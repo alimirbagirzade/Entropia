@@ -16,7 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from entropia import __version__
 from entropia.apps.api.context import RequestContextMiddleware
 from entropia.apps.api.errors import install_exception_handlers
-from entropia.apps.api.routes import health, meta
+from entropia.apps.api.routes import audit, health, identity, meta, trash
 from entropia.apps.api.sse import router as sse_router
 from entropia.config import get_settings
 from entropia.infrastructure.observability import configure_logging, get_logger
@@ -60,6 +60,9 @@ def create_app() -> FastAPI:
     app.include_router(health.router, prefix=base)
     app.include_router(meta.router, prefix=base)
     app.include_router(sse_router, prefix=base)
+    app.include_router(identity.router, prefix=base)
+    app.include_router(trash.router, prefix=base)
+    app.include_router(audit.router, prefix=base)
 
     return app
 

@@ -34,3 +34,11 @@ export interface ReadyResponse {
   status: string;
   checks: Record<string, string>;
 }
+
+export interface Me {
+  principal_id: string | null;
+  principal_type: string;
+  role: string | null;
+  is_admin: boolean;
+  is_authenticated: boolean;
+}

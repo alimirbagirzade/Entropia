@@ -1,6 +1,7 @@
 // Thin fetch wrapper. The backend is the source of truth; this client never
 // computes domain state. It surfaces the canonical error envelope as ApiError.
 
+import { getDevActorId } from "./devActor";
 import type { ApiErrorResponse } from "./types";
 
 const BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "/api/v1";
@@ -25,10 +26,12 @@ export interface RequestOptions extends Omit<RequestInit, "body"> {
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { body, headers, ...rest } = options;
+  const devActorId = getDevActorId();
   const response = await fetch(`${BASE_URL}${path}`, {
     ...rest,
     headers: {
       "Content-Type": "application/json",
+      ...(devActorId ? { "X-Actor-Id": devActorId } : {}),
       ...headers,
     },
     body: body === undefined ? undefined : JSON.stringify(body),

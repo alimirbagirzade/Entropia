@@ -6,6 +6,7 @@ export interface NavItem {
   path: string;
   label: string;
   stage: number;
+  adminOnly?: boolean;
 }
 
 export interface NavSection {
@@ -50,8 +51,8 @@ export const NAV: NavSection[] = [
     title: "Agent & Admin",
     items: [
       { path: "/analysis-lab", label: "Analysis Lab", stage: 6 },
-      { path: "/panel", label: "Panel / Management / Logs", stage: 6 },
-      { path: "/trash", label: "Trash", stage: 6 },
+      { path: "/panel", label: "Panel / Management / Logs", stage: 6, adminOnly: true },
+      { path: "/trash", label: "Trash", stage: 6, adminOnly: true },
     ],
   },
   {

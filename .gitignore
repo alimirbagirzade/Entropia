@@ -46,3 +46,6 @@ tmp/
 
 # ---- Misc ----
 *.log
+
+# TypeScript incremental build info
+*.tsbuildinfo

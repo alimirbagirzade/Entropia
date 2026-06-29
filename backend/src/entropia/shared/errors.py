@@ -75,6 +75,42 @@ class CapabilityNotActiveError(ForbiddenError):
     message = "This capability is not active."
 
 
+class AccessDeniedError(ForbiddenError):
+    """Authenticated actor lacks permission for this resource/action."""
+
+    code = "ACCESS_DENIED"
+    message = "You do not have access to this resource."
+
+
+class LastAdminProtectedError(ConflictError):
+    """The last active Admin cannot be demoted or deactivated."""
+
+    code = "LAST_ADMIN_PROTECTED"
+    http_status = 422
+    message = "The last active administrator cannot be demoted or deactivated."
+
+
+class AgentRoleNotAssignableError(ValidationError):
+    """Agent is a non-login system actor; it is not an assignable human role."""
+
+    code = "AGENT_ROLE_NOT_ASSIGNABLE"
+    message = "The Agent role cannot be assigned to a human user."
+
+
+class RoleContextStaleError(ConflictError):
+    """A request used a role context that has since changed."""
+
+    code = "ROLE_CONTEXT_STALE"
+    message = "Your role changed. Refresh and retry."
+
+
+class IdempotencyConflictError(ConflictError):
+    """Same idempotency key reused with a different request payload."""
+
+    code = "IDEMPOTENCY_KEY_CONFLICT"
+    message = "This idempotency key was already used with a different request."
+
+
 class ServiceUnavailableError(AppError):
     code = "SERVICE_UNAVAILABLE"
     http_status = 503

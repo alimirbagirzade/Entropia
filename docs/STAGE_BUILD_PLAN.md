@@ -21,7 +21,7 @@
 
 ---
 
-## Stage 1 — Common System Foundation
+## Stage 1 — Common System Foundation (DONE)
 
 **Goal:** Identity/policy/audit/revision/concurrency/soft-delete/worker/artifact substrate that every later page reuses. (Master §17 step 2; M1–M3.)
 

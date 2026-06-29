@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "./apiClient";
-import type { Meta, ReadyResponse } from "./types";
+import type { Me, Meta, ReadyResponse } from "./types";
 
 export function useMeta() {
   return useQuery({
@@ -15,5 +15,14 @@ export function useReadiness() {
     queryKey: ["health", "ready"],
     queryFn: () => api.get<ReadyResponse>("/health/ready"),
     refetchInterval: 15_000,
+  });
+}
+
+
+export function useMe() {
+  return useQuery({
+    queryKey: ["me"],
+    queryFn: () => api.get<Me>("/me"),
+    staleTime: 60_000,
   });
 }

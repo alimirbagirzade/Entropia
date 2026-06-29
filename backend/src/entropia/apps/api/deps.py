@@ -1,8 +1,9 @@
-"""Shared FastAPI dependencies.
+"""Shared FastAPI dependencies: DB session, request context, and actor.
 
-The ActorContext is a Stage-0 placeholder. Stage 1 replaces it with real
-identity/role resolution; every mutation command will run under an actor with
-server-side policy enforcement (Module 1).
+Authentication / IdP selection is deliberately deferred to a later security
+decision (Master §20). Until then the transport supplies the principal id via the
+``X-Actor-Id`` header (dev-mode); the ROLE is always resolved server-side from the
+user/agent registry — the client never asserts its own role.
 """
 
 from __future__ import annotations
@@ -10,10 +11,14 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 
-from fastapi import Request
+from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from entropia.application.identity import resolve_actor
+from entropia.domain.identity import Actor
 from entropia.infrastructure.postgres.engine import get_session_factory
+
+ACTOR_ID_HEADER = "X-Actor-Id"
 
 
 async def db_session() -> AsyncIterator[AsyncSession]:
@@ -27,20 +32,21 @@ async def db_session() -> AsyncIterator[AsyncSession]:
             raise
 
 
-@dataclass(frozen=True, slots=True)
-class ActorContext:
-    """Who is making the request, plus its trace ids. Stage-0 stub: anonymous."""
+@dataclass(slots=True)
+class RequestContext:
+    """One transactional unit of work bound to the request's actor + trace ids."""
 
-    actor_id: str | None
-    role: str
-    request_id: str
-    correlation_id: str
+    session: AsyncSession
+    actor: Actor
 
 
-def actor_context(request: Request) -> ActorContext:
-    return ActorContext(
-        actor_id=None,
-        role="anonymous",
+async def request_context(
+    request: Request, session: AsyncSession = Depends(db_session)
+) -> RequestContext:
+    actor = await resolve_actor(
+        session,
+        principal_id=request.headers.get(ACTOR_ID_HEADER),
         request_id=getattr(request.state, "request_id", ""),
         correlation_id=getattr(request.state, "correlation_id", ""),
     )
+    return RequestContext(session=session, actor=actor)

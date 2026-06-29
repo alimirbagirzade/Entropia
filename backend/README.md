@@ -49,3 +49,18 @@ uv run pytest               # unit + contract (no infra required)
 
 > The full stack (Postgres/Redis/MinIO + all worker planes) is easiest via
 > `docker compose up -d --build` from the repository root. See the root README.
+
+## Identity & dev auth (Stage 1)
+
+Authentication / IdP is deferred (Master §20). In dev, the transport supplies the
+principal via the `X-Actor-Id` header; the role is always resolved server-side.
+
+```bash
+uv run python -m entropia.apps.seed   # seed admin "user_admin" + agent "agent_alpha"
+curl -H "X-Actor-Id: user_admin" http://localhost:8000/api/v1/me
+```
+
+Stage 1 substrate lives in `domain/{identity,lifecycle,revision,deletion}`,
+`application/{commands,queries}`, and `infrastructure/postgres/{models,repositories}`.
+Integration tests (`tests/integration/`) need a reachable Postgres and are skipped
+otherwise; run them with the stack up or in CI.

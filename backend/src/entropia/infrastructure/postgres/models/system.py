@@ -1,8 +1,4 @@
-"""Infrastructure-level tables (system metadata only; no product domain).
-
-Domain models (roots, revisions, snapshots, audit, jobs, ...) arrive Stage 1+
-under entropia/domain/*. They register against the same Base.metadata.
-"""
+"""Infrastructure-level system metadata (no product domain)."""
 
 from __future__ import annotations
 
@@ -15,8 +11,6 @@ from entropia.infrastructure.postgres.base import Base
 
 
 class AppMetadata(Base):
-    """Key/value schema + build markers used by health checks and migrations."""
-
     __tablename__ = "app_metadata"
 
     key: Mapped[str] = mapped_column(String(128), primary_key=True)

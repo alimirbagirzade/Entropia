@@ -17,10 +17,12 @@ This repository is built **stage by stage** from a canonical specification (see
 | Realtime | Server-Sent Events (SSE) |
 | Runtime | Docker Compose — modular monolith with separate worker planes |
 
-> **Build status:** **Stage 0 — Project skeleton** is complete (app shell,
-> config, DB + migration infra, API + worker/agent/scheduler planes, frontend
-> shell with all 22 screens, common error/loading/empty states, tests, CI).
-> The staged roadmap lives in [`docs/STAGE_BUILD_PLAN.md`](docs/STAGE_BUILD_PLAN.md).
+> **Build status:** **Stage 0 (skeleton)** and **Stage 1 (common system
+> foundation)** are complete — identity/roles, server-side policy, audit +
+> transactional outbox, generic root/revision model, optimistic concurrency,
+> soft-delete/trash/restore/purge, idempotency, durable jobs, and the central
+> lifecycle enum registry. The staged roadmap lives in
+> [`docs/STAGE_BUILD_PLAN.md`](docs/STAGE_BUILD_PLAN.md).
 
 ---
 
@@ -130,6 +132,21 @@ make frontend-dev       # Vite dev server on :5173
 ```
 
 The dev frontend talks to `VITE_API_BASE_URL` (default `http://localhost:8000/api/v1`).
+
+### Acting as a user (dev-mode auth)
+
+Authentication / IdP selection is a deliberately deferred security decision. Until
+then, seed the baseline identities and choose which principal to act as:
+
+```bash
+# inside the backend (DB must be migrated):
+uv run python -m entropia.apps.seed        # creates admin "user_admin" + agent "agent_alpha"
+```
+
+The web app's header has an **act as** field (sends `X-Actor-Id`); set it to
+`user_admin` to use Admin-only screens (Panel, Trash). With Docker, run the seed
+once: `docker compose run --rm api python -m entropia.apps.seed`. The server always
+resolves the **role** from the database — the client never asserts its own role.
 
 ### 5. (Optional) Run worker planes natively
 

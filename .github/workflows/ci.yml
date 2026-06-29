@@ -14,6 +14,22 @@ jobs:
   backend:
     name: Backend — lint, type, test
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: entropia
+          POSTGRES_PASSWORD: entropia
+          POSTGRES_DB: entropia
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U entropia"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+asyncpg://entropia:entropia@localhost:5432/entropia
     steps:
       - uses: actions/checkout@v4
       - name: Install uv
@@ -31,9 +47,12 @@ jobs:
       - name: Mypy
         working-directory: backend
         run: uv run mypy src
-      - name: Pytest (unit + contract)
+      - name: Alembic migrations apply cleanly
         working-directory: backend
-        run: uv run pytest -m "not integration"
+        run: uv run alembic upgrade head
+      - name: Pytest (unit + contract + integration)
+        working-directory: backend
+        run: uv run pytest
 
   frontend:
     name: Frontend — lint, typecheck, build, test

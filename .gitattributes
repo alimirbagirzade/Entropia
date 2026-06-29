@@ -1,0 +1,21 @@
+# Normalize line endings: repo uses LF, checkout native where it matters.
+* text=auto eol=lf
+
+# Shell scripts must stay LF even on Windows checkouts.
+*.sh   text eol=lf
+*.bash text eol=lf
+
+# PowerShell scripts use CRLF on Windows.
+*.ps1  text eol=crlf
+*.psm1 text eol=crlf
+*.cmd  text eol=crlf
+*.bat  text eol=crlf
+
+# Binary / generated — never diff or normalize.
+*.png  binary
+*.jpg  binary
+*.ico  binary
+*.docx binary
+*.parquet binary
+uv.lock          -diff
+package-lock.json -diff

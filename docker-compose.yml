@@ -1,0 +1,153 @@
+# =============================================================================
+# Entropia V18 — local / first-production Docker Compose stack.
+# Modular monolith: one backend image, many entrypoints (api + worker planes).
+# Works identically on macOS, Windows (Docker Desktop) and Linux.
+#   docker compose up -d --build
+# =============================================================================
+
+x-backend-build: &backend-build
+  build:
+    context: ./backend
+    dockerfile: Dockerfile
+  image: entropia-backend:local
+  env_file: .env
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+    minio:
+      condition: service_healthy
+  restart: unless-stopped
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-entropia}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-entropia}
+      POSTGRES_DB: ${POSTGRES_DB:-entropia}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-entropia} -d ${POSTGRES_DB:-entropia}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${OBJECT_STORAGE_ACCESS_KEY:-entropia}
+      MINIO_ROOT_PASSWORD: ${OBJECT_STORAGE_SECRET_KEY:-entropia-secret}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # One-shot: ensure the artifact bucket exists, then exit.
+  minio-setup:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 ${OBJECT_STORAGE_ACCESS_KEY:-entropia} ${OBJECT_STORAGE_SECRET_KEY:-entropia-secret} &&
+      mc mb --ignore-existing local/${OBJECT_STORAGE_BUCKET:-entropia-artifacts} &&
+      echo 'bucket ready';
+      "
+    restart: "no"
+
+  # Runs Alembic migrations to head, then exits. Other services start after.
+  migrate:
+    <<: *backend-build
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["alembic", "upgrade", "head"]
+    restart: "no"
+
+  api:
+    <<: *backend-build
+    command: ["uvicorn", "entropia.apps.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0) if urllib.request.urlopen('http://localhost:8000/api/v1/health/live').status==200 else sys.exit(1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  worker-default:
+    <<: *backend-build
+    command: ["python", "-m", "entropia.apps.worker", "--queues", "default,maintenance"]
+
+  worker-data:
+    <<: *backend-build
+    command: ["python", "-m", "entropia.apps.worker", "--queues", "data"]
+
+  worker-backtest:
+    <<: *backend-build
+    command: ["python", "-m", "entropia.apps.worker", "--queues", "backtest"]
+
+  worker-agent:
+    <<: *backend-build
+    command: ["python", "-m", "entropia.apps.worker", "--queues", "agent,agent-high"]
+
+  agent-coordinator:
+    <<: *backend-build
+    command: ["python", "-m", "entropia.apps.agent_coordinator"]
+
+  scheduler:
+    <<: *backend-build
+    command: ["python", "-m", "entropia.apps.scheduler"]
+
+  web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000/api/v1}
+    image: entropia-web:local
+    ports:
+      - "8080:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redisdata:
+  miniodata:

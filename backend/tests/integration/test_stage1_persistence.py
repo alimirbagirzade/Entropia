@@ -88,6 +88,7 @@ async def test_soft_delete_then_restore_reuses_identity(session) -> None:
 
 async def test_last_admin_protection(session) -> None:
     session.add(Principal(principal_id="solo_admin", principal_type=PrincipalType.HUMAN))
+    await session.flush()  # principal must exist before the FK-dependent user row
     session.add(
         HumanUser(
             user_id="solo_admin",

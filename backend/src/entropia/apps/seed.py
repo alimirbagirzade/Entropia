@@ -22,6 +22,7 @@ from entropia.domain.lifecycle.enums import (
 )
 from entropia.domain.market_data.enums import MarketDataType, MarketRevisionState
 from entropia.domain.package.enums import PackageValidationState
+from entropia.domain.rationale import normalized_name, pick_color
 from entropia.domain.research_data.enums import ResearchRevisionState, UsageScope
 from entropia.infrastructure.observability import configure_logging, get_logger
 from entropia.infrastructure.postgres.engine import get_session_factory
@@ -29,6 +30,7 @@ from entropia.infrastructure.postgres.models import Agent, HumanUser, Principal
 from entropia.infrastructure.postgres.repositories import esp as esp_repo
 from entropia.infrastructure.postgres.repositories import market_data as md_repo
 from entropia.infrastructure.postgres.repositories import packages as pkg_repo
+from entropia.infrastructure.postgres.repositories import rationale as rationale_repo
 from entropia.infrastructure.postgres.repositories import research_data as rd_repo
 
 DEFAULT_ADMIN_ID = os.getenv("SEED_ADMIN_ID", "user_admin")
@@ -37,6 +39,43 @@ DEFAULT_AGENT_ID = os.getenv("SEED_AGENT_ID", "agent_alpha")
 SEED_DEMO_MARKET = os.getenv("SEED_DEMO_MARKET", "0") == "1"
 SEED_DEMO_RESEARCH = os.getenv("SEED_DEMO_RESEARCH", "0") == "1"
 SEED_ESP_TA = os.getenv("SEED_ESP_TA", "0") == "1"
+SEED_RATIONALE = os.getenv("SEED_RATIONALE", "0") == "1"
+
+# Canonical ACTIVE seed families (doc 10 §3.1). The last entry is the Production
+# correction (RF-15): V18's ESP metadata references "Embedded System / TA Resolver"
+# but the prototype's visible card list omits it, so it is seeded ACTIVE here.
+_RATIONALE_FAMILIES: tuple[tuple[str, list[str], list[str]], ...] = (
+    (
+        "Reversal / Mean Reversion",
+        ["Range Reversion", "Panic Reversion", "VWAP Reversion", "Statistical Reversion"],
+        ["Directional Signal", "Oversold / Overbought Zone", "Distance from Mean"],
+    ),
+    (
+        "Trend / Directional Regime",
+        ["Trend Continuation", "Direction State", "Pullback Continuation"],
+        ["Color / Direction State", "Trend State", "Moving Average Slope"],
+    ),
+    (
+        "Breakout / Volatility Expansion",
+        ["Range Break", "Volume Breakout", "Momentum Expansion"],
+        ["Breakout Signal", "Volume Confirmation", "Range Exit"],
+    ),
+    (
+        "Volatility / Regime",
+        ["Compression", "Expansion", "High Volatility", "Low Volatility"],
+        ["Regime Label", "Volatility State", "ATR Threshold"],
+    ),
+    (
+        "External Signal / Trade Log",
+        ["Copy Trading", "Imported Record", "Trade Log"],
+        ["Trade Record", "Signal Event", "External Direction"],
+    ),
+    (
+        "Embedded System / TA Resolver",
+        ["TA Resolver", "Indicator Primitive"],
+        ["Numeric Series", "Indicator Output"],
+    ),
+)
 
 # The 7 canonical TA resolvers seeded as trusted-active ESPs (doc 09 §3.2, DC7).
 # Each: (canonical key, ordered parameter types). All return a numeric series.
@@ -86,6 +125,9 @@ async def _seed() -> None:
 
         if SEED_ESP_TA:
             await _seed_esp_ta_resolvers(session, log)
+
+        if SEED_RATIONALE:
+            await _seed_rationale_families(session, log)
 
         await session.commit()
     log.info("seed.done")
@@ -193,6 +235,34 @@ async def _seed_esp_ta_resolvers(session: object, log: object) -> None:
             updated_by_principal_id=DEFAULT_ADMIN_ID,
         )
         log.info("seed.esp_ta_created", canonical_key=canonical_key)  # type: ignore[attr-defined]
+
+
+async def _seed_rationale_families(session: object, log: object) -> None:
+    """Seed the 6 canonical ACTIVE Rationale Families (doc 10 §3.1, RF-15).
+
+    Behind the ``SEED_RATIONALE=1`` flag. The admin principal (FK target) is already
+    flushed above. Idempotent: skips a normalized name that already has an active or
+    soft-deleted (reserved) family. Uses the FK-safe async ``create_family`` (root
+    flushed before children).
+    """
+    for ordinal, (display_name, subfamilies, output_types) in enumerate(_RATIONALE_FAMILIES):
+        norm = normalized_name(display_name)
+        existing = await rationale_repo.find_active_or_reserved_by_name(session, norm)  # type: ignore[arg-type]
+        if existing is not None:
+            continue
+        count = await rationale_repo.count_family_roots(session)  # type: ignore[arg-type]
+        root, _detail, _revision = await rationale_repo.create_family(
+            session,  # type: ignore[arg-type]
+            owner_principal_id=DEFAULT_ADMIN_ID,
+            created_by_principal_id=DEFAULT_ADMIN_ID,
+            display_name=display_name,
+            normalized_name=norm,
+            subfamilies=subfamilies,
+            compatible_output_types=output_types,
+            display_color=pick_color(count),
+            change_note=f"Seed canonical Rationale Family {display_name} (ordinal {ordinal}).",
+        )
+        log.info("seed.rationale_family_created", entity_id=root.entity_id)  # type: ignore[attr-defined]
 
 
 def run() -> None:

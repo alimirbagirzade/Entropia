@@ -4,6 +4,10 @@
 from entropia.infrastructure.postgres.models.approvals import ApprovalDecision
 from entropia.infrastructure.postgres.models.audit import AuditEvent, OutboxEvent
 from entropia.infrastructure.postgres.models.deletion import Tombstone, TrashEntry
+from entropia.infrastructure.postgres.models.esp import (
+    EmbeddedResolverContract,
+    EmbeddedResolverRegistry,
+)
 from entropia.infrastructure.postgres.models.identity import Agent, HumanUser, Principal
 from entropia.infrastructure.postgres.models.jobs import IdempotencyKey, Job
 from entropia.infrastructure.postgres.models.market_data import (
@@ -15,6 +19,7 @@ from entropia.infrastructure.postgres.models.market_data import (
     MarketValidationIssue,
     MarketValidationRun,
 )
+from entropia.infrastructure.postgres.models.packages import PackageRevision, PackageRoot
 from entropia.infrastructure.postgres.models.registry import EntityRegistry, EntityRevision
 from entropia.infrastructure.postgres.models.research_data import (
     ResearchDatasetRevision,
@@ -35,6 +40,8 @@ __all__ = [
     "ApprovalDecision",
     "AuditEvent",
     "DatasetCoverageSlice",
+    "EmbeddedResolverContract",
+    "EmbeddedResolverRegistry",
     "EntityRegistry",
     "EntityRevision",
     "HumanUser",
@@ -47,6 +54,8 @@ __all__ = [
     "MarketValidationIssue",
     "MarketValidationRun",
     "OutboxEvent",
+    "PackageRevision",
+    "PackageRoot",
     "Principal",
     "ResearchDatasetRevision",
     "ResearchFeatureDefinition",

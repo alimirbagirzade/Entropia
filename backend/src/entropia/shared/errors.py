@@ -178,6 +178,68 @@ class CustomCategoryRequired(ValidationError):
     message = "Enter a custom category for Other / Custom."
 
 
+class ClientLegacyTypeRejected(ValidationError):
+    """A legacy/invalid client package type was supplied (ESP doc 09 §14, CR-01).
+
+    Package types are only ``strategy``/``indicator``/``condition``/
+    ``embedded_system``; ``trading_signal`` and ``trade_log`` are external
+    Mainboard working objects and are never modeled as a package.
+    """
+
+    code = "CLIENT_LEGACY_TYPE_REJECTED"
+    message = "That package type is not supported."
+
+
+class ResolverSignatureMismatch(ValidationError):
+    """A resolver with the same key exists but its canonical signature is not
+    compatible with the parsed call (ESP doc 09 §9.3, §11.1). Name-only matching
+    is never accepted."""
+
+    code = "RESOLVER_SIGNATURE_MISMATCH"
+    message = "The resolver signature is not compatible with this call."
+
+
+class ResolverAdapterIncompatible(ConflictError):
+    """The resolver is trusted, but no approved runtime adapter is compatible
+    with the requested target runtime (ESP doc 09 §7.1, §11.1)."""
+
+    code = "RESOLVER_ADAPTER_INCOMPATIBLE"
+    message = "No approved runtime adapter is compatible with the target runtime."
+
+
+class ResolverNotResolved(NotFoundError):
+    """No trusted active resolver revision matched this dependency (ESP doc 09
+    §7.1 "Missing resolver warning", §9.2). The conversion branch is blocked
+    (PRECHECK_BLOCKED) until a compatible revision is approved."""
+
+    code = "RESOLVER_NOT_RESOLVED"
+    message = "No trusted Embedded System Package matched this dependency."
+
+
+class ResolverContractInvalid(ValidationError):
+    """The resolver contract failed typed schema validation (ESP doc 09 §11.1)."""
+
+    code = "RESOLVER_CONTRACT_INVALID"
+    message = "The resolver contract is invalid."
+
+
+class ResolverRegistryConflict(ConflictError):
+    """Optimistic-concurrency failure on a registry mutation (ESP doc 09 §9.4,
+    §6 "Expected head revision"). The expected registry/head token no longer
+    matches; no silent last-write-wins activation/deprecation is performed."""
+
+    code = "RESOLVER_REGISTRY_CONFLICT"
+    message = "This resolver changed while you were reviewing it. Reload and retry."
+
+
+class DeletePolicyBlocked(ConflictError):
+    """Soft-delete of an active trusted resolver is blocked; deprecate first
+    (ESP doc 09 §9.5, §14, §7.1 "Error - blocked delete")."""
+
+    code = "DELETE_POLICY_BLOCKED"
+    message = "This resolver is active in the registry. Deprecate it before deletion."
+
+
 class ServiceUnavailableError(AppError):
     code = "SERVICE_UNAVAILABLE"
     http_status = 503

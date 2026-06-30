@@ -11,6 +11,13 @@ from entropia.infrastructure.postgres.models.esp import (
 )
 from entropia.infrastructure.postgres.models.identity import Agent, HumanUser, Principal
 from entropia.infrastructure.postgres.models.jobs import IdempotencyKey, Job
+from entropia.infrastructure.postgres.models.mainboard import (
+    MainboardCompositionSnapshot,
+    MainboardWorkingItem,
+    MainboardWorkspace,
+    WorkObjectRevision,
+    WorkObjectRoot,
+)
 from entropia.infrastructure.postgres.models.market_data import (
     DatasetCoverageSlice,
     MarketDatasetRevision,
@@ -54,6 +61,9 @@ __all__ = [
     "HumanUser",
     "IdempotencyKey",
     "Job",
+    "MainboardCompositionSnapshot",
+    "MainboardWorkingItem",
+    "MainboardWorkspace",
     "MarketDatasetRevision",
     "MarketProcessedAsset",
     "MarketRawAsset",
@@ -79,4 +89,6 @@ __all__ = [
     "ResearchValidationRun",
     "Tombstone",
     "TrashEntry",
+    "WorkObjectRevision",
+    "WorkObjectRoot",
 ]

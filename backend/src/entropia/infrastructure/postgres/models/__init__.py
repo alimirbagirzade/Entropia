@@ -16,6 +16,17 @@ from entropia.infrastructure.postgres.models.market_data import (
     MarketValidationRun,
 )
 from entropia.infrastructure.postgres.models.registry import EntityRegistry, EntityRevision
+from entropia.infrastructure.postgres.models.research_data import (
+    ResearchDatasetRevision,
+    ResearchFeatureDefinition,
+    ResearchFieldDefinition,
+    ResearchMarketLink,
+    ResearchNativeAsset,
+    ResearchRawAsset,
+    ResearchTimePolicy,
+    ResearchValidationIssue,
+    ResearchValidationRun,
+)
 from entropia.infrastructure.postgres.models.system import AppMetadata
 
 __all__ = [
@@ -37,6 +48,15 @@ __all__ = [
     "MarketValidationRun",
     "OutboxEvent",
     "Principal",
+    "ResearchDatasetRevision",
+    "ResearchFeatureDefinition",
+    "ResearchFieldDefinition",
+    "ResearchMarketLink",
+    "ResearchNativeAsset",
+    "ResearchRawAsset",
+    "ResearchTimePolicy",
+    "ResearchValidationIssue",
+    "ResearchValidationRun",
     "Tombstone",
     "TrashEntry",
 ]

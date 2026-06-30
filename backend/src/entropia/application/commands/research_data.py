@@ -147,7 +147,7 @@ async def create_research_dataset(
     require_authenticated(actor)
     bundle = await _resolve_market_link(session, market_entity_id)
 
-    root, revision = rd_repo.create_research_dataset(
+    root, revision = await rd_repo.create_research_dataset(
         session,
         owner_principal_id=actor.principal_id,
         created_by_principal_id=actor.principal_id,

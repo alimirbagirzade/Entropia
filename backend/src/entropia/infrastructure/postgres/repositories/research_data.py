@@ -42,7 +42,7 @@ from entropia.shared.ids import new_id
 ENTITY_TYPE = "research_dataset"
 
 
-def create_research_dataset(
+async def create_research_dataset(
     session: AsyncSession,
     *,
     owner_principal_id: str | None,
@@ -57,8 +57,26 @@ def create_research_dataset(
     revision_state: ResearchRevisionState = ResearchRevisionState.DRAFT,
     lifecycle_state: str | None = "active",
 ) -> tuple[EntityRegistry, ResearchDatasetRevision]:
-    """Create the registry Root + first research revision; point head at it."""
+    """Create the registry Root + first research revision; point head at it.
+
+    The root is flushed BEFORE the revision is added so the revision's
+    ``entity_id`` FK target exists at flush time: SQLAlchemy's unit-of-work does
+    not derive parent-before-child INSERT order from a bare ``ForeignKey`` without
+    a ``relationship()`` (same fix as market data).
+    """
     entity_id = new_id("rds")
+    root = EntityRegistry(
+        entity_id=entity_id,
+        entity_type=ENTITY_TYPE,
+        owner_principal_id=owner_principal_id,
+        created_by_principal_id=created_by_principal_id,
+        lifecycle_state=lifecycle_state,
+        deletion_state=DeletionState.ACTIVE,
+        current_revision_id=None,
+        row_version=1,
+    )
+    session.add(root)
+    await session.flush()
     revision = ResearchDatasetRevision(
         revision_id=new_id("rrev"),
         entity_id=entity_id,
@@ -77,18 +95,8 @@ def create_research_dataset(
         content_hash=content_hash(payload),
         created_by_principal_id=created_by_principal_id,
     )
-    root = EntityRegistry(
-        entity_id=entity_id,
-        entity_type=ENTITY_TYPE,
-        owner_principal_id=owner_principal_id,
-        created_by_principal_id=created_by_principal_id,
-        lifecycle_state=lifecycle_state,
-        deletion_state=DeletionState.ACTIVE,
-        current_revision_id=revision.revision_id,
-        row_version=1,
-    )
-    session.add(root)
     session.add(revision)
+    root.current_revision_id = revision.revision_id
     return root, revision
 
 

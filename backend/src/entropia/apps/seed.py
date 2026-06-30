@@ -94,7 +94,7 @@ async def _seed_demo_research_dataset(
 
     Behind the ``SEED_DEMO_RESEARCH=1`` flag (which also forces the demo market).
     """
-    root, revision = rd_repo.create_research_dataset(
+    root, revision = await rd_repo.create_research_dataset(
         session,  # type: ignore[arg-type]
         owner_principal_id=DEFAULT_ADMIN_ID,
         created_by_principal_id=DEFAULT_ADMIN_ID,

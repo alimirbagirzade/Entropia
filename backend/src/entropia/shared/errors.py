@@ -190,6 +190,19 @@ class ClientLegacyTypeRejected(ValidationError):
     message = "That package type is not supported."
 
 
+class CatalogFilterInvalid(ValidationError):
+    """A Package Library catalog filter value was not a valid facet (doc 08 §5).
+
+    The catalog never silently substitutes another value — an invalid
+    lifecycle/validation/approval/visibility facet is rejected so the client can
+    correct it (an invalid/legacy *type* is rejected by ``ClientLegacyTypeRejected``
+    via the canonical package-kind guard, CR-01).
+    """
+
+    code = "CATALOG_FILTER_INVALID"
+    message = "One or more catalog filters are not valid."
+
+
 class ResolverSignatureMismatch(ValidationError):
     """A resolver with the same key exists but its canonical signature is not
     compatible with the parsed call (ESP doc 09 §9.3, §11.1). Name-only matching

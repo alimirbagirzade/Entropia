@@ -112,7 +112,7 @@ async def create_market_dataset(
 ) -> tuple[Any, MarketDatasetRevision]:
     """Create the dataset Root + first DRAFT revision (owner = actor)."""
     require_authenticated(actor)
-    root, revision = md_repo.create_market_dataset(
+    root, revision = await md_repo.create_market_dataset(
         session,
         owner_principal_id=actor.principal_id,
         created_by_principal_id=actor.principal_id,

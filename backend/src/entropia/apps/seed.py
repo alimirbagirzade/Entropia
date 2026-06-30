@@ -72,7 +72,7 @@ async def _seed_demo_market_dataset(session: object, log: object) -> str:
     already flushed above. Returns the approved market revision id so the demo
     research dataset can pin it.
     """
-    root, revision = md_repo.create_market_dataset(
+    root, revision = await md_repo.create_market_dataset(
         session,  # type: ignore[arg-type]
         owner_principal_id=DEFAULT_ADMIN_ID,
         created_by_principal_id=DEFAULT_ADMIN_ID,

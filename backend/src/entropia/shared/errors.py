@@ -448,3 +448,68 @@ class ServiceUnavailableError(AppError):
     code = "SERVICE_UNAVAILABLE"
     http_status = 503
     message = "A dependency is currently unavailable."
+
+
+# --- Stage 3a — Mainboard composition plane (doc 01; ARCHITECTURE §9.2) ---
+
+
+class MainboardItemKindMismatchError(ValidationError):
+    """CR-01 kind guard: a working item's kind diverged from its root's object
+    kind (doc 01; DOMAIN_MODEL §2.2). Item kind is server-derived from the root;
+    a client-supplied kind that disagrees is rejected, never coerced."""
+
+    code = "MAINBOARD_ITEM_KIND_MISMATCH"
+    message = "The item kind does not match the work object's kind."
+
+
+class ObjectNotActiveError(ConflictError):
+    """A work object referenced by an attach/pin/revision is not ACTIVE
+    (soft-deleted or otherwise not live). Operations require a live root."""
+
+    code = "OBJECT_NOT_ACTIVE"
+    message = "The work object is not active."
+
+
+class ObjectInActiveRunError(ConflictError):
+    """A work object cannot be soft-deleted because a queued/running backtest
+    references it (Stage 5). The 3a preflight is a no-op stub; reserved here."""
+
+    code = "OBJECT_IN_ACTIVE_RUN"
+    message = "This work object is in use by an active run and cannot be deleted."
+
+
+class RowVersionConflictError(ConflictError):
+    """A working-item mutation supplied a stale ``expected_row_version`` (doc 01
+    §9.4). No last-write-wins overwrite is applied."""
+
+    code = "ROW_VERSION_CONFLICT"
+    message = "This item changed after you loaded it. Reload the current version and retry."
+
+
+class WorkObjectRevisionConflictError(ConflictError):
+    """A work-object revision append supplied a stale ``expected_head_revision_id``
+    (doc 01 §9.4). The head advanced; reload and retry."""
+
+    code = "WORK_OBJECT_REVISION_CONFLICT"
+    message = "This work object's head changed. Reload the current revision and retry."
+
+
+class WorkObjectNotFoundError(NotFoundError):
+    """A referenced work object root did not resolve as an active work object."""
+
+    code = "WORK_OBJECT_NOT_FOUND"
+    message = "The work object was not found."
+
+
+class MainboardWorkspaceNotFoundError(NotFoundError):
+    """A referenced Mainboard workspace did not resolve as an active workspace."""
+
+    code = "MAINBOARD_WORKSPACE_NOT_FOUND"
+    message = "The Mainboard workspace was not found."
+
+
+class MainboardItemNotFoundError(NotFoundError):
+    """A referenced Mainboard working item did not resolve."""
+
+    code = "MAINBOARD_ITEM_NOT_FOUND"
+    message = "The Mainboard item was not found."

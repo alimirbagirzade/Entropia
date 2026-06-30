@@ -1,0 +1,187 @@
+"""Create Package + Pre-Check persistence (docs 06 §9, 07 §10; Stage 2e).
+
+The Root is the shared ``entity_registry`` (entity_type="package_request") with a
+mutable ``package_request`` detail row. ``create_request`` is async because it
+creates the registry Root AND the detail row in one unit-of-work: the root is
+flushed BEFORE the detail row is added, since SQLAlchemy does not derive
+parent-before-child INSERT order from a bare ``ForeignKey`` (L1/DC6). Dependency
+scans are INSERT-only immutable evidence (append, never UPDATE). Sync mutators add
+rows without committing (the request dependency owns the transaction); async
+helpers query for the queries layer.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from entropia.domain.create_package.enums import (
+    CreatePackageState,
+    CreationMode,
+    PrecheckScanStatus,
+    SourceKind,
+    SourceLanguage,
+)
+from entropia.domain.esp.enums import RuntimeAdapter
+from entropia.domain.lifecycle.enums import DeletionState, PackageKind
+from entropia.infrastructure.postgres.models import (
+    DependencyScan,
+    EntityRegistry,
+    PackageRequest,
+)
+from entropia.shared.ids import new_id
+
+ENTITY_TYPE = "package_request"
+
+
+async def create_request(
+    session: AsyncSession,
+    *,
+    owner_principal_id: str | None,
+    created_by_principal_id: str | None,
+    package_kind: PackageKind,
+    creation_mode: CreationMode,
+    source_kind: SourceKind,
+    source_language: SourceLanguage | None,
+    other_language_label: str | None,
+    target_runtime: RuntimeAdapter,
+    request_body: str,
+    source_hash: str,
+    context_hash: str,
+    output_contract: dict[str, Any],
+    rationale_family_id: str | None,
+    compatible_rationale_family_ids: list[str],
+    linked_indicator: dict[str, Any] | None,
+    declared_dependencies: list[dict[str, Any]],
+    state: CreatePackageState = CreatePackageState.REQUESTED,
+) -> tuple[EntityRegistry, PackageRequest]:
+    """Create the registry Root + ``package_request`` detail in one flush (L1/DC6).
+
+    The root is flushed BEFORE the detail row is added so the ``entity_id`` FK is
+    satisfiable at flush time. ``row_version`` on the root is the request_version.
+    """
+    entity_id = new_id("pkgreq")
+    root = EntityRegistry(
+        entity_id=entity_id,
+        entity_type=ENTITY_TYPE,
+        owner_principal_id=owner_principal_id,
+        created_by_principal_id=created_by_principal_id,
+        lifecycle_state="active",
+        deletion_state=DeletionState.ACTIVE,
+        current_revision_id=None,
+        row_version=1,
+    )
+    session.add(root)
+    await session.flush()
+    detail = PackageRequest(
+        entity_id=entity_id,
+        package_kind=package_kind,
+        creation_mode=creation_mode,
+        source_kind=source_kind,
+        source_language=source_language,
+        other_language_label=other_language_label,
+        target_runtime=target_runtime,
+        request_body=request_body,
+        source_hash=source_hash,
+        context_hash=context_hash,
+        output_contract=output_contract,
+        rationale_family_id=rationale_family_id,
+        compatible_rationale_family_ids=compatible_rationale_family_ids,
+        linked_indicator=linked_indicator,
+        declared_dependencies=declared_dependencies,
+        state=state,
+        current_scan_id=None,
+        candidate_hash=None,
+        candidate_output_contract=None,
+        package_root_id=None,
+        draft_revision_id=None,
+    )
+    session.add(detail)
+    return root, detail
+
+
+async def get_request_root(session: AsyncSession, entity_id: str) -> EntityRegistry | None:
+    """Return the registry Root iff it is a package_request."""
+    root = await session.get(EntityRegistry, entity_id)
+    if root is None or root.entity_type != ENTITY_TYPE:
+        return None
+    return root
+
+
+async def get_request_detail(session: AsyncSession, entity_id: str) -> PackageRequest | None:
+    return await session.get(PackageRequest, entity_id)
+
+
+async def append_dependency_scan(
+    session: AsyncSession,
+    *,
+    request_entity_id: str,
+    source_hash: str,
+    context_hash: str,
+    language: str | None,
+    scanner_version: str,
+    registry_fingerprint: str,
+    detected_calls: list[str],
+    resolved_refs: list[dict[str, Any]],
+    missing_calls: list[dict[str, Any]],
+    unsupported_calls: list[dict[str, Any]],
+    status: PrecheckScanStatus,
+    job_id: str | None,
+    error_detail: dict[str, Any] | None,
+    correlation_id: str | None,
+    created_by_principal_id: str | None,
+) -> DependencyScan:
+    """Insert immutable scan ``attempt_no = max+1`` for the request (doc 07 §8)."""
+    prior = await _max_scan_attempt(session, request_entity_id)
+    scan = DependencyScan(
+        scan_id=new_id("dscan"),
+        request_entity_id=request_entity_id,
+        attempt_no=(prior or 0) + 1,
+        source_hash=source_hash,
+        context_hash=context_hash,
+        language=language,
+        scanner_version=scanner_version,
+        registry_fingerprint=registry_fingerprint,
+        detected_calls=detected_calls,
+        resolved_refs=resolved_refs,
+        missing_calls=missing_calls,
+        unsupported_calls=unsupported_calls,
+        status=status,
+        job_id=job_id,
+        error_detail=error_detail,
+        correlation_id=correlation_id,
+        created_by_principal_id=created_by_principal_id,
+    )
+    session.add(scan)
+    return scan
+
+
+async def get_scan(session: AsyncSession, scan_id: str) -> DependencyScan | None:
+    return await session.get(DependencyScan, scan_id)
+
+
+async def get_current_scan(session: AsyncSession, detail: PackageRequest) -> DependencyScan | None:
+    """The request's current scan (the head pointer), if any."""
+    if detail.current_scan_id is None:
+        return None
+    return await session.get(DependencyScan, detail.current_scan_id)
+
+
+async def _max_scan_attempt(session: AsyncSession, request_entity_id: str) -> int | None:
+    stmt = select(func.max(DependencyScan.attempt_no)).where(
+        DependencyScan.request_entity_id == request_entity_id
+    )
+    return (await session.execute(stmt)).scalar_one_or_none()
+
+
+__all__ = [
+    "ENTITY_TYPE",
+    "append_dependency_scan",
+    "create_request",
+    "get_current_scan",
+    "get_request_detail",
+    "get_request_root",
+    "get_scan",
+]

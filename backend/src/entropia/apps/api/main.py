@@ -18,6 +18,7 @@ from entropia.apps.api.context import RequestContextMiddleware
 from entropia.apps.api.errors import install_exception_handlers
 from entropia.apps.api.routes import (
     audit,
+    create_package,
     esp,
     health,
     identity,
@@ -77,6 +78,7 @@ def create_app() -> FastAPI:
     app.include_router(research_data.router, prefix=base)
     app.include_router(esp.router, prefix=base)
     app.include_router(rationale.router, prefix=base)
+    app.include_router(create_package.router, prefix=base)
 
     return app
 

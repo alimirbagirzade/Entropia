@@ -42,6 +42,12 @@ async def run_idempotent(
     fingerprint = request_fingerprint(request_payload)
     existing = await idem_repo.get_key(session, key)
     if existing is not None:
+        # Idempotency keys are isolated per principal: never hand a caller another
+        # actor's stored result (the key namespace is otherwise client-controlled).
+        if existing.actor_principal_id is not None and (
+            existing.actor_principal_id != actor_principal_id
+        ):
+            raise IdempotencyConflictError()
         if existing.request_hash != fingerprint:
             raise IdempotencyConflictError()
         if existing.status == "completed" and existing.response_ref is not None:

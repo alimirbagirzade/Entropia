@@ -14,15 +14,18 @@ import os
 
 from entropia.domain.lifecycle.enums import PrincipalType, Role
 from entropia.domain.market_data.enums import MarketDataType, MarketRevisionState
+from entropia.domain.research_data.enums import ResearchRevisionState, UsageScope
 from entropia.infrastructure.observability import configure_logging, get_logger
 from entropia.infrastructure.postgres.engine import get_session_factory
 from entropia.infrastructure.postgres.models import Agent, HumanUser, Principal
 from entropia.infrastructure.postgres.repositories import market_data as md_repo
+from entropia.infrastructure.postgres.repositories import research_data as rd_repo
 
 DEFAULT_ADMIN_ID = os.getenv("SEED_ADMIN_ID", "user_admin")
 DEFAULT_ADMIN_USERNAME = os.getenv("SEED_ADMIN_USERNAME", "admin")
 DEFAULT_AGENT_ID = os.getenv("SEED_AGENT_ID", "agent_alpha")
 SEED_DEMO_MARKET = os.getenv("SEED_DEMO_MARKET", "0") == "1"
+SEED_DEMO_RESEARCH = os.getenv("SEED_DEMO_RESEARCH", "0") == "1"
 
 
 async def _seed() -> None:
@@ -53,18 +56,21 @@ async def _seed() -> None:
 
         await session.flush()  # principals exist before FK-dependent dataset rows
 
-        if SEED_DEMO_MARKET:
-            await _seed_demo_market_dataset(session, log)
+        if SEED_DEMO_MARKET or SEED_DEMO_RESEARCH:
+            market_revision_id = await _seed_demo_market_dataset(session, log)
+            if SEED_DEMO_RESEARCH:
+                await _seed_demo_research_dataset(session, log, market_revision_id)
 
         await session.commit()
     log.info("seed.done")
 
 
-async def _seed_demo_market_dataset(session: object, log: object) -> None:
+async def _seed_demo_market_dataset(session: object, log: object) -> str:
     """Seed one ACTIVE + APPROVED market dataset so Stage 2b has a dependency.
 
     Behind the ``SEED_DEMO_MARKET=1`` flag. The admin principal (FK target) is
-    already flushed above.
+    already flushed above. Returns the approved market revision id so the demo
+    research dataset can pin it.
     """
     root, revision = md_repo.create_market_dataset(
         session,  # type: ignore[arg-type]
@@ -78,7 +84,35 @@ async def _seed_demo_market_dataset(session: object, log: object) -> None:
         lifecycle_state="active",
     )
     log.info("seed.demo_market_created", entity_id=root.entity_id)  # type: ignore[attr-defined]
-    del revision
+    return revision.revision_id
+
+
+async def _seed_demo_research_dataset(
+    session: object, log: object, market_revision_id: str
+) -> None:
+    """Seed one research dataset linked to the demo Approved market revision.
+
+    Behind the ``SEED_DEMO_RESEARCH=1`` flag (which also forces the demo market).
+    """
+    root, revision = rd_repo.create_research_dataset(
+        session,  # type: ignore[arg-type]
+        owner_principal_id=DEFAULT_ADMIN_ID,
+        created_by_principal_id=DEFAULT_ADMIN_ID,
+        payload={"fields": ["open_interest_usd"]},
+        display_name="Demo BTCUSDT Open Interest",
+        category_key="open_interest",
+        provider_name="Demo Provider",
+        usage_scope=UsageScope.RESEARCH_BACKTEST,
+        linked_market_dataset_revision_id=market_revision_id,
+        revision_state=ResearchRevisionState.DRAFT,
+    )
+    rd_repo.add_market_link(
+        session,  # type: ignore[arg-type]
+        entity_id=root.entity_id,
+        market_dataset_revision_id=market_revision_id,
+        revision_id=revision.revision_id,
+    )
+    log.info("seed.demo_research_created", entity_id=root.entity_id)  # type: ignore[attr-defined]
 
 
 def run() -> None:

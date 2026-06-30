@@ -47,3 +47,30 @@ async def _run_market_data_analysis(job_id: str) -> None:
         except Exception:
             await session.rollback()
             raise
+
+
+@dramatiq.actor(queue_name="data", max_retries=3)
+def run_research_data_analysis(job_id: str) -> None:
+    """Execute the durable research-data analysis job (decision DR8).
+
+    The ``jobs`` row created at enqueue time is the source of truth. This actor
+    opens its own DB session, runs the analysis body, and commits — the request
+    that enqueued it has long since returned (browser close never cancels it).
+    """
+    log.info("worker.research_analysis.start", job_id=job_id)
+    asyncio.run(_run_research_data_analysis(job_id))
+    log.info("worker.research_analysis.done", job_id=job_id)
+
+
+async def _run_research_data_analysis(job_id: str) -> None:
+    from entropia.application.jobs.research_data import run_analysis
+    from entropia.infrastructure.postgres.engine import get_session_factory
+
+    factory = get_session_factory()
+    async with factory() as session:
+        try:
+            await run_analysis(session, job_id)
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise

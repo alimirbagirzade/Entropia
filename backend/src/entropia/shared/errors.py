@@ -240,6 +240,96 @@ class DeletePolicyBlocked(ConflictError):
     message = "This resolver is active in the registry. Deprecate it before deletion."
 
 
+class RationaleFamilyNameRequired(ValidationError):
+    """A Rationale Family name was blank/whitespace-only (doc 10 §10.1)."""
+
+    code = "RATIONALE_FAMILY_NAME_REQUIRED"
+    message = "Enter a shared semantic Rationale Family name."
+
+
+class RationaleFamilyNameTooLong(ValidationError):
+    """A Rationale Family name exceeded 120 visible characters (doc 10 §10.1)."""
+
+    code = "RATIONALE_FAMILY_NAME_TOO_LONG"
+    message = "A Rationale Family name must be 2-120 visible characters."
+
+
+class RationaleFamilyInvalidText(ValidationError):
+    """Family text contained unsafe control characters (doc 10 §10.1)."""
+
+    code = "RATIONALE_FAMILY_INVALID_TEXT"
+    message = "Paste plain visible text and retry."
+
+
+class RationaleFamilyMetadataLimit(ValidationError):
+    """Subfamily / compatible-output list exceeded count/length caps (doc 10 §10.1)."""
+
+    code = "RATIONALE_FAMILY_METADATA_LIMIT"
+    message = "Split or trim the list; keep meaningful distinct values."
+
+
+class RationaleFamilyNameConflict(ConflictError):
+    """An ACTIVE family already uses this normalized name (doc 10 §10.1, RF-07)."""
+
+    code = "RATIONALE_FAMILY_NAME_CONFLICT"
+    message = "A Rationale Family with this name already exists."
+
+
+class RationaleFamilyNameReserved(ConflictError):
+    """A soft-deleted family reserves this normalized name (doc 10 §10.1, RF-08).
+
+    Recovery: restore/rename the existing family from Trash (Admin) or choose a
+    different name.
+    """
+
+    code = "RATIONALE_FAMILY_NAME_RESERVED"
+    message = "This name is reserved by a deleted Rationale Family. Choose a different name."
+
+
+class RationaleFamilyConflict(ConflictError):
+    """Optimistic-concurrency failure on a family revision (doc 10 §8.3, §10.1,
+    RF-03). The expected head revision/ETag is stale; no last-write-wins overwrite
+    is applied."""
+
+    code = "RATIONALE_FAMILY_CONFLICT"
+    message = "This Family changed after you opened it. Reload the current revision and reapply."
+
+
+class RationaleFamilyNotActive(ConflictError):
+    """A soft-deleted family was selected for a new assignment (doc 10 §10.2).
+
+    Historical snapshots remain valid; new selection must use an ACTIVE family or
+    Unassigned. Restore is Admin-only from Trash.
+    """
+
+    code = "RATIONALE_FAMILY_NOT_ACTIVE"
+    message = "Select an active Rationale Family or Unassigned; this Family is deleted."
+
+
+class PackageRationaleAssignmentConflict(ConflictError):
+    """An atomic assignment batch referenced a stale package/table version
+    (doc 10 §8.4, §10.2, RF-09). No partial Package revisions are created — the
+    whole batch is rejected."""
+
+    code = "PACKAGE_RATIONALE_ASSIGNMENT_CONFLICT"
+    message = "One or more Packages changed after this table was loaded. No assignments were saved."
+
+
+class PackageNotFound(NotFoundError):
+    """A rationale-assignment row referenced a missing package root (doc 10 §10.2)."""
+
+    code = "PACKAGE_NOT_FOUND"
+    message = "The referenced package was not found."
+
+
+class LifecycleBlocked(ConflictError):
+    """An operation is blocked by the target's current lifecycle/deletion state
+    (doc 10 §10.2 "PACKAGE_NOT_FOUND or LIFECYCLE_BLOCKED")."""
+
+    code = "LIFECYCLE_BLOCKED"
+    message = "This object's current state does not permit the requested change."
+
+
 class ServiceUnavailableError(AppError):
     code = "SERVICE_UNAVAILABLE"
     http_status = 503

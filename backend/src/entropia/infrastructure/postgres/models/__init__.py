@@ -20,6 +20,11 @@ from entropia.infrastructure.postgres.models.market_data import (
     MarketValidationRun,
 )
 from entropia.infrastructure.postgres.models.packages import PackageRevision, PackageRoot
+from entropia.infrastructure.postgres.models.rationale import (
+    PackageRationaleAssignment,
+    RationaleFamilyRevision,
+    RationaleFamilyRoot,
+)
 from entropia.infrastructure.postgres.models.registry import EntityRegistry, EntityRevision
 from entropia.infrastructure.postgres.models.research_data import (
     ResearchDatasetRevision,
@@ -54,9 +59,12 @@ __all__ = [
     "MarketValidationIssue",
     "MarketValidationRun",
     "OutboxEvent",
+    "PackageRationaleAssignment",
     "PackageRevision",
     "PackageRoot",
     "Principal",
+    "RationaleFamilyRevision",
+    "RationaleFamilyRoot",
     "ResearchDatasetRevision",
     "ResearchFeatureDefinition",
     "ResearchFieldDefinition",

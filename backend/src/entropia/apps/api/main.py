@@ -23,6 +23,7 @@ from entropia.apps.api.routes import (
     identity,
     market_data,
     meta,
+    rationale,
     research_data,
     trash,
 )
@@ -75,6 +76,7 @@ def create_app() -> FastAPI:
     app.include_router(market_data.router, prefix=base)
     app.include_router(research_data.router, prefix=base)
     app.include_router(esp.router, prefix=base)
+    app.include_router(rationale.router, prefix=base)
 
     return app
 

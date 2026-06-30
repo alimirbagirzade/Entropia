@@ -3,6 +3,7 @@
 
 from entropia.infrastructure.postgres.models.approvals import ApprovalDecision
 from entropia.infrastructure.postgres.models.audit import AuditEvent, OutboxEvent
+from entropia.infrastructure.postgres.models.create_package import DependencyScan, PackageRequest
 from entropia.infrastructure.postgres.models.deletion import Tombstone, TrashEntry
 from entropia.infrastructure.postgres.models.esp import (
     EmbeddedResolverContract,
@@ -45,6 +46,7 @@ __all__ = [
     "ApprovalDecision",
     "AuditEvent",
     "DatasetCoverageSlice",
+    "DependencyScan",
     "EmbeddedResolverContract",
     "EmbeddedResolverRegistry",
     "EntityRegistry",
@@ -60,6 +62,7 @@ __all__ = [
     "MarketValidationRun",
     "OutboxEvent",
     "PackageRationaleAssignment",
+    "PackageRequest",
     "PackageRevision",
     "PackageRoot",
     "Principal",

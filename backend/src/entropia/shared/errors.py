@@ -330,6 +330,107 @@ class LifecycleBlocked(ConflictError):
     message = "This object's current state does not permit the requested change."
 
 
+class PackageRequestNotFound(NotFoundError):
+    """A Create-Package request id did not resolve (doc 06 §9.1, doc 07 §10.1)."""
+
+    code = "PACKAGE_REQUEST_NOT_FOUND"
+    message = "The package request was not found."
+
+
+class EmptySource(ValidationError):
+    """The request body was blank/whitespace-only (doc 06 §4.4, doc 07 §5.1)."""
+
+    code = "EMPTY_SOURCE"
+    message = "Paste code or describe the package to create before continuing."
+
+
+class SourceLanguageMismatch(ValidationError):
+    """The selected source language is absent/present against the creation mode,
+    conflicts with the detected syntax, or 'Other' has no label (doc 06 §11, §4.2).
+    No silent auto-rewrite is performed."""
+
+    code = "SOURCE_LANGUAGE_MISMATCH"
+    message = "Select the correct source language for this code request."
+
+
+class OutputContractInvalid(ValidationError):
+    """The output contract kind is missing or incompatible with the package type
+    (doc 06 §4.3, §11). Even a passed Pre-Check cannot bypass this."""
+
+    code = "OUTPUT_CONTRACT_INVALID"
+    message = "The output contract is not valid for this package type."
+
+
+class RuntimeUnavailable(ValidationError):
+    """The target runtime is not a registered, active adapter (doc 06 §4.2, §11).
+
+    V1 exposes only the Python runtime adapter; PHP/other are Future-Dev.
+    """
+
+    code = "RUNTIME_UNAVAILABLE"
+    message = "Select a registered, active target runtime."
+
+
+class PrecheckBlocked(ConflictError):
+    """A code request was sent while its current Pre-Check is BLOCKED (doc 06 §5,
+    doc 07 §9.3, PC-13). Conversion cannot start until a compatible trusted ESP
+    resolver exists and Pre-Check is re-run."""
+
+    code = "PRECHECK_BLOCKED"
+    message = "Conversion is blocked because a required dependency has no trusted resolver."
+
+
+class PrecheckStale(ConflictError):
+    """A code request was sent while its Pre-Check is stale — the source, runtime,
+    output contract, dependency context or the resolver registry changed after the
+    scan (doc 06 §8.5, doc 07 §4, PC-09). Re-run Pre-Check first."""
+
+    code = "PRECHECK_STALE"
+    message = "Pre-Check is stale because the context or resolver registry changed. Re-run it."
+
+
+class PrecheckAlreadyRunning(ConflictError):
+    """A second Pre-Check was requested while one is already in flight for the same
+    context (doc 07 §8.1). The in-flight scan is reused; no duplicate job is made."""
+
+    code = "PRECHECK_ALREADY_RUNNING"
+    message = "A Pre-Check is already running for this request."
+
+
+class RequestVersionConflict(ConflictError):
+    """Optimistic-concurrency failure on a package request: another actor advanced
+    the request head (``expected_request_version`` stale, doc 07 §8.1, §9.4)."""
+
+    code = "REQUEST_VERSION_CONFLICT"
+    message = "This request changed while you were working. Reload the current version and retry."
+
+
+class CandidateNotReady(ConflictError):
+    """Create Draft Package was called before a candidate is ready (doc 06 §7).
+
+    The request must be in ``candidate_ready`` (a non-stale, succeeded candidate).
+    """
+
+    code = "CANDIDATE_NOT_READY"
+    message = "No ready candidate exists for this request yet."
+
+
+class CandidateStale(ConflictError):
+    """The candidate hash supplied to Create Draft Package no longer matches the
+    request's current candidate (doc 06 §7, §13). Review the current candidate."""
+
+    code = "CANDIDATE_STALE"
+    message = "This candidate is stale. Review the current candidate and retry."
+
+
+class DependencyUnresolved(ConflictError):
+    """A draft/approval was attempted while a pinned dependency is unresolved
+    (doc 06 §7, §11). The dependency snapshot must be resolved and non-stale."""
+
+    code = "DEPENDENCY_UNRESOLVED"
+    message = "A required dependency is unresolved. Re-run Pre-Check and try again."
+
+
 class ServiceUnavailableError(AppError):
     code = "SERVICE_UNAVAILABLE"
     http_status = 503

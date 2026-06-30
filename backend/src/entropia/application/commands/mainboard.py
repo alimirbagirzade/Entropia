@@ -481,7 +481,9 @@ async def create_composition_snapshot(
             event_kind="mainboard.snapshot_created",
             target_type=_WORKSPACE_TARGET_TYPE,
             target_entity_id=workspace.entity_id,
-            new_state=comp_hash,
+            # new_state holds the snapshot id (<=48); the 64-char composition_hash
+            # rides in the outbox payload below (new_state is VARCHAR(48)).
+            new_state=snapshot.snapshot_id,
             payload={
                 "snapshot_id": snapshot.snapshot_id,
                 "composition_hash": comp_hash,
@@ -792,7 +794,10 @@ def _composition_changed(
         actor_kind=actor.actor_kind,
         target_entity_id=workspace_id,
         target_entity_type=_WORKSPACE_TARGET_TYPE,
-        new_state=composition_hash_value,
+        # The 64-char composition_hash exceeds new_state's VARCHAR(48); carry it in
+        # the JSONB metadata (and outbox payload below) instead — Postgres enforces
+        # the column length even though local SQLite does not.
+        metadata={"composition_hash": composition_hash_value},
         correlation_id=actor.correlation_id,
     )
     audit_repo.add_outbox_event(

@@ -58,6 +58,38 @@ async def test_guest_cannot_open_default_mainboard(app) -> None:
 
 
 @pytest.mark.contract
+async def test_guest_default_mainboard_does_not_leak_workspace_or_composition(app) -> None:
+    # AT#1: the Mainboard page is authentication-gated. A Guest must receive ONLY
+    # the canonical error envelope — never a workspace id, composition hash, item
+    # list, or an ETag (which would leak the workspace row version / existence).
+    gen = _override(app, Actor.anonymous())
+    next(gen)
+    try:
+        async with await _client(app) as c:
+            resp = await c.get("/api/v1/mainboards/default")
+        assert resp.status_code == 401
+        body = resp.json()
+        # Top-level envelope carries nothing but the error object.
+        assert set(body.keys()) == {"error"}
+        assert body["error"]["code"] == "UNAUTHENTICATED"
+        leak_keys = {
+            "workspace_id",
+            "workspace_kind",
+            "composition_hash",
+            "items",
+            "ready_summary",
+            "latest_result_summary",
+            "row_version",
+        }
+        assert not (leak_keys & body.keys())
+        assert not (leak_keys & body["error"].keys())
+        # The ETag header is only set after a successful projection — never here.
+        assert "ETag" not in resp.headers
+    finally:
+        next(gen, None)
+
+
+@pytest.mark.contract
 async def test_strategy_is_not_a_valid_external_draft_kind(app) -> None:
     # CR-01: a Strategy is not an external work object kind for this endpoint.
     gen = _override(app, _actor(Role.USER, PrincipalType.HUMAN, "user_1"))

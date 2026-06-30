@@ -111,6 +111,73 @@ class IdempotencyConflictError(ConflictError):
     message = "This idempotency key was already used with a different request."
 
 
+class ApprovalRequiresAdmin(ForbiddenError):
+    """Only the Admin role may approve a revision (Market Data §, CR-02)."""
+
+    code = "APPROVAL_REQUIRES_ADMIN"
+    message = "Approving this revision requires the Admin role."
+
+
+class MappingReviewRequired(ConflictError):
+    """An essential canonical field is unmapped or ambiguous; manual review needed."""
+
+    code = "MAPPING_REVIEW_REQUIRED"
+    http_status = 422
+    message = "Schema mapping needs review before a revision can be created."
+
+
+class TimezoneRequired(ValidationError):
+    """A custom timezone mode was selected without an IANA timezone identifier."""
+
+    code = "TIMEZONE_REQUIRED"
+    message = "A custom timezone mode requires an IANA timezone identifier."
+
+
+class DependencyBlocked(ConflictError):
+    """A required upstream dependency is missing/inactive (Research Data §10).
+
+    Raised when a research dataset revision has no linked ACTIVE+APPROVED market
+    dataset revision, or the linked market revision is inactive/deleted/deprecated.
+    """
+
+    code = "DEPENDENCY_BLOCKED"
+    message = "An Approved, active Market Data revision must be linked first."
+
+
+class UsageScopeForbidden(ForbiddenError):
+    """A requested consumption is not permitted by the revision's usage scope
+    (Research Data §9.3 matrix, §10). e.g. Agent-Research-Only used in a backtest
+    evidence bundle, or raw Feature-Input-Only bound directly to a strategy."""
+
+    code = "USAGE_SCOPE_FORBIDDEN"
+    message = "This dataset's usage scope does not permit the requested use."
+
+
+class TimePolicyInvalid(ValidationError):
+    """The event/available time policy is unparseable, undocumented, or unsafe
+    (Research Data §10). e.g. delay not positive/parseable, custom rule
+    undocumented, timezone conversion invalid, event semantics incomplete."""
+
+    code = "TIME_POLICY_INVALID"
+    message = "The time policy is invalid; available time cannot be validated."
+
+
+class FieldMeaningInsufficient(ValidationError):
+    """Field meaning was not enriched to field-level semantic metadata
+    (Research Data §8.3, §10). A single prose paragraph is insufficient."""
+
+    code = "FIELD_MEANING_INSUFFICIENT"
+    message = "Field meaning must define field-level semantic metadata."
+
+
+class CustomCategoryRequired(ValidationError):
+    """Data Category = Other/Custom was chosen without a non-empty custom value
+    (Research Data §5.1, §10). No silent 'Custom Research Data' fallback."""
+
+    code = "CUSTOM_CATEGORY_REQUIRED"
+    message = "Enter a custom category for Other / Custom."
+
+
 class ServiceUnavailableError(AppError):
     code = "SERVICE_UNAVAILABLE"
     http_status = 503

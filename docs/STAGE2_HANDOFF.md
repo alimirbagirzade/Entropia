@@ -2,20 +2,20 @@
 
 > Living handoff for the staged build. Update the **Status** + **Next** sections as sub-stages land.
 
-## Status (as of Stage 2c merge)
+## Status (as of Stage 2d merge)
 
-`main` contains: **Stage 0 + 1 + 2a + 2b + 2c**, all merged via green CI (backend lint/type/**integration on real Postgres**/alembic, frontend, docker).
+`main` contains: **Stage 0 + 1 + 2a + 2b + 2c + 2d**, all merged via green CI (backend lint/type/**integration on real Postgres**/alembic, frontend, docker).
 
 | Sub-stage | Page(s) | State | PR |
 |-----------|---------|-------|----|
 | 2a | Market Data (11) | ✅ merged | #1 |
 | 2b | Research Data (12) | ✅ merged | #2 → #1 → main |
 | 2c | ESP / Embedded System Packages (09) | ✅ merged | #3 |
-| 2d | Rationale Families (10) | ⬜ next | — |
-| 2e | Create Package + Pre-Check (06, 07) | ⬜ | — |
+| 2d | Rationale Families (10) | ✅ merged | #4 |
+| 2e | Create Package + Pre-Check (06, 07) | ⬜ next | — |
 | 2f | Package Library (08) | ⬜ | — |
 
-Alembic head: `0005_esp_packages` (0001→0002→0003_market_data→0004_research_data→0005_esp_packages).
+Alembic head: `0006_rationale_families` (…→0004_research_data→0005_esp_packages→0006_rationale_families).
 
 ## How each sub-stage is built (the working loop)
 
@@ -52,7 +52,12 @@ Alembic head: `0005_esp_packages` (0001→0002→0003_market_data→0004_researc
 - ESP soft-delete / `DELETE_POLICY_BLOCKED` deprecate-first guard deferred to a later stage.
 - Research: derive-from-base market-link carry-forward; approve/revoke root `row_version` bump; idempotency keys on draft-edit endpoints.
 - Consider aligning ESP audit `event_kind` to doc 09's `resolver.registry.activated`.
+- Rationale family **name uniqueness is app-enforced only** (`find_active_or_reserved_by_name` + check inside `_op`); add a root-level denormalized active-name column + partial unique index for a DB-level backstop against concurrent same-name creation. Same gap as the no-cascade `package_rationale_assignment` table-version token (coarse; the per-row `expected_head_revision_id` is the real guard).
 
-## Next: Stage 2d — Rationale Families (doc 10)
+## Stage 2d — Rationale Families (doc 10) ✅ landed (#4)
 
-Shared-edit exception (DOMAIN_MODEL §6): all four roles may create/edit/rename/soft-delete any family + edit any assignment (policy `can_manage_rationale_families` / `can_edit_rationale_assignments`, NOT generic owner policy). `rationale_family_root/revision` (entity_registry-anchored; `display_color` root-level presentation only) + `package_rationale_assignment` edge (`target_kind = package_revision | working_item_revision`; Trading Signal/Trade Log are assignable but NOT packages). Atomic all-or-nothing batch assignment with `expected_table_version` + per-row `expected_head_revision_id` → `PACKAGE_RATIONALE_ASSIGNMENT_CONFLICT`; each changed assignment makes a new package revision; identical resubmit = idempotent no-op. Seed family `Embedded System / TA Resolver` ACTIVE. Migration `0006_rationale_families`.
+Shared-edit exception (DOMAIN_MODEL §6): all four roles create/edit/rename/soft-delete any family + edit any assignment via `can_manage_rationale_families` / `can_edit_rationale_assignments` (NOT owner policy). `rationale_family_root` (detail + `display_color`) + immutable `rationale_family_revision` + `package_rationale_assignment` edge (`target_kind = package_revision | working_item_revision`), all entity_registry-anchored; `create_family` is async/FK-safe. Atomic all-or-nothing batch with `expected_table_version` + per-row `expected_head_revision_id` → `PACKAGE_RATIONALE_ASSIGNMENT_CONFLICT`; each changed assignment makes a new package revision (carrying contracts forward; package owner unchanged); identical resubmit = idempotent no-op; output mismatch = non-blocking `OUTPUT_TYPE_NOT_LISTED` warning. Assignment table renders the family's **current** name live (rename without re-pinning). 6 ACTIVE seed families behind `SEED_RATIONALE` (incl. `Embedded System / TA Resolver`). Migration `0006_rationale_families`. **Consumed by:** 2e Strategy required-family picker (ACTIVE roots only) + 2f Package Library family filter (`rationale_family_id` join).
+
+## Next: Stage 2e — Create Package + Pre-Check (docs 06, 07)
+
+Reuses the shared **Package** model (2c `create_package`, async/FK-safe) and the ESP resolver registry (`resolve_embedded_dependency`) for Pre-Check dependency resolution; rationale assignment from 2d carries the optional family snapshot (Unassigned valid for indicator/condition; required for Strategy). New entities: `package_request`, `dependency_scan` (immutable: detected/resolved/missing/unsupported calls). Create-Package lifecycle (DOMAIN_MODEL §3.2): `requested → precheck_{passed|blocked|not_applicable|stale} → candidate_generating → candidate_ready|failed → draft_created → validation_running → experimental|eligible_for_approval|revision_required → approved|rejected|superseded`; Pre-Check scan: `not_checked → checking → passed|blocked|not_applicable|failed ; passed → stale`. Admin-only `approve_and_publish` (CR-02); non-Admins create requests only. Migration `0007_create_package_precheck`. Follow the working loop above; FK insert-order proof for every new `create_*`.

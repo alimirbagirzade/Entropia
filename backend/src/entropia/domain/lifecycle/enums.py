@@ -36,6 +36,33 @@ class ActorKind(StrEnum):
     SYSTEM_SERVICE = "system_service"
 
 
+class PackageKind(StrEnum):
+    """Cross-stage package facet (CR-04). Legacy client types are never accepted."""
+
+    STRATEGY = "strategy"
+    INDICATOR = "indicator"
+    CONDITION = "condition"
+    EMBEDDED_SYSTEM = "embedded_system"
+
+
+class ApprovalState(StrEnum):
+    """Approval facet — kept separate from lifecycle/validation/visibility (CR-04)."""
+
+    DRAFT = "draft"
+    APPROVAL_REQUESTED = "approval_requested"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
+class VisibilityScope(StrEnum):
+    """Visibility facet — orthogonal to lifecycle and approval (CR-04)."""
+
+    PRIVATE = "private"
+    EXPLICITLY_SHARED = "explicitly_shared"
+    PUBLISHED = "published"
+    SYSTEM = "system"
+
+
 class DeletionState(StrEnum):
     """Deletion overlay — orthogonal to every entity's domain lifecycle.
 

@@ -6,6 +6,8 @@ decorators below register against the canonical Redis broker.
 
 from __future__ import annotations
 
+import asyncio
+
 import dramatiq
 
 from entropia.infrastructure.observability import get_logger
@@ -18,3 +20,30 @@ log = get_logger("worker")
 def system_heartbeat(note: str = "ping") -> None:
     """Proves the queue/worker round-trip works end to end."""
     log.info("worker.heartbeat", note=note)
+
+
+@dramatiq.actor(queue_name="data", max_retries=3)
+def run_market_data_analysis(job_id: str) -> None:
+    """Execute the durable market-data analysis job (decision D4).
+
+    The ``jobs`` row created at enqueue time is the source of truth. This actor
+    opens its own DB session, runs the analysis body, and commits — the request
+    that enqueued it has long since returned (browser close never cancels it).
+    """
+    log.info("worker.market_analysis.start", job_id=job_id)
+    asyncio.run(_run_market_data_analysis(job_id))
+    log.info("worker.market_analysis.done", job_id=job_id)
+
+
+async def _run_market_data_analysis(job_id: str) -> None:
+    from entropia.application.jobs.market_data import run_analysis
+    from entropia.infrastructure.postgres.engine import get_session_factory
+
+    factory = get_session_factory()
+    async with factory() as session:
+        try:
+            await run_analysis(session, job_id)
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise

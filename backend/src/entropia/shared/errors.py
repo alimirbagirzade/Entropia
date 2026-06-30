@@ -111,6 +111,28 @@ class IdempotencyConflictError(ConflictError):
     message = "This idempotency key was already used with a different request."
 
 
+class ApprovalRequiresAdmin(ForbiddenError):
+    """Only the Admin role may approve a revision (Market Data §, CR-02)."""
+
+    code = "APPROVAL_REQUIRES_ADMIN"
+    message = "Approving this revision requires the Admin role."
+
+
+class MappingReviewRequired(ConflictError):
+    """An essential canonical field is unmapped or ambiguous; manual review needed."""
+
+    code = "MAPPING_REVIEW_REQUIRED"
+    http_status = 422
+    message = "Schema mapping needs review before a revision can be created."
+
+
+class TimezoneRequired(ValidationError):
+    """A custom timezone mode was selected without an IANA timezone identifier."""
+
+    code = "TIMEZONE_REQUIRED"
+    message = "A custom timezone mode requires an IANA timezone identifier."
+
+
 class ServiceUnavailableError(AppError):
     code = "SERVICE_UNAVAILABLE"
     http_status = 503

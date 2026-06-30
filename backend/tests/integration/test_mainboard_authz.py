@@ -5,18 +5,21 @@ Auto-skips when no PostgreSQL is reachable (see tests/integration/conftest.py).
 These tests pin the cross-principal authorization boundary of the composition
 plane (doc 01 §5, §7; DOMAIN_MODEL §4, §5):
 
-* A foreign, non-admin principal MUST NOT attach (and thereby read the pinned
-  revision payload of) another principal's PRIVATE work object — a private root
-  is one whose ``lifecycle_state`` is not ``"active"`` / not published. Attach
-  visibility is derived from the root's actual state (mirroring
-  ``application/jobs/research_data.py`` ``_require_viewable_root``); it must never
-  be a hardcoded ``"explicitly_shared"`` (which ``policy.can_view`` treats as
-  readable by ANY authenticated actor — the original vulnerability).
-* A PUBLISHED (``lifecycle_state == "active"``) foreign root remains attachable —
-  the fix narrows access to private roots, it does not blanket-block foreigners.
-* An Agent principal cannot mutate (attach / revise / soft-delete) a human-owned
-  work object it does not own.
-* Admin override still works: an Admin may attach a foreign private root.
+* Work objects have NO visibility/sharing facet and NO publish path in Stage 3a
+  (``create_work_object`` always produces an ``active`` root; ``active`` is a
+  deletion/lifecycle facet, NOT a publication facet — CR-04). Cross-owner reuse
+  is exposed via the Package catalog (Add Package → derived Strategy Draft), not
+  by attaching another principal's raw work object. Therefore ANY foreign
+  principal (human or Agent) attaching another principal's work object — whatever
+  its ``lifecycle_state`` — MUST be denied (403). Only the owner or an Admin may
+  attach. The original bug hardcoded ``visibility="explicitly_shared"``, which
+  ``policy.can_view`` treats as readable by ANY authenticated actor; the fix gates
+  the attach as owner/Admin-only (a foreign root resolves to private), so deriving
+  ``published`` from ``lifecycle_state == "active"`` (which every work object has)
+  would re-open the exact leak and is deliberately NOT done.
+* The owner may attach their own work object; an Admin may attach a foreign one.
+* An Agent cannot mutate (attach / revise / soft-delete) a human-owned work object
+  it does not own.
 """
 
 from __future__ import annotations
@@ -54,14 +57,13 @@ async def _seed_principals(session) -> None:
     await session.flush()
 
 
-async def _create_work_object(
-    session, *, owner_id: str, lifecycle_state: str, name: str = "secret"
-) -> tuple[str, str]:
-    """Create an ACTIVE (not deleted) work object owned by ``owner_id`` with the
-    given domain ``lifecycle_state``. Returns (root_id, revision_id).
+async def _create_work_object(session, *, owner_id: str, name: str = "secret") -> tuple[str, str]:
+    """Create a work object owned by ``owner_id`` with the real-world default
+    ``lifecycle_state="active"``. Returns (root_id, revision_id).
 
-    ``lifecycle_state="active"`` is the published state; anything else (e.g.
-    ``"draft"``) is private — readable only by the owner or an Admin.
+    In Stage 3a there is no draft/published distinction and no sharing facet for
+    work objects, so the same root is used for every cross-principal authz case —
+    authorization does not depend on ``lifecycle_state``.
     """
     root, _detail, revision = await mb_repo.create_work_object(
         session,
@@ -69,7 +71,6 @@ async def _create_work_object(
         created_by_principal_id=owner_id,
         object_kind=MainboardItemKind.STRATEGY,
         payload={"name": name},
-        lifecycle_state=lifecycle_state,
     )
     await session.flush()
     return root.entity_id, revision.revision_id
@@ -80,17 +81,17 @@ async def _create_work_object(
 # --------------------------------------------------------------------------- #
 
 
-async def test_attach_foreign_private_work_object_is_denied(session) -> None:
-    """A foreign, non-admin user attaching another user's PRIVATE root onto their
+async def test_attach_foreign_work_object_is_denied(session) -> None:
+    """A foreign, non-admin user attaching another user's work object onto their
     own workspace must be denied (403). Before the fix, attach hardcoded
-    ``visibility="explicitly_shared"`` and this attach SUCCEEDED — leaking the
-    pinned revision payload of someone else's private work object."""
+    ``visibility="explicitly_shared"`` and this SUCCEEDED — leaking the pinned
+    revision payload of someone else's work object. The root is created with the
+    real default ``lifecycle_state="active"``, proving the gate does NOT treat
+    ``active`` as a permissive "published" state (which would re-open the leak)."""
     await _seed_principals(session)
-    root_id, revision_id = await _create_work_object(
-        session, owner_id="owner_h", lifecycle_state="draft"
-    )
+    root_id, revision_id = await _create_work_object(session, owner_id="owner_h")
     # FOREIGN attaches to FOREIGN's *own* workspace; the breach is pinning a
-    # foreign private root, not touching a foreign workspace.
+    # foreign root, not touching a foreign workspace.
     board = await mb_query.get_default_mainboard(session, FOREIGN)
     await session.flush()
 
@@ -104,19 +105,17 @@ async def test_attach_foreign_private_work_object_is_denied(session) -> None:
         )
 
 
-async def test_attach_foreign_published_work_object_is_allowed(session) -> None:
-    """A PUBLISHED (``lifecycle_state == "active"``) foreign root stays attachable:
-    the fix derives visibility from state and must not blanket-block foreigners."""
+async def test_attach_own_work_object_is_allowed(session) -> None:
+    """The owner attaching their OWN work object succeeds — the fix narrows access
+    to owner/Admin, it does not block legitimate self-composition."""
     await _seed_principals(session)
-    root_id, revision_id = await _create_work_object(
-        session, owner_id="owner_h", lifecycle_state="active", name="published"
-    )
-    board = await mb_query.get_default_mainboard(session, FOREIGN)
+    root_id, revision_id = await _create_work_object(session, owner_id="owner_h")
+    board = await mb_query.get_default_mainboard(session, OWNER)
     await session.flush()
 
     attached = await mb_cmd.attach_mainboard_item(
         session,
-        FOREIGN,
+        OWNER,
         workspace_id=board["workspace_id"],
         root_id=root_id,
         revision_id=revision_id,
@@ -133,13 +132,11 @@ async def test_attach_foreign_published_work_object_is_allowed(session) -> None:
 # --------------------------------------------------------------------------- #
 
 
-async def test_agent_cannot_attach_human_private_work_object(session) -> None:
-    """An Agent attaching a human's PRIVATE root onto the agent's own research
-    workspace must be denied (403) — same view-gate breach as a foreign human."""
+async def test_agent_cannot_attach_human_work_object(session) -> None:
+    """An Agent attaching a human's root onto the agent's own research workspace
+    must be denied (403) — same view-gate boundary as a foreign human."""
     await _seed_principals(session)
-    root_id, revision_id = await _create_work_object(
-        session, owner_id="owner_h", lifecycle_state="draft"
-    )
+    root_id, revision_id = await _create_work_object(session, owner_id="owner_h")
     board = await mb_query.get_default_mainboard(session, AGENT)
     await session.flush()
 
@@ -157,9 +154,7 @@ async def test_agent_cannot_revise_human_work_object(session) -> None:
     """An Agent appending a revision to a human-owned work object must be denied
     (403) — edit access requires ownership (or Admin)."""
     await _seed_principals(session)
-    root_id, _revision_id = await _create_work_object(
-        session, owner_id="owner_h", lifecycle_state="draft"
-    )
+    root_id, _revision_id = await _create_work_object(session, owner_id="owner_h")
 
     with pytest.raises(AccessDeniedError):
         await mb_cmd.create_work_object_revision(
@@ -173,9 +168,7 @@ async def test_agent_cannot_revise_human_work_object(session) -> None:
 async def test_agent_cannot_soft_delete_human_work_object(session) -> None:
     """An Agent soft-deleting a human-owned work object must be denied (403)."""
     await _seed_principals(session)
-    root_id, _revision_id = await _create_work_object(
-        session, owner_id="owner_h", lifecycle_state="draft"
-    )
+    root_id, _revision_id = await _create_work_object(session, owner_id="owner_h")
 
     with pytest.raises(AccessDeniedError):
         await mb_cmd.soft_delete_work_object(session, AGENT, root_id=root_id)
@@ -186,13 +179,11 @@ async def test_agent_cannot_soft_delete_human_work_object(session) -> None:
 # --------------------------------------------------------------------------- #
 
 
-async def test_admin_can_attach_foreign_private_work_object(session) -> None:
-    """An Admin may attach a foreign PRIVATE root (admin bypasses the view gate).
-    Guards that the fix does not regress the legitimate Admin override."""
+async def test_admin_can_attach_foreign_work_object(session) -> None:
+    """An Admin may attach a foreign root (admin bypasses the view gate). Guards
+    that the fix does not regress the legitimate Admin override."""
     await _seed_principals(session)
-    root_id, revision_id = await _create_work_object(
-        session, owner_id="owner_h", lifecycle_state="draft"
-    )
+    root_id, revision_id = await _create_work_object(session, owner_id="owner_h")
     board = await mb_query.get_default_mainboard(session, ADMIN)
     await session.flush()
 

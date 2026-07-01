@@ -513,3 +513,85 @@ class MainboardItemNotFoundError(NotFoundError):
 
     code = "MAINBOARD_ITEM_NOT_FOUND"
     message = "The Mainboard item was not found."
+
+
+# --- Stage 3b — Strategy Details (doc 02; DOMAIN_MODEL §2.3) ---
+
+
+class StrategyNotFoundError(NotFoundError):
+    """A referenced strategy root did not resolve as an active strategy."""
+
+    code = "STRATEGY_NOT_FOUND"
+    message = "The strategy was not found."
+
+
+class StrategyDraftNotFoundError(NotFoundError):
+    """A referenced strategy editor draft did not resolve."""
+
+    code = "STRATEGY_DRAFT_NOT_FOUND"
+    message = "The strategy draft was not found."
+
+
+class StrategyRevisionNotFoundError(NotFoundError):
+    """A referenced immutable strategy revision did not resolve."""
+
+    code = "STRATEGY_REVISION_NOT_FOUND"
+    message = "The strategy revision was not found."
+
+
+class StrategyDraftConflictError(ConflictError):
+    """A draft mutation supplied a stale ``expected_draft_row_version`` (doc 02
+    §7, §8.2). No last-write-wins overwrite is applied; the caller reloads the
+    current draft (changed paths) and chooses Reload / Merge / Fork / Discard."""
+
+    code = "STRATEGY_DRAFT_CONFLICT"
+    message = "This draft changed in another session. Reload the latest version before saving."
+
+
+class StrategyDraftNotAttachedError(ValidationError):
+    """A Save was attempted on a transient draft with no strategy root. A draft
+    must be bound to a root (created via POST /strategy-drafts) before Save."""
+
+    code = "STRATEGY_DRAFT_NOT_ATTACHED"
+    message = "This draft is not attached to a strategy root and cannot be saved."
+
+
+class StrategyValidationFailedError(ValidationError):
+    """The StrategyConfig failed semantic validation; no immutable revision is
+    produced (doc 02 §7.1). The issue envelope carries machine codes + paths."""
+
+    code = "STRATEGY_VALIDATION_FAILED"
+    message = "The strategy configuration has validation errors and cannot be saved."
+
+
+class SizingMethodNotExclusiveError(ValidationError):
+    """More than one Position Sizing method was active (doc 02 §6, AT-12).
+    Exactly one method must be selected."""
+
+    code = "SIZING_METHOD_NOT_EXCLUSIVE"
+    message = "Select exactly one Position Sizing method."
+
+
+class TriggerSourceConditionRequiredError(ValidationError):
+    """A condition-bearing Trigger Source (Native+Condition / Output+Condition)
+    has no compatible active Condition block (doc 02 §3, AT-05)."""
+
+    code = "TRIGGER_SOURCE_CONDITION_REQUIRED"
+    message = "Add at least one compatible Condition for the selected Trigger Source."
+
+
+class StrategyLockedForTestError(ConflictError):
+    """The strategy root is locked_for_test and cannot be edited in place;
+    clone-to-draft is required (doc 02 §7, DOMAIN_MODEL §3.2)."""
+
+    code = "STRATEGY_LOCKED_FOR_TEST"
+    message = "This strategy is locked for testing. Clone it to a new draft to continue editing."
+
+
+class StrategyReferenceNotActiveError(ConflictError):
+    """A pinned dependency (package/dataset) is no longer active at Save time
+    (doc 02 §8.2). Historical revisions/runs are unchanged; reselect an active
+    revision or have an Admin restore it."""
+
+    code = "REFERENCE_NOT_ACTIVE"
+    message = "A referenced dependency is no longer active. Select another revision."

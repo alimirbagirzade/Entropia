@@ -77,11 +77,10 @@ async def get_default_mainboard(
     return result
 
 
-@router.post("/strategy-drafts")
-async def start_strategy_draft(
-    ctx: RequestContext = Depends(request_context),
-) -> dict[str, Any]:
-    return mb_cmd.start_strategy_draft(ctx.actor)
+# NOTE: ``POST /strategy-drafts`` moved to the Strategy Details router (Stage 3b)
+# where it creates a PERSISTED draft + root instead of a transient opener. The 3a
+# transient ``mb_cmd.start_strategy_draft`` remains available as a command but is
+# no longer routed here (superseded by real persistence, doc 02 §7).
 
 
 @router.post("/external-work-object-drafts/{kind}")

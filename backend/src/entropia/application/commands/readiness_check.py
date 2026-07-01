@@ -1,0 +1,423 @@
+"""Backtest Ready Check command (doc 14 §7, §9.2, §9.3).
+
+Ready Check is a server-side immutable-snapshot validator, NOT a browser form
+check (doc 14 §14). One transaction, supplied by the request dependency, never
+committed here. Shape mirrors 4a: authorization + pure input validation OUTSIDE
+the idempotent body -> ``run_idempotent`` op {
+  read persisted draft -> compute current fingerprint ->
+  ``expected_fingerprint`` guard (mismatch => 409, RC-09) ->
+  transactional immutable snapshot (from persisted draft, NOT DOM/file) ->
+  resolve pinned revision payloads + external import evidence + allocation ->
+  pure ``evaluate_readiness`` -> persist immutable report + issues ->
+  back-fill snapshot.readiness_report_id -> audit + outbox
+}.
+
+A rerun always creates a NEW immutable report id (RC-18); reports/issues are never
+patched (doc 14 §9.1, §12.1). RUN admission (``POST /backtest-runs``) is a
+separate stage and is intentionally NOT implemented here (doc 14 §9.3, out of the
+Ready Check page scope).
+"""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime
+from typing import Any
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from entropia.application.idempotency import run_idempotent
+from entropia.domain.allocation.config import PortfolioAllocationConfigV1
+from entropia.domain.allocation.rules import (
+    AllocationItemRef,
+    canonical_config,
+    compute_config_hash,
+    validate_allocation,
+)
+from entropia.domain.identity import Actor
+from entropia.domain.identity.policy import ensure_can_view, require_authenticated
+from entropia.domain.lifecycle.enums import DeletionState
+from entropia.domain.mainboard.composition import CompositionMember, composition_hash
+from entropia.domain.mainboard.enums import MainboardItemKind
+from entropia.domain.readiness.issues import ExternalImportState, ReadinessItemInput
+from entropia.domain.readiness.validators import evaluate_readiness
+from entropia.infrastructure.postgres.models import (
+    EntityRegistry,
+    MainboardWorkingItem,
+    PortfolioAllocationEntry,
+)
+from entropia.infrastructure.postgres.repositories import allocation as alloc_repo
+from entropia.infrastructure.postgres.repositories import audit as audit_repo
+from entropia.infrastructure.postgres.repositories import mainboard as mb_repo
+from entropia.infrastructure.postgres.repositories import readiness as readiness_repo
+from entropia.shared.errors import CompositionNotFoundError, CompositionStaleError
+
+_REPORT_TARGET = "ready_check_report"
+_SNAPSHOT_TARGET = "mainboard_composition_snapshot"
+_SUCCEEDED = "succeeded"
+_EXTERNAL_KINDS = frozenset({MainboardItemKind.TRADING_SIGNAL, MainboardItemKind.TRADE_LOG})
+
+
+async def run_readiness_check(
+    session: AsyncSession,
+    actor: Actor,
+    *,
+    composition_id: str,
+    expected_fingerprint: str | None = None,
+    idempotency_key: str | None = None,
+) -> dict[str, Any]:
+    """Run the Ready Check for a composition and persist an immutable report
+    (doc 14 §7, §9.2)."""
+    require_authenticated(actor)
+    await _load_workspace_for_check(session, actor, composition_id)
+
+    async def _op() -> dict[str, Any]:
+        enabled = await readiness_repo.list_enabled_items_with_root_state(session, composition_id)
+        available_items = [item for item, ok in enabled if ok]
+        current_fingerprint = composition_hash(_members(available_items))
+
+        # RC-09: an explicit expected fingerprint that no longer matches the current
+        # draft is a stale conflict — no snapshot/report is created (doc 14 §11).
+        if expected_fingerprint is not None and expected_fingerprint != current_fingerprint:
+            raise CompositionStaleError()
+
+        allocation_enabled, allocation_issues, capital_mode = await _resolve_allocation(
+            session, composition_id, available_items
+        )
+
+        snapshot = await mb_repo.create_snapshot(
+            session,
+            workspace_entity_id=composition_id,
+            composition_hash=current_fingerprint,
+            item_manifest=_manifest(actor, composition_id, current_fingerprint, available_items),
+            created_by_principal_id=actor.principal_id,
+            capital_mode_snapshot=capital_mode,
+        )
+
+        items = await _build_item_inputs(session, enabled)
+        evaluation = evaluate_readiness(
+            items,
+            allocation_enabled=allocation_enabled,
+            allocation_issues=allocation_issues,
+        )
+
+        blocked_ids = {
+            i.scope_id for i in evaluation.issues if str(i.severity) == "blocker" and i.scope_id
+        }
+        pass_count = sum(1 for it in items if it.available and it.item_id not in blocked_ids)
+
+        report = await readiness_repo.create_report(
+            session,
+            workspace_entity_id=composition_id,
+            composition_snapshot_id=snapshot.snapshot_id,
+            composition_fingerprint=current_fingerprint,
+            state=str(evaluation.state),
+            blocker_count=evaluation.blocker_count,
+            warning_count=evaluation.warning_count,
+            pass_count=pass_count,
+            allocation_enabled=allocation_enabled,
+            checked_by_principal_id=actor.principal_id,
+        )
+        await readiness_repo.add_issues(
+            session, report_id=report.report_id, issues=evaluation.issues
+        )
+
+        # Fill the slot 3a left null; currentness is still recomputed at read time.
+        snapshot.readiness_report_id = report.report_id
+        snapshot.readiness_state = str(evaluation.state)
+
+        _emit_audit(
+            session,
+            actor,
+            report_id=report.report_id,
+            snapshot_id=snapshot.snapshot_id,
+            composition_id=composition_id,
+            fingerprint=current_fingerprint,
+            evaluation=evaluation,
+        )
+        return {
+            "report_id": report.report_id,
+            "composition_id": composition_id,
+            "state": str(evaluation.state),
+            "snapshot_id": snapshot.snapshot_id,
+            "composition_fingerprint": current_fingerprint,
+            "summary": {
+                "blocker_count": evaluation.blocker_count,
+                "warning_count": evaluation.warning_count,
+                "pass_count": pass_count,
+                "allocation_enabled": allocation_enabled,
+            },
+            "issues": [i.as_dict() for i in evaluation.issues],
+        }
+
+    return await run_idempotent(
+        session,
+        key=idempotency_key,
+        actor_principal_id=actor.principal_id,
+        request_payload={
+            "op": "run_readiness_check",
+            "composition_id": composition_id,
+            "expected_fingerprint": expected_fingerprint,
+        },
+        operation=_op,
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Resolution helpers                                                          #
+# --------------------------------------------------------------------------- #
+
+
+async def _load_workspace_for_check(
+    session: AsyncSession, actor: Actor, composition_id: str
+) -> EntityRegistry:
+    workspace = await mb_repo.get_workspace(session, composition_id)
+    if workspace is None or workspace.deletion_state != DeletionState.ACTIVE:
+        raise CompositionNotFoundError()
+    ensure_can_view(actor, owner_principal_id=workspace.owner_principal_id, visibility="private")
+    return workspace
+
+
+async def _build_item_inputs(
+    session: AsyncSession,
+    enabled: list[tuple[MainboardWorkingItem, bool]],
+) -> list[ReadinessItemInput]:
+    inputs: list[ReadinessItemInput] = []
+    for item, available in enabled:
+        payload: dict[str, Any] = {}
+        external: ExternalImportState | None = None
+        if available:
+            revision = await mb_repo.get_work_object_revision(session, item.pinned_revision_id)
+            payload = dict(revision.payload) if revision is not None else {}
+            if item.item_kind in _EXTERNAL_KINDS:
+                external = await _resolve_external(session, item)
+        inputs.append(
+            ReadinessItemInput(
+                item_id=item.item_id,
+                kind=item.item_kind,
+                root_id=item.work_object_root_id,
+                revision_id=item.pinned_revision_id,
+                available=available,
+                payload=payload,
+                external=external,
+            )
+        )
+    return inputs
+
+
+async def _resolve_external(
+    session: AsyncSession, item: MainboardWorkingItem
+) -> ExternalImportState:
+    if item.item_kind == MainboardItemKind.TRADE_LOG:
+        batch = await readiness_repo.resolve_trade_log_batch(session, item.pinned_revision_id)
+        if batch is None:
+            return ExternalImportState(found=False, succeeded=False, accepted_count=0)
+        return ExternalImportState(
+            found=True,
+            succeeded=str(batch.status) == _SUCCEEDED,
+            accepted_count=batch.accepted_count,
+            instrument_id=batch.instrument_id,
+            skipped_reason_codes=_reason_codes(batch.skipped_rows),
+        )
+    revision = await readiness_repo.resolve_signal_revision(session, item.pinned_revision_id)
+    if revision is None:
+        return ExternalImportState(found=False, succeeded=False, accepted_count=0)
+    return ExternalImportState(
+        found=True,
+        succeeded=str(revision.status) == _SUCCEEDED,
+        accepted_count=revision.accepted_count,
+        instrument_id=revision.instrument_id,
+        skipped_reason_codes=_reason_codes(revision.skipped_rows),
+    )
+
+
+def _reason_codes(skipped_rows: list[dict[str, Any]] | None) -> frozenset[str]:
+    if not skipped_rows:
+        return frozenset()
+    return frozenset(
+        str(row["reason_code"])
+        for row in skipped_rows
+        if isinstance(row, dict) and "reason_code" in row
+    )
+
+
+async def _resolve_allocation(
+    session: AsyncSession,
+    composition_id: str,
+    available_items: list[MainboardWorkingItem],
+) -> tuple[bool, list[Any], dict[str, Any] | None]:
+    """Resolve the persisted allocation draft into (enabled, issues, capital_mode).
+
+    Reuses the 4a plan/entries + ``validate_allocation`` (issues are empty in
+    independent mode). ``capital_mode`` pins the plan's current revision config
+    where one exists (doc 14 §9.1 capital mode snapshot), else the live draft.
+    """
+    plan = await alloc_repo.get_plan_for_workspace(session, composition_id)
+    if plan is None:
+        return False, [], {"enabled": False}
+
+    entries = await alloc_repo.list_entries(session, plan.plan_id)
+    config = _plan_to_config(plan, entries)
+    active_ids = {item.item_id for item in available_items}
+    item_refs = {
+        e.composition_item_id: AllocationItemRef(
+            kind=e.item_type, available=e.composition_item_id in active_ids
+        )
+        for e in entries
+    }
+    issues, _derived = validate_allocation(config, item_refs=item_refs)
+    capital_mode: dict[str, Any] = {
+        "enabled": config.enabled,
+        "plan_id": plan.plan_id,
+        "plan_revision_id": plan.current_revision_id,
+        "config_hash": compute_config_hash(config) if config.enabled else None,
+        "config": canonical_config(config) if config.enabled else None,
+    }
+    return config.enabled, list(issues), capital_mode
+
+
+def _plan_to_config(
+    plan: Any, entries: list[PortfolioAllocationEntry]
+) -> PortfolioAllocationConfigV1:
+    initial_capital = None
+    if plan.initial_capital_amount is not None and plan.initial_capital_currency is not None:
+        initial_capital = {
+            "amount": str(plan.initial_capital_amount),
+            "currency": str(plan.initial_capital_currency),
+        }
+    raw = {
+        "enabled": plan.enabled,
+        "initial_capital": initial_capital,
+        "compounding_mode": (
+            str(plan.compounding_mode) if plan.compounding_mode is not None else None
+        ),
+        "reserve_cash_percent": (
+            str(plan.reserve_cash_percent) if plan.reserve_cash_percent is not None else None
+        ),
+        "entries": [
+            {
+                "composition_item_id": e.composition_item_id,
+                "item_type": str(e.item_type),
+                "active": e.active,
+                "equity_share_percent": (
+                    str(e.equity_share_percent) if e.equity_share_percent is not None else None
+                ),
+            }
+            for e in entries
+        ],
+    }
+    return PortfolioAllocationConfigV1.model_validate(raw)
+
+
+def _members(items: list[MainboardWorkingItem]) -> list[CompositionMember]:
+    return [
+        CompositionMember(
+            kind=item.item_kind,
+            root_id=item.work_object_root_id,
+            revision_id=item.pinned_revision_id,
+        )
+        for item in items
+    ]
+
+
+def _manifest(
+    actor: Actor,
+    composition_id: str,
+    fingerprint: str,
+    items: list[MainboardWorkingItem],
+) -> dict[str, Any]:
+    return {
+        "workspace_id": composition_id,
+        "composition_hash": fingerprint,
+        "items": [
+            {
+                "item_id": item.item_id,
+                "kind": str(item.item_kind),
+                "root_id": item.work_object_root_id,
+                "revision_id": item.pinned_revision_id,
+                "enabled": item.is_enabled,
+                "position": item.position_index,
+            }
+            for item in items
+        ],
+        "created_by_actor_id": actor.principal_id,
+        "created_at": datetime.now(UTC).isoformat(),
+    }
+
+
+def _emit_audit(
+    session: AsyncSession,
+    actor: Actor,
+    *,
+    report_id: str,
+    snapshot_id: str,
+    composition_id: str,
+    fingerprint: str,
+    evaluation: Any,
+) -> None:
+    audit_repo.add_audit_event(
+        session,
+        event_kind="readiness.check_requested",
+        actor_principal_id=actor.principal_id,
+        actor_kind=actor.actor_kind,
+        target_entity_id=composition_id,
+        target_entity_type=_SNAPSHOT_TARGET,
+        correlation_id=actor.correlation_id,
+        metadata={"composition_fingerprint": fingerprint},
+    )
+    audit_repo.add_audit_event(
+        session,
+        event_kind="readiness.snapshot_created",
+        actor_principal_id=actor.principal_id,
+        actor_kind=actor.actor_kind,
+        target_entity_id=snapshot_id,
+        target_entity_type=_SNAPSHOT_TARGET,
+        new_state=snapshot_id,
+        correlation_id=actor.correlation_id,
+        metadata={"composition_fingerprint": fingerprint},
+    )
+    audit_repo.add_audit_event(
+        session,
+        event_kind="readiness.report_created",
+        actor_principal_id=actor.principal_id,
+        actor_kind=actor.actor_kind,
+        target_entity_id=report_id,
+        target_entity_type=_REPORT_TARGET,
+        new_state=str(evaluation.state),
+        correlation_id=actor.correlation_id,
+        metadata={
+            "blocker_count": evaluation.blocker_count,
+            "warning_count": evaluation.warning_count,
+        },
+    )
+    for issue in evaluation.issues:
+        audit_repo.add_audit_event(
+            session,
+            event_kind="readiness.issue_detected",
+            actor_principal_id=actor.principal_id,
+            actor_kind=actor.actor_kind,
+            target_entity_id=report_id,
+            target_entity_type=_REPORT_TARGET,
+            new_state=str(issue.code),
+            severity=str(issue.severity),
+            correlation_id=actor.correlation_id,
+            metadata={"scope": str(issue.scope), "scope_id": issue.scope_id},
+        )
+    audit_repo.add_outbox_event(
+        session,
+        event_type="readiness.report_created",
+        resource_type=_REPORT_TARGET,
+        resource_id=report_id,
+        payload={
+            "report_id": report_id,
+            "composition_id": composition_id,
+            "snapshot_id": snapshot_id,
+            "state": str(evaluation.state),
+            "composition_fingerprint": fingerprint,
+            "blocker_count": evaluation.blocker_count,
+            "warning_count": evaluation.warning_count,
+        },
+        correlation_id=actor.correlation_id,
+    )
+
+
+__all__ = ["run_readiness_check"]

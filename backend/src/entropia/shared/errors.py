@@ -799,3 +799,18 @@ class AllocationHasBlockersError(ValidationError):
 
     code = "ALLOCATION_HAS_BLOCKERS"
     message = "The allocation configuration has blocking issues and cannot become a plan revision."
+
+
+class CompositionStaleError(ConflictError):
+    """The composition changed since the caller's ``expected_fingerprint`` (doc 14
+    §11, RC-09). No snapshot/report/run is created."""
+
+    code = "COMPOSITION_STALE"
+    message = "The composition changed since this check was requested. Re-run the Ready Check."
+
+
+class ReadinessReportNotFoundError(NotFoundError):
+    """The requested readiness report does not exist or is not accessible (doc 14 §9.1)."""
+
+    code = "READINESS_REPORT_NOT_FOUND"
+    message = "The readiness report was not found or is not accessible."

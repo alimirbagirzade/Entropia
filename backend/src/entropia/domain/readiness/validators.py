@@ -1,0 +1,502 @@
+"""Pure, deterministic Ready Check validators + state derivation (Stage 4b,
+doc 14 §9.2 "Validator architecture and fixed check order").
+
+These are separate pure domain services (doc 14 §9.2 "not one large frontend
+handler"). Nothing here touches the DB, the clock or the request. The command
+orchestrator resolves inputs (snapshot items, pinned payloads, external import
+batch state, allocation config) and calls :func:`evaluate_readiness`; it owns
+aggregation, report persistence and audit.
+
+Fixed check order (doc 14 §9.2): composition -> lifecycle -> strategy ->
+external working objects -> portfolio allocation.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Sequence
+from dataclasses import dataclass
+from typing import Any
+
+from pydantic import ValidationError as PydanticValidationError
+
+from entropia.domain.allocation.enums import AllocationIssueCode as AllocCode
+from entropia.domain.allocation.enums import AllocationIssueSeverity as AllocSev
+from entropia.domain.allocation.rules import AllocationIssue
+from entropia.domain.mainboard.enums import MainboardItemKind
+from entropia.domain.readiness.enums import (
+    ReadinessIssueCode as Code,
+)
+from entropia.domain.readiness.enums import (
+    ReadinessScope as Scope,
+)
+from entropia.domain.readiness.enums import (
+    ReadinessSeverity as Sev,
+)
+from entropia.domain.readiness.enums import (
+    ReadinessState,
+)
+from entropia.domain.readiness.issues import ReadinessIssue, ReadinessItemInput
+from entropia.domain.strategy.config import StrategyConfig
+from entropia.domain.trade_log.compiler import validate_semantics as validate_trade_log_semantics
+from entropia.domain.trade_log.config import TradeLogConfig
+from entropia.domain.trade_log.enums import PriceSourceMode as TradeLogPriceSource
+from entropia.domain.trade_log.records import (
+    REASON_EXIT_BEFORE_ENTRY,
+    REASON_INSTRUMENT_MISMATCH,
+)
+from entropia.domain.trading_signal.compiler import (
+    validate_semantics as validate_signal_semantics,
+)
+from entropia.domain.trading_signal.config import TradingSignalConfig
+
+_CANONICAL_KINDS = frozenset(
+    {
+        MainboardItemKind.STRATEGY,
+        MainboardItemKind.TRADING_SIGNAL,
+        MainboardItemKind.TRADE_LOG,
+    }
+)
+_TRIGGERS_REQUIRING_CONDITION = frozenset(
+    {"indicator_native_trigger_plus_condition", "indicator_output_plus_condition"}
+)
+_OHLCV_FALLBACK_SOURCES = frozenset(
+    {
+        TradeLogPriceSource.OHLCV_CLOSE_IF_NEEDED,
+        TradeLogPriceSource.OHLCV_INTRABAR_IF_AVAILABLE,
+    }
+)
+
+# Allocation blocker codes that resolve to a specific readiness code; anything
+# else maps to the generic ALLOCATION_ISSUE (still carrying the original message).
+_ALLOC_CODE_MAP: dict[str, Code] = {
+    str(AllocCode.INITIAL_CAPITAL_INVALID): Code.ALLOCATION_CAPITAL_INVALID,
+    str(AllocCode.BASE_CURRENCY_INVALID): Code.ALLOCATION_CAPITAL_INVALID,
+    str(AllocCode.TOTAL_ALLOCATION_EXCEEDS_100): Code.ALLOCATION_TOTAL_EXCEEDS_100,
+    str(AllocCode.TOTAL_ALLOCATION_UNDER_100): Code.ALLOCATION_UNALLOCATED_CASH,
+    str(AllocCode.ITEM_UNAVAILABLE): Code.ALLOCATION_ITEM_UNAVAILABLE,
+}
+
+
+@dataclass(frozen=True, slots=True)
+class ReadinessEvaluation:
+    """Aggregate result of a Ready Check pass (doc 14 §9.1 report summary)."""
+
+    issues: tuple[ReadinessIssue, ...]
+    state: ReadinessState
+    blocker_count: int
+    warning_count: int
+
+    def as_summary(self) -> dict[str, int | str]:
+        return {
+            "state": str(self.state),
+            "blocker_count": self.blocker_count,
+            "warning_count": self.warning_count,
+        }
+
+
+def evaluate_readiness(
+    items: Sequence[ReadinessItemInput],
+    *,
+    allocation_enabled: bool,
+    allocation_issues: Sequence[AllocationIssue],
+) -> ReadinessEvaluation:
+    """Aggregate all validator layers into an immutable evaluation (doc 14 §9.2).
+
+    ``items`` are the ENABLED composition members (a disabled item never enters a
+    snapshot). ``allocation_issues`` is the 4a ``validate_allocation`` output for
+    the shared pool (empty in independent mode); it is mapped 1:1 here.
+    """
+    issues: list[ReadinessIssue] = []
+    issues.extend(_composition_issues(items))
+    for item in items:
+        issues.extend(_item_issues(item, allocation_enabled=allocation_enabled))
+    issues.extend(_map_allocation_issues(allocation_issues))
+
+    blockers = sum(1 for i in issues if i.severity == Sev.BLOCKER)
+    warnings = sum(1 for i in issues if i.severity == Sev.WARNING)
+    state = _derive_state(blockers, warnings)
+    return ReadinessEvaluation(
+        issues=tuple(issues),
+        state=state,
+        blocker_count=blockers,
+        warning_count=warnings,
+    )
+
+
+def _derive_state(blocker_count: int, warning_count: int) -> ReadinessState:
+    if blocker_count > 0:
+        return ReadinessState.NOT_READY
+    if warning_count > 0:
+        return ReadinessState.READY_WITH_WARNINGS
+    return ReadinessState.READY
+
+
+def is_stale(report_fingerprint: str, current_fingerprint: str) -> bool:
+    """A report is stale once the composition it was pinned to changed (doc 14 §4).
+
+    A newer catalog revision that the draft does NOT pin never stales a report —
+    the fingerprint is over the pinned revision ids only (RC-10, doc 14 §13).
+    """
+    return report_fingerprint != current_fingerprint
+
+
+# --------------------------------------------------------------------------- #
+# Composition / items (doc 14 §9.2, RC-01)                                     #
+# --------------------------------------------------------------------------- #
+
+
+def _composition_issues(items: Sequence[ReadinessItemInput]) -> list[ReadinessIssue]:
+    issues: list[ReadinessIssue] = []
+    available = [i for i in items if i.available]
+    if not available:
+        issues.append(
+            ReadinessIssue(
+                Code.COMPOSITION_EMPTY,
+                Sev.BLOCKER,
+                Scope.COMPOSITION,
+                "No enabled Strategy, Trading Signal or Trade Log exists on the composition.",
+                remediation="Add at least one enabled item, then re-run the check.",
+                field_path="composition.items",
+            )
+        )
+
+    seen: set[str] = set()
+    duplicated: set[str] = set()
+    for item in available:
+        if item.root_id in seen and item.root_id not in duplicated:
+            duplicated.add(item.root_id)
+            issues.append(
+                ReadinessIssue(
+                    Code.DUPLICATE_ENABLED_ITEM,
+                    Sev.BLOCKER,
+                    Scope.COMPOSITION,
+                    "The same working object is enabled more than once in this composition.",
+                    remediation="Disable or remove the duplicate item; V1 allows one enabled "
+                    "instance per working object.",
+                    scope_id=item.item_id,
+                )
+            )
+        seen.add(item.root_id)
+    return issues
+
+
+# --------------------------------------------------------------------------- #
+# Per-item dispatch (lifecycle -> strategy / external)                         #
+# --------------------------------------------------------------------------- #
+
+
+def _item_issues(item: ReadinessItemInput, *, allocation_enabled: bool) -> list[ReadinessIssue]:
+    if not item.available:
+        return [
+            ReadinessIssue(
+                Code.ITEM_UNAVAILABLE,
+                Sev.BLOCKER,
+                Scope.LIFECYCLE,
+                "A selected Mainboard item is soft-deleted, inaccessible, or no longer usable.",
+                remediation="Restore or replace the item's work object, then re-run the check.",
+                scope_id=item.item_id,
+            )
+        ]
+    if item.kind not in _CANONICAL_KINDS:
+        return [
+            ReadinessIssue(
+                Code.NON_CANONICAL_ITEM_KIND,
+                Sev.BLOCKER,
+                Scope.COMPOSITION,
+                f"Item kind {item.kind!s} is not a canonical composition kind.",
+                scope_id=item.item_id,
+            )
+        ]
+    if item.kind == MainboardItemKind.STRATEGY:
+        return _strategy_issues(item, allocation_enabled=allocation_enabled)
+    return _external_issues(item, allocation_enabled=allocation_enabled)
+
+
+# --------------------------------------------------------------------------- #
+# Strategy configuration (doc 14 §5.1, §9.2, RC-05/RC-06)                      #
+# --------------------------------------------------------------------------- #
+
+
+def _strategy_issues(item: ReadinessItemInput, *, allocation_enabled: bool) -> list[ReadinessIssue]:
+    try:
+        config = StrategyConfig(**item.payload)
+    except PydanticValidationError as exc:
+        return [
+            ReadinessIssue(
+                Code.STRATEGY_CONFIG_INVALID,
+                Sev.BLOCKER,
+                Scope.STRATEGY,
+                "The pinned strategy revision does not resolve to a valid configuration.",
+                remediation="Open the strategy and fix the reported fields, save a revision, "
+                "then re-run the check.",
+                field_path=_first_error_path(exc),
+                scope_id=item.item_id,
+            )
+        ]
+
+    issues: list[ReadinessIssue] = []
+    entry = config.position_entry_logic
+    enabled_entry_blocks = [b for b in entry.indicator_blocks if b.enabled]
+    if not enabled_entry_blocks:
+        issues.append(
+            ReadinessIssue(
+                Code.STRATEGY_NO_ENTRY_LOGIC,
+                Sev.BLOCKER,
+                Scope.STRATEGY,
+                "The strategy has no enabled entry indicator block.",
+                remediation="Enable at least one entry indicator block.",
+                field_path="position_entry_logic.indicator_blocks",
+                scope_id=item.item_id,
+            )
+        )
+
+    # RC-05/RC-06: a Condition Package is required ONLY when the Trigger Source
+    # demands it; a Native Trigger alone never requires one (doc 14 §5.1, §13).
+    for block in enabled_entry_blocks:
+        if block.trigger_source in _TRIGGERS_REQUIRING_CONDITION:
+            enabled_conditions = [c for c in (block.condition_blocks or []) if c.enabled]
+            if not enabled_conditions:
+                issues.append(
+                    ReadinessIssue(
+                        Code.CONDITION_PACKAGE_REQUIRED,
+                        Sev.BLOCKER,
+                        Scope.STRATEGY,
+                        f"Trigger source {block.trigger_source!r} requires at least one enabled "
+                        "condition package.",
+                        remediation="Add an enabled condition block to the indicator, or switch "
+                        "to a native trigger.",
+                        field_path=f"position_entry_logic.indicator_blocks.{block.block_id}."
+                        "condition_blocks",
+                        scope_id=item.item_id,
+                    )
+                )
+
+    if not _has_exit_or_stop(config):
+        issues.append(
+            ReadinessIssue(
+                Code.STRATEGY_NO_EXIT_OR_STOP,
+                Sev.BLOCKER,
+                Scope.STRATEGY,
+                "The strategy has neither exit logic nor an active stop.",
+                remediation="Define exit logic or enable at least one protection stop.",
+                field_path="position_exit_logic",
+                scope_id=item.item_id,
+            )
+        )
+
+    costs = config.data.costs
+    if costs.commission is None and costs.spread is None:
+        issues.append(
+            ReadinessIssue(
+                Code.EXECUTION_ASSUMPTIONS_DEFAULT,
+                Sev.WARNING,
+                Scope.STRATEGY,
+                "Commission and spread assumptions are unset; review execution realism "
+                "before running.",
+                field_path="data.costs",
+                scope_id=item.item_id,
+            )
+        )
+    return issues
+
+
+def _has_exit_or_stop(config: StrategyConfig) -> bool:
+    exit_logic = config.position_exit_logic
+    # Exit logic exists when at least one ENABLED exit indicator block is present;
+    # the signal_block is only the aggregation rule and disabled blocks are not
+    # active engine rules (doc 14 §5.1 exit/protection).
+    has_exit = any(block.enabled for block in (exit_logic.indicator_blocks or []))
+    stops = config.protection_stop_logic
+    has_stop = stops is not None and any(
+        s is not None and getattr(s, "enabled", False)
+        for s in (stops.percentage_stop, stops.trailing_stop, stops.absolute_stop)
+    )
+    return has_exit or has_stop
+
+
+# --------------------------------------------------------------------------- #
+# External working objects — Trading Signal / Trade Log (§5.1, §9.2, RC-07/08) #
+# --------------------------------------------------------------------------- #
+
+
+def _external_issues(item: ReadinessItemInput, *, allocation_enabled: bool) -> list[ReadinessIssue]:
+    is_trade_log = item.kind == MainboardItemKind.TRADE_LOG
+    issues: list[ReadinessIssue] = []
+
+    config: TradeLogConfig | TradingSignalConfig | None
+    semantic: str | None
+    if is_trade_log:
+        config, semantic = _parse_trade_log(item.payload)
+    else:
+        config, semantic = _parse_trading_signal(item.payload)
+
+    if config is None:
+        return [
+            ReadinessIssue(
+                Code.EXTERNAL_IMPORT_INVALID,
+                Sev.BLOCKER,
+                Scope.EXTERNAL_OBJECT,
+                "The pinned import revision does not resolve to a valid configuration.",
+                remediation="Re-import the source and bind an accepted normalized revision.",
+                field_path=semantic,
+                scope_id=item.item_id,
+            )
+        ]
+    if semantic is not None:
+        issues.append(
+            ReadinessIssue(
+                Code.EXTERNAL_IMPORT_INVALID,
+                Sev.BLOCKER,
+                Scope.EXTERNAL_OBJECT,
+                "The import configuration has a policy conflict.",
+                remediation="Correct the price/OHLCV/event-model policy and re-import.",
+                field_path=semantic,
+                scope_id=item.item_id,
+            )
+        )
+
+    # RC-07: a browser file selection is never proof — a normalized, accepted
+    # import revision must back the pinned config (doc 14 §5.1, Impl. Rules).
+    ext = item.external
+    if ext is None or not ext.found or not ext.succeeded or ext.accepted_count <= 0:
+        issues.append(
+            ReadinessIssue(
+                Code.EXTERNAL_IMPORT_UNRESOLVED,
+                Sev.BLOCKER,
+                Scope.EXTERNAL_OBJECT,
+                "No accepted normalized import revision backs this external object.",
+                remediation="Complete ingestion/parse/mapping and bind the accepted import "
+                "revision.",
+                scope_id=item.item_id,
+            )
+        )
+    else:
+        # TL-09: V1 is single-instrument scope; any out-of-scope (mixed) symbol
+        # row makes the import a Ready blocker (doc 05 §5.1, spec line 1099).
+        if REASON_INSTRUMENT_MISMATCH in ext.skipped_reason_codes:
+            issues.append(
+                ReadinessIssue(
+                    Code.MIXED_SYMBOL_SCOPE,
+                    Sev.BLOCKER,
+                    Scope.EXTERNAL_OBJECT,
+                    "The import contains rows outside the declared single-instrument scope.",
+                    remediation="Correct the instrument scope/mapping or split the mixed-symbol "
+                    "source into separate imports.",
+                    scope_id=item.item_id,
+                )
+            )
+        # RC-08: chronology-invalid rows are rejected under explicit policy (skipped,
+        # never silently passed) — surfaced as a non-blocking quality warning.
+        if REASON_EXIT_BEFORE_ENTRY in ext.skipped_reason_codes:
+            issues.append(
+                ReadinessIssue(
+                    Code.TRADE_LOG_CHRONOLOGY_INVALID,
+                    Sev.WARNING,
+                    Scope.EXTERNAL_OBJECT,
+                    "Some rows were skipped because exit_time precedes entry_time.",
+                    remediation="Review the skipped-row report; correct the source chronology "
+                    "if these rows are needed.",
+                    scope_id=item.item_id,
+                )
+            )
+
+    # OHLCV fallback (Trade Log): an OHLCV price fallback needs an approved Market
+    # Data revision reference at execution time (doc 05 §5.3, Impl. Rule 8).
+    if (
+        is_trade_log
+        and isinstance(config, TradeLogConfig)
+        and config.price_policy.source in _OHLCV_FALLBACK_SOURCES
+        and config.price_policy.approved_market_data_revision_ref is None
+    ):
+        issues.append(
+            ReadinessIssue(
+                Code.OHLCV_FALLBACK_MARKET_DATA_MISSING,
+                Sev.BLOCKER,
+                Scope.EXTERNAL_OBJECT,
+                "An OHLCV price fallback requires an approved Market Data revision reference.",
+                remediation="Bind an Approved Market Data revision to price_policy, or use "
+                "the trade-log entry/exit price source.",
+                field_path="price_policy.approved_market_data_revision_ref",
+                scope_id=item.item_id,
+            )
+        )
+
+    # TL-11: in independent-capital mode each enabled external item needs its own
+    # Initial Capital > 0 (doc 14 §5.1 Independent capital mode).
+    if not allocation_enabled and _independent_capital(config) is None:
+        issues.append(
+            ReadinessIssue(
+                Code.INDEPENDENT_CAPITAL_REQUIRED,
+                Sev.BLOCKER,
+                Scope.EXTERNAL_OBJECT,
+                "Independent capital mode requires this item's own Initial Capital > 0.",
+                remediation="Enable Portfolio Allocation or set an independent Initial Capital "
+                "on this item.",
+                field_path="capital.independent_initial_capital",
+                scope_id=item.item_id,
+            )
+        )
+    return issues
+
+
+def _parse_trade_log(payload: dict[str, Any]) -> tuple[TradeLogConfig | None, str | None]:
+    try:
+        config = TradeLogConfig(**payload)
+    except PydanticValidationError as exc:
+        return None, _first_error_path(exc)
+    semantic = validate_trade_log_semantics(config)
+    return config, (semantic[0]["field"] if semantic else None)
+
+
+def _parse_trading_signal(payload: dict[str, Any]) -> tuple[TradingSignalConfig | None, str | None]:
+    try:
+        config = TradingSignalConfig(**payload)
+    except PydanticValidationError as exc:
+        return None, _first_error_path(exc)
+    semantic = validate_signal_semantics(config)
+    return config, (semantic[0]["field"] if semantic else None)
+
+
+def _independent_capital(
+    config: TradeLogConfig | TradingSignalConfig,
+) -> object | None:
+    return config.capital.independent_initial_capital
+
+
+# --------------------------------------------------------------------------- #
+# Portfolio allocation (doc 14 §9.2, RC-03/RC-04) — 4a issues mapped 1:1        #
+# --------------------------------------------------------------------------- #
+
+
+def _map_allocation_issues(
+    allocation_issues: Sequence[AllocationIssue],
+) -> list[ReadinessIssue]:
+    mapped: list[ReadinessIssue] = []
+    for issue in allocation_issues:
+        severity = Sev.BLOCKER if str(issue.severity) == str(AllocSev.BLOCKER) else Sev.WARNING
+        code = _ALLOC_CODE_MAP.get(str(issue.code), Code.ALLOCATION_ISSUE)
+        mapped.append(
+            ReadinessIssue(
+                code,
+                severity,
+                Scope.PORTFOLIO_ALLOCATION,
+                issue.message,
+                field_path=issue.field,
+                scope_id=issue.composition_item_id,
+            )
+        )
+    return mapped
+
+
+def _first_error_path(exc: PydanticValidationError) -> str | None:
+    errors = exc.errors()
+    if not errors:
+        return None
+    return ".".join(str(p) for p in errors[0].get("loc", ()))
+
+
+__all__ = [
+    "ReadinessEvaluation",
+    "evaluate_readiness",
+    "is_stale",
+]

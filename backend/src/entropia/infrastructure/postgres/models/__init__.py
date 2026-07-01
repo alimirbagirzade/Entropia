@@ -26,6 +26,7 @@ from entropia.infrastructure.postgres.models.esp import (
     EmbeddedResolverContract,
     EmbeddedResolverRegistry,
 )
+from entropia.infrastructure.postgres.models.export import ExportArtifact
 from entropia.infrastructure.postgres.models.identity import Agent, HumanUser, Principal
 from entropia.infrastructure.postgres.models.jobs import IdempotencyKey, Job
 from entropia.infrastructure.postgres.models.mainboard import (
@@ -43,6 +44,11 @@ from entropia.infrastructure.postgres.models.market_data import (
     MarketSchemaMapping,
     MarketValidationIssue,
     MarketValidationRun,
+)
+from entropia.infrastructure.postgres.models.metric_profile import (
+    MetricDefinition,
+    ResultViewMetricProfileRevision,
+    ResultViewMetricProfileRoot,
 )
 from entropia.infrastructure.postgres.models.packages import PackageRevision, PackageRoot
 from entropia.infrastructure.postgres.models.rationale import (
@@ -95,6 +101,7 @@ __all__ = [
     "EmbeddedResolverRegistry",
     "EntityRegistry",
     "EntityRevision",
+    "ExportArtifact",
     "HumanUser",
     "IdempotencyKey",
     "Job",
@@ -107,6 +114,7 @@ __all__ = [
     "MarketSchemaMapping",
     "MarketValidationIssue",
     "MarketValidationRun",
+    "MetricDefinition",
     "MetricValueRow",
     "NormalizedSignalEventRevision",
     "OutboxEvent",
@@ -134,6 +142,8 @@ __all__ = [
     "ResultEquityPoint",
     "ResultManifestSnapshot",
     "ResultSummary",
+    "ResultViewMetricProfileRevision",
+    "ResultViewMetricProfileRoot",
     "SignalEventRow",
     "SourceAsset",
     "StrategyEditorDraft",

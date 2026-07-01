@@ -17,6 +17,7 @@ from entropia import __version__
 from entropia.apps.api.context import RequestContextMiddleware
 from entropia.apps.api.errors import install_exception_handlers
 from entropia.apps.api.routes import (
+    agent_lab,
     allocation,
     audit,
     backtest,
@@ -101,6 +102,7 @@ def create_app() -> FastAPI:
     app.include_router(results_history.router, prefix=base)
     app.include_router(metric_profile.router, prefix=base)
     app.include_router(result_export.router, prefix=base)
+    app.include_router(agent_lab.router, prefix=base)
 
     return app
 

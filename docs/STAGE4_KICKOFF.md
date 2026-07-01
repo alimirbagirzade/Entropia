@@ -1,103 +1,83 @@
-# Stage 4 — Portfolio/Equity Allocation (13) + Backtest Ready Check (14) — Kickoff / Resume Handoff
+# Stage 4b — Backtest Ready Check (doc 14) — Kickoff / Resume Handoff
 
 > **Amaç:** Yeni/temiz bir oturumda kaldığımız yerden devam edebilmek için hazır bağlam + **yapıştırmaya hazır başlangıç prompt'u**. Her kapanış oturumunda güncellenir.
 
 ## Nerede kaldık (2026-07-01)
 
-- **Stage 3 (Mainboard & External Work Objects, docs 01–05) TAMAMLANDI.**
-  - 3a **Mainboard** ✅ merged — PR #7, alembic 0008.
-  - 3b **Strategy Details** ✅ merged — PR #9, alembic 0009.
-  - 3c **Trading Signal + Add Outsource Signal (Trading-Signal yolu)** ✅ merged — PR #10, alembic 0010.
-  - 3d **Trade Log (doc 05)** ✅ **PR #12 açık, CI bekliyor** (main'e merge kullanıcı onayıyla). Alembic head = **`0011_trade_log`**. Add Outsource Signal `trade_log` save yolu bağlandı.
-- **Sıradaki = Stage 4 — Portfolio/Equity Allocation (doc 13) + Backtest Ready Check (doc 14).** Branch henüz yok (oturumda aç: `feat/stage-4-ready-check` veya iki dilim: `feat/stage-4a-portfolio-allocation` + `feat/stage-4b-ready-check`). **MALİYET NOTU:** Stage 4 iki büyük sayfadır (allocation + ready check); dilimi bölmen çok muhtemel — 4a=Portfolio Allocation, 4b=Ready Check.
+- **Stage 3 (docs 01–05) TAMAMLANDI** — main `7a3dab3` (PR #12 3d dahil merged).
+- **Stage 4a — Portfolio/Equity Allocation (doc 13) ✅ TAMAMLANDI** — **PR #13 açık** (`feat/stage-4a-portfolio-allocation`, commit `1c5c963`). Alembic head = **`0012_portfolio_allocation`**. CI YEŞİL olunca main'e merge (kullanıcı onayıyla; self-merge bloklu). _Merge sonrası bu satırı güncelle._
+- **Sıradaki = Stage 4b — Backtest Ready Check (doc 14).** Branch aç: `feat/stage-4b-ready-check`. Sonraki alembic = **`0013_*`**.
 
-## Otorite sırası (önce oku)
+## Stage 4a'nın bıraktıkları (Stage 4b bunları tüketir)
 
-1. `docs/STAGE2_HANDOFF.md` → "Stage 3d … ✅ landed" + "Next: Stage 4" bölümleri, **working loop**, dersler **L1–L7**, reusable foundation.
-2. `docs/STAGE_BUILD_PLAN.md` → **"Stage 4 — Portfolio Allocation & Backtest Ready Check"** (satır ~75–85): Goal (M11–M12, CR-06), tablolar, endpoint'ler, **acceptance** (kritik).
-3. `docs/spec/13_..Portfolio_Equity_Allocation..md` ve `docs/spec/14_..Backtest_Ready_Check..md` → spec'leri TAM çıkar (field/command payloads, §9 domain, §10 backend, acceptance testleri).
-4. ecc memory → **"Entropia Stage 3d — Trade Log"** ve **"Entropia Stage 3c — Trading Signal"** checkpoint'leri (reuse pointer'ları orada).
+- Tablolar (migration 0012): `portfolio_allocation_plan` (1:1 workspace, mutable draft + `row_version` + `current_revision_id`), `portfolio_allocation_entry` (composition_item_id ile bağlı, FK yok), `portfolio_allocation_plan_revision` (immutable: `config` JSONB + `config_hash` + `derived_amounts`).
+- Domain: `domain/allocation/rules.py` → `validate_allocation(config, item_refs) -> (issues, derived)`, `compute_config_hash`, `DerivedAmounts`. `domain/allocation/config.py` (PortfolioAllocationConfigV1, Decimal).
+- App: `application/commands/allocation_plan.py` (`upsert_allocation_draft`, `validate_allocation_draft`, `create_allocation_revision`), `application/queries/allocation_plan.py` (`get_allocation_draft`, `sync_preview`). Repo: `repositories/allocation.py` (`get_plan_for_workspace`, `list_entries`, `create_revision`, `max_revision_no`).
 
-## Tasarım yön verici (3a–3d'den taşınan bilgi — doğrula + uygula)
+## Stage 4b tasarım (doc 14 + build plan satır ~82)
 
-- **Backtest Ready Check (14)**, 3a'da kurulan **immutable `mainboard_composition_snapshot`**'tan okur (`readiness_report_id` alanı 3a'da **null bırakıldı — Stage 4 dolduruyor**). Ready report **immutable**; rerun = **yeni id**. Snapshot **persisted draft'tan transactional** kurulur (DOM/dosya varlığından değil). `composition_hash` add/del/enable/**pin** değişiminde değişir → prior Ready report **STALE** (bu semantik 3a'da ZATEN wired). save ≠ Ready PASS ≠ Run.
-- **Portfolio/Equity Allocation (13):** YENİ tablolar `mainboard_composition_draft`, `portfolio_allocation_plan`, `portfolio_allocation_plan_revision`, `portfolio_allocation_entry`. **Entry'ler `composition_item_id` ile bağlanır** (ASLA name/DOM/Type text). Independent mode (`enabled=false`) geçerli. **Total active share ≤100**: >100 **BLOCKER**, <100 **WARNING**, otomatik-borrow YOK. Para/yüzde **NUMERIC string** (float YASAK). Manifest yalnız `portfolio_allocation_plan_revision_id` taşır (**CR-06**, `allocation_profile*` YOK). Entry Condition Package yalnız Trigger Source gerektirdiğinde zorunlu.
-- **REUSE (yeniden yazma):**
-  - 3a `mainboard_composition_snapshot` + `create_snapshot` (Ready Check burayı okur/işaret eder), `work_object_root/revision`, `mainboard_working_item` (pinned root+revision, is_enabled, position_index).
-  - `run_idempotent` (per-principal), generic `jobs` + `enqueue_job`/`send_job` (Ready Check hesap job'ı gerekirse `data`/yeni queue).
-  - `audit_repo.add_audit_event/add_outbox_event`, tek-tx pattern, `request_context` dep, `ensure_can_edit/can_view`.
-  - Optimistic concurrency: 3b `expected_draft_row_version` / 3a `expected_row_version` / 3c-3d `expected_head_revision_id` desenleri; Stage 4 build plan `expected_fingerprint` diyor → mismatch 409.
-  - `enum_column` (VARCHAR, native_enum=False — DB'de CHECK ÜRETMİYOR; 0005–0011 hep böyle, bilerek).
-- **YENİ:** `domain/allocation/` (share/reserve/currency kuralları, NUMERIC), `domain/readiness/` (blocker/warning taxonomy), `application/commands/allocation_plan.py`, Ready Check command/query, routes, migration `0012_*`.
+- **Ready Check, 3a'nın immutable `mainboard_composition_snapshot`'ından okur.** `readiness_report_id` 3a'da **null bırakıldı → Stage 4b dolduruyor**. `capital_mode_snapshot` (JSONB) → allocation plan revision'dan doldurulacak. **`mb_repo.create_snapshot(..., capital_mode_snapshot=...)` param'ı ZATEN var** — allocation'ı buradan pinle.
+- **Endpoint:** `POST /compositions/{id}/readiness-checks` → `{report_id, state, issues[], snapshot_id, fingerprint}`. Report **immutable**, rerun = **yeni id**.
+- **Snapshot persisted draft'tan transactional** kurulur (DOM/dosya varlığından DEĞİL). `composition_hash` STALE semantiği 3a'da wired (add/del/enable/pin değişince değişir → prior report STALE). **`expected_fingerprint` mismatch → 409**. save ≠ Ready PASS ≠ Run.
+- **YENİ tablolar:** `ready_check_report`, `readiness_issue`. **YENİ modüller:** `domain/readiness/` (blocker/warning taxonomy, snapshot fingerprint compare), `application/commands/readiness_check.py`, query, route, migration `0013_*`.
+- **3d follow-up'ları BURADA uygula (Ready Check konusu):** TL-09 mixed-symbol block · TL-11 allocation kapalıyken item `capital>0` zorunlu · OHLCV-fallback → approved Market Data revision ref zorunluluğu. Trade Log revision payload'ında `price_policy.approved_market_data_revision_ref` + `capital.independent_initial_capital` alanları ZATEN var (nullable).
 
-## Bağlayıcı kurallar (Stage 4 acceptance — build plan satır 85)
+## REUSE (yeniden yazma)
 
-Allocation entry `composition_item_id` ile bağlanır (name/DOM/Type text ASLA) · independent mode (`enabled=false`) geçerli · total active share ≤100 (>100 BLOCKER, <100 WARNING, auto-borrow yok) · money/percent NUMERIC string (float yok) · manifest yalnız `portfolio_allocation_plan_revision_id` (CR-06, `allocation_profile*` yok) · readiness snapshot **persisted draft'tan transactional** (DOM/dosya varlığından değil) · reports/issues immutable (rerun = yeni id) · entry Condition Package yalnız Trigger Source gerektirince · `expected_fingerprint` mismatch → 409 · soft-delete historical snapshot/manifest/report'u ASLA silmez.
+- **3a:** `mainboard_composition_snapshot` + `mb_repo.create_snapshot(capital_mode_snapshot=)`, `work_object_root/revision`, `mainboard_working_item`, `list_active_items`, `composition_hash` (`_recompute_composition_hash`).
+- **4a:** `portfolio_allocation_plan(_revision)`, `alloc_repo.get_plan_for_workspace`, `validate_allocation` + `DerivedAmounts` (ready report allocation-yönü buradan).
+- `run_idempotent`, `audit_repo.add_audit_event/add_outbox_event`, `request_context` dep (`ctx.session`/`ctx.actor`), `ensure_can_edit/can_view`, `enum_column` (VARCHAR, CHECK üretmez), `new_id(prefix)`, `RowVersionConflictError`/`ConflictError` (409), `ValidationError` (422), `AppError.http_status` otomatik map (`apps/api/errors.py`).
 
-## Yöntem (3b/3c/3d dersi)
+## Yöntem (3b–4a dersi)
 
-- **Workflow KULLANMA** — doğrudan kendin yaz, 3a–3d pattern'lerini birebir izle (module-level async command'lar, `run_idempotent` op, `audit_repo.add_audit_event/add_outbox_event`, `request_context` dep, `ensure_can_edit/can_view`, GateGuard fact'lerini KISA geç).
-- **GateGuard fact-force hook HER yeni/edit dosyada tetikleniyor** (Write/Edit); Bash gate oturumda **bir kez**. 20+ dosyalık build'de Write tur-başına-1-dosyaya kısıtlanıyor → maliyet. **Çözüm:** ya oturum başında yetkiyle `ECC_DISABLED_HOOKS=pre:edit-write:gateguard-fact-force` set et, ya da dosyaları **Bash heredoc** ile yaz (gate-free, içerik birebir). 3d bu şekilde yazıldı.
-- Lokal doğrula: `cd backend && uv run ruff check . && uv run ruff format --check . && uv run mypy src && uv run pytest --no-cov -q` + **HER yeni `create_*` için L1 FK insert-order proof** (aiosqlite VEYA gerçek Postgres probe; 3d'de scratchpad `l1_probe_trade_log.py` deseni).
-- **Yerel Postgres:** `/opt/homebrew/bin` ile cluster **:5432 hâlâ ayakta** (entropia/entropia). Integration conftest `create_all` ile şema kuruyor (alembic'ten bağımsız). Alembic komutları `LC_ALL=en_US.UTF-8` ile; up/down/up proof için önce `DROP SCHEMA public CASCADE; CREATE SCHEMA public;`.
-- Review (code-reviewer subagent) CRITICAL/HIGH/ucuz-MEDIUM düzelt → commit (conventional) → PR → `gh run watch --exit-status` → **YEŞİL olunca merge için kullanıcıya sor** (main'e self-merge bloklu).
-- Türkçe konuş, autonomous ilerle, ana kararları + PR linkini bildir, **MALİYET BİLİNÇLİ** (gerekirse dilimi böl), her checkpoint'te memory'ye yaz.
-
-## 3d'nin bıraktığı takip notları (Stage 4'ü / sonrasını etkileyebilir)
-
-- **TL-09 (mixed-symbol Ready block), TL-11 (allocation kapalıyken capital>0 zorunlu), OHLCV-fallback → approved Market Data revision ref zorunluluğu → Ready Check (Stage 4) KONUSU.** 3d'de Save≠Ready ilkesiyle Save-time'da uygulanmadı; Ready Check bunları **blocker/warning** olarak burada uygulamalı. Trade Log revision payload'ında `price_policy.approved_market_data_revision_ref` alanı ZATEN var (null) + `capital.independent_initial_capital` (nullable) + instrument_scope tek enstrüman.
-- **Case-sensitivity latent bug — 3c'de HÂLÂ var:** 3d `records.py` header key'leri lowercase yapıyor (broker export'ları için fix + regression test). **3c `domain/trading_signal/events.py` aynı case-sensitive deseni taşıyor** (daha az maruz: bespoke `source_record_id` header'ları elle yazılıyor). Broker-stili sinyal dosyaları gelirse aynı lowercase fix'i 3c'ye uygula (follow-up).
-- **Pure "Save Draft (dosyasız)" yolu ertelendi** (3c parity): 3c ve 3d yalnız Validate&Save + Save revision (ikisi de ready import gerektirir) uyguluyor. Transient draft persistence gerekirse ayrı dilim.
-- `source_asset` repo helper'ları artık nötr `repositories/source_asset.py`'de (model hâlâ `models/trading_signal.py`'de, `models/__init__` export'lu). Stage 4 muhtemelen kullanmaz.
-- 3d integration testleri `localhost:5432` (asyncpg) `create_all` ile koşuyor; MinIO fake (monkeypatch put/get).
+- **Workflow KULLANMA** — doğrudan yaz, 4a pattern'i birebir (module-level async command'lar, tek-tx no-commit, `run_idempotent`, `session.refresh(with_for_update=True)` optimistic concurrency, `_audit_and_outbox`).
+- **GateGuard:** YENİ dosyaları **Bash heredoc** (`cat > f << 'PYEOF'`) ile yaz → gate-free. **Mevcut dosya edit'i** her seferinde fact-force tetikliyor (4 fact sun: importer'lar / etkilenen public API / veri şeması / kullanıcı isteği verbatim → retry). Bash gate oturumda bir kez.
+- **Lokal doğrula:** `cd backend && uv run ruff check . && uv run ruff format --check . && uv run mypy src && uv run pytest --no-cov -q` + **HER `create_*` için L1 FK insert-order proof** + **alembic 0013 up/down/up** (`LC_ALL=en_US.UTF-8`, proof öncesi `DROP SCHEMA public CASCADE; CREATE SCHEMA public;`). Yerel Postgres **:5432 ayakta** (entropia/entropia), `/opt/homebrew/bin`. Integration conftest `create_all` ile şema kuruyor.
+- **code-reviewer subagent → CRITICAL/HIGH bulgularını AMPİRİK DOĞRULA** (bu oturumda 3 HIGH'ın 2'si yanlış çıktı: Pydantic `model_dump(mode='json')` Decimal'i STRING yapar; strategy zaten `expected_*_row_version`'ı idempotency payload'a koyar) → gerçek olanı düzelt → commit (conventional, attribution YOK) → PR → `gh pr checks <n> --watch` → **YEŞİL olunca merge için kullanıcıya sor**.
+- **Türkçe konuş, autonomous ilerle, MALİYET BİLİNÇLİ** (bir önceki oturum $161 — gereksiz paralel ajan açma, review bulgusunu kendin doğrula). Her checkpoint'te ecc memory'ye yaz. **HER KAPANIŞTA:** `docs/STAGE<next>_KICKOFF.md` + resume prompt hazırla + `docs/STAGE2_HANDOFF.md` güncelle.
 
 ---
 
 ## ⤵️ YENİ OTURUMDA YAPIŞTIR (resume prompt)
 
 ```
-Entropia — Stage 4 başlat: Portfolio/Equity Allocation (doc 13) + Backtest Ready
-Check (doc 14). Önce bağlamı oku, sonra working loop'a göre ilerle. MALİYET BİLİNÇLİ
-ol — bu iki büyük sayfa; büyük ihtimalle dilimi böl (4a=Portfolio Allocation,
-4b=Ready Check). Branch feat/stage-4a-portfolio-allocation (veya feat/stage-4-ready-check) AÇ.
+Entropia — Stage 4b başlat: Backtest Ready Check (doc 14). Önce bağlamı oku, sonra
+working loop'a göre ilerle. Branch feat/stage-4b-ready-check AÇ. MALİYET BİLİNÇLİ ol.
 
-Durum: Stage 3 (Mainboard + Strategy + Trading Signal + Trade Log, docs 01–05)
-TAMAMLANDI. 3d Trade Log PR #12 (merge olduysa main'de; alembic head 0011_trade_log).
-Sıradaki = Stage 4.
+Durum: Stage 3 (01–05) + Stage 4a Portfolio Allocation (doc 13) TAMAMLANDI. 4a =
+PR #13 (merge olduysa main'de; alembic head 0012_portfolio_allocation). Sıradaki =
+Stage 4b Ready Check. Sonraki alembic 0013_*.
 
 ÖNCE OKU (otorite sırası): (1) docs/STAGE4_KICKOFF.md — bu dilimin tam handoff'u,
-tasarım pointer'ları, reuse listesi, working loop, 3d follow-up notları. (2)
-docs/STAGE2_HANDOFF.md → "Stage 3d landed" + "Next: Stage 4" + dersler L1–L7 +
-reusable foundation. (3) docs/STAGE_BUILD_PLAN.md → "Stage 4 — Portfolio Allocation
-& Backtest Ready Check" (Goal M11–M12/CR-06, tablolar, endpoint'ler, acceptance).
-(4) docs/spec/13_..Portfolio_Equity_Allocation.. ve docs/spec/14_..Backtest_Ready_Check..
-→ spec'leri TAM çıkar. (5) ecc memory "Entropia Stage 3d — Trade Log" + "Stage 3c"
-checkpoint'leri.
+4a'nın bıraktıkları, 4b tasarım pointer'ları, reuse listesi, working loop, 3d
+follow-up'ları. (2) docs/STAGE2_HANDOFF.md → "Stage 4a landed" + "Next: 4b" + dersler.
+(3) docs/STAGE_BUILD_PLAN.md → "Stage 4 — Portfolio Allocation & Backtest Ready Check"
+(satır ~82/85 Ready Check kolonu + acceptance). (4) docs/spec/14_..Backtest_Ready_Check..
+→ spec'i TAM çıkar (§9 domain, §10 backend, acceptance testleri). (5) ecc memory
+"Entropia Stage 4a — Portfolio Allocation" + "Stage 3d — Trade Log" checkpoint'leri.
 
-TASARIM: Ready Check, 3a'nın immutable mainboard_composition_snapshot'ından okur
-(readiness_report_id 3a'da null, Stage 4 dolduruyor); report immutable, rerun=yeni id;
-snapshot persisted draft'tan transactional; composition_hash STALE semantiği 3a'da
-wired. Portfolio Allocation: YENİ tablolar mainboard_composition_draft,
-portfolio_allocation_plan/_revision/_entry; entry composition_item_id ile bağlanır
-(name/DOM ASLA); total active share ≤100 (>100 BLOCKER, <100 WARNING, auto-borrow yok);
-money/percent NUMERIC string; manifest yalnız portfolio_allocation_plan_revision_id
-(CR-06). REUSE: 3a snapshot/work_object/item, run_idempotent, jobs+enqueue, audit/outbox,
-optimistic concurrency (expected_fingerprint→409), enum_column. YENİ: domain/allocation,
-domain/readiness, commands/queries/routes, migration 0012_*.
+TASARIM: Ready Check 3a'nın immutable mainboard_composition_snapshot'ından okur;
+readiness_report_id'yi doldurur (3a'da null); capital_mode_snapshot'ı 4a'nın
+portfolio_allocation_plan_revision'ından pinler (mb_repo.create_snapshot zaten
+capital_mode_snapshot param'ı alıyor). POST /compositions/{id}/readiness-checks →
+{report_id, state, issues[], snapshot_id, fingerprint}; report immutable, rerun=yeni id;
+snapshot persisted draft'tan transactional; expected_fingerprint mismatch → 409. YENİ
+tablolar ready_check_report + readiness_issue; YENİ domain/readiness + commands/queries/
+routes + migration 0013_*. 3d follow-up: TL-09 mixed-symbol block, TL-11 allocation
+kapalıyken capital>0, OHLCV-fallback→approved Market Data ref — Trade Log revision'da
+approved_market_data_revision_ref + capital alanları hazır.
 
-3d FOLLOW-UP (Stage 4'te uygula): TL-09 mixed-symbol block, TL-11 capital>0 (allocation
-kapalıyken), OHLCV-fallback→approved Market Data ref zorunluluğu Ready Check konusu —
-Trade Log revision'da approved_market_data_revision_ref/capital alanları hazır. 3c
-events.py'de case-sensitive header latent bug var (3d records.py fix'lendi); broker
-sinyal dosyası gelirse 3c'ye de lowercase fix uygula.
+REUSE: 3a snapshot/create_snapshot/work_object/item/composition_hash, 4a allocation
+plan_revision + validate_allocation + DerivedAmounts, run_idempotent, audit/outbox,
+request_context, ensure_can_edit/can_view, enum_column, new_id.
 
-YÖNTEM: Workflow KULLANMA — doğrudan yaz, 3a–3d pattern birebir. GateGuard fact-force
-her dosyada tetikliyor → oturum başında ECC_DISABLED_HOOKS=pre:edit-write:gateguard-fact-force
-set et VEYA Bash heredoc ile yaz. Lokal doğrula (ruff+format+mypy+pytest + HER create_*
-için L1 FK proof). Yerel Postgres :5432 ayakta (entropia/entropia); alembic LC_ALL=en_US.UTF-8,
-up/down/up proof öncesi DROP SCHEMA public CASCADE. code-reviewer subagent → CRITICAL/HIGH
-düzelt → commit → PR → gh run watch, YEŞİL olunca merge için bana sor (self-merge bloklu).
-Türkçe konuş, autonomous, MALİYET BİLİNÇLİ. Her checkpoint'te memory'ye yaz. VE HER KAPANIŞ
-OTURUMDA: docs/STAGE<next>_KICKOFF.md + yapıştırmaya-hazır resume prompt hazırla ve
-STAGE2_HANDOFF.md'yi güncelle.
+YÖNTEM: Workflow KULLANMA — doğrudan yaz, 4a pattern birebir. YENİ dosyaları Bash
+heredoc ile yaz (gate-free); mevcut dosya edit'i GateGuard fact-force (4 fact→retry).
+Lokal doğrula (ruff+format+mypy+pytest + HER create_* için L1 FK proof + alembic 0013
+up/down/up; LC_ALL=en_US.UTF-8, DROP SCHEMA public CASCADE önce). Yerel Postgres :5432
+ayakta (entropia/entropia). code-reviewer subagent → CRITICAL/HIGH bulgularını AMPİRİK
+DOĞRULA → gerçek olanı düzelt → commit (conventional, attribution yok) → PR → gh pr
+checks --watch, YEŞİL olunca merge için bana sor (self-merge bloklu). Türkçe konuş,
+autonomous, MALİYET BİLİNÇLİ. Her checkpoint memory'ye. VE HER KAPANIŞTA:
+docs/STAGE<next>_KICKOFF.md + resume prompt hazırla + STAGE2_HANDOFF.md güncelle.
 ```

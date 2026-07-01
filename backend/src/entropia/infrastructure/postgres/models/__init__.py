@@ -38,6 +38,10 @@ from entropia.infrastructure.postgres.models.rationale import (
     RationaleFamilyRevision,
     RationaleFamilyRoot,
 )
+from entropia.infrastructure.postgres.models.readiness import (
+    ReadinessIssueRow,
+    ReadyCheckReport,
+)
 from entropia.infrastructure.postgres.models.registry import EntityRegistry, EntityRevision
 from entropia.infrastructure.postgres.models.research_data import (
     ResearchDatasetRevision,
@@ -99,6 +103,8 @@ __all__ = [
     "Principal",
     "RationaleFamilyRevision",
     "RationaleFamilyRoot",
+    "ReadinessIssueRow",
+    "ReadyCheckReport",
     "ResearchDatasetRevision",
     "ResearchFeatureDefinition",
     "ResearchFieldDefinition",

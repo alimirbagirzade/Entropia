@@ -68,12 +68,14 @@ Before stopping a working session, produce **ALL** of the following:
 
 ## Current position (keep in sync at each closing)
 
-- **Landed:** Stages 0-4b + **5a — RUN + Backtest Results core (doc 15)** + **5b-1 —
-  Results History (doc 16)** + **5c — Arrange Metrics (doc 17) + doc-15 deferred
-  (Result export + artifact cursor-query)**. `main` after PR #20 = `9e29c23`; alembic
-  head = `0015_arrange_metrics_export` (4 tables: `metric_definition` seeded 27 +
-  `result_view_metric_profile_root/revision` + `export_artifact`).
-- **Next:** **Stage 6 — Analysis Lab (doc 18) + Panel/Management/Logs (doc 19) + Trash
-  (doc 20)**. First slice = Analysis Lab; branch `feat/stage-6a-analysis-lab`; first
-  new migration `0016_*` (→0015). Trash (20) picks up the Result restore/purge +
-  profile-root soft-delete deferred by 5a/5c. Full handoff: `docs/STAGE6_KICKOFF.md`.
+- **Landed:** Stages 0-4b + 5a (doc 15) + 5b-1 (doc 16) + 5c (doc 17 + doc-15 deferred)
+  + **6a — Analysis Lab observation/control plane (doc 18, surface + persistence)**.
+  `main` after PR #22 = `c908cbc`; alembic head = `0016_analysis_lab` (8 tables:
+  `agent_runtime`/`agent_task`/`task_directive`/`agent_checkpoint`/`lab_message`/
+  `hypothesis_artifact`/`artifact_link`/`agent_event`; singleton `alpha-agent` seeded).
+- **Next:** **Stage 6a-2 — Analysis Lab Coordinator runtime loop + Tool Gateway**
+  (doc 18 §9.2/§10): promote the `agent_coordinator` scaffold into a real loop +
+  `application/jobs/agent_tools` on `agent`/`agent-high` queue + tool parity (AL-01,
+  AL-11..AL-16). Branch `feat/stage-6a2-coordinator`; migration `0017_*` if new tables.
+  Then 6b = Panel/Logs (doc 19), 6c = Trash (doc 20). Full handoff:
+  `docs/STAGE6A2_KICKOFF.md`.

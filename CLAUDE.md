@@ -69,17 +69,24 @@ Before stopping a working session, produce **ALL** of the following:
 ## Current position (keep in sync at each closing)
 
 - **Landed:** Stages 0-4b + 5a (doc 15) + 5b-1 (doc 16) + 5c (doc 17 + doc-15 deferred)
-  + 6a (doc 18 surface + persistence) + **6a-2 — Analysis Lab Coordinator runtime
-  loop + Tool Gateway (doc 18 §9.2/§10)**. `main` after PR #24 = `23e13a5`; alembic
-  head = `0017_agent_tool_gateway` (adds `agent_tool_call` — the durable tool-call
-  envelope; `idempotency_key` UNIQUE). Coordinator loop = `apps/agent_coordinator` +
-  `application/commands/agent_loop.run_coordinator_cycle`; Tool Gateway =
-  `application/jobs/agent_tools` (`dispatch_tool_call`/`run_tool_job`/`enqueue_tool_call`)
-  on `agent`/`agent-high` queue; parity tools + governance in
-  `domain/agent_lab/tool_gateway`. AL-01/AL-11/AL-12/AL-14/AL-16 covered.
-- **Next:** **Stage 6b — Panel / Management / Logs (doc 19)**: `application/commands/
-  role_assignment` (atomic role change + last-admin protection) + `application/queries/
-  log_projection` (Admin-only read model over `audit_events`, filters + opaque cursor);
-  `require_admin` at endpoint **and** service; append-only events. Branch
-  `feat/stage-6b-panel-logs`; migration `0018_*` if new tables. Then 6c = Trash
-  (doc 20). Full handoff: `docs/STAGE6B_KICKOFF.md`.
+  + 6a (doc 18 surface + persistence) + 6a-2 (Coordinator loop + Tool Gateway,
+  §9.2/§10) + **6b — Panel / Management / Logs (doc 19)**. `main` after PR #26 =
+  `77ea5b4`; alembic head = `0017_agent_tool_gateway` (6b added **no migration** —
+  Logs is a read model over `audit_events`). 6b: `application/commands/role_assignment.
+  assign_user_role` (`PATCH /v1/admin/users/{id}/role` — row-lock + `expected_head_
+  revision_id`/If-Match OCC → 409 `USER_ROLE_VERSION_CONFLICT`, no-op `changed=false`,
+  Agent-target 422, last-admin protection **serialized via `identity_repo.lock_admin_
+  count` advisory lock** = TOCTOU fix, `role_assigned` audit+outbox 1-tx); Logs =
+  `application/queries/log_projection` (Admin-only append-only, filters + opaque
+  composite keyset cursor + detail/correlation/causation/deleted-subject; family
+  filter mirrors `event_family` first-match-wins); Management =
+  `application/queries/user_registry` (`/v1/admin/users` humans-only keyset,
+  `/system-actors`, `/role-matrix`); `domain/admin_panel/{log_taxonomy,role_matrix}`;
+  `require_admin_panel` at endpoint **and** service. 701 tests pass.
+- **Next:** **Stage 6c — Trash (doc 20)** (Stage 6 son alt-dilimi): Admin/owner Trash
+  page over the already-landed Stage-1 deletion core (`deletion.py`
+  soft_delete/restore/purge + `TrashEntry` + `DeletionState`). Doc 20 adds §9.2 state
+  machine, §9.3 flow (purge Admin-only, OCC+idempotency+audit/outbox), §10 type-specific
+  dependency/restore/historical-integrity, §4/§5 cursor-paginated Trash list projection.
+  Branch `feat/stage-6c-trash`; migration `0018_*` only if a new table is truly needed.
+  Full handoff: `docs/STAGE6C_KICKOFF.md`.

@@ -814,3 +814,49 @@ class ReadinessReportNotFoundError(NotFoundError):
 
     code = "READINESS_REPORT_NOT_FOUND"
     message = "The readiness report was not found or is not accessible."
+
+
+# --------------------------------------------------------------------------- #
+# Stage 5a — RUN + Backtest Results (doc 15 §7, §11)                           #
+# --------------------------------------------------------------------------- #
+
+
+class ReadinessBlockedError(ValidationError):
+    """RUN admission re-ran the mandatory server preflight and it produced a
+    blocker (doc 15 §11, §15). No snapshot/manifest/run/job is created; the client
+    ``ready`` flag is never trusted. The blocking issues ride in ``details``."""
+
+    code = "READINESS_BLOCKED"
+    message = "The composition is not ready to run. Resolve the blocking issues and re-check."
+
+
+class ReadyReportStaleError(ConflictError):
+    """A supplied ``ready_report_id`` is not valid for the current composition
+    fingerprint (doc 15 §11 READY_REPORT_STALE). The old report may be shown but
+    RUN admission is refused; a fresh Ready Check is required."""
+
+    code = "READY_REPORT_STALE"
+    message = "Readiness was checked against an older composition. Re-run the Ready Check."
+
+
+class BacktestRunNotFoundError(NotFoundError):
+    """A referenced Backtest Run did not resolve or is not accessible (doc 15 §7)."""
+
+    code = "BACKTEST_RUN_NOT_FOUND"
+    message = "The backtest run was not found."
+
+
+class BacktestResultNotFoundError(NotFoundError):
+    """A referenced Backtest Result did not resolve, is soft-deleted, or is not
+    accessible (doc 15 §7)."""
+
+    code = "BACKTEST_RESULT_NOT_FOUND"
+    message = "The backtest result was not found."
+
+
+class RunNotRetryableError(ConflictError):
+    """Retry was requested on a run that is not a terminal FAILED/CANCELLED run
+    (doc 15 §7, §8.4). A succeeded or still-active run is never reset."""
+
+    code = "RUN_NOT_RETRYABLE"
+    message = "Only a failed or cancelled run can be retried."

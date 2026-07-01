@@ -1,6 +1,16 @@
 """All ORM models. Importing this package registers every table on
 ``Base.metadata`` (used by Alembic autogenerate and create_all in tests)."""
 
+from entropia.infrastructure.postgres.models.agent_lab import (
+    AgentCheckpoint,
+    AgentEvent,
+    AgentRuntime,
+    AgentTask,
+    ArtifactLink,
+    HypothesisArtifact,
+    LabMessage,
+    TaskDirective,
+)
 from entropia.infrastructure.postgres.models.allocation import (
     PortfolioAllocationEntry,
     PortfolioAllocationPlan,
@@ -87,8 +97,13 @@ from entropia.infrastructure.postgres.models.trading_signal import (
 
 __all__ = [
     "Agent",
+    "AgentCheckpoint",
+    "AgentEvent",
+    "AgentRuntime",
+    "AgentTask",
     "AppMetadata",
     "ApprovalDecision",
+    "ArtifactLink",
     "AuditEvent",
     "BacktestResult",
     "BacktestRun",
@@ -103,8 +118,10 @@ __all__ = [
     "EntityRevision",
     "ExportArtifact",
     "HumanUser",
+    "HypothesisArtifact",
     "IdempotencyKey",
     "Job",
+    "LabMessage",
     "MainboardCompositionSnapshot",
     "MainboardWorkingItem",
     "MainboardWorkspace",
@@ -150,6 +167,7 @@ __all__ = [
     "StrategyRevision",
     "StrategyRevisionReference",
     "StrategyRoot",
+    "TaskDirective",
     "Tombstone",
     "TradeLedgerRow",
     "TrashEntry",

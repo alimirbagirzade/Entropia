@@ -978,3 +978,69 @@ class ArtifactNotAvailableError(NotFoundError):
 
     code = "ARTIFACT_NOT_AVAILABLE"
     message = "This result artifact is not available."
+
+
+# --- Analysis Lab (Stage 6a, doc 18) ----------------------------------------
+
+
+class MessageTextRequiredError(ValidationError):
+    """A blank/whitespace discussion message or directive text was submitted
+    (doc 18 §6.1, §11 AL-06)."""
+
+    code = "MESSAGE_TEXT_REQUIRED"
+    message = "Enter a message before sending."
+
+
+class InvalidDirectivePriorityError(ValidationError):
+    """A directive priority outside the human-selectable set (``normal | high``)
+    was submitted — e.g. ``autonomous`` or an unknown value (doc 18 §11 AL-07)."""
+
+    code = "INVALID_DIRECTIVE_PRIORITY"
+    message = "Directive priority must be normal or high."
+
+
+class DirectiveTargetInvalidError(ValidationError):
+    """The directive target agent is unknown or not eligible (doc 18 §5, §7)."""
+
+    code = "DIRECTIVE_TARGET_INVALID"
+    message = "The directive target agent is not available."
+
+
+class AgentRuntimeNotFoundError(NotFoundError):
+    """The Alpha Agent runtime record was not found (doc 18 §9)."""
+
+    code = "AGENT_RUNTIME_NOT_FOUND"
+    message = "The Agent runtime is not available."
+
+
+class AgentTaskNotFoundError(NotFoundError):
+    """The requested Agent task was not found or is not viewable (doc 18 §7, §9)."""
+
+    code = "AGENT_TASK_NOT_FOUND"
+    message = "The Agent task was not found."
+
+
+class HypothesisArtifactNotFoundError(NotFoundError):
+    """The requested hypothesis/output artifact was not found (doc 18 §7, §9)."""
+
+    code = "HYPOTHESIS_NOT_FOUND"
+    message = "The hypothesis artifact was not found."
+
+
+class AgentRuntimeStateConflictError(StaleRevisionError):
+    """A runtime lifecycle command raced another (stale expected version / a
+    control already pending) — doc 18 §11 AL-17."""
+
+    code = "AGENT_RUNTIME_STATE_CONFLICT"
+    message = (
+        "Analysis Lab state changed elsewhere. Reload the latest runtime state "
+        "before sending another control command."
+    )
+
+
+class AgentRunNotStoppableError(ConflictError):
+    """Stop Current Run was requested with no active, stoppable Agent sub-run
+    (doc 18 §4, §7)."""
+
+    code = "AGENT_RUN_NOT_STOPPABLE"
+    message = "There is no active run to stop."

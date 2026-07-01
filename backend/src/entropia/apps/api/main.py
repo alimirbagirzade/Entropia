@@ -17,6 +17,7 @@ from entropia import __version__
 from entropia.apps.api.context import RequestContextMiddleware
 from entropia.apps.api.errors import install_exception_handlers
 from entropia.apps.api.routes import (
+    allocation,
     audit,
     create_package,
     esp,
@@ -89,6 +90,7 @@ def create_app() -> FastAPI:
     app.include_router(strategy.router, prefix=base)
     app.include_router(trading_signal.router, prefix=base)
     app.include_router(trade_log.router, prefix=base)
+    app.include_router(allocation.router, prefix=base)
 
     return app
 

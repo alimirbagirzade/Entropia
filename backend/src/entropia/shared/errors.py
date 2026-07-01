@@ -595,3 +595,103 @@ class StrategyReferenceNotActiveError(ConflictError):
 
     code = "REFERENCE_NOT_ACTIVE"
     message = "A referenced dependency is no longer active. Select another revision."
+
+
+# --- Stage 3c — Trading Signal / Add Outsource Signal (docs 03, 04) ---
+
+
+class SourceProviderRequiredError(ValidationError):
+    """A Trading Signal Save had a blank source/provider (doc 04 §5, §8.3, TS-03)."""
+
+    code = "SOURCE_PROVIDER_REQUIRED"
+    message = "Enter the source or provider for this Trading Signal."
+
+
+class TradingSignalValidationFailedError(ValidationError):
+    """The Trading Signal §9.2 payload failed structural/cross-field validation
+    (doc 04 §7.1, §11). The issue envelope carries machine codes + field paths;
+    no immutable revision is produced."""
+
+    code = "TRADING_SIGNAL_VALIDATION_FAILED"
+    message = "The Trading Signal configuration has validation errors and cannot be saved."
+
+
+class EventModelPolicyConflictError(ValidationError):
+    """Event model conflicts with the timeframe selection (doc 04 §5.2, §11).
+    e.g. an event-based source carrying a fixed base timeframe."""
+
+    code = "EVENT_MODEL_POLICY_CONFLICT"
+    message = "The event model conflicts with the selected base timeframe."
+
+
+class OhlcvPolicyConflictError(ValidationError):
+    """Price/OHLCV policy is internally inconsistent (doc 04 §5.2, §11, TS-09).
+    e.g. Ignore OHLCV combined with an intrabar price policy."""
+
+    code = "OHLCV_POLICY_CONFLICT"
+    message = "The OHLCV and price policy selections are incompatible."
+
+
+class FileTypeNotAllowedError(ValidationError):
+    """An uploaded source asset was not an accepted TXT/CSV file (doc 04 §11)."""
+
+    code = "FILE_TYPE_NOT_ALLOWED"
+    message = "Upload a TXT or CSV signal-event file."
+
+
+class SourceAssetNotFoundError(NotFoundError):
+    """A referenced raw source asset did not resolve (doc 04 §7.1, §11)."""
+
+    code = "SOURCE_ASSET_NOT_FOUND"
+    message = "The source asset was not found."
+
+
+class ImportJobNotFoundError(NotFoundError):
+    """A referenced Trading Signal import job did not resolve (doc 04 §7)."""
+
+    code = "IMPORT_JOB_NOT_FOUND"
+    message = "The import job was not found."
+
+
+class NormalizedRevisionNotFoundError(NotFoundError):
+    """A referenced normalized signal-event revision did not resolve (doc 04 §7.1)."""
+
+    code = "NORMALIZED_REVISION_NOT_FOUND"
+    message = "The normalized import revision was not found."
+
+
+class AvailableTimeRequiredError(ValidationError):
+    """The normalized import lacks a valid per-event ``available_time`` (doc 04 §5.1,
+    §11, TS-05). Availability is never inferred from render/import time; a new
+    import revision with a valid availability rule is required."""
+
+    code = "AVAILABLE_TIME_REQUIRED"
+    message = "Every accepted signal event needs a valid available time before Save."
+
+
+class SignalEventMappingRequiredError(ValidationError):
+    """The source file does not resolve the canonical signal-event contract
+    (doc 04 §5.1, §11, TS-06). A legacy entry/exit ledger is not silently accepted
+    as a Trading Signal; explicit event mapping or the Trade Log flow is required."""
+
+    code = "SIGNAL_EVENT_MAPPING_REQUIRED"
+    message = (
+        "Map event_time, available_time, source_record_id and signal_type, "
+        "or import as a Trade Log."
+    )
+
+
+class NoAcceptedSignalEventsError(ValidationError):
+    """The import produced zero accepted events (doc 04 §11, TS-05). Save/attach
+    cannot proceed on an empty normalized revision."""
+
+    code = "NO_ACCEPTED_SIGNAL_EVENTS"
+    message = "No accepted signal events are available. Fix the source file or mapping."
+
+
+class ImportNotReadyError(ConflictError):
+    """A Save referenced a normalized import revision that has not succeeded
+    (doc 04 §11, TS: import durability). Wait for the durable import to finish."""
+
+    code = "IMPORT_NOT_READY"
+    message = "The signal import has not finished successfully yet."

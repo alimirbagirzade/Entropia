@@ -15,6 +15,7 @@ from entropia.infrastructure.s3.client import get_s3_client
 
 _RAW_PREFIX = "market/raw"
 _PROCESSED_PREFIX = "market/processed"
+_SOURCE_ASSET_PREFIX = "signals/source"
 
 
 def content_digest(data: bytes) -> str:
@@ -24,6 +25,28 @@ def content_digest(data: bytes) -> str:
 
 def raw_object_key(entity_id: str, digest: str) -> str:
     return f"{_RAW_PREFIX}/{entity_id}/{digest}"
+
+
+def source_asset_object_key(source_asset_id: str, digest: str) -> str:
+    return f"{_SOURCE_ASSET_PREFIX}/{source_asset_id}/{digest}"
+
+
+def put_source_asset_bytes(
+    source_asset_id: str, data: bytes, *, content_type: str | None = None
+) -> tuple[str, str]:
+    """Store immutable Trading Signal source-asset bytes content-addressed.
+
+    Returns ``(object_key, digest)``. Reads back via ``get_raw_bytes`` (generic).
+    """
+    digest = content_digest(data)
+    key = source_asset_object_key(source_asset_id, digest)
+    bucket = get_settings().object_storage_bucket
+    client = get_s3_client()
+    if content_type:
+        client.put_object(Bucket=bucket, Key=key, Body=data, ContentType=content_type)
+    else:
+        client.put_object(Bucket=bucket, Key=key, Body=data)
+    return key, digest
 
 
 def processed_object_key(entity_id: str, digest: str) -> str:

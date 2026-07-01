@@ -29,6 +29,7 @@ from entropia.apps.api.routes import (
     rationale,
     research_data,
     strategy,
+    trading_signal,
     trash,
 )
 from entropia.apps.api.sse import router as sse_router
@@ -85,6 +86,7 @@ def create_app() -> FastAPI:
     app.include_router(library.router, prefix=base)
     app.include_router(mainboard.router, prefix=base)
     app.include_router(strategy.router, prefix=base)
+    app.include_router(trading_signal.router, prefix=base)
 
     return app
 

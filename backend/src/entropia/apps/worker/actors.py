@@ -156,3 +156,38 @@ async def _run_backtest_engine(job_id: str) -> None:
         except Exception:
             await session.rollback()
             raise
+
+
+@dramatiq.actor(queue_name="agent", max_retries=3)
+def run_agent_tool(job_id: str) -> None:
+    """Execute a durable agent Tool Gateway job on the ``agent`` plane (doc 18 §9.2).
+
+    The ``jobs`` + ``agent_tool_call`` rows are the source of truth. The Tool
+    Gateway's idempotency guard makes a redelivered call replay its recorded
+    outcome instead of re-executing (AL-14)."""
+    log.info("worker.agent_tool.start", job_id=job_id)
+    asyncio.run(_run_agent_tool(job_id))
+    log.info("worker.agent_tool.done", job_id=job_id)
+
+
+@dramatiq.actor(queue_name="agent-high", max_retries=3)
+def run_agent_tool_high(job_id: str) -> None:
+    """Execute a durable agent Tool Gateway job on the ``agent-high`` plane — the
+    heavier execution-scoped tools (backtest ready-check / request), doc 18 §9.2."""
+    log.info("worker.agent_tool_high.start", job_id=job_id)
+    asyncio.run(_run_agent_tool(job_id))
+    log.info("worker.agent_tool_high.done", job_id=job_id)
+
+
+async def _run_agent_tool(job_id: str) -> None:
+    from entropia.application.jobs.agent_tools import run_tool_job
+    from entropia.infrastructure.postgres.engine import get_session_factory
+
+    factory = get_session_factory()
+    async with factory() as session:
+        try:
+            await run_tool_job(session, job_id)
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise

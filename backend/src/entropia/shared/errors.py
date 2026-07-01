@@ -1044,3 +1044,37 @@ class AgentRunNotStoppableError(ConflictError):
 
     code = "AGENT_RUN_NOT_STOPPABLE"
     message = "There is no active run to stop."
+
+
+class ToolPolicyScopeError(ForbiddenError):
+    """An agent tool call was made under a scope the tool does not allow, or the
+    tool/scope name is unknown (doc 18 §9.2, §10). Recorded as a REJECTED tool
+    call, never a silent crash."""
+
+    code = "AGENT_TOOL_SCOPE_FORBIDDEN"
+    message = "This tool cannot run under the requested policy scope."
+
+
+class ResearchInputBlockedError(ForbiddenError):
+    """An ``agent_research_only`` revision was routed into an execution / backtest
+    context (doc 18 §9.1, §14, AL-11). The invalid bundle never enters a run
+    manifest; the Gateway records a ``research_input_blocked`` rejection."""
+
+    code = "RESEARCH_INPUT_BLOCKED"
+    message = "Agent-research-only data cannot enter an execution or backtest context."
+
+
+class AgentToolCallForbiddenError(ForbiddenError):
+    """The Agent attempted a privileged action it never holds — approve/publish,
+    dataset approval, Trash, or human role management (doc 18 §10, §14, AL-12)."""
+
+    code = "AGENT_TOOL_FORBIDDEN"
+    message = "The Agent is not permitted to perform this action."
+
+
+class ArtifactOwnershipError(ForbiddenError):
+    """The Agent tried to soft-delete an artifact it does not own; restore /
+    permanent delete are Admin-only (doc 18 §12, AL-16)."""
+
+    code = "ARTIFACT_NOT_OWNED"
+    message = "The Agent may only soft-delete its own artifacts."

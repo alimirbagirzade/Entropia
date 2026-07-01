@@ -297,7 +297,11 @@ async def stop_run(
         # concurrent Coordinator control moves the task out of a stoppable state
         # between the unlocked read and the runtime lock.
         runtime = await _load_runtime_for_control(session, task.agent_id, expected_row_version)
-        await session.refresh(task)
+        # Full task-row lock (not just a re-read): the Coordinator loop now runs
+        # concurrently and may be transitioning this task at a safe checkpoint.
+        # Locking the row serializes stop against the loop so neither observes a
+        # stale status (doc 18 §8.4; Stage 6a-2 concurrency hardening).
+        await session.refresh(task, with_for_update=True)
         if task.status not in TASK_STOPPABLE_STATES:
             raise AgentRunNotStoppableError()
         if not runtime_can_request_stop(runtime.status, runtime.pending_control):

@@ -11,6 +11,7 @@ from entropia.infrastructure.postgres.models.agent_lab import (
     LabMessage,
     TaskDirective,
 )
+from entropia.infrastructure.postgres.models.agent_tool_gateway import AgentToolCall
 from entropia.infrastructure.postgres.models.allocation import (
     PortfolioAllocationEntry,
     PortfolioAllocationPlan,
@@ -101,6 +102,7 @@ __all__ = [
     "AgentEvent",
     "AgentRuntime",
     "AgentTask",
+    "AgentToolCall",
     "AppMetadata",
     "ApprovalDecision",
     "ArtifactLink",

@@ -1,0 +1,121 @@
+"""Continuous Coordinator cycle (Stage 6a-2, doc 18 §8.3, §8.4, §8.5, §14, AL-01).
+
+Promotes the Stage-6a deterministic scaffold (``agent_coordinator``) into the real
+loop body ``apps/agent_coordinator`` drives every tick, independent of the UI /
+browser / Lab Assistant chat (doc 18 §14, AL-01). One cycle, one transaction (the
+process commits per tick):
+
+    apply any pending pause/stop at a safe checkpoint (never a worker kill) ->
+    if paused, stop here (a paused runtime consumes nothing) ->
+    consume the next eligible directive at a safe checkpoint (HIGH orders, never
+        preempts) -> materialize an AUTONOMOUS follow-up task (doc 18 §8.3, §10).
+
+Re-entrancy / crash recovery (AL-14): a directive already CONSUMED is never
+re-selected, so a redelivered/retried cycle produces no duplicate follow-up; a
+cycle that fails mid-way rolls back whole and the next tick re-reads canonical
+state.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from entropia.application.commands import agent_coordinator as coordinator
+from entropia.domain.agent_lab.enums import (
+    ALPHA_AGENT_ID,
+    AgentTaskPriority,
+    AgentTaskStatus,
+    RuntimeStatus,
+)
+from entropia.domain.lifecycle.enums import ActorKind
+from entropia.infrastructure.postgres.repositories import agent_lab as al_repo
+from entropia.shared.errors import AgentRuntimeNotFoundError
+
+_SYSTEM_KIND = ActorKind.SYSTEM_SERVICE
+_FOLLOWUP_TITLE_LIMIT = 120
+
+
+async def run_coordinator_cycle(
+    session: AsyncSession, *, agent_id: str = ALPHA_AGENT_ID, correlation_id: str | None = None
+) -> dict[str, Any]:
+    """Run one Coordinator cycle for the agent runtime (doc 18 §8.3-§8.5)."""
+    runtime = await al_repo.get_runtime(session, agent_id)
+    if runtime is None:
+        raise AgentRuntimeNotFoundError()
+    # Lock the runtime row for the whole cycle. The loop is now concurrent with the
+    # Admin control commands (pause/resume/stop), which also lock the row; serializing
+    # here prevents any lost update on the runtime's operational pointers.
+    await session.refresh(runtime, with_for_update=True)
+
+    control = await coordinator.apply_pending_control(
+        session, agent_id=agent_id, correlation_id=correlation_id
+    )
+
+    # A paused runtime does no work and consumes no directive this cycle
+    # (queue/directives/artifacts are preserved, doc 18 §8.4).
+    await session.refresh(runtime)
+    if runtime.status is RuntimeStatus.PAUSED:
+        return {
+            "runtime_status": str(runtime.status),
+            "control": control,
+            "consumed": None,
+            "followup_task_id": None,
+        }
+
+    consumed = await coordinator.consume_next_directive(
+        session, agent_id=agent_id, correlation_id=correlation_id
+    )
+    followup_task_id: str | None = None
+    if consumed.get("consumed"):
+        followup_task_id = await _spawn_followup_task(
+            session,
+            agent_id=agent_id,
+            directive_id=str(consumed["consumed"]),
+            correlation_id=correlation_id,
+        )
+
+    return {
+        "runtime_status": str(runtime.status),
+        "control": control,
+        "consumed": consumed,
+        "followup_task_id": followup_task_id,
+    }
+
+
+async def _spawn_followup_task(
+    session: AsyncSession, *, agent_id: str, directive_id: str, correlation_id: str | None
+) -> str | None:
+    """Materialize an AUTONOMOUS follow-up task from a consumed directive.
+
+    The task is QUEUED — real execution is the worker/Tool-Gateway's job; the
+    Coordinator never fabricates progress (CR-09, doc 18 §14)."""
+    directive = await al_repo.get_directive(session, directive_id)
+    if directive is None:
+        return None
+    title = f"Directive follow-up: {directive.text[:_FOLLOWUP_TITLE_LIMIT]}"
+    task = await al_repo.create_task(
+        session,
+        agent_id=agent_id,
+        task_type="research",
+        title=title,
+        source="directive",
+        priority=AgentTaskPriority.AUTONOMOUS,
+        status=AgentTaskStatus.QUEUED,
+        parent_task_id=directive.related_task_id,
+    )
+    await al_repo.append_event(
+        session,
+        event_type="agent_task_created",
+        actor_principal_id=None,
+        actor_kind=_SYSTEM_KIND,
+        task_id=task.task_id,
+        directive_id=directive_id,
+        payload={"source": "directive", "priority": str(AgentTaskPriority.AUTONOMOUS)},
+        correlation_id=correlation_id,
+    )
+    return task.task_id
+
+
+__all__ = ["run_coordinator_cycle"]

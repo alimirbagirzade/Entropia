@@ -101,3 +101,30 @@ async def _run_trading_signal_import(job_id: str) -> None:
         except Exception:
             await session.rollback()
             raise
+
+
+@dramatiq.actor(queue_name="data", max_retries=3)
+def run_trade_log_import(job_id: str) -> None:
+    """Execute the durable Trade Log import job (Stage 3d, doc 05, CR-09).
+
+    The ``jobs`` row created at enqueue time is the source of truth. This actor opens
+    its own DB session, runs the parse/normalize/validate body, and commits — the
+    request that enqueued it has long since returned (browser close never cancels it).
+    """
+    log.info("worker.trade_log_import.start", job_id=job_id)
+    asyncio.run(_run_trade_log_import(job_id))
+    log.info("worker.trade_log_import.done", job_id=job_id)
+
+
+async def _run_trade_log_import(job_id: str) -> None:
+    from entropia.application.jobs.trade_log import run_import
+    from entropia.infrastructure.postgres.engine import get_session_factory
+
+    factory = get_session_factory()
+    async with factory() as session:
+        try:
+            await run_import(session, job_id)
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise

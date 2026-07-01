@@ -69,13 +69,17 @@ Before stopping a working session, produce **ALL** of the following:
 ## Current position (keep in sync at each closing)
 
 - **Landed:** Stages 0-4b + 5a (doc 15) + 5b-1 (doc 16) + 5c (doc 17 + doc-15 deferred)
-  + **6a — Analysis Lab observation/control plane (doc 18, surface + persistence)**.
-  `main` after PR #22 = `c908cbc`; alembic head = `0016_analysis_lab` (8 tables:
-  `agent_runtime`/`agent_task`/`task_directive`/`agent_checkpoint`/`lab_message`/
-  `hypothesis_artifact`/`artifact_link`/`agent_event`; singleton `alpha-agent` seeded).
-- **Next:** **Stage 6a-2 — Analysis Lab Coordinator runtime loop + Tool Gateway**
-  (doc 18 §9.2/§10): promote the `agent_coordinator` scaffold into a real loop +
-  `application/jobs/agent_tools` on `agent`/`agent-high` queue + tool parity (AL-01,
-  AL-11..AL-16). Branch `feat/stage-6a2-coordinator`; migration `0017_*` if new tables.
-  Then 6b = Panel/Logs (doc 19), 6c = Trash (doc 20). Full handoff:
-  `docs/STAGE6A2_KICKOFF.md`.
+  + 6a (doc 18 surface + persistence) + **6a-2 — Analysis Lab Coordinator runtime
+  loop + Tool Gateway (doc 18 §9.2/§10)**. `main` after PR #24 = `23e13a5`; alembic
+  head = `0017_agent_tool_gateway` (adds `agent_tool_call` — the durable tool-call
+  envelope; `idempotency_key` UNIQUE). Coordinator loop = `apps/agent_coordinator` +
+  `application/commands/agent_loop.run_coordinator_cycle`; Tool Gateway =
+  `application/jobs/agent_tools` (`dispatch_tool_call`/`run_tool_job`/`enqueue_tool_call`)
+  on `agent`/`agent-high` queue; parity tools + governance in
+  `domain/agent_lab/tool_gateway`. AL-01/AL-11/AL-12/AL-14/AL-16 covered.
+- **Next:** **Stage 6b — Panel / Management / Logs (doc 19)**: `application/commands/
+  role_assignment` (atomic role change + last-admin protection) + `application/queries/
+  log_projection` (Admin-only read model over `audit_events`, filters + opaque cursor);
+  `require_admin` at endpoint **and** service; append-only events. Branch
+  `feat/stage-6b-panel-logs`; migration `0018_*` if new tables. Then 6c = Trash
+  (doc 20). Full handoff: `docs/STAGE6B_KICKOFF.md`.

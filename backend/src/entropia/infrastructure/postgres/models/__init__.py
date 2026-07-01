@@ -1,6 +1,11 @@
 """All ORM models. Importing this package registers every table on
 ``Base.metadata`` (used by Alembic autogenerate and create_all in tests)."""
 
+from entropia.infrastructure.postgres.models.allocation import (
+    PortfolioAllocationEntry,
+    PortfolioAllocationPlan,
+    PortfolioAllocationPlanRevision,
+)
 from entropia.infrastructure.postgres.models.approvals import ApprovalDecision
 from entropia.infrastructure.postgres.models.audit import AuditEvent, OutboxEvent
 from entropia.infrastructure.postgres.models.create_package import DependencyScan, PackageRequest
@@ -88,6 +93,9 @@ __all__ = [
     "PackageRequest",
     "PackageRevision",
     "PackageRoot",
+    "PortfolioAllocationEntry",
+    "PortfolioAllocationPlan",
+    "PortfolioAllocationPlanRevision",
     "Principal",
     "RationaleFamilyRevision",
     "RationaleFamilyRoot",

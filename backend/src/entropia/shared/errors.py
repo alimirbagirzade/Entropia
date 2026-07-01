@@ -747,3 +747,55 @@ class NoAcceptedTradeRecordsError(ValidationError):
 
     code = "NO_ACCEPTED_TRADE_RECORDS"
     message = "No accepted trade records are available. Fix the source file or mapping."
+
+
+# --------------------------------------------------------------------------- #
+# Stage 4a — Portfolio / Equity Allocation (doc 13 §10)                        #
+# --------------------------------------------------------------------------- #
+
+
+class CompositionNotFoundError(NotFoundError):
+    """The target Mainboard composition (workspace) is missing or inaccessible."""
+
+    code = "COMPOSITION_NOT_FOUND"
+    message = "The mainboard composition was not found or is not accessible."
+
+
+class AllocationPlanNotFoundError(NotFoundError):
+    """No allocation plan has been created for this composition yet (doc 13 §7)."""
+
+    code = "ALLOCATION_PLAN_NOT_FOUND"
+    message = "No portfolio allocation plan exists for this composition yet."
+
+
+class AllocationDraftConflictError(ConflictError):
+    """Stale ``expected_row_version`` on an allocation draft (doc 13 §7.2, §10.1)."""
+
+    code = "ALLOCATION_DRAFT_CONFLICT"
+    message = "This allocation draft changed elsewhere. Refresh, compare, then reapply your update."
+
+
+class AllocationValidationFailedError(ValidationError):
+    """The allocation config failed structural/field validation (doc 13 §10.1)."""
+
+    code = "ALLOCATION_VALIDATION_FAILED"
+    message = "The allocation configuration failed validation."
+
+
+class AllocationDependencyBlockedError(ValidationError):
+    """An entry references an item that is not a current, accessible composition
+    member (doc 13 §14#7)."""
+
+    code = "DEPENDENCY_BLOCKED"
+    message = (
+        "An allocation entry references an item that is not a current, accessible "
+        "composition member."
+    )
+
+
+class AllocationHasBlockersError(ValidationError):
+    """A plan revision was requested from a draft that still has blocking issues
+    (doc 13 §7, §10.1)."""
+
+    code = "ALLOCATION_HAS_BLOCKERS"
+    message = "The allocation configuration has blocking issues and cannot become a plan revision."

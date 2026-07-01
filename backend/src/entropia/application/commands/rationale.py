@@ -38,6 +38,7 @@ from entropia.domain.rationale import (
     normalized_name,
     pick_color,
 )
+from entropia.domain.trash.page import original_location_for
 from entropia.infrastructure.postgres.models import EntityRegistry, PackageRevision, PackageRoot
 from entropia.infrastructure.postgres.repositories import audit as audit_repo
 from entropia.infrastructure.postgres.repositories import packages as pkg_repo
@@ -49,6 +50,7 @@ from entropia.shared.errors import (
     PackageNotFound,
     PackageRationaleAssignmentConflict,
     RationaleFamilyConflict,
+    RationaleFamilyInUseError,
     RationaleFamilyNameConflict,
     RationaleFamilyNameReserved,
     RationaleFamilyNotActive,
@@ -279,10 +281,18 @@ async def soft_delete_family(
     """
     ensure_can_manage_families(actor)
     root = await _require_active_family(session, entity_id)
-    # Compare the version token to committed state, not a stale snapshot (HIGH-1).
-    await session.refresh(root)
+    # Row-lock + reload committed state so concurrent deletes of the same family
+    # serialize: the loser re-reads soft_deleted and gets a 409 from the state
+    # machine instead of writing a duplicate Trash Entry (doc 20 §14).
+    await session.refresh(root, with_for_update=True)
     if expected_row_version is not None and root.row_version != expected_row_version:
         raise RationaleFamilyConflict()
+
+    # Doc 20 §10 delete preflight: an actively-assigned family needs a repair/
+    # unassign plan BEFORE it can enter Trash — no dangling assignment, and no
+    # Trash Entry is written for a blocked delete (RATIONALE_FAMILY_IN_USE).
+    if await rationale_repo.count_active_family_assignments(session, root.entity_id) > 0:
+        raise RationaleFamilyInUseError()
 
     revision = await rationale_repo.get_family_revision(session, root.current_revision_id or "")
     name_snapshot = revision.display_name if revision is not None else None
@@ -303,6 +313,13 @@ async def soft_delete_family(
             "current_revision_id": root.current_revision_id,
             "display_name": name_snapshot,
         },
+        display_name=name_snapshot,
+        original_location=original_location_for(root.entity_type),
+        deletion_snapshot={
+            "current_revision_id": root.current_revision_id,
+            "display_name": name_snapshot,
+        },
+        correlation_id=actor.correlation_id,
     )
     _audit_and_outbox(
         session,

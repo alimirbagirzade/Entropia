@@ -40,11 +40,13 @@ from entropia.domain.backtest.manifest import build_run_manifest
 from entropia.domain.identity import Actor
 from entropia.domain.identity.policy import ensure_can_edit, ensure_can_view, require_authenticated
 from entropia.domain.lifecycle.enums import DeletionState
+from entropia.domain.trash.page import original_location_for
 from entropia.infrastructure.postgres.models import MainboardCompositionSnapshot
 from entropia.infrastructure.postgres.repositories import audit as audit_repo
 from entropia.infrastructure.postgres.repositories import backtest as bt_repo
 from entropia.infrastructure.postgres.repositories import mainboard as mb_repo
 from entropia.infrastructure.postgres.repositories import readiness as readiness_repo
+from entropia.infrastructure.postgres.repositories import trash as trash_repo
 from entropia.infrastructure.queues.enqueue import enqueue_job
 from entropia.shared.errors import (
     BacktestResultNotFoundError,
@@ -272,6 +274,25 @@ async def soft_delete_backtest_result(
             raise RowVersionConflictError()
         result.deletion_state = _SOFT_DELETED
         result.row_version += 1
+        # Stage 6c (doc 20 §3.3): the deleted Result becomes an Admin Trash row;
+        # the parent Run manifest stays immutable and readable.
+        trash_repo.add_trash_entry(
+            session,
+            entity_id=result_id,
+            entity_type=_RESULT_TARGET,
+            deleted_by=actor.principal_id,
+            reason=None,
+            owner_at_deletion=result.created_by_principal_id,
+            dependency_snapshot={"run_id": result.run_id, "manifest_hash": result.manifest_hash},
+            display_name=result_id,
+            original_location=original_location_for(_RESULT_TARGET),
+            deletion_snapshot={
+                "run_id": result.run_id,
+                "manifest_hash": result.manifest_hash,
+                "workspace_entity_id": result.workspace_entity_id,
+            },
+            correlation_id=actor.correlation_id,
+        )
         _emit_delete_audit(session, actor, result_id=result_id)
         return {"result_id": result_id, "deletion_state": _SOFT_DELETED}
 

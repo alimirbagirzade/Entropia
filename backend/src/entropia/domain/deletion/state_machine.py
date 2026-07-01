@@ -13,7 +13,9 @@ from entropia.shared.errors import ConflictError
 _ALLOWED: dict[DeletionState, frozenset[DeletionState]] = {
     DeletionState.ACTIVE: frozenset({DeletionState.SOFT_DELETED}),
     DeletionState.SOFT_DELETED: frozenset({DeletionState.ACTIVE, DeletionState.PURGE_PENDING}),
-    DeletionState.PURGE_PENDING: frozenset({DeletionState.PURGED}),
+    # purge_pending -> soft_deleted is the WORKER-FAILURE return path (doc 20
+    # §9.2); restore (-> active) stays forbidden while a purge job is pending.
+    DeletionState.PURGE_PENDING: frozenset({DeletionState.PURGED, DeletionState.SOFT_DELETED}),
     DeletionState.PURGED: frozenset(),
 }
 

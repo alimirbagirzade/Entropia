@@ -71,26 +71,35 @@ async def test_me_admin(app) -> None:
 
 @pytest.mark.contract
 @pytest.mark.parametrize(
-    "method,path",
+    "method,path,expected_code",
     [
-        ("GET", "/api/v1/trash"),
-        ("GET", "/api/v1/audit-events"),
-        ("POST", "/api/v1/trash/ent_x/restore"),
-        ("DELETE", "/api/v1/trash/ent_x/purge"),
-        ("POST", "/api/v1/users/user_2/role"),
+        ("GET", "/api/v1/trash-entries", "TRASH_ACCESS_FORBIDDEN"),
+        ("GET", "/api/v1/trash-entries/trash_x", "TRASH_ACCESS_FORBIDDEN"),
+        ("POST", "/api/v1/trash-entries/trash_x/restore", "TRASH_ACCESS_FORBIDDEN"),
+        ("POST", "/api/v1/trash-entries/trash_x/purge", "TRASH_ACCESS_FORBIDDEN"),
+        ("GET", "/api/v1/audit-events", "ACCESS_DENIED"),
+        ("POST", "/api/v1/users/user_2/role", "ACCESS_DENIED"),
     ],
 )
-async def test_admin_routes_reject_normal_user(app, method: str, path: str) -> None:
+async def test_admin_routes_reject_normal_user(
+    app, method: str, path: str, expected_code: str
+) -> None:
     user = _actor(Role.USER, PrincipalType.HUMAN, "user_1")
     gen = _override(app, user)
     next(gen)
+    body: dict[str, str] | None = None
+    if path.endswith("role"):
+        body = {"role": "admin"}
+    elif path.endswith("purge"):
+        # A schema-valid body so the 403 guard (not 422 validation) is exercised.
+        body = {"confirmation_phrase": "x", "reauth_proof": "y"}
     try:
         async with await _client(app) as c:
-            resp = await c.request(
-                method, path, json={"role": "admin"} if path.endswith("role") else None
-            )
+            resp = await c.request(method, path, json=body)
         assert resp.status_code == 403
-        assert resp.json()["error"]["code"] == "ACCESS_DENIED"
+        assert resp.json()["error"]["code"] == expected_code
+        # No object names, counts or snapshots leak to a denied caller (doc 20 §15).
+        assert "data" not in resp.json()
     finally:
         next(gen, None)
 

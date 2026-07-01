@@ -16,6 +16,7 @@ from entropia.shared.errors import (
     AdminPanelAccessRequiredError,
     AgentRoleNotAssignableError,
     LastAdminProtectedError,
+    TrashAccessForbiddenError,
     UnauthenticatedError,
 )
 
@@ -41,6 +42,16 @@ def require_admin_panel(actor: Actor) -> None:
     require_authenticated(actor)
     if not actor.is_admin:
         raise AdminPanelAccessRequiredError()
+
+
+def require_trash_admin(actor: Actor) -> None:
+    """Trash list/detail/restore/purge guard (doc 20 §2). Only an authenticated
+    human Admin may use Trash; User/Supervisor/Agent get 403 TRASH_ACCESS_FORBIDDEN
+    with no row metadata. The Rationale shared-editing exception never extends
+    here, and the Agent principal keeps only its own-output soft-delete tool."""
+    require_authenticated(actor)
+    if not actor.is_admin:
+        raise TrashAccessForbiddenError()
 
 
 def require_role(actor: Actor, roles: Iterable[Role]) -> None:

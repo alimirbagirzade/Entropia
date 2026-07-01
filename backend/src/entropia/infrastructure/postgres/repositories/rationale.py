@@ -264,6 +264,20 @@ async def assignment_table_fingerprint(
     return content_hash(pairs)
 
 
+async def count_active_family_assignments(session: AsyncSession, family_id: str) -> int:
+    """How many current-projection rows still point at this family as ASSIGNED.
+
+    Soft-delete preflight (doc 20 §10, RATIONALE_FAMILY_IN_USE): a family with any
+    active assignment needs a repair/unassign plan before it can enter Trash.
+    ``assigned_to_deleted_family`` rows are historical flags, not active use.
+    """
+    stmt = select(func.count()).where(
+        PackageRationaleAssignment.rationale_family_id == family_id,
+        PackageRationaleAssignment.assignment_state == RationaleAssignmentState.ASSIGNED,
+    )
+    return int((await session.execute(stmt)).scalar_one())
+
+
 async def get_assignment(
     session: AsyncSession, *, target_kind: AssignmentTargetKind, target_root_id: str
 ) -> PackageRationaleAssignment | None:

@@ -8,6 +8,18 @@ from entropia.infrastructure.postgres.models.allocation import (
 )
 from entropia.infrastructure.postgres.models.approvals import ApprovalDecision
 from entropia.infrastructure.postgres.models.audit import AuditEvent, OutboxEvent
+from entropia.infrastructure.postgres.models.backtest import (
+    BacktestResult,
+    BacktestRun,
+    BacktestRunManifest,
+    DiagnosticArtifact,
+    MetricValueRow,
+    ResultEquityPoint,
+    ResultManifestSnapshot,
+    ResultSummary,
+    SignalEventRow,
+    TradeLedgerRow,
+)
 from entropia.infrastructure.postgres.models.create_package import DependencyScan, PackageRequest
 from entropia.infrastructure.postgres.models.deletion import Tombstone, TrashEntry
 from entropia.infrastructure.postgres.models.esp import (
@@ -72,9 +84,13 @@ __all__ = [
     "AppMetadata",
     "ApprovalDecision",
     "AuditEvent",
+    "BacktestResult",
+    "BacktestRun",
+    "BacktestRunManifest",
     "CanonicalTradeRecordBatch",
     "DatasetCoverageSlice",
     "DependencyScan",
+    "DiagnosticArtifact",
     "EmbeddedResolverContract",
     "EmbeddedResolverRegistry",
     "EntityRegistry",
@@ -91,6 +107,7 @@ __all__ = [
     "MarketSchemaMapping",
     "MarketValidationIssue",
     "MarketValidationRun",
+    "MetricValueRow",
     "NormalizedSignalEventRevision",
     "OutboxEvent",
     "PackageRationaleAssignment",
@@ -114,12 +131,17 @@ __all__ = [
     "ResearchTimePolicy",
     "ResearchValidationIssue",
     "ResearchValidationRun",
+    "ResultEquityPoint",
+    "ResultManifestSnapshot",
+    "ResultSummary",
+    "SignalEventRow",
     "SourceAsset",
     "StrategyEditorDraft",
     "StrategyRevision",
     "StrategyRevisionReference",
     "StrategyRoot",
     "Tombstone",
+    "TradeLedgerRow",
     "TrashEntry",
     "WorkObjectRevision",
     "WorkObjectRoot",

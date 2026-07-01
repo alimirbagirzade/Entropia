@@ -19,6 +19,7 @@ from entropia.apps.api.errors import install_exception_handlers
 from entropia.apps.api.routes import (
     allocation,
     audit,
+    backtest,
     create_package,
     esp,
     health,
@@ -93,6 +94,7 @@ def create_app() -> FastAPI:
     app.include_router(trade_log.router, prefix=base)
     app.include_router(allocation.router, prefix=base)
     app.include_router(readiness.router, prefix=base)
+    app.include_router(backtest.router, prefix=base)
 
     return app
 

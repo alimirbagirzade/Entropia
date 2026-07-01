@@ -128,3 +128,31 @@ async def _run_trade_log_import(job_id: str) -> None:
         except Exception:
             await session.rollback()
             raise
+
+
+@dramatiq.actor(queue_name="backtest", max_retries=3)
+def run_backtest_engine(job_id: str) -> None:
+    """Execute the durable Backtest engine job (Stage 5a, doc 15, CR-09).
+
+    The ``jobs`` + ``backtest_run`` rows created at admission time are the source of
+    truth. This actor opens its own DB session, runs the manifest-pinned engine +
+    result materialization, and commits — the request that admitted it has long
+    since returned (browser close never cancels it, doc 15 §8.2).
+    """
+    log.info("worker.backtest_engine.start", job_id=job_id)
+    asyncio.run(_run_backtest_engine(job_id))
+    log.info("worker.backtest_engine.done", job_id=job_id)
+
+
+async def _run_backtest_engine(job_id: str) -> None:
+    from entropia.application.jobs.backtest_engine import run_backtest
+    from entropia.infrastructure.postgres.engine import get_session_factory
+
+    factory = get_session_factory()
+    async with factory() as session:
+        try:
+            await run_backtest(session, job_id)
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise

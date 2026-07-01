@@ -565,13 +565,16 @@ async def soft_delete_work_object(
 
 
 async def _assert_not_in_active_run(session: AsyncSession, root_id: str) -> None:
-    """Preflight extension point — Stage 3a no-op.
-
-    TODO(Stage5): block when a queued/running backtest_run references this root by
-    raising ``ObjectInActiveRunError``. There are no runs in 3a, so this returns
-    immediately.
+    """Block soft-delete when a QUEUED/PROVISIONING/RUNNING backtest run pins this
+    root (Stage 5a wiring of OBJECT_IN_ACTIVE_RUN, doc 15 §12). Immutable historical
+    manifests keep their pins unchanged; only ACTIVE runs guard deletion. Imported
+    locally to keep the mainboard command free of a backtest import at module load.
     """
-    return None
+    from entropia.infrastructure.postgres.repositories import backtest as bt_repo
+    from entropia.shared.errors import ObjectInActiveRunError
+
+    if await bt_repo.has_active_run_for_root(session, root_id):
+        raise ObjectInActiveRunError()
 
 
 # --------------------------------------------------------------------------- #

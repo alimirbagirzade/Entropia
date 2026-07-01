@@ -69,8 +69,11 @@ Before stopping a working session, produce **ALL** of the following:
 ## Current position (keep in sync at each closing)
 
 - **Landed:** Stages 0-4b + **5a — RUN + Backtest Results core (doc 15)** + **5b-1 —
-  Results History (doc 16)**. `main` after PR #18 = `bd4aff4`; alembic head =
-  `0014_backtest_run_result` (**5b-1 is a pure read model — no migration**).
-- **Next:** **Stage 5c — Arrange Metrics (doc 17) + doc-15 deferred** (`RequestResultExport`
-  + `export_artifact` + heavy-artifact cursor query). Branch `feat/stage-5c-arrange-metrics`;
-  first new migration `0015_*`. Full handoff: `docs/STAGE5C_KICKOFF.md`.
+  Results History (doc 16)** + **5c — Arrange Metrics (doc 17) + doc-15 deferred
+  (Result export + artifact cursor-query)**. `main` after PR #20 = `9e29c23`; alembic
+  head = `0015_arrange_metrics_export` (4 tables: `metric_definition` seeded 27 +
+  `result_view_metric_profile_root/revision` + `export_artifact`).
+- **Next:** **Stage 6 — Analysis Lab (doc 18) + Panel/Management/Logs (doc 19) + Trash
+  (doc 20)**. First slice = Analysis Lab; branch `feat/stage-6a-analysis-lab`; first
+  new migration `0016_*` (→0015). Trash (20) picks up the Result restore/purge +
+  profile-root soft-delete deferred by 5a/5c. Full handoff: `docs/STAGE6_KICKOFF.md`.

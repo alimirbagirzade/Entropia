@@ -52,6 +52,10 @@ from entropia.infrastructure.postgres.models.strategy import (
     StrategyRoot,
 )
 from entropia.infrastructure.postgres.models.system import AppMetadata
+from entropia.infrastructure.postgres.models.trading_signal import (
+    NormalizedSignalEventRevision,
+    SourceAsset,
+)
 
 __all__ = [
     "Agent",
@@ -76,6 +80,7 @@ __all__ = [
     "MarketSchemaMapping",
     "MarketValidationIssue",
     "MarketValidationRun",
+    "NormalizedSignalEventRevision",
     "OutboxEvent",
     "PackageRationaleAssignment",
     "PackageRequest",
@@ -93,6 +98,7 @@ __all__ = [
     "ResearchTimePolicy",
     "ResearchValidationIssue",
     "ResearchValidationRun",
+    "SourceAsset",
     "StrategyEditorDraft",
     "StrategyRevision",
     "StrategyRevisionReference",

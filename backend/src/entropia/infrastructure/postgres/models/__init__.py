@@ -52,6 +52,7 @@ from entropia.infrastructure.postgres.models.strategy import (
     StrategyRoot,
 )
 from entropia.infrastructure.postgres.models.system import AppMetadata
+from entropia.infrastructure.postgres.models.trade_log import CanonicalTradeRecordBatch
 from entropia.infrastructure.postgres.models.trading_signal import (
     NormalizedSignalEventRevision,
     SourceAsset,
@@ -62,6 +63,7 @@ __all__ = [
     "AppMetadata",
     "ApprovalDecision",
     "AuditEvent",
+    "CanonicalTradeRecordBatch",
     "DatasetCoverageSlice",
     "DependencyScan",
     "EmbeddedResolverContract",

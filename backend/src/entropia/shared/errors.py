@@ -695,3 +695,55 @@ class ImportNotReadyError(ConflictError):
 
     code = "IMPORT_NOT_READY"
     message = "The signal import has not finished successfully yet."
+
+
+# --- Stage 3d — Trade Log (doc 05) ---
+
+
+class TradeLogValidationFailedError(ValidationError):
+    """The Trade Log §10.2 payload failed structural/cross-field validation
+    (doc 05 §10.5, §12). The issue envelope carries machine codes + field paths;
+    no immutable revision is produced (TL-03)."""
+
+    code = "TRADE_LOG_VALIDATION_FAILED"
+    message = "The Trade Log configuration has validation errors and cannot be saved."
+
+
+class TradeLogPriceContextConflictError(ValidationError):
+    """Price Source / OHLCV Use / Data Quality selections are internally inconsistent
+    (doc 05 §5.2, §12, TL-10). e.g. an OHLCV price fallback combined with
+    Ignore OHLCV context."""
+
+    code = "PRICE_CONTEXT_CONFLICT"
+    message = "The OHLCV and price policy selections are incompatible."
+
+
+class SourceFileRequiredError(ValidationError):
+    """Validate & Save Ready was attempted without a source-file import binding
+    (doc 05 §5.2, §12, TL-04). Save Draft may omit the file; a Ready revision may not."""
+
+    code = "SOURCE_FILE_REQUIRED"
+    message = "Select a TXT or CSV source file before validating this Trade Log revision."
+
+
+class RequiredColumnMissingError(ValidationError):
+    """The source file omits a canonical required column (doc 05 §5.4, §12, TL-05).
+    Required: direction, entry_time, entry_price, exit_time, exit_price."""
+
+    code = "REQUIRED_COLUMN_MISSING"
+    message = "The file must provide direction, entry_time, entry_price, exit_time and exit_price."
+
+
+class TradeRecordBatchNotFoundError(NotFoundError):
+    """A referenced canonical trade-record batch did not resolve (doc 05 §10.5)."""
+
+    code = "TRADE_RECORD_BATCH_NOT_FOUND"
+    message = "The trade-record batch was not found."
+
+
+class NoAcceptedTradeRecordsError(ValidationError):
+    """The import produced zero accepted records (doc 05 §12, TL-05). Save/attach
+    cannot proceed on an empty record batch."""
+
+    code = "NO_ACCEPTED_TRADE_RECORDS"
+    message = "No accepted trade records are available. Fix the source file or mapping."

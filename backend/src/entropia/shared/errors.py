@@ -892,3 +892,89 @@ class CompareRequiresTwoDistinctResultsError(ValidationError):
 
     code = "COMPARE_REQUIRES_TWO_DISTINCT_RESULTS"
     message = "Select exactly two different results to compare."
+
+
+# --------------------------------------------------------------------------- #
+# Stage 5c — Arrange Metrics (doc 17 §11) + doc-15 deferred (export + artifacts) #
+# --------------------------------------------------------------------------- #
+
+
+class MetricProfileNotFoundError(NotFoundError):
+    """A referenced Result View Metric Profile root did not resolve (doc 17 §7)."""
+
+    code = "METRIC_PROFILE_NOT_FOUND"
+    message = "The metric profile was not found."
+
+
+class MetricSelectionEmptyError(ValidationError):
+    """An Apply payload carried no SELECTABLE metric (doc 17 §5, §11, AT-05). The
+    minimum-one-selectable rule keeps a Result Summary from becoming empty; the
+    current canonical profile is preserved and no revision is created."""
+
+    code = "METRIC_SELECTION_EMPTY"
+    message = "Select at least one available metric before applying this profile."
+
+
+class MetricCodeUnknownError(ValidationError):
+    """A selected ``metric_code`` is absent from the registry (doc 17 §11)."""
+
+    code = "METRIC_CODE_UNKNOWN"
+    message = (
+        "One or more selected metrics are no longer recognized by the metric "
+        "registry. Reload the page and choose available metrics."
+    )
+
+
+class MetricNotSelectableError(ValidationError):
+    """A known but future/experimental code was submitted for Apply (doc 17 §11,
+    §14, AT-04). A future metric is reference-only and never enters a revision."""
+
+    code = "METRIC_NOT_SELECTABLE"
+    message = "That metric is not selectable in the current metric registry and cannot be applied."
+
+
+class MetricProfileLockedError(ConflictError):
+    """An Apply changed a selection while the current revision is locked (doc 17
+    §11 METRIC_PROFILE_LOCKED). Unlock first; lock is a preference, not a grant."""
+
+    code = "METRIC_PROFILE_LOCKED"
+    message = "Metrics are locked. Unlock this profile before changing the selection."
+
+
+class MetricProfileStaleError(ConflictError):
+    """``expected_profile_revision_id`` did not match the current head (doc 17 §11
+    METRIC_PROFILE_STALE, §8.5). No silent overwrite; reload the latest revision."""
+
+    code = "METRIC_PROFILE_STALE"
+    message = (
+        "Metric profile changed elsewhere. Reload the latest profile before saving your changes."
+    )
+
+
+class ExportTypeInvalidError(ValidationError):
+    """An unknown Result export type was requested (doc 15 §7, §11)."""
+
+    code = "EXPORT_TYPE_INVALID"
+    message = "That export type is not supported for this result."
+
+
+class ExportFormatInvalidError(ValidationError):
+    """An unknown Result export format was requested (doc 15 §7, §11)."""
+
+    code = "EXPORT_FORMAT_INVALID"
+    message = "That export format is not supported."
+
+
+class ArtifactTypeInvalidError(ValidationError):
+    """An unknown Result artifact drill-down type was requested (doc 15 §7)."""
+
+    code = "ARTIFACT_TYPE_INVALID"
+    message = "That result artifact type is not available."
+
+
+class ArtifactNotAvailableError(NotFoundError):
+    """The requested artifact scope produced no rows / is not retained (doc 15 §7
+    ARTIFACT_NOT_AVAILABLE). A soft-deleted or missing result is BACKTEST_RESULT_NOT_FOUND."""
+
+    code = "ARTIFACT_NOT_AVAILABLE"
+    message = "This result artifact is not available."

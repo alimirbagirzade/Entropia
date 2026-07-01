@@ -28,9 +28,11 @@ from entropia.apps.api.routes import (
     mainboard,
     market_data,
     meta,
+    metric_profile,
     rationale,
     readiness,
     research_data,
+    result_export,
     results_history,
     strategy,
     trade_log,
@@ -97,6 +99,8 @@ def create_app() -> FastAPI:
     app.include_router(readiness.router, prefix=base)
     app.include_router(backtest.router, prefix=base)
     app.include_router(results_history.router, prefix=base)
+    app.include_router(metric_profile.router, prefix=base)
+    app.include_router(result_export.router, prefix=base)
 
     return app
 

@@ -136,21 +136,10 @@ async def test_external_trading_signal_draft_is_transient(app) -> None:
         next(gen, None)
 
 
-@pytest.mark.contract
-async def test_strategy_draft_is_transient(app) -> None:
-    gen = _override(app, _actor(Role.USER, PrincipalType.HUMAN, "user_1"))
-    next(gen)
-    try:
-        async with await _client(app) as c:
-            resp = await c.post("/api/v1/strategy-drafts")
-        assert resp.status_code == 200
-        body = resp.json()
-        assert body["kind"] == "strategy"
-        assert body["unsaved"] is True
-        assert "root_id" not in body
-        assert body["draft_id"].startswith("wodraft_")
-    finally:
-        next(gen, None)
+# NOTE: ``POST /strategy-drafts`` now creates a PERSISTED draft + root (Stage 3b,
+# doc 02 §7), superseding the 3a transient opener. Its DB-touching behavior is
+# covered by tests/integration/test_strategy_integration.py; only the Guest 401
+# gate (DB-free) remains asserted here.
 
 
 @pytest.mark.contract

@@ -45,6 +45,12 @@ from entropia.infrastructure.postgres.models.research_data import (
     ResearchValidationIssue,
     ResearchValidationRun,
 )
+from entropia.infrastructure.postgres.models.strategy import (
+    StrategyEditorDraft,
+    StrategyRevision,
+    StrategyRevisionReference,
+    StrategyRoot,
+)
 from entropia.infrastructure.postgres.models.system import AppMetadata
 
 __all__ = [
@@ -87,6 +93,10 @@ __all__ = [
     "ResearchTimePolicy",
     "ResearchValidationIssue",
     "ResearchValidationRun",
+    "StrategyEditorDraft",
+    "StrategyRevision",
+    "StrategyRevisionReference",
+    "StrategyRoot",
     "Tombstone",
     "TrashEntry",
     "WorkObjectRevision",

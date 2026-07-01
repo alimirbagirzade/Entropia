@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from entropia.domain.lifecycle.enums import DeletionState, Role
 from entropia.infrastructure.postgres.models import Agent, HumanUser
+
+# Fixed key for the transaction-scoped advisory lock that serializes the
+# last-active-Admin critical section (count + check + demote). Any stable app-wide
+# integer works; released automatically at commit/rollback.
+_ADMIN_COUNT_LOCK_KEY = 6_2000_1
 
 
 async def get_human_user(session: AsyncSession, user_id: str) -> HumanUser | None:
@@ -15,6 +20,16 @@ async def get_human_user(session: AsyncSession, user_id: str) -> HumanUser | Non
 
 async def get_agent(session: AsyncSession, agent_id: str) -> Agent | None:
     return await session.get(Agent, agent_id)
+
+
+async def lock_admin_count(session: AsyncSession) -> None:
+    """Serialize the last-admin critical section against concurrent demotions.
+
+    Without this, two transactions each locking a *different* Admin row can both read
+    ``count_active_admins() == 2`` and both demote, leaving zero Admins (TOCTOU). A
+    transaction-scoped advisory lock is deadlock-free (single shared key) and released
+    at commit/rollback. Call this BEFORE ``count_active_admins`` on the demote path."""
+    await session.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": _ADMIN_COUNT_LOCK_KEY})
 
 
 async def count_active_admins(session: AsyncSession) -> int:

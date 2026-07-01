@@ -104,6 +104,30 @@ class RoleContextStaleError(ConflictError):
     message = "Your role changed. Refresh and retry."
 
 
+class AdminPanelAccessRequiredError(ForbiddenError):
+    """Panel / Management / Logs is Admin-only (doc 19 §2). UI hide/disable is
+    never a substitute for this server-side guard."""
+
+    code = "ADMIN_PANEL_ACCESS_REQUIRED"
+    message = "Admin access is required to use Panel."
+
+
+class UserRoleVersionConflictError(ConflictError):
+    """A role assignment supplied a stale ``expected_head_revision_id`` / ``If-Match``
+    (doc 19 §9.2, §11). No last-write-wins overwrite is applied; reload and retry."""
+
+    code = "USER_ROLE_VERSION_CONFLICT"
+    message = "This user record was updated by another Admin. The latest values have been loaded."
+
+
+class LogFilterInvalidError(ValidationError):
+    """A Logs query supplied an unknown/deprecated filter value (doc 19 §6.2).
+    The server rejects it rather than silently returning an unfiltered page."""
+
+    code = "LOG_FILTER_INVALID"
+    message = "One or more log filters are invalid."
+
+
 class IdempotencyConflictError(ConflictError):
     """Same idempotency key reused with a different request payload."""
 

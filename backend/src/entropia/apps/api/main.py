@@ -17,6 +17,7 @@ from entropia import __version__
 from entropia.apps.api.context import RequestContextMiddleware
 from entropia.apps.api.errors import install_exception_handlers
 from entropia.apps.api.routes import (
+    admin_panel,
     agent_lab,
     allocation,
     audit,
@@ -84,6 +85,7 @@ def create_app() -> FastAPI:
     app.include_router(meta.router, prefix=base)
     app.include_router(sse_router, prefix=base)
     app.include_router(identity.router, prefix=base)
+    app.include_router(admin_panel.router, prefix=base)
     app.include_router(trash.router, prefix=base)
     app.include_router(audit.router, prefix=base)
     app.include_router(market_data.router, prefix=base)

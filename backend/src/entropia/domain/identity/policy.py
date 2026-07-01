@@ -13,6 +13,7 @@ from entropia.domain.identity.actor import Actor
 from entropia.domain.lifecycle.enums import Role
 from entropia.shared.errors import (
     AccessDeniedError,
+    AdminPanelAccessRequiredError,
     AgentRoleNotAssignableError,
     LastAdminProtectedError,
     UnauthenticatedError,
@@ -31,6 +32,15 @@ def require_admin(actor: Actor) -> None:
     require_authenticated(actor)
     if not actor.is_admin:
         raise AccessDeniedError("This action requires the Admin role.")
+
+
+def require_admin_panel(actor: Actor) -> None:
+    """Panel / Management / Logs guard (doc 19 §2). Every Panel endpoint AND its
+    service call this — a hidden menu item is never an authorization decision.
+    Supervisor, User, Agent and anonymous callers are all denied here."""
+    require_authenticated(actor)
+    if not actor.is_admin:
+        raise AdminPanelAccessRequiredError()
 
 
 def require_role(actor: Actor, roles: Iterable[Role]) -> None:

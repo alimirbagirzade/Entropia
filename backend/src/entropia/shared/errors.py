@@ -860,3 +860,35 @@ class RunNotRetryableError(ConflictError):
 
     code = "RUN_NOT_RETRYABLE"
     message = "Only a failed or cancelled run can be retried."
+
+
+# --------------------------------------------------------------------------- #
+# Stage 5b — Results History (doc 16 §5, §12)                                  #
+# --------------------------------------------------------------------------- #
+
+
+class InvalidSortKeyError(ValidationError):
+    """An unknown/unsupported Results History sort enum was requested (doc 16 §5,
+    §12). The client never silently falls back to a known enum; it re-queries with
+    the default ``newest_current`` after showing the error."""
+
+    code = "INVALID_SORT_KEY"
+    message = "That sort option is not supported."
+
+
+class CursorInvalidError(ValidationError):
+    """A history cursor was expired, malformed, or built for a different query
+    fingerprint (doc 16 §5, §12). The appended local list is discarded and the
+    first page is refetched; partial/duplicated data is never appended."""
+
+    code = "CURSOR_INVALID"
+    message = "This results page cursor is no longer valid. Reload the first page."
+
+
+class CompareRequiresTwoDistinctResultsError(ValidationError):
+    """Result comparison requires exactly two DISTINCT visible results (doc 16 §5,
+    §8.3, RH-10). Same id twice or a count other than two is rejected; results are
+    never mutated."""
+
+    code = "COMPARE_REQUIRES_TWO_DISTINCT_RESULTS"
+    message = "Select exactly two different results to compare."

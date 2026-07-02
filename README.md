@@ -67,10 +67,248 @@ Stop it with `docker compose down` (add `-v` to also delete data volumes).
 
 ---
 
-## Local development (without Docker)
+## Yerel kurulum — Docker'sız, sıfırdan (Mac & Windows) 🧑‍💻
 
-You run the app processes natively and point them at infrastructure. The easiest
-path is to run **only the infra** in Docker and the app code on your machine.
+Bu bölüm Entropia'yı bilgisayarına **hiç Docker kurmadan** çalıştırmayı adım adım
+anlatır. Hiç programlama bilmesen de takip edebilesin diye her şeyi tek tek
+yazdım — komutları **kopyala → yapıştır** yapabilirsin.
+
+> 🧩 **Entropia neyden oluşuyor?** Üç parça düşün:
+> 1. **Beyin (API)** — bir Python programı. Asıl iş burada döner.
+> 2. **Hafıza (PostgreSQL)** — bir veritabanı; her şeyi burada saklarız. **Zorunlu.**
+> 3. **Yardımcılar (Redis + MinIO + worker'lar)** — backtest gibi ağır işleri arka
+>    planda yapan parçalar. **Başlangıçta gerekmez** — bunları Bölüm B'de açacağız.
+>
+> Yani **en kısa yolda sadece Python + veritabanı** kurup API'yi çalıştıracağız.
+
+### 🅰️ Bölüm A — En kısa yol (sadece API'yi ayağa kaldır)
+
+Bunu bitirince tarayıcında çalışan bir API'n olacak. 🎉
+
+#### Adım 1 — Kodu indir
+
+```bash
+# macOS (Terminal)
+git clone https://github.com/alimirbagirzade/Entropia.git
+cd Entropia
+```
+
+```powershell
+# Windows (PowerShell)
+git clone https://github.com/alimirbagirzade/Entropia.git
+cd Entropia
+```
+
+> `git` yoksa: macOS'ta `xcode-select --install`, Windows'ta https://git-scm.com/download/win
+
+#### Adım 2 — `uv`'yi kur (Python'u senin yerine kurar)
+
+`uv`, Python'un doğru sürümünü (3.12) ve tüm kütüphaneleri senin yerine indiren
+akıllı bir yardımcı. **Python'u elle kurmana gerek yok.**
+
+```bash
+# macOS
+curl -LsSf https://astral.sh/uv/install.sh | sh
+# Kurulumdan sonra terminali KAPAT ve yeniden aç.
+```
+
+```powershell
+# Windows (PowerShell)
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+# Sonra PowerShell'i KAPAT ve yeniden aç.
+```
+
+Kontrol: `uv --version` bir sürüm numarası yazıyorsa 👍
+
+#### Adım 3 — PostgreSQL'i kur, başlat ve veritabanını oluştur
+
+**macOS — en kolayı [Postgres.app](https://postgresapp.com):**
+1. İndir, `Applications`'a sürükle, aç ve **Initialize / Start**'a bas (yeşil = çalışıyor).
+2. `psql` komutunu kullanabilmek için (tek seferlik):
+   ```bash
+   sudo mkdir -p /etc/paths.d && echo /Applications/Postgres.app/Contents/Versions/latest/bin | sudo tee /etc/paths.d/postgresapp
+   ```
+   Terminali yeniden aç. _(Homebrew seversen alternatif: `brew install postgresql@16 && brew services start postgresql@16`.)_
+
+**Windows — resmi kurulum sihirbazı:**
+1. https://www.postgresql.org/download/windows/ → **Download the installer** (PostgreSQL 16).
+2. Sihirbazı çalıştır. `postgres` kullanıcısı için bir **şifre** ister — bir şifre yaz ve **not al**. Port `5432` kalsın.
+3. Bitince Başlat menüsünde **"SQL Shell (psql)"** kısayolu oluşur; onu kullanacağız.
+
+Şimdi Entropia'nın beklediği hesabı ve veritabanını yarat (kullanıcı `entropia`,
+şifre `entropia`, veritabanı `entropia`):
+
+```bash
+# macOS
+psql -d postgres -c "CREATE USER entropia WITH PASSWORD 'entropia';"
+psql -d postgres -c "CREATE DATABASE entropia OWNER entropia;"
+```
+
+```text
+# Windows: "SQL Shell (psql)"'i aç. Server/Database/Port/Username sorularını
+# Enter'la geç, postgres şifreni gir, sonra şu iki satırı yapıştır:
+CREATE USER entropia WITH PASSWORD 'entropia';
+CREATE DATABASE entropia OWNER entropia;
+```
+
+Test et (`?column? | 1` görürsen tamam):
+```bash
+psql "postgresql://entropia:entropia@localhost:5432/entropia" -c "SELECT 1;"
+```
+
+#### Adım 4 — Ayar dosyasını (`.env`) oluştur ve düzelt ⚠️ (EN ÖNEMLİ ADIM)
+
+```bash
+cp .env.example .env          # macOS
+```
+```powershell
+Copy-Item .env.example .env   # Windows
+```
+
+`.env` dosyasını bir metin düzenleyiciyle aç. İçindeki adresler Docker'a göre
+yazılmış (`postgres`, `redis`, `minio`). **Docker'sız** çalışacağımız için bunları
+`localhost` yapmalıyız. Şu **üç satırı** değiştir:
+
+```diff
+- DATABASE_URL=postgresql+asyncpg://entropia:entropia@postgres:5432/entropia
++ DATABASE_URL=postgresql+asyncpg://entropia:entropia@localhost:5432/entropia
+
+- REDIS_URL=redis://redis:6379/0
++ REDIS_URL=redis://localhost:6379/0
+
+- OBJECT_STORAGE_ENDPOINT=http://minio:9000
++ OBJECT_STORAGE_ENDPOINT=http://localhost:9000
+```
+
+> 🚨 Bu adımı atlarsan API `could not translate host name "postgres"` hatası verir.
+> **En sık yapılan hata budur.**
+
+#### Adım 5 — Kütüphaneleri kur ve veritabanı tablolarını oluştur
+
+```bash
+cd backend
+uv sync --all-extras          # Python 3.12 + tüm kütüphaneler (ilk seferde biraz sürer)
+uv run alembic upgrade head   # boş veritabanına tabloları yazar
+```
+
+Birkaç `Running upgrade ...` satırı görürsen tablolar hazır 👍
+
+#### Adım 6 — API'yi başlat 🚀
+
+```bash
+uv run uvicorn entropia.apps.api.main:app --reload --port 8000
+```
+
+`Application startup complete` yazınca hazır. Tarayıcıda aç:
+
+| Adres | Ne görürsün |
+| --- | --- |
+| http://localhost:8000/docs | Tıklanabilir API arayüzü (Swagger) |
+| http://localhost:8000/api/v1/health/live | `{"status":"ok"}` — API ayakta! |
+
+> `…/health/ready` şu an `redis` ve `object_storage` için `down` gösterebilir — bu
+> **normaldir**. Onları Bölüm B'de açacağız; API'nin temel çalışması için gerekmez.
+
+Durdurmak için terminalde **Ctrl + C**.
+
+#### Adım 7 — Bir "kullanıcı" oluştur (dev-mod giriş)
+
+Bir yönetici ve bir agent hesabı ekleyelim (API'yi durdurup, `backend` klasöründe):
+
+```bash
+uv run python -m entropia.apps.seed   # "user_admin" (yönetici) + "agent_alpha" (agent)
+```
+
+Denemek için (API tekrar çalışırken, **yeni** bir terminalde):
+```bash
+curl     -H "X-Actor-Id: user_admin" http://localhost:8000/api/v1/me   # macOS
+curl.exe -H "X-Actor-Id: user_admin" http://localhost:8000/api/v1/me   # Windows
+```
+Kim olduğunu söyleyen bir JSON dönerse tebrikler — çalışıyor! 🎉 _(Giriş/şifre
+sistemi bilinçli olarak sonraya bırakıldı; şimdilik kim olduğunu `X-Actor-Id`
+başlığı söyler, **rolü her zaman sunucu veritabanından çözer**.)_
+
+### 🅱️ Bölüm B — Tam deneyim (isteğe bağlı: backtest + arayüz)
+
+Backtest çalıştırmak, dosya üretmek ve web arayüzünü görmek istersen üç şey daha
+lazım: **Redis**, **MinIO** ve **worker**'lar (bir de istersen **frontend**).
+
+**Redis (iş kuyruğu)**
+```bash
+# macOS
+brew install redis && brew services start redis
+redis-cli ping   # -> PONG
+```
+Windows'ta Docker istemediğimiz için **[Memurai](https://www.memurai.com)**'yi kur
+(ücretsiz *Developer* sürümü — Redis'in Windows kardeşi; otomatik olarak `6379`
+portunda servis gibi çalışır). Test: `memurai-cli ping` → `PONG`.
+_(Alternatif: https://github.com/tporadowski/redis/releases → `redis-server.exe`.)_
+
+**MinIO (dosya deposu)**
+```bash
+# macOS
+brew install minio/stable/minio
+export MINIO_ROOT_USER=entropia
+export MINIO_ROOT_PASSWORD=entropia-secret
+minio server ~/entropia-minio --console-address :9001
+```
+```powershell
+# Windows: minio.exe'yi indir -> https://dl.min.io/server/minio/release/windows-amd64/minio.exe
+$env:MINIO_ROOT_USER="entropia"
+$env:MINIO_ROOT_PASSWORD="entropia-secret"
+.\minio.exe server C:\entropia-minio --console-address :9001
+```
+Sonra tarayıcıda **http://localhost:9001** → `entropia` / `entropia-secret` ile gir
+ve **`entropia-artifacts`** adında bir *bucket* (klasör) oluştur.
+
+**Worker'lar (ağır işleri yapan parçalar)** — Redis çalışırken, **her satırı ayrı
+terminalde** (`backend` klasöründe):
+```bash
+uv run python -m entropia.apps.worker --queues default,maintenance
+uv run python -m entropia.apps.worker --queues data
+uv run python -m entropia.apps.worker --queues backtest
+uv run python -m entropia.apps.worker --queues agent,agent-high
+uv run python -m entropia.apps.agent_coordinator   # sürekli çalışan araştırma Agent'ı
+uv run python -m entropia.apps.scheduler           # bakım / takılan iş kurtarma
+```
+
+**Frontend (web arayüzü)** — Node.js 20+ ister (https://nodejs.org):
+```bash
+cd frontend
+npm install
+npm run dev      # http://localhost:5173
+```
+Sayfanın üstündeki **"act as"** kutusuna `user_admin` yazarsan yönetici ekranlarını
+(Panel, Trash) görürsün.
+
+### 🧪 Her şey doğru mu? (hızlı test)
+
+```bash
+cd backend
+uv run pytest --no-cov -q
+```
+Birim/contract testleri altyapı istemez. `integration` testleri Postgres (bazıları
+Redis/MinIO) ister; onlar kapalıysa kendiliğinden atlanır.
+
+### 🆘 Takıldın mı? (sık sorunlar)
+
+| Belirti | Sebep & çözüm |
+| --- | --- |
+| `could not translate host name "postgres"` | `.env`'de `postgres`/`redis`/`minio` → `localhost` yapmayı unuttun (Adım 4). |
+| `connection refused ... 5432` | Postgres çalışmıyor. macOS: Postgres.app yeşil mi? Windows: "postgresql" servisi açık mı? |
+| `password authentication failed` | `entropia` kullanıcısı/şifresi Adım 3'teki gibi yok ya da `DATABASE_URL` yanlış. |
+| `uv: command not found` | Terminali kapatıp yeniden aç; olmazsa `uv`'yi PATH'e ekle. |
+| Windows'ta `psql` bulunamıyor | Başlat menüsünden **"SQL Shell (psql)"** kullan ya da `C:\Program Files\PostgreSQL\16\bin`'i PATH'e ekle. |
+| `address already in use ... 8000` | Port dolu. `--port 8001` ile başlat. |
+| `/health/ready` → `redis`/`object_storage`: `down` | Bölüm B'yi yapmadıysan **normal** — API yine de çalışır. |
+
+---
+
+## Local development — app on host, infra via Docker
+
+> Prefer a **fully Docker-free** setup? See the Turkish step-by-step guide above
+> (“Yerel kurulum — Docker'sız, sıfırdan”). The section below runs the app code
+> natively but starts Postgres/Redis/MinIO with Docker for convenience.
 
 **Prerequisites**
 

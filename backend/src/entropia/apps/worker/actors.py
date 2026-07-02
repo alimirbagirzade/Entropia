@@ -191,3 +191,30 @@ async def _run_agent_tool(job_id: str) -> None:
         except Exception:
             await session.rollback()
             raise
+
+
+@dramatiq.actor(queue_name="maintenance", max_retries=3)
+def run_trash_purge(job_id: str) -> None:
+    """Execute the durable Trash purge job (Stage 6c, doc 20 §8.3, §9.3).
+
+    The ``jobs`` + ``trash_entries`` rows created at request time are the source
+    of truth. This actor opens its own DB session, re-checks purge eligibility
+    and commits the terminal purged/tombstone (or purge_failed) outcome — the
+    Admin request that accepted it returned 202 long ago."""
+    log.info("worker.trash_purge.start", job_id=job_id)
+    asyncio.run(_run_trash_purge(job_id))
+    log.info("worker.trash_purge.done", job_id=job_id)
+
+
+async def _run_trash_purge(job_id: str) -> None:
+    from entropia.application.jobs.purge import run_purge
+    from entropia.infrastructure.postgres.engine import get_session_factory
+
+    factory = get_session_factory()
+    async with factory() as session:
+        try:
+            await run_purge(session, job_id)
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise

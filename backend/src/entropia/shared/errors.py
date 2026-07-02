@@ -1102,3 +1102,95 @@ class ArtifactOwnershipError(ForbiddenError):
 
     code = "ARTIFACT_NOT_OWNED"
     message = "The Agent may only soft-delete its own artifacts."
+
+
+# --- Stage 6c — Trash (doc 20 §2, §12) ---------------------------------------
+
+
+class TrashAccessForbiddenError(ForbiddenError):
+    """Trash list/detail/restore/purge is Admin-only (doc 20 §2). User, Supervisor,
+    Agent and anonymous callers are denied without leaking names or counts."""
+
+    code = "TRASH_ACCESS_FORBIDDEN"
+    message = "Trash is available only to an authenticated Admin."
+
+
+class TrashEntryNotFoundError(NotFoundError):
+    """A referenced Trash Entry did not resolve (doc 20 §7). A 404 never leaks
+    whether the id belonged to another deletion."""
+
+    code = "TRASH_ENTRY_NOT_FOUND"
+    message = "The trash entry was not found."
+
+
+class EntityNotSoftDeletedError(ConflictError):
+    """Restore/purge targeted an entry whose object is not recoverable-soft-deleted
+    anymore (doc 20 §12 lifecycle class)."""
+
+    code = "ENTITY_NOT_SOFT_DELETED"
+    message = "This object is not in a recoverable soft-deleted state."
+
+
+class PurgeInProgressError(ConflictError):
+    """Restore (or a duplicate purge without the original idempotency key) was
+    attempted while a purge job is pending (doc 20 §4, §9.2)."""
+
+    code = "PURGE_IN_PROGRESS"
+    message = "A purge is in progress for this object. Restore is unavailable."
+
+
+class ObjectAlreadyPurgedError(ConflictError):
+    """The target root is purged/tombstoned; it can never return to active
+    (doc 20 §9.2 forbidden transitions)."""
+
+    code = "OBJECT_ALREADY_PURGED"
+    message = "This object was permanently deleted and cannot be restored."
+
+
+class RestoreConflictError(ConflictError):
+    """Restore preflight found a dependency/location/pointer conflict (doc 20
+    §8.2). No partial restore is applied; the root remains soft-deleted."""
+
+    code = "RESTORE_CONFLICT"
+    message = "This object cannot be restored automatically. Review the conflict and retry."
+
+
+class PurgeNotEligibleError(ConflictError):
+    """The purge worker's retention/dependency re-check failed (doc 20 §9.3,
+    §12). The root returns to soft_deleted; the entry records purge_failed."""
+
+    code = "PURGE_NOT_ELIGIBLE"
+    message = "This object is not eligible for permanent deletion."
+
+
+class InvalidTrashObjectTypeError(ValidationError):
+    """An unknown Trash ``object_type`` filter value was supplied (doc 20 §5).
+    No free-text object type injection; the filter is rejected, not coerced."""
+
+    code = "INVALID_TRASH_OBJECT_TYPE"
+    message = "That trash object type is not supported."
+
+
+class PurgeConfirmationInvalidError(ValidationError):
+    """The Permanent Delete confirmation phrase did not match the target object
+    (doc 20 §5, §8.3). The purge command is not started."""
+
+    code = "PURGE_CONFIRMATION_INVALID"
+    message = "Enter the exact object name to confirm permanent deletion."
+
+
+class ReauthRequiredError(UnauthenticatedError):
+    """Permanent Delete requires a completed Admin re-authentication proof
+    (doc 20 §5, §8.3). Without it no purge job is created."""
+
+    code = "REAUTH_REQUIRED"
+    message = "Admin re-authentication is required for permanent deletion."
+
+
+class RationaleFamilyInUseError(ConflictError):
+    """A Rationale Family with active assignments cannot be soft-deleted before
+    a repair/unassign plan completes (doc 20 §10, §12; doc 10). No dangling
+    assignment and no Trash Entry are created."""
+
+    code = "RATIONALE_FAMILY_IN_USE"
+    message = "This Rationale Family still has active assignments. Repair them first."

@@ -31,6 +31,14 @@ from entropia.infrastructure.postgres.models.backtest import (
     SignalEventRow,
     TradeLedgerRow,
 )
+from entropia.infrastructure.postgres.models.capability import (
+    AnalysisArtifact,
+    CapabilityActivationEvent,
+    ExecutionPlan,
+    ExperimentProposal,
+    FutureCapability,
+    ViewDataset,
+)
 from entropia.infrastructure.postgres.models.create_package import DependencyScan, PackageRequest
 from entropia.infrastructure.postgres.models.deletion import Tombstone, TrashEntry
 from entropia.infrastructure.postgres.models.esp import (
@@ -111,6 +119,7 @@ __all__ = [
     "AgentRuntime",
     "AgentTask",
     "AgentToolCall",
+    "AnalysisArtifact",
     "AppMetadata",
     "ApprovalDecision",
     "ArtifactLink",
@@ -119,6 +128,7 @@ __all__ = [
     "BacktestRun",
     "BacktestRunManifest",
     "CanonicalTradeRecordBatch",
+    "CapabilityActivationEvent",
     "DatasetCoverageSlice",
     "DependencyScan",
     "DiagnosticArtifact",
@@ -126,7 +136,10 @@ __all__ = [
     "EmbeddedResolverRegistry",
     "EntityRegistry",
     "EntityRevision",
+    "ExecutionPlan",
+    "ExperimentProposal",
     "ExportArtifact",
+    "FutureCapability",
     "HumanUser",
     "HypothesisArtifact",
     "IdempotencyKey",
@@ -187,6 +200,7 @@ __all__ = [
     "Tombstone",
     "TradeLedgerRow",
     "TrashEntry",
+    "ViewDataset",
     "WorkObjectRevision",
     "WorkObjectRoot",
 ]

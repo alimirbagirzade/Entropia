@@ -1304,3 +1304,53 @@ class ManualSectionNotFoundError(NotFoundError):
 
     code = "MANUAL_SECTION_NOT_FOUND"
     message = "The section is no longer available in the current manual."
+
+
+# --- Stage 7b — Future Dev / Capability Registry (doc 22 §7, §12) -------------
+
+
+class CapabilityNotFoundError(NotFoundError):
+    """A referenced capability key is not in the server-side registry (doc 22 §9)."""
+
+    code = "CAPABILITY_NOT_FOUND"
+    message = "The capability was not found in the registry."
+
+
+class CapabilityAccessDeniedError(ForbiddenError):
+    """A capability operation or lifecycle transition was attempted without the
+    required role/policy (doc 22 §3, §12, FD-13). Lifecycle transitions are
+    Admin-only at route AND service; UI visibility is never authorization."""
+
+    code = "CAPABILITY_ACCESS_DENIED"
+    message = "You are not permitted to perform this capability operation or lifecycle transition."
+
+
+class CapabilityTransitionRejectedError(ConflictError):
+    """An illegal state edge, a missing/empty reason, or a malformed transition
+    request (doc 22 §12 lifecycle row, FD-14). The canonical lifecycle state is
+    never changed; the response shows the current state and blocking issues."""
+
+    code = "CAPABILITY_TRANSITION_REJECTED"
+    http_status = 422
+    message = "The capability lifecycle transition was rejected."
+
+
+class CapabilityDependencyMissingError(ConflictError):
+    """An activation-gate check failed while transitioning (doc 22 §9.2, §12).
+    ``details`` carries the per-gate issue list; the state does not change."""
+
+    code = "CAPABILITY_DEPENDENCY_MISSING"
+    http_status = 422
+    message = (
+        "Activation is blocked because required domain, data, policy, API, test, "
+        "or rollback dependencies are incomplete. Review the capability dependency record."
+    )
+
+
+class CapabilityStateStaleError(ConflictError):
+    """``expected_registry_version`` no longer matches the canonical registry row
+    (doc 22 §12 stale-concurrency row). Refresh capability status; never retry
+    blindly."""
+
+    code = "CAPABILITY_STATE_STALE"
+    message = "The capability state changed while this page was open. Refresh capability status."

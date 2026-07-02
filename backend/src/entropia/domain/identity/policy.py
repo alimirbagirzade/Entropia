@@ -16,6 +16,7 @@ from entropia.shared.errors import (
     AdminManualWriteRequiredError,
     AdminPanelAccessRequiredError,
     AgentRoleNotAssignableError,
+    CapabilityAccessDeniedError,
     LastAdminProtectedError,
     TrashAccessForbiddenError,
     UnauthenticatedError,
@@ -63,6 +64,16 @@ def require_manual_admin(actor: Actor) -> None:
     require_authenticated(actor)
     if not actor.is_admin:
         raise AdminManualWriteRequiredError()
+
+
+def require_capability_admin(actor: Actor) -> None:
+    """Capability lifecycle-transition guard (doc 22 §3, §12, FD-13): only an
+    authenticated human Admin may run POST lifecycle-transitions, at the ROUTE
+    and again inside the command. Supervisor, User, Agent and anonymous callers
+    get 403 CAPABILITY_ACCESS_DENIED; the Agent can never transition (CR-08)."""
+    require_authenticated(actor)
+    if not actor.is_admin:
+        raise CapabilityAccessDeniedError()
 
 
 def require_role(actor: Actor, roles: Iterable[Role]) -> None:

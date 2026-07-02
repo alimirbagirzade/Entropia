@@ -22,6 +22,7 @@ from entropia.apps.api.routes import (
     allocation,
     audit,
     backtest,
+    capability,
     create_package,
     esp,
     health,
@@ -107,6 +108,7 @@ def create_app() -> FastAPI:
     app.include_router(result_export.router, prefix=base)
     app.include_router(agent_lab.router, prefix=base)
     app.include_router(manual.router, prefix=base)
+    app.include_router(capability.router, prefix=base)
 
     return app
 

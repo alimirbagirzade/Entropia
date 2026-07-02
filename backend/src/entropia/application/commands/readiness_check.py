@@ -49,6 +49,7 @@ from entropia.infrastructure.postgres.repositories import allocation as alloc_re
 from entropia.infrastructure.postgres.repositories import audit as audit_repo
 from entropia.infrastructure.postgres.repositories import mainboard as mb_repo
 from entropia.infrastructure.postgres.repositories import readiness as readiness_repo
+from entropia.infrastructure.postgres.repositories import strategy as strat_repo
 from entropia.shared.errors import CompositionNotFoundError, CompositionStaleError
 
 _REPORT_TARGET = "ready_check_report"
@@ -188,6 +189,8 @@ async def _build_item_inputs(
         if available:
             revision = await mb_repo.get_work_object_revision(session, item.pinned_revision_id)
             payload = dict(revision.payload) if revision is not None else {}
+            if item.item_kind == MainboardItemKind.STRATEGY:
+                payload = await _resolve_strategy_payload(session, payload)
             if item.item_kind in _EXTERNAL_KINDS:
                 external = await _resolve_external(session, item)
         inputs.append(
@@ -202,6 +205,27 @@ async def _build_item_inputs(
             )
         )
     return inputs
+
+
+async def _resolve_strategy_payload(
+    session: AsyncSession, payload: dict[str, Any]
+) -> dict[str, Any]:
+    """Resolve a Strategy-editor MIRROR pin to its typed canonical config.
+
+    A strategy Mainboard item pins either a direct StrategyConfig payload (a
+    work object created with the full config) or the doc-02 §7.1 mirror
+    work-object revision (``{"strategy_revision_id", "config_hash", ...}``) that
+    ``save_strategy_revision`` appends. Ready Check must always validate the
+    REAL immutable configuration, so the mirror is dereferenced here; an
+    unresolvable mirror falls through unchanged and fails config validation
+    visibly (never silently passes)."""
+    mirror_ref = payload.get("strategy_revision_id")
+    if not mirror_ref:
+        return payload
+    revision = await strat_repo.get_strategy_revision(session, str(mirror_ref))
+    if revision is None:
+        return payload
+    return dict(revision.payload)
 
 
 async def _resolve_external(

@@ -172,6 +172,26 @@ def add_processed_asset(
     return asset
 
 
+async def get_processed_asset_for_revision(
+    session: AsyncSession, revision_id: str
+) -> MarketProcessedAsset | None:
+    """The revision's processed Parquet asset (newest first if re-processed).
+
+    Ordering note: real re-processing runs as SEPARATE analysis jobs, so rival
+    assets differ in ``created_at`` (transaction start). Within one transaction
+    (same ``created_at``) the ULID ``asset_id`` tiebreak is time-ordered only
+    across milliseconds — same-millisecond writes are unspecified. Do not write
+    two processed assets for one revision in a single transaction.
+    """
+    result = await session.execute(
+        select(MarketProcessedAsset)
+        .where(MarketProcessedAsset.revision_id == revision_id)
+        .order_by(MarketProcessedAsset.created_at.desc(), MarketProcessedAsset.asset_id.desc())
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
+
+
 def upsert_schema_mapping(
     session: AsyncSession,
     *,
@@ -332,6 +352,7 @@ __all__ = [
     "append_market_dataset_revision",
     "create_market_dataset",
     "get_dataset_root",
+    "get_processed_asset_for_revision",
     "get_revision",
     "list_revisions",
     "query_revisions_for_owner",

@@ -29,8 +29,10 @@ from entropia.domain.agent_lab.enums import (
     AgentTaskStatus,
     RuntimeStatus,
 )
+from entropia.domain.agent_lab.tool_gateway import exposed_tool_names
 from entropia.domain.lifecycle.enums import ActorKind
 from entropia.infrastructure.postgres.repositories import agent_lab as al_repo
+from entropia.infrastructure.postgres.repositories import capability as capability_repo
 from entropia.shared.errors import AgentRuntimeNotFoundError
 
 _SYSTEM_KIND = ActorKind.SYSTEM_SERVICE
@@ -54,7 +56,8 @@ async def run_coordinator_cycle(
     )
 
     # A paused runtime does no work and consumes no directive this cycle
-    # (queue/directives/artifacts are preserved, doc 18 §8.4).
+    # (queue/directives/artifacts are preserved, doc 18 §8.4) — and plans nothing,
+    # so no tool registry is resolved either.
     await session.refresh(runtime)
     if runtime.status is RuntimeStatus.PAUSED:
         return {
@@ -62,7 +65,15 @@ async def run_coordinator_cycle(
             "control": control,
             "consumed": None,
             "followup_task_id": None,
+            "exposed_tools": None,
         }
+
+    # Plan step (doc 22 §11, CR-08/FD-10): the tool menu the Agent may plan around
+    # this cycle is the CR-08 exposure — ungated tools plus capability tools whose
+    # gating capability is currently Limited/Active. Placeholder capabilities never
+    # enter the plan.
+    operational_keys = await capability_repo.operational_capability_keys(session)
+    plan_tools = exposed_tool_names(operational_keys)
 
     consumed = await coordinator.consume_next_directive(
         session, agent_id=agent_id, correlation_id=correlation_id
@@ -74,6 +85,7 @@ async def run_coordinator_cycle(
             agent_id=agent_id,
             directive_id=str(consumed["consumed"]),
             correlation_id=correlation_id,
+            exposed_tools=plan_tools,
         )
 
     return {
@@ -81,16 +93,24 @@ async def run_coordinator_cycle(
         "control": control,
         "consumed": consumed,
         "followup_task_id": followup_task_id,
+        "exposed_tools": list(plan_tools),
     }
 
 
 async def _spawn_followup_task(
-    session: AsyncSession, *, agent_id: str, directive_id: str, correlation_id: str | None
+    session: AsyncSession,
+    *,
+    agent_id: str,
+    directive_id: str,
+    correlation_id: str | None,
+    exposed_tools: tuple[str, ...] = (),
 ) -> str | None:
     """Materialize an AUTONOMOUS follow-up task from a consumed directive.
 
     The task is QUEUED — real execution is the worker/Tool-Gateway's job; the
-    Coordinator never fabricates progress (CR-09, doc 18 §14)."""
+    Coordinator never fabricates progress (CR-09, doc 18 §14). The plan-time
+    CR-08 tool exposure is recorded on the creation event so the task's plan
+    provenance shows exactly which tools were offerable at materialization."""
     directive = await al_repo.get_directive(session, directive_id)
     if directive is None:
         return None
@@ -112,7 +132,11 @@ async def _spawn_followup_task(
         actor_kind=_SYSTEM_KIND,
         task_id=task.task_id,
         directive_id=directive_id,
-        payload={"source": "directive", "priority": str(AgentTaskPriority.AUTONOMOUS)},
+        payload={
+            "source": "directive",
+            "priority": str(AgentTaskPriority.AUTONOMOUS),
+            "exposed_tools": list(exposed_tools),
+        },
         correlation_id=correlation_id,
     )
     return task.task_id

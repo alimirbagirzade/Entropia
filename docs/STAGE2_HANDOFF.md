@@ -288,6 +288,16 @@ Migration **`0021_local_auth`** (→0020): `human_credentials` (argon2id hash, s
 - **Settings** — `AUTH_MODE`, `AUTH_SESSION_TTL_MINUTES` (default 720), `ENTROPIA_SERVICE_TOKEN`. **Errors** — `INVALID_CREDENTIALS`, `SESSION_INVALID`, `USERNAME_TAKEN`, `PASSWORD_POLICY`, `SERVICE_LINE_FORBIDDEN`.
 - **Verify:** 813 green on an isolated DB; alembic 0021 up/down/up + column parity + L1 FK proof on real Postgres. **Review: 0 confirmed CRITICAL/HIGH** (timing pad, fixation absence, escalation closure, tx ordering explicitly verified).
 
+## Post-V1 — Parquet batch data-access (INF-12, Slice A) ✅ landed (PR #41, merged → main `3deee28`)
+
+No migration (alembic head stays `0021_local_auth`). +5 tests → **818 total**. Slice A of the real-backtest-engine track: the Data/Backtest worker can now stream a pinned market revision's processed Parquet asset in bounded batches instead of materializing the whole object in memory.
+
+- **Streaming** — `infrastructure/s3/parquet_stream.py`: `stream_processed_batches(object_key)` (S3 `download_fileobj` → `SpooledTemporaryFile` with a 32MB spill-to-disk cap → `pyarrow.parquet.ParquetFile.iter_batches`); `iter_parquet_batches(source)` is pure local I/O so the batching contract is unit-testable without infra; `DEFAULT_BATCH_SIZE = 8_192`. Worker plane only — never runs in the API process.
+- **Query layer** — `application/queries/market_bars.py`: `resolve_bar_source(session, market_revision_id=...)` (pinned revision → newest content-addressed processed asset → `BarSourceRef` frozen dataclass: entity_id/revision_id/object_key/content_digest/size_bytes/row_count; `NotFoundError` if the revision was never processed) + `iter_bar_batches(source)` (worker plane). Read-only — never touches 'latest' (doc 15 no-latest-leak contract).
+- **Repository** — `repositories/market_data.py`: `get_processed_asset_for_revision(session, market_revision_id)` with an explicit ordering contract — re-processing jobs run in separate transactions (distinct ULID timestamps); the same-ms ULID tiebreak is non-deterministic and documented as a limit, pinned by a deterministic test.
+- **mypy** — `pyarrow.*` added to the untyped overrides (no stubs published).
+- **Verify:** 818 green on an isolated DB; ruff/format/mypy clean. **Review: 1 finding (ULID same-ms tiebreak) — empirically CONFIRMED**, addressed via the documented ordering contract + deterministic test.
+
 ## Next: post-V1 (continued)
 
-**V1 COMPLETE (Stages 0–8, docs 01–22; 801 tests) + Auth/IdP landed (813 tests).** Remaining candidates (priority per `docs/POST_V1_KICKOFF.md`): (2) real backtest engine + Parquet pipeline (INF-12), (3) frontend SSE/metrics integration, (4) CP real candidate generation, (5) capability activations, (6) deferred list. See **`docs/POST_V1_KICKOFF.md`** for reuse anchors and the paste-ready resume prompt.
+**V1 COMPLETE (Stages 0–8, docs 01–22) + Auth/IdP (813) + Parquet Slice A landed (818 tests).** Next in the backtest track: **Slice B — bar-replay engine + rule set** (deterministic stub `domain/backtest/engine.py` → real market-data simulation over `iter_bar_batches`). Other candidates (priority per `docs/POST_V1_KICKOFF.md`): frontend SSE/metrics/login integration, CP real candidate generation, capability activations, deferred list. See **`docs/POST_V1_KICKOFF.md`** for reuse anchors and the paste-ready resume prompt.

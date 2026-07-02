@@ -69,9 +69,19 @@ Before stopping a working session, produce **ALL** of the following:
 ## Current position (keep in sync at each closing)
 
 - **Landed:** **V1 ROADMAP COMPLETE — Stages 0-8** (docs 01-22 + e2e integration +
-  hardening) **+ post-V1 Auth/IdP (PR #38)**; `main` after PR #38 = **`b9a9178`**;
-  alembic head = **`0021_local_auth`** (`human_credentials` + `auth_sessions`).
-  **813 tests green** (801 V1 + 12 auth). Auth slice: local auth per M1 §4 —
+  hardening) **+ post-V1 Auth/IdP (PR #38) + Parquet batch data-access (INF-12
+  Slice A, PR #41)**; `main` after PR #41 = **`3deee28`**;
+  alembic head = **`0021_local_auth`** (`human_credentials` + `auth_sessions`;
+  Slice A needs no migration). **818 tests green** (813 + 5 parquet).
+  Parquet slice: `infrastructure/s3/parquet_stream.py`
+  (`stream_processed_batches` — S3 → `SpooledTemporaryFile` 32MB spill cap →
+  pyarrow `iter_batches`; `iter_parquet_batches` pure local I/O; worker plane
+  only) + `application/queries/market_bars.py` (`resolve_bar_source` →
+  `BarSourceRef`, `iter_bar_batches` — Slice B builds on this) +
+  `repositories/market_data.py::get_processed_asset_for_revision` (ordering
+  contract: separate-tx re-processing, same-ms ULID tiebreak documented limit);
+  review 1 finding (ULID tiebreak) — empirically CONFIRMED, pinned by a
+  deterministic test. Auth slice: local auth per M1 §4 —
   argon2id credentials, opaque Bearer sessions (SHA-256 digest only, fresh role
   per request), `AUTH_MODE=dev|session` (dev default keeps `X-Actor-Id` for
   tests), non-human-only service line `ENTROPIA_SERVICE_TOKEN`, rate-limit key
@@ -95,10 +105,11 @@ Before stopping a working session, produce **ALL** of the following:
   `unmatched` 404 sentinel). Reviews: 8a 0 findings; 8b 2 HIGH both real, fixed
   in-commit. **Test-infra:** integration tests rebuild the schema per test —
   parallel sessions MUST use an isolated DB (`TEST_DATABASE_URL=...entropia_auth`).
-- **Next:** **post-V1 (continued)** — remaining candidates (order in
-  `docs/POST_V1_KICKOFF.md`): real backtest engine + Parquet pipeline (INF-12),
-  frontend SSE/metrics/login integration, CP real candidate generation,
-  capability activations, deferred list (tool-call status shadowing, retention
-  auto-purge, data-queue redelivery, SSE streaming e2e, first-Admin
-  provisioning). Ask the user which slice to start; full handoff:
+- **Next:** **post-V1 (continued)** — next in the backtest track: **Slice B —
+  bar-replay engine + rule set** (`domain/backtest/engine.py` deterministic
+  stub → real simulation over `iter_bar_batches`). Other candidates (order in
+  `docs/POST_V1_KICKOFF.md`): frontend SSE/metrics/login integration, CP real
+  candidate generation, capability activations, deferred list (tool-call status
+  shadowing, retention auto-purge, data-queue redelivery, SSE streaming e2e,
+  first-Admin provisioning). Ask the user which slice to start; full handoff:
   `docs/POST_V1_KICKOFF.md`.

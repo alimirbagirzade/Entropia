@@ -3,6 +3,11 @@
 # Run this on any machine to bring your local checkout up to date:
 #   ./scripts/update.sh      (or: make update)
 set -euo pipefail
+
+# When run from cron the PATH is minimal — make the usual per-user / Homebrew
+# tool locations (uv, git, node) reachable before we call them.
+export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+
 cd "$(dirname "$0")/.."
 
 say()  { printf "\033[36m▸ %s\033[0m\n" "$1"; }

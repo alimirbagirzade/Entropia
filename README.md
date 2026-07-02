@@ -296,17 +296,24 @@ make update                 # macOS / Linux   (ya da: ./scripts/update.sh)
 Sırasıyla şunları yapar: `git pull` → `uv sync` (backend) → `alembic upgrade head`
 (veritabanı) → `npm install` (frontend). **`.env` dosyana dokunmaz.**
 
-**Kendiliğinden (otomatik) güncellensin mi?** Aynı komutu zamanlanmış bir göreve bağla:
+**Her gün otomatik güncellensin (kurduğun yere).** Yolu elle yazmana gerek yok —
+tek komut, bulunduğu klasör için **günlük** bir görev kurar (varsayılan 09:00):
 
-- **macOS / Linux (cron):** `crontab -e` → şu satır her gün 09:00'da çalıştırır:
-  ```cron
-  0 9 * * * cd /ENTROPIA/YOLU && ./scripts/update.sh >> update.log 2>&1
-  ```
-- **Windows (Görev Zamanlayıcı):** yeni görev oluştur, "Program/script" alanına:
-  ```text
-  powershell.exe -ExecutionPolicy Bypass -File C:\ENTROPIA\YOLU\scripts\update.ps1
-  ```
-  ve bir tetikleyici seç (ör. "Günlük 09:00").
+```bash
+./scripts/schedule-update.sh          # macOS / Linux
+```
+```powershell
+.\scripts\schedule-update.ps1         # Windows
+```
+
+macOS/Linux'ta bir **cron** işi, Windows'ta bir **Görev Zamanlayıcı** görevi kurulur;
+her gün `git pull` + bağımlılıklar + migration çalışır (loglar macOS/Linux'ta `update.log`'a yazılır).
+Saati değiştir: `./scripts/schedule-update.sh 21:30` · Kaldır: `--remove` (Windows: `-Remove`).
+
+> 💡 **Cursor kullanıyorsan (uçtan uca):** Cursor'da GitHub linkiyle depoyu **Clone**'la →
+> yerleşik terminalde bir kez **Bölüm A** kurulumunu yap → sonra `./scripts/schedule-update.sh`
+> (Windows: `.\scripts\schedule-update.ps1`) komutunu **bir kez** çalıştır. Artık kurduğun
+> yerde her gün kendini günceller — Cursor açık olmasa bile.
 
 > Otomatik güncelleme yalnızca kodu/bağımlılıkları tazeler; değişiklikleri görmek için
 > çalışan API/worker'ları yeniden başlatman gerekir (`--reload` ile çalışan API kendini yeniler).

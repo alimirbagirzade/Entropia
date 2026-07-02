@@ -46,6 +46,7 @@ from entropia.shared.errors import (
 
 PURGE_QUEUE = "maintenance"
 RESULT_ENTITY_TYPE = "backtest_result"
+MANUAL_ENTITY_TYPE = "manual_document"
 _RESULT_ACTIVE = "active"
 _RESULT_SOFT_DELETED = "soft_deleted"
 _RESULT_PURGE_PENDING = "purge_pending"
@@ -239,6 +240,59 @@ async def _restore_result_target(
     return None, previous, _RESULT_ACTIVE
 
 
+async def _restore_manual_target(
+    session: AsyncSession, actor: Actor, entry: TrashEntry
+) -> tuple[str | None, str, str]:
+    """Manual documents are page-local roots (doc 21 §8.4, UM-09): restore
+    reactivates the SAME root/revision chain and the stream entry returns at
+    its original (never-reassigned) stream_position, bumping stream_version."""
+    from entropia.domain.manual.enums import StreamEntryState
+    from entropia.infrastructure.postgres.repositories import manual as manual_repo
+
+    document = await manual_repo.get_document(session, entry.entity_id)
+    if document is None:
+        raise RestoreConflictError()
+    await manual_repo.lock_stream(session)
+    await session.refresh(document, with_for_update=True)
+    previous = document.deletion_state
+    if previous == DeletionState.PURGE_PENDING:
+        raise PurgeInProgressError()
+    if previous == DeletionState.PURGED:
+        raise ObjectAlreadyPurgedError()
+    if previous != DeletionState.SOFT_DELETED:
+        raise EntityNotSoftDeletedError()
+
+    # Head-pointer integrity (doc 20 §10): restore returns the SAME revision
+    # the snapshot recorded; a moved head is a conflict, never silent adoption.
+    snap = entry.dependency_snapshot or {}
+    expected_head = snap.get("current_revision_id")
+    if expected_head is not None and expected_head != document.current_revision_id:
+        raise RestoreConflictError()
+
+    document.deletion_state = DeletionState.ACTIVE
+    document.deleted_at = None
+    document.deleted_by = None
+    document.delete_reason = None
+    document.row_version += 1
+    stream_entry = await manual_repo.get_stream_entry(session, entry.entity_id)
+    if stream_entry is not None and stream_entry.state != StreamEntryState.ACTIVE:
+        stream_entry.state = StreamEntryState.ACTIVE
+        stream_entry.row_version += 1
+    prior_version = await manual_repo.current_stream_version(session)
+    manual_repo.add_publication_event(
+        session,
+        event_type="manual_document_restored",
+        document_id=entry.entity_id,
+        revision_id=document.current_revision_id,
+        stream_entry_id=stream_entry.stream_entry_id if stream_entry is not None else None,
+        actor_principal_id=actor.principal_id,
+        prior_stream_version=prior_version,
+        resulting_stream_version=prior_version + 1,
+        correlation_id=actor.correlation_id,
+    )
+    return document.current_revision_id, str(previous), str(DeletionState.ACTIVE)
+
+
 async def _restore_entry_core(
     session: AsyncSession, actor: Actor, entry: TrashEntry
 ) -> dict[str, Any]:
@@ -246,6 +300,8 @@ async def _restore_entry_core(
     _assert_entry_recoverable(entry)
     if entry.entity_type == RESULT_ENTITY_TYPE:
         revision_id, previous, new_state = await _restore_result_target(session, entry)
+    elif entry.entity_type == MANUAL_ENTITY_TYPE:
+        revision_id, previous, new_state = await _restore_manual_target(session, actor, entry)
     else:
         revision_id, previous, new_state = await _restore_registry_target(session, entry)
 
@@ -344,6 +400,24 @@ async def restore_entity(session: AsyncSession, actor: Actor, *, entity_id: str)
 
 async def _mark_target_purge_pending(session: AsyncSession, entry: TrashEntry) -> str:
     """Move the target to purge_pending; return the previous state string."""
+    if entry.entity_type == MANUAL_ENTITY_TYPE:
+        from entropia.infrastructure.postgres.repositories import manual as manual_repo
+
+        document = await manual_repo.get_document(session, entry.entity_id)
+        if document is None:
+            raise ObjectAlreadyPurgedError()
+        await session.refresh(document, with_for_update=True)
+        manual_previous = document.deletion_state
+        if manual_previous == DeletionState.PURGE_PENDING:
+            raise PurgeInProgressError()
+        if manual_previous == DeletionState.PURGED:
+            raise ObjectAlreadyPurgedError()
+        if manual_previous != DeletionState.SOFT_DELETED:
+            raise EntityNotSoftDeletedError()
+        document.deletion_state = DeletionState.PURGE_PENDING
+        document.row_version += 1
+        return str(manual_previous)
+
     if entry.entity_type == RESULT_ENTITY_TYPE:
         from entropia.infrastructure.postgres.repositories import backtest as bt_repo
 

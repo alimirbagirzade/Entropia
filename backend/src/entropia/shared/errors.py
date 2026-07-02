@@ -1194,3 +1194,113 @@ class RationaleFamilyInUseError(ConflictError):
 
     code = "RATIONALE_FAMILY_IN_USE"
     message = "This Rationale Family still has active assignments. Repair them first."
+
+
+# --- Stage 7a — User Manual (doc 21 §10) --------------------------------------
+
+
+class AdminManualWriteRequiredError(ForbiddenError):
+    """Manual append/upload/revise/delete/restore is Admin-only (doc 21 §2).
+    Supervisor, User, Agent and anonymous callers are denied at route AND
+    service; the Agent holds read/citation tools only (doc 21 §12)."""
+
+    code = "ADMIN_MANUAL_WRITE_REQUIRED"
+    message = "Only Admin can add, upload, revise, remove or restore manual documents."
+
+
+class BaselineManualImmutableError(ConflictError):
+    """The built-in baseline guide (is_baseline=true) can never be deleted or
+    replaced through the normal User Manual flow (doc 21 §10, UM-10). Baseline
+    updates are system release/migration work only."""
+
+    code = "BASELINE_MANUAL_IMMUTABLE"
+    message = "The built-in guide cannot be removed or replaced from this page."
+
+
+class ManualTitleRequiredError(ValidationError):
+    """The document title was blank or whitespace-only (doc 21 §5, §10)."""
+
+    code = "MANUAL_TITLE_REQUIRED"
+    message = "A document title and full text are required."
+
+
+class ManualContentRequiredError(ValidationError):
+    """Normalized content produced no visible text block (doc 21 §5, §10)."""
+
+    code = "MANUAL_CONTENT_REQUIRED"
+    message = "A document title and full text are required."
+
+
+class ManualFileTypeUnsupportedError(ValidationError):
+    """Only UTF-8 TXT / Markdown / HTML text documents are accepted (doc 21 §5,
+    §10, UM-06). PDF, DOCX and image ingestion are not Production V1."""
+
+    code = "MANUAL_FILE_TYPE_UNSUPPORTED"
+    message = "This file type is not supported. Upload a UTF-8 TXT, Markdown or HTML text document."
+
+
+class ManualSourceEncodingInvalidError(ValidationError):
+    """The source could not be normalized as UTF-8 text (doc 21 §10). Nothing
+    is published; the prior reader stream is untouched."""
+
+    code = "MANUAL_SOURCE_ENCODING_INVALID"
+    message = "The selected document could not be read. Use a UTF-8 TXT, MD or HTML text file."
+
+
+class ManualParseFailedError(ValidationError):
+    """The source did not convert into canonical blocks, or it violated the
+    HTML allowlist (doc 21 §10, UM-17). No root/revision/stream entry is
+    published; no phantom reader section appears."""
+
+    code = "MANUAL_PARSE_FAILED"
+    message = (
+        "The document could not be converted into a valid manual structure. "
+        "No changes were published."
+    )
+
+
+class ManualDuplicateContentError(ConflictError):
+    """An active stream section already carries the same normalized checksum
+    (doc 21 §10). The default outcome blocks the append; an explicit Admin
+    override is a separate audited decision."""
+
+    code = "MANUAL_DUPLICATE_CONTENT"
+    message = (
+        "An active manual section has the same normalized content. "
+        "Review the existing section before adding a duplicate."
+    )
+
+
+class ManualRevisionConflictError(ConflictError):
+    """``expected_head_revision_id`` (transport: If-Match/ETag) no longer matches
+    the document's visible head revision (doc 21 §7, §10). No overwrite."""
+
+    code = "MANUAL_REVISION_CONFLICT"
+    message = (
+        "Manual content changed while you were editing. Review the latest version and try again."
+    )
+
+
+class ManualStreamConflictError(ConflictError):
+    """``expected_stream_version`` is stale against the current published stream
+    snapshot (doc 21 §7, §10, UM-15). The caller rehydrates and retries."""
+
+    code = "MANUAL_STREAM_CONFLICT"
+    message = (
+        "Manual content changed while you were editing. Review the latest version and try again."
+    )
+
+
+class ManualDocumentNotFoundError(NotFoundError):
+    """A referenced manual document did not resolve (doc 21 §7)."""
+
+    code = "MANUAL_DOCUMENT_NOT_FOUND"
+    message = "The manual document was not found."
+
+
+class ManualSectionNotFoundError(NotFoundError):
+    """A section/anchor did not resolve in the current published stream
+    (doc 21 §7, UM-18 stale-anchor recovery)."""
+
+    code = "MANUAL_SECTION_NOT_FOUND"
+    message = "The section is no longer available in the current manual."

@@ -500,6 +500,81 @@ async def _handle_backtest_request(ctx: _Ctx) -> _ToolOutcome:
     )
 
 
+async def _handle_documentation_search(ctx: _Ctx) -> _ToolOutcome:
+    """`documentation.search` — Published-corpus search through the SAME read
+    model a human uses (doc 21 §12, UM-03). Draft/soft-deleted content never
+    enters the result; the Agent needs no browser session."""
+    from entropia.application.queries.manual import search_manual
+
+    page = await search_manual(
+        ctx.session,
+        ctx.actor,
+        q=str(ctx.request.get("query", "")),
+        cursor=ctx.request.get("cursor"),
+        limit=ctx.request.get("limit"),
+    )
+    return _ToolOutcome(response={"results": page["data"], "meta": page["meta"]})
+
+
+async def _handle_documentation_get_section(ctx: _Ctx) -> _ToolOutcome:
+    """`documentation.get_section` — canonical blocks + source label +
+    stream_version + citation metadata for one published section (doc 21 §12)."""
+    from entropia.application.queries.manual import get_manual_section
+
+    revision_no_raw = ctx.request.get("revision_no")
+    section = await get_manual_section(
+        ctx.session,
+        ctx.actor,
+        document_id=str(ctx.request.get("document_id", "")),
+        anchor=ctx.request.get("anchor"),
+        revision_no=int(revision_no_raw) if revision_no_raw is not None else None,
+    )
+    return _ToolOutcome(response=section)
+
+
+async def _handle_artifact_attach_citation(ctx: _Ctx) -> _ToolOutcome:
+    """`artifact.attach_citation` — provenance evidence on the Agent's OWN
+    artifact (doc 21 §12): document_id + revision_no + anchor + block_ids. The
+    cited revision must exist; the manual itself is never mutated."""
+    from entropia.infrastructure.postgres.repositories import manual as manual_repo
+
+    artifact_id = str(ctx.request.get("artifact_id", ""))
+    artifact = await al_repo.get_hypothesis(ctx.session, artifact_id)
+    if artifact is None:
+        raise ArtifactOwnershipError("The artifact to cite from was not found.")
+    if artifact.created_by_principal_id != ctx.actor.principal_id:
+        raise ArtifactOwnershipError("The Agent may only attach citations to its own artifacts.")
+
+    document_id = str(ctx.request.get("document_id", ""))
+    revision_no = int(ctx.request.get("revision_no", 0))
+    anchor = str(ctx.request.get("anchor", ""))
+    revision = await manual_repo.get_revision_by_no(ctx.session, document_id, revision_no)
+    if revision is None:
+        raise AgentToolCallForbiddenError(
+            "The cited manual revision does not exist; a citation must resolve."
+        )
+    citation = {
+        "document_id": document_id,
+        "revision_no": revision_no,
+        "revision_id": revision.revision_id,
+        "anchor": anchor,
+        "block_ids": [str(b) for b in ctx.request.get("block_ids", [])],
+    }
+    link = await al_repo.create_artifact_link(
+        ctx.session,
+        source_artifact_id=artifact_id,
+        target_type="manual_citation",
+        # target_id is String(64); the anchor rides in the citation payload.
+        target_id=f"{document_id}@{revision_no}",
+        relation_type="cites_manual",
+    )
+    return _ToolOutcome(
+        response={"artifact_id": artifact_id, "link_id": link.link_id, "citation": citation},
+        artifact_output_ref=artifact_id,
+        domain_events=[("citation_attached", {"artifact_id": artifact_id, "citation": citation})],
+    )
+
+
 _HANDLERS = {
     ToolName.TASK_QUERY: _handle_task_query,
     ToolName.RESULT_QUERY: _handle_result_query,
@@ -510,6 +585,9 @@ _HANDLERS = {
     ToolName.FOLLOWUP_TASK_ENQUEUE: _handle_followup_task_enqueue,
     ToolName.BACKTEST_READY_CHECK: _handle_backtest_ready_check,
     ToolName.BACKTEST_REQUEST: _handle_backtest_request,
+    ToolName.DOCUMENTATION_SEARCH: _handle_documentation_search,
+    ToolName.DOCUMENTATION_GET_SECTION: _handle_documentation_get_section,
+    ToolName.ARTIFACT_ATTACH_CITATION: _handle_artifact_attach_citation,
 }
 
 

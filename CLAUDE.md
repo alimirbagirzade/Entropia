@@ -68,36 +68,32 @@ Before stopping a working session, produce **ALL** of the following:
 
 ## Current position (keep in sync at each closing)
 
-- **Landed:** **Stages 0-7 COMPLETE** — last slice **Stage 7b — Future Dev (doc 22,
-  PR #32)**. `main` after PR #32 = `ef3e1c1`; alembic head = **`0020_future_dev`**
-  (6 tables: `future_capability` registry root with UNIQUE `capability_key` +
-  per-row monotonic `registry_version` OCC + `dependency_snapshot` JSONB gates;
-  immutable `capability_activation_event` with UNIQUE
-  `(capability_id, resulting_registry_version)`; output roots `analysis_artifact` +
-  `view_dataset` (deletion_state overlay); future-only `experiment_proposal` +
-  `execution_plan` — NO V1 command writes them; 7 baseline slots seeded
-  Placeholder with ids `fcap_<key>`). `domain/capability`: 7-state graph
-  (`placeholder→designed→internal→shadow→limited→active`, rollback
-  `active→limited`/`limited→shadow`, `limited|active→retired` terminal) + 7 gates
-  (Designed/Internal/Shadow = keys present; Limited = 6 complete sans `ui`;
-  Active = 7/7 → else 422 CAPABILITY_DEPENDENCY_MISSING per-gate list).
-  `transition_capability`: Admin route+service (`require_capability_admin`),
-  non-empty reason, REQUIRED idempotency key + `expected_registry_version` OCC
-  (`with_for_update`, stale → 409 CAPABILITY_STATE_STALE), one-tx event+audit+
-  outbox. Operational cmds gate FIRST: inactive → CAPABILITY_NOT_ACTIVE, zero
-  side effects (CR-09); `POST /v1/view-datasets/query` + `/v1/analysis-artifacts`
-  (type→capability map `ANALYSIS_ARTIFACT_CAPABILITY`) only Limited/Active.
-  CR-08: `view_dataset.query`/`analysis_artifact.create` in
-  `CAPABILITY_GATED_TOOLS`; `exposed_tool_names(operational_keys)` +
-  `capability_repo.operational_capability_keys`; Placeholder call → REJECTED
-  record. No live-trade/order route (FD-12). Review: 0 findings. **781 tests
-  pass.**
-- **Next:** **Stage 8 — End-to-End Integration & Hardening**: outbox→SSE fan-out
-  all domains; Tool Gateway parity tests vs human commands (+ wire
-  `exposed_tool_names` into Coordinator planning — 7b deferred); cross-stage
-  manifest reproducibility; retention/purge scheduler; rate limiting;
-  CORS/security headers; metrics (golden signals + queue depth + outbox lag +
-  lease age). Flows: (a) full pipeline ingest→…→RUN→Result→Trash→restore,
-  (b) UI-independent Agent loop. Acceptance: pinned-manifest reproducibility,
-  CR-03, INF-01..INF-10, deployment topology boots + health/ready. Branch
-  `feat/stage-8-integration`. Full handoff: `docs/STAGE8_KICKOFF.md`.
+- **Landed:** **V1 ROADMAP COMPLETE — Stages 0-8** (docs 01-22 + e2e integration +
+  hardening). Last slices: **Stage 8a — Integration Flows (PR #34)** and **Stage 8b —
+  Hardening (PR #35)**; `main` after PR #35 = **`bc38ca6`**; alembic head stays
+  **`0020_future_dev`** (Stage 8 added no migration). **801 tests green.**
+  8a: Coordinator plan step consumes CR-08 exposure (`run_coordinator_cycle` →
+  `exposed_tools` in summary + `agent_task_created` payload); cross-stage FIX —
+  `readiness_check._resolve_strategy_payload` dereferences the Strategy-editor
+  mirror revision so the editor path (draft→save→attach→Ready Check→RUN) works;
+  e2e flow (a) full real-id pipeline (ingest→…→RUN→Result→History→Metrics→Trash→
+  restore; INF-04 idempotent reuse, INF-05 no-latest-leak via shared
+  `execution_key` + identical metrics, CR-03, monotonic audit+outbox), flow (b)
+  UI-less Agent loop (directive→bundle→backtest→result→hypothesis + ownership
+  boundary REJECTED), gateway parity suite (same report/denial code/capability
+  gate on both lines). 8b: outbox→SSE fan-out all domains
+  (`application/jobs/outbox_relay.py` scheduler checkpoint + `apps/api/sse.py`
+  SseHub/poller/taxonomy, loss-tolerant INF-11); real scheduler
+  (`application/jobs/maintenance.py`: INF-09 stale recovery audited,
+  INF-03 QUEUED redelivery via `ACTOR_BY_QUEUE`, data queue operator-only);
+  security headers + opt-in rate limiting (`RATE_LIMIT_ENABLED`, bounded memory)
+  + `/v1/metrics` (golden signals + jobs depth + outbox lag + lease age;
+  `unmatched` 404 sentinel). Reviews: 8a 0 findings; 8b 2 HIGH both real, fixed
+  in-commit. **Test-infra:** integration tests rebuild the schema per test —
+  parallel sessions MUST use an isolated DB (`TEST_DATABASE_URL=...entropia_stage8`).
+- **Next:** **post-V1** — candidates (order in `docs/POST_V1_KICKOFF.md`): Auth/IdP
+  (replace dev-mode `X-Actor-Id`, Master §20), real backtest engine + Parquet
+  pipeline (INF-12), frontend SSE/metrics integration, CP real candidate
+  generation, capability activations, deferred list (tool-call status shadowing,
+  retention auto-purge, data-queue redelivery, SSE streaming e2e). Ask the user
+  which slice to start; full handoff: `docs/POST_V1_KICKOFF.md`.

@@ -575,6 +575,55 @@ async def _handle_artifact_attach_citation(ctx: _Ctx) -> _ToolOutcome:
     )
 
 
+async def _handle_view_dataset_query(ctx: _Ctx) -> _ToolOutcome:
+    """`view_dataset.query` — Graphic View input preparation (doc 22 §11, CR-08).
+    The command re-checks the server-side registry state: below Limited/Active
+    it raises CAPABILITY_NOT_ACTIVE, which lands here as a recorded REJECTED
+    denial — no dataset row, no job, no fake output (CR-09, FD-02/10)."""
+    from entropia.application.commands.capability import query_view_dataset
+
+    result = await query_view_dataset(
+        ctx.session,
+        ctx.actor,
+        source_manifest_refs=list(ctx.request.get("source_manifest_refs") or []),
+        schema_version=str(ctx.request.get("schema_version", "")),
+        series_refs=ctx.request.get("series_refs"),
+        marker_refs=ctx.request.get("marker_refs"),
+        range_spec=ctx.request.get("range_spec"),
+    )
+    return _ToolOutcome(
+        response=result,
+        artifact_output_ref=result["view_dataset_id"],
+        domain_events=[("view_dataset_prepared", {"view_dataset_id": result["view_dataset_id"]})],
+    )
+
+
+async def _handle_analysis_artifact_create(ctx: _Ctx) -> _ToolOutcome:
+    """`analysis_artifact.create` — immutable evidence-linked analysis output
+    (doc 22 §10.3-§10.6, §11). Same capability re-check as the HTTP route; a
+    Placeholder capability yields a recorded CAPABILITY_NOT_ACTIVE rejection."""
+    from entropia.application.commands.capability import create_analysis_artifact
+
+    result = await create_analysis_artifact(
+        ctx.session,
+        ctx.actor,
+        artifact_type=str(ctx.request.get("artifact_type", "")),
+        input_manifest_refs=list(ctx.request.get("input_manifest_refs") or []),
+        method_version=str(ctx.request.get("method_version", "")),
+        output_ref=ctx.request.get("output_ref"),
+    )
+    return _ToolOutcome(
+        response=result,
+        artifact_output_ref=result["artifact_id"],
+        domain_events=[
+            (
+                "analysis_artifact_created",
+                {"artifact_id": result["artifact_id"], "artifact_type": result["artifact_type"]},
+            )
+        ],
+    )
+
+
 _HANDLERS = {
     ToolName.TASK_QUERY: _handle_task_query,
     ToolName.RESULT_QUERY: _handle_result_query,
@@ -588,6 +637,8 @@ _HANDLERS = {
     ToolName.DOCUMENTATION_SEARCH: _handle_documentation_search,
     ToolName.DOCUMENTATION_GET_SECTION: _handle_documentation_get_section,
     ToolName.ARTIFACT_ATTACH_CITATION: _handle_artifact_attach_citation,
+    ToolName.VIEW_DATASET_QUERY: _handle_view_dataset_query,
+    ToolName.ANALYSIS_ARTIFACT_CREATE: _handle_analysis_artifact_create,
 }
 
 

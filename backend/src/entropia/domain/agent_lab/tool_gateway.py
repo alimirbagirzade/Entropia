@@ -34,6 +34,12 @@ class ToolName(StrEnum):
     DOCUMENTATION_SEARCH = "documentation.search"
     DOCUMENTATION_GET_SECTION = "documentation.get_section"
     ARTIFACT_ATTACH_CITATION = "artifact.attach_citation"
+    # Stage 7b — Future Dev capability tools (doc 22 §11, CR-08): these exist in
+    # the enum but are OFFERED to the Agent only while their gating capability is
+    # Limited/Active (``exposed_tool_names``); a call while inactive is a recorded
+    # REJECTED denial (CAPABILITY_NOT_ACTIVE), never a job or output.
+    VIEW_DATASET_QUERY = "view_dataset.query"
+    ANALYSIS_ARTIFACT_CREATE = "analysis_artifact.create"
 
 
 class ToolCallStatus(StrEnum):
@@ -71,7 +77,33 @@ TOOL_ALLOWED_SCOPES: dict[ToolName, frozenset[PolicyScope]] = {
     ToolName.DOCUMENTATION_SEARCH: frozenset({PolicyScope.OBSERVATION, PolicyScope.RESEARCH}),
     ToolName.DOCUMENTATION_GET_SECTION: frozenset({PolicyScope.OBSERVATION, PolicyScope.RESEARCH}),
     ToolName.ARTIFACT_ATTACH_CITATION: frozenset({PolicyScope.RESEARCH, PolicyScope.PROPOSAL}),
+    ToolName.VIEW_DATASET_QUERY: frozenset({PolicyScope.RESEARCH}),
+    ToolName.ANALYSIS_ARTIFACT_CREATE: frozenset({PolicyScope.RESEARCH, PolicyScope.PROPOSAL}),
 }
+
+# CR-08 (doc 22 §11): which capability keys gate a tool's contract. A gated
+# tool enters the Agent tool registry ONLY while at least one of its gating
+# capabilities is Limited/Active; Placeholder/Designed capabilities are never
+# offered, so the Agent never plans around them (FD-10). The per-request
+# capability re-check happens again inside the application command.
+CAPABILITY_GATED_TOOLS: dict[ToolName, frozenset[str]] = {
+    ToolName.VIEW_DATASET_QUERY: frozenset({"graphic_view"}),
+    ToolName.ANALYSIS_ARTIFACT_CREATE: frozenset(
+        {"backtest_review", "signal_intelligence", "regime_research", "parameter_fields"}
+    ),
+}
+
+
+def exposed_tool_names(operational_capability_keys: frozenset[str] | set[str]) -> tuple[str, ...]:
+    """The Agent-visible tool registry (doc 22 §11, CR-08): every ungated tool
+    plus the capability tools whose gating capability is currently operational."""
+    return tuple(
+        tool.value
+        for tool in ToolName
+        if tool not in CAPABILITY_GATED_TOOLS
+        or CAPABILITY_GATED_TOOLS[tool] & frozenset(operational_capability_keys)
+    )
+
 
 TERMINAL_TOOL_CALL_STATES: frozenset[ToolCallStatus] = frozenset(
     {ToolCallStatus.SUCCEEDED, ToolCallStatus.FAILED, ToolCallStatus.REJECTED}
@@ -124,12 +156,14 @@ def is_terminal_tool_call(status: ToolCallStatus) -> bool:
 __all__ = [
     "AGENT_HIGH_QUEUE",
     "AGENT_QUEUE",
+    "CAPABILITY_GATED_TOOLS",
     "TERMINAL_TOOL_CALL_STATES",
     "TOOL_ALLOWED_SCOPES",
     "PolicyScope",
     "ToolCallStatus",
     "ToolName",
     "ensure_scope_allowed",
+    "exposed_tool_names",
     "is_terminal_tool_call",
     "parse_policy_scope",
     "parse_tool_name",

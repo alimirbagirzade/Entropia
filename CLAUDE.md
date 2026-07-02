@@ -68,35 +68,36 @@ Before stopping a working session, produce **ALL** of the following:
 
 ## Current position (keep in sync at each closing)
 
-- **Landed:** Stages 0-6 COMPLETE + **Stage 7a — User Manual (doc 21, PR #30)**. `main`
-  after PR #30 = `be65d4e`; alembic head = **`0019_user_manual`** (6 tables:
-  `manual_documents` page-local root + `is_baseline`/`deletion_state` overlay,
-  immutable `manual_document_revisions`, `manual_stream_entries` with unique
-  never-reassigned `stream_position`, canonical `manual_content_blocks`,
-  `manual_search_chunks` + GIN `'simple'` FTS, append-only `manual_publication_events`
-  whose UNIQUE monotonic `resulting_stream_version` is the reader stream_version;
-  baseline guide seeded from `build_baseline_seed()`). Commands: one-tx publish
-  (create/upload share `_publish_new_document`), revision replace (same position,
-  v1→Superseded, OCC `expected_head_revision_id`), soft delete → Trash entry
-  (`MANUAL_ENTITY_TYPE` dispatch in deletion.py/purge.py; restore = same position +
-  same revision chain; purge redacts search chunks, retains revisions; baseline never
-  delete/purge-eligible). Advisory stream lock (`lock_stream`, key 210721) serializes
-  stream mutations; `expected_stream_version` → MANUAL_STREAM_CONFLICT. Routes:
-  `GET /v1/manual/stream|/search` (all-role) + Admin write (`require_manual_admin`
-  route AND service). Tool Gateway += `documentation.search/get_section` +
-  `artifact.attach_citation` (read/citation only). **L1 lesson:** without
-  `relationship()` SQLAlchemy does NOT FK-order cross-table inserts — repo `create_*`
-  must flush parent-before-child (manual repo precedent). Review: 0 CRITICAL/HIGH.
-  **758 tests pass.**
-- **Next:** **Stage 7b — Future Dev (doc 22)**: `domain/capability` (7 activation
-  gates + state graph), Admin `capability_transition` (legal edge + non-empty reason +
-  `expected_registry_version` OCC + idempotency_key), inactive op →
-  `CAPABILITY_NOT_ACTIVE` (already in `shared/errors`), tables `future_capability`/
-  `capability_activation_event`/`analysis_artifact`/`view_dataset`/
-  `experiment_proposal`/`execution_plan` → migration `0020_*` (→0019), endpoints
-  `GET /api/v1/capabilities`, `/capabilities/{key}`, `POST .../lifecycle-transitions`
-  (Admin), `GET /future-dev/graphic_view/overview`, `POST /view-datasets/query`
-  (Limited/Active only), `POST /analysis-artifacts`. Agent tool contracts ONLY for
-  Active/Limited (CR-08); NO fake endpoints/jobs/progress/chart (CR-09); Live Trade =
-  separate execution plane. Branch `feat/stage-7b-future-dev`. Full handoff:
-  `docs/STAGE7B_KICKOFF.md`.
+- **Landed:** **Stages 0-7 COMPLETE** — last slice **Stage 7b — Future Dev (doc 22,
+  PR #32)**. `main` after PR #32 = `ef3e1c1`; alembic head = **`0020_future_dev`**
+  (6 tables: `future_capability` registry root with UNIQUE `capability_key` +
+  per-row monotonic `registry_version` OCC + `dependency_snapshot` JSONB gates;
+  immutable `capability_activation_event` with UNIQUE
+  `(capability_id, resulting_registry_version)`; output roots `analysis_artifact` +
+  `view_dataset` (deletion_state overlay); future-only `experiment_proposal` +
+  `execution_plan` — NO V1 command writes them; 7 baseline slots seeded
+  Placeholder with ids `fcap_<key>`). `domain/capability`: 7-state graph
+  (`placeholder→designed→internal→shadow→limited→active`, rollback
+  `active→limited`/`limited→shadow`, `limited|active→retired` terminal) + 7 gates
+  (Designed/Internal/Shadow = keys present; Limited = 6 complete sans `ui`;
+  Active = 7/7 → else 422 CAPABILITY_DEPENDENCY_MISSING per-gate list).
+  `transition_capability`: Admin route+service (`require_capability_admin`),
+  non-empty reason, REQUIRED idempotency key + `expected_registry_version` OCC
+  (`with_for_update`, stale → 409 CAPABILITY_STATE_STALE), one-tx event+audit+
+  outbox. Operational cmds gate FIRST: inactive → CAPABILITY_NOT_ACTIVE, zero
+  side effects (CR-09); `POST /v1/view-datasets/query` + `/v1/analysis-artifacts`
+  (type→capability map `ANALYSIS_ARTIFACT_CAPABILITY`) only Limited/Active.
+  CR-08: `view_dataset.query`/`analysis_artifact.create` in
+  `CAPABILITY_GATED_TOOLS`; `exposed_tool_names(operational_keys)` +
+  `capability_repo.operational_capability_keys`; Placeholder call → REJECTED
+  record. No live-trade/order route (FD-12). Review: 0 findings. **781 tests
+  pass.**
+- **Next:** **Stage 8 — End-to-End Integration & Hardening**: outbox→SSE fan-out
+  all domains; Tool Gateway parity tests vs human commands (+ wire
+  `exposed_tool_names` into Coordinator planning — 7b deferred); cross-stage
+  manifest reproducibility; retention/purge scheduler; rate limiting;
+  CORS/security headers; metrics (golden signals + queue depth + outbox lag +
+  lease age). Flows: (a) full pipeline ingest→…→RUN→Result→Trash→restore,
+  (b) UI-independent Agent loop. Acceptance: pinned-manifest reproducibility,
+  CR-03, INF-01..INF-10, deployment topology boots + health/ready. Branch
+  `feat/stage-8-integration`. Full handoff: `docs/STAGE8_KICKOFF.md`.

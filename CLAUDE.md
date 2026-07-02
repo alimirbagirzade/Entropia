@@ -69,9 +69,13 @@ Before stopping a working session, produce **ALL** of the following:
 ## Current position (keep in sync at each closing)
 
 - **Landed:** **V1 ROADMAP COMPLETE — Stages 0-8** (docs 01-22 + e2e integration +
-  hardening). Last slices: **Stage 8a — Integration Flows (PR #34)** and **Stage 8b —
-  Hardening (PR #35)**; `main` after PR #35 = **`bc38ca6`**; alembic head stays
-  **`0020_future_dev`** (Stage 8 added no migration). **801 tests green.**
+  hardening) **+ post-V1 Auth/IdP (PR #38)**; `main` after PR #38 = **`b9a9178`**;
+  alembic head = **`0021_local_auth`** (`human_credentials` + `auth_sessions`).
+  **813 tests green** (801 V1 + 12 auth). Auth slice: local auth per M1 §4 —
+  argon2id credentials, opaque Bearer sessions (SHA-256 digest only, fresh role
+  per request), `AUTH_MODE=dev|session` (dev default keeps `X-Actor-Id` for
+  tests), non-human-only service line `ENTROPIA_SERVICE_TOKEN`, rate-limit key
+  from Authorization digest; review 0 CRITICAL/HIGH. V1 recap:
   8a: Coordinator plan step consumes CR-08 exposure (`run_coordinator_cycle` →
   `exposed_tools` in summary + `agent_task_created` payload); cross-stage FIX —
   `readiness_check._resolve_strategy_payload` dereferences the Strategy-editor
@@ -90,10 +94,11 @@ Before stopping a working session, produce **ALL** of the following:
   + `/v1/metrics` (golden signals + jobs depth + outbox lag + lease age;
   `unmatched` 404 sentinel). Reviews: 8a 0 findings; 8b 2 HIGH both real, fixed
   in-commit. **Test-infra:** integration tests rebuild the schema per test —
-  parallel sessions MUST use an isolated DB (`TEST_DATABASE_URL=...entropia_stage8`).
-- **Next:** **post-V1** — candidates (order in `docs/POST_V1_KICKOFF.md`): Auth/IdP
-  (replace dev-mode `X-Actor-Id`, Master §20), real backtest engine + Parquet
-  pipeline (INF-12), frontend SSE/metrics integration, CP real candidate
-  generation, capability activations, deferred list (tool-call status shadowing,
-  retention auto-purge, data-queue redelivery, SSE streaming e2e). Ask the user
-  which slice to start; full handoff: `docs/POST_V1_KICKOFF.md`.
+  parallel sessions MUST use an isolated DB (`TEST_DATABASE_URL=...entropia_auth`).
+- **Next:** **post-V1 (continued)** — remaining candidates (order in
+  `docs/POST_V1_KICKOFF.md`): real backtest engine + Parquet pipeline (INF-12),
+  frontend SSE/metrics/login integration, CP real candidate generation,
+  capability activations, deferred list (tool-call status shadowing, retention
+  auto-purge, data-queue redelivery, SSE streaming e2e, first-Admin
+  provisioning). Ask the user which slice to start; full handoff:
+  `docs/POST_V1_KICKOFF.md`.

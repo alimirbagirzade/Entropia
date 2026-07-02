@@ -277,6 +277,17 @@ The hardening half. **No migration.** +10 tests → **801 total**.
 
 **Deferred (tracked):** retention-window AUTO-purge (V1 purge stays Admin-requested two-phase; scheduler only redelivers lost purge jobs); `data`-queue auto-redelivery (multi-actor queue → operator action); SSE HTTP-streaming e2e test (hub/poller/feed covered directly); frontend SSE consumption + `/metrics` dashboards.
 
-## Next: post-V1
+## Post-V1 — Auth/IdP (Master §20 → local auth) ✅ landed (PR #38, merged → main `b9a9178`)
 
-**The staged V1 backend build is COMPLETE** (Stages 0–8, docs 01–22, INF-01..INF-10 addressed; 801 tests). See **`docs/POST_V1_KICKOFF.md`** for the post-V1 state, candidate work list, and the paste-ready resume prompt.
+Migration **`0021_local_auth`** (→0020): `human_credentials` (argon2id hash, secret material apart from the user root) + `auth_sessions` (opaque Bearer; only the SHA-256 `token_hash` is stored; `expires_at`/`revoked_at`; `idx_auth_sessions_user_id`). New dep `argon2-cffi`. +12 tests → **813 total**.
+
+- **Commands** — `application/commands/auth.py`: `sign_up` (role ALWAYS `user` — the route schema has no role field, escalation structurally impossible; **FK-ordered staged flushes** principal→human_user→credential — the L1 insert-order trap fired empirically in one flush and was fixed; unique race → 409 `USERNAME_TAKEN`), `login` (ONE 401 `INVALID_CREDENTIALS` for unknown user / wrong password / disabled account, argon2 `DUMMY_HASH` timing pad on both miss paths, rehash-on-verify, token = `secrets.token_urlsafe(32)` returned exactly once), `logout` (retry-safe no-op, no audit noise on re-revoke). One-tx no-commit, audit in the same tx; outbox only for the domain resource (`user_created`) — sessions are infra, no SSE noise.
+- **Transport** — `apps/api/deps.py`: **`AUTH_MODE=dev|session`** (`dev` default → the `X-Actor-Id` line is byte-identical for tests/local). Session mode: bare `X-Actor-Id` is IGNORED; Bearer → `auth_sessions` lookup → role re-resolved from the registry on EVERY request (M1 §4.2: an Admin role change applies on the next request; a disabled/deleted user loses the live session) → invalid/expired/revoked = 401 `SESSION_INVALID`. **Service line**: `ENTROPIA_SERVICE_TOKEN` (`hmac.compare_digest`; empty disables) + `X-Actor-Id` must resolve to a NON-human principal, else 401 `SERVICE_LINE_FORBIDDEN` — agent/scheduler HTTP can never impersonate a human. New helper `bearer_token(request)`.
+- **Routes** — `apps/api/routes/auth.py`: `POST /v1/auth/signup` (201) / `login` / `logout`.
+- **Hardening** — rate-limit bucket key now prefers a sha256 digest of the `Authorization` header (raw token never sits in limiter memory); dev header + IP fallback unchanged.
+- **Settings** — `AUTH_MODE`, `AUTH_SESSION_TTL_MINUTES` (default 720), `ENTROPIA_SERVICE_TOKEN`. **Errors** — `INVALID_CREDENTIALS`, `SESSION_INVALID`, `USERNAME_TAKEN`, `PASSWORD_POLICY`, `SERVICE_LINE_FORBIDDEN`.
+- **Verify:** 813 green on an isolated DB; alembic 0021 up/down/up + column parity + L1 FK proof on real Postgres. **Review: 0 confirmed CRITICAL/HIGH** (timing pad, fixation absence, escalation closure, tx ordering explicitly verified).
+
+## Next: post-V1 (continued)
+
+**V1 COMPLETE (Stages 0–8, docs 01–22; 801 tests) + Auth/IdP landed (813 tests).** Remaining candidates (priority per `docs/POST_V1_KICKOFF.md`): (2) real backtest engine + Parquet pipeline (INF-12), (3) frontend SSE/metrics integration, (4) CP real candidate generation, (5) capability activations, (6) deferred list. See **`docs/POST_V1_KICKOFF.md`** for reuse anchors and the paste-ready resume prompt.

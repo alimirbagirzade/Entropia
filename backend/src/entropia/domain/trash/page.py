@@ -55,6 +55,7 @@ TRASH_OBJECT_LOCATIONS: dict[str, str] = {
     "rationale_family": "Edit / Rationale Families",
     "backtest_result": "Mainboard / Backtest Results",
     "hypothesis_artifact": "Analysis Lab / Outputs",
+    "manual_document": "Help / User Manual",
 }
 
 

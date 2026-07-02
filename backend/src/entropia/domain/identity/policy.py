@@ -13,6 +13,7 @@ from entropia.domain.identity.actor import Actor
 from entropia.domain.lifecycle.enums import Role
 from entropia.shared.errors import (
     AccessDeniedError,
+    AdminManualWriteRequiredError,
     AdminPanelAccessRequiredError,
     AgentRoleNotAssignableError,
     LastAdminProtectedError,
@@ -52,6 +53,16 @@ def require_trash_admin(actor: Actor) -> None:
     require_authenticated(actor)
     if not actor.is_admin:
         raise TrashAccessForbiddenError()
+
+
+def require_manual_admin(actor: Actor) -> None:
+    """User Manual write guard (doc 21 §2): append/upload/revise/delete/restore
+    are Admin-only at the ROUTE and again inside the command. V18's visible
+    ``canUploadUserManual()`` helper is never an authorization decision; the
+    Agent principal keeps read/search/citation tools only (doc 21 §12)."""
+    require_authenticated(actor)
+    if not actor.is_admin:
+        raise AdminManualWriteRequiredError()
 
 
 def require_role(actor: Actor, roles: Iterable[Role]) -> None:

@@ -47,6 +47,14 @@ from entropia.infrastructure.postgres.models.mainboard import (
     WorkObjectRevision,
     WorkObjectRoot,
 )
+from entropia.infrastructure.postgres.models.manual import (
+    ManualContentBlock,
+    ManualDocument,
+    ManualDocumentRevision,
+    ManualPublicationEvent,
+    ManualSearchChunk,
+    ManualStreamEntry,
+)
 from entropia.infrastructure.postgres.models.market_data import (
     DatasetCoverageSlice,
     MarketDatasetRevision,
@@ -127,6 +135,12 @@ __all__ = [
     "MainboardCompositionSnapshot",
     "MainboardWorkingItem",
     "MainboardWorkspace",
+    "ManualContentBlock",
+    "ManualDocument",
+    "ManualDocumentRevision",
+    "ManualPublicationEvent",
+    "ManualSearchChunk",
+    "ManualStreamEntry",
     "MarketDatasetRevision",
     "MarketProcessedAsset",
     "MarketRawAsset",

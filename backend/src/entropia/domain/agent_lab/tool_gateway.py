@@ -29,6 +29,11 @@ class ToolName(StrEnum):
     ARTIFACT_CREATE = "artifact.create"
     ARTIFACT_SOFT_DELETE = "artifact.soft_delete"
     FOLLOWUP_TASK_ENQUEUE = "followup_task.enqueue"
+    # Stage 7a — User Manual retrieval parity (doc 21 §12): Published-corpus
+    # read/search + citation provenance only; manual MUTATION tools do not exist.
+    DOCUMENTATION_SEARCH = "documentation.search"
+    DOCUMENTATION_GET_SECTION = "documentation.get_section"
+    ARTIFACT_ATTACH_CITATION = "artifact.attach_citation"
 
 
 class ToolCallStatus(StrEnum):
@@ -63,6 +68,9 @@ TOOL_ALLOWED_SCOPES: dict[ToolName, frozenset[PolicyScope]] = {
     ToolName.ARTIFACT_CREATE: frozenset({PolicyScope.RESEARCH, PolicyScope.PROPOSAL}),
     ToolName.ARTIFACT_SOFT_DELETE: frozenset({PolicyScope.RESEARCH}),
     ToolName.FOLLOWUP_TASK_ENQUEUE: frozenset({PolicyScope.RESEARCH}),
+    ToolName.DOCUMENTATION_SEARCH: frozenset({PolicyScope.OBSERVATION, PolicyScope.RESEARCH}),
+    ToolName.DOCUMENTATION_GET_SECTION: frozenset({PolicyScope.OBSERVATION, PolicyScope.RESEARCH}),
+    ToolName.ARTIFACT_ATTACH_CITATION: frozenset({PolicyScope.RESEARCH, PolicyScope.PROPOSAL}),
 }
 
 TERMINAL_TOOL_CALL_STATES: frozenset[ToolCallStatus] = frozenset(

@@ -70,6 +70,15 @@ class Settings(BaseSettings):
     job_stale_after_seconds: int = Field(default=600, alias="JOB_STALE_AFTER_SECONDS")
     job_redeliver_grace_seconds: int = Field(default=600, alias="JOB_REDELIVER_GRACE_SECONDS")
 
+    # ---- Authentication (M1 §4 / Master §20) ----
+    # "dev": trust the X-Actor-Id header (local/dev + test default).
+    # "session": require a Bearer session token (human) or the service token (agent).
+    auth_mode: Literal["dev", "session"] = Field(default="dev", alias="AUTH_MODE")
+    auth_session_ttl_minutes: int = Field(default=720, alias="AUTH_SESSION_TTL_MINUTES")
+    # Static service-line credential for non-human runtimes (agent/scheduler).
+    # Empty string disables the service line entirely.
+    service_token: str = Field(default="", alias="ENTROPIA_SERVICE_TOKEN")
+
     # ---- Rate limiting (Module 20 §11; opt-in per deployment) ----
     rate_limit_enabled: bool = Field(default=False, alias="RATE_LIMIT_ENABLED")
     rate_limit_anonymous_per_minute: int = Field(default=60, alias="RATE_LIMIT_ANON_PER_MINUTE")

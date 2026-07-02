@@ -28,6 +28,7 @@ from entropia.apps.api.routes import (
     agent_lab,
     allocation,
     audit,
+    auth,
     backtest,
     capability,
     create_package,
@@ -109,6 +110,7 @@ def create_app() -> FastAPI:
     app.include_router(meta.router, prefix=base)
     app.include_router(metrics.router, prefix=base)
     app.include_router(sse_router, prefix=base)
+    app.include_router(auth.router, prefix=base)
     app.include_router(identity.router, prefix=base)
     app.include_router(admin_panel.router, prefix=base)
     app.include_router(trash.router, prefix=base)

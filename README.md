@@ -281,6 +281,36 @@ npm run dev      # http://localhost:5173
 Sayfanın üstündeki **"act as"** kutusuna `user_admin` yazarsan yönetici ekranlarını
 (Panel, Trash) görürsün.
 
+### 🔄 Güncelleme (başka bilgisayarda en son sürümü al)
+
+Projeyi kurduktan sonra, ileride en son sürümü almak için **tek komut** yeter — kodu
+çeker, kütüphaneleri günceller ve veritabanı tablolarını en yeni haline getirir:
+
+```bash
+make update                 # macOS / Linux   (ya da: ./scripts/update.sh)
+```
+```powershell
+.\scripts\tasks.ps1 update  # Windows          (ya da: .\scripts\update.ps1)
+```
+
+Sırasıyla şunları yapar: `git pull` → `uv sync` (backend) → `alembic upgrade head`
+(veritabanı) → `npm install` (frontend). **`.env` dosyana dokunmaz.**
+
+**Kendiliğinden (otomatik) güncellensin mi?** Aynı komutu zamanlanmış bir göreve bağla:
+
+- **macOS / Linux (cron):** `crontab -e` → şu satır her gün 09:00'da çalıştırır:
+  ```cron
+  0 9 * * * cd /ENTROPIA/YOLU && ./scripts/update.sh >> update.log 2>&1
+  ```
+- **Windows (Görev Zamanlayıcı):** yeni görev oluştur, "Program/script" alanına:
+  ```text
+  powershell.exe -ExecutionPolicy Bypass -File C:\ENTROPIA\YOLU\scripts\update.ps1
+  ```
+  ve bir tetikleyici seç (ör. "Günlük 09:00").
+
+> Otomatik güncelleme yalnızca kodu/bağımlılıkları tazeler; değişiklikleri görmek için
+> çalışan API/worker'ları yeniden başlatman gerekir (`--reload` ile çalışan API kendini yeniler).
+
 ### 🧪 Her şey doğru mu? (hızlı test)
 
 ```bash

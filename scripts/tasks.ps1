@@ -9,6 +9,7 @@ switch ($Task) {
         Write-Host "Entropia tasks:" -ForegroundColor Cyan
         @(
           "  bootstrap          One-time local setup",
+          "  update             Pull latest + update deps + migrate (no Docker)",
           "  up                 Start the full Docker stack",
           "  down               Stop the stack (keep volumes)",
           "  restart            Rebuild and restart the stack",
@@ -27,6 +28,7 @@ switch ($Task) {
         ) | ForEach-Object { Write-Host $_ }
     }
     "bootstrap"        { & "$PSScriptRoot\bootstrap.ps1" }
+    "update"           { & "$PSScriptRoot\update.ps1" }
     "up"               { docker compose up -d --build }
     "down"             { docker compose down }
     "restart"          { docker compose down; docker compose up -d --build }

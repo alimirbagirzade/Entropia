@@ -62,6 +62,22 @@ class Settings(BaseSettings):
     worker_concurrency: int = Field(default=4, alias="WORKER_CONCURRENCY")
     backtest_worker_concurrency: int = Field(default=2, alias="BACKTEST_WORKER_CONCURRENCY")
 
+    # ---- Event fan-out (Module 20 §10) ----
+    sse_poll_interval_seconds: float = Field(default=1.0, alias="SSE_POLL_INTERVAL_SECONDS")
+    outbox_relay_batch_size: int = Field(default=200, alias="OUTBOX_RELAY_BATCH_SIZE")
+
+    # ---- Scheduler / job recovery (Module 20 §6; INF-03/INF-09) ----
+    job_stale_after_seconds: int = Field(default=600, alias="JOB_STALE_AFTER_SECONDS")
+    job_redeliver_grace_seconds: int = Field(default=600, alias="JOB_REDELIVER_GRACE_SECONDS")
+
+    # ---- Rate limiting (Module 20 §11; opt-in per deployment) ----
+    rate_limit_enabled: bool = Field(default=False, alias="RATE_LIMIT_ENABLED")
+    rate_limit_anonymous_per_minute: int = Field(default=60, alias="RATE_LIMIT_ANON_PER_MINUTE")
+    rate_limit_authenticated_per_minute: int = Field(
+        default=600, alias="RATE_LIMIT_AUTH_PER_MINUTE"
+    )
+    rate_limit_write_per_minute: int = Field(default=120, alias="RATE_LIMIT_WRITE_PER_MINUTE")
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def cors_origin_list(self) -> list[str]:

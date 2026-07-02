@@ -7,6 +7,7 @@ or business policy lives here. Long-running work becomes a job, never inline.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -14,8 +15,14 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from entropia import __version__
+from entropia.apps.api import sse
 from entropia.apps.api.context import RequestContextMiddleware
 from entropia.apps.api.errors import install_exception_handlers
+from entropia.apps.api.hardening import (
+    MetricsMiddleware,
+    RateLimitMiddleware,
+    SecurityHeadersMiddleware,
+)
 from entropia.apps.api.routes import (
     admin_panel,
     agent_lab,
@@ -33,6 +40,7 @@ from entropia.apps.api.routes import (
     market_data,
     meta,
     metric_profile,
+    metrics,
     rationale,
     readiness,
     research_data,
@@ -54,7 +62,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     log = get_logger("api")
     settings = get_settings()
     log.info("api.startup", environment=settings.environment, version=__version__)
+    # Outbox -> SSE fan-out (Module 20 §10): a per-process, loss-tolerant tail.
+    stop_poller = asyncio.Event()
+    poller = asyncio.create_task(
+        sse.run_outbox_poller(stop_poller, poll_interval_seconds=settings.sse_poll_interval_seconds)
+    )
     yield
+    stop_poller.set()
+    await poller
     log.info("api.shutdown")
 
 
@@ -70,6 +85,9 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    # Middleware stack (added inner -> outer): CORS, then rate limiting (a 429
+    # is shed before route work), metrics (counts every response incl. 429),
+    # security headers (ride EVERY response), and request context outermost.
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origin_list,
@@ -78,6 +96,10 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
         expose_headers=["X-Request-Id", "X-Correlation-Id", "ETag"],
     )
+    if settings.rate_limit_enabled:
+        app.add_middleware(RateLimitMiddleware)
+    app.add_middleware(MetricsMiddleware)
+    app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(RequestContextMiddleware)
 
     install_exception_handlers(app)
@@ -85,6 +107,7 @@ def create_app() -> FastAPI:
     base = settings.api_base_path
     app.include_router(health.router, prefix=base)
     app.include_router(meta.router, prefix=base)
+    app.include_router(metrics.router, prefix=base)
     app.include_router(sse_router, prefix=base)
     app.include_router(identity.router, prefix=base)
     app.include_router(admin_panel.router, prefix=base)

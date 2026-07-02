@@ -1,30 +1,132 @@
-"""Central Server-Sent Events endpoint (Module 20 §10).
+"""Central Server-Sent Events endpoint + outbox fan-out (Module 20 §10, Stage 8b).
 
-SSE is a refresh/projection signal, NOT a source of truth. On reconnect the
-frontend refetches authoritative state via query endpoints. Stage 0 ships a
-heartbeat stream; domain event fan-out (backtest.run.updated, job.updated,
-agent.task.updated, resource.changed, audit.event.created) lands in Stage 1+.
+SSE is a refresh/projection signal, NOT a source of truth (INF-11): on reconnect
+the frontend refetches authoritative state via query endpoints, so delivery here
+is deliberately loss-tolerant. A per-process poller tails the transactional
+outbox by its lexically-sortable ULID id (starting at the boot-time tail — only
+NEW events stream; history is a query concern) and fans each event out to every
+connected subscriber as a typed SSE event. Marking events published is NOT this
+module's job — that durable checkpoint belongs to the scheduler's relay.
 """
 
 from __future__ import annotations
 
 import asyncio
+import json
 from collections.abc import AsyncIterator
+from typing import Any
 
 from fastapi import APIRouter, Request
 from sse_starlette.sse import EventSourceResponse
 
+from entropia.application.jobs.outbox_relay import fetch_events_after, latest_event_id
+from entropia.infrastructure.observability import get_logger
+
 router = APIRouter(tags=["events"])
 
 HEARTBEAT_SECONDS = 15
+_SUBSCRIBER_BUFFER = 256
+
+log = get_logger("api.sse")
+
+
+def sse_event_name(event_type: str, resource_type: str | None) -> str:
+    """Project an outbox event onto the Module 20 §10 SSE taxonomy."""
+    kind = resource_type or ""
+    if kind.startswith("backtest"):
+        return "backtest.run.updated"
+    if kind == "job":
+        return "job.updated"
+    if kind.startswith("agent") or kind == "hypothesis_artifact":
+        return "agent.task.updated"
+    if event_type.startswith("audit."):
+        return "audit.event.created"
+    return "resource.changed"
+
+
+class SseHub:
+    """In-process broadcast hub. A slow subscriber's full buffer DROPS events
+    (loss-tolerated by contract, INF-11) instead of back-pressuring the poller."""
+
+    def __init__(self) -> None:
+        self._subscribers: set[asyncio.Queue[dict[str, Any]]] = set()
+
+    def subscribe(self) -> asyncio.Queue[dict[str, Any]]:
+        queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=_SUBSCRIBER_BUFFER)
+        self._subscribers.add(queue)
+        return queue
+
+    def unsubscribe(self, queue: asyncio.Queue[dict[str, Any]]) -> None:
+        self._subscribers.discard(queue)
+
+    def publish(self, event: dict[str, Any]) -> None:
+        for queue in list(self._subscribers):
+            try:
+                queue.put_nowait(event)
+            except asyncio.QueueFull:
+                continue
+
+    @property
+    def subscriber_count(self) -> int:
+        return len(self._subscribers)
+
+
+hub = SseHub()
+
+
+async def run_outbox_poller(
+    stop: asyncio.Event, *, poll_interval_seconds: float, target: SseHub | None = None
+) -> None:
+    """Tail the outbox and broadcast new events until ``stop`` is set.
+
+    Each iteration opens its own short session; a failing poll (e.g. database
+    briefly unreachable) is logged and retried on the next tick — the poller
+    never crashes the API process."""
+    from entropia.infrastructure.postgres.engine import get_session_factory
+
+    sink = target or hub
+    cursor: str | None = None
+    bootstrapped = False
+    while not stop.is_set():
+        try:
+            factory = get_session_factory()
+            async with factory() as session:
+                if not bootstrapped:
+                    cursor = await latest_event_id(session)
+                    bootstrapped = True
+                events = await fetch_events_after(session, cursor_id=cursor)
+            for event in events:
+                cursor = event["id"]
+                sink.publish(event)
+        except Exception as exc:  # keep polling; SSE loss is tolerated (INF-11)
+            log.warning("sse.outbox_poll_failed", error=str(exc))
+        try:
+            await asyncio.wait_for(stop.wait(), timeout=poll_interval_seconds)
+        except TimeoutError:
+            continue
+
+
+def _sse_frame(event: dict[str, Any]) -> dict[str, str]:
+    return {
+        "event": sse_event_name(str(event.get("event_type", "")), event.get("resource_type")),
+        "data": json.dumps(event, separators=(",", ":")),
+    }
 
 
 async def _event_source(request: Request) -> AsyncIterator[dict[str, str]]:
-    while True:
-        if await request.is_disconnected():
-            break
-        yield {"event": "heartbeat", "data": "{}"}
-        await asyncio.sleep(HEARTBEAT_SECONDS)
+    queue = hub.subscribe()
+    try:
+        while True:
+            if await request.is_disconnected():
+                break
+            try:
+                event = await asyncio.wait_for(queue.get(), timeout=HEARTBEAT_SECONDS)
+            except TimeoutError:
+                yield {"event": "heartbeat", "data": "{}"}
+                continue
+            yield _sse_frame(event)
+    finally:
+        hub.unsubscribe(queue)
 
 
 @router.get("/events")

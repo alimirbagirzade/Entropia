@@ -1354,3 +1354,35 @@ class CapabilityStateStaleError(ConflictError):
 
     code = "CAPABILITY_STATE_STALE"
     message = "The capability state changed while this page was open. Refresh capability status."
+
+
+class InvalidCredentialsError(UnauthenticatedError):
+    """Login rejected. One code for unknown user, wrong password, or a disabled
+    account — the response never reveals which (user-enumeration hardening)."""
+
+    code = "INVALID_CREDENTIALS"
+    message = "Invalid username or password."
+
+
+class SessionInvalidError(UnauthenticatedError):
+    """A Bearer token was presented but does not map to a live session."""
+
+    code = "SESSION_INVALID"
+    message = "The session is invalid, expired, or revoked. Log in again."
+
+
+class UsernameTakenError(ConflictError):
+    code = "USERNAME_TAKEN"
+    message = "That username is already in use."
+
+
+class PasswordPolicyError(ValidationError):
+    code = "PASSWORD_POLICY"
+    message = "Password does not meet the minimum length policy."
+
+
+class ServiceLineForbiddenError(UnauthenticatedError):
+    """The service token authenticates non-human runtimes only (M1 §3.3)."""
+
+    code = "SERVICE_LINE_FORBIDDEN"
+    message = "The service line cannot act as a human principal."

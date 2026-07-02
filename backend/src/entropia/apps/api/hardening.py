@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import time
 
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
@@ -91,12 +92,22 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         settings = get_settings()
+        # Identity signal for the bucket key: the Authorization credential
+        # (session mode — digested so the raw token never sits in limiter
+        # memory), else the dev-mode actor header, else the client address.
+        auth_header = request.headers.get("Authorization")
         actor_id = request.headers.get(ACTOR_ID_HEADER)
         client_host = request.client.host if request.client else "unknown"
-        key = actor_id or f"ip:{client_host}"
+        if auth_header:
+            credential_key: str | None = (
+                "tok:" + hashlib.sha256(auth_header.encode("utf-8")).hexdigest()[:16]
+            )
+        else:
+            credential_key = actor_id
+        key = credential_key or f"ip:{client_host}"
         if request.method in _WRITE_METHODS:
             limit_class, limit = "write", settings.rate_limit_write_per_minute
-        elif actor_id:
+        elif credential_key:
             limit_class, limit = "read", settings.rate_limit_authenticated_per_minute
         else:
             limit_class, limit = "read", settings.rate_limit_anonymous_per_minute

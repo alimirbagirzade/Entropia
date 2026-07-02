@@ -29,6 +29,8 @@ dependencies = [
   "pyarrow>=17.0",
   # --- Observability ---
   "structlog>=24.4",
+  # --- Authentication (M1 / Master §20: local auth, argon2id password hashes) ---
+  "argon2-cffi>=23.1,<26.0",
 ]
 
 [project.optional-dependencies]

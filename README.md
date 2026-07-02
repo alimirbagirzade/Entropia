@@ -281,6 +281,43 @@ npm run dev      # http://localhost:5173
 Sayfanın üstündeki **"act as"** kutusuna `user_admin` yazarsan yönetici ekranlarını
 (Panel, Trash) görürsün.
 
+### 🔄 Güncelleme (başka bilgisayarda en son sürümü al)
+
+Projeyi kurduktan sonra, ileride en son sürümü almak için **tek komut** yeter — kodu
+çeker, kütüphaneleri günceller ve veritabanı tablolarını en yeni haline getirir:
+
+```bash
+make update                 # macOS / Linux   (ya da: ./scripts/update.sh)
+```
+```powershell
+.\scripts\tasks.ps1 update  # Windows          (ya da: .\scripts\update.ps1)
+```
+
+Sırasıyla şunları yapar: `git pull` → `uv sync` (backend) → `alembic upgrade head`
+(veritabanı) → `npm install` (frontend). **`.env` dosyana dokunmaz.**
+
+**Her gün otomatik güncellensin (kurduğun yere).** Yolu elle yazmana gerek yok —
+tek komut, bulunduğu klasör için **günlük** bir görev kurar (varsayılan 09:00):
+
+```bash
+./scripts/schedule-update.sh          # macOS / Linux
+```
+```powershell
+.\scripts\schedule-update.ps1         # Windows
+```
+
+macOS/Linux'ta bir **cron** işi, Windows'ta bir **Görev Zamanlayıcı** görevi kurulur;
+her gün `git pull` + bağımlılıklar + migration çalışır (loglar macOS/Linux'ta `update.log`'a yazılır).
+Saati değiştir: `./scripts/schedule-update.sh 21:30` · Kaldır: `--remove` (Windows: `-Remove`).
+
+> 💡 **Cursor kullanıyorsan (uçtan uca):** Cursor'da GitHub linkiyle depoyu **Clone**'la →
+> yerleşik terminalde bir kez **Bölüm A** kurulumunu yap → sonra `./scripts/schedule-update.sh`
+> (Windows: `.\scripts\schedule-update.ps1`) komutunu **bir kez** çalıştır. Artık kurduğun
+> yerde her gün kendini günceller — Cursor açık olmasa bile.
+
+> Otomatik güncelleme yalnızca kodu/bağımlılıkları tazeler; değişiklikleri görmek için
+> çalışan API/worker'ları yeniden başlatman gerekir (`--reload` ile çalışan API kendini yeniler).
+
 ### 🧪 Her şey doğru mu? (hızlı test)
 
 ```bash

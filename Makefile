@@ -5,7 +5,7 @@ SHELL := /bin/bash
 
 COMPOSE := docker compose
 
-.PHONY: help bootstrap up down restart logs ps migrate revision \
+.PHONY: help bootstrap update up down restart logs ps migrate revision \
         backend-install backend-dev backend-test backend-lint backend-format \
         frontend-install frontend-dev frontend-build frontend-lint test clean nuke
 
@@ -15,6 +15,9 @@ help: ## Show this help
 
 bootstrap: ## One-time local setup (env file, backend venv, frontend deps)
 	@bash scripts/bootstrap.sh
+
+update: ## Pull latest + update deps + migrate DB (Docker-free)
+	@bash scripts/update.sh
 
 up: ## Start the full Docker stack (build if needed)
 	$(COMPOSE) up -d --build

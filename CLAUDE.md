@@ -62,31 +62,40 @@ Before stopping a working session, produce **ALL** of the following:
 - **Git:** `feat/stage-<x>-<slug>` for features, `docs/stage-<x>-landed` for closing docs.
   Commit `<type>(stage-<x>): <subject>`. **No AI attribution** (disabled globally).
 - **Stage order is authoritative** (`STAGE_BUILD_PLAN.md`) — never skip sub-stages.
-  Stage 5 = docs 15/16/17; Stage 6 = docs 18/19/20.
+  Stage 5 = docs 15/16/17; Stage 6 = docs 18/19/20; Stage 7 = docs 21/22.
 
 ---
 
 ## Current position (keep in sync at each closing)
 
-- **Landed:** Stages 0-4b + 5a (doc 15) + 5b-1 (doc 16) + 5c (doc 17 + doc-15 deferred)
-  + 6a (doc 18 surface + persistence) + 6a-2 (Coordinator loop + Tool Gateway,
-  §9.2/§10) + **6b — Panel / Management / Logs (doc 19)**. `main` after PR #26 =
-  `77ea5b4`; alembic head = `0017_agent_tool_gateway` (6b added **no migration** —
-  Logs is a read model over `audit_events`). 6b: `application/commands/role_assignment.
-  assign_user_role` (`PATCH /v1/admin/users/{id}/role` — row-lock + `expected_head_
-  revision_id`/If-Match OCC → 409 `USER_ROLE_VERSION_CONFLICT`, no-op `changed=false`,
-  Agent-target 422, last-admin protection **serialized via `identity_repo.lock_admin_
-  count` advisory lock** = TOCTOU fix, `role_assigned` audit+outbox 1-tx); Logs =
-  `application/queries/log_projection` (Admin-only append-only, filters + opaque
-  composite keyset cursor + detail/correlation/causation/deleted-subject; family
-  filter mirrors `event_family` first-match-wins); Management =
-  `application/queries/user_registry` (`/v1/admin/users` humans-only keyset,
-  `/system-actors`, `/role-matrix`); `domain/admin_panel/{log_taxonomy,role_matrix}`;
-  `require_admin_panel` at endpoint **and** service. 701 tests pass.
-- **Next:** **Stage 6c — Trash (doc 20)** (Stage 6 son alt-dilimi): Admin/owner Trash
-  page over the already-landed Stage-1 deletion core (`deletion.py`
-  soft_delete/restore/purge + `TrashEntry` + `DeletionState`). Doc 20 adds §9.2 state
-  machine, §9.3 flow (purge Admin-only, OCC+idempotency+audit/outbox), §10 type-specific
-  dependency/restore/historical-integrity, §4/§5 cursor-paginated Trash list projection.
-  Branch `feat/stage-6c-trash`; migration `0018_*` only if a new table is truly needed.
-  Full handoff: `docs/STAGE6C_KICKOFF.md`.
+- **Landed:** Stages 0-4b + 5a/5b-1/5c (docs 15/16/17) + **Stage 6 COMPLETE** — 6a
+  (doc 18) + 6a-2 (Coordinator + Tool Gateway) + 6b (Panel/Management/Logs, doc 19)
+  + **6c — Trash (doc 20, PR #28)**. `main` after PR #28 = `b437254`; alembic head =
+  **`0018_trash_page`** (no new table — `trash_entries` page-contract columns:
+  `status` overlay, `row_version` OCC, snapshots, purge-job linkage + explicit
+  `(deleted_at DESC, id DESC)` keyset index). 6c: state machine gained
+  `PURGE_PENDING → SOFT_DELETED` (worker failure); `soft_delete_entity` = row-lock +
+  idempotent repeat + type preflight (`OBJECT_IN_ACTIVE_RUN`,
+  `RATIONALE_FAMILY_IN_USE` — no entry for a blocked delete);
+  `restore_trash_entry` (Admin, OCC `expected_head_revision_id` vs entry
+  `row_version`, head-pointer integrity → `RESTORE_CONFLICT`, same
+  entity_id/current_revision_id, `trash.restored` audit + `entity.restored` outbox);
+  `request_purge` (confirmation_phrase = display identity, non-empty `reauth_proof`,
+  OCC+idempotency → `purge_pending` + durable `maintenance` job, 202) +
+  `application/jobs/purge.run_purge` worker (re-preflight; success = root PURGED
+  row-retained + tombstone; failure = back to soft_deleted + entry `purge_failed`);
+  `require_trash_admin` → 403 `TRASH_ACCESS_FORBIDDEN` at route AND service (Agent
+  denied; own-artifact soft-delete AL-16 only); `GET /v1/trash-entries[/{id}]`
+  Admin-only projection (q/object_type SQL push-down, opaque cursor,
+  `restore_eligible`); Backtest Result delete now writes a Trash entry
+  (Result-local deletion flag dispatch). Review: 2 HIGH verified real, fixed
+  (`soft_delete_family` row lock; DESC index DDL). **719 tests pass.**
+- **Next:** **Stage 7a — User Manual (doc 21)**: `domain/manual` (atomic
+  `stream_position`, canonical blocks — no raw HTML/MD), all-role
+  `GET /v1/manual/stream` + `/search` (Postgres FTS, cursor), Admin-only write
+  (`POST /v1/admin/manual/documents`, `:upload`, revisions; delete/restore via the
+  landed Trash core), `BASELINE_MANUAL_IMMUTABLE`, Agent `documentation.search/
+  get_section` + `artifact.attach_citation` via Tool Gateway. Then **7b — Future Dev
+  (doc 22)** (capability registry, 7 activation gates, `CAPABILITY_NOT_ACTIVE`).
+  Branch `feat/stage-7a-user-manual`; migration `0019_*` (→0018). Full handoff:
+  `docs/STAGE7_KICKOFF.md`.

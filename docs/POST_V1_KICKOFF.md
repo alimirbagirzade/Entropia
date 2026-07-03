@@ -176,11 +176,23 @@
    data-queue auto-redelivery; SSE HTTP-streaming e2e; audit log-projection indexleri;
    ilk-Admin provisioning.
 
-## Sıradaki iş: (b) condition blocks — kapsam kararı + keşif (2026-07-03)
+## (b) condition blocks — ✅ LANDED (PR #49, merged → main `6854e06`)
 
-Kullanıcı sıradaki follow-up olarak **(b) condition blocks**'u seçti; ilk primitive seti
-**threshold-only (minimal)** — indikatör-çıktısı vs sabit eşik (ör. `RSI > 70`, `close > MA`).
-**Tam kapsamlı, taze bir oturumda** yapılacak (bu kapanış turu yalın bırakıldı).
+**Threshold-only nested condition GATE landed** (INF-12 Slice C follow-up b). Kapsam
+kararı: yalnız **`indicator_native_trigger_plus_condition`** (native trigger + threshold
+gate) modellendi; **`indicator_output_plus_condition` bilinçli olarak `unresolved`
+bırakıldı** (condition-only yön sinyali edge/direction mapping ister — ayrı dilim).
+Reuse anchor'ları: `domain/backtest/indicators.py::ConditionSpec/ConditionEvaluator/
+_conditions_satisfied` + `BlockEvaluator.current_signal` gate; `indicator_plan.py::
+_resolve_conditions/_resolve_condition/_primary_condition_key/_source_override` (fail-closed);
+`engine.py` full-OHLC besleme + `condition_blocks` diagnostics; `manifest.py` ENGINE_VERSION
+`backtest-engine-v2-condition-blocks`; `apps/seed.py::_seed_esp_resolver` + `_ESP_COND_RESOLVERS`
+(`cond.above`/`cond.below`). Threshold zorunlu (override), source default `close`. +28 test,
+review APPROVE 0/0, migration yok. Kalan condition işi: `indicator_output_plus_condition`,
+zengin primitive'ler (crosses, indicator-vs-indicator, ranges). Aşağıdaki **keşif bölümü
+tarihsel referans** olarak duruyor.
+
+### Keşif (tarihsel — (b) için, artık LANDED)
 
 **KEŞİF (bu oturumda çıkarıldı — taze oturum tekrar keşfetmesin):**
 
@@ -228,43 +240,50 @@ Kullanıcı sıradaki follow-up olarak **(b) condition blocks**'u seçti; ilk pr
 ```
 Entropia — post-V1: V1 tamam + Auth/IdP (PR #38) + Parquet Slice A (PR #41) + Bar-replay
 engine Slice B (PR #43) + gerçek indikatör compute Slice C (PR #45) + risk_based sizing
-Slice C follow-up (a) (PR #47 merged). ÖNCE DOĞRULA (stale-by-default): git fetch &&
-git log --oneline origin/main -4. main=4b4d1c6 (feature kodu 43cee29; Slice C kodu 671d227);
-alembic head 0021_local_auth (migration YOK). İzole DB:
+follow-up (a) (PR #47) + threshold-only condition blocks follow-up (b) (PR #49) — hepsi
+MERGED. ÖNCE DOĞRULA (stale-by-default): git fetch && git log --oneline origin/main -4 &&
+gh pr list --state merged -L 3. main=6854e06 (condition-blocks kodu 8766fae; risk_based 43cee29;
+Slice C 671d227); alembic head 0021_local_auth (migration YOK). İzole DB:
 TEST_DATABASE_URL=postgresql+asyncpg://entropia:entropia@localhost:5432/entropia_auth.
-Test tabanı 864 (859 + 5); pytest --co ile teyit et (bu projede --co dosya-başına sayım
-basar → ": N" değerlerini topla). ÖNCE docs/POST_V1_KICKOFF.md + docs/STAGE2_HANDOFF.md
-("risk_based sizing landed (PR #47)" + "Next: remaining Slice C follow-ups") oku.
+Test tabanı 892; pytest --co --no-cov ile teyit et (bu projede dosya-başına ": N" basar → topla).
+ÖNCE docs/POST_V1_KICKOFF.md + docs/STAGE2_HANDOFF.md ("condition blocks landed (PR #49)" +
+"Next: remaining Slice C follow-ups") oku.
 
-SIRADAKİ İŞ (kullanıcı SEÇTİ): (b) condition blocks, ilk primitive seti threshold-only
-(minimal: indikatör-çıktısı vs sabit eşik) — TAM kapsamlı bu oturumda yap. (a) risk_based
-sizing ✅ LANDED (PR #47); formula_based/Kelly + (c) multi-timeframe + (d) directional
-ta.atr/vwap sonraya. **KEŞİF HAZIR — "## Sıradaki iş: (b) condition blocks" bölümünü oku
-(şema, condition seed'in SIFIRDAN gerektiği, dokunulacak 4 katman, açık karar).** Özet: (b) =
-yeni cond.* key ailesi + compute (threshold) + apps/seed.py ESP seed + indicator_plan.py
-condition_blocks resolution (..._plus_condition için) + engine gating (BlockEvaluator/aggregate
-+ condition_block_rule) + testler; ENGINE_VERSION bump gerekir.
+SIRADAKİ İŞ (kullanıcıyla SEÇ): kalan Slice C follow-up'ları — hepsi indicators.py/
+indicator_plan.py/engine.py üstüne biner:
+- formula_based / Kelly sizing (hâlâ notional fallback + position_sizing_method_unsupported
+  uyarısı; path-dependent istatistik — foundation'da temellendirilmesi gerekir).
+- (b2) condition genişletmeleri: indicator_output_plus_condition (condition-only YÖN sinyali —
+  edge/direction mapping ister; bugün bilinçli deferred) + zengin primitive'ler (cond.crosses_*,
+  indicator-vs-indicator, range/between). Bugün yalnız cond.above/cond.below threshold GATE var.
+- (c) multi-timeframe bar resampling (timeframe override bugün unresolved; en invaziv,
+  bar-replay determinizmini etkiler).
+- (d) daha çok directional canonical key (ta.atr/ta.vwap bugün recognized-ama-non-directional).
+Diğer adaylar: frontend SSE/metrics/login, CP real candidate generation, capability aktivasyonları,
+deferred liste (ilk-Admin provisioning, summary["timeframe"] çözümü, retention auto-purge).
 
 REUSE ANCHOR'LARI (kodu incele, tek satır özet):
-- domain/backtest/engine.py::_position_size — risk_based bacağı: size = max(equity,0)*risk%
-  /100/stop_loss_point (deterministik, entry_price'tan bağımsız, non-negatif clamp). Helper
-  _sizing_is_honored(config): base_position_size + sub-config'li risk_based_sizing = honored;
-  formula_based VE sub-config'siz risk_based = notional fallback + L4 position_sizing_method_
-  unsupported:<method>. ENGINE_VERSION=backtest-engine-v2-risk-based-sizing (manifest.py;
-  execution_key namespace, INF-04/INF-05). Dual-mode run_engine(..., indicator_plan=None)
-  (plan → gerçek sinyal, yoksa breakout PROXY); exit = protection stops + exit blocks +
-  exit_on_opposite. jobs/backtest_engine.py plan'ı resolve+enjekte (sözleşmeler sabit).
-- domain/backtest/indicators.py — pure/incremental Decimal TA (ta.sma/ema/rma/wma MA-cross
-  + ta.rsi band cross; ta.atr/vwap non-directional/unresolved); IndicatorSpec/SignalRule/
-  IndicatorPlan + BlockEvaluator; BUILTIN_ENTRY_MODEL=builtin_indicator_native_trigger_v1;
-  params: parameter_overrides else defaults (RSI 14, MA 20, 30/70).
-- application/queries/indicator_plan.py — resolve_indicator_plan(session, strategy_config)
-  → IndicatorPlan; pinned PackageRevision.dependency_snapshot canonical_key → spec (gövde
-  çalıştırılmaz; native-trigger-only → *_plus_condition/timeframe/non-directional = unresolved, L4).
+- domain/backtest/indicators.py — ConditionSpec + ConditionEvaluator (per-bar threshold: bar price
+  field VEYA parent block'un indicator_output değeri vs sabit eşik; validity _VALIDITY_BARS;
+  strict >/<; until_opposite false'ta temizler; None source warm-up'ta fail-closed);
+  CONDITION_KEYS={cond.above,cond.below}; _conditions_satisfied (condition_block_rule aggregation);
+  BlockEvaluator.current_signal trigger'ı gate'ler; IndicatorSpec +conditions/condition_rule/
+  min_condition_support (defaulted). Ayrıca: pure/incremental Decimal TA (ta.sma/ema/rma/wma
+  MA-cross + ta.rsi band cross), BUILTIN_ENTRY_MODEL, params override else default (RSI14/MA20/30-70).
+- application/queries/indicator_plan.py — resolve_indicator_plan; _resolve_block artık
+  indicator_native_trigger_plus_condition kabul eder → _resolve_conditions/_resolve_condition/
+  _primary_condition_key/_source_override ile pinned condition paketinin cond.* dep'ini ConditionSpec'e
+  çözer (FAIL-CLOSED: eksik paket/cond.* yok/threshold yok → tüm blok unresolved). threshold ZORUNLU
+  (override), source default close. indicator_output_plus_condition HÂLÂ deferred (kapsam kararı).
+- domain/backtest/engine.py — run_engine evaluator'lara tam OHLC besler (price-source condition) +
+  diagnostics condition_blocks sayacı; dual-mode (plan→gerçek sinyal, yoksa breakout PROXY).
+  manifest.py ENGINE_VERSION=backtest-engine-v2-condition-blocks (execution_key namespace).
+  apps/seed.py::_seed_esp_resolver + _ESP_COND_RESOLVERS (cond.above/cond.below, boolean return).
 
-YÖNTEM: Workflow KULLANMA; YENİ dosya heredoc, mevcut dosya Edit 4-fact; cd backend;
-ruff+format+mypy+pytest (izole DB: ...entropia_auth; 864 yeşil kalmalı); migration gerekirse
-0022_* (→0021) up/down/up + parity + L1 FK proof; code-reviewer → CRITICAL/HIGH AMPİRİK
-DOĞRULA → commit (attribution YOK) → PR → checks watch → merge kullanıcıda. Türkçe, MALİYET
-BİLİNÇLİ. Kapanışta: handoff + kickoff + CLAUDE.md + memory (ecc + claude-mem).
+YÖNTEM: Workflow KULLANMA; YENİ dosya heredoc (gate-free), mevcut dosya Edit 4-fact (GateGuard:
+ilk Bash + dosya-başına-ilk-edit gate); cd backend; ruff+format+mypy+pytest (izole DB:
+...entropia_auth; 892 yeşil kalmalı); migration gerekirse 0022_* (→0021) up/down/up + parity +
+L1 FK proof; code-reviewer → CRITICAL/HIGH AMPİRİK DOĞRULA → commit (conventional, attribution YOK)
+→ PR → gh pr checks --watch → merge KULLANICIDA. Türkçe, MALİYET BİLİNÇLİ. Kapanışta: handoff +
+kickoff + CLAUDE.md + memory (ecc knowledge graph + claude-mem).
 ```

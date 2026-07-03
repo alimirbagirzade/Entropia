@@ -50,6 +50,8 @@ def _cblock(
     lower: str | None = None,
     upper: str | None = None,
     reference: str | None = None,
+    reference_package_rev: str | None = None,
+    reference_length: str | None = None,
     requirement: str = "required",
     validity: str = "until_opposite_signal",
     cb_id: str = "cb_1",
@@ -65,7 +67,9 @@ def _cblock(
         overrides["upper"] = upper
     if reference is not None:
         overrides["reference"] = reference
-    return {
+    if reference_length is not None:
+        overrides["reference_length"] = reference_length
+    block: dict[str, Any] = {
         "condition_block_id": cb_id,
         "display_order": 0,
         "package_ref": {
@@ -77,6 +81,13 @@ def _cblock(
         "validity": validity,
         "parameter_overrides": overrides or None,
     }
+    if reference_package_rev is not None:
+        block["reference_package_ref"] = {
+            "package_root_id": "pkg_ref",
+            "package_revision_id": reference_package_rev,
+            "package_content_hash": "refhash",
+        }
+    return block
 
 
 def _config(
@@ -415,3 +426,157 @@ async def test_condition_only_below_threshold_never_enters(session) -> None:
         indicator_plan=await resolve_indicator_plan(session, cfg),
     )
     assert out.summary["total_trades"] == 0
+
+
+# ------------------------------------ two-package indicator-vs-indicator (reference pkg)
+
+
+async def test_reference_package_resolves_two_package_series_rhs(session) -> None:
+    # A 2nd pinned INDICATOR package supplies the RHS series (indicator-vs-indicator): a
+    # fast indicator_output crosses_above a slow reference MA. No constant threshold.
+    ind = await _package(session, PackageKind.INDICATOR, "ta.sma")
+    cross = await _package(session, PackageKind.CONDITION, "cond.crosses_above")
+    slow = await _package(session, PackageKind.INDICATOR, "ta.sma")
+    plan = await resolve_indicator_plan(
+        session,
+        _config(
+            ind,
+            trigger="indicator_output_plus_condition",
+            condition_blocks=[
+                _cblock(
+                    cross, threshold=None, source="indicator_output", reference_package_rev=slow
+                )
+            ],
+        ),
+    )
+    assert plan.has_entry is True
+    assert plan.unresolved == ()
+    cond_spec = plan.entry_specs[0].conditions[0]
+    assert cond_spec.reference_key == "ta.sma"
+    assert cond_spec.reference_length == 20  # engine-version default (no override)
+    assert cond_spec.threshold is None
+    assert cond_spec.reference is None
+
+
+async def test_reference_package_length_override_is_honored(session) -> None:
+    ind = await _package(session, PackageKind.INDICATOR, "ta.sma")
+    cross = await _package(session, PackageKind.CONDITION, "cond.crosses_above")
+    slow = await _package(session, PackageKind.INDICATOR, "ta.ema")
+    plan = await resolve_indicator_plan(
+        session,
+        _config(
+            ind,
+            trigger="indicator_output_plus_condition",
+            condition_blocks=[
+                _cblock(
+                    cross,
+                    threshold=None,
+                    source="indicator_output",
+                    reference_package_rev=slow,
+                    reference_length="50",
+                )
+            ],
+        ),
+    )
+    cond_spec = plan.entry_specs[0].conditions[0]
+    assert cond_spec.reference_key == "ta.ema"
+    assert cond_spec.reference_length == 50
+
+
+async def test_reference_package_missing_revision_is_unresolved(session) -> None:
+    ind = await _package(session, PackageKind.INDICATOR, "ta.sma")
+    cross = await _package(session, PackageKind.CONDITION, "cond.crosses_above")
+    plan = await resolve_indicator_plan(
+        session,
+        _config(
+            ind,
+            trigger="indicator_output_plus_condition",
+            condition_blocks=[
+                _cblock(
+                    cross,
+                    threshold=None,
+                    source="indicator_output",
+                    reference_package_rev="pkgrev_missing",
+                )
+            ],
+        ),
+    )
+    assert plan.has_entry is False
+    assert plan.unresolved == ("entry:blk_1:condition_reference_package_unresolved:cb_1",)
+
+
+async def test_reference_package_non_series_key_is_unresolved(session) -> None:
+    # ta.atr is recognized but non-directional -> not computable as an inline RHS series.
+    ind = await _package(session, PackageKind.INDICATOR, "ta.sma")
+    cross = await _package(session, PackageKind.CONDITION, "cond.crosses_above")
+    bogus = await _package(session, PackageKind.INDICATOR, "ta.atr")
+    plan = await resolve_indicator_plan(
+        session,
+        _config(
+            ind,
+            trigger="indicator_output_plus_condition",
+            condition_blocks=[
+                _cblock(
+                    cross, threshold=None, source="indicator_output", reference_package_rev=bogus
+                )
+            ],
+        ),
+    )
+    assert plan.has_entry is False
+    assert plan.unresolved == ("entry:blk_1:condition_reference_no_series:cb_1",)
+
+
+async def test_reference_package_on_a_range_condition_is_unresolved(session) -> None:
+    # A range compares against fixed bounds, not an RHS series; a reference package is a
+    # misconfiguration, surfaced rather than silently ignored.
+    ind = await _package(session, PackageKind.INDICATOR, "ta.rsi")
+    rng = await _package(session, PackageKind.CONDITION, "cond.between")
+    slow = await _package(session, PackageKind.INDICATOR, "ta.sma")
+    plan = await resolve_indicator_plan(
+        session,
+        _config(
+            ind,
+            condition_blocks=[
+                _cblock(rng, threshold=None, lower="30", upper="70", reference_package_rev=slow)
+            ],
+        ),
+    )
+    assert plan.has_entry is False
+    assert plan.unresolved == ("entry:blk_1:condition_reference_package_on_range:cb_1",)
+
+
+async def test_two_package_ma_cross_drives_the_engine_entry(session) -> None:
+    """End-to-end: a fast MA crossing above a slow reference MA DRIVES a long entry.
+
+    The parent block is a fast SMA(2) (native trigger ignored, condition-only); the
+    required condition is ``indicator_output crosses_above`` a slow SMA(4) supplied by a
+    SECOND pinned indicator package. The fast average overtakes the slow one exactly once
+    and the long position rides to end-of-data — the canonical two-package MA crossover."""
+    fast = await _package(session, PackageKind.INDICATOR, "ta.sma")
+    cross = await _package(session, PackageKind.CONDITION, "cond.crosses_above")
+    slow = await _package(session, PackageKind.INDICATOR, "ta.sma")
+    closes = ["10", "9", "8", "9", "12", "14", "16", "16"]  # fast(2) crosses slow(4) up @idx4
+    cfg = _config(
+        fast,
+        trigger="indicator_output_plus_condition",
+        condition_blocks=[
+            _cblock(
+                cross,
+                threshold=None,
+                source="indicator_output",
+                reference_package_rev=slow,
+                reference_length="4",
+            )
+        ],
+        ind_overrides={"length": 2},
+    )
+    out = run_engine(
+        strategy_config=cfg,
+        bar_batches=_bars(closes),
+        execution_key="k",
+        indicator_plan=await resolve_indicator_plan(session, cfg),
+    )
+    assert out.diagnostics["entry_model"] == BUILTIN_ENTRY_MODEL
+    assert out.diagnostics["condition_blocks"] == 1
+    assert out.summary["total_trades"] == 1
+    assert out.trades[0].direction == "long"

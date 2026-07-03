@@ -18,9 +18,11 @@ silently dropped:
   computed; an explicit timeframe override is deferred (needs multi-TF resampling);
 * only canonical keys with a defined native trigger fire (``ta.sma``/``ta.ema``/
   ``ta.rma``/``ta.wma``/``ta.rsi``); ``ta.atr``/``ta.vwap`` are recognized but
-  non-directional in this slice. A condition's ``reference`` RHS may be any available
-  series, but comparing two SEPARATE indicator packages needs a second pinned package
-  (a schema extension) and stays out of scope.
+  non-directional in this slice. A condition's RHS may be a constant threshold, a
+  bounded ``reference`` series, OR a second separately-pinned indicator package
+  (``reference_package_ref`` — the two-package indicator-vs-indicator form, e.g. a
+  fast-MA vs a slow-MA cross); a reference package that resolves to no computable
+  series leaves the block honest-unresolved.
 
 If no entry block resolves, the returned plan has no entry specs and the engine falls
 back to its labelled breakout proxy.
@@ -67,6 +69,10 @@ _SOURCE_KEYS = ("source", "input", "series")
 _BOUND_LOWER_KEYS = ("lower", "lower_bound", "min")
 _BOUND_UPPER_KEYS = ("upper", "upper_bound", "max")
 _REFERENCE_KEYS = ("reference", "compare_to", "other")
+# Look-back for the 2nd-package RHS indicator (``reference_package_ref``); the reference
+# package's own body is never executed, so its length comes from a dedicated override key
+# or the engine-version default (a reproducibility constant).
+_REFERENCE_LENGTH_KEYS = ("reference_length", "compare_length", "reference_len")
 
 
 async def resolve_indicator_plan(
@@ -227,7 +233,17 @@ async def _resolve_condition(
     overrides = cond.parameter_overrides or {}
     source = _source_override(overrides)
 
+    # An optional 2nd separately-pinned indicator package as the RHS series (two-package
+    # indicator-vs-indicator). Fail-closed if pinned but not a computable series.
+    ref_key, ref_length, ref_reason = await _resolve_reference_package(session, cond)
+    if ref_reason is not None:
+        return None, ref_reason
+
     if key in RANGE_CONDITION_KEYS:
+        if ref_key is not None:
+            # A range compares against fixed bounds, not an RHS series; a reference
+            # package here is a misconfiguration, surfaced rather than silently ignored.
+            return None, f"condition_reference_package_on_range:{cond.condition_block_id}"
         # A range needs BOTH bounds (no universal default) and a well-ordered interval.
         lower = _decimal_override(overrides, _BOUND_LOWER_KEYS)
         upper = _decimal_override(overrides, _BOUND_UPPER_KEYS)
@@ -249,7 +265,22 @@ async def _resolve_condition(
             None,
         )
 
-    # above/below/crosses: the RHS is a ``reference`` series OR a constant threshold.
+    # above/below/crosses RHS, in precedence order: a 2nd-package indicator series, a
+    # bounded ``reference`` series, or a constant threshold.
+    if ref_key is not None:
+        return (
+            ConditionSpec(
+                condition_block_id=cond.condition_block_id,
+                canonical_key=key,
+                source=source,
+                threshold=None,
+                requirement=str(cond.requirement),
+                validity=str(cond.validity),
+                reference_key=ref_key,
+                reference_length=ref_length,
+            ),
+            None,
+        )
     reference = _reference_override(overrides)
     threshold: Decimal | None = None
     if reference is None:
@@ -270,6 +301,30 @@ async def _resolve_condition(
         ),
         None,
     )
+
+
+async def _resolve_reference_package(
+    session: AsyncSession, cond: ConditionBlock
+) -> tuple[str | None, int | None, str | None]:
+    """Dereference the optional 2nd pinned INDICATOR package into ``(key, length)``.
+
+    The two-package indicator-vs-indicator RHS: the condition compares its source against
+    THIS package's computed output series (e.g. a fast MA vs a slow MA). Returns
+    ``(None, None, None)`` when no reference package is pinned; a specific fail-closed
+    reason when pinned but the revision is missing or resolves to no computable series
+    (only ``DIRECTIONAL_KEYS`` — the MA/RSI family — are computable as an inline series)."""
+    ref = cond.reference_package_ref
+    if ref is None:
+        return None, None, None
+    revision = await pkg_repo.get_revision(session, ref.package_revision_id)
+    if revision is None:
+        return None, None, f"condition_reference_package_unresolved:{cond.condition_block_id}"
+    key = _primary_directional_key(revision.dependency_snapshot)
+    if key is None:
+        return None, None, f"condition_reference_no_series:{cond.condition_block_id}"
+    overrides = cond.parameter_overrides or {}
+    length = _int_override(overrides, _REFERENCE_LENGTH_KEYS) or default_length(key)
+    return key, length, None
 
 
 def _primary_condition_key(dependency_snapshot: dict[str, Any]) -> str | None:
@@ -295,11 +350,12 @@ def _source_override(overrides: dict[str, Any]) -> str:
 
 
 def _reference_override(overrides: dict[str, Any]) -> str | None:
-    """An optional ``reference`` series RHS (bounded indicator-vs-indicator).
+    """An optional ``reference`` series RHS (bounded, single-package).
 
-    When set, the comparator's right-hand side is another available series instead of a
-    constant threshold. Comparing two SEPARATE indicator packages would need a second
-    pinned ``package_ref`` (a schema extension) and is not expressible here."""
+    When set, the comparator's right-hand side is another available series (a bar price
+    field or the parent block's ``indicator_output``) instead of a constant threshold.
+    Comparing two SEPARATE indicator packages uses ``reference_package_ref`` instead
+    (resolved in ``_resolve_reference_package``)."""
     for key in _REFERENCE_KEYS:
         raw = overrides.get(key)
         if isinstance(raw, str) and raw in CONDITION_SOURCES:

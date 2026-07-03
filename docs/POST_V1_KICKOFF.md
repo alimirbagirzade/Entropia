@@ -176,6 +176,40 @@
    data-queue auto-redelivery; SSE HTTP-streaming e2e; audit log-projection indexleri;
    ilk-Admin provisioning.
 
+## Sıradaki iş: (b) condition blocks — kapsam kararı + keşif (2026-07-03)
+
+Kullanıcı sıradaki follow-up olarak **(b) condition blocks**'u seçti; ilk primitive seti
+**threshold-only (minimal)** — indikatör-çıktısı vs sabit eşik (ör. `RSI > 70`, `close > MA`).
+**Tam kapsamlı, taze bir oturumda** yapılacak (bu kapanış turu yalın bırakıldı).
+
+**KEŞİF (bu oturumda çıkarıldı — taze oturum tekrar keşfetmesin):**
+
+- **Şema hazır (dokunma):** `domain/strategy/config.py` — `IndicatorBlock.trigger_source ∈
+  {indicator_native_trigger, indicator_native_trigger_plus_condition,
+  indicator_output_plus_condition}` (son ikisi bugün unresolved). `IndicatorBlock` içinde iç içe
+  `condition_blocks: list[ConditionBlock] | None` + `condition_block_rule`
+  (`required_condition_blocks_only` / `required_plus_any_supporting` /
+  `required_plus_min_supporting` / `required_plus_all_supporting`) + `min_supporting_condition_count`.
+  `ConditionBlock` = pinned **condition** `package_ref` (ayrı `condition` paket tipi,
+  `domain/package/kind.py`) + `requirement` (required/supporting) + `validity` penceresi +
+  `parameter_overrides`.
+- **Bugünkü davranış:** `application/queries/indicator_plan.py::_resolve_block` (satır ~106)
+  `trigger_source != "indicator_native_trigger"` → `trigger_source_deferred:<source>` unresolved;
+  `condition_blocks` hiç okunmuyor.
+- **KRİTİK — condition primitive katmanı SIFIRDAN gerekli:** bugün seed'li **hiç `cond.*`
+  canonical key yok** — `indicators.py`/ESP registry yalnız `ta.*` seed'i içeriyor
+  (`apps/seed.py::_ESP_TA_RESOLVERS`). Bu yüzden (b) = (1) yeni `cond.*` key ailesi + compute
+  (threshold-only) + ESP seed (`apps/seed.py`), (2) plan resolution — `..._plus_condition`
+  trigger'ları için `condition_blocks`'u dereference edip condition spec'lere çöz
+  (`indicator_plan.py`), (3) engine gating — `BlockEvaluator`/`aggregate`'i "native trigger
+  AND condition(lar) doğru" + `condition_block_rule` aggregation uygulayacak şekilde genişlet
+  (`indicators.py` + `engine.py`), (4) testler (unit compute + plan resolution integration +
+  engine gating + e2e yayınlanmış condition paketi).
+- **Karar (taze oturumda):** `indicator_output_plus_condition` (native trigger yok, sadece
+  condition sinyali) de mi kapsanacak, yoksa ilk sürüm `indicator_native_trigger_plus_condition`
+  (native trigger + condition gate) ile mi sınırlı? Threshold semantiği reproducibility sabiti
+  olmalı (parametre override yoksa engine-version default), ENGINE_VERSION bump gerekir.
+
 ## Yöntem (değişmedi)
 
 - Workflow KULLANMA — doğrudan yaz; YENİ dosya Bash heredoc (gate-free), mevcut dosya Edit 4-fact.
@@ -202,12 +236,14 @@ Test tabanı 864 (859 + 5); pytest --co ile teyit et (bu projede --co dosya-baş
 basar → ": N" değerlerini topla). ÖNCE docs/POST_V1_KICKOFF.md + docs/STAGE2_HANDOFF.md
 ("risk_based sizing landed (PR #47)" + "Next: remaining Slice C follow-ups") oku.
 
-SIRADAKİ İŞ (kullanıcıyla seç): kalan Slice C follow-up'ları. (a) risk_based sizing ✅
-LANDED (PR #47) — formula_based/Kelly hâlâ unresolved (path-dependent, foundation belirsiz).
-Kalan: (b) condition blocks + *_plus_condition (SignalRule/BlockEvaluator genişlet, indikatör
-compute'a dokunur), (c) multi-timeframe bar resampling (en invaziv, bar-replay determinizmi),
-(d) daha çok directional key (ta.atr/vwap bant/kanal). Kapsamı kullanıcıyla netleştir, hangi
-follow-up'tan başlanacağını sor.
+SIRADAKİ İŞ (kullanıcı SEÇTİ): (b) condition blocks, ilk primitive seti threshold-only
+(minimal: indikatör-çıktısı vs sabit eşik) — TAM kapsamlı bu oturumda yap. (a) risk_based
+sizing ✅ LANDED (PR #47); formula_based/Kelly + (c) multi-timeframe + (d) directional
+ta.atr/vwap sonraya. **KEŞİF HAZIR — "## Sıradaki iş: (b) condition blocks" bölümünü oku
+(şema, condition seed'in SIFIRDAN gerektiği, dokunulacak 4 katman, açık karar).** Özet: (b) =
+yeni cond.* key ailesi + compute (threshold) + apps/seed.py ESP seed + indicator_plan.py
+condition_blocks resolution (..._plus_condition için) + engine gating (BlockEvaluator/aggregate
++ condition_block_rule) + testler; ENGINE_VERSION bump gerekir.
 
 REUSE ANCHOR'LARI (kodu incele, tek satır özet):
 - domain/backtest/engine.py::_position_size — risk_based bacağı: size = max(equity,0)*risk%

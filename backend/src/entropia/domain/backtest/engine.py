@@ -32,6 +32,14 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
+from entropia.domain.backtest.indicators import (
+    BUILTIN_ENTRY_MODEL,
+    BlockEvaluator,
+    IndicatorPlan,
+    aggregate,
+    build_evaluators,
+)
+
 if TYPE_CHECKING:
     from entropia.domain.strategy.config import StrategyConfig
 
@@ -230,13 +238,27 @@ def run_engine(
     bar_batches: Iterator[list[dict[str, Any]]],
     execution_key: str,
     item_count: int = 1,
+    indicator_plan: IndicatorPlan | None = None,
 ) -> EngineOutput:
-    """Deterministically bar-replay one strategy over its pinned OHLCV bars."""
+    """Deterministically bar-replay one strategy over its pinned OHLCV bars.
+
+    Entry/exit timing uses real built-in indicator signals when ``indicator_plan``
+    resolves to at least one computable entry block; otherwise it falls back to the
+    labelled deterministic breakout proxy (Slice B behaviour), so callers without a
+    plan — and the pure unit tests — are unaffected."""
     config = strategy_config
     initial_capital = Decimal(config.data.initial_capital).quantize(_MONEY)
     long_ok, short_ok = _direction_flags(config.position_entry_logic.direction_mode)
     half_spread, slippage, commission = _cost_params(config)
     trail_pct = _trail_pct(config)
+
+    plan_active = indicator_plan is not None and indicator_plan.has_entry
+    entry_evals: list[BlockEvaluator] = (
+        build_evaluators(indicator_plan.entry_specs) if plan_active and indicator_plan else []
+    )
+    exit_evals: list[BlockEvaluator] = (
+        build_evaluators(indicator_plan.exit_specs) if plan_active and indicator_plan else []
+    )
 
     equity = initial_capital
     peak = initial_capital
@@ -320,6 +342,31 @@ def run_engine(
             )
         )
 
+    def _open(direction: str, bar: _Bar) -> _Position:
+        """Open a position in ``direction`` at this bar's cost-adjusted fill."""
+        is_long = direction == "long"
+        entry_eff = _effective_fill(
+            bar.close, is_buy=is_long, half_spread=half_spread, slip=slippage
+        )
+        size = _position_size(config, entry_eff, equity)
+        return _Position(
+            direction=direction,
+            entry_time=bar.timestamp,
+            entry_price=entry_eff,
+            size=size,
+            static_stop=_initial_static_stop(config, is_long=is_long, entry_price=entry_eff),
+            trail_pct=trail_pct,
+            trail_anchor=bar.close,
+            entry_notional=(entry_eff * size).quantize(_MONEY),
+        )
+
+    def _plan_exit(pos: _Position, entry_signal: str | None, exit_hit: bool) -> bool:
+        """Exit on an explicit exit signal or (opt-in) an opposite entry signal."""
+        if exit_hit:
+            return True
+        opposite = entry_signal is not None and entry_signal != pos.direction
+        return bool(opposite and indicator_plan is not None and indicator_plan.exit_on_opposite)
+
     for batch in bar_batches:
         for raw in batch:
             bar = _normalize(raw)
@@ -329,6 +376,18 @@ def run_engine(
             if not first_ts:
                 first_ts = bar.timestamp
             last_bar = bar
+
+            # Real indicator signals (when a plan resolved); evaluators see EVERY bar.
+            entry_signal: str | None = None
+            exit_hit = False
+            if plan_active and indicator_plan is not None:
+                for ev in entry_evals:
+                    ev.update(bar.close)
+                for ev in exit_evals:
+                    ev.update(bar.close)
+                entry_signal = aggregate(indicator_plan.entry_rule, entry_evals)
+                if exit_evals and indicator_plan.exit_rule is not None:
+                    exit_hit = aggregate(indicator_plan.exit_rule, exit_evals) is not None
 
             if position is not None:
                 # (2) protection / stop / exit against this bar (intrabar touch).
@@ -344,11 +403,25 @@ def run_engine(
                 ):
                     _close(bar.timestamp, stop, "stop_loss", position)
                     position, exited = None, True
-                if not exited and position is not None and _exit_proxy(position, bar, window):
-                    _close(bar.timestamp, bar.close, "exit_signal", position)
-                    position = None
+                if not exited and position is not None:
+                    if plan_active:
+                        if _plan_exit(position, entry_signal, exit_hit):
+                            _close(bar.timestamp, bar.close, "exit_signal", position)
+                            position = None
+                    elif _exit_proxy(position, bar, window):
+                        _close(bar.timestamp, bar.close, "exit_signal", position)
+                        position = None
+            elif plan_active:
+                # (3a) real indicator entry (only when flat, respecting the direction bias).
+                if entry_signal is not None:
+                    if (entry_signal == "long" and not long_ok) or (
+                        entry_signal == "short" and not short_ok
+                    ):
+                        suppressed_entries += 1
+                    else:
+                        position = _open(entry_signal, bar)
             elif len(window) == _BREAKOUT_WINDOW:
-                # (3) breakout entry proxy (only when flat, with a full look-back).
+                # (3b) breakout entry proxy (only when flat, with a full look-back).
                 highest = max(b.high for b in window)
                 lowest = min(b.low for b in window)
                 want_long = bar.close > highest
@@ -356,23 +429,8 @@ def run_engine(
                 if (want_long and not long_ok) or (want_short and not short_ok):
                     suppressed_entries += 1
                 elif want_long or want_short:
-                    is_long = bool(want_long)  # long wins a same-bar tie (deterministic)
-                    entry_eff = _effective_fill(
-                        bar.close, is_buy=is_long, half_spread=half_spread, slip=slippage
-                    )
-                    size = _position_size(config, entry_eff, equity)
-                    position = _Position(
-                        direction="long" if is_long else "short",
-                        entry_time=bar.timestamp,
-                        entry_price=entry_eff,
-                        size=size,
-                        static_stop=_initial_static_stop(
-                            config, is_long=is_long, entry_price=entry_eff
-                        ),
-                        trail_pct=trail_pct,
-                        trail_anchor=bar.close,
-                        entry_notional=(entry_eff * size).quantize(_MONEY),
-                    )
+                    # long wins a same-bar tie (deterministic); breakout sides are exclusive.
+                    position = _open("long" if want_long else "short", bar)
 
             window.append(bar)
 
@@ -439,15 +497,27 @@ def run_engine(
         # risk/formula sizing is not modelled in this foundation; the run used
         # notional sizing instead. Surface the divergence rather than hide it (L4).
         warnings.append(f"position_sizing_method_unsupported:{config.position_sizing.method}")
+    if indicator_plan is not None:
+        # Blocks the native-trigger foundation could not compute (deferred sources,
+        # timeframe overrides, non-directional keys) are surfaced, never hidden (L4).
+        warnings.extend(indicator_plan.unresolved)
+        if not plan_active:
+            warnings.append("indicator_plan_empty_fallback_proxy")
+    entry_model = BUILTIN_ENTRY_MODEL if plan_active else ENTRY_MODEL
+    reproducibility_note = (
+        "Deterministic bar-replay over the pinned market revision; real bars, "
+        "protection stops and built-in indicator native triggers."
+        if plan_active
+        else "Deterministic bar-replay over the pinned market revision; real bars and "
+        "protection stops, breakout entry proxy (indicator layer still stubbed)."
+    )
     diagnostics = {
         "engine_kind": "v1_bar_replay",
-        "entry_model": ENTRY_MODEL,
-        "reproducibility_note": (
-            "Deterministic bar-replay over the pinned market revision; real bars and "
-            "protection stops, breakout entry proxy (indicator layer still stubbed)."
-        ),
+        "entry_model": entry_model,
+        "reproducibility_note": reproducibility_note,
         "bars_processed": bars_seen,
         "breakout_window": _BREAKOUT_WINDOW,
+        "indicator_blocks": len(entry_evals),
         "item_count": item_count,
         "decision_trace_count": len(signal_events),
         "execution_key": execution_key,

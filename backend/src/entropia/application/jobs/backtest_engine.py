@@ -33,6 +33,7 @@ from typing import Any
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from entropia.application.queries.indicator_plan import resolve_indicator_plan
 from entropia.application.queries.market_bars import (
     BarSourceRef,
     iter_bar_batches,
@@ -128,12 +129,17 @@ async def run_backtest(
     run.state = BacktestRunState.RUNNING
 
     item_count = len(manifest.manifest.get("mainboard_items", []))
+    # Resolve the pinned strategy's indicator packages into a deterministic compute
+    # plan (INF-12 Slice C). Derived purely from immutable pins, so it does not break
+    # reproducibility; an empty plan makes the engine fall back to its breakout proxy.
+    indicator_plan = await resolve_indicator_plan(session, strategy_config)
     try:
         output = run_engine(
             strategy_config=strategy_config,
             bar_batches=stream_bars(source),
             execution_key=manifest.execution_key,
             item_count=item_count,
+            indicator_plan=indicator_plan,
         )
     except Exception as exc:
         return _fail_run(

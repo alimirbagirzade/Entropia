@@ -47,16 +47,26 @@ def _cblock(
     *,
     threshold: str | None = "70",
     source: str | None = None,
+    lower: str | None = None,
+    upper: str | None = None,
+    reference: str | None = None,
     requirement: str = "required",
     validity: str = "until_opposite_signal",
+    cb_id: str = "cb_1",
 ) -> dict[str, Any]:
     overrides: dict[str, Any] = {}
     if threshold is not None:
         overrides["threshold"] = threshold
     if source is not None:
         overrides["source"] = source
+    if lower is not None:
+        overrides["lower"] = lower
+    if upper is not None:
+        overrides["upper"] = upper
+    if reference is not None:
+        overrides["reference"] = reference
     return {
-        "condition_block_id": "cb_1",
+        "condition_block_id": cb_id,
         "display_order": 0,
         "package_ref": {
             "package_root_id": "pkg_cond",
@@ -195,7 +205,9 @@ async def test_missing_condition_package_revision_is_unresolved(session) -> None
     assert plan.unresolved == ("entry:blk_1:condition_package_unresolved:cb_1",)
 
 
-async def test_output_plus_condition_is_still_deferred(session) -> None:
+async def test_output_plus_condition_with_level_is_unresolved_no_edge(session) -> None:
+    # A condition-only trigger whose required condition is a LEVEL (not a cross) has no
+    # directional edge, so the whole block is honest-unresolved (b2 scope decision).
     ind = await _package(session, PackageKind.INDICATOR, "ta.rsi")
     cond = await _package(session, PackageKind.CONDITION, "cond.above")
     plan = await resolve_indicator_plan(
@@ -207,9 +219,112 @@ async def test_output_plus_condition_is_still_deferred(session) -> None:
         ),
     )
     assert plan.has_entry is False
-    assert plan.unresolved == (
-        "entry:blk_1:trigger_source_deferred:indicator_output_plus_condition",
+    assert plan.unresolved == ("entry:blk_1:condition_only_no_directional_edge",)
+
+
+async def test_output_plus_condition_with_cross_resolves_condition_only(session) -> None:
+    # A required crosses_above edge on the indicator output DRIVES a condition-only long.
+    ind = await _package(session, PackageKind.INDICATOR, "ta.rsi")
+    cross = await _package(session, PackageKind.CONDITION, "cond.crosses_above")
+    plan = await resolve_indicator_plan(
+        session,
+        _config(
+            ind,
+            trigger="indicator_output_plus_condition",
+            condition_blocks=[_cblock(cross, threshold="50", source="indicator_output")],
+        ),
     )
+    assert plan.has_entry is True
+    assert plan.unresolved == ()
+    spec = plan.entry_specs[0]
+    assert spec.condition_only is True
+    assert spec.conditions[0].canonical_key == "cond.crosses_above"
+    assert spec.conditions[0].source == "indicator_output"
+
+
+async def test_output_plus_condition_conflicting_crosses_is_unresolved(session) -> None:
+    # Two REQUIRED crosses of opposite polarity cannot define one direction.
+    ind = await _package(session, PackageKind.INDICATOR, "ta.rsi")
+    up = await _package(session, PackageKind.CONDITION, "cond.crosses_above")
+    down = await _package(session, PackageKind.CONDITION, "cond.crosses_below")
+    plan = await resolve_indicator_plan(
+        session,
+        _config(
+            ind,
+            trigger="indicator_output_plus_condition",
+            condition_blocks=[
+                _cblock(up, threshold="70", cb_id="cb_up"),
+                _cblock(down, threshold="30", cb_id="cb_down"),
+            ],
+        ),
+    )
+    assert plan.has_entry is False
+    assert plan.unresolved == ("entry:blk_1:condition_only_conflicting_direction",)
+
+
+async def test_native_plus_crosses_gate_resolves(session) -> None:
+    # A cross primitive also works as a GATE on a native trigger (native-gated mode).
+    ind = await _package(session, PackageKind.INDICATOR, "ta.sma")
+    cross = await _package(session, PackageKind.CONDITION, "cond.crosses_above")
+    plan = await resolve_indicator_plan(
+        session, _config(ind, condition_blocks=[_cblock(cross, threshold="70")])
+    )
+    assert plan.has_entry is True
+    assert plan.entry_specs[0].condition_only is False
+    assert plan.entry_specs[0].conditions[0].canonical_key == "cond.crosses_above"
+
+
+async def test_between_resolves_with_bounds(session) -> None:
+    ind = await _package(session, PackageKind.INDICATOR, "ta.rsi")
+    rng = await _package(session, PackageKind.CONDITION, "cond.between")
+    plan = await resolve_indicator_plan(
+        session,
+        _config(ind, condition_blocks=[_cblock(rng, threshold=None, lower="30", upper="70")]),
+    )
+    assert plan.has_entry is True
+    cond = plan.entry_specs[0].conditions[0]
+    assert cond.canonical_key == "cond.between"
+    assert str(cond.lower) == "30"
+    assert str(cond.upper) == "70"
+    assert cond.threshold is None
+
+
+async def test_between_missing_bounds_is_unresolved(session) -> None:
+    ind = await _package(session, PackageKind.INDICATOR, "ta.rsi")
+    rng = await _package(session, PackageKind.CONDITION, "cond.between")
+    plan = await resolve_indicator_plan(
+        session,
+        _config(ind, condition_blocks=[_cblock(rng, threshold=None, lower="30")]),  # no upper
+    )
+    assert plan.has_entry is False
+    assert plan.unresolved == ("entry:blk_1:condition_bounds_missing:cb_1",)
+
+
+async def test_between_inverted_bounds_is_unresolved(session) -> None:
+    ind = await _package(session, PackageKind.INDICATOR, "ta.rsi")
+    rng = await _package(session, PackageKind.CONDITION, "cond.between")
+    plan = await resolve_indicator_plan(
+        session,
+        _config(ind, condition_blocks=[_cblock(rng, threshold=None, lower="70", upper="30")]),
+    )
+    assert plan.has_entry is False
+    assert plan.unresolved == ("entry:blk_1:condition_bounds_invalid:cb_1",)
+
+
+async def test_reference_series_resolves_without_a_threshold(session) -> None:
+    # A reference-series RHS makes the constant threshold optional (series-vs-series).
+    ind = await _package(session, PackageKind.INDICATOR, "ta.sma")
+    cond = await _package(session, PackageKind.CONDITION, "cond.above")
+    plan = await resolve_indicator_plan(
+        session,
+        _config(
+            ind, condition_blocks=[_cblock(cond, threshold=None, reference="indicator_output")]
+        ),
+    )
+    assert plan.has_entry is True
+    cond_spec = plan.entry_specs[0].conditions[0]
+    assert cond_spec.reference == "indicator_output"
+    assert cond_spec.threshold is None
 
 
 def _bars(closes: list[str]) -> Iterator[list[dict[str, Any]]]:
@@ -254,3 +369,49 @@ async def test_resolved_condition_gates_the_engine_entry(session) -> None:
         indicator_plan=await resolve_indicator_plan(session, shut_cfg),
     )
     assert shut.summary["total_trades"] == 0  # close 12 never exceeds threshold 99
+
+
+async def test_condition_only_cross_drives_the_engine_entry(session) -> None:
+    """End-to-end: a published crosses_above package DRIVES a condition-only long entry.
+
+    No native trigger is used — the price crossing above 70 (bar index 5) is the entry
+    edge, so exactly one long trade opens and rides to end-of-data."""
+    ind = await _package(session, PackageKind.INDICATOR, "ta.sma")
+    cross = await _package(session, PackageKind.CONDITION, "cond.crosses_above")
+    closes = ["60", "60", "60", "60", "60", "80", "80", "80", "80"]  # crosses 70 at bar 5
+    cfg = _config(
+        ind,
+        trigger="indicator_output_plus_condition",
+        condition_blocks=[_cblock(cross, threshold="70", source="close")],
+        ind_overrides={"length": 3},
+    )
+    out = run_engine(
+        strategy_config=cfg,
+        bar_batches=_bars(closes),
+        execution_key="k",
+        indicator_plan=await resolve_indicator_plan(session, cfg),
+    )
+    assert out.diagnostics["entry_model"] == BUILTIN_ENTRY_MODEL
+    assert out.diagnostics["condition_blocks"] == 1
+    assert out.summary["total_trades"] == 1
+    assert out.trades[0].direction == "long"
+
+
+async def test_condition_only_below_threshold_never_enters(session) -> None:
+    # The price never crosses above the (very high) threshold, so no entry opens.
+    ind = await _package(session, PackageKind.INDICATOR, "ta.sma")
+    cross = await _package(session, PackageKind.CONDITION, "cond.crosses_above")
+    closes = ["60", "60", "60", "60", "60", "80", "80", "80", "80"]
+    cfg = _config(
+        ind,
+        trigger="indicator_output_plus_condition",
+        condition_blocks=[_cblock(cross, threshold="999", source="close")],
+        ind_overrides={"length": 3},
+    )
+    out = run_engine(
+        strategy_config=cfg,
+        bar_batches=_bars(closes),
+        execution_key="k",
+        indicator_plan=await resolve_indicator_plan(session, cfg),
+    )
+    assert out.summary["total_trades"] == 0

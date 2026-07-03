@@ -7,17 +7,20 @@ the revision's frozen ``dependency_snapshot`` — the package body is never exec
 maps that to a built-in directional indicator, and folds in the block's trigger /
 direction / validity / requirement plus the signal-block aggregation rule.
 
-Native-trigger-only foundation (honest boundary — every skipped block is surfaced as
-an ``unresolved`` warning, never silently dropped):
+Honest boundary — every skipped block is surfaced as an ``unresolved`` warning, never
+silently dropped:
 
-* only ``trigger_source == "indicator_native_trigger"`` is computed; ``*_plus_condition``
-  sources are deferred (computing only the native part would drop the condition and
-  change the signal semantics);
+* ``indicator_native_trigger`` (plain), ``indicator_native_trigger_plus_condition``
+  (the cross GATED by conditions) and ``indicator_output_plus_condition`` (a
+  condition-only signal whose direction comes from a REQUIRED cross edge) are computed;
+  a condition-only block with no required cross is unresolved (no directional edge);
 * only base-timeframe blocks (``same_as_base_tf`` / ``use_package_default_tf``) are
   computed; an explicit timeframe override is deferred (needs multi-TF resampling);
 * only canonical keys with a defined native trigger fire (``ta.sma``/``ta.ema``/
   ``ta.rma``/``ta.wma``/``ta.rsi``); ``ta.atr``/``ta.vwap`` are recognized but
-  non-directional in this slice.
+  non-directional in this slice. A condition's ``reference`` RHS may be any available
+  series, but comparing two SEPARATE indicator packages needs a second pinned package
+  (a schema extension) and stays out of scope.
 
 If no entry block resolves, the returned plan has no entry specs and the engine falls
 back to its labelled breakout proxy.
@@ -35,10 +38,12 @@ from entropia.domain.backtest.indicators import (
     CONDITION_SOURCES,
     DEFAULT_CONDITION_SOURCE,
     DIRECTIONAL_KEYS,
+    RANGE_CONDITION_KEYS,
     ConditionSpec,
     IndicatorPlan,
     IndicatorSpec,
     SignalRule,
+    condition_direction,
     default_length,
 )
 from entropia.domain.strategy.config import ConditionBlock, IndicatorBlock, StrategyConfig
@@ -46,16 +51,22 @@ from entropia.infrastructure.postgres.repositories import packages as pkg_repo
 
 _NATIVE_TRIGGER = "indicator_native_trigger"
 _NATIVE_PLUS_CONDITION = "indicator_native_trigger_plus_condition"
-# Threshold conditions GATE a native trigger; a condition-only signal
-# (``indicator_output_plus_condition``) needs edge/direction-mapping semantics beyond
-# the minimal threshold gate and stays deferred (surfaced as an unresolved warning).
-_ACCEPTED_TRIGGERS = frozenset({_NATIVE_TRIGGER, _NATIVE_PLUS_CONDITION})
+_OUTPUT_PLUS_CONDITION = "indicator_output_plus_condition"
+# ``*_native_trigger_plus_condition`` fires the indicator's own cross GATED by the
+# conditions; ``indicator_output_plus_condition`` has no native trigger and takes its
+# direction from a REQUIRED cross edge (crosses_above -> long, crosses_below -> short).
+_ACCEPTED_TRIGGERS = frozenset({_NATIVE_TRIGGER, _NATIVE_PLUS_CONDITION, _OUTPUT_PLUS_CONDITION})
+_CONDITION_TRIGGERS = frozenset({_NATIVE_PLUS_CONDITION, _OUTPUT_PLUS_CONDITION})
 _BASE_TIMEFRAMES = frozenset({"same_as_base_tf", "use_package_default_tf"})
 _LENGTH_KEYS = ("length", "period", "len")
 _LOWER_KEYS = ("rsi_lower", "lower", "oversold")
 _UPPER_KEYS = ("rsi_upper", "upper", "overbought")
 _THRESHOLD_KEYS = ("threshold", "value", "level")
 _SOURCE_KEYS = ("source", "input", "series")
+# ``cond.between`` bounds (both mandatory) and the optional series ``reference`` RHS.
+_BOUND_LOWER_KEYS = ("lower", "lower_bound", "min")
+_BOUND_UPPER_KEYS = ("upper", "upper_bound", "max")
+_REFERENCE_KEYS = ("reference", "compare_to", "other")
 
 
 async def resolve_indicator_plan(
@@ -130,12 +141,17 @@ async def _resolve_block(
     conditions: tuple[ConditionSpec, ...] = ()
     condition_rule: str | None = None
     min_condition_support: int | None = None
-    if trigger == _NATIVE_PLUS_CONDITION:
+    condition_only = trigger == _OUTPUT_PLUS_CONDITION
+    if trigger in _CONDITION_TRIGGERS:
         conditions, reason = await _resolve_conditions(session, block)
         if reason is not None:
             return None, reason
         condition_rule = str(block.condition_block_rule) if block.condition_block_rule else None
         min_condition_support = block.min_supporting_condition_count
+        if condition_only:
+            reason = _condition_only_direction_reason(conditions)
+            if reason is not None:
+                return None, reason
 
     overrides = block.parameter_overrides or {}
     kwargs: dict[str, Any] = {
@@ -148,6 +164,7 @@ async def _resolve_block(
         "conditions": conditions,
         "condition_rule": condition_rule,
         "min_condition_support": min_condition_support,
+        "condition_only": condition_only,
     }
     lower = _decimal_override(overrides, _LOWER_KEYS)
     if lower is not None:
@@ -180,6 +197,24 @@ async def _resolve_conditions(
     return tuple(specs), None
 
 
+def _condition_only_direction_reason(conditions: tuple[ConditionSpec, ...]) -> str | None:
+    """``None`` if the REQUIRED conditions define one directional edge, else a reason.
+
+    A condition-only signal takes its direction from a cross primitive; the directional
+    driver must be REQUIRED (an entry direction cannot hinge on an optional supporting
+    condition). No cross among the required set -> no edge; opposing crosses -> a
+    conflict. Both are surfaced as honest-unresolved rather than silently mis-directed."""
+    required = [c for c in conditions if c.requirement == "required"]
+    pool = required or list(conditions)
+    directions = {condition_direction(c.canonical_key) for c in pool}
+    directions.discard(None)
+    if len(directions) == 1:
+        return None
+    if not directions:
+        return "condition_only_no_directional_edge"
+    return "condition_only_conflicting_direction"
+
+
 async def _resolve_condition(
     session: AsyncSession, cond: ConditionBlock
 ) -> tuple[ConditionSpec | None, str | None]:
@@ -190,19 +225,48 @@ async def _resolve_condition(
     if key is None:
         return None, f"condition_no_recognized_key:{cond.condition_block_id}"
     overrides = cond.parameter_overrides or {}
-    threshold = _decimal_override(overrides, _THRESHOLD_KEYS)
-    if threshold is None:
-        # No universal default for a threshold value (it is instrument/scale specific),
-        # so — unlike an indicator length — it MUST be supplied; else honest-unresolved.
-        return None, f"condition_threshold_missing:{cond.condition_block_id}"
+    source = _source_override(overrides)
+
+    if key in RANGE_CONDITION_KEYS:
+        # A range needs BOTH bounds (no universal default) and a well-ordered interval.
+        lower = _decimal_override(overrides, _BOUND_LOWER_KEYS)
+        upper = _decimal_override(overrides, _BOUND_UPPER_KEYS)
+        if lower is None or upper is None:
+            return None, f"condition_bounds_missing:{cond.condition_block_id}"
+        if lower >= upper:
+            return None, f"condition_bounds_invalid:{cond.condition_block_id}"
+        return (
+            ConditionSpec(
+                condition_block_id=cond.condition_block_id,
+                canonical_key=key,
+                source=source,
+                threshold=None,
+                requirement=str(cond.requirement),
+                validity=str(cond.validity),
+                lower=lower,
+                upper=upper,
+            ),
+            None,
+        )
+
+    # above/below/crosses: the RHS is a ``reference`` series OR a constant threshold.
+    reference = _reference_override(overrides)
+    threshold: Decimal | None = None
+    if reference is None:
+        threshold = _decimal_override(overrides, _THRESHOLD_KEYS)
+        if threshold is None:
+            # No universal default for a threshold (instrument/scale specific); unlike an
+            # indicator length it MUST be supplied when there is no reference series.
+            return None, f"condition_threshold_missing:{cond.condition_block_id}"
     return (
         ConditionSpec(
             condition_block_id=cond.condition_block_id,
             canonical_key=key,
-            source=_source_override(overrides),
+            source=source,
             threshold=threshold,
             requirement=str(cond.requirement),
             validity=str(cond.validity),
+            reference=reference,
         ),
         None,
     )
@@ -222,12 +286,25 @@ def _primary_condition_key(dependency_snapshot: dict[str, Any]) -> str | None:
 
 
 def _source_override(overrides: dict[str, Any]) -> str:
-    """The condition's threshold source; defaults to the engine-version ``close``."""
+    """The condition's compared source; defaults to the engine-version ``close``."""
     for key in _SOURCE_KEYS:
         raw = overrides.get(key)
         if isinstance(raw, str) and raw in CONDITION_SOURCES:
             return raw
     return DEFAULT_CONDITION_SOURCE
+
+
+def _reference_override(overrides: dict[str, Any]) -> str | None:
+    """An optional ``reference`` series RHS (bounded indicator-vs-indicator).
+
+    When set, the comparator's right-hand side is another available series instead of a
+    constant threshold. Comparing two SEPARATE indicator packages would need a second
+    pinned ``package_ref`` (a schema extension) and is not expressible here."""
+    for key in _REFERENCE_KEYS:
+        raw = overrides.get(key)
+        if isinstance(raw, str) and raw in CONDITION_SOURCES:
+            return raw
+    return None
 
 
 def _primary_directional_key(dependency_snapshot: dict[str, Any]) -> str | None:

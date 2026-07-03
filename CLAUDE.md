@@ -70,17 +70,29 @@ Before stopping a working session, produce **ALL** of the following:
 
 - **Landed:** **V1 ROADMAP COMPLETE — Stages 0-8** (docs 01-22 + e2e integration +
   hardening) **+ post-V1 Auth/IdP (PR #38) + Parquet batch data-access (INF-12
-  Slice A, PR #41) + real bar-replay backtest engine (INF-12 Slice B, PR #43)**;
-  `main` after PR #43 = **`fc746f8`**;
+  Slice A, PR #41) + real bar-replay backtest engine (INF-12 Slice B, PR #43) +
+  real built-in indicator compute (INF-12 Slice C, PR #45)**;
+  `main` after PR #45 = **`a11640c`** (Slice C code `671d227`);
   alembic head = **`0021_local_auth`** (`human_credentials` + `auth_sessions`;
-  Slices A/B need no migration). **822 tests green** (818 + 4 engine).
-  Engine slice: `domain/backtest/engine.py::run_engine` — pure single-pass
+  Slices A/B/C need no migration). **859 tests green** (822 + 37 indicator compute).
+  Slice C: `domain/backtest/indicators.py` — pure incremental (bounded-memory)
+  Decimal TA compute (`ta.sma/ema/rma/wma` MA-cross + `ta.rsi` band cross;
+  `ta.atr/vwap` recognized-but-non-directional), types `IndicatorSpec/SignalRule/
+  IndicatorPlan` + `BlockEvaluator`, `BUILTIN_ENTRY_MODEL=builtin_indicator_native_trigger_v1`;
+  `application/queries/indicator_plan.py::resolve_indicator_plan` dereferences the
+  pinned `PackageRevision.dependency_snapshot` canonical keys (bodies NOT executed;
+  native-trigger-only → `*_plus_condition`/timeframe/non-directional = `unresolved`
+  warning, L4); `engine.py::run_engine(..., indicator_plan=None)` dual-mode (plan →
+  real signals, else labelled breakout PROXY fallback); manifest
+  `ENGINE_VERSION=backtest-engine-v2-indicator-compute`; run/manifest/result
+  contracts unchanged; no blocking review finding. Engine (Slice B):
+  `domain/backtest/engine.py::run_engine` — pure single-pass
   bar-replay over `iter_bar_batches` (breakout entry PROXY labelled
   `entry_model=deterministic_bar_breakout_proxy_v1` + REAL protection stops
   percentage/trailing/absolute intrabar + costs + notional sizing clamped to
   `max(equity,0)`); `application/jobs/backtest_engine.py::run_backtest`
   (injectable `stream_bars`, ASSET_UNAVAILABLE/ENGINE_ERROR fail paths);
-  manifest `ENGINE_VERSION=backtest-engine-v1-bar-replay`; run/manifest/result
+  manifest `ENGINE_VERSION` bumped v1→v2 by Slice C; run/manifest/result
   contracts unchanged. Review: 1 CRITICAL (negative all-in size inverts PnL) —
   empirically CONFIRMED, fixed via `max(equity,0)` clamp + bust-safety test.
   Parquet slice: `infrastructure/s3/parquet_stream.py`
@@ -115,13 +127,16 @@ Before stopping a working session, produce **ALL** of the following:
   `unmatched` 404 sentinel). Reviews: 8a 0 findings; 8b 2 HIGH both real, fixed
   in-commit. **Test-infra:** integration tests rebuild the schema per test —
   parallel sessions MUST use an isolated DB (`TEST_DATABASE_URL=...entropia_auth`).
-- **Next:** **post-V1 (continued)** — natural next in the backtest track: **Slice C —
-  real indicator compute** (replace the engine's entry/exit PROXY with real
-  indicator signals via Create-Package candidate generation; **only** `engine.py`'s
-  entry/exit evaluation changes — run/manifest/result contracts stay fixed).
-  Small follow-up: `risk_based`/`formula_based` sizing (now notional + warning).
-  Other candidates (order in `docs/POST_V1_KICKOFF.md`): frontend SSE/metrics/login
-  integration, CP real candidate generation, capability activations, deferred list
-  (`summary["timeframe"]` resolution, tool-call status shadowing, retention
-  auto-purge, data-queue redelivery, SSE streaming e2e, first-Admin provisioning).
-  Ask the user which slice to start; full handoff: `docs/POST_V1_KICKOFF.md`.
+- **Next:** **post-V1 (continued) — Slice C follow-ups** (user-chosen): natural
+  continuation of the backtest track, building on `indicators.py`/`indicator_plan.py`/
+  `engine.py` — (1) `risk_based`/`formula_based` sizing inside `_position_size`
+  (now notional + `position_sizing_method_unsupported` warning; smallest/most isolated),
+  (2) condition blocks + `*_plus_condition` triggers (now `unresolved`; extend
+  `SignalRule`/`BlockEvaluator`), (3) multi-timeframe bar resampling (timeframe
+  override now `unresolved`), (4) more directional canonical keys (`ta.atr`/`ta.vwap`
+  recognized-but-non-directional today). Other candidates (order in
+  `docs/POST_V1_KICKOFF.md`): frontend SSE/metrics/login integration, CP real
+  candidate generation, capability activations, deferred list (`summary["timeframe"]`
+  resolution, tool-call status shadowing, retention auto-purge, data-queue
+  redelivery, SSE streaming e2e, first-Admin provisioning). Full handoff:
+  `docs/POST_V1_KICKOFF.md`.

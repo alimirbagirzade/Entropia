@@ -163,18 +163,41 @@ def _effective_fill(
     return (adjusted * factor).quantize(_MONEY)
 
 
-def _position_size(config: StrategyConfig, entry_price: Decimal, equity: Decimal) -> Decimal:
-    """Deterministic sizing: explicit base size, else an all-in notional (bounded).
+def _sizing_is_honored(config: StrategyConfig) -> bool:
+    """Whether the requested sizing method is modelled by this engine version.
 
-    ``risk_based_sizing`` / ``formula_based_sizing`` are not modelled in this
-    foundation and fall back to notional sizing (surfaced as a diagnostics warning,
-    L4). The notional branch clamps to NON-NEGATIVE equity: a bust account yields
-    size 0, never a negative size — a negative size would invert the PnL sign of
-    every subsequent trade (review CRITICAL)."""
+    ``base_position_size`` (explicit size) and ``risk_based_sizing`` (a fixed % of
+    equity risked across the stop distance) are honored. ``formula_based_sizing`` —
+    and a ``risk_based_sizing`` request that carries no ``risk_based`` sub-config —
+    are not modelled and fall back to notional sizing (surfaced as a diagnostics
+    warning, never hidden — L4)."""
+    sizing = config.position_sizing
+    if sizing.method == "base_position_size" and sizing.base_position_size is not None:
+        return True
+    return sizing.method == "risk_based_sizing" and sizing.risk_based is not None
+
+
+def _position_size(config: StrategyConfig, entry_price: Decimal, equity: Decimal) -> Decimal:
+    """Deterministic sizing: explicit base size, risk-based, else an all-in notional.
+
+    ``base_position_size`` returns the explicit size. ``risk_based_sizing`` risks a
+    fixed % of (non-negative) equity across the configured stop distance —
+    ``size = equity * risk% / 100 / stop_loss_point`` — and is therefore independent
+    of the entry price. ``formula_based_sizing`` (and any request missing its
+    sub-config) is not modelled and falls back to an all-in notional (surfaced as a
+    diagnostics warning, L4). Every branch clamps to NON-NEGATIVE equity: a bust
+    account yields size 0, never a negative size — a negative size would invert the
+    PnL sign of every subsequent trade (review CRITICAL)."""
     sizing = config.position_sizing
     if sizing.method == "base_position_size" and sizing.base_position_size is not None:
         return Decimal(sizing.base_position_size)
     usable_equity = max(equity, _ZERO)
+    if sizing.method == "risk_based_sizing" and sizing.risk_based is not None:
+        risk = sizing.risk_based
+        if risk.stop_loss_point > _ZERO:
+            risk_capital = usable_equity * risk.risk_percentage_per_trade / _HUNDRED
+            return (risk_capital / risk.stop_loss_point).quantize(_QTY)
+        return _ZERO
     if entry_price > _ZERO:
         return (usable_equity / entry_price).quantize(_QTY)
     return _ZERO
@@ -493,9 +516,10 @@ def run_engine(
     warnings: list[str] = []
     if not bars_seen:
         warnings.append("no_bars_in_source")
-    if config.position_sizing.method != "base_position_size":
-        # risk/formula sizing is not modelled in this foundation; the run used
-        # notional sizing instead. Surface the divergence rather than hide it (L4).
+    if not _sizing_is_honored(config):
+        # formula sizing (and a risk_based request without its sub-config) is not
+        # modelled; the run used notional sizing instead. Surface the divergence
+        # rather than hide it (L4). risk_based_sizing with a sub-config IS honored.
         warnings.append(f"position_sizing_method_unsupported:{config.position_sizing.method}")
     if indicator_plan is not None:
         # Blocks the native-trigger foundation could not compute (deferred sources,

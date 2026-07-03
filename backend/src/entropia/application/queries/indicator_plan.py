@@ -31,20 +31,31 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from entropia.domain.backtest.indicators import (
+    CONDITION_KEYS,
+    CONDITION_SOURCES,
+    DEFAULT_CONDITION_SOURCE,
     DIRECTIONAL_KEYS,
+    ConditionSpec,
     IndicatorPlan,
     IndicatorSpec,
     SignalRule,
     default_length,
 )
-from entropia.domain.strategy.config import IndicatorBlock, StrategyConfig
+from entropia.domain.strategy.config import ConditionBlock, IndicatorBlock, StrategyConfig
 from entropia.infrastructure.postgres.repositories import packages as pkg_repo
 
 _NATIVE_TRIGGER = "indicator_native_trigger"
+_NATIVE_PLUS_CONDITION = "indicator_native_trigger_plus_condition"
+# Threshold conditions GATE a native trigger; a condition-only signal
+# (``indicator_output_plus_condition``) needs edge/direction-mapping semantics beyond
+# the minimal threshold gate and stays deferred (surfaced as an unresolved warning).
+_ACCEPTED_TRIGGERS = frozenset({_NATIVE_TRIGGER, _NATIVE_PLUS_CONDITION})
 _BASE_TIMEFRAMES = frozenset({"same_as_base_tf", "use_package_default_tf"})
 _LENGTH_KEYS = ("length", "period", "len")
 _LOWER_KEYS = ("rsi_lower", "lower", "oversold")
 _UPPER_KEYS = ("rsi_upper", "upper", "overbought")
+_THRESHOLD_KEYS = ("threshold", "value", "level")
+_SOURCE_KEYS = ("source", "input", "series")
 
 
 async def resolve_indicator_plan(
@@ -103,7 +114,8 @@ async def _resolve_blocks(
 async def _resolve_block(
     session: AsyncSession, block: IndicatorBlock
 ) -> tuple[IndicatorSpec | None, str | None]:
-    if str(block.trigger_source) != _NATIVE_TRIGGER:
+    trigger = str(block.trigger_source)
+    if trigger not in _ACCEPTED_TRIGGERS:
         return None, f"trigger_source_deferred:{block.trigger_source}"
     if str(block.timeframe) not in _BASE_TIMEFRAMES:
         return None, f"timeframe_override_deferred:{block.timeframe}"
@@ -115,6 +127,16 @@ async def _resolve_block(
     if key is None:
         return None, "no_directional_dependency"
 
+    conditions: tuple[ConditionSpec, ...] = ()
+    condition_rule: str | None = None
+    min_condition_support: int | None = None
+    if trigger == _NATIVE_PLUS_CONDITION:
+        conditions, reason = await _resolve_conditions(session, block)
+        if reason is not None:
+            return None, reason
+        condition_rule = str(block.condition_block_rule) if block.condition_block_rule else None
+        min_condition_support = block.min_supporting_condition_count
+
     overrides = block.parameter_overrides or {}
     kwargs: dict[str, Any] = {
         "block_id": block.block_id,
@@ -123,6 +145,9 @@ async def _resolve_block(
         "direction": str(block.direction),
         "requirement": str(block.requirement),
         "validity": str(block.validity),
+        "conditions": conditions,
+        "condition_rule": condition_rule,
+        "min_condition_support": min_condition_support,
     }
     lower = _decimal_override(overrides, _LOWER_KEYS)
     if lower is not None:
@@ -131,6 +156,78 @@ async def _resolve_block(
     if upper is not None:
         kwargs["rsi_upper"] = upper
     return IndicatorSpec(**kwargs), None
+
+
+async def _resolve_conditions(
+    session: AsyncSession, block: IndicatorBlock
+) -> tuple[tuple[ConditionSpec, ...], str | None]:
+    """Dereference a block's nested condition packages into computable threshold specs.
+
+    Fail-closed and honest: any enabled condition that cannot fully resolve (missing
+    package, no recognized ``cond.*`` dependency, or no threshold) leaves the WHOLE
+    block unresolved with a specific reason, rather than computing a partial gate."""
+    enabled = [c for c in (block.condition_blocks or []) if c.enabled is not False]
+    if not enabled:
+        # A ``*_plus_condition`` trigger with no conditions is a misconfiguration; a
+        # vacuous gate would silently equal the plain native trigger, so surface it.
+        return (), "condition_blocks_missing"
+    specs: list[ConditionSpec] = []
+    for cond in enabled:
+        spec, reason = await _resolve_condition(session, cond)
+        if spec is None:
+            return (), reason or "condition_unresolved"
+        specs.append(spec)
+    return tuple(specs), None
+
+
+async def _resolve_condition(
+    session: AsyncSession, cond: ConditionBlock
+) -> tuple[ConditionSpec | None, str | None]:
+    revision = await pkg_repo.get_revision(session, cond.package_ref.package_revision_id)
+    if revision is None:
+        return None, f"condition_package_unresolved:{cond.condition_block_id}"
+    key = _primary_condition_key(revision.dependency_snapshot)
+    if key is None:
+        return None, f"condition_no_recognized_key:{cond.condition_block_id}"
+    overrides = cond.parameter_overrides or {}
+    threshold = _decimal_override(overrides, _THRESHOLD_KEYS)
+    if threshold is None:
+        # No universal default for a threshold value (it is instrument/scale specific),
+        # so — unlike an indicator length — it MUST be supplied; else honest-unresolved.
+        return None, f"condition_threshold_missing:{cond.condition_block_id}"
+    return (
+        ConditionSpec(
+            condition_block_id=cond.condition_block_id,
+            canonical_key=key,
+            source=_source_override(overrides),
+            threshold=threshold,
+            requirement=str(cond.requirement),
+            validity=str(cond.validity),
+        ),
+        None,
+    )
+
+
+def _primary_condition_key(dependency_snapshot: dict[str, Any]) -> str | None:
+    """The first resolved canonical call that is a recognized ``cond.*`` comparator."""
+    resolved = None
+    if isinstance(dependency_snapshot, dict):
+        resolved = dependency_snapshot.get("resolved")
+    if not isinstance(resolved, list):
+        return None
+    for entry in resolved:
+        if isinstance(entry, dict) and str(entry.get("canonical_key", "")) in CONDITION_KEYS:
+            return str(entry["canonical_key"])
+    return None
+
+
+def _source_override(overrides: dict[str, Any]) -> str:
+    """The condition's threshold source; defaults to the engine-version ``close``."""
+    for key in _SOURCE_KEYS:
+        raw = overrides.get(key)
+        if isinstance(raw, str) and raw in CONDITION_SOURCES:
+            return raw
+    return DEFAULT_CONDITION_SOURCE
 
 
 def _primary_directional_key(dependency_snapshot: dict[str, Any]) -> str | None:

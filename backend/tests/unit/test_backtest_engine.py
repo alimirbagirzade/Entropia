@@ -12,7 +12,12 @@ from collections.abc import Iterator
 from decimal import Decimal
 from typing import Any
 
-from entropia.domain.backtest.engine import ENTRY_MODEL, EngineOutput, run_engine
+from entropia.domain.backtest.engine import (
+    ENTRY_MODEL,
+    EngineOutput,
+    _position_size,
+    run_engine,
+)
 from entropia.domain.backtest.enums import (
     RUN_ACTIVE_STATES,
     RUN_RETRYABLE_STATES,
@@ -97,11 +102,18 @@ def _config(
     instrument: str = "BTCUSDT",
     method: str = "base_position_size",
     with_stop: bool = True,
+    risk_pct: str | None = None,
+    stop_point: str | None = None,
 ) -> StrategyConfig:
     """A minimal VALID StrategyConfig; only the fields the engine reads matter."""
     sizing: dict[str, Any] = {"method": method}
     if method == "base_position_size":
         sizing["base_position_size"] = base_size
+    if method == "risk_based_sizing" and risk_pct is not None and stop_point is not None:
+        sizing["risk_based"] = {
+            "risk_percentage_per_trade": risk_pct,
+            "stop_loss_point": stop_point,
+        }
     protection: dict[str, Any] = (
         {"percentage_stop": {"enabled": True, "loss_percentage": loss_pct}} if with_stop else {}
     )
@@ -235,13 +247,55 @@ def test_engine_yields_no_trades_and_empty_warning_on_no_bars() -> None:
 
 
 def test_engine_warns_on_unsupported_sizing_method() -> None:
-    # risk/formula sizing is not modelled yet — the engine falls back to notional
+    # formula_based sizing is still not modelled — the engine falls back to notional
     # sizing and surfaces the divergence in diagnostics (never silently, L4).
-    out = _run(_config(method="risk_based_sizing"), _long_breakout_then_stop())
+    # (risk_based_sizing WITH a sub-config is now honored — see the tests below.)
+    out = _run(_config(method="formula_based_sizing"), _long_breakout_then_stop())
     assert any(
         w.startswith("position_sizing_method_unsupported") for w in out.diagnostics["warnings"]
     )
     assert out.summary["total_trades"] == 1  # still produces a real result
+
+
+def test_engine_warns_when_risk_based_sizing_lacks_its_sub_config() -> None:
+    # A risk_based_sizing request that carries no ``risk_based`` sub-config cannot be
+    # honored; the engine falls back to notional and surfaces the divergence (L4).
+    out = _run(_config(method="risk_based_sizing"), _long_breakout_then_stop())
+    assert any(
+        w.startswith("position_sizing_method_unsupported") for w in out.diagnostics["warnings"]
+    )
+
+
+def test_engine_does_not_warn_when_risk_based_sizing_is_honored() -> None:
+    # risk_based_sizing WITH its sub-config is modelled: no unsupported warning.
+    out = _run(
+        _config(method="risk_based_sizing", risk_pct="2.0", stop_point="50"),
+        _long_breakout_then_stop(),
+    )
+    assert not any(
+        w.startswith("position_sizing_method_unsupported") for w in out.diagnostics["warnings"]
+    )
+    assert out.summary["total_trades"] == 1  # produces a real result
+
+
+def test_position_size_risk_based_applies_the_risk_formula() -> None:
+    # size = equity * risk% / 100 / stop_loss_point = 10000 * 2 / 100 / 50 = 4.
+    cfg = _config(method="risk_based_sizing", risk_pct="2.0", stop_point="50")
+    assert _position_size(cfg, Decimal("123.45"), Decimal("10000")) == Decimal("4")
+
+
+def test_position_size_risk_based_is_independent_of_entry_price() -> None:
+    # Risk-based sizing is a function of equity + stop distance, never the price.
+    cfg = _config(method="risk_based_sizing", risk_pct="2.0", stop_point="50")
+    low = _position_size(cfg, Decimal("100"), Decimal("10000"))
+    high = _position_size(cfg, Decimal("999999"), Decimal("10000"))
+    assert low == high == Decimal("4")
+
+
+def test_position_size_risk_based_clamps_negative_equity_to_zero() -> None:
+    # A bust account never yields a negative size (would invert PnL signs — CRITICAL).
+    cfg = _config(method="risk_based_sizing", risk_pct="2.0", stop_point="50")
+    assert _position_size(cfg, Decimal("100"), Decimal("-500")) == Decimal("0")
 
 
 def test_engine_notional_sizing_never_inverts_pnl_after_bust() -> None:
@@ -254,7 +308,7 @@ def test_engine_notional_sizing_never_inverts_pnl_after_bust() -> None:
     bars.append(_bar("2024-01-22T00:00:00Z", "100", "300", "95", "300"))  # exit -> equity < 0
     bars.append(_bar("2024-01-23T00:00:00Z", "95", "95", "90", "90"))  # re-entry after bust
     bars.append(_bar("2024-01-24T00:00:00Z", "300", "400", "300", "400"))  # exit
-    out = _run(_config(direction="short", method="risk_based_sizing", with_stop=False), bars)
+    out = _run(_config(direction="short", method="formula_based_sizing", with_stop=False), bars)
     assert out.summary["total_trades"] >= 2
     for trade in out.trades:
         adverse = (

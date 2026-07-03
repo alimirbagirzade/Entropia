@@ -271,6 +271,8 @@ def test_no_required_degenerates_to_all_must_hold() -> None:
 
 
 def test_condition_key_and_source_sets_are_coherent() -> None:
-    assert {"cond.above", "cond.below"} == set(CONDITION_KEYS)
+    # The level primitives remain; (b2) adds crosses + between (asserted fully in
+    # test_backtest_condition_extensions.py), so this checks the invariant subset.
+    assert {"cond.above", "cond.below"} <= set(CONDITION_KEYS)
     assert "indicator_output" in CONDITION_SOURCES
     assert {"close", "open", "high", "low"} <= CONDITION_SOURCES

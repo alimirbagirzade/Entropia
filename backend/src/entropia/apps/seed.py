@@ -89,12 +89,16 @@ _ESP_TA_RESOLVERS: tuple[tuple[str, str, list[str]], ...] = (
     ("ESP_TA_VWAP", "ta.vwap", ["series"]),
 )
 
-# The canonical threshold-condition resolvers (post-V1 (b) — condition blocks). Each
-# compares a source series against a constant threshold and returns a boolean gate.
-# Real condition packages pin one of these ``cond.*`` keys in their dependency snapshot.
+# The canonical condition resolvers (post-V1 (b) — condition blocks; extended in (b2)).
+# Each returns a boolean gate: level (above/below), edge cross (crosses_above/
+# crosses_below) or range (between, two bounds). Real condition packages pin one of
+# these ``cond.*`` keys in their dependency snapshot.
 _ESP_COND_RESOLVERS: tuple[tuple[str, str, list[str]], ...] = (
     ("ESP_COND_ABOVE", "cond.above", ["series", "float"]),
     ("ESP_COND_BELOW", "cond.below", ["series", "float"]),
+    ("ESP_COND_CROSSES_ABOVE", "cond.crosses_above", ["series", "float"]),
+    ("ESP_COND_CROSSES_BELOW", "cond.crosses_below", ["series", "float"]),
+    ("ESP_COND_BETWEEN", "cond.between", ["series", "float", "float"]),
 )
 
 

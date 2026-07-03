@@ -122,15 +122,16 @@ async def test_non_directional_key_is_left_unresolved(session) -> None:
     assert plan.unresolved == ("entry:blk_1:no_directional_dependency",)
 
 
-async def test_non_native_trigger_source_is_deferred(session) -> None:
-    # ``indicator_native_trigger_plus_condition`` now resolves (post-V1 (b) gate); the
-    # condition-only signal source stays deferred until a later slice.
+async def test_condition_trigger_without_conditions_is_unresolved(session) -> None:
+    # Both ``*_plus_condition`` triggers now resolve (post-V1 (b)/(b2)); but a condition
+    # trigger with NO condition blocks is a misconfiguration (a vacuous gate would equal
+    # the plain native trigger), so it is honest-unresolved rather than silently native.
     revision_id = await _indicator_package(session, "ta.rsi")
     plan = await resolve_indicator_plan(
         session, _config(revision_id, trigger="indicator_output_plus_condition")
     )
     assert plan.has_entry is False
-    assert plan.unresolved[0].startswith("entry:blk_1:trigger_source_deferred")
+    assert plan.unresolved == ("entry:blk_1:condition_blocks_missing",)
 
 
 async def test_timeframe_override_is_deferred(session) -> None:

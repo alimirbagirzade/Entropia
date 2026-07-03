@@ -47,20 +47,53 @@ DIRECTIONAL_KEYS: frozenset[str] = _MA_KEYS | frozenset({"ta.rsi"})
 NON_DIRECTIONAL_KEYS: frozenset[str] = frozenset({"ta.atr", "ta.vwap"})
 RECOGNIZED_KEYS: frozenset[str] = DIRECTIONAL_KEYS | NON_DIRECTIONAL_KEYS
 
-# Threshold-condition primitives (post-V1 (b) — condition blocks). A nested condition
-# GATES an indicator block's native trigger: the trigger only becomes an entry/exit
-# signal on a bar where the block's conditions are satisfied. THRESHOLD-ONLY (minimal):
-# each condition compares a bar-derived source against a strategy-supplied constant
-# threshold. Aligned to the ESP registry seed (apps/seed.py ``_ESP_COND_RESOLVERS``).
+# Condition primitives (post-V1 (b) — condition blocks; extended in (b2)). A nested
+# condition either GATES an indicator block's native trigger (``*_native_trigger_plus_
+# condition``: the trigger only fires on a bar where the block's conditions hold) or
+# DRIVES a condition-only directional signal (``indicator_output_plus_condition``: no
+# native trigger — a cross primitive's edge IS the entry). Comparators:
+#   * ``cond.above`` / ``cond.below`` — LEVEL: source strictly over/under the RHS.
+#   * ``cond.crosses_above`` / ``cond.crosses_below`` — EDGE: source crosses the RHS
+#     this bar (prev on/under -> now strictly over, and vice versa). Directional.
+#   * ``cond.between`` — RANGE: source strictly within (lower, upper). Non-directional.
+# The RHS is a strategy-supplied constant ``threshold`` OR, when a ``reference`` series
+# is configured, another available series (a bar price field or the parent block's
+# ``indicator_output``) — the bounded "indicator-vs-indicator" form expressible without
+# a second pinned package. Aligned to the ESP seed (apps/seed.py ``_ESP_COND_RESOLVERS``).
 _COND_ABOVE = "cond.above"
 _COND_BELOW = "cond.below"
-CONDITION_KEYS: frozenset[str] = frozenset({_COND_ABOVE, _COND_BELOW})
-# Sources a threshold condition may read. Price fields come from the bar; the special
-# ``indicator_output`` reads the PARENT block's current indicator value (e.g. RSI 72).
+_COND_CROSSES_ABOVE = "cond.crosses_above"
+_COND_CROSSES_BELOW = "cond.crosses_below"
+_COND_BETWEEN = "cond.between"
+CONDITION_KEYS: frozenset[str] = frozenset(
+    {_COND_ABOVE, _COND_BELOW, _COND_CROSSES_ABOVE, _COND_CROSSES_BELOW, _COND_BETWEEN}
+)
+# Cross primitives carry a directional edge: usable as the driver of a condition-only
+# signal (``crosses_above`` -> long, ``crosses_below`` -> short).
+CROSS_CONDITION_KEYS: frozenset[str] = frozenset({_COND_CROSSES_ABOVE, _COND_CROSSES_BELOW})
+# The range primitive needs two bounds and is non-directional (gate/supporting only).
+RANGE_CONDITION_KEYS: frozenset[str] = frozenset({_COND_BETWEEN})
+# Sources a condition may read (for its ``source`` AND its ``reference`` RHS). Price
+# fields come from the bar; the special ``indicator_output`` reads the PARENT block's
+# current indicator value (e.g. RSI 72).
 _COND_PRICE_SOURCES: frozenset[str] = frozenset({"close", "open", "high", "low"})
 CONDITION_SOURCES: frozenset[str] = _COND_PRICE_SOURCES | frozenset({"indicator_output"})
 # Engine-version reproducibility constant: the source used when none is configured.
 DEFAULT_CONDITION_SOURCE = "close"
+
+
+def condition_direction(canonical_key: str) -> str | None:
+    """Long/short polarity of a directional (cross) condition; ``None`` if non-directional.
+
+    Condition-only signals take their direction from a cross edge: ``crosses_above`` is
+    a bullish edge (long), ``crosses_below`` a bearish edge (short). Level/range
+    comparators carry no inherent direction (a level is ambiguous — over/oversold)."""
+    if canonical_key == _COND_CROSSES_ABOVE:
+        return "long"
+    if canonical_key == _COND_CROSSES_BELOW:
+        return "short"
+    return None
+
 
 # Engine-version default parameters (reproducibility constants — a change here is a
 # new ``engine_version``). Used only when the strategy carries no override.
@@ -77,18 +110,23 @@ def default_length(canonical_key: str) -> int:
 
 @dataclass(frozen=True, slots=True)
 class ConditionSpec:
-    """A resolved, computable threshold condition nested under an indicator block.
+    """A resolved, computable condition nested under an indicator block.
 
     Pure data (no DB, no package body). ``canonical_key`` is a ``cond.*`` comparator,
-    ``source`` names the series to threshold (a bar price field or the parent block's
-    ``indicator_output``), and ``threshold`` is the strategy-supplied constant."""
+    ``source`` names the series compared (a bar price field or the parent block's
+    ``indicator_output``). The right-hand side is the constant ``threshold`` OR — when
+    ``reference`` is set — another series (bounded indicator-vs-indicator). ``cond.between``
+    ignores both and uses the ``lower``/``upper`` bounds instead."""
 
     condition_block_id: str
-    canonical_key: str  # "cond.above" | "cond.below"
+    canonical_key: str  # one of CONDITION_KEYS
     source: str  # "close" | "open" | "high" | "low" | "indicator_output"
-    threshold: Decimal
+    threshold: Decimal | None  # constant RHS; None for cond.between or a reference RHS
     requirement: str  # "required" | "supporting"
     validity: str
+    lower: Decimal | None = None  # cond.between lower bound (exclusive)
+    upper: Decimal | None = None  # cond.between upper bound (exclusive)
+    reference: str | None = None  # series RHS instead of the constant threshold
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,11 +141,15 @@ class IndicatorSpec:
     validity: str
     rsi_lower: Decimal = _DEFAULT_RSI_LOWER
     rsi_upper: Decimal = _DEFAULT_RSI_UPPER
-    # Nested threshold conditions (post-V1 (b)) that GATE this block's native trigger.
-    # Empty for a plain ``indicator_native_trigger`` block (Slice C behaviour intact).
+    # Nested conditions (post-V1 (b)/(b2)). In native-gated mode they GATE this block's
+    # native trigger; in ``condition_only`` mode there is no native trigger and the
+    # conditions DRIVE the signal (direction from the required cross primitive). Empty
+    # for a plain ``indicator_native_trigger`` block (Slice C behaviour intact).
     conditions: tuple[ConditionSpec, ...] = ()
     condition_rule: str | None = None  # ``condition_block_rule`` (None => all-required)
     min_condition_support: int | None = None
+    # True for ``indicator_output_plus_condition``: the conditions ARE the signal.
+    condition_only: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -255,20 +297,24 @@ class _Rsi:
 
 
 class ConditionEvaluator:
-    """Stateful per-condition threshold gate over the streamed bars.
+    """Stateful per-condition comparator over the streamed bars.
 
-    Each bar it reads the condition's SOURCE (a bar price field, or the parent
-    indicator block's current output value) and checks it against the strategy's
-    constant threshold. A satisfied check stays active for the condition's validity
-    window; ``until_opposite_signal`` is open-ended and clears the moment the check
-    fails. The parent ``BlockEvaluator`` reads ``satisfied`` to gate its trigger."""
+    Each bar it reads the condition's SOURCE series and its RHS — the constant
+    ``threshold`` or, when configured, a ``reference`` series — then evaluates the
+    ``cond.*`` comparator: a LEVEL check (above/below), an EDGE cross (crosses_above/
+    crosses_below, which needs the previous bar's pair) or a RANGE (between, over the
+    ``lower``/``upper`` bounds). A satisfied check stays active for the condition's
+    validity window; ``until_opposite_signal`` is open-ended and clears the moment the
+    check fails. The parent ``BlockEvaluator`` reads ``satisfied``."""
 
-    __slots__ = ("_active", "_active_left", "_spec")
+    __slots__ = ("_active", "_active_left", "_prev_rhs", "_prev_source", "_spec")
 
     def __init__(self, spec: ConditionSpec) -> None:
         self._spec = spec
         self._active = False
         self._active_left: int | None = None  # bars remaining (None = until it fails)
+        self._prev_source: Decimal | None = None  # last bar's source (for cross edges)
+        self._prev_rhs: Decimal | None = None  # last bar's RHS (constant or reference)
 
     def update(
         self,
@@ -286,16 +332,41 @@ class ConditionEvaluator:
             if self._active_left <= 0:
                 self._active = False
                 self._active_left = None
-        source = self._source_value(close, high, low, open_price, indicator_value)
-        if self._raw_check(source):
+        source = self._series_value(
+            self._spec.source, close, high, low, open_price, indicator_value
+        )
+        rhs = self._rhs_value(close, high, low, open_price, indicator_value)
+        if self._raw_check(source, rhs):
             self._active = True
             self._active_left = window  # None => open-ended (until the check fails)
         elif window is None:
             # until_opposite_signal: an open-ended gate clears when the check fails.
+            # (A momentary cross therefore stays active for exactly its firing bar.)
             self._active = False
             self._active_left = None
+        self._prev_source = source
+        self._prev_rhs = rhs
 
-    def _source_value(
+    def _series_value(
+        self,
+        name: str,
+        close: Decimal,
+        high: Decimal,
+        low: Decimal,
+        open_price: Decimal,
+        indicator_value: Decimal | None,
+    ) -> Decimal | None:
+        if name == "indicator_output":
+            return indicator_value  # None while the parent indicator is still warming up
+        if name == "high":
+            return high
+        if name == "low":
+            return low
+        if name == "open":
+            return open_price
+        return close
+
+    def _rhs_value(
         self,
         close: Decimal,
         high: Decimal,
@@ -303,23 +374,34 @@ class ConditionEvaluator:
         open_price: Decimal,
         indicator_value: Decimal | None,
     ) -> Decimal | None:
-        source = self._spec.source
-        if source == "indicator_output":
-            return indicator_value  # None while the parent indicator is still warming up
-        if source == "high":
-            return high
-        if source == "low":
-            return low
-        if source == "open":
-            return open_price
-        return close
+        """The comparator's right-hand side: a ``reference`` series, else the constant."""
+        reference = self._spec.reference
+        if reference is not None:
+            return self._series_value(reference, close, high, low, open_price, indicator_value)
+        return self._spec.threshold
 
-    def _raw_check(self, source: Decimal | None) -> bool:
-        if source is None:
+    def _raw_check(self, source: Decimal | None, rhs: Decimal | None) -> bool:
+        key = self._spec.canonical_key
+        if key == _COND_BETWEEN:
+            lower, upper = self._spec.lower, self._spec.upper
+            if source is None or lower is None or upper is None:
+                return False
+            return lower < source < upper
+        if source is None or rhs is None:
+            return False  # a missing series (warm-up) fails closed
+        if key == _COND_ABOVE:
+            return source > rhs
+        if key == _COND_BELOW:
+            return source < rhs
+        # Cross edges need the previous bar's (source, rhs) pair.
+        prev_source, prev_rhs = self._prev_source, self._prev_rhs
+        if prev_source is None or prev_rhs is None:
             return False
-        if self._spec.canonical_key == _COND_ABOVE:
-            return source > self._spec.threshold
-        return source < self._spec.threshold
+        if key == _COND_CROSSES_ABOVE:
+            return prev_source <= prev_rhs and source > rhs
+        if key == _COND_CROSSES_BELOW:
+            return prev_source >= prev_rhs and source < rhs
+        return False
 
     @property
     def satisfied(self) -> bool:
@@ -342,9 +424,12 @@ class BlockEvaluator:
         "_active_dir",
         "_active_left",
         "_cond_evals",
+        "_condition_dir",
+        "_condition_only",
         "_is_rsi",
         "_ma",
         "_prev_close",
+        "_prev_gate",
         "_prev_value",
         "_rsi",
         "_spec",
@@ -360,6 +445,13 @@ class BlockEvaluator:
         self._active_dir: str | None = None
         self._active_left: int | None = None  # validity bars remaining (None = until opposite)
         self._cond_evals = [ConditionEvaluator(cond) for cond in spec.conditions]
+        # Condition-only mode: the conditions DRIVE the signal (no native trigger). The
+        # block direction is the required cross primitives' shared polarity; the signal
+        # fires on the RISING EDGE of the aggregate gate and is held for the validity
+        # window. ``_condition_dir`` is None for a native-gated block (native trigger).
+        self._condition_only = spec.condition_only
+        self._condition_dir = _condition_only_direction(spec) if spec.condition_only else None
+        self._prev_gate = False  # last bar's aggregate condition-gate state (edge detect)
 
     def update(
         self,
@@ -384,14 +476,17 @@ class BlockEvaluator:
         else:
             assert self._ma is not None
             value = self._ma.update(close)
-        fired = self._detect(close, value)
-        if fired is not None:
-            self._active_dir = fired
-            self._active_left = _VALIDITY_BARS.get(self._spec.validity, 1)
+        # Native trigger (MA/RSI cross) — skipped in condition-only mode, where the
+        # conditions themselves drive the signal.
+        if not self._condition_only:
+            fired = self._detect(close, value)
+            if fired is not None:
+                self._active_dir = fired
+                self._active_left = _VALIDITY_BARS.get(self._spec.validity, 1)
         self._prev_value = value
         self._prev_close = close
-        # Feed the nested threshold conditions THIS bar's prices + the parent's fresh
-        # indicator value, so the gate is evaluated as-of the same bar as the trigger.
+        # Feed the nested conditions THIS bar's prices + the parent's fresh indicator
+        # value, so the gate is evaluated as-of the same bar as the trigger.
         for cond in self._cond_evals:
             cond.update(
                 close=close,
@@ -400,6 +495,18 @@ class BlockEvaluator:
                 open_price=open_price,
                 indicator_value=value,
             )
+        # Condition-only signal: fire on the RISING EDGE of the aggregate condition gate
+        # (a directionless false->true transition), in the block's condition direction.
+        if self._condition_only:
+            gate = _conditions_satisfied(
+                self._spec.condition_rule, self._cond_evals, self._spec.min_condition_support
+            )
+            if gate and not self._prev_gate and self._condition_dir is not None:
+                fired = self._filter(self._condition_dir)
+                if fired is not None:
+                    self._active_dir = fired
+                    self._active_left = _VALIDITY_BARS.get(self._spec.validity, 1)
+            self._prev_gate = gate
 
     def _detect(self, close: Decimal, value: Decimal | None) -> str | None:
         prev = self._prev_value
@@ -426,15 +533,21 @@ class BlockEvaluator:
 
     @property
     def current_signal(self) -> str | None:
-        """The active trigger direction, gated by the block's threshold conditions.
+        """The active signal direction for this block.
 
-        A block with no conditions behaves exactly as in Slice C. With conditions, an
-        otherwise-active trigger is suppressed on any bar where the conditions are not
-        satisfied per the block's ``condition_block_rule`` (directionless gate)."""
+        A block with no conditions behaves exactly as in Slice C. In native-gated mode
+        an otherwise-active trigger is suppressed on any bar where the conditions are
+        not satisfied per the block's ``condition_block_rule`` (directionless gate). In
+        condition-only mode the direction was already gated at the firing edge and is
+        simply held for the validity window (no re-gating)."""
         if self._active_dir is None:
             return None
-        if self._cond_evals and not _conditions_satisfied(
-            self._spec.condition_rule, self._cond_evals, self._spec.min_condition_support
+        if (
+            not self._condition_only
+            and self._cond_evals
+            and not _conditions_satisfied(
+                self._spec.condition_rule, self._cond_evals, self._spec.min_condition_support
+            )
         ):
             return None
         return self._active_dir
@@ -496,6 +609,23 @@ def _conditions_satisfied(
     return False
 
 
+def _condition_only_direction(spec: IndicatorSpec) -> str | None:
+    """The single directional edge a condition-only block signals, or ``None``.
+
+    Direction comes from the block's REQUIRED cross primitives (``crosses_above`` ->
+    long, ``crosses_below`` -> short). With no explicitly-required condition the whole
+    set is considered (mirrors ``_conditions_satisfied``). Non-directional level/range
+    conditions contribute no direction; a mixed or absent polarity yields ``None`` (the
+    plan layer surfaces this as an unresolved block, so it should not reach here)."""
+    required = [c for c in spec.conditions if c.requirement == "required"]
+    pool = required or list(spec.conditions)
+    directions = {condition_direction(c.canonical_key) for c in pool}
+    directions.discard(None)
+    if len(directions) == 1:
+        return directions.pop()
+    return None
+
+
 def aggregate(rule: SignalRule, evaluators: list[BlockEvaluator]) -> str | None:
     """Combine block signals into one directional decision (long wins a tie)."""
     if not evaluators:
@@ -511,9 +641,11 @@ __all__ = [
     "BUILTIN_ENTRY_MODEL",
     "CONDITION_KEYS",
     "CONDITION_SOURCES",
+    "CROSS_CONDITION_KEYS",
     "DEFAULT_CONDITION_SOURCE",
     "DIRECTIONAL_KEYS",
     "NON_DIRECTIONAL_KEYS",
+    "RANGE_CONDITION_KEYS",
     "RECOGNIZED_KEYS",
     "BlockEvaluator",
     "ConditionEvaluator",
@@ -523,5 +655,6 @@ __all__ = [
     "SignalRule",
     "aggregate",
     "build_evaluators",
+    "condition_direction",
     "default_length",
 ]

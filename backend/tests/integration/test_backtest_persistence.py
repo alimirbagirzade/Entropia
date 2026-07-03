@@ -13,6 +13,7 @@ foreign-owner 403; guest 401; and the OBJECT_IN_ACTIVE_RUN soft-delete guard.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from typing import Any
 
 import pytest
@@ -25,6 +26,7 @@ from entropia.application.queries import backtest_run as backtest_query
 from entropia.application.queries import mainboard as mb_query
 from entropia.domain.identity import Actor
 from entropia.domain.lifecycle.enums import PrincipalType, Role
+from entropia.domain.market_data.enums import MarketDataType
 from entropia.infrastructure.postgres.models import (
     BacktestResult,
     BacktestRun,
@@ -33,6 +35,7 @@ from entropia.infrastructure.postgres.models import (
     Principal,
 )
 from entropia.infrastructure.postgres.repositories import backtest as bt_repo
+from entropia.infrastructure.postgres.repositories import market_data as md_repo
 from entropia.shared.errors import (
     AccessDeniedError,
     BacktestResultNotFoundError,
@@ -55,16 +58,57 @@ async def _seed_principals(session) -> None:
     await session.flush()
 
 
-def _strategy_payload() -> dict[str, Any]:
+def _e2e_bars(_source: Any) -> Iterator[list[dict[str, Any]]]:
+    """Deterministic OHLCV bars for the bar-replay worker (S3-free injection).
+
+    20 flat bars fill the breakout window, then an upside breakout and a stop-out
+    yield one real, reproducible trade — enough for a succeeded Result."""
+    bars: list[dict[str, Any]] = [
+        {
+            "timestamp": f"2024-02-{i + 1:02d}T00:00:00Z",
+            "open": "100",
+            "high": "100",
+            "low": "100",
+            "close": "100",
+            "volume": "5",
+        }
+        for i in range(20)
+    ]
+    bars.append(
+        {
+            "timestamp": "2024-02-21T00:00:00Z",
+            "open": "100",
+            "high": "103",
+            "low": "100",
+            "close": "103",
+            "volume": "5",
+        }
+    )
+    bars.append(
+        {
+            "timestamp": "2024-02-22T00:00:00Z",
+            "open": "103",
+            "high": "103",
+            "low": "95",
+            "close": "98",
+            "volume": "5",
+        }
+    )
+    yield bars
+
+
+def _strategy_payload(
+    market_root_id: str, market_revision_id: str, market_hash: str
+) -> dict[str, Any]:
     return {
         "strategy_root_id": "strat_root_seed",
         "display_name": "Seed strategy",
         "rationale_family_id": "rf_1",
         "data": {
             "instrument_id": "BTCUSDT",
-            "market_dataset_root_id": "md_root_1",
-            "market_dataset_revision_id": "md_rev_1",
-            "market_dataset_content_hash": "a" * 64,
+            "market_dataset_root_id": market_root_id,
+            "market_dataset_revision_id": market_revision_id,
+            "market_dataset_content_hash": market_hash,
             "backtest_range": {"start": "2024-01-01T00:00:00Z", "end": "2024-06-01T00:00:00Z"},
             "initial_capital": "10000.00",
             "execution": {"entry_timing": "next_candle_open", "exit_timing": "next_candle_open"},
@@ -105,8 +149,34 @@ async def _empty_composition(session, actor: Actor) -> str:
 
 async def _ready_composition(session, actor: Actor) -> tuple[str, str, str]:
     workspace_id = await _empty_composition(session, actor)
+    # Slice B: the strategy pins a REAL market revision (FK-valid entity) and the
+    # bar-replay worker resolves its processed Parquet asset (INF-12); the bar bytes
+    # are injected via ``_e2e_bars``.
+    market_root, market_rev = await md_repo.create_market_dataset(
+        session,
+        owner_principal_id=None,
+        created_by_principal_id=None,
+        market_data_type=MarketDataType.OHLCV,
+        payload={"note": "seed bars"},
+    )
+    await session.flush()
+    md_repo.add_processed_asset(
+        session,
+        entity_id=market_root.entity_id,
+        object_key=f"market/processed/{market_root.entity_id}/seed.parquet",
+        content_digest="seed-bars",
+        size_bytes=4096,
+        revision_id=market_rev.revision_id,
+        row_count=22,
+    )
+    await session.flush()
     work_object = await mb_cmd.create_work_object(
-        session, actor, object_kind="strategy", payload=_strategy_payload()
+        session,
+        actor,
+        object_kind="strategy",
+        payload=_strategy_payload(
+            market_root.entity_id, market_rev.revision_id, market_rev.content_hash
+        ),
     )
     await mb_cmd.attach_mainboard_item(
         session,
@@ -145,7 +215,7 @@ async def test_admission_queues_run_and_worker_materializes_result(session) -> N
     job = await session.get(Job, admit["job_id"])
     assert job is not None and job.queue == "backtest"
 
-    out = await run_backtest(session, admit["job_id"])
+    out = await run_backtest(session, admit["job_id"], stream_bars=_e2e_bars)
     await session.commit()
 
     assert out["state"] == "succeeded"
@@ -234,7 +304,7 @@ async def test_worker_fails_on_unresolved_pin_and_retry_creates_new_run(session)
     manifest.manifest = doc
     await session.commit()
 
-    out = await run_backtest(session, admit["job_id"])
+    out = await run_backtest(session, admit["job_id"], stream_bars=_e2e_bars)
     await session.commit()
 
     assert out["state"] == "failed"
@@ -263,7 +333,7 @@ async def test_soft_delete_result_removes_projection(session) -> None:
     composition_id, _root, _rev = await _ready_composition(session, USER1)
     admit = await backtest_cmd.request_backtest_run(session, USER1, composition_id=composition_id)
     await session.commit()
-    out = await run_backtest(session, admit["job_id"])
+    out = await run_backtest(session, admit["job_id"], stream_bars=_e2e_bars)
     await session.commit()
 
     result = await session.get(BacktestResult, out["result_id"])
@@ -317,11 +387,11 @@ async def test_worker_is_redelivery_idempotent(session) -> None:
     admit = await backtest_cmd.request_backtest_run(session, USER1, composition_id=composition_id)
     await session.commit()
 
-    first = await run_backtest(session, admit["job_id"])
+    first = await run_backtest(session, admit["job_id"], stream_bars=_e2e_bars)
     await session.commit()
     assert first["state"] == "succeeded"
 
-    second = await run_backtest(session, admit["job_id"])
+    second = await run_backtest(session, admit["job_id"], stream_bars=_e2e_bars)
     await session.commit()
     assert second["state"] == "succeeded"
     assert second["result_id"] == first["result_id"]

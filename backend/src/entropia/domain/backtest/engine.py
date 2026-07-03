@@ -1,30 +1,52 @@
-"""Deterministic V1 backtest engine STUB (Stage 5a, doc 15 §9.3, §15).
+"""Deterministic V1 bar-replay backtest engine (Stage 5a → post-V1 Slice B, doc 15 §9.3).
 
-Production V1 has no real market-data simulation engine yet, mirroring the honest
-V1 stubs already shipped (2e candidate generation + dependency scan). This module
-produces a DETERMINISTIC, reproducible result from the manifest's ``execution_key``
-alone: the same pinned composition always yields byte-identical output (doc 15 §17
-async reproducibility). It never reads live market data, the current Mainboard or
-any 'latest' source, and it is pure — no DB, clock, network or real randomness.
+Replaces the pure-from-key V1 stub with a real, deterministic bar-replay over the
+pinned market revision's processed OHLCV bars (INF-12 Slice A: ``resolve_bar_source``
+→ ``iter_bar_batches``). The simulation is a PURE function of
+``(strategy_config, bars)``: the same pinned strategy revision + the same immutable
+pinned market revision always yield byte-identical output (doc 15 §17 async
+reproducibility). No DB, clock, network or real randomness.
 
-When a real engine lands, only this module + ``metrics.py`` change; the RUN
-admission, manifest, run lifecycle and result-materialization contracts stay put.
-The synthetic timestamps/prices are labelled stub output and are NOT presented as
-real market data (symbol/timeframe are left unresolved — never fabricated, L4).
+Honest V1 boundary: real indicator packages are still V1 stubs, so entry/exit timing
+uses a DETERMINISTIC breakout PROXY derived purely from the bars (labelled
+``entry_model=deterministic_bar_breakout_proxy_v1`` in diagnostics), NOT real
+indicator signals. What IS real: the bars, their timestamps/prices, the strategy's
+protection stops (percentage / trailing / absolute), the direction bias, the costs
+(commission / spread / slippage) and the position sizing. When the indicator layer
+lands, only the entry/exit evaluation here changes; the run, manifest and result
+contracts stay put.
+
+Engine order follows doc 15 §9.3 (bounded to the foundation scope): per bar —
+(1) update the rolling breakout window; (2) if in a position, evaluate
+protection/stop/exit against THIS bar's high/low (intrabar touch); (3) if flat,
+evaluate the breakout entry proxy and open a position. State/decision-trace
+counters are emitted per trade (bounded memory — never O(bars)); the OHLCV stream
+is consumed one batch at a time.
 """
 
 from __future__ import annotations
 
-import hashlib
+from collections import deque
 from collections.abc import Iterator
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from entropia.domain.strategy.config import StrategyConfig
 
 _MONEY = Decimal("0.01")
 _PCT = Decimal("0.0001")
 _RATIO = Decimal("0.01")
+_QTY = Decimal("0.00000001")
 _HUNDRED = Decimal("100")
+_ZERO = Decimal("0")
+
+# Rolling look-back for the breakout entry/exit proxy. A constant of the engine
+# version (part of the reproducibility contract via ``engine_version``), NOT a
+# strategy input — real indicator look-backs arrive with the indicator layer.
+_BREAKOUT_WINDOW = 20
+ENTRY_MODEL = "deterministic_bar_breakout_proxy_v1"
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,119 +88,337 @@ class EngineOutput:
     diagnostics: dict[str, Any]
 
 
-def _stream(key: str) -> Iterator[float]:
-    """A deterministic [0, 1) pseudo-random stream seeded from ``key`` (stub only)."""
-    counter = 0
-    while True:
-        digest = hashlib.sha256(f"{key}:{counter}".encode()).digest()
-        counter += 1
-        for offset in range(0, len(digest), 4):
-            yield int.from_bytes(digest[offset : offset + 4], "big") / 4294967296.0
+@dataclass(frozen=True, slots=True)
+class _Bar:
+    """One normalized OHLCV bar (canonical market-data field names, doc 11)."""
+
+    timestamp: str
+    open: Decimal
+    high: Decimal
+    low: Decimal
+    close: Decimal
 
 
-def _iso_day(index: int) -> str:
-    """A deterministic synthetic UTC day from a fixed epoch (stub output only)."""
-    month = 1 + (index // 28) % 12
-    day = 1 + index % 28
-    return f"2024-{month:02d}-{day:02d}T00:00:00Z"
+@dataclass(slots=True)
+class _Position:
+    direction: str  # "long" | "short"
+    entry_time: str
+    entry_price: Decimal  # cost-adjusted effective fill
+    size: Decimal
+    static_stop: Decimal | None
+    trail_pct: Decimal | None
+    trail_anchor: Decimal  # best price seen since entry (favourable extreme)
+    entry_notional: Decimal
+
+
+def _dec(value: Any) -> Decimal:
+    """Coerce a Parquet cell (float/int/str/Decimal) to Decimal deterministically."""
+    if isinstance(value, Decimal):
+        return value
+    return Decimal(str(value))
+
+
+def _normalize(raw: dict[str, Any]) -> _Bar | None:
+    """Project a raw OHLCV row to a typed bar; drop rows missing a price field."""
+    try:
+        return _Bar(
+            timestamp=str(raw["timestamp"]),
+            open=_dec(raw["open"]),
+            high=_dec(raw["high"]),
+            low=_dec(raw["low"]),
+            close=_dec(raw["close"]),
+        )
+    except (KeyError, TypeError, ArithmeticError, ValueError):
+        return None
+
+
+def _direction_flags(mode: str) -> tuple[bool, bool]:
+    """(long_allowed, short_allowed) from the entry ``direction_mode``."""
+    return mode in ("long", "long_and_short"), mode in ("short", "long_and_short")
+
+
+def _cost_params(config: StrategyConfig) -> tuple[Decimal, Decimal, Decimal]:
+    """(half_spread, slippage_fraction, per_fill_commission) — all non-negative."""
+    costs = config.data.costs
+    spread = (costs.spread or _ZERO) / Decimal("2")
+    slippage = (costs.slippage_value or _ZERO) / _HUNDRED
+    commission = costs.commission or _ZERO
+    return spread, slippage, commission
+
+
+def _effective_fill(
+    price: Decimal, *, is_buy: bool, half_spread: Decimal, slip: Decimal
+) -> Decimal:
+    """Adverse-side fill: a buy pays up, a sell receives less (spread + slippage)."""
+    adjusted = price + half_spread if is_buy else price - half_spread
+    factor = Decimal("1") + slip if is_buy else Decimal("1") - slip
+    return (adjusted * factor).quantize(_MONEY)
+
+
+def _position_size(config: StrategyConfig, entry_price: Decimal, equity: Decimal) -> Decimal:
+    """Deterministic sizing: explicit base size, else an all-in notional (bounded).
+
+    ``risk_based_sizing`` / ``formula_based_sizing`` are not modelled in this
+    foundation and fall back to notional sizing (surfaced as a diagnostics warning,
+    L4). The notional branch clamps to NON-NEGATIVE equity: a bust account yields
+    size 0, never a negative size — a negative size would invert the PnL sign of
+    every subsequent trade (review CRITICAL)."""
+    sizing = config.position_sizing
+    if sizing.method == "base_position_size" and sizing.base_position_size is not None:
+        return Decimal(sizing.base_position_size)
+    usable_equity = max(equity, _ZERO)
+    if entry_price > _ZERO:
+        return (usable_equity / entry_price).quantize(_QTY)
+    return _ZERO
+
+
+def _initial_static_stop(
+    config: StrategyConfig, *, is_long: bool, entry_price: Decimal
+) -> Decimal | None:
+    """Tightest enabled percentage/absolute stop (trailing handled dynamically)."""
+    protection = config.protection_stop_logic
+    if protection is None:
+        return None
+    candidates: list[Decimal] = []
+    pct = protection.percentage_stop
+    if pct is not None and pct.enabled:
+        distance = entry_price * (pct.loss_percentage / _HUNDRED)
+        candidates.append(entry_price - distance if is_long else entry_price + distance)
+    absolute = protection.absolute_stop
+    if absolute is not None and absolute.enabled and absolute.absolute_price is not None:
+        candidates.append(Decimal(absolute.absolute_price))
+    if not candidates:
+        return None
+    # Tightest = closest to entry on the adverse side (highest for long, lowest for short).
+    return max(candidates) if is_long else min(candidates)
+
+
+def _trail_pct(config: StrategyConfig) -> Decimal | None:
+    protection = config.protection_stop_logic
+    if protection is None or protection.trailing_stop is None:
+        return None
+    trailing = protection.trailing_stop
+    return trailing.trail_percentage / _HUNDRED if trailing.enabled else None
+
+
+def _effective_stop(position: _Position) -> Decimal | None:
+    """Combine the static stop with the trailing stop; return the tightest."""
+    trailing: Decimal | None = None
+    if position.trail_pct is not None:
+        if position.direction == "long":
+            trailing = position.trail_anchor * (Decimal("1") - position.trail_pct)
+        else:
+            trailing = position.trail_anchor * (Decimal("1") + position.trail_pct)
+    stops = [s for s in (position.static_stop, trailing) if s is not None]
+    if not stops:
+        return None
+    return max(stops) if position.direction == "long" else min(stops)
+
+
+def _exit_proxy(position: _Position, bar: _Bar, window: deque[_Bar]) -> bool:
+    """Opposite-breakout exit: a long exits on a new window low, a short on a new high."""
+    if len(window) < _BREAKOUT_WINDOW:
+        return False
+    if position.direction == "long":
+        return bar.close < min(b.low for b in window)
+    return bar.close > max(b.high for b in window)
 
 
 def run_engine(
-    execution_key: str,
     *,
-    initial_capital: Decimal,
-    item_count: int,
+    strategy_config: StrategyConfig,
+    bar_batches: Iterator[list[dict[str, Any]]],
+    execution_key: str,
+    item_count: int = 1,
 ) -> EngineOutput:
-    """Deterministically simulate a backtest from the manifest execution key."""
-    draws = _stream(execution_key)
-    trade_count = 8 + int(next(draws) * 8)
+    """Deterministically bar-replay one strategy over its pinned OHLCV bars."""
+    config = strategy_config
+    initial_capital = Decimal(config.data.initial_capital).quantize(_MONEY)
+    long_ok, short_ok = _direction_flags(config.position_entry_logic.direction_mode)
+    half_spread, slippage, commission = _cost_params(config)
+    trail_pct = _trail_pct(config)
+
     equity = initial_capital
     peak = initial_capital
     trades: list[TradeRow] = []
     equity_points: list[EquityPoint] = [
-        EquityPoint(
-            seq=0,
-            timestamp=_iso_day(0),
-            equity=equity.quantize(_MONEY),
-            drawdown=Decimal("0").quantize(_MONEY),
-            exposure=Decimal("0").quantize(_PCT),
-        )
+        EquityPoint(0, "", initial_capital, _ZERO.quantize(_MONEY), _ZERO.quantize(_PCT))
     ]
-    gross_profit = Decimal("0")
-    gross_loss = Decimal("0")
+    signal_events: list[SignalEventRow] = []
+    window: deque[_Bar] = deque(maxlen=_BREAKOUT_WINDOW)
+    position: _Position | None = None
+    bars_seen = 0
+    first_ts = ""
+    last_bar: _Bar | None = None
     winners = 0
-    stops = 0
-    streak = 0
+    stops_hit = 0
+    stop_streak = 0
     max_stop_streak = 0
+    suppressed_entries = 0
+    gross_profit = _ZERO
+    gross_loss = _ZERO
 
-    for seq in range(1, trade_count + 1):
-        direction = "long" if next(draws) < Decimal("0.55") else "short"
-        entry_price = (Decimal("100") + Decimal(str(round(next(draws) * 50, 2)))).quantize(_MONEY)
-        pnl_pct = Decimal(str(round((next(draws) - 0.42) * 6, 4)))
-        reason_roll = next(draws)
-        exposure = Decimal(str(round(next(draws), 4)))
-        pnl = (equity * pnl_pct / _HUNDRED).quantize(_MONEY)
-        if pnl_pct < 0:
-            exit_reason = "stop_loss" if reason_roll < 0.6 else "exit_signal"
-        else:
-            exit_reason = "take_profit" if reason_roll < 0.6 else "exit_signal"
-        exit_price = (entry_price * (Decimal("1") + pnl_pct / _HUNDRED)).quantize(_MONEY)
+    def _close(exit_time: str, exit_price_raw: Decimal, reason: str, pos: _Position) -> None:
+        nonlocal equity, peak, winners, stops_hit, stop_streak, max_stop_streak
+        nonlocal gross_profit, gross_loss
+        is_long = pos.direction == "long"
+        exit_eff = _effective_fill(
+            exit_price_raw, is_buy=not is_long, half_spread=half_spread, slip=slippage
+        )
+        sign = Decimal("1") if is_long else Decimal("-1")
+        gross = (exit_eff - pos.entry_price) * pos.size * sign
+        pnl = (gross - commission * 2).quantize(_MONEY)
+        equity_before = equity
         equity = (equity + pnl).quantize(_MONEY)
         peak = max(peak, equity)
         drawdown = (peak - equity).quantize(_MONEY)
-        if pnl > 0:
+        exposure = (
+            (pos.entry_notional / equity_before * _HUNDRED).quantize(_PCT)
+            if equity_before > _ZERO
+            else _ZERO.quantize(_PCT)
+        )
+        if pnl > _ZERO:
             winners += 1
             gross_profit += pnl
         else:
             gross_loss += -pnl
-        if exit_reason == "stop_loss":
-            stops += 1
-            streak += 1
-            max_stop_streak = max(max_stop_streak, streak)
+        if reason == "stop_loss":
+            stops_hit += 1
+            stop_streak += 1
+            max_stop_streak = max(max_stop_streak, stop_streak)
         else:
-            streak = 0
+            stop_streak = 0
+        seq = len(trades) + 1
         trades.append(
             TradeRow(
                 seq=seq,
-                entry_time=_iso_day(seq * 2 - 1),
-                exit_time=_iso_day(seq * 2),
-                direction=direction,
-                entry_price=entry_price,
-                exit_price=exit_price,
+                entry_time=pos.entry_time,
+                exit_time=exit_time,
+                direction=pos.direction,
+                entry_price=pos.entry_price,
+                exit_price=exit_eff,
                 pnl=pnl,
-                exit_reason=exit_reason,
+                exit_reason=reason,
             )
         )
         equity_points.append(
             EquityPoint(
                 seq=seq,
-                timestamp=_iso_day(seq * 2),
+                timestamp=exit_time,
                 equity=equity,
                 drawdown=drawdown,
                 exposure=exposure,
             )
         )
+        signal_events.append(
+            SignalEventRow(
+                seq=len(signal_events),
+                event_time=pos.entry_time,
+                event_type="entry_signal",
+                direction=pos.direction,
+                detail={"trade_seq": seq},
+            )
+        )
 
+    for batch in bar_batches:
+        for raw in batch:
+            bar = _normalize(raw)
+            if bar is None:
+                continue
+            bars_seen += 1
+            if not first_ts:
+                first_ts = bar.timestamp
+            last_bar = bar
+
+            if position is not None:
+                # (2) protection / stop / exit against this bar (intrabar touch).
+                if position.direction == "long":
+                    position.trail_anchor = max(position.trail_anchor, bar.high)
+                else:
+                    position.trail_anchor = min(position.trail_anchor, bar.low)
+                stop = _effective_stop(position)
+                exited = False
+                if stop is not None and (
+                    (position.direction == "long" and bar.low <= stop)
+                    or (position.direction == "short" and bar.high >= stop)
+                ):
+                    _close(bar.timestamp, stop, "stop_loss", position)
+                    position, exited = None, True
+                if not exited and position is not None and _exit_proxy(position, bar, window):
+                    _close(bar.timestamp, bar.close, "exit_signal", position)
+                    position = None
+            elif len(window) == _BREAKOUT_WINDOW:
+                # (3) breakout entry proxy (only when flat, with a full look-back).
+                highest = max(b.high for b in window)
+                lowest = min(b.low for b in window)
+                want_long = bar.close > highest
+                want_short = bar.close < lowest
+                if (want_long and not long_ok) or (want_short and not short_ok):
+                    suppressed_entries += 1
+                elif want_long or want_short:
+                    is_long = bool(want_long)  # long wins a same-bar tie (deterministic)
+                    entry_eff = _effective_fill(
+                        bar.close, is_buy=is_long, half_spread=half_spread, slip=slippage
+                    )
+                    size = _position_size(config, entry_eff, equity)
+                    position = _Position(
+                        direction="long" if is_long else "short",
+                        entry_time=bar.timestamp,
+                        entry_price=entry_eff,
+                        size=size,
+                        static_stop=_initial_static_stop(
+                            config, is_long=is_long, entry_price=entry_eff
+                        ),
+                        trail_pct=trail_pct,
+                        trail_anchor=bar.close,
+                        entry_notional=(entry_eff * size).quantize(_MONEY),
+                    )
+
+            window.append(bar)
+
+    # End-of-data: close any open position at the last bar's close (never left dangling).
+    if position is not None and last_bar is not None:
+        _close(last_bar.timestamp, last_bar.close, "end_of_data", position)
+        position = None
+
+    if suppressed_entries:
+        signal_events.append(
+            SignalEventRow(
+                seq=len(signal_events),
+                event_time=first_ts,
+                event_type="filtered_no_entry",
+                direction=None,
+                detail={"reason": "direction_restriction", "count": suppressed_entries},
+            )
+        )
+
+    total_trades = len(trades)
     net_profit = (equity - initial_capital).quantize(_MONEY)
     net_profit_pct = (
-        (net_profit / initial_capital * _HUNDRED).quantize(_PCT) if initial_capital > 0 else None
+        (net_profit / initial_capital * _HUNDRED).quantize(_PCT)
+        if initial_capital > _ZERO
+        else None
     )
-    max_drawdown = max((point.drawdown for point in equity_points), default=Decimal("0"))
-    max_drawdown_pct = (max_drawdown / peak * _HUNDRED).quantize(_PCT) if peak > 0 else Decimal("0")
+    max_drawdown = max((p.drawdown for p in equity_points), default=_ZERO)
+    max_drawdown_pct = (
+        (max_drawdown / peak * _HUNDRED).quantize(_PCT) if peak > _ZERO else _ZERO.quantize(_PCT)
+    )
     win_rate = (
-        (Decimal(winners) / Decimal(trade_count) * _HUNDRED).quantize(_PCT) if trade_count else None
+        (Decimal(winners) / Decimal(total_trades) * _HUNDRED).quantize(_PCT)
+        if total_trades
+        else None
     )
-    profit_factor = (gross_profit / gross_loss).quantize(_RATIO) if gross_loss > 0 else None
+    profit_factor = (gross_profit / gross_loss).quantize(_RATIO) if gross_loss > _ZERO else None
     romad = (
         (net_profit_pct / max_drawdown_pct).quantize(_RATIO)
-        if net_profit_pct is not None and max_drawdown_pct > 0
+        if net_profit_pct is not None and max_drawdown_pct > _ZERO
         else None
     )
 
     summary: dict[str, Any] = {
-        "symbol": None,
+        "symbol": config.data.instrument_id,
         "timeframe": None,
-        "initial_capital": initial_capital.quantize(_MONEY),
+        "initial_capital": initial_capital,
         "final_equity": equity,
         "net_profit": net_profit,
         "net_profit_pct": net_profit_pct,
@@ -187,18 +427,31 @@ def run_engine(
         "romad": romad,
         "win_rate": win_rate,
         "profit_factor": profit_factor,
-        "total_trades": trade_count,
-        "total_stops": stops,
+        "total_trades": total_trades,
+        "total_stops": stops_hit,
         "max_stop_streak": max_stop_streak,
         "total_winning_trades": winners,
     }
-    signal_events = _signal_events(execution_key, trades)
+    warnings: list[str] = []
+    if not bars_seen:
+        warnings.append("no_bars_in_source")
+    if config.position_sizing.method != "base_position_size":
+        # risk/formula sizing is not modelled in this foundation; the run used
+        # notional sizing instead. Surface the divergence rather than hide it (L4).
+        warnings.append(f"position_sizing_method_unsupported:{config.position_sizing.method}")
     diagnostics = {
-        "engine_kind": "v1_stub",
-        "reproducibility_note": "Deterministic from manifest execution_key; not real market data.",
+        "engine_kind": "v1_bar_replay",
+        "entry_model": ENTRY_MODEL,
+        "reproducibility_note": (
+            "Deterministic bar-replay over the pinned market revision; real bars and "
+            "protection stops, breakout entry proxy (indicator layer still stubbed)."
+        ),
+        "bars_processed": bars_seen,
+        "breakout_window": _BREAKOUT_WINDOW,
         "item_count": item_count,
         "decision_trace_count": len(signal_events),
-        "warnings": [],
+        "execution_key": execution_key,
+        "warnings": warnings,
     }
     return EngineOutput(
         summary=summary,
@@ -209,36 +462,8 @@ def run_engine(
     )
 
 
-def _signal_events(execution_key: str, trades: list[TradeRow]) -> list[SignalEventRow]:
-    """Decision-trace events — entry signals plus a filtered/no-entry marker.
-
-    A signal event is NOT a fill (doc 15 §14): filtered/no-entry decisions are
-    surfaced distinctly so the ledger is never double-counted from them.
-    """
-    events: list[SignalEventRow] = []
-    for trade in trades:
-        events.append(
-            SignalEventRow(
-                seq=len(events),
-                event_time=trade.entry_time,
-                event_type="entry_signal",
-                direction=trade.direction,
-                detail={"trade_seq": trade.seq},
-            )
-        )
-    events.append(
-        SignalEventRow(
-            seq=len(events),
-            event_time=_iso_day(1),
-            event_type="filtered_no_entry",
-            direction=None,
-            detail={"reason": "restriction_filter"},
-        )
-    )
-    return events
-
-
 __all__ = [
+    "ENTRY_MODEL",
     "EngineOutput",
     "EquityPoint",
     "SignalEventRow",

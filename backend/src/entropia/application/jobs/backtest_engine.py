@@ -1,4 +1,4 @@
-"""Backtest engine worker body (Stage 5a, doc 15 §8.3, §9.3, §15).
+"""Backtest engine worker body (Stage 5a → post-V1 Slice B, doc 15 §8.3, §9.3, §15).
 
 Runs on the ``backtest`` queue. The durable ``jobs`` row + the ``backtest_run`` row
 are the source of truth — the request that admitted the run has long since returned
@@ -7,24 +7,37 @@ are the source of truth — the request that admitted the run has long since ret
     load job + run + immutable manifest -> mark RUNNING ->
     RE-RESOLVE every pinned revision from the manifest (NO 'latest' fallback;
         any unresolved pin => terminal FAILED, doc 15 §11, §15) ->
-    run the deterministic engine (``domain.backtest.engine``) ->
+    resolve the primary Strategy's pinned config + its pinned market revision's
+        processed bar source (INF-12); a missing asset => terminal FAILED ->
+    bar-replay the deterministic engine (``domain.backtest.engine``) over the
+        streamed OHLCV batches (bounded memory) ->
     ONLY on success: materialize the immutable Result + summary + metrics +
         artifacts (CR-03), back-fill run.result_id, run -> SUCCEEDED ->
     audit + outbox.
 
 A FAILED run is a normal recorded terminal outcome (diagnostics only, no Result,
 no history row), NOT a job exception — so the worker does not retry a permanent
-manifest-resolution failure. Only an unexpected/missing-row condition raises.
+manifest/asset/engine failure. Only an unexpected/missing-row condition raises.
+
+Bars are injected via ``stream_bars`` (default: the real S3-backed
+``iter_bar_batches``) so integration tests exercise the full resolve → replay →
+materialize chain without object storage.
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
-from decimal import Decimal, InvalidOperation
 from typing import Any
 
+from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from entropia.application.queries.market_bars import (
+    BarSourceRef,
+    iter_bar_batches,
+    resolve_bar_source,
+)
 from entropia.domain.backtest.engine import run_engine
 from entropia.domain.backtest.enums import (
     RUN_TERMINAL_STATES,
@@ -33,17 +46,28 @@ from entropia.domain.backtest.enums import (
 )
 from entropia.domain.backtest.metrics import derive_metric_values
 from entropia.domain.lifecycle.enums import ActorKind, JobStatus
+from entropia.domain.mainboard.enums import MainboardItemKind
+from entropia.domain.strategy.config import StrategyConfig
 from entropia.infrastructure.postgres.models import Job
 from entropia.infrastructure.postgres.repositories import audit as audit_repo
 from entropia.infrastructure.postgres.repositories import backtest as bt_repo
 from entropia.infrastructure.postgres.repositories import mainboard as mb_repo
+from entropia.infrastructure.postgres.repositories import strategy as strat_repo
+from entropia.shared.errors import NotFoundError
 
-_DEFAULT_CAPITAL = Decimal("10000")
 _RUN_TARGET = "backtest_run"
 _RESULT_TARGET = "backtest_result"
 
+# The worker owns the bar-source I/O boundary; the engine itself never touches S3.
+BarBatchStreamer = Callable[[BarSourceRef], Iterator[list[dict[str, Any]]]]
 
-async def run_backtest(session: AsyncSession, job_id: str) -> dict[str, Any]:
+
+async def run_backtest(
+    session: AsyncSession,
+    job_id: str,
+    *,
+    stream_bars: BarBatchStreamer = iter_bar_batches,
+) -> dict[str, Any]:
     """Execute the durable backtest job. Does not commit (the worker scope commits)."""
     job = await session.get(Job, job_id)
     if job is None:
@@ -68,7 +92,8 @@ async def run_backtest(session: AsyncSession, job_id: str) -> dict[str, Any]:
     run.started_at = datetime.now(UTC)
 
     # Re-resolve pins while still PROVISIONING; advance to RUNNING only when the
-    # manifest fully resolves, so the fail path never transits through RUNNING.
+    # manifest fully resolves AND the bar source is available, so the fail path
+    # never transits through RUNNING.
     missing = await _unresolved_pins(session, manifest.manifest)
     if missing:
         return _fail_run(
@@ -78,13 +103,46 @@ async def run_backtest(session: AsyncSession, job_id: str) -> dict[str, Any]:
             code=RunFailureCode.MANIFEST_RESOLUTION,
             message=f"Pinned revisions could not be resolved (no 'latest' fallback): {missing}",
         )
+
+    strategy_config = await _resolve_primary_strategy(session, manifest.manifest)
+    if strategy_config is None:
+        return _fail_run(
+            session,
+            job,
+            run,
+            code=RunFailureCode.ASSET_UNAVAILABLE,
+            message="No enabled Strategy item with a resolvable pinned config in the composition.",
+        )
+    market_revision_id = strategy_config.data.market_dataset_revision_id
+    try:
+        source = await resolve_bar_source(session, market_revision_id=market_revision_id)
+    except NotFoundError:
+        return _fail_run(
+            session,
+            job,
+            run,
+            code=RunFailureCode.ASSET_UNAVAILABLE,
+            message=f"Pinned market revision '{market_revision_id}' has no processed bar asset.",
+        )
+
     run.state = BacktestRunState.RUNNING
 
-    initial_capital = _initial_capital(manifest.manifest.get("capital_execution"))
     item_count = len(manifest.manifest.get("mainboard_items", []))
-    output = run_engine(
-        manifest.execution_key, initial_capital=initial_capital, item_count=item_count
-    )
+    try:
+        output = run_engine(
+            strategy_config=strategy_config,
+            bar_batches=stream_bars(source),
+            execution_key=manifest.execution_key,
+            item_count=item_count,
+        )
+    except Exception as exc:
+        return _fail_run(
+            session,
+            job,
+            run,
+            code=RunFailureCode.ENGINE_ERROR,
+            message=f"Engine error during bar-replay: {exc}",
+        )
     metric_values = derive_metric_values(output.summary)
 
     result = await bt_repo.create_result(
@@ -128,17 +186,50 @@ async def _unresolved_pins(session: AsyncSession, manifest: dict[str, Any]) -> l
     return missing
 
 
-def _initial_capital(capital_mode: Any) -> Decimal:
-    if isinstance(capital_mode, dict) and capital_mode.get("enabled"):
-        config = capital_mode.get("config")
-        initial = config.get("initial_capital") if isinstance(config, dict) else None
-        amount = initial.get("amount") if isinstance(initial, dict) else None
-        if amount is not None:
-            try:
-                return Decimal(str(amount))
-            except (InvalidOperation, ValueError):
-                return _DEFAULT_CAPITAL
-    return _DEFAULT_CAPITAL
+async def _resolve_primary_strategy(
+    session: AsyncSession, manifest: dict[str, Any]
+) -> StrategyConfig | None:
+    """Resolve the first enabled Strategy item's pinned, typed StrategyConfig.
+
+    Foundation scope: a single-strategy bar-replay. Items are already pin-ordered
+    (doc 01 §5.2); the first enabled Strategy whose pinned revision parses to a
+    valid config drives the simulation. Reads ONLY pinned revisions."""
+    for item in manifest.get("mainboard_items", []):
+        if item.get("item_kind") != MainboardItemKind.STRATEGY:
+            continue
+        if item.get("enabled") is False:
+            continue
+        revision_id = item.get("selected_revision_id")
+        if revision_id is None:
+            continue
+        revision = await mb_repo.get_work_object_revision(session, str(revision_id))
+        if revision is None:
+            continue
+        payload = await _resolve_strategy_payload(session, dict(revision.payload))
+        try:
+            return StrategyConfig.model_validate(payload)
+        except ValidationError:
+            continue
+    return None
+
+
+async def _resolve_strategy_payload(
+    session: AsyncSession, payload: dict[str, Any]
+) -> dict[str, Any]:
+    """Dereference a Strategy-editor MIRROR pin to its typed canonical config.
+
+    Twin of ``readiness_check._resolve_strategy_payload`` (doc 02 §7.1): a strategy
+    Mainboard item pins either a direct StrategyConfig or the mirror work-object
+    revision (``{"strategy_revision_id", ...}``). The engine must replay the REAL
+    immutable configuration, so the mirror is dereferenced here; an unresolvable
+    mirror falls through unchanged and fails config parse visibly."""
+    mirror_ref = payload.get("strategy_revision_id")
+    if not mirror_ref:
+        return payload
+    revision = await strat_repo.get_strategy_revision(session, str(mirror_ref))
+    if revision is None:
+        return payload
+    return dict(revision.payload)
 
 
 def _fail_run(
@@ -239,4 +330,4 @@ def _emit_failure_audit(session: AsyncSession, *, run: Any, code: RunFailureCode
     )
 
 
-__all__ = ["run_backtest"]
+__all__ = ["BarBatchStreamer", "run_backtest"]

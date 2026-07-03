@@ -3,19 +3,21 @@
 > **Amaç:** V1 kapandı (Stage 0–8 COMPLETE). Bu doküman post-V1 durumunu, aday iş listesini
 > ve temiz oturumda yapıştırılacak resume prompt'u içerir.
 
-## Durum (2026-07-03, Backtest Engine condition extensions — Slice C follow-up (b2) sonrası)
+## Durum (2026-07-03, two-package indicator-vs-indicator — Slice C follow-up sonrası)
 
 - **V1 ROADMAP COMPLETE + Auth/IdP + Parquet batch (Slice A) + Bar-replay engine (Slice B) +
   gerçek indikatör compute (Slice C) + `risk_based` sizing (a) + condition blocks (b) +
-  condition extensions (b2) landed.** Son iş condition extensions PR **#51** merged →
-  `main` = **`6913b0a`** (feature kodu `361df4c`; condition-blocks (b) kodu `8766fae`;
-  risk_based (a) kodu `43cee29`; Slice C kodu `671d227`; **git log ile doğrula** —
-  özet stale-by-default). Alembic head = **`0021_local_auth`** (Slice C + (a)/(b)/(b2)
-  migration'sız). Test tabanı: **916 yeşil** (892 + (b2)'de 24). Backtest track artık
-  **gerçek indikatör sinyalleriyle** giriş/çıkış üretiyor, `risk_based_sizing`'i modelliyor,
-  ve condition gate'leri **crosses/between/series-vs-series** + **condition-only yön sinyali**
-  (`indicator_output_plus_condition`) ile değerlendiriyor. Manifest
-  `ENGINE_VERSION = "backtest-engine-v2-condition-extensions"`.
+  condition extensions (b2) + two-package indicator-vs-indicator landed.** Son iş
+  two-package indicator-vs-indicator PR **#53** merged → `main` = **`093df44`** (feature kodu
+  `9087c2b`; (b2) kodu `361df4c`; condition-blocks (b) kodu `8766fae`; risk_based (a) kodu
+  `43cee29`; Slice C kodu `671d227`; **git log ile doğrula** — özet stale-by-default). Alembic
+  head = **`0021_local_auth`** (Slice C + (a)/(b)/(b2)/(#53) migration'sız). Test tabanı:
+  **928 yeşil** (916 + #53'te 12). Backtest track artık **gerçek indikatör sinyalleriyle**
+  giriş/çıkış üretiyor, `risk_based_sizing`'i modelliyor, condition gate'leri
+  **crosses/between/series-vs-series** + **condition-only yön sinyali**
+  (`indicator_output_plus_condition`) ile değerlendiriyor, ve bir condition'ın RHS'i **2. ayrı
+  pinlenmiş indikatör paketi** olabiliyor (`reference_package_ref` — fast-MA vs slow-MA crossover).
+  Manifest `ENGINE_VERSION = "backtest-engine-v2-indicator-vs-indicator"`.
 - **Test-infra notu:** integration testleri her testte şemayı drop/create eder — aynı lokal
   Postgres'i paylaşan İKİ oturum birbirini bozar. İzole DB kullan:
   `TEST_DATABASE_URL=postgresql+asyncpg://entropia:entropia@localhost:5432/entropia_auth`.
@@ -163,8 +165,12 @@
      **`formula_based`/Kelly hâlâ `unresolved`** (path-dependent istatistik; foundation'da belirsiz).
    - ~~**(b)** condition block'ları (threshold gate)~~ ✅ **LANDED (PR #49)** ·
      ~~**(b2)** condition genişletmeleri (crosses/between/series-vs-series + condition-only yön)~~
-     ✅ **LANDED (PR #51)**. **Kalan:** indicator-vs-indicator — İKİ AYRI paket karşılaştırması
-     (2. `package_ref` şema genişletmesi ister; tek-paket sınırı aşılır).
+     ✅ **LANDED (PR #51)** · ~~**indicator-vs-indicator — İKİ AYRI paket** (fast-MA vs slow-MA,
+     `reference_package_ref`)~~ ✅ **LANDED (PR #53)**. **Kalan condition işi:** (i) **>2 paket**
+     karşılaştırması (N-ary reference şeması ister, tek `reference_package_ref` değil); (ii)
+     **multi-timeframe reference** (2. paket bugün trigger'ın TF'inde `close`'dan hesaplanır —
+     farklı-TF RHS (c)'ye bağlı); (iii) **non-MA/RSI reference key** (reference paketi bugün
+     `DIRECTIONAL_KEYS` MA/RSI serisine çözülmeli; `ta.atr`/`ta.vwap` RHS (d)'ye bağlı).
    - **(c)** multi-timeframe — bar resampling (timeframe override şu an `unresolved`; en invaziv,
      bar-replay determinizmini etkiler).
    - **(d)** daha çok directional canonical key — `ta.atr`/`ta.vwap` bugün directional değil
@@ -179,6 +185,52 @@
    `dispatch_tool_call` status-key gölgelemesi (chip açıldı); retention-window auto-purge;
    data-queue auto-redelivery; SSE HTTP-streaming e2e; audit log-projection indexleri;
    ilk-Admin provisioning.
+
+## two-package indicator-vs-indicator — ✅ LANDED (PR #53, merged → main `093df44`)
+
+**İki AYRI pinlenmiş indikatör paketinin karşılaştırılması landed** (INF-12 Slice C follow-up).
+(b2)'nin dürüst sınırını açar: bir nested `ConditionBlock` artık **2. bir indikatör paketi**
+pinleyebilir; onun hesaplanan çıktı serisi condition'ın RHS'i olur — kanonik **fast-MA vs
+slow-MA crossover**. Önceden RHS yalnız sabit `threshold` veya tek-paket bounded `reference`
+serisi olabiliyordu. Geriye uyumlu: tüm tek-paket formlar (b2) ile birebir aynı; **engine
+DEĞİŞMEDİ** (reference serisi evaluator içinde kendi hesaplanır). run / manifest / result
+sözleşmeleri sabit. +12 test → **928**, review APPROVE 0/0, **migration YOK**.
+
+Reuse anchor'ları:
+- **`domain/strategy/config.py`** — `ConditionBlock` +`reference_package_ref: PackageReference | None`
+  (default `None`; Pydantic/JSONB, geriye uyumlu, **migration YOK**). Set ise sabit threshold /
+  bounded reference serisinden **önceliklidir**.
+- **`domain/backtest/indicators.py`** — `ConditionSpec` +`reference_key`/`reference_length`. YENİ
+  `_build_reference_indicator(key, length)` factory **`_MovingAverage`/`_Rsi`'yi reuse eder**
+  (`ta.rsi` → Wilder RSI, aksi MA — `BlockEvaluator`'ın compute seçimini yansıtır).
+  `ConditionEvaluator` +`_ref_indicator` slot, her bar **`close`'dan inline ilerletir**
+  (`.update(close)`); `_rhs_value` precedence: **reference indikatör değeri > bounded `reference`
+  serisi > sabit `threshold`**. Isınan reference indikatör `None` döner → **fail-closed** (LEVEL ve
+  CROSS), tıpkı eksik seri gibi.
+- **`application/queries/indicator_plan.py`** — YENİ `_resolve_reference_package(session, cond) →
+  (key, length, reason)`: 2. paketin revision'ını `_primary_directional_key(revision.dependency_snapshot)`
+  ile `DIRECTIONAL_KEYS` kanonik key'e + look-back'e (`_int_override(_REFERENCE_LENGTH_KEYS)` —
+  `reference_length`/`compare_length`/`reference_len` — yoksa `default_length(key)`) çözer. 2. paketin
+  **gövdesi ÇALIŞTIRILMAZ.** `_resolve_condition` precedence: reference paketi → bounded reference →
+  threshold. **Fail-closed reason'lar:** `condition_reference_package_unresolved` (revision yok),
+  `condition_reference_no_series` (key computable `DIRECTIONAL_KEYS` MA/RSI serisi değil),
+  `condition_reference_package_on_range` (`cond.between` RANGE condition üstünde reference paketi =
+  misconfig; sessizce yutulmaz, yüzeye çıkar). Docstring dürüst-sınır güncellendi.
+- **`domain/backtest/manifest.py`** — `ENGINE_VERSION = "backtest-engine-v2-indicator-vs-indicator"`
+  (`execution_key` namespace shift — yeni RHS kaynağı sonucu değiştirir, stale condition-extensions
+  sonucu yeniden kullanılmaz; INF-04/INF-05). `apps/seed.py` DEĞİŞMEDİ (yeni RHS mevcut pinlenmiş
+  pakete biner; yeni `cond.*` resolver key yok).
+- **Testler (+12):** `tests/unit/test_backtest_indicator_vs_indicator.py` (+6: reference-pkg LEVEL/EDGE
+  compute, warm-up fail-closed, threshold'a precedence, RSI reference key, **flagship condition-only
+  fast(2)/slow(4) MA-cross → long entry**) + `tests/integration/test_condition_plan_resolution.py`
+  (+6: `_cblock`'a `reference_package_rev`/`reference_length` parametreleri; resolve + 3 fail-closed
+  yol + gerçek yayınlanmış 2-paket MA-cross e2e long entry).
+
+**Kalan condition işi (yeni dürüst sınır):** (i) **>2 paket** karşılaştırması (N-ary reference
+şeması ister, tek `reference_package_ref` yetmez); (ii) **multi-timeframe reference** (2. paket
+trigger TF'inde `close`'dan hesaplanıyor — farklı-TF RHS (c) multi-TF resampling'e bağlı);
+(iii) **non-MA/RSI reference key** (reference paketi `DIRECTIONAL_KEYS` MA/RSI serisine çözülmeli;
+`ta.atr`/`ta.vwap` RHS (d)'ye bağlı).
 
 ## (b2) condition extensions — ✅ LANDED (PR #51, merged → main `6913b0a`)
 
@@ -218,9 +270,9 @@ Reuse anchor'ları:
   between range, series-vs-series, condition_only yön + edge-fire) + `test_condition_plan_resolution.py`
   yeni fail-closed yollar; bir mevcut test repoint.
 
-**Kalan condition işi (dürüst sınır):** **indicator-vs-indicator — İKİ AYRI paket karşılaştırması**
-(ör. fast-MA vs slow-MA). Bugün yalnız tek-paket series-vs-series var; iki ayrı paket
-`ConditionBlock`'a 2. `package_ref` (şema genişletmesi) ister.
+**Kalan condition işi (dürüst sınır):** ~~indicator-vs-indicator — İKİ AYRI paket karşılaştırması
+(fast-MA vs slow-MA)~~ ✅ **LANDED (PR #53, yukarı bkz.)** — `reference_package_ref`. Şimdi kalan:
+>2 paket / multi-timeframe reference / non-MA-RSI reference key (yukarıdaki #53 bölümüne bkz.).
 
 ## (b) condition blocks — ✅ LANDED (PR #49, merged → main `6854e06`)
 
@@ -272,7 +324,7 @@ tarihsel referans** olarak duruyor.
 
 - Workflow KULLANMA — doğrudan yaz; YENİ dosya Bash heredoc (gate-free), mevcut dosya Edit 4-fact.
 - `cd backend && uv run ruff check . && uv run ruff format --check . && uv run mypy src` +
-  izole DB'de `uv run pytest --no-cov -q` (**916 yeşil kalmalı**); migration gerekirse
+  izole DB'de `uv run pytest --no-cov -q` (**928 yeşil kalmalı**); migration gerekirse
   `0022_*` (→0021) up/down/up + parity + L1 FK proof.
 - code-reviewer subagent → CRITICAL/HIGH **AMPİRİK DOĞRULA** (8a: 0; 8b: 2/2 GERÇEK; auth: 0;
   parquet: 1/1 GERÇEK; engine Slice B: 1 CRITICAL/1 GERÇEK — oran değişken, HER ZAMAN doğrula) →
@@ -286,51 +338,54 @@ tarihsel referans** olarak duruyor.
 ```
 Entropia — post-V1: V1 tamam + Auth/IdP (PR #38) + Parquet Slice A (PR #41) + Bar-replay
 engine Slice B (PR #43) + gerçek indikatör compute Slice C (PR #45) + risk_based sizing (a)
-(PR #47) + threshold condition blocks (b) (PR #49) + condition EXTENSIONS (b2) (PR #51) —
-HEPSİ MERGED. ÖNCE DOĞRULA (stale-by-default): git fetch && git log --oneline origin/main -4 &&
-gh pr list --state merged -L 4. main=6913b0a ((b2) kodu 361df4c; condition-blocks (b) 8766fae;
-risk_based (a) 43cee29; Slice C 671d227); alembic head 0021_local_auth (migration YOK). İzole DB:
+(PR #47) + threshold condition blocks (b) (PR #49) + condition EXTENSIONS (b2) (PR #51) +
+TWO-PACKAGE indicator-vs-indicator (PR #53) — HEPSİ MERGED (feature + kapanış docs dahil).
+ÖNCE DOĞRULA (stale-by-default): git fetch && git log --oneline origin/main -4 &&
+gh pr list --state merged -L 6. main=093df44 (#53 feature kodu 9087c2b; (b2) 361df4c;
+condition-blocks (b) 8766fae; risk_based (a) 43cee29; Slice C 671d227); alembic head
+0021_local_auth (migration YOK). İzole DB:
 TEST_DATABASE_URL=postgresql+asyncpg://entropia:entropia@localhost:5432/entropia_auth.
-Test tabanı 916; pytest --co --no-cov ile teyit et (bu projede dosya-başına ": N" basar → topla).
-ÖNCE docs/POST_V1_KICKOFF.md + docs/STAGE2_HANDOFF.md ("condition extensions (b2) landed (PR #51)" +
-"Next: remaining Slice C follow-ups") oku.
+Test tabanı 928; pytest --co --no-cov ile teyit et (bu projede dosya-başına ": N" basar → topla).
+ÖNCE docs/POST_V1_KICKOFF.md + docs/STAGE2_HANDOFF.md ("two-package indicator-vs-indicator landed
+(PR #53)" + "Next: remaining Slice C follow-ups") oku.
 
 SIRADAKİ İŞ (kullanıcıyla SEÇ): kalan Slice C follow-up'ları — hepsi indicators.py/
 indicator_plan.py/engine.py üstüne biner:
 - formula_based / Kelly sizing (hâlâ notional fallback + position_sizing_method_unsupported
   uyarısı; path-dependent istatistik — foundation'da temellendirilmesi gerekir).
-- indicator-vs-indicator: İKİ AYRI paket karşılaştırması (fast MA vs slow MA) — (b2)'nin dürüst
-  sınırı; ConditionBlock'a 2. package_ref (şema genişletmesi) ister. Bugün yalnız tek-paket
-  series-vs-series var.
 - (c) multi-timeframe bar resampling (timeframe override bugün unresolved; en invaziv,
-  bar-replay determinizmini etkiler).
-- (d) daha çok directional canonical key (ta.atr/ta.vwap bugün recognized-ama-non-directional).
+  bar-replay determinizmini etkiler; multi-TF condition reference'ını da açar).
+- (d) daha çok directional canonical key (ta.atr/ta.vwap bugün recognized-ama-non-directional;
+  reference paketi olarak da kullanılamıyorlar — DIRECTIONAL_KEYS şartı).
+- Kalan condition işi: >2 paket karşılaştırması (N-ary reference şeması) — tek reference_package_ref
+  bir fast-MA-vs-slow-MA çiftini çözer, üç+ paket ayrı iş.
 Diğer adaylar: frontend SSE/metrics/login, CP real candidate generation, capability aktivasyonları,
 deferred liste (ilk-Admin provisioning, summary["timeframe"] çözümü, retention auto-purge).
 
-REUSE ANCHOR'LARI (b2 dahil; kodu incele, tek satır özet):
-- domain/backtest/indicators.py — CONDITION_KEYS 5: cond.above/below (LEVEL), cond.crosses_above/below
-  (EDGE: prev on/under RHS → now strict over/under; _prev_source/_prev_rhs; warm-up None fail-closed),
-  cond.between (RANGE: strict lower<source<upper, non-directional). CROSS/RANGE_CONDITION_KEYS;
-  condition_direction() (crosses_above→long, crosses_below→short). ConditionSpec +lower/upper/reference
-  (threshold Optional); ConditionEvaluator._rhs_value (reference serisi VEYA sabit) → series-vs-series.
-  IndicatorSpec +condition_only: BlockEvaluator native _detect ATLAR, _conditions_satisfied gate'inin
-  YÜKSELEN EDGE'inde (_prev_gate) ateşler, yön _condition_only_direction (required cross ortak polaritesi),
-  block validity kadar tutulur, block.direction ile filtrelenir; current_signal condition_only'de
-  _active_dir döner. Ayrıca: pure/incremental Decimal TA (ta.sma/ema/rma/wma + ta.rsi), BUILTIN_ENTRY_MODEL.
-- application/queries/indicator_plan.py — _ACCEPTED_TRIGGERS += indicator_output_plus_condition;
-  _resolve_condition: between (lower/upper ZORUNLU + lower<upper → condition_bounds_missing/invalid),
-  reference (_reference_override → threshold OPSİYONEL). condition_only validasyonu:
-  _condition_only_direction_reason → tek cross polaritesi yoksa condition_only_no_directional_edge,
-  çelişki → condition_only_conflicting_direction (FAIL-CLOSED). DÜRÜST SINIR docstring'de: iki AYRI
-  paket 2. package_ref ister, kapsam dışı.
-- domain/backtest/manifest.py — ENGINE_VERSION=backtest-engine-v2-condition-extensions (execution_key ns).
-  apps/seed.py — _ESP_COND_RESOLVERS += cond.crosses_above/below (["series","float"]) +
-  cond.between (["series","float","float"]).
+REUSE ANCHOR'LARI (#53 two-package; kodu incele, tek satır özet). İKİ AYRI paket karşılaştırması
+(fast-MA vs slow-MA crossover); (b2)'nin dürüst sınırını açtı. Migration YOK (ConditionBlock JSONB'de
+opsiyonel alan). Engine DEĞİŞMEDİ (reference serisi evaluator içinde self-compute):
+- domain/strategy/config.py — ConditionBlock +reference_package_ref: PackageReference | None (opsiyonel,
+  default None; set ise RHS = 2. paketin serisi; sabit threshold / bounded reference'tan öncelikli).
+- domain/backtest/indicators.py — ConditionSpec +reference_key/+reference_length; _build_reference_indicator
+  factory (_MovingAverage/_Rsi reuse; ta.rsi→Rsi, aksi MA). ConditionEvaluator +_ref_indicator slot,
+  her bar close'dan .update() ile ilerler; _rhs_value precedence: reference indikatör > bounded reference
+  serisi > sabit threshold; warm-up None → FAIL-CLOSED (LEVEL ve CROSS).
+- application/queries/indicator_plan.py — _resolve_reference_package(session,cond)→(key,length,reason):
+  2. paket revision'ını _primary_directional_key(dependency_snapshot) DIRECTIONAL_KEYS key'e +
+  look-back'e (_int_override(_REFERENCE_LENGTH_KEYS) or default_length) çözer; gövde ÇALIŞTIRILMAZ.
+  _resolve_condition precedence + fail-closed: condition_reference_package_unresolved / _no_series /
+  _package_on_range (between üstünde reference paketi misconfig). Docstring dürüst sınır güncel.
+- domain/backtest/manifest.py — ENGINE_VERSION=backtest-engine-v2-indicator-vs-indicator (execution_key ns
+  shift). apps/seed.py DEĞİŞMEDİ (yeni RHS mevcut pinlenmiş pakete biner; yeni cond.* key yok).
+- Testler (+12): tests/unit/test_backtest_indicator_vs_indicator.py (+6: reference-pkg LEVEL/EDGE, warm-up
+  fail-closed, threshold'a precedence, rsi-key, FLAGSHIP condition_only fast(2)/slow(4) MA-cross → long) +
+  tests/integration/test_condition_plan_resolution.py (+6: _cblock'a reference_package_rev/reference_length;
+  resolve + 3 fail-closed yol + gerçek 2-paket MA-cross e2e long entry).
 
 YÖNTEM: Workflow KULLANMA; YENİ dosya heredoc (gate-free), mevcut dosya Edit 4-fact (GateGuard:
 ilk Bash + dosya-başına-ilk-edit gate); cd backend; ruff+format+mypy+pytest (izole DB:
-...entropia_auth; 916 yeşil kalmalı); migration gerekirse 0022_* (→0021) up/down/up + parity +
+...entropia_auth; 928 yeşil kalmalı); migration gerekirse 0022_* (→0021) up/down/up + parity +
 L1 FK proof; code-reviewer → CRITICAL/HIGH AMPİRİK DOĞRULA → commit (conventional, attribution YOK)
 → PR → gh pr checks --watch → merge KULLANICIDA. Türkçe, MALİYET BİLİNÇLİ. Kapanışta: handoff +
 kickoff + CLAUDE.md + memory (ecc knowledge graph + claude-mem).

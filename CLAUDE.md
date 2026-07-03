@@ -74,10 +74,29 @@ Before stopping a working session, produce **ALL** of the following:
   real built-in indicator compute (INF-12 Slice C, PR #45) + `risk_based`
   position sizing (INF-12 Slice C follow-up a, PR #47) + threshold condition
   blocks (INF-12 Slice C follow-up b, PR #49) + condition extensions
-  (INF-12 Slice C follow-up b2, PR #51)**;
-  `main` after PR #51 = **`6913b0a`** (condition-extensions code `361df4c`; condition-blocks code `8766fae`; risk_based code `43cee29`; Slice C code `671d227`);
+  (INF-12 Slice C follow-up b2, PR #51) + two-package indicator-vs-indicator
+  (INF-12 Slice C follow-up, PR #53)**;
+  `main` after PR #53 = **`093df44`** (indicator-vs-indicator code `9087c2b`; condition-extensions code `361df4c`; condition-blocks code `8766fae`; risk_based code `43cee29`; Slice C code `671d227`);
   alembic head = **`0021_local_auth`** (`human_credentials` + `auth_sessions`;
-  Slices A/B/C + follow-ups (a)/(b)/(b2) need no migration). **916 tests green** (892 + 24 condition extensions).
+  Slices A/B/C + follow-ups (a)/(b)/(b2)/(#53) need no migration). **928 tests green** (916 + 12 two-package indicator-vs-indicator).
+  Follow-up — two-package indicator-vs-indicator (PR #53): a nested `ConditionBlock`
+  can pin a SECOND indicator package whose computed output series is the condition RHS
+  (the canonical fast-MA vs slow-MA crossover; opens the (b2) honest boundary). Previously
+  the RHS was only a constant `threshold` or a bounded single-package `reference` series.
+  `domain/strategy/config.py` `ConditionBlock` +`reference_package_ref: PackageReference | None`
+  (optional Pydantic/JSONB, no migration; precedence over threshold/bounded reference).
+  `domain/backtest/indicators.py` `ConditionSpec` +`reference_key`/`reference_length`; new
+  `_build_reference_indicator` factory (reuses `_MovingAverage`/`_Rsi`; RSI for `ta.rsi`,
+  else MA); `ConditionEvaluator._ref_indicator` advanced inline from `close` each bar,
+  `_rhs_value` precedence reference-indicator > bounded `reference` > constant `threshold`
+  (warm-up `None` fails closed, LEVEL and CROSS). `indicator_plan.py::_resolve_reference_package`
+  dereferences the 2nd pinned package to a `DIRECTIONAL_KEYS` key + look-back
+  (`_REFERENCE_LENGTH_KEYS` else `default_length`; body NOT executed); fail-closed reasons
+  `condition_reference_package_unresolved`/`_no_series`/`_package_on_range` (reference pkg on a
+  `cond.between` RANGE = misconfig). `ENGINE_VERSION` → `backtest-engine-v2-indicator-vs-indicator`
+  (execution_key ns shift); ENGINE + `apps/seed.py` unchanged (RHS self-computed in the evaluator).
+  +12 tests (`test_backtest_indicator_vs_indicator.py` +6 incl. flagship condition-only fast/slow
+  MA-cross → long; `test_condition_plan_resolution.py` +6); review APPROVE 0 CRITICAL/HIGH; no migration.
   Follow-up (b) — condition blocks (PR #49): THRESHOLD-ONLY nested condition GATE for
   the bar-replay engine. `domain/backtest/indicators.py` gains `ConditionSpec` +
   `ConditionEvaluator` (per-bar threshold check on a bar price field OR the parent
@@ -177,11 +196,14 @@ Before stopping a working session, produce **ALL** of the following:
   building on `indicators.py`/`indicator_plan.py`/`engine.py` — (a) `risk_based`
   sizing **✅ LANDED (PR #47)** — `formula_based`/Kelly still honest `unresolved`
   (path-dependent statistics, ungrounded in the foundation), (b) condition blocks
-  **✅ LANDED (PR #49)** + (b2) condition extensions **✅ LANDED (PR #51)** —
-  crosses/between/series-vs-series + condition-only directional (`indicator_output_plus_condition`)
-  all resolved; remaining condition work: **indicator-vs-indicator across two SEPARATE packages**
-  (fast-MA vs slow-MA — needs a 2nd `package_ref` on `ConditionBlock`, a schema extension;
-  today only single-package series-vs-series), (c) multi-timeframe bar resampling (timeframe override
+  **✅ LANDED (PR #49)** + (b2) condition extensions **✅ LANDED (PR #51)** +
+  two-package indicator-vs-indicator **✅ LANDED (PR #53)** — crosses/between/series-vs-series
+  + condition-only directional + `reference_package_ref` (fast-MA vs slow-MA) all resolved;
+  remaining condition work: **(i) >2-package comparison** (needs an N-ary reference schema, not
+  just one `reference_package_ref`), **(ii) a multi-timeframe reference** (the 2nd package is
+  computed from `close` on the trigger TF — a different-TF RHS depends on (c)), **(iii) non-MA/RSI
+  reference keys** (reference package must resolve to a `DIRECTIONAL_KEYS` MA/RSI series today, so
+  `ta.atr`/`ta.vwap` as RHS is blocked by (d)), (c) multi-timeframe bar resampling (timeframe override
   now `unresolved`; most invasive, affects bar-replay determinism), (d) more directional
   canonical keys (`ta.atr`/`ta.vwap` recognized-but-non-directional today). Other candidates (order in
   `docs/POST_V1_KICKOFF.md`): frontend SSE/metrics/login integration, CP real

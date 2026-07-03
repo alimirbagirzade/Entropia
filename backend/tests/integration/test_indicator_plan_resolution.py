@@ -123,9 +123,11 @@ async def test_non_directional_key_is_left_unresolved(session) -> None:
 
 
 async def test_non_native_trigger_source_is_deferred(session) -> None:
+    # ``indicator_native_trigger_plus_condition`` now resolves (post-V1 (b) gate); the
+    # condition-only signal source stays deferred until a later slice.
     revision_id = await _indicator_package(session, "ta.rsi")
     plan = await resolve_indicator_plan(
-        session, _config(revision_id, trigger="indicator_native_trigger_plus_condition")
+        session, _config(revision_id, trigger="indicator_output_plus_condition")
     )
     assert plan.has_entry is False
     assert plan.unresolved[0].startswith("entry:blk_1:trigger_source_deferred")

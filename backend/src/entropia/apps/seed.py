@@ -78,7 +78,7 @@ _RATIONALE_FAMILIES: tuple[tuple[str, list[str], list[str]], ...] = (
 )
 
 # The 7 canonical TA resolvers seeded as trusted-active ESPs (doc 09 §3.2, DC7).
-# Each: (canonical key, ordered parameter types). All return a numeric series.
+# Each: (display name, canonical key, ordered parameter types). All return a numeric series.
 _ESP_TA_RESOLVERS: tuple[tuple[str, str, list[str]], ...] = (
     ("ESP_TA_SMA", "ta.sma", ["series", "int"]),
     ("ESP_TA_EMA", "ta.ema", ["series", "int"]),
@@ -87,6 +87,14 @@ _ESP_TA_RESOLVERS: tuple[tuple[str, str, list[str]], ...] = (
     ("ESP_TA_RSI", "ta.rsi", ["series", "int"]),
     ("ESP_TA_WMA", "ta.wma", ["series", "int"]),
     ("ESP_TA_VWAP", "ta.vwap", ["series"]),
+)
+
+# The canonical threshold-condition resolvers (post-V1 (b) — condition blocks). Each
+# compares a source series against a constant threshold and returns a boolean gate.
+# Real condition packages pin one of these ``cond.*`` keys in their dependency snapshot.
+_ESP_COND_RESOLVERS: tuple[tuple[str, str, list[str]], ...] = (
+    ("ESP_COND_ABOVE", "cond.above", ["series", "float"]),
+    ("ESP_COND_BELOW", "cond.below", ["series", "float"]),
 )
 
 
@@ -184,57 +192,73 @@ async def _seed_demo_research_dataset(
 
 
 async def _seed_esp_ta_resolvers(session: object, log: object) -> None:
-    """Seed the 7 canonical TA resolvers as trusted-active ESPs (doc 09 §3.2, DC7).
+    """Seed the canonical TA + threshold-condition resolvers as trusted-active ESPs.
 
-    Behind the ``SEED_ESP_TA=1`` flag. The admin principal (FK target) is already
-    flushed above. Each resolver gets a System-owned ESP package (passed +
-    approved revision), a resolver contract and a TRUSTED_ACTIVE registry row so
-    Pre-Check can resolve it. Idempotent: skips a key that already has a registry
-    entry. Uses the FK-safe async ``create_package`` (root flushed before children).
+    Behind the ``SEED_ESP_TA=1`` flag (doc 09 §3.2, DC7). The admin principal (FK
+    target) is already flushed above. Each resolver gets a System-owned ESP package
+    (passed + approved revision), a resolver contract and a TRUSTED_ACTIVE registry
+    row so Pre-Check can resolve it. Idempotent per key. The TA resolvers return a
+    numeric series; the ``cond.*`` threshold resolvers return a boolean gate.
     """
-    for display_name, canonical_key, param_types in _ESP_TA_RESOLVERS:
-        existing = await esp_repo.get_registry_by_key(session, canonical_key)  # type: ignore[arg-type]
-        if existing is not None:
-            continue
-        signature = {
-            "params": [{"name": f"arg{i}", "type": t} for i, t in enumerate(param_types)],
-            "return": "series",
-        }
-        contract_payload = {"resolver_key": canonical_key, "signature": signature}
-        _root, _detail, revision = await pkg_repo.create_package(
-            session,  # type: ignore[arg-type]
-            owner_principal_id=DEFAULT_ADMIN_ID,
-            created_by_principal_id=DEFAULT_ADMIN_ID,
-            package_kind=PackageKind.EMBEDDED_SYSTEM,
-            input_contract=contract_payload,
-            output_contract={"return": "series"},
-            dependency_snapshot={},
-            visibility_scope=VisibilityScope.SYSTEM,
-            validation_state=PackageValidationState.PASSED,
-            approval_state=ApprovalState.APPROVED,
-            change_note=f"Seed canonical TA resolver {display_name}.",
-        )
-        esp_repo.add_resolver_contract(
-            session,  # type: ignore[arg-type]
-            entity_id=_root.entity_id,
-            revision_id=revision.revision_id,
-            canonical_key=canonical_key,
-            signature=signature,
-            runtime_adapter=RuntimeAdapter.PINE_V5,
-            timing_semantics="closed_bar_only",
-            repaint=False,
-            evidence={"test_vectors": "seed", "review": "passed"},
-        )
-        esp_repo.upsert_registry_entry(
-            session,  # type: ignore[arg-type]
-            canonical_key=canonical_key,
-            package_entity_id=_root.entity_id,
-            runtime_adapter=RuntimeAdapter.PINE_V5,
-            trust_state=ResolverTrustState.TRUSTED_ACTIVE,
-            trusted_active_revision_id=revision.revision_id,
-            updated_by_principal_id=DEFAULT_ADMIN_ID,
-        )
-        log.info("seed.esp_ta_created", canonical_key=canonical_key)  # type: ignore[attr-defined]
+    for resolver in _ESP_TA_RESOLVERS:
+        await _seed_esp_resolver(session, log, spec=resolver, return_type="series")
+    for resolver in _ESP_COND_RESOLVERS:
+        await _seed_esp_resolver(session, log, spec=resolver, return_type="boolean")
+
+
+async def _seed_esp_resolver(
+    session: object,
+    log: object,
+    *,
+    spec: tuple[str, str, list[str]],
+    return_type: str,
+) -> None:
+    """Seed ONE canonical resolver (idempotent; skips a key already in the registry).
+
+    Uses the FK-safe async ``create_package`` (root flushed before children)."""
+    display_name, canonical_key, param_types = spec
+    existing = await esp_repo.get_registry_by_key(session, canonical_key)  # type: ignore[arg-type]
+    if existing is not None:
+        return
+    signature = {
+        "params": [{"name": f"arg{i}", "type": t} for i, t in enumerate(param_types)],
+        "return": return_type,
+    }
+    contract_payload = {"resolver_key": canonical_key, "signature": signature}
+    _root, _detail, revision = await pkg_repo.create_package(
+        session,  # type: ignore[arg-type]
+        owner_principal_id=DEFAULT_ADMIN_ID,
+        created_by_principal_id=DEFAULT_ADMIN_ID,
+        package_kind=PackageKind.EMBEDDED_SYSTEM,
+        input_contract=contract_payload,
+        output_contract={"return": return_type},
+        dependency_snapshot={},
+        visibility_scope=VisibilityScope.SYSTEM,
+        validation_state=PackageValidationState.PASSED,
+        approval_state=ApprovalState.APPROVED,
+        change_note=f"Seed canonical resolver {display_name}.",
+    )
+    esp_repo.add_resolver_contract(
+        session,  # type: ignore[arg-type]
+        entity_id=_root.entity_id,
+        revision_id=revision.revision_id,
+        canonical_key=canonical_key,
+        signature=signature,
+        runtime_adapter=RuntimeAdapter.PINE_V5,
+        timing_semantics="closed_bar_only",
+        repaint=False,
+        evidence={"test_vectors": "seed", "review": "passed"},
+    )
+    esp_repo.upsert_registry_entry(
+        session,  # type: ignore[arg-type]
+        canonical_key=canonical_key,
+        package_entity_id=_root.entity_id,
+        runtime_adapter=RuntimeAdapter.PINE_V5,
+        trust_state=ResolverTrustState.TRUSTED_ACTIVE,
+        trusted_active_revision_id=revision.revision_id,
+        updated_by_principal_id=DEFAULT_ADMIN_ID,
+    )
+    log.info("seed.esp_resolver_created", canonical_key=canonical_key)  # type: ignore[attr-defined]
 
 
 async def _seed_rationale_families(session: object, log: object) -> None:

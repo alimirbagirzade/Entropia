@@ -408,6 +408,15 @@ class ConditionBlock(BaseModel):
         "until_opposite_signal",
     ] = Field(default="3_candles", description="Condition validity window")
 
+    reference_package_ref: PackageReference | None = Field(
+        default=None,
+        description=(
+            "Optional 2nd pinned INDICATOR package whose output series is the condition's "
+            "right-hand side (two-package indicator-vs-indicator, e.g. fast-MA vs slow-MA). "
+            "When set it takes precedence over a constant threshold / bounded reference series."
+        ),
+    )
+
     parameter_overrides: dict[str, Any] | None = Field(
         default=None, description="Package parameter overrides"
     )

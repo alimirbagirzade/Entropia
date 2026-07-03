@@ -56,10 +56,11 @@ RECOGNIZED_KEYS: frozenset[str] = DIRECTIONAL_KEYS | NON_DIRECTIONAL_KEYS
 #   * ``cond.crosses_above`` / ``cond.crosses_below`` — EDGE: source crosses the RHS
 #     this bar (prev on/under -> now strictly over, and vice versa). Directional.
 #   * ``cond.between`` — RANGE: source strictly within (lower, upper). Non-directional.
-# The RHS is a strategy-supplied constant ``threshold`` OR, when a ``reference`` series
-# is configured, another available series (a bar price field or the parent block's
-# ``indicator_output``) — the bounded "indicator-vs-indicator" form expressible without
-# a second pinned package. Aligned to the ESP seed (apps/seed.py ``_ESP_COND_RESOLVERS``).
+# The RHS is (in precedence order): a second separately-pinned INDICATOR package's output
+# series (``reference_key`` — the two-package indicator-vs-indicator form, e.g. fast-MA vs
+# slow-MA), else a bounded ``reference`` series (a bar price field or the parent block's
+# ``indicator_output``), else a strategy-supplied constant ``threshold``. Aligned to the
+# ESP seed (apps/seed.py ``_ESP_COND_RESOLVERS``).
 _COND_ABOVE = "cond.above"
 _COND_BELOW = "cond.below"
 _COND_CROSSES_ABOVE = "cond.crosses_above"
@@ -114,9 +115,10 @@ class ConditionSpec:
 
     Pure data (no DB, no package body). ``canonical_key`` is a ``cond.*`` comparator,
     ``source`` names the series compared (a bar price field or the parent block's
-    ``indicator_output``). The right-hand side is the constant ``threshold`` OR — when
-    ``reference`` is set — another series (bounded indicator-vs-indicator). ``cond.between``
-    ignores both and uses the ``lower``/``upper`` bounds instead."""
+    ``indicator_output``). The right-hand side is (in precedence order) a second pinned
+    indicator's series (``reference_key`` — two-package indicator-vs-indicator), else a
+    bounded ``reference`` series, else the constant ``threshold``. ``cond.between`` ignores
+    the RHS and uses the ``lower``/``upper`` bounds instead."""
 
     condition_block_id: str
     canonical_key: str  # one of CONDITION_KEYS
@@ -126,7 +128,12 @@ class ConditionSpec:
     validity: str
     lower: Decimal | None = None  # cond.between lower bound (exclusive)
     upper: Decimal | None = None  # cond.between upper bound (exclusive)
-    reference: str | None = None  # series RHS instead of the constant threshold
+    reference: str | None = None  # bounded series RHS (price field / parent indicator_output)
+    # Two-package indicator-vs-indicator: a separately-pinned INDICATOR package computed
+    # inline as the RHS series (its canonical key + look-back). Takes precedence over
+    # ``reference`` and ``threshold``; ``None`` for the single-package forms.
+    reference_key: str | None = None  # 2nd-package RHS indicator (a DIRECTIONAL_KEYS key)
+    reference_length: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -296,6 +303,15 @@ class _Rsi:
         return self.value
 
 
+def _build_reference_indicator(key: str, length: int) -> _MovingAverage | _Rsi:
+    """A second computed series (a separately-pinned indicator package) used as a
+    condition's RHS — the two-package indicator-vs-indicator form. Mirrors the
+    ``BlockEvaluator`` compute choice: Wilder RSI for ``ta.rsi``, else a moving average."""
+    if key == "ta.rsi":
+        return _Rsi(length)
+    return _MovingAverage(key, length)
+
+
 class ConditionEvaluator:
     """Stateful per-condition comparator over the streamed bars.
 
@@ -307,7 +323,7 @@ class ConditionEvaluator:
     validity window; ``until_opposite_signal`` is open-ended and clears the moment the
     check fails. The parent ``BlockEvaluator`` reads ``satisfied``."""
 
-    __slots__ = ("_active", "_active_left", "_prev_rhs", "_prev_source", "_spec")
+    __slots__ = ("_active", "_active_left", "_prev_rhs", "_prev_source", "_ref_indicator", "_spec")
 
     def __init__(self, spec: ConditionSpec) -> None:
         self._spec = spec
@@ -315,6 +331,16 @@ class ConditionEvaluator:
         self._active_left: int | None = None  # bars remaining (None = until it fails)
         self._prev_source: Decimal | None = None  # last bar's source (for cross edges)
         self._prev_rhs: Decimal | None = None  # last bar's RHS (constant or reference)
+        # A second, separately-pinned indicator computed inline as the RHS series (the
+        # two-package indicator-vs-indicator form). It warms up over its own length; a
+        # ``None`` value fails the check closed just like any missing series.
+        self._ref_indicator: _MovingAverage | _Rsi | None = (
+            _build_reference_indicator(
+                spec.reference_key, spec.reference_length or default_length(spec.reference_key)
+            )
+            if spec.reference_key is not None
+            else None
+        )
 
     def update(
         self,
@@ -332,6 +358,9 @@ class ConditionEvaluator:
             if self._active_left <= 0:
                 self._active = False
                 self._active_left = None
+        # Advance the reference indicator (if any) so its RHS value is as-of this bar.
+        if self._ref_indicator is not None:
+            self._ref_indicator.update(close)
         source = self._series_value(
             self._spec.source, close, high, low, open_price, indicator_value
         )
@@ -374,7 +403,12 @@ class ConditionEvaluator:
         open_price: Decimal,
         indicator_value: Decimal | None,
     ) -> Decimal | None:
-        """The comparator's right-hand side: a ``reference`` series, else the constant."""
+        """The comparator's right-hand side, in precedence order: a second pinned
+        indicator's series (two-package), else a bounded ``reference`` series, else the
+        constant ``threshold``. A warming-up reference indicator returns ``None`` and
+        fails the check closed."""
+        if self._ref_indicator is not None:
+            return self._ref_indicator.value
         reference = self._spec.reference
         if reference is not None:
             return self._series_value(reference, close, high, low, open_price, indicator_value)

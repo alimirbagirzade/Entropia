@@ -43,6 +43,7 @@ from entropia.application.queries import backtest_run as backtest_query
 from entropia.application.queries import mainboard as mb_query
 from entropia.application.queries import metric_profile as mp_query
 from entropia.application.queries import results_history as history_query
+from entropia.domain.backtest.indicators import BUILTIN_ENTRY_MODEL
 from entropia.domain.create_package.enums import (
     CreatePackageState,
     CreationMode,
@@ -74,6 +75,7 @@ from entropia.infrastructure.postgres.models import (
     AuditEvent,
     BacktestResult,
     BacktestRun,
+    DiagnosticArtifact,
     MetricDefinition,
     OutboxEvent,
     Principal,
@@ -569,6 +571,15 @@ async def test_full_pipeline_run_history_metrics_trash_restore(session) -> None:
     await session.commit()
     assert out["state"] == "succeeded"
     result_id = out["result_id"]
+
+    # Slice C: the pinned RSI indicator package drove REAL built-in indicator compute
+    # (native trigger), not the breakout proxy — proven end-to-end through the job.
+    diag = (
+        await session.execute(
+            select(DiagnosticArtifact).where(DiagnosticArtifact.result_id == result_id)
+        )
+    ).scalar_one()
+    assert diag.content["entry_model"] == BUILTIN_ENTRY_MODEL
 
     # The manifest pins the EXACT mirror revision that the ingest chain produced.
     manifest = await bt_repo.get_manifest_by_run(session, admit["run_id"])

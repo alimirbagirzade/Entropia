@@ -322,13 +322,22 @@ No migration (alembic head stays `0021_local_auth`). +37 tests → **859 total**
 - **Tests (+37):** `tests/unit/test_backtest_indicators.py` (**+24** — MA/RSI reference values + invariants, native triggers, validity windows, aggregation), `tests/unit/test_backtest_engine_indicator_plan.py` (**+7** — real `entry_model`, determinism across batch sizes, exit-on-opposite, proxy fallback + unresolved warnings), `tests/integration/test_indicator_plan_resolution.py` (**+6** — real `package_revision` rows incl. every unresolved path), `test_e2e_pipeline.py` (published RSI package drives real compute `entry_model == BUILTIN_ENTRY_MODEL` end-to-end).
 - **Verify:** 859 green on an isolated DB; ruff / format / mypy clean; **no migration** (head stays `0021_local_auth`). Merged via green CI (backend lint/type/integration on real Postgres + alembic). Contract-preserving compute change (run/manifest/result fixed) — no blocking review finding carried into this handoff.
 
-## Next: post-V1 (continued) — Slice C follow-ups
+## Post-V1 — Backtest Engine `risk_based` sizing (INF-12, Slice C follow-up a) ✅ landed (PR #47, merged → main `4b4d1c6`)
 
-**V1 COMPLETE (Stages 0–8, docs 01–22) + Auth/IdP + Parquet Slice A + Backtest Engine Slice B + real indicator compute Slice C landed (859 tests).** Chosen next slice: **Slice C follow-ups** — the natural continuation of the backtest track, building directly on `indicators.py` / `indicator_plan.py` / `engine.py`:
+No migration (alembic head stays `0021_local_auth`). +5 tests → **864 total**. First of the Slice C follow-ups: `risk_based_sizing` is now really modelled inside `_position_size` (it previously fell back to notional + an `unsupported` warning). **Only** the engine's position-sizing branch changes — run / manifest / result contracts stay fixed; the manifest bumps `ENGINE_VERSION` because sized output changed.
 
-- `risk_based` / `formula_based` sizing — implement inside `_position_size` (currently falls back to notional + a `position_sizing_method_unsupported:<method>` warning). Smallest, most isolated.
-- Condition blocks + `*_plus_condition` triggers — currently `unresolved`; extend `SignalRule` / `BlockEvaluator` to evaluate the condition leg.
-- Multi-timeframe — bar resampling (timeframe override is currently `unresolved`).
-- More directional canonical keys — `ta.atr` / `ta.vwap` are recognized-but-non-directional today.
+- **Engine** — `domain/backtest/engine.py`: `_position_size` gains a `risk_based` branch — `size = max(equity, 0) * risk% / 100 / stop_loss_point` (deterministic, **independent of `entry_price`**, non-negative clamp — a negative size would invert the PnL sign of every subsequent trade, the earlier review CRITICAL). New helper `_sizing_is_honored(config)`: explicit `base_position_size` **and** `risk_based_sizing` **carrying a `risk_based` sub-config** are honored; `formula_based_sizing` **and** a `risk_based` request **without** its sub-config fall back to notional + the L4 `position_sizing_method_unsupported:<method>` warning. The diagnostics warning now keys off `_sizing_is_honored(config)` rather than `method != base_position_size`.
+- **Manifest** — `domain/backtest/manifest.py`: `ENGINE_VERSION` bump `backtest-engine-v2-indicator-compute` → **`backtest-engine-v2-risk-based-sizing`**. Rationale: `risk_based` output now differs, so the version must shift the `execution_key` namespace (INF-04 idempotent reuse / INF-05 reproducibility) — this prevents reusing a stale notional-sized result cached under the old version for the same composition.
+- **Tests (+5)** — `tests/unit/test_backtest_engine.py`: `_config` fixture extended with `risk_pct` / `stop_point`; +5 tests (risk-formula reference value, entry-price independence, bust clamp → 0, honored/unsupported warning in both directions); 2 pre-existing tests repointed to `formula_based_sizing` (still the honest unsupported path).
+- **Verify:** 864 green on an isolated DB; ruff / format / mypy clean; **no migration** (head stays `0021_local_auth`). **Review: code-reviewer APPROVE — 0 CRITICAL / 0 HIGH** (contract-preserving sizing change; the negative-size hazard is covered by the `max(equity, 0)` clamp + bust test).
+
+## Next: post-V1 (continued) — remaining Slice C follow-ups
+
+**V1 COMPLETE (Stages 0–8, docs 01–22) + Auth/IdP + Parquet Slice A + Backtest Engine Slice B + real indicator compute Slice C + `risk_based` sizing (follow-up a) landed (864 tests).** Remaining **Slice C follow-ups** — building directly on `indicators.py` / `indicator_plan.py` / `engine.py`:
+
+- ~~`risk_based` sizing~~ ✅ **LANDED (PR #47)**. **`formula_based` / Kelly still `unresolved`** — path-dependent statistics, not yet grounded in the foundation (still honest notional fallback + `position_sizing_method_unsupported` warning).
+- **(b)** Condition blocks + `*_plus_condition` triggers — currently `unresolved`; extend `SignalRule` / `BlockEvaluator` to evaluate the condition leg (touches indicator compute).
+- **(c)** Multi-timeframe — bar resampling (timeframe override is currently `unresolved`; most invasive, affects bar-replay determinism).
+- **(d)** More directional canonical keys — `ta.atr` / `ta.vwap` are recognized-but-non-directional today (need band/channel interpretation).
 
 Other candidates (priority per `docs/POST_V1_KICKOFF.md`): frontend SSE/metrics/login integration, CP real candidate generation, capability activations, deferred list (incl. `summary["timeframe"]` resolution from market-revision metadata, first-Admin provisioning). See **`docs/POST_V1_KICKOFF.md`** for reuse anchors and the paste-ready resume prompt.

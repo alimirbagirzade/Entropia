@@ -22,6 +22,7 @@ Stage 8 acceptance proven here:
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from typing import Any
 
 import pytest
@@ -385,6 +386,47 @@ def _strategy_payload(
     }
 
 
+def _e2e_bars(_source: Any) -> Iterator[list[dict[str, Any]]]:
+    """Deterministic OHLCV bars for the worker's bar-replay (S3-free injection).
+
+    Replaces the real S3-backed ``iter_bar_batches`` at the worker seam so the flow
+    exercises resolve -> replay -> materialize without object storage. 20 flat bars
+    fill the breakout window, then an upside breakout and a stop-out yield one real,
+    reproducible trade."""
+    bars: list[dict[str, Any]] = [
+        {
+            "timestamp": f"2024-02-{i + 1:02d}T00:00:00Z",
+            "open": "100",
+            "high": "100",
+            "low": "100",
+            "close": "100",
+            "volume": "5",
+        }
+        for i in range(20)
+    ]
+    bars.append(
+        {
+            "timestamp": "2024-02-21T00:00:00Z",
+            "open": "100",
+            "high": "103",
+            "low": "100",
+            "close": "103",
+            "volume": "5",
+        }
+    )
+    bars.append(
+        {
+            "timestamp": "2024-02-22T00:00:00Z",
+            "open": "103",
+            "high": "103",
+            "low": "95",
+            "close": "98",
+            "volume": "5",
+        }
+    )
+    yield bars
+
+
 async def _ready_pipeline(session) -> dict[str, Any]:
     """Run the whole ingest -> publish -> compose -> allocate chain; return every
     pinned identifier plus the composition ready to RUN."""
@@ -392,6 +434,19 @@ async def _ready_pipeline(session) -> dict[str, Any]:
     trail = await _trail(session)
 
     market = await _approved_market(session)
+    # Slice B: the bar-replay worker resolves the strategy's pinned market revision
+    # to a processed Parquet asset (INF-12). Seed that metadata row so resolution
+    # succeeds; the bar bytes themselves are injected via ``_e2e_bars``.
+    md_repo.add_processed_asset(
+        session,
+        entity_id=market["root_id"],
+        object_key=f"market/processed/{market['root_id']}/e2e.parquet",
+        content_digest="e2e-bars",
+        size_bytes=4096,
+        revision_id=market["revision_id"],
+        row_count=22,
+    )
+    await session.flush()
     research_revision_id = await _approved_research(session, market["root_id"])
     await session.commit()
     after_ingest = await _trail(session)
@@ -510,7 +565,7 @@ async def test_full_pipeline_run_history_metrics_trash_restore(session) -> None:
     assert replay["run_id"] == admit["run_id"]
     assert await _count(session, BacktestRun) == 1
 
-    out = await run_backtest(session, admit["job_id"])
+    out = await run_backtest(session, admit["job_id"], stream_bars=_e2e_bars)
     await session.commit()
     assert out["state"] == "succeeded"
     result_id = out["result_id"]
@@ -596,7 +651,7 @@ async def test_failed_run_yields_no_result_and_no_history(session) -> None:
     manifest.manifest = doc
     await session.commit()
 
-    out = await run_backtest(session, admit["job_id"])
+    out = await run_backtest(session, admit["job_id"], stream_bars=_e2e_bars)
     await session.commit()
 
     assert out["state"] == "failed"
@@ -618,7 +673,7 @@ async def test_market_successor_never_leaks_and_rerun_is_reproducible(session) -
 
     first = await backtest_cmd.request_backtest_run(session, OWNER, composition_id=workspace_id)
     await session.commit()
-    out1 = await run_backtest(session, first["job_id"])
+    out1 = await run_backtest(session, first["job_id"], stream_bars=_e2e_bars)
     await session.commit()
     assert out1["state"] == "succeeded"
 
@@ -645,7 +700,7 @@ async def test_market_successor_never_leaks_and_rerun_is_reproducible(session) -
     # composition pins the SAME execution content (no 'latest' resolution).
     second = await backtest_cmd.request_backtest_run(session, OWNER, composition_id=workspace_id)
     await session.commit()
-    out2 = await run_backtest(session, second["job_id"])
+    out2 = await run_backtest(session, second["job_id"], stream_bars=_e2e_bars)
     await session.commit()
     assert out2["state"] == "succeeded"
     assert second["run_id"] != first["run_id"]

@@ -21,6 +21,7 @@ Stage 8 acceptance proven here:
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from typing import Any
 
 import pytest
@@ -113,11 +114,62 @@ async def _approved_market(session) -> dict[str, str]:
         session, ADMIN, entity_id=root.entity_id, revision_id=revision.revision_id
     )
     await session.flush()
+    # Slice B: seed the processed Parquet asset the bar-replay worker resolves for
+    # this revision (INF-12); the bar bytes are injected via ``_e2e_bars``.
+    md_repo.add_processed_asset(
+        session,
+        entity_id=root.entity_id,
+        object_key=f"market/processed/{root.entity_id}/e2e.parquet",
+        content_digest="e2e-bars",
+        size_bytes=4096,
+        revision_id=revision.revision_id,
+        row_count=22,
+    )
+    await session.flush()
     return {
         "root_id": root.entity_id,
         "revision_id": revision.revision_id,
         "content_hash": revision.content_hash,
     }
+
+
+def _e2e_bars(_source: Any) -> Iterator[list[dict[str, Any]]]:
+    """Deterministic OHLCV bars for the bar-replay worker (S3-free injection).
+
+    20 flat bars fill the breakout window, then an upside breakout and a stop-out
+    yield one real, reproducible trade — enough for a succeeded Result."""
+    bars: list[dict[str, Any]] = [
+        {
+            "timestamp": f"2024-02-{i + 1:02d}T00:00:00Z",
+            "open": "100",
+            "high": "100",
+            "low": "100",
+            "close": "100",
+            "volume": "5",
+        }
+        for i in range(20)
+    ]
+    bars.append(
+        {
+            "timestamp": "2024-02-21T00:00:00Z",
+            "open": "100",
+            "high": "103",
+            "low": "100",
+            "close": "103",
+            "volume": "5",
+        }
+    )
+    bars.append(
+        {
+            "timestamp": "2024-02-22T00:00:00Z",
+            "open": "103",
+            "high": "103",
+            "low": "95",
+            "close": "98",
+            "volume": "5",
+        }
+    )
+    yield bars
 
 
 async def _research_revision(session) -> str:
@@ -301,7 +353,7 @@ async def test_agent_loop_directive_to_hypothesis_without_ui(session) -> None:
     assert job is not None and job.queue == "backtest"
 
     # 4. The engine worker materializes the immutable Result (CR-03 happy path).
-    out = await run_backtest(session, run_req["job_id"])
+    out = await run_backtest(session, run_req["job_id"], stream_bars=_e2e_bars)
     await session.commit()
     assert out["state"] == "succeeded"
     run = await session.get(BacktestRun, run_req["run_id"])

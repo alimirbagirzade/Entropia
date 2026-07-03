@@ -72,11 +72,12 @@ Before stopping a working session, produce **ALL** of the following:
   hardening) **+ post-V1 Auth/IdP (PR #38) + Parquet batch data-access (INF-12
   Slice A, PR #41) + real bar-replay backtest engine (INF-12 Slice B, PR #43) +
   real built-in indicator compute (INF-12 Slice C, PR #45) + `risk_based`
-  position sizing (INF-12 Slice C follow-up a, PR #47) + threshold-only condition
-  blocks (INF-12 Slice C follow-up b, PR #49)**;
-  `main` after PR #49 = **`6854e06`** (condition-blocks code `8766fae`; risk_based code `43cee29`; Slice C code `671d227`);
+  position sizing (INF-12 Slice C follow-up a, PR #47) + threshold condition
+  blocks (INF-12 Slice C follow-up b, PR #49) + condition extensions
+  (INF-12 Slice C follow-up b2, PR #51)**;
+  `main` after PR #51 = **`6913b0a`** (condition-extensions code `361df4c`; condition-blocks code `8766fae`; risk_based code `43cee29`; Slice C code `671d227`);
   alembic head = **`0021_local_auth`** (`human_credentials` + `auth_sessions`;
-  Slices A/B/C + follow-ups (a)/(b) need no migration). **892 tests green** (864 + 28 condition blocks).
+  Slices A/B/C + follow-ups (a)/(b)/(b2) need no migration). **916 tests green** (892 + 24 condition extensions).
   Follow-up (b) — condition blocks (PR #49): THRESHOLD-ONLY nested condition GATE for
   the bar-replay engine. `domain/backtest/indicators.py` gains `ConditionSpec` +
   `ConditionEvaluator` (per-bar threshold check on a bar price field OR the parent
@@ -89,10 +90,28 @@ Before stopping a working session, produce **ALL** of the following:
   `indicator_native_trigger_plus_condition` and dereferences the pinned condition
   package's `cond.*` dep into `ConditionSpec` (fail-closed: any unresolvable condition →
   whole block `unresolved`; threshold REQUIRED, source default `close`).
-  `indicator_output_plus_condition` STAYS deferred (scope decision). `engine.py` feeds
-  full OHLC to evaluators + `condition_blocks` diagnostics count; `ENGINE_VERSION` →
+  `indicator_output_plus_condition` deferred in (b), now RESOLVED in (b2, below). `engine.py` feeds
+  full OHLC to evaluators + `condition_blocks` diagnostics count; (b) `ENGINE_VERSION` →
   `backtest-engine-v2-condition-blocks`. `apps/seed.py` seeds `cond.above`/`cond.below`
   ESP resolvers. +28 tests; review APPROVE 0 CRITICAL/HIGH; no migration.
+  Follow-up (b2) — condition extensions (PR #51): extends the (b) gate with crosses/between/
+  series-vs-series RHS + condition-only directional signals — the honest boundary of single-package
+  condition compute. `CONDITION_KEYS` → 5 (`cond.above/below` LEVEL, `cond.crosses_above/below`
+  EDGE via `_prev_source`/`_prev_rhs`, warm-up `None` fail-closed; `cond.between` RANGE strict
+  `lower<source<upper`), `CROSS_CONDITION_KEYS`/`RANGE_CONDITION_KEYS`, `condition_direction()`
+  (crosses_above→long, crosses_below→short). `ConditionSpec` +`lower`/`upper`/`reference`
+  (threshold Optional; `ConditionEvaluator._rhs_value` = reference series OR constant →
+  series-vs-series). `IndicatorSpec` +`condition_only`: `BlockEvaluator` skips native `_detect`,
+  fires on the RISING EDGE of the `_conditions_satisfied` gate (`_prev_gate`), directs via
+  `_condition_only_direction` (shared polarity of required crosses), held for block validity,
+  filtered by `block.direction`; `current_signal` returns `_active_dir` in condition_only.
+  `indicator_plan.py` `_ACCEPTED_TRIGGERS` += `indicator_output_plus_condition`;
+  `_resolve_condition` handles `between` (bounds REQUIRED + `lower<upper` → `condition_bounds_missing`/
+  `_invalid`) + `reference` (`_reference_override` → threshold Optional); condition_only fail-closed
+  reasons (`condition_only_no_directional_edge`/`_conflicting_direction`). Honest boundary
+  (docstring): two SEPARATE packages need a 2nd `package_ref` (out of scope). `ENGINE_VERSION` →
+  `backtest-engine-v2-condition-extensions`; `apps/seed.py` +`cond.crosses_above/below`+`cond.between`
+  resolvers. +24 tests; review APPROVE 0 CRITICAL/HIGH; no migration.
   Slice C: `domain/backtest/indicators.py` — pure incremental (bounded-memory)
   Decimal TA compute (`ta.sma/ema/rma/wma` MA-cross + `ta.rsi` band cross;
   `ta.atr/vwap` recognized-but-non-directional), types `IndicatorSpec/SignalRule/
@@ -158,10 +177,11 @@ Before stopping a working session, produce **ALL** of the following:
   building on `indicators.py`/`indicator_plan.py`/`engine.py` — (a) `risk_based`
   sizing **✅ LANDED (PR #47)** — `formula_based`/Kelly still honest `unresolved`
   (path-dependent statistics, ungrounded in the foundation), (b) condition blocks
-  **✅ LANDED (PR #49)** — threshold gate for `indicator_native_trigger_plus_condition`;
-  remaining: `indicator_output_plus_condition` (condition-only directional signal —
-  edge/direction mapping) + richer condition primitives (crosses, indicator-vs-indicator,
-  ranges), (c) multi-timeframe bar resampling (timeframe override
+  **✅ LANDED (PR #49)** + (b2) condition extensions **✅ LANDED (PR #51)** —
+  crosses/between/series-vs-series + condition-only directional (`indicator_output_plus_condition`)
+  all resolved; remaining condition work: **indicator-vs-indicator across two SEPARATE packages**
+  (fast-MA vs slow-MA — needs a 2nd `package_ref` on `ConditionBlock`, a schema extension;
+  today only single-package series-vs-series), (c) multi-timeframe bar resampling (timeframe override
   now `unresolved`; most invasive, affects bar-replay determinism), (d) more directional
   canonical keys (`ta.atr`/`ta.vwap` recognized-but-non-directional today). Other candidates (order in
   `docs/POST_V1_KICKOFF.md`): frontend SSE/metrics/login integration, CP real

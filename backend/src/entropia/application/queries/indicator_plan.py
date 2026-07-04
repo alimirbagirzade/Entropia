@@ -45,12 +45,18 @@ from entropia.domain.backtest.indicators import (
     ConditionSpec,
     IndicatorPlan,
     IndicatorSpec,
+    ReferenceSeriesSpec,
     SignalRule,
     condition_direction,
     default_length,
     timeframe_seconds,
 )
-from entropia.domain.strategy.config import ConditionBlock, IndicatorBlock, StrategyConfig
+from entropia.domain.strategy.config import (
+    ConditionBlock,
+    IndicatorBlock,
+    ReferenceLeg,
+    StrategyConfig,
+)
 from entropia.infrastructure.postgres.repositories import market_data as md_repo
 from entropia.infrastructure.postgres.repositories import packages as pkg_repo
 
@@ -286,10 +292,11 @@ async def _resolve_condition(
     overrides = cond.parameter_overrides or {}
     source = _source_override(overrides)
 
-    # An optional 2nd separately-pinned indicator package as the RHS series (two-package
-    # indicator-vs-indicator), optionally on a coarser per-condition timeframe (post-V1 (i)).
+    # An optional reference chain as the RHS series: the primary 2nd separately-pinned
+    # indicator package (two-package indicator-vs-indicator) plus any N-ary extra legs
+    # (post-V1 (ii)), each optionally on a coarser per-condition timeframe (post-V1 (i)).
     # Fail-closed if pinned but not a computable series.
-    ref_key, ref_length, ref_resample, ref_reason = await _resolve_reference_package(
+    ref_key, ref_length, ref_resample, ref_extras, ref_reason = await _resolve_reference_package(
         session, cond, block_effective_seconds
     )
     if ref_reason is not None:
@@ -335,6 +342,7 @@ async def _resolve_condition(
                 reference_key=ref_key,
                 reference_length=ref_length,
                 reference_resample_seconds=ref_resample,
+                extra_references=ref_extras,
             ),
             None,
         )
@@ -362,44 +370,86 @@ async def _resolve_condition(
 
 async def _resolve_reference_package(
     session: AsyncSession, cond: ConditionBlock, block_effective_seconds: int | None
-) -> tuple[str | None, int | None, int | None, str | None]:
-    """Dereference the optional 2nd pinned INDICATOR package into ``(key, length, resample)``.
+) -> tuple[str | None, int | None, int | None, tuple[ReferenceSeriesSpec, ...], str | None]:
+    """Dereference the pinned reference chain into ``(key, length, resample, extras)``.
 
-    The two-package indicator-vs-indicator RHS: the condition compares its source against
-    THIS package's computed output series (e.g. a fast MA vs a slow MA). Returns
-    ``(None, None, None, None)`` when no reference package is pinned; a specific fail-closed
-    reason when pinned but the revision is missing or resolves to no computable series
-    (only ``DIRECTIONAL_KEYS`` — the MA/RSI family — are computable as an inline series).
+    The two-package indicator-vs-indicator RHS, optionally extended into an N-ary chain
+    (post-V1 (ii)): the condition compares its source against the primary
+    ``reference_package_ref`` and any ``additional_reference_package_refs`` legs (e.g. a
+    fast-MA vs slow-MA vs slowest-MA fan). Returns ``(None, None, None, (), None)`` when no
+    reference package is pinned; a specific fail-closed reason when pinned but a revision is
+    missing or resolves to no computable series (only ``DIRECTIONAL_KEYS`` — the MA/RSI
+    family — are computable as an inline series).
 
-    ``resample`` is the per-condition multi-timeframe reference span (post-V1 (i)): the RHS
-    may compute on a timeframe strictly COARSER than the parent block's effective timeframe
-    (``block_effective_seconds``). A reference-timeframe override with NO reference package
-    has no series to resample — a misconfiguration surfaced, not silently ignored."""
+    ``resample`` (and each leg's own resample) is the per-condition multi-timeframe reference
+    span (post-V1 (i)): a leg may compute on a timeframe strictly COARSER than the parent
+    block's effective timeframe (``block_effective_seconds``). A reference-timeframe override,
+    or an additional leg, with NO primary reference package is a misconfiguration surfaced,
+    not silently ignored."""
     ref = cond.reference_package_ref
     ref_tf = str(cond.reference_timeframe)
+    additional = cond.additional_reference_package_refs or []
     if ref is None:
+        if additional:
+            reason = f"condition_additional_reference_without_primary:{cond.condition_block_id}"
+            return None, None, None, (), reason
         if ref_tf not in _BASE_TIMEFRAMES:
-            return (
-                None,
-                None,
-                None,
-                (f"condition_reference_timeframe_without_package:{cond.condition_block_id}"),
-            )
-        return None, None, None, None
+            reason = f"condition_reference_timeframe_without_package:{cond.condition_block_id}"
+            return None, None, None, (), reason
+        return None, None, None, (), None
     revision = await pkg_repo.get_revision(session, ref.package_revision_id)
     if revision is None:
-        return None, None, None, f"condition_reference_package_unresolved:{cond.condition_block_id}"
+        reason = f"condition_reference_package_unresolved:{cond.condition_block_id}"
+        return None, None, None, (), reason
     key = _primary_directional_key(revision.dependency_snapshot)
     if key is None:
-        return None, None, None, f"condition_reference_no_series:{cond.condition_block_id}"
+        return None, None, None, (), f"condition_reference_no_series:{cond.condition_block_id}"
     resample, tf_reason = _resolve_reference_timeframe(
         ref_tf, block_effective_seconds, cond.condition_block_id
     )
     if tf_reason is not None:
-        return None, None, None, tf_reason
+        return None, None, None, (), tf_reason
     overrides = cond.parameter_overrides or {}
     length = _int_override(overrides, _REFERENCE_LENGTH_KEYS) or default_length(key)
-    return key, length, resample, None
+    extras, extra_reason = await _resolve_additional_references(
+        session, additional, block_effective_seconds, cond.condition_block_id
+    )
+    if extra_reason is not None:
+        return None, None, None, (), extra_reason
+    return key, length, resample, extras, None
+
+
+async def _resolve_additional_references(
+    session: AsyncSession,
+    legs: list[ReferenceLeg],
+    block_effective_seconds: int | None,
+    condition_block_id: str,
+) -> tuple[tuple[ReferenceSeriesSpec, ...], str | None]:
+    """Resolve the N-ary chain's additional reference legs (post-V1 (ii)).
+
+    Each leg dereferences its own pinned indicator package to a ``DIRECTIONAL_KEYS`` series,
+    resolves its own (optionally coarser) reference timeframe against the block, and takes its
+    look-back from its own overrides (else the engine-version default). Fail-closed: any leg
+    that cannot fully resolve leaves the whole condition unresolved with a leg-specific
+    reason (``:<index>`` disambiguates which leg)."""
+    specs: list[ReferenceSeriesSpec] = []
+    for index, leg in enumerate(legs):
+        revision = await pkg_repo.get_revision(session, leg.package_ref.package_revision_id)
+        if revision is None:
+            return (), f"condition_additional_reference_unresolved:{condition_block_id}:{index}"
+        key = _primary_directional_key(revision.dependency_snapshot)
+        if key is None:
+            return (), f"condition_additional_reference_no_series:{condition_block_id}:{index}"
+        resample, tf_reason = _resolve_reference_timeframe(
+            str(leg.timeframe), block_effective_seconds, condition_block_id
+        )
+        if tf_reason is not None:
+            return (), tf_reason
+        length = _int_override(leg.parameter_overrides or {}, _REFERENCE_LENGTH_KEYS) or (
+            default_length(key)
+        )
+        specs.append(ReferenceSeriesSpec(key=key, length=length, resample_seconds=resample))
+    return tuple(specs), None
 
 
 def _resolve_reference_timeframe(

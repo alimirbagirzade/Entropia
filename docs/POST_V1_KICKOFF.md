@@ -3,23 +3,26 @@
 > **Amaç:** V1 kapandı (Stage 0–8 COMPLETE). Bu doküman post-V1 durumunu, aday iş listesini
 > ve temiz oturumda yapıştırılacak resume prompt'u içerir.
 
-## Durum (2026-07-04, per-condition multi-timeframe reference — Slice C follow-up (i) sonrası)
+## Durum (2026-07-04, N-ary reference chain — Slice C follow-up (ii) sonrası)
 
 - **V1 ROADMAP COMPLETE + Auth/IdP + Parquet batch (Slice A) + Bar-replay engine (Slice B) +
   gerçek indikatör compute (Slice C) + `risk_based` sizing (a) + condition blocks (b) +
   condition extensions (b2) + two-package indicator-vs-indicator (#53) + higher-timeframe bar
-  resampling (c) (#55) + per-condition multi-timeframe reference (i) landed.** Son iş
-  per-condition multi-TF reference PR **#56** merged → `main` = **`<merge>`** (feature kodu
-  `1c5cca0`; #55 multi-tf kodu `def6c28`; #53 `9087c2b`; (b2) `361df4c`; condition-blocks (b)
+  resampling (c) (#55) + per-condition multi-timeframe reference (i) + N-ary reference chain (ii) landed.** Son iş
+  N-ary reference chain PR **#57** → `main` (feature kodu
+  `44099a7`; #56 per-condition `1c5cca0`; #55 multi-tf kodu `def6c28`; #53 `9087c2b`; (b2) `361df4c`; condition-blocks (b)
   `8766fae`; risk_based (a) `43cee29`; Slice C `671d227`; **git log ile doğrula** — özet
-  stale-by-default). Alembic head = **`0021_local_auth`** (Slice C + (a)/(b)/(b2)/(#53)/(c)/(i)
-  migration'sız). Test tabanı: **953 yeşil** (939 + #56'da 14). Backtest track artık **gerçek
+  stale-by-default). Alembic head = **`0021_local_auth`** (Slice C + (a)/(b)/(b2)/(#53)/(c)/(i)/(ii)
+  migration'sız). Test tabanı: **970 yeşil** (953 + #57'de 17). Backtest track artık **gerçek
   indikatör sinyalleriyle** giriş/çıkış üretiyor, `risk_based_sizing`'i modelliyor, condition
   gate'leri **crosses/between/series-vs-series** + **condition-only yön sinyali** ile
   değerlendiriyor, indikatör blok **daha kaba bir TF'de** compute edebiliyor (c), ve bir
   condition'ın **RHS reference paketi** parent bloktan **daha kaba bir TF'de** hesaplanabiliyor
-  (i — `ConditionBlock.reference_timeframe`; hızlı source vs yavaş referans, look-ahead yok).
-  Manifest `ENGINE_VERSION = "backtest-engine-v2-per-condition-timeframe"`.
+  (i — `ConditionBlock.reference_timeframe`; hızlı source vs yavaş referans, look-ahead yok),
+  ve bir condition'ın RHS'i **>2 paketlik sıralı bir zincir** olabiliyor (ii —
+  `ConditionBlock.additional_reference_package_refs`; `fast > slow > slowest` MA fan; tek-paket
+  yolu #53/#56 ile byte-identical).
+  Manifest `ENGINE_VERSION = "backtest-engine-v2-nary-reference"`.
 - **Test-infra notu:** integration testleri her testte şemayı drop/create eder — aynı lokal
   Postgres'i paylaşan İKİ oturum birbirini bozar. İzole DB kullan:
   `TEST_DATABASE_URL=postgresql+asyncpg://entropia:entropia@localhost:5432/entropia_auth`.
@@ -342,60 +345,60 @@ Entropia — post-V1: V1 tamam + Auth/IdP (PR #38) + Parquet Slice A (PR #41) + 
 engine Slice B (PR #43) + gerçek indikatör compute Slice C (PR #45) + risk_based sizing (a)
 (PR #47) + threshold condition blocks (b) (PR #49) + condition EXTENSIONS (b2) (PR #51) +
 two-package indicator-vs-indicator (PR #53) + HIGHER-TIMEFRAME bar resampling (c) (PR #55) +
-PER-CONDITION multi-timeframe reference (i) (PR #56) — HEPSİ MERGED (feature + kapanış docs dahil).
+PER-CONDITION multi-timeframe reference (i) (PR #56) + N-ARY reference chain (ii) (PR #57) —
+HEPSİ MERGED (feature + kapanış docs dahil).
 ÖNCE DOĞRULA (stale-by-default): git fetch && git log --oneline origin/main -4 &&
-gh pr list --state merged -L 6. main = #56 merge (per-condition kodu 1c5cca0; #55 multi-tf def6c28;
-#53 9087c2b; (b2) 361df4c; condition-blocks (b) 8766fae; risk_based (a) 43cee29; Slice C 671d227);
-alembic head 0021_local_auth (migration YOK). İzole DB:
+gh pr list --state merged -L 6. main = #57 merge (N-ary kodu 44099a7; #56 per-condition 1c5cca0;
+#55 multi-tf def6c28; #53 9087c2b; (b2) 361df4c; condition-blocks (b) 8766fae; risk_based (a) 43cee29;
+Slice C 671d227); alembic head 0021_local_auth (migration YOK). İzole DB:
 TEST_DATABASE_URL=postgresql+asyncpg://entropia:entropia@localhost:5432/entropia_auth.
-Test tabanı 953; pytest --co --no-cov ile teyit et (bu projede dosya-başına ": N" basar → topla).
-ENGINE_VERSION = backtest-engine-v2-per-condition-timeframe.
-ÖNCE docs/POST_V1_KICKOFF.md + docs/STAGE2_HANDOFF.md ("per-condition multi-timeframe reference landed
-(PR #56)" + "Next: remaining Slice C follow-ups") oku.
+Test tabanı 970; pytest --co --no-cov ile teyit et (bu projede dosya-başına ": N" basar → topla).
+ENGINE_VERSION = backtest-engine-v2-nary-reference.
+ÖNCE docs/POST_V1_KICKOFF.md + docs/STAGE2_HANDOFF.md ("N-ary reference chain landed
+(PR #57)" + "Next: remaining Slice C follow-ups") oku.
 
 SIRADAKİ İŞ (kullanıcıyla SEÇ): kalan Slice C follow-up'ları — hepsi indicators.py/
 indicator_plan.py/engine.py üstüne biner:
-- (ii) >2 paket karşılaştırması (N-ary reference şeması) — tek reference_package_ref bir
-  fast-MA-vs-slow-MA çiftini çözer; üç+ paket (ör. fast vs slow vs volume-MA) ayrı iş. (i) ile
-  aynı ConditionSpec/ConditionEvaluator alanlarını N-ary'ye genişletir.
 - (d) daha çok directional canonical key (ta.atr/ta.vwap bugün recognized-ama-non-directional;
-  reference paketi olarak da kullanılamıyorlar — DIRECTIONAL_KEYS şartı; VWAP-cross yönlü,
-  ATR doğası gereği değil).
+  reference paketi VE N-ary chain leg'i olarak da kullanılamıyorlar — DIRECTIONAL_KEYS şartı;
+  VWAP-cross yönlü, ATR doğası gereği değil).
 - formula_based / Kelly sizing (hâlâ notional fallback + position_sizing_method_unsupported
   uyarısı; path-dependent istatistik — foundation'da temellendirilmesi gerekir).
 Diğer adaylar: frontend SSE/metrics/login, CP real candidate generation, capability aktivasyonları,
 deferred liste (ilk-Admin provisioning, summary["timeframe"] çözümü — artık base-TF okunuyor, retention auto-purge).
 
-REUSE ANCHOR'LARI (#56 per-condition multi-TF reference; kodu incele, tek satır özet). Bir condition'ın
-RHS REFERENCE PAKETİ (reference_package_ref, #53) parent bloktan DAHA KABA bir TF'de hesaplanır; hızlı
-source (parent TF) yavaş referans (kaba TF, yalnız mum kapanınca ilerler) ile karşılaştırılır → look-ahead
-YOK, (c) ile simetrik. Migration YOK (reference_resample_seconds pinlenmiş config'ten türer):
-- domain/strategy/config.py — ConditionBlock.reference_timeframe (opsiyonel Literal, default same_as_base_tf;
-  IndicatorBlock.timeframe ile aynı vocab; yalnız reference_package_ref varken anlamlı).
-- domain/backtest/indicators.py — ConditionSpec +reference_resample_seconds:int|None. ConditionEvaluator.
-  _advance_reference: base bar close'larını referans mumuna toplar, RHS'i YALNIZ mum KAPANINCA (sonraki
-  bucket'ın ilk bar'ı) ilerletir (blok-seviyesi HTF dispatcher'ı yansıtır); resample None → her bar ilerlet
-  (BYTE-IDENTICAL). ConditionEvaluator.update +timestamp kwarg. BlockEvaluator._advance timestamp'i condition'a
-  geçirir + _form_ts tutar (forming HTF mumunun kapanış zamanı) → nested referans, parent'ın gördüğü muma
-  bucket'lanır (ham base bar değil). DAR SINIR: yalnız reference PAKETİ resample edilir; bounded reference /
-  sabit threshold RHS blok TF'inde kalır.
-- application/queries/indicator_plan.py — _resolve_reference_timeframe: ConditionBlock.reference_timeframe'i
-  block_effective_seconds'a (bloğun kendi resample span'i, yoksa base bar) göre çözer — coarser→
-  reference_resample_seconds, equal→block compute, finer→condition_reference_timeframe_finer_than_block,
-  base/block bilinmiyor→yine resample. _resolve_reference_package artık 4-tuple (key,length,resample,reason);
-  reference-TF ama reference_package YOK → condition_reference_timeframe_without_package.
-- engine.py — per_condition_timeframe_conditions diagnostic. manifest.py — ENGINE_VERSION=
-  backtest-engine-v2-per-condition-timeframe (execution_key ns shift).
-- Testler (+14 → 953): tests/unit/test_backtest_per_condition_timeframe.py (+6: RHS forming-mumda held/no-repaint,
-  base-TF kontrast, span None byte-identical, timestamp'siz fail-closed, coarser-reference cross timing, tam
-  BlockEvaluator→ConditionEvaluator plumbing) + tests/integration/test_per_condition_timeframe_resolution.py
-  (+8: coarser/equal/finer/no-package/unknown-base/coarser-than-HTF-block/finer-than-HTF-block + gerçek 2h-referans
-  cross e2e long entry).
-DÜRÜST SINIR: (ii) >2-paket (N-ary) ve (d) non-MA/RSI reference key hâlâ deferred; yalnız reference PAKETİ resample edilir.
+REUSE ANCHOR'LARI (#57 N-ary reference chain; kodu incele, tek satır özet). Bir condition'ın RHS'i tek
+reference paketi (reference_package_ref, #53/#56) yerine >2 SEPARATE pinlenmiş indikatör paketinin SIRALI
+ZİNCİRİ olabilir: source [cmp] ref0 [cmp] ref1 ... (klasik fast>slow>slowest MA fan; downtrend için ascending
+ayna). Tek-paket yolu #53/#56 ile BYTE-IDENTICAL (tek-eleman zincir eski kontrole indirgenir). Migration YOK:
+- domain/strategy/config.py — ReferenceLeg modeli (package_ref + timeframe + parameter_overrides);
+  ConditionBlock.additional_reference_package_refs: list[ReferenceLeg]|None (opsiyonel, JSONB, yalnız primary
+  reference_package_ref varken anlamlı).
+- domain/backtest/indicators.py — ReferenceSeriesSpec(key,length,resample_seconds); ConditionSpec
+  +extra_references. _ReferenceSeries (bir inline reference indikatör + KENDİ per-leg kaba-TF resample
+  state'i; yalnız mum kapanınca advance → look-ahead yok, (i) _advance_reference'ın per-leg port'u).
+  Module-level _chain_ordered (strict monotonic; None fail-closed). ConditionEvaluator artık source + tüm RHS
+  leg'leri üstünde ZİNCİR değerlendirir (_ref_series/_prev_ref_values/_rhs_values liste); HERHANGİ bir leg
+  warm-up (None) → tüm zincir fail-closed (LEVEL ve CROSS). Semantik: above/crosses_above = source>ref0>ref1>...
+  (descending); below/crosses_below = ascending ayna; cross bu bar hizalanınca ateşler (chain_now AND NOT
+  chain_prev). cond.between (RANGE) RHS zincirini yok sayar.
+- application/queries/indicator_plan.py — _resolve_reference_package artık 5-tuple (+extras);
+  _resolve_additional_references (her leg → kendi DIRECTIONAL_KEYS serisi, kendi TF block'a göre çözülür,
+  kendi look-back). Fail-closed: condition_additional_reference_without_primary / _unresolved:<i> /
+  _no_series:<i>; cond.between RANGE üstünde leg → condition_reference_package_on_range (mevcut yol).
+- engine.py — nary_reference_conditions diagnostic. manifest.py — ENGINE_VERSION=
+  backtest-engine-v2-nary-reference (execution_key ns shift).
+- Testler (+17 → 970): tests/unit/test_backtest_nary_reference.py (+7: descending/ascending fan LEVEL,
+  crosses_above/below EDGE alignment, N-ary tek-referanstan STRICTLY güçlü, warm-up fail-closed,
+  condition-only three-MA fan long) + tests/integration/test_nary_reference_resolution.py (+10: primary+2 leg
+  çözümü; fail-closed additional-without-primary/missing-revision/non-directional-leg/finer-than-block/RANGE-leg;
+  coarser per-leg resample; per-leg length override; use_package_default_tf leg; e2e 3-MA fan cross → 1 long
+  entry + nary_reference_conditions diagnostic).
+DÜRÜST SINIR: (d) non-MA/RSI reference key hâlâ deferred; yalnız DIRECTIONAL_KEYS (MA/RSI) paketleri chain leg olabilir.
 
 YÖNTEM: Workflow KULLANMA; YENİ dosya heredoc (gate-free), mevcut dosya Edit 4-fact (GateGuard:
 ilk Bash + dosya-başına-ilk-edit gate); cd backend (cwd resetlenebilir → absolute path); ruff+format+
-mypy+pytest (izole DB: ...entropia_auth; 953 yeşil kalmalı); migration gerekirse 0022_* (→0021) up/down/up
+mypy+pytest (izole DB: ...entropia_auth; 970 yeşil kalmalı); migration gerekirse 0022_* (→0021) up/down/up
 + parity + L1 FK proof; CRITICAL/HIGH AMPİRİK DOĞRULA → commit (conventional, attribution YOK)
 → PR → gh pr checks --watch → merge KULLANICIDA. Türkçe, MALİYET BİLİNÇLİ. Kapanışta: handoff +
 kickoff + CLAUDE.md + memory (ecc knowledge graph; claude-mem token stale/worker-modda atlanabilir).

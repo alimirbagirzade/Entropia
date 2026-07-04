@@ -174,6 +174,20 @@ def _htf_bucket(timestamp: str, span_seconds: int) -> int | None:
 
 
 @dataclass(frozen=True, slots=True)
+class ReferenceSeriesSpec:
+    """One resolved leg of an N-ary reference chain (post-V1 (ii)).
+
+    A separately-pinned indicator package computed inline as part of a condition's RHS
+    comparison chain. ``key`` is a ``DIRECTIONAL_KEYS`` MA/RSI key, ``length`` its look-back,
+    and ``resample_seconds`` an optional per-leg coarser reference timeframe (``None`` keeps
+    the leg on the block's timeframe)."""
+
+    key: str
+    length: int
+    resample_seconds: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class ConditionSpec:
     """A resolved, computable condition nested under an indicator block.
 
@@ -205,6 +219,11 @@ class ConditionSpec:
     # no look-ahead). ``None`` computes the RHS on the block's own timeframe (Slice C /
     # (#53) behaviour). Only meaningful when ``reference_key`` is set.
     reference_resample_seconds: int | None = None
+    # N-ary reference chain (post-V1 (ii)): reference legs BEYOND the primary ``reference_key``.
+    # The comparison becomes a monotonic chain ``source [cmp] primary [cmp] extra[0] [cmp]
+    # extra[1] ...`` (e.g. fast-MA > slow-MA > slowest-MA). Empty for the single-reference forms
+    # (#53/#56), where the check is byte-identical. Only meaningful with ``reference_key`` set.
+    extra_references: tuple[ReferenceSeriesSpec, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -387,6 +406,94 @@ def _build_reference_indicator(key: str, length: int) -> _MovingAverage | _Rsi:
     return _MovingAverage(key, length)
 
 
+@dataclass(slots=True)
+class _ReferenceSeries:
+    """One reference leg's computed series, with its own per-leg resampling state.
+
+    Wraps one inline reference indicator (``_MovingAverage``/``_Rsi``) plus the optional
+    coarser-timeframe aggregation (post-V1 (i)/(ii)). On the block's own timeframe
+    (``resample_seconds is None``) it advances every bar — byte-identical to the (#53)
+    two-package form. On a coarser reference timeframe it aggregates the base closes and
+    advances the indicator only when a reference candle CLOSES (the first base bar of the
+    next bucket), so the RHS never repaints from a still-forming candle (no look-ahead)."""
+
+    indicator: _MovingAverage | _Rsi
+    resample_seconds: int | None
+    _bucket: int | None = field(init=False, default=None)
+    _form_close: Decimal = field(init=False, default=_ZERO)
+
+    def advance(self, close: Decimal, timestamp: str | None) -> None:
+        if self.resample_seconds is None:
+            self.indicator.update(close)
+            return
+        bucket = _htf_bucket(timestamp, self.resample_seconds) if timestamp else None
+        if bucket is None:
+            return  # unparseable/absent timestamp: hold the last completed reference candle
+        if self._bucket is None:
+            self._bucket = bucket
+            self._form_close = close
+            return
+        if bucket == self._bucket:
+            self._form_close = close
+            return
+        # A new reference bucket started: the previous reference candle is complete — advance
+        # the RHS with its close, then open the next forming reference candle.
+        self.indicator.update(self._form_close)
+        self._bucket = bucket
+        self._form_close = close
+
+    @property
+    def value(self) -> Decimal | None:
+        return self.indicator.value
+
+
+def _build_reference_chain(spec: ConditionSpec) -> list[_ReferenceSeries]:
+    """The RHS reference legs of a condition — primary first, then the N-ary extras.
+
+    Empty when the condition has no reference package (its RHS is a bounded ``reference``
+    series or a constant ``threshold``). The ``extra_references`` (post-V1 (ii)) are only
+    meaningful with a primary ``reference_key`` and are ignored without one (the plan layer
+    forbids that configuration)."""
+    if spec.reference_key is None:
+        return []
+    chain = [
+        _ReferenceSeries(
+            _build_reference_indicator(
+                spec.reference_key, spec.reference_length or default_length(spec.reference_key)
+            ),
+            spec.reference_resample_seconds,
+        )
+    ]
+    for extra in spec.extra_references:
+        chain.append(
+            _ReferenceSeries(
+                _build_reference_indicator(extra.key, extra.length or default_length(extra.key)),
+                extra.resample_seconds,
+            )
+        )
+    return chain
+
+
+def _chain_ordered(head: Decimal, rest: list[Decimal | None], descending: bool) -> bool:
+    """Whether ``head`` and ``rest`` form a strictly monotonic chain.
+
+    ``descending`` requires ``head > rest[0] > rest[1] > ...`` (the source is the largest —
+    an ``above`` fan); otherwise strictly ascending (a ``below`` fan). Any ``None`` breaks the
+    chain (fails closed). A single-element ``rest`` reduces to exactly one comparison, so the
+    two-package (#53/#56) check is preserved byte-for-byte."""
+    prev = head
+    for value in rest:
+        if value is None:
+            return False
+        if descending:
+            if not prev > value:
+                return False
+        elif not prev < value:
+            return False
+        prev = value
+    return True
+
+
 class ConditionEvaluator:
     """Stateful per-condition comparator over the streamed bars.
 
@@ -401,12 +508,9 @@ class ConditionEvaluator:
     __slots__ = (
         "_active",
         "_active_left",
-        "_prev_rhs",
+        "_prev_ref_values",
         "_prev_source",
-        "_ref_bucket",
-        "_ref_form_close",
-        "_ref_indicator",
-        "_ref_resample_seconds",
+        "_ref_series",
         "_spec",
     )
 
@@ -415,24 +519,13 @@ class ConditionEvaluator:
         self._active = False
         self._active_left: int | None = None  # bars remaining (None = until it fails)
         self._prev_source: Decimal | None = None  # last bar's source (for cross edges)
-        self._prev_rhs: Decimal | None = None  # last bar's RHS (constant or reference)
-        # A second, separately-pinned indicator computed inline as the RHS series (the
-        # two-package indicator-vs-indicator form). It warms up over its own length; a
-        # ``None`` value fails the check closed just like any missing series.
-        self._ref_indicator: _MovingAverage | _Rsi | None = (
-            _build_reference_indicator(
-                spec.reference_key, spec.reference_length or default_length(spec.reference_key)
-            )
-            if spec.reference_key is not None
-            else None
-        )
-        # Per-condition multi-timeframe reference (post-V1 (i)): a coarser reference candle
-        # aggregator over the RHS indicator. ``None`` span => the RHS ticks on every bar (the
-        # block's own timeframe). A positive span advances the RHS only on a completed
-        # reference candle. Only used when ``_ref_indicator`` is set.
-        self._ref_resample_seconds = spec.reference_resample_seconds
-        self._ref_bucket: int | None = None
-        self._ref_form_close: Decimal = _ZERO
+        # RHS reference chain (post-V1 #53/(i)/(ii)): the primary ``reference_key`` leg plus
+        # any ``extra_references``, each a separately-pinned indicator computed inline (its own
+        # look-back + optional coarser timeframe). Empty for the bounded-reference/threshold
+        # forms; a warming-up leg contributes ``None`` and fails the check closed.
+        self._ref_series: list[_ReferenceSeries] = _build_reference_chain(spec)
+        # Previous bar's RHS chain values (for cross edges), parallel to ``_ref_series``.
+        self._prev_ref_values: list[Decimal | None] | None = None
 
     def update(
         self,
@@ -451,15 +544,15 @@ class ConditionEvaluator:
             if self._active_left <= 0:
                 self._active = False
                 self._active_left = None
-        # Advance the reference indicator (if any) so its RHS value is as-of this bar; on a
-        # coarser reference timeframe it only advances when a reference candle closes.
-        if self._ref_indicator is not None:
-            self._advance_reference(close, timestamp)
+        # Advance each RHS reference leg so its value is as-of this bar; a leg on a coarser
+        # reference timeframe only advances when its own reference candle closes.
+        for ref in self._ref_series:
+            ref.advance(close, timestamp)
         source = self._series_value(
             self._spec.source, close, high, low, open_price, indicator_value
         )
-        rhs = self._rhs_value(close, high, low, open_price, indicator_value)
-        if self._raw_check(source, rhs):
+        rhs_values = self._rhs_values(close, high, low, open_price, indicator_value)
+        if self._raw_check(source, rhs_values):
             self._active = True
             self._active_left = window  # None => open-ended (until the check fails)
         elif window is None:
@@ -468,37 +561,7 @@ class ConditionEvaluator:
             self._active = False
             self._active_left = None
         self._prev_source = source
-        self._prev_rhs = rhs
-
-    def _advance_reference(self, close: Decimal, timestamp: str | None) -> None:
-        """Feed the RHS reference indicator, resampling to a coarser timeframe if configured.
-
-        Base reference timeframe (``_ref_resample_seconds is None``): advance on every bar —
-        byte-identical to the (#53) two-package form, where the RHS ticks with the block.
-        Coarser reference timeframe (post-V1 (i)): aggregate the base bars' closes into the
-        current reference candle and advance the RHS only when that candle CLOSES (detected as
-        the first base bar of the next bucket), so the RHS never repaints from a still-forming
-        candle (no look-ahead). A missing/unparseable timestamp holds the last completed
-        reference candle's RHS (fails closed, never mis-buckets)."""
-        assert self._ref_indicator is not None
-        if self._ref_resample_seconds is None:
-            self._ref_indicator.update(close)
-            return
-        bucket = _htf_bucket(timestamp, self._ref_resample_seconds) if timestamp else None
-        if bucket is None:
-            return
-        if self._ref_bucket is None:
-            self._ref_bucket = bucket
-            self._ref_form_close = close
-            return
-        if bucket == self._ref_bucket:
-            self._ref_form_close = close
-            return
-        # A new reference bucket started: the previous reference candle is complete — advance
-        # the RHS with its close, then open the next forming reference candle.
-        self._ref_indicator.update(self._ref_form_close)
-        self._ref_bucket = bucket
-        self._ref_form_close = close
+        self._prev_ref_values = rhs_values
 
     def _series_value(
         self,
@@ -519,47 +582,52 @@ class ConditionEvaluator:
             return open_price
         return close
 
-    def _rhs_value(
+    def _rhs_values(
         self,
         close: Decimal,
         high: Decimal,
         low: Decimal,
         open_price: Decimal,
         indicator_value: Decimal | None,
-    ) -> Decimal | None:
-        """The comparator's right-hand side, in precedence order: a second pinned
-        indicator's series (two-package), else a bounded ``reference`` series, else the
-        constant ``threshold``. A warming-up reference indicator returns ``None`` and
-        fails the check closed."""
-        if self._ref_indicator is not None:
-            return self._ref_indicator.value
+    ) -> list[Decimal | None]:
+        """The comparator's right-hand side series, in precedence order: the reference chain
+        (one or more separately-pinned indicators — two-package / N-ary), else a single-
+        element bounded ``reference`` series, else the constant ``threshold``. A warming-up
+        reference leg contributes ``None`` and fails the check closed."""
+        if self._ref_series:
+            return [ref.value for ref in self._ref_series]
         reference = self._spec.reference
         if reference is not None:
-            return self._series_value(reference, close, high, low, open_price, indicator_value)
-        return self._spec.threshold
+            return [self._series_value(reference, close, high, low, open_price, indicator_value)]
+        return [self._spec.threshold]
 
-    def _raw_check(self, source: Decimal | None, rhs: Decimal | None) -> bool:
+    def _raw_check(self, source: Decimal | None, rhs_values: list[Decimal | None]) -> bool:
+        """Evaluate the comparator over the source and its RHS chain.
+
+        ``cond.between`` ignores the RHS (uses the ``lower``/``upper`` bounds). LEVEL/CROSS
+        treat the RHS as a monotonic chain: ``cond.above``/``crosses_above`` require
+        ``source > rhs[0] > rhs[1] > ...`` (source largest); ``cond.below``/``crosses_below``
+        the reverse. A single-leg chain reduces EXACTLY to the (#53/#56) two-package check.
+        Any missing value (warm-up) fails closed. Cross primitives additionally require the
+        previous bar's chain to NOT already hold (the alignment is achieved THIS bar)."""
         key = self._spec.canonical_key
         if key == _COND_BETWEEN:
             lower, upper = self._spec.lower, self._spec.upper
             if source is None or lower is None or upper is None:
                 return False
             return lower < source < upper
-        if source is None or rhs is None:
+        if source is None or any(value is None for value in rhs_values):
             return False  # a missing series (warm-up) fails closed
-        if key == _COND_ABOVE:
-            return source > rhs
-        if key == _COND_BELOW:
-            return source < rhs
-        # Cross edges need the previous bar's (source, rhs) pair.
-        prev_source, prev_rhs = self._prev_source, self._prev_rhs
-        if prev_source is None or prev_rhs is None:
+        descending = key in (_COND_ABOVE, _COND_CROSSES_ABOVE)
+        chain_now = _chain_ordered(source, rhs_values, descending)
+        if key in (_COND_ABOVE, _COND_BELOW):
+            return chain_now
+        # Cross edges need the previous bar's (source, chain) to be fully established.
+        prev_source, prev_refs = self._prev_source, self._prev_ref_values
+        if prev_source is None or prev_refs is None or any(v is None for v in prev_refs):
             return False
-        if key == _COND_CROSSES_ABOVE:
-            return prev_source <= prev_rhs and source > rhs
-        if key == _COND_CROSSES_BELOW:
-            return prev_source >= prev_rhs and source < rhs
-        return False
+        chain_prev = _chain_ordered(prev_source, prev_refs, descending)
+        return chain_now and not chain_prev
 
     @property
     def satisfied(self) -> bool:
@@ -889,6 +957,7 @@ __all__ = [
     "ConditionSpec",
     "IndicatorPlan",
     "IndicatorSpec",
+    "ReferenceSeriesSpec",
     "SignalRule",
     "aggregate",
     "build_evaluators",

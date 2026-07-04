@@ -77,10 +77,29 @@ Before stopping a working session, produce **ALL** of the following:
   (INF-12 Slice C follow-up b2, PR #51) + two-package indicator-vs-indicator
   (INF-12 Slice C follow-up, PR #53) + higher-timeframe bar resampling
   (INF-12 Slice C follow-up c, PR #55) + per-condition multi-timeframe reference
-  (INF-12 Slice C follow-up i, PR #56)**. **Overall: ~77% complete** (V1=100%, post-V1 core=74%, frontend=15%).
-  `main` after PR #56 (per-condition code `1c5cca0`; multi-timeframe code `def6c28`; indicator-vs-indicator code `9087c2b`; condition-extensions code `361df4c`; condition-blocks code `8766fae`; risk_based code `43cee29`; Slice C code `671d227`);
+  (INF-12 Slice C follow-up i, PR #56) + N-ary reference chain
+  (INF-12 Slice C follow-up ii, PR #57)**. **Overall: ~78% complete** (V1=100%, post-V1 core=76%, frontend=15%).
+  `main` after PR #57 (N-ary code `44099a7`; per-condition code `1c5cca0`; multi-timeframe code `def6c28`; indicator-vs-indicator code `9087c2b`; condition-extensions code `361df4c`; condition-blocks code `8766fae`; risk_based code `43cee29`; Slice C code `671d227`);
   alembic head = **`0021_local_auth`** (`human_credentials` + `auth_sessions`;
-  Slices A/B/C + follow-ups (a)/(b)/(b2)/(#53)/(c)/(i) need no migration). **953 tests green** (939 + 14 per-condition multi-TF reference).
+  Slices A/B/C + follow-ups (a)/(b)/(b2)/(#53)/(c)/(i)/(ii) need no migration). **970 tests green** (953 + 17 N-ary reference).
+  Follow-up (ii) — N-ary reference chain (PR #57): a nested condition's RHS extends from
+  a single reference package (#53/#56) to an ORDERED chain of >2 separately-pinned indicator
+  packages (`source [cmp] ref0 [cmp] ref1 ...` — the classic `fast > slow > slowest` MA fan;
+  ascending mirror for downtrends). Single-reference path BYTE-IDENTICAL to #53/#56 (one-leg
+  chain reduces exactly). `domain/strategy/config.py` `ReferenceLeg` model + `ConditionBlock`
+  `+additional_reference_package_refs: list[ReferenceLeg]|None` (JSONB, no migration).
+  `domain/backtest/indicators.py` `ReferenceSeriesSpec(key,length,resample_seconds)`;
+  `ConditionSpec +extra_references`; `_ReferenceSeries` (per-leg coarser-TF resampling, no
+  look-ahead — per-leg port of (i) `_advance_reference`); `_chain_ordered` (strict monotonic,
+  `None` fails closed); `ConditionEvaluator` evaluates a chain over source + all RHS legs
+  (`_ref_series`/`_prev_ref_values`/`_rhs_values` lists); warm-up on ANY leg fails whole chain
+  closed. `indicator_plan.py` `_resolve_reference_package` → 5-tuple (+extras);
+  `_resolve_additional_references` (per-leg key/timeframe/length); fail-closed
+  `condition_additional_reference_without_primary`/`_unresolved:<i>`/`_no_series:<i>`; a leg on
+  a `cond.between` RANGE rejected via `condition_reference_package_on_range`. `engine.py`
+  +`nary_reference_conditions` diagnostic; `ENGINE_VERSION` → `backtest-engine-v2-nary-reference`
+  (execution_key ns shift). Review APPROVE 0 CRITICAL/HIGH. +17 tests (unit +7 / integration +10).
+  No migration. Honest boundary: (d) non-MA/RSI reference keys still deferred.
   Follow-up (c) — higher-timeframe bar resampling (PR #55): an indicator block may
   compute on a timeframe COARSER than the base bars (`timeframe` override was
   `timeframe_override_deferred`; now resamples). `domain/backtest/indicators.py`
@@ -235,8 +254,7 @@ Before stopping a working session, produce **ALL** of the following:
 - **Next:** **post-V1 (continued)** — **3 priority tiers:**
   
   **TIER 1 — Slice C remaining (backend, high-impact):**
-  - **(ii) >2-package condition comparison** (N-ary reference schema, not just `reference_package_ref`; fast-MA vs slow-MA vs volume MA — extends the (i)/#56 `reference_package_ref`+`reference_timeframe` fields to N-ary)
-  - **(d) Non-MA/RSI directional keys** (`ta.atr`/`ta.vwap` recognized-but-non-directional today; must become `DIRECTIONAL_KEYS` or stay `unresolved`; also blocks them as reference-package RHS)
+  - **(d) Non-MA/RSI directional keys** (`ta.atr`/`ta.vwap` recognized-but-non-directional today; must become `DIRECTIONAL_KEYS` or stay `unresolved`; also blocks them as reference-package RHS — including as an N-ary chain leg)
   - **formula_based / Kelly sizing** (still notional fallback + `position_sizing_method_unsupported`; path-dependent, ungrounded in the foundation)
   
   **TIER 2 — Frontend + infra (user-facing, 0% today):**
@@ -257,5 +275,6 @@ Before stopping a working session, produce **ALL** of the following:
   - indicator-vs-indicator **PR #53** — two-package reference
   - (c) higher-timeframe bar resampling **PR #55** — indicator block on a coarser TF (no look-ahead)
   - (i) per-condition multi-TF reference **PR #56** — a condition's RHS reference package on a coarser TF (no look-ahead); `ConditionBlock.reference_timeframe`
+  - (ii) N-ary reference chain **PR #57** — condition RHS as an ordered chain of >2 packages (`fast > slow > slowest` MA fan); `ConditionBlock.additional_reference_package_refs`
   
   Full roadmap: `docs/POST_V1_KICKOFF.md`.

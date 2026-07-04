@@ -42,7 +42,11 @@ from entropia.domain.backtest.indicators import (
 )
 
 if TYPE_CHECKING:
-    from entropia.domain.strategy.config import PositionSizing, StrategyConfig
+    from entropia.domain.strategy.config import (
+        PositionSizeLimits,
+        PositionSizing,
+        StrategyConfig,
+    )
 
 _MONEY = Decimal("0.01")
 _PCT = Decimal("0.0001")
@@ -269,7 +273,33 @@ def _sizing_is_honored(config: StrategyConfig) -> bool:
     return _kelly_capital_fraction(sizing) is not None
 
 
-def _position_size(config: StrategyConfig, entry_price: Decimal, equity: Decimal) -> Decimal:
+def _clamp_to_limits(size: Decimal, limits: PositionSizeLimits | None) -> Decimal:
+    """Clamp a computed size to the strategy's configured min/max position caps (§6).
+
+    A no-op when no ``position_size_limits`` are configured OR the size is already
+    non-positive: ``0`` is the fail-closed "do not open" sentinel returned by
+    ``_raw_position_size`` (bust equity / non-positive entry price), and a ``min`` cap
+    must NOT resurrect it into a live position, nor may a stray negative be lifted
+    positive. A misconfigured window (``min > max`` — no size can satisfy both) fails
+    closed to ``0`` rather than silently honouring one bound and violating the other.
+    Only a genuinely positive size is pulled DOWN to ``max`` then UP to ``min``; the
+    final ``max(., 0)`` also neutralises a nonsensical negative cap. Caps are in the
+    same UNITS as the size (contracts/coins), applied verbatim (unquantized) — mirrors
+    the unquantized ``base_position_size`` branch."""
+    if limits is None or size <= _ZERO:
+        return size
+    minimum = limits.min_position_size
+    maximum = limits.max_position_size
+    if minimum is not None and maximum is not None and minimum > maximum:
+        return _ZERO
+    if maximum is not None and size > maximum:
+        size = maximum
+    if minimum is not None and size < minimum:
+        size = minimum
+    return max(size, _ZERO)
+
+
+def _raw_position_size(config: StrategyConfig, entry_price: Decimal, equity: Decimal) -> Decimal:
     """Deterministic sizing: explicit base size, risk-based, Kelly, else all-in notional.
 
     ``base_position_size`` returns the explicit size. ``risk_based_sizing`` risks a
@@ -283,7 +313,8 @@ def _position_size(config: StrategyConfig, entry_price: Decimal, equity: Decimal
     request missing its sub-config fall back to an all-in notional (surfaced as a
     diagnostics warning, L4). Every branch clamps to NON-NEGATIVE equity: a bust
     account yields size 0, never a negative size — a negative size would invert the
-    PnL sign of every subsequent trade (review CRITICAL)."""
+    PnL sign of every subsequent trade (review CRITICAL). The result is then clamped
+    to the configured ``position_size_limits`` by ``_position_size``."""
     sizing = config.position_sizing
     if sizing.method == "base_position_size" and sizing.base_position_size is not None:
         return Decimal(sizing.base_position_size)
@@ -302,6 +333,16 @@ def _position_size(config: StrategyConfig, entry_price: Decimal, equity: Decimal
     if entry_price > _ZERO:
         return (usable_equity / entry_price).quantize(_QTY)
     return _ZERO
+
+
+def _position_size(config: StrategyConfig, entry_price: Decimal, equity: Decimal) -> Decimal:
+    """Deterministic sizing (see ``_raw_position_size``) clamped to the configured
+    ``position_size_limits`` min/max caps (§6). The clamp applies uniformly to EVERY
+    sizing method — base, risk-based, Kelly and the notional fallback — so a global cap
+    is honoured regardless of which sizing path produced the size. A missing limits
+    subtree is a no-op, so behaviour is byte-identical to the pre-wiring engine."""
+    size = _raw_position_size(config, entry_price, equity)
+    return _clamp_to_limits(size, config.position_sizing.position_size_limits)
 
 
 def _initial_static_stop(
@@ -716,6 +757,7 @@ def run_engine(
         "per_condition_timeframe_conditions": per_condition_timeframe_conditions,
         "nary_reference_conditions": nary_reference_conditions,
         "vwap_blocks": vwap_blocks,
+        "position_size_limits_active": config.position_sizing.position_size_limits is not None,
         "item_count": item_count,
         "decision_trace_count": len(signal_events),
         "execution_key": execution_key,

@@ -22,8 +22,11 @@ Honest V1 boundary (kept explicit, never hidden):
   trigger sources likewise surface a warning rather than silently mis-computing.
 * An indicator block MAY compute on a higher timeframe than the base bars (post-V1 (c)):
   the base bars are aggregated into the block's coarser candle and the trigger only
-  advances on a completed candle (no look-ahead). A per-CONDITION timeframe (a
-  condition's RHS on a different TF) remains a later slice.
+  advances on a completed candle (no look-ahead). A nested condition's RHS reference
+  indicator MAY also compute on a coarser timeframe than its parent block (post-V1 (i)):
+  the fast source is compared against the slower reference series, which only advances on a
+  completed reference candle (no look-ahead). Only the ``reference_package_ref`` RHS is
+  resampled; a bounded ``reference``/``threshold`` RHS stays on the block's timeframe.
 
 The compute is a PURE function of the bars: same pinned strategy + same pinned
 market revision => byte-identical signals. All arithmetic is ``Decimal``.
@@ -195,6 +198,13 @@ class ConditionSpec:
     # ``reference`` and ``threshold``; ``None`` for the single-package forms.
     reference_key: str | None = None  # 2nd-package RHS indicator (a DIRECTIONAL_KEYS key)
     reference_length: int | None = None
+    # Per-condition multi-timeframe reference (post-V1 (i)). When set, the RHS reference
+    # indicator (``reference_key``) is computed on a timeframe COARSER than the parent
+    # block: base bars are aggregated into that reference candle and the RHS only advances
+    # when a candle CLOSES (the fast ``source`` is compared against the slower, held RHS —
+    # no look-ahead). ``None`` computes the RHS on the block's own timeframe (Slice C /
+    # (#53) behaviour). Only meaningful when ``reference_key`` is set.
+    reference_resample_seconds: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -388,7 +398,17 @@ class ConditionEvaluator:
     validity window; ``until_opposite_signal`` is open-ended and clears the moment the
     check fails. The parent ``BlockEvaluator`` reads ``satisfied``."""
 
-    __slots__ = ("_active", "_active_left", "_prev_rhs", "_prev_source", "_ref_indicator", "_spec")
+    __slots__ = (
+        "_active",
+        "_active_left",
+        "_prev_rhs",
+        "_prev_source",
+        "_ref_bucket",
+        "_ref_form_close",
+        "_ref_indicator",
+        "_ref_resample_seconds",
+        "_spec",
+    )
 
     def __init__(self, spec: ConditionSpec) -> None:
         self._spec = spec
@@ -406,6 +426,13 @@ class ConditionEvaluator:
             if spec.reference_key is not None
             else None
         )
+        # Per-condition multi-timeframe reference (post-V1 (i)): a coarser reference candle
+        # aggregator over the RHS indicator. ``None`` span => the RHS ticks on every bar (the
+        # block's own timeframe). A positive span advances the RHS only on a completed
+        # reference candle. Only used when ``_ref_indicator`` is set.
+        self._ref_resample_seconds = spec.reference_resample_seconds
+        self._ref_bucket: int | None = None
+        self._ref_form_close: Decimal = _ZERO
 
     def update(
         self,
@@ -415,6 +442,7 @@ class ConditionEvaluator:
         low: Decimal,
         open_price: Decimal,
         indicator_value: Decimal | None,
+        timestamp: str | None = None,
     ) -> None:
         window = _VALIDITY_BARS.get(self._spec.validity, 1)
         # Age a finite window BEFORE this bar's fresh check can refresh it.
@@ -423,9 +451,10 @@ class ConditionEvaluator:
             if self._active_left <= 0:
                 self._active = False
                 self._active_left = None
-        # Advance the reference indicator (if any) so its RHS value is as-of this bar.
+        # Advance the reference indicator (if any) so its RHS value is as-of this bar; on a
+        # coarser reference timeframe it only advances when a reference candle closes.
         if self._ref_indicator is not None:
-            self._ref_indicator.update(close)
+            self._advance_reference(close, timestamp)
         source = self._series_value(
             self._spec.source, close, high, low, open_price, indicator_value
         )
@@ -440,6 +469,36 @@ class ConditionEvaluator:
             self._active_left = None
         self._prev_source = source
         self._prev_rhs = rhs
+
+    def _advance_reference(self, close: Decimal, timestamp: str | None) -> None:
+        """Feed the RHS reference indicator, resampling to a coarser timeframe if configured.
+
+        Base reference timeframe (``_ref_resample_seconds is None``): advance on every bar —
+        byte-identical to the (#53) two-package form, where the RHS ticks with the block.
+        Coarser reference timeframe (post-V1 (i)): aggregate the base bars' closes into the
+        current reference candle and advance the RHS only when that candle CLOSES (detected as
+        the first base bar of the next bucket), so the RHS never repaints from a still-forming
+        candle (no look-ahead). A missing/unparseable timestamp holds the last completed
+        reference candle's RHS (fails closed, never mis-buckets)."""
+        assert self._ref_indicator is not None
+        if self._ref_resample_seconds is None:
+            self._ref_indicator.update(close)
+            return
+        bucket = _htf_bucket(timestamp, self._ref_resample_seconds) if timestamp else None
+        if bucket is None:
+            return
+        if self._ref_bucket is None:
+            self._ref_bucket = bucket
+            self._ref_form_close = close
+            return
+        if bucket == self._ref_bucket:
+            self._ref_form_close = close
+            return
+        # A new reference bucket started: the previous reference candle is complete — advance
+        # the RHS with its close, then open the next forming reference candle.
+        self._ref_indicator.update(self._ref_form_close)
+        self._ref_bucket = bucket
+        self._ref_form_close = close
 
     def _series_value(
         self,
@@ -530,6 +589,7 @@ class BlockEvaluator:
         "_form_high",
         "_form_low",
         "_form_open",
+        "_form_ts",
         "_is_rsi",
         "_ma",
         "_prev_close",
@@ -566,6 +626,11 @@ class BlockEvaluator:
         self._form_high: Decimal = _ZERO
         self._form_low: Decimal = _ZERO
         self._form_close: Decimal = _ZERO
+        # Timestamp of the forming higher-TF candle's latest base bar (its close time). On a
+        # candle close it is handed to ``_advance`` so nested per-condition reference
+        # resampling (post-V1 (i)) buckets against the candle the trigger sees, not the raw
+        # base bars. On the base-TF path each bar's own timestamp is passed straight through.
+        self._form_ts: str | None = None
 
     def update(
         self,
@@ -581,8 +646,9 @@ class BlockEvaluator:
         low = close if low is None else low
         open_price = close if open_price is None else open_price
         if self._resample_seconds is None:
-            # Base-timeframe block: advance on every bar (Slice C behaviour).
-            self._advance(close, high, low, open_price)
+            # Base-timeframe block: advance on every bar (Slice C behaviour). The bar's own
+            # timestamp flows to the nested conditions for per-condition reference resampling.
+            self._advance(close, high, low, open_price, timestamp)
             return
         # Higher-timeframe block: aggregate the base bars into a coarser candle and
         # advance the inner compute only when that candle CLOSES — detected as the first
@@ -592,20 +658,31 @@ class BlockEvaluator:
         if bucket is None:
             return  # unparseable/absent timestamp: hold the last completed-candle signal
         if self._cur_bucket is None:
-            self._begin_htf_candle(bucket, open_price, high, low, close)
+            self._begin_htf_candle(bucket, open_price, high, low, close, timestamp)
             return
         if bucket == self._cur_bucket:
             self._form_high = max(self._form_high, high)
             self._form_low = min(self._form_low, low)
             self._form_close = close
+            self._form_ts = timestamp  # candle close time advances with each base bar
             return
         # A new bucket started: the previous higher-TF candle is complete — advance the
-        # inner compute with its aggregated OHLC, then open the next forming candle.
-        self._advance(self._form_close, self._form_high, self._form_low, self._form_open)
-        self._begin_htf_candle(bucket, open_price, high, low, close)
+        # inner compute with its aggregated OHLC (stamped at the candle's close time so a
+        # coarser per-condition reference buckets against the candle, not the base bars),
+        # then open the next forming candle.
+        self._advance(
+            self._form_close, self._form_high, self._form_low, self._form_open, self._form_ts
+        )
+        self._begin_htf_candle(bucket, open_price, high, low, close, timestamp)
 
     def _begin_htf_candle(
-        self, bucket: int, open_price: Decimal, high: Decimal, low: Decimal, close: Decimal
+        self,
+        bucket: int,
+        open_price: Decimal,
+        high: Decimal,
+        low: Decimal,
+        close: Decimal,
+        timestamp: str | None,
     ) -> None:
         """Start aggregating a fresh higher-TF candle from this base bar."""
         self._cur_bucket = bucket
@@ -613,8 +690,16 @@ class BlockEvaluator:
         self._form_high = high
         self._form_low = low
         self._form_close = close
+        self._form_ts = timestamp
 
-    def _advance(self, close: Decimal, high: Decimal, low: Decimal, open_price: Decimal) -> None:
+    def _advance(
+        self,
+        close: Decimal,
+        high: Decimal,
+        low: Decimal,
+        open_price: Decimal,
+        timestamp: str | None = None,
+    ) -> None:
         """Run one indicator/condition step over one (base or aggregated) candle."""
         # Age any active window BEFORE this bar's fresh event can refresh it.
         if self._active_left is not None and self._active_dir is not None:
@@ -645,6 +730,7 @@ class BlockEvaluator:
                 low=low,
                 open_price=open_price,
                 indicator_value=value,
+                timestamp=timestamp,
             )
         # Condition-only signal: fire on the RISING EDGE of the aggregate condition gate
         # (a directionless false->true transition), in the block's condition direction.

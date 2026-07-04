@@ -157,7 +157,11 @@ async def _resolve_block(
     min_condition_support: int | None = None
     condition_only = trigger == _OUTPUT_PLUS_CONDITION
     if trigger in _CONDITION_TRIGGERS:
-        conditions, reason = await _resolve_conditions(session, block)
+        # The block's effective timeframe is its own resample span when it computes on a
+        # higher timeframe, else the base bars — the floor a per-condition reference
+        # timeframe (post-V1 (i)) must be strictly coarser than.
+        block_effective_seconds = resample_seconds if resample_seconds is not None else base_seconds
+        conditions, reason = await _resolve_conditions(session, block, block_effective_seconds)
         if reason is not None:
             return None, reason
         condition_rule = str(block.condition_block_rule) if block.condition_block_rule else None
@@ -228,13 +232,16 @@ def _resolve_timeframe(timeframe: str, base_seconds: int | None) -> tuple[int | 
 
 
 async def _resolve_conditions(
-    session: AsyncSession, block: IndicatorBlock
+    session: AsyncSession, block: IndicatorBlock, block_effective_seconds: int | None
 ) -> tuple[tuple[ConditionSpec, ...], str | None]:
     """Dereference a block's nested condition packages into computable threshold specs.
 
     Fail-closed and honest: any enabled condition that cannot fully resolve (missing
     package, no recognized ``cond.*`` dependency, or no threshold) leaves the WHOLE
-    block unresolved with a specific reason, rather than computing a partial gate."""
+    block unresolved with a specific reason, rather than computing a partial gate.
+    ``block_effective_seconds`` is the parent block's effective timeframe span (its
+    resample span, else the base bars) — the floor a per-condition reference timeframe
+    must be coarser than."""
     enabled = [c for c in (block.condition_blocks or []) if c.enabled is not False]
     if not enabled:
         # A ``*_plus_condition`` trigger with no conditions is a misconfiguration; a
@@ -242,7 +249,7 @@ async def _resolve_conditions(
         return (), "condition_blocks_missing"
     specs: list[ConditionSpec] = []
     for cond in enabled:
-        spec, reason = await _resolve_condition(session, cond)
+        spec, reason = await _resolve_condition(session, cond, block_effective_seconds)
         if spec is None:
             return (), reason or "condition_unresolved"
         specs.append(spec)
@@ -268,7 +275,7 @@ def _condition_only_direction_reason(conditions: tuple[ConditionSpec, ...]) -> s
 
 
 async def _resolve_condition(
-    session: AsyncSession, cond: ConditionBlock
+    session: AsyncSession, cond: ConditionBlock, block_effective_seconds: int | None
 ) -> tuple[ConditionSpec | None, str | None]:
     revision = await pkg_repo.get_revision(session, cond.package_ref.package_revision_id)
     if revision is None:
@@ -280,8 +287,11 @@ async def _resolve_condition(
     source = _source_override(overrides)
 
     # An optional 2nd separately-pinned indicator package as the RHS series (two-package
-    # indicator-vs-indicator). Fail-closed if pinned but not a computable series.
-    ref_key, ref_length, ref_reason = await _resolve_reference_package(session, cond)
+    # indicator-vs-indicator), optionally on a coarser per-condition timeframe (post-V1 (i)).
+    # Fail-closed if pinned but not a computable series.
+    ref_key, ref_length, ref_resample, ref_reason = await _resolve_reference_package(
+        session, cond, block_effective_seconds
+    )
     if ref_reason is not None:
         return None, ref_reason
 
@@ -324,6 +334,7 @@ async def _resolve_condition(
                 validity=str(cond.validity),
                 reference_key=ref_key,
                 reference_length=ref_length,
+                reference_resample_seconds=ref_resample,
             ),
             None,
         )
@@ -350,27 +361,72 @@ async def _resolve_condition(
 
 
 async def _resolve_reference_package(
-    session: AsyncSession, cond: ConditionBlock
-) -> tuple[str | None, int | None, str | None]:
-    """Dereference the optional 2nd pinned INDICATOR package into ``(key, length)``.
+    session: AsyncSession, cond: ConditionBlock, block_effective_seconds: int | None
+) -> tuple[str | None, int | None, int | None, str | None]:
+    """Dereference the optional 2nd pinned INDICATOR package into ``(key, length, resample)``.
 
     The two-package indicator-vs-indicator RHS: the condition compares its source against
     THIS package's computed output series (e.g. a fast MA vs a slow MA). Returns
-    ``(None, None, None)`` when no reference package is pinned; a specific fail-closed
+    ``(None, None, None, None)`` when no reference package is pinned; a specific fail-closed
     reason when pinned but the revision is missing or resolves to no computable series
-    (only ``DIRECTIONAL_KEYS`` — the MA/RSI family — are computable as an inline series)."""
+    (only ``DIRECTIONAL_KEYS`` — the MA/RSI family — are computable as an inline series).
+
+    ``resample`` is the per-condition multi-timeframe reference span (post-V1 (i)): the RHS
+    may compute on a timeframe strictly COARSER than the parent block's effective timeframe
+    (``block_effective_seconds``). A reference-timeframe override with NO reference package
+    has no series to resample — a misconfiguration surfaced, not silently ignored."""
     ref = cond.reference_package_ref
+    ref_tf = str(cond.reference_timeframe)
     if ref is None:
-        return None, None, None
+        if ref_tf not in _BASE_TIMEFRAMES:
+            return (
+                None,
+                None,
+                None,
+                (f"condition_reference_timeframe_without_package:{cond.condition_block_id}"),
+            )
+        return None, None, None, None
     revision = await pkg_repo.get_revision(session, ref.package_revision_id)
     if revision is None:
-        return None, None, f"condition_reference_package_unresolved:{cond.condition_block_id}"
+        return None, None, None, f"condition_reference_package_unresolved:{cond.condition_block_id}"
     key = _primary_directional_key(revision.dependency_snapshot)
     if key is None:
-        return None, None, f"condition_reference_no_series:{cond.condition_block_id}"
+        return None, None, None, f"condition_reference_no_series:{cond.condition_block_id}"
+    resample, tf_reason = _resolve_reference_timeframe(
+        ref_tf, block_effective_seconds, cond.condition_block_id
+    )
+    if tf_reason is not None:
+        return None, None, None, tf_reason
     overrides = cond.parameter_overrides or {}
     length = _int_override(overrides, _REFERENCE_LENGTH_KEYS) or default_length(key)
-    return key, length, None
+    return key, length, resample, None
+
+
+def _resolve_reference_timeframe(
+    timeframe: str, block_effective_seconds: int | None, condition_block_id: str
+) -> tuple[int | None, str | None]:
+    """Resolve a condition's reference timeframe to a resample span (seconds) or a reason.
+
+    Per-condition multi-timeframe reference (post-V1 (i)). The RHS reference indicator may
+    compute on a timeframe COARSER than the parent block's effective timeframe.
+    ``same_as_base_tf`` / ``use_package_default_tf`` keep the RHS on the block's timeframe (a
+    ``None`` span — the (#53) two-package behaviour). A concrete override resamples the RHS
+    when strictly coarser than the block; equal-to-block collapses to the block compute. An
+    override strictly FINER than a known block timeframe cannot be up-sampled (the RHS would
+    have to advance faster than the condition ticks) and is honest-unresolved. When the block
+    timeframe is unknown the override still resolves (it degrades deterministically to the
+    block's bars) — the boundary is surfaced, not guessed."""
+    if timeframe in _BASE_TIMEFRAMES:
+        return None, None
+    target = timeframe_seconds(timeframe)
+    if target is None:
+        return None, f"condition_reference_timeframe_unrecognized:{condition_block_id}"
+    if block_effective_seconds is not None:
+        if target < block_effective_seconds:
+            return None, f"condition_reference_timeframe_finer_than_block:{condition_block_id}"
+        if target == block_effective_seconds:
+            return None, None
+    return target, None
 
 
 def _primary_condition_key(dependency_snapshot: dict[str, Any]) -> str | None:

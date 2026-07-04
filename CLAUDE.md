@@ -76,10 +76,11 @@ Before stopping a working session, produce **ALL** of the following:
   blocks (INF-12 Slice C follow-up b, PR #49) + condition extensions
   (INF-12 Slice C follow-up b2, PR #51) + two-package indicator-vs-indicator
   (INF-12 Slice C follow-up, PR #53) + higher-timeframe bar resampling
-  (INF-12 Slice C follow-up c, PR #55)**. **Overall: ~76% complete** (V1=100%, post-V1 core=72%, frontend=15%).
-  `main` after PR #55 (multi-timeframe code `def6c28`; indicator-vs-indicator code `9087c2b`; condition-extensions code `361df4c`; condition-blocks code `8766fae`; risk_based code `43cee29`; Slice C code `671d227`);
+  (INF-12 Slice C follow-up c, PR #55) + per-condition multi-timeframe reference
+  (INF-12 Slice C follow-up i, PR #56)**. **Overall: ~77% complete** (V1=100%, post-V1 core=74%, frontend=15%).
+  `main` after PR #56 (per-condition code `1c5cca0`; multi-timeframe code `def6c28`; indicator-vs-indicator code `9087c2b`; condition-extensions code `361df4c`; condition-blocks code `8766fae`; risk_based code `43cee29`; Slice C code `671d227`);
   alembic head = **`0021_local_auth`** (`human_credentials` + `auth_sessions`;
-  Slices A/B/C + follow-ups (a)/(b)/(b2)/(#53)/(c) need no migration). **939 tests green** (928 + 11 multi-timeframe resampling).
+  Slices A/B/C + follow-ups (a)/(b)/(b2)/(#53)/(c)/(i) need no migration). **953 tests green** (939 + 14 per-condition multi-TF reference).
   Follow-up (c) — higher-timeframe bar resampling (PR #55): an indicator block may
   compute on a timeframe COARSER than the base bars (`timeframe` override was
   `timeframe_override_deferred`; now resamples). `domain/backtest/indicators.py`
@@ -95,9 +96,29 @@ Before stopping a working session, produce **ALL** of the following:
   still resamples (degrades to base bars, deterministic). `market_data` repo read-only
   `get_base_timeframe_for_revision` (`ResolutionKind.BAR` `resolution_value`). `engine.py`
   passes `bar.timestamp` to evaluators + `multi_timeframe_blocks` diagnostic; `ENGINE_VERSION`
-  → `backtest-engine-v2-multi-timeframe` (execution_key ns shift). Honest boundary: a
-  per-CONDITION multi-TF reference (item ii) still deferred. +11 tests (unit +6 / integration
-  +5). No migration.
+  → `backtest-engine-v2-multi-timeframe` (execution_key ns shift). +11 tests (unit +6 /
+  integration +5). No migration.
+  Follow-up (i) — per-condition multi-timeframe reference (PR #56): a nested condition's
+  RHS reference indicator (`reference_package_ref`, the #53 two-package form) may compute on
+  a timeframe COARSER than its parent block (fast `source` vs a slower reference that only
+  advances on a completed reference candle → no look-ahead, symmetric with (c)).
+  `domain/strategy/config.py` `ConditionBlock` +`reference_timeframe` (optional Literal,
+  default `same_as_base_tf`; JSONB, no migration). `indicators.py` `ConditionSpec`
+  +`reference_resample_seconds:int|None`; `ConditionEvaluator._advance_reference` buckets the
+  RHS closes and advances it ONLY on a completed reference candle (`reference_resample_seconds
+  is None` → advance-every-bar, BYTE-IDENTICAL to #53); `ConditionEvaluator.update` +`timestamp`
+  kwarg; `BlockEvaluator._advance` threads `timestamp` to conditions + tracks `_form_ts` (forming
+  HTF candle close time → a nested reference buckets against the parent candle, not raw base
+  bars). Honest dar boundary: only the reference PACKAGE is resampled (bounded `reference`/
+  constant `threshold` RHS stays on the block TF). `indicator_plan.py` `_resolve_reference_timeframe`
+  resolves against `block_effective_seconds` (block resample span else base bars): coarser→
+  `reference_resample_seconds`, equal→block compute, finer→`condition_reference_timeframe_finer_than_block`,
+  base/block-unknown→still resamples; `_resolve_reference_package` now returns a 4-tuple; a
+  reference-TF override with no reference package → `condition_reference_timeframe_without_package`.
+  `engine.py` +`per_condition_timeframe_conditions` diagnostic; `ENGINE_VERSION` →
+  `backtest-engine-v2-per-condition-timeframe` (execution_key ns shift). Review APPROVE 0
+  CRITICAL/HIGH. +14 tests (unit +6 / integration +8). No migration. Honest boundary: >2-package
+  (N-ary, ii) and non-MA/RSI reference keys (d) still deferred.
   Follow-up — two-package indicator-vs-indicator (PR #53): a nested `ConditionBlock`
   can pin a SECOND indicator package whose computed output series is the condition RHS
   (the canonical fast-MA vs slow-MA crossover; opens the (b2) honest boundary). Previously
@@ -214,9 +235,8 @@ Before stopping a working session, produce **ALL** of the following:
 - **Next:** **post-V1 (continued)** — **3 priority tiers:**
   
   **TIER 1 — Slice C remaining (backend, high-impact):**
-  - **(i) Per-condition multi-TF reference** (now UNBLOCKED by (c): a condition's RHS on a different TF; today conditions inherit the parent block's TF, no per-condition timeframe field yet)
-  - **(ii) >2-package condition comparison** (N-ary reference schema, not just `reference_package_ref`; fast-MA vs slow-MA vs volume MA)
-  - **(iii) Non-MA/RSI directional keys** (`ta.atr`/`ta.vwap` recognized-but-non-directional today; must become `DIRECTIONAL_KEYS` or stay `unresolved`)
+  - **(ii) >2-package condition comparison** (N-ary reference schema, not just `reference_package_ref`; fast-MA vs slow-MA vs volume MA — extends the (i)/#56 `reference_package_ref`+`reference_timeframe` fields to N-ary)
+  - **(d) Non-MA/RSI directional keys** (`ta.atr`/`ta.vwap` recognized-but-non-directional today; must become `DIRECTIONAL_KEYS` or stay `unresolved`; also blocks them as reference-package RHS)
   - **formula_based / Kelly sizing** (still notional fallback + `position_sizing_method_unsupported`; path-dependent, ungrounded in the foundation)
   
   **TIER 2 — Frontend + infra (user-facing, 0% today):**
@@ -236,5 +256,6 @@ Before stopping a working session, produce **ALL** of the following:
   - (b2) condition extensions **PR #51** — crosses/between/series-vs-series
   - indicator-vs-indicator **PR #53** — two-package reference
   - (c) higher-timeframe bar resampling **PR #55** — indicator block on a coarser TF (no look-ahead)
+  - (i) per-condition multi-TF reference **PR #56** — a condition's RHS reference package on a coarser TF (no look-ahead); `ConditionBlock.reference_timeframe`
   
   Full roadmap: `docs/POST_V1_KICKOFF.md`.

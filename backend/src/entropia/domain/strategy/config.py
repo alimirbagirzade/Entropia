@@ -417,6 +417,30 @@ class ConditionBlock(BaseModel):
         ),
     )
 
+    reference_timeframe: Literal[
+        "same_as_base_tf",
+        "use_package_default_tf",
+        "1m",
+        "3m",
+        "5m",
+        "15m",
+        "30m",
+        "1h",
+        "2h",
+        "4h",
+        "1D",
+    ] = Field(
+        default="same_as_base_tf",
+        description=(
+            "Timeframe on which the reference_package_ref RHS series is computed "
+            "(per-condition multi-timeframe reference). Only meaningful with a "
+            "reference_package_ref; a value strictly COARSER than the parent block's "
+            "effective timeframe resamples the RHS (the fast source is compared against "
+            "the slower reference, which only advances on a completed reference candle — "
+            "no look-ahead). same_as_base_tf keeps the RHS on the block's timeframe."
+        ),
+    )
+
     parameter_overrides: dict[str, Any] | None = Field(
         default=None, description="Package parameter overrides"
     )

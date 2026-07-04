@@ -79,10 +79,11 @@ Before stopping a working session, produce **ALL** of the following:
   (INF-12 Slice C follow-up c, PR #55) + per-condition multi-timeframe reference
   (INF-12 Slice C follow-up i, PR #56) + N-ary reference chain
   (INF-12 Slice C follow-up ii, PR #57) + VWAP directional key
-  (INF-12 Slice C follow-up d, PR #58)**. **Overall: ~79% complete** (V1=100%, post-V1 core=79%, frontend=15%).
-  `main` after PR #57 (VWAP code `d27b2bb` — PR #58 awaiting merge; N-ary code `44099a7`; per-condition code `1c5cca0`; multi-timeframe code `def6c28`; indicator-vs-indicator code `9087c2b`; condition-extensions code `361df4c`; condition-blocks code `8766fae`; risk_based code `43cee29`; Slice C code `671d227`);
+  (INF-12 Slice C follow-up d, PR #58) + formula_based Kelly criterion sizing
+  (INF-12 Slice C follow-up, PR #60 + non-finite fail-closed fix PR #61)**. **Overall: ~80% complete** (V1=100%, post-V1 core=82%, frontend=15%).
+  `main` after PR #61 (`54e71d2`; Kelly feat `3f254bc` / non-finite fail-closed fix `3a92e7d`; VWAP code `d27b2bb`; N-ary code `44099a7`; per-condition code `1c5cca0`; multi-timeframe code `def6c28`; indicator-vs-indicator code `9087c2b`; condition-extensions code `361df4c`; condition-blocks code `8766fae`; risk_based code `43cee29`; Slice C code `671d227`);
   alembic head = **`0021_local_auth`** (`human_credentials` + `auth_sessions`;
-  Slices A/B/C + follow-ups (a)/(b)/(b2)/(#53)/(c)/(i)/(ii)/(d) need no migration). **987 tests green** (970 + 17 VWAP directional).
+  Slices A/B/C + follow-ups (a)/(b)/(b2)/(#53)/(c)/(i)/(ii)/(d) + Kelly sizing need no migration). **999 tests green** (987 + 12 Kelly: 9 feat / 3 non-finite fix).
   Follow-up (ii) — N-ary reference chain (PR #57): a nested condition's RHS extends from
   a single reference package (#53/#56) to an ORDERED chain of >2 separately-pinned indicator
   packages (`source [cmp] ref0 [cmp] ref1 ...` — the classic `fast > slow > slowest` MA fan;
@@ -255,8 +256,9 @@ Before stopping a working session, produce **ALL** of the following:
 - **Next:** **post-V1 (continued)** — **3 priority tiers:**
   
   **TIER 1 — Slice C remaining (backend, high-impact):**
-  - ~~**(d) `ta.vwap` directional key**~~ ✅ **LANDED (PR #58)** — `ta.vwap` is now in `DIRECTIONAL_KEYS` (native trigger + reference package + N-ary leg). `ta.atr` correctly stays non-directional **by nature** (volatility band, no cross) — the honest terminal boundary. Slice C indicator-compute follow-ups are now effectively complete.
-  - **formula_based / Kelly sizing** (still notional fallback + `position_sizing_method_unsupported`; path-dependent, ungrounded in the foundation) — **the natural remaining TIER 1 item**
+  - ~~**(d) `ta.vwap` directional key**~~ ✅ **LANDED (PR #58)** — Slice C indicator-compute follow-ups effectively complete (`ta.atr` correctly stays non-directional by nature).
+  - ~~**formula_based / Kelly sizing**~~ ✅ **LANDED (PR #60 + non-finite fail-closed fix PR #61)** — Kelly criterion honored; `custom_formula` + adaptive/rolling Kelly stay honest `unresolved` (no safe eval / path-dependent look-ahead). **Slice C indicator-compute + sizing follow-ups now EFFECTIVELY COMPLETE.**
+  - **`position_size_limits` (min/max cap) wiring** — **the natural remaining TIER 1 item**: `PositionSizeLimits` is defined on the sizing config but silently ignored across ALL sizing methods in `engine._position_size` (latent bug); wiring clamps every computed size to the configured bounds; requires an `ENGINE_VERSION` bump.
   
   **TIER 2 — Frontend + infra (user-facing, 0% today):**
   - Frontend SSE/metrics/login integration (WebSocket subscription, real-time backtest progress, user session)
@@ -278,5 +280,6 @@ Before stopping a working session, produce **ALL** of the following:
   - (i) per-condition multi-TF reference **PR #56** — a condition's RHS reference package on a coarser TF (no look-ahead); `ConditionBlock.reference_timeframe`
   - (ii) N-ary reference chain **PR #57** — condition RHS as an ordered chain of >2 packages (`fast > slow > slowest` MA fan); `ConditionBlock.additional_reference_package_refs`
   - (d) VWAP directional key **PR #58** — `ta.vwap` → `DIRECTIONAL_KEYS` (rolling volume-weighted price line; price/VWAP cross native trigger + reference package + N-ary leg); `_Vwap` compute, volume threaded through engine→evaluators, `ENGINE_VERSION=backtest-engine-v2-vwap-directional`; `ta.atr` stays non-directional by nature
+  - formula_based **Kelly criterion sizing PR #60** (+ non-finite fail-closed fix **PR #61**) — `formula_based_sizing`+`kelly_criterion` honored: `f*=kelly_fraction·(W−(1−W)/R)` (clamp 0), `size=usable_equity·f*/entry_price` (entry-price dependent); `_decimal_param`/`_kelly_capital_fraction`/`_position_size` Kelly branch/`_sizing_is_honored` in `engine.py`; `ENGINE_VERSION=backtest-engine-v2-kelly-sizing`; no migration; review fixed a non-finite `formula_params` crash + Inf-payoff silent-honor via `Decimal.is_finite()` guard; `custom_formula`/adaptive Kelly stay `unresolved`
   
   Full roadmap: `docs/POST_V1_KICKOFF.md`.

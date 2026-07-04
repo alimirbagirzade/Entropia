@@ -3,6 +3,30 @@
 > **Amaç:** V1 kapandı (Stage 0–8 COMPLETE). Bu doküman post-V1 durumunu, aday iş listesini
 > ve temiz oturumda yapıştırılacak resume prompt'u içerir.
 
+## Durum (2026-07-04, formula_based Kelly sizing — Slice C follow-up sonrası; PR #60 + #61)
+
+> **`formula_based` (Kelly criterion) sizing landed (PR #60, kod `3f254bc`) + non-finite
+> fail-closed fix (PR #61, kod `3a92e7d`); ikisi de MERGED → main `54e71d2`.**
+> `formula_based_sizing` + `kelly_criterion` config artık **HONORED**: fractional-Kelly capital
+> fraction `f* = kelly_fraction·(W − (1−W)/R)` (alt-clamp 0), pozisyon usable equity'den boyutlanır
+> (entry-price **BAĞIMLI**, `risk_based`'in stop-mesafesi boyutlamasının aksine). Diğer TÜM
+> `formula_based` şekilleri (özellikle `custom_formula`) hâlâ notional fallback +
+> `position_sizing_method_unsupported`. `ENGINE_VERSION=backtest-engine-v2-kelly-sizing`.
+> **Migration YOK** (config-only). **999 test** (987 + 12: 9 Kelly feat / 3 non-finite fix).
+> **Review (PR #60):** 1 CONFIRMED defect — non-finite `formula_params` (NaN/Inf) → Decimal
+> aritmetiği `InvalidOperation` **CRASH** + Inf payoff → `(1−W)/R=0` → `f*` **SESSİZ honor**;
+> **PR #61** `Decimal.is_finite()` guard'ı ile kapatıldı (non-finite → None → fail-closed) + 3
+> regresyon testi. (#60 fix commit branch'e gelmeden self-merge edildi → fix ayrı PR #61 ile
+> landed; ikisi de main'de.) **Reuse anchor'ları:** STAGE2_HANDOFF.md «formula_based Kelly …
+> landed» + `domain/backtest/engine.py` (`_decimal_param` / `_kelly_capital_fraction` /
+> `_position_size` Kelly dalı / `_sizing_is_honored`) + `manifest.py` `ENGINE_VERSION`.
+> **Dürüst sınır:** adaptif/rolling Kelly (W/R backtest'ten tahmin) deferred (path-dependent +
+> look-ahead); `custom_formula` unsupported (güvenli eval yok). Slice C indikatör-compute +
+> sizing follow-up'ları böylece **EFEKTİF TAMAM**; sıradaki **TIER 1 kalıntısı**
+> `position_size_limits` (min/max cap) wiring — `PositionSizeLimits` config'de tanımlı ama TÜM
+> sizing metodlarında `engine._position_size`'da **sessizce ignore ediliyor** (latent bug;
+> ENGINE_VERSION bump gerektirir). Aşağıdaki VWAP (d) bloğu ve öncesi tarihsel.
+
 ## Durum (2026-07-04, VWAP directional key — Slice C follow-up (d) sonrası; PR #58)
 
 > **(d) VWAP directional key landed (PR #58, kod `d27b2bb`; merge KULLANICIDA, CI yeşil).**
@@ -358,55 +382,51 @@ engine Slice B (PR #43) + gerçek indikatör compute Slice C (PR #45) + risk_bas
 (PR #47) + threshold condition blocks (b) (PR #49) + condition EXTENSIONS (b2) (PR #51) +
 two-package indicator-vs-indicator (PR #53) + HIGHER-TIMEFRAME bar resampling (c) (PR #55) +
 PER-CONDITION multi-timeframe reference (i) (PR #56) + N-ARY reference chain (ii) (PR #57) +
-VWAP directional key (d) (PR #58) — HEPSİ MERGED (feature + kapanış docs dahil; PR #58 merge'i
-teyit et — CI yeşildi, merge KULLANICIDA idi).
-ÖNCE DOĞRULA (stale-by-default): git fetch && git log --oneline origin/main -4 &&
-gh pr list --state merged -L 6. main = #58 merge bekleniyor (VWAP kodu d27b2bb; #57 N-ary 44099a7;
-#56 per-condition 1c5cca0; #55 multi-tf def6c28; #53 9087c2b; (b2) 361df4c; condition-blocks (b) 8766fae;
-risk_based (a) 43cee29; Slice C 671d227); alembic head 0021_local_auth (migration YOK). İzole DB:
+VWAP directional key (d) (PR #58) + formula_based KELLY sizing (PR #60) + non-finite fail-closed
+fix (PR #61) — HEPSİ MERGED.
+ÖNCE DOĞRULA (stale-by-default): git fetch && git log --oneline origin/main -5 &&
+gh pr list --state all -L 6. main = 54e71d2 (Merge #61; Kelly feat 3f254bc / fix 3a92e7d;
+VWAP d27b2bb; #57 N-ary 44099a7; #56 per-condition 1c5cca0; #55 multi-tf def6c28; #53 9087c2b;
+(b2) 361df4c; condition-blocks (b) 8766fae; risk_based (a) 43cee29; Slice C 671d227); alembic head
+0021_local_auth (Kelly + fix migration YOK). İzole DB:
 TEST_DATABASE_URL=postgresql+asyncpg://entropia:entropia@localhost:5432/entropia_auth.
-Test tabanı 987; pytest --co --no-cov ile teyit et (bu projede dosya-başına ": N" basar → topla).
-ENGINE_VERSION = backtest-engine-v2-vwap-directional.
-ÖNCE docs/POST_V1_KICKOFF.md + docs/STAGE2_HANDOFF.md ("N-ary reference chain landed
-(PR #57)" + "Next: remaining Slice C follow-ups") oku.
+Test tabanı 999; pytest --co --no-cov ile teyit et (bu projede dosya-başına ": N" basar → topla).
+ENGINE_VERSION = backtest-engine-v2-kelly-sizing.
+ÖNCE docs/POST_V1_KICKOFF.md + docs/STAGE2_HANDOFF.md ("formula_based Kelly criterion sizing
+landed (PR #60) + non-finite fail-closed fix (PR #61)" + "Next: remaining Slice C follow-ups") oku.
 
-SIRADAKİ İŞ (kullanıcıyla SEÇ): (d) VWAP directional key ile Slice C indikatör-compute
-follow-up'ları ETKİN BİÇİMDE TAMAMLANDI (kalan tek non-directional key ta.atr doğası gereği
-yönsüz — dürüst terminal sınır). Doğal sıradaki işler:
-- formula_based / Kelly sizing (hâlâ notional fallback + position_sizing_method_unsupported
-  uyarısı; path-dependent istatistik — foundation'da temellendirilmesi gerekir; TIER 1 kalanı).
-- VEYA backend indikatör katmanından çık: frontend SSE/metrics/login, CP real candidate
+SIRADAKİ İŞ (kullanıcıyla SEÇ): Slice C indikatör-compute + sizing follow-up'ları EFEKTİF TAMAM
+(Kelly honored; kalan tek non-directional key ta.atr doğası gereği yönsüz; custom_formula +
+adaptif/rolling Kelly dürüst unresolved). Doğal sıradaki işler:
+- TIER 1 kalıntısı (ÖNERİLEN, küçük/temiz/düşük-risk): position_size_limits (min/max cap) wiring —
+  PositionSizeLimits config'de tanımlı ama TÜM sizing metodlarında engine._position_size'da SESSİZCE
+  ignore ediliyor (latent bug); ENGINE_VERSION bump gerektirir.
+- VEYA backend indikatör/sizing katmanından çık: frontend SSE/metrics/login, CP real candidate
   generation, capability aktivasyonları, deferred liste (ilk-Admin provisioning, retention
-  auto-purge). Öncelik: docs/STAGE2_HANDOFF.md "Next" + bu doküman aday listesi.
+  auto-purge, summary["timeframe"] market-revision metadata'dan çözümü). Öncelik:
+  docs/STAGE2_HANDOFF.md "Next" + bu doküman aday listesi.
 
-REUSE ANCHOR'LARI (#58 VWAP directional key; kodu incele, tek satır özet). ta.vwap artık
-DIRECTIONAL_KEYS üyesi: rolling volume-ağırlıklı fiyat çizgisi, fiyat/VWAP cross'u native
-yönlü trigger (MA-cross ile AYNI şekil — _detect'in MA-family dalı), native trigger + reference
-paketi + N-ary chain leg olarak kullanılabilir. ta.atr non-directional kaldı. Migration YOK
-(ta.vwap zaten seed'li; bar'lar zaten canonical `volume` sütununu taşıyordu, engine _normalize
-düşürüyordu):
-- domain/backtest/indicators.py — DIRECTIONAL_KEYS += {ta.vwap}, VOLUME_WEIGHTED_KEYS,
-  NON_DIRECTIONAL_KEYS = {ta.atr}. Yeni _Vwap (bounded-memory rolling window, typical (H+L+C)/3 ×
-  volume, `length` warm-up, ZERO-VOLUME window → value None fail-closed — divide-by-zero yok,
-  phantom cross yok). _feed_indicator dispatch volume'ü YALNIZ _Vwap'a router (MA/RSI BYTE-IDENTICAL).
-  Volume BlockEvaluator._advance / ConditionEvaluator.update / _ReferenceSeries.advance boyunca
-  threadlendi (reference-leg aggregation resampled VWAP leg için mum boyunca volume TOPLAR; MA/RSI'de inert).
-- domain/backtest/engine.py — _Bar.volume + _volume() (opsiyonel canonical OHLCV sütunu → non-negatif
-  Decimal; yok/negatif → 0, non-blocking); evaluator'lara volume=; vwap_blocks diagnostic.
-- domain/backtest/manifest.py — ENGINE_VERSION=backtest-engine-v2-vwap-directional (execution_key ns shift).
-- application/queries/indicator_plan.py — SADECE docstring; ta.vwap mevcut DIRECTIONAL_KEYS kontrolleriyle
-  otomatik directional çözülür (blok + reference paketi + her N-ary leg). Logic değişmedi.
-- Testler (+17 → 987): tests/unit/test_backtest_vwap.py (+12: _Vwap volume-ağırlık vs SMA, typical price,
-  warm-up, zero-volume fail-closed, native long/short cross, direction filter, VWAP reference leg, N-ary
-  VWAP leg, resampled VWAP leg) + tests/integration/test_vwap_resolution.py (+5: directional native trigger,
-  ta.atr HÂLÂ unresolved, VWAP reference paketi + N-ary leg çözümü, e2e VWAP bloğu gerçek long entry).
-DÜRÜST SINIR: ta.atr doğası gereği non-directional (volatilite bandı, cross yok) → terminal sınır;
-gelecekte yönlü yorumu olan yeni bir canonical key VWAP ile aynı şekilde DIRECTIONAL_KEYS'e eklenir.
+REUSE ANCHOR'LARI (#60/#61 formula_based Kelly sizing; kodu incele, tek satır özet). Migration YOK
+(config-only; sizing sub-config zaten StrategyConfig'te vardı):
+- domain/backtest/engine.py — _decimal_param(params, key): serbest formula_params değeri → best-effort
+  Decimal; absent / parse-fail / NON-FINITE (NaN/±Inf, Decimal.is_finite() guard) → None (fail-closed).
+  _kelly_capital_fraction(sizing): f* = kelly_fraction·(W − (1−W)/R), alt-clamp 0; kelly_fraction ABSENT
+  → full Kelly (1); PRESENT-ama-garbage/out-of-range, custom_formula, eksik/non-finite W (win_probability)
+  / R (payoff_ratio) → None. _position_size Kelly dalı: size = usable_equity·f*/entry_price (entry-price
+  BAĞIMLI, risk_based'in stop-mesafesi boyutlamasının aksine). _sizing_is_honored: geçerli Kelly config →
+  True (position_sizing_method_unsupported yalnız desteklenmeyen şekiller için).
+- domain/backtest/manifest.py — ENGINE_VERSION=backtest-engine-v2-kelly-sizing (execution_key ns shift).
+- Testler (+12 → 999): 9 Kelly feat (PR #60) + 3 non-finite regresyon (PR #61) → tests/unit/test_backtest_engine.py.
+REVIEW (PR #60): 1 CONFIRMED defect — non-finite formula_params (NaN/Inf) → Decimal aritmetiği
+InvalidOperation CRASH + Inf payoff → (1−W)/R=0 → f* SESSİZ honor; PR #61 Decimal.is_finite() guard'ı ile
+kapatıldı (non-finite → None → fail-closed). DÜRÜST SINIR: adaptif/rolling Kelly (W/R backtest'ten tahmin)
+deferred (path-dependent + look-ahead); custom_formula unsupported (güvenli eval yok) → notional fallback.
 
 YÖNTEM: Workflow KULLANMA; YENİ dosya heredoc (gate-free), mevcut dosya Edit 4-fact (GateGuard:
-ilk Bash + dosya-başına-ilk-edit gate); cd backend (cwd resetlenebilir → absolute path); ruff+format+
-mypy+pytest (izole DB: ...entropia_auth; 970 yeşil kalmalı); migration gerekirse 0022_* (→0021) up/down/up
-+ parity + L1 FK proof; CRITICAL/HIGH AMPİRİK DOĞRULA → commit (conventional, attribution YOK)
-→ PR → gh pr checks --watch → merge KULLANICIDA. Türkçe, MALİYET BİLİNÇLİ. Kapanışta: handoff +
-kickoff + CLAUDE.md + memory (ecc knowledge graph; claude-mem token stale/worker-modda atlanabilir).
+ilk Bash + dosya-başına-ilk-edit + docs dosyaları da gate'lenir); cd backend (cwd resetlenebilir →
+absolute path); ruff+format+mypy+pytest (izole DB: ...entropia_auth; 999 yeşil kalmalı); migration
+gerekirse 0022_* (→0021) up/down/up + parity + L1 FK proof; CRITICAL/HIGH AMPİRİK DOĞRULA → commit
+(conventional, attribution YOK) → PR → gh pr checks --watch → merge KULLANICIDA. Türkçe, MALİYET
+BİLİNÇLİ. Kapanışta: handoff + kickoff + CLAUDE.md + memory (ecc knowledge graph; claude-mem token
+stale/worker-modda atlanabilir).
 ```

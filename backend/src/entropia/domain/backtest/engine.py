@@ -34,6 +34,7 @@ from typing import TYPE_CHECKING, Any
 
 from entropia.domain.backtest.indicators import (
     BUILTIN_ENTRY_MODEL,
+    VOLUME_WEIGHTED_KEYS,
     BlockEvaluator,
     IndicatorPlan,
     aggregate,
@@ -105,6 +106,7 @@ class _Bar:
     high: Decimal
     low: Decimal
     close: Decimal
+    volume: Decimal
 
 
 @dataclass(slots=True)
@@ -126,8 +128,25 @@ def _dec(value: Any) -> Decimal:
     return Decimal(str(value))
 
 
+def _volume(value: Any) -> Decimal:
+    """Coerce an optional volume cell to a NON-NEGATIVE Decimal (post-V1 (d)).
+
+    Volume drives the VWAP weighting; an absent or unparseable cell degrades to zero
+    (non-blocking, mirroring the market-data validation policy) and a stray negative is
+    clamped to zero so it can never invert the volume-weighted mean."""
+    if value is None:
+        return _ZERO
+    try:
+        return max(_dec(value), _ZERO)
+    except (ArithmeticError, TypeError, ValueError):
+        return _ZERO
+
+
 def _normalize(raw: dict[str, Any]) -> _Bar | None:
-    """Project a raw OHLCV row to a typed bar; drop rows missing a price field."""
+    """Project a raw OHLCV row to a typed bar; drop rows missing a price field.
+
+    Volume is optional (only a VWAP block reads it — post-V1 (d)); an absent or
+    unparseable volume degrades to zero rather than dropping the bar."""
     try:
         return _Bar(
             timestamp=str(raw["timestamp"]),
@@ -135,6 +154,7 @@ def _normalize(raw: dict[str, Any]) -> _Bar | None:
             high=_dec(raw["high"]),
             low=_dec(raw["low"]),
             close=_dec(raw["close"]),
+            volume=_volume(raw.get("volume")),
         )
     except (KeyError, TypeError, ArithmeticError, ValueError):
         return None
@@ -405,9 +425,23 @@ def run_engine(
             exit_hit = False
             if plan_active and indicator_plan is not None:
                 for ev in entry_evals:
-                    ev.update(bar.close, bar.high, bar.low, bar.open, timestamp=bar.timestamp)
+                    ev.update(
+                        bar.close,
+                        bar.high,
+                        bar.low,
+                        bar.open,
+                        volume=bar.volume,
+                        timestamp=bar.timestamp,
+                    )
                 for ev in exit_evals:
-                    ev.update(bar.close, bar.high, bar.low, bar.open, timestamp=bar.timestamp)
+                    ev.update(
+                        bar.close,
+                        bar.high,
+                        bar.low,
+                        bar.open,
+                        volume=bar.volume,
+                        timestamp=bar.timestamp,
+                    )
                 entry_signal = aggregate(indicator_plan.entry_rule, entry_evals)
                 if exit_evals and indicator_plan.exit_rule is not None:
                     exit_hit = aggregate(indicator_plan.exit_rule, exit_evals) is not None
@@ -563,6 +597,24 @@ def run_engine(
         if plan_active and indicator_plan is not None
         else 0
     )
+    # Blocks/reference legs computed as a volume-weighted price line (VWAP — post-V1 (d)):
+    # the first directional key whose compute consumes the bars' volume — surfaced for audits.
+    vwap_blocks = (
+        sum(
+            1
+            for spec in (*indicator_plan.entry_specs, *indicator_plan.exit_specs)
+            if spec.canonical_key in VOLUME_WEIGHTED_KEYS
+        )
+        + sum(
+            1
+            for spec in (*indicator_plan.entry_specs, *indicator_plan.exit_specs)
+            for cond in spec.conditions
+            if cond.reference_key in VOLUME_WEIGHTED_KEYS
+            or any(leg.key in VOLUME_WEIGHTED_KEYS for leg in cond.extra_references)
+        )
+        if plan_active and indicator_plan is not None
+        else 0
+    )
     entry_model = BUILTIN_ENTRY_MODEL if plan_active else ENTRY_MODEL
     reproducibility_note = (
         "Deterministic bar-replay over the pinned market revision; real bars, "
@@ -582,6 +634,7 @@ def run_engine(
         "multi_timeframe_blocks": multi_timeframe_blocks,
         "per_condition_timeframe_conditions": per_condition_timeframe_conditions,
         "nary_reference_conditions": nary_reference_conditions,
+        "vwap_blocks": vwap_blocks,
         "item_count": item_count,
         "decision_trace_count": len(signal_events),
         "execution_key": execution_key,

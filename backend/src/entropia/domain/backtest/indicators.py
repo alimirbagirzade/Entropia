@@ -16,10 +16,13 @@ Honest V1 boundary (kept explicit, never hidden):
   un-parsed source body, so they are NOT recoverable from the pin. Compute uses the
   strategy's ``parameter_overrides`` when present, else a documented engine-version
   DEFAULT (part of the reproducibility contract, like ``_BREAKOUT_WINDOW`` was).
-* Only whitelisted directional keys produce a native trigger. ``ta.atr`` (volatility)
-  and ``ta.vwap`` (needs volume + a session anchor) are recognized but non-directional
-  → the block is left unresolved (surfaced as a diagnostics warning, L4). Non-native
-  trigger sources likewise surface a warning rather than silently mis-computing.
+* Only whitelisted directional keys produce a native trigger: the MA family and RSI,
+  plus ``ta.vwap`` — a rolling volume-weighted price line whose price/VWAP cross is
+  directional (post-V1 (d)); its compute reads the bars' volume (a windowed VWAP over
+  ``length`` candles, not a session anchor, to match the ``length``-parameterized family
+  and stay bounded-memory). ``ta.atr`` (volatility band width) stays recognized-but-non-
+  directional → that block is left unresolved (surfaced as a diagnostics warning, L4).
+  Non-native trigger sources likewise surface a warning rather than silently mis-computing.
 * An indicator block MAY compute on a higher timeframe than the base bars (post-V1 (c)):
   the base bars are aggregated into the block's coarser candle and the trigger only
   advances on a completed candle (no look-ahead). A nested condition's RHS reference
@@ -46,12 +49,19 @@ _HUNDRED = Decimal("100")
 # Diagnostics label emitted when a real indicator plan (not the proxy) drove the run.
 BUILTIN_ENTRY_MODEL = "builtin_indicator_native_trigger_v1"
 
-# Canonical keys with a defined native directional trigger (price/MA cross or RSI
-# band cross). Aligned to the ESP registry seed (apps/seed.py ``_ESP_TA_RESOLVERS``).
+# Canonical keys with a defined native directional trigger (price/MA cross, RSI band
+# cross, or a price/VWAP cross). Aligned to the ESP registry seed (apps/seed.py
+# ``_ESP_TA_RESOLVERS``).
 _MA_KEYS: frozenset[str] = frozenset({"ta.sma", "ta.ema", "ta.rma", "ta.wma"})
-DIRECTIONAL_KEYS: frozenset[str] = _MA_KEYS | frozenset({"ta.rsi"})
-# Recognized-but-non-directional in this slice (no native trigger yet).
-NON_DIRECTIONAL_KEYS: frozenset[str] = frozenset({"ta.atr", "ta.vwap"})
+# ``ta.vwap`` is a volume-weighted price line (post-V1 (d)): its compute needs the bars'
+# volume, so it is grouped here to keep the volume-dependent compute path explicit.
+_VWAP_KEY = "ta.vwap"
+VOLUME_WEIGHTED_KEYS: frozenset[str] = frozenset({_VWAP_KEY})
+DIRECTIONAL_KEYS: frozenset[str] = _MA_KEYS | frozenset({"ta.rsi"}) | VOLUME_WEIGHTED_KEYS
+# Recognized-but-non-directional: ``ta.atr`` is a volatility measure (a band width, not a
+# directional line), so it yields no native cross — left unresolved (surfaced as a
+# diagnostics warning, L4) rather than silently mis-computed.
+NON_DIRECTIONAL_KEYS: frozenset[str] = frozenset({"ta.atr"})
 RECOGNIZED_KEYS: frozenset[str] = DIRECTIONAL_KEYS | NON_DIRECTIONAL_KEYS
 
 # Condition primitives (post-V1 (b) — condition blocks; extended in (b2)). A nested
@@ -397,50 +407,136 @@ class _Rsi:
         return self.value
 
 
-def _build_reference_indicator(key: str, length: int) -> _MovingAverage | _Rsi:
+@dataclass(slots=True)
+class _Vwap:
+    """Incremental rolling volume-weighted average price over ``length`` candles (post-V1 (d)).
+
+    Each candle contributes its typical price ``(high + low + close) / 3`` weighted by its
+    volume; the value is the window's volume-weighted mean. Warms up over ``length`` candles
+    (value ``None`` until then), so a price/VWAP cross is only evaluated once the line is
+    established — mirroring the MA warm-up. A windowed VWAP (not a session-anchored one) keeps
+    it ``length``-parameterized and bounded-memory like the rest of the family; ``length`` is
+    the same look-back the plan layer resolves for any directional key. When the window carries
+    ZERO total volume the line is undefined — value ``None`` (fails closed, never divides by
+    zero), so a volume-less market yields no phantom crosses."""
+
+    length: int
+    _pv: deque[Decimal] = field(init=False)  # typical_price * volume per candle slot
+    _vol: deque[Decimal] = field(init=False)  # volume per candle slot
+    value: Decimal | None = field(init=False, default=None)
+
+    def __post_init__(self) -> None:
+        self._pv = deque(maxlen=self.length)
+        self._vol = deque(maxlen=self.length)
+
+    def update(
+        self, close: Decimal, high: Decimal, low: Decimal, volume: Decimal
+    ) -> Decimal | None:
+        typical = (high + low + close) / Decimal(3)
+        self._pv.append(typical * volume)
+        self._vol.append(volume)
+        if len(self._vol) < self.length:
+            self.value = None
+            return None
+        total_pv = _ZERO
+        total_vol = _ZERO
+        for pv, vol in zip(self._pv, self._vol, strict=True):
+            total_pv += pv
+            total_vol += vol
+        if total_vol <= _ZERO:
+            self.value = None  # no volume in the window: VWAP undefined, fail closed
+            return None
+        self.value = total_pv / total_vol
+        return self.value
+
+
+def _build_reference_indicator(key: str, length: int) -> _MovingAverage | _Rsi | _Vwap:
     """A second computed series (a separately-pinned indicator package) used as a
     condition's RHS — the two-package indicator-vs-indicator form. Mirrors the
-    ``BlockEvaluator`` compute choice: Wilder RSI for ``ta.rsi``, else a moving average."""
+    ``BlockEvaluator`` compute choice: Wilder RSI for ``ta.rsi``, a rolling VWAP for
+    ``ta.vwap`` (post-V1 (d)), else a moving average."""
     if key == "ta.rsi":
         return _Rsi(length)
+    if key == _VWAP_KEY:
+        return _Vwap(length)
     return _MovingAverage(key, length)
+
+
+def _feed_indicator(
+    indicator: _MovingAverage | _Rsi | _Vwap,
+    close: Decimal,
+    high: Decimal,
+    low: Decimal,
+    volume: Decimal,
+) -> Decimal | None:
+    """Advance an inline reference/block indicator by one candle, routing the extra
+    volume-weighted inputs only to a ``_Vwap`` (the MA/RSI computes read the close alone —
+    their behaviour is byte-identical to before (d))."""
+    if isinstance(indicator, _Vwap):
+        return indicator.update(close, high, low, volume)
+    return indicator.update(close)
 
 
 @dataclass(slots=True)
 class _ReferenceSeries:
     """One reference leg's computed series, with its own per-leg resampling state.
 
-    Wraps one inline reference indicator (``_MovingAverage``/``_Rsi``) plus the optional
-    coarser-timeframe aggregation (post-V1 (i)/(ii)). On the block's own timeframe
-    (``resample_seconds is None``) it advances every bar — byte-identical to the (#53)
-    two-package form. On a coarser reference timeframe it aggregates the base closes and
-    advances the indicator only when a reference candle CLOSES (the first base bar of the
-    next bucket), so the RHS never repaints from a still-forming candle (no look-ahead)."""
+    Wraps one inline reference indicator (``_MovingAverage``/``_Rsi``/``_Vwap``) plus the
+    optional coarser-timeframe aggregation (post-V1 (i)/(ii)/(d)). On the block's own
+    timeframe (``resample_seconds is None``) it advances every bar — byte-identical to the
+    (#53) two-package form for MA/RSI. On a coarser reference timeframe it aggregates the
+    base candles (high=max, low=min, close=last, volume=sum) and advances the indicator only
+    when a reference candle CLOSES (the first base bar of the next bucket), so the RHS never
+    repaints from a still-forming candle (no look-ahead). The high/low/volume aggregation is
+    inert for MA/RSI legs (they read the close alone) and feeds a ``_Vwap`` leg its candle."""
 
-    indicator: _MovingAverage | _Rsi
+    indicator: _MovingAverage | _Rsi | _Vwap
     resample_seconds: int | None
     _bucket: int | None = field(init=False, default=None)
+    _form_high: Decimal = field(init=False, default=_ZERO)
+    _form_low: Decimal = field(init=False, default=_ZERO)
     _form_close: Decimal = field(init=False, default=_ZERO)
+    _form_volume: Decimal = field(init=False, default=_ZERO)
 
-    def advance(self, close: Decimal, timestamp: str | None) -> None:
+    def advance(
+        self,
+        close: Decimal,
+        high: Decimal,
+        low: Decimal,
+        volume: Decimal,
+        timestamp: str | None,
+    ) -> None:
         if self.resample_seconds is None:
-            self.indicator.update(close)
+            _feed_indicator(self.indicator, close, high, low, volume)
             return
         bucket = _htf_bucket(timestamp, self.resample_seconds) if timestamp else None
         if bucket is None:
             return  # unparseable/absent timestamp: hold the last completed reference candle
         if self._bucket is None:
-            self._bucket = bucket
-            self._form_close = close
+            self._begin(bucket, high, low, close, volume)
             return
         if bucket == self._bucket:
+            self._form_high = max(self._form_high, high)
+            self._form_low = min(self._form_low, low)
             self._form_close = close
+            self._form_volume += volume  # volume sums across the reference candle (for VWAP)
             return
         # A new reference bucket started: the previous reference candle is complete — advance
-        # the RHS with its close, then open the next forming reference candle.
-        self.indicator.update(self._form_close)
+        # the RHS with its aggregated candle, then open the next forming reference candle.
+        _feed_indicator(
+            self.indicator, self._form_close, self._form_high, self._form_low, self._form_volume
+        )
+        self._begin(bucket, high, low, close, volume)
+
+    def _begin(
+        self, bucket: int, high: Decimal, low: Decimal, close: Decimal, volume: Decimal
+    ) -> None:
+        """Open a fresh forming reference candle from this base bar."""
         self._bucket = bucket
+        self._form_high = high
+        self._form_low = low
         self._form_close = close
+        self._form_volume = volume
 
     @property
     def value(self) -> Decimal | None:
@@ -535,6 +631,7 @@ class ConditionEvaluator:
         low: Decimal,
         open_price: Decimal,
         indicator_value: Decimal | None,
+        volume: Decimal | None = None,
         timestamp: str | None = None,
     ) -> None:
         window = _VALIDITY_BARS.get(self._spec.validity, 1)
@@ -545,9 +642,11 @@ class ConditionEvaluator:
                 self._active = False
                 self._active_left = None
         # Advance each RHS reference leg so its value is as-of this bar; a leg on a coarser
-        # reference timeframe only advances when its own reference candle closes.
+        # reference timeframe only advances when its own reference candle closes. Volume is
+        # consumed only by a VWAP reference leg (post-V1 (d)); an absent volume defaults to 0.
+        vol = _ZERO if volume is None else volume
         for ref in self._ref_series:
-            ref.advance(close, timestamp)
+            ref.advance(close, high, low, vol, timestamp)
         source = self._series_value(
             self._spec.source, close, high, low, open_price, indicator_value
         )
@@ -658,7 +757,9 @@ class BlockEvaluator:
         "_form_low",
         "_form_open",
         "_form_ts",
+        "_form_volume",
         "_is_rsi",
+        "_is_vwap",
         "_ma",
         "_prev_close",
         "_prev_gate",
@@ -666,12 +767,19 @@ class BlockEvaluator:
         "_resample_seconds",
         "_rsi",
         "_spec",
+        "_vwap",
     )
 
     def __init__(self, spec: IndicatorSpec) -> None:
         self._spec = spec
         self._is_rsi = spec.canonical_key == "ta.rsi"
-        self._ma = None if self._is_rsi else _MovingAverage(spec.canonical_key, spec.length)
+        self._is_vwap = spec.canonical_key == _VWAP_KEY
+        self._vwap = _Vwap(spec.length) if self._is_vwap else None
+        self._ma = (
+            None
+            if self._is_rsi or self._is_vwap
+            else _MovingAverage(spec.canonical_key, spec.length)
+        )
         self._rsi = _Rsi(spec.length) if self._is_rsi else None
         self._prev_value: Decimal | None = None
         self._prev_close: Decimal | None = None
@@ -694,6 +802,9 @@ class BlockEvaluator:
         self._form_high: Decimal = _ZERO
         self._form_low: Decimal = _ZERO
         self._form_close: Decimal = _ZERO
+        # Volume summed across the forming higher-TF candle (post-V1 (d)); fed to a VWAP
+        # block's compute on candle close (inert for MA/RSI blocks, which read the close).
+        self._form_volume: Decimal = _ZERO
         # Timestamp of the forming higher-TF candle's latest base bar (its close time). On a
         # candle close it is handed to ``_advance`` so nested per-condition reference
         # resampling (post-V1 (i)) buckets against the candle the trigger sees, not the raw
@@ -706,17 +817,20 @@ class BlockEvaluator:
         high: Decimal | None = None,
         low: Decimal | None = None,
         open_price: Decimal | None = None,
+        volume: Decimal | None = None,
         timestamp: str | None = None,
     ) -> None:
         # OHLC is optional so callers/tests with close-only series keep working; a
         # missing field degrades to the close (only price-source conditions read them).
+        # Volume is consumed only by a VWAP block/leg (post-V1 (d)); absent volume = 0.
         high = close if high is None else high
         low = close if low is None else low
         open_price = close if open_price is None else open_price
+        vol = _ZERO if volume is None else volume
         if self._resample_seconds is None:
             # Base-timeframe block: advance on every bar (Slice C behaviour). The bar's own
             # timestamp flows to the nested conditions for per-condition reference resampling.
-            self._advance(close, high, low, open_price, timestamp)
+            self._advance(close, high, low, open_price, vol, timestamp)
             return
         # Higher-timeframe block: aggregate the base bars into a coarser candle and
         # advance the inner compute only when that candle CLOSES — detected as the first
@@ -726,22 +840,28 @@ class BlockEvaluator:
         if bucket is None:
             return  # unparseable/absent timestamp: hold the last completed-candle signal
         if self._cur_bucket is None:
-            self._begin_htf_candle(bucket, open_price, high, low, close, timestamp)
+            self._begin_htf_candle(bucket, open_price, high, low, close, vol, timestamp)
             return
         if bucket == self._cur_bucket:
             self._form_high = max(self._form_high, high)
             self._form_low = min(self._form_low, low)
             self._form_close = close
+            self._form_volume += vol  # volume sums across the higher-TF candle (for VWAP)
             self._form_ts = timestamp  # candle close time advances with each base bar
             return
         # A new bucket started: the previous higher-TF candle is complete — advance the
-        # inner compute with its aggregated OHLC (stamped at the candle's close time so a
+        # inner compute with its aggregated OHLCV (stamped at the candle's close time so a
         # coarser per-condition reference buckets against the candle, not the base bars),
         # then open the next forming candle.
         self._advance(
-            self._form_close, self._form_high, self._form_low, self._form_open, self._form_ts
+            self._form_close,
+            self._form_high,
+            self._form_low,
+            self._form_open,
+            self._form_volume,
+            self._form_ts,
         )
-        self._begin_htf_candle(bucket, open_price, high, low, close, timestamp)
+        self._begin_htf_candle(bucket, open_price, high, low, close, vol, timestamp)
 
     def _begin_htf_candle(
         self,
@@ -750,6 +870,7 @@ class BlockEvaluator:
         high: Decimal,
         low: Decimal,
         close: Decimal,
+        volume: Decimal,
         timestamp: str | None,
     ) -> None:
         """Start aggregating a fresh higher-TF candle from this base bar."""
@@ -758,6 +879,7 @@ class BlockEvaluator:
         self._form_high = high
         self._form_low = low
         self._form_close = close
+        self._form_volume = volume
         self._form_ts = timestamp
 
     def _advance(
@@ -766,6 +888,7 @@ class BlockEvaluator:
         high: Decimal,
         low: Decimal,
         open_price: Decimal,
+        volume: Decimal,
         timestamp: str | None = None,
     ) -> None:
         """Run one indicator/condition step over one (base or aggregated) candle."""
@@ -777,6 +900,10 @@ class BlockEvaluator:
                 self._active_left = None
         if self._rsi is not None:
             value = self._rsi.update(close)
+        elif self._vwap is not None:
+            # VWAP is a volume-weighted price line; its price/VWAP cross is detected by the
+            # MA-family branch of ``_detect`` (close vs the line), same shape as an MA cross.
+            value = self._vwap.update(close, high, low, volume)
         else:
             assert self._ma is not None
             value = self._ma.update(close)
@@ -798,6 +925,7 @@ class BlockEvaluator:
                 low=low,
                 open_price=open_price,
                 indicator_value=value,
+                volume=volume,
                 timestamp=timestamp,
             )
         # Condition-only signal: fire on the RISING EDGE of the aggregate condition gate
@@ -952,6 +1080,7 @@ __all__ = [
     "NON_DIRECTIONAL_KEYS",
     "RANGE_CONDITION_KEYS",
     "RECOGNIZED_KEYS",
+    "VOLUME_WEIGHTED_KEYS",
     "BlockEvaluator",
     "ConditionEvaluator",
     "ConditionSpec",

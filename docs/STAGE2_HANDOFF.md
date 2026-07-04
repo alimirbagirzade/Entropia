@@ -461,17 +461,56 @@ the sizing sub-config already existed on `StrategyConfig`). **+12 tests → 999*
   itself) is deferred — path-dependent and look-ahead-prone; **`custom_formula` is
   unsupported** (no safe expression eval). Both stay honest `unresolved` → notional fallback.
 
-## Next: post-V1 (continued) — remaining Slice C follow-ups
+## post-V1 — position_size_limits (min/max cap) wiring landed (PR #63, code `5ef5525`, merge `97b10b8`)
 
-**V1 COMPLETE (Stages 0–8, docs 01–22) + Auth/IdP + Parquet Slice A + Backtest Engine Slice B + real indicator compute Slice C + `risk_based` sizing (a) + condition blocks (b) + condition extensions (b2) + two-package indicator-vs-indicator + higher-timeframe resampling (c) + per-condition multi-TF reference (i) + N-ary reference chain (ii) + VWAP directional key (d) + `formula_based` Kelly sizing landed (999 tests).** The **Slice C indicator-compute + position-sizing follow-ups are now EFFECTIVELY COMPLETE**:
+**`position_size_limits` (min/max position caps) are now HONORED across EVERY sizing method**
+(INF-12 Slice C follow-up; closes the last **TIER-1 backend** item). `PositionSizeLimits` was
+defined on the sizing sub-config (`domain/strategy/config.py:599`) but **silently ignored** in
+`engine._position_size` — a latent bug where a configured cap never constrained the computed
+size on ANY path. The fix clamps the size at a single sizing boundary, so **base / risk_based /
+Kelly / notional-fallback** are all capped uniformly. **No migration** (config-only, JSONB —
+`PositionSizeLimits` unchanged). **+15 tests → 1015** (7 `_clamp_to_limits` unit / 6 per-method
+`_position_size` / 1 e2e / 1 ENGINE_VERSION ns). Review APPROVE 0 CRITICAL/HIGH. Reuse anchors:
+- **`domain/backtest/engine.py`**
+  - **NEW `_clamp_to_limits(size, limits)`** — the clamp primitive. **Fail-closed edges:**
+    `limits is None` OR `size <= _ZERO` → **no-op** (`0` is the "do not open" sentinel from
+    `_raw_position_size` on bust equity / non-positive entry; a `min` cap must NOT resurrect it
+    into a live position, nor lift a stray negative positive); a misconfigured `min > max`
+    window → `_ZERO` (no size satisfies both — fail closed rather than honour one bound and
+    violate the other); else pull the size **DOWN to `max`**, then **UP to `min`**, then
+    `max(size, _ZERO)` (also neutralises a nonsensical negative cap). Caps are in the **same
+    UNITS as the size** (contracts/coins), applied **unquantized** — symmetric with the
+    `base_position_size` branch.
+  - The old `_position_size` body was **renamed `_raw_position_size`** (logic unchanged: base /
+    risk_based / Kelly / notional, each already clamped to non-negative equity).
+  - **`_position_size` is now a thin wrapper** =
+    `_clamp_to_limits(_raw_position_size(config, entry_price, equity), config.position_sizing.position_size_limits)`.
+    A missing limits subtree → **byte-identical** to the pre-wiring engine. **Single call site**
+    (`_open`, ~L475) → every sizing path is clamped automatically, no per-branch wiring.
+  - `TYPE_CHECKING` import += `PositionSizeLimits`.
+  - `run_engine` diagnostics += `"position_size_limits_active": config.position_sizing.position_size_limits is not None` (bool).
+- **`domain/backtest/manifest.py`** — `ENGINE_VERSION = "backtest-engine-v2-position-size-limits"`
+  (was `-kelly-sizing`; execution_key namespace shift — INF-04/INF-05, a stale **UNCLAMPED**
+  result is never reused).
+- **`domain/strategy/config.py:599`** — `PositionSizeLimits(min_position_size / max_position_size: Decimal | None)`
+  — **UNCHANGED**, no migration (config-only, JSONB).
+- **`tests/unit/test_backtest_engine.py`** — `_config` fixture gains `min_size` / `max_size`
+  kwargs; `_clamp_to_limits` + `PositionSizeLimits` imported; +15 tests.
+- **Honest boundary:** cap unit = the size unit (contracts/coins), unquantized (symmetric with
+  the `base` branch). If `base_position_size` is given a NEGATIVE explicit size the clamp is
+  exempt (the `size <= _ZERO` guard) — pre-existing behaviour, out of scope for this slice.
+
+## Next: post-V1 (continued) — TIER 2 frontend/infra (backend TIER 1 EFFECTIVELY COMPLETE)
+
+**V1 COMPLETE (Stages 0–8, docs 01–22) + Auth/IdP + Parquet Slice A + Backtest Engine Slice B + real indicator compute Slice C + `risk_based` sizing (a) + condition blocks (b) + condition extensions (b2) + two-package indicator-vs-indicator + higher-timeframe resampling (c) + per-condition multi-TF reference (i) + N-ary reference chain (ii) + VWAP directional key (d) + `formula_based` Kelly sizing + `position_size_limits` min/max cap (PR #63) landed (1015 tests).** The **Slice C indicator-compute + position-sizing follow-ups are now EFFECTIVELY COMPLETE — TIER 1 backend is DONE**:
 
 - ~~`risk_based` sizing (a)~~ ✅ **PR #47** · ~~`formula_based` / Kelly sizing~~ ✅ **PR #60 + non-finite fail-closed fix PR #61** — Kelly is now honored; **`custom_formula` + adaptive/rolling Kelly stay honest `unresolved`** (no safe eval / path-dependent look-ahead) → notional fallback + `position_sizing_method_unsupported`.
 - ~~Condition blocks (b)~~ ✅ **PR #49** · ~~extensions (b2)~~ ✅ **PR #51** · ~~two-package indicator-vs-indicator~~ ✅ **PR #53** · ~~(i) per-condition multi-TF reference~~ ✅ **PR #56** · ~~(ii) N-ary reference chain~~ ✅ **PR #57** · ~~(d) VWAP directional key~~ ✅ **PR #58** — `ta.vwap` is a directional key (native trigger + reference package + N-ary leg). **Remaining:** only `ta.atr` stays non-directional **by nature** (a volatility band, no cross) → the honest terminal boundary; any FUTURE canonical key with a directional interpretation would extend `DIRECTIONAL_KEYS` the same way VWAP did.
 - ~~**(c)** Multi-timeframe bar resampling~~ ✅ **PR #55**.
 
 **Next candidates** (priority per `docs/POST_V1_KICKOFF.md`):
-- **TIER 1 — `position_size_limits` (min/max cap) wiring** (small, clean, low-risk): `PositionSizeLimits` is defined on the sizing config but is **silently ignored across ALL sizing methods** in `engine._position_size` — a latent bug. Wiring it clamps every computed size to the configured bounds; requires an `ENGINE_VERSION` bump (execution_key ns shift).
-- **TIER 2 — frontend / user-facing (0% today):** SSE/metrics/login integration (WebSocket subscription, real-time backtest progress, user session), CP real candidate generation, capability activations, first-Admin provisioning dashboard.
-- **TIER 3 — data/ops (deferred):** retention auto-purge, data-queue redelivery, SSE streaming e2e, `summary["timeframe"]` resolution from market-revision metadata.
+- ~~**TIER 1 — `position_size_limits` (min/max cap) wiring**~~ ✅ **PR #63** — `PositionSizeLimits` (min/max caps) now clamps EVERY sizing method via `_clamp_to_limits` at the `_raw_position_size → _position_size` boundary; `ENGINE_VERSION → backtest-engine-v2-position-size-limits`; +15 tests → 1015; no migration. **TIER 1 backend is now EFFECTIVELY COMPLETE** (Kelly + risk_based + condition blocks + multi-TF + N-ary + VWAP + position_size_limits all landed).
+- **TIER 2 — frontend / user-facing (0% today) — the natural next slice:** SSE/metrics/login integration (WebSocket subscription, real-time backtest progress, user session), CP real candidate generation, capability activations (role-gated features), first-Admin provisioning dashboard.
+- **TIER 3 — data/ops (deferred):** retention auto-purge, data-queue redelivery, SSE streaming e2e (connection drops), tool-call status shadowing (CR-08 follow-up), `summary["timeframe"]` resolution from market-revision metadata.
 
 See **`docs/POST_V1_KICKOFF.md`** for reuse anchors and the paste-ready resume prompt.

@@ -80,10 +80,11 @@ Before stopping a working session, produce **ALL** of the following:
   (INF-12 Slice C follow-up i, PR #56) + N-ary reference chain
   (INF-12 Slice C follow-up ii, PR #57) + VWAP directional key
   (INF-12 Slice C follow-up d, PR #58) + formula_based Kelly criterion sizing
-  (INF-12 Slice C follow-up, PR #60 + non-finite fail-closed fix PR #61)**. **Overall: ~80% complete** (V1=100%, post-V1 core=82%, frontend=15%).
-  `main` after PR #61 (`54e71d2`; Kelly feat `3f254bc` / non-finite fail-closed fix `3a92e7d`; VWAP code `d27b2bb`; N-ary code `44099a7`; per-condition code `1c5cca0`; multi-timeframe code `def6c28`; indicator-vs-indicator code `9087c2b`; condition-extensions code `361df4c`; condition-blocks code `8766fae`; risk_based code `43cee29`; Slice C code `671d227`);
+  (INF-12 Slice C follow-up, PR #60 + non-finite fail-closed fix PR #61) + position_size_limits
+  min/max cap wiring (INF-12 Slice C follow-up, PR #63)**. **Overall: ~80% complete** (V1=100%, post-V1 core=84%, frontend=15%).
+  `main` after PR #63 (`97b10b8`; position_size_limits feat `5ef5525`; Kelly feat `3f254bc` / non-finite fail-closed fix `3a92e7d`; VWAP code `d27b2bb`; N-ary code `44099a7`; per-condition code `1c5cca0`; multi-timeframe code `def6c28`; indicator-vs-indicator code `9087c2b`; condition-extensions code `361df4c`; condition-blocks code `8766fae`; risk_based code `43cee29`; Slice C code `671d227`);
   alembic head = **`0021_local_auth`** (`human_credentials` + `auth_sessions`;
-  Slices A/B/C + follow-ups (a)/(b)/(b2)/(#53)/(c)/(i)/(ii)/(d) + Kelly sizing need no migration). **999 tests green** (987 + 12 Kelly: 9 feat / 3 non-finite fix).
+  Slices A/B/C + follow-ups (a)/(b)/(b2)/(#53)/(c)/(i)/(ii)/(d) + Kelly sizing + position_size_limits need no migration). **1015 tests green** (999 + 15 position_size_limits: 7 clamp unit / 6 per-method / 1 e2e / 1 ENGINE_VERSION ns).
   Follow-up (ii) — N-ary reference chain (PR #57): a nested condition's RHS extends from
   a single reference package (#53/#56) to an ORDERED chain of >2 separately-pinned indicator
   packages (`source [cmp] ref0 [cmp] ref1 ...` — the classic `fast > slow > slowest` MA fan;
@@ -255,10 +256,10 @@ Before stopping a working session, produce **ALL** of the following:
   parallel sessions MUST use an isolated DB (`TEST_DATABASE_URL=...entropia_auth`).
 - **Next:** **post-V1 (continued)** — **3 priority tiers:**
   
-  **TIER 1 — Slice C remaining (backend, high-impact):**
+  **TIER 1 — Slice C backend follow-ups: ✅ EFFECTIVELY COMPLETE (all landed):**
   - ~~**(d) `ta.vwap` directional key**~~ ✅ **LANDED (PR #58)** — Slice C indicator-compute follow-ups effectively complete (`ta.atr` correctly stays non-directional by nature).
-  - ~~**formula_based / Kelly sizing**~~ ✅ **LANDED (PR #60 + non-finite fail-closed fix PR #61)** — Kelly criterion honored; `custom_formula` + adaptive/rolling Kelly stay honest `unresolved` (no safe eval / path-dependent look-ahead). **Slice C indicator-compute + sizing follow-ups now EFFECTIVELY COMPLETE.**
-  - **`position_size_limits` (min/max cap) wiring** — **the natural remaining TIER 1 item**: `PositionSizeLimits` is defined on the sizing config but silently ignored across ALL sizing methods in `engine._position_size` (latent bug); wiring clamps every computed size to the configured bounds; requires an `ENGINE_VERSION` bump.
+  - ~~**formula_based / Kelly sizing**~~ ✅ **LANDED (PR #60 + non-finite fail-closed fix PR #61)** — Kelly criterion honored; `custom_formula` + adaptive/rolling Kelly stay honest `unresolved` (no safe eval / path-dependent look-ahead).
+  - ~~**`position_size_limits` (min/max cap) wiring**~~ ✅ **LANDED (PR #63)** — new `_clamp_to_limits` at the `_raw_position_size → _position_size` boundary clamps EVERY sizing method (base/risk_based/Kelly/notional); `ENGINE_VERSION=backtest-engine-v2-position-size-limits`; +15 tests → 1015; no migration. **TIER 1 backend is now DONE → next natural slice is TIER 2 (frontend/infra).**
   
   **TIER 2 — Frontend + infra (user-facing, 0% today):**
   - Frontend SSE/metrics/login integration (WebSocket subscription, real-time backtest progress, user session)
@@ -281,5 +282,6 @@ Before stopping a working session, produce **ALL** of the following:
   - (ii) N-ary reference chain **PR #57** — condition RHS as an ordered chain of >2 packages (`fast > slow > slowest` MA fan); `ConditionBlock.additional_reference_package_refs`
   - (d) VWAP directional key **PR #58** — `ta.vwap` → `DIRECTIONAL_KEYS` (rolling volume-weighted price line; price/VWAP cross native trigger + reference package + N-ary leg); `_Vwap` compute, volume threaded through engine→evaluators, `ENGINE_VERSION=backtest-engine-v2-vwap-directional`; `ta.atr` stays non-directional by nature
   - formula_based **Kelly criterion sizing PR #60** (+ non-finite fail-closed fix **PR #61**) — `formula_based_sizing`+`kelly_criterion` honored: `f*=kelly_fraction·(W−(1−W)/R)` (clamp 0), `size=usable_equity·f*/entry_price` (entry-price dependent); `_decimal_param`/`_kelly_capital_fraction`/`_position_size` Kelly branch/`_sizing_is_honored` in `engine.py`; `ENGINE_VERSION=backtest-engine-v2-kelly-sizing`; no migration; review fixed a non-finite `formula_params` crash + Inf-payoff silent-honor via `Decimal.is_finite()` guard; `custom_formula`/adaptive Kelly stay `unresolved`
+  - **position_size_limits min/max cap wiring PR #63** — `PositionSizeLimits` (min/max caps) was silently ignored across ALL sizing methods in `engine._position_size` (latent bug). New `_clamp_to_limits(size, limits)` clamps at the single `_raw_position_size → _position_size` boundary so base/risk_based/Kelly/notional are all capped uniformly (fail-closed: `limits is None` or `size≤0` → no-op, `min>max` → 0, else max-down/min-up/floor-0; caps in size units, unquantized). Old `_position_size` body renamed `_raw_position_size`; `_position_size` now a thin wrapper. `TYPE_CHECKING` += `PositionSizeLimits`; `run_engine` diagnostics += `position_size_limits_active`; `ENGINE_VERSION=backtest-engine-v2-position-size-limits`; +15 tests → 1015; no migration; review APPROVE 0 CRITICAL/HIGH. **TIER 1 backend EFFECTIVELY COMPLETE.**
   
   Full roadmap: `docs/POST_V1_KICKOFF.md`.

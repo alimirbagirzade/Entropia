@@ -426,14 +426,52 @@ regressions. Reuse anchors:
   the existing `DIRECTIONAL_KEYS` checks (block + reference package + each N-ary leg). No logic change.
 - **Tests (+17):** `tests/unit/test_backtest_vwap.py` (+12), `tests/integration/test_vwap_resolution.py` (+5).
 
+## post-V1 — formula_based Kelly criterion sizing landed (PR #60) + non-finite fail-closed fix (PR #61, code `3a92e7d`)
+
+**`formula_based` (Kelly criterion) position sizing is now HONORED** (INF-12 Slice C
+follow-up; closes the last sizing gap left `unresolved` after (a) `risk_based`). A
+`formula_based_sizing` request carrying a `kelly_criterion` formula config computes a
+fractional-Kelly capital fraction and sizes the position from usable equity; **every other
+`formula_based` shape** (notably `custom_formula`) still falls back to notional + a
+non-blocking `position_sizing_method_unsupported` diagnostic. **No migration** (config-only;
+the sizing sub-config already existed on `StrategyConfig`). **+12 tests → 999** (9 Kelly feat
+`PR #60` / 3 non-finite fix `PR #61`). Reuse anchors:
+- **`domain/backtest/engine.py`**
+  - `_decimal_param(params, key)` — best-effort parse of a free-form `formula_params` value
+    to `Decimal`; **absent / parse-failure / NON-FINITE (`NaN`/`±Inf`, guarded by
+    `Decimal.is_finite()`) → `None`** (fail-closed).
+  - `_kelly_capital_fraction(sizing)` — `f* = kelly_fraction · (W − (1 − W) / R)` with a lower
+    clamp at `0`. An **absent** `kelly_fraction` defaults to **full Kelly (`1`)**; a
+    **present-but-garbage / out-of-range** `kelly_fraction`, a non-`kelly_criterion` shape
+    (`custom_formula`), or a missing / non-finite `W` (`win_probability`) / `R`
+    (`payoff_ratio`) → `None` (unresolved → notional fallback).
+  - `_position_size` Kelly branch — `size = usable_equity · f* / entry_price` (entry-price
+    **dependent**, unlike `risk_based`'s stop-distance sizing), quantized to `_QTY`.
+  - `_sizing_is_honored` returns `True` for a valid Kelly config (so
+    `position_sizing_method_unsupported` fires only for the still-unsupported shapes).
+- **`domain/backtest/manifest.py`** — `ENGINE_VERSION = "backtest-engine-v2-kelly-sizing"`
+  (execution_key namespace shift; INF-04/INF-05 — a stale notional result is not reused).
+- **Review (PR #60):** 1 CONFIRMED defect — non-finite `formula_params` (`NaN`/`Inf`) reached
+  `Decimal` arithmetic → an `InvalidOperation` **crash**, and an `Inf` `payoff_ratio` made
+  `(1 − W) / R → 0` so `f*` **silently honored** a bogus position. **Fixed in PR #61** by the
+  `Decimal.is_finite()` guard in `_decimal_param` (non-finite → `None` → fail-closed); +3
+  regression tests. (Note: #60 was self-merged before the fix commit landed on the branch, so
+  the fix shipped as a separate PR #61 — both are on `main`.)
+- **Honest boundary:** **adaptive / rolling Kelly** (estimating `W`/`R` from the backtest
+  itself) is deferred — path-dependent and look-ahead-prone; **`custom_formula` is
+  unsupported** (no safe expression eval). Both stay honest `unresolved` → notional fallback.
+
 ## Next: post-V1 (continued) — remaining Slice C follow-ups
 
-**V1 COMPLETE (Stages 0–8, docs 01–22) + Auth/IdP + Parquet Slice A + Backtest Engine Slice B + real indicator compute Slice C + `risk_based` sizing (a) + condition blocks (b) + condition extensions (b2) + two-package indicator-vs-indicator + higher-timeframe resampling (c) + per-condition multi-TF reference (i) + N-ary reference chain (ii) + VWAP directional key (d) landed (987 tests).** Remaining **Slice C follow-ups** — building directly on `indicators.py` / `indicator_plan.py` / `engine.py`:
+**V1 COMPLETE (Stages 0–8, docs 01–22) + Auth/IdP + Parquet Slice A + Backtest Engine Slice B + real indicator compute Slice C + `risk_based` sizing (a) + condition blocks (b) + condition extensions (b2) + two-package indicator-vs-indicator + higher-timeframe resampling (c) + per-condition multi-TF reference (i) + N-ary reference chain (ii) + VWAP directional key (d) + `formula_based` Kelly sizing landed (999 tests).** The **Slice C indicator-compute + position-sizing follow-ups are now EFFECTIVELY COMPLETE**:
 
-- ~~`risk_based` sizing (a)~~ ✅ **LANDED (PR #47)**. **`formula_based` / Kelly still `unresolved`** — path-dependent statistics, not yet grounded in the foundation.
-- ~~Condition blocks (b)~~ ✅ **PR #49** · ~~extensions (b2)~~ ✅ **PR #51** · ~~two-package indicator-vs-indicator~~ ✅ **PR #53** · ~~(i) per-condition multi-TF reference~~ ✅ **PR #56** · ~~(ii) N-ary reference chain~~ ✅ **PR #57** · ~~(d) VWAP directional key~~ ✅ **LANDED (PR #58)** — `ta.vwap` is now a directional key (native trigger + reference package + N-ary leg). **Remaining:** only `ta.atr` stays non-directional **by nature** (a volatility band, no cross) → the honest terminal boundary; any FUTURE canonical key with a directional interpretation would extend `DIRECTIONAL_KEYS` the same way VWAP did.
-- ~~**(c)** Multi-timeframe bar resampling~~ ✅ **LANDED (PR #55)**.
+- ~~`risk_based` sizing (a)~~ ✅ **PR #47** · ~~`formula_based` / Kelly sizing~~ ✅ **PR #60 + non-finite fail-closed fix PR #61** — Kelly is now honored; **`custom_formula` + adaptive/rolling Kelly stay honest `unresolved`** (no safe eval / path-dependent look-ahead) → notional fallback + `position_sizing_method_unsupported`.
+- ~~Condition blocks (b)~~ ✅ **PR #49** · ~~extensions (b2)~~ ✅ **PR #51** · ~~two-package indicator-vs-indicator~~ ✅ **PR #53** · ~~(i) per-condition multi-TF reference~~ ✅ **PR #56** · ~~(ii) N-ary reference chain~~ ✅ **PR #57** · ~~(d) VWAP directional key~~ ✅ **PR #58** — `ta.vwap` is a directional key (native trigger + reference package + N-ary leg). **Remaining:** only `ta.atr` stays non-directional **by nature** (a volatility band, no cross) → the honest terminal boundary; any FUTURE canonical key with a directional interpretation would extend `DIRECTIONAL_KEYS` the same way VWAP did.
+- ~~**(c)** Multi-timeframe bar resampling~~ ✅ **PR #55**.
 
-With (d) landed, the Slice C indicator-compute follow-ups are effectively **complete** (only the by-nature-non-directional `ta.atr` remains, correctly unresolved). The natural next work is **`formula_based`/Kelly sizing** (still notional fallback + `position_sizing_method_unsupported`) OR moving off the backend indicator layer entirely (frontend integration, CP candidate generation).
+**Next candidates** (priority per `docs/POST_V1_KICKOFF.md`):
+- **TIER 1 — `position_size_limits` (min/max cap) wiring** (small, clean, low-risk): `PositionSizeLimits` is defined on the sizing config but is **silently ignored across ALL sizing methods** in `engine._position_size` — a latent bug. Wiring it clamps every computed size to the configured bounds; requires an `ENGINE_VERSION` bump (execution_key ns shift).
+- **TIER 2 — frontend / user-facing (0% today):** SSE/metrics/login integration (WebSocket subscription, real-time backtest progress, user session), CP real candidate generation, capability activations, first-Admin provisioning dashboard.
+- **TIER 3 — data/ops (deferred):** retention auto-purge, data-queue redelivery, SSE streaming e2e, `summary["timeframe"]` resolution from market-revision metadata.
 
-Other candidates (priority per `docs/POST_V1_KICKOFF.md`): frontend SSE/metrics/login integration, CP real candidate generation, capability activations, deferred list (incl. `summary["timeframe"]` resolution from market-revision metadata, first-Admin provisioning). See **`docs/POST_V1_KICKOFF.md`** for reuse anchors and the paste-ready resume prompt.
+See **`docs/POST_V1_KICKOFF.md`** for reuse anchors and the paste-ready resume prompt.

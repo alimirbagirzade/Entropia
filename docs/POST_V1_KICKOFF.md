@@ -3,6 +3,18 @@
 > **Amaç:** V1 kapandı (Stage 0–8 COMPLETE). Bu doküman post-V1 durumunu, aday iş listesini
 > ve temiz oturumda yapıştırılacak resume prompt'u içerir.
 
+## Durum (2026-07-04, VWAP directional key — Slice C follow-up (d) sonrası; PR #58)
+
+> **(d) VWAP directional key landed (PR #58, kod `d27b2bb`; merge KULLANICIDA, CI yeşil).**
+> `ta.vwap` artık `DIRECTIONAL_KEYS` üyesi: rolling volume-ağırlıklı fiyat çizgisi, fiyat/VWAP
+> cross'u native yönlü trigger (MA-cross ile aynı şekil); native trigger + reference paketi +
+> N-ary chain leg olarak kullanılabilir. `ta.atr` doğası gereği non-directional kaldı (dürüst
+> terminal sınır). Yeni `_Vwap` compute (bounded-memory, typical (H+L+C)/3 × volume, zero-volume
+> fail-closed); volume engine `_Bar`→evaluator'lar boyunca threadlendi; `vwap_blocks` diagnostic;
+> `ENGINE_VERSION=backtest-engine-v2-vwap-directional`. **Migration YOK.** **987 test** (970+17).
+> Slice C indikatör-compute follow-up'ları böylece **etkin biçimde tamamlandı**; kalan TIER 1
+> işi **formula_based/Kelly sizing** (hâlâ notional fallback). Aşağıdaki (ii) bölümü tarihsel.
+
 ## Durum (2026-07-04, N-ary reference chain — Slice C follow-up (ii) sonrası)
 
 - **V1 ROADMAP COMPLETE + Auth/IdP + Parquet batch (Slice A) + Bar-replay engine (Slice B) +
@@ -345,56 +357,51 @@ Entropia — post-V1: V1 tamam + Auth/IdP (PR #38) + Parquet Slice A (PR #41) + 
 engine Slice B (PR #43) + gerçek indikatör compute Slice C (PR #45) + risk_based sizing (a)
 (PR #47) + threshold condition blocks (b) (PR #49) + condition EXTENSIONS (b2) (PR #51) +
 two-package indicator-vs-indicator (PR #53) + HIGHER-TIMEFRAME bar resampling (c) (PR #55) +
-PER-CONDITION multi-timeframe reference (i) (PR #56) + N-ARY reference chain (ii) (PR #57) —
-HEPSİ MERGED (feature + kapanış docs dahil).
+PER-CONDITION multi-timeframe reference (i) (PR #56) + N-ARY reference chain (ii) (PR #57) +
+VWAP directional key (d) (PR #58) — HEPSİ MERGED (feature + kapanış docs dahil; PR #58 merge'i
+teyit et — CI yeşildi, merge KULLANICIDA idi).
 ÖNCE DOĞRULA (stale-by-default): git fetch && git log --oneline origin/main -4 &&
-gh pr list --state merged -L 6. main = #57 merge (N-ary kodu 44099a7; #56 per-condition 1c5cca0;
-#55 multi-tf def6c28; #53 9087c2b; (b2) 361df4c; condition-blocks (b) 8766fae; risk_based (a) 43cee29;
-Slice C 671d227); alembic head 0021_local_auth (migration YOK). İzole DB:
+gh pr list --state merged -L 6. main = #58 merge bekleniyor (VWAP kodu d27b2bb; #57 N-ary 44099a7;
+#56 per-condition 1c5cca0; #55 multi-tf def6c28; #53 9087c2b; (b2) 361df4c; condition-blocks (b) 8766fae;
+risk_based (a) 43cee29; Slice C 671d227); alembic head 0021_local_auth (migration YOK). İzole DB:
 TEST_DATABASE_URL=postgresql+asyncpg://entropia:entropia@localhost:5432/entropia_auth.
-Test tabanı 970; pytest --co --no-cov ile teyit et (bu projede dosya-başına ": N" basar → topla).
-ENGINE_VERSION = backtest-engine-v2-nary-reference.
+Test tabanı 987; pytest --co --no-cov ile teyit et (bu projede dosya-başına ": N" basar → topla).
+ENGINE_VERSION = backtest-engine-v2-vwap-directional.
 ÖNCE docs/POST_V1_KICKOFF.md + docs/STAGE2_HANDOFF.md ("N-ary reference chain landed
 (PR #57)" + "Next: remaining Slice C follow-ups") oku.
 
-SIRADAKİ İŞ (kullanıcıyla SEÇ): kalan Slice C follow-up'ları — hepsi indicators.py/
-indicator_plan.py/engine.py üstüne biner:
-- (d) daha çok directional canonical key (ta.atr/ta.vwap bugün recognized-ama-non-directional;
-  reference paketi VE N-ary chain leg'i olarak da kullanılamıyorlar — DIRECTIONAL_KEYS şartı;
-  VWAP-cross yönlü, ATR doğası gereği değil).
+SIRADAKİ İŞ (kullanıcıyla SEÇ): (d) VWAP directional key ile Slice C indikatör-compute
+follow-up'ları ETKİN BİÇİMDE TAMAMLANDI (kalan tek non-directional key ta.atr doğası gereği
+yönsüz — dürüst terminal sınır). Doğal sıradaki işler:
 - formula_based / Kelly sizing (hâlâ notional fallback + position_sizing_method_unsupported
-  uyarısı; path-dependent istatistik — foundation'da temellendirilmesi gerekir).
-Diğer adaylar: frontend SSE/metrics/login, CP real candidate generation, capability aktivasyonları,
-deferred liste (ilk-Admin provisioning, summary["timeframe"] çözümü — artık base-TF okunuyor, retention auto-purge).
+  uyarısı; path-dependent istatistik — foundation'da temellendirilmesi gerekir; TIER 1 kalanı).
+- VEYA backend indikatör katmanından çık: frontend SSE/metrics/login, CP real candidate
+  generation, capability aktivasyonları, deferred liste (ilk-Admin provisioning, retention
+  auto-purge). Öncelik: docs/STAGE2_HANDOFF.md "Next" + bu doküman aday listesi.
 
-REUSE ANCHOR'LARI (#57 N-ary reference chain; kodu incele, tek satır özet). Bir condition'ın RHS'i tek
-reference paketi (reference_package_ref, #53/#56) yerine >2 SEPARATE pinlenmiş indikatör paketinin SIRALI
-ZİNCİRİ olabilir: source [cmp] ref0 [cmp] ref1 ... (klasik fast>slow>slowest MA fan; downtrend için ascending
-ayna). Tek-paket yolu #53/#56 ile BYTE-IDENTICAL (tek-eleman zincir eski kontrole indirgenir). Migration YOK:
-- domain/strategy/config.py — ReferenceLeg modeli (package_ref + timeframe + parameter_overrides);
-  ConditionBlock.additional_reference_package_refs: list[ReferenceLeg]|None (opsiyonel, JSONB, yalnız primary
-  reference_package_ref varken anlamlı).
-- domain/backtest/indicators.py — ReferenceSeriesSpec(key,length,resample_seconds); ConditionSpec
-  +extra_references. _ReferenceSeries (bir inline reference indikatör + KENDİ per-leg kaba-TF resample
-  state'i; yalnız mum kapanınca advance → look-ahead yok, (i) _advance_reference'ın per-leg port'u).
-  Module-level _chain_ordered (strict monotonic; None fail-closed). ConditionEvaluator artık source + tüm RHS
-  leg'leri üstünde ZİNCİR değerlendirir (_ref_series/_prev_ref_values/_rhs_values liste); HERHANGİ bir leg
-  warm-up (None) → tüm zincir fail-closed (LEVEL ve CROSS). Semantik: above/crosses_above = source>ref0>ref1>...
-  (descending); below/crosses_below = ascending ayna; cross bu bar hizalanınca ateşler (chain_now AND NOT
-  chain_prev). cond.between (RANGE) RHS zincirini yok sayar.
-- application/queries/indicator_plan.py — _resolve_reference_package artık 5-tuple (+extras);
-  _resolve_additional_references (her leg → kendi DIRECTIONAL_KEYS serisi, kendi TF block'a göre çözülür,
-  kendi look-back). Fail-closed: condition_additional_reference_without_primary / _unresolved:<i> /
-  _no_series:<i>; cond.between RANGE üstünde leg → condition_reference_package_on_range (mevcut yol).
-- engine.py — nary_reference_conditions diagnostic. manifest.py — ENGINE_VERSION=
-  backtest-engine-v2-nary-reference (execution_key ns shift).
-- Testler (+17 → 970): tests/unit/test_backtest_nary_reference.py (+7: descending/ascending fan LEVEL,
-  crosses_above/below EDGE alignment, N-ary tek-referanstan STRICTLY güçlü, warm-up fail-closed,
-  condition-only three-MA fan long) + tests/integration/test_nary_reference_resolution.py (+10: primary+2 leg
-  çözümü; fail-closed additional-without-primary/missing-revision/non-directional-leg/finer-than-block/RANGE-leg;
-  coarser per-leg resample; per-leg length override; use_package_default_tf leg; e2e 3-MA fan cross → 1 long
-  entry + nary_reference_conditions diagnostic).
-DÜRÜST SINIR: (d) non-MA/RSI reference key hâlâ deferred; yalnız DIRECTIONAL_KEYS (MA/RSI) paketleri chain leg olabilir.
+REUSE ANCHOR'LARI (#58 VWAP directional key; kodu incele, tek satır özet). ta.vwap artık
+DIRECTIONAL_KEYS üyesi: rolling volume-ağırlıklı fiyat çizgisi, fiyat/VWAP cross'u native
+yönlü trigger (MA-cross ile AYNI şekil — _detect'in MA-family dalı), native trigger + reference
+paketi + N-ary chain leg olarak kullanılabilir. ta.atr non-directional kaldı. Migration YOK
+(ta.vwap zaten seed'li; bar'lar zaten canonical `volume` sütununu taşıyordu, engine _normalize
+düşürüyordu):
+- domain/backtest/indicators.py — DIRECTIONAL_KEYS += {ta.vwap}, VOLUME_WEIGHTED_KEYS,
+  NON_DIRECTIONAL_KEYS = {ta.atr}. Yeni _Vwap (bounded-memory rolling window, typical (H+L+C)/3 ×
+  volume, `length` warm-up, ZERO-VOLUME window → value None fail-closed — divide-by-zero yok,
+  phantom cross yok). _feed_indicator dispatch volume'ü YALNIZ _Vwap'a router (MA/RSI BYTE-IDENTICAL).
+  Volume BlockEvaluator._advance / ConditionEvaluator.update / _ReferenceSeries.advance boyunca
+  threadlendi (reference-leg aggregation resampled VWAP leg için mum boyunca volume TOPLAR; MA/RSI'de inert).
+- domain/backtest/engine.py — _Bar.volume + _volume() (opsiyonel canonical OHLCV sütunu → non-negatif
+  Decimal; yok/negatif → 0, non-blocking); evaluator'lara volume=; vwap_blocks diagnostic.
+- domain/backtest/manifest.py — ENGINE_VERSION=backtest-engine-v2-vwap-directional (execution_key ns shift).
+- application/queries/indicator_plan.py — SADECE docstring; ta.vwap mevcut DIRECTIONAL_KEYS kontrolleriyle
+  otomatik directional çözülür (blok + reference paketi + her N-ary leg). Logic değişmedi.
+- Testler (+17 → 987): tests/unit/test_backtest_vwap.py (+12: _Vwap volume-ağırlık vs SMA, typical price,
+  warm-up, zero-volume fail-closed, native long/short cross, direction filter, VWAP reference leg, N-ary
+  VWAP leg, resampled VWAP leg) + tests/integration/test_vwap_resolution.py (+5: directional native trigger,
+  ta.atr HÂLÂ unresolved, VWAP reference paketi + N-ary leg çözümü, e2e VWAP bloğu gerçek long entry).
+DÜRÜST SINIR: ta.atr doğası gereği non-directional (volatilite bandı, cross yok) → terminal sınır;
+gelecekte yönlü yorumu olan yeni bir canonical key VWAP ile aynı şekilde DIRECTIONAL_KEYS'e eklenir.
 
 YÖNTEM: Workflow KULLANMA; YENİ dosya heredoc (gate-free), mevcut dosya Edit 4-fact (GateGuard:
 ilk Bash + dosya-başına-ilk-edit gate); cd backend (cwd resetlenebilir → absolute path); ruff+format+

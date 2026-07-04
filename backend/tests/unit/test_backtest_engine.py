@@ -15,6 +15,7 @@ from typing import Any
 from entropia.domain.backtest.engine import (
     ENTRY_MODEL,
     EngineOutput,
+    _clamp_to_limits,
     _position_size,
     run_engine,
 )
@@ -27,7 +28,7 @@ from entropia.domain.backtest.enums import (
 )
 from entropia.domain.backtest.manifest import build_run_manifest
 from entropia.domain.backtest.metrics import DEFAULT_METRICS, derive_metric_values
-from entropia.domain.strategy.config import StrategyConfig
+from entropia.domain.strategy.config import PositionSizeLimits, StrategyConfig
 
 
 # ---------------------------------------------------------------------------
@@ -108,6 +109,8 @@ def _config(
     win_prob: str | None = None,
     payoff: str | None = None,
     kelly_fraction: str | None = None,
+    min_size: str | None = None,
+    max_size: str | None = None,
 ) -> StrategyConfig:
     """A minimal VALID StrategyConfig; only the fields the engine reads matter."""
     sizing: dict[str, Any] = {"method": method}
@@ -130,6 +133,13 @@ def _config(
             "formula_type": formula_type,
             "formula_params": formula_params,
         }
+    if min_size is not None or max_size is not None:
+        limits: dict[str, Any] = {}
+        if min_size is not None:
+            limits["min_position_size"] = min_size
+        if max_size is not None:
+            limits["max_position_size"] = max_size
+        sizing["position_size_limits"] = limits
     protection: dict[str, Any] = (
         {"percentage_stop": {"enabled": True, "loss_percentage": loss_pct}} if with_stop else {}
     )
@@ -450,6 +460,109 @@ def test_engine_notional_sizing_never_inverts_pnl_after_bust() -> None:
         )
         if adverse:
             assert trade.pnl <= Decimal("0"), f"phantom profit on adverse trade: {trade}"
+
+
+# --- position_size_limits (min/max cap) wiring -------------------------------
+
+
+def test_clamp_to_limits_is_a_noop_without_limits() -> None:
+    # No configured window → the raw size passes through byte-identically (this is what
+    # keeps every pre-wiring test's expected size unchanged).
+    assert _clamp_to_limits(Decimal("50"), None) == Decimal("50")
+
+
+def test_clamp_to_limits_caps_down_to_max() -> None:
+    limits = PositionSizeLimits(max_position_size=Decimal("30"))
+    assert _clamp_to_limits(Decimal("50"), limits) == Decimal("30")
+
+
+def test_clamp_to_limits_lifts_up_to_min() -> None:
+    limits = PositionSizeLimits(min_position_size=Decimal("80"))
+    assert _clamp_to_limits(Decimal("50"), limits) == Decimal("80")
+
+
+def test_clamp_to_limits_leaves_a_size_within_the_window() -> None:
+    limits = PositionSizeLimits(min_position_size=Decimal("10"), max_position_size=Decimal("100"))
+    assert _clamp_to_limits(Decimal("50"), limits) == Decimal("50")
+
+
+def test_clamp_to_limits_preserves_the_zero_fail_closed_sentinel() -> None:
+    # 0 = "do not open" (bust equity / non-positive entry price). A min cap must NOT
+    # resurrect it into a live position.
+    limits = PositionSizeLimits(min_position_size=Decimal("80"))
+    assert _clamp_to_limits(Decimal("0"), limits) == Decimal("0")
+
+
+def test_clamp_to_limits_min_greater_than_max_fails_closed() -> None:
+    # A misconfigured window that no size can satisfy fails closed to 0 rather than
+    # silently honouring one bound and violating the other.
+    limits = PositionSizeLimits(min_position_size=Decimal("100"), max_position_size=Decimal("30"))
+    assert _clamp_to_limits(Decimal("50"), limits) == Decimal("0")
+
+
+def test_clamp_to_limits_neutralises_a_negative_cap() -> None:
+    # A nonsensical negative max cannot pull a size negative — the final guard floors at 0.
+    limits = PositionSizeLimits(max_position_size=Decimal("-5"))
+    assert _clamp_to_limits(Decimal("50"), limits) == Decimal("0")
+
+
+def test_position_size_base_is_capped_to_max() -> None:
+    cfg = _config(base_size="50", max_size="30")
+    assert _position_size(cfg, Decimal("100"), Decimal("10000")) == Decimal("30")
+
+
+def test_position_size_base_is_lifted_to_min() -> None:
+    cfg = _config(base_size="50", min_size="80")
+    assert _position_size(cfg, Decimal("100"), Decimal("10000")) == Decimal("80")
+
+
+def test_position_size_risk_based_is_capped_to_max() -> None:
+    # risk_based raw size = 10000 * 2% / 50 = 4; capped to 1.
+    cfg = _config(method="risk_based_sizing", risk_pct="2.0", stop_point="50", max_size="1")
+    assert _position_size(cfg, Decimal("123.45"), Decimal("10000")) == Decimal("1")
+
+
+def test_position_size_kelly_is_capped_to_max() -> None:
+    # Kelly raw size = 10000 * f* / 100, f* = 0.6 - 0.4/2 = 0.4 → 40; capped to 5.
+    cfg = _config(
+        method="formula_based_sizing",
+        formula_type="kelly_criterion",
+        win_prob="0.6",
+        payoff="2",
+        max_size="5",
+    )
+    assert _position_size(cfg, Decimal("100"), Decimal("10000")) == Decimal("5")
+
+
+def test_position_size_notional_fallback_is_capped_to_max() -> None:
+    # custom_formula falls back to all-in notional (10000 / 100 = 100); the cap still binds.
+    cfg = _config(method="formula_based_sizing", formula_type="custom_formula", max_size="7")
+    assert _position_size(cfg, Decimal("100"), Decimal("10000")) == Decimal("7")
+
+
+def test_position_size_bust_equity_stays_zero_despite_min_cap() -> None:
+    # A min cap must not manufacture a position on a bust account (notional raw size 0).
+    cfg = _config(method="formula_based_sizing", formula_type="custom_formula", min_size="10")
+    assert _position_size(cfg, Decimal("100"), Decimal("-500")) == Decimal("0")
+
+
+def test_engine_applies_the_position_size_cap_to_a_real_trade() -> None:
+    # End-to-end: a base size of 50 capped to 5 shrinks the booked position, so the
+    # stop-out loss is strictly smaller in magnitude than the uncapped run (same prices,
+    # same stop). Both are losses, so uncapped_net < capped_net < 0.
+    uncapped = _run(_config(base_size="50"), _long_breakout_then_stop())
+    capped = _run(_config(base_size="50", max_size="5"), _long_breakout_then_stop())
+    assert capped.diagnostics["position_size_limits_active"] is True
+    assert uncapped.diagnostics["position_size_limits_active"] is False
+    assert capped.summary["total_trades"] == uncapped.summary["total_trades"] == 1
+    assert uncapped.summary["net_profit"] < capped.summary["net_profit"] < Decimal("0")
+
+
+def test_engine_execution_key_namespace_shifts_with_the_engine_version() -> None:
+    # The ENGINE_VERSION bump must flow into the manifest so a stale unclamped result
+    # cannot be reused under the new engine (INF-04 idempotent reuse / INF-05).
+    built = _manifest("btrun_A", "snap_A", "2024-01-01T00:00:00Z")
+    assert built.manifest["identity"]["engine_version"] == "backtest-engine-v2-position-size-limits"
 
 
 def test_metrics_registry_maps_all_nine_defaults() -> None:

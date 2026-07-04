@@ -187,15 +187,22 @@ def _effective_fill(
 def _decimal_param(params: dict[str, Any], key: str) -> Decimal | None:
     """Best-effort ``Decimal`` from a free-form ``formula_params`` entry.
 
-    Returns ``None`` when the key is absent or the value cannot be parsed as a
-    number (``str()`` first so a non-numeric value fails closed rather than a
-    ``Decimal`` coercion surprise)."""
+    Returns ``None`` when the key is absent, the value cannot be parsed as a number,
+    or it parses to a NON-FINITE ``Decimal`` (``NaN`` / ``Infinity``). ``str()`` first
+    so a non-numeric value fails closed rather than a ``Decimal`` coercion surprise;
+    the finiteness guard is load-bearing because ``formula_params`` is an unvalidated
+    ``dict[str, Any]`` — a user-supplied ``"nan"`` constructs a quiet ``Decimal('NaN')``
+    without error but then RAISES ``InvalidOperation`` on the ordered comparisons in
+    the caller (crashing the run), and an ``"Infinity"`` payoff would otherwise be
+    silently honoured as a real edge. Both must fail closed to notional + the L4
+    warning instead."""
     if key not in params:
         return None
     try:
-        return Decimal(str(params[key]))
+        value = Decimal(str(params[key]))
     except (InvalidOperation, ValueError, TypeError):
         return None
+    return value if value.is_finite() else None
 
 
 def _kelly_capital_fraction(sizing: PositionSizing) -> Decimal | None:
@@ -215,9 +222,12 @@ def _kelly_capital_fraction(sizing: PositionSizing) -> Decimal | None:
     clamped at the LOWER bound to 0 — a non-positive edge yields 0 (do not trade),
     never a negative (bet-against-the-edge) size. No upper clamp is needed: since
     ``(1 - W) / R >= 0`` and ``W < 1``, the edge is always ``< 1`` and so is ``f*``.
-    Returns ``None`` when the config is not a modelled ``kelly_criterion`` request
-    (``custom_formula``, or missing / out-of-range params), so the caller falls back
-    to notional sizing and surfaces the L4 diagnostics warning."""
+    An absent ``kelly_fraction`` defaults to full Kelly (``1``); a present but
+    unparseable / non-finite / out-of-range one fails closed. Returns ``None`` when
+    the config is not a modelled ``kelly_criterion`` request (``custom_formula``, or a
+    missing / non-finite / out-of-range ``W`` / ``R`` / explicit ``kelly_fraction``),
+    so the caller falls back to notional sizing and surfaces the L4 diagnostics
+    warning."""
     formula = sizing.formula_based
     if sizing.method != "formula_based_sizing" or formula is None:
         return None
@@ -227,11 +237,16 @@ def _kelly_capital_fraction(sizing: PositionSizing) -> Decimal | None:
     payoff = _decimal_param(formula.formula_params, "payoff_ratio")
     if win is None or payoff is None or not (_ZERO < win < _ONE) or payoff <= _ZERO:
         return None
-    fraction = _decimal_param(formula.formula_params, "kelly_fraction")
-    if fraction is None:
-        fraction = _ONE
-    elif not (_ZERO < fraction <= _ONE):
-        return None
+    if "kelly_fraction" not in formula.formula_params:
+        fraction = _ONE  # ABSENT → full Kelly (the documented default)
+    else:
+        # PRESENT: must be a valid finite multiplier in (0, 1]. An unparseable /
+        # non-finite / out-of-range value fails closed to notional — never silently
+        # upgraded to the most aggressive (full-Kelly) sizing.
+        parsed = _decimal_param(formula.formula_params, "kelly_fraction")
+        if parsed is None or not (_ZERO < parsed <= _ONE):
+            return None
+        fraction = parsed
     edge = win - (_ONE - win) / payoff
     return max(fraction * edge, _ZERO)
 

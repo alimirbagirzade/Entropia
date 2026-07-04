@@ -539,6 +539,18 @@ def run_engine(
         if plan_active and indicator_plan is not None
         else 0
     )
+    # Conditions whose RHS reference indicator computes on a coarser per-condition
+    # timeframe than its parent block (post-V1 (i)) — surfaced for reproducibility audits.
+    per_condition_timeframe_conditions = (
+        sum(
+            1
+            for spec in (*indicator_plan.entry_specs, *indicator_plan.exit_specs)
+            for cond in spec.conditions
+            if cond.reference_resample_seconds
+        )
+        if plan_active and indicator_plan is not None
+        else 0
+    )
     entry_model = BUILTIN_ENTRY_MODEL if plan_active else ENTRY_MODEL
     reproducibility_note = (
         "Deterministic bar-replay over the pinned market revision; real bars, "
@@ -556,6 +568,7 @@ def run_engine(
         "indicator_blocks": len(entry_evals),
         "condition_blocks": condition_count,
         "multi_timeframe_blocks": multi_timeframe_blocks,
+        "per_condition_timeframe_conditions": per_condition_timeframe_conditions,
         "item_count": item_count,
         "decision_trace_count": len(signal_events),
         "execution_key": execution_key,

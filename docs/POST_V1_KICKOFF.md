@@ -3,7 +3,7 @@
 > **Amaç:** V1 kapandı (Stage 0–8 COMPLETE). Bu doküman post-V1 durumunu, aday iş listesini
 > ve temiz oturumda yapıştırılacak resume prompt'u içerir.
 
-## Durum (2026-07-03, two-package indicator-vs-indicator — Slice C follow-up sonrası)
+## Durum (2026-07-04, higher-timeframe bar resampling — Slice C follow-up (c) sonrası)
 
 - **V1 ROADMAP COMPLETE + Auth/IdP + Parquet batch (Slice A) + Bar-replay engine (Slice B) +
   gerçek indikatör compute (Slice C) + `risk_based` sizing (a) + condition blocks (b) +
@@ -171,8 +171,8 @@
      **multi-timeframe reference** (2. paket bugün trigger'ın TF'inde `close`'dan hesaplanır —
      farklı-TF RHS (c)'ye bağlı); (iii) **non-MA/RSI reference key** (reference paketi bugün
      `DIRECTIONAL_KEYS` MA/RSI serisine çözülmeli; `ta.atr`/`ta.vwap` RHS (d)'ye bağlı).
-   - **(c)** multi-timeframe — bar resampling (timeframe override şu an `unresolved`; en invaziv,
-     bar-replay determinizmini etkiler).
+   - ~~**(c)** multi-timeframe — bar resampling~~ ✅ **LANDED (PR #55)** — indikatör blok base
+     bar'lardan daha kaba bir TF'de compute eder (look-ahead yok). **(ii) multi-TF reference'ı unblock etti.**
    - **(d)** daha çok directional canonical key — `ta.atr`/`ta.vwap` bugün directional değil
      (bant/kanal yorumu gerektirir).
 3. **Frontend entegrasyonu** — SSE tüketimi (yeni taksonomi), `/v1/metrics` dashboard'ları,
@@ -339,54 +339,59 @@ tarihsel referans** olarak duruyor.
 Entropia — post-V1: V1 tamam + Auth/IdP (PR #38) + Parquet Slice A (PR #41) + Bar-replay
 engine Slice B (PR #43) + gerçek indikatör compute Slice C (PR #45) + risk_based sizing (a)
 (PR #47) + threshold condition blocks (b) (PR #49) + condition EXTENSIONS (b2) (PR #51) +
-TWO-PACKAGE indicator-vs-indicator (PR #53) — HEPSİ MERGED (feature + kapanış docs dahil).
+two-package indicator-vs-indicator (PR #53) + HIGHER-TIMEFRAME bar resampling (c) (PR #55) —
+HEPSİ MERGED (feature + kapanış docs dahil).
 ÖNCE DOĞRULA (stale-by-default): git fetch && git log --oneline origin/main -4 &&
-gh pr list --state merged -L 6. main=093df44 (#53 feature kodu 9087c2b; (b2) 361df4c;
+gh pr list --state merged -L 6. main = #55 merge (multi-tf kodu def6c28; #53 9087c2b; (b2) 361df4c;
 condition-blocks (b) 8766fae; risk_based (a) 43cee29; Slice C 671d227); alembic head
 0021_local_auth (migration YOK). İzole DB:
 TEST_DATABASE_URL=postgresql+asyncpg://entropia:entropia@localhost:5432/entropia_auth.
-Test tabanı 928; pytest --co --no-cov ile teyit et (bu projede dosya-başına ": N" basar → topla).
-ÖNCE docs/POST_V1_KICKOFF.md + docs/STAGE2_HANDOFF.md ("two-package indicator-vs-indicator landed
-(PR #53)" + "Next: remaining Slice C follow-ups") oku.
+Test tabanı 939; pytest --co --no-cov ile teyit et (bu projede dosya-başına ": N" basar → topla).
+ENGINE_VERSION = backtest-engine-v2-multi-timeframe.
+ÖNCE docs/POST_V1_KICKOFF.md + docs/STAGE2_HANDOFF.md ("higher-timeframe bar resampling landed
+(PR #55)" + "Next: remaining Slice C follow-ups") oku.
 
 SIRADAKİ İŞ (kullanıcıyla SEÇ): kalan Slice C follow-up'ları — hepsi indicators.py/
 indicator_plan.py/engine.py üstüne biner:
 - formula_based / Kelly sizing (hâlâ notional fallback + position_sizing_method_unsupported
   uyarısı; path-dependent istatistik — foundation'da temellendirilmesi gerekir).
-- (c) multi-timeframe bar resampling (timeframe override bugün unresolved; en invaziv,
-  bar-replay determinizmini etkiler; multi-TF condition reference'ını da açar).
+- (i) per-condition multi-TF reference (ARTIK (c) ile UNBLOCKED: condition'ın RHS'i farklı bir TF'de;
+  bugün condition'lar parent blok'un TF'ini miras alır, condition'a ait timeframe alanı yok).
+- (ii) >2 paket karşılaştırması (N-ary reference şeması) — tek reference_package_ref bir
+  fast-MA-vs-slow-MA çiftini çözer, üç+ paket ayrı iş.
 - (d) daha çok directional canonical key (ta.atr/ta.vwap bugün recognized-ama-non-directional;
   reference paketi olarak da kullanılamıyorlar — DIRECTIONAL_KEYS şartı).
-- Kalan condition işi: >2 paket karşılaştırması (N-ary reference şeması) — tek reference_package_ref
-  bir fast-MA-vs-slow-MA çiftini çözer, üç+ paket ayrı iş.
 Diğer adaylar: frontend SSE/metrics/login, CP real candidate generation, capability aktivasyonları,
-deferred liste (ilk-Admin provisioning, summary["timeframe"] çözümü, retention auto-purge).
+deferred liste (ilk-Admin provisioning, summary["timeframe"] çözümü — artık base-TF okunuyor, retention auto-purge).
 
-REUSE ANCHOR'LARI (#53 two-package; kodu incele, tek satır özet). İKİ AYRI paket karşılaştırması
-(fast-MA vs slow-MA crossover); (b2)'nin dürüst sınırını açtı. Migration YOK (ConditionBlock JSONB'de
-opsiyonel alan). Engine DEĞİŞMEDİ (reference serisi evaluator içinde self-compute):
-- domain/strategy/config.py — ConditionBlock +reference_package_ref: PackageReference | None (opsiyonel,
-  default None; set ise RHS = 2. paketin serisi; sabit threshold / bounded reference'tan öncelikli).
-- domain/backtest/indicators.py — ConditionSpec +reference_key/+reference_length; _build_reference_indicator
-  factory (_MovingAverage/_Rsi reuse; ta.rsi→Rsi, aksi MA). ConditionEvaluator +_ref_indicator slot,
-  her bar close'dan .update() ile ilerler; _rhs_value precedence: reference indikatör > bounded reference
-  serisi > sabit threshold; warm-up None → FAIL-CLOSED (LEVEL ve CROSS).
-- application/queries/indicator_plan.py — _resolve_reference_package(session,cond)→(key,length,reason):
-  2. paket revision'ını _primary_directional_key(dependency_snapshot) DIRECTIONAL_KEYS key'e +
-  look-back'e (_int_override(_REFERENCE_LENGTH_KEYS) or default_length) çözer; gövde ÇALIŞTIRILMAZ.
-  _resolve_condition precedence + fail-closed: condition_reference_package_unresolved / _no_series /
-  _package_on_range (between üstünde reference paketi misconfig). Docstring dürüst sınır güncel.
-- domain/backtest/manifest.py — ENGINE_VERSION=backtest-engine-v2-indicator-vs-indicator (execution_key ns
-  shift). apps/seed.py DEĞİŞMEDİ (yeni RHS mevcut pinlenmiş pakete biner; yeni cond.* key yok).
-- Testler (+12): tests/unit/test_backtest_indicator_vs_indicator.py (+6: reference-pkg LEVEL/EDGE, warm-up
-  fail-closed, threshold'a precedence, rsi-key, FLAGSHIP condition_only fast(2)/slow(4) MA-cross → long) +
-  tests/integration/test_condition_plan_resolution.py (+6: _cblock'a reference_package_rev/reference_length;
-  resolve + 3 fail-closed yol + gerçek 2-paket MA-cross e2e long entry).
+REUSE ANCHOR'LARI (#55 higher-timeframe resampling; kodu incele, tek satır özet). Indikatör blok BASE
+bar'lardan DAHA KABA bir TF'de compute eder; base-TF yolu Slice C ile BYTE-IDENTICAL. Migration YOK
+(resample_seconds pinlenmiş config'ten türer, DB kolonu değil). Look-ahead YOK:
+- domain/backtest/indicators.py — timeframe_seconds() (1m…1D → saniye span); _epoch_seconds/_htf_bucket
+  (ISO/Z/epoch → floor(epoch/span), clock-free). IndicatorSpec +resample_seconds: int|None.
+  BlockEvaluator.update → base/HTF DISPATCHER + _advance (eski per-bar gövde). HTF modunda base bar'ları
+  blok'un kaba mumuna toplar (open=ilk, high=max, low=min, close=son) ve _advance'i YALNIZ mum KAPANINCA
+  (bir sonraki bucket'ın ilk bar'ı) çağırır → look-ahead/repaint yok; trailing partial mum finalize
+  edilmez; validity/conditions HTF mumunda tıklar.
+- application/queries/indicator_plan.py — _resolve_base_seconds (pinlenmiş revision base-TF'ini okur) +
+  _resolve_timeframe: coarser→resample_seconds, finer→timeframe_finer_than_base, equal→base compute,
+  base-unknown→yine resample (base bar'lara degenerate, deterministik). resolve_indicator_plan imzası
+  DEĞİŞMEDİ.
+- infrastructure/postgres/repositories/market_data.py — read-only get_base_timeframe_for_revision
+  (ResolutionKind.BAR resolution_value). DİKKAT: market_data.enums.ResolutionKind üyesi BAR (="bar"),
+  trading_signal.enums'un BAR_TIMEFRAME'i DEĞİL — model bu enum'u kullanır.
+- engine.py — evaluator'lara timestamp=bar.timestamp + multi_timeframe_blocks diagnostic. manifest.py —
+  ENGINE_VERSION=backtest-engine-v2-multi-timeframe (execution_key ns shift).
+- Testler (+11 → 939): tests/unit/test_backtest_multi_timeframe.py (+6: span map, epoch bucketing,
+  no-look-ahead timing, trailing-partial, hand-aggregated eşdeğerlik, batch-invariant engine entry) +
+  tests/integration/test_multi_timeframe_plan_resolution.py (+5: coarser/finer/equal/unknown-base + gerçek
+  2h MA-cross e2e long entry). test_indicator_plan_resolution.py override testi yeni resolve yoluna repoint.
+DÜRÜST SINIR: per-condition multi-TF reference (item i) hâlâ deferred; condition'lar parent TF'ini miras alır.
 
 YÖNTEM: Workflow KULLANMA; YENİ dosya heredoc (gate-free), mevcut dosya Edit 4-fact (GateGuard:
-ilk Bash + dosya-başına-ilk-edit gate); cd backend; ruff+format+mypy+pytest (izole DB:
-...entropia_auth; 928 yeşil kalmalı); migration gerekirse 0022_* (→0021) up/down/up + parity +
-L1 FK proof; code-reviewer → CRITICAL/HIGH AMPİRİK DOĞRULA → commit (conventional, attribution YOK)
+ilk Bash + dosya-başına-ilk-edit gate); cd backend (cwd resetlenebilir → absolute path); ruff+format+
+mypy+pytest (izole DB: ...entropia_auth; 939 yeşil kalmalı); migration gerekirse 0022_* (→0021) up/down/up
++ parity + L1 FK proof; CRITICAL/HIGH AMPİRİK DOĞRULA → commit (conventional, attribution YOK)
 → PR → gh pr checks --watch → merge KULLANICIDA. Türkçe, MALİYET BİLİNÇLİ. Kapanışta: handoff +
-kickoff + CLAUDE.md + memory (ecc knowledge graph + claude-mem).
+kickoff + CLAUDE.md + memory (ecc knowledge graph; claude-mem token stale/worker-modda atlanabilir).
 ```

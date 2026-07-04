@@ -75,10 +75,29 @@ Before stopping a working session, produce **ALL** of the following:
   position sizing (INF-12 Slice C follow-up a, PR #47) + threshold condition
   blocks (INF-12 Slice C follow-up b, PR #49) + condition extensions
   (INF-12 Slice C follow-up b2, PR #51) + two-package indicator-vs-indicator
-  (INF-12 Slice C follow-up, PR #53)**;
-  `main` after PR #53 = **`093df44`** (indicator-vs-indicator code `9087c2b`; condition-extensions code `361df4c`; condition-blocks code `8766fae`; risk_based code `43cee29`; Slice C code `671d227`);
+  (INF-12 Slice C follow-up, PR #53) + higher-timeframe bar resampling
+  (INF-12 Slice C follow-up c, PR #55)**. **Overall: ~76% complete** (V1=100%, post-V1 core=72%, frontend=15%).
+  `main` after PR #55 (multi-timeframe code `def6c28`; indicator-vs-indicator code `9087c2b`; condition-extensions code `361df4c`; condition-blocks code `8766fae`; risk_based code `43cee29`; Slice C code `671d227`);
   alembic head = **`0021_local_auth`** (`human_credentials` + `auth_sessions`;
-  Slices A/B/C + follow-ups (a)/(b)/(b2)/(#53) need no migration). **928 tests green** (916 + 12 two-package indicator-vs-indicator).
+  Slices A/B/C + follow-ups (a)/(b)/(b2)/(#53)/(c) need no migration). **939 tests green** (928 + 11 multi-timeframe resampling).
+  Follow-up (c) — higher-timeframe bar resampling (PR #55): an indicator block may
+  compute on a timeframe COARSER than the base bars (`timeframe` override was
+  `timeframe_override_deferred`; now resamples). `domain/backtest/indicators.py`
+  `timeframe_seconds()` + `_epoch_seconds`/`_htf_bucket` (ISO/`Z`/epoch → `floor(epoch/span)`
+  timestamp bucketing, clock-free); `IndicatorSpec` +`resample_seconds: int|None`;
+  `BlockEvaluator.update` splits into a base/HTF dispatcher + `_advance` (base-TF path
+  BYTE-IDENTICAL to Slice C). HTF path aggregates base bars into the block's coarser
+  candle (open=first, high=max, low=min, close=last) and calls `_advance` ONLY on candle
+  CLOSE = first bar of the NEXT bucket → no look-ahead / no repaint; trailing partial
+  candle never finalizes; validity/conditions tick in HTF candles. `indicator_plan.py`
+  `_resolve_base_seconds` (reads pinned revision base TF) + `_resolve_timeframe`: coarser→
+  `resample_seconds`, finer→`timeframe_finer_than_base`, equal→base compute, base-unknown→
+  still resamples (degrades to base bars, deterministic). `market_data` repo read-only
+  `get_base_timeframe_for_revision` (`ResolutionKind.BAR` `resolution_value`). `engine.py`
+  passes `bar.timestamp` to evaluators + `multi_timeframe_blocks` diagnostic; `ENGINE_VERSION`
+  → `backtest-engine-v2-multi-timeframe` (execution_key ns shift). Honest boundary: a
+  per-CONDITION multi-TF reference (item ii) still deferred. +11 tests (unit +6 / integration
+  +5). No migration.
   Follow-up — two-package indicator-vs-indicator (PR #53): a nested `ConditionBlock`
   can pin a SECOND indicator package whose computed output series is the condition RHS
   (the canonical fast-MA vs slow-MA crossover; opens the (b2) honest boundary). Previously
@@ -192,22 +211,30 @@ Before stopping a working session, produce **ALL** of the following:
   `unmatched` 404 sentinel). Reviews: 8a 0 findings; 8b 2 HIGH both real, fixed
   in-commit. **Test-infra:** integration tests rebuild the schema per test —
   parallel sessions MUST use an isolated DB (`TEST_DATABASE_URL=...entropia_auth`).
-- **Next:** **post-V1 (continued) — remaining Slice C follow-ups** (choose with user):
-  building on `indicators.py`/`indicator_plan.py`/`engine.py` — (a) `risk_based`
-  sizing **✅ LANDED (PR #47)** — `formula_based`/Kelly still honest `unresolved`
-  (path-dependent statistics, ungrounded in the foundation), (b) condition blocks
-  **✅ LANDED (PR #49)** + (b2) condition extensions **✅ LANDED (PR #51)** +
-  two-package indicator-vs-indicator **✅ LANDED (PR #53)** — crosses/between/series-vs-series
-  + condition-only directional + `reference_package_ref` (fast-MA vs slow-MA) all resolved;
-  remaining condition work: **(i) >2-package comparison** (needs an N-ary reference schema, not
-  just one `reference_package_ref`), **(ii) a multi-timeframe reference** (the 2nd package is
-  computed from `close` on the trigger TF — a different-TF RHS depends on (c)), **(iii) non-MA/RSI
-  reference keys** (reference package must resolve to a `DIRECTIONAL_KEYS` MA/RSI series today, so
-  `ta.atr`/`ta.vwap` as RHS is blocked by (d)), (c) multi-timeframe bar resampling (timeframe override
-  now `unresolved`; most invasive, affects bar-replay determinism), (d) more directional
-  canonical keys (`ta.atr`/`ta.vwap` recognized-but-non-directional today). Other candidates (order in
-  `docs/POST_V1_KICKOFF.md`): frontend SSE/metrics/login integration, CP real
-  candidate generation, capability activations, deferred list (`summary["timeframe"]`
-  resolution, tool-call status shadowing, retention auto-purge, data-queue
-  redelivery, SSE streaming e2e, first-Admin provisioning). Full handoff:
-  `docs/POST_V1_KICKOFF.md`.
+- **Next:** **post-V1 (continued)** — **3 priority tiers:**
+  
+  **TIER 1 — Slice C remaining (backend, high-impact):**
+  - **(i) Per-condition multi-TF reference** (now UNBLOCKED by (c): a condition's RHS on a different TF; today conditions inherit the parent block's TF, no per-condition timeframe field yet)
+  - **(ii) >2-package condition comparison** (N-ary reference schema, not just `reference_package_ref`; fast-MA vs slow-MA vs volume MA)
+  - **(iii) Non-MA/RSI directional keys** (`ta.atr`/`ta.vwap` recognized-but-non-directional today; must become `DIRECTIONAL_KEYS` or stay `unresolved`)
+  - **formula_based / Kelly sizing** (still notional fallback + `position_sizing_method_unsupported`; path-dependent, ungrounded in the foundation)
+  
+  **TIER 2 — Frontend + infra (user-facing, 0% today):**
+  - Frontend SSE/metrics/login integration (WebSocket subscription, real-time backtest progress, user session)
+  - Capability activations (gate new features per user role)
+  - Admin provisioning dashboard (first-Admin onboarding)
+  
+  **TIER 3 — Data/ops (deferred, optional for MVP):**
+  - Retention auto-purge (strategy/backtest history cleanup)
+  - Data-queue redelivery (operator recovery tool)
+  - SSE streaming e2e (handle connection drops gracefully)
+  - Tool-call status shadowing (CR-08 follow-up)
+  
+  **Landed follow-ups (✅):**
+  - (a) `risk_based` sizing **PR #47** — `formula_based`/Kelly still `unresolved`
+  - (b) condition blocks **PR #49** — threshold gates
+  - (b2) condition extensions **PR #51** — crosses/between/series-vs-series
+  - indicator-vs-indicator **PR #53** — two-package reference
+  - (c) higher-timeframe bar resampling **PR #55** — indicator block on a coarser TF (no look-ahead)
+  
+  Full roadmap: `docs/POST_V1_KICKOFF.md`.

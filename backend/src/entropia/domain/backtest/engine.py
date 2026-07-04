@@ -551,6 +551,18 @@ def run_engine(
         if plan_active and indicator_plan is not None
         else 0
     )
+    # Conditions whose RHS is an N-ary reference chain (>2 packages compared — post-V1 (ii)):
+    # source vs a monotonic fan of separately-pinned indicators — surfaced for audits.
+    nary_reference_conditions = (
+        sum(
+            1
+            for spec in (*indicator_plan.entry_specs, *indicator_plan.exit_specs)
+            for cond in spec.conditions
+            if cond.extra_references
+        )
+        if plan_active and indicator_plan is not None
+        else 0
+    )
     entry_model = BUILTIN_ENTRY_MODEL if plan_active else ENTRY_MODEL
     reproducibility_note = (
         "Deterministic bar-replay over the pinned market revision; real bars, "
@@ -569,6 +581,7 @@ def run_engine(
         "condition_blocks": condition_count,
         "multi_timeframe_blocks": multi_timeframe_blocks,
         "per_condition_timeframe_conditions": per_condition_timeframe_conditions,
+        "nary_reference_conditions": nary_reference_conditions,
         "item_count": item_count,
         "decision_trace_count": len(signal_events),
         "execution_key": execution_key,

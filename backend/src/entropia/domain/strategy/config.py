@@ -389,6 +389,36 @@ class IndicatorBlock(BaseModel):
     )
 
 
+class ReferenceLeg(BaseModel):
+    """One additional reference leg of an N-ary indicator comparison chain (post-V1 (ii)).
+
+    Extends the two-package ``reference_package_ref`` into an ordered chain: the
+    condition's source is compared against ``reference_package_ref`` -> ``additional[0]``
+    -> ``additional[1]`` ... (e.g. a fast-MA vs slow-MA vs slowest-MA fan). Each leg pins
+    its own indicator package, may compute on its own (coarser) timeframe, and carries its
+    own parameter overrides (its look-back)."""
+
+    package_ref: PackageReference = Field(..., description="Pinned reference indicator package")
+
+    timeframe: Literal[
+        "same_as_base_tf",
+        "use_package_default_tf",
+        "1m",
+        "3m",
+        "5m",
+        "15m",
+        "30m",
+        "1h",
+        "2h",
+        "4h",
+        "1D",
+    ] = Field(default="same_as_base_tf", description="Reference leg timeframe override")
+
+    parameter_overrides: dict[str, Any] | None = Field(
+        default=None, description="Reference leg parameter overrides (e.g. reference_length)"
+    )
+
+
 class ConditionBlock(BaseModel):
     """Condition package block, nested under indicator block (§3)."""
 
@@ -438,6 +468,16 @@ class ConditionBlock(BaseModel):
             "effective timeframe resamples the RHS (the fast source is compared against "
             "the slower reference, which only advances on a completed reference candle — "
             "no look-ahead). same_as_base_tf keeps the RHS on the block's timeframe."
+        ),
+    )
+
+    additional_reference_package_refs: list[ReferenceLeg] | None = Field(
+        default=None,
+        description=(
+            "Optional additional reference legs extending reference_package_ref into an "
+            "N-ary comparison chain (post-V1 (ii)): the source is compared against the "
+            "ordered chain reference_package_ref -> additional[0] -> additional[1] ... "
+            "(e.g. fast-MA > slow-MA > slowest-MA). Only meaningful with reference_package_ref."
         ),
     )
 

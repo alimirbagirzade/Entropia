@@ -405,9 +405,9 @@ def run_engine(
             exit_hit = False
             if plan_active and indicator_plan is not None:
                 for ev in entry_evals:
-                    ev.update(bar.close, bar.high, bar.low, bar.open)
+                    ev.update(bar.close, bar.high, bar.low, bar.open, timestamp=bar.timestamp)
                 for ev in exit_evals:
-                    ev.update(bar.close, bar.high, bar.low, bar.open)
+                    ev.update(bar.close, bar.high, bar.low, bar.open, timestamp=bar.timestamp)
                 entry_signal = aggregate(indicator_plan.entry_rule, entry_evals)
                 if exit_evals and indicator_plan.exit_rule is not None:
                     exit_hit = aggregate(indicator_plan.exit_rule, exit_evals) is not None
@@ -533,6 +533,12 @@ def run_engine(
         if plan_active and indicator_plan is not None
         else 0
     )
+    multi_timeframe_blocks = (
+        sum(1 for spec in indicator_plan.entry_specs if spec.resample_seconds)
+        + sum(1 for spec in indicator_plan.exit_specs if spec.resample_seconds)
+        if plan_active and indicator_plan is not None
+        else 0
+    )
     entry_model = BUILTIN_ENTRY_MODEL if plan_active else ENTRY_MODEL
     reproducibility_note = (
         "Deterministic bar-replay over the pinned market revision; real bars, "
@@ -549,6 +555,7 @@ def run_engine(
         "breakout_window": _BREAKOUT_WINDOW,
         "indicator_blocks": len(entry_evals),
         "condition_blocks": condition_count,
+        "multi_timeframe_blocks": multi_timeframe_blocks,
         "item_count": item_count,
         "decision_trace_count": len(signal_events),
         "execution_key": execution_key,

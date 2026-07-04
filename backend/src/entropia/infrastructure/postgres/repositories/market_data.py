@@ -15,7 +15,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from entropia.domain.lifecycle.enums import DeletionState, ValidationStatus
-from entropia.domain.market_data.enums import MarketDataType, MarketRevisionState
+from entropia.domain.market_data.enums import MarketDataType, MarketRevisionState, ResolutionKind
 from entropia.domain.revision.hashing import content_hash
 from entropia.domain.revision.head import next_revision_no
 from entropia.infrastructure.postgres.models import (
@@ -188,6 +188,22 @@ async def get_processed_asset_for_revision(
         .where(MarketProcessedAsset.revision_id == revision_id)
         .order_by(MarketProcessedAsset.created_at.desc(), MarketProcessedAsset.asset_id.desc())
         .limit(1)
+    )
+    return result.scalar_one_or_none()
+
+
+async def get_base_timeframe_for_revision(session: AsyncSession, revision_id: str) -> str | None:
+    """The base bar timeframe a revision resolves to, when it is bar-timeframed.
+
+    Read-only. ``None`` when the revision is missing, event-based, or carries no
+    resolution value — callers then treat the base timeframe as unknown (a higher-TF
+    override still resolves but cannot be validated as strictly coarser than the base).
+    Read from the pinned immutable revision, so it is reproducibility-safe."""
+    result = await session.execute(
+        select(MarketDatasetRevision.resolution_value).where(
+            MarketDatasetRevision.revision_id == revision_id,
+            MarketDatasetRevision.resolution_kind == ResolutionKind.BAR,
+        )
     )
     return result.scalar_one_or_none()
 

@@ -134,11 +134,15 @@ async def test_condition_trigger_without_conditions_is_unresolved(session) -> No
     assert plan.unresolved == ("entry:blk_1:condition_blocks_missing",)
 
 
-async def test_timeframe_override_is_deferred(session) -> None:
+async def test_timeframe_override_resolves_when_base_is_unknown(session) -> None:
+    # Multi-TF resampling (post-V1 (c)): a concrete override now RESOLVES. This fixture's
+    # revision carries no base timeframe, so the override cannot be validated as coarser,
+    # but it still resamples to that span deterministically (the coarser/finer/equal
+    # branches are covered in tests/integration/test_multi_timeframe_plan_resolution.py).
     revision_id = await _indicator_package(session, "ta.rsi")
     plan = await resolve_indicator_plan(session, _config(revision_id, timeframe="1h"))
-    assert plan.has_entry is False
-    assert plan.unresolved[0].startswith("entry:blk_1:timeframe_override_deferred")
+    assert plan.has_entry is True
+    assert plan.entry_specs[0].resample_seconds == 3600
 
 
 async def test_missing_package_revision_is_unresolved(session) -> None:

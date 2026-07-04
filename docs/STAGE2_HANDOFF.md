@@ -399,13 +399,41 @@ A nested condition's **RHS reference** extends from a single package (the two-pa
 - **Tests (+17)** — `tests/unit/test_backtest_nary_reference.py` (+7: descending/ascending fan LEVEL, crosses_above/below EDGE alignment, N-ary strictly stronger than a single reference, warm-up fail-closed, condition-only three-MA fan long) + `tests/integration/test_nary_reference_resolution.py` (+10: chain resolves primary + 2 legs; fail-closed for additional-without-primary / missing revision / non-directional leg / finer-than-block leg / `additional` on a RANGE; coarser per-leg resample; per-leg length override; `use_package_default_tf` leg; e2e 3-MA fan cross → one long entry + `nary_reference_conditions` diagnostic).
 - **Verify:** 970 green on an isolated DB; ruff / format / mypy clean; **no migration**. Reviewer agent (`code-reviewer`): **APPROVE, 0 CRITICAL/HIGH** (byte-identity exhaustively verified, warm-up fail-closed, no per-leg look-ahead, fail-closed resolution all confirmed).
 
+## post-V1 — VWAP directional key (d) landed (PR #58, code `d27b2bb`)
+
+**`ta.vwap` is now a `DIRECTIONAL_KEYS` member** (INF-12 Slice C follow-up (d)): a rolling,
+volume-weighted price line whose **price/VWAP cross** is a native directional trigger (same
+shape as an MA cross), usable as a **native trigger**, a **condition reference-package RHS**,
+and an **N-ary reference chain leg**. `ta.atr` stays recognized-but-non-directional (a
+volatility band width, no directional cross) — the honest boundary preserved. **No migration**
+(`ta.vwap` already seeded; bars already carry the canonical `volume` column, dropped in the
+engine's `_normalize` before this slice). **+17 tests → 987** (12 unit / 5 integration); review
+outcome n/a (user opted to skip review after 987-green + ruff/format/mypy clean); no deferred
+regressions. Reuse anchors:
+- **`domain/backtest/indicators.py`** — `DIRECTIONAL_KEYS += {ta.vwap}`, `VOLUME_WEIGHTED_KEYS`,
+  `NON_DIRECTIONAL_KEYS = {ta.atr}`. New `_Vwap` (bounded-memory rolling window over `length`
+  candles; typical `(H+L+C)/3` weighted by volume; warm-up over `length`; **zero-volume window
+  fails closed** — no divide-by-zero, no phantom crosses). `_feed_indicator` dispatch routes
+  volume only to a `_Vwap` (MA/RSI **byte-identical**). Volume threaded through
+  `BlockEvaluator._advance`, `ConditionEvaluator.update`, `_ReferenceSeries.advance` (reference-leg
+  aggregation sums volume across a coarser candle for a resampled VWAP leg; inert for MA/RSI).
+- **`domain/backtest/engine.py`** — `_Bar.volume` + `_volume()` (optional canonical OHLCV column →
+  non-negative Decimal; absent/negative → 0, non-blocking); evaluators receive `volume`;
+  `vwap_blocks` diagnostic.
+- **`domain/backtest/manifest.py`** — `ENGINE_VERSION = "backtest-engine-v2-vwap-directional"`
+  (execution_key ns shift; INF-04/INF-05).
+- **`application/queries/indicator_plan.py`** — docstrings only; `ta.vwap` resolves directional via
+  the existing `DIRECTIONAL_KEYS` checks (block + reference package + each N-ary leg). No logic change.
+- **Tests (+17):** `tests/unit/test_backtest_vwap.py` (+12), `tests/integration/test_vwap_resolution.py` (+5).
+
 ## Next: post-V1 (continued) — remaining Slice C follow-ups
 
-**V1 COMPLETE (Stages 0–8, docs 01–22) + Auth/IdP + Parquet Slice A + Backtest Engine Slice B + real indicator compute Slice C + `risk_based` sizing (a) + condition blocks (b) + condition extensions (b2) + two-package indicator-vs-indicator + higher-timeframe resampling (c) + per-condition multi-TF reference (i) + N-ary reference chain (ii) landed (970 tests).** Remaining **Slice C follow-ups** — building directly on `indicators.py` / `indicator_plan.py` / `engine.py`:
+**V1 COMPLETE (Stages 0–8, docs 01–22) + Auth/IdP + Parquet Slice A + Backtest Engine Slice B + real indicator compute Slice C + `risk_based` sizing (a) + condition blocks (b) + condition extensions (b2) + two-package indicator-vs-indicator + higher-timeframe resampling (c) + per-condition multi-TF reference (i) + N-ary reference chain (ii) + VWAP directional key (d) landed (987 tests).** Remaining **Slice C follow-ups** — building directly on `indicators.py` / `indicator_plan.py` / `engine.py`:
 
 - ~~`risk_based` sizing (a)~~ ✅ **LANDED (PR #47)**. **`formula_based` / Kelly still `unresolved`** — path-dependent statistics, not yet grounded in the foundation.
-- ~~Condition blocks (b) — threshold gate~~ ✅ **LANDED (PR #49)** · ~~Condition extensions (b2)~~ ✅ **LANDED (PR #51)** · ~~Two-package indicator-vs-indicator RHS (fast-MA vs slow-MA)~~ ✅ **LANDED (PR #53)** · ~~(i) per-condition **multi-timeframe reference** (RHS package on a coarser TF)~~ ✅ **LANDED (PR #56)** · ~~(ii) comparison **across MORE than two packages** (N-ary reference schema)~~ ✅ **LANDED (PR #57)** — `additional_reference_package_refs` chain (`fast > slow > slowest` fan). **Remaining condition work:** (iii)/(d) **non-MA/RSI reference keys** — the reference package (and each N-ary chain leg) must resolve to a `DIRECTIONAL_KEYS` (MA/RSI) series today, so `ta.atr`/`ta.vwap` as an RHS is blocked by (d).
-- ~~**(c)** Multi-timeframe — bar resampling~~ ✅ **LANDED (PR #55)**. ~~This unblocks a per-condition multi-TF reference~~ ✅ done in (i)/PR #56.
-- **(d)** More directional canonical keys — `ta.atr` / `ta.vwap` are recognized-but-non-directional today (need band/channel interpretation); also blocks them as reference-package RHS.
+- ~~Condition blocks (b)~~ ✅ **PR #49** · ~~extensions (b2)~~ ✅ **PR #51** · ~~two-package indicator-vs-indicator~~ ✅ **PR #53** · ~~(i) per-condition multi-TF reference~~ ✅ **PR #56** · ~~(ii) N-ary reference chain~~ ✅ **PR #57** · ~~(d) VWAP directional key~~ ✅ **LANDED (PR #58)** — `ta.vwap` is now a directional key (native trigger + reference package + N-ary leg). **Remaining:** only `ta.atr` stays non-directional **by nature** (a volatility band, no cross) → the honest terminal boundary; any FUTURE canonical key with a directional interpretation would extend `DIRECTIONAL_KEYS` the same way VWAP did.
+- ~~**(c)** Multi-timeframe bar resampling~~ ✅ **LANDED (PR #55)**.
+
+With (d) landed, the Slice C indicator-compute follow-ups are effectively **complete** (only the by-nature-non-directional `ta.atr` remains, correctly unresolved). The natural next work is **`formula_based`/Kelly sizing** (still notional fallback + `position_sizing_method_unsupported`) OR moving off the backend indicator layer entirely (frontend integration, CP candidate generation).
 
 Other candidates (priority per `docs/POST_V1_KICKOFF.md`): frontend SSE/metrics/login integration, CP real candidate generation, capability activations, deferred list (incl. `summary["timeframe"]` resolution from market-revision metadata, first-Admin provisioning). See **`docs/POST_V1_KICKOFF.md`** for reuse anchors and the paste-ready resume prompt.

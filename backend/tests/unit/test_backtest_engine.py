@@ -400,6 +400,36 @@ def test_engine_warns_when_kelly_params_are_out_of_range() -> None:
     )
 
 
+def test_position_size_kelly_non_finite_params_fail_closed() -> None:
+    # formula_params is an unvalidated dict[str, Any]: a user-supplied "nan" / "Infinity"
+    # constructs a quiet non-finite Decimal that would RAISE InvalidOperation on the
+    # caller's ordered comparisons (crashing the run) or silently honour a nonsensical
+    # infinite payoff. Both must fail closed to an all-in notional (equity / price),
+    # never raise and never a modelled Kelly size (40).
+    notional = Decimal("100")  # 10000 / 100
+    for win, payoff in [("nan", "2"), ("Infinity", "2"), ("0.6", "nan"), ("0.6", "Infinity")]:
+        cfg = _kelly(win, payoff)
+        assert _position_size(cfg, Decimal("100"), Decimal("10000")) == notional
+
+
+def test_position_size_kelly_garbage_fraction_is_not_upgraded_to_full_kelly() -> None:
+    # A PRESENT but non-finite kelly_fraction must fail closed to notional — never be
+    # silently treated as absent and upgraded to the most aggressive full-Kelly sizing.
+    cfg = _kelly("0.6", "2", kelly_fraction="nan")
+    assert _position_size(cfg, Decimal("100"), Decimal("10000")) == Decimal("100")  # notional
+    assert _position_size(cfg, Decimal("100"), Decimal("10000")) != Decimal("40")  # not full Kelly
+
+
+def test_engine_does_not_crash_on_nan_kelly_params() -> None:
+    # Regression: a non-finite formula param must not propagate an InvalidOperation out
+    # of the engine. The run completes and surfaces the L4 fall-back warning instead.
+    out = _run(_kelly("nan", "2"), _long_breakout_then_stop())
+    assert out.summary["total_trades"] == 1
+    assert any(
+        w.startswith("position_sizing_method_unsupported") for w in out.diagnostics["warnings"]
+    )
+
+
 def test_engine_notional_sizing_never_inverts_pnl_after_bust() -> None:
     # Regression (review CRITICAL): with notional (non-base) sizing and no stop, a
     # catastrophic short drives equity negative; the next entry must clamp to size 0

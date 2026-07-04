@@ -18,12 +18,14 @@ silently dropped:
   strictly coarser than the pinned revision's base timeframe resamples (post-V1 (c));
   an override finer than a known base cannot be up-sampled and is honest-unresolved;
 * only canonical keys with a defined native trigger fire (``ta.sma``/``ta.ema``/
-  ``ta.rma``/``ta.wma``/``ta.rsi``); ``ta.atr``/``ta.vwap`` are recognized but
-  non-directional in this slice. A condition's RHS may be a constant threshold, a
-  bounded ``reference`` series, OR a second separately-pinned indicator package
-  (``reference_package_ref`` — the two-package indicator-vs-indicator form, e.g. a
-  fast-MA vs a slow-MA cross); a reference package that resolves to no computable
-  series leaves the block honest-unresolved.
+  ``ta.rma``/``ta.wma``/``ta.rsi`` plus ``ta.vwap`` — a volume-weighted price line whose
+  price/VWAP cross is directional, post-V1 (d)); ``ta.atr`` stays recognized-but-non-
+  directional (a volatility band width, no directional cross). A condition's RHS may be a
+  constant threshold, a bounded ``reference`` series, OR a second separately-pinned
+  indicator package (``reference_package_ref`` — the two-package indicator-vs-indicator
+  form, e.g. a fast-MA vs a slow-MA cross), optionally extended into an N-ary chain; a
+  reference package (or leg) that resolves to no computable series — including ``ta.atr`` —
+  leaves the block honest-unresolved.
 
 If no entry block resolves, the returned plan has no entry specs and the engine falls
 back to its labelled breakout proxy.
@@ -520,7 +522,8 @@ def _primary_directional_key(dependency_snapshot: dict[str, Any]) -> str | None:
 
     ``dependency_snapshot["resolved"]`` is the frozen list of resolver refs the
     package pinned (each ``{"canonical_key", ...}``). A recognized-but-non-directional
-    call (``ta.atr``/``ta.vwap``) alone does not yield a signal."""
+    call (``ta.atr``) alone does not yield a signal; ``ta.vwap`` IS directional (post-V1
+    (d)) — a volume-weighted price line whose price/VWAP cross fires."""
     resolved = None
     if isinstance(dependency_snapshot, dict):
         resolved = dependency_snapshot.get("resolved")

@@ -104,6 +104,10 @@ def _config(
     with_stop: bool = True,
     risk_pct: str | None = None,
     stop_point: str | None = None,
+    formula_type: str | None = None,
+    win_prob: str | None = None,
+    payoff: str | None = None,
+    kelly_fraction: str | None = None,
 ) -> StrategyConfig:
     """A minimal VALID StrategyConfig; only the fields the engine reads matter."""
     sizing: dict[str, Any] = {"method": method}
@@ -113,6 +117,18 @@ def _config(
         sizing["risk_based"] = {
             "risk_percentage_per_trade": risk_pct,
             "stop_loss_point": stop_point,
+        }
+    if method == "formula_based_sizing" and formula_type is not None:
+        formula_params: dict[str, Any] = {}
+        if win_prob is not None:
+            formula_params["win_probability"] = win_prob
+        if payoff is not None:
+            formula_params["payoff_ratio"] = payoff
+        if kelly_fraction is not None:
+            formula_params["kelly_fraction"] = kelly_fraction
+        sizing["formula_based"] = {
+            "formula_type": formula_type,
+            "formula_params": formula_params,
         }
     protection: dict[str, Any] = (
         {"percentage_stop": {"enabled": True, "loss_percentage": loss_pct}} if with_stop else {}
@@ -296,6 +312,92 @@ def test_position_size_risk_based_clamps_negative_equity_to_zero() -> None:
     # A bust account never yields a negative size (would invert PnL signs — CRITICAL).
     cfg = _config(method="risk_based_sizing", risk_pct="2.0", stop_point="50")
     assert _position_size(cfg, Decimal("100"), Decimal("-500")) == Decimal("0")
+
+
+def _kelly(win_prob: str, payoff: str, kelly_fraction: str | None = None) -> StrategyConfig:
+    return _config(
+        method="formula_based_sizing",
+        formula_type="kelly_criterion",
+        win_prob=win_prob,
+        payoff=payoff,
+        kelly_fraction=kelly_fraction,
+    )
+
+
+def test_position_size_kelly_applies_the_fractional_kelly_formula() -> None:
+    # f* = W - (1 - W) / R = 0.6 - 0.4 / 2 = 0.4; size = equity * f* / entry_price.
+    cfg = _kelly("0.6", "2")
+    assert _position_size(cfg, Decimal("100"), Decimal("10000")) == Decimal("40")
+
+
+def test_position_size_kelly_scales_with_the_fractional_multiplier() -> None:
+    # Half-Kelly halves the capital fraction: f* = 0.5 * 0.4 = 0.2 → 10000 * 0.2 / 100.
+    cfg = _kelly("0.6", "2", kelly_fraction="0.5")
+    assert _position_size(cfg, Decimal("100"), Decimal("10000")) == Decimal("20")
+
+
+def test_position_size_kelly_non_positive_edge_clamps_to_zero() -> None:
+    # W - (1 - W) / R = 0.4 - 0.6 / 1 = -0.2 → clamped to 0 (no edge, do not trade),
+    # never a negative (bet-against-the-edge) size. Still an honored config (size 0).
+    cfg = _kelly("0.4", "1")
+    assert _position_size(cfg, Decimal("100"), Decimal("10000")) == Decimal("0")
+
+
+def test_position_size_kelly_clamps_negative_equity_to_zero() -> None:
+    # A bust account never yields a negative size (would invert PnL signs — CRITICAL).
+    cfg = _kelly("0.6", "2")
+    assert _position_size(cfg, Decimal("100"), Decimal("-500")) == Decimal("0")
+
+
+def test_position_size_kelly_is_entry_price_dependent() -> None:
+    # Unlike risk-based, Kelly sizes a fraction of CAPITAL, so the unit count scales
+    # inversely with the entry price (f* = 0.4; 10000 * 0.4 / price).
+    cfg = _kelly("0.6", "2")
+    cheap = _position_size(cfg, Decimal("100"), Decimal("10000"))
+    dear = _position_size(cfg, Decimal("200"), Decimal("10000"))
+    assert cheap == Decimal("40")
+    assert dear == Decimal("20")
+    assert cheap != dear
+
+
+def test_engine_does_not_warn_when_kelly_sizing_is_honored() -> None:
+    # A valid kelly_criterion config is modelled: no unsupported-method warning.
+    out = _run(_kelly("0.6", "2"), _long_breakout_then_stop())
+    assert not any(
+        w.startswith("position_sizing_method_unsupported") for w in out.diagnostics["warnings"]
+    )
+    assert out.summary["total_trades"] == 1  # produces a real result
+
+
+def test_engine_warns_on_custom_formula_sizing() -> None:
+    # custom_formula has no safe deterministic evaluation → notional fallback + L4 warn.
+    out = _run(
+        _config(method="formula_based_sizing", formula_type="custom_formula"),
+        _long_breakout_then_stop(),
+    )
+    assert any(
+        w.startswith("position_sizing_method_unsupported") for w in out.diagnostics["warnings"]
+    )
+
+
+def test_engine_warns_when_kelly_params_are_missing() -> None:
+    # kelly_criterion without win_probability / payoff_ratio cannot be modelled →
+    # fail closed to notional + surface the divergence (never silently, L4).
+    out = _run(
+        _config(method="formula_based_sizing", formula_type="kelly_criterion"),
+        _long_breakout_then_stop(),
+    )
+    assert any(
+        w.startswith("position_sizing_method_unsupported") for w in out.diagnostics["warnings"]
+    )
+
+
+def test_engine_warns_when_kelly_params_are_out_of_range() -> None:
+    # An impossible win probability (>= 1) is rejected → notional fallback + L4 warn.
+    out = _run(_kelly("1.5", "2"), _long_breakout_then_stop())
+    assert any(
+        w.startswith("position_sizing_method_unsupported") for w in out.diagnostics["warnings"]
+    )
 
 
 def test_engine_notional_sizing_never_inverts_pnl_after_bust() -> None:

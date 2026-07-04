@@ -29,7 +29,7 @@ from __future__ import annotations
 from collections import deque
 from collections.abc import Iterator
 from dataclasses import dataclass
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import TYPE_CHECKING, Any
 
 from entropia.domain.backtest.indicators import (
@@ -42,7 +42,7 @@ from entropia.domain.backtest.indicators import (
 )
 
 if TYPE_CHECKING:
-    from entropia.domain.strategy.config import StrategyConfig
+    from entropia.domain.strategy.config import PositionSizing, StrategyConfig
 
 _MONEY = Decimal("0.01")
 _PCT = Decimal("0.0001")
@@ -50,6 +50,7 @@ _RATIO = Decimal("0.01")
 _QTY = Decimal("0.00000001")
 _HUNDRED = Decimal("100")
 _ZERO = Decimal("0")
+_ONE = Decimal("1")
 
 # Rolling look-back for the breakout entry/exit proxy. A constant of the engine
 # version (part of the reproducibility contract via ``engine_version``), NOT a
@@ -183,28 +184,88 @@ def _effective_fill(
     return (adjusted * factor).quantize(_MONEY)
 
 
+def _decimal_param(params: dict[str, Any], key: str) -> Decimal | None:
+    """Best-effort ``Decimal`` from a free-form ``formula_params`` entry.
+
+    Returns ``None`` when the key is absent or the value cannot be parsed as a
+    number (``str()`` first so a non-numeric value fails closed rather than a
+    ``Decimal`` coercion surprise)."""
+    if key not in params:
+        return None
+    try:
+        return Decimal(str(params[key]))
+    except (InvalidOperation, ValueError, TypeError):
+        return None
+
+
+def _kelly_capital_fraction(sizing: PositionSizing) -> Decimal | None:
+    """Fractional-Kelly capital fraction for a ``kelly_criterion`` formula config.
+
+    Grounded, deterministic and path-INDEPENDENT: the win probability ``W``, the
+    payoff ratio ``R`` (average win / average loss) and the optional fractional-Kelly
+    multiplier all come from the strategy's own ``formula_params`` — user-supplied
+    edge estimates, NOT statistics estimated from the running backtest's realized
+    trades. That adaptive form is deliberately DEFERRED: estimating ``W`` / ``R`` from
+    outcomes-so-far is path-dependent and look-ahead-prone, so it is not modelled here
+    (the honest boundary, symmetric with ``risk_based`` reading fixed config
+    constants). Kelly capital fraction::
+
+        f* = kelly_fraction * (W - (1 - W) / R)
+
+    clamped at the LOWER bound to 0 — a non-positive edge yields 0 (do not trade),
+    never a negative (bet-against-the-edge) size. No upper clamp is needed: since
+    ``(1 - W) / R >= 0`` and ``W < 1``, the edge is always ``< 1`` and so is ``f*``.
+    Returns ``None`` when the config is not a modelled ``kelly_criterion`` request
+    (``custom_formula``, or missing / out-of-range params), so the caller falls back
+    to notional sizing and surfaces the L4 diagnostics warning."""
+    formula = sizing.formula_based
+    if sizing.method != "formula_based_sizing" or formula is None:
+        return None
+    if formula.formula_type != "kelly_criterion":
+        return None  # custom_formula: no safe arbitrary-expression evaluation
+    win = _decimal_param(formula.formula_params, "win_probability")
+    payoff = _decimal_param(formula.formula_params, "payoff_ratio")
+    if win is None or payoff is None or not (_ZERO < win < _ONE) or payoff <= _ZERO:
+        return None
+    fraction = _decimal_param(formula.formula_params, "kelly_fraction")
+    if fraction is None:
+        fraction = _ONE
+    elif not (_ZERO < fraction <= _ONE):
+        return None
+    edge = win - (_ONE - win) / payoff
+    return max(fraction * edge, _ZERO)
+
+
 def _sizing_is_honored(config: StrategyConfig) -> bool:
     """Whether the requested sizing method is modelled by this engine version.
 
-    ``base_position_size`` (explicit size) and ``risk_based_sizing`` (a fixed % of
-    equity risked across the stop distance) are honored. ``formula_based_sizing`` —
-    and a ``risk_based_sizing`` request that carries no ``risk_based`` sub-config —
-    are not modelled and fall back to notional sizing (surfaced as a diagnostics
-    warning, never hidden — L4)."""
+    ``base_position_size`` (explicit size), ``risk_based_sizing`` (a fixed % of equity
+    risked across the stop distance) and ``formula_based_sizing`` with a valid
+    ``kelly_criterion`` config are honored. A ``formula_based_sizing`` request that is
+    ``custom_formula`` or carries missing / out-of-range Kelly params — and a
+    ``risk_based_sizing`` request that carries no ``risk_based`` sub-config — are not
+    modelled and fall back to notional sizing (surfaced as a diagnostics warning,
+    never hidden — L4)."""
     sizing = config.position_sizing
     if sizing.method == "base_position_size" and sizing.base_position_size is not None:
         return True
-    return sizing.method == "risk_based_sizing" and sizing.risk_based is not None
+    if sizing.method == "risk_based_sizing" and sizing.risk_based is not None:
+        return True
+    return _kelly_capital_fraction(sizing) is not None
 
 
 def _position_size(config: StrategyConfig, entry_price: Decimal, equity: Decimal) -> Decimal:
-    """Deterministic sizing: explicit base size, risk-based, else an all-in notional.
+    """Deterministic sizing: explicit base size, risk-based, Kelly, else all-in notional.
 
     ``base_position_size`` returns the explicit size. ``risk_based_sizing`` risks a
     fixed % of (non-negative) equity across the configured stop distance —
     ``size = equity * risk% / 100 / stop_loss_point`` — and is therefore independent
-    of the entry price. ``formula_based_sizing`` (and any request missing its
-    sub-config) is not modelled and falls back to an all-in notional (surfaced as a
+    of the entry price. ``formula_based_sizing`` with a valid ``kelly_criterion`` config
+    allocates a fractional-Kelly slice of (non-negative) equity —
+    ``size = equity * f* / entry_price`` — and is therefore entry-price DEPENDENT
+    (Kelly sizes a fraction of CAPITAL; converting that to units divides by price),
+    unlike risk-based. An unmodelled formula (``custom_formula`` / bad params) and any
+    request missing its sub-config fall back to an all-in notional (surfaced as a
     diagnostics warning, L4). Every branch clamps to NON-NEGATIVE equity: a bust
     account yields size 0, never a negative size — a negative size would invert the
     PnL sign of every subsequent trade (review CRITICAL)."""
@@ -217,6 +278,11 @@ def _position_size(config: StrategyConfig, entry_price: Decimal, equity: Decimal
         if risk.stop_loss_point > _ZERO:
             risk_capital = usable_equity * risk.risk_percentage_per_trade / _HUNDRED
             return (risk_capital / risk.stop_loss_point).quantize(_QTY)
+        return _ZERO
+    kelly = _kelly_capital_fraction(sizing)
+    if kelly is not None:
+        if entry_price > _ZERO:
+            return (usable_equity * kelly / entry_price).quantize(_QTY)
         return _ZERO
     if entry_price > _ZERO:
         return (usable_equity / entry_price).quantize(_QTY)

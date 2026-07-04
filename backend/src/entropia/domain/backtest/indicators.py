@@ -18,9 +18,12 @@ Honest V1 boundary (kept explicit, never hidden):
   DEFAULT (part of the reproducibility contract, like ``_BREAKOUT_WINDOW`` was).
 * Only whitelisted directional keys produce a native trigger. ``ta.atr`` (volatility)
   and ``ta.vwap`` (needs volume + a session anchor) are recognized but non-directional
-  → the block is left unresolved (surfaced as a diagnostics warning, L4). Nested
-  condition blocks / multi-timeframe overrides / non-native trigger sources are a
-  later slice and likewise surface a warning rather than silently mis-computing.
+  → the block is left unresolved (surfaced as a diagnostics warning, L4). Non-native
+  trigger sources likewise surface a warning rather than silently mis-computing.
+* An indicator block MAY compute on a higher timeframe than the base bars (post-V1 (c)):
+  the base bars are aggregated into the block's coarser candle and the trigger only
+  advances on a completed candle (no look-ahead). A per-CONDITION timeframe (a
+  condition's RHS on a different TF) remains a later slice.
 
 The compute is a PURE function of the bars: same pinned strategy + same pinned
 market revision => byte-identical signals. All arithmetic is ``Decimal``.
@@ -30,6 +33,7 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from decimal import Decimal
 
 _ZERO = Decimal("0")
@@ -109,6 +113,63 @@ def default_length(canonical_key: str) -> int:
     return _DEFAULT_RSI_LENGTH if canonical_key == "ta.rsi" else _DEFAULT_MA_LENGTH
 
 
+# Multi-timeframe resampling (post-V1 Slice C follow-up (c)). A higher-timeframe
+# indicator block aggregates the base bars into its own coarser candles and advances
+# the indicator only when a candle CLOSES — never on a still-forming one (no look-ahead
+# / no repaint). The override vocabulary is a fixed set of fixed-duration timeframes (a
+# reproducibility constant, matching ``IndicatorBlock.timeframe``); each maps to the
+# second span used to floor a bar's timestamp into a higher-TF bucket.
+_TF_SECONDS: dict[str, int] = {
+    "1m": 60,
+    "3m": 180,
+    "5m": 300,
+    "15m": 900,
+    "30m": 1800,
+    "1h": 3600,
+    "2h": 7200,
+    "4h": 14400,
+    "1D": 86400,
+}
+
+
+def timeframe_seconds(timeframe: str) -> int | None:
+    """Span in seconds of a supported timeframe, or ``None`` if it is not recognized."""
+    return _TF_SECONDS.get(timeframe)
+
+
+def _epoch_seconds(timestamp: str) -> int | None:
+    """Parse an ISO-8601 (or bare epoch) bar timestamp to integer UTC epoch seconds.
+
+    Deterministic and clock-free — it only parses the given string, never reads the
+    wall clock. ISO strings (with or without a trailing ``Z``) go through ``datetime``;
+    an all-digit string is read as epoch milliseconds (>=13 digits) else seconds.
+    ``None`` on anything unparseable, so a higher-TF block fails closed (holds its last
+    completed-candle signal) rather than silently mis-bucketing."""
+    if not timestamp:
+        return None
+    text = timestamp.strip()
+    if text.isdigit():
+        value = int(text)
+        return value // 1000 if len(text) >= 13 else value
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return int(parsed.timestamp())
+
+
+def _htf_bucket(timestamp: str, span_seconds: int) -> int | None:
+    """Higher-TF bucket index a bar falls in — ``floor(epoch / span)`` — or ``None`` if
+    the timestamp is unparseable. Consecutive base bars sharing a bucket aggregate into
+    one candle; a change of bucket means the prior higher-TF candle has closed."""
+    epoch = _epoch_seconds(timestamp)
+    if epoch is None:
+        return None
+    return epoch // span_seconds
+
+
 @dataclass(frozen=True, slots=True)
 class ConditionSpec:
     """A resolved, computable condition nested under an indicator block.
@@ -157,6 +218,10 @@ class IndicatorSpec:
     min_condition_support: int | None = None
     # True for ``indicator_output_plus_condition``: the conditions ARE the signal.
     condition_only: bool = False
+    # Higher-timeframe resampling span in seconds (post-V1 (c)). ``None`` computes on the
+    # base bars (Slice C behaviour); a positive span aggregates the base bars into that
+    # coarser candle and advances the indicator only when the candle closes.
+    resample_seconds: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -460,11 +525,17 @@ class BlockEvaluator:
         "_cond_evals",
         "_condition_dir",
         "_condition_only",
+        "_cur_bucket",
+        "_form_close",
+        "_form_high",
+        "_form_low",
+        "_form_open",
         "_is_rsi",
         "_ma",
         "_prev_close",
         "_prev_gate",
         "_prev_value",
+        "_resample_seconds",
         "_rsi",
         "_spec",
     )
@@ -486,6 +557,15 @@ class BlockEvaluator:
         self._condition_only = spec.condition_only
         self._condition_dir = _condition_only_direction(spec) if spec.condition_only else None
         self._prev_gate = False  # last bar's aggregate condition-gate state (edge detect)
+        # Higher-timeframe resampling (post-V1 (c)): when set, base bars are aggregated
+        # into the current forming higher-TF candle and the inner compute only advances on
+        # a candle CLOSE (the first bar of the next bucket). ``None`` => base-TF compute.
+        self._resample_seconds = spec.resample_seconds
+        self._cur_bucket: int | None = None
+        self._form_open: Decimal = _ZERO
+        self._form_high: Decimal = _ZERO
+        self._form_low: Decimal = _ZERO
+        self._form_close: Decimal = _ZERO
 
     def update(
         self,
@@ -493,12 +573,49 @@ class BlockEvaluator:
         high: Decimal | None = None,
         low: Decimal | None = None,
         open_price: Decimal | None = None,
+        timestamp: str | None = None,
     ) -> None:
         # OHLC is optional so callers/tests with close-only series keep working; a
         # missing field degrades to the close (only price-source conditions read them).
         high = close if high is None else high
         low = close if low is None else low
         open_price = close if open_price is None else open_price
+        if self._resample_seconds is None:
+            # Base-timeframe block: advance on every bar (Slice C behaviour).
+            self._advance(close, high, low, open_price)
+            return
+        # Higher-timeframe block: aggregate the base bars into a coarser candle and
+        # advance the inner compute only when that candle CLOSES — detected as the first
+        # base bar of the NEXT bucket — so a signal is never read from a still-forming
+        # candle (no look-ahead). The trailing partial candle is never finalized.
+        bucket = _htf_bucket(timestamp, self._resample_seconds) if timestamp else None
+        if bucket is None:
+            return  # unparseable/absent timestamp: hold the last completed-candle signal
+        if self._cur_bucket is None:
+            self._begin_htf_candle(bucket, open_price, high, low, close)
+            return
+        if bucket == self._cur_bucket:
+            self._form_high = max(self._form_high, high)
+            self._form_low = min(self._form_low, low)
+            self._form_close = close
+            return
+        # A new bucket started: the previous higher-TF candle is complete — advance the
+        # inner compute with its aggregated OHLC, then open the next forming candle.
+        self._advance(self._form_close, self._form_high, self._form_low, self._form_open)
+        self._begin_htf_candle(bucket, open_price, high, low, close)
+
+    def _begin_htf_candle(
+        self, bucket: int, open_price: Decimal, high: Decimal, low: Decimal, close: Decimal
+    ) -> None:
+        """Start aggregating a fresh higher-TF candle from this base bar."""
+        self._cur_bucket = bucket
+        self._form_open = open_price
+        self._form_high = high
+        self._form_low = low
+        self._form_close = close
+
+    def _advance(self, close: Decimal, high: Decimal, low: Decimal, open_price: Decimal) -> None:
+        """Run one indicator/condition step over one (base or aggregated) candle."""
         # Age any active window BEFORE this bar's fresh event can refresh it.
         if self._active_left is not None and self._active_dir is not None:
             self._active_left -= 1
@@ -519,8 +636,8 @@ class BlockEvaluator:
                 self._active_left = _VALIDITY_BARS.get(self._spec.validity, 1)
         self._prev_value = value
         self._prev_close = close
-        # Feed the nested conditions THIS bar's prices + the parent's fresh indicator
-        # value, so the gate is evaluated as-of the same bar as the trigger.
+        # Feed the nested conditions THIS candle's prices + the parent's fresh indicator
+        # value, so the gate is evaluated as-of the same candle as the trigger.
         for cond in self._cond_evals:
             cond.update(
                 close=close,
@@ -691,4 +808,5 @@ __all__ = [
     "build_evaluators",
     "condition_direction",
     "default_length",
+    "timeframe_seconds",
 ]

@@ -14,8 +14,9 @@ silently dropped:
   (the cross GATED by conditions) and ``indicator_output_plus_condition`` (a
   condition-only signal whose direction comes from a REQUIRED cross edge) are computed;
   a condition-only block with no required cross is unresolved (no directional edge);
-* only base-timeframe blocks (``same_as_base_tf`` / ``use_package_default_tf``) are
-  computed; an explicit timeframe override is deferred (needs multi-TF resampling);
+* a block may compute on a higher timeframe than the base bars: an explicit override
+  strictly coarser than the pinned revision's base timeframe resamples (post-V1 (c));
+  an override finer than a known base cannot be up-sampled and is honest-unresolved;
 * only canonical keys with a defined native trigger fire (``ta.sma``/``ta.ema``/
   ``ta.rma``/``ta.wma``/``ta.rsi``); ``ta.atr``/``ta.vwap`` are recognized but
   non-directional in this slice. A condition's RHS may be a constant threshold, a
@@ -47,8 +48,10 @@ from entropia.domain.backtest.indicators import (
     SignalRule,
     condition_direction,
     default_length,
+    timeframe_seconds,
 )
 from entropia.domain.strategy.config import ConditionBlock, IndicatorBlock, StrategyConfig
+from entropia.infrastructure.postgres.repositories import market_data as md_repo
 from entropia.infrastructure.postgres.repositories import packages as pkg_repo
 
 _NATIVE_TRIGGER = "indicator_native_trigger"
@@ -79,9 +82,10 @@ async def resolve_indicator_plan(
     session: AsyncSession, strategy_config: StrategyConfig
 ) -> IndicatorPlan:
     """Build the deterministic indicator plan for a pinned strategy config."""
+    base_seconds = await _resolve_base_seconds(session, strategy_config)
     entry_logic = strategy_config.position_entry_logic
     entry_specs, entry_unresolved = await _resolve_blocks(
-        session, entry_logic.indicator_blocks, "entry"
+        session, entry_logic.indicator_blocks, "entry", base_seconds
     )
     entry_rule = SignalRule(
         rule=str(entry_logic.signal_block.rule),
@@ -94,7 +98,7 @@ async def resolve_indicator_plan(
     exit_unresolved: list[str] = []
     if exit_logic.indicator_blocks:
         exit_specs, exit_unresolved = await _resolve_blocks(
-            session, exit_logic.indicator_blocks, "exit"
+            session, exit_logic.indicator_blocks, "exit", base_seconds
         )
         if exit_logic.signal_block is not None:
             exit_rule = SignalRule(
@@ -113,14 +117,17 @@ async def resolve_indicator_plan(
 
 
 async def _resolve_blocks(
-    session: AsyncSession, blocks: list[IndicatorBlock] | None, side: str
+    session: AsyncSession,
+    blocks: list[IndicatorBlock] | None,
+    side: str,
+    base_seconds: int | None,
 ) -> tuple[tuple[IndicatorSpec, ...], list[str]]:
     specs: list[IndicatorSpec] = []
     unresolved: list[str] = []
     for block in blocks or []:
         if block.enabled is False:
             continue
-        spec, reason = await _resolve_block(session, block)
+        spec, reason = await _resolve_block(session, block, base_seconds)
         if spec is not None:
             specs.append(spec)
         elif reason is not None:
@@ -129,13 +136,14 @@ async def _resolve_blocks(
 
 
 async def _resolve_block(
-    session: AsyncSession, block: IndicatorBlock
+    session: AsyncSession, block: IndicatorBlock, base_seconds: int | None
 ) -> tuple[IndicatorSpec | None, str | None]:
     trigger = str(block.trigger_source)
     if trigger not in _ACCEPTED_TRIGGERS:
         return None, f"trigger_source_deferred:{block.trigger_source}"
-    if str(block.timeframe) not in _BASE_TIMEFRAMES:
-        return None, f"timeframe_override_deferred:{block.timeframe}"
+    resample_seconds, tf_reason = _resolve_timeframe(str(block.timeframe), base_seconds)
+    if tf_reason is not None:
+        return None, tf_reason
 
     revision = await pkg_repo.get_revision(session, block.package_ref.package_revision_id)
     if revision is None:
@@ -171,6 +179,7 @@ async def _resolve_block(
         "condition_rule": condition_rule,
         "min_condition_support": min_condition_support,
         "condition_only": condition_only,
+        "resample_seconds": resample_seconds,
     }
     lower = _decimal_override(overrides, _LOWER_KEYS)
     if lower is not None:
@@ -179,6 +188,43 @@ async def _resolve_block(
     if upper is not None:
         kwargs["rsi_upper"] = upper
     return IndicatorSpec(**kwargs), None
+
+
+async def _resolve_base_seconds(
+    session: AsyncSession, strategy_config: StrategyConfig
+) -> int | None:
+    """Span (seconds) of the pinned market revision's base bar timeframe, if known.
+
+    Read from the immutable pinned revision (reproducibility-safe). ``None`` when the
+    revision carries no bar-timeframe resolution — a higher-TF override then resolves
+    anyway (it degrades to the base bars deterministically) but cannot be validated as
+    strictly coarser than the base."""
+    base_tf = await md_repo.get_base_timeframe_for_revision(
+        session, strategy_config.data.market_dataset_revision_id
+    )
+    return timeframe_seconds(base_tf) if base_tf else None
+
+
+def _resolve_timeframe(timeframe: str, base_seconds: int | None) -> tuple[int | None, str | None]:
+    """Resolve a block's timeframe to a resample span (seconds) or an unresolved reason.
+
+    ``same_as_base_tf`` / ``use_package_default_tf`` compute on the base bars (a ``None``
+    span). A concrete override resamples the base bars to that timeframe when it is
+    strictly COARSER than the base; equal-to-base collapses back to the base compute. An
+    override strictly FINER than a known base cannot be up-sampled and is honest-
+    unresolved. When the base timeframe is unknown the override still resolves (it
+    degrades deterministically to the base bars) — the boundary is surfaced, not guessed."""
+    if timeframe in _BASE_TIMEFRAMES:
+        return None, None
+    target = timeframe_seconds(timeframe)
+    if target is None:
+        return None, f"timeframe_override_unrecognized:{timeframe}"
+    if base_seconds is not None:
+        if target < base_seconds:
+            return None, f"timeframe_finer_than_base:{timeframe}"
+        if target == base_seconds:
+            return None, None
+    return target, None
 
 
 async def _resolve_conditions(

@@ -3,6 +3,43 @@
 > **Amaç:** V1 kapandı (Stage 0–8 COMPLETE). Bu doküman post-V1 durumunu, aday iş listesini
 > ve temiz oturumda yapıştırılacak resume prompt'u içerir.
 
+## Durum (2026-07-05, TIER 2 frontend — SSE live-invalidation; PR #67)
+
+> **İkinci TIER 2 (frontend) slice — SSE live-invalidation landed (PR #67, açık, CI yeşil,
+> kullanıcı merge'i bekliyor).** Backend zaten transactional outbox'ı `GET /events` üzerinden tipli
+> SSE frame'leri olarak fan-out ediyordu (Stage 8b, `apps/api/sse.py`); web shell bağlantıyı açıyor
+> ama yalnızca `heartbeat` dinliyordu — `connectEvents`'in `queryClient` parametresi kullanılmayan
+> bir Stage-1 TODO'ydu, hiçbir domain event cache'i tazelemiyordu. Bu slice `frontend/src/lib/sse.ts`
+> stub'ını doldurur → her taksonomi event'i ilgili react-query key'lerini invalidate eder.
+> **FRONTEND-ONLY — backend değişmedi, migration YOK, backend test tabanı 1015 sabit.** CI: **Frontend
+> + Docker check yeşil**; backend check frontend-only diff için değişmeden yeniden koşar. alembic head
+> hâlâ `0021_local_auth`; backend `ENGINE_VERSION` hâlâ `backtest-engine-v2-position-size-limits`.
+> **Reuse anchor'ları (kesin semboller):**
+> - **`frontend/src/lib/sse.ts`** — `connectEvents(queryClient, onStatus?)` imzası + `SseStatus`
+>   DEĞİŞMEDİ (Layout call-site'a dokunulmadı). YENİ export'lar:
+>   - **`SseEventName`** — backend taksonomi union'ı (`backtest.run.updated`/`job.updated`/
+>     `agent.task.updated`/`audit.event.created`/`resource.changed`); `apps/api/sse.py::sse_event_name`
+>     ile lockstep kalmalı.
+>   - **`EVENT_QUERY_KEYS: Record<SseEventName, readonly QueryKey[]>`** — event→key-prefix map:
+>     `backtest.run.updated → [["backtests"]]`, `job.updated → [["jobs"]]`,
+>     `agent.task.updated → [["agent-tasks"]]`, `audit.event.created → [["audit"]]`,
+>     `resource.changed → []` (boş liste = catch-all → tam `invalidateQueries()`). react-query prefix
+>     eşler → `["backtests"]` ileride `["backtests", runId, …]`'i de kapsar.
+>   - **`SSE_EVENT_NAMES`** — `Object.keys(EVENT_QUERY_KEYS)` (iterasyon/test).
+>   - private `invalidateForEvent(qc, name)` — boş liste → tam refresh, değilse prefix-başına
+>     `invalidateQueries({queryKey})`. Handler'lar event-adı-başına eklenir + **dispose'da sökülür**
+>     (simetrik add/remove) → `source.close()`.
+>   - **Reconnect self-heal (INF-11):** `hasOpened` flag'i İLK `open`'ı no-op yapar ama SONRAKİ `open`
+>     (drop sonrası reconnect) tam `invalidateQueries()` tetikler → bağlantı boşluğunda hiçbir view stale kalmaz.
+> - **`frontend/src/test/sse.test.ts`** *(YENİ)* — in-memory `EventSource` double (`vi.stubGlobal`)
+>   ile 7 vitest → **frontend toplam 16/16** (9 önceki + 7 yeni); typecheck + lint temiz; build yeşil.
+> **Dürüst sınır:** bu key'lere bağlanan CANLI sayfa HENÜZ yok — Stage 5/6 `RUN`/`Results History`/
+> `Arrange Metrics`/`Analysis Lab` ekranları placeholder, dolayısıyla invalidation bugün zararsız
+> no-op; **görünür payoff o sayfalarla gelir**, `EVENT_QUERY_KEYS` onların forward contract'ı. Kalan
+> TIER 2 adayı **`/v1/metrics` Prometheus-text dashboard** bu slice'ta DEĞİL.
+> **Sıradaki doğal slice: `/v1/metrics` dashboard** (Prometheus-text parser + paneller) VEYA canlı-veri
+> sayfaları (Stage 5 RUN vb.). Aşağıdaki login (PR #65) bloğu ve öncesi tarihsel.
+
 ## Durum (2026-07-05, TIER 2 frontend — real-auth login/signup/logout; PR #65)
 
 > **İlk TIER 2 (frontend) slice — gerçek auth login/signup/logout landed (PR #65, açık, CI
@@ -466,42 +503,41 @@ Entropia — post-V1 TIER 2 (FRONTEND). Backend TIER 1 EFEKTİF TAMAM (V1 + Auth
 A #41 + bar-replay B #43 + indikatör compute C #45 + risk_based #47 + condition blocks #49 +
 extensions #51 + indicator-vs-indicator #53 + multi-TF #55 + per-condition-TF #56 + N-ary #57 +
 VWAP #58 + Kelly #60/#61 + position_size_limits #63 — HEPSİ MERGED). FRONTEND: gerçek auth
-login/signup/logout landed (PR #65 — merge KULLANICIDA; frontend-only, backend değişmedi, backend
-test tabanı 1015 SABİT).
+login/signup/logout landed (PR #65 MERGED) + SSE live-invalidation landed (PR #67 — merge
+KULLANICIDA; frontend-only, backend değişmedi, backend test tabanı 1015 SABİT).
 
 ÖNCE DOĞRULA (stale-by-default): git fetch && git log --oneline origin/main -6 && gh pr list
---state all -L 8. PR #65 (feat/post-v1-frontend-login) + docs PR'ı MERGE OLDU MU teyit et. Backend
-main = 97b10b8 (Merge #63) → docs #64 = 3594a58; alembic head 0021_local_auth;
+--state all -L 8. PR #67 (feat/post-v1-frontend-sse) + docs PR'ı MERGE OLDU MU teyit et. Backend
+main = 4979cdf (Merge #66, login+docs) civarı → #67 merge sonrası ileri; alembic head 0021_local_auth;
 ENGINE_VERSION = backtest-engine-v2-position-size-limits. FRONTEND doğrula:
-cd frontend && npm run typecheck && npm run lint && npm test && npm run build (login sonrası 9/9).
+cd frontend && npm run typecheck && npm run lint && npm test && npm run build (SSE sonrası 16/16).
 
-ÖNCE OKU: docs/POST_V1_KICKOFF.md (en üst Durum bloğu — TIER 2 frontend login PR #65) +
-docs/STAGE2_HANDOFF.md ("Frontend real-auth login/signup/logout ... landed (PR #65)" + "Next: TIER 2
-frontend — SSE live-invalidation + metrics dashboard remain").
+ÖNCE OKU: docs/POST_V1_KICKOFF.md (en üst Durum bloğu — TIER 2 frontend SSE PR #67) +
+docs/STAGE2_HANDOFF.md ("Frontend SSE live-invalidation ... landed (PR #67)" + "Next: TIER 2
+frontend — /v1/metrics dashboard remains").
 
 FRONTEND STACK: Vite 8 + React 18 + react-router 6 + @tanstack/react-query 5 + react-hook-form +
 vitest/jsdom + @testing-library. Alias @ = src; kök frontend/src/. Auth ZATEN bağlı (lib/session.ts
 store + lib/auth.ts hooks + apiClient Bearer header + pages/Login.tsx + /login route + Layout
-AuthControl). Node >=20.19.
+AuthControl). SSE ZATEN bağlı (lib/sse.ts: EVENT_QUERY_KEYS event→key map + connectEvents Layout'ta
+mount; reconnect full-refresh). Node >=20.19.
 
-SIRADAKİ İŞ (kullanıcıyla SEÇ) — kalan TIER 2 frontend adayları:
-- (a) SSE LIVE-INVALIDATION (ÖNERİLEN, küçük/saf infra): frontend/src/lib/sse.ts stub'ı ŞU AN yalnızca
-  heartbeat dinliyor + queryClient KULLANILMIYOR (Stage 1+ TODO). Backend /events taksonomisi
-  (backend .../apps/api/sse.py::sse_event_name): backtest.run.updated / job.updated / agent.task.updated /
-  audit.event.created / resource.changed (+heartbeat; data = tam outbox JSON). Bunları addEventListener
-  ile ilgili query key'lere queryClient.invalidateQueries([...]) map et → canlı backtest/job/agent
-  progress. İzole vitest ile test (EventSource mock).
-- (b) /v1/metrics DASHBOARD: GET /v1/metrics PROMETHEUS-TEXT döner (PlainTextResponse, JSON DEĞİL —
-  backend .../apps/api/routes/metrics.py:53). Exposition parser + golden-signals / jobs-depth /
-  outbox-lag / lease-age panelleri. En zahmetli (metin parse), en az temiz kontrat.
-- (c) capability aktivasyonları (role-gated), (d) first-Admin provisioning dashboard.
+SIRADAKİ İŞ — kalan TIER 2 frontend adayları:
+- (a) /v1/metrics DASHBOARD (ÖNERİLEN sıradaki): GET /v1/metrics PROMETHEUS-TEXT döner
+  (PlainTextResponse, JSON DEĞİL — backend .../apps/api/routes/metrics.py). Exposition parser +
+  golden-signals / jobs-depth / outbox-lag / lease-age panelleri. Yeni sayfa (/panel veya
+  /backtest/metrics altına) + lib/metrics.ts parser + izole vitest (parser unit + component render).
+- (b) capability aktivasyonları (role-gated features), (c) first-Admin provisioning dashboard,
+  (d) canlı-veri sayfaları (Stage 5 RUN / History / Metrics + Analysis Lab) — bunlar SSE
+  EVENT_QUERY_KEYS key'lerini (["backtests"]/["jobs"]/["agent-tasks"]/["audit"]) BAĞLADIĞINDA
+  SSE live-invalidation payoff'u görünür olur (şu an infra bağlı ama sayfalar placeholder).
 TIER 3 (deferred): retention auto-purge, data-queue redelivery, SSE streaming e2e (connection drops),
 tool-call status shadowing (CR-08 follow-up).
 
 BACKEND REUSE ANCHOR'LARI (frontend'in bağlanacağı HAZIR kontratlar — DEĞİŞTİRME, TÜKET):
-- SSE: backend .../apps/api/sse.py (SseHub / run_outbox_poller / sse_event_name); GET /events
-  (EventSourceResponse); .../application/jobs/outbox_relay.py (fetch_events_after / latest_event_id).
-- Metrics: GET /v1/metrics (Prometheus text; golden signals + jobs depth + outbox lag + lease age).
+- Metrics: GET /v1/metrics (Prometheus text; golden signals + jobs depth + outbox lag + lease age;
+  backend .../apps/api/routes/metrics.py — PlainTextResponse).
+- SSE: backend .../apps/api/sse.py (sse_event_name taksonomisi); frontend'de ZATEN bağlı (lib/sse.ts).
 - Auth: /v1/auth/* + /me (frontend'de zaten bağlı).
 
 YÖNTEM: Workflow KULLANMA; direct-author. Bu slice FRONTEND — backend working-loop (izole DB / L1 FK /
@@ -509,7 +545,7 @@ alembic) UYGULANMAZ. Frontend loop: cd frontend (cwd resetlenebilir → absolute
 && npm run lint && npm test && npm run build + yeni component/unit test. YENİ dosya heredoc (gate-free),
 mevcut dosya Edit 4-fact (GateGuard: ilk Bash + dosya-başına-ilk-edit + docs da gate'lenir).
 CRITICAL/HIGH AMPİRİK DOĞRULA → commit (conventional feat(post-v1)/branch feat/post-v1-frontend-<slug>,
-attribution YOK) → PR → gh pr checks --watch (frontend+docker check; backend değişmediği için yeşil) →
-merge KULLANICIDA. Türkçe, MALİYET BİLİNÇLİ. Kapanışta: handoff + kickoff + CLAUDE.md + memory
-(ecc knowledge graph; claude-mem token stale/worker-modda atlanabilir).
+attribution YOK) → PR → gh pr checks (frontend+docker check; backend değişmediği için yeşil; --watch 5dk
+timeout → poll tercih et) → merge KULLANICIDA. Türkçe, MALİYET BİLİNÇLİ. Kapanışta: handoff + kickoff +
+CLAUDE.md + memory (ecc knowledge graph; claude-mem token stale/worker-modda atlanabilir).
 ```

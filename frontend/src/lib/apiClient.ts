@@ -2,6 +2,7 @@
 // computes domain state. It surfaces the canonical error envelope as ApiError.
 
 import { getDevActorId } from "./devActor";
+import { getSessionToken } from "./session";
 import type { ApiErrorResponse } from "./types";
 
 const BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "/api/v1";
@@ -27,10 +28,16 @@ export interface RequestOptions extends Omit<RequestInit, "body"> {
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { body, headers, ...rest } = options;
   const devActorId = getDevActorId();
+  const sessionToken = getSessionToken();
   const response = await fetch(`${BASE_URL}${path}`, {
     ...rest,
     headers: {
       "Content-Type": "application/json",
+      // Real auth (AUTH_MODE=session): humans present an opaque Bearer session token.
+      ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
+      // Dev mode (AUTH_MODE=dev): pick which principal to act as. Both headers may
+      // be sent — the server honours only the one its AUTH_MODE trusts, so a stale
+      // dev header never spoofs a real session and vice-versa.
       ...(devActorId ? { "X-Actor-Id": devActorId } : {}),
       ...headers,
     },

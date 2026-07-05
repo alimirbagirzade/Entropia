@@ -546,7 +546,46 @@ diff). Reuse anchors (exact symbols):
   live-invalidation of the `sse.ts` stub; `/v1/metrics` Prometheus-text dashboard) are **not** in
   this slice.
 
-## Next: post-V1 (continued) — TIER 2 frontend (login landed; SSE live-invalidation + metrics dashboard remain)
+## Post-V1 — Frontend SSE live-invalidation (TIER 2, frontend slice 2) ✅ landed (PR #67, awaiting user merge)
+
+**Second TIER 2 (frontend) slice.** The backend already fans the transactional outbox out over
+`GET /events` as typed SSE frames (Stage 8b, `apps/api/sse.py`); the web shell opened the
+connection but only listened for `heartbeat` — `connectEvents`' `queryClient` param was an unused
+Stage-1 TODO, so no domain event refreshed the cache. This slice fills the
+`frontend/src/lib/sse.ts` stub so each taxonomy event invalidates the matching react-query keys.
+**Frontend-only — NO backend change, NO migration; backend test base stays 1015.** CI: **Frontend
++ Docker checks green**; backend check re-runs unchanged (frontend-only diff). Reuse anchors
+(exact symbols):
+- **`frontend/src/lib/sse.ts`** — `connectEvents(queryClient, onStatus?)` signature and `SseStatus`
+  UNCHANGED (the `Layout.tsx` call-site is untouched). New exports:
+  - **`SseEventName`** — the backend taxonomy union (`backtest.run.updated` / `job.updated` /
+    `agent.task.updated` / `audit.event.created` / `resource.changed`); must stay in lockstep with
+    `apps/api/sse.py::sse_event_name`.
+  - **`EVENT_QUERY_KEYS: Record<SseEventName, readonly QueryKey[]>`** — the event→key-prefix map:
+    `backtest.run.updated → [["backtests"]]`, `job.updated → [["jobs"]]`,
+    `agent.task.updated → [["agent-tasks"]]`, `audit.event.created → [["audit"]]`,
+    `resource.changed → []` (empty list = catch-all → full `invalidateQueries()`). react-query
+    matches by prefix, so `["backtests"]` also covers `["backtests", runId, …]`.
+  - **`SSE_EVENT_NAMES`** — `Object.keys(EVENT_QUERY_KEYS)` for iteration/tests.
+  - Private `invalidateForEvent(qc, name)` — empty list → full refresh, else per-prefix
+    `invalidateQueries({queryKey})`. Handlers are added per event name and **detached on dispose**
+    (symmetric add/remove) before `source.close()`.
+  - **Reconnect self-heal (INF-11):** a `hasOpened` flag makes the FIRST `open` a no-op but a
+    SUBSEQUENT `open` (reconnect after a drop) trigger a full `invalidateQueries()`, so no view is
+    left stale across a connection gap.
+- **`frontend/src/test/sse.test.ts`** *(new)* — 7 vitest backed by an in-memory `EventSource`
+  double (`vi.stubGlobal`): subscribes to every taxonomy event + heartbeat; each specialized event
+  → its `{queryKey}` prefix (exact call count); `resource.changed` → single full refresh (no key);
+  heartbeat → no cache effect; first-open no-op + reconnect full-refresh; `connecting→open` status;
+  dispose closes source + detaches all listeners. **Frontend total 16/16** (9 prior + 7 new);
+  typecheck + lint clean; production build green.
+- **Honest boundary:** no live page binds these keys YET — Stage 5/6 `RUN` / `Results History` /
+  `Arrange Metrics` / `Analysis Lab` screens are still placeholders, so invalidation is a harmless
+  no-op today; the **visible payoff arrives with those pages**, and `EVENT_QUERY_KEYS` is their
+  forward contract. The remaining TIER 2 candidate (`/v1/metrics` Prometheus-text dashboard) is
+  **not** in this slice.
+
+## Next: post-V1 (continued) — TIER 2 frontend (login + SSE landed; /v1/metrics dashboard remains)
 
 **V1 COMPLETE (Stages 0–8, docs 01–22) + Auth/IdP + Parquet Slice A + Backtest Engine Slice B + real indicator compute Slice C + `risk_based` sizing (a) + condition blocks (b) + condition extensions (b2) + two-package indicator-vs-indicator + higher-timeframe resampling (c) + per-condition multi-TF reference (i) + N-ary reference chain (ii) + VWAP directional key (d) + `formula_based` Kelly sizing + `position_size_limits` min/max cap (PR #63) landed (1015 tests).** The **Slice C indicator-compute + position-sizing follow-ups are now EFFECTIVELY COMPLETE — TIER 1 backend is DONE**:
 
@@ -556,7 +595,7 @@ diff). Reuse anchors (exact symbols):
 
 **Next candidates** (priority per `docs/POST_V1_KICKOFF.md`):
 - ~~**TIER 1 — `position_size_limits` (min/max cap) wiring**~~ ✅ **PR #63** — `PositionSizeLimits` (min/max caps) now clamps EVERY sizing method via `_clamp_to_limits` at the `_raw_position_size → _position_size` boundary; `ENGINE_VERSION → backtest-engine-v2-position-size-limits`; +15 tests → 1015; no migration. **TIER 1 backend is now EFFECTIVELY COMPLETE** (Kelly + risk_based + condition blocks + multi-TF + N-ary + VWAP + position_size_limits all landed).
-- **TIER 2 — frontend / user-facing (login slice 1 landed → PR #65):** ~~login / session integration~~ ✅ **PR #65** (Bearer session store + standalone `/login` page + signup/logout + role-aware header; `frontend/src/lib/{session,auth}.ts`, `pages/Login.tsx`, `apiClient.ts` Bearer header). **Remaining candidates:** (a) **SSE live-invalidation** — fill the `frontend/src/lib/sse.ts` stub (currently only heartbeat): map `backtest.run.updated` / `job.updated` / `agent.task.updated` / `audit.event.created` / `resource.changed` → `queryClient.invalidateQueries([...])` for real-time backtest/job/agent progress; (b) **`/v1/metrics` dashboard** — Prometheus-text parser + golden-signals / jobs-depth / outbox-lag / lease-age panels; (c) capability activations (role-gated features); (d) first-Admin provisioning dashboard; (e) CP real candidate generation.
+- **TIER 2 — frontend / user-facing (login + SSE landed):** ~~login / session integration~~ ✅ **PR #65** (Bearer session store + standalone `/login` page + signup/logout + role-aware header; `frontend/src/lib/{session,auth}.ts`, `pages/Login.tsx`, `apiClient.ts` Bearer header) · ~~SSE live-invalidation~~ ✅ **PR #67** (`frontend/src/lib/sse.ts` stub filled: `EVENT_QUERY_KEYS` maps `backtest.run.updated`/`job.updated`/`agent.task.updated`/`audit.event.created` → `["backtests"]`/`["jobs"]`/`["agent-tasks"]`/`["audit"]`, `resource.changed` → full refresh, reconnect self-heal; +7 vitest → 16/16). **Remaining candidates:** (a) **`/v1/metrics` dashboard** — `GET /v1/metrics` returns Prometheus-text (`PlainTextResponse`, `apps/api/routes/metrics.py`): exposition parser + golden-signals / jobs-depth / outbox-lag / lease-age panels; (b) capability activations (role-gated features); (c) first-Admin provisioning dashboard; (d) CP real candidate generation.
 - **TIER 3 — data/ops (deferred):** retention auto-purge, data-queue redelivery, SSE streaming e2e (connection drops), tool-call status shadowing (CR-08 follow-up), `summary["timeframe"]` resolution from market-revision metadata.
 
 See **`docs/POST_V1_KICKOFF.md`** for reuse anchors and the paste-ready resume prompt.

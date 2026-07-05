@@ -82,11 +82,12 @@ Before stopping a working session, produce **ALL** of the following:
   (INF-12 Slice C follow-up d, PR #58) + formula_based Kelly criterion sizing
   (INF-12 Slice C follow-up, PR #60 + non-finite fail-closed fix PR #61) + position_size_limits
   min/max cap wiring (INF-12 Slice C follow-up, PR #63) + TIER 2 frontend real-auth
-  login/signup/logout (PR #65, awaiting user merge)**. **Overall: ~81% complete** (V1=100%, post-V1 core=84%, frontend=22%).
-  `main` after PR #63 (`97b10b8`; position_size_limits feat `5ef5525`; Kelly feat `3f254bc` / non-finite fail-closed fix `3a92e7d`; VWAP code `d27b2bb`; N-ary code `44099a7`; per-condition code `1c5cca0`; multi-timeframe code `def6c28`; indicator-vs-indicator code `9087c2b`; condition-extensions code `361df4c`; condition-blocks code `8766fae`; risk_based code `43cee29`; Slice C code `671d227`);
+  login/signup/logout (PR #65, MERGED) + TIER 2 frontend SSE live-invalidation
+  (PR #67, awaiting user merge)**. **Overall: ~82% complete** (V1=100%, post-V1 core=84%, frontend=30%).
+  `main` after PR #66 (`4979cdf`; login feat `58781e4`; SSE feat `5ddb14f` on branch feat/post-v1-frontend-sse awaiting merge; position_size_limits feat `5ef5525`; Kelly feat `3f254bc` / non-finite fail-closed fix `3a92e7d`; VWAP code `d27b2bb`; N-ary code `44099a7`; per-condition code `1c5cca0`; multi-timeframe code `def6c28`; indicator-vs-indicator code `9087c2b`; condition-extensions code `361df4c`; condition-blocks code `8766fae`; risk_based code `43cee29`; Slice C code `671d227`);
   alembic head = **`0021_local_auth`** (`human_credentials` + `auth_sessions`;
   Slices A/B/C + follow-ups (a)/(b)/(b2)/(#53)/(c)/(i)/(ii)/(d) + Kelly sizing + position_size_limits need no migration). **1015 tests green** (999 + 15 position_size_limits: 7 clamp unit / 6 per-method / 1 e2e / 1 ENGINE_VERSION ns).
-  TIER 2 frontend — real-auth login/signup/logout (PR #65, awaiting user merge): **FRONTEND-ONLY**
+  TIER 2 frontend — real-auth login/signup/logout (PR #65, MERGED): **FRONTEND-ONLY**
   (backend unchanged, no migration, backend test base stays 1015). Connects the `frontend/` shell
   (Vite 8 + React 18 + react-router 6 + @tanstack/react-query 5 + react-hook-form) to the landed
   local-auth backend (`/v1/auth/*`, opaque Bearer sessions) so humans get a real session instead of
@@ -100,8 +101,24 @@ Before stopping a working session, produce **ALL** of the following:
   `AuthUser`/`LoginResponse`/`SignUpResponse`; `global.css` `.btn*`/`.auth-*`. Frontend 9/9 vitest
   (3 baseline + 6 new), typecheck + lint clean, build green. Honest boundary: no anonymous→`/login`
   route guard (dev mode allows anonymous browsing); first-Admin provisioning still absent upstream
-  (signup → baseline role). Remaining TIER 2: SSE live-invalidation (`sse.ts` stub), `/v1/metrics`
-  dashboard.
+  (signup → baseline role).
+  TIER 2 frontend — SSE live-invalidation (PR #67, awaiting user merge): **FRONTEND-ONLY**
+  (backend + its SSE taxonomy `apps/api/sse.py` consumed unchanged, no migration, backend test base
+  stays 1015). Fills the `frontend/src/lib/sse.ts` stub (was heartbeat-only; `connectEvents`'
+  `queryClient` param was an unused Stage-1 TODO) so each backend SSE frame invalidates react-query
+  keys. NEW exports: `SseEventName` (taxonomy union), `EVENT_QUERY_KEYS` (`backtest.run.updated`→
+  `[["backtests"]]`, `job.updated`→`[["jobs"]]`, `agent.task.updated`→`[["agent-tasks"]]`,
+  `audit.event.created`→`[["audit"]]`, `resource.changed`→`[]` catch-all full refresh; react-query
+  prefix-matches so `["backtests"]` covers `["backtests", runId, …]`), `SSE_EVENT_NAMES`; private
+  `invalidateForEvent` (empty list→full refresh else per-prefix `invalidateQueries({queryKey})`).
+  `connectEvents(queryClient, onStatus?)` signature + `SseStatus` UNCHANGED (`Layout.tsx` call-site
+  untouched); handlers detached on dispose (symmetric add/remove) before `source.close()`; a
+  reconnect (`hasOpened` flag: first `open` no-op, subsequent `open`→full `invalidateQueries()`)
+  self-heals across a connection gap (INF-11). NEW `test/sse.test.ts` — 7 vitest via an in-memory
+  `EventSource` double (`vi.stubGlobal`); **frontend 16/16** (9 prior + 7 new), typecheck + lint
+  clean, build green. Honest boundary: no live page binds these keys yet (Stage 5/6 RUN / History /
+  Metrics / Analysis Lab still placeholders) → visible payoff arrives with those pages;
+  `EVENT_QUERY_KEYS` is their forward contract. Remaining TIER 2: `/v1/metrics` dashboard.
   Follow-up (ii) — N-ary reference chain (PR #57): a nested condition's RHS extends from
   a single reference package (#53/#56) to an ORDERED chain of >2 separately-pinned indicator
   packages (`source [cmp] ref0 [cmp] ref1 ...` — the classic `fast > slow > slowest` MA fan;
@@ -278,10 +295,10 @@ Before stopping a working session, produce **ALL** of the following:
   - ~~**formula_based / Kelly sizing**~~ ✅ **LANDED (PR #60 + non-finite fail-closed fix PR #61)** — Kelly criterion honored; `custom_formula` + adaptive/rolling Kelly stay honest `unresolved` (no safe eval / path-dependent look-ahead).
   - ~~**`position_size_limits` (min/max cap) wiring**~~ ✅ **LANDED (PR #63)** — new `_clamp_to_limits` at the `_raw_position_size → _position_size` boundary clamps EVERY sizing method (base/risk_based/Kelly/notional); `ENGINE_VERSION=backtest-engine-v2-position-size-limits`; +15 tests → 1015; no migration. **TIER 1 backend is now DONE → next natural slice is TIER 2 (frontend/infra).**
   
-  **TIER 2 — Frontend + infra (user-facing; login slice 1 landed → PR #65):**
+  **TIER 2 — Frontend + infra (user-facing; login + SSE slices landed → PR #65, #67):**
   - ✅ **Login / session integration (PR #65)** — real Bearer login/signup/logout wired into the shell (`lib/session.ts` + `lib/auth.ts` + `pages/Login.tsx` + `apiClient.ts` Bearer header + `Layout.tsx` AuthControl).
-  - **SSE live-invalidation (recommended next, small/pure infra):** fill the `frontend/src/lib/sse.ts` stub (heartbeat-only today) — map `backtest.run.updated`/`job.updated`/`agent.task.updated`/`audit.event.created`/`resource.changed` → `queryClient.invalidateQueries([...])` for real-time backtest/job/agent progress.
-  - **`/v1/metrics` dashboard:** Prometheus-text parser (endpoint returns `PlainTextResponse`, not JSON) + golden-signals/jobs-depth/outbox-lag/lease-age panels.
+  - ✅ **SSE live-invalidation (PR #67)** — `frontend/src/lib/sse.ts` stub filled: `EVENT_QUERY_KEYS` maps each SSE taxonomy event → react-query key prefix (`backtest.run.updated`→`["backtests"]`, `job.updated`→`["jobs"]`, `agent.task.updated`→`["agent-tasks"]`, `audit.event.created`→`["audit"]`, `resource.changed`→full refresh) + reconnect self-heal; `connectEvents` signature unchanged; +7 vitest → 16/16. Honest boundary: no live page binds these keys yet (Stage 5/6 pages still placeholders) → payoff arrives with those pages.
+  - **`/v1/metrics` dashboard (recommended next):** Prometheus-text parser (endpoint returns `PlainTextResponse`, not JSON) + golden-signals/jobs-depth/outbox-lag/lease-age panels.
   - Capability activations (gate new features per user role)
   - Admin provisioning dashboard (first-Admin onboarding)
   

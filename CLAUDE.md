@@ -83,8 +83,9 @@ Before stopping a working session, produce **ALL** of the following:
   (INF-12 Slice C follow-up, PR #60 + non-finite fail-closed fix PR #61) + position_size_limits
   min/max cap wiring (INF-12 Slice C follow-up, PR #63) + TIER 2 frontend real-auth
   login/signup/logout (PR #65, MERGED) + TIER 2 frontend SSE live-invalidation
-  (PR #67, awaiting user merge)**. **Overall: ~82% complete** (V1=100%, post-V1 core=84%, frontend=30%).
-  `main` after PR #66 (`4979cdf`; login feat `58781e4`; SSE feat `5ddb14f` on branch feat/post-v1-frontend-sse awaiting merge; position_size_limits feat `5ef5525`; Kelly feat `3f254bc` / non-finite fail-closed fix `3a92e7d`; VWAP code `d27b2bb`; N-ary code `44099a7`; per-condition code `1c5cca0`; multi-timeframe code `def6c28`; indicator-vs-indicator code `9087c2b`; condition-extensions code `361df4c`; condition-blocks code `8766fae`; risk_based code `43cee29`; Slice C code `671d227`);
+  (PR #67, MERGED) + TIER 2 frontend /v1/metrics ops dashboard (PR #69, awaiting user
+  merge — CI all green)**. **Overall: ~83% complete** (V1=100%, post-V1 core=84%, frontend=35%).
+  `main` after PR #68 (`5978ba4`; login feat `58781e4` MERGED; SSE feat `5ddb14f` MERGED; metrics feat `d3039e7` on branch feat/post-v1-frontend-metrics awaiting merge; position_size_limits feat `5ef5525`; Kelly feat `3f254bc` / non-finite fail-closed fix `3a92e7d`; VWAP code `d27b2bb`; N-ary code `44099a7`; per-condition code `1c5cca0`; multi-timeframe code `def6c28`; indicator-vs-indicator code `9087c2b`; condition-extensions code `361df4c`; condition-blocks code `8766fae`; risk_based code `43cee29`; Slice C code `671d227`);
   alembic head = **`0021_local_auth`** (`human_credentials` + `auth_sessions`;
   Slices A/B/C + follow-ups (a)/(b)/(b2)/(#53)/(c)/(i)/(ii)/(d) + Kelly sizing + position_size_limits need no migration). **1015 tests green** (999 + 15 position_size_limits: 7 clamp unit / 6 per-method / 1 e2e / 1 ENGINE_VERSION ns).
   TIER 2 frontend — real-auth login/signup/logout (PR #65, MERGED): **FRONTEND-ONLY**
@@ -118,7 +119,25 @@ Before stopping a working session, produce **ALL** of the following:
   `EventSource` double (`vi.stubGlobal`); **frontend 16/16** (9 prior + 7 new), typecheck + lint
   clean, build green. Honest boundary: no live page binds these keys yet (Stage 5/6 RUN / History /
   Metrics / Analysis Lab still placeholders) → visible payoff arrives with those pages;
-  `EVENT_QUERY_KEYS` is their forward contract. Remaining TIER 2: `/v1/metrics` dashboard.
+  `EVENT_QUERY_KEYS` is their forward contract.
+  TIER 2 frontend — /v1/metrics ops dashboard (PR #69, awaiting user merge): **FRONTEND-ONLY**
+  (backend `apps/api/routes/metrics.py` Prometheus text exposition consumed unchanged, no migration,
+  backend test base stays 1015). Surfaces the Stage 8b `GET /v1/metrics` `text/plain` exposition as a
+  read-only ops dashboard. NEW `lib/metrics.ts` (dependency-free `parsePrometheus` — `# TYPE`/`# HELP`,
+  labeled + scalar samples, histogram `_bucket`/`_sum`/`_count` grouped via `ownerFamily`, `+Inf`/`NaN`,
+  label escapes, notes — + `summarizeMetrics`→`MetricsSummary`: four golden signals
+  (`requestsTotal`/`serverErrors` 5xx/`clientErrors` 4xx/`inFlight`/`avgLatencyMs`=histogram sum÷count),
+  sorted `jobsDepth`+total, `outboxLagSeconds`, `leaseAgeSeconds`, `degraded` DB-down detection,
+  `familyCount`); NEW `apiClient.ts` `apiGetText`/`api.getText` (raw-text GET for the `text/plain`
+  endpoint, mirrors `apiRequest` auth headers; existing `api.*` UNCHANGED); NEW `hooks.ts` `useMetrics`
+  (react-query `["metrics"]`, `refetchInterval` 5s); NEW `pages/Metrics.tsx` (golden-signal tiles +
+  status-class badges + operational gauges + jobs-depth table + degraded banner); `nav.ts`+`App.tsx`
+  NEW adminOnly `System Metrics` item at `/panel/metrics` (`ALL_NAV_ITEMS` 22→23), real route replaces
+  the placeholder; `global.css` `.metrics-table`. +13 vitest (10 parser/summary + 3 component via mocked
+  fetch) → **frontend 29/29**, typecheck + lint clean, build green. Honest boundary: metrics has no SSE
+  event → the dashboard POLLS every 5s (`["metrics"]` still swept by `resource.changed`); route reachable
+  by URL (scrape endpoint unauthenticated by design), nav item admin-gated. Remaining TIER 2: live-data
+  Stage 5/6 pages (bind SSE `EVENT_QUERY_KEYS`) + capability activations + first-Admin provisioning.
   Follow-up (ii) — N-ary reference chain (PR #57): a nested condition's RHS extends from
   a single reference package (#53/#56) to an ORDERED chain of >2 separately-pinned indicator
   packages (`source [cmp] ref0 [cmp] ref1 ...` — the classic `fast > slow > slowest` MA fan;
@@ -295,10 +314,11 @@ Before stopping a working session, produce **ALL** of the following:
   - ~~**formula_based / Kelly sizing**~~ ✅ **LANDED (PR #60 + non-finite fail-closed fix PR #61)** — Kelly criterion honored; `custom_formula` + adaptive/rolling Kelly stay honest `unresolved` (no safe eval / path-dependent look-ahead).
   - ~~**`position_size_limits` (min/max cap) wiring**~~ ✅ **LANDED (PR #63)** — new `_clamp_to_limits` at the `_raw_position_size → _position_size` boundary clamps EVERY sizing method (base/risk_based/Kelly/notional); `ENGINE_VERSION=backtest-engine-v2-position-size-limits`; +15 tests → 1015; no migration. **TIER 1 backend is now DONE → next natural slice is TIER 2 (frontend/infra).**
   
-  **TIER 2 — Frontend + infra (user-facing; login + SSE slices landed → PR #65, #67):**
+  **TIER 2 — Frontend + infra (user-facing; login + SSE + /v1/metrics landed → PR #65, #67, #69):**
   - ✅ **Login / session integration (PR #65)** — real Bearer login/signup/logout wired into the shell (`lib/session.ts` + `lib/auth.ts` + `pages/Login.tsx` + `apiClient.ts` Bearer header + `Layout.tsx` AuthControl).
   - ✅ **SSE live-invalidation (PR #67)** — `frontend/src/lib/sse.ts` stub filled: `EVENT_QUERY_KEYS` maps each SSE taxonomy event → react-query key prefix (`backtest.run.updated`→`["backtests"]`, `job.updated`→`["jobs"]`, `agent.task.updated`→`["agent-tasks"]`, `audit.event.created`→`["audit"]`, `resource.changed`→full refresh) + reconnect self-heal; `connectEvents` signature unchanged; +7 vitest → 16/16. Honest boundary: no live page binds these keys yet (Stage 5/6 pages still placeholders) → payoff arrives with those pages.
-  - **`/v1/metrics` dashboard (recommended next):** Prometheus-text parser (endpoint returns `PlainTextResponse`, not JSON) + golden-signals/jobs-depth/outbox-lag/lease-age panels.
+  - ✅ **`/v1/metrics` dashboard (PR #69, awaiting user merge)** — `lib/metrics.ts` Prometheus text-exposition parser + `apiGetText`/`useMetrics` (5s poll) + `pages/Metrics.tsx` (golden-signals/jobs-depth/outbox-lag/lease-age panels) + adminOnly `System Metrics` nav item at `/panel/metrics`; +13 vitest → 29/29; frontend-only, no migration.
+  - **Live-data Stage 5/6 pages (recommended next):** wire RUN / Results History / Arrange Metrics / Analysis Lab to real backend query hooks — binding the SSE `EVENT_QUERY_KEYS` (`["backtests"]`/`["jobs"]`/`["agent-tasks"]`/`["audit"]`) makes SSE live-invalidation payoff visible.
   - Capability activations (gate new features per user role)
   - Admin provisioning dashboard (first-Admin onboarding)
   

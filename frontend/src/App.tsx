@@ -2,6 +2,7 @@ import { Routes, Route } from "react-router-dom";
 import { Layout } from "./app/Layout";
 import { ALL_NAV_ITEMS } from "./app/nav";
 import { Mainboard } from "./pages/Mainboard";
+import { Metrics } from "./pages/Metrics";
 import { Placeholder } from "./pages/Placeholder";
 import { Login } from "./pages/Login";
 import { NotFound } from "./pages/NotFound";
@@ -21,7 +22,16 @@ export default function App() {
             </ErrorBoundary>
           }
         />
-        {ALL_NAV_ITEMS.filter((item) => item.path !== "/").map((item) => (
+        {/* Real ops dashboard — replaces the auto-generated placeholder for this path. */}
+        <Route
+          path="/panel/metrics"
+          element={
+            <ErrorBoundary>
+              <Metrics />
+            </ErrorBoundary>
+          }
+        />
+        {ALL_NAV_ITEMS.filter((item) => item.path !== "/" && item.path !== "/panel/metrics").map((item) => (
           <Route
             key={item.path}
             path={item.path}

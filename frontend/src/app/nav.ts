@@ -52,6 +52,8 @@ export const NAV: NavSection[] = [
     items: [
       { path: "/analysis-lab", label: "Analysis Lab", stage: 6 },
       { path: "/panel", label: "Panel / Management / Logs", stage: 6, adminOnly: true },
+      // Ops dashboard over the Stage 8b GET /v1/metrics exposition (post-V1 TIER 2).
+      { path: "/panel/metrics", label: "System Metrics", stage: 8, adminOnly: true },
       { path: "/trash", label: "Trash", stage: 6, adminOnly: true },
     ],
   },

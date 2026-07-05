@@ -5,7 +5,9 @@ import { NAV } from "./nav";
 import { connectEvents, type SseStatus } from "@/lib/sse";
 import { StatusBadge } from "@/components/StatusBadge";
 import { useMe, useMeta } from "@/lib/hooks";
+import { useLogout, useSessionToken } from "@/lib/auth";
 import { getDevActorId, setDevActorId } from "@/lib/devActor";
+import { getStoredUser } from "@/lib/session";
 
 function DevActorControl() {
   const queryClient = useQueryClient();
@@ -48,11 +50,45 @@ function DevActorControl() {
   );
 }
 
+// Real-session control: shows the signed-in user + a Log out action when a Bearer
+// session token is present, and a Log in link otherwise. In dev mode (X-Actor-Id)
+// no token exists, so this stays a Log in link and DevActorControl drives identity.
+function AuthControl() {
+  const token = useSessionToken();
+  const logout = useLogout();
+
+  if (!token) {
+    return (
+      <NavLink to="/login" className="btn btn-ghost">
+        Log in
+      </NavLink>
+    );
+  }
+
+  const user = getStoredUser();
+  return (
+    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+      <span style={{ fontSize: 12, color: "var(--text-dim)" }}>
+        {user?.display_name || user?.username || "signed in"}
+      </span>
+      <button
+        type="button"
+        className="btn btn-ghost"
+        onClick={() => logout.mutate()}
+        disabled={logout.isPending}
+      >
+        {logout.isPending ? "…" : "Log out"}
+      </button>
+    </div>
+  );
+}
+
 export function Layout() {
   const queryClient = useQueryClient();
   const [sse, setSse] = useState<SseStatus>("connecting");
   const meta = useMeta();
   const me = useMe();
+  const token = useSessionToken();
 
   useEffect(() => {
     return connectEvents(queryClient, setSse);
@@ -69,11 +105,12 @@ export function Layout() {
           tone={meta.isSuccess ? "ok" : meta.isError ? "down" : "warn"}
         />
         <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
-          <DevActorControl />
+          {token ? null : <DevActorControl />}
           <StatusBadge
             label={me.data?.is_authenticated ? `${me.data.role}` : "anonymous"}
             tone={me.data?.is_authenticated ? "ok" : "neutral"}
           />
+          <AuthControl />
           <StatusBadge label={`events: ${sse}`} tone={sseTone} />
         </div>
       </header>

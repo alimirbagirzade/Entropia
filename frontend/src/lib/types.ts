@@ -42,3 +42,21 @@ export interface Me {
   is_admin: boolean;
   is_authenticated: boolean;
 }
+
+// Local-auth envelopes (M1 §4). Sign Up can never assert a role; the server
+// assigns the baseline role and echoes it back here.
+export interface AuthUser {
+  user_id: string;
+  username: string;
+  display_name: string;
+  role: string;
+}
+
+export type SignUpResponse = AuthUser;
+
+export interface LoginResponse {
+  token: string;
+  session_id: string;
+  expires_at: string;
+  user: AuthUser;
+}

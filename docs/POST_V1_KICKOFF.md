@@ -3,6 +3,50 @@
 > **Amaç:** V1 kapandı (Stage 0–8 COMPLETE). Bu doküman post-V1 durumunu, aday iş listesini
 > ve temiz oturumda yapıştırılacak resume prompt'u içerir.
 
+## Durum (2026-07-05, TIER 2 frontend — real-auth login/signup/logout; PR #65)
+
+> **İlk TIER 2 (frontend) slice — gerçek auth login/signup/logout landed (PR #65, açık, CI
+> yeşil, kullanıcı merge'i bekliyor).** Backend zaten gerçek local auth sunuyordu
+> (`/v1/auth/signup|login|logout`, opaque Bearer session — Auth/IdP PR #38 + M1 §4) ama web
+> shell (`frontend/`, **Vite 8 + React 18 + react-router 6 + @tanstack/react-query 5 + react-hook-form**)
+> yalnızca dev `X-Actor-Id` header'ı gönderiyordu. Bu slice shell'i backend'e bağlar → insanlar
+> gerçek Bearer session alır. **FRONTEND-ONLY — backend değişmedi, migration YOK, backend test
+> tabanı 1015 sabit.** CI: **Frontend + Docker check yeşil**; backend check frontend-only diff
+> için değişmeden yeniden koşar. alembic head hâlâ `0021_local_auth`.
+> **Reuse anchor'ları (kesin semboller):**
+> - **`frontend/src/lib/session.ts`** *(YENİ)* — external store: `getSessionToken()` (API client'ın
+>   her istekte okuduğu ham-string fast-path), `getStoredUser()`, `setSession({token,user,expiresAt})`,
+>   `clearSession()`, `subscribe(listener)`. İki `localStorage` anahtarı (`entropia.sessionToken`
+>   + `entropia.session` JSON meta). React-bağımsız → `useSyncExternalStore` ile birleşir.
+> - **`frontend/src/lib/apiClient.ts`** — `apiRequest` artık `getSessionToken()` non-null iken
+>   mevcut `X-Actor-Id`'ye **EK OLARAK** `Authorization: Bearer <token>` ekler. İki header güvenle
+>   birlikte gider: server yalnızca `AUTH_MODE`'un güvendiğini onurlandırır (`session` → Bearer
+>   asıl, bare `X-Actor-Id` yok sayılır; `dev` → `X-Actor-Id`, Bearer yok sayılır — `backend
+>   .../apps/api/deps.py`), ikisi de diğerini spoof edemez.
+> - **`frontend/src/lib/auth.ts`** *(YENİ)* — react-query mutation'ları: `useLogin` (POST
+>   `/auth/login` → `setSession`), `useSignup` (POST `/auth/signup` sonra **auto-login**),
+>   `useLogout` (best-effort POST `/auth/logout`, **her durumda** `clearSession()` — başarısız/expired
+>   revoke UI'ı yarı-login bırakmaz), `useSessionToken()`. Her success `queryClient.invalidateQueries()`
+>   → `/me` + rol-gated nav yeni principal altında refetch.
+> - **`frontend/src/pages/Login.tsx`** *(YENİ)* — standalone `/login` (app shell yok),
+>   `react-hook-form`, login/signup toggle; hata backend canonical envelope'ını **verbatim** gösterir
+>   (`ApiError` → `${code}: ${message}`); client asla auth mesajı uydurmaz. Zorunlu-alan validation
+>   client-side submit'i bloklar.
+> - **`frontend/src/app/Layout.tsx`** — yeni `AuthControl`: anonimken **Log in** link, token varken
+>   kullanıcı + **Log out**; gerçek session aktifken `DevActorControl` gizli (`token ? null : <DevActorControl/>`).
+> - **`frontend/src/App.tsx`** — `<Layout>` route'u DIŞINDA standalone `/login` `<Route>`.
+> - **`frontend/src/lib/types.ts`** — `AuthUser` / `SignUpResponse` (= `AuthUser`) / `LoginResponse`
+>   envelope'ları (`routes/auth.py` yansıması).
+> - **`frontend/src/styles/global.css`** — yeni `.btn*` + `.auth-*` sınıfları (temalı, dark/light).
+> - **`frontend/src/test/auth.test.tsx`** *(YENİ)* — 6 vitest → **frontend toplam 9/9**; typecheck +
+>   lint temiz; production build yeşil.
+> **Dürüst sınır:** anonim → `/login` zorlayan route guard YOK (dev mode anonim gezmeye izin verir;
+> erişim server-side gate'lenir). First-Admin provisioning hâlâ upstream'de yok (signup hep baseline
+> rol). Diğer iki TIER 2 adayı — **SSE live-invalidation** (`sse.ts` stub'ını doldur) ve
+> **`/v1/metrics` dashboard** (Prometheus-text parser) — bu slice'ta DEĞİL, sıradaki doğal işler.
+> **Sıradaki doğal slice: TIER 2 SSE live-invalidation** (küçük, saf infra) VEYA `/v1/metrics`
+> dashboard — kullanıcı seçsin. Aşağıdaki position_size_limits (PR #63) bloğu ve öncesi tarihsel.
+
 ## Durum (2026-07-05, position_size_limits min/max cap wiring — Slice C follow-up sonrası; PR #63)
 
 > **`position_size_limits` (min/max pozisyon cap) wiring landed (PR #63, kod `5ef5525`,
@@ -418,58 +462,54 @@ tarihsel referans** olarak duruyor.
 ## ⤵️ YENİ OTURUMDA YAPIŞTIR (resume prompt)
 
 ```
-Entropia — post-V1: V1 tamam + Auth/IdP (PR #38) + Parquet Slice A (PR #41) + Bar-replay
-engine Slice B (PR #43) + gerçek indikatör compute Slice C (PR #45) + risk_based sizing (a)
-(PR #47) + threshold condition blocks (b) (PR #49) + condition EXTENSIONS (b2) (PR #51) +
-two-package indicator-vs-indicator (PR #53) + HIGHER-TIMEFRAME bar resampling (c) (PR #55) +
-PER-CONDITION multi-timeframe reference (i) (PR #56) + N-ARY reference chain (ii) (PR #57) +
-VWAP directional key (d) (PR #58) + formula_based KELLY sizing (PR #60) + non-finite fail-closed
-fix (PR #61) + position_size_limits MIN/MAX CAP wiring (PR #63) — HEPSİ MERGED.
-ÖNCE DOĞRULA (stale-by-default): git fetch && git log --oneline origin/main -6 &&
-gh pr list --state all -L 8. main = 97b10b8 (Merge #63; position_size_limits feat 5ef5525;
-Kelly feat 3f254bc / fix 3a92e7d; VWAP d27b2bb; #57 N-ary 44099a7; #56 per-condition 1c5cca0;
-#55 multi-tf def6c28; #53 9087c2b; (b2) 361df4c; condition-blocks (b) 8766fae; risk_based (a)
-43cee29; Slice C 671d227); alembic head 0021_local_auth (position_size_limits + Kelly migration YOK).
-İzole DB: TEST_DATABASE_URL=postgresql+asyncpg://entropia:entropia@localhost:5432/entropia_auth.
-Test tabanı 1015; pytest --co --no-cov ile teyit et (bu projede dosya-başına ": N" basar → topla).
-ENGINE_VERSION = backtest-engine-v2-position-size-limits.
-ÖNCE docs/POST_V1_KICKOFF.md (en üst durum bloğu) + docs/STAGE2_HANDOFF.md ("position_size_limits
-(min/max cap) wiring landed (PR #63)" + "Next: TIER 2 frontend/infra") oku.
+Entropia — post-V1 TIER 2 (FRONTEND). Backend TIER 1 EFEKTİF TAMAM (V1 + Auth/IdP #38 + Parquet
+A #41 + bar-replay B #43 + indikatör compute C #45 + risk_based #47 + condition blocks #49 +
+extensions #51 + indicator-vs-indicator #53 + multi-TF #55 + per-condition-TF #56 + N-ary #57 +
+VWAP #58 + Kelly #60/#61 + position_size_limits #63 — HEPSİ MERGED). FRONTEND: gerçek auth
+login/signup/logout landed (PR #65 — merge KULLANICIDA; frontend-only, backend değişmedi, backend
+test tabanı 1015 SABİT).
 
-SIRADAKİ İŞ (kullanıcıyla SEÇ): TIER 1 backend EFEKTİF TAMAM (Kelly + risk_based + condition blocks
-+ multi-TF + N-ary + VWAP + position_size_limits hepsi landed; kalan tek non-directional key ta.atr
-doğası gereği yönsüz; custom_formula + adaptif/rolling Kelly dürüst unresolved). Doğal sıradaki işler:
-- TIER 2 — frontend / user-facing (0% bugün, ÖNERİLEN doğal slice): SSE/metrics/login integration
-  (WebSocket subscription, real-time backtest progress, user session), CP real candidate generation,
-  capability aktivasyonları (role-gated), first-Admin provisioning dashboard.
-- TIER 3 — data/ops (deferred): retention auto-purge, data-queue redelivery, SSE streaming e2e
-  (connection drops), tool-call status shadowing (CR-08 follow-up), summary["timeframe"] market-revision
-  metadata'dan çözümü. Öncelik: docs/STAGE2_HANDOFF.md "Next" + bu doküman aday listesi.
+ÖNCE DOĞRULA (stale-by-default): git fetch && git log --oneline origin/main -6 && gh pr list
+--state all -L 8. PR #65 (feat/post-v1-frontend-login) + docs PR'ı MERGE OLDU MU teyit et. Backend
+main = 97b10b8 (Merge #63) → docs #64 = 3594a58; alembic head 0021_local_auth;
+ENGINE_VERSION = backtest-engine-v2-position-size-limits. FRONTEND doğrula:
+cd frontend && npm run typecheck && npm run lint && npm test && npm run build (login sonrası 9/9).
 
-REUSE ANCHOR'LARI (#63 position_size_limits min/max cap; kodu incele, tek satır özet). Migration YOK
-(config-only; PositionSizeLimits zaten StrategyConfig sizing sub-config'inde vardı):
-- domain/backtest/engine.py — YENİ _clamp_to_limits(size, limits): limits is None VEYA size<=_ZERO → no-op
-  (0 = "açma" sentinel'i; min cap onu diriltmez, negatifi pozitife çekmez); min>max → _ZERO (fail-closed);
-  yoksa DOWN-to-max, UP-to-min, sonra max(size,_ZERO) (negatif cap'i de nötrler). Cap birimi = size birimi
-  (adet), unquantized (base dalı ile simetrik). Eski _position_size gövdesi _raw_position_size olarak yeniden
-  adlandırıldı; _position_size artık ince wrapper = _clamp_to_limits(_raw_position_size(...),
-  config.position_sizing.position_size_limits). Eksik limits → pre-wiring engine ile byte-identical. Tek çağrı
-  noktası (_open ~L475) → tüm sizing yolları otomatik clamp. TYPE_CHECKING import'una PositionSizeLimits;
-  run_engine diagnostics'e "position_size_limits_active": bool.
-- domain/backtest/manifest.py — ENGINE_VERSION=backtest-engine-v2-position-size-limits (execution_key ns shift;
-  stale UNCLAMPED sonuç reuse edilmez).
-- domain/strategy/config.py:599 — PositionSizeLimits(min_position_size/max_position_size: Decimal|None) DEĞİŞMEDİ.
-- Testler (+15 → 1015): 7 _clamp_to_limits unit / 6 per-method _position_size / 1 e2e / 1 ENGINE_VERSION ns →
-  tests/unit/test_backtest_engine.py (_config'e min_size/max_size kwargs; _clamp_to_limits + PositionSizeLimits import).
-REVIEW (PR #63): APPROVE 0 CRITICAL/HIGH. DÜRÜST SINIR: cap birimi = size ile aynı (adet), unquantized (base
-branch ile simetrik); base_position_size NEGATİF verilirse clamp muaf (size<=_ZERO guard) — pre-existing, scope dışı.
+ÖNCE OKU: docs/POST_V1_KICKOFF.md (en üst Durum bloğu — TIER 2 frontend login PR #65) +
+docs/STAGE2_HANDOFF.md ("Frontend real-auth login/signup/logout ... landed (PR #65)" + "Next: TIER 2
+frontend — SSE live-invalidation + metrics dashboard remain").
 
-YÖNTEM: Workflow KULLANMA; YENİ dosya heredoc (gate-free), mevcut dosya Edit 4-fact (GateGuard:
-ilk Bash + dosya-başına-ilk-edit + docs dosyaları da gate'lenir); cd backend (cwd resetlenebilir →
-absolute path); ruff+format+mypy+pytest (izole DB: ...entropia_auth; 1015 yeşil kalmalı); migration
-gerekirse 0022_* (→0021) up/down/up + parity + L1 FK proof; CRITICAL/HIGH AMPİRİK DOĞRULA → commit
-(conventional, attribution YOK) → PR → gh pr checks --watch → merge KULLANICIDA. Türkçe, MALİYET
-BİLİNÇLİ. Kapanışta: handoff + kickoff + CLAUDE.md + memory (ecc knowledge graph; claude-mem token
-stale/worker-modda atlanabilir). NOT: TIER 2 frontend'e geçilirse bu backend-odaklı yöntem notu
-(izole DB / L1 FK / alembic) çoğunlukla uygulanmaz — frontend stack'ine göre uyarlanır.
+FRONTEND STACK: Vite 8 + React 18 + react-router 6 + @tanstack/react-query 5 + react-hook-form +
+vitest/jsdom + @testing-library. Alias @ = src; kök frontend/src/. Auth ZATEN bağlı (lib/session.ts
+store + lib/auth.ts hooks + apiClient Bearer header + pages/Login.tsx + /login route + Layout
+AuthControl). Node >=20.19.
+
+SIRADAKİ İŞ (kullanıcıyla SEÇ) — kalan TIER 2 frontend adayları:
+- (a) SSE LIVE-INVALIDATION (ÖNERİLEN, küçük/saf infra): frontend/src/lib/sse.ts stub'ı ŞU AN yalnızca
+  heartbeat dinliyor + queryClient KULLANILMIYOR (Stage 1+ TODO). Backend /events taksonomisi
+  (backend .../apps/api/sse.py::sse_event_name): backtest.run.updated / job.updated / agent.task.updated /
+  audit.event.created / resource.changed (+heartbeat; data = tam outbox JSON). Bunları addEventListener
+  ile ilgili query key'lere queryClient.invalidateQueries([...]) map et → canlı backtest/job/agent
+  progress. İzole vitest ile test (EventSource mock).
+- (b) /v1/metrics DASHBOARD: GET /v1/metrics PROMETHEUS-TEXT döner (PlainTextResponse, JSON DEĞİL —
+  backend .../apps/api/routes/metrics.py:53). Exposition parser + golden-signals / jobs-depth /
+  outbox-lag / lease-age panelleri. En zahmetli (metin parse), en az temiz kontrat.
+- (c) capability aktivasyonları (role-gated), (d) first-Admin provisioning dashboard.
+TIER 3 (deferred): retention auto-purge, data-queue redelivery, SSE streaming e2e (connection drops),
+tool-call status shadowing (CR-08 follow-up).
+
+BACKEND REUSE ANCHOR'LARI (frontend'in bağlanacağı HAZIR kontratlar — DEĞİŞTİRME, TÜKET):
+- SSE: backend .../apps/api/sse.py (SseHub / run_outbox_poller / sse_event_name); GET /events
+  (EventSourceResponse); .../application/jobs/outbox_relay.py (fetch_events_after / latest_event_id).
+- Metrics: GET /v1/metrics (Prometheus text; golden signals + jobs depth + outbox lag + lease age).
+- Auth: /v1/auth/* + /me (frontend'de zaten bağlı).
+
+YÖNTEM: Workflow KULLANMA; direct-author. Bu slice FRONTEND — backend working-loop (izole DB / L1 FK /
+alembic) UYGULANMAZ. Frontend loop: cd frontend (cwd resetlenebilir → absolute path); npm run typecheck
+&& npm run lint && npm test && npm run build + yeni component/unit test. YENİ dosya heredoc (gate-free),
+mevcut dosya Edit 4-fact (GateGuard: ilk Bash + dosya-başına-ilk-edit + docs da gate'lenir).
+CRITICAL/HIGH AMPİRİK DOĞRULA → commit (conventional feat(post-v1)/branch feat/post-v1-frontend-<slug>,
+attribution YOK) → PR → gh pr checks --watch (frontend+docker check; backend değişmediği için yeşil) →
+merge KULLANICIDA. Türkçe, MALİYET BİLİNÇLİ. Kapanışta: handoff + kickoff + CLAUDE.md + memory
+(ecc knowledge graph; claude-mem token stale/worker-modda atlanabilir).
 ```

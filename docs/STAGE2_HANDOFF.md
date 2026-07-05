@@ -500,7 +500,53 @@ Kelly / notional-fallback** are all capped uniformly. **No migration** (config-o
   the `base` branch). If `base_position_size` is given a NEGATIVE explicit size the clamp is
   exempt (the `size <= _ZERO` guard) — pre-existing behaviour, out of scope for this slice.
 
-## Next: post-V1 (continued) — TIER 2 frontend/infra (backend TIER 1 EFFECTIVELY COMPLETE)
+## Post-V1 — Frontend real-auth login/signup/logout (TIER 2, frontend slice 1) ✅ landed (PR #65, awaiting user merge)
+
+**First TIER 2 (frontend) slice.** The backend already shipped real local auth
+(`/v1/auth/signup|login|logout`, opaque Bearer sessions — Auth/IdP PR #38 + M1 §4), but the
+web shell (`frontend/`, Vite 8 + React 18 + react-router 6 + @tanstack/react-query 5) only ever
+sent the dev `X-Actor-Id` header. This slice connects the shell to that backend so humans get a
+real Bearer session. **Frontend-only — NO backend change, NO migration; backend test base stays
+1015.** CI: **Frontend + Docker checks green**; backend check re-runs unchanged (frontend-only
+diff). Reuse anchors (exact symbols):
+- **`frontend/src/lib/session.ts`** *(new)* — external session store: `getSessionToken()` (raw
+  string fast-path read by the API client each request), `getStoredUser()`, `setSession({token,
+  user, expiresAt})`, `clearSession()`, `subscribe(listener)`. Two `localStorage` keys
+  (`entropia.sessionToken` + `entropia.session` JSON meta). Framework-agnostic (no React import)
+  so it composes with `useSyncExternalStore`.
+- **`frontend/src/lib/apiClient.ts`** — `apiRequest` now attaches `Authorization: Bearer <token>`
+  when `getSessionToken()` is non-null, **in addition to** the existing `X-Actor-Id`. Both headers
+  are sent safely: the server honours only the one its `AUTH_MODE` trusts (`session` → Bearer
+  authoritative, bare `X-Actor-Id` ignored; `dev` → `X-Actor-Id`, Bearer ignored — per
+  `backend .../apps/api/deps.py`), so neither header can spoof the other.
+- **`frontend/src/lib/auth.ts`** *(new)* — react-query mutation hooks: `useLogin` (POST
+  `/auth/login` → `setSession`), `useSignup` (POST `/auth/signup` then **auto-login**),
+  `useLogout` (best-effort POST `/auth/logout`, **always** `clearSession()` — a failed/expired
+  revoke never strands the UI), `useSessionToken()` (`useSyncExternalStore` over the store). Every
+  success `queryClient.invalidateQueries()` so `/me` + role-gated nav refetch under the new principal.
+- **`frontend/src/pages/Login.tsx`** *(new)* — standalone `/login` page (no app shell),
+  `react-hook-form`, login/signup toggle (signup reveals optional display-name/email). Errors
+  surface the backend canonical envelope verbatim (`ApiError` → `${code}: ${message}`); the client
+  never invents auth messages. Required-field validation blocks submit client-side.
+- **`frontend/src/app/Layout.tsx`** — new `AuthControl`: a **Log in** link when anonymous, the
+  signed-in user + **Log out** button when a session token is present; `DevActorControl` is hidden
+  while a real session is active (`token ? null : <DevActorControl/>`).
+- **`frontend/src/App.tsx`** — standalone `/login` `<Route>` outside the `<Layout>` element route.
+- **`frontend/src/lib/types.ts`** — `AuthUser` / `SignUpResponse` (= `AuthUser`) / `LoginResponse`
+  ({token, session_id, expires_at, user}) envelopes mirroring `routes/auth.py`.
+- **`frontend/src/styles/global.css`** — new `.btn` / `.btn-primary` / `.btn-ghost` + `.auth-*`
+  classes (themed, dark/light).
+- **`frontend/src/test/auth.test.tsx`** *(new)* — 6 vitest: session round-trip, subscribe fires on
+  set/clear + unsubscribe, Bearer header present-when-token / absent-when-none, login stores the
+  returned token + hits `/auth/login`, empty-field validation blocks the request. **Frontend total
+  9/9** (3 baseline nav + 6 new); typecheck + lint clean; production build green.
+- **Honest boundary:** no route guard forcing anonymous → `/login` (dev mode intentionally allows
+  anonymous browsing; routes gate access server-side). First-Admin provisioning still absent
+  upstream — signup always yields the baseline role. The other two TIER 2 candidates (SSE
+  live-invalidation of the `sse.ts` stub; `/v1/metrics` Prometheus-text dashboard) are **not** in
+  this slice.
+
+## Next: post-V1 (continued) — TIER 2 frontend (login landed; SSE live-invalidation + metrics dashboard remain)
 
 **V1 COMPLETE (Stages 0–8, docs 01–22) + Auth/IdP + Parquet Slice A + Backtest Engine Slice B + real indicator compute Slice C + `risk_based` sizing (a) + condition blocks (b) + condition extensions (b2) + two-package indicator-vs-indicator + higher-timeframe resampling (c) + per-condition multi-TF reference (i) + N-ary reference chain (ii) + VWAP directional key (d) + `formula_based` Kelly sizing + `position_size_limits` min/max cap (PR #63) landed (1015 tests).** The **Slice C indicator-compute + position-sizing follow-ups are now EFFECTIVELY COMPLETE — TIER 1 backend is DONE**:
 
@@ -510,7 +556,7 @@ Kelly / notional-fallback** are all capped uniformly. **No migration** (config-o
 
 **Next candidates** (priority per `docs/POST_V1_KICKOFF.md`):
 - ~~**TIER 1 — `position_size_limits` (min/max cap) wiring**~~ ✅ **PR #63** — `PositionSizeLimits` (min/max caps) now clamps EVERY sizing method via `_clamp_to_limits` at the `_raw_position_size → _position_size` boundary; `ENGINE_VERSION → backtest-engine-v2-position-size-limits`; +15 tests → 1015; no migration. **TIER 1 backend is now EFFECTIVELY COMPLETE** (Kelly + risk_based + condition blocks + multi-TF + N-ary + VWAP + position_size_limits all landed).
-- **TIER 2 — frontend / user-facing (0% today) — the natural next slice:** SSE/metrics/login integration (WebSocket subscription, real-time backtest progress, user session), CP real candidate generation, capability activations (role-gated features), first-Admin provisioning dashboard.
+- **TIER 2 — frontend / user-facing (login slice 1 landed → PR #65):** ~~login / session integration~~ ✅ **PR #65** (Bearer session store + standalone `/login` page + signup/logout + role-aware header; `frontend/src/lib/{session,auth}.ts`, `pages/Login.tsx`, `apiClient.ts` Bearer header). **Remaining candidates:** (a) **SSE live-invalidation** — fill the `frontend/src/lib/sse.ts` stub (currently only heartbeat): map `backtest.run.updated` / `job.updated` / `agent.task.updated` / `audit.event.created` / `resource.changed` → `queryClient.invalidateQueries([...])` for real-time backtest/job/agent progress; (b) **`/v1/metrics` dashboard** — Prometheus-text parser + golden-signals / jobs-depth / outbox-lag / lease-age panels; (c) capability activations (role-gated features); (d) first-Admin provisioning dashboard; (e) CP real candidate generation.
 - **TIER 3 — data/ops (deferred):** retention auto-purge, data-queue redelivery, SSE streaming e2e (connection drops), tool-call status shadowing (CR-08 follow-up), `summary["timeframe"]` resolution from market-revision metadata.
 
 See **`docs/POST_V1_KICKOFF.md`** for reuse anchors and the paste-ready resume prompt.

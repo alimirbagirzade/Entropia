@@ -3,6 +3,43 @@
 > **Amaç:** V1 kapandı (Stage 0–8 COMPLETE). Bu doküman post-V1 durumunu, aday iş listesini
 > ve temiz oturumda yapıştırılacak resume prompt'u içerir.
 
+## Durum (2026-07-05, position_size_limits min/max cap wiring — Slice C follow-up sonrası; PR #63)
+
+> **`position_size_limits` (min/max pozisyon cap) wiring landed (PR #63, kod `5ef5525`,
+> merge `97b10b8`); MERGED → main `97b10b8`.** `PositionSizeLimits` sizing sub-config'de
+> (`domain/strategy/config.py:599`) tanımlıydı ama `engine._position_size`'da **TÜM sizing
+> metodlarında sessizce ignore ediliyordu** (latent bug — configure edilen cap hiçbir yolda
+> hesaplanan size'ı kısıtlamıyordu). Fix, size'ı **tek bir sizing sınırında** clamp'ler →
+> **base / risk_based / Kelly / notional-fallback** hepsi uniform cap'lenir. **Migration YOK**
+> (config-only, JSONB — `PositionSizeLimits` değişmedi). **1015 test** (999 + 15: 7
+> `_clamp_to_limits` unit / 6 per-method `_position_size` / 1 e2e / 1 ENGINE_VERSION ns).
+> Review APPROVE 0 CRITICAL/HIGH. `ENGINE_VERSION=backtest-engine-v2-position-size-limits`.
+> **Reuse anchor'ları:**
+> - `domain/backtest/engine.py` — **YENİ `_clamp_to_limits(size, limits)`**: `limits is None`
+>   VEYA `size <= _ZERO` → **no-op** (`0` = "açma" sentinel'i; bir `min` cap onu canlı pozisyona
+>   diriltmez, ne de bir negatifi pozitife çeker); `min > max` yanlış-yapılandırma → `_ZERO`
+>   (hiçbir size ikisini de sağlamaz → fail-closed); yoksa size'ı **DOWN-to-`max`**, sonra
+>   **UP-to-`min`**, sonra `max(size, _ZERO)` (negatif cap'i de nötrler). Cap birimi = size birimi
+>   (adet/coin), **unquantized** (base dalı ile simetrik). Eski `_position_size` gövdesi
+>   **`_raw_position_size` olarak yeniden adlandırıldı** (mantık aynı); `_position_size` artık ince
+>   wrapper = `_clamp_to_limits(_raw_position_size(config, entry_price, equity), config.position_sizing.position_size_limits)`.
+>   Eksik limits alt-ağacı → pre-wiring engine ile **byte-identical**. **Tek çağrı noktası**
+>   (`_open`, ~L475) → tüm sizing yolları otomatik clamp'lenir. `TYPE_CHECKING` import'una
+>   `PositionSizeLimits` eklendi; `run_engine` diagnostics'e `"position_size_limits_active": bool`.
+> - `domain/backtest/manifest.py` — `ENGINE_VERSION` `-kelly-sizing` → `-position-size-limits`
+>   (execution_key ns shift; INF-04/INF-05 — stale UNCLAMPED sonuç reuse edilmez).
+> - `domain/strategy/config.py:599` — `PositionSizeLimits(min_position_size/max_position_size: Decimal|None)`
+>   **DEĞİŞMEDİ**, migration YOK.
+> - `tests/unit/test_backtest_engine.py` — `_config`'e `min_size`/`max_size` kwargs; `_clamp_to_limits`
+>   + `PositionSizeLimits` import; +15 test.
+> **Dürüst sınır:** cap birimi = size birimi (adet), unquantized (base branch ile simetrik);
+> `base_position_size` NEGATİF verilirse clamp muaf (`size <= _ZERO` guard) — pre-existing, scope
+> dışı. **Slice C indikatör-compute + sizing + TIER 1 backend follow-up'ları böylece EFEKTİF TAMAM**
+> (Kelly + risk_based + condition blocks + multi-TF + N-ary + VWAP + position_size_limits hepsi
+> landed). **Sıradaki doğal slice: TIER 2 frontend/infra** (SSE/metrics/login, capability
+> aktivasyonları, admin provisioning) — kullanıcı seçsin. Aşağıdaki Kelly (PR #60/#61) bloğu ve
+> öncesi tarihsel.
+
 ## Durum (2026-07-04, formula_based Kelly sizing — Slice C follow-up sonrası; PR #60 + #61)
 
 > **`formula_based` (Kelly criterion) sizing landed (PR #60, kod `3f254bc`) + non-finite
@@ -200,22 +237,26 @@
 2. **Gerçek backtest engine** — ~~Slice A: Parquet batch (PR #41)~~ ✅ · ~~Slice B: bar-replay
    engine (PR #43)~~ ✅ · ~~Slice C: gerçek indikatör compute (PR #45)~~ ✅ ·
    ~~Slice C follow-up (a): `risk_based` sizing (PR #47)~~ ✅ **LANDED**.
-   **▶ SIRADAKİ (kullanıcıyla seçilecek): kalan Slice C follow-up'ları** — `indicators.py` /
-   `indicator_plan.py` / `engine.py` üstüne biner:
+   **▶ Slice C follow-up'ları ARTIK EFEKTİF TAMAM** (aşağıdakilerin hepsi landed; TIER 1 backend
+   DONE) — `indicators.py` / `indicator_plan.py` / `engine.py` üstüne biniyordu:
    - ~~**(a)** `risk_based` sizing~~ ✅ **LANDED (PR #47)** — `_position_size` içinde izole çözüldü.
-     **`formula_based`/Kelly hâlâ `unresolved`** (path-dependent istatistik; foundation'da belirsiz).
+     ~~**`formula_based`/Kelly**~~ ✅ **LANDED (PR #60 + #61)** — Kelly honored; `custom_formula` +
+     adaptif/rolling Kelly dürüst `unresolved`. ~~**`position_size_limits` min/max cap**~~ ✅
+     **LANDED (PR #63)** — `_clamp_to_limits` TÜM sizing metodlarını (base/risk_based/Kelly/notional) cap'ler.
    - ~~**(b)** condition block'ları (threshold gate)~~ ✅ **LANDED (PR #49)** ·
      ~~**(b2)** condition genişletmeleri (crosses/between/series-vs-series + condition-only yön)~~
      ✅ **LANDED (PR #51)** · ~~**indicator-vs-indicator — İKİ AYRI paket** (fast-MA vs slow-MA,
-     `reference_package_ref`)~~ ✅ **LANDED (PR #53)**. **Kalan condition işi:** (i) **>2 paket**
-     karşılaştırması (N-ary reference şeması ister, tek `reference_package_ref` değil); (ii)
-     **multi-timeframe reference** (2. paket bugün trigger'ın TF'inde `close`'dan hesaplanır —
-     farklı-TF RHS (c)'ye bağlı); (iii) **non-MA/RSI reference key** (reference paketi bugün
-     `DIRECTIONAL_KEYS` MA/RSI serisine çözülmeli; `ta.atr`/`ta.vwap` RHS (d)'ye bağlı).
+     `reference_package_ref`)~~ ✅ **LANDED (PR #53)**. **Kalan condition işi ARTIK LANDED:**
+     ~~(i) **>2 paket** karşılaştırması (N-ary reference)~~ ✅ **PR #57** · ~~(ii) **per-condition
+     multi-timeframe reference** (2. paket farklı-TF RHS)~~ ✅ **PR #56** · ~~(iii) `ta.vwap`
+     directional reference key~~ ✅ **PR #58** — yalnız `ta.atr` doğası gereği yönsüz kalır (terminal sınır).
    - ~~**(c)** multi-timeframe — bar resampling~~ ✅ **LANDED (PR #55)** — indikatör blok base
      bar'lardan daha kaba bir TF'de compute eder (look-ahead yok). **(ii) multi-TF reference'ı unblock etti.**
-   - **(d)** daha çok directional canonical key — `ta.atr`/`ta.vwap` bugün directional değil
-     (bant/kanal yorumu gerektirir).
+   - ~~**(d)** daha çok directional canonical key — `ta.vwap`~~ ✅ **LANDED (PR #58)**; `ta.atr`
+     doğası gereği yönsüz (volatilite bandı, cross yok) → terminal sınır.
+   - ~~**`position_size_limits` (min/max cap) wiring**~~ ✅ **LANDED (PR #63)** — `_clamp_to_limits`
+     `_raw_position_size → _position_size` sınırında; `ENGINE_VERSION=backtest-engine-v2-position-size-limits`;
+     +15 test → 1015; migration yok. **TIER 1 backend böylece EFEKTİF TAMAM → sıradaki: TIER 2 frontend/infra.**
 3. **Frontend entegrasyonu** — SSE tüketimi (yeni taksonomi), `/v1/metrics` dashboard'ları,
    Trash/Panel/Manual/Future-Dev shell'leri; `/v1/auth/*` login akışı hazır.
 4. **Create Package gerçek candidate generation** — stub generator → LLM/derleme hattı; indikatör
@@ -383,50 +424,52 @@ engine Slice B (PR #43) + gerçek indikatör compute Slice C (PR #45) + risk_bas
 two-package indicator-vs-indicator (PR #53) + HIGHER-TIMEFRAME bar resampling (c) (PR #55) +
 PER-CONDITION multi-timeframe reference (i) (PR #56) + N-ARY reference chain (ii) (PR #57) +
 VWAP directional key (d) (PR #58) + formula_based KELLY sizing (PR #60) + non-finite fail-closed
-fix (PR #61) — HEPSİ MERGED.
-ÖNCE DOĞRULA (stale-by-default): git fetch && git log --oneline origin/main -5 &&
-gh pr list --state all -L 6. main = 54e71d2 (Merge #61; Kelly feat 3f254bc / fix 3a92e7d;
-VWAP d27b2bb; #57 N-ary 44099a7; #56 per-condition 1c5cca0; #55 multi-tf def6c28; #53 9087c2b;
-(b2) 361df4c; condition-blocks (b) 8766fae; risk_based (a) 43cee29; Slice C 671d227); alembic head
-0021_local_auth (Kelly + fix migration YOK). İzole DB:
-TEST_DATABASE_URL=postgresql+asyncpg://entropia:entropia@localhost:5432/entropia_auth.
-Test tabanı 999; pytest --co --no-cov ile teyit et (bu projede dosya-başına ": N" basar → topla).
-ENGINE_VERSION = backtest-engine-v2-kelly-sizing.
-ÖNCE docs/POST_V1_KICKOFF.md + docs/STAGE2_HANDOFF.md ("formula_based Kelly criterion sizing
-landed (PR #60) + non-finite fail-closed fix (PR #61)" + "Next: remaining Slice C follow-ups") oku.
+fix (PR #61) + position_size_limits MIN/MAX CAP wiring (PR #63) — HEPSİ MERGED.
+ÖNCE DOĞRULA (stale-by-default): git fetch && git log --oneline origin/main -6 &&
+gh pr list --state all -L 8. main = 97b10b8 (Merge #63; position_size_limits feat 5ef5525;
+Kelly feat 3f254bc / fix 3a92e7d; VWAP d27b2bb; #57 N-ary 44099a7; #56 per-condition 1c5cca0;
+#55 multi-tf def6c28; #53 9087c2b; (b2) 361df4c; condition-blocks (b) 8766fae; risk_based (a)
+43cee29; Slice C 671d227); alembic head 0021_local_auth (position_size_limits + Kelly migration YOK).
+İzole DB: TEST_DATABASE_URL=postgresql+asyncpg://entropia:entropia@localhost:5432/entropia_auth.
+Test tabanı 1015; pytest --co --no-cov ile teyit et (bu projede dosya-başına ": N" basar → topla).
+ENGINE_VERSION = backtest-engine-v2-position-size-limits.
+ÖNCE docs/POST_V1_KICKOFF.md (en üst durum bloğu) + docs/STAGE2_HANDOFF.md ("position_size_limits
+(min/max cap) wiring landed (PR #63)" + "Next: TIER 2 frontend/infra") oku.
 
-SIRADAKİ İŞ (kullanıcıyla SEÇ): Slice C indikatör-compute + sizing follow-up'ları EFEKTİF TAMAM
-(Kelly honored; kalan tek non-directional key ta.atr doğası gereği yönsüz; custom_formula +
-adaptif/rolling Kelly dürüst unresolved). Doğal sıradaki işler:
-- TIER 1 kalıntısı (ÖNERİLEN, küçük/temiz/düşük-risk): position_size_limits (min/max cap) wiring —
-  PositionSizeLimits config'de tanımlı ama TÜM sizing metodlarında engine._position_size'da SESSİZCE
-  ignore ediliyor (latent bug); ENGINE_VERSION bump gerektirir.
-- VEYA backend indikatör/sizing katmanından çık: frontend SSE/metrics/login, CP real candidate
-  generation, capability aktivasyonları, deferred liste (ilk-Admin provisioning, retention
-  auto-purge, summary["timeframe"] market-revision metadata'dan çözümü). Öncelik:
-  docs/STAGE2_HANDOFF.md "Next" + bu doküman aday listesi.
+SIRADAKİ İŞ (kullanıcıyla SEÇ): TIER 1 backend EFEKTİF TAMAM (Kelly + risk_based + condition blocks
++ multi-TF + N-ary + VWAP + position_size_limits hepsi landed; kalan tek non-directional key ta.atr
+doğası gereği yönsüz; custom_formula + adaptif/rolling Kelly dürüst unresolved). Doğal sıradaki işler:
+- TIER 2 — frontend / user-facing (0% bugün, ÖNERİLEN doğal slice): SSE/metrics/login integration
+  (WebSocket subscription, real-time backtest progress, user session), CP real candidate generation,
+  capability aktivasyonları (role-gated), first-Admin provisioning dashboard.
+- TIER 3 — data/ops (deferred): retention auto-purge, data-queue redelivery, SSE streaming e2e
+  (connection drops), tool-call status shadowing (CR-08 follow-up), summary["timeframe"] market-revision
+  metadata'dan çözümü. Öncelik: docs/STAGE2_HANDOFF.md "Next" + bu doküman aday listesi.
 
-REUSE ANCHOR'LARI (#60/#61 formula_based Kelly sizing; kodu incele, tek satır özet). Migration YOK
-(config-only; sizing sub-config zaten StrategyConfig'te vardı):
-- domain/backtest/engine.py — _decimal_param(params, key): serbest formula_params değeri → best-effort
-  Decimal; absent / parse-fail / NON-FINITE (NaN/±Inf, Decimal.is_finite() guard) → None (fail-closed).
-  _kelly_capital_fraction(sizing): f* = kelly_fraction·(W − (1−W)/R), alt-clamp 0; kelly_fraction ABSENT
-  → full Kelly (1); PRESENT-ama-garbage/out-of-range, custom_formula, eksik/non-finite W (win_probability)
-  / R (payoff_ratio) → None. _position_size Kelly dalı: size = usable_equity·f*/entry_price (entry-price
-  BAĞIMLI, risk_based'in stop-mesafesi boyutlamasının aksine). _sizing_is_honored: geçerli Kelly config →
-  True (position_sizing_method_unsupported yalnız desteklenmeyen şekiller için).
-- domain/backtest/manifest.py — ENGINE_VERSION=backtest-engine-v2-kelly-sizing (execution_key ns shift).
-- Testler (+12 → 999): 9 Kelly feat (PR #60) + 3 non-finite regresyon (PR #61) → tests/unit/test_backtest_engine.py.
-REVIEW (PR #60): 1 CONFIRMED defect — non-finite formula_params (NaN/Inf) → Decimal aritmetiği
-InvalidOperation CRASH + Inf payoff → (1−W)/R=0 → f* SESSİZ honor; PR #61 Decimal.is_finite() guard'ı ile
-kapatıldı (non-finite → None → fail-closed). DÜRÜST SINIR: adaptif/rolling Kelly (W/R backtest'ten tahmin)
-deferred (path-dependent + look-ahead); custom_formula unsupported (güvenli eval yok) → notional fallback.
+REUSE ANCHOR'LARI (#63 position_size_limits min/max cap; kodu incele, tek satır özet). Migration YOK
+(config-only; PositionSizeLimits zaten StrategyConfig sizing sub-config'inde vardı):
+- domain/backtest/engine.py — YENİ _clamp_to_limits(size, limits): limits is None VEYA size<=_ZERO → no-op
+  (0 = "açma" sentinel'i; min cap onu diriltmez, negatifi pozitife çekmez); min>max → _ZERO (fail-closed);
+  yoksa DOWN-to-max, UP-to-min, sonra max(size,_ZERO) (negatif cap'i de nötrler). Cap birimi = size birimi
+  (adet), unquantized (base dalı ile simetrik). Eski _position_size gövdesi _raw_position_size olarak yeniden
+  adlandırıldı; _position_size artık ince wrapper = _clamp_to_limits(_raw_position_size(...),
+  config.position_sizing.position_size_limits). Eksik limits → pre-wiring engine ile byte-identical. Tek çağrı
+  noktası (_open ~L475) → tüm sizing yolları otomatik clamp. TYPE_CHECKING import'una PositionSizeLimits;
+  run_engine diagnostics'e "position_size_limits_active": bool.
+- domain/backtest/manifest.py — ENGINE_VERSION=backtest-engine-v2-position-size-limits (execution_key ns shift;
+  stale UNCLAMPED sonuç reuse edilmez).
+- domain/strategy/config.py:599 — PositionSizeLimits(min_position_size/max_position_size: Decimal|None) DEĞİŞMEDİ.
+- Testler (+15 → 1015): 7 _clamp_to_limits unit / 6 per-method _position_size / 1 e2e / 1 ENGINE_VERSION ns →
+  tests/unit/test_backtest_engine.py (_config'e min_size/max_size kwargs; _clamp_to_limits + PositionSizeLimits import).
+REVIEW (PR #63): APPROVE 0 CRITICAL/HIGH. DÜRÜST SINIR: cap birimi = size ile aynı (adet), unquantized (base
+branch ile simetrik); base_position_size NEGATİF verilirse clamp muaf (size<=_ZERO guard) — pre-existing, scope dışı.
 
 YÖNTEM: Workflow KULLANMA; YENİ dosya heredoc (gate-free), mevcut dosya Edit 4-fact (GateGuard:
 ilk Bash + dosya-başına-ilk-edit + docs dosyaları da gate'lenir); cd backend (cwd resetlenebilir →
-absolute path); ruff+format+mypy+pytest (izole DB: ...entropia_auth; 999 yeşil kalmalı); migration
+absolute path); ruff+format+mypy+pytest (izole DB: ...entropia_auth; 1015 yeşil kalmalı); migration
 gerekirse 0022_* (→0021) up/down/up + parity + L1 FK proof; CRITICAL/HIGH AMPİRİK DOĞRULA → commit
 (conventional, attribution YOK) → PR → gh pr checks --watch → merge KULLANICIDA. Türkçe, MALİYET
 BİLİNÇLİ. Kapanışta: handoff + kickoff + CLAUDE.md + memory (ecc knowledge graph; claude-mem token
-stale/worker-modda atlanabilir).
+stale/worker-modda atlanabilir). NOT: TIER 2 frontend'e geçilirse bu backend-odaklı yöntem notu
+(izole DB / L1 FK / alembic) çoğunlukla uygulanmaz — frontend stack'ine göre uyarlanır.
 ```

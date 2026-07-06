@@ -4,6 +4,7 @@ import { ALL_NAV_ITEMS } from "./app/nav";
 import { AnalysisLab } from "./pages/AnalysisLab";
 import { ArrangeMetrics } from "./pages/ArrangeMetrics";
 import { BacktestRun } from "./pages/BacktestRun";
+import { FutureDev } from "./pages/FutureDev";
 import { Mainboard } from "./pages/Mainboard";
 import { Metrics } from "./pages/Metrics";
 import { Panel } from "./pages/Panel";
@@ -23,6 +24,7 @@ const REAL_PATHS = new Set([
   "/backtest/history",
   "/backtest/metrics",
   "/analysis-lab",
+  "/future-dev",
 ]);
 
 export default function App() {
@@ -89,6 +91,15 @@ export default function App() {
           element={
             <ErrorBoundary>
               <AnalysisLab />
+            </ErrorBoundary>
+          }
+        />
+        {/* Future Dev (doc 22): server-side capability registry + Graphic View overview. */}
+        <Route
+          path="/future-dev"
+          element={
+            <ErrorBoundary>
+              <FutureDev />
             </ErrorBoundary>
           }
         />

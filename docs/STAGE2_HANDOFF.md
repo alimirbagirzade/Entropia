@@ -585,7 +585,7 @@ Stage-1 TODO, so no domain event refreshed the cache. This slice fills the
   forward contract. The remaining TIER 2 candidate (`/v1/metrics` Prometheus-text dashboard) is
   **not** in this slice.
 
-## Post-V1 — Frontend /v1/metrics dashboard (TIER 2, frontend slice 3) ✅ landed (PR #69, awaiting user merge)
+## Post-V1 — Frontend /v1/metrics dashboard (TIER 2, frontend slice 3) ✅ landed (PR #69, merged → main `ee76b24`)
 
 **Third TIER 2 (frontend) slice.** The backend already exposes `GET /v1/metrics` as a Prometheus text
 exposition (Stage 8b, `apps/api/routes/metrics.py`, `PlainTextResponse`) — golden signals from the
@@ -628,7 +628,46 @@ Reuse anchors (exact symbols):
   URL — the `/v1/metrics` scrape endpoint is unauthenticated by design — while the **nav item** is
   admin-gated (consistent with `/panel`, `/trash`). `# HELP` isn't shown (the backend omits it).
 
-## Next: post-V1 (continued) — TIER 2 frontend (login + SSE + /v1/metrics landed; live-data pages / capability activations / admin provisioning remain)
+## Post-V1 — Frontend live-data backtest pages (TIER 2, frontend slice 4) ✅ landed (PR #72, merged → main `c322588`)
+
+**Fourth TIER 2 (frontend) slice — the FIRST live pages on the SSE forward contract.** The Stage 5
+backtest screens (`/backtest/run`, `/backtest/history`) were Stage-0 placeholders even though the
+backend has served the full surface since Stage 5a/5b, and PR #67 already mapped
+`backtest.run.updated → ["backtests"]` with no page bound to it. This slice binds RUN & Backtest
+Results + Results History to real queries — the SSE live-invalidation payoff is now visible.
+**Frontend-only — NO backend change, NO migration; backend test base stays 1015.** CI 3/3 green.
+Reuse anchors (exact symbols):
+- **`frontend/src/lib/backtest.ts`** *(new)* — wire types mirroring the backend projections verbatim
+  (`DefaultMainboard`, `BacktestRunAdmission`, `BacktestRun`, `BacktestResultDetail`/`MetricValue`/
+  `ManifestExcerpt`, `HistoryRow`/`HistoryPage`); `HISTORY_SORTS` (6 canonical `HistorySort` wire
+  values + V18 labels), `KEY_METRIC_COLUMNS` (KEY_METRIC_KEYS order), `TERMINAL_RUN_STATES`;
+  `formatMetricValue` (signed_percent/percent/decimal2/integer; a null value renders its availability
+  label, NEVER 0 — L4) + locale-free `formatUtc`; hooks `useDefaultMainboard` (`["mainboard","default"]`),
+  `useBacktestRun` (`["backtests","run",id]`, poll fallback stops on terminal state — SSE primary,
+  INF-11), `useBacktestResult` (`["backtests","result",id]`, immutable), `useResultsHistory`
+  (`["backtests","history",sort,cursor]`, keyset cursor, `placeholderData` keeps the previous page);
+  202 mutations `useRequestBacktestRun` / `useRetryBacktestRun` (both invalidate `["backtests"]`).
+  ALL path params `encodeURIComponent`'d (review fix — an un-encoded `?result=` could URL-normalize
+  onto a different API GET endpoint).
+- **`frontend/src/pages/BacktestRun.tsx`** *(new)* — two modes: `?result=<id>` immutable deep-link
+  (hydrated ONLY from result_id, doc 15 §8.5 — where History "View" lands) and the workbench
+  (composition card from `GET /mainboards/default` → Request Backtest Run 202 admission → run id in
+  `?run=` so a refresh keeps tracking the durable row, doc 15 §4); failure_code/message verbatim +
+  Retry swaps tracking onto the NEW run id; admission `warning_count` badge.
+- **`frontend/src/pages/ResultsHistory.tsx` + `components/ResultDetail.tsx`** *(new)* — server-sorted
+  keyset index (sort select resets the cursor stack; Prev/Next disabled while fetching), key-metric
+  digest cells, View → `/backtest/run?result=<id>`; `ResultDetail` renders summary kv + metrics table
+  (value + availability) + manifest excerpt + artifact counts. The client never re-orders rows.
+- **`App.tsx`** — `REAL_PATHS` set (`/`, `/panel/metrics`, `/backtest/run`, `/backtest/history`)
+  replaces the inline placeholder filter; two real routes. `nav.ts` UNCHANGED (23 items).
+- **`test/backtestRun.test.tsx`** *(new, 3)* + **`test/resultsHistory.test.tsx`** *(new, 4)* + shared
+  route-aware fetch double **`test/helpers/apiStub.ts`** ("<METHOD> <path fragment>" keyed) —
+  **frontend 36/36** (29 prior + 7 new); typecheck + lint clean; build green.
+- **Honest boundary:** Arrange Metrics (`/backtest/metrics`) + Analysis Lab (`/analysis-lab`) stay
+  placeholders — `["jobs"]`/`["agent-tasks"]`/`["audit"]` keys still have no bound page; history
+  compare + soft-delete affordances deferred with them.
+
+## Next: post-V1 (continued) — TIER 2 frontend (login + SSE + /v1/metrics + live-data backtest pages landed; Arrange Metrics / Analysis Lab live pages / capability activations / admin provisioning remain)
 
 **V1 COMPLETE (Stages 0–8, docs 01–22) + Auth/IdP + Parquet Slice A + Backtest Engine Slice B + real indicator compute Slice C + `risk_based` sizing (a) + condition blocks (b) + condition extensions (b2) + two-package indicator-vs-indicator + higher-timeframe resampling (c) + per-condition multi-TF reference (i) + N-ary reference chain (ii) + VWAP directional key (d) + `formula_based` Kelly sizing + `position_size_limits` min/max cap (PR #63) landed (1015 tests).** The **Slice C indicator-compute + position-sizing follow-ups are now EFFECTIVELY COMPLETE — TIER 1 backend is DONE**:
 
@@ -638,7 +677,7 @@ Reuse anchors (exact symbols):
 
 **Next candidates** (priority per `docs/POST_V1_KICKOFF.md`):
 - ~~**TIER 1 — `position_size_limits` (min/max cap) wiring**~~ ✅ **PR #63** — `PositionSizeLimits` (min/max caps) now clamps EVERY sizing method via `_clamp_to_limits` at the `_raw_position_size → _position_size` boundary; `ENGINE_VERSION → backtest-engine-v2-position-size-limits`; +15 tests → 1015; no migration. **TIER 1 backend is now EFFECTIVELY COMPLETE** (Kelly + risk_based + condition blocks + multi-TF + N-ary + VWAP + position_size_limits all landed).
-- **TIER 2 — frontend / user-facing (login + SSE landed):** ~~login / session integration~~ ✅ **PR #65** (Bearer session store + standalone `/login` page + signup/logout + role-aware header; `frontend/src/lib/{session,auth}.ts`, `pages/Login.tsx`, `apiClient.ts` Bearer header) · ~~SSE live-invalidation~~ ✅ **PR #67** (`frontend/src/lib/sse.ts` stub filled: `EVENT_QUERY_KEYS` maps `backtest.run.updated`/`job.updated`/`agent.task.updated`/`audit.event.created` → `["backtests"]`/`["jobs"]`/`["agent-tasks"]`/`["audit"]`, `resource.changed` → full refresh, reconnect self-heal; +7 vitest → 16/16) · ~~**`/v1/metrics` dashboard**~~ ✅ **PR #69** (`lib/metrics.ts` Prometheus text-exposition parser + `apiGetText`/`useMetrics` 5s poll + `pages/Metrics.tsx` golden-signals / jobs-depth / outbox-lag / lease-age panels + adminOnly `System Metrics` nav item at `/panel/metrics`; +13 vitest → 29/29). **Remaining candidates:** (a) **live-data Stage 5/6 pages** (RUN / Results History / Arrange Metrics / Analysis Lab → bind the SSE `EVENT_QUERY_KEYS` for visible live-invalidation payoff); (b) capability activations (role-gated features); (c) first-Admin provisioning dashboard; (d) CP real candidate generation.
+- **TIER 2 — frontend / user-facing (login + SSE landed):** ~~login / session integration~~ ✅ **PR #65** (Bearer session store + standalone `/login` page + signup/logout + role-aware header; `frontend/src/lib/{session,auth}.ts`, `pages/Login.tsx`, `apiClient.ts` Bearer header) · ~~SSE live-invalidation~~ ✅ **PR #67** (`frontend/src/lib/sse.ts` stub filled: `EVENT_QUERY_KEYS` maps `backtest.run.updated`/`job.updated`/`agent.task.updated`/`audit.event.created` → `["backtests"]`/`["jobs"]`/`["agent-tasks"]`/`["audit"]`, `resource.changed` → full refresh, reconnect self-heal; +7 vitest → 16/16) · ~~**`/v1/metrics` dashboard**~~ ✅ **PR #69** (`lib/metrics.ts` Prometheus text-exposition parser + `apiGetText`/`useMetrics` 5s poll + `pages/Metrics.tsx` golden-signals / jobs-depth / outbox-lag / lease-age panels + adminOnly `System Metrics` nav item at `/panel/metrics`; +13 vitest → 29/29) · ~~**live-data backtest RUN + Results History**~~ ✅ **PR #72** (`lib/backtest.ts` `["backtests"]` hooks + `pages/BacktestRun.tsx` `?run=`/`?result=` modes + `pages/ResultsHistory.tsx` + `ResultDetail.tsx`; first pages bound to the SSE forward contract; +7 vitest → 36/36). **Remaining candidates:** (a) **Arrange Metrics + Analysis Lab live pages** (bind the remaining SSE keys `["jobs"]`/`["agent-tasks"]`/`["audit"]` via `routes/metric_profile.py` + `routes/agent_lab.py`; history compare/soft-delete affordances ride along); (b) capability activations (role-gated features); (c) first-Admin provisioning dashboard; (d) CP real candidate generation.
 - **TIER 3 — data/ops (deferred):** retention auto-purge, data-queue redelivery, SSE streaming e2e (connection drops), tool-call status shadowing (CR-08 follow-up), `summary["timeframe"]` resolution from market-revision metadata.
 
 See **`docs/POST_V1_KICKOFF.md`** for reuse anchors and the paste-ready resume prompt.

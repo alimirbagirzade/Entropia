@@ -83,9 +83,10 @@ Before stopping a working session, produce **ALL** of the following:
   (INF-12 Slice C follow-up, PR #60 + non-finite fail-closed fix PR #61) + position_size_limits
   min/max cap wiring (INF-12 Slice C follow-up, PR #63) + TIER 2 frontend real-auth
   login/signup/logout (PR #65, MERGED) + TIER 2 frontend SSE live-invalidation
-  (PR #67, MERGED) + TIER 2 frontend /v1/metrics ops dashboard (PR #69, awaiting user
-  merge — CI all green)**. **Overall: ~83% complete** (V1=100%, post-V1 core=84%, frontend=35%).
-  `main` after PR #68 (`5978ba4`; login feat `58781e4` MERGED; SSE feat `5ddb14f` MERGED; metrics feat `d3039e7` on branch feat/post-v1-frontend-metrics awaiting merge; position_size_limits feat `5ef5525`; Kelly feat `3f254bc` / non-finite fail-closed fix `3a92e7d`; VWAP code `d27b2bb`; N-ary code `44099a7`; per-condition code `1c5cca0`; multi-timeframe code `def6c28`; indicator-vs-indicator code `9087c2b`; condition-extensions code `361df4c`; condition-blocks code `8766fae`; risk_based code `43cee29`; Slice C code `671d227`);
+  (PR #67, MERGED) + TIER 2 frontend /v1/metrics ops dashboard (PR #69, MERGED) + TIER 2
+  frontend live-data backtest pages RUN & Results History (PR #72, MERGED)**.
+  **Overall: ~84% complete** (V1=100%, post-V1 core=84%, frontend=45%).
+  `main` after PR #72 (`c322588`; backtest-pages feat `10a0007` MERGED; metrics feat `d3039e7` MERGED; login feat `58781e4` MERGED; SSE feat `5ddb14f` MERGED; position_size_limits feat `5ef5525`; Kelly feat `3f254bc` / non-finite fail-closed fix `3a92e7d`; VWAP code `d27b2bb`; N-ary code `44099a7`; per-condition code `1c5cca0`; multi-timeframe code `def6c28`; indicator-vs-indicator code `9087c2b`; condition-extensions code `361df4c`; condition-blocks code `8766fae`; risk_based code `43cee29`; Slice C code `671d227`);
   alembic head = **`0021_local_auth`** (`human_credentials` + `auth_sessions`;
   Slices A/B/C + follow-ups (a)/(b)/(b2)/(#53)/(c)/(i)/(ii)/(d) + Kelly sizing + position_size_limits need no migration). **1015 tests green** (999 + 15 position_size_limits: 7 clamp unit / 6 per-method / 1 e2e / 1 ENGINE_VERSION ns).
   TIER 2 frontend — real-auth login/signup/logout (PR #65, MERGED): **FRONTEND-ONLY**
@@ -138,6 +139,32 @@ Before stopping a working session, produce **ALL** of the following:
   event → the dashboard POLLS every 5s (`["metrics"]` still swept by `resource.changed`); route reachable
   by URL (scrape endpoint unauthenticated by design), nav item admin-gated. Remaining TIER 2: live-data
   Stage 5/6 pages (bind SSE `EVENT_QUERY_KEYS`) + capability activations + first-Admin provisioning.
+  TIER 2 frontend — live-data backtest pages (PR #72, MERGED): **FRONTEND-ONLY** (backend Stage 5a/5b
+  backtest surface consumed unchanged, no migration, backend test base stays 1015). Binds the FIRST
+  live pages to the SSE forward contract: `/backtest/run` + `/backtest/history` placeholders become
+  real pages → SSE live-invalidation payoff now visible. NEW `lib/backtest.ts`: wire types mirroring
+  backend projections verbatim (`DefaultMainboard`/`BacktestRunAdmission`/`BacktestRun`/
+  `BacktestResultDetail`/`HistoryRow`/`HistoryPage`); `HISTORY_SORTS` (6 canonical `HistorySort` wire
+  values + V18 labels), `KEY_METRIC_COLUMNS` (KEY_METRIC_KEYS order), `TERMINAL_RUN_STATES`;
+  `formatMetricValue` (signed_percent/percent/decimal2/integer; null value renders its availability
+  label, NEVER 0 — L4) + locale-free `formatUtc`; hooks `useDefaultMainboard` (`["mainboard","default"]`),
+  `useBacktestRun` (`["backtests","run",id]`, poll fallback stops on terminal state — SSE primary,
+  INF-11), `useBacktestResult` (immutable, staleTime 5m), `useResultsHistory`
+  (`["backtests","history",sort,cursor]`, keyset cursor, placeholderData keeps prev page); 202
+  mutations `useRequestBacktestRun`/`useRetryBacktestRun` (both invalidate `["backtests"]`); ALL path
+  params `encodeURIComponent`'d (review fix — un-encoded `?result=` could URL-normalize onto another
+  API GET endpoint). NEW `pages/BacktestRun.tsx` (two modes: `?result=` immutable deep-link doc 15
+  §8.5 — History "View" lands here; workbench composition card from `GET /mainboards/default` → RUN
+  admission → `?run=` durable tracking doc 15 §4; failure verbatim + Retry swaps onto the NEW run id;
+  `warning_count` badge). NEW `pages/ResultsHistory.tsx` + `components/ResultDetail.tsx`
+  (server-sorted keyset index — client never re-orders; digest cells; View → `?result=`; summary kv +
+  metrics value/availability table + manifest excerpt + artifact counts). `App.tsx` `REAL_PATHS` set;
+  `nav.ts` UNCHANGED (23 items). NEW shared `test/helpers/apiStub.ts` route-aware fetch double
+  ("<METHOD> <fragment>" keyed); +7 vitest → **frontend 36/36**, typecheck + lint clean, build green.
+  Review: 1 finding (path-param encoding) empirically CONFIRMED + fixed in-commit; 0 CRITICAL/HIGH.
+  Honest boundary: Arrange Metrics (`/backtest/metrics`) + Analysis Lab (`/analysis-lab`) still
+  placeholders (`["jobs"]`/`["agent-tasks"]`/`["audit"]` keys unbound); history compare/soft-delete
+  affordances deferred with them.
   Follow-up (ii) — N-ary reference chain (PR #57): a nested condition's RHS extends from
   a single reference package (#53/#56) to an ORDERED chain of >2 separately-pinned indicator
   packages (`source [cmp] ref0 [cmp] ref1 ...` — the classic `fast > slow > slowest` MA fan;
@@ -314,11 +341,12 @@ Before stopping a working session, produce **ALL** of the following:
   - ~~**formula_based / Kelly sizing**~~ ✅ **LANDED (PR #60 + non-finite fail-closed fix PR #61)** — Kelly criterion honored; `custom_formula` + adaptive/rolling Kelly stay honest `unresolved` (no safe eval / path-dependent look-ahead).
   - ~~**`position_size_limits` (min/max cap) wiring**~~ ✅ **LANDED (PR #63)** — new `_clamp_to_limits` at the `_raw_position_size → _position_size` boundary clamps EVERY sizing method (base/risk_based/Kelly/notional); `ENGINE_VERSION=backtest-engine-v2-position-size-limits`; +15 tests → 1015; no migration. **TIER 1 backend is now DONE → next natural slice is TIER 2 (frontend/infra).**
   
-  **TIER 2 — Frontend + infra (user-facing; login + SSE + /v1/metrics landed → PR #65, #67, #69):**
+  **TIER 2 — Frontend + infra (user-facing; login + SSE + /v1/metrics + live-data backtest pages landed → PR #65, #67, #69, #72):**
   - ✅ **Login / session integration (PR #65)** — real Bearer login/signup/logout wired into the shell (`lib/session.ts` + `lib/auth.ts` + `pages/Login.tsx` + `apiClient.ts` Bearer header + `Layout.tsx` AuthControl).
   - ✅ **SSE live-invalidation (PR #67)** — `frontend/src/lib/sse.ts` stub filled: `EVENT_QUERY_KEYS` maps each SSE taxonomy event → react-query key prefix (`backtest.run.updated`→`["backtests"]`, `job.updated`→`["jobs"]`, `agent.task.updated`→`["agent-tasks"]`, `audit.event.created`→`["audit"]`, `resource.changed`→full refresh) + reconnect self-heal; `connectEvents` signature unchanged; +7 vitest → 16/16. Honest boundary: no live page binds these keys yet (Stage 5/6 pages still placeholders) → payoff arrives with those pages.
-  - ✅ **`/v1/metrics` dashboard (PR #69, awaiting user merge)** — `lib/metrics.ts` Prometheus text-exposition parser + `apiGetText`/`useMetrics` (5s poll) + `pages/Metrics.tsx` (golden-signals/jobs-depth/outbox-lag/lease-age panels) + adminOnly `System Metrics` nav item at `/panel/metrics`; +13 vitest → 29/29; frontend-only, no migration.
-  - **Live-data Stage 5/6 pages (recommended next):** wire RUN / Results History / Arrange Metrics / Analysis Lab to real backend query hooks — binding the SSE `EVENT_QUERY_KEYS` (`["backtests"]`/`["jobs"]`/`["agent-tasks"]`/`["audit"]`) makes SSE live-invalidation payoff visible.
+  - ✅ **`/v1/metrics` dashboard (PR #69, MERGED)** — `lib/metrics.ts` Prometheus text-exposition parser + `apiGetText`/`useMetrics` (5s poll) + `pages/Metrics.tsx` (golden-signals/jobs-depth/outbox-lag/lease-age panels) + adminOnly `System Metrics` nav item at `/panel/metrics`; +13 vitest → 29/29; frontend-only, no migration.
+  - ✅ **Live-data backtest pages (PR #72, MERGED)** — RUN & Backtest Results (`/backtest/run` — admission + `?run=` durable tracking + `?result=` immutable deep-link) + Results History (`/backtest/history` — server sorts + keyset cursor) bound to the SSE `["backtests"]` key via NEW `lib/backtest.ts` hooks; +7 vitest → 36/36; frontend-only, no migration.
+  - **Arrange Metrics + Analysis Lab live pages (recommended next):** bind the remaining SSE keys (`["jobs"]`/`["agent-tasks"]`/`["audit"]`) via `routes/metric_profile.py` + `routes/agent_lab.py`; history compare/soft-delete affordances can ride along.
   - Capability activations (gate new features per user role)
   - Admin provisioning dashboard (first-Admin onboarding)
   

@@ -1,12 +1,23 @@
-import { EM_DASH, formatMetricValue, type BacktestResultDetail } from "@/lib/backtest";
+import {
+  EM_DASH,
+  formatMetricValue,
+  useResultMetrics,
+  type BacktestResultDetail,
+} from "@/lib/backtest";
 
 const hashStyle = { fontFamily: "monospace", fontSize: 12, wordBreak: "break-all" } as const;
 
 // Immutable Result detail (doc 15 §9.4): hydrated ONLY from the result_id
 // projection — never from the current Mainboard form. Values render verbatim;
 // a non-computed metric shows its availability, never a fabricated 0 (L4).
+// The Metrics section binds the profile-hydrated view (doc 17 §9.1): the
+// resolved Arrange Metrics profile filters/orders the persisted rows. While
+// that view loads — or if it fails — the raw persisted rows keep rendering.
 export function ResultDetail({ result }: { result: BacktestResultDetail }) {
   const artifactEntries = Object.entries(result.artifact_counts);
+  const hydrated = useResultMetrics(result.result_id);
+  const profile = hydrated.data?.profile ?? null;
+  const metricRows = hydrated.data?.metrics ?? result.metrics;
   return (
     <section className="card" aria-labelledby="result-detail-h" style={{ marginTop: 18 }}>
       <h3 id="result-detail-h" style={{ marginTop: 0 }}>
@@ -37,7 +48,17 @@ export function ResultDetail({ result }: { result: BacktestResultDetail }) {
       )}
 
       <h4>Metrics</h4>
-      {result.metrics.length === 0 ? (
+      {profile ? (
+        <p className="page-sub" style={{ marginTop: 0 }}>
+          Profile view · {profile.is_personal ? "personal profile" : "system default"}
+          {profile.is_locked ? " · locked" : ""} · registry {profile.registry_version}
+        </p>
+      ) : hydrated.isError ? (
+        <p className="page-sub" style={{ marginTop: 0 }}>
+          Profile view unavailable — showing all persisted metrics.
+        </p>
+      ) : null}
+      {metricRows.length === 0 ? (
         <p className="page-sub">No metric values were persisted for this result.</p>
       ) : (
         <table className="metrics-table">
@@ -49,7 +70,7 @@ export function ResultDetail({ result }: { result: BacktestResultDetail }) {
             </tr>
           </thead>
           <tbody>
-            {result.metrics.map((metric) => (
+            {metricRows.map((metric) => (
               <tr key={metric.key}>
                 <td>{metric.label}</td>
                 <td>{formatMetricValue(metric)}</td>

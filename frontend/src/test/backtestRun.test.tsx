@@ -108,6 +108,21 @@ const RESULT_DETAIL = {
   artifact_counts: { trades: 42, equity_points: 1000 },
 };
 
+// Profile-hydrated metrics view (doc 17 §9.1) the ResultDetail Metrics section
+// binds to; mirrors the persisted rows so the L4 assertions below exercise the
+// HYDRATED path, not the fallback.
+const RESULT_METRICS_VIEW = {
+  result_id: "res_1",
+  profile: {
+    profile_id: "system_default",
+    scope: "system_default",
+    is_personal: false,
+    is_locked: false,
+    registry_version: "v1",
+  },
+  metrics: RESULT_DETAIL.metrics,
+};
+
 function renderPage(initialEntry = "/backtest/run") {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
@@ -158,10 +173,17 @@ describe("RUN & Backtest Results page", () => {
   });
 
   it("deep-links an immutable result via ?result=", async () => {
-    stubApi({ "GET /backtest-results/res_1": RESULT_DETAIL });
+    stubApi({
+      // Route-aware order: the metrics fragment must come first — the detail
+      // fragment is a substring of the metrics URL.
+      "GET /backtest-results/res_1/metrics": RESULT_METRICS_VIEW,
+      "GET /backtest-results/res_1": RESULT_DETAIL,
+    });
     renderPage("/backtest/run?result=res_1");
 
     expect(await screen.findByText("+12.50%")).toBeInTheDocument();
+    // The Metrics section is the profile-hydrated view, not the raw rows.
+    expect(await screen.findByText(/Profile view · system default/)).toBeInTheDocument();
     // A non-computed metric shows its availability, never a fabricated 0 (L4).
     expect(screen.getByText("Not available")).toBeInTheDocument();
     expect(screen.getByText("BTCUSDT")).toBeInTheDocument();

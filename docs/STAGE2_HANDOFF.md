@@ -790,7 +790,48 @@ anchors (exact symbols):
   profile-hydrated `GET /backtest-results/{id}/metrics` binding (ResultDetail rebind) still
   deferred — now the natural next follow-up.
 
-## Next: post-V1 (continued) — TIER 2 (login + SSE + /v1/metrics + backtest pages + Arrange Metrics/Analysis Lab + first-Admin bootstrap + Panel/Logs landed; history compare + capability activations / provisioning dashboard remain)
+## Post-V1 — Frontend history compare/soft-delete + profile-hydrated Result metrics (TIER 2, frontend slice 7) ✅ landed (PR #80, merged → main `8f57151`)
+
+**Seventh TIER 2 (frontend) slice — the last two landed-but-unconsumed backtest surfaces get their
+frontend binding: doc-16 §8.3 compare + §7 soft-delete on Results History, and the doc-17 §9.1
+profile-hydrated `GET /backtest-results/{id}/metrics` projection replaces the raw persisted rows in
+ResultDetail.** The backend surface (`routes/results_history.py` compare/delete +
+`routes/metric_profile.py` result-metrics hydration) had been landed since Stage 5b/5c.
+**Frontend-only — NO backend change, NO migration; backend test base stays 1028.** CI 3/3 green;
+review 0 CRITICAL/HIGH. Reuse anchors (exact symbols):
+- **`frontend/src/lib/backtest.ts`** — NEW wire types `CompareEntry`/`CompareField`/`CompareResponse`
+  (`context.fields{a,b,differs}` + `context_differs`) and `ResultMetricsProfile`/`ResultMetricsView`;
+  NEW hooks: `useCompareResults(pair)` — a READ over two immutable results, POST is only the
+  transport for the id pair (`["backtests","compare",a,b]`, 5m staleTime, pick order preserved) —
+  `useResultMetrics(resultId)` — keyed `["metric-profile","result-metrics",id]`, deliberately NOT
+  `["backtests"]`: the Result rows are immutable and the caller's resolved profile is the only
+  mutable input, so an Arrange Metrics Apply (which invalidates `["metric-profile"]`) sweeps this
+  view; cross-tab profile changes ride the `resource.changed` full refresh — and
+  `useSoftDeleteResult` (`POST /backtest-results/{id}/delete`; no OCC token — the history projection
+  carries no row_version and the command is idempotent + owner/Admin-gated server-side; invalidates
+  `["backtests"]` → the deletion-filtered index drops the row).
+- **`frontend/src/pages/ResultsHistory.tsx`** — compare selection in pick order capped at two
+  (checkbox gated by server `allowed_actions.compare`; columns A/B mirror pick order); `ComparePanel`
+  renders the server context diff VERBATIM (per-field `differs` badge, object values as JSON, warn
+  banner "informational only; neither result is ranked" — RH-09); two-step confirm Delete gated by
+  `allowed_actions.soft_delete` (arm → confirm; deleting a compared row closes the panel); canonical
+  error envelope verbatim.
+- **`frontend/src/components/ResultDetail.tsx`** — the Metrics section now binds `useResultMetrics`:
+  profile caption (personal/system default · locked · registry version); while the hydrated view
+  loads — or if it fails — the raw persisted rows keep rendering with an honest note (L4 preserved:
+  a missing metric is NEVER 0).
+- **Tests** — NEW `test/historyActions.test.tsx` (4: wire body/pick order, selection cap,
+  confirm-step delete + row disappearance, server-gated affordances) + `test/resultMetricsView.test.tsx`
+  (3: rebind + L4 not_computed, system-default caption, persisted-rows fallback) → **frontend 58/58**
+  (51 prior + 7 new); `backtestRun.test.tsx` deep-link test now stubs the metrics route FIRST
+  (apiStub fragment matching is ordered — the detail fragment is a substring of the metrics URL) and
+  asserts the hydrated caption; typecheck + lint clean; build green.
+- **Honest boundaries:** compare is exactly two results (server `min/max_length=2` — no N-way UI) ·
+  soft-delete sends no OCC token (no row_version in the history projection; server accepts optional) ·
+  restore stays the Admin Trash flow (backend Stage 6c landed; the frontend Trash page is still a
+  placeholder) · `["jobs"]` permanent boundary unchanged.
+
+## Next: post-V1 (continued) — TIER 2 (login + SSE + /v1/metrics + backtest pages + Arrange Metrics/Analysis Lab + first-Admin bootstrap + Panel/Logs + history compare/metrics rebind landed; capability activations / provisioning dashboard remain)
 
 **V1 COMPLETE (Stages 0–8, docs 01–22) + Auth/IdP + Parquet Slice A + Backtest Engine Slice B + real indicator compute Slice C + `risk_based` sizing (a) + condition blocks (b) + condition extensions (b2) + two-package indicator-vs-indicator + higher-timeframe resampling (c) + per-condition multi-TF reference (i) + N-ary reference chain (ii) + VWAP directional key (d) + `formula_based` Kelly sizing + `position_size_limits` min/max cap (PR #63) landed (1015 tests).** The **Slice C indicator-compute + position-sizing follow-ups are now EFFECTIVELY COMPLETE — TIER 1 backend is DONE**:
 
@@ -800,7 +841,7 @@ anchors (exact symbols):
 
 **Next candidates** (priority per `docs/POST_V1_KICKOFF.md`):
 - ~~**TIER 1 — `position_size_limits` (min/max cap) wiring**~~ ✅ **PR #63** — `PositionSizeLimits` (min/max caps) now clamps EVERY sizing method via `_clamp_to_limits` at the `_raw_position_size → _position_size` boundary; `ENGINE_VERSION → backtest-engine-v2-position-size-limits`; +15 tests → 1015; no migration. **TIER 1 backend is now EFFECTIVELY COMPLETE** (Kelly + risk_based + condition blocks + multi-TF + N-ary + VWAP + position_size_limits all landed).
-- **TIER 2 — frontend / user-facing (login + SSE landed):** ~~login / session integration~~ ✅ **PR #65** (Bearer session store + standalone `/login` page + signup/logout + role-aware header; `frontend/src/lib/{session,auth}.ts`, `pages/Login.tsx`, `apiClient.ts` Bearer header) · ~~SSE live-invalidation~~ ✅ **PR #67** (`frontend/src/lib/sse.ts` stub filled: `EVENT_QUERY_KEYS` maps `backtest.run.updated`/`job.updated`/`agent.task.updated`/`audit.event.created` → `["backtests"]`/`["jobs"]`/`["agent-tasks"]`/`["audit"]`, `resource.changed` → full refresh, reconnect self-heal; +7 vitest → 16/16) · ~~**`/v1/metrics` dashboard**~~ ✅ **PR #69** (`lib/metrics.ts` Prometheus text-exposition parser + `apiGetText`/`useMetrics` 5s poll + `pages/Metrics.tsx` golden-signals / jobs-depth / outbox-lag / lease-age panels + adminOnly `System Metrics` nav item at `/panel/metrics`; +13 vitest → 29/29) · ~~**live-data backtest RUN + Results History**~~ ✅ **PR #72** (`lib/backtest.ts` `["backtests"]` hooks + `pages/BacktestRun.tsx` `?run=`/`?result=` modes + `pages/ResultsHistory.tsx` + `ResultDetail.tsx`; first pages bound to the SSE forward contract; +7 vitest → 36/36) · ~~**Arrange Metrics + Analysis Lab live pages**~~ ✅ **PR #74** (`lib/metricProfile.ts` + `pages/ArrangeMetrics.tsx` profile editor with OCC Apply/Lock/Unlock; `lib/agentLab.ts` + `pages/AnalysisLab.tsx` — every key under the `["agent-tasks"]` prefix, second SSE key live; If-Match runtime controls; +9 vitest → 45/45) · ~~**Panel / Management / Logs live page**~~ ✅ **PR #78** (`lib/adminPanel.ts` — Management under `["admin"]`, Logs/Audit under the LAST bindable SSE key `["audit"]`; `useAssignRole` OCC `expected_head_revision_id` with role options from the server role-matrix assignable rows; `pages/Panel.tsx` 5 cards; +6 vitest → 51/51). **Remaining candidates:** (a) **history compare/soft-delete + profile-hydrated `GET /backtest-results/{id}/metrics` binding** (ResultDetail rebind; `routes/results_history.py` compare/delete already landed — small natural follow-up); (b) capability activations (role-gated features); (c) first-Admin provisioning **dashboard** UI (backend mechanism ✅ PR #76 — `ENTROPIA_BOOTSTRAP_ADMIN_EMAIL` opt-in; +13 tests → 1028); (d) CP real candidate generation. `["jobs"]` has NO backend list surface — permanent honest boundary.
+- **TIER 2 — frontend / user-facing (login + SSE landed):** ~~login / session integration~~ ✅ **PR #65** (Bearer session store + standalone `/login` page + signup/logout + role-aware header; `frontend/src/lib/{session,auth}.ts`, `pages/Login.tsx`, `apiClient.ts` Bearer header) · ~~SSE live-invalidation~~ ✅ **PR #67** (`frontend/src/lib/sse.ts` stub filled: `EVENT_QUERY_KEYS` maps `backtest.run.updated`/`job.updated`/`agent.task.updated`/`audit.event.created` → `["backtests"]`/`["jobs"]`/`["agent-tasks"]`/`["audit"]`, `resource.changed` → full refresh, reconnect self-heal; +7 vitest → 16/16) · ~~**`/v1/metrics` dashboard**~~ ✅ **PR #69** (`lib/metrics.ts` Prometheus text-exposition parser + `apiGetText`/`useMetrics` 5s poll + `pages/Metrics.tsx` golden-signals / jobs-depth / outbox-lag / lease-age panels + adminOnly `System Metrics` nav item at `/panel/metrics`; +13 vitest → 29/29) · ~~**live-data backtest RUN + Results History**~~ ✅ **PR #72** (`lib/backtest.ts` `["backtests"]` hooks + `pages/BacktestRun.tsx` `?run=`/`?result=` modes + `pages/ResultsHistory.tsx` + `ResultDetail.tsx`; first pages bound to the SSE forward contract; +7 vitest → 36/36) · ~~**Arrange Metrics + Analysis Lab live pages**~~ ✅ **PR #74** (`lib/metricProfile.ts` + `pages/ArrangeMetrics.tsx` profile editor with OCC Apply/Lock/Unlock; `lib/agentLab.ts` + `pages/AnalysisLab.tsx` — every key under the `["agent-tasks"]` prefix, second SSE key live; If-Match runtime controls; +9 vitest → 45/45) · ~~**Panel / Management / Logs live page**~~ ✅ **PR #78** (`lib/adminPanel.ts` — Management under `["admin"]`, Logs/Audit under the LAST bindable SSE key `["audit"]`; `useAssignRole` OCC `expected_head_revision_id` with role options from the server role-matrix assignable rows; `pages/Panel.tsx` 5 cards; +6 vitest → 51/51) · ~~**history compare/soft-delete + profile-hydrated result metrics**~~ ✅ **PR #80** (`lib/backtest.ts` `useCompareResults`/`useResultMetrics`/`useSoftDeleteResult`; `ComparePanel` verbatim context diff — RH-09; ResultDetail rebound to the doc-17 §9.1 hydrated projection with persisted-rows fallback; +7 vitest → 58/58). **Remaining candidates:** (b) capability activations (role-gated features; `routes/capability.py` backend surface); (c) first-Admin provisioning **dashboard** UI (backend mechanism ✅ PR #76 — `ENTROPIA_BOOTSTRAP_ADMIN_EMAIL` opt-in; +13 tests → 1028); (d) CP real candidate generation. `["jobs"]` has NO backend list surface — permanent honest boundary.
 - **TIER 3 — data/ops (deferred):** retention auto-purge, data-queue redelivery, SSE streaming e2e (connection drops), tool-call status shadowing (CR-08 follow-up), `summary["timeframe"]` resolution from market-revision metadata.
 
 See **`docs/POST_V1_KICKOFF.md`** for reuse anchors and the paste-ready resume prompt.

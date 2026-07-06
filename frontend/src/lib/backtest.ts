@@ -138,6 +138,48 @@ export interface HistoryPage {
   sort: string;
 }
 
+// Read-only two-result comparison (doc 16 §8.3). The server flags per-field
+// context differences; it never auto-ranks a "winner" (RH-09) and neither does
+// the client. Field values may be strings or manifest sub-objects — rendered
+// verbatim (objects as JSON), never interpreted.
+export interface CompareEntry {
+  result_id: string;
+  engine_version: string;
+  manifest_hash: string;
+  summary: ResultSummary | null;
+  key_metrics: Record<string, MetricCell | null>;
+}
+
+export interface CompareField {
+  a: unknown;
+  b: unknown;
+  differs: boolean;
+}
+
+export interface CompareResponse {
+  results: CompareEntry[];
+  context: { fields: Record<string, CompareField>; context_differs: boolean };
+  context_differs: boolean;
+}
+
+// Profile-hydrated Result metrics (doc 17 §9.1): the caller's resolved Arrange
+// Metrics profile filters/orders the immutable persisted rows. Presentation
+// only (CR-07) — a selected-but-absent metric arrives as not_computed with a
+// null value, never a fabricated 0 (L4).
+export interface ResultMetricsProfile {
+  profile_id: string;
+  scope: string;
+  is_personal: boolean;
+  is_locked: boolean;
+  registry_version: string;
+}
+
+export interface ResultMetricsView {
+  result_id: string;
+  profile: ResultMetricsProfile;
+  metrics: MetricCell[];
+}
+
 // Canonical server sort keys (backend domain/backtest/history.py::HistorySort)
 // paired with their V18 dropdown labels. The wire enum is authoritative.
 export const HISTORY_SORTS = [
@@ -260,6 +302,37 @@ export function useResultsHistory(sort: HistorySortValue, cursor: string | null)
   });
 }
 
+// Profile-hydrated metrics live under the ["metric-profile"] prefix, NOT
+// ["backtests"]: the Result rows are immutable — the caller's resolved profile
+// is the only mutable input, so an Arrange Metrics Apply (which invalidates
+// ["metric-profile"]) must sweep this view. Cross-tab profile changes ride the
+// SSE resource.changed full refresh (no dedicated metric-profile event).
+export function useResultMetrics(resultId: string | null) {
+  return useQuery({
+    queryKey: ["metric-profile", "result-metrics", resultId],
+    queryFn: () =>
+      api.get<ResultMetricsView>(
+        `/backtest-results/${encodeURIComponent(resultId ?? "")}/metrics`,
+      ),
+    enabled: resultId !== null,
+  });
+}
+
+// Compare is a READ over two immutable results — POST is only the transport
+// for the id pair (doc 16 §8.3). Selection order is preserved: columns A/B
+// mirror the order the user picked, and the client never re-ranks.
+export function useCompareResults(pair: [string, string] | null) {
+  return useQuery({
+    queryKey: ["backtests", "compare", pair?.[0] ?? null, pair?.[1] ?? null],
+    queryFn: () =>
+      api.post<CompareResponse>("/backtest-results/compare", { result_ids: pair }),
+    enabled: pair !== null,
+    // Both inputs are immutable results; the ["backtests"] SSE sweep may still
+    // refetch after run events, which is harmless.
+    staleTime: RESULT_STALE_TIME_MS,
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Mutations (202 admissions — the client never waits on the engine, doc 15 §8.2)
 // ---------------------------------------------------------------------------
@@ -283,6 +356,25 @@ export function useRetryBacktestRun() {
   return useMutation({
     mutationFn: (runId: string) =>
       api.post<BacktestRunAdmission>(`/backtest-runs/${encodeURIComponent(runId)}/retries`),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["backtests"] });
+    },
+  });
+}
+
+// Doc-16 soft-delete affordance (reuses the 5a command server-side). The
+// history row carries no row_version, so no OCC token is sent — the server
+// accepts an optional expected_row_version and the command is idempotent and
+// owner/Admin-gated regardless. The history list filters deleted rows, so the
+// ["backtests"] invalidation makes the row disappear.
+export function useSoftDeleteResult() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (resultId: string) =>
+      api.post<{ result_id: string; deletion_state: string }>(
+        `/backtest-results/${encodeURIComponent(resultId)}/delete`,
+        {},
+      ),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["backtests"] });
     },

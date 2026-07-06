@@ -585,7 +585,50 @@ Stage-1 TODO, so no domain event refreshed the cache. This slice fills the
   forward contract. The remaining TIER 2 candidate (`/v1/metrics` Prometheus-text dashboard) is
   **not** in this slice.
 
-## Next: post-V1 (continued) — TIER 2 frontend (login + SSE landed; /v1/metrics dashboard remains)
+## Post-V1 — Frontend /v1/metrics dashboard (TIER 2, frontend slice 3) ✅ landed (PR #69, awaiting user merge)
+
+**Third TIER 2 (frontend) slice.** The backend already exposes `GET /v1/metrics` as a Prometheus text
+exposition (Stage 8b, `apps/api/routes/metrics.py`, `PlainTextResponse`) — golden signals from the
+in-process registry plus scrape-time operational gauges — but nothing consumed it. This slice adds a
+read-only ops dashboard. **Frontend-only — NO backend change, NO migration; backend test base stays
+1015.** CI: **Frontend + Docker checks green**; backend check re-runs unchanged (frontend-only diff).
+Reuse anchors (exact symbols):
+- **`frontend/src/lib/metrics.ts`** *(new)* — dependency-free Prometheus exposition parser
+  `parsePrometheus(text) → ParsedMetrics` (handles `# TYPE`/`# HELP`, labeled + scalar samples,
+  histogram `_bucket`/`_sum`/`_count` grouped to the base family via `ownerFamily`, `+Inf`/`-Inf`/`NaN`
+  values, backslash/quote label escapes, freeform notes) + `summarizeMetrics(parsed) → MetricsSummary`:
+  the four golden signals (`requestsTotal` traffic, `serverErrors` 5xx, `clientErrors` 4xx, `inFlight`
+  saturation, `avgLatencyMs` = histogram `sum/count`), sorted `jobsDepth` rows + total,
+  `outboxLagSeconds`, `leaseAgeSeconds`, `degraded` (detects the backend's "operational gauges
+  unavailable" DB-down note), `familyCount`; `parseMetricsSummary(text)` convenience. Metric names
+  consumed: `entropia_http_requests_total`, `entropia_http_request_duration_seconds_{bucket,sum,count}`,
+  `entropia_http_requests_in_flight`, `entropia_jobs_depth{queue,status}`, `entropia_outbox_lag_seconds`,
+  `entropia_job_lease_age_seconds`. (Backend emits `# TYPE` but not `# HELP`.)
+- **`frontend/src/lib/apiClient.ts`** — new `apiGetText` / `api.getText`: a raw-text GET for non-JSON
+  endpoints (metrics is `text/plain`, not the JSON envelope). Mirrors `apiRequest`'s auth headers
+  (`Authorization: Bearer` + `X-Actor-Id`); `textError` falls back to the raw body when a non-envelope
+  error is returned. Existing `apiRequest` / `api.{get,post,patch,del}` UNCHANGED.
+- **`frontend/src/lib/hooks.ts`** — new `useMetrics()`: react-query `useQuery` on `["metrics"]`,
+  `refetchInterval` 5s, `queryFn` = `parseMetricsSummary(await api.getText("/metrics"))`. The
+  `["metrics"]` key is also swept by the SSE `resource.changed` catch-all.
+- **`frontend/src/pages/Metrics.tsx`** *(new)* — the dashboard: golden-signal `Stat` tiles, status-class
+  `StatusBadge`s, operational-gauges `kv` list, jobs-depth `.metrics-table`, a degraded banner, and a
+  live/updating indicator. Reuses `Loading`/`ErrorState`/`StatusBadge` + `.card`/`.kv`/`.page-title`;
+  `formatCount`/`formatMs`/`formatSeconds` render non-finite/absent values as an em-dash.
+- **`frontend/src/app/nav.ts` + `App.tsx`** — new **adminOnly** nav item **System Metrics** at
+  `/panel/metrics` (stage 8, under Agent & Admin); `ALL_NAV_ITEMS` 22 → 23 (`test/nav.test.tsx`
+  updated). `App.tsx` adds an explicit `/panel/metrics` route (real `Metrics` page) and filters that
+  path out of the `Placeholder` auto-map. `global.css`: `.metrics-table`.
+- **`frontend/src/test/metrics.test.ts`** *(new, 10)* + **`test/metricsPage.test.tsx`** *(new, 3)* —
+  parser/summary unit (healthy/degraded/empty scrapes, histogram avg 20ms, label escapes via
+  `String.raw`, malformed-line tolerance) + component render via a `vi.stubGlobal("fetch")` double.
+  **Frontend total 29/29** (16 prior + 13 new); typecheck + lint clean; production build green.
+- **Honest boundary:** metrics has **no SSE event**, so the dashboard **polls every 5s** rather than
+  SSE live-invalidating (`["metrics"]` still swept by `resource.changed`). The route is reachable by
+  URL — the `/v1/metrics` scrape endpoint is unauthenticated by design — while the **nav item** is
+  admin-gated (consistent with `/panel`, `/trash`). `# HELP` isn't shown (the backend omits it).
+
+## Next: post-V1 (continued) — TIER 2 frontend (login + SSE + /v1/metrics landed; live-data pages / capability activations / admin provisioning remain)
 
 **V1 COMPLETE (Stages 0–8, docs 01–22) + Auth/IdP + Parquet Slice A + Backtest Engine Slice B + real indicator compute Slice C + `risk_based` sizing (a) + condition blocks (b) + condition extensions (b2) + two-package indicator-vs-indicator + higher-timeframe resampling (c) + per-condition multi-TF reference (i) + N-ary reference chain (ii) + VWAP directional key (d) + `formula_based` Kelly sizing + `position_size_limits` min/max cap (PR #63) landed (1015 tests).** The **Slice C indicator-compute + position-sizing follow-ups are now EFFECTIVELY COMPLETE — TIER 1 backend is DONE**:
 
@@ -595,7 +638,7 @@ Stage-1 TODO, so no domain event refreshed the cache. This slice fills the
 
 **Next candidates** (priority per `docs/POST_V1_KICKOFF.md`):
 - ~~**TIER 1 — `position_size_limits` (min/max cap) wiring**~~ ✅ **PR #63** — `PositionSizeLimits` (min/max caps) now clamps EVERY sizing method via `_clamp_to_limits` at the `_raw_position_size → _position_size` boundary; `ENGINE_VERSION → backtest-engine-v2-position-size-limits`; +15 tests → 1015; no migration. **TIER 1 backend is now EFFECTIVELY COMPLETE** (Kelly + risk_based + condition blocks + multi-TF + N-ary + VWAP + position_size_limits all landed).
-- **TIER 2 — frontend / user-facing (login + SSE landed):** ~~login / session integration~~ ✅ **PR #65** (Bearer session store + standalone `/login` page + signup/logout + role-aware header; `frontend/src/lib/{session,auth}.ts`, `pages/Login.tsx`, `apiClient.ts` Bearer header) · ~~SSE live-invalidation~~ ✅ **PR #67** (`frontend/src/lib/sse.ts` stub filled: `EVENT_QUERY_KEYS` maps `backtest.run.updated`/`job.updated`/`agent.task.updated`/`audit.event.created` → `["backtests"]`/`["jobs"]`/`["agent-tasks"]`/`["audit"]`, `resource.changed` → full refresh, reconnect self-heal; +7 vitest → 16/16). **Remaining candidates:** (a) **`/v1/metrics` dashboard** — `GET /v1/metrics` returns Prometheus-text (`PlainTextResponse`, `apps/api/routes/metrics.py`): exposition parser + golden-signals / jobs-depth / outbox-lag / lease-age panels; (b) capability activations (role-gated features); (c) first-Admin provisioning dashboard; (d) CP real candidate generation.
+- **TIER 2 — frontend / user-facing (login + SSE landed):** ~~login / session integration~~ ✅ **PR #65** (Bearer session store + standalone `/login` page + signup/logout + role-aware header; `frontend/src/lib/{session,auth}.ts`, `pages/Login.tsx`, `apiClient.ts` Bearer header) · ~~SSE live-invalidation~~ ✅ **PR #67** (`frontend/src/lib/sse.ts` stub filled: `EVENT_QUERY_KEYS` maps `backtest.run.updated`/`job.updated`/`agent.task.updated`/`audit.event.created` → `["backtests"]`/`["jobs"]`/`["agent-tasks"]`/`["audit"]`, `resource.changed` → full refresh, reconnect self-heal; +7 vitest → 16/16) · ~~**`/v1/metrics` dashboard**~~ ✅ **PR #69** (`lib/metrics.ts` Prometheus text-exposition parser + `apiGetText`/`useMetrics` 5s poll + `pages/Metrics.tsx` golden-signals / jobs-depth / outbox-lag / lease-age panels + adminOnly `System Metrics` nav item at `/panel/metrics`; +13 vitest → 29/29). **Remaining candidates:** (a) **live-data Stage 5/6 pages** (RUN / Results History / Arrange Metrics / Analysis Lab → bind the SSE `EVENT_QUERY_KEYS` for visible live-invalidation payoff); (b) capability activations (role-gated features); (c) first-Admin provisioning dashboard; (d) CP real candidate generation.
 - **TIER 3 — data/ops (deferred):** retention auto-purge, data-queue redelivery, SSE streaming e2e (connection drops), tool-call status shadowing (CR-08 follow-up), `summary["timeframe"]` resolution from market-revision metadata.
 
 See **`docs/POST_V1_KICKOFF.md`** for reuse anchors and the paste-ready resume prompt.

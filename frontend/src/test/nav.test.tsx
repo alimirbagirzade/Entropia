@@ -3,8 +3,8 @@ import { NAV, ALL_NAV_ITEMS } from "@/app/nav";
 
 describe("navigation skeleton", () => {
   it("exposes every Entropia V18 screen", () => {
-    // 22 canonical screens across the staged build plan.
-    expect(ALL_NAV_ITEMS.length).toBe(22);
+    // 22 canonical V18 screens + 1 post-V1 ops surface (System Metrics, /panel/metrics).
+    expect(ALL_NAV_ITEMS.length).toBe(23);
   });
 
   it("has a Mainboard home route", () => {

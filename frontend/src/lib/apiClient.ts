@@ -63,8 +63,46 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   return payload as T;
 }
 
+// Error bodies stay JSON even on text endpoints; fall back to the raw body when
+// the response is not the canonical envelope.
+function textError(status: number, statusText: string, body: string): ApiError {
+  if (body) {
+    try {
+      const payload = JSON.parse(body) as ApiErrorResponse;
+      const err = payload?.error;
+      if (err?.code) {
+        return new ApiError(status, err.code, err.message ?? statusText, err.details ?? []);
+      }
+    } catch {
+      // Not the JSON envelope (a plain-text error) — fall through to the raw body.
+    }
+  }
+  return new ApiError(status, "UNKNOWN", body || statusText);
+}
+
+// Raw text GET for non-JSON endpoints: GET /v1/metrics returns the Prometheus text
+// exposition, not the JSON envelope. Auth headers mirror apiRequest.
+export async function apiGetText(path: string): Promise<string> {
+  const devActorId = getDevActorId();
+  const sessionToken = getSessionToken();
+  const response = await fetch(`${BASE_URL}${path}`, {
+    method: "GET",
+    headers: {
+      Accept: "text/plain",
+      ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
+      ...(devActorId ? { "X-Actor-Id": devActorId } : {}),
+    },
+  });
+  const text = await response.text();
+  if (!response.ok) {
+    throw textError(response.status, response.statusText, text);
+  }
+  return text;
+}
+
 export const api = {
   get: <T>(path: string) => apiRequest<T>(path, { method: "GET" }),
+  getText: (path: string) => apiGetText(path),
   post: <T>(path: string, body?: unknown) => apiRequest<T>(path, { method: "POST", body }),
   patch: <T>(path: string, body?: unknown) => apiRequest<T>(path, { method: "PATCH", body }),
   del: <T>(path: string) => apiRequest<T>(path, { method: "DELETE" }),

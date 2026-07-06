@@ -156,6 +156,21 @@ a:hover { text-decoration: underline; }
 .kv dt { color: var(--text-dim); }
 .kv dd { margin: 0; }
 
+/* Metrics dashboard — jobs-depth table */
+.metrics-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.metrics-table th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-dim);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0 12px 8px;
+  border-bottom: 1px solid var(--border);
+}
+.metrics-table td { padding: 8px 12px; border-bottom: 1px solid var(--border); }
+.metrics-table tbody tr:last-child td { border-bottom: 0; }
+
 /* Buttons */
 .btn {
   display: inline-flex;

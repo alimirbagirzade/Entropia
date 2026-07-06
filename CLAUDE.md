@@ -84,9 +84,10 @@ Before stopping a working session, produce **ALL** of the following:
   min/max cap wiring (INF-12 Slice C follow-up, PR #63) + TIER 2 frontend real-auth
   login/signup/logout (PR #65, MERGED) + TIER 2 frontend SSE live-invalidation
   (PR #67, MERGED) + TIER 2 frontend /v1/metrics ops dashboard (PR #69, MERGED) + TIER 2
-  frontend live-data backtest pages RUN & Results History (PR #72, MERGED)**.
-  **Overall: ~84% complete** (V1=100%, post-V1 core=84%, frontend=45%).
-  `main` after PR #72 (`c322588`; backtest-pages feat `10a0007` MERGED; metrics feat `d3039e7` MERGED; login feat `58781e4` MERGED; SSE feat `5ddb14f` MERGED; position_size_limits feat `5ef5525`; Kelly feat `3f254bc` / non-finite fail-closed fix `3a92e7d`; VWAP code `d27b2bb`; N-ary code `44099a7`; per-condition code `1c5cca0`; multi-timeframe code `def6c28`; indicator-vs-indicator code `9087c2b`; condition-extensions code `361df4c`; condition-blocks code `8766fae`; risk_based code `43cee29`; Slice C code `671d227`);
+  frontend live-data backtest pages RUN & Results History (PR #72, MERGED) + TIER 2
+  frontend Arrange Metrics & Analysis Lab live pages (PR #74, MERGED)**.
+  **Overall: ~85% complete** (V1=100%, post-V1 core=84%, frontend=55%).
+  `main` after PR #74 (`4969825`; live-pages feat `499bd8b` MERGED; backtest-pages feat `10a0007` MERGED; metrics feat `d3039e7` MERGED; login feat `58781e4` MERGED; SSE feat `5ddb14f` MERGED; position_size_limits feat `5ef5525`; Kelly feat `3f254bc` / non-finite fail-closed fix `3a92e7d`; VWAP code `d27b2bb`; N-ary code `44099a7`; per-condition code `1c5cca0`; multi-timeframe code `def6c28`; indicator-vs-indicator code `9087c2b`; condition-extensions code `361df4c`; condition-blocks code `8766fae`; risk_based code `43cee29`; Slice C code `671d227`);
   alembic head = **`0021_local_auth`** (`human_credentials` + `auth_sessions`;
   Slices A/B/C + follow-ups (a)/(b)/(b2)/(#53)/(c)/(i)/(ii)/(d) + Kelly sizing + position_size_limits need no migration). **1015 tests green** (999 + 15 position_size_limits: 7 clamp unit / 6 per-method / 1 e2e / 1 ENGINE_VERSION ns).
   TIER 2 frontend — real-auth login/signup/logout (PR #65, MERGED): **FRONTEND-ONLY**
@@ -165,6 +166,37 @@ Before stopping a working session, produce **ALL** of the following:
   Honest boundary: Arrange Metrics (`/backtest/metrics`) + Analysis Lab (`/analysis-lab`) still
   placeholders (`["jobs"]`/`["agent-tasks"]`/`["audit"]` keys unbound); history compare/soft-delete
   affordances deferred with them.
+  TIER 2 frontend — Arrange Metrics & Analysis Lab live pages (PR #74, MERGED): **FRONTEND-ONLY**
+  (backend `routes/metric_profile.py` + `routes/agent_lab.py` consumed unchanged, no migration,
+  backend test base stays 1015). The last two placeholders with a full backend surface become live
+  pages; every Analysis Lab query key is prefixed `["agent-tasks"]` → the PR #67 `agent.task.updated`
+  map (SECOND SSE forward-contract key) now sweeps live pages. NEW `lib/metricProfile.ts` (wire types
+  `MetricDefinition`/`MetricRegistry`/`ResolvedMetricProfile` incl. `editable_profile_id` — 
+  `"system_default"` until the first Apply forks a personal root — /`MetricProfileRevision` with
+  server-derived `reason`; hooks `useMetricDefinitions` `["metric-definitions"]` 5m staleTime +
+  `useResolvedMetricProfile` `["metric-profile","resolved"]`; `useApplyMetricProfile` — Apply /
+  Apply & Lock / pure-Unlock are ALL the same append POST with `expected_profile_revision_id` OCC
+  guard, 409 verbatim; presentation-only CR-07). NEW `pages/ArrangeMetrics.tsx` (registry table +
+  resolved selection; future/experimental never checkable; locked profile → edits disabled, pure
+  Unlock only; draft re-seeds on every server head move; empty selection blocks Apply). NEW
+  `lib/agentLab.ts` (wire types `AgentRuntime`/`AgentTaskCard`/`AgentOverview`/`AgentTaskDetail`/
+  `HypothesisCard` + `DirectiveAdmission`/`LabMessageResponse`/`RuntimeControlAccepted`; hooks
+  `useAgentOverview` 15s poll fallback INF-11 / `useAgentTasks` keyset / `useAgentTask` /
+  `useHypotheses` — ALL under `["agent-tasks"]`; 202 mutations `useQueueDirective`
+  (`DIRECTIVE_PRIORITIES=normal|high`, `autonomous` never human-selectable), `useSendLabMessage`,
+  `usePauseRuntime`/`useResumeRuntime`/`useStopRun` with runtime `row_version` as `If-Match` OCC
+  token via `postWithIfMatch`). NEW `pages/AnalysisLab.tsx` (`RuntimeCard` pause/resume/stop — stop
+  passes the active TASK id, run id ≡ task id: backend `stop_run` does `get_task(session, run_id)`;
+  `QueueCard` + `TaskDetailCard` checkpoints/directives; `DirectiveCard` composers with
+  `delivery_policy` echo; `HypothesesCard`; 403 envelope verbatim for non-Admin/Supervisor).
+  `App.tsx` `REAL_PATHS` 4→6; `nav.ts` UNCHANGED (23 items). +9 vitest (4 arrangeMetrics + 5
+  analysisLab, apiStub reuse) → **frontend 45/45**, typecheck + lint clean, build green. Honest
+  boundary: no dedicated SSE event for metric-profile changes (only `resource.changed` full refresh;
+  Apply invalidates `["metric-profile"]` same-tab); role-gated `GET /agent-events/stream` NOT wired
+  as a second EventSource; task/hypothesis pagination past page 1 + status-filter UI deferred;
+  `GET /backtest-results/{id}/metrics` (profile-hydrated Result view) NOT yet consumed — ResultDetail
+  still renders raw persisted rows (natural follow-up); `["audit"]` still unbound (Panel/Logs) and
+  `["jobs"]` has NO backend list surface at all; history compare/soft-delete still deferred.
   Follow-up (ii) — N-ary reference chain (PR #57): a nested condition's RHS extends from
   a single reference package (#53/#56) to an ORDERED chain of >2 separately-pinned indicator
   packages (`source [cmp] ref0 [cmp] ref1 ...` — the classic `fast > slow > slowest` MA fan;
@@ -341,12 +373,13 @@ Before stopping a working session, produce **ALL** of the following:
   - ~~**formula_based / Kelly sizing**~~ ✅ **LANDED (PR #60 + non-finite fail-closed fix PR #61)** — Kelly criterion honored; `custom_formula` + adaptive/rolling Kelly stay honest `unresolved` (no safe eval / path-dependent look-ahead).
   - ~~**`position_size_limits` (min/max cap) wiring**~~ ✅ **LANDED (PR #63)** — new `_clamp_to_limits` at the `_raw_position_size → _position_size` boundary clamps EVERY sizing method (base/risk_based/Kelly/notional); `ENGINE_VERSION=backtest-engine-v2-position-size-limits`; +15 tests → 1015; no migration. **TIER 1 backend is now DONE → next natural slice is TIER 2 (frontend/infra).**
   
-  **TIER 2 — Frontend + infra (user-facing; login + SSE + /v1/metrics + live-data backtest pages landed → PR #65, #67, #69, #72):**
+  **TIER 2 — Frontend + infra (user-facing; login + SSE + /v1/metrics + backtest pages + Arrange Metrics/Analysis Lab landed → PR #65, #67, #69, #72, #74):**
   - ✅ **Login / session integration (PR #65)** — real Bearer login/signup/logout wired into the shell (`lib/session.ts` + `lib/auth.ts` + `pages/Login.tsx` + `apiClient.ts` Bearer header + `Layout.tsx` AuthControl).
   - ✅ **SSE live-invalidation (PR #67)** — `frontend/src/lib/sse.ts` stub filled: `EVENT_QUERY_KEYS` maps each SSE taxonomy event → react-query key prefix (`backtest.run.updated`→`["backtests"]`, `job.updated`→`["jobs"]`, `agent.task.updated`→`["agent-tasks"]`, `audit.event.created`→`["audit"]`, `resource.changed`→full refresh) + reconnect self-heal; `connectEvents` signature unchanged; +7 vitest → 16/16. Honest boundary: no live page binds these keys yet (Stage 5/6 pages still placeholders) → payoff arrives with those pages.
   - ✅ **`/v1/metrics` dashboard (PR #69, MERGED)** — `lib/metrics.ts` Prometheus text-exposition parser + `apiGetText`/`useMetrics` (5s poll) + `pages/Metrics.tsx` (golden-signals/jobs-depth/outbox-lag/lease-age panels) + adminOnly `System Metrics` nav item at `/panel/metrics`; +13 vitest → 29/29; frontend-only, no migration.
   - ✅ **Live-data backtest pages (PR #72, MERGED)** — RUN & Backtest Results (`/backtest/run` — admission + `?run=` durable tracking + `?result=` immutable deep-link) + Results History (`/backtest/history` — server sorts + keyset cursor) bound to the SSE `["backtests"]` key via NEW `lib/backtest.ts` hooks; +7 vitest → 36/36; frontend-only, no migration.
-  - **Arrange Metrics + Analysis Lab live pages (recommended next):** bind the remaining SSE keys (`["jobs"]`/`["agent-tasks"]`/`["audit"]`) via `routes/metric_profile.py` + `routes/agent_lab.py`; history compare/soft-delete affordances can ride along.
+  - ✅ **Arrange Metrics + Analysis Lab live pages (PR #74, MERGED)** — `/backtest/metrics` profile editor (OCC Apply/Lock/Unlock via `lib/metricProfile.ts`) + `/analysis-lab` agent workspace (`lib/agentLab.ts` — every key under `["agent-tasks"]` → second SSE key live; If-Match runtime controls); +9 vitest → 45/45; frontend-only, no migration.
+  - **Panel / Management / Logs live page (recommended next):** bind the LAST bindable SSE key `["audit"]` via `routes/admin_panel.py` (`/admin/users` + role PATCH, `/admin/system-actors`, `/admin/role-matrix`, `/admin/logs`) + `routes/audit.py` (`/audit-events`). NOTE: `["jobs"]` has NO backend list surface (job state only via run projections + /v1/metrics jobs-depth) — leave as honest boundary. History compare/soft-delete + profile-hydrated `GET /backtest-results/{id}/metrics` binding (ResultDetail rebind) can ride along.
   - Capability activations (gate new features per user role)
   - Admin provisioning dashboard (first-Admin onboarding)
   

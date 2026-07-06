@@ -754,7 +754,43 @@ migration, NO new tables — alembic head stays `0021_local_auth`; `ENGINE_VERSI
   slice) · bootstrap applies at signup time only; it does NOT retro-promote an existing account
   (operator re-creates or uses a future admin tool).
 
-## Next: post-V1 (continued) — TIER 2 (login + SSE + /v1/metrics + backtest pages + Arrange Metrics/Analysis Lab + first-Admin bootstrap landed; Panel/Logs live page / capability activations remain)
+## Post-V1 — Frontend live-data Panel / Management / Logs page (TIER 2, frontend slice 6) ✅ landed (PR #78, merged → main `2a8de9e`)
+
+**Sixth TIER 2 (frontend) slice — the `/panel` placeholder becomes the real Panel / Management /
+Logs page, and the LAST bindable SSE forward-contract key `["audit"]` gets its first bound page.**
+Panel / Management / Logs (Stage 6b, doc 19) was a Stage-0 placeholder; its whole backend surface
+(`routes/admin_panel.py` `/admin/users` + role PATCH + `/admin/system-actors` + `/admin/role-matrix`
++ `/admin/logs` and `routes/audit.py` `/audit-events`) had been landed since PR #26. With this
+slice `audit.event.created` (PR #67 map) now sweeps a live page. **Frontend-only — NO backend
+change, NO migration; backend test base stays 1028.** CI green; review 0 CRITICAL/HIGH. Reuse
+anchors (exact symbols):
+- **`frontend/src/lib/adminPanel.ts`** *(new)* — Management reads under the `["admin"]` prefix:
+  `useRegisteredUsers` (keyset cursor, `placeholderData`), `useSystemActors`, `useRoleMatrix`
+  (5m staleTime — versioned policy config). Logs/Audit reads under the `["audit"]` SSE prefix:
+  `useAdminLogs` (filters `family`/`severity`/`actor_type`/`q`/`correlation_id` — an empty filter
+  param is NEVER sent), `useLogEvent` detail, `useAuditEvents` raw stream. Mutation
+  `useAssignRole` → `PATCH /admin/users/{id}/role` with the OCC guard
+  `expected_head_revision_id = user.version` (a stale tab gets the 409 envelope verbatim); the
+  offered role list comes from the server role-matrix ASSIGNABLE rows — never a hard-coded client
+  list; invalidates `["admin"]` + `["audit"]` (the command emits an audit event).
+  `LOG_FAMILIES`/`LOG_SEVERITIES`/`LOG_ACTOR_TYPES` mirror the server taxonomy verbatim.
+- **`frontend/src/pages/Panel.tsx`** *(new)* — 5 cards: `UsersCard` (registry + inline role
+  assignment), `SystemActorsCard`, `RoleMatrixCard` (grants grid + `policy_revision`), `LogsCard`
+  (filtered list + detail drill-down + correlation-chain link), `AuditStreamCard` (raw append-only
+  stream). Forward-only cursor-stack pagination throughout; a non-Admin sees the 403 envelope
+  verbatim via `ErrorState`.
+- **`App.tsx`** — `REAL_PATHS` 6 → 7 (`/panel`); `nav.ts` UNCHANGED (23 items).
+- **`test/panel.test.tsx`** *(new, 6)* — `apiStub.ts` reuse; role-assignment OCC payload assertion,
+  filter-param hygiene, 403 state — **frontend 51/51** (45 prior + 6 new); typecheck + lint clean;
+  build green.
+- **Honest boundaries:** `["jobs"]` has NO backend list surface — a PERMANENT honest boundary (job
+  state is visible only through run projections + the /v1/metrics jobs-depth gauge) ·
+  users/system-actors have no dedicated SSE event (their own mutations invalidate; the
+  `resource.changed` full refresh sweeps the rest) · history compare/soft-delete + the
+  profile-hydrated `GET /backtest-results/{id}/metrics` binding (ResultDetail rebind) still
+  deferred — now the natural next follow-up.
+
+## Next: post-V1 (continued) — TIER 2 (login + SSE + /v1/metrics + backtest pages + Arrange Metrics/Analysis Lab + first-Admin bootstrap + Panel/Logs landed; history compare + capability activations / provisioning dashboard remain)
 
 **V1 COMPLETE (Stages 0–8, docs 01–22) + Auth/IdP + Parquet Slice A + Backtest Engine Slice B + real indicator compute Slice C + `risk_based` sizing (a) + condition blocks (b) + condition extensions (b2) + two-package indicator-vs-indicator + higher-timeframe resampling (c) + per-condition multi-TF reference (i) + N-ary reference chain (ii) + VWAP directional key (d) + `formula_based` Kelly sizing + `position_size_limits` min/max cap (PR #63) landed (1015 tests).** The **Slice C indicator-compute + position-sizing follow-ups are now EFFECTIVELY COMPLETE — TIER 1 backend is DONE**:
 
@@ -764,7 +800,7 @@ migration, NO new tables — alembic head stays `0021_local_auth`; `ENGINE_VERSI
 
 **Next candidates** (priority per `docs/POST_V1_KICKOFF.md`):
 - ~~**TIER 1 — `position_size_limits` (min/max cap) wiring**~~ ✅ **PR #63** — `PositionSizeLimits` (min/max caps) now clamps EVERY sizing method via `_clamp_to_limits` at the `_raw_position_size → _position_size` boundary; `ENGINE_VERSION → backtest-engine-v2-position-size-limits`; +15 tests → 1015; no migration. **TIER 1 backend is now EFFECTIVELY COMPLETE** (Kelly + risk_based + condition blocks + multi-TF + N-ary + VWAP + position_size_limits all landed).
-- **TIER 2 — frontend / user-facing (login + SSE landed):** ~~login / session integration~~ ✅ **PR #65** (Bearer session store + standalone `/login` page + signup/logout + role-aware header; `frontend/src/lib/{session,auth}.ts`, `pages/Login.tsx`, `apiClient.ts` Bearer header) · ~~SSE live-invalidation~~ ✅ **PR #67** (`frontend/src/lib/sse.ts` stub filled: `EVENT_QUERY_KEYS` maps `backtest.run.updated`/`job.updated`/`agent.task.updated`/`audit.event.created` → `["backtests"]`/`["jobs"]`/`["agent-tasks"]`/`["audit"]`, `resource.changed` → full refresh, reconnect self-heal; +7 vitest → 16/16) · ~~**`/v1/metrics` dashboard**~~ ✅ **PR #69** (`lib/metrics.ts` Prometheus text-exposition parser + `apiGetText`/`useMetrics` 5s poll + `pages/Metrics.tsx` golden-signals / jobs-depth / outbox-lag / lease-age panels + adminOnly `System Metrics` nav item at `/panel/metrics`; +13 vitest → 29/29) · ~~**live-data backtest RUN + Results History**~~ ✅ **PR #72** (`lib/backtest.ts` `["backtests"]` hooks + `pages/BacktestRun.tsx` `?run=`/`?result=` modes + `pages/ResultsHistory.tsx` + `ResultDetail.tsx`; first pages bound to the SSE forward contract; +7 vitest → 36/36) · ~~**Arrange Metrics + Analysis Lab live pages**~~ ✅ **PR #74** (`lib/metricProfile.ts` + `pages/ArrangeMetrics.tsx` profile editor with OCC Apply/Lock/Unlock; `lib/agentLab.ts` + `pages/AnalysisLab.tsx` — every key under the `["agent-tasks"]` prefix, second SSE key live; If-Match runtime controls; +9 vitest → 45/45). **Remaining candidates:** (a) **Panel / Management / Logs live page** (binds the LAST bindable SSE key `["audit"]` via `routes/admin_panel.py` `/admin/users|system-actors|role-matrix|logs` + `routes/audit.py` `/audit-events`; `["jobs"]` has NO backend list surface — honest boundary; history compare/soft-delete + profile-hydrated `GET /backtest-results/{id}/metrics` binding can ride along); (b) capability activations (role-gated features); (c) ~~first-Admin provisioning~~ ✅ **backend mechanism PR #76** (`ENTROPIA_BOOTSTRAP_ADMIN_EMAIL` opt-in; +13 tests → 1028; the provisioning **dashboard** UI remains a later frontend slice); (d) CP real candidate generation.
+- **TIER 2 — frontend / user-facing (login + SSE landed):** ~~login / session integration~~ ✅ **PR #65** (Bearer session store + standalone `/login` page + signup/logout + role-aware header; `frontend/src/lib/{session,auth}.ts`, `pages/Login.tsx`, `apiClient.ts` Bearer header) · ~~SSE live-invalidation~~ ✅ **PR #67** (`frontend/src/lib/sse.ts` stub filled: `EVENT_QUERY_KEYS` maps `backtest.run.updated`/`job.updated`/`agent.task.updated`/`audit.event.created` → `["backtests"]`/`["jobs"]`/`["agent-tasks"]`/`["audit"]`, `resource.changed` → full refresh, reconnect self-heal; +7 vitest → 16/16) · ~~**`/v1/metrics` dashboard**~~ ✅ **PR #69** (`lib/metrics.ts` Prometheus text-exposition parser + `apiGetText`/`useMetrics` 5s poll + `pages/Metrics.tsx` golden-signals / jobs-depth / outbox-lag / lease-age panels + adminOnly `System Metrics` nav item at `/panel/metrics`; +13 vitest → 29/29) · ~~**live-data backtest RUN + Results History**~~ ✅ **PR #72** (`lib/backtest.ts` `["backtests"]` hooks + `pages/BacktestRun.tsx` `?run=`/`?result=` modes + `pages/ResultsHistory.tsx` + `ResultDetail.tsx`; first pages bound to the SSE forward contract; +7 vitest → 36/36) · ~~**Arrange Metrics + Analysis Lab live pages**~~ ✅ **PR #74** (`lib/metricProfile.ts` + `pages/ArrangeMetrics.tsx` profile editor with OCC Apply/Lock/Unlock; `lib/agentLab.ts` + `pages/AnalysisLab.tsx` — every key under the `["agent-tasks"]` prefix, second SSE key live; If-Match runtime controls; +9 vitest → 45/45) · ~~**Panel / Management / Logs live page**~~ ✅ **PR #78** (`lib/adminPanel.ts` — Management under `["admin"]`, Logs/Audit under the LAST bindable SSE key `["audit"]`; `useAssignRole` OCC `expected_head_revision_id` with role options from the server role-matrix assignable rows; `pages/Panel.tsx` 5 cards; +6 vitest → 51/51). **Remaining candidates:** (a) **history compare/soft-delete + profile-hydrated `GET /backtest-results/{id}/metrics` binding** (ResultDetail rebind; `routes/results_history.py` compare/delete already landed — small natural follow-up); (b) capability activations (role-gated features); (c) first-Admin provisioning **dashboard** UI (backend mechanism ✅ PR #76 — `ENTROPIA_BOOTSTRAP_ADMIN_EMAIL` opt-in; +13 tests → 1028); (d) CP real candidate generation. `["jobs"]` has NO backend list surface — permanent honest boundary.
 - **TIER 3 — data/ops (deferred):** retention auto-purge, data-queue redelivery, SSE streaming e2e (connection drops), tool-call status shadowing (CR-08 follow-up), `summary["timeframe"]` resolution from market-revision metadata.
 
 See **`docs/POST_V1_KICKOFF.md`** for reuse anchors and the paste-ready resume prompt.

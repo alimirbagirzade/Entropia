@@ -3,6 +3,46 @@
 > **Amaç:** V1 kapandı (Stage 0–8 COMPLETE). Bu doküman post-V1 durumunu, aday iş listesini
 > ve temiz oturumda yapıştırılacak resume prompt'u içerir.
 
+## Durum (2026-07-06, TIER 2 frontend — Panel / Management / Logs canlı sayfası; PR #78 MERGED)
+
+> **Altıncı TIER 2 (frontend) slice — Panel / Management / Logs canlı sayfası landed (PR #78,
+> merged → main `2a8de9e`; CI yeşil; review 0 CRITICAL/HIGH).** `/panel` placeholder'ı gerçek
+> sayfa oldu; **SON bağlanabilir SSE forward-contract key'i `["audit"]` ilk bağlı sayfasını aldı**
+> — `audit.event.created` (PR #67 map'i) artık canlı sayfayı süpürüyor. Backend yüzeyi PR #26'dan
+> beri hazırdı (`routes/admin_panel.py` + `routes/audit.py`).
+> **FRONTEND-ONLY — backend değişmedi, migration YOK, backend test tabanı 1028 sabit.** alembic
+> head hâlâ `0021_local_auth`; backend `ENGINE_VERSION` hâlâ
+> `backtest-engine-v2-position-size-limits`.
+> **Reuse anchor'ları (kesin semboller):**
+> - **`frontend/src/lib/adminPanel.ts`** *(YENİ)* — Management okumaları `["admin"]` prefix'inde:
+>   `useRegisteredUsers` (keyset cursor, `placeholderData`), `useSystemActors`, `useRoleMatrix`
+>   (5dk staleTime — versiyonlu policy config). Logs/Audit okumaları `["audit"]` SSE prefix'inde:
+>   `useAdminLogs` (family/severity/actor_type/q/correlation_id filtreleri — boş filtre
+>   parametresi ASLA gönderilmez), `useLogEvent` detay, `useAuditEvents` ham akış. Mutation
+>   `useAssignRole` → `PATCH /admin/users/{id}/role`, OCC guard
+>   `expected_head_revision_id = user.version` (stale tab 409 zarfını verbatim görür); rol
+>   seçenekleri server role-matrix'in ASSIGNABLE satırlarından — asla hard-coded client listesi
+>   değil; `["admin"]` + `["audit"]` invalidate (komut audit event üretir).
+>   `LOG_FAMILIES`/`LOG_SEVERITIES`/`LOG_ACTOR_TYPES` server taksonomisinin birebir aynası.
+> - **`frontend/src/pages/Panel.tsx`** *(YENİ)* — 5 kart: `UsersCard` (registry + satır içi rol
+>   atama), `SystemActorsCard`, `RoleMatrixCard` (grant grid'i + `policy_revision`), `LogsCard`
+>   (filtreli liste + detay + correlation-chain linki), `AuditStreamCard` (ham append-only akış).
+>   Forward-only cursor-stack pagination; Admin olmayan 403 zarfını `ErrorState` ile verbatim
+>   görür.
+> - **`App.tsx`** — `REAL_PATHS` 6 → 7 (`/panel`); `nav.ts` DEĞİŞMEDİ (23 öğe).
+> - **`test/panel.test.tsx`** *(YENİ, 6)* — apiStub reuse; OCC payload assertion'ı, filtre-param
+>   hijyeni, 403 — **frontend 51/51** (45 + 6); typecheck + lint temiz; build yeşil.
+> **Dürüst sınır:** `["jobs"]` için backend liste yüzeyi HİÇ yok — KALICI dürüst sınır (job
+> durumu run projeksiyonları + /v1/metrics jobs-depth'te) · users/system-actors'ın özel SSE
+> event'i yok (kendi mutation'ları invalidate eder; kalanını `resource.changed` full refresh
+> süpürür) · history compare/soft-delete + profil-hidrasyonlu
+> `GET /backtest-results/{id}/metrics` binding'i (ResultDetail rebind) hâlâ ertelendi — artık
+> doğal sıradaki follow-up.
+> **Sıradaki doğal slice:** (a) history compare/soft-delete + profil-hidrasyonlu Result metrics
+> binding'i (ResultDetail rebind; `routes/results_history.py` compare/delete backend'de landed)
+> VEYA (b) capability aktivasyonları VEYA (c) first-Admin provisioning DASHBOARD'u (backend
+> mekanizması PR #76'da). Aşağıdaki first-Admin bootstrap (PR #76) bloğu ve öncesi tarihsel.
+
 ## Durum (2026-07-06, first-Admin bootstrap provisioning — TIER 2 BACKEND slice; PR #76 MERGED)
 
 > **first-Admin bootstrap provisioning landed (PR #76, merged → main `1771f14`; CI yeşil; review
@@ -691,34 +731,35 @@ Entropia — post-V1 TIER 2. Backend TIER 1 EFEKTİF TAMAM (V1 + Auth/IdP #38 + 
 bar-replay B #43 + indikatör compute C #45 + risk_based #47 + condition blocks #49 + extensions
 #51 + indicator-vs-indicator #53 + multi-TF #55 + per-condition-TF #56 + N-ary #57 + VWAP #58 +
 Kelly #60/#61 + position_size_limits #63 — HEPSİ MERGED). FRONTEND landed (hepsi MERGED):
-real-auth login/signup/logout (PR #65) + SSE live-invalidation (PR #67) + /v1/metrics ops
-dashboard (PR #69) + canlı-veri backtest sayfaları (PR #72) + Arrange Metrics & Analysis Lab
-(PR #74 — tüm lab key'leri ["agent-tasks"] → ikinci SSE key'i canlı). YENİ BACKEND: first-Admin
-bootstrap provisioning (PR #76 MERGED — ENTROPIA_BOOTSTRAP_ADMIN_EMAIL opt-in; aktif Admin yokken
-eşleşen signup → Admin, aksi fail-closed; advisory-lock (identity_repo.lock_admin_count)
-race-safe; user.admin_bootstrapped audit + admin_bootstrapped outbox AYNI tx; route şemasında
-role alanı YOK → client'tan escalation yapısal imkânsız; migration YOK, alembic head
-0021_local_auth SABİT; backend testler 1015 → 1028).
+real-auth login/signup/logout (#65) + SSE live-invalidation (#67) + /v1/metrics ops dashboard
+(#69) + canlı-veri backtest sayfaları (#72) + Arrange Metrics & Analysis Lab (#74 — tüm lab
+key'leri ["agent-tasks"]) + Panel / Management / Logs (#78 — SON bağlanabilir SSE key'i
+["audit"] bağlandı: useAdminLogs/useLogEvent/useAuditEvents ["audit"] prefix'inde,
+audit.event.created canlı sayfayı süpürür; Management ["admin"] altında; useAssignRole PATCH OCC
+expected_head_revision_id=user.version, rol seçenekleri server role-matrix'in assignable
+satırlarından; pages/Panel.tsx 5 kart; frontend 45→51 vitest). BACKEND: first-Admin bootstrap
+provisioning (#76 — ENTROPIA_BOOTSTRAP_ADMIN_EMAIL opt-in; migration YOK, alembic head
+0021_local_auth SABİT; backend testler 1028).
 
 ÖNCE DOĞRULA (stale-by-default): git fetch && git log --oneline origin/main -6 && gh pr list
---state all -L 8. main = 1771f14 (Merge #76) + kapanış docs PR'ı merge sonrası ileri olmalı
+--state all -L 8. main = 2a8de9e (Merge #78) + kapanış docs PR'ı merge sonrası ileri olmalı
 (açıksa önce kullanıcıdan merge iste). alembic head 0021_local_auth; backend ENGINE_VERSION =
 backtest-engine-v2-position-size-limits. FRONTEND doğrula (yeni branch'i MUTLAKA origin/main'den
 aç — local stale olabilir): cd frontend && npm run typecheck && npm run lint && npm test &&
-npm run build (45/45 geçmeli).
+npm run build (51/51 geçmeli).
 
-ÖNCE OKU (authority): docs/POST_V1_KICKOFF.md (en üst Durum bloğu — PR #76) + docs/STAGE2_HANDOFF.md
-("first-Admin bootstrap provisioning ... landed (PR #76)" + "Next"). Landed yüzeyleri TÜKET,
+ÖNCE OKU (authority): docs/POST_V1_KICKOFF.md (en üst Durum bloğu — PR #78) + docs/STAGE2_HANDOFF.md
+("Panel / Management / Logs page ... landed (PR #78)" + "Next"). Landed yüzeyleri TÜKET,
 yeniden yazma: Auth (lib/session.ts + lib/auth.ts + apiClient Bearer + pages/Login.tsx); SSE
 (lib/sse.ts EVENT_QUERY_KEYS + connectEvents Layout mount); Metrics (lib/metrics.ts + useMetrics
 5s poll + pages/Metrics.tsx); Backtest (lib/backtest.ts ["backtests"] hook'ları +
 formatMetricValue/formatUtc + pages/BacktestRun.tsx ?run=/?result= + pages/ResultsHistory.tsx +
 components/ResultDetail.tsx); Arrange Metrics + Analysis Lab (lib/metricProfile.ts OCC Apply +
 lib/agentLab.ts ["agent-tasks"] hook'ları + If-Match kontrolleri + pages/ArrangeMetrics.tsx +
-pages/AnalysisLab.tsx); test/helpers/apiStub.ts route-aware fetch double — yeni sayfa testleri
-için BUNU reuse et. Backend bootstrap anchor'ları: application/commands/auth.py
-bootstrap_admin_matches + sign_up bootstrap branch; config/settings.py bootstrap_admin_email;
-apps/api/routes/auth.py settings passthrough.
+pages/AnalysisLab.tsx); Panel/Logs (lib/adminPanel.ts ["admin"]+["audit"] hook'ları +
+useAssignRole OCC + pages/Panel.tsx 5 kart); test/helpers/apiStub.ts route-aware fetch double
+("<METHOD> <fragment>" sıralı eşleşme — detay route'u liste route'undan ÖNCE yaz) — yeni sayfa
+testleri için BUNU reuse et.
 
 FRONTEND STACK: Vite 8 + React 18 + react-router 6 + @tanstack/react-query 5 + react-hook-form +
 vitest/jsdom + @testing-library. Alias @ = src; kök frontend/src/. Node >=20.19. ESLint tseslint
@@ -726,25 +767,24 @@ recommended (type-checked DEĞİL → no-floating-promises YOK; no-explicit-any 
 invalidateQueries({queryKey}) object-form. tsconfig: noUncheckedIndexedAccess +
 exactOptionalPropertyTypes KAPALI.
 
-SIRADAKİ İŞ — kalan TIER 2 frontend adayları (BAŞLARKEN kullanıcıyla hangisi diye TEYİT ET):
-- (a) Panel / Management / Logs canlı sayfası (/panel, adminOnly) — routes/admin_panel.py
-  (/admin/users GET + /admin/users/{id}/role PATCH + /admin/system-actors + /admin/role-matrix +
-  /admin/logs + /admin/logs/{event_id}) + routes/audit.py (/audit-events) → SON bağlanabilir SSE
-  key'i ["audit"] bağlanır. DİKKAT: ["jobs"] için backend liste yüzeyi YOK (job durumu run
-  projeksiyonları + /v1/metrics jobs-depth'te) — dürüst sınır olarak bırak. History
-  compare/soft-delete (routes/results_history.py) + profil-hidrasyonlu
-  GET /backtest-results/{id}/metrics binding'i (ResultDetail rebind) yanında gidebilir.
-  (ÖNERİLEN — PR #74'ün doğal devamı.)
+SIRADAKİ İŞ — kalan TIER 2 adayları (BAŞLARKEN kullanıcıyla hangisi diye TEYİT ET):
+- (a) History compare/soft-delete + profil-hidrasyonlu GET /backtest-results/{id}/metrics
+  binding'i (ResultDetail rebind) — routes/results_history.py compare/delete backend'de zaten
+  landed; küçük doğal follow-up. (ÖNERİLEN — PR #78'in doğal devamı.)
 - (b) capability aktivasyonları (role-gated features), (c) first-Admin provisioning DASHBOARD'u
   (backend mekanizması PR #76'da landed — bu yalnız UI).
+DİKKAT (kalıcı dürüst sınırlar): ["jobs"] için backend liste yüzeyi YOK (run projeksiyonları +
+/v1/metrics jobs-depth); users/system-actors'ın özel SSE event'i yok (kendi mutation'ları +
+resource.changed süpürür).
 TIER 3 (deferred): retention auto-purge, data-queue redelivery, SSE streaming e2e, tool-call status
 shadowing.
 
-BACKEND REUSE ANCHOR'LARI (DEĞİŞTİRME, TÜKET): routes/admin_panel.py + routes/audit.py +
-routes/results_history.py compare/delete (sıradaki sayfalar için); metric-profile + agent-lab
-zaten bağlı (PR #74); backtest RUN/result/history zaten bağlı (PR #72); SSE taksonomisi +
-/v1/auth/* + /me + GET /v1/metrics zaten bağlı; first-Admin bootstrap landed (PR #76 —
-commands/auth.py bootstrap_admin_matches + sign_up branch, settings.bootstrap_admin_email).
+BACKEND REUSE ANCHOR'LARI (DEĞİŞTİRME, TÜKET): routes/results_history.py compare/delete +
+GET /backtest-results/{id}/metrics (sıradaki sayfa için); admin panel + audit zaten bağlı
+(PR #78); metric-profile + agent-lab zaten bağlı (PR #74); backtest RUN/result/history zaten
+bağlı (PR #72); SSE taksonomisi + /v1/auth/* + /me + GET /v1/metrics zaten bağlı; first-Admin
+bootstrap landed (PR #76 — commands/auth.py bootstrap_admin_matches + sign_up branch,
+settings.bootstrap_admin_email).
 
 YÖNTEM: Workflow KULLANMA; direct-author. Backend working-loop (izole DB / L1 FK / alembic)
 UYGULANMAZ. Frontend loop: cd frontend (cwd resetlenebilir → absolute path);

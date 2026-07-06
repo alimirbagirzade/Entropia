@@ -724,7 +724,37 @@ migration; backend test base stays 1015.** CI 3/3 green. Reuse anchors (exact sy
   `["jobs"]` has NO backend list surface at all (job state is only visible through run projections +
   the /v1/metrics jobs-depth gauge) · history compare/soft-delete affordances still deferred.
 
-## Next: post-V1 (continued) — TIER 2 frontend (login + SSE + /v1/metrics + backtest pages + Arrange Metrics/Analysis Lab landed; Panel/Logs live page / capability activations / admin provisioning remain)
+## Post-V1 — first-Admin bootstrap provisioning (TIER 2, backend slice) ✅ landed (PR #76, merged → main `1771f14`)
+
+**First TIER 2 backend slice — closes the PR #38 honest boundary ("signup always gets the baseline
+User role; first-Admin provisioning absent upstream"): a fresh deployment now has an explicit,
+operator-opt-in path to its first Admin.** BACKEND-ONLY — frontend unchanged (45/45 stays); NO
+migration, NO new tables — alembic head stays `0021_local_auth`; `ENGINE_VERSION` stays
+`backtest-engine-v2-position-size-limits`. CI green; review APPROVE 0 CRITICAL/HIGH. Backend tests
+**1015 → 1028** (+13). Reuse anchors (exact symbols):
+- **`config/settings.py`** — NEW `bootstrap_admin_email` field (env `ENTROPIA_BOOTSTRAP_ADMIN_EMAIL`,
+  default `""` = disabled → ZERO behavior change unless the operator opts in).
+- **`application/commands/auth.py`** — NEW `bootstrap_admin_matches` helper (case- and
+  whitespace-normalized email match) + a bootstrap branch in `sign_up`: a matching signup is
+  provisioned as **Admin ONLY while no active Admin exists** (fail-closed otherwise → baseline
+  role). Race safety: the same-tx advisory lock already used by the last-admin demote path
+  (`identity_repo.lock_admin_count`) serializes the count+decide section against concurrent
+  demotions AND concurrent bootstraps; `unique(human_users.email)` additionally blocks a second
+  qualifying signup. Provisioning emits a dedicated `user.admin_bootstrapped` audit event +
+  `admin_bootstrapped` outbox event in the SAME transaction (house `_audit_and_outbox` pattern).
+- **`apps/api/routes/auth.py`** — passes `settings.bootstrap_admin_email` through, server-side
+  only. The route schema has NO role field → escalation via the client stays structurally
+  impossible.
+- **Tests** — NEW `tests/unit/test_auth_bootstrap_unit.py` +
+  `tests/integration/test_auth_bootstrap_admin.py` (+13): env unset → baseline (no events); match +
+  no admin → Admin + audit/outbox; active Admin exists → fail-closed baseline; non-matching/missing
+  email → baseline; case/whitespace normalization; settings env read; route pass-through. **1028
+  green** on an isolated DB; ruff + format + mypy (299 files) clean.
+- **Honest boundaries:** backend MECHANISM only — no provisioning dashboard yet (a later frontend
+  slice) · bootstrap applies at signup time only; it does NOT retro-promote an existing account
+  (operator re-creates or uses a future admin tool).
+
+## Next: post-V1 (continued) — TIER 2 (login + SSE + /v1/metrics + backtest pages + Arrange Metrics/Analysis Lab + first-Admin bootstrap landed; Panel/Logs live page / capability activations remain)
 
 **V1 COMPLETE (Stages 0–8, docs 01–22) + Auth/IdP + Parquet Slice A + Backtest Engine Slice B + real indicator compute Slice C + `risk_based` sizing (a) + condition blocks (b) + condition extensions (b2) + two-package indicator-vs-indicator + higher-timeframe resampling (c) + per-condition multi-TF reference (i) + N-ary reference chain (ii) + VWAP directional key (d) + `formula_based` Kelly sizing + `position_size_limits` min/max cap (PR #63) landed (1015 tests).** The **Slice C indicator-compute + position-sizing follow-ups are now EFFECTIVELY COMPLETE — TIER 1 backend is DONE**:
 
@@ -734,7 +764,7 @@ migration; backend test base stays 1015.** CI 3/3 green. Reuse anchors (exact sy
 
 **Next candidates** (priority per `docs/POST_V1_KICKOFF.md`):
 - ~~**TIER 1 — `position_size_limits` (min/max cap) wiring**~~ ✅ **PR #63** — `PositionSizeLimits` (min/max caps) now clamps EVERY sizing method via `_clamp_to_limits` at the `_raw_position_size → _position_size` boundary; `ENGINE_VERSION → backtest-engine-v2-position-size-limits`; +15 tests → 1015; no migration. **TIER 1 backend is now EFFECTIVELY COMPLETE** (Kelly + risk_based + condition blocks + multi-TF + N-ary + VWAP + position_size_limits all landed).
-- **TIER 2 — frontend / user-facing (login + SSE landed):** ~~login / session integration~~ ✅ **PR #65** (Bearer session store + standalone `/login` page + signup/logout + role-aware header; `frontend/src/lib/{session,auth}.ts`, `pages/Login.tsx`, `apiClient.ts` Bearer header) · ~~SSE live-invalidation~~ ✅ **PR #67** (`frontend/src/lib/sse.ts` stub filled: `EVENT_QUERY_KEYS` maps `backtest.run.updated`/`job.updated`/`agent.task.updated`/`audit.event.created` → `["backtests"]`/`["jobs"]`/`["agent-tasks"]`/`["audit"]`, `resource.changed` → full refresh, reconnect self-heal; +7 vitest → 16/16) · ~~**`/v1/metrics` dashboard**~~ ✅ **PR #69** (`lib/metrics.ts` Prometheus text-exposition parser + `apiGetText`/`useMetrics` 5s poll + `pages/Metrics.tsx` golden-signals / jobs-depth / outbox-lag / lease-age panels + adminOnly `System Metrics` nav item at `/panel/metrics`; +13 vitest → 29/29) · ~~**live-data backtest RUN + Results History**~~ ✅ **PR #72** (`lib/backtest.ts` `["backtests"]` hooks + `pages/BacktestRun.tsx` `?run=`/`?result=` modes + `pages/ResultsHistory.tsx` + `ResultDetail.tsx`; first pages bound to the SSE forward contract; +7 vitest → 36/36) · ~~**Arrange Metrics + Analysis Lab live pages**~~ ✅ **PR #74** (`lib/metricProfile.ts` + `pages/ArrangeMetrics.tsx` profile editor with OCC Apply/Lock/Unlock; `lib/agentLab.ts` + `pages/AnalysisLab.tsx` — every key under the `["agent-tasks"]` prefix, second SSE key live; If-Match runtime controls; +9 vitest → 45/45). **Remaining candidates:** (a) **Panel / Management / Logs live page** (binds the LAST bindable SSE key `["audit"]` via `routes/admin_panel.py` `/admin/users|system-actors|role-matrix|logs` + `routes/audit.py` `/audit-events`; `["jobs"]` has NO backend list surface — honest boundary; history compare/soft-delete + profile-hydrated `GET /backtest-results/{id}/metrics` binding can ride along); (b) capability activations (role-gated features); (c) first-Admin provisioning dashboard; (d) CP real candidate generation.
+- **TIER 2 — frontend / user-facing (login + SSE landed):** ~~login / session integration~~ ✅ **PR #65** (Bearer session store + standalone `/login` page + signup/logout + role-aware header; `frontend/src/lib/{session,auth}.ts`, `pages/Login.tsx`, `apiClient.ts` Bearer header) · ~~SSE live-invalidation~~ ✅ **PR #67** (`frontend/src/lib/sse.ts` stub filled: `EVENT_QUERY_KEYS` maps `backtest.run.updated`/`job.updated`/`agent.task.updated`/`audit.event.created` → `["backtests"]`/`["jobs"]`/`["agent-tasks"]`/`["audit"]`, `resource.changed` → full refresh, reconnect self-heal; +7 vitest → 16/16) · ~~**`/v1/metrics` dashboard**~~ ✅ **PR #69** (`lib/metrics.ts` Prometheus text-exposition parser + `apiGetText`/`useMetrics` 5s poll + `pages/Metrics.tsx` golden-signals / jobs-depth / outbox-lag / lease-age panels + adminOnly `System Metrics` nav item at `/panel/metrics`; +13 vitest → 29/29) · ~~**live-data backtest RUN + Results History**~~ ✅ **PR #72** (`lib/backtest.ts` `["backtests"]` hooks + `pages/BacktestRun.tsx` `?run=`/`?result=` modes + `pages/ResultsHistory.tsx` + `ResultDetail.tsx`; first pages bound to the SSE forward contract; +7 vitest → 36/36) · ~~**Arrange Metrics + Analysis Lab live pages**~~ ✅ **PR #74** (`lib/metricProfile.ts` + `pages/ArrangeMetrics.tsx` profile editor with OCC Apply/Lock/Unlock; `lib/agentLab.ts` + `pages/AnalysisLab.tsx` — every key under the `["agent-tasks"]` prefix, second SSE key live; If-Match runtime controls; +9 vitest → 45/45). **Remaining candidates:** (a) **Panel / Management / Logs live page** (binds the LAST bindable SSE key `["audit"]` via `routes/admin_panel.py` `/admin/users|system-actors|role-matrix|logs` + `routes/audit.py` `/audit-events`; `["jobs"]` has NO backend list surface — honest boundary; history compare/soft-delete + profile-hydrated `GET /backtest-results/{id}/metrics` binding can ride along); (b) capability activations (role-gated features); (c) ~~first-Admin provisioning~~ ✅ **backend mechanism PR #76** (`ENTROPIA_BOOTSTRAP_ADMIN_EMAIL` opt-in; +13 tests → 1028; the provisioning **dashboard** UI remains a later frontend slice); (d) CP real candidate generation.
 - **TIER 3 — data/ops (deferred):** retention auto-purge, data-queue redelivery, SSE streaming e2e (connection drops), tool-call status shadowing (CR-08 follow-up), `summary["timeframe"]` resolution from market-revision metadata.
 
 See **`docs/POST_V1_KICKOFF.md`** for reuse anchors and the paste-ready resume prompt.

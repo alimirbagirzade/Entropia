@@ -87,9 +87,10 @@ Before stopping a working session, produce **ALL** of the following:
   frontend live-data backtest pages RUN & Results History (PR #72, MERGED) + TIER 2
   frontend Arrange Metrics & Analysis Lab live pages (PR #74, MERGED) + first-Admin
   bootstrap provisioning (post-V1 TIER 2 backend, PR #76, MERGED) + TIER 2 frontend
-  live-data Panel / Management / Logs page (PR #78, MERGED)**.
-  **Overall: ~87% complete** (V1=100%, post-V1 core=86%, frontend=62%).
-  `main` after PR #78 (`2a8de9e`; panel-page feat `726ffcc` MERGED; first-Admin bootstrap feat `a53cf34` MERGED; live-pages feat `499bd8b` MERGED; backtest-pages feat `10a0007` MERGED; metrics feat `d3039e7` MERGED; login feat `58781e4` MERGED; SSE feat `5ddb14f` MERGED; position_size_limits feat `5ef5525`; Kelly feat `3f254bc` / non-finite fail-closed fix `3a92e7d`; VWAP code `d27b2bb`; N-ary code `44099a7`; per-condition code `1c5cca0`; multi-timeframe code `def6c28`; indicator-vs-indicator code `9087c2b`; condition-extensions code `361df4c`; condition-blocks code `8766fae`; risk_based code `43cee29`; Slice C code `671d227`);
+  live-data Panel / Management / Logs page (PR #78, MERGED) + TIER 2 frontend history
+  compare/soft-delete & profile-hydrated Result metrics rebind (PR #80, MERGED)**.
+  **Overall: ~88% complete** (V1=100%, post-V1 core=86%, frontend=66%).
+  `main` after PR #80 (`8f57151`; history-compare feat `491ac03` MERGED; panel-page feat `726ffcc` MERGED; first-Admin bootstrap feat `a53cf34` MERGED; live-pages feat `499bd8b` MERGED; backtest-pages feat `10a0007` MERGED; metrics feat `d3039e7` MERGED; login feat `58781e4` MERGED; SSE feat `5ddb14f` MERGED; position_size_limits feat `5ef5525`; Kelly feat `3f254bc` / non-finite fail-closed fix `3a92e7d`; VWAP code `d27b2bb`; N-ary code `44099a7`; per-condition code `1c5cca0`; multi-timeframe code `def6c28`; indicator-vs-indicator code `9087c2b`; condition-extensions code `361df4c`; condition-blocks code `8766fae`; risk_based code `43cee29`; Slice C code `671d227`);
   alembic head = **`0021_local_auth`** (`human_credentials` + `auth_sessions`;
   Slices A/B/C + follow-ups (a)/(b)/(b2)/(#53)/(c)/(i)/(ii)/(d) + Kelly sizing + position_size_limits + first-Admin bootstrap need no migration). **1028 tests green** (1015 + 13 first-Admin bootstrap: unit + integration — env-unset baseline / match+no-admin → Admin+audit+outbox / active-Admin fail-closed / non-matching baseline / case+whitespace normalization / settings env read / route pass-through).
   TIER 2 frontend — real-auth login/signup/logout (PR #65, MERGED): **FRONTEND-ONLY**
@@ -234,8 +235,31 @@ Before stopping a working session, produce **ALL** of the following:
   boundary: `["jobs"]` has NO backend list surface — PERMANENT (run projections + /v1/metrics
   jobs-depth only); users/system-actors have no dedicated SSE event (own mutations +
   `resource.changed` sweep); history compare/soft-delete + profile-hydrated
-  `GET /backtest-results/{id}/metrics` binding (ResultDetail rebind) still deferred — the natural
-  next follow-up.
+  `GET /backtest-results/{id}/metrics` binding (ResultDetail rebind) — landed next in PR #80.
+  TIER 2 frontend — history compare/soft-delete + profile-hydrated Result metrics (PR #80, MERGED):
+  **FRONTEND-ONLY** (backend `routes/results_history.py` compare/delete + `routes/metric_profile.py`
+  result-metrics hydration consumed unchanged, no migration, backend test base stays 1028). The
+  last two landed-but-unconsumed backtest surfaces bound (doc 16 §8.3/§7 + doc 17 §9.1).
+  `lib/backtest.ts` NEW wire types `CompareEntry`/`CompareField`/`CompareResponse`
+  (`context.fields{a,b,differs}` + `context_differs`) + `ResultMetricsProfile`/`ResultMetricsView`;
+  hooks `useCompareResults(pair)` (READ over two immutable results — POST only the transport;
+  `["backtests","compare",a,b]`, 5m staleTime, pick order preserved), `useResultMetrics(resultId)`
+  (keyed `["metric-profile","result-metrics",id]` — deliberately NOT `["backtests"]` so an Arrange
+  Metrics Apply sweeps the view; cross-tab rides `resource.changed`), `useSoftDeleteResult`
+  (`POST /backtest-results/{id}/delete`, no OCC token — the history projection carries no
+  row_version; command idempotent + owner/Admin-gated server-side; invalidates `["backtests"]`).
+  `pages/ResultsHistory.tsx` compare selection capped at 2, checkbox gated by server
+  `allowed_actions.compare`; `ComparePanel` renders the server context diff VERBATIM (differs
+  badges, objects as JSON, "informational only; neither result is ranked" — RH-09); two-step
+  confirm Delete gated by `allowed_actions.soft_delete` (deleting a compared row closes the panel).
+  `components/ResultDetail.tsx` Metrics section rebound to the hydrated projection (profile caption
+  personal/system default · locked · registry v1) with persisted-rows fallback while loading/on
+  error (L4). NEW `test/historyActions.test.tsx` (+4) + `test/resultMetricsView.test.tsx` (+3);
+  `backtestRun.test.tsx` deep-link test stubs the metrics route FIRST (apiStub ordered fragment
+  match — detail fragment is a substring of the metrics URL) → **frontend 58/58**, typecheck +
+  lint clean, build green; review 0 CRITICAL/HIGH. Honest boundary: compare is exactly two results
+  (server min/max_length=2); soft-delete sends no OCC token; restore stays the Admin Trash flow
+  (frontend Trash page still a placeholder).
   Follow-up (ii) — N-ary reference chain (PR #57): a nested condition's RHS extends from
   a single reference package (#53/#56) to an ORDERED chain of >2 separately-pinned indicator
   packages (`source [cmp] ref0 [cmp] ref1 ...` — the classic `fast > slow > slowest` MA fan;
@@ -419,7 +443,7 @@ Before stopping a working session, produce **ALL** of the following:
   - ✅ **Live-data backtest pages (PR #72, MERGED)** — RUN & Backtest Results (`/backtest/run` — admission + `?run=` durable tracking + `?result=` immutable deep-link) + Results History (`/backtest/history` — server sorts + keyset cursor) bound to the SSE `["backtests"]` key via NEW `lib/backtest.ts` hooks; +7 vitest → 36/36; frontend-only, no migration.
   - ✅ **Arrange Metrics + Analysis Lab live pages (PR #74, MERGED)** — `/backtest/metrics` profile editor (OCC Apply/Lock/Unlock via `lib/metricProfile.ts`) + `/analysis-lab` agent workspace (`lib/agentLab.ts` — every key under `["agent-tasks"]` → second SSE key live; If-Match runtime controls); +9 vitest → 45/45; frontend-only, no migration.
   - ✅ **Panel / Management / Logs live page (PR #78, MERGED)** — `/panel` real page; the LAST bindable SSE key `["audit"]` bound via `lib/adminPanel.ts` (Management under `["admin"]`, Logs/Audit under `["audit"]`; `useAssignRole` OCC `expected_head_revision_id` with role options from the server role-matrix assignable rows; `pages/Panel.tsx` 5 cards) + `test/panel.test.tsx`; +6 vitest → 51/51; frontend-only, no migration. `["jobs"]` has NO backend list surface — permanent honest boundary.
-  - **History compare/soft-delete + profile-hydrated `GET /backtest-results/{id}/metrics` binding (recommended next):** ResultDetail rebind; `routes/results_history.py` compare/delete already landed backend-side — small natural follow-up.
+  - ✅ **History compare/soft-delete + profile-hydrated Result metrics rebind (PR #80, MERGED)** — `useCompareResults`/`useResultMetrics`/`useSoftDeleteResult` (`lib/backtest.ts`) + `ComparePanel` verbatim context diff (RH-09, never ranked) + two-step confirm Delete gated by server `allowed_actions`; ResultDetail Metrics bound to the doc-17 §9.1 hydrated projection with persisted-rows fallback (L4); +7 vitest → 58/58; frontend-only, no migration.
   - ✅ **First-Admin bootstrap provisioning (PR #76, MERGED — backend)** — `ENTROPIA_BOOTSTRAP_ADMIN_EMAIL` opt-in: a matching signup is provisioned as Admin ONLY while no active Admin exists (fail-closed otherwise); advisory-lock (`identity_repo.lock_admin_count`) race-safe; `user.admin_bootstrapped` audit + outbox same tx; role decision server-side only (route schema has no role field); +13 tests → backend 1028; no migration.
   - Capability activations (gate new features per user role)
   - Admin provisioning dashboard (UI for first-Admin onboarding — backend mechanism landed in PR #76)

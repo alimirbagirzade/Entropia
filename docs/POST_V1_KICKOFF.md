@@ -3,6 +3,52 @@
 > **Amaç:** V1 kapandı (Stage 0–8 COMPLETE). Bu doküman post-V1 durumunu, aday iş listesini
 > ve temiz oturumda yapıştırılacak resume prompt'u içerir.
 
+## Durum (2026-07-06, TIER 2 frontend — history compare/soft-delete + profil-hidrasyonlu Result metrics; PR #80 MERGED)
+
+> **Yedinci TIER 2 (frontend) slice — history compare/soft-delete + ResultDetail rebind landed
+> (PR #80, merged → main `8f57151`; CI 3/3 yeşil; review 0 CRITICAL/HIGH).** Landed-ama-tüketilmemiş
+> SON iki backtest yüzeyi bağlandı: doc 16 §8.3 compare + §7 soft-delete (Results History) ve
+> doc 17 §9.1 profil-hidrasyonlu `GET /backtest-results/{id}/metrics` (ResultDetail'in Metrics
+> bölümü ham persisted satırlardan hydrated projeksiyona geçti). Backend yüzeyi Stage 5b/5c'den
+> beri hazırdı. **FRONTEND-ONLY — backend değişmedi, migration YOK, backend test tabanı 1028
+> sabit.** alembic head hâlâ `0021_local_auth`; backend `ENGINE_VERSION` hâlâ
+> `backtest-engine-v2-position-size-limits`.
+> **Reuse anchor'ları (kesin semboller):**
+> - **`frontend/src/lib/backtest.ts`** — YENİ wire tipleri `CompareEntry`/`CompareField`/
+>   `CompareResponse` (`context.fields{a,b,differs}` + `context_differs`) +
+>   `ResultMetricsProfile`/`ResultMetricsView`; YENİ hook'lar: `useCompareResults(pair)` —
+>   iki immutable sonuç üzerinde READ, POST yalnız id çiftinin taşıması
+>   (`["backtests","compare",a,b]`, 5dk staleTime, seçim sırası korunur) —
+>   `useResultMetrics(resultId)` — anahtar BİLEREK `["metric-profile","result-metrics",id]`,
+>   `["backtests"]` DEĞİL: Result satırları immutable, tek mutable girdi resolved profil →
+>   Arrange Metrics Apply (`["metric-profile"]` invalidate) bu görünümü süpürür; cross-tab
+>   `resource.changed` full refresh ile gelir — ve `useSoftDeleteResult`
+>   (`POST /backtest-results/{id}/delete`; OCC token YOK — history projeksiyonunda row_version
+>   yok, komut idempotent + server-side owner/Admin-gated; `["backtests"]` invalidate →
+>   deletion-filtered index satırı düşürür).
+> - **`frontend/src/pages/ResultsHistory.tsx`** — seçim sırası korunan, ikiyle sınırlı compare
+>   seçimi (checkbox server `allowed_actions.compare` ile kapılı); `ComparePanel` server context
+>   diff'ini VERBATIM render eder (alan başına `differs` badge, object değerler JSON, warn banner
+>   "informational only; neither result is ranked" — RH-09, asla winner seçilmez); iki-adımlı
+>   confirm'li Delete (`allowed_actions.soft_delete` kapılı; compare'deki satır silinirse panel
+>   kapanır); kanonik hata zarfı verbatim.
+> - **`frontend/src/components/ResultDetail.tsx`** — Metrics bölümü `useResultMetrics`'e bağlı:
+>   profil caption'ı (personal/system default · locked · registry versiyonu); hydrated görünüm
+>   yüklenirken VEYA hata alırsa ham persisted satırlar dürüst bir notla render edilmeye devam
+>   eder (L4 korunur: eksik metrik ASLA 0 değil).
+> - **Testler** — YENİ `test/historyActions.test.tsx` (4) + `test/resultMetricsView.test.tsx` (3)
+>   → **frontend 58/58** (51 + 7); `backtestRun.test.tsx` deep-link testi metrics route'unu artık
+>   İLK sırada stub'lar (apiStub fragment eşleşmesi SIRALI — detail fragment'i metrics URL'inin
+>   substring'i) ve hydrated caption'ı assert eder; typecheck + lint temiz; build yeşil.
+> **Dürüst sınır:** compare tam iki sonuç (server `min/max_length=2` — N-way UI yok) · soft-delete
+> OCC token göndermez (history projeksiyonunda row_version yok; server optional kabul eder) ·
+> restore Admin Trash akışında kalır (backend Stage 6c landed; frontend Trash sayfası hâlâ
+> placeholder) · `["jobs"]` kalıcı sınırı değişmedi.
+> **Sıradaki doğal slice:** (b) capability aktivasyonları (`routes/capability.py` backend yüzeyi)
+> VEYA (c) first-Admin provisioning DASHBOARD'u (backend mekanizması PR #76'da — yalnız UI) VEYA
+> (d) CP real candidate generation. Aşağıdaki Panel / Management / Logs (PR #78) bloğu ve öncesi
+> tarihsel.
+
 ## Durum (2026-07-06, TIER 2 frontend — Panel / Management / Logs canlı sayfası; PR #78 MERGED)
 
 > **Altıncı TIER 2 (frontend) slice — Panel / Management / Logs canlı sayfası landed (PR #78,
@@ -734,27 +780,30 @@ Kelly #60/#61 + position_size_limits #63 — HEPSİ MERGED). FRONTEND landed (he
 real-auth login/signup/logout (#65) + SSE live-invalidation (#67) + /v1/metrics ops dashboard
 (#69) + canlı-veri backtest sayfaları (#72) + Arrange Metrics & Analysis Lab (#74 — tüm lab
 key'leri ["agent-tasks"]) + Panel / Management / Logs (#78 — SON bağlanabilir SSE key'i
-["audit"] bağlandı: useAdminLogs/useLogEvent/useAuditEvents ["audit"] prefix'inde,
-audit.event.created canlı sayfayı süpürür; Management ["admin"] altında; useAssignRole PATCH OCC
-expected_head_revision_id=user.version, rol seçenekleri server role-matrix'in assignable
-satırlarından; pages/Panel.tsx 5 kart; frontend 45→51 vitest). BACKEND: first-Admin bootstrap
-provisioning (#76 — ENTROPIA_BOOTSTRAP_ADMIN_EMAIL opt-in; migration YOK, alembic head
-0021_local_auth SABİT; backend testler 1028).
+["audit"] bağlandı; Management ["admin"] altında) + history compare/soft-delete & profil-
+hidrasyonlu Result metrics rebind (#80 — lib/backtest.ts useCompareResults
+["backtests","compare",a,b] + useResultMetrics ["metric-profile","result-metrics",id] (BİLEREK
+["backtests"] değil — Arrange Metrics Apply bu görünümü süpürsün diye) + useSoftDeleteResult;
+ComparePanel server context diff'i verbatim, RH-09 asla winner yok; ResultDetail doc 17 §9.1
+hydrated projeksiyona bağlı, persisted-rows fallback'li — L4; frontend 51→58 vitest). BACKEND:
+first-Admin bootstrap provisioning (#76 — ENTROPIA_BOOTSTRAP_ADMIN_EMAIL opt-in; migration YOK,
+alembic head 0021_local_auth SABİT; backend testler 1028).
 
 ÖNCE DOĞRULA (stale-by-default): git fetch && git log --oneline origin/main -6 && gh pr list
---state all -L 8. main = 2a8de9e (Merge #78) + kapanış docs PR'ı merge sonrası ileri olmalı
+--state all -L 8. main = 8f57151 (Merge #80) + kapanış docs PR'ı merge sonrası ileri olmalı
 (açıksa önce kullanıcıdan merge iste). alembic head 0021_local_auth; backend ENGINE_VERSION =
 backtest-engine-v2-position-size-limits. FRONTEND doğrula (yeni branch'i MUTLAKA origin/main'den
 aç — local stale olabilir): cd frontend && npm run typecheck && npm run lint && npm test &&
-npm run build (51/51 geçmeli).
+npm run build (58/58 geçmeli).
 
-ÖNCE OKU (authority): docs/POST_V1_KICKOFF.md (en üst Durum bloğu — PR #78) + docs/STAGE2_HANDOFF.md
-("Panel / Management / Logs page ... landed (PR #78)" + "Next"). Landed yüzeyleri TÜKET,
+ÖNCE OKU (authority): docs/POST_V1_KICKOFF.md (en üst Durum bloğu — PR #80) + docs/STAGE2_HANDOFF.md
+("history compare/soft-delete ... landed (PR #80)" + "Next"). Landed yüzeyleri TÜKET,
 yeniden yazma: Auth (lib/session.ts + lib/auth.ts + apiClient Bearer + pages/Login.tsx); SSE
 (lib/sse.ts EVENT_QUERY_KEYS + connectEvents Layout mount); Metrics (lib/metrics.ts + useMetrics
 5s poll + pages/Metrics.tsx); Backtest (lib/backtest.ts ["backtests"] hook'ları +
-formatMetricValue/formatUtc + pages/BacktestRun.tsx ?run=/?result= + pages/ResultsHistory.tsx +
-components/ResultDetail.tsx); Arrange Metrics + Analysis Lab (lib/metricProfile.ts OCC Apply +
+formatMetricValue/formatUtc + pages/BacktestRun.tsx ?run=/?result= + pages/ResultsHistory.tsx
+compare/delete UI + components/ResultDetail.tsx hydrated Metrics + useCompareResults/
+useResultMetrics/useSoftDeleteResult — PR #80); Arrange Metrics + Analysis Lab (lib/metricProfile.ts OCC Apply +
 lib/agentLab.ts ["agent-tasks"] hook'ları + If-Match kontrolleri + pages/ArrangeMetrics.tsx +
 pages/AnalysisLab.tsx); Panel/Logs (lib/adminPanel.ts ["admin"]+["audit"] hook'ları +
 useAssignRole OCC + pages/Panel.tsx 5 kart); test/helpers/apiStub.ts route-aware fetch double
@@ -768,11 +817,11 @@ invalidateQueries({queryKey}) object-form. tsconfig: noUncheckedIndexedAccess +
 exactOptionalPropertyTypes KAPALI.
 
 SIRADAKİ İŞ — kalan TIER 2 adayları (BAŞLARKEN kullanıcıyla hangisi diye TEYİT ET):
-- (a) History compare/soft-delete + profil-hidrasyonlu GET /backtest-results/{id}/metrics
-  binding'i (ResultDetail rebind) — routes/results_history.py compare/delete backend'de zaten
-  landed; küçük doğal follow-up. (ÖNERİLEN — PR #78'in doğal devamı.)
-- (b) capability aktivasyonları (role-gated features), (c) first-Admin provisioning DASHBOARD'u
-  (backend mekanizması PR #76'da landed — bu yalnız UI).
+- (b) capability aktivasyonları (role-gated features) — routes/capability.py backend yüzeyi
+  mevcut; önce yüzeyi KEŞFET (hangi projeksiyonlar/komutlar var), sonra kapsamı kullanıcıyla
+  netleştir.
+- (c) first-Admin provisioning DASHBOARD'u (backend mekanizması PR #76'da landed — bu yalnız UI).
+- (d) CP real candidate generation (daha büyük; kapsam teyidi şart).
 DİKKAT (kalıcı dürüst sınırlar): ["jobs"] için backend liste yüzeyi YOK (run projeksiyonları +
 /v1/metrics jobs-depth); users/system-actors'ın özel SSE event'i yok (kendi mutation'ları +
 resource.changed süpürür).
@@ -780,7 +829,8 @@ TIER 3 (deferred): retention auto-purge, data-queue redelivery, SSE streaming e2
 shadowing.
 
 BACKEND REUSE ANCHOR'LARI (DEĞİŞTİRME, TÜKET): routes/results_history.py compare/delete +
-GET /backtest-results/{id}/metrics (sıradaki sayfa için); admin panel + audit zaten bağlı
+GET /backtest-results/{id}/metrics zaten bağlı (PR #80); routes/capability.py aday (b) için
+keşfedilecek yüzey; admin panel + audit zaten bağlı
 (PR #78); metric-profile + agent-lab zaten bağlı (PR #74); backtest RUN/result/history zaten
 bağlı (PR #72); SSE taksonomisi + /v1/auth/* + /me + GET /v1/metrics zaten bağlı; first-Admin
 bootstrap landed (PR #76 — commands/auth.py bootstrap_admin_matches + sign_up branch,

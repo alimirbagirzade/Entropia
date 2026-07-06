@@ -8,7 +8,10 @@ on:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # Cancel superseded runs on PRs/feature branches to save minutes, but never on
+  # main: every push to main must run to completion so each merged commit lands
+  # with a full, green CI check instead of a cancelled (incomplete) one.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   backend:

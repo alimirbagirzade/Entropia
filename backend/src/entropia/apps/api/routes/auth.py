@@ -59,6 +59,7 @@ async def sign_up(
     request: Request,
     session: AsyncSession = Depends(db_session),
 ) -> SignUpResponse:
+    settings = get_settings()
     result = await auth_commands.sign_up(
         session,
         username=body.username,
@@ -66,6 +67,8 @@ async def sign_up(
         email=body.email,
         display_name=body.display_name,
         correlation_id=getattr(request.state, "correlation_id", ""),
+        # First-Admin bootstrap opt-in — server-side only, never a client field.
+        bootstrap_admin_email=settings.bootstrap_admin_email or None,
     )
     return SignUpResponse(**result)
 

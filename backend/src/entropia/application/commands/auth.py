@@ -26,6 +26,7 @@ from entropia.infrastructure.postgres.models import (
 )
 from entropia.infrastructure.postgres.repositories import audit as audit_repo
 from entropia.infrastructure.postgres.repositories import auth as auth_repo
+from entropia.infrastructure.postgres.repositories import identity as identity_repo
 from entropia.shared.errors import (
     InvalidCredentialsError,
     PasswordPolicyError,
@@ -53,6 +54,17 @@ def hash_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
+def bootstrap_admin_matches(email: str | None, bootstrap_email: str | None) -> bool:
+    """Case- and whitespace-normalized bootstrap email comparison.
+
+    An unset/empty ``bootstrap_email`` (the default) or a signup without an
+    email disables the mechanism entirely — zero behavior change.
+    """
+    if not bootstrap_email or not email:
+        return False
+    return email.strip().lower() == bootstrap_email.strip().lower()
+
+
 def _user_projection(user: HumanUser) -> dict[str, Any]:
     return {
         "user_id": user.user_id,
@@ -70,10 +82,17 @@ async def sign_up(
     email: str | None = None,
     display_name: str | None = None,
     correlation_id: str = "",
+    bootstrap_admin_email: str | None = None,
 ) -> dict[str, Any]:
     """Create a human account. The role is ALWAYS User (M1 §4.1): any
     client-sent role never reaches this command — the route schema has no
-    role field, so escalation via Sign Up is structurally impossible."""
+    role field, so escalation via Sign Up is structurally impossible.
+
+    First-Admin bootstrap (explicit operator opt-in): when the deployment sets
+    ``ENTROPIA_BOOTSTRAP_ADMIN_EMAIL`` and the signup email matches it
+    (case-normalized), the account is provisioned as Admin — ONLY while no
+    active Admin exists (fail-closed otherwise). The role is still decided
+    server-side; no client field can reach this branch."""
     username = username.strip()
     if not (USERNAME_MIN_LENGTH <= len(username) <= USERNAME_MAX_LENGTH):
         raise ValidationError(
@@ -85,6 +104,18 @@ async def sign_up(
     if await auth_repo.get_user_by_username(session, username) is not None:
         raise UsernameTakenError()
 
+    role = Role.USER
+    bootstrapped = False
+    if bootstrap_admin_matches(email, bootstrap_admin_email):
+        # Same-tx race guard, mirroring the last-admin demote path: the shared
+        # advisory lock serializes this count+decide section against concurrent
+        # demotions AND concurrent bootstraps; a second concurrent qualifying
+        # signup is additionally impossible via unique(human_users.email).
+        await identity_repo.lock_admin_count(session)
+        if await identity_repo.count_active_admins(session) == 0:
+            role = Role.ADMIN
+            bootstrapped = True
+
     user_id = new_id("usr")
     session.add(Principal(principal_id=user_id, principal_type=PrincipalType.HUMAN))
     await session.flush()  # principal must exist before the FK-dependent user row
@@ -93,7 +124,7 @@ async def sign_up(
         username=username,
         email=email,
         display_name=display_name or username,
-        current_role=Role.USER,
+        current_role=role,
         status="active",
         version=1,
     )
@@ -135,6 +166,33 @@ async def sign_up(
         },
         correlation_id=correlation_id,
     )
+    if bootstrapped:
+        # The provisioning itself is a distinct auditable action (M1 §4.1:
+        # Sign Up never assigns elevated roles — this is operator provisioning).
+        bootstrap_event = audit_repo.add_audit_event(
+            session,
+            event_kind="user.admin_bootstrapped",
+            actor_principal_id=user_id,
+            actor_kind=ActorKind.HUMAN,
+            target_entity_id=user_id,
+            target_entity_type=_TARGET_TYPE,
+            new_state=str(Role.ADMIN),
+            correlation_id=correlation_id,
+            reason="bootstrap_admin_email_match",
+        )
+        audit_repo.add_outbox_event(
+            session,
+            event_type="admin_bootstrapped",
+            resource_type=_TARGET_TYPE,
+            resource_id=user_id,
+            payload={
+                "action": "admin_bootstrapped",
+                "username": user.username,
+                "role": str(Role.ADMIN),
+                "audit_event_id": bootstrap_event.event_id,
+            },
+            correlation_id=correlation_id,
+        )
     return _user_projection(user)
 
 
@@ -222,4 +280,4 @@ async def logout(session: AsyncSession, *, token: str, correlation_id: str = "")
     return {"session_id": record.session_id, "revoked": True, "changed": True}
 
 
-__all__ = ["hash_token", "login", "logout", "sign_up"]
+__all__ = ["bootstrap_admin_matches", "hash_token", "login", "logout", "sign_up"]

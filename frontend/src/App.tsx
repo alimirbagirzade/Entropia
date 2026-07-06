@@ -1,6 +1,8 @@
 import { Routes, Route } from "react-router-dom";
 import { Layout } from "./app/Layout";
 import { ALL_NAV_ITEMS } from "./app/nav";
+import { AnalysisLab } from "./pages/AnalysisLab";
+import { ArrangeMetrics } from "./pages/ArrangeMetrics";
 import { BacktestRun } from "./pages/BacktestRun";
 import { Mainboard } from "./pages/Mainboard";
 import { Metrics } from "./pages/Metrics";
@@ -12,7 +14,14 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 
 // Paths served by a real page below — excluded from the auto-generated
 // placeholder routes.
-const REAL_PATHS = new Set(["/", "/panel/metrics", "/backtest/run", "/backtest/history"]);
+const REAL_PATHS = new Set([
+  "/",
+  "/panel/metrics",
+  "/backtest/run",
+  "/backtest/history",
+  "/backtest/metrics",
+  "/analysis-lab",
+]);
 
 export default function App() {
   return (
@@ -51,6 +60,24 @@ export default function App() {
           element={
             <ErrorBoundary>
               <ResultsHistory />
+            </ErrorBoundary>
+          }
+        />
+        {/* Arrange Metrics (Stage 5c): presentation-only Result View Metric Profile. */}
+        <Route
+          path="/backtest/metrics"
+          element={
+            <ErrorBoundary>
+              <ArrangeMetrics />
+            </ErrorBoundary>
+          }
+        />
+        {/* Analysis Lab (Stage 6a): Agent Workspace observation/control plane. */}
+        <Route
+          path="/analysis-lab"
+          element={
+            <ErrorBoundary>
+              <AnalysisLab />
             </ErrorBoundary>
           }
         />

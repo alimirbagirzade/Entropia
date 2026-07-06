@@ -3,6 +3,49 @@
 > **Amaç:** V1 kapandı (Stage 0–8 COMPLETE). Bu doküman post-V1 durumunu, aday iş listesini
 > ve temiz oturumda yapıştırılacak resume prompt'u içerir.
 
+## Durum (2026-07-06, TIER 2 frontend — Future Dev capability registry sayfası; PR #82 MERGED)
+
+> **Sekizinci TIER 2 (frontend) slice — Future Dev capability registry sayfası landed
+> (PR #82, merged → main `1411adc`; CI 3/3 yeşil; review 0 CRITICAL/HIGH — 3 MEDIUM/LOW
+> self-review bulgusu commit içinde düzeltildi).** `/future-dev` placeholder'ı gerçek sayfa oldu:
+> Stage 7b'de landed olan Capability Registry yüzeyi (`routes/capability.py`, doc 22) olduğu
+> gibi render ediliyor + Admin-only lifecycle geçişi bağlandı. Registry, Future Dev'in ne
+> yapabileceğinin SUNUCU tarafı doğruluk kaynağı (asla frontend feature flag değil — doc 22
+> §2/§15). **FRONTEND-ONLY — backend değişmedi, migration YOK, backend test tabanı 1028 sabit.**
+> alembic head hâlâ `0021_local_auth`; backend `ENGINE_VERSION` hâlâ
+> `backtest-engine-v2-position-size-limits`.
+> **Reuse anchor'ları (kesin semboller):**
+> - **`frontend/src/lib/capability.ts`** — wire tipleri verbatim (`Capability`/`CapabilityDetail`
+>   — `dependency_snapshot` + provenance dahil —/`GraphicViewOverview`/`CapabilityTransitionResult`);
+>   doc-22 §9.1/§9.2 taksonomi AYNASI: `CAPABILITY_STATES` (7 durum), `ALLOWED_TRANSITIONS`
+>   (yasal edge haritası; `allowedTargets()`), `ACTIVATION_GATES` (7 gate), `STATE_TONES` —
+>   yalnız select/checklist hidrasyonu; sunucu her dispatch'te edge+gate+Admin'i yeniden doğrular.
+>   `gateComplete` sunucunun `_gate_complete` okumasının birebir aynası; `buildGatesSnapshot`
+>   Admin checklist'ini not objelerini ve kanonik olmayan anahtarları KORUYARAK merge eder.
+>   Hook'lar `["capabilities"]` altında (özel SSE event YOK — `resource.changed` süpürür):
+>   `useCapabilities` / `useCapability(key)` / `useGraphicViewOverview`; `useTransitionCapability`
+>   — OCC `expected_registry_version` + mutate başına taze `Idempotency-Key` UUID (komut ZORUNLU
+>   kılar), başarıda `["capabilities"]`+`["audit"]` invalidate.
+> - **`frontend/src/pages/FutureDev.tsx`** — registry tablosu; detay kartı (gate checklist +
+>   son geçiş provenance'ı); `TransitionComposer` — hedefler YALNIZ yasal doc-22 edge'leri,
+>   reason ZORUNLU, dokunulmamış checklist `dependency_snapshot`'ı OMIT eder (sunucu kayıtlı gate
+>   kaydını korur), hatalar envelope VERBATIM; mutation state KARTta yaşar (başarı mesajı
+>   registry_version bump'ının tetiklediği composer remount'unu atlatır); Graphic View overview
+>   salt-okunur (CR-09 — sahte operasyon/ilerleme yok).
+> - **`App.tsx`** — `/future-dev` REAL_PATHS'te (7→8); `nav.ts` DEĞİŞMEDİ (23 item).
+> - **Testler** — YENİ `test/futureDev.test.tsx` (7; apiStub SIRALI eşleşme — detay fragment'i
+>   `/capabilities` liste prefix'inden ÖNCE) + `test/capabilityLib.test.ts` (2 gate-merge unit)
+>   → **frontend 67/67**; typecheck + lint temiz; build yeşil.
+> **Dürüst sınır:** gated operasyonel POST'lar (`/view-datasets/query`, `/analysis-artifacts`)
+> BAĞLANMADI — V1 UI iş akışı yok; capability Limited/Active altındayken sunucu zaten
+> `CAPABILITY_NOT_ACTIVE` döner (CR-09/FD-02). Composer görünürlüğü rol-gate'li değil (UI
+> görünürlüğü asla yetkilendirme değildir — doc 22 §3); Admin olmayan deneme 403 envelope'unu
+> verbatim görür.
+> **Sıradaki doğal slice:** (c) first-Admin provisioning DASHBOARD'u (backend mekanizması PR
+> #76'da — yalnız UI; Panel.tsx kart deseni taban) VEYA (d) CP real candidate generation VEYA
+> (e) frontend Trash sayfası (restore UI). Aşağıdaki history compare (PR #80) bloğu ve öncesi
+> tarihsel.
+
 ## Durum (2026-07-06, TIER 2 frontend — history compare/soft-delete + profil-hidrasyonlu Result metrics; PR #80 MERGED)
 
 > **Yedinci TIER 2 (frontend) slice — history compare/soft-delete + ResultDetail rebind landed
@@ -781,23 +824,24 @@ real-auth login/signup/logout (#65) + SSE live-invalidation (#67) + /v1/metrics 
 (#69) + canlı-veri backtest sayfaları (#72) + Arrange Metrics & Analysis Lab (#74 — tüm lab
 key'leri ["agent-tasks"]) + Panel / Management / Logs (#78 — SON bağlanabilir SSE key'i
 ["audit"] bağlandı; Management ["admin"] altında) + history compare/soft-delete & profil-
-hidrasyonlu Result metrics rebind (#80 — lib/backtest.ts useCompareResults
-["backtests","compare",a,b] + useResultMetrics ["metric-profile","result-metrics",id] (BİLEREK
-["backtests"] değil — Arrange Metrics Apply bu görünümü süpürsün diye) + useSoftDeleteResult;
-ComparePanel server context diff'i verbatim, RH-09 asla winner yok; ResultDetail doc 17 §9.1
-hydrated projeksiyona bağlı, persisted-rows fallback'li — L4; frontend 51→58 vitest). BACKEND:
+hidrasyonlu Result metrics rebind (#80) + Future Dev capability registry sayfası (#82 —
+lib/capability.ts doc-22 §9.1/§9.2 taksonomi aynası (CAPABILITY_STATES/ALLOWED_TRANSITIONS/
+ACTIVATION_GATES) + gateComplete/buildGatesSnapshot (not-koruyan merge) + hook'lar
+["capabilities"] altında + useTransitionCapability OCC expected_registry_version + zorunlu
+Idempotency-Key UUID; pages/FutureDev.tsx registry/detay/transition composer + Graphic View
+overview salt-okunur CR-09; App.tsx /future-dev REAL_PATHS 7→8; frontend 58→67 vitest). BACKEND:
 first-Admin bootstrap provisioning (#76 — ENTROPIA_BOOTSTRAP_ADMIN_EMAIL opt-in; migration YOK,
 alembic head 0021_local_auth SABİT; backend testler 1028).
 
 ÖNCE DOĞRULA (stale-by-default): git fetch && git log --oneline origin/main -6 && gh pr list
---state all -L 8. main = 8f57151 (Merge #80) + kapanış docs PR'ı merge sonrası ileri olmalı
+--state all -L 8. main = 1411adc (Merge #82) + kapanış docs PR'ı merge sonrası ileri olmalı
 (açıksa önce kullanıcıdan merge iste). alembic head 0021_local_auth; backend ENGINE_VERSION =
 backtest-engine-v2-position-size-limits. FRONTEND doğrula (yeni branch'i MUTLAKA origin/main'den
 aç — local stale olabilir): cd frontend && npm run typecheck && npm run lint && npm test &&
-npm run build (58/58 geçmeli).
+npm run build (67/67 geçmeli).
 
-ÖNCE OKU (authority): docs/POST_V1_KICKOFF.md (en üst Durum bloğu — PR #80) + docs/STAGE2_HANDOFF.md
-("history compare/soft-delete ... landed (PR #80)" + "Next"). Landed yüzeyleri TÜKET,
+ÖNCE OKU (authority): docs/POST_V1_KICKOFF.md (en üst Durum bloğu — PR #82) + docs/STAGE2_HANDOFF.md
+("Future Dev capability registry page ... landed (PR #82)" + "Next"). Landed yüzeyleri TÜKET,
 yeniden yazma: Auth (lib/session.ts + lib/auth.ts + apiClient Bearer + pages/Login.tsx); SSE
 (lib/sse.ts EVENT_QUERY_KEYS + connectEvents Layout mount); Metrics (lib/metrics.ts + useMetrics
 5s poll + pages/Metrics.tsx); Backtest (lib/backtest.ts ["backtests"] hook'ları +
@@ -806,9 +850,11 @@ compare/delete UI + components/ResultDetail.tsx hydrated Metrics + useCompareRes
 useResultMetrics/useSoftDeleteResult — PR #80); Arrange Metrics + Analysis Lab (lib/metricProfile.ts OCC Apply +
 lib/agentLab.ts ["agent-tasks"] hook'ları + If-Match kontrolleri + pages/ArrangeMetrics.tsx +
 pages/AnalysisLab.tsx); Panel/Logs (lib/adminPanel.ts ["admin"]+["audit"] hook'ları +
-useAssignRole OCC + pages/Panel.tsx 5 kart); test/helpers/apiStub.ts route-aware fetch double
-("<METHOD> <fragment>" sıralı eşleşme — detay route'u liste route'undan ÖNCE yaz) — yeni sayfa
-testleri için BUNU reuse et.
+useAssignRole OCC + pages/Panel.tsx 5 kart); Capabilities (lib/capability.ts doc-22 taksonomi
+aynası + useTransitionCapability OCC/Idempotency-Key + pages/FutureDev.tsx — admin-facing
+lifecycle UI için doğal taban); test/helpers/apiStub.ts route-aware fetch double
+("<METHOD> <fragment>" sıralı eşleşme — detay/spesifik route'u liste/prefix route'undan ÖNCE yaz)
+— yeni sayfa testleri için BUNU reuse et.
 
 FRONTEND STACK: Vite 8 + React 18 + react-router 6 + @tanstack/react-query 5 + react-hook-form +
 vitest/jsdom + @testing-library. Alias @ = src; kök frontend/src/. Node >=20.19. ESLint tseslint
@@ -817,24 +863,25 @@ invalidateQueries({queryKey}) object-form. tsconfig: noUncheckedIndexedAccess +
 exactOptionalPropertyTypes KAPALI.
 
 SIRADAKİ İŞ — kalan TIER 2 adayları (BAŞLARKEN kullanıcıyla hangisi diye TEYİT ET):
-- (b) capability aktivasyonları (role-gated features) — routes/capability.py backend yüzeyi
-  mevcut; önce yüzeyi KEŞFET (hangi projeksiyonlar/komutlar var), sonra kapsamı kullanıcıyla
-  netleştir.
-- (c) first-Admin provisioning DASHBOARD'u (backend mekanizması PR #76'da landed — bu yalnız UI).
+- (c) first-Admin provisioning DASHBOARD'u (backend mekanizması PR #76'da landed — bu yalnız UI;
+  Panel.tsx kart deseni + lib/adminPanel.ts ["admin"] hook deseni taban).
 - (d) CP real candidate generation (daha büyük; kapsam teyidi şart).
+- (e) frontend Trash sayfası (restore UI — backend Stage 6c landed; şu an placeholder).
 DİKKAT (kalıcı dürüst sınırlar): ["jobs"] için backend liste yüzeyi YOK (run projeksiyonları +
-/v1/metrics jobs-depth); users/system-actors'ın özel SSE event'i yok (kendi mutation'ları +
-resource.changed süpürür).
+/v1/metrics jobs-depth); users/system-actors/capabilities'in özel SSE event'i yok (kendi
+mutation'ları + resource.changed süpürür); Future Dev gated operasyonel POST'ları
+(/view-datasets/query, /analysis-artifacts) BAĞLANMADI — V1 UI akışı yok, capability Limited/
+Active altındayken sunucu CAPABILITY_NOT_ACTIVE döner.
 TIER 3 (deferred): retention auto-purge, data-queue redelivery, SSE streaming e2e, tool-call status
 shadowing.
 
-BACKEND REUSE ANCHOR'LARI (DEĞİŞTİRME, TÜKET): routes/results_history.py compare/delete +
-GET /backtest-results/{id}/metrics zaten bağlı (PR #80); routes/capability.py aday (b) için
-keşfedilecek yüzey; admin panel + audit zaten bağlı
-(PR #78); metric-profile + agent-lab zaten bağlı (PR #74); backtest RUN/result/history zaten
-bağlı (PR #72); SSE taksonomisi + /v1/auth/* + /me + GET /v1/metrics zaten bağlı; first-Admin
+BACKEND REUSE ANCHOR'LARI (DEĞİŞTİRME, TÜKET): routes/capability.py registry list/detail +
+lifecycle-transitions + graphic_view/overview zaten bağlı (PR #82); routes/results_history.py
+compare/delete + GET /backtest-results/{id}/metrics zaten bağlı (PR #80); admin panel + audit
+zaten bağlı (PR #78); metric-profile + agent-lab zaten bağlı (PR #74); backtest RUN/result/history
+zaten bağlı (PR #72); SSE taksonomisi + /v1/auth/* + /me + GET /v1/metrics zaten bağlı; first-Admin
 bootstrap landed (PR #76 — commands/auth.py bootstrap_admin_matches + sign_up branch,
-settings.bootstrap_admin_email).
+settings.bootstrap_admin_email — provisioning DASHBOARD'u (c) için taban mekanizma).
 
 YÖNTEM: Workflow KULLANMA; direct-author. Backend working-loop (izole DB / L1 FK / alembic)
 UYGULANMAZ. Frontend loop: cd frontend (cwd resetlenebilir → absolute path);

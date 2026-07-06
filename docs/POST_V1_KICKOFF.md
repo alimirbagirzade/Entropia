@@ -3,6 +3,49 @@
 > **Amaç:** V1 kapandı (Stage 0–8 COMPLETE). Bu doküman post-V1 durumunu, aday iş listesini
 > ve temiz oturumda yapıştırılacak resume prompt'u içerir.
 
+## Durum (2026-07-06, TIER 2 frontend — canlı-veri backtest sayfaları; PR #72 MERGED)
+
+> **Dördüncü TIER 2 (frontend) slice — canlı-veri backtest sayfaları landed (PR #72, merged →
+> main `c322588`; CI 3/3 yeşil; review 1 bulgu — path-param encoding — commit öncesi düzeltildi,
+> 0 CRITICAL/HIGH).** Stage 5 backtest ekranları placeholder'dı; backend yüzeyi Stage 5a/5b'den beri
+> hazırdı ve PR #67'nin `backtest.run.updated → ["backtests"]` map'i sayfasızdı. Bu slice RUN &
+> Backtest Results (`/backtest/run`) + Results History'yi (`/backtest/history`) gerçek query'lere
+> bağlar → **SSE live-invalidation payoff'u ilk kez GÖRÜNÜR.**
+> **FRONTEND-ONLY — backend değişmedi, migration YOK, backend test tabanı 1015 sabit.** alembic head
+> hâlâ `0021_local_auth`; backend `ENGINE_VERSION` hâlâ `backtest-engine-v2-position-size-limits`.
+> **Reuse anchor'ları (kesin semboller):**
+> - **`frontend/src/lib/backtest.ts`** *(YENİ)* — backend projection'larını birebir yansıtan wire
+>   tipleri (`DefaultMainboard`/`BacktestRunAdmission`/`BacktestRun`/`BacktestResultDetail`/
+>   `HistoryRow`/`HistoryPage`); `HISTORY_SORTS` (6 kanonik sort + V18 label), `KEY_METRIC_COLUMNS`,
+>   `TERMINAL_RUN_STATES`; `formatMetricValue` (null değer availability label'ı gösterir, ASLA 0 —
+>   L4) + locale-bağımsız `formatUtc`; hook'lar: `useDefaultMainboard` (`["mainboard","default"]`),
+>   `useBacktestRun` (`["backtests","run",id]`, terminal state'te duran poll fallback — SSE asıl,
+>   INF-11), `useBacktestResult` (immutable), `useResultsHistory` (`["backtests","history",sort,cursor]`,
+>   keyset cursor, `placeholderData` önceki sayfayı tutar); 202 mutation'lar `useRequestBacktestRun`/
+>   `useRetryBacktestRun` (ikisi de `["backtests"]` invalidate). TÜM path parametreleri
+>   `encodeURIComponent`'li (review düzeltmesi — encode'suz `?result=` URL normalizasyonuyla başka
+>   API GET endpoint'ine gidebilirdi).
+> - **`frontend/src/pages/BacktestRun.tsx`** *(YENİ)* — iki mod: `?result=<id>` immutable deep-link
+>   (yalnızca result_id'den hydrate, doc 15 §8.5 — History "View" buraya iner) + workbench
+>   (composition kartı `GET /mainboards/default` → RUN admission 202 → run id `?run=`'da, refresh
+>   durable row'u izlemeye devam eder, doc 15 §4); failure verbatim + Retry YENİ run id'ye geçer;
+>   admission `warning_count` badge'i.
+> - **`frontend/src/pages/ResultsHistory.tsx` + `components/ResultDetail.tsx`** *(YENİ)* — server-side
+>   sort/keyset pagination (client asla yeniden sıralamaz), key-metric digest hücreleri, View →
+>   `?result=` deep-link; ResultDetail: summary kv + metrics tablosu (value + availability) +
+>   manifest excerpt + artifact sayıları.
+> - **`App.tsx`** — `REAL_PATHS` set'i (`/`, `/panel/metrics`, `/backtest/run`, `/backtest/history`);
+>   iki gerçek route. `nav.ts` DEĞİŞMEDİ (23 öğe).
+> - **`test/backtestRun.test.tsx`** *(3)* + **`test/resultsHistory.test.tsx`** *(4)* + paylaşılan
+>   **`test/helpers/apiStub.ts`** route-aware fetch double ("<METHOD> <fragment>" anahtarlı) —
+>   **frontend 36/36** (29 + 7); typecheck + lint temiz; build yeşil.
+> **Dürüst sınır:** Arrange Metrics (`/backtest/metrics`) + Analysis Lab (`/analysis-lab`) hâlâ
+> placeholder — `["jobs"]`/`["agent-tasks"]`/`["audit"]` key'lerinin bağlı sayfası yok; history
+> compare + soft-delete affordance'ları onlarla ertelendi.
+> **Sıradaki doğal slice:** Arrange Metrics + Analysis Lab canlı sayfaları (kalan SSE key'lerini
+> bağlar; `routes/metric_profile.py` + `routes/agent_lab.py`) VEYA capability aktivasyonları /
+> first-Admin provisioning. Aşağıdaki /v1/metrics (PR #69) bloğu ve öncesi tarihsel.
+
 ## Durum (2026-07-05, TIER 2 frontend — /v1/metrics dashboard; PR #69)
 
 > **Üçüncü TIER 2 (frontend) slice — /v1/metrics ops dashboard landed (PR #69, açık, CI: Frontend +
@@ -549,52 +592,60 @@ tarihsel referans** olarak duruyor.
 Entropia — post-V1 TIER 2 (FRONTEND). Backend TIER 1 EFEKTİF TAMAM (V1 + Auth/IdP #38 + Parquet
 A #41 + bar-replay B #43 + indikatör compute C #45 + risk_based #47 + condition blocks #49 +
 extensions #51 + indicator-vs-indicator #53 + multi-TF #55 + per-condition-TF #56 + N-ary #57 +
-VWAP #58 + Kelly #60/#61 + position_size_limits #63 — HEPSİ MERGED). FRONTEND landed: gerçek auth
-login/signup/logout (PR #65 MERGED) + SSE live-invalidation (PR #67 MERGED) + /v1/metrics ops
-dashboard (PR #69 — merge KULLANICIDA; frontend-only, backend değişmedi, backend test tabanı 1015 SABİT).
+VWAP #58 + Kelly #60/#61 + position_size_limits #63 — HEPSİ MERGED). FRONTEND landed (hepsi MERGED):
+real-auth login/signup/logout (PR #65) + SSE live-invalidation (PR #67) + /v1/metrics ops dashboard
+(PR #69) + CANLI-VERİ BACKTEST SAYFALARI (PR #72 — RUN & Backtest Results /backtest/run + Results
+History /backtest/history; SSE ["backtests"] key'i İLK KEZ canlı sayfalara bağlı). Hepsi
+frontend-only, backend değişmedi, backend test tabanı 1015 SABİT.
 
 ÖNCE DOĞRULA (stale-by-default): git fetch && git log --oneline origin/main -6 && gh pr list
---state all -L 8. PR #69 (feat/post-v1-frontend-metrics) + docs PR'ı MERGE OLDU MU teyit et;
-main = 5978ba4 (Merge #68) → #69 merge sonrası ileri. alembic head 0021_local_auth;
-ENGINE_VERSION = backtest-engine-v2-position-size-limits. FRONTEND doğrula (yeni branch'i MUTLAKA
-origin/main'den aç — local stale olabilir): cd frontend && npm run typecheck && npm run lint &&
-npm test && npm run build (metrics sonrası 29/29).
+--state all -L 8. main = c322588 (Merge #72) + kapanış docs PR'ı merge sonrası ileri olmalı.
+alembic head 0021_local_auth; backend ENGINE_VERSION = backtest-engine-v2-position-size-limits.
+FRONTEND doğrula (yeni branch'i MUTLAKA origin/main'den aç — local stale olabilir): cd frontend &&
+npm run typecheck && npm run lint && npm test && npm run build (backtest sayfaları sonrası 36/36
+geçmeli).
 
-ÖNCE OKU: docs/POST_V1_KICKOFF.md (en üst Durum bloğu — /v1/metrics PR #69) + docs/STAGE2_HANDOFF.md
-("Frontend /v1/metrics dashboard ... landed (PR #69)" + "Next"). Auth + SSE + metrics ZATEN bağlı,
-ÜÇÜNÜ DE TÜKET, yeniden yazma: Auth (lib/session.ts + lib/auth.ts + apiClient Bearer + pages/Login.tsx
-+ /login + Layout AuthControl); SSE (lib/sse.ts EVENT_QUERY_KEYS event→key map + connectEvents Layout
-mount + reconnect full-refresh); Metrics (lib/metrics.ts parser + lib/apiClient apiGetText/api.getText
-+ lib/hooks useMetrics 5s poll + pages/Metrics.tsx + /panel/metrics adminOnly route).
+ÖNCE OKU (authority): docs/POST_V1_KICKOFF.md (en üst Durum bloğu — PR #72) + docs/STAGE2_HANDOFF.md
+("Frontend live-data backtest pages ... landed (PR #72)" + "Next"). Auth + SSE + metrics + backtest
+sayfaları ZATEN bağlı, DÖRDÜNÜ DE TÜKET, yeniden yazma: Auth (lib/session.ts + lib/auth.ts +
+apiClient Bearer + pages/Login.tsx); SSE (lib/sse.ts EVENT_QUERY_KEYS + connectEvents Layout mount);
+Metrics (lib/metrics.ts + useMetrics 5s poll + pages/Metrics.tsx); Backtest (lib/backtest.ts wire
+tipleri + ["backtests"] hook'ları + formatMetricValue/formatUtc + pages/BacktestRun.tsx ?run=/?result=
+modları + pages/ResultsHistory.tsx + components/ResultDetail.tsx + test/helpers/apiStub.ts
+route-aware fetch double — yeni sayfa testleri için BUNU reuse et).
 
 FRONTEND STACK: Vite 8 + React 18 + react-router 6 + @tanstack/react-query 5 + react-hook-form +
 vitest/jsdom + @testing-library. Alias @ = src; kök frontend/src/. Node >=20.19. ESLint tseslint
 recommended (type-checked DEĞİL → no-floating-promises YOK; no-explicit-any VAR). react-query v5 →
-invalidateQueries({queryKey}) object-form (array-form kaldırıldı). tsconfig: noUncheckedIndexedAccess +
+invalidateQueries({queryKey}) object-form. tsconfig: noUncheckedIndexedAccess +
 exactOptionalPropertyTypes KAPALI.
 
 SIRADAKİ İŞ — kalan TIER 2 frontend adayları (BAŞLARKEN kullanıcıyla hangisi diye TEYİT ET):
-- (a) canlı-veri Stage 5/6 sayfaları (RUN & Backtest Results / Results History / Arrange Metrics /
-  Analysis Lab) — bunlar SSE EVENT_QUERY_KEYS key'lerini (["backtests"]/["jobs"]/["agent-tasks"]/
-  ["audit"]) BAĞLADIĞINDA SSE live-invalidation payoff'u görünür olur (şu an infra bağlı, sayfalar
-  placeholder). Daha büyük iş: gerçek backend query hook'ları + result render. (ÖNERİLEN — en görünür payoff.)
+- (a) Arrange Metrics (/backtest/metrics) + Analysis Lab (/analysis-lab) canlı sayfaları — metric
+  profile endpoint'leri (backend routes/metric_profile.py: definitions/resolved/revisions/
+  result-metrics) + agent lab endpoint'leri (routes/agent_lab.py: overview/tasks/task-detail/
+  hypotheses/messages/directives/pause/resume/stop) → kalan SSE key'leri ["agent-tasks"]/["jobs"]/
+  ["audit"] bağlanır; history compare/soft-delete affordance'ları da eklenebilir. (ÖNERİLEN —
+  PR #72'nin doğal devamı.)
 - (b) capability aktivasyonları (role-gated features), (c) first-Admin provisioning dashboard.
-TIER 3 (deferred): retention auto-purge, data-queue redelivery, SSE streaming e2e (connection drops),
-tool-call status shadowing (CR-08 follow-up).
+TIER 3 (deferred): retention auto-purge, data-queue redelivery, SSE streaming e2e, tool-call status
+shadowing.
 
-BACKEND REUSE ANCHOR'LARI (frontend'in bağlanacağı HAZIR kontratlar — DEĞİŞTİRME, TÜKET):
-- Backtest/RUN + result + history + jobs + agent-task + audit query endpoint'leri (canlı-veri sayfaları
-  için — backend .../apps/api/routes/*).
-- Metrics: GET /v1/metrics (Prometheus text) + lib/metrics.ts parser (frontend'de ZATEN bağlı).
-- SSE: backend .../apps/api/sse.py (sse_event_name taksonomisi); frontend'de ZATEN bağlı (lib/sse.ts).
-- Auth: /v1/auth/* + /me (frontend'de zaten bağlı).
+BACKEND REUSE ANCHOR'LARI (DEĞİŞTİRME, TÜKET): routes/metric_profile.py + routes/agent_lab.py +
+routes/audit.py + routes/results_history.py compare/delete (sıradaki sayfalar için); backtest
+RUN/result/history zaten bağlı (PR #72, lib/backtest.ts); SSE taksonomisi + /v1/auth/* + /me +
+GET /v1/metrics zaten bağlı.
 
-YÖNTEM: Workflow KULLANMA; direct-author. Bu slice FRONTEND — backend working-loop (izole DB / L1 FK /
-alembic) UYGULANMAZ. Frontend loop: cd frontend (cwd resetlenebilir → absolute path); npm run typecheck
-&& npm run lint && npm test && npm run build + yeni component/unit test. YENİ dosya heredoc (gate-free),
-mevcut dosya Edit 4-fact (GateGuard: ilk Bash + dosya-başına-ilk-edit + docs da gate'lenir).
-CRITICAL/HIGH AMPİRİK DOĞRULA → commit (conventional feat(post-v1)/branch feat/post-v1-frontend-<slug>,
-attribution YOK) → PR → gh pr checks (frontend+docker check; backend değişmediği için yeşil; --watch 5dk
-timeout → poll tercih et, foreground sleep >~20s bloklu → background poll) → merge KULLANICIDA. Türkçe,
-MALİYET BİLİNÇLİ. Kapanışta: handoff + kickoff + CLAUDE.md + memory (ecc knowledge graph; claude-mem token stale atlanabilir).
+YÖNTEM: Workflow KULLANMA; direct-author. Backend working-loop (izole DB / L1 FK / alembic)
+UYGULANMAZ. Frontend loop: cd frontend (cwd resetlenebilir → absolute path);
+typecheck+lint+test+build + yeni component/unit test (apiStub.ts reuse). YENİ dosya heredoc
+(gate-free); mevcut dosya Edit 4-fact (GateGuard: ilk Bash + dosya-başına-ilk-edit + docs da
+gate'lenir → importer'ları Grep ile kanıtla; gate bazen fact'ler sunulmuş olsa da İLK denemeyi
+bloklar → aynı çağrıyı aynen tekrarla). CRITICAL/HIGH AMPİRİK DOĞRULA → commit (conventional
+feat(post-v1)/branch feat/post-v1-frontend-<slug> origin/main'den, attribution YOK) → PR →
+gh pr checks (frontend+docker hızlı, backend ~13dk — değişmediği için yeşil; --watch 5dk timeout +
+foreground sleep >~20s BLOKLU → background poll: `until ! gh pr checks <n>|grep -q pending; do
+sleep 15; done`) → merge KULLANICIDA. Türkçe, MALİYET BİLİNÇLİ. Kapanışta: handoff + kickoff
+(resume prompt tazele) + CLAUDE.md + memory (ecc knowledge graph; claude-mem token stale
+atlanabilir).
 ```

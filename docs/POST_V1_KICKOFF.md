@@ -3,6 +3,68 @@
 > **Amaç:** V1 kapandı (Stage 0–8 COMPLETE). Bu doküman post-V1 durumunu, aday iş listesini
 > ve temiz oturumda yapıştırılacak resume prompt'u içerir.
 
+## Durum (2026-07-06, TIER 2 frontend — Arrange Metrics + Analysis Lab canlı sayfaları; PR #74 MERGED)
+
+> **Beşinci TIER 2 (frontend) slice — Arrange Metrics + Analysis Lab canlı sayfaları landed
+> (PR #74, merged → main `4969825`; CI 3/3 yeşil).** Backend yüzeyi tam olan SON iki placeholder
+> (`/backtest/metrics` Stage 5c doc 17 + `/analysis-lab` Stage 6a doc 18) gerçek sayfa oldu;
+> Analysis Lab'ın TÜM query key'leri `["agent-tasks"]` prefix'inde → **PR #67'nin
+> `agent.task.updated` map'i (İKİNCİ SSE forward-contract key'i) artık canlı sayfaları süpürüyor.**
+> **FRONTEND-ONLY — backend değişmedi, migration YOK, backend test tabanı 1015 sabit.** alembic head
+> hâlâ `0021_local_auth`; backend `ENGINE_VERSION` hâlâ `backtest-engine-v2-position-size-limits`.
+> **Reuse anchor'ları (kesin semboller):**
+> - **`frontend/src/lib/metricProfile.ts`** *(YENİ)* — `application/queries/metric_profile.py`
+>   projeksiyonlarını birebir yansıtan wire tipleri (`MetricDefinition`/`MetricRegistry`,
+>   `ResolvedMetricProfile` — `editable_profile_id` ilk Apply'a kadar `"system_default"`, doc 17
+>   §8.1 — `MetricProfileRevision` server-türevli geçiş `reason`'ıyla, `ApplyMetricProfileInput`);
+>   hook'lar `useMetricDefinitions` (`["metric-definitions"]`, 5dk staleTime) +
+>   `useResolvedMetricProfile` (`["metric-profile","resolved"]`); `useApplyMetricProfile` —
+>   Apply / Apply & Lock / saf Unlock ÜÇÜ DE aynı append `POST /metric-profiles/{id}/revisions`,
+>   `expected_profile_revision_id` OCC guard'ıyla (409 stale/locked verbatim); `["metric-profile"]`
+>   invalidate. SUNUM-ONLY (CR-07): metrik yeniden hesaplanmaz, Result'a dokunulmaz.
+> - **`frontend/src/pages/ArrangeMetrics.tsx`** *(YENİ)* — registry tablosu + üstüne resolved seçim:
+>   selectable olmayan (future/experimental) metrikler görünür ama işaretlenemez; kilitli profil
+>   edit'i kapatır, yalnızca SAF Unlock sunar (server'ın kendi seçimi + `is_locked=false`, doc 17
+>   §7); draft her revision hareketinde server head'inden yeniden tohumlanır; boş seçimde Apply
+>   disabled (server `min_length=1`); başarı `revision_no` + `reason` echo'lar.
+> - **`frontend/src/lib/agentLab.ts`** *(YENİ)* — `application/queries/agent_workspace.py`
+>   projeksiyonlarını yansıtan wire tipleri (`AgentRuntime`/`AgentTaskCard`/`AgentOverview`/
+>   `AgentTaskDetail` checkpoint+directive'lerle/`HypothesisCard`) + komut admission'ları
+>   (`DirectiveAdmission`, `LabMessageResponse`, `RuntimeControlAccepted`); TÜM query key'ler
+>   `["agent-tasks"]` SSE prefix'inde: `useAgentOverview` (15sn loss-tolerant poll fallback,
+>   INF-11 — SSE asıl), `useAgentTasks` (keyset, `placeholderData`), `useAgentTask`,
+>   `useHypotheses`; 202 mutation'lar `useQueueDirective` (`DIRECTIVE_PRIORITIES = normal|high` —
+>   `autonomous` yalnız Coordinator üretir, insana sunulmaz, doc 18 §9.1), `useSendLabMessage`,
+>   `usePauseRuntime`/`useResumeRuntime`/`useStopRun` — runtime `row_version` `If-Match` OCC token
+>   olarak gider (`postWithIfMatch`); hepsi `["agent-tasks"]` invalidate.
+> - **`frontend/src/pages/AnalysisLab.tsx`** *(YENİ)* — `RuntimeCard` (status/mode/pending_control
+>   badge'leri; Pause-at-next-safe-checkpoint / Resume / Stop-active-run — stop aktif TASK id'sini
+>   geçer; bu domain'de run id ≡ task id: backend `stop_run` `get_task(session, run_id)` yapar),
+>   `QueueCard` (sayaçlar + kartlar + Detail), `TaskDetailCard` (checkpoint sayısı,
+>   waiting/failure, ilişkili direktifler), `DirectiveCard` (direktif + discussion-message
+>   composer'ları; `delivery_policy` echo; asistan yanıtı render), `HypothesesCard` (output board).
+>   Server policy otorite: Admin/Supervisor olmayan 403 zarfını `ErrorState` ile verbatim görür.
+> - **`App.tsx`** — `REAL_PATHS` 4 → 6 (`/backtest/metrics`, `/analysis-lab`); `nav.ts` DEĞİŞMEDİ
+>   (23 öğe).
+> - **`test/arrangeMetrics.test.tsx`** *(4)* + **`test/analysisLab.test.tsx`** *(5)* — apiStub
+>   reuse; mutation payload + If-Match assertion'ları, `["agent-tasks"]` invalidation refetch
+>   kanıtı — **frontend 45/45** (36 + 9); typecheck + lint temiz; build yeşil.
+> **Dürüst sınır:** metric-profile değişikliğinin ÖZEL SSE event'i yok (yalnız `resource.changed`
+> full refresh süpürür; Apply mutation'ı aynı-tab tazeliği için `["metric-profile"]` invalidate
+> eder) · lab app-level `/events` stream'ini tüketir — role-gated `GET /agent-events/stream`
+> (bugün yalnız heartbeat/ready) ikinci EventSource olarak BAĞLANMADI · task/hypothesis keyset
+> pagination'ın ilk sayfa ötesi + `GET /agent-tasks?status&cursor` filtre UI'ı ertelendi ·
+> `GET /backtest-results/{result_id}/metrics` (profil-hidrasyonlu Result görünümü) henüz
+> TÜKETİLMEDİ — `ResultDetail` ham persisted satırları gösterir; profil editörü landed olduğuna
+> göre doğal follow-up budur · `["audit"]`'in bağlı sayfası hâlâ yok (Panel/Logs) ve `["jobs"]`
+> için backend'de liste yüzeyi HİÇ yok (job durumu run projeksiyonları + /v1/metrics jobs-depth
+> üzerinden görünür) · history compare/soft-delete affordance'ları hâlâ ertelendi.
+> **Sıradaki doğal slice:** Panel / Management / Logs canlı sayfası (SON bağlanabilir SSE key'i
+> `["audit"]`'i bağlar; `routes/admin_panel.py` `/admin/users|system-actors|role-matrix|logs` +
+> `routes/audit.py` `/audit-events`; compare/soft-delete + profil-hidrasyonlu Result metrics
+> binding'i yanında gidebilir) VEYA capability aktivasyonları / first-Admin provisioning.
+> Aşağıdaki backtest-sayfaları (PR #72) bloğu ve öncesi tarihsel.
+
 ## Durum (2026-07-06, TIER 2 frontend — canlı-veri backtest sayfaları; PR #72 MERGED)
 
 > **Dördüncü TIER 2 (frontend) slice — canlı-veri backtest sayfaları landed (PR #72, merged →
@@ -594,25 +656,27 @@ A #41 + bar-replay B #43 + indikatör compute C #45 + risk_based #47 + condition
 extensions #51 + indicator-vs-indicator #53 + multi-TF #55 + per-condition-TF #56 + N-ary #57 +
 VWAP #58 + Kelly #60/#61 + position_size_limits #63 — HEPSİ MERGED). FRONTEND landed (hepsi MERGED):
 real-auth login/signup/logout (PR #65) + SSE live-invalidation (PR #67) + /v1/metrics ops dashboard
-(PR #69) + CANLI-VERİ BACKTEST SAYFALARI (PR #72 — RUN & Backtest Results /backtest/run + Results
-History /backtest/history; SSE ["backtests"] key'i İLK KEZ canlı sayfalara bağlı). Hepsi
-frontend-only, backend değişmedi, backend test tabanı 1015 SABİT.
+(PR #69) + canlı-veri backtest sayfaları (PR #72) + ARRANGE METRICS & ANALYSIS LAB SAYFALARI
+(PR #74 — /backtest/metrics profil editörü OCC Apply/Lock/Unlock + /analysis-lab agent workspace;
+TÜM lab key'leri ["agent-tasks"] prefix'inde → İKİNCİ SSE key'i canlı). Hepsi frontend-only,
+backend değişmedi, backend test tabanı 1015 SABİT.
 
 ÖNCE DOĞRULA (stale-by-default): git fetch && git log --oneline origin/main -6 && gh pr list
---state all -L 8. main = c322588 (Merge #72) + kapanış docs PR'ı merge sonrası ileri olmalı.
-alembic head 0021_local_auth; backend ENGINE_VERSION = backtest-engine-v2-position-size-limits.
-FRONTEND doğrula (yeni branch'i MUTLAKA origin/main'den aç — local stale olabilir): cd frontend &&
-npm run typecheck && npm run lint && npm test && npm run build (backtest sayfaları sonrası 36/36
-geçmeli).
+--state all -L 8. main = 4969825 (Merge #74) + kapanış docs PR'ı (#75?) merge sonrası ileri olmalı
+(açıksa önce kullanıcıdan merge iste). alembic head 0021_local_auth; backend ENGINE_VERSION =
+backtest-engine-v2-position-size-limits. FRONTEND doğrula (yeni branch'i MUTLAKA origin/main'den
+aç — local stale olabilir): cd frontend && npm run typecheck && npm run lint && npm test &&
+npm run build (PR #74 sonrası 45/45 geçmeli).
 
-ÖNCE OKU (authority): docs/POST_V1_KICKOFF.md (en üst Durum bloğu — PR #72) + docs/STAGE2_HANDOFF.md
-("Frontend live-data backtest pages ... landed (PR #72)" + "Next"). Auth + SSE + metrics + backtest
-sayfaları ZATEN bağlı, DÖRDÜNÜ DE TÜKET, yeniden yazma: Auth (lib/session.ts + lib/auth.ts +
-apiClient Bearer + pages/Login.tsx); SSE (lib/sse.ts EVENT_QUERY_KEYS + connectEvents Layout mount);
-Metrics (lib/metrics.ts + useMetrics 5s poll + pages/Metrics.tsx); Backtest (lib/backtest.ts wire
-tipleri + ["backtests"] hook'ları + formatMetricValue/formatUtc + pages/BacktestRun.tsx ?run=/?result=
-modları + pages/ResultsHistory.tsx + components/ResultDetail.tsx + test/helpers/apiStub.ts
-route-aware fetch double — yeni sayfa testleri için BUNU reuse et).
+ÖNCE OKU (authority): docs/POST_V1_KICKOFF.md (en üst Durum bloğu — PR #74) + docs/STAGE2_HANDOFF.md
+("Arrange Metrics + Analysis Lab ... landed (PR #74)" + "Next"). Beş landed yüzeyi TÜKET, yeniden
+yazma: Auth (lib/session.ts + lib/auth.ts + apiClient Bearer + pages/Login.tsx); SSE (lib/sse.ts
+EVENT_QUERY_KEYS + connectEvents Layout mount); Metrics (lib/metrics.ts + useMetrics 5s poll +
+pages/Metrics.tsx); Backtest (lib/backtest.ts ["backtests"] hook'ları + formatMetricValue/formatUtc
++ pages/BacktestRun.tsx ?run=/?result= + pages/ResultsHistory.tsx + components/ResultDetail.tsx);
+Arrange Metrics + Analysis Lab (lib/metricProfile.ts OCC Apply + lib/agentLab.ts ["agent-tasks"]
+hook'ları + If-Match kontrolleri + pages/ArrangeMetrics.tsx + pages/AnalysisLab.tsx);
+test/helpers/apiStub.ts route-aware fetch double — yeni sayfa testleri için BUNU reuse et.
 
 FRONTEND STACK: Vite 8 + React 18 + react-router 6 + @tanstack/react-query 5 + react-hook-form +
 vitest/jsdom + @testing-library. Alias @ = src; kök frontend/src/. Node >=20.19. ESLint tseslint
@@ -621,20 +685,22 @@ invalidateQueries({queryKey}) object-form. tsconfig: noUncheckedIndexedAccess +
 exactOptionalPropertyTypes KAPALI.
 
 SIRADAKİ İŞ — kalan TIER 2 frontend adayları (BAŞLARKEN kullanıcıyla hangisi diye TEYİT ET):
-- (a) Arrange Metrics (/backtest/metrics) + Analysis Lab (/analysis-lab) canlı sayfaları — metric
-  profile endpoint'leri (backend routes/metric_profile.py: definitions/resolved/revisions/
-  result-metrics) + agent lab endpoint'leri (routes/agent_lab.py: overview/tasks/task-detail/
-  hypotheses/messages/directives/pause/resume/stop) → kalan SSE key'leri ["agent-tasks"]/["jobs"]/
-  ["audit"] bağlanır; history compare/soft-delete affordance'ları da eklenebilir. (ÖNERİLEN —
-  PR #72'nin doğal devamı.)
+- (a) Panel / Management / Logs canlı sayfası (/panel, adminOnly) — routes/admin_panel.py
+  (/admin/users GET + /admin/users/{id}/role PATCH + /admin/system-actors + /admin/role-matrix +
+  /admin/logs + /admin/logs/{event_id}) + routes/audit.py (/audit-events) → SON bağlanabilir SSE
+  key'i ["audit"] bağlanır. DİKKAT: ["jobs"] için backend liste yüzeyi YOK (job durumu run
+  projeksiyonları + /v1/metrics jobs-depth'te) — dürüst sınır olarak bırak. History
+  compare/soft-delete (routes/results_history.py) + profil-hidrasyonlu
+  GET /backtest-results/{id}/metrics binding'i (ResultDetail rebind) yanında gidebilir.
+  (ÖNERİLEN — PR #74'ün doğal devamı.)
 - (b) capability aktivasyonları (role-gated features), (c) first-Admin provisioning dashboard.
 TIER 3 (deferred): retention auto-purge, data-queue redelivery, SSE streaming e2e, tool-call status
 shadowing.
 
-BACKEND REUSE ANCHOR'LARI (DEĞİŞTİRME, TÜKET): routes/metric_profile.py + routes/agent_lab.py +
-routes/audit.py + routes/results_history.py compare/delete (sıradaki sayfalar için); backtest
-RUN/result/history zaten bağlı (PR #72, lib/backtest.ts); SSE taksonomisi + /v1/auth/* + /me +
-GET /v1/metrics zaten bağlı.
+BACKEND REUSE ANCHOR'LARI (DEĞİŞTİRME, TÜKET): routes/admin_panel.py + routes/audit.py +
+routes/results_history.py compare/delete (sıradaki sayfalar için); metric-profile + agent-lab
+zaten bağlı (PR #74); backtest RUN/result/history zaten bağlı (PR #72); SSE taksonomisi +
+/v1/auth/* + /me + GET /v1/metrics zaten bağlı.
 
 YÖNTEM: Workflow KULLANMA; direct-author. Backend working-loop (izole DB / L1 FK / alembic)
 UYGULANMAZ. Frontend loop: cd frontend (cwd resetlenebilir → absolute path);

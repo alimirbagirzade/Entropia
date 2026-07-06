@@ -667,7 +667,64 @@ Reuse anchors (exact symbols):
   placeholders — `["jobs"]`/`["agent-tasks"]`/`["audit"]` keys still have no bound page; history
   compare + soft-delete affordances deferred with them.
 
-## Next: post-V1 (continued) — TIER 2 frontend (login + SSE + /v1/metrics + live-data backtest pages landed; Arrange Metrics / Analysis Lab live pages / capability activations / admin provisioning remain)
+## Post-V1 — Frontend live-data Arrange Metrics + Analysis Lab pages (TIER 2, frontend slice 5) ✅ landed (PR #74, merged → main `4969825`)
+
+**Fifth TIER 2 (frontend) slice — the last two placeholders with a fully-landed backend surface become
+live pages, and the SECOND SSE forward-contract key gets its first bound pages.** Arrange Metrics
+(`/backtest/metrics`, Stage 5c, doc 17) and Analysis Lab (`/analysis-lab`, Stage 6a, doc 18) were
+Stage-0 placeholders; every Analysis Lab query key is prefixed `["agent-tasks"]`, so the PR #67
+`agent.task.updated` invalidation now sweeps live pages. **Frontend-only — NO backend change, NO
+migration; backend test base stays 1015.** CI 3/3 green. Reuse anchors (exact symbols):
+- **`frontend/src/lib/metricProfile.ts`** *(new)* — wire types mirroring
+  `application/queries/metric_profile.py` verbatim (`MetricDefinition`/`MetricRegistry`,
+  `ResolvedMetricProfile` incl. `editable_profile_id` — `"system_default"` until the first Apply
+  forks a personal root, doc 17 §8.1 — `MetricProfileRevision` incl. the server-derived transition
+  `reason`, `ApplyMetricProfileInput`); hooks `useMetricDefinitions` (`["metric-definitions"]`,
+  5m staleTime — the registry is versioned server config) + `useResolvedMetricProfile`
+  (`["metric-profile","resolved"]`); `useApplyMetricProfile` — Apply / Apply & Lock / pure-Unlock are
+  ALL the same append `POST /metric-profiles/{id}/revisions` with the `expected_profile_revision_id`
+  OCC guard (409 stale/locked surfaced verbatim); invalidates `["metric-profile"]`.
+  PRESENTATION-ONLY (CR-07): never recomputes a metric, never touches a Result.
+- **`frontend/src/pages/ArrangeMetrics.tsx`** *(new)* — registry table with the resolved selection
+  layered on top: non-selectable (future/experimental) metrics rendered but never checkable; a locked
+  profile disables edits and offers only the PURE Unlock (the server's own selection +
+  `is_locked=false`, doc 17 §7); the draft re-seeds from the server head on every revision move;
+  Apply disabled on an empty selection (server `min_length=1`); success echoes `revision_no` + `reason`.
+- **`frontend/src/lib/agentLab.ts`** *(new)* — wire types mirroring
+  `application/queries/agent_workspace.py` (`AgentRuntime`/`AgentTaskCard`/`AgentOverview`/
+  `AgentTaskDetail` with checkpoints + related directives/`HypothesisCard` + pages) and the command
+  admissions (`DirectiveAdmission`, `LabMessageResponse`, `RuntimeControlAccepted`); ALL query keys
+  under the `["agent-tasks"]` SSE prefix: `useAgentOverview` (15s loss-tolerant poll fallback,
+  INF-11 — SSE primary), `useAgentTasks` (keyset, `placeholderData`), `useAgentTask` detail,
+  `useHypotheses`; 202 mutations `useQueueDirective` (`DIRECTIVE_PRIORITIES = normal|high` —
+  `autonomous` is Coordinator-only, never human-selectable, doc 18 §9.1), `useSendLabMessage`, and
+  `usePauseRuntime`/`useResumeRuntime`/`useStopRun` carrying the runtime `row_version` as an
+  `If-Match` OCC token (`postWithIfMatch`); all invalidate `["agent-tasks"]`.
+- **`frontend/src/pages/AnalysisLab.tsx`** *(new)* — `RuntimeCard` (status/mode/pending_control
+  badges; Pause-at-next-safe-checkpoint / Resume / Stop-active-run — stop passes the active TASK id,
+  which IS the run id in this domain: backend `stop_run` does `get_task(session, run_id)`),
+  `QueueCard` (counts + overview cards + Detail drill-down), `TaskDetailCard` (checkpoints count,
+  waiting/failure reasons, related directives), `DirectiveCard` (directive + discussion-message
+  composers; `delivery_policy` echo; assistant response rendered), `HypothesesCard` (output board).
+  Server policy is authority: a non-Admin/Supervisor sees the 403 envelope verbatim via `ErrorState`.
+- **`App.tsx`** — `REAL_PATHS` 4 → 6 (`/backtest/metrics`, `/analysis-lab`); two real routes.
+  `nav.ts` UNCHANGED (23 items).
+- **`test/arrangeMetrics.test.tsx`** *(new, 4)* + **`test/analysisLab.test.tsx`** *(new, 5)* —
+  `apiStub.ts` reuse; mutation payload + `If-Match` assertions, `["agent-tasks"]` invalidation
+  refetch proof, error states — **frontend 45/45** (36 prior + 9 new); typecheck + lint clean;
+  build green.
+- **Honest boundaries:** no dedicated SSE event for metric-profile changes (those keys are swept only
+  by the `resource.changed` full refresh; the Apply mutation invalidates `["metric-profile"]` for
+  same-tab freshness) · the lab consumes the app-level `/events` stream — the role-gated
+  `GET /agent-events/stream` (heartbeat/ready only today) is NOT wired as a second EventSource ·
+  task/hypothesis keyset pagination beyond the first page + the `GET /agent-tasks?status&cursor`
+  filter UI deferred · `GET /backtest-results/{result_id}/metrics` (profile-hydrated Result view) NOT
+  consumed yet — `ResultDetail` still renders the raw persisted rows; binding it is the natural
+  follow-up now the profile editor exists · `["audit"]` still has no bound page (Panel/Logs) and
+  `["jobs"]` has NO backend list surface at all (job state is only visible through run projections +
+  the /v1/metrics jobs-depth gauge) · history compare/soft-delete affordances still deferred.
+
+## Next: post-V1 (continued) — TIER 2 frontend (login + SSE + /v1/metrics + backtest pages + Arrange Metrics/Analysis Lab landed; Panel/Logs live page / capability activations / admin provisioning remain)
 
 **V1 COMPLETE (Stages 0–8, docs 01–22) + Auth/IdP + Parquet Slice A + Backtest Engine Slice B + real indicator compute Slice C + `risk_based` sizing (a) + condition blocks (b) + condition extensions (b2) + two-package indicator-vs-indicator + higher-timeframe resampling (c) + per-condition multi-TF reference (i) + N-ary reference chain (ii) + VWAP directional key (d) + `formula_based` Kelly sizing + `position_size_limits` min/max cap (PR #63) landed (1015 tests).** The **Slice C indicator-compute + position-sizing follow-ups are now EFFECTIVELY COMPLETE — TIER 1 backend is DONE**:
 
@@ -677,7 +734,7 @@ Reuse anchors (exact symbols):
 
 **Next candidates** (priority per `docs/POST_V1_KICKOFF.md`):
 - ~~**TIER 1 — `position_size_limits` (min/max cap) wiring**~~ ✅ **PR #63** — `PositionSizeLimits` (min/max caps) now clamps EVERY sizing method via `_clamp_to_limits` at the `_raw_position_size → _position_size` boundary; `ENGINE_VERSION → backtest-engine-v2-position-size-limits`; +15 tests → 1015; no migration. **TIER 1 backend is now EFFECTIVELY COMPLETE** (Kelly + risk_based + condition blocks + multi-TF + N-ary + VWAP + position_size_limits all landed).
-- **TIER 2 — frontend / user-facing (login + SSE landed):** ~~login / session integration~~ ✅ **PR #65** (Bearer session store + standalone `/login` page + signup/logout + role-aware header; `frontend/src/lib/{session,auth}.ts`, `pages/Login.tsx`, `apiClient.ts` Bearer header) · ~~SSE live-invalidation~~ ✅ **PR #67** (`frontend/src/lib/sse.ts` stub filled: `EVENT_QUERY_KEYS` maps `backtest.run.updated`/`job.updated`/`agent.task.updated`/`audit.event.created` → `["backtests"]`/`["jobs"]`/`["agent-tasks"]`/`["audit"]`, `resource.changed` → full refresh, reconnect self-heal; +7 vitest → 16/16) · ~~**`/v1/metrics` dashboard**~~ ✅ **PR #69** (`lib/metrics.ts` Prometheus text-exposition parser + `apiGetText`/`useMetrics` 5s poll + `pages/Metrics.tsx` golden-signals / jobs-depth / outbox-lag / lease-age panels + adminOnly `System Metrics` nav item at `/panel/metrics`; +13 vitest → 29/29) · ~~**live-data backtest RUN + Results History**~~ ✅ **PR #72** (`lib/backtest.ts` `["backtests"]` hooks + `pages/BacktestRun.tsx` `?run=`/`?result=` modes + `pages/ResultsHistory.tsx` + `ResultDetail.tsx`; first pages bound to the SSE forward contract; +7 vitest → 36/36). **Remaining candidates:** (a) **Arrange Metrics + Analysis Lab live pages** (bind the remaining SSE keys `["jobs"]`/`["agent-tasks"]`/`["audit"]` via `routes/metric_profile.py` + `routes/agent_lab.py`; history compare/soft-delete affordances ride along); (b) capability activations (role-gated features); (c) first-Admin provisioning dashboard; (d) CP real candidate generation.
+- **TIER 2 — frontend / user-facing (login + SSE landed):** ~~login / session integration~~ ✅ **PR #65** (Bearer session store + standalone `/login` page + signup/logout + role-aware header; `frontend/src/lib/{session,auth}.ts`, `pages/Login.tsx`, `apiClient.ts` Bearer header) · ~~SSE live-invalidation~~ ✅ **PR #67** (`frontend/src/lib/sse.ts` stub filled: `EVENT_QUERY_KEYS` maps `backtest.run.updated`/`job.updated`/`agent.task.updated`/`audit.event.created` → `["backtests"]`/`["jobs"]`/`["agent-tasks"]`/`["audit"]`, `resource.changed` → full refresh, reconnect self-heal; +7 vitest → 16/16) · ~~**`/v1/metrics` dashboard**~~ ✅ **PR #69** (`lib/metrics.ts` Prometheus text-exposition parser + `apiGetText`/`useMetrics` 5s poll + `pages/Metrics.tsx` golden-signals / jobs-depth / outbox-lag / lease-age panels + adminOnly `System Metrics` nav item at `/panel/metrics`; +13 vitest → 29/29) · ~~**live-data backtest RUN + Results History**~~ ✅ **PR #72** (`lib/backtest.ts` `["backtests"]` hooks + `pages/BacktestRun.tsx` `?run=`/`?result=` modes + `pages/ResultsHistory.tsx` + `ResultDetail.tsx`; first pages bound to the SSE forward contract; +7 vitest → 36/36) · ~~**Arrange Metrics + Analysis Lab live pages**~~ ✅ **PR #74** (`lib/metricProfile.ts` + `pages/ArrangeMetrics.tsx` profile editor with OCC Apply/Lock/Unlock; `lib/agentLab.ts` + `pages/AnalysisLab.tsx` — every key under the `["agent-tasks"]` prefix, second SSE key live; If-Match runtime controls; +9 vitest → 45/45). **Remaining candidates:** (a) **Panel / Management / Logs live page** (binds the LAST bindable SSE key `["audit"]` via `routes/admin_panel.py` `/admin/users|system-actors|role-matrix|logs` + `routes/audit.py` `/audit-events`; `["jobs"]` has NO backend list surface — honest boundary; history compare/soft-delete + profile-hydrated `GET /backtest-results/{id}/metrics` binding can ride along); (b) capability activations (role-gated features); (c) first-Admin provisioning dashboard; (d) CP real candidate generation.
 - **TIER 3 — data/ops (deferred):** retention auto-purge, data-queue redelivery, SSE streaming e2e (connection drops), tool-call status shadowing (CR-08 follow-up), `summary["timeframe"]` resolution from market-revision metadata.
 
 See **`docs/POST_V1_KICKOFF.md`** for reuse anchors and the paste-ready resume prompt.

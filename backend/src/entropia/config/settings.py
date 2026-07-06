@@ -78,6 +78,10 @@ class Settings(BaseSettings):
     # Static service-line credential for non-human runtimes (agent/scheduler).
     # Empty string disables the service line entirely.
     service_token: str = Field(default="", alias="ENTROPIA_SERVICE_TOKEN")
+    # First-Admin bootstrap (explicit operator opt-in). When set, a Sign Up whose
+    # email matches (case-normalized) is provisioned as Admin — ONLY while no
+    # active Admin exists. Empty string (default) disables the mechanism.
+    bootstrap_admin_email: str = Field(default="", alias="ENTROPIA_BOOTSTRAP_ADMIN_EMAIL")
 
     # ---- Rate limiting (Module 20 §11; opt-in per deployment) ----
     rate_limit_enabled: bool = Field(default=False, alias="RATE_LIMIT_ENABLED")

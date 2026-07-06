@@ -831,7 +831,45 @@ review 0 CRITICAL/HIGH. Reuse anchors (exact symbols):
   restore stays the Admin Trash flow (backend Stage 6c landed; the frontend Trash page is still a
   placeholder) · `["jobs"]` permanent boundary unchanged.
 
-## Next: post-V1 (continued) — TIER 2 (login + SSE + /v1/metrics + backtest pages + Arrange Metrics/Analysis Lab + first-Admin bootstrap + Panel/Logs + history compare/metrics rebind landed; capability activations / provisioning dashboard remain)
+## Post-V1 — Frontend Future Dev capability registry page (TIER 2, frontend slice 8) ✅ landed (PR #82, merged → main `1411adc`)
+
+**FRONTEND-ONLY** (backend `routes/capability.py` Stage 7b surface consumed unchanged; NO
+migration, alembic head stays `0021_local_auth`; backend test base stays 1028). The
+`/future-dev` placeholder becomes the real page: the server-side Capability Registry
+(doc 22 — NEVER a frontend feature flag, §2/§15) rendered as-is, plus the Admin-only
+lifecycle transition.
+
+- **NEW `frontend/src/lib/capability.ts`** — wire types verbatim (`Capability` /
+  `CapabilityDetail` incl. `dependency_snapshot` + provenance / `GraphicViewOverview` /
+  `CapabilityTransitionResult`); doc-22 §9.1/§9.2 taxonomy MIRROR (`CAPABILITY_STATES`
+  7 states, `ALLOWED_TRANSITIONS` legal edges, `ACTIVATION_GATES` 7 gates — select/checklist
+  hydration only, the server re-validates every dispatch); `gateComplete` mirrors the server
+  `_gate_complete` reading exactly; `buildGatesSnapshot` merges an Admin checklist WITHOUT
+  clobbering server-side note objects or non-canonical keys; hooks under `["capabilities"]`
+  (no dedicated SSE event — swept by `resource.changed`); `useTransitionCapability` — OCC
+  `expected_registry_version` + REQUIRED fresh `Idempotency-Key` UUID per attempt,
+  invalidates `["capabilities"]` + `["audit"]`.
+- **NEW `frontend/src/pages/FutureDev.tsx`** — registry table (state badge / operational /
+  registry v); detail card: gate checklist + last-transition provenance +
+  `TransitionComposer` (targets = legal doc-22 edges only; reason REQUIRED; an untouched
+  checklist OMITS `dependency_snapshot` so the server keeps its stored gate record; errors
+  verbatim; mutation state owned by the CARD so the accepted message survives the
+  registry_version-bump remount); read-only Graphic View overview (CR-09 — no fake
+  operation/progress).
+- **`App.tsx`** — `/future-dev` joins REAL_PATHS (7→8); `nav.ts` UNCHANGED (23 items).
+- **Tests** — NEW `test/futureDev.test.tsx` (7; apiStub ORDERED routes — the detail fragment
+  must precede the `/capabilities` list prefix it contains) + `test/capabilityLib.test.ts`
+  (2 gate-merge unit) → **frontend 67/67**; typecheck + lint clean; build green.
+- **Review:** 0 CRITICAL/HIGH; 3 MEDIUM/LOW self-review findings (success message lost on
+  composer remount / non-canonical gate keys dropped by the merge / misleading terminal
+  message for client-unknown states) — all fixed in-commit.
+- **Honest boundary:** the gated operational POSTs (`/view-datasets/query`,
+  `/analysis-artifacts`) stay UNWIRED — no V1 UI workflow exists for them; the server
+  returns `CAPABILITY_NOT_ACTIVE` below Limited/Active regardless (CR-09/FD-02). Composer
+  visibility is not role-gated (UI visibility is never authorization, doc 22 §3) — a
+  non-Admin attempt renders the 403 envelope verbatim.
+
+## Next: post-V1 (continued) — TIER 2 (login + SSE + /v1/metrics + backtest pages + Arrange Metrics/Analysis Lab + first-Admin bootstrap + Panel/Logs + history compare/metrics rebind + capability registry page landed; provisioning dashboard UI / CP candidate generation remain)
 
 **V1 COMPLETE (Stages 0–8, docs 01–22) + Auth/IdP + Parquet Slice A + Backtest Engine Slice B + real indicator compute Slice C + `risk_based` sizing (a) + condition blocks (b) + condition extensions (b2) + two-package indicator-vs-indicator + higher-timeframe resampling (c) + per-condition multi-TF reference (i) + N-ary reference chain (ii) + VWAP directional key (d) + `formula_based` Kelly sizing + `position_size_limits` min/max cap (PR #63) landed (1015 tests).** The **Slice C indicator-compute + position-sizing follow-ups are now EFFECTIVELY COMPLETE — TIER 1 backend is DONE**:
 
@@ -841,7 +879,7 @@ review 0 CRITICAL/HIGH. Reuse anchors (exact symbols):
 
 **Next candidates** (priority per `docs/POST_V1_KICKOFF.md`):
 - ~~**TIER 1 — `position_size_limits` (min/max cap) wiring**~~ ✅ **PR #63** — `PositionSizeLimits` (min/max caps) now clamps EVERY sizing method via `_clamp_to_limits` at the `_raw_position_size → _position_size` boundary; `ENGINE_VERSION → backtest-engine-v2-position-size-limits`; +15 tests → 1015; no migration. **TIER 1 backend is now EFFECTIVELY COMPLETE** (Kelly + risk_based + condition blocks + multi-TF + N-ary + VWAP + position_size_limits all landed).
-- **TIER 2 — frontend / user-facing (login + SSE landed):** ~~login / session integration~~ ✅ **PR #65** (Bearer session store + standalone `/login` page + signup/logout + role-aware header; `frontend/src/lib/{session,auth}.ts`, `pages/Login.tsx`, `apiClient.ts` Bearer header) · ~~SSE live-invalidation~~ ✅ **PR #67** (`frontend/src/lib/sse.ts` stub filled: `EVENT_QUERY_KEYS` maps `backtest.run.updated`/`job.updated`/`agent.task.updated`/`audit.event.created` → `["backtests"]`/`["jobs"]`/`["agent-tasks"]`/`["audit"]`, `resource.changed` → full refresh, reconnect self-heal; +7 vitest → 16/16) · ~~**`/v1/metrics` dashboard**~~ ✅ **PR #69** (`lib/metrics.ts` Prometheus text-exposition parser + `apiGetText`/`useMetrics` 5s poll + `pages/Metrics.tsx` golden-signals / jobs-depth / outbox-lag / lease-age panels + adminOnly `System Metrics` nav item at `/panel/metrics`; +13 vitest → 29/29) · ~~**live-data backtest RUN + Results History**~~ ✅ **PR #72** (`lib/backtest.ts` `["backtests"]` hooks + `pages/BacktestRun.tsx` `?run=`/`?result=` modes + `pages/ResultsHistory.tsx` + `ResultDetail.tsx`; first pages bound to the SSE forward contract; +7 vitest → 36/36) · ~~**Arrange Metrics + Analysis Lab live pages**~~ ✅ **PR #74** (`lib/metricProfile.ts` + `pages/ArrangeMetrics.tsx` profile editor with OCC Apply/Lock/Unlock; `lib/agentLab.ts` + `pages/AnalysisLab.tsx` — every key under the `["agent-tasks"]` prefix, second SSE key live; If-Match runtime controls; +9 vitest → 45/45) · ~~**Panel / Management / Logs live page**~~ ✅ **PR #78** (`lib/adminPanel.ts` — Management under `["admin"]`, Logs/Audit under the LAST bindable SSE key `["audit"]`; `useAssignRole` OCC `expected_head_revision_id` with role options from the server role-matrix assignable rows; `pages/Panel.tsx` 5 cards; +6 vitest → 51/51) · ~~**history compare/soft-delete + profile-hydrated result metrics**~~ ✅ **PR #80** (`lib/backtest.ts` `useCompareResults`/`useResultMetrics`/`useSoftDeleteResult`; `ComparePanel` verbatim context diff — RH-09; ResultDetail rebound to the doc-17 §9.1 hydrated projection with persisted-rows fallback; +7 vitest → 58/58). **Remaining candidates:** (b) capability activations (role-gated features; `routes/capability.py` backend surface); (c) first-Admin provisioning **dashboard** UI (backend mechanism ✅ PR #76 — `ENTROPIA_BOOTSTRAP_ADMIN_EMAIL` opt-in; +13 tests → 1028); (d) CP real candidate generation. `["jobs"]` has NO backend list surface — permanent honest boundary.
+- **TIER 2 — frontend / user-facing (login + SSE landed):** ~~login / session integration~~ ✅ **PR #65** (Bearer session store + standalone `/login` page + signup/logout + role-aware header; `frontend/src/lib/{session,auth}.ts`, `pages/Login.tsx`, `apiClient.ts` Bearer header) · ~~SSE live-invalidation~~ ✅ **PR #67** (`frontend/src/lib/sse.ts` stub filled: `EVENT_QUERY_KEYS` maps `backtest.run.updated`/`job.updated`/`agent.task.updated`/`audit.event.created` → `["backtests"]`/`["jobs"]`/`["agent-tasks"]`/`["audit"]`, `resource.changed` → full refresh, reconnect self-heal; +7 vitest → 16/16) · ~~**`/v1/metrics` dashboard**~~ ✅ **PR #69** (`lib/metrics.ts` Prometheus text-exposition parser + `apiGetText`/`useMetrics` 5s poll + `pages/Metrics.tsx` golden-signals / jobs-depth / outbox-lag / lease-age panels + adminOnly `System Metrics` nav item at `/panel/metrics`; +13 vitest → 29/29) · ~~**live-data backtest RUN + Results History**~~ ✅ **PR #72** (`lib/backtest.ts` `["backtests"]` hooks + `pages/BacktestRun.tsx` `?run=`/`?result=` modes + `pages/ResultsHistory.tsx` + `ResultDetail.tsx`; first pages bound to the SSE forward contract; +7 vitest → 36/36) · ~~**Arrange Metrics + Analysis Lab live pages**~~ ✅ **PR #74** (`lib/metricProfile.ts` + `pages/ArrangeMetrics.tsx` profile editor with OCC Apply/Lock/Unlock; `lib/agentLab.ts` + `pages/AnalysisLab.tsx` — every key under the `["agent-tasks"]` prefix, second SSE key live; If-Match runtime controls; +9 vitest → 45/45) · ~~**Panel / Management / Logs live page**~~ ✅ **PR #78** (`lib/adminPanel.ts` — Management under `["admin"]`, Logs/Audit under the LAST bindable SSE key `["audit"]`; `useAssignRole` OCC `expected_head_revision_id` with role options from the server role-matrix assignable rows; `pages/Panel.tsx` 5 cards; +6 vitest → 51/51) · ~~**history compare/soft-delete + profile-hydrated result metrics**~~ ✅ **PR #80** (`lib/backtest.ts` `useCompareResults`/`useResultMetrics`/`useSoftDeleteResult`; `ComparePanel` verbatim context diff — RH-09; ResultDetail rebound to the doc-17 §9.1 hydrated projection with persisted-rows fallback; +7 vitest → 58/58). · ~~**capability activations / Future Dev registry page**~~ ✅ **PR #82** (`lib/capability.ts` doc-22 taxonomy mirror + OCC/Idempotency-Key transition hook; `pages/FutureDev.tsx` registry/detail/transition composer + Graphic View overview; +9 vitest → 67/67). **Remaining candidates:** (c) first-Admin provisioning **dashboard** UI (backend mechanism ✅ PR #76 — `ENTROPIA_BOOTSTRAP_ADMIN_EMAIL` opt-in; +13 tests → 1028); (d) CP real candidate generation; (e) frontend Trash page (restore UI — backend Stage 6c landed). `["jobs"]` has NO backend list surface — permanent honest boundary.
 - **TIER 3 — data/ops (deferred):** retention auto-purge, data-queue redelivery, SSE streaming e2e (connection drops), tool-call status shadowing (CR-08 follow-up), `summary["timeframe"]` resolution from market-revision metadata.
 
 See **`docs/POST_V1_KICKOFF.md`** for reuse anchors and the paste-ready resume prompt.

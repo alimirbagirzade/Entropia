@@ -88,9 +88,10 @@ Before stopping a working session, produce **ALL** of the following:
   frontend Arrange Metrics & Analysis Lab live pages (PR #74, MERGED) + first-Admin
   bootstrap provisioning (post-V1 TIER 2 backend, PR #76, MERGED) + TIER 2 frontend
   live-data Panel / Management / Logs page (PR #78, MERGED) + TIER 2 frontend history
-  compare/soft-delete & profile-hydrated Result metrics rebind (PR #80, MERGED)**.
-  **Overall: ~88% complete** (V1=100%, post-V1 core=86%, frontend=66%).
-  `main` after PR #80 (`8f57151`; history-compare feat `491ac03` MERGED; panel-page feat `726ffcc` MERGED; first-Admin bootstrap feat `a53cf34` MERGED; live-pages feat `499bd8b` MERGED; backtest-pages feat `10a0007` MERGED; metrics feat `d3039e7` MERGED; login feat `58781e4` MERGED; SSE feat `5ddb14f` MERGED; position_size_limits feat `5ef5525`; Kelly feat `3f254bc` / non-finite fail-closed fix `3a92e7d`; VWAP code `d27b2bb`; N-ary code `44099a7`; per-condition code `1c5cca0`; multi-timeframe code `def6c28`; indicator-vs-indicator code `9087c2b`; condition-extensions code `361df4c`; condition-blocks code `8766fae`; risk_based code `43cee29`; Slice C code `671d227`);
+  compare/soft-delete & profile-hydrated Result metrics rebind (PR #80, MERGED) + TIER 2
+  frontend Future Dev capability registry page (PR #82, MERGED)**.
+  **Overall: ~89% complete** (V1=100%, post-V1 core=86%, frontend=70%).
+  `main` after PR #82 (`1411adc`; capability-page feat `3d7977e` MERGED; history-compare feat `491ac03` MERGED; panel-page feat `726ffcc` MERGED; first-Admin bootstrap feat `a53cf34` MERGED; live-pages feat `499bd8b` MERGED; backtest-pages feat `10a0007` MERGED; metrics feat `d3039e7` MERGED; login feat `58781e4` MERGED; SSE feat `5ddb14f` MERGED; position_size_limits feat `5ef5525`; Kelly feat `3f254bc` / non-finite fail-closed fix `3a92e7d`; VWAP code `d27b2bb`; N-ary code `44099a7`; per-condition code `1c5cca0`; multi-timeframe code `def6c28`; indicator-vs-indicator code `9087c2b`; condition-extensions code `361df4c`; condition-blocks code `8766fae`; risk_based code `43cee29`; Slice C code `671d227`);
   alembic head = **`0021_local_auth`** (`human_credentials` + `auth_sessions`;
   Slices A/B/C + follow-ups (a)/(b)/(b2)/(#53)/(c)/(i)/(ii)/(d) + Kelly sizing + position_size_limits + first-Admin bootstrap need no migration). **1028 tests green** (1015 + 13 first-Admin bootstrap: unit + integration — env-unset baseline / match+no-admin → Admin+audit+outbox / active-Admin fail-closed / non-matching baseline / case+whitespace normalization / settings env read / route pass-through).
   TIER 2 frontend — real-auth login/signup/logout (PR #65, MERGED): **FRONTEND-ONLY**
@@ -445,8 +446,28 @@ Before stopping a working session, produce **ALL** of the following:
   - ✅ **Panel / Management / Logs live page (PR #78, MERGED)** — `/panel` real page; the LAST bindable SSE key `["audit"]` bound via `lib/adminPanel.ts` (Management under `["admin"]`, Logs/Audit under `["audit"]`; `useAssignRole` OCC `expected_head_revision_id` with role options from the server role-matrix assignable rows; `pages/Panel.tsx` 5 cards) + `test/panel.test.tsx`; +6 vitest → 51/51; frontend-only, no migration. `["jobs"]` has NO backend list surface — permanent honest boundary.
   - ✅ **History compare/soft-delete + profile-hydrated Result metrics rebind (PR #80, MERGED)** — `useCompareResults`/`useResultMetrics`/`useSoftDeleteResult` (`lib/backtest.ts`) + `ComparePanel` verbatim context diff (RH-09, never ranked) + two-step confirm Delete gated by server `allowed_actions`; ResultDetail Metrics bound to the doc-17 §9.1 hydrated projection with persisted-rows fallback (L4); +7 vitest → 58/58; frontend-only, no migration.
   - ✅ **First-Admin bootstrap provisioning (PR #76, MERGED — backend)** — `ENTROPIA_BOOTSTRAP_ADMIN_EMAIL` opt-in: a matching signup is provisioned as Admin ONLY while no active Admin exists (fail-closed otherwise); advisory-lock (`identity_repo.lock_admin_count`) race-safe; `user.admin_bootstrapped` audit + outbox same tx; role decision server-side only (route schema has no role field); +13 tests → backend 1028; no migration.
-  - Capability activations (gate new features per user role)
+  - ✅ **Future Dev capability registry page (PR #82, MERGED)** — `/future-dev` placeholder
+    becomes the real page: the Stage 7b Capability Registry (`routes/capability.py`, doc 22)
+    rendered as-is + Admin-only lifecycle transition. NEW `lib/capability.ts` (wire types
+    verbatim; doc-22 §9.1/§9.2 taxonomy MIRROR `CAPABILITY_STATES`/`ALLOWED_TRANSITIONS`/
+    `ACTIVATION_GATES` — select/checklist hydration only, server re-validates every dispatch;
+    `gateComplete` mirrors server `_gate_complete`; `buildGatesSnapshot` note-preserving merge;
+    hooks under `["capabilities"]` — no dedicated SSE event, swept by `resource.changed`;
+    `useTransitionCapability` OCC `expected_registry_version` + REQUIRED fresh `Idempotency-Key`
+    UUID, invalidates `["capabilities"]`+`["audit"]`) + `pages/FutureDev.tsx` (registry table,
+    detail card with gate checklist + provenance, `TransitionComposer` — legal doc-22 targets
+    only / reason required / untouched checklist OMITS `dependency_snapshot` / errors verbatim /
+    mutation state owned by CARD so the accepted message survives the registry_version-bump
+    remount; read-only Graphic View overview CR-09) + `App.tsx` `/future-dev` REAL_PATHS 7→8
+    (`nav.ts` unchanged, 23 items). +9 vitest (7 component apiStub ORDERED — detail fragment
+    precedes `/capabilities` list prefix — + 2 gate-merge unit) → **frontend 67/67**;
+    review 0 CRITICAL/HIGH (3 MEDIUM/LOW self-review fixed in-commit); frontend-only, no
+    migration, backend base stays 1028. Honest boundary: gated operational POSTs
+    (`/view-datasets/query`, `/analysis-artifacts`) stay UNWIRED — no V1 UI workflow; server
+    returns `CAPABILITY_NOT_ACTIVE` below Limited/Active (CR-09/FD-02); composer not role-gated
+    (UI visibility is never authorization, doc 22 §3 — non-Admin sees 403 verbatim).
   - Admin provisioning dashboard (UI for first-Admin onboarding — backend mechanism landed in PR #76)
+  - Frontend Trash page (restore UI — backend Stage 6c landed; currently a placeholder)
   
   **TIER 3 — Data/ops (deferred, optional for MVP):**
   - Retention auto-purge (strategy/backtest history cleanup)

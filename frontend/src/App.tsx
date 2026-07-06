@@ -6,6 +6,7 @@ import { ArrangeMetrics } from "./pages/ArrangeMetrics";
 import { BacktestRun } from "./pages/BacktestRun";
 import { Mainboard } from "./pages/Mainboard";
 import { Metrics } from "./pages/Metrics";
+import { Panel } from "./pages/Panel";
 import { Placeholder } from "./pages/Placeholder";
 import { Login } from "./pages/Login";
 import { NotFound } from "./pages/NotFound";
@@ -16,6 +17,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 // placeholder routes.
 const REAL_PATHS = new Set([
   "/",
+  "/panel",
   "/panel/metrics",
   "/backtest/run",
   "/backtest/history",
@@ -34,6 +36,15 @@ export default function App() {
           element={
             <ErrorBoundary>
               <Mainboard />
+            </ErrorBoundary>
+          }
+        />
+        {/* Panel / Management / Logs (doc 19): Admin-only registry + immutable logs. */}
+        <Route
+          path="/panel"
+          element={
+            <ErrorBoundary>
+              <Panel />
             </ErrorBoundary>
           }
         />

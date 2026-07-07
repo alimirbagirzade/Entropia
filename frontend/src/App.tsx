@@ -13,6 +13,7 @@ import { Placeholder } from "./pages/Placeholder";
 import { Login } from "./pages/Login";
 import { NotFound } from "./pages/NotFound";
 import { ResultsHistory } from "./pages/ResultsHistory";
+import { Trash } from "./pages/Trash";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 
 // Paths served by a real page below — excluded from the auto-generated
@@ -27,6 +28,7 @@ const REAL_PATHS = new Set([
   "/backtest/metrics",
   "/analysis-lab",
   "/future-dev",
+  "/trash",
 ]);
 
 export default function App() {
@@ -111,6 +113,15 @@ export default function App() {
           element={
             <ErrorBoundary>
               <FutureDev />
+            </ErrorBoundary>
+          }
+        />
+        {/* Admin Trash (Stage 6c doc 20): recoverable soft-deleted index + OCC restore. */}
+        <Route
+          path="/trash"
+          element={
+            <ErrorBoundary>
+              <Trash />
             </ErrorBoundary>
           }
         />

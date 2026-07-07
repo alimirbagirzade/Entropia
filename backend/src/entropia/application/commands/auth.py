@@ -65,6 +65,13 @@ def bootstrap_admin_matches(email: str | None, bootstrap_email: str | None) -> b
     return email.strip().lower() == bootstrap_email.strip().lower()
 
 
+def bootstrap_is_configured(bootstrap_email: str | None) -> bool:
+    """True when the operator has opted into first-Admin bootstrap by setting a
+    non-empty ``ENTROPIA_BOOTSTRAP_ADMIN_EMAIL``. Pure (no infra) so it can be
+    unit-tested and reused by the read-only status query."""
+    return bool(bootstrap_email and bootstrap_email.strip())
+
+
 def _user_projection(user: HumanUser) -> dict[str, Any]:
     return {
         "user_id": user.user_id,
@@ -196,6 +203,26 @@ async def sign_up(
     return _user_projection(user)
 
 
+async def bootstrap_status(
+    session: AsyncSession,
+    *,
+    bootstrap_admin_email: str | None = None,
+) -> dict[str, Any]:
+    """Read-only onboarding signal for the first-Admin flow.
+
+    Returns booleans ONLY — no email echo, no PII — so it is safe on the
+    anonymous entry surface alongside sign up / login (the first Admin is, by
+    definition, not yet authenticated). ``active_admin_exists`` lets an operator
+    see whether the bootstrap window is still OPEN (no active Admin yet) or
+    already CLOSED. This is a hint, not a decision: the actual provisioning
+    choice in :func:`sign_up` stays guarded by the same-tx advisory lock, so a
+    stale read here can never mint a second Admin."""
+    return {
+        "bootstrap_configured": bootstrap_is_configured(bootstrap_admin_email),
+        "active_admin_exists": await identity_repo.count_active_admins(session) > 0,
+    }
+
+
 async def login(
     session: AsyncSession,
     *,
@@ -280,4 +307,12 @@ async def logout(session: AsyncSession, *, token: str, correlation_id: str = "")
     return {"session_id": record.session_id, "revoked": True, "changed": True}
 
 
-__all__ = ["bootstrap_admin_matches", "hash_token", "login", "logout", "sign_up"]
+__all__ = [
+    "bootstrap_admin_matches",
+    "bootstrap_is_configured",
+    "bootstrap_status",
+    "hash_token",
+    "login",
+    "logout",
+    "sign_up",
+]

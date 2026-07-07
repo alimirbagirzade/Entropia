@@ -8,6 +8,7 @@ import { FutureDev } from "./pages/FutureDev";
 import { Mainboard } from "./pages/Mainboard";
 import { Metrics } from "./pages/Metrics";
 import { Panel } from "./pages/Panel";
+import { Provisioning } from "./pages/Provisioning";
 import { Placeholder } from "./pages/Placeholder";
 import { Login } from "./pages/Login";
 import { NotFound } from "./pages/NotFound";
@@ -19,6 +20,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 const REAL_PATHS = new Set([
   "/",
   "/panel",
+  "/panel/provisioning",
   "/panel/metrics",
   "/backtest/run",
   "/backtest/history",
@@ -47,6 +49,15 @@ export default function App() {
           element={
             <ErrorBoundary>
               <Panel />
+            </ErrorBoundary>
+          }
+        />
+        {/* First-Admin provisioning onboarding (post-V1 TIER 2) — reachable pre-elevation. */}
+        <Route
+          path="/panel/provisioning"
+          element={
+            <ErrorBoundary>
+              <Provisioning />
             </ErrorBoundary>
           }
         />

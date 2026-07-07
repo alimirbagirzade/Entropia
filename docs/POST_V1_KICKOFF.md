@@ -3,6 +3,48 @@
 > **Amaç:** V1 kapandı (Stage 0–8 COMPLETE). Bu doküman post-V1 durumunu, aday iş listesini
 > ve temiz oturumda yapıştırılacak resume prompt'u içerir.
 
+## Durum (2026-07-07, TIER 2 frontend — Admin Trash restore page; PR #86 MERGED)
+
+> **Onuncu TIER 2 slice — frontend Admin Trash restore sayfası landed (PR #86, merged → main
+> `09f4130`; CI yeşil; review 0 CRITICAL/HIGH).** `/trash` placeholder'ı gerçek sayfa oldu:
+> backend Stage 6c restore yüzeyini (`application/queries/trash.py` + `application/commands/deletion.py`
+> restore, `apps/api/routes/trash.py` ile expose; doc 20 §7) bağlar. **FRONTEND-ONLY (2 yeni + 2 edit
+> + 1 test) — backend değişmedi, migration YOK, alembic head `0021_local_auth` SABİT, `ENGINE_VERSION`
+> değişmedi, backend test tabanı 1036 SABİT.** Frontend 73→80.
+> **Reuse anchor'ları (kesin semboller):**
+> - **`frontend/src/lib/trash.ts`** — wire tipleri backend projeksiyonlarının aynası
+>   (`TrashEntry`/`TrashEntriesPage` — `meta.recoverable_total` + `meta.object_types` — /
+>   `TrashEntryDetail` — deletion+dependency snapshot, tombstone — /`RestoreResult`). Read hook'lar
+>   `["trash"]` altında (**özel SSE event YOK** — restore bir entity lifecycle'ını değiştirir →
+>   `resource.changed` full refresh + `audit.event.created` → `["audit"]`): `useTrashEntries(filters,
+>   cursor)` (q/object_type filtre, forward-only keyset cursor, `placeholderData` sayfa flip'inde
+>   tabloyu mount tutar) + `useTrashEntry(id)` (seçili id'ye enabled-gated). Restore mutation
+>   `useRestoreEntry` → `POST /trash-entries/{id}/restore`; **OCC `expected_head_revision_id =
+>   entry.row_version`** (bayat tab 409 verbatim) + **her denemede taze `Idempotency-Key` UUID**
+>   (reddedilen bir denemeden sonra retry yeni KARAR, replay değil — doc 20 §14; body token If-Match'i
+>   yener), başarıda `["trash"]`+`["audit"]` invalidate — birebir `lib/adminPanel.ts` `useAssignRole`
+>   deseni. `purgeStatusTone` rozet-tonu helper'ı.
+> - **`frontend/src/pages/Trash.tsx`** — `TrashCard`: object_type filtre select'i SUNUCU yanıtından
+>   hidrasyon (`meta.object_types`), ASLA hard-code liste değil; q arama; keyset `Pager`
+>   (`useCursorStack`); recoverable index tablosu + sunucu `recoverable_total`. **Restore YALNIZ
+>   sunucu-truth `restore_eligible` satırlarda** (purge-pending satır "not restorable"); komut hatası
+>   backend kanonik `ApiError`'ı VERBATIM gösterir (`mutationErrorText`; Panel/AnalysisLab aynası).
+>   `TrashRow` + `TrashDetail` (immutable deletion+dependency snapshot, purge/restore kontrol durumu,
+>   tombstone; `snapshotStyle` inline `pre` wrap+scroll — geniş JSON sayfayı genişletmez).
+> - **`App.tsx`** — `/trash` REAL_PATHS + gerçek `Route`. **`nav.ts` DEĞİŞMEDİ** — `/trash` `adminOnly`
+>   item zaten placeholder olarak vardı; sayfa arkasında canlandı.
+> - **Testler** — YENİ `test/trash.test.tsx` (7; apiStub SIRALI — restore+detay route'ları
+>   `/trash-entries` liste prefix'inden ÖNCE): index+recoverable total / restore_eligible gating /
+>   OCC+Idempotency-Key restore / object_type query param / snapshot detay / `["trash"]` invalidation
+>   refetch / 403 verbatim → **frontend 80/80**; typecheck+lint temiz; build yeşil.
+> **Dürüst sınır (KALICI):** Trash **purge** (destructive — `confirmation_phrase` / re-auth proof
+> gerekir) bu restore-odaklı slice'ta KAPSAM DIŞI — ayrı bir re-auth slice'ı gerektirir. Trash
+> **Admin-only sunucu-tarafı** (`require_trash_admin`) — Admin olmayan 403 envelope'unu verbatim görür
+> (gizli nav item asla yetkilendirme değil, doc 20 §2). `["jobs"]` için hâlâ backend liste yüzeyi YOK.
+> **Sıradaki doğal slice:** (d) CP real candidate generation VEYA (opsiyonel küçük) signup başarısında
+> `["auth"]` invalidate (lib/auth.ts useSignup — #84 provisioning'in doğal follow-up'ı). Aşağıdaki
+> PR #84 bloğu ve öncesi tarihsel.
+
 ## Durum (2026-07-07, first-Admin provisioning dashboard + bootstrap-status endpoint — TIER 2 slice 9; PR #84 MERGED)
 
 > **Dokuzuncu TIER 2 slice — first-Admin provisioning DASHBOARD'u + `GET /auth/bootstrap-status`
@@ -869,20 +911,24 @@ Idempotency-Key UUID; pages/FutureDev.tsx registry/detay/transition composer + G
 overview salt-okunur CR-09; App.tsx /future-dev REAL_PATHS 7→8; frontend 58→67 vitest) +
 first-Admin provisioning DASHBOARD'u + GET /auth/bootstrap-status (#84 — lib/provisioning.ts
 useBootstrapStatus ["auth"] + pages/Provisioning.tsx BootstrapWindow/identity/BootstrapExplainer;
-nav 23→24; salt-okunur — provisioning sunucu-tarafı+signup-zamanı kalır). BACKEND: first-Admin
-bootstrap provisioning (#76 — ENTROPIA_BOOTSTRAP_ADMIN_EMAIL opt-in) + salt-okunur bootstrap-status
-read endpoint (#84 — commands/auth.py bootstrap_status/bootstrap_is_configured); migration YOK,
-alembic head 0021_local_auth SABİT; backend testler 1036, frontend 73.
+nav 23→24; salt-okunur — provisioning sunucu-tarafı+signup-zamanı kalır) + Admin Trash restore
+sayfası (#86 — lib/trash.ts ["trash"] hook'ları + useRestoreEntry OCC expected_head_revision_id +
+taze Idempotency-Key; pages/Trash.tsx sunucu-truth restore_eligible gating + sunucu-hidrasyonlu
+object_type filtre + immutable snapshot detay; App.tsx /trash REAL_PATHS, nav.ts değişmedi;
+frontend-only). BACKEND: first-Admin bootstrap provisioning (#76 — ENTROPIA_BOOTSTRAP_ADMIN_EMAIL
+opt-in) + salt-okunur bootstrap-status read endpoint (#84 — commands/auth.py bootstrap_status/
+bootstrap_is_configured); migration YOK, alembic head 0021_local_auth SABİT; backend testler 1036,
+frontend 80.
 
 ÖNCE DOĞRULA (stale-by-default): git fetch && git log --oneline origin/main -6 && gh pr list
---state all -L 8. main = f7bf4a7 (Merge #84) + kapanış docs PR'ı merge sonrası ileri olmalı
+--state all -L 8. main = 09f4130 (Merge #86) + kapanış docs PR'ı merge sonrası ileri olmalı
 (açıksa önce kullanıcıdan merge iste). alembic head 0021_local_auth; backend ENGINE_VERSION =
 backtest-engine-v2-position-size-limits. FRONTEND doğrula (yeni branch'i MUTLAKA origin/main'den
 aç — local stale olabilir): cd frontend && npm run typecheck && npm run lint && npm test &&
-npm run build (73/73 geçmeli).
+npm run build (80/80 geçmeli).
 
-ÖNCE OKU (authority): docs/POST_V1_KICKOFF.md (en üst Durum bloğu — PR #84) + docs/STAGE2_HANDOFF.md
-("first-Admin provisioning dashboard + bootstrap-status endpoint ... landed (PR #84)" + "Next").
+ÖNCE OKU (authority): docs/POST_V1_KICKOFF.md (en üst Durum bloğu — PR #86) + docs/STAGE2_HANDOFF.md
+("Frontend Admin Trash restore page ... landed (PR #86)" + "Next").
 Landed yüzeyleri TÜKET,
 yeniden yazma: Auth (lib/session.ts + lib/auth.ts + apiClient Bearer + pages/Login.tsx); SSE
 (lib/sse.ts EVENT_QUERY_KEYS + connectEvents Layout mount); Metrics (lib/metrics.ts + useMetrics
@@ -894,7 +940,10 @@ lib/agentLab.ts ["agent-tasks"] hook'ları + If-Match kontrolleri + pages/Arrang
 pages/AnalysisLab.tsx); Panel/Logs (lib/adminPanel.ts ["admin"]+["audit"] hook'ları +
 useAssignRole OCC + pages/Panel.tsx 5 kart); Capabilities (lib/capability.ts doc-22 taksonomi
 aynası + useTransitionCapability OCC/Idempotency-Key + pages/FutureDev.tsx — admin-facing
-lifecycle UI için doğal taban); test/helpers/apiStub.ts route-aware fetch double
+lifecycle UI için doğal taban); Provisioning (lib/provisioning.ts useBootstrapStatus ["auth"] +
+pages/Provisioning.tsx); Trash (lib/trash.ts ["trash"] hook'ları + useRestoreEntry OCC +
+Idempotency-Key + pages/Trash.tsx sunucu-truth restore_eligible gating + sunucu-hidrasyonlu
+object_type filtre — PR #86); test/helpers/apiStub.ts route-aware fetch double
 ("<METHOD> <fragment>" sıralı eşleşme — detay/spesifik route'u liste/prefix route'undan ÖNCE yaz)
 — yeni sayfa testleri için BUNU reuse et.
 
@@ -905,12 +954,11 @@ invalidateQueries({queryKey}) object-form. tsconfig: noUncheckedIndexedAccess +
 exactOptionalPropertyTypes KAPALI.
 
 SIRADAKİ İŞ — kalan TIER 2 adayları (BAŞLARKEN kullanıcıyla hangisi diye TEYİT ET):
-- (e) frontend Trash sayfası (restore UI — backend Stage 6c landed; şu an placeholder + adminOnly;
-  lib/backtest.ts soft-delete deseni + Panel.tsx kart deseni + backend routes/trash.py yüzeyi taban;
-  frontend-only muhtemel).
-- (d) CP real candidate generation (daha büyük; backend+frontend olası; kapsam teyidi şart).
+- (d) CP real candidate generation (daha büyük; backend+frontend olası; kapsam teyidi ŞART — hangi CP
+  yüzeyi, ne üretiyor, hangi durum makinesi; önce spec çıkar).
 - (opsiyonel küçük) signup başarısında bootstrap-status invalidate (lib/auth.ts useSignup →
-  invalidateQueries(["auth"])) — #84'ün doğal follow-up'ı.
+  invalidateQueries(["auth"])) — #84'ün doğal follow-up'ı; yeni signup sonrası Provisioning sayfası
+  bayat kalmasın. Tek dosya + test.
 DİKKAT (kalıcı dürüst sınırlar): ["jobs"] için backend liste yüzeyi YOK (run projeksiyonları +
 /v1/metrics jobs-depth); users/system-actors/capabilities'in özel SSE event'i yok (kendi
 mutation'ları + resource.changed süpürür); Future Dev gated operasyonel POST'ları
@@ -919,7 +967,8 @@ Active altındayken sunucu CAPABILITY_NOT_ACTIVE döner.
 TIER 3 (deferred): retention auto-purge, data-queue redelivery, SSE streaming e2e, tool-call status
 shadowing.
 
-BACKEND REUSE ANCHOR'LARI (DEĞİŞTİRME, TÜKET): routes/capability.py registry list/detail +
+BACKEND REUSE ANCHOR'LARI (DEĞİŞTİRME, TÜKET): routes/trash.py trash-entries list/detail +
+restore zaten bağlı (PR #86); routes/capability.py registry list/detail +
 lifecycle-transitions + graphic_view/overview zaten bağlı (PR #82); routes/results_history.py
 compare/delete + GET /backtest-results/{id}/metrics zaten bağlı (PR #80); admin panel + audit
 zaten bağlı (PR #78); metric-profile + agent-lab zaten bağlı (PR #74); backtest RUN/result/history

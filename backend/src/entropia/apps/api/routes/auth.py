@@ -53,6 +53,12 @@ class LogoutResponse(BaseModel):
     revoked: bool
 
 
+class BootstrapStatusResponse(BaseModel):
+    # Booleans only — no email echo, no PII (see auth_commands.bootstrap_status).
+    bootstrap_configured: bool
+    active_admin_exists: bool
+
+
 @router.post("/signup", response_model=SignUpResponse, status_code=201)
 async def sign_up(
     body: SignUpRequest,
@@ -104,3 +110,19 @@ async def logout(
         correlation_id=getattr(request.state, "correlation_id", ""),
     )
     return LogoutResponse(session_id=result["session_id"], revoked=result["revoked"])
+
+
+@router.get("/bootstrap-status", response_model=BootstrapStatusResponse)
+async def bootstrap_status(
+    session: AsyncSession = Depends(db_session),
+) -> BootstrapStatusResponse:
+    """Anonymous, read-only first-Admin onboarding signal (booleans only). Like
+    sign up / login it is an unauthenticated entry surface — the first Admin is
+    not yet authenticated — and returns no PII, so exposing it carries no more
+    than the deployment fact "does an Admin exist yet"."""
+    settings = get_settings()
+    result = await auth_commands.bootstrap_status(
+        session,
+        bootstrap_admin_email=settings.bootstrap_admin_email or None,
+    )
+    return BootstrapStatusResponse(**result)

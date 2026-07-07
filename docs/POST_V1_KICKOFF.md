@@ -3,6 +3,43 @@
 > **Amaç:** V1 kapandı (Stage 0–8 COMPLETE). Bu doküman post-V1 durumunu, aday iş listesini
 > ve temiz oturumda yapıştırılacak resume prompt'u içerir.
 
+## Durum (2026-07-07, first-Admin provisioning dashboard + bootstrap-status endpoint — TIER 2 slice 9; PR #84 MERGED)
+
+> **Dokuzuncu TIER 2 slice — first-Admin provisioning DASHBOARD'u + `GET /auth/bootstrap-status`
+> landed (PR #84, merged → main `f7bf4a7`; CI 3/3 yeşil — Backend 13m3s / Frontend 30s / Docker
+> 34s; bloklayıcı review bulgusu yok).** PR #76'nın dürüst sınırını kapatır (backend bootstrap
+> mekanizması landed'di, UI yoktu): first-Admin akışı önceden yalnız signup-yanıtındaki rolden
+> gözlemlenebiliyordu; bu, eksik olan tek salt-okunur sinyali + bir onboarding sayfası ekler.
+> **BACKEND (2 dosya + 2 test) + FRONTEND (2 yeni + 3 edit + 1 test). Migration YOK; alembic head
+> `0021_local_auth` SABİT; `ENGINE_VERSION` değişmedi.** Backend testler 1028→1036; frontend 67→73.
+> **Reuse anchor'ları (kesin semboller):**
+> - **Backend `application/commands/auth.py`** — saf `bootstrap_is_configured(bootstrap_email)` +
+>   salt-okunur async `bootstrap_status(session, *, bootstrap_admin_email) -> {bootstrap_configured,
+>   active_admin_exists}` (`active_admin_exists = await identity_repo.count_active_admins(session) > 0`);
+>   YALNIZ boolean — PII/email echo YOK; KARAR değil İPUCU (`sign_up` provisioning dalı hâlâ
+>   advisory-lock korumalı — bu endpoint ASLA provision etmez). İkisi de `__all__`'a eklendi.
+> - **Backend `apps/api/routes/auth.py`** — `GET /auth/bootstrap-status` →
+>   `BootstrapStatusResponse(bootstrap_configured, active_admin_exists)`; ANONİM entry yüzeyi
+>   (sign-up/login gibi — first Admin henüz authenticated değil); `settings.bootstrap_admin_email`
+>   yalnız sunucu-tarafı geçirilir (yanıt şemasında email alanı YOK).
+> - **Frontend `lib/provisioning.ts`** — `BootstrapStatus` + `useBootstrapStatus()` (react-query
+>   `["auth"]` key; özel SSE event YOK → `resource.changed` süpürür).
+> - **Frontend `pages/Provisioning.tsx`** — `BootstrapWindow` kartı (`windowGuidance(status)` →
+>   açık/kapalı × configured rehberi), `GET /me` kimlik kartı (`useMe`, `lib/hooks`), salt-okunur
+>   `BootstrapExplainer` (backend docstring aynası); Admin ise Panel link (rol yönetimini TEKRARLAMAZ).
+> - **`nav.ts`** — YENİ `"Admin Provisioning"` `/panel/provisioning`, `adminOnly` DEĞİL
+>   (elevation-öncesi erişilir) → `ALL_NAV_ITEMS` 23→24. **`App.tsx`** — `/panel/provisioning`
+>   REAL_PATHS + route.
+> - **Testler** — `tests/unit/test_bootstrap_status_unit.py` + `tests/integration/test_bootstrap_status.py`
+>   (+8 → backend 1036) + `test/provisioning.test.tsx` (6) + `nav.test.tsx` 23→24 (+6 → frontend 73).
+> **Dürüst sınır (KALICI):** provisioning sunucu-tarafı + signup-zamanı kalır (runtime provisioning
+> API YOK) — bu sayfa yalnız OKUR/belgeler, ASLA provision etmez. `active_admin_exists` anonim
+> expose kasıtlı (tek boolean deployment gerçeği, PII yok, first Admin henüz authenticated değil).
+> Süregelen rol yönetimi Panel'de kalır.
+> **Sıradaki doğal slice:** (d) CP real candidate generation VEYA (e) frontend Trash sayfası
+> (restore UI — backend Stage 6c landed; şu an placeholder + adminOnly). Aşağıdaki PR #82 bloğu ve
+> öncesi tarihsel.
+
 ## Durum (2026-07-06, TIER 2 frontend — Future Dev capability registry sayfası; PR #82 MERGED)
 
 > **Sekizinci TIER 2 (frontend) slice — Future Dev capability registry sayfası landed
@@ -829,19 +866,24 @@ lib/capability.ts doc-22 §9.1/§9.2 taksonomi aynası (CAPABILITY_STATES/ALLOWE
 ACTIVATION_GATES) + gateComplete/buildGatesSnapshot (not-koruyan merge) + hook'lar
 ["capabilities"] altında + useTransitionCapability OCC expected_registry_version + zorunlu
 Idempotency-Key UUID; pages/FutureDev.tsx registry/detay/transition composer + Graphic View
-overview salt-okunur CR-09; App.tsx /future-dev REAL_PATHS 7→8; frontend 58→67 vitest). BACKEND:
-first-Admin bootstrap provisioning (#76 — ENTROPIA_BOOTSTRAP_ADMIN_EMAIL opt-in; migration YOK,
-alembic head 0021_local_auth SABİT; backend testler 1028).
+overview salt-okunur CR-09; App.tsx /future-dev REAL_PATHS 7→8; frontend 58→67 vitest) +
+first-Admin provisioning DASHBOARD'u + GET /auth/bootstrap-status (#84 — lib/provisioning.ts
+useBootstrapStatus ["auth"] + pages/Provisioning.tsx BootstrapWindow/identity/BootstrapExplainer;
+nav 23→24; salt-okunur — provisioning sunucu-tarafı+signup-zamanı kalır). BACKEND: first-Admin
+bootstrap provisioning (#76 — ENTROPIA_BOOTSTRAP_ADMIN_EMAIL opt-in) + salt-okunur bootstrap-status
+read endpoint (#84 — commands/auth.py bootstrap_status/bootstrap_is_configured); migration YOK,
+alembic head 0021_local_auth SABİT; backend testler 1036, frontend 73.
 
 ÖNCE DOĞRULA (stale-by-default): git fetch && git log --oneline origin/main -6 && gh pr list
---state all -L 8. main = 1411adc (Merge #82) + kapanış docs PR'ı merge sonrası ileri olmalı
+--state all -L 8. main = f7bf4a7 (Merge #84) + kapanış docs PR'ı merge sonrası ileri olmalı
 (açıksa önce kullanıcıdan merge iste). alembic head 0021_local_auth; backend ENGINE_VERSION =
 backtest-engine-v2-position-size-limits. FRONTEND doğrula (yeni branch'i MUTLAKA origin/main'den
 aç — local stale olabilir): cd frontend && npm run typecheck && npm run lint && npm test &&
-npm run build (67/67 geçmeli).
+npm run build (73/73 geçmeli).
 
-ÖNCE OKU (authority): docs/POST_V1_KICKOFF.md (en üst Durum bloğu — PR #82) + docs/STAGE2_HANDOFF.md
-("Future Dev capability registry page ... landed (PR #82)" + "Next"). Landed yüzeyleri TÜKET,
+ÖNCE OKU (authority): docs/POST_V1_KICKOFF.md (en üst Durum bloğu — PR #84) + docs/STAGE2_HANDOFF.md
+("first-Admin provisioning dashboard + bootstrap-status endpoint ... landed (PR #84)" + "Next").
+Landed yüzeyleri TÜKET,
 yeniden yazma: Auth (lib/session.ts + lib/auth.ts + apiClient Bearer + pages/Login.tsx); SSE
 (lib/sse.ts EVENT_QUERY_KEYS + connectEvents Layout mount); Metrics (lib/metrics.ts + useMetrics
 5s poll + pages/Metrics.tsx); Backtest (lib/backtest.ts ["backtests"] hook'ları +
@@ -863,10 +905,12 @@ invalidateQueries({queryKey}) object-form. tsconfig: noUncheckedIndexedAccess +
 exactOptionalPropertyTypes KAPALI.
 
 SIRADAKİ İŞ — kalan TIER 2 adayları (BAŞLARKEN kullanıcıyla hangisi diye TEYİT ET):
-- (c) first-Admin provisioning DASHBOARD'u (backend mekanizması PR #76'da landed — bu yalnız UI;
-  Panel.tsx kart deseni + lib/adminPanel.ts ["admin"] hook deseni taban).
-- (d) CP real candidate generation (daha büyük; kapsam teyidi şart).
-- (e) frontend Trash sayfası (restore UI — backend Stage 6c landed; şu an placeholder).
+- (e) frontend Trash sayfası (restore UI — backend Stage 6c landed; şu an placeholder + adminOnly;
+  lib/backtest.ts soft-delete deseni + Panel.tsx kart deseni + backend routes/trash.py yüzeyi taban;
+  frontend-only muhtemel).
+- (d) CP real candidate generation (daha büyük; backend+frontend olası; kapsam teyidi şart).
+- (opsiyonel küçük) signup başarısında bootstrap-status invalidate (lib/auth.ts useSignup →
+  invalidateQueries(["auth"])) — #84'ün doğal follow-up'ı.
 DİKKAT (kalıcı dürüst sınırlar): ["jobs"] için backend liste yüzeyi YOK (run projeksiyonları +
 /v1/metrics jobs-depth); users/system-actors/capabilities'in özel SSE event'i yok (kendi
 mutation'ları + resource.changed süpürür); Future Dev gated operasyonel POST'ları
@@ -881,7 +925,9 @@ compare/delete + GET /backtest-results/{id}/metrics zaten bağlı (PR #80); admi
 zaten bağlı (PR #78); metric-profile + agent-lab zaten bağlı (PR #74); backtest RUN/result/history
 zaten bağlı (PR #72); SSE taksonomisi + /v1/auth/* + /me + GET /v1/metrics zaten bağlı; first-Admin
 bootstrap landed (PR #76 — commands/auth.py bootstrap_admin_matches + sign_up branch,
-settings.bootstrap_admin_email — provisioning DASHBOARD'u (c) için taban mekanizma).
+settings.bootstrap_admin_email) + salt-okunur GET /auth/bootstrap-status (PR #84 — commands/auth.py
+bootstrap_status/bootstrap_is_configured; provisioning DASHBOARD'u bağlandı, artık bir sonraki
+slice için taban DEĞİL kapandı).
 
 YÖNTEM: Workflow KULLANMA; direct-author. Backend working-loop (izole DB / L1 FK / alembic)
 UYGULANMAZ. Frontend loop: cd frontend (cwd resetlenebilir → absolute path);

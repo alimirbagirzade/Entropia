@@ -869,7 +869,44 @@ lifecycle transition.
   visibility is not role-gated (UI visibility is never authorization, doc 22 §3) — a
   non-Admin attempt renders the 403 envelope verbatim.
 
-## Next: post-V1 (continued) — TIER 2 (login + SSE + /v1/metrics + backtest pages + Arrange Metrics/Analysis Lab + first-Admin bootstrap + Panel/Logs + history compare/metrics rebind + capability registry page landed; provisioning dashboard UI / CP candidate generation remain)
+## Post-V1 — first-Admin provisioning dashboard + bootstrap-status endpoint (TIER 2, slice 9) ✅ landed (PR #84, merged → main `f7bf4a7`)
+
+**BACKEND (2 files + 2 tests) + FRONTEND (2 new + 3 edits + 1 test)** — closes the PR #76 honest
+boundary (backend bootstrap mechanism landed, no UI): the first-Admin flow was previously
+observable only via the signup-response role; this adds the one missing read-only signal plus an
+onboarding page. **NO migration; alembic head stays `0021_local_auth`; `ENGINE_VERSION` unchanged.**
+
+- **Backend — `application/commands/auth.py`:** pure `bootstrap_is_configured(bootstrap_email)` +
+  read-only async `bootstrap_status(session, *, bootstrap_admin_email) -> {bootstrap_configured,
+  active_admin_exists}` (`active_admin_exists = await identity_repo.count_active_admins(session) > 0`).
+  **Booleans only — no PII / no email echo**; a HINT, not a decision (the `sign_up` provisioning
+  branch stays advisory-lock guarded — this endpoint never provisions). Both added to `__all__`.
+- **Backend — `apps/api/routes/auth.py`:** `GET /auth/bootstrap-status` →
+  `BootstrapStatusResponse(bootstrap_configured, active_admin_exists)`, an **anonymous entry
+  surface** (like sign-up / login — the first Admin is not yet authenticated); passes
+  `settings.bootstrap_admin_email` through server-side only (the response schema has no email field).
+- **Backend tests** — `tests/unit/test_bootstrap_status_unit.py` (configured flag) +
+  `tests/integration/test_bootstrap_status.py` (window open/closed against a real DB + route reads
+  the setting): **+8 → backend 1028 → 1036**.
+- **Frontend — NEW `lib/provisioning.ts`:** `BootstrapStatus` interface + `useBootstrapStatus()`
+  (react-query `["auth"]` key, `api.get("/auth/bootstrap-status")`; no dedicated SSE event → swept
+  by `resource.changed`).
+- **Frontend — NEW `pages/Provisioning.tsx`:** `BootstrapWindow` card (`windowGuidance(status)` →
+  open/closed × configured guidance), `GET /me` identity card (`useMe` from `lib/hooks`), read-only
+  `BootstrapExplainer` mirroring the backend docstring; an Admin gets a Panel link instead of a
+  duplicated role-assignment surface.
+- **Frontend — `nav.ts`:** NEW `"Admin Provisioning"` item at `/panel/provisioning`, **NOT
+  `adminOnly`** (reachable pre-elevation, before the first Admin exists) → `ALL_NAV_ITEMS` 23 → 24.
+  **`App.tsx`:** `/panel/provisioning` joins REAL_PATHS + route.
+- **Frontend tests** — `test/provisioning.test.tsx` (6; window states / identity + Panel link /
+  error) + `nav.test.tsx` 23 → 24: **+6 → frontend 67 → 73**; typecheck + lint clean, build green.
+- **CI:** 3/3 green (Backend lint/type/test 13m3s, Frontend 30s, Docker 34s); no blocking review finding.
+- **Honest boundary (PERMANENT):** provisioning stays **server-side + signup-time only** (no runtime
+  provisioning API) — this page **reads status and documents the flow, it never provisions**.
+  `active_admin_exists` is deliberately anonymous-exposed (a single boolean deployment fact, no PII,
+  the first Admin is not yet authenticated). Ongoing role management remains in the Panel.
+
+## Next: post-V1 (continued) — TIER 2 (login + SSE + /v1/metrics + backtest pages + Arrange Metrics/Analysis Lab + first-Admin bootstrap + Panel/Logs + history compare/metrics rebind + capability registry page + provisioning dashboard landed; Trash page UI / CP candidate generation remain)
 
 **V1 COMPLETE (Stages 0–8, docs 01–22) + Auth/IdP + Parquet Slice A + Backtest Engine Slice B + real indicator compute Slice C + `risk_based` sizing (a) + condition blocks (b) + condition extensions (b2) + two-package indicator-vs-indicator + higher-timeframe resampling (c) + per-condition multi-TF reference (i) + N-ary reference chain (ii) + VWAP directional key (d) + `formula_based` Kelly sizing + `position_size_limits` min/max cap (PR #63) landed (1015 tests).** The **Slice C indicator-compute + position-sizing follow-ups are now EFFECTIVELY COMPLETE — TIER 1 backend is DONE**:
 
@@ -879,7 +916,7 @@ lifecycle transition.
 
 **Next candidates** (priority per `docs/POST_V1_KICKOFF.md`):
 - ~~**TIER 1 — `position_size_limits` (min/max cap) wiring**~~ ✅ **PR #63** — `PositionSizeLimits` (min/max caps) now clamps EVERY sizing method via `_clamp_to_limits` at the `_raw_position_size → _position_size` boundary; `ENGINE_VERSION → backtest-engine-v2-position-size-limits`; +15 tests → 1015; no migration. **TIER 1 backend is now EFFECTIVELY COMPLETE** (Kelly + risk_based + condition blocks + multi-TF + N-ary + VWAP + position_size_limits all landed).
-- **TIER 2 — frontend / user-facing (login + SSE landed):** ~~login / session integration~~ ✅ **PR #65** (Bearer session store + standalone `/login` page + signup/logout + role-aware header; `frontend/src/lib/{session,auth}.ts`, `pages/Login.tsx`, `apiClient.ts` Bearer header) · ~~SSE live-invalidation~~ ✅ **PR #67** (`frontend/src/lib/sse.ts` stub filled: `EVENT_QUERY_KEYS` maps `backtest.run.updated`/`job.updated`/`agent.task.updated`/`audit.event.created` → `["backtests"]`/`["jobs"]`/`["agent-tasks"]`/`["audit"]`, `resource.changed` → full refresh, reconnect self-heal; +7 vitest → 16/16) · ~~**`/v1/metrics` dashboard**~~ ✅ **PR #69** (`lib/metrics.ts` Prometheus text-exposition parser + `apiGetText`/`useMetrics` 5s poll + `pages/Metrics.tsx` golden-signals / jobs-depth / outbox-lag / lease-age panels + adminOnly `System Metrics` nav item at `/panel/metrics`; +13 vitest → 29/29) · ~~**live-data backtest RUN + Results History**~~ ✅ **PR #72** (`lib/backtest.ts` `["backtests"]` hooks + `pages/BacktestRun.tsx` `?run=`/`?result=` modes + `pages/ResultsHistory.tsx` + `ResultDetail.tsx`; first pages bound to the SSE forward contract; +7 vitest → 36/36) · ~~**Arrange Metrics + Analysis Lab live pages**~~ ✅ **PR #74** (`lib/metricProfile.ts` + `pages/ArrangeMetrics.tsx` profile editor with OCC Apply/Lock/Unlock; `lib/agentLab.ts` + `pages/AnalysisLab.tsx` — every key under the `["agent-tasks"]` prefix, second SSE key live; If-Match runtime controls; +9 vitest → 45/45) · ~~**Panel / Management / Logs live page**~~ ✅ **PR #78** (`lib/adminPanel.ts` — Management under `["admin"]`, Logs/Audit under the LAST bindable SSE key `["audit"]`; `useAssignRole` OCC `expected_head_revision_id` with role options from the server role-matrix assignable rows; `pages/Panel.tsx` 5 cards; +6 vitest → 51/51) · ~~**history compare/soft-delete + profile-hydrated result metrics**~~ ✅ **PR #80** (`lib/backtest.ts` `useCompareResults`/`useResultMetrics`/`useSoftDeleteResult`; `ComparePanel` verbatim context diff — RH-09; ResultDetail rebound to the doc-17 §9.1 hydrated projection with persisted-rows fallback; +7 vitest → 58/58). · ~~**capability activations / Future Dev registry page**~~ ✅ **PR #82** (`lib/capability.ts` doc-22 taxonomy mirror + OCC/Idempotency-Key transition hook; `pages/FutureDev.tsx` registry/detail/transition composer + Graphic View overview; +9 vitest → 67/67). **Remaining candidates:** (c) first-Admin provisioning **dashboard** UI (backend mechanism ✅ PR #76 — `ENTROPIA_BOOTSTRAP_ADMIN_EMAIL` opt-in; +13 tests → 1028); (d) CP real candidate generation; (e) frontend Trash page (restore UI — backend Stage 6c landed). `["jobs"]` has NO backend list surface — permanent honest boundary.
+- **TIER 2 — frontend / user-facing (login + SSE landed):** ~~login / session integration~~ ✅ **PR #65** (Bearer session store + standalone `/login` page + signup/logout + role-aware header; `frontend/src/lib/{session,auth}.ts`, `pages/Login.tsx`, `apiClient.ts` Bearer header) · ~~SSE live-invalidation~~ ✅ **PR #67** (`frontend/src/lib/sse.ts` stub filled: `EVENT_QUERY_KEYS` maps `backtest.run.updated`/`job.updated`/`agent.task.updated`/`audit.event.created` → `["backtests"]`/`["jobs"]`/`["agent-tasks"]`/`["audit"]`, `resource.changed` → full refresh, reconnect self-heal; +7 vitest → 16/16) · ~~**`/v1/metrics` dashboard**~~ ✅ **PR #69** (`lib/metrics.ts` Prometheus text-exposition parser + `apiGetText`/`useMetrics` 5s poll + `pages/Metrics.tsx` golden-signals / jobs-depth / outbox-lag / lease-age panels + adminOnly `System Metrics` nav item at `/panel/metrics`; +13 vitest → 29/29) · ~~**live-data backtest RUN + Results History**~~ ✅ **PR #72** (`lib/backtest.ts` `["backtests"]` hooks + `pages/BacktestRun.tsx` `?run=`/`?result=` modes + `pages/ResultsHistory.tsx` + `ResultDetail.tsx`; first pages bound to the SSE forward contract; +7 vitest → 36/36) · ~~**Arrange Metrics + Analysis Lab live pages**~~ ✅ **PR #74** (`lib/metricProfile.ts` + `pages/ArrangeMetrics.tsx` profile editor with OCC Apply/Lock/Unlock; `lib/agentLab.ts` + `pages/AnalysisLab.tsx` — every key under the `["agent-tasks"]` prefix, second SSE key live; If-Match runtime controls; +9 vitest → 45/45) · ~~**Panel / Management / Logs live page**~~ ✅ **PR #78** (`lib/adminPanel.ts` — Management under `["admin"]`, Logs/Audit under the LAST bindable SSE key `["audit"]`; `useAssignRole` OCC `expected_head_revision_id` with role options from the server role-matrix assignable rows; `pages/Panel.tsx` 5 cards; +6 vitest → 51/51) · ~~**history compare/soft-delete + profile-hydrated result metrics**~~ ✅ **PR #80** (`lib/backtest.ts` `useCompareResults`/`useResultMetrics`/`useSoftDeleteResult`; `ComparePanel` verbatim context diff — RH-09; ResultDetail rebound to the doc-17 §9.1 hydrated projection with persisted-rows fallback; +7 vitest → 58/58). · ~~**capability activations / Future Dev registry page**~~ ✅ **PR #82** (`lib/capability.ts` doc-22 taxonomy mirror + OCC/Idempotency-Key transition hook; `pages/FutureDev.tsx` registry/detail/transition composer + Graphic View overview; +9 vitest → 67/67). · ~~**first-Admin provisioning dashboard**~~ ✅ **PR #84** (`GET /auth/bootstrap-status` + `lib/provisioning.ts` `useBootstrapStatus` `["auth"]` + `pages/Provisioning.tsx` window/identity/explainer; nav 23→24; +8 backend → 1036 / +6 vitest → 73; read-only — provisioning stays server-side + signup-time). **Remaining candidates:** (d) CP real candidate generation; (e) frontend Trash page (restore UI — backend Stage 6c landed). `["jobs"]` has NO backend list surface — permanent honest boundary.
 - **TIER 3 — data/ops (deferred):** retention auto-purge, data-queue redelivery, SSE streaming e2e (connection drops), tool-call status shadowing (CR-08 follow-up), `summary["timeframe"]` resolution from market-revision metadata.
 
 See **`docs/POST_V1_KICKOFF.md`** for reuse anchors and the paste-ready resume prompt.

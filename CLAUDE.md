@@ -89,11 +89,12 @@ Before stopping a working session, produce **ALL** of the following:
   bootstrap provisioning (post-V1 TIER 2 backend, PR #76, MERGED) + TIER 2 frontend
   live-data Panel / Management / Logs page (PR #78, MERGED) + TIER 2 frontend history
   compare/soft-delete & profile-hydrated Result metrics rebind (PR #80, MERGED) + TIER 2
-  frontend Future Dev capability registry page (PR #82, MERGED)**.
-  **Overall: ~89% complete** (V1=100%, post-V1 core=86%, frontend=70%).
-  `main` after PR #82 (`1411adc`; capability-page feat `3d7977e` MERGED; history-compare feat `491ac03` MERGED; panel-page feat `726ffcc` MERGED; first-Admin bootstrap feat `a53cf34` MERGED; live-pages feat `499bd8b` MERGED; backtest-pages feat `10a0007` MERGED; metrics feat `d3039e7` MERGED; login feat `58781e4` MERGED; SSE feat `5ddb14f` MERGED; position_size_limits feat `5ef5525`; Kelly feat `3f254bc` / non-finite fail-closed fix `3a92e7d`; VWAP code `d27b2bb`; N-ary code `44099a7`; per-condition code `1c5cca0`; multi-timeframe code `def6c28`; indicator-vs-indicator code `9087c2b`; condition-extensions code `361df4c`; condition-blocks code `8766fae`; risk_based code `43cee29`; Slice C code `671d227`);
+  frontend Future Dev capability registry page (PR #82, MERGED) + first-Admin provisioning
+  dashboard + bootstrap-status endpoint (post-V1 TIER 2, PR #84, MERGED)**.
+  **Overall: ~89% complete** (V1=100%, post-V1 core=87%, frontend=73%).
+  `main` after PR #84 (`f7bf4a7`; provisioning-dashboard feat `b56f621` MERGED; capability-page feat `3d7977e` MERGED; history-compare feat `491ac03` MERGED; panel-page feat `726ffcc` MERGED; first-Admin bootstrap feat `a53cf34` MERGED; live-pages feat `499bd8b` MERGED; backtest-pages feat `10a0007` MERGED; metrics feat `d3039e7` MERGED; login feat `58781e4` MERGED; SSE feat `5ddb14f` MERGED; position_size_limits feat `5ef5525`; Kelly feat `3f254bc` / non-finite fail-closed fix `3a92e7d`; VWAP code `d27b2bb`; N-ary code `44099a7`; per-condition code `1c5cca0`; multi-timeframe code `def6c28`; indicator-vs-indicator code `9087c2b`; condition-extensions code `361df4c`; condition-blocks code `8766fae`; risk_based code `43cee29`; Slice C code `671d227`);
   alembic head = **`0021_local_auth`** (`human_credentials` + `auth_sessions`;
-  Slices A/B/C + follow-ups (a)/(b)/(b2)/(#53)/(c)/(i)/(ii)/(d) + Kelly sizing + position_size_limits + first-Admin bootstrap need no migration). **1028 tests green** (1015 + 13 first-Admin bootstrap: unit + integration — env-unset baseline / match+no-admin → Admin+audit+outbox / active-Admin fail-closed / non-matching baseline / case+whitespace normalization / settings env read / route pass-through).
+  Slices A/B/C + follow-ups (a)/(b)/(b2)/(#53)/(c)/(i)/(ii)/(d) + Kelly sizing + position_size_limits + first-Admin bootstrap + bootstrap-status read endpoint need no migration). **1036 tests green** (1015 + 13 first-Admin bootstrap [env-unset baseline / match+no-admin → Admin+audit+outbox / active-Admin fail-closed / non-matching baseline / case+whitespace normalization / settings env read / route pass-through] + 8 bootstrap-status read endpoint: unit configured-flag + integration window open/closed vs a real DB + route reads the setting).
   TIER 2 frontend — real-auth login/signup/logout (PR #65, MERGED): **FRONTEND-ONLY**
   (backend unchanged, no migration, backend test base stays 1015). Connects the `frontend/` shell
   (Vite 8 + React 18 + react-router 6 + @tanstack/react-query 5 + react-hook-form) to the landed
@@ -466,7 +467,26 @@ Before stopping a working session, produce **ALL** of the following:
     (`/view-datasets/query`, `/analysis-artifacts`) stay UNWIRED — no V1 UI workflow; server
     returns `CAPABILITY_NOT_ACTIVE` below Limited/Active (CR-09/FD-02); composer not role-gated
     (UI visibility is never authorization, doc 22 §3 — non-Admin sees 403 verbatim).
-  - Admin provisioning dashboard (UI for first-Admin onboarding — backend mechanism landed in PR #76)
+  - ✅ **First-Admin provisioning dashboard + bootstrap-status endpoint (PR #84, MERGED)** — closes
+    the PR #76 boundary (backend mechanism landed, no UI). Backend (2 files + 2 tests):
+    `application/commands/auth.py` pure `bootstrap_is_configured(bootstrap_email)` + read-only async
+    `bootstrap_status(session, *, bootstrap_admin_email) -> {bootstrap_configured, active_admin_exists}`
+    (booleans only, no PII; `active_admin_exists = count_active_admins(session) > 0`; a HINT — the
+    `sign_up` provisioning branch stays advisory-lock guarded, this endpoint never provisions) +
+    `apps/api/routes/auth.py` `GET /auth/bootstrap-status` → `BootstrapStatusResponse` (anonymous
+    entry surface like sign-up/login; setting passed server-side only, no email field in the schema).
+    Frontend (2 new + 3 edits + 1 test): NEW `lib/provisioning.ts` `BootstrapStatus` +
+    `useBootstrapStatus` (`["auth"]` key, swept by `resource.changed`) + `pages/Provisioning.tsx`
+    (`BootstrapWindow` `windowGuidance` open/closed×configured + `GET /me` identity via `useMe` +
+    read-only `BootstrapExplainer`; Admin → Panel link, no duplicated role assignment) + `nav.ts` NEW
+    non-`adminOnly` `Admin Provisioning` at `/panel/provisioning` (reachable pre-elevation;
+    `ALL_NAV_ITEMS` 23→24) + `App.tsx` REAL_PATHS/route. +8 backend (unit + integration) → 1036, +6
+    vitest (`provisioning.test.tsx` + `nav.test.tsx`) → 73; CI 3/3 green; no migration, alembic head
+    stays 0021_local_auth, ENGINE_VERSION unchanged. Honest boundary (PERMANENT): provisioning stays
+    server-side + signup-time only (no runtime provisioning API) — the page reads status and documents
+    the flow, it never provisions; `active_admin_exists` anonymous-exposed by design (single boolean
+    deployment fact, no PII, the first Admin is not yet authenticated); ongoing role management stays
+    in the Panel.
   - Frontend Trash page (restore UI — backend Stage 6c landed; currently a placeholder)
   
   **TIER 3 — Data/ops (deferred, optional for MVP):**

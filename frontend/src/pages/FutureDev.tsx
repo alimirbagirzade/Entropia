@@ -8,17 +8,30 @@ import { ApiError } from "@/lib/apiClient";
 import { formatUtc } from "@/lib/backtest";
 import {
   ACTIVATION_GATES,
+  ANALYSIS_ARTIFACT_CAPABILITY,
+  ANALYSIS_ARTIFACT_TYPES,
   STATE_TONES,
   allowedTargets,
   buildGatesSnapshot,
   gateComplete,
   useCapabilities,
   useCapability,
+  useCreateAnalysisArtifact,
   useGraphicViewOverview,
+  useQueryViewDataset,
   useTransitionCapability,
   type Capability,
   type CapabilityDetail,
 } from "@/lib/capability";
+
+// One immutable reference per line — trims and drops blanks (mirrors the
+// CreatePackage declared-keys composer).
+function parseRefLines(text: string): string[] {
+  return text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+}
 
 // Command failures surface the backend canonical envelope verbatim — the
 // client never invents capability-domain messages (mirrors Panel).
@@ -29,21 +42,23 @@ function mutationErrorText(error: unknown): string {
 
 // Future Dev (doc 22): the server-side Capability Registry rendered as-is —
 // list/detail for any authenticated principal, the Admin-only lifecycle
-// transition composer, and the static Graphic View placeholder overview.
-// The registry state shown here is display only; the server re-checks it on
-// every command dispatch (CR-09, FD-02) and a denied transition renders the
-// server error envelope verbatim.
+// transition composer, the Graphic View overview, and the two gated
+// operational composers (View Dataset + Analysis Artifact). The registry
+// state shown here is display only; the server re-checks it on every command
+// dispatch (CR-09, FD-02) and a denial renders the error envelope verbatim.
 export function FutureDev() {
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   return (
     <>
       <h1 className="page-title">Future Dev</h1>
       <p className="page-sub">
-        Capability registry — lifecycle states, activation gates and the Graphic View placeholder
+        Capability registry — lifecycle states, activation gates, the Graphic View overview and
+        the gated operational commands
       </p>
       <RegistryCard selectedKey={selectedKey} onSelect={setSelectedKey} />
       {selectedKey !== null ? <CapabilityDetailCard capabilityKey={selectedKey} /> : null}
       <GraphicViewCard />
+      <AnalysisArtifactsCard />
     </>
   );
 }
@@ -334,6 +349,206 @@ function GraphicViewCard() {
           ))}
         </>
       ) : null}
+      <ViewDatasetComposer />
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Operational POSTs (doc 22 §8, §10 — CR-09/FD-02). The composers are never
+// pre-gated on the client's cached registry state: the SERVER re-checks
+// Limited/Active on every dispatch and an inactive capability returns
+// CAPABILITY_NOT_ACTIVE — rendered verbatim, no fake job or progress.
+// ---------------------------------------------------------------------------
+
+// POST /view-datasets/query — graphic_view-gated View Dataset preparation
+// from pinned immutable source refs (doc 22 §10.2, FD-04).
+function ViewDatasetComposer() {
+  const [sourceRefs, setSourceRefs] = useState("");
+  const [schemaVersion, setSchemaVersion] = useState("");
+  const [seriesRefs, setSeriesRefs] = useState("");
+  const [markerRefs, setMarkerRefs] = useState("");
+  const prepare = useQueryViewDataset();
+
+  const onSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const series = parseRefLines(seriesRefs);
+    const markers = parseRefLines(markerRefs);
+    prepare.mutate({
+      source_manifest_refs: parseRefLines(sourceRefs),
+      schema_version: schemaVersion.trim(),
+      // Blank optional lists are OMITTED — the route treats absent and empty
+      // alike, but the request mirrors exactly what the operator pinned.
+      ...(series.length > 0 ? { series_refs: series } : {}),
+      ...(markers.length > 0 ? { marker_refs: markers } : {}),
+    });
+  };
+
+  return (
+    <form onSubmit={onSubmit} aria-labelledby="view-dataset-h">
+      <h4 id="view-dataset-h">Prepare View Dataset</h4>
+      <label style={{ display: "block" }}>
+        Source manifest refs{" "}
+        <textarea
+          aria-label="Source manifest refs"
+          value={sourceRefs}
+          onChange={(event) => setSourceRefs(event.target.value)}
+          placeholder="One immutable manifest ref per line (required)"
+          rows={3}
+        />
+      </label>
+      <label>
+        Schema version{" "}
+        <input
+          aria-label="Schema version"
+          value={schemaVersion}
+          onChange={(event) => setSchemaVersion(event.target.value)}
+          placeholder="e.g. v1"
+        />
+      </label>{" "}
+      <label>
+        Series refs{" "}
+        <textarea
+          aria-label="Series refs"
+          value={seriesRefs}
+          onChange={(event) => setSeriesRefs(event.target.value)}
+          placeholder="Optional — one per line"
+          rows={2}
+        />
+      </label>{" "}
+      <label>
+        Marker refs{" "}
+        <textarea
+          aria-label="Marker refs"
+          value={markerRefs}
+          onChange={(event) => setMarkerRefs(event.target.value)}
+          placeholder="Optional — one per line"
+          rows={2}
+        />
+      </label>{" "}
+      <button
+        type="submit"
+        className="btn"
+        disabled={
+          prepare.isPending ||
+          parseRefLines(sourceRefs).length === 0 ||
+          schemaVersion.trim().length === 0
+        }
+      >
+        Prepare view dataset
+      </button>
+      {prepare.isError ? (
+        <p role="alert" style={{ color: "var(--down)", marginBottom: 0 }}>
+          {mutationErrorText(prepare.error)}
+        </p>
+      ) : null}
+      {prepare.data ? (
+        <p aria-live="polite">
+          View dataset prepared — <code>{prepare.data.view_dataset_id}</code> (schema{" "}
+          {prepare.data.schema_version}, {prepare.data.source_manifest_refs.length} source ref
+          {prepare.data.source_manifest_refs.length === 1 ? "" : "s"}).
+        </p>
+      ) : null}
+    </form>
+  );
+}
+
+// POST /analysis-artifacts — one immutable Analysis Artifact; the gating
+// capability is derived from artifact_type SERVER-side (doc 22 §10.3-§10.6,
+// FD-05/09). The per-type gate shown here is a display-only mirror.
+function AnalysisArtifactsCard() {
+  const [artifactType, setArtifactType] = useState<string>(ANALYSIS_ARTIFACT_TYPES[0] ?? "");
+  const [inputRefs, setInputRefs] = useState("");
+  const [methodVersion, setMethodVersion] = useState("");
+  const [outputRef, setOutputRef] = useState("");
+  const create = useCreateAnalysisArtifact();
+
+  const onSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const output = outputRef.trim();
+    create.mutate({
+      artifact_type: artifactType,
+      input_manifest_refs: parseRefLines(inputRefs),
+      method_version: methodVersion.trim(),
+      ...(output.length > 0 ? { output_ref: output } : {}),
+    });
+  };
+
+  return (
+    <section className="card" aria-labelledby="analysis-artifacts-h">
+      <h3 id="analysis-artifacts-h" style={{ marginTop: 0 }}>
+        Analysis Artifacts
+      </h3>
+      <form onSubmit={onSubmit}>
+        <label>
+          Artifact type{" "}
+          <select
+            aria-label="Artifact type"
+            value={artifactType}
+            onChange={(event) => setArtifactType(event.target.value)}
+          >
+            {ANALYSIS_ARTIFACT_TYPES.map((type) => (
+              <option key={type} value={type}>
+                {type}
+              </option>
+            ))}
+          </select>
+        </label>{" "}
+        <span>
+          Gated by <code>{ANALYSIS_ARTIFACT_CAPABILITY[artifactType] ?? "unknown"}</code> — the
+          server re-checks Limited/Active on dispatch.
+        </span>
+        <label style={{ display: "block" }}>
+          Input manifest refs{" "}
+          <textarea
+            aria-label="Input manifest refs"
+            value={inputRefs}
+            onChange={(event) => setInputRefs(event.target.value)}
+            placeholder="One immutable manifest ref per line (required)"
+            rows={3}
+          />
+        </label>
+        <label>
+          Method version{" "}
+          <input
+            aria-label="Method version"
+            value={methodVersion}
+            onChange={(event) => setMethodVersion(event.target.value)}
+            placeholder="e.g. mc-v1"
+          />
+        </label>{" "}
+        <label>
+          Output ref{" "}
+          <input
+            aria-label="Output ref"
+            value={outputRef}
+            onChange={(event) => setOutputRef(event.target.value)}
+            placeholder="Optional immutable output ref"
+          />
+        </label>{" "}
+        <button
+          type="submit"
+          className="btn"
+          disabled={
+            create.isPending ||
+            parseRefLines(inputRefs).length === 0 ||
+            methodVersion.trim().length === 0
+          }
+        >
+          Create analysis artifact
+        </button>
+        {create.isError ? (
+          <p role="alert" style={{ color: "var(--down)", marginBottom: 0 }}>
+            {mutationErrorText(create.error)}
+          </p>
+        ) : null}
+        {create.data ? (
+          <p aria-live="polite">
+            Analysis artifact created — <code>{create.data.artifact_id}</code> (
+            {create.data.artifact_type}, gated by <code>{create.data.capability_key}</code>).
+          </p>
+        ) : null}
+      </form>
     </section>
   );
 }

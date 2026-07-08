@@ -79,6 +79,33 @@ const CREATE_RESULT = {
   request_version: 1,
 };
 
+// Action results (commands/create_package.py return dicts verbatim).
+const PRECHECK_RESULT = {
+  request_id: "req_1",
+  scan_id: "scan_2",
+  attempt_no: 2,
+  status: "passed",
+  state: "precheck_passed",
+  resolved: 1,
+  missing: [],
+  registry_fingerprint: "fp_2",
+  job_id: "job_1",
+};
+
+const CANDIDATE_RESULT = {
+  request_id: "req_1",
+  state: "candidate_ready",
+  candidate_hash: "sha256:cand",
+  job_id: "job_2",
+};
+
+const DRAFT_RESULT = {
+  request_id: "req_1",
+  package_root_id: "root_1",
+  draft_revision_id: "rev_1",
+  state: "draft_created",
+};
+
 // Order matters for the fragment-matching stub: the detail routes must precede
 // the list route ("/create-package/requests/req_1" contains
 // "/create-package/requests"). POST vs GET differ by method, so their order is
@@ -242,5 +269,105 @@ describe("Create Package page", () => {
 
     expect(await screen.findByText("Unable to load")).toBeInTheDocument();
     expect(screen.getByText("FORBIDDEN: Guests cannot create packages.")).toBeInTheDocument();
+  });
+
+  it("runs Pre-Check with the OCC version header and a fresh Idempotency-Key", async () => {
+    // Action routes precede the create-POST fragment ("/create-package/requests"
+    // is contained in the action URL, so ordering decides the match).
+    const fetchMock = stubApi({
+      "POST /create-package/requests/req_1/pre-check": PRECHECK_RESULT,
+      ...BASE_ROUTES,
+    });
+    renderPage();
+    await screen.findByText("req_1");
+    fireEvent.click(screen.getByRole("button", { name: "View" }));
+
+    fireEvent.click(await screen.findByRole("button", { name: "Run Pre-Check" }));
+
+    expect(await screen.findByText("scan_2")).toBeInTheDocument();
+    const call = fetchMock.mock.calls.find(
+      ([url, init]) => String(url).endsWith("/pre-check") && init?.method === "POST",
+    );
+    expect(call).toBeDefined();
+    const headers = (call?.[1] as RequestInit).headers as Record<string, string>;
+    expect(headers["X-Request-Version"]).toBe("2");
+    expect(headers["Idempotency-Key"]).toBeTruthy();
+  });
+
+  it("gates Generate candidate on the server-side hint, never a UI guess", async () => {
+    stubApi({
+      ...BASE_ROUTES,
+      "GET /create-package/requests/req_1": { ...REQUEST_DETAIL, can_generate_candidate: false },
+    });
+    renderPage();
+    await screen.findByText("req_1");
+    fireEvent.click(screen.getByRole("button", { name: "View" }));
+
+    expect(await screen.findByRole("button", { name: "Generate candidate" })).toBeDisabled();
+  });
+
+  it("passes the accepted candidate hash as the draft staleness token", async () => {
+    let generated = false;
+    const fetchMock = stubApi({
+      "POST /create-package/requests/req_1/generate-candidate": () => {
+        generated = true;
+        return CANDIDATE_RESULT;
+      },
+      "POST /create-package/requests/req_1/draft": DRAFT_RESULT,
+      ...BASE_ROUTES,
+      // The refetched projection reaches candidate_ready after generation.
+      "GET /create-package/requests/req_1": () =>
+        generated ? { ...REQUEST_DETAIL, state: "candidate_ready" } : REQUEST_DETAIL,
+    });
+    renderPage();
+    await screen.findByText("req_1");
+    fireEvent.click(screen.getByRole("button", { name: "View" }));
+
+    fireEvent.click(await screen.findByRole("button", { name: "Generate candidate" }));
+    expect(await screen.findByText("sha256:cand")).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Create draft" })).toBeEnabled();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create draft" }));
+    expect(await screen.findByText(/Draft created/)).toBeInTheDocument();
+
+    const draftCall = fetchMock.mock.calls.find(
+      ([url, init]) => String(url).endsWith("/draft") && init?.method === "POST",
+    );
+    expect(draftCall).toBeDefined();
+    const init = draftCall?.[1] as RequestInit;
+    expect(JSON.parse(String(init.body))).toEqual({ expected_candidate_hash: "sha256:cand" });
+    expect((init.headers as Record<string, string>)["Idempotency-Key"]).toBeTruthy();
+  });
+
+  it("sends approve with the draft head token and shows the Admin denial verbatim", async () => {
+    const fetchMock = stubApi({
+      "POST /create-package/requests/req_1/approve": () => {
+        throw new Error("APPROVAL_REQUIRES_ADMIN: Only an Admin may approve and publish.");
+      },
+      ...BASE_ROUTES,
+      "GET /create-package/requests/req_1": {
+        ...REQUEST_DETAIL,
+        state: "draft_created",
+        package_root_id: "root_1",
+        draft_revision_id: "rev_1",
+      },
+    });
+    renderPage();
+    await screen.findByText("req_1");
+    fireEvent.click(screen.getByRole("button", { name: "View" }));
+
+    fireEvent.click(await screen.findByRole("button", { name: "Approve & publish" }));
+
+    expect(
+      await screen.findByText("APPROVAL_REQUIRES_ADMIN: Only an Admin may approve and publish."),
+    ).toBeInTheDocument();
+    const approveCall = fetchMock.mock.calls.find(
+      ([url, init]) => String(url).endsWith("/approve") && init?.method === "POST",
+    );
+    expect(approveCall).toBeDefined();
+    const body = JSON.parse(String((approveCall?.[1] as RequestInit).body));
+    expect(body.expected_head_revision_id).toBe("rev_1");
   });
 });

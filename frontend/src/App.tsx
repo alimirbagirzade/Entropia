@@ -9,6 +9,7 @@ import { FutureDev } from "./pages/FutureDev";
 import { Mainboard } from "./pages/Mainboard";
 import { Metrics } from "./pages/Metrics";
 import { Panel } from "./pages/Panel";
+import { PreCheck } from "./pages/PreCheck";
 import { Provisioning } from "./pages/Provisioning";
 import { Placeholder } from "./pages/Placeholder";
 import { Login } from "./pages/Login";
@@ -22,6 +23,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 const REAL_PATHS = new Set([
   "/",
   "/packages/create",
+  "/packages/pre-check",
   "/panel",
   "/panel/provisioning",
   "/panel/metrics",
@@ -53,6 +55,15 @@ export default function App() {
           element={
             <ErrorBoundary>
               <CreatePackage />
+            </ErrorBoundary>
+          }
+        />
+        {/* Pre-Check (doc 07): immutable dependency scans + scan artifact viewer. */}
+        <Route
+          path="/packages/pre-check"
+          element={
+            <ErrorBoundary>
+              <PreCheck />
             </ErrorBoundary>
           }
         />

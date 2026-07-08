@@ -3,6 +3,52 @@
 > **Amaç:** V1 kapandı (Stage 0–8 COMPLETE). Bu doküman post-V1 durumunu, aday iş listesini
 > ve temiz oturumda yapıştırılacak resume prompt'u içerir.
 
+## Durum (2026-07-08, CP-Gen — deterministic candidate generation; PR #89 MERGED)
+
+**BACKEND-ONLY** (1 yeni + 1 edit + 1 test; migration YOK, alembic head `0021_local_auth` SABİT,
+`ENGINE_VERSION` DEĞİŞMEDİ — CP-Gen engine'e dokunmaz). `submit_candidate_generation`'ın V1 stub
+*compute*'u → DETERMINISTIK candidate-manifest hattı (doc 06 §5). **LLM YOK** — gerçek generator
+Future-Dev. Backend 1036 → **1048** (+12 unit test); frontend 80 (DEĞİŞMEDİ). main = `ba533e5`
+(Merge #89), feat `5cc62cc`.
+
+- **YENİ `domain/create_package/candidate.py` (pure, I/O YOK):** `GENERATOR_VERSION =
+  "cp-candidate-gen-v1"` (ENGINE_VERSION analojisi — bump `candidate_hash` namespace'ini kaydırır,
+  eski generator'ın candidate'ı sessizce yeniden kullanılmaz; INF-04/INF-05). Frozen
+  `CandidateManifest` (`generator_version`/`package_kind`/`source_kind`/`signal_kind`/
+  `output_contract`/`resolved_dependencies`/`test_plan`/`uncertainty`) + `build_candidate_manifest(*,
+  package_kind, source_kind, output_contract, resolved_refs)` → reproducible manifest;
+  `candidate_hash = "sha256:" + content_hash(manifest.as_dict())` (`domain/revision/hashing`).
+  `_summarize_resolved` `canonical_key`'e göre sıralar → **order-independent** hash. Fail-closed
+  `_output_kind` (`kind`|`output_type` yoksa `OutputContractInvalid`) +
+  `_validate_contract_against_deps` (`directional_signal`→≥1 `ta.*`; `boolean_condition`→≥1 `cond.*`;
+  resolved BOŞ ise skip — description / dep-less deferred). **Katman-temiz:** `ta.`/`cond.`
+  PREFIX'iyle bakar, backtest indicator taksonomisini IMPORT ETMEZ.
+- **`commands/create_package.py::submit_candidate_generation`:** stub 4 satır → manifest compute;
+  `candidate_hash` artık manifest'in GERÇEK content-hash'i; `candidate_output_contract =
+  manifest.output_contract`. YENİ `_candidate_resolved_refs(session, detail)` (description→`[]`,
+  code→current PASSED `scan.resolved_refs` — PC-13 gate zaten `_enforce_precheck_gate`'te koştu, scan
+  taze). Dönüş anahtarları DEĞİŞMEDİ (`{request_id, state, candidate_hash, job_id}`); audit/outbox
+  `candidate_generation_started`/`_completed`, `run_idempotent`, `session.refresh(with_for_update)`,
+  state machine, durable job row hepsi aynı.
+- **DEĞİŞMEDİ (zaten gerçek, DOKUNMA):** Pre-Check resolver (`_resolve_declared` → ESP registry pin),
+  `DependencyScan` immutable evidence, PC-13 gate (`_enforce_precheck_gate`), job durability, state
+  machine, `_draft_dependency_snapshot` (`dependency_snapshot` Pre-Check scan'den — Slice C KAYNAĞI),
+  backtest engine + `resolve_indicator_plan`.
+- **DÜRÜST SINIR (KALICI):** LLM generation Future-Dev (spec bile erteliyor); üretilen artifact
+  backtest engine'de EXECUTE EDİLMEZ (engine `dependency_snapshot` pinlerinden native compute eder —
+  ESP `_MovingAverage`/`_Rsi`/`_Vwap`…); üretilen kodu çalıştıran executor AYRI mega iş; async
+  dramatiq worker'a taşınmadı (deterministik in-tx yeterli; job row yine durable); CP/Pre-Check
+  FRONTEND sayfaları hâlâ placeholder (doğal sonraki dilim); `["jobs"]` backend liste yüzeyi YOK.
+
+**SIRADAKİ İŞ ADAYLARI (kapanıştan sonra; BAŞLARKEN kullanıcıyla TEYİT ET):**
+- **CP / Pre-Check frontend sayfaları** — Create Package (doc 06) + Pre-Check (doc 07) placeholder'ları
+  canlı veriye bağla (`routes/create_package.py` yüzeyi + candidate/precheck akışı; `lib/*.ts` +
+  `apiStub` + `Panel.tsx` kart deseni reuse). Frontend-only muhtemel; en doğal görünür sonraki dilim.
+- **Capability aktivasyonları** — Future Dev slotlarını placeholder'dan çıkar (`graphic_view` ilk aday;
+  `routes/capability.py` + `lib/capability.ts` hazır — PR #82).
+- **TIER 3 deferred:** retention auto-purge, data-queue redelivery, SSE streaming e2e, tool-call status
+  shadowing. Trash purge (destructive + `confirmation_phrase`/re-auth) AYRI re-auth slice'ı.
+
 ## Durum (2026-07-07, TIER 2 frontend — Admin Trash restore page; PR #86 MERGED)
 
 > **Onuncu TIER 2 slice — frontend Admin Trash restore sayfası landed (PR #86, merged → main
@@ -735,8 +781,12 @@
      +15 test → 1015; migration yok. **TIER 1 backend böylece EFEKTİF TAMAM → sıradaki: TIER 2 frontend/infra.**
 3. **Frontend entegrasyonu** — SSE tüketimi (yeni taksonomi), `/v1/metrics` dashboard'ları,
    Trash/Panel/Manual/Future-Dev shell'leri; `/v1/auth/*` login akışı hazır.
-4. **Create Package gerçek candidate generation** — stub generator → LLM/derleme hattı; indikatör
-   compute'un kaynağı burası (Slice C plan resolution pinned snapshot'tan okur).
+4. ~~**Create Package gerçek candidate generation**~~ ✅ **LANDED (PR #89, merged → main `ba533e5`)** —
+   stub *compute* → DETERMINISTIK candidate-manifest hattı (`domain/create_package/candidate.py`;
+   `GENERATOR_VERSION` namespace + `content_hash`; **LLM YOK**, gerçek generator Future-Dev). +12 unit
+   test → **1048**; migration YOK; engine DEĞİŞMEDİ. İndikatör compute'un kaynağı hâlâ Slice C plan
+   resolution pinned snapshot'tan okur; **CP/Pre-Check FRONTEND sayfaları hâlâ placeholder** (doğal
+   sonraki dilim).
 5. **Capability aktivasyonları** — Future Dev slotlarını Placeholder'dan çıkarma (graphic_view ilk
    aday; gate'ler + Admin transition hazır).
 6. **Deferred takipleri** — `summary["timeframe"]` çözümü (market-revision metadata'sından);
@@ -915,20 +965,25 @@ nav 23→24; salt-okunur — provisioning sunucu-tarafı+signup-zamanı kalır) 
 sayfası (#86 — lib/trash.ts ["trash"] hook'ları + useRestoreEntry OCC expected_head_revision_id +
 taze Idempotency-Key; pages/Trash.tsx sunucu-truth restore_eligible gating + sunucu-hidrasyonlu
 object_type filtre + immutable snapshot detay; App.tsx /trash REAL_PATHS, nav.ts değişmedi;
-frontend-only). BACKEND: first-Admin bootstrap provisioning (#76 — ENTROPIA_BOOTSTRAP_ADMIN_EMAIL
-opt-in) + salt-okunur bootstrap-status read endpoint (#84 — commands/auth.py bootstrap_status/
-bootstrap_is_configured); migration YOK, alembic head 0021_local_auth SABİT; backend testler 1036,
-frontend 80.
+frontend-only) + signup/login bootstrap-status ["auth"] invalidation guard (#88 — frontend test).
+BACKEND: first-Admin bootstrap provisioning (#76 — ENTROPIA_BOOTSTRAP_ADMIN_EMAIL opt-in) +
+salt-okunur bootstrap-status read endpoint (#84 — commands/auth.py bootstrap_status/
+bootstrap_is_configured) + CP-Gen deterministic candidate generation (#89 — domain/create_package/
+candidate.py GENERATOR_VERSION namespace + content_hash; submit_candidate_generation stub compute →
+manifest; LLM YOK; engine DEĞİŞMEDİ). migration YOK, alembic head 0021_local_auth SABİT,
+ENGINE_VERSION backtest-engine-v2-position-size-limits SABİT; backend testler 1048, frontend 82.
 
 ÖNCE DOĞRULA (stale-by-default): git fetch && git log --oneline origin/main -6 && gh pr list
---state all -L 8. main = 09f4130 (Merge #86) + kapanış docs PR'ı merge sonrası ileri olmalı
+--state all -L 8. main = ba533e5 (Merge #89) + kapanış docs PR'ı merge sonrası ileri olmalı
 (açıksa önce kullanıcıdan merge iste). alembic head 0021_local_auth; backend ENGINE_VERSION =
 backtest-engine-v2-position-size-limits. FRONTEND doğrula (yeni branch'i MUTLAKA origin/main'den
 aç — local stale olabilir): cd frontend && npm run typecheck && npm run lint && npm test &&
-npm run build (80/80 geçmeli).
+npm run build (82/82 geçmeli).
 
-ÖNCE OKU (authority): docs/POST_V1_KICKOFF.md (en üst Durum bloğu — PR #86) + docs/STAGE2_HANDOFF.md
-("Frontend Admin Trash restore page ... landed (PR #86)" + "Next").
+ÖNCE OKU (authority): docs/POST_V1_KICKOFF.md (en üst Durum bloğu — PR #89) + docs/STAGE2_HANDOFF.md
+("CP-Gen — deterministic candidate generation landed (PR #89)" + "Next"). CP-Gen kodu:
+backend/src/entropia/domain/create_package/candidate.py +
+application/commands/create_package.py::submit_candidate_generation.
 Landed yüzeyleri TÜKET,
 yeniden yazma: Auth (lib/session.ts + lib/auth.ts + apiClient Bearer + pages/Login.tsx); SSE
 (lib/sse.ts EVENT_QUERY_KEYS + connectEvents Layout mount); Metrics (lib/metrics.ts + useMetrics
@@ -954,11 +1009,12 @@ invalidateQueries({queryKey}) object-form. tsconfig: noUncheckedIndexedAccess +
 exactOptionalPropertyTypes KAPALI.
 
 SIRADAKİ İŞ — kalan TIER 2 adayları (BAŞLARKEN kullanıcıyla hangisi diye TEYİT ET):
-- (d) CP real candidate generation (daha büyük; backend+frontend olası; kapsam teyidi ŞART — hangi CP
-  yüzeyi, ne üretiyor, hangi durum makinesi; önce spec çıkar).
-- (opsiyonel küçük) signup başarısında bootstrap-status invalidate (lib/auth.ts useSignup →
-  invalidateQueries(["auth"])) — #84'ün doğal follow-up'ı; yeni signup sonrası Provisioning sayfası
-  bayat kalmasın. Tek dosya + test.
+- CP / Pre-Check FRONTEND sayfaları — Create Package (doc 06) + Pre-Check (doc 07) placeholder'larını
+  canlı veriye bağla (routes/create_package.py yüzeyi + candidate/precheck akışı; lib/*.ts + apiStub +
+  Panel.tsx kart deseni reuse). CP backend candidate generation ARTIK GERÇEK (#89) → en doğal görünür
+  sonraki dilim; frontend-only muhtemel.
+- Capability aktivasyonları — Future Dev slotlarını placeholder'dan çıkar (graphic_view ilk aday;
+  routes/capability.py + lib/capability.ts hazır — PR #82).
 DİKKAT (kalıcı dürüst sınırlar): ["jobs"] için backend liste yüzeyi YOK (run projeksiyonları +
 /v1/metrics jobs-depth); users/system-actors/capabilities'in özel SSE event'i yok (kendi
 mutation'ları + resource.changed süpürür); Future Dev gated operasyonel POST'ları
@@ -976,7 +1032,11 @@ zaten bağlı (PR #72); SSE taksonomisi + /v1/auth/* + /me + GET /v1/metrics zat
 bootstrap landed (PR #76 — commands/auth.py bootstrap_admin_matches + sign_up branch,
 settings.bootstrap_admin_email) + salt-okunur GET /auth/bootstrap-status (PR #84 — commands/auth.py
 bootstrap_status/bootstrap_is_configured; provisioning DASHBOARD'u bağlandı, artık bir sonraki
-slice için taban DEĞİL kapandı).
+slice için taban DEĞİL kapandı). CP candidate generation ARTIK GERÇEK (PR #89 —
+commands/create_package.py::submit_candidate_generation manifest compute + YENİ
+domain/create_package/candidate.py deterministik-hash deseni [content_hash + sorted keys +
+GENERATOR_VERSION namespace] → ileriki generator'lar için TABAN); routes/create_package.py +
+Pre-Check yüzeyi zaten bağlı, yalnız FRONTEND sayfaları placeholder.
 
 YÖNTEM: Workflow KULLANMA; direct-author. Backend working-loop (izole DB / L1 FK / alembic)
 UYGULANMAZ. Frontend loop: cd frontend (cwd resetlenebilir → absolute path);

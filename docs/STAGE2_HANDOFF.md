@@ -944,7 +944,58 @@ head stays `0021_local_auth`; `ENGINE_VERSION` unchanged; backend test base stay
   Trash is **Admin-only server-side** (`require_trash_admin`) — a non-Admin sees the 403 envelope verbatim
   (a hidden nav item is never authorization, doc 20 §2). `["jobs"]` still has NO backend list surface.
 
-## Next: post-V1 (continued) — TIER 2 (login + SSE + /v1/metrics + backtest pages + Arrange Metrics/Analysis Lab + first-Admin bootstrap + Panel/Logs + history compare/metrics rebind + capability registry page + provisioning dashboard + Trash restore page landed; CP candidate generation remains)
+## CP-Gen — deterministic candidate generation landed (PR #89, merged → main `ba533e5`, feat `5cc62cc`)
+
+**BACKEND-ONLY (1 new + 1 edit + 1 test) — NO migration, alembic head stays `0021_local_auth`,
+`ENGINE_VERSION` unchanged (`backtest-engine-v2-position-size-limits` — CP-Gen never touches the
+engine).** Replaces the V1 stub *compute* in `submit_candidate_generation` with a deterministic,
+reproducible candidate-manifest pipeline (doc 06 §5). **No LLM** — a real LLM/code generator stays
+Future-Dev. Diff: `candidate.py` +149, `create_package.py` +41/−7, `test_candidate_generation.py`
++123 (3 files, +306/−7).
+
+- **NEW `backend/src/entropia/domain/create_package/candidate.py` (pure, no I/O):**
+  `GENERATOR_VERSION = "cp-candidate-gen-v1"` — the ENGINE_VERSION analogue; bumping it shifts the
+  `candidate_hash` namespace so a candidate built by an older generator is never silently reused
+  (INF-04/INF-05). Frozen `CandidateManifest` dataclass (`generator_version` / `package_kind` /
+  `source_kind` / `signal_kind` / `output_contract` / `resolved_dependencies` / `test_plan` /
+  `uncertainty`; `as_dict()` via `dataclasses.asdict`). `build_candidate_manifest(*, package_kind,
+  source_kind, output_contract, resolved_refs)` → reproducible manifest; `candidate_hash(manifest)
+  = "sha256:" + content_hash(manifest.as_dict())` (reuses `domain/revision/hashing.content_hash`).
+  `_summarize_resolved` sorts resolved refs by `canonical_key` → **order-independent** hash.
+  Fail-closed `_output_kind` (`kind` OR `output_type` alias missing → `OutputContractInvalid`) +
+  `_validate_contract_against_deps` (`directional_signal` → needs ≥1 `ta.*` dep; `boolean_condition`
+  → needs ≥1 `cond.*` dep; **empty resolved → skipped**: description / dep-less request,
+  implementation deferred). **Layer-clean:** checks canonical-key **prefixes** (`ta.` / `cond.`) —
+  does NOT import the backtest indicator taxonomy, keeping the CP domain independent.
+  `_test_plan` / `_uncertainty` derive human-readable notes (DESCRIPTION source + empty-resolved
+  uncertainty).
+- **`application/commands/create_package.py::submit_candidate_generation`:** the 4-line stub compute
+  (`sha256` of `{request_id, context_hash}` + an output-contract copy) → the manifest compute.
+  `candidate_hash` is now the manifest's **real content hash**; `candidate_output_contract =
+  manifest.output_contract`. NEW helper `_candidate_resolved_refs(session, detail)` — DESCRIPTION →
+  `[]`, code → the **current PASSED scan's `resolved_refs`** (the PC-13 gate already ran in
+  `_enforce_precheck_gate`, so the scan is fresh). Return keys UNCHANGED (`{request_id, state,
+  candidate_hash, job_id}`); the audit/outbox `candidate_generation_started`/`_completed` pair,
+  `run_idempotent`, `session.refresh(with_for_update=True)`, the state machine and the durable job
+  row are all unchanged.
+- **NEW `backend/tests/unit/test_candidate_generation.py` (+12):** reproducibility (same inputs →
+  same hash), order-independence (`resolved_refs` shuffled → same hash), output_contract /
+  resolved_refs hash sensitivity, `GENERATOR_VERSION` namespace shift, fail-closed validation
+  (`directional_signal` → `ta.*` / `boolean_condition` → `cond.*` / empty-resolved skip),
+  `output_type` alias, DESCRIPTION uncertainty note, test_plan dependency listing. **backend
+  1036 → 1048; ruff/format/mypy clean; review 0 CRITICAL/HIGH.**
+- **Unchanged (already real — DO NOT re-touch):** Pre-Check resolver (`_resolve_declared` → ESP
+  registry pin), `DependencyScan` immutable evidence, PC-13 gate (`_enforce_precheck_gate`), job
+  durability, the request state machine, `_draft_dependency_snapshot` (the `dependency_snapshot`
+  comes from the Pre-Check scan — the Slice C SOURCE), the backtest engine + `resolve_indicator_plan`.
+- **Honest boundary (PERMANENT):** LLM generation is Future-Dev (the spec itself defers it). The
+  generated candidate artifact is **NOT executed** by the backtest engine — the engine natively
+  computes from the `dependency_snapshot` pins (ESP `_MovingAverage`/`_Rsi`/`_Vwap`…); a real
+  code-executor is a separate mega-slice. No async dramatiq move (deterministic in-tx compute
+  suffices; the job row is still durable). CP / Pre-Check **frontend** pages remain placeholders (the
+  natural next slice). `["jobs"]` has NO backend list surface (permanent).
+
+## Next: post-V1 (continued) — TIER 2 (login + SSE + /v1/metrics + backtest pages + Arrange Metrics/Analysis Lab + first-Admin bootstrap + Panel/Logs + history compare/metrics rebind + capability registry page + provisioning dashboard + Trash restore page + CP deterministic candidate generation landed; CP/Pre-Check frontend pages remain)
 
 **V1 COMPLETE (Stages 0–8, docs 01–22) + Auth/IdP + Parquet Slice A + Backtest Engine Slice B + real indicator compute Slice C + `risk_based` sizing (a) + condition blocks (b) + condition extensions (b2) + two-package indicator-vs-indicator + higher-timeframe resampling (c) + per-condition multi-TF reference (i) + N-ary reference chain (ii) + VWAP directional key (d) + `formula_based` Kelly sizing + `position_size_limits` min/max cap (PR #63) landed (1015 tests).** The **Slice C indicator-compute + position-sizing follow-ups are now EFFECTIVELY COMPLETE — TIER 1 backend is DONE**:
 

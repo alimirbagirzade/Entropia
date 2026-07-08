@@ -41,6 +41,10 @@ from entropia.domain.create_package import (
     normalize_request,
     source_hash,
 )
+from entropia.domain.create_package.candidate import (
+    build_candidate_manifest,
+    candidate_hash,
+)
 from entropia.domain.esp.enums import RuntimeAdapter
 from entropia.domain.identity import Actor
 from entropia.domain.lifecycle.enums import (
@@ -495,12 +499,19 @@ async def submit_candidate_generation(
             new_state=str(detail.state),
             action="candidate_generation_started",
         )
-        # V1 stub: the candidate completes synchronously with the request's output
-        # contract; a real worker would write the generated implementation artifact.
-        candidate_payload = {"request_id": root.entity_id, "context_hash": detail.context_hash}
-        candidate_hash = f"sha256:{content_hash(candidate_payload)}"
-        detail.candidate_hash = candidate_hash
-        detail.candidate_output_contract = detail.output_contract
+        # Deterministic candidate compute (doc 06 §5): compose a reproducible manifest
+        # from the resolved ESP dependencies + validated output contract; its content
+        # hash is the candidate hash. A real LLM/code generator is Future-Dev.
+        resolved_refs = await _candidate_resolved_refs(session, detail)
+        manifest = build_candidate_manifest(
+            package_kind=str(detail.package_kind),
+            source_kind=detail.source_kind,
+            output_contract=detail.output_contract,
+            resolved_refs=resolved_refs,
+        )
+        new_candidate_hash = candidate_hash(manifest)
+        detail.candidate_hash = new_candidate_hash
+        detail.candidate_output_contract = manifest.output_contract
         detail.state = next_request_state(detail.state, CreatePackageState.CANDIDATE_READY)
         root.row_version += 1
         _audit_and_outbox(
@@ -517,7 +528,7 @@ async def submit_candidate_generation(
         return {
             "request_id": root.entity_id,
             "state": str(detail.state),
-            "candidate_hash": candidate_hash,
+            "candidate_hash": new_candidate_hash,
             "job_id": job.job_id,
         }
 
@@ -548,6 +559,22 @@ async def _enforce_precheck_gate(session: AsyncSession, detail: PackageRequest) 
     current_fingerprint = await _registry_fingerprint(session, detail.declared_dependencies)
     if scan.registry_fingerprint != current_fingerprint:
         raise PrecheckStale()
+
+
+async def _candidate_resolved_refs(
+    session: AsyncSession, detail: PackageRequest
+) -> list[dict[str, Any]]:
+    """The resolved ESP refs the candidate compute pins (doc 06 §5).
+
+    Description requests resolve nothing; a code request reuses the current PASSED
+    scan's resolved refs (the PC-13 gate already ran, so the scan is fresh).
+    """
+    if detail.source_kind == SourceKind.DESCRIPTION:
+        return []
+    scan = await cp_repo.get_current_scan(session, detail)
+    if scan is None:
+        return []
+    return list(scan.resolved_refs or [])
 
 
 async def create_draft_from_candidate(

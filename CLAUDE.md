@@ -90,9 +90,10 @@ Before stopping a working session, produce **ALL** of the following:
   live-data Panel / Management / Logs page (PR #78, MERGED) + TIER 2 frontend history
   compare/soft-delete & profile-hydrated Result metrics rebind (PR #80, MERGED) + TIER 2
   frontend Future Dev capability registry page (PR #82, MERGED) + first-Admin provisioning
-  dashboard + bootstrap-status endpoint (post-V1 TIER 2, PR #84, MERGED)**.
-  **Overall: ~89% complete** (V1=100%, post-V1 core=87%, frontend=73%).
-  `main` after PR #84 (`f7bf4a7`; provisioning-dashboard feat `b56f621` MERGED; capability-page feat `3d7977e` MERGED; history-compare feat `491ac03` MERGED; panel-page feat `726ffcc` MERGED; first-Admin bootstrap feat `a53cf34` MERGED; live-pages feat `499bd8b` MERGED; backtest-pages feat `10a0007` MERGED; metrics feat `d3039e7` MERGED; login feat `58781e4` MERGED; SSE feat `5ddb14f` MERGED; position_size_limits feat `5ef5525`; Kelly feat `3f254bc` / non-finite fail-closed fix `3a92e7d`; VWAP code `d27b2bb`; N-ary code `44099a7`; per-condition code `1c5cca0`; multi-timeframe code `def6c28`; indicator-vs-indicator code `9087c2b`; condition-extensions code `361df4c`; condition-blocks code `8766fae`; risk_based code `43cee29`; Slice C code `671d227`);
+  dashboard + bootstrap-status endpoint (post-V1 TIER 2, PR #84, MERGED) + TIER 2 frontend
+  live-data Admin Trash restore page (PR #86, MERGED)**.
+  **Overall: ~90% complete** (V1=100%, post-V1 core=87%, frontend=77%).
+  `main` after PR #86 (`09f4130`; trash-page feat `3ccb50d` MERGED; provisioning-dashboard feat `b56f621` MERGED; capability-page feat `3d7977e` MERGED; history-compare feat `491ac03` MERGED; panel-page feat `726ffcc` MERGED; first-Admin bootstrap feat `a53cf34` MERGED; live-pages feat `499bd8b` MERGED; backtest-pages feat `10a0007` MERGED; metrics feat `d3039e7` MERGED; login feat `58781e4` MERGED; SSE feat `5ddb14f` MERGED; position_size_limits feat `5ef5525`; Kelly feat `3f254bc` / non-finite fail-closed fix `3a92e7d`; VWAP code `d27b2bb`; N-ary code `44099a7`; per-condition code `1c5cca0`; multi-timeframe code `def6c28`; indicator-vs-indicator code `9087c2b`; condition-extensions code `361df4c`; condition-blocks code `8766fae`; risk_based code `43cee29`; Slice C code `671d227`);
   alembic head = **`0021_local_auth`** (`human_credentials` + `auth_sessions`;
   Slices A/B/C + follow-ups (a)/(b)/(b2)/(#53)/(c)/(i)/(ii)/(d) + Kelly sizing + position_size_limits + first-Admin bootstrap + bootstrap-status read endpoint need no migration). **1036 tests green** (1015 + 13 first-Admin bootstrap [env-unset baseline / match+no-admin → Admin+audit+outbox / active-Admin fail-closed / non-matching baseline / case+whitespace normalization / settings env read / route pass-through] + 8 bootstrap-status read endpoint: unit configured-flag + integration window open/closed vs a real DB + route reads the setting).
   TIER 2 frontend — real-auth login/signup/logout (PR #65, MERGED): **FRONTEND-ONLY**
@@ -260,8 +261,8 @@ Before stopping a working session, produce **ALL** of the following:
   `backtestRun.test.tsx` deep-link test stubs the metrics route FIRST (apiStub ordered fragment
   match — detail fragment is a substring of the metrics URL) → **frontend 58/58**, typecheck +
   lint clean, build green; review 0 CRITICAL/HIGH. Honest boundary: compare is exactly two results
-  (server min/max_length=2); soft-delete sends no OCC token; restore stays the Admin Trash flow
-  (frontend Trash page still a placeholder).
+  (server min/max_length=2); soft-delete sends no OCC token; restore is the Admin Trash flow
+  (frontend Trash page landed in PR #86).
   Follow-up (ii) — N-ary reference chain (PR #57): a nested condition's RHS extends from
   a single reference package (#53/#56) to an ORDERED chain of >2 separately-pinned indicator
   packages (`source [cmp] ref0 [cmp] ref1 ...` — the classic `fast > slow > slowest` MA fan;
@@ -487,7 +488,26 @@ Before stopping a working session, produce **ALL** of the following:
     the flow, it never provisions; `active_admin_exists` anonymous-exposed by design (single boolean
     deployment fact, no PII, the first Admin is not yet authenticated); ongoing role management stays
     in the Panel.
-  - Frontend Trash page (restore UI — backend Stage 6c landed; currently a placeholder)
+  - ✅ **Frontend Admin Trash restore page (PR #86, MERGED)** — the `/trash` placeholder becomes the
+    real page, binding the backend Stage 6c restore surface (`routes/trash.py`, doc 20 §7). **FRONTEND-ONLY**
+    (backend unchanged, no migration, alembic head stays 0021_local_auth, ENGINE_VERSION unchanged, backend
+    test base stays 1036). NEW `lib/trash.ts`: wire types mirroring `queries/trash.py` `_row`/detail +
+    `commands/deletion.py` restore return (`TrashEntry`/`TrashEntriesPage`/`TrashEntryDetail`/`RestoreResult`);
+    hooks under `["trash"]` (no dedicated SSE event — swept by `resource.changed`): `useTrashEntries`
+    (q/object_type filter, keyset cursor, `placeholderData`) + `useTrashEntry` (enabled-gated); `useRestoreEntry`
+    — OCC `expected_head_revision_id = entry.row_version` + a fresh `Idempotency-Key` per attempt, invalidates
+    `["trash"]` + `["audit"]` (the `adminPanel.useAssignRole` pattern); `purgeStatusTone` badge helper. NEW
+    `pages/Trash.tsx`: `TrashCard` (object_type select hydrated from server `meta.object_types` — no hard-coded
+    list; q search; keyset pager; table) — Restore shown ONLY on server-truth `restore_eligible` rows, failures
+    surface the `ApiError` verbatim; `TrashRow` + `TrashDetail` (deletion/dependency snapshot, purge/restore
+    control state, tombstone; `snapshotStyle` inline pre wrap+scroll). `App.tsx` `/trash` joins REAL_PATHS + real
+    Route; `nav.ts` UNCHANGED (the `/trash` adminOnly item already existed as a placeholder). NEW
+    `test/trash.test.tsx` (+7: index+recoverable total / restore_eligible gating / OCC+Idempotency-Key restore /
+    object_type query param / snapshot detail / `["trash"]` invalidation refetch / 403 verbatim) → **frontend
+    73 → 80**; typecheck + lint clean, build green; review 0 CRITICAL/HIGH. Honest boundary (PERMANENT): Trash
+    **purge** (destructive, needs `confirmation_phrase` / re-auth proof) is OUT OF SCOPE for this restore-focused
+    slice — a separate re-auth slice; Trash is Admin-only server-side (a non-Admin sees the 403 envelope verbatim
+    — UI visibility is never authorization).
   
   **TIER 3 — Data/ops (deferred, optional for MVP):**
   - Retention auto-purge (strategy/backtest history cleanup)

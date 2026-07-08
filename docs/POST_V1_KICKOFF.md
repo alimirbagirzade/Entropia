@@ -3,6 +3,61 @@
 > **Amaç:** V1 kapandı (Stage 0–8 COMPLETE). Bu doküman post-V1 durumunu, aday iş listesini
 > ve temiz oturumda yapıştırılacak resume prompt'u içerir.
 
+## Durum (2026-07-08, TIER 2 frontend — Create Package request sayfası; PR #91 MERGED)
+
+**FRONTEND-ONLY (3 yeni + 2 edit)** — backend DEĞİŞMEDİ (1048 sabit), migration YOK, alembic head
+`0021_local_auth` SABİT, `ENGINE_VERSION` SABİT. `/packages/create` placeholder'ı gerçek sayfa oldu:
+`routes/create_package.py` yüzeyine bağlı (doc 06 §4/§5/§9). Bu dilim yalnız request **LIFECYCLE
+ENTRY** — compose + own-requests listesi + salt-okunur detay projeksiyonu. Pre-Check /
+generate-candidate / draft / approve AKSİYONLARI doğal sonraki dilim (detay onların salt-okunur
+ipuçlarını zaten gösteriyor: `current_scan` / `precheck_fresh` / `can_generate_candidate`).
+Frontend 82 → **89** (+7 vitest). main = `bda3a7f` (Merge #91), feat `79fbd24`. CI 3/3 yeşil;
+review yok (self-review + yerel döngü).
+
+**Reuse anchor'ları (kesin semboller):**
+- **`frontend/src/lib/createPackage.ts`** — wire tipleri `queries/create_package.py`
+  projeksiyonlarının aynası (`PackageRequestSummary`/`PackageRequestDetail`/`ScanSummary`/
+  `CreateRequestResult`); enum aynaları `domain/create_package/enums.py`'den
+  (`CreatePackageKind`/`CreationMode`/`SourceKind`/`SourceLanguage`); `OUTPUT_KINDS_BY_KIND`
+  (`value_objects._OUTPUT_KINDS_BY_KIND` aynası — yalnız hidrasyon, sunucu her alanı yeniden
+  doğrular); `sourceKindForMode` (`_CODE_MODES` aynası); `requestStateTone` (17-durumlu
+  `CreatePackageState` üstünde salt-sunum rozet tonu). Hook'lar **`["package-requests"]`** altında
+  (özel SSE event YOK → `resource.changed` süpürür): `usePackageRequests` (keyset cursor,
+  `placeholderData`) + `usePackageRequest` (enabled-gated) + `useRationaleFamilies` (paylaşımlı
+  `["rationale-families"]`, 5m staleTime). `useCreatePackageRequest` — her submit'te **taze
+  `Idempotency-Key`** (OCC token YOK — create'in yarışacağı head yok), `["package-requests"]`
+  invalidate.
+- **`frontend/src/pages/CreatePackage.tsx`** — `CreateForm` (doc 06 §4: `source_language` yalnız
+  code modlarında, `other` → label zorunlu; output kind package type'a scoped + type değişince
+  RESET; rationale family Indicator/Condition için ZORUNLU + sunucudan hidrasyon, ESP'de N/A;
+  declared canonical keys satır-başına → `[{key}]`; `target_runtime` sabit `python`);
+  `RequestsCard` (keyset `Pager`); `RequestDetailCard`. Komut hataları kanonik `ApiError` VERBATIM.
+- **`App.tsx`** — `/packages/create` REAL_PATHS + Route; **`nav.ts` DEĞİŞMEDİ** (24 item).
+  **`global.css`** — `.cp-*` form grid'i.
+- **Testler** — YENİ `test/createPackage.test.tsx` (+7; apiStub SIRALI — `req_new`/`req_1` detay
+  route'ları `/create-package/requests` liste prefix'inden ÖNCE; create başarısı detayı otomatik
+  açar → `req_new` detay stub'ı ŞART): liste+rozet / composed body+Idempotency-Key / description →
+  `source_language: null` / output kind type-scoped / detay+scan ipuçları / `["package-requests"]`
+  invalidation refetch / 403 verbatim.
+
+**Dürüst sınır:** `target_runtime` `python` sabit (`SUPPORTED_TARGET_RUNTIMES`; `pine_v5`
+sunucu-reddi `RuntimeUnavailable`); Pre-Check/candidate/draft/approve AKSİYONLARI +
+`compatible_rationale_family_ids`/`linked_indicator` composer alanları sonraki dilime ertelendi;
+Pre-Check SAYFASI (`/packages/pre-check`, doc 07) hâlâ placeholder; CP request'lerin özel SSE
+event'i yok; `["jobs"]` backend liste yüzeyi YOK (kalıcı).
+
+**SIRADAKİ İŞ ADAYLARI (BAŞLARKEN kullanıcıyla TEYİT ET):**
+- **CP request AKSİYONLARI + Pre-Check sayfası** (EN DOĞAL SONRAKİ) — request detayına
+  pre-check / generate-candidate / draft / approve butonları (OCC `X-Request-Version` header +
+  taze Idempotency-Key; approve Admin-only CR-02 → 403 verbatim) + `/packages/pre-check` sayfası
+  (doc 07 — scan çalıştır + dependency result satırları + `GET /dependency-scans/{scan_id}`
+  viewer). REUSE: `lib/createPackage.ts` tipleri/hook'ları GENİŞLET (yeni dosya açma),
+  `postWithIfMatch` benzeri header deseni `lib/agentLab.ts`'de.
+- **Capability aktivasyonları** — `graphic_view` ilk aday (`routes/capability.py` +
+  `lib/capability.ts` hazır — PR #82).
+- **TIER 3 deferred:** retention auto-purge, data-queue redelivery, SSE streaming e2e, tool-call
+  status shadowing. Trash purge (destructive + re-auth) AYRI slice.
+
 ## Durum (2026-07-08, CP-Gen — deterministic candidate generation; PR #89 MERGED)
 
 **BACKEND-ONLY** (1 yeni + 1 edit + 1 test; migration YOK, alembic head `0021_local_auth` SABİT,
@@ -965,25 +1020,30 @@ nav 23→24; salt-okunur — provisioning sunucu-tarafı+signup-zamanı kalır) 
 sayfası (#86 — lib/trash.ts ["trash"] hook'ları + useRestoreEntry OCC expected_head_revision_id +
 taze Idempotency-Key; pages/Trash.tsx sunucu-truth restore_eligible gating + sunucu-hidrasyonlu
 object_type filtre + immutable snapshot detay; App.tsx /trash REAL_PATHS, nav.ts değişmedi;
-frontend-only) + signup/login bootstrap-status ["auth"] invalidation guard (#88 — frontend test).
+frontend-only) + signup/login bootstrap-status ["auth"] invalidation guard (#88 — frontend test) +
+Create Package request sayfası (#91 — lib/createPackage.ts ["package-requests"] hook'ları +
+OUTPUT_KINDS_BY_KIND/sourceKindForMode enum aynaları + taze Idempotency-Key create +
+pages/CreatePackage.tsx compose/list/detay; yalnız LIFECYCLE ENTRY — aksiyonlar sonraki dilim;
+frontend 82→89).
 BACKEND: first-Admin bootstrap provisioning (#76 — ENTROPIA_BOOTSTRAP_ADMIN_EMAIL opt-in) +
 salt-okunur bootstrap-status read endpoint (#84 — commands/auth.py bootstrap_status/
 bootstrap_is_configured) + CP-Gen deterministic candidate generation (#89 — domain/create_package/
 candidate.py GENERATOR_VERSION namespace + content_hash; submit_candidate_generation stub compute →
 manifest; LLM YOK; engine DEĞİŞMEDİ). migration YOK, alembic head 0021_local_auth SABİT,
-ENGINE_VERSION backtest-engine-v2-position-size-limits SABİT; backend testler 1048, frontend 82.
+ENGINE_VERSION backtest-engine-v2-position-size-limits SABİT; backend testler 1048, frontend 89.
 
 ÖNCE DOĞRULA (stale-by-default): git fetch && git log --oneline origin/main -6 && gh pr list
---state all -L 8. main = ba533e5 (Merge #89) + kapanış docs PR'ı merge sonrası ileri olmalı
+--state all -L 8. main = bda3a7f (Merge #91) + kapanış docs PR'ı merge sonrası ileri olmalı
 (açıksa önce kullanıcıdan merge iste). alembic head 0021_local_auth; backend ENGINE_VERSION =
 backtest-engine-v2-position-size-limits. FRONTEND doğrula (yeni branch'i MUTLAKA origin/main'den
 aç — local stale olabilir): cd frontend && npm run typecheck && npm run lint && npm test &&
-npm run build (82/82 geçmeli).
+npm run build (89/89 geçmeli).
 
-ÖNCE OKU (authority): docs/POST_V1_KICKOFF.md (en üst Durum bloğu — PR #89) + docs/STAGE2_HANDOFF.md
-("CP-Gen — deterministic candidate generation landed (PR #89)" + "Next"). CP-Gen kodu:
-backend/src/entropia/domain/create_package/candidate.py +
-application/commands/create_package.py::submit_candidate_generation.
+ÖNCE OKU (authority): docs/POST_V1_KICKOFF.md (en üst Durum bloğu — PR #91) + docs/STAGE2_HANDOFF.md
+("Frontend Create Package request page (TIER 2, frontend slice 11) landed (PR #91)" + "Next").
+CP backend kodu: routes/create_package.py (8 endpoint; aksiyonlar OCC X-Request-Version header +
+Idempotency-Key) + domain/create_package/{enums,value_objects,candidate}.py +
+application/commands/create_package.py + queries/create_package.py.
 Landed yüzeyleri TÜKET,
 yeniden yazma: Auth (lib/session.ts + lib/auth.ts + apiClient Bearer + pages/Login.tsx); SSE
 (lib/sse.ts EVENT_QUERY_KEYS + connectEvents Layout mount); Metrics (lib/metrics.ts + useMetrics
@@ -998,7 +1058,9 @@ aynası + useTransitionCapability OCC/Idempotency-Key + pages/FutureDev.tsx — 
 lifecycle UI için doğal taban); Provisioning (lib/provisioning.ts useBootstrapStatus ["auth"] +
 pages/Provisioning.tsx); Trash (lib/trash.ts ["trash"] hook'ları + useRestoreEntry OCC +
 Idempotency-Key + pages/Trash.tsx sunucu-truth restore_eligible gating + sunucu-hidrasyonlu
-object_type filtre — PR #86); test/helpers/apiStub.ts route-aware fetch double
+object_type filtre — PR #86); Create Package (lib/createPackage.ts ["package-requests"] hook'ları +
+useCreatePackageRequest taze Idempotency-Key + pages/CreatePackage.tsx compose/list/detay — PR #91;
+AKSİYONLAR için bu dosyayı GENİŞLET, yeni dosya açma); test/helpers/apiStub.ts route-aware fetch double
 ("<METHOD> <fragment>" sıralı eşleşme — detay/spesifik route'u liste/prefix route'undan ÖNCE yaz)
 — yeni sayfa testleri için BUNU reuse et.
 
@@ -1009,10 +1071,13 @@ invalidateQueries({queryKey}) object-form. tsconfig: noUncheckedIndexedAccess +
 exactOptionalPropertyTypes KAPALI.
 
 SIRADAKİ İŞ — kalan TIER 2 adayları (BAŞLARKEN kullanıcıyla hangisi diye TEYİT ET):
-- CP / Pre-Check FRONTEND sayfaları — Create Package (doc 06) + Pre-Check (doc 07) placeholder'larını
-  canlı veriye bağla (routes/create_package.py yüzeyi + candidate/precheck akışı; lib/*.ts + apiStub +
-  Panel.tsx kart deseni reuse). CP backend candidate generation ARTIK GERÇEK (#89) → en doğal görünür
-  sonraki dilim; frontend-only muhtemel.
+- CP request AKSİYONLARI + Pre-Check sayfası (EN DOĞAL SONRAKİ) — request detayına pre-check /
+  generate-candidate / draft / approve butonları (OCC X-Request-Version header + taze
+  Idempotency-Key; approve Admin-only CR-02 → 403 verbatim; create_draft expected_candidate_hash
+  body token) + /packages/pre-check sayfası (doc 07 — scan çalıştır + dependency result satırları
+  + GET /dependency-scans/{scan_id} viewer). Create Package sayfası ZATEN CANLI (#91) →
+  lib/createPackage.ts tiplerini/hook'larını GENİŞLET (yeni dosya açma); If-Match benzeri header
+  deseni lib/agentLab.ts postWithIfMatch'te.
 - Capability aktivasyonları — Future Dev slotlarını placeholder'dan çıkar (graphic_view ilk aday;
   routes/capability.py + lib/capability.ts hazır — PR #82).
 DİKKAT (kalıcı dürüst sınırlar): ["jobs"] için backend liste yüzeyi YOK (run projeksiyonları +
@@ -1035,8 +1100,10 @@ bootstrap_status/bootstrap_is_configured; provisioning DASHBOARD'u bağlandı, a
 slice için taban DEĞİL kapandı). CP candidate generation ARTIK GERÇEK (PR #89 —
 commands/create_package.py::submit_candidate_generation manifest compute + YENİ
 domain/create_package/candidate.py deterministik-hash deseni [content_hash + sorted keys +
-GENERATOR_VERSION namespace] → ileriki generator'lar için TABAN); routes/create_package.py +
-Pre-Check yüzeyi zaten bağlı, yalnız FRONTEND sayfaları placeholder.
+GENERATOR_VERSION namespace] → ileriki generator'lar için TABAN); routes/create_package.py
+request create/list/detail FRONTEND'e bağlandı (PR #91 — lib/createPackage.ts +
+pages/CreatePackage.tsx); request AKSİYONLARI (pre-check/generate-candidate/draft/approve) +
+Pre-Check SAYFASI (/packages/pre-check) frontend'te henüz YOK — sıradaki dilim.
 
 YÖNTEM: Workflow KULLANMA; direct-author. Backend working-loop (izole DB / L1 FK / alembic)
 UYGULANMAZ. Frontend loop: cd frontend (cwd resetlenebilir → absolute path);

@@ -94,9 +94,9 @@ Before stopping a working session, produce **ALL** of the following:
   live-data Admin Trash restore page (PR #86, MERGED) + frontend auth invalidation on
   signup/login (PR #88, MERGED) + deterministic Create Package candidate generation
   (INF-12, PR #89, MERGED) + TIER 2 frontend live-data Create Package request page
-  (PR #91, MERGED)**.
-  **Overall: ~91% complete** (V1=100%, post-V1 core=88%, frontend=82%).
-  `main` after PR #91 (`bda3a7f`; CP-create-page feat `79fbd24` MERGED; CP-Gen candidate-generation feat `5cc62cc` MERGED; auth-invalidation feat MERGED (PR #88); trash-page feat `3ccb50d` MERGED; provisioning-dashboard feat `b56f621` MERGED; capability-page feat `3d7977e` MERGED; history-compare feat `491ac03` MERGED; panel-page feat `726ffcc` MERGED; first-Admin bootstrap feat `a53cf34` MERGED; live-pages feat `499bd8b` MERGED; backtest-pages feat `10a0007` MERGED; metrics feat `d3039e7` MERGED; login feat `58781e4` MERGED; SSE feat `5ddb14f` MERGED; position_size_limits feat `5ef5525`; Kelly feat `3f254bc` / non-finite fail-closed fix `3a92e7d`; VWAP code `d27b2bb`; N-ary code `44099a7`; per-condition code `1c5cca0`; multi-timeframe code `def6c28`; indicator-vs-indicator code `9087c2b`; condition-extensions code `361df4c`; condition-blocks code `8766fae`; risk_based code `43cee29`; Slice C code `671d227`);
+  (PR #91, MERGED) + CP request lifecycle actions + Pre-Check page (PR #93, MERGED)**.
+  **Overall: ~92% complete** (V1=100%, post-V1 core=88%, frontend=85%).
+  `main` after PR #93 (`5b59884`; CP-actions/Pre-Check feat `e8f8982` MERGED; CP-create-page feat `79fbd24` MERGED; CP-Gen candidate-generation feat `5cc62cc` MERGED; auth-invalidation feat MERGED (PR #88); trash-page feat `3ccb50d` MERGED; provisioning-dashboard feat `b56f621` MERGED; capability-page feat `3d7977e` MERGED; history-compare feat `491ac03` MERGED; panel-page feat `726ffcc` MERGED; first-Admin bootstrap feat `a53cf34` MERGED; live-pages feat `499bd8b` MERGED; backtest-pages feat `10a0007` MERGED; metrics feat `d3039e7` MERGED; login feat `58781e4` MERGED; SSE feat `5ddb14f` MERGED; position_size_limits feat `5ef5525`; Kelly feat `3f254bc` / non-finite fail-closed fix `3a92e7d`; VWAP code `d27b2bb`; N-ary code `44099a7`; per-condition code `1c5cca0`; multi-timeframe code `def6c28`; indicator-vs-indicator code `9087c2b`; condition-extensions code `361df4c`; condition-blocks code `8766fae`; risk_based code `43cee29`; Slice C code `671d227`);
   alembic head = **`0021_local_auth`** (`human_credentials` + `auth_sessions`;
   Slices A/B/C + follow-ups (a)/(b)/(b2)/(#53)/(c)/(i)/(ii)/(d) + Kelly sizing + position_size_limits + first-Admin bootstrap + bootstrap-status read endpoint + CP-Gen deterministic candidate generation need no migration). **1048 tests green** (1015 + 13 first-Admin bootstrap [env-unset baseline / match+no-admin → Admin+audit+outbox / active-Admin fail-closed / non-matching baseline / case+whitespace normalization / settings env read / route pass-through] + 8 bootstrap-status read endpoint: unit configured-flag + integration window open/closed vs a real DB + route reads the setting + 12 CP-Gen candidate generation: reproducibility / order-independence / output_contract+resolved_refs hash sensitivity / GENERATOR_VERSION namespace shift / fail-closed directional→ta.* + condition→cond.* + empty-resolved skip / output_type alias / DESCRIPTION uncertainty / test_plan dep listing).
   TIER 2 frontend — real-auth login/signup/logout (PR #65, MERGED): **FRONTEND-ONLY**
@@ -553,7 +553,28 @@ Before stopping a working session, produce **ALL** of the following:
     **frontend 82 → 89**; typecheck+lint clean, build green; CI 3/3. Honest boundary:
     `target_runtime` fixed `python` (`SUPPORTED_TARGET_RUNTIMES`); Pre-Check/generate-candidate/
     draft/approve ACTIONS + `compatible_rationale_family_ids`/`linked_indicator` deferred (next
-    natural slice, OCC `X-Request-Version`); the Pre-Check PAGE (doc 07) is still a placeholder.
+    natural slice, OCC `X-Request-Version`); the Pre-Check PAGE (doc 07) is still a placeholder
+    (→ both landed next in PR #93).
+  - ✅ **CP request lifecycle actions + Pre-Check page (PR #93, MERGED — FRONTEND)** — closes the
+    PR #91 boundary. **FRONTEND-ONLY** (2 new + 4 edits; backend 1048 stays, no migration).
+    `lib/createPackage.ts` EXTENDED in place: action wire types mirror the command return dicts
+    verbatim; `useRunPrecheck`/`useGenerateCandidate` — request `row_version` as the
+    **`X-Request-Version` OCC header** + fresh `Idempotency-Key` per attempt
+    (`postWithRequestVersion`, agentLab `postWithIfMatch` mirror); `useCreateDraft` —
+    **`expected_candidate_hash` BODY token** from the accepted generate result;
+    `useApproveRequest` — **`expected_head_revision_id` = draft head** + optional note,
+    Admin-only SERVER-side (CR-02, 403 verbatim, UI never role-gates); all invalidate
+    `["package-requests"]`+`["audit"]`; `useDependencyScan` immutable artifact (5m staleTime).
+    `pages/CreatePackage.tsx` `RequestActions` bar (server-hint gating only:
+    `can_generate_candidate`/`candidate_ready`/draft present). NEW `pages/PreCheck.tsx`
+    (`/packages/pre-check`, doc 07): own-requests picker → run scan → §7.1 Resolved/Missing rows
+    (literal text, values as text nodes) → §7.2 canonical status lines + stale warning →
+    `GET /dependency-scans/{scan_id}` viewer. `App.tsx` REAL_PATHS 11→12; `nav.ts` UNCHANGED (24).
+    +4 `createPackage.test.tsx` + NEW `test/preCheck.test.tsx` (+5) → **frontend 89 → 98**;
+    CI 3/3. Honest boundary: `compatible_rationale_family_ids`/`linked_indicator` composer
+    fields still deferred; the draft token lives only in the card that ran Generate (projection
+    omits `candidate_hash`); no dedicated CP SSE event; the FULL `routes/create_package.py`
+    surface is now frontend-bound — no CP endpoint remains unbound.
   
   **TIER 3 — Data/ops (deferred, optional for MVP):**
   - Retention auto-purge (strategy/backtest history cleanup)

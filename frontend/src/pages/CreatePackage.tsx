@@ -14,10 +14,14 @@ import {
   outputKindsFor,
   requestStateTone,
   sourceKindForMode,
+  useApproveRequest,
+  useCreateDraft,
   useCreatePackageRequest,
+  useGenerateCandidate,
   usePackageRequest,
   usePackageRequests,
   useRationaleFamilies,
+  useRunPrecheck,
   type CreatePackageKind,
   type CreationMode,
   type PackageRequestDetail,
@@ -490,7 +494,147 @@ function RequestDetailBody({ detail }: { detail: PackageRequestDetail }) {
           No Pre-Check scan yet.
         </p>
       )}
+
+      <RequestActions detail={detail} />
     </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Request actions — the lifecycle commands (doc 06 §7, doc 07 §8). Button
+// gating mirrors server hints only (can_generate_candidate, candidate_ready,
+// draft present); the server re-validates every transition and a denial
+// surfaces the canonical envelope verbatim. Approve is Admin-only SERVER-side
+// (CR-02) — the button is never role-gated in the UI.
+// ---------------------------------------------------------------------------
+
+function RequestActions({ detail }: { detail: PackageRequestDetail }) {
+  const precheck = useRunPrecheck();
+  const generate = useGenerateCandidate();
+  const draft = useCreateDraft();
+  const approve = useApproveRequest();
+  const [note, setNote] = useState("");
+
+  const anyPending =
+    precheck.isPending || generate.isPending || draft.isPending || approve.isPending;
+  const hasDraft = detail.draft_revision_id !== null;
+  // The accepted candidate hash from THIS card is the draft's staleness token;
+  // after a reload it is absent and the server-side state check alone gates.
+  const candidateHash = generate.data?.candidate_hash ?? null;
+  const canDraft = detail.state === "candidate_ready" || hasDraft;
+
+  return (
+    <div style={{ marginTop: 14 }}>
+      <h4 style={{ margin: "0 0 8px" }}>Actions</h4>
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+        <button
+          type="button"
+          className="btn"
+          disabled={anyPending}
+          onClick={() =>
+            precheck.mutate({
+              request_id: detail.request_id,
+              request_version: detail.request_version,
+            })
+          }
+        >
+          {precheck.isPending ? "Checking dependencies…" : "Run Pre-Check"}
+        </button>
+        <button
+          type="button"
+          className="btn"
+          disabled={!detail.can_generate_candidate || anyPending}
+          onClick={() =>
+            generate.mutate({
+              request_id: detail.request_id,
+              request_version: detail.request_version,
+            })
+          }
+        >
+          {generate.isPending ? "Generating…" : "Generate candidate"}
+        </button>
+        <button
+          type="button"
+          className="btn"
+          disabled={!canDraft || anyPending}
+          onClick={() =>
+            draft.mutate({
+              request_id: detail.request_id,
+              expected_candidate_hash: candidateHash,
+            })
+          }
+        >
+          {draft.isPending ? "Drafting…" : "Create draft"}
+        </button>
+        <button
+          type="button"
+          className="btn btn-primary"
+          disabled={!hasDraft || anyPending}
+          onClick={() =>
+            approve.mutate({
+              request_id: detail.request_id,
+              expected_head_revision_id: detail.draft_revision_id,
+              note: note.trim().length > 0 ? note.trim() : null,
+            })
+          }
+        >
+          {approve.isPending ? "Approving…" : "Approve & publish"}
+        </button>
+      </div>
+
+      <div className="cp-field" style={{ marginTop: 10 }}>
+        <span>Approval note (optional)</span>
+        <input
+          aria-label="Approval note"
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          placeholder="Recorded on the approval decision…"
+        />
+      </div>
+
+      {precheck.isError ? (
+        <p role="alert" style={{ color: "var(--down)", marginBottom: 0 }}>
+          {mutationErrorText(precheck.error)}
+        </p>
+      ) : null}
+      {precheck.data ? (
+        <p aria-live="polite" style={{ marginBottom: 0 }}>
+          Pre-Check {precheck.data.status} — scan <code>{precheck.data.scan_id}</code> (attempt{" "}
+          {precheck.data.attempt_no}).
+        </p>
+      ) : null}
+      {generate.isError ? (
+        <p role="alert" style={{ color: "var(--down)", marginBottom: 0 }}>
+          {mutationErrorText(generate.error)}
+        </p>
+      ) : null}
+      {generate.data ? (
+        <p aria-live="polite" style={{ marginBottom: 0 }}>
+          Candidate {generate.data.state} — hash <code>{generate.data.candidate_hash}</code>.
+        </p>
+      ) : null}
+      {draft.isError ? (
+        <p role="alert" style={{ color: "var(--down)", marginBottom: 0 }}>
+          {mutationErrorText(draft.error)}
+        </p>
+      ) : null}
+      {draft.data ? (
+        <p aria-live="polite" style={{ marginBottom: 0 }}>
+          Draft created — revision <code>{draft.data.draft_revision_id ?? "—"}</code>.
+        </p>
+      ) : null}
+      {approve.isError ? (
+        <p role="alert" style={{ color: "var(--down)", marginBottom: 0 }}>
+          {mutationErrorText(approve.error)}
+        </p>
+      ) : null}
+      {approve.data ? (
+        <p aria-live="polite" style={{ marginBottom: 0 }}>
+          Approved &amp; published — revision <code>{approve.data.revision_id ?? "—"}</code> (
+          {approve.data.visibility_scope}).
+        </p>
+      ) : null}
+    </div>
   );
 }
 

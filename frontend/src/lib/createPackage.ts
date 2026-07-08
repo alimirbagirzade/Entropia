@@ -1,16 +1,24 @@
-// Create Package data access (doc 06 §4/§5/§9): compose an immutable
-// create-package request, list the actor's own requests, and open the read-only
-// request projection (flow state + current Pre-Check scan). This slice binds the
-// request LIFECYCLE ENTRY only — Pre-Check run, candidate generation, draft and
-// approve are a follow-up slice; the detail surfaces their read-only hints
-// (current_scan, precheck_fresh, can_generate_candidate) that those actions use.
+// Create Package data access (doc 06 §4/§5/§7/§9, doc 07 §8/§10): compose an
+// immutable create-package request, list the actor's own requests, open the
+// read-only request projection (flow state + current Pre-Check scan), and drive
+// the request lifecycle ACTIONS — run Pre-Check, generate candidate, create
+// draft, approve & publish — plus the immutable dependency-scan artifact viewer.
+//
+// Concurrency contract: pre-check / generate-candidate carry the request
+// row_version as an X-Request-Version OCC header (stale tab -> 409 verbatim);
+// draft carries the expected_candidate_hash body token; approve carries the
+// draft head as expected_head_revision_id. Every action sends a FRESH
+// Idempotency-Key per attempt (a retry after a rejection is a new decision,
+// not a replay). Approve is Admin-only server-side (CR-02) — the UI never
+// role-gates the button; a non-Admin sees the 403 envelope verbatim.
 //
 // Create Package has no dedicated SSE event: a new request / state move changes
 // an entity's lifecycle, swept by resource.changed (full refresh). Read keys live
-// under ["package-requests"]; the create mutation invalidates that prefix. The
-// Rationale Family selector reads the shared ["rationale-families"] list.
+// under ["package-requests"]; mutations invalidate that prefix (+ ["audit"] —
+// every action writes audit rows the Panel Logs page binds). The Rationale
+// Family selector reads the shared ["rationale-families"] list.
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 
 import { api, apiRequest } from "./apiClient";
 
@@ -107,6 +115,24 @@ export function requestStateTone(state: string): "ok" | "warn" | "down" | "neutr
   return "neutral";
 }
 
+// Presentation-only badge tone for the Pre-Check scan status (PrecheckScanStatus
+// wire values verbatim; stale is computed on read server-side).
+export function scanStatusTone(status: string): "ok" | "warn" | "down" | "neutral" {
+  if (status === "passed" || status === "not_applicable") return "ok";
+  if (status === "blocked" || status === "failed") return "down";
+  if (status === "stale") return "warn";
+  return "neutral";
+}
+
+// Narrow an unknown scan payload member (detected/resolved/missing/unsupported
+// are JSONB lists on the wire) to a safe record array for row rendering.
+export function asRecordArray(value: unknown): Array<Record<string, unknown>> {
+  if (!Array.isArray(value)) return [];
+  return value.filter(
+    (item): item is Record<string, unknown> => typeof item === "object" && item !== null,
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Wire types (mirror queries/create_package.py projections verbatim)
 // ---------------------------------------------------------------------------
@@ -180,6 +206,71 @@ export interface CreateRequestInput {
   declared_dependencies: Array<{ key: string }>;
 }
 
+// Resolved/missing row shapes (commands/create_package.py::_resolve_declared):
+// each resolved ref pins the exact ESP revision (never name-only/latest, P4/L5);
+// a typed resolver error becomes a missing call with its precise code.
+export interface ResolvedRef {
+  call?: string;
+  canonical_key?: string;
+  embedded_entity_id?: string;
+  embedded_revision_id?: string;
+  content_hash?: string;
+  runtime_adapter?: string;
+  registry_version?: number;
+}
+
+export interface MissingCall {
+  call?: string;
+  code?: string;
+  message?: string;
+}
+
+// Immutable scan artifact detail (queries/create_package.py::get_dependency_scan).
+export interface DependencyScanDetail extends ScanSummary {
+  request_id: string;
+  unsupported: unknown;
+  source_hash: string | null;
+  language: string | null;
+  job_id: string | null;
+  completed_at: string | null;
+}
+
+// Action results (mirror commands/create_package.py return dicts verbatim).
+export interface PrecheckActionResult {
+  request_id: string;
+  scan_id: string;
+  attempt_no: number;
+  status: string;
+  state: string;
+  resolved: number;
+  missing: Array<Record<string, unknown>>;
+  registry_fingerprint: string;
+  job_id: string;
+}
+
+export interface CandidateActionResult {
+  request_id: string;
+  state: string;
+  candidate_hash: string;
+  job_id: string;
+}
+
+export interface DraftActionResult {
+  request_id: string;
+  package_root_id: string | null;
+  draft_revision_id: string | null;
+  state: string;
+}
+
+export interface ApproveActionResult {
+  request_id: string;
+  package_root_id: string | null;
+  revision_id: string | null;
+  approval_state: string;
+  visibility_scope: string;
+  state: string;
+}
+
 export interface RationaleFamily {
   entity_id: string;
   display_name: string;
@@ -236,6 +327,19 @@ export function usePackageRequest(requestId: string | null) {
   });
 }
 
+// The immutable dependency-scan artifact (doc 07 §10): evidence never mutates
+// once written, so a long staleTime is safe; the key stays under
+// ["package-requests"] so the resource.changed sweep is harmless.
+export function useDependencyScan(scanId: string | null) {
+  return useQuery({
+    queryKey: ["package-requests", "scan", scanId],
+    queryFn: () =>
+      api.get<DependencyScanDetail>(`/dependency-scans/${encodeURIComponent(scanId ?? "")}`),
+    enabled: scanId !== null,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Mutation — create a request (POST /create-package/requests)
 // ---------------------------------------------------------------------------
@@ -257,5 +361,99 @@ export function useCreatePackageRequest() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["package-requests"] });
     },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Mutations — request lifecycle actions (doc 06 §7, doc 07 §8)
+// ---------------------------------------------------------------------------
+
+// Every action moves the request projection and writes audit rows; refetch both.
+function invalidateActions(queryClient: QueryClient) {
+  void queryClient.invalidateQueries({ queryKey: ["package-requests"] });
+  void queryClient.invalidateQueries({ queryKey: ["audit"] });
+}
+
+// Pre-check / generate-candidate carry the request row_version as an
+// X-Request-Version OCC header so a stale tab gets the 409 verbatim instead of
+// silently racing a concurrent edit (mirrors agentLab postWithIfMatch), plus a
+// fresh Idempotency-Key per attempt (doc 07 §8.1).
+function postWithRequestVersion<T>(path: string, requestVersion: number): Promise<T> {
+  return apiRequest<T>(path, {
+    method: "POST",
+    headers: {
+      "X-Request-Version": String(requestVersion),
+      "Idempotency-Key": crypto.randomUUID(),
+    },
+  });
+}
+
+export function useRunPrecheck() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { request_id: string; request_version: number }) =>
+      postWithRequestVersion<PrecheckActionResult>(
+        `/create-package/requests/${encodeURIComponent(input.request_id)}/pre-check`,
+        input.request_version,
+      ),
+    onSuccess: () => invalidateActions(queryClient),
+  });
+}
+
+export function useGenerateCandidate() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { request_id: string; request_version: number }) =>
+      postWithRequestVersion<CandidateActionResult>(
+        `/create-package/requests/${encodeURIComponent(input.request_id)}/generate-candidate`,
+        input.request_version,
+      ),
+    onSuccess: () => invalidateActions(queryClient),
+  });
+}
+
+// Draft races the CANDIDATE, not the request head: the expected_candidate_hash
+// body token (from the accepted generate result) rejects a stale candidate with
+// the typed error verbatim. Idempotent server-side: an existing draft replays
+// the SAME root + revision.
+export function useCreateDraft() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { request_id: string; expected_candidate_hash: string | null }) =>
+      apiRequest<DraftActionResult>(
+        `/create-package/requests/${encodeURIComponent(input.request_id)}/draft`,
+        {
+          method: "POST",
+          headers: { "Idempotency-Key": crypto.randomUUID() },
+          body: { expected_candidate_hash: input.expected_candidate_hash },
+        },
+      ),
+    onSuccess: () => invalidateActions(queryClient),
+  });
+}
+
+// Admin-only server-side (CR-02); expected_head_revision_id pins the draft head
+// so a concurrent revision move gets the conflict verbatim. UI visibility is
+// never authorization — a non-Admin click surfaces the 403 envelope verbatim.
+export function useApproveRequest() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      request_id: string;
+      expected_head_revision_id: string | null;
+      note: string | null;
+    }) =>
+      apiRequest<ApproveActionResult>(
+        `/create-package/requests/${encodeURIComponent(input.request_id)}/approve`,
+        {
+          method: "POST",
+          headers: { "Idempotency-Key": crypto.randomUUID() },
+          body: {
+            expected_head_revision_id: input.expected_head_revision_id,
+            note: input.note,
+          },
+        },
+      ),
+    onSuccess: () => invalidateActions(queryClient),
   });
 }

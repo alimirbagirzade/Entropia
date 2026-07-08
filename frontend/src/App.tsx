@@ -4,6 +4,7 @@ import { ALL_NAV_ITEMS } from "./app/nav";
 import { AnalysisLab } from "./pages/AnalysisLab";
 import { ArrangeMetrics } from "./pages/ArrangeMetrics";
 import { BacktestRun } from "./pages/BacktestRun";
+import { CreatePackage } from "./pages/CreatePackage";
 import { FutureDev } from "./pages/FutureDev";
 import { Mainboard } from "./pages/Mainboard";
 import { Metrics } from "./pages/Metrics";
@@ -20,6 +21,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 // placeholder routes.
 const REAL_PATHS = new Set([
   "/",
+  "/packages/create",
   "/panel",
   "/panel/provisioning",
   "/panel/metrics",
@@ -42,6 +44,15 @@ export default function App() {
           element={
             <ErrorBoundary>
               <Mainboard />
+            </ErrorBoundary>
+          }
+        />
+        {/* Create Package (doc 06): compose a request, list own requests, open detail. */}
+        <Route
+          path="/packages/create"
+          element={
+            <ErrorBoundary>
+              <CreatePackage />
             </ErrorBoundary>
           }
         />

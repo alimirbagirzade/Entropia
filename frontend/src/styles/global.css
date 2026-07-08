@@ -246,3 +246,27 @@ a:hover { text-decoration: underline; }
   font-size: 13px;
 }
 .auth-submit { width: 100%; margin-top: 4px; }
+
+/* Create Package compose form (doc 06 §4): a two-column field grid that
+   collapses to one column on narrow viewports. */
+.cp-form { display: grid; gap: 14px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.cp-field { display: flex; flex-direction: column; gap: 6px; }
+.cp-field > span { font-size: 13px; color: var(--text-dim); }
+.cp-field.cp-wide { grid-column: 1 / -1; }
+.cp-field input,
+.cp-field select,
+.cp-field textarea {
+  padding: 9px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-elev-2);
+  color: var(--text);
+  font-size: 14px;
+  font-family: inherit;
+}
+.cp-field textarea { min-height: 120px; resize: vertical; }
+.cp-field select:disabled { opacity: 0.6; cursor: not-allowed; }
+.cp-note { margin: 0; font-size: 12px; color: var(--text-faint); }
+@media (max-width: 720px) {
+  .cp-form { grid-template-columns: 1fr; }
+}

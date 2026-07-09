@@ -94,9 +94,10 @@ Before stopping a working session, produce **ALL** of the following:
   live-data Admin Trash restore page (PR #86, MERGED) + frontend auth invalidation on
   signup/login (PR #88, MERGED) + deterministic Create Package candidate generation
   (INF-12, PR #89, MERGED) + TIER 2 frontend live-data Create Package request page
-  (PR #91, MERGED) + CP request lifecycle actions + Pre-Check page (PR #93, MERGED)**.
-  **Overall: ~92% complete** (V1=100%, post-V1 core=88%, frontend=85%).
-  `main` after PR #93 (`5b59884`; CP-actions/Pre-Check feat `e8f8982` MERGED; CP-create-page feat `79fbd24` MERGED; CP-Gen candidate-generation feat `5cc62cc` MERGED; auth-invalidation feat MERGED (PR #88); trash-page feat `3ccb50d` MERGED; provisioning-dashboard feat `b56f621` MERGED; capability-page feat `3d7977e` MERGED; history-compare feat `491ac03` MERGED; panel-page feat `726ffcc` MERGED; first-Admin bootstrap feat `a53cf34` MERGED; live-pages feat `499bd8b` MERGED; backtest-pages feat `10a0007` MERGED; metrics feat `d3039e7` MERGED; login feat `58781e4` MERGED; SSE feat `5ddb14f` MERGED; position_size_limits feat `5ef5525`; Kelly feat `3f254bc` / non-finite fail-closed fix `3a92e7d`; VWAP code `d27b2bb`; N-ary code `44099a7`; per-condition code `1c5cca0`; multi-timeframe code `def6c28`; indicator-vs-indicator code `9087c2b`; condition-extensions code `361df4c`; condition-blocks code `8766fae`; risk_based code `43cee29`; Slice C code `671d227`);
+  (PR #91, MERGED) + CP request lifecycle actions + Pre-Check page (PR #93, MERGED) + gated
+  capability operational POSTs into Future Dev (PR #95, MERGED)**.
+  **Overall: ~93% complete** (V1=100%, post-V1 core=88%, frontend=87%).
+  `main` after PR #95 (`5225629`; capability-POSTs feat `652dfde` MERGED; CP-actions/Pre-Check feat `e8f8982` MERGED; CP-create-page feat `79fbd24` MERGED; CP-Gen candidate-generation feat `5cc62cc` MERGED; auth-invalidation feat MERGED (PR #88); trash-page feat `3ccb50d` MERGED; provisioning-dashboard feat `b56f621` MERGED; capability-page feat `3d7977e` MERGED; history-compare feat `491ac03` MERGED; panel-page feat `726ffcc` MERGED; first-Admin bootstrap feat `a53cf34` MERGED; live-pages feat `499bd8b` MERGED; backtest-pages feat `10a0007` MERGED; metrics feat `d3039e7` MERGED; login feat `58781e4` MERGED; SSE feat `5ddb14f` MERGED; position_size_limits feat `5ef5525`; Kelly feat `3f254bc` / non-finite fail-closed fix `3a92e7d`; VWAP code `d27b2bb`; N-ary code `44099a7`; per-condition code `1c5cca0`; multi-timeframe code `def6c28`; indicator-vs-indicator code `9087c2b`; condition-extensions code `361df4c`; condition-blocks code `8766fae`; risk_based code `43cee29`; Slice C code `671d227`);
   alembic head = **`0021_local_auth`** (`human_credentials` + `auth_sessions`;
   Slices A/B/C + follow-ups (a)/(b)/(b2)/(#53)/(c)/(i)/(ii)/(d) + Kelly sizing + position_size_limits + first-Admin bootstrap + bootstrap-status read endpoint + CP-Gen deterministic candidate generation need no migration). **1048 tests green** (1015 + 13 first-Admin bootstrap [env-unset baseline / match+no-admin → Admin+audit+outbox / active-Admin fail-closed / non-matching baseline / case+whitespace normalization / settings env read / route pass-through] + 8 bootstrap-status read endpoint: unit configured-flag + integration window open/closed vs a real DB + route reads the setting + 12 CP-Gen candidate generation: reproducibility / order-independence / output_contract+resolved_refs hash sensitivity / GENERATOR_VERSION namespace shift / fail-closed directional→ta.* + condition→cond.* + empty-resolved skip / output_type alias / DESCRIPTION uncertainty / test_plan dep listing).
   TIER 2 frontend — real-auth login/signup/logout (PR #65, MERGED): **FRONTEND-ONLY**
@@ -575,6 +576,27 @@ Before stopping a working session, produce **ALL** of the following:
     fields still deferred; the draft token lives only in the card that ran Generate (projection
     omits `candidate_hash`); no dedicated CP SSE event; the FULL `routes/create_package.py`
     surface is now frontend-bound — no CP endpoint remains unbound.
+  - ✅ **Gated capability operational POSTs (PR #95, MERGED — FRONTEND)** — closes the PR #82
+    boundary. **FRONTEND-ONLY** (4 edits, no new files; backend 1048 stays, no migration).
+    `lib/capability.ts` EXTENDED in place: `ANALYSIS_ARTIFACT_CAPABILITY` hydration-only mirror
+    of `commands/capability.py` (doc 22 §10.3–§10.6; server re-derives the gate from
+    `artifact_type` on every dispatch) + `ANALYSIS_ARTIFACT_TYPES` (server's sorted `allowed`
+    order); wire types `ViewDatasetResult`/`AnalysisArtifactResult` mirror the command returns;
+    `useQueryViewDataset`/`useCreateAnalysisArtifact` — **fresh `Idempotency-Key` per attempt,
+    NO OCC token** (a create has no head to race), blank optional fields OMITTED, success
+    invalidates `["audit"]` ONLY (neither entity has a read surface — results live in the
+    command return + audit trail). `pages/FutureDev.tsx`: `ViewDatasetComposer` in the Graphic
+    View card + NEW `AnalysisArtifactsCard`; composers NEVER client-pre-gated (doc 22 §3) —
+    `CAPABILITY_NOT_ACTIVE` renders verbatim (CR-09/FD-02). `App.tsx`/`nav.ts` UNCHANGED
+    (REAL_PATHS stays 12). +5 `futureDev.test.tsx` + 2 `capabilityLib.test.ts` →
+    **frontend 98 → 105**; CI 3/3. The FULL `routes/capability.py` surface is now frontend-bound.
+    Honest boundary: `range_spec` has no composer input (wire type carries it); created view
+    datasets/artifacts have NO list/read surface (permanent until a backend projection lands);
+    no dedicated capability SSE event (`resource.changed` sweeps). **Remaining TIER 2:** the 12
+    remaining placeholder pages, ALL with landed V1 backend surfaces (`library.py` Package
+    Library natural first / `esp.py` / `rationale.py` / `market_data.py` / `research_data.py` /
+    `strategy.py` / `trading_signal.py` / `trade_log.py` / `allocation.py` Portfolio /
+    `readiness.py` Ready Check / `manual.py` User Manual).
   
   **TIER 3 — Data/ops (deferred, optional for MVP):**
   - Retention auto-purge (strategy/backtest history cleanup)

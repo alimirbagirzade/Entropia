@@ -3,6 +3,50 @@
 > **Amaç:** V1 kapandı (Stage 0–8 COMPLETE). Bu doküman post-V1 durumunu, aday iş listesini
 > ve temiz oturumda yapıştırılacak resume prompt'u içerir.
 
+## Durum (2026-07-09, TIER 2 frontend — gated capability operasyonel POST'ları; PR #95 MERGED)
+
+**FRONTEND-ONLY (4 edit, yeni dosya yok)** — backend DEĞİŞMEDİ (1048 sabit), migration YOK,
+alembic head `0021_local_auth` SABİT, `ENGINE_VERSION` SABİT. PR #82'nin dürüst sınırı kapandı:
+iki gated operasyonel POST (`POST /view-datasets/query` + `POST /analysis-artifacts`) frontend'e
+bağlandı — `routes/capability.py` TAM yüzeyi artık tüketiliyor, capability'de bağlanmamış
+endpoint KALMADI. Frontend 98 → **105** (+7 vitest). main = `5225629` (Merge #95), feat
+`652dfde`. CI 3/3 yeşil; self-review + yerel döngü (0 CRITICAL/HIGH).
+
+**Reuse anchor'ları (kesin semboller):**
+- **`frontend/src/lib/capability.ts` (YERİNDE GENİŞLETİLDİ):** `ANALYSIS_ARTIFACT_CAPABILITY` —
+  `commands/capability.py` aynası (doc 22 §10.3–§10.6; yalnız hidrasyon — sunucu gate'i her
+  dispatch'te `artifact_type`'tan yeniden türetir) + `ANALYSIS_ARTIFACT_TYPES` (sunucunun sorted
+  `allowed` sırası); wire tipleri `ViewDatasetResult`/`AnalysisArtifactResult` komut dönüşlerinin
+  birebir aynası; `useQueryViewDataset`/`useCreateAnalysisArtifact` — **her denemede taze
+  `Idempotency-Key`, OCC token YOK** (create'in yarışacağı head yok); boş opsiyonel alanlar
+  gövdeye HİÇ girmez; başarı yalnız `["audit"]` invalidate eder (iki entity'nin de READ yüzeyi
+  yok — sonuç komut dönüşü + audit izinde yaşar).
+- **`pages/FutureDev.tsx`:** `ViewDatasetComposer` Graphic View kartının içinde (source manifest
+  refs satır-başına + schema version + opsiyonel series/marker refs; `parseRefLines` CreatePackage
+  declared-keys deseninin aynası) + YENİ `AnalysisArtifactsCard` (tip seçici + salt-görüntü gating
+  capability aynası + input refs + method version + opsiyonel output ref). Composer'lar ASLA
+  client-tarafı ön-gate'lenmez (UI görünürlüğü asla yetkilendirme değildir, doc 22 §3): sunucu her
+  dispatch'te Limited/Active'i yeniden kontrol eder, `CAPABILITY_NOT_ACTIVE` verbatim render
+  edilir (CR-09/FD-02) — sahte iş/ilerleme yok.
+- **Testler:** +5 `futureDev.test.tsx` (body + Idempotency-Key + boş-opsiyonel omit / submit
+  gating / CAPABILITY_NOT_ACTIVE verbatim + retry'da FARKLI taze key / gating görüntü scoping /
+  artifact POST + created id) + 2 `capabilityLib.test.ts` ayna birimi. **`App.tsx`/`nav.ts`
+  DEĞİŞMEDİ** (REAL_PATHS 12 — `/future-dev` zaten gerçekti).
+
+**Dürüst sınır:** `range_spec` composer girdisi yok (V1'de tüketen renderer yok — wire tipi
+taşır); üretilen view dataset / analysis artifact'ların LİSTE/READ yüzeyi YOK (backend
+projeksiyonu gelene dek kalıcı — audit satırları Panel → Logs'ta görünür); capability'nin özel
+SSE event'i yok (`resource.changed` süpürür).
+
+**SIRADAKİ İŞ ADAYLARI (BAŞLARKEN kullanıcıyla TEYİT ET):** kalan 12 placeholder sayfa —
+HEPSİNİN V1 backend yüzeyi landed: Packages & Data (`library.py` Package Library — doğal ilk
+aday / `esp.py` Embedded / `rationale.py` Rationale Families / `market_data.py` /
+`research_data.py`), Workspace (`strategy.py` Strategy Details / `trading_signal.py` /
+`trade_log.py` / outsource-signal), Backtest (`allocation.py` Portfolio / `readiness.py` Ready
+Check), Docs (`manual.py` User Manual). TIER 3 deferred: retention auto-purge, data-queue
+redelivery, SSE streaming e2e, tool-call status shadowing. Trash purge (destructive + re-auth)
+AYRI slice.
+
 ## Durum (2026-07-08, TIER 2 frontend — CP request aksiyonları + Pre-Check sayfası; PR #93 MERGED)
 
 **FRONTEND-ONLY (2 yeni + 4 edit)** — backend DEĞİŞMEDİ (1048 sabit), migration YOK, alembic head
@@ -1078,23 +1122,29 @@ useApproveRequest draft-head token Admin-only CR-02 403 verbatim, useDependencyS
 artifact; pages/CreatePackage.tsx RequestActions barı sunucu-hint gating'li + YENİ
 pages/PreCheck.tsx /packages/pre-check doc 07 §7.1 Resolved/Missing satırları + §7.2 kanonik
 durum satırları + GET /dependency-scans/{scan_id} viewer; App.tsx REAL_PATHS 11→12, nav.ts
-değişmedi; frontend 89→98).
+değişmedi; frontend 89→98) + gated capability operasyonel POST'ları (#95 — lib/capability.ts
+YERİNDE genişletildi: ANALYSIS_ARTIFACT_CAPABILITY hidrasyon aynası + ANALYSIS_ARTIFACT_TYPES
+sorted + useQueryViewDataset/useCreateAnalysisArtifact taze Idempotency-Key/OCC'siz create,
+başarı yalnız ["audit"] invalidate — READ yüzeyi yok; pages/FutureDev.tsx ViewDatasetComposer
+Graphic View kartında + AnalysisArtifactsCard; client asla ön-gate'lemez, CAPABILITY_NOT_ACTIVE
+verbatim CR-09/FD-02; App.tsx/nav.ts değişmedi; frontend 98→105 — routes/capability.py TAM
+yüzeyi bağlandı, capability'de bağlanmamış endpoint KALMADI).
 BACKEND: first-Admin bootstrap provisioning (#76 — ENTROPIA_BOOTSTRAP_ADMIN_EMAIL opt-in) +
 salt-okunur bootstrap-status read endpoint (#84 — commands/auth.py bootstrap_status/
 bootstrap_is_configured) + CP-Gen deterministic candidate generation (#89 — domain/create_package/
 candidate.py GENERATOR_VERSION namespace + content_hash; submit_candidate_generation stub compute →
 manifest; LLM YOK; engine DEĞİŞMEDİ). migration YOK, alembic head 0021_local_auth SABİT,
-ENGINE_VERSION backtest-engine-v2-position-size-limits SABİT; backend testler 1048, frontend 98.
+ENGINE_VERSION backtest-engine-v2-position-size-limits SABİT; backend testler 1048, frontend 105.
 
 ÖNCE DOĞRULA (stale-by-default): git fetch && git log --oneline origin/main -6 && gh pr list
---state all -L 8. main = 5b59884 (Merge #93) + kapanış docs PR'ı merge sonrası ileri olmalı
+--state all -L 8. main = 5225629 (Merge #95) + kapanış docs PR'ı merge sonrası ileri olmalı
 (açıksa önce kullanıcıdan merge iste). alembic head 0021_local_auth; backend ENGINE_VERSION =
 backtest-engine-v2-position-size-limits. FRONTEND doğrula (yeni branch'i MUTLAKA origin/main'den
 aç — local stale olabilir): cd frontend && npm run typecheck && npm run lint && npm test &&
-npm run build (98/98 geçmeli).
+npm run build (105/105 geçmeli).
 
-ÖNCE OKU (authority): docs/POST_V1_KICKOFF.md (en üst Durum bloğu — PR #93) + docs/STAGE2_HANDOFF.md
-("CP request lifecycle actions + Pre-Check page (TIER 2, frontend slice 12) landed (PR #93)" +
+ÖNCE OKU (authority): docs/POST_V1_KICKOFF.md (en üst Durum bloğu — PR #95) + docs/STAGE2_HANDOFF.md
+("gated capability operational POSTs into Future Dev (TIER 2, frontend slice 13) landed (PR #95)" +
 "Next").
 CP backend kodu: routes/create_package.py (8 endpoint; aksiyonlar OCC X-Request-Version header +
 Idempotency-Key) + domain/create_package/{enums,value_objects,candidate}.py +
@@ -1109,8 +1159,10 @@ useResultMetrics/useSoftDeleteResult — PR #80); Arrange Metrics + Analysis Lab
 lib/agentLab.ts ["agent-tasks"] hook'ları + If-Match kontrolleri + pages/ArrangeMetrics.tsx +
 pages/AnalysisLab.tsx); Panel/Logs (lib/adminPanel.ts ["admin"]+["audit"] hook'ları +
 useAssignRole OCC + pages/Panel.tsx 5 kart); Capabilities (lib/capability.ts doc-22 taksonomi
-aynası + useTransitionCapability OCC/Idempotency-Key + pages/FutureDev.tsx — admin-facing
-lifecycle UI için doğal taban); Provisioning (lib/provisioning.ts useBootstrapStatus ["auth"] +
+aynası + useTransitionCapability OCC/Idempotency-Key + operasyonel useQueryViewDataset/
+useCreateAnalysisArtifact + ANALYSIS_ARTIFACT_CAPABILITY aynası + pages/FutureDev.tsx
+registry/transition/ViewDatasetComposer/AnalysisArtifactsCard — PR #82+#95, TAM yüzey bağlı);
+Provisioning (lib/provisioning.ts useBootstrapStatus ["auth"] +
 pages/Provisioning.tsx); Trash (lib/trash.ts ["trash"] hook'ları + useRestoreEntry OCC +
 Idempotency-Key + pages/Trash.tsx sunucu-truth restore_eligible gating + sunucu-hidrasyonlu
 object_type filtre — PR #86); Create Package + Pre-Check (lib/createPackage.ts ["package-requests"]
@@ -1128,22 +1180,24 @@ invalidateQueries({queryKey}) object-form. tsconfig: noUncheckedIndexedAccess +
 exactOptionalPropertyTypes KAPALI.
 
 SIRADAKİ İŞ — kalan TIER 2 adayları (BAŞLARKEN kullanıcıyla hangisi diye TEYİT ET):
-- Capability aktivasyonları (EN DOĞAL SONRAKİ) — Future Dev slotlarını placeholder'dan çıkar
-  (graphic_view ilk aday; routes/capability.py + lib/capability.ts hazır — PR #82). Gated
-  operasyonel POST'lar (/view-datasets/query, /analysis-artifacts) hâlâ BAĞLANMADI — aktivasyon
-  dilimi bunları da kapsayabilir; sunucu capability Limited/Active altında CAPABILITY_NOT_ACTIVE
-  döner (CR-09/FD-02).
+- Kalan 12 placeholder sayfayı canlı-veri yap — HEPSİNİN V1 backend yüzeyi landed:
+  Packages & Data (library.py Package Library — doğal ilk aday / esp.py Embedded /
+  rationale.py Rationale Families / market_data.py / research_data.py), Workspace (strategy.py
+  Strategy Details / trading_signal.py / trade_log.py / outsource-signal), Backtest
+  (allocation.py Portfolio / readiness.py Ready Check), Docs (manual.py User Manual).
 DİKKAT (kalıcı dürüst sınırlar): ["jobs"] için backend liste yüzeyi YOK (run projeksiyonları +
 /v1/metrics jobs-depth); users/system-actors/capabilities'in özel SSE event'i yok (kendi
-mutation'ları + resource.changed süpürür); Future Dev gated operasyonel POST'ları
-(/view-datasets/query, /analysis-artifacts) BAĞLANMADI — V1 UI akışı yok, capability Limited/
-Active altındayken sunucu CAPABILITY_NOT_ACTIVE döner.
+mutation'ları + resource.changed süpürür); view dataset / analysis artifact'ların READ/liste
+yüzeyi YOK (yalnız create dönüşü + audit izi — Panel Logs'ta görünür); range_spec composer
+girdisi yok (wire tipi taşır).
 TIER 3 (deferred): retention auto-purge, data-queue redelivery, SSE streaming e2e, tool-call status
 shadowing.
 
 BACKEND REUSE ANCHOR'LARI (DEĞİŞTİRME, TÜKET): routes/trash.py trash-entries list/detail +
-restore zaten bağlı (PR #86); routes/capability.py registry list/detail +
-lifecycle-transitions + graphic_view/overview zaten bağlı (PR #82); routes/results_history.py
+restore zaten bağlı (PR #86); routes/capability.py TAM yüzey bağlı (PR #82 registry/transition/
+overview + PR #95 gated operasyonel POST'lar /view-datasets/query + /analysis-artifacts —
+commands/capability.py query_view_dataset/create_analysis_artifact + require_operational_capability
+fail-closed deseni ileriki gated yüzeyler için TABAN); routes/results_history.py
 compare/delete + GET /backtest-results/{id}/metrics zaten bağlı (PR #80); admin panel + audit
 zaten bağlı (PR #78); metric-profile + agent-lab zaten bağlı (PR #74); backtest RUN/result/history
 zaten bağlı (PR #72); SSE taksonomisi + /v1/auth/* + /me + GET /v1/metrics zaten bağlı; first-Admin

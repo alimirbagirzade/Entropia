@@ -1307,7 +1307,29 @@ page (no byte-upload endpoint on this surface — the D5/D6 evidence row pins ob
 the analysis job id is informational (`["jobs"]` has no list surface — permanent), progress lands
 on the revision state.
 
-## Next: post-V1 (continued) — TIER 2 (login + SSE + /v1/metrics + backtest pages + Arrange Metrics/Analysis Lab + first-Admin bootstrap + Panel/Logs + history compare/metrics rebind + capability registry page + provisioning dashboard + Trash restore page + CP candidate generation + Create Package request page + CP actions/Pre-Check page + capability operational POSTs + Package Library page + Embedded System Packages page + Rationale Families page + Market Data page landed; 8 placeholder pages + Market Data lifecycle actions + TIER 3 remain)
+## Stage post-V1 TIER 2 — Market Data lifecycle actions landed (PR #105)
+
+**FRONTEND-ONLY** (3 edits; backend unchanged, 1048 stays, no migration, alembic head
+`0021_local_auth`, `ENGINE_VERSION` unchanged). Binds the four unbound `routes/market_data.py`
+lifecycle endpoints, closing the Market Data page (PR #103) honest boundary — **10/10 endpoints now
+frontend-bound**. **Empirical finding (route read — the handoff/kickoff summary was WRONG):**
+`successor` + `deprecate` read NO `If-Match`/`Idempotency-Key` header (their route signatures carry
+none); only `revisions` + `approve` carry both; `approve` + `deprecate` are Admin-only
+(`ensure_can_approve`). `lib/marketData.ts`: `useCreateRevision`/`useCreateSuccessor`/
+`useApproveRevision`/`useDeprecateRevision` under `["market-data"]` (each invalidates
+`["market-data"]`+`["audit"]`); `postWithOcc` helper (`If-Match "rv-N"` + fresh `Idempotency-Key`)
+mirrors `lib/rationale.ts::useSoftDeleteFamily`; `TIMEZONE_MODES` mirror + wire types
+(`CreateRevisionResult`/`SuccessorResult`/`ApprovalResult`/`RevisionBody`). `pages/MarketData.tsx`:
+`DetailCard` `LifecycleSection` = `RevisionComposer` (append revision OCC / create successor no-OCC;
+custom-mode IANA input; local JSON payload parse-block) + `ApprovalComposer` (Admin
+approve/deprecate; revision picker defaulting to the current head). Buttons never role-pre-gated —
+403 (non-Admin) / 409 (stale token / illegal transition) renders the canonical envelope verbatim.
++6 vitest (`test/marketData.test.tsx`) → **frontend 140 → 146**; typecheck + lint clean, build
+green; CI 3/3. main = `db7b585` (Merge #105), feat `d2a9ada`. Honest boundary: ESP/Library registry
+MUTATION slices are a separate slice (Admin-only, `X-Registry-Version` OCC); `["jobs"]` list surface
+permanently absent; raw bytes still never travel through the page.
+
+## Next: post-V1 (continued) — TIER 2 (login + SSE + /v1/metrics + backtest pages + Arrange Metrics/Analysis Lab + first-Admin bootstrap + Panel/Logs + history compare/metrics rebind + capability registry page + provisioning dashboard + Trash restore page + CP candidate generation + Create Package request page + CP actions/Pre-Check page + capability operational POSTs + Package Library page + Embedded System Packages page + Rationale Families page + Market Data page + Market Data lifecycle actions landed; 8 placeholder pages + ESP/Library registry mutation slices + TIER 3 remain)
 
 **V1 COMPLETE (Stages 0–8, docs 01–22) + Auth/IdP + Parquet Slice A + Backtest Engine Slice B + real indicator compute Slice C + `risk_based` sizing (a) + condition blocks (b) + condition extensions (b2) + two-package indicator-vs-indicator + higher-timeframe resampling (c) + per-condition multi-TF reference (i) + N-ary reference chain (ii) + VWAP directional key (d) + `formula_based` Kelly sizing + `position_size_limits` min/max cap (PR #63) landed (1015 tests).** The **Slice C indicator-compute + position-sizing follow-ups are now EFFECTIVELY COMPLETE — TIER 1 backend is DONE**:
 

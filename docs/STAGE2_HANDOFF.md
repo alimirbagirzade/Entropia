@@ -1329,7 +1329,56 @@ green; CI 3/3. main = `db7b585` (Merge #105), feat `d2a9ada`. Honest boundary: E
 MUTATION slices are a separate slice (Admin-only, `X-Registry-Version` OCC); `["jobs"]` list surface
 permanently absent; raw bytes still never travel through the page.
 
-## Next: post-V1 (continued) — TIER 2 (login + SSE + /v1/metrics + backtest pages + Arrange Metrics/Analysis Lab + first-Admin bootstrap + Panel/Logs + history compare/metrics rebind + capability registry page + provisioning dashboard + Trash restore page + CP candidate generation + Create Package request page + CP actions/Pre-Check page + capability operational POSTs + Package Library page + Embedded System Packages page + Rationale Families page + Market Data page + Market Data lifecycle actions landed; 8 placeholder pages + ESP/Library registry mutation slices + TIER 3 remain)
+## Stage post-V1 TIER 2 — Research Data page landed (PR #107)
+
+**FRONTEND-ONLY (2 new + 1 edit + 1 test)** — backend UNCHANGED (**1048** stays), no migration,
+alembic head `0021_local_auth`, `ENGINE_VERSION` unchanged. The `/research-data` placeholder becomes
+the real page, binding `routes/research_data.py` (doc 12) READ surface + owner INGEST chain — the
+LAST real page in the **Packages & Data** nav group. Mirrors the Market Data page (#103) pattern:
+read + ingest first, revision lifecycle deferred. main = `38988a2` (Merge #107), feat `5049f4e`.
+
+**Endpoints bound: 6 of 14** — `GET /research-datasets` (role-aware keyset registry), `GET
+/research-datasets/{id}` (head detail + revision history, ETag `rv-N`), `POST /research-datasets`
+(create Root+DRAFT — DR3 market link required), `POST /research-datasets/{id}/upload-session` (raw
+evidence row), `.../upload-session/finalize`, `.../analysis` (202 durable job → ANALYZING).
+
+**AMPİRİK bulgu (route/command okundu — özet değil):** `create_dataset` + `create_upload_session`
+`Idempotency-Key` OKUMUYOR → key gönderilmedi; `finalize_upload` + `request_research_dataset_analysis`
+İKİSİ de okuyor → deneme başına taze `Idempotency-Key`. Her endpoint Admin/Supervisor/Agent gate'li
+(`ensure_can_access_page` — User/Guest 403 verbatim); create ayrıca DR3 (ACTIVE+APPROVED linked
+market revision yoksa 409 `DEPENDENCY_BLOCKED`). `research_data.router` `market_data.router` ile aynı
+`prefix=base` → path'ler `/api/v1/research-datasets`.
+
+**Reuse anchor'ları (kesin semboller):**
+- **`lib/researchData.ts` (yeni):** wire tipleri `queries/research_data.py` `_revision_dict`/
+  `get_research_dataset_detail` + command return dict'leri birebir aynası; `RESEARCH_CATEGORIES` (8;
+  `other_custom` extensible — `custom_category` ZORUNLU, diğerleri null) + `USAGE_SCOPES` (3) +
+  `RESEARCH_REVISION_STATES` (7; `verified` ≠ `approved`, `approval_revoked`) taksonomi aynaları +
+  `researchStateTone`/`OTHER_CUSTOM_CATEGORY`. Hook'lar `["research-data"]` altında (özel SSE YOK →
+  `resource.changed`): `useResearchDatasets` keyset + `useResearchDataset` enabled-gated (dönen
+  `row_version` = ertelenen lifecycle OCC token'ı). Ingest mutasyonları `["research-data"]`+`["audit"]`
+  invalidate: `useCreateDataset` (**Idempotency-Key YOK**), `useStartUpload` (immutable evidence,
+  no idem), `useFinalizeUpload`/`useRequestAnalysis` (taze `Idempotency-Key`).
+- **`pages/ResearchData.tsx` (yeni):** `CreateDatasetCard` (market_entity_id REQUIRED [DR3] +
+  category/usage_scope select + `other_custom`→custom_category input [built-in→null] + display/
+  provider/payload; lokal JSON payload parse-block) + `RegistryCard` (keyset Pager) + `DetailCard`
+  (`IdentitySection` meaning/timing/usage metadata tablosu + revision history + `IngestSection`
+  Step 1 upload/finalize + Step 2 analyze). Butonlar asla role-ön-gate'li değil — 403/409 kanonik
+  zarf verbatim.
+- **`App.tsx`:** `/research-data` → `REAL_PATHS` + gerçek `<Route>`; `nav.ts` UNCHANGED (24).
+- **Testler:** `test/researchData.test.tsx` +11 (1 `researchStateTone` unit + 10 component: registry
+  verbatim / create no-idem+auto-open+body / `other_custom` custom_category / lokal payload block /
+  detail meaning+timing+history / upload no-idem→finalize taze-idem / analysis taze-idem 202 / DR3
+  `DEPENDENCY_BLOCKED` verbatim / role-aware read denial verbatim / `["research-data"]` SSE sweep).
+  apiStub SIRALI — aksiyon/detay fragment'leri liste prefix'inden ÖNCE. **frontend 146 → 157**;
+  typecheck+lint temiz, build green; review 0 CRITICAL/HIGH.
+
+**Dürüst sınır:** revision lifecycle aksiyonları — append DRAFT/successor revision, `set_time_policy`,
+`define_field`/`define_feature`, Admin `approve`/`revoke`, agent/backtest evidence **bundles** (8
+endpoint) — doğal follow-up'a ertelendi (detay `row_version` If-Match OCC token'ı hazır); ham baytlar
+sayfadan geçmez; `["jobs"]` liste yüzeyi kalıcı yok.
+
+## Next: post-V1 (continued) — TIER 2 (… + Market Data page + Market Data lifecycle actions + Research Data page landed; **7 placeholder pages** [Workspace strategy/trading_signal/trade_log/outsource-signal, Backtest allocation Portfolio + readiness Ready Check, Docs manual User Manual] + ESP/Library registry mutation slices + Research Data lifecycle follow-up + TIER 3 remain)
 
 **V1 COMPLETE (Stages 0–8, docs 01–22) + Auth/IdP + Parquet Slice A + Backtest Engine Slice B + real indicator compute Slice C + `risk_based` sizing (a) + condition blocks (b) + condition extensions (b2) + two-package indicator-vs-indicator + higher-timeframe resampling (c) + per-condition multi-TF reference (i) + N-ary reference chain (ii) + VWAP directional key (d) + `formula_based` Kelly sizing + `position_size_limits` min/max cap (PR #63) landed (1015 tests).** The **Slice C indicator-compute + position-sizing follow-ups are now EFFECTIVELY COMPLETE — TIER 1 backend is DONE**:
 

@@ -253,13 +253,18 @@ describe("Research Data page", () => {
     renderPage();
     await openDetail();
 
-    // Values unique to the detail card (not registry columns).
+    // Values unique to the detail card (not registry columns). The identity table
+    // is table[1] (registry is table[0]); scope event-time semantics there so the
+    // ResearchLifecycle time-policy <option> with the same value does not clash.
     expect(screen.getByText("mrev_9")).toBeInTheDocument();
-    expect(screen.getByText("provider_snapshot_timestamp")).toBeInTheDocument();
+    const identityTable = within(screen.getAllByRole("table")[1]!);
+    expect(identityTable.getByText("provider_snapshot_timestamp")).toBeInTheDocument();
     expect(screen.getByText(/fixed_delay · delay 120s/)).toBeInTheDocument();
     expect(screen.getByText("sha256:c1")).toBeInTheDocument();
     expect(screen.getByText("rrev_0")).toBeInTheDocument();
-    expect(screen.getByText(/rv 4/)).toBeInTheDocument();
+    // rv 4 also appears in the ResearchLifecycle intro (OCC token hint) — scope to
+    // the identity table where the row_version is displayed.
+    expect(identityTable.getByText(/rv 4/)).toBeInTheDocument();
   });
 
   it("starts a raw upload then finalizes it with a fresh Idempotency-Key", async () => {

@@ -281,3 +281,321 @@ export function useRequestAnalysis() {
     onSuccess: () => invalidateResearchData(queryClient),
   });
 }
+
+// ===========================================================================
+// Revision lifecycle (doc 12 §5, §7, §8, §9) — the eight actions that carry a
+// dataset past ingest. Draft edits (revise / time-policy / field / feature) are
+// owner-or-Admin; approve + revoke are Admin-only; ALL gates live server-side and
+// the UI never pre-gates (a denial renders the 401/403 envelope verbatim). Revise
+// + approve + revoke carry the root row_version as an If-Match "rv-N" ETag
+// (etag_for_row_version) + a fresh Idempotency-Key per attempt; time-policy +
+// field/feature + the two bundle compilers read NO such header (mirrored verbatim
+// — their routes take none, AMPIRICALLY read). The bundle compilers are PURE READS
+// (no durable row, no audit/outbox) — content-addressed probes, no invalidation.
+// ===========================================================================
+
+// Taxonomy hydration mirrors — domain/research_data/enums.py. Select hydration
+// ONLY; the server re-validates every submitted value (CR-04).
+
+// EventTimeSemantics — how a record's event timestamp is interpreted (doc 12 §5.2).
+export const EVENT_TIME_SEMANTICS = [
+  "provider_event_timestamp",
+  "provider_snapshot_timestamp",
+  "bar_close_end_time",
+  "custom_documented_event_time",
+] as const;
+
+// AvailableTimePolicy — how the first real availability time is derived. Only
+// `fixed_delay` carries a positive delay; every other rule MUST send delay=null so
+// a stale prior delay never reaches the engine (the server's AvailableTimeSpec
+// rejects a mismatch — TIME_POLICY_INVALID verbatim).
+export const AVAILABLE_TIME_POLICIES = [
+  "same_as_event_time",
+  "fixed_delay",
+  "provider_publish_timestamp",
+  "custom_documented_rule",
+] as const;
+
+export const FIXED_DELAY_POLICY = "fixed_delay";
+
+// ResearchTimezoneMode — declared source timezone. `custom` requires an IANA id;
+// `utc`/`exchange` must NOT carry one (the server re-validates both directions).
+export const RESEARCH_TIMEZONE_MODES = ["utc", "exchange", "custom"] as const;
+
+export const CUSTOM_TIMEZONE_MODE = "custom";
+
+// ---------------------------------------------------------------------------
+// Lifecycle wire types — mirror the command / route / bundle-compiler return
+// dicts verbatim (application/commands/research_data.py, apps/api/routes/
+// research_data.py, application/jobs/research_data.py::_seal_bundle).
+// ---------------------------------------------------------------------------
+
+// create_research_dataset_revision -> {entity_id, revision_id, revision_no,
+// row_version}. row_version is the root's post-append token — a subsequent OCC
+// action must re-read the detail rather than reuse this stale value.
+export interface CreateRevisionResult {
+  entity_id: string;
+  revision_id: string;
+  revision_no: number;
+  row_version: number;
+}
+
+// set_time_policy (route dict) -> {time_policy_id, entity_id, available_time_policy}.
+export interface TimePolicyResult {
+  time_policy_id: string;
+  entity_id: string;
+  available_time_policy: string;
+}
+
+// define_field / define_feature (route dicts).
+export interface FieldDefinitionResult {
+  field_definition_id: string;
+  field_name: string;
+}
+
+export interface FeatureDefinitionResult {
+  feature_definition_id: string;
+  feature_name: string;
+}
+
+// approve_research_dataset_revision / revoke_research_dataset_approval share the
+// {entity_id, revision_id, revision_state} return shape.
+export interface ApprovalResult {
+  entity_id: string;
+  revision_id: string;
+  revision_state: string;
+}
+
+// One pinned member of a compiled bundle. The exact research revision id + content
+// hash AND the linked market revision id + content hash — never "latest".
+export interface BundleMember {
+  research_revision_id: string;
+  research_content_hash: string | null;
+  usage_scope: string | null;
+  market_dataset_revision_id: string | null;
+  market_content_hash: string | null;
+}
+
+// _seal_bundle -> a content-addressed immutable bundle. task_id / run_request_id
+// appear only when the request supplied them (the server drops None from the body).
+export interface BundleResult {
+  bundle_kind: string;
+  members: BundleMember[];
+  compiler_version: string;
+  resolved_at: string;
+  bundle_hash: string;
+  task_id?: string;
+  run_request_id?: string;
+}
+
+// If-Match "rv-N" OCC token + a fresh Idempotency-Key per attempt — the exact
+// header pair etag_for_row_version + the idempotent commands expect (revise,
+// approve, revoke). Mirrors lib/marketData.ts::postWithOcc.
+function postWithOcc<T>(path: string, rowVersion: number, body: unknown): Promise<T> {
+  return apiRequest<T>(path, {
+    method: "POST",
+    headers: { "If-Match": `"rv-${rowVersion}"`, "Idempotency-Key": crypto.randomUUID() },
+    body,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Revise (OCC) — append a new DRAFT revision (doc 12 §5).
+// ---------------------------------------------------------------------------
+
+// The revision body (CreateRevisionRequest). category + usage_scope +
+// timezone_mode are REQUIRED by the schema; custom_category is non-null only for
+// `other_custom`; timezone_iana is non-null only for `custom`; market_entity_id
+// re-links a fresh Approved market bundle (DR3) when supplied. The server
+// re-validates every field.
+export interface RevisionBody {
+  payload: Record<string, unknown>;
+  category: string;
+  usage_scope: string;
+  timezone_mode: string;
+  custom_category: string | null;
+  timezone_iana: string | null;
+  market_entity_id: string | null;
+  display_name: string | null;
+  provider_name: string | null;
+  base_revision_id: string | null;
+}
+
+export interface CreateRevisionInput extends RevisionBody {
+  entity_id: string;
+  // The root row_version read from the detail — the If-Match OCC token. A stale
+  // value -> 409 verbatim.
+  row_version: number;
+}
+
+// Append a new DRAFT revision under OCC. A stale row_version -> 409; a custom
+// category/timezone that violates the requiredness rule -> the server's
+// CUSTOM_CATEGORY_REQUIRED / TIME_POLICY_INVALID envelope verbatim.
+export function useCreateRevision() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ entity_id, row_version, ...body }: CreateRevisionInput) =>
+      postWithOcc<CreateRevisionResult>(
+        `/research-datasets/${encodeURIComponent(entity_id)}/revisions`,
+        row_version,
+        body,
+      ),
+    onSuccess: () => invalidateResearchData(queryClient),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Time policy (no OCC) — set the event/available time rules (doc 12 §5.2, §8.4).
+// ---------------------------------------------------------------------------
+
+export interface TimePolicyInput {
+  entity_id: string;
+  event_time_semantics: string;
+  available_time_policy: string;
+  timezone_mode: string;
+  // Non-null ONLY for fixed_delay (positive); every other policy sends null.
+  delay_seconds: number | null;
+  // Non-null ONLY for the custom timezone mode.
+  timezone_iana: string | null;
+}
+
+// The route reads no If-Match/Idempotency-Key — none is sent (mirrored verbatim).
+export function useSetTimePolicy() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ entity_id, ...body }: TimePolicyInput) =>
+      api.post<TimePolicyResult>(
+        `/research-datasets/${encodeURIComponent(entity_id)}/time-policy`,
+        body,
+      ),
+    onSuccess: () => invalidateResearchData(queryClient),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Field / feature definitions (no OCC) — doc 12 §8.3, §9.3.
+// ---------------------------------------------------------------------------
+
+export interface FieldDefinitionInput {
+  entity_id: string;
+  field_name: string;
+  semantic_type: string;
+  measurement_method: string;
+  null_semantics: string;
+  event_time_source: string;
+  availability_rule: string;
+  allowed_usage: string;
+  // The only optional field (doc 12 §8.3); everything else is required or the
+  // server answers FIELD_MEANING_INSUFFICIENT verbatim.
+  unit_or_scale: string | null;
+}
+
+export function useDefineField() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ entity_id, ...body }: FieldDefinitionInput) =>
+      api.post<FieldDefinitionResult>(
+        `/research-datasets/${encodeURIComponent(entity_id)}/field-definitions`,
+        body,
+      ),
+    onSuccess: () => invalidateResearchData(queryClient),
+  });
+}
+
+export interface FeatureDefinitionInput {
+  entity_id: string;
+  feature_name: string;
+  definition: Record<string, unknown>;
+  feature_version: number;
+  approval_state: string | null;
+}
+
+export function useDefineFeature() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ entity_id, ...body }: FeatureDefinitionInput) =>
+      api.post<FeatureDefinitionResult>(
+        `/research-datasets/${encodeURIComponent(entity_id)}/feature-definitions`,
+        body,
+      ),
+    onSuccess: () => invalidateResearchData(queryClient),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Approve / revoke (Admin, OCC) — doc 12 §2, §7.
+// ---------------------------------------------------------------------------
+
+export interface ApprovalInput {
+  entity_id: string;
+  revision_id: string;
+  note: string | null;
+  row_version: number;
+}
+
+// Admin-only: move a VERIFIED revision -> APPROVED under OCC. A non-Admin -> 403
+// APPROVAL_REQUIRES_ADMIN verbatim; a revision whose time policy/market link is no
+// longer valid -> 409 TIME_POLICY_INVALID / DEPENDENCY_BLOCKED (DR3/DR4).
+export function useApproveRevision() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ entity_id, row_version, revision_id, note }: ApprovalInput) =>
+      postWithOcc<ApprovalResult>(
+        `/research-datasets/${encodeURIComponent(entity_id)}/approve`,
+        row_version,
+        { revision_id, note },
+      ),
+    onSuccess: () => invalidateResearchData(queryClient),
+  });
+}
+
+// Admin-only: move an APPROVED revision -> APPROVAL_REVOKED (stops new use; pinned
+// manifests stay immutable). Same OCC + Idempotency-Key header pair as approve.
+export function useRevokeApproval() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ entity_id, row_version, revision_id, note }: ApprovalInput) =>
+      postWithOcc<ApprovalResult>(
+        `/research-datasets/${encodeURIComponent(entity_id)}/revoke`,
+        row_version,
+        { revision_id, note },
+      ),
+    onSuccess: () => invalidateResearchData(queryClient),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Bundle compilers (pure read) — doc 12 §9.1, §9.2. No durable row, no audit —
+// content-addressed probes, no Idempotency-Key, no invalidation (mirrors the ESP
+// resolve probe / Market Data approved-bundle).
+// ---------------------------------------------------------------------------
+
+export interface AgentBundleInput {
+  research_revision_ids: string[];
+  task_id: string | null;
+}
+
+export interface EvidenceBundleInput {
+  research_revision_ids: string[];
+  run_request_id: string | null;
+}
+
+// Compile an immutable Agent research bundle (doc 12 §9.1). A non-consumable member
+// -> the canonical NOT_FOUND envelope verbatim.
+export function useCompileAgentBundle() {
+  return useMutation({
+    mutationFn: (input: AgentBundleInput) =>
+      api.post<BundleResult>("/research-datasets/bundles/agent", input),
+  });
+}
+
+// Compile an immutable Backtest evidence bundle (doc 12 §9.2). Each member must be
+// ACTIVE+APPROVED, usage-scope-eligible and time-policy-valid or the server answers
+// USAGE_SCOPE_FORBIDDEN / FIELD_MEANING_INSUFFICIENT / TIME_POLICY_INVALID /
+// NOT_FOUND verbatim.
+export function useCompileEvidenceBundle() {
+  return useMutation({
+    mutationFn: (input: EvidenceBundleInput) =>
+      api.post<BundleResult>("/research-datasets/bundles/backtest-evidence", input),
+  });
+}

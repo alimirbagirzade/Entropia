@@ -15,6 +15,7 @@ import { Panel } from "./pages/Panel";
 import { PreCheck } from "./pages/PreCheck";
 import { Provisioning } from "./pages/Provisioning";
 import { RationaleFamilies } from "./pages/RationaleFamilies";
+import { ResearchData } from "./pages/ResearchData";
 import { Placeholder } from "./pages/Placeholder";
 import { Login } from "./pages/Login";
 import { NotFound } from "./pages/NotFound";
@@ -41,6 +42,7 @@ const REAL_PATHS = new Set([
   "/trash",
   "/rationale-families",
   "/market-data",
+  "/research-data",
 ]);
 
 export default function App() {
@@ -188,6 +190,15 @@ export default function App() {
           element={
             <ErrorBoundary>
               <MarketData />
+            </ErrorBoundary>
+          }
+        />
+        {/* Research Data (doc 12): role-aware registry + detail reads and the owner ingest chain. */}
+        <Route
+          path="/research-data"
+          element={
+            <ErrorBoundary>
+              <ResearchData />
             </ErrorBoundary>
           }
         />

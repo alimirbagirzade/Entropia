@@ -3,6 +3,54 @@
 > **Amaç:** V1 kapandı (Stage 0–8 COMPLETE). Bu doküman post-V1 durumunu, aday iş listesini
 > ve temiz oturumda yapıştırılacak resume prompt'u içerir.
 
+## Durum (2026-07-09, TIER 2 frontend — Package Library katalog sayfası; PR #97 MERGED)
+
+**FRONTEND-ONLY (3 yeni + 1 edit)** — backend DEĞİŞMEDİ (1048 sabit), migration YOK, alembic head
+`0021_local_auth` SABİT, `ENGINE_VERSION` SABİT. Kalan 12 placeholder'ın İLKİ indi:
+`/packages/library` gerçek sayfa oldu — `routes/library.py` TAM okuma yüzeyi (iki GET) frontend'e
+bağlandı. Frontend 105 → **113** (+8 vitest). main = `af7c66b` (Merge #97), feat `53394fe`.
+CI 3/3 yeşil; self-review + yerel döngü (0 CRITICAL/HIGH).
+
+**Reuse anchor'ları (kesin semboller):**
+- **YENİ `frontend/src/lib/library.ts`:** wire tipleri `application/queries/library.py` birebir
+  aynası — `LibraryPackageRow`/`LibraryPage`/`LibraryPackageDetail` (canlı rationale-family
+  çözümü `{id, name, pinned_name, family_active}`, Stage-2e `provenance` + immutable scan
+  özeti, `revisions` geçmişi, 10-flag `PackagePermissions` backend dataclass sırasında +
+  `PERMISSION_FLAGS`/`PERFORMANCE_FIELDS` render-sırası aynaları); facet taksonomi hidrasyon
+  aynaları (`CATALOG_PACKAGE_KINDS`/`CATALOG_LIFECYCLE_STATES`/`PACKAGE_VALIDATION_STATES`/
+  `APPROVAL_STATES`/`VISIBILITY_SCOPES` + `UNASSIGNED_FAMILY` sentineli) — sunucu her filtreyi
+  yeniden doğrular (`CatalogFilterInvalid` 422 verbatim); hook'lar `["library"]` altında (özel
+  SSE event yok — `resource.changed` süpürür): `useLibraryPackages` (kind facet'i `type` route
+  ALIAS'ı ile gider; boş facet ASLA gönderilmez; keyset cursor; placeholderData) +
+  `useLibraryPackage` (enabled-gated, `encodeURIComponent`); SALT-OKUNUR — mutation/OCC token
+  YOK; `validationTone`/`approvalTone`/`lifecycleTone` sunum yardımcıları.
+- **YENİ `pages/Library.tsx`:** 5 taksonomi select'i + paylaşılan `useRationaleFamilies` ile
+  hidre edilen family select (`unassigned` sentineli dahil) + serbest-metin `q`; ortogonal
+  lifecycle/validation/approval badge'li katalog tablosu (doc 08 §13 — V18 Status tek kolona
+  ASLA katlanmaz); cursor-stack `Pager`; detay kartı: 10 permission flag'i METİN olarak (asla
+  yalnız renk), **L4 performance availability label'ları verbatim (asla uydurma sıfır)**,
+  contract/dependency-snapshot/validation-summary JSON, provenance + scan özeti, revizyon
+  geçmişi; Guest → 401 zarfı verbatim (doc 08 §2 — UI görünürlüğü asla yetkilendirme değildir).
+- **`App.tsx`:** `/packages/library` REAL_PATHS (12 → 13) + gerçek Route; **`nav.ts` DEĞİŞMEDİ**
+  (24 — nav item placeholder olarak zaten vardı).
+- **Testler:** YENİ `test/library.test.tsx` (+8; apiStub SIRALI — detay fragment'i `/library`
+  liste prefix'inden ÖNCE; facet assert'leri tabloya scope'lu — select option'ları aynı
+  değerleri listeler).
+
+**Dürüst sınır:** salt-okunur katalog dilimi — paket AKSİYONLARI (revise / request-validation /
+approve-publish / deprecate / soft-delete / export) sunucu-hesaplı permission flag'leriyle
+AÇIKLANIR ama bu sayfadan dispatch edilmez (sonraki slice'lar; detay ETag/`row_version` OCC
+token'ları için hazır); performance metrikleri run bağlanana dek sunucu sözleşmesiyle
+`not_applicable` (doc 08 §3.2, L4).
+
+**SIRADAKİ İŞ ADAYLARI (BAŞLARKEN kullanıcıyla TEYİT ET):** kalan 11 placeholder sayfa —
+HEPSİNİN V1 backend yüzeyi landed: Packages & Data (`esp.py` Embedded — Library deseninin
+doğal devamı / `rationale.py` Rationale Families / `market_data.py` / `research_data.py`),
+Workspace (`strategy.py` Strategy Details / `trading_signal.py` / `trade_log.py` /
+outsource-signal), Backtest (`allocation.py` Portfolio / `readiness.py` Ready Check), Docs
+(`manual.py` User Manual). TIER 3 deferred: retention auto-purge, data-queue redelivery, SSE
+streaming e2e, tool-call status shadowing. Trash purge (destructive + re-auth) AYRI slice.
+
 ## Durum (2026-07-09, TIER 2 frontend — gated capability operasyonel POST'ları; PR #95 MERGED)
 
 **FRONTEND-ONLY (4 edit, yeni dosya yok)** — backend DEĞİŞMEDİ (1048 sabit), migration YOK,
@@ -1128,23 +1176,33 @@ sorted + useQueryViewDataset/useCreateAnalysisArtifact taze Idempotency-Key/OCC'
 başarı yalnız ["audit"] invalidate — READ yüzeyi yok; pages/FutureDev.tsx ViewDatasetComposer
 Graphic View kartında + AnalysisArtifactsCard; client asla ön-gate'lemez, CAPABILITY_NOT_ACTIVE
 verbatim CR-09/FD-02; App.tsx/nav.ts değişmedi; frontend 98→105 — routes/capability.py TAM
-yüzeyi bağlandı, capability'de bağlanmamış endpoint KALMADI).
+yüzeyi bağlandı, capability'de bağlanmamış endpoint KALMADI) + Package Library katalog sayfası
+(#97 — YENİ lib/library.ts ["library"] hook'ları: useLibraryPackages (kind facet'i `type` route
+alias'ı, boş facet ASLA gönderilmez, keyset cursor) + useLibraryPackage enabled-gated; facet
+taksonomi hidrasyon aynaları (CATALOG_PACKAGE_KINDS/CATALOG_LIFECYCLE_STATES/
+PACKAGE_VALIDATION_STATES/APPROVAL_STATES/VISIBILITY_SCOPES + UNASSIGNED_FAMILY sentineli) +
+10-flag PERMISSION_FLAGS/PERFORMANCE_FIELDS aynaları + canlı rationale-family çözümü/provenance/
+revisions wire tipleri; YENİ pages/Library.tsx facet bar + useRationaleFamilies-hidrasyonlu
+family select + ortogonal badge tablosu (doc 08 §13) + detay (permissions METİN, L4 N/A
+verbatim, contracts JSON, provenance+scan, revizyon geçmişi) + Guest 401 verbatim; App.tsx
+REAL_PATHS 12→13, nav.ts değişmedi; frontend 105→113 — routes/library.py TAM yüzeyi bağlandı;
+SALT-OKUNUR: paket aksiyonları sonraki slice, detay ETag/row_version OCC için hazır).
 BACKEND: first-Admin bootstrap provisioning (#76 — ENTROPIA_BOOTSTRAP_ADMIN_EMAIL opt-in) +
 salt-okunur bootstrap-status read endpoint (#84 — commands/auth.py bootstrap_status/
 bootstrap_is_configured) + CP-Gen deterministic candidate generation (#89 — domain/create_package/
 candidate.py GENERATOR_VERSION namespace + content_hash; submit_candidate_generation stub compute →
 manifest; LLM YOK; engine DEĞİŞMEDİ). migration YOK, alembic head 0021_local_auth SABİT,
-ENGINE_VERSION backtest-engine-v2-position-size-limits SABİT; backend testler 1048, frontend 105.
+ENGINE_VERSION backtest-engine-v2-position-size-limits SABİT; backend testler 1048, frontend 113.
 
 ÖNCE DOĞRULA (stale-by-default): git fetch && git log --oneline origin/main -6 && gh pr list
---state all -L 8. main = 5225629 (Merge #95) + kapanış docs PR'ı merge sonrası ileri olmalı
+--state all -L 8. main = af7c66b (Merge #97) + kapanış docs PR'ı merge sonrası ileri olmalı
 (açıksa önce kullanıcıdan merge iste). alembic head 0021_local_auth; backend ENGINE_VERSION =
 backtest-engine-v2-position-size-limits. FRONTEND doğrula (yeni branch'i MUTLAKA origin/main'den
 aç — local stale olabilir): cd frontend && npm run typecheck && npm run lint && npm test &&
-npm run build (105/105 geçmeli).
+npm run build (113/113 geçmeli).
 
-ÖNCE OKU (authority): docs/POST_V1_KICKOFF.md (en üst Durum bloğu — PR #95) + docs/STAGE2_HANDOFF.md
-("gated capability operational POSTs into Future Dev (TIER 2, frontend slice 13) landed (PR #95)" +
+ÖNCE OKU (authority): docs/POST_V1_KICKOFF.md (en üst Durum bloğu — PR #97) + docs/STAGE2_HANDOFF.md
+("live-data Package Library catalog page (TIER 2, frontend slice 14) landed (PR #97)" +
 "Next").
 CP backend kodu: routes/create_package.py (8 endpoint; aksiyonlar OCC X-Request-Version header +
 Idempotency-Key) + domain/create_package/{enums,value_objects,candidate}.py +
@@ -1169,7 +1227,9 @@ object_type filtre — PR #86); Create Package + Pre-Check (lib/createPackage.ts
 hook'ları + useCreatePackageRequest taze Idempotency-Key + AKSİYONLAR: useRunPrecheck/
 useGenerateCandidate OCC X-Request-Version + useCreateDraft candidate-hash body token +
 useApproveRequest draft-head token + useDependencyScan; pages/CreatePackage.tsx
-compose/list/detay/RequestActions + pages/PreCheck.tsx — PR #91+#93); test/helpers/apiStub.ts route-aware fetch double
+compose/list/detay/RequestActions + pages/PreCheck.tsx — PR #91+#93); Package Library
+(lib/library.ts ["library"] hook'ları + facet taksonomi aynaları + UNASSIGNED_FAMILY sentineli +
+pages/Library.tsx facet bar/detay — PR #97); test/helpers/apiStub.ts route-aware fetch double
 ("<METHOD> <fragment>" sıralı eşleşme — detay/spesifik route'u liste/prefix route'undan ÖNCE yaz)
 — yeni sayfa testleri için BUNU reuse et.
 
@@ -1180,9 +1240,9 @@ invalidateQueries({queryKey}) object-form. tsconfig: noUncheckedIndexedAccess +
 exactOptionalPropertyTypes KAPALI.
 
 SIRADAKİ İŞ — kalan TIER 2 adayları (BAŞLARKEN kullanıcıyla hangisi diye TEYİT ET):
-- Kalan 12 placeholder sayfayı canlı-veri yap — HEPSİNİN V1 backend yüzeyi landed:
-  Packages & Data (library.py Package Library — doğal ilk aday / esp.py Embedded /
-  rationale.py Rationale Families / market_data.py / research_data.py), Workspace (strategy.py
+- Kalan 11 placeholder sayfayı canlı-veri yap — HEPSİNİN V1 backend yüzeyi landed:
+  Packages & Data (esp.py Embedded — Library deseninin doğal devamı / rationale.py Rationale
+  Families / market_data.py / research_data.py), Workspace (strategy.py
   Strategy Details / trading_signal.py / trade_log.py / outsource-signal), Backtest
   (allocation.py Portfolio / readiness.py Ready Check), Docs (manual.py User Manual).
 DİKKAT (kalıcı dürüst sınırlar): ["jobs"] için backend liste yüzeyi YOK (run projeksiyonları +
@@ -1211,7 +1271,11 @@ GENERATOR_VERSION namespace] → ileriki generator'lar için TABAN); routes/crea
 TAM yüzey FRONTEND'e bağlandı: request create/list/detail (PR #91) + request AKSİYONLARI
 pre-check/generate-candidate/draft/approve + GET /dependency-scans/{scan_id} + Pre-Check
 SAYFASI /packages/pre-check (PR #93 — lib/createPackage.ts yerinde genişletildi +
-pages/PreCheck.tsx). CP yüzeyinde bağlanmamış endpoint kalmadı.
+pages/PreCheck.tsx). CP yüzeyinde bağlanmamış endpoint kalmadı. routes/library.py TAM yüzey
+FRONTEND'e bağlandı (PR #97 — list_packages facet'leri + get_package_detail ETag;
+domain/package/catalog.py parse_catalog_filters + permissions.py package_permissions'ın
+frontend aynaları lib/library.ts'te — Packages & Data grubunun kalan sayfaları [esp/rationale/
+market_data/research_data] için desen TABANI).
 
 YÖNTEM: Workflow KULLANMA; direct-author. Backend working-loop (izole DB / L1 FK / alembic)
 UYGULANMAZ. Frontend loop: cd frontend (cwd resetlenebilir → absolute path);

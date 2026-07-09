@@ -1205,7 +1205,60 @@ Idempotency-Key) are NOT dispatched from this page (later slices; the detail `ro
 `registry_version` tokens are already surfaced as their OCC tokens); ESP performance stays
 `not_applicable` by nature (doc 09 §14, L4 — resolvers never carry trading metrics).
 
-## Next: post-V1 (continued) — TIER 2 (login + SSE + /v1/metrics + backtest pages + Arrange Metrics/Analysis Lab + first-Admin bootstrap + Panel/Logs + history compare/metrics rebind + capability registry page + provisioning dashboard + Trash restore page + CP candidate generation + Create Package request page + CP actions/Pre-Check page + capability operational POSTs + Package Library page + Embedded System Packages page landed; 10 placeholder pages + TIER 3 remain)
+## Post-V1 — live-data Rationale Families page (TIER 2, frontend slice 16) ✅ landed (PR #101, merged → main `7372478`, feat `20ccacc`)
+
+**FRONTEND-ONLY (3 new files + 1 edit)** — backend unchanged (1048), no migration, alembic head
+`0021_local_auth`, ENGINE_VERSION unchanged. The `/rationale-families` placeholder becomes the
+real page, binding the **FULL** `routes/rationale.py` surface (doc 10 §7, §8) — the shared taxonomy
+plane, both tables. **Unlike the prior read-only slices this is a full CRUD + editor slice**, because
+the backend is **shared-editing** (any authenticated actor may edit both; `ensure_can_manage_families`
+/ `ensure_can_edit_assignments` — Admin-only is NOT used) and the read-only `useRationaleFamilies`
+selector already existed (so a read-only re-do was low value). Third of the remaining placeholder
+pages — 9 remain. Frontend 121 → **128** (+7 vitest). CI 3/3 green; self-review + local loop
+(0 CRITICAL/HIGH).
+
+- **NEW `lib/rationale.ts`:** wire types mirror `application/queries/rationale.py` `_family_dict` /
+  `_assignment_row` + `application/commands/rationale.py` return dicts verbatim
+  (`RationaleFamilyCard` / `RationaleAssignmentRow` + `CreateFamilyResult` / `ReviseFamilyResult` /
+  `SoftDeleteFamilyResult` / `BatchAssignResult`). Hooks under prefixes swept by `resource.changed`
+  (no dedicated rationale SSE event): `useFamilies` (active registry projection, keyset cursor,
+  placeholderData) + `useAssignments` (`meta.table_version` = the batch OCC token). Four mutations
+  mirror `lib/trash.ts` / `lib/adminPanel.ts`: `useCreateFamily` (fresh `Idempotency-Key`, **no OCC
+  token** — a create has no head to race), `useReviseFamily` (OCC `expected_head_revision_id` = the
+  family's current head, the command's token per doc 10 §5 Save + `Idempotency-Key`),
+  `useSoftDeleteFamily` (OCC `row_version` as the **`"rv-N"` If-Match ETag**,
+  `shared/concurrency.py row_version_from_if_match`), `useBatchAssign` (echoes
+  `expected_table_version`; all-or-nothing server-side + `Idempotency-Key`). Family mutations
+  invalidate `["rationale-families"]` + `["rationale-assignments"]` + `["audit"]`; the batch
+  invalidates the same set. `assignmentStateTone` maps the doc 10 §9.2 projection
+  (assigned→ok / unassigned→neutral / assigned_to_deleted_family→down).
+- **NEW `pages/RationaleFamilies.tsx`:** `FamilyRegistryCard` — one editor that creates, or revises
+  when a row's Edit seeds it (remounts by `key` so a mode switch reseeds; subfamilies /
+  compatible-outputs are one-per-line textareas → trimmed list); two-step confirm Delete; the server
+  envelope renders verbatim on every failure (`RATIONALE_FAMILY_CONFLICT` / `RATIONALE_FAMILY_IN_USE`
+  / `NAME_CONFLICT` / `NAME_RESERVED`). `AssignmentTableCard` — per-row family `select` hydrated from
+  the first active-families page; staged reassignments diffed against server truth (only changed rows
+  enter the batch); Save builds one `AssignmentChange` per changed row pinning
+  `current_package_revision_id` (head OCC) + the selected family's `current_revision_id`; non-blocking
+  `OUTPUT_TYPE_NOT_LISTED` warnings render verbatim; a soft-deleted pinned family surfaces as a
+  synthetic `select` option so the value never falls outside its options.
+- **`App.tsx`:** `/rationale-families` joins REAL_PATHS (14 → 15) + real Route; **`nav.ts`
+  UNCHANGED** (24 items — the item already existed as a placeholder).
+- **Tests:** NEW `test/rationaleFamilies.test.tsx` (+7: two-projection render / create
+  `Idempotency-Key` + no OCC + exact body / revise head-revision OCC token / two-step delete
+  `"rv-1"` If-Match / staged batch `expected_table_version` + `changes` + verbatim warning /
+  `["rationale-families"]` invalidation refetch / server denial verbatim; apiStub ORDERED — the
+  revise/delete/batch action fragments precede the list prefixes; **"Momentum" is NOT a ready-check**
+  since it appears in the registry row, the assignment cell AND every select option — "trend"
+  (fam_1's unique subfamily) is used instead, family-name asserts scoped to the registry table via
+  `within`).
+
+**Honest boundary:** the assignment `select` reads only the FIRST active-families page (doc 10 §7 UI
+scope — >20 families would truncate the option set); soft-deleted families live in the Admin-only
+Trash surface (restore/purge are NOT dispatched here); no dedicated rationale SSE event
+(`resource.changed` sweeps `["rationale-families"]` / `["rationale-assignments"]`).
+
+## Next: post-V1 (continued) — TIER 2 (login + SSE + /v1/metrics + backtest pages + Arrange Metrics/Analysis Lab + first-Admin bootstrap + Panel/Logs + history compare/metrics rebind + capability registry page + provisioning dashboard + Trash restore page + CP candidate generation + Create Package request page + CP actions/Pre-Check page + capability operational POSTs + Package Library page + Embedded System Packages page + Rationale Families page landed; 9 placeholder pages + TIER 3 remain)
 
 **V1 COMPLETE (Stages 0–8, docs 01–22) + Auth/IdP + Parquet Slice A + Backtest Engine Slice B + real indicator compute Slice C + `risk_based` sizing (a) + condition blocks (b) + condition extensions (b2) + two-package indicator-vs-indicator + higher-timeframe resampling (c) + per-condition multi-TF reference (i) + N-ary reference chain (ii) + VWAP directional key (d) + `formula_based` Kelly sizing + `position_size_limits` min/max cap (PR #63) landed (1015 tests).** The **Slice C indicator-compute + position-sizing follow-ups are now EFFECTIVELY COMPLETE — TIER 1 backend is DONE**:
 

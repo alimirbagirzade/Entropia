@@ -97,9 +97,10 @@ Before stopping a working session, produce **ALL** of the following:
   (PR #91, MERGED) + CP request lifecycle actions + Pre-Check page (PR #93, MERGED) + gated
   capability operational POSTs into Future Dev (PR #95, MERGED) + TIER 2 frontend live-data
   Package Library catalog page (PR #97, MERGED) + TIER 2 frontend live-data Embedded System
-  Packages page (PR #99, MERGED)**.
-  **Overall: ~94% complete** (V1=100%, post-V1 core=88%, frontend=89%).
-  `main` after PR #99 (`fa2003f`; Embedded feat `5bf633a` MERGED; Package Library feat `53394fe` MERGED; capability-POSTs feat `652dfde` MERGED; CP-actions/Pre-Check feat `e8f8982` MERGED; CP-create-page feat `79fbd24` MERGED; CP-Gen candidate-generation feat `5cc62cc` MERGED; auth-invalidation feat MERGED (PR #88); trash-page feat `3ccb50d` MERGED; provisioning-dashboard feat `b56f621` MERGED; capability-page feat `3d7977e` MERGED; history-compare feat `491ac03` MERGED; panel-page feat `726ffcc` MERGED; first-Admin bootstrap feat `a53cf34` MERGED; live-pages feat `499bd8b` MERGED; backtest-pages feat `10a0007` MERGED; metrics feat `d3039e7` MERGED; login feat `58781e4` MERGED; SSE feat `5ddb14f` MERGED; position_size_limits feat `5ef5525`; Kelly feat `3f254bc` / non-finite fail-closed fix `3a92e7d`; VWAP code `d27b2bb`; N-ary code `44099a7`; per-condition code `1c5cca0`; multi-timeframe code `def6c28`; indicator-vs-indicator code `9087c2b`; condition-extensions code `361df4c`; condition-blocks code `8766fae`; risk_based code `43cee29`; Slice C code `671d227`);
+  Packages page (PR #99, MERGED) + TIER 2 frontend live-data Rationale Families page — full
+  CRUD + assignment batch editor (PR #101, MERGED)**.
+  **Overall: ~94% complete** (V1=100%, post-V1 core=88%, frontend=90%).
+  `main` after PR #101 (`7372478`; Rationale Families feat `20ccacc` MERGED; Embedded feat `5bf633a` MERGED; Embedded feat `5bf633a` MERGED; Package Library feat `53394fe` MERGED; capability-POSTs feat `652dfde` MERGED; CP-actions/Pre-Check feat `e8f8982` MERGED; CP-create-page feat `79fbd24` MERGED; CP-Gen candidate-generation feat `5cc62cc` MERGED; auth-invalidation feat MERGED (PR #88); trash-page feat `3ccb50d` MERGED; provisioning-dashboard feat `b56f621` MERGED; capability-page feat `3d7977e` MERGED; history-compare feat `491ac03` MERGED; panel-page feat `726ffcc` MERGED; first-Admin bootstrap feat `a53cf34` MERGED; live-pages feat `499bd8b` MERGED; backtest-pages feat `10a0007` MERGED; metrics feat `d3039e7` MERGED; login feat `58781e4` MERGED; SSE feat `5ddb14f` MERGED; position_size_limits feat `5ef5525`; Kelly feat `3f254bc` / non-finite fail-closed fix `3a92e7d`; VWAP code `d27b2bb`; N-ary code `44099a7`; per-condition code `1c5cca0`; multi-timeframe code `def6c28`; indicator-vs-indicator code `9087c2b`; condition-extensions code `361df4c`; condition-blocks code `8766fae`; risk_based code `43cee29`; Slice C code `671d227`);
   alembic head = **`0021_local_auth`** (`human_credentials` + `auth_sessions`;
   Slices A/B/C + follow-ups (a)/(b)/(b2)/(#53)/(c)/(i)/(ii)/(d) + Kelly sizing + position_size_limits + first-Admin bootstrap + bootstrap-status read endpoint + CP-Gen deterministic candidate generation need no migration). **1048 tests green** (1015 + 13 first-Admin bootstrap [env-unset baseline / match+no-admin → Admin+audit+outbox / active-Admin fail-closed / non-matching baseline / case+whitespace normalization / settings env read / route pass-through] + 8 bootstrap-status read endpoint: unit configured-flag + integration window open/closed vs a real DB + route reads the setting + 12 CP-Gen candidate generation: reproducibility / order-independence / output_contract+resolved_refs hash sensitivity / GENERATOR_VERSION namespace shift / fail-closed directional→ta.* + condition→cond.* + empty-resolved skip / output_type alias / DESCRIPTION uncertainty / test_plan dep listing).
   TIER 2 frontend — real-auth login/signup/logout (PR #65, MERGED): **FRONTEND-ONLY**
@@ -635,11 +636,13 @@ Before stopping a working session, produce **ALL** of the following:
     detail GET precede the list prefix) → **frontend 113 → 121**; CI 3/3. Honest boundary:
     read slice — registry MUTATIONS (create/activate/deprecate, Admin-only, `X-Registry-Version`
     OCC + Idempotency-Key) NOT dispatched (later slices; `row_version`/`registry_version`
-    tokens ready). **Remaining TIER 2:** the 10 remaining placeholder pages, ALL with
-    landed V1 backend surfaces (`rationale.py` Rationale Families natural next — the shared
-    `useRationaleFamilies` hook already exists / `market_data.py` / `research_data.py` /
-    `strategy.py` / `trading_signal.py` / `trade_log.py` / outsource-signal / `allocation.py`
-    Portfolio / `readiness.py` Ready Check / `manual.py` User Manual).
+    tokens ready). **Remaining TIER 2:** the 9 remaining placeholder pages, ALL with
+    landed V1 backend surfaces (`market_data.py` Market Data natural next — the rest of the
+    Packages & Data group / `research_data.py` / `strategy.py` / `trading_signal.py` /
+    `trade_log.py` / outsource-signal / `allocation.py` Portfolio / `readiness.py` Ready Check /
+    `manual.py` User Manual). **Rationale Families (`rationale.py`) landed full CRUD + assignment
+    batch editor in PR #101 — the shared-editing mutation pattern (OCC + Idempotency-Key, no
+    Admin gate) is a base for the ESP/Library registry mutation slices.**
   
   **TIER 3 — Data/ops (deferred, optional for MVP):**
   - Retention auto-purge (strategy/backtest history cleanup)

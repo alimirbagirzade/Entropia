@@ -6,6 +6,7 @@ import { ArrangeMetrics } from "./pages/ArrangeMetrics";
 import { BacktestRun } from "./pages/BacktestRun";
 import { CreatePackage } from "./pages/CreatePackage";
 import { FutureDev } from "./pages/FutureDev";
+import { Library } from "./pages/Library";
 import { Mainboard } from "./pages/Mainboard";
 import { Metrics } from "./pages/Metrics";
 import { Panel } from "./pages/Panel";
@@ -24,6 +25,7 @@ const REAL_PATHS = new Set([
   "/",
   "/packages/create",
   "/packages/pre-check",
+  "/packages/library",
   "/panel",
   "/panel/provisioning",
   "/panel/metrics",
@@ -64,6 +66,15 @@ export default function App() {
           element={
             <ErrorBoundary>
               <PreCheck />
+            </ErrorBoundary>
+          }
+        />
+        {/* Package Library (doc 08): read-only catalog of the four canonical kinds. */}
+        <Route
+          path="/packages/library"
+          element={
+            <ErrorBoundary>
+              <Library />
             </ErrorBoundary>
           }
         />

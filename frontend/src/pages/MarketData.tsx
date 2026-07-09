@@ -8,12 +8,17 @@ import { ApiError } from "@/lib/apiClient";
 import { formatUtc } from "@/lib/backtest";
 import {
   MARKET_DATA_TYPES,
+  TIMEZONE_MODES,
   linesToList,
   parseMappingLines,
   revisionStateTone,
+  useApproveRevision,
   useApprovedBundle,
   useConfirmMapping,
   useCreateDataset,
+  useCreateRevision,
+  useCreateSuccessor,
+  useDeprecateRevision,
   useFinalizeUpload,
   useMarketDataset,
   useMarketDatasets,
@@ -21,6 +26,8 @@ import {
   useStartUpload,
   type MarketDatasetDetail,
   type MarketDatasetRow,
+  type MarketRevisionRef,
+  type RevisionBody,
 } from "@/lib/marketData";
 
 // Command failures surface the backend canonical envelope verbatim — the client
@@ -45,9 +52,11 @@ function useCursorStack() {
 
 // Market Data (doc 11): the primary price/execution layer for research and
 // backtests — only OHLCV, tick/trades and spread/execution data live here. This
-// slice binds the read surface + the owner ingest chain (upload -> analyze ->
-// map). Revision lifecycle actions (revise / successor / Admin approve /
-// deprecate) are a later slice; the detail row_version is their ready OCC token.
+// page binds the read surface, the owner ingest chain (upload -> analyze -> map)
+// AND the revision lifecycle actions: append a DRAFT revision under OCC, append a
+// superseding successor, and Admin approve/deprecate. The detail row_version is
+// the If-Match OCC token for revisions + approve; buttons are never role-pre-gated
+// — a denial (403/409) renders the canonical envelope verbatim.
 export function MarketData() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   return (
@@ -296,6 +305,7 @@ function DetailCard({ entityId }: { entityId: string }) {
         <>
           <IdentitySection detail={detail.data} />
           <IngestSection detail={detail.data} />
+          <LifecycleSection detail={detail.data} />
           <BundleProbe entityId={entityId} />
         </>
       ) : null}
@@ -619,6 +629,294 @@ function MappingComposer({
             </ul>
           ) : null}
         </div>
+      ) : null}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Revision lifecycle (doc 11 §5): append a DRAFT revision (OCC) or a superseding
+// successor, and Admin approve/deprecate. Buttons are never role-pre-gated —
+// approve/deprecate are Admin-only server-side and a denial (403) or an illegal
+// transition / stale token (409) renders the canonical envelope verbatim.
+// ---------------------------------------------------------------------------
+
+function LifecycleSection({ detail }: { detail: MarketDatasetDetail }) {
+  return (
+    <div style={{ marginTop: 16 }}>
+      <h4>Revision lifecycle</h4>
+      <RevisionComposer detail={detail} />
+      <ApprovalComposer detail={detail} />
+    </div>
+  );
+}
+
+function revisionOptionLabel(revision: MarketRevisionRef): string {
+  return `v${revision.revision_no} · ${revision.revision_id} · ${revision.revision_state}`;
+}
+
+// Append a new DRAFT revision (OCC via the detail row_version) OR a superseding
+// successor (no OCC). Both actions share one field set; a timezone is REQUIRED by
+// the revisions route (an IANA id only for `custom` mode). Payload is parsed
+// locally as a transport check — domain validation stays server-side.
+function RevisionComposer({ detail }: { detail: MarketDatasetDetail }) {
+  const createRevision = useCreateRevision();
+  const createSuccessor = useCreateSuccessor();
+  const [dataType, setDataType] = useState<string>(detail.market_data_type);
+  const [title, setTitle] = useState("");
+  const [instrumentId, setInstrumentId] = useState("");
+  const [payloadText, setPayloadText] = useState("");
+  const [timezoneMode, setTimezoneMode] = useState<string>(TIMEZONE_MODES[0]);
+  const [timezoneIana, setTimezoneIana] = useState("");
+  const [payloadError, setPayloadError] = useState<string | null>(null);
+
+  // Returns the wire body, or null when the payload is unserializable (a local
+  // transport block — never a domain judgement).
+  const buildBody = (): RevisionBody | null => {
+    let payload: Record<string, unknown> = {};
+    if (payloadText.trim().length > 0) {
+      try {
+        const parsed: unknown = JSON.parse(payloadText);
+        if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+          setPayloadError("Payload must be a JSON object.");
+          return null;
+        }
+        payload = parsed as Record<string, unknown>;
+      } catch {
+        setPayloadError("Payload is not valid JSON.");
+        return null;
+      }
+    }
+    setPayloadError(null);
+    return {
+      market_data_type: dataType,
+      payload,
+      title: title.trim() || null,
+      instrument_id: instrumentId.trim() || null,
+      timezone_mode: timezoneMode,
+      // Only `custom` carries an IANA id; other modes send null and let the
+      // server resolve the zone (exchange/utc).
+      timezone_iana: timezoneMode === "custom" ? timezoneIana.trim() || null : null,
+    };
+  };
+
+  const appendRevision = (event: FormEvent) => {
+    event.preventDefault();
+    const body = buildBody();
+    if (body === null) return;
+    createRevision.mutate({
+      entity_id: detail.entity_id,
+      row_version: detail.row_version,
+      ...body,
+    });
+  };
+
+  const appendSuccessor = () => {
+    const body = buildBody();
+    if (body === null) return;
+    createSuccessor.mutate({ entity_id: detail.entity_id, ...body });
+  };
+
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <strong>New revision</strong>
+      <p className="page-sub" style={{ marginTop: 4 }}>
+        Append a DRAFT revision under optimistic concurrency (If-Match rv-{detail.row_version}), or a
+        successor that supersedes the current head. A stale row_version → 409 STALE_REVISION verbatim.
+      </p>
+      <form onSubmit={appendRevision}>
+        <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}>
+          <label htmlFor="md-rev-type">
+            Market data type
+            <select id="md-rev-type" value={dataType} onChange={(event) => setDataType(event.target.value)}>
+              {MARKET_DATA_TYPES.map((value) => (
+                <option key={value} value={value}>
+                  {value}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label htmlFor="md-rev-tz">
+            Timezone mode
+            <select
+              id="md-rev-tz"
+              value={timezoneMode}
+              onChange={(event) => setTimezoneMode(event.target.value)}
+            >
+              {TIMEZONE_MODES.map((value) => (
+                <option key={value} value={value}>
+                  {value}
+                </option>
+              ))}
+            </select>
+          </label>
+          {timezoneMode === "custom" ? (
+            <label htmlFor="md-rev-iana">
+              IANA timezone (required for custom)
+              <input
+                id="md-rev-iana"
+                value={timezoneIana}
+                onChange={(event) => setTimezoneIana(event.target.value)}
+                placeholder="America/New_York"
+              />
+            </label>
+          ) : null}
+          <label htmlFor="md-rev-title">
+            Title (optional)
+            <input id="md-rev-title" value={title} onChange={(event) => setTitle(event.target.value)} />
+          </label>
+          <label htmlFor="md-rev-instrument">
+            Instrument id (optional)
+            <input
+              id="md-rev-instrument"
+              value={instrumentId}
+              onChange={(event) => setInstrumentId(event.target.value)}
+              placeholder="BTCUSDT"
+            />
+          </label>
+          <label htmlFor="md-rev-payload">
+            Payload (optional JSON object)
+            <textarea
+              id="md-rev-payload"
+              rows={3}
+              value={payloadText}
+              onChange={(event) => setPayloadText(event.target.value)}
+              placeholder='{"source": "binance_futures"}'
+            />
+          </label>
+        </div>
+        <div style={{ display: "flex", gap: 12, marginTop: 8, flexWrap: "wrap" }}>
+          <button type="submit" className="btn btn-primary" disabled={createRevision.isPending}>
+            Append revision
+          </button>
+          <button
+            type="button"
+            className="btn"
+            disabled={createSuccessor.isPending}
+            onClick={appendSuccessor}
+          >
+            Create successor
+          </button>
+        </div>
+      </form>
+      {payloadError ? (
+        <p role="alert" style={{ color: "var(--down)" }}>
+          {payloadError}
+        </p>
+      ) : null}
+      {createRevision.isError ? (
+        <p role="alert" style={{ color: "var(--down)" }}>
+          {mutationErrorText(createRevision.error)}
+        </p>
+      ) : null}
+      {createRevision.data ? (
+        <p aria-live="polite">
+          Revision appended — <code>{createRevision.data.revision_id}</code> (v
+          {createRevision.data.revision_no}).
+        </p>
+      ) : null}
+      {createSuccessor.isError ? (
+        <p role="alert" style={{ color: "var(--down)" }}>
+          {mutationErrorText(createSuccessor.error)}
+        </p>
+      ) : null}
+      {createSuccessor.data ? (
+        <p aria-live="polite">
+          Successor created — <code>{createSuccessor.data.revision_id}</code> (v
+          {createSuccessor.data.revision_no}, {createSuccessor.data.revision_state}).
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+// Admin approve (VERIFIED → APPROVED, OCC) / deprecate (APPROVED → DEPRECATED, no
+// OCC) a chosen revision. The picker defaults to the current head; the server is
+// the sole authority on role + legal transition — a 403/409 renders verbatim.
+function ApprovalComposer({ detail }: { detail: MarketDatasetDetail }) {
+  const approve = useApproveRevision();
+  const deprecate = useDeprecateRevision();
+  const [revisionId, setRevisionId] = useState<string>(detail.revision_id);
+  const [note, setNote] = useState("");
+
+  const noteOrNull = note.trim() || null;
+
+  const submitApprove = (event: FormEvent) => {
+    event.preventDefault();
+    approve.mutate({
+      entity_id: detail.entity_id,
+      row_version: detail.row_version,
+      revision_id: revisionId,
+      note: noteOrNull,
+    });
+  };
+
+  const submitDeprecate = () => {
+    deprecate.mutate({ entity_id: detail.entity_id, revision_id: revisionId, note: noteOrNull });
+  };
+
+  return (
+    <div>
+      <strong>Admin approval</strong>
+      <p className="page-sub" style={{ marginTop: 4 }}>
+        Approve a VERIFIED revision (If-Match rv-{detail.row_version}) or deprecate an APPROVED one.
+        Admin-only server-side — a non-Admin sees the 403 envelope verbatim.
+      </p>
+      <form onSubmit={submitApprove}>
+        <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
+          <label htmlFor="md-approve-rev">
+            Target revision
+            <select
+              id="md-approve-rev"
+              value={revisionId}
+              onChange={(event) => setRevisionId(event.target.value)}
+            >
+              {detail.revisions.map((revision) => (
+                <option key={revision.revision_id} value={revision.revision_id}>
+                  {revisionOptionLabel(revision)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label htmlFor="md-approve-note">
+            Decision note (optional)
+            <input id="md-approve-note" value={note} onChange={(event) => setNote(event.target.value)} />
+          </label>
+        </div>
+        <div style={{ display: "flex", gap: 12, marginTop: 8, flexWrap: "wrap" }}>
+          <button type="submit" className="btn btn-primary" disabled={approve.isPending}>
+            Approve (Admin)
+          </button>
+          <button
+            type="button"
+            className="btn"
+            disabled={deprecate.isPending}
+            onClick={submitDeprecate}
+          >
+            Deprecate (Admin)
+          </button>
+        </div>
+      </form>
+      {approve.isError ? (
+        <p role="alert" style={{ color: "var(--down)" }}>
+          {mutationErrorText(approve.error)}
+        </p>
+      ) : null}
+      {approve.data ? (
+        <p aria-live="polite">
+          Approved — revision <code>{approve.data.revision_id}</code> is now {approve.data.revision_state}.
+        </p>
+      ) : null}
+      {deprecate.isError ? (
+        <p role="alert" style={{ color: "var(--down)" }}>
+          {mutationErrorText(deprecate.error)}
+        </p>
+      ) : null}
+      {deprecate.data ? (
+        <p aria-live="polite">
+          Deprecated — revision <code>{deprecate.data.revision_id}</code> is now{" "}
+          {deprecate.data.revision_state}.
+        </p>
       ) : null}
     </div>
   );

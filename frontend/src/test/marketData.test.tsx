@@ -103,6 +103,24 @@ const BUNDLE_RESULT = {
   market_data_type: "ohlcv",
 };
 
+const REVISION_RESULT = {
+  entity_id: "md_1",
+  revision_id: "rev_3",
+  revision_no: 3,
+  row_version: 5,
+};
+
+const SUCCESSOR_RESULT = {
+  entity_id: "md_1",
+  revision_id: "rev_4",
+  revision_no: 3,
+  revision_state: "draft",
+};
+
+const APPROVE_RESULT = { entity_id: "md_1", revision_id: "rev_1", revision_state: "approved" };
+
+const DEPRECATE_RESULT = { entity_id: "md_1", revision_id: "rev_1", revision_state: "deprecated" };
+
 // Order matters for the fragment-matching stub: action/detail fragments must
 // precede their prefixes (finalize contains /raw-uploads; every md_1 sub-path
 // contains /market-datasets; POST /market-datasets prefixes every other POST).
@@ -111,6 +129,10 @@ const BASE_ROUTES = {
   "POST /market-datasets/md_1/raw-uploads": START_UPLOAD_RESULT,
   "POST /market-datasets/md_1/analysis": ANALYSIS_RESULT,
   "POST /market-datasets/md_1/schema-mapping": MAPPING_RESULT,
+  "POST /market-datasets/md_1/revisions": REVISION_RESULT,
+  "POST /market-datasets/md_1/successor": SUCCESSOR_RESULT,
+  "POST /market-datasets/md_1/approve": APPROVE_RESULT,
+  "POST /market-datasets/md_1/deprecate": DEPRECATE_RESULT,
   "GET /market-datasets/md_1/approved-bundle": BUNDLE_RESULT,
   "GET /market-datasets/md_1": DETAIL_MD1,
   "GET /market-datasets/md_new": DETAIL_MD_NEW,
@@ -381,5 +403,133 @@ describe("Market Data page", () => {
     expect(
       screen.getByText("AUTHENTICATION_REQUIRED: Sign in to view market datasets."),
     ).toBeInTheDocument();
+  });
+
+  it("appends a revision with the If-Match rv token, a fresh Idempotency-Key and default fields", async () => {
+    const fetchMock = stubApi(BASE_ROUTES);
+    renderPage();
+    await openDetail();
+
+    fireEvent.click(screen.getByRole("button", { name: "Append revision" }));
+
+    expect(await screen.findByText(/Revision appended/)).toBeInTheDocument();
+    expect(screen.getByText("rev_3")).toBeInTheDocument();
+
+    const call = fetchMock.mock.calls.find(
+      ([url, init]) => String(url).includes("/revisions") && init?.method === "POST",
+    );
+    expect(call).toBeDefined();
+    const init = call?.[1] as RequestInit;
+    const headers = init.headers as Record<string, string>;
+    // If-Match "rv-N" mirrors etag_for_row_version(detail.row_version = 4).
+    expect(headers["If-Match"]).toBe('"rv-4"');
+    expect(headers["Idempotency-Key"]).toBeTruthy();
+    expect(JSON.parse(String(init.body))).toEqual({
+      market_data_type: "ohlcv",
+      payload: {},
+      title: null,
+      instrument_id: null,
+      timezone_mode: "exchange",
+      timezone_iana: null,
+    });
+  });
+
+  it("creates a successor without an If-Match or Idempotency-Key header", async () => {
+    const fetchMock = stubApi(BASE_ROUTES);
+    renderPage();
+    await openDetail();
+
+    fireEvent.click(screen.getByRole("button", { name: "Create successor" }));
+
+    expect(await screen.findByText(/Successor created/)).toBeInTheDocument();
+    expect(screen.getByText("rev_4")).toBeInTheDocument();
+
+    const call = fetchMock.mock.calls.find(
+      ([url, init]) => String(url).includes("/successor") && init?.method === "POST",
+    );
+    expect(call).toBeDefined();
+    const headers = (call?.[1] as RequestInit).headers as Record<string, string>;
+    // The successor route reads neither header — mirrored verbatim.
+    expect(headers["If-Match"]).toBeUndefined();
+    expect(headers["Idempotency-Key"]).toBeUndefined();
+  });
+
+  it("approves the chosen revision with the If-Match rv token and a fresh Idempotency-Key", async () => {
+    const fetchMock = stubApi(BASE_ROUTES);
+    renderPage();
+    await openDetail();
+
+    fireEvent.click(screen.getByRole("button", { name: "Approve (Admin)" }));
+
+    expect(await screen.findByText(/Approved — revision/)).toBeInTheDocument();
+
+    const call = fetchMock.mock.calls.find(
+      ([url, init]) => String(url).includes("/approve") && init?.method === "POST",
+    );
+    expect(call).toBeDefined();
+    const init = call?.[1] as RequestInit;
+    const headers = init.headers as Record<string, string>;
+    expect(headers["If-Match"]).toBe('"rv-4"');
+    expect(headers["Idempotency-Key"]).toBeTruthy();
+    // The picker defaults to the current head revision (rev_1) with no note.
+    expect(JSON.parse(String(init.body))).toEqual({ revision_id: "rev_1", note: null });
+  });
+
+  it("deprecates the chosen revision without an If-Match or Idempotency-Key header", async () => {
+    const fetchMock = stubApi(BASE_ROUTES);
+    renderPage();
+    await openDetail();
+
+    fireEvent.click(screen.getByRole("button", { name: "Deprecate (Admin)" }));
+
+    expect(await screen.findByText(/Deprecated — revision/)).toBeInTheDocument();
+
+    const call = fetchMock.mock.calls.find(
+      ([url, init]) => String(url).includes("/deprecate") && init?.method === "POST",
+    );
+    expect(call).toBeDefined();
+    const init = call?.[1] as RequestInit;
+    const headers = init.headers as Record<string, string>;
+    expect(headers["If-Match"]).toBeUndefined();
+    expect(headers["Idempotency-Key"]).toBeUndefined();
+    expect(JSON.parse(String(init.body))).toEqual({ revision_id: "rev_1", note: null });
+  });
+
+  it("surfaces an Admin-only approval denial verbatim (server is the sole authority)", async () => {
+    stubApi({
+      ...BASE_ROUTES,
+      "POST /market-datasets/md_1/approve": () => {
+        throw new Error("APPROVAL_REQUIRES_ADMIN: Only an administrator may approve a revision.");
+      },
+    });
+    renderPage();
+    await openDetail();
+
+    fireEvent.click(screen.getByRole("button", { name: "Approve (Admin)" }));
+
+    expect(
+      await screen.findByText("APPROVAL_REQUIRES_ADMIN: Only an administrator may approve a revision."),
+    ).toBeInTheDocument();
+  });
+
+  it("sends the IANA zone only for custom timezone mode", async () => {
+    const fetchMock = stubApi(BASE_ROUTES);
+    renderPage();
+    await openDetail();
+
+    fireEvent.change(screen.getByLabelText("Timezone mode"), { target: { value: "custom" } });
+    fireEvent.change(screen.getByLabelText(/IANA timezone/), {
+      target: { value: "America/New_York" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Append revision" }));
+
+    expect(await screen.findByText(/Revision appended/)).toBeInTheDocument();
+
+    const call = fetchMock.mock.calls.find(
+      ([url, init]) => String(url).includes("/revisions") && init?.method === "POST",
+    );
+    const body = JSON.parse(String((call?.[1] as RequestInit).body));
+    expect(body.timezone_mode).toBe("custom");
+    expect(body.timezone_iana).toBe("America/New_York");
   });
 });

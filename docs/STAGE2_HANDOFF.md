@@ -1119,7 +1119,49 @@ type carries it); created view datasets / analysis artifacts have NO list/read s
 (permanent until a backend projection lands — audit rows appear in Panel → Logs); no dedicated
 capability SSE event (`resource.changed` sweeps).
 
-## Next: post-V1 (continued) — TIER 2 (login + SSE + /v1/metrics + backtest pages + Arrange Metrics/Analysis Lab + first-Admin bootstrap + Panel/Logs + history compare/metrics rebind + capability registry page + provisioning dashboard + Trash restore page + CP candidate generation + Create Package request page + CP actions/Pre-Check page + capability operational POSTs landed; remaining placeholder pages + TIER 3 remain)
+## Post-V1 — live-data Package Library catalog page (TIER 2, frontend slice 14) ✅ landed (PR #97, merged → main `af7c66b`, feat `53394fe`)
+
+**FRONTEND-ONLY (3 new files + 1 edit)** — backend unchanged (1048), no migration, alembic head
+`0021_local_auth`, ENGINE_VERSION unchanged. The `/packages/library` placeholder becomes the real
+page: the V1 Package Library read surface (`routes/library.py`, doc 08 §3/§4/§9.2) is fully
+frontend-bound (both GETs). First of the 12 remaining placeholder pages — 11 remain. Frontend
+105 → **113** (+8 vitest). CI 3/3 green; self-review + local loop (0 CRITICAL/HIGH).
+
+- **NEW `lib/library.ts`:** wire types mirror `application/queries/library.py` verbatim —
+  `LibraryPackageRow`/`LibraryPage`/`LibraryPackageDetail` (live rationale-family resolution
+  `{id, name, pinned_name, family_active}`, Stage-2e `provenance` + immutable scan summary,
+  `revisions` history, ten-flag `PackagePermissions` in backend dataclass order +
+  `PERMISSION_FLAGS`/`PERFORMANCE_FIELDS` render-order mirrors). Hydration-only facet taxonomy
+  mirrors (`CATALOG_PACKAGE_KINDS`/`CATALOG_LIFECYCLE_STATES`/`PACKAGE_VALIDATION_STATES`/
+  `APPROVAL_STATES`/`VISIBILITY_SCOPES` + the `UNASSIGNED_FAMILY` sentinel) — selects hydrate
+  from these; the server re-validates every filter (`CatalogFilterInvalid` 422 verbatim). Hooks
+  under `["library"]` (no dedicated SSE event — `resource.changed` sweeps): `useLibraryPackages`
+  (the kind facet travels as the `type` route alias; empty facets NEVER sent; keyset cursor;
+  placeholderData) + `useLibraryPackage` (enabled-gated, `encodeURIComponent`). Read-only — no
+  mutation, no OCC token. `validationTone`/`approvalTone`/`lifecycleTone` presentation helpers.
+- **NEW `pages/Library.tsx`:** facet filter bar (5 taxonomy selects + a rationale-family select
+  hydrated from the shared `useRationaleFamilies` list incl. the `unassigned` sentinel +
+  free-text `q`), catalog table with orthogonal lifecycle/validation/approval badges (doc 08
+  §13 — the V18 Status dropdown stays split into its facets), cursor-stack `Pager`, detail
+  card: ten permission flags rendered as text (never colour-only), **L4 performance
+  availability labels verbatim (never fabricated zeros)**, contracts/dependency-snapshot/
+  validation-summary JSON, provenance + dependency-scan summary, revision history. A Guest sees
+  the 401 envelope verbatim (doc 08 §2 — UI visibility is never authorization).
+- **`App.tsx`:** `/packages/library` joins REAL_PATHS (12 → 13) + real Route; **`nav.ts`
+  UNCHANGED** (24 items — the nav item already existed as a placeholder).
+- **Tests:** NEW `test/library.test.tsx` (+8: index render with orthogonal facets scoped to the
+  table / facet query param + empty-facet omission / unassigned sentinel / q search / detail
+  permissions + N/A performance + provenance + history / keyset pager / `["library"]`
+  invalidation refetch / 401 verbatim; apiStub ORDERED — the detail fragment precedes the
+  `/library` list prefix).
+
+**Honest boundary:** read-only catalog slice — package ACTIONS (revise / request-validation /
+approve-publish / deprecate / soft-delete / export) are explained by the server-computed
+permission flags but NOT dispatched from this page (later slices; the detail ETag/`row_version`
+is already surfaced for their OCC tokens); catalog performance metrics are all `not_applicable`
+by server contract until runs are linked (doc 08 §3.2, L4).
+
+## Next: post-V1 (continued) — TIER 2 (login + SSE + /v1/metrics + backtest pages + Arrange Metrics/Analysis Lab + first-Admin bootstrap + Panel/Logs + history compare/metrics rebind + capability registry page + provisioning dashboard + Trash restore page + CP candidate generation + Create Package request page + CP actions/Pre-Check page + capability operational POSTs + Package Library page landed; 11 placeholder pages + TIER 3 remain)
 
 **V1 COMPLETE (Stages 0–8, docs 01–22) + Auth/IdP + Parquet Slice A + Backtest Engine Slice B + real indicator compute Slice C + `risk_based` sizing (a) + condition blocks (b) + condition extensions (b2) + two-package indicator-vs-indicator + higher-timeframe resampling (c) + per-condition multi-TF reference (i) + N-ary reference chain (ii) + VWAP directional key (d) + `formula_based` Kelly sizing + `position_size_limits` min/max cap (PR #63) landed (1015 tests).** The **Slice C indicator-compute + position-sizing follow-ups are now EFFECTIVELY COMPLETE — TIER 1 backend is DONE**:
 

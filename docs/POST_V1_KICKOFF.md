@@ -3,6 +3,50 @@
 > **Amaç:** V1 kapandı (Stage 0–8 COMPLETE). Bu doküman post-V1 durumunu, aday iş listesini
 > ve temiz oturumda yapıştırılacak resume prompt'u içerir.
 
+## Durum (2026-07-09, TIER 2 frontend — Research Data sayfası; PR #107 MERGED)
+
+**FRONTEND-ONLY (2 yeni + 1 edit + 1 test)** — backend DEĞİŞMEDİ (1048 sabit), migration YOK,
+alembic head `0021_local_auth` SABİT, `ENGINE_VERSION` SABİT. `/research-data` gerçek sayfa oldu —
+`routes/research_data.py` (doc 12) OKUMA yüzeyi (role-aware registry list + head detail) + sahip
+INGEST zinciri (create dataset [DR3 market-link] / upload-session start+finalize / durable 202
+analysis) bağlandı — 14 endpoint'in 6'sı. **Packages & Data grubunun SON gerçek sayfası.** Market
+Data sayfası (#103) deseninin birebir paraleli: read+ingest önce, revision lifecycle ertelendi.
+Frontend 146 → **157** (+11 vitest). main = `38988a2` (Merge #107), feat `5049f4e`. CI yeşil;
+self-review 0 CRITICAL/HIGH.
+
+**AMPİRİK bulgu (route/command okundu):** create + upload-session `Idempotency-Key` OKUMUYOR →
+gönderilmedi; finalize + analysis okuyor → deneme başına taze key. Her endpoint Admin/Supervisor/
+Agent gate'li (`ensure_can_access_page` — User/Guest 403 verbatim); create ayrıca DR3 (ACTIVE+
+APPROVED linked market revision yoksa 409 `DEPENDENCY_BLOCKED`). `research_data.router` `market_data`
+ile aynı `prefix=base` → `/api/v1/research-datasets`.
+
+**Reuse anchor'ları:** `lib/researchData.ts` — wire tipleri `_revision_dict`/`get_research_dataset_detail`
++ command dict aynası; `RESEARCH_CATEGORIES`(8; `other_custom`→`custom_category` ZORUNLU, diğerleri
+null)/`USAGE_SCOPES`(3)/`RESEARCH_REVISION_STATES`(7; verified≠approved, approval_revoked) aynaları +
+`researchStateTone`/`OTHER_CUSTOM_CATEGORY`; `["research-data"]` hook'ları (özel SSE YOK →
+`resource.changed`): `useResearchDatasets` keyset + `useResearchDataset` (dönen `row_version` = ertelenen
+lifecycle OCC token'ı). `useCreateDataset` Idempotency-Key YOK; `useStartUpload` no-idem;
+`useFinalizeUpload`/`useRequestAnalysis` taze key. `pages/ResearchData.tsx` = `CreateDatasetCard` (DR3
+`market_entity_id` required + category/usage_scope + `other_custom`→custom_category) + `RegistryCard`
+(keyset) + `DetailCard` (meaning/timing/usage tablo + history + Step 1/2 ingest). `App.tsx` REAL_PATHS
+16→17; `nav.ts` 24 sabit. `test/researchData.test.tsx` +11 (apiStub SIRALI).
+
+**Dürüst sınır:** revision lifecycle (append DRAFT/successor revision, `set_time_policy`,
+`define_field`/`define_feature`, Admin `approve`/`revoke`, agent/backtest evidence bundles — 8
+endpoint) doğal follow-up'a ertelendi (detay `row_version` If-Match OCC token'ı hazır); ham baytlar
+sayfadan geçmez; `["jobs"]` liste yüzeyi kalıcı yok.
+
+**SIRADAKİ İŞ ADAYLARI (BAŞLARKEN kullanıcıyla TEYİT ET):** (a) **Research Data lifecycle follow-up**
+(revise/successor/time-policy/field+feature defs/Admin approve+revoke/evidence bundles — Market Data
+#105 deseni + `market_data.postWithOcc` If-Match `"rv-N"`+Idem helper TABAN) — doğal sıradaki; VEYA
+kalan **7 placeholder sayfa** (hepsinin V1 backend yüzeyi landed): Workspace (`strategy.py` Strategy
+Details / `trading_signal.py` / `trade_log.py` / outsource-signal), Backtest (`allocation.py` Portfolio
+/ `readiness.py` Ready Check), Docs (`manual.py` User Manual); + ESP/Library registry MUTASYON
+slice'ları (Admin-only, `X-Registry-Version` OCC — Rationale shared-editing deseni TABAN). TIER 3
+deferred: retention auto-purge, data-queue redelivery, SSE streaming e2e, tool-call status shadowing.
+
+---
+
 ## Durum (2026-07-09, TIER 2 frontend — Market Data lifecycle aksiyonları; PR #105 MERGED)
 
 **FRONTEND-ONLY (3 edit)** — backend DEĞİŞMEDİ (1048 sabit), migration YOK, alembic head
@@ -1361,17 +1405,17 @@ tarihsel referans** olarak duruyor.
 ## ⤵️ YENİ OTURUMDA YAPIŞTIR (resume prompt)
 
 ```
-Entropia — post-V1 TIER 2 devam. STALE-BY-DEFAULT: Market Data lifecycle aksiyonları (PR #105) +
-kapanış docs (PR #106) MERGE EDİLDİ varsayma, git'ten doğrula.
+Entropia — post-V1 TIER 2 devam. STALE-BY-DEFAULT: Research Data sayfası (PR #107) +
+kapanış docs (PR #108) MERGE EDİLDİ varsayma, git'ten doğrula.
 
 ÖNCE DOĞRULA: git fetch && git log --oneline origin/main -6 && gh pr list --state all -L 8.
-main = db7b585 (Merge #105) olmalı; docs #106 merge sonrası daha ileri (açıksa önce merge iste).
+main = 38988a2 (Merge #107) olmalı; docs #108 merge sonrası daha ileri (açıksa önce merge iste).
 alembic head 0021_local_auth (DEĞİŞMEDİ); ENGINE_VERSION = backtest-engine-v2-position-size-limits
-(DEĞİŞMEDİ). Backend 1048 test, frontend 146. Yeni branch'i MUTLAKA origin/main'den aç.
+(DEĞİŞMEDİ). Backend 1048 test, frontend 157. Yeni branch'i MUTLAKA origin/main'den aç.
 
-ÖNCE OKU (authority order): docs/POST_V1_KICKOFF.md (en üst "Durum" bloğu — PR #105 + "SIRADAKİ
-İŞ ADAYLARI" + en alttaki resume) → docs/STAGE2_HANDOFF.md ("Market Data lifecycle actions landed
-(PR #105)" + "## Next") → CLAUDE.md "Current position".
+ÖNCE OKU (authority order): docs/POST_V1_KICKOFF.md (en üst "Durum" bloğu — PR #107 + "SIRADAKİ
+İŞ ADAYLARI" + en alttaki resume) → docs/STAGE2_HANDOFF.md ("Research Data page landed
+(PR #107)" + "## Next") → CLAUDE.md "Current position".
 
 DURUM: TIER 1 backend EFEKTİF TAMAM. FRONTEND landed (hepsi MERGED): login #65, SSE #67,
 /v1/metrics #69, backtest RUN/History #72, Arrange Metrics + Analysis Lab #74, Panel/Logs #78,
@@ -1384,16 +1428,23 @@ useDeprecateRevision; postWithOcc helper If-Match "rv-N"+Idempotency-Key [ration
 deseni]; successor+deprecate HİÇBİR header taşımaz (route okumuyor — AMPİRİK), revisions+approve İKİSİ
 de; approve+deprecate Admin-only ensure_can_approve; TIMEZONE_MODES aynası; pages/MarketData.tsx
 LifecycleSection = RevisionComposer [append revision OCC / create successor OCC-yok] + ApprovalComposer
-[Admin approve/deprecate, revision picker]; +6 vitest → 146). BACKEND: first-Admin bootstrap #76 +
+[Admin approve/deprecate, revision picker]; +6 vitest → 146), Research Data sayfası #107 (YENİ —
+routes/research_data.py read+ingest 6/14 endpoint: lib/researchData.ts useCreateDataset [Idem YOK]/
+useStartUpload [no-idem]/useFinalizeUpload+useRequestAnalysis [taze key]; DR3 market-link zorunlu →
+409 DEPENDENCY_BLOCKED; RESEARCH_CATEGORIES(8, other_custom→custom_category ZORUNLU)/USAGE_SCOPES(3)/
+RESEARCH_REVISION_STATES(7) aynaları; ["research-data"] hook'ları; App REAL_PATHS 16→17, nav 24 sabit;
++11 vitest → 157; revision lifecycle 8-endpoint doğal follow-up). BACKEND: first-Admin bootstrap #76 +
 bootstrap-status #84 + CP-Gen deterministic candidate generation #89 (LLM YOK).
 
-SIRADAKİ İŞ (BAŞLARKEN kullanıcıyla TEYİT ET): kalan 8 placeholder sayfa (HEPSİNİN V1 backend
-yüzeyi landed): (1) Packages & Data — research_data.py Research Data (grubu kapatır) — doğal
-sıradaki; (2) Workspace — strategy.py Strategy Details / trading_signal.py / trade_log.py /
-outsource-signal; (3) Backtest — allocation.py Portfolio / readiness.py Ready Check (RUN/History
-zaten bağlı); (4) Docs — manual.py User Manual; + ESP/Library registry MUTASYON slice'ları
-(Admin-only, X-Registry-Version OCC — Rationale shared-editing deseni TABAN). TIER 3 deferred:
-retention auto-purge, data-queue redelivery, SSE streaming e2e, tool-call status shadowing.
+SIRADAKİ İŞ (BAŞLARKEN kullanıcıyla TEYİT ET): (a) Research Data lifecycle follow-up — Market Data
+#105 deseni (revise/successor/time-policy/field+feature defs/Admin approve+revoke/evidence bundles;
+lib/marketData.ts postWithOcc If-Match "rv-N"+Idem helper TABAN) — doğal sıradaki; VEYA kalan 7
+placeholder sayfa (HEPSİNİN V1 backend yüzeyi landed): (1) Workspace — strategy.py Strategy Details /
+trading_signal.py / trade_log.py / outsource-signal; (2) Backtest — allocation.py Portfolio /
+readiness.py Ready Check (RUN/History zaten bağlı); (3) Docs — manual.py User Manual; + ESP/Library
+registry MUTASYON slice'ları (Admin-only, X-Registry-Version OCC — Rationale shared-editing deseni
+TABAN). TIER 3 deferred: retention auto-purge, data-queue redelivery, SSE streaming e2e, tool-call
+status shadowing.
 
 DÜRÜST SINIR (KALICI): ["jobs"] backend liste yüzeyi YOK; ham baytlar sayfadan geçmez; view dataset
 / analysis artifact READ yüzeyi YOK; capability/CP/library/esp/rationale/market-data'nın özel SSE
@@ -1405,7 +1456,7 @@ invalidateQueries({queryKey}) object-form. tsconfig noUncheckedIndexedAccess AÇ
 exactOptionalPropertyTypes KAPALI.
 
 YÖNTEM: Workflow KULLANMA; direct-author. Frontend loop: cd frontend (absolute path) &&
-npm run typecheck && npm run lint && npm test && npm run build (146/146 geçmeli) + yeni
+npm run typecheck && npm run lint && npm test && npm run build (157/157 geçmeli) + yeni
 component/unit test (test/helpers/apiStub.ts reuse — SIRALI eşleşme: detay/aksiyon route'u liste
 prefix'inden ÖNCE; facet/select assert'lerini within ile tabloya scope'la; ready-check'i BENZERSİZ
 metne bağla — composer metninde "rv N" gibi mevcut ready-check ile çakışacak metinden kaçın). YENİ

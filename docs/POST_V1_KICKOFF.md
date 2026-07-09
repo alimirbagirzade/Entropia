@@ -3,6 +3,50 @@
 > **Amaç:** V1 kapandı (Stage 0–8 COMPLETE). Bu doküman post-V1 durumunu, aday iş listesini
 > ve temiz oturumda yapıştırılacak resume prompt'u içerir.
 
+## Durum (2026-07-10, TIER 2 frontend — Research Data lifecycle aksiyonları; PR #109 MERGED)
+
+**FRONTEND-ONLY (2 yeni + 3 edit)** — backend DEĞİŞMEDİ (1048 sabit), migration YOK, alembic head
+`0021_local_auth` SABİT, `ENGINE_VERSION` SABİT. PR #107'nin read+ingest dürüst sınırı kapandı:
+`routes/research_data.py`'nin bağlanmayan 8 lifecycle endpoint'i bağlandı → Research Data sayfası
+**14/14 endpoint** (Packages & Data grubu TAM). Frontend 157 → **168** (+11 vitest). main = `32d07e4`
+(Merge #109), feat `2e488dc`. CI 3/3 yeşil; self-review 0 CRITICAL/HIGH.
+
+**AMPİRİK route haritası (imzalar OKUNDU — PR #105 dersi):** revise/approve/revoke → `postWithOcc`
+(If-Match `"rv-N"` + taze Idempotency-Key); time-policy/field-def/feature-def → header YOK;
+bundles/agent + bundles/backtest-evidence → PURE READ compile probe (durable row/audit/Idem/
+invalidation YOK — ESP resolve-probe deseni). approve/revoke Admin-only (`ensure_can_approve`/
+`ensure_can_revoke` → `APPROVAL_REQUIRES_ADMIN` 403 verbatim). Validation: `fixed_delay`→delay
+zorunlu/diğerleri null; `custom` timezone→IANA zorunlu/diğerleri null; `other_custom`→custom_category
+zorunlu. approve ayrıca DR3 (`DEPENDENCY_BLOCKED`) + DR4 (`TIME_POLICY_INVALID`) yeniden kontrol.
+
+**Reuse anchor'ları:** `lib/researchData.ts` (genişletildi) — 8 hook + taksonomi aynaları
+(`EVENT_TIME_SEMANTICS`/`AVAILABLE_TIME_POLICIES`/`FIXED_DELAY_POLICY`/`RESEARCH_TIMEZONE_MODES`/
+`CUSTOM_TIMEZONE_MODE`) + `postWithOcc` (marketData birebir kopyası); `useCreateRevision` (OCC, body
+`entity_id`/`row_version` YOK) / `useSetTimePolicy` / `useDefineField` / `useDefineFeature` /
+`useApproveRevision` / `useRevokeApproval` (invalidate `["research-data"]`+`["audit"]`) /
+`useCompileAgentBundle` / `useCompileEvidenceBundle` (invalidation YOK). `components/ResearchLifecycle.tsx`
+(yeni, 713 satır) — 6 composer DetailCard'da (`key={detail.data.entity_id}`): ReviseComposer /
+TimePolicyComposer / FieldDefinitionComposer (`FIELD_INPUTS` map) / FeatureDefinitionComposer /
+ApprovalComposer (revision picker) / BundleComposer (+`BundleResultView`). `pages/ResearchData.tsx` =
+import+render+yorum tazeleme. `test/researchDataLifecycle.test.tsx` +11 (apiStub SIRALI — 8 aksiyon
+route'u liste prefix'inden ÖNCE). `test/researchData.test.tsx` 2 assertion `within(identityTable)`
+scope'landı (lifecycle `<option>`'ları event-time semantics + "rv 4" metnini paylaşıyor). App/nav
+UNCHANGED (REAL_PATHS 17, nav 24).
+
+**Dürüst sınır:** ham baytlar sayfadan geçmez; `["jobs"]` liste yüzeyi kalıcı yok; bundle'lar pure read
+(kalıcı read yüzeyi yok — command return + `bundle_hash`); özel research-data SSE yok
+(`resource.changed`). **routes/research_data.py TAM bağlı (14/14) — Packages & Data grubu kapandı.**
+
+**SIRADAKİ İŞ ADAYLARI (BAŞLARKEN kullanıcıyla TEYİT ET):** kalan **7 placeholder sayfa** (hepsinin
+V1 backend yüzeyi landed): (1) Workspace — `strategy.py` Strategy Details / `trading_signal.py` /
+`trade_log.py` / outsource-signal; (2) Backtest — `allocation.py` Portfolio / `readiness.py` Ready
+Check (RUN/History zaten bağlı); (3) Docs — `manual.py` User Manual; + ESP/Library registry MUTASYON
+slice'ları (Admin-only, `X-Registry-Version` OCC — Rationale shared-editing / marketData `postWithOcc`
+deseni TABAN). TIER 3 deferred: retention auto-purge, data-queue redelivery, SSE streaming e2e,
+tool-call status shadowing.
+
+---
+
 ## Durum (2026-07-09, TIER 2 frontend — Research Data sayfası; PR #107 MERGED)
 
 **FRONTEND-ONLY (2 yeni + 1 edit + 1 test)** — backend DEĞİŞMEDİ (1048 sabit), migration YOK,
@@ -1405,50 +1449,49 @@ tarihsel referans** olarak duruyor.
 ## ⤵️ YENİ OTURUMDA YAPIŞTIR (resume prompt)
 
 ```
-Entropia — post-V1 TIER 2 devam. STALE-BY-DEFAULT: Research Data sayfası (PR #107) +
-kapanış docs (PR #108) MERGE EDİLDİ varsayma, git'ten doğrula.
+Entropia — post-V1 TIER 2 devam. STALE-BY-DEFAULT: Research Data lifecycle (PR #109) +
+kapanış docs (PR #110) MERGE EDİLDİ varsayma, git'ten doğrula.
 
 ÖNCE DOĞRULA: git fetch && git log --oneline origin/main -6 && gh pr list --state all -L 8.
-main = 38988a2 (Merge #107) olmalı; docs #108 merge sonrası daha ileri (açıksa önce merge iste).
+main = 32d07e4 (Merge #109) olmalı; docs #110 merge sonrası daha ileri (açıksa önce merge iste).
 alembic head 0021_local_auth (DEĞİŞMEDİ); ENGINE_VERSION = backtest-engine-v2-position-size-limits
-(DEĞİŞMEDİ). Backend 1048 test, frontend 157. Yeni branch'i MUTLAKA origin/main'den aç.
+(DEĞİŞMEDİ). Backend 1048 test, frontend 168. Yeni branch'i MUTLAKA origin/main'den aç.
 
-ÖNCE OKU (authority order): docs/POST_V1_KICKOFF.md (en üst "Durum" bloğu — PR #107 + "SIRADAKİ
-İŞ ADAYLARI" + en alttaki resume) → docs/STAGE2_HANDOFF.md ("Research Data page landed
-(PR #107)" + "## Next") → CLAUDE.md "Current position".
+ÖNCE OKU (authority order): docs/POST_V1_KICKOFF.md (en üst "Durum" bloğu — PR #109 + "SIRADAKİ
+İŞ ADAYLARI" + en alttaki resume) → docs/STAGE2_HANDOFF.md ("Research Data lifecycle actions landed
+(PR #109)" + "## Next") → CLAUDE.md "Current position".
 
 DURUM: TIER 1 backend EFEKTİF TAMAM. FRONTEND landed (hepsi MERGED): login #65, SSE #67,
 /v1/metrics #69, backtest RUN/History #72, Arrange Metrics + Analysis Lab #74, Panel/Logs #78,
 history compare + metrics rebind #80, Future Dev registry #82, provisioning dashboard #84, Trash
 restore #86, auth-invalidation #88, Create Package #91, CP aksiyonları + Pre-Check #93, gated
 capability POST'ları #95, Package Library #97, Embedded System Packages #99, Rationale Families
-#101, Market Data sayfası #103, Market Data lifecycle aksiyonları #105 (YENİ — routes/market_data.py
-10/10 endpoint bağlı: lib/marketData.ts useCreateRevision/useCreateSuccessor/useApproveRevision/
-useDeprecateRevision; postWithOcc helper If-Match "rv-N"+Idempotency-Key [rationale useSoftDeleteFamily
-deseni]; successor+deprecate HİÇBİR header taşımaz (route okumuyor — AMPİRİK), revisions+approve İKİSİ
-de; approve+deprecate Admin-only ensure_can_approve; TIMEZONE_MODES aynası; pages/MarketData.tsx
-LifecycleSection = RevisionComposer [append revision OCC / create successor OCC-yok] + ApprovalComposer
-[Admin approve/deprecate, revision picker]; +6 vitest → 146), Research Data sayfası #107 (YENİ —
-routes/research_data.py read+ingest 6/14 endpoint: lib/researchData.ts useCreateDataset [Idem YOK]/
-useStartUpload [no-idem]/useFinalizeUpload+useRequestAnalysis [taze key]; DR3 market-link zorunlu →
-409 DEPENDENCY_BLOCKED; RESEARCH_CATEGORIES(8, other_custom→custom_category ZORUNLU)/USAGE_SCOPES(3)/
-RESEARCH_REVISION_STATES(7) aynaları; ["research-data"] hook'ları; App REAL_PATHS 16→17, nav 24 sabit;
-+11 vitest → 157; revision lifecycle 8-endpoint doğal follow-up). BACKEND: first-Admin bootstrap #76 +
-bootstrap-status #84 + CP-Gen deterministic candidate generation #89 (LLM YOK).
+#101, Market Data sayfası #103, Market Data lifecycle aksiyonları #105, Research Data sayfası #107,
+Research Data lifecycle aksiyonları #109 (YENİ — routes/research_data.py 8 lifecycle endpoint bağlandı
+→ sayfa 14/14 endpoint, Packages & Data grubu TAM: lib/researchData.ts useCreateRevision [OCC, body
+entity_id/row_version YOK]/useSetTimePolicy/useDefineField/useDefineFeature [3'ü header YOK]/
+useApproveRevision/useRevokeApproval [OCC, Admin]/useCompileAgentBundle/useCompileEvidenceBundle
+[PURE READ, Idem+invalidation YOK]; postWithOcc If-Match "rv-N"+taze Idempotency-Key [marketData
+birebir]; EVENT_TIME_SEMANTICS/AVAILABLE_TIME_POLICIES/FIXED_DELAY_POLICY/RESEARCH_TIMEZONE_MODES/
+CUSTOM_TIMEZONE_MODE aynaları; validation fixed_delay→delay zorunlu/diğerleri null, custom timezone→
+IANA zorunlu; components/ResearchLifecycle.tsx 6 composer DetailCard'da key={entity_id};
+pages/ResearchData.tsx import+render+yorum; test/researchDataLifecycle.test.tsx +11 apiStub SIRALI +
+researchData.test.tsx 2 assertion within(identityTable) scope; App/nav UNCHANGED REAL_PATHS 17 nav 24;
++11 vitest → 168). BACKEND: first-Admin bootstrap #76 + bootstrap-status #84 + CP-Gen deterministic
+candidate generation #89 (LLM YOK).
 
-SIRADAKİ İŞ (BAŞLARKEN kullanıcıyla TEYİT ET): (a) Research Data lifecycle follow-up — Market Data
-#105 deseni (revise/successor/time-policy/field+feature defs/Admin approve+revoke/evidence bundles;
-lib/marketData.ts postWithOcc If-Match "rv-N"+Idem helper TABAN) — doğal sıradaki; VEYA kalan 7
-placeholder sayfa (HEPSİNİN V1 backend yüzeyi landed): (1) Workspace — strategy.py Strategy Details /
-trading_signal.py / trade_log.py / outsource-signal; (2) Backtest — allocation.py Portfolio /
-readiness.py Ready Check (RUN/History zaten bağlı); (3) Docs — manual.py User Manual; + ESP/Library
-registry MUTASYON slice'ları (Admin-only, X-Registry-Version OCC — Rationale shared-editing deseni
-TABAN). TIER 3 deferred: retention auto-purge, data-queue redelivery, SSE streaming e2e, tool-call
-status shadowing.
+SIRADAKİ İŞ (BAŞLARKEN kullanıcıyla TEYİT ET): kalan 7 placeholder sayfa (HEPSİNİN V1 backend yüzeyi
+landed): (1) Workspace — strategy.py Strategy Details / trading_signal.py / trade_log.py /
+outsource-signal; (2) Backtest — allocation.py Portfolio / readiness.py Ready Check (RUN/History zaten
+bağlı); (3) Docs — manual.py User Manual; VEYA ESP/Library registry MUTASYON slice'ları (Admin-only,
+X-Registry-Version OCC — Rationale shared-editing / marketData postWithOcc deseni TABAN; route
+imzalarını ÖNCE OKU — bazı sub-action OCC/Idem okumayabilir). TIER 3 deferred: retention auto-purge,
+data-queue redelivery, SSE streaming e2e, tool-call status shadowing.
 
 DÜRÜST SINIR (KALICI): ["jobs"] backend liste yüzeyi YOK; ham baytlar sayfadan geçmez; view dataset
-/ analysis artifact READ yüzeyi YOK; capability/CP/library/esp/rationale/market-data'nın özel SSE
-event'i yok (resource.changed süpürür).
+/ analysis artifact READ yüzeyi YOK; bundle compiler'lar pure read (kalıcı read yüzeyi yok);
+capability/CP/library/esp/rationale/market-data/research-data'nın özel SSE event'i yok
+(resource.changed süpürür).
 
 FRONTEND STACK: Vite 8 + React 18 + react-router 6 + @tanstack/react-query 5 + react-hook-form +
 vitest/jsdom + @testing-library. Alias @ = src; kök frontend/src/. react-query v5 →
@@ -1456,16 +1499,16 @@ invalidateQueries({queryKey}) object-form. tsconfig noUncheckedIndexedAccess AÇ
 exactOptionalPropertyTypes KAPALI.
 
 YÖNTEM: Workflow KULLANMA; direct-author. Frontend loop: cd frontend (absolute path) &&
-npm run typecheck && npm run lint && npm test && npm run build (157/157 geçmeli) + yeni
+npm run typecheck && npm run lint && npm test && npm run build (168/168 geçmeli) + yeni
 component/unit test (test/helpers/apiStub.ts reuse — SIRALI eşleşme: detay/aksiyon route'u liste
-prefix'inden ÖNCE; facet/select assert'lerini within ile tabloya scope'la; ready-check'i BENZERSİZ
-metne bağla — composer metninde "rv N" gibi mevcut ready-check ile çakışacak metinden kaçın). YENİ
-dosya heredoc (gate-free); mevcut dosya Edit → GateGuard 4-fact (importer Grep / public-API /
-data-schema / user-request verbatim → gate İLK denemeyi fact'ler sunulsa da bloklar → aynı çağrıyı
-aynen tekrarla); ilk Bash da fact-gate'li; docs da gate'lenir. CRITICAL/HIGH AMPİRİK doğrula (route/
-command imzasını OKU — handoff özeti yanlış olabilir) → commit (conventional feat(post-v1), branch
-feat/post-v1-frontend-<slug> origin/main'den, attribution YOK) → PR → CI background poll
-(until ! gh pr checks <n>|grep -q pending) → merge KULLANICIDA (agent self-merge auto-mode
-classifier tarafından BLOKLU). Türkçe, MALİYET BİLİNÇLİ. Kapanışta: handoff + kickoff (resume
-tazele) + CLAUDE.md + ecc knowledge-graph.
+prefix'inden ÖNCE; facet/select assert'lerini within ile tabloya scope'la; select <option>'ları detay
+değerleriyle çakışabilir → detay assertion'ı within(table) ile scope'la). YENİ dosya heredoc
+(gate-free); mevcut dosya Edit → GateGuard 4-fact (importer Grep / public-API / data-schema /
+user-request verbatim → gate İLK denemeyi fact'ler sunulsa da bloklar → aynı çağrıyı aynen tekrarla;
+aynı dosyaya 2.+ edit gate-siz); ilk Bash da fact-gate'li (oturum/gün sınırı sonrası tekrar); docs da
+gate'lenir. CRITICAL/HIGH AMPİRİK doğrula (route/command imzasını OKU — handoff özeti yanlış olabilir)
+→ commit (conventional feat(post-v1), branch feat/post-v1-frontend-<slug> origin/main'den, attribution
+YOK) → PR → CI background poll (until ! gh pr checks <n>|grep -q pending) → merge KULLANICIDA (agent
+self-merge auto-mode classifier tarafından BLOKLU). Türkçe, MALİYET BİLİNÇLİ. Kapanışta: handoff +
+kickoff (resume tazele) + CLAUDE.md + ecc knowledge-graph.
 ```

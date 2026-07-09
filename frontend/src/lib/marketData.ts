@@ -2,11 +2,15 @@
 // a dataset Root + immutable revisions move DRAFT -> UPLOADING -> ANALYZING ->
 // NEEDS_REVIEW -> VERIFIED -> (Admin) APPROVED; only an ACTIVE+APPROVED revision
 // feeds research/backtests. This slice binds the READ surface (registry list,
-// detail, approved-bundle resolve) plus the owner INGEST chain (create dataset,
-// raw-upload start/finalize, durable analysis job, schema mapping). Revision
-// lifecycle actions (create revision / successor / Admin approve / deprecate —
-// If-Match "rv-N" OCC + Idempotency-Key) are a later slice; the detail's
-// row_version is ready as their OCC token.
+// detail, approved-bundle resolve), the owner INGEST chain (create dataset,
+// raw-upload start/finalize, durable analysis job, schema mapping) AND the
+// revision lifecycle actions: append a DRAFT revision under OCC, append a
+// superseding successor, Admin-approve a VERIFIED revision and Admin-deprecate an
+// APPROVED one. Revisions + approve carry the root row_version as an
+// If-Match "rv-N" ETag (etag_for_row_version) + a fresh Idempotency-Key per
+// attempt; successor + deprecate carry neither (their routes read no such header).
+// Approve + deprecate are Admin-only SERVER-side (ensure_can_approve) — the UI
+// never pre-gates, a denial renders the 403 envelope verbatim.
 //
 // All hooks live under ["market-data"]; there is no dedicated market-data SSE
 // event (commands emit resource.changed), so the full-refresh sweep covers them.
@@ -122,6 +126,12 @@ export const MARKET_REVISION_STATES = [
   "approved",
   "deprecated",
 ] as const;
+
+// TimezoneMode (domain/market_data/enums.py): declared source-timezone semantics
+// a revision must carry. `custom` requires an IANA id — the server rejects a
+// custom mode with no zone (TimezoneSpec validation); the UI only surfaces the
+// IANA input for `custom` and never fabricates a default zone.
+export const TIMEZONE_MODES = ["exchange", "utc", "custom"] as const;
 
 // ---------------------------------------------------------------------------
 // Presentation helpers — server strings stay verbatim over the wire.
@@ -308,6 +318,152 @@ export function useConfirmMapping() {
       api.post<SchemaMappingResult>(
         `/market-datasets/${encodeURIComponent(entity_id)}/schema-mapping`,
         confirmed_mapping === undefined ? rest : { ...rest, confirmed_mapping },
+      ),
+    onSuccess: () => invalidateMarketData(queryClient),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Revision lifecycle mutations (doc 11 §5) — the four actions that move a
+// dataset through its revision chain. Draft edits are owner-or-Admin, approve +
+// deprecate are Admin-only; ALL gates live server-side, the UI never pre-gates.
+// ---------------------------------------------------------------------------
+
+// create_market_dataset_revision -> {entity_id, revision_id, revision_no,
+// row_version}. row_version is the root's post-append token — a subsequent OCC
+// action must re-read the detail rather than reuse this stale value.
+export interface CreateRevisionResult {
+  entity_id: string;
+  revision_id: string;
+  revision_no: number;
+  row_version: number;
+}
+
+// create_successor_revision (route dict) -> {entity_id, revision_id,
+// revision_no, revision_state}.
+export interface SuccessorResult {
+  entity_id: string;
+  revision_id: string;
+  revision_no: number;
+  revision_state: string;
+}
+
+// approve_market_dataset_revision / deprecate_market_dataset_revision share the
+// {entity_id, revision_id, revision_state} return shape.
+export interface ApprovalResult {
+  entity_id: string;
+  revision_id: string;
+  revision_state: string;
+}
+
+// The revision body shared by the create-revision and successor routes
+// (CreateRevisionRequest). timezone_mode is REQUIRED by the request schema even
+// for successor (whose command ignores it); timezone_iana is null unless mode is
+// `custom` (the server re-validates the IANA requirement).
+export interface RevisionBody {
+  market_data_type: string;
+  payload: Record<string, unknown>;
+  title: string | null;
+  instrument_id: string | null;
+  timezone_mode: string;
+  timezone_iana: string | null;
+}
+
+export interface CreateRevisionInput extends RevisionBody {
+  entity_id: string;
+  // The root row_version read from the detail — the If-Match OCC token. A stale
+  // value -> 409 STALE_REVISION verbatim.
+  row_version: number;
+}
+
+export type CreateSuccessorInput = RevisionBody & { entity_id: string };
+
+export interface ApprovalInput {
+  entity_id: string;
+  revision_id: string;
+  note: string | null;
+  // Only revisions + approve carry OCC; deprecate reads no If-Match, so its hook
+  // omits row_version entirely (see useDeprecateRevision).
+  row_version: number;
+}
+
+// If-Match "rv-N" OCC token + a fresh Idempotency-Key per attempt — the exact
+// header pair etag_for_row_version + the idempotent commands expect (revisions,
+// approve). Mirrors lib/rationale.ts useSoftDeleteFamily / lib/createPackage.ts.
+function postWithOcc<T>(path: string, rowVersion: number, body: unknown): Promise<T> {
+  return apiRequest<T>(path, {
+    method: "POST",
+    headers: { "If-Match": `"rv-${rowVersion}"`, "Idempotency-Key": crypto.randomUUID() },
+    body,
+  });
+}
+
+function revisionBody(input: RevisionBody): RevisionBody {
+  return {
+    market_data_type: input.market_data_type,
+    payload: input.payload,
+    title: input.title,
+    instrument_id: input.instrument_id,
+    timezone_mode: input.timezone_mode,
+    timezone_iana: input.timezone_iana,
+  };
+}
+
+// Append a new DRAFT revision under OCC. A stale row_version -> 409; a missing/
+// invalid timezone -> the server's TIMEZONE_REQUIRED / validation envelope.
+export function useCreateRevision() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ entity_id, row_version, ...rest }: CreateRevisionInput) =>
+      postWithOcc<CreateRevisionResult>(
+        `/market-datasets/${encodeURIComponent(entity_id)}/revisions`,
+        row_version,
+        revisionBody(rest),
+      ),
+    onSuccess: () => invalidateMarketData(queryClient),
+  });
+}
+
+// Append a superseding successor DRAFT (prior revision stays immutable,
+// recorded as supersedes_revision_id). The route reads no If-Match/Idempotency-
+// Key — none is sent (mirrored verbatim).
+export function useCreateSuccessor() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ entity_id, ...rest }: CreateSuccessorInput) =>
+      api.post<SuccessorResult>(
+        `/market-datasets/${encodeURIComponent(entity_id)}/successor`,
+        revisionBody(rest),
+      ),
+    onSuccess: () => invalidateMarketData(queryClient),
+  });
+}
+
+// Admin-only: move a VERIFIED revision -> APPROVED under OCC (If-Match +
+// Idempotency-Key). A non-Admin -> 403 APPROVAL_REQUIRES_ADMIN verbatim; a
+// non-verified revision -> 409 illegal-transition verbatim.
+export function useApproveRevision() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ entity_id, row_version, revision_id, note }: ApprovalInput) =>
+      postWithOcc<ApprovalResult>(
+        `/market-datasets/${encodeURIComponent(entity_id)}/approve`,
+        row_version,
+        { revision_id, note },
+      ),
+    onSuccess: () => invalidateMarketData(queryClient),
+  });
+}
+
+// Admin-only: move an APPROVED revision -> DEPRECATED. The route reads no
+// If-Match/Idempotency-Key — none is sent. A non-Admin -> 403 verbatim.
+export function useDeprecateRevision() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { entity_id: string; revision_id: string; note: string | null }) =>
+      api.post<ApprovalResult>(
+        `/market-datasets/${encodeURIComponent(input.entity_id)}/deprecate`,
+        { revision_id: input.revision_id, note: input.note },
       ),
     onSuccess: () => invalidateMarketData(queryClient),
   });

@@ -3,6 +3,65 @@
 > **Amaç:** V1 kapandı (Stage 0–8 COMPLETE). Bu doküman post-V1 durumunu, aday iş listesini
 > ve temiz oturumda yapıştırılacak resume prompt'u içerir.
 
+## Durum (2026-07-09, TIER 2 frontend — Market Data sayfası; PR #103 MERGED)
+
+**FRONTEND-ONLY (3 yeni + 1 edit)** — backend DEĞİŞMEDİ (1048 sabit), migration YOK, alembic head
+`0021_local_auth` SABİT, `ENGINE_VERSION` SABİT. `/market-data` gerçek sayfa oldu —
+`routes/market_data.py` doc 11 OKUMA yüzeyi (registry list + head detail + approved-bundle resolve)
+**+ sahip INGEST zinciri** (create dataset / raw-upload start+finalize / durable 202 analysis job /
+schema mapping) bağlandı — 10 endpoint'in 8'i. Kalan placeholder'ların DÖRDÜNCÜSÜ indi — **8 kaldı**.
+Frontend 128 → **140** (+12 vitest). main = `c09051a` (Merge #103), feat `0ca0468`. CI yeşil;
+self-review + yerel döngü (0 CRITICAL/HIGH; 1 MEDIUM — bundle-probe tekrar-deneme — commit
+öncesi düzeltildi).
+
+**Reuse anchor'ları (kesin semboller):**
+- **YENİ `frontend/src/lib/marketData.ts`:** wire tipleri `application/queries/market_data.py`
+  `_revision_dict`/`get_market_dataset_detail`/`resolve_approved_market_data_bundle` +
+  `application/commands/market_data.py` return dict'leri birebir aynası (`MarketDatasetRow`/
+  `MarketDatasetDetail`/`ApprovedBundle` + `CreateDatasetResult`/`StartUploadResult`/
+  `FinalizeUploadResult`/`AnalysisAccepted`/`SchemaMappingResult`). Taksonomi hidrasyon aynaları
+  `MARKET_DATA_TYPES` (ohlcv/tick_trades/spread_execution) + `MARKET_REVISION_STATES` (8 state;
+  `verified` ≠ `approved`) — sunucu her değeri yeniden doğrular (CR-04). Hook'lar `["market-data"]`
+  altında (özel SSE event YOK — `resource.changed` süpürür): `useMarketDatasets` (keyset registry,
+  placeholderData) + `useMarketDataset` (enabled-gated detay; dönen `row_version` ertelenen
+  lifecycle aksiyonlarının OCC token'ı) + `useApprovedBundle` (İSTEĞE-BAĞLI salt-okuma probe —
+  enabled-gated GET, retry:false; 404 verbatim → tüketici asla "latest"e bağlanmaz; tekrar tıklama
+  refetch). Mutasyonlar `["market-data"]`+`["audit"]` invalidate: `useCreateDataset`
+  (**Idempotency-Key YOK — create rotası okumuyor, birebir ayna**), `useStartUpload` (immutable
+  evidence satırı: yalnız object_key+digest+size metadata), `useFinalizeUpload`/`useRequestAnalysis`
+  (deneme başına taze `Idempotency-Key`; analysis 202 admission `{job_id, queue, status}` verbatim),
+  `useConfirmMapping` (boş confirmed mapping GÖNDERİLMEZ → sunucu auto-confirm;
+  `MAPPING_REVIEW_REQUIRED` 422 verbatim, D7). `parseMappingLines` ("canonical: source" satırı;
+  boş source → null) + `linesToList` + `revisionStateTone`.
+- **YENİ `pages/MarketData.tsx`:** `CreateDatasetCard` (kanonik üç tipten select; opsiyonel payload
+  JSON OBJESİ — parse hatası lokal bloklanır [transport shaping], domain doğrulama sunucuda; create
+  detayını otomatik açar), `RegistryCard` (revision-state badge + validation verbatim; cursor-stack
+  Pager), `DetailCard` (kimlik/hash/revision history + Step 1/2 ingest akışı `UploadComposer`→
+  `AnalysisAction`→`MappingComposer` + `BundleProbe`). Butonlar asla role-ön-gate'li değil —
+  sunucunun owner/Admin draft gate'i (`ensure_can_edit_draft`) kanonik zarf ile verbatim yanıtlar.
+- **`App.tsx`:** `/market-data` REAL_PATHS (15 → 16) + gerçek Route; **`nav.ts` DEĞİŞMEDİ** (24).
+- **Testler:** YENİ `test/marketData.test.tsx` (+12: 1 `parseMappingLines` unit + 11 component;
+  apiStub SIRALI — finalize `/raw-uploads`'tan, aksiyon/detay/bundle fragment'ları
+  `/market-datasets` liste prefix'inden ÖNCE; "Binance 15m OHLCV" ready-check, badge assert'leri
+  `within` ile registry tablosuna scope'lu).
+
+**Dürüst sınır:** revision lifecycle aksiyonları (create revision / successor, Admin approve /
+deprecate — If-Match `"rv-N"` OCC + `Idempotency-Key`) DOĞAL SONRAKİ slice (CP #91→#93 deseni;
+detay `row_version` token'ı hazır); ham BAYTLAR bu sayfadan geçmez (bu yüzeyde byte-upload
+endpoint'i yok — D5/D6 evidence satırı object key + digest pinler); analysis job id bilgilendirme
+amaçlı (`["jobs"]` liste yüzeyi yok — kalıcı), ilerleme revision state'e düşer.
+
+**SIRADAKİ İŞ ADAYLARI (BAŞLARKEN kullanıcıyla TEYİT ET):** (1) **Market Data lifecycle
+aksiyonları follow-up** — revise/successor + Admin approve/deprecate (If-Match `"rv-N"` OCC +
+Idempotency-Key; PR #103 sınırını kapatır, CP #91→#93 deseni) — doğal sıradaki; (2) kalan 8
+placeholder sayfa — HEPSİNİN V1 backend yüzeyi landed: Packages & Data (`research_data.py`
+Research Data — grubu kapatır), Workspace (`strategy.py` Strategy Details / `trading_signal.py` /
+`trade_log.py` / outsource-signal), Backtest (`allocation.py` Portfolio / `readiness.py` Ready
+Check), Docs (`manual.py` User Manual); (3) ESP + Library registry MUTASYON slice'ları
+(Admin-only, `X-Registry-Version` OCC — Rationale'deki shared-editing OCC deseni TABAN). TIER 3
+deferred: retention auto-purge, data-queue redelivery, SSE streaming e2e, tool-call status
+shadowing.
+
 ## Durum (2026-07-09, TIER 2 frontend — Rationale Families sayfası; PR #101 MERGED)
 
 **FRONTEND-ONLY (3 yeni + 1 edit)** — backend DEĞİŞMEDİ (1048 sabit), migration YOK, alembic head
@@ -1246,8 +1305,8 @@ tarihsel referans** olarak duruyor.
 ## ⤵️ YENİ OTURUMDA YAPIŞTIR (resume prompt)
 
 ```
-Entropia — post-V1 TIER 2. STALE-BY-DEFAULT: Rationale Families sayfası (PR #101) + kapanış docs
-(PR #102) MERGE EDİLDİ varsayma, git'ten doğrula. Backend TIER 1 EFEKTİF TAMAM (V1 + Auth/IdP #38 +
+Entropia — post-V1 TIER 2. STALE-BY-DEFAULT: Market Data sayfası (PR #103) + kapanış docs
+(PR #104) MERGE EDİLDİ varsayma, git'ten doğrula. Backend TIER 1 EFEKTİF TAMAM (V1 + Auth/IdP #38 +
 Parquet A #41 + bar-replay B #43 + indikatör compute C #45 + risk_based #47 + condition blocks #49 +
 extensions #51 + indicator-vs-indicator #53 + multi-TF #55 + per-condition-TF #56 + N-ary #57 +
 VWAP #58 + Kelly #60/#61 + position_size_limits #63 — HEPSİ MERGED). FRONTEND landed (hepsi MERGED):
@@ -1316,23 +1375,36 @@ expected_table_version all-or-nothing; hepsi ["rationale-families"]+["rationale-
 key-remount + iki-adım Delete + AssignmentTableCard staged batch [server-truth diff, OUTPUT_TYPE_
 NOT_LISTED verbatim, soft-deleted family synthetic option]; App.tsx REAL_PATHS 14→15, nav.ts
 değişmedi; frontend 121→128 — routes/rationale.py TAM yüzeyi bağlandı; dürüst sınır: assignment
-select yalnız ilk aktif-aile sayfası [doc 10 §7 >20 aile kısaltır]).
+select yalnız ilk aktif-aile sayfası [doc 10 §7 >20 aile kısaltır]) + Market Data sayfası (#103 —
+YENİ lib/marketData.ts ["market-data"] hook'ları: useMarketDatasets keyset registry +
+useMarketDataset enabled-gated detay (row_version = ertelenen lifecycle aksiyonlarının OCC token'ı) +
+useApprovedBundle isteğe-bağlı salt-okuma probe (404 verbatim — asla "latest"); mutasyonlar
+useCreateDataset Idempotency-Key'SİZ (rota okumuyor, birebir ayna) + useStartUpload (yalnız
+object_key+digest+size metadata) + useFinalizeUpload/useRequestAnalysis taze Idempotency-Key (202
+admission verbatim) + useConfirmMapping (boş confirmed_mapping GÖNDERİLMEZ → auto-confirm;
+MAPPING_REVIEW_REQUIRED verbatim) + MARKET_DATA_TYPES/MARKET_REVISION_STATES aynaları +
+parseMappingLines; YENİ pages/MarketData.tsx CreateDatasetCard (payload JSON lokal parse-block,
+create detayı otomatik açar) + RegistryCard + DetailCard (kimlik/hash/revision history + Step 1/2
+ingest UploadComposer→AnalysisAction→MappingComposer + BundleProbe); App.tsx REAL_PATHS 15→16,
+nav.ts değişmedi; frontend 128→140 — dürüst sınır: revision lifecycle aksiyonları
+[revise/successor/approve/deprecate, If-Match "rv-N" OCC] SONRAKİ slice, ham baytlar sayfadan
+geçmez, job id bilgilendirme amaçlı).
 BACKEND: first-Admin bootstrap provisioning (#76 — ENTROPIA_BOOTSTRAP_ADMIN_EMAIL opt-in) +
 salt-okunur bootstrap-status read endpoint (#84 — commands/auth.py bootstrap_status/
 bootstrap_is_configured) + CP-Gen deterministic candidate generation (#89 — domain/create_package/
 candidate.py GENERATOR_VERSION namespace + content_hash; submit_candidate_generation stub compute →
 manifest; LLM YOK; engine DEĞİŞMEDİ). migration YOK, alembic head 0021_local_auth SABİT,
-ENGINE_VERSION backtest-engine-v2-position-size-limits SABİT; backend testler 1048, frontend 128.
+ENGINE_VERSION backtest-engine-v2-position-size-limits SABİT; backend testler 1048, frontend 140.
 
 ÖNCE DOĞRULA (stale-by-default): git fetch && git log --oneline origin/main -6 && gh pr list
---state all -L 8. main = 7372478 (Merge #101) + kapanış docs PR'ı (#102) merge sonrası ileri olmalı
+--state all -L 8. main = c09051a (Merge #103) + kapanış docs PR'ı (#104) merge sonrası ileri olmalı
 (açıksa önce kullanıcıdan merge iste). alembic head 0021_local_auth; backend ENGINE_VERSION =
 backtest-engine-v2-position-size-limits. FRONTEND doğrula (yeni branch'i MUTLAKA origin/main'den
 aç — local stale olabilir): cd frontend && npm run typecheck && npm run lint && npm test &&
-npm run build (128/128 geçmeli).
+npm run build (140/140 geçmeli).
 
-ÖNCE OKU (authority): docs/POST_V1_KICKOFF.md (en üst Durum bloğu — PR #101) + docs/STAGE2_HANDOFF.md
-("live-data Rationale Families page (TIER 2, frontend slice 16) landed (PR #101)" +
+ÖNCE OKU (authority): docs/POST_V1_KICKOFF.md (en üst Durum bloğu — PR #103) + docs/STAGE2_HANDOFF.md
+("live-data Market Data page (TIER 2, frontend slice 17) landed (PR #103)" +
 "Next").
 CP backend kodu: routes/create_package.py (8 endpoint; aksiyonlar OCC X-Request-Version header +
 Idempotency-Key) + domain/create_package/{enums,value_objects,candidate}.py +
@@ -1367,7 +1439,12 @@ OCC'siz taze Idempotency-Key, useReviseFamily OCC expected_head_revision_id=curr
 useSoftDeleteFamily "rv-N" If-Match ETag, useBatchAssign expected_table_version all-or-nothing] +
 assignmentStateTone; pages/RationaleFamilies.tsx FamilyRegistryCard tek-editör create/revise
 key-remount + iki-adım Delete + AssignmentTableCard staged batch editörü [server-truth diff,
-OUTPUT_TYPE_NOT_LISTED verbatim, soft-deleted synthetic option] — PR #101); test/helpers/apiStub.ts
+OUTPUT_TYPE_NOT_LISTED verbatim, soft-deleted synthetic option] — PR #101); Market Data
+(lib/marketData.ts ["market-data"] hook'ları useMarketDatasets/useMarketDataset/useApprovedBundle +
+ingest mutasyonları [useCreateDataset key'siz, useStartUpload, useFinalizeUpload/useRequestAnalysis
+taze Idempotency-Key, useConfirmMapping omit-when-blank] + MARKET_DATA_TYPES/MARKET_REVISION_STATES
+aynaları + parseMappingLines; pages/MarketData.tsx Create/Registry/Detail+ingest+BundleProbe —
+PR #103); test/helpers/apiStub.ts
 route-aware fetch double ("<METHOD> <fragment>" sıralı eşleşme — detay/spesifik route'u liste/prefix
 route'undan ÖNCE yaz) — yeni sayfa testleri için BUNU reuse et.
 
@@ -1378,11 +1455,16 @@ invalidateQueries({queryKey}) object-form. tsconfig: noUncheckedIndexedAccess +
 exactOptionalPropertyTypes KAPALI.
 
 SIRADAKİ İŞ — kalan TIER 2 adayları (BAŞLARKEN kullanıcıyla hangisi diye TEYİT ET):
-- Kalan 9 placeholder sayfayı canlı-veri yap — HEPSİNİN V1 backend yüzeyi landed:
-  Packages & Data (market_data.py Market Data — doğal sıradaki, Packages & Data grubunun
-  kalanı / research_data.py Research Data), Workspace (strategy.py Strategy Details /
-  trading_signal.py / trade_log.py / outsource-signal), Backtest (allocation.py Portfolio /
-  readiness.py Ready Check — RUN/History zaten bağlı, doğal ön-adım), Docs (manual.py User Manual).
+- Market Data lifecycle AKSİYONLARI follow-up — revise/successor + Admin approve/deprecate
+  (If-Match "rv-N" OCC + Idempotency-Key; PR #103 sınırını kapatır, CP #91→#93 deseni) —
+  doğal sıradaki.
+- Kalan 8 placeholder sayfayı canlı-veri yap — HEPSİNİN V1 backend yüzeyi landed:
+  Packages & Data (research_data.py Research Data — grubu kapatır), Workspace (strategy.py
+  Strategy Details / trading_signal.py / trade_log.py / outsource-signal), Backtest
+  (allocation.py Portfolio / readiness.py Ready Check — RUN/History zaten bağlı, doğal ön-adım),
+  Docs (manual.py User Manual).
+- ESP + Library registry MUTASYON slice'ları (Admin-only, X-Registry-Version OCC +
+  Idempotency-Key) — Rationale/Market-Data OCC desenleri TABAN.
 DİKKAT (kalıcı dürüst sınırlar): ["jobs"] için backend liste yüzeyi YOK (run projeksiyonları +
 /v1/metrics jobs-depth); users/system-actors/capabilities'in özel SSE event'i yok (kendi
 mutation'ları + resource.changed süpürür); view dataset / analysis artifact'ların READ/liste
@@ -1424,6 +1506,13 @@ ensure_can_edit_assignments, Admin-only DEĞİL]; commands/rationale.py return d
 desenleri [expected_head_revision_id / "rv-N" If-Match / expected_table_version] lib/rationale.ts
 aynaları — rationale'de bağlanmamış endpoint kalmadı; shared-editing mutasyon deseni [OCC +
 Idempotency-Key, Admin-gate YOK] ESP/Library registry mutasyon slice'ları için de TABAN).
+routes/market_data.py 10 endpoint'in 8'i FRONTEND'e bağlandı (PR #103 — list/detail/approved-bundle
+okuma + create/raw-uploads start+finalize/analysis 202/schema-mapping ingest zinciri;
+lib/marketData.ts + pages/MarketData.tsx; BAĞLANMAYAN 4: POST /{id}/revisions [If-Match rv-N +
+Idempotency-Key] + /successor + Admin /approve [If-Match + Idempotency-Key] + /deprecate —
+commands/market_data.py create_market_dataset_revision/create_successor_revision/
+approve_market_dataset_revision/deprecate_market_dataset_revision return dict'leri hazır —
+sonraki lifecycle-aksiyonları slice'ının yüzeyi; detay row_version OCC token'ı hazır).
 
 YÖNTEM: Workflow KULLANMA; direct-author. Backend working-loop (izole DB / L1 FK / alembic)
 UYGULANMAZ. Frontend loop: cd frontend (cwd resetlenebilir → absolute path);

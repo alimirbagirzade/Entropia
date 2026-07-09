@@ -13,6 +13,7 @@ import { Metrics } from "./pages/Metrics";
 import { Panel } from "./pages/Panel";
 import { PreCheck } from "./pages/PreCheck";
 import { Provisioning } from "./pages/Provisioning";
+import { RationaleFamilies } from "./pages/RationaleFamilies";
 import { Placeholder } from "./pages/Placeholder";
 import { Login } from "./pages/Login";
 import { NotFound } from "./pages/NotFound";
@@ -37,6 +38,7 @@ const REAL_PATHS = new Set([
   "/analysis-lab",
   "/future-dev",
   "/trash",
+  "/rationale-families",
 ]);
 
 export default function App() {
@@ -166,6 +168,15 @@ export default function App() {
           element={
             <ErrorBoundary>
               <Trash />
+            </ErrorBoundary>
+          }
+        />
+        {/* Rationale Families (doc 10): shared taxonomy — family CRUD + package assignment. */}
+        <Route
+          path="/rationale-families"
+          element={
+            <ErrorBoundary>
+              <RationaleFamilies />
             </ErrorBoundary>
           }
         />

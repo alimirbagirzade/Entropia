@@ -3,6 +3,57 @@
 > **Amaç:** V1 kapandı (Stage 0–8 COMPLETE). Bu doküman post-V1 durumunu, aday iş listesini
 > ve temiz oturumda yapıştırılacak resume prompt'u içerir.
 
+## Durum (2026-07-09, TIER 2 frontend — Embedded System Packages sayfası; PR #99 MERGED)
+
+**FRONTEND-ONLY (3 yeni + 1 edit)** — backend DEĞİŞMEDİ (1048 sabit), migration YOK, alembic head
+`0021_local_auth` SABİT, `ENGINE_VERSION` SABİT. Kalan placeholder'ların İKİNCİSİ indi:
+`/packages/embedded` gerçek sayfa oldu — `routes/esp.py` doc 09 OKUMA yüzeyi bağlandı (role-aware
+resolver-registry listesi + detay + Pre-Check-parity resolve probe). Frontend 113 → **121**
+(+8 vitest). main = `fa2003f` (Merge #99), feat `5bf633a`. CI 3/3 yeşil; self-review + yerel
+döngü (0 CRITICAL/HIGH).
+
+**Reuse anchor'ları (kesin semboller):**
+- **YENİ `frontend/src/lib/esp.ts`:** wire tipleri `application/queries/esp.py` birebir aynası —
+  `EspRegistryRow` (`_registry_dict`) / `EspPackageDetail` (`get_esp_detail`) / `EspContract`
+  (`_contract_dict`) / `ResolveResult` (`resolve_embedded_dependency`); taksonomi hidrasyon
+  aynaları `RESOLVER_TRUST_STATES` (candidate/trusted_active/deprecated/unavailable) +
+  `RUNTIME_ADAPTERS` (pine_v5/python) — sunucu her değeri yeniden doğrular; L4
+  `ESP_PERFORMANCE_FIELDS` (net_profit/backtest_ready/oos_passed — doğası gereği N/A, doc 09
+  §14, asla uydurma değer). Hook'lar `["esp"]` altında (özel SSE event yok — `resource.changed`
+  süpürür): `useEspRegistry` (trust_state facet'i — boş facet ASLA gönderilmez; canonical_key
+  keyset cursor; placeholderData) + `useEspPackage` (enabled-gated, `encodeURIComponent`) +
+  `useResolveProbe` — doc 09 §4.3 probe SALT-OKUMA (hiçbir şey yaratmaz, audit satırı yazmaz)
+  → POST'ta **Idempotency-Key YOK, invalidation YOK** (POST yalnız transport — PR #80 compare
+  deseni). `parseSignatureParams` (satır-başına "name:type" → sıralı `{name?, type}`) +
+  `trustTone`.
+- **YENİ `pages/Embedded.tsx`:** registry tablosu (canonical_key / trust badge / adapter /
+  registry_version / trusted revision) + trust facet + cursor-stack `Pager`; detay kartı
+  (contract signature + warm-up/timing/repaint verbatim, registry snapshot — OCC-hazır
+  `registry_version`, lifecycle/validation/approval badge'leri, **L4 N/A label'ları verbatim**);
+  Resolve Probe kartı — sıralı param TİPLERİ kimliktir (isimler görüntü); başarı EXACT pinned
+  revision (P4/L5 — asla latest); typed hatalar (`RESOLVER_NOT_RESOLVED` 404 /
+  `RESOLVER_SIGNATURE_MISMATCH` 422 / `RESOLVER_ADAPTER_INCOMPATIBLE` 409) verbatim
+  (doc 09 §9.1–§9.3).
+- **`App.tsx`:** `/packages/embedded` REAL_PATHS (13 → 14) + gerçek Route; **`nav.ts` DEĞİŞMEDİ**
+  (24).
+- **Testler:** YENİ `test/embedded.test.tsx` (+8: 1 `parseSignatureParams` unit + 7 component;
+  apiStub SIRALI — resolve POST + detay GET fragment'ları `/embedded-system-packages` liste
+  prefix'inden ÖNCE; trust assert'leri tabloya scope'lu).
+
+**Dürüst sınır:** okuma dilimi — registry MUTASYONLARI (create / activate / deprecate —
+Admin-only sunucu-tarafı, `X-Registry-Version` OCC header + Idempotency-Key) bu sayfadan
+dispatch edilmez (sonraki slice'lar; detaydaki `row_version`/`registry_version` OCC token'ları
+hazır); ESP performansı doğası gereği `not_applicable` kalır (doc 09 §14, L4).
+
+**SIRADAKİ İŞ ADAYLARI (BAŞLARKEN kullanıcıyla TEYİT ET):** kalan 10 placeholder sayfa —
+HEPSİNİN V1 backend yüzeyi landed: Packages & Data (`rationale.py` Rationale Families — doğal
+sıradaki: paylaşılan `useRationaleFamilies` hook'u zaten var / `market_data.py` /
+`research_data.py`), Workspace (`strategy.py` Strategy Details / `trading_signal.py` /
+`trade_log.py` / outsource-signal), Backtest (`allocation.py` Portfolio / `readiness.py` Ready
+Check), Docs (`manual.py` User Manual). TIER 3 deferred: retention auto-purge, data-queue
+redelivery, SSE streaming e2e, tool-call status shadowing. Trash purge (destructive + re-auth)
+AYRI slice.
+
 ## Durum (2026-07-09, TIER 2 frontend — Package Library katalog sayfası; PR #97 MERGED)
 
 **FRONTEND-ONLY (3 yeni + 1 edit)** — backend DEĞİŞMEDİ (1048 sabit), migration YOK, alembic head
@@ -1186,23 +1237,34 @@ revisions wire tipleri; YENİ pages/Library.tsx facet bar + useRationaleFamilies
 family select + ortogonal badge tablosu (doc 08 §13) + detay (permissions METİN, L4 N/A
 verbatim, contracts JSON, provenance+scan, revizyon geçmişi) + Guest 401 verbatim; App.tsx
 REAL_PATHS 12→13, nav.ts değişmedi; frontend 105→113 — routes/library.py TAM yüzeyi bağlandı;
-SALT-OKUNUR: paket aksiyonları sonraki slice, detay ETag/row_version OCC için hazır).
+SALT-OKUNUR: paket aksiyonları sonraki slice, detay ETag/row_version OCC için hazır) +
+Embedded System Packages sayfası (#99 — YENİ lib/esp.ts ["esp"] hook'ları: useEspRegistry
+trust_state facet'i (boş facet ASLA gönderilmez, canonical_key keyset cursor) + useEspPackage
+enabled-gated + useResolveProbe SALT-OKUMA Pre-Check-parity probe (POST yalnız transport —
+Idempotency-Key YOK, invalidation YOK); RESOLVER_TRUST_STATES/RUNTIME_ADAPTERS hidrasyon
+aynaları + L4 ESP_PERFORMANCE_FIELDS (doğası gereği N/A) + parseSignatureParams/trustTone;
+YENİ pages/Embedded.tsx registry tablosu + trust facet + detay (contract/registry snapshot,
+OCC-hazır registry_version) + Resolve Probe kartı (EXACT pinned revision P4/L5; typed hatalar
+RESOLVER_NOT_RESOLVED/SIGNATURE_MISMATCH/ADAPTER_INCOMPATIBLE verbatim doc 09 §9.1–9.3);
+App.tsx REAL_PATHS 13→14, nav.ts değişmedi; frontend 113→121 — routes/esp.py OKUMA yüzeyi
+bağlandı; registry MUTASYONLARI [create/activate/deprecate, Admin-only X-Registry-Version OCC +
+Idempotency-Key] sonraki slice).
 BACKEND: first-Admin bootstrap provisioning (#76 — ENTROPIA_BOOTSTRAP_ADMIN_EMAIL opt-in) +
 salt-okunur bootstrap-status read endpoint (#84 — commands/auth.py bootstrap_status/
 bootstrap_is_configured) + CP-Gen deterministic candidate generation (#89 — domain/create_package/
 candidate.py GENERATOR_VERSION namespace + content_hash; submit_candidate_generation stub compute →
 manifest; LLM YOK; engine DEĞİŞMEDİ). migration YOK, alembic head 0021_local_auth SABİT,
-ENGINE_VERSION backtest-engine-v2-position-size-limits SABİT; backend testler 1048, frontend 113.
+ENGINE_VERSION backtest-engine-v2-position-size-limits SABİT; backend testler 1048, frontend 121.
 
 ÖNCE DOĞRULA (stale-by-default): git fetch && git log --oneline origin/main -6 && gh pr list
---state all -L 8. main = af7c66b (Merge #97) + kapanış docs PR'ı merge sonrası ileri olmalı
+--state all -L 8. main = fa2003f (Merge #99) + kapanış docs PR'ı merge sonrası ileri olmalı
 (açıksa önce kullanıcıdan merge iste). alembic head 0021_local_auth; backend ENGINE_VERSION =
 backtest-engine-v2-position-size-limits. FRONTEND doğrula (yeni branch'i MUTLAKA origin/main'den
 aç — local stale olabilir): cd frontend && npm run typecheck && npm run lint && npm test &&
-npm run build (113/113 geçmeli).
+npm run build (121/121 geçmeli).
 
-ÖNCE OKU (authority): docs/POST_V1_KICKOFF.md (en üst Durum bloğu — PR #97) + docs/STAGE2_HANDOFF.md
-("live-data Package Library catalog page (TIER 2, frontend slice 14) landed (PR #97)" +
+ÖNCE OKU (authority): docs/POST_V1_KICKOFF.md (en üst Durum bloğu — PR #99) + docs/STAGE2_HANDOFF.md
+("live-data Embedded System Packages page (TIER 2, frontend slice 15) landed (PR #99)" +
 "Next").
 CP backend kodu: routes/create_package.py (8 endpoint; aksiyonlar OCC X-Request-Version header +
 Idempotency-Key) + domain/create_package/{enums,value_objects,candidate}.py +
@@ -1229,7 +1291,9 @@ useGenerateCandidate OCC X-Request-Version + useCreateDraft candidate-hash body 
 useApproveRequest draft-head token + useDependencyScan; pages/CreatePackage.tsx
 compose/list/detay/RequestActions + pages/PreCheck.tsx — PR #91+#93); Package Library
 (lib/library.ts ["library"] hook'ları + facet taksonomi aynaları + UNASSIGNED_FAMILY sentineli +
-pages/Library.tsx facet bar/detay — PR #97); test/helpers/apiStub.ts route-aware fetch double
+pages/Library.tsx facet bar/detay — PR #97); Embedded (lib/esp.ts ["esp"] hook'ları +
+useResolveProbe salt-okuma probe + taksonomi/L4 aynaları + pages/Embedded.tsx registry/detay/
+Resolve Probe — PR #99); test/helpers/apiStub.ts route-aware fetch double
 ("<METHOD> <fragment>" sıralı eşleşme — detay/spesifik route'u liste/prefix route'undan ÖNCE yaz)
 — yeni sayfa testleri için BUNU reuse et.
 
@@ -1240,11 +1304,11 @@ invalidateQueries({queryKey}) object-form. tsconfig: noUncheckedIndexedAccess +
 exactOptionalPropertyTypes KAPALI.
 
 SIRADAKİ İŞ — kalan TIER 2 adayları (BAŞLARKEN kullanıcıyla hangisi diye TEYİT ET):
-- Kalan 11 placeholder sayfayı canlı-veri yap — HEPSİNİN V1 backend yüzeyi landed:
-  Packages & Data (esp.py Embedded — Library deseninin doğal devamı / rationale.py Rationale
-  Families / market_data.py / research_data.py), Workspace (strategy.py
-  Strategy Details / trading_signal.py / trade_log.py / outsource-signal), Backtest
-  (allocation.py Portfolio / readiness.py Ready Check), Docs (manual.py User Manual).
+- Kalan 10 placeholder sayfayı canlı-veri yap — HEPSİNİN V1 backend yüzeyi landed:
+  Packages & Data (rationale.py Rationale Families — doğal sıradaki: paylaşılan
+  useRationaleFamilies hook'u zaten var / market_data.py / research_data.py), Workspace
+  (strategy.py Strategy Details / trading_signal.py / trade_log.py / outsource-signal),
+  Backtest (allocation.py Portfolio / readiness.py Ready Check), Docs (manual.py User Manual).
 DİKKAT (kalıcı dürüst sınırlar): ["jobs"] için backend liste yüzeyi YOK (run projeksiyonları +
 /v1/metrics jobs-depth); users/system-actors/capabilities'in özel SSE event'i yok (kendi
 mutation'ları + resource.changed süpürür); view dataset / analysis artifact'ların READ/liste
@@ -1274,8 +1338,11 @@ SAYFASI /packages/pre-check (PR #93 — lib/createPackage.ts yerinde genişletil
 pages/PreCheck.tsx). CP yüzeyinde bağlanmamış endpoint kalmadı. routes/library.py TAM yüzey
 FRONTEND'e bağlandı (PR #97 — list_packages facet'leri + get_package_detail ETag;
 domain/package/catalog.py parse_catalog_filters + permissions.py package_permissions'ın
-frontend aynaları lib/library.ts'te — Packages & Data grubunun kalan sayfaları [esp/rationale/
-market_data/research_data] için desen TABANI).
+frontend aynaları lib/library.ts'te — Packages & Data grubunun kalan sayfaları [rationale/
+market_data/research_data] için desen TABANI). routes/esp.py OKUMA yüzeyi FRONTEND'e bağlandı
+(PR #99 — list/detail/resolve; lib/esp.ts + pages/Embedded.tsx; Admin registry mutasyonları
+create/activate/deprecate [X-Registry-Version OCC + Idempotency-Key, commands/esp.py
+activate_resolver/deprecate_resolver] BAĞLANMADI — sonraki mutasyon slice'ının yüzeyi).
 
 YÖNTEM: Workflow KULLANMA; direct-author. Backend working-loop (izole DB / L1 FK / alembic)
 UYGULANMAZ. Frontend loop: cd frontend (cwd resetlenebilir → absolute path);

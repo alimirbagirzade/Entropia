@@ -3,6 +3,7 @@ import { useState, type FormEvent } from "react";
 import { EmptyState } from "@/components/EmptyState";
 import { ErrorState } from "@/components/ErrorState";
 import { Loading } from "@/components/Loading";
+import { ResearchLifecycle } from "@/components/ResearchLifecycle";
 import { StatusBadge } from "@/components/StatusBadge";
 import { ApiError } from "@/lib/apiClient";
 import { formatUtc } from "@/lib/backtest";
@@ -66,10 +67,10 @@ function parseJsonObject(
 // interest, funding, liquidations, order-book, on-chain and macro datasets that
 // feed Agent research and (after approval) Backtest evidence bundles. Every
 // research dataset pins an ACTIVE+APPROVED Market Data dataset (DR3). This page
-// binds the role-aware read surface and the owner ingest chain (create -> upload
-// -> analyze); the revision lifecycle (revise/time-policy/fields/approve/bundles)
-// is a deferred follow-up. Page access is Admin/Supervisor/Agent server-side — a
-// denial renders the 403 envelope verbatim.
+// binds the role-aware read surface, the owner ingest chain (create -> upload ->
+// analyze) AND the full revision lifecycle (revise/time-policy/field+feature
+// defs/Admin approve+revoke/evidence bundles — see ResearchLifecycle). Page access
+// is Admin/Supervisor/Agent server-side — a denial renders the 403 envelope verbatim.
 export function ResearchData() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   return (
@@ -353,6 +354,7 @@ function DetailCard({ entityId }: { entityId: string }) {
         <>
           <IdentitySection detail={detail.data} />
           <IngestSection detail={detail.data} />
+          <ResearchLifecycle key={detail.data.entity_id} detail={detail.data} />
         </>
       ) : null}
     </section>
@@ -465,7 +467,7 @@ function IdentitySection({ detail }: { detail: ResearchDatasetDetail }) {
 // Buttons are never role-pre-gated — the server's owner/Admin draft gate answers
 // with the canonical envelope verbatim. The revision lifecycle (revise,
 // time-policy, field/feature definitions, Admin approve/revoke, evidence bundles)
-// is a deferred follow-up.
+// follows in the ResearchLifecycle section below.
 function IngestSection({ detail }: { detail: ResearchDatasetDetail }) {
   return (
     <>

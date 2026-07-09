@@ -1378,7 +1378,67 @@ market revision yoksa 409 `DEPENDENCY_BLOCKED`). `research_data.router` `market_
 endpoint) — doğal follow-up'a ertelendi (detay `row_version` If-Match OCC token'ı hazır); ham baytlar
 sayfadan geçmez; `["jobs"]` liste yüzeyi kalıcı yok.
 
-## Next: post-V1 (continued) — TIER 2 (… + Market Data page + Market Data lifecycle actions + Research Data page landed; **7 placeholder pages** [Workspace strategy/trading_signal/trade_log/outsource-signal, Backtest allocation Portfolio + readiness Ready Check, Docs manual User Manual] + ESP/Library registry mutation slices + Research Data lifecycle follow-up + TIER 3 remain)
+## Stage post-V1 TIER 2 — Research Data lifecycle actions landed (PR #109)
+
+**FRONTEND-ONLY (2 new + 3 edits)** — backend UNCHANGED (**1048** stays), no migration, alembic head
+`0021_local_auth`, `ENGINE_VERSION` unchanged. Closes the PR #107 read+ingest boundary: the 8 unbound
+`routes/research_data.py` lifecycle endpoints are wired → the Research Data page is now **14/14
+endpoints** (the **Packages & Data** nav group is fully bound). main = `32d07e4` (Merge #109), feat
+`2e488dc`. CI 3/3 green; self-review 0 CRITICAL/HIGH. **frontend 157 → 168** (+11 vitest).
+
+**AMPİRİK route/command haritası (imzalar OKUNDU — özet değil, PR #105 dersi):**
+
+| Endpoint | If-Match `"rv-N"` | Idem-Key | Admin | Not |
+|---|---|---|---|---|
+| `POST /{id}/revisions` | ✓ | ✓ | — | append DRAFT (category+usage_scope+timezone_mode REQUIRED) |
+| `POST /{id}/time-policy` | — | — | — | `fixed_delay`→delay REQUIRED; diğerleri `delay=null` |
+| `POST /{id}/field-definitions` | — | — | — | 7 required + `unit_or_scale` optional |
+| `POST /{id}/feature-definitions` | — | — | — | `definition` JSON object |
+| `POST /{id}/approve` | ✓ | ✓ | ✓ | VERIFIED→APPROVED; DR3/DR4 yeniden kontrol |
+| `POST /{id}/revoke` | ✓ | ✓ | ✓ | APPROVED→APPROVAL_REVOKED |
+| `POST /bundles/agent` | — | — | — | **PURE READ** compile probe |
+| `POST /bundles/backtest-evidence` | — | — | — | **PURE READ** compile probe |
+
+`revise`/`approve`/`revoke` OCC (`etag_for_row_version` `"rv-N"` + taze `Idempotency-Key`);
+`time-policy`/`field`/`feature` header YOK; bundle compiler'lar PURE READ (durable row/audit YOK,
+content-addressed `bundle_hash` — ESP resolve-probe / Market Data approved-bundle deseni → Idem YOK,
+invalidation YOK). approve/revoke Admin-only SERVER-side (`ensure_can_approve`/`ensure_can_revoke` →
+`APPROVAL_REQUIRES_ADMIN` 403 verbatim); UI asla role-ön-gate'li değil.
+
+**Reuse anchor'ları (kesin semboller):**
+- **`lib/researchData.ts` (genişletildi):** 8 hook + wire tipleri + taksonomi aynaları
+  (`EVENT_TIME_SEMANTICS`(4) / `AVAILABLE_TIME_POLICIES`(4; `FIXED_DELAY_POLICY`) /
+  `RESEARCH_TIMEZONE_MODES`(3; `CUSTOM_TIMEZONE_MODE`)) + `postWithOcc` helper (`lib/marketData.ts`
+  birebir kopyası). `useCreateRevision` (OCC; body `entity_id`/`row_version` İÇERMEZ) /
+  `useSetTimePolicy` / `useDefineField` / `useDefineFeature` / `useApproveRevision` /
+  `useRevokeApproval` (hepsi `["research-data"]`+`["audit"]` invalidate) / `useCompileAgentBundle` /
+  `useCompileEvidenceBundle` (invalidation YOK). Tipler: `RevisionBody`/`CreateRevisionInput`/
+  `TimePolicyInput`/`FieldDefinitionInput`/`FeatureDefinitionInput`/`ApprovalInput`/`AgentBundleInput`/
+  `EvidenceBundleInput`/`BundleResult`/`BundleMember`/`CreateRevisionResult`/`TimePolicyResult`/
+  `FieldDefinitionResult`/`FeatureDefinitionResult`/`ApprovalResult`.
+- **`components/ResearchLifecycle.tsx` (yeni, 713 satır):** DetailCard içinde render edilen 6 composer
+  — `ReviseComposer` (OCC; `other_custom`→custom_category, `custom` timezone→IANA) /
+  `TimePolicyComposer` (`fixed_delay`→pozitif delay, diğerleri delay=null; `custom`→IANA input) /
+  `FieldDefinitionComposer` (7 required + unit_or_scale; `FIELD_INPUTS` map) /
+  `FeatureDefinitionComposer` (definition JSON object) / `ApprovalComposer` (revision picker +
+  approve/revoke; `detail.revisions` fallback) / `BundleComposer` (revision-ids textarea +
+  `BundleResultView` hash+members). Yerel `mutationErrorText`/`parseJsonObject`/`linesToList`.
+- **`pages/ResearchData.tsx` (edit):** `ResearchLifecycle` import + DetailCard'da
+  `key={detail.data.entity_id}` ile render + iki stale "deferred follow-up" yorumu tazelendi.
+- **Testler:** NEW `test/researchDataLifecycle.test.tsx` +11 (revise OCC If-Match `"rv-4"`+Idem /
+  custom_category+IANA yalnız other_custom+custom / fixed_delay delay+no-header / non-fixed delay=null /
+  field 7-required no-header / feature JSON definition / approve OCC Admin / revoke selected revision /
+  Admin denial `APPROVAL_REQUIRES_ADMIN` verbatim / agent bundle no-idem+hash+members / evidence
+  bundle). apiStub SIRALI — 8 aksiyon route'u liste prefix'inden ÖNCE. `test/researchData.test.tsx`:
+  2 detay assertion `within(identityTable)` ile scope'landı (lifecycle `<option>`'ları aynı metni
+  paylaşıyor — event-time semantics + "rv 4"). `App.tsx`/`nav.ts` UNCHANGED (REAL_PATHS 17, nav 24).
+
+**Dürüst sınır:** ham baytlar sayfadan geçmez; `["jobs"]` liste yüzeyi kalıcı yok; bundle compiler'lar
+pure read (oluşan bundle'ın kalıcı read yüzeyi yok — command return + `bundle_hash`); özel research-data
+SSE event'i yok (`resource.changed` süpürür). **`routes/research_data.py` yüzeyi artık TAM bağlı
+(14/14) — Packages & Data grubu tamamen kapandı.**
+
+## Next: post-V1 (continued) — TIER 2 (… + Market Data page + Market Data lifecycle actions + Research Data page + Research Data lifecycle actions landed; **7 placeholder pages** [Workspace strategy/trading_signal/trade_log/outsource-signal, Backtest allocation Portfolio + readiness Ready Check, Docs manual User Manual] + ESP/Library registry mutation slices + TIER 3 remain)
 
 **V1 COMPLETE (Stages 0–8, docs 01–22) + Auth/IdP + Parquet Slice A + Backtest Engine Slice B + real indicator compute Slice C + `risk_based` sizing (a) + condition blocks (b) + condition extensions (b2) + two-package indicator-vs-indicator + higher-timeframe resampling (c) + per-condition multi-TF reference (i) + N-ary reference chain (ii) + VWAP directional key (d) + `formula_based` Kelly sizing + `position_size_limits` min/max cap (PR #63) landed (1015 tests).** The **Slice C indicator-compute + position-sizing follow-ups are now EFFECTIVELY COMPLETE — TIER 1 backend is DONE**:
 

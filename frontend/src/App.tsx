@@ -9,6 +9,7 @@ import { Embedded } from "./pages/Embedded";
 import { FutureDev } from "./pages/FutureDev";
 import { Library } from "./pages/Library";
 import { Mainboard } from "./pages/Mainboard";
+import { MarketData } from "./pages/MarketData";
 import { Metrics } from "./pages/Metrics";
 import { Panel } from "./pages/Panel";
 import { PreCheck } from "./pages/PreCheck";
@@ -39,6 +40,7 @@ const REAL_PATHS = new Set([
   "/future-dev",
   "/trash",
   "/rationale-families",
+  "/market-data",
 ]);
 
 export default function App() {
@@ -177,6 +179,15 @@ export default function App() {
           element={
             <ErrorBoundary>
               <RationaleFamilies />
+            </ErrorBoundary>
+          }
+        />
+        {/* Market Data (doc 11): registry + detail reads and the owner ingest chain. */}
+        <Route
+          path="/market-data"
+          element={
+            <ErrorBoundary>
+              <MarketData />
             </ErrorBoundary>
           }
         />

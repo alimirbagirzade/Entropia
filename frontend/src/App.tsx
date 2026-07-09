@@ -5,6 +5,7 @@ import { AnalysisLab } from "./pages/AnalysisLab";
 import { ArrangeMetrics } from "./pages/ArrangeMetrics";
 import { BacktestRun } from "./pages/BacktestRun";
 import { CreatePackage } from "./pages/CreatePackage";
+import { Embedded } from "./pages/Embedded";
 import { FutureDev } from "./pages/FutureDev";
 import { Library } from "./pages/Library";
 import { Mainboard } from "./pages/Mainboard";
@@ -26,6 +27,7 @@ const REAL_PATHS = new Set([
   "/packages/create",
   "/packages/pre-check",
   "/packages/library",
+  "/packages/embedded",
   "/panel",
   "/panel/provisioning",
   "/panel/metrics",
@@ -75,6 +77,15 @@ export default function App() {
           element={
             <ErrorBoundary>
               <Library />
+            </ErrorBoundary>
+          }
+        />
+        {/* Embedded System Packages (doc 09): resolver registry + resolve probe. */}
+        <Route
+          path="/packages/embedded"
+          element={
+            <ErrorBoundary>
+              <Embedded />
             </ErrorBoundary>
           }
         />

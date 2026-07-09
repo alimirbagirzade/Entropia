@@ -3,6 +3,62 @@
 > **Amaç:** V1 kapandı (Stage 0–8 COMPLETE). Bu doküman post-V1 durumunu, aday iş listesini
 > ve temiz oturumda yapıştırılacak resume prompt'u içerir.
 
+## Durum (2026-07-09, TIER 2 frontend — Rationale Families sayfası; PR #101 MERGED)
+
+**FRONTEND-ONLY (3 yeni + 1 edit)** — backend DEĞİŞMEDİ (1048 sabit), migration YOK, alembic head
+`0021_local_auth` SABİT, `ENGINE_VERSION` SABİT. `/rationale-families` gerçek sayfa oldu —
+`routes/rationale.py` TAM yüzeyi (doc 10 §7/§8) bağlandı: paylaşılan taksonomi düzlemi, İKİ tablo.
+Önceki salt-okuma dilimlerinin AKSİNE bu TAM CRUD + editör dilimi — çünkü backend **shared-editing**
+(Guest hariç herkes düzenler; `ensure_can_manage_families`/`ensure_can_edit_assignments`, Admin-only
+DEĞİL) ve salt-okuma `useRationaleFamilies` seçici zaten vardı (salt-okuma tekrarı düşük değerdi).
+Kalan placeholder'ların ÜÇÜNCÜSÜ indi — **9 kaldı**. Frontend 121 → **128** (+7 vitest).
+main = `7372478` (Merge #101), feat `20ccacc`. CI 3/3 yeşil; self-review + yerel döngü (0 CRITICAL/HIGH).
+
+**Reuse anchor'ları (kesin semboller):**
+- **YENİ `frontend/src/lib/rationale.ts`:** wire tipleri `application/queries/rationale.py`
+  `_family_dict`/`_assignment_row` + `application/commands/rationale.py` return dict'leri birebir
+  aynası (`RationaleFamilyCard`/`RationaleAssignmentRow` + `CreateFamilyResult`/`ReviseFamilyResult`/
+  `SoftDeleteFamilyResult`/`BatchAssignResult`). Hook'lar `resource.changed` süpüren prefix'ler
+  altında (özel rationale SSE event YOK): `useFamilies` (aktif registry projeksiyonu, keyset cursor,
+  placeholderData) + `useAssignments` (`meta.table_version` = batch OCC token'ı). 4 mutasyon
+  `lib/trash.ts`/`lib/adminPanel.ts` aynası: `useCreateFamily` (taze `Idempotency-Key`, **OCC token
+  YOK** — create'in head'i yok), `useReviseFamily` (OCC `expected_head_revision_id` = ailenin current
+  head'i, command'ın token'ı doc 10 §5 + `Idempotency-Key`), `useSoftDeleteFamily` (OCC `row_version`
+  → **`"rv-N"` If-Match ETag**, `shared/concurrency.py row_version_from_if_match`), `useBatchAssign`
+  (`expected_table_version` echo; sunucu-tarafı all-or-nothing + `Idempotency-Key`). Aile
+  mutasyonları `["rationale-families"]`+`["rationale-assignments"]`+`["audit"]` invalidate eder;
+  batch aynı seti. `assignmentStateTone` doc 10 §9.2 projeksiyonunu eşler (assigned→ok /
+  unassigned→neutral / assigned_to_deleted_family→down).
+- **YENİ `pages/RationaleFamilies.tsx`:** `FamilyRegistryCard` — tek editör create eder ya da bir
+  satırın Edit'i onu beslerse revise eder (`key` ile remount → mod değişince yeniden beslenir;
+  subfamilies/compatible-outputs satır-başına textarea → trim'li liste); iki-adım onaylı Delete;
+  sunucu zarfı her hatada verbatim (`RATIONALE_FAMILY_CONFLICT`/`RATIONALE_FAMILY_IN_USE`/
+  `NAME_CONFLICT`/`NAME_RESERVED`). `AssignmentTableCard` — satır-başına aile `select`'i (ilk aktif-
+  aile sayfasından hidre); staged reatamalar server-truth'a karşı diff'lenir (yalnız değişen satırlar
+  batch'e girer); Save değişen her satır için bir `AssignmentChange` kurar (`current_package_revision_id`
+  head OCC + seçilen ailenin `current_revision_id`'si pinlenir); non-blocking `OUTPUT_TYPE_NOT_LISTED`
+  uyarıları verbatim; soft-deleted pinli aile synthetic `select` option olarak görünür (değer
+  option'ların dışına asla düşmez).
+- **`App.tsx`:** `/rationale-families` REAL_PATHS (14 → 15) + gerçek Route; **`nav.ts` DEĞİŞMEDİ**
+  (24 — item zaten placeholder olarak vardı).
+- **Testler:** YENİ `test/rationaleFamilies.test.tsx` (+7; apiStub SIRALI — revise/delete/batch
+  aksiyon fragment'ları liste prefix'lerinden ÖNCE; "Momentum" ready-check DEĞİL — registry satırı +
+  assignment hücresi + HER select option'da geçer → "trend" (fam_1 benzersiz subfamily) kullanıldı,
+  aile-adı assert'leri `within` ile registry tablosuna scope'lu).
+
+**Dürüst sınır:** assignment `select` yalnız İLK aktif-aile sayfasını okur (doc 10 §7 UI kapsam —
+>20 aile option setini kısaltır); soft-deleted aileler Admin-only Trash yüzeyinde (restore/purge
+burada dispatch edilmez); özel rationale SSE event YOK (`resource.changed` süpürür).
+
+**SIRADAKİ İŞ ADAYLARI (BAŞLARKEN kullanıcıyla TEYİT ET):** kalan 9 placeholder sayfa — HEPSİNİN V1
+backend yüzeyi landed: Packages & Data (`market_data.py` Market Data / `research_data.py` Research
+Data), Workspace (`strategy.py` Strategy Details / `trading_signal.py` / `trade_log.py` /
+outsource-signal), Backtest (`allocation.py` Portfolio / `readiness.py` Ready Check), Docs
+(`manual.py` User Manual). TIER 3 deferred: retention auto-purge, data-queue redelivery, SSE
+streaming e2e, tool-call status shadowing. Trash purge (destructive + re-auth) AYRI slice; ESP +
+Library registry MUTASYONLARI (create/activate/deprecate, Admin-only, `X-Registry-Version` OCC)
+AYRI mutasyon slice'ları — OCC token'ları detaylarda hazır.
+
 ## Durum (2026-07-09, TIER 2 frontend — Embedded System Packages sayfası; PR #99 MERGED)
 
 **FRONTEND-ONLY (3 yeni + 1 edit)** — backend DEĞİŞMEDİ (1048 sabit), migration YOK, alembic head
@@ -1190,10 +1246,11 @@ tarihsel referans** olarak duruyor.
 ## ⤵️ YENİ OTURUMDA YAPIŞTIR (resume prompt)
 
 ```
-Entropia — post-V1 TIER 2. Backend TIER 1 EFEKTİF TAMAM (V1 + Auth/IdP #38 + Parquet A #41 +
-bar-replay B #43 + indikatör compute C #45 + risk_based #47 + condition blocks #49 + extensions
-#51 + indicator-vs-indicator #53 + multi-TF #55 + per-condition-TF #56 + N-ary #57 + VWAP #58 +
-Kelly #60/#61 + position_size_limits #63 — HEPSİ MERGED). FRONTEND landed (hepsi MERGED):
+Entropia — post-V1 TIER 2. STALE-BY-DEFAULT: Rationale Families sayfası (PR #101) + kapanış docs
+(PR #102) MERGE EDİLDİ varsayma, git'ten doğrula. Backend TIER 1 EFEKTİF TAMAM (V1 + Auth/IdP #38 +
+Parquet A #41 + bar-replay B #43 + indikatör compute C #45 + risk_based #47 + condition blocks #49 +
+extensions #51 + indicator-vs-indicator #53 + multi-TF #55 + per-condition-TF #56 + N-ary #57 +
+VWAP #58 + Kelly #60/#61 + position_size_limits #63 — HEPSİ MERGED). FRONTEND landed (hepsi MERGED):
 real-auth login/signup/logout (#65) + SSE live-invalidation (#67) + /v1/metrics ops dashboard
 (#69) + canlı-veri backtest sayfaları (#72) + Arrange Metrics & Analysis Lab (#74 — tüm lab
 key'leri ["agent-tasks"]) + Panel / Management / Logs (#78 — SON bağlanabilir SSE key'i
@@ -1248,23 +1305,34 @@ OCC-hazır registry_version) + Resolve Probe kartı (EXACT pinned revision P4/L5
 RESOLVER_NOT_RESOLVED/SIGNATURE_MISMATCH/ADAPTER_INCOMPATIBLE verbatim doc 09 §9.1–9.3);
 App.tsx REAL_PATHS 13→14, nav.ts değişmedi; frontend 113→121 — routes/esp.py OKUMA yüzeyi
 bağlandı; registry MUTASYONLARI [create/activate/deprecate, Admin-only X-Registry-Version OCC +
-Idempotency-Key] sonraki slice).
+Idempotency-Key] sonraki slice) + Rationale Families sayfası (#101 — TAM CRUD + editör dilimi,
+salt-okumanın AKSİNE, çünkü backend shared-editing [Guest hariç herkes, Admin-only DEĞİL] ve
+useRationaleFamilies zaten vardı; YENİ lib/rationale.ts wire tipleri (_family_dict/_assignment_row +
+command return'leri) + useFamilies/useAssignments (meta.table_version = batch OCC) + 4 mutasyon
+lib/trash.ts aynası: useCreateFamily taze Idempotency-Key/OCC'siz, useReviseFamily OCC
+expected_head_revision_id=current head, useSoftDeleteFamily "rv-N" If-Match ETag, useBatchAssign
+expected_table_version all-or-nothing; hepsi ["rationale-families"]+["rationale-assignments"]+
+["audit"] invalidate; YENİ pages/RationaleFamilies.tsx FamilyRegistryCard tek-editör create/revise
+key-remount + iki-adım Delete + AssignmentTableCard staged batch [server-truth diff, OUTPUT_TYPE_
+NOT_LISTED verbatim, soft-deleted family synthetic option]; App.tsx REAL_PATHS 14→15, nav.ts
+değişmedi; frontend 121→128 — routes/rationale.py TAM yüzeyi bağlandı; dürüst sınır: assignment
+select yalnız ilk aktif-aile sayfası [doc 10 §7 >20 aile kısaltır]).
 BACKEND: first-Admin bootstrap provisioning (#76 — ENTROPIA_BOOTSTRAP_ADMIN_EMAIL opt-in) +
 salt-okunur bootstrap-status read endpoint (#84 — commands/auth.py bootstrap_status/
 bootstrap_is_configured) + CP-Gen deterministic candidate generation (#89 — domain/create_package/
 candidate.py GENERATOR_VERSION namespace + content_hash; submit_candidate_generation stub compute →
 manifest; LLM YOK; engine DEĞİŞMEDİ). migration YOK, alembic head 0021_local_auth SABİT,
-ENGINE_VERSION backtest-engine-v2-position-size-limits SABİT; backend testler 1048, frontend 121.
+ENGINE_VERSION backtest-engine-v2-position-size-limits SABİT; backend testler 1048, frontend 128.
 
 ÖNCE DOĞRULA (stale-by-default): git fetch && git log --oneline origin/main -6 && gh pr list
---state all -L 8. main = fa2003f (Merge #99) + kapanış docs PR'ı merge sonrası ileri olmalı
+--state all -L 8. main = 7372478 (Merge #101) + kapanış docs PR'ı (#102) merge sonrası ileri olmalı
 (açıksa önce kullanıcıdan merge iste). alembic head 0021_local_auth; backend ENGINE_VERSION =
 backtest-engine-v2-position-size-limits. FRONTEND doğrula (yeni branch'i MUTLAKA origin/main'den
 aç — local stale olabilir): cd frontend && npm run typecheck && npm run lint && npm test &&
-npm run build (121/121 geçmeli).
+npm run build (128/128 geçmeli).
 
-ÖNCE OKU (authority): docs/POST_V1_KICKOFF.md (en üst Durum bloğu — PR #99) + docs/STAGE2_HANDOFF.md
-("live-data Embedded System Packages page (TIER 2, frontend slice 15) landed (PR #99)" +
+ÖNCE OKU (authority): docs/POST_V1_KICKOFF.md (en üst Durum bloğu — PR #101) + docs/STAGE2_HANDOFF.md
+("live-data Rationale Families page (TIER 2, frontend slice 16) landed (PR #101)" +
 "Next").
 CP backend kodu: routes/create_package.py (8 endpoint; aksiyonlar OCC X-Request-Version header +
 Idempotency-Key) + domain/create_package/{enums,value_objects,candidate}.py +
@@ -1293,9 +1361,15 @@ compose/list/detay/RequestActions + pages/PreCheck.tsx — PR #91+#93); Package 
 (lib/library.ts ["library"] hook'ları + facet taksonomi aynaları + UNASSIGNED_FAMILY sentineli +
 pages/Library.tsx facet bar/detay — PR #97); Embedded (lib/esp.ts ["esp"] hook'ları +
 useResolveProbe salt-okuma probe + taksonomi/L4 aynaları + pages/Embedded.tsx registry/detay/
-Resolve Probe — PR #99); test/helpers/apiStub.ts route-aware fetch double
-("<METHOD> <fragment>" sıralı eşleşme — detay/spesifik route'u liste/prefix route'undan ÖNCE yaz)
-— yeni sayfa testleri için BUNU reuse et.
+Resolve Probe — PR #99); Rationale Families (lib/rationale.ts ["rationale-families"]/
+["rationale-assignments"] hook'ları useFamilies/useAssignments + 4 mutasyon [useCreateFamily
+OCC'siz taze Idempotency-Key, useReviseFamily OCC expected_head_revision_id=current head,
+useSoftDeleteFamily "rv-N" If-Match ETag, useBatchAssign expected_table_version all-or-nothing] +
+assignmentStateTone; pages/RationaleFamilies.tsx FamilyRegistryCard tek-editör create/revise
+key-remount + iki-adım Delete + AssignmentTableCard staged batch editörü [server-truth diff,
+OUTPUT_TYPE_NOT_LISTED verbatim, soft-deleted synthetic option] — PR #101); test/helpers/apiStub.ts
+route-aware fetch double ("<METHOD> <fragment>" sıralı eşleşme — detay/spesifik route'u liste/prefix
+route'undan ÖNCE yaz) — yeni sayfa testleri için BUNU reuse et.
 
 FRONTEND STACK: Vite 8 + React 18 + react-router 6 + @tanstack/react-query 5 + react-hook-form +
 vitest/jsdom + @testing-library. Alias @ = src; kök frontend/src/. Node >=20.19. ESLint tseslint
@@ -1304,11 +1378,11 @@ invalidateQueries({queryKey}) object-form. tsconfig: noUncheckedIndexedAccess +
 exactOptionalPropertyTypes KAPALI.
 
 SIRADAKİ İŞ — kalan TIER 2 adayları (BAŞLARKEN kullanıcıyla hangisi diye TEYİT ET):
-- Kalan 10 placeholder sayfayı canlı-veri yap — HEPSİNİN V1 backend yüzeyi landed:
-  Packages & Data (rationale.py Rationale Families — doğal sıradaki: paylaşılan
-  useRationaleFamilies hook'u zaten var / market_data.py / research_data.py), Workspace
-  (strategy.py Strategy Details / trading_signal.py / trade_log.py / outsource-signal),
-  Backtest (allocation.py Portfolio / readiness.py Ready Check), Docs (manual.py User Manual).
+- Kalan 9 placeholder sayfayı canlı-veri yap — HEPSİNİN V1 backend yüzeyi landed:
+  Packages & Data (market_data.py Market Data — doğal sıradaki, Packages & Data grubunun
+  kalanı / research_data.py Research Data), Workspace (strategy.py Strategy Details /
+  trading_signal.py / trade_log.py / outsource-signal), Backtest (allocation.py Portfolio /
+  readiness.py Ready Check — RUN/History zaten bağlı, doğal ön-adım), Docs (manual.py User Manual).
 DİKKAT (kalıcı dürüst sınırlar): ["jobs"] için backend liste yüzeyi YOK (run projeksiyonları +
 /v1/metrics jobs-depth); users/system-actors/capabilities'in özel SSE event'i yok (kendi
 mutation'ları + resource.changed süpürür); view dataset / analysis artifact'ların READ/liste
@@ -1343,6 +1417,13 @@ market_data/research_data] için desen TABANI). routes/esp.py OKUMA yüzeyi FRON
 (PR #99 — list/detail/resolve; lib/esp.ts + pages/Embedded.tsx; Admin registry mutasyonları
 create/activate/deprecate [X-Registry-Version OCC + Idempotency-Key, commands/esp.py
 activate_resolver/deprecate_resolver] BAĞLANMADI — sonraki mutasyon slice'ının yüzeyi).
+routes/rationale.py TAM yüzey FRONTEND'e bağlandı (PR #101 — list_families/get_family/
+list_package_assignments okuma + create_family/revise_family/soft_delete_family/
+batch_assign_rationale mutasyonları; shared-editing [ensure_can_manage_families/
+ensure_can_edit_assignments, Admin-only DEĞİL]; commands/rationale.py return dict'leri + OCC
+desenleri [expected_head_revision_id / "rv-N" If-Match / expected_table_version] lib/rationale.ts
+aynaları — rationale'de bağlanmamış endpoint kalmadı; shared-editing mutasyon deseni [OCC +
+Idempotency-Key, Admin-gate YOK] ESP/Library registry mutasyon slice'ları için de TABAN).
 
 YÖNTEM: Workflow KULLANMA; direct-author. Backend working-loop (izole DB / L1 FK / alembic)
 UYGULANMAZ. Frontend loop: cd frontend (cwd resetlenebilir → absolute path);

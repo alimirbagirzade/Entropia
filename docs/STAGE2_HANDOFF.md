@@ -1808,7 +1808,38 @@ Mainboard operasyonları olarak KALIYOR (`routes/mainboard.py` 8 endpoint'ten ya
 `GET /mainboards/default` bağlı; `pages/Mainboard.tsx` 55 satır, veri bağlamıyor → sıradaki
 doğal büyük aday).
 
-## Next: post-V1 (continued) — TIER 2 SAYFA HARİTASI TAMAM (24/24 real — outsource-signal PR #123) → kalan adaylar: **Mainboard canlı sayfa + kompozisyon operasyonları** (doc 01; `routes/mainboard.py` 7/8 bağsız) + Trash purge re-auth + TIER 3
+## Stage post-V1 TIER 2 — Mainboard composition page landed (PR #125)
+
+**FRONTEND-ONLY** (1 yeni `lib/mainboard.ts` + 1 yeni `test/mainboard.test.tsx` + `pages/Mainboard.tsx`
+yeniden yazımı; backend DEĞİŞMEDİ, migration YOK, alembic head `0021_local_auth` sabit,
+`ENGINE_VERSION` sabit, backend test tabanı 1048 sabit). Index `/` Mainboard, Stage-0 meta/health
+shell'inden gerçek **kompozisyon düzlemine** dönüştü (doc 01). `routes/mainboard.py`'nin **bağsız 7
+endpoint'i** bağlandı (GET default zaten `lib/backtest.ts` `useDefaultMainboard` ile bağlıydı) →
+**`mainboard.py` yüzeyi TAM**. **KALICI dürüst sınır kapandı:** attach + Pin ("Use This Revision") +
+work-object soft-delete artık gerçek landed bir sayfada. main = `8fce88a` (Merge #125), feat `43b9063`.
+
+**Ampirik OCC/Idem (route imzaları OKUNDU):** `POST /external-work-object-drafts/{kind}` Idem/OCC
+YOK (transient, `async` değil → TS/TL workbench deep-link) · create/attach/snapshot/delete Idem-var,
+OCC-yok · `POST /work-objects/{root}/revisions` BODY `expected_head_revision_id` STR (opsiyonel) ·
+`PATCH /mainboard-items/{item}` BODY `expected_row_version` INT REQUIRED (body If-Match'ten öncelikli;
+tek intent/çağrı: pin_revision|set_enabled|reorder|set_label) · `DELETE /work-objects/{root}` gövdesiz.
+
+**Reuse anchor'ları:** `lib/mainboard.ts` (wire tipleri command dönüşünden VERBATIM + `useDefaultMainboard`
+re-export + §6.2 ready-status text/tone kataloğu + `itemKindLabel`/`EXTERNAL_DRAFT_KINDS` + 7 hook
+`["mainboard"]` altında — özel SSE event yok, `resource.changed` süpürür; kompozisyon mutasyonları
+`["mainboard"]+["readiness"]+["audit"]`, delete +`["trash"]`, snapshot yalnız `["audit"]`) ·
+`pages/Mainboard.tsx` (kompozisyon özeti + item-başına genişleyen operasyon paneli [row_version OCC'li
+Pin/Enable-Disable/Move/Label + iki-adımlı soft-delete §6.2 metni VERBATIM] + Add Outsource Signal
+opener + Advanced generic work object; row expand/collapse SUNUM-ONLY AT#7; empty-state VERBATIM) ·
+`test/mainboard.test.tsx` +9 (apiStub SIRALI — `{root}/revisions` çıplak create prefix'inden ÖNCE) →
+**frontend 219 → 228**; typecheck + lint temiz, build yeşil.
+
+**Dürüst sınır:** Add Strategy draft + Add Package derive (`POST /strategy-drafts`) Strategy Details
+router'ında (doc 02, `/strategy`), `mainboard.py`'de değil; Ready Check + RUN landed `/backtest/*`
+sayfaları (doc 14 §9.3); Mainboard'a özel SSE event yok; `ready_summary` hâlâ backend `not_ready`
+placeholder'ı, `latest_result_summary` runs bağlanana kadar null.
+
+## Next: post-V1 (continued) — TIER 2 SAYFA HARİTASI + Mainboard operasyonları TAMAM (24/24 real, `mainboard.py` yüzeyi tam — PR #125) → kalan adaylar: **Trash purge re-auth slice** + **TIER 3 deferred** (retention auto-purge / data-queue redelivery / SSE streaming e2e / tool-call status shadowing)
 
 **V1 COMPLETE (Stages 0–8, docs 01–22) + Auth/IdP + Parquet Slice A + Backtest Engine Slice B + real indicator compute Slice C + `risk_based` sizing (a) + condition blocks (b) + condition extensions (b2) + two-package indicator-vs-indicator + higher-timeframe resampling (c) + per-condition multi-TF reference (i) + N-ary reference chain (ii) + VWAP directional key (d) + `formula_based` Kelly sizing + `position_size_limits` min/max cap (PR #63) landed (1015 tests).** The **Slice C indicator-compute + position-sizing follow-ups are now EFFECTIVELY COMPLETE — TIER 1 backend is DONE**:
 

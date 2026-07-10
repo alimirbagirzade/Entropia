@@ -192,6 +192,9 @@ a:hover { text-decoration: underline; }
 .btn-primary:hover { background: var(--accent-dim); }
 .btn-ghost { padding: 5px 12px; font-size: 13px; background: transparent; }
 .btn-ghost:hover { background: var(--bg-elev-2); }
+.btn-danger { border-color: var(--down); color: var(--down); }
+.btn-danger:hover { background: color-mix(in srgb, var(--down) 14%, transparent); }
+.btn-danger:disabled { opacity: 0.55; cursor: not-allowed; }
 
 /* Auth (standalone login/signup page) */
 .auth-viewport {

@@ -3,6 +3,49 @@
 > **Amaç:** V1 kapandı (Stage 0–8 COMPLETE). Bu doküman post-V1 durumunu, aday iş listesini
 > ve temiz oturumda yapıştırılacak resume prompt'u içerir.
 
+## Durum (2026-07-10, TIER 2 frontend — Portfolio / Equity Allocation sayfası; PR #113 MERGED)
+
+**FRONTEND-ONLY (4 dosya, +1477 satır)** — backend DEĞİŞMEDİ (1048 sabit), migration YOK, alembic
+head `0021_local_auth` SABİT, `ENGINE_VERSION` SABİT. `/portfolio` placeholder'ı gerçek sayfa oldu —
+`routes/allocation.py`'nin TAM yüzeyi (5/5 endpoint, doc 13 Stage 4a) bağlandı: Ready Check'in
+okuduğu allocation draft'ının editörü. **Backtest nav grubu KAPANDI** (RUN/History #72 + Arrange
+Metrics #74 + Ready Check #111 + Portfolio #113). Frontend 174 → **181** (+7 vitest). main =
+`3210ede` (Merge #113), feat `f3e9550`. CI yeşil; self-review 0 CRITICAL/HIGH.
+
+**AMPİRİK route haritası (imzalar OKUNDU):** GET draft'ın body `row_version`'ı canlı OCC token
+(0 = plan yok = geçerli creation token); PUT draft + POST revisions OCC'yi **BODY-form
+`expected_row_version`** taşır (route `_resolve_expected` body'yi If-Match'e tercih eder) + deneme
+başına taze `Idempotency-Key`; `validate` hiç body/header OKUMAZ (her koşuda yeni immutable
+`validation_report_id` + audit satırı); `sync` POST ama **PURE READ** merge preview (query katmanı —
+Idem YOK, invalidation YOK; removal yalnız açık Save PUT ile, §14#9). `item_type` PUT'ta gönderilmez
+(server türetir, §8.2); stale → 409 `ALLOCATION_DRAFT_CONFLICT` verbatim. Draft PUT dönüşü
+`readiness_invalidated: true` → `["allocation"]+["readiness"]+["mainboard"]+["audit"]` invalidate;
+revision → `["allocation"]+["audit"]`; validate → yalnız `["audit"]`.
+
+**Reuse anchor'ları:** `lib/allocation.ts` (yeni) — wire tipleri `AllocationDraftResponse`/
+`SaveDraftResult`/`AllocationValidationReport`/`SyncPreview`/`RevisionResult`/`DerivedAmounts`/
+`AllocationIssue` + `ALLOCATION_CURRENCIES`(4)/`COMPOUNDING_MODES`(2)/`ALLOCATION_STATE_LABELS`+
+`_TONES` (UPPERCASE, doc-14 lowercase readiness'ten AYRI); `["allocation"]` hook'ları (özel SSE YOK):
+`useAllocationDraft`/`useSaveAllocationDraft`/`useValidateAllocation`/`useSyncPreview`/
+`useCreateAllocationRevision`. `pages/Portfolio.tsx` (yeni) — `DraftEditor` `key={row_version}`
+remount-reseed (asla merge yok); mutation state PARENT'ta (remount'u atlatır); issues + derived
+VERBATIM (istemci kapital matematiği hesaplamaz); `severityTone` `lib/readiness`'ten reuse. `App.tsx`
+REAL_PATHS 18→19; `nav.ts` 24 sabit. `test/portfolio.test.tsx` +7 (apiStub SIRALI; OCC 0-token +
+item_type-yok body asserti; pure-read sync header asserti).
+
+**Dürüst sınır:** sayfa yalnız default Mainboard composition'ını okur; Validate SAVED draft'ı
+doğrular (yerel edit'leri değil); sync preview'ın "Apply" düğmesi yok (birleştirme editörde yapılıp
+Save ile uygulanır — §14#9); allocation'ın özel SSE event'i yok (`resource.changed`).
+
+**SIRADAKİ İŞ ADAYLARI (BAŞLARKEN kullanıcıyla TEYİT ET):** kalan **5 placeholder sayfa** (hepsinin
+V1 backend yüzeyi landed): (1) Workspace — `strategy.py` Strategy Details / `trading_signal.py` /
+`trade_log.py` / outsource-signal; (2) Docs — `manual.py` User Manual (muhtemelen en küçük slice);
+VEYA ESP/Library registry MUTASYON slice'ları (Admin-only, `X-Registry-Version` OCC — Rationale
+shared-editing / marketData `postWithOcc` deseni TABAN). TIER 3 deferred: retention auto-purge,
+data-queue redelivery, SSE streaming e2e, tool-call status shadowing.
+
+---
+
 ## Durum (2026-07-10, TIER 2 frontend — Backtest Ready Check sayfası; PR #111 MERGED)
 
 **FRONTEND-ONLY (4 dosya, +748 satır)** — backend DEĞİŞMEDİ (1048 sabit), migration YOK, alembic
@@ -1490,69 +1533,72 @@ tarihsel referans** olarak duruyor.
 ## ⤵️ YENİ OTURUMDA YAPIŞTIR (resume prompt)
 
 ```
-Entropia — post-V1 TIER 2 devam. STALE-BY-DEFAULT: Ready Check (PR #111) + kapanış docs (PR #112)
+Entropia — post-V1 TIER 2 devam. STALE-BY-DEFAULT: Portfolio (PR #113) + kapanış docs (PR #114)
 MERGE EDİLDİ varsayma, git'ten doğrula.
 
 ÖNCE DOĞRULA: git fetch && git log --oneline origin/main -6 && gh pr list --state all -L 8.
-main = 946b6cf (Merge #111) olmalı; docs #112 merge sonrası daha ileri (açıksa önce merge iste).
+main = 3210ede (Merge #113) olmalı; docs #114 merge sonrası daha ileri (açıksa önce merge iste).
 alembic head 0021_local_auth (DEĞİŞMEDİ); ENGINE_VERSION = backtest-engine-v2-position-size-limits
-(DEĞİŞMEDİ). Backend 1048 test, frontend 174. Yeni branch'i MUTLAKA origin/main'den aç.
+(DEĞİŞMEDİ). Backend 1048 test, frontend 181. Yeni branch'i MUTLAKA origin/main'den aç.
 
-ÖNCE OKU (authority order): docs/POST_V1_KICKOFF.md (en üst "Durum" bloğu — PR #111 + "SIRADAKİ
-İŞ" + en alttaki resume) → docs/STAGE2_HANDOFF.md ("Backtest Ready Check page landed (PR #111)" +
-"## Next") → CLAUDE.md "Current position".
+ÖNCE OKU (authority order): docs/POST_V1_KICKOFF.md (en üst "Durum" bloğu — PR #113 + "SIRADAKİ İŞ
+ADAYLARI" + en alttaki resume) → docs/STAGE2_HANDOFF.md ("Portfolio / Equity Allocation page landed
+(PR #113)" + "## Next") → CLAUDE.md "Current position".
 
-DURUM: TIER 1 backend EFEKTİF TAMAM. FRONTEND landed (hepsi MERGED): login #65, SSE #67,
-/v1/metrics #69, backtest RUN/History #72, Arrange Metrics + Analysis Lab #74, Panel/Logs #78,
-history compare + metrics rebind #80, Future Dev registry #82, provisioning dashboard #84, Trash
-restore #86, auth-invalidation #88, Create Package #91, CP aksiyonları + Pre-Check #93, gated
-capability POST'ları #95, Package Library #97, Embedded System Packages #99, Rationale Families
-#101, Market Data sayfası #103, Market Data lifecycle aksiyonları #105, Research Data sayfası #107,
-Research Data lifecycle aksiyonları #109 (Packages & Data grubu TAM 14/14), Backtest Ready Check
-sayfası #111 (YENİ — routes/readiness.py doc 14 §4/§7/§9 /backtest/ready-check'e bağlandı:
-lib/readiness.ts wire tipleri ReadinessReport/CurrentReadiness/RunCheckResult + READINESS_STATE_LABELS/
-_TONES/severityTone aynaları; ["readiness"] hook'ları useCurrentReadiness/useReadinessReport/
-useRunReadinessCheck; AMPİRİK: OCC token rv-N DEĞİL composition FINGERPRINT → expected_fingerprint
-BODY-form [If-Match değil; route _resolve_expected body'yi öncelikler] + taze Idempotency-Key, 409
-CompositionStale = RC-09 verbatim; success ["readiness"]+["mainboard"] invalidate; pages/ReadyCheck.tsx
-iki mod ?report= deep-link + default workbench; stale-vs-superseded ayrımı SERVER state'inden
-state === "stale" — self-review bug stored_state !== state düzeltildi + regression; App.tsx REAL_PATHS
-17→18, nav 24 sabit; test/readyCheck.test.tsx +6 apiStub SIRALI + findBy* zincirleme yükleme;
-+6 vitest → 174). BACKEND: first-Admin bootstrap #76 + bootstrap-status #84 + CP-Gen deterministic
-candidate generation #89 (LLM YOK).
+DURUM: TIER 1 backend EFEKTİF TAMAM. FRONTEND landed (hepsi MERGED): login #65, SSE #67, /v1/metrics
+#69, backtest RUN/History #72, Arrange Metrics + Analysis Lab #74, Panel/Logs #78, history compare +
+metrics rebind #80, Future Dev registry #82, provisioning dashboard #84, Trash restore #86,
+auth-invalidation #88, Create Package #91, CP aksiyonları + Pre-Check #93, gated capability POST'ları
+#95, Package Library #97, Embedded #99, Rationale Families #101, Market Data #103 + lifecycle #105,
+Research Data #107 + lifecycle #109 (Packages & Data grubu TAM), Ready Check #111, Portfolio #113
+(YENİ — routes/allocation.py 5/5 endpoint /portfolio'ya bağlandı, BACKTEST GRUBU KAPANDI;
+lib/allocation.ts ["allocation"] hook'ları; AMPİRİK: PUT/revisions OCC BODY-form expected_row_version
+[GET draft'ın row_version'ı canlı token; 0 = plan-yok = geçerli creation token] + taze
+Idempotency-Key; validate body/header OKUMAZ [her koşu yeni immutable rapor + audit]; sync POST ama
+PURE READ preview [Idem YOK, invalidation YOK]; item_type PUT'ta gönderilmez — server türetir §8.2;
+draft PUT readiness_invalidated:true → ["allocation"]+["readiness"]+["mainboard"]+["audit"]
+invalidate, revision → ["allocation"]+["audit"], validate → yalnız ["audit"];
+pages/Portfolio.tsx DraftEditor key={row_version} remount-reseed + mutation state PARENT'ta;
+App.tsx REAL_PATHS 18→19, nav 24 sabit; +7 vitest → 181). BACKEND: first-Admin bootstrap #76 +
+bootstrap-status #84 + CP-Gen deterministic candidate generation #89 (LLM YOK).
 
-SIRADAKİ İŞ (KULLANICI 2026-07-10 TEYİT ETTİ): allocation.py Portfolio/Equity Allocation (/portfolio)
-slice'ı — Ready Check'in okuduğu allocation draft'ının editörü, Backtest grubunu kapatır. Route
-imzalarını ÖNCE OKU (OCC/Idem her endpoint'te olmayabilir — PR #105/#111 dersi; readiness'te token
-fingerprint BODY-form'du). Sonrası: kalan 5 placeholder — Workspace (strategy.py Strategy Details /
-trading_signal.py / trade_log.py / outsource-signal), Docs (manual.py User Manual) — VEYA ESP/Library
-registry MUTASYON slice'ları (Admin-only, X-Registry-Version OCC — Rationale shared-editing /
-marketData postWithOcc deseni TABAN). TIER 3 deferred: retention auto-purge, data-queue redelivery,
-SSE streaming e2e, tool-call status shadowing.
+SIRADAKİ İŞ (BAŞLARKEN KULLANICIYLA TEYİT ET — henüz teyitli DEĞİL): kalan 5 placeholder sayfa
+(hepsinin V1 backend yüzeyi landed): (1) Workspace — strategy.py Strategy Details /
+trading_signal.py Trading Signal / trade_log.py Trade Log / outsource-signal; (2) Docs — manual.py
+User Manual (muhtemelen en küçük slice); VEYA ESP/Library registry MUTASYON slice'ları (Admin-only,
+X-Registry-Version OCC — Rationale shared-editing / marketData postWithOcc deseni TABAN). Hangisi
+seçilirse: route İMZALARINI ÖNCE OKU (OCC/Idem her endpoint'te olmayabilir — PR #105/#111/#113
+dersleri: successor/deprecate header okumuyordu; readiness token composition FINGERPRINT
+BODY-form'du; allocation OCC'si BODY-form expected_row_version'dı + sync POST'u pure read'di) +
+queries/commands dönüş dict'lerini oku → wire tipleri VERBATIM ayna. TIER 3 deferred: retention
+auto-purge, data-queue redelivery, SSE streaming e2e, tool-call status shadowing.
 
 DÜRÜST SINIR (KALICI): ["jobs"] backend liste yüzeyi YOK; ham baytlar sayfadan geçmez; view dataset
 / analysis artifact READ yüzeyi YOK; bundle compiler'lar pure read (kalıcı read yüzeyi yok);
-capability/CP/library/esp/rationale/market-data/research-data/readiness'in özel SSE event'i yok
-(resource.changed süpürür). RUN admission RUN sayfasında kalır (doc 14 §9.3).
+capability/CP/library/esp/rationale/market-data/research-data/readiness/allocation'ın özel SSE
+event'i yok (resource.changed süpürür). RUN admission RUN sayfasında kalır (doc 14 §9.3); Portfolio
+sayfası yalnız default Mainboard composition'ını okur.
 
 FRONTEND STACK: Vite 8 + React 18 + react-router 6 + @tanstack/react-query 5 + react-hook-form +
 vitest/jsdom + @testing-library. Alias @ = src; kök frontend/src/. react-query v5 →
 invalidateQueries({queryKey}) object-form. tsconfig noUncheckedIndexedAccess AÇIK,
 exactOptionalPropertyTypes KAPALI. Composition girişi: lib/backtest.ts useDefaultMainboard
-(workspace_id = composition_id, composition_hash = current fingerprint, ready_summary).
+(workspace_id = composition_id, composition_hash = current fingerprint, ready_summary); OCC/Idem
+taze örnekler: lib/allocation.ts (body-form OCC) + lib/readiness.ts (fingerprint OCC) +
+lib/marketData.ts postWithOcc (If-Match "rv-N").
 
 YÖNTEM: Workflow KULLANMA; direct-author. Frontend loop: cd frontend (absolute path) &&
-npm run typecheck && npm run lint && npm test && npm run build (174/174 geçmeli) + yeni
+npm run typecheck && npm run lint && npm test && npm run build (181/181 geçmeli) + yeni
 component/unit test (test/helpers/apiStub.ts reuse — SIRALI eşleşme: detay/aksiyon route'u liste
-prefix'inden ÖNCE; zincirleme yükleme için findBy* kullan, senkron getBy* değil; facet/select
-assert'lerini within ile tabloya scope'la). YENİ dosya heredoc (gate-free); mevcut dosya Edit →
-GateGuard 4-fact (importer Grep / public-API / data-schema / user-request verbatim → gate İLK
-denemeyi fact'ler sunulsa da bloklar → aynı çağrıyı aynen tekrarla; aynı dosyaya 2.+ edit gate-siz;
-ARAYA user mesajı/tool girerse gate RESETLENİR → tekrar 4-fact); ilk Bash da fact-gate'li
-(oturum/gün sınırı sonrası tekrar); docs da gate'lenir. Edit öncesi dosyayı Read etmen gerekir.
+prefix'inden ÖNCE; zincirleme yükleme için findBy* kullan, senkron getBy* değil; çift metin riski
+olan assert'leri within ile scope'la ya da tekil değere bağla). YENİ dosya heredoc (gate-free);
+mevcut dosya Edit → GateGuard 4-fact (importer Grep / public-API / data-schema / user-request
+verbatim → gate İLK denemeyi bloklar → aynı çağrıyı aynen tekrarla; aynı dosyaya 2.+ edit gate-siz;
+ARAYA mesaj/tool girerse gate RESETLENİR); ilk Bash da fact-gate'li; Edit öncesi dosyayı Read et.
 CRITICAL/HIGH AMPİRİK doğrula (route/command imzasını OKU — handoff özeti yanlış olabilir) →
 commit (conventional feat(post-v1), branch feat/post-v1-frontend-<slug> origin/main'den, attribution
-YOK) → PR → CI background poll (gh pr checks <n> --watch) → merge KULLANICIDA (agent self-merge
-BLOKLU). Türkçe, MALİYET BİLİNÇLİ. Kapanışta: handoff + kickoff (resume tazele) + CLAUDE.md + ecc
-knowledge-graph + claude-mem checkpoint.
+YOK) → PR → CI background poll (gh pr checks <n> --watch) → merge KULLANICIDA (self-merge BLOKLU).
+Türkçe, MALİYET BİLİNÇLİ. Kapanışta: handoff + kickoff (resume tazele) + CLAUDE.md + ecc
+knowledge-graph (claude-mem manuel checkpoint worker runtime'da YAZILAMAZ — otomatik yakalanır,
+deneme).
 ```

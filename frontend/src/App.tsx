@@ -11,6 +11,7 @@ import { Library } from "./pages/Library";
 import { Mainboard } from "./pages/Mainboard";
 import { MarketData } from "./pages/MarketData";
 import { Metrics } from "./pages/Metrics";
+import { OutsourceSignal } from "./pages/OutsourceSignal";
 import { Panel } from "./pages/Panel";
 import { Portfolio } from "./pages/Portfolio";
 import { PreCheck } from "./pages/PreCheck";
@@ -53,6 +54,7 @@ const REAL_PATHS = new Set([
   "/market-data",
   "/research-data",
   "/strategy",
+  "/outsource-signal",
   "/trading-signal",
   "/trade-log",
 ]);
@@ -247,6 +249,15 @@ export default function App() {
           element={
             <ErrorBoundary>
               <StrategyDetails />
+            </ErrorBoundary>
+          }
+        />
+        {/* Add Outsource Signal (Stage 3 doc 03): external-work type chooser — no backend surface. */}
+        <Route
+          path="/outsource-signal"
+          element={
+            <ErrorBoundary>
+              <OutsourceSignal />
             </ErrorBoundary>
           }
         />

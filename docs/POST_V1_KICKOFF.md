@@ -3,6 +3,47 @@
 > **Amaç:** V1 kapandı (Stage 0–8 COMPLETE). Bu doküman post-V1 durumunu, aday iş listesini
 > ve temiz oturumda yapıştırılacak resume prompt'u içerir.
 
+## Durum (2026-07-10, TIER 2 frontend — Backtest Ready Check sayfası; PR #111 MERGED)
+
+**FRONTEND-ONLY (4 dosya, +748 satır)** — backend DEĞİŞMEDİ (1048 sabit), migration YOK, alembic
+head `0021_local_auth` SABİT, `ENGINE_VERSION` SABİT. `/backtest/ready-check` placeholder'ı gerçek
+sayfa oldu — `routes/readiness.py` (doc 14 §4/§7/§9) bağlandı: Backtest grubunun strateji→RUN kapısı
+(RUN/History zaten #72'de bağlı). Frontend 168 → **174** (+6 vitest). main = `946b6cf` (Merge #111),
+feat `6232486`. CI 3/3 yeşil; self-review 1 bug buldu + düzeltti (aşağıda).
+
+**AMPİRİK route bulgusu (imza OKUNDU):** OCC token `"rv-N"` DEĞİL — composition **FINGERPRINT**.
+`POST /mainboard-compositions/{id}/readiness-checks` `expected_fingerprint`'i **BODY-form** taşır
+(If-Match değil; route `_resolve_expected` body'yi öncelikler) + deneme başına taze
+`Idempotency-Key`; 409 `CompositionStale` = RC-09 verbatim. Success `["readiness"]` +
+`["mainboard"]` İKİSİNİ de invalidate eder (default-Mainboard `ready_summary` hareket eder).
+
+**Reuse anchor'ları:** `lib/readiness.ts` (yeni) — wire tipleri `ReadinessIssue`/`ReadinessSummary`/
+`ReadinessReport`/`CurrentReadiness`/`RunCheckResult`; `enums.py` aynaları `READINESS_STATE_LABELS`/
+`READINESS_STATE_TONES` + `NOT_CHECKED_STATE` + `readinessStateLabel`/`readinessStateTone`/
+`severityTone`; `["readiness"]` hook'ları (özel SSE YOK → `resource.changed`):
+`useCurrentReadiness(compositionId)` / `useReadinessReport(reportId)` / `useRunReadinessCheck`.
+`pages/ReadyCheck.tsx` (yeni) — iki mod: `?report=<id>` immutable deep-link + default workbench
+(`useDefaultMainboard` composition → current readiness → guard toggle'lı run); stale ("re-run") vs
+superseded ("a newer report exists") ayrımı SERVER `state`'inden (`state === "stale"`), asla
+yeniden türetilmez. **SELF-REVIEW BUG:** stale bayrağı `stored_state !== state` idi → superseded'a
+yanlış "re-run" gösterirdi → `state === "stale"`'e düzeltildi + regression testi. `App.tsx`
+REAL_PATHS 17→18; `nav.ts` 24 sabit. `test/readyCheck.test.tsx` +6 (apiStub SIRALI; zincirleme
+yükleme için `findBy*` — senkron `getBy*` erken çalışıyordu).
+
+**Dürüst sınır:** RUN admission (`POST /backtest-runs`) RUN sayfasında kalır (doc 14 §9.3 scope);
+readiness'in özel SSE event'i yok; sayfa yalnız default Mainboard composition'ını okur (RUN sayfası
+deseni; Stage 3 gerçek Mainboard sayfası app-level'a taşıyabilir).
+
+**SIRADAKİ İŞ — KULLANICI TEYİT ETTİ (2026-07-10):** `allocation.py` **Portfolio/Equity Allocation**
+(`/portfolio`) slice'ı — Ready Check'in okuduğu allocation draft'ının editörü, Backtest grubunu
+kapatır. Route imzalarını ÖNCE OKU (OCC/Idem her endpoint'te olmayabilir — PR #105/#111 dersi).
+Sonrası: kalan **5 placeholder** — Workspace (`strategy.py` / `trading_signal.py` / `trade_log.py` /
+outsource-signal), Docs (`manual.py` User Manual) — + ESP/Library registry MUTASYON slice'ları
+(Admin-only, `X-Registry-Version` OCC). TIER 3 deferred: retention auto-purge, data-queue
+redelivery, SSE streaming e2e, tool-call status shadowing.
+
+---
+
 ## Durum (2026-07-10, TIER 2 frontend — Research Data lifecycle aksiyonları; PR #109 MERGED)
 
 **FRONTEND-ONLY (2 yeni + 3 edit)** — backend DEĞİŞMEDİ (1048 sabit), migration YOK, alembic head
@@ -1437,7 +1478,7 @@ tarihsel referans** olarak duruyor.
 
 - Workflow KULLANMA — doğrudan yaz; YENİ dosya Bash heredoc (gate-free), mevcut dosya Edit 4-fact.
 - `cd backend && uv run ruff check . && uv run ruff format --check . && uv run mypy src` +
-  izole DB'de `uv run pytest --no-cov -q` (**928 yeşil kalmalı**); migration gerekirse
+  izole DB'de `uv run pytest --no-cov -q` (**1048 yeşil kalmalı**); migration gerekirse
   `0022_*` (→0021) up/down/up + parity + L1 FK proof.
 - code-reviewer subagent → CRITICAL/HIGH **AMPİRİK DOĞRULA** (8a: 0; 8b: 2/2 GERÇEK; auth: 0;
   parquet: 1/1 GERÇEK; engine Slice B: 1 CRITICAL/1 GERÇEK — oran değişken, HER ZAMAN doğrula) →
@@ -1449,17 +1490,17 @@ tarihsel referans** olarak duruyor.
 ## ⤵️ YENİ OTURUMDA YAPIŞTIR (resume prompt)
 
 ```
-Entropia — post-V1 TIER 2 devam. STALE-BY-DEFAULT: Research Data lifecycle (PR #109) +
-kapanış docs (PR #110) MERGE EDİLDİ varsayma, git'ten doğrula.
+Entropia — post-V1 TIER 2 devam. STALE-BY-DEFAULT: Ready Check (PR #111) + kapanış docs (PR #112)
+MERGE EDİLDİ varsayma, git'ten doğrula.
 
 ÖNCE DOĞRULA: git fetch && git log --oneline origin/main -6 && gh pr list --state all -L 8.
-main = 32d07e4 (Merge #109) olmalı; docs #110 merge sonrası daha ileri (açıksa önce merge iste).
+main = 946b6cf (Merge #111) olmalı; docs #112 merge sonrası daha ileri (açıksa önce merge iste).
 alembic head 0021_local_auth (DEĞİŞMEDİ); ENGINE_VERSION = backtest-engine-v2-position-size-limits
-(DEĞİŞMEDİ). Backend 1048 test, frontend 168. Yeni branch'i MUTLAKA origin/main'den aç.
+(DEĞİŞMEDİ). Backend 1048 test, frontend 174. Yeni branch'i MUTLAKA origin/main'den aç.
 
-ÖNCE OKU (authority order): docs/POST_V1_KICKOFF.md (en üst "Durum" bloğu — PR #109 + "SIRADAKİ
-İŞ ADAYLARI" + en alttaki resume) → docs/STAGE2_HANDOFF.md ("Research Data lifecycle actions landed
-(PR #109)" + "## Next") → CLAUDE.md "Current position".
+ÖNCE OKU (authority order): docs/POST_V1_KICKOFF.md (en üst "Durum" bloğu — PR #111 + "SIRADAKİ
+İŞ" + en alttaki resume) → docs/STAGE2_HANDOFF.md ("Backtest Ready Check page landed (PR #111)" +
+"## Next") → CLAUDE.md "Current position".
 
 DURUM: TIER 1 backend EFEKTİF TAMAM. FRONTEND landed (hepsi MERGED): login #65, SSE #67,
 /v1/metrics #69, backtest RUN/History #72, Arrange Metrics + Analysis Lab #74, Panel/Logs #78,
@@ -1467,48 +1508,51 @@ history compare + metrics rebind #80, Future Dev registry #82, provisioning dash
 restore #86, auth-invalidation #88, Create Package #91, CP aksiyonları + Pre-Check #93, gated
 capability POST'ları #95, Package Library #97, Embedded System Packages #99, Rationale Families
 #101, Market Data sayfası #103, Market Data lifecycle aksiyonları #105, Research Data sayfası #107,
-Research Data lifecycle aksiyonları #109 (YENİ — routes/research_data.py 8 lifecycle endpoint bağlandı
-→ sayfa 14/14 endpoint, Packages & Data grubu TAM: lib/researchData.ts useCreateRevision [OCC, body
-entity_id/row_version YOK]/useSetTimePolicy/useDefineField/useDefineFeature [3'ü header YOK]/
-useApproveRevision/useRevokeApproval [OCC, Admin]/useCompileAgentBundle/useCompileEvidenceBundle
-[PURE READ, Idem+invalidation YOK]; postWithOcc If-Match "rv-N"+taze Idempotency-Key [marketData
-birebir]; EVENT_TIME_SEMANTICS/AVAILABLE_TIME_POLICIES/FIXED_DELAY_POLICY/RESEARCH_TIMEZONE_MODES/
-CUSTOM_TIMEZONE_MODE aynaları; validation fixed_delay→delay zorunlu/diğerleri null, custom timezone→
-IANA zorunlu; components/ResearchLifecycle.tsx 6 composer DetailCard'da key={entity_id};
-pages/ResearchData.tsx import+render+yorum; test/researchDataLifecycle.test.tsx +11 apiStub SIRALI +
-researchData.test.tsx 2 assertion within(identityTable) scope; App/nav UNCHANGED REAL_PATHS 17 nav 24;
-+11 vitest → 168). BACKEND: first-Admin bootstrap #76 + bootstrap-status #84 + CP-Gen deterministic
+Research Data lifecycle aksiyonları #109 (Packages & Data grubu TAM 14/14), Backtest Ready Check
+sayfası #111 (YENİ — routes/readiness.py doc 14 §4/§7/§9 /backtest/ready-check'e bağlandı:
+lib/readiness.ts wire tipleri ReadinessReport/CurrentReadiness/RunCheckResult + READINESS_STATE_LABELS/
+_TONES/severityTone aynaları; ["readiness"] hook'ları useCurrentReadiness/useReadinessReport/
+useRunReadinessCheck; AMPİRİK: OCC token rv-N DEĞİL composition FINGERPRINT → expected_fingerprint
+BODY-form [If-Match değil; route _resolve_expected body'yi öncelikler] + taze Idempotency-Key, 409
+CompositionStale = RC-09 verbatim; success ["readiness"]+["mainboard"] invalidate; pages/ReadyCheck.tsx
+iki mod ?report= deep-link + default workbench; stale-vs-superseded ayrımı SERVER state'inden
+state === "stale" — self-review bug stored_state !== state düzeltildi + regression; App.tsx REAL_PATHS
+17→18, nav 24 sabit; test/readyCheck.test.tsx +6 apiStub SIRALI + findBy* zincirleme yükleme;
++6 vitest → 174). BACKEND: first-Admin bootstrap #76 + bootstrap-status #84 + CP-Gen deterministic
 candidate generation #89 (LLM YOK).
 
-SIRADAKİ İŞ (BAŞLARKEN kullanıcıyla TEYİT ET): kalan 7 placeholder sayfa (HEPSİNİN V1 backend yüzeyi
-landed): (1) Workspace — strategy.py Strategy Details / trading_signal.py / trade_log.py /
-outsource-signal; (2) Backtest — allocation.py Portfolio / readiness.py Ready Check (RUN/History zaten
-bağlı); (3) Docs — manual.py User Manual; VEYA ESP/Library registry MUTASYON slice'ları (Admin-only,
-X-Registry-Version OCC — Rationale shared-editing / marketData postWithOcc deseni TABAN; route
-imzalarını ÖNCE OKU — bazı sub-action OCC/Idem okumayabilir). TIER 3 deferred: retention auto-purge,
-data-queue redelivery, SSE streaming e2e, tool-call status shadowing.
+SIRADAKİ İŞ (KULLANICI 2026-07-10 TEYİT ETTİ): allocation.py Portfolio/Equity Allocation (/portfolio)
+slice'ı — Ready Check'in okuduğu allocation draft'ının editörü, Backtest grubunu kapatır. Route
+imzalarını ÖNCE OKU (OCC/Idem her endpoint'te olmayabilir — PR #105/#111 dersi; readiness'te token
+fingerprint BODY-form'du). Sonrası: kalan 5 placeholder — Workspace (strategy.py Strategy Details /
+trading_signal.py / trade_log.py / outsource-signal), Docs (manual.py User Manual) — VEYA ESP/Library
+registry MUTASYON slice'ları (Admin-only, X-Registry-Version OCC — Rationale shared-editing /
+marketData postWithOcc deseni TABAN). TIER 3 deferred: retention auto-purge, data-queue redelivery,
+SSE streaming e2e, tool-call status shadowing.
 
 DÜRÜST SINIR (KALICI): ["jobs"] backend liste yüzeyi YOK; ham baytlar sayfadan geçmez; view dataset
 / analysis artifact READ yüzeyi YOK; bundle compiler'lar pure read (kalıcı read yüzeyi yok);
-capability/CP/library/esp/rationale/market-data/research-data'nın özel SSE event'i yok
-(resource.changed süpürür).
+capability/CP/library/esp/rationale/market-data/research-data/readiness'in özel SSE event'i yok
+(resource.changed süpürür). RUN admission RUN sayfasında kalır (doc 14 §9.3).
 
 FRONTEND STACK: Vite 8 + React 18 + react-router 6 + @tanstack/react-query 5 + react-hook-form +
 vitest/jsdom + @testing-library. Alias @ = src; kök frontend/src/. react-query v5 →
 invalidateQueries({queryKey}) object-form. tsconfig noUncheckedIndexedAccess AÇIK,
-exactOptionalPropertyTypes KAPALI.
+exactOptionalPropertyTypes KAPALI. Composition girişi: lib/backtest.ts useDefaultMainboard
+(workspace_id = composition_id, composition_hash = current fingerprint, ready_summary).
 
 YÖNTEM: Workflow KULLANMA; direct-author. Frontend loop: cd frontend (absolute path) &&
-npm run typecheck && npm run lint && npm test && npm run build (168/168 geçmeli) + yeni
+npm run typecheck && npm run lint && npm test && npm run build (174/174 geçmeli) + yeni
 component/unit test (test/helpers/apiStub.ts reuse — SIRALI eşleşme: detay/aksiyon route'u liste
-prefix'inden ÖNCE; facet/select assert'lerini within ile tabloya scope'la; select <option>'ları detay
-değerleriyle çakışabilir → detay assertion'ı within(table) ile scope'la). YENİ dosya heredoc
-(gate-free); mevcut dosya Edit → GateGuard 4-fact (importer Grep / public-API / data-schema /
-user-request verbatim → gate İLK denemeyi fact'ler sunulsa da bloklar → aynı çağrıyı aynen tekrarla;
-aynı dosyaya 2.+ edit gate-siz); ilk Bash da fact-gate'li (oturum/gün sınırı sonrası tekrar); docs da
-gate'lenir. CRITICAL/HIGH AMPİRİK doğrula (route/command imzasını OKU — handoff özeti yanlış olabilir)
-→ commit (conventional feat(post-v1), branch feat/post-v1-frontend-<slug> origin/main'den, attribution
-YOK) → PR → CI background poll (until ! gh pr checks <n>|grep -q pending) → merge KULLANICIDA (agent
-self-merge auto-mode classifier tarafından BLOKLU). Türkçe, MALİYET BİLİNÇLİ. Kapanışta: handoff +
-kickoff (resume tazele) + CLAUDE.md + ecc knowledge-graph.
+prefix'inden ÖNCE; zincirleme yükleme için findBy* kullan, senkron getBy* değil; facet/select
+assert'lerini within ile tabloya scope'la). YENİ dosya heredoc (gate-free); mevcut dosya Edit →
+GateGuard 4-fact (importer Grep / public-API / data-schema / user-request verbatim → gate İLK
+denemeyi fact'ler sunulsa da bloklar → aynı çağrıyı aynen tekrarla; aynı dosyaya 2.+ edit gate-siz;
+ARAYA user mesajı/tool girerse gate RESETLENİR → tekrar 4-fact); ilk Bash da fact-gate'li
+(oturum/gün sınırı sonrası tekrar); docs da gate'lenir. Edit öncesi dosyayı Read etmen gerekir.
+CRITICAL/HIGH AMPİRİK doğrula (route/command imzasını OKU — handoff özeti yanlış olabilir) →
+commit (conventional feat(post-v1), branch feat/post-v1-frontend-<slug> origin/main'den, attribution
+YOK) → PR → CI background poll (gh pr checks <n> --watch) → merge KULLANICIDA (agent self-merge
+BLOKLU). Türkçe, MALİYET BİLİNÇLİ. Kapanışta: handoff + kickoff (resume tazele) + CLAUDE.md + ecc
+knowledge-graph + claude-mem checkpoint.
 ```

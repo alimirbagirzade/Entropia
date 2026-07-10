@@ -3,6 +3,109 @@
 > **Amaç:** V1 kapandı (Stage 0–8 COMPLETE). Bu doküman post-V1 durumunu, aday iş listesini
 > ve temiz oturumda yapıştırılacak resume prompt'u içerir.
 
+## Durum (2026-07-10, TIER 2 frontend — Data-queue redelivery Admin UI; PR #131 MERGED)
+
+**FRONTEND-ONLY** (3 dosya salt-ekleme; backend değişmedi, migration YOK, alembic head `0021_local_auth`
+SABİT, `ENGINE_VERSION` SABİT, backend **1054** sabit; frontend **232 → 235**). main = `889ca2e`
+(Merge #131), feat `51d9e83`. Landed backend operator-recovery endpoint'ini (PR #129, INF-03, doc 20 §6)
+`/panel` sayfasına bağlar → `data`-queue redelivery için opsiyonel Admin UI paneli TIER 3 adayı KAPANDI.
+
+**Ne yapıldı:** `POST /admin/data-queue/redeliver` → `pages/Panel.tsx` `OperatorRecoveryCard`. Route yalnız
+opsiyonel `grace_seconds` query okur (`ge=0`, `0`=her QUEUED data job'ı süpürür) → **OCC token /
+Idempotency-Key YOK** (durable satırlar kaynak-gerçek, redelivery idempotent). `lib/adminPanel.ts` (salt
+ekleme): `DataQueueRedeliverResult`/`DataQueueRedeliverable` wire tipleri (`commands/data_queue.py`
+dönüş dict'i VERBATIM → `{scanned, redeliverable:[{job_kind,job_id}], skipped_unknown_kind}`) +
+`DATA_JOB_KIND_LABELS`/`dataJobKindLabel` (`jobs/data_queue.py` `DATA_JOB_KINDS` etiket aynası, yalnız
+hydration) + `useRedeliverDataQueue` (başarıda `["audit"]` invalidate — command bir
+`data_queue.redelivery_requested` audit+outbox yayar, süpürülecek data-queue read yüzeyi yok). Kart:
+grace-seconds ipucu input'u + routable sonuç tablosu (server job_kind etiketi + job id) + scanned/
+re-dispatched/skipped sayaçları + un-routable legacy-satır notu; Admin-only server-side (non-Admin 403
+VERBATIM); client negatif/ondalık grace'i dispatch öncesi engeller. `test/panel.test.tsx` +3 → 235.
+`App.tsx`/`nav.ts` DEĞİŞMEDİ (`/panel` zaten real). Review 0 CRITICAL/HIGH.
+
+**Reuse anchor'ları:** `lib/adminPanel.ts::useRedeliverDataQueue` (query-only POST, OCC/Idem yok,
+`["audit"]` invalidate) + `DataQueueRedeliverResult`/`dataJobKindLabel` + `pages/Panel.tsx`
+`OperatorRecoveryCard`/`RedeliverResult` (grace hint input + sonuç tablosu + empty-state + skipped notu).
+
+**Dürüst sınır (KALICI):** re-dispatch OPERATOR aksiyonu kalır (scheduler `data`'yı ASLA auto-route etmez,
+doc 20 §6); legacy satırlar `skipped_unknown_kind` (asla tahmin); `["jobs"]` HTTP LİSTE yüzeyi YOK (POST
+recovery aksiyonu, browser değil); operator = Admin (`require_admin_panel`).
+
+**SIRADAKİ İŞ (BAŞLARKEN kullanıcıyla TEYİT ET — henüz teyitli DEĞİL):** kalan **TIER 3 deferred**:
+(a) SSE streaming e2e (bağlantı kopması dayanıklılığı — `lib/sse.ts` reconnect self-heal zaten var, bu
+test/dayanıklılık ağırlıklı); (b) tool-call status shadowing (CR-08 follow-up — agent runtime tarafı, daha
+geniş kapsam). **retention auto-purge KAPSAM DIŞI** (doc 20 §16). LLM generation Future-Dev — kapsam dışı.
+
+**PASTE-READY RESUME PROMPT (sonraki temiz oturuma yapıştır):**
+
+```
+Entropia — post-V1 TIER 3 devam. STALE-BY-DEFAULT: data-queue redelivery Admin UI kapanış docs (PR #132)
+MERGE EDİLDİ varsayma, git'ten doğrula.
+
+ÖNCE DOĞRULA: git fetch && git log --oneline origin/main -6 && gh pr list --state all -L 8.
+main = 889ca2e (Merge #131 — data-queue redelivery Admin UI feat 51d9e83) + docs #132 merge sonrası daha
+ileri (açıksa önce merge iste). alembic head 0021_local_auth (DEĞİŞMEDİ); ENGINE_VERSION =
+backtest-engine-v2-position-size-limits (DEĞİŞMEDİ). Backend 1054 test, frontend 235. Yeni branch'i
+MUTLAKA origin/main'den aç.
+
+ÖNCE OKU (authority order): docs/POST_V1_KICKOFF.md (en üst "Durum" bloğu — PR #131 + "SIRADAKİ İŞ" +
+bu resume) → docs/STAGE2_HANDOFF.md ("Data-queue redelivery operator recovery card landed (PR #131)" +
+"## Next") → CLAUDE.md "Current position".
+
+DURUM: TIER 1 backend + TIER 2 SAYFA HARİTASI TAMAM (24/24 real, tüm route yüzeyleri bağlı). Data-queue
+operator redelivery TAM KAPANDI: backend #129 (INF-03, doc 20 §6 — job_kind discriminator + data_queue.py
++ DATA_ACTOR_BY_KIND + commands/data_queue.py redeliver_data_queue_jobs + POST /admin/data-queue/redeliver)
++ Admin UI #131 (Panel OperatorRecoveryCard — POST /admin/data-queue/redeliver'i bağlar; grace_seconds
+query-only, OCC/Idem YOK; sonuç {scanned, redeliverable[], skipped_unknown_kind}; lib/adminPanel.ts
+useRedeliverDataQueue + DataQueueRedeliverResult + dataJobKindLabel). Scheduler DOKUNULMADI — data
+operator-only kalır. Önceki landed frontend: login #65, SSE #67, /v1/metrics #69, RUN/History #72,
+Arrange/Lab #74, Panel #78, compare/rebind #80, Future Dev #82, provisioning #84, Trash restore #86,
+auth-inval #88, CP #91/#93, capability POST #95, Library #97, ESP #99/#121, Rationale #101, Market Data
+#103/#105, Research Data #107/#109, Ready Check #111, Portfolio #113, User Manual #115, Strategy #117,
+TS/TL #119, Outsource #123, Mainboard #125, Trash purge #127, data-queue redelivery Admin UI #131.
+BACKEND: first-Admin bootstrap #76 + bootstrap-status #84 + CP-Gen #89 + data-queue redelivery #129.
+
+ÖNEMLİ (KALICI SINIR): retention auto-purge YAPMA — doc 20 §16 açıkça "Automatic purge remains disabled
+in Production V1" (Future-Dev boundary, uygulanabilir slice DEĞİL); purge her zaman explicit Admin
+confirm+re-auth.
+
+SIRADAKİ İŞ (BAŞLARKEN KULLANICIYLA TEYİT ET — henüz teyitli DEĞİL): kalan TIER 3 deferred: (a) SSE
+streaming e2e (bağlantı kopması dayanıklılığı — lib/sse.ts reconnect self-heal zaten var, test/dayanıklılık
+ağırlıklı); (b) tool-call status shadowing (CR-08 follow-up — agent runtime tarafı, daha geniş kapsam).
+Başka aday yeni bir backend follow-up olabilir (LLM generation Future-Dev, kapsam dışı). BAŞLAMADAN ilgili
+doc'u + route/command imzalarını + queries/commands dönüş dict'lerini oku → wire tipleri VERBATIM ayna.
+
+DÜRÜST SINIR (KALICI): ["jobs"] backend LİSTE yüzeyi YOK (POST recovery aksiyonları var, browser değil);
+data-queue redelivery re-dispatch operator aksiyonu (scheduler data'yı ASLA auto-route etmez); purge worker
+durumu ["trash"] projeksiyonundan okunur (özel SSE event YOK, resource.changed süpürür); reauth_proof V1'de
+yalnız varlık-kontrollü; ham baytlar sayfadan geçmez (UTF-8 metin); view dataset / analysis artifact READ
+yüzeyi YOK; work-object (TS/TL) LIST endpoint'i YOK; get_manual_section HTTP'ye route edilmemiş; Mainboard
+ready_summary hâlâ backend not_ready placeholder'ı, latest_result_summary runs bağlanana kadar null.
+
+FRONTEND STACK: Vite 8 + React 18 + react-router 6 + @tanstack/react-query 5 + react-hook-form +
+vitest/jsdom + @testing-library. Alias @ = src; kök frontend/src/. react-query v5 →
+invalidateQueries({queryKey}) object-form. tsconfig noUncheckedIndexedAccess AÇIK,
+exactOptionalPropertyTypes KAPALI. OCC/Idem/query-only taze örnekler: lib/adminPanel.ts
+(useRedeliverDataQueue — query-only POST, OCC/Idem YOK + useAssignRole BODY-form INT OCC) + lib/trash.ts
+(useRestoreEntry + useRequestPurge — Idem header + BODY-form INT token) + lib/esp.ts
+postWithRegistryVersion (HEADER-form DÜZ INT) + lib/marketData.ts postWithOcc (If-Match "rv-N").
+
+YÖNTEM: Workflow KULLANMA; direct-author. Frontend loop: cd frontend (absolute path) &&
+npm run typecheck && npm run lint && npm test && npm run build (235 + yeniler geçmeli) + yeni
+component/unit test (test/helpers/apiStub.ts reuse — SIRALI eşleşme: spesifik aksiyon fragmanları
+çıplak liste/create prefix'inden ÖNCE; zincirleme yükleme için findBy*; çift metin/label riskinde
+within(region)). YENİ dosya heredoc (gate-free); mevcut dosya Edit/Write → GateGuard 4-fact
+(çağıran / Grep-dup-yok / data-schema / user-request verbatim → gate İLK denemeyi bloklar → aynı
+çağrıyı aynen tekrarla; ARAYA mesaj/tool girerse gate RESETLENİR); ilk Bash da fact-gate'li; Edit
+öncesi dosyayı Read et. CRITICAL/HIGH AMPİRİK doğrula (route/command imzasını OKU) → commit
+(conventional feat(post-v1) veya docs(post-v1), branch origin/main'den, attribution YOK) → PR → CI
+background poll (gh pr checks <n> --watch) → merge KULLANICIDA (self-merge BLOKLU). Türkçe, MALİYET
+BİLİNÇLİ. Kapanışta: handoff + kickoff (resume tazele) + CLAUDE.md + ecc knowledge-graph (claude-mem
+worker runtime'da yazılamaz — otomatik yakalanır).
+```
+
+---
+
 ## Durum (2026-07-10, post-V1 TIER 3 — Data-queue operator redelivery; PR #129 MERGED)
 
 **BACKEND-ONLY** (`application/jobs/data_queue.py` + `application/commands/data_queue.py` NEW; 4 data

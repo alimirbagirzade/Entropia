@@ -290,3 +290,68 @@ export function useAssignRole() {
     },
   });
 }
+
+// ---------------------------------------------------------------------------
+// Operator recovery — data-queue redelivery (INF-03, doc 20 §6)
+// ---------------------------------------------------------------------------
+
+// The `data` queue multiplexes four durable actors (market/research analysis,
+// Trading Signal / Trade Log import). A lost broker message leaves the durable
+// job QUEUED forever; the scheduler deliberately does NOT auto-redeliver it —
+// the row alone cannot say which of the four actors to re-dispatch. This
+// Admin-only action lists the rows still QUEUED past the grace window and routes
+// each back to its actor via the payload `job_kind` discriminator. Rows that
+// predate the discriminator carry no `job_kind` → counted as un-routable, never
+// guessed.
+
+// Mirror of application/jobs/data_queue.py DATA_JOB_KINDS — hydrates the result
+// labels only; the server is the sole authority on which kinds route.
+export const DATA_JOB_KIND_LABELS: Record<string, string> = {
+  market_data_analysis: "Market data analysis",
+  research_data_analysis: "Research data analysis",
+  trading_signal_import: "Trading Signal import",
+  trade_log_import: "Trade Log import",
+};
+
+export function dataJobKindLabel(kind: string): string {
+  return DATA_JOB_KIND_LABELS[kind] ?? kind;
+}
+
+export interface DataQueueRedeliverable {
+  job_kind: string;
+  job_id: string;
+}
+
+// Mirrors commands/data_queue.py redeliver_data_queue_jobs return dict verbatim.
+export interface DataQueueRedeliverResult {
+  scanned: number;
+  redeliverable: DataQueueRedeliverable[];
+  skipped_unknown_kind: number;
+}
+
+// POST /admin/data-queue/redeliver — Admin-only operator recovery. `grace_seconds`
+// is an optional query param (the configured window when omitted; 0 sweeps every
+// QUEUED data job). No OCC token / Idempotency-Key — the route reads only the
+// query and the durable rows are the source of truth (redelivery is idempotent
+// server-side). The command emits one `data_queue.redelivery_requested` audit +
+// outbox event, so success sweeps the ["audit"] projection (Logs / Audit stream).
+export function useRedeliverDataQueue() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { grace_seconds?: number | null }) => {
+      const params = new URLSearchParams();
+      if (input.grace_seconds !== null && input.grace_seconds !== undefined) {
+        params.set("grace_seconds", String(input.grace_seconds));
+      }
+      const qs = params.toString();
+      return api.post<DataQueueRedeliverResult>(
+        `/admin/data-queue/redeliver${qs ? `?${qs}` : ""}`,
+      );
+    },
+    onSuccess: () => {
+      // The command emitted an audit + outbox event; no data-queue read surface
+      // exists, so only the audit projection needs a sweep.
+      void queryClient.invalidateQueries({ queryKey: ["audit"] });
+    },
+  });
+}

@@ -1480,7 +1480,67 @@ composition'ını okur (RUN sayfası deseni; Stage 3 gerçek Mainboard sayfası 
 **Backtest grubunda kalan tek placeholder: `/portfolio` (allocation.py) — Ready Check'in okuduğu
 allocation draft'ının editörü, doğal sıradaki slice (kullanıcı 2026-07-10 teyit etti).**
 
-## Next: post-V1 (continued) — TIER 2 (… + Market Data page + lifecycle actions + Research Data page + lifecycle actions + Backtest Ready Check page landed; **6 placeholder pages** [Workspace strategy/trading_signal/trade_log/outsource-signal, Backtest allocation Portfolio — CONFIRMED NEXT, Docs manual User Manual] + ESP/Library registry mutation slices + TIER 3 remain)
+## Stage post-V1 TIER 2 — Portfolio / Equity Allocation page landed (PR #113)
+
+**FRONTEND-ONLY (4 dosya, +1477 satır)** — backend UNCHANGED (**1048** sabit), migration YOK, alembic
+head `0021_local_auth`, `ENGINE_VERSION` sabit. `/portfolio` placeholder'ı gerçek sayfa oldu —
+`routes/allocation.py`'nin TAM yüzeyi (5/5 endpoint, doc 13 Stage 4a) bağlandı: Ready Check'in
+okuduğu allocation draft'ının editörü. **Backtest nav grubu KAPANDI** (RUN/History #72 + Arrange
+Metrics #74 + Ready Check #111 + Portfolio #113). main = `3210ede` (Merge #113), feat `f3e9550`.
+CI yeşil; self-review 0 CRITICAL/HIGH (2 test-assertion düzeltmesi in-commit). **frontend 174 → 181**
+(+7 vitest).
+
+**AMPİRİK route haritası (imzalar OKUNDU — PR #105/#111 dersi):**
+
+| Endpoint | OCC | Idempotency-Key |
+|---|---|---|
+| `GET .../portfolio-allocation-draft` | body `row_version` = canlı token (0 = plan yok = geçerli creation token) | — |
+| `PUT .../portfolio-allocation-draft` | **BODY-form `expected_row_version`** (route body'yi If-Match'e tercih eder) | taze key/deneme |
+| `POST .../portfolio-allocation/validate` | YOK (body/header okumaz) | YOK |
+| `POST .../portfolio-allocation/sync` | YOK — **PURE READ** merge preview (query katmanı) | YOK |
+| `POST .../portfolio-allocation/revisions` | body `expected_row_version` | taze key/deneme |
+
+`item_type` PUT'ta HİÇ gönderilmez (server composition item'dan türetir, doc 13 §8.2); stale token →
+409 `ALLOCATION_DRAFT_CONFLICT` verbatim (asla last-write-wins, §10.1); sync non-destructive (§10.2
+Flow D — removal yalnız açık Save PUT ile uygulanır, §14#9); revision yalnız blocker-free ENABLED
+draft'tan (§8.5 — `ALLOCATION_HAS_BLOCKERS` verbatim). Draft PUT dönüşü `readiness_invalidated: true`
+→ `["allocation"]+["readiness"]+["mainboard"]+["audit"]` invalidate (Ready Check bu draft'ı okuyor);
+revision dönüşünde bu bayrak YOK → `["allocation"]+["audit"]`; validate yalnız `["audit"]` (draft'ı
+oynatmaz); sync hiçbir şey invalidate etmez.
+
+**Reuse anchor'ları (kesin semboller):**
+- **`lib/allocation.ts` (yeni):** wire tipleri `AllocationDraftResponse`/`AllocationDraft`/
+  `AllocationEntry`/`AllocationCandidate`/`AllocationIssue`/`DerivedAmounts`/`SleeveAmount`/
+  `SaveDraftResult`/`AllocationValidationReport`/`SyncPreview`/`RevisionResult` +
+  `AllocationDraftInput`/`AllocationEntryInput`; taksonomi aynaları `ALLOCATION_CURRENCIES`(4)/
+  `COMPOUNDING_MODES`(2)+`COMPOUNDING_MODE_LABELS`/`ALLOCATION_STATE_LABELS`+`_TONES` (UPPERCASE
+  `NOT_SELECTED|NOT_READY|READY_WITH_WARNINGS|READY` — doc-14 lowercase readiness'ten AYRI) +
+  `allocationStateLabel`/`allocationStateTone`; `["allocation"]` hook'ları (özel SSE YOK →
+  `resource.changed` süpürür): `useAllocationDraft(compositionId)` / `useSaveAllocationDraft` /
+  `useValidateAllocation` / `useSyncPreview` / `useCreateAllocationRevision`.
+- **`pages/Portfolio.tsx` (yeni):** default-Mainboard composition bağlamı (RUN/Ready Check deseni);
+  `DraftEditor` `key={row_version}` ile her server head hareketinde REMOUNT → yerel state server
+  draft'ından yeniden tohumlanır (asla merge edilmez); mutation state PARENT'ta (FutureDev
+  registry_version-bump remount dersi — save/validate/sync/revision sonuçları remount'u atlatır);
+  `EntriesTable` (active checkbox + share input + Remove) / `CandidatePicker` / `SaveResultCard`
+  (inline_issues + "re-run Ready Check" uyarısı) / `ValidateCard` / `SyncCard`
+  (retained/missing/new_candidates + destructive-removal hint) / `RevisionCard`; issues + derived
+  amounts VERBATIM render (istemci asla kapital matematiği hesaplamaz); `severityTone`
+  `lib/readiness`'ten reuse.
+- **`App.tsx`:** `/portfolio` REAL_PATHS 18→19 + gerçek Route (`nav.ts` UNCHANGED — 24; item zaten
+  placeholder'dı). **Testler:** NEW `test/portfolio.test.tsx` +7 (empty draft + candidate picker /
+  save body+headers+reseed [OCC 0-token, `item_type` gönderilmiyor asserti] / 409
+  `ALLOCATION_DRAFT_CONFLICT` verbatim / validate raporu + header'sız body'siz POST / sync pure-read
+  + destructive hint / revision OCC+Idem / `ALLOCATION_HAS_BLOCKERS` denial verbatim).
+
+**Dürüst sınır:** sayfa yalnız default Mainboard composition'ını okur (RUN/Ready Check deseni;
+Stage-3 gerçek Mainboard sayfası composition seçimini app-level'a taşıyabilir); Validate SAVED
+draft'ı doğrular (yerel edit'leri değil — UI'da açıkça yazılı); sync preview'ın "Apply" düğmesi yok —
+birleştirme editörde yapılıp Save ile uygulanır (doc 13 §14#9 açık-destructive-PUT sözleşmesi);
+allocation'ın özel SSE event'i yok. **Backtest grubu TAM — kalan placeholder'lar: Workspace (4) +
+Docs User Manual (1).**
+
+## Next: post-V1 (continued) — TIER 2 (… + Backtest Ready Check + Portfolio / Equity Allocation pages landed — Backtest grubu TAM; **5 placeholder pages** [Workspace strategy/trading_signal/trade_log/outsource-signal, Docs manual User Manual] + ESP/Library registry mutation slices + TIER 3 remain)
 
 **V1 COMPLETE (Stages 0–8, docs 01–22) + Auth/IdP + Parquet Slice A + Backtest Engine Slice B + real indicator compute Slice C + `risk_based` sizing (a) + condition blocks (b) + condition extensions (b2) + two-package indicator-vs-indicator + higher-timeframe resampling (c) + per-condition multi-TF reference (i) + N-ary reference chain (ii) + VWAP directional key (d) + `formula_based` Kelly sizing + `position_size_limits` min/max cap (PR #63) landed (1015 tests).** The **Slice C indicator-compute + position-sizing follow-ups are now EFFECTIVELY COMPLETE — TIER 1 backend is DONE**:
 

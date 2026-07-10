@@ -3,6 +3,52 @@
 > **Amaç:** V1 kapandı (Stage 0–8 COMPLETE). Bu doküman post-V1 durumunu, aday iş listesini
 > ve temiz oturumda yapıştırılacak resume prompt'u içerir.
 
+## Durum (2026-07-10, TIER 2 frontend — Trading Signal & Trade Log ikiz sayfaları; PR #119 MERGED)
+
+**FRONTEND-ONLY (6 yeni + 1 edit, +2690 satır)** — backend DEĞİŞMEDİ (1048 sabit), migration YOK,
+alembic head `0021_local_auth` SABİT, `ENGINE_VERSION` SABİT. `/trading-signal` + `/trade-log`
+placeholder'ları TEK slice'ta gerçek sayfa oldu — `routes/trading_signal.py` + `routes/trade_log.py`
+İKİZ yüzeylerinin TAMAMI (6+6 endpoint, Stage 3c/3d doc 04/05): upload (content-addressed dedup) →
+durable 202 import → report → Save & Add native work object → OCC-guarded revision append.
+Frontend 197 → **208** (+11 vitest). main = `7fd70dd` (Merge #119), feat `038187f`. CI yeşil;
+self-review 0 CRITICAL/HIGH.
+
+**AMPİRİK route haritası (imzalar OKUNDU):** iki router bire bir simetrik; 4 POST'un HEPSİ taze
+`Idempotency-Key` okur; TEK OCC token `/revisions`'taki **BODY-form `expected_head_revision_id`
+STR** (server'da optional — client HER ZAMAN rendered head'i gönderir; stale → 409); create/upload/
+import OCC'siz; `workspace_id` HİÇ gönderilmez (server default Mainboard'ı çözer). İKİZ FARKLAR:
+report kanıt anahtarı `normalized_event_revision_id` (TS) vs `record_batch_revision_id` (TL);
+TL revizyonları HER ZAMAN `available_time=null` (historical, doc 05 §10.4); config TS
+`time_policy`+`event_model` vs TL `time_model`. Pin/delete Mainboard router'ında (CR-01/TL-01).
+**SSE kazanımı:** import report `["jobs","<kind>-import",jobId]` — `job.updated` anahtarının İLK
+sayfa bağlaması (terminal-stop poll fallback `TERMINAL_IMPORT_STATUSES`, INF-11); "["jobs"]
+bağlanamaz" sınırı LİSTE yüzeyi içindi (o hâlâ yok — kalıcı). Create-with-attach →
+`["mainboard"]`+`["readiness"]` invalidate (composition_hash oynar); revisions asla auto-repin
+yapmaz → yalnız kendi anahtarı + `["audit"]`.
+
+**Reuse anchor'ları:** `lib/tradingSignal.ts` (`SignalImportReport`/`TradingSignalDetail`/
+`CreateTradingSignalResult`/`CreateSignalRevisionResult` + `TERMINAL_IMPORT_STATUSES` +
+`buildSignalPayloadTemplate` + 2 query/4 mutation hook) · `lib/tradeLog.ts` (ikiz tipler +
+`buildTradeLogPayloadTemplate`; paylaşılan upload/import tipleri tradingSignal'den import) ·
+`pages/TradingSignal.tsx` + `pages/TradeLog.tsx` (URL modları `?job=`/`?root=`; Workbench
+upload→import→report→create; `CreateCard` key remount-reseed; mutation state PARENT'ta) ·
+`App.tsx` REAL_PATHS 21→23 (nav 24 sabit) · `test/tradingSignal.test.tsx` +6 /
+`test/tradeLog.test.tsx` +5 (apiStub SIRALI).
+
+**Dürüst sınır:** work-object LIST endpoint'i YOK (keşif default Mainboard item'larından; attach
+edilmemiş nesne create-result `?root=` linkiyle); upload UTF-8 TEXT (`content: str`); Pin/delete
+bu sayfalarda değil; deep-link `?job=`'da template timezone'u "UTC"ye düşer.
+
+**SIRADAKİ İŞ ADAYLARI (BAŞLARKEN kullanıcıyla TEYİT ET):** (a) **outsource-signal** — Workspace'in
+SON placeholder'ı; DİKKAT AMPİRİK: backend'de "outsource" stringi HİÇ GEÇMİYOR — ayrı router YOK;
+doc 03 (`docs/spec/03_..._Add_Outsource_Signal_...md`) akışı büyük olasılıkla TS/TL yüzeylerini
+reuse eden bir kompozisyon sayfası → SLICE'A BAŞLAMADAN doc 03'ü oku ve yüzeyi tespit et (yeni
+backend gerekebilir!); VEYA (b) **ESP registry MUTASYON slice'ı** (`esp.py` create/activate/
+deprecate — Admin-only, `X-Registry-Version` OCC; Rationale shared-editing / marketData postWithOcc
+deseni TABAN; okuma yüzeyi PR #99'da bağlı). TIER 3 deferred.
+
+---
+
 ## Durum (2026-07-10, TIER 2 frontend — Strategy Details sayfası; PR #117 MERGED)
 
 **FRONTEND-ONLY (3 yeni + 1 edit, +1501 satır)** — backend DEĞİŞMEDİ (1048 sabit), migration YOK,
@@ -1630,82 +1676,83 @@ tarihsel referans** olarak duruyor.
 ## ⤵️ YENİ OTURUMDA YAPIŞTIR (resume prompt)
 
 ```
-Entropia — post-V1 TIER 2 devam. STALE-BY-DEFAULT: Strategy Details (PR #117) + kapanış docs
-(PR #118) MERGE EDİLDİ varsayma, git'ten doğrula.
+Entropia — post-V1 TIER 2 devam. STALE-BY-DEFAULT: Trading Signal & Trade Log ikizleri (PR #119)
++ kapanış docs (PR #120) MERGE EDİLDİ varsayma, git'ten doğrula.
 
 ÖNCE DOĞRULA: git fetch && git log --oneline origin/main -6 && gh pr list --state all -L 8.
-main = fcbbfb6 (Merge #117) olmalı; docs #118 merge sonrası daha ileri (açıksa önce merge iste).
+main = 7fd70dd (Merge #119) olmalı; docs #120 merge sonrası daha ileri (açıksa önce merge iste).
 alembic head 0021_local_auth (DEĞİŞMEDİ); ENGINE_VERSION = backtest-engine-v2-position-size-limits
-(DEĞİŞMEDİ). Backend 1048 test, frontend 197. Yeni branch'i MUTLAKA origin/main'den aç.
+(DEĞİŞMEDİ). Backend 1048 test, frontend 208. Yeni branch'i MUTLAKA origin/main'den aç.
 
-ÖNCE OKU (authority order): docs/POST_V1_KICKOFF.md (en üst "Durum" bloğu — PR #117 + "SIRADAKİ İŞ
-ADAYLARI" + en alttaki resume) → docs/STAGE2_HANDOFF.md ("Strategy Details page landed (PR #117)"
-+ "## Next") → CLAUDE.md "Current position".
+ÖNCE OKU (authority order): docs/POST_V1_KICKOFF.md (en üst "Durum" bloğu — PR #119 + "SIRADAKİ İŞ
+ADAYLARI" + en alttaki resume) → docs/STAGE2_HANDOFF.md ("Trading Signal & Trade Log pages landed
+(PR #119)" + "## Next") → CLAUDE.md "Current position".
 
-DURUM: TIER 1 backend EFEKTİF TAMAM. Packages & Data grubu TAM (#97/#99/#101/#103/#105/#107/#109);
-BACKTEST GRUBU KAPANDI (#72/#74/#111/#113); DOCS GRUBU KAPANDI (#82/#115); Workspace'te Strategy
-Details #117 landed (YENİ — routes/strategy.py 9/9 endpoint /strategy'ye bağlandı; lib/strategy.ts
-["strategy"] hook'ları; AMPİRİK: PATCH/save/clear OCC BODY-form expected_draft_row_version INT
-[body If-Match'e galip; ZORUNLU; draft row_version 0'dan başlar — 0 geçerli token; stale → 409
-STRATEGY_DRAFT_CONFLICT verbatim] + taze Idempotency-Key; validate body/header OKUMAZ [saf
-compiler pass, audit YOK → Idem YOK, invalidation YOK]; create OCC'siz + display_name
-command-REQUIRED; save bağlı Mainboard item'larını re-pin eder →
-["strategy"]+["mainboard"]+["readiness"]+["audit"] invalidate; bloklu save 422 details'te compiler
-issue listesi {field,code,message} verbatim; draft_id bağımsız stratdraft ULID — root→draft lookup
-YOK → draft handle URL'de [?draft=]; /strategies/{root}/revisions BARE LIST; PayloadEditor
-key={row_version} remount-reseed; mutation state PARENT DraftWorkbench'te; App.tsx REAL_PATHS
-20→21, nav 24 sabit; +8 vitest → 197). Önceki landed: login #65, SSE #67, /v1/metrics #69,
-RUN/History #72, Arrange Metrics + Analysis Lab #74, Panel #78, compare/rebind #80, Future Dev
-#82, provisioning #84, Trash #86, auth-invalidation #88, CP #91/#93, capability POST'ları #95,
-User Manual #115. BACKEND: first-Admin bootstrap #76 + bootstrap-status #84 + CP-Gen #89 (LLM YOK).
+DURUM: TIER 1 backend EFEKTİF TAMAM. Packages & Data TAM; Backtest KAPANDI; Docs KAPANDI;
+Workspace'te Strategy Details #117 + Trading Signal & Trade Log ikizleri #119 landed (YENİ —
+routes/trading_signal.py + trade_log.py 6+6 endpoint /trading-signal + /trade-log'a bağlandı;
+lib/tradingSignal.ts + lib/tradeLog.ts; AMPİRİK: 4 POST'un HEPSİ taze Idempotency-Key okur; TEK
+OCC token /revisions'ta BODY-form expected_head_revision_id STR [server'da optional — client HER
+ZAMAN rendered head'i gönderir; stale → 409]; create/upload/import OCC'siz; workspace_id HİÇ
+gönderilmez [server default Mainboard'ı çözer]; İKİZ FARKLAR: report kanıtı
+normalized_event_revision_id (TS) vs record_batch_revision_id (TL) + TL available_time HER ZAMAN
+null [historical, doc 05 §10.4] + config TS time_policy+event_model vs TL time_model; import
+report ["jobs","<kind>-import",jobId] anahtarında — job.updated SSE anahtarının İLK sayfa
+bağlaması, terminal-stop poll TERMINAL_IMPORT_STATUSES; create-with-attach
+["mainboard"]+["readiness"] invalidate; revisions ASLA auto-repin yapmaz; Pin/delete Mainboard
+router'ında [CR-01/TL-01]; App.tsx REAL_PATHS 21→23, nav 24 sabit; +11 vitest → 208). Önceki
+landed: login #65, SSE #67, /v1/metrics #69, RUN/History #72, Arrange Metrics + Analysis Lab #74,
+Panel #78, compare/rebind #80, Future Dev #82, provisioning #84, Trash #86, auth-invalidation #88,
+CP #91/#93, capability POST'ları #95, Library #97, ESP read #99, Rationale #101, Market Data
+#103/#105, Research Data #107/#109, Ready Check #111, Portfolio #113, User Manual #115, Strategy
+#117. BACKEND: first-Admin bootstrap #76 + bootstrap-status #84 + CP-Gen #89 (LLM YOK).
 
-SIRADAKİ İŞ (BAŞLARKEN KULLANICIYLA TEYİT ET — henüz teyitli DEĞİL): kalan 3 placeholder sayfa —
-HEPSİ Workspace (hepsinin V1 backend yüzeyi landed): trading_signal.py + trade_log.py (6+6
-endpoint, neredeyse simetrik ikizler — source-asset → 202 import → create → revisions → read; tek
-slice'ta ikisi mantıklı) / outsource-signal; VEYA ESP registry MUTASYON slice'ı (esp.py
-create/activate/deprecate — Admin-only, X-Registry-Version OCC — Rationale shared-editing /
-marketData postWithOcc deseni TABAN; library.py 2/2 zaten bağlı). Hangisi seçilirse: route
-İMZALARINI ÖNCE OKU (OCC/Idem her endpoint'te olmayabilir — PR #105/#111/#113/#115/#117 dersleri:
-successor/deprecate header okumuyordu; readiness token composition FINGERPRINT BODY-form'du;
-allocation OCC'si BODY-form expected_row_version'dı + sync POST'u pure read'di; manual'da İKİ
-farklı body-form token vardı [stream_version INT / head_revision_id STR] + DELETE body'liydi +
-:restore require_trash_admin'di; strategy'de validate HİÇBİR ŞEY okumuyordu + draft row_version
-0'dan başlıyordu + revisions BARE LIST'ti) + queries/commands dönüş dict'lerini oku → wire tipleri
-VERBATIM ayna. TIER 3 deferred: retention auto-purge, data-queue redelivery, SSE streaming e2e,
-tool-call status shadowing.
+SIRADAKİ İŞ (BAŞLARKEN KULLANICIYLA TEYİT ET — henüz teyitli DEĞİL): (a) outsource-signal —
+Workspace'in SON placeholder'ı; DİKKAT AMPİRİK BULGU: backend'de "outsource" stringi HİÇ GEÇMİYOR
+— ayrı router YOK; doc 03 (docs/spec/03_..._Add_Outsource_Signal_...md) akışı büyük olasılıkla
+TS/TL yüzeylerini reuse eden bir kompozisyon/yönlendirme sayfası → SLICE'A BAŞLAMADAN doc 03'ü
+oku ve gerçek yüzeyi tespit et (yeni backend slice'ı gerekebilir — kapsamı kullanıcıyla netleştir);
+VEYA (b) ESP registry MUTASYON slice'ı (esp.py create/activate/deprecate — Admin-only,
+X-Registry-Version OCC; Rationale shared-editing / marketData postWithOcc deseni TABAN; okuma
+yüzeyi #99'da bağlı). Hangisi seçilirse: route İMZALARINI ÖNCE OKU (OCC/Idem her endpoint'te
+olmayabilir — #105/#111/#113/#115/#117/#119 dersleri: successor/deprecate header okumuyordu;
+readiness token FINGERPRINT BODY-form'du; allocation OCC'si BODY-form expected_row_version'dı;
+manual'da İKİ farklı body-form token + DELETE body'liydi; strategy'de validate HİÇBİR ŞEY
+okumuyordu; TS/TL'de İKİZ rapor anahtarları farklıydı + TÜM POST'lar Idem okuyordu) +
+queries/commands dönüş dict'lerini oku → wire tipleri VERBATIM ayna. TIER 3 deferred: retention
+auto-purge, data-queue redelivery, SSE streaming e2e, tool-call status shadowing.
 
-DÜRÜST SINIR (KALICI): ["jobs"] backend liste yüzeyi YOK; ham baytlar sayfadan geçmez (manual
-upload UTF-8 METİN taşır — route sözleşmesi content: str; PDF/DOCX V1 değil); view dataset
-/ analysis artifact READ yüzeyi YOK; bundle compiler'lar pure read (kalıcı read yüzeyi yok);
-capability/CP/library/esp/rationale/market-data/research-data/readiness/allocation/manual/
-strategy'nin özel SSE event'i yok (resource.changed süpürür); get_manual_section HTTP'ye route
-edilmemiş (Agent Tool Gateway); strateji LIST + root→draft lookup endpoint'i YOK (draft handle
-create anındaki ?draft= URL'i); Mainboard ATTACH Stage-3a operasyonu (hiçbir landed sayfada
-değil). RUN admission RUN sayfasında kalır (doc 14 §9.3); Portfolio/ReadyCheck/Strategy yalnız
-default Mainboard composition'ını okur; Trash purge ayrı re-auth slice'ı.
+DÜRÜST SINIR (KALICI): ["jobs"] backend LİSTE yüzeyi YOK (ama job-scoped import report READ'leri
+#119'dan beri ["jobs"] altında — job.updated süpürür); ham baytlar sayfadan geçmez (upload'lar
+UTF-8 METİN taşır — route sözleşmeleri content: str); view dataset / analysis artifact READ
+yüzeyi YOK; bundle compiler'lar pure read; work-object'lerin (TS/TL) LIST endpoint'i YOK — keşif
+default Mainboard item'larından; capability/CP/library/esp/rationale/market-data/research-data/
+readiness/allocation/manual/strategy/trading-signals/trade-logs özel SSE event'siz
+(resource.changed süpürür); get_manual_section HTTP'ye route edilmemiş; strateji root→draft
+lookup YOK (?draft= URL'i); Mainboard ATTACH + Pin ("Use This Revision") + work-object delete
+Stage-3a Mainboard operasyonları (hiçbir landed sayfada değil); RUN admission RUN sayfasında
+(doc 14 §9.3); Trash purge ayrı re-auth slice'ı.
 
 FRONTEND STACK: Vite 8 + React 18 + react-router 6 + @tanstack/react-query 5 + react-hook-form +
 vitest/jsdom + @testing-library. Alias @ = src; kök frontend/src/. react-query v5 →
 invalidateQueries({queryKey}) object-form. tsconfig noUncheckedIndexedAccess AÇIK,
-exactOptionalPropertyTypes KAPALI. Composition girişi: lib/backtest.ts useDefaultMainboard
-(workspace_id = composition_id, composition_hash = current fingerprint, ready_summary); OCC/Idem
-taze örnekler: lib/strategy.ts (BODY-form INT token + tokensız saf validate POST'u) + lib/manual.ts
-(İKİ body-form token: stream_version INT + head_revision_id STR; DELETE body'li) +
-lib/allocation.ts (body-form OCC) + lib/readiness.ts (fingerprint OCC) + lib/marketData.ts
-postWithOcc (If-Match "rv-N").
+exactOptionalPropertyTypes KAPALI. Composition girişi: lib/backtest.ts useDefaultMainboard;
+OCC/Idem taze örnekler: lib/tradingSignal.ts + lib/tradeLog.ts (BODY-form STR head token +
+["jobs"] terminal-stop poll + rapor-seed'li JSON editör) + lib/strategy.ts (BODY-form INT token +
+tokensız saf validate) + lib/manual.ts (İKİ body-form token) + lib/marketData.ts postWithOcc
+(If-Match "rv-N").
 
 YÖNTEM: Workflow KULLANMA; direct-author. Frontend loop: cd frontend (absolute path) &&
-npm run typecheck && npm run lint && npm test && npm run build (197 + yeniler geçmeli) + yeni
-component/unit test (test/helpers/apiStub.ts reuse — SIRALI eşleşme: detay/aksiyon route'u liste
-prefix'inden ÖNCE; zincirleme yükleme için findBy* kullan, senkron getBy* değil; çift metin riski
-olan assert'leri within ile scope'la ya da tekil değere bağla). YENİ dosya heredoc (gate-free);
-mevcut dosya Edit → GateGuard 4-fact (importer Grep / public-API / data-schema / user-request
-verbatim → gate İLK denemeyi bloklar → aynı çağrıyı aynen tekrarla; aynı dosyaya 2.+ edit gate-siz;
-ARAYA mesaj/tool girerse gate RESETLENİR); ilk Bash da fact-gate'li; Edit öncesi dosyayı Read et.
-CRITICAL/HIGH AMPİRİK doğrula (route/command imzasını OKU — handoff özeti yanlış olabilir) →
-commit (conventional feat(post-v1), branch feat/post-v1-frontend-<slug> origin/main'den, attribution
-YOK) → PR → CI background poll (gh pr checks <n> --watch) → merge KULLANICIDA (self-merge BLOKLU).
-Türkçe, MALİYET BİLİNÇLİ. Kapanışta: handoff + kickoff (resume tazele) + CLAUDE.md + ecc
-knowledge-graph (claude-mem manuel checkpoint worker runtime'da YAZILAMAZ — otomatik yakalanır,
-deneme).
+npm run typecheck && npm run lint && npm test && npm run build (208 + yeniler geçmeli) + yeni
+component/unit test (test/helpers/apiStub.ts reuse — SIRALI eşleşme: spesifik aksiyon fragmanları
+çıplak liste/create prefix'inden ÖNCE; zincirleme yükleme için findBy*; çift metin riskinde within
+ya da tekil değer). YENİ dosya heredoc (gate-free); mevcut dosya Edit → GateGuard 4-fact (importer
+Grep / public-API / data-schema / user-request verbatim → gate İLK denemeyi bloklar → aynı çağrıyı
+aynen tekrarla; aynı dosyaya 2.+ edit gate-siz; ARAYA mesaj/tool girerse gate RESETLENİR); ilk
+Bash da fact-gate'li; Edit öncesi dosyayı Read et. CRITICAL/HIGH AMPİRİK doğrula (route/command
+imzasını OKU — handoff özeti yanlış olabilir: outsource örneği!) → commit (conventional
+feat(post-v1), branch feat/post-v1-frontend-<slug> origin/main'den, attribution YOK) → PR → CI
+background poll (gh pr checks <n> --watch) → merge KULLANICIDA (self-merge BLOKLU). Türkçe,
+MALİYET BİLİNÇLİ. Kapanışta: handoff + kickoff (resume tazele) + CLAUDE.md + ecc knowledge-graph
+(claude-mem manuel checkpoint worker runtime'da YAZILAMAZ — otomatik yakalanır, deneme).
 ```

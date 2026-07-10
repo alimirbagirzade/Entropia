@@ -166,9 +166,32 @@ Before stopping a working session, produce **ALL** of the following:
   construction); doc 03 §6.1 ⓘ panels + §6.2 helpers VERBATIM; NO hooks/query keys/fetch (doc 03
   §7.1 — the chooser performs no backend mutation; "outsource" exists in the backend only as the
   errors.py:624 comment — no router exists and none is needed, confirmed empirically); nav.ts
-  UNCHANGED (24); +6 vitest → 219 (PR #123, MERGED)**.
+  UNCHANGED (24); +6 vitest → 219 (PR #123, MERGED)**
+  + TIER 2 frontend Mainboard composition page — the index `/` Mainboard becomes the real doc 01
+  composition plane (was a 55-line Stage-0 meta/health shell). Binds the 7 unbound
+  routes/mainboard.py endpoints (GET default already bound via lib/backtest.ts useDefaultMainboard)
+  → **mainboard.py surface COMPLETE**; closes the PERMANENT boundary where attach + Pin
+  ("Use This Revision") + work-object soft-delete lived on no landed page. EMPIRICAL OCC/Idem
+  (route signatures READ): POST /external-work-object-drafts/{kind} carries NO Idempotency-Key/OCC
+  (transient opener, not even async → deep-links to /trading-signal|/trade-log workbench, CR-01);
+  create/attach/snapshot/delete are Idempotency-Key WITH NO OCC; /work-objects/{root}/revisions
+  carries BODY-form expected_head_revision_id STR (optional); PATCH /mainboard-items/{item} carries
+  BODY-form expected_row_version INT (REQUIRED, body wins over If-Match; one intent per call
+  pin_revision|set_enabled|reorder|set_label, only the needed field sent — pin/enable change the
+  composition hash → Ready stale); DELETE /work-objects/{root} carries NO body. NEW lib/mainboard.ts
+  (wire result types mirror the command return dicts verbatim; re-exports useDefaultMainboard +
+  item/workspace types from lib/backtest.ts; §6.2 ready-status text/tone catalog; itemKindLabel +
+  EXTERNAL_DRAFT_KINDS taxonomy; 7 hooks under ["mainboard"] — no dedicated SSE event,
+  resource.changed sweeps; composition mutations invalidate ["mainboard"]+["readiness"]+["audit"],
+  delete +["trash"], snapshot ["audit"] only) + pages/Mainboard.tsx rewritten (composition summary
+  + Ready Check/RUN links to the landed /backtest/* pages + Freeze composition; per-item expandable
+  ops panel — row_version-OCC Pin/Enable-Disable/Move/Label + two-step soft-delete with doc 01 §6.2
+  text verbatim; Add Outsource Signal opener; Advanced generic work object create→revision→attach;
+  row expand/collapse presentation-only AT#7; empty-state verbatim) + test/mainboard.test.tsx +9
+  (apiStub ORDERED — {root}/revisions precedes the bare create prefix); App.tsx/nav.ts UNCHANGED
+  (index `/` already REAL_PATHS); +9 vitest → 228 (PR #125, MERGED)**.
   **Overall: ~98% complete** (V1=100%, post-V1 core=88%, frontend page map=100%).
-  `main` after PR #123 (`2f8d28f`; Outsource chooser feat `be2aa8a` MERGED; ESP registry mutation feat `b692aaa` MERGED; Trading Signal & Trade Log twin feat `038187f` MERGED;
+  `main` after PR #125 (`8fce88a`; Mainboard composition feat `43b9063` MERGED; Outsource chooser feat `be2aa8a` MERGED; ESP registry mutation feat `b692aaa` MERGED; Trading Signal & Trade Log twin feat `038187f` MERGED; Outsource chooser feat `be2aa8a` MERGED; ESP registry mutation feat `b692aaa` MERGED; Trading Signal & Trade Log twin feat `038187f` MERGED;
   Strategy Details feat `8e5e068` MERGED; User Manual feat `54fd4db` MERGED; Portfolio feat `f3e9550` MERGED; Ready Check feat `6232486` MERGED; Research Data lifecycle-actions feat `2e488dc` MERGED; Research Data page feat `5049f4e` MERGED; Market Data lifecycle-actions feat `d2a9ada` MERGED; Market Data lifecycle-actions feat `d2a9ada` MERGED; Market Data page feat `0ca0468` MERGED; Rationale Families feat `20ccacc` MERGED; Embedded feat `5bf633a` MERGED; Embedded feat `5bf633a` MERGED; Package Library feat `53394fe` MERGED; capability-POSTs feat `652dfde` MERGED; CP-actions/Pre-Check feat `e8f8982` MERGED; CP-create-page feat `79fbd24` MERGED; CP-Gen candidate-generation feat `5cc62cc` MERGED; auth-invalidation feat MERGED (PR #88); trash-page feat `3ccb50d` MERGED; provisioning-dashboard feat `b56f621` MERGED; capability-page feat `3d7977e` MERGED; history-compare feat `491ac03` MERGED; panel-page feat `726ffcc` MERGED; first-Admin bootstrap feat `a53cf34` MERGED; live-pages feat `499bd8b` MERGED; backtest-pages feat `10a0007` MERGED; metrics feat `d3039e7` MERGED; login feat `58781e4` MERGED; SSE feat `5ddb14f` MERGED; position_size_limits feat `5ef5525`; Kelly feat `3f254bc` / non-finite fail-closed fix `3a92e7d`; VWAP code `d27b2bb`; N-ary code `44099a7`; per-condition code `1c5cca0`; multi-timeframe code `def6c28`; indicator-vs-indicator code `9087c2b`; condition-extensions code `361df4c`; condition-blocks code `8766fae`; risk_based code `43cee29`; Slice C code `671d227`);
   alembic head = **`0021_local_auth`** (`human_credentials` + `auth_sessions`;
   Slices A/B/C + follow-ups (a)/(b)/(b2)/(#53)/(c)/(i)/(ii)/(d) + Kelly sizing + position_size_limits + first-Admin bootstrap + bootstrap-status read endpoint + CP-Gen deterministic candidate generation need no migration). **1048 tests green** (1015 + 13 first-Admin bootstrap [env-unset baseline / match+no-admin → Admin+audit+outbox / active-Admin fail-closed / non-matching baseline / case+whitespace normalization / settings env read / route pass-through] + 8 bootstrap-status read endpoint: unit configured-flag + integration window open/closed vs a real DB + route reads the setting + 12 CP-Gen candidate generation: reproducibility / order-independence / output_contract+resolved_refs hash sensitivity / GENERATOR_VERSION namespace shift / fail-closed directional→ta.* + condition→cond.* + empty-resolved skip / output_type alias / DESCRIPTION uncertainty / test_plan dep listing).
@@ -867,12 +890,12 @@ Before stopping a working session, produce **ALL** of the following:
     ~~outsource-signal~~ ✅ **LANDED (PR #123)** — doc 03 type chooser, pure presentation, no
     backend surface (empirical answer: NO new backend slice was needed) → **TIER 2 page map
     COMPLETE (24/24 real)**.
-    **Remaining TIER 2 candidates:** Mainboard live page + composition operations (doc 01 —
-    `routes/mainboard.py` 7/8 endpoints unbound: external-work draft / generic work-object
-    create+revisions / attach item / PATCH item pin-enable-reorder / snapshot / work-object
-    soft-delete; `pages/Mainboard.tsx` is a 55-line static shell binding nothing — closing it
-    retires the PERMANENT "attach+Pin+delete on no landed page" boundary); Trash purge re-auth
-    slice.
+    ~~Mainboard live page + composition operations~~ ✅ **LANDED (PR #125)** — doc 01 composition
+    plane; `routes/mainboard.py` 8/8 bound (`mainboard.py` surface COMPLETE); the PERMANENT
+    "attach+Pin+delete on no landed page" boundary is RETIRED. **Remaining candidates:** Trash purge
+    re-auth slice (destructive purge needs `confirmation_phrase`/re-auth proof; #86 landed restore,
+    purge deferred) + TIER 3 deferred (retention auto-purge / data-queue redelivery / SSE streaming
+    e2e / tool-call status shadowing).
   
   **TIER 3 — Data/ops (deferred, optional for MVP):**
   - Retention auto-purge (strategy/backtest history cleanup)

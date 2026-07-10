@@ -3,6 +3,123 @@
 > **Amaç:** V1 kapandı (Stage 0–8 COMPLETE). Bu doküman post-V1 durumunu, aday iş listesini
 > ve temiz oturumda yapıştırılacak resume prompt'u içerir.
 
+## Durum (2026-07-10, TIER 2 frontend — Mainboard canlı kompozisyon sayfası; PR #125 MERGED)
+
+**FRONTEND-ONLY (1 yeni lib + 1 yeni test + 1 sayfa yeniden yazımı)** — backend DEĞİŞMEDİ (1048
+sabit), migration YOK, alembic head `0021_local_auth` SABİT, `ENGINE_VERSION` SABİT. Index `/`
+Mainboard, Stage-0 meta/health shell'inden gerçek **kompozisyon düzlemine** dönüştü (doc 01).
+`routes/mainboard.py`'nin **bağsız 7 endpoint'i** bağlandı (GET default zaten `lib/backtest.ts`
+`useDefaultMainboard` ile bağlıydı) → **`mainboard.py` yüzeyi TAM**. **KALICI dürüst sınır kapandı:**
+attach + Pin ("Use This Revision") + work-object soft-delete artık gerçek landed bir sayfada.
+Frontend 219 → **228** (+9 vitest). main = `8fce88a` (Merge #125), feat `43b9063`. CI yeşil.
+
+**AMPİRİK OCC/Idem kontratı (route imzaları OKUNDU — handoff özetine güvenilmedi):**
+`POST /external-work-object-drafts/{kind}` Idem/OCC **YOK** (transient, `async` bile değil →
+TS/TL workbench'e deep-link) · `POST /work-objects` Idem, OCC yok · `POST /work-objects/{root}/revisions`
+Idem + BODY `expected_head_revision_id` STR (opsiyonel) · `POST /mainboards/{ws}/items` (attach)
+Idem, OCC yok, `item_kind` server-türetimli (CR-01, client null) · `PATCH /mainboard-items/{item}`
+Idem + BODY `expected_row_version` INT (**REQUIRED**, body If-Match'ten öncelikli; tek intent/çağrı:
+pin_revision|set_enabled|reorder|set_label, yalnız gerekli alan) · `POST /mainboards/{ws}/snapshots`
+Idem, OCC yok · `DELETE /work-objects/{root}` Idem, OCC yok, gövdesiz.
+
+**Reuse anchor'ları:** `lib/mainboard.ts` (YENİ) — wire tipleri command dönüş dict'lerinden VERBATIM;
+`useDefaultMainboard` + item/workspace tipleri `lib/backtest.ts`'ten re-export; §6.2 ready-status
+text/tone kataloğu (`readyStatusText`/`readyStatusTone`); `itemKindLabel`/`EXTERNAL_DRAFT_KINDS`
+taksonomisi; hook'lar `["mainboard"]` altında (özel SSE event YOK — `resource.changed` süpürür):
+`useStartExternalDraft`/`useCreateWorkObject`/`useCreateWorkObjectRevision`/`useAttachItem`/
+`usePatchItem`/`useCreateSnapshot`/`useSoftDeleteWorkObject`; kompozisyon değiştiren mutasyonlar
+`["mainboard"]+["readiness"]+["audit"]` (delete +`["trash"]`), snapshot yalnız `["audit"]` ·
+`pages/Mainboard.tsx` (yeniden yazıldı) — kompozisyon özeti (hash/version/ready-line/latest-result
+placeholder VERBATIM + Ready Check & RUN landed-sayfa link'leri + Freeze composition) + item-başına
+genişleyen operasyon paneli (`row_version` OCC'li Pin/Enable-Disable/Move/Label + iki-adımlı
+soft-delete §6.2 metni VERBATIM) + Add Outsource Signal opener + Advanced generic work object;
+row expand/collapse SUNUM-ONLY (AT#7); empty-state metni VERBATIM · `test/mainboard.test.tsx` +9
+(apiStub SIRALI — `{root}/revisions` çıplak create prefix'inden ÖNCE).
+
+**Dürüst sınır:** Add Strategy draft + Add Package derive (`POST /strategy-drafts`) Strategy Details
+router'ında (doc 02, `/strategy`), `mainboard.py`'de değil; Ready Check + RUN landed `/backtest/*`
+sayfaları (doc 14 §9.3); Mainboard'a özel SSE event yok; `ready_summary` hâlâ backend `not_ready`
+placeholder'ı, `latest_result_summary` runs bağlanana kadar null; reorder ±1 (backend
+`position_index`'i yeniden sıralar, sayfa re-fetch'te tekrar sıralar).
+
+**SIRADAKİ İŞ (BAŞLARKEN kullanıcıyla TEYİT ET — henüz teyitli DEĞİL):** TIER 2 sayfa haritası +
+Mainboard operasyonları TAMAM. Kalan adaylar: (a) **Trash purge re-auth slice** — Trash purge
+(destructive, `confirmation_phrase`/re-auth kanıtı gerekir; #86'da restore inmişti, purge dışarıda);
+(b) **TIER 3 data/ops (deferred)** — retention auto-purge / data-queue redelivery / SSE streaming
+e2e / tool-call status shadowing (CR-08). Backend'de LLM generation (Future-Dev) hâlâ kapsam dışı.
+
+**PASTE-READY RESUME PROMPT (sonraki temiz oturuma yapıştır):**
+
+```
+Entropia — post-V1 TIER 2/3 devam. STALE-BY-DEFAULT: Mainboard kompozisyon sayfası (PR #125)
++ kapanış docs (PR #126) MERGE EDİLDİ varsayma, git'ten doğrula.
+
+ÖNCE DOĞRULA: git fetch && git log --oneline origin/main -6 && gh pr list --state all -L 8.
+main = 8fce88a (Merge #125) olmalı; docs #126 merge sonrası daha ileri (açıksa önce merge iste).
+alembic head 0021_local_auth (DEĞİŞMEDİ); ENGINE_VERSION = backtest-engine-v2-position-size-limits
+(DEĞİŞMEDİ). Backend 1048 test, frontend 228. Yeni branch'i MUTLAKA origin/main'den aç.
+
+ÖNCE OKU (authority order): docs/POST_V1_KICKOFF.md (en üst "Durum" bloğu — PR #125 + "SIRADAKİ İŞ"
++ bu resume) → docs/STAGE2_HANDOFF.md ("Mainboard composition page landed (PR #125)" + "## Next")
+→ CLAUDE.md "Current position".
+
+DURUM: TIER 1 backend EFEKTİF TAMAM. TIER 2 SAYFA HARİTASI TAMAM (24/24 real). Mainboard canlı
+kompozisyon sayfası #125 (YENİ — index / gerçek kompozisyon düzlemi oldu; routes/mainboard.py
+bağsız 7 endpoint bağlandı → mainboard.py yüzeyi TAM; KALICI "attach+Pin+delete landed sayfada
+değil" sınırı KAPANDI). AMPİRİK OCC/Idem: external-draft Idem/OCC yok (transient); create/attach/
+snapshot/delete Idem-var-OCC-yok; revisions BODY expected_head_revision_id STR; PATCH item BODY
+expected_row_version INT REQUIRED (tek intent/çağrı); DELETE gövdesiz. lib/mainboard.ts (wire
+tipleri command dönüşünden verbatim + useDefaultMainboard re-export + §6.2 ready-status kataloğu +
+7 hook ["mainboard"] altında) + pages/Mainboard.tsx yeniden yazıldı + test/mainboard.test.tsx +9.
+Önceki landed: login #65, SSE #67, /v1/metrics #69, RUN/History #72, Arrange Metrics + Analysis Lab
+#74, Panel #78, compare/rebind #80, Future Dev #82, provisioning #84, Trash #86, auth-invalidation
+#88, CP #91/#93, capability POST'ları #95, Library #97, ESP read #99 + mutation'lar #121, Rationale
+#101, Market Data #103/#105, Research Data #107/#109, Ready Check #111, Portfolio #113, User Manual
+#115, Strategy #117, TS/TL #119, Outsource chooser #123. BACKEND: first-Admin bootstrap #76 +
+bootstrap-status #84 + CP-Gen #89 (LLM YOK).
+
+SIRADAKİ İŞ (BAŞLARKEN KULLANICIYLA TEYİT ET — henüz teyitli DEĞİL): TIER 2 sayfa haritası +
+Mainboard operasyonları TAMAM → kalan adaylar: (a) Trash purge re-auth slice (destructive,
+confirmation_phrase/re-auth; #86'da restore inmişti, purge dışarıda — backend imzasını ÖNCE OKU,
+re-auth kanıt taşıyıcısı + OCC/Idem endpoint'te olmayabilir); (b) TIER 3 deferred: retention
+auto-purge, data-queue redelivery, SSE streaming e2e, tool-call status shadowing (CR-08). Başka
+bir aday: küçük backend follow-up'ları (LLM generation Future-Dev, kapsam dışı). BAŞLAMADAN ilgili
+doc'u (Trash purge = doc 20 §8/§9; retention = doc 20) + route/command imzalarını + queries/commands
+dönüş dict'lerini oku → wire tipleri VERBATIM ayna (Mainboard dersleri: external-draft tamamen
+gate'siz + async değildi; PATCH body-form INT REQUIRED; DELETE gövdesizdi; snapshot yalnız audit
+invalidate).
+
+DÜRÜST SINIR (KALICI): ["jobs"] backend LİSTE yüzeyi YOK; ham baytlar sayfadan geçmez (UTF-8 metin);
+view dataset / analysis artifact READ yüzeyi YOK; bundle compiler'lar pure read; work-object'lerin
+(TS/TL) LIST endpoint'i YOK (keşif default Mainboard item'larından); tüm domain'ler özel SSE
+event'siz (resource.changed süpürür); get_manual_section HTTP'ye route edilmemiş; strateji
+root→draft lookup YOK (?draft= URL'i); Mainboard ready_summary hâlâ backend not_ready placeholder'ı,
+latest_result_summary runs bağlanana kadar null; RUN admission RUN sayfasında (doc 14 §9.3).
+
+FRONTEND STACK: Vite 8 + React 18 + react-router 6 + @tanstack/react-query 5 + react-hook-form +
+vitest/jsdom + @testing-library. Alias @ = src; kök frontend/src/. react-query v5 →
+invalidateQueries({queryKey}) object-form. tsconfig noUncheckedIndexedAccess AÇIK,
+exactOptionalPropertyTypes KAPALI. Composition girişi: lib/mainboard.ts (yeni) / lib/backtest.ts
+useDefaultMainboard; OCC/Idem taze örnekler: lib/mainboard.ts (freshIdempotency + BODY-form INT/STR
+token) + lib/esp.ts postWithRegistryVersion (HEADER-form DÜZ INT) + lib/marketData.ts postWithOcc
+(If-Match "rv-N"); apiRequest DELETE + headers için lib/mainboard.ts useSoftDeleteWorkObject örneği.
+
+YÖNTEM: Workflow KULLANMA; direct-author. Frontend loop: cd frontend (absolute path) &&
+npm run typecheck && npm run lint && npm test && npm run build (228 + yeniler geçmeli) + yeni
+component/unit test (test/helpers/apiStub.ts reuse — SIRALI eşleşme: spesifik aksiyon fragmanları
+çıplak liste/create prefix'inden ÖNCE; zincirleme yükleme için findBy*; çift metin/label riskinde
+within(region)). YENİ dosya heredoc (gate-free); mevcut dosya Edit/Write → GateGuard 4-fact
+(çağıran / Glob-dup-yok / data-schema / user-request verbatim → gate İLK denemeyi bloklar → aynı
+çağrıyı aynen tekrarla; ARAYA mesaj/tool girerse gate RESETLENİR); ilk Bash da fact-gate'li; Edit
+öncesi dosyayı Read et. CRITICAL/HIGH AMPİRİK doğrula (route/command imzasını OKU) → commit
+(conventional feat(post-v1), branch feat/post-v1-frontend-<slug> [veya feat/post-v1-<slug>]
+origin/main'den, attribution YOK) → PR → CI background poll (gh pr checks <n> --watch) → merge
+KULLANICIDA (self-merge BLOKLU). Türkçe, MALİYET BİLİNÇLİ. Kapanışta: handoff + kickoff (resume
+tazele) + CLAUDE.md + ecc knowledge-graph (claude-mem worker runtime'da yazılamaz — otomatik yakalanır).
+```
+
+---
+
 ## Durum (2026-07-10, TIER 2 frontend — Add Outsource Signal seçici sayfası; PR #123 MERGED)
 
 **FRONTEND-ONLY (2 yeni + 1 edit, +238 satır)** — backend DEĞİŞMEDİ (1048 sabit), migration YOK,

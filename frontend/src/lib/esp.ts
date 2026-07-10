@@ -7,13 +7,17 @@
 //
 // The registry has no dedicated SSE event: resolver lifecycle changes ride
 // resource.changed (full refresh). Read keys live under ["esp"]. Registry
-// mutations (create / activate / deprecate — Admin-only, X-Registry-Version
-// OCC header) stay OUT of this slice; the detail row_version / registry_version
-// tokens are ready for those later slices.
+// mutations are bound here too: create (any authenticated actor proposes a
+// CANDIDATE — no OCC / Idempotency-Key), and Admin-only activate / deprecate,
+// which carry the registry_version as the X-Registry-Version OCC header (a plain
+// int, NOT the If-Match "rv-N" ETag) + a fresh Idempotency-Key per attempt. A
+// stale token -> 409 RESOLVER_REGISTRY_CONFLICT; a non-Admin -> 403
+// APPROVAL_REQUIRES_ADMIN — both rendered verbatim. Mutations invalidate ["esp"]
+// + ["audit"] (each command audits), mirroring lib/marketData.ts.
 
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { api } from "./apiClient";
+import { api, apiRequest } from "./apiClient";
 
 // ---------------------------------------------------------------------------
 // Taxonomy mirrors — hydration-only copies of domain/esp/enums.py. Selects are
@@ -185,5 +189,158 @@ export function useResolveProbe() {
         },
         target_runtime: input.target_runtime,
       }),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Registry mutation wire types (mirror application/commands/esp.py return dicts
+// verbatim) + hooks. create is open to any authenticated actor; activate /
+// deprecate are Admin-only server-side (ensure_can_activate/deprecate, CR-02).
+// ---------------------------------------------------------------------------
+
+// Visibility facet mirror (domain/lifecycle/enums.py VisibilityScope). Seeds the
+// create select; the server re-validates and rejects a bad value with the 422
+// envelope — never authorization.
+export const VISIBILITY_SCOPES = [
+  "private",
+  "explicitly_shared",
+  "published",
+  "system",
+] as const;
+
+// create_esp_package return dict — a fresh CANDIDATE proposal (doc 09 §5); not
+// trusted until an Admin activates it.
+export interface CreateEspResult {
+  entity_id: string;
+  revision_id: string;
+  canonical_key: string;
+  trust_state: string;
+  runtime_adapter: string;
+}
+
+// activate_resolver return dict (candidate -> trusted_active, doc 09 §8/§10.2).
+export interface ActivateResolverResult {
+  entity_id: string;
+  revision_id: string;
+  canonical_key: string;
+  trust_state: string;
+  registry_version: number;
+}
+
+// deprecate_resolver return dict (trusted_active -> deprecated, doc 09 §8).
+export interface DeprecateResolverResult {
+  canonical_key: string;
+  entity_id: string;
+  trust_state: string;
+  replacement_revision_id: string | null;
+  registry_version: number;
+}
+
+export interface CreateEspInput {
+  canonical_key: string;
+  signature: { params: SignatureParam[]; return: string };
+  runtime_adapter: string;
+  visibility_scope: string;
+  warm_up_period: number | null;
+  timing_semantics: string | null;
+  repaint: boolean;
+  change_note: string | null;
+}
+
+export interface ActivateResolverInput {
+  entityId: string;
+  registryVersion: number;
+  revision_id: string;
+  canonical_key: string;
+  note?: string | null;
+}
+
+export interface DeprecateResolverInput {
+  entityId: string;
+  registryVersion: number;
+  canonical_key: string;
+  reason: string;
+  replacement_revision_id?: string | null;
+}
+
+// UI-hint gating only (domain/esp/state_machine.py): activation is legal from
+// `candidate`, deprecation from `trusted_active`. The server re-validates BOTH
+// the transition and the Admin gate — an illegal/non-Admin move surfaces verbatim.
+export function canActivate(trustState: string): boolean {
+  return trustState === "candidate";
+}
+
+export function canDeprecate(trustState: string): boolean {
+  return trustState === "trusted_active";
+}
+
+// Registry OCC travels in the X-Registry-Version header (a plain int, parsed
+// server-side as int(strip('"')) — NOT the If-Match "rv-N" ETag) + a fresh
+// Idempotency-Key per attempt (a retry after a rejection is a new decision, not a
+// replay). A stale token -> 409 RESOLVER_REGISTRY_CONFLICT verbatim.
+function postWithRegistryVersion<T>(
+  path: string,
+  registryVersion: number,
+  body: unknown,
+): Promise<T> {
+  return apiRequest<T>(path, {
+    method: "POST",
+    body,
+    headers: {
+      "X-Registry-Version": String(registryVersion),
+      "Idempotency-Key": crypto.randomUUID(),
+    },
+  });
+}
+
+// Propose a new resolver: any authenticated actor may create a CANDIDATE (doc 09
+// §5). No OCC / Idempotency-Key — a create has no head to race. Invalidates
+// ["esp"] (the new candidate joins the registry) + ["audit"].
+export function useCreateEsp() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateEspInput) =>
+      api.post<CreateEspResult>("/embedded-system-packages", input),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["esp"] });
+      void queryClient.invalidateQueries({ queryKey: ["audit"] });
+    },
+  });
+}
+
+// Admin-only: activate a CANDIDATE resolver -> TRUSTED_ACTIVE. OCC on the
+// registry_version + fresh Idempotency-Key. A non-Admin -> 403 verbatim.
+export function useActivateResolver() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ entityId, registryVersion, ...body }: ActivateResolverInput) =>
+      postWithRegistryVersion<ActivateResolverResult>(
+        `/embedded-system-packages/${encodeURIComponent(entityId)}/activate`,
+        registryVersion,
+        body,
+      ),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["esp"] });
+      void queryClient.invalidateQueries({ queryKey: ["audit"] });
+    },
+  });
+}
+
+// Admin-only: deprecate a TRUSTED_ACTIVE resolver -> DEPRECATED. A reason is
+// required (doc 09 §6). Historical pins keep reading their exact revision; only
+// new-work selection closes. OCC + fresh Idempotency-Key; a non-Admin -> 403.
+export function useDeprecateResolver() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ entityId, registryVersion, ...body }: DeprecateResolverInput) =>
+      postWithRegistryVersion<DeprecateResolverResult>(
+        `/embedded-system-packages/${encodeURIComponent(entityId)}/deprecate`,
+        registryVersion,
+        body,
+      ),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["esp"] });
+      void queryClient.invalidateQueries({ queryKey: ["audit"] });
+    },
   });
 }

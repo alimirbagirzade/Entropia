@@ -190,8 +190,29 @@ Before stopping a working session, produce **ALL** of the following:
   row expand/collapse presentation-only AT#7; empty-state verbatim) + test/mainboard.test.tsx +9
   (apiStub ORDERED — {root}/revisions precedes the bare create prefix); App.tsx/nav.ts UNCHANGED
   (index `/` already REAL_PATHS); +9 vitest → 228 (PR #125, MERGED)**.
-  **Overall: ~98% complete** (V1=100%, post-V1 core=88%, frontend page map=100%).
-  `main` after PR #125 (`8fce88a`; Mainboard composition feat `43b9063` MERGED; Outsource chooser feat `be2aa8a` MERGED; ESP registry mutation feat `b692aaa` MERGED; Trading Signal & Trade Log twin feat `038187f` MERGED; Outsource chooser feat `be2aa8a` MERGED; ESP registry mutation feat `b692aaa` MERGED; Trading Signal & Trade Log twin feat `038187f` MERGED;
+  + TIER 2 frontend Trash Permanent Delete (purge) actions — the `/trash` page (read + restore
+  landed in PR #86) gains the destructive purge, binding the last unbound routes/trash.py endpoint
+  (POST /trash-entries/{id}/purge, doc 20 §8.3) → **trash.py surface COMPLETE** (mainboard.py #125 +
+  trash.py #127 → no unbound endpoint remains). EMPIRICAL (route + command signatures READ): two-phase
+  202 — the request only moves the target to purge_pending + enqueues a durable maintenance job; the
+  WORKER runs the actual purge (re-checks eligibility). Body REQUIRES confirmation_phrase (must equal
+  the object's display identity display_name||entity_id, else PURGE_CONFIRMATION_INVALID, never started)
+  + reauth_proof (non-empty; V1 presence-only, full MFA out of scope doc 20 §0, else REAUTH_REQUIRED);
+  OCC = BODY-form expected_row_version INT (body wins over If-Match, doc 20 §14) = entry row_version,
+  stale → STALE_REVISION; fresh Idempotency-Key per attempt (same key → same job). Purge is eligible on
+  the SAME recoverable statuses as Restore (shares _assert_entry_recoverable) → the page gates the action
+  on the server-truth restore_eligible flag (no backend change). lib/trash.ts (PurgeResult wire type —
+  request_purge dict verbatim, NB omits display_name + useRequestPurge Idempotency-Key header + body-OCC
+  token, invalidates ["trash"]+["audit"]; PR #86 useRestoreEntry pattern) + pages/Trash.tsx (Permanent
+  Delete → explicit two-step PurgeComposer, doc 20 §9 confirmation copy verbatim; Confirm mirrors the
+  server preconditions — exact name + non-empty proof, server re-validates; captures the display name at
+  accept time for the §9 accepted toast since the 202 return has no display_name) + .btn-danger style +
+  test/trash.test.tsx +4 (228 → 232); App.tsx/nav.ts UNCHANGED (/trash already REAL_PATHS); review 0
+  CRITICAL/HIGH. Honest boundary: purge is a request only — the worker runs the actual purge (status
+  via the ["trash"] projection, no dedicated SSE event); reauth_proof presence-checked only in V1;
+  retention auto-purge stays a TIER 3 backend slice; +4 vitest → 232 (PR #127, MERGED)**.
+  **Overall: ~98% complete** (V1=100%, post-V1 core=88%, frontend page map=100%; all route surfaces bound).
+  `main` after PR #127 (`77b6b61`; Trash purge feat `7ae3428` MERGED; Mainboard composition feat `43b9063` MERGED; Outsource chooser feat `be2aa8a` MERGED; ESP registry mutation feat `b692aaa` MERGED; Trading Signal & Trade Log twin feat `038187f` MERGED; Outsource chooser feat `be2aa8a` MERGED; ESP registry mutation feat `b692aaa` MERGED; Trading Signal & Trade Log twin feat `038187f` MERGED;
   Strategy Details feat `8e5e068` MERGED; User Manual feat `54fd4db` MERGED; Portfolio feat `f3e9550` MERGED; Ready Check feat `6232486` MERGED; Research Data lifecycle-actions feat `2e488dc` MERGED; Research Data page feat `5049f4e` MERGED; Market Data lifecycle-actions feat `d2a9ada` MERGED; Market Data lifecycle-actions feat `d2a9ada` MERGED; Market Data page feat `0ca0468` MERGED; Rationale Families feat `20ccacc` MERGED; Embedded feat `5bf633a` MERGED; Embedded feat `5bf633a` MERGED; Package Library feat `53394fe` MERGED; capability-POSTs feat `652dfde` MERGED; CP-actions/Pre-Check feat `e8f8982` MERGED; CP-create-page feat `79fbd24` MERGED; CP-Gen candidate-generation feat `5cc62cc` MERGED; auth-invalidation feat MERGED (PR #88); trash-page feat `3ccb50d` MERGED; provisioning-dashboard feat `b56f621` MERGED; capability-page feat `3d7977e` MERGED; history-compare feat `491ac03` MERGED; panel-page feat `726ffcc` MERGED; first-Admin bootstrap feat `a53cf34` MERGED; live-pages feat `499bd8b` MERGED; backtest-pages feat `10a0007` MERGED; metrics feat `d3039e7` MERGED; login feat `58781e4` MERGED; SSE feat `5ddb14f` MERGED; position_size_limits feat `5ef5525`; Kelly feat `3f254bc` / non-finite fail-closed fix `3a92e7d`; VWAP code `d27b2bb`; N-ary code `44099a7`; per-condition code `1c5cca0`; multi-timeframe code `def6c28`; indicator-vs-indicator code `9087c2b`; condition-extensions code `361df4c`; condition-blocks code `8766fae`; risk_based code `43cee29`; Slice C code `671d227`);
   alembic head = **`0021_local_auth`** (`human_credentials` + `auth_sessions`;
   Slices A/B/C + follow-ups (a)/(b)/(b2)/(#53)/(c)/(i)/(ii)/(d) + Kelly sizing + position_size_limits + first-Admin bootstrap + bootstrap-status read endpoint + CP-Gen deterministic candidate generation need no migration). **1048 tests green** (1015 + 13 first-Admin bootstrap [env-unset baseline / match+no-admin → Admin+audit+outbox / active-Admin fail-closed / non-matching baseline / case+whitespace normalization / settings env read / route pass-through] + 8 bootstrap-status read endpoint: unit configured-flag + integration window open/closed vs a real DB + route reads the setting + 12 CP-Gen candidate generation: reproducibility / order-independence / output_contract+resolved_refs hash sensitivity / GENERATOR_VERSION namespace shift / fail-closed directional→ta.* + condition→cond.* + empty-resolved skip / output_type alias / DESCRIPTION uncertainty / test_plan dep listing).
@@ -892,10 +913,23 @@ Before stopping a working session, produce **ALL** of the following:
     COMPLETE (24/24 real)**.
     ~~Mainboard live page + composition operations~~ ✅ **LANDED (PR #125)** — doc 01 composition
     plane; `routes/mainboard.py` 8/8 bound (`mainboard.py` surface COMPLETE); the PERMANENT
-    "attach+Pin+delete on no landed page" boundary is RETIRED. **Remaining candidates:** Trash purge
-    re-auth slice (destructive purge needs `confirmation_phrase`/re-auth proof; #86 landed restore,
-    purge deferred) + TIER 3 deferred (retention auto-purge / data-queue redelivery / SSE streaming
-    e2e / tool-call status shadowing).
+    "attach+Pin+delete on no landed page" boundary is RETIRED.
+    ~~Trash purge re-auth slice~~ ✅ **LANDED (PR #127)** — the `/trash` page (restore landed #86)
+    gains the destructive purge, binding the last unbound `routes/trash.py` endpoint (POST
+    /trash-entries/{id}/purge, doc 20 §8.3) → **trash.py surface COMPLETE** (mainboard.py #125 +
+    trash.py #127 → no unbound route endpoint remains). Two-phase 202 (request → purge_pending +
+    durable maintenance job; worker runs the actual purge); body REQUIRES confirmation_phrase
+    (=display_name||entity_id, else PURGE_CONFIRMATION_INVALID) + reauth_proof (non-empty, V1
+    presence-only, else REAUTH_REQUIRED); OCC = BODY-form expected_row_version INT (body wins over
+    If-Match) = entry row_version, stale → STALE_REVISION; fresh Idempotency-Key; purge eligible on
+    the SAME recoverable statuses as Restore (shares _assert_entry_recoverable) → page gates on
+    server-truth restore_eligible. `lib/trash.ts` PurgeResult wire type (omits display_name) +
+    useRequestPurge (Idem header + body-OCC, invalidates ["trash"]+["audit"]) + `pages/Trash.tsx`
+    two-step PurgeComposer (§9 copy verbatim, display name captured at accept time) + .btn-danger;
+    +4 vitest → 232; frontend-only, no migration, backend stays 1048. **Remaining candidates:**
+    TIER 3 deferred (retention auto-purge [doc 20; related to the purge worker] / data-queue
+    redelivery / SSE streaming e2e / tool-call status shadowing) + minor backend follow-ups
+    (LLM generation stays Future-Dev, out of scope).
   
   **TIER 3 — Data/ops (deferred, optional for MVP):**
   - Retention auto-purge (strategy/backtest history cleanup)

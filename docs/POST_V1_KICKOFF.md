@@ -3,6 +3,116 @@
 > **Amaç:** V1 kapandı (Stage 0–8 COMPLETE). Bu doküman post-V1 durumunu, aday iş listesini
 > ve temiz oturumda yapıştırılacak resume prompt'u içerir.
 
+## Durum (2026-07-10, TIER 2 frontend — Trash Permanent Delete (purge) actions; PR #127 MERGED)
+
+**FRONTEND-ONLY** (`lib/trash.ts` + `pages/Trash.tsx` + `styles/global.css` + `test/trash.test.tsx`)
+— backend DEĞİŞMEDİ (1048 sabit), migration YOK, alembic head `0021_local_auth` SABİT, `ENGINE_VERSION`
+SABİT. PR #86'nın restore-only sınırı kapandı: son bağsız `routes/trash.py` endpoint'i
+(`POST /trash-entries/{id}/purge`, doc 20 §8.3) bağlandı → **`trash.py` yüzeyi TAM** (mainboard.py
+PR #125 + trash.py PR #127 → bağsız endpoint kalmadı). Frontend 228 → **232** (+4 vitest).
+main = `77b6b61` (Merge #127), feat `7ae3428`. CI yeşil.
+
+**AMPİRİK OCC/Idem kontratı (route + command imzaları OKUNDU — handoff özetine güvenilmedi):**
+İki-aşamalı **202** — request yalnızca hedefi `purge_pending`'e taşır + durable maintenance job
+enqueue eder; asıl purge'ü **worker** yürütür (worker eligibility'yi yeniden doğrular). Gövde
+**REQUIRED** `confirmation_phrase` + `reauth_proof`: `confirmation_phrase` objenin display kimliğine
+(`display_name || entity_id`) EŞİT olmalı yoksa `PURGE_CONFIRMATION_INVALID` (hiç başlamaz);
+`reauth_proof` boş olamaz (V1 **varlık-kontrollü**, tam MFA kapsam dışı doc 20 §0) yoksa
+`REAUTH_REQUIRED`. OCC = **BODY-form `expected_row_version` INT** (body If-Match'ten öncelikli,
+doc 20 §14) = entry `row_version`; stale → `STALE_REVISION`. Her denemede taze `Idempotency-Key`
+(aynı key → aynı job). Purge, Restore ile **AYNI recoverable statülerde** uygun (command
+`_assert_entry_recoverable`'ı paylaşır) → sayfa server-truth `restore_eligible` flag'ı üzerinden gate.
+
+**Reuse anchor'ları:** `lib/trash.ts` — `PurgeResult` wire tipi (`request_purge` dict'inden VERBATIM,
+NB `display_name` İÇERMEZ) + `useRequestPurge` (Idempotency-Key header + body-OCC token, invalidate
+`["trash"]+["audit"]`; PR #86 `useRestoreEntry` deseni) · `pages/Trash.tsx` — Permanent Delete →
+açık **iki-adımlı `PurgeComposer`** (doc 20 §9 onay metni VERBATIM; Confirm server ön-koşullarını
+aynalar — tam isim + boş-olmayan proof, server yeniden doğrular; §9 kabul toast'ı için display name'i
+**kabul anında yakalar** çünkü 202 dönüşü `display_name` içermez) · `.btn-danger` style.
+
+**Dürüst sınır:** purge yalnızca bir **request** — asıl purge'ü worker yürütür (durum `["trash"]`
+projeksiyonundan okunur, özel SSE event yok, `resource.changed` süpürür); re-auth proof V1'de yalnız
+varlık-kontrollü (gerçek MFA yok); **retention auto-purge** hâlâ bir TIER 3 backend slice'ı.
+
+**SIRADAKİ İŞ (BAŞLARKEN kullanıcıyla TEYİT ET — henüz teyitli DEĞİL):** TIER 2 sayfa haritası + tüm
+route yüzeyleri TAMAM (24/24 real, bağsız endpoint kalmadı). Kalan adaylar: **TIER 3 data/ops
+(deferred)** — retention auto-purge (doc 20; purge worker'ıyla ilişkili BACKEND slice) / data-queue
+redelivery / SSE streaming e2e / tool-call status shadowing (CR-08). Backend'de LLM generation
+(Future-Dev) hâlâ kapsam dışı.
+
+**PASTE-READY RESUME PROMPT (sonraki temiz oturuma yapıştır):**
+
+```
+Entropia — post-V1 TIER 2/3 devam. STALE-BY-DEFAULT: Trash purge kapanış docs (PR #128) MERGE
+EDİLDİ varsayma, git'ten doğrula.
+
+ÖNCE DOĞRULA: git fetch && git log --oneline origin/main -6 && gh pr list --state all -L 8.
+main = 77b6b61 (Merge #127) + docs #128 merge sonrası daha ileri (açıksa önce merge iste).
+alembic head 0021_local_auth (DEĞİŞMEDİ); ENGINE_VERSION = backtest-engine-v2-position-size-limits
+(DEĞİŞMEDİ). Backend 1048 test, frontend 232. Yeni branch'i MUTLAKA origin/main'den aç.
+
+ÖNCE OKU (authority order): docs/POST_V1_KICKOFF.md (en üst "Durum" bloğu — PR #127 + "SIRADAKİ İŞ"
++ bu resume) → docs/STAGE2_HANDOFF.md ("Trash Permanent Delete (purge) actions landed (PR #127)" +
+"## Next") → CLAUDE.md "Current position".
+
+DURUM: TIER 1 backend EFEKTİF TAMAM. TIER 2 SAYFA HARİTASI TAMAM (24/24 real) + tüm route yüzeyleri
+bağlı (mainboard.py #125, trash.py #127 dahil bağsız endpoint kalmadı). Trash purge #127 (YENİ —
+routes/trash.py son endpoint POST /trash-entries/{id}/purge bağlandı → trash.py yüzeyi TAM; PR #86
+restore-only sınırı kapandı). AMPİRİK: iki-aşamalı 202 (request purge_pending'e taşır + durable job
+enqueue; worker asıl purge'ü yürütür); body REQUIRED confirmation_phrase (=display_name||entity_id,
+yoksa PURGE_CONFIRMATION_INVALID) + reauth_proof (boş olamaz, V1 varlık-kontrollü, yoksa
+REAUTH_REQUIRED); OCC = BODY expected_row_version INT (body If-Match'i yener) = entry row_version,
+stale → STALE_REVISION; taze Idempotency-Key; purge Restore ile AYNI recoverable statülerde uygun
+(_assert_entry_recoverable paylaşımlı) → sayfa restore_eligible flag'ından gate. lib/trash.ts
+(PurgeResult wire tipi — display_name YOK + useRequestPurge Idem-header + body-OCC, invalidate
+["trash"]+["audit"]) + pages/Trash.tsx (iki-aşamalı PurgeComposer, §9 metni verbatim, display_name'i
+kabul anında yakala) + .btn-danger + test +4 → 232. Önceki landed: login #65, SSE #67, /v1/metrics
+#69, RUN/History #72, Arrange Metrics + Analysis Lab #74, Panel #78, compare/rebind #80, Future Dev
+#82, provisioning #84, Trash restore #86, auth-invalidation #88, CP #91/#93, capability POST'ları #95,
+Library #97, ESP read #99 + mutation'lar #121, Rationale #101, Market Data #103/#105, Research Data
+#107/#109, Ready Check #111, Portfolio #113, User Manual #115, Strategy #117, TS/TL #119, Outsource
+chooser #123, Mainboard #125. BACKEND: first-Admin bootstrap #76 + bootstrap-status #84 + CP-Gen #89.
+
+SIRADAKİ İŞ (BAŞLARKEN KULLANICIYLA TEYİT ET — henüz teyitli DEĞİL): TIER 2 sayfa haritası + tüm route
+yüzeyleri TAMAM → kalan adaylar TIER 3 deferred: (a) retention auto-purge (doc 20; strategy/backtest
+history cleanup — BACKEND slice, purge worker'ıyla ilişkili; imzaları ÖNCE OKU); (b) data-queue
+redelivery (operator recovery tool); (c) SSE streaming e2e (bağlantı kopması dayanıklılığı); (d)
+tool-call status shadowing (CR-08 follow-up). Başka aday: küçük backend follow-up'ları (LLM generation
+Future-Dev, kapsam dışı). BAŞLAMADAN ilgili doc'u + route/command imzalarını + queries/commands dönüş
+dict'lerini oku → wire tipleri VERBATIM ayna (Trash purge dersleri: iki-aşamalı 202 request-only;
+confirmation_phrase display kimliği; reauth_proof varlık-kontrollü; OCC body-form INT).
+
+DÜRÜST SINIR (KALICI): ["jobs"] backend LİSTE yüzeyi YOK; purge worker durumu ["trash"]
+projeksiyonundan okunur (özel SSE event YOK, resource.changed süpürür); reauth_proof V1'de yalnız
+varlık-kontrollü (gerçek MFA yok); ham baytlar sayfadan geçmez (UTF-8 metin); view dataset / analysis
+artifact READ yüzeyi YOK; work-object (TS/TL) LIST endpoint'i YOK; get_manual_section HTTP'ye route
+edilmemiş; Mainboard ready_summary hâlâ backend not_ready placeholder'ı, latest_result_summary runs
+bağlanana kadar null.
+
+FRONTEND STACK: Vite 8 + React 18 + react-router 6 + @tanstack/react-query 5 + react-hook-form +
+vitest/jsdom + @testing-library. Alias @ = src; kök frontend/src/. react-query v5 →
+invalidateQueries({queryKey}) object-form. tsconfig noUncheckedIndexedAccess AÇIK,
+exactOptionalPropertyTypes KAPALI. OCC/Idem taze örnekler: lib/trash.ts (useRestoreEntry +
+useRequestPurge — Idem header + BODY-form INT token) + lib/mainboard.ts (freshIdempotency + BODY
+INT/STR) + lib/esp.ts postWithRegistryVersion (HEADER-form DÜZ INT) + lib/marketData.ts postWithOcc
+(If-Match "rv-N").
+
+YÖNTEM: Workflow KULLANMA; direct-author. Frontend loop: cd frontend (absolute path) &&
+npm run typecheck && npm run lint && npm test && npm run build (232 + yeniler geçmeli) + yeni
+component/unit test (test/helpers/apiStub.ts reuse — SIRALI eşleşme: spesifik aksiyon fragmanları
+çıplak liste/create prefix'inden ÖNCE; zincirleme yükleme için findBy*; çift metin/label riskinde
+within(region)). YENİ dosya heredoc (gate-free); mevcut dosya Edit/Write → GateGuard 4-fact
+(çağıran / Grep-dup-yok / data-schema / user-request verbatim → gate İLK denemeyi bloklar → aynı
+çağrıyı aynen tekrarla; ARAYA mesaj/tool girerse gate RESETLENİR); ilk Bash da fact-gate'li; Edit
+öncesi dosyayı Read et. CRITICAL/HIGH AMPİRİK doğrula (route/command imzasını OKU) → commit
+(conventional feat(post-v1) veya docs(post-v1), branch origin/main'den, attribution YOK) → PR → CI
+background poll (gh pr checks <n> --watch) → merge KULLANICIDA (self-merge BLOKLU). Türkçe, MALİYET
+BİLİNÇLİ. Kapanışta: handoff + kickoff (resume tazele) + CLAUDE.md + ecc knowledge-graph (claude-mem
+worker runtime'da yazılamaz — otomatik yakalanır).
+```
+
+---
+
 ## Durum (2026-07-10, TIER 2 frontend — Mainboard canlı kompozisyon sayfası; PR #125 MERGED)
 
 **FRONTEND-ONLY (1 yeni lib + 1 yeni test + 1 sayfa yeniden yazımı)** — backend DEĞİŞMEDİ (1048

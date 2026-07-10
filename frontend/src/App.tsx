@@ -15,6 +15,7 @@ import { Panel } from "./pages/Panel";
 import { PreCheck } from "./pages/PreCheck";
 import { Provisioning } from "./pages/Provisioning";
 import { RationaleFamilies } from "./pages/RationaleFamilies";
+import { ReadyCheck } from "./pages/ReadyCheck";
 import { ResearchData } from "./pages/ResearchData";
 import { Placeholder } from "./pages/Placeholder";
 import { Login } from "./pages/Login";
@@ -34,6 +35,7 @@ const REAL_PATHS = new Set([
   "/panel",
   "/panel/provisioning",
   "/panel/metrics",
+  "/backtest/ready-check",
   "/backtest/run",
   "/backtest/history",
   "/backtest/metrics",
@@ -119,6 +121,15 @@ export default function App() {
           element={
             <ErrorBoundary>
               <Metrics />
+            </ErrorBoundary>
+          }
+        />
+        {/* Backtest Ready Check (Stage 4b doc 14): composition validator + immutable report. */}
+        <Route
+          path="/backtest/ready-check"
+          element={
+            <ErrorBoundary>
+              <ReadyCheck />
             </ErrorBoundary>
           }
         />

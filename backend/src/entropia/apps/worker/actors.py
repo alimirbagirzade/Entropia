@@ -7,9 +7,16 @@ decorators below register against the canonical Redis broker.
 from __future__ import annotations
 
 import asyncio
+from typing import Any
 
 import dramatiq
 
+from entropia.application.jobs.data_queue import (
+    MARKET_DATA_ANALYSIS,
+    RESEARCH_DATA_ANALYSIS,
+    TRADE_LOG_IMPORT,
+    TRADING_SIGNAL_IMPORT,
+)
 from entropia.infrastructure.observability import get_logger
 from entropia.infrastructure.queues import broker as _broker  # noqa: F401  (installs broker)
 
@@ -218,3 +225,17 @@ async def _run_trash_purge(job_id: str) -> None:
         except Exception:
             await session.rollback()
             raise
+
+
+# Kind->actor map for the multi-actor ``data`` queue (INF-03, doc 20 §6). The
+# scheduler deliberately keeps ``data`` out of ``ACTOR_BY_QUEUE`` — it cannot pick
+# the right actor from the durable row alone — so the operator redelivery action
+# routes a stuck data job here via its payload ``job_kind`` discriminator.
+# Re-dispatch stays an explicit operator action; the automatic sweep never reads
+# this map.
+DATA_ACTOR_BY_KIND: dict[str, Any] = {
+    MARKET_DATA_ANALYSIS: run_market_data_analysis,
+    RESEARCH_DATA_ANALYSIS: run_research_data_analysis,
+    TRADING_SIGNAL_IMPORT: run_trading_signal_import,
+    TRADE_LOG_IMPORT: run_trade_log_import,
+}

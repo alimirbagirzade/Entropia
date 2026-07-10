@@ -157,9 +157,18 @@ Before stopping a working session, produce **ALL** of the following:
   Admin-only (command layer — UI never pre-gates; 409 RESOLVER_REGISTRY_CONFLICT / 403
   APPROVAL_REQUIRES_ADMIN verbatim); canActivate/canDeprecate state-machine UI hints;
   postWithRegistryVersion helper; invalidates ["esp"]+["audit"]; App.tsx/nav.ts UNCHANGED;
-  +5 vitest → 213 (PR #121, MERGED)**.
-  **Overall: ~97% complete** (V1=100%, post-V1 core=88%, frontend=99%).
-  `main` after PR #121 (`45e615b`; ESP registry mutation feat `b692aaa` MERGED; Trading Signal & Trade Log twin feat `038187f` MERGED;
+  +5 vitest → 213 (PR #121, MERGED)
+  + TIER 2 frontend Add Outsource Signal chooser page — the /outsource-signal placeholder (the
+  LAST Workspace + TIER 2 page-map placeholder) becomes the real doc 03 external-work TYPE
+  CHOOSER → REAL_PATHS 23→24, NO placeholder remains — **TIER 2 PAGE MAP COMPLETE**. PURE
+  presentation: exactly two canonical choice links (trading_signal | trade_log, CR-01) into the
+  TS/TL workbenches (direct links make "continue without a choice" unconstructible — AOS-02 by
+  construction); doc 03 §6.1 ⓘ panels + §6.2 helpers VERBATIM; NO hooks/query keys/fetch (doc 03
+  §7.1 — the chooser performs no backend mutation; "outsource" exists in the backend only as the
+  errors.py:624 comment — no router exists and none is needed, confirmed empirically); nav.ts
+  UNCHANGED (24); +6 vitest → 219 (PR #123, MERGED)**.
+  **Overall: ~98% complete** (V1=100%, post-V1 core=88%, frontend page map=100%).
+  `main` after PR #123 (`2f8d28f`; Outsource chooser feat `be2aa8a` MERGED; ESP registry mutation feat `b692aaa` MERGED; Trading Signal & Trade Log twin feat `038187f` MERGED;
   Strategy Details feat `8e5e068` MERGED; User Manual feat `54fd4db` MERGED; Portfolio feat `f3e9550` MERGED; Ready Check feat `6232486` MERGED; Research Data lifecycle-actions feat `2e488dc` MERGED; Research Data page feat `5049f4e` MERGED; Market Data lifecycle-actions feat `d2a9ada` MERGED; Market Data lifecycle-actions feat `d2a9ada` MERGED; Market Data page feat `0ca0468` MERGED; Rationale Families feat `20ccacc` MERGED; Embedded feat `5bf633a` MERGED; Embedded feat `5bf633a` MERGED; Package Library feat `53394fe` MERGED; capability-POSTs feat `652dfde` MERGED; CP-actions/Pre-Check feat `e8f8982` MERGED; CP-create-page feat `79fbd24` MERGED; CP-Gen candidate-generation feat `5cc62cc` MERGED; auth-invalidation feat MERGED (PR #88); trash-page feat `3ccb50d` MERGED; provisioning-dashboard feat `b56f621` MERGED; capability-page feat `3d7977e` MERGED; history-compare feat `491ac03` MERGED; panel-page feat `726ffcc` MERGED; first-Admin bootstrap feat `a53cf34` MERGED; live-pages feat `499bd8b` MERGED; backtest-pages feat `10a0007` MERGED; metrics feat `d3039e7` MERGED; login feat `58781e4` MERGED; SSE feat `5ddb14f` MERGED; position_size_limits feat `5ef5525`; Kelly feat `3f254bc` / non-finite fail-closed fix `3a92e7d`; VWAP code `d27b2bb`; N-ary code `44099a7`; per-condition code `1c5cca0`; multi-timeframe code `def6c28`; indicator-vs-indicator code `9087c2b`; condition-extensions code `361df4c`; condition-blocks code `8766fae`; risk_based code `43cee29`; Slice C code `671d227`);
   alembic head = **`0021_local_auth`** (`human_credentials` + `auth_sessions`;
   Slices A/B/C + follow-ups (a)/(b)/(b2)/(#53)/(c)/(i)/(ii)/(d) + Kelly sizing + position_size_limits + first-Admin bootstrap + bootstrap-status read endpoint + CP-Gen deterministic candidate generation need no migration). **1048 tests green** (1015 + 13 first-Admin bootstrap [env-unset baseline / match+no-admin → Admin+audit+outbox / active-Admin fail-closed / non-matching baseline / case+whitespace normalization / settings env read / route pass-through] + 8 bootstrap-status read endpoint: unit configured-flag + integration window open/closed vs a real DB + route reads the setting + 12 CP-Gen candidate generation: reproducibility / order-independence / output_contract+resolved_refs hash sensitivity / GENERATOR_VERSION namespace shift / fail-closed directional→ta.* + condition→cond.* + empty-resolved skip / output_type alias / DESCRIPTION uncertainty / test_plan dep listing).
@@ -855,11 +864,15 @@ Before stopping a working session, produce **ALL** of the following:
     `App.tsx`/`nav.ts` UNCHANGED; +5 vitest → **213**; frontend-only, no migration, backend
     stays 1048. Honest boundary: advanced contract fields (`input_contract`/`output_contract`/
     `dependency_snapshot`/`evidence`) not in the propose form — server defaults (`{}`/null).
-    **Remaining TIER 2:** outsource-signal — the LAST Workspace (and TIER 2 page-map)
-    placeholder; EMPIRICAL WARNING: the string "outsource" appears in the backend ONLY in a
-    comment (`shared/errors.py:624`) — no dedicated router; doc 03 likely reuses the TS/TL
-    surfaces — read `docs/spec/03_Entropia_V18_Add_Outsource_Signal_Page_Documentation_v1_1.md`
-    and scope with the user BEFORE starting; a new backend slice may be needed.
+    ~~outsource-signal~~ ✅ **LANDED (PR #123)** — doc 03 type chooser, pure presentation, no
+    backend surface (empirical answer: NO new backend slice was needed) → **TIER 2 page map
+    COMPLETE (24/24 real)**.
+    **Remaining TIER 2 candidates:** Mainboard live page + composition operations (doc 01 —
+    `routes/mainboard.py` 7/8 endpoints unbound: external-work draft / generic work-object
+    create+revisions / attach item / PATCH item pin-enable-reorder / snapshot / work-object
+    soft-delete; `pages/Mainboard.tsx` is a 55-line static shell binding nothing — closing it
+    retires the PERMANENT "attach+Pin+delete on no landed page" boundary); Trash purge re-auth
+    slice.
   
   **TIER 3 — Data/ops (deferred, optional for MVP):**
   - Retention auto-purge (strategy/backtest history cleanup)

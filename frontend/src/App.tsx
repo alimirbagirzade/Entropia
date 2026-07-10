@@ -19,6 +19,8 @@ import { RationaleFamilies } from "./pages/RationaleFamilies";
 import { ReadyCheck } from "./pages/ReadyCheck";
 import { ResearchData } from "./pages/ResearchData";
 import { StrategyDetails } from "./pages/StrategyDetails";
+import { TradeLog } from "./pages/TradeLog";
+import { TradingSignal } from "./pages/TradingSignal";
 import { Placeholder } from "./pages/Placeholder";
 import { Login } from "./pages/Login";
 import { NotFound } from "./pages/NotFound";
@@ -51,6 +53,8 @@ const REAL_PATHS = new Set([
   "/market-data",
   "/research-data",
   "/strategy",
+  "/trading-signal",
+  "/trade-log",
 ]);
 
 export default function App() {
@@ -243,6 +247,24 @@ export default function App() {
           element={
             <ErrorBoundary>
               <StrategyDetails />
+            </ErrorBoundary>
+          }
+        />
+        {/* Trading Signal (Stage 3c doc 04): source-import chain + native work object. */}
+        <Route
+          path="/trading-signal"
+          element={
+            <ErrorBoundary>
+              <TradingSignal />
+            </ErrorBoundary>
+          }
+        />
+        {/* Trade Log (Stage 3d doc 05): historical ledger import + native work object. */}
+        <Route
+          path="/trade-log"
+          element={
+            <ErrorBoundary>
+              <TradeLog />
             </ErrorBoundary>
           }
         />

@@ -18,6 +18,7 @@ import { Provisioning } from "./pages/Provisioning";
 import { RationaleFamilies } from "./pages/RationaleFamilies";
 import { ReadyCheck } from "./pages/ReadyCheck";
 import { ResearchData } from "./pages/ResearchData";
+import { StrategyDetails } from "./pages/StrategyDetails";
 import { Placeholder } from "./pages/Placeholder";
 import { Login } from "./pages/Login";
 import { NotFound } from "./pages/NotFound";
@@ -49,6 +50,7 @@ const REAL_PATHS = new Set([
   "/rationale-families",
   "/market-data",
   "/research-data",
+  "/strategy",
 ]);
 
 export default function App() {
@@ -232,6 +234,15 @@ export default function App() {
           element={
             <ErrorBoundary>
               <ResearchData />
+            </ErrorBoundary>
+          }
+        />
+        {/* Strategy Details (Stage 3b doc 02): editor draft workflow + revision history. */}
+        <Route
+          path="/strategy"
+          element={
+            <ErrorBoundary>
+              <StrategyDetails />
             </ErrorBoundary>
           }
         />

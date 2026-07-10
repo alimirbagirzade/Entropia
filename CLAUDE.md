@@ -126,9 +126,19 @@ Before stopping a working session, produce **ALL** of the following:
   BODY (api.del takes neither → apiRequest direct); :restore is require_trash_admin (NOT
   manual admin), no body, returns the Trash-core RestoreResult (lib/trash.ts type REUSED);
   get_manual_section NOT routed (doc 21 §12 Agent Tool Gateway); mutations invalidate
-  ["manual"]+["audit"] (+["trash"] on delete/restore) (PR #115, MERGED)**.
-  **Overall: ~95% complete** (V1=100%, post-V1 core=88%, frontend=96%).
-  `main` after PR #115 (`6a4ba3b`; User Manual feat `54fd4db` MERGED; Portfolio feat `f3e9550` MERGED; Ready Check feat `6232486` MERGED; Research Data lifecycle-actions feat `2e488dc` MERGED; Research Data page feat `5049f4e` MERGED; Market Data lifecycle-actions feat `d2a9ada` MERGED; Market Data lifecycle-actions feat `d2a9ada` MERGED; Market Data page feat `0ca0468` MERGED; Rationale Families feat `20ccacc` MERGED; Embedded feat `5bf633a` MERGED; Embedded feat `5bf633a` MERGED; Package Library feat `53394fe` MERGED; capability-POSTs feat `652dfde` MERGED; CP-actions/Pre-Check feat `e8f8982` MERGED; CP-create-page feat `79fbd24` MERGED; CP-Gen candidate-generation feat `5cc62cc` MERGED; auth-invalidation feat MERGED (PR #88); trash-page feat `3ccb50d` MERGED; provisioning-dashboard feat `b56f621` MERGED; capability-page feat `3d7977e` MERGED; history-compare feat `491ac03` MERGED; panel-page feat `726ffcc` MERGED; first-Admin bootstrap feat `a53cf34` MERGED; live-pages feat `499bd8b` MERGED; backtest-pages feat `10a0007` MERGED; metrics feat `d3039e7` MERGED; login feat `58781e4` MERGED; SSE feat `5ddb14f` MERGED; position_size_limits feat `5ef5525`; Kelly feat `3f254bc` / non-finite fail-closed fix `3a92e7d`; VWAP code `d27b2bb`; N-ary code `44099a7`; per-condition code `1c5cca0`; multi-timeframe code `def6c28`; indicator-vs-indicator code `9087c2b`; condition-extensions code `361df4c`; condition-blocks code `8766fae`; risk_based code `43cee29`; Slice C code `671d227`);
+  ["manual"]+["audit"] (+["trash"] on delete/restore) (PR #115, MERGED)
+  + TIER 2 frontend live-data Strategy Details page — routes/strategy.py 9/9 bound to /strategy
+  (biggest Workspace surface; editor draft workflow create/patch/validate/save/clear + root header
+  + revision history + immutable ?revision= deep-link); OCC is BODY-form expected_draft_row_version
+  INT on PATCH/save/clear (body wins over If-Match; REQUIRED; draft row_version starts at 0 — 0 is
+  a valid token; stale → 409 STRATEGY_DRAFT_CONFLICT) + fresh Idempotency-Key; validate reads NO
+  body/headers (pure compiler pass, no audit row → no Idem, no invalidation); save re-pins attached
+  Mainboard items same-tx → invalidates ["strategy"]+["mainboard"]+["readiness"]+["audit"]; blocked
+  save = 422 with compiler issues {field,code,message} in error.details (verbatim); draft_id is an
+  independent stratdraft ULID — NO root→draft lookup endpoint → the page carries the draft handle
+  in the URL (?draft=); /strategies/{root}/revisions is a BARE LIST (PR #117, MERGED)**.
+  **Overall: ~95% complete** (V1=100%, post-V1 core=88%, frontend=97%).
+  `main` after PR #117 (`fcbbfb6`; Strategy Details feat `8e5e068` MERGED; User Manual feat `54fd4db` MERGED; Portfolio feat `f3e9550` MERGED; Ready Check feat `6232486` MERGED; Research Data lifecycle-actions feat `2e488dc` MERGED; Research Data page feat `5049f4e` MERGED; Market Data lifecycle-actions feat `d2a9ada` MERGED; Market Data lifecycle-actions feat `d2a9ada` MERGED; Market Data page feat `0ca0468` MERGED; Rationale Families feat `20ccacc` MERGED; Embedded feat `5bf633a` MERGED; Embedded feat `5bf633a` MERGED; Package Library feat `53394fe` MERGED; capability-POSTs feat `652dfde` MERGED; CP-actions/Pre-Check feat `e8f8982` MERGED; CP-create-page feat `79fbd24` MERGED; CP-Gen candidate-generation feat `5cc62cc` MERGED; auth-invalidation feat MERGED (PR #88); trash-page feat `3ccb50d` MERGED; provisioning-dashboard feat `b56f621` MERGED; capability-page feat `3d7977e` MERGED; history-compare feat `491ac03` MERGED; panel-page feat `726ffcc` MERGED; first-Admin bootstrap feat `a53cf34` MERGED; live-pages feat `499bd8b` MERGED; backtest-pages feat `10a0007` MERGED; metrics feat `d3039e7` MERGED; login feat `58781e4` MERGED; SSE feat `5ddb14f` MERGED; position_size_limits feat `5ef5525`; Kelly feat `3f254bc` / non-finite fail-closed fix `3a92e7d`; VWAP code `d27b2bb`; N-ary code `44099a7`; per-condition code `1c5cca0`; multi-timeframe code `def6c28`; indicator-vs-indicator code `9087c2b`; condition-extensions code `361df4c`; condition-blocks code `8766fae`; risk_based code `43cee29`; Slice C code `671d227`);
   alembic head = **`0021_local_auth`** (`human_credentials` + `auth_sessions`;
   Slices A/B/C + follow-ups (a)/(b)/(b2)/(#53)/(c)/(i)/(ii)/(d) + Kelly sizing + position_size_limits + first-Admin bootstrap + bootstrap-status read endpoint + CP-Gen deterministic candidate generation need no migration). **1048 tests green** (1015 + 13 first-Admin bootstrap [env-unset baseline / match+no-admin → Admin+audit+outbox / active-Admin fail-closed / non-matching baseline / case+whitespace normalization / settings env read / route pass-through] + 8 bootstrap-status read endpoint: unit configured-flag + integration window open/closed vs a real DB + route reads the setting + 12 CP-Gen candidate generation: reproducibility / order-independence / output_contract+resolved_refs hash sensitivity / GENERATOR_VERSION namespace shift / fail-closed directional→ta.* + condition→cond.* + empty-resolved skip / output_type alias / DESCRIPTION uncertainty / test_plan dep listing).
   TIER 2 frontend — real-auth login/signup/logout (PR #65, MERGED): **FRONTEND-ONLY**
@@ -769,11 +779,23 @@ Before stopping a working session, produce **ALL** of the following:
     replacement is "V18 UI not exposed" in doc 21 §7 — bound as an explicit Admin maintenance
     affordance (PR #95 precedent; server gates end-to-end); upload carries UTF-8 TEXT only
     (route contract `content: str` — raw bytes never travel; PDF/DOCX not V1); Trash purge
-    stays a separate re-auth slice. **Remaining TIER 2:** 4 placeholder pages, ALL Workspace,
-    ALL with landed V1 backend surfaces — `strategy.py` Strategy Details (9 endpoints, the
-    biggest) / `trading_signal.py` + `trade_log.py` (6+6 near-symmetric twins — one slice) /
-    outsource-signal — plus the ESP registry MUTATION slice (`esp.py` create/activate/
-    deprecate, Admin-only, `X-Registry-Version` OCC; `library.py` already 2/2 bound).
+    stays a separate re-auth slice.
+  - ✅ **Strategy Details page (PR #117, MERGED)** — `/strategy` real page binding the FULL
+    `routes/strategy.py` surface (9/9 endpoints, Stage 3b doc 02 §7–§9) — the biggest Workspace
+    surface: editor draft workflow (create root+draft / full-payload PATCH / pure validate /
+    save immutable revision / clear) + root header + revision history + immutable `?revision=`
+    deep-link. EMPIRICAL: PATCH/save/clear OCC BODY-form `expected_draft_row_version` INT (body
+    wins over If-Match; REQUIRED; draft row_version starts at 0) + fresh Idempotency-Key;
+    validate reads NOTHING (no audit → no Idem, no invalidation); save re-pins attached
+    Mainboard items → `["strategy"]+["mainboard"]+["readiness"]+["audit"]`; NO root→draft
+    lookup (draft handle lives in the `?draft=` URL). NEW `lib/strategy.ts` + 
+    `pages/StrategyDetails.tsx` (PayloadEditor `key={row_version}` remount-reseed; mutation
+    state parent-held; two-step Clear); `App.tsx` REAL_PATHS 20→21; +8 vitest → **197**;
+    frontend-only, no migration, backend stays 1048. **Remaining TIER 2:** 3 placeholder
+    pages, ALL Workspace, ALL with landed V1 backend surfaces — `trading_signal.py` +
+    `trade_log.py` (6+6 near-symmetric twins — one slice) / outsource-signal — plus the ESP
+    registry MUTATION slice (`esp.py` create/activate/deprecate, Admin-only,
+    `X-Registry-Version` OCC; `library.py` already 2/2 bound).
   
   **TIER 3 — Data/ops (deferred, optional for MVP):**
   - Retention auto-purge (strategy/backtest history cleanup)

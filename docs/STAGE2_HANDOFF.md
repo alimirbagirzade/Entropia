@@ -1593,7 +1593,60 @@ upload UTF-8 METİN taşır (route sözleşmesi `content: str` — ham bayt sayf
 değil); manual'ın özel SSE event'i yok; Trash purge ayrı re-auth slice'ı. **Docs grubu TAM — kalan
 placeholder'lar: Workspace (4: strategy / outsource-signal / trading-signal / trade-log).**
 
-## Next: post-V1 (continued) — TIER 2 (… + Portfolio + User Manual pages landed — Backtest & Docs grupları TAM; **4 placeholder pages** [Workspace strategy/trading_signal/trade_log/outsource-signal] + ESP/Library registry mutation slices + TIER 3 remain)
+## Stage post-V1 TIER 2 — Strategy Details page landed (PR #117)
+
+**FRONTEND-ONLY (3 yeni + 1 edit, +1501 satır)** — backend UNCHANGED (**1048** sabit), migration YOK,
+alembic head `0021_local_auth`, `ENGINE_VERSION` sabit. `/strategy` placeholder'ı gerçek sayfa oldu —
+`routes/strategy.py`'nin TAM yüzeyi (9/9 endpoint, Stage 3b doc 02 §7–§9) bağlandı: editor draft
+workflow (create root+draft / full-payload PATCH / pure validate / save immutable revision / clear)
++ root header + revision history + immutable revision deep-link. main = `fcbbfb6` (Merge #117), feat
+`8e5e068`. CI yeşil; self-review 0 CRITICAL/HIGH. **frontend 189 → 197** (+8 vitest).
+
+**AMPİRİK route haritası (imzalar OKUNDU — PR #105/#111/#113/#115 dersi):**
+
+| Endpoint | OCC | Idempotency-Key |
+|---|---|---|
+| `POST /strategy-drafts` (201) | YOK (create'in head'i yok) — `display_name` command-REQUIRED (route'ta optional) | taze key/deneme |
+| `PATCH /strategy-drafts/{id}` | **BODY-form `expected_draft_row_version` INT** (body If-Match'e galip; ZORUNLU — yoksa 422; draft row_version **0'dan** başlar, 0 geçerli token) | taze key/deneme |
+| `POST .../{id}/validate` | — (body/header OKUMAZ; saf compiler pass, audit satırı YOK → invalidation YOK) | YOK |
+| `POST .../{id}/save` (201) | body `expected_draft_row_version` | taze key/deneme |
+| `POST .../{id}/clear` | body `expected_draft_row_version` | taze key/deneme |
+| `GET /strategy-drafts/{id}` · `/strategies/{root}` · `/strategies/{root}/revisions?limit=` (**BARE LIST**, envelope yok) · `/strategy-revisions/{id}` | — | — |
+
+Stale token → 409 `STRATEGY_DRAFT_CONFLICT` verbatim (AT-19, asla last-write-wins). Bloklu save →
+422 (`STRATEGY_VALIDATION_FAILED`/`SIZING_METHOD_NOT_EXCLUSIVE`/`TRIGGER_SOURCE_CONDITION_REQUIRED`)
++ compiler issue listesi `error.details`'te (verbatim render). save aynı tx'te bağlı Mainboard
+item'larını yeni mirror revision'a re-pin eder (composition_hash oynar → önceki Ready raporu STALE)
+→ `["strategy"]+["mainboard"]+["readiness"]+["audit"]` invalidate. `draft_id` bağımsız `stratdraft`
+ULID — **root→draft lookup endpoint'i YOK** → sayfa draft handle'ını URL'de taşır (`?draft=`).
+
+**Reuse anchor'ları (kesin semboller):**
+- **`lib/strategy.ts` (yeni):** wire tipleri `StrategyDraft`/`StrategyDetail`/`StrategyRevisionRow`/
+  `StrategyReference`/`StrategyRevisionDetail`/`CreateDraftResult`/`PatchDraftResult`/`StrategyIssue`
+  (`{field,code,message}`)/`ValidateDraftResult`/`PinnedMainboardItem`/`SaveRevisionResult`
+  (`ready_state="STALE"` sabiti — save asla Ready PASS değil)/`ClearDraftResult`; taxonomy aynaları
+  `STRATEGY_LIFECYCLE_LABELS/_TONES` + `VALIDATION_STATUS_TONES` (+ `lifecycleLabel`/`lifecycleTone`/
+  `validationStatusTone`); `["strategy"]` hook'ları (özel SSE YOK → `resource.changed` süpürür):
+  `useStrategyDraft`/`useStrategy`/`useStrategyRevisions` (bare list)/`useStrategyRevision`
+  (immutable, 5m staleTime) + `useCreateStrategyDraft`/`usePatchStrategyDraft` (full-payload
+  replacement — shallow `patch` server'da var, UI kullanmıyor)/`useValidateStrategyDraft`
+  (invalidation YOK)/`useSaveStrategyRevision`/`useClearStrategyDraft`.
+- **`pages/StrategyDetails.tsx` (yeni):** URL modları `?draft=`/`?strategy=`/`?revision=`;
+  `PayloadEditor` `key={row_version}` remount-reseed (asla merge); mutation state PARENT
+  `DraftWorkbench`'te (Portfolio dersi); bozuk JSON client'ta kalır ("Not sent — invalid JSON");
+  Clear iki adımlı onay; `AttachedStrategiesCard` default Mainboard'ın `item_kind==="strategy"`
+  item'larından keşif; `MutationErrorCard` 422 `details`'i verbatim listeler.
+- **`App.tsx`:** `/strategy` REAL_PATHS 20→21 + gerçek Route (`nav.ts` UNCHANGED — 24).
+  **Testler:** NEW `test/strategy.test.tsx` +8 (apiStub SIRALI — draft-aksiyon fragmanları
+  `POST /strategy-drafts` create prefix'inden ÖNCE; `/strategies/{root}/revisions` root GET'ten ÖNCE).
+
+**Dürüst sınır:** strateji LIST endpoint'i YOK — keşif default Mainboard'a bağlı item'lardan; hiç
+attach edilmemiş bir strateji yalnız create anındaki `?draft=` URL'i ile erişilir; Mainboard ATTACH
+bu yüzeyin dışında (Stage 3a mainboard operasyonu); payload editörü ham JSON (semantik otorite
+yalnız server compiler'ı — issue'lar verbatim). **Workspace kalan: trading_signal / trade_log /
+outsource-signal (3 placeholder).**
+
+## Next: post-V1 (continued) — TIER 2 (… + User Manual + Strategy Details pages landed — Backtest & Docs grupları TAM; **3 placeholder pages** [Workspace trading_signal/trade_log/outsource-signal] + ESP registry mutation slice + TIER 3 remain)
 
 **V1 COMPLETE (Stages 0–8, docs 01–22) + Auth/IdP + Parquet Slice A + Backtest Engine Slice B + real indicator compute Slice C + `risk_based` sizing (a) + condition blocks (b) + condition extensions (b2) + two-package indicator-vs-indicator + higher-timeframe resampling (c) + per-condition multi-TF reference (i) + N-ary reference chain (ii) + VWAP directional key (d) + `formula_based` Kelly sizing + `position_size_limits` min/max cap (PR #63) landed (1015 tests).** The **Slice C indicator-compute + position-sizing follow-ups are now EFFECTIVELY COMPLETE — TIER 1 backend is DONE**:
 

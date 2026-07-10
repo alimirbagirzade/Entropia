@@ -1869,9 +1869,47 @@ typecheck + lint temiz, build yeşil. Review 0 CRITICAL/HIGH.
 
 **Dürüst sınır:** purge yalnızca bir **request** — asıl purge'ü worker yürütür (durum `["trash"]`
 projeksiyonundan okunur, özel SSE event yok, `resource.changed` süpürür); re-auth proof V1'de yalnız
-varlık-kontrollü (gerçek MFA challenge yok); **retention auto-purge** hâlâ bir TIER 3 backend slice'ı.
+varlık-kontrollü (gerçek MFA challenge yok).
 
-## Next: post-V1 (continued) — TIER 2 SAYFA HARİTASI + tüm route yüzeyleri TAMAM (24/24 real; `mainboard.py` PR #125, `trash.py` PR #127 dahil bağsız endpoint kalmadı) → kalan adaylar: **TIER 3 deferred** (retention auto-purge / data-queue redelivery / SSE streaming e2e / tool-call status shadowing) + küçük backend follow-up'ları (LLM generation Future-Dev — kapsam dışı)
+## Stage post-V1 TIER 3 — Data-queue operator redelivery landed (PR #129)
+
+**BACKEND-ONLY** (`application/jobs/data_queue.py` + `application/commands/data_queue.py` NEW; 4 data
+command payload'ı + `apps/worker/actors.py` + `routes/admin_panel.py` EDIT; migration YOK, alembic head
+`0021_local_auth` SABİT, `ENGINE_VERSION` SABİT, frontend DEĞİŞMEDİ 232). main = `2829514` (Merge #129),
+feat `986ede7`. CI yeşil. Backend **1048 → 1054** (+3 unit / +3 integration).
+
+**Sorun (INF-03, doc 20 §6):** çok-actor'lı `data` queue (market/research analysis + TS/TL import)
+scheduler auto-redelivery'sinden (`ACTOR_BY_QUEUE`) KASTEN dışlanmış — kayıp broker mesajı durable
+`jobs` satırını sonsuza dek QUEUED bırakır, ama satırdan hangi actor olduğu ayırt edilemez (market vs
+research aynı `{entity_id,revision_id}` payload; TS vs TL aynı `{source_asset_id,...}` payload — hiç
+discriminator yoktu). Scheduler yorumu "re-dispatch is an operator action" diyordu ama böyle bir
+operator aracı YOKTU → takılı data job sonsuza dek QUEUED kalıyordu.
+
+**ÖNEMLİ karar — retention auto-purge YAPILMADI:** kardeş TIER 3 adayı doc 20 §16'da açıkça
+*"Automatic purge remains disabled in Production V1"* → Future-Dev sınırı, uygulanabilir slice DEĞİL
+(purge her zaman explicit Admin confirm+re-auth). Onun yerine spec-uyumlu data-queue redelivery
+inşa edildi (kullanıcı ile teyitli seçim).
+
+**Reuse anchor'ları:** `application/jobs/data_queue.py` — `DATA_QUEUE`, 4 `job_kind` sabiti
+(`MARKET_DATA_ANALYSIS`/`RESEARCH_DATA_ANALYSIS`/`TRADING_SIGNAL_IMPORT`/`TRADE_LOG_IMPORT`),
+`DATA_JOB_KINDS`, `data_job_kind(payload)` (legacy/bilinmeyen/yanlış-tip → `None`, ASLA tahmin),
+`list_redeliverable_data_jobs(session, *, grace_seconds, now=None)` (QUEUED `data` satırları grace
+sonrası, oldest-first, kind resolved) · 4 data enqueue payload'ı artık `"job_kind"` taşır (JSONB
+additive, sabit import edilir — yanlış-literal riski yok) · `apps/worker/actors.py::DATA_ACTOR_BY_KIND`
+(kind→actor; scheduler DOKUNULMADI — `data` operator-only kalır) ·
+`commands/data_queue.py::redeliver_data_queue_jobs(session, actor, *, grace_seconds)`
+(`require_admin_panel`; `data_queue.redelivery_requested` audit+outbox bir kez; dönüş
+`{scanned, redeliverable:[{job_kind,job_id}], skipped_unknown_kind}`; dispatch route'ta, trash `_dispatch`
+deseni) · `POST /admin/data-queue/redeliver` (Admin, opsiyonel `grace_seconds` query; `0` her QUEUED
+data job'ı süpürür; `DATA_ACTOR_BY_KIND` ile send_job).
+
+**Dürüst sınır (KALICI):** re-dispatch OPERATOR aksiyonu kalır (scheduler ASLA `data`'yı auto-route
+etmez, doc 20 §6); discriminator ÖNCESİ enqueue edilmiş legacy satırlar `job_kind` taşımaz →
+`skipped_unknown_kind` sayılır (geçici/nadir, asla tahmin edilmez); redelivery idempotent (durable satır
+dokunulmaz, QUEUED kalır; data-plane worker'lar güvenle replay); `["jobs"]` HTTP LİSTE yüzeyi hâlâ
+YOK — bu bir POST recovery aksiyonu, browser DEĞİL; operator ayrı rol değil = Admin (`require_admin_panel`).
+
+## Next: post-V1 (continued) — TIER 2 SAYFA HARİTASI + TÜM route yüzeyleri TAMAM (24/24 real) + `data`-queue operator redelivery (PR #129) landed → kalan **TIER 3 deferred**: SSE streaming e2e (bağlantı kopması dayanıklılığı) / tool-call status shadowing (CR-08 follow-up) / data-queue redelivery için opsiyonel bir Admin UI paneli. **retention auto-purge KAPSAM DIŞI** (doc 20 §16 "Automatic purge remains disabled in Production V1" — Future-Dev boundary, uygulanabilir slice değil). LLM generation Future-Dev — kapsam dışı.
 
 **V1 COMPLETE (Stages 0–8, docs 01–22) + Auth/IdP + Parquet Slice A + Backtest Engine Slice B + real indicator compute Slice C + `risk_based` sizing (a) + condition blocks (b) + condition extensions (b2) + two-package indicator-vs-indicator + higher-timeframe resampling (c) + per-condition multi-TF reference (i) + N-ary reference chain (ii) + VWAP directional key (d) + `formula_based` Kelly sizing + `position_size_limits` min/max cap (PR #63) landed (1015 tests).** The **Slice C indicator-compute + position-sizing follow-ups are now EFFECTIVELY COMPLETE — TIER 1 backend is DONE**:
 

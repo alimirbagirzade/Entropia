@@ -3,6 +3,43 @@
 > **Amaç:** V1 kapandı (Stage 0–8 COMPLETE). Bu doküman post-V1 durumunu, aday iş listesini
 > ve temiz oturumda yapıştırılacak resume prompt'u içerir.
 
+## Durum (2026-07-10, TIER 2 frontend — Add Outsource Signal seçici sayfası; PR #123 MERGED)
+
+**FRONTEND-ONLY (2 yeni + 1 edit, +238 satır)** — backend DEĞİŞMEDİ (1048 sabit), migration YOK,
+alembic head `0021_local_auth` SABİT, `ENGINE_VERSION` SABİT. `/outsource-signal` placeholder'ı
+gerçek sayfa oldu — doc 03 external-work TİP SEÇİCİsi; Workspace'in (ve TÜM TIER 2 sayfa
+haritasının) SON placeholder'ıydı → **REAL_PATHS 23 → 24, placeholder KALMADI — TIER 2 SAYFA
+HARİTASI TAMAM**. Frontend 213 → **219** (+6 vitest). main = `2f8d28f` (Merge #123), feat
+`be2aa8a`. CI yeşil.
+
+**AMPİRİK scope bulgusu (doc 03 TAM okundu; kapsam kullanıcıyla AskUserQuestion ile teyitleşildi):**
+seçici yüzey HİÇBİR backend mutasyonu yapmaz — §7.1 `start_transient_outsource_draft` =
+"transient UI acknowledgement only or local state creation" (root/revision/audit YOK); tüm alan
+sözleşmeleri + save/import akışları doc 04/05'in malı ve PR #119'da TAM bağlı. Backend'de
+"outsource" yalnız `shared/errors.py:624` YORUMUNDA — router YOK ve spec gereği GEREKMİYOR →
+önceki kickoff'un "yeni backend slice'ı gerekebilir" sorusunun ampirik cevabı: HAYIR.
+
+**Reuse anchor'ları:** `pages/OutsourceSignal.tsx` (YENİ) — `TypeChoice` (iki kanonik seçim linki
+`trading_signal` | `trade_log`, CR-01; workbench'lere `Link`) + `InfoPanel` (§6.1 ⓘ kataloğu 3
+panel VERBATIM, native `<details>/<summary>`) + §6.2 helper'lar VERBATIM + sınır kartı; hook/query
+key/fetch YOK; doğrudan linkler "seçimsiz devam"ı kurulamaz kılar → AOS-02 yapısal ·
+`App.tsx` REAL_PATHS 23→24 (`nav.ts` DEĞİŞMEDİ, 24 item) · `test/outsourceSignal.test.tsx` +6
+(AOS-01 tam-iki-seçenek; verbatim metinler; MemoryRouter tıkla-git probe'ları; sıfır-fetch
+guard'ı — QueryClientProvider gerekmez).
+
+**Dürüst sınır:** seçici rol pre-gate etmez (doc 03 §2); "Unsaved draft" BADGE'i child workbench
+detayı (TS/TL sayfalarına dokunulmadı); attach/pin/delete Stage-3a Mainboard operasyonları olarak
+kalıyor — `routes/mainboard.py` 8 endpoint'ten yalnız `GET /mainboards/default` bağlı,
+`pages/Mainboard.tsx` 55 satır statik → SIRADAKİ doğal büyük aday.
+
+**SIRADAKİ İŞ (BAŞLARKEN kullanıcıyla TEYİT ET):** **Mainboard canlı sayfa + kompozisyon
+operasyonları (doc 01)** — bağsız 7 endpoint: external-work draft, generic work-object
+create/revisions, attach item, PATCH item (pin/enable/reorder), snapshot, work-object
+soft-delete; KALICI "attach+Pin+delete hiçbir landed sayfada değil" sınırını kapatır.
+Alternatif: Trash purge re-auth; TIER 3 deferred.
+
+---
+
 ## Durum (2026-07-10, TIER 2 frontend — ESP registry mutation actions; PR #121 MERGED)
 
 **FRONTEND-ONLY (3 edit, +720/−15 satır)** — backend DEĞİŞMEDİ (1048 sabit), migration YOK,
@@ -1720,50 +1757,52 @@ tarihsel referans** olarak duruyor.
 ## ⤵️ YENİ OTURUMDA YAPIŞTIR (resume prompt)
 
 ```
-Entropia — post-V1 TIER 2 devam. STALE-BY-DEFAULT: ESP registry mutation actions (PR #121)
-+ kapanış docs (PR #122) MERGE EDİLDİ varsayma, git'ten doğrula.
+Entropia — post-V1 TIER 2 devam. STALE-BY-DEFAULT: Add Outsource Signal seçici sayfası (PR #123)
++ kapanış docs (PR #124) MERGE EDİLDİ varsayma, git'ten doğrula.
 
 ÖNCE DOĞRULA: git fetch && git log --oneline origin/main -6 && gh pr list --state all -L 8.
-main = 45e615b (Merge #121) olmalı; docs #122 merge sonrası daha ileri (açıksa önce merge iste).
+main = 2f8d28f (Merge #123) olmalı; docs #124 merge sonrası daha ileri (açıksa önce merge iste).
 alembic head 0021_local_auth (DEĞİŞMEDİ); ENGINE_VERSION = backtest-engine-v2-position-size-limits
-(DEĞİŞMEDİ). Backend 1048 test, frontend 213. Yeni branch'i MUTLAKA origin/main'den aç.
+(DEĞİŞMEDİ). Backend 1048 test, frontend 219. Yeni branch'i MUTLAKA origin/main'den aç.
 
-ÖNCE OKU (authority order): docs/POST_V1_KICKOFF.md (en üst "Durum" bloğu — PR #121 + "SIRADAKİ İŞ"
-+ en alttaki resume) → docs/STAGE2_HANDOFF.md ("ESP registry mutation actions landed (PR #121)" +
-"## Next") → CLAUDE.md "Current position".
+ÖNCE OKU (authority order): docs/POST_V1_KICKOFF.md (en üst "Durum" bloğu — PR #123 + "SIRADAKİ İŞ"
++ en alttaki resume) → docs/STAGE2_HANDOFF.md ("Add Outsource Signal chooser page landed
+(PR #123)" + "## Next") → CLAUDE.md "Current position".
 
-DURUM: TIER 1 backend EFEKTİF TAMAM. Packages & Data TAM (esp.py dahil — #121 ile bağlanmamış
-endpoint KALMADI); Backtest KAPANDI; Docs KAPANDI; Workspace'te Strategy #117 + TS/TL ikizleri
-#119 + ESP registry mutation'ları #121 landed (YENİ — routes/esp.py create/activate/deprecate
-mevcut /packages/embedded sayfasına bağlandı; lib/esp.ts genişletildi; AMPİRİK: create OCC'siz +
-Idem'siz + Admin-gate'siz [herhangi authenticated → CANDIDATE, doc 09 §5]; activate + deprecate
-X-Registry-Version HEADER-form DÜZ INT OCC [If-Match "rv-N" DEĞİL; kaynak
-detail.registry.registry_version] + taze Idempotency-Key + Admin-only [command katmanında —
-UI pre-gate etmez]; stale → 409 RESOLVER_REGISTRY_CONFLICT, non-Admin → 403
-APPROVAL_REQUIRES_ADMIN verbatim; state-machine hint canActivate[candidate]/
-canDeprecate[trusted_active]; invalidation ["esp"]+["audit"]; postWithRegistryVersion helper;
-ProposeResolverCard + LifecycleActions composer'ları; App.tsx/nav.ts DEĞİŞMEDİ; +5 vitest → 213).
+DURUM: TIER 1 backend EFEKTİF TAMAM. **TIER 2 SAYFA HARİTASI TAMAM — 24/24 nav item gerçek
+sayfa (REAL_PATHS 24, placeholder KALMADI).** Son slice: Add Outsource Signal seçici sayfası
+#123 (YENİ — doc 03 external-work TİP SEÇİCİsi /outsource-signal'e bağlandı; SAF SUNUM: iki
+kanonik seçim linki [trading_signal | trade_log, CR-01] TS/TL workbench'lerine, doğrudan linkler
+"seçimsiz devam"ı kurulamaz kılar [AOS-02 yapısal]; §6.1 ⓘ panelleri + §6.2 helper'lar VERBATIM;
+hook/query key/fetch YOK — doc 03 §7.1 seçici backend mutasyonu YAPMAZ; backend'de "outsource"
+yalnız errors.py:624 yorumunda, router YOK ve GEREKMİYOR — önceki kickoff'un "yeni backend
+gerekebilir" sorusunun ampirik cevabı HAYIR; +6 vitest [AOS-01 tam-iki-seçenek / verbatim metin /
+tıkla-git probe'ları / sıfır-fetch guard'ı]; App.tsx REAL_PATHS 23→24, nav.ts DEĞİŞMEDİ).
 Önceki landed: login #65, SSE #67, /v1/metrics #69, RUN/History #72, Arrange Metrics + Analysis
 Lab #74, Panel #78, compare/rebind #80, Future Dev #82, provisioning #84, Trash #86,
-auth-invalidation #88, CP #91/#93, capability POST'ları #95, Library #97, ESP read #99, Rationale
-#101, Market Data #103/#105, Research Data #107/#109, Ready Check #111, Portfolio #113, User
-Manual #115, Strategy #117, TS/TL #119. BACKEND: first-Admin bootstrap #76 + bootstrap-status
-#84 + CP-Gen #89 (LLM YOK).
+auth-invalidation #88, CP #91/#93, capability POST'ları #95, Library #97, ESP read #99 +
+mutation'lar #121, Rationale #101, Market Data #103/#105, Research Data #107/#109, Ready Check
+#111, Portfolio #113, User Manual #115, Strategy #117, TS/TL #119. BACKEND: first-Admin
+bootstrap #76 + bootstrap-status #84 + CP-Gen #89 (LLM YOK).
 
-SIRADAKİ İŞ (BAŞLARKEN KULLANICIYLA TEYİT ET — henüz teyitli DEĞİL): outsource-signal —
-Workspace'in (ve TIER 2 sayfa haritasının) SON placeholder'ı; DİKKAT AMPİRİK BULGU: backend'de
-"outsource" stringi yalnız shared/errors.py:624 YORUMUNDA geçiyor — ayrı router YOK; doc 03
-(docs/spec/03_Entropia_V18_Add_Outsource_Signal_Page_Documentation_v1_1.md) akışı büyük
-olasılıkla TS/TL yüzeylerini reuse eden bir kompozisyon/yönlendirme sayfası → SLICE'A BAŞLAMADAN
-doc 03'ü OKU ve gerçek yüzeyi tespit et (yeni backend slice'ı gerekebilir — kapsamı kullanıcıyla
-netleştir; frontend-only çıkarsa TS/TL anchor'ları TABAN). Her durumda: route İMZALARINI ÖNCE OKU
-(OCC/Idem her endpoint'te olmayabilir — #105/#111/#113/#115/#117/#119/#121 dersleri:
-successor/deprecate header okumuyordu; readiness token FINGERPRINT BODY-form'du; allocation
-BODY-form expected_row_version'dı; manual'da İKİ farklı body-form token; strategy validate HİÇBİR
-ŞEY okumuyordu; TS/TL'de TÜM POST'lar Idem okuyordu; ESP'de OCC HEADER-form DÜZ INT'ti +
-create tamamen gate'sizdi) + queries/commands dönüş dict'lerini oku → wire tipleri VERBATIM ayna.
-TIER 3 deferred: retention auto-purge, data-queue redelivery, SSE streaming e2e, tool-call
-status shadowing.
+SIRADAKİ İŞ (BAŞLARKEN KULLANICIYLA TEYİT ET — henüz teyitli DEĞİL): en büyük doğal aday
+**Mainboard canlı sayfa + kompozisyon operasyonları (doc 01)** — AMPİRİK: pages/Mainboard.tsx
+55 satır ve HİÇBİR veri bağlamıyor; routes/mainboard.py 8 endpoint'ten yalnız
+GET /mainboards/default bağlı (lib/backtest.ts useDefaultMainboard). Bağsız 7:
+POST /external-work-object-drafts/{kind}, POST /work-objects,
+POST /work-objects/{root}/revisions, POST /mainboards/{ws}/items (attach),
+PATCH /mainboard-items/{item} (pin/enable/reorder), POST /mainboards/{ws}/snapshots,
+DELETE /work-objects/{root} (soft delete). Bu slice KALICI dürüst sınırı (attach + Pin "Use This
+Revision" + work-object delete hiçbir landed sayfada değil) KAPATIR. BAŞLAMADAN doc 01'i
+(docs/spec/01_Entropia_V18_Mainboard_Page_Documentation_v1_1.md, ~105KB — TAM oku) + route
+İMZALARINI ÖNCE OKU (OCC/Idem her endpoint'te olmayabilir — #105/#111/#113/#115/#117/#119/#121
+dersleri: successor/deprecate header okumuyordu; readiness token FINGERPRINT BODY-form'du;
+allocation BODY-form expected_row_version'dı; manual'da İKİ farklı body-form token; strategy
+validate HİÇBİR ŞEY okumuyordu; TS/TL'de TÜM POST'lar Idem okuyordu; ESP'de OCC HEADER-form DÜZ
+INT'ti + create tamamen gate'sizdi; outsource'ta hiç endpoint YOKTU — seçici saf sunumdu) +
+queries/commands dönüş dict'lerini oku → wire tipleri VERBATIM ayna. Alternatif adaylar: Trash
+purge re-auth slice'ı; TIER 3 deferred: retention auto-purge, data-queue redelivery, SSE
+streaming e2e, tool-call status shadowing.
 
 DÜRÜST SINIR (KALICI): ["jobs"] backend LİSTE yüzeyi YOK (job-scoped import report READ'leri
 #119'dan beri ["jobs"] altında — job.updated süpürür); ham baytlar sayfadan geçmez (upload'lar
@@ -1787,7 +1826,7 @@ rapor-seed'li JSON editör) + lib/strategy.ts (BODY-form INT token + tokensız s
 lib/manual.ts (İKİ body-form token) + lib/marketData.ts postWithOcc (If-Match "rv-N").
 
 YÖNTEM: Workflow KULLANMA; direct-author. Frontend loop: cd frontend (absolute path) &&
-npm run typecheck && npm run lint && npm test && npm run build (213 + yeniler geçmeli) + yeni
+npm run typecheck && npm run lint && npm test && npm run build (219 + yeniler geçmeli) + yeni
 component/unit test (test/helpers/apiStub.ts reuse — SIRALI eşleşme: spesifik aksiyon fragmanları
 çıplak liste/create prefix'inden ÖNCE; zincirleme yükleme için findBy*; çift metin/label riskinde
 within(region) — ESP dersi: Propose formu probe'un label'larını kopyaladı, 2 eski test within ile

@@ -3,84 +3,88 @@
 > **Amaç:** V1 kapandı (Stage 0–8 COMPLETE). Bu doküman post-V1 durumunu, aday iş listesini
 > ve temiz oturumda yapıştırılacak resume prompt'u içerir.
 
-## Durum (2026-07-10, TIER 2 frontend — Trash Permanent Delete (purge) actions; PR #127 MERGED)
+## Durum (2026-07-10, post-V1 TIER 3 — Data-queue operator redelivery; PR #129 MERGED)
 
-**FRONTEND-ONLY** (`lib/trash.ts` + `pages/Trash.tsx` + `styles/global.css` + `test/trash.test.tsx`)
-— backend DEĞİŞMEDİ (1048 sabit), migration YOK, alembic head `0021_local_auth` SABİT, `ENGINE_VERSION`
-SABİT. PR #86'nın restore-only sınırı kapandı: son bağsız `routes/trash.py` endpoint'i
-(`POST /trash-entries/{id}/purge`, doc 20 §8.3) bağlandı → **`trash.py` yüzeyi TAM** (mainboard.py
-PR #125 + trash.py PR #127 → bağsız endpoint kalmadı). Frontend 228 → **232** (+4 vitest).
-main = `77b6b61` (Merge #127), feat `7ae3428`. CI yeşil.
+**BACKEND-ONLY** (`application/jobs/data_queue.py` + `application/commands/data_queue.py` NEW; 4 data
+command payload'ı + `apps/worker/actors.py` + `apps/api/routes/admin_panel.py` EDIT) — migration YOK,
+alembic head `0021_local_auth` SABİT, `ENGINE_VERSION` SABİT, frontend DEĞİŞMEDİ (232). main = `2829514`
+(Merge #129), feat `986ede7`. Backend **1048 → 1054** (+3 unit / +3 integration). CI yeşil.
 
-**AMPİRİK OCC/Idem kontratı (route + command imzaları OKUNDU — handoff özetine güvenilmedi):**
-İki-aşamalı **202** — request yalnızca hedefi `purge_pending`'e taşır + durable maintenance job
-enqueue eder; asıl purge'ü **worker** yürütür (worker eligibility'yi yeniden doğrular). Gövde
-**REQUIRED** `confirmation_phrase` + `reauth_proof`: `confirmation_phrase` objenin display kimliğine
-(`display_name || entity_id`) EŞİT olmalı yoksa `PURGE_CONFIRMATION_INVALID` (hiç başlamaz);
-`reauth_proof` boş olamaz (V1 **varlık-kontrollü**, tam MFA kapsam dışı doc 20 §0) yoksa
-`REAUTH_REQUIRED`. OCC = **BODY-form `expected_row_version` INT** (body If-Match'ten öncelikli,
-doc 20 §14) = entry `row_version`; stale → `STALE_REVISION`. Her denemede taze `Idempotency-Key`
-(aynı key → aynı job). Purge, Restore ile **AYNI recoverable statülerde** uygun (command
-`_assert_entry_recoverable`'ı paylaşır) → sayfa server-truth `restore_eligible` flag'ı üzerinden gate.
+**Sorun (INF-03, doc 20 §6):** çok-actor'lı `data` queue (market/research analysis + TS/TL import)
+scheduler auto-redelivery'sinden (`ACTOR_BY_QUEUE`) KASTEN dışlanmış — kayıp broker mesajı durable
+`jobs` satırını sonsuza dek QUEUED bırakır ama satırdan hangi actor olduğu ayırt edilemez (payload
+discriminator yoktu; market≡research aynı `{entity_id,revision_id}`, TS≡TL aynı `{source_asset_id,...}`).
+Scheduler yorumu "re-dispatch is an operator action" diyordu ama böyle bir operator aracı YOKTU.
 
-**Reuse anchor'ları:** `lib/trash.ts` — `PurgeResult` wire tipi (`request_purge` dict'inden VERBATIM,
-NB `display_name` İÇERMEZ) + `useRequestPurge` (Idempotency-Key header + body-OCC token, invalidate
-`["trash"]+["audit"]`; PR #86 `useRestoreEntry` deseni) · `pages/Trash.tsx` — Permanent Delete →
-açık **iki-adımlı `PurgeComposer`** (doc 20 §9 onay metni VERBATIM; Confirm server ön-koşullarını
-aynalar — tam isim + boş-olmayan proof, server yeniden doğrular; §9 kabul toast'ı için display name'i
-**kabul anında yakalar** çünkü 202 dönüşü `display_name` içermez) · `.btn-danger` style.
+**ÖNEMLİ karar — retention auto-purge YAPILMADI:** doc 20 §16 açıkça *"Automatic purge remains disabled
+in Production V1"* → Future-Dev sınırı, uygulanabilir slice DEĞİL (purge her zaman explicit Admin
+confirm+re-auth). Onun yerine spec-uyumlu data-queue redelivery inşa edildi (kullanıcı ile teyitli seçim).
 
-**Dürüst sınır:** purge yalnızca bir **request** — asıl purge'ü worker yürütür (durum `["trash"]`
-projeksiyonundan okunur, özel SSE event yok, `resource.changed` süpürür); re-auth proof V1'de yalnız
-varlık-kontrollü (gerçek MFA yok); **retention auto-purge** hâlâ bir TIER 3 backend slice'ı.
+**Reuse anchor'ları:** `application/jobs/data_queue.py` — `DATA_QUEUE` + 4 `job_kind` sabiti
+(`MARKET_DATA_ANALYSIS`/`RESEARCH_DATA_ANALYSIS`/`TRADING_SIGNAL_IMPORT`/`TRADE_LOG_IMPORT`) +
+`DATA_JOB_KINDS` + `data_job_kind(payload)` (legacy/bilinmeyen/yanlış-tip → `None`, ASLA tahmin) +
+`list_redeliverable_data_jobs(session,*,grace_seconds,now=None)` (QUEUED `data` satırları grace sonrası,
+oldest-first) · 4 enqueue payload'ı artık `"job_kind"` taşır (JSONB additive, sabit import — yanlış-literal
+riski yok) · `apps/worker/actors.py::DATA_ACTOR_BY_KIND` (kind→actor; scheduler DOKUNULMADI, `data`
+operator-only kalır) · `commands/data_queue.py::redeliver_data_queue_jobs(session,actor,*,grace_seconds)`
+(`require_admin_panel` + `data_queue.redelivery_requested` audit/outbox bir kez + dönüş
+`{scanned, redeliverable:[{job_kind,job_id}], skipped_unknown_kind}`; dispatch route'ta, trash `_dispatch`
+deseni) · `POST /admin/data-queue/redeliver` (Admin, opsiyonel `grace_seconds` query; `0` hepsini süpürür).
 
-**SIRADAKİ İŞ (BAŞLARKEN kullanıcıyla TEYİT ET — henüz teyitli DEĞİL):** TIER 2 sayfa haritası + tüm
-route yüzeyleri TAMAM (24/24 real, bağsız endpoint kalmadı). Kalan adaylar: **TIER 3 data/ops
-(deferred)** — retention auto-purge (doc 20; purge worker'ıyla ilişkili BACKEND slice) / data-queue
-redelivery / SSE streaming e2e / tool-call status shadowing (CR-08). Backend'de LLM generation
-(Future-Dev) hâlâ kapsam dışı.
+**Dürüst sınır (KALICI):** re-dispatch OPERATOR aksiyonu kalır (scheduler `data`'yı ASLA auto-route etmez,
+doc 20 §6); discriminator öncesi legacy satırlar `job_kind` taşımaz → `skipped_unknown_kind` (nadir/geçici,
+asla tahmin); redelivery idempotent (durable satır dokunulmaz); `["jobs"]` HTTP LİSTE yüzeyi YOK (bu bir
+POST recovery aksiyonu, browser değil); operator ayrı rol değil = Admin.
+
+**SIRADAKİ İŞ (BAŞLARKEN kullanıcıyla TEYİT ET — henüz teyitli DEĞİL):** TIER 2 sayfa haritası + TÜM route
+yüzeyleri TAMAM + data-queue redelivery (PR #129) landed. Kalan **TIER 3 deferred**: SSE streaming e2e
+(bağlantı kopması dayanıklılığı) / tool-call status shadowing (CR-08) / data-queue redelivery için opsiyonel
+bir Admin UI paneli. **retention auto-purge KAPSAM DIŞI** (doc 20 §16). LLM generation Future-Dev — kapsam dışı.
 
 **PASTE-READY RESUME PROMPT (sonraki temiz oturuma yapıştır):**
 
 ```
-Entropia — post-V1 TIER 2/3 devam. STALE-BY-DEFAULT: Trash purge kapanış docs (PR #128) MERGE
+Entropia — post-V1 TIER 3 devam. STALE-BY-DEFAULT: data-queue redelivery kapanış docs (PR #130) MERGE
 EDİLDİ varsayma, git'ten doğrula.
 
 ÖNCE DOĞRULA: git fetch && git log --oneline origin/main -6 && gh pr list --state all -L 8.
-main = 77b6b61 (Merge #127) + docs #128 merge sonrası daha ileri (açıksa önce merge iste).
+main = 2829514 (Merge #129) + docs #130 merge sonrası daha ileri (açıksa önce merge iste).
 alembic head 0021_local_auth (DEĞİŞMEDİ); ENGINE_VERSION = backtest-engine-v2-position-size-limits
-(DEĞİŞMEDİ). Backend 1048 test, frontend 232. Yeni branch'i MUTLAKA origin/main'den aç.
+(DEĞİŞMEDİ). Backend 1054 test, frontend 232. Yeni branch'i MUTLAKA origin/main'den aç.
 
-ÖNCE OKU (authority order): docs/POST_V1_KICKOFF.md (en üst "Durum" bloğu — PR #127 + "SIRADAKİ İŞ"
-+ bu resume) → docs/STAGE2_HANDOFF.md ("Trash Permanent Delete (purge) actions landed (PR #127)" +
-"## Next") → CLAUDE.md "Current position".
+ÖNCE OKU (authority order): docs/POST_V1_KICKOFF.md (en üst "Durum" bloğu — PR #129 + "SIRADAKİ İŞ"
++ bu resume) → docs/STAGE2_HANDOFF.md ("Data-queue operator redelivery landed (PR #129)" + "## Next")
+→ CLAUDE.md "Current position".
 
-DURUM: TIER 1 backend EFEKTİF TAMAM. TIER 2 SAYFA HARİTASI TAMAM (24/24 real) + tüm route yüzeyleri
-bağlı (mainboard.py #125, trash.py #127 dahil bağsız endpoint kalmadı). Trash purge #127 (YENİ —
-routes/trash.py son endpoint POST /trash-entries/{id}/purge bağlandı → trash.py yüzeyi TAM; PR #86
-restore-only sınırı kapandı). AMPİRİK: iki-aşamalı 202 (request purge_pending'e taşır + durable job
-enqueue; worker asıl purge'ü yürütür); body REQUIRED confirmation_phrase (=display_name||entity_id,
-yoksa PURGE_CONFIRMATION_INVALID) + reauth_proof (boş olamaz, V1 varlık-kontrollü, yoksa
-REAUTH_REQUIRED); OCC = BODY expected_row_version INT (body If-Match'i yener) = entry row_version,
-stale → STALE_REVISION; taze Idempotency-Key; purge Restore ile AYNI recoverable statülerde uygun
-(_assert_entry_recoverable paylaşımlı) → sayfa restore_eligible flag'ından gate. lib/trash.ts
-(PurgeResult wire tipi — display_name YOK + useRequestPurge Idem-header + body-OCC, invalidate
-["trash"]+["audit"]) + pages/Trash.tsx (iki-aşamalı PurgeComposer, §9 metni verbatim, display_name'i
-kabul anında yakala) + .btn-danger + test +4 → 232. Önceki landed: login #65, SSE #67, /v1/metrics
-#69, RUN/History #72, Arrange Metrics + Analysis Lab #74, Panel #78, compare/rebind #80, Future Dev
-#82, provisioning #84, Trash restore #86, auth-invalidation #88, CP #91/#93, capability POST'ları #95,
-Library #97, ESP read #99 + mutation'lar #121, Rationale #101, Market Data #103/#105, Research Data
-#107/#109, Ready Check #111, Portfolio #113, User Manual #115, Strategy #117, TS/TL #119, Outsource
-chooser #123, Mainboard #125. BACKEND: first-Admin bootstrap #76 + bootstrap-status #84 + CP-Gen #89.
+DURUM: TIER 1 backend + TIER 2 SAYFA HARİTASI TAMAM (24/24 real, tüm route yüzeyleri bağlı). Data-queue
+operator redelivery #129 (YENİ — INF-03, doc 20 §6): çok-actor'lı `data` queue'da takılı (QUEUED-past-
+grace) job'ları operator'ün doğru actor'a yeniden teslim etmesi. Kök sorun: data queue 4 actor
+multiplexler (market/research analysis + TS/TL import), payload discriminator yoktu → satırdan actor
+ayırt edilemiyordu; scheduler `data`'yı KASTEN auto-redeliver etmiyor (doc 20 §6). Çözüm: application/
+jobs/data_queue.py (`job_kind` 4 sabit + `data_job_kind` + `list_redeliverable_data_jobs`) + 4 enqueue
+payload'ına `job_kind` (JSONB additive) + apps/worker/actors.py `DATA_ACTOR_BY_KIND` (kind→actor;
+scheduler DOKUNULMADI) + commands/data_queue.py `redeliver_data_queue_jobs` (require_admin_panel +
+`data_queue.redelivery_requested` audit/outbox + `{scanned, redeliverable[], skipped_unknown_kind}`) +
+POST /admin/data-queue/redeliver (Admin, opsiyonel grace_seconds; 0 hepsini süpürür; send_job dispatch).
+Backend 1048→1054, migration yok. Önceki landed frontend: login #65, SSE #67, /v1/metrics #69, RUN/
+History #72, Arrange/Lab #74, Panel #78, compare/rebind #80, Future Dev #82, provisioning #84, Trash
+restore #86, auth-inval #88, CP #91/#93, capability POST #95, Library #97, ESP #99/#121, Rationale #101,
+Market Data #103/#105, Research Data #107/#109, Ready Check #111, Portfolio #113, User Manual #115,
+Strategy #117, TS/TL #119, Outsource #123, Mainboard #125, Trash purge #127. BACKEND: first-Admin
+bootstrap #76 + bootstrap-status #84 + CP-Gen #89 + data-queue redelivery #129.
 
-SIRADAKİ İŞ (BAŞLARKEN KULLANICIYLA TEYİT ET — henüz teyitli DEĞİL): TIER 2 sayfa haritası + tüm route
-yüzeyleri TAMAM → kalan adaylar TIER 3 deferred: (a) retention auto-purge (doc 20; strategy/backtest
-history cleanup — BACKEND slice, purge worker'ıyla ilişkili; imzaları ÖNCE OKU); (b) data-queue
-redelivery (operator recovery tool); (c) SSE streaming e2e (bağlantı kopması dayanıklılığı); (d)
-tool-call status shadowing (CR-08 follow-up). Başka aday: küçük backend follow-up'ları (LLM generation
-Future-Dev, kapsam dışı). BAŞLAMADAN ilgili doc'u + route/command imzalarını + queries/commands dönüş
-dict'lerini oku → wire tipleri VERBATIM ayna (Trash purge dersleri: iki-aşamalı 202 request-only;
-confirmation_phrase display kimliği; reauth_proof varlık-kontrollü; OCC body-form INT).
+ÖNEMLİ (KALICI SINIR): retention auto-purge YAPMA — doc 20 §16 açıkça "Automatic purge remains disabled
+in Production V1" (Future-Dev boundary, uygulanabilir slice DEĞİL); purge her zaman explicit Admin
+confirm+re-auth. Bir önceki seansta bu spec-çelişkisi tespit edildi, onun yerine data-queue redelivery
+seçildi.
+
+SIRADAKİ İŞ (BAŞLARKEN KULLANICIYLA TEYİT ET — henüz teyitli DEĞİL): kalan TIER 3 deferred: (a) SSE
+streaming e2e (bağlantı kopması dayanıklılığı); (b) tool-call status shadowing (CR-08 follow-up); (c)
+data-queue redelivery için opsiyonel Admin UI paneli. Başka aday: küçük backend follow-up'ları (LLM
+generation Future-Dev, kapsam dışı). BAŞLAMADAN ilgili doc'u + route/command imzalarını + queries/
+commands dönüş dict'lerini oku → wire tipleri VERBATIM ayna (data-queue dersleri: discriminator payload'da
+job_kind; operator=Admin require_admin_panel; audit+outbox bir kez; dispatch route'ta send_job;
+DATA_ACTOR_BY_KIND registry kind→actor).
 
 DÜRÜST SINIR (KALICI): ["jobs"] backend LİSTE yüzeyi YOK; purge worker durumu ["trash"]
 projeksiyonundan okunur (özel SSE event YOK, resource.changed süpürür); reauth_proof V1'de yalnız

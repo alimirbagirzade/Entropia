@@ -1646,7 +1646,75 @@ bu yüzeyin dışında (Stage 3a mainboard operasyonu); payload editörü ham JS
 yalnız server compiler'ı — issue'lar verbatim). **Workspace kalan: trading_signal / trade_log /
 outsource-signal (3 placeholder).**
 
-## Next: post-V1 (continued) — TIER 2 (… + User Manual + Strategy Details pages landed — Backtest & Docs grupları TAM; **3 placeholder pages** [Workspace trading_signal/trade_log/outsource-signal] + ESP registry mutation slice + TIER 3 remain)
+## Stage post-V1 TIER 2 — Trading Signal & Trade Log pages landed (PR #119)
+
+**FRONTEND-ONLY (6 yeni + 1 edit, +2690 satır)** — backend UNCHANGED (**1048** sabit), migration YOK,
+alembic head `0021_local_auth`, `ENGINE_VERSION` sabit. `/trading-signal` + `/trade-log`
+placeholder'ları TEK slice'ta gerçek sayfa oldu — `routes/trading_signal.py` + `routes/trade_log.py`
+İKİZ yüzeylerinin TAMAMI (6+6 endpoint, Stage 3c/3d doc 04/05) bağlandı: immutable TXT/CSV source
+asset upload (content-addressed dedup) → durable 202 import job → import report → Save & Add native
+work object → OCC-guarded revision append. main = `7fd70dd` (Merge #119), feat `038187f`. CI yeşil;
+self-review 0 CRITICAL/HIGH. **frontend 197 → 208** (+11 vitest: 6 TS + 5 TL).
+
+**AMPİRİK route haritası (imzalar OKUNDU — iki router bire bir simetrik):**
+
+| Endpoint (her iki prefix) | OCC | Idempotency-Key |
+|---|---|---|
+| `POST .../source-assets` (201) | YOK — content-addressed: aynı içerik `deduplicated:true` ile önceki asset'i döner | taze key/deneme (route okuyor) |
+| `POST .../imports` (202) | YOK — durable jobs satırı (data queue, CR-09; browser kapansa da yaşar) | taze key/deneme |
+| `GET .../imports/{job_id}` | — | — |
+| `POST /trading-signals` · `/trade-logs` (201, create & attach) | YOK (create'in head'i yok); `workspace_id` HİÇ gönderilmez — server default Mainboard'ı çözer | taze key/deneme |
+| `POST .../{root_id}/revisions` (201) | **BODY-form `expected_head_revision_id` STR** (server'da optional — client HER ZAMAN rendered head'i gönderir; stale → 409, asla last-write-wins) | taze key/deneme |
+| `GET .../{root_id}` | — | — |
+
+**İKİZ FARKLAR (verbatim aynalandı):** (1) report kanıt anahtarı — TS `normalized_event_revision_id`
+vs TL `record_batch_revision_id` (import_binding'de de aynı fark); (2) TL revizyonları HER ZAMAN
+`available_time=null` (historical ledger, doc 05 §10.4 — anti-lookahead availability sözleşmesi yok),
+TS earliest-accepted-event taşır; (3) config şekli — TS `time_policy`+`event_model` vs TL `time_model`;
+(4) hata taksonomileri ayrı. Pin ("Use This Revision") + delete bu router'larda YOK — Mainboard
+router'ı REUSE edilir (CR-01/TL-01: work object, package değil).
+
+**SSE kazanımı:** import report `["jobs", "<kind>-import", jobId]` anahtarıyla bağlandı — **`job.updated`
+SSE anahtarının İLK sayfa bağlaması** (PR #67 forward-contract'ının son açık anahtarı). Poll fallback
+`TERMINAL_IMPORT_STATUSES` (succeeded/failed/cancelled/failed_final/superseded) üzerinde durur
+(INF-11). "`["jobs"]` bağlanamaz" sınırı LİSTE yüzeyi için geçerliydi (o hâlâ yok — kalıcı);
+job-scoped report READ'i anahtarı canlandırdı. Work-object anahtarları `["trading-signals"]` /
+`["trade-logs"]` özel SSE event'siz → `resource.changed` süpürür.
+
+**Invalidation:** create-with-attach → kendi anahtarı + `["audit"]` + (result.attached ise)
+`["mainboard"]`+`["readiness"]` (composition_hash oynar → önceki Ready raporu STALE); revisions
+ASLA auto-repin yapmaz (doc 04 rule 9 / doc 05 Rule 10) → yalnız kendi anahtarı + `["audit"]`;
+upload → `["audit"]`; import request → `["jobs"]`+`["audit"]`.
+
+**Reuse anchor'ları (kesin semboller):**
+- **`lib/tradingSignal.ts` (yeni):** `UploadSourceAssetResult`/`RequestImportResult`/
+  `SignalImportReport`/`WorkObjectRevisionView`/`TradingSignalDetail`/`CreateTradingSignalResult`/
+  `CreateSignalRevisionResult`; `SIGNAL_SOURCE_EXTENSIONS` (.txt/.csv) + `TERMINAL_IMPORT_STATUSES`
+  + `buildSignalPayloadTemplate` (§9.2 iskeleti, import binding enjekte — hydration-only, otorite
+  server compiler); hook'lar `useTradingSignal`/`useSignalImportReport` (["jobs"] altında, terminal-stop
+  poll)/`useUploadSignalSource`/`useRequestSignalImport`/`useCreateTradingSignal`/`useCreateSignalRevision`.
+- **`lib/tradeLog.ts` (yeni):** ikiz tipler `TradeLogImportReport`/`TradeLogDetail`/`CreateTradeLogResult`/
+  `CreateTradeLogRevisionResult` + `buildTradeLogPayloadTemplate` (§10.2 — `time_model`,
+  `content_profile`, `trade_log_entry_exit_price`, record-batch binding); paylaşılan
+  `UploadSourceAssetResult`/`RequestImportResult`/`WorkObjectRevisionView`/`TERMINAL_IMPORT_STATUSES`
+  tradingSignal'den import; hook'lar `useTradeLog`/`useTradeLogImportReport`/`useUploadTradeLogSource`/
+  `useRequestTradeLogImport`/`useCreateTradeLog`/`useCreateTradeLogRevision`.
+- **`pages/TradingSignal.tsx` + `pages/TradeLog.tsx` (yeni, simetrik):** URL modları `?job=` (durable
+  import handle) / `?root=` (detail + revision composer); `Workbench` upload→import→report→create
+  zinciri — mutation state + instrument/tz state PARENT'ta; `CreateCard` `key={<report revision id> ??
+  "blank"}` remount-reseed; `RevisionComposer` `key={current_revision_id}`; bozuk JSON client'ta kalır;
+  keşif `AttachedSignalsCard`/`AttachedTradeLogsCard` (default Mainboard `item_kind` filtresi).
+- **`App.tsx`:** REAL_PATHS 21→23 + iki gerçek Route (`nav.ts` UNCHANGED — 24).
+  **Testler:** NEW `test/tradingSignal.test.tsx` +6 / `test/tradeLog.test.tsx` +5 (apiStub SIRALI —
+  `source-assets`/`imports`/`{root}/revisions` POST fragmanları çıplak create prefix'inden ÖNCE).
+
+**Dürüst sınır:** work-object LIST endpoint'i YOK — keşif default Mainboard item'larından; hiç attach
+edilmemiş nesne yalnız create-result `?root=` linkiyle erişilir; upload UTF-8 TEXT taşır (route
+sözleşmesi `content: str` — ham bayt sayfadan geçmez); Pin/delete Mainboard operasyonu (bu sayfalarda
+değil); deep-link `?job=` senaryosunda template timezone'u "UTC" default'una düşer (report tz taşımaz).
+**Workspace kalan: outsource-signal (SON placeholder).**
+
+## Next: post-V1 (continued) — TIER 2 (… + Strategy Details + Trading Signal & Trade Log twin pages landed — Workspace'te SON placeholder **outsource-signal**; + ESP registry mutation slice + TIER 3 remain)
 
 **V1 COMPLETE (Stages 0–8, docs 01–22) + Auth/IdP + Parquet Slice A + Backtest Engine Slice B + real indicator compute Slice C + `risk_based` sizing (a) + condition blocks (b) + condition extensions (b2) + two-package indicator-vs-indicator + higher-timeframe resampling (c) + per-condition multi-TF reference (i) + N-ary reference chain (ii) + VWAP directional key (d) + `formula_based` Kelly sizing + `position_size_limits` min/max cap (PR #63) landed (1015 tests).** The **Slice C indicator-compute + position-sizing follow-ups are now EFFECTIVELY COMPLETE — TIER 1 backend is DONE**:
 

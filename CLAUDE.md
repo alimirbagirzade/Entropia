@@ -136,9 +136,21 @@ Before stopping a working session, produce **ALL** of the following:
   Mainboard items same-tx → invalidates ["strategy"]+["mainboard"]+["readiness"]+["audit"]; blocked
   save = 422 with compiler issues {field,code,message} in error.details (verbatim); draft_id is an
   independent stratdraft ULID — NO root→draft lookup endpoint → the page carries the draft handle
-  in the URL (?draft=); /strategies/{root}/revisions is a BARE LIST (PR #117, MERGED)**.
-  **Overall: ~95% complete** (V1=100%, post-V1 core=88%, frontend=97%).
-  `main` after PR #117 (`fcbbfb6`; Strategy Details feat `8e5e068` MERGED; User Manual feat `54fd4db` MERGED; Portfolio feat `f3e9550` MERGED; Ready Check feat `6232486` MERGED; Research Data lifecycle-actions feat `2e488dc` MERGED; Research Data page feat `5049f4e` MERGED; Market Data lifecycle-actions feat `d2a9ada` MERGED; Market Data lifecycle-actions feat `d2a9ada` MERGED; Market Data page feat `0ca0468` MERGED; Rationale Families feat `20ccacc` MERGED; Embedded feat `5bf633a` MERGED; Embedded feat `5bf633a` MERGED; Package Library feat `53394fe` MERGED; capability-POSTs feat `652dfde` MERGED; CP-actions/Pre-Check feat `e8f8982` MERGED; CP-create-page feat `79fbd24` MERGED; CP-Gen candidate-generation feat `5cc62cc` MERGED; auth-invalidation feat MERGED (PR #88); trash-page feat `3ccb50d` MERGED; provisioning-dashboard feat `b56f621` MERGED; capability-page feat `3d7977e` MERGED; history-compare feat `491ac03` MERGED; panel-page feat `726ffcc` MERGED; first-Admin bootstrap feat `a53cf34` MERGED; live-pages feat `499bd8b` MERGED; backtest-pages feat `10a0007` MERGED; metrics feat `d3039e7` MERGED; login feat `58781e4` MERGED; SSE feat `5ddb14f` MERGED; position_size_limits feat `5ef5525`; Kelly feat `3f254bc` / non-finite fail-closed fix `3a92e7d`; VWAP code `d27b2bb`; N-ary code `44099a7`; per-condition code `1c5cca0`; multi-timeframe code `def6c28`; indicator-vs-indicator code `9087c2b`; condition-extensions code `361df4c`; condition-blocks code `8766fae`; risk_based code `43cee29`; Slice C code `671d227`);
+  in the URL (?draft=); /strategies/{root}/revisions is a BARE LIST (PR #117, MERGED)
+  + TIER 2 frontend live-data Trading Signal & Trade Log twin pages — routes/trading_signal.py +
+  trade_log.py FULL twin surfaces (6+6 endpoints, docs 04/05) bound to /trading-signal +
+  /trade-log in ONE slice (upload content-addressed dedup → durable 202 import → report →
+  Save & Add native work object → OCC revision append); all 4 POSTs/twin read fresh
+  Idempotency-Key, ONLY OCC token = BODY-form expected_head_revision_id STR on /revisions
+  (client always sends rendered head); TWIN DIFFS verbatim (normalized_event_revision_id vs
+  record_batch_revision_id; TL available_time always null — historical doc 05 §10.4); import
+  report keyed ["jobs","<kind>-import",jobId] — FIRST page binding of the job.updated SSE key
+  (terminal-stop poll, INF-11); create-with-attach invalidates ["mainboard"]+["readiness"];
+  revisions never auto-repin; Pin/delete stay Mainboard ops (CR-01/TL-01); App.tsx REAL_PATHS
+  21→23; +11 vitest → 208 (PR #119, MERGED)**.
+  **Overall: ~96% complete** (V1=100%, post-V1 core=88%, frontend=98%).
+  `main` after PR #119 (`7fd70dd`; Trading Signal & Trade Log twin feat `038187f` MERGED;
+  Strategy Details feat `8e5e068` MERGED; User Manual feat `54fd4db` MERGED; Portfolio feat `f3e9550` MERGED; Ready Check feat `6232486` MERGED; Research Data lifecycle-actions feat `2e488dc` MERGED; Research Data page feat `5049f4e` MERGED; Market Data lifecycle-actions feat `d2a9ada` MERGED; Market Data lifecycle-actions feat `d2a9ada` MERGED; Market Data page feat `0ca0468` MERGED; Rationale Families feat `20ccacc` MERGED; Embedded feat `5bf633a` MERGED; Embedded feat `5bf633a` MERGED; Package Library feat `53394fe` MERGED; capability-POSTs feat `652dfde` MERGED; CP-actions/Pre-Check feat `e8f8982` MERGED; CP-create-page feat `79fbd24` MERGED; CP-Gen candidate-generation feat `5cc62cc` MERGED; auth-invalidation feat MERGED (PR #88); trash-page feat `3ccb50d` MERGED; provisioning-dashboard feat `b56f621` MERGED; capability-page feat `3d7977e` MERGED; history-compare feat `491ac03` MERGED; panel-page feat `726ffcc` MERGED; first-Admin bootstrap feat `a53cf34` MERGED; live-pages feat `499bd8b` MERGED; backtest-pages feat `10a0007` MERGED; metrics feat `d3039e7` MERGED; login feat `58781e4` MERGED; SSE feat `5ddb14f` MERGED; position_size_limits feat `5ef5525`; Kelly feat `3f254bc` / non-finite fail-closed fix `3a92e7d`; VWAP code `d27b2bb`; N-ary code `44099a7`; per-condition code `1c5cca0`; multi-timeframe code `def6c28`; indicator-vs-indicator code `9087c2b`; condition-extensions code `361df4c`; condition-blocks code `8766fae`; risk_based code `43cee29`; Slice C code `671d227`);
   alembic head = **`0021_local_auth`** (`human_credentials` + `auth_sessions`;
   Slices A/B/C + follow-ups (a)/(b)/(b2)/(#53)/(c)/(i)/(ii)/(d) + Kelly sizing + position_size_limits + first-Admin bootstrap + bootstrap-status read endpoint + CP-Gen deterministic candidate generation need no migration). **1048 tests green** (1015 + 13 first-Admin bootstrap [env-unset baseline / match+no-admin → Admin+audit+outbox / active-Admin fail-closed / non-matching baseline / case+whitespace normalization / settings env read / route pass-through] + 8 bootstrap-status read endpoint: unit configured-flag + integration window open/closed vs a real DB + route reads the setting + 12 CP-Gen candidate generation: reproducibility / order-independence / output_contract+resolved_refs hash sensitivity / GENERATOR_VERSION namespace shift / fail-closed directional→ta.* + condition→cond.* + empty-resolved skip / output_type alias / DESCRIPTION uncertainty / test_plan dep listing).
   TIER 2 frontend — real-auth login/signup/logout (PR #65, MERGED): **FRONTEND-ONLY**
@@ -791,11 +803,32 @@ Before stopping a working session, produce **ALL** of the following:
     lookup (draft handle lives in the `?draft=` URL). NEW `lib/strategy.ts` + 
     `pages/StrategyDetails.tsx` (PayloadEditor `key={row_version}` remount-reseed; mutation
     state parent-held; two-step Clear); `App.tsx` REAL_PATHS 20→21; +8 vitest → **197**;
-    frontend-only, no migration, backend stays 1048. **Remaining TIER 2:** 3 placeholder
-    pages, ALL Workspace, ALL with landed V1 backend surfaces — `trading_signal.py` +
-    `trade_log.py` (6+6 near-symmetric twins — one slice) / outsource-signal — plus the ESP
-    registry MUTATION slice (`esp.py` create/activate/deprecate, Admin-only,
-    `X-Registry-Version` OCC; `library.py` already 2/2 bound).
+    frontend-only, no migration, backend stays 1048.
+  - ✅ **Trading Signal & Trade Log twin pages (PR #119, MERGED)** — `/trading-signal` +
+    `/trade-log` real pages in ONE slice binding the FULL `routes/trading_signal.py` +
+    `routes/trade_log.py` twin surfaces (6+6 endpoints, Stage 3c/3d docs 04/05): upload
+    immutable TXT/CSV source asset (content-addressed dedup) → durable 202 import job →
+    import report → Save & Add native work object → OCC-guarded revision append. EMPIRICAL:
+    all 4 POSTs per twin read a fresh Idempotency-Key; the ONLY OCC token is BODY-form
+    `expected_head_revision_id` STR on `/revisions` (server-optional — client always sends
+    the rendered head); `workspace_id` never sent (server resolves the default Mainboard).
+    TWIN DIFFS mirrored verbatim: report evidence key `normalized_event_revision_id` (TS) vs
+    `record_batch_revision_id` (TL); TL revisions always `available_time=null` (historical,
+    doc 05 §10.4); config TS `time_policy`+`event_model` vs TL `time_model`. Import report
+    keyed `["jobs","<kind>-import",jobId]` — the FIRST page binding of the `job.updated` SSE
+    key (terminal-stop poll fallback `TERMINAL_IMPORT_STATUSES`, INF-11). Create-with-attach
+    invalidates `["mainboard"]+["readiness"]` (composition hash moves → prior Ready report
+    STALE); revisions NEVER auto-repin. Pin/delete stay Mainboard operations (CR-01/TL-01).
+    NEW `lib/tradingSignal.ts` + `lib/tradeLog.ts` + `pages/TradingSignal.tsx` +
+    `pages/TradeLog.tsx` (URL modes `?job=`/`?root=`; report-seeded JSON payload editor,
+    `CreateCard` key remount-reseed); `App.tsx` REAL_PATHS 21→23; +11 vitest → **208**;
+    frontend-only, no migration, backend stays 1048. **Remaining TIER 2:** outsource-signal
+    — the LAST Workspace placeholder; EMPIRICAL WARNING: the string "outsource" appears
+    NOWHERE in the backend (no dedicated router; doc 03 likely reuses the TS/TL surfaces —
+    read `docs/spec/03_...Add_Outsource_Signal...md` and scope with the user BEFORE
+    starting; a new backend slice may be needed) — plus the ESP registry MUTATION slice
+    (`esp.py` create/activate/deprecate, Admin-only, `X-Registry-Version` OCC; `library.py`
+    already 2/2 bound).
   
   **TIER 3 — Data/ops (deferred, optional for MVP):**
   - Retention auto-purge (strategy/backtest history cleanup)

@@ -1909,7 +1909,37 @@ etmez, doc 20 §6); discriminator ÖNCESİ enqueue edilmiş legacy satırlar `jo
 dokunulmaz, QUEUED kalır; data-plane worker'lar güvenle replay); `["jobs"]` HTTP LİSTE yüzeyi hâlâ
 YOK — bu bir POST recovery aksiyonu, browser DEĞİL; operator ayrı rol değil = Admin (`require_admin_panel`).
 
-## Next: post-V1 (continued) — TIER 2 SAYFA HARİTASI + TÜM route yüzeyleri TAMAM (24/24 real) + `data`-queue operator redelivery (PR #129) landed → kalan **TIER 3 deferred**: SSE streaming e2e (bağlantı kopması dayanıklılığı) / tool-call status shadowing (CR-08 follow-up) / data-queue redelivery için opsiyonel bir Admin UI paneli. **retention auto-purge KAPSAM DIŞI** (doc 20 §16 "Automatic purge remains disabled in Production V1" — Future-Dev boundary, uygulanabilir slice değil). LLM generation Future-Dev — kapsam dışı.
+## Stage post-V1 TIER 2 — Data-queue redelivery operator recovery card landed (PR #131)
+
+**FRONTEND-ONLY** (backend değişmedi, migration yok, alembic head `0021_local_auth` SABİT,
+`ENGINE_VERSION` SABİT, backend test base **1054** sabit; frontend **232 → 235**). Landed backend
+operator-recovery endpoint'ini (PR #129, INF-03, doc 20 §6) `/panel` sayfasına bağlar — `data`-queue
+redelivery için opsiyonel Admin UI paneli TIER 3 adayı KAPANDI (kullanıcıyla teyitli seçim).
+
+**Ne yapıldı:** `POST /admin/data-queue/redeliver`'i Panel'e bir `OperatorRecoveryCard` olarak bağlar.
+3 dosya, +264 satır, salt-ekleme; `App.tsx`/`nav.ts` DEĞİŞMEDİ (`/panel` zaten real).
+- `lib/adminPanel.ts` (salt ekleme): `DataQueueRedeliverResult`/`DataQueueRedeliverable` wire tipleri
+  (`commands/data_queue.py::redeliver_data_queue_jobs` dönüş dict'i VERBATIM →
+  `{scanned, redeliverable:[{job_kind,job_id}], skipped_unknown_kind}`) + `DATA_JOB_KIND_LABELS`/
+  `dataJobKindLabel` (`application/jobs/data_queue.py` `DATA_JOB_KINDS` okunabilir etiket aynası —
+  yalnız hydration, server tek otorite) + `useRedeliverDataQueue` (route yalnız opsiyonel
+  `grace_seconds` query okur, `ge=0`, `0`=hepsi → **OCC token / Idempotency-Key YOK**; başarıda
+  `["audit"]` invalidate — command bir `data_queue.redelivery_requested` audit+outbox yayar, süpürülecek
+  data-queue read yüzeyi yok).
+- `pages/Panel.tsx` (salt ekleme): `OperatorRecoveryCard` — grace-seconds ipucu input'u (boş=server
+  penceresi, `0`=hepsi), routable sonuç tablosu (server job_kind etiketleri + job id), scanned/
+  re-dispatched/skipped sayaçları, un-routable legacy-satır notu (sayılır, ASLA tahmin edilmez); Admin-only
+  server-side (non-Admin 403 zarfı VERBATIM); client negatif/ondalık grace'i dispatch öncesi engeller
+  (server yine `ge=0` doğrular).
+- `test/panel.test.tsx` +3 → **235**: routable render + query'siz default POST · `grace_seconds=0`
+  süpürme + empty-state · geçersiz-grace client bloklama.
+
+typecheck+lint temiz, build green, 235/235. Review 0 CRITICAL/HIGH (route imzası ampirik okundu →
+VERBATIM aynalandı). **Dürüst sınır (KALICI):** re-dispatch OPERATOR aksiyonu kalır (scheduler `data`'yı
+ASLA auto-route etmez, doc 20 §6); legacy satırlar `skipped_unknown_kind`; `["jobs"]` HTTP LİSTE yüzeyi
+YOK (bu bir POST recovery aksiyonu); operator = Admin (`require_admin_panel`).
+
+## Next: post-V1 (continued) — TIER 2 SAYFA HARİTASI + TÜM route yüzeyleri TAMAM (24/24 real) + `data`-queue operator redelivery (backend PR #129 + Admin UI PR #131) landed → kalan **TIER 3 deferred**: SSE streaming e2e (bağlantı kopması dayanıklılığı) / tool-call status shadowing (CR-08 follow-up). **retention auto-purge KAPSAM DIŞI** (doc 20 §16 "Automatic purge remains disabled in Production V1" — Future-Dev boundary, uygulanabilir slice değil). LLM generation Future-Dev — kapsam dışı.
 
 **V1 COMPLETE (Stages 0–8, docs 01–22) + Auth/IdP + Parquet Slice A + Backtest Engine Slice B + real indicator compute Slice C + `risk_based` sizing (a) + condition blocks (b) + condition extensions (b2) + two-package indicator-vs-indicator + higher-timeframe resampling (c) + per-condition multi-TF reference (i) + N-ary reference chain (ii) + VWAP directional key (d) + `formula_based` Kelly sizing + `position_size_limits` min/max cap (PR #63) landed (1015 tests).** The **Slice C indicator-compute + position-sizing follow-ups are now EFFECTIVELY COMPLETE — TIER 1 backend is DONE**:
 

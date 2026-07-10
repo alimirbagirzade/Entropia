@@ -3,6 +3,54 @@
 > **Amaç:** V1 kapandı (Stage 0–8 COMPLETE). Bu doküman post-V1 durumunu, aday iş listesini
 > ve temiz oturumda yapıştırılacak resume prompt'u içerir.
 
+## Durum (2026-07-10, TIER 2 frontend — User Manual sayfası; PR #115 MERGED)
+
+**FRONTEND-ONLY (3 yeni + 2 edit, +1295 satır)** — backend DEĞİŞMEDİ (1048 sabit), migration YOK,
+alembic head `0021_local_auth` SABİT, `ENGINE_VERSION` SABİT. `/user-manual` placeholder'ı gerçek
+sayfa oldu — `routes/manual.py`'nin TAM yüzeyi (7/7 endpoint, Stage 7a doc 21) bağlandı: all-role
+Published reader stream + server-side search + Admin publish/upload/replace/soft-delete/restore.
+**Docs nav grubu KAPANDI** (Future Dev #82 + User Manual #115). Frontend 181 → **189** (+8 vitest).
+main = `6a4ba3b` (Merge #115), feat `54fd4db`. CI yeşil; self-review 0 CRITICAL/HIGH.
+
+**AMPİRİK route haritası (imzalar OKUNDU):** create/upload/delete OCC'si **BODY-form
+`expected_stream_version` INT** (server'da optional — client HER ZAMAN render edilen snapshot ile
+korur, UM-13/UM-15; stale → 409 `MANUAL_STREAM_CONFLICT` verbatim); revisions OCC'si **BODY-form
+`expected_head_revision_id` STR** (route body'yi If-Match'e tercih eder; stale → 409
+`MANUAL_REVISION_CONFLICT`); **DELETE opsiyonel BODY taşır** (reason + expected_stream_version) +
+Idem → `api.del` body/header almadığından `apiRequest` doğrudan; `:restore` **`require_trash_admin`**
+(manual admin DEĞİL), body YOK, dönüş = Trash-core `RestoreResult` (tip `lib/trash.ts`'ten REUSE);
+`get_manual_section` ROUTE EDİLMEMİŞ (doc 21 §12 Agent Tool Gateway). Tüm mutasyonlar
+`["manual"]`+`["audit"]` (+delete/restore'da `["trash"]`) invalidate; deneme başına taze
+Idempotency-Key.
+
+**Reuse anchor'ları:** `lib/manual.ts` (yeni) — `ManualBlock`/`ManualSection`/`ManualStreamPage`/
+`ManualSearchResult` (heading_path STRING, liste değil!)/`PublishResult`/`ReviseResult`/
+`DeleteResult` + `ACCEPTED_UPLOAD_EXTENSIONS` hydration aynası; `["manual"]` hook'ları (özel SSE
+YOK → `resource.changed`): `useManualStream(cursor)`/`useManualSearch(q,cursor)` (boş sorgu fetch
+etmez, doc 21 §14) + 5 mutasyon. `pages/UserManual.tsx` (yeni) — `BlockView` kanonik blok renderer
+(heading/paragraph/lists/code/callout/divider — yalnız TEXT node, bilinmeyen tip fail-closed null);
+baseline aksiyonları server-truth `is_baseline`'dan gizli (UM-10, Trash `restore_eligible` deseni);
+delete sonucu PARENT'ta (`lastDelete` — section refetch'te kaybolmaz, Portfolio dersi); composers
+client-role-gate'siz (doc 21 §2). `App.tsx` REAL_PATHS 19→20; `nav.ts` 24 sabit.
+`test/userManual.test.tsx` +8 (apiStub SIRALI — `:upload`/`:restore`/`/revisions` fragmanları create
+prefix'inden ÖNCE: create path'i hepsinin substring'i).
+
+**Dürüst sınır:** revision replacement doc 21 §7'de "V18 UI not exposed" — 7/7 için açık Admin bakım
+affordance'ı (PR #95 gated-POST emsali; server uçtan uca gate'ler); upload UTF-8 METİN taşır
+(route sözleşmesi `content: str` — ham bayt geçmez; PDF/DOCX V1 değil); manual'ın özel SSE event'i
+yok; Trash purge ayrı re-auth slice'ı.
+
+**SIRADAKİ İŞ ADAYLARI (BAŞLARKEN kullanıcıyla TEYİT ET):** kalan **4 placeholder sayfa — hepsi
+Workspace**, hepsinin V1 backend yüzeyi landed: `strategy.py` Strategy Details (9 endpoint — draft
+create/patch/validate/save/clear + strateji/revizyon okumaları; en kapsamlı aday) /
+`trading_signal.py` + `trade_log.py` (6+6 endpoint, neredeyse simetrik ikizler — source-asset →
+202 import → create → revisions → read; tek slice'ta ikisi mantıklı) / outsource-signal; VEYA ESP
+registry MUTASYON slice'ı (`esp.py` create/activate/deprecate — Admin-only, `X-Registry-Version`
+OCC; `library.py` 2/2 zaten bağlı). TIER 3 deferred: retention auto-purge, data-queue redelivery,
+SSE streaming e2e, tool-call status shadowing.
+
+---
+
 ## Durum (2026-07-10, TIER 2 frontend — Portfolio / Equity Allocation sayfası; PR #113 MERGED)
 
 **FRONTEND-ONLY (4 dosya, +1477 satır)** — backend DEĞİŞMEDİ (1048 sabit), migration YOK, alembic
@@ -1533,17 +1581,17 @@ tarihsel referans** olarak duruyor.
 ## ⤵️ YENİ OTURUMDA YAPIŞTIR (resume prompt)
 
 ```
-Entropia — post-V1 TIER 2 devam. STALE-BY-DEFAULT: Portfolio (PR #113) + kapanış docs (PR #114)
+Entropia — post-V1 TIER 2 devam. STALE-BY-DEFAULT: User Manual (PR #115) + kapanış docs (PR #116)
 MERGE EDİLDİ varsayma, git'ten doğrula.
 
 ÖNCE DOĞRULA: git fetch && git log --oneline origin/main -6 && gh pr list --state all -L 8.
-main = 3210ede (Merge #113) olmalı; docs #114 merge sonrası daha ileri (açıksa önce merge iste).
+main = 6a4ba3b (Merge #115) olmalı; docs #116 merge sonrası daha ileri (açıksa önce merge iste).
 alembic head 0021_local_auth (DEĞİŞMEDİ); ENGINE_VERSION = backtest-engine-v2-position-size-limits
-(DEĞİŞMEDİ). Backend 1048 test, frontend 181. Yeni branch'i MUTLAKA origin/main'den aç.
+(DEĞİŞMEDİ). Backend 1048 test, frontend 189. Yeni branch'i MUTLAKA origin/main'den aç.
 
-ÖNCE OKU (authority order): docs/POST_V1_KICKOFF.md (en üst "Durum" bloğu — PR #113 + "SIRADAKİ İŞ
-ADAYLARI" + en alttaki resume) → docs/STAGE2_HANDOFF.md ("Portfolio / Equity Allocation page landed
-(PR #113)" + "## Next") → CLAUDE.md "Current position".
+ÖNCE OKU (authority order): docs/POST_V1_KICKOFF.md (en üst "Durum" bloğu — PR #115 + "SIRADAKİ İŞ
+ADAYLARI" + en alttaki resume) → docs/STAGE2_HANDOFF.md ("User Manual page landed (PR #115)" +
+"## Next") → CLAUDE.md "Current position".
 
 DURUM: TIER 1 backend EFEKTİF TAMAM. FRONTEND landed (hepsi MERGED): login #65, SSE #67, /v1/metrics
 #69, backtest RUN/History #72, Arrange Metrics + Analysis Lab #74, Panel/Logs #78, history compare +
@@ -1551,44 +1599,54 @@ metrics rebind #80, Future Dev registry #82, provisioning dashboard #84, Trash r
 auth-invalidation #88, Create Package #91, CP aksiyonları + Pre-Check #93, gated capability POST'ları
 #95, Package Library #97, Embedded #99, Rationale Families #101, Market Data #103 + lifecycle #105,
 Research Data #107 + lifecycle #109 (Packages & Data grubu TAM), Ready Check #111, Portfolio #113
-(YENİ — routes/allocation.py 5/5 endpoint /portfolio'ya bağlandı, BACKTEST GRUBU KAPANDI;
-lib/allocation.ts ["allocation"] hook'ları; AMPİRİK: PUT/revisions OCC BODY-form expected_row_version
-[GET draft'ın row_version'ı canlı token; 0 = plan-yok = geçerli creation token] + taze
-Idempotency-Key; validate body/header OKUMAZ [her koşu yeni immutable rapor + audit]; sync POST ama
-PURE READ preview [Idem YOK, invalidation YOK]; item_type PUT'ta gönderilmez — server türetir §8.2;
-draft PUT readiness_invalidated:true → ["allocation"]+["readiness"]+["mainboard"]+["audit"]
-invalidate, revision → ["allocation"]+["audit"], validate → yalnız ["audit"];
-pages/Portfolio.tsx DraftEditor key={row_version} remount-reseed + mutation state PARENT'ta;
-App.tsx REAL_PATHS 18→19, nav 24 sabit; +7 vitest → 181). BACKEND: first-Admin bootstrap #76 +
+(BACKTEST GRUBU KAPANDI), User Manual #115 (YENİ — routes/manual.py 7/7 endpoint /user-manual'a
+bağlandı, DOCS GRUBU KAPANDI [Future Dev #82 + User Manual #115]; lib/manual.ts ["manual"]
+hook'ları; AMPİRİK: create/upload/delete OCC BODY-form expected_stream_version INT [server'da
+optional — client HER ZAMAN render edilen snapshot ile korur; stale → 409 MANUAL_STREAM_CONFLICT] +
+taze Idempotency-Key; revisions OCC BODY-form expected_head_revision_id STR [body If-Match'e galip;
+409 MANUAL_REVISION_CONFLICT]; DELETE opsiyonel BODY taşır [api.del body/header almaz → apiRequest
+doğrudan]; :restore require_trash_admin [manual admin DEĞİL], body YOK, dönüş = Trash-core
+RestoreResult [lib/trash.ts tipi REUSE]; get_manual_section ROUTE EDİLMEMİŞ [doc 21 §12 Agent Tool
+Gateway]; mutasyonlar ["manual"]+["audit"] (+delete/restore'da ["trash"]) invalidate;
+pages/UserManual.tsx BlockView kanonik blok renderer [yalnız TEXT node, bilinmeyen tip fail-closed]
++ baseline aksiyonları server-truth is_baseline'dan gizli [UM-10] + delete sonucu PARENT'ta;
+App.tsx REAL_PATHS 19→20, nav 24 sabit; +8 vitest → 189). BACKEND: first-Admin bootstrap #76 +
 bootstrap-status #84 + CP-Gen deterministic candidate generation #89 (LLM YOK).
 
-SIRADAKİ İŞ (BAŞLARKEN KULLANICIYLA TEYİT ET — henüz teyitli DEĞİL): kalan 5 placeholder sayfa
-(hepsinin V1 backend yüzeyi landed): (1) Workspace — strategy.py Strategy Details /
-trading_signal.py Trading Signal / trade_log.py Trade Log / outsource-signal; (2) Docs — manual.py
-User Manual (muhtemelen en küçük slice); VEYA ESP/Library registry MUTASYON slice'ları (Admin-only,
-X-Registry-Version OCC — Rationale shared-editing / marketData postWithOcc deseni TABAN). Hangisi
-seçilirse: route İMZALARINI ÖNCE OKU (OCC/Idem her endpoint'te olmayabilir — PR #105/#111/#113
+SIRADAKİ İŞ (BAŞLARKEN KULLANICIYLA TEYİT ET — henüz teyitli DEĞİL): kalan 4 placeholder sayfa —
+HEPSİ Workspace (hepsinin V1 backend yüzeyi landed): strategy.py Strategy Details (9 endpoint —
+draft create/patch/validate/save/clear + strateji/revizyon okumaları; en kapsamlı aday) /
+trading_signal.py + trade_log.py (6+6 endpoint, neredeyse simetrik ikizler — source-asset → 202
+import → create → revisions → read; tek slice'ta ikisi mantıklı) / outsource-signal; VEYA ESP
+registry MUTASYON slice'ı (esp.py create/activate/deprecate — Admin-only, X-Registry-Version OCC —
+Rationale shared-editing / marketData postWithOcc deseni TABAN; library.py 2/2 zaten bağlı). Hangisi
+seçilirse: route İMZALARINI ÖNCE OKU (OCC/Idem her endpoint'te olmayabilir — PR #105/#111/#113/#115
 dersleri: successor/deprecate header okumuyordu; readiness token composition FINGERPRINT
-BODY-form'du; allocation OCC'si BODY-form expected_row_version'dı + sync POST'u pure read'di) +
-queries/commands dönüş dict'lerini oku → wire tipleri VERBATIM ayna. TIER 3 deferred: retention
-auto-purge, data-queue redelivery, SSE streaming e2e, tool-call status shadowing.
+BODY-form'du; allocation OCC'si BODY-form expected_row_version'dı + sync POST'u pure read'di;
+manual'da İKİ farklı body-form token vardı [stream_version INT / head_revision_id STR] + DELETE
+body'liydi + :restore require_trash_admin'di) + queries/commands dönüş dict'lerini oku → wire
+tipleri VERBATIM ayna. TIER 3 deferred: retention auto-purge, data-queue redelivery, SSE streaming
+e2e, tool-call status shadowing.
 
-DÜRÜST SINIR (KALICI): ["jobs"] backend liste yüzeyi YOK; ham baytlar sayfadan geçmez; view dataset
+DÜRÜST SINIR (KALICI): ["jobs"] backend liste yüzeyi YOK; ham baytlar sayfadan geçmez (manual
+upload UTF-8 METİN taşır — route sözleşmesi content: str; PDF/DOCX V1 değil); view dataset
 / analysis artifact READ yüzeyi YOK; bundle compiler'lar pure read (kalıcı read yüzeyi yok);
-capability/CP/library/esp/rationale/market-data/research-data/readiness/allocation'ın özel SSE
-event'i yok (resource.changed süpürür). RUN admission RUN sayfasında kalır (doc 14 §9.3); Portfolio
-sayfası yalnız default Mainboard composition'ını okur.
+capability/CP/library/esp/rationale/market-data/research-data/readiness/allocation/manual'ın özel
+SSE event'i yok (resource.changed süpürür); get_manual_section HTTP'ye route edilmemiş (Agent Tool
+Gateway). RUN admission RUN sayfasında kalır (doc 14 §9.3); Portfolio sayfası yalnız default
+Mainboard composition'ını okur; Trash purge ayrı re-auth slice'ı.
 
 FRONTEND STACK: Vite 8 + React 18 + react-router 6 + @tanstack/react-query 5 + react-hook-form +
 vitest/jsdom + @testing-library. Alias @ = src; kök frontend/src/. react-query v5 →
 invalidateQueries({queryKey}) object-form. tsconfig noUncheckedIndexedAccess AÇIK,
 exactOptionalPropertyTypes KAPALI. Composition girişi: lib/backtest.ts useDefaultMainboard
 (workspace_id = composition_id, composition_hash = current fingerprint, ready_summary); OCC/Idem
-taze örnekler: lib/allocation.ts (body-form OCC) + lib/readiness.ts (fingerprint OCC) +
+taze örnekler: lib/manual.ts (İKİ body-form token: stream_version INT + head_revision_id STR;
+DELETE body'li) + lib/allocation.ts (body-form OCC) + lib/readiness.ts (fingerprint OCC) +
 lib/marketData.ts postWithOcc (If-Match "rv-N").
 
 YÖNTEM: Workflow KULLANMA; direct-author. Frontend loop: cd frontend (absolute path) &&
-npm run typecheck && npm run lint && npm test && npm run build (181/181 geçmeli) + yeni
+npm run typecheck && npm run lint && npm test && npm run build (189/189 geçmeli) + yeni
 component/unit test (test/helpers/apiStub.ts reuse — SIRALI eşleşme: detay/aksiyon route'u liste
 prefix'inden ÖNCE; zincirleme yükleme için findBy* kullan, senkron getBy* değil; çift metin riski
 olan assert'leri within ile scope'la ya da tekil değere bağla). YENİ dosya heredoc (gate-free);

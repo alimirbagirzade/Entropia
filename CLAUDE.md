@@ -116,9 +116,19 @@ Before stopping a working session, produce **ALL** of the following:
   PUT/revisions; validate reads NO body/headers (new immutable report per run); sync POST is
   a PURE READ merge preview (no Idem, no invalidation); item_type never sent
   (server-derived §8.2); draft PUT readiness_invalidated:true → invalidates
-  ["allocation"]+["readiness"]+["mainboard"]+["audit"] (PR #113, MERGED)**.
-  **Overall: ~95% complete** (V1=100%, post-V1 core=88%, frontend=95%).
-  `main` after PR #113 (`3210ede`; Portfolio feat `f3e9550` MERGED; Ready Check feat `6232486` MERGED; Research Data lifecycle-actions feat `2e488dc` MERGED; Research Data page feat `5049f4e` MERGED; Market Data lifecycle-actions feat `d2a9ada` MERGED; Market Data lifecycle-actions feat `d2a9ada` MERGED; Market Data page feat `0ca0468` MERGED; Rationale Families feat `20ccacc` MERGED; Embedded feat `5bf633a` MERGED; Embedded feat `5bf633a` MERGED; Package Library feat `53394fe` MERGED; capability-POSTs feat `652dfde` MERGED; CP-actions/Pre-Check feat `e8f8982` MERGED; CP-create-page feat `79fbd24` MERGED; CP-Gen candidate-generation feat `5cc62cc` MERGED; auth-invalidation feat MERGED (PR #88); trash-page feat `3ccb50d` MERGED; provisioning-dashboard feat `b56f621` MERGED; capability-page feat `3d7977e` MERGED; history-compare feat `491ac03` MERGED; panel-page feat `726ffcc` MERGED; first-Admin bootstrap feat `a53cf34` MERGED; live-pages feat `499bd8b` MERGED; backtest-pages feat `10a0007` MERGED; metrics feat `d3039e7` MERGED; login feat `58781e4` MERGED; SSE feat `5ddb14f` MERGED; position_size_limits feat `5ef5525`; Kelly feat `3f254bc` / non-finite fail-closed fix `3a92e7d`; VWAP code `d27b2bb`; N-ary code `44099a7`; per-condition code `1c5cca0`; multi-timeframe code `def6c28`; indicator-vs-indicator code `9087c2b`; condition-extensions code `361df4c`; condition-blocks code `8766fae`; risk_based code `43cee29`; Slice C code `671d227`);
+  ["allocation"]+["readiness"]+["mainboard"]+["audit"] (PR #113, MERGED)
+  + TIER 2 frontend User Manual page — routes/manual.py 7/7 bound to /user-manual (Docs nav
+  group CLOSED: Future Dev #82 + User Manual #115); OCC is TWO different BODY-form tokens:
+  expected_stream_version INT on create/upload/delete (optional server-side; client always
+  guards with the rendered snapshot — stale → 409 MANUAL_STREAM_CONFLICT) and
+  expected_head_revision_id STR on revisions (body wins over If-Match; 409
+  MANUAL_REVISION_CONFLICT) + fresh Idempotency-Key per attempt; DELETE carries an OPTIONAL
+  BODY (api.del takes neither → apiRequest direct); :restore is require_trash_admin (NOT
+  manual admin), no body, returns the Trash-core RestoreResult (lib/trash.ts type REUSED);
+  get_manual_section NOT routed (doc 21 §12 Agent Tool Gateway); mutations invalidate
+  ["manual"]+["audit"] (+["trash"] on delete/restore) (PR #115, MERGED)**.
+  **Overall: ~95% complete** (V1=100%, post-V1 core=88%, frontend=96%).
+  `main` after PR #115 (`6a4ba3b`; User Manual feat `54fd4db` MERGED; Portfolio feat `f3e9550` MERGED; Ready Check feat `6232486` MERGED; Research Data lifecycle-actions feat `2e488dc` MERGED; Research Data page feat `5049f4e` MERGED; Market Data lifecycle-actions feat `d2a9ada` MERGED; Market Data lifecycle-actions feat `d2a9ada` MERGED; Market Data page feat `0ca0468` MERGED; Rationale Families feat `20ccacc` MERGED; Embedded feat `5bf633a` MERGED; Embedded feat `5bf633a` MERGED; Package Library feat `53394fe` MERGED; capability-POSTs feat `652dfde` MERGED; CP-actions/Pre-Check feat `e8f8982` MERGED; CP-create-page feat `79fbd24` MERGED; CP-Gen candidate-generation feat `5cc62cc` MERGED; auth-invalidation feat MERGED (PR #88); trash-page feat `3ccb50d` MERGED; provisioning-dashboard feat `b56f621` MERGED; capability-page feat `3d7977e` MERGED; history-compare feat `491ac03` MERGED; panel-page feat `726ffcc` MERGED; first-Admin bootstrap feat `a53cf34` MERGED; live-pages feat `499bd8b` MERGED; backtest-pages feat `10a0007` MERGED; metrics feat `d3039e7` MERGED; login feat `58781e4` MERGED; SSE feat `5ddb14f` MERGED; position_size_limits feat `5ef5525`; Kelly feat `3f254bc` / non-finite fail-closed fix `3a92e7d`; VWAP code `d27b2bb`; N-ary code `44099a7`; per-condition code `1c5cca0`; multi-timeframe code `def6c28`; indicator-vs-indicator code `9087c2b`; condition-extensions code `361df4c`; condition-blocks code `8766fae`; risk_based code `43cee29`; Slice C code `671d227`);
   alembic head = **`0021_local_auth`** (`human_credentials` + `auth_sessions`;
   Slices A/B/C + follow-ups (a)/(b)/(b2)/(#53)/(c)/(i)/(ii)/(d) + Kelly sizing + position_size_limits + first-Admin bootstrap + bootstrap-status read endpoint + CP-Gen deterministic candidate generation need no migration). **1048 tests green** (1015 + 13 first-Admin bootstrap [env-unset baseline / match+no-admin → Admin+audit+outbox / active-Admin fail-closed / non-matching baseline / case+whitespace normalization / settings env read / route pass-through] + 8 bootstrap-status read endpoint: unit configured-flag + integration window open/closed vs a real DB + route reads the setting + 12 CP-Gen candidate generation: reproducibility / order-independence / output_contract+resolved_refs hash sensitivity / GENERATOR_VERSION namespace shift / fail-closed directional→ta.* + condition→cond.* + empty-resolved skip / output_type alias / DESCRIPTION uncertainty / test_plan dep listing).
   TIER 2 frontend — real-auth login/signup/logout (PR #65, MERGED): **FRONTEND-ONLY**
@@ -733,10 +743,37 @@ Before stopping a working session, produce **ALL** of the following:
     frontend-only, no migration, backend stays 1048. Honest boundary: page reads only the default
     Mainboard composition (RUN/Ready-Check pattern); Validate checks the SAVED draft (not unsaved
     edits — stated in the UI); the sync preview has no "Apply" button (merge is done in the editor
-    and applied by Save — the §14#9 explicit-destructive-PUT contract). **Remaining TIER 2:** 5
-    placeholder pages, ALL with landed V1 backend surfaces — Workspace `strategy.py` Strategy
-    Details / `trading_signal.py` / `trade_log.py` / outsource-signal, Docs `manual.py` User Manual
-    — plus the ESP/Library registry MUTATION slices (Admin-only, `X-Registry-Version` OCC).
+    and applied by Save — the §14#9 explicit-destructive-PUT contract).
+  - ✅ **User Manual page (PR #115, MERGED)** — `/user-manual` real page binding the FULL
+    `routes/manual.py` surface (7/7 endpoints, Stage 7a doc 21) — **Docs nav group CLOSED**
+    (Future Dev #82 + User Manual #115). EMPIRICAL (signatures read): OCC is TWO different
+    BODY-form tokens — `expected_stream_version` INT on create/upload/delete (optional
+    server-side; the client ALWAYS guards with the rendered snapshot, UM-13/UM-15; stale →
+    409 `MANUAL_STREAM_CONFLICT` verbatim) and `expected_head_revision_id` STR on revisions
+    (body wins over If-Match; 409 `MANUAL_REVISION_CONFLICT`) + fresh Idempotency-Key per
+    attempt; DELETE carries an OPTIONAL BODY (reason + expected_stream_version — `api.del`
+    takes neither → `apiRequest` direct); `:restore` is `require_trash_admin` (NOT manual
+    admin), no body, returns the Trash-core `RestoreResult` (`lib/trash.ts` type REUSED);
+    `get_manual_section` NOT routed (doc 21 §12 Agent Tool Gateway). NEW `lib/manual.ts`
+    (`ManualBlock`/`ManualSection`/stream+search pages [`heading_path` STRING, not a list]/
+    `PublishResult`/`ReviseResult`/`DeleteResult` + `ACCEPTED_UPLOAD_EXTENSIONS` mirror;
+    `["manual"]` hooks — no dedicated SSE event, swept by `resource.changed`; blank search
+    query never fetches, doc 21 §14; mutations invalidate `["manual"]`+`["audit"]`
+    (+`["trash"]` on delete/restore)) + NEW `pages/UserManual.tsx` (`BlockView` canonical
+    block renderer — TEXT nodes only, unknown type fail-closed; baseline actions hidden from
+    server-truth `is_baseline` [UM-10]; two-step delete confirm with PARENT-held `lastDelete`
+    result; composers never client-role-gated, doc 21 §2). `App.tsx` REAL_PATHS 19→20;
+    `nav.ts` UNCHANGED (24). NEW `test/userManual.test.tsx` +8 (apiStub ORDERED —
+    `:upload`/`:restore`/`/revisions` fragments precede the create prefix) → **frontend
+    181 → 189**; frontend-only, no migration, backend stays 1048. Honest boundary: revision
+    replacement is "V18 UI not exposed" in doc 21 §7 — bound as an explicit Admin maintenance
+    affordance (PR #95 precedent; server gates end-to-end); upload carries UTF-8 TEXT only
+    (route contract `content: str` — raw bytes never travel; PDF/DOCX not V1); Trash purge
+    stays a separate re-auth slice. **Remaining TIER 2:** 4 placeholder pages, ALL Workspace,
+    ALL with landed V1 backend surfaces — `strategy.py` Strategy Details (9 endpoints, the
+    biggest) / `trading_signal.py` + `trade_log.py` (6+6 near-symmetric twins — one slice) /
+    outsource-signal — plus the ESP registry MUTATION slice (`esp.py` create/activate/
+    deprecate, Admin-only, `X-Registry-Version` OCC; `library.py` already 2/2 bound).
   
   **TIER 3 — Data/ops (deferred, optional for MVP):**
   - Retention auto-purge (strategy/backtest history cleanup)

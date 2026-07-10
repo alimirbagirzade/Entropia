@@ -1540,7 +1540,60 @@ birleştirme editörde yapılıp Save ile uygulanır (doc 13 §14#9 açık-destr
 allocation'ın özel SSE event'i yok. **Backtest grubu TAM — kalan placeholder'lar: Workspace (4) +
 Docs User Manual (1).**
 
-## Next: post-V1 (continued) — TIER 2 (… + Backtest Ready Check + Portfolio / Equity Allocation pages landed — Backtest grubu TAM; **5 placeholder pages** [Workspace strategy/trading_signal/trade_log/outsource-signal, Docs manual User Manual] + ESP/Library registry mutation slices + TIER 3 remain)
+## Stage post-V1 TIER 2 — User Manual page landed (PR #115)
+
+**FRONTEND-ONLY (3 yeni + 2 edit, +1295 satır)** — backend UNCHANGED (**1048** sabit), migration YOK,
+alembic head `0021_local_auth`, `ENGINE_VERSION` sabit. `/user-manual` placeholder'ı gerçek sayfa
+oldu — `routes/manual.py`'nin TAM yüzeyi (7/7 endpoint, Stage 7a doc 21) bağlandı: all-role Published
+reader stream + server-side search + Admin publish/upload/replace/soft-delete/restore zinciri.
+**Docs nav grubu KAPANDI** (Future Dev #82 + User Manual #115). main = `6a4ba3b` (Merge #115), feat
+`54fd4db`. CI yeşil; self-review 0 CRITICAL/HIGH. **frontend 181 → 189** (+8 vitest).
+
+**AMPİRİK route haritası (imzalar OKUNDU — PR #105/#111/#113 dersi):**
+
+| Endpoint | OCC | Idempotency-Key |
+|---|---|---|
+| `GET /manual/stream` + `GET /manual/search` | — (meta `stream_version` snapshot taşır) | — |
+| `POST /admin/manual/documents` (create) | **BODY-form `expected_stream_version` INT** (server'da optional; client HER ZAMAN render edilen snapshot ile korur — UM-13/UM-15) | taze key/deneme |
+| `POST /admin/manual/documents:upload` | body `expected_stream_version` | taze key/deneme |
+| `POST .../{id}/revisions` | **BODY-form `expected_head_revision_id` STR** (route body'yi If-Match'e tercih eder) | taze key/deneme |
+| `DELETE .../{id}` | body `expected_stream_version` — **DELETE opsiyonel BODY taşır** (`api.del` body/header almaz → `apiRequest` doğrudan) | taze key/deneme |
+| `POST .../{id}:restore` | YOK (body yok) — **`require_trash_admin`** (manual admin DEĞİL) | taze key/deneme |
+
+Stale stream token → 409 `MANUAL_STREAM_CONFLICT`; hareket etmiş head → 409 `MANUAL_REVISION_CONFLICT`
+(ikisi de verbatim); duplicate içerik → `MANUAL_DUPLICATE_CONTENT` (`allow_duplicate` audited
+override); baseline → `BASELINE_MANUAL_IMMUTABLE` (UM-10). `:restore` dönüşü Trash-core
+`RestoreResult` — tip `lib/trash.ts`'ten REUSE. `get_manual_section` query'si ROUTE EDİLMEMİŞ
+(doc 21 §12 — Agent Tool Gateway'e ait, HTTP yüzeyi değil).
+
+**Reuse anchor'ları (kesin semboller):**
+- **`lib/manual.ts` (yeni):** wire tipleri `ManualBlock`/`ManualSection`/`ManualStreamPage`/
+  `ManualSearchResult` (`heading_path` STRING, liste değil!)/`ManualSearchPage`/`PublishResult`/
+  `ReviseResult`/`DeleteResult`; `ACCEPTED_UPLOAD_EXTENSIONS` hydration aynası (.txt/.md/.markdown/
+  .html/.htm — server `MANUAL_FILE_TYPE_UNSUPPORTED` ile yeniden doğrular); `["manual"]` hook'ları
+  (özel SSE YOK → `resource.changed` süpürür): `useManualStream(cursor)` / `useManualSearch(q,cursor)`
+  (boş sorgu FETCH ETMEZ — doc 21 §14) / `useCreateManualDocument` / `useUploadManualDocument`
+  (boş title OMIT — filename stem'den türer) / `useReplaceManualRevision` /
+  `useSoftDeleteManualDocument` (delete/restore `["trash"]`'i de invalidate eder — aynı tx'te Trash
+  entry yazılıyor) / `useRestoreManualDocument`.
+- **`pages/UserManual.tsx` (yeni):** kanonik blok renderer `BlockView` (heading{level,text}/
+  paragraph{text}/bullet+ordered_list{items}/code{code_text,language}/callout{tone,title,text}/
+  divider — yalnız TEXT node, bilinmeyen tip fail-closed null); baseline aksiyonları server-truth
+  `is_baseline` bayrağından gizli (Trash `restore_eligible` deseni); iki adımlı delete onayı +
+  delete sonucu PARENT'ta (`lastDelete` — section refetch'te kaybolmaz, Portfolio dersi); composers
+  role ile client-gate edilmez (doc 21 §2 — non-Admin 403 verbatim görür); `SearchCard` yalnız
+  submit'te arar + reader/search `stream_version` uyuşmazlığında "index may lag" notu.
+- **`App.tsx`:** `/user-manual` REAL_PATHS 19→20 + gerçek Route (`nav.ts` UNCHANGED — 24).
+  **Testler:** NEW `test/userManual.test.tsx` +8 (apiStub SIRALI — `:upload`/`:restore`/`/revisions`
+  fragmanları create prefix'inden ÖNCE: create path'i hepsinin substring'i).
+
+**Dürüst sınır:** revision replacement doc 21 §7'de "V18 UI not exposed" — 7/7 bağlamak için açık
+Admin bakım affordance'ı olarak sunuldu (PR #95 gated-POST emsali; server uçtan uca gate'ler);
+upload UTF-8 METİN taşır (route sözleşmesi `content: str` — ham bayt sayfadan geçmez; PDF/DOCX V1
+değil); manual'ın özel SSE event'i yok; Trash purge ayrı re-auth slice'ı. **Docs grubu TAM — kalan
+placeholder'lar: Workspace (4: strategy / outsource-signal / trading-signal / trade-log).**
+
+## Next: post-V1 (continued) — TIER 2 (… + Portfolio + User Manual pages landed — Backtest & Docs grupları TAM; **4 placeholder pages** [Workspace strategy/trading_signal/trade_log/outsource-signal] + ESP/Library registry mutation slices + TIER 3 remain)
 
 **V1 COMPLETE (Stages 0–8, docs 01–22) + Auth/IdP + Parquet Slice A + Backtest Engine Slice B + real indicator compute Slice C + `risk_based` sizing (a) + condition blocks (b) + condition extensions (b2) + two-package indicator-vs-indicator + higher-timeframe resampling (c) + per-condition multi-TF reference (i) + N-ary reference chain (ii) + VWAP directional key (d) + `formula_based` Kelly sizing + `position_size_limits` min/max cap (PR #63) landed (1015 tests).** The **Slice C indicator-compute + position-sizing follow-ups are now EFFECTIVELY COMPLETE — TIER 1 backend is DONE**:
 

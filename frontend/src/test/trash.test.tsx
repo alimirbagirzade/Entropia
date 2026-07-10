@@ -77,9 +77,21 @@ const RESTORE_RESULT = {
   correlation_id: "corr-3",
 };
 
-// Order matters for the fragment-matching stub: the restore + detail routes
-// must precede the list route ("/trash-entries/t_1" contains "/trash-entries").
+const PURGE_RESULT = {
+  purge_job_id: "j_9",
+  trash_entry_id: "t_1",
+  entity_id: "e_1",
+  entity_type: "backtest_result",
+  deletion_state: "purge_pending",
+  purge_status: "pending",
+  row_version: 5,
+  correlation_id: "corr-9",
+};
+
+// Order matters for the fragment-matching stub: the purge + restore + detail
+// routes must precede the list route (each contains "/trash-entries").
 const BASE_ROUTES = {
+  "POST /trash-entries/t_1/purge": PURGE_RESULT,
   "POST /trash-entries/t_1/restore": RESTORE_RESULT,
   "GET /trash-entries/t_1": ENTRY_DETAIL,
   "GET /trash-entries": ENTRIES_PAGE,
@@ -204,5 +216,110 @@ describe("Trash page", () => {
 
     expect(await screen.findByText("Unable to load")).toBeInTheDocument();
     expect(screen.getByText("FORBIDDEN: Trash requires the Admin role.")).toBeInTheDocument();
+  });
+
+  it("offers Permanent Delete only on restore-eligible entries", async () => {
+    stubApi(BASE_ROUTES);
+    renderPage();
+    await screen.findByText("Backtest Alpha");
+
+    // Eligible on the same recoverable statuses as Restore; the purge-pending
+    // row (t_2) offers neither.
+    expect(screen.getAllByRole("button", { name: "Permanent Delete" })).toHaveLength(1);
+  });
+
+  it("gates the purge behind an exact object name and a re-auth proof", async () => {
+    stubApi(BASE_ROUTES);
+    renderPage();
+    await screen.findByText("Backtest Alpha");
+
+    fireEvent.click(screen.getByRole("button", { name: "Permanent Delete" }));
+
+    // doc 20 §9 confirmation copy is shown verbatim.
+    expect(
+      screen.getByText(/This starts an irreversible purge of eligible recoverable payloads/),
+    ).toBeInTheDocument();
+
+    const confirm = screen.getByRole("button", { name: "Confirm permanent delete" });
+    // Both fields empty -> disabled.
+    expect(confirm).toBeDisabled();
+
+    // A wrong phrase shows the mismatch hint and keeps Confirm disabled even
+    // once the re-auth proof is present.
+    fireEvent.change(screen.getByLabelText(/Type the object name to confirm/), {
+      target: { value: "Wrong Name" },
+    });
+    fireEvent.change(screen.getByLabelText(/Admin re-authentication proof/), {
+      target: { value: "reauth-token" },
+    });
+    expect(
+      screen.getByText("The confirmation phrase must match the object name exactly."),
+    ).toBeInTheDocument();
+    expect(confirm).toBeDisabled();
+
+    // The exact object name unlocks Confirm.
+    fireEvent.change(screen.getByLabelText(/Type the object name to confirm/), {
+      target: { value: "Backtest Alpha" },
+    });
+    expect(confirm).toBeEnabled();
+  });
+
+  it("requests the purge with the confirmation phrase, re-auth proof, OCC and a fresh Idempotency-Key", async () => {
+    const fetchMock = stubApi(BASE_ROUTES);
+    renderPage();
+    await screen.findByText("Backtest Alpha");
+
+    fireEvent.click(screen.getByRole("button", { name: "Permanent Delete" }));
+    fireEvent.change(screen.getByLabelText(/Type the object name to confirm/), {
+      target: { value: "Backtest Alpha" },
+    });
+    fireEvent.change(screen.getByLabelText(/Admin re-authentication proof/), {
+      target: { value: "reauth-token" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Confirm permanent delete" }));
+
+    // doc 20 §9 accepted toast, echoing the captured object name.
+    expect(
+      await screen.findByText(
+        /Permanent deletion was requested for “Backtest Alpha”\. Track the purge status/,
+      ),
+    ).toBeInTheDocument();
+
+    const purgeCall = fetchMock.mock.calls.find(
+      ([url, init]) => String(url).includes("/trash-entries/t_1/purge") && init?.method === "POST",
+    );
+    expect(purgeCall).toBeDefined();
+    const init = purgeCall?.[1] as RequestInit;
+    expect(JSON.parse(String(init.body))).toEqual({
+      confirmation_phrase: "Backtest Alpha",
+      reauth_proof: "reauth-token",
+      // OCC: the body carries the entry's row_version as the expected head.
+      expected_head_revision_id: 4,
+    });
+    expect((init.headers as Record<string, string>)["Idempotency-Key"]).toBeTruthy();
+  });
+
+  it("surfaces a purge rejection verbatim (server re-validates OCC)", async () => {
+    stubApi({
+      ...BASE_ROUTES,
+      "POST /trash-entries/t_1/purge": () => {
+        throw new Error("STALE_REVISION: The resource was modified by someone else.");
+      },
+    });
+    renderPage();
+    await screen.findByText("Backtest Alpha");
+
+    fireEvent.click(screen.getByRole("button", { name: "Permanent Delete" }));
+    fireEvent.change(screen.getByLabelText(/Type the object name to confirm/), {
+      target: { value: "Backtest Alpha" },
+    });
+    fireEvent.change(screen.getByLabelText(/Admin re-authentication proof/), {
+      target: { value: "reauth-token" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Confirm permanent delete" }));
+
+    expect(
+      await screen.findByText("STALE_REVISION: The resource was modified by someone else."),
+    ).toBeInTheDocument();
   });
 });

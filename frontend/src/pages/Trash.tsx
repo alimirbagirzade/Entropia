@@ -9,6 +9,7 @@ import { formatUtc } from "@/lib/backtest";
 import {
   DEFAULT_TRASH_FILTERS,
   purgeStatusTone,
+  useRequestPurge,
   useRestoreEntry,
   useTrashEntries,
   useTrashEntry,
@@ -52,17 +53,20 @@ function useCursorStack() {
 }
 
 // Admin Trash (doc 20 §7): the recoverable soft-deleted index + immutable
-// snapshot detail + OCC restore. Admin-only server-side — a non-Admin sees the
-// 403 envelope verbatim (UI visibility is never authorization, doc 20 §2).
-// Purge (destructive, needs a re-auth proof) is intentionally out of scope for
-// this restore-focused slice; the Restore action is the payoff here.
+// snapshot detail + OCC restore + OCC-guarded Permanent Delete (purge). Every
+// surface is Admin-only server-side — a non-Admin sees the 403 envelope
+// verbatim (UI visibility is never authorization, doc 20 §2). Permanent Delete
+// is a destructive two-phase 202 that requires a second confirmation phrase
+// (the exact object name) AND a re-auth proof (doc 20 §8.3); it is intentionally
+// gated behind an explicit composer, never a one-click table action.
 export function Trash() {
   return (
     <>
       <h1 className="page-title">Trash</h1>
       <p className="page-sub">
         Admin-only recoverable soft-deleted objects · restore returns the object with its
-        original id and revision (no new version)
+        original id and revision (no new version) · Permanent Delete starts an irreversible,
+        retention-checked purge
       </p>
       <TrashCard />
     </>
@@ -73,9 +77,16 @@ function TrashCard() {
   const [filters, setFilters] = useState<TrashFilters>(DEFAULT_TRASH_FILTERS);
   const [draftQ, setDraftQ] = useState("");
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
+  const [purgeTarget, setPurgeTarget] = useState<TrashEntry | null>(null);
+  // The purge 202 return omits display_name (only entity_id/type); capture the
+  // human name at accept time so the toast can echo the object name (doc 20 §9).
+  const [purgedName, setPurgedName] = useState<string | null>(null);
   const pager = useCursorStack();
   const entries = useTrashEntries(filters, pager.cursor);
   const restore = useRestoreEntry();
+  // Purge mutation state lives in the card (not the composer) so the accepted
+  // result survives the composer closing after a successful request.
+  const purge = useRequestPurge();
 
   const applyFilter = (patch: Partial<TrashFilters>) => {
     setFilters((prev) => ({ ...prev, ...patch }));
@@ -165,6 +176,10 @@ function TrashCard() {
                         expected_head_revision_id: entry.row_version,
                       })
                     }
+                    onPurge={() => {
+                      purge.reset();
+                      setPurgeTarget(entry);
+                    }}
                     onDetail={() => setSelectedEntryId(entry.trash_entry_id)}
                     isRestoring={restore.isPending}
                   />
@@ -193,6 +208,44 @@ function TrashCard() {
         </p>
       ) : null}
 
+      {purgeTarget ? (
+        <PurgeComposer
+          entry={purgeTarget}
+          isPurging={purge.isPending}
+          error={purge.isError ? purge.error : null}
+          onCancel={() => {
+            purge.reset();
+            setPurgeTarget(null);
+          }}
+          onConfirm={(confirmationPhrase, reauthProof) =>
+            purge.mutate(
+              {
+                trash_entry_id: purgeTarget.trash_entry_id,
+                confirmation_phrase: confirmationPhrase,
+                reauth_proof: reauthProof,
+                expected_head_revision_id: purgeTarget.row_version,
+              },
+              // The request was accepted (202) — close the composer; the card
+              // keeps `purge.data` so the accepted toast renders below.
+              {
+                onSuccess: () => {
+                  setPurgedName(purgeTarget.display_name);
+                  setPurgeTarget(null);
+                },
+              },
+            )
+          }
+        />
+      ) : null}
+
+      {/* doc 20 §9 Purge accepted toast — verbatim, only after the 202. */}
+      {purge.data ? (
+        <p aria-live="polite" style={{ color: "var(--warn)" }}>
+          Permanent deletion was requested for “{purgedName ?? purge.data.entity_id}”. Track the
+          purge status before leaving this page. (job {purge.data.purge_job_id})
+        </p>
+      ) : null}
+
       {selectedEntryId ? (
         <TrashDetail entryId={selectedEntryId} onClose={() => setSelectedEntryId(null)} />
       ) : null}
@@ -203,11 +256,13 @@ function TrashCard() {
 function TrashRow({
   entry,
   onRestore,
+  onPurge,
   onDetail,
   isRestoring,
 }: {
   entry: TrashEntry;
   onRestore: () => void;
+  onPurge: () => void;
   onDetail: () => void;
   isRestoring: boolean;
 }) {
@@ -230,9 +285,17 @@ function TrashRow({
       </td>
       <td>
         {entry.restore_eligible ? (
-          <button type="button" className="btn" disabled={isRestoring} onClick={onRestore}>
-            Restore
-          </button>
+          <>
+            <button type="button" className="btn" disabled={isRestoring} onClick={onRestore}>
+              Restore
+            </button>{" "}
+            {/* Permanent Delete is eligible on the same recoverable statuses as
+                Restore (the purge command shares _assert_entry_recoverable); it
+                opens the confirmation composer, it never purges on click. */}
+            <button type="button" className="btn btn-danger" onClick={onPurge}>
+              Permanent Delete
+            </button>
+          </>
         ) : (
           <span className="page-sub">not restorable</span>
         )}{" "}
@@ -313,6 +376,102 @@ function TrashDetail({ entryId, onClose }: { entryId: string; onClose: () => voi
         </>
       ) : null}
     </div>
+  );
+}
+
+// Permanent Delete confirmation (doc 20 §8.3, §9): a two-step gate that must
+// collect BOTH the exact object name AND a re-auth proof before the purge
+// command is sent. The Confirm button mirrors the server preconditions
+// (confirmation phrase == the object's display identity + a non-empty re-auth
+// proof); the server re-validates and returns PURGE_CONFIRMATION_INVALID /
+// REAUTH_REQUIRED verbatim if either is wrong.
+function PurgeComposer({
+  entry,
+  isPurging,
+  error,
+  onCancel,
+  onConfirm,
+}: {
+  entry: TrashEntry;
+  isPurging: boolean;
+  error: unknown;
+  onCancel: () => void;
+  onConfirm: (confirmationPhrase: string, reauthProof: string) => void;
+}) {
+  const [confirmationPhrase, setConfirmationPhrase] = useState("");
+  const [reauthProof, setReauthProof] = useState("");
+  // The server checks confirmation_phrase against display_name || entity_id;
+  // the list projection already resolves display_name to that same fallback.
+  const phraseMatches = confirmationPhrase.trim() === entry.display_name;
+  const canConfirm = phraseMatches && reauthProof.trim().length > 0 && !isPurging;
+
+  const onSubmit = (event: FormEvent) => {
+    event.preventDefault();
+    if (canConfirm) onConfirm(confirmationPhrase.trim(), reauthProof.trim());
+  };
+
+  return (
+    <form
+      onSubmit={onSubmit}
+      aria-labelledby="purge-h"
+      style={{
+        marginTop: 16,
+        padding: 12,
+        border: "1px solid var(--down)",
+        borderRadius: 6,
+      }}
+    >
+      <h4 id="purge-h" style={{ marginTop: 0, color: "var(--down)" }}>
+        Permanent Delete
+      </h4>
+      {/* doc 20 §9 permanent delete confirmation copy — verbatim. */}
+      <p className="page-sub" style={{ marginTop: 0 }}>
+        Permanently delete “{entry.display_name}” ({entry.object_type})? This starts an
+        irreversible purge of eligible recoverable payloads. The object cannot be restored after
+        purge. Audit evidence and a minimal tombstone remain. Enter the object name and complete
+        Admin re-authentication to continue.
+      </p>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 420 }}>
+        <label htmlFor="purge-phrase">
+          Type the object name to confirm{" "}
+          <input
+            id="purge-phrase"
+            value={confirmationPhrase}
+            onChange={(event) => setConfirmationPhrase(event.target.value)}
+            placeholder={entry.display_name}
+            autoComplete="off"
+          />
+        </label>
+        <label htmlFor="purge-reauth">
+          Admin re-authentication proof{" "}
+          <input
+            id="purge-reauth"
+            type="password"
+            value={reauthProof}
+            onChange={(event) => setReauthProof(event.target.value)}
+            autoComplete="off"
+          />
+        </label>
+        {confirmationPhrase.trim().length > 0 && !phraseMatches ? (
+          <span className="page-sub" style={{ color: "var(--down)" }}>
+            The confirmation phrase must match the object name exactly.
+          </span>
+        ) : null}
+        <div style={{ display: "flex", gap: 12 }}>
+          <button type="submit" className="btn btn-danger" disabled={!canConfirm}>
+            {isPurging ? "Requesting…" : "Confirm permanent delete"}
+          </button>
+          <button type="button" className="btn" onClick={onCancel} disabled={isPurging}>
+            Cancel
+          </button>
+        </div>
+        {error ? (
+          <p role="alert" style={{ color: "var(--down)", margin: 0 }}>
+            {mutationErrorText(error)}
+          </p>
+        ) : null}
+      </div>
+    </form>
   );
 }
 

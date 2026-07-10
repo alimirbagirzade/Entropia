@@ -76,6 +76,21 @@ export interface RestoreResult {
   correlation_id: string | null;
 }
 
+// Purge request 202 return (mirrors commands/deletion.py request_purge dict
+// verbatim): the target moved to purge_pending and a durable maintenance job
+// is enqueued (doc 20 §8.3). The purge itself runs in the worker — the request
+// only accepts the job.
+export interface PurgeResult {
+  purge_job_id: string;
+  trash_entry_id: string;
+  entity_id: string;
+  entity_type: string;
+  deletion_state: string;
+  purge_status: string;
+  row_version: number;
+  correlation_id: string | null;
+}
+
 // ---------------------------------------------------------------------------
 // Filters — the object_type option list is hydrated from the server response
 // (`meta.object_types`), never a hard-coded client list.
@@ -147,6 +162,55 @@ export function useRestoreEntry() {
       ),
     onSuccess: () => {
       // The root lifecycle changed AND the command emitted an audit event.
+      void queryClient.invalidateQueries({ queryKey: ["trash"] });
+      void queryClient.invalidateQueries({ queryKey: ["audit"] });
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Mutation — request permanent delete / purge (POST /trash-entries/{id}/purge)
+// ---------------------------------------------------------------------------
+
+// Permanent Delete is a two-phase 202 (doc 20 §8.3): the request only moves the
+// target to purge_pending and enqueues a durable maintenance job — the worker
+// re-checks eligibility and tombstones (or returns it to soft_deleted on
+// failure). The command requires BOTH a second confirmation and a re-auth
+// proof:
+//   - confirmation_phrase must equal the object's display identity
+//     (display_name || entity_id) or the server rejects with
+//     PURGE_CONFIRMATION_INVALID — never started.
+//   - reauth_proof must be a non-empty token from a completed Admin
+//     re-authentication step (V1 contract: presence only; full MFA is out of
+//     scope, doc 20 §0) or the server rejects with REAUTH_REQUIRED.
+// OCC: expected_head_revision_id carries the entry's row_version (body token
+// wins over If-Match, doc 20 §14) so a stale tab gets STALE_REVISION verbatim
+// instead of purging a moved target. A fresh Idempotency-Key per attempt keeps
+// a retry after a rejection a new decision, not a replay (a duplicate submit
+// with the SAME key returns the same job, doc 20 §9.3).
+export function useRequestPurge() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      trash_entry_id: string;
+      confirmation_phrase: string;
+      reauth_proof: string;
+      expected_head_revision_id: number;
+    }) =>
+      apiRequest<PurgeResult>(
+        `/trash-entries/${encodeURIComponent(input.trash_entry_id)}/purge`,
+        {
+          method: "POST",
+          headers: { "Idempotency-Key": crypto.randomUUID() },
+          body: {
+            confirmation_phrase: input.confirmation_phrase,
+            reauth_proof: input.reauth_proof,
+            expected_head_revision_id: input.expected_head_revision_id,
+          },
+        },
+      ),
+    onSuccess: () => {
+      // The target moved to purge_pending AND the command emitted an audit event.
       void queryClient.invalidateQueries({ queryKey: ["trash"] });
       void queryClient.invalidateQueries({ queryKey: ["audit"] });
     },

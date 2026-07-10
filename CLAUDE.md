@@ -105,9 +105,13 @@ Before stopping a working session, produce **ALL** of the following:
   (create[DR3 market-link]/upload/finalize/analysis), 6/14 endpoints bound (PR #107, MERGED)
   + TIER 2 frontend Research Data revision lifecycle actions — revise/time-policy/field+feature
   defs/Admin approve+revoke (OCC If-Match "rv-N")/agent+evidence bundles (pure read), 14/14 endpoints
-  bound → Packages & Data group fully bound (PR #109, MERGED)**.
-  **Overall: ~94% complete** (V1=100%, post-V1 core=88%, frontend=93%).
-  `main` after PR #109 (`32d07e4`; Research Data lifecycle-actions feat `2e488dc` MERGED; Research Data page feat `5049f4e` MERGED; Market Data lifecycle-actions feat `d2a9ada` MERGED; Market Data lifecycle-actions feat `d2a9ada` MERGED; Market Data page feat `0ca0468` MERGED; Rationale Families feat `20ccacc` MERGED; Embedded feat `5bf633a` MERGED; Embedded feat `5bf633a` MERGED; Package Library feat `53394fe` MERGED; capability-POSTs feat `652dfde` MERGED; CP-actions/Pre-Check feat `e8f8982` MERGED; CP-create-page feat `79fbd24` MERGED; CP-Gen candidate-generation feat `5cc62cc` MERGED; auth-invalidation feat MERGED (PR #88); trash-page feat `3ccb50d` MERGED; provisioning-dashboard feat `b56f621` MERGED; capability-page feat `3d7977e` MERGED; history-compare feat `491ac03` MERGED; panel-page feat `726ffcc` MERGED; first-Admin bootstrap feat `a53cf34` MERGED; live-pages feat `499bd8b` MERGED; backtest-pages feat `10a0007` MERGED; metrics feat `d3039e7` MERGED; login feat `58781e4` MERGED; SSE feat `5ddb14f` MERGED; position_size_limits feat `5ef5525`; Kelly feat `3f254bc` / non-finite fail-closed fix `3a92e7d`; VWAP code `d27b2bb`; N-ary code `44099a7`; per-condition code `1c5cca0`; multi-timeframe code `def6c28`; indicator-vs-indicator code `9087c2b`; condition-extensions code `361df4c`; condition-blocks code `8766fae`; risk_based code `43cee29`; Slice C code `671d227`);
+  bound → Packages & Data group fully bound (PR #109, MERGED)
+  + TIER 2 frontend Backtest Ready Check page — routes/readiness.py (doc 14 §4/§7/§9) bound to
+  /backtest/ready-check; OCC token is the composition FINGERPRINT carried BODY-form as
+  expected_fingerprint (NOT "rv-N"/If-Match) + fresh Idempotency-Key; success invalidates
+  ["readiness"]+["mainboard"] (PR #111, MERGED)**.
+  **Overall: ~94% complete** (V1=100%, post-V1 core=88%, frontend=94%).
+  `main` after PR #111 (`946b6cf`; Ready Check feat `6232486` MERGED; Research Data lifecycle-actions feat `2e488dc` MERGED; Research Data page feat `5049f4e` MERGED; Market Data lifecycle-actions feat `d2a9ada` MERGED; Market Data lifecycle-actions feat `d2a9ada` MERGED; Market Data page feat `0ca0468` MERGED; Rationale Families feat `20ccacc` MERGED; Embedded feat `5bf633a` MERGED; Embedded feat `5bf633a` MERGED; Package Library feat `53394fe` MERGED; capability-POSTs feat `652dfde` MERGED; CP-actions/Pre-Check feat `e8f8982` MERGED; CP-create-page feat `79fbd24` MERGED; CP-Gen candidate-generation feat `5cc62cc` MERGED; auth-invalidation feat MERGED (PR #88); trash-page feat `3ccb50d` MERGED; provisioning-dashboard feat `b56f621` MERGED; capability-page feat `3d7977e` MERGED; history-compare feat `491ac03` MERGED; panel-page feat `726ffcc` MERGED; first-Admin bootstrap feat `a53cf34` MERGED; live-pages feat `499bd8b` MERGED; backtest-pages feat `10a0007` MERGED; metrics feat `d3039e7` MERGED; login feat `58781e4` MERGED; SSE feat `5ddb14f` MERGED; position_size_limits feat `5ef5525`; Kelly feat `3f254bc` / non-finite fail-closed fix `3a92e7d`; VWAP code `d27b2bb`; N-ary code `44099a7`; per-condition code `1c5cca0`; multi-timeframe code `def6c28`; indicator-vs-indicator code `9087c2b`; condition-extensions code `361df4c`; condition-blocks code `8766fae`; risk_based code `43cee29`; Slice C code `671d227`);
   alembic head = **`0021_local_auth`** (`human_credentials` + `auth_sessions`;
   Slices A/B/C + follow-ups (a)/(b)/(b2)/(#53)/(c)/(i)/(ii)/(d) + Kelly sizing + position_size_limits + first-Admin bootstrap + bootstrap-status read endpoint + CP-Gen deterministic candidate generation need no migration). **1048 tests green** (1015 + 13 first-Admin bootstrap [env-unset baseline / match+no-admin → Admin+audit+outbox / active-Admin fail-closed / non-matching baseline / case+whitespace normalization / settings env read / route pass-through] + 8 bootstrap-status read endpoint: unit configured-flag + integration window open/closed vs a real DB + route reads the setting + 12 CP-Gen candidate generation: reproducibility / order-independence / output_contract+resolved_refs hash sensitivity / GENERATOR_VERSION namespace shift / fail-closed directional→ta.* + condition→cond.* + empty-resolved skip / output_type alias / DESCRIPTION uncertainty / test_plan dep listing).
   TIER 2 frontend — real-auth login/signup/logout (PR #65, MERGED): **FRONTEND-ONLY**
@@ -660,12 +664,51 @@ Before stopping a working session, produce **ALL** of the following:
     actions (revise/successor + Admin approve/deprecate — If-Match `"rv-N"` OCC + Idempotency-Key)
     are the NATURAL FOLLOW-UP slice (detail `row_version` token ready); raw bytes never travel
     through the page (evidence row pins object key + digest); analysis job id informational
-    (`["jobs"]` list surface permanently absent). **Remaining TIER 2:** the Market Data lifecycle
-    ACTIONS follow-up (natural next) + the 8 remaining placeholder pages, ALL with landed V1
-    backend surfaces (`research_data.py` Research Data — closes the Packages & Data group /
-    `strategy.py` / `trading_signal.py` / `trade_log.py` / outsource-signal / `allocation.py`
-    Portfolio / `readiness.py` Ready Check / `manual.py` User Manual) + ESP/Library registry
-    mutation slices.
+    (`["jobs"]` list surface permanently absent). Lifecycle ACTIONS landed next in PR #105.
+  - ✅ **Market Data lifecycle actions (PR #105, MERGED)** — closes the PR #103 boundary: the 4
+    unbound lifecycle endpoints wired → 10/10. EMPIRICAL (route signatures READ — the handoff
+    summary was WRONG): successor + deprecate read NO If-Match/Idempotency-Key; only revisions +
+    approve carry both; approve + deprecate Admin-only. NEW `postWithOcc(path, rowVersion, body)`
+    helper (If-Match `"rv-N"` + fresh Idempotency-Key); `LifecycleSection` composers in
+    `pages/MarketData.tsx`; +6 vitest → 146.
+  - ✅ **Research Data page (PR #107, MERGED)** — `/research-data` real page: role-aware read
+    surface + owner ingest chain (create[DR3 market-link]/upload start+finalize/durable 202
+    analysis), 6/14 endpoints. EMPIRICAL: create + upload-start read NO Idempotency-Key;
+    finalize/analysis fresh key per attempt. NEW `lib/researchData.ts` + `pages/ResearchData.tsx`;
+    +11 vitest → 157.
+  - ✅ **Research Data lifecycle actions (PR #109, MERGED)** — the remaining 8 endpoints wired →
+    14/14, **Packages & Data group fully bound**. revise/approve/revoke via `postWithOcc`
+    (If-Match `"rv-N"` + Idem); time-policy/field/feature defs NO headers; agent + evidence bundle
+    compilers PURE READ (no Idem, no invalidation, content-addressed `bundle_hash`); approve/revoke
+    Admin-only (`APPROVAL_REQUIRES_ADMIN` verbatim). NEW `components/ResearchLifecycle.tsx` 6
+    composers; +11 vitest → 168.
+  - ✅ **Backtest Ready Check page (PR #111, MERGED)** — `/backtest/ready-check` real page binding
+    `routes/readiness.py` (doc 14 §4/§7/§9) — the strategy→RUN gate of the Backtest group
+    (RUN/History bound since PR #72). NEW `lib/readiness.ts` (wire types `ReadinessIssue`/
+    `ReadinessSummary`/`ReadinessReport`/`CurrentReadiness`/`RunCheckResult`; enums.py mirrors
+    `READINESS_STATE_LABELS`/`READINESS_STATE_TONES` + `NOT_CHECKED_STATE` +
+    `readinessStateLabel`/`readinessStateTone`/`severityTone`; `["readiness"]` hooks — no dedicated
+    SSE event, swept by `resource.changed`: `useCurrentReadiness`/`useReadinessReport`/
+    `useRunReadinessCheck`). EMPIRICAL route finding (signature READ): the OCC token is NOT
+    `"rv-N"` — it is the composition FINGERPRINT, carried BODY-form as `expected_fingerprint`
+    (not If-Match; the route's `_resolve_expected` prefers the body) + fresh Idempotency-Key per
+    attempt; 409 `CompositionStale` = RC-09 verbatim; success invalidates `["readiness"]` +
+    `["mainboard"]` (the default-Mainboard `ready_summary` moves). NEW `pages/ReadyCheck.tsx` —
+    two modes: `?report=<id>` immutable deep-link + default workbench (`useDefaultMainboard`
+    composition → current readiness → guard-toggled run); stale ("re-run") vs superseded ("a newer
+    report exists") distinction from SERVER `state` (`state === "stale"`), never re-derived —
+    self-review found + fixed the `stored_state !== state` bug (showed "stale" for superseded too)
+    + regression test. `App.tsx` REAL_PATHS 17→18; `nav.ts` UNCHANGED (24). NEW
+    `test/readyCheck.test.tsx` +6 (apiStub ORDERED; `findBy*` for chained loading —
+    composition→readiness second wave) → **frontend 168 → 174**; frontend-only, no migration,
+    backend stays 1048. Honest boundary: RUN admission (`POST /backtest-runs`) stays on the RUN
+    page (doc 14 §9.3 scope); the page reads only the default Mainboard composition (RUN-page
+    pattern; a real Stage-3 Mainboard page may lift it app-level). **Remaining TIER 2:** 6
+    placeholder pages, ALL with landed V1 backend surfaces — Backtest `allocation.py` Portfolio
+    (`/portfolio`, editor of the allocation draft Ready Check reads — **CONFIRMED NEXT**, user
+    2026-07-10), Workspace `strategy.py` Strategy Details / `trading_signal.py` / `trade_log.py` /
+    outsource-signal, Docs `manual.py` User Manual — plus the ESP/Library registry MUTATION slices
+    (Admin-only, `X-Registry-Version` OCC).
   
   **TIER 3 — Data/ops (deferred, optional for MVP):**
   - Retention auto-purge (strategy/backtest history cleanup)

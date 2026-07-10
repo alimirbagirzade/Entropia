@@ -1438,7 +1438,49 @@ pure read (oluşan bundle'ın kalıcı read yüzeyi yok — command return + `bu
 SSE event'i yok (`resource.changed` süpürür). **`routes/research_data.py` yüzeyi artık TAM bağlı
 (14/14) — Packages & Data grubu tamamen kapandı.**
 
-## Next: post-V1 (continued) — TIER 2 (… + Market Data page + Market Data lifecycle actions + Research Data page + Research Data lifecycle actions landed; **7 placeholder pages** [Workspace strategy/trading_signal/trade_log/outsource-signal, Backtest allocation Portfolio + readiness Ready Check, Docs manual User Manual] + ESP/Library registry mutation slices + TIER 3 remain)
+## Stage post-V1 TIER 2 — Backtest Ready Check page landed (PR #111)
+
+**FRONTEND-ONLY (4 files, +748 lines)** — backend UNCHANGED (**1048** stays), no migration, alembic
+head `0021_local_auth`, `ENGINE_VERSION` unchanged. The `/backtest/ready-check` placeholder becomes
+the real page binding `routes/readiness.py` (doc 14 §4/§7/§9) — the strategy→RUN gate of the
+Backtest group (RUN/History already bound since PR #72). main = `946b6cf` (Merge #111), feat
+`6232486`. CI 3/3 green; self-review found + fixed 1 bug (stale flag, below). **frontend 168 → 174**
+(+6 vitest).
+
+**AMPİRİK route bulgusu (imza OKUNDU):** OCC token `"rv-N"` DEĞİL — composition **FINGERPRINT**.
+`POST /mainboard-compositions/{id}/readiness-checks` `expected_fingerprint`'i **BODY-form** taşır
+(If-Match değil; route `_resolve_expected` body'yi öncelikler) + deneme başına taze
+`Idempotency-Key`; 409 `CompositionStale` = RC-09 verbatim. Success `["readiness"]` + `["mainboard"]`
+İKİSİNİ de invalidate eder (default-Mainboard `ready_summary` hareket eder).
+
+**Reuse anchor'ları (kesin semboller):**
+- **`lib/readiness.ts` (yeni):** wire tipleri `ReadinessIssue`/`ReadinessSummary`/`ReadinessReport`/
+  `CurrentReadiness`/`RunCheckResult`; `enums.py` aynaları `READINESS_STATE_LABELS`/
+  `READINESS_STATE_TONES` + `NOT_CHECKED_STATE` + `readinessStateLabel`/`readinessStateTone`/
+  `severityTone`; `["readiness"]` hook'ları (özel SSE YOK — `resource.changed` süpürür):
+  `useCurrentReadiness(compositionId)` / `useReadinessReport(reportId)` / `useRunReadinessCheck`
+  (`expected_fingerprint` body + taze `Idempotency-Key`; success `["readiness"]`+`["mainboard"]`
+  invalidate).
+- **`pages/ReadyCheck.tsx` (yeni):** iki mod — `?report=<id>` immutable deep-link + default
+  workbench (`useDefaultMainboard` composition → current readiness → guard toggle'lı run). Report
+  kartı state badge + summary counts + issues tablosu verbatim; non-current raporda stale
+  ("re-run") vs superseded ("a newer report exists") ayrımı SERVER `state`'inden
+  (`state === "stale"`), asla client'ta yeniden türetilmez.
+- **SELF-REVIEW BUG (bulundu + düzeltildi):** stale bayrağı `stored_state !== state` ile
+  hesaplanıyordu → superseded raporda da true olur, yanlış "re-run" gösterirdi → `state === "stale"`
+  karşılaştırmasına düzeltildi + regression testi.
+- **`App.tsx`:** `/backtest/ready-check` REAL_PATHS 17→18 + gerçek Route (`nav.ts` UNCHANGED — 24;
+  item zaten placeholder'dı). **Testler:** NEW `test/readyCheck.test.tsx` +6 (apiStub SIRALI;
+  zincirleme yükleme için `findBy*` — composition→readiness ikinci dalga, senkron `getBy*` erken
+  çalışıyordu).
+
+**Dürüst sınır:** RUN admission (`POST /backtest-runs`) RUN sayfasında kalır (doc 14 §9.3 scope);
+readiness'in özel SSE event'i yok (`resource.changed` süpürür); sayfa yalnız default Mainboard
+composition'ını okur (RUN sayfası deseni; Stage 3 gerçek Mainboard sayfası app-level'a taşıyabilir).
+**Backtest grubunda kalan tek placeholder: `/portfolio` (allocation.py) — Ready Check'in okuduğu
+allocation draft'ının editörü, doğal sıradaki slice (kullanıcı 2026-07-10 teyit etti).**
+
+## Next: post-V1 (continued) — TIER 2 (… + Market Data page + lifecycle actions + Research Data page + lifecycle actions + Backtest Ready Check page landed; **6 placeholder pages** [Workspace strategy/trading_signal/trade_log/outsource-signal, Backtest allocation Portfolio — CONFIRMED NEXT, Docs manual User Manual] + ESP/Library registry mutation slices + TIER 3 remain)
 
 **V1 COMPLETE (Stages 0–8, docs 01–22) + Auth/IdP + Parquet Slice A + Backtest Engine Slice B + real indicator compute Slice C + `risk_based` sizing (a) + condition blocks (b) + condition extensions (b2) + two-package indicator-vs-indicator + higher-timeframe resampling (c) + per-condition multi-TF reference (i) + N-ary reference chain (ii) + VWAP directional key (d) + `formula_based` Kelly sizing + `position_size_limits` min/max cap (PR #63) landed (1015 tests).** The **Slice C indicator-compute + position-sizing follow-ups are now EFFECTIVELY COMPLETE — TIER 1 backend is DONE**:
 

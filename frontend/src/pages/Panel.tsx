@@ -5,6 +5,7 @@ import { ErrorState } from "@/components/ErrorState";
 import { Loading } from "@/components/Loading";
 import { StatusBadge } from "@/components/StatusBadge";
 import {
+  dataJobKindLabel,
   DEFAULT_LOG_FILTERS,
   LOG_ACTOR_TYPES,
   LOG_FAMILIES,
@@ -14,9 +15,11 @@ import {
   useAssignRole,
   useAuditEvents,
   useLogEvent,
+  useRedeliverDataQueue,
   useRegisteredUsers,
   useRoleMatrix,
   useSystemActors,
+  type DataQueueRedeliverResult,
   type LogEventRow,
   type LogFamily,
   type LogFilters,
@@ -62,7 +65,121 @@ export function Panel() {
       <RoleMatrixCard />
       <LogsCard />
       <AuditStreamCard />
+      <OperatorRecoveryCard />
     </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Operator recovery — data-queue redelivery (INF-03, doc 20 §6)
+// ---------------------------------------------------------------------------
+
+// The multi-actor `data` queue is deliberately excluded from the scheduler's
+// auto-redelivery (the row alone cannot say which of the four actors a stuck job
+// belongs to), so re-dispatch is an explicit operator action. This card
+// lists+routes the jobs still QUEUED past the grace window back to their actor
+// via the payload `job_kind`; legacy rows without a discriminator are reported as
+// skipped, never guessed. Admin-only server-side — a non-Admin sees the 403
+// envelope verbatim.
+function OperatorRecoveryCard() {
+  // Blank = the server's configured grace window; "0" sweeps every QUEUED data
+  // job. The server validates (ge=0) and re-derives everything — this is a hint.
+  const [graceInput, setGraceInput] = useState("");
+  const redeliver = useRedeliverDataQueue();
+
+  const trimmed = graceInput.trim();
+  const graceNum = Number(trimmed);
+  const graceInvalid = trimmed !== "" && (!Number.isInteger(graceNum) || graceNum < 0);
+
+  const onSubmit = (event: FormEvent) => {
+    event.preventDefault();
+    if (graceInvalid) return;
+    redeliver.mutate({ grace_seconds: trimmed === "" ? null : graceNum });
+  };
+
+  return (
+    <section className="card" aria-labelledby="recovery-h">
+      <h3 id="recovery-h" style={{ marginTop: 0 }}>
+        Operator recovery — data queue
+      </h3>
+      <p className="page-sub">
+        Re-dispatch durable <code>data</code>-queue jobs still QUEUED past the redeliver grace
+        window. The multi-actor data queue is not auto-redelivered by the scheduler — each stuck
+        job is routed back to its actor via the payload <code>job_kind</code>. Redelivery is
+        idempotent; the durable rows are untouched.
+      </p>
+      <form
+        onSubmit={onSubmit}
+        style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "flex-end" }}
+      >
+        <label htmlFor="grace-seconds">
+          Grace seconds{" "}
+          <input
+            id="grace-seconds"
+            inputMode="numeric"
+            value={graceInput}
+            onChange={(event) => setGraceInput(event.target.value)}
+            placeholder="default window"
+          />
+        </label>
+        <button type="submit" className="btn" disabled={redeliver.isPending || graceInvalid}>
+          Redeliver stuck jobs
+        </button>
+      </form>
+      <p className="page-sub" style={{ marginBottom: 0 }}>
+        Leave blank for the configured window; <code>0</code> sweeps every QUEUED data job.
+      </p>
+      {graceInvalid ? (
+        <p role="alert" style={{ color: "var(--down)", marginBottom: 0 }}>
+          Grace seconds must be a whole number of seconds (0 or greater).
+        </p>
+      ) : null}
+      {redeliver.isError ? (
+        <p role="alert" style={{ color: "var(--down)", marginBottom: 0 }}>
+          {mutationErrorText(redeliver.error)}
+        </p>
+      ) : null}
+      {redeliver.data ? <RedeliverResult result={redeliver.data} /> : null}
+    </section>
+  );
+}
+
+function RedeliverResult({ result }: { result: DataQueueRedeliverResult }) {
+  return (
+    <div aria-live="polite" style={{ marginTop: 12 }}>
+      <p style={{ marginBottom: 8 }}>
+        Scanned {result.scanned} stuck {result.scanned === 1 ? "job" : "jobs"} · re-dispatched{" "}
+        {result.redeliverable.length} · skipped {result.skipped_unknown_kind} un-routable.
+      </p>
+      {result.redeliverable.length > 0 ? (
+        <table className="metrics-table">
+          <thead>
+            <tr>
+              <th scope="col">Job kind</th>
+              <th scope="col">Job id</th>
+            </tr>
+          </thead>
+          <tbody>
+            {result.redeliverable.map((item) => (
+              <tr key={item.job_id}>
+                <td>{dataJobKindLabel(item.job_kind)}</td>
+                <td>
+                  <code>{item.job_id}</code>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : (
+        <EmptyState title="No routable data-queue jobs past the grace window" />
+      )}
+      {result.skipped_unknown_kind > 0 ? (
+        <p className="page-sub" style={{ marginBottom: 0 }}>
+          {result.skipped_unknown_kind} legacy row(s) carry no <code>job_kind</code> discriminator
+          and were left untouched (never guessed).
+        </p>
+      ) : null}
+    </div>
   );
 }
 

@@ -280,4 +280,86 @@ describe("Panel / Management / Logs page", () => {
       screen.getByText("FORBIDDEN: Admin Panel requires the Admin role."),
     ).toBeInTheDocument();
   });
+
+  it("redelivers stuck data-queue jobs and renders the routable result", async () => {
+    const fetchMock = stubApi({
+      ...BASE_ROUTES,
+      "POST /admin/data-queue/redeliver": {
+        scanned: 3,
+        redeliverable: [
+          { job_kind: "market_data_analysis", job_id: "job_1" },
+          { job_kind: "trade_log_import", job_id: "job_2" },
+        ],
+        skipped_unknown_kind: 1,
+      },
+    });
+    renderPage();
+    await screen.findByText("alice");
+
+    fireEvent.click(screen.getByRole("button", { name: "Redeliver stuck jobs" }));
+
+    expect(
+      await screen.findByText(
+        /Scanned 3 stuck jobs · re-dispatched 2 · skipped 1 un-routable\./,
+      ),
+    ).toBeInTheDocument();
+    // job_kind labels come from the server-mirrored taxonomy, not raw wire values.
+    expect(screen.getByText("Market data analysis")).toBeInTheDocument();
+    expect(screen.getByText("Trade Log import")).toBeInTheDocument();
+    expect(screen.getByText("job_1")).toBeInTheDocument();
+    // A blank grace input → the POST carries no query param (server default window).
+    const postCall = fetchMock.mock.calls.find(
+      ([url, init]) =>
+        String(url).includes("/admin/data-queue/redeliver") && init?.method === "POST",
+    );
+    expect(postCall).toBeDefined();
+    expect(String(postCall?.[0])).not.toContain("grace_seconds");
+  });
+
+  it("sweeps every queued data job with grace_seconds=0 and shows the empty result", async () => {
+    const fetchMock = stubApi({
+      ...BASE_ROUTES,
+      "POST /admin/data-queue/redeliver": {
+        scanned: 0,
+        redeliverable: [],
+        skipped_unknown_kind: 0,
+      },
+    });
+    renderPage();
+    await screen.findByText("alice");
+
+    fireEvent.change(screen.getByLabelText(/Grace seconds/), { target: { value: "0" } });
+    fireEvent.click(screen.getByRole("button", { name: "Redeliver stuck jobs" }));
+
+    await waitFor(() => {
+      const swept = fetchMock.mock.calls.find(
+        ([url, init]) =>
+          String(url).includes("/admin/data-queue/redeliver?grace_seconds=0") &&
+          init?.method === "POST",
+      );
+      expect(swept).toBeDefined();
+    });
+    // No routable rows → the empty state, never a fabricated row.
+    expect(
+      await screen.findByText("No routable data-queue jobs past the grace window"),
+    ).toBeInTheDocument();
+  });
+
+  it("blocks redelivery for a negative or non-integer grace value", async () => {
+    const fetchMock = stubApi(BASE_ROUTES);
+    renderPage();
+    await screen.findByText("alice");
+
+    fireEvent.change(screen.getByLabelText(/Grace seconds/), { target: { value: "-5" } });
+
+    expect(screen.getByRole("button", { name: "Redeliver stuck jobs" })).toBeDisabled();
+    expect(
+      screen.getByText("Grace seconds must be a whole number of seconds (0 or greater)."),
+    ).toBeInTheDocument();
+    // The invalid value never reaches the server.
+    const posted = fetchMock.mock.calls.some(([url, init]) =>
+      String(url).includes("/admin/data-queue/redeliver") && init?.method === "POST",
+    );
+    expect(posted).toBe(false);
+  });
 });

@@ -3,6 +3,50 @@
 > **Amaç:** V1 kapandı (Stage 0–8 COMPLETE). Bu doküman post-V1 durumunu, aday iş listesini
 > ve temiz oturumda yapıştırılacak resume prompt'u içerir.
 
+## Durum (2026-07-10, TIER 2 frontend — ESP registry mutation actions; PR #121 MERGED)
+
+**FRONTEND-ONLY (3 edit, +720/−15 satır)** — backend DEĞİŞMEDİ (1048 sabit), migration YOK,
+alembic head `0021_local_auth` SABİT, `ENGINE_VERSION` SABİT. `routes/esp.py`'nin 3 mutasyon
+endpoint'i mevcut `/packages/embedded` sayfasına bağlandı (okuma yüzeyi #99'daydı) →
+**`esp.py` yüzeyi TAM** (`library.py` zaten 2/2 → Packages & Data grubunda bağlanmamış endpoint
+KALMADI). Propose (create) CANDIDATE + Admin-only activate/deprecate. Frontend 208 → **213**
+(+5 vitest). main = `45e615b` (Merge #121), feat `b692aaa`. CI 3/3 yeşil; self-review 0
+CRITICAL/HIGH.
+
+**AMPİRİK route haritası (imzalar OKUNDU):** create (201) OCC'siz + Idem'siz + Admin-gate'siz
+(herhangi authenticated actor CANDIDATE önerir, doc 09 §5); activate + deprecate
+**X-Registry-Version HEADER-form DÜZ INT OCC** (If-Match `"rv-N"` DEĞİL; kaynak
+`detail.registry.registry_version`) + taze Idempotency-Key/deneme + Admin-only
+(`ensure_can_activate`/`_deprecate` command katmanında — UI asla pre-gate etmez). Stale → 409
+`RESOLVER_REGISTRY_CONFLICT`; non-Admin → 403 `APPROVAL_REQUIRES_ADMIN` — ikisi de verbatim.
+State-machine UI hint: activate yalnız `candidate`'ten, deprecate yalnız `trusted_active`'ten
+(`canActivate`/`canDeprecate` — `domain/esp/state_machine.py` aynası); server geçişi VE gate'i
+yeniden doğrular. Invalidation: `["esp"]`+`["audit"]`; özel SSE yok → `resource.changed` süpürür.
+
+**Reuse anchor'ları:** `lib/esp.ts` genişletildi — `CreateEspResult`/`ActivateResolverResult`/
+`DeprecateResolverResult` + input tipleri, `VISIBILITY_SCOPES` mirror, `postWithRegistryVersion`
+helper (X-Registry-Version + taze Idem), `useCreateEsp`/`useActivateResolver`/
+`useDeprecateResolver`, `canActivate`/`canDeprecate` · `pages/Embedded.tsx` —
+`ProposeResolverCard` (`parseSignatureParams` REUSE; key + [params VEYA return] yoksa disabled) +
+detail `LifecycleActions` (`ActivateComposer` head-default / `DeprecateComposer` reason ZORUNLU) ·
+`test/embedded.test.tsx` +5 (2 mevcut probe testi `within(region)` scope — Propose aynı
+label'ları kullanıyor). `App.tsx`/`nav.ts` DEĞİŞMEDİ (Embedded zaten route'luydu).
+
+**Dürüst sınır:** gelişmiş kontrat alanları (`input_contract`/`output_contract`/
+`dependency_snapshot`/`evidence`) propose formunda yok — server default (`{}`/null); activation
+default head revision'ı trust eder (düzenlenebilir; server ownership + head'liği yeniden
+doğrular); ESP'nin özel SSE event'i yok (kalıcı).
+
+**SIRADAKİ İŞ (BAŞLARKEN kullanıcıyla TEYİT ET):** **outsource-signal** — Workspace'in (ve TIER 2
+sayfa haritasının) SON placeholder'ı; DİKKAT AMPİRİK: backend'de "outsource" stringi yalnız
+`shared/errors.py:624` YORUMUNDA geçiyor — ayrı router YOK; doc 03
+(`docs/spec/03_Entropia_V18_Add_Outsource_Signal_Page_Documentation_v1_1.md`) akışı büyük
+olasılıkla TS/TL yüzeylerini reuse eden bir kompozisyon sayfası → SLICE'A BAŞLAMADAN doc 03'ü OKU
+ve gerçek yüzeyi tespit et (yeni backend slice'ı gerekebilir — kapsamı kullanıcıyla netleştir).
+TIER 3 deferred.
+
+---
+
 ## Durum (2026-07-10, TIER 2 frontend — Trading Signal & Trade Log ikiz sayfaları; PR #119 MERGED)
 
 **FRONTEND-ONLY (6 yeni + 1 edit, +2690 satır)** — backend DEĞİŞMEDİ (1048 sabit), migration YOK,
@@ -1676,77 +1720,78 @@ tarihsel referans** olarak duruyor.
 ## ⤵️ YENİ OTURUMDA YAPIŞTIR (resume prompt)
 
 ```
-Entropia — post-V1 TIER 2 devam. STALE-BY-DEFAULT: Trading Signal & Trade Log ikizleri (PR #119)
-+ kapanış docs (PR #120) MERGE EDİLDİ varsayma, git'ten doğrula.
+Entropia — post-V1 TIER 2 devam. STALE-BY-DEFAULT: ESP registry mutation actions (PR #121)
++ kapanış docs (PR #122) MERGE EDİLDİ varsayma, git'ten doğrula.
 
 ÖNCE DOĞRULA: git fetch && git log --oneline origin/main -6 && gh pr list --state all -L 8.
-main = 7fd70dd (Merge #119) olmalı; docs #120 merge sonrası daha ileri (açıksa önce merge iste).
+main = 45e615b (Merge #121) olmalı; docs #122 merge sonrası daha ileri (açıksa önce merge iste).
 alembic head 0021_local_auth (DEĞİŞMEDİ); ENGINE_VERSION = backtest-engine-v2-position-size-limits
-(DEĞİŞMEDİ). Backend 1048 test, frontend 208. Yeni branch'i MUTLAKA origin/main'den aç.
+(DEĞİŞMEDİ). Backend 1048 test, frontend 213. Yeni branch'i MUTLAKA origin/main'den aç.
 
-ÖNCE OKU (authority order): docs/POST_V1_KICKOFF.md (en üst "Durum" bloğu — PR #119 + "SIRADAKİ İŞ
-ADAYLARI" + en alttaki resume) → docs/STAGE2_HANDOFF.md ("Trading Signal & Trade Log pages landed
-(PR #119)" + "## Next") → CLAUDE.md "Current position".
+ÖNCE OKU (authority order): docs/POST_V1_KICKOFF.md (en üst "Durum" bloğu — PR #121 + "SIRADAKİ İŞ"
++ en alttaki resume) → docs/STAGE2_HANDOFF.md ("ESP registry mutation actions landed (PR #121)" +
+"## Next") → CLAUDE.md "Current position".
 
-DURUM: TIER 1 backend EFEKTİF TAMAM. Packages & Data TAM; Backtest KAPANDI; Docs KAPANDI;
-Workspace'te Strategy Details #117 + Trading Signal & Trade Log ikizleri #119 landed (YENİ —
-routes/trading_signal.py + trade_log.py 6+6 endpoint /trading-signal + /trade-log'a bağlandı;
-lib/tradingSignal.ts + lib/tradeLog.ts; AMPİRİK: 4 POST'un HEPSİ taze Idempotency-Key okur; TEK
-OCC token /revisions'ta BODY-form expected_head_revision_id STR [server'da optional — client HER
-ZAMAN rendered head'i gönderir; stale → 409]; create/upload/import OCC'siz; workspace_id HİÇ
-gönderilmez [server default Mainboard'ı çözer]; İKİZ FARKLAR: report kanıtı
-normalized_event_revision_id (TS) vs record_batch_revision_id (TL) + TL available_time HER ZAMAN
-null [historical, doc 05 §10.4] + config TS time_policy+event_model vs TL time_model; import
-report ["jobs","<kind>-import",jobId] anahtarında — job.updated SSE anahtarının İLK sayfa
-bağlaması, terminal-stop poll TERMINAL_IMPORT_STATUSES; create-with-attach
-["mainboard"]+["readiness"] invalidate; revisions ASLA auto-repin yapmaz; Pin/delete Mainboard
-router'ında [CR-01/TL-01]; App.tsx REAL_PATHS 21→23, nav 24 sabit; +11 vitest → 208). Önceki
-landed: login #65, SSE #67, /v1/metrics #69, RUN/History #72, Arrange Metrics + Analysis Lab #74,
-Panel #78, compare/rebind #80, Future Dev #82, provisioning #84, Trash #86, auth-invalidation #88,
-CP #91/#93, capability POST'ları #95, Library #97, ESP read #99, Rationale #101, Market Data
-#103/#105, Research Data #107/#109, Ready Check #111, Portfolio #113, User Manual #115, Strategy
-#117. BACKEND: first-Admin bootstrap #76 + bootstrap-status #84 + CP-Gen #89 (LLM YOK).
+DURUM: TIER 1 backend EFEKTİF TAMAM. Packages & Data TAM (esp.py dahil — #121 ile bağlanmamış
+endpoint KALMADI); Backtest KAPANDI; Docs KAPANDI; Workspace'te Strategy #117 + TS/TL ikizleri
+#119 + ESP registry mutation'ları #121 landed (YENİ — routes/esp.py create/activate/deprecate
+mevcut /packages/embedded sayfasına bağlandı; lib/esp.ts genişletildi; AMPİRİK: create OCC'siz +
+Idem'siz + Admin-gate'siz [herhangi authenticated → CANDIDATE, doc 09 §5]; activate + deprecate
+X-Registry-Version HEADER-form DÜZ INT OCC [If-Match "rv-N" DEĞİL; kaynak
+detail.registry.registry_version] + taze Idempotency-Key + Admin-only [command katmanında —
+UI pre-gate etmez]; stale → 409 RESOLVER_REGISTRY_CONFLICT, non-Admin → 403
+APPROVAL_REQUIRES_ADMIN verbatim; state-machine hint canActivate[candidate]/
+canDeprecate[trusted_active]; invalidation ["esp"]+["audit"]; postWithRegistryVersion helper;
+ProposeResolverCard + LifecycleActions composer'ları; App.tsx/nav.ts DEĞİŞMEDİ; +5 vitest → 213).
+Önceki landed: login #65, SSE #67, /v1/metrics #69, RUN/History #72, Arrange Metrics + Analysis
+Lab #74, Panel #78, compare/rebind #80, Future Dev #82, provisioning #84, Trash #86,
+auth-invalidation #88, CP #91/#93, capability POST'ları #95, Library #97, ESP read #99, Rationale
+#101, Market Data #103/#105, Research Data #107/#109, Ready Check #111, Portfolio #113, User
+Manual #115, Strategy #117, TS/TL #119. BACKEND: first-Admin bootstrap #76 + bootstrap-status
+#84 + CP-Gen #89 (LLM YOK).
 
-SIRADAKİ İŞ (BAŞLARKEN KULLANICIYLA TEYİT ET — henüz teyitli DEĞİL): (a) outsource-signal —
-Workspace'in SON placeholder'ı; DİKKAT AMPİRİK BULGU: backend'de "outsource" stringi HİÇ GEÇMİYOR
-— ayrı router YOK; doc 03 (docs/spec/03_..._Add_Outsource_Signal_...md) akışı büyük olasılıkla
-TS/TL yüzeylerini reuse eden bir kompozisyon/yönlendirme sayfası → SLICE'A BAŞLAMADAN doc 03'ü
-oku ve gerçek yüzeyi tespit et (yeni backend slice'ı gerekebilir — kapsamı kullanıcıyla netleştir);
-VEYA (b) ESP registry MUTASYON slice'ı (esp.py create/activate/deprecate — Admin-only,
-X-Registry-Version OCC; Rationale shared-editing / marketData postWithOcc deseni TABAN; okuma
-yüzeyi #99'da bağlı). Hangisi seçilirse: route İMZALARINI ÖNCE OKU (OCC/Idem her endpoint'te
-olmayabilir — #105/#111/#113/#115/#117/#119 dersleri: successor/deprecate header okumuyordu;
-readiness token FINGERPRINT BODY-form'du; allocation OCC'si BODY-form expected_row_version'dı;
-manual'da İKİ farklı body-form token + DELETE body'liydi; strategy'de validate HİÇBİR ŞEY
-okumuyordu; TS/TL'de İKİZ rapor anahtarları farklıydı + TÜM POST'lar Idem okuyordu) +
-queries/commands dönüş dict'lerini oku → wire tipleri VERBATIM ayna. TIER 3 deferred: retention
-auto-purge, data-queue redelivery, SSE streaming e2e, tool-call status shadowing.
+SIRADAKİ İŞ (BAŞLARKEN KULLANICIYLA TEYİT ET — henüz teyitli DEĞİL): outsource-signal —
+Workspace'in (ve TIER 2 sayfa haritasının) SON placeholder'ı; DİKKAT AMPİRİK BULGU: backend'de
+"outsource" stringi yalnız shared/errors.py:624 YORUMUNDA geçiyor — ayrı router YOK; doc 03
+(docs/spec/03_Entropia_V18_Add_Outsource_Signal_Page_Documentation_v1_1.md) akışı büyük
+olasılıkla TS/TL yüzeylerini reuse eden bir kompozisyon/yönlendirme sayfası → SLICE'A BAŞLAMADAN
+doc 03'ü OKU ve gerçek yüzeyi tespit et (yeni backend slice'ı gerekebilir — kapsamı kullanıcıyla
+netleştir; frontend-only çıkarsa TS/TL anchor'ları TABAN). Her durumda: route İMZALARINI ÖNCE OKU
+(OCC/Idem her endpoint'te olmayabilir — #105/#111/#113/#115/#117/#119/#121 dersleri:
+successor/deprecate header okumuyordu; readiness token FINGERPRINT BODY-form'du; allocation
+BODY-form expected_row_version'dı; manual'da İKİ farklı body-form token; strategy validate HİÇBİR
+ŞEY okumuyordu; TS/TL'de TÜM POST'lar Idem okuyordu; ESP'de OCC HEADER-form DÜZ INT'ti +
+create tamamen gate'sizdi) + queries/commands dönüş dict'lerini oku → wire tipleri VERBATIM ayna.
+TIER 3 deferred: retention auto-purge, data-queue redelivery, SSE streaming e2e, tool-call
+status shadowing.
 
-DÜRÜST SINIR (KALICI): ["jobs"] backend LİSTE yüzeyi YOK (ama job-scoped import report READ'leri
+DÜRÜST SINIR (KALICI): ["jobs"] backend LİSTE yüzeyi YOK (job-scoped import report READ'leri
 #119'dan beri ["jobs"] altında — job.updated süpürür); ham baytlar sayfadan geçmez (upload'lar
 UTF-8 METİN taşır — route sözleşmeleri content: str); view dataset / analysis artifact READ
 yüzeyi YOK; bundle compiler'lar pure read; work-object'lerin (TS/TL) LIST endpoint'i YOK — keşif
 default Mainboard item'larından; capability/CP/library/esp/rationale/market-data/research-data/
 readiness/allocation/manual/strategy/trading-signals/trade-logs özel SSE event'siz
 (resource.changed süpürür); get_manual_section HTTP'ye route edilmemiş; strateji root→draft
-lookup YOK (?draft= URL'i); Mainboard ATTACH + Pin ("Use This Revision") + work-object delete
-Stage-3a Mainboard operasyonları (hiçbir landed sayfada değil); RUN admission RUN sayfasında
-(doc 14 §9.3); Trash purge ayrı re-auth slice'ı.
+lookup YOK (?draft= URL'i); ESP propose formu gelişmiş kontrat alanlarını (input/output_contract,
+dependency_snapshot, evidence) taşımaz — server default; Mainboard ATTACH + Pin ("Use This
+Revision") + work-object delete Stage-3a Mainboard operasyonları (hiçbir landed sayfada değil);
+RUN admission RUN sayfasında (doc 14 §9.3); Trash purge ayrı re-auth slice'ı.
 
 FRONTEND STACK: Vite 8 + React 18 + react-router 6 + @tanstack/react-query 5 + react-hook-form +
 vitest/jsdom + @testing-library. Alias @ = src; kök frontend/src/. react-query v5 →
 invalidateQueries({queryKey}) object-form. tsconfig noUncheckedIndexedAccess AÇIK,
 exactOptionalPropertyTypes KAPALI. Composition girişi: lib/backtest.ts useDefaultMainboard;
-OCC/Idem taze örnekler: lib/tradingSignal.ts + lib/tradeLog.ts (BODY-form STR head token +
-["jobs"] terminal-stop poll + rapor-seed'li JSON editör) + lib/strategy.ts (BODY-form INT token +
-tokensız saf validate) + lib/manual.ts (İKİ body-form token) + lib/marketData.ts postWithOcc
-(If-Match "rv-N").
+OCC/Idem taze örnekler: lib/esp.ts postWithRegistryVersion (HEADER-form DÜZ INT + taze Idem) +
+lib/tradingSignal.ts + lib/tradeLog.ts (BODY-form STR head token + ["jobs"] terminal-stop poll +
+rapor-seed'li JSON editör) + lib/strategy.ts (BODY-form INT token + tokensız saf validate) +
+lib/manual.ts (İKİ body-form token) + lib/marketData.ts postWithOcc (If-Match "rv-N").
 
 YÖNTEM: Workflow KULLANMA; direct-author. Frontend loop: cd frontend (absolute path) &&
-npm run typecheck && npm run lint && npm test && npm run build (208 + yeniler geçmeli) + yeni
+npm run typecheck && npm run lint && npm test && npm run build (213 + yeniler geçmeli) + yeni
 component/unit test (test/helpers/apiStub.ts reuse — SIRALI eşleşme: spesifik aksiyon fragmanları
-çıplak liste/create prefix'inden ÖNCE; zincirleme yükleme için findBy*; çift metin riskinde within
-ya da tekil değer). YENİ dosya heredoc (gate-free); mevcut dosya Edit → GateGuard 4-fact (importer
+çıplak liste/create prefix'inden ÖNCE; zincirleme yükleme için findBy*; çift metin/label riskinde
+within(region) — ESP dersi: Propose formu probe'un label'larını kopyaladı, 2 eski test within ile
+scope'landı). YENİ dosya heredoc (gate-free); mevcut dosya Edit → GateGuard 4-fact (importer
 Grep / public-API / data-schema / user-request verbatim → gate İLK denemeyi bloklar → aynı çağrıyı
 aynen tekrarla; aynı dosyaya 2.+ edit gate-siz; ARAYA mesaj/tool girerse gate RESETLENİR); ilk
 Bash da fact-gate'li; Edit öncesi dosyayı Read et. CRITICAL/HIGH AMPİRİK doğrula (route/command

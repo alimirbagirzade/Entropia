@@ -12,6 +12,7 @@ import { Mainboard } from "./pages/Mainboard";
 import { MarketData } from "./pages/MarketData";
 import { Metrics } from "./pages/Metrics";
 import { Panel } from "./pages/Panel";
+import { Portfolio } from "./pages/Portfolio";
 import { PreCheck } from "./pages/PreCheck";
 import { Provisioning } from "./pages/Provisioning";
 import { RationaleFamilies } from "./pages/RationaleFamilies";
@@ -35,6 +36,7 @@ const REAL_PATHS = new Set([
   "/panel",
   "/panel/provisioning",
   "/panel/metrics",
+  "/portfolio",
   "/backtest/ready-check",
   "/backtest/run",
   "/backtest/history",
@@ -121,6 +123,15 @@ export default function App() {
           element={
             <ErrorBoundary>
               <Metrics />
+            </ErrorBoundary>
+          }
+        />
+        {/* Portfolio / Equity Allocation (Stage 4a doc 13): draft editor + validation + revisions. */}
+        <Route
+          path="/portfolio"
+          element={
+            <ErrorBoundary>
+              <Portfolio />
             </ErrorBoundary>
           }
         />

@@ -87,6 +87,25 @@ const RESOLVE_OK = {
   evidence: null,
 };
 
+// A CANDIDATE resolver (the activate-composer target) + its registry row.
+const CANDIDATE_ROW = {
+  ...TRUSTED_ROW,
+  registry_id: "reg_3",
+  canonical_key: "ta.macd",
+  package_entity_id: "esp_3",
+  trusted_active_revision_id: null,
+  trust_state: "candidate",
+  registry_version: 2,
+};
+
+const CANDIDATE_DETAIL = {
+  ...ESP_DETAIL,
+  entity_id: "esp_3",
+  revision_id: "rev_r3",
+  registry: CANDIDATE_ROW,
+  contract: { ...ESP_DETAIL.contract, canonical_key: "ta.macd" },
+};
+
 // Order matters for the fragment-matching stub: the resolve POST and the
 // detail GET must precede the list route ("/embedded-system-packages/esp_1"
 // contains "/embedded-system-packages").
@@ -199,16 +218,17 @@ describe("Embedded System Packages page", () => {
     renderPage();
     await screen.findByText("ta.rsi");
 
-    fireEvent.change(screen.getByLabelText(/Canonical key/), {
+    const probe = screen.getByRole("region", { name: "Resolve probe" });
+    fireEvent.change(within(probe).getByLabelText(/Canonical key/), {
       target: { value: "ta.rsi" },
     });
-    fireEvent.change(screen.getByLabelText(/Signature params/), {
+    fireEvent.change(within(probe).getByLabelText(/Signature params/), {
       target: { value: "source:series\nlength:int" },
     });
-    fireEvent.change(screen.getByLabelText(/Return shape/), {
+    fireEvent.change(within(probe).getByLabelText(/Return shape/), {
       target: { value: "series" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Resolve" }));
+    fireEvent.click(within(probe).getByRole("button", { name: "Resolve" }));
 
     // Success renders the EXACT pinned revision (P4/L5 — never latest).
     expect(await screen.findByText("rev_r1")).toBeInTheDocument();
@@ -250,10 +270,11 @@ describe("Embedded System Packages page", () => {
     renderPage();
     await screen.findByText("ta.rsi");
 
-    fireEvent.change(screen.getByLabelText(/Canonical key/), {
+    const probe = screen.getByRole("region", { name: "Resolve probe" });
+    fireEvent.change(within(probe).getByLabelText(/Canonical key/), {
       target: { value: "ta.unknown" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Resolve" }));
+    fireEvent.click(within(probe).getByRole("button", { name: "Resolve" }));
 
     expect(
       await screen.findByText(
@@ -279,5 +300,201 @@ describe("Embedded System Packages page", () => {
       ).length;
       expect(after).toBeGreaterThan(before);
     });
+  });
+
+  it("activates a candidate with the X-Registry-Version OCC header + a fresh Idempotency-Key", async () => {
+    const ACTIVATE_OK = {
+      entity_id: "esp_3",
+      revision_id: "rev_r3",
+      canonical_key: "ta.macd",
+      trust_state: "trusted_active",
+      registry_version: 3,
+    };
+    // Action fragments precede the detail GET, which precedes the bare list.
+    const fetchMock = stubApi({
+      "POST /embedded-system-packages/esp_3/activate": ACTIVATE_OK,
+      "GET /embedded-system-packages/esp_3": CANDIDATE_DETAIL,
+      "GET /embedded-system-packages": {
+        data: [CANDIDATE_ROW],
+        meta: { cursor: null, has_more: false },
+      },
+    });
+    renderPage();
+    await screen.findByText("ta.macd");
+
+    fireEvent.click(screen.getByRole("button", { name: "Detail" }));
+
+    // A candidate offers Activate — never Deprecate (state-machine UI hint).
+    const activateBtn = await screen.findByRole("button", { name: "Activate resolver" });
+    expect(screen.queryByRole("button", { name: "Deprecate resolver" })).toBeNull();
+
+    fireEvent.click(activateBtn);
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.find(
+          ([url, init]) =>
+            String(url).includes("/embedded-system-packages/esp_3/activate") &&
+            (init?.method ?? "GET") === "POST",
+        ),
+      ).toBeDefined();
+    });
+
+    const call = fetchMock.mock.calls.find(
+      ([url, init]) => String(url).includes("/esp_3/activate") && init?.method === "POST",
+    );
+    const headers = (call?.[1]?.headers ?? {}) as Record<string, string>;
+    // OCC is the plain registry version (candidate = 2) — NOT an If-Match ETag.
+    expect(headers["X-Registry-Version"]).toBe("2");
+    expect(headers).toHaveProperty("Idempotency-Key");
+    const body = JSON.parse(String(call?.[1]?.body));
+    // The head revision + registry canonical_key; an empty note is omitted.
+    expect(body).toEqual({ revision_id: "rev_r3", canonical_key: "ta.macd" });
+  });
+
+  it("deprecates a trusted_active resolver, requiring a reason, with OCC + Idempotency-Key", async () => {
+    const DEPRECATE_OK = {
+      canonical_key: "ta.rsi",
+      entity_id: "esp_1",
+      trust_state: "deprecated",
+      replacement_revision_id: null,
+      registry_version: 5,
+    };
+    const fetchMock = stubApi({
+      "POST /embedded-system-packages/esp_1/deprecate": DEPRECATE_OK,
+      "GET /embedded-system-packages/esp_1": ESP_DETAIL,
+      "GET /embedded-system-packages": REGISTRY_PAGE,
+    });
+    renderPage();
+    await screen.findByText("ta.rsi");
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Detail" })[0]);
+
+    // A trusted_active resolver offers Deprecate — never Activate.
+    const depBtn = await screen.findByRole("button", { name: "Deprecate resolver" });
+    expect(screen.queryByRole("button", { name: "Activate resolver" })).toBeNull();
+    // Reason required: the button stays disabled until a reason is typed.
+    expect(depBtn).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText(/Deprecation reason/), {
+      target: { value: "Superseded by v2" },
+    });
+    expect(depBtn).toBeEnabled();
+
+    fireEvent.click(depBtn);
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.find(
+          ([url, init]) => String(url).includes("/esp_1/deprecate") && init?.method === "POST",
+        ),
+      ).toBeDefined();
+    });
+
+    const call = fetchMock.mock.calls.find(
+      ([url, init]) => String(url).includes("/esp_1/deprecate") && init?.method === "POST",
+    );
+    const headers = (call?.[1]?.headers ?? {}) as Record<string, string>;
+    expect(headers["X-Registry-Version"]).toBe("4"); // TRUSTED_ROW.registry_version
+    expect(headers).toHaveProperty("Idempotency-Key");
+    const body = JSON.parse(String(call?.[1]?.body));
+    expect(body).toEqual({ canonical_key: "ta.rsi", reason: "Superseded by v2" });
+  });
+
+  it("proposes a resolver via create — no OCC / Idempotency-Key header, signature verbatim", async () => {
+    const CREATE_OK = {
+      entity_id: "esp_9",
+      revision_id: "rev_r9",
+      canonical_key: "ta.macd",
+      trust_state: "candidate",
+      runtime_adapter: "python",
+    };
+    // The create fragment is the bare path; it never matches a sub-path POST.
+    const fetchMock = stubApi({ ...BASE_ROUTES, "POST /embedded-system-packages": CREATE_OK });
+    renderPage();
+    await screen.findByText("ta.rsi");
+
+    // Scope to the propose region: the resolve probe reuses the same labels.
+    const section = screen.getByRole("region", { name: "Propose resolver" });
+    fireEvent.change(within(section).getByLabelText(/Canonical key/), {
+      target: { value: "ta.macd" },
+    });
+    fireEvent.change(within(section).getByLabelText(/Signature params/), {
+      target: { value: "source:series\nlength:int" },
+    });
+    fireEvent.change(within(section).getByLabelText(/Return shape/), {
+      target: { value: "series" },
+    });
+    fireEvent.click(within(section).getByRole("button", { name: "Propose resolver" }));
+
+    expect(await screen.findByText(/Proposed/)).toBeInTheDocument();
+
+    const call = fetchMock.mock.calls.find(
+      ([url, init]) =>
+        String(url).endsWith("/embedded-system-packages") && init?.method === "POST",
+    );
+    expect(call).toBeDefined();
+    const headers = (call?.[1]?.headers ?? {}) as Record<string, string>;
+    // A create has no head to race — neither OCC nor Idempotency-Key travels.
+    expect(Object.keys(headers)).not.toContain("Idempotency-Key");
+    expect(Object.keys(headers)).not.toContain("X-Registry-Version");
+    const body = JSON.parse(String(call?.[1]?.body));
+    expect(body.canonical_key).toBe("ta.macd");
+    expect(body.signature).toEqual({
+      params: [
+        { name: "source", type: "series" },
+        { name: "length", type: "int" },
+      ],
+      return: "series",
+    });
+    expect(body.runtime_adapter).toBe("python");
+    expect(body.visibility_scope).toBe("private");
+  });
+
+  it("keeps Propose disabled until a key and a signature are present", async () => {
+    stubApi(BASE_ROUTES);
+    renderPage();
+    await screen.findByText("ta.rsi");
+
+    const section = screen.getByRole("region", { name: "Propose resolver" });
+    const proposeBtn = within(section).getByRole("button", { name: "Propose resolver" });
+    expect(proposeBtn).toBeDisabled();
+
+    // A key alone is not enough — the signature needs params or a return shape.
+    fireEvent.change(within(section).getByLabelText(/Canonical key/), {
+      target: { value: "ta.macd" },
+    });
+    expect(proposeBtn).toBeDisabled();
+
+    fireEvent.change(within(section).getByLabelText(/Return shape/), {
+      target: { value: "series" },
+    });
+    expect(proposeBtn).toBeEnabled();
+  });
+
+  it("surfaces a 403 verbatim when a non-Admin activates (doc 09 §10.3)", async () => {
+    stubApi({
+      "POST /embedded-system-packages/esp_3/activate": () => {
+        throw new Error(
+          "APPROVAL_REQUIRES_ADMIN: Activating a trusted resolver requires the Admin role.",
+        );
+      },
+      "GET /embedded-system-packages/esp_3": CANDIDATE_DETAIL,
+      "GET /embedded-system-packages": {
+        data: [CANDIDATE_ROW],
+        meta: { cursor: null, has_more: false },
+      },
+    });
+    renderPage();
+    await screen.findByText("ta.macd");
+
+    fireEvent.click(screen.getByRole("button", { name: "Detail" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Activate resolver" }));
+
+    expect(
+      await screen.findByText(
+        "APPROVAL_REQUIRES_ADMIN: Activating a trusted resolver requires the Admin role.",
+      ),
+    ).toBeInTheDocument();
   });
 });

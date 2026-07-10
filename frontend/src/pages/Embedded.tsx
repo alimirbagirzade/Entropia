@@ -9,11 +9,18 @@ import {
   ESP_PERFORMANCE_FIELDS,
   RESOLVER_TRUST_STATES,
   RUNTIME_ADAPTERS,
+  VISIBILITY_SCOPES,
+  canActivate,
+  canDeprecate,
   parseSignatureParams,
   trustTone,
+  useActivateResolver,
+  useCreateEsp,
+  useDeprecateResolver,
   useEspPackage,
   useEspRegistry,
   useResolveProbe,
+  type EspPackageDetail,
   type EspRegistryRow,
 } from "@/lib/esp";
 import { approvalTone, lifecycleTone, validationTone } from "@/lib/library";
@@ -46,10 +53,11 @@ function useCursorStack() {
   };
 }
 
-// Embedded System Packages (doc 09): the role-aware resolver-registry catalog
-// plus a Pre-Check-parity resolve probe. Visibility is enforced server-side;
-// registry mutations (activate / deprecate — Admin-only, OCC-guarded) belong
-// to later slices, so this page is read-only over the live registry.
+// Embedded System Packages (doc 09): the role-aware resolver-registry catalog,
+// a Pre-Check-parity resolve probe, and the registry lifecycle. Visibility is
+// enforced server-side; propose (create) is open to any authenticated actor,
+// while activate / deprecate are Admin-only and OCC-guarded — the UI never
+// pre-gates, a denial surfaces the 403 envelope verbatim.
 export function Embedded() {
   return (
     <>
@@ -59,6 +67,7 @@ export function Embedded() {
         visibility are server-computed per role
       </p>
       <RegistryCard />
+      <ProposeResolverCard />
       <ResolveProbeCard />
     </>
   );
@@ -279,6 +288,8 @@ function EspDetailCard({ entityId, onClose }: { entityId: string; onClose: () =>
               <PerformanceField key={field} field={field} value={esp[field]} />
             ))}
           </dl>
+
+          <LifecycleActions esp={esp} />
         </>
       ) : null}
     </div>
@@ -293,6 +304,326 @@ function PerformanceField({ field, value }: { field: string; value: string | und
       <dt>{field}</dt>
       <dd>{value === "not_applicable" ? "N/A (not applicable)" : (value ?? "—")}</dd>
     </>
+  );
+}
+
+// Registry lifecycle for the open resolver. The OCC token is the registry's own
+// registry_version; the legal action is a UI hint (state machine) — the server
+// re-validates the transition AND the Admin gate, so a stale token (409),
+// illegal jump, or non-Admin (403) all surface verbatim. Without a registry
+// pointer there is nothing to transition.
+function LifecycleActions({ esp }: { esp: EspPackageDetail }) {
+  const registry = esp.registry;
+  if (!registry) return null;
+  return (
+    <>
+      <h5 style={{ marginBottom: 4 }}>Registry lifecycle</h5>
+      {canActivate(registry.trust_state) ? (
+        <ActivateComposer esp={esp} registry={registry} />
+      ) : canDeprecate(registry.trust_state) ? (
+        <DeprecateComposer esp={esp} registry={registry} />
+      ) : (
+        <p className="page-sub" style={{ marginTop: 0 }}>
+          No lifecycle action is available from the <code>{registry.trust_state}</code> state.
+        </p>
+      )}
+    </>
+  );
+}
+
+// Activate a CANDIDATE → TRUSTED_ACTIVE (Admin-only). The revision to trust
+// defaults to the head; canonical_key + registry_version come from the pinned
+// registry row (never re-derived on the client).
+function ActivateComposer({
+  esp,
+  registry,
+}: {
+  esp: EspPackageDetail;
+  registry: EspRegistryRow;
+}) {
+  const [revisionId, setRevisionId] = useState(esp.revision_id);
+  const [note, setNote] = useState("");
+  const activate = useActivateResolver();
+
+  const onSubmit = (event: FormEvent) => {
+    event.preventDefault();
+    activate.mutate({
+      entityId: esp.entity_id,
+      registryVersion: registry.registry_version,
+      revision_id: revisionId.trim(),
+      canonical_key: registry.canonical_key,
+      note: note.trim() || undefined,
+    });
+  };
+
+  return (
+    <form onSubmit={onSubmit} style={{ display: "grid", gap: 8, maxWidth: 480 }}>
+      <p className="page-sub" style={{ margin: 0 }}>
+        Activate <code>{registry.canonical_key}</code> (candidate → trusted_active).
+        Admin-only — a non-Admin is rejected verbatim.
+      </p>
+      <label htmlFor="esp-act-rev">
+        Revision to trust{" "}
+        <input
+          id="esp-act-rev"
+          value={revisionId}
+          onChange={(event) => setRevisionId(event.target.value)}
+        />
+      </label>
+      <label htmlFor="esp-act-note">
+        Note (optional){" "}
+        <input id="esp-act-note" value={note} onChange={(event) => setNote(event.target.value)} />
+      </label>
+      <div>
+        <button
+          type="submit"
+          className="btn"
+          disabled={activate.isPending || revisionId.trim() === ""}
+        >
+          {activate.isPending ? "Activating…" : "Activate resolver"}
+        </button>
+      </div>
+      {activate.isError ? (
+        <p role="alert" style={{ color: "var(--down)", margin: 0 }}>
+          {(activate.error as Error).message}
+        </p>
+      ) : null}
+      {activate.isSuccess ? (
+        <p role="status" style={{ color: "var(--ok)", margin: 0 }}>
+          Activated — now {activate.data.trust_state} (registry v
+          {activate.data.registry_version}).
+        </p>
+      ) : null}
+    </form>
+  );
+}
+
+// Deprecate a TRUSTED_ACTIVE → DEPRECATED (Admin-only). A reason is required
+// (doc 09 §6). An optional replacement revision points new work elsewhere;
+// historical pins keep reading their exact revision.
+function DeprecateComposer({
+  esp,
+  registry,
+}: {
+  esp: EspPackageDetail;
+  registry: EspRegistryRow;
+}) {
+  const [reason, setReason] = useState("");
+  const [replacement, setReplacement] = useState("");
+  const deprecate = useDeprecateResolver();
+
+  const onSubmit = (event: FormEvent) => {
+    event.preventDefault();
+    deprecate.mutate({
+      entityId: esp.entity_id,
+      registryVersion: registry.registry_version,
+      canonical_key: registry.canonical_key,
+      reason: reason.trim(),
+      replacement_revision_id: replacement.trim() || undefined,
+    });
+  };
+
+  return (
+    <form onSubmit={onSubmit} style={{ display: "grid", gap: 8, maxWidth: 480 }}>
+      <p className="page-sub" style={{ margin: 0 }}>
+        Deprecate <code>{registry.canonical_key}</code> (trusted_active → deprecated).
+        Admin-only — a non-Admin is rejected verbatim.
+      </p>
+      <label htmlFor="esp-dep-reason">
+        Deprecation reason{" "}
+        <input
+          id="esp-dep-reason"
+          value={reason}
+          onChange={(event) => setReason(event.target.value)}
+          placeholder="Superseded by v2 resolver"
+        />
+      </label>
+      <label htmlFor="esp-dep-repl">
+        Replacement revision (optional){" "}
+        <input
+          id="esp-dep-repl"
+          value={replacement}
+          onChange={(event) => setReplacement(event.target.value)}
+        />
+      </label>
+      <div>
+        <button
+          type="submit"
+          className="btn"
+          disabled={deprecate.isPending || reason.trim() === ""}
+        >
+          {deprecate.isPending ? "Deprecating…" : "Deprecate resolver"}
+        </button>
+      </div>
+      {deprecate.isError ? (
+        <p role="alert" style={{ color: "var(--down)", margin: 0 }}>
+          {(deprecate.error as Error).message}
+        </p>
+      ) : null}
+      {deprecate.isSuccess ? (
+        <p role="status" style={{ color: "var(--ok)", margin: 0 }}>
+          Deprecated — now {deprecate.data.trust_state} (registry v
+          {deprecate.data.registry_version}).
+        </p>
+      ) : null}
+    </form>
+  );
+}
+
+// Propose a new resolver (doc 09 §5): any authenticated actor may submit a
+// CANDIDATE — not trusted until an Admin activates it. Ordered signature param
+// TYPES are identity (parseSignatureParams is reused from the resolve probe);
+// input/output contracts default to {} server-side. No OCC / Idempotency-Key.
+function ProposeResolverCard() {
+  const [key, setKey] = useState("");
+  const [runtime, setRuntime] = useState<string>(RUNTIME_ADAPTERS[1]);
+  const [paramsText, setParamsText] = useState("");
+  const [returnShape, setReturnShape] = useState("");
+  const [visibility, setVisibility] = useState<string>(VISIBILITY_SCOPES[0]);
+  const [warmUp, setWarmUp] = useState("");
+  const [timing, setTiming] = useState("");
+  const [repaint, setRepaint] = useState(false);
+  const [note, setNote] = useState("");
+  const create = useCreateEsp();
+
+  const params = parseSignatureParams(paramsText);
+  // The server needs a signature with params OR a return shape; mirror that guard
+  // client-side (it re-validates and returns RESOLVER_CONTRACT_INVALID otherwise).
+  const canSubmit = key.trim() !== "" && (params.length > 0 || returnShape.trim() !== "");
+
+  const onSubmit = (event: FormEvent) => {
+    event.preventDefault();
+    const warmUpValue = warmUp.trim();
+    create.mutate({
+      canonical_key: key.trim(),
+      signature: { params, return: returnShape.trim() },
+      runtime_adapter: runtime,
+      visibility_scope: visibility,
+      warm_up_period:
+        warmUpValue !== "" && Number.isFinite(Number(warmUpValue)) ? Number(warmUpValue) : null,
+      timing_semantics: timing.trim() || null,
+      repaint,
+      change_note: note.trim() || null,
+    });
+  };
+
+  const result = create.data;
+  return (
+    <section className="card" aria-labelledby="esp-propose-h">
+      <h3 id="esp-propose-h" style={{ marginTop: 0 }}>
+        Propose resolver
+      </h3>
+      <p className="page-sub">
+        Submit a new resolver as a candidate. It stays untrusted until an Admin
+        activates it — Pre-Check cannot select a candidate.
+      </p>
+      <form onSubmit={onSubmit} style={{ display: "grid", gap: 12, maxWidth: 560 }}>
+        <label htmlFor="propose-key">
+          Canonical key{" "}
+          <input
+            id="propose-key"
+            value={key}
+            onChange={(event) => setKey(event.target.value)}
+            placeholder="ta.rsi"
+          />
+        </label>
+        <label htmlFor="propose-runtime">
+          Runtime adapter{" "}
+          <select
+            id="propose-runtime"
+            value={runtime}
+            onChange={(event) => setRuntime(event.target.value)}
+          >
+            {RUNTIME_ADAPTERS.map((adapter) => (
+              <option key={adapter} value={adapter}>
+                {adapter}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label htmlFor="propose-params">
+          Signature params (one per line, "name:type" or "type"){" "}
+          <textarea
+            id="propose-params"
+            rows={3}
+            value={paramsText}
+            onChange={(event) => setParamsText(event.target.value)}
+            placeholder={"source:series\nlength:int"}
+          />
+        </label>
+        <label htmlFor="propose-return">
+          Return shape{" "}
+          <input
+            id="propose-return"
+            value={returnShape}
+            onChange={(event) => setReturnShape(event.target.value)}
+            placeholder="series"
+          />
+        </label>
+        <label htmlFor="propose-visibility">
+          Visibility{" "}
+          <select
+            id="propose-visibility"
+            value={visibility}
+            onChange={(event) => setVisibility(event.target.value)}
+          >
+            {VISIBILITY_SCOPES.map((scope) => (
+              <option key={scope} value={scope}>
+                {scope}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label htmlFor="propose-warmup">
+          Warm-up period (optional){" "}
+          <input
+            id="propose-warmup"
+            type="number"
+            value={warmUp}
+            onChange={(event) => setWarmUp(event.target.value)}
+          />
+        </label>
+        <label htmlFor="propose-timing">
+          Timing semantics (optional){" "}
+          <input
+            id="propose-timing"
+            value={timing}
+            onChange={(event) => setTiming(event.target.value)}
+            placeholder="bar_close"
+          />
+        </label>
+        <label htmlFor="propose-repaint" style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <input
+            id="propose-repaint"
+            type="checkbox"
+            checked={repaint}
+            onChange={(event) => setRepaint(event.target.checked)}
+          />
+          Repaints
+        </label>
+        <label htmlFor="propose-note">
+          Change note (optional){" "}
+          <input id="propose-note" value={note} onChange={(event) => setNote(event.target.value)} />
+        </label>
+        <div>
+          <button type="submit" className="btn" disabled={create.isPending || !canSubmit}>
+            {create.isPending ? "Proposing…" : "Propose resolver"}
+          </button>
+        </div>
+      </form>
+
+      {create.isError ? (
+        <p role="alert" style={{ color: "var(--down)", marginBottom: 0 }}>
+          {(create.error as Error).message}
+        </p>
+      ) : null}
+      {result ? (
+        <p role="status" style={{ color: "var(--ok)", marginBottom: 0 }}>
+          Proposed <code>{result.canonical_key}</code> as {result.trust_state} —{" "}
+          {result.entity_id}
+        </p>
+      ) : null}
+    </section>
   );
 }
 

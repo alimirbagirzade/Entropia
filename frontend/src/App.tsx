@@ -23,6 +23,7 @@ import { Login } from "./pages/Login";
 import { NotFound } from "./pages/NotFound";
 import { ResultsHistory } from "./pages/ResultsHistory";
 import { Trash } from "./pages/Trash";
+import { UserManual } from "./pages/UserManual";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 
 // Paths served by a real page below — excluded from the auto-generated
@@ -43,6 +44,7 @@ const REAL_PATHS = new Set([
   "/backtest/metrics",
   "/analysis-lab",
   "/future-dev",
+  "/user-manual",
   "/trash",
   "/rationale-families",
   "/market-data",
@@ -185,6 +187,15 @@ export default function App() {
           element={
             <ErrorBoundary>
               <FutureDev />
+            </ErrorBoundary>
+          }
+        />
+        {/* User Manual (Stage 7a doc 21): published reader stream + search + Admin publish surface. */}
+        <Route
+          path="/user-manual"
+          element={
+            <ErrorBoundary>
+              <UserManual />
             </ErrorBoundary>
           }
         />

@@ -1839,7 +1839,39 @@ router'ında (doc 02, `/strategy`), `mainboard.py`'de değil; Ready Check + RUN 
 sayfaları (doc 14 §9.3); Mainboard'a özel SSE event yok; `ready_summary` hâlâ backend `not_ready`
 placeholder'ı, `latest_result_summary` runs bağlanana kadar null.
 
-## Next: post-V1 (continued) — TIER 2 SAYFA HARİTASI + Mainboard operasyonları TAMAM (24/24 real, `mainboard.py` yüzeyi tam — PR #125) → kalan adaylar: **Trash purge re-auth slice** + **TIER 3 deferred** (retention auto-purge / data-queue redelivery / SSE streaming e2e / tool-call status shadowing)
+## Stage post-V1 TIER 2 — Trash Permanent Delete (purge) actions landed (PR #127)
+
+**FRONTEND-ONLY** (`lib/trash.ts` + `pages/Trash.tsx` + `styles/global.css` + `test/trash.test.tsx`;
+backend DEĞİŞMEDİ, migration YOK, alembic head `0021_local_auth` sabit, `ENGINE_VERSION` sabit,
+backend test tabanı 1048 sabit). PR #86'nın restore-only sınırı kapandı: son bağsız
+`routes/trash.py` endpoint'i (`POST /trash-entries/{id}/purge`, doc 20 §8.3) bağlandı →
+**`trash.py` yüzeyi TAM**. main = `77b6b61` (Merge #127), feat `7ae3428`.
+
+**Ampirik OCC/Idem (route + command imzaları OKUNDU):** İki-aşamalı **202** — request yalnızca hedefi
+`purge_pending`'e taşır + durable maintenance job enqueue eder; asıl purge'ü **worker** yürütür (worker
+eligibility'yi yeniden doğrular). Gövde **REQUIRED** `confirmation_phrase` + `reauth_proof`:
+`confirmation_phrase` objenin **display kimliğine** (`display_name || entity_id`) EŞİT olmalı yoksa
+server `PURGE_CONFIRMATION_INVALID` ile reddeder (hiç başlamaz); `reauth_proof` boş olamaz (V1
+**varlık-kontrollü** kontrat, tam MFA kapsam dışı doc 20 §0) yoksa `REAUTH_REQUIRED`. OCC =
+**BODY-form `expected_row_version` INT** (body If-Match'ten öncelikli, doc 20 §14) = entry `row_version`;
+stale → `STALE_REVISION`. Her denemede taze `Idempotency-Key` (aynı key ile tekrar submit aynı job'ı
+döner). Purge, Restore ile **AYNI recoverable statülerde** uygun (command `_assert_entry_recoverable`'ı
+paylaşır) → sayfa aksiyonu server-truth `restore_eligible` flag'ı üzerinden gate eder (backend
+değişikliği gerekmez).
+
+**Reuse anchor'ları:** `lib/trash.ts` (`PurgeResult` wire tipi — `request_purge` dict'inden VERBATIM,
+NB `display_name` İÇERMEZ + `useRequestPurge` — Idempotency-Key header + body-OCC token, invalidate
+`["trash"]+["audit"]`) · `pages/Trash.tsx` (Permanent Delete → açık **iki-adımlı `PurgeComposer`**;
+doc 20 §9 onay metni VERBATIM; Confirm server ön-koşullarını aynalar — tam isim + boş-olmayan proof,
+server yeniden doğrular; §9 kabul toast'ı için display name'i **kabul anında yakalar** çünkü 202 dönüşü
+`display_name` içermez) · `.btn-danger` style. `test/trash.test.tsx` +4 → **frontend 228 → 232**;
+typecheck + lint temiz, build yeşil. Review 0 CRITICAL/HIGH.
+
+**Dürüst sınır:** purge yalnızca bir **request** — asıl purge'ü worker yürütür (durum `["trash"]`
+projeksiyonundan okunur, özel SSE event yok, `resource.changed` süpürür); re-auth proof V1'de yalnız
+varlık-kontrollü (gerçek MFA challenge yok); **retention auto-purge** hâlâ bir TIER 3 backend slice'ı.
+
+## Next: post-V1 (continued) — TIER 2 SAYFA HARİTASI + tüm route yüzeyleri TAMAM (24/24 real; `mainboard.py` PR #125, `trash.py` PR #127 dahil bağsız endpoint kalmadı) → kalan adaylar: **TIER 3 deferred** (retention auto-purge / data-queue redelivery / SSE streaming e2e / tool-call status shadowing) + küçük backend follow-up'ları (LLM generation Future-Dev — kapsam dışı)
 
 **V1 COMPLETE (Stages 0–8, docs 01–22) + Auth/IdP + Parquet Slice A + Backtest Engine Slice B + real indicator compute Slice C + `risk_based` sizing (a) + condition blocks (b) + condition extensions (b2) + two-package indicator-vs-indicator + higher-timeframe resampling (c) + per-condition multi-TF reference (i) + N-ary reference chain (ii) + VWAP directional key (d) + `formula_based` Kelly sizing + `position_size_limits` min/max cap (PR #63) landed (1015 tests).** The **Slice C indicator-compute + position-sizing follow-ups are now EFFECTIVELY COMPLETE — TIER 1 backend is DONE**:
 

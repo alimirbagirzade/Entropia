@@ -1,0 +1,243 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
+
+import { Mainboard } from "@/pages/Mainboard";
+import { stubApi } from "./helpers/apiStub";
+
+const MAINBOARD = {
+  workspace_id: "ws_1",
+  workspace_kind: "human_default",
+  composition_hash: "hash_abc",
+  row_version: 7,
+  items: [
+    {
+      item_id: "item_strat",
+      item_kind: "strategy",
+      work_object_root_id: "root_strat",
+      pinned_revision_id: "wor_1",
+      position_index: 0,
+      is_enabled: true,
+      display_label_override: "Momentum A",
+      row_version: 5,
+    },
+  ],
+  ready_summary: { state: "not_ready", report_id: null },
+  latest_result_summary: null,
+};
+
+const PATCH_RESULT = {
+  item_id: "item_strat",
+  item_kind: "strategy",
+  work_object_root_id: "root_strat",
+  pinned_revision_id: "wor_2",
+  position_index: 0,
+  is_enabled: true,
+  display_label_override: "Momentum A",
+  row_version: 6,
+  composition_hash: "hash_def",
+};
+
+const DELETE_RESULT = { root_id: "root_strat", deletion_state: "soft_deleted" };
+const SNAPSHOT_RESULT = { snapshot_id: "snap_1", composition_hash: "hash_abc", item_count: 1 };
+const EXTERNAL_DRAFT = { draft_id: "wodraft_1", kind: "trading_signal", unsaved: true };
+const CREATE_RESULT = {
+  root_id: "root_new",
+  revision_id: "wor_new1",
+  revision_no: 1,
+  object_kind: "strategy",
+  row_version: 0,
+};
+const REVISION_RESULT = {
+  root_id: "root_new",
+  revision_id: "wor_new2",
+  revision_no: 2,
+  row_version: 1,
+};
+const ATTACH_RESULT = {
+  item_id: "item_new",
+  item_kind: "strategy",
+  work_object_root_id: "root_new",
+  pinned_revision_id: "wor_new1",
+  position_index: 1,
+  is_enabled: true,
+  display_label_override: null,
+  row_version: 0,
+  composition_hash: "hash_ghi",
+};
+
+// ORDERED routes: the {root}/revisions POST fragment must precede the bare
+// "POST /work-objects" create prefix (the create path is a substring of it).
+function stubRoutes(overrides: Record<string, unknown> = {}) {
+  return stubApi({
+    "POST /work-objects/root_new/revisions": REVISION_RESULT,
+    "POST /work-objects": CREATE_RESULT,
+    "POST /mainboards/ws_1/items": ATTACH_RESULT,
+    "POST /mainboards/ws_1/snapshots": SNAPSHOT_RESULT,
+    "POST /external-work-object-drafts/trading_signal": EXTERNAL_DRAFT,
+    "PATCH /mainboard-items/item_strat": PATCH_RESULT,
+    "DELETE /work-objects/root_strat": DELETE_RESULT,
+    "GET /mainboards/default": MAINBOARD,
+    ...overrides,
+  });
+}
+
+function renderPage() {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={client}>
+      <MemoryRouter initialEntries={["/"]}>
+        <Routes>
+          <Route path="/" element={<Mainboard />} />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+}
+
+function headersOf(init: RequestInit | undefined): Record<string, string> {
+  return (init?.headers ?? {}) as Record<string, string>;
+}
+function bodyOf(init: RequestInit | undefined): Record<string, unknown> {
+  return JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+}
+async function expandRow() {
+  fireEvent.click(await screen.findByLabelText("Expand Momentum A"));
+}
+
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
+
+describe("Mainboard", () => {
+  it("renders the composition projection and ready status line", async () => {
+    stubRoutes();
+    renderPage();
+    expect(await screen.findByText("Momentum A")).toBeTruthy();
+    expect(screen.getByText("Backtest Ready: Not Ready")).toBeTruthy();
+    expect(screen.getByText("hash_abc")).toBeTruthy();
+    expect(screen.getByText(/No succeeded Backtest Result is available/)).toBeTruthy();
+    expect(screen.getAllByText("Enabled").length).toBeGreaterThan(0);
+  });
+
+  it("shows the empty-state text when the workspace has no items", async () => {
+    stubRoutes({ "GET /mainboards/default": { ...MAINBOARD, items: [] } });
+    renderPage();
+    expect(await screen.findByText("Your Mainboard is empty.")).toBeTruthy();
+    expect(screen.getByText(/Add a Strategy, Trading Signal, or Trade Log/)).toBeTruthy();
+  });
+
+  it("pins a revision with the item row_version OCC and a fresh Idempotency-Key", async () => {
+    const fetchMock = stubRoutes();
+    renderPage();
+    await expandRow();
+    fireEvent.change(screen.getByLabelText("Revision id for Momentum A"), {
+      target: { value: "wor_2" },
+    });
+    fireEvent.click(screen.getByText("Use This Revision"));
+    await screen.findByText("Momentum A");
+    const call = fetchMock.mock.calls.find(
+      (c) => String(c[0]).includes("/mainboard-items/item_strat"),
+    );
+    expect(call).toBeTruthy();
+    const body = bodyOf(call?.[1]);
+    expect(body.intent).toBe("pin_revision");
+    expect(body.expected_row_version).toBe(5);
+    expect(body.revision_id).toBe("wor_2");
+    expect(headersOf(call?.[1])["Idempotency-Key"]).toBeTruthy();
+  });
+
+  it("toggles enable/disable via set_enabled", async () => {
+    const fetchMock = stubRoutes();
+    renderPage();
+    await expandRow();
+    fireEvent.click(screen.getByText("Disable"));
+    await screen.findByText("Momentum A");
+    const call = fetchMock.mock.calls.find(
+      (c) => String(c[0]).includes("/mainboard-items/item_strat"),
+    );
+    const body = bodyOf(call?.[1]);
+    expect(body.intent).toBe("set_enabled");
+    expect(body.is_enabled).toBe(false);
+    expect(body.expected_row_version).toBe(5);
+  });
+
+  it("reorders an item via move down (position_index + 1)", async () => {
+    const fetchMock = stubRoutes();
+    renderPage();
+    await expandRow();
+    fireEvent.click(screen.getByText("Move down"));
+    await screen.findByText("Momentum A");
+    const call = fetchMock.mock.calls.find(
+      (c) => String(c[0]).includes("/mainboard-items/item_strat"),
+    );
+    const body = bodyOf(call?.[1]);
+    expect(body.intent).toBe("reorder");
+    expect(body.position_index).toBe(1);
+  });
+
+  it("soft-deletes a work object behind a two-step confirmation", async () => {
+    const fetchMock = stubRoutes();
+    renderPage();
+    await expandRow();
+    fireEvent.click(screen.getByLabelText("Delete Momentum A"));
+    const dialog = screen.getByRole("alertdialog");
+    expect(within(dialog).getByText(/Only an Admin can restore/)).toBeTruthy();
+    fireEvent.click(within(dialog).getByText("Move to Trash"));
+    await screen.findByText("Momentum A");
+    const call = fetchMock.mock.calls.find(
+      (c) => String(c[0]).includes("/work-objects/root_strat") && (c[1]?.method ?? "") === "DELETE",
+    );
+    expect(call).toBeTruthy();
+    expect(headersOf(call?.[1])["Idempotency-Key"]).toBeTruthy();
+  });
+
+  it("freezes the composition into a snapshot", async () => {
+    const fetchMock = stubRoutes();
+    renderPage();
+    fireEvent.click(await screen.findByText("Freeze composition"));
+    expect(await screen.findByText(/Snapshot snap_1/)).toBeTruthy();
+    const call = fetchMock.mock.calls.find(
+      (c) => String(c[0]).includes("/mainboards/ws_1/snapshots"),
+    );
+    expect(call).toBeTruthy();
+    expect(headersOf(call?.[1])["Idempotency-Key"]).toBeTruthy();
+  });
+
+  it("starts an external work-object draft and links to the workbench", async () => {
+    const fetchMock = stubRoutes();
+    renderPage();
+    await screen.findByText("Momentum A");
+    fireEvent.click(screen.getByRole("button", { name: "Trading Signal" }));
+    expect(await screen.findByText(/Trading Signal draft opened/)).toBeTruthy();
+    const link = screen.getByRole("link", { name: /Continue in the Trading Signal workbench/ });
+    expect(link.getAttribute("href")).toBe("/trading-signal");
+    const call = fetchMock.mock.calls.find(
+      (c) => String(c[0]).includes("/external-work-object-drafts/trading_signal"),
+    );
+    expect(call).toBeTruthy();
+  });
+
+  it("creates a generic work object then attaches its revision", async () => {
+    const fetchMock = stubRoutes();
+    renderPage();
+    fireEvent.click(await screen.findByText("Create work object"));
+    expect(await screen.findByText("root_new")).toBeTruthy();
+    fireEvent.click(screen.getByText("Attach to Mainboard"));
+    await screen.findByText("Momentum A");
+    const createCall = fetchMock.mock.calls.find(
+      (c) => String(c[0]).endsWith("/work-objects") && (c[1]?.method ?? "") === "POST",
+    );
+    expect(createCall).toBeTruthy();
+    expect(headersOf(createCall?.[1])["Idempotency-Key"]).toBeTruthy();
+    const attachCall = fetchMock.mock.calls.find(
+      (c) => String(c[0]).includes("/mainboards/ws_1/items"),
+    );
+    expect(attachCall).toBeTruthy();
+    const body = bodyOf(attachCall?.[1]);
+    expect(body.root_id).toBe("root_new");
+    expect(body.revision_id).toBe("wor_new1");
+  });
+});

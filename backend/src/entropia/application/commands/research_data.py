@@ -25,6 +25,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from entropia.application.idempotency import run_idempotent
+from entropia.application.jobs.data_queue import RESEARCH_DATA_ANALYSIS
 from entropia.application.queries.market_data import resolve_approved_market_data_bundle
 from entropia.domain.identity import Actor
 from entropia.domain.identity.policy import require_authenticated
@@ -275,7 +276,11 @@ async def request_research_dataset_analysis(
         job = job_enqueue.enqueue_job(
             session,
             queue=_DATA_QUEUE,
-            payload={"entity_id": entity_id, "revision_id": revision.revision_id},
+            payload={
+                "job_kind": RESEARCH_DATA_ANALYSIS,
+                "entity_id": entity_id,
+                "revision_id": revision.revision_id,
+            },
             actor_principal_id=actor.principal_id,
             idempotency_key=idempotency_key,
             correlation_id=actor.correlation_id,

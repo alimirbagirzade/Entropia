@@ -12,10 +12,12 @@ from typing import Any
 from fastapi import APIRouter, Depends, Header, Query
 from pydantic import BaseModel, Field
 
+from entropia.application.commands import data_queue as data_queue_cmd
 from entropia.application.commands import role_assignment as role_assignment_cmd
 from entropia.application.queries import log_projection as log_query
 from entropia.application.queries import user_registry as user_registry_query
 from entropia.apps.api.deps import RequestContext, request_context
+from entropia.config import get_settings
 from entropia.domain.identity.policy import require_admin_panel
 from entropia.domain.lifecycle.enums import Role
 from entropia.shared.errors import ValidationError
@@ -28,6 +30,7 @@ _SYSTEM_ACTORS_PATH = "/admin/system-actors"
 _ROLE_MATRIX_PATH = "/admin/role-matrix"
 _LOGS_PATH = "/admin/logs"
 _LOG_DETAIL_PATH = "/admin/logs/{event_id}"
+_DATA_QUEUE_REDELIVER_PATH = "/admin/data-queue/redeliver"
 
 
 class AssignRoleBody(BaseModel):
@@ -153,6 +156,41 @@ async def list_logs(
 async def get_log(event_id: str, ctx: RequestContext = Depends(request_context)) -> dict[str, Any]:
     require_admin_panel(ctx.actor)
     return await log_query.get_log_event(ctx.session, ctx.actor, event_id=event_id)
+
+
+# ---------- Operator recovery ----------
+
+
+@router.post(_DATA_QUEUE_REDELIVER_PATH)
+async def redeliver_data_queue(
+    ctx: RequestContext = Depends(request_context),
+    grace_seconds: int | None = Query(default=None, ge=0),
+) -> dict[str, Any]:
+    """Operator recovery (INF-03, doc 20 §6): re-dispatch durable ``data``-queue
+    jobs still QUEUED past the redeliver grace window. The multi-actor ``data``
+    queue is not auto-redelivered by the scheduler — this explicit Admin action
+    routes each stuck job back to its actor via the payload ``job_kind``.
+    ``grace_seconds`` defaults to the configured window; ``0`` sweeps every QUEUED
+    data job."""
+    require_admin_panel(ctx.actor)
+    window = get_settings().job_redeliver_grace_seconds if grace_seconds is None else grace_seconds
+    result = await data_queue_cmd.redeliver_data_queue_jobs(
+        ctx.session, ctx.actor, grace_seconds=window
+    )
+    _dispatch_data_jobs(result["redeliverable"])
+    return result
+
+
+def _dispatch_data_jobs(items: list[dict[str, Any]]) -> None:
+    """Send the resolved data actors after the request tx (the durable rows are
+    already QUEUED; mirrors the other worker routes). Redelivery is idempotent."""
+    from entropia.apps.worker.actors import DATA_ACTOR_BY_KIND
+    from entropia.infrastructure.queues import enqueue as job_enqueue
+
+    for item in items:
+        actor = DATA_ACTOR_BY_KIND.get(item["job_kind"])
+        if actor is not None:
+            job_enqueue.send_job(actor, item["job_id"])
 
 
 __all__ = ["router"]

@@ -36,6 +36,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from entropia.application.commands import mainboard as mb_cmd
 from entropia.application.idempotency import run_idempotent
+from entropia.application.jobs.data_queue import TRADE_LOG_IMPORT
 from entropia.application.queries import mainboard as mb_query
 from entropia.domain.identity import Actor
 from entropia.domain.identity.policy import ensure_can_edit, require_authenticated
@@ -198,6 +199,7 @@ async def request_trade_log_import(
             session,
             queue=_DATA_QUEUE,
             payload={
+                "job_kind": TRADE_LOG_IMPORT,
                 "source_asset_id": source_asset_id,
                 "instrument_id": instrument_id,
                 "source_timezone": source_timezone,

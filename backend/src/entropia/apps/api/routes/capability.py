@@ -24,9 +24,13 @@ from entropia.application.commands.capability import (
     transition_capability,
 )
 from entropia.application.queries.capability import (
+    get_analysis_artifact,
     get_capability,
     get_graphic_view_overview,
+    get_view_dataset,
+    list_analysis_artifacts,
     list_capabilities,
+    list_view_datasets,
 )
 from entropia.apps.api.deps import RequestContext, request_context
 from entropia.domain.identity.policy import require_capability_admin
@@ -38,7 +42,10 @@ _CAPABILITY_PATH = "/capabilities/{capability_key}"
 _TRANSITIONS_PATH = "/capabilities/{capability_key}/lifecycle-transitions"
 _GRAPHIC_VIEW_OVERVIEW_PATH = "/future-dev/graphic_view/overview"
 _VIEW_DATASET_QUERY_PATH = "/view-datasets/query"
+_VIEW_DATASETS_PATH = "/view-datasets"
+_VIEW_DATASET_PATH = "/view-datasets/{view_dataset_id}"
 _ANALYSIS_ARTIFACTS_PATH = "/analysis-artifacts"
+_ANALYSIS_ARTIFACT_PATH = "/analysis-artifacts/{artifact_id}"
 
 
 class LifecycleTransitionRequest(BaseModel):
@@ -138,6 +145,53 @@ async def analysis_artifact_create(
         output_ref=body.output_ref,
         idempotency_key=idempotency_key,
     )
+
+
+# --------------------------------------------------------------------------- #
+# Operational output history (owner-scoped read, doc 22 §7) — the read surface  #
+# for the outputs the operational POSTs above create.                          #
+# --------------------------------------------------------------------------- #
+
+
+@router.get(_VIEW_DATASETS_PATH)
+async def view_datasets_index(
+    cursor: str | None = None,
+    limit: int | None = None,
+    ctx: RequestContext = Depends(request_context),
+) -> dict[str, Any]:
+    return await list_view_datasets(ctx.session, ctx.actor, cursor=cursor, limit=limit)
+
+
+@router.get(_VIEW_DATASET_PATH)
+async def view_dataset_detail(
+    view_dataset_id: str,
+    ctx: RequestContext = Depends(request_context),
+) -> dict[str, Any]:
+    return await get_view_dataset(ctx.session, ctx.actor, view_dataset_id=view_dataset_id)
+
+
+@router.get(_ANALYSIS_ARTIFACTS_PATH)
+async def analysis_artifacts_index(
+    artifact_type: str | None = None,
+    cursor: str | None = None,
+    limit: int | None = None,
+    ctx: RequestContext = Depends(request_context),
+) -> dict[str, Any]:
+    return await list_analysis_artifacts(
+        ctx.session,
+        ctx.actor,
+        artifact_type=artifact_type,
+        cursor=cursor,
+        limit=limit,
+    )
+
+
+@router.get(_ANALYSIS_ARTIFACT_PATH)
+async def analysis_artifact_detail(
+    artifact_id: str,
+    ctx: RequestContext = Depends(request_context),
+) -> dict[str, Any]:
+    return await get_analysis_artifact(ctx.session, ctx.actor, artifact_id=artifact_id)
 
 
 __all__ = ["router"]

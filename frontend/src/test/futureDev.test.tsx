@@ -103,8 +103,56 @@ const ARTIFACT_RESULT = {
   correlation_id: "corr_3",
 };
 
+// Output-history projections (doc 22 §7) — row/detail mirror queries/capability.py.
+const VIEW_DATASET_ROW = {
+  view_dataset_id: "vds_01",
+  capability_key: "graphic_view",
+  schema_version: "v1",
+  source_manifest_refs: ["man_1", "man_2"],
+  series_refs: [],
+  marker_refs: ["mk_1"],
+  range_spec: null,
+  deletion_state: "active",
+  row_version: 1,
+  created_at: "2026-07-06T12:00:00+00:00",
+};
+const VIEW_DATASET_DETAIL = {
+  ...VIEW_DATASET_ROW,
+  owner_principal_id: "hu_user",
+  created_by_principal_id: "hu_user",
+};
+const VIEW_DATASET_HISTORY = {
+  data: [VIEW_DATASET_ROW],
+  meta: { cursor: null, has_more: false, limit: 20 },
+};
+const EMPTY_VIEW_HISTORY = { data: [], meta: { cursor: null, has_more: false, limit: 20 } };
+
+const ARTIFACT_ROW = {
+  artifact_id: "art_01",
+  artifact_type: "monte_carlo",
+  capability_key: "backtest_review",
+  input_manifest_refs: ["man_9"],
+  method_version: "mc-v1",
+  output_ref: null,
+  deletion_state: "active",
+  row_version: 1,
+  created_at: "2026-07-06T12:05:00+00:00",
+};
+const ARTIFACT_HISTORY = {
+  data: [ARTIFACT_ROW],
+  meta: { cursor: null, has_more: false, limit: 20, artifact_type: null },
+};
+const EMPTY_ARTIFACT_HISTORY = {
+  data: [],
+  meta: { cursor: null, has_more: false, limit: 20, artifact_type: null },
+};
+
+const NO_OUTPUT_HISTORY =
+  "No output exists because this capability has not produced an operational artifact in the current state.";
+
 // apiStub matches the FIRST fragment contained in the URL — the detail route
-// must precede the "/capabilities" list prefix it contains.
+// must precede the "/capabilities" list prefix it contains. Output history GETs
+// default to empty so every existing test that renders FutureDev stays clean.
 function baseRoutes(onTransition?: (init?: RequestInit) => unknown) {
   return {
     "GET /future-dev/graphic_view/overview": OVERVIEW,
@@ -114,6 +162,8 @@ function baseRoutes(onTransition?: (init?: RequestInit) => unknown) {
     "POST /analysis-artifacts": ARTIFACT_RESULT,
     "GET /capabilities/graphic_view": DETAIL,
     "GET /capabilities": CAPABILITIES,
+    "GET /view-datasets": EMPTY_VIEW_HISTORY,
+    "GET /analysis-artifacts": EMPTY_ARTIFACT_HISTORY,
   };
 }
 
@@ -362,5 +412,46 @@ describe("Future Dev page", () => {
     // A blank output ref never travels.
     expect("output_ref" in body).toBe(false);
     expect((captured?.headers as Record<string, string>)["Idempotency-Key"]).toBeTruthy();
+  });
+
+  it("renders the futureDevNoHistory.empty copy when a capability has no output", async () => {
+    stubApi(baseRoutes());
+    renderFutureDev();
+    await screen.findByText("Live Trade");
+    // Both the View Dataset and the Analysis Artifact histories are empty here.
+    const empties = await screen.findAllByText(NO_OUTPUT_HISTORY);
+    expect(empties.length).toBe(2);
+  });
+
+  it("renders the owner's View Dataset history rows", async () => {
+    stubApi({ ...baseRoutes(), "GET /view-datasets": VIEW_DATASET_HISTORY });
+    renderFutureDev();
+    await screen.findByText("vds_01");
+    expect(screen.getByText("View Dataset history")).toBeTruthy();
+    // The Analysis Artifact history is still empty in this scenario.
+    expect(screen.getByText(NO_OUTPUT_HISTORY)).toBeTruthy();
+  });
+
+  it("renders the owner's Analysis Artifact history with a type filter", async () => {
+    stubApi({ ...baseRoutes(), "GET /analysis-artifacts": ARTIFACT_HISTORY });
+    renderFutureDev();
+    await screen.findByText("art_01");
+    expect(screen.getByRole("combobox", { name: "Filter artifact type" })).toBeTruthy();
+  });
+
+  it("opens the owner-scoped View Dataset detail on select", async () => {
+    stubApi({
+      // The detail fragment MUST precede the list prefix it contains.
+      "GET /view-datasets/vds_01": VIEW_DATASET_DETAIL,
+      ...baseRoutes(),
+      "GET /view-datasets": VIEW_DATASET_HISTORY,
+    });
+    renderFutureDev();
+    await screen.findByText("vds_01");
+    // The View Dataset history row's View button is the last one on the page.
+    const viewButtons = screen.getAllByRole("button", { name: "View" });
+    fireEvent.click(viewButtons[viewButtons.length - 1]);
+    // The owner provenance only exists on the detail projection.
+    await screen.findByText("hu_user");
   });
 });

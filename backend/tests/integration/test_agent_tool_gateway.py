@@ -135,6 +135,69 @@ async def test_tool_call_records_full_envelope(session) -> None:
 
 
 # --------------------------------------------------------------------------- #
+# Envelope status is never shadowed by a handler payload's own status key
+# --------------------------------------------------------------------------- #
+
+
+async def test_envelope_status_not_shadowed_by_artifact_status(session) -> None:
+    # artifact.create returns its OWN maturity; it must NOT overwrite the
+    # envelope's terminal call status (doc 18 §9.2). The durable row agrees.
+    await _seed(session)
+
+    result = await agent_tools.dispatch_tool_call(
+        session,
+        AGENT,
+        tool_name="artifact.create",
+        policy_scope="research",
+        request={"title": "H", "mechanism": "m"},
+    )
+
+    assert result["status"] == "succeeded"
+    assert result["artifact_status"] == HypothesisStatus.EXPLORING.value
+    assert "status" not in {"artifact_status"}  # keys are distinct, not aliased
+    call = await tg_repo.get_tool_call(session, result["tool_call_id"])
+    assert call.status is ToolCallStatus.SUCCEEDED
+
+
+async def test_task_query_status_is_namespaced(session) -> None:
+    # agent.task.query returns the queried task's status under ``task_status``;
+    # the envelope's ``status`` stays the call outcome.
+    await _seed(session)
+    task = await _seed_task(session)
+
+    result = await agent_tools.dispatch_tool_call(
+        session,
+        AGENT,
+        tool_name="agent.task.query",
+        policy_scope="observation",
+        request={"target_task_id": task.task_id},
+    )
+
+    assert result["found"] is True
+    assert result["status"] == "succeeded"
+    assert result["task_status"] == str(task.status)
+
+
+async def test_replay_status_not_shadowed(session) -> None:
+    # The replay path mirrors the success path: the durable terminal status wins
+    # over the stored handler payload (AL-14).
+    await _seed(session)
+    payload = {
+        "tool_name": "artifact.create",
+        "policy_scope": "research",
+        "idempotency_key": "shadow_key",
+        "request": {"title": "H", "mechanism": "m"},
+    }
+    first = await agent_tools.dispatch_tool_call(session, AGENT, **payload)
+    replay = await agent_tools.dispatch_tool_call(session, AGENT, **payload)
+
+    assert replay["replayed"] is True
+    assert replay["tool_call_id"] == first["tool_call_id"]
+    assert replay["status"] == "succeeded"
+    assert replay["artifact_status"] == HypothesisStatus.EXPLORING.value
+
+
+# --------------------------------------------------------------------------- #
 # AL-11 — agent_research_only cannot enter execution/backtest
 # --------------------------------------------------------------------------- #
 

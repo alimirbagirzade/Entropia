@@ -393,10 +393,11 @@ async def test_agent_loop_directive_to_hypothesis_without_ui(session) -> None:
         idempotency_key="e2e-agent-hypothesis-1",
     )
     await session.commit()
-    # NOTE: the merged response's "status" is the DOMAIN hypothesis status (the
-    # handler payload shadows the envelope key); the durable tool-call row is
-    # the authoritative call outcome.
-    assert hypothesis["status"] == "exploring"
+    # The merged response's "status" is the envelope call outcome (never shadowed
+    # by the handler payload); the artifact's own maturity is namespaced under
+    # "artifact_status". The durable tool-call row stays authoritative.
+    assert hypothesis["status"] == "succeeded"
+    assert hypothesis["artifact_status"] == "exploring"
     call = await session.get(AgentToolCall, hypothesis["tool_call_id"])
     assert call is not None and str(call.status) == "succeeded"
 

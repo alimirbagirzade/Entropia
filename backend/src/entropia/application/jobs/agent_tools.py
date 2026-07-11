@@ -173,15 +173,20 @@ async def dispatch_tool_call(
         task_id=task_id,
         payload={"tool": tool.value, "tool_call_id": call.tool_call_id},
     )
-    return {"tool_call_id": call.tool_call_id, "status": "succeeded", **outcome.response}
+    # The envelope's lifecycle status + id WIN over any handler payload key: a
+    # handler's own ``status`` (e.g. hypothesis ``exploring``) must never shadow
+    # the call's terminal ``succeeded`` — the durable row is authoritative.
+    return {**outcome.response, "tool_call_id": call.tool_call_id, "status": "succeeded"}
 
 
 def _replayed(prior: Any) -> dict[str, Any]:
+    # Same envelope-wins rule as the success path: the durable row's terminal
+    # status + id are authoritative, never shadowed by the stored handler payload.
     return {
+        **(prior.response_ref or {}),
         "tool_call_id": prior.tool_call_id,
         "status": str(prior.status),
         "replayed": True,
-        **(prior.response_ref or {}),
     }
 
 
@@ -245,7 +250,8 @@ async def _handle_task_query(ctx: _Ctx) -> _ToolOutcome:
         response={
             "found": True,
             "task_id": task.task_id,
-            "status": str(task.status),
+            # Namespaced so it never shadows the envelope's call ``status``.
+            "task_status": str(task.status),
             "stage": task.stage,
             "progress": task.progress,
             "context_manifest_id": task.context_manifest_id,
@@ -371,7 +377,9 @@ async def _handle_artifact_create(ctx: _Ctx) -> _ToolOutcome:
     """`artifact.create` — persist an Agent-owned hypothesis/output (doc 18 §10)."""
     artifact = await _create_agent_artifact(ctx, default_status=HypothesisStatus.EXPLORING)
     return _ToolOutcome(
-        response={"artifact_id": artifact.artifact_id, "status": str(artifact.status)},
+        # ``artifact_status`` is namespaced so the artifact's maturity never
+        # shadows the envelope's call ``status`` (doc 18 §9.2).
+        response={"artifact_id": artifact.artifact_id, "artifact_status": str(artifact.status)},
         artifact_output_ref=artifact.artifact_id,
         domain_events=[
             ("artifact_created", {"artifact_id": artifact.artifact_id}),

@@ -1976,7 +1976,38 @@ hâliyle DEĞİŞMEDİ.
 
 **Reuse anchor'ları:** `agent_tools.py::dispatch_tool_call` return (envelope-wins merge order — the pattern for any future handler) + `_replayed` (same rule on replay) + `test_agent_tool_gateway.py::test_envelope_status_not_shadowed_by_artifact_status` / `test_task_query_status_is_namespaced` / `test_replay_status_not_shadowed`.
 
-## Next: post-V1 (continued) — TIER 2 SAYFA HARİTASI + TÜM route yüzeyleri TAMAM (24/24 real) + `data`-queue operator redelivery (PR #129 + #131) + **SSE streaming e2e reconnect resilience (PR #133)** + **tool-call envelope status shadowing (PR #135)** landed → **hiçbir teed-up TIER 3 açık iş kalmadı**. Kalan adaylar tükendi: SSE streaming e2e ✅ KAPANDI (PR #133); tool-call status shadowing ✅ KAPANDI (PR #135). **retention auto-purge KAPSAM DIŞI** (doc 20 §16 "Automatic purge remains disabled in Production V1" — Future-Dev boundary, uygulanabilir slice değil). LLM generation Future-Dev — kapsam dışı. Proje ~%98; yeni iş için kullanıcıdan yön iste (aday: minör backend follow-up / `summary["timeframe"]` market-revision metadata çözümü).
+## Stage summary["timeframe"] resolution — landed (PR #137)
+
+**BACKEND-ONLY** (no migration, alembic head `0021_local_auth` SABİT; **`ENGINE_VERSION` BUMP:
+`backtest-engine-v2-position-size-limits` → `backtest-engine-v2-summary-timeframe`**; backend
+**1057 → 1061**). main after PR #137 = `22c099e`, feat `e1a2f88`. Closes the kickoff deferred item
+"`summary[\"timeframe\"]` çözümü (market-revision metadata'sından)": `summary["timeframe"]` was a
+hard-coded `None` since Slice B (`engine.py:657`). Now `domain/backtest/engine.py::run_engine` gains
+an optional caller-resolved keyword `timeframe: str | None = None` (engine stays PURE — no I/O; all
+callers pass keyword args → default keeps them byte-identical) and surfaces it verbatim in the
+summary; `application/jobs/backtest_engine.py::run_backtest` resolves it from the PINNED strategy's
+market revision via the read-only `md_repo.get_base_timeframe_for_revision` (PR #55 helper;
+`resolution_kind == BAR` → `resolution_value` e.g. `"1m"`; immutable revision → reproducibility-safe)
+and threads it into `run_engine`. Non-bar (event-based / unknown) revisions surface an honest `None`,
+never guessed (L4). The resolve happens OUTSIDE the engine `try:` — an unexpected DB error stays a
+retryable job exception, not a FAILED run (file contract preserved). ENGINE_VERSION bump shifts the
+`execution_key` namespace so a stale timeframe-less result is not reused next to fresh ones carrying
+the real value (INF-04/INF-05; PR #47/#63 precedent). Read models untouched (`ResultSummary.timeframe`
+column existed since Stage 5a; queries/projections already carried the field); frontend UNCHANGED
+(`lib/backtest.ts` already types `timeframe: string | null`). +4 tests (2 unit: engine passthrough
+`"1m"` / default `None`; 2 integration: full admission→worker chain persists `"1m"` into the summary
+row + headline JSONB + result read model / un-timeframed revision persists `None`); the ENGINE_VERSION
+literal assert updated. Review: APPROVE 0 CRITICAL/HIGH (1 LOW accepted: the duplicate base-TF read in
+`_resolve_base_seconds` returns SECONDS for plan validation while the job needs the verbatim STRING —
+kept separate deliberately).
+
+**Reuse anchor'ları:** `run_engine(..., timeframe=...)` (caller-resolved summary metadata pattern —
+any future summary field resolved from pinned metadata follows this shape) +
+`md_repo.get_base_timeframe_for_revision` + `test_backtest_persistence.py::_ready_composition(base_tf=...)`
+(bar-timeframed market revision seed helper) +
+`test_result_summary_carries_pinned_market_timeframe` / `test_result_summary_timeframe_none_when_revision_not_bar_timeframed`.
+
+## Next: post-V1 (continued) — TIER 2 SAYFA HARİTASI + TÜM route yüzeyleri TAMAM (24/24 real) + `data`-queue operator redelivery (PR #129 + #131) + SSE streaming e2e reconnect resilience (PR #133) + tool-call envelope status shadowing (PR #135) + **`summary["timeframe"]` market-revision metadata çözümü (PR #137)** landed → **hiçbir teed-up açık iş kalmadı**. **retention auto-purge KAPSAM DIŞI** (doc 20 §16 "Automatic purge remains disabled in Production V1" — Future-Dev boundary, uygulanabilir slice değil). LLM generation Future-Dev — kapsam dışı. Proje ~%98; yeni iş için kullanıcıdan yön iste (kalan adaylar — hiçbiri teyitli değil: audit log-projection indexleri [migration gerektirir, alembic head ilerler]; capability aktivasyonu [graphic_view'i Placeholder'dan çıkarma, doc 22 — gate'ler + Admin transition hazır]; minör backend temizlik; kullanıcının getireceği yeni feature).
 
 **V1 COMPLETE (Stages 0–8, docs 01–22) + Auth/IdP + Parquet Slice A + Backtest Engine Slice B + real indicator compute Slice C + `risk_based` sizing (a) + condition blocks (b) + condition extensions (b2) + two-package indicator-vs-indicator + higher-timeframe resampling (c) + per-condition multi-TF reference (i) + N-ary reference chain (ii) + VWAP directional key (d) + `formula_based` Kelly sizing + `position_size_limits` min/max cap (PR #63) landed (1015 tests).** The **Slice C indicator-compute + position-sizing follow-ups are now EFFECTIVELY COMPLETE — TIER 1 backend is DONE**:
 

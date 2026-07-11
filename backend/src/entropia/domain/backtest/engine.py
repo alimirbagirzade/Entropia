@@ -404,13 +404,18 @@ def run_engine(
     execution_key: str,
     item_count: int = 1,
     indicator_plan: IndicatorPlan | None = None,
+    timeframe: str | None = None,
 ) -> EngineOutput:
     """Deterministically bar-replay one strategy over its pinned OHLCV bars.
 
     Entry/exit timing uses real built-in indicator signals when ``indicator_plan``
     resolves to at least one computable entry block; otherwise it falls back to the
     labelled deterministic breakout proxy (Slice B behaviour), so callers without a
-    plan — and the pure unit tests — are unaffected."""
+    plan — and the pure unit tests — are unaffected.
+
+    ``timeframe`` is the pinned market revision's base bar timeframe, resolved by
+    the CALLER (the engine is pure — no I/O); ``None`` means the revision is not
+    bar-timeframed (event-based / unknown) and is surfaced as-is, never guessed."""
     config = strategy_config
     initial_capital = Decimal(config.data.initial_capital).quantize(_MONEY)
     long_ok, short_ok = _direction_flags(config.position_entry_logic.direction_mode)
@@ -654,7 +659,7 @@ def run_engine(
 
     summary: dict[str, Any] = {
         "symbol": config.data.instrument_id,
-        "timeframe": None,
+        "timeframe": timeframe,
         "initial_capital": initial_capital,
         "final_equity": equity,
         "net_profit": net_profit,

@@ -2007,7 +2007,50 @@ any future summary field resolved from pinned metadata follows this shape) +
 (bar-timeframed market revision seed helper) +
 `test_result_summary_carries_pinned_market_timeframe` / `test_result_summary_timeframe_none_when_revision_not_bar_timeframed`.
 
-## Next: post-V1 (continued) — TIER 2 SAYFA HARİTASI + TÜM route yüzeyleri TAMAM (24/24 real) + `data`-queue operator redelivery (PR #129 + #131) + SSE streaming e2e reconnect resilience (PR #133) + tool-call envelope status shadowing (PR #135) + **`summary["timeframe"]` market-revision metadata çözümü (PR #137)** landed → **hiçbir teed-up açık iş kalmadı**. **retention auto-purge KAPSAM DIŞI** (doc 20 §16 "Automatic purge remains disabled in Production V1" — Future-Dev boundary, uygulanabilir slice değil). LLM generation Future-Dev — kapsam dışı. Proje ~%98; yeni iş için kullanıcıdan yön iste (kalan adaylar — hiçbiri teyitli değil: audit log-projection indexleri [migration gerektirir, alembic head ilerler]; capability aktivasyonu [graphic_view'i Placeholder'dan çıkarma, doc 22 — gate'ler + Admin transition hazır]; minör backend temizlik; kullanıcının getireceği yeni feature).
+## Stage audit log-projection indexes — landed (PR #139)
+
+**BACKEND-ONLY, MIGRATION slice** (alembic head **`0021_local_auth` → `0022_audit_log_indexes`**;
+`ENGINE_VERSION` UNCHANGED — engine untouched; backend **1061 → 1065**; frontend unchanged 238).
+main after PR #139 = `73ae1bd`, feat `72c95ec`. Closes the deferred performance candidate
+"audit log-projection indexleri": the Admin Logs read model (`queries/log_projection.py`,
+doc 19 §5/§6.2) ran every filtered page and every correlation chain as an unindexed scan over the
+append-only, insert-hot `audit_events` table. Design derived from the EMPIRICAL read of ALL THREE
+consumers (`list_log_events`, `get_log_event`, `audit_repo.query_audit_events` — no other consumer
+exists). 5 indexes on `AuditEvent.__table_args__` + byte-identical mirror migration `0022`:
+
+- `(severity | actor_principal_id | target_entity_type, occurred_at, event_id)` partial
+  composites — filter equality + the newest-first keyset BEHIND it, so a filtered page is ONE
+  ordered index scan; partial `WHERE` mirrors the filter semantics (NULL never matches);
+  `severity` indexes only non-info rows (the warning/error triage case — `severity = 'info'`
+  matches the table bulk and deliberately stays on `ix_audit_events_log_order`).
+- `(correlation_id, occurred_at, event_id)` partial — the §5 detail correlation chain
+  (equality + ASC composite order; DESC keyset via backward scan).
+- `lower(correlation_id) varchar_pattern_ops` partial **EXPRESSION** index — the §6.2
+  exact-or-prefix filter lowercases while ids store UPPERCASE Crockford base32 (`shared/ids.py`),
+  so only this expression index can serve the LIKE prefix.
+
+Proofs: migration↔model `pg_indexes.indexdef` diff **IDENTICAL** (migration-built vs
+`Base.metadata.create_all` schema); alembic 0022 up/down/up green (8→3→8 indexes on
+`audit_events`); 3× EXPLAIN — `severity='error'` → **Index Only Scan Backward** on the partial
+index (the planner PROVES the `!= 'info'` implication; sort-free newest-first), prefix LIKE →
+pattern-ops range cond on the expression index, chain → Index Only Scan without sort.
++4 integration tests (`tests/integration/test_audit_log_indexes.py` — asserts against
+`pg_indexes.indexdef` server-truth DDL: names, column ORDER as contract, partial predicates,
+expression + ops). Review: APPROVE 0 CRITICAL/HIGH (2 LOW accepted: non-CONCURRENT index
+creation = the house pattern of all 21 prior migrations, dev-stage deployment; pre-existing
+`startswith` `_`-wildcard nuance in `log_projection.py:102` — the planner extracts the fixed
+prefix `corr` and filters, result correct).
+
+**Honest boundary:** `actor_kind` (3-value enum) deliberately unindexed — poor selectivity;
+family/query-text substring (`contains`) filters would need **pg_trgm** (an extension decision,
+out of scope) — both keep riding the log-order index.
+
+**Reuse anchor'ları:** `test_audit_log_indexes.py::_indexdefs` (pg_indexes `indexdef`
+server-truth assert pattern for any future index slice) + the parity proof (indexdef dict diff
+between the migration-built DB and an ORM-`create_all` schema) + the EXPLAIN
+`SET enable_seqscan = off` viability ritual on the empty migration DB.
+
+## Next: post-V1 (continued) — TIER 2 SAYFA HARİTASI + TÜM route yüzeyleri TAMAM (24/24 real) + `data`-queue operator redelivery (PR #129 + #131) + SSE streaming e2e reconnect resilience (PR #133) + tool-call envelope status shadowing (PR #135) + `summary["timeframe"]` market-revision metadata çözümü (PR #137) + **audit log-projection indexleri (PR #139 — alembic head artık `0022_audit_log_indexes`)** landed → **hiçbir teed-up açık iş kalmadı**. **retention auto-purge KAPSAM DIŞI** (doc 20 §16 "Automatic purge remains disabled in Production V1" — Future-Dev boundary, uygulanabilir slice değil). LLM generation Future-Dev — kapsam dışı. Proje ~%98; yeni iş için kullanıcıdan yön iste (kalan adaylar — hiçbiri teyitli değil: capability aktivasyonu [graphic_view'i Placeholder'dan çıkarma, doc 22 — gate'ler + Admin transition hazır, PR #82/#95 taban]; pg_trgm substring-filtre index'leri [extension kararı — family/query-text filtreleri için, #139'un dürüst sınırı]; minör backend temizlik; kullanıcının getireceği yeni feature).
 
 **V1 COMPLETE (Stages 0–8, docs 01–22) + Auth/IdP + Parquet Slice A + Backtest Engine Slice B + real indicator compute Slice C + `risk_based` sizing (a) + condition blocks (b) + condition extensions (b2) + two-package indicator-vs-indicator + higher-timeframe resampling (c) + per-condition multi-TF reference (i) + N-ary reference chain (ii) + VWAP directional key (d) + `formula_based` Kelly sizing + `position_size_limits` min/max cap (PR #63) landed (1015 tests).** The **Slice C indicator-compute + position-sizing follow-ups are now EFFECTIVELY COMPLETE — TIER 1 backend is DONE**:
 

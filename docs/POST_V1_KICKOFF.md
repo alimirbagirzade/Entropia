@@ -43,36 +43,60 @@ INF-04/INF-05, PR #47/#63 emsali). +4 test (2 unit passthrough/default + 2 integ
 summary alanı için desen) + `_ready_composition(base_tf=...)` seed helper
 (`test_backtest_persistence.py`).
 
+## audit log-projection indexleri — ✅ LANDED (PR #139, main `73ae1bd`)
+
+**BACKEND-ONLY, MIGRATION dilimi** (alembic head **`0021_local_auth` → `0022_audit_log_indexes`**;
+`ENGINE_VERSION` SABİT — engine dokunulmadı; backend **1061 → 1065**; frontend **238** SABİT).
+Deferred performans adayı kapandı: Admin Logs read model'i (`queries/log_projection.py`, doc 19
+§5/§6.2) her filtreli sayfayı ve her correlation zincirini append-only `audit_events` üzerinde
+indexsiz taramayla çözüyordu. Tasarım ÜÇ tüketicinin (başkası yok) ampirik okumasından türedi:
+3 partial composite (`severity|actor_principal_id|target_entity_type` + arkada newest-first
+`(occurred_at, event_id)` keyset — filtreli sayfa TEK sıralı index taraması; `severity` yalnız
+non-info triage satırlarını indexler) + correlation chain composite (§5, eşitlik + ASC sıra) +
+`lower(correlation_id) varchar_pattern_ops` partial EXPRESSION index (§6.2 prefix filtresi
+lower() uygular, ID'ler UPPERCASE Crockford base32 — yalnız bu index servis edebilir).
+Kanıtlar: migration↔model `pg_indexes.indexdef` diff IDENTICAL; alembic up/down/up (8→3→8);
+3× EXPLAIN (partial implication planner'ca kanıtlı → Index Only Scan Backward sort'suz;
+pattern-ops range cond; zincir Index Only Scan). +4 integration test
+(`test_audit_log_indexes.py`, pg_indexes server-truth DDL shape). Review APPROVE 0 CRITICAL/HIGH.
+**Dürüst sınır:** `actor_kind` bilinçli indexsiz; family/query-text substring filtreleri pg_trgm
+ister (extension kararı, kapsam dışı).
+
+**Reuse anchor'ları:** `test_audit_log_indexes.py::_indexdefs` (indexdef assert deseni) +
+parity diff kanıtı (migration-built DB vs ORM-`create_all` şema) + `SET enable_seqscan = off`
+EXPLAIN viability ritüeli.
+
 **SIRADAKİ İŞ:** hiçbir teed-up açık iş kalmadı. retention auto-purge KAPSAM DIŞI (doc 20 §16).
-LLM generation Future-Dev. Proje ~%98 — yeni iş için YÖN KULLANICIDAN gelmeli (adaylar: audit
-log-projection indexleri [migration gerektirir] / capability aktivasyonu graphic_view / minör temizlik /
-yeni feature).
+LLM generation Future-Dev. Proje ~%98 — yeni iş için YÖN KULLANICIDAN gelmeli (adaylar:
+capability aktivasyonu graphic_view [doc 22, PR #82/#95 taban] / pg_trgm substring-filtre
+index'leri [#139'un dürüst sınırı, extension kararı] / minör temizlik / yeni feature).
 
 **PASTE-READY RESUME PROMPT (sonraki temiz oturuma yapıştır):**
 
 ```
 Entropia — post-V1. STALE-BY-DEFAULT: aşağıdaki durumu GİT'TEN DOĞRULA, özete güvenme.
 ÖNCE: git fetch && git log --oneline origin/main -6 && gh pr list --state all -L 8.
-main = docs PR #138 merge sonrası ileri; kod main'i 22c099e (Merge #137 — summary["timeframe"]
-feat e1a2f88). alembic head 0021_local_auth (DEĞİŞMEDİ); ENGINE_VERSION =
-backtest-engine-v2-summary-timeframe (#137'DE BUMP EDİLDİ — execution_key namespace kaydı).
-Backend 1061 test, frontend 238.
+main = docs PR #140 merge sonrası ileri; kod main'i 73ae1bd (Merge #139 — audit log-projection
+indexleri feat 72c95ec). alembic head **0022_audit_log_indexes** (#139'DA İLERLEDİ — 0021 üstüne
+index-only migration); ENGINE_VERSION = backtest-engine-v2-summary-timeframe (DEĞİŞMEDİ).
+Backend 1065 test, frontend 238.
 
 DURUM: V1 %100 + TIER 2 sayfa haritası %100 (24/24 real, tüm route yüzeyleri bağlı) + TIER 3
 adaylarının TAMAMI kapalı (SSE e2e #133, data-queue redelivery #129+#131, tool-call shadowing
-#135) + summary["timeframe"] deferred item'ı KAPANDI (PR #137: worker pinned market revision'dan
-get_base_timeframe_for_revision ile çözer → run_engine opsiyonel timeframe param, engine saf;
-BAR olmayan revision dürüst None, L4). Proje ~%98.
+#135) + summary["timeframe"] KAPANDI (#137) + audit log-projection indexleri KAPANDI (PR #139:
+5 index — 3 partial composite [severity|actor|target_type + arkada (occurred_at,event_id)
+keyset] + correlation chain composite + lower(correlation_id) varchar_pattern_ops expression;
+parity IDENTICAL, up/down/up, 3× EXPLAIN kanıtlı). Proje ~%98.
 
 ÖNEMLİ: teed-up (teyitli) açık iş KALMADI. retention auto-purge KAPSAM DIŞI (doc 20 §16 "Automatic
 purge remains disabled in Production V1" — Future-Dev boundary). LLM generation Future-Dev — kapsam dışı.
 
 SIRADAKİ İŞ: yeni bir yön yok — BAŞLARKEN KULLANICIYA SOR ne yapmak istediğini. Olası adaylar (hiçbiri
-teyitli değil): (a) audit log-projection indexleri (deferred performans dilimi; MIGRATION gerektirir →
-alembic head 0021'den ilerler; önce sorgu desenlerini ampirik oku); (b) capability aktivasyonu
-(graphic_view'i Placeholder'dan çıkarma, doc 22 — gate'ler + Admin transition hazır); (c) minör backend
-temizlik; (d) kullanıcının getireceği yeni feature. BAŞLAMADAN ilgili doc'u + route/command imzalarını +
-queries/commands dönüş dict'lerini oku → wire tipleri VERBATIM ayna.
+teyitli değil): (a) capability aktivasyonu (graphic_view'i Placeholder'dan çıkarma, doc 22 — gate'ler +
+Admin transition hazır, PR #82/#95 taban); (b) pg_trgm substring-filtre index'leri (family/query-text
+contains filtreleri — #139'un dürüst sınırı; EXTENSION kararı, prod erişilebilirliğini kullanıcıya sor);
+(c) minör backend temizlik; (d) kullanıcının getireceği yeni feature. BAŞLAMADAN ilgili doc'u +
+route/command imzalarını + queries/commands dönüş dict'lerini oku → wire tipleri VERBATIM ayna.
 
 YÖNTEM: Workflow KULLANMA; direct-author. Backend loop: cd backend && uv run ruff check . && uv run
 ruff format --check . && uv run mypy src && TEST_DATABASE_URL=...entropia_auth uv run pytest --no-cov -q

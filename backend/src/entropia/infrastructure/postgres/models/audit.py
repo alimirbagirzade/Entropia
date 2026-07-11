@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, Index, Integer, String, func
+from sqlalchemy import DateTime, Index, Integer, String, func, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -22,6 +22,53 @@ class AuditEvent(Base):
     __table_args__ = (
         Index("ix_audit_events_log_order", "occurred_at", "event_id"),
         Index("ix_audit_events_target", "target_entity_id"),
+        # Log-projection filter indexes (doc 19 §6.2): each mirrors one equality
+        # filter of ``list_log_events`` plus the newest-first
+        # ``(occurred_at, event_id)`` keyset, so a filtered page is a single
+        # ordered index scan. Partial WHERE matches the filter semantics (a NULL
+        # row can never match) and keeps the insert-hot append path cheap.
+        # ``severity`` indexes only non-info rows — the warning/error triage
+        # case; ``severity = 'info'`` matches the table bulk and deliberately
+        # rides the log-order index instead.
+        Index(
+            "ix_audit_events_severity_order",
+            "severity",
+            "occurred_at",
+            "event_id",
+            postgresql_where=text("severity != 'info'"),
+        ),
+        Index(
+            "ix_audit_events_actor_order",
+            "actor_principal_id",
+            "occurred_at",
+            "event_id",
+            postgresql_where=text("actor_principal_id IS NOT NULL"),
+        ),
+        Index(
+            "ix_audit_events_target_type_order",
+            "target_entity_type",
+            "occurred_at",
+            "event_id",
+            postgresql_where=text("target_entity_type IS NOT NULL"),
+        ),
+        # Correlation chain (doc 19 §5): equality + the same composite order —
+        # serves the detail view's ASC chain (and a DESC keyset via backward
+        # scan) without touching the heap for ordering.
+        Index(
+            "ix_audit_events_correlation_order",
+            "correlation_id",
+            "occurred_at",
+            "event_id",
+            postgresql_where=text("correlation_id IS NOT NULL"),
+        ),
+        # §6.2 exact-or-prefix filter runs ``lower(correlation_id) LIKE 'p%'``
+        # while ids store UPPERCASE Crockford base32 — only this expression
+        # index (pattern ops, locale-independent) can serve that predicate.
+        Index(
+            "ix_audit_events_correlation_prefix",
+            text("lower(correlation_id) varchar_pattern_ops"),
+            postgresql_where=text("correlation_id IS NOT NULL"),
+        ),
     )
 
     event_id: Mapped[str] = mapped_column(String(40), primary_key=True)

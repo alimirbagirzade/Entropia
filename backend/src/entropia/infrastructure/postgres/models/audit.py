@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, Index, Integer, String, func, text
+from sqlalchemy import DDL, DateTime, Index, Integer, String, event, func, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -69,6 +69,33 @@ class AuditEvent(Base):
             text("lower(correlation_id) varchar_pattern_ops"),
             postgresql_where=text("correlation_id IS NOT NULL"),
         ),
+        # Substring (pg_trgm) indexes (doc 19 §6.2): the family token filter and
+        # the ``q`` search run ``lower(col) LIKE '%needle%'`` — a leading-wildcard
+        # LIKE that no B-tree (not even ``varchar_pattern_ops``) can serve; only a
+        # ``gin_trgm_ops`` trigram index does. Each is an expression index over
+        # ``lower(col)`` to match the predicate. ``event_kind`` is NOT NULL so it
+        # covers every row; the nullable columns carry a partial ``IS NOT NULL``
+        # predicate (a NULL row never matches a ``contains``) to keep the
+        # insert-hot append path cheap. The extension is provisioned by the
+        # ``before_create`` listener below (create_all) and migration 0023
+        # (alembic).
+        Index(
+            "ix_audit_events_event_kind_trgm",
+            text("lower(event_kind) gin_trgm_ops"),
+            postgresql_using="gin",
+        ),
+        Index(
+            "ix_audit_events_target_id_trgm",
+            text("lower(target_entity_id) gin_trgm_ops"),
+            postgresql_using="gin",
+            postgresql_where=text("target_entity_id IS NOT NULL"),
+        ),
+        Index(
+            "ix_audit_events_reason_trgm",
+            text("lower(reason) gin_trgm_ops"),
+            postgresql_using="gin",
+            postgresql_where=text("reason IS NOT NULL"),
+        ),
     )
 
     event_id: Mapped[str] = mapped_column(String(40), primary_key=True)
@@ -114,3 +141,16 @@ class OutboxEvent(Base):
     )
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+# The ``audit_events`` trigram indexes above need the ``pg_trgm`` extension.
+# Declare that dependency on the metadata so any ``create_all`` path (tests)
+# provisions the extension BEFORE ``CREATE INDEX``; the paired migration 0023
+# does the same via ``op.execute`` for the alembic path. Postgres-only — a no-op
+# on any other dialect.
+_pg_trgm_ddl = DDL("CREATE EXTENSION IF NOT EXISTS pg_trgm")  # type: ignore[no-untyped-call]
+event.listen(
+    Base.metadata,
+    "before_create",
+    _pg_trgm_ddl.execute_if(dialect="postgresql"),
+)

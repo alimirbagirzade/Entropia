@@ -2259,39 +2259,40 @@ tarihsel referans** olarak duruyor.
 ```
 Entropia — post-V1 devam. STALE-BY-DEFAULT: aşağıdakini GİT'TEN DOĞRULA, özete güvenme.
 
-ÖNCE DOĞRULA: git fetch && git log --oneline origin/main -6 && gh pr list --state all -L 8.
-main = c5d97b6 (Merge #144) olmalı; kapanış docs PR'ı merge sonrası daha ileri (açıksa önce merge
-iste). alembic head 0023_audit_log_trgm_indexes (DEĞİŞMEDİ); ENGINE_VERSION =
-backtest-engine-v2-summary-timeframe (DEĞİŞMEDİ). Backend 1081 test, frontend 244. Yeni branch'i
+ÖNCE DOĞRULA: git fetch && git log --oneline origin/main -8 && gh pr list --state all -L 10.
+main >= 2d57f95 (Merge #149) olmalı; #150 (USAGE/ARCHITECTURE) + #151 (finalizasyon kapanış docs)
+merge sonrası daha ileri (açıksa önce merge iste). alembic head 0023_audit_log_trgm_indexes
+(DEĞİŞMEDİ); ENGINE_VERSION = backtest-engine-v2-summary-timeframe (DEĞİŞMEDİ). Backend 1089 test
+(CI server-truth — önceki zincirin 1088 sayımı off-by-one idi), frontend 246. Yeni branch'i
 MUTLAKA origin/main'den aç.
 
-ÖNCE OKU (authority order): docs/POST_V1_KICKOFF.md (en üst "Durum" bloğu — PR #143 + #144 +
-"SIRADAKİ İŞ" + en alttaki resume) → docs/STAGE2_HANDOFF.md (capability output/transition history
-landed #143/#144 + "## Next") → CLAUDE.md "Current position".
+ÖNCE OKU (authority order): docs/POST_V1_KICKOFF.md (en alttaki resume = bu blok) →
+docs/STAGE2_HANDOFF.md ("Post-V1 FINALIZATION landed" + "## Next") → CLAUDE.md "Current position"
+→ kök README ("Verifying changes" + 24-screen map) → docs/USAGE.md (golden path).
 
-DURUM: **PROJE ~%98 — V1=%100, TIER 2 sayfa haritası %100 (24/24 real, placeholder YOK), TÜM route
-yüzeyleri bağlı, TIER 3 adaylarının tamamı kapalı, doc-22 Future Dev capability sistemi UÇTAN UCA
-TAM.** Son iki slice — capability READ yüzeyleri: **#143 output history**
-(`GET /view-datasets[/{id}]` + `/analysis-artifacts[/{id}]`, owner-scoped ACTIVE-only newest-first
-keyset; iki operasyonel POST'un [view_dataset.query / analysis_artifact.create, #95] yazdığı ama
-okunamayan satırları okunur kıldı; doc 22 §7 futureDevNoHistory.empty ulaşılabilir; cross-owner/
-soft-deleted/missing → not-found) + **#144 transition history** (orphan
-`capability_repo.list_activation_events` → `GET /capabilities/{key}/lifecycle-transitions`,
-oldest-first, any-authenticated okuma / write Admin-only kalır). Capability sistemi TAM: registry
-list/detail + Admin transition (OCC + 7 gate + audit/outbox + activation event) + 2 operasyonel POST
-(ACTIVE-only) + output history #143 + transition history #144. TIER 3 kapalı: data-queue redelivery
-#129/#131, SSE reconnect #133, tool-call status shadowing #135, audit indexleri #139/#141. Frontend
-sayfa haritası TAM (Mainboard #125, Trash purge #127, outsource chooser #123 dahil 24/24).
+DURUM: **PROJE ~%99 — V1=%100, TIER 2 sayfa haritası %100 (24/24), TÜM route yüzeyleri bağlı,
+TIER 3 kapalı, doc-22 capability sistemi TAM, FINALIZASYON landed.** Finalizasyon dalgası:
+#146 agent tool-call gateway call-history read surface (orphan list_tool_calls/get_tool_call →
+GET /agent-tasks/{id}/tool-calls + /agent-tool-calls/{id}, ADMIN/SUPERVISOR; AnalysisLab "Tool
+calls" bölümü) + #147 seed identity FK fix (boş DB'de python -m entropia.apps.seed
+ForeignKeyViolationError ile KIRIKTI — relationship()'siz modellerde flush sırası tablo-FK'sından
+türetilmiyor; Principal önce flush; seed_identities(session) + 2 regression testi) + #148
+scripts/smoke.sh + make smoke (çalışan stack'in dışarıdan doğrulaması; e2e yol =
+tests/integration/test_e2e_pipeline.py, canlı 3 passed) + #149 kök README yenileme (gerçek build
+status, 24-screen map, Verifying changes, AUTH_MODE anlatısı, .env.example auth/rate-limit) +
+#150 docs/USAGE.md + ARCHITECTURE hizalama. Çalıştırılabilirlik EMPİRİK: Docker'sız yol uçtan uca
+kanıtlı (pg :5432 + alembic 0023 + uvicorn + seed + /me admin + Vite + make smoke SMOKE OK).
+DÜRÜST SINIR (yeni): docker compose up bu makinede KANITLANMADI — Docker Desktop self-update GUI
+onayı bekliyordu; compose config geçerli + CI "Docker — build images" yeşil.
 
 SIRADAKİ İŞ: **teed-up (teyitli) AÇIK İŞ KALMADI — yeni yön YOK, başlarken kullanıcıya SOR.** Aday
-(hiçbiri teyitli DEĞİL): (a) minör backend temizlik / tutarlılık düzeltmesi (migration'sız); (b)
-kullanıcının getireceği yeni feature; (c) orphan / dead-code taraması (repo'da bağlanmamış başka
-fonksiyon/endpoint/query var mı — #144 böyle bir orphan'ı [list_activation_events] kapatmıştı; şablon:
-yazılan-ama-okunamayan append log → oldest-first projection + any-authenticated GET, write path gated
-kalır). KAPSAM DIŞI: retention auto-purge (doc 20 §16 "Automatic purge remains disabled in Production
-V1"), LLM generation (Future-Dev), Graphic View renderer (doc 22 §1/§16/§17 "V18 statik placeholder
-korunur"). Başlamadan ilgili doc + route/command imzaları + queries/commands dönüş dict'lerini oku →
-wire tipleri VERBATIM ayna.
+(hiçbiri teyitli DEĞİL): (a) Docker compose tam-stack canlı kanıtı (Docker Desktop'ı GUI'den
+başlat/güncelle → docker compose up -d --build → make smoke → sonucu handoff'a işle); (b)
+kullanıcının getireceği yeni feature; (c) orphan / dead-code taraması (şablon: #144/#146 —
+yazılan-ama-okunamayan append log → projection + gated GET, write path gated kalır); (d) minör
+backend temizlik (migration'sız). KAPSAM DIŞI: retention auto-purge (doc 20 §16), LLM generation
+(Future-Dev), Graphic View renderer (doc 22 §1/§16/§17). Başlamadan ilgili doc + route/command
+imzaları + queries/commands dönüş dict'lerini oku → wire tipleri VERBATIM ayna.
 
 DÜRÜST SINIR (KALICI): ["jobs"] backend LİSTE yüzeyi YOK (job-scoped import report READ'leri
 #119'dan beri ["jobs"] altında — job.updated süpürür); ham baytlar sayfadan geçmez (upload'lar
@@ -2315,7 +2316,7 @@ rapor-seed'li JSON editör) + lib/strategy.ts (BODY-form INT token + tokensız s
 lib/manual.ts (İKİ body-form token) + lib/marketData.ts postWithOcc (If-Match "rv-N").
 
 YÖNTEM: Workflow KULLANMA; direct-author. Frontend loop: cd frontend (absolute path) &&
-npm run typecheck && npm run lint && npm test && npm run build (244 + yeniler geçmeli) + yeni
+npm run typecheck && npm run lint && npm test && npm run build (246 + yeniler geçmeli) + yeni
 component/unit test (test/helpers/apiStub.ts reuse — SIRALI eşleşme: spesifik aksiyon fragmanları
 çıplak liste/create prefix'inden ÖNCE; zincirleme yükleme için findBy*; çift metin/label riskinde
 within(region) — ESP dersi: Propose formu probe'un label'larını kopyaladı, 2 eski test within ile

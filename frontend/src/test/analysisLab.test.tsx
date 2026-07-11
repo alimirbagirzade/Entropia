@@ -72,6 +72,51 @@ const TASK_DETAIL = {
   ],
 };
 
+const TOOL_CALLS = {
+  tool_calls: [
+    {
+      tool_call_id: "tc_1",
+      tool_name: "artifact.create",
+      task_id: "atask_2",
+      checkpoint_id: "cp_9",
+      actor_kind: "agent",
+      policy_scope: "research",
+      status: "succeeded",
+      artifact_output_ref: "hyp_9",
+      failure_code: null,
+      failure_message: null,
+      correlation_id: "corr_1",
+      created_at: "2026-07-11T10:00:00Z",
+      updated_at: "2026-07-11T10:00:01Z",
+    },
+    {
+      tool_call_id: "tc_2",
+      tool_name: "data_bundle.resolve",
+      task_id: "atask_2",
+      checkpoint_id: null,
+      actor_kind: "agent",
+      policy_scope: "research",
+      status: "failed",
+      artifact_output_ref: null,
+      failure_code: "RESEARCH_INPUT_BLOCKED",
+      failure_message: "Agent-research-only data cannot enter an execution context.",
+      correlation_id: "corr_2",
+      created_at: "2026-07-11T10:01:00Z",
+      updated_at: "2026-07-11T10:01:01Z",
+    },
+  ],
+};
+
+const TOOL_CALL_DETAIL = {
+  ...TOOL_CALLS.tool_calls[0],
+  agent_id: "alpha",
+  actor_principal_id: "agent_alpha",
+  input_manifest_id: "man_x",
+  idempotency_key: "key_1",
+  request: { title: "Funding edge", mechanism: "carry" },
+  response_ref: { artifact_id: "hyp_9", status: "exploring" },
+};
+
 function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
@@ -112,6 +157,9 @@ describe("Analysis Lab page", () => {
     stubApi({
       "GET /agent-workspace/overview": OVERVIEW,
       "GET /hypotheses": HYPOTHESES,
+      // Ordered: the tool-calls fragment must precede the bare detail prefix so
+      // "/agent-tasks/atask_2/tool-calls" does not match the detail stub.
+      "GET /agent-tasks/atask_2/tool-calls": TOOL_CALLS,
       "GET /agent-tasks/atask_2": { ...TASK_DETAIL, task_id: "atask_2", title: "Vol regime scan" },
     });
     renderPage();
@@ -215,5 +263,49 @@ describe("Analysis Lab page", () => {
     expect(
       screen.getByText("FORBIDDEN: Analysis Lab requires Admin or Supervisor."),
     ).toBeInTheDocument();
+  });
+
+  it("lists the task's durable tool calls in the detail", async () => {
+    stubApi({
+      "GET /agent-workspace/overview": OVERVIEW,
+      "GET /hypotheses": HYPOTHESES,
+      "GET /agent-tasks/atask_2/tool-calls": TOOL_CALLS,
+      "GET /agent-tasks/atask_2": { ...TASK_DETAIL, task_id: "atask_2", title: "Vol regime scan" },
+    });
+    renderPage();
+    await screen.findByText("Vol regime scan");
+    fireEvent.click(screen.getAllByRole("button", { name: "Detail" })[1]);
+
+    expect(await screen.findByText("artifact.create")).toBeInTheDocument();
+    expect(screen.getByText("data_bundle.resolve")).toBeInTheDocument();
+    // A failed/rejected call surfaces its recorded governance failure verbatim.
+    expect(
+      screen.getByText("Agent-research-only data cannot enter an execution context."),
+    ).toBeInTheDocument();
+  });
+
+  it("expands a tool call to load its request/response detail on demand", async () => {
+    const fetchMock = stubApi({
+      "GET /agent-workspace/overview": OVERVIEW,
+      "GET /hypotheses": HYPOTHESES,
+      "GET /agent-tool-calls/tc_1": TOOL_CALL_DETAIL,
+      "GET /agent-tasks/atask_2/tool-calls": TOOL_CALLS,
+      "GET /agent-tasks/atask_2": { ...TASK_DETAIL, task_id: "atask_2", title: "Vol regime scan" },
+    });
+    renderPage();
+    await screen.findByText("Vol regime scan");
+    fireEvent.click(screen.getAllByRole("button", { name: "Detail" })[1]);
+
+    const row = await screen.findByText("artifact.create");
+    // The detail (request/response bodies) is NOT fetched until the row expands.
+    expect(
+      fetchMock.mock.calls.some(([url]) => String(url).includes("/agent-tool-calls/tc_1")),
+    ).toBe(false);
+    fireEvent.click(row);
+
+    expect(await screen.findByText(/Funding edge/)).toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.some(([url]) => String(url).includes("/agent-tool-calls/tc_1")),
+    ).toBe(true);
   });
 });

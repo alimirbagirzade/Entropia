@@ -1044,6 +1044,13 @@ class AgentTaskNotFoundError(NotFoundError):
     message = "The Agent task was not found."
 
 
+class AgentToolCallNotFoundError(NotFoundError):
+    """The requested Agent Tool Gateway call record was not found (doc 18 §9.2)."""
+
+    code = "AGENT_TOOL_CALL_NOT_FOUND"
+    message = "The Agent tool call was not found."
+
+
 class HypothesisArtifactNotFoundError(NotFoundError):
     """The requested hypothesis/output artifact was not found (doc 18 §7, §9)."""
 

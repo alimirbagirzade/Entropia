@@ -16,6 +16,7 @@ from sse_starlette.sse import EventSourceResponse
 
 from entropia.application.commands import agent_control as agent_control_cmd
 from entropia.application.commands import lab_message as lab_message_cmd
+from entropia.application.queries import agent_tool_gateway as tool_gateway_query
 from entropia.application.queries import agent_workspace as agent_workspace_query
 from entropia.apps.api.deps import RequestContext, request_context
 from entropia.domain.agent_lab.enums import ALPHA_AGENT_ID
@@ -38,6 +39,8 @@ _RESUME_PATH = "/agent-runtime/resume"
 _STOP_PATH = "/agent-runs/{run_id}/stop"
 _HYPOTHESES_PATH = "/hypotheses"
 _STREAM_PATH = "/agent-events/stream"
+_TASK_TOOL_CALLS_PATH = "/agent-tasks/{task_id}/tool-calls"
+_TOOL_CALL_DETAIL_PATH = "/agent-tool-calls/{tool_call_id}"
 
 
 class LabMessageBody(BaseModel):
@@ -93,6 +96,24 @@ async def list_tasks(
 @router.get(_TASK_DETAIL_PATH)
 async def get_task(task_id: str, ctx: RequestContext = Depends(request_context)) -> dict[str, Any]:
     return await agent_workspace_query.get_task(ctx.session, ctx.actor, task_id=task_id)
+
+
+@router.get(_TASK_TOOL_CALLS_PATH)
+async def list_task_tool_calls(
+    task_id: str,
+    ctx: RequestContext = Depends(request_context),
+    limit: int | None = Query(default=None),
+) -> dict[str, Any]:
+    return await tool_gateway_query.list_task_tool_calls(
+        ctx.session, ctx.actor, task_id=task_id, limit=limit
+    )
+
+
+@router.get(_TOOL_CALL_DETAIL_PATH)
+async def get_tool_call(
+    tool_call_id: str, ctx: RequestContext = Depends(request_context)
+) -> dict[str, Any]:
+    return await tool_gateway_query.get_tool_call(ctx.session, ctx.actor, tool_call_id=tool_call_id)
 
 
 @router.get(_HYPOTHESES_PATH)

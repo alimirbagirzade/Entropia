@@ -8,6 +8,7 @@ import { ApiError } from "@/lib/apiClient";
 import {
   DIRECTIVE_PRIORITIES,
   TASK_STATUS_TONES,
+  TOOL_CALL_STATUS_TONES,
   useAgentOverview,
   useAgentTask,
   useHypotheses,
@@ -16,8 +17,11 @@ import {
   useResumeRuntime,
   useSendLabMessage,
   useStopRun,
+  useTaskToolCalls,
+  useToolCall,
   type AgentOverview,
   type AgentTaskCard,
+  type AgentToolCallCard,
   type DirectivePriority,
 } from "@/lib/agentLab";
 
@@ -282,9 +286,88 @@ function TaskDetailCard({ taskId, onClose }: { taskId: string; onClose: () => vo
               </ul>
             </>
           ) : null}
+          <ToolCallsSection taskId={taskId} />
         </>
       ) : null}
     </section>
+  );
+}
+
+// Durable Tool Gateway call history for one task (doc 18 §9.2, §14) — the "safe
+// observation" surface. The list is the Coordinator's truth; a row expands to
+// the full request/terminal outcome, fetched on demand.
+function ToolCallsSection({ taskId }: { taskId: string }) {
+  const calls = useTaskToolCalls(taskId);
+  const [openId, setOpenId] = useState<string | null>(null);
+  return (
+    <>
+      <h4>Tool calls</h4>
+      {calls.isLoading ? (
+        <Loading label="Loading tool calls…" />
+      ) : calls.isError ? (
+        <ErrorState error={calls.error} onRetry={() => void calls.refetch()} />
+      ) : calls.data && calls.data.tool_calls.length > 0 ? (
+        <ul className="plain-list">
+          {calls.data.tool_calls.map((call) => (
+            <ToolCallRow
+              key={call.tool_call_id}
+              call={call}
+              open={openId === call.tool_call_id}
+              onToggle={() =>
+                setOpenId((prev) => (prev === call.tool_call_id ? null : call.tool_call_id))
+              }
+            />
+          ))}
+        </ul>
+      ) : (
+        <EmptyState title="No tool calls recorded for this task yet." />
+      )}
+    </>
+  );
+}
+
+function ToolCallRow({
+  call,
+  open,
+  onToggle,
+}: {
+  call: AgentToolCallCard;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  // Detail (request/response bodies) is fetched only while the row is expanded.
+  const detail = useToolCall(open ? call.tool_call_id : null);
+  return (
+    <li>
+      <button
+        type="button"
+        className="btn btn-ghost"
+        onClick={onToggle}
+        aria-expanded={open}
+        style={{ display: "inline-flex", gap: 8, alignItems: "center" }}
+      >
+        <StatusBadge tone={TOOL_CALL_STATUS_TONES[call.status] ?? "neutral"} label={call.status} />
+        <code>{call.tool_name}</code>
+      </button>
+      {call.failure_message ? (
+        <span style={{ color: "var(--down)", marginLeft: 8 }}>{call.failure_message}</span>
+      ) : null}
+      {open ? (
+        detail.isLoading ? (
+          <Loading label="Loading tool call…" />
+        ) : detail.isError ? (
+          <ErrorState error={detail.error} onRetry={() => void detail.refetch()} />
+        ) : detail.data ? (
+          <pre style={{ whiteSpace: "pre-wrap", overflowX: "auto", marginTop: 6 }}>
+            {JSON.stringify(
+              { request: detail.data.request, response_ref: detail.data.response_ref },
+              null,
+              2,
+            )}
+          </pre>
+        ) : null
+      ) : null}
+    </li>
   );
 }
 

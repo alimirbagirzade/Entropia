@@ -1939,7 +1939,38 @@ VERBATIM aynalandı). **Dürüst sınır (KALICI):** re-dispatch OPERATOR aksiyo
 ASLA auto-route etmez, doc 20 §6); legacy satırlar `skipped_unknown_kind`; `["jobs"]` HTTP LİSTE yüzeyi
 YOK (bu bir POST recovery aksiyonu); operator = Admin (`require_admin_panel`).
 
-## Next: post-V1 (continued) — TIER 2 SAYFA HARİTASI + TÜM route yüzeyleri TAMAM (24/24 real) + `data`-queue operator redelivery (backend PR #129 + Admin UI PR #131) landed → kalan **TIER 3 deferred**: SSE streaming e2e (bağlantı kopması dayanıklılığı) / tool-call status shadowing (CR-08 follow-up). **retention auto-purge KAPSAM DIŞI** (doc 20 §16 "Automatic purge remains disabled in Production V1" — Future-Dev boundary, uygulanabilir slice değil). LLM generation Future-Dev — kapsam dışı.
+## Stage post-V1 TIER 3 — SSE reconnect backoff resilience landed (PR #133)
+
+**FRONTEND-ONLY** (2 dosya; backend değişmedi, migration YOK, alembic head `0021_local_auth` SABİT,
+`ENGINE_VERSION` SABİT, backend test base **1054** sabit; frontend **235 → 238**). main = `ff92310`
+(Merge #133), feat `a100930`. `lib/sse.ts::connectEvents` non-retryable stream close'u atlatır →
+**SSE streaming e2e dayanıklılık TIER 3 adayı KAPANDI.**
+
+**Sorun:** önceki hâlde `onerror` her hatayı `"closed"` sayıyordu ve **manuel reconnect YOKTU**. Tarayıcının
+`EventSource`'u yalnız `readyState===CONNECTING` iken auto-retry yapar; sunucu akışı non-retryable
+kapattığında / initial handshake fail'de `readyState=CLOSED` olur ve native retry **DURUR** → dashboard
+kalıcı SSE-kör kalır, tam reload'a kadar hiç canlı invalidation almaz.
+
+**Ne yapıldı:**
+- `lib/sse.ts` (Edit): **readyState-aware `onerror`** — `CONNECTING` (native retry sürüyor) → status
+  `"connecting"` (yanlış `"closed"` değil); `CLOSED` (native vazgeçti) → kendi **exponential backoff**
+  reconnect'i (`RECONNECT_BASE_MS=1000` → `RECONNECT_MAX_MS=30000` cap). Reopen (native VEYA backoff) aynı
+  gap full-refresh'i tetikler (INF-11); backoff ramp `open`'da sıfırlanır. `dispose` bekleyen reconnect
+  timer'ı iptal eder + mevcut source'un listener'larını söker; her (re)open önceki `teardownSource`'u
+  değiştirir → handler sızıntısı YOK. Kapalı closure yapısı: `openSource`/`scheduleReconnect`/
+  `teardownSource`. **`connectEvents(queryClient, onStatus?)` imzası + SSE taxonomy / `EVENT_QUERY_KEYS`
+  yüzeyi DEĞİŞMEDİ** — `app/Layout.tsx:94` call-site dokunulmadı.
+- `test/sse.test.ts` (Write): `FakeEventSource` double'ı `readyState` + statik `CONNECTING/OPEN/CLOSED`
+  sabitleri + `error(readyState)` helper + `constructed` sayacı ile genişletildi; **+3 vitest** (`vi.useFakeTimers`):
+  transient hata `connecting` kalır + self-reconnect etmez · fatal hata backoff ile reconnect + reopen'da
+  self-heal (gap full-refresh) · dispose bekleyen backoff'u iptal eder.
+
+typecheck+lint temiz, build green, **238/238**. Review 0 CRITICAL/HIGH (kendi ampirik doğrulaması: 238 test
++ build). **Dürüst sınır (KALICI):** reconnect sonsuza dek dener (delay cap 30s — canlı dashboard için doğru,
+"denemeye devam"); yalnız CLIENT dayanıklılık değişikliği — backend SSE stream (`apps/api/sse.py`) tüketilen
+hâliyle DEĞİŞMEDİ.
+
+## Next: post-V1 (continued) — TIER 2 SAYFA HARİTASI + TÜM route yüzeyleri TAMAM (24/24 real) + `data`-queue operator redelivery (backend PR #129 + Admin UI PR #131) + **SSE streaming e2e reconnect resilience (PR #133)** landed → kalan **TIER 3 deferred**: tool-call status shadowing (CR-08 follow-up — agent runtime tarafı). SSE streaming e2e ✅ KAPANDI (PR #133). **retention auto-purge KAPSAM DIŞI** (doc 20 §16 "Automatic purge remains disabled in Production V1" — Future-Dev boundary, uygulanabilir slice değil). LLM generation Future-Dev — kapsam dışı.
 
 **V1 COMPLETE (Stages 0–8, docs 01–22) + Auth/IdP + Parquet Slice A + Backtest Engine Slice B + real indicator compute Slice C + `risk_based` sizing (a) + condition blocks (b) + condition extensions (b2) + two-package indicator-vs-indicator + higher-timeframe resampling (c) + per-condition multi-TF reference (i) + N-ary reference chain (ii) + VWAP directional key (d) + `formula_based` Kelly sizing + `position_size_limits` min/max cap (PR #63) landed (1015 tests).** The **Slice C indicator-compute + position-sizing follow-ups are now EFFECTIVELY COMPLETE — TIER 1 backend is DONE**:
 

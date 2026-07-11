@@ -116,7 +116,7 @@ entropia/
 
 A handler does exactly four things (already established in Stage 0 scaffolding):
 1. Parse/validate the request body (Pydantic v2 model).
-2. Resolve `ActorContext` via `deps.actor_context` (Stage 1 replaces the anonymous stub with real identity/role).
+2. Resolve `ActorContext` via `deps.actor_context` — real identity + role per `AUTH_MODE` (`dev`: `X-Actor-Id` header; `session`: opaque Bearer session / service token), role always re-read from the database.
 3. Invoke one application command or query.
 4. Serialize the result into the canonical envelope; set `ETag` on single resources; return `202 + id` for jobs.
 
@@ -281,7 +281,7 @@ finalizing → {succeeded | failed | cancelled}
 
 ### 8.2 SSE semantics (refresh signal, not source of truth)
 
-- Single endpoint `GET {base}/events` (Stage 0 ships heartbeat; domain fan-out lands Stage 1+).
+- Single endpoint `GET {base}/events` — heartbeat + live domain fan-out (the outbox relay publishes every domain family through `apps/api/sse.py`; loss-tolerant, INF-11).
 - On reconnect, the client refetches authoritative state via query endpoints (`Last-Event-ID` + resource refresh). SSE payloads are **never** trusted as state.
 - Event envelope: `event_id, event_type, resource{type,id,version}, correlation_id, occurred_at`.
 - Canonical event families: `backtest_run.state_changed`, `backtest_result.created` (**no** `backtest_result.failed`), `job.updated`, `agent.task.*` (task_created/started/waiting, checkpoint_saved, directive_queued/consumed/deferred, tool_call_*, backtest_requested, result_linked, hypothesis_*), `resource.changed`, `audit.event.created`, `mainboard.composition_changed`, `ready_report.staled`.
@@ -367,7 +367,7 @@ resolve principal (session/runtime; ignore client body role/owner/isAdmin)
 ### 11.3 Health & metrics
 
 - `/health/live` (process up) and `/health/ready` (Postgres + Redis + object storage reachable; `503` if degraded) — already implemented.
-- Golden signals per process (latency p50/p95/p99, traffic, errors, saturation), plus queue depth, job duration, worker lease age, backtest run duration, outbox lag.
+- `GET {base}/metrics` — Prometheus text exposition: golden signals (latency histogram, traffic, errors, in-flight), jobs depth per queue, outbox lag, worker lease age. Rendered in-app on the Admin **System Metrics** screen; `scripts/smoke.sh` asserts the exposition outside-in.
 
 ---
 
@@ -379,7 +379,7 @@ One image, role per service: `api`, `worker-default`, `worker-data`, `worker-bac
 
 ### 12.2 Configuration (`config/settings.py`, env-driven)
 
-- `ENTROPIA_ENV ∈ {local, staging, production}`; `DATABASE_URL` (async) with derived `sync_database_url` for Alembic; `REDIS_URL` + `QUEUE_NAMESPACE`; `OBJECT_STORAGE_*`; `WORKER_CONCURRENCY`, `BACKTEST_WORKER_CONCURRENCY`; `API_BASE_PATH`, `API_CORS_ORIGINS`. Secrets from environment only — never logged, never in audit payloads, never in the frontend build.
+- `ENTROPIA_ENV ∈ {local, staging, production}`; `DATABASE_URL` (async) with derived `sync_database_url` for Alembic; `REDIS_URL` + `QUEUE_NAMESPACE`; `OBJECT_STORAGE_*`; `WORKER_CONCURRENCY`, `BACKTEST_WORKER_CONCURRENCY`; `API_BASE_PATH`, `API_CORS_ORIGINS`; `AUTH_MODE ∈ {dev, session}` + `AUTH_SESSION_TTL_MINUTES` + `ENTROPIA_SERVICE_TOKEN` (non-human service line) + `ENTROPIA_BOOTSTRAP_ADMIN_EMAIL` (first-Admin bootstrap, empty = disabled); `RATE_LIMIT_*` (opt-in). Secrets from environment only — never logged, never in audit payloads, never in the frontend build.
 
 ### 12.3 Migrations
 

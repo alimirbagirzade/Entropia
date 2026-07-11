@@ -43,6 +43,31 @@ INF-04/INF-05, PR #47/#63 emsali). +4 test (2 unit passthrough/default + 2 integ
 summary alanı için desen) + `_ready_composition(base_tf=...)` seed helper
 (`test_backtest_persistence.py`).
 
+## audit log substring (pg_trgm) indexleri — ✅ LANDED (PR #141, main `9b5568d`)
+
+**BACKEND-ONLY, MIGRATION dilimi** (alembic head **`0022_audit_log_indexes` → `0023_audit_log_trgm_indexes`**;
+`ENGINE_VERSION` SABİT; backend **1065 → 1069**; frontend **238** SABİT). feat `36069cb`. #139'un
+DÜRÜST SINIRINI kapattı: Admin Logs **substring** filtreleri (`log_projection.py::_apply_filters`,
+doc 19 §6.2) seq-scan'di. Leading-wildcard `lower(col) LIKE '%needle%'` (`func.lower(col).contains`)
+hiçbir B-tree'yle (`varchar_pattern_ops` bile — o yalnız anchored prefix) servis edilemez; yalnız
+`gin_trgm_ops`. 3 GIN trigram EXPRESSION index `lower(col)` üzerinde (iki `contains` filtresini ampirik
+yansıtır): `event_kind` (NOT NULL, partial YOK → hem `family` token filtresi hem `q`), `target_entity_id`
+(partial `IS NOT NULL` → `q`), `reason` (partial `IS NOT NULL` → `q`). Extension iki yolla sağlanır:
+migration `0023` `CREATE EXTENSION IF NOT EXISTS pg_trgm`; `models/audit.py` `before_create`
+`execute_if(dialect="postgresql")` listener'ı her `create_all` (test şeması) yolunda pg_trgm'i CREATE
+INDEX öncesi kurar. Downgrade 3 index'i düşürür ama extension'ı KORUR (routine down'da DROP EXTENSION
+yıkıcı). Kanıtlar: migration↔model `indexdef` parity IDENTICAL; alembic up/down/up → head `0023`;
+EXPLAIN (3-kolon `q` → BitmapOr üç trgm index üstünde; `family`/`q` event_kind → Bitmap Index Scan).
++4 integration shape test (`test_audit_log_trgm_indexes.py`). Review APPROVE 0 CRITICAL/HIGH.
+**Dürüst sınır:** `system_other`/earlier-family exclusion'ları saf NEGATİF (`NOT LIKE '%token%'` —
+trigram negatif substring servis etmez, pozitif predicate arkasında scan-filter kalırlar); `actor_kind`
+bilinçli indexsiz; pg_trgm deploy'da `CREATE EXTENSION` yetkisi ister (PG13+ trusted extension, DB
+owner kurabilir — deployment notu, kod açığı değil).
+
+**Reuse anchor'ları:** `before_create` `execute_if(dialect="postgresql")` metadata listener'ı
+(`create_all` şemasının ihtiyaç duyduğu HERHANGİ bir Postgres extension'ı sağlama deseni) +
+`test_audit_log_trgm_indexes.py` (GIN/trgm/expression indexdef assert deseni).
+
 ## audit log-projection indexleri — ✅ LANDED (PR #139, main `73ae1bd`)
 
 **BACKEND-ONLY, MIGRATION dilimi** (alembic head **`0021_local_auth` → `0022_audit_log_indexes`**;
@@ -68,35 +93,37 @@ EXPLAIN viability ritüeli.
 
 **SIRADAKİ İŞ:** hiçbir teed-up açık iş kalmadı. retention auto-purge KAPSAM DIŞI (doc 20 §16).
 LLM generation Future-Dev. Proje ~%98 — yeni iş için YÖN KULLANICIDAN gelmeli (adaylar:
-capability aktivasyonu graphic_view [doc 22, PR #82/#95 taban] / pg_trgm substring-filtre
-index'leri [#139'un dürüst sınırı, extension kararı] / minör temizlik / yeni feature).
+capability aktivasyonu graphic_view [doc 22, PR #82/#95 taban] / minör temizlik / yeni feature).
+Audit_events index kapsamı ARTIK TAM (§139 5 filter/prefix + §141 3 substring trgm — her Admin Logs
+filtre yolu index-served, yalnız negatif family-exclusion'lar doğaları gereği scan-filter).
 
 **PASTE-READY RESUME PROMPT (sonraki temiz oturuma yapıştır):**
 
 ```
 Entropia — post-V1. STALE-BY-DEFAULT: aşağıdaki durumu GİT'TEN DOĞRULA, özete güvenme.
 ÖNCE: git fetch && git log --oneline origin/main -6 && gh pr list --state all -L 8.
-main = docs PR #140 merge sonrası ileri; kod main'i 73ae1bd (Merge #139 — audit log-projection
-indexleri feat 72c95ec). alembic head **0022_audit_log_indexes** (#139'DA İLERLEDİ — 0021 üstüne
-index-only migration); ENGINE_VERSION = backtest-engine-v2-summary-timeframe (DEĞİŞMEDİ).
-Backend 1065 test, frontend 238.
+main = docs PR #142 merge sonrası ileri; kod main'i 9b5568d (Merge #141 — audit log substring
+pg_trgm indexleri feat 36069cb). alembic head **0023_audit_log_trgm_indexes** (#141'DE İLERLEDİ —
+0022 üstüne pg_trgm extension + 3 GIN trgm index); ENGINE_VERSION =
+backtest-engine-v2-summary-timeframe (DEĞİŞMEDİ). Backend 1069 test, frontend 238.
 
 DURUM: V1 %100 + TIER 2 sayfa haritası %100 (24/24 real, tüm route yüzeyleri bağlı) + TIER 3
 adaylarının TAMAMI kapalı (SSE e2e #133, data-queue redelivery #129+#131, tool-call shadowing
-#135) + summary["timeframe"] KAPANDI (#137) + audit log-projection indexleri KAPANDI (PR #139:
-5 index — 3 partial composite [severity|actor|target_type + arkada (occurred_at,event_id)
-keyset] + correlation chain composite + lower(correlation_id) varchar_pattern_ops expression;
-parity IDENTICAL, up/down/up, 3× EXPLAIN kanıtlı). Proje ~%98.
+#135) + summary["timeframe"] KAPANDI (#137) + audit log-projection indexleri KAPANDI (#139: 5 index)
++ audit log substring pg_trgm indexleri KAPANDI (PR #141: 3 GIN trgm expression index event_kind/
+target_entity_id/reason üstünde lower(col) — family+q contains filtrelerini index-serve eder; migration
+0023 CREATE EXTENSION pg_trgm + models/audit.py before_create listener create_all yolu için; downgrade
+index düşürür extension korur; parity IDENTICAL, up/down/up, EXPLAIN BitmapOr kanıtlı). audit_events
+index kapsamı ARTIK TAM. Proje ~%98.
 
 ÖNEMLİ: teed-up (teyitli) açık iş KALMADI. retention auto-purge KAPSAM DIŞI (doc 20 §16 "Automatic
 purge remains disabled in Production V1" — Future-Dev boundary). LLM generation Future-Dev — kapsam dışı.
 
 SIRADAKİ İŞ: yeni bir yön yok — BAŞLARKEN KULLANICIYA SOR ne yapmak istediğini. Olası adaylar (hiçbiri
 teyitli değil): (a) capability aktivasyonu (graphic_view'i Placeholder'dan çıkarma, doc 22 — gate'ler +
-Admin transition hazır, PR #82/#95 taban); (b) pg_trgm substring-filtre index'leri (family/query-text
-contains filtreleri — #139'un dürüst sınırı; EXTENSION kararı, prod erişilebilirliğini kullanıcıya sor);
-(c) minör backend temizlik; (d) kullanıcının getireceği yeni feature. BAŞLAMADAN ilgili doc'u +
-route/command imzalarını + queries/commands dönüş dict'lerini oku → wire tipleri VERBATIM ayna.
+Admin transition hazır, PR #82/#95 taban); (b) minör backend temizlik; (c) kullanıcının getireceği yeni
+feature. BAŞLAMADAN ilgili doc'u + route/command imzalarını + queries/commands dönüş dict'lerini oku →
+wire tipleri VERBATIM ayna.
 
 YÖNTEM: Workflow KULLANMA; direct-author. Backend loop: cd backend && uv run ruff check . && uv run
 ruff format --check . && uv run mypy src && TEST_DATABASE_URL=...entropia_auth uv run pytest --no-cov -q

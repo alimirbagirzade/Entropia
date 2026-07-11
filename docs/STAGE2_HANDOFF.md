@@ -2144,7 +2144,61 @@ activation event) + 2 operational POSTs (view-dataset / analysis-artifact, ACTIV
 output history (#143) + transition history (#144). The Graphic View RENDERER stays OUT OF doc-22 scope
 ("V18 static placeholder retained").
 
-## Next: post-V1 (continued) — TÜM route yüzeyleri + TIER 2 sayfa haritası (24/24 real) TAMAM + doc-22 **Future Dev capability sistemi UÇTAN UCA TAM** (registry + Admin transition + 2 operasyonel POST + output history PR #143 + transition history PR #144) → **hiçbir teed-up açık iş kalmadı**. TIER 3 adaylarının tamamı kapalı (`data`-queue redelivery #129/#131, SSE reconnect #133, tool-call status shadowing #135, audit indexleri #139/#141). **KAPSAM DIŞI:** retention auto-purge (doc 20 §16 "Automatic purge remains disabled in Production V1"), LLM generation (Future-Dev), Graphic View renderer (doc 22 §1/§16/§17 "V18 statik placeholder korunur"). Proje ~%98 (V1=%100, frontend sayfa haritası %100 24/24, capability sistemi tam). Backend **1081** test, frontend **244**. alembic head `0023_audit_log_trgm_indexes` (DEĞİŞMEDİ), `ENGINE_VERSION = backtest-engine-v2-summary-timeframe` (DEĞİŞMEDİ). **SIRADAKİ İŞ: yeni yön YOK — başlarken kullanıcıya SOR.** Aday (hiçbiri teyitli değil): (a) minör backend temizlik/tutarlılık (migration'sız); (b) kullanıcının getireceği yeni feature; (c) orphan/dead-code taraması (repo'da bağlanmamış başka fonksiyon var mı — #144 böyle bir orphan'ı kapatmıştı). Başlamadan ilgili doc + route/command imzaları + queries/commands dönüş dict'lerini oku → wire tipleri VERBATIM ayna.
+## Post-V1 — agent tool-call gateway call-history read surface ✅ landed (PR #146, merged → main `4d5c5d4`, feat `b8f1664`)
+
+**BACKEND+FRONTEND, migration YOK.** Orphan-scan bulgusu (#144 deseni: yazılı-ama-bağlanmamış durable
+append log → projection + gated GET): `agent_tool_gateway` repo'sunun `list_tool_calls`/`get_tool_call`
+metodları yazılı+test edilmişti ama query/route/frontend yoktu. YENİ `queries/agent_tool_gateway.py`
+(`require_role` ADMIN/SUPERVISOR; task-scoped bounded newest-first list — summary satırları
+request/response_ref gövdelerini omit eder — + full-record detail; missing task/id → not-found, sessiz
+boş sayfa değil). `routes/agent_lab.py`'ye `GET /agent-tasks/{task_id}/tool-calls` +
+`GET /agent-tool-calls/{tool_call_id}`. `errors.py`'ye `AgentToolCallNotFoundError` (additive).
+Frontend: `lib/agentLab.ts` `AgentToolCall{Card,Detail,List}` + `TOOL_CALL_STATUS_TONES` +
+`useTaskToolCalls`/`useToolCall` (`["agent-tasks"]` SSE-swept, on-demand detail); `AnalysisLab.tsx`
+task-detail "Tool calls" bölümü (badge+tool_name+failure; satır açılınca request/response). +7 backend
+integration + 2 vitest. alembic head / ENGINE_VERSION değişmedi. Honest boundary: detail read
+rol-gate'li (Analysis Lab paylaşımlı-gözlem modeli, owner-scoped değil); list bounded newest-first
+(keyset yok) — checkpoints/directives gibi.
+
+## Post-V1 FINALIZATION — seed FK fix + smoke + README/USAGE/ARCHITECTURE ✅ landed (PRs #147 `f597883` + #148 `748b31e` + #149 `2d57f95` MERGED; #150 açık/merge bekliyor)
+
+Developer/operator-experience kapanış seansı — yeni ürün özelliği YOK. Hepsi EMPİRİK kanıtla:
+
+- **#147 `fix(post-v1)` seed identity FK flush order** — `python -m entropia.apps.seed` BOŞ veritabanında
+  `ForeignKeyViolationError` ile patlıyordu (README yerel kurulum Adım 7 KIRIKTI): `Principal` ↔
+  `HumanUser`/`Agent` arasında mapped `relationship()` olmadığından unit-of-work flush sırasını tablo-FK'sından
+  TÜRETMİYOR — batched flush `agents` INSERT'ini `principals`'tan önce basabiliyor (minimal repro + SQL echo
+  ile kanıtlandı; SQLAlchemy 2.0.51). Fix: her FK-bağımlı child'dan önce Principal flush'ı; kimlik bloğu
+  `seed_identities(session)` olarak test edilebilir çıkarıldı. +2 integration (taze-şema FK sırası +
+  idempotency) → **backend 1089 (CI server-truth; NOT: önceki zincirin "1088" sayımı off-by-one idi — #147
+  öncesi CI 1087)**. Canlı kanıt: boş DB → seed → `/me` user_admin=admin; ikinci koşu idempotent.
+- **#148 `chore(post-v1)` scripts/smoke.sh + `make smoke`** — çalışan stack'in dışarıdan doğrulaması:
+  `/health/live` + `/meta` + `/openapi.json` + bağımlılık-bazlı `/health/ready` (postgres=hard FAIL,
+  redis/minio=WARN — Docker'sız minimal kurulum meşru) + `/metrics` Prometheus + `X-Actor-Id` `/me` +
+  frontend :5173/:8080. `--seed` opsiyonel. Bulgu: ready DOWN bağımlılıklarda kendi connect-timeout'larını
+  beklediği için >5s sürer → ready çağrısına uzun curl timeout. Tam e2e yol header'da işaret edilen
+  `tests/integration/test_e2e_pipeline.py` (bu seans canlı: **3 passed in 7.89s**, `entropia_smoke` DB).
+- **#149 `docs(post-v1)` kök README yenileme** — "Stage 0/1 complete" → gerçek durum (V1 %100 + post-V1
+  dalgası; CI-truth 1089/246; alembic 0023); YENİ "What's inside — the 24-screen map" tablosu; YENİ
+  "Verifying changes" bölümü (CI'ın koştuğu kapılar + izole `TEST_DATABASE_URL` uyarısı + up/down/up +
+  smoke + e2e); auth bölümü landed `AUTH_MODE=dev|session` modeline yeniden yazıldı (argon2id + Bearer,
+  `/login`, `ENTROPIA_BOOTSTRAP_ADMIN_EMAIL`, `ENTROPIA_SERVICE_TOKEN`); Türkçe rehberin "login sonraya
+  bırakıldı" notu güncellendi; `.env.example`'a Authentication + Rate-limiting blokları (settings.py
+  default'ları verbatim — "every variable and its default" iddiası yeniden doğru).
+- **#150 `docs(post-v1)` USAGE + ARCHITECTURE hizalama** — YENİ `docs/USAGE.md` (login & roller
+  User/Supervisor/Admin/Agent, golden path ingest→package→strategy→mainboard→ready→RUN→result→
+  history/compare→trash, Analysis Lab, güvenlik rayları; çalıştırılabilir kanıt = e2e testi);
+  `docs/ARCHITECTURE.md` bayat pasajlar gerçekle hizalandı (ActorContext AUTH_MODE gerçeği; SSE fan-out
+  CANLI; `/metrics` implemented; §12.2 config listesine AUTH_*/RATE_LIMIT_*); `docs/README.md` USAGE satırı.
+
+**Canlı çalıştırılabilirlik kanıtı (Docker'sız yol):** lokal Postgres :5432 → alembic head `0023` →
+uvicorn → live ok / ready degraded(pg ok) / metrics exposition → seed → `/me` admin → Vite
+`<title>Entropia V18</title>` → `make smoke` SMOKE OK. **Dürüst sınır:** `docker compose up` bu seansta
+KANITLANAMADI — Docker Desktop bu makinede self-update GUI onayı bekliyordu (daemon hiç ayağa kalkmadı);
+`docker compose config --quiet` geçerli + CI'ın "Docker — build images" job'ı yeşil. Bir sonraki fırsatta:
+Docker Desktop'ı GUI'den güncelle/başlat → `docker compose up -d --build` → `make smoke`.
+
+## Next: post-V1 FINALIZATION sonrası — **teed-up açık iş YOK; başlarken kullanıcıya SOR.** TÜM route yüzeyleri + TIER 2 sayfa haritası (24/24) + doc-22 capability sistemi TAM; TIER 3 adayları kapalı; finalizasyon dalgası (#146 tool-call history, #147 seed FK fix, #148 smoke, #149 README, #150 USAGE/ARCHITECTURE) landed. **KAPSAM DIŞI:** retention auto-purge (doc 20 §16), LLM generation (Future-Dev), Graphic View renderer (doc 22). Proje ~%99 (V1=%100; kalan: gerçek doğal iş yok — bakım/keşif). Backend **1089** test (CI server-truth on `main`), frontend **246**. alembic head `0023_audit_log_trgm_indexes` (DEĞİŞMEDİ), `ENGINE_VERSION = backtest-engine-v2-summary-timeframe` (DEĞİŞMEDİ). Aday (hiçbiri teyitli değil): (a) Docker compose tam-stack canlı kanıtı (`docker compose up -d --build` + `make smoke` — bu seansın tek dürüst sınırı); (b) kullanıcının getireceği yeni feature; (c) orphan/dead-code taraması (#144/#146 şablonu); (d) minör backend temizlik (migration'sız). Başlamadan ilgili doc + route/command imzaları + queries/commands dönüş dict'lerini oku → wire tipleri VERBATIM ayna.
 
 **V1 COMPLETE (Stages 0–8, docs 01–22) + Auth/IdP + Parquet Slice A + Backtest Engine Slice B + real indicator compute Slice C + `risk_based` sizing (a) + condition blocks (b) + condition extensions (b2) + two-package indicator-vs-indicator + higher-timeframe resampling (c) + per-condition multi-TF reference (i) + N-ary reference chain (ii) + VWAP directional key (d) + `formula_based` Kelly sizing + `position_size_limits` min/max cap (PR #63) landed (1015 tests).** The **Slice C indicator-compute + position-sizing follow-ups are now EFFECTIVELY COMPLETE — TIER 1 backend is DONE**:
 

@@ -3,77 +3,79 @@
 > **Amaç:** V1 kapandı (Stage 0–8 COMPLETE). Bu doküman post-V1 durumunu, aday iş listesini
 > ve temiz oturumda yapıştırılacak resume prompt'u içerir.
 
-## Durum (2026-07-10, TIER 2 frontend — Data-queue redelivery Admin UI; PR #131 MERGED)
+## Durum (2026-07-11, post-V1 TIER 3 — SSE reconnect backoff resilience; PR #133 MERGED)
 
-**FRONTEND-ONLY** (3 dosya salt-ekleme; backend değişmedi, migration YOK, alembic head `0021_local_auth`
-SABİT, `ENGINE_VERSION` SABİT, backend **1054** sabit; frontend **232 → 235**). main = `889ca2e`
-(Merge #131), feat `51d9e83`. Landed backend operator-recovery endpoint'ini (PR #129, INF-03, doc 20 §6)
-`/panel` sayfasına bağlar → `data`-queue redelivery için opsiyonel Admin UI paneli TIER 3 adayı KAPANDI.
+**FRONTEND-ONLY** (2 dosya; backend değişmedi, migration YOK, alembic head `0021_local_auth` SABİT,
+`ENGINE_VERSION` SABİT, backend **1054** sabit; frontend **235 → 238**). main = `ff92310`
+(Merge #133), feat `a100930`. `lib/sse.ts::connectEvents` artık non-retryable stream close'u atlatır →
+**SSE streaming e2e dayanıklılık TIER 3 adayı KAPANDI.**
 
-**Ne yapıldı:** `POST /admin/data-queue/redeliver` → `pages/Panel.tsx` `OperatorRecoveryCard`. Route yalnız
-opsiyonel `grace_seconds` query okur (`ge=0`, `0`=her QUEUED data job'ı süpürür) → **OCC token /
-Idempotency-Key YOK** (durable satırlar kaynak-gerçek, redelivery idempotent). `lib/adminPanel.ts` (salt
-ekleme): `DataQueueRedeliverResult`/`DataQueueRedeliverable` wire tipleri (`commands/data_queue.py`
-dönüş dict'i VERBATIM → `{scanned, redeliverable:[{job_kind,job_id}], skipped_unknown_kind}`) +
-`DATA_JOB_KIND_LABELS`/`dataJobKindLabel` (`jobs/data_queue.py` `DATA_JOB_KINDS` etiket aynası, yalnız
-hydration) + `useRedeliverDataQueue` (başarıda `["audit"]` invalidate — command bir
-`data_queue.redelivery_requested` audit+outbox yayar, süpürülecek data-queue read yüzeyi yok). Kart:
-grace-seconds ipucu input'u + routable sonuç tablosu (server job_kind etiketi + job id) + scanned/
-re-dispatched/skipped sayaçları + un-routable legacy-satır notu; Admin-only server-side (non-Admin 403
-VERBATIM); client negatif/ondalık grace'i dispatch öncesi engeller. `test/panel.test.tsx` +3 → 235.
-`App.tsx`/`nav.ts` DEĞİŞMEDİ (`/panel` zaten real). Review 0 CRITICAL/HIGH.
+**Ne yapıldı:** Önceki hâlde `onerror` her hatayı `"closed"` sayıyordu ve **manuel reconnect YOKTU**.
+Tarayıcının `EventSource`'u yalnız `readyState===CONNECTING` iken auto-retry yapar; sunucu akışı
+non-retryable kapattığında / initial handshake fail'de `readyState=CLOSED` olur ve native retry **DURUR**
+→ dashboard kalıcı SSE-kör kalır. Çözüm: (1) **readyState-aware `onerror`** — `CONNECTING` (native retry
+sürüyor) → status `"connecting"` (yanlış `"closed"` değil); `CLOSED` (native vazgeçti) → kendi **exponential
+backoff** reconnect'imiz (`RECONNECT_BASE_MS=1000` → `RECONNECT_MAX_MS=30000` cap). (2) **Self-heal korundu**
+— reopen (native VEYA backoff) aynı gap full-refresh'i tetikler (INF-11); backoff ramp `open`'da sıfırlanır.
+(3) **Temiz teardown** — `dispose` bekleyen reconnect timer'ı iptal eder + mevcut source'un listener'larını
+söker; her (re)open önceki `teardownSource`'u değiştirir → handler sızıntısı YOK. `connectEvents(queryClient,
+onStatus?)` **imzası + SSE taxonomy / `EVENT_QUERY_KEYS` yüzeyi DEĞİŞMEDİ** — `Layout.tsx:94` call-site
+dokunulmadı. `test/sse.test.ts`: `FakeEventSource` double'ı `readyState` + statik `CONNECTING/OPEN/CLOSED`
+sabitleri + `error(readyState)` + `constructed` sayacı ile genişletildi; **+3 vitest** (transient hata
+`connecting` kalır+self-reconnect etmez / fatal hata backoff ile reconnect+reopen'da self-heal / dispose
+bekleyen backoff'u iptal eder) → **238**. Review: kendi ampirik doğrulaması (238 test + build), 0 CRITICAL/HIGH.
 
-**Reuse anchor'ları:** `lib/adminPanel.ts::useRedeliverDataQueue` (query-only POST, OCC/Idem yok,
-`["audit"]` invalidate) + `DataQueueRedeliverResult`/`dataJobKindLabel` + `pages/Panel.tsx`
-`OperatorRecoveryCard`/`RedeliverResult` (grace hint input + sonuç tablosu + empty-state + skipped notu).
+**Reuse anchor'ları:** `lib/sse.ts::connectEvents` (kapalı `openSource`/`scheduleReconnect`/`teardownSource`
+closure yapısı — bir sonraki reconnect-benzeri slice için doğrudan örnek) + `test/sse.test.ts::FakeEventSource`
+(`readyState`/`error()`/`constructed` + `vi.useFakeTimers` backoff testleri).
 
-**Dürüst sınır (KALICI):** re-dispatch OPERATOR aksiyonu kalır (scheduler `data`'yı ASLA auto-route etmez,
-doc 20 §6); legacy satırlar `skipped_unknown_kind` (asla tahmin); `["jobs"]` HTTP LİSTE yüzeyi YOK (POST
-recovery aksiyonu, browser değil); operator = Admin (`require_admin_panel`).
+**Dürüst sınır (KALICI):** reconnect sonsuza dek dener (delay cap 30s — canlı dashboard için doğru davranış,
+"denemeye devam"); yalnız CLIENT dayanıklılık değişikliği — backend SSE stream (`apps/api/sse.py`) tüketilen
+hâliyle DEĞİŞMEDİ; metric-profile / capability / trash gibi projeksiyonların özel SSE event'i yok
+(`resource.changed` süpürür).
 
 **SIRADAKİ İŞ (BAŞLARKEN kullanıcıyla TEYİT ET — henüz teyitli DEĞİL):** kalan **TIER 3 deferred**:
-(a) SSE streaming e2e (bağlantı kopması dayanıklılığı — `lib/sse.ts` reconnect self-heal zaten var, bu
-test/dayanıklılık ağırlıklı); (b) tool-call status shadowing (CR-08 follow-up — agent runtime tarafı, daha
-geniş kapsam). **retention auto-purge KAPSAM DIŞI** (doc 20 §16). LLM generation Future-Dev — kapsam dışı.
+(b) **tool-call status shadowing** (CR-08 follow-up — agent runtime tarafı, daha geniş kapsam; doc + agent
+loop imzaları okunmalı). (a) SSE streaming e2e ✅ KAPANDI (PR #133). **retention auto-purge KAPSAM DIŞI**
+(doc 20 §16). LLM generation Future-Dev — kapsam dışı. Başka aday: minör backend follow-up.
 
 **PASTE-READY RESUME PROMPT (sonraki temiz oturuma yapıştır):**
 
 ```
-Entropia — post-V1 TIER 3 devam. STALE-BY-DEFAULT: data-queue redelivery Admin UI kapanış docs (PR #132)
+Entropia — post-V1 TIER 3 devam. STALE-BY-DEFAULT: SSE reconnect resilience kapanış docs (PR #134)
 MERGE EDİLDİ varsayma, git'ten doğrula.
 
 ÖNCE DOĞRULA: git fetch && git log --oneline origin/main -6 && gh pr list --state all -L 8.
-main = 889ca2e (Merge #131 — data-queue redelivery Admin UI feat 51d9e83) + docs #132 merge sonrası daha
+main = ff92310 (Merge #133 — SSE reconnect backoff resilience feat a100930) + docs #134 merge sonrası daha
 ileri (açıksa önce merge iste). alembic head 0021_local_auth (DEĞİŞMEDİ); ENGINE_VERSION =
-backtest-engine-v2-position-size-limits (DEĞİŞMEDİ). Backend 1054 test, frontend 235. Yeni branch'i
+backtest-engine-v2-position-size-limits (DEĞİŞMEDİ). Backend 1054 test, frontend 238. Yeni branch'i
 MUTLAKA origin/main'den aç.
 
-ÖNCE OKU (authority order): docs/POST_V1_KICKOFF.md (en üst "Durum" bloğu — PR #131 + "SIRADAKİ İŞ" +
-bu resume) → docs/STAGE2_HANDOFF.md ("Data-queue redelivery operator recovery card landed (PR #131)" +
+ÖNCE OKU (authority order): docs/POST_V1_KICKOFF.md (en üst "Durum" bloğu — PR #133 + "SIRADAKİ İŞ" +
+bu resume) → docs/STAGE2_HANDOFF.md ("SSE reconnect backoff resilience landed (PR #133)" +
 "## Next") → CLAUDE.md "Current position".
 
-DURUM: TIER 1 backend + TIER 2 SAYFA HARİTASI TAMAM (24/24 real, tüm route yüzeyleri bağlı). Data-queue
-operator redelivery TAM KAPANDI: backend #129 (INF-03, doc 20 §6 — job_kind discriminator + data_queue.py
-+ DATA_ACTOR_BY_KIND + commands/data_queue.py redeliver_data_queue_jobs + POST /admin/data-queue/redeliver)
-+ Admin UI #131 (Panel OperatorRecoveryCard — POST /admin/data-queue/redeliver'i bağlar; grace_seconds
-query-only, OCC/Idem YOK; sonuç {scanned, redeliverable[], skipped_unknown_kind}; lib/adminPanel.ts
-useRedeliverDataQueue + DataQueueRedeliverResult + dataJobKindLabel). Scheduler DOKUNULMADI — data
-operator-only kalır. Önceki landed frontend: login #65, SSE #67, /v1/metrics #69, RUN/History #72,
-Arrange/Lab #74, Panel #78, compare/rebind #80, Future Dev #82, provisioning #84, Trash restore #86,
-auth-inval #88, CP #91/#93, capability POST #95, Library #97, ESP #99/#121, Rationale #101, Market Data
-#103/#105, Research Data #107/#109, Ready Check #111, Portfolio #113, User Manual #115, Strategy #117,
-TS/TL #119, Outsource #123, Mainboard #125, Trash purge #127, data-queue redelivery Admin UI #131.
-BACKEND: first-Admin bootstrap #76 + bootstrap-status #84 + CP-Gen #89 + data-queue redelivery #129.
+DURUM: TIER 1 backend + TIER 2 SAYFA HARİTASI TAMAM (24/24 real, tüm route yüzeyleri bağlı). SSE streaming
+e2e dayanıklılık TAM KAPANDI (PR #133): lib/sse.ts::connectEvents readyState-aware onerror (CONNECTING→
+"connecting" native retry; CLOSED→kendi exponential backoff 1s→30s cap) + reopen'da gap full-refresh
+(INF-11) + dispose backoff'u iptal eder; imza + EVENT_QUERY_KEYS DEĞİŞMEDİ; +3 vitest → 238. Data-queue
+operator redelivery de KAPALI: backend #129 + Admin UI #131. Önceki landed frontend: login #65, SSE #67,
+/v1/metrics #69, RUN/History #72, Arrange/Lab #74, Panel #78, compare/rebind #80, Future Dev #82,
+provisioning #84, Trash restore #86, auth-inval #88, CP #91/#93, capability POST #95, Library #97,
+ESP #99/#121, Rationale #101, Market Data #103/#105, Research Data #107/#109, Ready Check #111,
+Portfolio #113, User Manual #115, Strategy #117, TS/TL #119, Outsource #123, Mainboard #125, Trash purge
+#127, data-queue redelivery Admin UI #131, SSE reconnect resilience #133. BACKEND: first-Admin bootstrap
+#76 + bootstrap-status #84 + CP-Gen #89 + data-queue redelivery #129.
 
 ÖNEMLİ (KALICI SINIR): retention auto-purge YAPMA — doc 20 §16 açıkça "Automatic purge remains disabled
 in Production V1" (Future-Dev boundary, uygulanabilir slice DEĞİL); purge her zaman explicit Admin
 confirm+re-auth.
 
-SIRADAKİ İŞ (BAŞLARKEN KULLANICIYLA TEYİT ET — henüz teyitli DEĞİL): kalan TIER 3 deferred: (a) SSE
-streaming e2e (bağlantı kopması dayanıklılığı — lib/sse.ts reconnect self-heal zaten var, test/dayanıklılık
-ağırlıklı); (b) tool-call status shadowing (CR-08 follow-up — agent runtime tarafı, daha geniş kapsam).
-Başka aday yeni bir backend follow-up olabilir (LLM generation Future-Dev, kapsam dışı). BAŞLAMADAN ilgili
-doc'u + route/command imzalarını + queries/commands dönüş dict'lerini oku → wire tipleri VERBATIM ayna.
+SIRADAKİ İŞ (BAŞLARKEN KULLANICIYLA TEYİT ET — henüz teyitli DEĞİL): kalan TIER 3 deferred: (b) tool-call
+status shadowing (CR-08 follow-up — agent runtime tarafı, daha geniş kapsam; agent loop + tool-call durum
+yayınımı okunmalı). (a) SSE streaming e2e ✅ KAPANDI (PR #133). Başka aday yeni bir minör backend follow-up
+olabilir (LLM generation Future-Dev, kapsam dışı). BAŞLAMADAN ilgili doc'u + route/command imzalarını +
+queries/commands dönüş dict'lerini oku → wire tipleri VERBATIM ayna.
 
 DÜRÜST SINIR (KALICI): ["jobs"] backend LİSTE yüzeyi YOK (POST recovery aksiyonları var, browser değil);
 data-queue redelivery re-dispatch operator aksiyonu (scheduler data'yı ASLA auto-route etmez); purge worker

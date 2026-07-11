@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+from typing import TYPE_CHECKING
 
 from entropia.domain.esp.enums import ResolverTrustState, RuntimeAdapter
 from entropia.domain.lifecycle.enums import (
@@ -32,6 +33,9 @@ from entropia.infrastructure.postgres.repositories import market_data as md_repo
 from entropia.infrastructure.postgres.repositories import packages as pkg_repo
 from entropia.infrastructure.postgres.repositories import rationale as rationale_repo
 from entropia.infrastructure.postgres.repositories import research_data as rd_repo
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 DEFAULT_ADMIN_ID = os.getenv("SEED_ADMIN_ID", "user_admin")
 DEFAULT_ADMIN_USERNAME = os.getenv("SEED_ADMIN_USERNAME", "admin")
@@ -102,33 +106,43 @@ _ESP_COND_RESOLVERS: tuple[tuple[str, str, list[str]], ...] = (
 )
 
 
+async def seed_identities(session: AsyncSession) -> None:
+    """Idempotently seed the default Admin human and the system Agent.
+
+    The Principal row is flushed before its FK-dependent HumanUser/Agent row:
+    without a mapped relationship() the unit of work does not derive flush
+    order from the table-level FK, so batching both adds into one flush can
+    emit the child INSERT first and violate the FK on a fresh database.
+    """
+    log = get_logger("seed")
+    if await session.get(HumanUser, DEFAULT_ADMIN_ID) is None:
+        session.add(Principal(principal_id=DEFAULT_ADMIN_ID, principal_type=PrincipalType.HUMAN))
+        await session.flush()
+        session.add(
+            HumanUser(
+                user_id=DEFAULT_ADMIN_ID,
+                username=DEFAULT_ADMIN_USERNAME,
+                display_name="Default Admin",
+                current_role=Role.ADMIN,
+                status="active",
+            )
+        )
+        log.info("seed.admin_created", user_id=DEFAULT_ADMIN_ID)
+
+    if await session.get(Agent, DEFAULT_AGENT_ID) is None:
+        session.add(Principal(principal_id=DEFAULT_AGENT_ID, principal_type=PrincipalType.AGENT))
+        await session.flush()
+        session.add(Agent(agent_id=DEFAULT_AGENT_ID, name="Alpha Agent", enabled=True))
+        log.info("seed.agent_created", agent_id=DEFAULT_AGENT_ID)
+
+    await session.flush()  # principals exist before FK-dependent dataset rows
+
+
 async def _seed() -> None:
     log = get_logger("seed")
     factory = get_session_factory()
     async with factory() as session:
-        if await session.get(HumanUser, DEFAULT_ADMIN_ID) is None:
-            session.add(
-                Principal(principal_id=DEFAULT_ADMIN_ID, principal_type=PrincipalType.HUMAN)
-            )
-            session.add(
-                HumanUser(
-                    user_id=DEFAULT_ADMIN_ID,
-                    username=DEFAULT_ADMIN_USERNAME,
-                    display_name="Default Admin",
-                    current_role=Role.ADMIN,
-                    status="active",
-                )
-            )
-            log.info("seed.admin_created", user_id=DEFAULT_ADMIN_ID)
-
-        if await session.get(Agent, DEFAULT_AGENT_ID) is None:
-            session.add(
-                Principal(principal_id=DEFAULT_AGENT_ID, principal_type=PrincipalType.AGENT)
-            )
-            session.add(Agent(agent_id=DEFAULT_AGENT_ID, name="Alpha Agent", enabled=True))
-            log.info("seed.agent_created", agent_id=DEFAULT_AGENT_ID)
-
-        await session.flush()  # principals exist before FK-dependent dataset rows
+        await seed_identities(session)
 
         if SEED_DEMO_MARKET or SEED_DEMO_RESEARCH:
             market_revision_id = await _seed_demo_market_dataset(session, log)

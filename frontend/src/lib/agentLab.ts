@@ -86,6 +86,37 @@ export interface HypothesisPage {
   next_cursor: string | null;
 }
 
+// One durable Tool Gateway call, summary form (doc 18 §9.2). The `request` /
+// `response_ref` payload bodies live only on the detail read.
+export interface AgentToolCallCard {
+  tool_call_id: string;
+  tool_name: string;
+  task_id: string | null;
+  checkpoint_id: string | null;
+  actor_kind: string;
+  policy_scope: string;
+  status: string;
+  artifact_output_ref: string | null;
+  failure_code: string | null;
+  failure_message: string | null;
+  correlation_id: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface AgentToolCallDetail extends AgentToolCallCard {
+  agent_id: string;
+  actor_principal_id: string | null;
+  input_manifest_id: string | null;
+  idempotency_key: string | null;
+  request: Record<string, unknown>;
+  response_ref: Record<string, unknown> | null;
+}
+
+export interface AgentToolCallList {
+  tool_calls: AgentToolCallCard[];
+}
+
 export interface DirectiveAdmission {
   directive_id: string;
   status: string;
@@ -166,6 +197,35 @@ export function useAgentTask(taskId: string | null) {
     queryKey: ["agent-tasks", "detail", taskId],
     queryFn: () => api.get<AgentTaskDetail>(`/agent-tasks/${encodeURIComponent(taskId ?? "")}`),
     enabled: taskId !== null,
+  });
+}
+
+// Durable tool-call lifecycle (backend ToolCallStatus). The wire value stays a
+// plain string; this map only picks a badge tone. REJECTED is a recorded
+// governance denial (doc 18 §11 AL-11), rendered like a failure.
+export const TOOL_CALL_STATUS_TONES: Record<string, "ok" | "warn" | "down" | "neutral"> = {
+  queued: "neutral",
+  running: "warn",
+  succeeded: "ok",
+  failed: "down",
+  rejected: "down",
+};
+
+export function useTaskToolCalls(taskId: string | null) {
+  return useQuery({
+    queryKey: ["agent-tasks", "tool-calls", taskId],
+    queryFn: () =>
+      api.get<AgentToolCallList>(`/agent-tasks/${encodeURIComponent(taskId ?? "")}/tool-calls`),
+    enabled: taskId !== null,
+  });
+}
+
+export function useToolCall(toolCallId: string | null) {
+  return useQuery({
+    queryKey: ["agent-tasks", "tool-call", toolCallId],
+    queryFn: () =>
+      api.get<AgentToolCallDetail>(`/agent-tool-calls/${encodeURIComponent(toolCallId ?? "")}`),
+    enabled: toolCallId !== null,
   });
 }
 

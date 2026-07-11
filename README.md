@@ -17,12 +17,19 @@ This repository is built **stage by stage** from a canonical specification (see
 | Realtime | Server-Sent Events (SSE) |
 | Runtime | Docker Compose — modular monolith with separate worker planes |
 
-> **Build status:** **Stage 0 (skeleton)** and **Stage 1 (common system
-> foundation)** are complete — identity/roles, server-side policy, audit +
-> transactional outbox, generic root/revision model, optimistic concurrency,
-> soft-delete/trash/restore/purge, idempotency, durable jobs, and the central
-> lifecycle enum registry. The staged roadmap lives in
-> [`docs/STAGE_BUILD_PLAN.md`](docs/STAGE_BUILD_PLAN.md).
+> **Build status:** **Production V1 is complete** — every stage of
+> [`docs/STAGE_BUILD_PLAN.md`](docs/STAGE_BUILD_PLAN.md) (0–8) has landed, plus
+> the post-V1 wave: real local authentication (argon2id credentials + opaque
+> Bearer sessions + first-Admin bootstrap), a real bar-replay backtest engine
+> with built-in indicator compute (SMA/EMA/RMA/WMA/RSI/VWAP, condition blocks,
+> multi-timeframe resampling, risk-based & Kelly sizing, position-size limits),
+> the full **24-screen web app** bound to live data end-to-end, the Future Dev
+> capability system, and audit-log query indexes. Snapshot (CI on `main`):
+> **1089 backend tests**, **246 frontend tests**, Alembic head
+> `0023_audit_log_trgm_indexes`. The running handoff lives in
+> [`docs/STAGE2_HANDOFF.md`](docs/STAGE2_HANDOFF.md); deliberate non-goals
+> (live trading, LLM generation, retention auto-purge, Graphic View renderer)
+> are listed there and in [`docs/POST_V1_KICKOFF.md`](docs/POST_V1_KICKOFF.md).
 
 ---
 
@@ -64,6 +71,44 @@ MinIO bucket, and starts the API plus every worker plane
 `agent-coordinator`, `scheduler`).
 
 Stop it with `docker compose down` (add `-v` to also delete data volumes).
+
+To verify a running stack at any time: `make smoke` (or `./scripts/smoke.sh`).
+
+---
+
+## What's inside — the 24-screen map
+
+Every screen renders **server projections only** (the client never computes
+domain state) and every mutation is a typed, audited command.
+
+| Group | Screen | Purpose |
+| --- | --- | --- |
+| Workspace | **Mainboard** (`/`) | Composition plane: attach work objects, pin exact revisions, enable/order/label items, freeze snapshots — the fingerprint that feeds Ready Check. |
+| Workspace | **Strategy Details** (`/strategy`) | Strategy editor: draft → validate (pure compiler pass) → save immutable revisions; revision history and deep links. |
+| Workspace | **Add Outsource Signal** (`/outsource-signal`) | Type chooser routing external work into the Trading Signal / Trade Log workbenches. |
+| Workspace | **Trading Signal** (`/trading-signal`) | Upload a signal file → durable import job → report → save as a native work object with OCC-guarded revisions. |
+| Workspace | **Trade Log** (`/trade-log`) | The same import chain for historical trade records (twin surface of Trading Signal). |
+| Packages & Data | **Create Package** (`/packages/create`) | Package request lifecycle: compose a request, run dependency scans, generate a deterministic candidate, draft, approve. |
+| Packages & Data | **Pre-Check** (`/packages/pre-check`) | Dependency scan viewer: resolved vs missing canonical keys against the resolver registry. |
+| Packages & Data | **Package Library** (`/packages/library`) | Read-only catalog of every package: permissions, provenance, scan summary, revision history. |
+| Packages & Data | **Embedded System Packages** (`/packages/embedded`) | Resolver registry: propose candidates, Admin activate/deprecate, Pre-Check-parity resolve probe. |
+| Packages & Data | **Rationale Families** (`/rationale-families`) | Shared strategy-taxonomy CRUD plus the package-assignment batch editor. |
+| Packages & Data | **Market Data** (`/market-data`) | Market dataset registry + owner ingest chain (upload → analyze → schema-map → approve) with revision lifecycle. |
+| Packages & Data | **Research Data** (`/research-data`) | Research dataset registry: time policies, field/feature definitions, agent/evidence bundles. |
+| Backtest | **Portfolio / Equity Allocation** (`/portfolio`) | Allocation plan draft editor with immutable validation reports. |
+| Backtest | **Backtest Ready Check** (`/backtest/ready-check`) | Server preflight over the composition fingerprint; immutable readiness reports. |
+| Backtest | **RUN & Backtest Results** (`/backtest/run`) | Run admission (202 + durable tracking) and immutable result deep links with retry. |
+| Backtest | **Results History** (`/backtest/history`) | Keyset-sorted result index with two-result compare and soft delete. |
+| Backtest | **Arrange Metrics** (`/backtest/metrics`) | Metric profile editor (apply / lock / unlock) shaping how results are displayed — never what was computed. |
+| Analysis & Ops | **Analysis Lab** (`/analysis-lab`) | Alpha Agent workspace: runtime pause/resume/stop, directives, tasks, checkpoints, tool-call history, hypotheses. |
+| Analysis & Ops | **Panel / Management / Logs** (`/panel`) | Admin: users & roles, system actors, role matrix, audit-log explorer, operator recovery. |
+| Analysis & Ops | **Admin Provisioning** (`/panel/provisioning`) | First-Admin bootstrap window status and flow documentation. |
+| Analysis & Ops | **System Metrics** (`/panel/metrics`) | Golden-signals ops dashboard over the Prometheus `/metrics` exposition. |
+| Analysis & Ops | **Trash** (`/trash`) | Admin recycle bin: restore, or permanently purge with confirmation + re-auth proof. |
+| Docs | **User Manual** (`/user-manual`) | Versioned in-app manual: sections, uploads, revisions, search. |
+| Docs | **Future Dev** (`/future-dev`) | Capability registry: lifecycle transitions with activation gates, operational POSTs, output & transition histories. |
+
+Plus `/login` (sign up / log in when `AUTH_MODE=session`).
 
 ---
 
@@ -224,9 +269,11 @@ Denemek için (API tekrar çalışırken, **yeni** bir terminalde):
 curl     -H "X-Actor-Id: user_admin" http://localhost:8000/api/v1/me   # macOS
 curl.exe -H "X-Actor-Id: user_admin" http://localhost:8000/api/v1/me   # Windows
 ```
-Kim olduğunu söyleyen bir JSON dönerse tebrikler — çalışıyor! 🎉 _(Giriş/şifre
-sistemi bilinçli olarak sonraya bırakıldı; şimdilik kim olduğunu `X-Actor-Id`
-başlığı söyler, **rolü her zaman sunucu veritabanından çözer**.)_
+Kim olduğunu söyleyen bir JSON dönerse tebrikler — çalışıyor! 🎉 _(Varsayılan
+`AUTH_MODE=dev` modunda kim olduğunu `X-Actor-Id` başlığı söyler; **rolü her
+zaman sunucu veritabanından çözer**. Gerçek kullanıcı adı/şifre girişi de var:
+`.env`'e `AUTH_MODE=session` yaz, web arayüzündeki `/login` sayfasından kayıt
+ol/giriş yap.)_
 
 ### 🅱️ Bölüm B — Tam deneyim (isteğe bağlı: backtest + arayüz)
 
@@ -408,10 +455,26 @@ make frontend-dev       # Vite dev server on :5173
 
 The dev frontend talks to `VITE_API_BASE_URL` (default `http://localhost:8000/api/v1`).
 
-### Acting as a user (dev-mode auth)
+### Authentication — dev mode and real sessions
 
-Authentication / IdP selection is a deliberately deferred security decision. Until
-then, seed the baseline identities and choose which principal to act as:
+`AUTH_MODE` selects the authentication line (default `dev`; see
+[Configuration](#configuration)):
+
+- **`dev`** — the transport supplies the principal via the `X-Actor-Id` header
+  (local development and tests). Seed the baseline identities and choose which
+  principal to act as (below).
+- **`session`** — real login: argon2id password credentials + opaque Bearer
+  session tokens, created on the web app's `/login` page (sign up / log in).
+  To provision the **first Admin**, set
+  `ENTROPIA_BOOTSTRAP_ADMIN_EMAIL=you@example.com` before signing up — the
+  matching sign-up is promoted to Admin only while no active Admin exists.
+  Non-human runtimes (agent/scheduler) authenticate with
+  `ENTROPIA_SERVICE_TOKEN`.
+
+In **both** modes the server resolves the **role** from the database on every
+request — the client never asserts its own role.
+
+For dev mode, seed and pick a principal:
 
 ```bash
 # inside the backend (DB must be migrated):
@@ -420,8 +483,7 @@ uv run python -m entropia.apps.seed        # creates admin "user_admin" + agent 
 
 The web app's header has an **act as** field (sends `X-Actor-Id`); set it to
 `user_admin` to use Admin-only screens (Panel, Trash). With Docker, run the seed
-once: `docker compose run --rm api python -m entropia.apps.seed`. The server always
-resolves the **role** from the database — the client never asserts its own role.
+once: `docker compose run --rm api python -m entropia.apps.seed`.
 
 ### 5. (Optional) Run worker planes natively
 
@@ -446,11 +508,58 @@ macOS/Linux use `make <target>`; Windows use `.\scripts\tasks.ps1 <task>`.
 | Stack down | `make down` | `.\scripts\tasks.ps1 down` |
 | Tail logs | `make logs` | `.\scripts\tasks.ps1 logs` |
 | DB migrate | `make migrate` | `.\scripts\tasks.ps1 migrate` |
+| Smoke-test a running stack | `make smoke` | `bash scripts/smoke.sh` (Git Bash) |
 | Backend tests | `make backend-test` | `.\scripts\tasks.ps1 backend-test` |
 | Backend lint | `make backend-lint` | `.\scripts\tasks.ps1 backend-lint` |
 | Frontend build | `make frontend-build` | `.\scripts\tasks.ps1 frontend-build` |
 | Frontend lint | `make frontend-lint` | `.\scripts\tasks.ps1 frontend-lint` |
 | Run `make help` for the full list. | | |
+
+---
+
+## Verifying changes
+
+Everything below is what CI runs (`.github/workflows/ci.yml`: **Backend — lint,
+type, test** with a PostgreSQL 16 service · **Frontend — lint, typecheck,
+build, test** · **Docker — build images**) — run it locally before pushing.
+
+**Backend** (from `backend/`):
+
+```bash
+uv run ruff check . && uv run ruff format --check .   # lint + formatting
+uv run mypy src                                       # strict typing
+uv run alembic upgrade head                           # migrations apply cleanly
+uv run pytest --no-cov -q                             # unit + contract + integration
+```
+
+Integration tests **rebuild the schema on every test** — never point them at a
+database you care about. Give each concurrent session its own database:
+
+```bash
+TEST_DATABASE_URL=postgresql+asyncpg://entropia:entropia@localhost:5432/entropia_test \
+  uv run pytest --no-cov -q
+```
+
+Without a reachable PostgreSQL, integration tests skip themselves (unit and
+contract tests always run). Migration changes additionally require an
+up/down/up proof (`uv run alembic downgrade -1 && uv run alembic upgrade head`)
+and migration↔model column parity.
+
+**Frontend** (from `frontend/`):
+
+```bash
+npm run typecheck && npm run lint && npm test && npm run build
+```
+
+**Running stack** (outside-in): `make smoke` — health endpoints, per-dependency
+readiness, metrics exposition, identity resolution, frontend reachability. The
+full end-to-end product path (ingest → package → strategy → mainboard → ready
+check → RUN → result → history → trash/restore) is executable as one test:
+
+```bash
+cd backend && TEST_DATABASE_URL=postgresql+asyncpg://entropia:entropia@localhost:5432/entropia_smoke \
+  uv run pytest tests/integration/test_e2e_pipeline.py --no-cov -q
+```
 
 ---
 

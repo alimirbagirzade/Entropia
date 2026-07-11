@@ -53,6 +53,7 @@ from entropia.infrastructure.postgres.models import Job
 from entropia.infrastructure.postgres.repositories import audit as audit_repo
 from entropia.infrastructure.postgres.repositories import backtest as bt_repo
 from entropia.infrastructure.postgres.repositories import mainboard as mb_repo
+from entropia.infrastructure.postgres.repositories import market_data as md_repo
 from entropia.infrastructure.postgres.repositories import strategy as strat_repo
 from entropia.shared.errors import NotFoundError
 
@@ -133,6 +134,10 @@ async def run_backtest(
     # plan (INF-12 Slice C). Derived purely from immutable pins, so it does not break
     # reproducibility; an empty plan makes the engine fall back to its breakout proxy.
     indicator_plan = await resolve_indicator_plan(session, strategy_config)
+    # Summary metadata: the pinned revision's base bar timeframe (immutable read,
+    # reproducibility-safe). None when the revision is not bar-timeframed — surfaced
+    # as-is, never guessed (L4).
+    base_timeframe = await md_repo.get_base_timeframe_for_revision(session, market_revision_id)
     try:
         output = run_engine(
             strategy_config=strategy_config,
@@ -140,6 +145,7 @@ async def run_backtest(
             execution_key=manifest.execution_key,
             item_count=item_count,
             indicator_plan=indicator_plan,
+            timeframe=base_timeframe,
         )
     except Exception as exc:
         return _fail_run(

@@ -26,13 +26,14 @@ from entropia.application.queries import backtest_run as backtest_query
 from entropia.application.queries import mainboard as mb_query
 from entropia.domain.identity import Actor
 from entropia.domain.lifecycle.enums import PrincipalType, Role
-from entropia.domain.market_data.enums import MarketDataType
+from entropia.domain.market_data.enums import MarketDataType, ResolutionKind
 from entropia.infrastructure.postgres.models import (
     BacktestResult,
     BacktestRun,
     Job,
     MetricValueRow,
     Principal,
+    ResultSummary,
 )
 from entropia.infrastructure.postgres.repositories import backtest as bt_repo
 from entropia.infrastructure.postgres.repositories import market_data as md_repo
@@ -147,11 +148,14 @@ async def _empty_composition(session, actor: Actor) -> str:
     return mb["workspace_id"]
 
 
-async def _ready_composition(session, actor: Actor) -> tuple[str, str, str]:
+async def _ready_composition(
+    session, actor: Actor, *, base_tf: str | None = None
+) -> tuple[str, str, str]:
     workspace_id = await _empty_composition(session, actor)
     # Slice B: the strategy pins a REAL market revision (FK-valid entity) and the
     # bar-replay worker resolves its processed Parquet asset (INF-12); the bar bytes
-    # are injected via ``_e2e_bars``.
+    # are injected via ``_e2e_bars``. ``base_tf`` pins the revision's bar timeframe
+    # so the worker can surface it in the result summary.
     market_root, market_rev = await md_repo.create_market_dataset(
         session,
         owner_principal_id=None,
@@ -159,6 +163,9 @@ async def _ready_composition(session, actor: Actor) -> tuple[str, str, str]:
         market_data_type=MarketDataType.OHLCV,
         payload={"note": "seed bars"},
     )
+    if base_tf is not None:
+        market_rev.resolution_kind = ResolutionKind.BAR
+        market_rev.resolution_value = base_tf
     await session.flush()
     md_repo.add_processed_asset(
         session,
@@ -234,6 +241,49 @@ async def test_admission_queues_run_and_worker_materializes_result(session) -> N
 
     run_view = await backtest_query.get_backtest_run(session, USER1, run_id=admit["run_id"])
     assert run_view["state"] == "succeeded" and run_view["result_id"] == out["result_id"]
+
+
+async def test_result_summary_carries_pinned_market_timeframe(session) -> None:
+    # The worker resolves the pinned revision's bar timeframe (resolution_kind=BAR)
+    # and it lands verbatim in the persisted summary + the result read model.
+    await _seed_principals(session)
+    composition_id, _root, _rev = await _ready_composition(session, USER1, base_tf="1m")
+    admit = await backtest_cmd.request_backtest_run(session, USER1, composition_id=composition_id)
+    await session.commit()
+
+    out = await run_backtest(session, admit["job_id"], stream_bars=_e2e_bars)
+    await session.commit()
+
+    assert out["state"] == "succeeded"
+    summary_row = (
+        await session.execute(
+            select(ResultSummary).where(ResultSummary.result_id == out["result_id"])
+        )
+    ).scalar_one()
+    assert summary_row.timeframe == "1m"
+    assert summary_row.headline["timeframe"] == "1m"
+    view = await backtest_query.get_backtest_result(session, USER1, result_id=out["result_id"])
+    assert view["summary"]["timeframe"] == "1m"
+
+
+async def test_result_summary_timeframe_none_when_revision_not_bar_timeframed(session) -> None:
+    # A revision without a bar resolution (event-based / unknown) surfaces an honest
+    # None — the worker never guesses a timeframe from the bars (L4).
+    await _seed_principals(session)
+    composition_id, _root, _rev = await _ready_composition(session, USER1)
+    admit = await backtest_cmd.request_backtest_run(session, USER1, composition_id=composition_id)
+    await session.commit()
+
+    out = await run_backtest(session, admit["job_id"], stream_bars=_e2e_bars)
+    await session.commit()
+
+    assert out["state"] == "succeeded"
+    summary_row = (
+        await session.execute(
+            select(ResultSummary).where(ResultSummary.result_id == out["result_id"])
+        )
+    ).scalar_one()
+    assert summary_row.timeframe is None
 
 
 # --------------------------------------------------------------------------- #

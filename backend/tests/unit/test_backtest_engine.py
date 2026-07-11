@@ -559,10 +559,29 @@ def test_engine_applies_the_position_size_cap_to_a_real_trade() -> None:
 
 
 def test_engine_execution_key_namespace_shifts_with_the_engine_version() -> None:
-    # The ENGINE_VERSION bump must flow into the manifest so a stale unclamped result
-    # cannot be reused under the new engine (INF-04 idempotent reuse / INF-05).
+    # The ENGINE_VERSION bump must flow into the manifest so a stale timeframe-less
+    # result cannot be reused under the new engine (INF-04 idempotent reuse / INF-05).
     built = _manifest("btrun_A", "snap_A", "2024-01-01T00:00:00Z")
-    assert built.manifest["identity"]["engine_version"] == "backtest-engine-v2-position-size-limits"
+    assert built.manifest["identity"]["engine_version"] == "backtest-engine-v2-summary-timeframe"
+
+
+def test_summary_carries_the_caller_resolved_timeframe() -> None:
+    # The job resolves the pinned market revision's base bar timeframe and passes it
+    # through; the engine surfaces it verbatim in the summary (pure — no I/O here).
+    out = run_engine(
+        strategy_config=_config(),
+        bar_batches=_batched(_long_breakout_then_stop(), 8),
+        execution_key="exec_key_test",
+        timeframe="1m",
+    )
+    assert out.summary["timeframe"] == "1m"
+
+
+def test_summary_timeframe_defaults_to_none_when_unresolved() -> None:
+    # No caller-resolved timeframe (event-based / unknown revision) stays an honest
+    # None — never guessed from the bars (L4).
+    out = _run(_config(), _long_breakout_then_stop())
+    assert out.summary["timeframe"] is None
 
 
 def test_metrics_registry_maps_all_nine_defaults() -> None:

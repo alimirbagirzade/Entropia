@@ -3,6 +3,33 @@
 > **Amaç:** V1 kapandı (Stage 0–8 COMPLETE). Bu doküman post-V1 durumunu, aday iş listesini
 > ve temiz oturumda yapıştırılacak resume prompt'u içerir.
 
+## Durum (2026-07-11, post-V1 — capability history read surfaces; PR #143 + #144 MERGED) ✅ EN GÜNCEL
+
+**BACKEND + FRONTEND, migration YOK** (alembic head `0023_audit_log_trgm_indexes` SABİT; `ENGINE_VERSION =
+backtest-engine-v2-summary-timeframe` SABİT). main = `c5d97b6` (Merge #144); feat #143 `44e4b1e` + #144
+`d77d612`. Backend **1069 → 1077 (#143) → 1081 (#144)**; frontend **238 → 242 (#143) → 244 (#144)**.
+
+İki dilim doc-22 Future Dev capability sistemini UÇTAN UCA TAMAMLADI:
+
+- **#143 (output history):** iki operasyonel POST'un (`view_dataset.query` / `analysis_artifact.create`,
+  PR #95) yazdığı ama okunamayan satırlara owner-scoped, ACTIVE-only, newest-first keyset READ yüzeyi
+  (`GET /view-datasets[/{id}]` + `/analysis-artifacts[/{id}]`); doc 22 §7 `futureDevNoHistory.empty` artık
+  ulaşılabilir. Cross-owner / soft-deleted / missing → not-found (varlık sızmaz). ULID id-DESC keyset,
+  owner+`active` repo filtresi. +8 backend / +4 vitest.
+- **#144 (transition history):** **orphan** `capability_repo.list_activation_events`'i READ yüzeyine bağlar
+  (`GET /capabilities/{key}/lifecycle-transitions`, oldest-first; **any-authenticated** okuma, write /
+  transition **Admin-only** kalır). Detay artık yalnız SON transition'ı değil tüm zaman çizelgesini gösterir;
+  tablo `["capabilities"]` altında → Admin transition sonrası aynı sekmede tazelenir. +4 backend / +2 vitest.
+
+**Capability sistemi ARTIK TAM:** registry list/detail + Admin transition (OCC + 7 gate + audit/outbox +
+activation event) + 2 operasyonel POST (ACTIVE-only) + output history (#143) + transition history (#144).
+Graphic View RENDERER doc-22 KAPSAM DIŞI (§1/§16/§17 "V18 statik placeholder korunur").
+
+**SIRADAKİ İŞ: teed-up açık iş YOK — başlarken kullanıcıya SOR** (aday, teyitsiz: minör backend temizlik /
+kullanıcının yeni feature'ı / orphan-dead-code taraması — #144 böyle bir orphan'ı kapatmıştı). **Reuse
+anchor (bir sonraki orphan'ı bulma şablonu):** orphan-repo → read-surface bağlama ritüeli = yazılan-ama-
+okunamayan bir append log'a oldest-first projection + any-authenticated GET, write path gated kalır.
+
 ## Durum (2026-07-11, post-V1 TIER 3 — tool-call envelope status shadowing; PR #135 MERGED)
 
 **BACKEND-ONLY** (no migration, alembic head `0021_local_auth` SABİT, `ENGINE_VERSION` SABİT; backend
@@ -2230,52 +2257,41 @@ tarihsel referans** olarak duruyor.
 ## ⤵️ YENİ OTURUMDA YAPIŞTIR (resume prompt)
 
 ```
-Entropia — post-V1 TIER 2 devam. STALE-BY-DEFAULT: Add Outsource Signal seçici sayfası (PR #123)
-+ kapanış docs (PR #124) MERGE EDİLDİ varsayma, git'ten doğrula.
+Entropia — post-V1 devam. STALE-BY-DEFAULT: aşağıdakini GİT'TEN DOĞRULA, özete güvenme.
 
 ÖNCE DOĞRULA: git fetch && git log --oneline origin/main -6 && gh pr list --state all -L 8.
-main = 2f8d28f (Merge #123) olmalı; docs #124 merge sonrası daha ileri (açıksa önce merge iste).
-alembic head 0021_local_auth (DEĞİŞMEDİ); ENGINE_VERSION = backtest-engine-v2-position-size-limits
-(DEĞİŞMEDİ). Backend 1048 test, frontend 219. Yeni branch'i MUTLAKA origin/main'den aç.
+main = c5d97b6 (Merge #144) olmalı; kapanış docs PR'ı merge sonrası daha ileri (açıksa önce merge
+iste). alembic head 0023_audit_log_trgm_indexes (DEĞİŞMEDİ); ENGINE_VERSION =
+backtest-engine-v2-summary-timeframe (DEĞİŞMEDİ). Backend 1081 test, frontend 244. Yeni branch'i
+MUTLAKA origin/main'den aç.
 
-ÖNCE OKU (authority order): docs/POST_V1_KICKOFF.md (en üst "Durum" bloğu — PR #123 + "SIRADAKİ İŞ"
-+ en alttaki resume) → docs/STAGE2_HANDOFF.md ("Add Outsource Signal chooser page landed
-(PR #123)" + "## Next") → CLAUDE.md "Current position".
+ÖNCE OKU (authority order): docs/POST_V1_KICKOFF.md (en üst "Durum" bloğu — PR #143 + #144 +
+"SIRADAKİ İŞ" + en alttaki resume) → docs/STAGE2_HANDOFF.md (capability output/transition history
+landed #143/#144 + "## Next") → CLAUDE.md "Current position".
 
-DURUM: TIER 1 backend EFEKTİF TAMAM. **TIER 2 SAYFA HARİTASI TAMAM — 24/24 nav item gerçek
-sayfa (REAL_PATHS 24, placeholder KALMADI).** Son slice: Add Outsource Signal seçici sayfası
-#123 (YENİ — doc 03 external-work TİP SEÇİCİsi /outsource-signal'e bağlandı; SAF SUNUM: iki
-kanonik seçim linki [trading_signal | trade_log, CR-01] TS/TL workbench'lerine, doğrudan linkler
-"seçimsiz devam"ı kurulamaz kılar [AOS-02 yapısal]; §6.1 ⓘ panelleri + §6.2 helper'lar VERBATIM;
-hook/query key/fetch YOK — doc 03 §7.1 seçici backend mutasyonu YAPMAZ; backend'de "outsource"
-yalnız errors.py:624 yorumunda, router YOK ve GEREKMİYOR — önceki kickoff'un "yeni backend
-gerekebilir" sorusunun ampirik cevabı HAYIR; +6 vitest [AOS-01 tam-iki-seçenek / verbatim metin /
-tıkla-git probe'ları / sıfır-fetch guard'ı]; App.tsx REAL_PATHS 23→24, nav.ts DEĞİŞMEDİ).
-Önceki landed: login #65, SSE #67, /v1/metrics #69, RUN/History #72, Arrange Metrics + Analysis
-Lab #74, Panel #78, compare/rebind #80, Future Dev #82, provisioning #84, Trash #86,
-auth-invalidation #88, CP #91/#93, capability POST'ları #95, Library #97, ESP read #99 +
-mutation'lar #121, Rationale #101, Market Data #103/#105, Research Data #107/#109, Ready Check
-#111, Portfolio #113, User Manual #115, Strategy #117, TS/TL #119. BACKEND: first-Admin
-bootstrap #76 + bootstrap-status #84 + CP-Gen #89 (LLM YOK).
+DURUM: **PROJE ~%98 — V1=%100, TIER 2 sayfa haritası %100 (24/24 real, placeholder YOK), TÜM route
+yüzeyleri bağlı, TIER 3 adaylarının tamamı kapalı, doc-22 Future Dev capability sistemi UÇTAN UCA
+TAM.** Son iki slice — capability READ yüzeyleri: **#143 output history**
+(`GET /view-datasets[/{id}]` + `/analysis-artifacts[/{id}]`, owner-scoped ACTIVE-only newest-first
+keyset; iki operasyonel POST'un [view_dataset.query / analysis_artifact.create, #95] yazdığı ama
+okunamayan satırları okunur kıldı; doc 22 §7 futureDevNoHistory.empty ulaşılabilir; cross-owner/
+soft-deleted/missing → not-found) + **#144 transition history** (orphan
+`capability_repo.list_activation_events` → `GET /capabilities/{key}/lifecycle-transitions`,
+oldest-first, any-authenticated okuma / write Admin-only kalır). Capability sistemi TAM: registry
+list/detail + Admin transition (OCC + 7 gate + audit/outbox + activation event) + 2 operasyonel POST
+(ACTIVE-only) + output history #143 + transition history #144. TIER 3 kapalı: data-queue redelivery
+#129/#131, SSE reconnect #133, tool-call status shadowing #135, audit indexleri #139/#141. Frontend
+sayfa haritası TAM (Mainboard #125, Trash purge #127, outsource chooser #123 dahil 24/24).
 
-SIRADAKİ İŞ (BAŞLARKEN KULLANICIYLA TEYİT ET — henüz teyitli DEĞİL): en büyük doğal aday
-**Mainboard canlı sayfa + kompozisyon operasyonları (doc 01)** — AMPİRİK: pages/Mainboard.tsx
-55 satır ve HİÇBİR veri bağlamıyor; routes/mainboard.py 8 endpoint'ten yalnız
-GET /mainboards/default bağlı (lib/backtest.ts useDefaultMainboard). Bağsız 7:
-POST /external-work-object-drafts/{kind}, POST /work-objects,
-POST /work-objects/{root}/revisions, POST /mainboards/{ws}/items (attach),
-PATCH /mainboard-items/{item} (pin/enable/reorder), POST /mainboards/{ws}/snapshots,
-DELETE /work-objects/{root} (soft delete). Bu slice KALICI dürüst sınırı (attach + Pin "Use This
-Revision" + work-object delete hiçbir landed sayfada değil) KAPATIR. BAŞLAMADAN doc 01'i
-(docs/spec/01_Entropia_V18_Mainboard_Page_Documentation_v1_1.md, ~105KB — TAM oku) + route
-İMZALARINI ÖNCE OKU (OCC/Idem her endpoint'te olmayabilir — #105/#111/#113/#115/#117/#119/#121
-dersleri: successor/deprecate header okumuyordu; readiness token FINGERPRINT BODY-form'du;
-allocation BODY-form expected_row_version'dı; manual'da İKİ farklı body-form token; strategy
-validate HİÇBİR ŞEY okumuyordu; TS/TL'de TÜM POST'lar Idem okuyordu; ESP'de OCC HEADER-form DÜZ
-INT'ti + create tamamen gate'sizdi; outsource'ta hiç endpoint YOKTU — seçici saf sunumdu) +
-queries/commands dönüş dict'lerini oku → wire tipleri VERBATIM ayna. Alternatif adaylar: Trash
-purge re-auth slice'ı; TIER 3 deferred: retention auto-purge, data-queue redelivery, SSE
-streaming e2e, tool-call status shadowing.
+SIRADAKİ İŞ: **teed-up (teyitli) AÇIK İŞ KALMADI — yeni yön YOK, başlarken kullanıcıya SOR.** Aday
+(hiçbiri teyitli DEĞİL): (a) minör backend temizlik / tutarlılık düzeltmesi (migration'sız); (b)
+kullanıcının getireceği yeni feature; (c) orphan / dead-code taraması (repo'da bağlanmamış başka
+fonksiyon/endpoint/query var mı — #144 böyle bir orphan'ı [list_activation_events] kapatmıştı; şablon:
+yazılan-ama-okunamayan append log → oldest-first projection + any-authenticated GET, write path gated
+kalır). KAPSAM DIŞI: retention auto-purge (doc 20 §16 "Automatic purge remains disabled in Production
+V1"), LLM generation (Future-Dev), Graphic View renderer (doc 22 §1/§16/§17 "V18 statik placeholder
+korunur"). Başlamadan ilgili doc + route/command imzaları + queries/commands dönüş dict'lerini oku →
+wire tipleri VERBATIM ayna.
 
 DÜRÜST SINIR (KALICI): ["jobs"] backend LİSTE yüzeyi YOK (job-scoped import report READ'leri
 #119'dan beri ["jobs"] altında — job.updated süpürür); ham baytlar sayfadan geçmez (upload'lar
@@ -2299,7 +2315,7 @@ rapor-seed'li JSON editör) + lib/strategy.ts (BODY-form INT token + tokensız s
 lib/manual.ts (İKİ body-form token) + lib/marketData.ts postWithOcc (If-Match "rv-N").
 
 YÖNTEM: Workflow KULLANMA; direct-author. Frontend loop: cd frontend (absolute path) &&
-npm run typecheck && npm run lint && npm test && npm run build (219 + yeniler geçmeli) + yeni
+npm run typecheck && npm run lint && npm test && npm run build (244 + yeniler geçmeli) + yeni
 component/unit test (test/helpers/apiStub.ts reuse — SIRALI eşleşme: spesifik aksiyon fragmanları
 çıplak liste/create prefix'inden ÖNCE; zincirleme yükleme için findBy*; çift metin/label riskinde
 within(region) — ESP dersi: Propose formu probe'un label'larını kopyaladı, 2 eski test within ile

@@ -2092,7 +2092,59 @@ by the database owner (deployment note, not a code gap).
 future index/type depends on an extension) + `test_audit_log_trgm_indexes.py` (GIN/trgm/expression
 indexdef assert pattern) + the migration↔`create_all` parity + EXPLAIN-BitmapOr viability ritual.
 
-## Next: post-V1 (continued) — TIER 2 SAYFA HARİTASI + TÜM route yüzeyleri TAMAM (24/24 real) + `data`-queue operator redelivery (PR #129 + #131) + SSE streaming e2e reconnect resilience (PR #133) + tool-call envelope status shadowing (PR #135) + `summary["timeframe"]` market-revision metadata çözümü (PR #137) + audit log-projection indexleri (PR #139) + **audit log substring pg_trgm indexleri (PR #141 — alembic head artık `0023_audit_log_trgm_indexes`)** landed → **hiçbir teed-up açık iş kalmadı**. **retention auto-purge KAPSAM DIŞI** (doc 20 §16 "Automatic purge remains disabled in Production V1" — Future-Dev boundary, uygulanabilir slice değil). LLM generation Future-Dev — kapsam dışı. Proje ~%98; yeni iş için kullanıcıdan yön iste (kalan adaylar — hiçbiri teyitli değil: capability aktivasyonu [graphic_view'i Placeholder'dan çıkarma, doc 22 — gate'ler + Admin transition hazır, PR #82/#95 taban]; minör backend temizlik; kullanıcının getireceği yeni feature). Audit_events index kapsamı ARTIK TAM: log-order + target + 5 filter/prefix (§139) + 3 substring trgm (§141) — Admin Logs'un her filtre yolu index-served (yalnız negatif family-exclusion'lar scan-filter, doğaları gereği).
+## Post-V1 — capability operational output history read surface (TIER 2 slice) ✅ landed (PR #143, merged → main `30eabd5`, feat `44e4b1e`)
+
+**BACKEND + FRONTEND** (no migration — `view_dataset` / `analysis_artifact` tables exist since
+`0020_future_dev`; `ENGINE_VERSION` unchanged; backend **1069 → 1077**; frontend **238 → 242**). The two
+Future Dev operational POSTs (`view_dataset.query`, `analysis_artifact.create`, landed PR #95) wrote rows
+that NO endpoint could read back — the outputs lived only in the command return + audit trail; doc 22 §7
+`futureDevNoHistory.empty` was defined but **unreachable**. Adds the owner-scoped, ACTIVE-only,
+newest-first keyset read surface (doc 22 §7, §13):
+
+- `repositories/postgres/repositories/capability.py`: list/get `view_datasets` + `analysis_artifacts`
+  (owner + `deletion_state=active` filter, ULID id-DESC keyset `id < last_key`).
+- `queries/capability.py`: list/detail projections over the agent-lab keyset cursor; detail reports a
+  cross-owner / soft-deleted / missing id as **not-found** so existence never leaks.
+- `routes/capability.py`: `GET /view-datasets[/{id}]` + `GET /analysis-artifacts[/{id}]`.
+- `shared/errors.py`: `ViewDatasetNotFoundError`, `AnalysisArtifactNotFoundError`.
+- Frontend `lib/capability.ts`: history + detail hooks + wire types mirroring the row/detail projections;
+  the operational POSTs now invalidate their history key (`["view-datasets"]` / `["analysis-artifacts"]`)
+  alongside `["audit"]`. `pages/FutureDev.tsx`: View Dataset + Analysis Artifact history cards (keyset
+  cursor-stack pager, owner-scoped row detail, `futureDevNoHistory.empty` copy rendered verbatim).
+- +8 backend integration tests (`test_capability_output_history.py`) + 4 vitest.
+
+**Reuse anchor'ları:** the agent-lab ULID id-DESC keyset cursor + owner+`active` repo filter (mirror for
+any future owner-scoped operational read surface) + the not-found-on-cross-owner projection
+(existence-non-leak pattern) + the operational-POST-invalidates-its-own-history-key wiring.
+
+## Post-V1 — capability lifecycle-transition history read surface (TIER 2 slice) ✅ landed (PR #144, merged → main `c5d97b6`, feat `d77d612`)
+
+**BACKEND + FRONTEND** (no migration — `capability_activation_event` exists since `0020_future_dev`;
+`ENGINE_VERSION` unchanged; backend **1077 → 1081**; frontend **242 → 244**). Binds the **orphan**
+`capability_repo.list_activation_events` to a read surface (doc 22 §9, §13): the immutable, append-only
+lifecycle-transition timeline for one capability, oldest-first by resulting registry version. Before this
+the capability detail exposed only the LAST transition; every prior activation event was written but had
+no read path.
+
+- `queries/capability.py`: `get_capability_transitions` — projection over `list_activation_events`
+  (oldest-first by resulting registry version).
+- `routes/capability.py`: `GET /capabilities/{key}/lifecycle-transitions` — the POST on the same path
+  already **appends**; the read is **any-authenticated** (mirrors the capability detail's last-transition
+  provenance fields; the write / transition path stays **Admin-only**).
+- Frontend `lib/capability.ts`: `useCapabilityTransitions`; `pages/FutureDev.tsx`: an immutable
+  "Transition history" table in the capability detail card, keyed under `["capabilities"]` so an Admin
+  transition (which invalidates `["capabilities"]`) refreshes it in the same tab.
+- +4 backend integration tests (`test_capability_transition_history.py`) + 2 vitest.
+
+**Reuse anchor'ları:** the **orphan-repo → read-surface binding ritual** (a written-but-unreadable append
+log gets an oldest-first projection + an any-authenticated GET while the write path stays gated) — the
+exact template for finding + closing the NEXT orphan. **With #143 + #144 the doc-22 Future Dev capability
+system is END-TO-END COMPLETE:** registry list/detail + Admin transition (OCC + 7 gates + audit/outbox +
+activation event) + 2 operational POSTs (view-dataset / analysis-artifact, ACTIVE-only) + owner-scoped
+output history (#143) + transition history (#144). The Graphic View RENDERER stays OUT OF doc-22 scope
+("V18 static placeholder retained").
+
+## Next: post-V1 (continued) — TÜM route yüzeyleri + TIER 2 sayfa haritası (24/24 real) TAMAM + doc-22 **Future Dev capability sistemi UÇTAN UCA TAM** (registry + Admin transition + 2 operasyonel POST + output history PR #143 + transition history PR #144) → **hiçbir teed-up açık iş kalmadı**. TIER 3 adaylarının tamamı kapalı (`data`-queue redelivery #129/#131, SSE reconnect #133, tool-call status shadowing #135, audit indexleri #139/#141). **KAPSAM DIŞI:** retention auto-purge (doc 20 §16 "Automatic purge remains disabled in Production V1"), LLM generation (Future-Dev), Graphic View renderer (doc 22 §1/§16/§17 "V18 statik placeholder korunur"). Proje ~%98 (V1=%100, frontend sayfa haritası %100 24/24, capability sistemi tam). Backend **1081** test, frontend **244**. alembic head `0023_audit_log_trgm_indexes` (DEĞİŞMEDİ), `ENGINE_VERSION = backtest-engine-v2-summary-timeframe` (DEĞİŞMEDİ). **SIRADAKİ İŞ: yeni yön YOK — başlarken kullanıcıya SOR.** Aday (hiçbiri teyitli değil): (a) minör backend temizlik/tutarlılık (migration'sız); (b) kullanıcının getireceği yeni feature; (c) orphan/dead-code taraması (repo'da bağlanmamış başka fonksiyon var mı — #144 böyle bir orphan'ı kapatmıştı). Başlamadan ilgili doc + route/command imzaları + queries/commands dönüş dict'lerini oku → wire tipleri VERBATIM ayna.
 
 **V1 COMPLETE (Stages 0–8, docs 01–22) + Auth/IdP + Parquet Slice A + Backtest Engine Slice B + real indicator compute Slice C + `risk_based` sizing (a) + condition blocks (b) + condition extensions (b2) + two-package indicator-vs-indicator + higher-timeframe resampling (c) + per-condition multi-TF reference (i) + N-ary reference chain (ii) + VWAP directional key (d) + `formula_based` Kelly sizing + `position_size_limits` min/max cap (PR #63) landed (1015 tests).** The **Slice C indicator-compute + position-sizing follow-ups are now EFFECTIVELY COMPLETE — TIER 1 backend is DONE**:
 

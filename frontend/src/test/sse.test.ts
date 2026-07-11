@@ -11,18 +11,26 @@ import {
 type Listener = (event: MessageEvent) => void;
 
 // Minimal in-memory EventSource double: records listeners so a test can dispatch
-// server frames and assert the resulting query invalidations.
+// server frames and assert the resulting query invalidations. `readyState` mirrors
+// the DOM contract (CONNECTING = auto-retrying, CLOSED = native retry gave up) so a
+// test can steer the reconnect path.
 class FakeEventSource {
+  static readonly CONNECTING = 0;
+  static readonly OPEN = 1;
+  static readonly CLOSED = 2;
   static last: FakeEventSource | null = null;
+  static constructed = 0;
   url: string;
   onopen: (() => void) | null = null;
   onerror: (() => void) | null = null;
   closed = false;
+  readyState = FakeEventSource.CONNECTING;
   private listeners = new Map<string, Set<Listener>>();
 
   constructor(url: string) {
     this.url = url;
     FakeEventSource.last = this;
+    FakeEventSource.constructed += 1;
   }
 
   addEventListener(type: string, cb: Listener): void {
@@ -37,6 +45,7 @@ class FakeEventSource {
 
   close(): void {
     this.closed = true;
+    this.readyState = FakeEventSource.CLOSED;
   }
 
   // --- test helpers ---
@@ -47,7 +56,15 @@ class FakeEventSource {
   }
 
   open(): void {
+    this.readyState = FakeEventSource.OPEN;
     this.onopen?.();
+  }
+
+  // Simulate a connection error at a given readyState: CONNECTING = the browser is
+  // auto-retrying; CLOSED = native retry has given up (drives our own backoff).
+  error(readyState: number): void {
+    this.readyState = readyState;
+    this.onerror?.();
   }
 
   listenerCount(type: string): number {
@@ -68,6 +85,7 @@ function setup() {
 describe("connectEvents SSE live-invalidation", () => {
   beforeEach(() => {
     FakeEventSource.last = null;
+    FakeEventSource.constructed = 0;
     vi.stubGlobal("EventSource", FakeEventSource);
   });
 
@@ -137,5 +155,64 @@ describe("connectEvents SSE live-invalidation", () => {
       expect(src.listenerCount(name)).toBe(0);
     }
     expect(statuses.at(-1)).toBe("closed");
+  });
+
+  // --- reconnect resilience (connection-drop self-heal) ---
+
+  it("stays connecting on a transient error and does not self-reconnect", () => {
+    vi.useFakeTimers();
+    try {
+      const { src, statuses } = setup();
+      src.open();
+      // readyState CONNECTING: the browser is auto-retrying on its own.
+      src.error(FakeEventSource.CONNECTING);
+      expect(statuses.at(-1)).toBe("connecting");
+      const before = FakeEventSource.constructed;
+      vi.advanceTimersByTime(60000);
+      // No backoff timer scheduled — native retry owns this case.
+      expect(FakeEventSource.constructed).toBe(before);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("reconnects with backoff after a fatal error and full-refreshes on reopen", () => {
+    vi.useFakeTimers();
+    try {
+      const { src, spy, statuses } = setup();
+      src.open(); // first healthy connection (hasOpened = true)
+      spy.mockClear();
+      // readyState CLOSED: native retry gave up — our backoff must take over.
+      src.error(FakeEventSource.CLOSED);
+      expect(statuses.at(-1)).toBe("connecting");
+      expect(FakeEventSource.constructed).toBe(1); // waiting on backoff, not yet
+      vi.advanceTimersByTime(1000); // RECONNECT_BASE_MS
+      expect(FakeEventSource.constructed).toBe(2); // backoff fired a fresh stream
+      const next = FakeEventSource.last;
+      if (!next) throw new Error("backoff did not construct a new EventSource");
+      expect(next).not.toBe(src);
+      next.open(); // reconnected
+      expect(statuses.at(-1)).toBe("open");
+      // Gap full-refresh (INF-11): reopening after a drop refetches everything.
+      expect(spy).toHaveBeenCalledWith();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("cancels a pending backoff reconnect on dispose", () => {
+    vi.useFakeTimers();
+    try {
+      const { src, dispose, statuses } = setup();
+      src.open();
+      src.error(FakeEventSource.CLOSED); // schedules a backoff reconnect
+      dispose();
+      expect(statuses.at(-1)).toBe("closed");
+      vi.advanceTimersByTime(60000);
+      // Disposed before the timer fired — no reconnect attempt is made.
+      expect(FakeEventSource.constructed).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

@@ -47,40 +47,97 @@ function invalidateForEvent(queryClient: QueryClient, name: SseEventName): void 
   }
 }
 
+// Reconnect backoff: the browser's EventSource auto-retries only while it can
+// (readyState CONNECTING). When the server closes the stream non-retryably or the
+// initial handshake fails, readyState lands on CLOSED and native retry STOPS — the
+// dashboard would then sit SSE-blind, missing every live invalidation until a full
+// reload. So on a CLOSED error we drive our own exponential backoff (capped) until
+// the stream comes back; a successful reopen triggers the same gap full-refresh as
+// a native reconnect (INF-11 loss-tolerance).
+const RECONNECT_BASE_MS = 1000;
+const RECONNECT_MAX_MS = 30000;
+
 export function connectEvents(
   queryClient: QueryClient,
   onStatus?: (status: SseStatus) => void,
 ): () => void {
-  onStatus?.("connecting");
-  const source = new EventSource(`${BASE_URL}/events`);
-
   let hasOpened = false;
-  source.onopen = () => {
-    if (hasOpened) {
-      // Reconnected after a drop: events emitted during the gap were missed, so
-      // refetch all authoritative state (INF-11 loss-tolerance).
-      void queryClient.invalidateQueries();
+  let disposed = false;
+  let attempt = 0;
+  let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  // Teardown for the CURRENT EventSource (detach listeners + close). Replaced on
+  // every (re)open so a reconnect never leaks the prior connection's handlers.
+  let teardownSource: (() => void) | null = null;
+
+  function scheduleReconnect(): void {
+    if (disposed || reconnectTimer !== null) return;
+    const delay = Math.min(RECONNECT_BASE_MS * 2 ** attempt, RECONNECT_MAX_MS);
+    attempt += 1;
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = null;
+      openSource();
+    }, delay);
+  }
+
+  function openSource(): void {
+    if (disposed) return;
+    teardownSource?.();
+
+    const source = new EventSource(`${BASE_URL}/events`);
+    const handlers: Array<[string, () => void]> = [];
+    const on = (type: string, handler: () => void): void => {
+      source.addEventListener(type, handler);
+      handlers.push([type, handler]);
+    };
+
+    source.onopen = () => {
+      attempt = 0; // healthy again — reset the backoff ramp
+      if (hasOpened) {
+        // Reconnected after a drop (native OR our backoff): events emitted during
+        // the gap were missed, so refetch all authoritative state.
+        void queryClient.invalidateQueries();
+      }
+      hasOpened = true;
+      onStatus?.("open");
+    };
+    source.onerror = () => {
+      if (source.readyState === EventSource.CLOSED) {
+        // Native retry has given up — take over with our own backoff.
+        onStatus?.("connecting");
+        scheduleReconnect();
+      } else {
+        // readyState CONNECTING: the browser is auto-retrying. Stay observable as
+        // "connecting" rather than falsely reporting a dead connection.
+        onStatus?.("connecting");
+      }
+    };
+
+    // Heartbeat keeps the connection observable; no cache effect.
+    on("heartbeat", () => {});
+    // Map each domain event onto its query-key invalidations.
+    for (const name of SSE_EVENT_NAMES) {
+      on(name, () => invalidateForEvent(queryClient, name));
     }
-    hasOpened = true;
-    onStatus?.("open");
-  };
-  source.onerror = () => onStatus?.("closed");
 
-  // Heartbeat keeps the connection observable; no cache effect.
-  source.addEventListener("heartbeat", () => {});
+    teardownSource = () => {
+      for (const [type, handler] of handlers) {
+        source.removeEventListener(type, handler);
+      }
+      source.close();
+    };
+  }
 
-  // Map each domain event onto its query-key invalidations.
-  const handlers = SSE_EVENT_NAMES.map((name): [SseEventName, () => void] => {
-    const handler = () => invalidateForEvent(queryClient, name);
-    source.addEventListener(name, handler);
-    return [name, handler];
-  });
+  onStatus?.("connecting");
+  openSource();
 
   return () => {
-    for (const [name, handler] of handlers) {
-      source.removeEventListener(name, handler);
+    disposed = true;
+    if (reconnectTimer !== null) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
     }
-    source.close();
+    teardownSource?.();
+    teardownSource = null;
     onStatus?.("closed");
   };
 }

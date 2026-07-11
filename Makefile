@@ -7,7 +7,7 @@ COMPOSE := docker compose
 
 .PHONY: help bootstrap update up down restart logs ps migrate revision \
         backend-install backend-dev backend-test backend-lint backend-format \
-        frontend-install frontend-dev frontend-build frontend-lint test clean nuke
+        frontend-install frontend-dev frontend-build frontend-lint test smoke clean nuke
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -69,6 +69,9 @@ frontend-lint: ## Lint + typecheck the frontend
 
 test: backend-test ## Alias: run all tests
 	cd frontend && npm test --silent || true
+
+smoke: ## Smoke-test a RUNNING stack (health, deps, metrics, identity, frontend)
+	@bash scripts/smoke.sh
 
 clean: ## Remove build artifacts and caches
 	rm -rf backend/.pytest_cache backend/.ruff_cache backend/.mypy_cache frontend/dist frontend/.vite

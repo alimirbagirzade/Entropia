@@ -2050,7 +2050,49 @@ server-truth assert pattern for any future index slice) + the parity proof (inde
 between the migration-built DB and an ORM-`create_all` schema) + the EXPLAIN
 `SET enable_seqscan = off` viability ritual on the empty migration DB.
 
-## Next: post-V1 (continued) — TIER 2 SAYFA HARİTASI + TÜM route yüzeyleri TAMAM (24/24 real) + `data`-queue operator redelivery (PR #129 + #131) + SSE streaming e2e reconnect resilience (PR #133) + tool-call envelope status shadowing (PR #135) + `summary["timeframe"]` market-revision metadata çözümü (PR #137) + **audit log-projection indexleri (PR #139 — alembic head artık `0022_audit_log_indexes`)** landed → **hiçbir teed-up açık iş kalmadı**. **retention auto-purge KAPSAM DIŞI** (doc 20 §16 "Automatic purge remains disabled in Production V1" — Future-Dev boundary, uygulanabilir slice değil). LLM generation Future-Dev — kapsam dışı. Proje ~%98; yeni iş için kullanıcıdan yön iste (kalan adaylar — hiçbiri teyitli değil: capability aktivasyonu [graphic_view'i Placeholder'dan çıkarma, doc 22 — gate'ler + Admin transition hazır, PR #82/#95 taban]; pg_trgm substring-filtre index'leri [extension kararı — family/query-text filtreleri için, #139'un dürüst sınırı]; minör backend temizlik; kullanıcının getireceği yeni feature).
+## Stage audit log substring (pg_trgm) indexes — landed (PR #141)
+
+**BACKEND-ONLY, MIGRATION slice** (alembic head **`0022_audit_log_indexes` → `0023_audit_log_trgm_indexes`**;
+`ENGINE_VERSION` UNCHANGED; backend **1065 → 1069**; frontend unchanged 238). main after PR #141 =
+`9b5568d`, feat `36069cb`. Closes the **exact honest boundary #139 (PR #139) left open**: the Admin
+Logs **substring** filters (`queries/log_projection.py::_apply_filters`, doc 19 §6.2) were sequential
+scans. A leading-wildcard `lower(col) LIKE '%needle%'` (from `func.lower(col).contains(needle)`) can
+be served by NO B-tree — not even `varchar_pattern_ops` (that only serves ANCHORED prefixes, which is
+why #139's `correlation_prefix` index worked for the correlation filter but nothing else). Only a
+`gin_trgm_ops` trigram index does. 3 GIN trigram EXPRESSION indexes over `lower(col)` (empirically
+matching the two `contains` filters):
+
+- `ix_audit_events_event_kind_trgm` = `lower(event_kind)` **no partial predicate** (event_kind is
+  NOT NULL) → serves BOTH the `family` token filter (`_family_predicate` positive `own` tokens) AND
+  the `q` search (first OR leg).
+- `ix_audit_events_target_id_trgm` = `lower(target_entity_id)` partial `IS NOT NULL` → the `q` search
+  (2nd OR leg).
+- `ix_audit_events_reason_trgm` = `lower(reason)` partial `IS NOT NULL` → the `q` search (3rd OR leg).
+
+The `pg_trgm` extension is provisioned two ways: migration `0023` runs `CREATE EXTENSION IF NOT
+EXISTS pg_trgm` before the indexes; `models/audit.py` adds a `Base.metadata` `before_create` DDL
+listener (`execute_if(dialect="postgresql")`) so any `create_all` path (the integration test schema
+builds this way, NOT via alembic) provisions the extension before `CREATE INDEX`. Downgrade drops the
+3 indexes but **RETAINS** the extension (a `DROP EXTENSION` in a routine down-migration is destructive
+and could break unrelated objects). Proofs: migration↔model `indexdef` parity **IDENTICAL**; alembic
+up/down/up → head `0023` (down drops trgm indexes, extension retained); **EXPLAIN** — the 3-column `q`
+search plans a `BitmapOr` over all three trgm indexes, the `family`/`q` event_kind filter plans a
+`Bitmap Index Scan on ix_audit_events_event_kind_trgm`. +4 integration shape tests
+(`test_audit_log_trgm_indexes.py`, `pg_indexes.indexdef` server-truth: gin + gin_trgm_ops + lower(...)
+expression + partial predicates on the nullable columns only). Review APPROVE 0 CRITICAL/HIGH.
+
+**Honest boundary:** the `system_other` family and earlier-family exclusions are purely NEGATIVE
+(`NOT lower(event_kind) LIKE '%token%'`) — no trigram index serves a negated substring; those ride a
+scan filter behind the positive predicate. `actor_kind` (3-value enum) stays unindexed by design.
+`pg_trgm` requires `CREATE EXTENSION` privilege at deploy — a trusted extension on PG13+, installable
+by the database owner (deployment note, not a code gap).
+
+**Reuse anchor'ları:** the `before_create` `execute_if(dialect="postgresql")` metadata listener
+(pattern for provisioning any Postgres extension a `create_all` schema needs — mirror it whenever a
+future index/type depends on an extension) + `test_audit_log_trgm_indexes.py` (GIN/trgm/expression
+indexdef assert pattern) + the migration↔`create_all` parity + EXPLAIN-BitmapOr viability ritual.
+
+## Next: post-V1 (continued) — TIER 2 SAYFA HARİTASI + TÜM route yüzeyleri TAMAM (24/24 real) + `data`-queue operator redelivery (PR #129 + #131) + SSE streaming e2e reconnect resilience (PR #133) + tool-call envelope status shadowing (PR #135) + `summary["timeframe"]` market-revision metadata çözümü (PR #137) + audit log-projection indexleri (PR #139) + **audit log substring pg_trgm indexleri (PR #141 — alembic head artık `0023_audit_log_trgm_indexes`)** landed → **hiçbir teed-up açık iş kalmadı**. **retention auto-purge KAPSAM DIŞI** (doc 20 §16 "Automatic purge remains disabled in Production V1" — Future-Dev boundary, uygulanabilir slice değil). LLM generation Future-Dev — kapsam dışı. Proje ~%98; yeni iş için kullanıcıdan yön iste (kalan adaylar — hiçbiri teyitli değil: capability aktivasyonu [graphic_view'i Placeholder'dan çıkarma, doc 22 — gate'ler + Admin transition hazır, PR #82/#95 taban]; minör backend temizlik; kullanıcının getireceği yeni feature). Audit_events index kapsamı ARTIK TAM: log-order + target + 5 filter/prefix (§139) + 3 substring trgm (§141) — Admin Logs'un her filtre yolu index-served (yalnız negatif family-exclusion'lar scan-filter, doğaları gereği).
 
 **V1 COMPLETE (Stages 0–8, docs 01–22) + Auth/IdP + Parquet Slice A + Backtest Engine Slice B + real indicator compute Slice C + `risk_based` sizing (a) + condition blocks (b) + condition extensions (b2) + two-package indicator-vs-indicator + higher-timeframe resampling (c) + per-condition multi-TF reference (i) + N-ary reference chain (ii) + VWAP directional key (d) + `formula_based` Kelly sizing + `position_size_limits` min/max cap (PR #63) landed (1015 tests).** The **Slice C indicator-compute + position-sizing follow-ups are now EFFECTIVELY COMPLETE — TIER 1 backend is DONE**:
 

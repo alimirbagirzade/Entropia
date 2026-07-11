@@ -1316,6 +1316,24 @@ class CapabilityNotFoundError(NotFoundError):
     message = "The capability was not found in the registry."
 
 
+class ViewDatasetNotFoundError(NotFoundError):
+    """A View Dataset output root is absent, soft-deleted, or not owned by the
+    requesting principal (doc 22 §7, §13). Owner-scoped read: a cross-owner id
+    is reported as not-found so existence never leaks."""
+
+    code = "VIEW_DATASET_NOT_FOUND"
+    message = "The view dataset was not found."
+
+
+class AnalysisArtifactNotFoundError(NotFoundError):
+    """An Analysis Artifact output root is absent, soft-deleted, or not owned by
+    the requesting principal (doc 22 §7, §13). Owner-scoped read: a cross-owner
+    id is reported as not-found so existence never leaks."""
+
+    code = "ANALYSIS_ARTIFACT_NOT_FOUND"
+    message = "The analysis artifact was not found."
+
+
 class CapabilityAccessDeniedError(ForbiddenError):
     """A capability operation or lifecycle transition was attempted without the
     required role/policy (doc 22 §3, §12, FD-13). Lifecycle transitions are

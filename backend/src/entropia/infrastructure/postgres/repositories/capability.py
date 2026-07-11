@@ -18,6 +18,7 @@ from entropia.domain.capability.baseline import (
     UI_SURFACE_VERSION_V18,
 )
 from entropia.domain.capability.enums import CapabilityState
+from entropia.domain.lifecycle.enums import DeletionState
 from entropia.infrastructure.postgres.models import (
     AnalysisArtifact,
     CapabilityActivationEvent,
@@ -63,6 +64,70 @@ async def list_activation_events(
         .where(CapabilityActivationEvent.capability_id == capability_id)
         .order_by(CapabilityActivationEvent.resulting_registry_version.asc())
     )
+    return list((await session.execute(stmt)).scalars())
+
+
+# --------------------------------------------------------------------------- #
+# Operational output history (read-only, owner-scoped — doc 22 §7, §13)        #
+# --------------------------------------------------------------------------- #
+
+
+async def get_view_dataset(session: AsyncSession, view_dataset_id: str) -> ViewDataset | None:
+    return await session.get(ViewDataset, view_dataset_id)
+
+
+async def list_view_datasets(
+    session: AsyncSession,
+    *,
+    owner_principal_id: str,
+    last_key: str | None,
+    limit: int,
+) -> list[ViewDataset]:
+    """Owner-scoped, ACTIVE-only View Dataset history, newest-first. The
+    ``view_dataset_id`` is ULID-sortable, so a descending id keyset orders by
+    creation time and ``id < last_key`` pages forward without an offset."""
+    stmt = (
+        select(ViewDataset)
+        .where(
+            ViewDataset.owner_principal_id == owner_principal_id,
+            ViewDataset.deletion_state == DeletionState.ACTIVE,
+        )
+        .order_by(ViewDataset.view_dataset_id.desc())
+        .limit(limit)
+    )
+    if last_key is not None:
+        stmt = stmt.where(ViewDataset.view_dataset_id < last_key)
+    return list((await session.execute(stmt)).scalars())
+
+
+async def get_analysis_artifact(session: AsyncSession, artifact_id: str) -> AnalysisArtifact | None:
+    return await session.get(AnalysisArtifact, artifact_id)
+
+
+async def list_analysis_artifacts(
+    session: AsyncSession,
+    *,
+    owner_principal_id: str,
+    artifact_type: str | None,
+    last_key: str | None,
+    limit: int,
+) -> list[AnalysisArtifact]:
+    """Owner-scoped, ACTIVE-only Analysis Artifact history, newest-first,
+    optionally narrowed to one ``artifact_type``. The ``artifact_id`` is
+    ULID-sortable — the descending id keyset orders by creation time."""
+    stmt = (
+        select(AnalysisArtifact)
+        .where(
+            AnalysisArtifact.owner_principal_id == owner_principal_id,
+            AnalysisArtifact.deletion_state == DeletionState.ACTIVE,
+        )
+        .order_by(AnalysisArtifact.artifact_id.desc())
+        .limit(limit)
+    )
+    if artifact_type is not None:
+        stmt = stmt.where(AnalysisArtifact.artifact_type == artifact_type)
+    if last_key is not None:
+        stmt = stmt.where(AnalysisArtifact.artifact_id < last_key)
     return list((await session.execute(stmt)).scalars())
 
 

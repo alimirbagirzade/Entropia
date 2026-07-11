@@ -239,9 +239,9 @@ export function useTransitionCapability() {
 // capability returns CAPABILITY_NOT_ACTIVE and creates nothing (CR-09,
 // FD-02). The UI never pre-gates on its cached state — a denial renders the
 // canonical envelope verbatim. Creates carry NO OCC token (there is no head
-// to race); each attempt sends one fresh Idempotency-Key. Neither view
-// datasets nor analysis artifacts have a read surface — results live in the
-// command return plus the audit trail, so success invalidates ["audit"] only.
+// to race); each attempt sends one fresh Idempotency-Key. On success each
+// output now appears in its owner-scoped history (doc 22 §7), so the mutation
+// invalidates the matching history key alongside ["audit"].
 // ---------------------------------------------------------------------------
 
 // Mirror of commands/capability.py ANALYSIS_ARTIFACT_CAPABILITY (doc 22
@@ -315,6 +315,8 @@ export function useQueryViewDataset() {
         },
       }),
     onSuccess: () => {
+      // The prepared dataset now appears in the owner's View Dataset history.
+      void queryClient.invalidateQueries({ queryKey: ["view-datasets"] });
       void queryClient.invalidateQueries({ queryKey: ["audit"] });
     },
   });
@@ -337,7 +339,121 @@ export function useCreateAnalysisArtifact() {
         },
       }),
     onSuccess: () => {
+      // The new artifact now appears in the owner's Analysis Artifact history.
+      void queryClient.invalidateQueries({ queryKey: ["analysis-artifacts"] });
       void queryClient.invalidateQueries({ queryKey: ["audit"] });
     },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Operational output history (doc 22 §7, §13 — GET /view-datasets[/{id}] +
+// GET /analysis-artifacts[/{id}]). The read surface for the outputs the two
+// POSTs above create: an owner-scoped, ACTIVE-only, newest-first keyset page
+// plus an owner-scoped detail. A principal sees only what it produced; a
+// cross-owner or soft-deleted id is a canonical not-found (never leaks). Keys
+// live under ["view-datasets"] / ["analysis-artifacts"] — no dedicated SSE
+// event, swept by `resource.changed` and by the owning POST's invalidation.
+// An empty page is the futureDevNoHistory.empty state (doc 22 §7), never a
+// fabricated row. Wire types mirror queries/capability.py row/detail verbatim.
+// ---------------------------------------------------------------------------
+
+export interface OutputHistoryMeta {
+  cursor: string | null;
+  has_more: boolean;
+  limit: number;
+}
+
+export interface ViewDatasetRow {
+  view_dataset_id: string;
+  capability_key: string;
+  schema_version: string;
+  source_manifest_refs: string[];
+  series_refs: string[];
+  marker_refs: string[];
+  range_spec: Record<string, unknown> | null;
+  deletion_state: string;
+  row_version: number;
+  created_at: string | null;
+}
+
+export interface ViewDatasetDetail extends ViewDatasetRow {
+  owner_principal_id: string | null;
+  created_by_principal_id: string | null;
+}
+
+export interface ViewDatasetHistoryPage {
+  data: ViewDatasetRow[];
+  meta: OutputHistoryMeta;
+}
+
+export interface AnalysisArtifactRow {
+  artifact_id: string;
+  artifact_type: string;
+  capability_key: string;
+  input_manifest_refs: string[];
+  method_version: string;
+  output_ref: string | null;
+  deletion_state: string;
+  row_version: number;
+  created_at: string | null;
+}
+
+export interface AnalysisArtifactDetail extends AnalysisArtifactRow {
+  owner_principal_id: string | null;
+  created_by_principal_id: string | null;
+}
+
+export interface AnalysisArtifactHistoryPage {
+  data: AnalysisArtifactRow[];
+  // The list meta echoes the normalized artifact_type filter (null when unset).
+  meta: OutputHistoryMeta & { artifact_type: string | null };
+}
+
+// Owner-scoped View Dataset history — a forward keyset page. A null cursor is
+// page one; the placeholder keeps the current table mounted across a page flip.
+export function useViewDatasetHistory(cursor: string | null) {
+  return useQuery({
+    queryKey: ["view-datasets", cursor],
+    queryFn: () => {
+      const params = new URLSearchParams();
+      if (cursor !== null) params.set("cursor", cursor);
+      const qs = params.toString();
+      return api.get<ViewDatasetHistoryPage>(`/view-datasets${qs ? `?${qs}` : ""}`);
+    },
+    placeholderData: (previous) => previous,
+  });
+}
+
+export function useViewDataset(viewDatasetId: string | null) {
+  return useQuery({
+    queryKey: ["view-datasets", "detail", viewDatasetId],
+    queryFn: () =>
+      api.get<ViewDatasetDetail>(`/view-datasets/${encodeURIComponent(viewDatasetId ?? "")}`),
+    enabled: viewDatasetId !== null,
+  });
+}
+
+// Owner-scoped Analysis Artifact history, optionally narrowed to one type.
+export function useAnalysisArtifactHistory(artifactType: string | null, cursor: string | null) {
+  return useQuery({
+    queryKey: ["analysis-artifacts", artifactType, cursor],
+    queryFn: () => {
+      const params = new URLSearchParams();
+      if (artifactType !== null) params.set("artifact_type", artifactType);
+      if (cursor !== null) params.set("cursor", cursor);
+      const qs = params.toString();
+      return api.get<AnalysisArtifactHistoryPage>(`/analysis-artifacts${qs ? `?${qs}` : ""}`);
+    },
+    placeholderData: (previous) => previous,
+  });
+}
+
+export function useAnalysisArtifact(artifactId: string | null) {
+  return useQuery({
+    queryKey: ["analysis-artifacts", "detail", artifactId],
+    queryFn: () =>
+      api.get<AnalysisArtifactDetail>(`/analysis-artifacts/${encodeURIComponent(artifactId ?? "")}`),
+    enabled: artifactId !== null,
   });
 }

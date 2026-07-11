@@ -14,14 +14,20 @@ import {
   allowedTargets,
   buildGatesSnapshot,
   gateComplete,
+  useAnalysisArtifact,
+  useAnalysisArtifactHistory,
   useCapabilities,
   useCapability,
   useCreateAnalysisArtifact,
   useGraphicViewOverview,
   useQueryViewDataset,
   useTransitionCapability,
+  useViewDataset,
+  useViewDatasetHistory,
+  type AnalysisArtifactRow,
   type Capability,
   type CapabilityDetail,
+  type ViewDatasetRow,
 } from "@/lib/capability";
 
 // One immutable reference per line — trims and drops blanks (mirrors the
@@ -350,6 +356,7 @@ function GraphicViewCard() {
         </>
       ) : null}
       <ViewDatasetComposer />
+      <ViewDatasetHistory />
     </section>
   );
 }
@@ -549,6 +556,293 @@ function AnalysisArtifactsCard() {
           </p>
         ) : null}
       </form>
+      <AnalysisArtifactHistory />
     </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Operational output history (doc 22 §7) — the read surface for the outputs
+// the two composers above create. Owner-scoped, ACTIVE-only, newest-first;
+// an empty page renders the futureDevNoHistory.empty copy verbatim. A forward
+// keyset cursor stack pages back and forth; selecting a row opens its
+// owner-scoped detail (provenance + full pinned refs).
+// ---------------------------------------------------------------------------
+
+// doc 22 §7 futureDevNoHistory.empty copy — rendered verbatim, never a fake row.
+const NO_OUTPUT_HISTORY =
+  "No output exists because this capability has not produced an operational artifact in the current state.";
+
+function HistoryPager({
+  hasMore,
+  nextCursor,
+  canGoBack,
+  onNext,
+  onPrev,
+}: {
+  hasMore: boolean;
+  nextCursor: string | null;
+  canGoBack: boolean;
+  onNext: (next: string | null) => void;
+  onPrev: () => void;
+}) {
+  if (!hasMore && !canGoBack) return null;
+  return (
+    <div style={{ marginTop: "0.5rem" }}>
+      <button type="button" className="btn" disabled={!canGoBack} onClick={onPrev}>
+        Previous
+      </button>{" "}
+      <button
+        type="button"
+        className="btn"
+        disabled={!hasMore || nextCursor === null}
+        onClick={() => onNext(nextCursor)}
+      >
+        Next
+      </button>
+    </div>
+  );
+}
+
+function ViewDatasetHistory() {
+  const [stack, setStack] = useState<(string | null)[]>([null]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const cursor = stack[stack.length - 1];
+  const history = useViewDatasetHistory(cursor);
+
+  return (
+    <div style={{ marginTop: "1rem" }}>
+      <h4>View Dataset history</h4>
+      {history.isLoading ? (
+        <Loading label="Loading view dataset history…" />
+      ) : history.isError ? (
+        <ErrorState error={history.error} onRetry={() => void history.refetch()} />
+      ) : history.data ? (
+        history.data.data.length === 0 ? (
+          <EmptyState title="No output history" description={NO_OUTPUT_HISTORY} />
+        ) : (
+          <>
+            <table className="metrics-table">
+              <thead>
+                <tr>
+                  <th scope="col">View dataset</th>
+                  <th scope="col">Schema</th>
+                  <th scope="col">Source refs</th>
+                  <th scope="col">Created</th>
+                  <th scope="col">Detail</th>
+                </tr>
+              </thead>
+              <tbody>
+                {history.data.data.map((row) => (
+                  <ViewDatasetHistoryRow
+                    key={row.view_dataset_id}
+                    row={row}
+                    isSelected={row.view_dataset_id === selectedId}
+                    onSelect={() => setSelectedId(row.view_dataset_id)}
+                  />
+                ))}
+              </tbody>
+            </table>
+            <HistoryPager
+              hasMore={history.data.meta.has_more}
+              nextCursor={history.data.meta.cursor}
+              canGoBack={stack.length > 1}
+              onNext={(next) => setStack((prev) => [...prev, next])}
+              onPrev={() => setStack((prev) => prev.slice(0, -1))}
+            />
+          </>
+        )
+      ) : null}
+      {selectedId !== null ? <ViewDatasetDetailCard viewDatasetId={selectedId} /> : null}
+    </div>
+  );
+}
+
+function ViewDatasetHistoryRow({
+  row,
+  isSelected,
+  onSelect,
+}: {
+  row: ViewDatasetRow;
+  isSelected: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <tr>
+      <td>
+        <code>{row.view_dataset_id}</code>
+      </td>
+      <td>{row.schema_version}</td>
+      <td>{row.source_manifest_refs.length}</td>
+      <td>{formatUtc(row.created_at)}</td>
+      <td>
+        <button type="button" className="btn" disabled={isSelected} onClick={onSelect}>
+          View
+        </button>
+      </td>
+    </tr>
+  );
+}
+
+function ViewDatasetDetailCard({ viewDatasetId }: { viewDatasetId: string }) {
+  const detail = useViewDataset(viewDatasetId);
+  if (detail.isLoading) return <Loading label="Loading view dataset…" />;
+  if (detail.isError)
+    return <ErrorState error={detail.error} onRetry={() => void detail.refetch()} />;
+  if (!detail.data) return null;
+  return (
+    <dl className="kv">
+      <dt>View dataset</dt>
+      <dd>
+        <code>{detail.data.view_dataset_id}</code>
+      </dd>
+      <dt>Capability</dt>
+      <dd>{detail.data.capability_key}</dd>
+      <dt>Schema</dt>
+      <dd>{detail.data.schema_version}</dd>
+      <dt>Source refs</dt>
+      <dd>{detail.data.source_manifest_refs.join(", ") || "—"}</dd>
+      <dt>Series / marker refs</dt>
+      <dd>
+        {detail.data.series_refs.join(", ") || "—"} / {detail.data.marker_refs.join(", ") || "—"}
+      </dd>
+      <dt>Owner</dt>
+      <dd>{detail.data.owner_principal_id ?? "—"}</dd>
+      <dt>Created</dt>
+      <dd>{formatUtc(detail.data.created_at)}</dd>
+    </dl>
+  );
+}
+
+function AnalysisArtifactHistory() {
+  const [artifactType, setArtifactType] = useState<string>(""); // "" = all types
+  const [stack, setStack] = useState<(string | null)[]>([null]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const cursor = stack[stack.length - 1];
+  const history = useAnalysisArtifactHistory(artifactType === "" ? null : artifactType, cursor);
+
+  // Changing the filter resets the keyset stack and any open detail.
+  const onFilterChange = (value: string) => {
+    setArtifactType(value);
+    setStack([null]);
+    setSelectedId(null);
+  };
+
+  return (
+    <div style={{ marginTop: "1rem" }}>
+      <h4>Analysis Artifact history</h4>
+      <label>
+        Filter by type{" "}
+        <select
+          aria-label="Filter artifact type"
+          value={artifactType}
+          onChange={(event) => onFilterChange(event.target.value)}
+        >
+          <option value="">All types</option>
+          {ANALYSIS_ARTIFACT_TYPES.map((type) => (
+            <option key={type} value={type}>
+              {type}
+            </option>
+          ))}
+        </select>
+      </label>
+      {history.isLoading ? (
+        <Loading label="Loading analysis artifact history…" />
+      ) : history.isError ? (
+        <ErrorState error={history.error} onRetry={() => void history.refetch()} />
+      ) : history.data ? (
+        history.data.data.length === 0 ? (
+          <EmptyState title="No output history" description={NO_OUTPUT_HISTORY} />
+        ) : (
+          <>
+            <table className="metrics-table">
+              <thead>
+                <tr>
+                  <th scope="col">Artifact</th>
+                  <th scope="col">Type</th>
+                  <th scope="col">Method</th>
+                  <th scope="col">Created</th>
+                  <th scope="col">Detail</th>
+                </tr>
+              </thead>
+              <tbody>
+                {history.data.data.map((row) => (
+                  <AnalysisArtifactHistoryRow
+                    key={row.artifact_id}
+                    row={row}
+                    isSelected={row.artifact_id === selectedId}
+                    onSelect={() => setSelectedId(row.artifact_id)}
+                  />
+                ))}
+              </tbody>
+            </table>
+            <HistoryPager
+              hasMore={history.data.meta.has_more}
+              nextCursor={history.data.meta.cursor}
+              canGoBack={stack.length > 1}
+              onNext={(next) => setStack((prev) => [...prev, next])}
+              onPrev={() => setStack((prev) => prev.slice(0, -1))}
+            />
+          </>
+        )
+      ) : null}
+      {selectedId !== null ? <AnalysisArtifactDetailCard artifactId={selectedId} /> : null}
+    </div>
+  );
+}
+
+function AnalysisArtifactHistoryRow({
+  row,
+  isSelected,
+  onSelect,
+}: {
+  row: AnalysisArtifactRow;
+  isSelected: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <tr>
+      <td>
+        <code>{row.artifact_id}</code>
+      </td>
+      <td>{row.artifact_type}</td>
+      <td>{row.method_version}</td>
+      <td>{formatUtc(row.created_at)}</td>
+      <td>
+        <button type="button" className="btn" disabled={isSelected} onClick={onSelect}>
+          View
+        </button>
+      </td>
+    </tr>
+  );
+}
+
+function AnalysisArtifactDetailCard({ artifactId }: { artifactId: string }) {
+  const detail = useAnalysisArtifact(artifactId);
+  if (detail.isLoading) return <Loading label="Loading analysis artifact…" />;
+  if (detail.isError)
+    return <ErrorState error={detail.error} onRetry={() => void detail.refetch()} />;
+  if (!detail.data) return null;
+  return (
+    <dl className="kv">
+      <dt>Artifact</dt>
+      <dd>
+        <code>{detail.data.artifact_id}</code>
+      </dd>
+      <dt>Type</dt>
+      <dd>{detail.data.artifact_type}</dd>
+      <dt>Gated by</dt>
+      <dd>{detail.data.capability_key}</dd>
+      <dt>Method version</dt>
+      <dd>{detail.data.method_version}</dd>
+      <dt>Input refs</dt>
+      <dd>{detail.data.input_manifest_refs.join(", ") || "—"}</dd>
+      <dt>Output ref</dt>
+      <dd>{detail.data.output_ref ?? "—"}</dd>
+      <dt>Owner</dt>
+      <dd>{detail.data.owner_principal_id ?? "—"}</dd>
+      <dt>Created</dt>
+      <dd>{formatUtc(detail.data.created_at)}</dd>
+    </dl>
   );
 }

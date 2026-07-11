@@ -3,7 +3,65 @@
 > **Amaç:** V1 kapandı (Stage 0–8 COMPLETE). Bu doküman post-V1 durumunu, aday iş listesini
 > ve temiz oturumda yapıştırılacak resume prompt'u içerir.
 
-## Durum (2026-07-11, post-V1 TIER 3 — SSE reconnect backoff resilience; PR #133 MERGED)
+## Durum (2026-07-11, post-V1 TIER 3 — tool-call envelope status shadowing; PR #135 MERGED)
+
+**BACKEND-ONLY** (no migration, alembic head `0021_local_auth` SABİT, `ENGINE_VERSION` SABİT; backend
+**1054 → 1057**; frontend **238** SABİT). main = `18b29f9` (Merge #135), feat `4e8ce12`. Son tracked TIER 3
+deferred defect KAPANDI: `application/jobs/agent_tools.py::dispatch_tool_call` handler payload'ını envelope
+anahtarlarından SONRA spread ediyordu → handler'ın kendi `status`'u envelope'un terminal `succeeded`'ını
+DÖNEN dict'te gölgeliyordu (kalıcı `agent_tool_call` satırı hep otoriterdi → düşük şiddetli response-envelope
+tutarsızlığı, persistence bug'ı DEĞİL). Gölgeleyenler: `artifact.create` (`status:"exploring"`),
+`agent.task.query` (sorgulanan task status), idempotent-**replay** (`_replayed`). CR-08 DEĞİL (capability
+gating tam çalışıyor/test edilmiş — kickoff yanlış etiketlemiş). **Fix (Option A, bilgi kaybı yok):** envelope
+`status`/`tool_call_id` artık success + replay yollarında KAZANIR (payload ÖNCE spread); çakışan iki anahtar
+namespace'lendi — `artifact.create` `status`→`artifact_status`, `agent.task.query` `status`→`task_status`
+(`response_ref` şekli buna göre değişir; `state`-anahtarlı readiness/backtest + rejection yolu hiç
+çakışmıyordu). Gölgeyi feature olarak kodlayan e2e assertion düzeltildi. +3 gateway regression testi.
+Frontend DEĞİŞMEDİ (senkron response'u tüketmiyor). Review: kendi ampirik doğrulaması (tam suite yeşil +
+ruff/format/mypy temiz), 0 CRITICAL/HIGH.
+
+**Reuse anchor'ları:** `agent_tools.py::dispatch_tool_call` return (envelope-wins merge sırası — gelecekteki
+her handler için desen) + `_replayed` + `test_agent_tool_gateway.py` 3 shadow-regression testi.
+
+**SIRADAKİ İŞ:** hiçbir teed-up TIER 3 açık iş kalmadı (SSE e2e ✅ PR #133 + tool-call shadowing ✅ PR #135
+kapandı). retention auto-purge KAPSAM DIŞI (doc 20 §16). LLM generation Future-Dev. Proje ~%98 — yeni iş için
+YÖN KULLANICIDAN gelmeli (aday: minör backend follow-up / `summary["timeframe"]` market-revision metadata).
+
+**PASTE-READY RESUME PROMPT (sonraki temiz oturuma yapıştır):**
+
+```
+Entropia — post-V1. STALE-BY-DEFAULT: aşağıdaki durumu GİT'TEN DOĞRULA, özete güvenme.
+ÖNCE: git fetch && git log --oneline origin/main -6 && gh pr list --state all -L 8.
+main = 18b29f9 (Merge #135 — tool-call envelope status shadowing feat 4e8ce12). alembic head
+0021_local_auth (DEĞİŞMEDİ); ENGINE_VERSION = backtest-engine-v2-position-size-limits (DEĞİŞMEDİ).
+Backend 1057 test, frontend 238.
+
+DURUM: V1 %100 + TIER 2 sayfa haritası %100 (24/24 real, tüm route yüzeyleri bağlı) + TIER 3
+adaylarının TAMAMI kapandı: SSE streaming e2e reconnect resilience (PR #133), data-queue redelivery
+(backend #129 + Admin UI #131), tool-call envelope status shadowing (PR #135). Proje ~%98.
+
+ÖNEMLİ: teed-up (teyitli) açık iş KALMADI. retention auto-purge KAPSAM DIŞI (doc 20 §16 "Automatic
+purge remains disabled in Production V1" — Future-Dev boundary). LLM generation Future-Dev — kapsam dışı.
+
+SIRADAKİ İŞ: yeni bir yön yok — BAŞLARKEN KULLANICIYA SOR ne yapmak istediğini. Olası adaylar (hiçbiri
+teyitli değil): (a) minör backend follow-up / temizlik; (b) summary["timeframe"] market-revision
+metadata'dan çözümü; (c) kullanıcının getireceği yeni bir feature. BAŞLAMADAN ilgili doc'u +
+route/command imzalarını + queries/commands dönüş dict'lerini oku → wire tipleri VERBATIM ayna.
+
+YÖNTEM: Workflow KULLANMA; direct-author. Backend loop: cd backend && uv run ruff check . && uv run
+ruff format --check . && uv run mypy src && TEST_DATABASE_URL=...entropia_auth uv run pytest --no-cov -q
+(izole DB; yeni create_* için L1 FK proof + alembic up/down/up + migration↔model parity). Frontend loop:
+cd frontend && npm run typecheck && npm run lint && npm test && npm run build. YENİ dosya heredoc
+(gate-free); mevcut dosya Edit → GateGuard 4-fact (çağıran / Grep-dup-yok / data-schema / user-request
+verbatim; gate İLK denemeyi bloklar → aynı çağrıyı aynen tekrarla; araya tool girerse gate RESETLENİR;
+ilk Bash da fact-gate'li). CRITICAL/HIGH AMPİRİK doğrula → commit (feat/docs(post-v1), branch
+origin/main'den, attribution YOK) → PR → CI background poll → merge KULLANICIDA (self-merge BLOKLU).
+Türkçe, MALİYET BİLİNÇLİ. Kapanışta: handoff + kickoff (resume tazele) + CLAUDE.md.
+```
+
+<details><summary>Önceki durum (SSE reconnect backoff resilience; PR #133 MERGED) — tarihsel</summary>
+
+### Durum (2026-07-11, post-V1 TIER 3 — SSE reconnect backoff resilience; PR #133 MERGED)
 
 **FRONTEND-ONLY** (2 dosya; backend değişmedi, migration YOK, alembic head `0021_local_auth` SABİT,
 `ENGINE_VERSION` SABİT, backend **1054** sabit; frontend **235 → 238**). main = `ff92310`
@@ -107,6 +165,8 @@ worker runtime'da yazılamaz — otomatik yakalanır).
 ```
 
 ---
+
+</details>
 
 ## Durum (2026-07-10, post-V1 TIER 3 — Data-queue operator redelivery; PR #129 MERGED)
 

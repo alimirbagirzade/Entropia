@@ -2,6 +2,7 @@
 
 | Document | Purpose |
 | --- | --- |
+| [USAGE.md](USAGE.md) | End-to-end usage guide: login & roles, the golden path (ingest → package → strategy → mainboard → ready check → RUN → result → history), the Agent, and the safety rails. |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | System architecture: process topology, layering, data split, job/worker model, backtest & agent planes, SSE, API conventions, observability, deployment. |
 | [DOMAIN_MODEL.md](DOMAIN_MODEL.md) | Canonical roots/revisions/snapshots, lifecycle enum registry, role model, ownership & shared-editing rules, soft-delete/trash, audit, and the CR-01..CR-09 invariants. |
 | [STAGE_BUILD_PLAN.md](STAGE_BUILD_PLAN.md) | The Stage 0..8 build roadmap mapping every screen/domain to its stage with acceptance criteria. |

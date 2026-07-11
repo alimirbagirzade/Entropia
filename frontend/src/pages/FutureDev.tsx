@@ -18,6 +18,7 @@ import {
   useAnalysisArtifactHistory,
   useCapabilities,
   useCapability,
+  useCapabilityTransitions,
   useCreateAnalysisArtifact,
   useGraphicViewOverview,
   useQueryViewDataset,
@@ -27,6 +28,7 @@ import {
   type AnalysisArtifactRow,
   type Capability,
   type CapabilityDetail,
+  type CapabilityTransition,
   type ViewDatasetRow,
 } from "@/lib/capability";
 
@@ -208,6 +210,7 @@ function CapabilityDetailCard({ capabilityKey }: { capabilityKey: string }) {
             detail={detail.data}
             transition={transition}
           />
+          <CapabilityTransitionHistory capabilityKey={detail.data.capability_key} />
         </>
       ) : null}
     </section>
@@ -217,6 +220,65 @@ function CapabilityDetailCard({ capabilityKey }: { capabilityKey: string }) {
 // Gate checklist + transition form. Target options come from the doc-22 §9.1
 // edge taxonomy mirror; the server re-validates the edge, the gates and Admin
 // on dispatch — an illegal or stale submit renders the envelope verbatim.
+// Immutable lifecycle-transition timeline (doc 22 §9, §13) — read-only for any
+// authenticated principal. The key lives under ["capabilities"], so an Admin
+// transition (which invalidates ["capabilities"]) refreshes it in the same tab.
+// A never-transitioned capability shows a real empty state, never a fake row.
+function CapabilityTransitionHistory({ capabilityKey }: { capabilityKey: string }) {
+  const history = useCapabilityTransitions(capabilityKey);
+  return (
+    <div style={{ marginTop: "1rem" }}>
+      <h4>Transition history</h4>
+      {history.isLoading ? (
+        <Loading label="Loading transition history…" />
+      ) : history.isError ? (
+        <ErrorState error={history.error} onRetry={() => void history.refetch()} />
+      ) : history.data ? (
+        history.data.transitions.length === 0 ? (
+          <EmptyState
+            title="No transitions"
+            description="No lifecycle transition has been recorded for this capability yet."
+          />
+        ) : (
+          <table className="metrics-table">
+            <thead>
+              <tr>
+                <th scope="col">Transition</th>
+                <th scope="col">Reason</th>
+                <th scope="col">Actor</th>
+                <th scope="col">Registry</th>
+                <th scope="col">When</th>
+              </tr>
+            </thead>
+            <tbody>
+              {history.data.transitions.map((event) => (
+                <TransitionHistoryRow key={event.event_id} event={event} />
+              ))}
+            </tbody>
+          </table>
+        )
+      ) : null}
+    </div>
+  );
+}
+
+function TransitionHistoryRow({ event }: { event: CapabilityTransition }) {
+  return (
+    <tr>
+      <td>
+        <StatusBadge label={event.from_state} tone={STATE_TONES[event.from_state] ?? "neutral"} /> →{" "}
+        <StatusBadge label={event.to_state} tone={STATE_TONES[event.to_state] ?? "neutral"} />
+      </td>
+      <td>{event.reason}</td>
+      <td>{event.actor_principal_id ?? "—"}</td>
+      <td>
+        v{event.prior_registry_version} → v{event.resulting_registry_version}
+      </td>
+      <td>{formatUtc(event.occurred_at)}</td>
+    </tr>
+  );
+}
+
 function TransitionComposer({
   detail,
   transition,

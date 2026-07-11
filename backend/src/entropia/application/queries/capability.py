@@ -28,6 +28,7 @@ from entropia.domain.identity.policy import require_authenticated
 from entropia.domain.lifecycle.enums import DeletionState
 from entropia.infrastructure.postgres.models import (
     AnalysisArtifact,
+    CapabilityActivationEvent,
     FutureCapability,
     ViewDataset,
 )
@@ -106,6 +107,54 @@ async def get_graphic_view_overview(session: AsyncSession, actor: Actor) -> dict
         "intro": GRAPHIC_VIEW_INTRO,
         "cards": [dict(card) for card in GRAPHIC_VIEW_CARDS],
         "status_message": STATE_MESSAGES[state],
+    }
+
+
+# --------------------------------------------------------------------------- #
+# Lifecycle-transition history (immutable activation-event timeline,            #
+# doc 22 §9, §13) — the read surface for the events every Admin transition       #
+# appends. Registry provenance is readable by any authenticated principal (like  #
+# the capability detail's last-transition fields); the write path               #
+# (POST .../lifecycle-transitions) stays Admin-only. The list is bounded (a      #
+# capability transitions rarely) and oldest-first by resulting registry          #
+# version, so it carries no keyset cursor.                                       #
+# --------------------------------------------------------------------------- #
+
+
+def _activation_event_view(event: CapabilityActivationEvent) -> dict[str, Any]:
+    return {
+        "event_id": event.event_id,
+        "capability_key": event.capability_key,
+        "from_state": event.from_state.value,
+        "to_state": event.to_state.value,
+        "actor_principal_id": event.actor_principal_id,
+        "reason": event.reason,
+        "snapshot_checksum": event.snapshot_checksum,
+        "prior_registry_version": event.prior_registry_version,
+        "resulting_registry_version": event.resulting_registry_version,
+        "correlation_id": event.correlation_id,
+        "occurred_at": event.occurred_at.isoformat() if event.occurred_at else None,
+    }
+
+
+async def get_capability_transitions(
+    session: AsyncSession, actor: Actor, *, capability_key: str
+) -> dict[str, Any]:
+    """GET /capabilities/{key}/lifecycle-transitions (doc 22 §9, §13): the
+    immutable, append-only lifecycle-transition timeline for one capability,
+    oldest-first by resulting registry version. A never-transitioned capability
+    returns an empty list — real absence, never a fabricated row; an unknown key
+    is a canonical not-found."""
+    require_authenticated(actor)
+    capability = await capability_repo.get_capability_by_key(session, capability_key)
+    if capability is None:
+        raise CapabilityNotFoundError()
+    events = await capability_repo.list_activation_events(session, capability.capability_id)
+    return {
+        "capability_key": capability.capability_key,
+        "capability_id": capability.capability_id,
+        "transitions": [_activation_event_view(event) for event in events],
+        "count": len(events),
     }
 
 
@@ -264,6 +313,7 @@ async def get_analysis_artifact(
 __all__ = [
     "get_analysis_artifact",
     "get_capability",
+    "get_capability_transitions",
     "get_graphic_view_overview",
     "get_view_dataset",
     "list_analysis_artifacts",

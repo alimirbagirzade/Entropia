@@ -84,6 +84,32 @@ export interface CapabilityTransitionResult {
   correlation_id: string | null;
 }
 
+// One immutable lifecycle-transition audit event (doc 22 §9, §13). Mirrors
+// queries/capability.py `_activation_event_view` verbatim — the record every
+// Admin transition appends. from/to states stay plain strings (STATE_TONES
+// only badges them); the checksum is the snapshot integrity anchor.
+export interface CapabilityTransition {
+  event_id: string;
+  capability_key: string;
+  from_state: string;
+  to_state: string;
+  actor_principal_id: string | null;
+  reason: string;
+  snapshot_checksum: string;
+  prior_registry_version: number;
+  resulting_registry_version: number;
+  correlation_id: string | null;
+  occurred_at: string | null;
+}
+
+export interface CapabilityTransitionsResponse {
+  capability_key: string;
+  capability_id: string;
+  // Oldest-first by resulting registry version — the transition chain replayed.
+  transitions: CapabilityTransition[];
+  count: number;
+}
+
 // ---------------------------------------------------------------------------
 // Server-owned lifecycle taxonomy (domain/capability/{enums,lifecycle}.py,
 // doc 22 §9.1/§9.2) mirrored for the composer option lists. The server
@@ -185,6 +211,22 @@ export function useGraphicViewOverview() {
   return useQuery({
     queryKey: ["capabilities", "graphic-view-overview"],
     queryFn: () => api.get<GraphicViewOverview>("/future-dev/graphic_view/overview"),
+  });
+}
+
+// Immutable lifecycle-transition timeline for one capability (doc 22 §9, §13).
+// The key lives under ["capabilities"] so an Admin transition — which
+// invalidates ["capabilities"] — refreshes the timeline in the same tab. The
+// list is bounded server-side (no cursor); a never-transitioned capability
+// returns an empty list.
+export function useCapabilityTransitions(capabilityKey: string | null) {
+  return useQuery({
+    queryKey: ["capabilities", "transitions", capabilityKey],
+    queryFn: () =>
+      api.get<CapabilityTransitionsResponse>(
+        `/capabilities/${encodeURIComponent(capabilityKey ?? "")}/lifecycle-transitions`,
+      ),
+    enabled: capabilityKey !== null,
   });
 }
 

@@ -147,6 +147,36 @@ const EMPTY_ARTIFACT_HISTORY = {
   meta: { cursor: null, has_more: false, limit: 20, artifact_type: null },
 };
 
+// Lifecycle-transition timeline (doc 22 §9, §13) — mirrors queries/capability.py
+// `_activation_event_view` + the {capability_key, capability_id, transitions,
+// count} envelope.
+const TRANSITIONS = {
+  capability_key: "graphic_view",
+  capability_id: "fcap_graphic_view",
+  transitions: [
+    {
+      event_id: "cev_1",
+      capability_key: "graphic_view",
+      from_state: "internal",
+      to_state: "shadow",
+      actor_principal_id: "hu_admin",
+      reason: "internal parity complete",
+      snapshot_checksum: "sum_1",
+      prior_registry_version: 3,
+      resulting_registry_version: 4,
+      correlation_id: "corr_9",
+      occurred_at: "2026-07-06T11:00:00+00:00",
+    },
+  ],
+  count: 1,
+};
+const EMPTY_TRANSITIONS = {
+  capability_key: "graphic_view",
+  capability_id: "fcap_graphic_view",
+  transitions: [],
+  count: 0,
+};
+
 const NO_OUTPUT_HISTORY =
   "No output exists because this capability has not produced an operational artifact in the current state.";
 
@@ -160,6 +190,9 @@ function baseRoutes(onTransition?: (init?: RequestInit) => unknown) {
       onTransition ?? TRANSITION_RESULT,
     "POST /view-datasets/query": VIEW_DATASET_RESULT,
     "POST /analysis-artifacts": ARTIFACT_RESULT,
+    // The lifecycle-transitions GET must precede the "/capabilities/graphic_view"
+    // detail prefix it contains (apiStub matches the first fragment in the URL).
+    "GET /capabilities/graphic_view/lifecycle-transitions": EMPTY_TRANSITIONS,
     "GET /capabilities/graphic_view": DETAIL,
     "GET /capabilities": CAPABILITIES,
     "GET /view-datasets": EMPTY_VIEW_HISTORY,
@@ -453,5 +486,29 @@ describe("Future Dev page", () => {
     fireEvent.click(viewButtons[viewButtons.length - 1]);
     // The owner provenance only exists on the detail projection.
     await screen.findByText("hu_user");
+  });
+
+  it("renders the immutable transition timeline in the capability detail", async () => {
+    stubApi({
+      ...baseRoutes(),
+      "GET /capabilities/graphic_view/lifecycle-transitions": TRANSITIONS,
+    });
+    renderFutureDev();
+    await openGraphicViewDetail();
+    // The reason cell only appears once the timeline query resolves.
+    expect(await screen.findByText("internal parity complete")).toBeTruthy();
+    expect(screen.getByText("Transition history")).toBeTruthy();
+    // The from-state badge renders from the server projection.
+    expect(screen.getByText("internal")).toBeTruthy();
+  });
+
+  it("shows the empty transition state for a never-transitioned capability", async () => {
+    // baseRoutes defaults the lifecycle-transitions GET to EMPTY_TRANSITIONS.
+    stubApi(baseRoutes());
+    renderFutureDev();
+    await openGraphicViewDetail();
+    expect(
+      await screen.findByText("No lifecycle transition has been recorded for this capability yet."),
+    ).toBeTruthy();
   });
 });

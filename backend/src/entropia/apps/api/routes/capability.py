@@ -26,6 +26,7 @@ from entropia.application.commands.capability import (
 from entropia.application.queries.capability import (
     get_analysis_artifact,
     get_capability,
+    get_capability_transitions,
     get_graphic_view_overview,
     get_view_dataset,
     list_analysis_artifacts,
@@ -103,6 +104,17 @@ async def lifecycle_transition(
         dependency_snapshot=body.dependency_snapshot,
         idempotency_key=idempotency_key,
     )
+
+
+@router.get(_TRANSITIONS_PATH)
+async def lifecycle_transitions_index(
+    capability_key: str,
+    ctx: RequestContext = Depends(request_context),
+) -> dict[str, Any]:
+    """Read-only immutable transition timeline for one capability (doc 22 §9,
+    §13). Any authenticated principal may read registry provenance; the POST on
+    this same path appends a transition and stays Admin-only."""
+    return await get_capability_transitions(ctx.session, ctx.actor, capability_key=capability_key)
 
 
 @router.get(_GRAPHIC_VIEW_OVERVIEW_PATH)

@@ -239,6 +239,42 @@ export interface ResultArtifactPage<T> {
   next_cursor: string | null;
 }
 
+// Diagnostics artifact row (backend project_row: {diagnostic_id, kind, content,
+// created_at}). The single deterministic `run_diagnostics` row carries the honest
+// L4 warnings (proxy fallback / unresolved indicator blocks / unsupported sizing)
+// and the reproducibility note that states whether real indicator triggers or a
+// breakout proxy produced this result (doc 15 §13). `content` is an open dict; the
+// UI reads the keys it knows and never fabricates a missing one.
+export interface DiagnosticContent {
+  entry_model?: string;
+  reproducibility_note?: string;
+  warnings?: string[];
+  [key: string]: unknown;
+}
+
+export interface DiagnosticRow {
+  diagnostic_id: string;
+  kind: string;
+  content: DiagnosticContent;
+  created_at: string | null;
+}
+
+// Engine diagnostics warning codes (domain/backtest/engine.py) → an honest,
+// human-readable line. Prefix-coded warnings keep their tail so the specific
+// cause shows; an unknown code (e.g. an unresolved indicator-plan reason) is
+// surfaced verbatim rather than dropped or invented (L4).
+const _SIZING_UNSUPPORTED_PREFIX = "position_sizing_method_unsupported:";
+
+export function diagnosticWarningLabel(code: string): string {
+  if (code === "no_bars_in_source")
+    return "No bars were available in the pinned market source for this run.";
+  if (code === "indicator_plan_empty_fallback_proxy")
+    return "The indicator layer produced no computable trigger — this result used a breakout entry proxy, not real indicator signals.";
+  if (code.startsWith(_SIZING_UNSUPPORTED_PREFIX))
+    return `Position sizing method "${code.slice(_SIZING_UNSUPPORTED_PREFIX.length)}" is not modelled — the run fell back to notional sizing.`;
+  return code;
+}
+
 // Export contract (backend domain/backtest/export.py). The label is V18 wording;
 // the value is the authoritative wire enum. `summary` has no drill-down list but
 // is exportable (doc 15 §3.2 Data Export).

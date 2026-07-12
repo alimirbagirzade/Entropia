@@ -4,6 +4,7 @@ import { ErrorState } from "@/components/ErrorState";
 import { Loading } from "@/components/Loading";
 import { ApiError } from "@/lib/apiClient";
 import {
+  diagnosticWarningLabel,
   EM_DASH,
   EXPORT_FORMATS,
   EXPORT_TYPES,
@@ -13,6 +14,8 @@ import {
   useResultArtifact,
   useResultMetrics,
   type BacktestResultDetail,
+  type DiagnosticContent,
+  type DiagnosticRow,
   type ExportFormatValue,
   type TradeLedgerRow,
 } from "@/lib/backtest";
@@ -102,6 +105,7 @@ export function ResultDetail({ result }: { result: BacktestResultDetail }) {
 
       <ChartsPlaceholder />
       <TradeListSection resultId={result.result_id} />
+      <DiagnosticsSection resultId={result.result_id} />
       <ExportSection resultId={result.result_id} />
 
       <h4>Manifest</h4>
@@ -249,6 +253,101 @@ function TradeTable({ rows }: { rows: TradeLedgerRow[] }) {
         </tbody>
       </table>
     </div>
+  );
+}
+
+const warnBoxStyle = {
+  border: "1px solid var(--warn)",
+  borderRadius: 6,
+  padding: "10px 12px",
+  color: "var(--warn)",
+  fontSize: 13,
+} as const;
+
+// Informational engine counters surfaced verbatim (real values, never a
+// fabricated fallback). warnings / reproducibility_note / entry_model are handled
+// separately above, so they are not repeated here.
+const DIAGNOSTIC_DISPLAY_FIELDS: { key: string; label: string }[] = [
+  { key: "engine_kind", label: "Engine kind" },
+  { key: "bars_processed", label: "Bars processed" },
+  { key: "indicator_blocks", label: "Indicator blocks" },
+  { key: "condition_blocks", label: "Condition blocks" },
+  { key: "decision_trace_count", label: "Decision trace events" },
+];
+
+// Deterministic run diagnostics (doc 15 §13). The single `run_diagnostics`
+// artifact row states — via the reproducibility note and the honest L4 warnings —
+// how this result was produced: whether real indicator triggers or a breakout
+// proxy fired, whether an indicator block went unresolved, or whether an
+// unsupported sizing method fell back to notional. Diagnostics is the
+// deterministic engine artifact, NOT a numeric truth source that overrides the
+// metrics (§13). AI Review below is an explicit V1 placeholder — never fabricated.
+function DiagnosticsSection({ resultId }: { resultId: string }) {
+  const page = useResultArtifact<DiagnosticRow>(resultId, "diagnostics", null);
+  const content = page.data?.items[0]?.content ?? null;
+  const warnings = content?.warnings ?? [];
+
+  return (
+    <>
+      <h4>Diagnostics</h4>
+      {page.isLoading ? (
+        <Loading label="Loading diagnostics…" />
+      ) : page.isError ? (
+        <ErrorState error={page.error} onRetry={() => void page.refetch()} />
+      ) : content === null ? (
+        <p className="page-sub">No diagnostics artifact was persisted for this result.</p>
+      ) : (
+        <>
+          {content.reproducibility_note ? (
+            <p className="page-sub" style={{ marginTop: 0 }}>
+              {content.reproducibility_note}
+            </p>
+          ) : null}
+          {warnings.length > 0 ? (
+            <div role="alert" style={warnBoxStyle}>
+              <strong>
+                {`${warnings.length} diagnostic warning${warnings.length === 1 ? "" : "s"}`}
+              </strong>
+              <ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>
+                {warnings.map((code) => (
+                  <li key={code}>{diagnosticWarningLabel(code)}</li>
+                ))}
+              </ul>
+            </div>
+          ) : (
+            <p className="page-sub">
+              No diagnostic warnings — the run produced no honesty flags.
+            </p>
+          )}
+          <DiagnosticCounters content={content} />
+        </>
+      )}
+
+      <h4>AI Review</h4>
+      <div style={placeholderStyle}>
+        AI Review is not generated in V1 (no analysis capability enabled). The
+        diagnostics above are the deterministic engine artifact; no AI verdict or
+        fabricated diagnosis is produced (doc 15 §13).
+      </div>
+    </>
+  );
+}
+
+function DiagnosticCounters({ content }: { content: DiagnosticContent }) {
+  const rows = DIAGNOSTIC_DISPLAY_FIELDS.map((field) => ({
+    ...field,
+    value: content[field.key],
+  })).filter((field) => field.value !== undefined && field.value !== null);
+  if (rows.length === 0) return null;
+  return (
+    <dl className="kv" style={{ marginTop: 10 }}>
+      {rows.map((field) => (
+        <div key={field.key} style={{ display: "contents" }}>
+          <dt>{field.label}</dt>
+          <dd>{String(field.value)}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 

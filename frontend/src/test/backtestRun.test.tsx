@@ -183,6 +183,12 @@ describe("RUN & Backtest Results page", () => {
         items: [],
         next_cursor: null,
       },
+      "GET /backtest-results/res_1/artifacts/diagnostics": {
+        result_id: "res_1",
+        artifact_type: "diagnostics",
+        items: [],
+        next_cursor: null,
+      },
       "GET /backtest-results/res_1/metrics": RESULT_METRICS_VIEW,
       "GET /backtest-results/res_1": RESULT_DETAIL,
     });

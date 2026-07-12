@@ -6,11 +6,14 @@ import { Loading } from "@/components/Loading";
 import { StatusBadge } from "@/components/StatusBadge";
 import { ApiError } from "@/lib/apiClient";
 import {
+  AGENT_TASK_STATUS_FILTERS,
   DIRECTIVE_PRIORITIES,
+  HYPOTHESIS_STATUS_FILTERS,
   TASK_STATUS_TONES,
   TOOL_CALL_STATUS_TONES,
   useAgentOverview,
   useAgentTask,
+  useAgentTasks,
   useHypotheses,
   usePauseRuntime,
   useQueueDirective,
@@ -37,6 +40,49 @@ const RUNTIME_TONES: Record<string, "ok" | "warn" | "down" | "neutral"> = {
 function mutationErrorText(error: unknown): string {
   if (error instanceof ApiError) return `${error.code}: ${error.message}`;
   return error instanceof Error ? error.message : "Request failed.";
+}
+
+// Forward-only opaque keyset cursors (server contract): Prev replays the cursor
+// stack, the client never re-orders or fabricates a page (mirrors Panel).
+function useCursorStack() {
+  const [stack, setStack] = useState<string[]>([]);
+  const cursor = stack.length > 0 ? stack[stack.length - 1] : null;
+  return {
+    cursor,
+    canPrev: stack.length > 0,
+    next: (nextCursor: string) => setStack((prev) => [...prev, nextCursor]),
+    prev: () => setStack((prev) => prev.slice(0, -1)),
+    reset: () => setStack([]),
+  };
+}
+
+function Pager({
+  canPrev,
+  nextCursor,
+  onPrev,
+  onNext,
+}: {
+  canPrev: boolean;
+  nextCursor: string | null;
+  onPrev: () => void;
+  onNext: (cursor: string) => void;
+}) {
+  if (!canPrev && nextCursor === null) return null;
+  return (
+    <div style={{ display: "flex", gap: 12, marginTop: 12 }}>
+      <button type="button" className="btn" disabled={!canPrev} onClick={onPrev}>
+        Prev
+      </button>
+      <button
+        type="button"
+        className="btn"
+        disabled={nextCursor === null}
+        onClick={() => (nextCursor !== null ? onNext(nextCursor) : undefined)}
+      >
+        Next
+      </button>
+    </div>
+  );
 }
 
 // Analysis Lab (Stage 6a, doc 18): the Agent Workspace observation/control
@@ -74,6 +120,7 @@ function Workspace({ overview }: { overview: AgentOverview }) {
         selectedTaskId={selectedTaskId}
         onSelectTask={setSelectedTaskId}
       />
+      <TaskHistoryCard selectedTaskId={selectedTaskId} onSelectTask={setSelectedTaskId} />
       {selectedTaskId ? (
         <TaskDetailCard taskId={selectedTaskId} onClose={() => setSelectedTaskId(null)} />
       ) : null}
@@ -227,6 +274,110 @@ function QueueCard({
             ))}
           </tbody>
         </table>
+      )}
+    </section>
+  );
+}
+
+// Task history — the full, browsable task record behind the bounded live queue.
+// The overview queue only carries the Coordinator's current cards; aged-out
+// tasks (succeeded / failed / cancelled) live here, filterable by status and
+// paged with the server's opaque keyset cursor (doc 18 §9.2). The status filter
+// is server-validated; an unknown value would 422, so the dropdown only offers
+// the canonical AgentTaskStatus vocabulary.
+function TaskHistoryCard({
+  selectedTaskId,
+  onSelectTask,
+}: {
+  selectedTaskId: string | null;
+  onSelectTask: (taskId: string) => void;
+}) {
+  const [status, setStatus] = useState<string | null>(null);
+  const pager = useCursorStack();
+  const tasks = useAgentTasks(status, pager.cursor);
+  const rows = tasks.data?.tasks ?? [];
+
+  function onStatusChange(next: string) {
+    setStatus(next === "" ? null : next);
+    pager.reset();
+  }
+
+  return (
+    <section className="card" aria-labelledby="task-history-h" style={{ marginTop: 18 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12 }}>
+        <h3 id="task-history-h" style={{ marginTop: 0 }}>
+          Task history
+        </h3>
+        <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span>Status</span>
+          <select
+            value={status ?? ""}
+            onChange={(event) => onStatusChange(event.target.value)}
+            aria-label="Filter task history by status"
+          >
+            <option value="">All</option>
+            {AGENT_TASK_STATUS_FILTERS.map((value) => (
+              <option key={value} value={value}>
+                {value}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      {tasks.isLoading ? (
+        <Loading label="Loading task history…" />
+      ) : tasks.isError ? (
+        <ErrorState error={tasks.error} onRetry={() => void tasks.refetch()} />
+      ) : rows.length === 0 ? (
+        <EmptyState
+          glyph="⧉"
+          title={status === null ? "No tasks yet" : `No ${status} tasks`}
+          description="The Coordinator records every task it runs here."
+        />
+      ) : (
+        <>
+          <table className="metrics-table">
+            <thead>
+              <tr>
+                <th scope="col">Task</th>
+                <th scope="col">Type</th>
+                <th scope="col">Priority</th>
+                <th scope="col">Status</th>
+                <th scope="col">Stage</th>
+                <th scope="col" aria-label="Actions" />
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((task) => (
+                <tr key={task.task_id}>
+                  <td>{task.title}</td>
+                  <td>{task.task_type}</td>
+                  <td>{task.priority}</td>
+                  <td>
+                    <StatusBadge tone={TASK_STATUS_TONES[task.status] ?? "neutral"} label={task.status} />
+                  </td>
+                  <td>{task.stage ?? "—"}</td>
+                  <td>
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      aria-pressed={selectedTaskId === task.task_id}
+                      onClick={() => onSelectTask(task.task_id)}
+                    >
+                      Detail
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <Pager
+            canPrev={pager.canPrev}
+            nextCursor={tasks.data?.next_cursor ?? null}
+            onPrev={pager.prev}
+            onNext={pager.next}
+          />
+        </>
       )}
     </section>
   );
@@ -482,13 +633,38 @@ function DirectiveCard() {
 }
 
 function HypothesesCard() {
-  const hypotheses = useHypotheses();
+  const [status, setStatus] = useState<string | null>(null);
+  const pager = useCursorStack();
+  const hypotheses = useHypotheses(status, pager.cursor);
   const rows = hypotheses.data?.hypotheses ?? [];
+
+  function onStatusChange(next: string) {
+    setStatus(next === "" ? null : next);
+    pager.reset();
+  }
+
   return (
     <section className="card" aria-labelledby="hypotheses-h" style={{ marginTop: 18 }}>
-      <h3 id="hypotheses-h" style={{ marginTop: 0 }}>
-        Hypothesis &amp; output board
-      </h3>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12 }}>
+        <h3 id="hypotheses-h" style={{ marginTop: 0 }}>
+          Hypothesis &amp; output board
+        </h3>
+        <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span>Status</span>
+          <select
+            value={status ?? ""}
+            onChange={(event) => onStatusChange(event.target.value)}
+            aria-label="Filter hypotheses by status"
+          >
+            <option value="">All</option>
+            {HYPOTHESIS_STATUS_FILTERS.map((value) => (
+              <option key={value} value={value}>
+                {value}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
       {hypotheses.isLoading ? (
         <Loading label="Loading hypotheses…" />
       ) : hypotheses.isError ? (
@@ -496,32 +672,40 @@ function HypothesesCard() {
       ) : rows.length === 0 ? (
         <EmptyState
           glyph="◇"
-          title="No hypotheses yet"
+          title={status === null ? "No hypotheses yet" : `No ${status} hypotheses`}
           description="Completed research tasks publish their hypotheses here."
         />
       ) : (
-        <table className="metrics-table">
-          <thead>
-            <tr>
-              <th scope="col">Hypothesis</th>
-              <th scope="col">Status</th>
-              <th scope="col">Mechanism</th>
-              <th scope="col">Next action</th>
-              <th scope="col">Source task</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => (
-              <tr key={row.artifact_id}>
-                <td>{row.title}</td>
-                <td>{row.status}</td>
-                <td>{row.mechanism ?? "—"}</td>
-                <td>{row.next_action ?? "—"}</td>
-                <td>{row.source_task_id ? <code>{row.source_task_id}</code> : "—"}</td>
+        <>
+          <table className="metrics-table">
+            <thead>
+              <tr>
+                <th scope="col">Hypothesis</th>
+                <th scope="col">Status</th>
+                <th scope="col">Mechanism</th>
+                <th scope="col">Next action</th>
+                <th scope="col">Source task</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr key={row.artifact_id}>
+                  <td>{row.title}</td>
+                  <td>{row.status}</td>
+                  <td>{row.mechanism ?? "—"}</td>
+                  <td>{row.next_action ?? "—"}</td>
+                  <td>{row.source_task_id ? <code>{row.source_task_id}</code> : "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <Pager
+            canPrev={pager.canPrev}
+            nextCursor={hypotheses.data?.next_cursor ?? null}
+            onPrev={pager.prev}
+            onNext={pager.next}
+          />
+        </>
       )}
     </section>
   );

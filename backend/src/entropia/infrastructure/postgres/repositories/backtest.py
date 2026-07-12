@@ -291,6 +291,29 @@ async def get_result(session: AsyncSession, result_id: str) -> BacktestResult | 
     return await session.get(BacktestResult, result_id)
 
 
+async def latest_result_for_workspace(
+    session: AsyncSession, workspace_entity_id: str
+) -> BacktestResult | None:
+    """The most recent active succeeded Result for a composition (doc 15 §9.4).
+
+    A ``BacktestResult`` exists only for a succeeded run (CR-03); soft-deleted
+    results are excluded. Ordered newest-first by ``created_at`` with the ULID
+    ``result_id`` as a deterministic same-instant tiebreak. Currentness of the
+    result against the live composition is recomputed by the caller (the
+    "snapshot differs" badge is never stored, doc 15 §9.4).
+    """
+    stmt = (
+        select(BacktestResult)
+        .where(
+            BacktestResult.workspace_entity_id == workspace_entity_id,
+            BacktestResult.deletion_state == "active",
+        )
+        .order_by(BacktestResult.created_at.desc(), BacktestResult.result_id.desc())
+        .limit(1)
+    )
+    return (await session.execute(stmt)).scalars().first()
+
+
 async def get_summary(session: AsyncSession, result_id: str) -> ResultSummary | None:
     stmt = select(ResultSummary).where(ResultSummary.result_id == result_id)
     return (await session.execute(stmt)).scalars().first()
@@ -339,5 +362,6 @@ __all__ = [
     "get_run",
     "get_summary",
     "has_active_run_for_root",
+    "latest_result_for_workspace",
     "list_metric_values",
 ]

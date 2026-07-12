@@ -15,6 +15,8 @@ transaction.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import pytest
 from sqlalchemy import select
 
@@ -22,11 +24,14 @@ from entropia.application.commands import mainboard as mb_cmd
 from entropia.application.queries import mainboard as mb_query
 from entropia.domain.identity import Actor
 from entropia.domain.lifecycle.enums import DeletionState, PrincipalType, Role
+from entropia.domain.mainboard.composition import composition_hash
 from entropia.infrastructure.postgres.models import (
     AuditEvent,
+    BacktestResult,
     MainboardCompositionSnapshot,
     OutboxEvent,
     Principal,
+    ResultSummary,
 )
 from entropia.infrastructure.postgres.repositories import mainboard as mb_repo
 from entropia.shared.errors import (
@@ -73,7 +78,9 @@ async def test_get_default_mainboard_auto_creates_workspace(session) -> None:
     assert workspace_id.startswith("mbws_")
     assert projection["workspace_kind"] == "human_default"
     assert projection["items"] == []
-    assert projection["ready_summary"] == {"state": "not_ready", "report_id": None}
+    # A never-checked composition is not_checked (a transient UI state, no report),
+    # NOT not_ready — the real Ready Check projection, GAP-05 / doc 14 §4.
+    assert projection["ready_summary"] == {"state": "not_checked", "report_id": None}
     assert projection["latest_result_summary"] is None
 
     # A registry root + detail row now exist for the workspace.
@@ -374,3 +381,99 @@ async def test_attach_writes_audit_and_outbox_rows(session) -> None:
     assert "mainboard.work_object_created" in audit_kinds
     assert "mainboard.item_attached" in outbox_types
     assert "mainboard.composition_changed" in outbox_types
+
+
+# --------------------------------------------------------------------------- #
+# Latest-result + readiness projection (GAP-05)                               #
+# --------------------------------------------------------------------------- #
+
+
+async def test_default_mainboard_surfaces_latest_result_and_snapshot_badge(session) -> None:
+    # GAP-05 / doc 15 §9.4: the default Mainboard shows the most recent ACTIVE
+    # succeeded Result for its composition; flags "snapshot differs" when the live
+    # composition fingerprint has moved past the result's pinned one; prefers the
+    # newest by time; excludes soft-deleted results; never fabricates a summary.
+    await _seed_principals(session)
+    board = await mb_query.get_default_mainboard(session, USER1)
+    workspace_id = board["workspace_id"]
+    current_fp = composition_hash([])  # the empty composition's live fingerprint
+
+    older = datetime(2026, 7, 1, 12, 0, tzinfo=UTC)
+    newer = datetime(2026, 7, 2, 12, 0, tzinfo=UTC)
+
+    # A succeeded Result pinned to the CURRENT composition -> snapshot matches.
+    # BacktestResult is flushed before its ResultSummary child: these models carry
+    # no ORM relationship(), so the FK insert order is not derived (PR #147 lesson).
+    session.add(
+        BacktestResult(
+            result_id="btr_current",
+            run_id="btrun_current",
+            manifest_id="btman_current",
+            manifest_hash="a" * 64,
+            workspace_entity_id=workspace_id,
+            composition_fingerprint=current_fp,
+            engine_version="backtest-engine-test",
+            deletion_state="active",
+            created_at=older,
+        )
+    )
+    await session.flush()
+    session.add(
+        ResultSummary(
+            summary_id="btsum_current",
+            result_id="btr_current",
+            symbol="BTCUSD",
+            timeframe="1h",
+            period_start="2026-01-01",
+            period_end="2026-02-01",
+            total_trades=7,
+            headline={"pnl": "123.45"},
+        )
+    )
+    await session.flush()
+
+    latest = (await mb_query.get_default_mainboard(session, USER1))["latest_result_summary"]
+    assert latest is not None
+    assert latest["result_id"] == "btr_current"
+    assert latest["composition_fingerprint"] == current_fp
+    assert latest["snapshot_differs"] is False
+    assert latest["summary"] == {
+        "symbol": "BTCUSD",
+        "timeframe": "1h",
+        "period_start": "2026-01-01",
+        "period_end": "2026-02-01",
+        "total_trades": 7,
+        "headline": {"pnl": "123.45"},
+    }
+
+    # A NEWER Result pinned to a DIFFERENT composition -> newest wins + badge on;
+    # it has no ResultSummary row -> honest null summary (never fabricated, L4).
+    session.add(
+        BacktestResult(
+            result_id="btr_stale",
+            run_id="btrun_stale",
+            manifest_id="btman_stale",
+            manifest_hash="b" * 64,
+            workspace_entity_id=workspace_id,
+            composition_fingerprint="d" * 64,
+            engine_version="backtest-engine-test",
+            deletion_state="active",
+            created_at=newer,
+        )
+    )
+    await session.flush()
+
+    latest = (await mb_query.get_default_mainboard(session, USER1))["latest_result_summary"]
+    assert latest["result_id"] == "btr_stale"
+    assert latest["snapshot_differs"] is True
+    assert latest["summary"] is None
+
+    # Soft-deleting the newest excludes it -> falls back to the older active one.
+    stale = await session.get(BacktestResult, "btr_stale")
+    assert stale is not None
+    stale.deletion_state = "deleted"
+    await session.flush()
+
+    latest = (await mb_query.get_default_mainboard(session, USER1))["latest_result_summary"]
+    assert latest["result_id"] == "btr_current"
+    assert latest["snapshot_differs"] is False

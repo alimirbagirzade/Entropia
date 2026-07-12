@@ -19,6 +19,7 @@ import {
   useSoftDeleteWorkObject,
   useStartExternalDraft,
   type ExternalDraft,
+  type LatestResultSummary,
   type MainboardItem,
   type WorkObjectResult,
 } from "@/lib/mainboard";
@@ -422,6 +423,39 @@ function OutsourceSignalCard() {
 // Root page.                                                                   //
 // --------------------------------------------------------------------------- //
 
+// A single-line headline for the latest-result summary (kept as one text node so
+// the digest reads cleanly and is straightforward to assert).
+function latestResultLine(s: NonNullable<LatestResultSummary["summary"]>): string {
+  const period = s.period_start && s.period_end ? ` · ${s.period_start} → ${s.period_end}` : "";
+  return `${s.symbol ?? "—"} · ${s.timeframe ?? "—"} · ${s.total_trades} trade(s)${period}`;
+}
+
+// The most recent succeeded Result for this composition (doc 15 §9.4). The row is
+// always readable; when the live composition has moved past the result's pinned
+// fingerprint the server flags snapshot_differs and we label it — the result is
+// never treated as a current test of the modified composition.
+function LatestResultCard({ result }: { result: LatestResultSummary }) {
+  const s = result.summary;
+  return (
+    <div style={{ display: "grid", gap: 6 }}>
+      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+        <Link to={`/backtest/run?result=${encodeURIComponent(result.result_id)}`}>
+          {result.result_id}
+        </Link>
+        {result.snapshot_differs && (
+          <StatusBadge
+            label="Result snapshot differs from current Mainboard composition"
+            tone="warn"
+          />
+        )}
+      </div>
+      <div style={{ fontSize: 13 }}>
+        {s ? latestResultLine(s) : "Summary not available for this result."}
+      </div>
+    </div>
+  );
+}
+
 export function Mainboard() {
   const board = useDefaultMainboard();
   const snapshot = useCreateSnapshot();
@@ -452,7 +486,13 @@ export function Mainboard() {
             <dt>Workspace version</dt>
             <dd>{data.row_version}</dd>
             <dt>Latest result</dt>
-            <dd>No succeeded Backtest Result is available for this Mainboard yet.</dd>
+            <dd>
+              {data.latest_result_summary ? (
+                <LatestResultCard result={data.latest_result_summary} />
+              ) : (
+                "No succeeded Backtest Result is available for this Mainboard yet."
+              )}
+            </dd>
           </dl>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 14 }}>
             <Link to="/backtest/ready-check" className="btn">Backtest Ready Check</Link>

@@ -28,6 +28,27 @@ export interface MainboardItem {
   row_version: number;
 }
 
+// The most recent active succeeded Result projected onto the Mainboard
+// (doc 15 §9.4). `snapshot_differs` is server-recomputed: true when the live
+// composition fingerprint has moved past the result's pinned one — the row stays
+// readable but is clearly labelled, never treated as a current test.
+export interface LatestResultSummary {
+  result_id: string;
+  manifest_hash: string;
+  composition_fingerprint: string;
+  engine_version: string;
+  created_at: string;
+  snapshot_differs: boolean;
+  summary: {
+    symbol: string | null;
+    timeframe: string | null;
+    period_start: string | null;
+    period_end: string | null;
+    total_trades: number;
+    headline: Record<string, unknown>;
+  } | null;
+}
+
 export interface DefaultMainboard {
   workspace_id: string;
   workspace_kind: string;
@@ -35,7 +56,7 @@ export interface DefaultMainboard {
   row_version: number;
   items: MainboardItem[];
   ready_summary: { state: string; report_id: string | null };
-  latest_result_summary: unknown;
+  latest_result_summary: LatestResultSummary | null;
 }
 
 // Canonical BacktestRun lifecycle (backend domain/backtest/enums.py). The wire

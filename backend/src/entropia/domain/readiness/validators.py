@@ -8,7 +8,7 @@ batch state, allocation config) and calls :func:`evaluate_readiness`; it owns
 aggregation, report persistence and audit.
 
 Fixed check order (doc 14 §9.2): composition -> lifecycle -> strategy ->
-external working objects -> portfolio allocation.
+market data -> external working objects -> portfolio allocation.
 """
 
 from __future__ import annotations
@@ -99,6 +99,7 @@ def evaluate_readiness(
     *,
     allocation_enabled: bool,
     allocation_issues: Sequence[AllocationIssue],
+    market_data_issues: Sequence[ReadinessIssue] = (),
 ) -> ReadinessEvaluation:
     """Aggregate all validator layers into an immutable evaluation (doc 14 §9.2).
 
@@ -110,6 +111,7 @@ def evaluate_readiness(
     issues.extend(_composition_issues(items))
     for item in items:
         issues.extend(_item_issues(item, allocation_enabled=allocation_enabled))
+    issues.extend(market_data_issues)
     issues.extend(_map_allocation_issues(allocation_issues))
 
     blockers = sum(1 for i in issues if i.severity == Sev.BLOCKER)

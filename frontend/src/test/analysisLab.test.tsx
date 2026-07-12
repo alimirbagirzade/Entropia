@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 
@@ -50,6 +50,21 @@ const HYPOTHESES = {
     },
   ],
   next_cursor: null,
+};
+
+// Task history list (GET /agent-tasks) — the aged-out record behind the bounded
+// live queue. `next_cursor` is present so the Pager's Next is exercisable.
+const TASK_HISTORY = {
+  tasks: [
+    {
+      ...TASK,
+      task_id: "atask_9",
+      title: "Archived carry study",
+      status: "succeeded",
+      stage: "done",
+    },
+  ],
+  next_cursor: "cur_2",
 };
 
 const TASK_DETAIL = {
@@ -140,6 +155,7 @@ describe("Analysis Lab page", () => {
     stubApi({
       "GET /agent-workspace/overview": OVERVIEW,
       "GET /hypotheses": HYPOTHESES,
+      "GET /agent-tasks": TASK_HISTORY,
     });
     renderPage();
 
@@ -161,6 +177,8 @@ describe("Analysis Lab page", () => {
       // "/agent-tasks/atask_2/tool-calls" does not match the detail stub.
       "GET /agent-tasks/atask_2/tool-calls": TOOL_CALLS,
       "GET /agent-tasks/atask_2": { ...TASK_DETAIL, task_id: "atask_2", title: "Vol regime scan" },
+      // Ordered LAST: the bare list fragment must not shadow the detail/tool-calls stubs above.
+      "GET /agent-tasks": TASK_HISTORY,
     });
     renderPage();
     await screen.findByText("Vol regime scan");
@@ -176,6 +194,7 @@ describe("Analysis Lab page", () => {
     const fetchMock = stubApi({
       "GET /agent-workspace/overview": OVERVIEW,
       "GET /hypotheses": HYPOTHESES,
+      "GET /agent-tasks": TASK_HISTORY,
       "POST /agent-directives": {
         directive_id: "dir_2",
         status: "queued",
@@ -241,6 +260,7 @@ describe("Analysis Lab page", () => {
     const fetchMock = stubApi({
       "GET /agent-workspace/overview": OVERVIEW,
       "GET /hypotheses": HYPOTHESES,
+      "GET /agent-tasks": TASK_HISTORY,
     });
     const client = renderPage();
     await screen.findByText("alpha");
@@ -280,6 +300,8 @@ describe("Analysis Lab page", () => {
       "GET /hypotheses": HYPOTHESES,
       "GET /agent-tasks/atask_2/tool-calls": TOOL_CALLS,
       "GET /agent-tasks/atask_2": { ...TASK_DETAIL, task_id: "atask_2", title: "Vol regime scan" },
+      // Ordered LAST: the bare list fragment must not shadow the detail/tool-calls stubs above.
+      "GET /agent-tasks": TASK_HISTORY,
     });
     renderPage();
     await screen.findByText("Vol regime scan");
@@ -300,6 +322,8 @@ describe("Analysis Lab page", () => {
       "GET /agent-tool-calls/tc_1": TOOL_CALL_DETAIL,
       "GET /agent-tasks/atask_2/tool-calls": TOOL_CALLS,
       "GET /agent-tasks/atask_2": { ...TASK_DETAIL, task_id: "atask_2", title: "Vol regime scan" },
+      // Ordered LAST: the bare list fragment must not shadow the detail/tool-calls stubs above.
+      "GET /agent-tasks": TASK_HISTORY,
     });
     renderPage();
     await screen.findByText("Vol regime scan");
@@ -316,5 +340,73 @@ describe("Analysis Lab page", () => {
     expect(
       fetchMock.mock.calls.some(([url]) => String(url).includes("/agent-tool-calls/tc_1")),
     ).toBe(true);
+  });
+
+  it("filters task history by status and pages with the server keyset cursor", async () => {
+    const fetchMock = stubApi({
+      "GET /agent-workspace/overview": OVERVIEW,
+      "GET /hypotheses": HYPOTHESES,
+      "GET /agent-tasks": TASK_HISTORY,
+    });
+    renderPage();
+
+    // The aged-out task shows in history, not in the bounded live queue.
+    expect(await screen.findByText("Archived carry study")).toBeInTheDocument();
+
+    // A status filter is sent as the server-validated `status` param (an unknown
+    // value would 422) — never a client-side re-filter of the current page.
+    fireEvent.change(screen.getByLabelText("Filter task history by status"), {
+      target: { value: "succeeded" },
+    });
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(([url]) =>
+          String(url).includes("/agent-tasks?status=succeeded"),
+        ),
+      ).toBe(true);
+    });
+
+    // Next replays the opaque cursor the server returned; the client never
+    // fabricates a page key.
+    const history = screen.getByRole("region", { name: "Task history" });
+    fireEvent.click(within(history).getByRole("button", { name: "Next" }));
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some(([url]) => String(url).includes("cursor=cur_2"))).toBe(
+        true,
+      );
+    });
+  });
+
+  it("filters and pages the hypothesis output board with the server cursor", async () => {
+    const HYP_PAGE = { hypotheses: HYPOTHESES.hypotheses, next_cursor: "hyp_2" };
+    const fetchMock = stubApi({
+      "GET /agent-workspace/overview": OVERVIEW,
+      "GET /agent-tasks": TASK_HISTORY,
+      "GET /hypotheses": HYP_PAGE,
+    });
+    renderPage();
+
+    expect(
+      await screen.findByText("BTC momentum persists after HTF breakout"),
+    ).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Filter hypotheses by status"), {
+      target: { value: "candidate" },
+    });
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(([url]) =>
+          String(url).includes("/hypotheses?status=candidate"),
+        ),
+      ).toBe(true);
+    });
+
+    const board = screen.getByRole("region", { name: "Hypothesis & output board" });
+    fireEvent.click(within(board).getByRole("button", { name: "Next" }));
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some(([url]) => String(url).includes("cursor=hyp_2"))).toBe(
+        true,
+      );
+    });
   });
 });

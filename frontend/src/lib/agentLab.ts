@@ -161,6 +161,30 @@ export const TASK_STATUS_TONES: Record<string, "ok" | "warn" | "down" | "neutral
 export const DIRECTIVE_PRIORITIES = ["normal", "high"] as const;
 export type DirectivePriority = (typeof DIRECTIVE_PRIORITIES)[number];
 
+// Status-filter vocabularies for the history views — hydration-only mirrors of
+// the backend enums (domain/agent_lab/enums.py AgentTaskStatus /
+// HypothesisStatus). The server re-validates every filter (an unknown value is
+// a 422 ValidationError), so these arrays only shape the dropdown; they are
+// never authority. The "All" option sends no `status` param.
+export const AGENT_TASK_STATUS_FILTERS = [
+  "queued",
+  "running",
+  "waiting",
+  "checkpointing",
+  "paused",
+  "succeeded",
+  "failed",
+  "cancelled",
+] as const;
+
+export const HYPOTHESIS_STATUS_FILTERS = [
+  "exploring",
+  "testing",
+  "candidate",
+  "rejected",
+  "archived",
+] as const;
+
 // ---------------------------------------------------------------------------
 // Query hooks — all under the ["agent-tasks"] SSE-invalidation prefix
 // ---------------------------------------------------------------------------
@@ -229,10 +253,18 @@ export function useToolCall(toolCallId: string | null) {
   });
 }
 
-export function useHypotheses() {
+export function useHypotheses(status: string | null, cursor: string | null) {
   return useQuery({
-    queryKey: ["agent-tasks", "hypotheses"],
-    queryFn: () => api.get<HypothesisPage>("/hypotheses"),
+    queryKey: ["agent-tasks", "hypotheses", status, cursor],
+    queryFn: () => {
+      const params = new URLSearchParams();
+      if (status !== null) params.set("status", status);
+      if (cursor !== null) params.set("cursor", cursor);
+      const qs = params.toString();
+      return api.get<HypothesisPage>(`/hypotheses${qs ? `?${qs}` : ""}`);
+    },
+    // Keep the current board mounted while a filter/cursor flip is in flight.
+    placeholderData: (previous) => previous,
   });
 }
 

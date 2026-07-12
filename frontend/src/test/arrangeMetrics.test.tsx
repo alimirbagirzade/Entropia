@@ -141,6 +141,10 @@ describe("Arrange Metrics page", () => {
     expect(body.selected_metric_codes).toEqual(["net_profit", "romad"]);
     expect(body.is_locked).toBe(false);
     expect(body.expected_profile_revision_id).toBeNull();
+    // GAP-13: a fresh Idempotency-Key lets the server dedup a retry to one
+    // revision even though the OCC guard already blocks a stale overwrite.
+    const applyHeaders = (postCall?.[1] as RequestInit).headers as Record<string, string>;
+    expect(applyHeaders["Idempotency-Key"]).toBeTruthy();
   });
 
   it("refuses edits while locked and offers a pure unlock", async () => {

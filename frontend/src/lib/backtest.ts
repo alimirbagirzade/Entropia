@@ -495,9 +495,12 @@ export function useRequestBacktestRun() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (compositionId: string) =>
-      api.post<BacktestRunAdmission>(
+      // 202 admission — a fresh Idempotency-Key per attempt lets the server dedup
+      // a network retry to the same run instead of admitting a duplicate one
+      // (the route reads the header, INF-04/INF-05).
+      apiRequest<BacktestRunAdmission>(
         `/mainboard-compositions/${encodeURIComponent(compositionId)}/backtest-runs`,
-        {},
+        { method: "POST", headers: { "Idempotency-Key": crypto.randomUUID() }, body: {} },
       ),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["backtests"] });
@@ -509,7 +512,13 @@ export function useRetryBacktestRun() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (runId: string) =>
-      api.post<BacktestRunAdmission>(`/backtest-runs/${encodeURIComponent(runId)}/retries`),
+      // A retry is deliberately a distinct decision, but a fresh Idempotency-Key
+      // still collapses an accidental double-submit / network retry to one
+      // admission (the route reads the header).
+      apiRequest<BacktestRunAdmission>(`/backtest-runs/${encodeURIComponent(runId)}/retries`, {
+        method: "POST",
+        headers: { "Idempotency-Key": crypto.randomUUID() },
+      }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["backtests"] });
     },
@@ -525,9 +534,11 @@ export function useSoftDeleteResult() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (resultId: string) =>
-      api.post<{ result_id: string; deletion_state: string }>(
+      // The command is idempotent server-side, but a fresh Idempotency-Key still
+      // lets the server dedup a retry to the same delete (the route reads it).
+      apiRequest<{ result_id: string; deletion_state: string }>(
         `/backtest-results/${encodeURIComponent(resultId)}/delete`,
-        {},
+        { method: "POST", headers: { "Idempotency-Key": crypto.randomUUID() }, body: {} },
       ),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["backtests"] });

@@ -144,7 +144,7 @@ describe("RUN & Backtest Results page", () => {
   });
 
   it("renders the composition context and admits a run", async () => {
-    stubApi({
+    const fetchMock = stubApi({
       "GET /mainboards/default": MAINBOARD,
       "POST /mainboard-compositions/ws_1/backtest-runs": {
         run_id: "btrun_7",
@@ -170,6 +170,14 @@ describe("RUN & Backtest Results page", () => {
     expect(await screen.findByText("queued")).toBeInTheDocument();
     expect(screen.getByText("btrun_7")).toBeInTheDocument();
     expect(screen.getByText("2 readiness warning(s)")).toBeInTheDocument();
+    // GAP-13: the 202 admission carries a fresh Idempotency-Key so the server
+    // dedups a network retry to a single run instead of admitting a duplicate.
+    const runCall = fetchMock.mock.calls.find(
+      ([url, init]) =>
+        String(url).includes("/backtest-runs") && (init as RequestInit)?.method === "POST",
+    );
+    const runHeaders = (runCall?.[1] as RequestInit).headers as Record<string, string>;
+    expect(runHeaders["Idempotency-Key"]).toBeTruthy();
   });
 
   it("deep-links an immutable result via ?result=", async () => {
@@ -205,7 +213,7 @@ describe("RUN & Backtest Results page", () => {
   });
 
   it("shows failure details and retries into a fresh run", async () => {
-    stubApi({
+    const fetchMock = stubApi({
       "GET /mainboards/default": MAINBOARD,
       "GET /backtest-runs/btrun_8": FAILED_RUN,
       "POST /backtest-runs/btrun_8/retries": {
@@ -234,5 +242,9 @@ describe("RUN & Backtest Results page", () => {
     // The retry admission swaps tracking onto the NEW run id (immutable original).
     expect(await screen.findByText("btrun_9")).toBeInTheDocument();
     expect(screen.getByText("queued")).toBeInTheDocument();
+    // GAP-13: the retry admission carries a fresh Idempotency-Key.
+    const retryCall = fetchMock.mock.calls.find(([url]) => String(url).includes("/retries"));
+    const retryHeaders = (retryCall?.[1] as RequestInit).headers as Record<string, string>;
+    expect(retryHeaders["Idempotency-Key"]).toBeTruthy();
   });
 });

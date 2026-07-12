@@ -129,6 +129,73 @@ describe("Mainboard", () => {
     expect(screen.getByText(/Add a Strategy, Trading Signal, or Trade Log/)).toBeTruthy();
   });
 
+  it("shows 'not checked yet' for a never-checked composition (not a false Not Ready)", async () => {
+    stubRoutes({
+      "GET /mainboards/default": {
+        ...MAINBOARD,
+        ready_summary: { state: "not_checked", report_id: null },
+      },
+    });
+    renderPage();
+    expect(await screen.findByText("Backtest Ready: Not checked yet")).toBeTruthy();
+  });
+
+  it("renders the latest succeeded result with its summary line and deep-link", async () => {
+    stubRoutes({
+      "GET /mainboards/default": {
+        ...MAINBOARD,
+        latest_result_summary: {
+          result_id: "btr_1",
+          manifest_hash: "mh_1",
+          composition_fingerprint: "hash_abc",
+          engine_version: "backtest-engine-v2",
+          created_at: "2026-07-01T12:00:00Z",
+          snapshot_differs: false,
+          summary: {
+            symbol: "BTCUSD",
+            timeframe: "1h",
+            period_start: "2026-01-01",
+            period_end: "2026-02-01",
+            total_trades: 7,
+            headline: {},
+          },
+        },
+      },
+    });
+    renderPage();
+    const link = await screen.findByText("btr_1");
+    expect(link.getAttribute("href")).toBe("/backtest/run?result=btr_1");
+    expect(
+      screen.getByText("BTCUSD · 1h · 7 trade(s) · 2026-01-01 → 2026-02-01"),
+    ).toBeTruthy();
+    // Matching fingerprint -> the result is current; no snapshot-differs badge.
+    expect(screen.queryByText(/Result snapshot differs/)).toBeNull();
+  });
+
+  it("labels the latest result when its snapshot differs from the current composition", async () => {
+    stubRoutes({
+      "GET /mainboards/default": {
+        ...MAINBOARD,
+        latest_result_summary: {
+          result_id: "btr_2",
+          manifest_hash: "mh_2",
+          composition_fingerprint: "stale_hash",
+          engine_version: "backtest-engine-v2",
+          created_at: "2026-07-02T12:00:00Z",
+          snapshot_differs: true,
+          summary: null,
+        },
+      },
+    });
+    renderPage();
+    expect(await screen.findByText("btr_2")).toBeTruthy();
+    expect(
+      screen.getByText("Result snapshot differs from current Mainboard composition"),
+    ).toBeTruthy();
+    // No summary row -> honest fallback, never a fabricated 0-trade line (L4).
+    expect(screen.getByText("Summary not available for this result.")).toBeTruthy();
+  });
+
   it("pins a revision with the item row_version OCC and a fresh Idempotency-Key", async () => {
     const fetchMock = stubRoutes();
     renderPage();

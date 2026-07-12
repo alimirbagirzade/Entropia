@@ -26,7 +26,7 @@ import { api, apiRequest } from "./apiClient";
 // The read hook + item/workspace projection types already live in lib/backtest.ts
 // (its RUN flow was the first consumer). Re-export so the page has one import.
 export { useDefaultMainboard } from "./backtest";
-export type { DefaultMainboard, MainboardItem } from "./backtest";
+export type { DefaultMainboard, LatestResultSummary, MainboardItem } from "./backtest";
 
 // --------------------------------------------------------------------------- //
 // Taxonomy (mirrors domain/mainboard/enums.py — hydration only, server         //
@@ -59,12 +59,14 @@ export type PatchIntent = "pin_revision" | "set_enabled" | "reorder" | "set_labe
 // backend query currently emits "not_ready" as a placeholder; the full state
 // set is honored here so the line is correct the moment readiness lands.
 const READY_STATUS_TEXT: Record<string, string> = {
+  not_checked: "Backtest Ready: Not checked yet",
   not_ready: "Backtest Ready: Not Ready",
   checking: "Backtest Ready: Checking current composition…",
   ready: "Backtest Ready: Ready",
   ready_with_warnings: "Backtest Ready: Ready with warnings",
   failed: "Backtest Ready: Not Ready",
   stale: "Changes detected. Run Backtest Ready Check again.",
+  superseded: "A newer Ready Check exists. Run it again for the current composition.",
 };
 
 export function readyStatusText(state: string): string {
@@ -73,7 +75,14 @@ export function readyStatusText(state: string): string {
 
 export function readyStatusTone(state: string): "ok" | "warn" | "down" {
   if (state === "ready") return "ok";
-  if (state === "ready_with_warnings" || state === "stale") return "warn";
+  if (
+    state === "ready_with_warnings" ||
+    state === "stale" ||
+    state === "superseded" ||
+    state === "not_checked"
+  ) {
+    return "warn";
+  }
   return "down";
 }
 

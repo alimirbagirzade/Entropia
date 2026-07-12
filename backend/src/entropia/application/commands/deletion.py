@@ -32,6 +32,7 @@ from entropia.infrastructure.postgres.repositories import audit as audit_repo
 from entropia.infrastructure.postgres.repositories import entities as entity_repo
 from entropia.infrastructure.postgres.repositories import trash as trash_repo
 from entropia.infrastructure.queues.enqueue import enqueue_job
+from entropia.shared.concurrency import check_row_version
 from entropia.shared.errors import (
     EntityNotSoftDeletedError,
     NotFoundError,
@@ -165,6 +166,66 @@ async def soft_delete_entity(
         correlation_id=actor.correlation_id,
     )
     return root
+
+
+async def soft_delete_registry_root(
+    session: AsyncSession,
+    actor: Actor,
+    root: EntityRegistry,
+    *,
+    reason: str | None,
+    display_name: str | None,
+    expected_row_version: int | None = None,
+) -> tuple[str, str] | None:
+    """Shared soft-delete core for a DOMAIN registry root (doc 20 §9.3/§10).
+
+    Row-locks the root, enforces optional OCC, and — on a real ACTIVE ->
+    SOFT_DELETED transition — flips the deletion pointers and writes the Trash
+    Entry. Returns ``(previous_state, new_state)`` when a transition happened, or
+    ``None`` when the root was already soft-deleted (idempotent no-op — the caller
+    MUST NOT emit a duplicate audit; doc 20 §14).
+
+    Unlike ``soft_delete_entity`` this emits NO audit/outbox: the caller keeps its
+    own domain event family (``market.dataset.*`` / ``research.dataset.*``) so the
+    delete lands in the Logs family filter alongside that resource's other events
+    (doc 11 §10, doc 12 §11). Authorization is the caller's responsibility.
+    """
+    await session.refresh(root, with_for_update=True)
+    check_row_version(root.row_version, expected_row_version)
+
+    previous = root.deletion_state
+    if previous == DeletionState.SOFT_DELETED:
+        return None  # idempotent repeat: the existing entry stands (doc 20 §14)
+    if previous == DeletionState.PURGE_PENDING:
+        raise PurgeInProgressError()
+    if previous == DeletionState.PURGED:
+        raise ObjectAlreadyPurgedError()
+
+    from entropia.domain.deletion import next_deletion_state
+
+    root.deletion_state = next_deletion_state(previous, DeletionState.SOFT_DELETED)
+    root.deleted_by = actor.principal_id
+    root.delete_reason = reason
+    root.deleted_at = datetime.now(UTC)
+
+    trash_repo.add_trash_entry(
+        session,
+        entity_id=root.entity_id,
+        entity_type=root.entity_type,
+        deleted_by=actor.principal_id,
+        reason=reason,
+        owner_at_deletion=root.owner_principal_id,
+        dependency_snapshot={"current_revision_id": root.current_revision_id},
+        display_name=display_name,
+        original_location=original_location_for(root.entity_type),
+        deletion_snapshot={
+            "current_revision_id": root.current_revision_id,
+            "domain_lifecycle_state": root.lifecycle_state,
+            "display_name": display_name,
+        },
+        correlation_id=actor.correlation_id,
+    )
+    return str(previous), str(root.deletion_state)
 
 
 # --------------------------------------------------------------------------- #

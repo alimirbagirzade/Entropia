@@ -69,6 +69,10 @@ class DeprecateRequest(BaseModel):
     note: str | None = None
 
 
+class DeleteDatasetRequest(BaseModel):
+    reason: str | None = None
+
+
 @router.post("/market-datasets", status_code=201)
 async def create_dataset(
     body: CreateDatasetRequest,
@@ -245,6 +249,25 @@ async def deprecate(
         revision_id=body.revision_id,
         note=body.note,
     )
+
+
+@router.delete("/market-datasets/{entity_id}", status_code=204)
+async def soft_delete(
+    entity_id: str,
+    body: DeleteDatasetRequest | None = None,
+    ctx: RequestContext = Depends(request_context),
+    if_match: str | None = Header(default=None, alias="If-Match"),
+) -> Response:
+    """Owner-or-Admin soft delete (doc 11 §10.1, Flow F). The Market Data page has
+    no delete control (doc 11 §2.1); this is the domain/Agent-Gateway surface."""
+    await md_cmd.soft_delete_market_dataset(
+        ctx.session,
+        ctx.actor,
+        entity_id=entity_id,
+        reason=body.reason if body else None,
+        expected_row_version=row_version_from_if_match(if_match),
+    )
+    return Response(status_code=204)
 
 
 @router.get("/market-datasets")

@@ -965,6 +965,23 @@
         "title": "CreationMode",
         "type": "string"
       },
+      "DeleteDatasetRequest": {
+        "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "title": "DeleteDatasetRequest",
+        "type": "object"
+      },
       "DeleteDocumentRequest": {
         "properties": {
           "expected_stream_version": {
@@ -7836,6 +7853,73 @@
       }
     },
     "/api/v1/market-datasets/{entity_id}": {
+      "delete": {
+        "description": "Owner-or-Admin soft delete (doc 11 §10.1, Flow F). The Market Data page has\nno delete control (doc 11 §2.1); this is the domain/Agent-Gateway surface.",
+        "operationId": "soft_delete_api_v1_market_datasets__entity_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entity_id",
+            "required": true,
+            "schema": {
+              "title": "Entity Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/DeleteDatasetRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Soft Delete",
+        "tags": [
+          "market-data"
+        ]
+      },
       "get": {
         "operationId": "get_detail_api_v1_market_datasets__entity_id__get",
         "parameters": [
@@ -9343,6 +9427,73 @@
       }
     },
     "/api/v1/research-datasets/{entity_id}": {
+      "delete": {
+        "description": "Owner-or-Admin soft delete (doc 12 §7/§11). The V18 Research Data page has\nno delete control (doc 12 §7); this is the domain/Agent-Gateway surface.",
+        "operationId": "soft_delete_api_v1_research_datasets__entity_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entity_id",
+            "required": true,
+            "schema": {
+              "title": "Entity Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/DeleteDatasetRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Soft Delete",
+        "tags": [
+          "research-data"
+        ]
+      },
       "get": {
         "operationId": "get_detail_api_v1_research_datasets__entity_id__get",
         "parameters": [

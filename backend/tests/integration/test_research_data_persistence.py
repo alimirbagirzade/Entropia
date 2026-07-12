@@ -15,7 +15,7 @@ from sqlalchemy import func, select
 
 from entropia.application.commands import market_data as md_cmd
 from entropia.application.commands import research_data as rd_cmd
-from entropia.application.commands.deletion import soft_delete_entity
+from entropia.application.commands.deletion import restore_entity, soft_delete_entity
 from entropia.application.jobs import research_data as rd_jobs
 from entropia.domain.identity import Actor
 from entropia.domain.lifecycle.enums import DeletionState, PrincipalType, Role
@@ -33,6 +33,7 @@ from entropia.domain.research_data.value_objects import (
     CategorySpec,
     ResearchTimezoneSpec,
 )
+from entropia.domain.trash.page import TrashEntryStatus
 from entropia.infrastructure.postgres.models import (
     ApprovalDecision,
     AuditEvent,
@@ -40,10 +41,16 @@ from entropia.infrastructure.postgres.models import (
     Principal,
     ResearchDatasetRevision,
     ResearchMarketLink,
+    TrashEntry,
 )
 from entropia.infrastructure.postgres.repositories import market_data as md_repo
 from entropia.infrastructure.postgres.repositories import research_data as rd_repo
-from entropia.shared.errors import DependencyBlocked, StaleRevisionError, UsageScopeForbidden
+from entropia.shared.errors import (
+    AccessDeniedError,
+    DependencyBlocked,
+    StaleRevisionError,
+    UsageScopeForbidden,
+)
 
 pytestmark = pytest.mark.integration
 
@@ -330,3 +337,94 @@ async def test_soft_delete_preserves_revision_chain(session) -> None:
     assert root.deletion_state == DeletionState.SOFT_DELETED
     assert await rd_repo.get_revision(session, revision.revision_id) is not None
     assert root.current_revision_id == head
+
+
+async def _trash_entry(session, entity_id: str) -> TrashEntry | None:
+    return (
+        await session.execute(select(TrashEntry).where(TrashEntry.entity_id == entity_id))
+    ).scalar_one_or_none()
+
+
+async def _count_kind(session, event_kind: str) -> int:
+    return int(
+        (
+            await session.execute(
+                select(func.count())
+                .select_from(AuditEvent)
+                .where(AuditEvent.event_kind == event_kind)
+            )
+        ).scalar_one()
+    )
+
+
+async def _create_dataset(session):
+    market_id = await _approved_market(session)
+    root, _ = await rd_cmd.create_research_dataset(
+        session,
+        OWNER,
+        market_entity_id=market_id,
+        payload={"f": 1},
+        category=OPEN_INTEREST,
+        usage_scope=UsageScope.RESEARCH_BACKTEST,
+        display_name="OI",
+    )
+    await session.commit()
+    return root
+
+
+async def test_domain_soft_delete_writes_named_trash_entry_and_audit(session) -> None:
+    await _seed_principals(session)
+    root = await _create_dataset(session)
+
+    result = await rd_cmd.soft_delete_research_dataset(
+        session, OWNER, entity_id=root.entity_id, reason="cleanup"
+    )
+    await session.commit()
+
+    assert result["deletion_state"] == str(DeletionState.SOFT_DELETED)
+    entry = await _trash_entry(session, root.entity_id)
+    assert entry is not None
+    assert entry.status == TrashEntryStatus.SOFT_DELETED
+    assert entry.entity_type == "research_dataset"
+    assert entry.display_name == "OI"  # snapshot from the current revision display_name
+    assert await _count_kind(session, "research.dataset.soft_deleted") == 1
+
+
+async def test_domain_soft_delete_then_admin_restore_round_trip(session) -> None:
+    await _seed_principals(session)
+    root = await _create_dataset(session)
+
+    await rd_cmd.soft_delete_research_dataset(session, OWNER, entity_id=root.entity_id)
+    await session.commit()
+    assert root.deletion_state == DeletionState.SOFT_DELETED
+
+    restored = await restore_entity(session, ADMIN, entity_id=root.entity_id)
+    await session.commit()
+
+    assert restored.deletion_state == DeletionState.ACTIVE
+    assert (await _trash_entry(session, root.entity_id)).status == TrashEntryStatus.RESTORED
+
+
+async def test_domain_soft_delete_rejects_non_owner(session) -> None:
+    await _seed_principals(session)
+    root = await _create_dataset(session)
+    # A page-eligible but non-owner Supervisor still cannot delete another's root.
+    stranger = Actor(
+        principal_id="user_2", principal_type=PrincipalType.HUMAN, role=Role.SUPERVISOR
+    )
+
+    with pytest.raises(AccessDeniedError):
+        await rd_cmd.soft_delete_research_dataset(session, stranger, entity_id=root.entity_id)
+    assert await _trash_entry(session, root.entity_id) is None
+
+
+async def test_domain_soft_delete_stale_row_version_conflicts(session) -> None:
+    await _seed_principals(session)
+    root = await _create_dataset(session)
+
+    with pytest.raises(StaleRevisionError):
+        await rd_cmd.soft_delete_research_dataset(
+            session, OWNER, entity_id=root.entity_id, expected_row_version=root.row_version + 99
+        )
+    assert root.deletion_state == DeletionState.ACTIVE
+    assert await _trash_entry(session, root.entity_id) is None

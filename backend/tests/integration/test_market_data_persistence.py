@@ -13,7 +13,7 @@ import pytest
 from sqlalchemy import func, select
 
 from entropia.application.commands import market_data as md_cmd
-from entropia.application.commands.deletion import soft_delete_entity
+from entropia.application.commands.deletion import restore_entity, soft_delete_entity
 from entropia.application.queries.market_data import (
     resolve_approved_market_data_bundle,
 )
@@ -25,15 +25,17 @@ from entropia.domain.lifecycle.enums import (
 )
 from entropia.domain.market_data.enums import MarketDataType, MarketRevisionState, TimezoneMode
 from entropia.domain.market_data.value_objects import TimezoneSpec
+from entropia.domain.trash.page import TrashEntryStatus
 from entropia.infrastructure.postgres.models import (
     ApprovalDecision,
     AuditEvent,
     MarketDatasetRevision,
     OutboxEvent,
     Principal,
+    TrashEntry,
 )
 from entropia.infrastructure.postgres.repositories import market_data as md_repo
-from entropia.shared.errors import NotFoundError, StaleRevisionError
+from entropia.shared.errors import AccessDeniedError, NotFoundError, StaleRevisionError
 
 pytestmark = pytest.mark.integration
 
@@ -187,6 +189,113 @@ async def test_soft_delete_preserves_revision_chain(session) -> None:
     # Provenance preserved: the revision row still exists and head is unchanged.
     assert await md_repo.get_revision(session, revision.revision_id) is not None
     assert root.current_revision_id == head
+
+
+async def _trash_entry(session, entity_id: str) -> TrashEntry | None:
+    return (
+        await session.execute(select(TrashEntry).where(TrashEntry.entity_id == entity_id))
+    ).scalar_one_or_none()
+
+
+async def _count_kind(session, event_kind: str) -> int:
+    return int(
+        (
+            await session.execute(
+                select(func.count())
+                .select_from(AuditEvent)
+                .where(AuditEvent.event_kind == event_kind)
+            )
+        ).scalar_one()
+    )
+
+
+async def test_domain_soft_delete_writes_named_trash_entry_and_audit(session) -> None:
+    await _seed_principals(session)
+    root, _ = await md_cmd.create_market_dataset(
+        session, OWNER, market_data_type=MarketDataType.OHLCV, payload={"v": 1}, title="Prices"
+    )
+    await session.commit()
+    before_outbox = await _count(session, OutboxEvent)
+
+    result = await md_cmd.soft_delete_market_dataset(
+        session, OWNER, entity_id=root.entity_id, reason="cleanup"
+    )
+    await session.commit()
+
+    assert result["deletion_state"] == str(DeletionState.SOFT_DELETED)
+    assert root.deletion_state == DeletionState.SOFT_DELETED
+    entry = await _trash_entry(session, root.entity_id)
+    assert entry is not None
+    assert entry.status == TrashEntryStatus.SOFT_DELETED
+    assert entry.entity_type == "market_dataset"
+    assert entry.display_name == "Prices"  # snapshot from the current revision title
+    # The delete lands in the market audit family (doc 11 §10), not entity.*.
+    assert await _count_kind(session, "market.dataset.soft_deleted") == 1
+    assert await _count(session, OutboxEvent) == before_outbox + 1
+
+
+async def test_domain_soft_delete_then_admin_restore_round_trip(session) -> None:
+    await _seed_principals(session)
+    root, _ = await md_cmd.create_market_dataset(
+        session, OWNER, market_data_type=MarketDataType.OHLCV, payload={"v": 1}, title="RT"
+    )
+    await session.commit()
+
+    await md_cmd.soft_delete_market_dataset(session, OWNER, entity_id=root.entity_id)
+    await session.commit()
+    assert root.deletion_state == DeletionState.SOFT_DELETED
+
+    restored = await restore_entity(session, ADMIN, entity_id=root.entity_id)
+    await session.commit()
+
+    assert restored.deletion_state == DeletionState.ACTIVE
+    assert (await _trash_entry(session, root.entity_id)).status == TrashEntryStatus.RESTORED
+
+
+async def test_domain_soft_delete_rejects_non_owner(session) -> None:
+    await _seed_principals(session)
+    root, _ = await md_cmd.create_market_dataset(
+        session, OWNER, market_data_type=MarketDataType.OHLCV, payload={"v": 1}
+    )
+    await session.commit()
+    stranger = Actor(principal_id="user_2", principal_type=PrincipalType.HUMAN, role=Role.USER)
+
+    with pytest.raises(AccessDeniedError):
+        await md_cmd.soft_delete_market_dataset(session, stranger, entity_id=root.entity_id)
+    # No Trash Entry is written for a rejected delete.
+    assert await _trash_entry(session, root.entity_id) is None
+
+
+async def test_domain_soft_delete_repeat_is_idempotent(session) -> None:
+    await _seed_principals(session)
+    root, _ = await md_cmd.create_market_dataset(
+        session, OWNER, market_data_type=MarketDataType.OHLCV, payload={"v": 1}
+    )
+    await session.commit()
+
+    await md_cmd.soft_delete_market_dataset(session, OWNER, entity_id=root.entity_id)
+    await session.commit()
+    await md_cmd.soft_delete_market_dataset(session, OWNER, entity_id=root.entity_id)
+    await session.commit()
+
+    # One Trash Entry, one audit — the repeat is a no-op (doc 20 §14).
+    assert await _count(session, TrashEntry) == 1
+    assert await _count_kind(session, "market.dataset.soft_deleted") == 1
+
+
+async def test_domain_soft_delete_stale_row_version_conflicts(session) -> None:
+    await _seed_principals(session)
+    root, _ = await md_cmd.create_market_dataset(
+        session, OWNER, market_data_type=MarketDataType.OHLCV, payload={"v": 1}
+    )
+    await session.commit()
+
+    with pytest.raises(StaleRevisionError):
+        await md_cmd.soft_delete_market_dataset(
+            session, OWNER, entity_id=root.entity_id, expected_row_version=root.row_version + 99
+        )
+    assert root.deletion_state == DeletionState.ACTIVE
+    assert await _trash_entry(session, root.entity_id) is None
 
 
 async def test_resolve_bundle_only_returns_approved_active(session) -> None:

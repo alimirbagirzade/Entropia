@@ -15,9 +15,11 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from entropia.domain.lifecycle.enums import ActorKind, DeletionState, PrincipalType, Role
+from entropia.infrastructure.observability import get_logger
+from entropia.infrastructure.postgres.engine import get_session_factory
 from entropia.infrastructure.postgres.models import (
     AuthSession,
     HumanCredential,
@@ -47,6 +49,12 @@ from entropia.shared.passwords import (
 _TARGET_TYPE = "human_user"
 USERNAME_MIN_LENGTH = 3
 USERNAME_MAX_LENGTH = 128
+# Truncated-hash length for the failed-login "attempted identifier reference"
+# (Master M1 §11.2): enough to correlate repeated attempts against one account,
+# never the plaintext username/email.
+_USERNAME_HINT_LENGTH = 16
+
+log = get_logger("auth")
 
 
 def hash_token(token: str) -> str:
@@ -223,7 +231,55 @@ async def bootstrap_status(
     }
 
 
-async def login(
+def _username_hint(username: str) -> str:
+    """A non-plaintext reference to the attempted identifier (Master M1 §11.2:
+    "attempted identifier reference ... hassas credential detail saklanmaz").
+
+    A truncated SHA-256 of the normalized username — never the plaintext — lets
+    an operator correlate repeated failures against one account (brute-force /
+    credential-stuffing) without persisting the username or email into the log.
+    """
+    return hashlib.sha256(username.strip().encode("utf-8")).hexdigest()[:_USERNAME_HINT_LENGTH]
+
+
+async def _record_login_failure(
+    username: str,
+    correlation_id: str,
+    audit_session_factory: async_sessionmaker[AsyncSession] | None,
+) -> None:
+    """Persist a LOGIN_FAILED audit (Master M1 §11.2) that SURVIVES the request
+    unit-of-work rollback that follows the 401.
+
+    A failed login rolls back the request session (``deps.db_session`` rolls back
+    on any exception), so this row is written in its OWN committed transaction.
+    It is UNIFORM across every failure reason (unknown user / bad password /
+    inactive account) — no ``actor_principal_id`` and no reason beyond the shared
+    error code — so the audit trail itself never reveals whether the account
+    exists (user-enumeration hardening, mirroring the single-401 login contract).
+
+    Best-effort: an audit-infra hiccup must not turn a failed login into a 500,
+    so a write failure is logged (never silently swallowed) and the original 401
+    still propagates.
+    """
+    factory = audit_session_factory or get_session_factory()
+    try:
+        async with factory() as audit_session:
+            audit_repo.add_audit_event(
+                audit_session,
+                event_kind="auth.login_failed",
+                actor_principal_id=None,
+                actor_kind=ActorKind.HUMAN,
+                severity="warning",
+                reason="invalid_credentials",
+                correlation_id=correlation_id,
+                metadata={"username_hint": _username_hint(username)},
+            )
+            await audit_session.commit()
+    except Exception:
+        log.exception("auth.login_failed_audit_write_failed", correlation_id=correlation_id)
+
+
+async def _authenticate_or_raise(
     session: AsyncSession,
     *,
     username: str,
@@ -231,11 +287,13 @@ async def login(
     ttl_minutes: int,
     correlation_id: str = "",
 ) -> dict[str, Any]:
-    """Verify the credential and open a revocable server-side session.
+    """Verify the credential and open a revocable server-side session, or raise.
 
     Every rejection path is the same 401 INVALID_CREDENTIALS and every path
     runs exactly one argon2 verification (user-enumeration hardening). The
     raw token is returned once here and persisted only as a SHA-256 digest.
+    The success audit ``auth.session_opened`` is the LOGIN_SUCCEEDED record
+    (Master M1 §11.2); the LOGIN_FAILED record is emitted by :func:`login`.
     """
     user = await auth_repo.get_user_by_username(session, username.strip())
     if user is None:
@@ -280,6 +338,36 @@ async def login(
         "expires_at": record.expires_at.isoformat(),
         "user": _user_projection(user),
     }
+
+
+async def login(
+    session: AsyncSession,
+    *,
+    username: str,
+    password: str,
+    ttl_minutes: int,
+    correlation_id: str = "",
+    audit_session_factory: async_sessionmaker[AsyncSession] | None = None,
+) -> dict[str, Any]:
+    """Authenticate and open a session; on ANY failure persist a durable
+    LOGIN_FAILED audit (Master M1 §11.2) before re-raising the same 401.
+
+    The failure audit is written in an INDEPENDENT transaction because the 401
+    rolls back the request unit of work (``deps.db_session``) — see
+    :func:`_record_login_failure`. ``audit_session_factory`` is a test seam
+    (default: the app session factory); the route never passes it.
+    """
+    try:
+        return await _authenticate_or_raise(
+            session,
+            username=username,
+            password=password,
+            ttl_minutes=ttl_minutes,
+            correlation_id=correlation_id,
+        )
+    except InvalidCredentialsError:
+        await _record_login_failure(username, correlation_id, audit_session_factory)
+        raise
 
 
 async def logout(session: AsyncSession, *, token: str, correlation_id: str = "") -> dict[str, Any]:

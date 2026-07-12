@@ -10,7 +10,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { api } from "./apiClient";
+import { api, apiRequest } from "./apiClient";
 
 // ---------------------------------------------------------------------------
 // Wire types (mirror backend application/queries/metric_profile.py projections)
@@ -103,12 +103,19 @@ export function useApplyMetricProfile() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: ApplyMetricProfileInput) =>
-      api.post<MetricProfileRevision>(
+      // The OCC guard blocks a stale overwrite, but a network retry of the same
+      // Apply still appends a duplicate revision unless the server can dedup it —
+      // so send a fresh Idempotency-Key per attempt (the route reads the header).
+      apiRequest<MetricProfileRevision>(
         `/metric-profiles/${encodeURIComponent(input.profile_id)}/revisions`,
         {
-          selected_metric_codes: input.selected_metric_codes,
-          is_locked: input.is_locked,
-          expected_profile_revision_id: input.expected_profile_revision_id,
+          method: "POST",
+          headers: { "Idempotency-Key": crypto.randomUUID() },
+          body: {
+            selected_metric_codes: input.selected_metric_codes,
+            is_locked: input.is_locked,
+            expected_profile_revision_id: input.expected_profile_revision_id,
+          },
         },
       ),
     onSuccess: () => {

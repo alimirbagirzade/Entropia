@@ -215,6 +215,10 @@ describe("Panel / Management / Logs page", () => {
     // OCC: the body carries the registry row's version as the expected head.
     const body = JSON.parse(String((patchCall?.[1] as RequestInit).body));
     expect(body).toEqual({ target_role: "supervisor", expected_head_revision_id: 3 });
+    // GAP-13: the PATCH also carries a fresh Idempotency-Key so a retry dedups to
+    // a single role change (and one audit event) despite the OCC guard.
+    const patchHeaders = (patchCall?.[1] as RequestInit).headers as Record<string, string>;
+    expect(patchHeaders["Idempotency-Key"]).toBeTruthy();
   });
 
   it("applies a family filter as a server-side query parameter", async () => {

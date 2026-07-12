@@ -7,6 +7,7 @@ COMPOSE := docker compose
 
 .PHONY: help bootstrap update up down restart logs ps migrate revision \
         backend-install backend-dev backend-test backend-lint backend-format \
+        openapi openapi-check \
         frontend-install frontend-dev frontend-build frontend-lint test smoke clean nuke
 
 help: ## Show this help
@@ -54,6 +55,12 @@ backend-lint: ## Ruff + mypy
 
 backend-format: ## Auto-format backend (ruff format)
 	cd backend && uv run ruff format . && uv run ruff check --fix .
+
+openapi: ## Regenerate the committed OpenAPI snapshot (docs/openapi.json)
+	cd backend && uv run python -m entropia.apps.api.openapi_export
+
+openapi-check: ## Fail if docs/openapi.json drifted from the app's schema
+	cd backend && uv run python -m entropia.apps.api.openapi_export --check
 
 frontend-install: ## Install frontend deps
 	cd frontend && npm install

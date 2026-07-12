@@ -39,6 +39,9 @@ from entropia.domain.identity.policy import ensure_can_edit, ensure_can_view, re
 from entropia.domain.lifecycle.enums import DeletionState
 from entropia.domain.mainboard.enums import MainboardItemKind
 from entropia.domain.strategy.compiler import (
+    CODE_ENTRY_DIRECTION_INCOHERENT,
+    CODE_ENTRY_REQUIRED_BLOCK_MISSING,
+    CODE_SIGNAL_SUPPORTING_REQUIREMENT_UNMET,
     CODE_SIZING_NOT_EXCLUSIVE,
     CODE_TRIGGER_CONDITION_REQUIRED,
     compute_config_hash,
@@ -57,6 +60,9 @@ from entropia.infrastructure.postgres.repositories import audit as audit_repo
 from entropia.infrastructure.postgres.repositories import mainboard as mb_repo
 from entropia.infrastructure.postgres.repositories import strategy as strat_repo
 from entropia.shared.errors import (
+    EntryDirectionIncoherentError,
+    EntryRequiredBlockMissingError,
+    SignalSupportingRequirementUnmetError,
     SizingMethodNotExclusiveError,
     StrategyDraftConflictError,
     StrategyDraftNotAttachedError,
@@ -480,6 +486,12 @@ def _raise_for_issues(issues: list[dict[str, Any]]) -> None:
         raise SizingMethodNotExclusiveError(details=issues)
     if CODE_TRIGGER_CONDITION_REQUIRED in codes:
         raise TriggerSourceConditionRequiredError(details=issues)
+    if CODE_ENTRY_REQUIRED_BLOCK_MISSING in codes:
+        raise EntryRequiredBlockMissingError(details=issues)
+    if CODE_SIGNAL_SUPPORTING_REQUIREMENT_UNMET in codes:
+        raise SignalSupportingRequirementUnmetError(details=issues)
+    if CODE_ENTRY_DIRECTION_INCOHERENT in codes:
+        raise EntryDirectionIncoherentError(details=issues)
     raise StrategyValidationFailedError(details=issues)
 
 

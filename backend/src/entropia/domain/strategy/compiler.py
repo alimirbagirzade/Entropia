@@ -19,10 +19,37 @@ from entropia.domain.strategy.config import StrategyConfig
 # Machine-coded semantic issue codes (map to typed API errors in the command).
 CODE_SIZING_NOT_EXCLUSIVE = "SIZING_METHOD_NOT_EXCLUSIVE"
 CODE_TRIGGER_CONDITION_REQUIRED = "TRIGGER_SOURCE_CONDITION_REQUIRED"
+CODE_ENTRY_REQUIRED_BLOCK_MISSING = "ENTRY_REQUIRED_BLOCK_MISSING"
+CODE_SIGNAL_SUPPORTING_REQUIREMENT_UNMET = "SIGNAL_SUPPORTING_REQUIREMENT_UNMET"
+CODE_ENTRY_DIRECTION_INCOHERENT = "ENTRY_DIRECTION_INCOHERENT"
 
 _CONDITION_BEARING_TRIGGERS = frozenset(
     {"indicator_native_trigger_plus_condition", "indicator_output_plus_condition"}
 )
+
+# Entry signal aggregation rules that need at least one active Supporting block to be
+# satisfiable (doc 02 §3, line 758). ``required_indicator_blocks_only`` needs none.
+_SUPPORTING_BEARING_SIGNAL_RULES = frozenset(
+    {
+        "required_plus_any_supporting",
+        "required_plus_min_supporting",
+        "required_plus_all_confirmations",
+    }
+)
+
+
+def _direction_incoherent(direction_mode: str, block_direction: str) -> bool:
+    """True iff a block signalling only ``block_direction`` can never fire under
+    ``direction_mode`` (mode=long vs block=short, or mode=short vs block=long).
+
+    A ``long_and_short`` mode or a ``long_and_short`` block always overlaps and is
+    coherent, so only the strictly-opposite directional pairing is dead config.
+    """
+    if direction_mode == "long":
+        return block_direction == "short"
+    if direction_mode == "short":
+        return block_direction == "long"
+    return False
 
 
 def validate_strategy_config(
@@ -75,6 +102,17 @@ def validate_semantics(config: StrategyConfig) -> list[dict[str, Any]]:
     * **Trigger-source-conditional** (doc 02 §3, AT-05): an enabled indicator
       block whose trigger source is a ``*_plus_condition`` variant must carry at
       least one enabled Condition block; a Native-only trigger needs none.
+    * **Entry Required block** (doc 02 §3, lines 758/806): at least one active
+      entry Indicator Block must be ``requirement="required"``.
+    * **Signal aggregation satisfiability** (doc 02 §3, line 758): a signal rule
+      that consumes Supporting blocks must have enough active Supporting blocks to
+      be satisfiable (``min_supporting_count`` for the min-supporting rule).
+    * **Direction coherence** (doc 02 §9, AT-08, line 1306): an active entry block
+      whose ``direction`` can never fire under the strategy's ``direction_mode``
+      (mode=long vs block=short, or mode=short vs block=long) is dead config.
+
+    Only entry logic is validated for the last three rules; exit logic depth is a
+    separate concern (doc 02 §4 placeholder semantics) and out of scope here.
     """
     issues: list[dict[str, Any]] = []
 
@@ -110,6 +148,60 @@ def validate_semantics(config: StrategyConfig) -> list[dict[str, Any]]:
                     "code": CODE_TRIGGER_CONDITION_REQUIRED,
                     "message": (
                         "Add at least one compatible Condition for the selected Trigger Source."
+                    ),
+                }
+            )
+
+    entry = config.position_entry_logic
+    active_entry_blocks = [block for block in entry.indicator_blocks if block.enabled]
+
+    # Entry Required block: the entry signal graph is invalid if no active block is
+    # Required (doc 02 §3, lines 758/806). A structurally-valid config guarantees >=1
+    # active block, so the failure here is a graph with only Supporting blocks.
+    if active_entry_blocks and not any(
+        block.requirement == "required" for block in active_entry_blocks
+    ):
+        issues.append(
+            {
+                "field": "position_entry_logic.indicator_blocks",
+                "code": CODE_ENTRY_REQUIRED_BLOCK_MISSING,
+                "message": "At least one active entry Indicator Block must be Required.",
+            }
+        )
+
+    # Signal aggregation satisfiability: a Supporting-bearing rule must have enough
+    # active Supporting blocks to ever be satisfiable (doc 02 §3, line 758).
+    signal_rule = entry.signal_block.rule
+    if signal_rule in _SUPPORTING_BEARING_SIGNAL_RULES:
+        supporting = [block for block in active_entry_blocks if block.requirement == "supporting"]
+        required_support = 1
+        if signal_rule == "required_plus_min_supporting":
+            required_support = entry.signal_block.min_supporting_count or 1
+        if len(supporting) < required_support:
+            issues.append(
+                {
+                    "field": "position_entry_logic.signal_block",
+                    "code": CODE_SIGNAL_SUPPORTING_REQUIREMENT_UNMET,
+                    "message": (
+                        f"This signal rule needs at least {required_support} active "
+                        f"Supporting entry Indicator Block(s); found {len(supporting)}."
+                    ),
+                }
+            )
+
+    # Direction coherence: an active block that can never fire under the strategy's
+    # direction mode is dead config (doc 02 §9, AT-08, line 1306).
+    for index, block in enumerate(entry.indicator_blocks):
+        if not block.enabled:
+            continue
+        if _direction_incoherent(entry.direction_mode, block.direction):
+            issues.append(
+                {
+                    "field": f"position_entry_logic.indicator_blocks.{index}.direction",
+                    "code": CODE_ENTRY_DIRECTION_INCOHERENT,
+                    "message": (
+                        "This Indicator Block's direction can never fire under the "
+                        "strategy's direction mode."
                     ),
                 }
             )

@@ -11,7 +11,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { api } from "./apiClient";
+import { api, apiRequest } from "./apiClient";
 
 // ---------------------------------------------------------------------------
 // Wire types (mirror backend application/queries projections)
@@ -201,6 +201,75 @@ export interface ResultMetricsView {
   metrics: MetricCell[];
 }
 
+// ---------------------------------------------------------------------------
+// Result artifact drill-down + export (doc 15 §3.2, §5, §7)
+// ---------------------------------------------------------------------------
+
+// Queryable immutable result artifacts (backend domain/backtest/artifacts.py
+// ArtifactType). The drill-down is server-paginated with an opaque keyset cursor
+// — the client never offsets or re-orders (doc 15 §7).
+export const RESULT_ARTIFACT_KINDS = [
+  "trade_ledger",
+  "equity_curve",
+  "signal_events",
+  "diagnostics",
+] as const;
+
+export type ResultArtifactKind = (typeof RESULT_ARTIFACT_KINDS)[number];
+
+// One Trade Ledger row is a trade ROOT (backend project_row): fills/scaling legs
+// never become separate rows, so a page never double-counts (doc 15 §3.2, §14).
+// Prices/PnL arrive as decimal strings (or null) — rendered verbatim, never
+// re-computed; a null cell shows an em dash, never a fabricated 0 (L4).
+export interface TradeLedgerRow {
+  seq: number;
+  entry_time: string;
+  exit_time: string | null;
+  direction: string;
+  entry_price: string | null;
+  exit_price: string | null;
+  pnl: string | null;
+  exit_reason: string | null;
+}
+
+export interface ResultArtifactPage<T> {
+  result_id: string;
+  artifact_type: string;
+  items: T[];
+  next_cursor: string | null;
+}
+
+// Export contract (backend domain/backtest/export.py). The label is V18 wording;
+// the value is the authoritative wire enum. `summary` has no drill-down list but
+// is exportable (doc 15 §3.2 Data Export).
+export const EXPORT_TYPES = [
+  { value: "trade_ledger", label: "Trade Ledger" },
+  { value: "equity_curve", label: "Equity Curve" },
+  { value: "signal_events", label: "Signal Events" },
+  { value: "diagnostics", label: "Diagnostics" },
+  { value: "summary", label: "Summary" },
+] as const;
+
+export const EXPORT_FORMATS = ["csv", "json", "parquet"] as const;
+
+export type ExportFormatValue = (typeof EXPORT_FORMATS)[number];
+
+// A schema-versioned DERIVATIVE of one immutable Result (doc 15 §9.1). The bytes
+// live in object storage; this metadata row carries the checksum + provenance
+// (source manifest hash) + row_count the UI surfaces after a request.
+export interface ResultExport {
+  export_id: string;
+  result_id: string;
+  export_type: string;
+  export_format: string;
+  source_manifest_hash: string;
+  object_key: string;
+  checksum: string;
+  schema_version: string;
+  row_count: number;
+  status: string;
+}
+
 // Canonical server sort keys (backend domain/backtest/history.py::HistorySort)
 // paired with their V18 dropdown labels. The wire enum is authoritative.
 export const HISTORY_SORTS = [
@@ -339,6 +408,34 @@ export function useResultMetrics(resultId: string | null) {
   });
 }
 
+// One keyset page of a result's immutable artifact (doc 15 §7). Lives under the
+// ["backtests"] prefix so the SSE sweep covers it; a Result is immutable, so the
+// page is long-lived (staleTime) and `placeholderData` keeps the current page
+// mounted across a cursor flip. The opaque cursor is server-issued — the client
+// only threads it back, never forges an offset.
+export function useResultArtifact<T>(
+  resultId: string | null,
+  kind: ResultArtifactKind,
+  cursor: string | null,
+) {
+  return useQuery({
+    queryKey: ["backtests", "artifact", resultId, kind, cursor],
+    queryFn: () => {
+      const params = new URLSearchParams();
+      if (cursor !== null) params.set("cursor", cursor);
+      const query = params.toString();
+      return api.get<ResultArtifactPage<T>>(
+        `/backtest-results/${encodeURIComponent(resultId ?? "")}/artifacts/${kind}${
+          query ? `?${query}` : ""
+        }`,
+      );
+    },
+    enabled: resultId !== null,
+    staleTime: RESULT_STALE_TIME_MS,
+    placeholderData: (previous) => previous,
+  });
+}
+
 // Compare is a READ over two immutable results — POST is only the transport
 // for the id pair (doc 16 §8.3). Selection order is preserved: columns A/B
 // mirror the order the user picked, and the client never re-ranks.
@@ -398,6 +495,33 @@ export function useSoftDeleteResult() {
       ),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["backtests"] });
+    },
+  });
+}
+
+// Materialize a schema-versioned export from an immutable Result (doc 15 §5, §7).
+// The export is a derivative — it never mutates the Result or its artifact_counts
+// — so only ["audit"] is swept (the command emits export_requested/completed). A
+// fresh Idempotency-Key per attempt keeps a retry a distinct decision; the server
+// dedups an in-flight retry of the SAME key to the same export (doc 15 §11).
+export function useCreateResultExport() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      resultId: string;
+      exportType: string;
+      exportFormat: ExportFormatValue;
+    }) =>
+      apiRequest<ResultExport>(
+        `/backtest-results/${encodeURIComponent(input.resultId)}/exports`,
+        {
+          method: "POST",
+          body: { export_type: input.exportType, export_format: input.exportFormat },
+          headers: { "Idempotency-Key": crypto.randomUUID() },
+        },
+      ),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["audit"] });
     },
   });
 }

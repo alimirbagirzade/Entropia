@@ -174,8 +174,15 @@ describe("RUN & Backtest Results page", () => {
 
   it("deep-links an immutable result via ?result=", async () => {
     stubApi({
-      // Route-aware order: the metrics fragment must come first — the detail
-      // fragment is a substring of the metrics URL.
+      // Route-aware order: most-specific fragment first. The artifacts URL
+      // contains the detail fragment, and the metrics URL contains the detail
+      // fragment — so both must precede the bare detail entry.
+      "GET /backtest-results/res_1/artifacts/trade_ledger": {
+        result_id: "res_1",
+        artifact_type: "trade_ledger",
+        items: [],
+        next_cursor: null,
+      },
       "GET /backtest-results/res_1/metrics": RESULT_METRICS_VIEW,
       "GET /backtest-results/res_1": RESULT_DETAIL,
     });

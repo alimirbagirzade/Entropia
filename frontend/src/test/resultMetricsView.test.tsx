@@ -60,6 +60,15 @@ const HYDRATED = {
   ],
 };
 
+// The Trade List section always drills the trade_ledger artifact; these tests
+// exercise the Metrics section, so an empty page keeps that call satisfied.
+const TRADE_LEDGER_EMPTY = {
+  result_id: "res_9",
+  artifact_type: "trade_ledger",
+  items: [],
+  next_cursor: null,
+};
+
 function renderDetail() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
@@ -77,7 +86,10 @@ describe("ResultDetail profile-hydrated metrics", () => {
   });
 
   it("rebinds the Metrics section to the resolved-profile projection", async () => {
-    stubApi({ "GET /backtest-results/res_9/metrics": HYDRATED });
+    stubApi({
+      "GET /backtest-results/res_9/artifacts/trade_ledger": TRADE_LEDGER_EMPTY,
+      "GET /backtest-results/res_9/metrics": HYDRATED,
+    });
     renderDetail();
 
     expect(
@@ -93,6 +105,7 @@ describe("ResultDetail profile-hydrated metrics", () => {
 
   it("labels the System Default profile without a lock marker", async () => {
     stubApi({
+      "GET /backtest-results/res_9/artifacts/trade_ledger": TRADE_LEDGER_EMPTY,
       "GET /backtest-results/res_9/metrics": {
         ...HYDRATED,
         profile: {
@@ -112,6 +125,7 @@ describe("ResultDetail profile-hydrated metrics", () => {
 
   it("falls back to the persisted rows when the profile view is unavailable", async () => {
     stubApi({
+      "GET /backtest-results/res_9/artifacts/trade_ledger": TRADE_LEDGER_EMPTY,
       "GET /backtest-results/res_9/metrics": () => {
         throw new Error("boom");
       },

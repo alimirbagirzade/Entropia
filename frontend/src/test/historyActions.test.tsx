@@ -169,6 +169,10 @@ describe("Results History compare & soft-delete", () => {
     fireEvent.click(screen.getByRole("button", { name: "Confirm delete" }));
 
     await waitFor(() => expect(deleteCalls()).toHaveLength(1));
+    // GAP-13: the soft-delete carries a fresh Idempotency-Key so the server can
+    // dedup a retry to a single delete (the route reads the header).
+    const deleteHeaders = (deleteCalls()[0][1] as RequestInit).headers as Record<string, string>;
+    expect(deleteHeaders["Idempotency-Key"]).toBeTruthy();
     // The ["backtests"] invalidation refetches the index; the deleted row is gone.
     await waitFor(() => expect(screen.queryByText("res_1")).not.toBeInTheDocument());
   });

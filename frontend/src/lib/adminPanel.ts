@@ -11,7 +11,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { api } from "./apiClient";
+import { api, apiRequest } from "./apiClient";
 
 // ---------------------------------------------------------------------------
 // Wire types (mirror backend application/queries/{user_registry,log_projection,
@@ -307,10 +307,17 @@ export function useAssignRole() {
       expected_head_revision_id: number;
       reason?: string | null;
     }) =>
-      api.patch<AssignRoleResult>(`/admin/users/${encodeURIComponent(input.user_id)}/role`, {
-        target_role: input.target_role,
-        expected_head_revision_id: input.expected_head_revision_id,
-        ...(input.reason ? { reason: input.reason } : {}),
+      // Body-form OCC (expected_head_revision_id) blocks a stale overwrite; a
+      // fresh Idempotency-Key additionally dedups a network retry to one role
+      // change instead of two audit events (the route reads the header).
+      apiRequest<AssignRoleResult>(`/admin/users/${encodeURIComponent(input.user_id)}/role`, {
+        method: "PATCH",
+        headers: { "Idempotency-Key": crypto.randomUUID() },
+        body: {
+          target_role: input.target_role,
+          expected_head_revision_id: input.expected_head_revision_id,
+          ...(input.reason ? { reason: input.reason } : {}),
+        },
       }),
     onSuccess: () => {
       // The registry row changed AND the command emitted an audit event.

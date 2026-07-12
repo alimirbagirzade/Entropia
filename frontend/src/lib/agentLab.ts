@@ -246,11 +246,13 @@ function invalidateLab(queryClient: ReturnType<typeof useQueryClient>): void {
 }
 
 // Pause/Resume/Stop carry the runtime row_version as an If-Match OCC token so a
-// stale tab gets a 409 instead of silently clobbering a concurrent control.
+// stale tab gets a 409 instead of silently clobbering a concurrent control. A
+// fresh Idempotency-Key per attempt lets the server dedup a network retry to
+// the same control instead of applying it twice (the routes read the header).
 function postWithIfMatch<T>(path: string, rowVersion: number): Promise<T> {
   return apiRequest<T>(path, {
     method: "POST",
-    headers: { "If-Match": String(rowVersion) },
+    headers: { "If-Match": String(rowVersion), "Idempotency-Key": crypto.randomUUID() },
   });
 }
 
@@ -262,10 +264,16 @@ export function useQueueDirective() {
       priority: DirectivePriority;
       related_task_id?: string | null;
     }) =>
-      api.post<DirectiveAdmission>("/agent-directives", {
-        text: input.text,
-        priority: input.priority,
-        related_task_id: input.related_task_id ?? null,
+      // 202 admission with no OCC head to guard — a fresh Idempotency-Key is the
+      // only thing keeping a network retry from queuing a second directive.
+      apiRequest<DirectiveAdmission>("/agent-directives", {
+        method: "POST",
+        headers: { "Idempotency-Key": crypto.randomUUID() },
+        body: {
+          text: input.text,
+          priority: input.priority,
+          related_task_id: input.related_task_id ?? null,
+        },
       }),
     onSuccess: () => invalidateLab(queryClient),
   });
@@ -275,9 +283,14 @@ export function useSendLabMessage() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: { text: string; related_task_id?: string | null }) =>
-      api.post<LabMessageResponse>("/lab/messages", {
-        text: input.text,
-        related_task_id: input.related_task_id ?? null,
+      // No OCC head — a fresh Idempotency-Key dedups a retry to one message.
+      apiRequest<LabMessageResponse>("/lab/messages", {
+        method: "POST",
+        headers: { "Idempotency-Key": crypto.randomUUID() },
+        body: {
+          text: input.text,
+          related_task_id: input.related_task_id ?? null,
+        },
       }),
     onSuccess: () => invalidateLab(queryClient),
   });

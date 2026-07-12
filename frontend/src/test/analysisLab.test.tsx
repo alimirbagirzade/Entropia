@@ -215,6 +215,13 @@ describe("Analysis Lab page", () => {
       priority: "high",
       related_task_id: null,
     });
+    // GAP-13: the 202 admission has no OCC head — a fresh Idempotency-Key is the
+    // only guard that dedups a network retry to a single directive.
+    const directiveHeaders = (directiveCall?.[1] as RequestInit).headers as Record<
+      string,
+      string
+    >;
+    expect(directiveHeaders["Idempotency-Key"]).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Pause at next safe checkpoint" }));
     await waitFor(() => {
@@ -225,6 +232,8 @@ describe("Analysis Lab page", () => {
       // OCC: the pause admission carries the runtime row_version as If-Match.
       const headers = (pauseCall?.[1] as RequestInit).headers as Record<string, string>;
       expect(headers["If-Match"]).toBe("4");
+      // GAP-13: it also carries a fresh Idempotency-Key so a retry dedups.
+      expect(headers["Idempotency-Key"]).toBeTruthy();
     });
   });
 

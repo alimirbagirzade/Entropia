@@ -153,6 +153,19 @@ export const LOG_SEVERITIES = ["info", "warning", "error"] as const;
 
 export const LOG_ACTOR_TYPES = ["human", "system_agent", "system"] as const;
 
+export const LOG_RESOURCE_TYPES = [
+  "user",
+  "strategy",
+  "package_revision",
+  "dataset_revision",
+  "backtest_run",
+  "backtest_result",
+  "artifact",
+  "manual_document",
+  "allocation_plan",
+  "system",
+] as const;
+
 // Badge tones only — the wire severity stays a plain string.
 export const SEVERITY_TONES: Record<string, "ok" | "warn" | "down" | "neutral"> = {
   info: "neutral",
@@ -161,17 +174,25 @@ export const SEVERITY_TONES: Record<string, "ok" | "warn" | "down" | "neutral"> 
 };
 
 export interface LogFilters {
+  from: string | null;
+  to: string | null;
   family: LogFamily;
   severity: string | null;
   actor_type: string | null;
+  actor_id: string | null;
+  resource_type: string | null;
   q: string | null;
   correlation_id: string | null;
 }
 
 export const DEFAULT_LOG_FILTERS: LogFilters = {
+  from: null,
+  to: null,
   family: "all",
   severity: null,
   actor_type: null,
+  actor_id: null,
+  resource_type: null,
   q: null,
   correlation_id: null,
 };
@@ -218,18 +239,26 @@ export function useAdminLogs(filters: LogFilters, cursor: string | null) {
     queryKey: [
       "audit",
       "logs",
+      filters.from,
+      filters.to,
       filters.family,
       filters.severity,
       filters.actor_type,
+      filters.actor_id,
+      filters.resource_type,
       filters.q,
       filters.correlation_id,
       cursor,
     ],
     queryFn: () => {
       const params = new URLSearchParams();
+      if (filters.from) params.set("from", filters.from);
+      if (filters.to) params.set("to", filters.to);
       if (filters.family !== "all") params.set("family", filters.family);
       if (filters.severity) params.set("severity", filters.severity);
       if (filters.actor_type) params.set("actor_type", filters.actor_type);
+      if (filters.actor_id) params.set("actor_id", filters.actor_id);
+      if (filters.resource_type) params.set("resource_type", filters.resource_type);
       if (filters.q) params.set("q", filters.q);
       if (filters.correlation_id) params.set("correlation_id", filters.correlation_id);
       if (cursor !== null) params.set("cursor", cursor);

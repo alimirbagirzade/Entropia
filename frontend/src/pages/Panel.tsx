@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 
 import { EmptyState } from "@/components/EmptyState";
 import { ErrorState } from "@/components/ErrorState";
@@ -9,6 +10,7 @@ import {
   DEFAULT_LOG_FILTERS,
   LOG_ACTOR_TYPES,
   LOG_FAMILIES,
+  LOG_RESOURCE_TYPES,
   LOG_SEVERITIES,
   SEVERITY_TONES,
   useAdminLogs,
@@ -431,8 +433,12 @@ function RoleMatrixCard() {
 
 function LogsCard() {
   const [filters, setFilters] = useState<LogFilters>(DEFAULT_LOG_FILTERS);
+  const [draftFrom, setDraftFrom] = useState("");
+  const [draftTo, setDraftTo] = useState("");
+  const [draftActorId, setDraftActorId] = useState("");
   const [draftQ, setDraftQ] = useState("");
   const [draftCorrelation, setDraftCorrelation] = useState("");
+  const [filterError, setFilterError] = useState<string | null>(null);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const pager = useCursorStack();
   const logs = useAdminLogs(filters, pager.cursor);
@@ -444,7 +450,17 @@ function LogsCard() {
 
   const onSearch = (event: FormEvent) => {
     event.preventDefault();
+    const from = draftFrom ? new Date(draftFrom).toISOString() : null;
+    const to = draftTo ? new Date(draftTo).toISOString() : null;
+    if (from && to && from > to) {
+      setFilterError("From must be earlier than or equal to To.");
+      return;
+    }
+    setFilterError(null);
     applyFilter({
+      from,
+      to,
+      actor_id: draftActorId.trim() || null,
       q: draftQ.trim() || null,
       correlation_id: draftCorrelation.trim() || null,
     });
@@ -456,6 +472,24 @@ function LogsCard() {
         Logs
       </h3>
       <form onSubmit={onSearch} style={{ display: "flex", flexWrap: "wrap", gap: 12, marginBottom: 12 }}>
+        <label htmlFor="log-from">
+          From{" "}
+          <input
+            id="log-from"
+            type="datetime-local"
+            value={draftFrom}
+            onChange={(event) => setDraftFrom(event.target.value)}
+          />
+        </label>
+        <label htmlFor="log-to">
+          To{" "}
+          <input
+            id="log-to"
+            type="datetime-local"
+            value={draftTo}
+            onChange={(event) => setDraftTo(event.target.value)}
+          />
+        </label>
         <label htmlFor="log-family">
           Family{" "}
           <select
@@ -500,6 +534,30 @@ function LogsCard() {
             ))}
           </select>
         </label>
+        <label htmlFor="log-actor-id">
+          Actor ID{" "}
+          <input
+            id="log-actor-id"
+            value={draftActorId}
+            onChange={(event) => setDraftActorId(event.target.value)}
+            placeholder="principal id"
+          />
+        </label>
+        <label htmlFor="log-resource-type">
+          Resource type{" "}
+          <select
+            id="log-resource-type"
+            value={filters.resource_type ?? ""}
+            onChange={(event) => applyFilter({ resource_type: event.target.value || null })}
+          >
+            <option value="">all</option>
+            {LOG_RESOURCE_TYPES.map((resourceType) => (
+              <option key={resourceType} value={resourceType}>
+                {resourceType.replace(/_/g, " ")}
+              </option>
+            ))}
+          </select>
+        </label>
         <label htmlFor="log-q">
           Search{" "}
           <input
@@ -522,6 +580,11 @@ function LogsCard() {
           Search
         </button>
       </form>
+      {filterError ? (
+        <p role="alert" className="error-text">
+          {filterError}
+        </p>
+      ) : null}
       {logs.isLoading ? (
         <Loading label="Loading logs…" />
       ) : logs.isError ? (
@@ -633,6 +696,11 @@ function LogDetail({ eventId, onClose }: { eventId: string; onClose: () => void 
               {detail.data.technical.target_revision_id ?? "—"}
             </dd>
           </dl>
+          {detail.data.subject_deleted ? (
+            <p role="status">
+              Source is deleted. <Link to="/trash">See Trash.</Link>
+            </p>
+          ) : null}
           {detail.data.causation_event ? (
             <p>
               Caused by <code>{detail.data.causation_event.event_kind}</code> (

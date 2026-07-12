@@ -232,6 +232,54 @@ describe("Panel / Management / Logs page", () => {
     });
   });
 
+  it("sends time, resource and actor identity filters while omitting empty values", async () => {
+    const fetchMock = stubApi(BASE_ROUTES);
+    renderPage();
+    await screen.findByText("alice");
+
+    const initialLogCall = fetchMock.mock.calls.find(([url]) =>
+      String(url).endsWith("/admin/logs"),
+    );
+    expect(initialLogCall).toBeDefined();
+
+    fireEvent.change(screen.getByLabelText(/From/), {
+      target: { value: "2026-07-06T09:00" },
+    });
+    fireEvent.change(screen.getByLabelText(/To/), {
+      target: { value: "2026-07-06T11:00" },
+    });
+    fireEvent.change(screen.getByLabelText(/Actor ID/), { target: { value: "  u_9  " } });
+    fireEvent.change(screen.getByLabelText(/Resource type/), {
+      target: { value: "backtest_run" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+
+    await waitFor(() => {
+      const filtered = fetchMock.mock.calls
+        .map(([url]) => new URL(String(url), "http://entropia.test"))
+        .find((url) => url.searchParams.get("actor_id") === "u_9");
+      expect(filtered?.searchParams.get("resource_type")).toBe("backtest_run");
+      expect(filtered?.searchParams.get("from")).toMatch(/Z$/);
+      expect(filtered?.searchParams.get("to")).toMatch(/Z$/);
+      expect(filtered?.searchParams.has("q")).toBe(false);
+      expect(filtered?.searchParams.has("correlation_id")).toBe(false);
+    });
+  });
+
+  it("shows the retained-event Trash affordance for a deleted source", async () => {
+    stubApi({
+      ...BASE_ROUTES,
+      "GET /admin/logs/evt_1": { ...LOG_DETAIL, subject_deleted: true },
+    });
+    renderPage();
+    await screen.findByText("role assigned");
+
+    fireEvent.click(screen.getByRole("button", { name: "Detail" }));
+
+    const trashLink = await screen.findByRole("link", { name: "See Trash." });
+    expect(trashLink).toHaveAttribute("href", "/trash");
+  });
+
   it("opens the event detail with state transition and correlation chain", async () => {
     stubApi(BASE_ROUTES);
     renderPage();

@@ -26,7 +26,11 @@ from entropia.application.queries import backtest_run as backtest_query
 from entropia.application.queries import mainboard as mb_query
 from entropia.domain.identity import Actor
 from entropia.domain.lifecycle.enums import PrincipalType, Role
-from entropia.domain.market_data.enums import MarketDataType, ResolutionKind
+from entropia.domain.market_data.enums import (
+    MarketDataType,
+    MarketRevisionState,
+    ResolutionKind,
+)
 from entropia.infrastructure.postgres.models import (
     BacktestResult,
     BacktestRun,
@@ -166,6 +170,8 @@ async def _ready_composition(
     if base_tf is not None:
         market_rev.resolution_kind = ResolutionKind.BAR
         market_rev.resolution_value = base_tf
+    # GAP-01: readiness now requires the pinned market revision to be ACTIVE+APPROVED.
+    market_rev.revision_state = MarketRevisionState.APPROVED
     await session.flush()
     md_repo.add_processed_asset(
         session,

@@ -45,12 +45,15 @@ from entropia.domain.capability.baseline import initial_dependency_snapshot
 from entropia.domain.capability.enums import GRAPHIC_VIEW, ActivationGate
 from entropia.domain.identity import Actor
 from entropia.domain.lifecycle.enums import PrincipalType, Role
+from entropia.domain.market_data.enums import MarketDataType, MarketRevisionState
 from entropia.infrastructure.postgres.models import (
     AgentEvent,
     AgentRuntime,
     AgentToolCall,
     BacktestRun,
+    EntityRegistry,
     Job,
+    MarketDatasetRevision,
     Principal,
     ViewDataset,
 )
@@ -138,6 +141,34 @@ async def _seed(session) -> None:
 async def _ready_composition(session, actor: Actor) -> str:
     mb = await mb_query.get_default_mainboard(session, actor)
     workspace_id = mb["workspace_id"]
+    # GAP-01: readiness requires the pinned market revision to be ACTIVE+APPROVED.
+    # The strategy payload pins md_root_parity / md_rev_parity, so seed a real
+    # approved market dataset revision the market-data validator can resolve.
+    if await session.get(EntityRegistry, "md_root_parity") is None:
+        root = EntityRegistry(
+            entity_id="md_root_parity",
+            entity_type="market_dataset",
+            owner_principal_id=None,
+            created_by_principal_id=None,
+            lifecycle_state="active",
+            current_revision_id=None,
+        )
+        session.add(root)
+        await session.flush()
+        session.add(
+            MarketDatasetRevision(
+                revision_id="md_rev_parity",
+                entity_id="md_root_parity",
+                revision_no=1,
+                market_data_type=MarketDataType.OHLCV,
+                revision_state=MarketRevisionState.APPROVED,
+                payload={},
+                content_hash="a" * 64,
+                created_by_principal_id=None,
+            )
+        )
+        root.current_revision_id = "md_rev_parity"
+        await session.flush()
     work_object = await mb_cmd.create_work_object(
         session, actor, object_kind="strategy", payload=_strategy_payload()
     )

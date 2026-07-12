@@ -50,6 +50,12 @@ jobs:
       - name: Mypy
         working-directory: backend
         run: uv run mypy src
+      - name: OpenAPI schema drift guard
+        working-directory: backend
+        # Regenerate the schema from the app and fail if docs/openapi.json is
+        # stale (DB-free). Validity of the document is asserted by the contract
+        # test suite. To fix a failure: `make openapi` and commit the snapshot.
+        run: uv run python -m entropia.apps.api.openapi_export --check
       - name: Alembic migrations apply cleanly
         working-directory: backend
         run: uv run alembic upgrade head

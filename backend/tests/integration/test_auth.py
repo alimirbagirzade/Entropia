@@ -18,11 +18,11 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from starlette.requests import Request
 
 from entropia.application.commands import auth as auth_cmd
-from entropia.application.commands.auth import hash_token
+from entropia.application.commands.auth import _username_hint, hash_token
 from entropia.apps.api.deps import request_context
 from entropia.config import get_settings
 from entropia.domain.lifecycle.enums import PrincipalType, Role
@@ -55,6 +55,26 @@ def _request(headers: dict[str, str]) -> Request:
         "headers": [(k.lower().encode(), v.encode()) for k, v in headers.items()],
     }
     return Request(scope)
+
+
+def _audit_factory(session: AsyncSession) -> async_sessionmaker[AsyncSession]:
+    """A committed-transaction factory bound to the SAME test engine, so the
+    LOGIN_FAILED audit that ``login`` writes in its OWN transaction (surviving
+    the request rollback) lands in this test's database — the production default
+    is the app's ``lru_cache`` factory, which is not safe across test loops."""
+    bind = session.bind
+    assert isinstance(bind, AsyncEngine)
+    return async_sessionmaker(bind=bind, expire_on_commit=False)
+
+
+async def _login_failed_events(session: AsyncSession) -> list[AuditEvent]:
+    """Read the committed ``auth.login_failed`` rows via a fresh session — proof
+    the audit persisted independently of the raising login path."""
+    async with _audit_factory(session)() as read:
+        result = await read.execute(
+            select(AuditEvent).where(AuditEvent.event_kind == "auth.login_failed")
+        )
+        return list(result.scalars().all())
 
 
 @pytest.fixture
@@ -120,11 +140,24 @@ async def test_login_issues_token_and_stores_only_digest(session: AsyncSession) 
 
 async def test_login_failure_paths_are_one_error(session: AsyncSession) -> None:
     signup = await auth_cmd.sign_up(session, username="alice", password=PASSWORD)
+    factory = _audit_factory(session)
 
     with pytest.raises(InvalidCredentialsError):
-        await auth_cmd.login(session, username="alice", password="wrong-password!", ttl_minutes=60)
+        await auth_cmd.login(
+            session,
+            username="alice",
+            password="wrong-password!",
+            ttl_minutes=60,
+            audit_session_factory=factory,
+        )
     with pytest.raises(InvalidCredentialsError):
-        await auth_cmd.login(session, username="nobody", password=PASSWORD, ttl_minutes=60)
+        await auth_cmd.login(
+            session,
+            username="nobody",
+            password=PASSWORD,
+            ttl_minutes=60,
+            audit_session_factory=factory,
+        )
 
     from entropia.infrastructure.postgres.models import HumanUser
 
@@ -132,7 +165,82 @@ async def test_login_failure_paths_are_one_error(session: AsyncSession) -> None:
     assert user is not None
     user.status = "locked"
     with pytest.raises(InvalidCredentialsError):
-        await auth_cmd.login(session, username="alice", password=PASSWORD, ttl_minutes=60)
+        await auth_cmd.login(
+            session,
+            username="alice",
+            password=PASSWORD,
+            ttl_minutes=60,
+            audit_session_factory=factory,
+        )
+
+
+async def test_login_failure_writes_login_failed_audit(session: AsyncSession) -> None:
+    # GAP-20 / Master M1 §11.2: a failed login MUST leave a LOGIN_FAILED audit —
+    # and it must survive the request rollback the 401 triggers (the row is read
+    # back here through a SEPARATE committed session).
+    await auth_cmd.sign_up(session, username="alice", password=PASSWORD)
+
+    with pytest.raises(InvalidCredentialsError):
+        await auth_cmd.login(
+            session,
+            username="alice",
+            password="wrong-password!",
+            ttl_minutes=60,
+            audit_session_factory=_audit_factory(session),
+        )
+
+    events = await _login_failed_events(session)
+    assert len(events) == 1
+    event = events[0]
+    assert event.severity == "warning"  # security-relevant, surfaces in triage
+    assert event.actor_principal_id is None  # never leaks the resolved user id
+    assert event.reason == "invalid_credentials"
+    assert event.target_entity_id is None  # no session was opened
+    # The only stored reference to the attempt is a truncated hash — never the
+    # plaintext username/email, and no credential detail at all (M1 §11.2).
+    hint = _username_hint("alice")
+    assert event.event_metadata == {"username_hint": hint}
+    assert len(hint) == 16 and hint != "alice"
+    assert "wrong-password!" not in str(event.event_metadata)
+
+
+async def test_login_failure_audit_is_uniform_across_reasons(session: AsyncSession) -> None:
+    # The audit row must be IDENTICAL across every rejection reason (unknown user
+    # / bad password / inactive account) so the trail never reveals whether the
+    # account exists — the audit-side mirror of the single-401 login contract.
+    signup = await auth_cmd.sign_up(session, username="alice", password=PASSWORD)
+    factory = _audit_factory(session)
+
+    async def _attempt(username: str, password: str) -> None:
+        with pytest.raises(InvalidCredentialsError):
+            await auth_cmd.login(
+                session,
+                username=username,
+                password=password,
+                ttl_minutes=60,
+                audit_session_factory=factory,
+            )
+
+    await _attempt("ghost", PASSWORD)  # unknown user
+    await _attempt("alice", "nope-nope-nope")  # known user, wrong password
+
+    from entropia.infrastructure.postgres.models import HumanUser
+
+    user = await session.get(HumanUser, signup["user_id"])
+    assert user is not None
+    user.status = "locked"  # verify succeeds, status check rejects
+    await session.flush()
+    await _attempt("alice", PASSWORD)
+
+    events = await _login_failed_events(session)
+    assert len(events) == 3
+    assert {e.event_kind for e in events} == {"auth.login_failed"}
+    assert {e.severity for e in events} == {"warning"}
+    assert {e.actor_principal_id for e in events} == {None}
+    assert {e.reason for e in events} == {"invalid_credentials"}
+    # The ONLY field that varies is the attempted-identifier reference.
+    hints = {(e.event_metadata or {})["username_hint"] for e in events}
+    assert hints == {_username_hint("ghost"), _username_hint("alice")}
 
 
 async def test_logout_revokes_and_is_retry_safe(session: AsyncSession) -> None:

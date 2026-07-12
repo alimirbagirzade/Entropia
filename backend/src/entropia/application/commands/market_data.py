@@ -18,6 +18,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from entropia.application.commands.deletion import soft_delete_registry_root
 from entropia.application.idempotency import run_idempotent
 from entropia.application.jobs.data_queue import MARKET_DATA_ANALYSIS
 from entropia.domain.identity import Actor
@@ -563,6 +564,61 @@ async def deprecate_market_dataset_revision(
         "entity_id": entity_id,
         "revision_id": revision_id,
         "revision_state": str(revision.revision_state),
+    }
+
+
+async def soft_delete_market_dataset(
+    session: AsyncSession,
+    actor: Actor,
+    *,
+    entity_id: str,
+    reason: str | None = None,
+    expected_row_version: int | None = None,
+) -> dict[str, Any]:
+    """Owner-or-Admin soft delete of a Market Dataset root (doc 11 §10.1, Flow F,
+    rule 13; MARKET_DATASET_SOFT_DELETED).
+
+    Removes the root from the active catalog + new-selector projections and writes
+    a Trash Entry; historical revision/manifest provenance and any run-pinned
+    references are preserved (no cascade). There is deliberately NO running-job
+    blocker: a completed or in-flight Run keeps its own pinned manifest (exact
+    revision id + digests), so soft delete only affects NEW selection (doc 11
+    §10.1, sibling of ``deprecate``). Restore / permanent delete stay Admin-only
+    via the Trash surface; a repeat delete is an idempotent no-op.
+    """
+    root = await _require_root(session, entity_id)
+    md_policy.ensure_can_edit_draft(actor, owner_principal_id=root.owner_principal_id)
+
+    display_name: str | None = None
+    if root.current_revision_id:
+        revision = await md_repo.get_revision(session, root.current_revision_id)
+        if revision is not None:
+            display_name = revision.title
+
+    transition = await soft_delete_registry_root(
+        session,
+        actor,
+        root,
+        reason=reason,
+        display_name=display_name,
+        expected_row_version=expected_row_version,
+    )
+    if transition is not None:
+        previous, new_state = transition
+        _audit_and_outbox(
+            session,
+            actor,
+            event_kind="market.dataset.soft_deleted",
+            entity_id=entity_id,
+            revision_id=root.current_revision_id,
+            previous_state=previous,
+            new_state=new_state,
+            action="soft_deleted",
+        )
+    return {
+        "entity_id": entity_id,
+        "deletion_state": str(root.deletion_state),
+        "display_name": display_name,
     }
 
 

@@ -116,6 +116,10 @@ class RevokeRequest(BaseModel):
     note: str | None = None
 
 
+class DeleteDatasetRequest(BaseModel):
+    reason: str | None = None
+
+
 class CompileBundleRequest(BaseModel):
     research_revision_ids: list[str]
     task_id: str | None = None
@@ -331,6 +335,25 @@ async def revoke(
         expected_row_version=row_version_from_if_match(if_match),
         idempotency_key=idempotency_key,
     )
+
+
+@router.delete("/research-datasets/{entity_id}", status_code=204)
+async def soft_delete(
+    entity_id: str,
+    body: DeleteDatasetRequest | None = None,
+    ctx: RequestContext = Depends(request_context),
+    if_match: str | None = Header(default=None, alias="If-Match"),
+) -> Response:
+    """Owner-or-Admin soft delete (doc 12 §7/§11). The V18 Research Data page has
+    no delete control (doc 12 §7); this is the domain/Agent-Gateway surface."""
+    await rd_cmd.soft_delete_research_dataset(
+        ctx.session,
+        ctx.actor,
+        entity_id=entity_id,
+        reason=body.reason if body else None,
+        expected_row_version=row_version_from_if_match(if_match),
+    )
+    return Response(status_code=204)
 
 
 @router.get("/research-datasets")

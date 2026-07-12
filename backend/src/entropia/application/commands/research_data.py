@@ -24,6 +24,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from entropia.application.commands.deletion import soft_delete_registry_root
 from entropia.application.idempotency import run_idempotent
 from entropia.application.jobs.data_queue import RESEARCH_DATA_ANALYSIS
 from entropia.application.queries.market_data import resolve_approved_market_data_bundle
@@ -660,6 +661,61 @@ async def revoke_research_dataset_approval(
         request_payload={"op": "revoke", "entity_id": entity_id, "revision_id": revision_id},
         operation=_op,
     )
+
+
+async def soft_delete_research_dataset(
+    session: AsyncSession,
+    actor: Actor,
+    *,
+    entity_id: str,
+    reason: str | None = None,
+    expected_row_version: int | None = None,
+) -> dict[str, Any]:
+    """Owner-or-Admin soft delete of a Research Dataset root (doc 12 §7/§11,
+    ``SoftDeleteResearchDatasetRoot``; RESEARCH_DATASET_SOFT_DELETED).
+
+    Removes the root from the active list and writes a Trash Entry; historical
+    Agent/Backtest manifests and any linked-market provenance stay intact (no
+    cascade, doc 12 §11). Like its market sibling there is NO running-job blocker:
+    references are pinned in the Run manifest, so soft delete only affects NEW
+    selection. Restore / permanent delete stay Admin-only via the Trash surface;
+    a repeat delete is an idempotent no-op. ``expected_row_version`` enforces the
+    doc 12 "expected root version current" precondition when supplied.
+    """
+    root = await _require_root(session, entity_id)
+    rd_policy.ensure_can_edit_draft(actor, owner_principal_id=root.owner_principal_id)
+
+    display_name: str | None = None
+    if root.current_revision_id:
+        revision = await rd_repo.get_revision(session, root.current_revision_id)
+        if revision is not None:
+            display_name = revision.display_name
+
+    transition = await soft_delete_registry_root(
+        session,
+        actor,
+        root,
+        reason=reason,
+        display_name=display_name,
+        expected_row_version=expected_row_version,
+    )
+    if transition is not None:
+        previous, new_state = transition
+        _audit_and_outbox(
+            session,
+            actor,
+            event_kind="research.dataset.soft_deleted",
+            entity_id=entity_id,
+            revision_id=root.current_revision_id,
+            previous_state=previous,
+            new_state=new_state,
+            action="soft_deleted",
+        )
+    return {
+        "entity_id": entity_id,
+        "deletion_state": str(root.deletion_state),
+        "display_name": display_name,
+    }
 
 
 def _ensure_time_policy_approvable(revision: ResearchDatasetRevision) -> None:

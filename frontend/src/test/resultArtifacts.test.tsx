@@ -81,6 +81,60 @@ const EXPORT_RECEIPT = {
   status: "completed",
 };
 
+// A run that fell back to the breakout proxy AND could not model the requested
+// sizing method — the two honest L4 warnings the Diagnostics card must surface.
+const DIAG_PAGE = {
+  result_id: "res_x",
+  artifact_type: "diagnostics",
+  items: [
+    {
+      diagnostic_id: "btdiag_1",
+      kind: "run_diagnostics",
+      content: {
+        engine_kind: "v1_bar_replay",
+        entry_model: "deterministic_bar_breakout_proxy_v1",
+        reproducibility_note:
+          "Deterministic bar-replay over the pinned market revision; real bars and " +
+          "protection stops, breakout entry proxy (indicator layer still stubbed).",
+        bars_processed: 500,
+        indicator_blocks: 0,
+        condition_blocks: 0,
+        decision_trace_count: 3,
+        warnings: [
+          "indicator_plan_empty_fallback_proxy",
+          "position_sizing_method_unsupported:formula_based",
+        ],
+      },
+      created_at: "2026-01-01T12:00:00+00:00",
+    },
+  ],
+  next_cursor: null,
+};
+
+// A clean run: real indicator triggers, no honesty flags.
+const DIAG_CLEAN = {
+  result_id: "res_x",
+  artifact_type: "diagnostics",
+  items: [
+    {
+      diagnostic_id: "btdiag_2",
+      kind: "run_diagnostics",
+      content: {
+        engine_kind: "v1_bar_replay",
+        entry_model: "builtin_indicator_native_trigger_v1",
+        reproducibility_note:
+          "Deterministic bar-replay over the pinned market revision; real bars, " +
+          "protection stops and built-in indicator native triggers.",
+        bars_processed: 800,
+        indicator_blocks: 2,
+        warnings: [],
+      },
+      created_at: "2026-01-02T12:00:00+00:00",
+    },
+  ],
+  next_cursor: null,
+};
+
 function renderDetail() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
@@ -101,6 +155,7 @@ describe("ResultDetail trade list + export", () => {
     stubApi({
       "GET /backtest-results/res_x/artifacts/trade_ledger": TRADE_PAGE,
       "GET /backtest-results/res_x/metrics": METRICS_VIEW,
+      "GET /backtest-results/res_x/artifacts/diagnostics": DIAG_PAGE,
     });
     renderDetail();
 
@@ -120,6 +175,7 @@ describe("ResultDetail trade list + export", () => {
     const fetchMock = stubApi({
       "GET /backtest-results/res_x/artifacts/trade_ledger": TRADE_PAGE,
       "GET /backtest-results/res_x/metrics": METRICS_VIEW,
+      "GET /backtest-results/res_x/artifacts/diagnostics": DIAG_PAGE,
     });
     renderDetail();
     await screen.findByText("long");
@@ -138,6 +194,7 @@ describe("ResultDetail trade list + export", () => {
     stubApi({
       "GET /backtest-results/res_x/artifacts/trade_ledger": EMPTY_PAGE,
       "GET /backtest-results/res_x/metrics": METRICS_VIEW,
+      "GET /backtest-results/res_x/artifacts/diagnostics": DIAG_PAGE,
     });
     renderDetail();
 
@@ -150,6 +207,7 @@ describe("ResultDetail trade list + export", () => {
     const fetchMock = stubApi({
       "GET /backtest-results/res_x/artifacts/trade_ledger": EMPTY_PAGE,
       "GET /backtest-results/res_x/metrics": METRICS_VIEW,
+      "GET /backtest-results/res_x/artifacts/diagnostics": DIAG_PAGE,
       "POST /backtest-results/res_x/exports": EXPORT_RECEIPT,
     });
     renderDetail();
@@ -170,5 +228,43 @@ describe("ResultDetail trade list + export", () => {
         headers: expect.objectContaining({ "Idempotency-Key": expect.any(String) }),
       }),
     );
+  });
+
+  it("surfaces the honest L4 diagnostic warnings and reproducibility note", async () => {
+    stubApi({
+      "GET /backtest-results/res_x/artifacts/trade_ledger": EMPTY_PAGE,
+      "GET /backtest-results/res_x/metrics": METRICS_VIEW,
+      "GET /backtest-results/res_x/artifacts/diagnostics": DIAG_PAGE,
+    });
+    renderDetail();
+
+    // The fallback-proxy warning is a human-readable line: the user is told the
+    // numbers came from a proxy, not real indicator signals (L4 — never hidden).
+    expect(
+      await screen.findByText(/breakout entry proxy, not real indicator signals/),
+    ).toBeInTheDocument();
+    // The unsupported-sizing warning keeps the specific method name.
+    expect(
+      screen.getByText(/Position sizing method "formula_based" is not modelled/),
+    ).toBeInTheDocument();
+    expect(screen.getByText("2 diagnostic warnings")).toBeInTheDocument();
+    // The reproducibility note states how the result was produced.
+    expect(
+      screen.getByText(/breakout entry proxy \(indicator layer still stubbed\)/),
+    ).toBeInTheDocument();
+  });
+
+  it("shows the clean state when the run produced no diagnostic warnings", async () => {
+    stubApi({
+      "GET /backtest-results/res_x/artifacts/trade_ledger": EMPTY_PAGE,
+      "GET /backtest-results/res_x/metrics": METRICS_VIEW,
+      "GET /backtest-results/res_x/artifacts/diagnostics": DIAG_CLEAN,
+    });
+    renderDetail();
+
+    expect(
+      await screen.findByText("No diagnostic warnings — the run produced no honesty flags."),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/built-in indicator native triggers/)).toBeInTheDocument();
   });
 });

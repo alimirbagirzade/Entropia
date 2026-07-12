@@ -38,7 +38,9 @@ from entropia.domain.identity.policy import ensure_can_view, require_authenticat
 from entropia.domain.lifecycle.enums import DeletionState
 from entropia.domain.mainboard.composition import CompositionMember, composition_hash
 from entropia.domain.mainboard.enums import MainboardItemKind
-from entropia.domain.readiness.issues import ExternalImportState, ReadinessItemInput
+from entropia.domain.market_data.enums import MarketRevisionState
+from entropia.domain.readiness.enums import ReadinessIssueCode, ReadinessScope, ReadinessSeverity
+from entropia.domain.readiness.issues import ExternalImportState, ReadinessIssue, ReadinessItemInput
 from entropia.domain.readiness.validators import evaluate_readiness
 from entropia.infrastructure.postgres.models import (
     EntityRegistry,
@@ -48,6 +50,7 @@ from entropia.infrastructure.postgres.models import (
 from entropia.infrastructure.postgres.repositories import allocation as alloc_repo
 from entropia.infrastructure.postgres.repositories import audit as audit_repo
 from entropia.infrastructure.postgres.repositories import mainboard as mb_repo
+from entropia.infrastructure.postgres.repositories import market_data as market_repo
 from entropia.infrastructure.postgres.repositories import readiness as readiness_repo
 from entropia.infrastructure.postgres.repositories import strategy as strat_repo
 from entropia.shared.errors import CompositionNotFoundError, CompositionStaleError
@@ -95,10 +98,12 @@ async def run_readiness_check(
         )
 
         items = await _build_item_inputs(session, enabled)
+        market_data_issues = await _resolve_market_data_issues(session, items)
         evaluation = evaluate_readiness(
             items,
             allocation_enabled=allocation_enabled,
             allocation_issues=allocation_issues,
+            market_data_issues=market_data_issues,
         )
 
         blocked_ids = {
@@ -226,6 +231,51 @@ async def _resolve_strategy_payload(
     if revision is None:
         return payload
     return dict(revision.payload)
+
+
+async def _resolve_market_data_issues(
+    session: AsyncSession, items: list[ReadinessItemInput]
+) -> list[ReadinessIssue]:
+    """Fail closed unless every strategy's exact market-data pin is usable.
+
+    A processed asset may exist before validation finishes, so asset presence is
+    not approval evidence. The pinned revision itself must be APPROVED and its
+    dataset root must still be ACTIVE (doc 11; doc 14 §9.2/§11).
+    """
+    issues: list[ReadinessIssue] = []
+    for item in items:
+        if not item.available or item.kind != MainboardItemKind.STRATEGY:
+            continue
+        data = item.payload.get("data")
+        revision_id = data.get("market_dataset_revision_id") if isinstance(data, dict) else None
+        revision = await market_repo.get_revision(session, str(revision_id or ""))
+        root = (
+            await market_repo.get_dataset_root(session, revision.entity_id)
+            if revision is not None
+            else None
+        )
+        if (
+            revision is not None
+            and revision.revision_state == MarketRevisionState.APPROVED
+            and root is not None
+            and root.deletion_state == DeletionState.ACTIVE
+        ):
+            continue
+        issues.append(
+            ReadinessIssue(
+                code=ReadinessIssueCode.MARKET_DATASET_NOT_APPROVED,
+                severity=ReadinessSeverity.BLOCKER,
+                scope=ReadinessScope.MARKET_DATA,
+                message="The pinned market dataset revision is not ACTIVE and APPROVED.",
+                remediation=(
+                    "Approve the pinned market dataset revision or select an approved revision, "
+                    "then re-run the check."
+                ),
+                field_path="data.market_dataset_revision_id",
+                scope_id=item.item_id,
+            )
+        )
+    return issues
 
 
 async def _resolve_external(

@@ -44,6 +44,7 @@ class ReadinessScope(StrEnum):
     COMPOSITION = "composition"
     LIFECYCLE = "lifecycle"
     STRATEGY = "strategy"
+    MARKET_DATA = "market_data"
     EXTERNAL_OBJECT = "external_object"
     PORTFOLIO_ALLOCATION = "portfolio_allocation"
 
@@ -68,6 +69,9 @@ class ReadinessIssueCode(StrEnum):
     CONDITION_PACKAGE_REQUIRED = "CONDITION_PACKAGE_REQUIRED"
     STRATEGY_NO_EXIT_OR_STOP = "STRATEGY_NO_EXIT_OR_STOP"
     EXECUTION_ASSUMPTIONS_DEFAULT = "EXECUTION_ASSUMPTIONS_DEFAULT"
+
+    # Market data (§9.2, §11 approved-only gate)
+    MARKET_DATASET_NOT_APPROVED = "MARKET_DATASET_NOT_APPROVED"
 
     # External working objects — Trading Signal / Trade Log (§5.1, §9.2, RC-07/RC-08)
     EXTERNAL_IMPORT_UNRESOLVED = "EXTERNAL_IMPORT_UNRESOLVED"

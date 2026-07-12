@@ -22,8 +22,11 @@ from entropia.application.queries import mainboard as mb_query
 from entropia.application.queries import readiness_check as readiness_query
 from entropia.domain.identity import Actor
 from entropia.domain.lifecycle.enums import PrincipalType, Role
+from entropia.domain.market_data.enums import MarketDataType, MarketRevisionState
 from entropia.infrastructure.postgres.models import (
+    EntityRegistry,
     MainboardCompositionSnapshot,
+    MarketDatasetRevision,
     Principal,
     ReadinessIssueRow,
     ReadyCheckReport,
@@ -45,6 +48,39 @@ async def _seed_principals(session) -> None:
     for pid in ("user_1", "user_2"):
         if await session.get(Principal, pid) is None:
             session.add(Principal(principal_id=pid, principal_type=PrincipalType.HUMAN))
+    await session.flush()
+
+
+async def _seed_market_revision(session, state: MarketRevisionState) -> None:
+    root = await session.get(EntityRegistry, "md_root_1")
+    if root is None:
+        root = EntityRegistry(
+            entity_id="md_root_1",
+            entity_type="market_dataset",
+            owner_principal_id="user_1",
+            created_by_principal_id="user_1",
+            lifecycle_state="active",
+            current_revision_id=None,
+        )
+        session.add(root)
+        await session.flush()
+        session.add(
+            MarketDatasetRevision(
+                revision_id="md_rev_1",
+                entity_id=root.entity_id,
+                revision_no=1,
+                market_data_type=MarketDataType.OHLCV,
+                revision_state=state,
+                payload={},
+                content_hash="a" * 64,
+                created_by_principal_id="user_1",
+            )
+        )
+        root.current_revision_id = "md_rev_1"
+    else:
+        revision = await session.get(MarketDatasetRevision, "md_rev_1")
+        assert revision is not None
+        revision.revision_state = state
     await session.flush()
 
 
@@ -97,6 +133,7 @@ async def _empty_composition(session, actor: Actor) -> str:
 
 
 async def _composition_with_strategy(session, actor: Actor) -> str:
+    await _seed_market_revision(session, MarketRevisionState.APPROVED)
     workspace_id = await _empty_composition(session, actor)
     work_object = await mb_cmd.create_work_object(
         session, actor, object_kind="strategy", payload=_strategy_payload()
@@ -172,6 +209,23 @@ async def test_rc02_valid_strategy_is_ready(session) -> None:
         )
     ).scalar_one()
     assert published >= 1
+
+
+async def test_unapproved_market_dataset_blocks_then_approved_passes(session) -> None:
+    await _seed_principals(session)
+    composition_id = await _composition_with_strategy(session, USER1)
+    await _seed_market_revision(session, MarketRevisionState.NEEDS_REVIEW)
+
+    blocked = await readiness_cmd.run_readiness_check(session, USER1, composition_id=composition_id)
+    assert blocked["state"] == "not_ready"
+    assert any(i["code"] == "MARKET_DATASET_NOT_APPROVED" for i in blocked["issues"])
+
+    await _seed_market_revision(session, MarketRevisionState.APPROVED)
+    approved = await readiness_cmd.run_readiness_check(
+        session, USER1, composition_id=composition_id
+    )
+    assert approved["state"] == "ready"
+    assert approved["issues"] == []
 
 
 # --------------------------------------------------------------------------- #

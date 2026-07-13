@@ -76,12 +76,10 @@ class CreatePackageState(StrEnum):
     CANDIDATE_FAILED = "candidate_failed"
     DRAFT_CREATED = "draft_created"
     VALIDATION_RUNNING = "validation_running"
-    EXPERIMENTAL = "experimental"
     ELIGIBLE_FOR_APPROVAL = "eligible_for_approval"
     REVISION_REQUIRED = "revision_required"
     APPROVED = "approved"
     REJECTED = "rejected"
-    SUPERSEDED = "superseded"
 
 
 class PrecheckScanStatus(StrEnum):

@@ -50,6 +50,7 @@ async def run_import(session: AsyncSession, job_id: str) -> dict[str, Any]:
     source_asset_id = str(payload.get("source_asset_id"))
     instrument_id = str(payload.get("instrument_id"))
     source_timezone = str(payload.get("source_timezone") or "UTC")
+    import_mapping = _coerce_mapping(payload.get("import_mapping"))
 
     asset = await ts_repo.get_source_asset(session, source_asset_id)
     if asset is None:
@@ -61,7 +62,11 @@ async def run_import(session: AsyncSession, job_id: str) -> dict[str, Any]:
     data = _read_bytes(asset.object_key)
     columns, rows = parse_delimited(data)
     outcome = normalize_signal_rows(
-        columns, rows, source_timezone=source_timezone, instrument_id=instrument_id
+        columns,
+        rows,
+        source_timezone=source_timezone,
+        instrument_id=instrument_id,
+        import_mapping=import_mapping,
     )
 
     content_hash = events_content_hash(outcome.accepted)
@@ -114,13 +119,27 @@ async def run_import(session: AsyncSession, job_id: str) -> dict[str, Any]:
         "accepted_count": outcome.accepted_count,
         "skipped_count": outcome.skipped_count,
         "blocker_code": outcome.blocker_code,
+        "mapping_hash": outcome.mapping_hash,
     }
     job.result_ref = result
     return result
 
 
+def _coerce_mapping(raw: Any) -> dict[str, str] | None:
+    """Read a ``{canonical_field: source_header}`` mapping from the durable payload.
+
+    The job payload is JSON, so an absent/malformed mapping degrades to ``None``
+    (no mapping) rather than raising — the parser then relies on exact/aliased
+    headers exactly as before.
+    """
+    if not isinstance(raw, dict):
+        return None
+    mapping = {str(k): str(v) for k, v in raw.items() if v is not None and str(v).strip()}
+    return mapping or None
+
+
 def _summary(outcome: ImportOutcome, source_timezone: str) -> dict[str, Any]:
-    return {
+    summary: dict[str, Any] = {
         "source_timezone": source_timezone,
         "instrument_id": outcome.instrument_id,
         "accepted_count": outcome.accepted_count,
@@ -132,6 +151,10 @@ def _summary(outcome: ImportOutcome, source_timezone: str) -> dict[str, Any]:
             else None
         ),
     }
+    if outcome.mapping_hash is not None:
+        summary["mapping_hash"] = outcome.mapping_hash
+        summary["resolved_mapping"] = outcome.resolved_mapping
+    return summary
 
 
 def _read_bytes(object_key: str) -> bytes:

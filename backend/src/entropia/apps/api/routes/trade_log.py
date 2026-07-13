@@ -36,6 +36,10 @@ class RequestImportBody(BaseModel):
     source_asset_id: str
     instrument_id: str
     source_timezone: str = "UTC"
+    # Optional {canonical_field: source_header} column mapping (doc 05 §5.2). Absent
+    # for exact/aliased canonical headers; required when a header is unmappable
+    # otherwise. The server never infers an ambiguous mapping.
+    import_mapping: dict[str, str] | None = None
 
 
 class CreateTradeLogBody(BaseModel):
@@ -79,6 +83,7 @@ async def request_import(
         source_asset_id=body.source_asset_id,
         instrument_id=body.instrument_id,
         source_timezone=body.source_timezone,
+        import_mapping=body.import_mapping,
         idempotency_key=idempotency_key,
     )
     # Dispatch the durable actor after the request tx commits (job row already durable).

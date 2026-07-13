@@ -797,6 +797,29 @@ class NoAcceptedTradeRecordsError(ValidationError):
     message = "No accepted trade records are available. Fix the source file or mapping."
 
 
+# --- Shared — TL/TS column mapping (doc 04 §5.1, doc 05 §5.2) ---
+
+
+class AmbiguousColumnMappingError(ValidationError):
+    """Two or more source columns alias to the same canonical field and no explicit
+    mapping disambiguates them (doc 04 §5.1, doc 05 §5.2). The server never infers an
+    ambiguous mapping; supply an explicit column mapping and re-import."""
+
+    code = "AMBIGUOUS_COLUMN_MAPPING"
+    message = (
+        "The source columns are ambiguous. Provide an explicit column mapping so the "
+        "canonical fields resolve to exactly one column each, then re-import."
+    )
+
+
+class InvalidColumnMappingError(ValidationError):
+    """The explicit column mapping references a source column that is not in the file
+    or an unknown canonical field (doc 04 §5.1, doc 05 §5.2)."""
+
+    code = "INVALID_COLUMN_MAPPING"
+    message = "The column mapping references a column or field that does not exist."
+
+
 # --------------------------------------------------------------------------- #
 # Stage 4a — Portfolio / Equity Allocation (doc 13 §10)                        #
 # --------------------------------------------------------------------------- #

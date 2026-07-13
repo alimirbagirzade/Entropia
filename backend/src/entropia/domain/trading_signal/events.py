@@ -22,6 +22,12 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from entropia.domain.importing.column_mapping import (
+    apply_rename,
+    mapping_hash,
+    rename_columns,
+    resolve_column_mapping,
+)
 from entropia.domain.trading_signal.enums import (
     NormalizedRevisionStatus,
     SignalDirection,
@@ -49,6 +55,64 @@ _DELIMITERS = (",", ";", "\t", "|")
 # Canonical inbound instrument columns (V1 accepts canonically-named files).
 _INSTRUMENT_COLUMNS = ("instrument_id", "instrument", "symbol")
 _LEGACY_COLUMNS = ("entry_time", "exit_time", "entry_price", "exit_price")
+
+# Canonical signal-event fields the normalizer consumes — the mappable catalog
+# (doc 04 §5.1).
+_CANONICAL_FIELDS = (
+    "source_record_id",
+    "event_time",
+    "available_time",
+    "direction",
+    "signal_type",
+    "suggested_entry_price",
+    "suggested_exit_price",
+    "confidence",
+    *_INSTRUMENT_COLUMNS,
+)
+
+# Built-in header-alias table (lowercased source header -> canonical signal field,
+# doc 04 §5.1). Only consulted when a canonical field is absent under its own
+# case-normalized name; two aliases for one absent field are AMBIGUOUS, never
+# inferred. Deliberately SIGNAL-flavored: a legacy Trade Log ledger column
+# (entry_time/exit_time/entry_price/exit_price) is NEVER auto-aliased into a signal
+# field, so a ledger file with no explicit mapping still fails closed to the Trade
+# Log flow (LEGACY_TRADE_LOG_SCHEMA, TS-06). Converting a ledger to a signal
+# requires an EXPLICIT mapping of the required signal fields.
+_COLUMN_ALIASES: dict[str, str] = {
+    "record_id": "source_record_id",
+    "signal_id": "source_record_id",
+    "external_id": "source_record_id",
+    "provider_record_id": "source_record_id",
+    "signal_time": "event_time",
+    "signal time": "event_time",
+    "event time": "event_time",
+    "timestamp": "event_time",
+    "generated_at": "event_time",
+    "created_at": "event_time",
+    "available time": "available_time",
+    "availability_time": "available_time",
+    "known_time": "available_time",
+    "visible_time": "available_time",
+    "published_at": "available_time",
+    "publish_time": "available_time",
+    "side": "direction",
+    "signal_direction": "direction",
+    "position_side": "direction",
+    "signal": "signal_type",
+    "event_type": "signal_type",
+    "action": "signal_type",
+    "type": "signal_type",
+    "suggested_entry": "suggested_entry_price",
+    "target_entry": "suggested_entry_price",
+    "suggested_exit": "suggested_exit_price",
+    "target_exit": "suggested_exit_price",
+    "score": "confidence",
+    "conf": "confidence",
+    "probability": "confidence",
+    "ticker": "symbol",
+    "market": "symbol",
+    "pair": "symbol",
+}
 
 _DIRECTION_ALIASES: dict[str, SignalDirection] = {
     "long": SignalDirection.LONG,
@@ -111,6 +175,8 @@ class ImportOutcome:
     earliest_available_time: datetime | None = None
     instrument_id: str | None = None
     blocker_code: str | None = None
+    mapping_hash: str | None = None
+    resolved_mapping: dict[str, str] | None = None
 
     @property
     def accepted_count(self) -> int:
@@ -149,25 +215,55 @@ def normalize_signal_rows(
     source_timezone: str,
     instrument_id: str,
     now: datetime | None = None,
+    import_mapping: dict[str, str] | None = None,
 ) -> ImportOutcome:
     """Normalize parsed rows into a time-safe event set (pure, deterministic).
 
     ``instrument_id`` is the root's canonical instrument scope; rows whose symbol
     disagrees are skipped (``INSTRUMENT_MISMATCH``). ``now`` seams the clock for the
-    future-event check (defaults to ``datetime.now(UTC)``). A file that looks like a
-    Trade Log ledger (entry/exit columns, no signal-event mapping) is a whole-file
-    blocker so the user is directed to the Trade Log flow (doc 04 §5.1, TS-06).
+    future-event check (defaults to ``datetime.now(UTC)``). Non-canonical headers are
+    first resolved via the header-alias table + an optional explicit
+    ``import_mapping`` (``{canonical_field: source_header}``, doc 04 §5.1); an
+    ambiguous/invalid mapping is a whole-file blocker and nothing is inferred. The
+    legacy-ledger check runs on the POST-mapping columns: a Trade Log ledger with no
+    explicit signal mapping is still a whole-file blocker directing the user to the
+    Trade Log flow (doc 04 §5.1, TS-06); an explicit mapping supplying the required
+    signal fields lets a legacy file be accepted as a Trading Signal.
     """
     clock = now if now is not None else datetime.now(UTC)
+    resolution = resolve_column_mapping(
+        columns,
+        canonical_fields=_CANONICAL_FIELDS,
+        alias_table=_COLUMN_ALIASES,
+        explicit_mapping=import_mapping,
+    )
+    if resolution.blocker_code is not None:
+        return ImportOutcome(
+            status=NormalizedRevisionStatus.FAILED,
+            blocker_code=resolution.blocker_code,
+            instrument_id=instrument_id,
+        )
+    columns = rename_columns(columns, resolution.rename)
+    rows = apply_rename(rows, resolution.rename)
+    mapping_evidence = mapping_hash(resolution.resolved) if resolution.applied else None
+    resolved_map = resolution.resolved if resolution.applied else None
+
     if _is_legacy_trade_log(columns):
         return ImportOutcome(
             status=NormalizedRevisionStatus.FAILED,
             blocker_code=BLOCKER_LEGACY_TRADE_LOG_SCHEMA,
             instrument_id=instrument_id,
+            mapping_hash=mapping_evidence,
+            resolved_mapping=resolved_map,
         )
 
     tz = _resolve_timezone(source_timezone)
-    outcome = ImportOutcome(status=NormalizedRevisionStatus.PENDING, instrument_id=instrument_id)
+    outcome = ImportOutcome(
+        status=NormalizedRevisionStatus.PENDING,
+        instrument_id=instrument_id,
+        mapping_hash=mapping_evidence,
+        resolved_mapping=resolved_map,
+    )
     seen: set[str] = set()
     available_seen = False
 

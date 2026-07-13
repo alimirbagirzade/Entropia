@@ -23,6 +23,12 @@ from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from entropia.domain.importing.column_mapping import (
+    apply_rename,
+    mapping_hash,
+    rename_columns,
+    resolve_column_mapping,
+)
 from entropia.domain.trade_log.enums import RecordBatchStatus, TradeDirection
 
 # --- skip reason codes (surfaced per-row in the skipped-row report) ----------
@@ -48,6 +54,55 @@ _DELIMITERS = (",", ";", "\t", "|")
 
 _REQUIRED_COLUMNS = ("direction", "entry_time", "entry_price", "exit_time", "exit_price")
 _INSTRUMENT_COLUMNS = ("symbol", "instrument", "instrument_id")
+
+# Canonical fields the normalizer actually consumes — the mappable catalog
+# (doc 05 §5.4). OHLCV context columns are not read by the ledger normalizer, so
+# they are intentionally out of scope for header aliasing.
+_CANONICAL_FIELDS = (*_REQUIRED_COLUMNS, "size", "fees", "pnl", *_INSTRUMENT_COLUMNS)
+
+# Built-in header-alias table (lowercased source header -> canonical field,
+# doc 05 §5.2). Only consulted when a canonical field is NOT present under its own
+# case-normalized name; two aliases for the same absent field are AMBIGUOUS, never
+# inferred. Deliberately conservative — "volume" stays an OHLCV context column, not
+# a size alias.
+_COLUMN_ALIASES: dict[str, str] = {
+    "side": "direction",
+    "trade_direction": "direction",
+    "position_side": "direction",
+    "open_time": "entry_time",
+    "open time": "entry_time",
+    "entry time": "entry_time",
+    "opened_at": "entry_time",
+    "entry_date": "entry_time",
+    "open_price": "entry_price",
+    "open price": "entry_price",
+    "entry price": "entry_price",
+    "avg_entry_price": "entry_price",
+    "close_time": "exit_time",
+    "close time": "exit_time",
+    "exit time": "exit_time",
+    "closed_at": "exit_time",
+    "exit_date": "exit_time",
+    "close_price": "exit_price",
+    "close price": "exit_price",
+    "exit price": "exit_price",
+    "avg_exit_price": "exit_price",
+    "quantity": "size",
+    "qty": "size",
+    "contracts": "size",
+    "lots": "size",
+    "fee": "fees",
+    "commission": "fees",
+    "commissions": "fees",
+    "profit": "pnl",
+    "realized_pnl": "pnl",
+    "realised_pnl": "pnl",
+    "net_pnl": "pnl",
+    "profit_loss": "pnl",
+    "ticker": "symbol",
+    "market": "symbol",
+    "pair": "symbol",
+}
 
 _DIRECTION_ALIASES: dict[str, TradeDirection] = {
     "long": TradeDirection.LONG,
@@ -101,6 +156,8 @@ class ImportOutcome:
     latest_exit_time: datetime | None = None
     instrument_id: str | None = None
     blocker_code: str | None = None
+    mapping_hash: str | None = None
+    resolved_mapping: dict[str, str] | None = None
 
     @property
     def accepted_count(self) -> int:
@@ -146,20 +203,44 @@ def normalize_trade_rows(
     *,
     source_timezone: str,
     instrument_id: str,
+    import_mapping: dict[str, str] | None = None,
 ) -> ImportOutcome:
     """Normalize parsed rows into a canonical trade-record set (pure, deterministic).
 
     ``instrument_id`` is the root's canonical instrument scope; rows whose symbol
-    disagrees are skipped (``INSTRUMENT_MISMATCH``, TL-09). A file missing any
-    required column is a whole-file blocker (``REQUIRED_COLUMN_MISSING``, TL-05); an
-    invalid/ambiguous timezone is a whole-file blocker (``TIMEZONE_INVALID``, TL-07).
+    disagrees are skipped (``INSTRUMENT_MISMATCH``, TL-09). Non-canonical headers are
+    first resolved via the header-alias table + an optional explicit
+    ``import_mapping`` (``{canonical_field: source_header}``, doc 05 §5.2); an
+    ambiguous/invalid mapping is a whole-file blocker and nothing is inferred. A file
+    missing any required column (after mapping) is a whole-file blocker
+    (``REQUIRED_COLUMN_MISSING``, TL-05); an invalid/ambiguous timezone is a
+    whole-file blocker (``TIMEZONE_INVALID``, TL-07).
     """
+    resolution = resolve_column_mapping(
+        columns,
+        canonical_fields=_CANONICAL_FIELDS,
+        alias_table=_COLUMN_ALIASES,
+        explicit_mapping=import_mapping,
+    )
+    if resolution.blocker_code is not None:
+        return ImportOutcome(
+            status=RecordBatchStatus.FAILED,
+            blocker_code=resolution.blocker_code,
+            instrument_id=instrument_id,
+        )
+    columns = rename_columns(columns, resolution.rename)
+    rows = apply_rename(rows, resolution.rename)
+    mapping_evidence = mapping_hash(resolution.resolved) if resolution.applied else None
+    resolved_map = resolution.resolved if resolution.applied else None
+
     missing = _missing_required_columns(columns)
     if missing:
         return ImportOutcome(
             status=RecordBatchStatus.FAILED,
             blocker_code=BLOCKER_REQUIRED_COLUMN_MISSING,
             instrument_id=instrument_id,
+            mapping_hash=mapping_evidence,
+            resolved_mapping=resolved_map,
         )
 
     tz = _resolve_timezone(source_timezone)
@@ -168,9 +249,16 @@ def normalize_trade_rows(
             status=RecordBatchStatus.FAILED,
             blocker_code=BLOCKER_TIMEZONE_INVALID,
             instrument_id=instrument_id,
+            mapping_hash=mapping_evidence,
+            resolved_mapping=resolved_map,
         )
 
-    outcome = ImportOutcome(status=RecordBatchStatus.PENDING, instrument_id=instrument_id)
+    outcome = ImportOutcome(
+        status=RecordBatchStatus.PENDING,
+        instrument_id=instrument_id,
+        mapping_hash=mapping_evidence,
+        resolved_mapping=resolved_map,
+    )
     for index, row in enumerate(rows):
         result = _normalize_one(row, index, tz=tz, instrument_id=instrument_id)
         if isinstance(result, SkippedRow):

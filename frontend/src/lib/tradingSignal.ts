@@ -147,12 +147,46 @@ const IMPORT_POLL_INTERVAL_MS = 5000;
 // §9.2 payload skeleton pre-seeded with the import binding — a hydration-only
 // convenience for the JSON editor. The server compiler is the sole authority
 // on config semantics; every enum default here is a valid canonical token.
+// Parse a "canonical_field = source_header" per-line column mapping into the
+// {canonical: source} object the import route accepts (doc 04 §5.1 / doc 05 §5.2).
+// Blank lines and lines without "=" are ignored; the server re-validates and NEVER
+// infers an ambiguous mapping. Shared by both import twins.
+export function parseColumnMapping(text: string): Record<string, string> {
+  const mapping: Record<string, string> = {};
+  for (const line of text.split("\n")) {
+    const eq = line.indexOf("=");
+    if (eq < 0) continue;
+    const canonical = line.slice(0, eq).trim();
+    const source = line.slice(eq + 1).trim();
+    if (canonical !== "" && source !== "") mapping[canonical] = source;
+  }
+  return mapping;
+}
+
+// Read the server-computed column-mapping evidence hash from an import report's
+// validation summary (present only when a mapping/alias was actually applied). It
+// becomes the saved revision's import_binding.mapping_revision_id.
+export function mappingHashFromSummary(
+  summary: Record<string, unknown> | null | undefined,
+): string | undefined {
+  const value = summary?.mapping_hash;
+  return typeof value === "string" ? value : undefined;
+}
+
 export function buildSignalPayloadTemplate(input: {
   sourceAssetId: string;
   normalizedEventRevisionId: string;
   instrumentId: string;
   sourceTimezone: string;
+  mappingRevisionId?: string;
 }): Record<string, unknown> {
+  const importBinding: Record<string, unknown> = {
+    source_asset_id: input.sourceAssetId,
+    normalized_event_revision_id: input.normalizedEventRevisionId,
+  };
+  if (input.mappingRevisionId !== undefined && input.mappingRevisionId !== "") {
+    importBinding.mapping_revision_id = input.mappingRevisionId;
+  }
   return {
     kind: "trading_signal",
     identity: { display_name: "" },
@@ -170,10 +204,7 @@ export function buildSignalPayloadTemplate(input: {
     },
     price_policy: { source: "suggested_signal_price" },
     ohlcv_policy: { use_mode: "ignore" },
-    import_binding: {
-      source_asset_id: input.sourceAssetId,
-      normalized_event_revision_id: input.normalizedEventRevisionId,
-    },
+    import_binding: importBinding,
   };
 }
 
@@ -247,6 +278,7 @@ export function useRequestSignalImport() {
       sourceAssetId: string;
       instrumentId: string;
       sourceTimezone: string;
+      importMapping?: Record<string, string> | null;
     }) =>
       apiRequest<RequestImportResult>("/trading-signals/imports", {
         method: "POST",
@@ -254,6 +286,9 @@ export function useRequestSignalImport() {
           source_asset_id: input.sourceAssetId,
           instrument_id: input.instrumentId,
           source_timezone: input.sourceTimezone,
+          ...(input.importMapping && Object.keys(input.importMapping).length > 0
+            ? { import_mapping: input.importMapping }
+            : {}),
         },
         headers: { "Idempotency-Key": crypto.randomUUID() },
       }),

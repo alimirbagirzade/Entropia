@@ -13,6 +13,8 @@ import {
   type TradeLogDetail,
   type TradeLogImportReport,
   buildTradeLogPayloadTemplate,
+  mappingHashFromSummary,
+  parseColumnMapping,
   useCreateTradeLog,
   useCreateTradeLogRevision,
   useRequestTradeLogImport,
@@ -114,6 +116,7 @@ function Workbench({
     recordBatchRevisionId: succeededReport?.record_batch_revision_id ?? "",
     instrumentId: succeededReport?.instrument_id ?? instrumentId,
     sourceTimezone,
+    mappingRevisionId: mappingHashFromSummary(succeededReport?.validation_summary ?? null),
   });
 
   return (
@@ -148,9 +151,9 @@ function Workbench({
         onSourceAssetId={setSourceAssetId}
         onInstrumentId={setInstrumentId}
         onSourceTimezone={setSourceTimezone}
-        onRequest={() =>
+        onRequest={(importMapping) =>
           requestImport.mutate(
-            { sourceAssetId, instrumentId, sourceTimezone },
+            { sourceAssetId, instrumentId, sourceTimezone, importMapping },
             { onSuccess: (result) => onJobAccepted(result.job_id) },
           )
         }
@@ -254,8 +257,9 @@ function ImportRequestCard({
   onSourceAssetId: (value: string) => void;
   onInstrumentId: (value: string) => void;
   onSourceTimezone: (value: string) => void;
-  onRequest: () => void;
+  onRequest: (importMapping: Record<string, string>) => void;
 }) {
+  const [mappingText, setMappingText] = useState("");
   return (
     <section className="card" style={{ marginTop: 18 }} aria-labelledby="tl-import-h">
       <h3 id="tl-import-h" style={{ marginTop: 0 }}>
@@ -269,7 +273,7 @@ function ImportRequestCard({
         className="cp-form"
         onSubmit={(event) => {
           event.preventDefault();
-          onRequest();
+          onRequest(parseColumnMapping(mappingText));
         }}
       >
         <label className="cp-field">
@@ -297,6 +301,20 @@ function ImportRequestCard({
             onChange={(event) => onSourceTimezone(event.target.value)}
             required
           />
+        </label>
+        <label className="cp-field cp-wide">
+          <span>Column mapping (optional) — one “canonical_field = source_header” per line</span>
+          <textarea
+            rows={4}
+            value={mappingText}
+            onChange={(event) => setMappingText(event.target.value)}
+            spellCheck={false}
+            placeholder={"entry_time = Open Time\nexit_time = Close Time"}
+          />
+          <small className="cp-note">
+            Leave blank when the file uses the canonical headers (or a known alias). The server
+            never infers an ambiguous mapping — map each canonical field explicitly to resolve it.
+          </small>
         </label>
         <div className="cp-field cp-wide">
           <button className="btn btn-primary" type="submit" disabled={pending}>

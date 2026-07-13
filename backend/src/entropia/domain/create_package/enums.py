@@ -115,3 +115,18 @@ class ValidationRunStatus(StrEnum):
     PASSED = "passed"
     FAILED = "failed"
     STALE = "stale"
+
+
+class BaselineParseStatus(StrEnum):
+    """Immutable baseline-asset parse result (doc 06 §4.4/§5/§8.3).
+
+    ``uploaded`` is the freshly-stored state before the parse runs; ``parsing`` is
+    the transient in-flight state. A ``passed`` parse is the equivalence-comparison
+    evidence the mode-aware approval baseline gate reads. A file upload alone is
+    never proof of equivalence — the parse must confirm the CSV and its metadata.
+    """
+
+    UPLOADED = "uploaded"
+    PARSING = "parsing"
+    PASSED = "passed"
+    FAILED = "failed"

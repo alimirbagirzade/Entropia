@@ -18,6 +18,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from entropia.domain.create_package.enums import (
+    BaselineParseStatus,
     CreatePackageState,
     CreationMode,
     PrecheckScanStatus,
@@ -28,6 +29,7 @@ from entropia.domain.create_package.enums import (
 from entropia.domain.esp.enums import RuntimeAdapter
 from entropia.domain.lifecycle.enums import DeletionState, PackageKind
 from entropia.infrastructure.postgres.models import (
+    BaselineAsset,
     DependencyScan,
     EntityRegistry,
     PackageRequest,
@@ -57,6 +59,7 @@ async def create_request(
     compatible_rationale_family_ids: list[str],
     linked_indicator: dict[str, Any] | None,
     declared_dependencies: list[dict[str, Any]],
+    claims_equivalence: bool = False,
     state: CreatePackageState = CreatePackageState.REQUESTED,
 ) -> tuple[EntityRegistry, PackageRequest]:
     """Create the registry Root + ``package_request`` detail in one flush (L1/DC6).
@@ -93,12 +96,14 @@ async def create_request(
         compatible_rationale_family_ids=compatible_rationale_family_ids,
         linked_indicator=linked_indicator,
         declared_dependencies=declared_dependencies,
+        claims_equivalence=claims_equivalence,
         state=state,
         current_scan_id=None,
         candidate_hash=None,
         candidate_output_contract=None,
         package_root_id=None,
         draft_revision_id=None,
+        baseline_asset_id=None,
     )
     session.add(detail)
     return root, detail
@@ -234,11 +239,76 @@ async def _max_validation_attempt(session: AsyncSession, request_entity_id: str)
     return (await session.execute(stmt)).scalar_one_or_none()
 
 
+async def append_baseline_asset(
+    session: AsyncSession,
+    *,
+    request_entity_id: str,
+    object_key: str,
+    content_digest: str,
+    size_bytes: int,
+    content_type: str | None,
+    original_filename: str | None,
+    baseline_metadata: dict[str, Any],
+    correlation_id: str | None,
+    created_by_principal_id: str | None,
+) -> BaselineAsset:
+    """Insert an immutable baseline upload ``attempt_no = max+1`` (doc 06 §8.3).
+
+    The row starts ``uploaded``; StartBaselineParse transitions the current head to
+    ``passed`` (or the parse raises a typed error and this row is left as evidence
+    of the upload). A fresh upload is always a new attempt — a prior attempt's
+    object key / digest / metadata are never mutated.
+    """
+    prior = await _max_baseline_attempt(session, request_entity_id)
+    asset = BaselineAsset(
+        baseline_asset_id=new_id("baseline"),
+        request_entity_id=request_entity_id,
+        attempt_no=(prior or 0) + 1,
+        object_key=object_key,
+        content_digest=content_digest,
+        size_bytes=size_bytes,
+        content_type=content_type,
+        original_filename=original_filename,
+        baseline_metadata=baseline_metadata,
+        parse_status=BaselineParseStatus.UPLOADED,
+        parse_report=None,
+        parser_version=None,
+        parse_job_id=None,
+        correlation_id=correlation_id,
+        created_by_principal_id=created_by_principal_id,
+    )
+    session.add(asset)
+    return asset
+
+
+async def get_baseline_asset(session: AsyncSession, baseline_asset_id: str) -> BaselineAsset | None:
+    return await session.get(BaselineAsset, baseline_asset_id)
+
+
+async def get_current_baseline_asset(
+    session: AsyncSession, detail: PackageRequest
+) -> BaselineAsset | None:
+    """The request's current baseline asset (the head pointer), if any."""
+    if detail.baseline_asset_id is None:
+        return None
+    return await session.get(BaselineAsset, detail.baseline_asset_id)
+
+
+async def _max_baseline_attempt(session: AsyncSession, request_entity_id: str) -> int | None:
+    stmt = select(func.max(BaselineAsset.attempt_no)).where(
+        BaselineAsset.request_entity_id == request_entity_id
+    )
+    return (await session.execute(stmt)).scalar_one_or_none()
+
+
 __all__ = [
     "ENTITY_TYPE",
+    "append_baseline_asset",
     "append_dependency_scan",
     "append_validation_run",
     "create_request",
+    "get_baseline_asset",
+    "get_current_baseline_asset",
     "get_current_scan",
     "get_current_validation_run",
     "get_request_detail",

@@ -2,8 +2,18 @@
 
 from __future__ import annotations
 
+from entropia.domain.create_package.baseline import (
+    BASELINE_PARSER_VERSION,
+    REQUIRED_BASELINE_METADATA_FIELDS,
+    BaselineParseReport,
+    is_allowed_baseline_file,
+    missing_baseline_metadata_fields,
+    parse_baseline_csv,
+    resolve_equivalence_claim,
+)
 from entropia.domain.create_package.enums import (
     CREATE_PACKAGE_KINDS,
+    BaselineParseStatus,
     CreatePackageState,
     CreationMode,
     PrecheckScanStatus,
@@ -39,10 +49,14 @@ from entropia.domain.create_package.value_objects import (
 )
 
 __all__ = [
+    "BASELINE_PARSER_VERSION",
     "CREATE_PACKAGE_KINDS",
+    "REQUIRED_BASELINE_METADATA_FIELDS",
     "SCAN_BLOCKING_STATES",
     "SUPPORTED_TARGET_RUNTIMES",
     "VALIDATOR_VERSION",
+    "BaselineParseReport",
+    "BaselineParseStatus",
     "CreatePackageState",
     "CreationMode",
     "DependencyResolution",
@@ -59,9 +73,13 @@ __all__ = [
     "ensure_can_create_request",
     "ensure_can_operate_request",
     "ensure_create_package_kind",
+    "is_allowed_baseline_file",
+    "missing_baseline_metadata_fields",
     "next_request_state",
     "next_scan_status",
     "normalize_request",
+    "parse_baseline_csv",
+    "resolve_equivalence_claim",
     "source_hash",
     "source_kind_for_mode",
 ]

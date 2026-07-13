@@ -15,6 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from entropia.domain.create_package.enums import (
+    BaselineParseStatus,
     PrecheckScanStatus,
     SourceKind,
     ValidationRunStatus,
@@ -23,6 +24,7 @@ from entropia.domain.identity import Actor
 from entropia.domain.identity import policy as identity_policy
 from entropia.domain.lifecycle.enums import DeletionState
 from entropia.infrastructure.postgres.models import (
+    BaselineAsset,
     DependencyScan,
     EntityRegistry,
     PackageRequest,
@@ -38,6 +40,7 @@ def _request_dict(
     detail: PackageRequest,
     scan: DependencyScan | None,
     run: PackageValidationRun | None,
+    baseline: BaselineAsset | None,
 ) -> dict[str, Any]:
     precheck_fresh = (
         scan is not None
@@ -49,6 +52,7 @@ def _request_dict(
         and run.status == ValidationRunStatus.PASSED
         and run.candidate_hash == detail.candidate_hash
     )
+    baseline_ready = baseline is not None and baseline.parse_status == BaselineParseStatus.PASSED
     return {
         "request_id": detail.entity_id,
         "package_type": str(detail.package_kind),
@@ -71,7 +75,29 @@ def _request_dict(
         "current_validation_run": _validation_summary(run) if run is not None else None,
         "validation_fresh": validation_fresh,
         "can_generate_candidate": _can_generate(detail, scan, precheck_fresh),
+        # Mode-aware baseline projection (doc 06 §4.4): whether the package claims
+        # equivalence, its current baseline, and whether the approval baseline gate
+        # is satisfied (a claiming package needs baseline_ready, a non-claiming one
+        # never requires it).
+        "claims_equivalence": detail.claims_equivalence,
+        "current_baseline": _baseline_summary(baseline) if baseline is not None else None,
+        "baseline_ready": baseline_ready,
+        "baseline_required": bool(detail.claims_equivalence),
         "created_at": root.created_at.isoformat() if root.created_at else None,
+    }
+
+
+def _baseline_summary(asset: BaselineAsset) -> dict[str, Any]:
+    return {
+        "baseline_asset_id": asset.baseline_asset_id,
+        "attempt_no": asset.attempt_no,
+        "parse_status": str(asset.parse_status),
+        "content_digest": asset.content_digest,
+        "size_bytes": asset.size_bytes,
+        "original_filename": asset.original_filename,
+        "baseline_metadata": asset.baseline_metadata,
+        "parse_report": asset.parse_report,
+        "parser_version": asset.parser_version,
     }
 
 
@@ -121,7 +147,8 @@ async def get_package_request(
     _ensure_can_view(actor, root)
     scan = await cp_repo.get_current_scan(session, detail)
     run = await cp_repo.get_current_validation_run(session, detail)
-    return _request_dict(root, detail, scan, run)
+    baseline = await cp_repo.get_current_baseline_asset(session, detail)
+    return _request_dict(root, detail, scan, run, baseline)
 
 
 async def get_dependency_scan(
@@ -167,6 +194,31 @@ async def get_validation_run(
             "package_root_id": run.package_root_id,
             "job_id": run.job_id,
             "completed_at": run.completed_at.isoformat() if run.completed_at else None,
+        }
+    )
+    return summary
+
+
+async def get_baseline_asset(
+    session: AsyncSession, actor: Actor, *, baseline_asset_id: str
+) -> dict[str, Any]:
+    """Return the immutable baseline asset + parse report, re-checking view permission."""
+    asset = await cp_repo.get_baseline_asset(session, baseline_asset_id)
+    if asset is None:
+        raise PackageRequestNotFound(f"Baseline asset '{baseline_asset_id}' not found.")
+    root = await cp_repo.get_request_root(session, asset.request_entity_id)
+    if root is None:
+        raise PackageRequestNotFound(f"Baseline asset '{baseline_asset_id}' not found.")
+    _ensure_can_view(actor, root)
+    summary = _baseline_summary(asset)
+    summary.update(
+        {
+            "request_id": asset.request_entity_id,
+            "object_key": asset.object_key,
+            "content_type": asset.content_type,
+            "parse_job_id": asset.parse_job_id,
+            "parsed_at": asset.parsed_at.isoformat() if asset.parsed_at else None,
+            "created_at": asset.created_at.isoformat() if asset.created_at else None,
         }
     )
     return summary
@@ -221,6 +273,7 @@ def _ensure_can_view(actor: Actor, root: EntityRegistry) -> None:
 
 
 __all__ = [
+    "get_baseline_asset",
     "get_dependency_scan",
     "get_package_request",
     "get_validation_run",

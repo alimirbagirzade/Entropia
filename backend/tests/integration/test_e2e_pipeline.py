@@ -257,6 +257,9 @@ async def _published_package(session, family_id: str) -> dict[str, str]:
         output_contract={"kind": "directional_signal"},
         rationale_family_id=family_id,
         declared_dependencies=[_RSI_DEP],
+        # The pipeline under test is run -> history -> metrics -> trash; this package
+        # asserts no equivalence, so publish needs no baseline (GAP-07b mode-aware gate).
+        equivalence_claim=False,
     )
     await session.commit()
     request_id = created["request_id"]

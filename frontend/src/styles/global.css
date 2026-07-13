@@ -296,9 +296,12 @@ a:hover { text-decoration: underline; }
 .kv dd { margin: 0; }
 
 /* Data tables — v18 mockup wireframe look (bordered cells, grey bold header;
-   mirrors .trade-table / .database-table in the spec). */
-.metrics-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.metrics-table th {
+   mirrors .trade-table / .database-table in the spec). .database-table is the
+   mockup's Market/Research Data + Panel name — same bordered wireframe style. */
+.metrics-table,
+.database-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.metrics-table th,
+.database-table th {
   text-align: left;
   font-weight: 900;
   color: var(--text);
@@ -307,7 +310,8 @@ a:hover { text-decoration: underline; }
   padding: 6px 8px;
   border: 1px solid var(--border);
 }
-.metrics-table td { padding: 6px 8px; border: 1px solid var(--border); }
+.metrics-table td,
+.database-table td { padding: 6px 8px; border: 1px solid var(--border); }
 
 /* Buttons */
 /* v18 mockup buttons: dense, 4px radius, bold (mirrors .page-button). */

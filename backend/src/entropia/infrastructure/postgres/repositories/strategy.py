@@ -49,6 +49,7 @@ async def create_strategy(
     display_name: str,
     rationale_family_id: str | None,
     initial_payload: dict[str, Any],
+    source_provenance: dict[str, Any] | None = None,
 ) -> tuple[EntityRegistry, StrategyRoot, WorkObjectRoot, StrategyEditorDraft]:
     """Create the shared registry Root + strategy/work-object details + draft (FK-safe).
 
@@ -96,6 +97,7 @@ async def create_strategy(
         strategy_root_id=entity_id,
         last_saved_revision_id=None,
         payload=initial_payload,
+        source_provenance=source_provenance,
         is_dirty=True,
         row_version=0,
         created_by_principal=created_by_principal_id,

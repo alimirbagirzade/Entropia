@@ -36,8 +36,9 @@ from entropia.application.commands import mainboard as mb_cmd
 from entropia.application.idempotency import run_idempotent
 from entropia.domain.identity import Actor
 from entropia.domain.identity.policy import ensure_can_edit, ensure_can_view, require_authenticated
-from entropia.domain.lifecycle.enums import DeletionState
+from entropia.domain.lifecycle.enums import DeletionState, PackageKind
 from entropia.domain.mainboard.enums import MainboardItemKind
+from entropia.domain.package.permissions import package_permissions
 from entropia.domain.strategy.compiler import (
     CODE_ENTRY_DIRECTION_INCOHERENT,
     CODE_ENTRY_REQUIRED_BLOCK_MISSING,
@@ -58,10 +59,13 @@ from entropia.domain.strategy.enums import (
 from entropia.infrastructure.postgres.models import EntityRegistry, StrategyRoot
 from entropia.infrastructure.postgres.repositories import audit as audit_repo
 from entropia.infrastructure.postgres.repositories import mainboard as mb_repo
+from entropia.infrastructure.postgres.repositories import packages as pkg_repo
 from entropia.infrastructure.postgres.repositories import strategy as strat_repo
 from entropia.shared.errors import (
     EntryDirectionIncoherentError,
     EntryRequiredBlockMissingError,
+    PackageNotDerivableError,
+    PackageNotFound,
     SignalSupportingRequirementUnmetError,
     SizingMethodNotExclusiveError,
     StrategyDraftConflictError,
@@ -144,6 +148,172 @@ async def create_strategy_draft(
         },
         operation=_op,
     )
+
+
+# --------------------------------------------------------------------------- #
+# Derive draft from a Strategy Package (GAP-03; doc 01 §8.2, doc 08 §4.3)      #
+# --------------------------------------------------------------------------- #
+
+
+async def derive_strategy_draft_from_package(
+    session: AsyncSession,
+    actor: Actor,
+    *,
+    source_package_root_id: str,
+    source_package_revision_id: str | None = None,
+    display_name: str | None = None,
+    rationale_family_id: str | None = None,
+    idempotency_key: str | None = None,
+) -> dict[str, Any]:
+    """Create a new Strategy draft seeded from a usable Strategy Package (doc 01 §8.2).
+
+    This is the canonical cross-owner reuse path: rather than attaching a foreign
+    work object, a viewer *derives* their OWN strategy root+draft from a Strategy
+    Package they may use. The source package stays immutable; the new draft records
+    the pinned source ``(root, revision, content_hash)`` and the inherited dependency
+    list as ``source_provenance``. The editable config starts EMPTY — a
+    ``kind=strategy`` package carries contracts + a dependency snapshot, not a full
+    StrategyConfig, so it seeds provenance and the caller completes the config (doc
+    08 §4.3 "create or seed a Strategy Draft").
+
+    Guards (server re-validated, never client-authoritative): view permission
+    (foreign private -> 403), Strategy-kind only, and the EXACT pinned revision must
+    be usable (active + validation-passed, ``package_permissions.can_use``) -> else a
+    typed 422 ``PACKAGE_NOT_DERIVABLE`` that names why (doc 08 §4.4). The revision is
+    pinned exactly (explicit id or the current head — no "latest" leak, L5).
+    """
+    require_authenticated(actor)
+    root_id = (source_package_root_id or "").strip()
+    if not root_id:
+        raise ValidationError(
+            "A source_package_root_id is required.",
+            details=[{"field": "source_package_root_id"}],
+        )
+
+    root = await pkg_repo.get_package_root(session, root_id)
+    detail = await pkg_repo.get_package_detail(session, root_id)
+    if root is None or detail is None or root.deletion_state != DeletionState.ACTIVE:
+        raise PackageNotFound(f"Package '{root_id}' not found.")
+    # View gate first — a foreign private package is a 403, not a silent no-op.
+    ensure_can_view(
+        actor,
+        owner_principal_id=root.owner_principal_id,
+        visibility=str(detail.visibility_scope),
+    )
+    if detail.package_kind != PackageKind.STRATEGY:
+        raise PackageNotDerivableError(
+            "Only Strategy packages can seed a Strategy Draft.",
+            details=[{"field": "source_package_root_id", "actual": str(detail.package_kind)}],
+        )
+
+    revision = await _resolve_source_revision(session, root, source_package_revision_id)
+    permissions = package_permissions(
+        actor,
+        owner_principal_id=root.owner_principal_id,
+        visibility_scope=str(detail.visibility_scope),
+        lifecycle_state=root.lifecycle_state,
+        validation_state=revision.validation_state,
+        approval_state=revision.approval_state,
+    )
+    if not permissions.can_use:
+        raise PackageNotDerivableError(
+            "This package revision is not usable (it must be active and validation-passed).",
+            details=[
+                {"field": "source_package_revision_id", "actual": revision.revision_id},
+                {"field": "validation_state", "actual": str(revision.validation_state)},
+            ],
+        )
+
+    source_name = _source_package_display_name(revision)
+    name = (display_name or source_name).strip() or source_name
+    family_id = rationale_family_id or _pinned_family_id(revision)
+    provenance: dict[str, Any] = {
+        "source_package_root_id": root.entity_id,
+        "source_package_revision_id": revision.revision_id,
+        "source_content_hash": revision.content_hash,
+        "source_package_kind": str(detail.package_kind),
+        "source_display_name": source_name,
+        # The inherited dependency set (doc 01 §8.2) — the package revision's
+        # resolved dependency snapshot, copied verbatim as origin metadata.
+        "inherited_dependencies": revision.dependency_snapshot or {},
+    }
+
+    async def _op() -> dict[str, Any]:
+        _root, strategy_root, _work_object, draft = await strat_repo.create_strategy(
+            session,
+            owner_principal_id=actor.principal_id or "",
+            created_by_principal_id=actor.principal_id or "",
+            display_name=name,
+            rationale_family_id=family_id,
+            initial_payload={},
+            source_provenance=provenance,
+        )
+        _audit_and_outbox(
+            session,
+            actor,
+            event_kind="strategy.derived_from_package",
+            target_type=_STRATEGY_TARGET_TYPE,
+            target_entity_id=strategy_root.entity_id,
+            new_state=StrategyLifecycleStateEnum.DRAFT.value,
+            payload={
+                "draft_id": draft.draft_id,
+                "display_name": name,
+                "source_package_root_id": root.entity_id,
+                "source_package_revision_id": revision.revision_id,
+            },
+        )
+        return {
+            "draft_id": draft.draft_id,
+            "strategy_root_id": strategy_root.entity_id,
+            "display_name": name,
+            "row_version": draft.row_version,
+            "source_provenance": provenance,
+        }
+
+    return await run_idempotent(
+        session,
+        key=idempotency_key,
+        actor_principal_id=actor.principal_id,
+        request_payload={
+            "op": "derive_strategy_draft_from_package",
+            "source_package_root_id": root.entity_id,
+            "source_package_revision_id": revision.revision_id,
+            "display_name": name,
+        },
+        operation=_op,
+    )
+
+
+async def _resolve_source_revision(
+    session: AsyncSession, root: EntityRegistry, explicit_revision_id: str | None
+) -> Any:
+    """Pin the exact source package revision (explicit id or head; no "latest", L5)."""
+    if explicit_revision_id:
+        revision = await pkg_repo.get_revision(session, explicit_revision_id)
+        if revision is None or revision.entity_id != root.entity_id:
+            raise PackageNotFound(f"Package revision '{explicit_revision_id}' not found.")
+        return revision
+    revision = await pkg_repo.get_revision(session, root.current_revision_id or "")
+    if revision is None:
+        raise PackageNotDerivableError(
+            "This package has no current revision to derive from.",
+            details=[{"field": "source_package_root_id", "actual": root.entity_id}],
+        )
+    return revision
+
+
+def _source_package_display_name(revision: Any) -> str:
+    """Best-effort display name from the package revision's input contract."""
+    contract = revision.input_contract if isinstance(revision.input_contract, dict) else {}
+    name = contract.get("name")
+    return name.strip() if isinstance(name, str) and name.strip() else "Derived Strategy"
+
+
+def _pinned_family_id(revision: Any) -> str | None:
+    """The package revision's pinned rationale family id (inherited if not overridden)."""
+    snapshot = revision.rationale_family_snapshot or {}
+    family_id = snapshot.get("rationale_family_id") if isinstance(snapshot, dict) else None
+    return family_id if isinstance(family_id, str) and family_id else None
 
 
 # --------------------------------------------------------------------------- #
@@ -698,6 +868,7 @@ def _audit_only(
 __all__ = [
     "clear_strategy_draft",
     "create_strategy_draft",
+    "derive_strategy_draft_from_package",
     "patch_strategy_draft",
     "save_strategy_revision",
     "validate_strategy_draft",

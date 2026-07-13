@@ -359,6 +359,17 @@ class PackageNotFound(NotFoundError):
     message = "The referenced package was not found."
 
 
+class PackageNotDerivableError(ValidationError):
+    """A "Create Strategy Draft from Package" targeted a package that cannot seed a
+    strategy draft (GAP-03; doc 01 §8.2, doc 08 §4.3): it is not a Strategy-kind
+    package, or the pinned revision is not usable (must be active + validation-passed
+    — doc 08 §4.4 ``can_use``). View permission is checked separately (403); this is
+    a semantic 422 that names why the derive is not offered rather than hiding it."""
+
+    code = "PACKAGE_NOT_DERIVABLE"
+    message = "This package cannot seed a Strategy Draft."
+
+
 class LifecycleBlocked(ConflictError):
     """An operation is blocked by the target's current lifecycle/deletion state
     (doc 10 §10.2 "PACKAGE_NOT_FOUND or LIFECYCLE_BLOCKED")."""

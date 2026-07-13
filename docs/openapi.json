@@ -787,6 +787,28 @@
               }
             ],
             "title": "Rationale Family Id"
+          },
+          "source_package_revision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Package Revision Id"
+          },
+          "source_package_root_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Package Root Id"
           }
         },
         "title": "CreateStrategyDraftBody",

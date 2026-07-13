@@ -37,6 +37,7 @@ async def get_strategy_draft(session: AsyncSession, actor: Actor, draft_id: str)
         "is_dirty": draft.is_dirty,
         "row_version": draft.row_version,
         "last_saved_revision_id": draft.last_saved_revision_id,
+        "source_provenance": draft.source_provenance,
         "updated_at": draft.updated_at.isoformat() if draft.updated_at else None,
     }
 

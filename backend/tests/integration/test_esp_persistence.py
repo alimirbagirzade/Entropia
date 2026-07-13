@@ -3,10 +3,13 @@
 Auto-skips when no PostgreSQL is reachable (see tests/integration/conftest.py).
 Covers: create ESP package (+1 audit & +1 outbox, CANDIDATE registry row),
 activate (CANDIDATE -> TRUSTED_ACTIVE, approval_decision recorded, revision
-passed+approved), deprecate, resolve returns the exact revision only when
-trusted_active+passed+approved, optimistic/stale registry version -> 409,
-idempotent activate replay returns the cached result, soft-delete preserves the
-revision chain, and seed-style TA resolvers are resolvable.
+APPROVED — validation stays ``pending`` because activation does not fabricate a
+validation pass, GAP-07c/doc 09 §7), the evidence precondition (activating a
+resolver with no/empty test-vector evidence -> RESOLVER_EVIDENCE_REQUIRED),
+deprecate, resolve returns the exact revision only once trusted_active + a
+validation run marked it passed + approved, optimistic/stale registry version ->
+409, idempotent activate replay returns the cached result, soft-delete preserves
+the revision chain, and seed-style TA resolvers are resolvable.
 """
 
 from __future__ import annotations
@@ -39,6 +42,7 @@ from entropia.infrastructure.postgres.repositories import esp as esp_repo
 from entropia.infrastructure.postgres.repositories import packages as pkg_repo
 from entropia.shared.errors import (
     ResolverAdapterIncompatible,
+    ResolverEvidenceRequired,
     ResolverNotResolved,
     ResolverRegistryConflict,
     ResolverSignatureMismatch,
@@ -54,6 +58,11 @@ _SMA_SIG = {
     "return": "series",
 }
 
+# Passing test-vector evidence is a precondition for trusted activation (doc 09
+# §4.2/§7). A proposal carries it so an Admin can activate; the rejection tests
+# override it with None/{} to prove the gate.
+_EVIDENCE = {"test_vectors": ["warmup", "boundary", "normal"], "review": "passed"}
+
 
 async def _count(session, model) -> int:
     return int((await session.execute(select(func.count()).select_from(model))).scalar_one())
@@ -66,7 +75,7 @@ async def _seed_principals(session) -> None:
     await session.flush()
 
 
-async def _create_esp(session, *, key: str = "ta.sma") -> dict:
+async def _create_esp(session, *, key: str = "ta.sma", evidence: dict | None = _EVIDENCE) -> dict:
     return await esp_cmd.create_esp_package(
         session,
         OWNER,
@@ -75,6 +84,7 @@ async def _create_esp(session, *, key: str = "ta.sma") -> dict:
         runtime_adapter=RuntimeAdapter.PINE_V5,
         input_contract={"resolver_key": key},
         output_contract={"return": "series"},
+        evidence=evidence,
     )
 
 
@@ -125,8 +135,52 @@ async def test_activate_promotes_and_records_decision(session) -> None:
     assert entry.trusted_active_revision_id == created["revision_id"]
     revision = await pkg_repo.get_revision(session, created["revision_id"])
     assert revision is not None
-    assert revision.validation_state == PackageValidationState.PASSED
+    # Activation records the Admin's APPROVAL but does NOT fabricate a validation
+    # pass: with only a presence gate (GAP-07c), validation stays PENDING until a
+    # real validation run (separate scope) marks the evidence passed (doc 09 §7).
+    assert revision.validation_state == PackageValidationState.PENDING
     assert revision.approval_state == ApprovalState.APPROVED
+
+
+async def test_activate_without_evidence_rejected(session) -> None:
+    """Doc 09 §4.2/§7: passing test-vector evidence is a precondition for trusted
+    activation. A proposal carrying no evidence cannot be activated."""
+    await _seed_principals(session)
+    created = await _create_esp(session, evidence=None)
+    await session.commit()
+
+    with pytest.raises(ResolverEvidenceRequired):
+        await esp_cmd.activate_resolver(
+            session,
+            ADMIN,
+            entity_id=created["entity_id"],
+            revision_id=created["revision_id"],
+            canonical_key="ta.sma",
+            expected_registry_version=1,
+        )
+
+    # The registry pointer is untouched — no partial activation.
+    entry = await esp_repo.get_registry_by_key(session, "ta.sma")
+    assert entry is not None
+    assert entry.trust_state == ResolverTrustState.CANDIDATE
+    assert entry.registry_version == 1
+
+
+async def test_activate_with_empty_evidence_rejected(session) -> None:
+    """An empty ``evidence`` payload ({}) counts as no evidence (presence gate)."""
+    await _seed_principals(session)
+    created = await _create_esp(session, evidence={})
+    await session.commit()
+
+    with pytest.raises(ResolverEvidenceRequired):
+        await esp_cmd.activate_resolver(
+            session,
+            ADMIN,
+            entity_id=created["entity_id"],
+            revision_id=created["revision_id"],
+            canonical_key="ta.sma",
+            expected_registry_version=1,
+        )
 
 
 async def test_resolve_returns_exact_revision_only_when_trusted(session) -> None:
@@ -150,6 +204,21 @@ async def test_resolve_returns_exact_revision_only_when_trusted(session) -> None
         canonical_key="ta.sma",
         expected_registry_version=1,
     )
+    await session.commit()
+
+    # Trusted-active + approved but validation still PENDING -> not yet resolvable
+    # (doc 09 §4.3 step 5). Activation is an approval, not a validation pass.
+    with pytest.raises(ResolverNotResolved):
+        await resolve_embedded_dependency(
+            session,
+            parsed_call={"key": "ta.sma", "signature": _SMA_SIG},
+            target_runtime=RuntimeAdapter.PINE_V5,
+        )
+
+    # Simulate the out-of-scope validation run marking the evidence as passed.
+    revision = await pkg_repo.get_revision(session, created["revision_id"])
+    assert revision is not None
+    revision.validation_state = PackageValidationState.PASSED
     await session.commit()
 
     resolved = await resolve_embedded_dependency(

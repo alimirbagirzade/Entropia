@@ -40,6 +40,10 @@ from entropia.application.jobs.data_queue import TRADE_LOG_IMPORT
 from entropia.application.queries import mainboard as mb_query
 from entropia.domain.identity import Actor
 from entropia.domain.identity.policy import ensure_can_edit, require_authenticated
+from entropia.domain.importing.column_mapping import (
+    BLOCKER_AMBIGUOUS_COLUMN_MAPPING,
+    BLOCKER_INVALID_COLUMN_MAPPING,
+)
 from entropia.domain.lifecycle.enums import DeletionState
 from entropia.domain.mainboard.enums import MainboardItemKind
 from entropia.domain.trade_log.compiler import (
@@ -68,9 +72,11 @@ from entropia.infrastructure.postgres.repositories import trade_log as tl_repo
 from entropia.infrastructure.queues import enqueue as job_enqueue
 from entropia.infrastructure.s3 import datasets
 from entropia.shared.errors import (
+    AmbiguousColumnMappingError,
     EventModelPolicyConflictError,
     FileTypeNotAllowedError,
     ImportNotReadyError,
+    InvalidColumnMappingError,
     NoAcceptedTradeRecordsError,
     RequiredColumnMissingError,
     SourceAssetNotFoundError,
@@ -180,19 +186,24 @@ async def request_trade_log_import(
     source_asset_id: str,
     instrument_id: str,
     source_timezone: str = "UTC",
+    import_mapping: dict[str, str] | None = None,
     idempotency_key: str | None = None,
 ) -> dict[str, Any]:
     """Enqueue a durable trade-log import job on the ``data`` queue (doc 05 §8, CR-09).
 
     The ``jobs`` row is the source of truth and survives browser close (the worker
-    parses/normalizes/validates and writes a ``canonical_trade_record_batch``).
-    Idempotent: the same key returns the same job id (TL-14, TL-15).
+    parses/normalizes/validates and writes a ``canonical_trade_record_batch``). An
+    optional ``import_mapping`` (``{canonical_field: source_header}``, doc 05 §5.2)
+    is carried in the durable payload so files whose headers are not the exact
+    canonical names still import. Idempotent: the same key returns the same job id
+    (TL-14, TL-15).
     """
     require_authenticated(actor)
     asset = await asset_repo.get_source_asset(session, source_asset_id)
     if asset is None:
         raise SourceAssetNotFoundError(f"Source asset '{source_asset_id}' not found.")
     ensure_can_edit(actor, owner_principal_id=asset.owner_principal_id)
+    mapping = _clean_mapping(import_mapping)
 
     async def _op() -> dict[str, Any]:
         job = job_enqueue.enqueue_job(
@@ -203,6 +214,7 @@ async def request_trade_log_import(
                 "source_asset_id": source_asset_id,
                 "instrument_id": instrument_id,
                 "source_timezone": source_timezone,
+                "import_mapping": mapping,
             },
             actor_principal_id=actor.principal_id,
             idempotency_key=idempotency_key,
@@ -271,11 +283,7 @@ async def create_trade_log_and_attach(
             created_by_principal_id=actor.principal_id,
             object_kind=_KIND,
             payload=canonical,
-            source_provenance={
-                "source_asset_id": config.import_binding.source_asset_id,
-                "record_batch_revision_id": batch.record_batch_id,
-                "config_hash": config_hash,
-            },
+            source_provenance=_import_provenance(config, batch, config_hash),
             available_time=None,
         )
         await session.flush()
@@ -380,11 +388,7 @@ async def create_trade_log_revision(
             root,
             object_kind=detail.object_kind,
             payload=canonical,
-            source_provenance={
-                "source_asset_id": config.import_binding.source_asset_id,
-                "record_batch_revision_id": batch.record_batch_id,
-                "config_hash": config_hash,
-            },
+            source_provenance=_import_provenance(config, batch, config_hash),
             available_time=None,
             created_by_principal_id=actor.principal_id,
             change_note=f"trade log revision {config_hash[:12]}",
@@ -443,6 +447,33 @@ def _validate_file_type(original_filename: str | None) -> None:
         )
 
 
+def _clean_mapping(import_mapping: dict[str, str] | None) -> dict[str, str] | None:
+    """Drop blank entries; an empty mapping degrades to ``None`` (no mapping)."""
+    if not import_mapping:
+        return None
+    cleaned = {
+        str(key): str(value).strip()
+        for key, value in import_mapping.items()
+        if value is not None and str(value).strip()
+    }
+    return cleaned or None
+
+
+def _import_provenance(
+    config: TradeLogConfig, batch: CanonicalTradeRecordBatch, config_hash: str
+) -> dict[str, Any]:
+    """Build the revision source-provenance, carrying the mapping evidence id when the
+    import used a column mapping (doc 05 §5.2 — ``import_binding.mapping_revision_id``)."""
+    provenance: dict[str, Any] = {
+        "source_asset_id": config.import_binding.source_asset_id,
+        "record_batch_revision_id": batch.record_batch_id,
+        "config_hash": config_hash,
+    }
+    if config.import_binding.mapping_revision_id:
+        provenance["mapping_revision_id"] = config.import_binding.mapping_revision_id
+    return provenance
+
+
 def _validate_config(payload: dict[str, Any]) -> TradeLogConfig:
     config, issues = validate_trade_log_config(payload)
     if config is None or issues:
@@ -487,6 +518,10 @@ async def _require_ready_import(
 def _raise_for_failed_import(batch: CanonicalTradeRecordBatch) -> None:
     summary = batch.validation_summary or {}
     blocker = summary.get("blocker_code")
+    if blocker == BLOCKER_AMBIGUOUS_COLUMN_MAPPING:
+        raise AmbiguousColumnMappingError()
+    if blocker == BLOCKER_INVALID_COLUMN_MAPPING:
+        raise InvalidColumnMappingError()
     if blocker == BLOCKER_REQUIRED_COLUMN_MISSING:
         raise RequiredColumnMissingError()
     if blocker == BLOCKER_TIMEZONE_INVALID:

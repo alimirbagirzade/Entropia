@@ -1767,6 +1767,20 @@
       },
       "RequestImportBody": {
         "properties": {
+          "import_mapping": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Import Mapping"
+          },
           "instrument_id": {
             "title": "Instrument Id",
             "type": "string"

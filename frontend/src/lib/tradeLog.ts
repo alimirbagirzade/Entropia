@@ -27,6 +27,10 @@ import type {
 } from "./tradingSignal";
 import { TERMINAL_IMPORT_STATUSES } from "./tradingSignal";
 
+// Shared column-mapping helpers (doc 05 §5.2) — re-exported so the Trade Log page
+// imports them from its own lib, mirroring the twin's surface.
+export { mappingHashFromSummary, parseColumnMapping } from "./tradingSignal";
+
 // ---------------------------------------------------------------------------
 // Wire types (mirror application/{commands,queries}/trade_log.py returns)
 // ---------------------------------------------------------------------------
@@ -103,7 +107,15 @@ export function buildTradeLogPayloadTemplate(input: {
   recordBatchRevisionId: string;
   instrumentId: string;
   sourceTimezone: string;
+  mappingRevisionId?: string;
 }): Record<string, unknown> {
+  const importBinding: Record<string, unknown> = {
+    source_asset_id: input.sourceAssetId,
+    record_batch_revision_id: input.recordBatchRevisionId,
+  };
+  if (input.mappingRevisionId !== undefined && input.mappingRevisionId !== "") {
+    importBinding.mapping_revision_id = input.mappingRevisionId;
+  }
   return {
     kind: "trade_log",
     identity: { display_name: "" },
@@ -120,10 +132,7 @@ export function buildTradeLogPayloadTemplate(input: {
     data_quality: { content_profile: "entry_exit_records_only" },
     price_policy: { source: "trade_log_entry_exit_price" },
     ohlcv_policy: { use_mode: "ignore" },
-    import_binding: {
-      source_asset_id: input.sourceAssetId,
-      record_batch_revision_id: input.recordBatchRevisionId,
-    },
+    import_binding: importBinding,
   };
 }
 
@@ -192,6 +201,7 @@ export function useRequestTradeLogImport() {
       sourceAssetId: string;
       instrumentId: string;
       sourceTimezone: string;
+      importMapping?: Record<string, string> | null;
     }) =>
       apiRequest<RequestImportResult>("/trade-logs/imports", {
         method: "POST",
@@ -199,6 +209,9 @@ export function useRequestTradeLogImport() {
           source_asset_id: input.sourceAssetId,
           instrument_id: input.instrumentId,
           source_timezone: input.sourceTimezone,
+          ...(input.importMapping && Object.keys(input.importMapping).length > 0
+            ? { import_mapping: input.importMapping }
+            : {}),
         },
         headers: { "Idempotency-Key": crypto.randomUUID() },
       }),

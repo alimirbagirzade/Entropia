@@ -153,6 +153,37 @@ describe("TradeLog", () => {
     expect(call).toBeTruthy();
   });
 
+  it("sends an explicit column mapping in the import request body (GAP-22)", async () => {
+    const fetchMock = stubRoutes({
+      "POST /trade-logs/imports": {
+        job_id: "job_9",
+        source_asset_id: "srcasset_9",
+        queue: "data",
+        status: "queued",
+      },
+    });
+    renderPage("/trade-log");
+
+    fireEvent.change(screen.getByLabelText("Source asset id"), {
+      target: { value: "srcasset_9" },
+    });
+    fireEvent.change(screen.getByLabelText("Instrument id"), { target: { value: "BTCUSDT" } });
+    fireEvent.change(screen.getByLabelText(/Column mapping/), {
+      target: { value: "entry_time = Open Time\nexit_time = Close Time" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Request import" }));
+
+    const call = await vi.waitFor(() => {
+      const found = fetchMock.mock.calls.find(
+        ([url, init]) => String(url).endsWith("/trade-logs/imports") && init?.method === "POST",
+      );
+      expect(found).toBeTruthy();
+      return found;
+    });
+    const body = JSON.parse(String(call?.[1]?.body)) as { import_mapping?: Record<string, string> };
+    expect(body.import_mapping).toEqual({ entry_time: "Open Time", exit_time: "Close Time" });
+  });
+
   it("saves the trade log with the record-batch import binding", async () => {
     const fetchMock = stubRoutes();
     renderPage("/trade-log?job=job_9");

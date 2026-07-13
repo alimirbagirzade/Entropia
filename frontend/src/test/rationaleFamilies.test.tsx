@@ -146,9 +146,9 @@ describe("Rationale Families page", () => {
     // Registry: unique metadata cells + family names scoped to the registry table.
     expect(await screen.findByText("trend")).toBeInTheDocument();
     expect(screen.getByText("directional_signal")).toBeInTheDocument();
-    const registryTable = within(screen.getAllByRole("table")[0]!);
-    expect(registryTable.getByText("Momentum")).toBeInTheDocument();
-    expect(registryTable.getByText("Mean Reversion")).toBeInTheDocument();
+    const registry = within(screen.getByRole("list", { name: "Rationale families" }));
+    expect(registry.getByText("Momentum")).toBeInTheDocument();
+    expect(registry.getByText("Mean Reversion")).toBeInTheDocument();
 
     // Assignment rows with their current-projection states.
     expect(await screen.findByText("RSI-14")).toBeInTheDocument();

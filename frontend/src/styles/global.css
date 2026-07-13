@@ -649,3 +649,12 @@ a:hover { text-decoration: underline; }
 .dashed-box > div { border-bottom: 1px dashed var(--text-dim); padding: 4px 6px; }
 .dashed-box > div:last-child { border-bottom: none; }
 .settings-panel { border: 1px dashed var(--text-dim); border-radius: var(--radius); padding: 6px; font-size: 13px; line-height: 1.5; }
+
+/* ---- v18 Rationale Families: shared card grid (mockup .rationale-grid/card) ---- */
+.rationale-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; }
+.rationale-card { border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-elev); padding: 12px; }
+.rationale-card-title { font-size: 13px; font-weight: 900; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+.rationale-card-row { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; padding: 3px 0; border-bottom: 1px solid var(--bg-elev-2); }
+.rationale-card-row:last-of-type { border-bottom: none; }
+.rationale-card-row b { color: var(--text-dim); font-weight: 700; }
+.rationale-card-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }

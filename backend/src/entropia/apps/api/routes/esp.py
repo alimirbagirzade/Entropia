@@ -55,6 +55,10 @@ class CreateEspRequest(BaseModel):
     change_note: str | None = None
 
 
+class ValidateRequest(BaseModel):
+    revision_id: str
+
+
 class ActivateRequest(BaseModel):
     revision_id: str
     canonical_key: str
@@ -119,6 +123,25 @@ async def get_esp(
     detail = await esp_query.get_esp_detail(ctx.session, ctx.actor, entity_id=entity_id)
     response.headers["ETag"] = etag_for_row_version(int(detail["row_version"]))
     return detail
+
+
+@router.post("/embedded-system-packages/{entity_id}/validate")
+async def validate_esp(
+    entity_id: str,
+    body: ValidateRequest,
+    ctx: RequestContext = Depends(request_context),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+) -> dict[str, Any]:
+    # Owner-or-Admin runs the resolver's stored test-vectors (doc 09 §11.1, R8); the
+    # command gates ownership and moves ``validation_state``. A resolver must pass this
+    # before an Admin may activate it.
+    return await esp_cmd.run_resolver_validation(
+        ctx.session,
+        ctx.actor,
+        entity_id=entity_id,
+        revision_id=body.revision_id,
+        idempotency_key=idempotency_key,
+    )
 
 
 @router.post("/embedded-system-packages/{entity_id}/activate")

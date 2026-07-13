@@ -26,6 +26,7 @@ from entropia.domain.lifecycle.enums import DeletionState, PackageKind
 from entropia.infrastructure.postgres.models import (
     EmbeddedResolverContract,
     EmbeddedResolverRegistry,
+    EmbeddedResolverValidationRun,
     EntityRegistry,
     PackageRoot,
 )
@@ -141,6 +142,7 @@ async def get_esp_detail(session: AsyncSession, actor: Actor, *, entity_id: str)
         if contract is not None
         else None
     )
+    latest_run = await esp_repo.get_latest_validation_run(session, revision.revision_id)
     return {
         "entity_id": entity_id,
         "revision_id": revision.revision_id,
@@ -155,11 +157,26 @@ async def get_esp_detail(session: AsyncSession, actor: Actor, *, entity_id: str)
         "owner_principal_id": root.owner_principal_id,
         "contract": _contract_dict(contract) if contract is not None else None,
         "registry": _registry_dict(entry) if entry is not None else None,
+        "latest_validation_run": _validation_run_dict(latest_run),
         "created_at": revision.created_at.isoformat() if revision.created_at else None,
         # Resolver perf fields are N/A (never fabricated, L4 / doc 09 §14).
         "net_profit": _NOT_APPLICABLE,
         "backtest_ready": _NOT_APPLICABLE,
         "oos_passed": _NOT_APPLICABLE,
+    }
+
+
+def _validation_run_dict(run: EmbeddedResolverValidationRun | None) -> dict[str, Any] | None:
+    """Surface the latest validation-run (status + checks) for the detail projection (R8)."""
+    if run is None:
+        return None
+    return {
+        "run_id": run.run_id,
+        "status": str(run.status),
+        "validator_version": run.validator_version,
+        "vectors_run": run.vectors_run,
+        "checks": run.checks,
+        "completed_at": run.completed_at.isoformat() if run.completed_at else None,
     }
 
 

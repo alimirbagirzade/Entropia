@@ -50,6 +50,7 @@ from entropia.infrastructure.postgres.models.deletion import Tombstone, TrashEnt
 from entropia.infrastructure.postgres.models.esp import (
     EmbeddedResolverContract,
     EmbeddedResolverRegistry,
+    EmbeddedResolverValidationRun,
 )
 from entropia.infrastructure.postgres.models.export import ExportArtifact
 from entropia.infrastructure.postgres.models.identity import Agent, HumanUser, Principal
@@ -147,6 +148,7 @@ __all__ = [
     "DiagnosticArtifact",
     "EmbeddedResolverContract",
     "EmbeddedResolverRegistry",
+    "EmbeddedResolverValidationRun",
     "EntityRegistry",
     "EntityRevision",
     "ExecutionPlan",

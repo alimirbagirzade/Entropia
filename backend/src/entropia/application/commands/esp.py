@@ -23,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from entropia.application.idempotency import run_idempotent
 from entropia.domain.esp import policy as esp_policy
+from entropia.domain.esp import validation as esp_validation
 from entropia.domain.esp.enums import ResolverTrustState, RuntimeAdapter
 from entropia.domain.esp.state_machine import next_resolver_trust_state
 from entropia.domain.identity import Actor
@@ -45,6 +46,7 @@ from entropia.shared.errors import (
     ResolverContractInvalid,
     ResolverEvidenceRequired,
     ResolverRegistryConflict,
+    ResolverValidationRequired,
 )
 
 # Audit target / approval target kind for ESP registry decisions (doc 09 §11.3).
@@ -195,17 +197,20 @@ async def activate_resolver(
 ) -> dict[str, Any]:
     """Admin-only: activate a CANDIDATE resolver -> TRUSTED_ACTIVE (doc 09 §8/§10.2).
 
-    Passing test-vector EVIDENCE is a precondition for trusted activation (doc 09
-    §4.1/§4.2/§7): the resolver contract must carry a non-empty ``evidence`` payload,
-    else ResolverEvidenceRequired (409). Activation does NOT fabricate a PASSED
-    validation state — it records the Admin's APPROVAL only; whether the evidence
-    actually PASSES is a separate validation-run plane (GAP-07 core, out of scope
-    here), so a command-activated revision stays validation ``pending`` until that
-    run lands. Records an approval_decision + audit("esp.registry.activated") +
-    outbox in one transaction. A stale ``expected_registry_version`` ->
-    RESOLVER_REGISTRY_CONFLICT (409). The revision must belong to the resolver's
-    package root; non-Admins are rejected with ApprovalRequiresAdmin (403) before
-    the body runs.
+    A PASSED validation-run is a precondition for trusted activation (doc 09 §4.3
+    step 5, §5, §7; post-V1 R8): the revision must have its stored test-vectors
+    executed to ``validation_state=passed`` via ``run_resolver_validation`` first —
+    a resolver with no/empty evidence is rejected ResolverEvidenceRequired (409),
+    and a revision that has NOT reached ``passed`` (still ``pending``/``warning``/
+    ``failed``) is rejected ResolverValidationRequired (409). This keeps registry
+    trust and Pre-Check resolvability (which already requires ``validation_state ==
+    passed``) in agreement — no longer a presence-only gate. Activation itself is
+    still an APPROVAL: it records an approval_decision + audit("esp.registry.
+    activated") + outbox in one transaction and stamps ``approval_state=approved``
+    (the validation pass was stamped by the earlier run, not fabricated here). A
+    stale ``expected_registry_version`` -> RESOLVER_REGISTRY_CONFLICT (409). The
+    revision must belong to the resolver's package root; non-Admins are rejected
+    with ApprovalRequiresAdmin (403) before the body runs.
     """
     esp_policy.ensure_can_activate(actor)
     entry = await _require_registry(session, canonical_key)
@@ -216,14 +221,13 @@ async def activate_resolver(
         # Concurrency + legality checks live INSIDE the idempotent body (L2/D3):
         # a completed-key replay returns the stored result before reaching here.
         _check_registry_version(entry, expected_registry_version)
-        _ensure_activation_evidence(contract)
+        _ensure_validation_passed(revision, contract)
         previous = entry.trust_state
         next_resolver_trust_state(previous, ResolverTrustState.TRUSTED_ACTIVE)
-        # Activation is an APPROVAL decision, not a validation pass: the Admin
-        # trusts the resolver on the strength of its attached evidence. The
-        # validation RUN that would set ``validation_state=passed`` is separate
-        # scope, so we deliberately do NOT stamp it here (doc 09 §7 "a successful
-        # one-off sample is not sufficient evidence for activation").
+        # Activation is an APPROVAL decision layered on top of a PASSED validation
+        # run (checked just above, R8): the earlier run set ``validation_state=
+        # passed`` on the strength of the executed test-vectors; here we record the
+        # Admin's approval and repoint the registry. We never fabricate the pass.
         revision.approval_state = ApprovalState.APPROVED
         esp_repo.set_trust_state(
             entry,
@@ -270,6 +274,81 @@ async def activate_resolver(
             "entity_id": entity_id,
             "revision_id": revision_id,
         },
+        operation=_op,
+    )
+
+
+async def run_resolver_validation(
+    session: AsyncSession,
+    actor: Actor,
+    *,
+    entity_id: str,
+    revision_id: str,
+    idempotency_key: str | None = None,
+) -> dict[str, Any]:
+    """Execute a resolver revision's stored test-vectors -> set ``validation_state`` (R8).
+
+    The resolver's owner or an Admin may run validation (doc 09 §5 candidate evidence
+    collection). Runs the deterministic ``esp_validation.run_resolver_validation`` suite over
+    the contract's evidence + signature, copies the terminal status onto
+    ``revision.validation_state``, writes an immutable ``embedded_resolver_validation_run``
+    row and emits ``esp.validation.completed`` audit + outbox in one transaction. Idempotent
+    on ``idempotency_key`` (a completed-key replay returns the cached report). Only after a
+    ``passed`` run can an Admin ``activate_resolver`` the revision (doc 09 §4.3 step 5)."""
+    revision = await _require_revision(session, entity_id, revision_id)
+    root = await pkg_repo.get_package_root(session, entity_id)
+    owner_principal_id = root.owner_principal_id if root is not None else None
+    esp_policy.ensure_can_run_validation(actor, owner_principal_id=owner_principal_id)
+    contract = await esp_repo.get_contract_by_revision(session, revision_id)
+    if contract is None:
+        raise ResolverContractInvalid("This resolver revision has no contract to validate.")
+    canonical_key = contract.canonical_key
+    signature = contract.signature
+    evidence = contract.evidence
+    repaint = contract.repaint
+
+    async def _op() -> dict[str, Any]:
+        report = esp_validation.run_resolver_validation(
+            canonical_key=canonical_key,
+            signature=signature,
+            evidence=evidence,
+            repaint=repaint,
+        )
+        revision.validation_state = report.status
+        esp_repo.add_validation_run(
+            session,
+            entity_id=entity_id,
+            revision_id=revision_id,
+            canonical_key=canonical_key,
+            status=report.status,
+            validator_version=esp_validation.VALIDATOR_VERSION,
+            vectors_run=report.vectors_run,
+            checks=report.as_dict(),
+            created_by_principal_id=actor.principal_id,
+        )
+        _audit_and_outbox(
+            session,
+            actor,
+            event_kind="esp.validation.completed",
+            entity_id=entity_id,
+            revision_id=revision_id,
+            new_state=str(report.status),
+            action="validation_completed",
+        )
+        return {
+            "entity_id": entity_id,
+            "revision_id": revision_id,
+            "canonical_key": canonical_key,
+            "validation_state": str(report.status),
+            "vectors_run": report.vectors_run,
+            "checks": [c.as_dict() for c in report.checks],
+        }
+
+    return await run_idempotent(
+        session,
+        key=idempotency_key,
+        actor_principal_id=actor.principal_id,
+        request_payload={"op": "run_resolver_validation", "revision_id": revision_id},
         operation=_op,
     )
 
@@ -378,6 +457,24 @@ def _ensure_activation_evidence(contract: EmbeddedResolverContract | None) -> No
         )
 
 
+def _ensure_validation_passed(
+    revision: PackageRevision, contract: EmbeddedResolverContract | None
+) -> None:
+    """Activation gate (R8): the resolver must carry evidence AND have reached
+    ``validation_state=passed`` via a validation-run (doc 09 §4.3 step 5, §5, §7).
+
+    The evidence-presence check runs FIRST so a bare proposal returns the more specific
+    RESOLVER_EVIDENCE_REQUIRED; a resolver that has evidence but has not passed its run
+    (still ``pending``/``warning``/``failed``) returns RESOLVER_VALIDATION_REQUIRED. This
+    replaces the presence-only gate so registry trust and Pre-Check resolvability (which
+    already requires ``validation_state == passed``) finally agree."""
+    _ensure_activation_evidence(contract)
+    if revision.validation_state != PackageValidationState.PASSED:
+        raise ResolverValidationRequired(
+            "This resolver has not passed validation; run its test vectors before activation."
+        )
+
+
 async def _require_revision(
     session: AsyncSession, entity_id: str, revision_id: str
 ) -> PackageRevision:
@@ -394,4 +491,9 @@ async def _require_revision(
     return revision
 
 
-__all__ = ["activate_resolver", "create_esp_package", "deprecate_resolver"]
+__all__ = [
+    "activate_resolver",
+    "create_esp_package",
+    "deprecate_resolver",
+    "run_resolver_validation",
+]

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from entropia.domain.identity import policy as identity_policy
 from entropia.domain.identity.actor import Actor
-from entropia.shared.errors import ApprovalRequiresAdmin
+from entropia.shared.errors import AccessDeniedError, ApprovalRequiresAdmin
 
 
 def ensure_can_view(actor: Actor, *, owner_principal_id: str | None, visibility: str) -> None:
@@ -40,3 +40,16 @@ def ensure_can_deprecate(actor: Actor) -> None:
     """Registry deprecation (trusted_active -> deprecated) is Admin-only (CR-02)."""
     if not actor.is_admin:
         raise ApprovalRequiresAdmin("Deprecating a trusted resolver requires the Admin role.")
+
+
+def ensure_can_run_validation(actor: Actor, *, owner_principal_id: str | None) -> None:
+    """A resolver's owner or an Admin may run its validation suite (doc 09 §5 "Draft /
+    candidate": owner/Admin evidence collection; §11.1 test-vector layer, R8).
+
+    Validation writes durable evidence and moves ``revision.validation_state``, so it is
+    NOT an anonymous read — a non-owner, non-Admin actor is denied. Activation itself
+    stays Admin-only (``ensure_can_activate``)."""
+    identity_policy.require_authenticated(actor)
+    if actor.is_admin or actor.principal_id == owner_principal_id:
+        return
+    raise AccessDeniedError("You may only run validation on a resolver you own.")

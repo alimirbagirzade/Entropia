@@ -38,6 +38,7 @@ market revision => byte-identical signals. All arithmetic is ``Decimal``.
 from __future__ import annotations
 
 from collections import deque
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -460,6 +461,44 @@ def _build_reference_indicator(key: str, length: int) -> _MovingAverage | _Rsi |
     if key == _VWAP_KEY:
         return _Vwap(length)
     return _MovingAverage(key, length)
+
+
+# Directional keys whose incremental compute an ESP validation-run can execute against
+# stored test-vectors (doc 09 §11.1 "Test vectors", post-V1 R8). ``ta.atr`` / ``cond.*``
+# have no directional series compute here, so a validation-run over them cannot PASS
+# (fail-closed, doc 09 §7 "a successful one-off sample is not sufficient evidence").
+VALIDATABLE_RESOLVER_KEYS: frozenset[str] = DIRECTIONAL_KEYS
+
+
+def compute_resolver_series(
+    key: str,
+    length: int,
+    closes: Sequence[Decimal],
+    *,
+    highs: Sequence[Decimal] | None = None,
+    lows: Sequence[Decimal] | None = None,
+    volumes: Sequence[Decimal] | None = None,
+) -> list[Decimal | None]:
+    """Run a directional resolver's incremental compute over a bar series (post-V1 R8).
+
+    Returns the per-bar output value (``None`` during warm-up / when undefined). Reuses the
+    exact ``_build_reference_indicator`` compute the engine's conditions use, so an ESP
+    validation-run certifies the SAME math the backtest engine runs — never a divergent
+    second implementation. ``ta.vwap`` reads ``highs``/``lows``/``volumes`` (a zero-volume
+    window is undefined -> ``None``, fail-closed); the MA family and ``ta.rsi`` read only
+    ``closes``. Callers must pre-check ``key in VALIDATABLE_RESOLVER_KEYS``.
+    """
+    indicator = _build_reference_indicator(key, length)
+    out: list[Decimal | None] = []
+    for i, close in enumerate(closes):
+        if isinstance(indicator, _Vwap):
+            high = highs[i] if highs is not None and i < len(highs) else close
+            low = lows[i] if lows is not None and i < len(lows) else close
+            volume = volumes[i] if volumes is not None and i < len(volumes) else _ZERO
+            out.append(indicator.update(close, high, low, volume))
+        else:
+            out.append(indicator.update(close))
+    return out
 
 
 def _feed_indicator(
@@ -1080,6 +1119,7 @@ __all__ = [
     "NON_DIRECTIONAL_KEYS",
     "RANGE_CONDITION_KEYS",
     "RECOGNIZED_KEYS",
+    "VALIDATABLE_RESOLVER_KEYS",
     "VOLUME_WEIGHTED_KEYS",
     "BlockEvaluator",
     "ConditionEvaluator",
@@ -1090,6 +1130,7 @@ __all__ = [
     "SignalRule",
     "aggregate",
     "build_evaluators",
+    "compute_resolver_series",
     "condition_direction",
     "default_length",
     "timeframe_seconds",

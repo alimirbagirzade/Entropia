@@ -90,7 +90,7 @@ async def get_capability(
 
 
 async def get_graphic_view_overview(session: AsyncSession, actor: Actor) -> dict[str, Any]:
-    """GET /future-dev/graphic_view/overview (doc 22 §4.1, §8, FD-01/03): the
+    """GET /future-dev/graphic-view/overview (doc 22 §4.1, §8, FD-01/03): the
     static intro + six future cards + the server-side registry state. No chart
     request, no View Dataset job, no marker computation, no persistence."""
     require_authenticated(actor)

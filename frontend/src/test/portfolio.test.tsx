@@ -252,7 +252,7 @@ describe("Portfolio / Equity Allocation page", () => {
     renderPage();
 
     fireEvent.click(await screen.findByRole("button", { name: "Add" }));
-    fireEvent.click(screen.getByLabelText(/Enable shared equity allocation/));
+    fireEvent.click(screen.getByLabelText(/USE EQUITY ALLOCATION FOR THIS BACKTEST/));
     fireEvent.change(screen.getByLabelText("Initial capital"), { target: { value: "10000" } });
     fireEvent.change(screen.getByLabelText("Currency"), { target: { value: "USDT" } });
     fireEvent.change(screen.getByLabelText("Compounding mode"), {

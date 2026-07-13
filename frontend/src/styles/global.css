@@ -313,3 +313,63 @@ a:hover { text-decoration: underline; }
 @media (max-width: 720px) {
   .manual-publish-grid { grid-template-columns: 1fr; }
 }
+
+/* GAP-08 — Strategy structured form + ⓘ Information Content panels (doc 02) */
+.form-section-h {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 22px 0 4px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  font-size: 15px;
+}
+.field-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+.field-head > label { font-size: 13px; color: var(--text-dim); }
+.checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--text);
+  cursor: pointer;
+}
+.info-panel { display: inline-block; }
+.info-panel > summary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  color: var(--accent);
+  font-size: 13px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.info-panel > summary::-webkit-details-marker { display: none; }
+.info-panel > summary::marker { content: ""; }
+.info-panel > summary:hover { background: var(--bg-elev-2); }
+.info-panel-body {
+  margin-top: 6px;
+  padding: 10px 12px;
+  max-width: 520px;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 13px;
+}
+.info-panel-body strong { display: block; margin-bottom: 6px; color: var(--text); }
+.info-panel-body p { margin: 0; white-space: pre-wrap; color: var(--text-dim); }
+@media (max-width: 720px) {
+  .info-panel-body { max-width: 100%; }
+}

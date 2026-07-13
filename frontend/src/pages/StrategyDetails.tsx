@@ -5,6 +5,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { ErrorState } from "@/components/ErrorState";
 import { Loading } from "@/components/Loading";
 import { StatusBadge } from "@/components/StatusBadge";
+import { StrategyConfigForm } from "@/components/StrategyConfigForm";
 import { ApiError } from "@/lib/apiClient";
 import { EM_DASH, formatUtc, useDefaultMainboard } from "@/lib/backtest";
 import { useRationaleFamilies } from "@/lib/createPackage";
@@ -244,17 +245,22 @@ function DraftWorkbench({ draftId }: { draftId: string }) {
   const draft = draftQuery.data;
   if (!draft) return null;
 
+  // A patch replaces the FULL draft payload under BODY-form OCC. Both the
+  // structured form (covered flat sections overlaid) and the Advanced JSON
+  // editor (raw full payload) flow through this same PATCH.
+  const applyPayload = (payload: Record<string, unknown>) =>
+    patch.mutate({ draftId, expectedRowVersion: draft.row_version, payload });
+
   return (
     <>
       <DraftHeaderCard draft={draft} />
-      <PayloadEditor
-        key={draft.row_version}
-        draft={draft}
+      <StrategyConfigForm
+        key={`form-${draft.row_version}`}
+        payload={draft.payload}
         pending={patch.isPending}
-        onApply={(payload) =>
-          patch.mutate({ draftId, expectedRowVersion: draft.row_version, payload })
-        }
+        onApply={applyPayload}
       />
+      <PayloadEditor key={draft.row_version} draft={draft} pending={patch.isPending} onApply={applyPayload} />
       {patch.isError ? (
         <MutationErrorCard error={patch.error} />
       ) : patch.data ? (
@@ -321,7 +327,9 @@ function DraftHeaderCard({ draft }: { draft: StrategyDraft }) {
 // Remounts on every server head move via key={row_version} — the editor is
 // always seeded from the latest server draft, never merged. The textarea is
 // raw JSON: parse failures stay CLIENT-side (nothing is sent); the server
-// compiler remains the only authority on config semantics.
+// compiler remains the only authority on config semantics. This is the expert
+// escape hatch that also edits the package-graph sections (Entry/Exit Logic,
+// Scaling, Restrictions) the structured form leaves untouched.
 function PayloadEditor({
   draft,
   pending,
@@ -337,11 +345,13 @@ function PayloadEditor({
   return (
     <section className="card" style={{ marginTop: 18 }} aria-labelledby="strat-payload-h">
       <h3 id="strat-payload-h" style={{ marginTop: 0 }}>
-        Draft payload (JSON)
+        Advanced (JSON) editor
       </h3>
       <p className="cp-note">
         Apply replaces the FULL draft payload (optimistic concurrency on row version{" "}
-        {draft.row_version}). Validation happens on the server — Validate / Save below.
+        {draft.row_version}) — this is where the Position Entry/Exit Logic, Scaling and
+        Restrictions sections are edited. Validation happens on the server — Validate / Save
+        below.
       </p>
       <label className="cp-field cp-wide">
         <span>StrategyConfig payload</span>

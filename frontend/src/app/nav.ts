@@ -88,6 +88,8 @@ export interface MenuLink {
   path?: string; // omitted → non-navigating action item (e.g. About modal)
   action?: "about";
   adminOnly?: boolean;
+  items?: MenuLink[]; // second-level submenu (v18 nested tree); a leaf with no
+  // path/action/items is a passive placeholder (mockup "Live Trade").
 }
 
 export interface MenuGroup {
@@ -99,23 +101,40 @@ export interface MenuGroup {
 }
 
 export const MENU_BAR: MenuGroup[] = [
-  { label: "Mainboard", path: "/" },
+  {
+    label: "Mainboard",
+    path: "/", // clickable title (opens the index) AND a hover dropdown
+    items: [
+      { label: "Add Strategy", path: "/strategy" },
+      {
+        label: "Add Outsource Signal",
+        items: [
+          { label: "Trading Signal", path: "/trading-signal" },
+          { label: "Trade Log", path: "/trade-log" },
+        ],
+      },
+      { label: "Add Package", path: "/packages/create" },
+      { label: "Portfolio / Equity Allocation", path: "/portfolio" },
+    ],
+  },
   {
     label: "Edit",
     items: [
-      { label: "Add Strategy", path: "/strategy" },
-      { label: "Trading Signal", path: "/trading-signal" },
-      { label: "Trade Log", path: "/trade-log" },
-      { label: "Add Outsource Signal", path: "/outsource-signal" },
-      { label: "Portfolio / Equity Allocation", path: "/portfolio" },
-      { label: "Create Package", path: "/packages/create" },
-      { label: "Pre-Check", path: "/packages/pre-check" },
-      { label: "Package Library", path: "/packages/library" },
-      { label: "Embedded System Packages", path: "/packages/embedded" },
+      {
+        label: "Package Library",
+        items: [
+          { label: "Strategy Packages", path: "/packages/library?type=strategy" },
+          { label: "Indicator Packages", path: "/packages/library?type=indicator" },
+          { label: "Condition Packages", path: "/packages/library?type=condition" },
+          // Trading Signal / Trade Log are not backend catalog kinds → unfiltered library.
+          { label: "Trading Signal Packages", path: "/packages/library" },
+          { label: "Trade Log Packages", path: "/packages/library" },
+          { label: "Embedded System Packages", path: "/packages/embedded" },
+        ],
+      },
       { label: "Rationale Families", path: "/rationale-families" },
+      { label: "Create Package", path: "/packages/create" },
       { label: "Market Data", path: "/market-data" },
-      { label: "Research Data", path: "/research-data" },
-      { label: "Instrument Registry", path: "/instruments" },
     ],
   },
   {
@@ -135,21 +154,41 @@ export const MENU_BAR: MenuGroup[] = [
   {
     label: "Future Dev",
     accent: "blue",
-    items: [{ label: "Future Dev", path: "/future-dev" }],
+    items: [
+      { label: "Live Trade" }, // passive placeholder (mockup: no target)
+      { label: "Graphic View", path: "/future-dev/graphic-view" },
+      {
+        label: "AI Operations",
+        items: [
+          { label: "Backtest Review", path: "/future-dev/backtest-review" },
+          { label: "Signal Intelligence", path: "/future-dev/signal-intelligence" },
+        ],
+      },
+      {
+        label: "Research",
+        items: [
+          { label: "Regime Research", path: "/future-dev/regime-research" },
+          { label: "Hypothesis Lab", path: "/future-dev/hypothesis-lab" },
+          { label: "Parameter Fields", path: "/future-dev/parameter-fields" },
+        ],
+      },
+    ],
   },
   {
     label: "Panel",
     adminOnly: true,
     items: [
-      { label: "Logs / Management", path: "/panel", adminOnly: true },
-      { label: "Admin Provisioning", path: "/panel/provisioning" },
-      { label: "System Metrics", path: "/panel/metrics", adminOnly: true },
+      { label: "Logs", path: "/panel", adminOnly: true },
+      { label: "Management", path: "/panel", adminOnly: true },
       { label: "Trash", path: "/trash", adminOnly: true },
     ],
   },
   {
     label: "Agent Workspace",
     adminOnly: true,
-    items: [{ label: "Analysis Lab", path: "/analysis-lab" }],
+    items: [
+      { label: "Analysis Lab", path: "/analysis-lab" },
+      { label: "Research Data", path: "/research-data" },
+    ],
   },
 ];

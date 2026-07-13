@@ -604,6 +604,30 @@ class TriggerSourceConditionRequiredError(ValidationError):
     message = "Add at least one compatible Condition for the selected Trigger Source."
 
 
+class EntryRequiredBlockMissingError(ValidationError):
+    """No active entry Indicator Block is marked ``required`` (doc 02 §3, lines
+    758/806). The entry signal graph needs at least one Required block."""
+
+    code = "ENTRY_REQUIRED_BLOCK_MISSING"
+    message = "At least one active entry Indicator Block must be Required."
+
+
+class SignalSupportingRequirementUnmetError(ValidationError):
+    """The entry signal aggregation rule consumes Supporting blocks but the config
+    has too few active Supporting blocks to ever satisfy it (doc 02 §3, line 758)."""
+
+    code = "SIGNAL_SUPPORTING_REQUIREMENT_UNMET"
+    message = "Add enough active Supporting entry Indicator Blocks for the selected signal rule."
+
+
+class EntryDirectionIncoherentError(ValidationError):
+    """An active entry Indicator Block's direction can never fire under the
+    strategy's direction mode (doc 02 §9, AT-08, line 1306)."""
+
+    code = "ENTRY_DIRECTION_INCOHERENT"
+    message = "An entry Indicator Block's direction can never fire under the direction mode."
+
+
 class StrategyLockedForTestError(ConflictError):
     """The strategy root is locked_for_test and cannot be edited in place;
     clone-to-draft is required (doc 02 §7, DOMAIN_MODEL §3.2)."""

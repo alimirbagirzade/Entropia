@@ -8,7 +8,8 @@ tests/integration/test_strategy_integration.py):
   (422). DI-override style mirrors test_mainboard_contract.py.
 * The compiler contract — ``config_hash`` is deterministic, disabled sections are
   filtered out (scaling.enabled=false -> None), and the cross-field blockers
-  (sizing exclusivity, trigger-source-conditional) surface their machine codes.
+  (sizing exclusivity, trigger-source-conditional, entry Required block, signal
+  aggregation satisfiability, direction coherence) surface their machine codes.
 """
 
 from __future__ import annotations
@@ -23,6 +24,9 @@ from entropia.apps.api.deps import RequestContext, request_context
 from entropia.domain.identity import Actor
 from entropia.domain.lifecycle.enums import PrincipalType, Role
 from entropia.domain.strategy.compiler import (
+    CODE_ENTRY_DIRECTION_INCOHERENT,
+    CODE_ENTRY_REQUIRED_BLOCK_MISSING,
+    CODE_SIGNAL_SUPPORTING_REQUIREMENT_UNMET,
     CODE_SIZING_NOT_EXCLUSIVE,
     CODE_TRIGGER_CONDITION_REQUIRED,
     compute_config_hash,
@@ -235,3 +239,60 @@ def test_native_trigger_needs_no_condition() -> None:
     config, _issues = validate_strategy_config(_valid_payload())
     assert config is not None
     assert not validate_semantics(config)
+
+
+def test_compiler_flags_entry_no_required_block() -> None:
+    # An entry graph with only Supporting blocks is invalid (doc 02 §3, line 806).
+    payload = _valid_payload()
+    payload["position_entry_logic"]["indicator_blocks"][0]["requirement"] = "supporting"
+    config, issues = validate_strategy_config(payload)
+    assert config is not None  # structurally valid; blocked semantically
+    assert CODE_ENTRY_REQUIRED_BLOCK_MISSING in {i["code"] for i in issues}
+
+
+def test_compiler_flags_supporting_rule_without_supporting_blocks() -> None:
+    # A supporting-bearing signal rule with zero Supporting blocks is unsatisfiable.
+    payload = _valid_payload()
+    payload["position_entry_logic"]["signal_block"]["rule"] = "required_plus_any_supporting"
+    config, issues = validate_strategy_config(payload)
+    assert config is not None
+    assert CODE_SIGNAL_SUPPORTING_REQUIREMENT_UNMET in {i["code"] for i in issues}
+
+
+def test_compiler_flags_min_supporting_count_unsatisfiable() -> None:
+    # required_plus_min_supporting needs >= min_supporting_count active Supporting
+    # blocks; a config that cannot reach the count is blocked (doc 02 §3, line 758).
+    payload = _valid_payload()
+    payload["position_entry_logic"]["signal_block"]["rule"] = "required_plus_min_supporting"
+    payload["position_entry_logic"]["signal_block"]["min_supporting_count"] = 2
+    config, issues = validate_strategy_config(payload)
+    assert config is not None
+    assert CODE_SIGNAL_SUPPORTING_REQUIREMENT_UNMET in {i["code"] for i in issues}
+
+
+def test_compiler_flags_direction_incoherent() -> None:
+    # A short-only block under a long-only strategy can never fire (AT-08, line 1306).
+    payload = _valid_payload()
+    payload["position_entry_logic"]["direction_mode"] = "long"
+    payload["position_entry_logic"]["indicator_blocks"][0]["direction"] = "short"
+    config, issues = validate_strategy_config(payload)
+    assert config is not None
+    assert CODE_ENTRY_DIRECTION_INCOHERENT in {i["code"] for i in issues}
+
+
+def test_supporting_rule_with_required_and_supporting_ok() -> None:
+    # A required + supporting pair under a supporting rule is coherent (negative case:
+    # no over-blocking). Direction long block under long-and-short mode also coheres.
+    payload = _valid_payload()
+    payload["position_entry_logic"]["signal_block"]["rule"] = "required_plus_any_supporting"
+    base_block = payload["position_entry_logic"]["indicator_blocks"][0]
+    supporting_block = {
+        **base_block,
+        "block_id": "ind_supporting",
+        "display_order": 1,
+        "requirement": "supporting",
+    }
+    payload["position_entry_logic"]["indicator_blocks"].append(supporting_block)
+    config, issues = validate_strategy_config(payload)
+    assert config is not None
+    assert not issues

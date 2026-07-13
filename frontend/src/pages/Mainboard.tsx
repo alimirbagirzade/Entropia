@@ -51,28 +51,30 @@ function ItemRow({ item }: { item: MainboardItem }) {
   const busy = patch.isPending || del.isPending;
 
   return (
-    <div style={{ border: "1px solid var(--border)", borderRadius: 5, padding: "10px 14px" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+    <div className="strategy-package">
+      <div className={`strategy-row${expanded ? " open" : ""}`}>
+        <span className="strategy-text">
+          <strong>{label}</strong>
+          <StatusBadge label={itemKindLabel(item.item_kind)} tone="neutral" />
+          <StatusBadge
+            label={item.is_enabled ? "Enabled" : "Disabled"}
+            tone={item.is_enabled ? "ok" : "warn"}
+          />
+          <span style={noteStyle}>#{item.position_index}</span>
+        </span>
         <button
           type="button"
-          className="btn btn-ghost"
+          className="strategy-arrow"
           aria-expanded={expanded}
           aria-label={expanded ? `Collapse ${label}` : `Expand ${label}`}
           onClick={() => setExpanded((v) => !v)}
         >
           {expanded ? "▲" : "▼"}
         </button>
-        <strong style={{ flex: 1, minWidth: 160 }}>{label}</strong>
-        <StatusBadge label={itemKindLabel(item.item_kind)} tone="neutral" />
-        <StatusBadge
-          label={item.is_enabled ? "Enabled" : "Disabled"}
-          tone={item.is_enabled ? "ok" : "warn"}
-        />
-        <span style={noteStyle}>#{item.position_index}</span>
       </div>
 
       {expanded && (
-        <div style={{ marginTop: 12, display: "grid", gap: 14 }}>
+        <div className="strategy-details" style={{ display: "grid", gap: 14 }}>
           <dl className="kv">
             <dt>Work object</dt>
             <dd>{item.work_object_root_id}</dd>
@@ -475,6 +477,38 @@ export function Mainboard() {
       <p className="page-sub">Backtest composition · {data.workspace_kind}</p>
 
       <div style={{ display: "grid", gap: 18 }}>
+        <section aria-labelledby="strategies-h">
+          <h2 id="strategies-h" className="strategies-title">STRATEGIES</h2>
+          {items.length === 0 ? (
+            <div className="card">
+              <strong>Your Mainboard is empty.</strong>
+              <p style={{ margin: "6px 0 0", fontSize: 13 }}>
+                Add a Strategy, Trading Signal, or Trade Log to build a backtest composition. Unsaved
+                drafts are not included in Backtest Ready Check or RUN.
+              </p>
+            </div>
+          ) : (
+            <div className="strategy-list">
+              {items.map((item) => (
+                <ItemRow key={item.item_id} item={item} />
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section aria-labelledby="results-h">
+          <h2 id="results-h" className="results-title">BACKTEST RESULTS</h2>
+          {data.latest_result_summary ? (
+            <div className="result-row">
+              <LatestResultCard result={data.latest_result_summary} />
+            </div>
+          ) : (
+            <p style={{ ...noteStyle, margin: 0 }}>
+              No succeeded Backtest Result is available for this Mainboard yet.
+            </p>
+          )}
+        </section>
+
         <section className="card" aria-labelledby="summary-h">
           <h3 id="summary-h" style={{ marginTop: 0 }}>Composition</h3>
           <div style={{ display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap" }}>
@@ -485,14 +519,6 @@ export function Mainboard() {
             <dd>{data.composition_hash ?? "—"}</dd>
             <dt>Workspace version</dt>
             <dd>{data.row_version}</dd>
-            <dt>Latest result</dt>
-            <dd>
-              {data.latest_result_summary ? (
-                <LatestResultCard result={data.latest_result_summary} />
-              ) : (
-                "No succeeded Backtest Result is available for this Mainboard yet."
-              )}
-            </dd>
           </dl>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 14 }}>
             <Link to="/backtest/ready-check" className="btn">Backtest Ready Check</Link>
@@ -514,25 +540,6 @@ export function Mainboard() {
             <p style={{ margin: "8px 0 0", fontSize: 13 }}>
               Snapshot {snapshot.data.snapshot_id} · {snapshot.data.item_count} enabled item(s).
             </p>
-          )}
-        </section>
-
-        <section className="card" aria-labelledby="strategies-h">
-          <h3 id="strategies-h" style={{ marginTop: 0 }}>Strategies</h3>
-          {items.length === 0 ? (
-            <div>
-              <strong>Your Mainboard is empty.</strong>
-              <p style={{ margin: "6px 0 0", fontSize: 13 }}>
-                Add a Strategy, Trading Signal, or Trade Log to build a backtest composition. Unsaved
-                drafts are not included in Backtest Ready Check or RUN.
-              </p>
-            </div>
-          ) : (
-            <div style={{ display: "grid", gap: 10 }}>
-              {items.map((item) => (
-                <ItemRow key={item.item_id} item={item} />
-              ))}
-            </div>
           )}
         </section>
 

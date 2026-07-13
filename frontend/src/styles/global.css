@@ -565,3 +565,74 @@ a:hover { text-decoration: underline; }
 .mode-toggle > input { margin-top: 3px; }
 .mode-toggle b { display: block; margin-bottom: 3px; }
 .mode-toggle span { font-size: 12px; color: var(--text-dim); }
+
+/* ---- v18 Mainboard: STRATEGIES + BACKTEST RESULTS lists (mockup) ---- */
+.strategies-title,
+.results-title {
+  font-size: 9.5px;
+  font-weight: 900;
+  letter-spacing: 0.8px;
+  color: var(--text-dim);
+  margin: 0 0 8px;
+}
+.results-title { border-top: 1px solid var(--border); padding-top: 12px; }
+.strategy-list { position: relative; }
+.strategy-package { margin-bottom: 9px; }
+
+/* Collapsed strategy bar → blue when open (mockup .strategy-row / .open). */
+.strategy-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 34px;
+  border: 1px solid #333;
+  border-radius: 5px;
+  padding-left: 10px;
+  gap: 8px;
+  font-size: 13px;
+  background: #ffffff;
+  color: #111;
+}
+.strategy-row.open {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  background: #b9ecff;
+  border-color: #4a8aa0;
+}
+.strategy-text { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.strategy-arrow {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  font-size: 17px;
+  line-height: 34px;
+  cursor: pointer;
+  color: #000;
+  padding: 0;
+}
+.strategy-details {
+  border-left: 1px solid #4a8aa0;
+  border-right: 1px solid #4a8aa0;
+  border-bottom: 1px solid #4a8aa0;
+  border-bottom-left-radius: 5px;
+  border-bottom-right-radius: 5px;
+  padding: 16px 18px;
+  background: #ffffff;
+}
+
+/* Backtest result bar (mockup .result-row — cyan). */
+.result-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 38px;
+  border: 1px solid #4a8aa0;
+  border-radius: 5px;
+  background: #b9ecff;
+  color: #111;
+  padding: 6px 12px;
+  gap: 10px;
+  font-size: 13px;
+}

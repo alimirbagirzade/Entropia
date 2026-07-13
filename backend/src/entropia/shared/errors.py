@@ -1598,3 +1598,45 @@ class InstrumentDeprecateRequiresAdminError(ForbiddenError):
 
     code = "INSTRUMENT_DEPRECATE_REQUIRES_ADMIN"
     message = "Deprecating a canonical instrument requires the Admin role."
+
+
+class ShareManagementForbiddenError(ForbiddenError):
+    """Only the resource owner or an Admin may grant/revoke explicit shares
+    (GAP-17; Master §6.4). A viewer with whom a resource is shared cannot re-share
+    it — sharing never transfers ownership or grant authority."""
+
+    code = "SHARE_MANAGEMENT_FORBIDDEN"
+    message = "Only the owner or an Admin can manage sharing for this resource."
+
+
+class ShareNotAllowedForVisibilityError(ConflictError):
+    """An explicit share was requested for a published/system resource that is
+    already visible to everyone (GAP-17; Master §6.4). Explicit sharing applies to
+    private resources only; making a resource public is a separate publish flow."""
+
+    code = "SHARE_NOT_ALLOWED"
+    message = "This resource is already public; explicit sharing does not apply."
+
+
+class ShareWithSelfError(ValidationError):
+    """The owner tried to share a resource with themselves (GAP-17). The owner
+    already has full access, so a self-grant is meaningless and rejected."""
+
+    code = "SHARE_WITH_SELF"
+    message = "You cannot share a resource with yourself."
+
+
+class ShareGranteeNotFoundError(NotFoundError):
+    """The share target did not resolve to an active user account (GAP-17). The
+    grantee must be an existing, active human user; no share row is created."""
+
+    code = "SHARE_GRANTEE_NOT_FOUND"
+    message = "No active user matches the share recipient."
+
+
+class ShareGrantNotFoundError(NotFoundError):
+    """A revoke referenced a share grant that does not exist for this resource
+    (GAP-17). The id leaks no metadata about other resources' grants."""
+
+    code = "SHARE_GRANT_NOT_FOUND"
+    message = "The share grant was not found for this resource."

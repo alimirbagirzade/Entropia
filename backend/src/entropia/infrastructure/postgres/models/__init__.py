@@ -109,6 +109,7 @@ from entropia.infrastructure.postgres.models.research_data import (
     ResearchValidationIssue,
     ResearchValidationRun,
 )
+from entropia.infrastructure.postgres.models.resource_share import ResourceShare
 from entropia.infrastructure.postgres.models.strategy import (
     StrategyEditorDraft,
     StrategyRevision,
@@ -201,6 +202,7 @@ __all__ = [
     "ResearchTimePolicy",
     "ResearchValidationIssue",
     "ResearchValidationRun",
+    "ResourceShare",
     "ResultEquityPoint",
     "ResultManifestSnapshot",
     "ResultSummary",

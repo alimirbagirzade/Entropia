@@ -18,6 +18,23 @@ async def get_human_user(session: AsyncSession, user_id: str) -> HumanUser | Non
     return await session.get(HumanUser, user_id)
 
 
+async def get_active_user_by_email(session: AsyncSession, email: str) -> HumanUser | None:
+    """Resolve an ACTIVE human user by exact (case-normalized) email.
+
+    The email is stored verbatim but matched case-insensitively so a share
+    recipient is found regardless of the casing the owner typed. A disabled or
+    soft-deleted account never resolves (it must not become a share target)."""
+    normalized = email.strip().lower()
+    if not normalized:
+        return None
+    stmt = select(HumanUser).where(
+        func.lower(HumanUser.email) == normalized,
+        HumanUser.status == "active",
+        HumanUser.deletion_state == DeletionState.ACTIVE,
+    )
+    return (await session.execute(stmt)).scalar_one_or_none()
+
+
 async def get_agent(session: AsyncSession, agent_id: str) -> Agent | None:
     return await session.get(Agent, agent_id)
 

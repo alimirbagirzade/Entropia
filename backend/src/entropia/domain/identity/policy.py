@@ -7,7 +7,7 @@ a substitute for these checks.
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Collection, Iterable
 
 from entropia.domain.identity.actor import Actor
 from entropia.domain.lifecycle.enums import Role
@@ -83,10 +83,19 @@ def require_role(actor: Actor, roles: Iterable[Role]) -> None:
         raise AccessDeniedError("Your role does not permit this action.")
 
 
-def can_view(actor: Actor, *, owner_principal_id: str | None, visibility: str) -> bool:
+def can_view(
+    actor: Actor,
+    *,
+    owner_principal_id: str | None,
+    visibility: str,
+    shared_principal_ids: Collection[str] | None = None,
+) -> bool:
     """Read access: admins see all; anyone sees published/system; owners see own;
-    `explicitly_shared` is treated as readable to authenticated actors here (the
-    fine-grained share list is resolved by the owning domain in later stages)."""
+    an ``explicitly_shared`` resource is readable ONLY by a principal in the
+    resolved grantee set (``shared_principal_ids``) — never by every authenticated
+    actor. The owning domain resolves that set from ``resource_share`` (GAP-17);
+    the default ``None`` fails closed, so a resource marked ``explicitly_shared``
+    with no resolved grant is visible only to its owner and Admins."""
     if actor.is_admin:
         return True
     if visibility in PUBLIC_VISIBILITIES:
@@ -95,11 +104,24 @@ def can_view(actor: Actor, *, owner_principal_id: str | None, visibility: str) -
         return False
     if owner_principal_id is not None and owner_principal_id == actor.principal_id:
         return True
-    return visibility == "explicitly_shared"
+    if visibility == "explicitly_shared":
+        return shared_principal_ids is not None and actor.principal_id in shared_principal_ids
+    return False
 
 
-def ensure_can_view(actor: Actor, *, owner_principal_id: str | None, visibility: str) -> None:
-    if not can_view(actor, owner_principal_id=owner_principal_id, visibility=visibility):
+def ensure_can_view(
+    actor: Actor,
+    *,
+    owner_principal_id: str | None,
+    visibility: str,
+    shared_principal_ids: Collection[str] | None = None,
+) -> None:
+    if not can_view(
+        actor,
+        owner_principal_id=owner_principal_id,
+        visibility=visibility,
+        shared_principal_ids=shared_principal_ids,
+    ):
         raise AccessDeniedError()
 
 

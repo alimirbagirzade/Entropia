@@ -7,6 +7,12 @@ import { Loading } from "@/components/Loading";
 import { StatusBadge } from "@/components/StatusBadge";
 import { formatUtc } from "@/lib/backtest";
 import { useRationaleFamilies } from "@/lib/createPackage";
+import {
+  usePackageShares,
+  useRevokeShare,
+  useSharePackage,
+  type PackageShare,
+} from "@/lib/sharing";
 import { useDeriveStrategyDraftFromPackage } from "@/lib/strategy";
 import {
   APPROVAL_STATES,
@@ -370,6 +376,7 @@ function PackageDetail({ entityId, onClose }: { entityId: string; onClose: () =>
 
           <DeriveStrategyBlock pkg={pkg} />
           <PackageActions pkg={pkg} onDeleted={onClose} />
+          <PackageSharePanel pkg={pkg} />
 
           <h5 style={{ marginBottom: 4 }}>Performance</h5>
           <dl className="kv">
@@ -551,6 +558,91 @@ function PackageActions({ pkg, onDeleted }: { pkg: LibraryPackageDetail; onDelet
       </p>
       {deprecate.isError ? <ErrorState error={deprecate.error} /> : null}
       {softDelete.isError ? <ErrorState error={softDelete.error} /> : null}
+    </div>
+  );
+}
+
+// GAP-17: explicit sharing (doc §6.4). Shown only when the SERVER marks
+// `can_share` (owner/Admin on an active, non-public head), but the UI never
+// authorizes — the command re-validates and renders 403/409/422 verbatim. Grant
+// by email; the backend flips the head PRIVATE <-> EXPLICITLY_SHARED as the
+// first/last grant is added/removed. The OCC token is the current package
+// row_version (freshest from the shares GET), carried as the If-Match "rv-N"
+// ETag; a stale head -> 409 STALE_REVISION.
+function PackageSharePanel({ pkg }: { pkg: LibraryPackageDetail }) {
+  const shares = usePackageShares(pkg.entity_id, pkg.permissions.can_share);
+  const share = useSharePackage();
+  const revoke = useRevokeShare();
+  const [email, setEmail] = useState("");
+  if (!pkg.permissions.can_share) return null;
+
+  const rowVersion = shares.data?.row_version ?? pkg.row_version;
+  const grants = shares.data?.shares ?? [];
+
+  const onShare = (event: FormEvent) => {
+    event.preventDefault();
+    const granteeEmail = email.trim();
+    if (!granteeEmail) return;
+    share.mutate(
+      { entityId: pkg.entity_id, rowVersion, granteeEmail },
+      { onSuccess: () => setEmail("") },
+    );
+  };
+  const onRevoke = (grant: PackageShare) =>
+    revoke.mutate({ entityId: pkg.entity_id, shareId: grant.share_id, rowVersion });
+
+  return (
+    <div style={{ marginTop: 12 }}>
+      <h5 style={{ marginBottom: 4 }}>Sharing</h5>
+      <form onSubmit={onShare} style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+        <label htmlFor="lib-share-email">
+          Share with{" "}
+          <input
+            id="lib-share-email"
+            type="email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            placeholder="grantee email"
+          />
+        </label>
+        <button type="submit" className="btn" disabled={share.isPending || !email.trim()}>
+          {share.isPending ? "Sharing…" : "Share"}
+        </button>
+      </form>
+      <p className="page-sub" style={{ marginTop: 4 }}>
+        Grants a specific user explicit view/use access to this private package. Sharing never
+        transfers ownership; only the owner or an Admin can manage it (Master §6.4).
+      </p>
+      {share.isError ? <ErrorState error={share.error} /> : null}
+      {revoke.isError ? <ErrorState error={revoke.error} /> : null}
+      {shares.isLoading ? (
+        <Loading label="Loading shares…" />
+      ) : shares.isError ? (
+        <ErrorState error={shares.error} onRetry={() => void shares.refetch()} />
+      ) : grants.length === 0 ? (
+        <p className="page-sub">Not shared with anyone yet.</p>
+      ) : (
+        <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+          {grants.map((grant) => (
+            <li
+              key={grant.share_id}
+              style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}
+            >
+              <span>
+                {grant.grantee_email ?? grant.grantee_display_name ?? grant.grantee_principal_id}
+              </span>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => onRevoke(grant)}
+                disabled={revoke.isPending}
+              >
+                Revoke
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

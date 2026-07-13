@@ -31,6 +31,7 @@ from entropia.domain.lifecycle.enums import ApprovalState, PackageKind, Visibili
 from entropia.domain.package.enums import PackageValidationState
 from entropia.domain.package.kind import ensure_package_kind
 from entropia.infrastructure.postgres.models import (
+    EmbeddedResolverContract,
     EmbeddedResolverRegistry,
     PackageRevision,
     PackageRoot,
@@ -42,6 +43,7 @@ from entropia.infrastructure.postgres.repositories import packages as pkg_repo
 from entropia.shared.errors import (
     NotFoundError,
     ResolverContractInvalid,
+    ResolverEvidenceRequired,
     ResolverRegistryConflict,
 )
 
@@ -193,23 +195,35 @@ async def activate_resolver(
 ) -> dict[str, Any]:
     """Admin-only: activate a CANDIDATE resolver -> TRUSTED_ACTIVE (doc 09 §8/§10.2).
 
-    Records an approval_decision + audit("esp.registry.activated") + outbox in one
-    transaction. A stale ``expected_registry_version`` -> RESOLVER_REGISTRY_CONFLICT
-    (409). The revision must belong to the resolver's package root and must be the
-    head revision; non-Admins are rejected with ApprovalRequiresAdmin (403) before
+    Passing test-vector EVIDENCE is a precondition for trusted activation (doc 09
+    §4.1/§4.2/§7): the resolver contract must carry a non-empty ``evidence`` payload,
+    else ResolverEvidenceRequired (409). Activation does NOT fabricate a PASSED
+    validation state — it records the Admin's APPROVAL only; whether the evidence
+    actually PASSES is a separate validation-run plane (GAP-07 core, out of scope
+    here), so a command-activated revision stays validation ``pending`` until that
+    run lands. Records an approval_decision + audit("esp.registry.activated") +
+    outbox in one transaction. A stale ``expected_registry_version`` ->
+    RESOLVER_REGISTRY_CONFLICT (409). The revision must belong to the resolver's
+    package root; non-Admins are rejected with ApprovalRequiresAdmin (403) before
     the body runs.
     """
     esp_policy.ensure_can_activate(actor)
     entry = await _require_registry(session, canonical_key)
     revision = await _require_revision(session, entity_id, revision_id)
+    contract = await esp_repo.get_contract_by_revision(session, revision_id)
 
     async def _op() -> dict[str, Any]:
         # Concurrency + legality checks live INSIDE the idempotent body (L2/D3):
         # a completed-key replay returns the stored result before reaching here.
         _check_registry_version(entry, expected_registry_version)
+        _ensure_activation_evidence(contract)
         previous = entry.trust_state
         next_resolver_trust_state(previous, ResolverTrustState.TRUSTED_ACTIVE)
-        revision.validation_state = PackageValidationState.PASSED
+        # Activation is an APPROVAL decision, not a validation pass: the Admin
+        # trusts the resolver on the strength of its attached evidence. The
+        # validation RUN that would set ``validation_state=passed`` is separate
+        # scope, so we deliberately do NOT stamp it here (doc 09 §7 "a successful
+        # one-off sample is not sufficient evidence for activation").
         revision.approval_state = ApprovalState.APPROVED
         esp_repo.set_trust_state(
             entry,
@@ -346,6 +360,21 @@ def _check_registry_version(
         raise ResolverRegistryConflict(
             f"Expected registry version {expected_registry_version} "
             f"but current is {entry.registry_version}."
+        )
+
+
+def _ensure_activation_evidence(contract: EmbeddedResolverContract | None) -> None:
+    """Precondition gate: a resolver may only be trusted-activated when its
+    contract carries test-vector evidence (doc 09 §4.1/§4.2/§7 "Passing evidence
+    is a precondition for registry activation. LLM output or package name is not
+    evidence."). This checks PRESENCE only — a missing/empty ``evidence`` payload
+    is rejected; whether those vectors actually pass is the separate validation-run
+    plane (GAP-07 core), deliberately NOT wired here.
+    """
+    if contract is None or not contract.evidence:
+        raise ResolverEvidenceRequired(
+            "This resolver revision has no test-vector evidence; attach passing "
+            "evidence before activation."
         )
 
 

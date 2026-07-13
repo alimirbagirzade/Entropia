@@ -269,6 +269,18 @@ class ResolverRegistryConflict(ConflictError):
     message = "This resolver changed while you were reviewing it. Reload and retry."
 
 
+class ResolverEvidenceRequired(ConflictError):
+    """Trusted activation attempted on a resolver revision with no test-vector
+    evidence (ESP doc 09 §4.1/§4.2/§7: passing evidence is a precondition for
+    registry activation — a package name or LLM output is not evidence). This
+    gates on evidence PRESENCE only; running the validation suite (which would
+    legitimately set ``validation_state=passed``) is separate scope, so
+    activation no longer fabricates a PASSED validation state."""
+
+    code = "RESOLVER_EVIDENCE_REQUIRED"
+    message = "Test-vector evidence is required before this resolver can be activated."
+
+
 class DeletePolicyBlocked(ConflictError):
     """Soft-delete of an active trusted resolver is blocked; deprecate first
     (ESP doc 09 §9.5, §14, §7.1 "Error - blocked delete")."""

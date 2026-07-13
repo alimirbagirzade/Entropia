@@ -20,6 +20,7 @@ from entropia.domain.create_package.enums import (
     CreationMode,
     PrecheckScanStatus,
     SourceLanguage,
+    ValidationRunStatus,
 )
 from entropia.domain.esp.enums import ResolverTrustState, RuntimeAdapter
 from entropia.domain.identity import Actor
@@ -164,6 +165,12 @@ async def test_full_flow_create_precheck_draft_publish(session) -> None:
     await session.commit()
     assert draft["package_root_id"] is not None
     assert draft["state"] == str(CreatePackageState.DRAFT_CREATED)
+
+    # GAP-07: a draft cannot be approved without a passing validation run.
+    validated = await cp_cmd.start_package_validation_run(session, OWNER, request_id=request_id)
+    await session.commit()
+    assert validated["status"] == str(ValidationRunStatus.PASSED)
+    assert validated["state"] == str(CreatePackageState.ELIGIBLE_FOR_APPROVAL)
 
     before_decisions = await _count(session, ApprovalDecision)
     published = await cp_cmd.approve_and_publish(

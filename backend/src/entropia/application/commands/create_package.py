@@ -29,9 +29,12 @@ from entropia.application.queries import esp as esp_query
 from entropia.domain.create_package import (
     CreatePackageState,
     CreationMode,
+    DependencyResolution,
     PrecheckScanStatus,
     SourceKind,
     SourceLanguage,
+    ValidationRunStatus,
+    build_validation_report,
     clean_declared_dependencies,
     context_hash,
     ensure_can_approve_publish,
@@ -83,6 +86,8 @@ from entropia.shared.errors import (
     ResolverNotResolved,
     ResolverSignatureMismatch,
     ValidationError,
+    ValidationRequired,
+    ValidationStale,
 )
 
 _REQUEST_TARGET_KIND = "package_request"
@@ -703,6 +708,204 @@ async def _draft_rationale_snapshot(
     }
 
 
+async def start_package_validation_run(
+    session: AsyncSession,
+    actor: Actor,
+    *,
+    request_id: str,
+    expected_request_version: int | None = None,
+    idempotency_key: str | None = None,
+) -> dict[str, Any]:
+    """Run Validation Tests over a draft revision, producing immutable evidence
+    (doc 06 §4.4/§5/§7). Revives the ``validation_running`` -> ``eligible_for_approval``
+    / ``revision_required`` states.
+
+    Gate: the request must be in ``draft_created`` (has a draft revision). The V1
+    validation *compute* is deterministic (see ``domain/create_package/validation``):
+    output-structure conformance + a live re-resolution of the pinned dependencies;
+    the execution-based checks are recorded ``not_executed`` (Future-Dev worker). A
+    passed run -> ``eligible_for_approval``; a failed run -> ``revision_required``.
+    The durable job + immutable run row are produced in-transaction (mirrors
+    ``run_precheck``); the concurrency + evidence write live INSIDE the idempotent body.
+    """
+    root, detail = await _require_request(session, actor, request_id)
+
+    async def _op() -> dict[str, Any]:
+        await session.refresh(root, with_for_update=True)
+        await session.refresh(detail)
+        _check_request_version(root, expected_request_version)
+        if detail.package_root_id is None or detail.draft_revision_id is None:
+            raise CandidateNotReady("This request has no draft revision to validate.")
+
+        # Move to running FIRST (L2: an un-validatable state raises before any write).
+        previous = detail.state
+        detail.state = next_request_state(detail.state, CreatePackageState.VALIDATION_RUNNING)
+
+        resolutions = await _validation_dependency_resolutions(session, detail)
+        report = build_validation_report(
+            output_kind=_draft_output_kind(detail), dependency_resolutions=resolutions
+        )
+        status = ValidationRunStatus.PASSED if report.passed else ValidationRunStatus.FAILED
+        job = await _enqueue_stub_job(
+            session, actor, queue="default", kind="validation", request_id=root.entity_id
+        )
+        run = await cp_repo.append_validation_run(
+            session,
+            request_entity_id=root.entity_id,
+            package_root_id=detail.package_root_id,
+            draft_revision_id=detail.draft_revision_id,
+            candidate_hash=detail.candidate_hash,
+            validator_version=report.validator_version,
+            checks=[check.as_dict() for check in report.checks],
+            status=status,
+            job_id=job.job_id,
+            correlation_id=actor.correlation_id or None,
+            created_by_principal_id=actor.principal_id,
+        )
+        run.completed_at = datetime.now(UTC)
+        await session.flush()
+        detail.current_validation_run_id = run.validation_run_id
+        terminal = (
+            CreatePackageState.ELIGIBLE_FOR_APPROVAL
+            if report.passed
+            else CreatePackageState.REVISION_REQUIRED
+        )
+        detail.state = next_request_state(detail.state, terminal)
+        root.row_version += 1
+        _audit_and_outbox(
+            session,
+            actor,
+            event_kind="validation_run_completed",
+            target_kind=_PACKAGE_TARGET_KIND,
+            entity_id=detail.package_root_id,
+            revision_id=detail.draft_revision_id,
+            previous_state=str(previous),
+            new_state=str(detail.state),
+            action="validation_run_completed",
+        )
+        return {
+            "request_id": root.entity_id,
+            "validation_run_id": run.validation_run_id,
+            "attempt_no": run.attempt_no,
+            "status": str(run.status),
+            "state": str(detail.state),
+            "checks": run.checks,
+            "job_id": job.job_id,
+        }
+
+    return await run_idempotent(
+        session,
+        key=idempotency_key,
+        actor_principal_id=actor.principal_id,
+        request_payload={"op": "start_package_validation_run", "request_id": request_id},
+        operation=_op,
+    )
+
+
+def _draft_output_kind(detail: PackageRequest) -> str | None:
+    contract = detail.candidate_output_contract or detail.output_contract
+    raw = contract.get("kind") or contract.get("output_type")
+    return raw if isinstance(raw, str) and raw else None
+
+
+async def _validation_dependency_resolutions(
+    session: AsyncSession, detail: PackageRequest
+) -> list[DependencyResolution]:
+    """Re-resolve the request's declared dependencies against the LIVE ESP registry.
+
+    Drift (a pinned resolver deactivated/deprecated after the draft was pinned) makes
+    the dependency-health check fail, blocking approval. Description / dep-less
+    requests resolve nothing (the check is ``not_executed``)."""
+    if detail.source_kind == SourceKind.DESCRIPTION or not detail.declared_dependencies:
+        return []
+    resolved_refs, missing_calls = await _resolve_declared(
+        session, detail.declared_dependencies, detail.target_runtime
+    )
+    resolutions = [
+        DependencyResolution(
+            canonical_key=str(ref.get("canonical_key") or ref.get("call")),
+            resolved=True,
+            detail=f"resolves to {ref.get('embedded_revision_id')}",
+        )
+        for ref in resolved_refs
+    ]
+    resolutions.extend(
+        DependencyResolution(
+            canonical_key=str(miss.get("call")),
+            resolved=False,
+            detail=str(miss.get("code")),
+        )
+        for miss in missing_calls
+    )
+    return resolutions
+
+
+async def request_package_revision(
+    session: AsyncSession,
+    actor: Actor,
+    *,
+    request_id: str,
+    expected_request_version: int | None = None,
+    idempotency_key: str | None = None,
+) -> dict[str, Any]:
+    """Request Revision: reopen a failed/rejected draft for a fresh attempt (doc 06 §5, §7).
+
+    Legal from ``revision_required`` / ``rejected`` (state machine); moves through
+    ``candidate_generating`` and regenerates a deterministic candidate so the loop
+    (fail validation -> request revision -> new candidate -> new draft -> re-validate)
+    closes. The draft head pointers are cleared so the next Create-Draft produces a
+    fresh attempt. (A true parent-linked revision CHAIN needs the package
+    revision-append machinery — GAP-06 — and is out of scope here.)
+    """
+    root, detail = await _require_request(session, actor, request_id)
+
+    async def _op() -> dict[str, Any]:
+        await session.refresh(root, with_for_update=True)
+        await session.refresh(detail)
+        previous = detail.state
+        # Legality FIRST (L2): only revision_required / rejected have this edge.
+        detail.state = next_request_state(detail.state, CreatePackageState.CANDIDATE_GENERATING)
+        detail.package_root_id = None
+        detail.draft_revision_id = None
+        detail.current_validation_run_id = None
+
+        resolved_refs = await _candidate_resolved_refs(session, detail)
+        manifest = build_candidate_manifest(
+            package_kind=str(detail.package_kind),
+            source_kind=detail.source_kind,
+            output_contract=detail.output_contract,
+            resolved_refs=resolved_refs,
+        )
+        detail.candidate_hash = candidate_hash(manifest)
+        detail.candidate_output_contract = manifest.output_contract
+        detail.state = next_request_state(detail.state, CreatePackageState.CANDIDATE_READY)
+        root.row_version += 1
+        _audit_and_outbox(
+            session,
+            actor,
+            event_kind="revision_requested",
+            target_kind=_REQUEST_TARGET_KIND,
+            entity_id=root.entity_id,
+            revision_id=None,
+            previous_state=str(previous),
+            new_state=str(detail.state),
+            action="revision_requested",
+        )
+        return {
+            "request_id": root.entity_id,
+            "state": str(detail.state),
+            "candidate_hash": detail.candidate_hash,
+        }
+
+    return await run_idempotent(
+        session,
+        key=idempotency_key,
+        actor_principal_id=actor.principal_id,
+        request_payload={"op": "request_package_revision", "request_id": request_id},
+        operation=_op,
+    )
+
+
 async def approve_and_publish(
     session: AsyncSession,
     actor: Actor,
@@ -731,9 +934,19 @@ async def approve_and_publish(
             return _publish_result(detail)
         if detail.package_root_id is None or detail.draft_revision_id is None:
             raise CandidateNotReady("This request has no draft revision to approve.")
-        # Legality FIRST (L2): an un-approvable state raises before any row mutation.
-        # Only DRAFT_CREATED / ELIGIBLE_FOR_APPROVAL have an APPROVED edge; states
-        # like validation_running / experimental must reach eligible_for_approval.
+        # Evidence gate FIRST (doc 06 §4.4/§7): publish only from eligible_for_approval
+        # with a current PASSED validation run that still certifies THIS draft's
+        # candidate. A fresh draft (draft_created) has no APPROVED edge, so an
+        # un-validated request raises VALIDATION_REQUIRED before any row mutation;
+        # a regenerated candidate makes the evidence stale (VALIDATION_STALE).
+        if detail.state != CreatePackageState.ELIGIBLE_FOR_APPROVAL:
+            raise ValidationRequired()
+        run = await cp_repo.get_current_validation_run(session, detail)
+        if run is None or run.status != ValidationRunStatus.PASSED:
+            raise ValidationRequired()
+        if run.candidate_hash != detail.candidate_hash:
+            raise ValidationStale()
+        # Only ELIGIBLE_FOR_APPROVAL has an APPROVED edge (state machine, L2).
         target_state = next_request_state(detail.state, CreatePackageState.APPROVED)
 
         pkg_root = await pkg_repo.get_package_root(session, detail.package_root_id)
@@ -837,6 +1050,8 @@ __all__ = [
     "approve_and_publish",
     "create_draft_from_candidate",
     "create_package_request",
+    "request_package_revision",
     "run_precheck",
+    "start_package_validation_run",
     "submit_candidate_generation",
 ]

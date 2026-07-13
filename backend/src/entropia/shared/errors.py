@@ -479,6 +479,32 @@ class DependencyUnresolved(ConflictError):
     message = "A required dependency is unresolved. Re-run Pre-Check and try again."
 
 
+class ValidationRequired(ConflictError):
+    """Approve & Publish was attempted before a passing validation run exists
+    (doc 06 §4.4/§7). The draft must reach ``eligible_for_approval`` via a passed
+    validation run — a fresh draft can never be published without evidence."""
+
+    code = "VALIDATION_REQUIRED"
+    message = "Run the validation tests and let them pass before approving this package."
+
+
+class ValidationStale(ConflictError):
+    """The current validation evidence no longer certifies the draft's candidate
+    (doc 06 §4.4/§7 — a regenerated candidate makes prior evidence stale). Re-run
+    validation before approval."""
+
+    code = "VALIDATION_STALE"
+    message = "Validation evidence is stale because the candidate changed. Re-run validation."
+
+
+class ValidationAlreadyRunning(ConflictError):
+    """A second validation run was requested while one is already in flight for the
+    same draft (doc 06 §5). The in-flight run is authoritative; no duplicate is made."""
+
+    code = "VALIDATION_ALREADY_RUNNING"
+    message = "A validation run is already in progress for this draft."
+
+
 class ServiceUnavailableError(AppError):
     code = "SERVICE_UNAVAILABLE"
     http_status = 503

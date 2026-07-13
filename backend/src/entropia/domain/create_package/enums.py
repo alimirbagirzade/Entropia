@@ -99,3 +99,19 @@ class PrecheckScanStatus(StrEnum):
     NOT_APPLICABLE = "not_applicable"
     FAILED = "failed"
     STALE = "stale"
+
+
+class ValidationRunStatus(StrEnum):
+    """Immutable package validation-run result (doc 06 §4.4/§5/§7).
+
+    ``queued``/``running`` are transient; the terminal results drive the request
+    projection and the approval gate. A ``passed`` run becomes ``stale`` (computed
+    on read) when the draft candidate it validated is regenerated — evidence is
+    never a cosmetic label, it pins the exact candidate it certified.
+    """
+
+    QUEUED = "queued"
+    RUNNING = "running"
+    PASSED = "passed"
+    FAILED = "failed"
+    STALE = "stale"

@@ -274,6 +274,11 @@ async def _published_package(session, family_id: str) -> dict[str, str]:
     )
     await session.commit()
 
+    # GAP-07: publish requires passing validation evidence on the draft revision.
+    validated = await cp_cmd.start_package_validation_run(session, OWNER, request_id=request_id)
+    await session.commit()
+    assert validated["state"] == str(CreatePackageState.ELIGIBLE_FOR_APPROVAL)
+
     published = await cp_cmd.approve_and_publish(
         session,
         ADMIN,

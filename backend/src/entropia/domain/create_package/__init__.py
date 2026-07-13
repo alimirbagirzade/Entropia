@@ -9,6 +9,7 @@ from entropia.domain.create_package.enums import (
     PrecheckScanStatus,
     SourceKind,
     SourceLanguage,
+    ValidationRunStatus,
 )
 from entropia.domain.create_package.policy import (
     ensure_can_approve_publish,
@@ -19,6 +20,12 @@ from entropia.domain.create_package.state_machine import (
     SCAN_BLOCKING_STATES,
     next_request_state,
     next_scan_status,
+)
+from entropia.domain.create_package.validation import (
+    VALIDATOR_VERSION,
+    DependencyResolution,
+    ValidationReport,
+    build_validation_report,
 )
 from entropia.domain.create_package.value_objects import (
     SUPPORTED_TARGET_RUNTIMES,
@@ -35,12 +42,17 @@ __all__ = [
     "CREATE_PACKAGE_KINDS",
     "SCAN_BLOCKING_STATES",
     "SUPPORTED_TARGET_RUNTIMES",
+    "VALIDATOR_VERSION",
     "CreatePackageState",
     "CreationMode",
+    "DependencyResolution",
     "NormalizedRequest",
     "PrecheckScanStatus",
     "SourceKind",
     "SourceLanguage",
+    "ValidationReport",
+    "ValidationRunStatus",
+    "build_validation_report",
     "clean_declared_dependencies",
     "context_hash",
     "ensure_can_approve_publish",

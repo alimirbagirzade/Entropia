@@ -35,6 +35,7 @@ from entropia.domain.create_package.enums import (
     PrecheckScanStatus,
     SourceKind,
     SourceLanguage,
+    ValidationRunStatus,
 )
 from entropia.domain.esp.enums import RuntimeAdapter
 from entropia.domain.lifecycle.enums import PackageKind
@@ -93,6 +94,7 @@ class PackageRequest(TimestampMixin, Base):
     candidate_output_contract: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     package_root_id: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
     draft_revision_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    current_validation_run_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
 
 
 class DependencyScan(Base):
@@ -130,6 +132,49 @@ class DependencyScan(Base):
     )
     job_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
     error_detail: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    correlation_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_by_principal_id: Mapped[str | None] = mapped_column(
+        String(40), ForeignKey(_PRINCIPAL_FK), nullable=True
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class PackageValidationRun(Base):
+    """Immutable package validation-run evidence (doc 06 §4.4/§5/§7). Never UPDATEd.
+
+    One draft has N validation runs (``attempt_no``); each pins the exact
+    ``candidate_hash`` it certified, the per-check breakdown and the terminal
+    status. Reuse against a regenerated candidate is forbidden — the run goes
+    ``stale`` (computed on read) and a fresh run is required before approval.
+    """
+
+    __tablename__ = "package_validation_run"
+    __table_args__ = (
+        UniqueConstraint(
+            "request_entity_id", "attempt_no", name="uq_package_validation_run_attempt"
+        ),
+    )
+
+    validation_run_id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    request_entity_id: Mapped[str] = mapped_column(
+        String(40), ForeignKey(_ENTITY_FK), nullable=False, index=True
+    )
+    attempt_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    package_root_id: Mapped[str] = mapped_column(String(40), nullable=False)
+    draft_revision_id: Mapped[str] = mapped_column(String(40), nullable=False)
+    candidate_hash: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    validator_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    checks: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False)
+    status: Mapped[ValidationRunStatus] = mapped_column(
+        enum_column(ValidationRunStatus, "validation_run_status"),
+        nullable=False,
+        default=ValidationRunStatus.QUEUED,
+        index=True,
+    )
+    job_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
     correlation_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_by_principal_id: Mapped[str | None] = mapped_column(
         String(40), ForeignKey(_PRINCIPAL_FK), nullable=True

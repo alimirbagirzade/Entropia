@@ -10,13 +10,13 @@ import {
   DEFAULT_LOG_FILTERS,
   LOG_ACTOR_TYPES,
   LOG_FAMILIES,
-  LOG_RESOURCE_TYPES,
   LOG_SEVERITIES,
   SEVERITY_TONES,
   useAdminLogs,
   useAssignRole,
   useAuditEvents,
   useLogEvent,
+  useLogResourceTypes,
   useRedeliverDataQueue,
   useRegisteredUsers,
   useRoleMatrix,
@@ -442,6 +442,9 @@ function LogsCard() {
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const pager = useCursorStack();
   const logs = useAdminLogs(filters, pager.cursor);
+  // Server-hydrated distinct emitted target_entity_type set — never a curated list.
+  const resourceTypes = useLogResourceTypes();
+  const resourceTypeOptions = resourceTypes.data?.resource_types ?? [];
 
   const applyFilter = (patch: Partial<LogFilters>) => {
     setFilters((prev) => ({ ...prev, ...patch }));
@@ -551,7 +554,7 @@ function LogsCard() {
             onChange={(event) => applyFilter({ resource_type: event.target.value || null })}
           >
             <option value="">all</option>
-            {LOG_RESOURCE_TYPES.map((resourceType) => (
+            {resourceTypeOptions.map((resourceType) => (
               <option key={resourceType} value={resourceType}>
                 {resourceType.replace(/_/g, " ")}
               </option>

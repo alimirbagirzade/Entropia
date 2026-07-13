@@ -3161,6 +3161,30 @@
         ]
       }
     },
+    "/api/v1/admin/log-resource-types": {
+      "get": {
+        "description": "Distinct ``target_entity_type`` set actually present in the audit log, so the\nLogs \"Resource type\" filter hydrates from server truth instead of a hand-curated\nlist that silently drifts (a stale option matches nothing → empty page, no error).",
+        "operationId": "list_log_resource_types_api_v1_admin_log_resource_types_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Log Resource Types Api V1 Admin Log Resource Types Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Log Resource Types",
+        "tags": [
+          "admin-panel"
+        ]
+      }
+    },
     "/api/v1/admin/logs": {
       "get": {
         "operationId": "list_logs_api_v1_admin_logs_get",

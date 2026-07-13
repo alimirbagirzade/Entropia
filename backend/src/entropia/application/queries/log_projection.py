@@ -197,6 +197,28 @@ async def list_log_events(
     }
 
 
+async def list_resource_types(session: AsyncSession, actor: Actor) -> dict[str, Any]:
+    """Admin-only distinct set of ``target_entity_type`` values actually emitted.
+
+    The Logs "Resource type" filter matches ``target_entity_type`` EXACTLY (see
+    ``_apply_filters``), so a hand-curated option list silently drifts from the real
+    emitters — a stale option matches nothing and returns an empty page with no error.
+    This hydrates the filter from the source of truth (the append-only ``audit_events``
+    rows themselves), so a dead option is structurally impossible: an option can only
+    appear once a real event has carried that type. Ordered DISTINCT, backed by the
+    partial ``ix_audit_events_target_type_order`` index (target_entity_type leading).
+    """
+    require_admin_panel(actor)
+    stmt = (
+        select(AuditEvent.target_entity_type)
+        .where(AuditEvent.target_entity_type.is_not(None))
+        .distinct()
+        .order_by(AuditEvent.target_entity_type.asc())
+    )
+    rows = (await session.execute(stmt)).scalars().all()
+    return {"resource_types": [r for r in rows if r is not None]}
+
+
 async def _subject_status(session: AsyncSession, event: AuditEvent) -> str | None:
     """Best-effort lifecycle of the event's subject: ``deleted`` if the registry row
     is soft-deleted/purged, ``active`` if present and active, ``None`` if unresolved
@@ -257,4 +279,10 @@ async def get_log_event(session: AsyncSession, actor: Actor, *, event_id: str) -
     return detail
 
 
-__all__ = ["DEFAULT_LOG_LIMIT", "MAX_LOG_LIMIT", "get_log_event", "list_log_events"]
+__all__ = [
+    "DEFAULT_LOG_LIMIT",
+    "MAX_LOG_LIMIT",
+    "get_log_event",
+    "list_log_events",
+    "list_resource_types",
+]

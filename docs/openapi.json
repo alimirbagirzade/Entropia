@@ -2294,6 +2294,19 @@
         "title": "SetTimePolicyRequest",
         "type": "object"
       },
+      "SharePackageRequest": {
+        "properties": {
+          "grantee_email": {
+            "title": "Grantee Email",
+            "type": "string"
+          }
+        },
+        "required": [
+          "grantee_email"
+        ],
+        "title": "SharePackageRequest",
+        "type": "object"
+      },
       "SignUpRequest": {
         "properties": {
           "display_name": {
@@ -7827,6 +7840,69 @@
         ]
       }
     },
+    "/api/v1/library-shared-with-me": {
+      "get": {
+        "operationId": "list_shared_with_me_api_v1_library_shared_with_me_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Shared With Me Api V1 Library Shared With Me Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Shared With Me",
+        "tags": [
+          "package-sharing"
+        ]
+      }
+    },
     "/api/v1/library/{entity_id}": {
       "delete": {
         "description": "Owner-or-Admin Move to Trash (doc 08 §7, §8.4). OCC token is the root\n``row_version`` carried as the ``If-Match \"rv-N\"`` ETag (the detail GET returns\nit); a stale head -> 409, a repeat delete is an idempotent no-op. Restore stays\nthe Admin-only Trash surface.",
@@ -7997,6 +8073,219 @@
         "summary": "Deprecate Package",
         "tags": [
           "package-library"
+        ]
+      }
+    },
+    "/api/v1/library/{entity_id}/shares": {
+      "get": {
+        "operationId": "list_package_shares_api_v1_library__entity_id__shares_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entity_id",
+            "required": true,
+            "schema": {
+              "title": "Entity Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Package Shares Api V1 Library  Entity Id  Shares Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Package Shares",
+        "tags": [
+          "package-sharing"
+        ]
+      },
+      "post": {
+        "operationId": "share_package_api_v1_library__entity_id__shares_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entity_id",
+            "required": true,
+            "schema": {
+              "title": "Entity Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SharePackageRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Share Package Api V1 Library  Entity Id  Shares Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Share Package",
+        "tags": [
+          "package-sharing"
+        ]
+      }
+    },
+    "/api/v1/library/{entity_id}/shares/{share_id}": {
+      "delete": {
+        "operationId": "revoke_package_share_api_v1_library__entity_id__shares__share_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entity_id",
+            "required": true,
+            "schema": {
+              "title": "Entity Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "share_id",
+            "required": true,
+            "schema": {
+              "title": "Share Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Revoke Package Share Api V1 Library  Entity Id  Shares  Share Id  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revoke Package Share",
+        "tags": [
+          "package-sharing"
         ]
       }
     },

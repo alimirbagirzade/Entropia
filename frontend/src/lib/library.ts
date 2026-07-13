@@ -49,8 +49,8 @@ export const UNASSIGNED_FAMILY = "unassigned";
 // verbatim)
 // ---------------------------------------------------------------------------
 
-// The ten capability flags of doc 08 §4.2 — a UX hint, never the authority:
-// the server re-validates every guard on each command.
+// The eleven capability flags of doc 08 §4.2 (+ GAP-17 `can_share`) — a UX hint,
+// never the authority: the server re-validates every guard on each command.
 export interface PackagePermissions {
   can_view: boolean;
   can_use: boolean;
@@ -62,6 +62,7 @@ export interface PackagePermissions {
   can_deprecate: boolean;
   can_soft_delete: boolean;
   can_export: boolean;
+  can_share: boolean;
 }
 
 // Backend dataclass field order — rendered in this order so the grid is stable.
@@ -76,6 +77,7 @@ export const PERMISSION_FLAGS: readonly (keyof PackagePermissions)[] = [
   "can_deprecate",
   "can_soft_delete",
   "can_export",
+  "can_share",
 ] as const;
 
 // Catalog performance fields (doc 08 §3.2 boxed): only Strategy packages with

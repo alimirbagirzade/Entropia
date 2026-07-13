@@ -11,6 +11,7 @@ approval facets.
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from dataclasses import asdict, dataclass
 
 from entropia.domain.identity import policy as identity_policy
@@ -20,11 +21,14 @@ from entropia.domain.package.enums import PackageValidationState
 
 _ACTIVE = "active"
 _DEPRECATED = "deprecated"
+# Visibility scopes for which an explicit share is meaningful (GAP-17): a
+# private head can be shared; a published/system head is already public.
+_SHAREABLE_VISIBILITIES = frozenset({"private", "explicitly_shared"})
 
 
 @dataclass(frozen=True, slots=True)
 class PackagePermissions:
-    """The ten capability flags a catalog row/detail exposes (doc 08 §4.2)."""
+    """The capability flags a catalog row/detail exposes (doc 08 §4.2; GAP-17)."""
 
     can_view: bool
     can_use: bool
@@ -36,6 +40,7 @@ class PackagePermissions:
     can_deprecate: bool
     can_soft_delete: bool
     can_export: bool
+    can_share: bool
 
     def as_dict(self) -> dict[str, bool]:
         return asdict(self)
@@ -49,6 +54,7 @@ def package_permissions(
     lifecycle_state: str | None,
     validation_state: PackageValidationState,
     approval_state: ApprovalState,
+    shared_principal_ids: Collection[str] | None = None,
 ) -> PackagePermissions:
     """Project the capabilities ``actor`` has over one package head.
 
@@ -62,7 +68,10 @@ def package_permissions(
       approval with passed validation (CR-02 / doc 08 §4.3).
     """
     can_view = identity_policy.can_view(
-        actor, owner_principal_id=owner_principal_id, visibility=visibility_scope
+        actor,
+        owner_principal_id=owner_principal_id,
+        visibility=visibility_scope,
+        shared_principal_ids=shared_principal_ids,
     )
     can_edit = identity_policy.can_edit(actor, owner_principal_id=owner_principal_id)
     is_active = lifecycle_state == _ACTIVE
@@ -84,6 +93,10 @@ def package_permissions(
         can_deprecate=can_edit and is_active,
         can_soft_delete=can_edit and is_listed,
         can_export=can_view,
+        # Only the owner or an Admin manages shares; sharing a published/system
+        # package is a no-op (already public), so it is offered on active,
+        # non-public heads only (GAP-17; server re-validates on every command).
+        can_share=can_edit and is_active and visibility_scope in _SHAREABLE_VISIBILITIES,
     )
 
 

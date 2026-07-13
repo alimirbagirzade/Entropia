@@ -4,17 +4,19 @@ The catalog is authentication-gated: Guests get no catalog at all (doc 08 §2
 "Protected library ... katalog döndürülmez"), so the query raises UNAUTHENTICATED
 before returning any data. Visibility is enforced SERVER-SIDE in SQL (ARCHITECTURE
 §9.5 "List endpoints exclude unauthorized rows server-side") — admins see every
-active root; everyone else sees published/system/explicitly_shared packages plus
-their own — so ``has_more``/``cursor`` count the post-visibility set (no
-client-side hiding, no under-filled pages). Only the four canonical kinds are
+active root; everyone else sees published/system packages, their own, and the
+explicitly_shared packages resolved as shared with them (GAP-17: never every
+explicitly_shared row) — so ``has_more``/``cursor`` count the post-visibility set
+(no client-side hiding, no under-filled pages). Only the four canonical kinds are
 listed (CR-01); soft-deleted roots are never discoverable (a soft-deleted detail
-GET returns 404, DOMAIN_MODEL §7). Each row carries the ten-flag permission
-projection (doc 08 §4.2) and never fabricates performance metrics for
-non-Strategy types (L4 / doc 08 §13). All values are JSON-safe dicts.
+GET returns 404, DOMAIN_MODEL §7). Each row carries the eleven-flag permission
+projection (doc 08 §4.2, +``can_share``) and never fabricates performance metrics
+for non-Strategy types (L4 / doc 08 §13). All values are JSON-safe dicts.
 """
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from typing import Any
 
 from sqlalchemy import select
@@ -40,16 +42,17 @@ from entropia.infrastructure.postgres.models import (
 )
 from entropia.infrastructure.postgres.repositories import packages as pkg_repo
 from entropia.infrastructure.postgres.repositories import rationale as rationale_repo
+from entropia.infrastructure.postgres.repositories import resource_share as share_repo
 from entropia.shared.errors import NotFoundError
 from entropia.shared.pagination import PageParams
 
 # Visibility scopes a non-admin actor may always read (mirrors identity policy
-# ``can_view``: public scopes + explicitly_shared are readable to authenticated
-# actors; the row's own owner is added per-request below).
+# ``can_view``): public scopes only. The row's own owner is added per-request,
+# and an explicitly_shared row is added ONLY for a resolved grantee via the
+# share set (GAP-17) — never blanket-visible to every authenticated actor.
 _CATALOG_VISIBLE_SCOPES: tuple[VisibilityScope, ...] = (
     VisibilityScope.PUBLISHED,
     VisibilityScope.SYSTEM,
-    VisibilityScope.EXPLICITLY_SHARED,
 )
 
 # Catalog performance metrics: only Strategy packages with linked runs can ever
@@ -80,12 +83,13 @@ async def list_packages(
     is exactly the authorized, filtered set.
     """
     identity_policy.require_authenticated(actor)
+    shared_ids = await _viewer_shared_ids(session, actor)
     conditions: list[ColumnElement[bool]] = [
         EntityRegistry.entity_type == pkg_repo.ENTITY_TYPE,
         EntityRegistry.deletion_state == DeletionState.ACTIVE,
         EntityRegistry.lifecycle_state.in_(sorted(CATALOG_LIFECYCLE_STATES)),
         PackageRoot.package_kind.in_(CATALOG_PACKAGE_KINDS),
-        *_visibility_conditions(actor),
+        *_visibility_conditions(actor, shared_ids),
         *_filter_conditions(filters),
     ]
     if params.cursor is not None:
@@ -104,18 +108,103 @@ async def list_packages(
     page = rows[: params.limit]
     next_cursor = page[-1][0].entity_id if has_more and page else None
     return {
-        "data": [_package_row(actor, root, detail, revision) for root, detail, revision in page],
+        "data": [
+            _package_row(
+                actor,
+                root,
+                detail,
+                revision,
+                shared_principal_ids=_viewer_grant_context(actor, root, detail, shared_ids),
+            )
+            for root, detail, revision in page
+        ],
         "meta": {"cursor": next_cursor, "has_more": has_more},
     }
 
 
-def _visibility_conditions(actor: Actor) -> list[ColumnElement[bool]]:
-    """SQL predicate that mirrors identity ``can_view`` for the catalog list."""
+async def list_shared_with_me(
+    session: AsyncSession, actor: Actor, params: PageParams
+) -> dict[str, Any]:
+    """List catalog package heads explicitly shared WITH the calling actor.
+
+    Newest-first by ``entity_id`` (the platform cursor convention). Only rows for
+    which the caller holds an active ``resource_share`` grant appear (GAP-17);
+    the caller is a grantee of every row, so each carries full view permission.
+    """
+    identity_policy.require_authenticated(actor)
+    shared_ids = await _viewer_shared_ids(session, actor)
+    if not shared_ids:
+        return {"data": [], "meta": {"cursor": None, "has_more": False}}
+    conditions: list[ColumnElement[bool]] = [
+        EntityRegistry.entity_type == pkg_repo.ENTITY_TYPE,
+        EntityRegistry.deletion_state == DeletionState.ACTIVE,
+        EntityRegistry.lifecycle_state.in_(sorted(CATALOG_LIFECYCLE_STATES)),
+        PackageRoot.package_kind.in_(CATALOG_PACKAGE_KINDS),
+        EntityRegistry.entity_id.in_(shared_ids),
+    ]
+    if params.cursor is not None:
+        conditions.append(EntityRegistry.entity_id < params.cursor)
+    stmt = (
+        select(EntityRegistry, PackageRoot, PackageRevision)
+        .join(PackageRoot, PackageRoot.entity_id == EntityRegistry.entity_id)
+        .join(PackageRevision, PackageRevision.revision_id == EntityRegistry.current_revision_id)
+        .where(*conditions)
+        .order_by(EntityRegistry.entity_id.desc())
+        .limit(params.limit + 1)
+    )
+    rows = list((await session.execute(stmt)).all())
+    has_more = len(rows) > params.limit
+    page = rows[: params.limit]
+    next_cursor = page[-1][0].entity_id if has_more and page else None
+    grantee = {actor.principal_id} if actor.principal_id is not None else None
+    return {
+        "data": [
+            _package_row(actor, root, detail, revision, shared_principal_ids=grantee)
+            for root, detail, revision in page
+        ],
+        "meta": {"cursor": next_cursor, "has_more": has_more},
+    }
+
+
+async def _viewer_shared_ids(session: AsyncSession, actor: Actor) -> set[str]:
+    """The package entity ids explicitly shared with this actor (empty if none)."""
+    if actor.principal_id is None:
+        return set()
+    return await share_repo.shared_resource_ids(
+        session,
+        grantee_principal_id=actor.principal_id,
+        resource_type=pkg_repo.ENTITY_TYPE,
+    )
+
+
+def _viewer_grant_context(
+    actor: Actor, root: EntityRegistry, detail: PackageRoot, shared_ids: Collection[str]
+) -> Collection[str] | None:
+    """Grantee set to feed the permission projection for one catalog row: the
+    viewer's own principal iff this explicitly_shared row is shared with them."""
+    if (
+        detail.visibility_scope == VisibilityScope.EXPLICITLY_SHARED
+        and root.entity_id in shared_ids
+        and actor.principal_id is not None
+    ):
+        return {actor.principal_id}
+    return None
+
+
+def _visibility_conditions(actor: Actor, shared_ids: Collection[str]) -> list[ColumnElement[bool]]:
+    """SQL predicate that mirrors identity ``can_view`` for the catalog list.
+
+    Non-admins see public scopes, their own rows, and the explicitly_shared rows
+    resolved as shared with them (``shared_ids``) — never every explicitly_shared
+    row (GAP-17 closes that over-share)."""
     if actor.is_admin:
         return []
     visible = PackageRoot.visibility_scope.in_(_CATALOG_VISIBLE_SCOPES)
     if actor.principal_id is not None:
-        return [visible | (EntityRegistry.owner_principal_id == actor.principal_id)]
+        allowed = visible | (EntityRegistry.owner_principal_id == actor.principal_id)
+        if shared_ids:
+            allowed = allowed | EntityRegistry.entity_id.in_(shared_ids)
+        return [allowed]
     return [visible]
 
 
@@ -155,6 +244,8 @@ def _package_row(
     root: EntityRegistry,
     detail: PackageRoot,
     revision: PackageRevision,
+    *,
+    shared_principal_ids: Collection[str] | None = None,
 ) -> dict[str, Any]:
     snapshot = revision.rationale_family_snapshot or {}
     permissions = package_permissions(
@@ -164,6 +255,7 @@ def _package_row(
         lifecycle_state=root.lifecycle_state,
         validation_state=revision.validation_state,
         approval_state=revision.approval_state,
+        shared_principal_ids=shared_principal_ids,
     )
     return {
         "entity_id": root.entity_id,
@@ -231,16 +323,20 @@ async def get_package_detail(
     detail = await pkg_repo.get_package_detail(session, entity_id)
     if detail is None or detail.package_kind not in CATALOG_PACKAGE_KINDS:
         raise NotFoundError(f"Package '{entity_id}' not found.")
+    grantee_ids = await share_repo.active_grantee_ids(
+        session, resource_type=pkg_repo.ENTITY_TYPE, resource_id=entity_id
+    )
     identity_policy.ensure_can_view(
         actor,
         owner_principal_id=root.owner_principal_id,
         visibility=str(detail.visibility_scope),
+        shared_principal_ids=grantee_ids,
     )
     revision = await pkg_repo.get_revision(session, root.current_revision_id or "")
     if revision is None:
         raise NotFoundError(f"Package '{entity_id}' has no current revision.")
 
-    data = _package_row(actor, root, detail, revision)
+    data = _package_row(actor, root, detail, revision, shared_principal_ids=grantee_ids)
     data["input_contract"] = revision.input_contract
     data["output_contract"] = revision.output_contract
     data["dependency_snapshot"] = revision.dependency_snapshot

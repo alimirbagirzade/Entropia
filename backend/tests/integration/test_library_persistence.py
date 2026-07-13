@@ -106,11 +106,14 @@ async def test_visibility_is_enforced_server_side(session) -> None:
 
     user1_ids = {row["entity_id"] for row in (await _list(session, USER1))["data"]}
     assert own in user1_ids  # own private draft
-    # published / system / explicitly_shared are readable to any authenticated actor
-    # (mirrors identity policy can_view); pins every entry of _CATALOG_VISIBLE_SCOPES.
+    # published / system are readable to any authenticated actor (mirrors identity
+    # policy can_view); pins every entry of _CATALOG_VISIBLE_SCOPES.
     assert shared in user1_ids
     assert system in user1_ids
-    assert explicit in user1_ids
+    # GAP-17: an explicitly_shared package is NO LONGER blanket-visible to every
+    # authenticated actor — user_1 holds no share grant for user_2's package, so
+    # it is excluded server-side (the over-share hole is closed).
+    assert explicit not in user1_ids
     assert hidden not in user1_ids  # another user's private draft is hidden server-side
 
 

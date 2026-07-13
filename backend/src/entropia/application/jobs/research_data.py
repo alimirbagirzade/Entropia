@@ -15,7 +15,7 @@ local to the functions that need them):
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -27,6 +27,11 @@ from entropia.domain.identity.actor import Actor
 from entropia.domain.lifecycle.enums import DeletionState, JobStatus, ValidationStatus
 from entropia.domain.research_data import policy as rd_policy
 from entropia.domain.research_data.enums import ResearchRevisionState
+from entropia.domain.research_data.quality_rules import (
+    SEVERITY_RANK,
+    QualityIssue,
+    evaluate_quality,
+)
 from entropia.domain.research_data.state_machine import next_research_revision_state
 from entropia.domain.research_data.time_policy import time_policy_is_valid
 from entropia.domain.research_data.usage_scope import ensure_allows_evidence_bundle
@@ -71,13 +76,26 @@ class ParsedResearch:
     rows: list[dict[str, Any]]
 
 
+# Injection seams (mirror the market-data job): the S3/Polars steps are swappable so
+# ``run_analysis`` is exercisable end-to-end against a real DB without MinIO.
+# Production callers pass neither and get the real helpers below.
+_LoadAndParse = Callable[[AsyncSession, str], Awaitable[ParsedResearch]]
+_WriteNative = Callable[[AsyncSession, str, str, ParsedResearch], Awaitable[str]]
+
+
 def evaluate_research(parsed: ParsedResearch, revision: ResearchDatasetRevision) -> AnalysisOutcome:
     """Decide the validation outcome for a parsed research revision (pure).
 
-    Blocking checks (any -> needs_review, never auto-verified):
+    Structural blockers (any -> needs_review, never auto-verified):
       * the time policy must be structurally valid (DR4);
       * at least one native field/column must exist (schema integrity).
-    Clean data with a valid policy is auto-verified (not approved).
+
+    Then the deeper semantic quality report (doc 12 §10 / backlog R9) adds the
+    coverage / duplicates / null-density / type-consistency / numeric-range /
+    instrument-mapping families. Per the §10.1 decision tree, only a ``BLOCKING_FAIL``
+    forces ``NEEDS_REVIEW``; ``WARNING`` findings are recorded but still verify (a
+    verified-with-warnings revision remains Admin-approvable). The run status is the
+    worst severity across every finding so warnings surface in the quality report.
     """
     issues: list[dict[str, Any]] = []
 
@@ -107,17 +125,49 @@ def evaluate_research(parsed: ParsedResearch, revision: ResearchDatasetRevision)
             }
         )
 
-    has_blocker = any(i["severity"] == ValidationStatus.BLOCKING_FAIL.value for i in issues)
-    status = ValidationStatus.BLOCKING_FAIL if has_blocker else ValidationStatus.PASS
+    quality = evaluate_quality(
+        parsed.columns,
+        parsed.rows,
+        linked_market_dataset_revision_id=revision.linked_market_dataset_revision_id,
+        instrument_mapping_ref=revision.instrument_mapping_ref,
+    )
+    issues.extend(_quality_issue_dict(issue) for issue in quality.issues)
+
+    worst = ValidationStatus.PASS
+    for issue in issues:
+        severity = ValidationStatus(issue["severity"])
+        if SEVERITY_RANK[severity] > SEVERITY_RANK[worst]:
+            worst = severity
+    has_blocker = worst == ValidationStatus.BLOCKING_FAIL
     next_state = (
         ResearchRevisionState.NEEDS_REVIEW if has_blocker else ResearchRevisionState.VERIFIED
     )
     return AnalysisOutcome(
-        status=status,
+        status=worst,
         rows_checked=len(parsed.rows),
         next_state=next_state,
         issues=issues,
     )
+
+
+def _quality_issue_dict(issue: QualityIssue) -> dict[str, Any]:
+    """Flatten a pure ``QualityIssue`` into the job's persist-ready issue dict."""
+    return {
+        "check_id": issue.check_id,
+        "severity": issue.severity.value,
+        "message": issue.message,
+        "remediation": issue.remediation,
+        "occurrences": issue.occurrences,
+        "evidence": issue.evidence,
+    }
+
+
+def _issues_by_severity(issues: list[dict[str, Any]]) -> dict[str, int]:
+    """Count findings per severity for the validation-run summary (JSON-safe)."""
+    counts = {status.value: 0 for status in ValidationStatus}
+    for issue in issues:
+        counts[str(issue["severity"])] += 1
+    return counts
 
 
 def _parse_raw_bytes(data: bytes) -> ParsedResearch:
@@ -143,9 +193,19 @@ def _to_parquet_bytes(parsed: ParsedResearch) -> bytes:
     return buffer.getvalue()
 
 
-async def run_analysis(session: AsyncSession, job_id: str) -> dict[str, Any]:
+async def run_analysis(
+    session: AsyncSession,
+    job_id: str,
+    *,
+    load_and_parse: _LoadAndParse | None = None,
+    write_native: _WriteNative | None = None,
+) -> dict[str, Any]:
     """Execute the durable research-analysis job. The ``jobs`` row is the source
-    of truth. Does not commit (the worker's session scope commits)."""
+    of truth. Does not commit (the worker's session scope commits). ``load_and_parse``
+    / ``write_native`` default to the real S3/Polars helpers; tests inject fakes."""
+    load = load_and_parse or _load_and_parse
+    write = write_native or _write_native
+
     job = await session.get(Job, job_id)
     if job is None:
         raise ValueError(f"Job '{job_id}' not found.")
@@ -160,10 +220,10 @@ async def run_analysis(session: AsyncSession, job_id: str) -> dict[str, Any]:
     job.status = JobStatus.RUNNING
     job.started_at = datetime.now(UTC)
 
-    parsed = await _load_and_parse(session, entity_id)
+    parsed = await load(session, entity_id)
     outcome = evaluate_research(parsed, revision)
 
-    native_digest = await _write_native(session, entity_id, revision_id, parsed)
+    native_digest = await write(session, entity_id, revision_id, parsed)
 
     run = rd_repo.add_validation_run(
         session,
@@ -172,8 +232,17 @@ async def run_analysis(session: AsyncSession, job_id: str) -> dict[str, Any]:
         revision_id=revision_id,
         job_id=job_id,
         rows_checked=outcome.rows_checked,
-        summary={"native_digest": native_digest, "issue_count": len(outcome.issues)},
+        summary={
+            "native_digest": native_digest,
+            "issue_count": len(outcome.issues),
+            "issues_by_severity": _issues_by_severity(outcome.issues),
+        },
     )
+    # The run must be INSERTed before its issues: there is no ORM relationship
+    # between run and issue, so the unit-of-work cannot derive the parent-before-
+    # child order from the bare run_id FK (mirrors the market-data job + registry
+    # create-order note).
+    await session.flush()
     for issue in outcome.issues:
         rd_repo.add_validation_issue(
             session,
@@ -181,7 +250,9 @@ async def run_analysis(session: AsyncSession, job_id: str) -> dict[str, Any]:
             severity=ValidationStatus(issue["severity"]),
             check_id=issue["check_id"],
             message=issue["message"],
+            occurrences=int(issue.get("occurrences", 1)),
             remediation=issue.get("remediation"),
+            evidence=issue.get("evidence"),
         )
 
     _advance_revision(revision, outcome, parsed, native_digest)

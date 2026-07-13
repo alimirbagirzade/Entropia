@@ -31,6 +31,7 @@ from entropia.shared.errors import (
 _LAB_ROLES = (Role.ADMIN, Role.SUPERVISOR)
 _TASK_NAMESPACE = "agent_task"
 _HYPOTHESIS_NAMESPACE = "hypothesis"
+_MESSAGE_NAMESPACE = "lab_message"
 _QUEUE_CARD_LIMIT = 20
 
 
@@ -75,6 +76,19 @@ def _hypothesis_card(artifact: Any) -> dict[str, Any]:
         "next_action": artifact.next_action,
         "evidence_refs": list(artifact.evidence_refs),
         "source_task_id": artifact.source_task_id,
+    }
+
+
+def _message_card(message: Any) -> dict[str, Any]:
+    """One Lab Conversation card (doc 18 §3.2): type/tag/time/text, read-only."""
+    return {
+        "message_id": message.message_id,
+        "type": str(message.type),
+        "text": message.text,
+        "task_id": message.task_id,
+        "author_principal_id": message.author_principal_id,
+        "correlation_id": message.correlation_id,
+        "created_at": message.created_at.isoformat() if message.created_at else None,
     }
 
 
@@ -223,4 +237,43 @@ async def list_hypotheses(
     }
 
 
-__all__ = ["get_overview", "get_task", "list_hypotheses", "list_tasks"]
+async def list_lab_messages(
+    session: AsyncSession,
+    actor: Actor,
+    *,
+    task_id: str | None = None,
+    cursor: str | None = None,
+    limit: int | None = None,
+) -> dict[str, Any]:
+    """One keyset page of the Lab Conversation panel (doc 18 §3.2, §9).
+
+    Read-only projection of the append-only ``lab_message`` log, newest-first —
+    the write path (``record_discussion_message``) is unchanged. When ``task_id``
+    is given the page is scoped to that task's thread and a missing task is
+    reported as not-found so the panel never silently returns an empty page for a
+    bad id (mirrors ``list_task_tool_calls``); otherwise the whole conversation.
+    """
+    require_role(actor, _LAB_ROLES)
+    if task_id is not None:
+        task = await al_repo.get_task(session, task_id)
+        if task is None:
+            raise AgentTaskNotFoundError()
+    page_size = clamp_limit(limit)
+    last_key = (
+        decode_cursor(cursor, namespace=_MESSAGE_NAMESPACE).last_key if cursor is not None else None
+    )
+    rows = await al_repo.page_messages(session, task_id=task_id, last_key=last_key, limit=page_size)
+    has_more = len(rows) > page_size
+    page = rows[:page_size]
+    next_cursor = (
+        encode_cursor(_MESSAGE_NAMESPACE, last_key=page[-1].message_id)
+        if has_more and page
+        else None
+    )
+    return {
+        "messages": [_message_card(m) for m in page],
+        "next_cursor": next_cursor,
+    }
+
+
+__all__ = ["get_overview", "get_task", "list_hypotheses", "list_lab_messages", "list_tasks"]

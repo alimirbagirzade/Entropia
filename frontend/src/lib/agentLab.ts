@@ -133,6 +133,23 @@ export interface LabMessageResponse {
   active_task_interrupted: boolean;
 }
 
+// One Lab Conversation card (doc 18 §3.2) — a read-only projection of the
+// append-only `lab_message` log (mirrors backend agent_workspace._message_card).
+export interface LabMessageCard {
+  message_id: string;
+  type: string;
+  text: string;
+  task_id: string | null;
+  author_principal_id: string | null;
+  correlation_id: string | null;
+  created_at: string | null;
+}
+
+export interface LabMessagePage {
+  messages: LabMessageCard[];
+  next_cursor: string | null;
+}
+
 export interface RuntimeControlAccepted {
   agent_id: string;
   control: string;
@@ -264,6 +281,36 @@ export function useHypotheses(status: string | null, cursor: string | null) {
       return api.get<HypothesisPage>(`/hypotheses${qs ? `?${qs}` : ""}`);
     },
     // Keep the current board mounted while a filter/cursor flip is in flight.
+    placeholderData: (previous) => previous,
+  });
+}
+
+// Conversation card type -> badge tone (doc 18 §3.2). The wire value stays a
+// plain string; this map only picks a badge tone. `directive`/`system` are
+// canonical persisted types (domain/agent_lab/enums.py LabMessageType).
+export const LAB_MESSAGE_TYPE_TONES: Record<string, "ok" | "warn" | "down" | "neutral"> = {
+  assistant: "ok",
+  message: "neutral",
+  directive: "warn",
+  system: "neutral",
+};
+
+// The Lab Conversation panel (doc 18 §3.2): a keyset page of the append-only
+// conversation log, newest-first. `taskId` scopes to one task's thread (null =
+// the whole conversation). Under the ["agent-tasks"] prefix so the SSE
+// `agent.task.updated` sweep — and a just-sent message's invalidation — refresh
+// it. A sent message never mutates the write path here; this is read-only.
+export function useLabMessages(taskId: string | null, cursor: string | null) {
+  return useQuery({
+    queryKey: ["agent-tasks", "messages", taskId, cursor],
+    queryFn: () => {
+      const params = new URLSearchParams();
+      if (taskId !== null) params.set("task", taskId);
+      if (cursor !== null) params.set("cursor", cursor);
+      const qs = params.toString();
+      return api.get<LabMessagePage>(`/lab/messages${qs ? `?${qs}` : ""}`);
+    },
+    // Keep the current conversation mounted while a cursor flip is in flight.
     placeholderData: (previous) => previous,
   });
 }

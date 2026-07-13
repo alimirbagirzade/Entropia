@@ -116,6 +116,18 @@ async def get_tool_call(
     return await tool_gateway_query.get_tool_call(ctx.session, ctx.actor, tool_call_id=tool_call_id)
 
 
+@router.get(_MESSAGES_PATH)
+async def list_lab_messages(
+    ctx: RequestContext = Depends(request_context),
+    task: str | None = Query(default=None),
+    cursor: str | None = Query(default=None),
+    limit: int | None = Query(default=None),
+) -> dict[str, Any]:
+    return await agent_workspace_query.list_lab_messages(
+        ctx.session, ctx.actor, task_id=task, cursor=cursor, limit=limit
+    )
+
+
 @router.get(_HYPOTHESES_PATH)
 async def list_hypotheses(
     ctx: RequestContext = Depends(request_context),

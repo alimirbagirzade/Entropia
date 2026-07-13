@@ -9,12 +9,14 @@ import {
   AGENT_TASK_STATUS_FILTERS,
   DIRECTIVE_PRIORITIES,
   HYPOTHESIS_STATUS_FILTERS,
+  LAB_MESSAGE_TYPE_TONES,
   TASK_STATUS_TONES,
   TOOL_CALL_STATUS_TONES,
   useAgentOverview,
   useAgentTask,
   useAgentTasks,
   useHypotheses,
+  useLabMessages,
   usePauseRuntime,
   useQueueDirective,
   useResumeRuntime,
@@ -26,6 +28,7 @@ import {
   type AgentTaskCard,
   type AgentToolCallCard,
   type DirectivePriority,
+  type LabMessageCard,
 } from "@/lib/agentLab";
 
 const RUNTIME_TONES: Record<string, "ok" | "warn" | "down" | "neutral"> = {
@@ -125,6 +128,7 @@ function Workspace({ overview }: { overview: AgentOverview }) {
         <TaskDetailCard taskId={selectedTaskId} onClose={() => setSelectedTaskId(null)} />
       ) : null}
       <DirectiveCard />
+      <ConversationCard />
       <HypothesesCard />
     </>
   );
@@ -629,6 +633,76 @@ function DirectiveCard() {
         ) : null}
       </form>
     </section>
+  );
+}
+
+// Lab Conversation panel (doc 18 §3.2): read-only cards over the append-only
+// conversation log (type/tag/time/text). The compose inputs live in the
+// DirectiveCard above; this surface only observes — a sent message lands here
+// via the ["agent-tasks"] invalidation, never a local echo.
+function ConversationCard() {
+  const pager = useCursorStack();
+  const messages = useLabMessages(null, pager.cursor);
+  const rows = messages.data?.messages ?? [];
+
+  return (
+    <section className="card" aria-labelledby="conversation-h" style={{ marginTop: 18 }}>
+      <h3 id="conversation-h" style={{ marginTop: 0 }}>
+        Lab conversation
+      </h3>
+      <p className="page-sub" style={{ marginTop: 0 }}>
+        Read-only record of discussion messages and the assistant’s saved-context replies.
+      </p>
+      {messages.isLoading ? (
+        <Loading label="Loading conversation…" />
+      ) : messages.isError ? (
+        <ErrorState error={messages.error} onRetry={() => void messages.refetch()} />
+      ) : rows.length === 0 ? (
+        <EmptyState
+          glyph="◇"
+          title="No conversation yet"
+          description="Send a message above to start the conversation; the assistant replies from saved context."
+        />
+      ) : (
+        <>
+          <ul className="plain-list">
+            {rows.map((row) => (
+              <ConversationRow key={row.message_id} message={row} />
+            ))}
+          </ul>
+          <Pager
+            canPrev={pager.canPrev}
+            nextCursor={messages.data?.next_cursor ?? null}
+            onPrev={pager.prev}
+            onNext={pager.next}
+          />
+        </>
+      )}
+    </section>
+  );
+}
+
+function ConversationRow({ message }: { message: LabMessageCard }) {
+  return (
+    <li style={{ marginBottom: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <StatusBadge tone={LAB_MESSAGE_TYPE_TONES[message.type] ?? "neutral"} label={message.type} />
+        {message.task_id ? (
+          <span className="badge">
+            task · <code>{message.task_id}</code>
+          </span>
+        ) : null}
+        {message.created_at ? (
+          <time
+            dateTime={message.created_at}
+            style={{ fontSize: 12, color: "var(--text-dim)", marginLeft: "auto" }}
+          >
+            {message.created_at}
+          </time>
+        ) : null}
+      </div>
+      <p style={{ margin: "6px 0 0", whiteSpace: "pre-wrap" }}>{message.text}</p>
+    </li>
   );
 }
 

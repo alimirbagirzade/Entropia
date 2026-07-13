@@ -52,6 +52,33 @@ const HYPOTHESES = {
   next_cursor: null,
 };
 
+// Lab Conversation (GET /lab/messages) — the read-only projection of the
+// append-only lab_message log, newest-first (assistant reply leads its human
+// message). The human message is task-scoped so its tag renders.
+const LAB_MESSAGES = {
+  messages: [
+    {
+      message_id: "labmsg_2",
+      type: "assistant",
+      text: "Alpha Agent is active. This message was recorded and did not interrupt the active task.",
+      task_id: null,
+      author_principal_id: null,
+      correlation_id: "corr_c",
+      created_at: "2026-07-11T10:00:01Z",
+    },
+    {
+      message_id: "labmsg_1",
+      type: "message",
+      text: "Which dataset revisions are pinned?",
+      task_id: "atask_1",
+      author_principal_id: "admin_1",
+      correlation_id: "corr_c",
+      created_at: "2026-07-11T10:00:00Z",
+    },
+  ],
+  next_cursor: null,
+};
+
 // Task history list (GET /agent-tasks) — the aged-out record behind the bounded
 // live queue. `next_cursor` is present so the Pager's Next is exercisable.
 const TASK_HISTORY = {
@@ -155,6 +182,7 @@ describe("Analysis Lab page", () => {
     stubApi({
       "GET /agent-workspace/overview": OVERVIEW,
       "GET /hypotheses": HYPOTHESES,
+      "GET /lab/messages": LAB_MESSAGES,
       "GET /agent-tasks": TASK_HISTORY,
     });
     renderPage();
@@ -173,6 +201,7 @@ describe("Analysis Lab page", () => {
     stubApi({
       "GET /agent-workspace/overview": OVERVIEW,
       "GET /hypotheses": HYPOTHESES,
+      "GET /lab/messages": LAB_MESSAGES,
       // Ordered: the tool-calls fragment must precede the bare detail prefix so
       // "/agent-tasks/atask_2/tool-calls" does not match the detail stub.
       "GET /agent-tasks/atask_2/tool-calls": TOOL_CALLS,
@@ -194,6 +223,7 @@ describe("Analysis Lab page", () => {
     const fetchMock = stubApi({
       "GET /agent-workspace/overview": OVERVIEW,
       "GET /hypotheses": HYPOTHESES,
+      "GET /lab/messages": LAB_MESSAGES,
       "GET /agent-tasks": TASK_HISTORY,
       "POST /agent-directives": {
         directive_id: "dir_2",
@@ -260,6 +290,7 @@ describe("Analysis Lab page", () => {
     const fetchMock = stubApi({
       "GET /agent-workspace/overview": OVERVIEW,
       "GET /hypotheses": HYPOTHESES,
+      "GET /lab/messages": LAB_MESSAGES,
       "GET /agent-tasks": TASK_HISTORY,
     });
     const client = renderPage();
@@ -285,6 +316,7 @@ describe("Analysis Lab page", () => {
         throw new Error("FORBIDDEN: Analysis Lab requires Admin or Supervisor.");
       },
       "GET /hypotheses": HYPOTHESES,
+      "GET /lab/messages": LAB_MESSAGES,
     });
     renderPage();
 
@@ -298,6 +330,7 @@ describe("Analysis Lab page", () => {
     stubApi({
       "GET /agent-workspace/overview": OVERVIEW,
       "GET /hypotheses": HYPOTHESES,
+      "GET /lab/messages": LAB_MESSAGES,
       "GET /agent-tasks/atask_2/tool-calls": TOOL_CALLS,
       "GET /agent-tasks/atask_2": { ...TASK_DETAIL, task_id: "atask_2", title: "Vol regime scan" },
       // Ordered LAST: the bare list fragment must not shadow the detail/tool-calls stubs above.
@@ -319,6 +352,7 @@ describe("Analysis Lab page", () => {
     const fetchMock = stubApi({
       "GET /agent-workspace/overview": OVERVIEW,
       "GET /hypotheses": HYPOTHESES,
+      "GET /lab/messages": LAB_MESSAGES,
       "GET /agent-tool-calls/tc_1": TOOL_CALL_DETAIL,
       "GET /agent-tasks/atask_2/tool-calls": TOOL_CALLS,
       "GET /agent-tasks/atask_2": { ...TASK_DETAIL, task_id: "atask_2", title: "Vol regime scan" },
@@ -346,6 +380,7 @@ describe("Analysis Lab page", () => {
     const fetchMock = stubApi({
       "GET /agent-workspace/overview": OVERVIEW,
       "GET /hypotheses": HYPOTHESES,
+      "GET /lab/messages": LAB_MESSAGES,
       "GET /agent-tasks": TASK_HISTORY,
     });
     renderPage();
@@ -383,6 +418,7 @@ describe("Analysis Lab page", () => {
       "GET /agent-workspace/overview": OVERVIEW,
       "GET /agent-tasks": TASK_HISTORY,
       "GET /hypotheses": HYP_PAGE,
+      "GET /lab/messages": LAB_MESSAGES,
     });
     renderPage();
 
@@ -407,6 +443,54 @@ describe("Analysis Lab page", () => {
       expect(fetchMock.mock.calls.some(([url]) => String(url).includes("cursor=hyp_2"))).toBe(
         true,
       );
+    });
+  });
+
+  it("renders the lab conversation cards from the read-only projection", async () => {
+    const fetchMock = stubApi({
+      "GET /agent-workspace/overview": OVERVIEW,
+      "GET /hypotheses": HYPOTHESES,
+      "GET /lab/messages": LAB_MESSAGES,
+      "GET /agent-tasks": TASK_HISTORY,
+    });
+    renderPage();
+
+    // Wait for the conversation query to resolve before reading its cards.
+    expect(await screen.findByText("Which dataset revisions are pinned?")).toBeInTheDocument();
+    const convo = screen.getByRole("region", { name: "Lab conversation" });
+    // Type/tag/time/text cards (doc 18 §3.2) over the append-only log.
+    expect(within(convo).getByText("assistant")).toBeInTheDocument();
+    expect(within(convo).getByText("message")).toBeInTheDocument();
+    // The task-scoped human message renders its task tag.
+    expect(within(convo).getByText("atask_1")).toBeInTheDocument();
+    // The panel shows the whole conversation — it never scopes with `task=`.
+    const call = fetchMock.mock.calls.find(([url]) => String(url).includes("/lab/messages"));
+    expect(String(call?.[0])).not.toContain("task=");
+  });
+
+  it("sweeps the lab conversation when the agent-tasks SSE prefix is invalidated", async () => {
+    const fetchMock = stubApi({
+      "GET /agent-workspace/overview": OVERVIEW,
+      "GET /hypotheses": HYPOTHESES,
+      "GET /lab/messages": LAB_MESSAGES,
+      "GET /agent-tasks": TASK_HISTORY,
+    });
+    const client = renderPage();
+    // Wait for the first conversation fetch to resolve before counting.
+    await screen.findByText("Which dataset revisions are pinned?");
+    const before = fetchMock.mock.calls.filter(([url]) =>
+      String(url).includes("/lab/messages"),
+    ).length;
+
+    // A sent message (useSendLabMessage) and the SSE `agent.task.updated` both
+    // invalidate ["agent-tasks"] — the conversation must be swept too.
+    await client.invalidateQueries({ queryKey: ["agent-tasks"] });
+
+    await waitFor(() => {
+      const after = fetchMock.mock.calls.filter(([url]) =>
+        String(url).includes("/lab/messages"),
+      ).length;
+      expect(after).toBeGreaterThan(before);
     });
   });
 });

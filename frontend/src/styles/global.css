@@ -636,3 +636,16 @@ a:hover { text-decoration: underline; }
   gap: 10px;
   font-size: 13px;
 }
+
+/* ---- v18 Strategy Details: dense multi-column config + block styles ---- */
+.details-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 24px; }
+.details-column { border-right: 1px solid var(--border); padding-right: 20px; }
+.details-column:last-child { border-right: none; padding-right: 0; }
+/* Packed field grid so the structured form reads like the mockup's columns. */
+.strategy-form-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+@media (max-width: 720px) { .strategy-form-grid { grid-template-columns: 1fr; } }
+.logic-box { border: 1px solid #6b86b6; border-radius: var(--radius); padding: 8px; margin-bottom: 14px; }
+.dashed-box { border: 1px dashed var(--text-dim); border-radius: var(--radius); font-size: 13px; }
+.dashed-box > div { border-bottom: 1px dashed var(--text-dim); padding: 4px 6px; }
+.dashed-box > div:last-child { border-bottom: none; }
+.settings-panel { border: 1px dashed var(--text-dim); border-radius: var(--radius); padding: 6px; font-size: 13px; line-height: 1.5; }

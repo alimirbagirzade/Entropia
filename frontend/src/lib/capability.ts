@@ -210,7 +210,7 @@ export function useCapability(capabilityKey: string | null) {
 export function useGraphicViewOverview() {
   return useQuery({
     queryKey: ["capabilities", "graphic-view-overview"],
-    queryFn: () => api.get<GraphicViewOverview>("/future-dev/graphic_view/overview"),
+    queryFn: () => api.get<GraphicViewOverview>("/future-dev/graphic-view/overview"),
   });
 }
 

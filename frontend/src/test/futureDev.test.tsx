@@ -185,7 +185,7 @@ const NO_OUTPUT_HISTORY =
 // default to empty so every existing test that renders FutureDev stays clean.
 function baseRoutes(onTransition?: (init?: RequestInit) => unknown) {
   return {
-    "GET /future-dev/graphic_view/overview": OVERVIEW,
+    "GET /future-dev/graphic-view/overview": OVERVIEW,
     "POST /capabilities/graphic_view/lifecycle-transitions":
       onTransition ?? TRANSITION_RESULT,
     "POST /view-datasets/query": VIEW_DATASET_RESULT,

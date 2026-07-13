@@ -7075,7 +7075,7 @@
         ]
       }
     },
-    "/api/v1/future-dev/graphic_view/overview": {
+    "/api/v1/future-dev/graphic-view/overview": {
       "get": {
         "operationId": "graphic_view_overview_api_v1_future_dev_graphic_view_overview_get",
         "responses": {

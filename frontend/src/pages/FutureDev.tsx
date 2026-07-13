@@ -384,7 +384,7 @@ function TransitionComposer({
 }
 
 // ---------------------------------------------------------------------------
-// Graphic View placeholder overview (GET /future-dev/graphic_view/overview,
+// Graphic View placeholder overview (GET /future-dev/graphic-view/overview,
 // doc 22 §4.1, FD-01/03) — static copy + server lifecycle state; never a
 // chart request, a job or fake progress (CR-09).
 // ---------------------------------------------------------------------------

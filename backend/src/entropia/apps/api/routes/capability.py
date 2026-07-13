@@ -41,7 +41,7 @@ router = APIRouter(tags=["future-dev"])
 _CAPABILITIES_PATH = "/capabilities"
 _CAPABILITY_PATH = "/capabilities/{capability_key}"
 _TRANSITIONS_PATH = "/capabilities/{capability_key}/lifecycle-transitions"
-_GRAPHIC_VIEW_OVERVIEW_PATH = "/future-dev/graphic_view/overview"
+_GRAPHIC_VIEW_OVERVIEW_PATH = "/future-dev/graphic-view/overview"
 _VIEW_DATASET_QUERY_PATH = "/view-datasets/query"
 _VIEW_DATASETS_PATH = "/view-datasets"
 _VIEW_DATASET_PATH = "/view-datasets/{view_dataset_id}"

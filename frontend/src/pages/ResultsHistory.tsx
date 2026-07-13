@@ -83,7 +83,7 @@ export function ResultsHistory() {
       <h1 className="page-title">Results History</h1>
       <p className="page-sub">Immutable backtest results · server-side sort and pagination</p>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+      <div className="history-toolbar">
         <label htmlFor="history-sort" style={{ fontSize: 13, color: "var(--text-dim)" }}>
           Sort
         </label>

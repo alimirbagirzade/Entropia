@@ -136,12 +136,28 @@ const AUDIT_PAGE = {
   meta: { cursor: null, has_more: false },
 };
 
+// Server-hydrated distinct target_entity_type set (real emitters only) — the source
+// of truth for the "Resource type" filter. Deliberately contains NONE of the six
+// curated options the old hand-list carried (user / package_revision / dataset_revision
+// / artifact / allocation_plan / system), which matched no emitter → silent empty page.
+const RESOURCE_TYPES = {
+  resource_types: [
+    "backtest_run",
+    "human_user",
+    "market_dataset",
+    "package",
+    "portfolio_allocation_plan",
+    "strategy",
+  ],
+};
+
 // Order matters for the fragment-matching stub: the detail route must come
 // before the list route ("/admin/logs/evt_1" contains "/admin/logs").
 const BASE_ROUTES = {
   "GET /admin/users": USERS_PAGE,
   "GET /admin/system-actors": SYSTEM_ACTORS,
   "GET /admin/role-matrix": ROLE_MATRIX,
+  "GET /admin/log-resource-types": RESOURCE_TYPES,
   "GET /admin/logs/evt_1": LOG_DETAIL,
   "GET /admin/logs": LOGS_PAGE,
   "GET /audit-events": AUDIT_PAGE,
@@ -176,6 +192,28 @@ describe("Panel / Management / Logs page", () => {
     expect((await screen.findAllByText("user.role_assigned")).length).toBeGreaterThan(0);
     // The raw audit stream renders alongside the filtered Logs projection.
     expect(screen.getByText("Audit stream (raw)")).toBeInTheDocument();
+  });
+
+  it("hydrates the Resource type filter from the server distinct-set (no curated drift)", async () => {
+    stubApi(BASE_ROUTES);
+    renderPage();
+    await screen.findByText("alice");
+
+    const select = (await screen.findByLabelText("Resource type")) as HTMLSelectElement;
+    // "all" (empty value) plus exactly the server-hydrated real targets — no more, no less.
+    const values = Array.from(select.options).map((o) => o.value);
+    expect(values).toEqual(["", ...RESOURCE_TYPES.resource_types]);
+    // Every non-"all" option is a real emitted target the server returned (the R4 invariant).
+    expect(values.filter((v) => v !== "")).toEqual(RESOURCE_TYPES.resource_types);
+    // The six previously-broken curated options can never render — they are not in the
+    // server set, so hydrating from truth structurally cannot resurrect the silent drift.
+    for (const broken of ["user", "package_revision", "dataset_revision", "artifact", "allocation_plan", "system"]) {
+      expect(values).not.toContain(broken);
+    }
+
+    // Selecting a hydrated option drives the filter and refetches the logs page.
+    fireEvent.change(select, { target: { value: "package" } });
+    await waitFor(() => expect(select.value).toBe("package"));
   });
 
   it("assigns a role with the row-version OCC guard and server-truth role options", async () => {

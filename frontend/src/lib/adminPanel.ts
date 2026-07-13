@@ -153,18 +153,13 @@ export const LOG_SEVERITIES = ["info", "warning", "error"] as const;
 
 export const LOG_ACTOR_TYPES = ["human", "system_agent", "system"] as const;
 
-export const LOG_RESOURCE_TYPES = [
-  "user",
-  "strategy",
-  "package_revision",
-  "dataset_revision",
-  "backtest_run",
-  "backtest_result",
-  "artifact",
-  "manual_document",
-  "allocation_plan",
-  "system",
-] as const;
+// Resource-type filter options are NOT curated here — a hand-listed set silently
+// drifts from the real emitted `target_entity_type` strings (the server matches them
+// EXACTLY), so a stale option returns an empty page with no error. They are hydrated
+// from the server's distinct-set endpoint via `useLogResourceTypes` instead.
+export interface LogResourceTypes {
+  resource_types: string[];
+}
 
 // Badge tones only — the wire severity stays a plain string.
 export const SEVERITY_TONES: Record<string, "ok" | "warn" | "down" | "neutral"> = {
@@ -266,6 +261,19 @@ export function useAdminLogs(filters: LogFilters, cursor: string | null) {
       return api.get<LogsPage>(`/admin/logs${qs ? `?${qs}` : ""}`);
     },
     placeholderData: (previous) => previous,
+  });
+}
+
+const RESOURCE_TYPES_STALE_MS = 5 * 60 * 1000;
+
+export function useLogResourceTypes() {
+  // Distinct emitted target_entity_type set — the "Resource type" filter's option
+  // source of truth. Keyed under ["audit"] so a new audit event (which may carry a
+  // never-seen type) sweeps it via the `audit.event.created` SSE invalidation.
+  return useQuery({
+    queryKey: ["audit", "resource-types"],
+    queryFn: () => api.get<LogResourceTypes>("/admin/log-resource-types"),
+    staleTime: RESOURCE_TYPES_STALE_MS,
   });
 }
 

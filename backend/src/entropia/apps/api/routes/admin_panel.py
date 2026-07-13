@@ -29,6 +29,7 @@ _USER_ROLE_PATH = "/admin/users/{user_id}/role"
 _SYSTEM_ACTORS_PATH = "/admin/system-actors"
 _ROLE_MATRIX_PATH = "/admin/role-matrix"
 _LOGS_PATH = "/admin/logs"
+_LOG_RESOURCE_TYPES_PATH = "/admin/log-resource-types"
 _LOG_DETAIL_PATH = "/admin/logs/{event_id}"
 _DATA_QUEUE_REDELIVER_PATH = "/admin/data-queue/redeliver"
 
@@ -150,6 +151,17 @@ async def list_logs(
         cursor=cursor,
         limit=limit,
     )
+
+
+@router.get(_LOG_RESOURCE_TYPES_PATH)
+async def list_log_resource_types(
+    ctx: RequestContext = Depends(request_context),
+) -> dict[str, Any]:
+    """Distinct ``target_entity_type`` set actually present in the audit log, so the
+    Logs "Resource type" filter hydrates from server truth instead of a hand-curated
+    list that silently drifts (a stale option matches nothing → empty page, no error)."""
+    require_admin_panel(ctx.actor)
+    return await log_query.list_resource_types(ctx.session, ctx.actor)
 
 
 @router.get(_LOG_DETAIL_PATH)

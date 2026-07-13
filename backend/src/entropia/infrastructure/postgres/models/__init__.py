@@ -53,6 +53,10 @@ from entropia.infrastructure.postgres.models.esp import (
 )
 from entropia.infrastructure.postgres.models.export import ExportArtifact
 from entropia.infrastructure.postgres.models.identity import Agent, HumanUser, Principal
+from entropia.infrastructure.postgres.models.instrument import (
+    InstrumentAlias,
+    InstrumentRegistry,
+)
 from entropia.infrastructure.postgres.models.jobs import IdempotencyKey, Job
 from entropia.infrastructure.postgres.models.mainboard import (
     MainboardCompositionSnapshot,
@@ -152,6 +156,8 @@ __all__ = [
     "HumanUser",
     "HypothesisArtifact",
     "IdempotencyKey",
+    "InstrumentAlias",
+    "InstrumentRegistry",
     "Job",
     "LabMessage",
     "MainboardCompositionSnapshot",

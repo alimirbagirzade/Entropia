@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from entropia.application.commands.deletion import soft_delete_registry_root
 from entropia.application.idempotency import run_idempotent
 from entropia.application.jobs.data_queue import MARKET_DATA_ANALYSIS
+from entropia.application.queries import instrument as instrument_query
 from entropia.domain.identity import Actor
 from entropia.domain.identity.policy import require_authenticated
 from entropia.domain.lifecycle.enums import ApprovalState
@@ -111,9 +112,27 @@ async def create_market_dataset(
     payload: dict[str, Any],
     title: str | None = None,
     instrument_id: str | None = None,
+    instrument_scope: dict[str, Any] | None = None,
 ) -> tuple[Any, MarketDatasetRevision]:
-    """Create the dataset Root + first DRAFT revision (owner = actor)."""
+    """Create the dataset Root + first DRAFT revision (owner = actor).
+
+    When ``instrument_scope`` is supplied (GAP-16; Master §8.1), the free-text
+    scope is resolved to a canonical ``instrument_id`` through the registry — an
+    unresolvable scope fails closed (INSTRUMENT_SCOPE_UNRESOLVABLE) rather than
+    persisting a silent free-text assumption. Without a scope the legacy
+    ``instrument_id`` is stored verbatim (backward compatible).
+    """
     require_authenticated(actor)
+    resolved_instrument_id = instrument_id
+    if instrument_scope:
+        resolved = await instrument_query.resolve_scope(
+            session,
+            venue_id=instrument_scope.get("venue_id"),
+            symbol=instrument_scope.get("symbol"),
+            contract_type=instrument_scope.get("contract_type"),
+            alias=instrument_scope.get("alias"),
+        )
+        resolved_instrument_id = resolved["instrument_id"]
     root, revision = await md_repo.create_market_dataset(
         session,
         owner_principal_id=actor.principal_id,
@@ -121,7 +140,7 @@ async def create_market_dataset(
         market_data_type=market_data_type,
         payload=payload,
         title=title,
-        instrument_id=instrument_id,
+        instrument_id=resolved_instrument_id,
     )
     _audit_and_outbox(
         session,

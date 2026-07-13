@@ -7,6 +7,7 @@ import { BacktestRun } from "./pages/BacktestRun";
 import { CreatePackage } from "./pages/CreatePackage";
 import { Embedded } from "./pages/Embedded";
 import { FutureDev } from "./pages/FutureDev";
+import { Instruments } from "./pages/Instruments";
 import { Library } from "./pages/Library";
 import { Mainboard } from "./pages/Mainboard";
 import { MarketData } from "./pages/MarketData";
@@ -53,6 +54,7 @@ const REAL_PATHS = new Set([
   "/rationale-families",
   "/market-data",
   "/research-data",
+  "/instruments",
   "/strategy",
   "/outsource-signal",
   "/trading-signal",
@@ -240,6 +242,15 @@ export default function App() {
           element={
             <ErrorBoundary>
               <ResearchData />
+            </ErrorBoundary>
+          }
+        />
+        {/* Instrument Registry (GAP-16, Master §8.1): canonical instruments + free-text scope resolver. */}
+        <Route
+          path="/instruments"
+          element={
+            <ErrorBoundary>
+              <Instruments />
             </ErrorBoundary>
           }
         />

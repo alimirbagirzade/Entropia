@@ -30,6 +30,10 @@ class CreateDatasetRequest(BaseModel):
     payload: dict[str, Any] = Field(default_factory=dict)
     title: str | None = None
     instrument_id: str | None = None
+    # GAP-16 (Master §8.1): a free-text scope resolved server-side to a canonical
+    # instrument_id. Keys: {venue_id, symbol, contract_type} or {alias}. An
+    # unresolvable scope -> 422 INSTRUMENT_SCOPE_UNRESOLVABLE (never a silent free-text).
+    instrument_scope: dict[str, Any] | None = None
 
 
 class StartUploadRequest(BaseModel):
@@ -86,6 +90,7 @@ async def create_dataset(
         payload=body.payload,
         title=body.title,
         instrument_id=body.instrument_id,
+        instrument_scope=body.instrument_scope,
     )
     response.headers["ETag"] = etag_for_row_version(root.row_version)
     return {

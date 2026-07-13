@@ -15,6 +15,7 @@ need them).
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
@@ -33,6 +34,7 @@ from entropia.domain.market_data.validation_rules import (
     OhlcvRow,
     SpreadRow,
     TickRow,
+    evaluate_cross_row,
     validate_ohlcv_row,
     validate_spread_row,
     validate_tick_row,
@@ -68,6 +70,13 @@ class ParsedDataset:
     columns: list[str]
     rows: list[dict[str, Any]]
     coverage: list[dict[str, Any]] = field(default_factory=list)
+
+
+# Injection seams (mirror the backtest engine's ``stream_bars``): the S3/Polars
+# steps are swappable so ``run_analysis`` is exercisable end-to-end against a real
+# DB without MinIO. Production callers pass neither and get the real helpers.
+_LoadAndParse = Callable[[AsyncSession, str, "MarketDatasetRevision"], Awaitable[ParsedDataset]]
+_WriteProcessed = Callable[[AsyncSession, str, str, ParsedDataset], Awaitable[str]]
 
 
 def _validate_one(market_data_type: MarketDataType, row: dict[str, Any]) -> ValidationStatus:
@@ -153,11 +162,18 @@ def _to_parquet_bytes(parsed: ParsedDataset) -> bytes:
     return buffer.getvalue()
 
 
-async def run_analysis(session: AsyncSession, job_id: str) -> dict[str, Any]:
+async def run_analysis(
+    session: AsyncSession,
+    job_id: str,
+    *,
+    load_and_parse: _LoadAndParse | None = None,
+    write_processed: _WriteProcessed | None = None,
+) -> dict[str, Any]:
     """Execute the durable analysis job. The ``jobs`` row is the source of truth.
 
     Returns a JSON-safe result reference. Does not commit (the worker's session
-    scope commits).
+    scope commits). ``load_and_parse``/``write_processed`` default to the real
+    S3/Polars helpers; tests inject in-memory fakes.
     """
     job = await session.get(Job, job_id)
     if job is None:
@@ -173,10 +189,33 @@ async def run_analysis(session: AsyncSession, job_id: str) -> dict[str, Any]:
     job.status = JobStatus.RUNNING
     job.started_at = datetime.now(UTC)
 
-    parsed = await _load_and_parse(session, entity_id, revision)
-    outcome = evaluate_rows(parsed)
+    parsed = await (load_and_parse or _load_and_parse)(session, entity_id, revision)
+    per_row = evaluate_rows(parsed)
+    cross = evaluate_cross_row(
+        parsed.market_data_type,
+        parsed.rows,
+        resolution_kind=revision.resolution_kind,
+        resolution_value=revision.resolution_value,
+        spread_unit=(revision.payload or {}).get("spread_unit"),
+    )
+    # The final severity is the worse of per-row and cross-row; a blocking finding
+    # from either drives the revision to NEEDS_REVIEW (decide_outcome), so a
+    # non-monotonic or duplicated series can never auto-verify into the money engine.
+    worst = (
+        per_row.status
+        if _SEVERITY_RANK[per_row.status] >= _SEVERITY_RANK[cross.worst]
+        else cross.worst
+    )
+    outcome = AnalysisOutcome(
+        status=worst,
+        rows_checked=per_row.rows_checked,
+        counts=per_row.counts,
+        next_state=decide_outcome(worst),
+    )
 
-    processed_digest = await _write_processed(session, entity_id, revision_id, parsed)
+    processed_digest = await (write_processed or _write_processed)(
+        session, entity_id, revision_id, parsed
+    )
 
     run = md_repo.add_validation_run(
         session,
@@ -185,8 +224,17 @@ async def run_analysis(session: AsyncSession, job_id: str) -> dict[str, Any]:
         revision_id=revision_id,
         job_id=job_id,
         rows_checked=outcome.rows_checked,
-        summary={"counts": outcome.counts, "processed_digest": processed_digest},
+        summary={
+            "counts": outcome.counts,
+            "processed_digest": processed_digest,
+            "cross_row": {issue.rule_code: issue.occurrences for issue in cross.issues},
+            "coverage_slices": len(cross.coverage),
+        },
     )
+    # The run must be INSERTed before its issues: there is no ORM relationship
+    # between run and issue, so the unit-of-work cannot derive the parent-before-
+    # child order from the bare run_id FK (mirrors the registry create-order note).
+    await session.flush()
     if outcome.counts.get(ValidationStatus.BLOCKING_FAIL.value, 0) > 0:
         md_repo.add_validation_issue(
             session,
@@ -195,6 +243,26 @@ async def run_analysis(session: AsyncSession, job_id: str) -> dict[str, Any]:
             rule_code="ROW_RULE_BLOCKING_FAIL",
             message="One or more rows failed blocking validation.",
             occurrences=outcome.counts[ValidationStatus.BLOCKING_FAIL.value],
+        )
+    for issue in cross.issues:
+        md_repo.add_validation_issue(
+            session,
+            run_id=run.run_id,
+            severity=issue.severity,
+            rule_code=issue.rule_code,
+            message=issue.message,
+            occurrences=issue.occurrences,
+            sample=issue.sample,
+        )
+    for segment in cross.coverage:
+        md_repo.add_coverage_slice(
+            session,
+            entity_id=entity_id,
+            revision_id=revision_id,
+            start_at=segment.start_at,
+            end_at=segment.end_at,
+            row_count=segment.row_count,
+            gap_seconds=segment.gap_seconds,
         )
 
     _advance_revision(revision, outcome)

@@ -27,9 +27,15 @@ from entropia.domain.market_data.state_machine import (
     next_market_revision_state,
 )
 from entropia.domain.market_data.validation_rules import (
+    CoverageSegment,
+    CrossRowIssue,
+    CrossRowReport,
     OhlcvRow,
     SpreadRow,
     TickRow,
+    cadence_seconds,
+    evaluate_cross_row,
+    parse_timestamp,
     validate_ohlcv_row,
     validate_spread_row,
     validate_tick_row,
@@ -41,7 +47,10 @@ from entropia.domain.market_data.value_objects import (
 )
 
 __all__ = [
+    "CoverageSegment",
     "CoverageSlice",
+    "CrossRowIssue",
+    "CrossRowReport",
     "IllegalMarketRevisionTransition",
     "MarketDataType",
     "MarketRevisionState",
@@ -55,6 +64,7 @@ __all__ = [
     "TimezoneMode",
     "TimezoneSpec",
     "TradeSide",
+    "cadence_seconds",
     "can_approve",
     "can_deprecate",
     "can_reject",
@@ -63,7 +73,9 @@ __all__ = [
     "ensure_can_approve",
     "ensure_can_edit_draft",
     "ensure_can_view",
+    "evaluate_cross_row",
     "next_market_revision_state",
+    "parse_timestamp",
     "propose_schema_mapping",
     "validate_ohlcv_row",
     "validate_spread_row",

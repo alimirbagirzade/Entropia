@@ -51,7 +51,7 @@ function ItemRow({ item }: { item: MainboardItem }) {
   const busy = patch.isPending || del.isPending;
 
   return (
-    <div style={{ border: "1px solid var(--border)", borderRadius: 10, padding: "10px 14px" }}>
+    <div style={{ border: "1px solid var(--border)", borderRadius: 5, padding: "10px 14px" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
         <button
           type="button"
@@ -197,7 +197,7 @@ function ItemRow({ item }: { item: MainboardItem }) {
             <div
               role="alertdialog"
               aria-label={`Delete ${itemKindLabel(item.item_kind)}?`}
-              style={{ border: "1px solid var(--down)", borderRadius: 8, padding: 12 }}
+              style={{ border: "1px solid var(--down)", borderRadius: 4, padding: 12 }}
             >
               <strong>Delete {itemKindLabel(item.item_kind)}?</strong>
               <p style={{ margin: "6px 0", fontSize: 13 }}>

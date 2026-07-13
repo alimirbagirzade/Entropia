@@ -1032,6 +1032,23 @@
         "title": "DeleteDocumentRequest",
         "type": "object"
       },
+      "DeletePackageRequest": {
+        "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "title": "DeletePackageRequest",
+        "type": "object"
+      },
       "DeleteRequest": {
         "properties": {
           "reason": {
@@ -1064,6 +1081,23 @@
           }
         },
         "title": "DeleteResultBody",
+        "type": "object"
+      },
+      "DeprecatePackageRequest": {
+        "properties": {
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "title": "DeprecatePackageRequest",
         "type": "object"
       },
       "DirectiveBody": {
@@ -6816,6 +6850,73 @@
       }
     },
     "/api/v1/library/{entity_id}": {
+      "delete": {
+        "description": "Owner-or-Admin Move to Trash (doc 08 §7, §8.4). OCC token is the root\n``row_version`` carried as the ``If-Match \"rv-N\"`` ETag (the detail GET returns\nit); a stale head -> 409, a repeat delete is an idempotent no-op. Restore stays\nthe Admin-only Trash surface.",
+        "operationId": "soft_delete_package_api_v1_library__entity_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entity_id",
+            "required": true,
+            "schema": {
+              "title": "Entity Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/DeletePackageRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Soft Delete Package",
+        "tags": [
+          "package-library"
+        ]
+      },
       "get": {
         "operationId": "get_library_package_api_v1_library__entity_id__get",
         "parameters": [
@@ -6854,6 +6955,68 @@
           }
         },
         "summary": "Get Library Package",
+        "tags": [
+          "package-library"
+        ]
+      }
+    },
+    "/api/v1/library/{entity_id}/deprecate": {
+      "post": {
+        "description": "Owner-or-Admin: ``active -> deprecated`` (doc 08 §7 \"Deprecate\"). No OCC — a\ndeprecate appends no revision, so it cannot race the head (mirrors the sibling\n``market_data`` deprecate); a non-active/soft-deleted root -> 409 LIFECYCLE_BLOCKED.",
+        "operationId": "deprecate_package_api_v1_library__entity_id__deprecate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entity_id",
+            "required": true,
+            "schema": {
+              "title": "Entity Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/DeprecatePackageRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Deprecate Package Api V1 Library  Entity Id  Deprecate Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Deprecate Package",
         "tags": [
           "package-library"
         ]

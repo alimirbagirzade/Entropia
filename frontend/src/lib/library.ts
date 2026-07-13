@@ -8,9 +8,10 @@
 // surface is GET-only — every mutating package action stays out of this slice,
 // so no OCC token is sent from here (the detail ETag exists for later slices).
 
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { QueryClient } from "@tanstack/react-query";
 
-import { api } from "./apiClient";
+import { api, apiRequest } from "./apiClient";
 
 // ---------------------------------------------------------------------------
 // Facet taxonomies — hydration-only mirrors of domain/package/catalog.py and
@@ -247,5 +248,59 @@ export function useLibraryPackage(entityId: string | null) {
     queryFn: () =>
       api.get<LibraryPackageDetail>(`/library/${encodeURIComponent(entityId ?? "")}`),
     enabled: entityId !== null,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Lifecycle mutations — GAP-06 epic slice 1 (doc 08 §7): Deprecate + Move to
+// Trash. A lifecycle change moves the catalog projection AND writes an audit
+// event, so both sweep ["library"] + ["audit"]; a delete additionally lands a
+// Trash entry, so it sweeps ["trash"]. The client never pre-gates on the
+// permission flags — the server re-validates and renders 403/409 verbatim.
+// ---------------------------------------------------------------------------
+
+export interface DeprecatePackageResult {
+  entity_id: string;
+  lifecycle_state: string;
+}
+
+function invalidateLibrary(queryClient: QueryClient, options: { trash?: boolean } = {}) {
+  void queryClient.invalidateQueries({ queryKey: ["library"] });
+  void queryClient.invalidateQueries({ queryKey: ["audit"] });
+  if (options.trash) void queryClient.invalidateQueries({ queryKey: ["trash"] });
+}
+
+// Deprecate carries NO OCC token or Idempotency-Key — it appends no revision, so
+// it cannot race the head (mirrors the sibling market_data deprecate). A
+// non-active / soft-deleted root -> 409 LIFECYCLE_BLOCKED (rendered verbatim).
+export function useDeprecatePackage() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { entityId: string; note?: string }) =>
+      api.post<DeprecatePackageResult>(
+        `/library/${encodeURIComponent(input.entityId)}/deprecate`,
+        input.note ? { note: input.note } : {},
+      ),
+    onSuccess: () => invalidateLibrary(queryClient),
+  });
+}
+
+// Move to Trash is a soft delete under OCC: the root row_version travels as the
+// If-Match "rv-N" ETag (etag_for_row_version) + a fresh Idempotency-Key per
+// attempt; a stale head -> 409 STALE_REVISION, a repeat delete is a no-op. The
+// route returns 204 (no body). Restore stays the Admin-only Trash surface.
+export function useSoftDeletePackage() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { entityId: string; rowVersion: number; reason?: string }) =>
+      apiRequest<void>(`/library/${encodeURIComponent(input.entityId)}`, {
+        method: "DELETE",
+        headers: {
+          "If-Match": `"rv-${input.rowVersion}"`,
+          "Idempotency-Key": crypto.randomUUID(),
+        },
+        body: input.reason ? { reason: input.reason } : {},
+      }),
+    onSuccess: () => invalidateLibrary(queryClient, { trash: true }),
   });
 }

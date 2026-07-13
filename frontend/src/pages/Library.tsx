@@ -20,8 +20,10 @@ import {
   VISIBILITY_SCOPES,
   approvalTone,
   lifecycleTone,
+  useDeprecatePackage,
   useLibraryPackage,
   useLibraryPackages,
+  useSoftDeletePackage,
   validationTone,
   type LibraryFilters,
   type LibraryPackageDetail,
@@ -367,6 +369,7 @@ function PackageDetail({ entityId, onClose }: { entityId: string; onClose: () =>
           </ul>
 
           <DeriveStrategyBlock pkg={pkg} />
+          <PackageActions pkg={pkg} onDeleted={onClose} />
 
           <h5 style={{ marginBottom: 4 }}>Performance</h5>
           <dl className="kv">
@@ -472,6 +475,82 @@ function DeriveStrategyBlock({ pkg }: { pkg: LibraryPackageDetail }) {
         its source. The source package is never modified (doc 08 §4.3).
       </p>
       {derive.isError ? <ErrorState error={derive.error} /> : null}
+    </div>
+  );
+}
+
+// GAP-06 (epic slice 1): lifecycle actions on the detail panel (doc 08 §7).
+// Each button is shown only when the SERVER marks the capability true, but the
+// UI never authorizes — the command re-validates and renders 403/409 verbatim.
+//   - Deprecate: active -> deprecated (owner/Admin), no OCC; the package stays
+//     listed but is no longer offered for new work (can_use turns false).
+//   - Move to Trash: a two-step soft delete under If-Match "rv-N" OCC; on
+//     success the root leaves the catalog, so the panel closes.
+function PackageActions({ pkg, onDeleted }: { pkg: LibraryPackageDetail; onDeleted: () => void }) {
+  const deprecate = useDeprecatePackage();
+  const softDelete = useSoftDeletePackage();
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+
+  if (!pkg.permissions.can_deprecate && !pkg.permissions.can_soft_delete) return null;
+
+  const onDeprecate = () => deprecate.mutate({ entityId: pkg.entity_id });
+  const onConfirmDelete = () =>
+    softDelete.mutate(
+      { entityId: pkg.entity_id, rowVersion: pkg.row_version },
+      {
+        onSuccess: () => {
+          setConfirmingDelete(false);
+          onDeleted();
+        },
+      },
+    );
+
+  return (
+    <div style={{ marginTop: 12 }}>
+      <h5 style={{ marginBottom: 4 }}>Lifecycle actions</h5>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+        {pkg.permissions.can_deprecate ? (
+          <button
+            type="button"
+            className="btn"
+            onClick={onDeprecate}
+            disabled={deprecate.isPending}
+          >
+            {deprecate.isPending ? "Deprecating…" : "Deprecate"}
+          </button>
+        ) : null}
+        {pkg.permissions.can_soft_delete && !confirmingDelete ? (
+          <button type="button" className="btn" onClick={() => setConfirmingDelete(true)}>
+            Move to Trash
+          </button>
+        ) : null}
+        {pkg.permissions.can_soft_delete && confirmingDelete ? (
+          <>
+            <button
+              type="button"
+              className="btn btn-danger"
+              onClick={onConfirmDelete}
+              disabled={softDelete.isPending}
+            >
+              {softDelete.isPending ? "Deleting…" : "Confirm delete"}
+            </button>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => setConfirmingDelete(false)}
+              disabled={softDelete.isPending}
+            >
+              Cancel
+            </button>
+          </>
+        ) : null}
+      </div>
+      <p className="page-sub" style={{ marginTop: 4 }}>
+        Deprecate keeps the package listed but stops new use; Move to Trash soft-deletes it
+        (historical pins keep resolving) and an Admin can restore it from Trash (doc 08 §7, §8.4).
+      </p>
+      {deprecate.isError ? <ErrorState error={deprecate.error} /> : null}
+      {softDelete.isError ? <ErrorState error={softDelete.error} /> : null}
     </div>
   );
 }

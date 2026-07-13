@@ -74,13 +74,16 @@ _REQUEST_ALLOWED: dict[CreatePackageState, frozenset[CreatePackageState]] = {
         {CreatePackageState.DRAFT_CREATED, CreatePackageState.CANDIDATE_GENERATING}
     ),
     CreatePackageState.CANDIDATE_FAILED: frozenset({CreatePackageState.CANDIDATE_GENERATING}),
+    # A fresh draft has NO validation evidence yet, so it has no APPROVED edge: the
+    # only path to approval is through a passed validation run (VALIDATION_RUNNING ->
+    # ELIGIBLE_FOR_APPROVAL). This is what closes the "publish without evidence"
+    # bypass (doc 06 §4.4/§7 — approval requires current validation evidence).
     CreatePackageState.DRAFT_CREATED: frozenset(
         {
             CreatePackageState.VALIDATION_RUNNING,
             CreatePackageState.ELIGIBLE_FOR_APPROVAL,
             CreatePackageState.EXPERIMENTAL,
             CreatePackageState.REVISION_REQUIRED,
-            CreatePackageState.APPROVED,
             CreatePackageState.REJECTED,
             CreatePackageState.CANDIDATE_GENERATING,
         }

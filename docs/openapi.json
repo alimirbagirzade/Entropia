@@ -5927,6 +5927,158 @@
         ]
       }
     },
+    "/api/v1/create-package/requests/{request_id}/request-revision": {
+      "post": {
+        "operationId": "request_revision_api_v1_create_package_requests__request_id__request_revision_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "title": "Request Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Request-Version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Request-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Request Revision Api V1 Create Package Requests  Request Id  Request Revision Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Request Revision",
+        "tags": [
+          "create-package"
+        ]
+      }
+    },
+    "/api/v1/create-package/requests/{request_id}/validate": {
+      "post": {
+        "operationId": "run_validation_api_v1_create_package_requests__request_id__validate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "title": "Request Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Request-Version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Request-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Run Validation Api V1 Create Package Requests  Request Id  Validate Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Run Validation",
+        "tags": [
+          "create-package"
+        ]
+      }
+    },
     "/api/v1/dependency-scans/{scan_id}": {
       "get": {
         "operationId": "get_scan_api_v1_dependency_scans__scan_id__get",
@@ -11954,6 +12106,50 @@
         "summary": "Set User Role",
         "tags": [
           "identity"
+        ]
+      }
+    },
+    "/api/v1/validation-runs/{validation_run_id}": {
+      "get": {
+        "operationId": "get_validation_run_api_v1_validation_runs__validation_run_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "validation_run_id",
+            "required": true,
+            "schema": {
+              "title": "Validation Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Validation Run Api V1 Validation Runs  Validation Run Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Validation Run",
+        "tags": [
+          "create-package"
         ]
       }
     },

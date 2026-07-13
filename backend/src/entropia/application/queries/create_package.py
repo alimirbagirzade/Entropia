@@ -14,23 +14,40 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from entropia.domain.create_package.enums import PrecheckScanStatus, SourceKind
+from entropia.domain.create_package.enums import (
+    PrecheckScanStatus,
+    SourceKind,
+    ValidationRunStatus,
+)
 from entropia.domain.identity import Actor
 from entropia.domain.identity import policy as identity_policy
 from entropia.domain.lifecycle.enums import DeletionState
-from entropia.infrastructure.postgres.models import DependencyScan, EntityRegistry, PackageRequest
+from entropia.infrastructure.postgres.models import (
+    DependencyScan,
+    EntityRegistry,
+    PackageRequest,
+    PackageValidationRun,
+)
 from entropia.infrastructure.postgres.repositories import create_package as cp_repo
 from entropia.shared.errors import AccessDeniedError, PackageRequestNotFound
 from entropia.shared.pagination import PageParams
 
 
 def _request_dict(
-    root: EntityRegistry, detail: PackageRequest, scan: DependencyScan | None
+    root: EntityRegistry,
+    detail: PackageRequest,
+    scan: DependencyScan | None,
+    run: PackageValidationRun | None,
 ) -> dict[str, Any]:
     precheck_fresh = (
         scan is not None
         and scan.status == PrecheckScanStatus.PASSED
         and scan.context_hash == detail.context_hash
+    )
+    validation_fresh = (
+        run is not None
+        and run.status == ValidationRunStatus.PASSED
+        and run.candidate_hash == detail.candidate_hash
     )
     return {
         "request_id": detail.entity_id,
@@ -51,8 +68,22 @@ def _request_dict(
         "precheck_fresh": precheck_fresh,
         "package_root_id": detail.package_root_id,
         "draft_revision_id": detail.draft_revision_id,
+        "current_validation_run": _validation_summary(run) if run is not None else None,
+        "validation_fresh": validation_fresh,
         "can_generate_candidate": _can_generate(detail, scan, precheck_fresh),
         "created_at": root.created_at.isoformat() if root.created_at else None,
+    }
+
+
+def _validation_summary(run: PackageValidationRun) -> dict[str, Any]:
+    return {
+        "validation_run_id": run.validation_run_id,
+        "attempt_no": run.attempt_no,
+        "status": str(run.status),
+        "validator_version": run.validator_version,
+        "checks": run.checks,
+        "candidate_hash": run.candidate_hash,
+        "draft_revision_id": run.draft_revision_id,
     }
 
 
@@ -89,7 +120,8 @@ async def get_package_request(
         raise PackageRequestNotFound(f"Package request '{request_id}' not found.")
     _ensure_can_view(actor, root)
     scan = await cp_repo.get_current_scan(session, detail)
-    return _request_dict(root, detail, scan)
+    run = await cp_repo.get_current_validation_run(session, detail)
+    return _request_dict(root, detail, scan, run)
 
 
 async def get_dependency_scan(
@@ -112,6 +144,29 @@ async def get_dependency_scan(
             "language": scan.language,
             "job_id": scan.job_id,
             "completed_at": scan.completed_at.isoformat() if scan.completed_at else None,
+        }
+    )
+    return summary
+
+
+async def get_validation_run(
+    session: AsyncSession, actor: Actor, *, validation_run_id: str
+) -> dict[str, Any]:
+    """Return the immutable validation-run evidence, re-checking view permission."""
+    run = await cp_repo.get_validation_run(session, validation_run_id)
+    if run is None:
+        raise PackageRequestNotFound(f"Validation run '{validation_run_id}' not found.")
+    root = await cp_repo.get_request_root(session, run.request_entity_id)
+    if root is None:
+        raise PackageRequestNotFound(f"Validation run '{validation_run_id}' not found.")
+    _ensure_can_view(actor, root)
+    summary = _validation_summary(run)
+    summary.update(
+        {
+            "request_id": run.request_entity_id,
+            "package_root_id": run.package_root_id,
+            "job_id": run.job_id,
+            "completed_at": run.completed_at.isoformat() if run.completed_at else None,
         }
     )
     return summary
@@ -168,5 +223,6 @@ def _ensure_can_view(actor: Actor, root: EntityRegistry) -> None:
 __all__ = [
     "get_dependency_scan",
     "get_package_request",
+    "get_validation_run",
     "list_package_requests",
 ]

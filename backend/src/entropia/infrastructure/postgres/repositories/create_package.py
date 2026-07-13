@@ -23,6 +23,7 @@ from entropia.domain.create_package.enums import (
     PrecheckScanStatus,
     SourceKind,
     SourceLanguage,
+    ValidationRunStatus,
 )
 from entropia.domain.esp.enums import RuntimeAdapter
 from entropia.domain.lifecycle.enums import DeletionState, PackageKind
@@ -30,6 +31,7 @@ from entropia.infrastructure.postgres.models import (
     DependencyScan,
     EntityRegistry,
     PackageRequest,
+    PackageValidationRun,
 )
 from entropia.shared.ids import new_id
 
@@ -176,12 +178,71 @@ async def _max_scan_attempt(session: AsyncSession, request_entity_id: str) -> in
     return (await session.execute(stmt)).scalar_one_or_none()
 
 
+async def append_validation_run(
+    session: AsyncSession,
+    *,
+    request_entity_id: str,
+    package_root_id: str,
+    draft_revision_id: str,
+    candidate_hash: str | None,
+    validator_version: str,
+    checks: list[dict[str, Any]],
+    status: ValidationRunStatus,
+    job_id: str | None,
+    correlation_id: str | None,
+    created_by_principal_id: str | None,
+) -> PackageValidationRun:
+    """Insert immutable validation run ``attempt_no = max+1`` (doc 06 §4.4)."""
+    prior = await _max_validation_attempt(session, request_entity_id)
+    run = PackageValidationRun(
+        validation_run_id=new_id("valrun"),
+        request_entity_id=request_entity_id,
+        attempt_no=(prior or 0) + 1,
+        package_root_id=package_root_id,
+        draft_revision_id=draft_revision_id,
+        candidate_hash=candidate_hash,
+        validator_version=validator_version,
+        checks=checks,
+        status=status,
+        job_id=job_id,
+        correlation_id=correlation_id,
+        created_by_principal_id=created_by_principal_id,
+    )
+    session.add(run)
+    return run
+
+
+async def get_validation_run(
+    session: AsyncSession, validation_run_id: str
+) -> PackageValidationRun | None:
+    return await session.get(PackageValidationRun, validation_run_id)
+
+
+async def get_current_validation_run(
+    session: AsyncSession, detail: PackageRequest
+) -> PackageValidationRun | None:
+    """The request's current validation run (the head pointer), if any."""
+    if detail.current_validation_run_id is None:
+        return None
+    return await session.get(PackageValidationRun, detail.current_validation_run_id)
+
+
+async def _max_validation_attempt(session: AsyncSession, request_entity_id: str) -> int | None:
+    stmt = select(func.max(PackageValidationRun.attempt_no)).where(
+        PackageValidationRun.request_entity_id == request_entity_id
+    )
+    return (await session.execute(stmt)).scalar_one_or_none()
+
+
 __all__ = [
     "ENTITY_TYPE",
     "append_dependency_scan",
+    "append_validation_run",
     "create_request",
     "get_current_scan",
+    "get_current_validation_run",
     "get_request_detail",
     "get_request_root",
     "get_scan",
+    "get_validation_run",
 ]

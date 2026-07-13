@@ -40,7 +40,11 @@ from entropia.infrastructure.postgres.models.capability import (
     FutureCapability,
     ViewDataset,
 )
-from entropia.infrastructure.postgres.models.create_package import DependencyScan, PackageRequest
+from entropia.infrastructure.postgres.models.create_package import (
+    DependencyScan,
+    PackageRequest,
+    PackageValidationRun,
+)
 from entropia.infrastructure.postgres.models.deletion import Tombstone, TrashEntry
 from entropia.infrastructure.postgres.models.esp import (
     EmbeddedResolverContract,
@@ -171,6 +175,7 @@ __all__ = [
     "PackageRequest",
     "PackageRevision",
     "PackageRoot",
+    "PackageValidationRun",
     "PortfolioAllocationEntry",
     "PortfolioAllocationPlan",
     "PortfolioAllocationPlanRevision",

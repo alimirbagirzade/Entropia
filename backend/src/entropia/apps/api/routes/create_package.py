@@ -151,6 +151,38 @@ async def create_draft(
     )
 
 
+@router.post("/create-package/requests/{request_id}/validate")
+async def run_validation(
+    request_id: str,
+    ctx: RequestContext = Depends(request_context),
+    request_version: str | None = Header(default=None, alias=_REQUEST_VERSION_HEADER),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+) -> dict[str, Any]:
+    return await cp_cmd.start_package_validation_run(
+        ctx.session,
+        ctx.actor,
+        request_id=request_id,
+        expected_request_version=_request_version(request_version),
+        idempotency_key=idempotency_key,
+    )
+
+
+@router.post("/create-package/requests/{request_id}/request-revision")
+async def request_revision(
+    request_id: str,
+    ctx: RequestContext = Depends(request_context),
+    request_version: str | None = Header(default=None, alias=_REQUEST_VERSION_HEADER),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+) -> dict[str, Any]:
+    return await cp_cmd.request_package_revision(
+        ctx.session,
+        ctx.actor,
+        request_id=request_id,
+        expected_request_version=_request_version(request_version),
+        idempotency_key=idempotency_key,
+    )
+
+
 @router.post("/create-package/requests/{request_id}/approve")
 async def approve_request(
     request_id: str,
@@ -175,3 +207,13 @@ async def get_scan(
     ctx: RequestContext = Depends(request_context),
 ) -> dict[str, Any]:
     return await cp_query.get_dependency_scan(ctx.session, ctx.actor, scan_id=scan_id)
+
+
+@router.get("/validation-runs/{validation_run_id}")
+async def get_validation_run(
+    validation_run_id: str,
+    ctx: RequestContext = Depends(request_context),
+) -> dict[str, Any]:
+    return await cp_query.get_validation_run(
+        ctx.session, ctx.actor, validation_run_id=validation_run_id
+    )

@@ -34,8 +34,19 @@ def test_request_happy_path_transitions() -> None:
         next_request_state(CreatePackageState.CANDIDATE_READY, CreatePackageState.DRAFT_CREATED)
         == CreatePackageState.DRAFT_CREATED
     )
+    # A draft must be validated before approval (GAP-07 evidence gate).
     assert (
-        next_request_state(CreatePackageState.DRAFT_CREATED, CreatePackageState.APPROVED)
+        next_request_state(CreatePackageState.DRAFT_CREATED, CreatePackageState.VALIDATION_RUNNING)
+        == CreatePackageState.VALIDATION_RUNNING
+    )
+    assert (
+        next_request_state(
+            CreatePackageState.VALIDATION_RUNNING, CreatePackageState.ELIGIBLE_FOR_APPROVAL
+        )
+        == CreatePackageState.ELIGIBLE_FOR_APPROVAL
+    )
+    assert (
+        next_request_state(CreatePackageState.ELIGIBLE_FOR_APPROVAL, CreatePackageState.APPROVED)
         == CreatePackageState.APPROVED
     )
 
@@ -44,6 +55,12 @@ def test_request_illegal_transitions_raise() -> None:
     # Cannot jump straight from requested to approved.
     with pytest.raises(IllegalCreatePackageTransition):
         next_request_state(CreatePackageState.REQUESTED, CreatePackageState.APPROVED)
+    # A fresh draft has no evidence yet, so it cannot be approved directly (GAP-07).
+    with pytest.raises(IllegalCreatePackageTransition):
+        next_request_state(CreatePackageState.DRAFT_CREATED, CreatePackageState.APPROVED)
+    # A failed validation run routes to revision_required, never straight to approved.
+    with pytest.raises(IllegalCreatePackageTransition):
+        next_request_state(CreatePackageState.REVISION_REQUIRED, CreatePackageState.APPROVED)
     # Approved is terminal except for supersede.
     with pytest.raises(IllegalCreatePackageTransition):
         next_request_state(CreatePackageState.APPROVED, CreatePackageState.DRAFT_CREATED)

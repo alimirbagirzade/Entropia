@@ -209,6 +209,12 @@ class StrategyEditorDraft(Base):
     # Plain column (no FK): set once a revision exists; cleared on discard.
     last_saved_revision_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
     payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    # GAP-03: when a draft is derived from a Strategy Package, records the pinned
+    # source (root+revision+content_hash) and the inherited dependency list (doc 01
+    # §8.2). NULL for ordinary drafts. No FK — the source is a heterogeneous package
+    # revision pinned by content_hash (normalized-reference pattern). Survives
+    # PATCH/Clear (it is a fact about origin, not editable config).
+    source_provenance: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     is_dirty: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default="true"
     )

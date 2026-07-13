@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { useNavigate } from "react-router-dom";
 
 import { EmptyState } from "@/components/EmptyState";
 import { ErrorState } from "@/components/ErrorState";
@@ -6,6 +7,7 @@ import { Loading } from "@/components/Loading";
 import { StatusBadge } from "@/components/StatusBadge";
 import { formatUtc } from "@/lib/backtest";
 import { useRationaleFamilies } from "@/lib/createPackage";
+import { useDeriveStrategyDraftFromPackage } from "@/lib/strategy";
 import {
   APPROVAL_STATES,
   CATALOG_LIFECYCLE_STATES,
@@ -22,6 +24,7 @@ import {
   useLibraryPackages,
   validationTone,
   type LibraryFilters,
+  type LibraryPackageDetail,
   type LibraryPackageRow,
   type PackageProvenance,
 } from "@/lib/library";
@@ -363,6 +366,8 @@ function PackageDetail({ entityId, onClose }: { entityId: string; onClose: () =>
             ))}
           </ul>
 
+          <DeriveStrategyBlock pkg={pkg} />
+
           <h5 style={{ marginBottom: 4 }}>Performance</h5>
           <dl className="kv">
             {PERFORMANCE_FIELDS.map((field) => (
@@ -432,6 +437,41 @@ function PackageDetail({ entityId, onClose }: { entityId: string; onClose: () =>
           </table>
         </>
       ) : null}
+    </div>
+  );
+}
+
+// GAP-03: "Create Strategy Draft from Package (Strategy only)" (doc 08 §4.3). Shown
+// only when the package is a Strategy kind AND the server marks the head usable
+// (permissions.can_use = active + validation-passed). The UI never authorizes — the
+// derive command re-validates kind/usability/visibility and renders 403/422 verbatim.
+// On success it deep-links to the new draft (/strategy?draft=…); the source package
+// is never modified (it is pinned as provenance).
+function DeriveStrategyBlock({ pkg }: { pkg: LibraryPackageDetail }) {
+  const navigate = useNavigate();
+  const derive = useDeriveStrategyDraftFromPackage();
+  if (pkg.package_kind !== "strategy" || !pkg.permissions.can_use) return null;
+  const onDerive = () =>
+    derive.mutate(
+      {
+        sourcePackageRootId: pkg.entity_id,
+        sourcePackageRevisionId: pkg.current_revision_id,
+      },
+      {
+        onSuccess: (result) =>
+          navigate(`/strategy?draft=${encodeURIComponent(result.draft_id)}`),
+      },
+    );
+  return (
+    <div style={{ marginTop: 12 }}>
+      <button type="button" className="btn" onClick={onDerive} disabled={derive.isPending}>
+        {derive.isPending ? "Creating…" : "Create Strategy Draft from Package"}
+      </button>
+      <p className="page-sub" style={{ marginTop: 4 }}>
+        Derives your own editable strategy draft, pinning this exact package revision as
+        its source. The source package is never modified (doc 08 §4.3).
+      </p>
+      {derive.isError ? <ErrorState error={derive.error} /> : null}
     </div>
   );
 }

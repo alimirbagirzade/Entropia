@@ -29,6 +29,11 @@ class CreateStrategyDraftBody(BaseModel):
     display_name: str | None = None
     rationale_family_id: str | None = None
     initial_payload: dict[str, Any] | None = None
+    # GAP-03 (doc 01 §8.2, §9.5): when present, the draft is DERIVED from a usable
+    # Strategy Package instead of created blank — the source is pinned and provenance
+    # is recorded. source_package_revision_id is optional (defaults to the head).
+    source_package_root_id: str | None = None
+    source_package_revision_id: str | None = None
 
 
 class PatchStrategyDraftBody(BaseModel):
@@ -67,6 +72,16 @@ async def create_strategy_draft(
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> dict[str, Any]:
     payload = body or CreateStrategyDraftBody()
+    if payload.source_package_root_id is not None:
+        return await strat_cmd.derive_strategy_draft_from_package(
+            ctx.session,
+            ctx.actor,
+            source_package_root_id=payload.source_package_root_id,
+            source_package_revision_id=payload.source_package_revision_id,
+            display_name=payload.display_name,
+            rationale_family_id=payload.rationale_family_id,
+            idempotency_key=idempotency_key,
+        )
     return await strat_cmd.create_strategy_draft(
         ctx.session,
         ctx.actor,

@@ -45,6 +45,17 @@ import { api, apiRequest } from "./apiClient";
 // Wire types (mirror backend application/{queries,commands}/strategy*.py)
 // ---------------------------------------------------------------------------
 
+// GAP-03: provenance a derived draft carries (mirrors the backend
+// source_provenance dict). NULL for ordinary (non-derived) drafts.
+export interface SourceProvenance {
+  source_package_root_id: string;
+  source_package_revision_id: string;
+  source_content_hash: string;
+  source_package_kind: string;
+  source_display_name: string;
+  inherited_dependencies: Record<string, unknown>;
+}
+
 // GET /strategy-drafts/{id} (queries get_strategy_draft).
 export interface StrategyDraft {
   draft_id: string;
@@ -53,6 +64,7 @@ export interface StrategyDraft {
   is_dirty: boolean;
   row_version: number;
   last_saved_revision_id: string | null;
+  source_provenance: SourceProvenance | null;
   updated_at: string | null;
 }
 
@@ -108,6 +120,16 @@ export interface CreateDraftResult {
   strategy_root_id: string;
   display_name: string;
   row_version: number;
+}
+
+// POST /strategy-drafts with source_package_* return (commands
+// derive_strategy_draft_from_package). Carries the pinned source + inherited deps.
+export interface DeriveDraftResult {
+  draft_id: string;
+  strategy_root_id: string;
+  display_name: string;
+  row_version: number;
+  source_provenance: SourceProvenance;
 }
 
 // PATCH /strategy-drafts/{id} return (commands patch_strategy_draft).
@@ -270,6 +292,39 @@ export function useCreateStrategyDraft() {
           ...(input.rationaleFamilyId !== null
             ? { rationale_family_id: input.rationaleFamilyId }
             : {}),
+        },
+        headers: { "Idempotency-Key": crypto.randomUUID() },
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["strategy"] });
+      void queryClient.invalidateQueries({ queryKey: ["audit"] });
+    },
+  });
+}
+
+// GAP-03: derive a NEW strategy draft from a usable Strategy Package (doc 01 §8.2,
+// doc 08 §4.3). The source is pinned (root + optional exact revision, else head) and
+// provenance is recorded; the source package is never modified. No OCC (a create has
+// no head to race); fresh Idempotency-Key. The UI never pre-authorizes — the server
+// re-validates usability/kind/visibility and renders the canonical error verbatim
+// (403 foreign-private / 422 PACKAGE_NOT_DERIVABLE). Invalidates ["strategy"] +
+// ["audit"] (the derive writes a strategy.derived_from_package audit row).
+export function useDeriveStrategyDraftFromPackage() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      sourcePackageRootId: string;
+      sourcePackageRevisionId?: string | null;
+      displayName?: string | null;
+    }) =>
+      apiRequest<DeriveDraftResult>("/strategy-drafts", {
+        method: "POST",
+        body: {
+          source_package_root_id: input.sourcePackageRootId,
+          ...(input.sourcePackageRevisionId != null
+            ? { source_package_revision_id: input.sourcePackageRevisionId }
+            : {}),
+          ...(input.displayName != null ? { display_name: input.displayName } : {}),
         },
         headers: { "Idempotency-Key": crypto.randomUUID() },
       }),

@@ -39,7 +39,7 @@ from entropia.application.queries.market_bars import (
     iter_bar_batches,
     resolve_bar_source,
 )
-from entropia.domain.backtest.engine import run_engine
+from entropia.domain.backtest.engine import resolve_allocation_execution, run_engine
 from entropia.domain.backtest.enums import (
     RUN_TERMINAL_STATES,
     BacktestRunState,
@@ -106,8 +106,8 @@ async def run_backtest(
             message=f"Pinned revisions could not be resolved (no 'latest' fallback): {missing}",
         )
 
-    strategy_config = await _resolve_primary_strategy(session, manifest.manifest)
-    if strategy_config is None:
+    primary = await _resolve_primary_strategy(session, manifest.manifest)
+    if primary is None:
         return _fail_run(
             session,
             job,
@@ -115,6 +115,7 @@ async def run_backtest(
             code=RunFailureCode.ASSET_UNAVAILABLE,
             message="No enabled Strategy item with a resolvable pinned config in the composition.",
         )
+    strategy_config, primary_item_id = primary
     market_revision_id = strategy_config.data.market_dataset_revision_id
     try:
         source = await resolve_bar_source(session, market_revision_id=market_revision_id)
@@ -138,6 +139,13 @@ async def run_backtest(
     # reproducibility-safe). None when the revision is not bar-timeframed — surfaced
     # as-is, never guessed (L4).
     base_timeframe = await md_repo.get_base_timeframe_for_revision(session, market_revision_id)
+    # GAP-02: apply the pinned shared-pool capital model from the manifest snapshot
+    # (doc 13 §8.3/§8.4). Independent / absent allocation resolves to None, so the
+    # engine sizes from the strategy's own initial_capital exactly as before. The
+    # replayed Strategy item's id joins the allocation entries to its sleeve share.
+    allocation = resolve_allocation_execution(
+        manifest.manifest.get("capital_execution"), item_id=primary_item_id
+    )
     try:
         output = run_engine(
             strategy_config=strategy_config,
@@ -146,6 +154,7 @@ async def run_backtest(
             item_count=item_count,
             indicator_plan=indicator_plan,
             timeframe=base_timeframe,
+            allocation=allocation,
         )
     except Exception as exc:
         return _fail_run(
@@ -200,12 +209,14 @@ async def _unresolved_pins(session: AsyncSession, manifest: dict[str, Any]) -> l
 
 async def _resolve_primary_strategy(
     session: AsyncSession, manifest: dict[str, Any]
-) -> StrategyConfig | None:
-    """Resolve the first enabled Strategy item's pinned, typed StrategyConfig.
+) -> tuple[StrategyConfig, str] | None:
+    """Resolve the first enabled Strategy item's pinned config + its composition item id.
 
     Foundation scope: a single-strategy bar-replay. Items are already pin-ordered
     (doc 01 §5.2); the first enabled Strategy whose pinned revision parses to a
-    valid config drives the simulation. Reads ONLY pinned revisions."""
+    valid config drives the simulation. The item id (== the allocation entry's
+    ``composition_item_id``, doc 13 §8.2) joins this item to its sleeve share for
+    GAP-02 allocation execution. Reads ONLY pinned revisions."""
     for item in manifest.get("mainboard_items", []):
         if item.get("item_kind") != MainboardItemKind.STRATEGY:
             continue
@@ -219,7 +230,7 @@ async def _resolve_primary_strategy(
             continue
         payload = await _resolve_strategy_payload(session, dict(revision.payload))
         try:
-            return StrategyConfig.model_validate(payload)
+            return StrategyConfig.model_validate(payload), str(item.get("item_id"))
         except ValidationError:
             continue
     return None

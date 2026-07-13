@@ -32,6 +32,7 @@ from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from typing import TYPE_CHECKING, Any
 
+from entropia.domain.allocation.enums import CompoundingMode
 from entropia.domain.backtest.indicators import (
     BUILTIN_ENTRY_MODEL,
     VOLUME_WEIGHTED_KEYS,
@@ -100,6 +101,34 @@ class EngineOutput:
     equity_points: list[EquityPoint]
     signal_events: list[SignalEventRow]
     diagnostics: dict[str, Any]
+
+
+@dataclass(frozen=True, slots=True)
+class AllocationExecution:
+    """Resolved shared-pool capital model for the item the engine replays (doc 13 §8.3).
+
+    Built from the run manifest's immutable ``capital_execution`` snapshot by
+    ``resolve_allocation_execution`` — a PURE projection, so the engine stays a
+    function of ``(config, bars, allocation)`` with no I/O. The presence of this
+    object means shared allocation is ON; ``None`` means independent / absent
+    allocation and the engine sizes from the strategy's own ``initial_capital``
+    exactly as it did pre-allocation.
+
+    * ``initial_capital`` — P0, the shared portfolio pool (overrides the strategy's own).
+    * ``reserve_percent`` — r, the fixed nominal reserve %, floored at 0.
+    * ``compound`` — ``True`` recomputes the sleeve from live portfolio equity
+      (``COMPOUND_PORTFOLIO_EQUITY``); ``False`` holds the sleeve at its initial value
+      (``FIXED_INITIAL_PORTFOLIO_CAPITAL``).
+    * ``item_share_percent`` — wi, the replayed item's active ``equity_share_percent``;
+      ``0`` when the item has no active entry → a 0-capital sleeve → no fills (an L4
+      warning, NEVER a silent fall-back to the strategy's independent capital).
+    """
+
+    initial_capital: Decimal
+    reserve_percent: Decimal
+    compound: bool
+    item_share_percent: Decimal
+    currency: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -345,6 +374,93 @@ def _position_size(config: StrategyConfig, entry_price: Decimal, equity: Decimal
     return _clamp_to_limits(size, config.position_sizing.position_size_limits)
 
 
+def _safe_decimal(value: Any) -> Decimal | None:
+    """Best-effort finite ``Decimal`` from an untyped JSON snapshot cell, else ``None``.
+
+    The allocation snapshot is a validated plan config, but it reaches the engine as
+    an untyped ``dict[str, Any]``; ``str()`` first so a non-numeric value fails closed
+    rather than surprising ``Decimal`` coercion, and a ``NaN`` / ``Infinity`` is
+    rejected (it would raise on the ordered comparisons that consume it)."""
+    if value is None:
+        return None
+    try:
+        parsed = Decimal(str(value))
+    except (InvalidOperation, ValueError, TypeError):
+        return None
+    return parsed if parsed.is_finite() else None
+
+
+def _active_item_share(entries: Any, item_id: str) -> Decimal:
+    """The replayed item's active ``equity_share_percent`` (0 if absent/inactive/invalid).
+
+    Validation forbids a duplicate active entry, so the first active match for
+    ``item_id`` is authoritative; a non-positive or unparseable share yields 0 (an
+    unallocated item → no sleeve → no fills)."""
+    if not isinstance(entries, list):
+        return _ZERO
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        if str(entry.get("composition_item_id")) != item_id or not entry.get("active"):
+            continue
+        share = _safe_decimal(entry.get("equity_share_percent"))
+        if share is not None and share > _ZERO:
+            return share
+    return _ZERO
+
+
+def resolve_allocation_execution(
+    capital_execution: dict[str, Any] | None, *, item_id: str
+) -> AllocationExecution | None:
+    """Project the manifest ``capital_execution`` snapshot into the replayed item's
+    resolved capital model (doc 13 §8.3), or ``None`` for independent / absent
+    allocation (the engine then behaves byte-identically to the pre-allocation build).
+
+    Pure and defensive. The snapshot is a validated plan config, but it is read here
+    as an untyped JSON dict, so a missing / non-finite / non-positive pool ``P0`` fails
+    closed to ``None`` — there is genuinely nothing to allocate without a pool, and a
+    non-positive ``P0`` is itself a validation blocker that cannot pin a real revision.
+    A negative reserve is floored at 0 (it could otherwise inflate the allocatable
+    pool above P0); an over-100 reserve needs no upper clamp — the engine's
+    ``max(0, P0 - R0)`` drives the allocatable pool to 0. The replayed item's share is
+    0 when it has no active entry, so an enabled allocation is NEVER silently downgraded
+    to the strategy's own independent capital."""
+    if not isinstance(capital_execution, dict) or not capital_execution.get("enabled"):
+        return None
+    config = capital_execution.get("config")
+    if not isinstance(config, dict):
+        return None
+    pool = config.get("initial_capital")
+    if not isinstance(pool, dict):
+        return None
+    p0 = _safe_decimal(pool.get("amount"))
+    if p0 is None or p0 <= _ZERO:
+        return None
+    reserve = max(_safe_decimal(config.get("reserve_cash_percent")) or _ZERO, _ZERO)
+    currency = pool.get("currency")
+    return AllocationExecution(
+        initial_capital=p0,
+        reserve_percent=reserve,
+        compound=config.get("compounding_mode") == CompoundingMode.COMPOUND_PORTFOLIO_EQUITY.value,
+        item_share_percent=_active_item_share(config.get("entries"), item_id),
+        currency=str(currency) if currency is not None else None,
+    )
+
+
+def _cap_to_sleeve(desired: Decimal, sleeve_capital: Decimal, entry_price: Decimal) -> Decimal:
+    """Clamp a desired size to the sleeve's remaining capacity (doc 13 §8.3/§8.4 step 5).
+
+    ``allowed_size = min(desired, remaining_sleeve_capacity / entry_price)``. The engine
+    holds at most one position at a time, so when it opens, the item's deployed capital
+    is 0 and the FULL sleeve is available (the single-item foundation — a genuine
+    multi-item co-simulation over a unified clock stays deferred). A non-positive sleeve
+    or entry price yields 0 (the item is unallocated / cannot fill)."""
+    if sleeve_capital <= _ZERO or entry_price <= _ZERO:
+        return _ZERO
+    cap_units = (sleeve_capital / entry_price).quantize(_QTY)
+    return min(desired, cap_units)
+
+
 def _initial_static_stop(
     config: StrategyConfig, *, is_long: bool, entry_price: Decimal
 ) -> Decimal | None:
@@ -405,6 +521,7 @@ def run_engine(
     item_count: int = 1,
     indicator_plan: IndicatorPlan | None = None,
     timeframe: str | None = None,
+    allocation: AllocationExecution | None = None,
 ) -> EngineOutput:
     """Deterministically bar-replay one strategy over its pinned OHLCV bars.
 
@@ -415,9 +532,37 @@ def run_engine(
 
     ``timeframe`` is the pinned market revision's base bar timeframe, resolved by
     the CALLER (the engine is pure — no I/O); ``None`` means the revision is not
-    bar-timeframed (event-based / unknown) and is surfaced as-is, never guessed."""
+    bar-timeframed (event-based / unknown) and is surfaced as-is, never guessed.
+
+    ``allocation`` applies the pinned shared-pool capital model (doc 13 §8.3/§8.4): the
+    run is capitalised from the portfolio pool P0 (minus the fixed nominal reserve R0),
+    and every entry is bounded by the item's sleeve cap ``Ci(t) = A(t) * wi / 100`` as
+    an OUTER ``allowed_size`` limit — compound mode recomputes A(t) from live portfolio
+    equity each valuation point, fixed mode holds it at the initial A0. ``None`` (the
+    default, independent mode) sizes from the strategy's own ``initial_capital`` and is
+    BYTE-IDENTICAL to the pre-allocation engine. Honest V1 boundary: this is the
+    single-item foundation — the replayed strategy is capitalised and capped as one
+    portfolio sleeve; a genuine multi-item co-simulation over a unified clock across
+    heterogeneous bar sources, and cross-currency FX conversion (GAP-16), stay
+    deferred (surfaced as L4 diagnostics, never hidden)."""
     config = strategy_config
-    initial_capital = Decimal(config.data.initial_capital).quantize(_MONEY)
+    alloc_on = allocation is not None
+    alloc_compound = False
+    reserve_nominal = _ZERO
+    allocatable_initial = _ZERO
+    item_share = _ZERO
+    if allocation is not None:
+        # Shared allocation: the run is capitalised from the PORTFOLIO POOL P0 (not the
+        # strategy's own initial_capital); R0 is held back nominally, A0 = P0 - R0 is the
+        # allocatable pool, and Ci0 = A0 * wi / 100 is this item's initial sleeve (§8.3).
+        portfolio_pool = allocation.initial_capital.quantize(_MONEY)
+        reserve_nominal = portfolio_pool * allocation.reserve_percent / _HUNDRED
+        allocatable_initial = max(_ZERO, portfolio_pool - reserve_nominal)
+        item_share = allocation.item_share_percent
+        alloc_compound = allocation.compound
+        initial_capital = portfolio_pool
+    else:
+        initial_capital = Decimal(config.data.initial_capital).quantize(_MONEY)
     long_ok, short_ok = _direction_flags(config.position_entry_logic.direction_mode)
     half_spread, slippage, commission = _cost_params(config)
     trail_pct = _trail_pct(config)
@@ -512,13 +657,39 @@ def run_engine(
             )
         )
 
-    def _open(direction: str, bar: _Bar) -> _Position:
-        """Open a position in ``direction`` at this bar's cost-adjusted fill."""
+    def _sleeve_capital(current_equity: Decimal) -> Decimal:
+        """The replayed item's sleeve cap Ci(t) at this valuation point (doc 13 §8.3).
+
+        Compound: A(t) = max(0, E(t) - R0); Ci(t) = A(t) * wi / 100, where E(t) is the
+        portfolio equity (which starts at P0 and accrues this item's realized PnL in the
+        single-item foundation). Fixed: Ci = A0 * wi / 100 (constant)."""
+        allocatable = (
+            max(_ZERO, current_equity - reserve_nominal) if alloc_compound else allocatable_initial
+        )
+        return allocatable * item_share / _HUNDRED
+
+    def _open(direction: str, bar: _Bar) -> _Position | None:
+        """Open a position at this bar's cost-adjusted fill, or ``None`` for a no-fill.
+
+        Under allocation a 0-capacity sleeve (an unallocated item, or a compound pool
+        busted below its reserve) yields no fill at all — ``None`` — rather than a
+        phantom 0-size trade (doc 13 §8.4 step 5/6). Independent mode is unchanged: it
+        always opens (a bust-equity 0-size fill stays booked, preserving the notional
+        no-phantom-profit invariant)."""
         is_long = direction == "long"
         entry_eff = _effective_fill(
             bar.close, is_buy=is_long, half_spread=half_spread, slip=slippage
         )
-        size = _position_size(config, entry_eff, equity)
+        if alloc_on:
+            # Strategy Details sizing/risk constraints first (within the item's sleeve),
+            # then the allocation remaining-sleeve outer cap (§8.4 step 5).
+            sleeve = _sleeve_capital(equity)
+            desired = _position_size(config, entry_eff, sleeve)
+            size = _cap_to_sleeve(desired, sleeve, entry_eff)
+            if size <= _ZERO:
+                return None
+        else:
+            size = _position_size(config, entry_eff, equity)
         return _Position(
             direction=direction,
             entry_time=bar.timestamp,
@@ -688,6 +859,15 @@ def run_engine(
         warnings.extend(indicator_plan.unresolved)
         if not plan_active:
             warnings.append("indicator_plan_empty_fallback_proxy")
+    if alloc_on:
+        # FX conversion across a mixed-currency pool is out of scope (GAP-16); the run
+        # assumes a single-currency portfolio pool — surfaced, never hidden (L4).
+        warnings.append("allocation_single_currency_pool_assumed")
+        if item_share <= _ZERO:
+            # Allocation is enabled but the replayed item has no active entry → a
+            # 0-capital sleeve → no fills. Surface it rather than silently fall back to
+            # the strategy's own independent capital (L4).
+            warnings.append("allocation_item_not_in_active_plan")
     condition_count = (
         sum(len(spec.conditions) for spec in indicator_plan.entry_specs)
         + sum(len(spec.conditions) for spec in indicator_plan.exit_specs)
@@ -763,6 +943,10 @@ def run_engine(
         "nary_reference_conditions": nary_reference_conditions,
         "vwap_blocks": vwap_blocks,
         "position_size_limits_active": config.position_sizing.position_size_limits is not None,
+        "allocation_enabled": alloc_on,
+        "allocation_compounding": ("compound" if alloc_compound else "fixed") if alloc_on else None,
+        "allocation_items_executed": 1 if (alloc_on and item_share > _ZERO) else 0,
+        "allocation_sleeve_cap_active": alloc_on and item_share > _ZERO,
         "item_count": item_count,
         "decision_trace_count": len(signal_events),
         "execution_key": execution_key,
@@ -779,9 +963,11 @@ def run_engine(
 
 __all__ = [
     "ENTRY_MODEL",
+    "AllocationExecution",
     "EngineOutput",
     "EquityPoint",
     "SignalEventRow",
     "TradeRow",
+    "resolve_allocation_execution",
     "run_engine",
 ]

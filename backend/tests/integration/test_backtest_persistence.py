@@ -19,6 +19,7 @@ from typing import Any
 import pytest
 from sqlalchemy import func, select
 
+from entropia.application.commands import allocation_plan as alloc_cmd
 from entropia.application.commands import backtest_run as backtest_cmd
 from entropia.application.commands import mainboard as mb_cmd
 from entropia.application.jobs.backtest_engine import run_backtest
@@ -34,12 +35,14 @@ from entropia.domain.market_data.enums import (
 from entropia.infrastructure.postgres.models import (
     BacktestResult,
     BacktestRun,
+    DiagnosticArtifact,
     Job,
     MetricValueRow,
     Principal,
     ResultSummary,
 )
 from entropia.infrastructure.postgres.repositories import backtest as bt_repo
+from entropia.infrastructure.postgres.repositories import mainboard as mb_repo
 from entropia.infrastructure.postgres.repositories import market_data as md_repo
 from entropia.shared.errors import (
     AccessDeniedError,
@@ -451,4 +454,91 @@ async def test_worker_is_redelivery_idempotent(session) -> None:
     await session.commit()
     assert second["state"] == "succeeded"
     assert second["result_id"] == first["result_id"]
+
+
+# --------------------------------------------------------------------------- #
+# GAP-02: shared-pool allocation execution flows end-to-end (doc 13 §8.3)      #
+# --------------------------------------------------------------------------- #
+
+
+async def _enable_allocation(session, actor: Actor, composition_id: str, *, amount: str) -> None:
+    """Enable a shared-pool allocation plan capitalising the composition's sole
+    strategy item at 100% share (doc 13 §7). Bound by the item's composition_item_id."""
+    items = await mb_repo.list_active_items(session, composition_id)
+    strategy_item = next(it for it in items if str(it.item_kind) == "strategy")
+    await alloc_cmd.upsert_allocation_draft(
+        session,
+        actor,
+        composition_id=composition_id,
+        expected_row_version=None,
+        enabled=True,
+        initial_capital={"amount": amount, "currency": "USDT"},
+        compounding_mode="COMPOUND_PORTFOLIO_EQUITY",
+        reserve_cash_percent="0",
+        entries=[
+            {
+                "composition_item_id": strategy_item.item_id,
+                "active": True,
+                "equity_share_percent": "100",
+            }
+        ],
+        idempotency_key="alloc-enable-1",
+    )
+    await session.commit()
+
+
+async def _run_diagnostics(session, result_id: str) -> dict[str, Any]:
+    """The immutable ``run_diagnostics`` artifact content for a result (doc 15 §3.2)."""
+    row = (
+        await session.execute(
+            select(DiagnosticArtifact).where(
+                DiagnosticArtifact.result_id == result_id,
+                DiagnosticArtifact.kind == "run_diagnostics",
+            )
+        )
+    ).scalar_one()
+    return dict(row.content)
+
+
+async def test_worker_applies_the_pinned_allocation_pool_capital(session) -> None:
+    # GAP-02: the manifest pins an enabled allocation plan; the worker must READ
+    # capital_execution and capitalise the run from the portfolio pool P0 (50000),
+    # not the strategy's own initial_capital (10000). Proves the pin is now APPLIED.
+    await _seed_principals(session)
+    composition_id, _root, _rev = await _ready_composition(session, USER1)
+    await _enable_allocation(session, USER1, composition_id, amount="50000.00")
+
+    admit = await backtest_cmd.request_backtest_run(session, USER1, composition_id=composition_id)
+    await session.commit()
+    out = await run_backtest(session, admit["job_id"], stream_bars=_e2e_bars)
+    await session.commit()
+    assert out["state"] == "succeeded"
+
+    view = await backtest_query.get_backtest_result(session, USER1, result_id=out["result_id"])
+    # The run is capitalised from the portfolio pool P0 (50000), which is only possible
+    # if the worker read + applied capital_execution (the strategy's own is 10000).
+    assert view["summary"]["headline"]["initial_capital"] == "50000.00"
+
+    diagnostics = await _run_diagnostics(session, out["result_id"])
+    assert diagnostics["allocation_enabled"] is True
+    assert diagnostics["allocation_items_executed"] == 1
+    assert "allocation_single_currency_pool_assumed" in diagnostics["warnings"]
+
+
+async def test_worker_independent_run_uses_the_strategy_own_capital(session) -> None:
+    # Regression: with no allocation plan the run is capitalised from the strategy's
+    # own initial_capital (10000) and carries no allocation execution — byte-identical
+    # to the pre-GAP-02 engine.
+    await _seed_principals(session)
+    composition_id, _root, _rev = await _ready_composition(session, USER1)
+
+    admit = await backtest_cmd.request_backtest_run(session, USER1, composition_id=composition_id)
+    await session.commit()
+    out = await run_backtest(session, admit["job_id"], stream_bars=_e2e_bars)
+    await session.commit()
+
+    view = await backtest_query.get_backtest_result(session, USER1, result_id=out["result_id"])
+    assert view["summary"]["headline"]["initial_capital"] == "10000.00"  # the strategy's own
+    diagnostics = await _run_diagnostics(session, out["result_id"])
+    assert diagnostics["allocation_enabled"] is False
     assert await _count(session, BacktestResult) == 1

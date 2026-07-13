@@ -681,6 +681,17 @@
             "title": "Declared Dependencies",
             "type": "array"
           },
+          "equivalence_claim": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Equivalence Claim"
+          },
           "linked_indicator": {
             "anyOf": [
               {
@@ -2248,6 +2259,47 @@
         ],
         "title": "TimezoneMode",
         "type": "string"
+      },
+      "UploadBaselineBody": {
+        "properties": {
+          "baseline_metadata": {
+            "additionalProperties": true,
+            "title": "Baseline Metadata",
+            "type": "object"
+          },
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "content_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "text/csv",
+            "title": "Content Type"
+          },
+          "original_filename": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Filename"
+          }
+        },
+        "required": [
+          "content"
+        ],
+        "title": "UploadBaselineBody",
+        "type": "object"
       },
       "UploadDocumentRequest": {
         "properties": {
@@ -5275,6 +5327,50 @@
         ]
       }
     },
+    "/api/v1/baseline-assets/{baseline_asset_id}": {
+      "get": {
+        "operationId": "get_baseline_asset_api_v1_baseline_assets__baseline_asset_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "baseline_asset_id",
+            "required": true,
+            "schema": {
+              "title": "Baseline Asset Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Baseline Asset Api V1 Baseline Assets  Baseline Asset Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Baseline Asset",
+        "tags": [
+          "create-package"
+        ]
+      }
+    },
     "/api/v1/capabilities": {
       "get": {
         "operationId": "capabilities_index_api_v1_capabilities_get",
@@ -5693,6 +5789,168 @@
           }
         },
         "summary": "Approve Request",
+        "tags": [
+          "create-package"
+        ]
+      }
+    },
+    "/api/v1/create-package/requests/{request_id}/baseline": {
+      "post": {
+        "operationId": "upload_baseline_api_v1_create_package_requests__request_id__baseline_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "title": "Request Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Request-Version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Request-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UploadBaselineBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Upload Baseline Api V1 Create Package Requests  Request Id  Baseline Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Upload Baseline",
+        "tags": [
+          "create-package"
+        ]
+      }
+    },
+    "/api/v1/create-package/requests/{request_id}/baseline-parse": {
+      "post": {
+        "operationId": "parse_baseline_api_v1_create_package_requests__request_id__baseline_parse_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "title": "Request Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Request-Version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Request-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Parse Baseline Api V1 Create Package Requests  Request Id  Baseline Parse Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Parse Baseline",
         "tags": [
           "create-package"
         ]

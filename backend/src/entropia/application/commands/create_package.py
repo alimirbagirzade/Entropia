@@ -27,6 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from entropia.application.idempotency import run_idempotent
 from entropia.application.queries import esp as esp_query
 from entropia.domain.create_package import (
+    BaselineParseStatus,
     CreatePackageState,
     CreationMode,
     DependencyResolution,
@@ -40,8 +41,12 @@ from entropia.domain.create_package import (
     ensure_can_approve_publish,
     ensure_can_create_request,
     ensure_can_operate_request,
+    is_allowed_baseline_file,
+    missing_baseline_metadata_fields,
     next_request_state,
     normalize_request,
+    parse_baseline_csv,
+    resolve_equivalence_claim,
     source_hash,
 )
 from entropia.domain.create_package.candidate import (
@@ -72,11 +77,17 @@ from entropia.infrastructure.postgres.repositories import create_package as cp_r
 from entropia.infrastructure.postgres.repositories import esp as esp_repo
 from entropia.infrastructure.postgres.repositories import packages as pkg_repo
 from entropia.infrastructure.postgres.repositories import rationale as rationale_repo
+from entropia.infrastructure.s3 import datasets
 from entropia.shared.concurrency import check_head_revision
 from entropia.shared.errors import (
+    BaselineAssetNotFound,
+    BaselineMetadataInvalid,
+    BaselineParseFailed,
+    BaselineRequired,
     CandidateNotReady,
     CandidateStale,
     DependencyUnresolved,
+    FileTypeNotAllowedError,
     PackageRequestNotFound,
     PrecheckBlocked,
     PrecheckStale,
@@ -94,6 +105,8 @@ _REQUEST_TARGET_KIND = "package_request"
 _PACKAGE_TARGET_KIND = "package"
 _SCANNER_VERSION = "stub-declared-1.0"
 _RESOLVE_ERRORS = (ResolverNotResolved, ResolverSignatureMismatch, ResolverAdapterIncompatible)
+# Upload cap for a baseline CSV export (doc 06 §8.3 file type/size gate).
+_MAX_BASELINE_BYTES = 25 * 1024 * 1024
 
 
 def _audit_and_outbox(
@@ -225,6 +238,7 @@ async def create_package_request(
     compatible_rationale_family_ids: list[str] | None = None,
     linked_indicator: dict[str, Any] | None = None,
     declared_dependencies: list[dict[str, Any]] | None = None,
+    equivalence_claim: bool | None = None,
     idempotency_key: str | None = None,
 ) -> dict[str, Any]:
     """Create an immutable Create-Package request (Send step 1, doc 06 §5, §7).
@@ -234,6 +248,11 @@ async def create_package_request(
     take the system classification (personal family ignored). Description requests
     start ``precheck_not_applicable``; code requests start ``requested`` and must
     pass Pre-Check before candidate generation.
+
+    ``equivalence_claim`` captures whether the package claims to reproduce/repair/be
+    equivalent to an external reference (doc 06 §4.4): it is resolved from the
+    creation mode (translate/repair/review claim; generate does not) unless supplied
+    explicitly, and drives the mode-aware baseline gate at approval.
     """
     ensure_can_create_request(actor)
     normalized = normalize_request(
@@ -247,6 +266,7 @@ async def create_package_request(
     )
     declared = clean_declared_dependencies(declared_dependencies)
     family_id = await _validate_family(session, normalized.package_kind, rationale_family_id)
+    claims_equivalence = resolve_equivalence_claim(normalized.creation_mode, equivalence_claim)
     src_hash = source_hash(request_body)
     ctx_hash = context_hash(
         source_hash_value=src_hash,
@@ -280,6 +300,7 @@ async def create_package_request(
             compatible_rationale_family_ids=compatible_rationale_family_ids or [],
             linked_indicator=linked_indicator,
             declared_dependencies=declared,
+            claims_equivalence=claims_equivalence,
             state=initial_state,
         )
         _audit_and_outbox(
@@ -300,6 +321,7 @@ async def create_package_request(
             "state": str(initial_state),
             "context_hash": ctx_hash,
             "request_version": root.row_version,
+            "claims_equivalence": claims_equivalence,
         }
 
     return await run_idempotent(
@@ -906,6 +928,166 @@ async def request_package_revision(
     )
 
 
+async def upload_baseline_asset(
+    session: AsyncSession,
+    actor: Actor,
+    *,
+    request_id: str,
+    content: bytes,
+    baseline_metadata: dict[str, Any],
+    content_type: str | None = None,
+    original_filename: str | None = None,
+    expected_request_version: int | None = None,
+    idempotency_key: str | None = None,
+) -> dict[str, Any]:
+    """UploadBaselineAsset: store an immutable baseline CSV + metadata (doc 06 §8.3).
+
+    The file type/size gate runs OUTSIDE (FILE_TYPE_NOT_ALLOWED for a non-CSV, a
+    422 for empty/oversize). The bytes are written to object storage content-
+    addressed; the immutable ``baseline_asset`` row is the evidence and becomes the
+    request's head baseline (a fresh upload is always a new ``attempt_no`` — a prior
+    attempt is never mutated). The parse (StartBaselineParse) runs separately.
+    """
+    root, detail = await _require_request(session, actor, request_id)
+    if not is_allowed_baseline_file(original_filename):
+        raise FileTypeNotAllowedError("Upload a CSV baseline file.")
+    if not content:
+        raise ValidationError("The baseline file is empty.")
+    if len(content) > _MAX_BASELINE_BYTES:
+        raise ValidationError("The baseline file exceeds the maximum allowed size.")
+
+    async def _op() -> dict[str, Any]:
+        await session.refresh(root, with_for_update=True)
+        await session.refresh(detail)
+        _check_request_version(root, expected_request_version)
+        object_key, digest = datasets.put_baseline_bytes(
+            root.entity_id, content, content_type=content_type
+        )
+        asset = await cp_repo.append_baseline_asset(
+            session,
+            request_entity_id=root.entity_id,
+            object_key=object_key,
+            content_digest=digest,
+            size_bytes=len(content),
+            content_type=content_type,
+            original_filename=original_filename,
+            baseline_metadata=baseline_metadata,
+            correlation_id=actor.correlation_id or None,
+            created_by_principal_id=actor.principal_id,
+        )
+        await session.flush()
+        detail.baseline_asset_id = asset.baseline_asset_id
+        root.row_version += 1
+        _audit_and_outbox(
+            session,
+            actor,
+            event_kind="baseline_uploaded",
+            target_kind=_REQUEST_TARGET_KIND,
+            entity_id=root.entity_id,
+            revision_id=asset.baseline_asset_id,
+            previous_state=None,
+            new_state=str(asset.parse_status),
+            action="baseline_uploaded",
+        )
+        return {
+            "request_id": root.entity_id,
+            "baseline_asset_id": asset.baseline_asset_id,
+            "attempt_no": asset.attempt_no,
+            "parse_status": str(asset.parse_status),
+            "content_digest": digest,
+            "size_bytes": len(content),
+        }
+
+    return await run_idempotent(
+        session,
+        key=idempotency_key,
+        actor_principal_id=actor.principal_id,
+        request_payload={
+            "op": "upload_baseline_asset",
+            "request_id": request_id,
+            "content_digest": datasets.content_digest(content),
+        },
+        operation=_op,
+    )
+
+
+async def start_baseline_parse(
+    session: AsyncSession,
+    actor: Actor,
+    *,
+    request_id: str,
+    expected_request_version: int | None = None,
+    idempotency_key: str | None = None,
+) -> dict[str, Any]:
+    """StartBaselineParse: validate the head baseline's metadata + CSV (doc 06 §8.3).
+
+    Gate order (a file upload alone is not proof of equivalence, doc 06 §4.4):
+    BASELINE_ASSET_NOT_FOUND if there is no head baseline; BASELINE_METADATA_INVALID
+    if the submitted metadata is incomplete; PARSE_FAILED if the stored CSV does not
+    parse. On success the head baseline transitions ``uploaded -> passed`` with the
+    deterministic parse report, and a durable job records the work (CR-09). A failed
+    parse raises (the stored asset stays as upload evidence) and the user uploads a
+    corrected baseline (doc 06 §9). The concurrency + status write live INSIDE the
+    idempotent body.
+    """
+    root, detail = await _require_request(session, actor, request_id)
+
+    async def _op() -> dict[str, Any]:
+        await session.refresh(root, with_for_update=True)
+        await session.refresh(detail)
+        _check_request_version(root, expected_request_version)
+        asset = await cp_repo.get_current_baseline_asset(session, detail)
+        if asset is None:
+            raise BaselineAssetNotFound()
+        missing = missing_baseline_metadata_fields(asset.baseline_metadata)
+        if missing:
+            raise BaselineMetadataInvalid(
+                "The baseline metadata is missing required fields.",
+                details=[{"field": field, "issue": "required"} for field in missing],
+            )
+        report = parse_baseline_csv(datasets.get_raw_bytes(asset.object_key))
+        if not report.is_parseable:
+            raise BaselineParseFailed(report.detail)
+
+        job = await _enqueue_stub_job(
+            session, actor, queue="default", kind="baseline_parse", request_id=root.entity_id
+        )
+        asset.parse_status = BaselineParseStatus.PASSED
+        asset.parse_report = report.as_dict()
+        asset.parser_version = report.parser_version
+        asset.parse_job_id = job.job_id
+        asset.parsed_at = datetime.now(UTC)
+        root.row_version += 1
+        _audit_and_outbox(
+            session,
+            actor,
+            event_kind="baseline_validated",
+            target_kind=_REQUEST_TARGET_KIND,
+            entity_id=root.entity_id,
+            revision_id=asset.baseline_asset_id,
+            previous_state=str(BaselineParseStatus.UPLOADED),
+            new_state=str(asset.parse_status),
+            action="baseline_validated",
+        )
+        return {
+            "request_id": root.entity_id,
+            "baseline_asset_id": asset.baseline_asset_id,
+            "attempt_no": asset.attempt_no,
+            "parse_status": str(asset.parse_status),
+            "parser_version": report.parser_version,
+            "parse_report": asset.parse_report,
+            "job_id": job.job_id,
+        }
+
+    return await run_idempotent(
+        session,
+        key=idempotency_key,
+        actor_principal_id=actor.principal_id,
+        request_payload={"op": "start_baseline_parse", "request_id": request_id},
+        operation=_op,
+    )
+
+
 async def approve_and_publish(
     session: AsyncSession,
     actor: Actor,
@@ -946,6 +1128,14 @@ async def approve_and_publish(
             raise ValidationRequired()
         if run.candidate_hash != detail.candidate_hash:
             raise ValidationStale()
+        # Mode-aware baseline gate (doc 06 §4.4/§7): a package that claims
+        # translation/repair/equivalence may publish only with a PASSED baseline
+        # parse; a non-claiming request needs none (existing behaviour). A file
+        # upload alone is not sufficient — the baseline must have parsed.
+        if detail.claims_equivalence:
+            baseline = await cp_repo.get_current_baseline_asset(session, detail)
+            if baseline is None or baseline.parse_status != BaselineParseStatus.PASSED:
+                raise BaselineRequired()
         # Only ELIGIBLE_FOR_APPROVAL has an APPROVED edge (state machine, L2).
         target_state = next_request_state(detail.state, CreatePackageState.APPROVED)
 
@@ -1052,6 +1242,8 @@ __all__ = [
     "create_package_request",
     "request_package_revision",
     "run_precheck",
+    "start_baseline_parse",
     "start_package_validation_run",
     "submit_candidate_generation",
+    "upload_baseline_asset",
 ]

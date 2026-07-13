@@ -16,6 +16,7 @@ from entropia.infrastructure.s3.client import get_s3_client
 _RAW_PREFIX = "market/raw"
 _PROCESSED_PREFIX = "market/processed"
 _SOURCE_ASSET_PREFIX = "signals/source"
+_BASELINE_PREFIX = "create-package/baseline"
 
 
 def content_digest(data: bytes) -> str:
@@ -40,6 +41,28 @@ def put_source_asset_bytes(
     """
     digest = content_digest(data)
     key = source_asset_object_key(source_asset_id, digest)
+    bucket = get_settings().object_storage_bucket
+    client = get_s3_client()
+    if content_type:
+        client.put_object(Bucket=bucket, Key=key, Body=data, ContentType=content_type)
+    else:
+        client.put_object(Bucket=bucket, Key=key, Body=data)
+    return key, digest
+
+
+def baseline_object_key(request_entity_id: str, digest: str) -> str:
+    return f"{_BASELINE_PREFIX}/{request_entity_id}/{digest}"
+
+
+def put_baseline_bytes(
+    request_entity_id: str, data: bytes, *, content_type: str | None = None
+) -> tuple[str, str]:
+    """Store an immutable Create-Package baseline CSV content-addressed (doc 06 §8.3).
+
+    Returns ``(object_key, digest)``. Reads back via ``get_raw_bytes`` (generic).
+    """
+    digest = content_digest(data)
+    key = baseline_object_key(request_entity_id, digest)
     bucket = get_settings().object_storage_bucket
     client = get_s3_client()
     if content_type:

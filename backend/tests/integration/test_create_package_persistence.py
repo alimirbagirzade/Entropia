@@ -132,6 +132,9 @@ async def _create_indicator_request(session, *, family_id: str, deps: list[dict]
         output_contract=_INDICATOR_OUTPUT,
         rationale_family_id=family_id,
         declared_dependencies=deps,
+        # These plumbing tests do not exercise the mode-aware baseline gate; opt out
+        # of the equivalence claim so publish needs no baseline (GAP-07b).
+        equivalence_claim=False,
     )
 
 

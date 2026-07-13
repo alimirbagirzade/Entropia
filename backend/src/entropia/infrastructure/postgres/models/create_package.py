@@ -19,6 +19,7 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import (
+    Boolean,
     DateTime,
     ForeignKey,
     Integer,
@@ -30,6 +31,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from entropia.domain.create_package.enums import (
+    BaselineParseStatus,
     CreatePackageState,
     CreationMode,
     PrecheckScanStatus,
@@ -95,6 +97,16 @@ class PackageRequest(TimestampMixin, Base):
     package_root_id: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
     draft_revision_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
     current_validation_run_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    # Whether the request claims equivalence to an external reference (doc 06 §4.4):
+    # derived from the creation mode (translate/repair/review) or set explicitly.
+    # The mode-aware approval baseline gate reads this — a claiming package needs a
+    # passed baseline parse before publish; a non-claiming one does not.
+    claims_equivalence: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    # Head pointer to the current immutable baseline_asset (its parse_status +
+    # parse_report are the equivalence-comparison evidence).
+    baseline_asset_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
 
 
 class DependencyScan(Base):
@@ -137,6 +149,54 @@ class DependencyScan(Base):
         String(40), ForeignKey(_PRINCIPAL_FK), nullable=True
     )
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class BaselineAsset(Base):
+    """Immutable baseline-comparison evidence (doc 06 §4.4/§5/§8.3). Never re-keyed.
+
+    One request has N baseline assets (``attempt_no``); each pins the exact
+    content-addressed object key + digest of one uploaded CSV, the submitted
+    ``BaselineMetadata`` and — after StartBaselineParse — the deterministic parse
+    report + terminal ``parse_status``. A fresh upload is a new attempt; the object
+    key / digest / metadata of a prior attempt are never mutated. The parse
+    transitions ``uploaded -> passed`` on the current head; a rejected parse raises
+    a typed error (PARSE_FAILED / BASELINE_METADATA_INVALID) and the user uploads a
+    new baseline (doc 06 §9 "Baseline rejected").
+    """
+
+    __tablename__ = "baseline_asset"
+    __table_args__ = (
+        UniqueConstraint("request_entity_id", "attempt_no", name="uq_baseline_asset_attempt"),
+    )
+
+    baseline_asset_id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    request_entity_id: Mapped[str] = mapped_column(
+        String(40), ForeignKey(_ENTITY_FK), nullable=False, index=True
+    )
+    attempt_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    object_key: Mapped[str] = mapped_column(String(512), nullable=False)
+    content_digest: Mapped[str] = mapped_column(String(80), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    content_type: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    original_filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    baseline_metadata: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    parse_status: Mapped[BaselineParseStatus] = mapped_column(
+        enum_column(BaselineParseStatus, "baseline_parse_status"),
+        nullable=False,
+        default=BaselineParseStatus.UPLOADED,
+        index=True,
+    )
+    parse_report: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    parser_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    parse_job_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    correlation_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_by_principal_id: Mapped[str | None] = mapped_column(
+        String(40), ForeignKey(_PRINCIPAL_FK), nullable=True
+    )
+    parsed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

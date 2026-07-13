@@ -121,6 +121,9 @@ async def _drive_to_draft(session, *, family_id: str) -> str:
         output_contract=_INDICATOR_OUTPUT,
         rationale_family_id=family_id,
         declared_dependencies=[_RSI_DEP],
+        # This suite exercises the validation-evidence gate, not the baseline gate;
+        # opt out of the equivalence claim so no baseline is required (GAP-07b).
+        equivalence_claim=False,
     )
     request_id = created["request_id"]
     await cp_cmd.run_precheck(session, OWNER, request_id=request_id)

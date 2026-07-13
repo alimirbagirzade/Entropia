@@ -517,6 +517,43 @@ class ValidationAlreadyRunning(ConflictError):
     message = "A validation run is already in progress for this draft."
 
 
+class BaselineMetadataInvalid(ValidationError):
+    """A baseline parse found the submitted BaselineMetadata incomplete (doc 06 §4.4,
+    §8.3). A file upload alone is not proof of equivalence — the metadata must carry
+    provider, symbol, timeframe, range, timezone, settings and the source revision
+    context. Correct the metadata and upload a new baseline asset (doc 06 §9)."""
+
+    code = "BASELINE_METADATA_INVALID"
+    message = "The baseline metadata is missing required fields. Correct it and upload again."
+
+
+class BaselineParseFailed(ValidationError):
+    """The uploaded baseline CSV could not be parsed (doc 06 §4.4, §8.3): it is not
+    valid UTF-8 text, or has no header/data rows. Upload a well-formed CSV export."""
+
+    code = "PARSE_FAILED"
+    message = "The baseline file could not be parsed. Upload a valid CSV export."
+
+
+class BaselineAssetNotFound(NotFoundError):
+    """A referenced baseline asset did not resolve, or the request has no baseline to
+    parse yet (doc 06 §8.3). Upload a baseline before running the parse."""
+
+    code = "BASELINE_ASSET_NOT_FOUND"
+    message = "No baseline asset was found for this request. Upload one first."
+
+
+class BaselineRequired(ConflictError):
+    """Approve & Publish was attempted for an equivalence-claiming package without a
+    passed baseline parse (doc 06 §4.4/§7, mode-aware gate). Translate/Repair (and any
+    explicit equivalence claim) must upload + pass a baseline before publish; a
+    non-claiming request never requires one. A file upload alone is not sufficient —
+    the baseline must PARSE successfully."""
+
+    code = "BASELINE_REQUIRED"
+    message = "This package claims equivalence; upload and parse a baseline before approving it."
+
+
 class ServiceUnavailableError(AppError):
     code = "SERVICE_UNAVAILABLE"
     http_status = 503

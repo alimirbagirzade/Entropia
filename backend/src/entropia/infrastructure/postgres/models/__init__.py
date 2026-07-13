@@ -41,6 +41,7 @@ from entropia.infrastructure.postgres.models.capability import (
     ViewDataset,
 )
 from entropia.infrastructure.postgres.models.create_package import (
+    BaselineAsset,
     DependencyScan,
     PackageRequest,
     PackageValidationRun,
@@ -133,6 +134,7 @@ __all__ = [
     "BacktestResult",
     "BacktestRun",
     "BacktestRunManifest",
+    "BaselineAsset",
     "CanonicalTradeRecordBatch",
     "CapabilityActivationEvent",
     "DatasetCoverageSlice",

@@ -48,6 +48,9 @@ class CreateRequestBody(BaseModel):
     compatible_rationale_family_ids: list[str] = Field(default_factory=list)
     linked_indicator: dict[str, Any] | None = None
     declared_dependencies: list[dict[str, Any]] = Field(default_factory=list)
+    # Optional explicit equivalence claim (doc 06 §4.4); when null the server derives
+    # it from the creation mode. Never a role field — it only drives the baseline gate.
+    equivalence_claim: bool | None = None
 
 
 class DraftBody(BaseModel):
@@ -57,6 +60,16 @@ class DraftBody(BaseModel):
 class ApproveBody(BaseModel):
     expected_head_revision_id: str | None = None
     note: str | None = None
+
+
+class UploadBaselineBody(BaseModel):
+    # UTF-8 CSV text (raw bytes never travel through the JSON body; mirrors the
+    # Trading Signal source-asset upload). BaselineMetadata carries the provider,
+    # symbol, timeframe, range, timezone, settings and source revision context.
+    content: str
+    baseline_metadata: dict[str, Any] = Field(default_factory=dict)
+    content_type: str | None = "text/csv"
+    original_filename: str | None = None
 
 
 @router.post("/create-package/requests", status_code=201)
@@ -79,6 +92,7 @@ async def create_request(
         compatible_rationale_family_ids=body.compatible_rationale_family_ids,
         linked_indicator=body.linked_indicator,
         declared_dependencies=body.declared_dependencies,
+        equivalence_claim=body.equivalence_claim,
         idempotency_key=idempotency_key,
     )
 
@@ -183,6 +197,43 @@ async def request_revision(
     )
 
 
+@router.post("/create-package/requests/{request_id}/baseline", status_code=201)
+async def upload_baseline(
+    request_id: str,
+    body: UploadBaselineBody,
+    ctx: RequestContext = Depends(request_context),
+    request_version: str | None = Header(default=None, alias=_REQUEST_VERSION_HEADER),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+) -> dict[str, Any]:
+    return await cp_cmd.upload_baseline_asset(
+        ctx.session,
+        ctx.actor,
+        request_id=request_id,
+        content=body.content.encode("utf-8"),
+        baseline_metadata=body.baseline_metadata,
+        content_type=body.content_type,
+        original_filename=body.original_filename,
+        expected_request_version=_request_version(request_version),
+        idempotency_key=idempotency_key,
+    )
+
+
+@router.post("/create-package/requests/{request_id}/baseline-parse")
+async def parse_baseline(
+    request_id: str,
+    ctx: RequestContext = Depends(request_context),
+    request_version: str | None = Header(default=None, alias=_REQUEST_VERSION_HEADER),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+) -> dict[str, Any]:
+    return await cp_cmd.start_baseline_parse(
+        ctx.session,
+        ctx.actor,
+        request_id=request_id,
+        expected_request_version=_request_version(request_version),
+        idempotency_key=idempotency_key,
+    )
+
+
 @router.post("/create-package/requests/{request_id}/approve")
 async def approve_request(
     request_id: str,
@@ -216,4 +267,14 @@ async def get_validation_run(
 ) -> dict[str, Any]:
     return await cp_query.get_validation_run(
         ctx.session, ctx.actor, validation_run_id=validation_run_id
+    )
+
+
+@router.get("/baseline-assets/{baseline_asset_id}")
+async def get_baseline_asset(
+    baseline_asset_id: str,
+    ctx: RequestContext = Depends(request_context),
+) -> dict[str, Any]:
+    return await cp_query.get_baseline_asset(
+        ctx.session, ctx.actor, baseline_asset_id=baseline_asset_id
     )

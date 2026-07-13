@@ -234,16 +234,26 @@ function DraftEditor({
         </span>
       </div>
 
-      <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 12 }}>
-        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}>
+      <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 14 }}>
+        {/* v18 mockup "USE EQUITY ALLOCATION FOR THIS BACKTEST" banner. The
+            <label> wraps the checkbox so its accessible name stays the heading. */}
+        <label className="mode-toggle">
           <input
             type="checkbox"
             checked={enabled}
             onChange={(event) => setEnabled(event.target.checked)}
           />
-          Enable shared equity allocation (off = every item trades independently)
+          <div>
+            <b>USE EQUITY ALLOCATION FOR THIS BACKTEST</b>
+            <span>
+              When enabled, the shared capital pool and equity shares below control every active
+              Strategy, Trading Signal and Trade Log. When disabled, each item runs with its own
+              Initial Capital.
+            </span>
+          </div>
         </label>
 
+        <div className="section-title-upper">1. Shared capital pool</div>
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
           <label className="auth-field" style={{ maxWidth: 180 }}>
             <span>Initial capital</span>
@@ -287,6 +297,7 @@ function DraftEditor({
           </label>
         </div>
 
+        <div className="section-title-upper">2. Equity allocation</div>
         <EntriesTable entries={entries} onChange={setEntries} />
         <CandidatePicker
           candidates={candidates}

@@ -201,7 +201,7 @@ export function StrategyConfigForm({
 
       {/* ---- Data & Execution (§5.2) ---- */}
       <h4 className="form-section-h">Data &amp; Execution</h4>
-      <div className="cp-form">
+      <div className="cp-form strategy-form-grid">
         <TextField
           label="Market (instrument)"
           required
@@ -383,7 +383,7 @@ export function StrategyConfigForm({
         allowed only in Research Only state; Ready Check surfaces a high-severity risk warning
         (doc 02 §5.5).
       </p>
-      <div className="cp-form">
+      <div className="cp-form strategy-form-grid">
         <CheckboxField
           label="Percentage stop"
           checked={p.percentage_enabled}
@@ -440,7 +440,7 @@ export function StrategyConfigForm({
         Exactly one sizing method is active per revision — the server rejects a multi-method
         config with SIZING_METHOD_NOT_EXCLUSIVE (doc 02 §5.6).
       </p>
-      <div className="cp-form">
+      <div className="cp-form strategy-form-grid">
         <SelectField
           label="Sizing method"
           value={s.method}
@@ -528,7 +528,7 @@ export function StrategyConfigForm({
         Conflict / Position Handling <InfoPanel panel={STRATEGY_INFO_PANELS.stopExitConflict} />
         <InfoPanel panel={STRATEGY_INFO_PANELS.multipleStopsConflict} />
       </h4>
-      <div className="cp-form">
+      <div className="cp-form strategy-form-grid">
         <SelectField
           label="Overlapping signal policy"
           value={c.overlapping_signal_policy}

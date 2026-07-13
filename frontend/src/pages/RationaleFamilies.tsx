@@ -145,43 +145,31 @@ function FamilyRegistryCard() {
           {families.data.data.length === 0 ? (
             <EmptyState title="No active rationale families yet — create the first one above" />
           ) : (
-            <table className="metrics-table">
-              <thead>
-                <tr>
-                  <th scope="col">Family</th>
-                  <th scope="col">Subfamilies</th>
-                  <th scope="col">Compatible outputs</th>
-                  <th scope="col">Rev</th>
-                  <th scope="col">Created (UTC)</th>
-                  <th scope="col" aria-label="Actions" />
-                </tr>
-              </thead>
-              <tbody>
-                {families.data.data.map((family) => (
-                  <FamilyRow
-                    key={family.entity_id}
-                    family={family}
-                    isEditing={editing?.entity_id === family.entity_id}
-                    confirming={deleteConfirm === family.entity_id}
-                    deleting={del.isPending}
-                    onEdit={() => setEditing(family)}
-                    onAskDelete={() => setDeleteConfirm(family.entity_id)}
-                    onCancelDelete={() => setDeleteConfirm(null)}
-                    onConfirmDelete={() => {
-                      del.mutate(
-                        { entity_id: family.entity_id, row_version: family.row_version },
-                        {
-                          onSuccess: () => {
-                            setDeleteConfirm(null);
-                            if (editing?.entity_id === family.entity_id) setEditing(null);
-                          },
+            <div className="rationale-grid" role="list" aria-label="Rationale families">
+              {families.data.data.map((family) => (
+                <FamilyCard
+                  key={family.entity_id}
+                  family={family}
+                  isEditing={editing?.entity_id === family.entity_id}
+                  confirming={deleteConfirm === family.entity_id}
+                  deleting={del.isPending}
+                  onEdit={() => setEditing(family)}
+                  onAskDelete={() => setDeleteConfirm(family.entity_id)}
+                  onCancelDelete={() => setDeleteConfirm(null)}
+                  onConfirmDelete={() => {
+                    del.mutate(
+                      { entity_id: family.entity_id, row_version: family.row_version },
+                      {
+                        onSuccess: () => {
+                          setDeleteConfirm(null);
+                          if (editing?.entity_id === family.entity_id) setEditing(null);
                         },
-                      );
-                    }}
-                  />
-                ))}
-              </tbody>
-            </table>
+                      },
+                    );
+                  }}
+                />
+              ))}
+            </div>
           )}
           <Pager
             canPrev={pager.canPrev}
@@ -295,7 +283,7 @@ function FamilyEditor({
   );
 }
 
-function FamilyRow({
+function FamilyCard({
   family,
   isEditing,
   confirming,
@@ -315,26 +303,46 @@ function FamilyRow({
   onConfirmDelete: () => void;
 }) {
   return (
-    <tr style={isEditing ? { background: "var(--bg-elev)" } : undefined}>
-      <td>
+    <div
+      className="rationale-card"
+      role="listitem"
+      style={isEditing ? { borderColor: "var(--accent)" } : undefined}
+    >
+      <div className="rationale-card-title">
         <span style={swatchStyle(family.display_color)} aria-hidden="true" />
         {family.display_name}
-      </td>
-      <td>{family.subfamilies.length > 0 ? family.subfamilies.join(", ") : "—"}</td>
-      <td>{family.compatible_output_types.length > 0 ? family.compatible_output_types.join(", ") : "—"}</td>
-      <td>
-        v{family.revision_no} <span className="page-sub">(rv {family.row_version})</span>
-      </td>
-      <td>{formatUtc(family.created_at)}</td>
-      <td>
+      </div>
+      <div className="rationale-card-row">
+        <b>Subfamilies</b>
+        <span>{family.subfamilies.length > 0 ? family.subfamilies.join(", ") : "—"}</span>
+      </div>
+      <div className="rationale-card-row">
+        <b>Compatible outputs</b>
+        <span>
+          {family.compatible_output_types.length > 0
+            ? family.compatible_output_types.join(", ")
+            : "—"}
+        </span>
+      </div>
+      <div className="rationale-card-row">
+        <b>Revision</b>
+        <span>
+          v{family.revision_no} (rv {family.row_version})
+        </span>
+      </div>
+      <div className="rationale-card-row">
+        <b>Created (UTC)</b>
+        <span>{formatUtc(family.created_at)}</span>
+      </div>
+      <div className="rationale-card-actions">
         <button type="button" className="btn" onClick={onEdit}>
           Edit
-        </button>{" "}
+        </button>
         {confirming ? (
           <>
             <button type="button" className="btn" disabled={deleting} onClick={onConfirmDelete}>
               Confirm delete
-            </button>{" "}
+            </button>
             <button type="button" className="btn btn-ghost" onClick={onCancelDelete}>
               Cancel
             </button>
@@ -344,8 +352,8 @@ function FamilyRow({
             Delete
           </button>
         )}
-      </td>
-    </tr>
+      </div>
+    </div>
   );
 }
 

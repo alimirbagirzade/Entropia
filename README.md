@@ -509,6 +509,8 @@ macOS/Linux use `make <target>`; Windows use `.\scripts\tasks.ps1 <task>`.
 | Tail logs | `make logs` | `.\scripts\tasks.ps1 logs` |
 | DB migrate | `make migrate` | `.\scripts\tasks.ps1 migrate` |
 | Smoke-test a running stack | `make smoke` | `bash scripts/smoke.sh` (Git Bash) |
+| Back up Postgres + artifacts | `make backup` | `bash scripts/backup.sh` (Git Bash) |
+| Verify a backup restores | `make backup-verify` | `bash scripts/backup-verify.sh` (Git Bash) |
 | Backend tests | `make backend-test` | `.\scripts\tasks.ps1 backend-test` |
 | Backend lint | `make backend-lint` | `.\scripts\tasks.ps1 backend-lint` |
 | Frontend build | `make frontend-build` | `.\scripts\tasks.ps1 frontend-build` |
@@ -560,6 +562,24 @@ check → RUN → result → history → trash/restore) is executable as one tes
 cd backend && TEST_DATABASE_URL=postgresql+asyncpg://entropia:entropia@localhost:5432/entropia_smoke \
   uv run pytest tests/integration/test_e2e_pipeline.py --no-cov -q
 ```
+
+---
+
+## Backup & recovery
+
+Two authoritative stores are backed up — **PostgreSQL** (metadata) and **MinIO**
+(artifacts); Redis is derivable and intentionally excluded. Backups are
+operator-initiated and local:
+
+```bash
+make backup          # snapshot -> ./backups/<UTC-stamp>/  (Postgres required, MinIO optional)
+make backup-verify   # prove the latest backup restores into a throwaway DB
+make restore         # recover from the latest backup (DESTRUCTIVE, guarded)
+```
+
+The full runbook — retention, disaster scenarios, RPO/RTO, and what V1 defers to
+the infra module (PITR, off-site replication) — is in
+[`docs/BACKUP_DR.md`](docs/BACKUP_DR.md).
 
 ---
 

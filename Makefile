@@ -85,3 +85,14 @@ clean: ## Remove build artifacts and caches
 
 nuke: ## Stop stack and DELETE all volumes (DESTRUCTIVE)
 	$(COMPOSE) down -v
+
+.PHONY: backup restore backup-verify
+
+backup: ## Back up Postgres + object storage to ./backups/<timestamp>
+	@bash scripts/backup.sh
+
+restore: ## Restore Postgres + object storage from a backup dir (DESTRUCTIVE; make restore dir=./backups/<ts>)
+	@bash scripts/restore.sh $(dir)
+
+backup-verify: ## Verify the latest backup restores cleanly into a scratch DB
+	@bash scripts/backup-verify.sh

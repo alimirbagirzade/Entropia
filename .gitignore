@@ -49,3 +49,6 @@ tmp/
 
 # TypeScript incremental build info
 *.tsbuildinfo
+
+# ---- Backups (data-bearing; never commit) ----
+backups/

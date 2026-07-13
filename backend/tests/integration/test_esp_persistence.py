@@ -1,15 +1,17 @@
-"""Stage 2c ESP acceptance — exercised against a real database.
+"""Stage 2c ESP acceptance (+ post-V1 R8 validation-run) — exercised against a real DB.
 
 Auto-skips when no PostgreSQL is reachable (see tests/integration/conftest.py).
-Covers: create ESP package (+1 audit & +1 outbox, CANDIDATE registry row),
-activate (CANDIDATE -> TRUSTED_ACTIVE, approval_decision recorded, revision
-APPROVED — validation stays ``pending`` because activation does not fabricate a
-validation pass, GAP-07c/doc 09 §7), the evidence precondition (activating a
-resolver with no/empty test-vector evidence -> RESOLVER_EVIDENCE_REQUIRED),
-deprecate, resolve returns the exact revision only once trusted_active + a
-validation run marked it passed + approved, optimistic/stale registry version ->
-409, idempotent activate replay returns the cached result, soft-delete preserves
-the revision chain, and seed-style TA resolvers are resolvable.
+Covers: create ESP package (+1 audit & +1 outbox, CANDIDATE registry row); the R8
+validation-run (``run_resolver_validation`` executes the stored test-vectors ->
+``validation_state=passed`` + an immutable run row + ``esp.validation.completed``
+audit); the activation gate now requires a PASSED run (activating a revision that has
+evidence but has not passed -> RESOLVER_VALIDATION_REQUIRED; no/empty evidence ->
+RESOLVER_EVIDENCE_REQUIRED); activate (CANDIDATE -> TRUSTED_ACTIVE, approval_decision
+recorded, revision APPROVED) only after a passed run; deprecate; resolve returns the
+exact revision only once trusted_active + validation passed + approved; optimistic/stale
+registry version -> 409; idempotent activate/validate replay returns the cached result;
+non-owner validation is denied; soft-delete preserves the revision chain; and seed-style
+TA resolvers are resolvable.
 """
 
 from __future__ import annotations
@@ -35,17 +37,20 @@ from entropia.infrastructure.postgres.models import (
     ApprovalDecision,
     AuditEvent,
     EmbeddedResolverRegistry,
+    EmbeddedResolverValidationRun,
     OutboxEvent,
     Principal,
 )
 from entropia.infrastructure.postgres.repositories import esp as esp_repo
 from entropia.infrastructure.postgres.repositories import packages as pkg_repo
 from entropia.shared.errors import (
+    AccessDeniedError,
     ResolverAdapterIncompatible,
     ResolverEvidenceRequired,
     ResolverNotResolved,
     ResolverRegistryConflict,
     ResolverSignatureMismatch,
+    ResolverValidationRequired,
 )
 
 pytestmark = pytest.mark.integration
@@ -58,10 +63,27 @@ _SMA_SIG = {
     "return": "series",
 }
 
-# Passing test-vector evidence is a precondition for trusted activation (doc 09
-# §4.2/§7). A proposal carries it so an Admin can activate; the rejection tests
-# override it with None/{} to prove the gate.
-_EVIDENCE = {"test_vectors": ["warmup", "boundary", "normal"], "review": "passed"}
+# Executable test-vector evidence (R8): a real ``ta.sma`` len-3 vector whose expected
+# column matches the engine compute, so ``run_resolver_validation`` sets
+# ``validation_state=passed`` and an Admin may then activate. SMA(3) over [1,2,3,4,5] is
+# [None, None, 2, 3, 4].
+_EVIDENCE = {
+    "test_vectors": [
+        {
+            "name": "sma_len3",
+            "length": 3,
+            "close": [1, 2, 3, 4, 5],
+            "expected": [None, None, 2, 3, 4],
+        }
+    ],
+    "review": "passed",
+}
+
+# Evidence whose vector does NOT match the compute -> the validation-run FAILS, so
+# activation is blocked with RESOLVER_VALIDATION_REQUIRED (R8).
+_FAILING_EVIDENCE = {
+    "test_vectors": [{"length": 3, "close": [1, 2, 3, 4, 5], "expected": [None, None, 2, 3, 99]}]
+}
 
 
 async def _count(session, model) -> int:
@@ -88,6 +110,17 @@ async def _create_esp(session, *, key: str = "ta.sma", evidence: dict | None = _
     )
 
 
+async def _validate(session, created: dict, *, actor: Actor = OWNER, **kw) -> dict:
+    """Run the R8 validation-run for a created resolver (owner-or-Admin)."""
+    return await esp_cmd.run_resolver_validation(
+        session,
+        actor,
+        entity_id=created["entity_id"],
+        revision_id=created["revision_id"],
+        **kw,
+    )
+
+
 async def test_create_esp_inserts_audit_outbox_and_candidate(session) -> None:
     await _seed_principals(session)
     before_audit = await _count(session, AuditEvent)
@@ -109,6 +142,7 @@ async def test_create_esp_inserts_audit_outbox_and_candidate(session) -> None:
 async def test_activate_promotes_and_records_decision(session) -> None:
     await _seed_principals(session)
     created = await _create_esp(session)
+    await _validate(session, created)  # R8: the test-vectors must pass before activation
     await session.commit()
 
     before_decisions = await _count(session, ApprovalDecision)
@@ -135,10 +169,9 @@ async def test_activate_promotes_and_records_decision(session) -> None:
     assert entry.trusted_active_revision_id == created["revision_id"]
     revision = await pkg_repo.get_revision(session, created["revision_id"])
     assert revision is not None
-    # Activation records the Admin's APPROVAL but does NOT fabricate a validation
-    # pass: with only a presence gate (GAP-07c), validation stays PENDING until a
-    # real validation run (separate scope) marks the evidence passed (doc 09 §7).
-    assert revision.validation_state == PackageValidationState.PENDING
+    # The validation-run stamped PASSED (R8); activation then records the Admin's APPROVAL
+    # on top of it (it never fabricates the pass).
+    assert revision.validation_state == PackageValidationState.PASSED
     assert revision.approval_state == ApprovalState.APPROVED
 
 
@@ -183,6 +216,102 @@ async def test_activate_with_empty_evidence_rejected(session) -> None:
         )
 
 
+async def test_validation_run_persists_row_and_passes(session) -> None:
+    """R8: run_resolver_validation executes the vectors -> passed + an immutable run row
+    + an esp.validation.completed audit."""
+    await _seed_principals(session)
+    created = await _create_esp(session)
+    await session.commit()
+
+    before_runs = await _count(session, EmbeddedResolverValidationRun)
+    before_audit = await _count(session, AuditEvent)
+
+    result = await _validate(session, created)
+    await session.commit()
+
+    assert result["validation_state"] == str(PackageValidationState.PASSED)
+    assert result["vectors_run"] == 1
+    assert await _count(session, EmbeddedResolverValidationRun) == before_runs + 1
+    assert await _count(session, AuditEvent) == before_audit + 1
+
+    revision = await pkg_repo.get_revision(session, created["revision_id"])
+    assert revision is not None
+    assert revision.validation_state == PackageValidationState.PASSED
+    run = await esp_repo.get_latest_validation_run(session, created["revision_id"])
+    assert run is not None
+    assert run.status == PackageValidationState.PASSED
+    assert run.validator_version
+
+
+async def test_activation_requires_passed_validation_even_with_evidence(session) -> None:
+    """The core R8 fix: evidence PRESENCE is no longer enough — a resolver that has never
+    passed a validation-run cannot be activated (doc 09 §4.3 step 5)."""
+    await _seed_principals(session)
+    created = await _create_esp(session)  # carries real evidence but is NOT validated
+    await session.commit()
+
+    with pytest.raises(ResolverValidationRequired):
+        await esp_cmd.activate_resolver(
+            session,
+            ADMIN,
+            entity_id=created["entity_id"],
+            revision_id=created["revision_id"],
+            canonical_key="ta.sma",
+            expected_registry_version=1,
+        )
+
+    entry = await esp_repo.get_registry_by_key(session, "ta.sma")
+    assert entry is not None
+    assert entry.trust_state == ResolverTrustState.CANDIDATE  # untouched
+
+
+async def test_activation_blocked_when_validation_failed(session) -> None:
+    """A validation-run over mismatched vectors -> failed; activation stays blocked."""
+    await _seed_principals(session)
+    created = await _create_esp(session, evidence=_FAILING_EVIDENCE)
+    result = await _validate(session, created)
+    await session.commit()
+
+    assert result["validation_state"] == str(PackageValidationState.FAILED)
+    with pytest.raises(ResolverValidationRequired):
+        await esp_cmd.activate_resolver(
+            session,
+            ADMIN,
+            entity_id=created["entity_id"],
+            revision_id=created["revision_id"],
+            canonical_key="ta.sma",
+            expected_registry_version=1,
+        )
+
+
+async def test_validation_by_non_owner_denied(session) -> None:
+    """Validation writes evidence + moves validation_state -> a non-owner, non-Admin actor
+    is denied (doc 09 §5 owner/Admin evidence collection)."""
+    await _seed_principals(session)
+    created = await _create_esp(session)
+    await session.commit()
+
+    other = Actor(principal_id="user_2", principal_type=PrincipalType.HUMAN, role=Role.USER)
+    with pytest.raises(AccessDeniedError):
+        await _validate(session, created, actor=other)
+
+
+async def test_idempotent_validation_replay_returns_cached(session) -> None:
+    await _seed_principals(session)
+    created = await _create_esp(session)
+    await session.commit()
+
+    first = await _validate(session, created, idempotency_key="val-k1")
+    await session.commit()
+    runs_after_first = await _count(session, EmbeddedResolverValidationRun)
+
+    second = await _validate(session, created, idempotency_key="val-k1")
+    await session.commit()
+
+    assert second == first
+    assert await _count(session, EmbeddedResolverValidationRun) == runs_after_first
+
+
 async def test_resolve_returns_exact_revision_only_when_trusted(session) -> None:
     await _seed_principals(session)
     created = await _create_esp(session)
@@ -196,6 +325,19 @@ async def test_resolve_returns_exact_revision_only_when_trusted(session) -> None
             target_runtime=RuntimeAdapter.PINE_V5,
         )
 
+    # A passed validation-run alone does NOT make it resolvable — it is still only a
+    # CANDIDATE (validation and registry trust are separate facets, doc 09 §11.2).
+    validated = await _validate(session, created)
+    await session.commit()
+    assert validated["validation_state"] == str(PackageValidationState.PASSED)
+    with pytest.raises(ResolverNotResolved):
+        await resolve_embedded_dependency(
+            session,
+            parsed_call={"key": "ta.sma", "signature": _SMA_SIG},
+            target_runtime=RuntimeAdapter.PINE_V5,
+        )
+
+    # Admin activation (now permitted because validation passed) trusts the revision.
     await esp_cmd.activate_resolver(
         session,
         ADMIN,
@@ -204,21 +346,6 @@ async def test_resolve_returns_exact_revision_only_when_trusted(session) -> None
         canonical_key="ta.sma",
         expected_registry_version=1,
     )
-    await session.commit()
-
-    # Trusted-active + approved but validation still PENDING -> not yet resolvable
-    # (doc 09 §4.3 step 5). Activation is an approval, not a validation pass.
-    with pytest.raises(ResolverNotResolved):
-        await resolve_embedded_dependency(
-            session,
-            parsed_call={"key": "ta.sma", "signature": _SMA_SIG},
-            target_runtime=RuntimeAdapter.PINE_V5,
-        )
-
-    # Simulate the out-of-scope validation run marking the evidence as passed.
-    revision = await pkg_repo.get_revision(session, created["revision_id"])
-    assert revision is not None
-    revision.validation_state = PackageValidationState.PASSED
     await session.commit()
 
     resolved = await resolve_embedded_dependency(
@@ -234,6 +361,7 @@ async def test_resolve_returns_exact_revision_only_when_trusted(session) -> None
 async def test_resolve_signature_mismatch_and_adapter(session) -> None:
     await _seed_principals(session)
     created = await _create_esp(session)
+    await _validate(session, created)
     await esp_cmd.activate_resolver(
         session,
         ADMIN,
@@ -265,6 +393,7 @@ async def test_resolve_signature_mismatch_and_adapter(session) -> None:
 async def test_deprecate_closes_new_selection(session) -> None:
     await _seed_principals(session)
     created = await _create_esp(session)
+    await _validate(session, created)
     await esp_cmd.activate_resolver(
         session,
         ADMIN,
@@ -312,6 +441,7 @@ async def test_stale_registry_version_conflicts(session) -> None:
 async def test_idempotent_activate_replay_returns_cached(session) -> None:
     await _seed_principals(session)
     created = await _create_esp(session)
+    await _validate(session, created)
     await session.commit()
 
     first = await esp_cmd.activate_resolver(

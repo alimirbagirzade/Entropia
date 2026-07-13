@@ -10,15 +10,18 @@ layer validates legality (state machine) and authorization (policy) first.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from entropia.domain.esp.enums import ResolverTrustState, RuntimeAdapter
+from entropia.domain.package.enums import PackageValidationState
 from entropia.infrastructure.postgres.models import (
     EmbeddedResolverContract,
     EmbeddedResolverRegistry,
+    EmbeddedResolverValidationRun,
 )
 from entropia.shared.ids import new_id
 
@@ -145,9 +148,56 @@ async def list_resolvers(
     return list((await session.execute(stmt)).scalars().all())
 
 
+def add_validation_run(
+    session: AsyncSession,
+    *,
+    entity_id: str,
+    revision_id: str,
+    canonical_key: str,
+    status: PackageValidationState,
+    validator_version: str,
+    vectors_run: int,
+    checks: dict[str, Any],
+    created_by_principal_id: str | None,
+) -> EmbeddedResolverValidationRun:
+    """Insert one immutable ESP validation-run evidence row (doc 09 §11.1, R8).
+
+    The caller has already moved ``revision.validation_state``; this row is the durable
+    audit-able record of what the run certified (never mutated after insert)."""
+    run = EmbeddedResolverValidationRun(
+        run_id=new_id("espv"),
+        entity_id=entity_id,
+        revision_id=revision_id,
+        canonical_key=canonical_key,
+        status=status,
+        validator_version=validator_version,
+        vectors_run=vectors_run,
+        checks=checks,
+        created_by_principal_id=created_by_principal_id,
+        completed_at=datetime.now(UTC),
+    )
+    session.add(run)
+    return run
+
+
+async def get_latest_validation_run(
+    session: AsyncSession, revision_id: str
+) -> EmbeddedResolverValidationRun | None:
+    """The most recent validation-run for a revision (newest ``created_at`` first)."""
+    stmt = (
+        select(EmbeddedResolverValidationRun)
+        .where(EmbeddedResolverValidationRun.revision_id == revision_id)
+        .order_by(EmbeddedResolverValidationRun.created_at.desc())
+        .limit(1)
+    )
+    return (await session.execute(stmt)).scalar_one_or_none()
+
+
 __all__ = [
     "add_resolver_contract",
+    "add_validation_run",
     "get_contract_by_revision",
+    "get_latest_validation_run",
     "get_registry_by_key",
     "list_resolvers",
     "set_trust_state",

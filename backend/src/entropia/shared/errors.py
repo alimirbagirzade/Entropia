@@ -272,13 +272,27 @@ class ResolverRegistryConflict(ConflictError):
 class ResolverEvidenceRequired(ConflictError):
     """Trusted activation attempted on a resolver revision with no test-vector
     evidence (ESP doc 09 §4.1/§4.2/§7: passing evidence is a precondition for
-    registry activation — a package name or LLM output is not evidence). This
-    gates on evidence PRESENCE only; running the validation suite (which would
-    legitimately set ``validation_state=passed``) is separate scope, so
-    activation no longer fabricates a PASSED validation state."""
+    registry activation — a package name or LLM output is not evidence). This is
+    the FIRST half of the activation gate: a bare proposal (no/empty evidence) is
+    rejected here before the validation check. A resolver that HAS evidence but has
+    not passed its validation-run is rejected with ``ResolverValidationRequired``
+    instead (post-V1 R8 wired the run that actually sets ``validation_state=passed``)."""
 
     code = "RESOLVER_EVIDENCE_REQUIRED"
     message = "Test-vector evidence is required before this resolver can be activated."
+
+
+class ResolverValidationRequired(ConflictError):
+    """Trusted activation attempted on a resolver revision whose validation-run has not
+    PASSED (ESP doc 09 §4.3 step 5, §5 "Validation failed/blocked", §7). Post-V1 R8 wires
+    the validation-run plane: a resolver must have its stored test-vectors executed to
+    ``validation_state=passed`` (``run_resolver_validation``) before an Admin may activate
+    it — evidence PRESENCE alone is no longer sufficient. This keeps registry trust and
+    Pre-Check resolvability (which already requires ``validation_state == passed``) in
+    agreement."""
+
+    code = "RESOLVER_VALIDATION_REQUIRED"
+    message = "This resolver has not passed validation; run its test vectors before activation."
 
 
 class DeletePolicyBlocked(ConflictError):

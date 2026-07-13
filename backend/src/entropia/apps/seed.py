@@ -14,6 +14,8 @@ import os
 from typing import TYPE_CHECKING
 
 from entropia.domain.esp.enums import ResolverTrustState, RuntimeAdapter
+from entropia.domain.instrument.enums import ContractType
+from entropia.domain.instrument.scope import normalize_alias, resolution_key
 from entropia.domain.lifecycle.enums import (
     ApprovalState,
     PackageKind,
@@ -29,6 +31,7 @@ from entropia.infrastructure.observability import configure_logging, get_logger
 from entropia.infrastructure.postgres.engine import get_session_factory
 from entropia.infrastructure.postgres.models import Agent, HumanUser, Principal
 from entropia.infrastructure.postgres.repositories import esp as esp_repo
+from entropia.infrastructure.postgres.repositories import instrument as instrument_repo
 from entropia.infrastructure.postgres.repositories import market_data as md_repo
 from entropia.infrastructure.postgres.repositories import packages as pkg_repo
 from entropia.infrastructure.postgres.repositories import rationale as rationale_repo
@@ -44,6 +47,49 @@ SEED_DEMO_MARKET = os.getenv("SEED_DEMO_MARKET", "0") == "1"
 SEED_DEMO_RESEARCH = os.getenv("SEED_DEMO_RESEARCH", "0") == "1"
 SEED_ESP_TA = os.getenv("SEED_ESP_TA", "0") == "1"
 SEED_RATIONALE = os.getenv("SEED_RATIONALE", "0") == "1"
+SEED_INSTRUMENTS = os.getenv("SEED_INSTRUMENTS", "0") == "1"
+
+# Canonical instrument seeds (GAP-16; Master §8.1). Each: (venue, symbol,
+# contract_type, display_name, base, quote, settlement, market_class, aliases).
+# The identity triple keeps spot vs perpetual distinct; the aliases resolve the
+# free-text UI scope ("BTCUSDT Perpetual") to the exact canonical instrument.
+_INSTRUMENT_SEEDS: tuple[
+    tuple[str, str, str, ContractType, str, str, str, str, tuple[str, ...]], ...
+] = (
+    (
+        "binance",
+        "BTCUSDT",
+        "BTCUSDT Perpetual",
+        ContractType.PERPETUAL,
+        "BTC",
+        "USDT",
+        "USDT",
+        "crypto",
+        ("BTCUSDT Perpetual", "BTCUSDT.P", "Binance BTCUSDT Perp"),
+    ),
+    (
+        "coinbase",
+        "BTC-USD",
+        "BTC-USD Spot",
+        ContractType.SPOT,
+        "BTC",
+        "USD",
+        "USD",
+        "crypto",
+        ("BTC-USD", "BTCUSD Spot", "Coinbase BTC-USD"),
+    ),
+    (
+        "binance",
+        "ETHUSDT",
+        "ETHUSDT Perpetual",
+        ContractType.PERPETUAL,
+        "ETH",
+        "USDT",
+        "USDT",
+        "crypto",
+        ("ETHUSDT Perpetual", "ETHUSDT.P"),
+    ),
+)
 
 # Canonical ACTIVE seed families (doc 10 §3.1). The last entry is the Production
 # correction (RF-15): V18's ESP metadata references "Embedded System / TA Resolver"
@@ -155,8 +201,49 @@ async def _seed() -> None:
         if SEED_RATIONALE:
             await _seed_rationale_families(session, log)
 
+        if SEED_INSTRUMENTS:
+            await _seed_instruments(session, log)
+
         await session.commit()
     log.info("seed.done")
+
+
+async def _seed_instruments(session: object, log: object) -> None:
+    """Seed the canonical instrument registry idempotently (GAP-16; Master §8.1).
+
+    Uses the FK-safe order (instrument row flushed before its alias children).
+    An existing ``resolution_key`` is skipped so re-running the seed is a no-op.
+    """
+    for venue, symbol, display, ct, base, quote, settle, market_class, aliases in _INSTRUMENT_SEEDS:
+        key = resolution_key(venue, symbol, ct)
+        if await instrument_repo.get_by_resolution_key(session, key) is not None:  # type: ignore[arg-type]
+            continue
+        instrument = instrument_repo.create_instrument(
+            session,  # type: ignore[arg-type]
+            resolution_key=key,
+            venue_id=venue,
+            symbol=symbol,
+            contract_type=ct,
+            display_name=display,
+            base_asset=base,
+            quote_asset=quote,
+            settlement_asset=settle,
+            market_class=market_class,
+            created_by_principal_id=DEFAULT_ADMIN_ID,
+        )
+        await session.flush()  # type: ignore[attr-defined]
+        for alias in aliases:
+            norm = normalize_alias(alias)
+            if await instrument_repo.get_alias(session, norm) is not None:  # type: ignore[arg-type]
+                continue
+            instrument_repo.add_alias(
+                session,  # type: ignore[arg-type]
+                instrument_id=instrument.instrument_id,
+                alias_norm=norm,
+                alias_text=alias,
+                created_by_principal_id=DEFAULT_ADMIN_ID,
+            )
+        log.info("seed.instrument_created", instrument_id=instrument.instrument_id, key=key)  # type: ignore[attr-defined]
 
 
 async def _seed_demo_market_dataset(session: object, log: object) -> str:

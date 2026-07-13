@@ -35,6 +35,7 @@ export const NAV: NavSection[] = [
       { path: "/rationale-families", label: "Rationale Families", stage: 2 },
       { path: "/market-data", label: "Market Data", stage: 2 },
       { path: "/research-data", label: "Research Data", stage: 2 },
+      { path: "/instruments", label: "Instrument Registry", stage: 2 },
     ],
   },
   {

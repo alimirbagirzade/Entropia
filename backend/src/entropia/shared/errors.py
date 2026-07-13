@@ -1544,3 +1544,57 @@ class ServiceLineForbiddenError(UnauthenticatedError):
 
     code = "SERVICE_LINE_FORBIDDEN"
     message = "The service line cannot act as a human principal."
+
+
+# --------------------------------------------------------------------------- #
+# GAP-16 — Canonical Instrument Registry (Master Reference §8.1, §9.1)         #
+# --------------------------------------------------------------------------- #
+
+
+class InstrumentNotFoundError(NotFoundError):
+    """A referenced canonical instrument id did not resolve (Master §8.1)."""
+
+    code = "INSTRUMENT_NOT_FOUND"
+    message = "The instrument was not found in the registry."
+
+
+class InstrumentScopeInvalidError(ValidationError):
+    """An instrument scope was malformed: a blank identity field, an unknown
+    contract type, or an invalid multiplier (Master §8.1). No ambiguous,
+    unresolvable row is ever created."""
+
+    code = "INSTRUMENT_SCOPE_INVALID"
+    message = "The instrument scope is invalid; provide a venue, symbol and contract type."
+
+
+class InstrumentScopeUnresolvableError(ValidationError):
+    """A free-text instrument scope resolved to no registered canonical instrument
+    (Master §8.1 "instrument scope must resolve"). The caller may not silently
+    assume a free-text identity; register the instrument first."""
+
+    code = "INSTRUMENT_SCOPE_UNRESOLVABLE"
+    message = "This instrument scope does not resolve to a registered instrument."
+
+
+class InstrumentAlreadyRegisteredError(ConflictError):
+    """A duplicate ``resolution_key`` or an alias that already resolves to another
+    instrument (Master §8.1). An alias can never be ambiguous."""
+
+    code = "INSTRUMENT_ALREADY_REGISTERED"
+    message = "An instrument or alias with this identity is already registered."
+
+
+class InstrumentRegistryConflictError(ConflictError):
+    """Optimistic-concurrency failure on an instrument registry mutation: a stale
+    ``expected_registry_version`` (Master §8.1). No silent last-write-wins."""
+
+    code = "INSTRUMENT_REGISTRY_CONFLICT"
+    message = "This instrument changed while you were reviewing it. Reload and retry."
+
+
+class InstrumentDeprecateRequiresAdminError(ForbiddenError):
+    """Deprecating a canonical instrument closes new selection for everyone and is
+    Admin-only (Master §8.1). Non-Admins are rejected before any mutation."""
+
+    code = "INSTRUMENT_DEPRECATE_REQUIRES_ADMIN"
+    message = "Deprecating a canonical instrument requires the Admin role."

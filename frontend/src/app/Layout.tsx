@@ -1,9 +1,8 @@
 import { useEffect, useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { NAV } from "./nav";
+import { MENU_BAR, type MenuGroup } from "./nav";
 import { connectEvents, type SseStatus } from "@/lib/sse";
-import { StatusBadge } from "@/components/StatusBadge";
 import { useMe, useMeta } from "@/lib/hooks";
 import { useLogout, useSessionToken } from "@/lib/auth";
 import { getDevActorId, setDevActorId } from "@/lib/devActor";
@@ -25,26 +24,15 @@ function DevActorControl() {
         e.preventDefault();
         apply();
       }}
-      style={{ display: "flex", gap: 6, alignItems: "center" }}
+      className="topbar-actor"
       title="Dev-mode: act as a principal (sent as X-Actor-Id). Role is resolved server-side."
     >
-      <label htmlFor="dev-actor" style={{ fontSize: 12, color: "var(--text-dim)" }}>
-        act as
-      </label>
+      <label htmlFor="dev-actor">act as</label>
       <input
         id="dev-actor"
         value={value}
         onChange={(e) => setValue(e.target.value)}
         placeholder="user_admin"
-        style={{
-          background: "var(--bg-elev-2)",
-          border: "1px solid var(--border)",
-          color: "var(--text)",
-          borderRadius: 6,
-          padding: "3px 8px",
-          fontSize: 12,
-          width: 120,
-        }}
       />
     </form>
   );
@@ -59,26 +47,77 @@ function AuthControl() {
 
   if (!token) {
     return (
-      <NavLink to="/login" className="btn btn-ghost">
-        Log in
+      <NavLink to="/login" className="top-auth-line">
+        Login / Sign Up
       </NavLink>
     );
   }
 
   const user = getStoredUser();
   return (
-    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-      <span style={{ fontSize: 12, color: "var(--text-dim)" }}>
-        {user?.display_name || user?.username || "signed in"}
-      </span>
-      <button
-        type="button"
-        className="btn btn-ghost"
-        onClick={() => logout.mutate()}
-        disabled={logout.isPending}
-      >
+    <span className="top-auth-line" style={{ display: "inline-flex", gap: 8 }}>
+      <span>{user?.display_name || user?.username || "signed in"}</span>
+      <button type="button" className="link-btn" onClick={() => logout.mutate()} disabled={logout.isPending}>
         {logout.isPending ? "…" : "Log out"}
       </button>
+    </span>
+  );
+}
+
+// One top-level menu: a direct link (Mainboard) or a hover dropdown (Edit, …).
+function Menu({ group, isAdmin, onAbout }: { group: MenuGroup; isAdmin: boolean; onAbout: () => void }) {
+  if (group.path) {
+    return (
+      <NavLink to={group.path} end={group.path === "/"} className="menu menu-link">
+        {group.label}
+      </NavLink>
+    );
+  }
+
+  const items = (group.items ?? []).filter((i) => !i.adminOnly || isAdmin);
+  if (items.length === 0) return null;
+
+  return (
+    <div className={`menu${group.accent === "blue" ? " menu-blue" : ""}`}>
+      {group.label}
+      <div className={`dropdown${group.accent === "blue" ? " dropdown-blue" : ""}`}>
+        {items.map((item) =>
+          item.path ? (
+            <NavLink key={item.label} to={item.path} className="item">
+              {item.label}
+            </NavLink>
+          ) : (
+            <button
+              key={item.label}
+              type="button"
+              className="item"
+              onClick={() => item.action === "about" && onAbout()}
+            >
+              {item.label}
+            </button>
+          )
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AboutModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  if (!open) return null;
+  return (
+    <div className="modal-overlay" role="dialog" aria-modal="true" aria-label="About" onClick={onClose}>
+      <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+        <h3 style={{ marginTop: 0 }}>Entropia V18</h3>
+        <p style={{ color: "var(--text-dim)" }}>
+          Backtest-first strategy composition workspace. Compose strategies and packages, verify
+          readiness, run deterministic backtests, and review results.
+        </p>
+        <div style={{ marginTop: 16, textAlign: "right" }}>
+          <button type="button" className="page-button" onClick={onClose}>
+            Close
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -86,6 +125,7 @@ function AuthControl() {
 export function Layout() {
   const queryClient = useQueryClient();
   const [sse, setSse] = useState<SseStatus>("connecting");
+  const [aboutOpen, setAboutOpen] = useState(false);
   const meta = useMeta();
   const me = useMe();
   const token = useSessionToken();
@@ -94,57 +134,55 @@ export function Layout() {
     return connectEvents(queryClient, setSse);
   }, [queryClient]);
 
-  const sseTone = sse === "open" ? "ok" : sse === "connecting" ? "warn" : "down";
   const isAdmin = me.data?.is_admin ?? false;
+  const menus = MENU_BAR.filter((g) => !g.adminOnly || isAdmin);
+  const sseTone = sse === "open" ? "ok" : sse === "connecting" ? "warn" : "down";
 
   return (
     <div className="app-shell">
-      <header className="app-header">
-        <StatusBadge
-          label={meta.data ? `${meta.data.name} · ${meta.data.environment}` : "Entropia V18"}
-          tone={meta.isSuccess ? "ok" : meta.isError ? "down" : "warn"}
-        />
-        <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
+      <div className="top-title">
+        <AuthControl />
+        <span className="brand-title">entropia</span>
+        <div className="topbar-status">
           {token ? null : <DevActorControl />}
-          <StatusBadge
-            label={me.data?.is_authenticated ? `${me.data.role}` : "anonymous"}
-            tone={me.data?.is_authenticated ? "ok" : "neutral"}
-          />
-          <AuthControl />
-          <StatusBadge label={`events: ${sse}`} tone={sseTone} />
+          <span className={`topbar-badge ${me.data?.is_authenticated ? "ok" : "neutral"}`}>
+            {me.data?.is_authenticated ? me.data.role : "anonymous"}
+          </span>
+          <span className={`topbar-badge ${meta.isSuccess ? "ok" : "warn"}`}>
+            {meta.data ? meta.data.environment : "…"}
+          </span>
+          <span className={`topbar-badge ${sseTone}`} title={`live events: ${sse}`}>
+            ● {sse}
+          </span>
         </div>
-      </header>
+      </div>
 
-      <nav className="app-sidebar" aria-label="Primary">
-        <div className="brand" style={{ padding: "4px 10px 18px" }}>
-          <span className="logo" aria-hidden="true" />
-          <span>ENTROPIA</span>
-        </div>
-        {NAV.map((section) => {
-          const items = section.items.filter((item) => !item.adminOnly || isAdmin);
-          if (items.length === 0) return null;
-          return (
-            <div className="nav-section" key={section.title}>
-              <h4>{section.title}</h4>
-              {items.map((item) => (
-                <NavLink
-                  key={item.path}
-                  to={item.path}
-                  end={item.path === "/"}
-                  className={({ isActive }) => `nav-link${isActive ? " active" : ""}`}
-                >
-                  <span>{item.label}</span>
-                  <span className="stage-pill">S{item.stage}</span>
-                </NavLink>
-              ))}
-            </div>
-          );
-        })}
+      <nav className="menu-bar" aria-label="Primary">
+        {menus.map((group) => (
+          <Menu key={group.label} group={group} isAdmin={isAdmin} onAbout={() => setAboutOpen(true)} />
+        ))}
       </nav>
 
-      <main className="app-main">
+      <main className="workspace">
         <Outlet />
       </main>
+
+      {/* Fixed global RUN / Ready-Check panel (v18 mockup, bottom-right). */}
+      <div className="run-controls">
+        <NavLink to="/backtest/ready-check" className="ready-button">
+          Backtest
+          <br />
+          Ready
+          <br />
+          Check
+        </NavLink>
+        <div className="ready-status" title="Backtest readiness — open Ready Check to compute" />
+        <NavLink to="/backtest/run" className="run-button">
+          RUN
+        </NavLink>
+      </div>
+
+      <AboutModal open={aboutOpen} onClose={() => setAboutOpen(false)} />
     </div>
   );
 }

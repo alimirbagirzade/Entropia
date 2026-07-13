@@ -264,6 +264,28 @@ async def create_message(
     return message
 
 
+async def page_messages(
+    session: AsyncSession,
+    *,
+    task_id: str | None = None,
+    last_key: str | None = None,
+    limit: int,
+) -> list[LabMessage]:
+    """One keyset page of the append-only conversation log, newest-first.
+
+    ``message_id`` is a sortable id, so it doubles as the recency key (mirrors
+    ``page_tasks`` / ``page_hypotheses``). ``task_id`` scopes to a single task's
+    thread; ``None`` returns the whole conversation.
+    """
+    stmt = select(LabMessage)
+    if task_id is not None:
+        stmt = stmt.where(LabMessage.task_id == task_id)
+    if last_key is not None:
+        stmt = stmt.where(LabMessage.message_id < last_key)
+    stmt = stmt.order_by(LabMessage.message_id.desc()).limit(limit + 1)
+    return list((await session.execute(stmt)).scalars().all())
+
+
 # ---------- Hypotheses / artifacts ----------
 
 
@@ -419,6 +441,7 @@ __all__ = [
     "max_checkpoint_no",
     "next_queued_directive",
     "page_hypotheses",
+    "page_messages",
     "page_tasks",
     "queue_counts",
     "recent_tasks",

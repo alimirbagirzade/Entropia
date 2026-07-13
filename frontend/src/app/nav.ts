@@ -1,6 +1,12 @@
 // Canonical navigation skeleton — every Entropia V18 screen, grouped by area,
 // tagged with the build STAGE that delivers its behavior. Stage 0 renders each
 // as a placeholder; later stages replace the element with the real page.
+//
+// Two views of the same routes:
+//   • NAV / ALL_NAV_ITEMS — flat grouped list (kept for route generation + tests).
+//   • MENU_BAR            — the v18 mockup top menu-bar tree (horizontal menus +
+//                           hover dropdowns). Presentation only; every entry
+//                           points at an existing route path — no backend change.
 
 export interface NavItem {
   path: string;
@@ -71,3 +77,79 @@ export const NAV: NavSection[] = [
 ];
 
 export const ALL_NAV_ITEMS: NavItem[] = NAV.flatMap((s) => s.items);
+
+// ---------------------------------------------------------------------------
+// v18 mockup top menu-bar tree (presentation shell).
+// Every entry points at an existing route above — no new routes, no backend change.
+// ---------------------------------------------------------------------------
+
+export interface MenuLink {
+  label: string;
+  path?: string; // omitted → non-navigating action item (e.g. About modal)
+  action?: "about";
+  adminOnly?: boolean;
+}
+
+export interface MenuGroup {
+  label: string;
+  path?: string; // top-level direct link (e.g. Mainboard) — no dropdown
+  items?: MenuLink[]; // dropdown entries
+  accent?: "blue"; // v18 "Future Dev" blue menu
+  adminOnly?: boolean;
+}
+
+export const MENU_BAR: MenuGroup[] = [
+  { label: "Mainboard", path: "/" },
+  {
+    label: "Edit",
+    items: [
+      { label: "Add Strategy", path: "/strategy" },
+      { label: "Trading Signal", path: "/trading-signal" },
+      { label: "Trade Log", path: "/trade-log" },
+      { label: "Add Outsource Signal", path: "/outsource-signal" },
+      { label: "Portfolio / Equity Allocation", path: "/portfolio" },
+      { label: "Create Package", path: "/packages/create" },
+      { label: "Pre-Check", path: "/packages/pre-check" },
+      { label: "Package Library", path: "/packages/library" },
+      { label: "Embedded System Packages", path: "/packages/embedded" },
+      { label: "Rationale Families", path: "/rationale-families" },
+      { label: "Market Data", path: "/market-data" },
+      { label: "Research Data", path: "/research-data" },
+      { label: "Instrument Registry", path: "/instruments" },
+    ],
+  },
+  {
+    label: "Performance Metrics",
+    items: [
+      { label: "Results History", path: "/backtest/history" },
+      { label: "Arrange Metrics", path: "/backtest/metrics" },
+    ],
+  },
+  {
+    label: "Help",
+    items: [
+      { label: "User Manual", path: "/user-manual" },
+      { label: "About", action: "about" },
+    ],
+  },
+  {
+    label: "Future Dev",
+    accent: "blue",
+    items: [{ label: "Future Dev", path: "/future-dev" }],
+  },
+  {
+    label: "Panel",
+    adminOnly: true,
+    items: [
+      { label: "Logs / Management", path: "/panel", adminOnly: true },
+      { label: "Admin Provisioning", path: "/panel/provisioning" },
+      { label: "System Metrics", path: "/panel/metrics", adminOnly: true },
+      { label: "Trash", path: "/trash", adminOnly: true },
+    ],
+  },
+  {
+    label: "Agent Workspace",
+    adminOnly: true,
+    items: [{ label: "Analysis Lab", path: "/analysis-lab" }],
+  },
+];

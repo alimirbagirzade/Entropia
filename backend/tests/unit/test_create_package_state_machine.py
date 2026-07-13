@@ -6,6 +6,7 @@ import pytest
 
 from entropia.domain.create_package.enums import CreatePackageState, PrecheckScanStatus
 from entropia.domain.create_package.state_machine import (
+    _REQUEST_ALLOWED,
     IllegalCreatePackageTransition,
     IllegalPrecheckScanTransition,
     next_request_state,
@@ -61,11 +62,39 @@ def test_request_illegal_transitions_raise() -> None:
     # A failed validation run routes to revision_required, never straight to approved.
     with pytest.raises(IllegalCreatePackageTransition):
         next_request_state(CreatePackageState.REVISION_REQUIRED, CreatePackageState.APPROVED)
-    # Approved is terminal except for supersede.
+    # Approved is now fully terminal — the supersede edge was removed (R7).
     with pytest.raises(IllegalCreatePackageTransition):
         next_request_state(CreatePackageState.APPROVED, CreatePackageState.DRAFT_CREATED)
     with pytest.raises(IllegalCreatePackageTransition):
-        next_request_state(CreatePackageState.SUPERSEDED, CreatePackageState.APPROVED)
+        next_request_state(CreatePackageState.APPROVED, CreatePackageState.ELIGIBLE_FOR_APPROVAL)
+
+
+def test_experimental_and_superseded_states_are_removed() -> None:
+    # R7: EXPERIMENTAL and SUPERSEDED were speculative Create-Package flow states
+    # that no command ever transitioned into. Doc 06 treats "experimental" as a UI
+    # label over the no-equivalence-claim approval path (already modelled by
+    # claims_equivalence=False) and "superseded" as a Candidate facet — neither is
+    # a request-flow state. They are deleted from the enum entirely.
+    member_names = {member.name for member in CreatePackageState}
+    assert "EXPERIMENTAL" not in member_names
+    assert "SUPERSEDED" not in member_names
+
+
+def test_approved_is_terminal() -> None:
+    # With the supersede edge gone, APPROVED has no outgoing transition at all.
+    assert _REQUEST_ALLOWED[CreatePackageState.APPROVED] == frozenset()
+    for target in CreatePackageState:
+        with pytest.raises(IllegalCreatePackageTransition):
+            next_request_state(CreatePackageState.APPROVED, target)
+
+
+def test_every_transition_target_is_a_live_state() -> None:
+    # Defensive invariant: no edge may point at a removed/unknown state. Guards
+    # against re-introducing a reference to a deleted flow state.
+    members = set(CreatePackageState)
+    for source, targets in _REQUEST_ALLOWED.items():
+        assert source in members
+        assert targets <= members
 
 
 def test_scan_passes_and_stales() -> None:

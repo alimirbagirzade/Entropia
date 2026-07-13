@@ -82,7 +82,6 @@ _REQUEST_ALLOWED: dict[CreatePackageState, frozenset[CreatePackageState]] = {
         {
             CreatePackageState.VALIDATION_RUNNING,
             CreatePackageState.ELIGIBLE_FOR_APPROVAL,
-            CreatePackageState.EXPERIMENTAL,
             CreatePackageState.REVISION_REQUIRED,
             CreatePackageState.REJECTED,
             CreatePackageState.CANDIDATE_GENERATING,
@@ -90,13 +89,9 @@ _REQUEST_ALLOWED: dict[CreatePackageState, frozenset[CreatePackageState]] = {
     ),
     CreatePackageState.VALIDATION_RUNNING: frozenset(
         {
-            CreatePackageState.EXPERIMENTAL,
             CreatePackageState.ELIGIBLE_FOR_APPROVAL,
             CreatePackageState.REVISION_REQUIRED,
         }
-    ),
-    CreatePackageState.EXPERIMENTAL: frozenset(
-        {CreatePackageState.ELIGIBLE_FOR_APPROVAL, CreatePackageState.REVISION_REQUIRED}
     ),
     CreatePackageState.ELIGIBLE_FOR_APPROVAL: frozenset(
         {
@@ -106,9 +101,11 @@ _REQUEST_ALLOWED: dict[CreatePackageState, frozenset[CreatePackageState]] = {
         }
     ),
     CreatePackageState.REVISION_REQUIRED: frozenset({CreatePackageState.CANDIDATE_GENERATING}),
-    CreatePackageState.APPROVED: frozenset({CreatePackageState.SUPERSEDED}),
+    # APPROVED is terminal: publishing a package produces a fresh Create-Package
+    # request/revision, so the flow never "supersedes" an approved request in place
+    # (doc 06 models supersede on the Candidate facet, not the request flow — R7).
+    CreatePackageState.APPROVED: frozenset(),
     CreatePackageState.REJECTED: frozenset({CreatePackageState.CANDIDATE_GENERATING}),
-    CreatePackageState.SUPERSEDED: frozenset(),
 }
 
 _SCAN_ALLOWED: dict[PrecheckScanStatus, frozenset[PrecheckScanStatus]] = {

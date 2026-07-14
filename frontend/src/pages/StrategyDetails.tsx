@@ -6,6 +6,7 @@ import { ErrorState } from "@/components/ErrorState";
 import { Loading } from "@/components/Loading";
 import { StatusBadge } from "@/components/StatusBadge";
 import { StrategyConfigForm } from "@/components/StrategyConfigForm";
+import { StrategyGraphForm } from "@/components/StrategyGraphForm";
 import { ApiError } from "@/lib/apiClient";
 import { EM_DASH, formatUtc, useDefaultMainboard } from "@/lib/backtest";
 import { useRationaleFamilies } from "@/lib/createPackage";
@@ -260,6 +261,12 @@ function DraftWorkbench({ draftId }: { draftId: string }) {
         pending={patch.isPending}
         onApply={applyPayload}
       />
+      <StrategyGraphForm
+        key={`graph-${draft.row_version}`}
+        payload={draft.payload}
+        pending={patch.isPending}
+        onApply={applyPayload}
+      />
       <PayloadEditor key={draft.row_version} draft={draft} pending={patch.isPending} onApply={applyPayload} />
       {patch.isError ? (
         <MutationErrorCard error={patch.error} />
@@ -327,9 +334,11 @@ function DraftHeaderCard({ draft }: { draft: StrategyDraft }) {
 // Remounts on every server head move via key={row_version} — the editor is
 // always seeded from the latest server draft, never merged. The textarea is
 // raw JSON: parse failures stay CLIENT-side (nothing is sent); the server
-// compiler remains the only authority on config semantics. This is the expert
-// escape hatch that also edits the package-graph sections (Entry/Exit Logic,
-// Scaling, Restrictions) the structured form leaves untouched.
+// compiler remains the only authority on config semantics. Since R6 the
+// structured forms above cover the flat sections AND the Entry / Exit package
+// graph, so this is a genuine expert FALLBACK — used for the sections still
+// without a structured editor (Scaling, Restrictions / Filters), each block's
+// advanced fields (parameter overrides, reference chains) and any future key.
 function PayloadEditor({
   draft,
   pending,
@@ -349,9 +358,10 @@ function PayloadEditor({
       </h3>
       <p className="cp-note">
         Apply replaces the FULL draft payload (optimistic concurrency on row version{" "}
-        {draft.row_version}) — this is where the Position Entry/Exit Logic, Scaling and
-        Restrictions sections are edited. Validation happens on the server — Validate / Save
-        below.
+        {draft.row_version}). The structured forms above now cover the flat sections and the Entry
+        / Exit package graph — this is the fallback for Scaling, Restrictions / Filters, each
+        block&apos;s advanced fields (parameter overrides, reference chains) and any key not yet
+        surfaced. Validation happens on the server — Validate / Save below.
       </p>
       <label className="cp-field cp-wide">
         <span>StrategyConfig payload</span>

@@ -43,6 +43,7 @@ from entropia.infrastructure.postgres.models.capability import (
 from entropia.infrastructure.postgres.models.create_package import (
     BaselineAsset,
     DependencyScan,
+    PackageImportJob,
     PackageRequest,
     PackageValidationRun,
 )
@@ -182,6 +183,7 @@ __all__ = [
     "MetricValueRow",
     "NormalizedSignalEventRevision",
     "OutboxEvent",
+    "PackageImportJob",
     "PackageRationaleAssignment",
     "PackageRequest",
     "PackageRevision",

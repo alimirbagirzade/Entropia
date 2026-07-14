@@ -100,7 +100,7 @@ function OperatorRecoveryCard() {
   };
 
   return (
-    <section className="card" aria-labelledby="recovery-h">
+    <section className="card panel-card" aria-labelledby="recovery-h">
       <h3 id="recovery-h" style={{ marginTop: 0 }}>
         Operator recovery — data queue
       </h3>
@@ -154,7 +154,7 @@ function RedeliverResult({ result }: { result: DataQueueRedeliverResult }) {
         {result.redeliverable.length} · skipped {result.skipped_unknown_kind} un-routable.
       </p>
       {result.redeliverable.length > 0 ? (
-        <table className="metrics-table">
+        <table className="database-table">
           <thead>
             <tr>
               <th scope="col">Job kind</th>
@@ -203,7 +203,7 @@ function UsersCard() {
     .map((row) => row.role);
 
   return (
-    <section className="card" aria-labelledby="users-h">
+    <section className="card panel-card" aria-labelledby="users-h">
       <h3 id="users-h" style={{ marginTop: 0 }}>
         Registered users
       </h3>
@@ -216,7 +216,7 @@ function UsersCard() {
           {users.data.data.length === 0 ? (
             <EmptyState title="No registered users" />
           ) : (
-            <table className="metrics-table">
+            <table className="database-table">
               <thead>
                 <tr>
                   <th scope="col">Username</th>
@@ -335,7 +335,7 @@ function UserRow({
 function SystemActorsCard() {
   const actors = useSystemActors();
   return (
-    <section className="card" aria-labelledby="actors-h">
+    <section className="card panel-card" aria-labelledby="actors-h">
       <h3 id="actors-h" style={{ marginTop: 0 }}>
         System actors
       </h3>
@@ -347,7 +347,7 @@ function SystemActorsCard() {
         actors.data.data.length === 0 ? (
           <EmptyState title="No system actors" />
         ) : (
-          <table className="metrics-table">
+          <table className="database-table">
             <thead>
               <tr>
                 <th scope="col">Actor</th>
@@ -381,7 +381,7 @@ function SystemActorsCard() {
 function RoleMatrixCard() {
   const matrix = useRoleMatrix();
   return (
-    <section className="card" aria-labelledby="matrix-h">
+    <section className="card panel-card" aria-labelledby="matrix-h">
       <h3 id="matrix-h" style={{ marginTop: 0 }}>
         Role scope matrix
       </h3>
@@ -394,7 +394,7 @@ function RoleMatrixCard() {
           <p className="page-sub">
             Read-only server policy · revision <code>{matrix.data.policy_revision}</code>
           </p>
-          <table className="metrics-table">
+          <table className="database-table">
             <thead>
               <tr>
                 <th scope="col">Role</th>
@@ -470,7 +470,7 @@ function LogsCard() {
   };
 
   return (
-    <section className="card" aria-labelledby="logs-h">
+    <section className="card panel-card" aria-labelledby="logs-h">
       <h3 id="logs-h" style={{ marginTop: 0 }}>
         Logs
       </h3>
@@ -597,7 +597,7 @@ function LogsCard() {
           {logs.data.data.length === 0 ? (
             <EmptyState title="No log events match the current filters" />
           ) : (
-            <table className="metrics-table">
+            <table className="database-table">
               <thead>
                 <tr>
                   <th scope="col">Time (UTC)</th>
@@ -738,7 +738,7 @@ function AuditStreamCard() {
   const pager = useCursorStack();
   const events = useAuditEvents(pager.cursor);
   return (
-    <section className="card" aria-labelledby="audit-h">
+    <section className="card panel-card" aria-labelledby="audit-h">
       <h3 id="audit-h" style={{ marginTop: 0 }}>
         Audit stream (raw)
       </h3>
@@ -751,7 +751,7 @@ function AuditStreamCard() {
           {events.data.data.length === 0 ? (
             <EmptyState title="No audit events" />
           ) : (
-            <table className="metrics-table">
+            <table className="database-table">
               <thead>
                 <tr>
                   <th scope="col">Time (UTC)</th>

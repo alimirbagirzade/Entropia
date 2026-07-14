@@ -15,6 +15,7 @@ import {
   PARTIAL_FILL_OPTIONS,
   SAME_DIRECTION_OPTIONS,
   SIGNAL_STRENGTH_OPTIONS,
+  STOP_EXIT_CONFLICT_OPTIONS,
   SIZING_METHOD_OPTIONS,
   SLIPPAGE_MODE_OPTIONS,
   STRATEGY_INFO_PANELS,
@@ -546,6 +547,12 @@ export function StrategyConfigForm({
           value={c.opposite_direction_hedge}
           onChange={(v) => setConflict({ opposite_direction_hedge: v })}
           options={OPPOSITE_HEDGE_OPTIONS}
+        />
+        <SelectField
+          label="Stop + Exit conflict"
+          value={c.stop_exit_conflict}
+          onChange={(v) => setConflict({ stop_exit_conflict: v })}
+          options={STOP_EXIT_CONFLICT_OPTIONS}
         />
         <CheckboxField
           label="Exit on opposite signal"

@@ -20,6 +20,8 @@ describe("extractFlatSections", () => {
     expect(form.sizing.leverage_mode).toBe("isolated");
     expect(form.conflict.overlapping_signal_policy).toBe("queue_sequential");
     expect(form.conflict.exit_on_opposite_signal).toBe(true);
+    // §5.9 Stop+Exit collision defaults to the V18 "Stop Has Priority".
+    expect(form.conflict.stop_exit_conflict).toBe("stop_has_priority");
     // Required-no-default enums stay blank — the server, not the form, decides.
     expect(form.data.entry_timing).toBe("");
     expect(form.data.exit_timing).toBe("");
@@ -73,6 +75,16 @@ describe("mergeFlatSections", () => {
     expect(merged.protection_stop_logic).toBeDefined();
     expect(merged.position_sizing).toBeDefined();
     expect(merged.conflict_position_handling).toBeDefined();
+  });
+
+  it("round-trips a non-default stop_exit_conflict through the conflict subtree", () => {
+    const payload = {
+      conflict_position_handling: { stop_exit_conflict: "exit_has_priority" },
+    };
+    const form = extractFlatSections(payload);
+    expect(form.conflict.stop_exit_conflict).toBe("exit_has_priority");
+    const merged = mergeFlatSections(payload, form) as Record<string, Record<string, unknown>>;
+    expect(merged.conflict_position_handling.stop_exit_conflict).toBe("exit_has_priority");
   });
 
   it("emits the limit subtree only for limit / stop-limit order types", () => {

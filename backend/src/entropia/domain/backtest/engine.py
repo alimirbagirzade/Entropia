@@ -566,6 +566,9 @@ def run_engine(
     long_ok, short_ok = _direction_flags(config.position_entry_logic.direction_mode)
     half_spread, slippage, commission = _cost_params(config)
     trail_pct = _trail_pct(config)
+    # §5.9 Stop+Exit same-bar collision policy (read straight from the pinned config so it
+    # applies in BOTH plan and breakout-proxy modes; default "stop_has_priority" = V18).
+    stop_exit_conflict = str(config.conflict_position_handling.stop_exit_conflict)
 
     plan_active = indicator_plan is not None and indicator_plan.has_entry
     entry_evals: list[BlockEvaluator] = (
@@ -592,6 +595,7 @@ def run_engine(
     stop_streak = 0
     max_stop_streak = 0
     suppressed_entries = 0
+    stop_exit_collisions = 0
     gross_profit = _ZERO
     gross_loss = _ZERO
 
@@ -751,21 +755,48 @@ def run_engine(
                 else:
                     position.trail_anchor = min(position.trail_anchor, bar.low)
                 stop = _effective_stop(position)
-                exited = False
-                if stop is not None and (
+                stop_touched = stop is not None and (
                     (position.direction == "long" and bar.low <= stop)
                     or (position.direction == "short" and bar.high >= stop)
-                ):
-                    _close(bar.timestamp, stop, "stop_loss", position)
-                    position, exited = None, True
-                if not exited and position is not None:
-                    if plan_active:
-                        if _plan_exit(position, entry_signal, exit_hit):
-                            _close(bar.timestamp, bar.close, "exit_signal", position)
-                            position = None
-                    elif _exit_proxy(position, bar, window):
+                )
+                exit_wanted = (
+                    _plan_exit(position, entry_signal, exit_hit)
+                    if plan_active
+                    else _exit_proxy(position, bar, window)
+                )
+                if stop_touched and exit_wanted:
+                    # §5.9 same-bar Stop+Exit collision — resolve deterministically. Only
+                    # "exit_has_priority" changes the OUTCOME (close at close as an exit);
+                    # the other three execute the stop (the intrabar touch precedes the
+                    # close-based exit), and "record_both_reasons" also logs both codes.
+                    stop_exit_collisions += 1
+                    if stop_exit_conflict == "exit_has_priority":
                         _close(bar.timestamp, bar.close, "exit_signal", position)
-                        position = None
+                    else:
+                        assert stop is not None  # implied by stop_touched
+                        _close(bar.timestamp, stop, "stop_loss", position)
+                        if stop_exit_conflict == "record_both_reasons":
+                            signal_events.append(
+                                SignalEventRow(
+                                    seq=len(signal_events),
+                                    event_time=bar.timestamp,
+                                    event_type="stop_exit_collision",
+                                    direction=position.direction,
+                                    detail={
+                                        "executed": "stop_loss",
+                                        "also_triggered": "exit_signal",
+                                        "policy": stop_exit_conflict,
+                                    },
+                                )
+                            )
+                    position = None
+                elif stop_touched:
+                    assert stop is not None  # implied by stop_touched
+                    _close(bar.timestamp, stop, "stop_loss", position)
+                    position = None
+                elif exit_wanted:
+                    _close(bar.timestamp, bar.close, "exit_signal", position)
+                    position = None
             elif plan_active:
                 # (3a) real indicator entry (only when flat, respecting the direction bias).
                 if entry_signal is not None:
@@ -943,6 +974,8 @@ def run_engine(
         "nary_reference_conditions": nary_reference_conditions,
         "vwap_blocks": vwap_blocks,
         "position_size_limits_active": config.position_sizing.position_size_limits is not None,
+        "stop_exit_conflict": stop_exit_conflict,
+        "stop_exit_collisions": stop_exit_collisions,
         "allocation_enabled": alloc_on,
         "allocation_compounding": ("compound" if alloc_compound else "fixed") if alloc_on else None,
         "allocation_items_executed": 1 if (alloc_on and item_share > _ZERO) else 0,

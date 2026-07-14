@@ -13,6 +13,7 @@ import dramatiq
 
 from entropia.application.jobs.data_queue import (
     MARKET_DATA_ANALYSIS,
+    PACKAGE_IMPORT,
     RESEARCH_DATA_ANALYSIS,
     TRADE_LOG_IMPORT,
     TRADING_SIGNAL_IMPORT,
@@ -227,6 +228,34 @@ async def _run_trash_purge(job_id: str) -> None:
             raise
 
 
+@dramatiq.actor(queue_name="data", max_retries=3)
+def run_package_import(job_id: str) -> None:
+    """Execute the durable package-import job (S3, doc 08 §9.1/§10/§14, CR-09).
+
+    The ``jobs`` row created at enqueue time is the source of truth. This actor opens
+    its own DB session, parses the manifest, re-resolves dependencies against the local
+    ESP registry, creates the DRAFT root and commits — the request that enqueued it has
+    long since returned (browser close never cancels it).
+    """
+    log.info("worker.package_import.start", job_id=job_id)
+    asyncio.run(_run_package_import(job_id))
+    log.info("worker.package_import.done", job_id=job_id)
+
+
+async def _run_package_import(job_id: str) -> None:
+    from entropia.application.jobs.package_import import run_import
+    from entropia.infrastructure.postgres.engine import get_session_factory
+
+    factory = get_session_factory()
+    async with factory() as session:
+        try:
+            await run_import(session, job_id)
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+
+
 # Kind->actor map for the multi-actor ``data`` queue (INF-03, doc 20 §6). The
 # scheduler deliberately keeps ``data`` out of ``ACTOR_BY_QUEUE`` — it cannot pick
 # the right actor from the durable row alone — so the operator redelivery action
@@ -238,4 +267,5 @@ DATA_ACTOR_BY_KIND: dict[str, Any] = {
     RESEARCH_DATA_ANALYSIS: run_research_data_analysis,
     TRADING_SIGNAL_IMPORT: run_trading_signal_import,
     TRADE_LOG_IMPORT: run_trade_log_import,
+    PACKAGE_IMPORT: run_package_import,
 }

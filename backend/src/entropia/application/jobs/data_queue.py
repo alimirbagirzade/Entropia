@@ -32,6 +32,7 @@ MARKET_DATA_ANALYSIS = "market_data_analysis"
 RESEARCH_DATA_ANALYSIS = "research_data_analysis"
 TRADING_SIGNAL_IMPORT = "trading_signal_import"
 TRADE_LOG_IMPORT = "trade_log_import"
+PACKAGE_IMPORT = "package_import"
 
 DATA_JOB_KINDS: frozenset[str] = frozenset(
     {
@@ -39,6 +40,7 @@ DATA_JOB_KINDS: frozenset[str] = frozenset(
         RESEARCH_DATA_ANALYSIS,
         TRADING_SIGNAL_IMPORT,
         TRADE_LOG_IMPORT,
+        PACKAGE_IMPORT,
     }
 )
 
@@ -82,6 +84,7 @@ __all__ = [
     "DATA_JOB_KINDS",
     "DATA_QUEUE",
     "MARKET_DATA_ANALYSIS",
+    "PACKAGE_IMPORT",
     "RESEARCH_DATA_ANALYSIS",
     "TRADE_LOG_IMPORT",
     "TRADING_SIGNAL_IMPORT",

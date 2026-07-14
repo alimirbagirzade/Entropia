@@ -2596,6 +2596,21 @@
         "title": "StartUploadRequest",
         "type": "object"
       },
+      "SubmitPackageImportBody": {
+        "properties": {
+          "manifest": {
+            "additionalProperties": true,
+            "description": "An export manifest produced by POST /library/{id}/export.",
+            "title": "Manifest",
+            "type": "object"
+          }
+        },
+        "required": [
+          "manifest"
+        ],
+        "title": "SubmitPackageImportBody",
+        "type": "object"
+      },
       "TimezoneMode": {
         "description": "Declared source timezone semantics. ``custom`` requires an IANA id.",
         "enum": [
@@ -10976,6 +10991,132 @@
         "summary": "Metrics Endpoint",
         "tags": [
           "metrics"
+        ]
+      }
+    },
+    "/api/v1/package-imports": {
+      "get": {
+        "operationId": "list_package_imports_api_v1_package_imports_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Package Imports Api V1 Package Imports Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Package Imports",
+        "tags": [
+          "package-import"
+        ]
+      },
+      "post": {
+        "operationId": "submit_package_import_api_v1_package_imports_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubmitPackageImportBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Submit Package Import Api V1 Package Imports Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Submit Package Import",
+        "tags": [
+          "package-import"
+        ]
+      }
+    },
+    "/api/v1/package-imports/{import_job_id}": {
+      "get": {
+        "operationId": "get_package_import_api_v1_package_imports__import_job_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "import_job_id",
+            "required": true,
+            "schema": {
+              "title": "Import Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Package Import Api V1 Package Imports  Import Job Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Package Import",
+        "tags": [
+          "package-import"
         ]
       }
     },

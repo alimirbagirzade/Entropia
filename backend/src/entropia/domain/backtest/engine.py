@@ -292,14 +292,25 @@ def _sizing_is_honored(config: StrategyConfig) -> bool:
     ``kelly_criterion`` config are honored. A ``formula_based_sizing`` request that is
     ``custom_formula`` or carries missing / out-of-range Kelly params — and a
     ``risk_based_sizing`` request that carries no ``risk_based`` sub-config — are not
-    modelled and fall back to notional sizing (surfaced as a diagnostics warning,
-    never hidden — L4)."""
+    modelled and FAIL CLOSED: the engine opens no position for them (F-09), surfaced
+    as a diagnostics warning, never hidden — L4."""
     sizing = config.position_sizing
     if sizing.method == "base_position_size" and sizing.base_position_size is not None:
         return True
     if sizing.method == "risk_based_sizing" and sizing.risk_based is not None:
         return True
     return _kelly_capital_fraction(sizing) is not None
+
+
+def sizing_is_modelled(config: StrategyConfig) -> bool:
+    """Public predicate: is this strategy's position sizing modelled by the engine?
+
+    The single shared source of truth for "modelled sizing", imported by the readiness
+    validator so Ready Check's ``STRATEGY_SIZING_UNSUPPORTED`` blocker and the engine's
+    fail-closed ``_open`` gate agree on exactly one definition — an unsupported method
+    is blocked at Ready Check AND opens no position if a stale readiness state slips
+    through to the worker (F-09)."""
+    return _sizing_is_honored(config)
 
 
 def _clamp_to_limits(size: Decimal, limits: PositionSizeLimits | None) -> Decimal:
@@ -329,7 +340,7 @@ def _clamp_to_limits(size: Decimal, limits: PositionSizeLimits | None) -> Decima
 
 
 def _raw_position_size(config: StrategyConfig, entry_price: Decimal, equity: Decimal) -> Decimal:
-    """Deterministic sizing: explicit base size, risk-based, Kelly, else all-in notional.
+    """Deterministic sizing: explicit base size, risk-based, Kelly, else fail closed.
 
     ``base_position_size`` returns the explicit size. ``risk_based_sizing`` risks a
     fixed % of (non-negative) equity across the configured stop distance —
@@ -339,8 +350,9 @@ def _raw_position_size(config: StrategyConfig, entry_price: Decimal, equity: Dec
     ``size = equity * f* / entry_price`` — and is therefore entry-price DEPENDENT
     (Kelly sizes a fraction of CAPITAL; converting that to units divides by price),
     unlike risk-based. An unmodelled formula (``custom_formula`` / bad params) and any
-    request missing its sub-config fall back to an all-in notional (surfaced as a
-    diagnostics warning, L4). Every branch clamps to NON-NEGATIVE equity: a bust
+    request missing its sub-config FAIL CLOSED to size 0 — never an all-in notional
+    (F-09; surfaced as a diagnostics warning, L4). Every branch clamps to NON-NEGATIVE
+    equity: a bust
     account yields size 0, never a negative size — a negative size would invert the
     PnL sign of every subsequent trade (review CRITICAL). The result is then clamped
     to the configured ``position_size_limits`` by ``_position_size``."""
@@ -359,8 +371,16 @@ def _raw_position_size(config: StrategyConfig, entry_price: Decimal, equity: Dec
         if entry_price > _ZERO:
             return (usable_equity * kelly / entry_price).quantize(_QTY)
         return _ZERO
-    if entry_price > _ZERO:
-        return (usable_equity / entry_price).quantize(_QTY)
+    # F-09 (fail closed): the requested sizing method is NOT modelled by this engine
+    # version (``custom_formula``, out-of-range / missing Kelly params, or a request
+    # missing its sub-config). It opens NO position — the account is never "all-in'd"
+    # by dividing all available equity by the entry price (the prior behaviour, which
+    # could fabricate a full-notional trade for a strategy the user never validly
+    # configured). Ready Check raises a ``STRATEGY_SIZING_UNSUPPORTED`` blocker so this
+    # state cannot reach a real RUN; ``run_engine`` additionally refuses to open any
+    # position when the sizing is unmodelled, so a stale/bypassed readiness state
+    # reaching the worker still produces a financially inert run. The divergence is
+    # surfaced (L4) via the ``position_sizing_method_unsupported`` diagnostics warning.
     return _ZERO
 
 
@@ -570,6 +590,12 @@ def run_engine(
     # applies in BOTH plan and breakout-proxy modes; default "stop_has_priority" = V18).
     stop_exit_conflict = str(config.conflict_position_handling.stop_exit_conflict)
 
+    # F-09: an unmodelled / misconfigured sizing method opens NO position at all — the
+    # engine is a fail-closed backstop to the Ready Check STRATEGY_SIZING_UNSUPPORTED
+    # blocker, so a stale/bypassed readiness state reaching the worker still produces a
+    # financially inert run (no phantom 0-size or all-in trades).
+    sizing_ok = _sizing_is_honored(config)
+
     plan_active = indicator_plan is not None and indicator_plan.has_entry
     entry_evals: list[BlockEvaluator] = (
         build_evaluators(indicator_plan.entry_specs) if plan_active and indicator_plan else []
@@ -677,9 +703,12 @@ def run_engine(
 
         Under allocation a 0-capacity sleeve (an unallocated item, or a compound pool
         busted below its reserve) yields no fill at all — ``None`` — rather than a
-        phantom 0-size trade (doc 13 §8.4 step 5/6). Independent mode is unchanged: it
-        always opens (a bust-equity 0-size fill stays booked, preserving the notional
-        no-phantom-profit invariant)."""
+        phantom 0-size trade (doc 13 §8.4 step 5/6). Independent mode books even a
+        bust-equity 0-size fill (preserving the risk-based no-phantom-profit invariant),
+        but an UNMODELLED sizing method (F-09) opens nothing at all — no phantom trade
+        for a strategy the user never validly configured."""
+        if not sizing_ok:
+            return None
         is_long = direction == "long"
         entry_eff = _effective_fill(
             bar.close, is_buy=is_long, half_spread=half_spread, slip=slippage
@@ -879,10 +908,11 @@ def run_engine(
     warnings: list[str] = []
     if not bars_seen:
         warnings.append("no_bars_in_source")
-    if not _sizing_is_honored(config):
+    if not sizing_ok:
         # formula sizing (and a risk_based request without its sub-config) is not
-        # modelled; the run used notional sizing instead. Surface the divergence
-        # rather than hide it (L4). risk_based_sizing with a sub-config IS honored.
+        # modelled; the run opened NO position (fail closed, F-09) rather than a
+        # notional all-in. Surface the divergence rather than hide it (L4).
+        # risk_based_sizing with a sub-config IS honored.
         warnings.append(f"position_sizing_method_unsupported:{config.position_sizing.method}")
     if indicator_plan is not None:
         # Blocks the native-trigger foundation could not compute (deferred sources,

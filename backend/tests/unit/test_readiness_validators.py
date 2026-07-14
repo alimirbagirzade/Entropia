@@ -182,6 +182,28 @@ def test_strategy_without_exit_or_stop_blocks() -> None:
     assert Code.STRATEGY_NO_EXIT_OR_STOP.value in _codes(result)
 
 
+def test_strategy_unsupported_sizing_blocks() -> None:
+    # F-09: an unmodelled position-sizing method (custom_formula) must BLOCK RUN — the
+    # engine fails closed and would open no position, so Ready Check surfaces it.
+    payload = _strategy_payload(
+        position_sizing={
+            "method": "formula_based_sizing",
+            "formula_based": {"formula_type": "custom_formula", "formula_params": {}},
+        }
+    )
+    result = evaluate_readiness(
+        [_strategy_item(payload=payload)], allocation_enabled=False, allocation_issues=[]
+    )
+    assert Code.STRATEGY_SIZING_UNSUPPORTED.value in _codes(result)
+    assert result.state == ReadinessState.NOT_READY
+
+
+def test_strategy_supported_sizing_does_not_block() -> None:
+    # A valid base_position_size strategy raises no sizing blocker (the default payload).
+    result = evaluate_readiness([_strategy_item()], allocation_enabled=False, allocation_issues=[])
+    assert Code.STRATEGY_SIZING_UNSUPPORTED.value not in _codes(result)
+
+
 def test_strategy_default_costs_warns_not_blocks() -> None:
     payload = _strategy_payload()
     payload["data"]["costs"] = {"slippage_value": "0.1"}  # commission + spread unset

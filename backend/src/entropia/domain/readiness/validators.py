@@ -22,6 +22,7 @@ from pydantic import ValidationError as PydanticValidationError
 from entropia.domain.allocation.enums import AllocationIssueCode as AllocCode
 from entropia.domain.allocation.enums import AllocationIssueSeverity as AllocSev
 from entropia.domain.allocation.rules import AllocationIssue
+from entropia.domain.backtest.engine import sizing_is_modelled
 from entropia.domain.mainboard.enums import MainboardItemKind
 from entropia.domain.readiness.enums import (
     ReadinessIssueCode as Code,
@@ -331,6 +332,26 @@ def _strategy_issues(item: ReadinessItemInput, *, allocation_enabled: bool) -> l
                 "The strategy has neither exit logic nor an active stop.",
                 remediation="Define exit logic or enable at least one protection stop.",
                 field_path="position_exit_logic",
+                scope_id=item.item_id,
+            )
+        )
+
+    # F-09: an unsupported / misconfigured position-sizing method must BLOCK RUN — the
+    # engine fails closed (opens no position) for it, so a run would silently produce
+    # nothing. Surface it as a blocker with a concrete remediation instead. Shares the
+    # single ``sizing_is_modelled`` predicate with the engine so the two never diverge.
+    if not sizing_is_modelled(config):
+        issues.append(
+            ReadinessIssue(
+                Code.STRATEGY_SIZING_UNSUPPORTED,
+                Sev.BLOCKER,
+                Scope.STRATEGY,
+                "The strategy's position sizing method is not supported by the backtest "
+                "engine and would open no position.",
+                remediation="Use an explicit base position size, risk-based sizing with a "
+                "stop distance, or a valid Kelly-criterion formula (win_probability in "
+                "(0,1) and a positive payoff_ratio).",
+                field_path="position_sizing",
                 scope_id=item.item_id,
             )
         )

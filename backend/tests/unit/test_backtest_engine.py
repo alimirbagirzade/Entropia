@@ -276,23 +276,24 @@ def test_engine_yields_no_trades_and_empty_warning_on_no_bars() -> None:
 
 
 def test_engine_warns_on_unsupported_sizing_method() -> None:
-    # formula_based sizing is still not modelled — the engine falls back to notional
-    # sizing and surfaces the divergence in diagnostics (never silently, L4).
+    # formula_based sizing is not modelled — the engine FAILS CLOSED (opens no position,
+    # F-09) and surfaces the divergence in diagnostics (never silently, L4).
     # (risk_based_sizing WITH a sub-config is now honored — see the tests below.)
     out = _run(_config(method="formula_based_sizing"), _long_breakout_then_stop())
     assert any(
         w.startswith("position_sizing_method_unsupported") for w in out.diagnostics["warnings"]
     )
-    assert out.summary["total_trades"] == 1  # still produces a real result
+    assert out.summary["total_trades"] == 0  # fail closed: no position opened
 
 
 def test_engine_warns_when_risk_based_sizing_lacks_its_sub_config() -> None:
     # A risk_based_sizing request that carries no ``risk_based`` sub-config cannot be
-    # honored; the engine falls back to notional and surfaces the divergence (L4).
+    # honored; the engine FAILS CLOSED (no position) and surfaces the divergence (L4).
     out = _run(_config(method="risk_based_sizing"), _long_breakout_then_stop())
     assert any(
         w.startswith("position_sizing_method_unsupported") for w in out.diagnostics["warnings"]
     )
+    assert out.summary["total_trades"] == 0  # fail closed: no position opened
 
 
 def test_engine_does_not_warn_when_risk_based_sizing_is_honored() -> None:
@@ -383,7 +384,7 @@ def test_engine_does_not_warn_when_kelly_sizing_is_honored() -> None:
 
 
 def test_engine_warns_on_custom_formula_sizing() -> None:
-    # custom_formula has no safe deterministic evaluation → notional fallback + L4 warn.
+    # custom_formula has no safe deterministic evaluation → fail closed (no position) + L4 warn.
     out = _run(
         _config(method="formula_based_sizing", formula_type="custom_formula"),
         _long_breakout_then_stop(),
@@ -395,7 +396,7 @@ def test_engine_warns_on_custom_formula_sizing() -> None:
 
 def test_engine_warns_when_kelly_params_are_missing() -> None:
     # kelly_criterion without win_probability / payoff_ratio cannot be modelled →
-    # fail closed to notional + surface the divergence (never silently, L4).
+    # fail closed (no position) + surface the divergence (never silently, L4).
     out = _run(
         _config(method="formula_based_sizing", formula_type="kelly_criterion"),
         _long_breakout_then_stop(),
@@ -406,7 +407,7 @@ def test_engine_warns_when_kelly_params_are_missing() -> None:
 
 
 def test_engine_warns_when_kelly_params_are_out_of_range() -> None:
-    # An impossible win probability (>= 1) is rejected → notional fallback + L4 warn.
+    # An impossible win probability (>= 1) is rejected → fail closed (no position) + L4 warn.
     out = _run(_kelly("1.5", "2"), _long_breakout_then_stop())
     assert any(
         w.startswith("position_sizing_method_unsupported") for w in out.diagnostics["warnings"]
@@ -417,52 +418,51 @@ def test_position_size_kelly_non_finite_params_fail_closed() -> None:
     # formula_params is an unvalidated dict[str, Any]: a user-supplied "nan" / "Infinity"
     # constructs a quiet non-finite Decimal that would RAISE InvalidOperation on the
     # caller's ordered comparisons (crashing the run) or silently honour a nonsensical
-    # infinite payoff. Both must fail closed to an all-in notional (equity / price),
-    # never raise and never a modelled Kelly size (40).
-    notional = Decimal("100")  # 10000 / 100
+    # infinite payoff. Both must FAIL CLOSED to size 0 (F-09) — never raise, never an
+    # all-in notional, never a modelled Kelly size (40).
     for win, payoff in [("nan", "2"), ("Infinity", "2"), ("0.6", "nan"), ("0.6", "Infinity")]:
         cfg = _kelly(win, payoff)
-        assert _position_size(cfg, Decimal("100"), Decimal("10000")) == notional
+        assert _position_size(cfg, Decimal("100"), Decimal("10000")) == Decimal("0")
 
 
 def test_position_size_kelly_garbage_fraction_is_not_upgraded_to_full_kelly() -> None:
-    # A PRESENT but non-finite kelly_fraction must fail closed to notional — never be
-    # silently treated as absent and upgraded to the most aggressive full-Kelly sizing.
+    # A PRESENT but non-finite kelly_fraction must FAIL CLOSED to size 0 (F-09) — never
+    # silently treated as absent and upgraded to the most aggressive full-Kelly sizing,
+    # and never an all-in notional.
     cfg = _kelly("0.6", "2", kelly_fraction="nan")
-    assert _position_size(cfg, Decimal("100"), Decimal("10000")) == Decimal("100")  # notional
+    assert _position_size(cfg, Decimal("100"), Decimal("10000")) == Decimal("0")  # fail closed
     assert _position_size(cfg, Decimal("100"), Decimal("10000")) != Decimal("40")  # not full Kelly
 
 
 def test_engine_does_not_crash_on_nan_kelly_params() -> None:
     # Regression: a non-finite formula param must not propagate an InvalidOperation out
-    # of the engine. The run completes and surfaces the L4 fall-back warning instead.
+    # of the engine. The run completes, opens NO position (fail closed, F-09) and
+    # surfaces the L4 unsupported-sizing warning instead of a phantom notional trade.
     out = _run(_kelly("nan", "2"), _long_breakout_then_stop())
-    assert out.summary["total_trades"] == 1
+    assert out.summary["total_trades"] == 0
     assert any(
         w.startswith("position_sizing_method_unsupported") for w in out.diagnostics["warnings"]
     )
 
 
-def test_engine_notional_sizing_never_inverts_pnl_after_bust() -> None:
-    # Regression (review CRITICAL): with notional (non-base) sizing and no stop, a
-    # catastrophic short drives equity negative; the next entry must clamp to size 0
-    # rather than a NEGATIVE size, which would invert PnL signs. Assert no
-    # adverse-direction trade ever books a phantom profit.
+def test_engine_unsupported_sizing_opens_no_position() -> None:
+    # F-09 (was: notional-fallback no-phantom-profit regression). An unmodelled sizing
+    # method (formula_based without a valid Kelly config) must FAIL CLOSED — the engine
+    # opens NO position for it, so no phantom notional trade (and therefore no phantom
+    # profit) can ever be booked, whatever the price path. The negative-size clamp for
+    # SUPPORTED methods stays covered by test_position_size_{risk_based,kelly}_clamps_
+    # negative_equity_to_zero.
     bars = _flat(20)
-    bars.append(_bar("2024-01-21T00:00:00Z", "100", "100", "95", "95"))  # short entry
-    bars.append(_bar("2024-01-22T00:00:00Z", "100", "300", "95", "300"))  # exit -> equity < 0
-    bars.append(_bar("2024-01-23T00:00:00Z", "95", "95", "90", "90"))  # re-entry after bust
-    bars.append(_bar("2024-01-24T00:00:00Z", "300", "400", "300", "400"))  # exit
+    bars.append(_bar("2024-01-21T00:00:00Z", "100", "100", "95", "95"))  # would-be short entry
+    bars.append(_bar("2024-01-22T00:00:00Z", "100", "300", "95", "300"))  # would-be exit
+    bars.append(_bar("2024-01-23T00:00:00Z", "95", "95", "90", "90"))  # would-be re-entry
+    bars.append(_bar("2024-01-24T00:00:00Z", "300", "400", "300", "400"))  # would-be exit
     out = _run(_config(direction="short", method="formula_based_sizing", with_stop=False), bars)
-    assert out.summary["total_trades"] >= 2
-    for trade in out.trades:
-        adverse = (
-            trade.exit_price > trade.entry_price
-            if trade.direction == "short"
-            else trade.exit_price < trade.entry_price
-        )
-        if adverse:
-            assert trade.pnl <= Decimal("0"), f"phantom profit on adverse trade: {trade}"
+    assert out.summary["total_trades"] == 0
+    assert not out.trades
+    assert any(
+        w.startswith("position_sizing_method_unsupported") for w in out.diagnostics["warnings"]
+    )
 
 
 # --- position_size_limits (min/max cap) wiring -------------------------------
@@ -537,14 +537,16 @@ def test_position_size_kelly_is_capped_to_max() -> None:
     assert _position_size(cfg, Decimal("100"), Decimal("10000")) == Decimal("5")
 
 
-def test_position_size_notional_fallback_is_capped_to_max() -> None:
-    # custom_formula falls back to all-in notional (10000 / 100 = 100); the cap still binds.
+def test_position_size_unsupported_sizing_fails_closed_regardless_of_cap() -> None:
+    # custom_formula is unmodelled → FAIL CLOSED to size 0 (F-09). There is no all-in
+    # notional to cap; a configured max cap is irrelevant because the raw size is 0.
     cfg = _config(method="formula_based_sizing", formula_type="custom_formula", max_size="7")
-    assert _position_size(cfg, Decimal("100"), Decimal("10000")) == Decimal("7")
+    assert _position_size(cfg, Decimal("100"), Decimal("10000")) == Decimal("0")
 
 
 def test_position_size_bust_equity_stays_zero_despite_min_cap() -> None:
-    # A min cap must not manufacture a position on a bust account (notional raw size 0).
+    # A min cap must not manufacture a position when the raw size is 0 — here because the
+    # sizing method is unmodelled and fails closed (F-09). The clamp leaves 0 as 0.
     cfg = _config(method="formula_based_sizing", formula_type="custom_formula", min_size="10")
     assert _position_size(cfg, Decimal("100"), Decimal("-500")) == Decimal("0")
 
@@ -565,7 +567,7 @@ def test_engine_execution_key_namespace_shifts_with_the_engine_version() -> None
     # The ENGINE_VERSION bump must flow into the manifest so a stale pre-conflict
     # result cannot be reused under the new engine (INF-04 idempotent reuse / INF-05).
     built = _manifest("btrun_A", "snap_A", "2024-01-01T00:00:00Z")
-    assert built.manifest["identity"]["engine_version"] == "backtest-engine-v2-stop-exit-conflict"
+    assert built.manifest["identity"]["engine_version"] == "backtest-engine-v2-sizing-fail-closed"
 
 
 def test_stop_exit_default_is_stop_has_priority() -> None:

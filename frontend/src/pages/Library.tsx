@@ -8,6 +8,13 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { formatUtc } from "@/lib/backtest";
 import { useRationaleFamilies } from "@/lib/createPackage";
 import {
+  packageImportTone,
+  usePackageImportReport,
+  usePackageImports,
+  useSubmitPackageImport,
+  type PackageImportReport,
+} from "@/lib/packageImport";
+import {
   usePackageShares,
   useRevokeShare,
   useSharePackage,
@@ -85,6 +92,7 @@ export function Library() {
         server-computed per role
       </p>
       <CatalogCard />
+      <ImportCard />
     </>
   );
 }
@@ -993,6 +1001,145 @@ function Pager({
       >
         Next
       </button>
+    </div>
+  );
+}
+
+// S3 slice (d) — Import a foreign export manifest (doc 08 §9.1/§10/§14). The reverse
+// of PackageExportBlock: paste an export manifest, submit a durable 202 import job and
+// watch the report. A `succeeded` import produces a DRAFT root in the catalog above; a
+// `blocked` import produces a FAILED-validation DRAFT root (never executable) whose
+// diagnostics list the unresolved dependencies; a `failed` manifest produces no package.
+// The manifest is parsed client-side — invalid JSON never reaches the server.
+function ImportCard() {
+  const [manifestText, setManifestText] = useState("");
+  const [parseError, setParseError] = useState<string | null>(null);
+  const [importJobId, setImportJobId] = useState<string | null>(null);
+  const submit = useSubmitPackageImport();
+  const report = usePackageImportReport(importJobId);
+  const recent = usePackageImports();
+
+  const onSubmit = (event: FormEvent) => {
+    event.preventDefault();
+    setParseError(null);
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(manifestText);
+    } catch {
+      setParseError("The manifest is not valid JSON.");
+      return;
+    }
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+      setParseError("The manifest must be a JSON object.");
+      return;
+    }
+    submit.mutate(parsed as Record<string, unknown>, {
+      onSuccess: (result) => setImportJobId(result.import_job_id),
+    });
+  };
+
+  return (
+    <section className="card" aria-labelledby="library-import-h" style={{ marginTop: 16 }}>
+      <h2 id="library-import-h" className="card-title">
+        Import package
+      </h2>
+      <p className="page-sub">
+        Paste an export manifest (from “Export manifest” above). A durable job re-resolves
+        its dependencies against this deployment’s registry and creates a private DRAFT — an
+        unresolved dependency blocks it as non-executable, never silently runnable.
+      </p>
+      <form onSubmit={onSubmit}>
+        <textarea
+          aria-label="Export manifest JSON"
+          value={manifestText}
+          onChange={(e) => setManifestText(e.target.value)}
+          rows={8}
+          placeholder='{"package_kind": "indicator", "input_contract": {…}, …}'
+          style={{ width: "100%", fontFamily: "monospace", fontSize: 12 }}
+        />
+        <div style={{ marginTop: 8 }}>
+          <button
+            type="submit"
+            className="btn"
+            disabled={submit.isPending || manifestText.trim() === ""}
+          >
+            {submit.isPending ? "Submitting…" : "Import manifest"}
+          </button>
+        </div>
+      </form>
+      {parseError !== null ? (
+        <p className="page-sub" role="alert" style={{ color: "var(--down, #b00)" }}>
+          {parseError}
+        </p>
+      ) : null}
+      {submit.isError ? <ErrorState error={submit.error} /> : null}
+
+      {importJobId !== null ? (
+        <div style={{ marginTop: 12 }}>
+          <h5 style={{ marginBottom: 4 }}>Import report</h5>
+          {report.isLoading ? <Loading /> : null}
+          {report.data ? <ImportReportView report={report.data} /> : null}
+        </div>
+      ) : null}
+
+      <div style={{ marginTop: 16 }}>
+        <h5 style={{ marginBottom: 4 }}>Recent imports</h5>
+        {recent.isLoading ? <Loading /> : null}
+        {recent.data && recent.data.items.length === 0 ? (
+          <EmptyState title="No imports yet." />
+        ) : null}
+        {recent.data?.items.map((item) => (
+          <button
+            key={item.import_job_id}
+            type="button"
+            className="btn-ghost"
+            onClick={() => setImportJobId(item.import_job_id)}
+            style={{ display: "flex", gap: 8, alignItems: "center", width: "100%" }}
+          >
+            <StatusBadge tone={packageImportTone(item.status)} label={item.status} />
+            <code>{item.import_job_id}</code>
+            <span className="page-sub">{item.package_kind}</span>
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ImportReportView({ report }: { report: PackageImportReport }) {
+  const navigate = useNavigate();
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <StatusBadge tone={packageImportTone(report.status)} label={report.status} />
+        <code>{report.import_job_id}</code>
+      </div>
+      {report.status === "succeeded" && report.result_package_root_id ? (
+        <p className="page-sub" style={{ marginTop: 4 }}>
+          Imported as a private DRAFT.{" "}
+          <button
+            type="button"
+            className="link-btn"
+            onClick={() => navigate(`/packages/library?package=${report.result_package_root_id}`)}
+          >
+            View in catalog
+          </button>
+        </p>
+      ) : null}
+      {report.status === "blocked" ? (
+        <p className="page-sub" style={{ marginTop: 4 }}>
+          Blocked: the DRAFT was created but is not executable — resolve its dependencies
+          first.
+        </p>
+      ) : null}
+      {report.status === "failed" ? (
+        <p className="page-sub" style={{ marginTop: 4 }}>
+          Failed: the manifest could not be parsed into a package. No package was created.
+        </p>
+      ) : null}
+      {report.diagnostics ? (
+        <pre style={contractStyle}>{JSON.stringify(report.diagnostics, null, 2)}</pre>
+      ) : null}
     </div>
   );
 }

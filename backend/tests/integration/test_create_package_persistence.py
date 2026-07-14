@@ -327,3 +327,112 @@ async def test_request_creation_writes_audit(session) -> None:
     await _create_indicator_request(session, family_id=family_id, deps=[])
     await session.commit()
     assert await _count(session, AuditEvent) == before + 1
+
+
+_EMA_DEP = {"key": "ta.ema", "signature": _RSI_SIG}
+
+
+async def _create_request_with_body(
+    session, *, family_id: str, body: str, deps: list[dict]
+) -> dict:
+    """A code request with a caller-supplied source body (for the source lexer)."""
+    return await cp_cmd.create_package_request(
+        session,
+        OWNER,
+        package_type="indicator",
+        creation_mode=CreationMode.TRANSLATE_EXISTING_CODE,
+        source_language=SourceLanguage.PINESCRIPT,
+        other_language_label=None,
+        target_runtime=RuntimeAdapter.PYTHON,
+        request_body=body,
+        output_contract=_INDICATOR_OUTPUT,
+        rationale_family_id=family_id,
+        declared_dependencies=deps,
+        equivalence_claim=False,
+    )
+
+
+async def test_precheck_blocks_undeclared_source_call(session) -> None:
+    """PC-06: a real ``ta.rsi`` call the request never declared must Block."""
+    await _seed_principals(session)
+    await _seed_python_resolver(session, key="ta.rsi")
+    family_id = await _seed_family(session)
+    await session.commit()
+
+    created = await _create_request_with_body(
+        session,
+        family_id=family_id,
+        body="//@version=5\nx = ta.rsi(close, 14)",
+        deps=[],
+    )
+    await session.commit()
+
+    pre = await cp_cmd.run_precheck(session, OWNER, request_id=created["request_id"])
+    await session.commit()
+    assert pre["status"] == str(PrecheckScanStatus.BLOCKED)
+    assert pre["state"] == str(CreatePackageState.PRECHECK_BLOCKED)
+    codes = {m["code"] for m in pre["missing"]}
+    assert "UNDECLARED_SOURCE_DEPENDENCY" in codes
+    assert any(m["call"] == "ta.rsi" for m in pre["missing"])
+    scan = await cp_repo.get_scan(session, pre["scan_id"])
+    assert scan is not None
+    assert scan.detected_calls == ["ta.rsi"]
+
+    with pytest.raises(PrecheckBlocked):
+        await cp_cmd.submit_candidate_generation(session, OWNER, request_id=created["request_id"])
+
+
+async def test_precheck_comment_only_call_is_not_a_dependency(session) -> None:
+    """PC-06: ``ta.rsi`` only inside a comment creates no dependency -> PASSED."""
+    await _seed_principals(session)
+    family_id = await _seed_family(session)
+    await session.commit()
+
+    created = await _create_request_with_body(
+        session,
+        family_id=family_id,
+        body="//@version=5\n// legacy note: ta.rsi(close, 14)\nplot(close)",
+        deps=[],
+    )
+    await session.commit()
+
+    pre = await cp_cmd.run_precheck(session, OWNER, request_id=created["request_id"])
+    await session.commit()
+    assert pre["status"] == str(PrecheckScanStatus.PASSED)
+    assert pre["missing"] == []
+    assert pre["warnings"] == []
+    scan = await cp_repo.get_scan(session, pre["scan_id"])
+    assert scan is not None
+    assert scan.detected_calls == []
+
+
+async def test_precheck_over_declared_dependency_is_a_warning(session) -> None:
+    """A declared call the source never invokes is a non-fatal Warning (PASSED)."""
+    await _seed_principals(session)
+    await _seed_python_resolver(session, key="ta.rsi")
+    await _seed_python_resolver(session, key="ta.ema")
+    family_id = await _seed_family(session)
+    await session.commit()
+
+    created = await _create_request_with_body(
+        session,
+        family_id=family_id,
+        body="//@version=5\nx = ta.rsi(close, 14)",
+        deps=[_RSI_DEP, _EMA_DEP],
+    )
+    await session.commit()
+
+    pre = await cp_cmd.run_precheck(session, OWNER, request_id=created["request_id"])
+    await session.commit()
+    assert pre["status"] == str(PrecheckScanStatus.PASSED)
+    assert pre["missing"] == []
+    assert [w["call"] for w in pre["warnings"]] == ["ta.ema"]
+    assert pre["warnings"][0]["code"] == "DECLARED_NOT_IN_SOURCE"
+    scan = await cp_repo.get_scan(session, pre["scan_id"])
+    assert scan is not None
+    assert scan.source_warnings[0]["call"] == "ta.ema"
+    # A warning does not block Send.
+    sent = await cp_cmd.submit_candidate_generation(
+        session, OWNER, request_id=created["request_id"]
+    )
+    assert sent["state"] == str(CreatePackageState.CANDIDATE_READY)

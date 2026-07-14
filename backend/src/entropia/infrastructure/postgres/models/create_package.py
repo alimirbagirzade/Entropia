@@ -26,6 +26,7 @@ from sqlalchemy import (
     String,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
@@ -136,6 +137,9 @@ class DependencyScan(Base):
     resolved_refs: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False)
     missing_calls: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False)
     unsupported_calls: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False)
+    source_warnings: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'[]'::jsonb")
+    )
     status: Mapped[PrecheckScanStatus] = mapped_column(
         enum_column(PrecheckScanStatus, "precheck_scan_status"),
         nullable=False,

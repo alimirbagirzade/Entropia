@@ -40,6 +40,23 @@ class ToolName(StrEnum):
     # REJECTED denial (CAPABILITY_NOT_ACTIVE), never a job or output.
     VIEW_DATASET_QUERY = "view_dataset.query"
     ANALYSIS_ARTIFACT_CREATE = "analysis_artifact.create"
+    # Post-V1 S4 — Portfolio / Equity Allocation parity (doc 13 §9): the SAME
+    # draft/validate/revision command line a human uses. The Agent mutates only
+    # its OWN composition's plan (ownership enforced INSIDE each command); a
+    # foreign-owner plan is a recorded REJECTED denial, never last-write-wins.
+    ALLOCATION_GET_DRAFT = "portfolio_allocation.get_draft"
+    ALLOCATION_UPSERT_DRAFT = "portfolio_allocation.upsert_draft"
+    ALLOCATION_SYNC_PREVIEW = "portfolio_allocation.sync_preview"
+    ALLOCATION_VALIDATE = "portfolio_allocation.validate"
+    ALLOCATION_CREATE_REVISION = "portfolio_allocation.create_revision"
+    # Post-V1 S4 — Trade Log parity (doc 05 §11, TL-22): the SAME upload/import/
+    # save/revision command line a human uses (a Trade Log is a native work object,
+    # CR-01). Pin (``Use This Revision``) + soft-delete stay the shared 3a Mainboard
+    # tools; export (doc 05 §11 request_trade_log_export) is a separate slice.
+    TRADE_LOG_UPLOAD_SOURCE = "trade_log.upload_source_asset"
+    TRADE_LOG_REQUEST_IMPORT = "trade_log.request_import"
+    TRADE_LOG_CREATE = "trade_log.create"
+    TRADE_LOG_CREATE_REVISION = "trade_log.create_revision"
 
 
 class ToolCallStatus(StrEnum):
@@ -79,6 +96,20 @@ TOOL_ALLOWED_SCOPES: dict[ToolName, frozenset[PolicyScope]] = {
     ToolName.ARTIFACT_ATTACH_CITATION: frozenset({PolicyScope.RESEARCH, PolicyScope.PROPOSAL}),
     ToolName.VIEW_DATASET_QUERY: frozenset({PolicyScope.RESEARCH}),
     ToolName.ANALYSIS_ARTIFACT_CREATE: frozenset({PolicyScope.RESEARCH, PolicyScope.PROPOSAL}),
+    # S4 allocation (doc 13 §9): reads are OBSERVATION/RESEARCH; the draft/validate/
+    # revision mutations are hypothesis-shaping work, never a backtest EXECUTION
+    # (a run is a separate ``backtest.request`` tool, doc 13 §9 last row).
+    ToolName.ALLOCATION_GET_DRAFT: frozenset({PolicyScope.OBSERVATION, PolicyScope.RESEARCH}),
+    ToolName.ALLOCATION_SYNC_PREVIEW: frozenset({PolicyScope.OBSERVATION, PolicyScope.RESEARCH}),
+    ToolName.ALLOCATION_UPSERT_DRAFT: frozenset({PolicyScope.RESEARCH, PolicyScope.PROPOSAL}),
+    ToolName.ALLOCATION_VALIDATE: frozenset({PolicyScope.RESEARCH, PolicyScope.PROPOSAL}),
+    ToolName.ALLOCATION_CREATE_REVISION: frozenset({PolicyScope.PROPOSAL}),
+    # S4 trade_log (doc 05 §11): upload/import prepare research inputs; save/revision
+    # produce a native work object (a proposal-shaped output), never a run.
+    ToolName.TRADE_LOG_UPLOAD_SOURCE: frozenset({PolicyScope.RESEARCH}),
+    ToolName.TRADE_LOG_REQUEST_IMPORT: frozenset({PolicyScope.RESEARCH}),
+    ToolName.TRADE_LOG_CREATE: frozenset({PolicyScope.RESEARCH, PolicyScope.PROPOSAL}),
+    ToolName.TRADE_LOG_CREATE_REVISION: frozenset({PolicyScope.RESEARCH, PolicyScope.PROPOSAL}),
 }
 
 # CR-08 (doc 22 §11): which capability keys gate a tool's contract. A gated

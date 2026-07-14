@@ -632,6 +632,199 @@ async def _handle_analysis_artifact_create(ctx: _Ctx) -> _ToolOutcome:
     )
 
 
+# --------------------------------------------------------------------------- #
+# S4 — Portfolio / Equity Allocation parity (doc 13 §9)                        #
+#                                                                             #
+# Each handler forwards to the SAME application command/query a human calls;   #
+# ownership (``ensure_can_edit``/``ensure_can_view``), optimistic concurrency  #
+# (``expected_row_version``), idempotency and audit all live INSIDE those      #
+# functions — no gateway-side business logic is added. An ownership violation  #
+# raises ``AccessDeniedError`` (a ``ForbiddenError``) and lands as a recorded  #
+# REJECTED denial, identical to the human 403 (AL-11, doc 13 §14#17).          #
+# --------------------------------------------------------------------------- #
+
+
+async def _handle_allocation_get_draft(ctx: _Ctx) -> _ToolOutcome:
+    """`portfolio_allocation.get_draft` — read the composition's draft projection,
+    row_version and candidate items through the same read model (doc 13 §9)."""
+    from entropia.application.queries.allocation_plan import get_allocation_draft
+
+    result = await get_allocation_draft(
+        ctx.session, ctx.actor, composition_id=str(ctx.request.get("composition_id", ""))
+    )
+    return _ToolOutcome(response=result)
+
+
+async def _handle_allocation_sync_preview(ctx: _Ctx) -> _ToolOutcome:
+    """`portfolio_allocation.sync_preview` — non-destructive Sync-From-Mainboard
+    merge preview (doc 13 §9, §10.2 Flow D). A preview never mutates."""
+    from entropia.application.queries.allocation_plan import sync_preview
+
+    result = await sync_preview(
+        ctx.session, ctx.actor, composition_id=str(ctx.request.get("composition_id", ""))
+    )
+    return _ToolOutcome(response=result)
+
+
+async def _handle_allocation_upsert_draft(ctx: _Ctx) -> _ToolOutcome:
+    """`portfolio_allocation.upsert_draft` — autosave the draft config on the
+    Agent's OWN composition (doc 13 §9). ``expected_row_version`` is the live OCC
+    token; a stale value is ALLOCATION_DRAFT_CONFLICT, never last-write-wins."""
+    from entropia.application.commands.allocation_plan import upsert_allocation_draft
+
+    request = ctx.request
+    result = await upsert_allocation_draft(
+        ctx.session,
+        ctx.actor,
+        composition_id=str(request.get("composition_id", "")),
+        expected_row_version=request.get("expected_row_version"),
+        enabled=bool(request.get("enabled", False)),
+        initial_capital=request.get("initial_capital"),
+        compounding_mode=request.get("compounding_mode"),
+        reserve_cash_percent=request.get("reserve_cash_percent"),
+        entries=request.get("entries"),
+        idempotency_key=request.get("idempotency_key"),
+    )
+    return _ToolOutcome(
+        response=result,
+        artifact_output_ref=result.get("plan_id"),
+        domain_events=[("allocation_draft_changed", {"plan_id": result.get("plan_id")})],
+    )
+
+
+async def _handle_allocation_validate(ctx: _Ctx) -> _ToolOutcome:
+    """`portfolio_allocation.validate` — resolve blocker/warning/derived caps into
+    an immutable validation report (doc 13 §9, §11.2). No revision or run."""
+    from entropia.application.commands.allocation_plan import validate_allocation_draft
+
+    result = await validate_allocation_draft(
+        ctx.session, ctx.actor, composition_id=str(ctx.request.get("composition_id", ""))
+    )
+    return _ToolOutcome(response=result, artifact_output_ref=result.get("validation_report_id"))
+
+
+async def _handle_allocation_create_revision(ctx: _Ctx) -> _ToolOutcome:
+    """`portfolio_allocation.create_revision` — turn a validated, blocker-free
+    enabled draft into an immutable plan revision (doc 13 §9, §8.5). Never mutates
+    an active/completed run manifest — a new revision is a future snapshot only."""
+    from entropia.application.commands.allocation_plan import create_allocation_revision
+
+    request = ctx.request
+    result = await create_allocation_revision(
+        ctx.session,
+        ctx.actor,
+        composition_id=str(request.get("composition_id", "")),
+        expected_row_version=request.get("expected_row_version"),
+        idempotency_key=request.get("idempotency_key"),
+    )
+    return _ToolOutcome(
+        response=result,
+        artifact_output_ref=result.get("plan_revision_id"),
+        domain_events=[
+            ("allocation_revision_created", {"plan_revision_id": result.get("plan_revision_id")})
+        ],
+    )
+
+
+# --------------------------------------------------------------------------- #
+# S4 — Trade Log parity (doc 05 §11, TL-22)                                    #
+# --------------------------------------------------------------------------- #
+
+
+async def _handle_trade_log_upload_source(ctx: _Ctx) -> _ToolOutcome:
+    """`trade_log.upload_source_asset` — store an immutable TXT/CSV source asset
+    (doc 05 §11). Content-addressed dedup lives in the command. The bytes ride in
+    ``content`` (bytes, or a UTF-8 string coerced here for a JSON-safe envelope)."""
+    from entropia.application.commands.trade_log import upload_source_asset
+
+    request = ctx.request
+    raw = request.get("content", b"")
+    content = raw.encode("utf-8") if isinstance(raw, str) else bytes(raw)
+    result = await upload_source_asset(
+        ctx.session,
+        ctx.actor,
+        content=content,
+        content_type=request.get("content_type"),
+        original_filename=request.get("original_filename"),
+        draft_id=request.get("draft_id"),
+        idempotency_key=request.get("idempotency_key"),
+    )
+    return _ToolOutcome(response=result, artifact_output_ref=result.get("source_asset_id"))
+
+
+async def _handle_trade_log_request_import(ctx: _Ctx) -> _ToolOutcome:
+    """`trade_log.request_import` — enqueue a durable import job on the data queue
+    (doc 05 §11, CR-09). The Agent receives the structured job handle and may plan
+    a remediation task; the worker parses/normalizes/validates."""
+    from entropia.application.commands.trade_log import request_trade_log_import
+
+    request = ctx.request
+    result = await request_trade_log_import(
+        ctx.session,
+        ctx.actor,
+        source_asset_id=str(request.get("source_asset_id", "")),
+        instrument_id=str(request.get("instrument_id", "")),
+        instrument_scope=request.get("instrument_scope"),
+        source_timezone=str(request.get("source_timezone", "UTC")),
+        import_mapping=request.get("import_mapping"),
+        idempotency_key=request.get("idempotency_key"),
+    )
+    # The job's own ``status`` is namespaced so it never shadows the envelope's
+    # terminal call ``status`` (doc 18 §9.2 envelope-wins rule).
+    response = {**result, "import_status": result.get("status")}
+    response.pop("status", None)
+    return _ToolOutcome(
+        response=response,
+        artifact_output_ref=result.get("job_id"),
+        domain_events=[("trade_log_import_requested", {"job_id": result.get("job_id")})],
+    )
+
+
+async def _handle_trade_log_create(ctx: _Ctx) -> _ToolOutcome:
+    """`trade_log.create` — Save (& Add): create the native Trade Log work object +
+    immutable revision 1 and optionally attach it onto the Mainboard (doc 05 §11).
+    Save != Ready PASS != Run."""
+    from entropia.application.commands.trade_log import create_trade_log_and_attach
+
+    request = ctx.request
+    result = await create_trade_log_and_attach(
+        ctx.session,
+        ctx.actor,
+        payload=dict(request.get("payload") or {}),
+        workspace_id=request.get("workspace_id"),
+        attach=bool(request.get("attach", True)),
+        position_index=request.get("position_index"),
+        idempotency_key=request.get("idempotency_key"),
+    )
+    return _ToolOutcome(
+        response=result,
+        artifact_output_ref=result.get("revision_id"),
+        domain_events=[("trade_log_created", {"root_id": result.get("root_id")})],
+    )
+
+
+async def _handle_trade_log_create_revision(ctx: _Ctx) -> _ToolOutcome:
+    """`trade_log.create_revision` — append an immutable Trade Log revision N+1 on
+    the Agent's OWN root (doc 05 §11, Rule 10). ``expected_head_revision_id`` is the
+    OCC token; the Mainboard item is NEVER auto-repinned."""
+    from entropia.application.commands.trade_log import create_trade_log_revision
+
+    request = ctx.request
+    result = await create_trade_log_revision(
+        ctx.session,
+        ctx.actor,
+        root_id=str(request.get("root_id", "")),
+        payload=dict(request.get("payload") or {}),
+        expected_head_revision_id=request.get("expected_head_revision_id"),
+        idempotency_key=request.get("idempotency_key"),
+    )
+    return _ToolOutcome(
+        response=result,
+        artifact_output_ref=result.get("revision_id"),
+        domain_events=[("trade_log_revision_created", {"root_id": result.get("root_id")})],
+    )
+
+
 _HANDLERS = {
     ToolName.TASK_QUERY: _handle_task_query,
     ToolName.RESULT_QUERY: _handle_result_query,
@@ -647,6 +840,15 @@ _HANDLERS = {
     ToolName.ARTIFACT_ATTACH_CITATION: _handle_artifact_attach_citation,
     ToolName.VIEW_DATASET_QUERY: _handle_view_dataset_query,
     ToolName.ANALYSIS_ARTIFACT_CREATE: _handle_analysis_artifact_create,
+    ToolName.ALLOCATION_GET_DRAFT: _handle_allocation_get_draft,
+    ToolName.ALLOCATION_SYNC_PREVIEW: _handle_allocation_sync_preview,
+    ToolName.ALLOCATION_UPSERT_DRAFT: _handle_allocation_upsert_draft,
+    ToolName.ALLOCATION_VALIDATE: _handle_allocation_validate,
+    ToolName.ALLOCATION_CREATE_REVISION: _handle_allocation_create_revision,
+    ToolName.TRADE_LOG_UPLOAD_SOURCE: _handle_trade_log_upload_source,
+    ToolName.TRADE_LOG_REQUEST_IMPORT: _handle_trade_log_request_import,
+    ToolName.TRADE_LOG_CREATE: _handle_trade_log_create,
+    ToolName.TRADE_LOG_CREATE_REVISION: _handle_trade_log_create_revision,
 }
 
 

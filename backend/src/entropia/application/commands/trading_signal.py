@@ -38,7 +38,11 @@ from entropia.application.jobs.data_queue import TRADING_SIGNAL_IMPORT
 from entropia.application.queries import instrument as instrument_query
 from entropia.application.queries import mainboard as mb_query
 from entropia.domain.identity import Actor
-from entropia.domain.identity.policy import ensure_can_edit, require_authenticated
+from entropia.domain.identity.policy import (
+    ensure_can_edit,
+    ensure_can_view,
+    require_authenticated,
+)
 from entropia.domain.importing.column_mapping import (
     BLOCKER_AMBIGUOUS_COLUMN_MAPPING,
     BLOCKER_INVALID_COLUMN_MAPPING,
@@ -86,6 +90,7 @@ from entropia.shared.errors import (
     WorkObjectRevisionConflictError,
 )
 from entropia.shared.ids import new_id
+from entropia.shared.manifest import manifest_hash
 
 _DATA_QUEUE = "data"
 _WORK_OBJECT_TARGET = "work_object"
@@ -448,6 +453,91 @@ async def create_trading_signal_revision(
 
 
 # --------------------------------------------------------------------------- #
+# 5. Export — immutable source-mapping/provenance manifest (doc 04 §7, Rule 17)#
+# --------------------------------------------------------------------------- #
+
+
+async def export_trading_signal(
+    session: AsyncSession,
+    actor: Actor,
+    *,
+    root_id: str,
+    revision_id: str | None = None,
+    idempotency_key: str | None = None,
+) -> dict[str, Any]:
+    """Owner/Admin: produce the immutable export MANIFEST for a Trading Signal
+    revision (doc 04 §7 "Export As Package", Rule 17 — an export never mutates the
+    source).
+
+    Mirrors the R2c package-revision export (``export_package``): synchronous V1,
+    ``ensure_can_view`` gates the private work object (owner + Admin only), then a
+    content-addressed manifest carrying the source-mapping / provenance
+    (``source_provenance`` + the §9.2 config payload) is computed from the immutable
+    revision and a ``trading_signal.exported`` audit records the ``manifest_hash`` as
+    durable provenance. No source mutation; a fresh ``Idempotency-Key`` makes repeated
+    clicks return the same manifest. Any revision of the root may be exported
+    (default: the pinned head); a revision not on this root -> 404.
+    """
+    require_authenticated(actor)
+    root, _detail = await _require_active_trading_signal(session, root_id)
+    ensure_can_view(actor, owner_principal_id=root.owner_principal_id, visibility="private")
+
+    target_revision_id = revision_id or root.current_revision_id
+    if target_revision_id is None:
+        raise WorkObjectNotFoundError(f"Trading Signal '{root_id}' has no revision to export.")
+    revision = await mb_repo.get_work_object_revision(session, target_revision_id)
+    if revision is None or revision.entity_id != root_id:
+        raise WorkObjectNotFoundError(
+            f"Revision '{target_revision_id}' not found on Trading Signal '{root_id}'."
+        )
+
+    async def _op() -> dict[str, Any]:
+        manifest = {
+            "root_id": root_id,
+            "object_kind": _KIND.value,
+            "revision_id": revision.revision_id,
+            "revision_no": revision.revision_no,
+            "payload": revision.payload,
+            "source_provenance": revision.source_provenance,
+            "available_time": (
+                revision.available_time.isoformat() if revision.available_time is not None else None
+            ),
+            "content_hash": revision.content_hash,
+        }
+        digest = manifest_hash(manifest)
+        _audit_and_outbox(
+            session,
+            actor,
+            event_kind="trading_signal.exported",
+            target_type=_WORK_OBJECT_TARGET,
+            target_entity_id=root_id,
+            target_revision_id=revision.revision_id,
+            new_state="exported",
+            # The 64-char manifest hash is the export's durable provenance (JSONB
+            # payload), not a short state label.
+            payload={"manifest_hash": digest, "revision_id": revision.revision_id},
+        )
+        return {
+            "root_id": root_id,
+            "revision_id": revision.revision_id,
+            "manifest_hash": digest,
+            "manifest": manifest,
+        }
+
+    return await run_idempotent(
+        session,
+        key=idempotency_key,
+        actor_principal_id=actor.principal_id,
+        request_payload={
+            "op": "export_trading_signal",
+            "root_id": root_id,
+            "revision_id": target_revision_id,
+        },
+        operation=_op,
+    )
+
+
+# --------------------------------------------------------------------------- #
 # Shared helpers                                                              #
 # --------------------------------------------------------------------------- #
 
@@ -612,6 +702,7 @@ def _audit_and_outbox(
 __all__ = [
     "create_trading_signal_and_attach",
     "create_trading_signal_revision",
+    "export_trading_signal",
     "request_trading_signal_import",
     "upload_source_asset",
 ]

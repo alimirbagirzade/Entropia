@@ -105,6 +105,13 @@ const REVISION_RESULT = {
   auto_repinned: false,
 };
 
+const EXPORT_RESULT = {
+  root_id: "root_ts",
+  revision_id: "wor_1",
+  manifest_hash: "a".repeat(64),
+  manifest: { object_kind: "trading_signal", payload: { kind: "trading_signal" } },
+};
+
 // ORDERED routes: the specific POST fragments (source-assets / imports /
 // {root}/revisions) must precede the bare "POST /trading-signals" create
 // prefix — the create path is a substring of every other POST URL.
@@ -113,6 +120,7 @@ function stubRoutes(overrides: Record<string, unknown> = {}) {
     "POST /trading-signals/source-assets": UPLOAD_RESULT,
     "POST /trading-signals/imports": IMPORT_ACCEPTED,
     "POST /trading-signals/root_ts/revisions": REVISION_RESULT,
+    "POST /trading-signals/root_ts/export": EXPORT_RESULT,
     "POST /trading-signals": CREATE_RESULT,
     "GET /trading-signals/imports/job_1": REPORT,
     "GET /trading-signals/root_ts": DETAIL,
@@ -276,5 +284,24 @@ describe("TradingSignal", () => {
     expect(screen.getByText("root_ts")).toBeTruthy();
     // The strategy item on the same Mainboard is filtered out.
     expect(screen.queryByText("Momentum A")).toBeNull();
+  });
+
+  it("exports the pinned head manifest with a fresh Idempotency-Key and no OCC token", async () => {
+    const fetchMock = stubRoutes();
+    renderPage("/trading-signal?root=root_ts");
+
+    fireEvent.click(await screen.findByRole("button", { name: "Export manifest" }));
+
+    // The manifest hash renders after the synchronous export resolves.
+    expect(await screen.findByText("a".repeat(64))).toBeTruthy();
+
+    const call = fetchMock.mock.calls.find(
+      ([url, init]) => String(url).includes("/export") && init?.method === "POST",
+    );
+    expect(call).toBeTruthy();
+    const body = JSON.parse(String(call?.[1]?.body)) as Record<string, unknown>;
+    // Default export omits revision_id (server exports the pinned head); no OCC token.
+    expect("revision_id" in body).toBe(false);
+    expect(headersOf(call?.[1])["Idempotency-Key"]).toBeTruthy();
   });
 });

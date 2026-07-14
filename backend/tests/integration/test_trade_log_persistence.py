@@ -399,3 +399,88 @@ async def test_record_batch_persists_evidence(session, fake_object_store) -> Non
     assert batch.content_hash and len(batch.content_hash) == 64
     assert batch.earliest_entry_time is not None
     assert batch.latest_exit_time is not None
+
+
+# --------------------------------------------------------------------------- #
+# Export — immutable manifest (S6, doc 05 §8 "Export As Package", §11, §13.2)  #
+# --------------------------------------------------------------------------- #
+
+
+async def test_export_produces_manifest_and_audit(session, fake_object_store) -> None:
+    await _seed_principals(session)
+    saved = await _saved_trade_log(session, USER1, fake_object_store)
+    root_id = saved["save"]["root_id"]
+    revision_id = saved["save"]["revision_id"]
+
+    result = await tl_cmd.export_trade_log(session, USER1, root_id=root_id)
+    await session.commit()
+
+    assert result["root_id"] == root_id
+    assert result["revision_id"] == revision_id  # default = pinned head
+    assert len(result["manifest_hash"]) == 64
+    manifest = result["manifest"]
+    assert manifest["object_kind"] == "trade_log"
+    assert manifest["payload"]["kind"] == "trade_log"
+    # Twin diff: a Trade Log revision carries no per-event availability (doc 05 §10.4).
+    assert manifest["available_time"] is None
+    assert manifest["source_provenance"]["source_asset_id"]
+
+    # The export never mutated the source — head revision unchanged.
+    detail = await tl_query.get_trade_log(session, USER1, root_id=root_id)
+    assert detail["current_revision_id"] == revision_id
+
+    audit = (
+        (
+            await session.execute(
+                select(AuditEvent).where(AuditEvent.event_kind == "trade_log.exported")
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(audit) == 1
+    outbox = (
+        (
+            await session.execute(
+                select(OutboxEvent).where(OutboxEvent.event_type == "trade_log.exported")
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(outbox) == 1
+    assert outbox[0].payload["manifest_hash"] == result["manifest_hash"]
+
+
+async def test_export_foreign_owner_forbidden(session, fake_object_store) -> None:
+    await _seed_principals(session)
+    saved = await _saved_trade_log(session, USER1, fake_object_store)
+    root_id = saved["save"]["root_id"]
+
+    with pytest.raises(AccessDeniedError):
+        await tl_cmd.export_trade_log(session, USER2, root_id=root_id)
+
+
+async def test_export_idempotent_replay(session, fake_object_store) -> None:
+    await _seed_principals(session)
+    saved = await _saved_trade_log(session, USER1, fake_object_store)
+    root_id = saved["save"]["root_id"]
+
+    first = await tl_cmd.export_trade_log(
+        session, USER1, root_id=root_id, idempotency_key="tl-exp-key-1"
+    )
+    await session.commit()
+    second = await tl_cmd.export_trade_log(
+        session, USER1, root_id=root_id, idempotency_key="tl-exp-key-1"
+    )
+    await session.commit()
+
+    assert first["manifest_hash"] == second["manifest_hash"]
+    audit_count = (
+        await session.execute(
+            select(func.count())
+            .select_from(AuditEvent)
+            .where(AuditEvent.event_kind == "trade_log.exported")
+        )
+    ).scalar_one()
+    assert audit_count == 1

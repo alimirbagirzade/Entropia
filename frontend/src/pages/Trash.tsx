@@ -103,7 +103,7 @@ function TrashCard() {
   const objectTypes = entries.data?.meta.object_types ?? [];
 
   return (
-    <section className="card" aria-labelledby="trash-h">
+    <section className="card panel-card" aria-labelledby="trash-h">
       <h3 id="trash-h" style={{ marginTop: 0 }}>
         Recoverable entries
         {entries.data ? (
@@ -154,7 +154,7 @@ function TrashCard() {
           {entries.data.data.length === 0 ? (
             <EmptyState title="No recoverable objects match the current filters" />
           ) : (
-            <table className="metrics-table">
+            <table className="database-table">
               <thead>
                 <tr>
                   <th scope="col">Object type</th>

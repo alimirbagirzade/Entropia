@@ -77,10 +77,29 @@ class StrategyConfig(BaseModel):
 # ============================================================================
 
 
+class DataContextInstrumentScope(BaseModel):
+    """Free-text instrument scope resolved to a canonical instrument (GAP-16; Master §8.1).
+
+    When present, ``save_strategy_revision`` resolves this scope through the registry
+    and rewrites ``DataContext.instrument_id`` to the canonical ``instrument_id`` — an
+    unresolvable scope fails closed (422) so a strategy can no longer conflate
+    BTCUSDT spot with BTCUSDT perpetual. A caller provides either an ``alias`` (display
+    text) or a ``venue_id``/``symbol``/``contract_type`` triple.
+    """
+
+    venue_id: str | None = Field(default=None)
+    symbol: str | None = Field(default=None)
+    contract_type: str | None = Field(default=None)
+    alias: str | None = Field(default=None)
+
+
 class DataContext(BaseModel):
     """Data source, execution assumptions, capital base (§2)."""
 
     instrument_id: str = Field(..., description="e.g., 'BTCUSDT'")
+    # GAP-16 (Master §8.1): optional free-text scope resolved server-side at save to
+    # the canonical instrument_id above; unresolvable -> 422 (never a silent free-text).
+    instrument_scope: DataContextInstrumentScope | None = Field(default=None)
     market_dataset_root_id: str = Field(..., description="Market data ULID")
     market_dataset_revision_id: str = Field(..., description="Pinned revision")
     market_dataset_content_hash: str = Field(..., description="SHA-256 hash")

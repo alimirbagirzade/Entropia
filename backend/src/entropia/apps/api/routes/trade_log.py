@@ -35,6 +35,11 @@ class UploadSourceAssetBody(BaseModel):
 class RequestImportBody(BaseModel):
     source_asset_id: str
     instrument_id: str
+    # GAP-16 (Master §8.1): an optional free-text scope resolved server-side to a
+    # canonical instrument_id BEFORE the durable import is enqueued. Keys:
+    # {venue_id, symbol, contract_type} or {alias}. Unresolvable -> 422
+    # INSTRUMENT_SCOPE_UNRESOLVABLE (never a silent free-text instrument).
+    instrument_scope: dict[str, Any] | None = None
     source_timezone: str = "UTC"
     # Optional {canonical_field: source_header} column mapping (doc 05 §5.2). Absent
     # for exact/aliased canonical headers; required when a header is unmappable
@@ -82,6 +87,7 @@ async def request_import(
         ctx.actor,
         source_asset_id=body.source_asset_id,
         instrument_id=body.instrument_id,
+        instrument_scope=body.instrument_scope,
         source_timezone=body.source_timezone,
         import_mapping=body.import_mapping,
         idempotency_key=idempotency_key,

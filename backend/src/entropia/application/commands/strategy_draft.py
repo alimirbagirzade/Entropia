@@ -34,6 +34,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from entropia.application.commands import mainboard as mb_cmd
 from entropia.application.idempotency import run_idempotent
+from entropia.application.queries import instrument as instrument_query
 from entropia.domain.identity import Actor
 from entropia.domain.identity.policy import ensure_can_edit, ensure_can_view, require_authenticated
 from entropia.domain.lifecycle.enums import DeletionState, PackageKind
@@ -461,6 +462,11 @@ async def save_strategy_revision(
             _raise_for_issues(issues)
         assert config is not None  # narrowed: issues empty and config parsed
 
+        # GAP-16 (Master §8.1): resolve the free-text instrument scope to a canonical
+        # instrument BEFORE hashing/persisting the immutable revision — unresolvable
+        # -> 422 (never a silent free-text instrument in a saved strategy).
+        config = await _resolve_instrument_scope(session, config)
+
         canonical = config_to_dict(config)
         config_hash = compute_config_hash(config)
         references = _extract_references(config)
@@ -647,6 +653,27 @@ async def _draft_owner(session: AsyncSession, strategy_root_id: str | None) -> s
         return None
     registry_root = await strat_repo.get_strategy_registry_root(session, strategy_root_id)
     return registry_root.owner_principal_id if registry_root is not None else None
+
+
+async def _resolve_instrument_scope(
+    session: AsyncSession, config: StrategyConfig
+) -> StrategyConfig:
+    """Resolve ``DataContext.instrument_scope`` to a canonical instrument (GAP-16).
+
+    No scope declared -> the config is returned unchanged (the free-text
+    ``instrument_id`` is kept, backward compatible). A populated scope resolves
+    through the registry and rewrites ``data.instrument_id`` to the canonical id;
+    an unresolvable/invalid scope fails closed (INSTRUMENT_SCOPE_UNRESOLVABLE /
+    _INVALID -> 422) so a saved strategy can never conflate spot with perpetual.
+    """
+    scope = config.data.instrument_scope
+    resolved_id = await instrument_query.resolve_scope_id(
+        session, scope.model_dump() if scope is not None else None
+    )
+    if resolved_id is None:
+        return config
+    new_data = config.data.model_copy(update={"instrument_id": resolved_id})
+    return config.model_copy(update={"data": new_data})
 
 
 def _raise_for_issues(issues: list[dict[str, Any]]) -> None:

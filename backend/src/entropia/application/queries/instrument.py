@@ -122,6 +122,27 @@ async def resolve_scope(
     return {"resolved": True, **_instrument_dict(instrument)}
 
 
+async def resolve_scope_id(session: AsyncSession, scope: dict[str, Any] | None) -> str | None:
+    """Resolve a free-text ``instrument_scope`` dict to its canonical ``instrument_id``.
+
+    The shared entry point every ingest/save flow uses (Master §8.1): ``None``/empty
+    scope -> ``None`` (the caller keeps any legacy free-text value, backward
+    compatible); a populated scope resolves through the registry and an unresolvable
+    or invalid one fails closed (INSTRUMENT_SCOPE_UNRESOLVABLE / _INVALID -> 422) so
+    no flow ever silently persists a free-text instrument assumption.
+    """
+    if not scope:
+        return None
+    resolved = await resolve_scope(
+        session,
+        venue_id=scope.get("venue_id"),
+        symbol=scope.get("symbol"),
+        contract_type=scope.get("contract_type"),
+        alias=scope.get("alias"),
+    )
+    return str(resolved["instrument_id"])
+
+
 async def _resolve_instrument(
     session: AsyncSession,
     *,
@@ -162,4 +183,5 @@ __all__ = [
     "get_instrument_detail",
     "list_instruments",
     "resolve_scope",
+    "resolve_scope_id",
 ]

@@ -11,6 +11,7 @@ import {
   CREATION_MODES,
   SOURCE_LANGUAGES,
   SUPPORTED_TARGET_RUNTIME,
+  baselineParseTone,
   outputKindsFor,
   requestStateTone,
   sourceKindForMode,
@@ -21,7 +22,12 @@ import {
   usePackageRequest,
   usePackageRequests,
   useRationaleFamilies,
+  useRequestRevision,
   useRunPrecheck,
+  useRunValidation,
+  useStartBaselineParse,
+  useUploadBaseline,
+  validationRunTone,
   type CreatePackageKind,
   type CreationMode,
   type PackageRequestDetail,
@@ -472,6 +478,37 @@ function RequestDetailBody({ detail }: { detail: PackageRequestDetail }) {
           <span className="cp-status-label">Draft</span>
           <span>{detail.draft_revision_id ? "Present" : "—"}</span>
         </div>
+        <div className="cp-status-row">
+          <span className="cp-status-label">Validation</span>
+          <span>
+            {detail.current_validation_run ? (
+              <>
+                <StatusBadge
+                  tone={validationRunTone(detail.current_validation_run.status)}
+                  label={prettyToken(detail.current_validation_run.status)}
+                />
+                {detail.validation_fresh ? "" : " · stale"}
+              </>
+            ) : (
+              "—"
+            )}
+          </span>
+        </div>
+        <div className="cp-status-row">
+          <span className="cp-status-label">Baseline</span>
+          <span>
+            {detail.current_baseline ? (
+              <StatusBadge
+                tone={baselineParseTone(detail.current_baseline.parse_status)}
+                label={prettyToken(detail.current_baseline.parse_status)}
+              />
+            ) : detail.baseline_required ? (
+              "Required — none"
+            ) : (
+              "Not required"
+            )}
+          </span>
+        </div>
       </div>
 
       <dl className="kv">
@@ -538,8 +575,208 @@ function RequestDetailBody({ detail }: { detail: PackageRequestDetail }) {
         </p>
       )}
 
+      {detail.current_validation_run ? (
+        <div style={{ marginTop: 14 }}>
+          <h4 style={{ margin: "0 0 8px" }}>Validation evidence</h4>
+          <dl className="kv">
+            <dt>Run</dt>
+            <dd>
+              <code>{detail.current_validation_run.validation_run_id}</code> (attempt{" "}
+              {detail.current_validation_run.attempt_no})
+            </dd>
+            <dt>Status</dt>
+            <dd>
+              <StatusBadge
+                tone={validationRunTone(detail.current_validation_run.status)}
+                label={detail.current_validation_run.status}
+              />
+              {detail.validation_fresh ? "" : " — stale (candidate regenerated)"}
+            </dd>
+            <dt>Validator</dt>
+            <dd>{detail.current_validation_run.validator_version ?? "—"}</dd>
+            <dt>Checks</dt>
+            <dd>
+              <code>{JSON.stringify(detail.current_validation_run.checks)}</code>
+            </dd>
+          </dl>
+        </div>
+      ) : null}
+
       <RequestActions detail={detail} />
+
+      <BaselineSection detail={detail} />
     </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Baseline evidence (doc 06 §4.4/§8.3): a mode-aware equivalence gate. A package
+// that claims translation/repair/equivalence may publish only with a PASSED
+// baseline parse; a non-claiming package never requires one. The UI never
+// pre-judges the gate — it uploads the composed CSV + metadata and runs the
+// parse; the server enforces file-type / metadata-complete / parseable and
+// returns the canonical envelope verbatim. Raw bytes never travel: the content
+// is UTF-8 CSV text, the evidence is a content-addressed digest + parse report.
+// ---------------------------------------------------------------------------
+
+function BaselineSection({ detail }: { detail: PackageRequestDetail }) {
+  const upload = useUploadBaseline();
+  const parse = useStartBaselineParse();
+  const [filename, setFilename] = useState("");
+  const [content, setContent] = useState("");
+  const [metadataText, setMetadataText] = useState("");
+  const [metadataError, setMetadataError] = useState<string | null>(null);
+
+  const baseline = detail.current_baseline;
+  const anyPending = upload.isPending || parse.isPending;
+
+  function onUpload() {
+    setMetadataError(null);
+    let metadata: Record<string, unknown> = {};
+    const trimmed = metadataText.trim();
+    if (trimmed.length > 0) {
+      try {
+        const parsed: unknown = JSON.parse(trimmed);
+        if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+          setMetadataError("Baseline metadata must be a JSON object.");
+          return;
+        }
+        metadata = parsed as Record<string, unknown>;
+      } catch {
+        setMetadataError("Baseline metadata is not valid JSON.");
+        return;
+      }
+    }
+    upload.mutate({
+      request_id: detail.request_id,
+      request_version: detail.request_version,
+      content,
+      baseline_metadata: metadata,
+      content_type: "text/csv",
+      original_filename: filename.trim().length > 0 ? filename.trim() : null,
+    });
+  }
+
+  return (
+    <div style={{ marginTop: 14 }}>
+      <h4 style={{ margin: "0 0 8px" }}>Baseline (equivalence evidence)</h4>
+      <p className="cp-note" style={{ marginTop: 0 }}>
+        {detail.baseline_required
+          ? "This request claims equivalence — a PASSED baseline parse is required to publish."
+          : "This request does not claim equivalence — a baseline is optional."}
+      </p>
+
+      {baseline ? (
+        <dl className="kv">
+          <dt>Asset</dt>
+          <dd>
+            <code>{baseline.baseline_asset_id}</code> (attempt {baseline.attempt_no})
+          </dd>
+          <dt>Parse status</dt>
+          <dd>
+            <StatusBadge tone={baselineParseTone(baseline.parse_status)} label={baseline.parse_status} />
+          </dd>
+          <dt>File</dt>
+          <dd>
+            {baseline.original_filename ?? "—"}
+            {baseline.size_bytes !== null ? ` · ${baseline.size_bytes} bytes` : ""}
+          </dd>
+          <dt>Digest</dt>
+          <dd>
+            <code>{baseline.content_digest ?? "—"}</code>
+          </dd>
+          <dt>Metadata</dt>
+          <dd>
+            <code>{JSON.stringify(baseline.baseline_metadata)}</code>
+          </dd>
+        </dl>
+      ) : (
+        <p className="cp-note" style={{ marginTop: 0 }}>
+          No baseline uploaded yet.
+        </p>
+      )}
+
+      <div className="cp-field" style={{ marginTop: 10 }}>
+        <span>Baseline filename (.csv)</span>
+        <input
+          aria-label="Baseline filename"
+          value={filename}
+          onChange={(e) => setFilename(e.target.value)}
+          placeholder="baseline.csv"
+        />
+      </div>
+      <div className="cp-field" style={{ marginTop: 10 }}>
+        <span>Baseline CSV content</span>
+        <textarea
+          aria-label="Baseline CSV content"
+          value={content}
+          onChange={(e) => setContent(e.target.value)}
+          rows={4}
+          placeholder="time,open,high,low,close,volume…"
+        />
+      </div>
+      <div className="cp-field" style={{ marginTop: 10 }}>
+        <span>Baseline metadata (JSON)</span>
+        <textarea
+          aria-label="Baseline metadata"
+          value={metadataText}
+          onChange={(e) => setMetadataText(e.target.value)}
+          rows={4}
+          placeholder='{"provider":"…","symbol":"…","timeframe":"…","range":"…","timezone":"…","settings":{},"source_revision_context":{}}'
+        />
+      </div>
+
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 10 }}>
+        <button
+          type="button"
+          className="btn"
+          disabled={anyPending || content.trim().length === 0 || filename.trim().length === 0}
+          onClick={onUpload}
+        >
+          {upload.isPending ? "Uploading…" : "Upload baseline"}
+        </button>
+        <button
+          type="button"
+          className="btn"
+          disabled={baseline === null || anyPending}
+          onClick={() =>
+            parse.mutate({
+              request_id: detail.request_id,
+              request_version: detail.request_version,
+            })
+          }
+        >
+          {parse.isPending ? "Parsing…" : "Run baseline parse"}
+        </button>
+      </div>
+
+      {metadataError ? (
+        <p role="alert" style={{ color: "var(--down)", marginBottom: 0 }}>
+          {metadataError}
+        </p>
+      ) : null}
+      {upload.isError ? (
+        <p role="alert" style={{ color: "var(--down)", marginBottom: 0 }}>
+          {mutationErrorText(upload.error)}
+        </p>
+      ) : null}
+      {upload.data ? (
+        <p aria-live="polite" style={{ marginBottom: 0 }}>
+          Baseline uploaded — asset <code>{upload.data.baseline_asset_id}</code> (attempt{" "}
+          {upload.data.attempt_no}, {upload.data.size_bytes} bytes).
+        </p>
+      ) : null}
+      {parse.isError ? (
+        <p role="alert" style={{ color: "var(--down)", marginBottom: 0 }}>
+          {mutationErrorText(parse.error)}
+        </p>
+      ) : null}
+      {parse.data ? (
+        <p aria-live="polite" style={{ marginBottom: 0 }}>
+          Baseline parse {parse.data.parse_status} — parser {parse.data.parser_version}.
+        </p>
+      ) : null}
+    </div>
   );
 }
 
@@ -555,11 +792,18 @@ function RequestActions({ detail }: { detail: PackageRequestDetail }) {
   const precheck = useRunPrecheck();
   const generate = useGenerateCandidate();
   const draft = useCreateDraft();
+  const validate = useRunValidation();
+  const revision = useRequestRevision();
   const approve = useApproveRequest();
   const [note, setNote] = useState("");
 
   const anyPending =
-    precheck.isPending || generate.isPending || draft.isPending || approve.isPending;
+    precheck.isPending ||
+    generate.isPending ||
+    draft.isPending ||
+    validate.isPending ||
+    revision.isPending ||
+    approve.isPending;
   const hasDraft = detail.draft_revision_id !== null;
   // The accepted candidate hash from THIS card is the draft's staleness token;
   // after a reload it is absent and the server-side state check alone gates.
@@ -608,6 +852,32 @@ function RequestActions({ detail }: { detail: PackageRequestDetail }) {
           }
         >
           {draft.isPending ? "Drafting…" : "Create draft"}
+        </button>
+        <button
+          type="button"
+          className="btn"
+          disabled={!hasDraft || anyPending}
+          onClick={() =>
+            validate.mutate({
+              request_id: detail.request_id,
+              request_version: detail.request_version,
+            })
+          }
+        >
+          {validate.isPending ? "Running validation…" : "Run Validation Tests"}
+        </button>
+        <button
+          type="button"
+          className="btn"
+          disabled={anyPending}
+          onClick={() =>
+            revision.mutate({
+              request_id: detail.request_id,
+              request_version: detail.request_version,
+            })
+          }
+        >
+          {revision.isPending ? "Requesting revision…" : "Request Revision"}
         </button>
         <button
           type="button"
@@ -664,6 +934,28 @@ function RequestActions({ detail }: { detail: PackageRequestDetail }) {
       {draft.data ? (
         <p aria-live="polite" style={{ marginBottom: 0 }}>
           Draft created — revision <code>{draft.data.draft_revision_id ?? "—"}</code>.
+        </p>
+      ) : null}
+      {validate.isError ? (
+        <p role="alert" style={{ color: "var(--down)", marginBottom: 0 }}>
+          {mutationErrorText(validate.error)}
+        </p>
+      ) : null}
+      {validate.data ? (
+        <p aria-live="polite" style={{ marginBottom: 0 }}>
+          Validation {validate.data.status} — run <code>{validate.data.validation_run_id}</code>{" "}
+          (attempt {validate.data.attempt_no}) → {prettyToken(validate.data.state)}.
+        </p>
+      ) : null}
+      {revision.isError ? (
+        <p role="alert" style={{ color: "var(--down)", marginBottom: 0 }}>
+          {mutationErrorText(revision.error)}
+        </p>
+      ) : null}
+      {revision.data ? (
+        <p aria-live="polite" style={{ marginBottom: 0 }}>
+          Revision requested — {prettyToken(revision.data.state)}, new candidate{" "}
+          <code>{revision.data.candidate_hash}</code>.
         </p>
       ) : null}
       {approve.isError ? (

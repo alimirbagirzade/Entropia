@@ -56,6 +56,12 @@ const REQUEST_DETAIL = {
   package_root_id: null,
   draft_revision_id: null,
   can_generate_candidate: true,
+  current_validation_run: null,
+  validation_fresh: false,
+  claims_equivalence: true,
+  current_baseline: null,
+  baseline_ready: false,
+  baseline_required: true,
   created_at: "2026-07-08T10:00:00+00:00",
 };
 
@@ -104,6 +110,65 @@ const DRAFT_RESULT = {
   package_root_id: "root_1",
   draft_revision_id: "rev_1",
   state: "draft_created",
+};
+
+const VALIDATION_RESULT = {
+  request_id: "req_1",
+  validation_run_id: "vr_1",
+  attempt_no: 1,
+  status: "passed",
+  state: "eligible_for_approval",
+  checks: [{ name: "output_structure", passed: true }],
+  job_id: "job_3",
+};
+
+const REVISION_RESULT = {
+  request_id: "req_1",
+  state: "candidate_ready",
+  candidate_hash: "sha256:rev",
+};
+
+const BASELINE_UPLOAD_RESULT = {
+  request_id: "req_1",
+  baseline_asset_id: "ba_1",
+  attempt_no: 1,
+  parse_status: "uploaded",
+  content_digest: "sha256:csv",
+  size_bytes: 42,
+};
+
+const BASELINE_PARSE_RESULT = {
+  request_id: "req_1",
+  baseline_asset_id: "ba_1",
+  attempt_no: 1,
+  parse_status: "passed",
+  parser_version: "baseline-parser-v1",
+  parse_report: { rows: 3 },
+  job_id: "job_4",
+};
+
+// A request with a draft present (validation + approve edges are live).
+const REQUEST_DETAIL_DRAFT = {
+  ...REQUEST_DETAIL,
+  state: "draft_created",
+  package_root_id: "root_1",
+  draft_revision_id: "rev_1",
+};
+
+// A request whose head baseline is uploaded but not yet parsed.
+const REQUEST_DETAIL_BASELINE = {
+  ...REQUEST_DETAIL_DRAFT,
+  current_baseline: {
+    baseline_asset_id: "ba_1",
+    attempt_no: 1,
+    parse_status: "uploaded",
+    content_digest: "sha256:csv",
+    size_bytes: 42,
+    original_filename: "baseline.csv",
+    baseline_metadata: { provider: "x", symbol: "BTCUSD" },
+    parse_report: null,
+    parser_version: null,
+  },
 };
 
 // Order matters for the fragment-matching stub: the detail routes must precede
@@ -369,5 +434,143 @@ describe("Create Package page", () => {
     expect(approveCall).toBeDefined();
     const body = JSON.parse(String((approveCall?.[1] as RequestInit).body));
     expect(body.expected_head_revision_id).toBe("rev_1");
+  });
+
+  it("runs validation with the OCC version header and a fresh Idempotency-Key", async () => {
+    const fetchMock = stubApi({
+      "POST /create-package/requests/req_1/validate": VALIDATION_RESULT,
+      ...BASE_ROUTES,
+      "GET /create-package/requests/req_1": REQUEST_DETAIL_DRAFT,
+    });
+    renderPage();
+    await screen.findByText("req_1");
+    fireEvent.click(screen.getByRole("button", { name: "View" }));
+
+    fireEvent.click(await screen.findByRole("button", { name: "Run Validation Tests" }));
+
+    expect(await screen.findByText("vr_1")).toBeInTheDocument();
+    const call = fetchMock.mock.calls.find(
+      ([url, init]) => String(url).endsWith("/validate") && init?.method === "POST",
+    );
+    expect(call).toBeDefined();
+    const headers = (call?.[1] as RequestInit).headers as Record<string, string>;
+    expect(headers["X-Request-Version"]).toBe("2");
+    expect(headers["Idempotency-Key"]).toBeTruthy();
+  });
+
+  it("gates Run Validation Tests on a server-truth draft, never a UI guess", async () => {
+    // No draft present -> the server-truth draft_revision_id is null.
+    stubApi(BASE_ROUTES);
+    renderPage();
+    await screen.findByText("req_1");
+    fireEvent.click(screen.getByRole("button", { name: "View" }));
+
+    expect(await screen.findByRole("button", { name: "Run Validation Tests" })).toBeDisabled();
+  });
+
+  it("requests a revision with the OCC header (legal state enforced server-side)", async () => {
+    const fetchMock = stubApi({
+      "POST /create-package/requests/req_1/request-revision": REVISION_RESULT,
+      ...BASE_ROUTES,
+      "GET /create-package/requests/req_1": { ...REQUEST_DETAIL, state: "revision_required" },
+    });
+    renderPage();
+    await screen.findByText("req_1");
+    fireEvent.click(screen.getByRole("button", { name: "View" }));
+
+    fireEvent.click(await screen.findByRole("button", { name: "Request Revision" }));
+
+    expect(await screen.findByText("sha256:rev")).toBeInTheDocument();
+    const call = fetchMock.mock.calls.find(
+      ([url, init]) => String(url).endsWith("/request-revision") && init?.method === "POST",
+    );
+    expect(call).toBeDefined();
+    expect((call?.[1] as RequestInit).headers as Record<string, string>).toMatchObject({
+      "X-Request-Version": "2",
+    });
+  });
+
+  it("uploads a baseline with the OCC header + composed CSV body and metadata", async () => {
+    const fetchMock = stubApi({
+      "POST /create-package/requests/req_1/baseline": BASELINE_UPLOAD_RESULT,
+      ...BASE_ROUTES,
+      "GET /create-package/requests/req_1": REQUEST_DETAIL_DRAFT,
+    });
+    renderPage();
+    await screen.findByText("req_1");
+    fireEvent.click(screen.getByRole("button", { name: "View" }));
+
+    fireEvent.change(await screen.findByLabelText("Baseline filename"), {
+      target: { value: "baseline.csv" },
+    });
+    fireEvent.change(screen.getByLabelText("Baseline CSV content"), {
+      target: { value: "time,close\n1,2\n" },
+    });
+    fireEvent.change(screen.getByLabelText("Baseline metadata"), {
+      target: { value: '{"provider":"x","symbol":"BTCUSD"}' },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Upload baseline" }));
+
+    expect(await screen.findByText("ba_1")).toBeInTheDocument();
+    const call = fetchMock.mock.calls.find(
+      ([url, init]) => String(url).endsWith("/baseline") && init?.method === "POST",
+    );
+    expect(call).toBeDefined();
+    const init = call?.[1] as RequestInit;
+    expect((init.headers as Record<string, string>)["X-Request-Version"]).toBe("2");
+    expect((init.headers as Record<string, string>)["Idempotency-Key"]).toBeTruthy();
+    expect(JSON.parse(String(init.body))).toEqual({
+      content: "time,close\n1,2\n",
+      baseline_metadata: { provider: "x", symbol: "BTCUSD" },
+      content_type: "text/csv",
+      original_filename: "baseline.csv",
+    });
+  });
+
+  it("blocks a baseline upload with malformed metadata before dispatch", async () => {
+    const fetchMock = stubApi({ ...BASE_ROUTES, "GET /create-package/requests/req_1": REQUEST_DETAIL_DRAFT });
+    renderPage();
+    await screen.findByText("req_1");
+    fireEvent.click(screen.getByRole("button", { name: "View" }));
+
+    fireEvent.change(await screen.findByLabelText("Baseline filename"), {
+      target: { value: "baseline.csv" },
+    });
+    fireEvent.change(screen.getByLabelText("Baseline CSV content"), {
+      target: { value: "time,close\n1,2\n" },
+    });
+    fireEvent.change(screen.getByLabelText("Baseline metadata"), {
+      target: { value: "{not json" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Upload baseline" }));
+
+    expect(await screen.findByText("Baseline metadata is not valid JSON.")).toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.find(([url]) => String(url).endsWith("/baseline")),
+    ).toBeUndefined();
+  });
+
+  it("runs baseline parse only when a baseline exists and surfaces the report", async () => {
+    const fetchMock = stubApi({
+      "POST /create-package/requests/req_1/baseline-parse": BASELINE_PARSE_RESULT,
+      ...BASE_ROUTES,
+      "GET /create-package/requests/req_1": REQUEST_DETAIL_BASELINE,
+    });
+    renderPage();
+    await screen.findByText("req_1");
+    fireEvent.click(screen.getByRole("button", { name: "View" }));
+
+    const parseButton = await screen.findByRole("button", { name: "Run baseline parse" });
+    expect(parseButton).toBeEnabled();
+    fireEvent.click(parseButton);
+
+    expect(await screen.findByText(/baseline-parser-v1/)).toBeInTheDocument();
+    const call = fetchMock.mock.calls.find(
+      ([url, init]) => String(url).endsWith("/baseline-parse") && init?.method === "POST",
+    );
+    expect(call).toBeDefined();
+    expect((call?.[1] as RequestInit).headers as Record<string, string>).toMatchObject({
+      "X-Request-Version": "2",
+    });
   });
 });

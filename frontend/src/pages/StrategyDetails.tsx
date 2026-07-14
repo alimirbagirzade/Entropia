@@ -335,10 +335,10 @@ function DraftHeaderCard({ draft }: { draft: StrategyDraft }) {
 // always seeded from the latest server draft, never merged. The textarea is
 // raw JSON: parse failures stay CLIENT-side (nothing is sent); the server
 // compiler remains the only authority on config semantics. Since R6 the
-// structured forms above cover the flat sections AND the Entry / Exit package
-// graph, so this is a genuine expert FALLBACK — used for the sections still
-// without a structured editor (Scaling, Restrictions / Filters), each block's
-// advanced fields (parameter overrides, reference chains) and any future key.
+// structured forms above cover the flat sections AND the full package graph
+// (Entry / Exit Logic, Scaling, Restrictions), so this is a genuine expert
+// FALLBACK — used for each block's advanced fields (parameter overrides,
+// reference chains) and any future key not yet surfaced by a structured field.
 function PayloadEditor({
   draft,
   pending,
@@ -358,8 +358,8 @@ function PayloadEditor({
       </h3>
       <p className="cp-note">
         Apply replaces the FULL draft payload (optimistic concurrency on row version{" "}
-        {draft.row_version}). The structured forms above now cover the flat sections and the Entry
-        / Exit package graph — this is the fallback for Scaling, Restrictions / Filters, each
+        {draft.row_version}). The structured forms above now cover the flat sections and the full
+        package graph (Entry / Exit Logic, Scaling, Restrictions) — this is the fallback for each
         block&apos;s advanced fields (parameter overrides, reference chains) and any key not yet
         surfaced. Validation happens on the server — Validate / Save below.
       </p>

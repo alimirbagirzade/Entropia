@@ -140,6 +140,44 @@ export const PARTIAL_AFTERMATH_OPTIONS: SelectOption[] = [
   { value: "close_all", label: "Close Remaining at Next Exit Signal" },
 ];
 
+// ScalingLogic.method — "" (empty) = no method selected (scaling inactive).
+export const SCALING_METHOD_OPTIONS: SelectOption[] = [
+  { value: "price_distance_scaling", label: "Price-Distance Based Scaling" },
+  { value: "logic_based_scaling", label: "Logic-Based Scaling" },
+];
+
+// ScalingLogic.add_size
+export const ADD_SIZE_OPTIONS: SelectOption[] = [
+  { value: "percent_of_initial", label: "Percentage of Initial Entry Size" },
+  { value: "percent_of_current", label: "Percentage of Current Position" },
+  { value: "fixed_amount", label: "Fixed Amount" },
+];
+
+// RestrictionsFilters.rule
+export const RESTRICTION_RULE_OPTIONS: SelectOption[] = [
+  { value: "any", label: "If ANY restriction is active, block entry" },
+  { value: "all", label: "If ALL restrictions are active, block entry" },
+];
+
+// RestrictionFilter.filter_type (the seven config.py categories; the V18 spec's
+// regime/session/weekend/etc. have no V1 backend type and are out of scope).
+export const FILTER_TYPE_OPTIONS: SelectOption[] = [
+  { value: "volatility_filter", label: "Volatility Filter" },
+  { value: "spread_filter", label: "Spread Filter" },
+  { value: "volume_filter", label: "Volume Filter" },
+  { value: "date_blackout_filter", label: "Date Blackout Windows" },
+  { value: "max_daily_loss_filter", label: "Max Daily Loss" },
+  { value: "consecutive_loss_filter", label: "Consecutive Loss Filter" },
+  { value: "correlation_filter", label: "Correlation Filter" },
+];
+
+// ⓘ panel by filter_type where doc 02 §6 provides one (others have no panel).
+export const FILTER_TYPE_PANEL_KEY: Record<string, string> = {
+  volatility_filter: "volatilityFilter",
+  date_blackout_filter: "dateBlackoutWindows",
+  consecutive_loss_filter: "consecutiveLossFilter",
+};
+
 // ---------------------------------------------------------------------------
 // ⓘ panels — transcribed VERBATIM from doc 02 §6 (HTML entities decoded,
 // <br/><br/> -> "\n\n"). Help-only: a panel never writes a form value.
@@ -242,6 +280,50 @@ export const STRATEGY_GRAPH_PANELS: Record<string, InfoPanelContent> = {
     title: "Logic-Based Stop Block",
     body: "Bir indikatör ve ona bağlı condition’lar üzerinden stop sinyali üretir. Fiyat önceden belirlenmiş yüzde stop seviyesine gelmeden önce, stratejinin temel mantığı bozulduysa pozisyonu kapatmak için kullanılır.\n\n+ Add Condition , aynı indikatör için yeni bir koşul ekler. + Add Logic-Based Stop Block , farklı bir indikatörle ayrı bir stop kuralı kurar.\n\nÖrnek: Long pozisyon için Smoothed Heiken Ashi seçip “Color Turns Red” condition’ı eklenirse, gösterge kırmızıya döndüğünde stop sinyali üretilebilir.",
   },
+  scalingLogic: {
+    title: "7. Scaling Logic",
+    body: "Scaling Logic, zaten açık olan bir pozisyona aynı yönde yeni layer eklemeyi tanımlar. Bu bölüm pozisyon azaltma veya partial close için kullanılmaz; çıkış işlemleri Position Exit Logic içinde kalır.\n\nÖrnek: Long pozisyon açıkken fiyat %1 aleyhe hareket ettiğinde yeni long layer eklemek Price-Distance Based Scaling; yeni bir indicator onayı gelince layer eklemek Logic-Based Scaling’dir.",
+  },
+  scalingTimeframeStructure: {
+    title: "1. Scaling Timeframe Structure",
+    body: "Yalnızca Logic-Based Scaling kurallarının hangi timeframe’de değerlendirileceğini belirler. Price-Distance Based Scaling doğrudan fiyat mesafesiyle tetiklendiğinden bu timeframe dizisini kullanmaz.\n\nÖrnek: Ana strateji 15m iken layer 1 için 15m, layer 2 için 30m, layer 3 için 1h sinyali aramak, yeni kademe açıldıkça daha güçlü onay istemek anlamına gelir.",
+  },
+  additionalLayerMethod: {
+    title: "2. Additional Layer Method",
+    body: "Açık pozisyona yeni layer’ın hangi yöntemle ekleneceğini belirler. Price-Distance Based Scaling ve Logic-Based Scaling eşit seviyede iki alternatif yöntemdir; aynı anda yalnızca biri aktif olabilir.\n\nÖrnek: Fiyat her %1 düştüğünde long layer eklemek mesafe tabanlıdır. Reversal Sensor tekrar long sinyal verdiğinde layer eklemek logic tabanlıdır.",
+  },
+  priceDistanceScaling: {
+    title: "Price-Distance Based Scaling",
+    body: "Yeni layer’ı indikatör beklemeden, fiyatın seçilen referans noktadan belirli yüzde kadar hareket etmesiyle ekler. Fiyatın pozisyona karşı mı yoksa pozisyon lehine mi hareketinde ekleneceği ayrıca seçilir.\n\nÖrnek: Long pozisyon açık, Direction “Against Open Position”, mesafe %1 ve Reference “Previous Filled Layer” ise; her önceki dolan layer’dan %1 aşağıda yeni long layer tetiklenir.",
+  },
+  logicBasedScaling: {
+    title: "Logic-Based Scaling",
+    body: "Yeni layer yalnızca tanımlı Signal Block içindeki indicator/condition kuralları geçerli olduğunda eklenir. Fiyatın belirli mesafeye gelmesi tek başına yeterli değildir.\n\nÖrnek: Zarar yönünde hareket eden long pozisyona, ancak Predictive Ranges desteği korunuyor ve Reversal Sensor yeniden long sinyal üretiyorsa layer eklenebilir.",
+  },
+  addSizePerScale: {
+    title: "Add Size Per Scale",
+    body: "Scale koşulu gerçekleştiğinde açık pozisyona aynı yönde ne kadar ekleme yapılacağını belirler.",
+  },
+  scalingLimits: {
+    title: "3. Layer Size & Scaling Limits",
+    body: "Yeni layer’ların büyüklüğünü ve scaling davranışının kontrol sınırlarını belirler. Scaling yöntemi sinyal üretiyor olsa bile bu sınırlar aşılırsa yeni layer eklenmez.\n\nÖrnek: Maksimum ek layer sayısı 3 ise dördüncü ekleme sinyali görülse bile yeni layer açılmaz.",
+  },
+  restrictionRule: {
+    title: "Restriction Rule",
+    body: "Restriction, entry sinyali doğru olsa bile yeni pozisyon açılmasını sınırlayan güvenlik veya piyasa uygunluğu kontrolüdür. Bu açılır menü aktif filtrelerin nasıl birleşeceğini belirler.\n\n• If ANY restriction is active, block entry: Aktif filtrelerden biri risk gördüğünde yeni giriş engellenir. En korumacı seçimdir.\n\n• If ALL restrictions are active, block entry: Tüm aktif filtreler aynı anda risk göstermeden giriş engellenmez.\n\n• Minimum N of M restrictions must be active: Belirli sayıda filtrenin birlikte tetiklenmesi gerekir.\n\n• Restriction Score Threshold: Filtrelerin puanları toplamı eşik üzerinde olursa giriş engellenir.\n\n• Warning Only: İşlem engellenmez; yalnızca uyarı kaydı oluşur.\n\nÖrnek: Spread çok yüksekse, sinyal ne kadar iyi görünürse görünsün “ANY” seçimi yeni pozisyonu engeller; açık pozisyonu kapatmaz.",
+  },
+  volatilityFilter: {
+    title: "Volatility Filter",
+    body: "Volatility (oynaklık) , fiyatın belirli sürede ne kadar geniş ve hızlı dalgalandığını ifade eder. Yüksek volatilite büyük fiyat hareketleri; düşük volatilite dar ve sakin hareketler anlamına gelir. Bu filtre, stratejinin uygun olmadığı oynaklık ortamlarında yeni pozisyon açmasını engellemek için kullanılır.\n\n• Volatility too high: Piyasa normalden fazla dalgalanıyorsa filtre çalışır; stopların ani fiyat sıçramalarıyla bozulmasını önlemeye yardım eder.\n\n• Volatility too low: Hareket yetersizse filtre çalışır; özellikle breakout stratejisinde işlem fırsatı zayıf olabilir.\n\n• Volatility spike detected: Çok kısa sürede ani oynaklık artışı tespit edildiğinde tetiklenir.\n\n• Volatility compression detected: Oynaklık sıkışması tespit edildiğinde tetiklenir; strateji türüne göre giriş engelleme amacı taşıyabilir.\n\n• ATR above threshold: Average True Range (Ortalama Gerçek Aralık) belirlenen değerin üstüne çıktığında aktif olur.\n\n• ATR below threshold: Average True Range (Ortalama Gerçek Aralık) belirlenen değerin altına indiğinde aktif olur.\n\nÖrnek: Ortalama 15 dakikalık fiyat aralığı %0.4 iken aniden %2.5 aralıklı mumlar oluşuyorsa “Volatility spike detected” yeni girişleri geçici olarak engelleyebilir.",
+  },
+  dateBlackoutWindows: {
+    title: "Date Blackout Windows",
+    body: "Bu panel, belirli takvim aralıklarında Strategynin yeni entry veya scaling davranışını sınırlamak için kullanılır. Her aralık başlangıç ve bitiş zamanı, Strategy/Data timezoneı ve seçilmiş aksiyonla birlikte değerlendirilir.\n\n• Block New Entries + Block New Scaling: Açık pozisyonlar korunur; yeni giriş ve yeni layer engellenir.\n\n• Block New Entries Only: Yeni ana giriş engellenir; Scaling/exit ayrı kuralına göre devam edebilir.\n\n• Close Open Positions at Start Date: Aralık başladığında açık pozisyon için deterministic close intent üretilir.\n\n• Allow Exit Only: Yalnız risk/exit işlemlerine izin verilir.\n\n• Warning Only: Engine kararını engellemez; trace ve warning üretir.\n\nÖrnek: Önemli bir veri açıklaması veya bakım dönemi için 12:00–14:00 aralığı tanımlanır. “Block New Entries + Block New Scaling” seçilirse sistem bu aralıkta açık pozisyonu büyütmez ve yeni trade açmaz.",
+  },
+  consecutiveLossFilter: {
+    title: "Consecutive Loss Filter",
+    body: "Arka arkaya gelen zarar sayısı belirli bir sınıra ulaştığında yeni işlem açılmasını engellemek veya stratejiyi geçici olarak yavaşlatmak için kullanılır. Amaç, piyasanın o anda strateji için uygun olmayabileceğini kabul ederek aynı hatayı art arda büyütmemektir.\n\n• Block New Entries: Açık pozisyonlara dokunmaz, yalnızca yeni girişleri engeller.\n\n• Reduce New Position Size: Yeni sinyaller alınabilir fakat daha küçük pozisyonla denenir.\n\n• Pause Strategy for N Candles: Belirlenen mum sayısı boyunca yeni giriş aranmaz.\n\n• Disable Strategy for the Day: Günün kalanında yeni pozisyon açılmaz.\n\n• Warning Only: İşlem davranışı değişmez; yalnızca kayıt/uyarı üretir.\n\nÖrnek: Max Consecutive Losses = 5 ve Action = Block New Entries ise, beşinci ardışık zarardan sonra yeni giriş sinyalleri uygulanmaz.",
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -300,9 +382,48 @@ export interface ExitLogicForm {
   raw: Record<string, unknown>;
 }
 
+export interface PriceScalingForm {
+  retracement_distance: string;
+  layers: string;
+}
+
+export interface ScalingLimitsForm {
+  max_scaling_layers: string;
+  max_total_position_size: string;
+}
+
+export interface ScalingForm {
+  enabled: boolean;
+  timeframe: string;
+  method: string;
+  price: PriceScalingForm;
+  logic_blocks: IndicatorBlockForm[];
+  add_size: string;
+  add_size_value: string;
+  limits: ScalingLimitsForm;
+  raw: Record<string, unknown>;
+}
+
+export interface RestrictionFilterForm {
+  key: string;
+  filter_id: string;
+  filter_type: string;
+  enabled: boolean;
+  config_text: string;
+  raw: Record<string, unknown>;
+}
+
+export interface RestrictionsForm {
+  rule: string;
+  filters: RestrictionFilterForm[];
+  raw: Record<string, unknown>;
+}
+
 export interface StrategyGraphForm {
   entry: EntryLogicForm;
   exit: ExitLogicForm;
+  scaling: ScalingForm;
+  restrictions: RestrictionsForm;
 }
 
 // ---------------------------------------------------------------------------
@@ -417,6 +538,55 @@ export function newCondition(): ConditionBlockForm {
   };
 }
 
+export function newFilter(): RestrictionFilterForm {
+  const id = newBlockId();
+  return { key: id, filter_id: id, filter_type: "", enabled: true, config_text: "", raw: {} };
+}
+
+function extractFilter(raw: unknown, index: number): RestrictionFilterForm {
+  const f = asRecord(raw);
+  const id = str(f.filter_id) || newBlockId();
+  const config = asRecord(f.config);
+  return {
+    key: id || `filter-${index}`,
+    filter_id: id,
+    filter_type: str(f.filter_type),
+    enabled: bool(f.enabled, true),
+    config_text: Object.keys(config).length > 0 ? JSON.stringify(config, null, 2) : "",
+    raw: f,
+  };
+}
+
+function extractScaling(payload: Record<string, unknown>): ScalingForm {
+  const s = asRecord(payload.scaling_logic);
+  const price = asRecord(s.price_scaling);
+  const logic = asRecord(s.logic_scaling);
+  const limits = asRecord(s.scaling_limits);
+  return {
+    enabled: bool(s.enabled, false),
+    timeframe: enumStr(s.timeframe, "same_as_base_tf"),
+    method: str(s.method),
+    price: { retracement_distance: str(price.retracement_distance), layers: str(price.layers) },
+    logic_blocks: asArray(logic.indicator_blocks).map((b, i) => extractBlock(b, i)),
+    add_size: enumStr(s.add_size, "percent_of_initial"),
+    add_size_value: str(s.add_size_value),
+    limits: {
+      max_scaling_layers: str(limits.max_scaling_layers),
+      max_total_position_size: str(limits.max_total_position_size),
+    },
+    raw: s,
+  };
+}
+
+function extractRestrictions(payload: Record<string, unknown>): RestrictionsForm {
+  const r = asRecord(payload.restrictions_filters);
+  return {
+    rule: enumStr(r.rule, "any"),
+    filters: asArray(r.filters).map((f, i) => extractFilter(f, i)),
+    raw: r,
+  };
+}
+
 export { newBlock };
 
 export function extractGraphSections(payload: Record<string, unknown>): StrategyGraphForm {
@@ -448,6 +618,8 @@ export function extractGraphSections(payload: Record<string, unknown>): Strategy
       blocks: exitBlocks,
       raw: exit,
     },
+    scaling: extractScaling(payload),
+    restrictions: extractRestrictions(payload),
   };
 }
 
@@ -519,6 +691,84 @@ function mergeSignalBlock(rule: string, minCount: string): Record<string, unknow
   return out;
 }
 
+function pruneUndefined(obj: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) out[key] = value;
+  }
+  return out;
+}
+
+// Parse a restriction filter's config text. "" -> {}; a valid JSON object -> it;
+// anything else -> not ok (the component blocks Apply, nothing is sent).
+export function parseFilterConfig(text: string): { ok: boolean; value: Record<string, unknown> } {
+  const trimmed = text.trim();
+  if (trimmed === "") return { ok: true, value: {} };
+  try {
+    const parsed: unknown = JSON.parse(trimmed);
+    if (parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return { ok: true, value: parsed as Record<string, unknown> };
+    }
+    return { ok: false, value: {} };
+  } catch {
+    return { ok: false, value: {} };
+  }
+}
+
+// The label of the first restriction filter whose config text is not a valid
+// JSON object, else null — the component's client-side Apply guard (mirrors the
+// Advanced JSON editor: an invalid config is never sent).
+export function firstInvalidFilterConfig(form: StrategyGraphForm): string | null {
+  for (const f of form.restrictions.filters) {
+    if (!parseFilterConfig(f.config_text).ok) return f.filter_type || f.filter_id;
+  }
+  return null;
+}
+
+function mergeFilter(f: RestrictionFilterForm): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...f.raw };
+  out.filter_id = f.filter_id;
+  out.enabled = f.enabled;
+  setOrDelete(out, "filter_type", f.filter_type);
+  const parsed = parseFilterConfig(f.config_text);
+  out.config = parsed.ok ? parsed.value : asRecord(f.raw.config);
+  return out;
+}
+
+function mergeScaling(s: ScalingForm): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...s.raw };
+  out.enabled = s.enabled;
+  setOrDelete(out, "timeframe", s.timeframe);
+  setOrDelete(out, "method", s.method);
+  if (s.method === "price_distance_scaling") {
+    out.price_scaling = pruneUndefined({
+      retracement_distance: decOrOmit(s.price.retracement_distance),
+      layers: intOrOmit(s.price.layers),
+    });
+  } else {
+    delete out.price_scaling;
+  }
+  if (s.method === "logic_based_scaling") {
+    out.logic_scaling = { indicator_blocks: s.logic_blocks.map((b, i) => mergeBlock(b, i)) };
+  } else {
+    delete out.logic_scaling;
+  }
+  setOrDelete(out, "add_size", s.add_size);
+  setOrDelete(out, "add_size_value", decOrOmit(s.add_size_value));
+  if (
+    s.limits.max_scaling_layers.trim() === "" &&
+    s.limits.max_total_position_size.trim() === ""
+  ) {
+    delete out.scaling_limits;
+  } else {
+    out.scaling_limits = pruneUndefined({
+      max_scaling_layers: intOrOmit(s.limits.max_scaling_layers),
+      max_total_position_size: decOrOmit(s.limits.max_total_position_size),
+    });
+  }
+  return out;
+}
+
 export function mergeGraphSections(
   payload: Record<string, unknown>,
   form: StrategyGraphForm,
@@ -547,9 +797,17 @@ export function mergeGraphSections(
     delete exit.signal_block;
   }
 
+  const scaling = mergeScaling(form.scaling);
+
+  const restrictions: Record<string, unknown> = { ...form.restrictions.raw };
+  setOrDelete(restrictions, "rule", form.restrictions.rule);
+  restrictions.filters = form.restrictions.filters.map((f) => mergeFilter(f));
+
   return {
     ...payload,
     position_entry_logic: entry,
     position_exit_logic: exit,
+    scaling_logic: scaling,
+    restrictions_filters: restrictions,
   };
 }

@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { StrategyGraphForm } from "@/components/StrategyGraphForm";
 import {
   extractGraphSections,
+  firstInvalidFilterConfig,
   mergeGraphSections,
   type StrategyGraphForm as GraphState,
 } from "@/lib/strategyGraph";
@@ -69,7 +70,26 @@ function fullPayload(): Record<string, unknown> {
       partial_aftermath: "move_stop_to_entry",
     },
     position_sizing: { method: "base_position_size", base_position_size: "10" },
-    scaling_logic: { enabled: false },
+    scaling_logic: {
+      enabled: true,
+      timeframe: "15m",
+      method: "price_distance_scaling",
+      price_scaling: { retracement_distance: "1.0", layers: 3 },
+      add_size: "percent_of_initial",
+      add_size_value: "50",
+      scaling_limits: { max_scaling_layers: 4 },
+    },
+    restrictions_filters: {
+      rule: "any",
+      filters: [
+        {
+          filter_id: "f1",
+          filter_type: "volatility_filter",
+          enabled: true,
+          config: { condition: "too_high" },
+        },
+      ],
+    },
     untouched_future_key: "preserved",
   };
 }
@@ -97,10 +117,10 @@ describe("strategyGraph extract/merge", () => {
     const payload = fullPayload();
     const merged = mergeGraphSections(payload, extractGraphSections(payload));
 
-    // Uncovered top-level keys preserved verbatim.
+    // Uncovered top-level keys preserved verbatim (scaling_logic /
+    // restrictions_filters are now COVERED — asserted in their own suite).
     expect(merged.untouched_future_key).toBe("preserved");
     expect(merged.position_sizing).toEqual(payload.position_sizing);
-    expect(merged.scaling_logic).toEqual(payload.scaling_logic);
 
     const entry = merged.position_entry_logic as Record<string, unknown>;
     const blocks = entry.indicator_blocks as Record<string, unknown>[];
@@ -159,6 +179,57 @@ describe("strategyGraph extract/merge", () => {
   });
 });
 
+describe("strategyGraph scaling + restrictions", () => {
+  it("round-trips price-distance scaling", () => {
+    const p = fullPayload();
+    const form = extractGraphSections(p);
+    expect(form.scaling.enabled).toBe(true);
+    expect(form.scaling.method).toBe("price_distance_scaling");
+    expect(form.scaling.price.retracement_distance).toBe("1.0");
+    const scaling = mergeGraphSections(p, form).scaling_logic as Record<string, unknown>;
+    expect(scaling.enabled).toBe(true);
+    expect(scaling.price_scaling).toEqual({ retracement_distance: "1.0", layers: 3 });
+    expect(scaling).not.toHaveProperty("logic_scaling");
+    expect(scaling.scaling_limits).toEqual({ max_scaling_layers: 4 });
+  });
+
+  it("switches scaling to logic-based, emitting indicator blocks", () => {
+    const p = fullPayload();
+    const form = extractGraphSections(p);
+    const changed: GraphState = {
+      ...form,
+      scaling: { ...form.scaling, method: "logic_based_scaling", logic_blocks: form.entry.blocks },
+    };
+    const scaling = mergeGraphSections(p, changed).scaling_logic as Record<string, unknown>;
+    expect(scaling).not.toHaveProperty("price_scaling");
+    expect((scaling.logic_scaling as Record<string, unknown>).indicator_blocks).toHaveLength(1);
+  });
+
+  it("round-trips restriction filters preserving config", () => {
+    const p = fullPayload();
+    const form = extractGraphSections(p);
+    expect(form.restrictions.rule).toBe("any");
+    expect(form.restrictions.filters[0].filter_type).toBe("volatility_filter");
+    const restrictions = mergeGraphSections(p, form).restrictions_filters as Record<string, unknown>;
+    const filters = restrictions.filters as Record<string, unknown>[];
+    expect(filters[0].config).toEqual({ condition: "too_high" });
+    expect(filters[0].enabled).toBe(true);
+  });
+
+  it("flags an invalid filter config JSON, passes a valid one", () => {
+    const form = extractGraphSections(fullPayload());
+    expect(firstInvalidFilterConfig(form)).toBeNull();
+    const bad: GraphState = {
+      ...form,
+      restrictions: {
+        ...form.restrictions,
+        filters: [{ ...form.restrictions.filters[0], config_text: "{ not json" }],
+      },
+    };
+    expect(firstInvalidFilterConfig(bad)).toBe("volatility_filter");
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Component tests
 // ---------------------------------------------------------------------------
@@ -195,9 +266,11 @@ describe("StrategyGraphForm", () => {
   it("renders the Entry, Exit and Logic-Based Stop sections", () => {
     stubApi({ "GET /library": LIBRARY_PAGE });
     renderForm({});
-    expect(screen.getByRole("heading", { name: /Position Entry Logic/ })).toBeTruthy();
-    expect(screen.getByRole("heading", { name: /Position Exit Logic/ })).toBeTruthy();
-    expect(screen.getByRole("heading", { name: /Logic-Based Stop Block/ })).toBeTruthy();
+    // Anchor at the start of the accessible name — the Scaling Logic ⓘ body
+    // references "Position Exit Logic", so an unanchored match is ambiguous.
+    expect(screen.getByRole("heading", { name: /^Position Entry Logic/ })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: /^Position Exit Logic/ })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: /^Logic-Based Stop Block/ })).toBeTruthy();
     // Honest boundary note about the unimplemented logic-based stop.
     expect(screen.getByText(/does not yet implement/i)).toBeTruthy();
   });
@@ -222,5 +295,21 @@ describe("StrategyGraphForm", () => {
     const entry = sent.position_entry_logic as Record<string, unknown>;
     const blocks = entry.indicator_blocks as Record<string, unknown>[];
     expect(blocks[0].parameter_overrides).toEqual({ length: 14 });
+  });
+
+  it("renders the Scaling and Restrictions sections", () => {
+    stubApi({ "GET /library": LIBRARY_PAGE });
+    renderForm(fullPayload());
+    expect(screen.getByRole("heading", { name: /^Scaling Logic/ })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: /^Restrictions \/ Filters/ })).toBeTruthy();
+  });
+
+  it("blocks apply when a filter config is invalid JSON", () => {
+    stubApi({ "GET /library": LIBRARY_PAGE });
+    const onApply = renderForm(fullPayload());
+    fireEvent.change(screen.getByLabelText(/Config/), { target: { value: "{ not json" } });
+    fireEvent.click(screen.getByRole("button", { name: "Apply graph changes" }));
+    expect(onApply).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert").textContent).toMatch(/not valid JSON/);
   });
 });

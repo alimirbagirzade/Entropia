@@ -63,6 +63,17 @@ Before stopping a working session, produce **ALL** of the following:
   Commit `<type>(stage-<x>): <subject>`. **No AI attribution** (disabled globally).
 - **Stage order is authoritative** (`STAGE_BUILD_PLAN.md`) — never skip sub-stages.
   Stage 5 = docs 15/16/17; Stage 6 = docs 18/19/20; Stage 7 = docs 21/22.
+- **UI / frontend = v18 mockup is the visual reference (mandatory).** Every frontend/UI
+  change takes `docs/spec/index_guncellenmis_duzeltilmis_v18.html` (the canonical v18 mockup)
+  as its layout/style source of truth; the theme lives in `frontend/src/styles/global.css`
+  variables (`--accent:#00a9e8 --border:#cfcfcf --radius:4px --text:#222`, Arial). Work is
+  **presentation-only** — never touch route paths, react-query keys, OCC tokens
+  (If-Match / `expected_*_version` / `X-*-Version`), Idempotency-Key, hooks, SSE taxonomy,
+  API calls, or `lib/*.ts` data logic; `app/nav.ts` NAV/ALL_NAV_ITEMS stay verbatim. A broken
+  test is re-aligned to the NEW markup (option values + OCC/Idempotency assertions unchanged;
+  only visible labels / container scope via `aria-label` + `role`). To preview locally,
+  `cp docs/spec/index_guncellenmis_duzeltilmis_v18.html frontend/public/mockup_v18.html` (a
+  gitignored dev-only copy — canonical stays in `docs/spec/`).
 
 ---
 

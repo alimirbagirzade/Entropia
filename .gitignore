@@ -52,3 +52,8 @@ tmp/
 
 # ---- Backups (data-bearing; never commit) ----
 backups/
+
+# ---- v18 mockup: dev-only serving copy (npm run dev serves it at /mockup_v18.html
+#      for visual reference). Canonical lives in docs/spec/ and is tracked; the copy
+#      is a duplicate, so it is never committed. ----
+frontend/public/mockup_v18.html

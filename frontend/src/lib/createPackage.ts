@@ -124,6 +124,24 @@ export function scanStatusTone(status: string): "ok" | "warn" | "down" | "neutra
   return "neutral";
 }
 
+// Presentation-only badge tone for the immutable validation-run status
+// (ValidationRunStatus wire values verbatim: queued/running/passed/failed/stale).
+export function validationRunTone(status: string): "ok" | "warn" | "down" | "neutral" {
+  if (status === "passed") return "ok";
+  if (status === "failed") return "down";
+  if (status === "stale") return "warn";
+  return "neutral";
+}
+
+// Presentation-only badge tone for the baseline parse status
+// (BaselineParseStatus wire values verbatim: uploaded/parsing/passed/failed).
+export function baselineParseTone(status: string): "ok" | "warn" | "down" | "neutral" {
+  if (status === "passed") return "ok";
+  if (status === "failed") return "down";
+  if (status === "uploaded") return "warn";
+  return "neutral";
+}
+
 // Narrow an unknown scan payload member (detected/resolved/missing/unsupported
 // are JSONB lists on the wire) to a safe record array for row rendering.
 export function asRecordArray(value: unknown): Array<Record<string, unknown>> {
@@ -147,6 +165,35 @@ export interface ScanSummary {
   scanner_version: string | null;
   registry_fingerprint: string | null;
   context_hash: string | null;
+}
+
+// Immutable validation-run evidence summary embedded in the request projection
+// (queries/create_package.py::_validation_summary). ``checks`` is a JSONB list of
+// per-conformance rows; ``candidate_hash`` pins the exact candidate this run
+// certified (validation_fresh goes false once the candidate is regenerated).
+export interface ValidationSummary {
+  validation_run_id: string;
+  attempt_no: number;
+  status: string;
+  validator_version: string | null;
+  checks: Array<Record<string, unknown>>;
+  candidate_hash: string | null;
+  draft_revision_id: string | null;
+}
+
+// Current baseline-asset summary embedded in the request projection
+// (queries/create_package.py::_baseline_summary). The bytes never travel through
+// the projection — only the content-addressed digest + parse evidence.
+export interface BaselineSummary {
+  baseline_asset_id: string;
+  attempt_no: number;
+  parse_status: string;
+  content_digest: string | null;
+  size_bytes: number | null;
+  original_filename: string | null;
+  baseline_metadata: Record<string, unknown>;
+  parse_report: Record<string, unknown> | null;
+  parser_version: string | null;
 }
 
 export interface PackageRequestSummary {
@@ -182,6 +229,18 @@ export interface PackageRequestDetail {
   package_root_id: string | null;
   draft_revision_id: string | null;
   can_generate_candidate: boolean;
+  // Validation evidence (doc 06 §4.4/§7): the current immutable run + whether it
+  // still certifies THIS draft's candidate (false once the candidate regenerates).
+  current_validation_run: ValidationSummary | null;
+  validation_fresh: boolean;
+  // Mode-aware baseline projection (doc 06 §4.4): whether the package claims
+  // equivalence, its current baseline, and whether the approval baseline gate is
+  // satisfied (a claiming package needs baseline_ready; a non-claiming one never
+  // requires it — baseline_required mirrors claims_equivalence server-side).
+  claims_equivalence: boolean;
+  current_baseline: BaselineSummary | null;
+  baseline_ready: boolean;
+  baseline_required: boolean;
   created_at: string | null;
 }
 
@@ -271,6 +330,61 @@ export interface ApproveActionResult {
   state: string;
 }
 
+// Run Validation Tests (commands/create_package.py::start_package_validation_run):
+// a deterministic run produces immutable evidence and drives the request to
+// eligible_for_approval (passed) or revision_required (failed).
+export interface ValidationActionResult {
+  request_id: string;
+  validation_run_id: string;
+  attempt_no: number;
+  status: string;
+  state: string;
+  checks: Array<Record<string, unknown>>;
+  job_id: string;
+}
+
+// Request Revision (commands/create_package.py::request_package_revision): reopen
+// a failed/rejected draft, regenerating a fresh deterministic candidate.
+export interface RevisionActionResult {
+  request_id: string;
+  state: string;
+  candidate_hash: string;
+}
+
+// Upload Baseline (commands/create_package.py::upload_baseline_asset): store an
+// immutable content-addressed CSV + metadata; a fresh upload is a new attempt.
+export interface BaselineUploadResult {
+  request_id: string;
+  baseline_asset_id: string;
+  attempt_no: number;
+  parse_status: string;
+  content_digest: string;
+  size_bytes: number;
+}
+
+// Parse Baseline (commands/create_package.py::start_baseline_parse): validate the
+// head baseline's metadata + CSV; on success uploaded -> passed with the report.
+export interface BaselineParseResult {
+  request_id: string;
+  baseline_asset_id: string;
+  attempt_no: number;
+  parse_status: string;
+  parser_version: string;
+  parse_report: Record<string, unknown>;
+  job_id: string;
+}
+
+// Baseline upload input — the raw bytes never travel; UTF-8 CSV text + the
+// structured metadata the parse gate re-validates (REQUIRED_BASELINE_METADATA_FIELDS).
+export interface BaselineUploadInput {
+  request_id: string;
+  request_version: number;
+  content: string;
+  baseline_metadata: Record<string, unknown>;
+  content_type: string | null;
+  original_filename: string | null;
+}
+
 export interface RationaleFamily {
   entity_id: string;
   display_name: string;
@@ -336,6 +450,34 @@ export function useDependencyScan(scanId: string | null) {
     queryFn: () =>
       api.get<DependencyScanDetail>(`/dependency-scans/${encodeURIComponent(scanId ?? "")}`),
     enabled: scanId !== null,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+// Immutable validation-run evidence detail (queries/create_package.py::
+// get_validation_run). Like the scan artifact it never mutates once written.
+export function useValidationRun(validationRunId: string | null) {
+  return useQuery({
+    queryKey: ["package-requests", "validation-run", validationRunId],
+    queryFn: () =>
+      api.get<
+        ValidationSummary & { request_id: string; job_id: string; completed_at: string | null }
+      >(`/validation-runs/${encodeURIComponent(validationRunId ?? "")}`),
+    enabled: validationRunId !== null,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+// Immutable baseline-asset detail + parse report (queries/create_package.py::
+// get_baseline_asset). Once parsed the evidence is fixed; a fresh upload is a new id.
+export function useBaselineAsset(baselineAssetId: string | null) {
+  return useQuery({
+    queryKey: ["package-requests", "baseline-asset", baselineAssetId],
+    queryFn: () =>
+      api.get<BaselineSummary & { request_id: string; parsed_at: string | null }>(
+        `/baseline-assets/${encodeURIComponent(baselineAssetId ?? "")}`,
+      ),
+    enabled: baselineAssetId !== null,
     staleTime: 5 * 60 * 1000,
   });
 }
@@ -453,6 +595,80 @@ export function useApproveRequest() {
             note: input.note,
           },
         },
+      ),
+    onSuccess: () => invalidateActions(queryClient),
+  });
+}
+
+// Run Validation Tests: the request row_version guards the transition
+// (X-Request-Version) + a fresh Idempotency-Key per attempt. The server enforces
+// the draft-present gate (CandidateNotReady verbatim); a passed run moves the
+// request to eligible_for_approval, a failed run to revision_required.
+export function useRunValidation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { request_id: string; request_version: number }) =>
+      postWithRequestVersion<ValidationActionResult>(
+        `/create-package/requests/${encodeURIComponent(input.request_id)}/validate`,
+        input.request_version,
+      ),
+    onSuccess: () => invalidateActions(queryClient),
+  });
+}
+
+// Request Revision: reopen a failed/rejected draft. Legal only from
+// revision_required / rejected (state machine) — the server rejects an illegal
+// state verbatim; the UI never pre-judges the state.
+export function useRequestRevision() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { request_id: string; request_version: number }) =>
+      postWithRequestVersion<RevisionActionResult>(
+        `/create-package/requests/${encodeURIComponent(input.request_id)}/request-revision`,
+        input.request_version,
+      ),
+    onSuccess: () => invalidateActions(queryClient),
+  });
+}
+
+// Upload Baseline: an immutable content-addressed CSV upload (doc 06 §8.3). The
+// row_version guards concurrency + a fresh Idempotency-Key per attempt. The file
+// type / size / emptiness gates run server-side (FILE_TYPE_NOT_ALLOWED / 422
+// verbatim) — the UI submits the composed body and renders the envelope.
+export function useUploadBaseline() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: BaselineUploadInput) =>
+      apiRequest<BaselineUploadResult>(
+        `/create-package/requests/${encodeURIComponent(input.request_id)}/baseline`,
+        {
+          method: "POST",
+          headers: {
+            "X-Request-Version": String(input.request_version),
+            "Idempotency-Key": crypto.randomUUID(),
+          },
+          body: {
+            content: input.content,
+            baseline_metadata: input.baseline_metadata,
+            content_type: input.content_type,
+            original_filename: input.original_filename,
+          },
+        },
+      ),
+    onSuccess: () => invalidateActions(queryClient),
+  });
+}
+
+// Parse Baseline: validate the head baseline's metadata + CSV (doc 06 §8.3). The
+// metadata-complete + CSV-parseable gates run server-side (BASELINE_METADATA_INVALID
+// / PARSE_FAILED verbatim); on success the head baseline transitions uploaded -> passed.
+export function useStartBaselineParse() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { request_id: string; request_version: number }) =>
+      postWithRequestVersion<BaselineParseResult>(
+        `/create-package/requests/${encodeURIComponent(input.request_id)}/baseline-parse`,
+        input.request_version,
       ),
     onSuccess: () => invalidateActions(queryClient),
   });

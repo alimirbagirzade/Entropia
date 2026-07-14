@@ -749,3 +749,54 @@ a:hover { text-decoration: underline; }
   gap: 10px;
   font-size: 12px;
 }
+
+/* Intro banner + facet filter bar (mockup .package-pool-intro/.package-filter-bar). */
+.package-pool-intro {
+  border: 1px solid var(--border);
+  background: var(--bg-elev-2);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-dim);
+  margin-bottom: 12px;
+}
+.package-filter-bar {
+  border: 1px solid var(--border);
+  background: var(--bg-elev-2);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  margin-bottom: 14px;
+}
+
+/* Expandable catalog rows (mockup .package-card/.package-row.open/.package-details). */
+.package-list { display: flex; flex-direction: column; gap: 6px; }
+.package-text { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.package-arrow {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  font-size: 12px;
+  cursor: pointer;
+  color: var(--text);
+  padding: 0;
+}
+/* Open row turns the light-cyan mockup shade and squares its bottom into the body. */
+.package-row.open {
+  background: #dff5ff;
+  border-color: #4a8aa0;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.package-details {
+  border: 1px solid #4a8aa0;
+  border-top: none;
+  border-bottom-left-radius: var(--radius);
+  border-bottom-right-radius: var(--radius);
+  background: var(--bg-elev);
+  padding: 14px 16px;
+}
+.package-meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 6px; margin: 8px 0; }
+.package-meta-cell { border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 8px; font-size: 12px; }

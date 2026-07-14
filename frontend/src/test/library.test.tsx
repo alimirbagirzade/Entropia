@@ -162,11 +162,12 @@ describe("Package Library page", () => {
     expect(await screen.findByText("RSI Bundle")).toBeInTheDocument();
     expect(screen.getByText("Breakout Alpha")).toBeInTheDocument();
     // The V18 Status dropdown stays split into orthogonal facets (doc 08 §13) —
-    // scoped to the table because the facet selects list the same values.
-    const table = screen.getByRole("table");
-    expect(within(table).getByText("passed")).toBeInTheDocument();
-    expect(within(table).getByText("warning")).toBeInTheDocument();
-    expect(within(table).getByText("deprecated")).toBeInTheDocument();
+    // scoped to the catalog list because the facet selects list the same values
+    // (the catalog is now an expandable .package-row list, not a table).
+    const list = screen.getByRole("list", { name: /package catalog/i });
+    expect(within(list).getByText("passed")).toBeInTheDocument();
+    expect(within(list).getByText("warning")).toBeInTheDocument();
+    expect(within(list).getByText("deprecated")).toBeInTheDocument();
   });
 
   it("applies a facet filter as a server-side query param and never sends empty facets", async () => {

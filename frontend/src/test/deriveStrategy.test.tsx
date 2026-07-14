@@ -147,7 +147,7 @@ function renderPage(routes: Record<string, unknown>) {
 }
 
 async function openDetail(name: RegExp) {
-  const rowEl = (await screen.findByText(name)).closest("tr") as HTMLElement;
+  const rowEl = (await screen.findByText(name)).closest("[role='listitem']") as HTMLElement;
   fireEvent.click(within(rowEl).getByRole("button", { name: "Detail" }));
 }
 

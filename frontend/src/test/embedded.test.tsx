@@ -150,11 +150,12 @@ describe("Embedded System Packages page", () => {
 
     expect(await screen.findByText("ta.rsi")).toBeInTheDocument();
     expect(screen.getByText("ta.sma")).toBeInTheDocument();
-    // Trust states render as text badges — scoped to the table because the
-    // trust facet select lists the same values.
-    const table = screen.getByRole("table");
-    expect(within(table).getByText("trusted_active")).toBeInTheDocument();
-    expect(within(table).getByText("deprecated")).toBeInTheDocument();
+    // Trust states render as text badges — scoped to the registry list because
+    // the trust facet select lists the same values (the registry is now an
+    // expandable .package-row list, not a table).
+    const list = screen.getByRole("list", { name: /resolver registry/i });
+    expect(within(list).getByText("trusted_active")).toBeInTheDocument();
+    expect(within(list).getByText("deprecated")).toBeInTheDocument();
   });
 
   it("applies the trust facet as a server-side query param and never sends empty facets", async () => {

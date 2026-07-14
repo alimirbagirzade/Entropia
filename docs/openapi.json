@@ -1264,6 +1264,19 @@
         "title": "EventTimeSemantics",
         "type": "string"
       },
+      "ExportPackageRequest": {
+        "properties": {
+          "revision_id": {
+            "title": "Revision Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision_id"
+        ],
+        "title": "ExportPackageRequest",
+        "type": "object"
+      },
       "FeatureDefinitionRequest": {
         "properties": {
           "approval_state": {
@@ -8576,6 +8589,77 @@
           }
         },
         "summary": "Derive Package",
+        "tags": [
+          "package-library"
+        ]
+      }
+    },
+    "/api/v1/library/{entity_id}/export": {
+      "post": {
+        "description": "Any viewer: produce the immutable package-revision MANIFEST for the selected\nrevision (doc 08 §7 \"Export\"). This is the package manifest, NOT a backtest\nresult_export. Synchronous V1: returns the content-addressed manifest +\n``manifest_hash`` and records a ``package.exported`` audit; no source mutation. A\nfresh ``Idempotency-Key`` makes repeated clicks return the same manifest.",
+        "operationId": "export_package_api_v1_library__entity_id__export_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entity_id",
+            "required": true,
+            "schema": {
+              "title": "Entity Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExportPackageRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Export Package Api V1 Library  Entity Id  Export Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Export Package",
         "tags": [
           "package-library"
         ]

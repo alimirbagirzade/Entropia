@@ -46,7 +46,13 @@ that ``can_approve_publish`` could never be true because no command set
   08 §7 "Approve & Publish"). A non-requested / non-passed head -> 409; a non-Admin
   -> 403 ``APPROVAL_REQUIRES_ADMIN``. Audit ``package.approved_published``.
 
-Export (R2c) is added onto this module next.
+R2c adds Export — the package-revision MANIFEST export the catalog advertised via
+``can_export`` (doc 08 §7 "Export", §9.1 ``package_export``). This is the immutable
+package manifest, NOT a backtest ``result_export``. V1 is synchronous: any viewer
+computes the content-addressed manifest of a selected immutable revision and a
+``package.exported`` audit records the ``manifest_hash`` as durable provenance — no
+source mutation, no new table (the manifest derives deterministically from the
+revision; a fresh ``Idempotency-Key`` makes repeated clicks return the same hash).
 """
 
 from __future__ import annotations
@@ -78,6 +84,7 @@ from entropia.shared.errors import (
     PackageRevisionConflict,
     ValidationRequired,
 )
+from entropia.shared.manifest import manifest_hash
 
 _TARGET_KIND = pkg_repo.ENTITY_TYPE
 _ACTIVE = "active"
@@ -95,12 +102,17 @@ def _audit_and_outbox(
     new_state: str | None,
     action: str,
     reason: str | None = None,
+    metadata: dict[str, Any] | None = None,
 ) -> None:
     """One domain audit row + a ``resource.changed`` outbox fan-out (SSE sweeps the
     ``["library"]`` cache) — the ``package.*`` family so the delete/deprecate lands
-    in the Logs family filter beside the package's other events (doc 08 §11.2)."""
+    in the Logs family filter beside the package's other events (doc 08 §11.2).
+
+    ``metadata`` carries structured provenance that does not fit the short
+    ``previous/new_state`` labels (e.g. an export ``manifest_hash``)."""
     audit_repo.add_audit_event(
         session,
+        metadata=metadata,
         event_kind=event_kind,
         actor_principal_id=actor.principal_id,
         actor_kind=actor.actor_kind,
@@ -613,11 +625,99 @@ async def approve_and_publish_package(
     )
 
 
+async def export_package(
+    session: AsyncSession,
+    actor: Actor,
+    *,
+    entity_id: str,
+    revision_id: str,
+    idempotency_key: str | None = None,
+) -> dict[str, Any]:
+    """Any viewer: produce an immutable export MANIFEST for a selected revision (doc
+    08 §7 "Export", §9.1 ``package_export``).
+
+    This is the package-revision manifest — NOT a backtest ``result_export``. V1 is
+    synchronous: ``ensure_can_view`` gates the source, then the content-addressed
+    manifest is computed from the immutable revision and a ``package.exported`` audit
+    records the ``manifest_hash`` as durable provenance. No source mutation; a fresh
+    ``Idempotency-Key`` makes repeated clicks return the same manifest (doc 08 §4.4
+    "repeated clicks disabled by idempotency key"). Any revision of the root may be
+    exported (not only the head); a revision not on this root -> 404.
+    """
+    require_authenticated(actor)
+    root = await _require_package_root(session, entity_id)
+    detail = await pkg_repo.get_package_detail(session, entity_id)
+    if detail is None or root.deletion_state != DeletionState.ACTIVE:
+        raise PackageNotFound()
+
+    grantee_ids = await share_repo.active_grantee_ids(
+        session, resource_type=_TARGET_KIND, resource_id=entity_id
+    )
+    ensure_can_view(
+        actor,
+        owner_principal_id=root.owner_principal_id,
+        visibility=str(detail.visibility_scope),
+        shared_principal_ids=grantee_ids,
+    )
+
+    revision = await pkg_repo.get_revision(session, revision_id)
+    if revision is None or revision.entity_id != entity_id:
+        raise PackageNotFound()
+
+    async def _op() -> dict[str, Any]:
+        contract = revision.input_contract if isinstance(revision.input_contract, dict) else {}
+        name = contract.get("name")
+        manifest = {
+            "package_root_id": entity_id,
+            "revision_id": revision.revision_id,
+            "revision_no": revision.revision_no,
+            "package_kind": str(revision.package_kind),
+            "name": name if isinstance(name, str) else None,
+            "input_contract": revision.input_contract,
+            "output_contract": revision.output_contract,
+            "dependency_snapshot": revision.dependency_snapshot,
+            "rationale_family_snapshot": revision.rationale_family_snapshot,
+            "validation_state": str(revision.validation_state),
+            "approval_state": str(revision.approval_state),
+            "content_hash": revision.content_hash,
+            "derived_from_revision_id": detail.derived_from_revision_id,
+        }
+        digest = manifest_hash(manifest)
+        _audit_and_outbox(
+            session,
+            actor,
+            event_kind="package.exported",
+            entity_id=entity_id,
+            revision_id=revision.revision_id,
+            previous_state=None,
+            new_state="exported",
+            action="exported",
+            # The 64-char manifest hash lives in metadata (JSONB), not the short
+            # new_state label — it is the export's durable provenance.
+            metadata={"manifest_hash": digest},
+        )
+        return {
+            "entity_id": entity_id,
+            "revision_id": revision.revision_id,
+            "manifest_hash": digest,
+            "manifest": manifest,
+        }
+
+    return await run_idempotent(
+        session,
+        key=idempotency_key,
+        actor_principal_id=actor.principal_id,
+        request_payload={"op": "export", "entity_id": entity_id, "revision_id": revision_id},
+        operation=_op,
+    )
+
+
 __all__ = [
     "approve_and_publish_package",
     "create_package_revision",
     "deprecate_package",
     "derive_package",
+    "export_package",
     "request_package_approval",
     "soft_delete_package",
 ]

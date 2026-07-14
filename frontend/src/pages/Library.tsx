@@ -26,11 +26,13 @@ import {
   VISIBILITY_SCOPES,
   approvalTone,
   lifecycleTone,
+  useApprovePackage,
   useCreatePackageRevision,
   useDeprecatePackage,
   useDerivePackage,
   useLibraryPackage,
   useLibraryPackages,
+  useRequestApproval,
   useSoftDeletePackage,
   validationTone,
   type LibraryFilters,
@@ -387,6 +389,7 @@ function PackageDetail({ entityId, onClose }: { entityId: string; onClose: () =>
 
           <DeriveStrategyBlock pkg={pkg} />
           <PackageRevisionActions pkg={pkg} />
+          <PackageApprovalActions pkg={pkg} />
           <PackageActions pkg={pkg} onDeleted={onClose} />
           <PackageSharePanel pkg={pkg} />
 
@@ -617,6 +620,102 @@ function PackageRevisionActions({ pkg }: { pkg: LibraryPackageDetail }) {
       {createRevision.data ? (
         <p className="page-sub" style={{ marginTop: 4 }}>
           Created revision v{createRevision.data.revision_no}.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+// GAP-06 (epic R2b): approval sub-flow on the detail panel (doc 08 §7). Shown only
+// when the SERVER marks the capability true, but the UI never authorizes — the
+// command re-validates and renders 403/409/422 verbatim.
+//   - Request Approval: owner/Admin moves the PASSED head DRAFT -> APPROVAL_REQUESTED.
+//     This is the transition that opens the Admin Approve gate (can_approve_publish).
+//   - Approve & Publish: Admin-only atomic APPROVED + PUBLISHED (two-step confirm).
+// Both carry the BODY-form expected_head_revision_id OCC (the current head).
+function PackageApprovalActions({ pkg }: { pkg: LibraryPackageDetail }) {
+  const requestApproval = useRequestApproval();
+  const approve = useApprovePackage();
+  const [approveNote, setApproveNote] = useState("");
+  const [confirmingApprove, setConfirmingApprove] = useState(false);
+
+  if (!pkg.permissions.can_request_approval && !pkg.permissions.can_approve_publish) return null;
+
+  const onRequest = () =>
+    requestApproval.mutate({ entityId: pkg.entity_id, revisionId: pkg.current_revision_id });
+  const onApprove = () =>
+    approve.mutate(
+      {
+        entityId: pkg.entity_id,
+        revisionId: pkg.current_revision_id,
+        note: approveNote.trim() || undefined,
+      },
+      {
+        onSuccess: () => {
+          setConfirmingApprove(false);
+          setApproveNote("");
+        },
+      },
+    );
+
+  return (
+    <div style={{ marginTop: 12 }}>
+      <h5 style={{ marginBottom: 4 }}>Approval actions</h5>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+        {pkg.permissions.can_request_approval ? (
+          <button
+            type="button"
+            className="btn"
+            onClick={onRequest}
+            disabled={requestApproval.isPending}
+          >
+            {requestApproval.isPending ? "Requesting…" : "Request Approval"}
+          </button>
+        ) : null}
+        {pkg.permissions.can_approve_publish && !confirmingApprove ? (
+          <button type="button" className="btn" onClick={() => setConfirmingApprove(true)}>
+            Approve &amp; Publish
+          </button>
+        ) : null}
+        {pkg.permissions.can_approve_publish && confirmingApprove ? (
+          <>
+            <label htmlFor="lib-approve-note">
+              Note{" "}
+              <input
+                id="lib-approve-note"
+                value={approveNote}
+                onChange={(event) => setApproveNote(event.target.value)}
+                placeholder="optional"
+              />
+            </label>
+            <button type="button" className="btn" onClick={onApprove} disabled={approve.isPending}>
+              {approve.isPending ? "Publishing…" : "Confirm approve & publish"}
+            </button>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => setConfirmingApprove(false)}
+              disabled={approve.isPending}
+            >
+              Cancel
+            </button>
+          </>
+        ) : null}
+      </div>
+      <p className="page-sub" style={{ marginTop: 4 }}>
+        Request Approval submits the validated head for review; only an Admin can atomically
+        Approve &amp; Publish it into the shared/published scope (doc 08 §7, CR-02).
+      </p>
+      {requestApproval.isError ? <ErrorState error={requestApproval.error} /> : null}
+      {requestApproval.data ? (
+        <p className="page-sub" style={{ marginTop: 4 }}>
+          Approval requested ({requestApproval.data.approval_state}).
+        </p>
+      ) : null}
+      {approve.isError ? <ErrorState error={approve.error} /> : null}
+      {approve.data ? (
+        <p className="page-sub" style={{ marginTop: 4 }}>
+          Published — {approve.data.approval_state} · {approve.data.visibility_scope}.
         </p>
       ) : null}
     </div>

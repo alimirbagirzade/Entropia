@@ -16,7 +16,6 @@ const PERMS = (over: Record<string, boolean> = {}) => ({
   can_use: true,
   can_derive: true,
   can_create_revision: false,
-  can_request_validation: false,
   can_request_approval: false,
   can_approve_publish: false,
   can_deprecate: false,

@@ -47,6 +47,18 @@ class CreateRevisionRequest(BaseModel):
     dependency_snapshot: dict[str, Any] | None = None
 
 
+class RequestApprovalRequest(BaseModel):
+    revision_id: str
+    expected_head_revision_id: str | None = None
+    note: str | None = None
+
+
+class ApprovePackageRequest(BaseModel):
+    revision_id: str
+    expected_head_revision_id: str | None = None
+    note: str | None = None
+
+
 @router.get("/library")
 async def list_library(
     cursor: str | None = Query(default=None),
@@ -170,5 +182,50 @@ async def create_package_revision(
         input_contract=body.input_contract,
         output_contract=body.output_contract,
         dependency_snapshot=body.dependency_snapshot,
+        idempotency_key=idempotency_key,
+    )
+
+
+@router.post("/library/{entity_id}/request-approval")
+async def request_package_approval(
+    entity_id: str,
+    body: RequestApprovalRequest,
+    ctx: RequestContext = Depends(request_context),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+) -> dict[str, Any]:
+    """Owner-or-Admin: move the validation-PASSED head revision ``DRAFT ->
+    APPROVAL_REQUESTED`` (doc 08 §7 "Request approval"). OCC is the BODY-form
+    ``expected_head_revision_id`` + a fresh ``Idempotency-Key``; a stale head -> 409
+    PACKAGE_REVISION_CONFLICT, a not-passed head -> 409 VALIDATION_REQUIRED."""
+    return await pkg_cmd.request_package_approval(
+        ctx.session,
+        ctx.actor,
+        entity_id=entity_id,
+        revision_id=body.revision_id,
+        expected_head_revision_id=body.expected_head_revision_id,
+        note=body.note,
+        idempotency_key=idempotency_key,
+    )
+
+
+@router.post("/library/{entity_id}/approve")
+async def approve_package(
+    entity_id: str,
+    body: ApprovePackageRequest,
+    ctx: RequestContext = Depends(request_context),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+) -> dict[str, Any]:
+    """Admin-only: approve + publish the requested + PASSED head revision in one
+    transaction (CR-02, doc 08 §7 "Approve & Publish"). OCC is the BODY-form
+    ``expected_head_revision_id`` + a fresh ``Idempotency-Key``; a non-Admin -> 403
+    APPROVAL_REQUIRES_ADMIN, a non-requested / non-passed head -> 409. The UI never
+    pre-gates (it never renders 403 as a hidden button); the server re-validates."""
+    return await pkg_cmd.approve_and_publish_package(
+        ctx.session,
+        ctx.actor,
+        entity_id=entity_id,
+        revision_id=body.revision_id,
+        expected_head_revision_id=body.expected_head_revision_id,
+        note=body.note,
         idempotency_key=idempotency_key,
     )

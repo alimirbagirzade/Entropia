@@ -35,16 +35,30 @@ def _perms(
 def test_owner_of_active_passed_package_has_full_edit_rights() -> None:
     p = _perms(OWNER)
     assert p.can_view and p.can_use and p.can_derive
-    assert p.can_create_revision and p.can_request_validation and p.can_request_approval
+    assert p.can_create_revision and p.can_request_approval
     assert p.can_deprecate and p.can_soft_delete and p.can_export
     assert not p.can_approve_publish  # owner is not Admin (CR-02)
+
+
+def test_request_validation_flag_is_no_longer_projected() -> None:
+    # R2 does not add a Library-plane validation-run command, so the projection no
+    # longer advertises an un-performable action (doc 08 §4.3).
+    assert not hasattr(_perms(OWNER), "can_request_validation")
+
+
+def test_request_approval_flag_turns_off_once_requested() -> None:
+    # can_request_approval requires a still-DRAFT approval facet — the button
+    # disappears once approval is requested (R2b accuracy fix); the command
+    # re-validates regardless.
+    assert _perms(OWNER, approval=ApprovalState.DRAFT).can_request_approval
+    assert not _perms(OWNER, approval=ApprovalState.APPROVAL_REQUESTED).can_request_approval
+    assert not _perms(OWNER, approval=ApprovalState.APPROVED).can_request_approval
 
 
 def test_foreign_user_can_view_and_derive_but_not_edit_published() -> None:
     p = _perms(OTHER, owner="user_1", visibility="published")
     assert p.can_view and p.can_use and p.can_derive and p.can_export
     assert not p.can_create_revision  # non-owner must Derive, not edit (doc 08 §8.2)
-    assert not p.can_request_validation
     assert not p.can_request_approval
     assert not p.can_deprecate
     assert not p.can_soft_delete
@@ -90,9 +104,8 @@ def test_deprecated_package_is_not_useable_or_deprecatable() -> None:
 def test_validation_blocked_package_cannot_be_used_or_approval_requested() -> None:
     p = _perms(OWNER, validation=PackageValidationState.FAILED)
     assert not p.can_use
-    assert not p.can_request_approval
+    assert not p.can_request_approval  # approval needs a passed validation
     assert p.can_create_revision  # editing to fix the revision is still allowed
-    assert p.can_request_validation
 
 
 def test_guest_sees_nothing_on_a_private_package() -> None:

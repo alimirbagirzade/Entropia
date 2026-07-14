@@ -49,14 +49,16 @@ export const UNASSIGNED_FAMILY = "unassigned";
 // verbatim)
 // ---------------------------------------------------------------------------
 
-// The eleven capability flags of doc 08 §4.2 (+ GAP-17 `can_share`) — a UX hint,
+// The ten capability flags of doc 08 §4.2 (+ GAP-17 `can_share`) — a UX hint,
 // never the authority: the server re-validates every guard on each command.
+// `can_request_validation` is intentionally absent: R2 does not add a Library-plane
+// validation-run command, so the projection never advertises an un-performable
+// action (doc 08 §4.3); it returns with that slice.
 export interface PackagePermissions {
   can_view: boolean;
   can_use: boolean;
   can_derive: boolean;
   can_create_revision: boolean;
-  can_request_validation: boolean;
   can_request_approval: boolean;
   can_approve_publish: boolean;
   can_deprecate: boolean;
@@ -71,7 +73,6 @@ export const PERMISSION_FLAGS: readonly (keyof PackagePermissions)[] = [
   "can_use",
   "can_derive",
   "can_create_revision",
-  "can_request_validation",
   "can_request_approval",
   "can_approve_publish",
   "can_deprecate",
@@ -381,6 +382,74 @@ export function useCreatePackageRevision() {
           body: {
             expected_head_revision_id: input.expectedHeadRevisionId,
             ...(input.changeNote ? { change_note: input.changeNote } : {}),
+          },
+        },
+      ),
+    onSuccess: () => invalidateLibrary(queryClient),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Approval sub-flow — GAP-06 epic R2b (doc 08 §7): Request Approval + Approve &
+// Publish. Both move the catalog projection AND write an audit event, so both
+// sweep ["library"] + ["audit"]. The OCC token is the BODY-form
+// expected_head_revision_id (the detail current_revision_id). The client never
+// pre-gates on the permission flags — the server re-validates and renders
+// 403/409/422 verbatim (Approve is Admin-only: APPROVAL_REQUIRES_ADMIN).
+// ---------------------------------------------------------------------------
+
+export interface RequestApprovalResult {
+  entity_id: string;
+  revision_id: string;
+  approval_state: string;
+}
+
+export interface ApprovePackageResult {
+  entity_id: string;
+  revision_id: string;
+  approval_state: string;
+  visibility_scope: string;
+}
+
+// Request Approval moves the validation-PASSED head DRAFT -> APPROVAL_REQUESTED
+// (owner/Admin). A not-passed head -> 409 VALIDATION_REQUIRED, a stale head -> 409
+// PACKAGE_REVISION_CONFLICT. This is the transition that opens the Admin approve gate.
+export function useRequestApproval() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { entityId: string; revisionId: string }) =>
+      apiRequest<RequestApprovalResult>(
+        `/library/${encodeURIComponent(input.entityId)}/request-approval`,
+        {
+          method: "POST",
+          headers: { "Idempotency-Key": crypto.randomUUID() },
+          body: {
+            revision_id: input.revisionId,
+            expected_head_revision_id: input.revisionId,
+          },
+        },
+      ),
+    onSuccess: () => invalidateLibrary(queryClient),
+  });
+}
+
+// Approve & Publish is Admin-only: it moves the requested + PASSED head to APPROVED
+// and the root to PUBLISHED in one transaction. A non-Admin -> 403
+// APPROVAL_REQUIRES_ADMIN; an unrequested/non-passed head -> 409. The UI never
+// pre-gates — the button is shown only on the server flag, the command re-validates.
+export function useApprovePackage() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { entityId: string; revisionId: string; note?: string }) =>
+      apiRequest<ApprovePackageResult>(
+        `/library/${encodeURIComponent(input.entityId)}/approve`,
+        {
+          method: "POST",
+          headers: { "Idempotency-Key": crypto.randomUUID() },
+          body: {
+            revision_id: input.revisionId,
+            expected_head_revision_id: input.revisionId,
+            ...(input.note ? { note: input.note } : {}),
           },
         },
       ),

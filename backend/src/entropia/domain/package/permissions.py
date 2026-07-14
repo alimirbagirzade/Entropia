@@ -34,7 +34,6 @@ class PackagePermissions:
     can_use: bool
     can_derive: bool
     can_create_revision: bool
-    can_request_validation: bool
     can_request_approval: bool
     can_approve_publish: bool
     can_deprecate: bool
@@ -62,10 +61,17 @@ def package_permissions(
       package or derive their own root from it — doc 08 §2 "Derive" column);
       Use additionally requires an active, validation-PASSED head (a deprecated or
       validation-blocked package is not offered for new work — doc 08 §4.4).
-    - Create-revision / request-validation / request-approval follow ``can_edit``
-      (owner or Admin; a non-owner must Derive, not edit — doc 08 §8.2).
+    - Create-revision / request-approval follow ``can_edit`` (owner or Admin; a
+      non-owner must Derive, not edit — doc 08 §8.2). Request-approval additionally
+      requires a passed validation AND a still-DRAFT approval facet, so the flag
+      turns off once approval is requested (the request command re-validates).
     - Approve & Publish is Admin-only and only when a revision is awaiting
       approval with passed validation (CR-02 / doc 08 §4.3).
+
+    ``can_request_validation`` is deliberately NOT projected: the Library-plane
+    validation-run command (a durable job pipeline, doc 08 §7 "Request validation")
+    is out of the R2 scope, so the catalog does not advertise an un-performable
+    action. It returns with that slice.
     """
     can_view = identity_policy.can_view(
         actor,
@@ -83,8 +89,9 @@ def package_permissions(
         can_use=can_view and is_active and validation_passed,
         can_derive=can_view,
         can_create_revision=can_edit and is_active,
-        can_request_validation=can_edit and is_active,
-        can_request_approval=can_edit and is_active and validation_passed,
+        can_request_approval=(
+            can_edit and is_active and validation_passed and approval_state == ApprovalState.DRAFT
+        ),
         can_approve_publish=(
             actor.is_admin
             and validation_passed

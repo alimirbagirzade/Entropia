@@ -31,7 +31,22 @@ R2a adds the two revision-plane mutations the catalog advertised but never dispa
   guards a concurrent head move -> 409 ``PACKAGE_REVISION_CONFLICT`` (doc 08 §8.5); no old
   revision is mutated. Audit ``package.revision_drafted``.
 
-Later epic slices add Request Approval / Approve & Publish / Export onto this module.
+R2b adds the approval sub-flow the catalog advertised but never dispatched
+(``can_request_approval`` / ``can_approve_publish``) — and opens the latent bug
+that ``can_approve_publish`` could never be true because no command set
+``APPROVAL_REQUESTED`` (doc 08 §7, §14 "Admin publish"):
+
+* **Request Approval** — an owner/Admin moves a validation-PASSED head revision
+  ``DRAFT -> APPROVAL_REQUESTED`` (doc 08 §7 "Request approval"). Not passed ->
+  ``VALIDATION_REQUIRED``; a stale head -> ``PACKAGE_REVISION_CONFLICT``. Audit
+  ``package.approval_requested``.
+* **Approve & Publish** — Admin-only (``pkg_policy.ensure_can_approve`` OUTSIDE the
+  idempotent body): a single-tx transition of the requested + passed head to
+  ``APPROVED`` + root ``PUBLISHED`` with an ``approval_decision`` proof (CR-02, doc
+  08 §7 "Approve & Publish"). A non-requested / non-passed head -> 409; a non-Admin
+  -> 403 ``APPROVAL_REQUIRES_ADMIN``. Audit ``package.approved_published``.
+
+Export (R2c) is added onto this module next.
 """
 
 from __future__ import annotations
@@ -49,8 +64,10 @@ from entropia.domain.identity.policy import (
     require_authenticated,
 )
 from entropia.domain.lifecycle.enums import ApprovalState, DeletionState, VisibilityScope
+from entropia.domain.package import policy as pkg_policy
 from entropia.domain.package.enums import PackageValidationState
 from entropia.infrastructure.postgres.models import EntityRegistry
+from entropia.infrastructure.postgres.repositories import approvals as approval_repo
 from entropia.infrastructure.postgres.repositories import audit as audit_repo
 from entropia.infrastructure.postgres.repositories import packages as pkg_repo
 from entropia.infrastructure.postgres.repositories import resource_share as share_repo
@@ -59,6 +76,7 @@ from entropia.shared.errors import (
     PackageDeriveInvalid,
     PackageNotFound,
     PackageRevisionConflict,
+    ValidationRequired,
 )
 
 _TARGET_KIND = pkg_repo.ENTITY_TYPE
@@ -414,9 +432,192 @@ async def create_package_revision(
     )
 
 
+async def request_package_approval(
+    session: AsyncSession,
+    actor: Actor,
+    *,
+    entity_id: str,
+    revision_id: str,
+    expected_head_revision_id: str | None = None,
+    note: str | None = None,
+    idempotency_key: str | None = None,
+) -> dict[str, Any]:
+    """Owner-or-Admin: move a validation-PASSED head revision ``DRAFT ->
+    APPROVAL_REQUESTED`` (doc 08 §7 "Request approval").
+
+    This is the transition that opens the latent ``can_approve_publish`` gate — no
+    command previously set ``APPROVAL_REQUESTED``, so the Admin approve path could
+    never activate. Only the current head may be requested (``revision_id`` +
+    ``expected_head_revision_id`` must match the head, else 409
+    ``PACKAGE_REVISION_CONFLICT``); the revision must be PASSED (else 409
+    ``VALIDATION_REQUIRED``, mirroring the CreatePackage plane); an already-requested
+    head is an idempotent no-op; an approved/rejected head -> 409 ``LIFECYCLE_BLOCKED``.
+    The OCC + transition live inside the idempotent body so a completed-key replay
+    short-circuits (D3). Audit ``package.approval_requested``.
+    """
+    root = await _require_package_root(session, entity_id)
+    ensure_can_edit(actor, owner_principal_id=root.owner_principal_id)
+    await session.refresh(root, with_for_update=True)
+
+    if root.deletion_state != DeletionState.ACTIVE or root.lifecycle_state != _ACTIVE:
+        raise LifecycleBlocked()
+
+    async def _op() -> dict[str, Any]:
+        if revision_id != root.current_revision_id or (
+            expected_head_revision_id is not None
+            and root.current_revision_id != expected_head_revision_id
+        ):
+            raise PackageRevisionConflict()
+        revision = await pkg_repo.get_revision(session, revision_id)
+        if revision is None or revision.entity_id != entity_id:
+            raise PackageNotFound()
+        if revision.approval_state == ApprovalState.APPROVAL_REQUESTED:
+            return {
+                "entity_id": entity_id,
+                "revision_id": revision_id,
+                "approval_state": str(revision.approval_state),
+            }
+        if revision.validation_state != PackageValidationState.PASSED:
+            raise ValidationRequired()
+        if revision.approval_state != ApprovalState.DRAFT:
+            raise LifecycleBlocked()
+
+        previous = revision.approval_state
+        revision.approval_state = ApprovalState.APPROVAL_REQUESTED
+        root.row_version += 1
+        _audit_and_outbox(
+            session,
+            actor,
+            event_kind="package.approval_requested",
+            entity_id=entity_id,
+            revision_id=revision_id,
+            previous_state=str(previous),
+            new_state=str(ApprovalState.APPROVAL_REQUESTED),
+            action="approval_requested",
+            reason=note,
+        )
+        return {
+            "entity_id": entity_id,
+            "revision_id": revision_id,
+            "approval_state": str(revision.approval_state),
+        }
+
+    return await run_idempotent(
+        session,
+        key=idempotency_key,
+        actor_principal_id=actor.principal_id,
+        request_payload={
+            "op": "request_approval",
+            "entity_id": entity_id,
+            "revision_id": revision_id,
+        },
+        operation=_op,
+    )
+
+
+async def approve_and_publish_package(
+    session: AsyncSession,
+    actor: Actor,
+    *,
+    entity_id: str,
+    revision_id: str,
+    expected_head_revision_id: str | None = None,
+    note: str | None = None,
+    idempotency_key: str | None = None,
+) -> dict[str, Any]:
+    """Admin-only: approve + publish a requested + validation-PASSED head revision in
+    one transaction (CR-02, doc 08 §7 "Approve & Publish", §11.1).
+
+    The Admin check is OUTSIDE the idempotent body (a non-Admin -> 403
+    ``APPROVAL_REQUIRES_ADMIN`` before any work). Inside: the head must be the
+    ``revision_id`` and match ``expected_head_revision_id`` (else 409
+    ``PACKAGE_REVISION_CONFLICT``), be PASSED (else ``VALIDATION_REQUIRED``) and be
+    ``APPROVAL_REQUESTED`` (else ``LIFECYCLE_BLOCKED`` — an unrequested head cannot be
+    published). On success the revision becomes ``APPROVED``, the root becomes
+    ``PUBLISHED``, an ``approval_decision`` proof + ``package.approved_published``
+    audit are written, and ``row_version`` advances. An already-approved head is an
+    idempotent no-op; a completed-key replay returns the cached result (D3).
+    """
+    pkg_policy.ensure_can_approve(actor)
+    root = await _require_package_root(session, entity_id)
+
+    async def _op() -> dict[str, Any]:
+        await session.refresh(root, with_for_update=True)
+        detail = await pkg_repo.get_package_detail(session, entity_id)
+        if detail is None or root.deletion_state != DeletionState.ACTIVE:
+            raise PackageNotFound()
+        revision = await pkg_repo.get_revision(session, revision_id)
+        if revision is None or revision.entity_id != entity_id:
+            raise PackageNotFound()
+        if revision.approval_state == ApprovalState.APPROVED:
+            return {
+                "entity_id": entity_id,
+                "revision_id": revision_id,
+                "approval_state": str(revision.approval_state),
+                "visibility_scope": str(detail.visibility_scope),
+            }
+        if revision_id != root.current_revision_id or (
+            expected_head_revision_id is not None
+            and root.current_revision_id != expected_head_revision_id
+        ):
+            raise PackageRevisionConflict()
+        if revision.validation_state != PackageValidationState.PASSED:
+            raise ValidationRequired()
+        if revision.approval_state != ApprovalState.APPROVAL_REQUESTED:
+            raise LifecycleBlocked()
+
+        previous = revision.approval_state
+        revision.approval_state = ApprovalState.APPROVED
+        detail.visibility_scope = VisibilityScope.PUBLISHED
+        root.row_version += 1
+        approval_repo.add_approval_decision(
+            session,
+            target_entity_id=entity_id,
+            target_kind=_TARGET_KIND,
+            decision=ApprovalState.APPROVED,
+            target_revision_id=revision_id,
+            approver_principal_id=actor.principal_id,
+            prior_state=str(previous),
+            new_state=str(ApprovalState.APPROVED),
+            note=note,
+            policy_context={"action": "approve_and_publish"},
+        )
+        _audit_and_outbox(
+            session,
+            actor,
+            event_kind="package.approved_published",
+            entity_id=entity_id,
+            revision_id=revision_id,
+            previous_state=str(previous),
+            new_state=str(ApprovalState.APPROVED),
+            action="approved_published",
+            reason=note,
+        )
+        return {
+            "entity_id": entity_id,
+            "revision_id": revision_id,
+            "approval_state": str(ApprovalState.APPROVED),
+            "visibility_scope": str(VisibilityScope.PUBLISHED),
+        }
+
+    return await run_idempotent(
+        session,
+        key=idempotency_key,
+        actor_principal_id=actor.principal_id,
+        request_payload={
+            "op": "approve_and_publish",
+            "entity_id": entity_id,
+            "revision_id": revision_id,
+        },
+        operation=_op,
+    )
+
+
 __all__ = [
+    "approve_and_publish_package",
     "create_package_revision",
     "deprecate_package",
     "derive_package",
+    "request_package_approval",
     "soft_delete_package",
 ]

@@ -25,7 +25,6 @@ const OWNER_PERMISSIONS = {
   can_use: true,
   can_derive: true,
   can_create_revision: true,
-  can_request_validation: true,
   can_request_approval: true,
   can_approve_publish: false,
   can_deprecate: true,

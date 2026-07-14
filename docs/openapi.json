@@ -1277,6 +1277,40 @@
         "title": "ExportPackageRequest",
         "type": "object"
       },
+      "ExportTradeLogBody": {
+        "properties": {
+          "revision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision Id"
+          }
+        },
+        "title": "ExportTradeLogBody",
+        "type": "object"
+      },
+      "ExportTradingSignalBody": {
+        "properties": {
+          "revision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision Id"
+          }
+        },
+        "title": "ExportTradingSignalBody",
+        "type": "object"
+      },
       "FeatureDefinitionRequest": {
         "properties": {
           "approval_state": {
@@ -13168,6 +13202,77 @@
         ]
       }
     },
+    "/api/v1/trade-logs/{root_id}/export": {
+      "post": {
+        "description": "Owner/Admin: produce the immutable export MANIFEST for a Trade Log revision\n(doc 05 §8 \"Export As Package\", §11, §13.2). Mirrors the R2c package export:\nsynchronous V1, returns the content-addressed manifest + ``manifest_hash`` and\nrecords a ``trade_log.exported`` audit; no source mutation. A fresh\n``Idempotency-Key`` makes repeated clicks return the same manifest.",
+        "operationId": "export_trade_log_api_v1_trade_logs__root_id__export_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "root_id",
+            "required": true,
+            "schema": {
+              "title": "Root Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExportTradeLogBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Export Trade Log Api V1 Trade Logs  Root Id  Export Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Export Trade Log",
+        "tags": [
+          "trade-log"
+        ]
+      }
+    },
     "/api/v1/trade-logs/{root_id}/revisions": {
       "post": {
         "operationId": "create_trade_log_revision_api_v1_trade_logs__root_id__revisions_post",
@@ -13504,6 +13609,77 @@
           }
         },
         "summary": "Get Trading Signal",
+        "tags": [
+          "trading-signal"
+        ]
+      }
+    },
+    "/api/v1/trading-signals/{root_id}/export": {
+      "post": {
+        "description": "Owner/Admin: produce the immutable export MANIFEST for a Trading Signal\nrevision (doc 04 §7 \"Export As Package\", Rule 17). Mirrors the R2c package\nexport: synchronous V1, returns the content-addressed manifest + ``manifest_hash``\nand records a ``trading_signal.exported`` audit; no source mutation. A fresh\n``Idempotency-Key`` makes repeated clicks return the same manifest.",
+        "operationId": "export_trading_signal_api_v1_trading_signals__root_id__export_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "root_id",
+            "required": true,
+            "schema": {
+              "title": "Root Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExportTradingSignalBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Export Trading Signal Api V1 Trading Signals  Root Id  Export Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Export Trading Signal",
         "tags": [
           "trading-signal"
         ]

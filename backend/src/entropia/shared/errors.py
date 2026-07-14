@@ -404,6 +404,25 @@ class LifecycleBlocked(ConflictError):
     message = "This object's current state does not permit the requested change."
 
 
+class PackageRevisionConflict(ConflictError):
+    """Optimistic-concurrency failure on a package root: another actor advanced the
+    head after this view loaded (``expected_head_revision_id`` stale, doc 08 §8.5,
+    §14 "Concurrency"). Never a silent overwrite or merge — the caller reloads the
+    current head and retries or derives a separate root."""
+
+    code = "PACKAGE_REVISION_CONFLICT"
+    message = "This package changed while you were working. Reload the current revision and retry."
+
+
+class PackageDeriveInvalid(ValidationError):
+    """A Library-plane Derive was submitted without a valid new name (doc 08 §7,
+    §8.2 "supplies required new name"). Derive copies an immutable source revision
+    into a NEW root owned by the caller, so a fresh package name is required."""
+
+    code = "PACKAGE_DERIVE_INVALID"
+    message = "Provide a new package name to derive."
+
+
 class PackageRequestNotFound(NotFoundError):
     """A Create-Package request id did not resolve (doc 06 §9.1, doc 07 §10.1)."""
 

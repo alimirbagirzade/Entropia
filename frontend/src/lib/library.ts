@@ -306,3 +306,84 @@ export function useSoftDeletePackage() {
     onSuccess: () => invalidateLibrary(queryClient, { trash: true }),
   });
 }
+
+// ---------------------------------------------------------------------------
+// Revision-plane actions — GAP-06 epic R2a (doc 08 §7): Derive + Create Revision.
+// Both move the catalog projection AND write an audit event, so both sweep
+// ["library"] + ["audit"]. The client never pre-gates on the permission flags —
+// the server re-validates and renders 403/409/422 verbatim.
+// ---------------------------------------------------------------------------
+
+export interface DerivePackageResult {
+  entity_id: string;
+  current_revision_id: string;
+  package_kind: string;
+  name: string;
+  derived_from_revision_id: string;
+  source_entity_id: string;
+}
+
+export interface CreateRevisionResult {
+  entity_id: string;
+  revision_id: string;
+  revision_no: number;
+  current_revision_id: string;
+  base_revision_id: string;
+}
+
+// Derive copies the selected immutable source revision into a NEW root owned by
+// the caller (doc 08 §7 "Derive", §8.2). A fresh Idempotency-Key guards
+// double-creation; NO OCC token — a derive creates a new root and cannot race the
+// source head. The source package is never modified (it is pinned as provenance).
+export function useDerivePackage() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      entityId: string;
+      sourceRevisionId: string;
+      name: string;
+      changeNote?: string;
+    }) =>
+      apiRequest<DerivePackageResult>(
+        `/library/${encodeURIComponent(input.entityId)}/derive`,
+        {
+          method: "POST",
+          headers: { "Idempotency-Key": crypto.randomUUID() },
+          body: {
+            source_revision_id: input.sourceRevisionId,
+            name: input.name,
+            ...(input.changeNote ? { change_note: input.changeNote } : {}),
+          },
+        },
+      ),
+    onSuccess: () => invalidateLibrary(queryClient),
+  });
+}
+
+// Create Revision appends an immutable revision N+1 to an owned active root (doc
+// 08 §7, §8.5). OCC is the BODY-form expected_head_revision_id (the detail
+// current_revision_id) + a fresh Idempotency-Key per attempt; a concurrent head
+// move -> 409 PACKAGE_REVISION_CONFLICT, a deprecated/deleted root -> 409
+// LIFECYCLE_BLOCKED. The base revision is never mutated.
+export function useCreatePackageRevision() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      entityId: string;
+      expectedHeadRevisionId: string;
+      changeNote?: string;
+    }) =>
+      apiRequest<CreateRevisionResult>(
+        `/library/${encodeURIComponent(input.entityId)}/revisions`,
+        {
+          method: "POST",
+          headers: { "Idempotency-Key": crypto.randomUUID() },
+          body: {
+            expected_head_revision_id: input.expectedHeadRevisionId,
+            ...(input.changeNote ? { change_note: input.changeNote } : {}),
+          },
+        },
+      ),
+    onSuccess: () => invalidateLibrary(queryClient),
+  });
+}

@@ -33,6 +33,20 @@ class DeletePackageRequest(BaseModel):
     reason: str | None = None
 
 
+class DerivePackageRequest(BaseModel):
+    source_revision_id: str
+    name: str
+    change_note: str | None = None
+
+
+class CreateRevisionRequest(BaseModel):
+    expected_head_revision_id: str | None = None
+    change_note: str | None = None
+    input_contract: dict[str, Any] | None = None
+    output_contract: dict[str, Any] | None = None
+    dependency_snapshot: dict[str, Any] | None = None
+
+
 @router.get("/library")
 async def list_library(
     cursor: str | None = Query(default=None),
@@ -110,3 +124,51 @@ async def soft_delete_package(
         expected_row_version=row_version_from_if_match(if_match),
     )
     return Response(status_code=204)
+
+
+@router.post("/library/{entity_id}/derive", status_code=201)
+async def derive_package(
+    entity_id: str,
+    body: DerivePackageRequest,
+    ctx: RequestContext = Depends(request_context),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+) -> dict[str, Any]:
+    """Any viewer: copy the selected immutable source revision into a NEW root owned
+    by the caller (doc 08 §7 "Derive", §8.2). The source is chosen in the body, not
+    the path; a fresh ``Idempotency-Key`` guards double-creation. No OCC token — a
+    derive creates a new root and cannot race the source head. The source package is
+    never mutated; a blank name -> 422 PACKAGE_DERIVE_INVALID."""
+    return await pkg_cmd.derive_package(
+        ctx.session,
+        ctx.actor,
+        entity_id=entity_id,
+        source_revision_id=body.source_revision_id,
+        name=body.name,
+        change_note=body.change_note,
+        idempotency_key=idempotency_key,
+    )
+
+
+@router.post("/library/{entity_id}/revisions", status_code=201)
+async def create_package_revision(
+    entity_id: str,
+    body: CreateRevisionRequest,
+    ctx: RequestContext = Depends(request_context),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+) -> dict[str, Any]:
+    """Owner-or-Admin: append an immutable revision N+1 to an active owned root (doc
+    08 §7 "Create Revision", §8.5). OCC is the BODY-form ``expected_head_revision_id``
+    (the detail GET returns ``current_revision_id``); a concurrent head move -> 409
+    PACKAGE_REVISION_CONFLICT + a fresh ``Idempotency-Key`` guards double-append. A
+    non-active / soft-deleted root -> 409 LIFECYCLE_BLOCKED."""
+    return await pkg_cmd.create_package_revision(
+        ctx.session,
+        ctx.actor,
+        entity_id=entity_id,
+        expected_head_revision_id=body.expected_head_revision_id,
+        change_note=body.change_note,
+        input_contract=body.input_contract,
+        output_contract=body.output_contract,
+        dependency_snapshot=body.dependency_snapshot,
+        idempotency_key=idempotency_key,
+    )

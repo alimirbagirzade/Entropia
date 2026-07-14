@@ -1137,6 +1137,35 @@
         "title": "DeprecatePackageRequest",
         "type": "object"
       },
+      "DerivePackageRequest": {
+        "properties": {
+          "change_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Change Note"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "source_revision_id": {
+            "title": "Source Revision Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_revision_id",
+          "name"
+        ],
+        "title": "DerivePackageRequest",
+        "type": "object"
+      },
       "DirectiveBody": {
         "properties": {
           "priority": {
@@ -2800,6 +2829,70 @@
           "reason"
         ],
         "title": "DeprecateRequest",
+        "type": "object"
+      },
+      "entropia__apps__api__routes__library__CreateRevisionRequest": {
+        "properties": {
+          "change_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Change Note"
+          },
+          "dependency_snapshot": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dependency Snapshot"
+          },
+          "expected_head_revision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Head Revision Id"
+          },
+          "input_contract": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Contract"
+          },
+          "output_contract": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Contract"
+          }
+        },
+        "title": "CreateRevisionRequest",
         "type": "object"
       },
       "entropia__apps__api__routes__market_data__CreateDatasetRequest": {
@@ -8271,6 +8364,148 @@
           }
         },
         "summary": "Deprecate Package",
+        "tags": [
+          "package-library"
+        ]
+      }
+    },
+    "/api/v1/library/{entity_id}/derive": {
+      "post": {
+        "description": "Any viewer: copy the selected immutable source revision into a NEW root owned\nby the caller (doc 08 §7 \"Derive\", §8.2). The source is chosen in the body, not\nthe path; a fresh ``Idempotency-Key`` guards double-creation. No OCC token — a\nderive creates a new root and cannot race the source head. The source package is\nnever mutated; a blank name -> 422 PACKAGE_DERIVE_INVALID.",
+        "operationId": "derive_package_api_v1_library__entity_id__derive_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entity_id",
+            "required": true,
+            "schema": {
+              "title": "Entity Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DerivePackageRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Derive Package Api V1 Library  Entity Id  Derive Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Derive Package",
+        "tags": [
+          "package-library"
+        ]
+      }
+    },
+    "/api/v1/library/{entity_id}/revisions": {
+      "post": {
+        "description": "Owner-or-Admin: append an immutable revision N+1 to an active owned root (doc\n08 §7 \"Create Revision\", §8.5). OCC is the BODY-form ``expected_head_revision_id``\n(the detail GET returns ``current_revision_id``); a concurrent head move -> 409\nPACKAGE_REVISION_CONFLICT + a fresh ``Idempotency-Key`` guards double-append. A\nnon-active / soft-deleted root -> 409 LIFECYCLE_BLOCKED.",
+        "operationId": "create_package_revision_api_v1_library__entity_id__revisions_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entity_id",
+            "required": true,
+            "schema": {
+              "title": "Entity Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/entropia__apps__api__routes__library__CreateRevisionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create Package Revision Api V1 Library  Entity Id  Revisions Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Package Revision",
         "tags": [
           "package-library"
         ]

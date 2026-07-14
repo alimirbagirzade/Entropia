@@ -26,7 +26,9 @@ import {
   VISIBILITY_SCOPES,
   approvalTone,
   lifecycleTone,
+  useCreatePackageRevision,
   useDeprecatePackage,
+  useDerivePackage,
   useLibraryPackage,
   useLibraryPackages,
   useSoftDeletePackage,
@@ -384,6 +386,7 @@ function PackageDetail({ entityId, onClose }: { entityId: string; onClose: () =>
           </div>
 
           <DeriveStrategyBlock pkg={pkg} />
+          <PackageRevisionActions pkg={pkg} />
           <PackageActions pkg={pkg} onDeleted={onClose} />
           <PackageSharePanel pkg={pkg} />
 
@@ -491,6 +494,131 @@ function DeriveStrategyBlock({ pkg }: { pkg: LibraryPackageDetail }) {
         its source. The source package is never modified (doc 08 §4.3).
       </p>
       {derive.isError ? <ErrorState error={derive.error} /> : null}
+    </div>
+  );
+}
+
+// GAP-06 (epic R2a): revision-plane actions on the detail panel (doc 08 §7).
+// Shown only when the SERVER marks the capability true, but the UI never
+// authorizes — the command re-validates and renders 403/409/422 verbatim.
+//   - Derive: any viewer copies this exact revision into a NEW private root they
+//     own (name required); the source package is never modified.
+//   - Create Revision: owner/Admin appends an immutable revision N+1 under the
+//     BODY-form expected_head_revision_id OCC (the detail current_revision_id);
+//     a concurrent head move -> 409 PACKAGE_REVISION_CONFLICT.
+function PackageRevisionActions({ pkg }: { pkg: LibraryPackageDetail }) {
+  const derive = useDerivePackage();
+  const createRevision = useCreatePackageRevision();
+  const [deriveName, setDeriveName] = useState("");
+  const [deriveNote, setDeriveNote] = useState("");
+  const [revisionNote, setRevisionNote] = useState("");
+
+  if (!pkg.permissions.can_derive && !pkg.permissions.can_create_revision) return null;
+
+  const onDerive = (event: FormEvent) => {
+    event.preventDefault();
+    const name = deriveName.trim();
+    if (!name) return;
+    derive.mutate(
+      {
+        entityId: pkg.entity_id,
+        sourceRevisionId: pkg.current_revision_id,
+        name,
+        changeNote: deriveNote.trim() || undefined,
+      },
+      {
+        onSuccess: () => {
+          setDeriveName("");
+          setDeriveNote("");
+        },
+      },
+    );
+  };
+
+  const onCreateRevision = (event: FormEvent) => {
+    event.preventDefault();
+    createRevision.mutate(
+      {
+        entityId: pkg.entity_id,
+        expectedHeadRevisionId: pkg.current_revision_id,
+        changeNote: revisionNote.trim() || undefined,
+      },
+      { onSuccess: () => setRevisionNote("") },
+    );
+  };
+
+  return (
+    <div style={{ marginTop: 12 }}>
+      <h5 style={{ marginBottom: 4 }}>Revision actions</h5>
+      {pkg.permissions.can_derive ? (
+        <form onSubmit={onDerive} style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          <label htmlFor="lib-derive-name">
+            Derive as{" "}
+            <input
+              id="lib-derive-name"
+              value={deriveName}
+              onChange={(event) => setDeriveName(event.target.value)}
+              placeholder="new package name"
+            />
+          </label>
+          <label htmlFor="lib-derive-note">
+            Change note{" "}
+            <input
+              id="lib-derive-note"
+              value={deriveNote}
+              onChange={(event) => setDeriveNote(event.target.value)}
+              placeholder="optional"
+            />
+          </label>
+          <button type="submit" className="btn" disabled={derive.isPending || !deriveName.trim()}>
+            {derive.isPending ? "Deriving…" : "Derive"}
+          </button>
+        </form>
+      ) : null}
+      {pkg.permissions.can_derive ? (
+        <p className="page-sub" style={{ marginTop: 4 }}>
+          Copies this exact revision into your own new private package (pinned as its source).
+          The source package is never modified (doc 08 §8.2).
+        </p>
+      ) : null}
+      {derive.isError ? <ErrorState error={derive.error} /> : null}
+      {derive.data ? (
+        <p className="page-sub" style={{ marginTop: 4 }}>
+          Derived <strong>{derive.data.name}</strong> (<code>{derive.data.entity_id}</code>).
+        </p>
+      ) : null}
+
+      {pkg.permissions.can_create_revision ? (
+        <form
+          onSubmit={onCreateRevision}
+          style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}
+        >
+          <label htmlFor="lib-revision-note">
+            New revision note{" "}
+            <input
+              id="lib-revision-note"
+              value={revisionNote}
+              onChange={(event) => setRevisionNote(event.target.value)}
+              placeholder="optional change note"
+            />
+          </label>
+          <button type="submit" className="btn" disabled={createRevision.isPending}>
+            {createRevision.isPending ? "Creating…" : "Create Revision"}
+          </button>
+        </form>
+      ) : null}
+      {pkg.permissions.can_create_revision ? (
+        <p className="page-sub" style={{ marginTop: 4 }}>
+          Appends an immutable revision based on the current head (v{pkg.revision_no}); the base
+          revision stays unchanged. A concurrent head move is rejected (doc 08 §8.5).
+        </p>
+      ) : null}
+      {createRevision.isError ? <ErrorState error={createRevision.error} /> : null}
+      {createRevision.data ? (
+        <p className="page-sub" style={{ marginTop: 4 }}>
+          Created revision v{createRevision.data.revision_no}.
+        </p>
+      ) : null}
     </div>
   );
 }

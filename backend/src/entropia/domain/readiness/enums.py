@@ -89,6 +89,9 @@ class ReadinessIssueCode(StrEnum):
     ALLOCATION_TOTAL_EXCEEDS_100 = "ALLOCATION_TOTAL_EXCEEDS_100"
     ALLOCATION_ITEM_UNAVAILABLE = "ALLOCATION_ITEM_UNAVAILABLE"
     ALLOCATION_UNALLOCATED_CASH = "ALLOCATION_UNALLOCATED_CASH"
+    # An item settles in a currency other than the Base Currency with no approved
+    # pinned FX conversion dataset (doc 13 §5.1/§6.2 surfaced through Ready Check).
+    ALLOCATION_FX_DEPENDENCY = "ALLOCATION_FX_DEPENDENCY"
     ALLOCATION_ISSUE = "ALLOCATION_ISSUE"
 
 

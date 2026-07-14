@@ -26,6 +26,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from entropia.application.idempotency import run_idempotent
+from entropia.application.queries.allocation_currency import resolve_settlement_currencies
 from entropia.domain.allocation.config import PortfolioAllocationConfigV1
 from entropia.domain.allocation.rules import (
     AllocationItemRef,
@@ -332,9 +333,12 @@ async def _resolve_allocation(
     entries = await alloc_repo.list_entries(session, plan.plan_id)
     config = _plan_to_config(plan, entries)
     active_ids = {item.item_id for item in available_items}
+    settlement = await resolve_settlement_currencies(session, available_items)
     item_refs = {
         e.composition_item_id: AllocationItemRef(
-            kind=e.item_type, available=e.composition_item_id in active_ids
+            kind=e.item_type,
+            available=e.composition_item_id in active_ids,
+            settlement_currency=settlement.get(e.composition_item_id),
         )
         for e in entries
     }

@@ -33,6 +33,7 @@ from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from entropia.application.idempotency import run_idempotent
+from entropia.application.queries.allocation_currency import resolve_settlement_currencies
 from entropia.domain.allocation.config import PortfolioAllocationConfigV1
 from entropia.domain.allocation.rules import (
     AllocationItemRef,
@@ -102,7 +103,7 @@ async def upsert_allocation_draft(
         current_entries = (
             await alloc_repo.list_entries(session, plan.plan_id) if plan is not None else []
         )
-        active = await _active_items(session, composition_id)
+        active, settlement = await _resolve_items(session, composition_id)
         resolved = _resolve_entries(config, active, current_entries)
         canonical = _canonical_draft(config, resolved)
         fingerprint = _hash_dict(canonical)
@@ -137,7 +138,7 @@ async def upsert_allocation_draft(
 
         await alloc_repo.replace_entries(session, plan_id=plan.plan_id, entries=resolved)
 
-        item_refs = _item_refs_from_resolved(resolved, active)
+        item_refs = _item_refs_from_resolved(resolved, active, settlement)
         issues, derived = validate_allocation(config, item_refs=item_refs)
 
         if config.enabled != previous_enabled:
@@ -239,10 +240,12 @@ async def validate_allocation_draft(
 
     entries = await alloc_repo.list_entries(session, plan.plan_id)
     config = _plan_to_config(plan, entries)
-    active = await _active_items(session, composition_id)
+    active, settlement = await _resolve_items(session, composition_id)
     item_refs = {
         e.composition_item_id: AllocationItemRef(
-            kind=e.item_type, available=e.composition_item_id in active
+            kind=e.item_type,
+            available=e.composition_item_id in active,
+            settlement_currency=settlement.get(e.composition_item_id),
         )
         for e in entries
     }
@@ -311,10 +314,12 @@ async def create_allocation_revision(
                 "A plan revision can only be created in shared allocation mode (enabled=true).",
                 details=[{"code": "ALLOCATION_NOT_ENABLED", "field": "enabled"}],
             )
-        active = await _active_items(session, composition_id)
+        active, settlement = await _resolve_items(session, composition_id)
         item_refs = {
             e.composition_item_id: AllocationItemRef(
-                kind=e.item_type, available=e.composition_item_id in active
+                kind=e.item_type,
+                available=e.composition_item_id in active,
+                settlement_currency=settlement.get(e.composition_item_id),
             )
             for e in entries
         }
@@ -402,9 +407,18 @@ async def _load_workspace_for_view(
     return workspace
 
 
-async def _active_items(session: AsyncSession, composition_id: str) -> dict[str, MainboardItemKind]:
+async def _resolve_items(
+    session: AsyncSession, composition_id: str
+) -> tuple[dict[str, MainboardItemKind], dict[str, str | None]]:
+    """Active composition items -> (kind map, settlement-currency map) (doc 13 §5.1).
+
+    The settlement map feeds the pure ``validate_allocation`` FX cross-check; an
+    item that does not resolve to an instrument settlement currency maps to ``None``.
+    """
     items = await mb_repo.list_active_items(session, composition_id)
-    return {item.item_id: item.item_kind for item in items}
+    active = {item.item_id: item.item_kind for item in items}
+    settlement = await resolve_settlement_currencies(session, items)
+    return active, settlement
 
 
 def _parse_config(raw: dict[str, Any]) -> PortfolioAllocationConfigV1:
@@ -458,11 +472,15 @@ def _resolve_entries(
 
 
 def _item_refs_from_resolved(
-    resolved: list[dict[str, Any]], active: dict[str, MainboardItemKind]
+    resolved: list[dict[str, Any]],
+    active: dict[str, MainboardItemKind],
+    settlement: dict[str, str | None],
 ) -> dict[str, AllocationItemRef]:
     return {
         entry["composition_item_id"]: AllocationItemRef(
-            kind=entry["item_type"], available=entry["composition_item_id"] in active
+            kind=entry["item_type"],
+            available=entry["composition_item_id"] in active,
+            settlement_currency=settlement.get(entry["composition_item_id"]),
         )
         for entry in resolved
     }

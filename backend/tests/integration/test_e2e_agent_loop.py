@@ -194,7 +194,10 @@ async def _real_package(session) -> dict[str, str]:
         package_kind=PackageKind.EMBEDDED_SYSTEM,
         input_contract={"resolver_key": "ta.rsi"},
         output_contract={"return": "series"},
-        dependency_snapshot={},
+        # F-06: a resolvable directional dependency so the pinned strategy yields a
+        # computable entry — the worker's fail-closed gate never blocks this run, and
+        # metrics come from real built-in compute (not the removed breakout proxy).
+        dependency_snapshot={"resolved": [{"call": "ta.rsi", "canonical_key": "ta.rsi"}]},
         visibility_scope=VisibilityScope.SYSTEM,
         validation_state=PackageValidationState.PASSED,
         approval_state=ApprovalState.APPROVED,

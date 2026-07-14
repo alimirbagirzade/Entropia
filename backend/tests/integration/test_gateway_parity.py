@@ -44,8 +44,15 @@ from entropia.domain.agent_lab.tool_gateway import exposed_tool_names
 from entropia.domain.capability.baseline import initial_dependency_snapshot
 from entropia.domain.capability.enums import GRAPHIC_VIEW, ActivationGate
 from entropia.domain.identity import Actor
-from entropia.domain.lifecycle.enums import PrincipalType, Role
+from entropia.domain.lifecycle.enums import (
+    ApprovalState,
+    PackageKind,
+    PrincipalType,
+    Role,
+    VisibilityScope,
+)
 from entropia.domain.market_data.enums import MarketDataType, MarketRevisionState
+from entropia.domain.package.enums import PackageValidationState
 from entropia.infrastructure.postgres.models import (
     AgentEvent,
     AgentRuntime,
@@ -59,6 +66,7 @@ from entropia.infrastructure.postgres.models import (
 )
 from entropia.infrastructure.postgres.repositories import agent_lab as al_repo
 from entropia.infrastructure.postgres.repositories import capability as capability_repo
+from entropia.infrastructure.postgres.repositories import packages as pkg_repo
 from entropia.shared.errors import AccessDeniedError, CapabilityNotActiveError
 
 pytestmark = pytest.mark.integration
@@ -78,7 +86,7 @@ AGENT = Actor(
 GATES_WITHOUT_UI = {"gates": {gate.value: gate is not ActivationGate.UI for gate in ActivationGate}}
 
 
-def _strategy_payload() -> dict[str, Any]:
+def _strategy_payload(indicator_revision_id: str = "pkg_rev_parity") -> dict[str, Any]:
     return {
         "strategy_root_id": "strat_parity_seed",
         "display_name": "Parity strategy",
@@ -104,7 +112,7 @@ def _strategy_payload() -> dict[str, Any]:
                     "display_order": 0,
                     "package_ref": {
                         "package_root_id": "pkg_root_parity",
-                        "package_revision_id": "pkg_rev_parity",
+                        "package_revision_id": indicator_revision_id,
                         "package_content_hash": "b" * 64,
                     },
                     "trigger_source": "indicator_native_trigger",
@@ -169,8 +177,27 @@ async def _ready_composition(session, actor: Actor) -> str:
         )
         root.current_revision_id = "md_rev_parity"
         await session.flush()
+    # F-06: pin a REAL approved indicator package whose dependency snapshot resolves a
+    # directional key (ta.sma), so the upfront Ready Check gate does not block the run
+    # on STRATEGY_INDICATOR_UNRESOLVED and the parity walk reaches the ready state.
+    _reg, _pkg_root, pkg_rev = await pkg_repo.create_package(
+        session,
+        owner_principal_id=None,
+        created_by_principal_id=None,
+        package_kind=PackageKind.INDICATOR,
+        input_contract={"source": "close"},
+        output_contract={"kind": "directional_signal"},
+        dependency_snapshot={"resolved": [{"call": "ta.sma", "canonical_key": "ta.sma"}]},
+        visibility_scope=VisibilityScope.PUBLISHED,
+        validation_state=PackageValidationState.PASSED,
+        approval_state=ApprovalState.APPROVED,
+    )
+    await session.flush()
     work_object = await mb_cmd.create_work_object(
-        session, actor, object_kind="strategy", payload=_strategy_payload()
+        session,
+        actor,
+        object_kind="strategy",
+        payload=_strategy_payload(indicator_revision_id=pkg_rev.revision_id),
     )
     await mb_cmd.attach_mainboard_item(
         session,

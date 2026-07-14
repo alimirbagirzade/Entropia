@@ -102,12 +102,17 @@ def evaluate_readiness(
     allocation_enabled: bool,
     allocation_issues: Sequence[AllocationIssue],
     market_data_issues: Sequence[ReadinessIssue] = (),
+    strategy_indicator_issues: Sequence[ReadinessIssue] = (),
 ) -> ReadinessEvaluation:
     """Aggregate all validator layers into an immutable evaluation (doc 14 §9.2).
 
     ``items`` are the ENABLED composition members (a disabled item never enters a
     snapshot). ``allocation_issues`` is the 4a ``validate_allocation`` output for
     the shared pool (empty in independent mode); it is mapped 1:1 here.
+    ``strategy_indicator_issues`` are the F-06 upfront-RUN-gate blockers the command
+    resolved from each strategy's pinned indicator plan (a DB read, like
+    ``market_data_issues``) — an unresolved required dependency blocks RUN so the
+    worker can never silently substitute the breakout proxy.
     """
     issues: list[ReadinessIssue] = []
     issues.extend(_composition_issues(items))
@@ -115,6 +120,7 @@ def evaluate_readiness(
     for item in items:
         issues.extend(_item_issues(item, allocation_enabled=allocation_enabled))
     issues.extend(market_data_issues)
+    issues.extend(strategy_indicator_issues)
     issues.extend(_map_allocation_issues(allocation_issues))
 
     blockers = sum(1 for i in issues if i.severity == Sev.BLOCKER)

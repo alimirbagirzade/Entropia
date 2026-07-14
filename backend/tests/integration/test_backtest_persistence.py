@@ -26,24 +26,33 @@ from entropia.application.jobs.backtest_engine import run_backtest
 from entropia.application.queries import backtest_run as backtest_query
 from entropia.application.queries import mainboard as mb_query
 from entropia.domain.identity import Actor
-from entropia.domain.lifecycle.enums import PrincipalType, Role
+from entropia.domain.lifecycle.enums import (
+    ApprovalState,
+    PackageKind,
+    PrincipalType,
+    Role,
+    VisibilityScope,
+)
 from entropia.domain.market_data.enums import (
     MarketDataType,
     MarketRevisionState,
     ResolutionKind,
 )
+from entropia.domain.package.enums import PackageValidationState
 from entropia.infrastructure.postgres.models import (
     BacktestResult,
     BacktestRun,
     DiagnosticArtifact,
     Job,
     MetricValueRow,
+    PackageRevision,
     Principal,
     ResultSummary,
 )
 from entropia.infrastructure.postgres.repositories import backtest as bt_repo
 from entropia.infrastructure.postgres.repositories import mainboard as mb_repo
 from entropia.infrastructure.postgres.repositories import market_data as md_repo
+from entropia.infrastructure.postgres.repositories import packages as pkg_repo
 from entropia.shared.errors import (
     AccessDeniedError,
     BacktestResultNotFoundError,
@@ -106,7 +115,10 @@ def _e2e_bars(_source: Any) -> Iterator[list[dict[str, Any]]]:
 
 
 def _strategy_payload(
-    market_root_id: str, market_revision_id: str, market_hash: str
+    market_root_id: str,
+    market_revision_id: str,
+    market_hash: str,
+    indicator_revision_id: str = "pkg_rev_1",
 ) -> dict[str, Any]:
     return {
         "strategy_root_id": "strat_root_seed",
@@ -133,7 +145,7 @@ def _strategy_payload(
                     "display_order": 0,
                     "package_ref": {
                         "package_root_id": "pkg_root_1",
-                        "package_revision_id": "pkg_rev_1",
+                        "package_revision_id": indicator_revision_id,
                         "package_content_hash": "b" * 64,
                     },
                     "trigger_source": "indicator_native_trigger",
@@ -156,7 +168,7 @@ async def _empty_composition(session, actor: Actor) -> str:
 
 
 async def _ready_composition(
-    session, actor: Actor, *, base_tf: str | None = None
+    session, actor: Actor, *, base_tf: str | None = None, resolvable_indicator: bool = True
 ) -> tuple[str, str, str]:
     workspace_id = await _empty_composition(session, actor)
     # Slice B: the strategy pins a REAL market revision (FK-valid entity) and the
@@ -186,12 +198,35 @@ async def _ready_composition(
         row_count=22,
     )
     await session.flush()
+    # F-06: the strategy pins a REAL indicator package. When ``resolvable_indicator``
+    # its dependency snapshot resolves a directional key (ta.sma) so
+    # ``resolve_indicator_plan`` yields a computable entry — the worker's fail-closed
+    # gate never blocks the happy path, and the run drives real built-in compute (not
+    # the removed breakout proxy). When not, a recognized-but-non-directional key
+    # (ta.atr) leaves the block unresolved — the upfront Ready Check gate blocks RUN.
+    indicator_key = "ta.sma" if resolvable_indicator else "ta.atr"
+    _reg, _pkg_root, pkg_rev = await pkg_repo.create_package(
+        session,
+        owner_principal_id=None,
+        created_by_principal_id=None,
+        package_kind=PackageKind.INDICATOR,
+        input_contract={"source": "close"},
+        output_contract={"kind": "directional_signal"},
+        dependency_snapshot={"resolved": [{"call": indicator_key, "canonical_key": indicator_key}]},
+        visibility_scope=VisibilityScope.PUBLISHED,
+        validation_state=PackageValidationState.PASSED,
+        approval_state=ApprovalState.APPROVED,
+    )
+    await session.flush()
     work_object = await mb_cmd.create_work_object(
         session,
         actor,
         object_kind="strategy",
         payload=_strategy_payload(
-            market_root.entity_id, market_rev.revision_id, market_rev.content_hash
+            market_root.entity_id,
+            market_rev.revision_id,
+            market_rev.content_hash,
+            indicator_revision_id=pkg_rev.revision_id,
         ),
     )
     await mb_cmd.attach_mainboard_item(
@@ -380,6 +415,57 @@ async def test_worker_fails_on_unresolved_pin_and_retry_creates_new_run(session)
     assert retry["manifest_hash"] != admit["manifest_hash"]
     new_run = await session.get(BacktestRun, retry["run_id"])
     assert new_run.retry_of_run_id == admit["run_id"] and str(new_run.state) == "queued"
+
+
+async def test_run_admission_blocked_when_indicator_dependency_unresolved(session) -> None:
+    """F-06 upfront RUN gate: RUN cannot start with an unresolved required package.
+
+    The strategy pins an indicator whose dependency is recognized but non-directional
+    (ta.atr), so no computable entry resolves. Admission runs Ready Check first and
+    refuses to queue a run — the blocker names the strategy scope (spec F-06)."""
+    await _seed_principals(session)
+    composition_id, _root, _rev = await _ready_composition(
+        session, USER1, resolvable_indicator=False
+    )
+    with pytest.raises(ReadinessBlockedError) as excinfo:
+        await backtest_cmd.request_backtest_run(session, USER1, composition_id=composition_id)
+
+    codes = {detail["code"] for detail in excinfo.value.details}
+    assert "STRATEGY_INDICATOR_UNRESOLVED" in codes
+    # No run/manifest was created — RUN never started (spec F-06 acceptance).
+    assert await _count(session, BacktestRun) == 0
+
+
+async def test_worker_fails_closed_when_indicator_becomes_unresolved(session) -> None:
+    """F-06 defence in depth: even if a bypassed/stale readiness reaches the worker,
+    the engine fails fast instead of substituting the breakout proxy.
+
+    A resolvable run is admitted normally, then the pinned indicator package loses its
+    directional dependency (simulating a bypassed Ready Check). The worker must
+    terminate FAILED with UNRESOLVED_DEPENDENCY and materialize NO Result — metrics
+    from a strategy the user did not select can never be produced (spec F-06)."""
+    await _seed_principals(session)
+    composition_id, _root, _rev = await _ready_composition(session, USER1)
+    admit = await backtest_cmd.request_backtest_run(session, USER1, composition_id=composition_id)
+    await session.commit()
+
+    # Break the pinned indicator's resolution AFTER admission (readiness already passed).
+    pkg = (
+        await session.execute(
+            select(PackageRevision).where(PackageRevision.package_kind == PackageKind.INDICATOR)
+        )
+    ).scalar_one()
+    pkg.dependency_snapshot = {"resolved": [{"call": "ta.atr", "canonical_key": "ta.atr"}]}
+    await session.commit()
+
+    out = await run_backtest(session, admit["job_id"], stream_bars=_e2e_bars)
+    await session.commit()
+
+    assert out["state"] == "failed"
+    assert out["failure_code"] == "RUN_FAILED_UNRESOLVED_DEPENDENCY"
+    run = await session.get(BacktestRun, admit["run_id"])
+    assert str(run.state) == "failed" and run.result_id is None
+    assert await _count(session, BacktestResult) == 0  # CR-03: no Result on failure
 
 
 # --------------------------------------------------------------------------- #

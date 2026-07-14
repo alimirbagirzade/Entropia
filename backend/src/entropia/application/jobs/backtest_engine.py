@@ -9,6 +9,8 @@ are the source of truth — the request that admitted the run has long since ret
         any unresolved pin => terminal FAILED, doc 15 §11, §15) ->
     resolve the primary Strategy's pinned config + its pinned market revision's
         processed bar source (INF-12); a missing asset => terminal FAILED ->
+    resolve the pinned indicator plan; an unresolved required dependency =>
+        terminal FAILED (F-06: NEVER the breakout proxy, doc 15 §15) ->
     bar-replay the deterministic engine (``domain.backtest.engine``) over the
         streamed OHLCV batches (bounded memory) ->
     ONLY on success: materialize the immutable Result + summary + metrics +
@@ -128,13 +130,33 @@ async def run_backtest(
             message=f"Pinned market revision '{market_revision_id}' has no processed bar asset.",
         )
 
+    # Resolve the pinned strategy's indicator packages into a deterministic compute
+    # plan (INF-12 Slice C). Derived purely from immutable pins, so it does not break
+    # reproducibility.
+    indicator_plan = await resolve_indicator_plan(session, strategy_config)
+    # F-06: an unresolved required indicator dependency is a HARD terminal failure —
+    # NEVER silently substituted with the deterministic breakout proxy. A run whose
+    # pinned packages do not resolve to a computable entry signal (or leaves any block
+    # unresolved) would otherwise fabricate metrics from a strategy the user never
+    # selected (spec F-06 acceptance). Resolved while still PROVISIONING so the fail
+    # path never transits through RUNNING, exactly like the pin/asset checks above.
+    # The engine's proxy mode is retained only as a domain-level primitive; it is
+    # structurally unreachable on the production worker path.
+    if not indicator_plan.has_entry or indicator_plan.unresolved:
+        return _fail_run(
+            session,
+            job,
+            run,
+            code=RunFailureCode.UNRESOLVED_DEPENDENCY,
+            message=(
+                "Required indicator dependency could not be resolved (no breakout-proxy "
+                f"fallback): {list(indicator_plan.unresolved) or 'no computable entry signal'}."
+            ),
+        )
+
     run.state = BacktestRunState.RUNNING
 
     item_count = len(manifest.manifest.get("mainboard_items", []))
-    # Resolve the pinned strategy's indicator packages into a deterministic compute
-    # plan (INF-12 Slice C). Derived purely from immutable pins, so it does not break
-    # reproducibility; an empty plan makes the engine fall back to its breakout proxy.
-    indicator_plan = await resolve_indicator_plan(session, strategy_config)
     # Summary metadata: the pinned revision's base bar timeframe (immutable read,
     # reproducibility-safe). None when the revision is not bar-timeframed — surfaced
     # as-is, never guessed (L4).

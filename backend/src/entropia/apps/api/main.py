@@ -43,6 +43,7 @@ from entropia.apps.api.routes import (
     meta,
     metric_profile,
     metrics,
+    package_import,
     rationale,
     readiness,
     research_data,
@@ -124,6 +125,7 @@ def create_app() -> FastAPI:
     app.include_router(rationale.router, prefix=base)
     app.include_router(create_package.router, prefix=base)
     app.include_router(library.router, prefix=base)
+    app.include_router(package_import.router, prefix=base)
     app.include_router(sharing.router, prefix=base)
     app.include_router(mainboard.router, prefix=base)
     app.include_router(strategy.router, prefix=base)

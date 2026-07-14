@@ -385,6 +385,26 @@ class PackageNotFound(NotFoundError):
     message = "The referenced package was not found."
 
 
+class PackageImportManifestInvalid(ValidationError):
+    """A submitted package-import manifest is structurally unusable at the API boundary
+    (doc 08 §10, S3): not an object, or missing/invalid ``package_kind``. Deeper
+    structural defects surface asynchronously as a ``failed`` import job — this 422 only
+    rejects a body that cannot even open a durable job (a NOT NULL ``package_kind`` is
+    needed to record it)."""
+
+    code = "PACKAGE_IMPORT_MANIFEST_INVALID"
+    message = "The import manifest is not a valid export manifest."
+
+
+class PackageImportJobNotFound(NotFoundError):
+    """A package-import report was requested for an id the caller cannot see (doc 08
+    §10, S3). Owner-scoped: a cross-owner or missing import job is a 404, never an
+    existence leak."""
+
+    code = "PACKAGE_IMPORT_JOB_NOT_FOUND"
+    message = "The import job was not found."
+
+
 class PackageNotDerivableError(ValidationError):
     """A "Create Strategy Draft from Package" targeted a package that cannot seed a
     strategy draft (GAP-03; doc 01 §8.2, doc 08 §4.3): it is not a Strategy-kind

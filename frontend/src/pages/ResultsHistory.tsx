@@ -167,6 +167,7 @@ export function ResultsHistory() {
                     <code>{row.result_id}</code>
                     <span>{formatUtc(row.completed_at_utc)}</span>
                     <span>{row.timeframe ?? EM_DASH}</span>
+                    <span>{row.market_data_revision_summary?.symbol ?? EM_DASH}</span>
                   </div>
                   <div
                     style={{ display: "flex", alignItems: "center", gap: 8, whiteSpace: "nowrap" }}

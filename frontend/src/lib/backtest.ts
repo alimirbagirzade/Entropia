@@ -122,6 +122,42 @@ export interface ManifestExcerpt {
   pinned_item_count: number;
 }
 
+// One pinned Mainboard item ref (doc 16 §9.4). The exact (kind, root, revision)
+// tuple the run pinned — never re-resolved from the current Mainboard (§15).
+export interface ManifestItemRef {
+  item_id: string | null;
+  item_kind: string | null;
+  root_id: string | null;
+  revision_id: string | null;
+  position: number | null;
+  enabled: boolean | null;
+}
+
+// Immutable ResultManifestExcerptDTO (doc 16 §8.2/§9.4): pinned strategy/external
+// refs, allocation + execution context and artifact availability, read ONLY from
+// the result manifest. Fields the V1 manifest does not separately pin
+// (package_revision_refs, market_data_revision, research_data_revision_refs) are
+// honestly empty/null — carried transitively by strategy_revision_refs.
+export interface ResultManifestExcerpt {
+  result_id: string;
+  composition_snapshot_id: string | null;
+  strategy_revision_refs: ManifestItemRef[];
+  external_work_refs: ManifestItemRef[];
+  package_revision_refs: ManifestItemRef[];
+  market_data_revision: string | null;
+  research_data_revision_refs: ManifestItemRef[];
+  portfolio_allocation_plan_revision_id: string | null;
+  execution_context: {
+    execution_key: string | null;
+    composition_fingerprint: string | null;
+    capital_execution: unknown;
+  };
+  engine_contract_version: string | null;
+  artifact_context: unknown;
+  completed_at_utc: string | null;
+  artifact_availability: { counts: Record<string, number>; any_available: boolean };
+}
+
 export interface BacktestResultDetail {
   result_id: string;
   run_id: string;
@@ -132,6 +168,7 @@ export interface BacktestResultDetail {
   summary: ResultSummary | null;
   metrics: MetricValue[];
   manifest: ManifestExcerpt | null;
+  manifest_excerpt: ResultManifestExcerpt;
   artifact_counts: Record<string, number>;
 }
 
@@ -142,7 +179,9 @@ export interface HistoryRow {
   display_title: string;
   composition_context: { composition_id: string; composition_fingerprint: string };
   key_metrics: Record<string, MetricCell | null>;
-  market_data_revision_summary: unknown;
+  // The pinned instrument the result ran on (doc 16 §9.4) — honest null when the
+  // summary pinned no symbol; a dedicated MD revision is not separately pinned.
+  market_data_revision_summary: { symbol: string } | null;
   timeframe: string | null;
   backtest_range: { start: string | null; end: string | null };
   manifest_hash: string;

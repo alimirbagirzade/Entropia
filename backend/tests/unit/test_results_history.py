@@ -13,6 +13,7 @@ from entropia.domain.backtest.history import (
     DEFAULT_SORT,
     Cursor,
     HistorySort,
+    build_manifest_excerpt,
     decode_cursor,
     diff_manifest_contexts,
     encode_cursor,
@@ -130,3 +131,126 @@ def test_diff_identical_contexts_reports_no_difference() -> None:
     diff = diff_manifest_contexts(ctx, dict(ctx))
     assert diff["context_differs"] is False
     assert all(not field["differs"] for field in diff["fields"].values())
+
+
+# --- S7: manifest excerpt enrichment (doc 16 §8.2/§9.4, RH-09) ------------ #
+
+
+def _manifest(
+    *, engine: str = "v2", strat_rev: str = "srev-1", plan_rev: str | None = "plan-9"
+) -> dict:
+    """A synthetic pinned manifest mirroring ``build_run_manifest`` output shape."""
+    capital: dict = {"enabled": True}
+    if plan_rev is not None:
+        capital["plan_revision_id"] = plan_rev
+    return {
+        "identity": {
+            "engine_version": engine,
+            "composition_fingerprint": "fp1",
+            "composition_snapshot_id": "snap-1",
+        },
+        "mainboard_items": [
+            {
+                "item_id": "it-1",
+                "item_kind": "strategy",
+                "root_id": "strat-root",
+                "selected_revision_id": strat_rev,
+                "position": 0,
+                "enabled": True,
+            },
+            {
+                "item_id": "it-2",
+                "item_kind": "trading_signal",
+                "root_id": "ts-root",
+                "selected_revision_id": "ts-rev-1",
+                "position": 1,
+                "enabled": True,
+            },
+        ],
+        "capital_execution": capital,
+        "result_artifact_context": {
+            "metric_set_version": "metric-set-v1",
+            "output_artifact_profile": "standard-v1",
+        },
+        "execution_key": "ek1",
+    }
+
+
+def test_extract_context_surfaces_pinned_strategy_refs_and_allocation() -> None:
+    ctx = extract_manifest_context(_manifest(strat_rev="srev-7", plan_rev="plan-3"))
+    assert ctx["strategy_revision_refs"] == [
+        {
+            "item_id": "it-1",
+            "item_kind": "strategy",
+            "root_id": "strat-root",
+            "revision_id": "srev-7",
+            "position": 0,
+            "enabled": True,
+        }
+    ]
+    assert ctx["portfolio_allocation_plan_revision_id"] == "plan-3"
+    assert ctx["artifact_context"]["metric_set_version"] == "metric-set-v1"
+    # Market data still not separately pinned -> honest None, carried transitively.
+    assert ctx["market_data_revision"] is None
+
+
+def test_diff_flags_differing_strategy_revision_transitive_market_data() -> None:
+    # A Market Data change lands inside the strategy config -> a different pinned
+    # strategy revision, which the compare flags (RH-09) even though the dedicated
+    # market_data_revision row stays "Not available".
+    a = extract_manifest_context(_manifest(strat_rev="srev-1"))
+    b = extract_manifest_context(_manifest(strat_rev="srev-2"))
+    diff = diff_manifest_contexts(a, b)
+    assert diff["context_differs"] is True
+    assert diff["fields"]["strategy_revision_refs"]["differs"] is True
+    assert diff["fields"]["market_data_revision"]["differs"] is False
+    assert diff["fields"]["market_data_revision"]["a"] == "Not available"
+
+
+def test_diff_flags_differing_allocation_plan_revision() -> None:
+    a = extract_manifest_context(_manifest(plan_rev="plan-1"))
+    b = extract_manifest_context(_manifest(plan_rev="plan-2"))
+    diff = diff_manifest_contexts(a, b)
+    assert diff["fields"]["portfolio_allocation_plan_revision_id"]["differs"] is True
+    assert diff["fields"]["portfolio_allocation_plan_revision_id"]["a"] == "plan-1"
+
+
+def test_extract_context_no_allocation_plan_is_honest_none() -> None:
+    ctx = extract_manifest_context(_manifest(plan_rev=None))
+    assert ctx["portfolio_allocation_plan_revision_id"] is None
+
+
+def test_build_excerpt_reads_pinned_refs_and_availability() -> None:
+    excerpt = build_manifest_excerpt(
+        _manifest(strat_rev="srev-5", plan_rev="plan-8"),
+        result_id="res-1",
+        completed_at_utc="2026-07-14T00:00:00+00:00",
+        artifact_availability={"counts": {"trade": 3}, "any_available": True},
+    )
+    assert excerpt["result_id"] == "res-1"
+    assert excerpt["composition_snapshot_id"] == "snap-1"
+    assert [r["revision_id"] for r in excerpt["strategy_revision_refs"]] == ["srev-5"]
+    assert [r["item_kind"] for r in excerpt["external_work_refs"]] == ["trading_signal"]
+    assert excerpt["portfolio_allocation_plan_revision_id"] == "plan-8"
+    assert excerpt["engine_contract_version"] == "v2"
+    assert excerpt["execution_context"]["execution_key"] == "ek1"
+    assert excerpt["completed_at_utc"] == "2026-07-14T00:00:00+00:00"
+    assert excerpt["artifact_availability"]["any_available"] is True
+    # Not separately pinned in the V1 manifest -> honest empty/null.
+    assert excerpt["package_revision_refs"] == []
+    assert excerpt["market_data_revision"] is None
+    assert excerpt["research_data_revision_refs"] == []
+
+
+def test_build_excerpt_handles_empty_manifest_honestly() -> None:
+    excerpt = build_manifest_excerpt(
+        None,
+        result_id="res-2",
+        completed_at_utc=None,
+        artifact_availability={"counts": {}, "any_available": False},
+    )
+    assert excerpt["strategy_revision_refs"] == []
+    assert excerpt["external_work_refs"] == []
+    assert excerpt["composition_snapshot_id"] is None
+    assert excerpt["engine_contract_version"] is None
+    assert excerpt["portfolio_allocation_plan_revision_id"] is None

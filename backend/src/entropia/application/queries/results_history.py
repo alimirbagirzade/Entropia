@@ -269,8 +269,13 @@ def _row_dto(
             "composition_fingerprint": result.composition_fingerprint,
         },
         "key_metrics": {key: digest.get(key) for key in KEY_METRIC_KEYS},
-        # Not separately pinned in the V1 manifest — honest null, never fabricated.
-        "market_data_revision_summary": None,
+        # The pinned instrument the result was computed on — a market-data-at-a-glance
+        # read from the already-loaded immutable summary (no per-row manifest N+1). A
+        # dedicated Market Data revision is not separately pinned in the V1 manifest,
+        # so ``symbol`` is honestly null when the summary lacks one (doc 16 §4, §9.4).
+        "market_data_revision_summary": (
+            None if summary is None or summary.symbol is None else {"symbol": summary.symbol}
+        ),
         "timeframe": summary.timeframe if summary is not None else None,
         "backtest_range": {
             "start": summary.period_start if summary is not None else None,

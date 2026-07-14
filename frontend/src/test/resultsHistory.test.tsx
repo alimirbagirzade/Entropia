@@ -45,7 +45,7 @@ const ROW = {
       availability: "computed",
     },
   },
-  market_data_revision_summary: null,
+  market_data_revision_summary: { symbol: "BTCUSDT" },
   timeframe: "1h",
   backtest_range: { start: "2026-01-01", end: "2026-03-01" },
   manifest_hash: "mh_1",
@@ -97,6 +97,7 @@ describe("Results History page", () => {
     expect(screen.getByText("55.00%")).toBeInTheDocument(); // percent
     expect(screen.getByText("42")).toBeInTheDocument(); // integer
     expect(screen.getByText("—")).toBeInTheDocument(); // missing digest cell, never 0
+    expect(screen.getByText("BTCUSDT")).toBeInTheDocument(); // S7: pinned instrument
     expect(screen.getByText("2026-07-05 19:06 UTC")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "View" })).toHaveAttribute(
       "href",

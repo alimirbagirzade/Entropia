@@ -239,9 +239,7 @@ async def test_idempotent_replay_returns_same_job(session: AsyncSession) -> None
     assert first["job_id"] == second["job_id"]
     assert first["import_job_id"] == second["import_job_id"]
     count = int(
-        (
-            await session.execute(select(func.count()).select_from(PackageImportJob))
-        ).scalar_one()
+        (await session.execute(select(func.count()).select_from(PackageImportJob))).scalar_one()
     )
     assert count == 1
 

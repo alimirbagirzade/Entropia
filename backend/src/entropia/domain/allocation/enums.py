@@ -55,6 +55,12 @@ class AllocationIssueCode(StrEnum):
     DUPLICATE_ACTIVE_ENTRY = "DUPLICATE_ACTIVE_ENTRY"
     ITEM_UNAVAILABLE = "ITEM_UNAVAILABLE"
     ONE_ACTIVE_SLEEVE = "ONE_ACTIVE_SLEEVE"
+    # An active item settles in a currency other than the Base Currency and no
+    # approved, pinned FX conversion dataset is available to convert it (doc 13
+    # §5.1, §6.2 "Error - FX dependency", §10.1). The system never silently
+    # converts — cross-currency pooling blocks fail-closed until a conversion
+    # source exists (mirrors the engine GAP-16 single-currency assumption).
+    FX_DEPENDENCY_MISSING = "FX_DEPENDENCY_MISSING"
 
 
 __all__ = [

@@ -89,10 +89,18 @@ class DerivedAmounts:
 
 @dataclass(frozen=True, slots=True)
 class AllocationItemRef:
-    """Composition-item availability resolved by the command layer (doc 13 §10.1)."""
+    """Composition-item availability resolved by the command layer (doc 13 §10.1).
+
+    ``settlement_currency`` is the item's traded-instrument settlement currency,
+    resolved impurely by the command layer from the pinned work object -> canonical
+    instrument (doc 13 §5.1). ``None`` means "unknown / not resolvable" — the FX
+    cross-check is skipped for that item (a difference is never fabricated), other
+    layers still surface a missing/unusable pin.
+    """
 
     kind: MainboardItemKind
     available: bool
+    settlement_currency: str | None = None
 
 
 def validate_allocation(
@@ -234,8 +242,57 @@ def validate_allocation(
             )
         )
 
+    issues.extend(_fx_dependency_issues(config, active, item_refs))
+
     derived = _derive(config, active) if (capital_ok and reserve_ok) else None
     return issues, derived
+
+
+def _normalize_currency(value: str | None) -> str:
+    return (value or "").strip().upper()
+
+
+def _fx_dependency_issues(
+    config: PortfolioAllocationConfigV1,
+    active: list,  # type: ignore[type-arg]
+    item_refs: dict[str, AllocationItemRef],
+) -> list[AllocationIssue]:
+    """Block a mixed-currency pool with no conversion source (doc 13 §5.1, §6.2).
+
+    The Base Currency is the pool/ledger accounting currency; every active item's
+    traded-instrument settlement currency must equal it, OR an approved, pinned FX
+    conversion dataset must exist. No such dataset entity exists in V1 (the engine
+    assumes a single-currency pool, GAP-16), so a resolved mismatch always blocks —
+    the system never converts silently. Fail-closed on a KNOWN difference only: an
+    unresolved (``None``) settlement currency is skipped (never a fabricated diff),
+    and a missing Base Currency is already covered by ``BASE_CURRENCY_INVALID``.
+    """
+    base = config.initial_capital.currency if config.initial_capital is not None else None
+    base_ccy = _normalize_currency(str(base)) if base is not None else ""
+    if not base_ccy:
+        return []
+
+    issues: list[AllocationIssue] = []
+    for entry in active:
+        ref = item_refs.get(entry.composition_item_id)
+        if ref is None or ref.settlement_currency is None:
+            continue
+        item_ccy = _normalize_currency(ref.settlement_currency)
+        if not item_ccy or item_ccy == base_ccy:
+            continue
+        issues.append(
+            AllocationIssue(
+                Code.FX_DEPENDENCY_MISSING,
+                Sev.BLOCKER,
+                f"Base Currency ({base_ccy}) differs from this item's settlement currency "
+                f"({item_ccy}) and no approved pinned FX conversion dataset is available. "
+                "The system does not silently convert; attach an approved FX conversion "
+                "dataset or align the currencies.",
+                field="initial_capital.currency",
+                composition_item_id=entry.composition_item_id,
+            )
+        )
+    return issues
 
 
 def _derive(

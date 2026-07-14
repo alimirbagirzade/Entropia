@@ -10,6 +10,7 @@ import { EM_DASH, formatUtc, useDefaultMainboard } from "@/lib/backtest";
 import {
   type CreateSignalRevisionResult,
   type CreateTradingSignalResult,
+  type ExportTradingSignalResult,
   type SignalImportReport,
   type TradingSignalDetail,
   buildSignalPayloadTemplate,
@@ -17,6 +18,7 @@ import {
   parseColumnMapping,
   useCreateSignalRevision,
   useCreateTradingSignal,
+  useExportTradingSignal,
   useRequestSignalImport,
   useSignalImportReport,
   useTradingSignal,
@@ -616,6 +618,7 @@ function AttachedSignalsCard() {
 function DetailView({ rootId }: { rootId: string }) {
   const detail = useTradingSignal(rootId);
   const revise = useCreateSignalRevision();
+  const exportSignal = useExportTradingSignal();
 
   if (detail.isLoading) {
     return (
@@ -637,6 +640,14 @@ function DetailView({ rootId }: { rootId: string }) {
   return (
     <>
       <DetailHeaderCard data={data} />
+      {data.current_revision_id !== null ? (
+        <ExportCard
+          disabled={exportSignal.isPending}
+          onExport={() => exportSignal.mutate({ rootId })}
+          error={exportSignal.isError ? exportSignal.error : null}
+          result={exportSignal.data ?? null}
+        />
+      ) : null}
       {data.current_revision !== null ? <CurrentRevisionCard data={data} /> : null}
       {data.current_revision_id !== null && data.current_revision !== null ? (
         <RevisionComposer
@@ -782,6 +793,50 @@ function RevisionComposer({
         <p role="alert" style={{ color: "var(--down)", marginBottom: 0 }}>
           Not sent — invalid JSON: {parseError}
         </p>
+      ) : null}
+    </section>
+  );
+}
+
+// Export As Package (doc 04 §7, Rule 17): produce the immutable
+// source-mapping/provenance manifest for the pinned head revision. Read-only —
+// the export never mutates the source (the button stays enabled). Owner/Admin is
+// enforced server-side; a non-owner sees the 403 envelope verbatim.
+function ExportCard({
+  disabled,
+  onExport,
+  error,
+  result,
+}: {
+  disabled: boolean;
+  onExport: () => void;
+  error: unknown;
+  result: ExportTradingSignalResult | null;
+}) {
+  return (
+    <section className="card" style={{ marginTop: 18 }} aria-labelledby="ts-export-h">
+      <h3 id="ts-export-h" style={{ marginTop: 0 }}>
+        Export As Package
+      </h3>
+      <p className="cp-note" style={{ marginTop: 0 }}>
+        Produce the immutable source-mapping/provenance manifest for the pinned head revision. The
+        export never mutates the source — repeated clicks return the same manifest hash.
+      </p>
+      <button className="btn btn-primary" type="button" disabled={disabled} onClick={onExport}>
+        {disabled ? "Exporting…" : "Export manifest"}
+      </button>
+      {error ? <MutationErrorCard error={error} /> : null}
+      {result ? (
+        <dl className="kv" style={{ marginTop: 12 }}>
+          <dt>Revision</dt>
+          <dd>
+            <code>{result.revision_id}</code>
+          </dd>
+          <dt>Manifest hash</dt>
+          <dd>
+            <code>{result.manifest_hash}</code>
+          </dd>
+        </dl>
       ) : null}
     </section>
   );

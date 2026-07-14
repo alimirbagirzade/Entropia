@@ -351,3 +351,38 @@ export function useCreateSignalRevision() {
     },
   });
 }
+
+// Export (S6, doc 04 §7 "Export As Package", Rule 17) — the immutable
+// source-mapping/provenance MANIFEST for a Trading Signal revision. Twin of the
+// R2c package export: synchronous, owner/Admin-gated server-side, read-only
+// provenance (writes only a trading_signal.exported audit; the work object is
+// unchanged) → invalidates only ["audit"]. A fresh Idempotency-Key makes repeated
+// clicks return the same manifest_hash; NO OCC token (revisionId omitted → the
+// server exports the pinned head).
+export interface ExportTradingSignalResult {
+  root_id: string;
+  revision_id: string;
+  manifest_hash: string;
+  manifest: Record<string, unknown>;
+}
+
+export function useExportTradingSignal() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { rootId: string; revisionId?: string }) =>
+      apiRequest<ExportTradingSignalResult>(
+        `/trading-signals/${encodeURIComponent(input.rootId)}/export`,
+        {
+          method: "POST",
+          headers: { "Idempotency-Key": crypto.randomUUID() },
+          body:
+            input.revisionId !== undefined
+              ? { revision_id: input.revisionId }
+              : {},
+        },
+      ),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["audit"] });
+    },
+  });
+}

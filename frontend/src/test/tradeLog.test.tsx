@@ -101,12 +101,20 @@ const REVISION_RESULT = {
   auto_repinned: false,
 };
 
+const EXPORT_RESULT = {
+  root_id: "root_tl",
+  revision_id: "wor_tl1",
+  manifest_hash: "b".repeat(64),
+  manifest: { object_kind: "trade_log", available_time: null },
+};
+
 // ORDERED routes: the specific POST fragments precede the bare
 // "POST /trade-logs" create prefix (a substring of every other POST URL).
 function stubRoutes(overrides: Record<string, unknown> = {}) {
   return stubApi({
     "POST /trade-logs/source-assets": DEDUP_UPLOAD_RESULT,
     "POST /trade-logs/root_tl/revisions": REVISION_RESULT,
+    "POST /trade-logs/root_tl/export": EXPORT_RESULT,
     "POST /trade-logs": CREATE_RESULT,
     "GET /trade-logs/imports/job_9": REPORT,
     "GET /trade-logs/root_tl": DETAIL,
@@ -256,5 +264,22 @@ describe("TradeLog", () => {
     expect(screen.getByText("root_tl")).toBeTruthy();
     // The trading-signal item on the same Mainboard is filtered out.
     expect(screen.queryByText("Provider signals")).toBeNull();
+  });
+
+  it("exports the pinned head manifest with a fresh Idempotency-Key and no OCC token", async () => {
+    const fetchMock = stubRoutes();
+    renderPage("/trade-log?root=root_tl");
+
+    fireEvent.click(await screen.findByRole("button", { name: "Export manifest" }));
+
+    expect(await screen.findByText("b".repeat(64))).toBeTruthy();
+
+    const call = fetchMock.mock.calls.find(
+      ([url, init]) => String(url).includes("/export") && init?.method === "POST",
+    );
+    expect(call).toBeTruthy();
+    const body = JSON.parse(String(call?.[1]?.body)) as Record<string, unknown>;
+    expect("revision_id" in body).toBe(false);
+    expect(headersOf(call?.[1])["Idempotency-Key"]).toBeTruthy();
   });
 });

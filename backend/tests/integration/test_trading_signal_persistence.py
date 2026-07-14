@@ -418,3 +418,89 @@ async def test_normalized_revision_row_persists_evidence(session, fake_object_st
     assert normalized is not None
     assert len(normalized.events) == 2
     assert normalized.content_hash and len(normalized.content_hash) == 64
+
+
+# --------------------------------------------------------------------------- #
+# Export — immutable manifest (S6, doc 04 §7 "Export As Package", Rule 17)     #
+# --------------------------------------------------------------------------- #
+
+
+async def test_export_produces_manifest_and_audit(session, fake_object_store) -> None:
+    await _seed_principals(session)
+    saved = await _saved_signal(session, USER1, fake_object_store)
+    root_id = saved["save"]["root_id"]
+    revision_id = saved["save"]["revision_id"]
+
+    result = await ts_cmd.export_trading_signal(session, USER1, root_id=root_id)
+    await session.commit()
+
+    # Manifest carries the exported revision's source-mapping/provenance + a 64-char hash.
+    assert result["root_id"] == root_id
+    assert result["revision_id"] == revision_id  # default = pinned head
+    assert len(result["manifest_hash"]) == 64
+    manifest = result["manifest"]
+    assert manifest["object_kind"] == "trading_signal"
+    assert manifest["payload"]["kind"] == "trading_signal"
+    assert manifest["source_provenance"]["source_asset_id"]
+
+    # The export never mutated the source (Rule 17) — head revision unchanged.
+    detail = await ts_query.get_trading_signal(session, USER1, root_id=root_id)
+    assert detail["current_revision_id"] == revision_id
+
+    # A trading_signal.exported audit + outbox record the manifest_hash as provenance.
+    audit = (
+        (
+            await session.execute(
+                select(AuditEvent).where(AuditEvent.event_kind == "trading_signal.exported")
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(audit) == 1
+    outbox = (
+        (
+            await session.execute(
+                select(OutboxEvent).where(OutboxEvent.event_type == "trading_signal.exported")
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(outbox) == 1
+    assert outbox[0].payload["manifest_hash"] == result["manifest_hash"]
+
+
+async def test_export_foreign_owner_forbidden(session, fake_object_store) -> None:
+    await _seed_principals(session)
+    saved = await _saved_signal(session, USER1, fake_object_store)
+    root_id = saved["save"]["root_id"]
+
+    with pytest.raises(AccessDeniedError):
+        await ts_cmd.export_trading_signal(session, USER2, root_id=root_id)
+
+
+async def test_export_idempotent_replay(session, fake_object_store) -> None:
+    await _seed_principals(session)
+    saved = await _saved_signal(session, USER1, fake_object_store)
+    root_id = saved["save"]["root_id"]
+
+    first = await ts_cmd.export_trading_signal(
+        session, USER1, root_id=root_id, idempotency_key="exp-key-1"
+    )
+    await session.commit()
+    second = await ts_cmd.export_trading_signal(
+        session, USER1, root_id=root_id, idempotency_key="exp-key-1"
+    )
+    await session.commit()
+
+    assert first["manifest_hash"] == second["manifest_hash"]
+    # Replay does NOT write a second audit row.
+    audit_count = (
+        await session.execute(
+            select(func.count())
+            .select_from(AuditEvent)
+            .where(AuditEvent.event_kind == "trading_signal.exported")
+        )
+    ).scalar_one()
+    assert audit_count == 1

@@ -59,6 +59,11 @@ class CreateRevisionBody(BaseModel):
     expected_head_revision_id: str | None = None
 
 
+class ExportTradeLogBody(BaseModel):
+    # Optional: export any revision of the root (default: the pinned head).
+    revision_id: str | None = None
+
+
 @router.post("/trade-logs/source-assets", status_code=201)
 async def upload_source_asset(
     body: UploadSourceAssetBody,
@@ -137,6 +142,27 @@ async def create_trade_log_revision(
         root_id=root_id,
         payload=body.payload,
         expected_head_revision_id=body.expected_head_revision_id,
+        idempotency_key=idempotency_key,
+    )
+
+
+@router.post("/trade-logs/{root_id}/export", status_code=201)
+async def export_trade_log(
+    root_id: str,
+    body: ExportTradeLogBody,
+    ctx: RequestContext = Depends(request_context),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+) -> dict[str, Any]:
+    """Owner/Admin: produce the immutable export MANIFEST for a Trade Log revision
+    (doc 05 §8 "Export As Package", §11, §13.2). Mirrors the R2c package export:
+    synchronous V1, returns the content-addressed manifest + ``manifest_hash`` and
+    records a ``trade_log.exported`` audit; no source mutation. A fresh
+    ``Idempotency-Key`` makes repeated clicks return the same manifest."""
+    return await tl_cmd.export_trade_log(
+        ctx.session,
+        ctx.actor,
+        root_id=root_id,
+        revision_id=body.revision_id,
         idempotency_key=idempotency_key,
     )
 

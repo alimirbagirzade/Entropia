@@ -59,6 +59,11 @@ class CreateRevisionBody(BaseModel):
     expected_head_revision_id: str | None = None
 
 
+class ExportTradingSignalBody(BaseModel):
+    # Optional: export any revision of the root (default: the pinned head).
+    revision_id: str | None = None
+
+
 @router.post("/trading-signals/source-assets", status_code=201)
 async def upload_source_asset(
     body: UploadSourceAssetBody,
@@ -137,6 +142,27 @@ async def create_trading_signal_revision(
         root_id=root_id,
         payload=body.payload,
         expected_head_revision_id=body.expected_head_revision_id,
+        idempotency_key=idempotency_key,
+    )
+
+
+@router.post("/trading-signals/{root_id}/export", status_code=201)
+async def export_trading_signal(
+    root_id: str,
+    body: ExportTradingSignalBody,
+    ctx: RequestContext = Depends(request_context),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+) -> dict[str, Any]:
+    """Owner/Admin: produce the immutable export MANIFEST for a Trading Signal
+    revision (doc 04 §7 "Export As Package", Rule 17). Mirrors the R2c package
+    export: synchronous V1, returns the content-addressed manifest + ``manifest_hash``
+    and records a ``trading_signal.exported`` audit; no source mutation. A fresh
+    ``Idempotency-Key`` makes repeated clicks return the same manifest."""
+    return await ts_cmd.export_trading_signal(
+        ctx.session,
+        ctx.actor,
+        root_id=root_id,
+        revision_id=body.revision_id,
         idempotency_key=idempotency_key,
     )
 

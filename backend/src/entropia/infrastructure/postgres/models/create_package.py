@@ -35,6 +35,7 @@ from entropia.domain.create_package.enums import (
     BaselineParseStatus,
     CreatePackageState,
     CreationMode,
+    PackageImportStatus,
     PrecheckScanStatus,
     SourceKind,
     SourceLanguage,
@@ -242,6 +243,50 @@ class PackageValidationRun(Base):
     correlation_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_by_principal_id: Mapped[str | None] = mapped_column(
         String(40), ForeignKey(_PRINCIPAL_FK), nullable=True
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class PackageImportJob(Base):
+    """Durable package-import job projection (doc 08 §9.1/§10/§14, master ref Modül 7 §12).
+
+    The reverse of package Export. A submitted export manifest is recorded here with
+    the ``manifest_hash`` it certifies and the foreign origin (``origin_package_id`` /
+    ``origin_revision_id``); a worker parses it, re-resolves its dependencies against
+    the local ESP registry and either creates a clean DRAFT root (``succeeded``,
+    ``result_package_root_id`` set) or a FAILED-validation DRAFT root with the missing
+    calls in ``diagnostics`` (``blocked`` — never silently executable, doc 08 §10). A
+    structurally-unparseable manifest is ``failed`` with no package. ``job_id`` links
+    the durable ``jobs`` row that dispatched the worker; this row is the read model the
+    Library Import report reads. Rows are append-then-terminal (created ``queued``,
+    updated exactly once to a terminal status by the worker); the immutable evidence is
+    the ``manifest_hash`` + ``diagnostics`` it pins.
+    """
+
+    __tablename__ = "package_import_job"
+
+    import_job_id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    manifest_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    origin_package_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    origin_revision_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    package_kind: Mapped[PackageKind] = mapped_column(
+        enum_column(PackageKind, "package_kind"), nullable=False
+    )
+    result_package_root_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    status: Mapped[PackageImportStatus] = mapped_column(
+        enum_column(PackageImportStatus, "package_import_status"),
+        nullable=False,
+        default=PackageImportStatus.QUEUED,
+        index=True,
+    )
+    diagnostics: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    job_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    correlation_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_by_principal_id: Mapped[str | None] = mapped_column(
+        String(40), ForeignKey(_PRINCIPAL_FK), nullable=True, index=True
     )
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(

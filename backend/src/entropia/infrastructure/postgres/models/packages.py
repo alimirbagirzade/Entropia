@@ -53,6 +53,10 @@ class PackageRoot(Base):
         index=True,
     )
     derived_from_revision_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    # Import provenance (doc 08 §10, master ref Modül 7 §12): when this local root was
+    # created by importing a foreign export manifest, this pins the manifest's
+    # ``package_root_id`` so the origin is auditable. NULL for natively-authored roots.
+    origin_package_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
 
 
 class PackageRevision(Base):

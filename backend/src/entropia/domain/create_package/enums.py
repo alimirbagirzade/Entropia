@@ -115,6 +115,26 @@ class ValidationRunStatus(StrEnum):
     STALE = "stale"
 
 
+class PackageImportStatus(StrEnum):
+    """Durable package-import job outcome (doc 08 §9.1/§10/§14, master ref Modül 7 §12).
+
+    The reverse of package Export: a submitted export manifest is parsed and its
+    dependencies re-resolved against the local ESP registry, then a NEW local DRAFT
+    package root is created with ``origin_package_id`` provenance. ``queued``/
+    ``running`` are transient. ``succeeded`` = every dependency resolved -> a clean
+    DRAFT root. ``blocked`` = at least one unresolved dependency -> the DRAFT root is
+    created but marked FAILED-validation with the missing calls in its diagnostics; it
+    is never silently executable (doc 08 §10). ``failed`` = the manifest itself was
+    structurally unparseable -> no package is created. A separate facet from
+    ``JobStatus`` (the durable ``jobs`` row lifecycle) and never aliased (CR-04)."""
+
+    QUEUED = "queued"
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    BLOCKED = "blocked"
+    FAILED = "failed"
+
+
 class BaselineParseStatus(StrEnum):
     """Immutable baseline-asset parse result (doc 06 §4.4/§5/§8.3).
 

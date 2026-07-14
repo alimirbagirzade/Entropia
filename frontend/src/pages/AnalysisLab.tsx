@@ -37,6 +37,14 @@ import {
 const LAB_PILL_STATES = new Set(["active", "paused", "running", "queued", "waiting"]);
 const HYPOTHESIS_PILL_STATES = new Set(["testing", "candidate", "exploring"]);
 
+// doc 18 §6.1 Pause/Stop confirmation copy — VERBATIM. §13 Implementation
+// Decision: V18 has no confirm modal, but Production requires an explicit
+// confirmation before either lifecycle command; Resume stays unconfirmed.
+const PAUSE_CONFIRMATION_TEXT =
+  "Pause Alpha Agent after the next safe checkpoint? The active step will finish to a durable checkpoint. Queue entries, directives, and artifacts will remain available.";
+const STOP_CONFIRMATION_TEXT =
+  "Stop the current Agent run? The run will be cancelled at the next cancellation-safe boundary. The last completed checkpoint and partial diagnostics will remain available. No Backtest Result will be published for a cancelled run.";
+
 function pillState(status: string, allowed: Set<string>): string {
   return allowed.has(status) ? status : "";
 }
@@ -152,6 +160,28 @@ function LabTopbar({ overview }: { overview: AgentOverview }) {
   const resume = useResumeRuntime();
   const stopRun = useStopRun();
   const controlError = pause.error ?? resume.error ?? stopRun.error;
+  // Two-step confirm (doc 18 §6.1/§8.4/§13 — Trash PurgeComposer pattern):
+  // Pause/Stop first arm an inline confirmation; only Confirm dispatches the
+  // existing mutation. The armed entry pins the row_version it was opened
+  // against, so a runtime change elsewhere (SSE sweep, stale-409 reload — §11)
+  // disarms it and the operator must re-confirm against the fresh state.
+  const [pendingConfirm, setPendingConfirm] = useState<{
+    control: "pause" | "stop";
+    rowVersion: number;
+  } | null>(null);
+  const armedControl =
+    pendingConfirm !== null && pendingConfirm.rowVersion === runtime.row_version
+      ? pendingConfirm.control
+      : null;
+
+  const dispatchArmedControl = () => {
+    if (armedControl === "pause") {
+      pause.mutate(runtime.row_version);
+    } else if (armedControl === "stop" && activeTask) {
+      stopRun.mutate({ run_id: activeTask.task_id, row_version: runtime.row_version });
+    }
+    setPendingConfirm(null);
+  };
 
   return (
     <section aria-label="Agent runtime">
@@ -185,7 +215,9 @@ function LabTopbar({ overview }: { overview: AgentOverview }) {
               type="button"
               className="btn"
               disabled={pause.isPending || runtime.pending_control !== null}
-              onClick={() => pause.mutate(runtime.row_version)}
+              onClick={() =>
+                setPendingConfirm({ control: "pause", rowVersion: runtime.row_version })
+              }
             >
               {pause.isPending ? "Pausing…" : "Pause at next safe checkpoint"}
             </button>
@@ -196,7 +228,7 @@ function LabTopbar({ overview }: { overview: AgentOverview }) {
               className="btn"
               disabled={stopRun.isPending}
               onClick={() =>
-                stopRun.mutate({ run_id: activeTask.task_id, row_version: runtime.row_version })
+                setPendingConfirm({ control: "stop", rowVersion: runtime.row_version })
               }
             >
               {stopRun.isPending ? "Stopping…" : "Stop active run"}
@@ -204,6 +236,36 @@ function LabTopbar({ overview }: { overview: AgentOverview }) {
           ) : null}
         </div>
       </div>
+      {armedControl ? (
+        <div
+          role="group"
+          aria-label={armedControl === "pause" ? "Pause confirmation" : "Stop confirmation"}
+          style={{
+            marginTop: 8,
+            marginBottom: 12,
+            padding: 12,
+            border: `1px solid ${armedControl === "stop" ? "var(--down)" : "var(--border)"}`,
+            borderRadius: 6,
+          }}
+        >
+          {/* doc 18 §6.1 confirmation copy — verbatim. */}
+          <p className="page-sub" style={{ marginTop: 0 }}>
+            {armedControl === "pause" ? PAUSE_CONFIRMATION_TEXT : STOP_CONFIRMATION_TEXT}
+          </p>
+          <div style={{ display: "flex", gap: 12 }}>
+            <button
+              type="button"
+              className={armedControl === "stop" ? "btn btn-danger" : "btn btn-primary"}
+              onClick={dispatchArmedControl}
+            >
+              {armedControl === "pause" ? "Confirm pause" : "Confirm stop"}
+            </button>
+            <button type="button" className="btn" onClick={() => setPendingConfirm(null)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : null}
       {controlError ? (
         <p role="alert" style={{ color: "var(--down)", marginTop: -4, marginBottom: 12 }}>
           {mutationErrorText(controlError)}

@@ -274,7 +274,10 @@ describe("Analysis Lab page", () => {
     >;
     expect(directiveHeaders["Idempotency-Key"]).toBeTruthy();
 
+    // S9 (doc 18 §6.1/§13): the click only ARMS the confirmation — the POST is
+    // dispatched by the explicit Confirm step.
     fireEvent.click(screen.getByRole("button", { name: "Pause at next safe checkpoint" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm pause" }));
     await waitFor(() => {
       const pauseCall = fetchMock.mock.calls.find(([url]) =>
         String(url).includes("/agent-runtime/pause"),
@@ -285,6 +288,110 @@ describe("Analysis Lab page", () => {
       expect(headers["If-Match"]).toBe("4");
       // GAP-13: it also carries a fresh Idempotency-Key so a retry dedups.
       expect(headers["Idempotency-Key"]).toBeTruthy();
+    });
+  });
+
+  it("arms the §6.1 pause confirmation without dispatching, and Cancel closes it", async () => {
+    const fetchMock = stubApi({
+      "GET /agent-workspace/overview": OVERVIEW,
+      "GET /hypotheses": HYPOTHESES,
+      "GET /lab/messages": LAB_MESSAGES,
+      "GET /agent-tasks": TASK_HISTORY,
+    });
+    renderPage();
+    await screen.findByText("alpha");
+
+    fireEvent.click(screen.getByRole("button", { name: "Pause at next safe checkpoint" }));
+    // doc 18 §6.1 pause confirmation copy — verbatim; no POST before Confirm.
+    expect(
+      screen.getByText(
+        "Pause Alpha Agent after the next safe checkpoint? The active step will finish to a durable checkpoint. Queue entries, directives, and artifacts will remain available.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.some(([url]) => String(url).includes("/agent-runtime/pause")),
+    ).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(
+      screen.queryByText(/Pause Alpha Agent after the next safe checkpoint\?/),
+    ).not.toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.some(([url]) => String(url).includes("/agent-runtime/pause")),
+    ).toBe(false);
+  });
+
+  it("confirms the §6.1 stop confirmation and dispatches the stop POST with the OCC token", async () => {
+    const fetchMock = stubApi({
+      "GET /agent-workspace/overview": OVERVIEW,
+      "GET /hypotheses": HYPOTHESES,
+      "GET /lab/messages": LAB_MESSAGES,
+      "GET /agent-tasks": TASK_HISTORY,
+      "POST /agent-runs/atask_1/stop": {
+        agent_id: "alpha",
+        control: "stop",
+        status: "accepted",
+        runtime_status: "active",
+        delivery_policy: "next_safe_checkpoint",
+        row_version: 4,
+      },
+    });
+    renderPage();
+    await screen.findByText("alpha");
+
+    fireEvent.click(screen.getByRole("button", { name: "Stop active run" }));
+    // doc 18 §6.1 stop confirmation copy — verbatim; no POST before Confirm.
+    expect(
+      screen.getByText(
+        "Stop the current Agent run? The run will be cancelled at the next cancellation-safe boundary. The last completed checkpoint and partial diagnostics will remain available. No Backtest Result will be published for a cancelled run.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.some(([url]) => String(url).includes("/agent-runs/atask_1/stop")),
+    ).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: "Confirm stop" }));
+    await waitFor(() => {
+      const stopCall = fetchMock.mock.calls.find(([url]) =>
+        String(url).includes("/agent-runs/atask_1/stop"),
+      );
+      expect(stopCall).toBeDefined();
+      const headers = (stopCall?.[1] as RequestInit).headers as Record<string, string>;
+      expect(headers["If-Match"]).toBe("4");
+      expect(headers["Idempotency-Key"]).toBeTruthy();
+    });
+  });
+
+  it("disarms a pending confirmation when the runtime row_version moves elsewhere", async () => {
+    // The stale-409 / SSE-sweep path (§11): a fresh runtime state must force a
+    // re-confirm — the armed confirmation is pinned to the row_version it was
+    // opened against.
+    let overviewResponse: typeof OVERVIEW = OVERVIEW;
+    stubApi({
+      "GET /agent-workspace/overview": () => overviewResponse,
+      "GET /hypotheses": HYPOTHESES,
+      "GET /lab/messages": LAB_MESSAGES,
+      "GET /agent-tasks": TASK_HISTORY,
+    });
+    const client = renderPage();
+    await screen.findByText("alpha");
+
+    fireEvent.click(screen.getByRole("button", { name: "Pause at next safe checkpoint" }));
+    expect(
+      screen.getByText(/Pause Alpha Agent after the next safe checkpoint\?/),
+    ).toBeInTheDocument();
+
+    overviewResponse = {
+      ...OVERVIEW,
+      runtime: { ...OVERVIEW.runtime, row_version: 5 },
+    };
+    // What lib/sse.ts does on `agent.task.updated` — the overview refetches.
+    await client.invalidateQueries({ queryKey: ["agent-tasks"] });
+
+    await waitFor(() => {
+      expect(
+        screen.queryByText(/Pause Alpha Agent after the next safe checkpoint\?/),
+      ).not.toBeInTheDocument();
     });
   });
 

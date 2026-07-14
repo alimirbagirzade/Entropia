@@ -2,9 +2,10 @@
 // Catalog (doc 02 §5.2/§5.5/§5.6/§5.9 + §6). A TYPED OVERLAY on the free-form
 // StrategyConfig draft payload: the structured form edits the flat
 // (package-picker-free) sections — Data & Execution, Protection / Stop Logic,
-// Position Sizing, Conflict / Position Handling — while the package-graph
-// sections (Position Entry/Exit Logic, Scaling, Restrictions) stay in the
-// retained Advanced (JSON) editor. extractFlatSections reads the current
+// Position Sizing, Conflict / Position Handling. The package-graph sections that
+// PIN packages — Position Entry / Exit Logic — moved to a structured editor in
+// R6 (lib/strategyGraph.ts + StrategyGraphForm); Scaling and Restrictions stay
+// in the retained Advanced (JSON) editor. extractFlatSections reads the current
 // payload into form state; mergeFlatSections writes the covered sections back
 // over the FULL payload, preserving every uncovered key (the compiler parses
 // the whole payload with extra="forbid", so nothing may be dropped). Enum

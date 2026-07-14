@@ -30,6 +30,7 @@ import {
   useCreatePackageRevision,
   useDeprecatePackage,
   useDerivePackage,
+  useExportPackage,
   useLibraryPackage,
   useLibraryPackages,
   useRequestApproval,
@@ -390,6 +391,7 @@ function PackageDetail({ entityId, onClose }: { entityId: string; onClose: () =>
           <DeriveStrategyBlock pkg={pkg} />
           <PackageRevisionActions pkg={pkg} />
           <PackageApprovalActions pkg={pkg} />
+          <PackageExportBlock pkg={pkg} />
           <PackageActions pkg={pkg} onDeleted={onClose} />
           <PackageSharePanel pkg={pkg} />
 
@@ -621,6 +623,38 @@ function PackageRevisionActions({ pkg }: { pkg: LibraryPackageDetail }) {
         <p className="page-sub" style={{ marginTop: 4 }}>
           Created revision v{createRevision.data.revision_no}.
         </p>
+      ) : null}
+    </div>
+  );
+}
+
+// GAP-06 (epic R2c): Export the immutable package-revision MANIFEST (doc 08 §7).
+// Shown when the SERVER marks can_export (any viewer). It is read-only provenance —
+// the button produces a content-addressed manifest + hash for the current head; the
+// source package is never modified. The UI never authorizes (server re-validates).
+function PackageExportBlock({ pkg }: { pkg: LibraryPackageDetail }) {
+  const exportPkg = useExportPackage();
+  if (!pkg.permissions.can_export) return null;
+  const onExport = () =>
+    exportPkg.mutate({ entityId: pkg.entity_id, revisionId: pkg.current_revision_id });
+  return (
+    <div style={{ marginTop: 12 }}>
+      <h5 style={{ marginBottom: 4 }}>Export</h5>
+      <button type="button" className="btn" onClick={onExport} disabled={exportPkg.isPending}>
+        {exportPkg.isPending ? "Exporting…" : "Export manifest"}
+      </button>
+      <p className="page-sub" style={{ marginTop: 4 }}>
+        Produces the immutable manifest for the current head (v{pkg.revision_no}) — the exact
+        contracts, dependency snapshot and content hash. The source package is never modified.
+      </p>
+      {exportPkg.isError ? <ErrorState error={exportPkg.error} /> : null}
+      {exportPkg.data ? (
+        <>
+          <p className="page-sub" style={{ marginTop: 4 }}>
+            Manifest hash: <code>{exportPkg.data.manifest_hash}</code>
+          </p>
+          <pre style={contractStyle}>{JSON.stringify(exportPkg.data.manifest, null, 2)}</pre>
+        </>
       ) : null}
     </div>
   );

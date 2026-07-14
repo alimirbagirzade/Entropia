@@ -456,3 +456,36 @@ export function useApprovePackage() {
     onSuccess: () => invalidateLibrary(queryClient),
   });
 }
+
+// ---------------------------------------------------------------------------
+// Export — GAP-06 epic R2c (doc 08 §7): the immutable package-revision MANIFEST
+// (NOT a backtest result_export). It is read-only provenance (writes only a
+// package.exported audit; the catalog projection is unchanged), so it invalidates
+// only ["audit"]. A fresh Idempotency-Key makes repeated clicks return the same
+// manifest_hash. NO OCC token — any revision of the root is exportable.
+// ---------------------------------------------------------------------------
+
+export interface ExportPackageResult {
+  entity_id: string;
+  revision_id: string;
+  manifest_hash: string;
+  manifest: Record<string, unknown>;
+}
+
+export function useExportPackage() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { entityId: string; revisionId: string }) =>
+      apiRequest<ExportPackageResult>(
+        `/library/${encodeURIComponent(input.entityId)}/export`,
+        {
+          method: "POST",
+          headers: { "Idempotency-Key": crypto.randomUUID() },
+          body: { revision_id: input.revisionId },
+        },
+      ),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["audit"] });
+    },
+  });
+}

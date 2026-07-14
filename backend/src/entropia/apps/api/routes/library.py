@@ -59,6 +59,10 @@ class ApprovePackageRequest(BaseModel):
     note: str | None = None
 
 
+class ExportPackageRequest(BaseModel):
+    revision_id: str
+
+
 @router.get("/library")
 async def list_library(
     cursor: str | None = Query(default=None),
@@ -227,5 +231,26 @@ async def approve_package(
         revision_id=body.revision_id,
         expected_head_revision_id=body.expected_head_revision_id,
         note=body.note,
+        idempotency_key=idempotency_key,
+    )
+
+
+@router.post("/library/{entity_id}/export")
+async def export_package(
+    entity_id: str,
+    body: ExportPackageRequest,
+    ctx: RequestContext = Depends(request_context),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+) -> dict[str, Any]:
+    """Any viewer: produce the immutable package-revision MANIFEST for the selected
+    revision (doc 08 §7 "Export"). This is the package manifest, NOT a backtest
+    result_export. Synchronous V1: returns the content-addressed manifest +
+    ``manifest_hash`` and records a ``package.exported`` audit; no source mutation. A
+    fresh ``Idempotency-Key`` makes repeated clicks return the same manifest."""
+    return await pkg_cmd.export_package(
+        ctx.session,
+        ctx.actor,
+        entity_id=entity_id,
+        revision_id=body.revision_id,
         idempotency_key=idempotency_key,
     )

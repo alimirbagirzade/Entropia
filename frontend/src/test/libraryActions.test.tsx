@@ -115,6 +115,12 @@ function routesFor(permissions: typeof OWNER_PERMISSIONS) {
       approval_state: "approved",
       visibility_scope: "published",
     },
+    "POST /library/pkg_own/export": {
+      entity_id: "pkg_own",
+      revision_id: "rev_1",
+      manifest_hash: "sha256:deadbeef",
+      manifest: { revision_id: "rev_1", package_kind: "indicator" },
+    },
     "DELETE /library/pkg_own": {},
   };
 }
@@ -396,5 +402,53 @@ describe("Package Library approval actions (R2b)", () => {
     expect(screen.queryByText("Approval actions")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Request Approval" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Approve & Publish" })).not.toBeInTheDocument();
+  });
+});
+
+// GAP-06 (epic R2c): Export the immutable package-revision manifest (doc 08 §7).
+// Read-only provenance: a POST with a fresh Idempotency-Key, no OCC token; the
+// response manifest_hash is surfaced. Shown only on the server can_export flag.
+const NO_EXPORT_PERMISSIONS = { ...OWNER_PERMISSIONS, can_export: false };
+
+describe("Package Library export (R2c)", () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("dispatches an Export POST with an Idempotency-Key and surfaces the manifest hash", async () => {
+    const fetchMock = stubApi(routesFor(OWNER_PERMISSIONS));
+    renderPage();
+    await screen.findByText("Owned RSI");
+    fireEvent.click(screen.getAllByRole("button", { name: "Detail" })[0]);
+    const exportBtn = await screen.findByRole("button", { name: "Export manifest" });
+
+    fireEvent.click(exportBtn);
+
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find(
+        ([url, init]) =>
+          String(url).includes("/library/pkg_own/export") &&
+          (init?.method ?? "").toUpperCase() === "POST",
+      );
+      expect(call).toBeDefined();
+      const headers = (call?.[1]?.headers ?? {}) as Record<string, string>;
+      expect(headers["Idempotency-Key"]).toBeTruthy();
+      expect(headers["If-Match"]).toBeUndefined();
+      const body = JSON.parse(String(call?.[1]?.body ?? "{}"));
+      expect(body.revision_id).toBe("rev_1");
+    });
+    expect(await screen.findByText("sha256:deadbeef")).toBeInTheDocument();
+  });
+
+  it("hides the export action when the server denies can_export", async () => {
+    stubApi(routesFor(NO_EXPORT_PERMISSIONS));
+    renderPage();
+    await screen.findByText("Owned RSI");
+    fireEvent.click(screen.getAllByRole("button", { name: "Detail" })[0]);
+
+    expect(await screen.findByText("Permissions (server-computed)")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Export manifest" })).not.toBeInTheDocument();
   });
 });

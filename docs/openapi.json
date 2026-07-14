@@ -181,6 +181,41 @@
         "title": "ApproveBody",
         "type": "object"
       },
+      "ApprovePackageRequest": {
+        "properties": {
+          "expected_head_revision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Head Revision Id"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "revision_id": {
+            "title": "Revision Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision_id"
+        ],
+        "title": "ApprovePackageRequest",
+        "type": "object"
+      },
       "ApproveRequest": {
         "properties": {
           "note": {
@@ -1954,6 +1989,41 @@
           "content"
         ],
         "title": "ReplaceRevisionRequest",
+        "type": "object"
+      },
+      "RequestApprovalRequest": {
+        "properties": {
+          "expected_head_revision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Head Revision Id"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "revision_id": {
+            "title": "Revision Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision_id"
+        ],
+        "title": "RequestApprovalRequest",
         "type": "object"
       },
       "RequestExportBody": {
@@ -8307,6 +8377,77 @@
         ]
       }
     },
+    "/api/v1/library/{entity_id}/approve": {
+      "post": {
+        "description": "Admin-only: approve + publish the requested + PASSED head revision in one\ntransaction (CR-02, doc 08 §7 \"Approve & Publish\"). OCC is the BODY-form\n``expected_head_revision_id`` + a fresh ``Idempotency-Key``; a non-Admin -> 403\nAPPROVAL_REQUIRES_ADMIN, a non-requested / non-passed head -> 409. The UI never\npre-gates (it never renders 403 as a hidden button); the server re-validates.",
+        "operationId": "approve_package_api_v1_library__entity_id__approve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entity_id",
+            "required": true,
+            "schema": {
+              "title": "Entity Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApprovePackageRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Approve Package Api V1 Library  Entity Id  Approve Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Approve Package",
+        "tags": [
+          "package-library"
+        ]
+      }
+    },
     "/api/v1/library/{entity_id}/deprecate": {
       "post": {
         "description": "Owner-or-Admin: ``active -> deprecated`` (doc 08 §7 \"Deprecate\"). No OCC — a\ndeprecate appends no revision, so it cannot race the head (mirrors the sibling\n``market_data`` deprecate); a non-active/soft-deleted root -> 409 LIFECYCLE_BLOCKED.",
@@ -8435,6 +8576,77 @@
           }
         },
         "summary": "Derive Package",
+        "tags": [
+          "package-library"
+        ]
+      }
+    },
+    "/api/v1/library/{entity_id}/request-approval": {
+      "post": {
+        "description": "Owner-or-Admin: move the validation-PASSED head revision ``DRAFT ->\nAPPROVAL_REQUESTED`` (doc 08 §7 \"Request approval\"). OCC is the BODY-form\n``expected_head_revision_id`` + a fresh ``Idempotency-Key``; a stale head -> 409\nPACKAGE_REVISION_CONFLICT, a not-passed head -> 409 VALIDATION_REQUIRED.",
+        "operationId": "request_package_approval_api_v1_library__entity_id__request_approval_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entity_id",
+            "required": true,
+            "schema": {
+              "title": "Entity Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestApprovalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Request Package Approval Api V1 Library  Entity Id  Request Approval Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Request Package Approval",
         "tags": [
           "package-library"
         ]

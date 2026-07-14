@@ -25,7 +25,6 @@ const OWNER_PERMISSIONS = {
   can_use: true,
   can_derive: true,
   can_create_revision: true,
-  can_request_validation: true,
   can_request_approval: true,
   can_approve_publish: false,
   can_deprecate: true,
@@ -104,6 +103,17 @@ function routesFor(permissions: typeof OWNER_PERMISSIONS) {
       revision_no: 3,
       current_revision_id: "rev_2",
       base_revision_id: "rev_1",
+    },
+    "POST /library/pkg_own/request-approval": {
+      entity_id: "pkg_own",
+      revision_id: "rev_1",
+      approval_state: "approval_requested",
+    },
+    "POST /library/pkg_own/approve": {
+      entity_id: "pkg_own",
+      revision_id: "rev_1",
+      approval_state: "approved",
+      visibility_scope: "published",
     },
     "DELETE /library/pkg_own": {},
   };
@@ -291,5 +301,100 @@ describe("Package Library revision actions (R2a)", () => {
     expect(await screen.findByText("Permissions (server-computed)")).toBeInTheDocument();
     expect(screen.queryByText("Revision actions")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Derive" })).not.toBeInTheDocument();
+  });
+});
+
+// GAP-06 (epic R2b): Request Approval + Approve & Publish (doc 08 §7). Both POST
+// carry a fresh Idempotency-Key and the BODY-form expected_head_revision_id OCC
+// (the current head). Approve is Admin-only (shown only on can_approve_publish);
+// Request Approval opens that gate.
+const ADMIN_PERMISSIONS = {
+  ...OWNER_PERMISSIONS,
+  can_request_approval: false,
+  can_approve_publish: true,
+};
+
+const NO_APPROVAL_PERMISSIONS = {
+  ...OWNER_PERMISSIONS,
+  can_request_approval: false,
+  can_approve_publish: false,
+};
+
+describe("Package Library approval actions (R2b)", () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("dispatches a Request Approval POST carrying the BODY-form expected_head_revision_id OCC", async () => {
+    const fetchMock = stubApi(routesFor(OWNER_PERMISSIONS));
+    renderPage();
+    await screen.findByText("Owned RSI");
+    fireEvent.click(screen.getAllByRole("button", { name: "Detail" })[0]);
+    const request = await screen.findByRole("button", { name: "Request Approval" });
+
+    fireEvent.click(request);
+
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find(
+        ([url, init]) =>
+          String(url).includes("/library/pkg_own/request-approval") &&
+          (init?.method ?? "").toUpperCase() === "POST",
+      );
+      expect(call).toBeDefined();
+      const headers = (call?.[1]?.headers ?? {}) as Record<string, string>;
+      expect(headers["Idempotency-Key"]).toBeTruthy();
+      expect(headers["If-Match"]).toBeUndefined();
+      const body = JSON.parse(String(call?.[1]?.body ?? "{}"));
+      expect(body.revision_id).toBe("rev_1");
+      expect(body.expected_head_revision_id).toBe("rev_1");
+    });
+  });
+
+  it("Approve & Publish requires a two-step confirm and is Admin-gated by the server flag", async () => {
+    const fetchMock = stubApi(routesFor(ADMIN_PERMISSIONS));
+    renderPage();
+    await screen.findByText("Owned RSI");
+    fireEvent.click(screen.getAllByRole("button", { name: "Detail" })[0]);
+    const publish = await screen.findByRole("button", { name: "Approve & Publish" });
+
+    // A non-admin owner never sees the publish action here.
+    expect(screen.queryByRole("button", { name: "Request Approval" })).not.toBeInTheDocument();
+    // First click only arms the confirm — no request yet.
+    fireEvent.click(publish);
+    const confirm = await screen.findByRole("button", { name: "Confirm approve & publish" });
+    expect(
+      fetchMock.mock.calls.some(
+        ([url, init]) =>
+          String(url).includes("/library/pkg_own/approve") && (init?.method ?? "") === "POST",
+      ),
+    ).toBe(false);
+
+    fireEvent.click(confirm);
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find(
+        ([url, init]) =>
+          String(url).includes("/library/pkg_own/approve") &&
+          (init?.method ?? "").toUpperCase() === "POST",
+      );
+      expect(call).toBeDefined();
+      const headers = (call?.[1]?.headers ?? {}) as Record<string, string>;
+      expect(headers["Idempotency-Key"]).toBeTruthy();
+      const body = JSON.parse(String(call?.[1]?.body ?? "{}"));
+      expect(body.expected_head_revision_id).toBe("rev_1");
+    });
+  });
+
+  it("hides the approval section when the server denies both flags", async () => {
+    stubApi(routesFor(NO_APPROVAL_PERMISSIONS));
+    renderPage();
+    await screen.findByText("Owned RSI");
+    fireEvent.click(screen.getAllByRole("button", { name: "Detail" })[0]);
+
+    expect(await screen.findByText("Permissions (server-computed)")).toBeInTheDocument();
+    expect(screen.queryByText("Approval actions")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Request Approval" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Approve & Publish" })).not.toBeInTheDocument();
   });
 });

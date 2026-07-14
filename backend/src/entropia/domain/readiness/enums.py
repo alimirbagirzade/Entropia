@@ -78,6 +78,9 @@ class ReadinessIssueCode(StrEnum):
     EXTERNAL_IMPORT_INVALID = "EXTERNAL_IMPORT_INVALID"
     TRADE_LOG_CHRONOLOGY_INVALID = "TRADE_LOG_CHRONOLOGY_INVALID"
     MIXED_SYMBOL_SCOPE = "MIXED_SYMBOL_SCOPE"
+    # GAP-16 (Master §8.1): an external import's canonical instrument must match the
+    # strategy's — a spot import under a perpetual strategy is a Ready blocker.
+    INSTRUMENT_SCOPE_MISMATCH = "INSTRUMENT_SCOPE_MISMATCH"
     OHLCV_FALLBACK_MARKET_DATA_MISSING = "OHLCV_FALLBACK_MARKET_DATA_MISSING"
 
     # Capital / allocation (§5.1, §9.2, RC-03/RC-04)

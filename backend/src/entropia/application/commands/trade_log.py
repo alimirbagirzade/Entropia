@@ -37,6 +37,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from entropia.application.commands import mainboard as mb_cmd
 from entropia.application.idempotency import run_idempotent
 from entropia.application.jobs.data_queue import TRADE_LOG_IMPORT
+from entropia.application.queries import instrument as instrument_query
 from entropia.application.queries import mainboard as mb_query
 from entropia.domain.identity import Actor
 from entropia.domain.identity.policy import ensure_can_edit, require_authenticated
@@ -185,6 +186,7 @@ async def request_trade_log_import(
     *,
     source_asset_id: str,
     instrument_id: str,
+    instrument_scope: dict[str, Any] | None = None,
     source_timezone: str = "UTC",
     import_mapping: dict[str, str] | None = None,
     idempotency_key: str | None = None,
@@ -197,12 +199,22 @@ async def request_trade_log_import(
     is carried in the durable payload so files whose headers are not the exact
     canonical names still import. Idempotent: the same key returns the same job id
     (TL-14, TL-15).
+
+    When an ``instrument_scope`` is supplied (GAP-16; Master §8.1), the free-text
+    scope is resolved to a canonical ``instrument_id`` through the registry BEFORE
+    the job is enqueued — an unresolvable scope fails closed (422
+    INSTRUMENT_SCOPE_UNRESOLVABLE) so the durable pipeline never carries a silent
+    free-text instrument (spot vs perpetual can no longer collide). Without a scope
+    the legacy free-text ``instrument_id`` is carried verbatim (backward compatible).
     """
     require_authenticated(actor)
     asset = await asset_repo.get_source_asset(session, source_asset_id)
     if asset is None:
         raise SourceAssetNotFoundError(f"Source asset '{source_asset_id}' not found.")
     ensure_can_edit(actor, owner_principal_id=asset.owner_principal_id)
+    resolved_instrument_id = (
+        await instrument_query.resolve_scope_id(session, instrument_scope) or instrument_id
+    )
     mapping = _clean_mapping(import_mapping)
 
     async def _op() -> dict[str, Any]:
@@ -212,7 +224,7 @@ async def request_trade_log_import(
             payload={
                 "job_kind": TRADE_LOG_IMPORT,
                 "source_asset_id": source_asset_id,
-                "instrument_id": instrument_id,
+                "instrument_id": resolved_instrument_id,
                 "source_timezone": source_timezone,
                 "import_mapping": mapping,
             },

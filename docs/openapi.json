@@ -1977,6 +1977,18 @@
             "title": "Instrument Id",
             "type": "string"
           },
+          "instrument_scope": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instrument Scope"
+          },
           "source_asset_id": {
             "title": "Source Asset Id",
             "type": "string"

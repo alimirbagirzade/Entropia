@@ -381,3 +381,36 @@ def test_disabled_exit_block_without_stop_still_blocks() -> None:
         [_strategy_item(payload=payload)], allocation_enabled=False, allocation_issues=[]
     )
     assert Code.STRATEGY_NO_EXIT_OR_STOP.value in _codes(result)
+
+
+# --------------------------------------------------------------------------- #
+# GAP-16: cross-item instrument consistency (Master §8.1)                      #
+# --------------------------------------------------------------------------- #
+
+
+def test_external_import_instrument_mismatch_blocks() -> None:
+    # An external import resolved to a DIFFERENT canonical instrument than the
+    # strategy (spot import under a perpetual strategy) is a Ready blocker.
+    mismatched = ExternalImportState(
+        found=True,
+        succeeded=True,
+        accepted_count=5,
+        instrument_id="binance:btcusdt:perpetual",
+    )
+    result = evaluate_readiness(
+        [_strategy_item(), _trade_log_item(external=mismatched)],
+        allocation_enabled=False,
+        allocation_issues=[],
+    )
+    assert Code.INSTRUMENT_SCOPE_MISMATCH.value in _codes(result)
+    assert result.state == ReadinessState.NOT_READY
+
+
+def test_external_import_matching_instrument_has_no_mismatch() -> None:
+    # The strategy and the import share the same canonical instrument -> no mismatch.
+    result = evaluate_readiness(
+        [_strategy_item(), _trade_log_item()],
+        allocation_enabled=False,
+        allocation_issues=[],
+    )
+    assert Code.INSTRUMENT_SCOPE_MISMATCH.value not in _codes(result)

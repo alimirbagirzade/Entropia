@@ -109,6 +109,7 @@ def evaluate_readiness(
     """
     issues: list[ReadinessIssue] = []
     issues.extend(_composition_issues(items))
+    issues.extend(_instrument_consistency_issues(items))
     for item in items:
         issues.extend(_item_issues(item, allocation_enabled=allocation_enabled))
     issues.extend(market_data_issues)
@@ -179,6 +180,53 @@ def _composition_issues(items: Sequence[ReadinessItemInput]) -> list[ReadinessIs
                 )
             )
         seen.add(item.root_id)
+    return issues
+
+
+def _strategy_instrument_id(item: ReadinessItemInput) -> str:
+    data = item.payload.get("data")
+    raw = data.get("instrument_id") if isinstance(data, dict) else None
+    return (raw or "").strip()
+
+
+def _instrument_consistency_issues(
+    items: Sequence[ReadinessItemInput],
+) -> list[ReadinessIssue]:
+    """Every external import's canonical instrument must match the strategy's (GAP-16).
+
+    V1 compositions are single-instrument scope (doc 05 §5.1). Once ingest resolves
+    the free-text scope to a canonical ``instrument_id`` (Master §8.1), a divergence
+    between a strategy and its Trading Signal / Trade Log is a real mismatch, not a
+    formatting difference: a spot import under a perpetual strategy is a Ready
+    blocker. The check anchors on a single declared strategy instrument; with none
+    (external-only) or more than one, it yields to the other validator layers.
+    """
+    issues: list[ReadinessIssue] = []
+    references = {
+        _strategy_instrument_id(item)
+        for item in items
+        if item.available and item.kind == MainboardItemKind.STRATEGY
+    }
+    references.discard("")
+    if len(references) != 1:
+        return issues
+    reference = next(iter(references))
+    for item in items:
+        if not item.available or item.external is None:
+            continue
+        declared = (item.external.instrument_id or "").strip()
+        if declared and declared != reference:
+            issues.append(
+                ReadinessIssue(
+                    Code.INSTRUMENT_SCOPE_MISMATCH,
+                    Sev.BLOCKER,
+                    Scope.EXTERNAL_OBJECT,
+                    "This external import's instrument does not match the strategy's instrument.",
+                    remediation="Re-import the external object under the strategy's instrument, or "
+                    "pin a strategy for the same instrument.",
+                    scope_id=item.item_id,
+                )
+            )
     return issues
 
 

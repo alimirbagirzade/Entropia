@@ -246,11 +246,13 @@ describe("Analysis Lab page", () => {
     renderPage();
     await screen.findByText("alpha");
 
-    fireEvent.change(screen.getByLabelText("Directive"), {
+    // The mockup compose shares one textarea between Send Message and Send as
+    // Directive; the priority select is labelled "Directive Priority".
+    fireEvent.change(screen.getByLabelText("Message"), {
       target: { value: "Prioritize BTCUSDT" },
     });
-    fireEvent.change(screen.getByLabelText("Priority"), { target: { value: "high" } });
-    fireEvent.click(screen.getByRole("button", { name: "Queue directive" }));
+    fireEvent.change(screen.getByLabelText("Directive Priority"), { target: { value: "high" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send as Directive" }));
 
     expect(
       await screen.findByText("Directive queued — delivered at the next safe checkpoint."),

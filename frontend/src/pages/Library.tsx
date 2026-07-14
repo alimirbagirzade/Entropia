@@ -141,9 +141,16 @@ function CatalogCard() {
       <h3 id="library-h" style={{ marginTop: 0 }}>
         Catalog
       </h3>
+      {/* v18 mockup .package-pool-intro — role/permission summary banner. */}
+      <div className="package-pool-intro">
+        Packages are reusable building blocks. Admin, Supervisor and Agent can view and use every
+        package object; Supervisor and Agent may edit or delete only objects they own. Visibility
+        and permissions are computed by the server per role.
+      </div>
       <form
         onSubmit={onSearch}
-        style={{ display: "flex", flexWrap: "wrap", gap: 12, marginBottom: 12 }}
+        className="package-filter-bar"
+        style={{ display: "flex", flexWrap: "wrap", gap: 12 }}
       >
         <FacetSelect
           id="lib-kind"
@@ -219,30 +226,20 @@ function CatalogCard() {
           {packages.data.data.length === 0 ? (
             <EmptyState title="No packages match the current filters" />
           ) : (
-            <table className="metrics-table">
-              <thead>
-                <tr>
-                  <th scope="col">Name</th>
-                  <th scope="col">Type</th>
-                  <th scope="col">Rev</th>
-                  <th scope="col">Lifecycle</th>
-                  <th scope="col">Validation</th>
-                  <th scope="col">Approval</th>
-                  <th scope="col">Visibility</th>
-                  <th scope="col">Family</th>
-                  <th scope="col" aria-label="Actions" />
-                </tr>
-              </thead>
-              <tbody>
-                {packages.data.data.map((row) => (
-                  <PackageRow
-                    key={row.entity_id}
-                    row={row}
-                    onDetail={() => setSelectedId(row.entity_id)}
-                  />
-                ))}
-              </tbody>
-            </table>
+            // v18 mockup: expandable .package-row rows (open → light-cyan) that
+            // embed the package detail inline, instead of a wide catalog table.
+            <div className="package-list" role="list" aria-label="Package catalog">
+              {packages.data.data.map((row) => (
+                <PackageRow
+                  key={row.entity_id}
+                  row={row}
+                  open={selectedId === row.entity_id}
+                  onToggle={() =>
+                    setSelectedId((current) => (current === row.entity_id ? null : row.entity_id))
+                  }
+                />
+              ))}
+            </div>
           )}
           <Pager
             canPrev={pager.canPrev}
@@ -252,39 +249,50 @@ function CatalogCard() {
           />
         </>
       ) : null}
-
-      {selectedId ? (
-        <PackageDetail entityId={selectedId} onClose={() => setSelectedId(null)} />
-      ) : null}
     </section>
   );
 }
 
-function PackageRow({ row, onDetail }: { row: LibraryPackageRow; onDetail: () => void }) {
+function PackageRow({
+  row,
+  open,
+  onToggle,
+}: {
+  row: LibraryPackageRow;
+  open: boolean;
+  onToggle: () => void;
+}) {
   return (
-    <tr>
-      <td>{row.name ?? "—"}</td>
-      <td>
-        <code>{row.package_kind}</code>
-      </td>
-      <td>v{row.revision_no}</td>
-      <td>
-        <StatusBadge tone={lifecycleTone(row.lifecycle_state)} label={row.lifecycle_state} />
-      </td>
-      <td>
-        <StatusBadge tone={validationTone(row.validation_state)} label={row.validation_state} />
-      </td>
-      <td>
-        <StatusBadge tone={approvalTone(row.approval_state)} label={row.approval_state} />
-      </td>
-      <td>{row.visibility_scope}</td>
-      <td>{row.rationale_family?.name ?? "—"}</td>
-      <td>
-        <button type="button" className="btn" onClick={onDetail}>
-          Detail
+    <div role="listitem" className="package-card">
+      <div className={`package-row${open ? " open" : ""}`}>
+        <div className="package-text">
+          <strong>{row.name ?? "—"}</strong>
+          <code>{row.package_kind}</code>
+          <span>v{row.revision_no}</span>
+          <StatusBadge tone={lifecycleTone(row.lifecycle_state)} label={row.lifecycle_state} />
+          <StatusBadge tone={validationTone(row.validation_state)} label={row.validation_state} />
+          <StatusBadge tone={approvalTone(row.approval_state)} label={row.approval_state} />
+          <span>{row.visibility_scope}</span>
+          <span>{row.rationale_family?.name ?? "—"}</span>
+        </div>
+        {/* aria-label keeps the accessible name "Detail" so the toggle stays the
+            catalog's detail affordance; the glyph mirrors the mockup arrow. */}
+        <button
+          type="button"
+          className="package-arrow"
+          aria-label="Detail"
+          aria-expanded={open}
+          onClick={onToggle}
+        >
+          {open ? "▲" : "▼"}
         </button>
-      </td>
-    </tr>
+      </div>
+      {open ? (
+        <div className="package-details">
+          <PackageDetail entityId={row.entity_id} onClose={onToggle} />
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -366,13 +374,14 @@ function PackageDetail({ entityId, onClose }: { entityId: string; onClose: () =>
           </dl>
 
           <h5 style={{ marginBottom: 4 }}>Permissions (server-computed)</h5>
-          <ul style={{ display: "flex", flexWrap: "wrap", gap: 8, listStyle: "none", padding: 0 }}>
+          {/* v18 mockup .package-meta-grid — server-computed flags as bordered cells. */}
+          <div className="package-meta-grid">
             {PERMISSION_FLAGS.map((flag) => (
-              <li key={flag}>
+              <div key={flag} className="package-meta-cell">
                 <code>{flag}</code>: {pkg.permissions[flag] ? "yes" : "no"}
-              </li>
+              </div>
             ))}
-          </ul>
+          </div>
 
           <DeriveStrategyBlock pkg={pkg} />
           <PackageActions pkg={pkg} onDeleted={onClose} />

@@ -352,30 +352,43 @@ function ImportReportCard({
         <ErrorState error={error} onRetry={onRetry} />
       ) : report !== null ? (
         <>
-          <dl className="kv">
-            <dt>Job</dt>
-            <dd>
-              <code>{jobId}</code>
-            </dd>
-            <dt>Status</dt>
-            <dd>
-              <StatusBadge label={report.status} tone={importStatusTone(report.status)} />
-            </dd>
-            <dt>Normalized revision</dt>
-            <dd>
-              {report.normalized_event_revision_id !== null ? (
-                <code>{report.normalized_event_revision_id}</code>
-              ) : (
-                "not produced yet"
-              )}
-            </dd>
-            <dt>Accepted / skipped</dt>
-            <dd>
-              {report.accepted_count} / {report.skipped_count}
-            </dd>
-            <dt>Content hash</dt>
-            <dd>{report.content_hash ? <code>{report.content_hash}</code> : EM_DASH}</dd>
-          </dl>
+          {/* v18 mockup: the import report reads as a bordered wireframe table. */}
+          <table className="metrics-table">
+            <tbody>
+              <tr>
+                <th scope="row">Job</th>
+                <td>
+                  <code>{jobId}</code>
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Status</th>
+                <td>
+                  <StatusBadge label={report.status} tone={importStatusTone(report.status)} />
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Normalized revision</th>
+                <td>
+                  {report.normalized_event_revision_id !== null ? (
+                    <code>{report.normalized_event_revision_id}</code>
+                  ) : (
+                    "not produced yet"
+                  )}
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Accepted / skipped</th>
+                <td>
+                  {report.accepted_count} / {report.skipped_count}
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Content hash</th>
+                <td>{report.content_hash ? <code>{report.content_hash}</code> : EM_DASH}</td>
+              </tr>
+            </tbody>
+          </table>
           {report.validation_summary !== null ? (
             <pre style={{ ...preStyle, marginTop: 12 }}>
               {JSON.stringify(report.validation_summary, null, 2)}

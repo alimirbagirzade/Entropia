@@ -709,11 +709,35 @@ a:hover { text-decoration: underline; }
 .history-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; font-size: 13px; }
 .history-card { margin-bottom: 9px; border: 1px solid #4a8aa0; border-radius: 5px; background: #b9ecff; overflow: hidden; }
 .history-row { display: flex; align-items: center; justify-content: space-between; min-height: 38px; padding: 4px 10px; gap: 10px; font-size: 13px; color: #111; }
-.history-details { background: #fff; border-top: 1px solid #4a8aa0; padding: 12px; font-size: 13px; }
+.history-arrow {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  font-size: 12px;
+  cursor: pointer;
+  color: #000;
+  padding: 0;
+}
+/* Metrics collapse into the card body until the row is expanded (mockup). */
+.history-details { display: none; background: #fff; border-top: 1px solid #4a8aa0; padding: 12px; font-size: 13px; }
+.history-details.open { display: block; }
 
 /* ---- v18 Panel: management/logs card grid (mockup .panel-grid/.panel-card) ---- */
 .panel-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
 .panel-card { border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-elev); padding: 14px; }
+
+/* ---- v18 Create Package: request status summary card (mockup .cp-state-card) ---- */
+.cp-status-card { border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-elev-2); padding: 12px; margin-bottom: 14px; }
+.cp-status-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 13px; padding: 5px 0; border-bottom: 1px solid var(--border); }
+.cp-status-row:last-child { border-bottom: none; }
+.cp-status-row > .cp-status-label { color: var(--text-dim); font-weight: 700; }
+
+/* ---- v18 Portfolio: numbered allocation cards (mockup .portfolio-grid/.portfolio-card) ---- */
+.portfolio-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.portfolio-card { border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-elev); padding: 14px; }
+.portfolio-card > .section-title-upper { border-bottom: 1px solid var(--border); padding-bottom: 6px; }
 
 /* ---- v18 Package pool: sectioned rows (mockup .package-row/.package-section-title) ---- */
 .package-section-title {
@@ -738,3 +762,54 @@ a:hover { text-decoration: underline; }
   gap: 10px;
   font-size: 12px;
 }
+
+/* Intro banner + facet filter bar (mockup .package-pool-intro/.package-filter-bar). */
+.package-pool-intro {
+  border: 1px solid var(--border);
+  background: var(--bg-elev-2);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-dim);
+  margin-bottom: 12px;
+}
+.package-filter-bar {
+  border: 1px solid var(--border);
+  background: var(--bg-elev-2);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  margin-bottom: 14px;
+}
+
+/* Expandable catalog rows (mockup .package-card/.package-row.open/.package-details). */
+.package-list { display: flex; flex-direction: column; gap: 6px; }
+.package-text { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.package-arrow {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  font-size: 12px;
+  cursor: pointer;
+  color: var(--text);
+  padding: 0;
+}
+/* Open row turns the light-cyan mockup shade and squares its bottom into the body. */
+.package-row.open {
+  background: #dff5ff;
+  border-color: #4a8aa0;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.package-details {
+  border: 1px solid #4a8aa0;
+  border-top: none;
+  border-bottom-left-radius: var(--radius);
+  border-bottom-right-radius: var(--radius);
+  background: var(--bg-elev);
+  padding: 14px 16px;
+}
+.package-meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 6px; margin: 8px 0; }
+.package-meta-cell { border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 8px; font-size: 12px; }

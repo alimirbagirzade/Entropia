@@ -253,66 +253,74 @@ function DraftEditor({
           </div>
         </label>
 
-        <div className="section-title-upper">1. Shared capital pool</div>
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-          <label className="auth-field" style={{ maxWidth: 180 }}>
-            <span>Initial capital</span>
-            <input
-              className="auth-input"
-              value={amount}
-              placeholder="e.g. 10000"
-              onChange={(event) => setAmount(event.target.value)}
-            />
-          </label>
-          <label className="auth-field" style={{ maxWidth: 120 }}>
-            <span>Currency</span>
-            <select value={currency} onChange={(event) => setCurrency(event.target.value)}>
-              <option value="">—</option>
-              {ALLOCATION_CURRENCIES.map((token) => (
-                <option key={token} value={token}>
-                  {token}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="auth-field" style={{ maxWidth: 260 }}>
-            <span>Compounding mode</span>
-            <select value={mode} onChange={(event) => setMode(event.target.value)}>
-              <option value="">—</option>
-              {COMPOUNDING_MODES.map((token) => (
-                <option key={token} value={token}>
-                  {COMPOUNDING_MODE_LABELS[token] ?? token}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="auth-field" style={{ maxWidth: 160 }}>
-            <span>Reserve cash %</span>
-            <input
-              className="auth-input"
-              value={reserve}
-              placeholder="e.g. 10"
-              onChange={(event) => setReserve(event.target.value)}
-            />
-          </label>
+        {/* v18 mockup card 1 — SHARED CAPITAL POOL. */}
+        <div className="portfolio-card">
+          <div className="section-title-upper">1. Shared capital pool</div>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+            <label className="auth-field" style={{ maxWidth: 180 }}>
+              <span>Initial capital</span>
+              <input
+                className="auth-input"
+                value={amount}
+                placeholder="e.g. 10000"
+                onChange={(event) => setAmount(event.target.value)}
+              />
+            </label>
+            <label className="auth-field" style={{ maxWidth: 120 }}>
+              <span>Currency</span>
+              <select value={currency} onChange={(event) => setCurrency(event.target.value)}>
+                <option value="">—</option>
+                {ALLOCATION_CURRENCIES.map((token) => (
+                  <option key={token} value={token}>
+                    {token}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="auth-field" style={{ maxWidth: 260 }}>
+              <span>Compounding mode</span>
+              <select value={mode} onChange={(event) => setMode(event.target.value)}>
+                <option value="">—</option>
+                {COMPOUNDING_MODES.map((token) => (
+                  <option key={token} value={token}>
+                    {COMPOUNDING_MODE_LABELS[token] ?? token}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="auth-field" style={{ maxWidth: 160 }}>
+              <span>Reserve cash %</span>
+              <input
+                className="auth-input"
+                value={reserve}
+                placeholder="e.g. 10"
+                onChange={(event) => setReserve(event.target.value)}
+              />
+            </label>
+          </div>
         </div>
 
-        <div className="section-title-upper">2. Equity allocation</div>
-        <EntriesTable entries={entries} onChange={setEntries} />
-        <CandidatePicker
-          candidates={candidates}
-          onAdd={(candidate) =>
-            setEntries((previous) => [
-              ...previous,
-              {
-                composition_item_id: candidate.composition_item_id,
-                item_type: candidate.item_type,
-                active: true,
-                share: "",
-              },
-            ])
-          }
-        />
+        {/* v18 mockup card 2 — EQUITY ALLOCATION (per-item sleeves). */}
+        <div className="portfolio-card">
+          <div className="section-title-upper">2. Equity allocation</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <EntriesTable entries={entries} onChange={setEntries} />
+            <CandidatePicker
+              candidates={candidates}
+              onAdd={(candidate) =>
+                setEntries((previous) => [
+                  ...previous,
+                  {
+                    composition_item_id: candidate.composition_item_id,
+                    item_type: candidate.item_type,
+                    active: true,
+                    share: "",
+                  },
+                ])
+              }
+            />
+          </div>
+        </div>
 
         <div>
           <button

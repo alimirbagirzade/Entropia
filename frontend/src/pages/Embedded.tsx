@@ -114,27 +114,22 @@ function RegistryCard() {
           {registry.data.data.length === 0 ? (
             <EmptyState title="No resolver matches the current filters" />
           ) : (
-            <table className="metrics-table">
-              <thead>
-                <tr>
-                  <th scope="col">Resolver key</th>
-                  <th scope="col">Trust</th>
-                  <th scope="col">Adapter</th>
-                  <th scope="col">Registry ver</th>
-                  <th scope="col">Trusted revision</th>
-                  <th scope="col" aria-label="Actions" />
-                </tr>
-              </thead>
-              <tbody>
-                {registry.data.data.map((row) => (
-                  <RegistryRowView
-                    key={row.registry_id}
-                    row={row}
-                    onDetail={() => setSelectedId(row.package_entity_id)}
-                  />
-                ))}
-              </tbody>
-            </table>
+            // v18 mockup: expandable .package-row registry rows (open → light-cyan)
+            // that embed the resolver detail inline, instead of a wide table.
+            <div className="package-list" role="list" aria-label="Resolver registry">
+              {registry.data.data.map((row) => (
+                <RegistryRowView
+                  key={row.registry_id}
+                  row={row}
+                  open={selectedId === row.package_entity_id}
+                  onToggle={() =>
+                    setSelectedId((current) =>
+                      current === row.package_entity_id ? null : row.package_entity_id,
+                    )
+                  }
+                />
+              ))}
+            </div>
           )}
           <Pager
             canPrev={pager.canPrev}
@@ -144,32 +139,49 @@ function RegistryCard() {
           />
         </>
       ) : null}
-
-      {selectedId ? (
-        <EspDetailCard entityId={selectedId} onClose={() => setSelectedId(null)} />
-      ) : null}
     </section>
   );
 }
 
-function RegistryRowView({ row, onDetail }: { row: EspRegistryRow; onDetail: () => void }) {
+function RegistryRowView({
+  row,
+  open,
+  onToggle,
+}: {
+  row: EspRegistryRow;
+  open: boolean;
+  onToggle: () => void;
+}) {
   return (
-    <tr>
-      <td>
-        <code>{row.canonical_key}</code>
-      </td>
-      <td>
-        <StatusBadge tone={trustTone(row.trust_state)} label={row.trust_state} />
-      </td>
-      <td>{row.runtime_adapter}</td>
-      <td>{row.registry_version}</td>
-      <td>{row.trusted_active_revision_id ? <code>{row.trusted_active_revision_id}</code> : "—"}</td>
-      <td>
-        <button type="button" className="btn" onClick={onDetail}>
-          Detail
+    <div role="listitem" className="package-card">
+      <div className={`package-row${open ? " open" : ""}`}>
+        <div className="package-text">
+          <code>{row.canonical_key}</code>
+          <StatusBadge tone={trustTone(row.trust_state)} label={row.trust_state} />
+          <span>{row.runtime_adapter}</span>
+          {row.trusted_active_revision_id ? (
+            <code>{row.trusted_active_revision_id}</code>
+          ) : (
+            <span>—</span>
+          )}
+        </div>
+        {/* aria-label keeps the accessible name "Detail"; the glyph mirrors the mockup arrow. */}
+        <button
+          type="button"
+          className="package-arrow"
+          aria-label="Detail"
+          aria-expanded={open}
+          onClick={onToggle}
+        >
+          {open ? "▲" : "▼"}
         </button>
-      </td>
-    </tr>
+      </div>
+      {open ? (
+        <div className="package-details">
+          <EspDetailCard entityId={row.package_entity_id} onClose={onToggle} />
+        </div>
+      ) : null}
+    </div>
   );
 }
 

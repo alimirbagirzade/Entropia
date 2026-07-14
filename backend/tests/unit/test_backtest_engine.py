@@ -111,6 +111,7 @@ def _config(
     kelly_fraction: str | None = None,
     min_size: str | None = None,
     max_size: str | None = None,
+    stop_exit_conflict: str | None = None,
 ) -> StrategyConfig:
     """A minimal VALID StrategyConfig; only the fields the engine reads matter."""
     sizing: dict[str, Any] = {"method": method}
@@ -191,7 +192,9 @@ def _config(
             "protection_stop_logic": protection,
             "position_sizing": sizing,
             "restrictions_filters": {"rule": "any", "filters": []},
-            "conflict_position_handling": {},
+            "conflict_position_handling": (
+                {"stop_exit_conflict": stop_exit_conflict} if stop_exit_conflict is not None else {}
+            ),
         }
     )
 
@@ -559,10 +562,66 @@ def test_engine_applies_the_position_size_cap_to_a_real_trade() -> None:
 
 
 def test_engine_execution_key_namespace_shifts_with_the_engine_version() -> None:
-    # The ENGINE_VERSION bump must flow into the manifest so a stale non-allocation
+    # The ENGINE_VERSION bump must flow into the manifest so a stale pre-conflict
     # result cannot be reused under the new engine (INF-04 idempotent reuse / INF-05).
     built = _manifest("btrun_A", "snap_A", "2024-01-01T00:00:00Z")
-    assert built.manifest["identity"]["engine_version"] == "backtest-engine-v2-allocation-execution"
+    assert built.manifest["identity"]["engine_version"] == "backtest-engine-v2-stop-exit-conflict"
+
+
+def test_stop_exit_default_is_stop_has_priority() -> None:
+    # §5.9: with no override the same-bar Stop+Exit collision resolves to the stop —
+    # the V18 default. The bar-22 low (90) both trips the 1% stop AND makes a new
+    # window low (proxy exit), so the collision path is exercised; the trade closes at
+    # the stop level, NOT at the bar close.
+    out = _run(_config(), _long_breakout_then_stop())
+    trade = out.trades[0]
+    assert trade.exit_reason == "stop_loss"
+    assert out.diagnostics["stop_exit_conflict"] == "stop_has_priority"
+    assert out.diagnostics["stop_exit_collisions"] == 1
+    # Stop = entry(102) * (1 - 1%) = 100.98 (slippage/commission are 0 here).
+    assert trade.exit_price == Decimal("100.98")
+
+
+def test_stop_exit_exit_has_priority_closes_at_the_bar_close() -> None:
+    # "exit_has_priority" is the only option that changes the OUTCOME: the same
+    # collision bar closes as an exit at the bar CLOSE (95), well below the stop
+    # (100.98), so the long loses strictly more than under stop priority.
+    stop_first = _run(_config(), _long_breakout_then_stop())
+    exit_first = _run(_config(stop_exit_conflict="exit_has_priority"), _long_breakout_then_stop())
+    trade = exit_first.trades[0]
+    assert trade.exit_reason == "exit_signal"
+    assert trade.exit_price == Decimal("95")
+    assert exit_first.diagnostics["stop_exit_conflict"] == "exit_has_priority"
+    assert exit_first.diagnostics["stop_exit_collisions"] == 1
+    # Closing lower (95 < 100.98) is strictly worse for the long position.
+    assert exit_first.summary["net_profit"] < stop_first.summary["net_profit"]
+
+
+def test_stop_exit_record_both_reasons_executes_stop_but_logs_the_collision() -> None:
+    # "record_both_reasons" executes the stop (identical trade to the default) but
+    # emits a stop_exit_collision signal event carrying BOTH reason codes (§5.9).
+    default = _run(_config(), _long_breakout_then_stop())
+    both = _run(_config(stop_exit_conflict="record_both_reasons"), _long_breakout_then_stop())
+    assert both.trades[0].exit_reason == "stop_loss"
+    assert both.trades[0].exit_price == default.trades[0].exit_price
+    assert both.summary["net_profit"] == default.summary["net_profit"]
+    collision = [e for e in both.signal_events if e.event_type == "stop_exit_collision"]
+    assert len(collision) == 1
+    assert collision[0].detail["executed"] == "stop_loss"
+    assert collision[0].detail["also_triggered"] == "exit_signal"
+
+
+def test_stop_exit_first_trigger_wins_resolves_to_the_intrabar_stop() -> None:
+    # "first_trigger_wins": the stop is an intrabar high/low touch and precedes the
+    # close-based exit signal, so it wins deterministically — same trade as the
+    # default, but the collision is still counted (honest V1 boundary).
+    default = _run(_config(), _long_breakout_then_stop())
+    first = _run(_config(stop_exit_conflict="first_trigger_wins"), _long_breakout_then_stop())
+    assert first.trades[0].exit_reason == "stop_loss"
+    assert first.trades[0].exit_price == default.trades[0].exit_price
+    assert first.diagnostics["stop_exit_collisions"] == 1
+    # No collision event is emitted unless the policy is record_both_reasons.
+    assert not [e for e in first.signal_events if e.event_type == "stop_exit_collision"]
 
 
 def test_summary_carries_the_caller_resolved_timeframe() -> None:

@@ -243,6 +243,15 @@ export const OPPOSITE_HEDGE_OPTIONS: SelectOption[] = [
   { value: "ignore", label: "Ignore" },
 ];
 
+// §5.9 "Stop + Exit" same-bar collision resolution. VALUE mirrors config.py Literal;
+// LABEL is the V18 surface. Default "Stop Has Priority" (first option).
+export const STOP_EXIT_CONFLICT_OPTIONS: SelectOption[] = [
+  { value: "stop_has_priority", label: "Stop Has Priority" },
+  { value: "exit_has_priority", label: "Exit Has Priority" },
+  { value: "record_both_reasons", label: "Record Both Reasons" },
+  { value: "first_trigger_wins", label: "First Trigger Wins" },
+];
+
 // ---------------------------------------------------------------------------
 // Form state — a flat, string-backed mirror of the covered payload sections.
 // Numeric fields stay strings so a blank field is representable ("" → omit on
@@ -302,6 +311,7 @@ export interface StrategyFlatForm {
     same_direction_stacking: string;
     opposite_direction_hedge: string;
     exit_on_opposite_signal: boolean;
+    stop_exit_conflict: string;
   };
 }
 
@@ -319,6 +329,7 @@ const DEFAULTS = {
   overlapping_signal_policy: "queue_sequential",
   same_direction_stacking: "allow_stacking",
   opposite_direction_hedge: "allow_hedge",
+  stop_exit_conflict: "stop_has_priority",
   percentage_loss: "1.0",
   trailing_trail: "2.0",
   trailing_lock_in: "0.8",
@@ -434,6 +445,7 @@ export function extractFlatSections(payload: Record<string, unknown>): StrategyF
         DEFAULTS.opposite_direction_hedge,
       ),
       exit_on_opposite_signal: bool(conflict.exit_on_opposite_signal, true),
+      stop_exit_conflict: enumStr(conflict.stop_exit_conflict, DEFAULTS.stop_exit_conflict),
     },
   };
 }
@@ -575,6 +587,7 @@ export function mergeFlatSections(
     same_direction_stacking: c.same_direction_stacking,
     opposite_direction_hedge: c.opposite_direction_hedge,
     exit_on_opposite_signal: c.exit_on_opposite_signal,
+    stop_exit_conflict: c.stop_exit_conflict,
   };
 
   return {

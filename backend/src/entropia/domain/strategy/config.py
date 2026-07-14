@@ -749,3 +749,21 @@ class ConflictPositionHandling(BaseModel):
     ] = Field(default="allow_hedge", description="Hedge/reverse position policy")
 
     exit_on_opposite_signal: bool = Field(default=True, description="Close on opposite signal")
+
+    # §5.9 "Stop + Exit" — same-bar collision resolution when BOTH a protection stop
+    # touches AND an exit signal fires on one bar. V18 default is "Stop Has Priority".
+    # Only "exit_has_priority" changes the trade OUTCOME (close at bar.close as an exit
+    # rather than at the stop level); "record_both_reasons" executes the stop but emits
+    # a collision signal event carrying both reason codes; "first_trigger_wins" resolves
+    # to the stop deterministically because the stop is an intrabar high/low touch while
+    # the exit signal is close-based (no intrabar ordering data exists to separate them —
+    # an honest V1 boundary, so it shares the stop-wins execution and records the reason).
+    stop_exit_conflict: Literal[
+        "stop_has_priority",
+        "exit_has_priority",
+        "record_both_reasons",
+        "first_trigger_wins",
+    ] = Field(
+        default="stop_has_priority",
+        description="Stop vs exit-signal same-bar collision resolution (§5.9)",
+    )

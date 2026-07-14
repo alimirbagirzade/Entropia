@@ -47,11 +47,16 @@ from entropia.domain.create_package import (
     normalize_request,
     parse_baseline_csv,
     resolve_equivalence_claim,
+    scan_source_calls,
     source_hash,
 )
 from entropia.domain.create_package.candidate import (
     build_candidate_manifest,
     candidate_hash,
+)
+from entropia.domain.create_package.source_scan import (
+    SOURCE_SCANNER_VERSION,
+    is_scannable_key,
 )
 from entropia.domain.esp.enums import RuntimeAdapter
 from entropia.domain.identity import Actor
@@ -103,7 +108,12 @@ from entropia.shared.errors import (
 
 _REQUEST_TARGET_KIND = "package_request"
 _PACKAGE_TARGET_KIND = "package"
-_SCANNER_VERSION = "stub-declared-1.0"
+# The scanner semantics changed from a declared-list echo to a comment/string-aware
+# source lexer (doc 07 §6.2). A prior stub scan is not equivalent, so the version
+# tracks the domain scanner contract.
+_SCANNER_VERSION = SOURCE_SCANNER_VERSION
+_UNDECLARED_SOURCE_CODE = "UNDECLARED_SOURCE_DEPENDENCY"
+_DECLARED_NOT_IN_SOURCE_CODE = "DECLARED_NOT_IN_SOURCE"
 _RESOLVE_ERRORS = (ResolverNotResolved, ResolverSignatureMismatch, ResolverAdapterIncompatible)
 # Upload cap for a baseline CSV export (doc 06 §8.3 file type/size gate).
 _MAX_BASELINE_BYTES = 25 * 1024 * 1024
@@ -379,15 +389,46 @@ async def run_precheck(
                 detected_calls=[],
                 resolved_refs=[],
                 missing_calls=[],
+                source_warnings=[],
                 status=PrecheckScanStatus.NOT_APPLICABLE,
                 registry_fingerprint="sha256:not_applicable",
                 next_state=CreatePackageState.PRECHECK_NOT_APPLICABLE,
             )
 
-        detected = [str(dep["key"]) for dep in detail.declared_dependencies]
+        # Detect the real TA/condition call nodes from the SOURCE (comment/string
+        # aware), then reconcile against the declared dependency list (doc 07 §6.2):
+        # a source call the request never declared blocks (PC-06 undeclared), and a
+        # declared call the source never invokes is a non-fatal over-declaration
+        # warning. Declared deps still drive registry resolution + the pins.
+        detected = list(scan_source_calls(detail.request_body).calls)
+        declared_keys = [str(dep["key"]) for dep in detail.declared_dependencies]
+        declared_set = set(declared_keys)
+        source_set = set(detected)
+        undeclared = [
+            {
+                "call": call,
+                "code": _UNDECLARED_SOURCE_CODE,
+                "message": f"Source calls '{call}' but it is not declared as a dependency.",
+            }
+            for call in detected
+            if call not in declared_set
+        ]
+        source_warnings = [
+            {
+                "call": key,
+                "code": _DECLARED_NOT_IN_SOURCE_CODE,
+                "message": f"Declared dependency '{key}' is not called in the source.",
+            }
+            for key in declared_keys
+            if is_scannable_key(key) and key not in source_set
+        ]
+
         resolved_refs, missing_calls = await _resolve_declared(
             session, detail.declared_dependencies, detail.target_runtime
         )
+        # Registry-missing declared calls first, then undeclared source calls:
+        # both block, and the existing missing[0] contract stays the resolver miss.
+        missing_calls = missing_calls + undeclared
         fingerprint = await _registry_fingerprint(session, detail.declared_dependencies)
         passed = not missing_calls
         status = PrecheckScanStatus.PASSED if passed else PrecheckScanStatus.BLOCKED
@@ -402,6 +443,7 @@ async def run_precheck(
             detected_calls=detected,
             resolved_refs=resolved_refs,
             missing_calls=missing_calls,
+            source_warnings=source_warnings,
             status=status,
             registry_fingerprint=fingerprint,
             next_state=next_state,
@@ -429,6 +471,7 @@ async def _record_scan(
     detected_calls: list[str],
     resolved_refs: list[dict[str, Any]],
     missing_calls: list[dict[str, Any]],
+    source_warnings: list[dict[str, Any]],
     status: PrecheckScanStatus,
     registry_fingerprint: str,
     next_state: CreatePackageState,
@@ -449,6 +492,7 @@ async def _record_scan(
         resolved_refs=resolved_refs,
         missing_calls=missing_calls,
         unsupported_calls=[],
+        source_warnings=source_warnings,
         status=status,
         job_id=job.job_id,
         error_detail=None,
@@ -482,6 +526,7 @@ async def _record_scan(
         "state": str(detail.state),
         "resolved": len(resolved_refs),
         "missing": missing_calls,
+        "warnings": source_warnings,
         "registry_fingerprint": registry_fingerprint,
         "job_id": job.job_id,
     }

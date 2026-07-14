@@ -130,6 +130,7 @@ def _scan_summary(scan: DependencyScan) -> dict[str, Any]:
         "detected": scan.detected_calls,
         "resolved": scan.resolved_refs,
         "missing": scan.missing_calls,
+        "warnings": scan.source_warnings,
         "scanner_version": scan.scanner_version,
         "registry_fingerprint": scan.registry_fingerprint,
         "context_hash": scan.context_hash,

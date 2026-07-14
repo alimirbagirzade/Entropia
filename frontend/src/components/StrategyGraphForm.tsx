@@ -4,6 +4,7 @@ import { InfoPanel } from "@/components/InfoPanel";
 import { PackagePicker } from "@/components/PackagePicker";
 import type { InfoPanelContent } from "@/lib/strategyForm";
 import {
+  ADD_SIZE_OPTIONS,
   APPLIES_TO_OPTIONS,
   BLOCK_DIRECTION_OPTIONS,
   BLOCK_TIMEFRAME_OPTIONS,
@@ -12,21 +13,30 @@ import {
   CONDITION_REQUIRING_TRIGGERS,
   CONDITION_VALIDITY_OPTIONS,
   DIRECTION_MODE_OPTIONS,
+  FILTER_TYPE_OPTIONS,
+  FILTER_TYPE_PANEL_KEY,
   INDICATOR_VALIDITY_OPTIONS,
   PARTIAL_AFTERMATH_OPTIONS,
   REQUIREMENT_OPTIONS,
+  RESTRICTION_RULE_OPTIONS,
+  SCALING_METHOD_OPTIONS,
   SIGNAL_MIN_SUPPORTING_RULE,
   SIGNAL_RULE_OPTIONS,
   STRATEGY_GRAPH_PANELS,
   TRIGGER_SOURCE_OPTIONS,
   type ConditionBlockForm,
   type IndicatorBlockForm,
+  type RestrictionFilterForm,
+  type RestrictionsForm,
+  type ScalingForm,
   type SelectOption,
   type StrategyGraphForm as GraphFormState,
   extractGraphSections,
+  firstInvalidFilterConfig,
   mergeGraphSections,
   newBlock,
   newCondition,
+  newFilter,
 } from "@/lib/strategyGraph";
 
 // R6 / GAP-08 — the structured editor for the package-graph decision sections
@@ -448,6 +458,220 @@ function BlockList({
 }
 
 // ---------------------------------------------------------------------------
+// Scaling Logic (§5.7)
+// ---------------------------------------------------------------------------
+
+function ScalingSection({
+  scaling,
+  onChange,
+}: {
+  scaling: ScalingForm;
+  onChange: (patch: Partial<ScalingForm>) => void;
+}) {
+  return (
+    <>
+      <h4 className="form-section-h" style={{ marginTop: 20 }}>
+        Scaling Logic <InfoPanel panel={P.scalingLogic} />
+      </h4>
+      <p className="cp-note">
+        Scaling adds same-direction layers to an open position (doc 02 §5.7) — never a reverse
+        layer. A disabled scaling section is collapsed to none on save.
+      </p>
+      <div className="cp-form strategy-form-grid">
+        <CheckboxField
+          label="Enable scaling"
+          checked={scaling.enabled}
+          onChange={(v) => onChange({ enabled: v })}
+        />
+        <SelectField
+          label="Scaling timeframe"
+          value={scaling.timeframe}
+          onChange={(v) => onChange({ timeframe: v })}
+          options={BLOCK_TIMEFRAME_OPTIONS}
+          panel={P.scalingTimeframeStructure}
+        />
+        <SelectField
+          label="Additional layer method"
+          value={scaling.method}
+          onChange={(v) => onChange({ method: v })}
+          options={SCALING_METHOD_OPTIONS}
+          placeholder="None"
+          panel={P.additionalLayerMethod}
+        />
+        <div className="cp-field" aria-hidden="true" />
+      </div>
+      {scaling.method === "price_distance_scaling" ? (
+        <div className="cp-form strategy-form-grid">
+          <TextField
+            label="Retracement distance %"
+            required
+            value={scaling.price.retracement_distance}
+            onChange={(v) => onChange({ price: { ...scaling.price, retracement_distance: v } })}
+            panel={P.priceDistanceScaling}
+          />
+          <TextField
+            label="Layers"
+            required
+            value={scaling.price.layers}
+            onChange={(v) => onChange({ price: { ...scaling.price, layers: v } })}
+            placeholder="e.g. 3"
+          />
+        </div>
+      ) : null}
+      {scaling.method === "logic_based_scaling" ? (
+        <>
+          <p className="cp-note">
+            <InfoPanel panel={P.logicBasedScaling} /> Layers are added when these indicator blocks
+            confirm.
+          </p>
+          <BlockList
+            scope="entry"
+            blocks={scaling.logic_blocks}
+            onChange={(blocks) => onChange({ logic_blocks: blocks })}
+          />
+        </>
+      ) : null}
+      <div className="cp-form strategy-form-grid">
+        <SelectField
+          label="Add size per scale"
+          value={scaling.add_size}
+          onChange={(v) => onChange({ add_size: v })}
+          options={ADD_SIZE_OPTIONS}
+          panel={P.addSizePerScale}
+        />
+        <TextField
+          label="Add size value"
+          value={scaling.add_size_value}
+          onChange={(v) => onChange({ add_size_value: v })}
+          placeholder="e.g. 50"
+        />
+        <TextField
+          label="Max scaling layers"
+          value={scaling.limits.max_scaling_layers}
+          onChange={(v) => onChange({ limits: { ...scaling.limits, max_scaling_layers: v } })}
+          panel={P.scalingLimits}
+        />
+        <TextField
+          label="Max total position size"
+          value={scaling.limits.max_total_position_size}
+          onChange={(v) => onChange({ limits: { ...scaling.limits, max_total_position_size: v } })}
+        />
+      </div>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Restrictions / Filters (§5.8)
+// ---------------------------------------------------------------------------
+
+function FilterConfigField({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const id = useId();
+  return (
+    <div className="cp-field cp-wide">
+      <label htmlFor={id}>Config (JSON — type-specific)</label>
+      <textarea
+        id={id}
+        rows={3}
+        value={value}
+        placeholder={'{ "threshold": 0.5 }'}
+        onChange={(event) => onChange(event.target.value)}
+        spellCheck={false}
+      />
+    </div>
+  );
+}
+
+function RestrictionsSection({
+  restrictions,
+  onChange,
+}: {
+  restrictions: RestrictionsForm;
+  onChange: (patch: Partial<RestrictionsForm>) => void;
+}) {
+  const updateFilter = (i: number, patch: Partial<RestrictionFilterForm>) =>
+    onChange({
+      filters: restrictions.filters.map((f, idx) => (idx === i ? { ...f, ...patch } : f)),
+    });
+  const removeFilter = (i: number) =>
+    onChange({ filters: restrictions.filters.filter((_, idx) => idx !== i) });
+  const addFilter = () => onChange({ filters: [...restrictions.filters, newFilter()] });
+
+  return (
+    <>
+      <h4 className="form-section-h" style={{ marginTop: 20 }}>
+        Restrictions / Filters <InfoPanel panel={P.restrictionRule} />
+      </h4>
+      <p className="cp-note">
+        Filters block a new entry even when the signal is valid (doc 02 §5.8). Disabled filters are
+        dropped from the saved revision. Each filter&apos;s typed config is edited as JSON — the V1
+        backend config is an untyped dict.
+      </p>
+      <div className="cp-form strategy-form-grid">
+        <SelectField
+          label="Restriction rule"
+          value={restrictions.rule}
+          onChange={(v) => onChange({ rule: v })}
+          options={RESTRICTION_RULE_OPTIONS}
+          panel={P.restrictionRule}
+        />
+        <div className="cp-field" aria-hidden="true" />
+      </div>
+      {restrictions.filters.map((filter, i) => {
+        const panelKey = FILTER_TYPE_PANEL_KEY[filter.filter_type];
+        const panel = panelKey ? P[panelKey] : undefined;
+        return (
+          <div key={filter.key} className="graph-condition">
+            <div className="graph-block-head">
+              <span className="field-head">
+                <strong>Filter {i + 1}</strong>
+                {panel ? <InfoPanel panel={panel} /> : null}
+              </span>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => removeFilter(i)}
+                aria-label={`Remove filter ${i + 1}`}
+              >
+                Remove
+              </button>
+            </div>
+            <div className="cp-form strategy-form-grid">
+              <SelectField
+                label="Filter type"
+                required
+                value={filter.filter_type}
+                onChange={(v) => updateFilter(i, { filter_type: v })}
+                options={FILTER_TYPE_OPTIONS}
+                placeholder="Choose filter type"
+              />
+              <CheckboxField
+                label="Enabled"
+                checked={filter.enabled}
+                onChange={(checked) => updateFilter(i, { enabled: checked })}
+              />
+            </div>
+            <FilterConfigField
+              value={filter.config_text}
+              onChange={(v) => updateFilter(i, { config_text: v })}
+            />
+          </div>
+        );
+      })}
+      <button type="button" className="btn" onClick={addFilter}>
+        + Add Restriction / Filter
+      </button>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // The structured graph form
 // ---------------------------------------------------------------------------
 
@@ -466,6 +690,21 @@ export function StrategyGraphForm({
     setForm((f) => ({ ...f, entry: { ...f.entry, ...patch } }));
   const setExit = (patch: Partial<GraphFormState["exit"]>) =>
     setForm((f) => ({ ...f, exit: { ...f.exit, ...patch } }));
+  const setScaling = (patch: Partial<GraphFormState["scaling"]>) =>
+    setForm((f) => ({ ...f, scaling: { ...f.scaling, ...patch } }));
+  const setRestrictions = (patch: Partial<GraphFormState["restrictions"]>) =>
+    setForm((f) => ({ ...f, restrictions: { ...f.restrictions, ...patch } }));
+
+  const [applyError, setApplyError] = useState<string | null>(null);
+  const handleApply = () => {
+    const invalidFilter = firstInvalidFilterConfig(form);
+    if (invalidFilter !== null) {
+      setApplyError(`Not sent — the "${invalidFilter}" filter config is not valid JSON.`);
+      return;
+    }
+    setApplyError(null);
+    onApply(mergeGraphSections(payload, form));
+  };
 
   const e = form.entry;
   const x = form.exit;
@@ -601,18 +840,22 @@ export function StrategyGraphForm({
         logic-based stop is not composable here until the engine supports it.
       </p>
 
+      <ScalingSection scaling={form.scaling} onChange={setScaling} />
+      <RestrictionsSection restrictions={form.restrictions} onChange={setRestrictions} />
+
       <div style={{ marginTop: 14 }}>
-        <button
-          type="button"
-          className="btn btn-primary"
-          disabled={pending}
-          onClick={() => onApply(mergeGraphSections(payload, form))}
-        >
+        <button type="button" className="btn btn-primary" disabled={pending} onClick={handleApply}>
           {pending ? "Applying…" : "Apply graph changes"}
         </button>
       </div>
+      {applyError !== null ? (
+        <p role="alert" style={{ color: "var(--down)", marginBottom: 0 }}>
+          {applyError}
+        </p>
+      ) : null}
       <p className="cp-note" style={{ marginTop: 10 }}>
-        Scaling and Restrictions / Filters are still edited in the Advanced (JSON) editor below.
+        The Advanced (JSON) editor below remains the fallback for each block&apos;s advanced fields
+        (parameter overrides, reference chains) and any key not yet surfaced.
       </p>
     </section>
   );

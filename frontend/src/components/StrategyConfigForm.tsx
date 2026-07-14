@@ -565,9 +565,8 @@ export function StrategyConfigForm({
         </button>
       </div>
       <p className="cp-note" style={{ marginTop: 10 }}>
-        Position Entry Logic and Position Exit Logic (which pin indicator / condition packages) are
-        edited in the Position graph form below; Scaling and Restrictions / Filters remain in the
-        Advanced (JSON) editor.
+        The package-graph sections — Position Entry / Exit Logic (which pin indicator / condition
+        packages), Scaling and Restrictions / Filters — are edited in the Position graph form below.
       </p>
     </section>
   );

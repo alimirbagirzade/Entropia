@@ -47,6 +47,15 @@ export function ResultsHistory() {
   const [comparePair, setComparePair] = useState<[string, string] | null>(null);
   // Two-step delete confirm: first click arms the row, second click commits.
   const [armedDelete, setArmedDelete] = useState<string | null>(null);
+  // v18 expandable cards: which rows have their metrics panel open.
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  const toggleExpanded = (resultId: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(resultId)) next.delete(resultId);
+      else next.add(resultId);
+      return next;
+    });
   const cursor = cursorStack.length > 0 ? cursorStack[cursorStack.length - 1] : null;
   const history = useResultsHistory(sort, cursor);
   const softDelete = useSoftDeleteResult();
@@ -126,26 +135,23 @@ export function ResultsHistory() {
           />
         </div>
       ) : (
-        <div className="card" style={{ overflowX: "auto", padding: 0 }}>
-          <table className="metrics-table">
-            <thead>
-              <tr>
-                <th scope="col" aria-label="Select for compare" />
-                <th scope="col">Result</th>
-                <th scope="col">Completed</th>
-                <th scope="col">Timeframe</th>
-                {KEY_METRIC_COLUMNS.map((column) => (
-                  <th key={column.key} scope="col">
-                    {column.label}
-                  </th>
-                ))}
-                <th scope="col" aria-label="Actions" />
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <tr key={row.result_id}>
-                  <td>
+        // v18 mockup: each immutable result is a blue expandable card — the row
+        // carries identity + actions, the details panel holds the key metrics.
+        <div>
+          {rows.map((row) => {
+            const isOpen = expanded.has(row.result_id);
+            return (
+              <div className="history-card" key={row.result_id}>
+                <div className="history-row">
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 10,
+                      flexWrap: "wrap",
+                      minWidth: 0,
+                    }}
+                  >
                     {row.allowed_actions.compare ? (
                       <input
                         type="checkbox"
@@ -158,17 +164,17 @@ export function ResultsHistory() {
                         onChange={() => toggleSelect(row.result_id)}
                       />
                     ) : null}
-                  </td>
-                  <td>
                     <code>{row.result_id}</code>
-                  </td>
-                  <td>{formatUtc(row.completed_at_utc)}</td>
-                  <td>{row.timeframe ?? EM_DASH}</td>
-                  {KEY_METRIC_COLUMNS.map((column) => (
-                    <td key={column.key}>{formatMetricValue(row.key_metrics[column.key])}</td>
-                  ))}
-                  <td style={{ whiteSpace: "nowrap" }}>
-                    <Link className="btn btn-ghost" to={`/backtest/run?result=${encodeURIComponent(row.result_id)}`}>
+                    <span>{formatUtc(row.completed_at_utc)}</span>
+                    <span>{row.timeframe ?? EM_DASH}</span>
+                  </div>
+                  <div
+                    style={{ display: "flex", alignItems: "center", gap: 8, whiteSpace: "nowrap" }}
+                  >
+                    <Link
+                      className="btn btn-ghost"
+                      to={`/backtest/run?result=${encodeURIComponent(row.result_id)}`}
+                    >
                       View
                     </Link>
                     {row.allowed_actions.soft_delete ? (
@@ -181,11 +187,34 @@ export function ResultsHistory() {
                         {armedDelete === row.result_id ? "Confirm delete" : "Delete"}
                       </button>
                     ) : null}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    <button
+                      type="button"
+                      className="history-arrow"
+                      aria-label={`Metrics for ${row.result_id}`}
+                      aria-expanded={isOpen}
+                      onClick={() => toggleExpanded(row.result_id)}
+                    >
+                      {isOpen ? "▲" : "▼"}
+                    </button>
+                  </div>
+                </div>
+                {/* Always rendered so the key metrics are addressable; CSS
+                    collapses the panel until the row is expanded. */}
+                <div className={`history-details${isOpen ? " open" : ""}`}>
+                  <table className="metrics-table">
+                    <tbody>
+                      {KEY_METRIC_COLUMNS.map((column) => (
+                        <tr key={column.key}>
+                          <th scope="row">{column.label}</th>
+                          <td>{formatMetricValue(row.key_metrics[column.key])}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
 

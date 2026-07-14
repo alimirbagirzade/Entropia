@@ -709,7 +709,20 @@ a:hover { text-decoration: underline; }
 .history-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; font-size: 13px; }
 .history-card { margin-bottom: 9px; border: 1px solid #4a8aa0; border-radius: 5px; background: #b9ecff; overflow: hidden; }
 .history-row { display: flex; align-items: center; justify-content: space-between; min-height: 38px; padding: 4px 10px; gap: 10px; font-size: 13px; color: #111; }
-.history-details { background: #fff; border-top: 1px solid #4a8aa0; padding: 12px; font-size: 13px; }
+.history-arrow {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  font-size: 12px;
+  cursor: pointer;
+  color: #000;
+  padding: 0;
+}
+/* Metrics collapse into the card body until the row is expanded (mockup). */
+.history-details { display: none; background: #fff; border-top: 1px solid #4a8aa0; padding: 12px; font-size: 13px; }
+.history-details.open { display: block; }
 
 /* ---- v18 Panel: management/logs card grid (mockup .panel-grid/.panel-card) ---- */
 .panel-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }

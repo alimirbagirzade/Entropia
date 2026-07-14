@@ -35,6 +35,16 @@ function mutationErrorText(error: unknown): string {
   return error instanceof Error ? error.message : "Request failed.";
 }
 
+// Pure presentation: turn a raw wire enum (snake_case) into a Title Case label
+// for the v18 status-summary card. Never alters the value sent to the server —
+// the raw enum still travels in every request body/header unchanged.
+function prettyToken(token: string): string {
+  return token
+    .split("_")
+    .map((part) => (part.length > 0 ? part[0].toUpperCase() + part.slice(1) : part))
+    .join(" ");
+}
+
 // Forward-only opaque keyset cursors (server contract): Prev replays the cursor
 // stack, the client never re-orders or fabricates a page.
 function useCursorStack() {
@@ -431,6 +441,39 @@ function RequestDetailBody({ detail }: { detail: PackageRequestDetail }) {
     .filter((key) => key.length > 0);
   return (
     <>
+      {/* v18 mockup PACKAGE STATUS side-panel — a status summary derived
+          strictly from the real request projection (no fabricated validation
+          results; the mockup's per-check rows have no backend equivalent). */}
+      <div className="cp-status-card" aria-label="Package status">
+        <div className="cp-status-row">
+          <span className="cp-status-label">Type</span>
+          <span>{prettyToken(detail.package_type)}</span>
+        </div>
+        <div className="cp-status-row">
+          <span className="cp-status-label">Version</span>
+          <span>{detail.request_version}</span>
+        </div>
+        <div className="cp-status-row">
+          <span className="cp-status-label">Request state</span>
+          <StatusBadge tone={requestStateTone(detail.state)} label={prettyToken(detail.state)} />
+        </div>
+        <div className="cp-status-row">
+          <span className="cp-status-label">TA Pre-Check</span>
+          <span>
+            {detail.precheck_fresh ? "Fresh" : "Stale"}
+            {scan ? ` · ${prettyToken(scan.status)}` : ""}
+          </span>
+        </div>
+        <div className="cp-status-row">
+          <span className="cp-status-label">Candidate</span>
+          <span>{detail.can_generate_candidate ? "Ready" : "Not ready"}</span>
+        </div>
+        <div className="cp-status-row">
+          <span className="cp-status-label">Draft</span>
+          <span>{detail.draft_revision_id ? "Present" : "—"}</span>
+        </div>
+      </div>
+
       <dl className="kv">
         <dt>Request</dt>
         <dd>

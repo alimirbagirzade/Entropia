@@ -715,6 +715,12 @@ a:hover { text-decoration: underline; }
 .panel-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
 .panel-card { border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-elev); padding: 14px; }
 
+/* ---- v18 Create Package: request status summary card (mockup .cp-state-card) ---- */
+.cp-status-card { border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-elev-2); padding: 12px; margin-bottom: 14px; }
+.cp-status-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 13px; padding: 5px 0; border-bottom: 1px solid var(--border); }
+.cp-status-row:last-child { border-bottom: none; }
+.cp-status-row > .cp-status-label { color: var(--text-dim); font-weight: 700; }
+
 /* ---- v18 Portfolio: numbered allocation cards (mockup .portfolio-grid/.portfolio-card) ---- */
 .portfolio-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
 .portfolio-card { border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-elev); padding: 14px; }

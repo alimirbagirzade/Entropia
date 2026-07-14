@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { MENU_BAR, type MenuGroup } from "./nav";
+import { MENU_BAR, type MenuGroup, type MenuLink } from "./nav";
 import { connectEvents, type SseStatus } from "@/lib/sse";
 import { useMe, useMeta } from "@/lib/hooks";
 import { useLogout, useSessionToken } from "@/lib/auth";
@@ -64,39 +64,82 @@ function AuthControl() {
   );
 }
 
-// One top-level menu: a direct link (Mainboard) or a hover dropdown (Edit, …).
-function Menu({ group, isAdmin, onAbout }: { group: MenuGroup; isAdmin: boolean; onAbout: () => void }) {
-  if (group.path) {
+// A dropdown leaf, or a nested submenu parent (v18 two-level tree). A leaf with
+// no path/action/submenu is a passive placeholder (mockup "Live Trade").
+function MenuItem({
+  item,
+  isAdmin,
+  onAbout,
+}: {
+  item: MenuLink;
+  isAdmin: boolean;
+  onAbout: () => void;
+}) {
+  const subItems = (item.items ?? []).filter((i) => !i.adminOnly || isAdmin);
+  if (subItems.length > 0) {
     return (
-      <NavLink to={group.path} end={group.path === "/"} className="menu menu-link">
-        {group.label}
+      <div className="item has-sub">
+        {item.label}
+        <div className="submenu">
+          {subItems.map((sub) => (
+            <MenuItem key={sub.label} item={sub} isAdmin={isAdmin} onAbout={onAbout} />
+          ))}
+        </div>
+      </div>
+    );
+  }
+  if (item.path) {
+    return (
+      <NavLink to={item.path} className="item">
+        {item.label}
       </NavLink>
     );
   }
+  if (item.action === "about") {
+    return (
+      <button type="button" className="item" onClick={onAbout}>
+        {item.label}
+      </button>
+    );
+  }
+  return (
+    <span className="item" aria-disabled="true">
+      {item.label}
+    </span>
+  );
+}
 
+// One top-level menu: a hover dropdown, optionally with a clickable title
+// (Mainboard opens the index on click and reveals its dropdown on hover).
+function Menu({ group, isAdmin, onAbout }: { group: MenuGroup; isAdmin: boolean; onAbout: () => void }) {
   const items = (group.items ?? []).filter((i) => !i.adminOnly || isAdmin);
-  if (items.length === 0) return null;
+  const blue = group.accent === "blue";
+
+  if (items.length === 0) {
+    return group.path ? (
+      <NavLink
+        to={group.path}
+        end={group.path === "/"}
+        className={`menu menu-link${blue ? " menu-blue" : ""}`}
+      >
+        {group.label}
+      </NavLink>
+    ) : null;
+  }
 
   return (
-    <div className={`menu${group.accent === "blue" ? " menu-blue" : ""}`}>
-      {group.label}
-      <div className={`dropdown${group.accent === "blue" ? " dropdown-blue" : ""}`}>
-        {items.map((item) =>
-          item.path ? (
-            <NavLink key={item.label} to={item.path} className="item">
-              {item.label}
-            </NavLink>
-          ) : (
-            <button
-              key={item.label}
-              type="button"
-              className="item"
-              onClick={() => item.action === "about" && onAbout()}
-            >
-              {item.label}
-            </button>
-          )
-        )}
+    <div className={`menu${blue ? " menu-blue" : ""}`}>
+      {group.path ? (
+        <NavLink to={group.path} end={group.path === "/"} className="menu-title">
+          {group.label}
+        </NavLink>
+      ) : (
+        group.label
+      )}
+      <div className={`dropdown${blue ? " dropdown-blue" : ""}`}>
+        {items.map((item) => (
+          <MenuItem key={item.label} item={item} isAdmin={isAdmin} onAbout={onAbout} />
+        ))}
       </div>
     </div>
   );

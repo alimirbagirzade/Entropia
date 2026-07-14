@@ -157,6 +157,31 @@ a:hover { text-decoration: underline; }
 .dropdown-blue .item { background: #00a9e8; color: #fff; }
 .dropdown-blue .item:hover { background: #f28c28; }
 
+/* Second-level submenu (v18 nested menu tree). */
+.item.has-sub { position: relative; padding-right: 22px; }
+.item.has-sub::after { content: "›"; position: absolute; right: 8px; top: 50%; transform: translateY(-50%); }
+.submenu {
+  display: none;
+  position: absolute;
+  top: -1px;
+  left: 100%;
+  min-width: 220px;
+  background: #8f8f8f;
+  border: 1px solid #777;
+  z-index: 60;
+}
+.item.has-sub:hover > .submenu { display: block; }
+.dropdown-blue .submenu { background: #00a9e8; border-color: #007fb0; }
+.dropdown-blue .submenu .item { background: #00a9e8; color: #fff; }
+.dropdown-blue .submenu .item:hover { background: #f28c28; }
+/* Clickable menu title (Mainboard) that also carries a hover dropdown. */
+.menu > .menu-title { color: inherit; text-decoration: none; font: inherit; }
+.menu > .menu-title:hover { text-decoration: none; }
+/* A passive (unbuilt) menu leaf — shown but not clickable (mockup Live Trade). */
+.item[aria-disabled="true"] { cursor: default; opacity: 0.7; }
+.item[aria-disabled="true"]:hover { background: inherit; }
+.dropdown-blue .item[aria-disabled="true"]:hover { background: #00a9e8; }
+
 .workspace {
   flex: 1;
   background: #ffffff;
@@ -662,3 +687,54 @@ a:hover { text-decoration: underline; }
 .rationale-card-row:last-of-type { border-bottom: none; }
 .rationale-card-row b { color: var(--text-dim); font-weight: 700; }
 .rationale-card-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+
+/* ---- v18 Arrange Metrics: metric-option grid (mockup .metrics-panel) ---- */
+.metrics-panel { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+.metric-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elev);
+  padding: 10px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.metric-option input { margin-top: 2px; }
+.metric-option .metric-meta { display: block; font-size: 11px; color: var(--text-dim); margin-top: 3px; }
+.locked-note { color: var(--down); font-weight: 700; }
+
+/* ---- v18 Results History: blue expandable cards (mockup .history-card) ---- */
+.history-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; font-size: 13px; }
+.history-card { margin-bottom: 9px; border: 1px solid #4a8aa0; border-radius: 5px; background: #b9ecff; overflow: hidden; }
+.history-row { display: flex; align-items: center; justify-content: space-between; min-height: 38px; padding: 4px 10px; gap: 10px; font-size: 13px; color: #111; }
+.history-details { background: #fff; border-top: 1px solid #4a8aa0; padding: 12px; font-size: 13px; }
+
+/* ---- v18 Panel: management/logs card grid (mockup .panel-grid/.panel-card) ---- */
+.panel-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+.panel-card { border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-elev); padding: 14px; }
+
+/* ---- v18 Package pool: sectioned rows (mockup .package-row/.package-section-title) ---- */
+.package-section-title {
+  font-size: 10.5px;
+  font-weight: 900;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+  margin: 0 0 6px;
+}
+.package-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 30px;
+  border: 1px solid #777;
+  border-radius: var(--radius);
+  background: var(--bg-elev);
+  padding: 3px 8px;
+  gap: 10px;
+  font-size: 12px;
+}

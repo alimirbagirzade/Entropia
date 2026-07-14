@@ -124,38 +124,33 @@ function ProfileEditor({
         <h3 id="registry-h" style={{ marginTop: 0 }}>
           Metric registry
         </h3>
-        <table className="metrics-table">
-          <thead>
-            <tr>
-              <th scope="col">Show</th>
-              <th scope="col">Metric</th>
-              <th scope="col">Unit</th>
-              <th scope="col">Availability</th>
-              <th scope="col">Description</th>
-            </tr>
-          </thead>
-          <tbody>
-            {definitions.map((definition) => (
-              <tr key={definition.metric_code}>
-                <td>
-                  <input
-                    type="checkbox"
-                    aria-label={`Show ${definition.label}`}
-                    checked={draft.has(definition.metric_code)}
-                    // A non-selectable (future/experimental) metric can never be
-                    // chosen; a locked profile refuses edits until Unlock.
-                    disabled={!definition.selectable || locked}
-                    onChange={() => toggle(definition.metric_code)}
-                  />
-                </td>
-                <td>{definition.label}</td>
-                <td>{definition.unit ?? "—"}</td>
-                <td>{definition.availability_status}</td>
-                <td>{definition.description ?? "—"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="metrics-panel">
+          {definitions.map((definition) => (
+            <label className="metric-option" key={definition.metric_code}>
+              <input
+                type="checkbox"
+                aria-label={`Show ${definition.label}`}
+                checked={draft.has(definition.metric_code)}
+                // A non-selectable (future/experimental) metric can never be
+                // chosen; a locked profile refuses edits until Unlock.
+                disabled={!definition.selectable || locked}
+                onChange={() => toggle(definition.metric_code)}
+              />
+              <span>
+                {definition.label}
+                <span className="metric-meta">
+                  {definition.unit ?? "—"} · {definition.availability_status}
+                  {definition.description ? ` — ${definition.description}` : ""}
+                </span>
+              </span>
+            </label>
+          ))}
+        </div>
+        {locked ? (
+          <p className="locked-note" style={{ marginTop: 12 }}>
+            Metrics are locked — Unlock to edit the selection.
+          </p>
+        ) : null}
 
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 14 }}>
           <button

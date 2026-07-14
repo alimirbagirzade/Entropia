@@ -90,6 +90,21 @@ function routesFor(permissions: typeof OWNER_PERMISSIONS) {
     "GET /rationale-families": FAMILIES_PAGE,
     "GET /library": { data: [{ ...ROW, permissions }], meta: { cursor: null, has_more: false } },
     "POST /library/pkg_own/deprecate": { entity_id: "pkg_own", lifecycle_state: "deprecated" },
+    "POST /library/pkg_own/derive": {
+      entity_id: "pkg_derived",
+      current_revision_id: "rev_d1",
+      package_kind: "indicator",
+      name: "My Copy",
+      derived_from_revision_id: "rev_1",
+      source_entity_id: "pkg_own",
+    },
+    "POST /library/pkg_own/revisions": {
+      entity_id: "pkg_own",
+      revision_id: "rev_2",
+      revision_no: 3,
+      current_revision_id: "rev_2",
+      base_revision_id: "rev_1",
+    },
     "DELETE /library/pkg_own": {},
   };
 }
@@ -184,5 +199,97 @@ describe("Package Library lifecycle actions (GAP-06)", () => {
     expect(await screen.findByText("Permissions (server-computed)")).toBeInTheDocument();
     expect(screen.queryByText("Lifecycle actions")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Deprecate" })).not.toBeInTheDocument();
+  });
+});
+
+// GAP-06 (epic R2a): Derive + Create Revision revision-plane actions (doc 08 §7).
+// Both dispatch a POST with a fresh Idempotency-Key; Create Revision carries the
+// BODY-form expected_head_revision_id OCC (the detail current_revision_id) and no
+// If-Match. Derive has no OCC token (it creates a new root).
+const NO_REVISION_PERMISSIONS = {
+  ...OWNER_PERMISSIONS,
+  can_derive: false,
+  can_create_revision: false,
+};
+
+async function openRevisionActions() {
+  await screen.findByText("Owned RSI");
+  fireEvent.click(screen.getAllByRole("button", { name: "Detail" })[0]);
+  await screen.findByText("Revision actions");
+}
+
+describe("Package Library revision actions (R2a)", () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("shows Derive + Create Revision when the server marks the flags true", async () => {
+    stubApi(routesFor(OWNER_PERMISSIONS));
+    renderPage();
+    await openRevisionActions();
+
+    expect(screen.getByRole("button", { name: "Derive" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create Revision" })).toBeInTheDocument();
+  });
+
+  it("dispatches a Derive POST with an Idempotency-Key, no If-Match, and the source revision", async () => {
+    const fetchMock = stubApi(routesFor(OWNER_PERMISSIONS));
+    renderPage();
+    await openRevisionActions();
+
+    fireEvent.change(screen.getByLabelText(/Derive as/), { target: { value: "My Copy" } });
+    fireEvent.click(screen.getByRole("button", { name: "Derive" }));
+
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find(
+        ([url, init]) =>
+          String(url).includes("/library/pkg_own/derive") &&
+          (init?.method ?? "").toUpperCase() === "POST",
+      );
+      expect(call).toBeDefined();
+      const headers = (call?.[1]?.headers ?? {}) as Record<string, string>;
+      expect(headers["Idempotency-Key"]).toBeTruthy();
+      expect(headers["If-Match"]).toBeUndefined();
+      const body = JSON.parse(String(call?.[1]?.body ?? "{}"));
+      expect(body.source_revision_id).toBe("rev_1"); // the current head revision
+      expect(body.name).toBe("My Copy");
+    });
+    // Success surfaces the new derived root id.
+    expect(await screen.findByText(/pkg_derived/)).toBeInTheDocument();
+  });
+
+  it("dispatches a Create Revision POST carrying the BODY-form expected_head_revision_id OCC", async () => {
+    const fetchMock = stubApi(routesFor(OWNER_PERMISSIONS));
+    renderPage();
+    await openRevisionActions();
+
+    fireEvent.click(screen.getByRole("button", { name: "Create Revision" }));
+
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find(
+        ([url, init]) =>
+          String(url).includes("/library/pkg_own/revisions") &&
+          (init?.method ?? "").toUpperCase() === "POST",
+      );
+      expect(call).toBeDefined();
+      const headers = (call?.[1]?.headers ?? {}) as Record<string, string>;
+      expect(headers["Idempotency-Key"]).toBeTruthy();
+      expect(headers["If-Match"]).toBeUndefined(); // OCC travels in the body, not If-Match
+      const body = JSON.parse(String(call?.[1]?.body ?? "{}"));
+      expect(body.expected_head_revision_id).toBe("rev_1");
+    });
+  });
+
+  it("hides the revision actions when the server denies both flags", async () => {
+    stubApi(routesFor(NO_REVISION_PERMISSIONS));
+    renderPage();
+    await screen.findByText("Owned RSI");
+    fireEvent.click(screen.getAllByRole("button", { name: "Detail" })[0]);
+
+    expect(await screen.findByText("Permissions (server-computed)")).toBeInTheDocument();
+    expect(screen.queryByText("Revision actions")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Derive" })).not.toBeInTheDocument();
   });
 });

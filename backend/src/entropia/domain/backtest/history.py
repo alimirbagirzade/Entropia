@@ -148,6 +148,50 @@ def decode_cursor(cursor: str, *, sort: HistorySort) -> Cursor:
 
 _NOT_AVAILABLE = "Not available"
 
+# Mainboard item kind pinned as the internal, package-backed strategy object
+# (doc 01 §5.2); trading_signal / trade_log are the EXTERNAL work objects.
+_STRATEGY_KIND = "strategy"
+_EXTERNAL_KINDS: frozenset[str] = frozenset({"trading_signal", "trade_log"})
+
+
+def _pinned_item_refs(manifest: dict[str, Any]) -> list[dict[str, Any]]:
+    """Project the manifest's pinned ``mainboard_items`` into immutable refs.
+
+    Read-only over the immutable manifest — the exact (kind, root, revision) tuples
+    the run pinned (never re-resolved from the current Mainboard, doc 16 §15). Order
+    is preserved from the manifest, which already sorts them stably (doc 15 §9.2).
+    """
+    raw = manifest.get("mainboard_items")
+    items = raw if isinstance(raw, list) else []
+    refs: list[dict[str, Any]] = []
+    for entry in items:
+        if not isinstance(entry, dict):
+            continue
+        refs.append(
+            {
+                "item_id": entry.get("item_id"),
+                "item_kind": entry.get("item_kind"),
+                "root_id": entry.get("root_id"),
+                "revision_id": entry.get("selected_revision_id"),
+                "position": entry.get("position"),
+                "enabled": entry.get("enabled"),
+            }
+        )
+    return refs
+
+
+def _allocation_plan_revision_id(manifest: dict[str, Any]) -> str | None:
+    """The pinned Portfolio Allocation Plan revision id, if the run pinned one.
+
+    Sourced from the immutable ``capital_execution`` snapshot (doc 14 §9.1); ``None``
+    when the run had no allocation plan (independent mode) — honest, never blank.
+    """
+    capital = manifest.get("capital_execution")
+    if not isinstance(capital, dict):
+        return None
+    value = capital.get("plan_revision_id")
+    return value if isinstance(value, str) else None
+
 
 def extract_manifest_context(manifest: dict[str, Any] | None) -> dict[str, Any]:
     """Human-readable comparison context from a result's pinned manifest snapshot.
@@ -155,27 +199,80 @@ def extract_manifest_context(manifest: dict[str, Any] | None) -> dict[str, Any]:
     Only policy-permitted, immutable fields are surfaced (doc 16 §9.4). A field the
     V1 manifest does not separately pin (e.g. a dedicated Market Data revision) is
     left ``None`` so the caller renders "Not available" — never a fabricated 0/blank
-    (doc 16 §4, §8.2).
+    (doc 16 §4, §8.2). The pinned ``strategy_revision_refs`` are the transitive
+    carrier of the Market Data revision (pinned inside the strategy config), so a
+    Market Data change surfaces as a differing strategy revision (doc 16 §8.3,
+    RH-09).
     """
     manifest = manifest if isinstance(manifest, dict) else {}
     identity = manifest.get("identity")
     identity = identity if isinstance(identity, dict) else {}
+    refs = _pinned_item_refs(manifest)
     return {
         "engine_version": identity.get("engine_version"),
         "execution_key": manifest.get("execution_key"),
         "composition_fingerprint": identity.get("composition_fingerprint"),
         "allocation_context": manifest.get("capital_execution"),
+        "portfolio_allocation_plan_revision_id": _allocation_plan_revision_id(manifest),
+        "strategy_revision_refs": [r for r in refs if r.get("item_kind") == _STRATEGY_KIND],
+        "artifact_context": manifest.get("result_artifact_context"),
         # Market Data revisions are pinned inside strategy configs, not separately
-        # in the V1 manifest — honestly surfaced as "Not available" (doc 16 §4).
+        # in the V1 manifest — honestly surfaced as "Not available" (doc 16 §4); a
+        # change is flagged transitively via ``strategy_revision_refs``.
         "market_data_revision": None,
+    }
+
+
+def build_manifest_excerpt(
+    manifest: dict[str, Any] | None,
+    *,
+    result_id: str,
+    completed_at_utc: str | None,
+    artifact_availability: dict[str, Any],
+) -> dict[str, Any]:
+    """Immutable ``ResultManifestExcerptDTO`` from the pinned manifest (doc 16 §9.4).
+
+    Read-only over the immutable manifest snapshot; never re-resolves the current
+    Mainboard, latest package names, or cached form state (doc 16 §8.2, §15). Fields
+    the V1 manifest does not separately pin (``package_revision_refs``,
+    ``market_data_revision``, ``research_data_revision_refs``) are honestly left
+    empty/``None`` — they live inside the pinned strategy config, transitively
+    carried by ``strategy_revision_refs`` (doc 16 §4, §8.2).
+    """
+    manifest = manifest if isinstance(manifest, dict) else {}
+    identity = manifest.get("identity")
+    identity = identity if isinstance(identity, dict) else {}
+    refs = _pinned_item_refs(manifest)
+    return {
+        "result_id": result_id,
+        "composition_snapshot_id": identity.get("composition_snapshot_id"),
+        "strategy_revision_refs": [r for r in refs if r.get("item_kind") == _STRATEGY_KIND],
+        "external_work_refs": [r for r in refs if r.get("item_kind") in _EXTERNAL_KINDS],
+        # Not separately pinned in the V1 manifest — honest empty/null (doc 16 §4).
+        "package_revision_refs": [],
+        "market_data_revision": None,
+        "research_data_revision_refs": [],
+        "portfolio_allocation_plan_revision_id": _allocation_plan_revision_id(manifest),
+        "execution_context": {
+            "execution_key": manifest.get("execution_key"),
+            "composition_fingerprint": identity.get("composition_fingerprint"),
+            "capital_execution": manifest.get("capital_execution"),
+        },
+        "engine_contract_version": identity.get("engine_version"),
+        "artifact_context": manifest.get("result_artifact_context"),
+        "completed_at_utc": completed_at_utc,
+        "artifact_availability": artifact_availability,
     }
 
 
 # Order of the comparison rows the UI reads (doc 16 §8.3 warning fields).
 _COMPARE_FIELDS: tuple[str, ...] = (
     "market_data_revision",
+    "strategy_revision_refs",
     "engine_version",
     "allocation_context",
+    "portfolio_allocation_plan_revision_id",
+    "artifact_context",
     "execution_key",
     "composition_fingerprint",
 )
@@ -211,6 +308,7 @@ __all__ = [
     "Cursor",
     "HistorySort",
     "SortSpec",
+    "build_manifest_excerpt",
     "decode_cursor",
     "diff_manifest_contexts",
     "encode_cursor",

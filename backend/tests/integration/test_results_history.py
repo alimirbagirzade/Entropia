@@ -21,6 +21,7 @@ import pytest
 
 from entropia.application.queries import mainboard as mb_query
 from entropia.application.queries import results_history as history_query
+from entropia.application.queries.backtest_run import get_backtest_result
 from entropia.domain.backtest.enums import MetricAvailability
 from entropia.domain.identity import Actor
 from entropia.domain.lifecycle.enums import PrincipalType, Role
@@ -29,6 +30,7 @@ from entropia.infrastructure.postgres.models import (
     MetricValueRow,
     Principal,
     ResultManifestSnapshot,
+    ResultSummary,
 )
 from entropia.shared.errors import (
     AccessDeniedError,
@@ -364,3 +366,183 @@ async def test_result_missing_sort_metric_row_stays_indexed_in_null_tail(session
     ids = _ids(page)
     assert set(ids) == {"res_a", "res_b", "res_c"}  # none dropped
     assert ids[0] == "res_a"  # the only computed romad (2.0) leads; res_b/res_c null tail
+
+
+# --------------------------------------------------------------------------- #
+# S7 — manifest excerpt enrichment (doc 16 §8.2/§9.4, RH-09)                   #
+# --------------------------------------------------------------------------- #
+
+
+async def _seed_rich_result(
+    session,
+    *,
+    workspace_id: str,
+    result_id: str,
+    strategy_revision_id: str,
+    plan_revision_id: str,
+    symbol: str | None,
+    order_index: int,
+) -> None:
+    """A Result whose pinned manifest carries real mainboard item + allocation refs."""
+    session.add(
+        BacktestResult(
+            result_id=result_id,
+            run_id=f"run_{result_id}",
+            manifest_id=f"man_{result_id}",
+            manifest_hash="b" * 64,
+            workspace_entity_id=workspace_id,
+            composition_fingerprint=f"fp_{result_id}",
+            engine_version="backtest-engine-v2-stub",
+            deletion_state="active",
+            row_version=1,
+            created_by_principal_id="user_1",
+            created_at=_BASE_TIME + timedelta(hours=order_index),
+        )
+    )
+    await session.flush()
+    session.add(
+        ResultSummary(
+            summary_id=f"sum_{result_id}",
+            result_id=result_id,
+            symbol=symbol,
+            timeframe="1h",
+            period_start="2026-01-01",
+            period_end="2026-02-01",
+            total_trades=7,
+            headline={"net_profit": "42.0"},
+        )
+    )
+    session.add(
+        ResultManifestSnapshot(
+            snapshot_id=f"snap_{result_id}",
+            result_id=result_id,
+            manifest_hash="b" * 64,
+            execution_key=f"ek_{result_id}",
+            engine_version="backtest-engine-v2-stub",
+            manifest={
+                "identity": {
+                    "engine_version": "backtest-engine-v2-stub",
+                    "composition_fingerprint": f"fp_{result_id}",
+                    "composition_snapshot_id": f"snapid_{result_id}",
+                },
+                "mainboard_items": [
+                    {
+                        "item_id": f"it_{result_id}",
+                        "item_kind": "strategy",
+                        "root_id": "strat_root",
+                        "selected_revision_id": strategy_revision_id,
+                        "position": 0,
+                        "enabled": True,
+                    }
+                ],
+                "capital_execution": {"enabled": True, "plan_revision_id": plan_revision_id},
+                "result_artifact_context": {
+                    "metric_set_version": "metric-set-v1",
+                    "output_artifact_profile": "standard-v1",
+                },
+                "execution_key": f"ek_{result_id}",
+            },
+        )
+    )
+    await session.flush()
+
+
+async def test_detail_excerpt_reads_real_pinned_refs_from_manifest(session) -> None:
+    await _seed_principals(session)
+    workspace_id = await _workspace(session, USER1)
+    await _seed_rich_result(
+        session,
+        workspace_id=workspace_id,
+        result_id="res_rich",
+        strategy_revision_id="strat_rev_9",
+        plan_revision_id="plan_rev_4",
+        symbol="BTCUSDT",
+        order_index=0,
+    )
+    await session.commit()
+
+    detail = await get_backtest_result(session, USER1, result_id="res_rich")
+    excerpt = detail["manifest_excerpt"]
+    assert excerpt["result_id"] == "res_rich"
+    assert excerpt["composition_snapshot_id"] == "snapid_res_rich"
+    assert [r["revision_id"] for r in excerpt["strategy_revision_refs"]] == ["strat_rev_9"]
+    assert excerpt["portfolio_allocation_plan_revision_id"] == "plan_rev_4"
+    assert excerpt["engine_contract_version"] == "backtest-engine-v2-stub"
+    assert excerpt["artifact_context"]["metric_set_version"] == "metric-set-v1"
+    # Not separately pinned -> honest empty/null (never fabricated).
+    assert excerpt["package_revision_refs"] == []
+    assert excerpt["market_data_revision"] is None
+
+
+async def test_history_row_market_data_summary_from_pinned_symbol(session) -> None:
+    await _seed_principals(session)
+    workspace_id = await _workspace(session, USER1)
+    await _seed_rich_result(
+        session,
+        workspace_id=workspace_id,
+        result_id="res_sym",
+        strategy_revision_id="strat_rev_1",
+        plan_revision_id="plan_rev_1",
+        symbol="ETHUSDT",
+        order_index=0,
+    )
+    await session.commit()
+
+    page = await history_query.list_backtest_results(session, USER1)
+    row = next(item for item in page["items"] if item["result_id"] == "res_sym")
+    assert row["market_data_revision_summary"] == {"symbol": "ETHUSDT"}
+
+
+async def test_history_row_market_data_summary_absent_symbol_is_none(session) -> None:
+    await _seed_principals(session)
+    workspace_id = await _workspace(session, USER1)
+    await _seed_rich_result(
+        session,
+        workspace_id=workspace_id,
+        result_id="res_nosym",
+        strategy_revision_id="strat_rev_1",
+        plan_revision_id="plan_rev_1",
+        symbol=None,  # no pinned instrument -> honest null, never fabricated
+        order_index=0,
+    )
+    await session.commit()
+
+    page = await history_query.list_backtest_results(session, USER1)
+    row = next(item for item in page["items"] if item["result_id"] == "res_nosym")
+    assert row["market_data_revision_summary"] is None
+
+
+async def test_compare_flags_differing_strategy_revision(session) -> None:
+    """Two results pinning DIFFERENT strategy revisions (the transitive carrier of
+    the Market Data revision) surface as a flagged strategy_revision_refs diff — the
+    RH-09 warning the old None-hardcoded context could never raise."""
+    await _seed_principals(session)
+    workspace_id = await _workspace(session, USER1)
+    await _seed_rich_result(
+        session,
+        workspace_id=workspace_id,
+        result_id="res_x",
+        strategy_revision_id="strat_rev_A",
+        plan_revision_id="plan_rev_1",
+        symbol="BTCUSDT",
+        order_index=0,
+    )
+    await _seed_rich_result(
+        session,
+        workspace_id=workspace_id,
+        result_id="res_y",
+        strategy_revision_id="strat_rev_B",  # different pinned strategy revision
+        plan_revision_id="plan_rev_1",
+        symbol="BTCUSDT",
+        order_index=1,
+    )
+    await session.commit()
+
+    compare = await history_query.compare_backtest_results(
+        session, USER1, result_ids=["res_x", "res_y"]
+    )
+    assert compare["context_differs"] is True
+    assert compare["context"]["fields"]["strategy_revision_refs"]["differs"] is True
+    # market_data_revision itself stays honestly "Not available" (not separately pinned).
+    assert compare["context"]["fields"]["market_data_revision"]["differs"] is False
+    assert compare["context"]["fields"]["market_data_revision"]["a"] == "Not available"

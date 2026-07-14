@@ -14,6 +14,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from entropia.domain.backtest.history import build_manifest_excerpt
 from entropia.domain.identity import Actor
 from entropia.domain.identity.policy import ensure_can_view, require_authenticated
 from entropia.domain.lifecycle.enums import DeletionState
@@ -78,6 +79,7 @@ async def get_backtest_result(
     manifest_snapshot = await bt_repo.get_manifest_snapshot(session, result_id)
     counts = await bt_repo.count_artifacts(session, result_id)
 
+    manifest = manifest_snapshot.manifest if manifest_snapshot is not None else None
     return {
         "result_id": result.result_id,
         "run_id": result.run_id,
@@ -88,7 +90,25 @@ async def get_backtest_result(
         "summary": _summary_projection(summary),
         "metrics": [_metric_projection(metric) for metric in metrics],
         "manifest": _manifest_projection(manifest_snapshot),
+        "manifest_excerpt": build_manifest_excerpt(
+            manifest if isinstance(manifest, dict) else None,
+            result_id=result.result_id,
+            completed_at_utc=_iso(result.created_at),
+            artifact_availability=_artifact_availability(counts),
+        ),
         "artifact_counts": counts,
+    }
+
+
+def _artifact_availability(counts: dict[str, Any]) -> dict[str, Any]:
+    """Read-only artifact availability from stored counts (doc 16 §9.4).
+
+    Honest: presence is derived from the persisted count map — never a fabricated
+    zero for an artifact class the result never produced."""
+    normalized = counts if isinstance(counts, dict) else {}
+    return {
+        "counts": normalized,
+        "any_available": any(isinstance(v, int) and v > 0 for v in normalized.values()),
     }
 
 

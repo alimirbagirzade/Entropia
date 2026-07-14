@@ -26,6 +26,25 @@ const RESULT: BacktestResultDetail = {
     },
   ],
   manifest: null,
+  manifest_excerpt: {
+    result_id: "res_9",
+    composition_snapshot_id: null,
+    strategy_revision_refs: [],
+    external_work_refs: [],
+    package_revision_refs: [],
+    market_data_revision: null,
+    research_data_revision_refs: [],
+    portfolio_allocation_plan_revision_id: null,
+    execution_context: {
+      execution_key: null,
+      composition_fingerprint: null,
+      capital_execution: null,
+    },
+    engine_contract_version: null,
+    artifact_context: null,
+    completed_at_utc: null,
+    artifact_availability: { counts: {}, any_available: false },
+  },
   artifact_counts: {},
 };
 

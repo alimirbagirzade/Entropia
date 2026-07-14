@@ -105,6 +105,34 @@ const RESULT_DETAIL = {
     engine_version: "backtest-engine-v2-position-size-limits",
     pinned_item_count: 2,
   },
+  manifest_excerpt: {
+    result_id: "res_1",
+    composition_snapshot_id: "snap_1",
+    strategy_revision_refs: [
+      {
+        item_id: "it_1",
+        item_kind: "strategy",
+        root_id: "strat_root",
+        revision_id: "strat_rev_9",
+        position: 0,
+        enabled: true,
+      },
+    ],
+    external_work_refs: [],
+    package_revision_refs: [],
+    market_data_revision: null,
+    research_data_revision_refs: [],
+    portfolio_allocation_plan_revision_id: "plan_rev_4",
+    execution_context: {
+      execution_key: "exec_1",
+      composition_fingerprint: "fp_1",
+      capital_execution: { enabled: true, plan_revision_id: "plan_rev_4" },
+    },
+    engine_contract_version: "backtest-engine-v2-position-size-limits",
+    artifact_context: { metric_set_version: "metric-set-v1" },
+    completed_at_utc: "2026-03-01T00:00:00+00:00",
+    artifact_availability: { counts: { trades: 42 }, any_available: true },
+  },
   artifact_counts: { trades: 42, equity_points: 1000 },
 };
 
@@ -210,6 +238,12 @@ describe("RUN & Backtest Results page", () => {
     expect(screen.getByText("BTCUSDT")).toBeInTheDocument();
     expect(screen.getByText("res_1")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "← Results History" })).toBeInTheDocument();
+    // S7: the immutable manifest excerpt surfaces the pinned strategy revision +
+    // allocation plan; the not-separately-pinned Market Data revision is honest.
+    expect(screen.getByRole("heading", { name: "Manifest excerpt" })).toBeInTheDocument();
+    expect(screen.getByText("strat_root @ strat_rev_9")).toBeInTheDocument();
+    expect(screen.getByText("plan_rev_4")).toBeInTheDocument();
+    expect(screen.getByText("Not separately pinned")).toBeInTheDocument();
   });
 
   it("shows failure details and retries into a fresh run", async () => {

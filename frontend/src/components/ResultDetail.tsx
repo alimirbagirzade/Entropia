@@ -17,6 +17,8 @@ import {
   type DiagnosticContent,
   type DiagnosticRow,
   type ExportFormatValue,
+  type ManifestItemRef,
+  type ResultManifestExcerpt,
   type TradeLedgerRow,
 } from "@/lib/backtest";
 
@@ -126,6 +128,8 @@ export function ResultDetail({ result }: { result: BacktestResultDetail }) {
         ) : null}
       </dl>
 
+      <ManifestExcerptSection excerpt={result.manifest_excerpt} />
+
       {artifactEntries.length > 0 ? (
         <>
           <h4>Artifacts</h4>
@@ -150,6 +154,74 @@ const placeholderStyle = {
   color: "var(--text-dim)",
   fontSize: 13,
 } as const;
+
+const NOT_PINNED = "Not separately pinned";
+
+function refLabel(ref: ManifestItemRef): string {
+  return `${ref.root_id ?? EM_DASH} @ ${ref.revision_id ?? EM_DASH}`;
+}
+
+// Immutable ResultManifestExcerpt (doc 16 §8.2/§9.4): pinned strategy/external
+// refs + allocation/execution context + artifact availability, read ONLY from the
+// result manifest — never re-resolved from the current Mainboard (§15). Fields the
+// V1 manifest does not separately pin (package/market-data/research-data) render an
+// honest "Not separately pinned", never a fabricated ref (doc 16 §4).
+function ManifestExcerptSection({ excerpt }: { excerpt: ResultManifestExcerpt }) {
+  const strategyRefs = excerpt.strategy_revision_refs;
+  const externalRefs = excerpt.external_work_refs;
+  return (
+    <>
+      <h4>Manifest excerpt</h4>
+      <dl className="kv">
+        <dt>Composition snapshot</dt>
+        <dd style={hashStyle}>{excerpt.composition_snapshot_id ?? EM_DASH}</dd>
+        <dt>Engine contract</dt>
+        <dd>{excerpt.engine_contract_version ?? EM_DASH}</dd>
+        <dt>Strategy revisions</dt>
+        <dd>
+          {strategyRefs.length === 0 ? (
+            NOT_PINNED
+          ) : (
+            <ul style={{ margin: 0, paddingLeft: 18 }}>
+              {strategyRefs.map((ref) => (
+                <li key={ref.item_id ?? refLabel(ref)} style={hashStyle}>
+                  {refLabel(ref)}
+                </li>
+              ))}
+            </ul>
+          )}
+        </dd>
+        {externalRefs.length > 0 ? (
+          <>
+            <dt>External work</dt>
+            <dd>
+              <ul style={{ margin: 0, paddingLeft: 18 }}>
+                {externalRefs.map((ref) => (
+                  <li key={ref.item_id ?? refLabel(ref)} style={hashStyle}>
+                    {`${ref.item_kind ?? EM_DASH} · ${refLabel(ref)}`}
+                  </li>
+                ))}
+              </ul>
+            </dd>
+          </>
+        ) : null}
+        <dt>Allocation plan revision</dt>
+        <dd style={hashStyle}>
+          {excerpt.portfolio_allocation_plan_revision_id ?? NOT_PINNED}
+        </dd>
+        <dt>Market Data revision</dt>
+        <dd>{excerpt.market_data_revision ?? NOT_PINNED}</dd>
+        <dt>Artifacts available</dt>
+        <dd>{excerpt.artifact_availability.any_available ? "Yes" : "No"}</dd>
+      </dl>
+      <p className="page-sub" style={{ marginTop: 0 }}>
+        Read only from the immutable result manifest — package, Market Data and
+        Research Data revisions are pinned inside the strategy config, surfaced
+        transitively via the strategy revisions above (doc 16 §4, §8.2).
+      </p>
+    </>
+  );
+}
 
 // V18 chart placeholders (doc 15 §3.2, §13): the renderer is a deliberate Future
 // boundary — the page shows an explicit placeholder, NEVER a fabricated chart or

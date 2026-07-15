@@ -42,8 +42,8 @@ from entropia.shared.errors import (
     BaselineAssetNotFound,
     BaselineMetadataInvalid,
     BaselineParseFailed,
-    BaselineRequired,
     FileTypeNotAllowedError,
+    ValidationRequired,
 )
 
 pytestmark = pytest.mark.integration
@@ -277,11 +277,17 @@ async def test_equivalence_claim_without_baseline_blocks_approve(
     detail = await cp_repo.get_request_detail(session, request_id)
     assert detail is not None and detail.claims_equivalence is True
 
-    await cp_cmd.start_package_validation_run(session, OWNER, request_id=request_id)
+    # F-13: with no baseline, the real_market_data + baseline_comparison checks are
+    # BLOCKED, so validation itself fails (a blocked mandatory check is not a pass) and
+    # the request never reaches eligible_for_approval.
+    validated = await cp_cmd.start_package_validation_run(session, OWNER, request_id=request_id)
     await session.commit()
+    assert validated["status"] == "failed"
+    statuses = {c["check"]: c["status"] for c in validated["checks"]}
+    assert statuses["real_market_data"] == "blocked"
+    assert statuses["baseline_comparison"] == "blocked"
 
-    # Validation passed but no baseline -> the mode-aware gate refuses publish.
-    with pytest.raises(BaselineRequired):
+    with pytest.raises(ValidationRequired):
         await cp_cmd.approve_and_publish(session, ADMIN, request_id=request_id)
 
 

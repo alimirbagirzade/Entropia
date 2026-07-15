@@ -422,6 +422,86 @@ function OutsourceSignalCard() {
 }
 
 // --------------------------------------------------------------------------- //
+// Add Package popover: a small launcher in the STRATEGIES header (v18 mockup     //
+// .package-picker-popover). It routes to the real attach flows — Outsource       //
+// Signal (TS/TL external draft) or a generic work object — and links to Create   //
+// Package. There is no library "pick an existing package" list because the       //
+// backend exposes no attachable-package list endpoint; the popover launches the  //
+// flows that actually attach to the composition.                                 //
+// --------------------------------------------------------------------------- //
+
+type AddMode = null | "outsource" | "advanced";
+
+function AddPackagePopover({ mode, onPick }: { mode: AddMode; onPick: (mode: AddMode) => void }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="cp-popover-anchor">
+      <button
+        type="button"
+        className="btn btn-primary"
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+      >
+        + Add Package
+      </button>
+      {open && (
+        <>
+          <button
+            type="button"
+            aria-label="Close Add Package"
+            onClick={() => setOpen(false)}
+            style={{
+              position: "fixed",
+              inset: 0,
+              zIndex: 39,
+              background: "transparent",
+              border: "none",
+              cursor: "default",
+            }}
+          />
+          <div className="package-picker-popover" role="dialog" aria-label="Add Package">
+            <div className="package-picker-title">Add Package</div>
+            <p style={{ ...noteStyle, margin: 0 }}>
+              Choose what to add to this Mainboard composition.
+            </p>
+            <button
+              type="button"
+              className={mode === "outsource" ? "btn btn-primary" : "btn"}
+              onClick={() => {
+                onPick("outsource");
+                setOpen(false);
+              }}
+            >
+              Trading Signal / Trade Log
+            </button>
+            <button
+              type="button"
+              className={mode === "advanced" ? "btn btn-primary" : "btn"}
+              onClick={() => {
+                onPick("advanced");
+                setOpen(false);
+              }}
+            >
+              Strategy / work object
+            </button>
+            <Link to="/packages/create" className="btn btn-ghost">
+              Create a new package →
+            </Link>
+            <div className="package-picker-actions">
+              <button type="button" className="btn btn-ghost" onClick={() => setOpen(false)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// --------------------------------------------------------------------------- //
 // Root page.                                                                   //
 // --------------------------------------------------------------------------- //
 
@@ -461,6 +541,7 @@ function LatestResultCard({ result }: { result: LatestResultSummary }) {
 export function Mainboard() {
   const board = useDefaultMainboard();
   const snapshot = useCreateSnapshot();
+  const [addMode, setAddMode] = useState<AddMode>(null);
 
   if (board.isLoading) return <Loading label="Loading Mainboard…" />;
   if (board.isError || !board.data) {
@@ -478,7 +559,20 @@ export function Mainboard() {
 
       <div style={{ display: "grid", gap: 18 }}>
         <section aria-labelledby="strategies-h">
-          <h2 id="strategies-h" className="strategies-title">STRATEGIES</h2>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+              flexWrap: "wrap",
+            }}
+          >
+            <h2 id="strategies-h" className="strategies-title" style={{ margin: 0 }}>
+              STRATEGIES
+            </h2>
+            <AddPackagePopover mode={addMode} onPick={setAddMode} />
+          </div>
           {items.length === 0 ? (
             <div className="card">
               <strong>Your Mainboard is empty.</strong>
@@ -543,8 +637,8 @@ export function Mainboard() {
           )}
         </section>
 
-        <OutsourceSignalCard />
-        <AddWorkObjectCard workspaceId={data.workspace_id} />
+        {addMode === "outsource" && <OutsourceSignalCard />}
+        {addMode === "advanced" && <AddWorkObjectCard workspaceId={data.workspace_id} />}
       </div>
     </>
   );

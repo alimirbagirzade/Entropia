@@ -104,6 +104,7 @@ async def list_esp(
     cursor: str | None = Query(default=None),
     limit: int = Query(default=20, ge=1, le=100),
     trust_state: ResolverTrustState | None = Query(default=None),
+    visibility_scope: VisibilityScope | None = Query(default=None),
     ctx: RequestContext = Depends(request_context),
 ) -> dict[str, Any]:
     return await esp_query.list_embedded_system_packages(
@@ -111,6 +112,7 @@ async def list_esp(
         ctx.actor,
         PageParams(cursor=cursor, limit=limit),
         trust_state=trust_state,
+        visibility_scope=visibility_scope,
     )
 
 

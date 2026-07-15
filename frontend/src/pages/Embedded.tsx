@@ -3,6 +3,7 @@ import { useState, type FormEvent } from "react";
 import { EmptyState } from "@/components/EmptyState";
 import { ErrorState } from "@/components/ErrorState";
 import { Loading } from "@/components/Loading";
+import { Modal } from "@/components/Modal";
 import { StatusBadge } from "@/components/StatusBadge";
 import { formatUtc } from "@/lib/backtest";
 import {
@@ -57,8 +58,13 @@ function useCursorStack() {
 // a Pre-Check-parity resolve probe, and the registry lifecycle. Visibility is
 // enforced server-side; propose (create) is open to any authenticated actor,
 // while activate / deprecate are Admin-only and OCC-guarded — the UI never
-// pre-gates, a denial surfaces the 403 envelope verbatim.
+// pre-gates, a denial surfaces the 403 envelope verbatim. The catalog is the
+// primary surface (rendered first); proposing a resolver and running a
+// resolve probe are secondary actions opened in a dialog.
 export function Embedded() {
+  const [proposeOpen, setProposeOpen] = useState(false);
+  const [probeOpen, setProbeOpen] = useState(false);
+
   return (
     <>
       <h1 className="page-title">Embedded System Packages</h1>
@@ -66,25 +72,54 @@ export function Embedded() {
         Trusted resolver registry for source-code TA dependencies · trust and
         visibility are server-computed per role
       </p>
-      <RegistryCard />
-      <ProposeResolverCard />
-      <ResolveProbeCard />
+      <RegistryCard onPropose={() => setProposeOpen(true)} onProbe={() => setProbeOpen(true)} />
+
+      <Modal
+        open={proposeOpen}
+        onClose={() => setProposeOpen(false)}
+        titleId="esp-propose-h"
+        wide
+      >
+        <ProposeResolverCard onClose={() => setProposeOpen(false)} />
+      </Modal>
+      <Modal open={probeOpen} onClose={() => setProbeOpen(false)} titleId="esp-probe-h" wide>
+        <ResolveProbeCard onClose={() => setProbeOpen(false)} />
+      </Modal>
     </>
   );
 }
 
-function RegistryCard() {
+function RegistryCard({ onPropose, onProbe }: { onPropose: () => void; onProbe: () => void }) {
   const [trustState, setTrustState] = useState<string | null>(null);
+  const [scope, setScope] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const pager = useCursorStack();
-  const registry = useEspRegistry(trustState, pager.cursor);
+  const registry = useEspRegistry(trustState, pager.cursor, scope);
 
   return (
     <section className="card" aria-labelledby="esp-h">
-      <h3 id="esp-h" style={{ marginTop: 0 }}>
-        Resolver registry
-      </h3>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginBottom: 12 }}>
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+          gap: 12,
+        }}
+      >
+        <h3 id="esp-h" style={{ margin: 0 }}>
+          Resolver registry
+        </h3>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button type="button" className="btn" onClick={onPropose}>
+            Propose resolver
+          </button>
+          <button type="button" className="btn" onClick={onProbe}>
+            Resolve probe
+          </button>
+        </div>
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 12, margin: "12px 0" }}>
         <label htmlFor="esp-trust">
           Trust state{" "}
           <select
@@ -99,6 +134,24 @@ function RegistryCard() {
             {RESOLVER_TRUST_STATES.map((state) => (
               <option key={state} value={state}>
                 {state}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label htmlFor="esp-scope">
+          Scope{" "}
+          <select
+            id="esp-scope"
+            value={scope ?? ""}
+            onChange={(event) => {
+              setScope(event.target.value || null);
+              pager.reset();
+            }}
+          >
+            <option value="">all</option>
+            {VISIBILITY_SCOPES.map((visScope) => (
+              <option key={visScope} value={visScope}>
+                {visScope}
               </option>
             ))}
           </select>
@@ -158,6 +211,7 @@ function RegistryRowView({
         <div className="package-text">
           <code>{row.canonical_key}</code>
           <StatusBadge tone={trustTone(row.trust_state)} label={row.trust_state} />
+          <span>{row.visibility_scope ?? "—"}</span>
           <span>{row.runtime_adapter}</span>
           {row.trusted_active_revision_id ? (
             <code>{row.trusted_active_revision_id}</code>
@@ -486,7 +540,7 @@ function DeprecateComposer({
 // CANDIDATE — not trusted until an Admin activates it. Ordered signature param
 // TYPES are identity (parseSignatureParams is reused from the resolve probe);
 // input/output contracts default to {} server-side. No OCC / Idempotency-Key.
-function ProposeResolverCard() {
+function ProposeResolverCard({ onClose }: { onClose: () => void }) {
   const [key, setKey] = useState("");
   const [runtime, setRuntime] = useState<string>(RUNTIME_ADAPTERS[1]);
   const [paramsText, setParamsText] = useState("");
@@ -521,10 +575,15 @@ function ProposeResolverCard() {
 
   const result = create.data;
   return (
-    <section className="card" aria-labelledby="esp-propose-h">
-      <h3 id="esp-propose-h" style={{ marginTop: 0 }}>
-        Propose resolver
-      </h3>
+    <section aria-labelledby="esp-propose-h">
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <h3 id="esp-propose-h" style={{ margin: 0 }}>
+          Propose resolver
+        </h3>
+        <button type="button" className="page-button" onClick={onClose}>
+          Close
+        </button>
+      </div>
       <p className="page-sub">
         Submit a new resolver as a candidate. It stays untrusted until an Admin
         activates it — Pre-Check cannot select a candidate.
@@ -642,7 +701,7 @@ function ProposeResolverCard() {
 // Pre-Check-parity resolve probe (doc 09 §9.1–§9.3): try a parsed call against
 // the live registry. Success pins the EXACT revision; each failure mode is the
 // server's typed error rendered verbatim.
-function ResolveProbeCard() {
+function ResolveProbeCard({ onClose }: { onClose: () => void }) {
   const [key, setKey] = useState("");
   const [paramsText, setParamsText] = useState("");
   const [returnShape, setReturnShape] = useState("");
@@ -661,10 +720,15 @@ function ResolveProbeCard() {
 
   const result = probe.data;
   return (
-    <section className="card" aria-labelledby="esp-probe-h">
-      <h3 id="esp-probe-h" style={{ marginTop: 0 }}>
-        Resolve probe
-      </h3>
+    <section aria-labelledby="esp-probe-h">
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <h3 id="esp-probe-h" style={{ margin: 0 }}>
+          Resolve probe
+        </h3>
+        <button type="button" className="page-button" onClick={onClose}>
+          Close
+        </button>
+      </div>
       <p className="page-sub">
         Pre-Check parity: resolve a parsed call to the exact trusted revision.
         Ordered parameter types are identity — names are display-only.

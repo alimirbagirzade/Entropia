@@ -21,7 +21,10 @@ from sqlalchemy import func, select
 
 from entropia.application.commands import esp as esp_cmd
 from entropia.application.commands.deletion import soft_delete_entity
-from entropia.application.queries.esp import resolve_embedded_dependency
+from entropia.application.queries.esp import (
+    list_embedded_system_packages,
+    resolve_embedded_dependency,
+)
 from entropia.domain.esp.enums import ResolverTrustState, RuntimeAdapter
 from entropia.domain.identity import Actor
 from entropia.domain.lifecycle.enums import (
@@ -52,6 +55,7 @@ from entropia.shared.errors import (
     ResolverSignatureMismatch,
     ResolverValidationRequired,
 )
+from entropia.shared.pagination import PageParams
 
 pytestmark = pytest.mark.integration
 
@@ -97,7 +101,13 @@ async def _seed_principals(session) -> None:
     await session.flush()
 
 
-async def _create_esp(session, *, key: str = "ta.sma", evidence: dict | None = _EVIDENCE) -> dict:
+async def _create_esp(
+    session,
+    *,
+    key: str = "ta.sma",
+    evidence: dict | None = _EVIDENCE,
+    visibility_scope: VisibilityScope = VisibilityScope.PRIVATE,
+) -> dict:
     return await esp_cmd.create_esp_package(
         session,
         OWNER,
@@ -107,6 +117,7 @@ async def _create_esp(session, *, key: str = "ta.sma", evidence: dict | None = _
         input_contract={"resolver_key": key},
         output_contract={"return": "series"},
         evidence=evidence,
+        visibility_scope=visibility_scope,
     )
 
 
@@ -137,6 +148,27 @@ async def test_create_esp_inserts_audit_outbox_and_candidate(session) -> None:
     assert entry is not None
     assert entry.trust_state == ResolverTrustState.CANDIDATE
     assert entry.registry_version == 1
+
+
+async def test_list_filters_by_visibility_scope(session) -> None:
+    """The `visibility_scope` filter narrows the registry list to that scope's
+    entries only, and each returned row carries its own `visibility_scope`."""
+    await _seed_principals(session)
+    await _create_esp(session, key="ta.sma", visibility_scope=VisibilityScope.SYSTEM)
+    await _create_esp(session, key="ta.rsi", visibility_scope=VisibilityScope.PRIVATE)
+    await session.commit()
+
+    system_only = await list_embedded_system_packages(
+        session, OWNER, PageParams(cursor=None, limit=20), visibility_scope=VisibilityScope.SYSTEM
+    )
+    keys = {row["canonical_key"] for row in system_only["data"]}
+    assert keys == {"ta.sma"}
+    assert system_only["data"][0]["visibility_scope"] == str(VisibilityScope.SYSTEM)
+
+    unfiltered = await list_embedded_system_packages(
+        session, OWNER, PageParams(cursor=None, limit=20)
+    )
+    assert {"ta.sma", "ta.rsi"}.issubset({row["canonical_key"] for row in unfiltered["data"]})
 
 
 async def test_activate_promotes_and_records_decision(session) -> None:

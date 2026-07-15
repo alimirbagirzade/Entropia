@@ -18,7 +18,8 @@ export class CreatePackagePage {
     await this.page.getByLabel("Package type").selectOption("embedded_system");
     await this.page.getByLabel("Creation mode").selectOption("generate_from_description");
     await this.page.getByLabel("Description").fill(description);
-    await this.page.getByRole("button", { name: "Create request" }).click();
+    // UI-06: the compose action button is "Send" (was "Create request").
+    await this.page.getByRole("button", { name: "Send" }).click();
 
     const created = this.page.getByText(/Request created — /);
     await expect(created).toBeVisible({ timeout: 20_000 });

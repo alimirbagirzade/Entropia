@@ -808,6 +808,35 @@ a:hover { text-decoration: underline; }
 .portfolio-card { border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-elev); padding: 14px; }
 .portfolio-card > .section-title-upper { border-bottom: 1px solid var(--border); padding-bottom: 6px; }
 
+/* ---- v18 Portfolio: toggle-off disabled workspace (mockup .equity-allocation-workspace /
+   .equity-allocation-disabled: opacity .42, grayscale, pointer-events none — UI-13) ---- */
+.alloc-workspace { display: flex; flex-direction: column; gap: 14px; }
+.alloc-workspace-disabled { opacity: 0.42; filter: grayscale(0.15); pointer-events: none; }
+.alloc-workspace-disabled input,
+.alloc-workspace-disabled select,
+.alloc-workspace-disabled button { cursor: not-allowed; }
+
+.alloc-muted { font-size: 13px; color: var(--text-dim); margin: 0; }
+
+.alloc-confirm-box {
+  border: 1px solid var(--warn);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
+  color: var(--warn);
+  padding: 9px 12px;
+  font-size: 13px;
+  margin: 0;
+}
+.alloc-error-box {
+  border: 1px solid var(--down);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--down) 12%, transparent);
+  color: var(--down);
+  padding: 9px 12px;
+  font-size: 13px;
+  margin: 0;
+}
+
 /* ---- v18 Package pool: sectioned rows (mockup .package-row/.package-section-title) ---- */
 .package-section-title {
   font-size: 10.5px;

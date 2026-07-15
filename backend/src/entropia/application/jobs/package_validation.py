@@ -70,9 +70,7 @@ _KINDS_REQUIRING_CONDITION = frozenset({"boolean_condition"})
 _DELIMITERS: dict[str, str] = {"(": ")", "[": "]", "{": "}"}
 
 
-async def run_package_validation(
-    session: AsyncSession, detail: PackageRequest
-) -> ValidationReport:
+async def run_package_validation(session: AsyncSession, detail: PackageRequest) -> ValidationReport:
     """Gather the draft's real facts and run the seven mandatory checks (F-13)."""
     inputs = await gather_validation_inputs(session, detail)
     return build_validation_report(inputs)

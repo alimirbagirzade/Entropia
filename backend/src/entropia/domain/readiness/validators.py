@@ -407,11 +407,15 @@ def _has_exit_or_stop(config: StrategyConfig) -> bool:
     # active engine rules (doc 14 §5.1 exit/protection).
     has_exit = any(block.enabled for block in (exit_logic.indicator_blocks or []))
     stops = config.protection_stop_logic
-    has_stop = stops is not None and any(
+    has_price_stop = stops is not None and any(
         s is not None and getattr(s, "enabled", False)
         for s in (stops.percentage_stop, stops.trailing_stop, stops.absolute_stop)
     )
-    return has_exit or has_stop
+    # F-08: an enabled Logic-Based Stop Block is a real protection rule too.
+    has_logic_stop = stops is not None and any(
+        block.enabled for block in (stops.logic_blocks or [])
+    )
+    return has_exit or has_price_stop or has_logic_stop
 
 
 # --------------------------------------------------------------------------- #

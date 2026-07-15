@@ -71,6 +71,9 @@ class ReadinessIssueCode(StrEnum):
     STRATEGY_SIZING_UNSUPPORTED = "STRATEGY_SIZING_UNSUPPORTED"
     STRATEGY_EXECUTION_TIMING_UNSUPPORTED = "STRATEGY_EXECUTION_TIMING_UNSUPPORTED"
     STRATEGY_INDICATOR_UNRESOLVED = "STRATEGY_INDICATOR_UNRESOLVED"
+    # F-08: a pinned Logic-Based Stop Block dependency does not resolve to a computable
+    # stop signal — blocks RUN (the worker also fails closed on plan.unresolved).
+    STRATEGY_LOGIC_STOP_UNRESOLVED = "STRATEGY_LOGIC_STOP_UNRESOLVED"
     EXECUTION_ASSUMPTIONS_DEFAULT = "EXECUTION_ASSUMPTIONS_DEFAULT"
 
     # Market data (§9.2, §11 approved-only gate)

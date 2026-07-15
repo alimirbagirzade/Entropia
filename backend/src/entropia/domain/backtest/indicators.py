@@ -286,11 +286,22 @@ class IndicatorPlan:
     exit_specs: tuple[IndicatorSpec, ...] = ()
     exit_on_opposite: bool = True
     unresolved: tuple[str, ...] = ()
+    # F-08: resolved Logic-Based Stop Blocks (each an IndicatorSpec whose signal AGAINST
+    # the open position emits a protection stop). Empty when the strategy pins no logic
+    # stops. Any block that failed to resolve is recorded in ``unresolved`` (prefix
+    # ``stop:``) and fails the RUN closed (Ready Check STRATEGY_LOGIC_STOP_UNRESOLVED).
+    # Placed last to preserve positional construction of the pre-F-08 fields.
+    stop_specs: tuple[IndicatorSpec, ...] = ()
 
     @property
     def has_entry(self) -> bool:
         """True when at least one entry block resolved to a computable indicator."""
         return bool(self.entry_specs)
+
+    @property
+    def has_stop(self) -> bool:
+        """True when at least one Logic-Based Stop Block resolved to a computable spec."""
+        return bool(self.stop_specs)
 
 
 # Validity window (in bars) a fired native trigger stays active. ``None`` means

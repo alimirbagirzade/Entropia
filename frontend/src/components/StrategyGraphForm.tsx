@@ -22,6 +22,8 @@ import {
   SCALING_METHOD_OPTIONS,
   SIGNAL_MIN_SUPPORTING_RULE,
   SIGNAL_RULE_OPTIONS,
+  STOP_CONFLICT_RESOLUTION_OPTIONS,
+  STOP_TRIGGER_REQUIREMENT_OPTIONS,
   STRATEGY_GRAPH_PANELS,
   TRIGGER_SOURCE_OPTIONS,
   type ConditionBlockForm,
@@ -162,7 +164,7 @@ function CheckboxField({
 // their own ⓘ text in doc 02 §6).
 // ---------------------------------------------------------------------------
 
-type Scope = "entry" | "exit";
+type Scope = "entry" | "exit" | "stop";
 
 const P = STRATEGY_GRAPH_PANELS;
 
@@ -690,6 +692,8 @@ export function StrategyGraphForm({
     setForm((f) => ({ ...f, entry: { ...f.entry, ...patch } }));
   const setExit = (patch: Partial<GraphFormState["exit"]>) =>
     setForm((f) => ({ ...f, exit: { ...f.exit, ...patch } }));
+  const setStop = (patch: Partial<GraphFormState["stop"]>) =>
+    setForm((f) => ({ ...f, stop: { ...f.stop, ...patch } }));
   const setScaling = (patch: Partial<GraphFormState["scaling"]>) =>
     setForm((f) => ({ ...f, scaling: { ...f.scaling, ...patch } }));
   const setRestrictions = (patch: Partial<GraphFormState["restrictions"]>) =>
@@ -828,17 +832,35 @@ export function StrategyGraphForm({
         </>
       ) : null}
 
-      {/* ---- Logic-Based Stop Block (§5.5) — honest boundary ---- */}
+      {/* ---- Logic-Based Stop Block (§5.5) — F-08 real composer ---- */}
       <h4 className="form-section-h" style={{ marginTop: 20 }}>
         Logic-Based Stop Block <InfoPanel panel={P.logicBasedStopBlock} />
       </h4>
       <p className="cp-note">
-        Logic-based stop blocks (an indicator + conditions that emit a stop signal) are a
-        documented V18 spec feature (doc 02 §5.5) that the V1 backend engine does not yet implement
-        — the compiled StrategyConfig has no <code>logic_blocks</code> field. The percentage /
-        trailing / absolute stops are edited in the Strategy configuration form above; a
-        logic-based stop is not composable here until the engine supports it.
+        A logic-based stop pins an indicator + conditions that emit a stop signal against the
+        open position (the strategy premise broke). Percentage / trailing / absolute price stops
+        are edited in the Strategy configuration form above; the stop mode below decides how every
+        active stop rule combines.
       </p>
+      <div className="cp-form strategy-form-grid">
+        <SelectField
+          label="Stop mode"
+          value={form.stop.trigger_requirement}
+          onChange={(v) => setStop({ trigger_requirement: v })}
+          options={STOP_TRIGGER_REQUIREMENT_OPTIONS}
+        />
+        <SelectField
+          label="Same-bar resolution"
+          value={form.stop.conflict_resolution}
+          onChange={(v) => setStop({ conflict_resolution: v })}
+          options={STOP_CONFLICT_RESOLUTION_OPTIONS}
+        />
+      </div>
+      <BlockList
+        scope="stop"
+        blocks={form.stop.logic_blocks}
+        onChange={(logic_blocks) => setStop({ logic_blocks })}
+      />
 
       <ScalingSection scaling={form.scaling} onChange={setScaling} />
       <RestrictionsSection restrictions={form.restrictions} onChange={setRestrictions} />

@@ -519,11 +519,70 @@ class PackageReference(BaseModel):
 
 
 class ProtectionStopLogic(BaseModel):
-    """Stop loss rules (all toggleable independently; at least one enables risk control) (§5)."""
+    """Stop loss rules (all toggleable independently; at least one enables risk control) (§5).
+
+    F-08 — Logic-Based Stop end to end. Beyond the three fixed price stops
+    (percentage / trailing / absolute), a strategy may attach one or more
+    ``logic_blocks`` (each an indicator + conditions that emit a stop signal, doc 02
+    §5.5 / Master Ref §9.2). ``stop_trigger_requirement`` is the canonical AND/OR
+    combination (Master Ref §9.1): ``any_active`` fires protection when ANY enabled
+    stop rule triggers; ``all_active`` only when EVERY enabled stop rule triggers in
+    the same bar's decision context. ``stop_conflict_resolution`` (doc 02 §5.6 Stop
+    Mode) resolves which triggered rule executes and how the others are reported when
+    more than one fires on a bar. Defaults (``any_active`` + ``most_conservative``)
+    reproduce the pre-F-08 tightest-wins behaviour byte-for-byte.
+    """
 
     percentage_stop: PercentageStop | None = Field(default=None)
     trailing_stop: TrailingStop | None = Field(default=None)
     absolute_stop: AbsoluteStop | None = Field(default=None)
+
+    logic_blocks: list[IndicatorBlock] | None = Field(
+        default=None,
+        description=(
+            "Logic-Based Stop Blocks (§5.5): each an indicator + nested conditions whose "
+            "signal AGAINST the open position (the strategy premise broke) emits a stop "
+            "event. Every block is a full IndicatorBlock (UUID = block_id); multiple blocks "
+            "are allowed. A block whose direction is long_and_short fires on either adverse "
+            "signal."
+        ),
+    )
+
+    stop_trigger_requirement: Literal["any_active", "all_active"] = Field(
+        default="any_active",
+        description=(
+            "Stop Mode / Stop Trigger Requirement (§9.1). any_active: protection fires when "
+            "ANY enabled stop rule triggers. all_active: fires only when EVERY enabled stop "
+            "rule triggers within the same bar's decision context."
+        ),
+    )
+
+    stop_conflict_resolution: Literal[
+        "first_trigger_wins",
+        "most_conservative",
+        "priority_order",
+        "record_all_execute_highest",
+    ] = Field(
+        default="most_conservative",
+        description=(
+            "Same-bar multi-stop resolution (§5.6 / §9.3). most_conservative: the rule that "
+            "closes earliest / leaves least risk executes (tightest adverse price for price "
+            "stops). priority_order / record_all_execute_highest: execute the highest-priority "
+            "triggered rule per stop_priority_order; record_all also records every co-triggered "
+            "rule in the ledger. first_trigger_wins requires an intrabar tick path; over OHLCV "
+            "it resolves to the conservative model and is flagged in diagnostics (§9.3)."
+        ),
+    )
+
+    stop_priority_order: list[str] | None = Field(
+        default=None,
+        description=(
+            "Explicit stop-rule precedence for priority_order / record_all_execute_highest. "
+            "Each entry is a stop key: 'percentage', 'trailing', 'absolute', or "
+            "'logic:<block_id>'. When null the canonical §9.2 default order is used "
+            "(logic blocks in display order, then percentage, trailing, absolute)."
+        ),
+    )
 
 
 class PercentageStop(BaseModel):

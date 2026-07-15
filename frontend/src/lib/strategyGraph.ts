@@ -125,6 +125,20 @@ export const CONDITION_VALIDITY_OPTIONS: SelectOption[] = [
   { value: "until_opposite_signal", label: "Until Opposite Condition" },
 ];
 
+// ProtectionStopLogic.stop_trigger_requirement (F-08 Stop Mode, §9.1)
+export const STOP_TRIGGER_REQUIREMENT_OPTIONS: SelectOption[] = [
+  { value: "any_active", label: "Any Active Stop Rule Triggers Stop" },
+  { value: "all_active", label: "All Active Stop Rules Must Trigger Stop" },
+];
+
+// ProtectionStopLogic.stop_conflict_resolution (F-08 same-bar resolution, §5.6/§9.3)
+export const STOP_CONFLICT_RESOLUTION_OPTIONS: SelectOption[] = [
+  { value: "most_conservative", label: "Most Conservative Stop Wins" },
+  { value: "priority_order", label: "Priority Order" },
+  { value: "record_all_execute_highest", label: "Record All / Execute Highest Priority" },
+  { value: "first_trigger_wins", label: "First Trigger Wins" },
+];
+
 // PositionExitLogic.applies_to_direction
 export const APPLIES_TO_OPTIONS: SelectOption[] = [
   { value: "long", label: "Long Positions" },
@@ -419,9 +433,20 @@ export interface RestrictionsForm {
   raw: Record<string, unknown>;
 }
 
+// F-08 Logic-Based Stop section of the graph form. The percentage / trailing /
+// absolute price stops stay in the Strategy configuration form; this section owns the
+// logic-stop blocks plus the two stop-combination mode fields.
+export interface StopLogicForm {
+  logic_blocks: IndicatorBlockForm[];
+  trigger_requirement: string; // any_active | all_active
+  conflict_resolution: string; // most_conservative | priority_order | ...
+  raw: Record<string, unknown>;
+}
+
 export interface StrategyGraphForm {
   entry: EntryLogicForm;
   exit: ExitLogicForm;
+  stop: StopLogicForm;
   scaling: ScalingForm;
   restrictions: RestrictionsForm;
 }
@@ -587,6 +612,16 @@ function extractRestrictions(payload: Record<string, unknown>): RestrictionsForm
   };
 }
 
+function extractStop(payload: Record<string, unknown>): StopLogicForm {
+  const p = asRecord(payload.protection_stop_logic);
+  return {
+    logic_blocks: asArray(p.logic_blocks).map((b, i) => extractBlock(b, i)),
+    trigger_requirement: enumStr(p.stop_trigger_requirement, "any_active"),
+    conflict_resolution: enumStr(p.stop_conflict_resolution, "most_conservative"),
+    raw: p,
+  };
+}
+
 export { newBlock };
 
 export function extractGraphSections(payload: Record<string, unknown>): StrategyGraphForm {
@@ -618,6 +653,7 @@ export function extractGraphSections(payload: Record<string, unknown>): Strategy
       blocks: exitBlocks,
       raw: exit,
     },
+    stop: extractStop(payload),
     scaling: extractScaling(payload),
     restrictions: extractRestrictions(payload),
   };
@@ -769,6 +805,22 @@ function mergeScaling(s: ScalingForm): Record<string, unknown> {
   return out;
 }
 
+// Overlay the logic-stop blocks + mode fields onto the EXISTING protection object,
+// preserving the percentage/trailing/absolute price stops (edited in the config form).
+// An empty stop section (no logic blocks) still writes the mode fields; the server-side
+// disabled-section filter collapses a protection object with no active rule to null.
+function mergeStop(s: StopLogicForm): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...s.raw };
+  if (s.logic_blocks.length > 0) {
+    out.logic_blocks = s.logic_blocks.map((b, i) => mergeBlock(b, i));
+  } else {
+    delete out.logic_blocks;
+  }
+  setOrDelete(out, "stop_trigger_requirement", s.trigger_requirement);
+  setOrDelete(out, "stop_conflict_resolution", s.conflict_resolution);
+  return out;
+}
+
 export function mergeGraphSections(
   payload: Record<string, unknown>,
   form: StrategyGraphForm,
@@ -807,6 +859,7 @@ export function mergeGraphSections(
     ...payload,
     position_entry_logic: entry,
     position_exit_logic: exit,
+    protection_stop_logic: mergeStop(form.stop),
     scaling_logic: scaling,
     restrictions_filters: restrictions,
   };

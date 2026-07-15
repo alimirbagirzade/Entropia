@@ -10,6 +10,8 @@ preserves the revision chain.
 
 from __future__ import annotations
 
+import hashlib
+
 import pytest
 from sqlalchemy import func, select
 
@@ -41,6 +43,7 @@ from entropia.infrastructure.postgres.models import (
     Principal,
     ResearchDatasetRevision,
     ResearchMarketLink,
+    ResearchRawAsset,
     TrashEntry,
 )
 from entropia.infrastructure.postgres.repositories import market_data as md_repo
@@ -48,6 +51,9 @@ from entropia.infrastructure.postgres.repositories import research_data as rd_re
 from entropia.shared.errors import (
     AccessDeniedError,
     DependencyBlocked,
+    ResearchDataFileTypeNotAllowedError,
+    ResearchDataUploadIntegrityError,
+    ResearchDataUploadStorageFailedError,
     StaleRevisionError,
     UsageScopeForbidden,
 )
@@ -428,3 +434,168 @@ async def test_domain_soft_delete_stale_row_version_conflicts(session) -> None:
         )
     assert root.deletion_state == DeletionState.ACTIVE
     assert await _trash_entry(session, root.entity_id) is None
+
+
+# ---- F-02 real raw-asset upload (doc 12 §7) --------------------------------
+
+
+@pytest.fixture
+def fake_object_store(monkeypatch) -> dict[str, bytes]:
+    """In-process object storage so upload/verify run without MinIO (mirrors
+    test_market_data_persistence.py's fake_object_store)."""
+    from entropia.infrastructure.s3 import datasets
+
+    store: dict[str, bytes] = {}
+
+    def _put(entity_id: str, data: bytes, *, content_type: str | None = None):
+        digest = hashlib.sha256(data).hexdigest()
+        key = f"research/raw/{entity_id}/{digest}"
+        store[key] = data
+        return key, digest
+
+    def _get(object_key: str) -> bytes:
+        return store[object_key]
+
+    monkeypatch.setattr(datasets, "put_raw_bytes", _put)
+    monkeypatch.setattr(datasets, "get_raw_bytes", _get)
+    return store
+
+
+async def _draft_research(session) -> str:
+    """Seed principals + an approved market link + a DRAFT research dataset;
+    return its entity_id (the owner is OWNER)."""
+    await _seed_principals(session)
+    market_id = await _approved_market(session)
+    root, _ = await rd_cmd.create_research_dataset(
+        session,
+        OWNER,
+        market_entity_id=market_id,
+        payload={"f": 1},
+        category=OPEN_INTEREST,
+        usage_scope=UsageScope.RESEARCH_BACKTEST,
+    )
+    await session.commit()
+    return root.entity_id
+
+
+async def test_upload_writes_object_storage_and_evidence_row(session, fake_object_store) -> None:
+    """The client supplies only bytes + filename; object key, digest, size, and
+    content type are all derived server-side (F-02 acceptance)."""
+    entity_id = await _draft_research(session)
+
+    content = b"timestamp,open_interest\n2024-01-01T00:00:00Z,123456\n"
+    result = await rd_cmd.create_upload_session(
+        session,
+        OWNER,
+        entity_id=entity_id,
+        content=content,
+        content_type="text/csv",
+        original_filename="oi-btcusdt-8h.csv",
+    )
+    await session.commit()
+
+    assert result["deduplicated"] is False
+    assert result["size_bytes"] == len(content)
+    expected_digest = hashlib.sha256(content).hexdigest()
+    assert result["content_digest"] == expected_digest
+    assert fake_object_store[f"research/raw/{entity_id}/{expected_digest}"] == content
+
+    asset = await session.get(ResearchRawAsset, result["asset_id"])
+    assert asset is not None
+    assert asset.content_digest == expected_digest
+    assert asset.size_bytes == len(content)
+    assert asset.original_filename == "oi-btcusdt-8h.csv"
+
+
+async def test_upload_is_content_deduplicated(session, fake_object_store) -> None:
+    """Re-uploading identical bytes for the same dataset is idempotent: it
+    returns the prior asset instead of writing a duplicate object/row."""
+    entity_id = await _draft_research(session)
+
+    content = b"timestamp,open_interest\n2024-01-01T00:00:00Z,123456\n"
+    first = await rd_cmd.create_upload_session(
+        session, OWNER, entity_id=entity_id, content=content, original_filename="a.csv"
+    )
+    await session.commit()
+    before = await _count(session, ResearchRawAsset)
+
+    second = await rd_cmd.create_upload_session(
+        session, OWNER, entity_id=entity_id, content=content, original_filename="a.csv"
+    )
+    await session.commit()
+
+    assert second["deduplicated"] is True
+    assert second["asset_id"] == first["asset_id"]
+    assert await _count(session, ResearchRawAsset) == before
+
+
+async def test_upload_rejects_unsupported_file_type(session, fake_object_store) -> None:
+    entity_id = await _draft_research(session)
+
+    with pytest.raises(ResearchDataFileTypeNotAllowedError):
+        await rd_cmd.create_upload_session(
+            session,
+            OWNER,
+            entity_id=entity_id,
+            content=b"binary-ish",
+            original_filename="dataset.xlsx",
+        )
+    assert await _count(session, ResearchRawAsset) == 0
+
+
+async def test_upload_rejects_non_owner(session, fake_object_store) -> None:
+    entity_id = await _draft_research(session)
+    if await session.get(Principal, "user_2") is None:
+        session.add(Principal(principal_id="user_2", principal_type=PrincipalType.HUMAN))
+        await session.flush()
+
+    other = Actor(principal_id="user_2", principal_type=PrincipalType.HUMAN, role=Role.SUPERVISOR)
+    with pytest.raises(AccessDeniedError):
+        await rd_cmd.create_upload_session(
+            session,
+            other,
+            entity_id=entity_id,
+            content=b"a,b\n1,2\n",
+            original_filename="a.csv",
+        )
+    assert await _count(session, ResearchRawAsset) == 0
+
+
+async def test_upload_surfaces_storage_failure(session, fake_object_store, monkeypatch) -> None:
+    from entropia.infrastructure.s3 import datasets
+
+    entity_id = await _draft_research(session)
+
+    def _boom(*_a, **_k):
+        raise RuntimeError("simulated object-storage outage")
+
+    monkeypatch.setattr(datasets, "put_raw_bytes", _boom)
+
+    with pytest.raises(ResearchDataUploadStorageFailedError):
+        await rd_cmd.create_upload_session(
+            session,
+            OWNER,
+            entity_id=entity_id,
+            content=b"a,b\n1,2\n",
+            original_filename="a.csv",
+        )
+    assert await _count(session, ResearchRawAsset) == 0
+
+
+async def test_upload_surfaces_digest_mismatch(session, fake_object_store, monkeypatch) -> None:
+    """A read-back that no longer matches the uploaded bytes (storage
+    corruption) fails closed with no evidence row persisted (F-02)."""
+    from entropia.infrastructure.s3 import datasets
+
+    entity_id = await _draft_research(session)
+    monkeypatch.setattr(datasets, "get_raw_bytes", lambda _key: b"corrupted-bytes")
+
+    with pytest.raises(ResearchDataUploadIntegrityError):
+        await rd_cmd.create_upload_session(
+            session,
+            OWNER,
+            entity_id=entity_id,
+            content=b"a,b\n1,2\n",
+            original_filename="a.csv",
+        )
+    assert await _count(session, ResearchRawAsset) == 0

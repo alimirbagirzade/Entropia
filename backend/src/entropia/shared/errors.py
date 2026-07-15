@@ -1738,3 +1738,39 @@ class MarketDataUploadIntegrityError(AppError):
     code = "MARKET_DATA_UPLOAD_INTEGRITY_FAILED"
     http_status = 502
     message = "The uploaded file failed integrity verification. Please retry the upload."
+
+
+# --------------------------------------------------------------------------- #
+# F-02 — Real Research Data raw-asset file upload (doc 12 §7)                  #
+# --------------------------------------------------------------------------- #
+
+
+class ResearchDataFileTypeNotAllowedError(ValidationError):
+    """The uploaded file's extension is not an accepted raw-asset type."""
+
+    code = "RESEARCH_DATA_FILE_TYPE_NOT_ALLOWED"
+    message = "Upload a CSV or TXT research data file."
+
+
+class ResearchDataFileTooLargeError(ValidationError):
+    """The uploaded file exceeds the server-enforced upload size limit."""
+
+    code = "RESEARCH_DATA_FILE_TOO_LARGE"
+    message = "The file exceeds the maximum upload size."
+
+
+class ResearchDataUploadStorageFailedError(AppError):
+    """Object storage rejected or failed the write (network/backend failure)."""
+
+    code = "RESEARCH_DATA_UPLOAD_STORAGE_FAILED"
+    http_status = 502
+    message = "The file could not be written to storage. Please retry the upload."
+
+
+class ResearchDataUploadIntegrityError(AppError):
+    """The bytes read back from storage did not match the uploaded content's
+    digest — the write is not trusted and no evidence row is persisted."""
+
+    code = "RESEARCH_DATA_UPLOAD_INTEGRITY_FAILED"
+    http_status = 502
+    message = "The uploaded file failed integrity verification. Please retry the upload."

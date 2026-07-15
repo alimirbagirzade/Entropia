@@ -6,6 +6,7 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     UV_LINK_MODE=copy \
     UV_PROJECT_ENVIRONMENT=/app/.venv \
+    UV_PYTHON_PREFERENCE=only-system \
     PATH="/app/.venv/bin:$PATH"
 
 # uv: fast, reproducible Python dependency management.

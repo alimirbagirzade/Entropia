@@ -24,6 +24,7 @@ const TRUSTED_ROW = {
   runtime_adapter: "python",
   registry_version: 4,
   replacement_revision_id: null,
+  visibility_scope: "system",
   ...PERFORMANCE_NA,
 };
 
@@ -156,6 +157,8 @@ describe("Embedded System Packages page", () => {
     const list = screen.getByRole("list", { name: /resolver registry/i });
     expect(within(list).getByText("trusted_active")).toBeInTheDocument();
     expect(within(list).getByText("deprecated")).toBeInTheDocument();
+    // Each row surfaces its own visibility scope alongside the trust badge.
+    expect(within(list).getAllByText("system")).toHaveLength(2);
   });
 
   it("applies the trust facet as a server-side query param and never sends empty facets", async () => {
@@ -177,6 +180,24 @@ describe("Embedded System Packages page", () => {
         fetchMock.mock.calls.find(([url]) =>
           String(url).includes("trust_state=trusted_active"),
         ),
+      ).toBeDefined();
+    });
+  });
+
+  it("applies the scope facet as a server-side query param and never sends empty facets", async () => {
+    const fetchMock = stubApi(BASE_ROUTES);
+    renderPage();
+    await screen.findByText("ta.rsi");
+
+    expect(
+      fetchMock.mock.calls.find(([url]) => String(url).includes("visibility_scope=")),
+    ).toBeUndefined();
+
+    fireEvent.change(screen.getByLabelText(/Scope/), { target: { value: "system" } });
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.find(([url]) => String(url).includes("visibility_scope=system")),
       ).toBeDefined();
     });
   });
@@ -214,12 +235,48 @@ describe("Embedded System Packages page", () => {
     expect(screen.getByText(/registry v4/)).toBeInTheDocument();
   });
 
+  it("keeps Propose resolver and Resolve probe out of the DOM until opened, catalog first", async () => {
+    stubApi(BASE_ROUTES);
+    renderPage();
+    await screen.findByText("ta.rsi");
+
+    // The catalog renders unconditionally; the secondary actions are dialogs
+    // opened on demand, not always-visible cards (UI-09: catalog first).
+    expect(screen.queryByRole("region", { name: "Propose resolver" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Resolve probe" })).toBeNull();
+    expect(screen.getByRole("heading", { name: "Resolver registry" })).toBeInTheDocument();
+  });
+
+  it("opens Resolve probe in a dialog, closes on Escape, and restores focus to the trigger", async () => {
+    stubApi(BASE_ROUTES);
+    renderPage();
+    await screen.findByText("ta.rsi");
+
+    const trigger = screen.getByRole("button", { name: "Resolve probe" });
+    // jsdom's fireEvent.click does not perform the browser's default
+    // focus-on-click for buttons, so focus explicitly first (mirrors a real
+    // click) — the Modal captures document.activeElement as the trigger.
+    trigger.focus();
+    fireEvent.click(trigger);
+
+    const dialog = await screen.findByRole("dialog", { name: "Resolve probe" });
+    expect(within(dialog).getByRole("region", { name: "Resolve probe" })).toBeInTheDocument();
+
+    fireEvent.keyDown(dialog, { key: "Escape" });
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "Resolve probe" })).toBeNull();
+    });
+    expect(trigger).toHaveFocus();
+  });
+
   it("submits the resolve probe with the parsed-call payload and renders the pinned revision", async () => {
     const fetchMock = stubApi(BASE_ROUTES);
     renderPage();
     await screen.findByText("ta.rsi");
 
-    const probe = screen.getByRole("region", { name: "Resolve probe" });
+    fireEvent.click(screen.getByRole("button", { name: "Resolve probe" }));
+    const probe = await screen.findByRole("region", { name: "Resolve probe" });
     fireEvent.change(within(probe).getByLabelText(/Canonical key/), {
       target: { value: "ta.rsi" },
     });
@@ -271,7 +328,8 @@ describe("Embedded System Packages page", () => {
     renderPage();
     await screen.findByText("ta.rsi");
 
-    const probe = screen.getByRole("region", { name: "Resolve probe" });
+    fireEvent.click(screen.getByRole("button", { name: "Resolve probe" }));
+    const probe = await screen.findByRole("region", { name: "Resolve probe" });
     fireEvent.change(within(probe).getByLabelText(/Canonical key/), {
       target: { value: "ta.unknown" },
     });
@@ -416,7 +474,8 @@ describe("Embedded System Packages page", () => {
     await screen.findByText("ta.rsi");
 
     // Scope to the propose region: the resolve probe reuses the same labels.
-    const section = screen.getByRole("region", { name: "Propose resolver" });
+    fireEvent.click(screen.getByRole("button", { name: "Propose resolver" }));
+    const section = await screen.findByRole("region", { name: "Propose resolver" });
     fireEvent.change(within(section).getByLabelText(/Canonical key/), {
       target: { value: "ta.macd" },
     });
@@ -457,7 +516,8 @@ describe("Embedded System Packages page", () => {
     renderPage();
     await screen.findByText("ta.rsi");
 
-    const section = screen.getByRole("region", { name: "Propose resolver" });
+    fireEvent.click(screen.getByRole("button", { name: "Propose resolver" }));
+    const section = await screen.findByRole("region", { name: "Propose resolver" });
     const proposeBtn = within(section).getByRole("button", { name: "Propose resolver" });
     expect(proposeBtn).toBeDisabled();
 

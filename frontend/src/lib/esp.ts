@@ -53,6 +53,9 @@ export interface EspRegistryRow {
   runtime_adapter: string;
   registry_version: number;
   replacement_revision_id: string | null;
+  // Present on list rows; the nested `registry` dict inside EspPackageDetail
+  // omits it (null) — the detail view already carries the top-level field.
+  visibility_scope: string | null;
   net_profit: string;
   backtest_ready: string;
   oos_passed: string;
@@ -148,13 +151,18 @@ export function parseSignatureParams(text: string): SignatureParam[] {
 // Query hooks — all under the ["esp"] prefix (swept by resource.changed)
 // ---------------------------------------------------------------------------
 
-export function useEspRegistry(trustState: string | null, cursor: string | null) {
+export function useEspRegistry(
+  trustState: string | null,
+  cursor: string | null,
+  visibilityScope: string | null = null,
+) {
   return useQuery({
-    queryKey: ["esp", "list", trustState, cursor],
+    queryKey: ["esp", "list", trustState, visibilityScope, cursor],
     queryFn: () => {
       const params = new URLSearchParams();
       // An empty facet param is NEVER sent (server 422s unknown values).
       if (trustState) params.set("trust_state", trustState);
+      if (visibilityScope) params.set("visibility_scope", visibilityScope);
       if (cursor !== null) params.set("cursor", cursor);
       const qs = params.toString();
       return api.get<EspPage>(`/embedded-system-packages${qs ? `?${qs}` : ""}`);

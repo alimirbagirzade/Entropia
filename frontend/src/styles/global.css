@@ -265,6 +265,13 @@ a:hover { text-decoration: underline; }
   max-width: 440px;
   width: 90%;
 }
+/* Form-carrying dialogs (Modal.tsx): wider card, scrolls internally instead
+   of growing past the viewport. */
+.modal-card-wide {
+  max-width: 620px;
+  max-height: 85vh;
+  overflow-y: auto;
+}
 .page-button {
   border: 1px solid #777;
   background: #efefef;

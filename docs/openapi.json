@@ -6997,6 +6997,22 @@
               ],
               "title": "Trust State"
             }
+          },
+          {
+            "in": "query",
+            "name": "visibility_scope",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/VisibilityScope"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Visibility Scope"
+            }
           }
         ],
         "responses": {

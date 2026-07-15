@@ -22,7 +22,7 @@ from entropia.domain.esp import policy as esp_policy
 from entropia.domain.esp.enums import ResolverTrustState, RuntimeAdapter
 from entropia.domain.esp.resolver import ResolutionReason, evaluate_resolution
 from entropia.domain.identity import Actor
-from entropia.domain.lifecycle.enums import DeletionState, PackageKind
+from entropia.domain.lifecycle.enums import DeletionState, PackageKind, VisibilityScope
 from entropia.infrastructure.postgres.models import (
     EmbeddedResolverContract,
     EmbeddedResolverRegistry,
@@ -49,7 +49,13 @@ def _visibility_of(detail: PackageRoot, root: EntityRegistry) -> str:
     return str(detail.visibility_scope)
 
 
-def _registry_dict(entry: EmbeddedResolverRegistry) -> dict[str, Any]:
+def _registry_dict(
+    entry: EmbeddedResolverRegistry, detail: PackageRoot | None = None
+) -> dict[str, Any]:
+    # `detail` is the backing PackageRoot for `entry.package_entity_id`. The list
+    # query always has it (joined on that FK); the nested `registry` dict inside
+    # `get_esp_detail` omits it (None) rather than resolving a possibly-different
+    # package's root just to duplicate the top-level `visibility_scope` field.
     return {
         "registry_id": entry.registry_id,
         "canonical_key": entry.canonical_key,
@@ -59,6 +65,7 @@ def _registry_dict(entry: EmbeddedResolverRegistry) -> dict[str, Any]:
         "runtime_adapter": str(entry.runtime_adapter),
         "registry_version": entry.registry_version,
         "replacement_revision_id": entry.replacement_revision_id,
+        "visibility_scope": str(detail.visibility_scope) if detail is not None else None,
         # Performance metrics are N/A for resolvers (never fabricated, L4).
         "net_profit": _NOT_APPLICABLE,
         "backtest_ready": _NOT_APPLICABLE,
@@ -72,6 +79,7 @@ async def list_embedded_system_packages(
     params: PageParams,
     *,
     trust_state: ResolverTrustState | None = None,
+    visibility_scope: VisibilityScope | None = None,
 ) -> dict[str, Any]:
     """List resolver registry entries visible to the actor, cursor-paginated.
 
@@ -93,6 +101,8 @@ async def list_embedded_system_packages(
     )
     if trust_state is not None:
         stmt = stmt.where(EmbeddedResolverRegistry.trust_state == trust_state)
+    if visibility_scope is not None:
+        stmt = stmt.where(PackageRoot.visibility_scope == visibility_scope)
     if params.cursor is not None:
         stmt = stmt.where(EmbeddedResolverRegistry.canonical_key > params.cursor)
     stmt = stmt.limit(params.limit + 1)
@@ -105,7 +115,7 @@ async def list_embedded_system_packages(
     page = visible[: params.limit]
     next_cursor = page[-1][0].canonical_key if has_more and page else None
     return {
-        "data": [_registry_dict(entry) for entry, _detail, _root in page],
+        "data": [_registry_dict(entry, detail) for entry, detail, _root in page],
         "meta": {"cursor": next_cursor, "has_more": has_more},
     }
 

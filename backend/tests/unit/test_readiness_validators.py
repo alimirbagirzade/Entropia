@@ -14,8 +14,12 @@ from entropia.domain.allocation.enums import AllocationIssueCode, AllocationIssu
 from entropia.domain.allocation.rules import AllocationIssue
 from entropia.domain.mainboard.enums import MainboardItemKind
 from entropia.domain.readiness.enums import ReadinessIssueCode as Code
-from entropia.domain.readiness.enums import ReadinessState
-from entropia.domain.readiness.issues import ExternalImportState, ReadinessItemInput
+from entropia.domain.readiness.enums import ReadinessScope, ReadinessSeverity, ReadinessState
+from entropia.domain.readiness.issues import (
+    ExternalImportState,
+    ReadinessIssue,
+    ReadinessItemInput,
+)
 from entropia.domain.readiness.validators import evaluate_readiness, is_stale
 
 # --------------------------------------------------------------------------- #
@@ -436,3 +440,23 @@ def test_external_import_matching_instrument_has_no_mismatch() -> None:
         allocation_issues=[],
     )
     assert Code.INSTRUMENT_SCOPE_MISMATCH.value not in _codes(result)
+
+
+def test_f06_injected_strategy_indicator_issue_blocks() -> None:
+    # F-06: the command resolves the pinned indicator plan (a DB read) and injects a
+    # blocker for an unresolved required dependency; the validator aggregates it 1:1.
+    unresolved = ReadinessIssue(
+        code=Code.STRATEGY_INDICATOR_UNRESOLVED,
+        severity=ReadinessSeverity.BLOCKER,
+        scope=ReadinessScope.STRATEGY,
+        message="A pinned indicator package does not resolve to a computable signal.",
+        scope_id="item_s1",
+    )
+    result = evaluate_readiness(
+        [_strategy_item()],
+        allocation_enabled=False,
+        allocation_issues=[],
+        strategy_indicator_issues=[unresolved],
+    )
+    assert Code.STRATEGY_INDICATOR_UNRESOLVED.value in _codes(result)
+    assert result.state == ReadinessState.NOT_READY

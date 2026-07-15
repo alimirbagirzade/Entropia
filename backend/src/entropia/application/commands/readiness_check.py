@@ -23,10 +23,12 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
+from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from entropia.application.idempotency import run_idempotent
 from entropia.application.queries.allocation_currency import resolve_settlement_currencies
+from entropia.application.queries.indicator_plan import resolve_indicator_plan
 from entropia.domain.allocation.config import PortfolioAllocationConfigV1
 from entropia.domain.allocation.rules import (
     AllocationItemRef,
@@ -43,6 +45,7 @@ from entropia.domain.market_data.enums import MarketRevisionState
 from entropia.domain.readiness.enums import ReadinessIssueCode, ReadinessScope, ReadinessSeverity
 from entropia.domain.readiness.issues import ExternalImportState, ReadinessIssue, ReadinessItemInput
 from entropia.domain.readiness.validators import evaluate_readiness
+from entropia.domain.strategy.config import StrategyConfig
 from entropia.infrastructure.postgres.models import (
     EntityRegistry,
     MainboardWorkingItem,
@@ -100,11 +103,13 @@ async def run_readiness_check(
 
         items = await _build_item_inputs(session, enabled)
         market_data_issues = await _resolve_market_data_issues(session, items)
+        strategy_indicator_issues = await _resolve_strategy_indicator_issues(session, items)
         evaluation = evaluate_readiness(
             items,
             allocation_enabled=allocation_enabled,
             allocation_issues=allocation_issues,
             market_data_issues=market_data_issues,
+            strategy_indicator_issues=strategy_indicator_issues,
         )
 
         blocked_ids = {
@@ -273,6 +278,60 @@ async def _resolve_market_data_issues(
                     "then re-run the check."
                 ),
                 field_path="data.market_dataset_revision_id",
+                scope_id=item.item_id,
+            )
+        )
+    return issues
+
+
+async def _resolve_strategy_indicator_issues(
+    session: AsyncSession, items: list[ReadinessItemInput]
+) -> list[ReadinessIssue]:
+    """F-06: block RUN when a strategy's pinned indicator dependency does not resolve.
+
+    Ready Check is the upfront RUN gate (doc 14 §4). The worker's fail-closed guard
+    (``jobs.backtest_engine``) is the last line of defence; this makes the missing
+    package/revision a *pre-run* blocker with a concrete remediation, so the user is
+    never allowed to admit a run that would either fabricate breakout-proxy metrics
+    (F-06) or fail terminally.
+
+    Resolving the plan is a DB read (pinned ``package_revision`` dereference), so it
+    lives here in the command, not in the pure validators — the same shape as
+    ``_resolve_market_data_issues``. A config that does not even parse is left to the
+    ``STRATEGY_CONFIG_INVALID`` validator; a strategy with no enabled entry block is
+    left to ``STRATEGY_NO_ENTRY_LOGIC`` — this check only fires when entry blocks
+    exist but their pinned packages resolve to no computable signal, or any block is
+    left unresolved.
+    """
+    issues: list[ReadinessIssue] = []
+    for item in items:
+        if not item.available or item.kind != MainboardItemKind.STRATEGY:
+            continue
+        try:
+            config = StrategyConfig(**item.payload)
+        except PydanticValidationError:
+            continue  # STRATEGY_CONFIG_INVALID already surfaces this in the validators.
+        entry_blocks = [b for b in config.position_entry_logic.indicator_blocks if b.enabled]
+        if not entry_blocks:
+            continue  # STRATEGY_NO_ENTRY_LOGIC covers a strategy with no entry block.
+        plan = await resolve_indicator_plan(session, config)
+        if plan.has_entry and not plan.unresolved:
+            continue
+        detail = list(plan.unresolved) or ["no computable entry signal from the pinned packages"]
+        issues.append(
+            ReadinessIssue(
+                code=ReadinessIssueCode.STRATEGY_INDICATOR_UNRESOLVED,
+                severity=ReadinessSeverity.BLOCKER,
+                scope=ReadinessScope.STRATEGY,
+                message=(
+                    "A pinned indicator package or dependency does not resolve to a computable "
+                    f"signal: {detail}."
+                ),
+                remediation=(
+                    "Pin an approved indicator package whose dependencies resolve (or fix the "
+                    "unresolved block), then re-run the check."
+                ),
+                field_path="position_entry_logic.indicator_blocks",
                 scope_id=item.item_id,
             )
         )

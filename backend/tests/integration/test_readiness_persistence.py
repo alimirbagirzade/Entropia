@@ -21,8 +21,15 @@ from entropia.application.commands import readiness_check as readiness_cmd
 from entropia.application.queries import mainboard as mb_query
 from entropia.application.queries import readiness_check as readiness_query
 from entropia.domain.identity import Actor
-from entropia.domain.lifecycle.enums import PrincipalType, Role
+from entropia.domain.lifecycle.enums import (
+    ApprovalState,
+    PackageKind,
+    PrincipalType,
+    Role,
+    VisibilityScope,
+)
 from entropia.domain.market_data.enums import MarketDataType, MarketRevisionState
+from entropia.domain.package.enums import PackageValidationState
 from entropia.infrastructure.postgres.models import (
     EntityRegistry,
     MainboardCompositionSnapshot,
@@ -32,6 +39,7 @@ from entropia.infrastructure.postgres.models import (
     ReadyCheckReport,
 )
 from entropia.infrastructure.postgres.models.audit import OutboxEvent
+from entropia.infrastructure.postgres.repositories import packages as pkg_repo
 from entropia.shared.errors import (
     AccessDeniedError,
     CompositionStaleError,
@@ -84,7 +92,7 @@ async def _seed_market_revision(session, state: MarketRevisionState) -> None:
     await session.flush()
 
 
-def _strategy_payload() -> dict[str, Any]:
+def _strategy_payload(indicator_revision_id: str = "pkg_rev_1") -> dict[str, Any]:
     return {
         "strategy_root_id": "strat_root_seed",
         "display_name": "Seed strategy",
@@ -110,7 +118,7 @@ def _strategy_payload() -> dict[str, Any]:
                     "display_order": 0,
                     "package_ref": {
                         "package_root_id": "pkg_root_1",
-                        "package_revision_id": "pkg_rev_1",
+                        "package_revision_id": indicator_revision_id,
                         "package_content_hash": "b" * 64,
                     },
                     "trigger_source": "indicator_native_trigger",
@@ -135,8 +143,27 @@ async def _empty_composition(session, actor: Actor) -> str:
 async def _composition_with_strategy(session, actor: Actor) -> str:
     await _seed_market_revision(session, MarketRevisionState.APPROVED)
     workspace_id = await _empty_composition(session, actor)
+    # F-06: the pinned indicator must resolve to a computable signal, else the upfront
+    # Ready Check gate blocks it (STRATEGY_INDICATOR_UNRESOLVED). Seed a real approved
+    # package whose dependency snapshot yields the directional key ta.sma.
+    _reg, _pkg_root, pkg_rev = await pkg_repo.create_package(
+        session,
+        owner_principal_id=None,
+        created_by_principal_id=None,
+        package_kind=PackageKind.INDICATOR,
+        input_contract={"source": "close"},
+        output_contract={"kind": "directional_signal"},
+        dependency_snapshot={"resolved": [{"call": "ta.sma", "canonical_key": "ta.sma"}]},
+        visibility_scope=VisibilityScope.PUBLISHED,
+        validation_state=PackageValidationState.PASSED,
+        approval_state=ApprovalState.APPROVED,
+    )
+    await session.flush()
     work_object = await mb_cmd.create_work_object(
-        session, actor, object_kind="strategy", payload=_strategy_payload()
+        session,
+        actor,
+        object_kind="strategy",
+        payload=_strategy_payload(indicator_revision_id=pkg_rev.revision_id),
     )
     await mb_cmd.attach_mainboard_item(
         session,

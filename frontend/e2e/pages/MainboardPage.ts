@@ -22,6 +22,11 @@ export class MainboardPage {
   // (queries/trash.py: entry.display_name or entry.entity_id), used by the
   // Trash spec to find this exact entry without depending on list ordering.
   async createAndAttachWorkObject(objectKind: "strategy" | "trading_signal" | "trade_log"): Promise<string> {
+    // UI-06: the Add work object composer is mode-gated behind the small
+    // "Add Package" popover in the STRATEGIES header — open it and choose the
+    // work-object path before the card renders.
+    await this.page.getByRole("button", { name: "+ Add Package" }).click();
+    await this.page.getByRole("button", { name: "Strategy / work object" }).click();
     const card = this.page.locator("section", { has: this.page.getByRole("heading", { name: "Add work object", exact: true }) });
     await card.getByRole("combobox").selectOption(objectKind);
     await card.getByRole("button", { name: "Create work object" }).click();

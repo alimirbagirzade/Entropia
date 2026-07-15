@@ -86,6 +86,18 @@ def session_mode(monkeypatch: pytest.MonkeyPatch):
     get_settings.cache_clear()
 
 
+@pytest.fixture
+def production_session_mode(monkeypatch: pytest.MonkeyPatch):
+    """F-22: the production profile itself, not just AUTH_MODE=session — proves
+    the whole non-local deployment (env + auth) rejects header impersonation."""
+    monkeypatch.setenv("ENTROPIA_ENV", "production")
+    monkeypatch.setenv("AUTH_MODE", "session")
+    monkeypatch.setenv("ENTROPIA_SERVICE_TOKEN", "svc-secret-token")
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
+
+
 async def test_sign_up_creates_user_credential_audit_and_outbox(session: AsyncSession) -> None:
     result = await auth_cmd.sign_up(session, username="alice", password=PASSWORD)
 
@@ -346,3 +358,29 @@ async def test_service_line_is_non_human_only(session: AsyncSession, session_mod
         await request_context(
             _request({"Authorization": "Bearer svc-secret-token"}), session=session
         )
+
+
+# ---- F-22: the production profile cannot trust client-supplied actor headers ----
+
+
+async def test_production_profile_rejects_bare_actor_header_impersonation(
+    session: AsyncSession, production_session_mode: None
+) -> None:
+    """The production ENVIRONMENT (not merely AUTH_MODE=session in isolation)
+    must reject an unauthenticated caller who only sets X-Actor-Id — a real
+    login + live session is required, exactly as in dev-mode's opposite."""
+    signup = await auth_cmd.sign_up(session, username="alice", password=PASSWORD)
+
+    ctx = await request_context(_request({"X-Actor-Id": signup["user_id"]}), session=session)
+    assert not ctx.actor.is_authenticated
+
+    login = await auth_cmd.login(session, username="alice", password=PASSWORD, ttl_minutes=60)
+    ctx2 = await request_context(
+        _request(
+            {"Authorization": f"Bearer {login['token']}", "X-Actor-Id": "someone-else-entirely"}
+        ),
+        session=session,
+    )
+    # The Bearer session decides the actor; a mismatched X-Actor-Id is ignored,
+    # not honored as an impersonation vector.
+    assert ctx2.actor.principal_id == signup["user_id"]

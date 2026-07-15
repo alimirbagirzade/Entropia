@@ -31,6 +31,10 @@ This repository is built **stage by stage** from a canonical specification (see
 > (live trading, LLM generation, retention auto-purge, Graphic View renderer)
 > are listed there and in [`docs/POST_V1_KICKOFF.md`](docs/POST_V1_KICKOFF.md).
 
+Contributing? See [`CONTRIBUTING.md`](CONTRIBUTING.md) for local setup and the
+development workflow. Found a security issue? See [`SECURITY.md`](SECURITY.md)
+— please do not open a public issue.
+
 ---
 
 ## Quick start — Docker (recommended, identical on macOS / Windows / Linux)

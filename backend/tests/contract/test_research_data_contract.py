@@ -330,3 +330,41 @@ async def test_idempotent_analyze_returns_same_job(app, monkeypatch) -> None:
         assert r1.json()["job_id"] == r2.json()["job_id"] == "job_fixed"
     finally:
         app.dependency_overrides.pop(request_context, None)
+
+
+# ---- F-02 real multipart upload — pure validation before any DB touch -------
+
+
+@pytest.mark.contract
+async def test_upload_rejects_unsupported_file_type_before_db(app) -> None:
+    """The extension gate runs before ``_require_root`` — a Supervisor is
+    page-eligible (Users/Guests are blocked at the router gate) and a dummy
+    session that never answers a query is enough."""
+    gen = _override(app, _supervisor())
+    next(gen)
+    try:
+        async with await _client(app) as c:
+            resp = await c.post(
+                "/api/v1/research-datasets/rds_x/upload-session",
+                files={"file": ("dataset.xlsx", b"not-a-csv", "application/octet-stream")},
+            )
+        assert resp.status_code == 422
+        assert resp.json()["error"]["code"] == "RESEARCH_DATA_FILE_TYPE_NOT_ALLOWED"
+    finally:
+        next(gen, None)
+
+
+@pytest.mark.contract
+async def test_upload_rejects_empty_file_before_db(app) -> None:
+    gen = _override(app, _supervisor())
+    next(gen)
+    try:
+        async with await _client(app) as c:
+            resp = await c.post(
+                "/api/v1/research-datasets/rds_x/upload-session",
+                files={"file": ("dataset.csv", b"", "text/csv")},
+            )
+        assert resp.status_code == 422
+        assert resp.json()["error"]["code"] == "VALIDATION_ERROR"
+    finally:
+        next(gen, None)

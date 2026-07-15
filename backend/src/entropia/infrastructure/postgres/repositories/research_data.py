@@ -142,6 +142,23 @@ async def append_research_dataset_revision(
     return revision
 
 
+async def find_raw_asset_by_hash(
+    session: AsyncSession, *, entity_id: str, content_digest: str
+) -> ResearchRawAsset | None:
+    """Return an existing identical raw-asset upload for this dataset (content
+    dedup) — makes a retried upload idempotent regardless of Idempotency-Key."""
+    stmt = (
+        select(ResearchRawAsset)
+        .where(
+            ResearchRawAsset.entity_id == entity_id,
+            ResearchRawAsset.content_digest == content_digest,
+        )
+        .order_by(ResearchRawAsset.asset_id)
+        .limit(1)
+    )
+    return (await session.execute(stmt)).scalars().first()
+
+
 def add_raw_asset(
     session: AsyncSession,
     *,

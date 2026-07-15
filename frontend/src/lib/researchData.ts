@@ -80,6 +80,11 @@ export interface CreateDatasetResult {
 export interface StartUploadResult {
   asset_id: string;
   entity_id: string;
+  content_digest: string;
+  size_bytes: number;
+  content_type: string | null;
+  original_filename: string | null;
+  deduplicated: boolean;
 }
 
 export interface FinalizeUploadResult {
@@ -223,28 +228,19 @@ export function useCreateDataset() {
   });
 }
 
-export interface StartUploadInput {
-  entity_id: string;
-  object_key: string;
-  content_digest: string;
-  size_bytes: number;
-  content_type: string | null;
-  original_filename: string | null;
+// Step 1: transfer the real file bytes (F-02). The object key, SHA-256 digest,
+// byte size, and content type are all derived server-side from the transferred
+// bytes — the caller supplies only the File. Use with lib/upload.ts's
+// useFileUpload<StartUploadResult>() + rawUploadPath(entityId).
+export function rawUploadPath(entityId: string): string {
+  return `/research-datasets/${encodeURIComponent(entityId)}/upload-session`;
 }
 
-// Step 1: record the immutable raw-asset evidence row (doc 12 §7 Browse File). The
-// bytes live in object storage; this page registers the object key + digest
-// metadata only — there is no browser byte-upload endpoint on this surface.
-export function useStartUpload() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ entity_id, ...body }: StartUploadInput) =>
-      api.post<StartUploadResult>(
-        `/research-datasets/${encodeURIComponent(entity_id)}/upload-session`,
-        body,
-      ),
-    onSuccess: () => invalidateResearchData(queryClient),
-  });
+// A successful multipart upload changes dataset state (a new/reused raw asset),
+// so the page must invalidate the same query keys a JSON mutation would — call
+// this from the useFileUpload() onSuccess/then handler.
+export function invalidateAfterRawUpload(queryClient: QueryClient) {
+  invalidateResearchData(queryClient);
 }
 
 // Mark the upload complete. Idempotent server-side — a fresh Idempotency-Key per

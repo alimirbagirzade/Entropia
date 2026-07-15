@@ -394,6 +394,20 @@
         "title": "BatchAssignmentRequest",
         "type": "object"
       },
+      "Body_create_upload_session_api_v1_research_datasets__entity_id__upload_session_post": {
+        "properties": {
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_create_upload_session_api_v1_research_datasets__entity_id__upload_session_post",
+        "type": "object"
+      },
       "Body_start_upload_api_v1_market_datasets__entity_id__raw_uploads_post": {
         "properties": {
           "file": {
@@ -2602,52 +2616,6 @@
         ],
         "title": "SourceLanguage",
         "type": "string"
-      },
-      "StartUploadRequest": {
-        "properties": {
-          "content_digest": {
-            "title": "Content Digest",
-            "type": "string"
-          },
-          "content_type": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Content Type"
-          },
-          "object_key": {
-            "title": "Object Key",
-            "type": "string"
-          },
-          "original_filename": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Original Filename"
-          },
-          "size_bytes": {
-            "minimum": 0.0,
-            "title": "Size Bytes",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "object_key",
-          "content_digest",
-          "size_bytes"
-        ],
-        "title": "StartUploadRequest",
-        "type": "object"
       },
       "SubmitPackageImportBody": {
         "properties": {
@@ -12519,6 +12487,7 @@
     },
     "/api/v1/research-datasets/{entity_id}/upload-session": {
       "post": {
+        "description": "Real multipart byte transfer (F-02): the object key, SHA-256 digest,\nbyte size, and content type are all derived server-side from the bytes —\nthe client never supplies storage metadata. The read is bounded by\n``MAX_UPLOAD_BYTES + 1`` so an oversized upload is rejected without\nbuffering an unbounded payload into memory.",
         "operationId": "create_upload_session_api_v1_research_datasets__entity_id__upload_session_post",
         "parameters": [
           {
@@ -12529,13 +12498,29 @@
               "title": "Entity Id",
               "type": "string"
             }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
           }
         ],
         "requestBody": {
           "content": {
-            "application/json": {
+            "multipart/form-data": {
               "schema": {
-                "$ref": "#/components/schemas/StartUploadRequest"
+                "$ref": "#/components/schemas/Body_create_upload_session_api_v1_research_datasets__entity_id__upload_session_post"
               }
             }
           },

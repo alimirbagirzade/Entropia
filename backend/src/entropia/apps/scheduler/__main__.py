@@ -20,6 +20,7 @@ from typing import Any
 from entropia.application.jobs.maintenance import recover_stale_jobs, redeliverable_queued_jobs
 from entropia.application.jobs.outbox_relay import relay_unpublished
 from entropia.apps.worker.actors import (
+    run_agent_executor,
     run_agent_tool,
     run_agent_tool_high,
     run_backtest_engine,
@@ -37,6 +38,7 @@ ACTOR_BY_QUEUE: dict[str, Any] = {
     "backtest": run_backtest_engine,
     "agent": run_agent_tool,
     "agent-high": run_agent_tool_high,
+    "agent-executor": run_agent_executor,
     "maintenance": run_trash_purge,
 }
 

@@ -200,8 +200,11 @@ async def create_result(
             result_id=result_id,
             symbol=summary.get("symbol"),
             timeframe=summary.get("timeframe"),
-            period_start=None,
-            period_end=None,
+            # F-05: the actual first/last bar timestamps replayed (post-filter),
+            # never the requested config range — proves the manifest matches the
+            # data actually processed.
+            period_start=summary.get("period_start"),
+            period_end=summary.get("period_end"),
             total_trades=int(summary.get("total_trades") or 0),
             headline={k: _jsonable(summary.get(k)) for k in _SUMMARY_JSON_KEYS},
         )

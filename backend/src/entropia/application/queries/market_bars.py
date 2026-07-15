@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -58,4 +59,58 @@ def iter_bar_batches(
     yield from stream_processed_batches(source.object_key, batch_size=batch_size, columns=columns)
 
 
-__all__ = ["BarSourceRef", "iter_bar_batches", "resolve_bar_source"]
+def parse_range_bound(value: str) -> datetime | None:
+    """Parse a ``backtest_range`` boundary to a comparable UTC ``datetime`` (F-05).
+
+    ``None`` when the value is not a valid ISO-8601 timestamp — the caller must
+    treat that as an explicit reject, never a silently-ignored filter. A bound
+    with no offset/zone is treated as UTC, matching the documented "engine
+    manifest UTC normalization" (Master Technical Reference, Backtest Range)."""
+    candidate = value[:-1] + "+00:00" if value.endswith("Z") else value
+    try:
+        parsed = datetime.fromisoformat(candidate)
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
+
+
+def _bar_timestamp(row: dict[str, Any], lo: datetime, hi: datetime) -> bool:
+    """Whether a raw bar row's ``timestamp`` falls within ``[lo, hi]`` inclusive.
+
+    An unparseable/missing timestamp is dropped rather than guessed — it can
+    never be proven in-range (fail-closed exclusion, doc 02 §2 boundary
+    semantics: ``start <= end`` inclusive)."""
+    raw_ts = row.get("timestamp")
+    if raw_ts is None:
+        return False
+    parsed = parse_range_bound(str(raw_ts))
+    return parsed is not None and lo <= parsed <= hi
+
+
+def filter_bars_by_range(
+    batches: Iterator[list[dict[str, Any]]], *, start: str, end: str
+) -> Iterator[list[dict[str, Any]]]:
+    """Physically filter the bar stream to ``[start, end]`` inclusive (F-05).
+
+    Applied at the worker boundary so the engine itself stays a pure function of
+    the bars it is handed — it never sees a bar outside the selected range. Empty
+    batches are never yielded, so a fully-excluded stream yields nothing at all
+    (the caller detects that and rejects the run rather than materializing an
+    empty-but-"succeeded" result)."""
+    lo = parse_range_bound(start)
+    hi = parse_range_bound(end)
+    if lo is None or hi is None or lo > hi:
+        return
+    for batch in batches:
+        kept = [row for row in batch if _bar_timestamp(row, lo, hi)]
+        if kept:
+            yield kept
+
+
+__all__ = [
+    "BarSourceRef",
+    "filter_bars_by_range",
+    "iter_bar_batches",
+    "parse_range_bound",
+    "resolve_bar_source",
+]

@@ -9,6 +9,9 @@ are the source of truth — the request that admitted the run has long since ret
         any unresolved pin => terminal FAILED, doc 15 §11, §15) ->
     resolve the primary Strategy's pinned config + its pinned market revision's
         processed bar source (INF-12); a missing asset => terminal FAILED ->
+    physically filter the bar stream to the strategy's backtest_range + verify
+        the pinned revision's instrument (F-05); an invalid/empty-after-filter
+        range or an instrument mismatch => terminal FAILED ->
     resolve the pinned indicator plan; an unresolved required dependency =>
         terminal FAILED (F-06: NEVER the breakout proxy, doc 15 §15) ->
     bar-replay the deterministic engine (``domain.backtest.engine``) over the
@@ -28,6 +31,7 @@ materialize chain without object storage.
 
 from __future__ import annotations
 
+import itertools
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
 from typing import Any
@@ -38,7 +42,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from entropia.application.queries.indicator_plan import resolve_indicator_plan
 from entropia.application.queries.market_bars import (
     BarSourceRef,
+    filter_bars_by_range,
     iter_bar_batches,
+    parse_range_bound,
     resolve_bar_source,
 )
 from entropia.domain.backtest.engine import resolve_allocation_execution, run_engine
@@ -130,6 +136,65 @@ async def run_backtest(
             message=f"Pinned market revision '{market_revision_id}' has no processed bar asset.",
         )
 
+    # F-05: physically filter the bar stream to the strategy's selected date range +
+    # cross-check the pinned market revision's instrument. Both checks happen while
+    # still PROVISIONING, exactly like the pin/asset checks above, so the fail path
+    # never transits through RUNNING.
+    range_cfg = strategy_config.data.backtest_range
+    range_start = parse_range_bound(range_cfg.start)
+    range_end = parse_range_bound(range_cfg.end)
+    if range_start is None or range_end is None or range_start > range_end:
+        return _fail_run(
+            session,
+            job,
+            run,
+            code=RunFailureCode.INVALID_BACKTEST_RANGE,
+            message=(
+                f"backtest_range '{range_cfg.start}'..'{range_cfg.end}' is not a valid "
+                "start<=end ISO-8601 window."
+            ),
+        )
+    # The pinned revision's dataset-level instrument (GAP-16) must match the
+    # strategy's selected instrument when it is known. A legacy/unset revision
+    # instrument_id cannot be disproven and is honestly passed through unfiltered;
+    # an actual mismatch is a hard fail-closed reject, never a silent cross-instrument
+    # run (spec F-05 acceptance: "bars from unselected instruments never enter").
+    market_revision = await md_repo.get_revision(session, market_revision_id)
+    if (
+        market_revision is not None
+        and market_revision.instrument_id is not None
+        and market_revision.instrument_id != strategy_config.data.instrument_id
+    ):
+        return _fail_run(
+            session,
+            job,
+            run,
+            code=RunFailureCode.INSTRUMENT_MISMATCH,
+            message=(
+                f"Pinned market revision '{market_revision_id}' is scoped to instrument "
+                f"'{market_revision.instrument_id}', not the strategy's selected "
+                f"'{strategy_config.data.instrument_id}'."
+            ),
+        )
+    filtered_bars = filter_bars_by_range(
+        stream_bars(source), start=range_cfg.start, end=range_cfg.end
+    )
+    try:
+        first_batch = next(filtered_bars)
+    except StopIteration:
+        return _fail_run(
+            session,
+            job,
+            run,
+            code=RunFailureCode.EMPTY_FILTERED_RANGE,
+            message=(
+                f"No bars fall within the selected backtest_range "
+                f"'{range_cfg.start}'..'{range_cfg.end}' for market revision "
+                f"'{market_revision_id}'."
+            ),
+        )
+    bar_batches = itertools.chain([first_batch], filtered_bars)
+
     # Resolve the pinned strategy's indicator packages into a deterministic compute
     # plan (INF-12 Slice C). Derived purely from immutable pins, so it does not break
     # reproducibility.
@@ -171,7 +236,7 @@ async def run_backtest(
     try:
         output = run_engine(
             strategy_config=strategy_config,
-            bar_batches=stream_bars(source),
+            bar_batches=bar_batches,
             execution_key=manifest.execution_key,
             item_count=item_count,
             indicator_plan=indicator_plan,

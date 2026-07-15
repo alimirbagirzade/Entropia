@@ -156,20 +156,26 @@ export const MENU_BAR: MenuGroup[] = [
     accent: "blue",
     items: [
       { label: "Live Trade" }, // passive placeholder (mockup: no target)
-      { label: "Graphic View", path: "/future-dev/graphic-view" },
+      // Graphic View / AI Operations / Research have no dedicated sub-pages —
+      // all of Future Dev's server-backed content (registry + Graphic View
+      // overview + gated commands) lives on the single real /future-dev route.
+      // The prior per-item sub-paths matched no route (not in ALL_NAV_ITEMS,
+      // so App.tsx never auto-generated a placeholder for them either) and
+      // resolved to NotFound — every entry must target an existing route.
+      { label: "Graphic View", path: "/future-dev" },
       {
         label: "AI Operations",
         items: [
-          { label: "Backtest Review", path: "/future-dev/backtest-review" },
-          { label: "Signal Intelligence", path: "/future-dev/signal-intelligence" },
+          { label: "Backtest Review", path: "/future-dev" },
+          { label: "Signal Intelligence", path: "/future-dev" },
         ],
       },
       {
         label: "Research",
         items: [
-          { label: "Regime Research", path: "/future-dev/regime-research" },
-          { label: "Hypothesis Lab", path: "/future-dev/hypothesis-lab" },
-          { label: "Parameter Fields", path: "/future-dev/parameter-fields" },
+          { label: "Regime Research", path: "/future-dev" },
+          { label: "Hypothesis Lab", path: "/future-dev" },
+          { label: "Parameter Fields", path: "/future-dev" },
         ],
       },
     ],

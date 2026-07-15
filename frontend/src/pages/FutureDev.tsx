@@ -66,6 +66,7 @@ export function FutureDev() {
       <RegistryCard selectedKey={selectedKey} onSelect={setSelectedKey} />
       {selectedKey !== null ? <CapabilityDetailCard capabilityKey={selectedKey} /> : null}
       <GraphicViewCard />
+      <ViewDatasetCard />
       <AnalysisArtifactsCard />
     </>
   );
@@ -385,8 +386,13 @@ function TransitionComposer({
 
 // ---------------------------------------------------------------------------
 // Graphic View placeholder overview (GET /future-dev/graphic-view/overview,
-// doc 22 §4.1, FD-01/03) — static copy + server lifecycle state; never a
-// chart request, a job or fake progress (CR-09).
+// doc 22 §4.1, FD-01/03) — static intro + the six v18 mockup cards + the
+// server lifecycle state; never a chart request, a job or fake progress
+// (CR-09). This card is a pure static placeholder mirroring the v18 mockup's
+// "FUTURE DEV / GRAPHIC VIEW" page byte-for-byte — no input, table, lifecycle
+// control or form belongs here. The gated operational commands (Prepare View
+// Dataset, Analysis Artifacts) and the Capability Registry live in their own
+// sibling sections below, never inside this one.
 // ---------------------------------------------------------------------------
 
 function GraphicViewCard() {
@@ -417,6 +423,21 @@ function GraphicViewCard() {
           ))}
         </>
       ) : null}
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// View Dataset — the graphic_view-gated operational command (doc 22 §8, §10.2,
+// FD-04), its own section separate from the Graphic View placeholder above.
+// ---------------------------------------------------------------------------
+
+function ViewDatasetCard() {
+  return (
+    <section className="card" aria-labelledby="view-dataset-section-h">
+      <h3 id="view-dataset-section-h" style={{ marginTop: 0 }}>
+        View Dataset
+      </h3>
       <ViewDatasetComposer />
       <ViewDatasetHistory />
     </section>

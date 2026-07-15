@@ -178,6 +178,27 @@ class _Position:
     entry_notional: Decimal
 
 
+@dataclass(slots=True)
+class _Pending:
+    """A fill deferred to a FUTURE bar by the execution-timing setting (F-07a, §2).
+
+    ``current_candle_close`` / ``market_fill_simulation`` fill immediately at the
+    signal bar's close and never create a ``_Pending``. ``next_candle_open`` /
+    ``next_candle_close`` defer the fill to the following bar: ``target_seq`` is the
+    ``bars_seen`` index at which the fill executes (always the bar right after the
+    signal), and ``at_open`` chooses that bar's open (resolved before the intrabar
+    stop path) versus its close (resolved at end-of-bar, so an intrabar stop on the
+    same bar pre-empts a scheduled close exit). At most one ``_Pending`` is ever
+    outstanding: an entry pending exists only while flat, an exit pending only while
+    in a position."""
+
+    kind: str  # "entry" | "exit"
+    at_open: bool  # fill at the target bar's OPEN (else its CLOSE)
+    target_seq: int  # bars_seen index at which the fill executes (the next bar)
+    direction: str  # entry direction ("" for an exit)
+    reason: str  # exit reason ("" for an entry)
+
+
 def _dec(value: Any) -> Decimal:
     """Coerce a Parquet cell (float/int/str/Decimal) to Decimal deterministically."""
     if isinstance(value, Decimal):
@@ -334,6 +355,50 @@ def sizing_is_modelled(config: StrategyConfig) -> bool:
     is blocked at Ready Check AND opens no position if a stale readiness state slips
     through to the worker (F-09)."""
     return _sizing_is_honored(config)
+
+
+# §2 Execution timing modelled by the deterministic OHLCV bar-replay (F-07a). The
+# "immediate" modes fill at the SIGNAL bar's close (a market fill at the decision
+# point); the "next candle" modes defer the fill to the following bar's open/close,
+# removing the hardcoded current-candle-close assumption. ``intrabar_touch`` and the
+# limit / stop-limit simulation modes need an intrabar (tick) price path or the
+# limit-order machinery (later F-07 slices) and MUST NOT be silently imitated over
+# plain OHLCV (doc 02 Entry/Exit Execution row: "cannot silently imitate unavailable
+# detail") — they FAIL CLOSED as a Ready Check blocker + an inert engine run.
+_ENTRY_TIMING_IMMEDIATE = frozenset({"current_candle_close", "market_fill_simulation"})
+_EXIT_TIMING_IMMEDIATE = frozenset({"current_candle_close", "market_fill_simulation"})
+_ENTRY_TIMING_MODELLED = _ENTRY_TIMING_IMMEDIATE | {"next_candle_open", "next_candle_close"}
+_EXIT_TIMING_MODELLED = _EXIT_TIMING_IMMEDIATE | {"next_candle_open", "next_candle_close"}
+
+
+def execution_timing_is_modelled(config: StrategyConfig) -> bool:
+    """Public predicate: are BOTH entry and exit execution timings modelled (F-07a)?
+
+    The single shared source of truth for "modelled timing", imported by the readiness
+    validator so Ready Check's ``STRATEGY_EXECUTION_TIMING_UNSUPPORTED`` blocker and the
+    engine's fail-closed entry gate agree on exactly one definition. An unsupported
+    value (``intrabar_touch`` / a limit or stop-limit simulation mode) is blocked at
+    Ready Check AND opens no position if a stale readiness state slips through to the
+    worker — never silently downgraded to a current-candle-close fill it did not
+    request."""
+    execution = config.data.execution
+    return (
+        execution.entry_timing in _ENTRY_TIMING_MODELLED
+        and execution.exit_timing in _EXIT_TIMING_MODELLED
+    )
+
+
+def _fill_schedule(timing: str) -> str:
+    """Map a timing enum to a fill schedule: ``immediate`` / ``next_open`` / ``next_close``.
+
+    Immediate / market-fill (and any unsupported value) map to ``immediate`` — the
+    unsupported case is inert because the entry gate blocks trading unless
+    ``execution_timing_is_modelled`` holds (fail-closed backstop to Ready Check)."""
+    if timing == "next_candle_open":
+        return "next_open"
+    if timing == "next_candle_close":
+        return "next_close"
+    return "immediate"
 
 
 def _clamp_to_limits(size: Decimal, limits: PositionSizeLimits | None) -> Decimal:
@@ -619,6 +684,16 @@ def run_engine(
     # financially inert run (no phantom 0-size or all-in trades).
     sizing_ok = _sizing_is_honored(config)
 
+    # F-07a: entry/exit execution timing. Immediate modes fill at the signal bar's
+    # close; the next-candle modes defer the fill to the following bar (removing the
+    # hardcoded current-candle-close assumption). An UNSUPPORTED timing (intrabar_touch /
+    # a limit or stop-limit simulation) opens NO position — the fail-closed backstop to
+    # the Ready Check STRATEGY_EXECUTION_TIMING_UNSUPPORTED blocker, never silently
+    # downgraded to a close fill it did not request.
+    timing_ok = execution_timing_is_modelled(config)
+    entry_sched = _fill_schedule(config.data.execution.entry_timing)
+    exit_sched = _fill_schedule(config.data.execution.exit_timing)
+
     plan_active = indicator_plan is not None and indicator_plan.has_entry
     entry_evals: list[BlockEvaluator] = (
         build_evaluators(indicator_plan.entry_specs) if plan_active and indicator_plan else []
@@ -636,6 +711,7 @@ def run_engine(
     signal_events: list[SignalEventRow] = []
     window: deque[_Bar] = deque(maxlen=_BREAKOUT_WINDOW)
     position: _Position | None = None
+    pending: _Pending | None = None  # a fill deferred to a future bar (F-07a timing)
     bars_seen = 0
     first_ts = ""
     last_bar: _Bar | None = None
@@ -645,6 +721,8 @@ def run_engine(
     max_stop_streak = 0
     suppressed_entries = 0
     stop_exit_collisions = 0
+    deferred_entry_fills = 0
+    deferred_exit_fills = 0
     gross_profit = _ZERO
     gross_loss = _ZERO
 
@@ -721,20 +799,24 @@ def run_engine(
         )
         return allocatable * item_share / _HUNDRED
 
-    def _open(direction: str, bar: _Bar) -> _Position | None:
-        """Open a position at this bar's cost-adjusted fill, or ``None`` for a no-fill.
+    def _open(direction: str, bar: _Bar, fill_raw: Decimal) -> _Position | None:
+        """Open a position at the cost-adjusted fill of ``fill_raw``, or ``None`` for a
+        no-fill.
 
-        Under allocation a 0-capacity sleeve (an unallocated item, or a compound pool
-        busted below its reserve) yields no fill at all — ``None`` — rather than a
-        phantom 0-size trade (doc 13 §8.4 step 5/6). Independent mode books even a
-        bust-equity 0-size fill (preserving the risk-based no-phantom-profit invariant),
-        but an UNMODELLED sizing method (F-09) opens nothing at all — no phantom trade
-        for a strategy the user never validly configured."""
+        ``fill_raw`` is the raw (pre-cost) execution price chosen by the entry timing:
+        the signal bar's close (immediate), or the next bar's open / close (deferred) —
+        removing the hardcoded current-candle-close assumption (F-07a). Under allocation
+        a 0-capacity sleeve (an unallocated item, or a compound pool busted below its
+        reserve) yields no fill at all — ``None`` — rather than a phantom 0-size trade
+        (doc 13 §8.4 step 5/6). Independent mode books even a bust-equity 0-size fill
+        (preserving the risk-based no-phantom-profit invariant), but an UNMODELLED sizing
+        method (F-09) opens nothing at all — no phantom trade for a strategy the user
+        never validly configured."""
         if not sizing_ok:
             return None
         is_long = direction == "long"
         entry_eff = _effective_fill(
-            bar.close, is_buy=is_long, half_spread=half_spread, slip=slippage
+            fill_raw, is_buy=is_long, half_spread=half_spread, slip=slippage
         )
         if alloc_on:
             # Strategy Details sizing/risk constraints first (within the item's sleeve),
@@ -753,7 +835,7 @@ def run_engine(
             size=size,
             static_stop=_initial_static_stop(config, is_long=is_long, entry_price=entry_eff),
             trail_pct=trail_pct,
-            trail_anchor=bar.close,
+            trail_anchor=fill_raw,
             entry_notional=(entry_eff * size).quantize(_MONEY),
         )
 
@@ -800,6 +882,18 @@ def run_engine(
                 if exit_evals and indicator_plan.exit_rule is not None:
                     exit_hit = aggregate(indicator_plan.exit_rule, exit_evals) is not None
 
+            # (1) Resolve a fill deferred to THIS bar's OPEN (next_candle_open). Runs
+            # before the intrabar stop path so the open fill precedes the bar's high/low.
+            if pending is not None and pending.target_seq == bars_seen and pending.at_open:
+                if pending.kind == "entry" and position is None:
+                    deferred_entry_fills += 1
+                    position = _open(pending.direction, bar, bar.open)
+                elif pending.kind == "exit" and position is not None:
+                    deferred_exit_fills += 1
+                    _close(bar.timestamp, bar.open, pending.reason, position)
+                    position = None
+                pending = None
+
             if position is not None:
                 # (2) protection / stop / exit against this bar (intrabar touch).
                 if position.direction == "long":
@@ -811,16 +905,21 @@ def run_engine(
                     (position.direction == "long" and bar.low <= stop)
                     or (position.direction == "short" and bar.high >= stop)
                 )
-                exit_wanted = (
+                # A fresh exit signal is evaluated only when no exit is already committed:
+                # a deferred exit from a prior bar (``pending``) is pinned and cannot be
+                # pre-empted by a new signal — only an intrabar stop below can cancel it.
+                exit_wanted = pending is None and (
                     _plan_exit(position, entry_signal, exit_hit)
                     if plan_active
                     else _exit_proxy(position, bar, window)
                 )
-                if stop_touched and exit_wanted:
-                    # §5.9 same-bar Stop+Exit collision — resolve deterministically. Only
-                    # "exit_has_priority" changes the OUTCOME (close at close as an exit);
-                    # the other three execute the stop (the intrabar touch precedes the
-                    # close-based exit), and "record_both_reasons" also logs both codes.
+                if stop_touched and exit_wanted and exit_sched == "immediate":
+                    # §5.9 same-bar Stop+Exit collision — only when the exit ALSO fills
+                    # this bar (immediate timing). A deferred exit would fill strictly
+                    # later, so an intrabar stop simply wins (handled by the elif below).
+                    # Only "exit_has_priority" changes the OUTCOME (close at close as an
+                    # exit); the other three execute the stop (the intrabar touch precedes
+                    # the close-based exit), "record_both_reasons" logs both codes.
                     stop_exit_collisions += 1
                     if stop_exit_conflict == "exit_has_priority":
                         _close(bar.timestamp, bar.close, "exit_signal", position)
@@ -843,32 +942,66 @@ def run_engine(
                             )
                     position = None
                 elif stop_touched:
+                    # An intrabar stop fires immediately and subsumes any deferred exit
+                    # scheduled for later this bar (or a later bar) — the stop is hit first.
                     assert stop is not None  # implied by stop_touched
                     _close(bar.timestamp, stop, "stop_loss", position)
                     position = None
+                    pending = None
                 elif exit_wanted:
-                    _close(bar.timestamp, bar.close, "exit_signal", position)
-                    position = None
-            elif plan_active:
-                # (3a) real indicator entry (only when flat, respecting the direction bias).
-                if entry_signal is not None:
-                    if (entry_signal == "long" and not long_ok) or (
-                        entry_signal == "short" and not short_ok
-                    ):
-                        suppressed_entries += 1
+                    if exit_sched == "immediate":
+                        _close(bar.timestamp, bar.close, "exit_signal", position)
+                        position = None
                     else:
-                        position = _open(entry_signal, bar)
-            elif len(window) == _BREAKOUT_WINDOW:
-                # (3b) breakout entry proxy (only when flat, with a full look-back).
-                highest = max(b.high for b in window)
-                lowest = min(b.low for b in window)
-                want_long = bar.close > highest
-                want_short = bar.close < lowest
-                if (want_long and not long_ok) or (want_short and not short_ok):
-                    suppressed_entries += 1
-                elif want_long or want_short:
-                    # long wins a same-bar tie (deterministic); breakout sides are exclusive.
-                    position = _open("long" if want_long else "short", bar)
+                        # Defer the exit to the next bar's open / close (F-07a).
+                        pending = _Pending(
+                            "exit", exit_sched == "next_open", bars_seen + 1, "", "exit_signal"
+                        )
+            elif timing_ok and pending is None:
+                # Flat and uncommitted: evaluate a fresh entry, then open now (immediate)
+                # or schedule the fill for the next bar (deferred). ``timing_ok`` is the
+                # fail-closed backstop — an unsupported timing opens nothing (F-07a).
+                want: str | None = None
+                if plan_active:
+                    # (3a) real indicator entry, respecting the direction bias.
+                    if entry_signal is not None:
+                        if (entry_signal == "long" and not long_ok) or (
+                            entry_signal == "short" and not short_ok
+                        ):
+                            suppressed_entries += 1
+                        else:
+                            want = entry_signal
+                elif len(window) == _BREAKOUT_WINDOW:
+                    # (3b) breakout entry proxy, with a full look-back.
+                    highest = max(b.high for b in window)
+                    lowest = min(b.low for b in window)
+                    want_long = bar.close > highest
+                    want_short = bar.close < lowest
+                    if (want_long and not long_ok) or (want_short and not short_ok):
+                        suppressed_entries += 1
+                    elif want_long or want_short:
+                        # long wins a same-bar tie (deterministic); sides are exclusive.
+                        want = "long" if want_long else "short"
+                if want is not None:
+                    if entry_sched == "immediate":
+                        position = _open(want, bar, bar.close)
+                    else:
+                        pending = _Pending(
+                            "entry", entry_sched == "next_open", bars_seen + 1, want, ""
+                        )
+
+            # (4) Resolve a fill deferred to THIS bar's CLOSE (next_candle_close). Runs at
+            # end-of-bar so an intrabar stop (above) pre-empts a scheduled close exit, and
+            # so a pending set THIS bar (target bars_seen+1) is never resolved early.
+            if pending is not None and pending.target_seq == bars_seen and not pending.at_open:
+                if pending.kind == "entry" and position is None:
+                    deferred_entry_fills += 1
+                    position = _open(pending.direction, bar, bar.close)
+                elif pending.kind == "exit" and position is not None:
+                    deferred_exit_fills += 1
+                    _close(bar.timestamp, bar.close, pending.reason, position)
+                    position = None
+                pending = None
 
             window.append(bar)
 
@@ -942,6 +1075,16 @@ def run_engine(
         # notional all-in. Surface the divergence rather than hide it (L4).
         # risk_based_sizing with a sub-config IS honored.
         warnings.append(f"position_sizing_method_unsupported:{config.position_sizing.method}")
+    if not timing_ok:
+        # An unsupported entry/exit execution timing (intrabar_touch / a limit or
+        # stop-limit simulation) is not modelled over plain OHLCV; the run opened NO
+        # position (fail closed, F-07a) rather than silently filling at the candle
+        # close. Ready Check raises STRATEGY_EXECUTION_TIMING_UNSUPPORTED — this L4
+        # warning is the engine backstop when a stale readiness state reaches the worker.
+        execution = config.data.execution
+        warnings.append(
+            f"execution_timing_unsupported:{execution.entry_timing}/{execution.exit_timing}"
+        )
     if indicator_plan is not None:
         # Blocks the native-trigger foundation could not compute (deferred sources,
         # timeframe overrides, non-directional keys) are surfaced, never hidden (L4).
@@ -1032,6 +1175,11 @@ def run_engine(
         "nary_reference_conditions": nary_reference_conditions,
         "vwap_blocks": vwap_blocks,
         "position_size_limits_active": config.position_sizing.position_size_limits is not None,
+        "entry_timing": config.data.execution.entry_timing,
+        "exit_timing": config.data.execution.exit_timing,
+        "execution_timing_modelled": timing_ok,
+        "deferred_entry_fills": deferred_entry_fills,
+        "deferred_exit_fills": deferred_exit_fills,
         "stop_exit_conflict": stop_exit_conflict,
         "stop_exit_collisions": stop_exit_collisions,
         "allocation_enabled": alloc_on,
@@ -1061,6 +1209,8 @@ _DIAG_SUM_KEYS = (
     "nary_reference_conditions",
     "vwap_blocks",
     "stop_exit_collisions",
+    "deferred_entry_fills",
+    "deferred_exit_fills",
 )
 
 # Sequential composite curve is NOT a unified-clock portfolio valuation (each strategy
@@ -1290,6 +1440,8 @@ __all__ = [
     "SignalEventRow",
     "TradeRow",
     "combine_item_runs",
+    "execution_timing_is_modelled",
     "resolve_allocation_execution",
     "run_engine",
+    "sizing_is_modelled",
 ]

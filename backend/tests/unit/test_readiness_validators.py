@@ -208,6 +208,24 @@ def test_strategy_supported_sizing_does_not_block() -> None:
     assert Code.STRATEGY_SIZING_UNSUPPORTED.value not in _codes(result)
 
 
+def test_strategy_unsupported_execution_timing_blocks() -> None:
+    # F-07a: an unsupported entry execution timing (intrabar_touch, not modelled over
+    # OHLCV) must BLOCK RUN — the engine fails closed and would open no position.
+    payload = _strategy_payload()
+    payload["data"]["execution"]["entry_timing"] = "intrabar_touch"
+    result = evaluate_readiness(
+        [_strategy_item(payload=payload)], allocation_enabled=False, allocation_issues=[]
+    )
+    assert Code.STRATEGY_EXECUTION_TIMING_UNSUPPORTED.value in _codes(result)
+    assert result.state == ReadinessState.NOT_READY
+
+
+def test_strategy_supported_execution_timing_does_not_block() -> None:
+    # Both timings modelled (next_candle_open, the default payload) → no timing blocker.
+    result = evaluate_readiness([_strategy_item()], allocation_enabled=False, allocation_issues=[])
+    assert Code.STRATEGY_EXECUTION_TIMING_UNSUPPORTED.value not in _codes(result)
+
+
 def test_strategy_default_costs_warns_not_blocks() -> None:
     payload = _strategy_payload()
     payload["data"]["costs"] = {"slippage_value": "0.1"}  # commission + spread unset

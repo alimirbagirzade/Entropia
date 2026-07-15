@@ -22,7 +22,7 @@ from pydantic import ValidationError as PydanticValidationError
 from entropia.domain.allocation.enums import AllocationIssueCode as AllocCode
 from entropia.domain.allocation.enums import AllocationIssueSeverity as AllocSev
 from entropia.domain.allocation.rules import AllocationIssue
-from entropia.domain.backtest.engine import sizing_is_modelled
+from entropia.domain.backtest.engine import execution_timing_is_modelled, sizing_is_modelled
 from entropia.domain.mainboard.enums import MainboardItemKind
 from entropia.domain.readiness.enums import (
     ReadinessIssueCode as Code,
@@ -358,6 +358,28 @@ def _strategy_issues(item: ReadinessItemInput, *, allocation_enabled: bool) -> l
                 "stop distance, or a valid Kelly-criterion formula (win_probability in "
                 "(0,1) and a positive payoff_ratio).",
                 field_path="position_sizing",
+                scope_id=item.item_id,
+            )
+        )
+
+    # F-07a: an unsupported entry/exit EXECUTION TIMING must BLOCK RUN — the engine
+    # fails closed (opens no position) for it, so a run would silently produce nothing.
+    # Over plain OHLCV the intrabar-touch and limit/stop-limit simulation modes cannot
+    # be faithfully reproduced (doc 02: "cannot silently imitate unavailable detail") and
+    # are deferred to later F-07 slices. Shares the single ``execution_timing_is_modelled``
+    # predicate with the engine so Ready Check and the worker never diverge.
+    if not execution_timing_is_modelled(config):
+        issues.append(
+            ReadinessIssue(
+                Code.STRATEGY_EXECUTION_TIMING_UNSUPPORTED,
+                Sev.BLOCKER,
+                Scope.STRATEGY,
+                "The strategy's entry or exit execution timing is not supported by the "
+                "backtest engine and would open no position.",
+                remediation="Use Current Candle Close, Next Candle Open, Next Candle Close, "
+                "or Market Fill Simulation for both entry and exit execution. Intrabar Touch "
+                "and Limit/Stop-Limit simulation are not yet supported over OHLCV data.",
+                field_path="data.execution",
                 scope_id=item.item_id,
             )
         )

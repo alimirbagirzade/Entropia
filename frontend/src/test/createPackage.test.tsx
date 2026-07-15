@@ -224,7 +224,7 @@ describe("Create Package page", () => {
       target: { value: "ta.sma\nta.rsi\n" },
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Create request" }));
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
 
     expect(await screen.findByText(/Request created/)).toBeInTheDocument();
 
@@ -259,14 +259,14 @@ describe("Create Package page", () => {
     // The code-language selector is gone; the description note is shown instead.
     expect(screen.queryByLabelText("Source language")).not.toBeInTheDocument();
     expect(
-      screen.getByText("Not applicable — Generate From Description carries no code."),
+      screen.getByText("Not applicable — description carries no code."),
     ).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Rationale family"), { target: { value: "fam_1" } });
     fireEvent.change(screen.getByLabelText("Description"), {
       target: { value: "A momentum crossover" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Create request" }));
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
 
     await screen.findByText(/Request created/);
     const createCall = fetchMock.mock.calls.find(
@@ -295,13 +295,14 @@ describe("Create Package page", () => {
     renderPage();
     await screen.findByText("req_1");
 
-    fireEvent.click(screen.getByRole("button", { name: "View" }));
+    fireEvent.click(screen.getByRole("button", { name: /req_1/ }));
 
-    expect(await screen.findByText("Current Pre-Check scan")).toBeInTheDocument();
-    expect(screen.getByText("scan_1")).toBeInTheDocument();
-    expect(screen.getByText("precheck_passed")).toBeInTheDocument();
-    // The can-generate hint mirrors the server-side Send gate.
-    expect(screen.getByText("Can generate candidate")).toBeInTheDocument();
+    // The workspace opens the selected request's projection: the Package Status
+    // panel shows the flow state and the Resolver panel renders the Pre-Check scan.
+    expect(await screen.findByText("Precheck Passed")).toBeInTheDocument();
+    expect(screen.getByText("Pine TA / ESP Resolver")).toBeInTheDocument();
+    // The CP Agent chat board reflects the Pre-Check outcome for the request.
+    expect(screen.getByText(/Pre-Check passed/)).toBeInTheDocument();
   });
 
   it("refetches the requests index when ['package-requests'] is invalidated", async () => {
@@ -345,9 +346,11 @@ describe("Create Package page", () => {
     });
     renderPage();
     await screen.findByText("req_1");
-    fireEvent.click(screen.getByRole("button", { name: "View" }));
+    fireEvent.click(screen.getByRole("button", { name: /req_1/ }));
 
-    fireEvent.click(await screen.findByRole("button", { name: "Run Pre-Check" }));
+    const preBtn = await screen.findByRole("button", { name: "Pre-Check" });
+    await waitFor(() => expect(preBtn).toBeEnabled());
+    fireEvent.click(preBtn);
 
     expect(await screen.findByText("scan_2")).toBeInTheDocument();
     const call = fetchMock.mock.calls.find(
@@ -366,9 +369,10 @@ describe("Create Package page", () => {
     });
     renderPage();
     await screen.findByText("req_1");
-    fireEvent.click(screen.getByRole("button", { name: "View" }));
+    fireEvent.click(screen.getByRole("button", { name: /req_1/ }));
 
-    expect(await screen.findByRole("button", { name: "Generate candidate" })).toBeDisabled();
+    // C.D.P (generate candidate → draft) is gated on the server-side hint.
+    expect(await screen.findByRole("button", { name: "C.D.P" })).toBeDisabled();
   });
 
   it("passes the accepted candidate hash as the draft staleness token", async () => {
@@ -386,15 +390,13 @@ describe("Create Package page", () => {
     });
     renderPage();
     await screen.findByText("req_1");
-    fireEvent.click(screen.getByRole("button", { name: "View" }));
+    fireEvent.click(screen.getByRole("button", { name: /req_1/ }));
 
-    fireEvent.click(await screen.findByRole("button", { name: "Generate candidate" }));
-    expect(await screen.findByText("sha256:cand")).toBeInTheDocument();
-
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Create draft" })).toBeEnabled();
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Create draft" }));
+    // C.D.P chains generate-candidate → create-draft in one action; the accepted
+    // candidate_hash from generate is passed as the draft's staleness token.
+    const cdpBtn = await screen.findByRole("button", { name: "C.D.P" });
+    await waitFor(() => expect(cdpBtn).toBeEnabled());
+    fireEvent.click(cdpBtn);
     expect(await screen.findByText(/Draft created/)).toBeInTheDocument();
 
     const draftCall = fetchMock.mock.calls.find(
@@ -421,9 +423,9 @@ describe("Create Package page", () => {
     });
     renderPage();
     await screen.findByText("req_1");
-    fireEvent.click(screen.getByRole("button", { name: "View" }));
+    fireEvent.click(screen.getByRole("button", { name: /req_1/ }));
 
-    fireEvent.click(await screen.findByRole("button", { name: "Approve & publish" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Approve Package" }));
 
     expect(
       await screen.findByText("APPROVAL_REQUIRES_ADMIN: Only an Admin may approve and publish."),
@@ -444,7 +446,7 @@ describe("Create Package page", () => {
     });
     renderPage();
     await screen.findByText("req_1");
-    fireEvent.click(screen.getByRole("button", { name: "View" }));
+    fireEvent.click(screen.getByRole("button", { name: /req_1/ }));
 
     fireEvent.click(await screen.findByRole("button", { name: "Run Validation Tests" }));
 
@@ -463,7 +465,7 @@ describe("Create Package page", () => {
     stubApi(BASE_ROUTES);
     renderPage();
     await screen.findByText("req_1");
-    fireEvent.click(screen.getByRole("button", { name: "View" }));
+    fireEvent.click(screen.getByRole("button", { name: /req_1/ }));
 
     expect(await screen.findByRole("button", { name: "Run Validation Tests" })).toBeDisabled();
   });
@@ -476,11 +478,11 @@ describe("Create Package page", () => {
     });
     renderPage();
     await screen.findByText("req_1");
-    fireEvent.click(screen.getByRole("button", { name: "View" }));
+    fireEvent.click(screen.getByRole("button", { name: /req_1/ }));
 
     fireEvent.click(await screen.findByRole("button", { name: "Request Revision" }));
 
-    expect(await screen.findByText("sha256:rev")).toBeInTheDocument();
+    expect(await screen.findByText(/Revision requested/)).toBeInTheDocument();
     const call = fetchMock.mock.calls.find(
       ([url, init]) => String(url).endsWith("/request-revision") && init?.method === "POST",
     );
@@ -498,18 +500,19 @@ describe("Create Package page", () => {
     });
     renderPage();
     await screen.findByText("req_1");
-    fireEvent.click(screen.getByRole("button", { name: "View" }));
+    fireEvent.click(screen.getByRole("button", { name: /req_1/ }));
 
-    fireEvent.change(await screen.findByLabelText("Baseline filename"), {
-      target: { value: "baseline.csv" },
+    // Real TradingView CSV: pick a file; the browser reads it to UTF-8 text
+    // (FileReader) and feeds the same upload hook — the body is unchanged.
+    const csvFile = new File(["time,close\n1,2\n"], "baseline.csv", { type: "text/csv" });
+    fireEvent.change(await screen.findByLabelText("TradingView baseline CSV file"), {
+      target: { files: [csvFile] },
     });
-    fireEvent.change(screen.getByLabelText("Baseline CSV content"), {
-      target: { value: "time,close\n1,2\n" },
-    });
+    await screen.findByText(/baseline\.csv selected/);
     fireEvent.change(screen.getByLabelText("Baseline metadata"), {
       target: { value: '{"provider":"x","symbol":"BTCUSD"}' },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Upload baseline" }));
+    fireEvent.click(screen.getByRole("button", { name: "Upload CSV" }));
 
     expect(await screen.findByText("ba_1")).toBeInTheDocument();
     const call = fetchMock.mock.calls.find(
@@ -531,18 +534,17 @@ describe("Create Package page", () => {
     const fetchMock = stubApi({ ...BASE_ROUTES, "GET /create-package/requests/req_1": REQUEST_DETAIL_DRAFT });
     renderPage();
     await screen.findByText("req_1");
-    fireEvent.click(screen.getByRole("button", { name: "View" }));
+    fireEvent.click(screen.getByRole("button", { name: /req_1/ }));
 
-    fireEvent.change(await screen.findByLabelText("Baseline filename"), {
-      target: { value: "baseline.csv" },
+    const csvFile = new File(["time,close\n1,2\n"], "baseline.csv", { type: "text/csv" });
+    fireEvent.change(await screen.findByLabelText("TradingView baseline CSV file"), {
+      target: { files: [csvFile] },
     });
-    fireEvent.change(screen.getByLabelText("Baseline CSV content"), {
-      target: { value: "time,close\n1,2\n" },
-    });
+    await screen.findByText(/baseline\.csv selected/);
     fireEvent.change(screen.getByLabelText("Baseline metadata"), {
       target: { value: "{not json" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Upload baseline" }));
+    fireEvent.click(screen.getByRole("button", { name: "Upload CSV" }));
 
     expect(await screen.findByText("Baseline metadata is not valid JSON.")).toBeInTheDocument();
     expect(
@@ -558,7 +560,7 @@ describe("Create Package page", () => {
     });
     renderPage();
     await screen.findByText("req_1");
-    fireEvent.click(screen.getByRole("button", { name: "View" }));
+    fireEvent.click(screen.getByRole("button", { name: /req_1/ }));
 
     const parseButton = await screen.findByRole("button", { name: "Run baseline parse" });
     expect(parseButton).toBeEnabled();

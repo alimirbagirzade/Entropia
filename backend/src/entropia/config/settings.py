@@ -82,6 +82,9 @@ class Settings(BaseSettings):
     # email matches (case-normalized) is provisioned as Admin — ONLY while no
     # active Admin exists. Empty string (default) disables the mechanism.
     bootstrap_admin_email: str = Field(default="", alias="ENTROPIA_BOOTSTRAP_ADMIN_EMAIL")
+    # F-21: how long a re-authentication proof (POST /auth/reauth) stays valid
+    # before a sensitive action (Trash Permanent Delete) must request a fresh one.
+    reauth_proof_ttl_minutes: int = Field(default=5, alias="REAUTH_PROOF_TTL_MINUTES")
 
     # ---- Rate limiting (Module 20 §11; opt-in per deployment) ----
     rate_limit_enabled: bool = Field(default=False, alias="RATE_LIMIT_ENABLED")

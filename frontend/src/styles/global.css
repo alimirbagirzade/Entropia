@@ -984,10 +984,204 @@ a:hover { text-decoration: underline; }
 .cp-status-row:last-child { border-bottom: none; }
 .cp-status-row > .cp-status-label { color: var(--text-dim); font-weight: 700; }
 
+/* ---- v18 Create Package: 2-column CP Agent workspace (mockup .cp-create-layout) ---- */
+.cp-controls-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.cp-create-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(320px, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+@media (max-width: 900px) { .cp-create-layout { grid-template-columns: 1fr; } }
+.cp-panel {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elev);
+  overflow: hidden;
+}
+.cp-panel-head {
+  padding: 9px 12px;
+  background: var(--bg-elev-2);
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.cp-panel-head .cp-sub {
+  color: var(--text-faint);
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.cp-panel-body { padding: 12px; }
+.cp-messages {
+  min-height: 220px;
+  max-height: 360px;
+  padding: 12px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cp-message {
+  border: 1px solid var(--border);
+  background: var(--bg-elev-2);
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.cp-message.ai { border-color: var(--accent); }
+.cp-message-tag {
+  font-weight: 900;
+  font-size: 11px;
+  color: var(--text-dim);
+  letter-spacing: 0.4px;
+  margin-bottom: 4px;
+}
+.cp-message-empty {
+  color: var(--text-faint);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+}
+.cp-compose {
+  border-top: 1px solid var(--border);
+  padding: 12px;
+  background: var(--bg-elev-2);
+}
+.cp-button-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.cp-section-title {
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+  margin: 16px 0 8px;
+}
+.cp-file-list, .cp-validation-list {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elev);
+  overflow: hidden;
+}
+.cp-file-row, .cp-validation-row {
+  min-height: 30px;
+  border-bottom: 1px solid var(--border);
+  padding: 6px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13px;
+}
+.cp-file-row:last-child, .cp-validation-row:last-child { border-bottom: 0; }
+.cp-file-purpose { color: var(--text-faint); white-space: nowrap; font-size: 12px; }
+.cp-check-result { font-size: 12px; font-weight: 900; color: var(--text-faint); min-width: 84px; text-align: right; }
+.cp-check-result.pass { color: var(--ok); }
+.cp-check-result.ready { color: var(--accent-dim); }
+.cp-check-result.fail { color: var(--down); }
+.cp-baseline-upload {
+  border: 1px dashed var(--text-faint);
+  border-radius: var(--radius);
+  background: var(--bg-elev-2);
+  min-height: 48px;
+  padding: 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--text-dim);
+  flex-wrap: wrap;
+}
+.cp-target-pool {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elev-2);
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13px;
+}
+.cp-inactive-text { color: var(--text-faint); }
+
+/* ---- v18 Mainboard: small Add Package popover (mockup .package-picker-popover) ---- */
+.cp-popover-anchor { position: relative; display: inline-block; }
+.package-picker-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 40;
+  width: 340px;
+  max-width: calc(100vw - 24px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elev);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+}
+.package-picker-title {
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.package-picker-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+
 /* ---- v18 Portfolio: numbered allocation cards (mockup .portfolio-grid/.portfolio-card) ---- */
 .portfolio-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
 .portfolio-card { border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-elev); padding: 14px; }
 .portfolio-card > .section-title-upper { border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+
+/* ---- v18 Portfolio: toggle-off disabled workspace (mockup .equity-allocation-workspace /
+   .equity-allocation-disabled: opacity .42, grayscale, pointer-events none — UI-13) ---- */
+.alloc-workspace { display: flex; flex-direction: column; gap: 14px; }
+.alloc-workspace-disabled { opacity: 0.42; filter: grayscale(0.15); pointer-events: none; }
+.alloc-workspace-disabled input,
+.alloc-workspace-disabled select,
+.alloc-workspace-disabled button { cursor: not-allowed; }
+
+.alloc-muted { font-size: 13px; color: var(--text-dim); margin: 0; }
+
+.alloc-confirm-box {
+  border: 1px solid var(--warn);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
+  color: var(--warn);
+  padding: 9px 12px;
+  font-size: 13px;
+  margin: 0;
+}
+.alloc-error-box {
+  border: 1px solid var(--down);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--down) 12%, transparent);
+  color: var(--down);
+  padding: 9px 12px;
+  font-size: 13px;
+  margin: 0;
+}
 
 /* ---- v18 Package pool: sectioned rows (mockup .package-row/.package-section-title) ---- */
 .package-section-title {

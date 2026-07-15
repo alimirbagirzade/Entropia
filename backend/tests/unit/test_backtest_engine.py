@@ -115,6 +115,8 @@ def _config(
     min_size: str | None = None,
     max_size: str | None = None,
     stop_exit_conflict: str | None = None,
+    entry_timing: str = "current_candle_close",
+    exit_timing: str = "current_candle_close",
 ) -> StrategyConfig:
     """A minimal VALID StrategyConfig; only the fields the engine reads matter."""
     sizing: dict[str, Any] = {"method": method}
@@ -163,8 +165,8 @@ def _config(
                 },
                 "initial_capital": "10000.00",
                 "execution": {
-                    "entry_timing": "current_candle_close",
-                    "exit_timing": "current_candle_close",
+                    "entry_timing": entry_timing,
+                    "exit_timing": exit_timing,
                 },
                 "order_config": {"type": "market_order"},
                 "costs": {"slippage_mode": "percentage_slippage", "slippage_value": "0"},
@@ -570,7 +572,7 @@ def test_engine_execution_key_namespace_shifts_with_the_engine_version() -> None
     # The ENGINE_VERSION bump must flow into the manifest so a stale pre-conflict
     # result cannot be reused under the new engine (INF-04 idempotent reuse / INF-05).
     built = _manifest("btrun_A", "snap_A", "2024-01-01T00:00:00Z")
-    assert built.manifest["identity"]["engine_version"] == "backtest-engine-v3-full-composition"
+    assert built.manifest["identity"]["engine_version"] == "backtest-engine-v4-execution-timing"
 
 
 def test_stop_exit_default_is_stop_has_priority() -> None:
@@ -780,3 +782,157 @@ def test_combine_records_non_executing_trading_signal_without_contribution() -> 
     # A lone executing strategy (with a participating TS) does NOT get the multi-curve
     # sequential warning — only 2+ executing strategies concatenate curves.
     assert COMPOSITION_CURVE_WARNING not in combined.diagnostics["warnings"]
+
+
+# ============================================================================
+# F-07a: entry/exit execution timing (ExecutionModel.entry_timing / exit_timing)
+# ============================================================================
+
+
+def _entry_timing_bars() -> list[dict[str, Any]]:
+    """20 flat bars fill the breakout window at 100; bar 21 breaks out up (close 102 →
+    long signal); bar 22 is the deferred-fill bar with a distinct open (105) and close
+    (108). Trailing flat bars at 108 stay above the window low so nothing exits before
+    end-of-data. With zero costs the raw fill price equals the recorded entry price:
+    immediate → 102, next_candle_open → 105, next_candle_close → 108."""
+    bars = _flat(20, "100")
+    bars.append(_bar("2024-01-21T00:00:00Z", "100", "102", "100", "102"))
+    bars.append(_bar("2024-01-22T00:00:00Z", "105", "110", "104", "108"))
+    bars += [_bar(f"2024-02-{i + 1:02d}T00:00:00Z", "108", "108", "108", "108") for i in range(3)]
+    return bars
+
+
+def _exit_timing_bars() -> list[dict[str, Any]]:
+    """20 flat bars fill the window; bar 21 breaks out up (immediate long entry at 102);
+    19 flat bars at 100 hold the position; the next bar closes below the window low (96 →
+    exit signal); the final bar is the deferred-exit fill with a distinct open (90) and
+    close (85). immediate exit → 96, next_candle_open → 90, next_candle_close → 85."""
+    bars = _flat(20, "100")
+    bars.append(_bar("2024-01-21T00:00:00Z", "100", "102", "100", "102"))
+    bars += [_bar(f"2024-02-{i + 1:02d}T00:00:00Z", "100", "100", "100", "100") for i in range(19)]
+    bars.append(_bar("2024-03-01T00:00:00Z", "100", "100", "95", "96"))
+    bars.append(_bar("2024-03-02T00:00:00Z", "90", "91", "84", "85"))
+    return bars
+
+
+def test_entry_timing_current_candle_close_fills_at_signal_bar_close() -> None:
+    # Baseline (unchanged behaviour): the entry fills at the SIGNAL bar's close.
+    out = _run(_config(with_stop=False, direction="long"), _entry_timing_bars())
+    assert out.summary["total_trades"] == 1
+    assert out.trades[0].entry_price == Decimal("102.00")
+    assert out.diagnostics["deferred_entry_fills"] == 0
+    assert out.diagnostics["entry_timing"] == "current_candle_close"
+    assert out.diagnostics["execution_timing_modelled"] is True
+
+
+def test_entry_timing_next_candle_open_fills_at_next_bar_open() -> None:
+    out = _run(
+        _config(with_stop=False, direction="long", entry_timing="next_candle_open"),
+        _entry_timing_bars(),
+    )
+    assert out.summary["total_trades"] == 1
+    # POSITIVE: fills at the NEXT bar's open (105). NEGATIVE: NOT the old hardcoded
+    # current-candle-close (102) — the timing is honored, not ignored.
+    assert out.trades[0].entry_price == Decimal("105.00")
+    assert out.trades[0].entry_price != Decimal("102.00")
+    assert out.diagnostics["deferred_entry_fills"] == 1
+
+
+def test_entry_timing_next_candle_close_fills_at_next_bar_close() -> None:
+    out = _run(
+        _config(with_stop=False, direction="long", entry_timing="next_candle_close"),
+        _entry_timing_bars(),
+    )
+    assert out.summary["total_trades"] == 1
+    assert out.trades[0].entry_price == Decimal("108.00")  # POSITIVE: next bar close
+    assert out.trades[0].entry_price != Decimal("102.00")  # NEGATIVE: not signal close
+    assert out.diagnostics["deferred_entry_fills"] == 1
+
+
+def test_entry_timing_market_fill_simulation_is_immediate() -> None:
+    # market_fill_simulation == a market fill at the decision bar's close (immediate).
+    out = _run(
+        _config(with_stop=False, direction="long", entry_timing="market_fill_simulation"),
+        _entry_timing_bars(),
+    )
+    assert out.trades[0].entry_price == Decimal("102.00")
+    assert out.diagnostics["deferred_entry_fills"] == 0
+    assert out.diagnostics["execution_timing_modelled"] is True
+
+
+def test_unsupported_entry_timing_fails_closed_opens_no_position() -> None:
+    # F-07a: intrabar_touch needs a tick path — not silently imitated over OHLCV. The
+    # engine opens NO position (fail closed, backstop to the Ready Check blocker).
+    out = _run(
+        _config(with_stop=False, direction="long", entry_timing="intrabar_touch"),
+        _entry_timing_bars(),
+    )
+    assert out.summary["total_trades"] == 0
+    assert out.diagnostics["execution_timing_modelled"] is False
+    assert (
+        "execution_timing_unsupported:intrabar_touch/current_candle_close"
+        in out.diagnostics["warnings"]
+    )
+
+
+def test_unsupported_exit_timing_fails_closed_opens_no_position() -> None:
+    # BOTH sides must be modelled: an unsupported EXIT timing (a stop-limit simulation)
+    # also fails the run closed — no position at all.
+    out = _run(
+        _config(with_stop=False, direction="long", exit_timing="stop_limit_priority_simulation"),
+        _entry_timing_bars(),
+    )
+    assert out.summary["total_trades"] == 0
+    assert out.diagnostics["execution_timing_modelled"] is False
+
+
+def test_exit_timing_current_candle_close_exits_at_signal_bar_close() -> None:
+    out = _run(_config(with_stop=False, direction="long"), _exit_timing_bars())
+    assert out.summary["total_trades"] == 1
+    trade = out.trades[0]
+    assert trade.exit_reason == "exit_signal"
+    assert trade.exit_price == Decimal("96.00")
+    assert out.diagnostics["deferred_exit_fills"] == 0
+
+
+def test_exit_timing_next_candle_open_exits_at_next_bar_open() -> None:
+    out = _run(
+        _config(with_stop=False, direction="long", exit_timing="next_candle_open"),
+        _exit_timing_bars(),
+    )
+    assert out.summary["total_trades"] == 1
+    trade = out.trades[0]
+    assert trade.exit_price == Decimal("90.00")  # POSITIVE: next bar open
+    assert trade.exit_price != Decimal("96.00")  # NEGATIVE: not the signal close
+    assert out.diagnostics["deferred_exit_fills"] == 1
+
+
+def test_exit_timing_next_candle_close_exits_at_next_bar_close() -> None:
+    out = _run(
+        _config(with_stop=False, direction="long", exit_timing="next_candle_close"),
+        _exit_timing_bars(),
+    )
+    assert out.summary["total_trades"] == 1
+    trade = out.trades[0]
+    assert trade.exit_price == Decimal("85.00")  # POSITIVE: next bar close
+    assert trade.exit_price != Decimal("96.00")  # NEGATIVE: not the signal close
+    assert out.diagnostics["deferred_exit_fills"] == 1
+
+
+def test_intrabar_stop_pre_empts_a_deferred_close_exit() -> None:
+    # A stop is ALWAYS an intrabar touch (immediate) and pre-empts a signal exit that
+    # was deferred to the same bar's close: the stop wins, no deferred exit fill occurs.
+    bars = _flat(20, "100")
+    bars.append(_bar("2024-01-21T00:00:00Z", "100", "102", "100", "102"))  # long entry @102
+    bars += [_bar(f"2024-02-{i + 1:02d}T00:00:00Z", "100", "100", "100", "100") for i in range(19)]
+    bars.append(_bar("2024-03-01T00:00:00Z", "100", "100", "95", "96"))  # exit signal (close 96)
+    # A deferred (next_close) exit would fill here, but the bar's low 90 trips the 1% stop
+    # (100.98 → below entry) intrabar first, so the STOP closes the trade.
+    bars.append(_bar("2024-03-02T00:00:00Z", "97", "97", "90", "97"))
+    out = _run(
+        _config(with_stop=True, loss_pct="1.0", direction="long", exit_timing="next_candle_close"),
+        bars,
+    )
+    assert out.summary["total_trades"] == 1
+    assert out.trades[0].exit_reason == "stop_loss"
+    assert out.diagnostics["deferred_exit_fills"] == 0

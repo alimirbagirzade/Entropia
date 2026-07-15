@@ -19,7 +19,7 @@ from entropia.infrastructure.postgres.models.allocation import (
 )
 from entropia.infrastructure.postgres.models.approvals import ApprovalDecision
 from entropia.infrastructure.postgres.models.audit import AuditEvent, OutboxEvent
-from entropia.infrastructure.postgres.models.auth import AuthSession, HumanCredential
+from entropia.infrastructure.postgres.models.auth import AuthSession, HumanCredential, ReauthProof
 from entropia.infrastructure.postgres.models.backtest import (
     BacktestResult,
     BacktestRun,
@@ -197,6 +197,7 @@ __all__ = [
     "RationaleFamilyRoot",
     "ReadinessIssueRow",
     "ReadyCheckReport",
+    "ReauthProof",
     "ResearchDatasetRevision",
     "ResearchFeatureDefinition",
     "ResearchFieldDefinition",

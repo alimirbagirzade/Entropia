@@ -7,7 +7,12 @@ from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from entropia.infrastructure.postgres.models import AuthSession, HumanCredential, HumanUser
+from entropia.infrastructure.postgres.models import (
+    AuthSession,
+    HumanCredential,
+    HumanUser,
+    ReauthProof,
+)
 
 
 async def get_user_by_username(session: AsyncSession, username: str) -> HumanUser | None:
@@ -26,3 +31,8 @@ async def get_session_by_token_hash(session: AsyncSession, token_hash: str) -> A
 
 def is_session_active(record: AuthSession, *, now: datetime) -> bool:
     return record.revoked_at is None and record.expires_at > now
+
+
+async def get_reauth_proof_by_hash(session: AsyncSession, proof_hash: str) -> ReauthProof | None:
+    result = await session.execute(select(ReauthProof).where(ReauthProof.proof_hash == proof_hash))
+    return result.scalar_one_or_none()

@@ -233,9 +233,15 @@ describe("Portfolio / Equity Allocation page", () => {
     // The draft loads as a second wave once the composition id resolves.
     expect(await screen.findByText("independent (off)")).toBeInTheDocument();
     expect(screen.getByText(/no plan row yet/)).toBeInTheDocument();
-    const picker = screen.getByText("Unrepresented composition items").closest("div");
+    // Toggle off (the draft's default) fades and blocks the whole workspace,
+    // incl. the Add Item picker — the "Add" button is present but disabled.
+    expect(screen.getByText(/Equity Allocation is not selected/)).toBeInTheDocument();
+    const picker = screen.getByText("+ Add item").closest("div");
     expect(within(picker as HTMLElement).getByText("item_1")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Add" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add" })).toBeDisabled();
+    // Card 3/4 show their toggle-off placeholders, never a live computation.
+    expect(screen.getByText("Not in use.")).toBeInTheDocument();
+    expect(screen.getByText("Not selected (independent)")).toBeInTheDocument();
   });
 
   it("saves the draft with the body-form OCC token and a fresh Idempotency-Key", async () => {
@@ -251,8 +257,10 @@ describe("Portfolio / Equity Allocation page", () => {
     });
     renderPage();
 
-    fireEvent.click(await screen.findByRole("button", { name: "Add" }));
-    fireEvent.click(screen.getByLabelText(/USE EQUITY ALLOCATION FOR THIS BACKTEST/));
+    // The Add Item picker only accepts input once the toggle is on (UI-13
+    // toggle-off disable) — flip it on first, then add the candidate.
+    fireEvent.click(await screen.findByLabelText(/USE EQUITY ALLOCATION FOR THIS BACKTEST/));
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
     fireEvent.change(screen.getByLabelText("Initial capital"), { target: { value: "10000" } });
     fireEvent.change(screen.getByLabelText("Currency"), { target: { value: "USDT" } });
     fireEvent.change(screen.getByLabelText("Compounding mode"), {
@@ -262,11 +270,13 @@ describe("Portfolio / Equity Allocation page", () => {
     fireEvent.change(screen.getByLabelText("share item_1"), { target: { value: "90" } });
     fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
 
-    // The PUT return renders inline issues + server-derived amounts verbatim.
+    // The PUT return renders inline issues verbatim; the derived amounts it
+    // carries feed Card 3 "Calculation preview" (server-derived, never
+    // recomputed client-side).
     expect(await screen.findByText("Draft saved")).toBeInTheDocument();
     expect(screen.getByText("TOTAL_ALLOCATION_UNDER_100")).toBeInTheDocument();
     expect(screen.getByText("9000.00")).toBeInTheDocument();
-    expect(screen.getAllByText("8100.00")).toHaveLength(2);
+    expect(screen.getByText("8100.00")).toBeInTheDocument();
 
     const init = callFor(fetchMock, "PUT", "/portfolio-allocation-draft");
     const body = JSON.parse(String(init.body));
@@ -339,7 +349,7 @@ describe("Portfolio / Equity Allocation page", () => {
     });
     renderPage();
 
-    fireEvent.click(await screen.findByRole("button", { name: "Preview sync" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Sync From Mainboard" }));
 
     expect(await screen.findByText("Retained (1)")).toBeInTheDocument();
     expect(screen.getByText("Missing from composition (1)")).toBeInTheDocument();
@@ -391,5 +401,69 @@ describe("Portfolio / Equity Allocation page", () => {
         "ALLOCATION_HAS_BLOCKERS: The allocation configuration has blocking issues and cannot become a plan revision.",
       ),
     ).toBeInTheDocument();
+  });
+
+  it("fades and blocks the workspace on toggle-off, and restores it on toggle-on", async () => {
+    stubApi({
+      "GET /mainboard-compositions/ws_1/portfolio-allocation-draft": DRAFT_SAVED,
+      "GET /mainboards/default": MAINBOARD,
+    });
+    renderPage();
+
+    // DRAFT_SAVED starts enabled=true: the workspace is interactive and Card
+    // 3/4 show live content, not the toggle-off placeholders.
+    const toggle = await screen.findByLabelText(/USE EQUITY ALLOCATION FOR THIS BACKTEST/);
+    expect(toggle).toBeChecked();
+    expect(screen.getByLabelText("Initial capital")).not.toBeDisabled();
+    expect(screen.queryByText("Not in use.")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Validate saved draft" })).toBeInTheDocument();
+
+    fireEvent.click(toggle);
+
+    expect(screen.getByText(/Equity Allocation is not selected/)).toBeInTheDocument();
+    // Every field/button inside the workspace carries a native `disabled` —
+    // pointer-events:none alone would not block keyboard activation (UI-13).
+    expect(screen.getByLabelText("Initial capital")).toBeDisabled();
+    expect(screen.getByLabelText("share item_1")).toBeDisabled();
+    expect(screen.getByText("Not in use.")).toBeInTheDocument();
+    expect(screen.getByText("Not selected (independent)")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Validate saved draft" })).not.toBeInTheDocument();
+    // The toggle itself is never inside the disabled treatment.
+    expect(toggle).not.toBeDisabled();
+  });
+
+  it("distinguishes the two Add Item empty states", async () => {
+    // Every candidate the composition offers already has an allocation row —
+    // distinct from there being no compatible items at all.
+    const allRepresentedDraft = {
+      ...DRAFT_SAVED,
+      candidate_items: [
+        {
+          composition_item_id: "item_1",
+          item_type: "strategy",
+          work_object_root_id: "root_1",
+          is_enabled: true,
+          position_index: 0,
+          display_label_override: "Momentum A",
+        },
+      ],
+    };
+    stubApi({
+      "GET /mainboard-compositions/ws_1/portfolio-allocation-draft": allRepresentedDraft,
+      "GET /mainboards/default": MAINBOARD,
+    });
+    renderPage();
+
+    expect(await screen.findByText("Every item is already allocated")).toBeInTheDocument();
+
+    cleanup();
+    // DRAFT_SAVED's own candidate_items is [] — no compatible item exists.
+    stubApi({
+      "GET /mainboard-compositions/ws_1/portfolio-allocation-draft": DRAFT_SAVED,
+      "GET /mainboards/default": MAINBOARD,
+    });
+    renderPage();
+
+    expect(await screen.findByText("No compatible items")).toBeInTheDocument();
   });
 });

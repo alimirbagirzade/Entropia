@@ -1380,6 +1380,15 @@ class ReauthRequiredError(UnauthenticatedError):
     message = "Admin re-authentication is required for permanent deletion."
 
 
+class ReauthProofInvalidError(UnauthenticatedError):
+    """The presented re-authentication proof did not verify (F-21): unknown,
+    wrong purpose, wrong principal, expired, or already consumed. No arbitrary
+    text can substitute for a real ``POST /auth/reauth`` proof."""
+
+    code = "REAUTH_PROOF_INVALID"
+    message = "Re-authentication proof is invalid or expired. Re-authenticate and try again."
+
+
 class RationaleFamilyInUseError(ConflictError):
     """A Rationale Family with active assignments cannot be soft-deleted before
     a repair/unassign plan completes (doc 20 §10, §12; doc 10). No dangling

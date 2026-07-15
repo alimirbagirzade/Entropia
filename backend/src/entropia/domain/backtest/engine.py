@@ -172,7 +172,11 @@ class _Position:
     entry_time: str
     entry_price: Decimal  # cost-adjusted effective fill
     size: Decimal
-    static_stop: Decimal | None
+    # F-08: per-rule stop levels kept SEPARATELY (was a single merged ``static_stop``)
+    # so the combination engine can evaluate percentage / absolute / trailing / logic
+    # stops as distinct rules for the Any/All requirement and priority resolution.
+    pct_stop: Decimal | None  # percentage stop level (entry-relative, fixed)
+    abs_stop: Decimal | None  # absolute-price stop level (fixed)
     trail_pct: Decimal | None
     trail_anchor: Decimal  # best price seen since entry (favourable extreme)
     entry_notional: Decimal
@@ -569,25 +573,29 @@ def _cap_to_sleeve(desired: Decimal, sleeve_capital: Decimal, entry_price: Decim
     return min(desired, cap_units)
 
 
-def _initial_static_stop(
+def _pct_stop_level(
     config: StrategyConfig, *, is_long: bool, entry_price: Decimal
 ) -> Decimal | None:
-    """Tightest enabled percentage/absolute stop (trailing handled dynamically)."""
+    """Enabled percentage stop level (entry-relative, fixed for the position's life)."""
     protection = config.protection_stop_logic
-    if protection is None:
+    if protection is None or protection.percentage_stop is None:
         return None
-    candidates: list[Decimal] = []
     pct = protection.percentage_stop
-    if pct is not None and pct.enabled:
-        distance = entry_price * (pct.loss_percentage / _HUNDRED)
-        candidates.append(entry_price - distance if is_long else entry_price + distance)
-    absolute = protection.absolute_stop
-    if absolute is not None and absolute.enabled and absolute.absolute_price is not None:
-        candidates.append(Decimal(absolute.absolute_price))
-    if not candidates:
+    if not pct.enabled:
         return None
-    # Tightest = closest to entry on the adverse side (highest for long, lowest for short).
-    return max(candidates) if is_long else min(candidates)
+    distance = entry_price * (pct.loss_percentage / _HUNDRED)
+    return entry_price - distance if is_long else entry_price + distance
+
+
+def _abs_stop_level(config: StrategyConfig) -> Decimal | None:
+    """Enabled absolute-price stop level (fixed)."""
+    protection = config.protection_stop_logic
+    if protection is None or protection.absolute_stop is None:
+        return None
+    absolute = protection.absolute_stop
+    if not absolute.enabled or absolute.absolute_price is None:
+        return None
+    return Decimal(absolute.absolute_price)
 
 
 def _trail_pct(config: StrategyConfig) -> Decimal | None:
@@ -598,18 +606,126 @@ def _trail_pct(config: StrategyConfig) -> Decimal | None:
     return trailing.trail_percentage / _HUNDRED if trailing.enabled else None
 
 
-def _effective_stop(position: _Position) -> Decimal | None:
-    """Combine the static stop with the trailing stop; return the tightest."""
-    trailing: Decimal | None = None
-    if position.trail_pct is not None:
-        if position.direction == "long":
-            trailing = position.trail_anchor * (Decimal("1") - position.trail_pct)
-        else:
-            trailing = position.trail_anchor * (Decimal("1") + position.trail_pct)
-    stops = [s for s in (position.static_stop, trailing) if s is not None]
-    if not stops:
+def _trailing_level(position: _Position) -> Decimal | None:
+    """Current trailing-stop level from the favourable extreme (None if inactive)."""
+    if position.trail_pct is None:
         return None
-    return max(stops) if position.direction == "long" else min(stops)
+    if position.direction == "long":
+        return position.trail_anchor * (Decimal("1") - position.trail_pct)
+    return position.trail_anchor * (Decimal("1") + position.trail_pct)
+
+
+# Canonical §9.2 stop precedence AFTER any logic blocks (which come first, in display
+# order): percentage, then trailing, then absolute. Used for priority_order resolution
+# when no explicit stop_priority_order is configured, and as the deterministic tie-break
+# for most_conservative.
+_CANONICAL_PRICE_STOP_ORDER = ("percentage", "trailing", "absolute")
+
+
+def _stop_priority_index(custom_order: list[str] | None, logic_keys: list[str]) -> dict[str, int]:
+    """Map every stop key to a precedence index (lower = higher priority).
+
+    The canonical default (``custom_order is None``) is logic blocks in display order,
+    then percentage, trailing, absolute (Master Ref §9.2). An explicit
+    ``stop_priority_order`` leads; any key it omits is appended in canonical order so the
+    result is always total and deterministic.
+    """
+    ordered: list[str] = list(custom_order) if custom_order else []
+    for key in [*logic_keys, *_CANONICAL_PRICE_STOP_ORDER]:
+        if key not in ordered:
+            ordered.append(key)
+    return {key: idx for idx, key in enumerate(ordered)}
+
+
+@dataclass(frozen=True, slots=True)
+class _StopOutcome:
+    """Resolved protection-stop firing for one bar (F-08 combination engine)."""
+
+    price: Decimal  # executed exit price of the winning rule
+    executed_key: str  # winning stop key (e.g. "percentage" / "logic:<block_id>")
+    triggered: tuple[str, ...]  # every stop key that fired this bar (sorted)
+    approximated_first: bool  # first_trigger_wins resolved to conservative over OHLCV
+
+
+def _resolve_stop(
+    config: StrategyConfig,
+    position: _Position,
+    bar: _Bar,
+    *,
+    logic_enabled: list[str],
+    logic_triggered: list[str],
+) -> _StopOutcome | None:
+    """Combine every enabled protection stop rule for THIS bar (Master Ref §9.1/§9.3).
+
+    Enabled rules = each enabled price stop (percentage / absolute / trailing) plus each
+    enabled Logic-Based Stop Block (``logic_enabled``). A price stop TRIGGERS when the
+    bar's adverse extreme touches its level (long: ``low <= level``; short:
+    ``high >= level``) and executes at that level. A logic block triggers when it emits a
+    signal against the open position (``logic_triggered``) and executes at the bar close
+    (signal-confirmed). ``stop_trigger_requirement`` decides WHETHER protection fires
+    (``any_active`` = any rule; ``all_active`` = every enabled rule this bar);
+    ``stop_conflict_resolution`` decides WHICH triggered rule's price/reason executes.
+    Returns ``None`` when protection does not fire.
+    """
+    protection = config.protection_stop_logic
+    is_long = position.direction == "long"
+    entry = position.entry_price
+
+    price_levels: dict[str, Decimal] = {}
+    if position.pct_stop is not None:
+        price_levels["percentage"] = position.pct_stop
+    if position.abs_stop is not None:
+        price_levels["absolute"] = position.abs_stop
+    trailing = _trailing_level(position)
+    if trailing is not None:
+        price_levels["trailing"] = trailing
+
+    enabled_keys = set(price_levels) | set(logic_enabled)
+    if not enabled_keys:
+        return None
+
+    triggered: dict[str, Decimal] = {}
+    for key, level in price_levels.items():
+        touched = (is_long and bar.low <= level) or (not is_long and bar.high >= level)
+        if touched:
+            triggered[key] = level
+    for key in logic_triggered:
+        triggered[key] = bar.close  # logic stop fills at the signal-confirmed bar close
+
+    if not triggered:
+        return None
+
+    requirement = protection.stop_trigger_requirement if protection is not None else "any_active"
+    if requirement == "all_active" and set(triggered) != enabled_keys:
+        return None
+
+    resolution = (
+        protection.stop_conflict_resolution if protection is not None else "most_conservative"
+    )
+    approximated_first = False
+    if resolution == "first_trigger_wins":
+        # OHLCV carries no intrabar tick path, so true first-touch order is unknowable;
+        # resolve to the conservative model and flag it (Master Ref §9.3), never faked.
+        resolution = "most_conservative"
+        approximated_first = True
+
+    priority = _stop_priority_index(
+        protection.stop_priority_order if protection is not None else None, logic_enabled
+    )
+    if resolution in ("priority_order", "record_all_execute_highest"):
+        winner = min(triggered, key=lambda k: priority.get(k, len(priority)))
+    else:  # most_conservative: tightest adverse move, canonical priority as tie-break
+        winner = min(
+            triggered,
+            key=lambda k: (abs(entry - triggered[k]), priority.get(k, len(priority))),
+        )
+
+    return _StopOutcome(
+        price=triggered[winner],
+        executed_key=winner,
+        triggered=tuple(sorted(triggered)),
+        approximated_first=approximated_first,
+    )
 
 
 def _exit_proxy(position: _Position, bar: _Bar, window: deque[_Bar]) -> bool:
@@ -677,6 +793,14 @@ def run_engine(
     # §5.9 Stop+Exit same-bar collision policy (read straight from the pinned config so it
     # applies in BOTH plan and breakout-proxy modes; default "stop_has_priority" = V18).
     stop_exit_conflict = str(config.conflict_position_handling.stop_exit_conflict)
+    # F-08 stop-combination modes (read once; drive _resolve_stop + the ledger record).
+    _protection = config.protection_stop_logic
+    stop_trigger_requirement = (
+        _protection.stop_trigger_requirement if _protection is not None else "any_active"
+    )
+    stop_conflict_resolution = (
+        _protection.stop_conflict_resolution if _protection is not None else "most_conservative"
+    )
 
     # F-09: an unmodelled / misconfigured sizing method opens NO position at all — the
     # engine is a fail-closed backstop to the Ready Check STRATEGY_SIZING_UNSUPPORTED
@@ -701,6 +825,15 @@ def run_engine(
     exit_evals: list[BlockEvaluator] = (
         build_evaluators(indicator_plan.exit_specs) if plan_active and indicator_plan else []
     )
+    # F-08 Logic-Based Stop evaluators are INDEPENDENT of the entry plan (a strategy may
+    # protect with a logic stop regardless of its entry model). Each stop spec's UUID keys
+    # its rule for the combination engine + ledger. Empty when no logic stops are pinned,
+    # so the pure price-stop path is byte-identical to pre-F-08.
+    stop_specs = indicator_plan.stop_specs if indicator_plan is not None else ()
+    stop_evals: list[BlockEvaluator] = build_evaluators(stop_specs)
+    stop_pairs = list(zip(stop_specs, stop_evals, strict=True))
+    logic_enabled = [f"logic:{spec.block_id}" for spec in stop_specs]
+    logic_stop_triggers = 0
 
     equity = initial_capital
     peak = initial_capital
@@ -833,7 +966,8 @@ def run_engine(
             entry_time=bar.timestamp,
             entry_price=entry_eff,
             size=size,
-            static_stop=_initial_static_stop(config, is_long=is_long, entry_price=entry_eff),
+            pct_stop=_pct_stop_level(config, is_long=is_long, entry_price=entry_eff),
+            abs_stop=_abs_stop_level(config),
             trail_pct=trail_pct,
             trail_anchor=fill_raw,
             entry_notional=(entry_eff * size).quantize(_MONEY),
@@ -845,6 +979,37 @@ def run_engine(
             return True
         opposite = entry_signal is not None and entry_signal != pos.direction
         return bool(opposite and indicator_plan is not None and indicator_plan.exit_on_opposite)
+
+    def _emit_stop_resolution(outcome: _StopOutcome, event_time: str, direction: str) -> None:
+        """Record the resolved stop (Master Ref §9.2: ledger carries priority + sources).
+
+        Emits a ``stop_resolution`` decision-trace event whenever more than one rule fired,
+        the executed rule was a Logic-Based Stop, or the OHLCV first-trigger approximation
+        applied. The single-price-stop default path emits nothing extra (byte-identical to
+        pre-F-08 output)."""
+        nonlocal logic_stop_triggers
+        if any(k.startswith("logic:") for k in outcome.triggered):
+            logic_stop_triggers += 1
+        if (
+            len(outcome.triggered) > 1
+            or outcome.approximated_first
+            or outcome.executed_key.startswith("logic:")
+        ):
+            signal_events.append(
+                SignalEventRow(
+                    seq=len(signal_events),
+                    event_time=event_time,
+                    event_type="stop_resolution",
+                    direction=direction,
+                    detail={
+                        "executed": outcome.executed_key,
+                        "triggered": list(outcome.triggered),
+                        "requirement": stop_trigger_requirement,
+                        "resolution": stop_conflict_resolution,
+                        "first_trigger_approximated": outcome.approximated_first,
+                    },
+                )
+            )
 
     for batch in bar_batches:
         for raw in batch:
@@ -882,6 +1047,18 @@ def run_engine(
                 if exit_evals and indicator_plan.exit_rule is not None:
                     exit_hit = aggregate(indicator_plan.exit_rule, exit_evals) is not None
 
+            # F-08: logic-stop evaluators advance EVERY bar (independent of the entry plan)
+            # so a logic-based stop can fire against the open position.
+            for ev in stop_evals:
+                ev.update(
+                    bar.close,
+                    bar.high,
+                    bar.low,
+                    bar.open,
+                    volume=bar.volume,
+                    timestamp=bar.timestamp,
+                )
+
             # (1) Resolve a fill deferred to THIS bar's OPEN (next_candle_open). Runs
             # before the intrabar stop path so the open fill precedes the bar's high/low.
             if pending is not None and pending.target_seq == bars_seen and pending.at_open:
@@ -900,11 +1077,18 @@ def run_engine(
                     position.trail_anchor = max(position.trail_anchor, bar.high)
                 else:
                     position.trail_anchor = min(position.trail_anchor, bar.low)
-                stop = _effective_stop(position)
-                stop_touched = stop is not None and (
-                    (position.direction == "long" and bar.low <= stop)
-                    or (position.direction == "short" and bar.high >= stop)
+                opp = "short" if position.direction == "long" else "long"
+                logic_triggered = [
+                    f"logic:{spec.block_id}" for spec, ev in stop_pairs if ev.current_signal == opp
+                ]
+                stop_outcome = _resolve_stop(
+                    config,
+                    position,
+                    bar,
+                    logic_enabled=logic_enabled,
+                    logic_triggered=logic_triggered,
                 )
+                stop_touched = stop_outcome is not None
                 # A fresh exit signal is evaluated only when no exit is already committed:
                 # a deferred exit from a prior bar (``pending``) is pinned and cannot be
                 # pre-empted by a new signal — only an intrabar stop below can cancel it.
@@ -924,8 +1108,9 @@ def run_engine(
                     if stop_exit_conflict == "exit_has_priority":
                         _close(bar.timestamp, bar.close, "exit_signal", position)
                     else:
-                        assert stop is not None  # implied by stop_touched
-                        _close(bar.timestamp, stop, "stop_loss", position)
+                        assert stop_outcome is not None  # implied by stop_touched
+                        _close(bar.timestamp, stop_outcome.price, "stop_loss", position)
+                        _emit_stop_resolution(stop_outcome, bar.timestamp, position.direction)
                         if stop_exit_conflict == "record_both_reasons":
                             signal_events.append(
                                 SignalEventRow(
@@ -944,8 +1129,9 @@ def run_engine(
                 elif stop_touched:
                     # An intrabar stop fires immediately and subsumes any deferred exit
                     # scheduled for later this bar (or a later bar) — the stop is hit first.
-                    assert stop is not None  # implied by stop_touched
-                    _close(bar.timestamp, stop, "stop_loss", position)
+                    assert stop_outcome is not None  # implied by stop_touched
+                    _close(bar.timestamp, stop_outcome.price, "stop_loss", position)
+                    _emit_stop_resolution(stop_outcome, bar.timestamp, position.direction)
                     position = None
                     pending = None
                 elif exit_wanted:
@@ -1182,6 +1368,10 @@ def run_engine(
         "deferred_exit_fills": deferred_exit_fills,
         "stop_exit_conflict": stop_exit_conflict,
         "stop_exit_collisions": stop_exit_collisions,
+        "logic_stop_blocks": len(stop_evals),
+        "stop_trigger_requirement": stop_trigger_requirement,
+        "stop_conflict_resolution": stop_conflict_resolution,
+        "logic_stop_triggers": logic_stop_triggers,
         "allocation_enabled": alloc_on,
         "allocation_compounding": ("compound" if alloc_compound else "fixed") if alloc_on else None,
         "allocation_items_executed": 1 if (alloc_on and item_share > _ZERO) else 0,
@@ -1211,6 +1401,7 @@ _DIAG_SUM_KEYS = (
     "stop_exit_collisions",
     "deferred_entry_fills",
     "deferred_exit_fills",
+    "logic_stop_triggers",
 )
 
 # Sequential composite curve is NOT a unified-clock portfolio valuation (each strategy

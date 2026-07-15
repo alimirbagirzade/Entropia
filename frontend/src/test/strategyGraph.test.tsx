@@ -205,6 +205,42 @@ describe("strategyGraph scaling + restrictions", () => {
     expect((scaling.logic_scaling as Record<string, unknown>).indicator_blocks).toHaveLength(1);
   });
 
+  it("extracts default stop-combination modes", () => {
+    const form = extractGraphSections(fullPayload());
+    expect(form.stop.trigger_requirement).toBe("any_active");
+    expect(form.stop.conflict_resolution).toBe("most_conservative");
+    expect(form.stop.logic_blocks).toHaveLength(0);
+  });
+
+  it("serializes logic-stop blocks + all_active mode, preserving price stops", () => {
+    const p = { ...fullPayload(), protection_stop_logic: { percentage_stop: { enabled: true, loss_percentage: "1.0" } } };
+    const form = extractGraphSections(p);
+    const changed: GraphState = {
+      ...form,
+      stop: {
+        ...form.stop,
+        trigger_requirement: "all_active",
+        conflict_resolution: "priority_order",
+        logic_blocks: form.entry.blocks,
+      },
+    };
+    const stop = mergeGraphSections(p, changed).protection_stop_logic as Record<string, unknown>;
+    expect(stop.stop_trigger_requirement).toBe("all_active");
+    expect(stop.stop_conflict_resolution).toBe("priority_order");
+    expect(stop.logic_blocks as unknown[]).toHaveLength(1);
+    // the percentage price stop edited elsewhere survives the graph-form overlay.
+    expect(stop.percentage_stop).toEqual({ enabled: true, loss_percentage: "1.0" });
+  });
+
+  it("omits logic_blocks when the stop section has none", () => {
+    const p = fullPayload();
+    const merged = mergeGraphSections(p, extractGraphSections(p)).protection_stop_logic as Record<
+      string,
+      unknown
+    >;
+    expect(merged).not.toHaveProperty("logic_blocks");
+  });
+
   it("round-trips restriction filters preserving config", () => {
     const p = fullPayload();
     const form = extractGraphSections(p);
@@ -271,8 +307,10 @@ describe("StrategyGraphForm", () => {
     expect(screen.getByRole("heading", { name: /^Position Entry Logic/ })).toBeTruthy();
     expect(screen.getByRole("heading", { name: /^Position Exit Logic/ })).toBeTruthy();
     expect(screen.getByRole("heading", { name: /^Logic-Based Stop Block/ })).toBeTruthy();
-    // Honest boundary note about the unimplemented logic-based stop.
-    expect(screen.getByText(/does not yet implement/i)).toBeTruthy();
+    // F-08: the logic-based stop is now a real composer with a Stop mode selector.
+    expect(screen.getByLabelText("Stop mode")).toBeTruthy();
+    expect(screen.getByLabelText("Same-bar resolution")).toBeTruthy();
+    expect(screen.queryByText(/does not yet implement/i)).toBeNull();
   });
 
   it("pins a package via the picker browsing the Library catalog", async () => {

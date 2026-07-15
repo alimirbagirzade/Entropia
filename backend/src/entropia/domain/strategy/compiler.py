@@ -247,14 +247,34 @@ def filter_disabled_sections(payload: dict[str, Any]) -> dict[str, Any]:
             ]
             filtered["position_exit_logic"] = exit_logic
 
-    # Filter protection_stop_logic: only keep enabled stops (Binding Decision #2)
+    # Filter protection_stop_logic: only keep enabled stops (Binding Decision #2).
+    # F-08: also keep enabled Logic-Based Stop Blocks (with their nested enabled
+    # conditions filtered) and preserve the stop-combination mode fields whenever any
+    # stop rule survives.
     if "protection_stop_logic" in filtered and isinstance(filtered["protection_stop_logic"], dict):
         stop_logic = dict(filtered["protection_stop_logic"])
-        filtered_stops = {}
+        filtered_stops: dict[str, Any] = {}
         for stop_key in ("percentage_stop", "trailing_stop", "absolute_stop"):
             stop = stop_logic.get(stop_key)
             if isinstance(stop, dict) and stop.get("enabled", False):
                 filtered_stops[stop_key] = stop
+        raw_logic_blocks = stop_logic.get("logic_blocks")
+        if isinstance(raw_logic_blocks, list):
+            enabled_logic_blocks = [
+                _filter_block_conditions(block)
+                for block in raw_logic_blocks
+                if isinstance(block, dict) and block.get("enabled", True)
+            ]
+            if enabled_logic_blocks:
+                filtered_stops["logic_blocks"] = enabled_logic_blocks
+        if filtered_stops:
+            for mode_key in (
+                "stop_trigger_requirement",
+                "stop_conflict_resolution",
+                "stop_priority_order",
+            ):
+                if mode_key in stop_logic:
+                    filtered_stops[mode_key] = stop_logic[mode_key]
         filtered["protection_stop_logic"] = filtered_stops if filtered_stops else None
 
     # Filter scaling_logic: if enabled=false, entire section becomes None
@@ -282,6 +302,20 @@ def filter_disabled_sections(payload: dict[str, Any]) -> dict[str, Any]:
     return filtered
 
 
+def _filter_block_conditions(block: dict[str, Any]) -> dict[str, Any]:
+    """Return a copy of an indicator/logic block with disabled condition blocks dropped."""
+    filtered_block = dict(block)
+    if "condition_blocks" in filtered_block and isinstance(
+        filtered_block["condition_blocks"], list
+    ):
+        filtered_block["condition_blocks"] = [
+            cb
+            for cb in filtered_block["condition_blocks"]
+            if isinstance(cb, dict) and cb.get("enabled", True)
+        ]
+    return filtered_block
+
+
 def _filter_condition_blocks_recursive(payload: dict[str, Any]) -> dict[str, Any]:
     """Recursively filter disabled condition blocks from indicator blocks."""
     filtered = dict(payload)
@@ -290,22 +324,10 @@ def _filter_condition_blocks_recursive(payload: dict[str, Any]) -> dict[str, Any
         if key in filtered and isinstance(filtered[key], dict):
             logic = dict(filtered[key])
             if "indicator_blocks" in logic and isinstance(logic["indicator_blocks"], list):
-                filtered_blocks = []
-                for block in logic["indicator_blocks"]:
-                    if isinstance(block, dict):
-                        filtered_block = dict(block)
-                        if "condition_blocks" in filtered_block and isinstance(
-                            filtered_block["condition_blocks"], list
-                        ):
-                            filtered_block["condition_blocks"] = [
-                                cb
-                                for cb in filtered_block["condition_blocks"]
-                                if isinstance(cb, dict) and cb.get("enabled", True)
-                            ]
-                        filtered_blocks.append(filtered_block)
-                    else:
-                        filtered_blocks.append(block)
-                logic["indicator_blocks"] = filtered_blocks
+                logic["indicator_blocks"] = [
+                    _filter_block_conditions(block) if isinstance(block, dict) else block
+                    for block in logic["indicator_blocks"]
+                ]
                 filtered[key] = logic
 
     return filtered

@@ -114,13 +114,26 @@ async def resolve_indicator_plan(
                 min_supporting_count=exit_logic.signal_block.min_supporting_count,
             )
 
+    # F-08: resolve Logic-Based Stop Blocks with the SAME block resolver as entry/exit.
+    # Each stop block is a full IndicatorBlock; its signal against the open position emits
+    # a protection stop in the engine. An unresolvable stop block is surfaced (prefix
+    # ``stop:``) and fails the RUN closed via Ready Check (never a silent no-op stop).
+    stop_specs: tuple[IndicatorSpec, ...] = ()
+    stop_unresolved: list[str] = []
+    protection = strategy_config.protection_stop_logic
+    if protection is not None and protection.logic_blocks:
+        stop_specs, stop_unresolved = await _resolve_blocks(
+            session, protection.logic_blocks, "stop", base_seconds
+        )
+
     return IndicatorPlan(
         entry_rule=entry_rule,
         entry_specs=entry_specs,
         exit_rule=exit_rule,
         exit_specs=exit_specs,
         exit_on_opposite=bool(strategy_config.conflict_position_handling.exit_on_opposite_signal),
-        unresolved=tuple(entry_unresolved + exit_unresolved),
+        unresolved=tuple(entry_unresolved + exit_unresolved + stop_unresolved),
+        stop_specs=stop_specs,
     )
 
 

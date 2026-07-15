@@ -284,6 +284,9 @@ class DependencyRoleEnum(StrEnum):
     RESTRICTION_FILTER = "restriction_filter"
     DATA_SOURCE = "data_source"
     FUNDING_SOURCE = "funding_source"
+    # F-08 Logic-Based Stop: pinned packages of a protection logic-stop block.
+    PROTECTION_STOP_INDICATOR = "protection_stop_indicator"
+    PROTECTION_STOP_CONDITION = "protection_stop_condition"
 
 
 class ReferencedEntityTypeEnum(StrEnum):

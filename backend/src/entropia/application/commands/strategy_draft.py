@@ -748,6 +748,15 @@ def _extract_references(config: StrategyConfig) -> list[dict[str, Any]]:
             condition_role=DependencyRoleEnum.SCALING_LOGIC,
             out=refs,
         )
+    # F-08: Logic-Based Stop Blocks pin indicator + condition packages exactly like
+    # entry/exit blocks, so they are validated active at save and recorded as edges.
+    if config.protection_stop_logic is not None and config.protection_stop_logic.logic_blocks:
+        _collect_block_refs(
+            config.protection_stop_logic.logic_blocks,
+            indicator_role=DependencyRoleEnum.PROTECTION_STOP_INDICATOR,
+            condition_role=DependencyRoleEnum.PROTECTION_STOP_CONDITION,
+            out=refs,
+        )
     return refs
 
 

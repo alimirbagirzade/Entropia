@@ -312,29 +312,52 @@ async def _resolve_strategy_indicator_issues(
         except PydanticValidationError:
             continue  # STRATEGY_CONFIG_INVALID already surfaces this in the validators.
         entry_blocks = [b for b in config.position_entry_logic.indicator_blocks if b.enabled]
-        if not entry_blocks:
+        protection = config.protection_stop_logic
+        has_logic_stops = protection is not None and bool(protection.logic_blocks)
+        if not entry_blocks and not has_logic_stops:
             continue  # STRATEGY_NO_ENTRY_LOGIC covers a strategy with no entry block.
         plan = await resolve_indicator_plan(session, config)
-        if plan.has_entry and not plan.unresolved:
-            continue
-        detail = list(plan.unresolved) or ["no computable entry signal from the pinned packages"]
-        issues.append(
-            ReadinessIssue(
-                code=ReadinessIssueCode.STRATEGY_INDICATOR_UNRESOLVED,
-                severity=ReadinessSeverity.BLOCKER,
-                scope=ReadinessScope.STRATEGY,
-                message=(
-                    "A pinned indicator package or dependency does not resolve to a computable "
-                    f"signal: {detail}."
-                ),
-                remediation=(
-                    "Pin an approved indicator package whose dependencies resolve (or fix the "
-                    "unresolved block), then re-run the check."
-                ),
-                field_path="position_entry_logic.indicator_blocks",
-                scope_id=item.item_id,
+        # F-08: split stop-scoped unresolved dependencies from entry/exit ones so each
+        # gets its own accurate blocker code / message / field path.
+        stop_unresolved = [u for u in plan.unresolved if u.startswith("stop:")]
+        entry_unresolved = [u for u in plan.unresolved if not u.startswith("stop:")]
+        if entry_blocks and (not plan.has_entry or entry_unresolved):
+            detail = entry_unresolved or ["no computable entry signal from the pinned packages"]
+            issues.append(
+                ReadinessIssue(
+                    code=ReadinessIssueCode.STRATEGY_INDICATOR_UNRESOLVED,
+                    severity=ReadinessSeverity.BLOCKER,
+                    scope=ReadinessScope.STRATEGY,
+                    message=(
+                        "A pinned indicator package or dependency does not resolve to a "
+                        f"computable signal: {detail}."
+                    ),
+                    remediation=(
+                        "Pin an approved indicator package whose dependencies resolve (or fix "
+                        "the unresolved block), then re-run the check."
+                    ),
+                    field_path="position_entry_logic.indicator_blocks",
+                    scope_id=item.item_id,
+                )
             )
-        )
+        if stop_unresolved:
+            issues.append(
+                ReadinessIssue(
+                    code=ReadinessIssueCode.STRATEGY_LOGIC_STOP_UNRESOLVED,
+                    severity=ReadinessSeverity.BLOCKER,
+                    scope=ReadinessScope.STRATEGY,
+                    message=(
+                        "A pinned Logic-Based Stop Block dependency does not resolve to a "
+                        f"computable stop signal: {stop_unresolved}."
+                    ),
+                    remediation=(
+                        "Pin an approved indicator/condition package whose dependencies resolve "
+                        "for the logic stop block (or remove the block), then re-run the check."
+                    ),
+                    field_path="protection_stop_logic.logic_blocks",
+                    scope_id=item.item_id,
+                )
+            )
     return issues
 
 

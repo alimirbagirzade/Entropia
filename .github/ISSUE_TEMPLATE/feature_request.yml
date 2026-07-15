@@ -1,0 +1,41 @@
+name: Feature request
+description: Propose a new capability or enhancement
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: What's missing or painful today? Who is affected?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What would you like to see built? Reference relevant docs/spec sections if applicable.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+    validations:
+      required: false
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      multiple: true
+      options:
+        - Backend (FastAPI / commands / queries)
+        - Backend (worker / dramatiq jobs)
+        - Backend (database / migrations)
+        - Frontend (React / pages)
+        - Infra (Docker / CI)
+        - Docs
+    validations:
+      required: true

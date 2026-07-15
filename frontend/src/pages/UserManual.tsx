@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
 
 import { EmptyState } from "@/components/EmptyState";
 import { ErrorState } from "@/components/ErrorState";
@@ -10,6 +10,7 @@ import {
   type DeleteResult,
   type ManualBlock,
   type ManualSection,
+  type PublishResult,
   useCreateManualDocument,
   useManualSearch,
   useManualStream,
@@ -18,6 +19,7 @@ import {
   useSoftDeleteManualDocument,
   useUploadManualDocument,
 } from "@/lib/manual";
+import { type RestoreResult, useTrashEntries } from "@/lib/trash";
 
 // Failures surface the backend canonical envelope verbatim — the client never
 // invents manual-domain messages (MANUAL_STREAM_CONFLICT / MANUAL_REVISION_
@@ -28,25 +30,54 @@ function mutationErrorText(error: unknown): string {
   return error instanceof Error ? error.message : "Request failed.";
 }
 
-// User Manual (Stage 7a, doc 21). One continuous Published reader stream —
-// baseline guide first, appended sections in stream_position order — plus
-// server-side search over title/heading/content chunks, and the Admin
-// publish/replace/delete/restore surface. Composers are never client-gated
-// (doc 21 §2 — UI visibility is never authorization); a non-Admin sees the
-// server 403 envelope verbatim. Baseline actions ARE hidden, but from the
-// server-truth is_baseline flag on the wire, not a client guess (UM-10).
-export function UserManual() {
-  // Forward-only cursor stack (Trash pager pattern): push on next, pop on prev.
-  const [cursorStack, setCursorStack] = useState<string[]>([]);
-  const cursor = cursorStack.length > 0 ? (cursorStack[cursorStack.length - 1] ?? null) : null;
-  const stream = useManualStream(cursor);
-  // Const-rooted page reference: narrowing survives into the pager closures.
-  const page = stream.data ?? null;
-  const streamVersion = page?.meta.stream_version ?? null;
+function publishNoticeText(result: PublishResult): string {
+  return `Published “${result.title}” rev ${result.revision_no} — added to the end of the continuous manual.`;
+}
 
-  // Delete state lives in the PARENT: a successful soft delete removes its
-  // section from the refetched stream, so a result kept inside the section
-  // component would vanish with it (Portfolio lesson).
+function readFileAsText(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ""));
+    reader.onerror = () => reject(new Error("manual_file_unreadable"));
+    reader.readAsText(file);
+  });
+}
+
+// User Manual (Stage 7a, doc 21; UI-21). One continuous Published reader
+// flow — sticky MANUAL DOCUMENTS sidebar (search + section nav primary) next
+// to a continuous reader pane: baseline guide first, appended sections in
+// stream_position order. Pagination is real (server keyset), so "continuous"
+// means accumulate-on-load-more rather than a client-side full array like the
+// v18 mockup's in-memory doc list. Publish (Add Text / Upload) and Restore
+// live behind an on-demand drawer (F-03: Upload reads a real chosen file via
+// FileReader, never a manually-typed filename/content pair; Restore picks
+// from real recoverable Trash entries, never a manually-typed document id).
+// Composers are never client-gated (doc 21 §2 — UI visibility is never
+// authorization); a non-Admin sees the server 403 envelope verbatim. Baseline
+// actions ARE hidden, but from the server-truth is_baseline flag on the wire,
+// not a client guess (UM-10).
+export function UserManual() {
+  // Accumulate-on-load-more: `frontier` is the cursor for the next page to
+  // fetch. Any successful mutation resets it to null (page 1), so a stale
+  // accumulated tail never survives a stream_version change.
+  const [frontier, setFrontier] = useState<string | null>(null);
+  const stream = useManualStream(frontier);
+  const [sections, setSections] = useState<ManualSection[]>([]);
+  const meta = stream.data?.meta ?? null;
+  const streamVersion = meta?.stream_version ?? null;
+
+  useEffect(() => {
+    if (!stream.data) return;
+    const page = stream.data;
+    setSections((previous) => {
+      if (frontier === null) return page.data;
+      const seen = new Set(previous.map((section) => section.document_id));
+      return [...previous, ...page.data.filter((section) => !seen.has(section.document_id))];
+    });
+  }, [stream.data, frontier]);
+
+  const resetToFirstPage = () => setFrontier(null);
+
   const softDelete = useSoftDeleteManualDocument();
   const [lastDelete, setLastDelete] = useState<DeleteResult | null>(null);
 
@@ -58,9 +89,17 @@ export function UserManual() {
         ...(reason.trim() ? { reason: reason.trim() } : {}),
         expected_stream_version: streamVersion,
       },
-      { onSuccess: (result) => setLastDelete(result) },
+      {
+        onSuccess: (result) => {
+          setLastDelete(result);
+          resetToFirstPage();
+        },
+      },
     );
   };
+
+  const [notice, setNotice] = useState<string | null>(null);
+  const [openDrawer, setOpenDrawer] = useState<"add" | "upload" | "restore" | null>(null);
 
   return (
     <>
@@ -69,23 +108,80 @@ export function UserManual() {
         Published guide stream (doc 21) — baseline first, appended sections in stream order.
       </p>
 
-      <SearchCard readerStreamVersion={streamVersion} />
+      <div className="user-manual-shell">
+        <aside className="user-manual-sidebar">
+          <div className="manual-side-title">MANUAL DOCUMENTS</div>
 
-      <div className="card">
-        <h3>Reader</h3>
-        {streamVersion !== null ? (
-          <p className="cp-note">
-            Stream v{streamVersion} — one snapshot per page; anchors resolve against this version.
-          </p>
-        ) : null}
-        {stream.isLoading ? <Loading label="Loading manual stream…" /> : null}
-        {stream.isError ? <ErrorState error={stream.error} onRetry={() => void stream.refetch()} /> : null}
-        {page ? (
-          <>
-            {page.data.length === 0 ? (
+          <ManualSearchNav streamVersion={streamVersion} />
+
+          <div className="manual-document-list">
+            <div className="manual-section-label">CONTINUOUS MANUAL SECTIONS</div>
+            {sections.length === 0 ? (
+              <div className="manual-empty-state">No sections loaded yet.</div>
+            ) : (
+              sections.map((section) => (
+                <a key={section.document_id} className="manual-document-item" href={`#${section.anchor}`}>
+                  <b>{section.title}</b>
+                  <span className="manual-document-meta">{section.source_label}</span>
+                </a>
+              ))
+            )}
+            {meta?.has_more ? (
+              <button
+                type="button"
+                className="btn btn-ghost"
+                style={{ width: "100%" }}
+                disabled={stream.isFetching}
+                onClick={() => {
+                  if (meta.cursor !== null) setFrontier(meta.cursor);
+                }}
+              >
+                {stream.isFetching ? "Loading…" : "Load more sections"}
+              </button>
+            ) : null}
+          </div>
+
+          <div className="manual-side-actions">
+            <button type="button" className="btn btn-ghost" onClick={() => setOpenDrawer("add")}>
+              + Add / Paste Text
+            </button>
+            <button type="button" className="btn btn-ghost" onClick={() => setOpenDrawer("upload")}>
+              Upload Document
+            </button>
+            <button type="button" className="btn btn-ghost" onClick={() => setOpenDrawer("restore")}>
+              Restore a Document
+            </button>
+          </div>
+        </aside>
+
+        <section className="user-manual-reader">
+          <div className="manual-reader-toolbar">
+            <div>
+              <h3 className="manual-reader-title">ENTROPIA USER MANUAL</h3>
+              <div className="manual-reader-meta">
+                Built-in guidance and added documents, shown as one continuous reading flow.
+                {streamVersion !== null ? ` Stream v${streamVersion}.` : ""}
+              </div>
+            </div>
+          </div>
+
+          {notice ? <div className="manual-notice">{notice}</div> : null}
+          {lastDelete ? (
+            <div className="manual-notice">
+              <strong>Deleted:</strong> {lastDelete.display_name ?? lastDelete.document_id} — document{" "}
+              <code>{lastDelete.document_id}</code> moved to Trash (stream v{lastDelete.stream_version}).
+              Restore it from the sidebar or the Admin Trash page.
+            </div>
+          ) : null}
+
+          {stream.isLoading && sections.length === 0 ? <Loading label="Loading manual stream…" /> : null}
+          {stream.isError ? <ErrorState error={stream.error} onRetry={() => void stream.refetch()} /> : null}
+
+          <article className="manual-document-content">
+            {sections.length === 0 && !stream.isLoading ? (
               <EmptyState title="No published sections" description="The manual stream is empty." />
             ) : (
-              page.data.map((section) => (
+              sections.map((section) => (
                 <SectionView
                   key={section.document_id}
                   section={section}
@@ -93,6 +189,182 @@ export function UserManual() {
                   deleteError={softDelete.isError ? mutationErrorText(softDelete.error) : null}
                   onDelete={requestDelete}
                 />
+              ))
+            )}
+          </article>
+        </section>
+      </div>
+
+      {openDrawer === "add" ? (
+        <Drawer title="Add / Paste Text" onClose={() => setOpenDrawer(null)}>
+          <AddComposer
+            expectedStreamVersion={streamVersion}
+            onPublished={(result) => {
+              resetToFirstPage();
+              setNotice(publishNoticeText(result));
+              setOpenDrawer(null);
+            }}
+          />
+        </Drawer>
+      ) : null}
+      {openDrawer === "upload" ? (
+        <Drawer title="Upload Document" onClose={() => setOpenDrawer(null)}>
+          <UploadComposer
+            expectedStreamVersion={streamVersion}
+            onPublished={(result) => {
+              resetToFirstPage();
+              setNotice(publishNoticeText(result));
+              setOpenDrawer(null);
+            }}
+          />
+        </Drawer>
+      ) : null}
+      {openDrawer === "restore" ? (
+        <Drawer title="Restore a Document" onClose={() => setOpenDrawer(null)}>
+          <RestoreChooser
+            onRestored={(result) => {
+              resetToFirstPage();
+              setNotice(`Restored “${result.display_name}” — ${result.entity_id} is ${result.deletion_state}.`);
+              setOpenDrawer(null);
+            }}
+          />
+        </Drawer>
+      ) : null}
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Drawer — accessible dialog shell shared by Add / Upload / Restore (WCAG
+// 2.2: role=dialog + aria-modal, Escape closes, focus trap, focus restored
+// to the trigger on close, backdrop click closes).
+// ---------------------------------------------------------------------------
+
+function Drawer({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+  const previouslyFocused = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    previouslyFocused.current = document.activeElement as HTMLElement | null;
+    closeButtonRef.current?.focus();
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const focusables = panelRef.current?.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      );
+      if (!focusables || focusables.length === 0) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      previouslyFocused.current?.focus();
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      className="manual-drawer-backdrop"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <div className="manual-drawer" role="dialog" aria-modal="true" aria-label={title} ref={panelRef}>
+        <div className="manual-drawer-header">
+          <h3>{title}</h3>
+          <button
+            type="button"
+            className="manual-drawer-close"
+            onClick={onClose}
+            ref={closeButtonRef}
+            aria-label="Close"
+          >
+            ×
+          </button>
+        </div>
+        <div className="manual-drawer-body">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Search — server-side, search-on-submit only (a live-per-keystroke search
+// would flood the backend); primary sidebar navigation alongside the section
+// list. A blank query never fetches (doc 21 §14).
+// ---------------------------------------------------------------------------
+
+function ManualSearchNav({ streamVersion }: { streamVersion: number | null }) {
+  const [input, setInput] = useState("");
+  const [query, setQuery] = useState("");
+  const [cursorStack, setCursorStack] = useState<string[]>([]);
+  const cursor = cursorStack.length > 0 ? (cursorStack[cursorStack.length - 1] ?? null) : null;
+  const search = useManualSearch(query, cursor);
+  const results = search.data ?? null;
+
+  return (
+    <>
+      <div className="manual-search-label">Search all manual text</div>
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          setCursorStack([]);
+          setQuery(input);
+        }}
+      >
+        <input
+          className="manual-search-input"
+          type="search"
+          placeholder="Search headings or text"
+          value={input}
+          onChange={(event) => setInput(event.target.value)}
+          aria-label="Search query"
+        />
+        <button
+          type="submit"
+          className="btn btn-ghost"
+          style={{ marginTop: 6, width: "100%" }}
+          disabled={input.trim().length === 0}
+        >
+          Search
+        </button>
+      </form>
+      <div className="manual-search-results">
+        <div className="manual-section-label">SEARCH RESULTS</div>
+        {search.isLoading && query.trim().length > 0 ? <Loading label="Searching…" /> : null}
+        {search.isError ? <ErrorState error={search.error} onRetry={() => void search.refetch()} /> : null}
+        {results && query.trim().length > 0 ? (
+          <>
+            {streamVersion !== null && streamVersion !== results.meta.stream_version ? (
+              <p className="cp-note">
+                The reader shows a different snapshot; the index may lag (re-run the search).
+              </p>
+            ) : null}
+            {results.data.length === 0 ? (
+              <div className="manual-empty-state">Nothing matched “{results.meta.query}”.</div>
+            ) : (
+              results.data.map((row) => (
+                <a key={row.chunk_id} className="manual-search-result" href={`#${row.anchor}`}>
+                  <b>{row.title}</b>
+                  <span className="manual-result-excerpt">{row.heading_path}</span>
+                  <span className="manual-result-excerpt">{row.excerpt}</span>
+                  <span className="manual-document-meta">{row.source_label}</span>
+                </a>
               ))
             )}
             <div className="manual-pager">
@@ -107,9 +379,9 @@ export function UserManual() {
               <button
                 type="button"
                 className="btn btn-ghost"
-                disabled={!page.meta.has_more || page.meta.cursor === null}
+                disabled={!results.meta.has_more || results.meta.cursor === null}
                 onClick={() => {
-                  const next = page.meta.cursor;
+                  const next = results.meta.cursor;
                   if (next !== null) setCursorStack((stack) => [...stack, next]);
                 }}
               >
@@ -117,122 +389,13 @@ export function UserManual() {
               </button>
             </div>
           </>
-        ) : null}
-        {lastDelete ? (
-          <div className="manual-callout">
-            <strong>Deleted:</strong> {lastDelete.display_name ?? lastDelete.document_id} —{" "}
-            document <code>{lastDelete.document_id}</code> moved to Trash (stream v
-            {lastDelete.stream_version}). Restore it below or from the Admin Trash page.
+        ) : (
+          <div className="manual-empty-state">
+            Enter a word or phrase to search every part of the continuous manual.
           </div>
-        ) : null}
+        )}
       </div>
-
-      <PublishCard expectedStreamVersion={streamVersion} />
-      <RestoreCard />
     </>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Search
-// ---------------------------------------------------------------------------
-
-function SearchCard({ readerStreamVersion }: { readerStreamVersion: number | null }) {
-  const [input, setInput] = useState("");
-  const [query, setQuery] = useState("");
-  const [cursorStack, setCursorStack] = useState<string[]>([]);
-  const cursor = cursorStack.length > 0 ? (cursorStack[cursorStack.length - 1] ?? null) : null;
-  const search = useManualSearch(query, cursor);
-  // Const-rooted results reference: narrowing survives into the pager closures.
-  const results = search.data ?? null;
-
-  return (
-    <div className="card">
-      <h3>Search the manual</h3>
-      <form
-        className="manual-search-form"
-        onSubmit={(event) => {
-          event.preventDefault();
-          setCursorStack([]);
-          setQuery(input);
-        }}
-      >
-        <input
-          className="auth-input"
-          type="search"
-          placeholder="Search titles, headings and content…"
-          value={input}
-          onChange={(event) => setInput(event.target.value)}
-          aria-label="Search query"
-        />
-        <button type="submit" className="btn btn-primary" disabled={input.trim().length === 0}>
-          Search
-        </button>
-      </form>
-      {search.isLoading && query.trim().length > 0 ? <Loading label="Searching…" /> : null}
-      {search.isError ? <ErrorState error={search.error} onRetry={() => void search.refetch()} /> : null}
-      {results && query.trim().length > 0 ? (
-        <>
-          <p className="cp-note">
-            Results resolve against stream v{results.meta.stream_version}
-            {readerStreamVersion !== null && readerStreamVersion !== results.meta.stream_version
-              ? " — the reader shows a different snapshot; the index may lag (re-run the search)."
-              : ""}
-          </p>
-          {results.data.length === 0 ? (
-            <EmptyState title="No matches" description={`Nothing matched “${results.meta.query}”.`} />
-          ) : (
-            <table className="metrics-table">
-              <thead>
-                <tr>
-                  <th>Document</th>
-                  <th>Heading</th>
-                  <th>Excerpt</th>
-                  <th>Source</th>
-                  <th>Anchor</th>
-                </tr>
-              </thead>
-              <tbody>
-                {results.data.map((row) => (
-                  <tr key={row.chunk_id}>
-                    <td>
-                      {row.title} <span className="cp-note">rev {row.revision_no}</span>
-                    </td>
-                    <td>{row.heading_path}</td>
-                    <td>{row.excerpt}</td>
-                    <td>{row.source_label}</td>
-                    <td>
-                      <a href={`#${row.anchor}`}>#{row.anchor}</a>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-          <div className="manual-pager">
-            <button
-              type="button"
-              className="btn btn-ghost"
-              disabled={cursorStack.length === 0}
-              onClick={() => setCursorStack((stack) => stack.slice(0, -1))}
-            >
-              Previous
-            </button>
-            <button
-              type="button"
-              className="btn btn-ghost"
-              disabled={!results.meta.has_more || results.meta.cursor === null}
-              onClick={() => {
-                const next = results.meta.cursor;
-                if (next !== null) setCursorStack((stack) => [...stack, next]);
-              }}
-            >
-              Next
-            </button>
-          </div>
-        </>
-      ) : null}
-    </div>
   );
 }
 
@@ -247,8 +410,8 @@ function BlockView({ block }: { block: ManualBlock }) {
     case "heading": {
       const level = typeof payload.level === "number" ? payload.level : 1;
       const text = String(payload.text ?? "");
-      if (level <= 1) return <h4 id={block.anchor}>{text}</h4>;
-      if (level === 2) return <h5 id={block.anchor}>{text}</h5>;
+      if (level <= 1) return <h5 id={block.anchor}>{text}</h5>;
+      if (level === 2) return <h6 id={block.anchor}>{text}</h6>;
       return <h6 id={block.anchor}>{text}</h6>;
     }
     case "paragraph":
@@ -297,12 +460,11 @@ function SectionView({ section, deletePending, deleteError, onDelete }: SectionV
   const [deleteReason, setDeleteReason] = useState("");
 
   return (
-    <section className="manual-section" id={section.anchor}>
-      <h3>{section.title}</h3>
-      <div className="manual-section-meta">
+    <section className="manual-appended-document" id={section.anchor}>
+      <h4 className="manual-appended-document-title">{section.title}</h4>
+      <div className="manual-appended-document-meta">
         {section.is_baseline ? <StatusBadge label="Baseline" tone="ok" /> : null}
-        <span>rev {section.revision_no}</span>
-        <span>{section.source_label}</span>
+        <span> rev {section.revision_no}</span> · <span>{section.source_label}</span> ·{" "}
         <span>position {section.stream_position}</span>
       </div>
       <div className="manual-blocks">
@@ -315,7 +477,7 @@ function SectionView({ section, deletePending, deleteError, onDelete }: SectionV
           restore_eligible. Non-baseline actions still re-check Admin
           server-side. */}
       {section.is_baseline ? null : (
-        <div className="manual-actions">
+        <div className="manual-document-actions">
           <button type="button" className="btn btn-ghost" onClick={() => setShowReplace((v) => !v)}>
             {showReplace ? "Close replace" : "Replace content"}
           </button>
@@ -404,36 +566,20 @@ function ReplaceComposer({ section }: { section: ManualSection }) {
 }
 
 // ---------------------------------------------------------------------------
-// Admin publish composers (Add/Paste + Upload share one pipeline, doc 21 §14)
+// Publish composers — Add / Paste Text and Upload share one pipeline (doc 21
+// §14). Upload reads a real chosen file (F-03): no manual filename/content
+// entry — FileReader derives the content client-side, then the SAME wire
+// fields (source_filename/content/title/allow_duplicate) go to the server,
+// which re-validates the extension (MANUAL_FILE_TYPE_UNSUPPORTED, UM-06).
 // ---------------------------------------------------------------------------
 
-function PublishCard({ expectedStreamVersion }: { expectedStreamVersion: number | null }) {
-  return (
-    <div className="card">
-      <h3>Publish (Admin)</h3>
-      <p className="cp-note">
-        Appends are guarded by the rendered stream snapshot (v
-        {expectedStreamVersion ?? "…"}) — a concurrent publish is a 409 MANUAL_STREAM_CONFLICT to
-        re-read, never a silent overwrite.
-      </p>
-      <div className="manual-publish-grid">
-        <AddComposer expectedStreamVersion={expectedStreamVersion} />
-        <UploadComposer expectedStreamVersion={expectedStreamVersion} />
-      </div>
-    </div>
-  );
-}
-
-function PublishResultNote({ result }: { result: { anchor: string; revision_no: number; stream_version: number; title: string } }) {
-  return (
-    <p className="cp-note">
-      Published “{result.title}” rev {result.revision_no} — anchor{" "}
-      <a href={`#${result.anchor}`}>#{result.anchor}</a>, stream v{result.stream_version}.
-    </p>
-  );
-}
-
-function AddComposer({ expectedStreamVersion }: { expectedStreamVersion: number | null }) {
+function AddComposer({
+  expectedStreamVersion,
+  onPublished,
+}: {
+  expectedStreamVersion: number | null;
+  onPublished: (result: PublishResult) => void;
+}) {
   const create = useCreateManualDocument();
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
@@ -441,19 +587,26 @@ function AddComposer({ expectedStreamVersion }: { expectedStreamVersion: number 
 
   return (
     <form
-      className="manual-composer"
+      className="manual-compose"
       onSubmit={(event) => {
         event.preventDefault();
         if (expectedStreamVersion === null) return;
-        create.mutate({
-          title: title.trim(),
-          content,
-          allow_duplicate: allowDuplicate,
-          expected_stream_version: expectedStreamVersion,
-        });
+        create.mutate(
+          {
+            title: title.trim(),
+            content,
+            allow_duplicate: allowDuplicate,
+            expected_stream_version: expectedStreamVersion,
+          },
+          { onSuccess: onPublished },
+        );
       }}
     >
-      <h4>Add text document</h4>
+      <p className="cp-note">
+        Appends are guarded by the rendered stream snapshot (v
+        {expectedStreamVersion ?? "…"}) — a concurrent publish is a 409 MANUAL_STREAM_CONFLICT to
+        re-read, never a silent overwrite.
+      </p>
       <label className="auth-field">
         <span>Title</span>
         <input className="auth-input" value={title} onChange={(event) => setTitle(event.target.value)} />
@@ -462,7 +615,7 @@ function AddComposer({ expectedStreamVersion }: { expectedStreamVersion: number 
         <span>Content</span>
         <textarea
           className="auth-input"
-          rows={6}
+          rows={8}
           value={content}
           onChange={(event) => setContent(event.target.value)}
         />
@@ -488,61 +641,72 @@ function AddComposer({ expectedStreamVersion }: { expectedStreamVersion: number 
         Publish document
       </button>
       {create.isError ? <p className="auth-hint">{mutationErrorText(create.error)}</p> : null}
-      {create.data ? <PublishResultNote result={create.data} /> : null}
     </form>
   );
 }
 
-function UploadComposer({ expectedStreamVersion }: { expectedStreamVersion: number | null }) {
+function UploadComposer({
+  expectedStreamVersion,
+  onPublished,
+}: {
+  expectedStreamVersion: number | null;
+  onPublished: (result: PublishResult) => void;
+}) {
   const upload = useUploadManualDocument();
-  const [filename, setFilename] = useState("");
+  const [file, setFile] = useState<File | null>(null);
   const [title, setTitle] = useState("");
-  const [content, setContent] = useState("");
   const [allowDuplicate, setAllowDuplicate] = useState(false);
+  const [readError, setReadError] = useState<string | null>(null);
+
+  const onFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    setFile(event.target.files?.[0] ?? null);
+    setReadError(null);
+    upload.reset();
+  };
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (file === null || expectedStreamVersion === null) return;
+    let content: string;
+    try {
+      content = await readFileAsText(file);
+    } catch {
+      setReadError("The selected document could not be read. Use a UTF-8 TXT, MD or HTML text file.");
+      return;
+    }
+    upload.mutate(
+      {
+        source_filename: file.name,
+        content,
+        ...(title.trim() ? { title: title.trim() } : {}),
+        allow_duplicate: allowDuplicate,
+        expected_stream_version: expectedStreamVersion,
+      },
+      { onSuccess: onPublished },
+    );
+  };
 
   return (
-    <form
-      className="manual-composer"
-      onSubmit={(event) => {
-        event.preventDefault();
-        if (expectedStreamVersion === null) return;
-        upload.mutate({
-          source_filename: filename.trim(),
-          content,
-          ...(title.trim() ? { title: title.trim() } : {}),
-          allow_duplicate: allowDuplicate,
-          expected_stream_version: expectedStreamVersion,
-        });
-      }}
-    >
-      <h4>Upload document</h4>
+    <form className="manual-compose" onSubmit={(event) => void submit(event)}>
       <p className="cp-note">
         UTF-8 text only ({ACCEPTED_UPLOAD_EXTENSIONS.join(", ")}) — the server re-validates the
         extension (MANUAL_FILE_TYPE_UNSUPPORTED verbatim, UM-06).
       </p>
       <label className="auth-field">
-        <span>Source filename</span>
+        <span>File</span>
         <input
           className="auth-input"
-          placeholder="guide.md"
-          value={filename}
-          onChange={(event) => setFilename(event.target.value)}
+          type="file"
+          accept={ACCEPTED_UPLOAD_EXTENSIONS.join(",")}
+          onChange={onFileChange}
         />
       </label>
+      {file ? <p className="cp-note">Selected: {file.name}</p> : null}
       <label className="auth-field">
         <span>
           Title <span className="auth-optional">(optional — derived from the filename)</span>
         </span>
         <input className="auth-input" value={title} onChange={(event) => setTitle(event.target.value)} />
-      </label>
-      <label className="auth-field">
-        <span>File content (UTF-8 text)</span>
-        <textarea
-          className="auth-input"
-          rows={6}
-          value={content}
-          onChange={(event) => setContent(event.target.value)}
-        />
       </label>
       <label className="manual-check">
         <input
@@ -555,60 +719,71 @@ function UploadComposer({ expectedStreamVersion }: { expectedStreamVersion: numb
       <button
         type="submit"
         className="btn btn-primary"
-        disabled={
-          upload.isPending ||
-          expectedStreamVersion === null ||
-          filename.trim().length === 0 ||
-          content.trim().length === 0
-        }
+        disabled={upload.isPending || expectedStreamVersion === null || file === null}
       >
         Upload &amp; publish
       </button>
+      {readError ? <p className="auth-hint">{readError}</p> : null}
       {upload.isError ? <p className="auth-hint">{mutationErrorText(upload.error)}</p> : null}
-      {upload.data ? <PublishResultNote result={upload.data} /> : null}
     </form>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Restore (doc 21 §8.4 UM-09 — Trash-core delegate addressed by document id)
+// Restore — real document chooser (F-03): picks from actually recoverable
+// Trash entries (object_type=manual_document, restore_eligible) rather than
+// a manually-typed document id. Delegates to the landed Trash core (doc 21
+// §8.4 UM-09); the section returns to its original stream position.
 // ---------------------------------------------------------------------------
 
-function RestoreCard() {
+function RestoreChooser({ onRestored }: { onRestored: (result: RestoreResult) => void }) {
+  const entries = useTrashEntries({ q: null, object_type: "manual_document" }, null);
   const restore = useRestoreManualDocument();
   const [documentId, setDocumentId] = useState("");
 
+  const recoverable = (entries.data?.data ?? []).filter((entry) => entry.restore_eligible);
+
   return (
-    <div className="card">
-      <h3>Restore a deleted document (Admin)</h3>
+    <div>
       <p className="cp-note">
         Delegates to the Admin Trash restore — the section returns to its original stream position
         (UM-09). Also available from the Trash page.
       </p>
-      <form
-        className="manual-search-form"
-        onSubmit={(event) => {
-          event.preventDefault();
-          restore.mutate({ document_id: documentId.trim() });
-        }}
-      >
-        <input
-          className="auth-input"
-          placeholder="mdoc_…"
-          value={documentId}
-          onChange={(event) => setDocumentId(event.target.value)}
-          aria-label="Document id to restore"
-        />
-        <button type="submit" className="btn" disabled={restore.isPending || documentId.trim().length === 0}>
-          Restore
-        </button>
-      </form>
-      {restore.isError ? <p className="auth-hint">{mutationErrorText(restore.error)}</p> : null}
-      {restore.data ? (
-        <p className="cp-note">
-          Restored “{restore.data.display_name}” — {restore.data.entity_id} is{" "}
-          {restore.data.deletion_state}.
-        </p>
+      {entries.isLoading ? <Loading label="Loading deleted documents…" /> : null}
+      {entries.isError ? <ErrorState error={entries.error} onRetry={() => void entries.refetch()} /> : null}
+      {entries.data && recoverable.length === 0 ? (
+        <div className="manual-empty-state">No deleted manual documents are available to restore.</div>
+      ) : null}
+      {recoverable.length > 0 ? (
+        <form
+          className="manual-compose"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!documentId) return;
+            restore.mutate({ document_id: documentId }, { onSuccess: onRestored });
+          }}
+        >
+          <label className="auth-field">
+            <span>Document</span>
+            <select
+              className="auth-input"
+              value={documentId}
+              onChange={(event) => setDocumentId(event.target.value)}
+              aria-label="Document to restore"
+            >
+              <option value="">Select a deleted document…</option>
+              {recoverable.map((entry) => (
+                <option key={entry.entity_id} value={entry.entity_id}>
+                  {entry.display_name} ({entry.entity_id})
+                </option>
+              ))}
+            </select>
+          </label>
+          <button type="submit" className="btn" disabled={restore.isPending || !documentId}>
+            Restore
+          </button>
+          {restore.isError ? <p className="auth-hint">{mutationErrorText(restore.error)}</p> : null}
+        </form>
       ) : null}
     </div>
   );

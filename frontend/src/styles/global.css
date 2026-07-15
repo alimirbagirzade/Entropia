@@ -450,17 +450,131 @@ a:hover { text-decoration: underline; }
   .cp-form { grid-template-columns: 1fr; }
 }
 
-/* User Manual reader (doc 21): canonical block rendering + pager/composers. */
-.manual-section { padding: 14px 0; border-bottom: 1px solid var(--border); }
-.manual-section:last-of-type { border-bottom: 0; }
-.manual-section-meta {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  flex-wrap: wrap;
-  font-size: 12px;
-  color: var(--text-dim);
+/* User Manual (doc 21, UI-21): sticky sidebar + continuous reader shell,
+   mirrors the v18 mockup's .user-manual-shell layout (docs/spec). */
+.user-manual-shell {
+  display: grid;
+  grid-template-columns: minmax(245px, 0.32fr) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
 }
+.user-manual-sidebar,
+.user-manual-reader {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-sizing: border-box;
+}
+.user-manual-sidebar { padding: 11px; position: sticky; top: 12px; }
+.user-manual-reader { padding: 16px 18px 22px; min-height: 420px; }
+.manual-side-title {
+  font-size: 10.5px;
+  font-weight: 900;
+  letter-spacing: 0.55px;
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 7px;
+  margin-bottom: 8px;
+}
+.manual-side-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.manual-search-label {
+  display: block;
+  font-size: 9.5px;
+  font-weight: 900;
+  color: var(--text-dim);
+  margin: 9px 0 3px;
+  letter-spacing: 0.3px;
+}
+.manual-search-input {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 5px 6px;
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--text);
+  background: var(--bg);
+}
+.manual-search-results,
+.manual-document-list { margin-top: 8px; }
+.manual-section-label {
+  font-size: 9.5px;
+  font-weight: 900;
+  letter-spacing: 0.45px;
+  color: var(--text-dim);
+  margin: 10px 0 5px;
+}
+.manual-search-result,
+.manual-document-item {
+  display: block;
+  width: 100%;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  border-radius: var(--radius);
+  padding: 7px;
+  box-sizing: border-box;
+  text-align: left;
+  cursor: pointer;
+  margin-bottom: 5px;
+  font-size: 10.5px;
+  line-height: 1.35;
+  color: var(--text);
+  text-decoration: none;
+}
+.manual-search-result:hover,
+.manual-document-item:hover {
+  background: var(--bg-elev-2);
+  border-color: var(--accent-dim);
+}
+.manual-search-result b,
+.manual-document-item b { display: block; font-size: 10.7px; margin-bottom: 2px; }
+.manual-result-excerpt,
+.manual-document-meta { display: block; color: var(--text-faint); font-size: 9.6px; }
+.manual-empty-state {
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elev-2);
+  color: var(--text-dim);
+  padding: 8px;
+  font-size: 10.5px;
+  line-height: 1.4;
+}
+.manual-reader-toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: start;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 9px;
+  margin-bottom: 14px;
+}
+.manual-reader-title { font-size: 15px; margin: 0 0 3px; }
+.manual-reader-meta { font-size: 11px; color: var(--text-dim); line-height: 1.4; }
+.manual-notice {
+  border: 1px solid var(--accent-dim);
+  background: var(--bg-elev-2);
+  color: var(--text);
+  border-radius: var(--radius);
+  padding: 7px 8px;
+  font-size: 10.5px;
+  line-height: 1.4;
+  margin-bottom: 12px;
+}
+.manual-document-content { font-size: 13px; line-height: 1.72; color: var(--text); }
+.manual-document-content p { margin: 0 0 14px; }
+.manual-appended-document { border-top: 2px solid var(--border); margin-top: 26px; padding-top: 18px; }
+.manual-appended-document:first-of-type { border-top: 0; margin-top: 0; padding-top: 0; }
+.manual-appended-document-title { font-size: 17px; font-weight: 900; color: var(--text); line-height: 1.25; margin-bottom: 4px; }
+.manual-appended-document-meta { font-size: 10px; color: var(--text-faint); margin-bottom: 12px; }
+.manual-document-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
 .manual-blocks p { margin: 8px 0; }
 .manual-code {
   background: var(--bg-elev-2);
@@ -480,14 +594,58 @@ a:hover { text-decoration: underline; }
   font-size: 14px;
 }
 .manual-pager { display: flex; gap: 8px; margin-top: 12px; }
-.manual-search-form { display: flex; gap: 8px; margin-bottom: 12px; }
-.manual-search-form .auth-input { flex: 1; }
-.manual-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
-.manual-composer { margin-top: 12px; }
-.manual-publish-grid { display: grid; gap: 20px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.manual-composer,
+.manual-compose { margin-top: 12px; display: flex; flex-direction: column; gap: 4px; }
 .manual-check { display: flex; gap: 8px; align-items: center; font-size: 13px; margin: 0 0 12px; }
-@media (max-width: 720px) {
-  .manual-publish-grid { grid-template-columns: 1fr; }
+
+/* Publish / Add Text / Upload / Restore drawer (WCAG 2.2 dialog). */
+.manual-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  z-index: 60;
+  display: flex;
+  justify-content: flex-end;
+}
+.manual-drawer {
+  width: min(440px, 100%);
+  height: 100%;
+  background: var(--bg-elev);
+  border-left: 1px solid var(--border);
+  box-shadow: -4px 0 16px rgba(0, 0, 0, 0.18);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+.manual-drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: var(--bg-elev);
+}
+.manual-drawer-header h3 { margin: 0; font-size: 14px; }
+.manual-drawer-close {
+  border: 1px solid var(--border);
+  background: var(--bg);
+  border-radius: var(--radius);
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+}
+.manual-drawer-close:hover { background: var(--bg-elev-2); }
+.manual-drawer-body { padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+
+@media (max-width: 980px) {
+  .user-manual-shell { grid-template-columns: 1fr; }
+  .user-manual-sidebar { position: static; }
 }
 
 /* GAP-08 — Strategy structured form + ⓘ Information Content panels (doc 02) */
@@ -803,6 +961,29 @@ a:hover { text-decoration: underline; }
 /* ---- v18 Panel: management/logs card grid (mockup .panel-grid/.panel-card) ---- */
 .panel-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
 .panel-card { border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-elev); padding: 14px; }
+
+/* ---- v18 Panel: Management / Logs work-context tabs (doc 19, mockup Panel dropdown) ---- */
+.panel-tabs {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: 16px;
+  border-radius: var(--radius);
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+}
+.panel-tab {
+  padding: 8px 16px;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.panel-tab.active { background: var(--bg-elev); color: var(--text); box-shadow: 0 0 0 1px var(--border); }
+.panel-secondary-flow { margin-top: 10px; }
 
 /* ---- v18 Create Package: request status summary card (mockup .cp-state-card) ---- */
 .cp-status-card { border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-elev-2); padding: 12px; margin-bottom: 14px; }

@@ -28,6 +28,13 @@ updates:
         update-types:
           - "minor"
           - "patch"
+    # Frontend toolchain majors (eslint, typescript, react, ...) have breaking
+    # changes and interdependent peer requirements — they cannot be merged
+    # piecemeal. Suppress automated major PRs; perform major upgrades as a
+    # dedicated, manually-tested branch instead.
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   # GitHub Actions — pin/patch workflow action versions
   - package-ecosystem: "github-actions"

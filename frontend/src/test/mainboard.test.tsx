@@ -277,6 +277,10 @@ describe("Mainboard", () => {
     const fetchMock = stubRoutes();
     renderPage();
     await screen.findByText("Momentum A");
+    // Add Package popover (UI-06): open it and choose the outsource path before
+    // the Outsource Signal card (mode-gated) renders its TS/TL buttons.
+    fireEvent.click(screen.getByRole("button", { name: "+ Add Package" }));
+    fireEvent.click(screen.getByRole("button", { name: "Trading Signal / Trade Log" }));
     fireEvent.click(screen.getByRole("button", { name: "Trading Signal" }));
     expect(await screen.findByText(/Trading Signal draft opened/)).toBeTruthy();
     const link = screen.getByRole("link", { name: /Continue in the Trading Signal workbench/ });
@@ -290,6 +294,10 @@ describe("Mainboard", () => {
   it("creates a generic work object then attaches its revision", async () => {
     const fetchMock = stubRoutes();
     renderPage();
+    // Add Package popover (UI-06): open it and choose the work-object path before
+    // the Add work object card (mode-gated) renders.
+    fireEvent.click(await screen.findByRole("button", { name: "+ Add Package" }));
+    fireEvent.click(screen.getByRole("button", { name: "Strategy / work object" }));
     fireEvent.click(await screen.findByText("Create work object"));
     expect(await screen.findByText("root_new")).toBeTruthy();
     fireEvent.click(screen.getByText("Attach to Mainboard"));

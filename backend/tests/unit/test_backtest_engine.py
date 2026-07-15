@@ -572,7 +572,7 @@ def test_engine_execution_key_namespace_shifts_with_the_engine_version() -> None
     # The ENGINE_VERSION bump must flow into the manifest so a stale pre-conflict
     # result cannot be reused under the new engine (INF-04 idempotent reuse / INF-05).
     built = _manifest("btrun_A", "snap_A", "2024-01-01T00:00:00Z")
-    assert built.manifest["identity"]["engine_version"] == "backtest-engine-v5-logic-based-stop"
+    assert built.manifest["identity"]["engine_version"] == "backtest-engine-v6-decision-trace"
 
 
 def test_stop_exit_default_is_stop_has_priority() -> None:
@@ -627,8 +627,13 @@ def test_stop_exit_first_trigger_wins_resolves_to_the_intrabar_stop() -> None:
     assert first.trades[0].exit_reason == "stop_loss"
     assert first.trades[0].exit_price == default.trades[0].exit_price
     assert first.diagnostics["stop_exit_collisions"] == 1
-    # No collision event is emitted unless the policy is record_both_reasons.
-    assert not [e for e in first.signal_events if e.event_type == "stop_exit_collision"]
+    # F-10: the conflict decision is ALWAYS traced (not only under record_both_reasons),
+    # carrying which rule executed, which also fired, and the governing policy.
+    collision = [e for e in first.signal_events if e.event_type == "stop_exit_collision"]
+    assert len(collision) == 1
+    assert collision[0].detail["executed"] == "stop_loss"
+    assert collision[0].detail["also_triggered"] == "exit_signal"
+    assert collision[0].detail["policy"] == "first_trigger_wins"
 
 
 def test_summary_carries_the_caller_resolved_timeframe() -> None:

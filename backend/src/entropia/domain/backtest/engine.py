@@ -63,6 +63,29 @@ _ONE = Decimal("1")
 _BREAKOUT_WINDOW = 20
 ENTRY_MODEL = "deterministic_bar_breakout_proxy_v1"
 
+# F-10 complete decision trace (doc 15 §9.3 step 8, §14, §16). The full event taxonomy the
+# bar-replay engine emits, so a reviewer can reconstruct WHY every position opened / did not
+# open / changed / closed. A signal/decision event is never conflated with a real fill.
+DECISION_TRACE_SCHEMA = "v1"
+DECISION_TRACE_EVENT_TYPES = (
+    "entry_signal",  # strategy decided to enter (rule id + per-condition evidence)
+    "entry_fill",  # a position actually opened (execution)
+    "entry_scheduled",  # a deferred entry was scheduled to a future bar (F-07a timing)
+    "entry_blocked",  # a wanted entry produced no fill (sizing / sleeve capacity)
+    "filtered_no_entry",  # a signal was filtered by the direction bias (no fill attempt)
+    "exit_scheduled",  # a deferred exit was scheduled to a future bar (F-07a timing)
+    "position_close",  # a position closed (trade linkage + exit reason + realized pnl)
+    "stop_resolution",  # multi-rule / logic stop resolution (F-08 combination engine)
+    "stop_exit_collision",  # same-bar stop+exit tie-break decision (§5.9)
+)
+# Honest V1 boundary: the bar-replay engine holds at most ONE full-size position, so these
+# decision classes never occur — surfaced (never fabricated as phantom events).
+UNMODELLED_DECISION_CLASSES = (
+    "same_direction_scaling",
+    "partial_fill",
+    "partial_close",
+)
+
 
 @dataclass(frozen=True, slots=True)
 class TradeRow:
@@ -168,6 +191,11 @@ class _Bar:
 
 @dataclass(slots=True)
 class _Position:
+    # F-10: lifecycle id + entry bar index so every decision-trace event of this position
+    # (entry_signal -> entry_fill -> ... -> position_close) links back to one lifecycle and
+    # a reviewer can compute the holding span.
+    position_seq: int
+    entry_bar_seq: int
     direction: str  # "long" | "short"
     entry_time: str
     entry_price: Decimal  # cost-adjusted effective fill
@@ -858,8 +886,75 @@ def run_engine(
     deferred_exit_fills = 0
     gross_profit = _ZERO
     gross_loss = _ZERO
+    # F-10: monotonic position-lifecycle id linking every decision-trace event of one
+    # position (entry_signal -> entry_fill -> ... -> position_close) so a reviewer can
+    # reconstruct WHY each position opened / did not open / closed. Incremented only on a
+    # real fill (a gap is a no-fill, never a phantom position).
+    position_seq = 0
 
-    def _close(exit_time: str, exit_price_raw: Decimal, reason: str, pos: _Position) -> None:
+    def _emit(
+        event_type: str,
+        *,
+        event_time: str,
+        direction: str | None,
+        bar_seq: int,
+        detail: dict[str, Any],
+    ) -> None:
+        """Append one immutable decision-trace event (F-10, doc 15 §9.3 step 8/§14).
+
+        ``bar_seq`` (the 1-based replayed-bar index) + ``event_time`` bind the event to
+        the exact bar; ``detail`` carries the position/order linkage and rule evidence.
+        A signal/decision event is NEVER conflated with a real fill (doc 15 §16)."""
+        signal_events.append(
+            SignalEventRow(
+                seq=len(signal_events),
+                event_time=event_time,
+                event_type=event_type,
+                direction=direction,
+                detail={"bar_seq": bar_seq, **detail},
+            )
+        )
+
+    def _entry_rule_snapshot(want: str) -> dict[str, Any]:
+        """The entry DECISION evidence as-of the signal bar (F-10 rule id + conditions).
+
+        Plan mode: the aggregation rule + every evaluated block's pinned ``rule_id``,
+        its per-bar ``signal`` and its nested condition pass/fail. Proxy mode: the
+        breakout look-back that produced the intent. Read-only — no re-evaluation."""
+        if plan_active and indicator_plan is not None:
+            return {
+                "mode": "plan",
+                "rule": indicator_plan.entry_rule.rule,
+                "min_supporting_count": indicator_plan.entry_rule.min_supporting_count,
+                "blocks": [
+                    {
+                        "rule_id": ev.block_id,
+                        "key": ev.canonical_key,
+                        "requirement": ev.requirement,
+                        "signal": ev.current_signal,
+                        "conditions": ev.condition_snapshot(),
+                    }
+                    for ev in entry_evals
+                ],
+            }
+        return {"mode": "breakout_proxy", "window": _BREAKOUT_WINDOW, "direction": want}
+
+    def _blocked_reason() -> str:
+        """Why a wanted entry produced NO fill (F-10 restriction trace)."""
+        if not sizing_ok:
+            return "sizing_unsupported"
+        if alloc_on:
+            return "sleeve_zero_capacity"
+        return "no_fill"
+
+    def _close(
+        exit_time: str,
+        exit_price_raw: Decimal,
+        reason: str,
+        pos: _Position,
+        *,
+        bar_seq: int,
+    ) -> None:
         nonlocal equity, peak, winners, stops_hit, stop_streak, max_stop_streak
         nonlocal gross_profit, gross_loss
         is_long = pos.direction == "long"
@@ -911,14 +1006,24 @@ def run_engine(
                 exposure=exposure,
             )
         )
-        signal_events.append(
-            SignalEventRow(
-                seq=len(signal_events),
-                event_time=pos.entry_time,
-                event_type="entry_signal",
-                direction=pos.direction,
-                detail={"trade_seq": seq},
-            )
+        # F-10: the position CLOSE decision — links the lifecycle to its immutable trade
+        # row (``trade_seq``), the exit reason, the realized pnl and the holding span so a
+        # reviewer reconstructs exactly why/when the position closed. Distinct from the
+        # ``entry_fill`` event — a close is never conflated with the open (doc 15 §16).
+        _emit(
+            "position_close",
+            event_time=exit_time,
+            direction=pos.direction,
+            bar_seq=bar_seq,
+            detail={
+                "position_seq": pos.position_seq,
+                "trade_seq": seq,
+                "exit_reason": reason,
+                "exit_price": str(exit_eff),
+                "pnl": str(pnl),
+                "entry_bar_seq": pos.entry_bar_seq,
+                "holding_bars": bar_seq - pos.entry_bar_seq,
+            },
         )
 
     def _sleeve_capital(current_equity: Decimal) -> Decimal:
@@ -932,7 +1037,7 @@ def run_engine(
         )
         return allocatable * item_share / _HUNDRED
 
-    def _open(direction: str, bar: _Bar, fill_raw: Decimal) -> _Position | None:
+    def _open(direction: str, bar: _Bar, fill_raw: Decimal, *, bar_seq: int) -> _Position | None:
         """Open a position at the cost-adjusted fill of ``fill_raw``, or ``None`` for a
         no-fill.
 
@@ -961,7 +1066,11 @@ def run_engine(
                 return None
         else:
             size = _position_size(config, entry_eff, equity)
+        nonlocal position_seq
+        position_seq += 1
         return _Position(
+            position_seq=position_seq,
+            entry_bar_seq=bar_seq,
             direction=direction,
             entry_time=bar.timestamp,
             entry_price=entry_eff,
@@ -972,6 +1081,40 @@ def run_engine(
             trail_anchor=fill_raw,
             entry_notional=(entry_eff * size).quantize(_MONEY),
         )
+
+    def _do_open(
+        direction: str, bar: _Bar, fill_raw: Decimal, *, bar_seq: int, deferred: bool
+    ) -> _Position | None:
+        """Open a position AND emit the F-10 fill/blocked decision-trace event.
+
+        On a real fill: ``entry_fill`` (the execution — position_seq, price, size, timing).
+        On a no-fill: ``entry_blocked`` with the concrete reason (sizing/sleeve), so a
+        signalled-but-unfilled entry is never a silent gap in the trace."""
+        pos = _open(direction, bar, fill_raw, bar_seq=bar_seq)
+        if pos is not None:
+            _emit(
+                "entry_fill",
+                event_time=bar.timestamp,
+                direction=direction,
+                bar_seq=bar_seq,
+                detail={
+                    "position_seq": pos.position_seq,
+                    "fill_price": str(pos.entry_price),
+                    "size": str(pos.size),
+                    "entry_notional": str(pos.entry_notional),
+                    "timing": config.data.execution.entry_timing,
+                    "deferred": deferred,
+                },
+            )
+        else:
+            _emit(
+                "entry_blocked",
+                event_time=bar.timestamp,
+                direction=direction,
+                bar_seq=bar_seq,
+                detail={"reason": _blocked_reason(), "deferred": deferred},
+            )
+        return pos
 
     def _plan_exit(pos: _Position, entry_signal: str | None, exit_hit: bool) -> bool:
         """Exit on an explicit exit signal or (opt-in) an opposite entry signal."""
@@ -1064,10 +1207,12 @@ def run_engine(
             if pending is not None and pending.target_seq == bars_seen and pending.at_open:
                 if pending.kind == "entry" and position is None:
                     deferred_entry_fills += 1
-                    position = _open(pending.direction, bar, bar.open)
+                    position = _do_open(
+                        pending.direction, bar, bar.open, bar_seq=bars_seen, deferred=True
+                    )
                 elif pending.kind == "exit" and position is not None:
                     deferred_exit_fills += 1
-                    _close(bar.timestamp, bar.open, pending.reason, position)
+                    _close(bar.timestamp, bar.open, pending.reason, position, bar_seq=bars_seen)
                     position = None
                 pending = None
 
@@ -1105,41 +1250,68 @@ def run_engine(
                     # exit); the other three execute the stop (the intrabar touch precedes
                     # the close-based exit), "record_both_reasons" logs both codes.
                     stop_exit_collisions += 1
+                    executed_reason = (
+                        "exit_signal" if stop_exit_conflict == "exit_has_priority" else "stop_loss"
+                    )
+                    # F-10: the CONFLICT decision is ALWAYS traced (was only under
+                    # record_both_reasons) — which rule executed, which also triggered, and
+                    # the governing policy — so a reviewer can reconstruct the tie-break.
+                    _emit(
+                        "stop_exit_collision",
+                        event_time=bar.timestamp,
+                        direction=position.direction,
+                        bar_seq=bars_seen,
+                        detail={
+                            "position_seq": position.position_seq,
+                            "executed": executed_reason,
+                            "also_triggered": (
+                                "stop_loss" if executed_reason == "exit_signal" else "exit_signal"
+                            ),
+                            "policy": stop_exit_conflict,
+                        },
+                    )
                     if stop_exit_conflict == "exit_has_priority":
-                        _close(bar.timestamp, bar.close, "exit_signal", position)
+                        _close(bar.timestamp, bar.close, "exit_signal", position, bar_seq=bars_seen)
                     else:
                         assert stop_outcome is not None  # implied by stop_touched
-                        _close(bar.timestamp, stop_outcome.price, "stop_loss", position)
+                        _close(
+                            bar.timestamp,
+                            stop_outcome.price,
+                            "stop_loss",
+                            position,
+                            bar_seq=bars_seen,
+                        )
                         _emit_stop_resolution(stop_outcome, bar.timestamp, position.direction)
-                        if stop_exit_conflict == "record_both_reasons":
-                            signal_events.append(
-                                SignalEventRow(
-                                    seq=len(signal_events),
-                                    event_time=bar.timestamp,
-                                    event_type="stop_exit_collision",
-                                    direction=position.direction,
-                                    detail={
-                                        "executed": "stop_loss",
-                                        "also_triggered": "exit_signal",
-                                        "policy": stop_exit_conflict,
-                                    },
-                                )
-                            )
                     position = None
                 elif stop_touched:
                     # An intrabar stop fires immediately and subsumes any deferred exit
                     # scheduled for later this bar (or a later bar) — the stop is hit first.
                     assert stop_outcome is not None  # implied by stop_touched
-                    _close(bar.timestamp, stop_outcome.price, "stop_loss", position)
+                    _close(
+                        bar.timestamp, stop_outcome.price, "stop_loss", position, bar_seq=bars_seen
+                    )
                     _emit_stop_resolution(stop_outcome, bar.timestamp, position.direction)
                     position = None
                     pending = None
                 elif exit_wanted:
                     if exit_sched == "immediate":
-                        _close(bar.timestamp, bar.close, "exit_signal", position)
+                        _close(bar.timestamp, bar.close, "exit_signal", position, bar_seq=bars_seen)
                         position = None
                     else:
-                        # Defer the exit to the next bar's open / close (F-07a).
+                        # Defer the exit to the next bar's open / close (F-07a); trace the
+                        # scheduling decision so the two-phase timing is reconstructable.
+                        _emit(
+                            "exit_scheduled",
+                            event_time=bar.timestamp,
+                            direction=position.direction,
+                            bar_seq=bars_seen,
+                            detail={
+                                "position_seq": position.position_seq,
+                                "reason": "exit_signal",
+                                "timing": config.data.execution.exit_timing,
+                                "target_bar_seq": bars_seen + 1,
+                            },
+                        )
                         pending = _Pending(
                             "exit", exit_sched == "next_open", bars_seen + 1, "", "exit_signal"
                         )
@@ -1155,6 +1327,16 @@ def run_engine(
                             entry_signal == "short" and not short_ok
                         ):
                             suppressed_entries += 1
+                            _emit(
+                                "filtered_no_entry",
+                                event_time=bar.timestamp,
+                                direction=entry_signal,
+                                bar_seq=bars_seen,
+                                detail={
+                                    "reason": "direction_restriction",
+                                    "direction_mode": config.position_entry_logic.direction_mode,
+                                },
+                            )
                         else:
                             want = entry_signal
                 elif len(window) == _BREAKOUT_WINDOW:
@@ -1165,13 +1347,43 @@ def run_engine(
                     want_short = bar.close < lowest
                     if (want_long and not long_ok) or (want_short and not short_ok):
                         suppressed_entries += 1
+                        _emit(
+                            "filtered_no_entry",
+                            event_time=bar.timestamp,
+                            direction="long" if want_long else "short",
+                            bar_seq=bars_seen,
+                            detail={
+                                "reason": "direction_restriction",
+                                "direction_mode": config.position_entry_logic.direction_mode,
+                            },
+                        )
                     elif want_long or want_short:
                         # long wins a same-bar tie (deterministic); sides are exclusive.
                         want = "long" if want_long else "short"
                 if want is not None:
+                    # F-10: the entry DECISION (signal fired + bias allowed), carrying the
+                    # evaluated rule id(s) and each nested condition's pass/fail — distinct
+                    # from the ``entry_fill`` execution event (doc 15 §16).
+                    _emit(
+                        "entry_signal",
+                        event_time=bar.timestamp,
+                        direction=want,
+                        bar_seq=bars_seen,
+                        detail={"rule": _entry_rule_snapshot(want)},
+                    )
                     if entry_sched == "immediate":
-                        position = _open(want, bar, bar.close)
+                        position = _do_open(want, bar, bar.close, bar_seq=bars_seen, deferred=False)
                     else:
+                        _emit(
+                            "entry_scheduled",
+                            event_time=bar.timestamp,
+                            direction=want,
+                            bar_seq=bars_seen,
+                            detail={
+                                "timing": config.data.execution.entry_timing,
+                                "target_bar_seq": bars_seen + 1,
+                            },
+                        )
                         pending = _Pending(
                             "entry", entry_sched == "next_open", bars_seen + 1, want, ""
                         )
@@ -1182,10 +1394,12 @@ def run_engine(
             if pending is not None and pending.target_seq == bars_seen and not pending.at_open:
                 if pending.kind == "entry" and position is None:
                     deferred_entry_fills += 1
-                    position = _open(pending.direction, bar, bar.close)
+                    position = _do_open(
+                        pending.direction, bar, bar.close, bar_seq=bars_seen, deferred=True
+                    )
                 elif pending.kind == "exit" and position is not None:
                     deferred_exit_fills += 1
-                    _close(bar.timestamp, bar.close, pending.reason, position)
+                    _close(bar.timestamp, bar.close, pending.reason, position, bar_seq=bars_seen)
                     position = None
                 pending = None
 
@@ -1193,19 +1407,8 @@ def run_engine(
 
     # End-of-data: close any open position at the last bar's close (never left dangling).
     if position is not None and last_bar is not None:
-        _close(last_bar.timestamp, last_bar.close, "end_of_data", position)
+        _close(last_bar.timestamp, last_bar.close, "end_of_data", position, bar_seq=bars_seen)
         position = None
-
-    if suppressed_entries:
-        signal_events.append(
-            SignalEventRow(
-                seq=len(signal_events),
-                event_time=first_ts,
-                event_type="filtered_no_entry",
-                direction=None,
-                detail={"reason": "direction_restriction", "count": suppressed_entries},
-            )
-        )
 
     total_trades = len(trades)
     net_profit = (equity - initial_capital).quantize(_MONEY)
@@ -1378,6 +1581,10 @@ def run_engine(
         "allocation_sleeve_cap_active": alloc_on and item_share > _ZERO,
         "item_count": item_count,
         "decision_trace_count": len(signal_events),
+        "decision_trace_schema": DECISION_TRACE_SCHEMA,
+        "decision_trace_event_types": list(DECISION_TRACE_EVENT_TYPES),
+        "unmodelled_decision_classes": list(UNMODELLED_DECISION_CLASSES),
+        "suppressed_entries": suppressed_entries,
         "execution_key": execution_key,
         "warnings": warnings,
     }
@@ -1527,7 +1734,15 @@ def combine_item_runs(
                     event_time=event.event_time,
                     event_type=event.event_type,
                     direction=event.direction,
-                    detail={**event.detail, "item_id": run.item_id},
+                    # F-10: bind every decision-trace event to the exact executing item's
+                    # pinned object revision, so a reviewer resolves the rule id back to the
+                    # immutable Strategy/Package revision the run actually replayed.
+                    detail={
+                        **event.detail,
+                        "item_id": run.item_id,
+                        "root_id": run.root_id,
+                        "revision_id": run.revision_id,
+                    },
                 )
             )
         running_net += run_net
@@ -1623,7 +1838,10 @@ def combine_item_runs(
 
 __all__ = [
     "COMPOSITION_CURVE_WARNING",
+    "DECISION_TRACE_EVENT_TYPES",
+    "DECISION_TRACE_SCHEMA",
     "ENTRY_MODEL",
+    "UNMODELLED_DECISION_CLASSES",
     "AllocationExecution",
     "EngineOutput",
     "EquityPoint",

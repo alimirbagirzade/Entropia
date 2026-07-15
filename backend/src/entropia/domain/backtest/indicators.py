@@ -42,6 +42,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal
+from typing import Any
 
 _ZERO = Decimal("0")
 _ONE = Decimal("1")
@@ -786,6 +787,16 @@ class ConditionEvaluator:
     def requirement(self) -> str:
         return self._spec.requirement
 
+    @property
+    def condition_block_id(self) -> str:
+        """The pinned condition package's block id (F-10 decision-trace rule id)."""
+        return self._spec.condition_block_id
+
+    @property
+    def canonical_key(self) -> str:
+        """The ``cond.*`` comparator key (F-10 decision-trace rule id)."""
+        return self._spec.canonical_key
+
 
 class BlockEvaluator:
     """Stateful per-block native-trigger evaluator over the streamed bars.
@@ -1038,6 +1049,33 @@ class BlockEvaluator:
     @property
     def requirement(self) -> str:
         return self._spec.requirement
+
+    @property
+    def block_id(self) -> str:
+        """The pinned indicator package's block id (F-10 decision-trace rule id)."""
+        return self._spec.block_id
+
+    @property
+    def canonical_key(self) -> str:
+        """The block's directional indicator key (F-10 decision-trace rule id)."""
+        return self._spec.canonical_key
+
+    def condition_snapshot(self) -> list[dict[str, Any]]:
+        """Per-nested-condition pass/fail with identity — F-10 decision trace.
+
+        A read-only projection of this block's condition gate AS-OF the current bar
+        (``satisfied`` is the already-computed state, no re-evaluation): each entry
+        binds the reviewer to the exact pinned condition package (``rule_id``) and its
+        comparator (``key``). Empty for a plain native-trigger block (no conditions)."""
+        return [
+            {
+                "rule_id": cond.condition_block_id,
+                "key": cond.canonical_key,
+                "requirement": cond.requirement,
+                "satisfied": cond.satisfied,
+            }
+            for cond in self._cond_evals
+        ]
 
 
 def build_evaluators(specs: tuple[IndicatorSpec, ...]) -> list[BlockEvaluator]:

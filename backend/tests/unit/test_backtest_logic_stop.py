@@ -89,6 +89,8 @@ def _pos(
     absolute: str | None = None,
 ) -> _Position:
     return _Position(
+        position_seq=1,
+        entry_bar_seq=1,
         direction=direction,
         entry_time="2024-01-01T00:00:00Z",
         entry_price=_ENTRY,
@@ -268,6 +270,8 @@ def test_all_active_with_price_and_logic_requires_both() -> None:
 def test_short_position_price_stop_triggers_on_the_high() -> None:
     protection = _protection(percentage_stop={"enabled": True, "loss_percentage": "1.0"})
     pos = _Position(
+        position_seq=1,
+        entry_bar_seq=1,
         direction="short",
         entry_time="2024-01-01T00:00:00Z",
         entry_price=_ENTRY,

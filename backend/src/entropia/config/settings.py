@@ -9,7 +9,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, computed_field
+from pydantic import Field, computed_field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 Environment = Literal["local", "staging", "production"]
@@ -108,6 +108,22 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.environment == "production"
+
+    @model_validator(mode="after")
+    def _restrict_dev_auth_to_local(self) -> Settings:
+        """F-22: ``AUTH_MODE=dev`` trusts the client-supplied ``X-Actor-Id``
+        header outright (no login, no session, no token). That trust model is
+        acceptable only in the explicitly-named local dev profile. Any other
+        environment (``staging``, ``production``) MUST run ``AUTH_MODE=session``
+        so every request is a real login + live session + server-resolved role
+        — fail closed at startup rather than let a misconfigured deployment
+        silently accept actor impersonation."""
+        if self.environment != "local" and self.auth_mode == "dev":
+            raise ValueError(
+                "AUTH_MODE=dev is restricted to ENTROPIA_ENV=local (dev profile); "
+                f"ENTROPIA_ENV={self.environment!r} requires AUTH_MODE=session."
+            )
+        return self
 
 
 @lru_cache(maxsize=1)

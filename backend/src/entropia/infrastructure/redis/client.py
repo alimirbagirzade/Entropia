@@ -12,9 +12,7 @@ from entropia.config import get_settings
 @lru_cache(maxsize=1)
 def get_redis() -> redis.Redis:
     settings = get_settings()
-    client: redis.Redis = redis.from_url(
-        settings.redis_url, decode_responses=True
-    )
+    client: redis.Redis = redis.from_url(settings.redis_url, decode_responses=True)
     return client
 
 

@@ -111,7 +111,7 @@ export function AnalysisLab() {
 
   return (
     <>
-      <h1 className="page-title">Analysis Lab</h1>
+      <h1 className="page-title">Agent Workspace / Analysis Lab</h1>
       <div className="analysis-lab-intro">
         <b>Analysis Lab</b> is the operational research environment. The visible chat
         counterpart is the <b>Lab Assistant</b>; Alpha Agent continues its autonomous work

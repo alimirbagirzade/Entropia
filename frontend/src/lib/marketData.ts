@@ -80,6 +80,11 @@ export interface CreateDatasetResult {
 export interface StartUploadResult {
   asset_id: string;
   entity_id: string;
+  content_digest: string;
+  size_bytes: number;
+  content_type: string | null;
+  original_filename: string | null;
+  deduplicated: boolean;
 }
 
 export interface FinalizeUploadResult {
@@ -243,28 +248,19 @@ export function useCreateDataset() {
   });
 }
 
-export interface StartUploadInput {
-  entity_id: string;
-  object_key: string;
-  content_digest: string;
-  size_bytes: number;
-  content_type: string | null;
-  original_filename: string | null;
+// Step 1: transfer the real file bytes (F-01). The object key, SHA-256 digest,
+// byte size, and content type are all derived server-side from the transferred
+// bytes — the caller supplies only the File. Use with lib/upload.ts's
+// useFileUpload<StartUploadResult>() + rawUploadPath(entityId).
+export function rawUploadPath(entityId: string): string {
+  return `/market-datasets/${encodeURIComponent(entityId)}/raw-uploads`;
 }
 
-// Step 1: record the immutable raw-asset evidence row (D5/D6). The bytes live in
-// object storage; this page registers the object key + digest metadata only —
-// there is no browser byte-upload endpoint on this surface.
-export function useStartUpload() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ entity_id, ...body }: StartUploadInput) =>
-      api.post<StartUploadResult>(
-        `/market-datasets/${encodeURIComponent(entity_id)}/raw-uploads`,
-        body,
-      ),
-    onSuccess: () => invalidateMarketData(queryClient),
-  });
+// A successful multipart upload changes dataset state (a new/reused raw
+// asset), so the page must invalidate the same query keys a JSON mutation
+// would — call this from the useFileUpload() onSuccess/then handler.
+export function invalidateAfterRawUpload(queryClient: QueryClient) {
+  invalidateMarketData(queryClient);
 }
 
 // Mark the upload complete: DRAFT -> UPLOADING. Idempotent server-side — a fresh

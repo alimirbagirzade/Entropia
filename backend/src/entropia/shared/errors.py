@@ -1693,3 +1693,39 @@ class ShareGrantNotFoundError(NotFoundError):
 
     code = "SHARE_GRANT_NOT_FOUND"
     message = "The share grant was not found for this resource."
+
+
+# --------------------------------------------------------------------------- #
+# F-01 — Real Market Data raw-asset file upload (doc 11 §3.1, §7)             #
+# --------------------------------------------------------------------------- #
+
+
+class MarketDataFileTypeNotAllowedError(ValidationError):
+    """The uploaded file's extension is not an accepted raw-asset type."""
+
+    code = "MARKET_DATA_FILE_TYPE_NOT_ALLOWED"
+    message = "Upload a CSV or TXT market data file."
+
+
+class MarketDataFileTooLargeError(ValidationError):
+    """The uploaded file exceeds the server-enforced upload size limit."""
+
+    code = "MARKET_DATA_FILE_TOO_LARGE"
+    message = "The file exceeds the maximum upload size."
+
+
+class MarketDataUploadStorageFailedError(AppError):
+    """Object storage rejected or failed the write (network/backend failure)."""
+
+    code = "MARKET_DATA_UPLOAD_STORAGE_FAILED"
+    http_status = 502
+    message = "The file could not be written to storage. Please retry the upload."
+
+
+class MarketDataUploadIntegrityError(AppError):
+    """The bytes read back from storage did not match the uploaded content's
+    digest — the write is not trusted and no evidence row is persisted."""
+
+    code = "MARKET_DATA_UPLOAD_INTEGRITY_FAILED"
+    http_status = 502
+    message = "The uploaded file failed integrity verification. Please retry the upload."

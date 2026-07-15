@@ -118,6 +118,23 @@ async def append_market_dataset_revision(
     return revision
 
 
+async def find_raw_asset_by_hash(
+    session: AsyncSession, *, entity_id: str, content_digest: str
+) -> MarketRawAsset | None:
+    """Return an existing identical raw-asset upload for this dataset (content
+    dedup) — makes a retried upload idempotent regardless of Idempotency-Key."""
+    stmt = (
+        select(MarketRawAsset)
+        .where(
+            MarketRawAsset.entity_id == entity_id,
+            MarketRawAsset.content_digest == content_digest,
+        )
+        .order_by(MarketRawAsset.asset_id)
+        .limit(1)
+    )
+    return (await session.execute(stmt)).scalars().first()
+
+
 def add_raw_asset(
     session: AsyncSession,
     *,

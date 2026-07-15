@@ -6,6 +6,7 @@ import { MemoryRouter } from "react-router-dom";
 import { parseMappingLines } from "@/lib/marketData";
 import { MarketData } from "@/pages/MarketData";
 import { stubApi } from "./helpers/apiStub";
+import { stubUpload } from "./helpers/xhrStub";
 
 const ROW_OHLCV = {
   entity_id: "md_1",
@@ -70,7 +71,15 @@ const DETAIL_MD_NEW = {
   revisions: [{ revision_id: "rev_new", revision_no: 1, revision_state: "draft" }],
 };
 
-const START_UPLOAD_RESULT = { asset_id: "asset_9", entity_id: "md_1" };
+const START_UPLOAD_RESULT = {
+  asset_id: "asset_9",
+  entity_id: "md_1",
+  content_digest: "sha256:deadbeef",
+  size_bytes: 42,
+  content_type: "text/csv",
+  original_filename: "btcusdt.csv",
+  deduplicated: false,
+};
 
 const FINALIZE_RESULT = {
   entity_id: "md_1",
@@ -124,9 +133,10 @@ const DEPRECATE_RESULT = { entity_id: "md_1", revision_id: "rev_1", revision_sta
 // Order matters for the fragment-matching stub: action/detail fragments must
 // precede their prefixes (finalize contains /raw-uploads; every md_1 sub-path
 // contains /market-datasets; POST /market-datasets prefixes every other POST).
+// The raw-uploads POST itself travels over XHR (lib/upload.ts), not fetch —
+// it is stubbed separately with stubUpload() in the upload-specific tests.
 const BASE_ROUTES = {
   "POST /market-datasets/md_1/raw-uploads/finalize": FINALIZE_RESULT,
-  "POST /market-datasets/md_1/raw-uploads": START_UPLOAD_RESULT,
   "POST /market-datasets/md_1/analysis": ANALYSIS_RESULT,
   "POST /market-datasets/md_1/schema-mapping": MAPPING_RESULT,
   "POST /market-datasets/md_1/revisions": REVISION_RESULT,
@@ -246,40 +256,39 @@ describe("Market Data page", () => {
     expect(screen.getByText(/rv 4/)).toBeInTheDocument();
   });
 
-  it("starts a raw upload then finalizes it with a fresh Idempotency-Key", async () => {
+  function pickFile(name = "btcusdt.csv", content = "timestamp,close\n1,2\n") {
+    const file = new File([content], name, { type: "text/csv" });
+    const input = screen.getByLabelText("File") as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [file] } });
+    return file;
+  }
+
+  it("uploads a real file (no storage metadata entered) then finalizes with a fresh Idempotency-Key", async () => {
     const fetchMock = stubApi(BASE_ROUTES);
+    const { calls: uploadCalls } = stubUpload({
+      "POST /market-datasets/md_1/raw-uploads": START_UPLOAD_RESULT,
+    });
     renderPage();
     await openDetail();
 
-    fireEvent.change(screen.getByLabelText("Object key"), {
-      target: { value: "raw/btcusdt.csv" },
-    });
-    fireEvent.change(screen.getByLabelText("Content digest"), { target: { value: "sha256:d" } });
-    fireEvent.change(screen.getByLabelText("Size (bytes)"), { target: { value: "1024" } });
-    fireEvent.click(screen.getByRole("button", { name: "Start upload" }));
+    const file = pickFile();
+    fireEvent.click(screen.getByRole("button", { name: "Upload file" }));
 
-    expect(await screen.findByText(/Upload started/)).toBeInTheDocument();
+    expect(await screen.findByText(/Uploaded — asset/)).toBeInTheDocument();
+    expect(screen.getByText(/asset_9/)).toBeInTheDocument();
 
-    const startCall = fetchMock.mock.calls.find(
-      ([url, init]) => String(url).endsWith("/raw-uploads") && init?.method === "POST",
-    );
-    expect(startCall).toBeDefined();
-    const startInit = startCall?.[1] as RequestInit;
-    expect(JSON.parse(String(startInit.body))).toEqual({
-      object_key: "raw/btcusdt.csv",
-      content_digest: "sha256:d",
-      size_bytes: 1024,
-      content_type: null,
-      original_filename: null,
-    });
-    // Start-upload is not idempotency-wrapped upstream — no key is sent.
-    expect((startInit.headers as Record<string, string>)["Idempotency-Key"]).toBeUndefined();
+    expect(uploadCalls).toHaveLength(1);
+    expect(uploadCalls[0]?.url).toContain("/market-datasets/md_1/raw-uploads");
+    expect(uploadCalls[0]?.file?.name).toBe(file.name);
+    // A fresh Idempotency-Key travels alongside the content-addressed dedup
+    // guarantee (belt-and-suspenders retry safety, F-01).
+    expect(uploadCalls[0]?.headers["Idempotency-Key"]).toBeTruthy();
 
-    // The asset id from the start result seeds the finalize input.
-    expect(screen.getByLabelText("Asset id to finalize")).toHaveValue("asset_9");
     fireEvent.click(screen.getByRole("button", { name: "Finalize upload" }));
 
-    expect(await screen.findByText(/Upload finalized — revision rev_1 is now uploading/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Upload finalized — revision rev_1 is now uploading/),
+    ).toBeInTheDocument();
 
     const finalizeCall = fetchMock.mock.calls.find(
       ([url, init]) => String(url).includes("/raw-uploads/finalize") && init?.method === "POST",
@@ -288,6 +297,41 @@ describe("Market Data page", () => {
     const finalizeInit = finalizeCall?.[1] as RequestInit;
     expect(JSON.parse(String(finalizeInit.body))).toEqual({ asset_id: "asset_9" });
     expect((finalizeInit.headers as Record<string, string>)["Idempotency-Key"]).toBeTruthy();
+  });
+
+  it("surfaces an unsupported-file-type upload error and retries successfully", async () => {
+    stubApi(BASE_ROUTES);
+    let attempt = 0;
+    const { calls: uploadCalls } = stubUpload({
+      "POST /market-datasets/md_1/raw-uploads": () => {
+        attempt += 1;
+        if (attempt === 1) {
+          return {
+            status: 422,
+            error: {
+              code: "MARKET_DATA_FILE_TYPE_NOT_ALLOWED",
+              message: "Upload a CSV or TXT market data file.",
+            },
+          };
+        }
+        return START_UPLOAD_RESULT;
+      },
+    });
+    renderPage();
+    await openDetail();
+
+    pickFile();
+    fireEvent.click(screen.getByRole("button", { name: "Upload file" }));
+
+    expect(
+      await screen.findByText("MARKET_DATA_FILE_TYPE_NOT_ALLOWED: Upload a CSV or TXT market data file."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+
+    expect(await screen.findByText(/Uploaded — asset/)).toBeInTheDocument();
+    expect(uploadCalls).toHaveLength(2);
   });
 
   it("requests analysis with a fresh Idempotency-Key and renders the 202 admission", async () => {

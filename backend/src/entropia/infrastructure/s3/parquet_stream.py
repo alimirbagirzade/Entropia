@@ -33,10 +33,8 @@ def iter_parquet_batches(
     Pure local I/O (no S3) so unit tests can cover the batching contract
     without infrastructure. Each yielded batch is at most ``batch_size`` rows.
     """
-    parquet = pq.ParquetFile(source)  # type: ignore[no-untyped-call]
-    for record_batch in parquet.iter_batches(  # type: ignore[no-untyped-call]
-        batch_size=batch_size, columns=columns
-    ):
+    parquet = pq.ParquetFile(source)
+    for record_batch in parquet.iter_batches(batch_size=batch_size, columns=columns):
         yield record_batch.to_pylist()
 
 

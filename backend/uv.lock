@@ -348,7 +348,7 @@ requires-dist = [
     { name = "python-multipart", specifier = ">=0.0.12" },
     { name = "redis", specifier = ">=5.1,<6.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.7,<1.0" },
-    { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.35,<3.0" },
+    { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.51,<3.0" },
     { name = "sse-starlette", specifier = ">=3.4.5,<4.0" },
     { name = "structlog", specifier = ">=24.4" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.51.0,<1.0" },

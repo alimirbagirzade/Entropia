@@ -21,7 +21,7 @@ dependencies = [
   "greenlet>=3.1",
   # --- Queue / workers (Redis 7 + Dramatiq) ---
   "redis>=5.1,<6.0",
-  "dramatiq[redis]>=1.17,<2.0",
+  "dramatiq[redis]>=2.2.0,<3.0",
   # --- Object storage (S3 / MinIO) ---
   "boto3>=1.35,<2.0",
   # --- Columnar data toolchain ---

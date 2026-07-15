@@ -50,7 +50,7 @@ Otherwise the spec's technical "broken" claims are **accurate, not errors** (ver
 | F-19 | Remove infra IDs/JSON from Strategy Details | P1 | Not Started | Root/revision/hash entry still user-facing. |
 | F-20 | Real autonomous Alpha Agent executor | P1 | Not Started | No durable QUEUED-task executor loop. |
 | F-21 | Real Trash re-authentication | P0 | Not Started | CONFIRMED: any non-empty string accepted (deletion.py:530). Needs real IdP verify (infra-gated). |
-| F-22 | Production authentication profile | P0 | Not Started | CONFIRMED: `AUTH_MODE` defaults `dev` / trusts `X-Actor-Id` (settings.py:76). |
+| **F-22** | **Production authentication profile** | **P0** | **In Progress (this PR) — blocked-needs-stack for full E2E** | CONFIRMED gap: `AUTH_MODE` defaulted `dev` with no guard against `ENTROPIA_ENV=staging\|production` also running `dev` (client-controlled `X-Actor-Id` trusted outright in that combination). Fixed at the config layer: `Settings._restrict_dev_auth_to_local` (pydantic `model_validator`, fail-closed) now REFUSES to construct — i.e. the app refuses to start — whenever `ENTROPIA_ENV != local` and `AUTH_MODE == dev`; `dev` is now structurally restricted to the named local profile. `AUTH_MODE=session` (real argon2id login + opaque Bearer session, fresh server-resolved role every request, bare `X-Actor-Id` ignored — PR #38 local auth, unchanged) remains the only auth mode staging/production can run. Proven empirically: 8 new unit tests (`tests/unit/test_settings.py`, all env×mode combinations) + a new production-*profile* integration test (`tests/integration/test_auth.py::test_production_profile_rejects_bare_actor_header_impersonation`, `ENTROPIA_ENV=production` + `AUTH_MODE=session`, not just the mode in isolation) proving a bare `X-Actor-Id` header resolves to an anonymous actor and a mismatched header on a valid Bearer session is ignored. **Honest boundary — NOT claimed Complete:** the full E2E acceptance (real login/logout/session-expiration/role-denial/audit against the running Docker stack + IdP) is `blocked-needs-stack` on this machine (no Docker available this session, per CLAUDE.md environment boundary) — deferred to F-23's Playwright-against-Docker suite. |
 | F-23 | Real browser E2E suite | P0 | Not Started | No Playwright suite against the Docker stack. |
 | F-24 | Replace tests approving incorrect behavior | P0 | In Progress | Sizing all-in tests rewritten to fail-closed with F-09 (#209). Breakout-fallback tests done with F-06: proxy-reliant fixtures reseeded with resolvable packages + fail-closed worker/admission tests added. Remaining incorrect-behavior tests tracked per future slice. |
 | F-25 | Truthful README/status | P3 | Not Started | README claims "Production V1 complete"; contradicts this backlog. |
@@ -71,3 +71,10 @@ Otherwise the spec's technical "broken" claims are **accurate, not errors** (ver
   `RUN_FAILED_UNRESOLVED_DEPENDENCY` (proxy unreachable in production); Ready Check adds the upfront
   `STRATEGY_INDICATOR_UNRESOLVED` blocker. No migration, no ENGINE_VERSION bump. Branch
   `feat/v18-f06-remove-breakout-proxy`.
+- 2026-07-15 — F-22 production authentication profile (config-layer + tests only). `Settings`
+  fail-closed `model_validator` restricts `AUTH_MODE=dev` to `ENTROPIA_ENV=local`; staging/production
+  MUST run `AUTH_MODE=session` or the app refuses to start. No migration, no route/middleware change
+  (the existing session-mode transport in `deps.py` from PR #38 already ignores a bare `X-Actor-Id`;
+  this slice closes the gap where `dev` could still be selected under a non-local environment). Full
+  Docker/IdP E2E acceptance `blocked-needs-stack` — deferred to F-23. Branch
+  `feat/v18-f22-prod-auth-profile`.

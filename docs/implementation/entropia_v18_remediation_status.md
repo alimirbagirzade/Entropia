@@ -50,7 +50,7 @@ Otherwise the spec's technical "broken" claims are **accurate, not errors** (ver
 | F-19 | Remove infra IDs/JSON from Strategy Details | P1 | Not Started | Root/revision/hash entry still user-facing. |
 | F-20 | Real autonomous Alpha Agent executor | P1 | Not Started | No durable QUEUED-task executor loop. |
 | F-21 | Real Trash re-authentication | P0 | Not Started | CONFIRMED: any non-empty string accepted (deletion.py:530). Needs real IdP verify (infra-gated). |
-| F-22 | Production authentication profile | P0 | Not Started | CONFIRMED: `AUTH_MODE` defaults `dev` / trusts `X-Actor-Id` (settings.py:76). |
+| **F-22** | **Production authentication profile** | **P0** | **In Progress (this PR) — blocked-needs-stack for full E2E** | CONFIRMED gap: `AUTH_MODE` defaulted `dev` with no guard against `ENTROPIA_ENV=staging\|production` also running `dev` (client-controlled `X-Actor-Id` trusted outright in that combination). Fixed at the config layer: `Settings._restrict_dev_auth_to_local` (pydantic `model_validator`, fail-closed) now REFUSES to construct — i.e. the app refuses to start — whenever `ENTROPIA_ENV != local` and `AUTH_MODE == dev`; `dev` is now structurally restricted to the named local profile. `AUTH_MODE=session` (real argon2id login + opaque Bearer session, fresh server-resolved role every request, bare `X-Actor-Id` ignored — PR #38 local auth, unchanged) remains the only auth mode staging/production can run. Proven empirically: 8 new unit tests (`tests/unit/test_settings.py`, all env×mode combinations) + a new production-*profile* integration test (`tests/integration/test_auth.py::test_production_profile_rejects_bare_actor_header_impersonation`, `ENTROPIA_ENV=production` + `AUTH_MODE=session`, not just the mode in isolation) proving a bare `X-Actor-Id` header resolves to an anonymous actor and a mismatched header on a valid Bearer session is ignored. **Honest boundary — NOT claimed Complete:** the full E2E acceptance (real login/logout/session-expiration/role-denial/audit against the running Docker stack + IdP) is `blocked-needs-stack` on this machine (no Docker available this session, per CLAUDE.md environment boundary) — deferred to F-23's Playwright-against-Docker suite. |
 | F-23 | Real browser E2E suite | P0 | Not Started | No Playwright suite against the Docker stack. |
 | F-24 | Replace tests approving incorrect behavior | P0 | In Progress | Sizing all-in tests rewritten to fail-closed with F-09 (#209). Breakout-fallback tests done with F-06: proxy-reliant fixtures reseeded with resolvable packages + fail-closed worker/admission tests added. Remaining incorrect-behavior tests tracked per future slice. |
 | F-25 | Truthful README/status | P3 | Not Started | README claims "Production V1 complete"; contradicts this backlog. |
@@ -71,11 +71,4 @@ Otherwise the spec's technical "broken" claims are **accurate, not errors** (ver
   `RUN_FAILED_UNRESOLVED_DEPENDENCY` (proxy unreachable in production); Ready Check adds the upfront
   `STRATEGY_INDICATOR_UNRESOLVED` blocker. No migration, no ENGINE_VERSION bump. Branch
   `feat/v18-f06-remove-breakout-proxy`.
-- 2026-07-15 — F-05 apply date range + instrument to engine input. Worker physically filters the bar
-  stream to `backtest_range` (inclusive, UTC-normalized) + cross-checks the pinned market revision's
-  instrument against the strategy's selection (fail-closed on a real mismatch, honest pass-through on
-  unset legacy revisions); an invalid or fully-empty-after-filter range is an explicit
-  `RUN_FAILED_*` reject. Engine surfaces the actually-processed first/last bar timestamps as
-  `period_start`/`period_end` (was hardcoded `None`). `ENGINE_VERSION →
-  backtest-engine-v2-range-instrument-filter`. No migration. Branch
-  `feat/v18-f05-range-instrument-filter`.
+

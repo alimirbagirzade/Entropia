@@ -14,6 +14,14 @@ Re-entrancy / crash recovery (AL-14): a directive already CONSUMED is never
 re-selected, so a redelivered/retried cycle produces no duplicate follow-up; a
 cycle that fails mid-way rolls back whole and the next tick re-reads canonical
 state.
+
+Stage 6b (spec F-20): materializing a follow-up task also enqueues a durable
+``agent-executor`` Job in the SAME transaction (no commit here either) — the
+Coordinator process (``apps/agent_coordinator/__main__.py``) dispatches the
+matching actor after it commits, exactly like an API route dispatches
+``send_job`` after its own commit. A crash between commit and dispatch is not a
+lost task: the job row stays QUEUED and the scheduler's redelivery sweep
+(INF-03) re-sends it on the next tick.
 """
 
 from __future__ import annotations
@@ -33,7 +41,10 @@ from entropia.domain.agent_lab.tool_gateway import exposed_tool_names
 from entropia.domain.lifecycle.enums import ActorKind
 from entropia.infrastructure.postgres.repositories import agent_lab as al_repo
 from entropia.infrastructure.postgres.repositories import capability as capability_repo
+from entropia.infrastructure.queues.enqueue import enqueue_job
 from entropia.shared.errors import AgentRuntimeNotFoundError
+
+_EXECUTOR_QUEUE = "agent-executor"
 
 _SYSTEM_KIND = ActorKind.SYSTEM_SERVICE
 _FOLLOWUP_TITLE_LIMIT = 120
@@ -79,20 +90,24 @@ async def run_coordinator_cycle(
         session, agent_id=agent_id, correlation_id=correlation_id
     )
     followup_task_id: str | None = None
+    executor_job_id: str | None = None
     if consumed.get("consumed"):
-        followup_task_id = await _spawn_followup_task(
+        spawned = await _spawn_followup_task(
             session,
             agent_id=agent_id,
             directive_id=str(consumed["consumed"]),
             correlation_id=correlation_id,
             exposed_tools=plan_tools,
         )
+        if spawned is not None:
+            followup_task_id, executor_job_id = spawned
 
     return {
         "runtime_status": str(runtime.status),
         "control": control,
         "consumed": consumed,
         "followup_task_id": followup_task_id,
+        "executor_job_id": executor_job_id,
         "exposed_tools": list(plan_tools),
     }
 
@@ -104,13 +119,16 @@ async def _spawn_followup_task(
     directive_id: str,
     correlation_id: str | None,
     exposed_tools: tuple[str, ...] = (),
-) -> str | None:
+) -> tuple[str, str] | None:
     """Materialize an AUTONOMOUS follow-up task from a consumed directive.
 
-    The task is QUEUED — real execution is the worker/Tool-Gateway's job; the
-    Coordinator never fabricates progress (CR-09, doc 18 §14). The plan-time
-    CR-08 tool exposure is recorded on the creation event so the task's plan
-    provenance shows exactly which tools were offerable at materialization."""
+    The task is QUEUED — real execution is the durable executor's job (spec
+    F-20, ``application/jobs/agent_executor.py``); the Coordinator never
+    fabricates progress itself (CR-09, doc 18 §14). The plan-time CR-08 tool
+    exposure is recorded on the creation event so the task's plan provenance
+    shows exactly which tools were offerable at materialization, and the
+    executor re-reads it before dispatching any governed tool call (safe tool
+    selection). Returns ``(task_id, executor_job_id)``."""
     directive = await al_repo.get_directive(session, directive_id)
     if directive is None:
         return None
@@ -139,7 +157,14 @@ async def _spawn_followup_task(
         },
         correlation_id=correlation_id,
     )
-    return task.task_id
+    job = enqueue_job(
+        session,
+        queue=_EXECUTOR_QUEUE,
+        payload={"task_id": task.task_id},
+        idempotency_key=f"agent-task-exec:{task.task_id}",
+        correlation_id=correlation_id,
+    )
+    return task.task_id, job.job_id
 
 
 __all__ = ["run_coordinator_cycle"]

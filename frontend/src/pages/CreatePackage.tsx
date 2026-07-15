@@ -1,4 +1,4 @@
-import { useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { useState, type ChangeEvent, type FormEvent } from "react";
 
 import { EmptyState } from "@/components/EmptyState";
 import { ErrorState } from "@/components/ErrorState";
@@ -777,29 +777,21 @@ function StatusPanel({ detail }: { detail: PackageRequestDetail | null }) {
 function BaselinePanel({ detail }: { detail: PackageRequestDetail }) {
   const upload = useUploadBaseline();
   const parse = useStartBaselineParse();
-  const [filename, setFilename] = useState("");
-  const [content, setContent] = useState("");
+  const [file, setFile] = useState<File | null>(null);
   const [metadataText, setMetadataText] = useState("");
   const [metadataError, setMetadataError] = useState<string | null>(null);
-  const [readError, setReadError] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const baseline = detail.current_baseline;
   const anyPending = upload.isPending || parse.isPending;
 
   function onFile(event: ChangeEvent<HTMLInputElement>) {
-    setReadError(null);
-    const file = event.target.files?.[0];
-    if (!file) return;
-    setFilename(file.name);
-    const reader = new FileReader();
-    reader.onload = () => setContent(typeof reader.result === "string" ? reader.result : "");
-    reader.onerror = () => setReadError("Could not read the selected file.");
-    reader.readAsText(file);
+    setFile(event.target.files?.[0] ?? null);
+    upload.reset();
   }
 
   function onUpload() {
     setMetadataError(null);
+    if (file === null) return;
     let metadata: Record<string, unknown> = {};
     const trimmed = metadataText.trim();
     if (trimmed.length > 0) {
@@ -815,19 +807,15 @@ function BaselinePanel({ detail }: { detail: PackageRequestDetail }) {
         return;
       }
     }
+    // F-03: transfer the chosen CSV itself (multipart); the server derives the
+    // filename/content type/digest and re-validates size/encoding/schema.
     upload.mutate({
       request_id: detail.request_id,
       request_version: detail.request_version,
-      content,
+      file,
       baseline_metadata: metadata,
-      content_type: "text/csv",
-      original_filename: filename.trim().length > 0 ? filename.trim() : null,
     });
   }
-
-  // fileInputRef kept for potential programmatic reset; the visible input is the
-  // real capture surface.
-  void fileInputRef;
 
   return (
     <div className="cp-panel">
@@ -843,25 +831,19 @@ function BaselinePanel({ detail }: { detail: PackageRequestDetail }) {
 
         <div className="cp-baseline-upload">
           <span>
-            {content.length > 0
-              ? `${filename || "baseline.csv"} selected (${content.length} chars)`
+            {file
+              ? `${file.name} selected (${file.size} bytes)`
               : baseline
                 ? `${baseline.original_filename ?? "baseline.csv"} uploaded`
                 : "No baseline CSV selected."}
           </span>
           <input
-            ref={fileInputRef}
             type="file"
             accept=".csv,text/csv"
             aria-label="TradingView baseline CSV file"
             onChange={onFile}
           />
         </div>
-        {readError ? (
-          <p role="alert" style={alertStyle}>
-            {readError}
-          </p>
-        ) : null}
 
         {baseline ? (
           <dl className="kv" style={{ marginTop: 10 }}>
@@ -898,7 +880,7 @@ function BaselinePanel({ detail }: { detail: PackageRequestDetail }) {
           <button
             type="button"
             className="btn"
-            disabled={anyPending || content.trim().length === 0 || filename.trim().length === 0}
+            disabled={anyPending || file === null}
             onClick={onUpload}
           >
             {upload.isPending ? "Uploading…" : "Upload CSV"}

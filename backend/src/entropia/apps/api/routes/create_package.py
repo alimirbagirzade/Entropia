@@ -9,16 +9,19 @@ in the command/policy layer before any mutation. Guests are rejected.
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
-from fastapi import APIRouter, Depends, Header, Query
+from fastapi import APIRouter, Depends, File, Form, Header, Query, UploadFile
 from pydantic import BaseModel, Field
 
 from entropia.application.commands import create_package as cp_cmd
 from entropia.application.queries import create_package as cp_query
 from entropia.apps.api.deps import RequestContext, request_context
+from entropia.apps.api.upload import validate_multipart_upload
 from entropia.domain.create_package.enums import CreationMode, SourceLanguage
 from entropia.domain.esp.enums import RuntimeAdapter
+from entropia.shared.errors import ValidationError
 from entropia.shared.pagination import PageParams
 
 router = APIRouter(tags=["create-package"])
@@ -62,14 +65,19 @@ class ApproveBody(BaseModel):
     note: str | None = None
 
 
-class UploadBaselineBody(BaseModel):
-    # UTF-8 CSV text (raw bytes never travel through the JSON body; mirrors the
-    # Trading Signal source-asset upload). BaselineMetadata carries the provider,
-    # symbol, timeframe, range, timezone, settings and source revision context.
-    content: str
-    baseline_metadata: dict[str, Any] = Field(default_factory=dict)
-    content_type: str | None = "text/csv"
-    original_filename: str | None = None
+def _parse_baseline_metadata(raw: str | None) -> dict[str, Any]:
+    """Decode the ``baseline_metadata`` multipart form field (a JSON object string
+    carrying provider/symbol/timeframe/range/timezone/settings context). Absent or
+    blank -> ``{}``; malformed JSON or a non-object -> 422 (never a silent drop)."""
+    if raw is None or not raw.strip():
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ValidationError("baseline_metadata is not valid JSON.") from exc
+    if not isinstance(parsed, dict):
+        raise ValidationError("baseline_metadata must be a JSON object.")
+    return parsed
 
 
 @router.post("/create-package/requests", status_code=201)
@@ -200,19 +208,26 @@ async def request_revision(
 @router.post("/create-package/requests/{request_id}/baseline", status_code=201)
 async def upload_baseline(
     request_id: str,
-    body: UploadBaselineBody,
+    file: UploadFile = File(...),
+    baseline_metadata: str | None = Form(default=None),
     ctx: RequestContext = Depends(request_context),
     request_version: str | None = Header(default=None, alias=_REQUEST_VERSION_HEADER),
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> dict[str, Any]:
+    """Real native baseline upload (F-03): the browser transfers the selected
+    TradingView baseline CSV as ``multipart/form-data``; the provider/symbol/
+    timeframe context rides the ``baseline_metadata`` JSON form field. Size,
+    UTF-8 encoding, and CSV schema are validated server-side; the CSV extension
+    gate lives in the command (``FILE_TYPE_NOT_ALLOWED``)."""
+    upload = await validate_multipart_upload(file, require_csv_schema=True)
     return await cp_cmd.upload_baseline_asset(
         ctx.session,
         ctx.actor,
         request_id=request_id,
-        content=body.content.encode("utf-8"),
-        baseline_metadata=body.baseline_metadata,
-        content_type=body.content_type,
-        original_filename=body.original_filename,
+        content=upload.content,
+        baseline_metadata=_parse_baseline_metadata(baseline_metadata),
+        content_type=upload.content_type,
+        original_filename=upload.filename,
         expected_request_version=_request_version(request_version),
         idempotency_key=idempotency_key,
     )

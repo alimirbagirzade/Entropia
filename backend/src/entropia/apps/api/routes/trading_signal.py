@@ -14,22 +14,16 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, Depends, File, Form, Header, UploadFile
 from pydantic import BaseModel, Field
 
 from entropia.application.commands import trading_signal as ts_cmd
 from entropia.application.queries import trading_signal as ts_query
 from entropia.apps.api.deps import RequestContext, request_context
+from entropia.apps.api.upload import validate_multipart_upload
 from entropia.infrastructure.queues import enqueue as job_enqueue
 
 router = APIRouter(tags=["trading-signal"])
-
-
-class UploadSourceAssetBody(BaseModel):
-    content: str
-    content_type: str | None = "text/csv"
-    original_filename: str | None = None
-    draft_id: str | None = None
 
 
 class RequestImportBody(BaseModel):
@@ -66,17 +60,23 @@ class ExportTradingSignalBody(BaseModel):
 
 @router.post("/trading-signals/source-assets", status_code=201)
 async def upload_source_asset(
-    body: UploadSourceAssetBody,
+    file: UploadFile = File(...),
+    draft_id: str | None = Form(default=None),
     ctx: RequestContext = Depends(request_context),
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> dict[str, Any]:
+    """Real native file upload (F-03): the browser transfers the selected TXT/CSV
+    signal-event file as ``multipart/form-data``. Size, UTF-8 encoding, and CSV
+    schema are validated server-side before the command touches storage; the
+    extension gate lives in the command (``FILE_TYPE_NOT_ALLOWED``)."""
+    upload = await validate_multipart_upload(file, require_csv_schema=True)
     return await ts_cmd.upload_source_asset(
         ctx.session,
         ctx.actor,
-        content=body.content.encode("utf-8"),
-        content_type=body.content_type,
-        original_filename=body.original_filename,
-        draft_id=body.draft_id,
+        content=upload.content,
+        content_type=upload.content_type,
+        original_filename=upload.filename,
+        draft_id=draft_id or None,
         idempotency_key=idempotency_key,
     )
 

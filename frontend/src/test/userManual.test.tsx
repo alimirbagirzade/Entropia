@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 
 import { UserManual } from "@/pages/UserManual";
 import { stubApi } from "./helpers/apiStub";
+import { stubUpload } from "./helpers/xhrStub";
 
 // One stream page: the immutable baseline guide first (UM-10 — no admin
 // actions), then an appended non-baseline section with every block type.
@@ -141,7 +142,6 @@ const TRASH_ENTRIES = {
 function stubRoutes(extra: Record<string, unknown> = {}) {
   return stubApi({
     "POST :restore": RESTORE_RESULT,
-    "POST :upload": PUBLISH_RESULT,
     "POST /revisions": REVISE_RESULT,
     "DELETE /admin/manual/documents": DELETE_RESULT,
     "POST /admin/manual/documents": PUBLISH_RESULT,
@@ -276,7 +276,8 @@ describe("User Manual page", () => {
   });
 
   it("uploads a real chosen file (F-03) omitting the blank optional title", async () => {
-    const fetchMock = stubRoutes();
+    stubRoutes();
+    const { calls: uploadCalls } = stubUpload({ "POST :upload": PUBLISH_RESULT });
     renderPage();
     await screen.findByText("Appendix body.");
 
@@ -287,14 +288,15 @@ describe("User Manual page", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Upload & publish" }));
 
     expect(await screen.findByText(/Published “New doc” rev 1/)).toBeTruthy();
-    const init = callFor(fetchMock, "POST", ":upload");
-    const body = JSON.parse(String(init.body)) as Record<string, unknown>;
-    expect(body.source_filename).toBe("guide.md");
-    expect(body.content).toBe("# Uploaded");
-    expect(body.expected_stream_version).toBe(7);
+    // F-03: the real file bytes travel via multipart; the OCC stream version and
+    // the (omitted) optional title ride form fields, not a JSON body.
+    expect(uploadCalls).toHaveLength(1);
+    expect(uploadCalls[0]?.url).toContain(":upload");
+    expect(uploadCalls[0]?.file?.name).toBe("guide.md");
+    expect(uploadCalls[0]?.fields.expected_stream_version).toBe("7");
     // Blank optional field is OMITTED — the server derives the title.
-    expect("title" in body).toBe(false);
-    expect(headersOf(init)["Idempotency-Key"]).toBeTruthy();
+    expect("title" in uploadCalls[0]!.fields).toBe(false);
+    expect(uploadCalls[0]?.headers["Idempotency-Key"]).toBeTruthy();
   });
 
   it("replaces a revision with the section head as the BODY-form OCC token", async () => {

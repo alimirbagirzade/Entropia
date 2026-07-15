@@ -5,6 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 
 import { CreatePackage } from "@/pages/CreatePackage";
 import { stubApi } from "./helpers/apiStub";
+import { stubUpload } from "./helpers/xhrStub";
 
 const FAMILIES_PAGE = {
   data: [
@@ -492,18 +493,21 @@ describe("Create Package page", () => {
     });
   });
 
-  it("uploads a baseline with the OCC header + composed CSV body and metadata", async () => {
-    const fetchMock = stubApi({
-      "POST /create-package/requests/req_1/baseline": BASELINE_UPLOAD_RESULT,
+  it("uploads a real baseline file (multipart) with the OCC header and metadata field", async () => {
+    stubApi({
       ...BASE_ROUTES,
       "GET /create-package/requests/req_1": REQUEST_DETAIL_DRAFT,
+    });
+    const { calls: uploadCalls } = stubUpload({
+      "POST /create-package/requests/req_1/baseline": BASELINE_UPLOAD_RESULT,
     });
     renderPage();
     await screen.findByText("req_1");
     fireEvent.click(screen.getByRole("button", { name: /req_1/ }));
 
-    // Real TradingView CSV: pick a file; the browser reads it to UTF-8 text
-    // (FileReader) and feeds the same upload hook — the body is unchanged.
+    // F-03: the real TradingView CSV is transferred as multipart bytes (no
+    // FileReader/pasted content). The OCC token rides the X-Request-Version
+    // header and the metadata rides the baseline_metadata form field.
     const csvFile = new File(["time,close\n1,2\n"], "baseline.csv", { type: "text/csv" });
     fireEvent.change(await screen.findByLabelText("TradingView baseline CSV file"), {
       target: { files: [csvFile] },
@@ -515,18 +519,14 @@ describe("Create Package page", () => {
     fireEvent.click(screen.getByRole("button", { name: "Upload CSV" }));
 
     expect(await screen.findByText("ba_1")).toBeInTheDocument();
-    const call = fetchMock.mock.calls.find(
-      ([url, init]) => String(url).endsWith("/baseline") && init?.method === "POST",
-    );
-    expect(call).toBeDefined();
-    const init = call?.[1] as RequestInit;
-    expect((init.headers as Record<string, string>)["X-Request-Version"]).toBe("2");
-    expect((init.headers as Record<string, string>)["Idempotency-Key"]).toBeTruthy();
-    expect(JSON.parse(String(init.body))).toEqual({
-      content: "time,close\n1,2\n",
-      baseline_metadata: { provider: "x", symbol: "BTCUSD" },
-      content_type: "text/csv",
-      original_filename: "baseline.csv",
+    expect(uploadCalls).toHaveLength(1);
+    expect(uploadCalls[0]?.url).toContain("/create-package/requests/req_1/baseline");
+    expect(uploadCalls[0]?.file?.name).toBe("baseline.csv");
+    expect(uploadCalls[0]?.headers["X-Request-Version"]).toBe("2");
+    expect(uploadCalls[0]?.headers["Idempotency-Key"]).toBeTruthy();
+    expect(JSON.parse(uploadCalls[0]!.fields.baseline_metadata)).toEqual({
+      provider: "x",
+      symbol: "BTCUSD",
     });
   });
 

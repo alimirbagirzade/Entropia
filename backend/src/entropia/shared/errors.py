@@ -826,6 +826,38 @@ class FileTypeNotAllowedError(ValidationError):
     message = "Upload a TXT or CSV signal-event file."
 
 
+# --------------------------------------------------------------------------- #
+# Shared multipart upload validation (F-03)                                    #
+# Cross-surface size/encoding/schema errors for real native file uploads       #
+# (Trading Signal, Trade Log, Create Package baseline, User Manual). Extension  #
+# checks stay per-surface to preserve the documented error taxonomy.            #
+# --------------------------------------------------------------------------- #
+
+
+class UploadTooLargeError(ValidationError):
+    """A native file upload exceeded the server-enforced byte ceiling (F-03)."""
+
+    code = "UPLOAD_TOO_LARGE"
+    message = "The uploaded file exceeds the maximum allowed size."
+
+
+class UploadEncodingInvalidError(ValidationError):
+    """A native file upload could not be decoded as UTF-8 text (F-03). The bytes
+    are rejected before any asset is persisted."""
+
+    code = "UPLOAD_ENCODING_INVALID"
+    message = "The file could not be read as UTF-8 text. Upload a valid UTF-8 text file."
+
+
+class UploadSchemaInvalidError(ValidationError):
+    """A native CSV/TXT upload did not present a usable header/row structure
+    (F-03 schema validation). The bytes are rejected before any asset is
+    persisted."""
+
+    code = "UPLOAD_SCHEMA_INVALID"
+    message = "The file is not a valid CSV/TXT document with a header row."
+
+
 class SourceAssetNotFoundError(NotFoundError):
     """A referenced raw source asset did not resolve (doc 04 §7.1, §11)."""
 

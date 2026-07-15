@@ -28,6 +28,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api, apiRequest } from "./apiClient";
 import type { RestoreResult } from "./trash";
+import { uploadFile } from "./upload";
 
 // ---------------------------------------------------------------------------
 // Wire types (mirror application/queries/manual.py and commands/manual.py
@@ -201,8 +202,9 @@ export function useCreateManualDocument() {
 }
 
 export interface UploadDocumentInput {
-  source_filename: string;
-  content: string;
+  // F-03: the real chosen document. The server derives source_filename + content
+  // from the transferred bytes and validates size/encoding.
+  file: File;
   // Omitted when blank: the server derives the title from the filename stem.
   title?: string;
   allow_duplicate: boolean;
@@ -212,12 +214,18 @@ export interface UploadDocumentInput {
 export function useUploadManualDocument() {
   const queryClient = useQueryClient();
   return useMutation({
+    // F-03: real native document transfer (multipart) — the browser sends the
+    // selected UTF-8 TXT/MD/HTML file itself (no FileReader/typed content). The
+    // stream-version guard + optional title ride multipart form fields.
     mutationFn: (input: UploadDocumentInput) =>
-      apiRequest<PublishResult>("/admin/manual/documents:upload", {
-        method: "POST",
-        headers: { "Idempotency-Key": crypto.randomUUID() },
-        body: input,
-      }),
+      uploadFile<PublishResult>("/admin/manual/documents:upload", input.file, {
+        idempotencyKey: crypto.randomUUID(),
+        fields: {
+          ...(input.title ? { title: input.title } : {}),
+          allow_duplicate: String(input.allow_duplicate),
+          expected_stream_version: String(input.expected_stream_version),
+        },
+      }).promise,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["manual"] });
       void queryClient.invalidateQueries({ queryKey: ["audit"] });

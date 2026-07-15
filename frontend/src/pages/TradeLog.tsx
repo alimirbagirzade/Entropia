@@ -125,9 +125,9 @@ function Workbench({
     <>
       <UploadCard
         pending={upload.isPending}
-        onUpload={(content, filename) =>
+        onUpload={(file) =>
           upload.mutate(
-            { content, originalFilename: filename },
+            { file },
             { onSuccess: (result) => setSourceAssetId(result.source_asset_id) },
           )
         }
@@ -193,10 +193,9 @@ function UploadCard({
   onUpload,
 }: {
   pending: boolean;
-  onUpload: (content: string, filename: string | null) => void;
+  onUpload: (file: File) => void;
 }) {
-  const [content, setContent] = useState("");
-  const [filename, setFilename] = useState("");
+  const [file, setFile] = useState<File | null>(null);
 
   return (
     <section className="card" aria-labelledby="tl-upload-h">
@@ -204,36 +203,32 @@ function UploadCard({
         Upload source file
       </h3>
       <p className="cp-note">
-        UTF-8 TXT/CSV text only — the asset is immutable and content-addressed (an identical
-        re-upload reuses the prior asset, TL-15). Raw bytes never travel through this page.
+        Select a UTF-8 TXT/CSV trade-record file — the browser transfers the file itself. The
+        asset is immutable and content-addressed (an identical re-upload reuses the prior asset,
+        TL-15); size, encoding, and schema are validated on the server.
       </p>
       <form
         className="cp-form"
         onSubmit={(event) => {
           event.preventDefault();
-          onUpload(content, filename === "" ? null : filename);
+          if (file) onUpload(file);
         }}
       >
         <label className="cp-field cp-wide">
-          <span>File content</span>
-          <textarea
-            rows={6}
-            value={content}
-            onChange={(event) => setContent(event.target.value)}
-            spellCheck={false}
-            required
-          />
-        </label>
-        <label className="cp-field">
-          <span>Original filename (optional, .txt/.csv)</span>
+          <span>Trade-record file (.txt / .csv)</span>
           <input
-            value={filename}
-            onChange={(event) => setFilename(event.target.value)}
-            placeholder="trades.csv"
+            type="file"
+            accept=".txt,.csv,text/plain,text/csv"
+            onChange={(event) => setFile(event.target.files?.[0] ?? null)}
           />
         </label>
+        {file ? (
+          <p className="cp-note" style={{ marginTop: 0 }}>
+            Selected <code>{file.name}</code> ({file.size} bytes)
+          </p>
+        ) : null}
         <div className="cp-field cp-wide">
-          <button className="btn btn-primary" type="submit" disabled={pending}>
+          <button className="btn btn-primary" type="submit" disabled={pending || !file}>
             {pending ? "Uploading…" : "Upload source asset"}
           </button>
         </div>

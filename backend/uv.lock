@@ -129,15 +129,15 @@ wheels = [
 
 [[package]]
 name = "boto3-stubs"
-version = "1.43.36"
+version = "1.43.48"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "botocore-stubs" },
     { name = "types-s3transfer" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c0/64/bbc5e1a6a8e770e8380d1480d714926a70873d0f022c4b733ac80242703e/boto3_stubs-1.43.36.tar.gz", hash = "sha256:35bdcef0f3e5b6bb1f1f6e61ab813fdde0d739508512450b6ea12509b516cdcb", size = 103461, upload-time = "2026-06-23T05:49:39.582Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/44/8d/3c7dfaf5cb38a687c705e1cae39f60678d1432ca7a3484f8906336ae9143/boto3_stubs-1.43.48.tar.gz", hash = "sha256:8c1243ca12c17014993d83a97d923b6821caef36a5177e684c263b13bf4d4d11", size = 103218, upload-time = "2026-07-14T20:32:47.483Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/34/54/a2ed6e00bdb37315dcdc336e68a2047e73d7664df836a84d8ba723fd5ac7/boto3_stubs-1.43.36-py3-none-any.whl", hash = "sha256:e89e48f937710919ef2d36623a8a98c3768568ca6fb9726f7b2369f681ec5745", size = 71048, upload-time = "2026-06-23T05:49:35.109Z" },
+    { url = "https://files.pythonhosted.org/packages/22/b7/ea47ce3c2aad8f6bb2a7e0eef0db023f846b5e76e6e273d0385db5354984/boto3_stubs-1.43.48-py3-none-any.whl", hash = "sha256:33aed4d28fa6e98387ff7479626fb8bf406c3866e4265ddde0be9538138ea1ac", size = 70962, upload-time = "2026-07-14T20:32:42.009Z" },
 ]
 
 [package.optional-dependencies]
@@ -277,14 +277,11 @@ wheels = [
 
 [[package]]
 name = "dramatiq"
-version = "1.18.0"
+version = "2.2.0"
 source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "prometheus-client" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/d9/9f/c8be928a88c387ed27344de089278e76d893dc71ad9e4b2a39a61deab0d8/dramatiq-1.18.0.tar.gz", hash = "sha256:5ea436b6e50dae64d4de04f1eb519ad239a6b1ba6315ba1dce1c0c4c1ebedfaf", size = 100868, upload-time = "2025-05-30T12:00:31.913Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/29/fb/78b1b689c4a121fc762ab6f00674cfa7246980678117edb03cbb168e5f9f/dramatiq-2.2.0.tar.gz", hash = "sha256:70c9278b0a9b880aeb23b8e09c9d43b1421ac8e807ef18903f6dd059130474a1", size = 108462, upload-time = "2026-06-17T11:18:34.629Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ac/00/d9ea755cdeda3d498504775b62122b72ba282b91446fd58980171fb1084c/dramatiq-1.18.0-py3-none-any.whl", hash = "sha256:d360f608aa3cd06f5db714bfcd23825dc7098bacfee52aca536b0bb0faae3c69", size = 121231, upload-time = "2025-05-30T12:00:30.199Z" },
+    { url = "https://files.pythonhosted.org/packages/ef/57/a9be0b205b24e794c833a5295497f914776eb4d606d5a25a5b290e8b75ec/dramatiq-2.2.0-py3-none-any.whl", hash = "sha256:2b2aa244b4098e154600c47cdb2c04cec6c3af44e9e159c319c6fc8b6f0ba90e", size = 127342, upload-time = "2026-06-17T11:18:33.433Z" },
 ]
 
 [package.optional-dependencies]
@@ -334,8 +331,8 @@ requires-dist = [
     { name = "argon2-cffi", specifier = ">=23.1,<26.0" },
     { name = "asyncpg", specifier = ">=0.30,<0.31" },
     { name = "boto3", specifier = ">=1.35,<2.0" },
-    { name = "boto3-stubs", extras = ["s3"], marker = "extra == 'dev'", specifier = ">=1.35" },
-    { name = "dramatiq", extras = ["redis"], specifier = ">=1.17,<2.0" },
+    { name = "boto3-stubs", extras = ["s3"], marker = "extra == 'dev'", specifier = ">=1.43.48" },
+    { name = "dramatiq", extras = ["redis"], specifier = ">=2.2.0,<3.0" },
     { name = "fastapi", specifier = ">=0.115,<1.0" },
     { name = "greenlet", specifier = ">=3.1" },
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.27,<1.0" },
@@ -346,15 +343,15 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.9,<3.0" },
     { name = "pydantic-settings", specifier = ">=2.5,<3.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.3,<9.0" },
-    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.24,<1.0" },
+    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=1.4.0,<2.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=5.0" },
     { name = "python-multipart", specifier = ">=0.0.12" },
     { name = "redis", specifier = ">=5.1,<6.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.7,<1.0" },
-    { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.35,<3.0" },
-    { name = "sse-starlette", specifier = ">=2.1,<3.0" },
+    { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.51,<3.0" },
+    { name = "sse-starlette", specifier = ">=3.4.5,<4.0" },
     { name = "structlog", specifier = ">=24.4" },
-    { name = "uvicorn", extras = ["standard"], specifier = ">=0.32,<1.0" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.51.0,<1.0" },
 ]
 provides-extras = ["dev"]
 
@@ -789,15 +786,6 @@ wheels = [
 ]
 
 [[package]]
-name = "prometheus-client"
-version = "0.25.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/1b/fb/d9aa83ffe43ce1f19e557c0971d04b90561b0cfd50762aafb01968285553/prometheus_client-0.25.0.tar.gz", hash = "sha256:5e373b75c31afb3c86f1a52fa1ad470c9aace18082d39ec0d2f918d11cc9ba28", size = 86035, upload-time = "2026-04-09T19:53:42.359Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/8d/9b/d4b1e644385499c8346fa9b622a3f030dce14cd6ef8a1871c221a17a67e7/prometheus_client-0.25.0-py3-none-any.whl", hash = "sha256:d5aec89e349a6ec230805d0df882f3807f74fd6c1a2fa86864e3c2279059fed1", size = 64154, upload-time = "2026-04-09T19:53:41.324Z" },
-]
-
-[[package]]
 name = "pyarrow"
 version = "24.0.0"
 source = { registry = "https://pypi.org/simple" }
@@ -945,14 +933,15 @@ wheels = [
 
 [[package]]
 name = "pytest-asyncio"
-version = "0.26.0"
+version = "1.4.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pytest" },
+    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/8e/c4/453c52c659521066969523e87d85d54139bbd17b78f09532fb8eb8cdb58e/pytest_asyncio-0.26.0.tar.gz", hash = "sha256:c4df2a697648241ff39e7f0e4a73050b03f123f760673956cf0d72a4990e312f", size = 54156, upload-time = "2025-03-25T06:22:28.883Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/43/7c/d36d04db312ecf4298932ef77e6e4a9e8ad017906e24e34f0b0c361a2473/pytest_asyncio-1.4.0.tar.gz", hash = "sha256:c6c0d2259945122819f171a32ecea2c349ead889ee28176caaf492143424be42", size = 58514, upload-time = "2026-05-26T09:56:04.083Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/20/7f/338843f449ace853647ace35870874f69a764d251872ed1b4de9f234822c/pytest_asyncio-0.26.0-py3-none-any.whl", hash = "sha256:7b51ed894f4fbea1340262bdae5135797ebbe21d8638978e35d31c6d19f72fb0", size = 19694, upload-time = "2025-03-25T06:22:27.807Z" },
+    { url = "https://files.pythonhosted.org/packages/03/e2/08a497ef684b88559c9cc5f4ad53a37e7b99e727094a86d6ea32536d5d3c/pytest_asyncio-1.4.0-py3-none-any.whl", hash = "sha256:933ca923a23075a87fb7070c0ec272a6848489824d887c85c812670932835aa1", size = 16930, upload-time = "2026-05-26T09:56:02.576Z" },
 ]
 
 [[package]]
@@ -1183,14 +1172,15 @@ asyncio = [
 
 [[package]]
 name = "sse-starlette"
-version = "2.4.1"
+version = "3.4.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anyio" },
+    { name = "starlette" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/07/3e/eae74d8d33e3262bae0a7e023bb43d8bdd27980aa3557333f4632611151f/sse_starlette-2.4.1.tar.gz", hash = "sha256:7c8a800a1ca343e9165fc06bbda45c78e4c6166320707ae30b416c42da070926", size = 18635, upload-time = "2025-07-06T09:41:33.631Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d2/1b/bc9e3e7a72dcdad7dc7888758f5d00f56f8909ed5cfdff822bd72bb4c520/sse_starlette-3.4.5.tar.gz", hash = "sha256:83072538bc211a2f68b7b0422226c4af3e9b62e106e07034664b832ca019842a", size = 35249, upload-time = "2026-06-20T17:36:58.322Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e4/f1/6c7eaa8187ba789a6dd6d74430307478d2a91c23a5452ab339b6fbe15a08/sse_starlette-2.4.1-py3-none-any.whl", hash = "sha256:08b77ea898ab1a13a428b2b6f73cfe6d0e607a7b4e15b9bb23e4a37b087fd39a", size = 10824, upload-time = "2025-07-06T09:41:32.321Z" },
+    { url = "https://files.pythonhosted.org/packages/78/75/c88d3f5dafd59c791da1ce27650d30bf5b70cbf1cbf01cd00e5f9e360915/sse_starlette-3.4.5-py3-none-any.whl", hash = "sha256:e71bad53323f65573c3864a6c3bd0c1eb6e5f092b2e48082b0c35927d19ca296", size = 16518, upload-time = "2026-06-20T17:36:56.729Z" },
 ]
 
 [[package]]
@@ -1265,20 +1255,19 @@ wheels = [
 
 [[package]]
 name = "uvicorn"
-version = "0.49.0"
+version = "0.51.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click" },
     { name = "h11" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c4/1f/fa18009dea8469069cca78a4e877a008ab78f08b064bfc9ab891579077ff/uvicorn-0.49.0.tar.gz", hash = "sha256:ebf4271aa580d9de97f93192d4595176df6e91f9aae919ca73e4fc07df1e66a3", size = 91284, upload-time = "2026-06-03T22:01:30.448Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/a2/65/b7c6c443ccc58678c91e1e973bbe2a878591538655d6e1d47f24ba1c51f3/uvicorn-0.51.0.tar.gz", hash = "sha256:f6f4b69b657c312f516dd2d268ab9ae6f254b11e4bac504f37b2ab58b24dd0b0", size = 94412, upload-time = "2026-07-08T10:59:05.962Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/88/fa/e1388bbcf24ef3274f45c0c1c7b501fd14971037c1b6ee23610553307497/uvicorn-0.49.0-py3-none-any.whl", hash = "sha256:ba3d14c3ee7e41c6c654c46c9eb489d33213cdd30aa1696eab1374337c13f68f", size = 71376, upload-time = "2026-06-03T22:01:29.037Z" },
+    { url = "https://files.pythonhosted.org/packages/45/ec/dbb7e5a6b91f86bfb9eb7d2988a2730907b6a729875b949c7f022e8b88fa/uvicorn-0.51.0-py3-none-any.whl", hash = "sha256:5d38af6cd620f2ae3849fb44fd4879e0890aa1febe8d47eb355fb45d93fe6a5b", size = 73219, upload-time = "2026-07-08T10:59:04.44Z" },
 ]
 
 [package.optional-dependencies]
 standard = [
-    { name = "colorama", marker = "sys_platform == 'win32'" },
     { name = "httptools" },
     { name = "python-dotenv" },
     { name = "pyyaml" },

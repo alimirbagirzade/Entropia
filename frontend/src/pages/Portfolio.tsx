@@ -38,6 +38,23 @@ function mutationErrorText(error: unknown): string {
   return error instanceof Error ? error.message : "Request failed.";
 }
 
+// Consistent inline mutation-error callout (doc 13 UI-13 "explicit error").
+// Distinct from ErrorState, which is for query-load failures and always says
+// "Unable to load" — a save/validate/sync failure needs its own copy.
+function InlineError({ message }: { message: string }) {
+  return (
+    <p role="alert" className="alloc-error-box">
+      {message}
+    </p>
+  );
+}
+
+// The two mode-note strings a toggle state renders (doc 13 §3.1, verbatim).
+const MODE_NOTE_ON =
+  "Equity Allocation is active. The shared pool below replaces individual Initial Capital values for this backtest only.";
+const MODE_NOTE_OFF =
+  "Equity Allocation is not selected. No shared capital pool is used; each Strategy, Trading Signal and Trade Log runs with the Initial Capital entered in its own details.";
+
 // A local editor row. `share` keeps the raw text so a partially-typed decimal
 // is never coerced client-side — the server parses money/percent strings
 // (doc 13 §13) and its validation errors render verbatim.
@@ -95,70 +112,71 @@ export function Portfolio() {
               enabled)
             </dd>
           </dl>
-        ) : null}
+        ) : (
+          <EmptyState
+            glyph="—"
+            title="No composition available"
+            description="This workspace has no default Mainboard composition yet."
+          />
+        )}
       </section>
 
       {compositionId !== null ? (
-        <>
-          <div style={{ marginTop: 18 }}>
-            {draftQuery.isLoading ? (
-              <div className="card">
-                <Loading label="Loading allocation draft…" />
-              </div>
-            ) : draftQuery.isError ? (
-              <div className="card">
-                <ErrorState error={draftQuery.error} onRetry={() => void draftQuery.refetch()} />
-              </div>
-            ) : draftQuery.data ? (
-              <>
-                <DraftEditor
-                  key={draftQuery.data.row_version}
-                  data={draftQuery.data}
-                  saving={save.isPending}
-                  onSave={(draft) =>
-                    save.mutate({
-                      compositionId,
-                      expectedRowVersion: draftQuery.data.row_version,
-                      draft,
-                    })
-                  }
-                />
-                {save.isError ? (
-                  <div className="card" style={{ marginTop: 18 }}>
-                    <p role="alert" style={{ color: "var(--down)", margin: 0 }}>
-                      {mutationErrorText(save.error)}
-                    </p>
-                  </div>
-                ) : null}
-                {save.data ? <SaveResultCard result={save.data} /> : null}
-                <ValidateCard
-                  pending={validate.isPending}
-                  error={validate.isError ? mutationErrorText(validate.error) : null}
-                  report={validate.data ?? null}
-                  onRun={() => validate.mutate({ compositionId })}
-                />
-                <SyncCard
-                  pending={sync.isPending}
-                  error={sync.isError ? mutationErrorText(sync.error) : null}
-                  preview={sync.data ?? null}
-                  onRun={() => sync.mutate({ compositionId })}
-                />
-                <RevisionCard
-                  data={draftQuery.data}
-                  pending={revision.isPending}
-                  error={revision.isError ? mutationErrorText(revision.error) : null}
-                  result={revision.data ?? null}
-                  onRun={() =>
-                    revision.mutate({
-                      compositionId,
-                      expectedRowVersion: draftQuery.data.row_version,
-                    })
-                  }
-                />
-              </>
-            ) : null}
-          </div>
-        </>
+        <div style={{ marginTop: 18 }}>
+          {draftQuery.isLoading ? (
+            <div className="card">
+              <Loading label="Loading allocation draft…" />
+            </div>
+          ) : draftQuery.isError ? (
+            <div className="card">
+              <ErrorState error={draftQuery.error} onRetry={() => void draftQuery.refetch()} />
+            </div>
+          ) : draftQuery.data ? (
+            <>
+              <DraftEditor
+                key={draftQuery.data.row_version}
+                data={draftQuery.data}
+                saving={save.isPending}
+                onSave={(draft) =>
+                  save.mutate({
+                    compositionId,
+                    expectedRowVersion: draftQuery.data.row_version,
+                    draft,
+                  })
+                }
+                validatePending={validate.isPending}
+                validateError={validate.isError ? mutationErrorText(validate.error) : null}
+                validateReport={validate.data ?? null}
+                onValidate={() => validate.mutate({ compositionId })}
+                savedDerived={save.data?.derived ?? null}
+              />
+              {save.isError ? (
+                <div className="card" style={{ marginTop: 18 }}>
+                  <InlineError message={mutationErrorText(save.error)} />
+                </div>
+              ) : null}
+              {save.data ? <SaveResultCard result={save.data} /> : null}
+              <SyncCard
+                pending={sync.isPending}
+                error={sync.isError ? mutationErrorText(sync.error) : null}
+                preview={sync.data ?? null}
+                onRun={() => sync.mutate({ compositionId })}
+              />
+              <RevisionCard
+                data={draftQuery.data}
+                pending={revision.isPending}
+                error={revision.isError ? mutationErrorText(revision.error) : null}
+                result={revision.data ?? null}
+                onRun={() =>
+                  revision.mutate({
+                    compositionId,
+                    expectedRowVersion: draftQuery.data.row_version,
+                  })
+                }
+              />
+            </>
+          ) : null}
+        </div>
       ) : null}
     </>
   );
@@ -173,10 +191,20 @@ function DraftEditor({
   data,
   saving,
   onSave,
+  validatePending,
+  validateError,
+  validateReport,
+  onValidate,
+  savedDerived,
 }: {
   data: AllocationDraftResponse;
   saving: boolean;
   onSave: (draft: AllocationDraftInput) => void;
+  validatePending: boolean;
+  validateError: string | null;
+  validateReport: AllocationValidationReport | null;
+  onValidate: () => void;
+  savedDerived: DerivedAmounts | null;
 }) {
   const [enabled, setEnabled] = useState(data.draft.enabled);
   const [amount, setAmount] = useState(data.draft.initial_capital?.amount ?? "");
@@ -211,6 +239,11 @@ function DraftEditor({
     })),
   });
 
+  // Derived preview for Card 3 — the latest report wins over a plain save,
+  // since Validate is the authoritative allocation-readiness computation;
+  // never recomputed client-side (doc 13 §8.3).
+  const previewDerived = validateReport?.derived ?? savedDerived;
+
   return (
     <section className="card" aria-labelledby="alloc-draft-h">
       <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
@@ -236,7 +269,8 @@ function DraftEditor({
 
       <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 14 }}>
         {/* v18 mockup "USE EQUITY ALLOCATION FOR THIS BACKTEST" banner. The
-            <label> wraps the checkbox so its accessible name stays the heading. */}
+            <label> wraps the checkbox so its accessible name stays the heading.
+            Always interactive — toggling back on must never itself be blocked. */}
         <label className="mode-toggle">
           <input
             type="checkbox"
@@ -245,83 +279,164 @@ function DraftEditor({
           />
           <div>
             <b>USE EQUITY ALLOCATION FOR THIS BACKTEST</b>
-            <span>
-              When enabled, the shared capital pool and equity shares below control every active
-              Strategy, Trading Signal and Trade Log. When disabled, each item runs with its own
-              Initial Capital.
-            </span>
+            <span>{enabled ? MODE_NOTE_ON : MODE_NOTE_OFF}</span>
           </div>
         </label>
 
-        {/* v18 mockup card 1 — SHARED CAPITAL POOL. */}
-        <div className="portfolio-card">
-          <div className="section-title-upper">1. Shared capital pool</div>
-          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-            <label className="auth-field" style={{ maxWidth: 180 }}>
-              <span>Initial capital</span>
-              <input
-                className="auth-input"
-                value={amount}
-                placeholder="e.g. 10000"
-                onChange={(event) => setAmount(event.target.value)}
+        {/* v18 mockup workspace — 4 numbered cards. Toggle off fades + blocks
+            pointer input (mockup .equity-allocation-disabled: opacity .42,
+            grayscale, pointer-events none); every field/button inside also
+            carries a native `disabled` so keyboard activation is blocked too,
+            not just the mouse (UI-13). */}
+        <div
+          className={`alloc-workspace${enabled ? "" : " alloc-workspace-disabled"}`}
+          aria-disabled={!enabled}
+        >
+          {/* Card 1 — SHARED CAPITAL POOL. */}
+          <div className="portfolio-card">
+            <div className="section-title-upper">1. Shared capital pool</div>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+              <label className="auth-field" style={{ maxWidth: 180 }}>
+                <span>Initial capital</span>
+                <input
+                  className="auth-input"
+                  value={amount}
+                  placeholder="e.g. 10000"
+                  disabled={!enabled}
+                  onChange={(event) => setAmount(event.target.value)}
+                />
+              </label>
+              <label className="auth-field" style={{ maxWidth: 120 }}>
+                <span>Currency</span>
+                <select
+                  value={currency}
+                  disabled={!enabled}
+                  onChange={(event) => setCurrency(event.target.value)}
+                >
+                  <option value="">—</option>
+                  {ALLOCATION_CURRENCIES.map((token) => (
+                    <option key={token} value={token}>
+                      {token}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="auth-field" style={{ maxWidth: 260 }}>
+                <span>Compounding mode</span>
+                <select value={mode} disabled={!enabled} onChange={(event) => setMode(event.target.value)}>
+                  <option value="">—</option>
+                  {COMPOUNDING_MODES.map((token) => (
+                    <option key={token} value={token}>
+                      {COMPOUNDING_MODE_LABELS[token] ?? token}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="auth-field" style={{ maxWidth: 160 }}>
+                <span>Reserve cash %</span>
+                <input
+                  className="auth-input"
+                  value={reserve}
+                  placeholder="e.g. 10"
+                  disabled={!enabled}
+                  onChange={(event) => setReserve(event.target.value)}
+                />
+              </label>
+            </div>
+          </div>
+
+          {/* Card 2 — EQUITY ALLOCATION (per-item sleeves + Add Item picker). */}
+          <div className="portfolio-card">
+            <div className="section-title-upper">2. Equity allocation</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <EntriesTable entries={entries} onChange={setEntries} disabled={!enabled} />
+              <CandidatePicker
+                candidates={candidates}
+                totalCandidates={data.candidate_items.length}
+                disabled={!enabled}
+                onAdd={(candidate) =>
+                  setEntries((previous) => [
+                    ...previous,
+                    {
+                      composition_item_id: candidate.composition_item_id,
+                      item_type: candidate.item_type,
+                      active: true,
+                      share: "",
+                    },
+                  ])
+                }
               />
-            </label>
-            <label className="auth-field" style={{ maxWidth: 120 }}>
-              <span>Currency</span>
-              <select value={currency} onChange={(event) => setCurrency(event.target.value)}>
-                <option value="">—</option>
-                {ALLOCATION_CURRENCIES.map((token) => (
-                  <option key={token} value={token}>
-                    {token}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="auth-field" style={{ maxWidth: 260 }}>
-              <span>Compounding mode</span>
-              <select value={mode} onChange={(event) => setMode(event.target.value)}>
-                <option value="">—</option>
-                {COMPOUNDING_MODES.map((token) => (
-                  <option key={token} value={token}>
-                    {COMPOUNDING_MODE_LABELS[token] ?? token}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="auth-field" style={{ maxWidth: 160 }}>
-              <span>Reserve cash %</span>
-              <input
-                className="auth-input"
-                value={reserve}
-                placeholder="e.g. 10"
-                onChange={(event) => setReserve(event.target.value)}
+            </div>
+          </div>
+
+          {/* Card 3 — CALCULATION PREVIEW (server-derived, never recomputed
+              client-side; sourced from the latest Save or Validate result). */}
+          <div className="portfolio-card">
+            <div className="section-title-upper">3. Calculation preview</div>
+            {!enabled ? (
+              <p className="alloc-muted">Not in use.</p>
+            ) : previewDerived ? (
+              <CalculationPreview derived={previewDerived} />
+            ) : (
+              <EmptyState
+                glyph="Σ"
+                title="No calculation yet"
+                description="Save the draft or run Validate below to see derived amounts."
               />
-            </label>
+            )}
+          </div>
+
+          {/* Card 4 — ALLOCATION CHECK (immutable validation report; each run
+              mints a new report id, §11.1 — nothing here is auto-computed). */}
+          <div className="portfolio-card">
+            <div className="section-title-upper">4. Allocation check</div>
+            {!enabled ? (
+              <StatusBadge
+                tone={allocationStateTone("NOT_SELECTED")}
+                label={allocationStateLabel("NOT_SELECTED")}
+              />
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                  <button type="button" className="btn" disabled={validatePending} onClick={onValidate}>
+                    {validatePending ? "Validating…" : "Validate saved draft"}
+                  </button>
+                  <span style={{ fontSize: 12, color: "var(--text-dim)" }}>
+                    Validates the last SAVED draft, not unsaved edits.
+                  </span>
+                </div>
+                {validateError ? <InlineError message={validateError} /> : null}
+                {validateReport ? (
+                  <>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                      <StatusBadge
+                        tone={allocationStateTone(validateReport.state)}
+                        label={allocationStateLabel(validateReport.state)}
+                      />
+                      <span style={{ fontSize: 12, color: "var(--text-dim)" }}>
+                        report <code>{validateReport.validation_report_id}</code>
+                      </span>
+                      {validateReport.config_hash ? (
+                        <span style={{ fontSize: 12, color: "var(--text-dim)" }}>
+                          config <code>{validateReport.config_hash}</code>
+                        </span>
+                      ) : null}
+                    </div>
+                    <IssuesTable issues={validateReport.issues} emptyText="No blockers or warnings." />
+                  </>
+                ) : (
+                  <EmptyState
+                    glyph="?"
+                    title="Not yet checked"
+                    description="Run Validate to see whether this allocation is ready for a backtest."
+                  />
+                )}
+              </div>
+            )}
           </div>
         </div>
 
-        {/* v18 mockup card 2 — EQUITY ALLOCATION (per-item sleeves). */}
-        <div className="portfolio-card">
-          <div className="section-title-upper">2. Equity allocation</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            <EntriesTable entries={entries} onChange={setEntries} />
-            <CandidatePicker
-              candidates={candidates}
-              onAdd={(candidate) =>
-                setEntries((previous) => [
-                  ...previous,
-                  {
-                    composition_item_id: candidate.composition_item_id,
-                    item_type: candidate.item_type,
-                    active: true,
-                    share: "",
-                  },
-                ])
-              }
-            />
-          </div>
-        </div>
-
+        {/* Outside the disabled workspace — saving "off" is a normal action. */}
         <div>
           <button
             type="button"
@@ -337,18 +452,47 @@ function DraftEditor({
   );
 }
 
+function CalculationPreview({ derived }: { derived: DerivedAmounts }) {
+  return (
+    <>
+      <dl className="kv">
+        <dt>Portfolio initial capital</dt>
+        <dd>
+          {derived.portfolio_initial_capital}
+          {derived.currency ? ` ${derived.currency}` : ""}
+        </dd>
+        <dt>Reserved cash</dt>
+        <dd>{derived.reserved_cash}</dd>
+        <dt>Capital available</dt>
+        <dd>{derived.capital_available}</dd>
+        <dt>Total allocated</dt>
+        <dd>{derived.total_allocated}</dd>
+        <dt>Unallocated</dt>
+        <dd>{derived.unallocated}</dd>
+      </dl>
+      <p className="alloc-muted" style={{ marginTop: 8 }}>
+        From the most recent Save or Validate — not recalculated as you type.
+      </p>
+    </>
+  );
+}
+
 function EntriesTable({
   entries,
   onChange,
+  disabled,
 }: {
   entries: EntryRow[];
   onChange: (next: EntryRow[]) => void;
+  disabled: boolean;
 }) {
   if (entries.length === 0) {
     return (
-      <p style={{ margin: 0, fontSize: 13, color: "var(--text-dim)" }}>
-        No allocation entries yet — add composition items below.
-      </p>
+      <EmptyState
+        glyph="◦"
+        title="No allocation entries yet"
+        description="Add a composition item below to give it a capital sleeve."
+      />
     );
   }
   const update = (id: string, patch: Partial<EntryRow>) =>
@@ -376,6 +520,7 @@ function EntriesTable({
                 type="checkbox"
                 aria-label={`active ${row.composition_item_id}`}
                 checked={row.active}
+                disabled={disabled}
                 onChange={(event) => update(row.composition_item_id, { active: event.target.checked })}
               />
             </td>
@@ -384,6 +529,7 @@ function EntriesTable({
                 aria-label={`share ${row.composition_item_id}`}
                 value={row.share}
                 style={{ maxWidth: 100 }}
+                disabled={disabled}
                 onChange={(event) => update(row.composition_item_id, { share: event.target.value })}
               />
             </td>
@@ -392,6 +538,7 @@ function EntriesTable({
               <button
                 type="button"
                 className="btn btn-ghost"
+                disabled={disabled}
                 onClick={() =>
                   onChange(entries.filter((r) => r.composition_item_id !== row.composition_item_id))
                 }
@@ -408,15 +555,39 @@ function EntriesTable({
 
 function CandidatePicker({
   candidates,
+  totalCandidates,
+  disabled,
   onAdd,
 }: {
   candidates: AllocationCandidate[];
+  totalCandidates: number;
+  disabled: boolean;
   onAdd: (candidate: AllocationCandidate) => void;
 }) {
-  if (candidates.length === 0) return null;
+  if (candidates.length === 0) {
+    return (
+      <div>
+        <h4 style={{ margin: "0 0 8px" }}>+ Add item</h4>
+        <EmptyState
+          glyph="◦"
+          title={totalCandidates === 0 ? "No compatible items" : "Every item is already allocated"}
+          description={
+            totalCandidates === 0
+              ? "No compatible Mainboard items are available for allocation. Add a Strategy, Trading Signal, or Trade Log item to the composition first."
+              : "Every compatible item in this composition already has an allocation row. Remove an existing row to add a different one, or change the Mainboard composition."
+          }
+        />
+      </div>
+    );
+  }
   return (
     <div>
-      <h4 style={{ margin: "0 0 8px" }}>Unrepresented composition items</h4>
+      <h4 style={{ margin: "0 0 8px" }}>+ Add item</h4>
+      <p className="alloc-muted" style={{ marginBottom: 8 }}>
+        Choose a Mainboard item without an allocation row in this composition. Strategy, Trading
+        Signal, and Trade Log items are not separate Package types — they simply receive a capital
+        sleeve for this run.
+      </p>
       <ul style={{ margin: 0, paddingLeft: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 6 }}>
         {candidates.map((candidate) => (
           <li key={candidate.composition_item_id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -426,7 +597,12 @@ function CandidatePicker({
               {candidate.display_label_override ? ` · ${candidate.display_label_override}` : ""}
               {candidate.is_enabled ? "" : " · disabled on Mainboard"}
             </span>
-            <button type="button" className="btn btn-ghost" onClick={() => onAdd(candidate)}>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              disabled={disabled}
+              onClick={() => onAdd(candidate)}
+            >
               Add
             </button>
           </li>
@@ -437,7 +613,8 @@ function CandidatePicker({
 }
 
 // ---------------------------------------------------------------------------
-// Save result (inline issues + derived amounts from the PUT return)
+// Save result (inline issues from the PUT return — Card 3 covers the derived
+// amounts, so this stays focused on the save confirmation + inline issues)
 // ---------------------------------------------------------------------------
 
 function SaveResultCard({ result }: { result: SaveDraftResult }) {
@@ -460,67 +637,6 @@ function SaveResultCard({ result }: { result: SaveDraftResult }) {
       <div style={{ marginTop: 12 }}>
         <IssuesTable issues={result.inline_issues} emptyText="No inline issues." />
       </div>
-      {result.derived ? <DerivedTable derived={result.derived} /> : null}
-    </section>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Validate (immutable report — a rerun is a NEW report id, §11.1)
-// ---------------------------------------------------------------------------
-
-function ValidateCard({
-  pending,
-  error,
-  report,
-  onRun,
-}: {
-  pending: boolean;
-  error: string | null;
-  report: AllocationValidationReport | null;
-  onRun: () => void;
-}) {
-  return (
-    <section className="card" style={{ marginTop: 18 }} aria-labelledby="alloc-validate-h">
-      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-        <h3 id="alloc-validate-h" style={{ margin: 0 }}>
-          Validation
-        </h3>
-        <button type="button" className="btn" disabled={pending} onClick={onRun}>
-          {pending ? "Validating…" : "Validate saved draft"}
-        </button>
-      </div>
-      <p style={{ fontSize: 12, color: "var(--text-dim)", margin: "8px 0 0" }}>
-        Validates the last SAVED draft (not unsaved edits). Each run produces a new immutable
-        report; no plan revision or run is created.
-      </p>
-      {error ? (
-        <p role="alert" style={{ color: "var(--down)", margin: "10px 0 0" }}>
-          {error}
-        </p>
-      ) : null}
-      {report ? (
-        <div style={{ marginTop: 12 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-            <StatusBadge
-              tone={allocationStateTone(report.state)}
-              label={allocationStateLabel(report.state)}
-            />
-            <span style={{ fontSize: 12, color: "var(--text-dim)" }}>
-              report <code>{report.validation_report_id}</code>
-            </span>
-            {report.config_hash ? (
-              <span style={{ fontSize: 12, color: "var(--text-dim)" }}>
-                config <code>{report.config_hash}</code>
-              </span>
-            ) : null}
-          </div>
-          <div style={{ marginTop: 12 }}>
-            <IssuesTable issues={report.issues} emptyText="No blockers or warnings." />
-          </div>
-          {report.derived ? <DerivedTable derived={report.derived} /> : null}
-        </div>
-      ) : null}
     </section>
   );
 }
@@ -547,24 +663,20 @@ function SyncCard({
           Sync from Mainboard
         </h3>
         <button type="button" className="btn" disabled={pending} onClick={onRun}>
-          {pending ? "Previewing…" : "Preview sync"}
+          {pending ? "Previewing…" : "Sync From Mainboard"}
         </button>
       </div>
       <p style={{ fontSize: 12, color: "var(--text-dim)", margin: "8px 0 0" }}>
         Non-destructive preview of the saved entries against the current composition. Nothing is
         applied here — removals take effect only through an explicit Save of the merged entries.
       </p>
-      {error ? (
-        <p role="alert" style={{ color: "var(--down)", margin: "10px 0 0" }}>
-          {error}
-        </p>
-      ) : null}
+      {error ? <InlineError message={error} /> : null}
       {preview ? (
         <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
           {preview.requires_confirmation ? (
-            <p role="alert" style={{ color: "var(--warn)", margin: 0, fontSize: 13 }}>
+            <p role="alert" className="alloc-confirm-box">
               Some planned entries no longer exist on the Mainboard — removing them is destructive
-              and requires an explicit Save.
+              and requires an explicit Save to confirm.
             </p>
           ) : null}
           <SyncEntryList label="Retained" entries={preview.retained} />
@@ -646,11 +758,7 @@ function RevisionCard({
         Freezes the saved draft into an immutable revision. The server requires shared mode
         (enabled) and a blocker-free validation — denials render verbatim.
       </p>
-      {error ? (
-        <p role="alert" style={{ color: "var(--down)", margin: "10px 0 0" }}>
-          {error}
-        </p>
-      ) : null}
+      {error ? <InlineError message={error} /> : null}
       {result ? (
         <dl className="kv" style={{ marginTop: 12 }}>
           <dt>Revision</dt>
@@ -711,51 +819,5 @@ function IssuesTable({ issues, emptyText }: { issues: AllocationIssue[]; emptyTe
         ))}
       </tbody>
     </table>
-  );
-}
-
-function DerivedTable({ derived }: { derived: DerivedAmounts }) {
-  return (
-    <div style={{ marginTop: 12 }}>
-      <h4 style={{ margin: "0 0 8px" }}>
-        Derived amounts{derived.currency ? ` (${derived.currency})` : ""}
-      </h4>
-      <dl className="kv">
-        <dt>Initial capital</dt>
-        <dd>{derived.portfolio_initial_capital}</dd>
-        <dt>Reserved cash</dt>
-        <dd>{derived.reserved_cash}</dd>
-        <dt>Capital available</dt>
-        <dd>{derived.capital_available}</dd>
-        <dt>Total allocated</dt>
-        <dd>{derived.total_allocated}</dd>
-        <dt>Unallocated</dt>
-        <dd>{derived.unallocated}</dd>
-        <dt>Active share total</dt>
-        <dd>{derived.active_share_total}%</dd>
-      </dl>
-      {derived.sleeves.length > 0 ? (
-        <table className="metrics-table" style={{ marginTop: 10 }}>
-          <thead>
-            <tr>
-              <th>Sleeve</th>
-              <th>Share %</th>
-              <th>Initial sleeve capital</th>
-            </tr>
-          </thead>
-          <tbody>
-            {derived.sleeves.map((sleeve) => (
-              <tr key={sleeve.composition_item_id}>
-                <td>
-                  <code>{sleeve.composition_item_id}</code>
-                </td>
-                <td>{sleeve.equity_share_percent}</td>
-                <td>{sleeve.initial_sleeve_capital}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      ) : null}
-    </div>
   );
 }

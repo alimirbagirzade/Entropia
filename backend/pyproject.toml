@@ -42,6 +42,9 @@ dev = [
 
   "boto3-stubs[s3]>=1.43.48",
   "openapi-spec-validator>=0.7,<1.0",
+
+  "ruff>=0.15.21,<1.0",
+  "mypy>=1.11,<3.0",
 ]
 
 [build-system]

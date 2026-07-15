@@ -891,6 +891,11 @@ def run_engine(
     summary: dict[str, Any] = {
         "symbol": config.data.instrument_id,
         "timeframe": timeframe,
+        # F-05: the ACTUAL first/last bar timestamps replayed (post-filter), never
+        # the requested config.data.backtest_range bounds — proves the manifest
+        # range matches the data actually processed (spec F-05 acceptance).
+        "period_start": first_ts or None,
+        "period_end": last_bar.timestamp if last_bar is not None else None,
         "initial_capital": initial_capital,
         "final_equity": equity,
         "net_profit": net_profit,

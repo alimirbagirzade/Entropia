@@ -119,17 +119,20 @@ def _strategy_payload(
     market_revision_id: str,
     market_hash: str,
     indicator_revision_id: str = "pkg_rev_1",
+    backtest_range: dict[str, str] | None = None,
+    instrument_id: str = "BTCUSDT",
 ) -> dict[str, Any]:
     return {
         "strategy_root_id": "strat_root_seed",
         "display_name": "Seed strategy",
         "rationale_family_id": "rf_1",
         "data": {
-            "instrument_id": "BTCUSDT",
+            "instrument_id": instrument_id,
             "market_dataset_root_id": market_root_id,
             "market_dataset_revision_id": market_revision_id,
             "market_dataset_content_hash": market_hash,
-            "backtest_range": {"start": "2024-01-01T00:00:00Z", "end": "2024-06-01T00:00:00Z"},
+            "backtest_range": backtest_range
+            or {"start": "2024-01-01T00:00:00Z", "end": "2024-06-01T00:00:00Z"},
             "initial_capital": "10000.00",
             "execution": {"entry_timing": "next_candle_open", "exit_timing": "next_candle_open"},
             "order_config": {"type": "market_order"},
@@ -168,19 +171,29 @@ async def _empty_composition(session, actor: Actor) -> str:
 
 
 async def _ready_composition(
-    session, actor: Actor, *, base_tf: str | None = None, resolvable_indicator: bool = True
+    session,
+    actor: Actor,
+    *,
+    base_tf: str | None = None,
+    resolvable_indicator: bool = True,
+    market_instrument_id: str | None = None,
+    strategy_instrument_id: str = "BTCUSDT",
+    backtest_range: dict[str, str] | None = None,
 ) -> tuple[str, str, str]:
     workspace_id = await _empty_composition(session, actor)
     # Slice B: the strategy pins a REAL market revision (FK-valid entity) and the
     # bar-replay worker resolves its processed Parquet asset (INF-12); the bar bytes
     # are injected via ``_e2e_bars``. ``base_tf`` pins the revision's bar timeframe
-    # so the worker can surface it in the result summary.
+    # so the worker can surface it in the result summary. ``market_instrument_id``
+    # pins the revision's dataset-level instrument identity (F-05 GAP-16 cross-check);
+    # ``None`` (the default) mirrors legacy/unset revisions.
     market_root, market_rev = await md_repo.create_market_dataset(
         session,
         owner_principal_id=None,
         created_by_principal_id=None,
         market_data_type=MarketDataType.OHLCV,
         payload={"note": "seed bars"},
+        instrument_id=market_instrument_id,
     )
     if base_tf is not None:
         market_rev.resolution_kind = ResolutionKind.BAR
@@ -227,6 +240,8 @@ async def _ready_composition(
             market_rev.revision_id,
             market_rev.content_hash,
             indicator_revision_id=pkg_rev.revision_id,
+            backtest_range=backtest_range,
+            instrument_id=strategy_instrument_id,
         ),
     )
     await mb_cmd.attach_mainboard_item(
@@ -328,6 +343,150 @@ async def test_result_summary_timeframe_none_when_revision_not_bar_timeframed(se
         )
     ).scalar_one()
     assert summary_row.timeframe is None
+
+
+# --------------------------------------------------------------------------- #
+# F-05: backtest_range + instrument physical filter                            #
+# --------------------------------------------------------------------------- #
+
+
+async def test_result_period_matches_actually_processed_bars(session) -> None:
+    # F-05 acceptance: "Manifest range/instrument values match the data actually
+    # processed." period_start/end reflect the REAL first/last replayed bar
+    # timestamps (2024-02-01..2024-02-22), not the wider requested backtest_range
+    # (2024-01-01..2024-06-01).
+    await _seed_principals(session)
+    composition_id, _root, _rev = await _ready_composition(session, USER1)
+    admit = await backtest_cmd.request_backtest_run(session, USER1, composition_id=composition_id)
+    await session.commit()
+
+    out = await run_backtest(session, admit["job_id"], stream_bars=_e2e_bars)
+    await session.commit()
+
+    assert out["state"] == "succeeded"
+    summary_row = (
+        await session.execute(
+            select(ResultSummary).where(ResultSummary.result_id == out["result_id"])
+        )
+    ).scalar_one()
+    assert summary_row.period_start == "2024-02-01T00:00:00Z"
+    assert summary_row.period_end == "2024-02-22T00:00:00Z"
+
+
+async def test_narrower_backtest_range_processes_fewer_bars(session) -> None:
+    # F-05 acceptance: "Different selected ranges over the same dataset process
+    # only their respective bars." A range that excludes the breakout window
+    # (only 10 of the 20 flat warm-up bars survive) leaves the breakout proxy
+    # without a full look-back -> zero trades, proving the filter is PHYSICAL,
+    # not cosmetic.
+    await _seed_principals(session)
+    composition_id, _root, _rev = await _ready_composition(
+        session,
+        USER1,
+        backtest_range={"start": "2024-02-11T00:00:00Z", "end": "2024-02-22T00:00:00Z"},
+    )
+    admit = await backtest_cmd.request_backtest_run(session, USER1, composition_id=composition_id)
+    await session.commit()
+
+    out = await run_backtest(session, admit["job_id"], stream_bars=_e2e_bars)
+    await session.commit()
+
+    assert out["state"] == "succeeded"
+    summary_row = (
+        await session.execute(
+            select(ResultSummary).where(ResultSummary.result_id == out["result_id"])
+        )
+    ).scalar_one()
+    assert summary_row.period_start == "2024-02-11T00:00:00Z"
+    assert summary_row.period_end == "2024-02-22T00:00:00Z"
+    assert summary_row.total_trades == 0
+    diagnostics = await _run_diagnostics(session, out["result_id"])
+    assert diagnostics["bars_processed"] == 12  # 2024-02-11..2024-02-22 inclusive
+
+
+async def test_worker_fails_closed_when_range_excludes_every_bar(session) -> None:
+    # F-05 acceptance: "Reject an empty or invalid filtered range explicitly."
+    await _seed_principals(session)
+    composition_id, _root, _rev = await _ready_composition(
+        session,
+        USER1,
+        backtest_range={"start": "2025-01-01T00:00:00Z", "end": "2025-02-01T00:00:00Z"},
+    )
+    admit = await backtest_cmd.request_backtest_run(session, USER1, composition_id=composition_id)
+    await session.commit()
+
+    out = await run_backtest(session, admit["job_id"], stream_bars=_e2e_bars)
+    await session.commit()
+
+    assert out["state"] == "failed"
+    assert out["failure_code"] == "RUN_FAILED_EMPTY_FILTERED_RANGE"
+    run = await session.get(BacktestRun, admit["run_id"])
+    assert str(run.state) == "failed" and run.result_id is None
+    assert await _count(session, BacktestResult) == 0
+
+
+async def test_worker_fails_closed_on_unparseable_backtest_range(session) -> None:
+    # An out-of-calendar timestamp ("month 13") passes the DateRange field's
+    # ``start<end`` regex/lexicographic checks at save time but is not a real
+    # ISO-8601 instant — the worker must reject it explicitly, never guess.
+    await _seed_principals(session)
+    composition_id, _root, _rev = await _ready_composition(
+        session,
+        USER1,
+        backtest_range={"start": "2024-01-01T00:00:00Z", "end": "2024-13-40T99:99:00Z"},
+    )
+    admit = await backtest_cmd.request_backtest_run(session, USER1, composition_id=composition_id)
+    await session.commit()
+
+    out = await run_backtest(session, admit["job_id"], stream_bars=_e2e_bars)
+    await session.commit()
+
+    assert out["state"] == "failed"
+    assert out["failure_code"] == "RUN_FAILED_INVALID_BACKTEST_RANGE"
+    assert await _count(session, BacktestResult) == 0
+
+
+async def test_worker_fails_closed_on_instrument_mismatch(session) -> None:
+    # F-05 acceptance: "Bars from unselected instruments never enter decisions,
+    # positions, metrics, or artifacts." The pinned revision is scoped to a
+    # DIFFERENT instrument than the strategy's selected one.
+    await _seed_principals(session)
+    composition_id, _root, _rev = await _ready_composition(
+        session,
+        USER1,
+        market_instrument_id="ETHUSDT",
+        strategy_instrument_id="BTCUSDT",
+    )
+    admit = await backtest_cmd.request_backtest_run(session, USER1, composition_id=composition_id)
+    await session.commit()
+
+    out = await run_backtest(session, admit["job_id"], stream_bars=_e2e_bars)
+    await session.commit()
+
+    assert out["state"] == "failed"
+    assert out["failure_code"] == "RUN_FAILED_INSTRUMENT_MISMATCH"
+    run = await session.get(BacktestRun, admit["run_id"])
+    assert str(run.state) == "failed" and run.result_id is None
+    assert await _count(session, BacktestResult) == 0
+
+
+async def test_matching_instrument_scoped_revision_still_succeeds(session) -> None:
+    # Regression: a revision whose instrument_id IS set and matches the strategy's
+    # selected instrument runs exactly like the legacy/unset-instrument happy path.
+    await _seed_principals(session)
+    composition_id, _root, _rev = await _ready_composition(
+        session,
+        USER1,
+        market_instrument_id="BTCUSDT",
+        strategy_instrument_id="BTCUSDT",
+    )
+    admit = await backtest_cmd.request_backtest_run(session, USER1, composition_id=composition_id)
+    await session.commit()
+
+    out = await run_backtest(session, admit["job_id"], stream_bars=_e2e_bars)
+    await session.commit()
+
+    assert out["state"] == "succeeded"
 
 
 # --------------------------------------------------------------------------- #

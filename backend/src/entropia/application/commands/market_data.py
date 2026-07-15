@@ -38,23 +38,35 @@ from entropia.domain.market_data.state_machine import (
 from entropia.domain.market_data.value_objects import TimezoneSpec
 from entropia.infrastructure.postgres.models import (
     MarketDatasetRevision,
-    MarketRawAsset,
     MarketSchemaMapping,
 )
 from entropia.infrastructure.postgres.repositories import approvals as approval_repo
 from entropia.infrastructure.postgres.repositories import audit as audit_repo
 from entropia.infrastructure.postgres.repositories import market_data as md_repo
 from entropia.infrastructure.queues import enqueue as job_enqueue
+from entropia.infrastructure.s3 import datasets
 from entropia.shared.concurrency import check_head_revision, check_row_version
 from entropia.shared.errors import (
     MappingReviewRequired,
+    MarketDataFileTooLargeError,
+    MarketDataFileTypeNotAllowedError,
+    MarketDataUploadIntegrityError,
+    MarketDataUploadStorageFailedError,
     NotFoundError,
     TimezoneRequired,
+    ValidationError,
 )
 from entropia.shared.manifest import manifest_hash
 
 _DATA_QUEUE = "data"
 _TARGET_KIND = md_repo.ENTITY_TYPE
+
+# F-01: accepted raw-asset file types and the server-enforced upload ceiling.
+# MAX_UPLOAD_BYTES is public (not "_"-prefixed) because the API route bounds its
+# read of the multipart body by this same constant (doc 11 "Validate content/
+# size server-side" — one source of truth for the limit).
+_ALLOWED_UPLOAD_EXTENSIONS = (".csv", ".txt")
+MAX_UPLOAD_BYTES = 200 * 1024 * 1024  # 200 MB
 
 
 async def _require_root(session: AsyncSession, entity_id: str) -> Any:
@@ -159,39 +171,83 @@ async def start_market_raw_upload(
     actor: Actor,
     *,
     entity_id: str,
-    object_key: str,
-    content_digest: str,
-    size_bytes: int,
+    content: bytes,
     content_type: str | None = None,
     original_filename: str | None = None,
-) -> MarketRawAsset:
-    """Record the raw-upload metadata row pointing at an object-storage key.
+    idempotency_key: str | None = None,
+) -> dict[str, Any]:
+    """Store the raw upload bytes in object storage and record the immutable
+    evidence row (D5/D6).
 
-    The bytes are written to object storage by the route/infra; here we persist
-    the immutable evidence row (D5/D6) and audit it.
+    The object key, SHA-256 digest, byte size, and content type are all derived
+    from the transferred bytes here — the caller never supplies storage
+    metadata (F-01). Content-addressed: an identical re-upload for the same
+    dataset returns the prior asset (idempotent regardless of retry) rather
+    than writing a duplicate object.
     """
+    _validate_upload_file_type(original_filename)
+    _validate_upload_file_size(len(content))
+
     root = await _require_root(session, entity_id)
     md_policy.ensure_can_edit_draft(actor, owner_principal_id=root.owner_principal_id)
-    asset = md_repo.add_raw_asset(
-        session,
-        entity_id=entity_id,
-        revision_id=root.current_revision_id,
-        object_key=object_key,
-        content_digest=content_digest,
-        size_bytes=size_bytes,
-        content_type=content_type,
-        original_filename=original_filename,
-        uploaded_by_principal_id=actor.principal_id,
+
+    digest = datasets.content_digest(content)
+    existing = await md_repo.find_raw_asset_by_hash(
+        session, entity_id=entity_id, content_digest=digest
     )
-    _audit_and_outbox(
+    if existing is not None:
+        return {
+            "asset_id": existing.asset_id,
+            "entity_id": entity_id,
+            "content_digest": existing.content_digest,
+            "size_bytes": existing.size_bytes,
+            "content_type": existing.content_type,
+            "original_filename": existing.original_filename,
+            "deduplicated": True,
+        }
+
+    async def _op() -> dict[str, Any]:
+        object_key, stored_digest = _write_and_verify_raw_bytes(entity_id, content, content_type)
+        asset = md_repo.add_raw_asset(
+            session,
+            entity_id=entity_id,
+            revision_id=root.current_revision_id,
+            object_key=object_key,
+            content_digest=stored_digest,
+            size_bytes=len(content),
+            content_type=content_type,
+            original_filename=original_filename,
+            uploaded_by_principal_id=actor.principal_id,
+        )
+        _audit_and_outbox(
+            session,
+            actor,
+            event_kind="market.raw_upload.started",
+            entity_id=entity_id,
+            revision_id=root.current_revision_id,
+            action="raw_upload_started",
+        )
+        return {
+            "asset_id": asset.asset_id,
+            "entity_id": entity_id,
+            "content_digest": stored_digest,
+            "size_bytes": len(content),
+            "content_type": content_type,
+            "original_filename": original_filename,
+            "deduplicated": False,
+        }
+
+    return await run_idempotent(
         session,
-        actor,
-        event_kind="market.raw_upload.started",
-        entity_id=entity_id,
-        revision_id=root.current_revision_id,
-        action="raw_upload_started",
+        key=idempotency_key,
+        actor_principal_id=actor.principal_id,
+        request_payload={
+            "op": "start_raw_upload",
+            "entity_id": entity_id,
+            "raw_asset_hash": digest,
+        },
+        operation=_op,
     )
-    return asset
 
 
 async def finalize_market_raw_upload(
@@ -644,3 +700,53 @@ async def soft_delete_market_dataset(
 def now_utc() -> datetime:
     """Deterministic UTC clock seam (kept here so tests can patch one place)."""
     return datetime.now(UTC)
+
+
+# --------------------------------------------------------------------------- #
+# F-01 upload helpers                                                         #
+# --------------------------------------------------------------------------- #
+
+
+def _validate_upload_file_type(original_filename: str | None) -> None:
+    name = (original_filename or "").lower()
+    if name and not name.endswith(_ALLOWED_UPLOAD_EXTENSIONS):
+        raise MarketDataFileTypeNotAllowedError(
+            f"File {original_filename!r} is not a CSV/TXT file.",
+            details=[{"field": "original_filename", "actual": original_filename}],
+        )
+
+
+def _validate_upload_file_size(size_bytes: int) -> None:
+    if size_bytes <= 0:
+        raise ValidationError("The uploaded file is empty.")
+    if size_bytes > MAX_UPLOAD_BYTES:
+        raise MarketDataFileTooLargeError(
+            f"The file exceeds the {MAX_UPLOAD_BYTES // (1024 * 1024)} MB upload limit.",
+            details=[
+                {"field": "size_bytes", "actual": size_bytes, "limit": MAX_UPLOAD_BYTES},
+            ],
+        )
+
+
+def _write_and_verify_raw_bytes(
+    entity_id: str, content: bytes, content_type: str | None
+) -> tuple[str, str]:
+    """Write bytes to object storage, then read them back and re-hash to
+    confirm the stored object matches what was uploaded (integrity
+    verification, F-01) before any evidence row is persisted."""
+    try:
+        object_key, stored_digest = datasets.put_raw_bytes(
+            entity_id, content, content_type=content_type
+        )
+    except Exception as exc:
+        raise MarketDataUploadStorageFailedError() from exc
+
+    try:
+        roundtrip = datasets.get_raw_bytes(object_key)
+    except Exception as exc:
+        raise MarketDataUploadStorageFailedError() from exc
+
+    if len(roundtrip) != len(content) or datasets.content_digest(roundtrip) != stored_digest:
+        raise MarketDataUploadIntegrityError()
+
+    return object_key, stored_digest

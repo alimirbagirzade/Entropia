@@ -1,4 +1,6 @@
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type ChangeEvent, type FormEvent } from "react";
+
+import { useQueryClient } from "@tanstack/react-query";
 
 import { EmptyState } from "@/components/EmptyState";
 import { ErrorState } from "@/components/ErrorState";
@@ -9,8 +11,10 @@ import { formatUtc } from "@/lib/backtest";
 import {
   MARKET_DATA_TYPES,
   TIMEZONE_MODES,
+  invalidateAfterRawUpload,
   linesToList,
   parseMappingLines,
+  rawUploadPath,
   revisionStateTone,
   useApproveRevision,
   useApprovedBundle,
@@ -23,12 +27,13 @@ import {
   useMarketDataset,
   useMarketDatasets,
   useRequestAnalysis,
-  useStartUpload,
   type MarketDatasetDetail,
   type MarketDatasetRow,
   type MarketRevisionRef,
   type RevisionBody,
+  type StartUploadResult,
 } from "@/lib/marketData";
+import { useFileUpload } from "@/lib/upload";
 
 // Command failures surface the backend canonical envelope verbatim — the client
 // never invents market-data-domain messages (mirrors Rationale / Trash / Panel).
@@ -387,119 +392,132 @@ function IngestSection({ detail }: { detail: MarketDatasetDetail }) {
   );
 }
 
-function UploadComposer({ entityId }: { entityId: string }) {
-  const start = useStartUpload();
-  const finalize = useFinalizeUpload();
-  const [objectKey, setObjectKey] = useState("");
-  const [digest, setDigest] = useState("");
-  const [sizeBytes, setSizeBytes] = useState("");
-  const [contentType, setContentType] = useState("");
-  const [filename, setFilename] = useState("");
-  const [assetId, setAssetId] = useState("");
+// Bytes-per-unit thresholds for the human-readable progress label.
+const KILOBYTE = 1024;
+const MEGABYTE = KILOBYTE * 1024;
 
-  const submitStart = (event: FormEvent) => {
-    event.preventDefault();
-    start.mutate(
-      {
-        entity_id: entityId,
-        object_key: objectKey.trim(),
-        content_digest: digest.trim(),
-        size_bytes: Number(sizeBytes),
-        content_type: contentType.trim() || null,
-        original_filename: filename.trim() || null,
-      },
-      { onSuccess: (result) => setAssetId(result.asset_id) },
-    );
+function formatBytes(bytes: number): string {
+  if (bytes >= MEGABYTE) return `${(bytes / MEGABYTE).toFixed(1)} MB`;
+  if (bytes >= KILOBYTE) return `${(bytes / KILOBYTE).toFixed(1)} KB`;
+  return `${bytes} B`;
+}
+
+// Step 1 — native file chooser + real byte transfer (F-01). The client never
+// supplies object key/digest/size/content-type; the server derives all of it
+// from the transferred bytes and returns it in the response. Finalize then
+// moves the revision DRAFT -> UPLOADING.
+function UploadComposer({ entityId }: { entityId: string }) {
+  const queryClient = useQueryClient();
+  const upload = useFileUpload<StartUploadResult>();
+  const finalize = useFinalizeUpload();
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
+  const onFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] ?? null;
+    setSelectedFile(file);
+    upload.reset();
   };
+
+  const submitUpload = (event: FormEvent) => {
+    event.preventDefault();
+    if (selectedFile === null) return;
+    upload
+      .upload(rawUploadPath(entityId), selectedFile, { idempotencyKey: crypto.randomUUID() })
+      .then(() => invalidateAfterRawUpload(queryClient))
+      .catch(() => {
+        // Surfaced via upload.error below; nothing further to do here.
+      });
+  };
+
+  const retry = () => {
+    if (selectedFile === null) return;
+    upload
+      .upload(rawUploadPath(entityId), selectedFile, { idempotencyKey: crypto.randomUUID() })
+      .then(() => invalidateAfterRawUpload(queryClient))
+      .catch(() => {
+        // Surfaced via upload.error below.
+      });
+  };
+
+  const progressPercent =
+    upload.progress && upload.progress.total > 0
+      ? Math.round((upload.progress.loaded / upload.progress.total) * 100)
+      : null;
 
   return (
     <div style={{ marginBottom: 16 }}>
       <strong>Step 1 — raw source</strong>
       <p className="page-sub" style={{ marginTop: 4 }}>
-        Registers the immutable evidence row for an object already in storage (object key + digest);
-        raw bytes never travel through this page.
+        Choose a local CSV/TXT file. The bytes are transferred to object storage and the object key,
+        digest, size, and content type are generated automatically — you never enter storage metadata.
       </p>
-      <form onSubmit={submitStart}>
-        <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}>
-          <label htmlFor="md-object-key">
-            Object key
-            <input
-              id="md-object-key"
-              value={objectKey}
-              onChange={(event) => setObjectKey(event.target.value)}
-              placeholder="raw/btcusdt-15m.csv"
-              required
-            />
-          </label>
-          <label htmlFor="md-digest">
-            Content digest
-            <input
-              id="md-digest"
-              value={digest}
-              onChange={(event) => setDigest(event.target.value)}
-              placeholder="sha256:…"
-              required
-            />
-          </label>
-          <label htmlFor="md-size">
-            Size (bytes)
-            <input
-              id="md-size"
-              type="number"
-              min={0}
-              value={sizeBytes}
-              onChange={(event) => setSizeBytes(event.target.value)}
-              required
-            />
-          </label>
-          <label htmlFor="md-content-type">
-            Content type (optional)
-            <input
-              id="md-content-type"
-              value={contentType}
-              onChange={(event) => setContentType(event.target.value)}
-              placeholder="text/csv"
-            />
-          </label>
-          <label htmlFor="md-filename">
-            Original filename (optional)
-            <input
-              id="md-filename"
-              value={filename}
-              onChange={(event) => setFilename(event.target.value)}
-            />
-          </label>
+      <form onSubmit={submitUpload}>
+        <label htmlFor="md-file">
+          File
+          <input
+            id="md-file"
+            ref={fileInputRef}
+            type="file"
+            accept=".csv,.txt,text/csv,text/plain"
+            onChange={onFileChange}
+          />
+        </label>
+        <div style={{ display: "flex", gap: 8, marginTop: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <button
+            type="submit"
+            className="btn btn-primary"
+            disabled={selectedFile === null || upload.status === "uploading"}
+          >
+            Upload file
+          </button>
+          {upload.status === "uploading" ? (
+            <button type="button" className="btn" onClick={upload.cancel}>
+              Cancel
+            </button>
+          ) : null}
+          {upload.status === "error" || upload.status === "cancelled" ? (
+            <button type="button" className="btn" onClick={retry}>
+              Retry
+            </button>
+          ) : null}
         </div>
-        <button type="submit" className="btn" disabled={start.isPending} style={{ marginTop: 8 }}>
-          Start upload
-        </button>
       </form>
-      {start.isError ? (
-        <p role="alert" style={{ color: "var(--down)" }}>
-          {mutationErrorText(start.error)}
+
+      {upload.status === "uploading" && upload.progress ? (
+        <p aria-live="polite" style={{ marginTop: 8 }}>
+          Uploading… {formatBytes(upload.progress.loaded)} / {formatBytes(upload.progress.total)}
+          {progressPercent !== null ? ` (${progressPercent}%)` : ""}
         </p>
       ) : null}
-      {start.data ? (
+      {upload.status === "cancelled" ? (
+        <p role="alert" style={{ color: "var(--down)" }}>
+          Upload cancelled.
+        </p>
+      ) : null}
+      {upload.status === "error" ? (
+        <p role="alert" style={{ color: "var(--down)" }}>
+          {mutationErrorText(upload.error)}
+        </p>
+      ) : null}
+      {upload.status === "success" && upload.data ? (
         <p aria-live="polite">
-          Upload started — asset <code>{start.data.asset_id}</code>.
+          {upload.data.deduplicated ? "Already uploaded — reused" : "Uploaded"} — asset{" "}
+          <code>{upload.data.asset_id}</code> ({formatBytes(upload.data.size_bytes)},{" "}
+          digest <code>{upload.data.content_digest.slice(0, 12)}…</code>).
         </p>
       ) : null}
 
-      <div style={{ display: "flex", alignItems: "end", gap: 12, marginTop: 8, flexWrap: "wrap" }}>
-        <label htmlFor="md-asset-id">
-          Asset id to finalize
-          <input
-            id="md-asset-id"
-            value={assetId}
-            onChange={(event) => setAssetId(event.target.value)}
-            placeholder="asset_…"
-          />
-        </label>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 8, flexWrap: "wrap" }}>
         <button
           type="button"
           className="btn"
-          disabled={finalize.isPending || assetId.trim().length === 0}
-          onClick={() => finalize.mutate({ entity_id: entityId, asset_id: assetId.trim() })}
+          disabled={finalize.isPending || upload.data === null}
+          onClick={() =>
+            upload.data
+              ? finalize.mutate({ entity_id: entityId, asset_id: upload.data.asset_id })
+              : undefined
+          }
         >
           Finalize upload
         </button>

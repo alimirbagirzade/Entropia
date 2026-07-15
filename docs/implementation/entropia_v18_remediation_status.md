@@ -29,7 +29,7 @@ Otherwise the spec's technical "broken" claims are **accurate, not errors** (ver
 
 | ID | Title | P | Status | Verified finding / evidence |
 |----|-------|---|--------|------------------------------|
-| F-01 | Real Market Data file upload | P0 | Not Started | Upload still via pre-supplied object key (no native chooser / byte transfer). |
+| **F-01** | **Real Market Data file upload** | **P0** | **Complete (this PR)** | Fixed: `start_market_raw_upload` (`application/commands/market_data.py`) now accepts real bytes via a multipart `POST /market-datasets/{entity_id}/raw-uploads` (`UploadFile`), never a pre-supplied `object_key`/`content_digest`/`size_bytes`; object key + SHA-256 digest + byte size + content type are all derived server-side, written via `datasets.put_raw_bytes`, and integrity-verified with a storage read-back before any evidence row is persisted (`MARKET_DATA_UPLOAD_INTEGRITY_FAILED` on mismatch). Content-addressed dedup (`find_raw_asset_by_hash`, scoped per dataset) makes a retry idempotent regardless of Idempotency-Key. Unsupported type/empty/oversized file -> `MARKET_DATA_FILE_TYPE_NOT_ALLOWED`/`VALIDATION_ERROR`/`MARKET_DATA_FILE_TOO_LARGE`; storage failure -> `MARKET_DATA_UPLOAD_STORAGE_FAILED`. Frontend: `frontend/src/lib/upload.ts` — new shared XHR-based multipart primitive (`uploadFile` + `useFileUpload` hook, real progress/cancel/retry) reused by `MarketData.tsx`'s `UploadComposer`, which replaces the manual object-key/digest/size-bytes form with a native file chooser; no storage metadata is ever requested from the user. No migration (`market_raw_asset.object_key`/`content_digest`/`size_bytes` columns already existed). Tests: +5 backend unit (validators), +7 backend integration (happy path, dedup, unsupported type, non-owner, storage failure, digest mismatch), +2 backend contract (pure-validation-before-DB), +3 frontend unit (`upload.test.ts` — progress/error/cancel), +2 frontend component (success+finalize, error+retry). A Playwright E2E extension of `frontend/e2e/specs/02-market-data-upload.spec.ts` is authored and held on a reference branch pending F-23's merge to `main` (that directory does not exist on `main` yet). |
 | F-02 | Real Research Data file upload | P0 | Not Started | Same object-key workflow as F-01. |
 | F-03 | Replace simulated file inputs | P0 | Not Started | TXT/CSV textareas + manual filename entry still present. |
 | F-04 | Execute full Mainboard composition | P0 | Not Started | Engine selects first enabled strategy path; multi-item execution unverified. |
@@ -65,6 +65,12 @@ Otherwise the spec's technical "broken" claims are **accurate, not errors** (ver
 
 ## Change log
 
+- 2026-07-15 — F-01 real Market Data raw-asset file upload. `POST /market-datasets/{id}/raw-uploads`
+  now transfers real multipart bytes; object key/digest/size/content-type all server-derived +
+  integrity-verified via a storage read-back before persisting; content-addressed dedup makes retry
+  idempotent. New shared `frontend/src/lib/upload.ts` (XHR multipart + progress/cancel/retry) reused
+  by `MarketData.tsx`'s native file-chooser UploadComposer. No migration. Branch
+  `feat/v18-f01-market-data-upload`.
 - 2026-07-14 — F-09 fail-closed sizing (engine + Ready Check blocker) + F-24 sizing-test rewrite.
   Branch `feat/v18-f09-sizing-fail-closed`. `ENGINE_VERSION → backtest-engine-v2-sizing-fail-closed`.
 - 2026-07-15 — F-06 remove unresolved-indicator breakout fallback. Worker fails closed with

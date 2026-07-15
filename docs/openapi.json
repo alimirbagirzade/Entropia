@@ -394,6 +394,20 @@
         "title": "BatchAssignmentRequest",
         "type": "object"
       },
+      "Body_start_upload_api_v1_market_datasets__entity_id__raw_uploads_post": {
+        "properties": {
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_start_upload_api_v1_market_datasets__entity_id__raw_uploads_post",
+        "type": "object"
+      },
       "BootstrapStatusResponse": {
         "properties": {
           "active_admin_exists": {
@@ -10455,6 +10469,7 @@
     },
     "/api/v1/market-datasets/{entity_id}/raw-uploads": {
       "post": {
+        "description": "Real multipart byte transfer (F-01): the object key, SHA-256 digest,\nbyte size, and content type are all derived server-side from the bytes —\nthe client never supplies storage metadata. The read is bounded by\n``MAX_UPLOAD_BYTES + 1`` so an oversized upload is rejected without\nbuffering an unbounded payload into memory.",
         "operationId": "start_upload_api_v1_market_datasets__entity_id__raw_uploads_post",
         "parameters": [
           {
@@ -10465,13 +10480,29 @@
               "title": "Entity Id",
               "type": "string"
             }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
           }
         ],
         "requestBody": {
           "content": {
-            "application/json": {
+            "multipart/form-data": {
               "schema": {
-                "$ref": "#/components/schemas/StartUploadRequest"
+                "$ref": "#/components/schemas/Body_start_upload_api_v1_market_datasets__entity_id__raw_uploads_post"
               }
             }
           },

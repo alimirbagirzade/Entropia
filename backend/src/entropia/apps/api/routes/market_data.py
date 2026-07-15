@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, Header, Query, Response
+from fastapi import APIRouter, Depends, File, Header, Query, Response, UploadFile
 from pydantic import BaseModel, Field
 
 from entropia.application.commands import market_data as md_cmd
@@ -34,14 +34,6 @@ class CreateDatasetRequest(BaseModel):
     # instrument_id. Keys: {venue_id, symbol, contract_type} or {alias}. An
     # unresolvable scope -> 422 INSTRUMENT_SCOPE_UNRESOLVABLE (never a silent free-text).
     instrument_scope: dict[str, Any] | None = None
-
-
-class StartUploadRequest(BaseModel):
-    object_key: str
-    content_digest: str
-    size_bytes: int = Field(ge=0)
-    content_type: str | None = None
-    original_filename: str | None = None
 
 
 class FinalizeUploadRequest(BaseModel):
@@ -103,20 +95,26 @@ async def create_dataset(
 @router.post("/market-datasets/{entity_id}/raw-uploads", status_code=201)
 async def start_upload(
     entity_id: str,
-    body: StartUploadRequest,
+    file: UploadFile = File(...),
     ctx: RequestContext = Depends(request_context),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> dict[str, Any]:
-    asset = await md_cmd.start_market_raw_upload(
+    """Real multipart byte transfer (F-01): the object key, SHA-256 digest,
+    byte size, and content type are all derived server-side from the bytes —
+    the client never supplies storage metadata. The read is bounded by
+    ``MAX_UPLOAD_BYTES + 1`` so an oversized upload is rejected without
+    buffering an unbounded payload into memory.
+    """
+    content = await file.read(md_cmd.MAX_UPLOAD_BYTES + 1)
+    return await md_cmd.start_market_raw_upload(
         ctx.session,
         ctx.actor,
         entity_id=entity_id,
-        object_key=body.object_key,
-        content_digest=body.content_digest,
-        size_bytes=body.size_bytes,
-        content_type=body.content_type,
-        original_filename=body.original_filename,
+        content=content,
+        content_type=file.content_type,
+        original_filename=file.filename,
+        idempotency_key=idempotency_key,
     )
-    return {"asset_id": asset.asset_id, "entity_id": entity_id}
 
 
 @router.post("/market-datasets/{entity_id}/raw-uploads/finalize")

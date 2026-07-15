@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 
@@ -110,6 +110,31 @@ const RESTORE_RESULT = {
   correlation_id: null,
 };
 
+// Real document chooser (F-03): the Restore drawer sources its options from
+// actual recoverable Trash entries, never a manually-typed document id.
+const TRASH_ENTRIES = {
+  data: [
+    {
+      trash_entry_id: "42",
+      entity_id: "mdoc_2",
+      object_type: "manual_document",
+      display_name: "Appendix",
+      original_location: "Help / User Manual",
+      original_owner: "User",
+      deleted_by: "User",
+      deleted_at: "2026-07-15T00:00:00Z",
+      delete_reason: null,
+      status: "soft_deleted",
+      purge_status: null,
+      purge_job_id: null,
+      restore_eligible: true,
+      row_version: 3,
+      correlation_id: null,
+    },
+  ],
+  meta: { cursor: null, has_more: false, limit: 20, recoverable_total: 1, object_types: ["manual_document"] },
+};
+
 // apiStub matches in insertion order: the specific admin fragments (:upload,
 // :restore, /revisions) MUST precede the bare create fragment — the create
 // path "/admin/manual/documents" is a substring of all of them.
@@ -120,6 +145,7 @@ function stubRoutes(extra: Record<string, unknown> = {}) {
     "POST /revisions": REVISE_RESULT,
     "DELETE /admin/manual/documents": DELETE_RESULT,
     "POST /admin/manual/documents": PUBLISH_RESULT,
+    "GET /trash-entries": TRASH_ENTRIES,
     "GET /manual/search": SEARCH,
     "GET /manual/stream": STREAM,
     ...extra,
@@ -167,25 +193,28 @@ describe("User Manual page", () => {
     stubRoutes();
     renderPage();
 
-    expect(await screen.findByText("Entropia Guide")).toBeTruthy();
-    expect(screen.getByText("Baseline")).toBeTruthy();
+    // The sidebar's section nav mirrors title/source_label alongside the
+    // reader, so those two specifically are scoped to the reader article.
+    const article = screen.getByRole("article");
+    expect(await within(article).findByText("Entropia Guide")).toBeTruthy();
+    expect(within(article).getByText("Baseline")).toBeTruthy();
     expect(screen.getByText(/Stream v7/)).toBeTruthy();
     // Canonical block types render as text nodes (doc 21 §9.2).
-    expect(screen.getByText("Introduction")).toBeTruthy();
-    expect(screen.getByText("Welcome to Entropia.")).toBeTruthy();
-    expect(screen.getByText("Second item")).toBeTruthy();
-    expect(screen.getByText("print('hi')")).toBeTruthy();
-    expect(screen.getByText(/Be careful\./)).toBeTruthy();
+    expect(within(article).getByText("Introduction")).toBeTruthy();
+    expect(within(article).getByText("Welcome to Entropia.")).toBeTruthy();
+    expect(within(article).getByText("Second item")).toBeTruthy();
+    expect(within(article).getByText("print('hi')")).toBeTruthy();
+    expect(within(article).getByText(/Be careful\./)).toBeTruthy();
     // Appended section with its source provenance.
-    expect(screen.getByText("Appendix")).toBeTruthy();
-    expect(screen.getByText("Added text document")).toBeTruthy();
+    expect(within(article).getByText("Appendix")).toBeTruthy();
+    expect(within(article).getByText("Added text document")).toBeTruthy();
   });
 
   it("hides replace/delete on the baseline from the server-truth is_baseline flag (UM-10)", async () => {
     stubRoutes();
     renderPage();
 
-    await screen.findByText("Appendix");
+    await screen.findByText("Appendix body.");
     // Only the non-baseline section carries admin actions.
     expect(screen.getAllByRole("button", { name: "Delete…" })).toHaveLength(1);
     expect(screen.getAllByRole("button", { name: "Replace content" })).toHaveLength(1);
@@ -194,7 +223,7 @@ describe("User Manual page", () => {
   it("searches only on submit and renders chunk results verbatim", async () => {
     const fetchMock = stubRoutes();
     renderPage();
-    await screen.findByText("Appendix");
+    await screen.findByText("Appendix body.");
 
     // A blank/untouched query never fetches (doc 21 §14 — blank searches nothing).
     expect(
@@ -214,16 +243,20 @@ describe("User Manual page", () => {
     expect(url).toContain("q=appendix");
   });
 
-  it("publishes an added text document guarded by the rendered stream snapshot", async () => {
+  it("publishes an added text document from the Add / Paste Text drawer", async () => {
     const fetchMock = stubRoutes();
     renderPage();
-    await screen.findByText("Appendix");
+    await screen.findByText("Appendix body.");
 
-    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "New doc" } });
+    fireEvent.click(screen.getByRole("button", { name: "+ Add / Paste Text" }));
+    fireEvent.change(await screen.findByLabelText("Title"), { target: { value: "New doc" } });
     fireEvent.change(screen.getByLabelText("Content"), { target: { value: "Body text." } });
     fireEvent.click(screen.getByRole("button", { name: "Publish document" }));
 
+    // The drawer closes and the reader shows the publish notice.
     expect(await screen.findByText(/Published “New doc” rev 1/)).toBeTruthy();
+    expect(screen.queryByLabelText("Content")).toBeNull();
+
     const init = callFor(fetchMock, "POST", "/admin/manual/documents");
     const body = JSON.parse(String(init.body)) as Record<string, unknown>;
     // OCC is the BODY-form expected_stream_version INT from the rendered page.
@@ -242,21 +275,22 @@ describe("User Manual page", () => {
     );
   });
 
-  it("uploads a document omitting the blank optional title", async () => {
+  it("uploads a real chosen file (F-03) omitting the blank optional title", async () => {
     const fetchMock = stubRoutes();
     renderPage();
-    await screen.findByText("Appendix");
+    await screen.findByText("Appendix body.");
 
-    fireEvent.change(screen.getByLabelText("Source filename"), { target: { value: "guide.md" } });
-    fireEvent.change(screen.getByLabelText("File content (UTF-8 text)"), {
-      target: { value: "# Uploaded" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Upload & publish" }));
+    fireEvent.click(screen.getByRole("button", { name: "Upload Document" }));
+    const fileInput = await screen.findByLabelText("File");
+    const file = new File(["# Uploaded"], "guide.md", { type: "text/markdown" });
+    fireEvent.change(fileInput, { target: { files: [file] } });
+    fireEvent.click(await screen.findByRole("button", { name: "Upload & publish" }));
 
-    await screen.findByText(/Published “New doc” rev 1/);
+    expect(await screen.findByText(/Published “New doc” rev 1/)).toBeTruthy();
     const init = callFor(fetchMock, "POST", ":upload");
     const body = JSON.parse(String(init.body)) as Record<string, unknown>;
     expect(body.source_filename).toBe("guide.md");
+    expect(body.content).toBe("# Uploaded");
     expect(body.expected_stream_version).toBe(7);
     // Blank optional field is OMITTED — the server derives the title.
     expect("title" in body).toBe(false);
@@ -266,7 +300,7 @@ describe("User Manual page", () => {
   it("replaces a revision with the section head as the BODY-form OCC token", async () => {
     const fetchMock = stubRoutes();
     renderPage();
-    await screen.findByText("Appendix");
+    await screen.findByText("Appendix body.");
 
     fireEvent.click(screen.getByRole("button", { name: "Replace content" }));
     fireEvent.change(screen.getByLabelText("Replacement content"), {
@@ -287,7 +321,7 @@ describe("User Manual page", () => {
   it("soft deletes after a two-step confirm — DELETE carries a BODY + Idempotency-Key", async () => {
     const fetchMock = stubRoutes();
     renderPage();
-    await screen.findByText("Appendix");
+    await screen.findByText("Appendix body.");
 
     fireEvent.click(screen.getByRole("button", { name: "Delete…" }));
     fireEvent.change(screen.getByLabelText("Delete reason for Appendix"), {
@@ -303,17 +337,24 @@ describe("User Manual page", () => {
     expect(headersOf(init)["Idempotency-Key"]).toBeTruthy();
   });
 
-  it("restores by document id — no body, Idempotency-Key only (Trash-core delegate)", async () => {
+  it("restores via a real document chooser sourced from recoverable Trash entries (F-03)", async () => {
     const fetchMock = stubRoutes();
     renderPage();
-    await screen.findByText("Appendix");
+    await screen.findByText("Appendix body.");
 
-    fireEvent.change(screen.getByLabelText("Document id to restore"), {
-      target: { value: "mdoc_2" },
-    });
+    fireEvent.click(screen.getByRole("button", { name: "Restore a Document" }));
+    const picker = await screen.findByLabelText("Document to restore");
+    expect(screen.getByText("Appendix (mdoc_2)")).toBeTruthy();
+    fireEvent.change(picker, { target: { value: "mdoc_2" } });
     fireEvent.click(screen.getByRole("button", { name: "Restore" }));
 
     expect(await screen.findByText(/Restored “Appendix” — mdoc_2 is active\./)).toBeTruthy();
+    const entriesInit = callFor(fetchMock, "GET", "/trash-entries");
+    expect(entriesInit).toBeTruthy();
+    const entriesUrl = String(
+      fetchMock.mock.calls.find(([u]) => String(u).includes("/trash-entries"))?.[0],
+    );
+    expect(entriesUrl).toContain("object_type=manual_document");
     const init = callFor(fetchMock, "POST", ":restore");
     expect(init.body).toBeUndefined();
     expect(headersOf(init)["Idempotency-Key"]).toBeTruthy();

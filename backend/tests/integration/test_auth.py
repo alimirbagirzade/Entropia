@@ -33,10 +33,13 @@ from entropia.infrastructure.postgres.models import (
     HumanCredential,
     OutboxEvent,
     Principal,
+    ReauthProof,
 )
 from entropia.shared.errors import (
     InvalidCredentialsError,
     PasswordPolicyError,
+    ReauthProofInvalidError,
+    ReauthRequiredError,
     ServiceLineForbiddenError,
     SessionInvalidError,
     UsernameTakenError,
@@ -384,3 +387,188 @@ async def test_production_profile_rejects_bare_actor_header_impersonation(
     # The Bearer session decides the actor; a mismatched X-Actor-Id is ignored,
     # not honored as an impersonation vector.
     assert ctx2.actor.principal_id == signup["user_id"]
+
+
+# ---- F-21: real re-authentication proof for Permanent Delete (doc 20 §8.3) ----
+
+
+async def _reauth_failed_events(session: AsyncSession) -> list[AuditEvent]:
+    async with _audit_factory(session)() as read:
+        result = await read.execute(
+            select(AuditEvent).where(AuditEvent.event_kind == "auth.reauth_failed")
+        )
+        return list(result.scalars().all())
+
+
+async def test_reauthenticate_mints_single_use_proof_and_audits(session: AsyncSession) -> None:
+    signup = await auth_cmd.sign_up(session, username="alice", password=PASSWORD)
+    result = await auth_cmd.reauthenticate(
+        session,
+        user_id=signup["user_id"],
+        password=PASSWORD,
+        purpose="trash_purge",
+        ttl_minutes=5,
+    )
+
+    proof = result["reauth_proof"]
+    record = (
+        await session.execute(
+            select(ReauthProof).where(ReauthProof.proof_hash == hash_token(proof))
+        )
+    ).scalar_one()
+    assert record.user_id == signup["user_id"]
+    assert record.purpose == "trash_purge"
+    assert record.used_at is None
+    assert proof not in (record.proof_hash,)  # raw token never persisted
+
+    audits = (
+        (
+            await session.execute(
+                select(AuditEvent).where(AuditEvent.event_kind == "auth.reauth_verified")
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(audits) == 1
+    assert audits[0].actor_principal_id == signup["user_id"]
+    assert audits[0].target_entity_id == record.proof_id
+
+    # F-21 acceptance: consuming works exactly once (replay is rejected).
+    await auth_cmd.consume_reauth_proof(
+        session, user_id=signup["user_id"], purpose="trash_purge", proof=proof
+    )
+    await session.flush()
+    assert record.used_at is not None
+    with pytest.raises(ReauthProofInvalidError):
+        await auth_cmd.consume_reauth_proof(
+            session, user_id=signup["user_id"], purpose="trash_purge", proof=proof
+        )
+
+
+async def test_reauthenticate_rejects_wrong_password_and_audits(session: AsyncSession) -> None:
+    signup = await auth_cmd.sign_up(session, username="alice", password=PASSWORD)
+    factory = _audit_factory(session)
+
+    with pytest.raises(InvalidCredentialsError):
+        await auth_cmd.reauthenticate(
+            session,
+            user_id=signup["user_id"],
+            password="wrong-password!",
+            purpose="trash_purge",
+            ttl_minutes=5,
+            audit_session_factory=factory,
+        )
+
+    events = await _reauth_failed_events(session)
+    assert len(events) == 1
+    assert events[0].actor_principal_id == signup["user_id"]  # already-authenticated actor
+    assert events[0].reason == "invalid_credentials"
+    assert events[0].event_metadata == {"purpose": "trash_purge"}
+    assert "wrong-password!" not in str(events[0].event_metadata)
+
+
+async def test_reauthenticate_rejects_unknown_or_disabled_actor(session: AsyncSession) -> None:
+    factory = _audit_factory(session)
+    # No such human_users row at all (e.g. an Agent principal id).
+    with pytest.raises(InvalidCredentialsError):
+        await auth_cmd.reauthenticate(
+            session,
+            user_id="agent_alpha",
+            password=PASSWORD,
+            purpose="trash_purge",
+            ttl_minutes=5,
+            audit_session_factory=factory,
+        )
+
+    signup = await auth_cmd.sign_up(session, username="bob", password=PASSWORD)
+    from entropia.infrastructure.postgres.models import HumanUser
+
+    user = await session.get(HumanUser, signup["user_id"])
+    assert user is not None
+    user.status = "locked"
+    await session.flush()
+    with pytest.raises(InvalidCredentialsError):
+        await auth_cmd.reauthenticate(
+            session,
+            user_id=signup["user_id"],
+            password=PASSWORD,
+            purpose="trash_purge",
+            ttl_minutes=5,
+            audit_session_factory=factory,
+        )
+
+
+async def test_consume_reauth_proof_rejects_missing_arbitrary_wrong_scope_and_expired(
+    session: AsyncSession,
+) -> None:
+    signup = await auth_cmd.sign_up(session, username="alice", password=PASSWORD)
+    other = await auth_cmd.sign_up(session, username="carol", password=PASSWORD)
+
+    # Missing / blank proof -> REAUTH_REQUIRED (distinct from an invalid one).
+    with pytest.raises(ReauthRequiredError):
+        await auth_cmd.consume_reauth_proof(
+            session, user_id=signup["user_id"], purpose="trash_purge", proof=None
+        )
+    with pytest.raises(ReauthRequiredError):
+        await auth_cmd.consume_reauth_proof(
+            session, user_id=signup["user_id"], purpose="trash_purge", proof="   "
+        )
+
+    # F-21's core contract: arbitrary non-empty text is NOT a valid proof.
+    with pytest.raises(ReauthProofInvalidError):
+        await auth_cmd.consume_reauth_proof(
+            session,
+            user_id=signup["user_id"],
+            purpose="trash_purge",
+            proof="just some text I typed",
+        )
+
+    minted = await auth_cmd.reauthenticate(
+        session,
+        user_id=signup["user_id"],
+        password=PASSWORD,
+        purpose="trash_purge",
+        ttl_minutes=5,
+    )
+    proof = minted["reauth_proof"]
+
+    # Wrong purpose -> rejected even though the proof itself is real and fresh.
+    with pytest.raises(ReauthProofInvalidError):
+        await auth_cmd.consume_reauth_proof(
+            session, user_id=signup["user_id"], purpose="some_other_action", proof=proof
+        )
+    # Bound to a DIFFERENT principal -> rejected (no cross-account reuse).
+    with pytest.raises(ReauthProofInvalidError):
+        await auth_cmd.consume_reauth_proof(
+            session, user_id=other["user_id"], purpose="trash_purge", proof=proof
+        )
+
+    # Expired -> rejected even for the right user/purpose.
+    expired = await auth_cmd.reauthenticate(
+        session,
+        user_id=signup["user_id"],
+        password=PASSWORD,
+        purpose="trash_purge",
+        ttl_minutes=5,
+    )
+    record = (
+        await session.execute(
+            select(ReauthProof).where(ReauthProof.proof_hash == hash_token(expired["reauth_proof"]))
+        )
+    ).scalar_one()
+    record.expires_at = datetime.now(UTC) - timedelta(seconds=1)
+    await session.flush()
+    with pytest.raises(ReauthProofInvalidError):
+        await auth_cmd.consume_reauth_proof(
+            session,
+            user_id=signup["user_id"],
+            purpose="trash_purge",
+            proof=expired["reauth_proof"],
+        )
+
+    # The originally-minted, correctly-scoped proof is still untouched by all
+    # of the above rejections and consumes cleanly.
+    await auth_cmd.consume_reauth_proof(
+        session, user_id=signup["user_id"], purpose="trash_purge", proof=proof
+    )

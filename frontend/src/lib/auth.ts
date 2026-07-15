@@ -67,3 +67,25 @@ export function useLogout() {
     onSuccess: () => queryClient.invalidateQueries(),
   });
 }
+
+// F-21: a closed set of sensitive actions a re-authentication proof may be
+// minted for — mirrors the backend's `ReauthPurpose` Literal (apps/api/routes/
+// auth.py). A client can never scope a proof to an action it wasn't issued for.
+export type ReauthPurpose = "trash_purge";
+
+export interface ReauthResult {
+  reauth_proof: string;
+  expires_at: string;
+}
+
+// Re-verifies the ALREADY-authenticated session's password and mints a
+// short-lived, single-use, purpose-scoped proof (doc 20 §8.3). This is a
+// re-auth STEP on top of the live session, not a second login — it never
+// touches the stored session token. No query invalidation: the proof is a
+// transient credential, not read-model state.
+export function useReauth() {
+  return useMutation({
+    mutationFn: (input: { password: string; purpose: ReauthPurpose }) =>
+      api.post<ReauthResult>("/auth/reauth", input),
+  });
+}

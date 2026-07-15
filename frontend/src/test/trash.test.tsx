@@ -88,9 +88,15 @@ const PURGE_RESULT = {
   correlation_id: "corr-9",
 };
 
+const REAUTH_RESULT = {
+  reauth_proof: "server-minted-proof-token",
+  expires_at: "2026-07-06T10:05:00+00:00",
+};
+
 // Order matters for the fragment-matching stub: the purge + restore + detail
 // routes must precede the list route (each contains "/trash-entries").
 const BASE_ROUTES = {
+  "POST /auth/reauth": REAUTH_RESULT,
   "POST /trash-entries/t_1/purge": PURGE_RESULT,
   "POST /trash-entries/t_1/restore": RESTORE_RESULT,
   "GET /trash-entries/t_1": ENTRY_DETAIL,
@@ -173,17 +179,23 @@ describe("Trash page", () => {
     });
   });
 
-  it("opens the entry detail with the immutable snapshots", async () => {
+  it("opens the UPPER snapshot panel (above the table) with the immutable snapshots", async () => {
     stubApi(BASE_ROUTES);
     renderPage();
     await screen.findByText("Backtest Alpha");
 
-    fireEvent.click(screen.getAllByRole("button", { name: "Detail" })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: "Open Snapshot" })[0]);
 
     expect(await screen.findByText("Deletion snapshot")).toBeInTheDocument();
     expect(screen.getByText("Dependency snapshot")).toBeInTheDocument();
     // The dependency snapshot renders its raw JSON (a ref only in the detail).
     expect(screen.getByText(/"e_9"/)).toBeInTheDocument();
+    // UI-20: the snapshot panel sits ABOVE the table, not below it.
+    const panelHeading = screen.getByText("Snapshot: Backtest Alpha");
+    const table = screen.getByRole("table");
+    expect(
+      panelHeading.compareDocumentPosition(table) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("refetches the index when the ['trash'] SSE prefix is invalidated", async () => {
@@ -228,7 +240,7 @@ describe("Trash page", () => {
     expect(screen.getAllByRole("button", { name: "Permanent Delete" })).toHaveLength(1);
   });
 
-  it("gates the purge behind an exact object name and a re-auth proof", async () => {
+  it("gates the purge behind an exact object name and an Admin password", async () => {
     stubApi(BASE_ROUTES);
     renderPage();
     await screen.findByText("Backtest Alpha");
@@ -245,12 +257,12 @@ describe("Trash page", () => {
     expect(confirm).toBeDisabled();
 
     // A wrong phrase shows the mismatch hint and keeps Confirm disabled even
-    // once the re-auth proof is present.
+    // once a password is present.
     fireEvent.change(screen.getByLabelText(/Type the object name to confirm/), {
       target: { value: "Wrong Name" },
     });
-    fireEvent.change(screen.getByLabelText(/Admin re-authentication proof/), {
-      target: { value: "reauth-token" },
+    fireEvent.change(screen.getByLabelText(/Admin password/), {
+      target: { value: "correct-horse-battery" },
     });
     expect(
       screen.getByText("The confirmation phrase must match the object name exactly."),
@@ -264,7 +276,7 @@ describe("Trash page", () => {
     expect(confirm).toBeEnabled();
   });
 
-  it("requests the purge with the confirmation phrase, re-auth proof, OCC and a fresh Idempotency-Key", async () => {
+  it("re-authenticates FIRST (F-21), then requests the purge with the server-minted proof, OCC and a fresh Idempotency-Key", async () => {
     const fetchMock = stubApi(BASE_ROUTES);
     renderPage();
     await screen.findByText("Backtest Alpha");
@@ -273,8 +285,8 @@ describe("Trash page", () => {
     fireEvent.change(screen.getByLabelText(/Type the object name to confirm/), {
       target: { value: "Backtest Alpha" },
     });
-    fireEvent.change(screen.getByLabelText(/Admin re-authentication proof/), {
-      target: { value: "reauth-token" },
+    fireEvent.change(screen.getByLabelText(/Admin password/), {
+      target: { value: "correct-horse-battery" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Confirm permanent delete" }));
 
@@ -285,6 +297,15 @@ describe("Trash page", () => {
       ),
     ).toBeInTheDocument();
 
+    const reauthCall = fetchMock.mock.calls.find(
+      ([url, init]) => String(url).includes("/auth/reauth") && init?.method === "POST",
+    );
+    expect(reauthCall).toBeDefined();
+    expect(JSON.parse(String((reauthCall?.[1] as RequestInit).body))).toEqual({
+      password: "correct-horse-battery",
+      purpose: "trash_purge",
+    });
+
     const purgeCall = fetchMock.mock.calls.find(
       ([url, init]) => String(url).includes("/trash-entries/t_1/purge") && init?.method === "POST",
     );
@@ -292,11 +313,45 @@ describe("Trash page", () => {
     const init = purgeCall?.[1] as RequestInit;
     expect(JSON.parse(String(init.body))).toEqual({
       confirmation_phrase: "Backtest Alpha",
-      reauth_proof: "reauth-token",
+      // The purge NEVER carries the typed password — only the server-minted
+      // proof token returned by /auth/reauth.
+      reauth_proof: "server-minted-proof-token",
       // OCC: the body carries the entry's row_version as the expected head.
       expected_head_revision_id: 4,
     });
     expect((init.headers as Record<string, string>)["Idempotency-Key"]).toBeTruthy();
+
+    // The re-auth call happened strictly before the purge call.
+    const reauthIndex = fetchMock.mock.calls.indexOf(reauthCall!);
+    const purgeIndex = fetchMock.mock.calls.indexOf(purgeCall!);
+    expect(reauthIndex).toBeLessThan(purgeIndex);
+  });
+
+  it("blocks the purge entirely on a wrong password — the purge endpoint is never called", async () => {
+    const fetchMock = stubApi({
+      ...BASE_ROUTES,
+      "POST /auth/reauth": () => {
+        throw new Error("INVALID_CREDENTIALS: Invalid username or password.");
+      },
+    });
+    renderPage();
+    await screen.findByText("Backtest Alpha");
+
+    fireEvent.click(screen.getByRole("button", { name: "Permanent Delete" }));
+    fireEvent.change(screen.getByLabelText(/Type the object name to confirm/), {
+      target: { value: "Backtest Alpha" },
+    });
+    fireEvent.change(screen.getByLabelText(/Admin password/), {
+      target: { value: "wrong-password" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Confirm permanent delete" }));
+
+    expect(
+      await screen.findByText("INVALID_CREDENTIALS: Invalid username or password."),
+    ).toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.find(([url]) => String(url).includes("/trash-entries/t_1/purge")),
+    ).toBeUndefined();
   });
 
   it("surfaces a purge rejection verbatim (server re-validates OCC)", async () => {
@@ -313,8 +368,8 @@ describe("Trash page", () => {
     fireEvent.change(screen.getByLabelText(/Type the object name to confirm/), {
       target: { value: "Backtest Alpha" },
     });
-    fireEvent.change(screen.getByLabelText(/Admin re-authentication proof/), {
-      target: { value: "reauth-token" },
+    fireEvent.change(screen.getByLabelText(/Admin password/), {
+      target: { value: "correct-horse-battery" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Confirm permanent delete" }));
 

@@ -14,6 +14,7 @@ from __future__ import annotations
 import pytest
 from sqlalchemy import func, select
 
+from entropia.application.commands import auth as auth_cmd
 from entropia.application.commands.backtest_run import soft_delete_backtest_result
 from entropia.application.commands.deletion import (
     request_purge,
@@ -33,6 +34,8 @@ from entropia.infrastructure.postgres.models import (
     AuditEvent,
     BacktestResult,
     EntityRegistry,
+    HumanCredential,
+    HumanUser,
     Job,
     Principal,
     TrashEntry,
@@ -47,10 +50,12 @@ from entropia.shared.errors import (
     PurgeInProgressError,
     PurgeNotEligibleError,
     RationaleFamilyInUseError,
+    ReauthProofInvalidError,
     ReauthRequiredError,
     StaleRevisionError,
     TrashAccessForbiddenError,
 )
+from entropia.shared.passwords import PASSWORD_ALGORITHM, hash_password
 
 pytestmark = pytest.mark.integration
 
@@ -58,9 +63,50 @@ ADMIN = Actor(principal_id="user_admin", principal_type=PrincipalType.HUMAN, rol
 USER = Actor(principal_id="user_1", principal_type=PrincipalType.HUMAN, role=Role.USER)
 AGENT = Actor(principal_id="agent_alpha", principal_type=PrincipalType.AGENT, role=None)
 
+ADMIN_PASSWORD = "correct-horse-battery-admin"
+
 
 async def _count(session, model) -> int:
     return int((await session.execute(select(func.count()).select_from(model))).scalar_one())
+
+
+async def _mint_reauth_proof(session, *, purpose: str = "trash_purge") -> str:
+    """F-21: the ADMIN test actor is a plain ``Actor`` dataclass, not a real
+    signed-up account — ``reauth_proofs.user_id`` FKs to ``human_users``, so
+    give it a real row once, then mint a REAL proof through the same
+    ``reauthenticate`` command the HTTP route uses (no test-only shortcut)."""
+    if await session.get(Principal, ADMIN.principal_id) is None:
+        session.add(Principal(principal_id=ADMIN.principal_id, principal_type=PrincipalType.HUMAN))
+        await session.flush()
+    if await session.get(HumanUser, ADMIN.principal_id) is None:
+        session.add(
+            HumanUser(
+                user_id=ADMIN.principal_id,
+                username="admin_test",
+                display_name="Admin",
+                current_role=Role.ADMIN,
+                status="active",
+                version=1,
+            )
+        )
+        await session.flush()
+    if await session.get(HumanCredential, ADMIN.principal_id) is None:
+        session.add(
+            HumanCredential(
+                user_id=ADMIN.principal_id,
+                password_hash=hash_password(ADMIN_PASSWORD),
+                algorithm=PASSWORD_ALGORITHM,
+            )
+        )
+        await session.flush()
+    result = await auth_cmd.reauthenticate(
+        session,
+        user_id=ADMIN.principal_id,
+        password=ADMIN_PASSWORD,
+        purpose=purpose,
+        ttl_minutes=5,
+    )
+    return str(result["reauth_proof"])
 
 
 async def _delete_one(session, *, entity_type: str = "demo_entity") -> str:
@@ -130,7 +176,7 @@ async def test_trash_surfaces_reject_non_admin(session, actor: Actor) -> None:
             actor,
             trash_entry_id=entry.id,
             confirmation_phrase=entity_id,
-            reauth_proof="proof",
+            reauth_proof="irrelevant",  # role check runs before any proof lookup
         )
 
 
@@ -287,13 +333,23 @@ async def test_purge_request_validations(session) -> None:
             confirmation_phrase=entity_id,
             reauth_proof="  ",
         )
+    # F-21: an arbitrary non-empty string is NOT a valid proof — the core
+    # acceptance criterion this slice fixes (it used to be accepted).
+    with pytest.raises(ReauthProofInvalidError):
+        await request_purge(
+            session,
+            ADMIN,
+            trash_entry_id=entry.id,
+            confirmation_phrase=entity_id,
+            reauth_proof="just some arbitrary text, not a real proof",
+        )
     with pytest.raises(PurgeConfirmationInvalidError):
         await request_purge(
             session,
             ADMIN,
             trash_entry_id=entry.id,
             confirmation_phrase="wrong-name",
-            reauth_proof="proof",
+            reauth_proof=await _mint_reauth_proof(session),
         )
     await session.rollback()
     assert (await _entry_for(session, entity_id)).status == TrashEntryStatus.SOFT_DELETED
@@ -310,7 +366,7 @@ async def test_purge_two_phase_flow_completes_with_tombstone(session) -> None:
         ADMIN,
         trash_entry_id=trash_id,
         confirmation_phrase=entity_id,
-        reauth_proof="proof",
+        reauth_proof=await _mint_reauth_proof(session),
         expected_head_revision_id=1,
     )
     await session.commit()
@@ -333,7 +389,7 @@ async def test_purge_two_phase_flow_completes_with_tombstone(session) -> None:
             ADMIN,
             trash_entry_id=trash_id,
             confirmation_phrase=entity_id,
-            reauth_proof="proof",
+            reauth_proof=await _mint_reauth_proof(session),
         )
     await session.rollback()
 
@@ -368,18 +424,21 @@ async def test_purge_request_idempotency_key_replays_same_job(session) -> None:
         ADMIN,
         trash_entry_id=entry.id,
         confirmation_phrase=entity_id,
-        reauth_proof="proof",
+        reauth_proof=await _mint_reauth_proof(session),
         idempotency_key="purge-key-1",
     )
     await session.commit()
     jobs_before = await _count(session, Job)
 
+    # The idempotency-key REPLAY never re-checks the proof (run_idempotent
+    # short-circuits before `_op` runs) — an arbitrary string here proves the
+    # replay path genuinely never re-consumes or re-verifies a proof.
     replay = await request_purge(
         session,
         ADMIN,
         trash_entry_id=entry.id,
         confirmation_phrase=entity_id,
-        reauth_proof="proof",
+        reauth_proof="not-a-real-proof-and-that-is-fine-on-replay",
         idempotency_key="purge-key-1",
     )
     await session.commit()
@@ -396,7 +455,7 @@ async def test_purge_worker_failure_returns_root_to_soft_deleted(session, monkey
         ADMIN,
         trash_entry_id=entry.id,
         confirmation_phrase=entity_id,
-        reauth_proof="proof",
+        reauth_proof=await _mint_reauth_proof(session),
     )
     await session.commit()
 
@@ -495,7 +554,7 @@ async def test_backtest_result_trash_roundtrip(session) -> None:
         ADMIN,
         trash_entry_id=entry2.id,
         confirmation_phrase="res_trash_1",
-        reauth_proof="proof",
+        reauth_proof=await _mint_reauth_proof(session),
     )
     await session.commit()
     await purge_job.run_purge(session, accepted["purge_job_id"])

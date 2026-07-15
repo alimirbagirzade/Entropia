@@ -1927,6 +1927,45 @@
         "title": "ReadyResponse",
         "type": "object"
       },
+      "ReauthRequest": {
+        "properties": {
+          "password": {
+            "maxLength": 1024,
+            "minLength": 1,
+            "title": "Password",
+            "type": "string"
+          },
+          "purpose": {
+            "const": "trash_purge",
+            "title": "Purpose",
+            "type": "string"
+          }
+        },
+        "required": [
+          "password",
+          "purpose"
+        ],
+        "title": "ReauthRequest",
+        "type": "object"
+      },
+      "ReauthResponse": {
+        "properties": {
+          "expires_at": {
+            "title": "Expires At",
+            "type": "string"
+          },
+          "reauth_proof": {
+            "title": "Reauth Proof",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reauth_proof",
+          "expires_at"
+        ],
+        "title": "ReauthResponse",
+        "type": "object"
+      },
       "RegisterInstrumentRequest": {
         "properties": {
           "aliases": {
@@ -5120,6 +5159,48 @@
           }
         },
         "summary": "Logout",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/reauth": {
+      "post": {
+        "description": "F-21: re-verify the ALREADY-authenticated actor's password and mint a\nshort-lived, single-use, purpose-scoped proof (doc 20 §8.3). Requires the\nsame session the client is already using — this is a re-auth STEP, not a\nsecond login. A non-human actor (Agent/service line) or an unknown\npassword both fall through to the same 401 INVALID_CREDENTIALS as login\n(:func:`auth_commands.reauthenticate` resolves no ``HumanUser`` row for a\nnon-human principal id and rejects uniformly).",
+        "operationId": "reauth_api_v1_auth_reauth_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReauthRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReauthResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reauth",
         "tags": [
           "auth"
         ]

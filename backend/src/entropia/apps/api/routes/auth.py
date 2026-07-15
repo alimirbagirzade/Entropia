@@ -8,16 +8,23 @@ jobs, or other users' sessions (M1 §4.3).
 
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from entropia.application.commands import auth as auth_commands
-from entropia.apps.api.deps import bearer_token, db_session
+from entropia.apps.api.deps import RequestContext, bearer_token, db_session, request_context
 from entropia.config import get_settings
+from entropia.domain.identity.policy import require_authenticated
 from entropia.shared.errors import SessionInvalidError
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+# F-21 purposes a re-authentication proof may be minted for — a closed set so
+# a client can never scope a proof to an action it wasn't actually issued for.
+ReauthPurpose = Literal["trash_purge"]
 
 
 class SignUpRequest(BaseModel):
@@ -57,6 +64,16 @@ class BootstrapStatusResponse(BaseModel):
     # Booleans only — no email echo, no PII (see auth_commands.bootstrap_status).
     bootstrap_configured: bool
     active_admin_exists: bool
+
+
+class ReauthRequest(BaseModel):
+    password: str = Field(min_length=1, max_length=1024)
+    purpose: ReauthPurpose
+
+
+class ReauthResponse(BaseModel):
+    reauth_proof: str
+    expires_at: str
 
 
 @router.post("/signup", response_model=SignUpResponse, status_code=201)
@@ -126,3 +143,29 @@ async def bootstrap_status(
         bootstrap_admin_email=settings.bootstrap_admin_email or None,
     )
     return BootstrapStatusResponse(**result)
+
+
+@router.post("/reauth", response_model=ReauthResponse)
+async def reauth(
+    body: ReauthRequest,
+    request: Request,
+    ctx: RequestContext = Depends(request_context),
+) -> ReauthResponse:
+    """F-21: re-verify the ALREADY-authenticated actor's password and mint a
+    short-lived, single-use, purpose-scoped proof (doc 20 §8.3). Requires the
+    same session the client is already using — this is a re-auth STEP, not a
+    second login. A non-human actor (Agent/service line) or an unknown
+    password both fall through to the same 401 INVALID_CREDENTIALS as login
+    (:func:`auth_commands.reauthenticate` resolves no ``HumanUser`` row for a
+    non-human principal id and rejects uniformly)."""
+    require_authenticated(ctx.actor)
+    settings = get_settings()
+    result = await auth_commands.reauthenticate(
+        ctx.session,
+        user_id=ctx.actor.principal_id or "",
+        password=body.password,
+        purpose=body.purpose,
+        ttl_minutes=settings.reauth_proof_ttl_minutes,
+        correlation_id=getattr(request.state, "correlation_id", ""),
+    )
+    return ReauthResponse(**result)

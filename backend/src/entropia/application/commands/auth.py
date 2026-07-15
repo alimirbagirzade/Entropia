@@ -25,6 +25,7 @@ from entropia.infrastructure.postgres.models import (
     HumanCredential,
     HumanUser,
     Principal,
+    ReauthProof,
 )
 from entropia.infrastructure.postgres.repositories import audit as audit_repo
 from entropia.infrastructure.postgres.repositories import auth as auth_repo
@@ -32,6 +33,8 @@ from entropia.infrastructure.postgres.repositories import identity as identity_r
 from entropia.shared.errors import (
     InvalidCredentialsError,
     PasswordPolicyError,
+    ReauthProofInvalidError,
+    ReauthRequiredError,
     SessionInvalidError,
     UsernameTakenError,
     ValidationError,
@@ -395,12 +398,140 @@ async def logout(session: AsyncSession, *, token: str, correlation_id: str = "")
     return {"session_id": record.session_id, "revoked": True, "changed": True}
 
 
+async def _record_reauth_failure(
+    user_id: str,
+    purpose: str,
+    correlation_id: str,
+    audit_session_factory: async_sessionmaker[AsyncSession] | None,
+) -> None:
+    """Persist a durable ``auth.reauth_failed`` audit (F-21) that SURVIVES the
+    request rollback that follows the 401 — mirrors :func:`_record_login_failure`.
+    Unlike login, the actor is already authenticated (this is a re-auth STEP,
+    not first authentication), so the target user id is not sensitive here."""
+    factory = audit_session_factory or get_session_factory()
+    try:
+        async with factory() as audit_session:
+            audit_repo.add_audit_event(
+                audit_session,
+                event_kind="auth.reauth_failed",
+                actor_principal_id=user_id,
+                actor_kind=ActorKind.HUMAN,
+                target_entity_id=user_id,
+                target_entity_type=_TARGET_TYPE,
+                severity="warning",
+                reason="invalid_credentials",
+                correlation_id=correlation_id,
+                metadata={"purpose": purpose},
+            )
+            await audit_session.commit()
+    except Exception:
+        log.exception("auth.reauth_failed_audit_write_failed", correlation_id=correlation_id)
+
+
+async def reauthenticate(
+    session: AsyncSession,
+    *,
+    user_id: str,
+    password: str,
+    purpose: str,
+    ttl_minutes: int,
+    correlation_id: str = "",
+    audit_session_factory: async_sessionmaker[AsyncSession] | None = None,
+) -> dict[str, Any]:
+    """Verify the ALREADY-authenticated human's password again and mint a
+    short-lived, single-use, purpose-scoped proof token (F-21, doc 20 §8.3).
+
+    Every rejection is the same 401 INVALID_CREDENTIALS (mirrors login's
+    user-enumeration hardening — a timing pad on the "no credential" path) and
+    a durable ``auth.reauth_failed`` audit survives the request rollback. The
+    raw proof token is returned once here and persisted only as a SHA-256
+    digest — the same shape as a session token (:func:`hash_token`).
+    """
+    user = await session.get(HumanUser, user_id)
+    credential = await auth_repo.get_credential(session, user_id) if user is not None else None
+    verified = (
+        credential is not None
+        and user is not None
+        and user.status == "active"
+        and user.deletion_state == DeletionState.ACTIVE
+        and verify_password(credential.password_hash, password)
+    )
+    if not verified:
+        if credential is None:
+            verify_password(DUMMY_HASH, password)  # timing pad
+        await _record_reauth_failure(user_id, purpose, correlation_id, audit_session_factory)
+        raise InvalidCredentialsError()
+    assert credential is not None  # narrows for mypy; implied by `verified`
+    if needs_rehash(credential.password_hash):
+        credential.password_hash = hash_password(password)
+
+    proof = secrets.token_urlsafe(32)
+    now = datetime.now(UTC)
+    record = ReauthProof(
+        proof_id=new_id("rap"),
+        user_id=user_id,
+        purpose=purpose,
+        proof_hash=hash_token(proof),
+        issued_at=now,
+        expires_at=now + timedelta(minutes=ttl_minutes),
+    )
+    session.add(record)
+
+    audit_repo.add_audit_event(
+        session,
+        event_kind="auth.reauth_verified",
+        actor_principal_id=user_id,
+        actor_kind=ActorKind.HUMAN,
+        target_entity_id=record.proof_id,
+        target_entity_type="reauth_proof",
+        new_state="issued",
+        correlation_id=correlation_id,
+        metadata={"purpose": purpose},
+    )
+    return {"reauth_proof": proof, "expires_at": record.expires_at.isoformat()}
+
+
+async def consume_reauth_proof(
+    session: AsyncSession, *, user_id: str, purpose: str, proof: str | None
+) -> None:
+    """Verify and CONSUME a re-authentication proof for a sensitive action
+    (F-21). Raises :class:`ReauthRequiredError` for a missing/empty proof and
+    :class:`ReauthProofInvalidError` for anything that fails verification
+    (unknown, wrong purpose, wrong principal, expired, already used) — no
+    arbitrary non-empty string can substitute for a real proof minted by
+    :func:`reauthenticate`.
+
+    Marks the proof used IN THE CALLER'S transaction so it is consumed
+    atomically with the action it authorizes — a concurrent replay of the same
+    token either loses the row lock race or observes ``used_at`` already set,
+    never both callers succeeding.
+    """
+    if not proof or not proof.strip():
+        raise ReauthRequiredError()
+    record = await auth_repo.get_reauth_proof_by_hash(session, hash_token(proof.strip()))
+    now = datetime.now(UTC)
+    if (
+        record is None
+        or record.user_id != user_id
+        or record.purpose != purpose
+        or record.used_at is not None
+        or record.expires_at <= now
+    ):
+        raise ReauthProofInvalidError()
+    await session.refresh(record, with_for_update=True)
+    if record.used_at is not None:  # re-check under the row lock (replay race)
+        raise ReauthProofInvalidError()
+    record.used_at = now
+
+
 __all__ = [
     "bootstrap_admin_matches",
     "bootstrap_is_configured",
     "bootstrap_status",
+    "consume_reauth_proof",
     "hash_token",
     "login",
     "logout",
+    "reauthenticate",
     "sign_up",
 ]

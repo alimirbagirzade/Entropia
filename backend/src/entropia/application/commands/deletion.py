@@ -22,6 +22,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from entropia.application.commands.auth import consume_reauth_proof
 from entropia.application.idempotency import run_idempotent
 from entropia.domain.identity import Actor
 from entropia.domain.identity.policy import ensure_can_edit, require_trash_admin
@@ -39,11 +40,12 @@ from entropia.shared.errors import (
     ObjectAlreadyPurgedError,
     PurgeConfirmationInvalidError,
     PurgeInProgressError,
-    ReauthRequiredError,
     RestoreConflictError,
     StaleRevisionError,
     TrashEntryNotFoundError,
 )
+
+_TRASH_PURGE_REAUTH_PURPOSE = "trash_purge"
 
 PURGE_QUEUE = "maintenance"
 RESULT_ENTITY_TYPE = "backtest_result"
@@ -522,15 +524,25 @@ async def request_purge(
     """Admin Permanent Delete request (doc 20 §8.3): second confirmation + re-auth
     + OCC + idempotency -> target ``purge_pending`` + durable purge job (202).
 
-    The V1 re-auth contract requires a non-empty proof token from a completed
-    Admin re-authentication step; full MFA verification is out of scope (doc 20
-    §0). The confirmation phrase must match the object's display identity.
+    The re-auth proof (F-21) must be a real, unexpired, single-use token minted
+    by ``POST /auth/reauth`` for the ``trash_purge`` purpose and bound to THIS
+    actor — no arbitrary non-empty string can authorize a purge (doc 20 §0/§8.3;
+    full MFA verification stays out of scope). The confirmation phrase must
+    match the object's display identity.
     """
     require_trash_admin(actor)
-    if not reauth_proof or not reauth_proof.strip():
-        raise ReauthRequiredError()
 
     async def _op() -> dict[str, Any]:
+        # Consumed INSIDE the idempotent operation: run_idempotent skips this
+        # closure entirely on a cache-hit replay, so a legitimate retry of an
+        # already-succeeded request never re-checks (and never re-rejects) the
+        # proof it already spent on the first, successful attempt.
+        await consume_reauth_proof(
+            session,
+            user_id=actor.principal_id or "",
+            purpose=_TRASH_PURGE_REAUTH_PURPOSE,
+            proof=reauth_proof,
+        )
         entry = await trash_repo.get_entry(session, trash_entry_id)
         if entry is None:
             raise TrashEntryNotFoundError()

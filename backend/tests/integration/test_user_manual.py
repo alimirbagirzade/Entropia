@@ -20,6 +20,7 @@ import pytest
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
+from entropia.application.commands import auth as auth_cmd
 from entropia.application.commands.deletion import request_purge
 from entropia.application.commands.manual import (
     create_manual_document,
@@ -54,6 +55,8 @@ from entropia.infrastructure.postgres.models import (
     AgentRuntime,
     ArtifactLink,
     AuditEvent,
+    HumanCredential,
+    HumanUser,
     ManualDocument,
     ManualDocumentRevision,
     ManualSearchChunk,
@@ -77,6 +80,7 @@ from entropia.shared.errors import (
     ManualStreamConflictError,
     ManualTitleRequiredError,
 )
+from entropia.shared.passwords import PASSWORD_ALGORITHM, hash_password
 
 pytestmark = pytest.mark.integration
 
@@ -87,6 +91,47 @@ ADMIN = Actor(
     correlation_id="corr_adm",
 )
 USER = Actor(principal_id="user_1", principal_type=PrincipalType.HUMAN, role=Role.USER)
+
+ADMIN_PASSWORD = "correct-horse-battery-admin"
+
+
+async def _mint_reauth_proof(session, *, purpose: str = "trash_purge") -> str:
+    """F-21: mirrors ``test_trash_page._mint_reauth_proof`` — the ADMIN test
+    actor needs a real ``human_users`` row for the ``reauth_proofs`` FK."""
+    if await session.get(Principal, ADMIN.principal_id) is None:
+        session.add(Principal(principal_id=ADMIN.principal_id, principal_type=PrincipalType.HUMAN))
+        await session.flush()
+    if await session.get(HumanUser, ADMIN.principal_id) is None:
+        session.add(
+            HumanUser(
+                user_id=ADMIN.principal_id,
+                username="admin_test",
+                display_name="Admin",
+                current_role=Role.ADMIN,
+                status="active",
+                version=1,
+            )
+        )
+        await session.flush()
+    if await session.get(HumanCredential, ADMIN.principal_id) is None:
+        session.add(
+            HumanCredential(
+                user_id=ADMIN.principal_id,
+                password_hash=hash_password(ADMIN_PASSWORD),
+                algorithm=PASSWORD_ALGORITHM,
+            )
+        )
+        await session.flush()
+    result = await auth_cmd.reauthenticate(
+        session,
+        user_id=ADMIN.principal_id,
+        password=ADMIN_PASSWORD,
+        purpose=purpose,
+        ttl_minutes=5,
+    )
+    return str(result["reauth_proof"])
+
+
 SUPERVISOR = Actor(
     principal_id="user_sup", principal_type=PrincipalType.HUMAN, role=Role.SUPERVISOR
 )
@@ -421,7 +466,7 @@ async def test_manual_purge_redacts_search_keeps_revisions(session) -> None:
         ADMIN,
         trash_entry_id=entry.id,
         confirmation_phrase="Purgeable",
-        reauth_proof="proof-token",
+        reauth_proof=await _mint_reauth_proof(session),
     )
     await session.commit()
 

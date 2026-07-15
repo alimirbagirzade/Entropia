@@ -13,10 +13,13 @@ from decimal import Decimal
 from typing import Any
 
 from entropia.domain.backtest.engine import (
+    COMPOSITION_CURVE_WARNING,
     ENTRY_MODEL,
     EngineOutput,
+    ItemRun,
     _clamp_to_limits,
     _position_size,
+    combine_item_runs,
     run_engine,
 )
 from entropia.domain.backtest.enums import (
@@ -567,9 +570,7 @@ def test_engine_execution_key_namespace_shifts_with_the_engine_version() -> None
     # The ENGINE_VERSION bump must flow into the manifest so a stale pre-conflict
     # result cannot be reused under the new engine (INF-04 idempotent reuse / INF-05).
     built = _manifest("btrun_A", "snap_A", "2024-01-01T00:00:00Z")
-    assert (
-        built.manifest["identity"]["engine_version"] == "backtest-engine-v2-range-instrument-filter"
-    )
+    assert built.manifest["identity"]["engine_version"] == "backtest-engine-v3-full-composition"
 
 
 def test_stop_exit_default_is_stop_has_priority() -> None:
@@ -685,3 +686,97 @@ def test_run_state_partitions() -> None:
     assert BacktestRunState.SUCCEEDED in RUN_TERMINAL_STATES
     assert {BacktestRunState.FAILED, BacktestRunState.CANCELLED} == RUN_RETRYABLE_STATES
     assert RUN_ACTIVE_STATES.isdisjoint(RUN_TERMINAL_STATES)
+
+
+# ---------------------------------------------------------------------------
+# F-04: full-composition aggregation (combine_item_runs)
+# ---------------------------------------------------------------------------
+
+
+def _strategy_run(item_id: str, *, base_size: str = "50") -> ItemRun:
+    """One executing Strategy ItemRun over the shared long-breakout-then-stop bars."""
+    out = _run(_config(base_size=base_size), _long_breakout_then_stop())
+    return ItemRun(
+        item_id=item_id,
+        item_kind="strategy",
+        root_id=f"root_{item_id}",
+        revision_id=f"rev_{item_id}",
+        output=out,
+    )
+
+
+def test_combine_two_strategies_sums_net_profit_and_unions_trades() -> None:
+    a = _strategy_run("item_a", base_size="50")
+    b = _strategy_run("item_b", base_size="30")
+    combined = combine_item_runs(
+        [a, b],
+        portfolio_initial_capital=Decimal("20000.00"),
+        execution_key="exec_multi",
+        item_count=2,
+    )
+    # Both strategies contribute: net_profit is additive, trades are the union.
+    assert a.output is not None and b.output is not None
+    assert combined.summary["net_profit"] == (
+        a.output.summary["net_profit"] + b.output.summary["net_profit"]
+    )
+    assert combined.summary["total_trades"] == len(a.output.trades) + len(b.output.trades)
+    assert combined.summary["initial_capital"] == Decimal("20000.00")
+    assert combined.summary["final_equity"] == Decimal("20000.00") + combined.summary["net_profit"]
+    # Trades are re-sequenced 1..N with no gaps or dupes.
+    assert [t.seq for t in combined.trades] == list(range(1, len(combined.trades) + 1))
+    # Every decision event is attributed to its originating item (traceability).
+    tagged = {ev.detail.get("item_id") for ev in combined.signal_events}
+    assert tagged == {"item_a", "item_b"}
+    # Per-item breakdown is recorded for both, with the ledger seq range.
+    comp = combined.diagnostics["composition"]
+    assert comp["strategy_count"] == 2
+    ids = {row["item_id"]: row for row in comp["items"]}
+    assert ids["item_a"]["executed"] is True and ids["item_b"]["executed"] is True
+    assert ids["item_a"]["net_profit"] == a.output.summary["net_profit"]
+    assert ids["item_a"]["trade_seq_range"] == [1, len(a.output.trades)]
+    assert COMPOSITION_CURVE_WARNING in combined.diagnostics["warnings"]
+
+
+def test_combine_net_profit_is_order_invariant() -> None:
+    a = _strategy_run("item_a", base_size="50")
+    b = _strategy_run("item_b", base_size="30")
+    forward = combine_item_runs(
+        [a, b], portfolio_initial_capital=Decimal("20000"), execution_key="k", item_count=2
+    )
+    reverse = combine_item_runs(
+        [b, a], portfolio_initial_capital=Decimal("20000"), execution_key="k", item_count=2
+    )
+    # Realized PnL is additive → the portfolio total does not depend on compose order.
+    assert forward.summary["net_profit"] == reverse.summary["net_profit"]
+    assert forward.summary["total_trades"] == reverse.summary["total_trades"]
+
+
+def test_combine_records_non_executing_trading_signal_without_contribution() -> None:
+    strat = _strategy_run("item_a")
+    ts = ItemRun(
+        item_id="item_ts",
+        item_kind="trading_signal",
+        root_id="root_ts",
+        revision_id="rev_ts",
+        output=None,
+    )
+    combined = combine_item_runs(
+        [strat, ts],
+        portfolio_initial_capital=Decimal("10000.00"),
+        execution_key="exec_ts",
+        item_count=2,
+    )
+    assert strat.output is not None
+    # The Trading Signal is pinned + recorded but contributes no trades (V1 boundary).
+    assert combined.summary["net_profit"] == strat.output.summary["net_profit"]
+    assert combined.summary["total_trades"] == len(strat.output.trades)
+    comp = combined.diagnostics["composition"]
+    assert comp["strategy_count"] == 1
+    assert comp["participating_item_count"] == 2
+    ts_row = next(row for row in comp["items"] if row["item_id"] == "item_ts")
+    assert ts_row["executed"] is False
+    assert ts_row["net_profit"] is None
+    assert ts_row["total_trades"] == 0
+    # A lone executing strategy (with a participating TS) does NOT get the multi-curve
+    # sequential warning — only 2+ executing strategies concatenate curves.
+    assert COMPOSITION_CURVE_WARNING not in combined.diagnostics["warnings"]

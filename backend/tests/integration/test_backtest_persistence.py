@@ -787,3 +787,156 @@ async def test_worker_independent_run_uses_the_strategy_own_capital(session) -> 
     diagnostics = await _run_diagnostics(session, out["result_id"])
     assert diagnostics["allocation_enabled"] is False
     assert await _count(session, BacktestResult) == 1
+
+
+# --------------------------------------------------------------------------- #
+# F-04: execute the COMPLETE Mainboard composition (F-24 two-strategy proof)   #
+# --------------------------------------------------------------------------- #
+
+
+async def _seed_indicator_package(session):
+    """One resolvable INDICATOR package (ta.sma) shared by the seeded strategies."""
+    _reg, _pkg_root, pkg_rev = await pkg_repo.create_package(
+        session,
+        owner_principal_id=None,
+        created_by_principal_id=None,
+        package_kind=PackageKind.INDICATOR,
+        input_contract={"source": "close"},
+        output_contract={"kind": "directional_signal"},
+        dependency_snapshot={"resolved": [{"call": "ta.sma", "canonical_key": "ta.sma"}]},
+        visibility_scope=VisibilityScope.PUBLISHED,
+        validation_state=PackageValidationState.PASSED,
+        approval_state=ApprovalState.APPROVED,
+    )
+    await session.flush()
+    return pkg_rev.revision_id
+
+
+async def _attach_strategy(session, actor: Actor, workspace_id: str, *, pkg_rev_id: str):
+    """Seed one Strategy (its own market revision + processed asset) onto a workspace."""
+    market_root, market_rev = await md_repo.create_market_dataset(
+        session,
+        owner_principal_id=None,
+        created_by_principal_id=None,
+        market_data_type=MarketDataType.OHLCV,
+        payload={"note": "seed bars"},
+        instrument_id=None,
+    )
+    market_rev.revision_state = MarketRevisionState.APPROVED
+    await session.flush()
+    md_repo.add_processed_asset(
+        session,
+        entity_id=market_root.entity_id,
+        object_key=f"market/processed/{market_root.entity_id}/seed.parquet",
+        content_digest="seed-bars",
+        size_bytes=4096,
+        revision_id=market_rev.revision_id,
+        row_count=22,
+    )
+    await session.flush()
+    work_object = await mb_cmd.create_work_object(
+        session,
+        actor,
+        object_kind="strategy",
+        payload=_strategy_payload(
+            market_root.entity_id,
+            market_rev.revision_id,
+            market_rev.content_hash,
+            indicator_revision_id=pkg_rev_id,
+        ),
+    )
+    await mb_cmd.attach_mainboard_item(
+        session,
+        actor,
+        workspace_id=workspace_id,
+        root_id=work_object["root_id"],
+        revision_id=work_object["revision_id"],
+        item_kind="strategy",
+    )
+    return work_object["root_id"], work_object["revision_id"]
+
+
+async def _two_strategy_composition(session, actor: Actor) -> tuple[str, list[str]]:
+    """A composition with TWO enabled Strategies (shared indicator, own market rev)."""
+    workspace_id = await _empty_composition(session, actor)
+    pkg_rev_id = await _seed_indicator_package(session)
+    revisions: list[str] = []
+    for _ in range(2):
+        _root, rev = await _attach_strategy(session, actor, workspace_id, pkg_rev_id=pkg_rev_id)
+        revisions.append(rev)
+    await session.commit()
+    return workspace_id, revisions
+
+
+async def test_two_strategy_composition_runs_both_and_composes_one_result(session) -> None:
+    # F-04 / F-24: a Mainboard with two enabled Strategies must include BOTH in the
+    # simulation and the financial result — not just the first (the pre-F-04 bug).
+    await _seed_principals(session)
+    composition_id, revisions = await _two_strategy_composition(session, USER1)
+
+    admit = await backtest_cmd.request_backtest_run(session, USER1, composition_id=composition_id)
+    await session.commit()
+
+    # Both revisions are pinned in the immutable manifest (every participating object).
+    manifest = await bt_repo.get_manifest_by_run(session, admit["run_id"])
+    pinned = {item["selected_revision_id"] for item in manifest.manifest["mainboard_items"]}
+    assert set(revisions) <= pinned
+    assert len(manifest.manifest["mainboard_items"]) == 2
+
+    out = await run_backtest(session, admit["job_id"], stream_bars=_e2e_bars)
+    await session.commit()
+    assert out["state"] == "succeeded"
+
+    # The composite result folds in BOTH strategies (traceable per item).
+    diagnostics = await _run_diagnostics(session, out["result_id"])
+    assert diagnostics["engine_kind"] == "v1_bar_replay_composition"
+    comp = diagnostics["composition"]
+    assert comp["strategy_count"] == 2
+    executed = [row for row in comp["items"] if row["executed"]]
+    assert len(executed) == 2
+    # Each strategy contributed its own trade(s); the portfolio total is their sum.
+    per_item_trades = sum(int(row["total_trades"]) for row in executed)
+    summary_row = (
+        await session.execute(
+            select(ResultSummary).where(ResultSummary.result_id == out["result_id"])
+        )
+    ).scalar_one()
+    assert summary_row.total_trades == per_item_trades
+    assert per_item_trades >= 2  # at least one real trade from EACH of the two strategies
+    # The portfolio is capitalised once per strategy's own capital (independent mode).
+    assert summary_row.headline["initial_capital"] == "20000.00"  # 2 x 10000
+
+
+async def test_disabled_strategy_is_excluded_from_the_result(session) -> None:
+    # F-04 acceptance: a disabled object never affects the result. Disabling one of the
+    # two strategies collapses the run back to a single-strategy result.
+    await _seed_principals(session)
+    composition_id, _revisions = await _two_strategy_composition(session, USER1)
+
+    # Disable the first item on the workspace before admission.
+    mb = await mb_query.get_default_mainboard(session, USER1)
+    first_item = mb["items"][0]
+    await mb_cmd.patch_mainboard_item(
+        session,
+        USER1,
+        item_id=first_item["item_id"],
+        intent="set_enabled",
+        expected_row_version=first_item["row_version"],
+        is_enabled=False,
+    )
+    await session.commit()
+
+    admit = await backtest_cmd.request_backtest_run(session, USER1, composition_id=composition_id)
+    await session.commit()
+    out = await run_backtest(session, admit["job_id"], stream_bars=_e2e_bars)
+    await session.commit()
+    assert out["state"] == "succeeded"
+
+    summary_row = (
+        await session.execute(
+            select(ResultSummary).where(ResultSummary.result_id == out["result_id"])
+        )
+    ).scalar_one()
+    # Only the single enabled strategy's own capital is deployed — the disabled item
+    # contributes nothing (byte-identical single-strategy path).
+    assert summary_row.headline["initial_capital"] == "10000.00"

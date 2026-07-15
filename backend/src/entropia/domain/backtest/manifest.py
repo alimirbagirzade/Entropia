@@ -22,7 +22,7 @@ from typing import Any
 
 from entropia.shared.manifest import manifest_hash
 
-ENGINE_VERSION = "backtest-engine-v2-range-instrument-filter"
+ENGINE_VERSION = "backtest-engine-v3-full-composition"
 METRIC_SET_VERSION = "metric-set-v1"
 OUTPUT_ARTIFACT_PROFILE = "standard-v1"
 

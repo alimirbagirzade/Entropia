@@ -7,15 +7,17 @@ are the source of truth — the request that admitted the run has long since ret
     load job + run + immutable manifest -> mark RUNNING ->
     RE-RESOLVE every pinned revision from the manifest (NO 'latest' fallback;
         any unresolved pin => terminal FAILED, doc 15 §11, §15) ->
-    resolve the primary Strategy's pinned config + its pinned market revision's
-        processed bar source (INF-12); a missing asset => terminal FAILED ->
-    physically filter the bar stream to the strategy's backtest_range + verify
-        the pinned revision's instrument (F-05); an invalid/empty-after-filter
-        range or an instrument mismatch => terminal FAILED ->
-    resolve the pinned indicator plan; an unresolved required dependency =>
-        terminal FAILED (F-06: NEVER the breakout proxy, doc 15 §15) ->
-    bar-replay the deterministic engine (``domain.backtest.engine``) over the
-        streamed OHLCV batches (bounded memory) ->
+    resolve EVERY enabled Strategy's pinned config + its pinned market revision's
+        processed bar source (INF-12); a missing asset => terminal FAILED (F-04) ->
+    for each enabled Strategy: physically filter its bar stream to its backtest_range
+        + verify its pinned revision's instrument (F-05); resolve its pinned indicator
+        plan (F-06: NEVER the breakout proxy); an invalid/empty-after-filter range,
+        instrument mismatch, or unresolved required dependency on ANY enabled Strategy
+        => terminal FAILED (a selected object is never silently dropped) ->
+    bar-replay the deterministic engine (``domain.backtest.engine``) once per enabled
+        Strategy over its streamed OHLCV batches (bounded memory), then COMPOSE every
+        contribution into one portfolio result in deterministic manifest pin order
+        (F-04); a lone Strategy stays byte-identical (no compose step) ->
     ONLY on success: materialize the immutable Result + summary + metrics +
         artifacts (CR-03), back-fill run.result_id, run -> SUCCEEDED ->
     audit + outbox.
@@ -33,7 +35,9 @@ from __future__ import annotations
 
 import itertools
 from collections.abc import Callable, Iterator
+from dataclasses import dataclass
 from datetime import UTC, datetime
+from decimal import Decimal
 from typing import Any
 
 from pydantic import ValidationError
@@ -47,7 +51,13 @@ from entropia.application.queries.market_bars import (
     parse_range_bound,
     resolve_bar_source,
 )
-from entropia.domain.backtest.engine import resolve_allocation_execution, run_engine
+from entropia.domain.backtest.engine import (
+    EngineOutput,
+    ItemRun,
+    combine_item_runs,
+    resolve_allocation_execution,
+    run_engine,
+)
 from entropia.domain.backtest.enums import (
     RUN_TERMINAL_STATES,
     BacktestRunState,
@@ -114,8 +124,11 @@ async def run_backtest(
             message=f"Pinned revisions could not be resolved (no 'latest' fallback): {missing}",
         )
 
-    primary = await _resolve_primary_strategy(session, manifest.manifest)
-    if primary is None:
+    # F-04: resolve EVERY enabled Strategy item, not just the first. The user selected
+    # all of them; a composition with two enabled strategies must run both and fold
+    # their contributions into one portfolio result.
+    strategies = await _resolve_enabled_strategies(session, manifest.manifest)
+    if not strategies:
         return _fail_run(
             session,
             job,
@@ -123,133 +136,58 @@ async def run_backtest(
             code=RunFailureCode.ASSET_UNAVAILABLE,
             message="No enabled Strategy item with a resolvable pinned config in the composition.",
         )
-    strategy_config, primary_item_id = primary
-    market_revision_id = strategy_config.data.market_dataset_revision_id
-    try:
-        source = await resolve_bar_source(session, market_revision_id=market_revision_id)
-    except NotFoundError:
-        return _fail_run(
-            session,
-            job,
-            run,
-            code=RunFailureCode.ASSET_UNAVAILABLE,
-            message=f"Pinned market revision '{market_revision_id}' has no processed bar asset.",
-        )
 
-    # F-05: physically filter the bar stream to the strategy's selected date range +
-    # cross-check the pinned market revision's instrument. Both checks happen while
-    # still PROVISIONING, exactly like the pin/asset checks above, so the fail path
-    # never transits through RUNNING.
-    range_cfg = strategy_config.data.backtest_range
-    range_start = parse_range_bound(range_cfg.start)
-    range_end = parse_range_bound(range_cfg.end)
-    if range_start is None or range_end is None or range_start > range_end:
-        return _fail_run(
+    capital_execution = manifest.manifest.get("capital_execution")
+    item_count = len(manifest.manifest.get("mainboard_items", []))
+    # Prepare + bar-replay each enabled Strategy while still PROVISIONING, so the fail
+    # path (a missing asset / bad range / instrument mismatch / unresolved dependency /
+    # engine error on ANY enabled Strategy) never transits through RUNNING. A single
+    # enabled Strategy that fails is not silently dropped — the whole run FAILS (F-04:
+    # every selected object participates or the result is honestly not produced).
+    item_runs: list[ItemRun] = []
+    for config, meta in strategies:
+        prepared = await _prepare_and_run_strategy(
             session,
-            job,
-            run,
-            code=RunFailureCode.INVALID_BACKTEST_RANGE,
-            message=(
-                f"backtest_range '{range_cfg.start}'..'{range_cfg.end}' is not a valid "
-                "start<=end ISO-8601 window."
-            ),
+            config=config,
+            meta=meta,
+            stream_bars=stream_bars,
+            capital_execution=capital_execution,
+            execution_key=manifest.execution_key,
+            item_count=item_count,
         )
-    # The pinned revision's dataset-level instrument (GAP-16) must match the
-    # strategy's selected instrument when it is known. A legacy/unset revision
-    # instrument_id cannot be disproven and is honestly passed through unfiltered;
-    # an actual mismatch is a hard fail-closed reject, never a silent cross-instrument
-    # run (spec F-05 acceptance: "bars from unselected instruments never enter").
-    market_revision = await md_repo.get_revision(session, market_revision_id)
-    if (
-        market_revision is not None
-        and market_revision.instrument_id is not None
-        and market_revision.instrument_id != strategy_config.data.instrument_id
-    ):
-        return _fail_run(
-            session,
-            job,
-            run,
-            code=RunFailureCode.INSTRUMENT_MISMATCH,
-            message=(
-                f"Pinned market revision '{market_revision_id}' is scoped to instrument "
-                f"'{market_revision.instrument_id}', not the strategy's selected "
-                f"'{strategy_config.data.instrument_id}'."
-            ),
-        )
-    filtered_bars = filter_bars_by_range(
-        stream_bars(source), start=range_cfg.start, end=range_cfg.end
-    )
-    try:
-        first_batch = next(filtered_bars)
-    except StopIteration:
-        return _fail_run(
-            session,
-            job,
-            run,
-            code=RunFailureCode.EMPTY_FILTERED_RANGE,
-            message=(
-                f"No bars fall within the selected backtest_range "
-                f"'{range_cfg.start}'..'{range_cfg.end}' for market revision "
-                f"'{market_revision_id}'."
-            ),
-        )
-    bar_batches = itertools.chain([first_batch], filtered_bars)
-
-    # Resolve the pinned strategy's indicator packages into a deterministic compute
-    # plan (INF-12 Slice C). Derived purely from immutable pins, so it does not break
-    # reproducibility.
-    indicator_plan = await resolve_indicator_plan(session, strategy_config)
-    # F-06: an unresolved required indicator dependency is a HARD terminal failure —
-    # NEVER silently substituted with the deterministic breakout proxy. A run whose
-    # pinned packages do not resolve to a computable entry signal (or leaves any block
-    # unresolved) would otherwise fabricate metrics from a strategy the user never
-    # selected (spec F-06 acceptance). Resolved while still PROVISIONING so the fail
-    # path never transits through RUNNING, exactly like the pin/asset checks above.
-    # The engine's proxy mode is retained only as a domain-level primitive; it is
-    # structurally unreachable on the production worker path.
-    if not indicator_plan.has_entry or indicator_plan.unresolved:
-        return _fail_run(
-            session,
-            job,
-            run,
-            code=RunFailureCode.UNRESOLVED_DEPENDENCY,
-            message=(
-                "Required indicator dependency could not be resolved (no breakout-proxy "
-                f"fallback): {list(indicator_plan.unresolved) or 'no computable entry signal'}."
-            ),
-        )
+        if isinstance(prepared, _PrepFailure):
+            return _fail_run(session, job, run, code=prepared.code, message=prepared.message)
+        item_runs.append(prepared)
 
     run.state = BacktestRunState.RUNNING
 
-    item_count = len(manifest.manifest.get("mainboard_items", []))
-    # Summary metadata: the pinned revision's base bar timeframe (immutable read,
-    # reproducibility-safe). None when the revision is not bar-timeframed — surfaced
-    # as-is, never guessed (L4).
-    base_timeframe = await md_repo.get_base_timeframe_for_revision(session, market_revision_id)
-    # GAP-02: apply the pinned shared-pool capital model from the manifest snapshot
-    # (doc 13 §8.3/§8.4). Independent / absent allocation resolves to None, so the
-    # engine sizes from the strategy's own initial_capital exactly as before. The
-    # replayed Strategy item's id joins the allocation entries to its sleeve share.
-    allocation = resolve_allocation_execution(
-        manifest.manifest.get("capital_execution"), item_id=primary_item_id
-    )
-    try:
-        output = run_engine(
-            strategy_config=strategy_config,
-            bar_batches=bar_batches,
+    # Enabled non-Strategy items (Trading Signal / Trade Log) are pinned + recorded for
+    # traceability but run no standalone V1 bar-replay (F-04 honest boundary): their
+    # execution effect is defined only as a Strategy data input. Disabled items were
+    # already excluded from the snapshot (doc 01 §5.2) and never reach here.
+    non_executing = _enabled_non_strategy_items(manifest.manifest)
+
+    if len(item_runs) == 1 and not non_executing:
+        # Byte-identical single-Strategy path: a lone enabled Strategy with nothing else
+        # in the composition produces exactly the pre-F-04 engine output (no compose).
+        output: EngineOutput = item_runs[0].output  # type: ignore[assignment]
+    else:
+        # Portfolio starting capital: the shared pool P0 under shared allocation (taken
+        # ONCE — each sleeve reports the same pool), else the sum of the strategies' own
+        # initial capitals (independent mode). Realized PnL is additive either way.
+        alloc_probe = resolve_allocation_execution(capital_execution, item_id=item_runs[0].item_id)
+        if alloc_probe is not None:
+            portfolio_initial = alloc_probe.initial_capital
+        else:
+            portfolio_initial = sum(
+                (Decimal(str(r.output.summary["initial_capital"])) for r in item_runs if r.output),
+                Decimal("0"),
+            )
+        output = combine_item_runs(
+            [*item_runs, *non_executing],
+            portfolio_initial_capital=portfolio_initial,
             execution_key=manifest.execution_key,
             item_count=item_count,
-            indicator_plan=indicator_plan,
-            timeframe=base_timeframe,
-            allocation=allocation,
-        )
-    except Exception as exc:
-        return _fail_run(
-            session,
-            job,
-            run,
-            code=RunFailureCode.ENGINE_ERROR,
-            message=f"Engine error during bar-replay: {exc}",
         )
     metric_values = derive_metric_values(output.summary)
 
@@ -294,16 +232,31 @@ async def _unresolved_pins(session: AsyncSession, manifest: dict[str, Any]) -> l
     return missing
 
 
-async def _resolve_primary_strategy(
-    session: AsyncSession, manifest: dict[str, Any]
-) -> tuple[StrategyConfig, str] | None:
-    """Resolve the first enabled Strategy item's pinned config + its composition item id.
+@dataclass(frozen=True, slots=True)
+class _PrepFailure:
+    """A per-Strategy preparation/replay failure (F-04): fails the WHOLE run.
 
-    Foundation scope: a single-strategy bar-replay. Items are already pin-ordered
-    (doc 01 §5.2); the first enabled Strategy whose pinned revision parses to a
-    valid config drives the simulation. The item id (== the allocation entry's
-    ``composition_item_id``, doc 13 §8.2) joins this item to its sleeve share for
-    GAP-02 allocation execution. Reads ONLY pinned revisions."""
+    A selected Strategy that cannot resolve its asset / range / instrument / indicator
+    plan, or that errors during replay, is never silently dropped — the run fails so a
+    result is never materialized missing an object the user chose (spec F-04/F-06)."""
+
+    code: RunFailureCode
+    message: str
+
+
+async def _resolve_enabled_strategies(
+    session: AsyncSession, manifest: dict[str, Any]
+) -> list[tuple[StrategyConfig, dict[str, Any]]]:
+    """Every enabled Strategy item's pinned config + its composition item metadata (F-04).
+
+    Items are consumed in the manifest's deterministic pin order (sorted by
+    ``(root_id, selected_revision_id)`` at manifest-build time — doc 01 §5.2 presentation
+    ``position`` is explicitly NOT engine event priority), so the composed portfolio
+    result is reproducible. The ``item_id`` (== the allocation entry's
+    ``composition_item_id``, doc 13 §8.2) joins each item to its sleeve share. Reads ONLY
+    pinned revisions; a pin that no longer parses to a valid config is skipped here and
+    caught upstream as a hard MANIFEST_RESOLUTION / ASSET failure."""
+    resolved: list[tuple[StrategyConfig, dict[str, Any]]] = []
     for item in manifest.get("mainboard_items", []):
         if item.get("item_kind") != MainboardItemKind.STRATEGY:
             continue
@@ -317,10 +270,158 @@ async def _resolve_primary_strategy(
             continue
         payload = await _resolve_strategy_payload(session, dict(revision.payload))
         try:
-            return StrategyConfig.model_validate(payload), str(item.get("item_id"))
+            config = StrategyConfig.model_validate(payload)
         except ValidationError:
             continue
-    return None
+        resolved.append(
+            (
+                config,
+                {
+                    "item_id": str(item.get("item_id")),
+                    "item_kind": str(item.get("item_kind")),
+                    "root_id": item.get("root_id"),
+                    "revision_id": str(revision_id),
+                },
+            )
+        )
+    return resolved
+
+
+def _enabled_non_strategy_items(manifest: dict[str, Any]) -> list[ItemRun]:
+    """Enabled Trading Signal / Trade Log items — pinned + recorded, no standalone run.
+
+    F-04 honest boundary: these EXTERNAL work objects affect execution only as a
+    Strategy data input, so the V1 bar-replay engine runs no standalone simulation for
+    them. They are still surfaced (``output=None``) in the composite diagnostics so
+    every participating object is traceable; disabled items were already excluded from
+    the snapshot and never reach here."""
+    items: list[ItemRun] = []
+    for item in manifest.get("mainboard_items", []):
+        if item.get("item_kind") == MainboardItemKind.STRATEGY:
+            continue
+        if item.get("enabled") is False:
+            continue
+        revision_id = item.get("selected_revision_id")
+        items.append(
+            ItemRun(
+                item_id=str(item.get("item_id")),
+                item_kind=str(item.get("item_kind")),
+                root_id=item.get("root_id"),
+                revision_id=str(revision_id) if revision_id is not None else None,
+                output=None,
+            )
+        )
+    return items
+
+
+async def _prepare_and_run_strategy(
+    session: AsyncSession,
+    *,
+    config: StrategyConfig,
+    meta: dict[str, Any],
+    stream_bars: BarBatchStreamer,
+    capital_execution: dict[str, Any] | None,
+    execution_key: str,
+    item_count: int,
+) -> ItemRun | _PrepFailure:
+    """Resolve + bar-replay ONE enabled Strategy (F-04/F-05/F-06), or a ``_PrepFailure``.
+
+    Mirrors the pre-F-04 single-strategy chain exactly (asset -> F-05 range/instrument
+    filter -> F-06 indicator plan -> allocation sleeve -> ``run_engine``), so a lone
+    Strategy replays byte-identically. Every failure is attributed to its ``item_id``
+    for traceability, and fails the whole run upstream — a selected Strategy is never
+    silently skipped."""
+    item_id = meta["item_id"]
+    market_revision_id = config.data.market_dataset_revision_id
+    try:
+        source = await resolve_bar_source(session, market_revision_id=market_revision_id)
+    except NotFoundError:
+        return _PrepFailure(
+            RunFailureCode.ASSET_UNAVAILABLE,
+            f"Strategy item '{item_id}': pinned market revision '{market_revision_id}' "
+            "has no processed bar asset.",
+        )
+
+    # F-05: physically filter the bar stream to this strategy's selected date range +
+    # cross-check its pinned market revision's instrument.
+    range_cfg = config.data.backtest_range
+    range_start = parse_range_bound(range_cfg.start)
+    range_end = parse_range_bound(range_cfg.end)
+    if range_start is None or range_end is None or range_start > range_end:
+        return _PrepFailure(
+            RunFailureCode.INVALID_BACKTEST_RANGE,
+            f"Strategy item '{item_id}': backtest_range '{range_cfg.start}'.."
+            f"'{range_cfg.end}' is not a valid start<=end ISO-8601 window.",
+        )
+    # The pinned revision's dataset-level instrument (GAP-16) must match the strategy's
+    # selected instrument when it is known. A legacy/unset revision instrument_id cannot
+    # be disproven and is honestly passed through unfiltered; an actual mismatch is a
+    # hard fail-closed reject, never a silent cross-instrument run (F-05 acceptance).
+    market_revision = await md_repo.get_revision(session, market_revision_id)
+    if (
+        market_revision is not None
+        and market_revision.instrument_id is not None
+        and market_revision.instrument_id != config.data.instrument_id
+    ):
+        return _PrepFailure(
+            RunFailureCode.INSTRUMENT_MISMATCH,
+            f"Strategy item '{item_id}': pinned market revision '{market_revision_id}' is "
+            f"scoped to instrument '{market_revision.instrument_id}', not the strategy's "
+            f"selected '{config.data.instrument_id}'.",
+        )
+    filtered_bars = filter_bars_by_range(
+        stream_bars(source), start=range_cfg.start, end=range_cfg.end
+    )
+    try:
+        first_batch = next(filtered_bars)
+    except StopIteration:
+        return _PrepFailure(
+            RunFailureCode.EMPTY_FILTERED_RANGE,
+            f"Strategy item '{item_id}': no bars fall within the selected backtest_range "
+            f"'{range_cfg.start}'..'{range_cfg.end}' for market revision "
+            f"'{market_revision_id}'.",
+        )
+    bar_batches = itertools.chain([first_batch], filtered_bars)
+
+    # F-06: an unresolved required indicator dependency is a HARD terminal failure —
+    # NEVER silently substituted with the deterministic breakout proxy.
+    indicator_plan = await resolve_indicator_plan(session, config)
+    if not indicator_plan.has_entry or indicator_plan.unresolved:
+        return _PrepFailure(
+            RunFailureCode.UNRESOLVED_DEPENDENCY,
+            f"Strategy item '{item_id}': required indicator dependency could not be "
+            "resolved (no breakout-proxy fallback): "
+            f"{list(indicator_plan.unresolved) or 'no computable entry signal'}.",
+        )
+
+    base_timeframe = await md_repo.get_base_timeframe_for_revision(session, market_revision_id)
+    # GAP-02: apply the pinned shared-pool capital model from the manifest snapshot
+    # (doc 13 §8.3/§8.4). Independent / absent allocation resolves to None, so the engine
+    # sizes from the strategy's own initial_capital. The item id joins the allocation
+    # entries to this item's sleeve share.
+    allocation = resolve_allocation_execution(capital_execution, item_id=item_id)
+    try:
+        output = run_engine(
+            strategy_config=config,
+            bar_batches=bar_batches,
+            execution_key=execution_key,
+            item_count=item_count,
+            indicator_plan=indicator_plan,
+            timeframe=base_timeframe,
+            allocation=allocation,
+        )
+    except Exception as exc:
+        return _PrepFailure(
+            RunFailureCode.ENGINE_ERROR,
+            f"Strategy item '{item_id}': engine error during bar-replay: {exc}",
+        )
+    return ItemRun(
+        item_id=item_id,
+        item_kind=meta["item_kind"],
+        root_id=meta["root_id"],
+        revision_id=meta["revision_id"],
+        output=output,
+    )
 
 
 async def _resolve_strategy_payload(

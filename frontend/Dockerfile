@@ -1,5 +1,5 @@
 # Entropia V18 frontend — build with Node, serve static assets via nginx.
-FROM node:20-alpine AS build
+FROM node:26-alpine AS build
 WORKDIR /app
 
 # Vite inlines VITE_* at build time.

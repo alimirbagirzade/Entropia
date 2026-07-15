@@ -45,13 +45,12 @@ def _client(app) -> AsyncClient:
     return AsyncClient(transport=ASGITransport(app=app), base_url="http://t")
 
 
+_MD_BYTES = b"# Heading\n\nBody.\n"
+
+# The upload route is multipart (F-03) and is gated by its own dedicated test
+# below; the JSON write routes stay here.
 _WRITE_CALLS = [
     ("post", "/api/v1/admin/manual/documents", {"title": "T", "content": "body"}),
-    (
-        "post",
-        "/api/v1/admin/manual/documents:upload",
-        {"source_filename": "a.md", "content": "# H"},
-    ),
     ("post", "/api/v1/admin/manual/documents/mdoc_x/revisions", {"content": "body"}),
     ("delete", "/api/v1/admin/manual/documents/mdoc_x", None),
 ]
@@ -59,15 +58,32 @@ _WRITE_CALLS = [
 
 @pytest.mark.contract
 @pytest.mark.parametrize("actor", [USER, SUPERVISOR, AGENT], ids=["user", "supervisor", "agent"])
-@pytest.mark.parametrize(
-    "method,path,body", _WRITE_CALLS, ids=["create", "upload", "revise", "delete"]
-)
+@pytest.mark.parametrize("method,path,body", _WRITE_CALLS, ids=["create", "revise", "delete"])
 async def test_manual_write_routes_are_admin_only(app, actor, method, path, body) -> None:
     gen = _override(app, actor)
     next(gen)
     try:
         async with _client(app) as c:
             resp = await c.request(method.upper(), path, json=body)
+        assert resp.status_code == 403
+        assert resp.json()["error"]["code"] == "ADMIN_MANUAL_WRITE_REQUIRED"
+    finally:
+        next(gen, None)
+
+
+@pytest.mark.contract
+@pytest.mark.parametrize("actor", [USER, SUPERVISOR, AGENT], ids=["user", "supervisor", "agent"])
+async def test_manual_upload_is_admin_only(app, actor) -> None:
+    # F-03: a valid multipart document passes FastAPI validation, so the 403 is
+    # the handler's require_manual_admin (menu visibility is never authorization).
+    gen = _override(app, actor)
+    next(gen)
+    try:
+        async with _client(app) as c:
+            resp = await c.post(
+                "/api/v1/admin/manual/documents:upload",
+                files={"file": ("guide.md", _MD_BYTES, "text/markdown")},
+            )
         assert resp.status_code == 403
         assert resp.json()["error"]["code"] == "ADMIN_MANUAL_WRITE_REQUIRED"
     finally:
@@ -108,10 +124,28 @@ async def test_upload_rejects_unsupported_file_type_before_db(app) -> None:
         async with _client(app) as c:
             resp = await c.post(
                 "/api/v1/admin/manual/documents:upload",
-                json={"source_filename": "guide.pdf", "content": "x"},
+                files={"file": ("guide.pdf", b"not really a pdf", "application/pdf")},
             )
         assert resp.status_code == 422
         assert resp.json()["error"]["code"] == "MANUAL_FILE_TYPE_UNSUPPORTED"
+    finally:
+        next(gen, None)
+
+
+@pytest.mark.contract
+async def test_upload_rejects_non_utf8_document_before_db(app) -> None:
+    # F-03 encoding gate: a non-UTF-8 document is rejected at the route before the
+    # command touches the manual stream.
+    gen = _override(app, ADMIN)
+    next(gen)
+    try:
+        async with _client(app) as c:
+            resp = await c.post(
+                "/api/v1/admin/manual/documents:upload",
+                files={"file": ("guide.md", b"\xff\xfe\x00bad", "text/markdown")},
+            )
+        assert resp.status_code == 422
+        assert resp.json()["error"]["code"] == "UPLOAD_ENCODING_INVALID"
     finally:
         next(gen, None)
 

@@ -73,18 +73,71 @@ def _valid_payload(**overrides: Any) -> dict[str, Any]:
     return payload
 
 
+_VALID_CSV = b"time,side\n1,buy\n"
+
+
 @pytest.mark.contract
 async def test_guest_cannot_upload_source_asset(app) -> None:
+    # F-03: a valid multipart file passes the size/encoding/schema gate, so the
+    # 401 comes from the command's authentication check (not a 422).
     gen = _override(app, Actor.anonymous())
     next(gen)
     try:
         async with await _client(app) as c:
             resp = await c.post(
                 "/api/v1/trade-logs/source-assets",
-                json={"content": "x", "original_filename": "t.csv"},
+                files={"file": ("t.csv", _VALID_CSV, "text/csv")},
             )
         assert resp.status_code == 401
         assert resp.json()["error"]["code"] == "UNAUTHENTICATED"
+    finally:
+        next(gen, None)
+
+
+@pytest.mark.contract
+async def test_upload_rejects_non_csv_extension_before_db(app) -> None:
+    gen = _override(app, _actor(Role.USER, PrincipalType.HUMAN, "user_1"))
+    next(gen)
+    try:
+        async with await _client(app) as c:
+            resp = await c.post(
+                "/api/v1/trade-logs/source-assets",
+                files={"file": ("trades.pdf", _VALID_CSV, "application/pdf")},
+            )
+        assert resp.status_code == 422
+        assert resp.json()["error"]["code"] == "FILE_TYPE_NOT_ALLOWED"
+    finally:
+        next(gen, None)
+
+
+@pytest.mark.contract
+async def test_upload_rejects_non_utf8_bytes_before_db(app) -> None:
+    gen = _override(app, _actor(Role.USER, PrincipalType.HUMAN, "user_1"))
+    next(gen)
+    try:
+        async with await _client(app) as c:
+            resp = await c.post(
+                "/api/v1/trade-logs/source-assets",
+                files={"file": ("t.csv", b"\xff\xfe\x00bad", "text/csv")},
+            )
+        assert resp.status_code == 422
+        assert resp.json()["error"]["code"] == "UPLOAD_ENCODING_INVALID"
+    finally:
+        next(gen, None)
+
+
+@pytest.mark.contract
+async def test_upload_rejects_blank_schema_before_db(app) -> None:
+    gen = _override(app, _actor(Role.USER, PrincipalType.HUMAN, "user_1"))
+    next(gen)
+    try:
+        async with await _client(app) as c:
+            resp = await c.post(
+                "/api/v1/trade-logs/source-assets",
+                files={"file": ("t.csv", b"   \n  \n", "text/csv")},
+            )
+        assert resp.status_code == 422
+        assert resp.json()["error"]["code"] == "UPLOAD_SCHEMA_INVALID"
     finally:
         next(gen, None)
 

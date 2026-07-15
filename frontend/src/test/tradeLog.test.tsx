@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 
 import { TradeLog } from "@/pages/TradeLog";
 import { stubApi } from "./helpers/apiStub";
+import { stubUpload } from "./helpers/xhrStub";
 
 const MAINBOARD = {
   workspace_id: "ws_1",
@@ -112,7 +113,6 @@ const EXPORT_RESULT = {
 // "POST /trade-logs" create prefix (a substring of every other POST URL).
 function stubRoutes(overrides: Record<string, unknown> = {}) {
   return stubApi({
-    "POST /trade-logs/source-assets": DEDUP_UPLOAD_RESULT,
     "POST /trade-logs/root_tl/revisions": REVISION_RESULT,
     "POST /trade-logs/root_tl/export": EXPORT_RESULT,
     "POST /trade-logs": CREATE_RESULT,
@@ -245,15 +245,22 @@ describe("TradeLog", () => {
 
   it("surfaces a content-addressed dedup upload as a reuse note", async () => {
     stubRoutes();
+    const { calls: uploadCalls } = stubUpload({
+      "POST /trade-logs/source-assets": DEDUP_UPLOAD_RESULT,
+    });
     renderPage();
 
-    fireEvent.change(await screen.findByLabelText(/File content/), {
-      target: { value: "ts,side,qty\n1,long,2" },
+    const file = new File(["ts,side,qty\n1,long,2"], "trades.csv", { type: "text/csv" });
+    fireEvent.change(await screen.findByLabelText(/Trade-record file/), {
+      target: { files: [file] },
     });
     fireEvent.click(screen.getByRole("button", { name: "Upload source asset" }));
 
     expect(await screen.findByText(/already uploaded/)).toBeTruthy();
     expect(screen.getByDisplayValue("srcasset_9")).toBeTruthy();
+    // F-03: the real file travels via multipart XHR.
+    expect(uploadCalls[0]?.file?.name).toBe("trades.csv");
+    expect(uploadCalls[0]?.headers["Idempotency-Key"]).toBeTruthy();
   });
 
   it("discovers only trade-log items from the default Mainboard", async () => {

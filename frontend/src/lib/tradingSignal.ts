@@ -37,6 +37,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api, apiRequest } from "./apiClient";
+import { uploadFile } from "./upload";
 
 // ---------------------------------------------------------------------------
 // Wire types (mirror application/{commands,queries}/trading_signal.py returns)
@@ -251,18 +252,13 @@ export function useSignalImportReport(jobId: string | null) {
 export function useUploadSignalSource() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: { content: string; originalFilename: string | null }) =>
-      apiRequest<UploadSourceAssetResult>("/trading-signals/source-assets", {
-        method: "POST",
-        body: {
-          content: input.content,
-          content_type: "text/csv",
-          ...(input.originalFilename !== null && input.originalFilename !== ""
-            ? { original_filename: input.originalFilename }
-            : {}),
-        },
-        headers: { "Idempotency-Key": crypto.randomUUID() },
-      }),
+    // F-03: real native file transfer (multipart) — the browser sends the
+    // selected TXT/CSV file itself; the server derives content type + digest and
+    // validates size/encoding/schema. No pasted-textarea content.
+    mutationFn: (input: { file: File }) =>
+      uploadFile<UploadSourceAssetResult>("/trading-signals/source-assets", input.file, {
+        idempotencyKey: crypto.randomUUID(),
+      }).promise,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["audit"] });
     },

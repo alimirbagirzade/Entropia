@@ -10,6 +10,8 @@ export interface RecordedUpload {
   url: string;
   headers: Record<string, string>;
   file: File | null;
+  // Non-file multipart form fields (e.g. baseline_metadata, expected_stream_version).
+  fields: Record<string, string>;
 }
 
 function isShapedResponse(value: unknown): value is ShapedResponse {
@@ -55,7 +57,11 @@ export function stubUpload(routes: Record<string, UploadRouteValue>): { calls: R
     send(body: FormData) {
       const fileEntry = body.get("file");
       const file = fileEntry instanceof File ? fileEntry : null;
-      calls.push({ url: this.url, headers: { ...this.headers }, file });
+      const fields: Record<string, string> = {};
+      for (const [key, value] of body.entries()) {
+        if (key !== "file" && typeof value === "string") fields[key] = value;
+      }
+      calls.push({ url: this.url, headers: { ...this.headers }, file, fields });
 
       queueMicrotask(() => {
         if (this.aborted) return;

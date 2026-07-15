@@ -34,15 +34,6 @@ function publishNoticeText(result: PublishResult): string {
   return `Published “${result.title}” rev ${result.revision_no} — added to the end of the continuous manual.`;
 }
 
-function readFileAsText(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result ?? ""));
-    reader.onerror = () => reject(new Error("manual_file_unreadable"));
-    reader.readAsText(file);
-  });
-}
-
 // User Manual (Stage 7a, doc 21; UI-21). One continuous Published reader
 // flow — sticky MANUAL DOCUMENTS sidebar (search + section nav primary) next
 // to a continuous reader pane: baseline guide first, appended sections in
@@ -656,28 +647,21 @@ function UploadComposer({
   const [file, setFile] = useState<File | null>(null);
   const [title, setTitle] = useState("");
   const [allowDuplicate, setAllowDuplicate] = useState(false);
-  const [readError, setReadError] = useState<string | null>(null);
 
   const onFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     setFile(event.target.files?.[0] ?? null);
-    setReadError(null);
     upload.reset();
   };
 
-  const submit = async (event: FormEvent) => {
+  const submit = (event: FormEvent) => {
     event.preventDefault();
     if (file === null || expectedStreamVersion === null) return;
-    let content: string;
-    try {
-      content = await readFileAsText(file);
-    } catch {
-      setReadError("The selected document could not be read. Use a UTF-8 TXT, MD or HTML text file.");
-      return;
-    }
+    // F-03: transfer the chosen file itself (multipart). The server decodes the
+    // bytes and re-validates size/encoding (UPLOAD_ENCODING_INVALID) + extension
+    // (MANUAL_FILE_TYPE_UNSUPPORTED) — no client-side FileReader step.
     upload.mutate(
       {
-        source_filename: file.name,
-        content,
+        file,
         ...(title.trim() ? { title: title.trim() } : {}),
         allow_duplicate: allowDuplicate,
         expected_stream_version: expectedStreamVersion,
@@ -687,7 +671,7 @@ function UploadComposer({
   };
 
   return (
-    <form className="manual-compose" onSubmit={(event) => void submit(event)}>
+    <form className="manual-compose" onSubmit={submit}>
       <p className="cp-note">
         UTF-8 text only ({ACCEPTED_UPLOAD_EXTENSIONS.join(", ")}) — the server re-validates the
         extension (MANUAL_FILE_TYPE_UNSUPPORTED verbatim, UM-06).
@@ -723,7 +707,6 @@ function UploadComposer({
       >
         Upload &amp; publish
       </button>
-      {readError ? <p className="auth-hint">{readError}</p> : null}
       {upload.isError ? <p className="auth-hint">{mutationErrorText(upload.error)}</p> : null}
     </form>
   );

@@ -26,6 +26,10 @@ export interface FileUploadOptions {
   fieldName?: string;
   fields?: Record<string, string>;
   idempotencyKey?: string;
+  // Extra request headers (e.g. an ``X-Request-Version`` OCC token). Applied
+  // after the auth/idempotency headers so a caller never has to give up an
+  // optimistic-concurrency guard just to transfer real bytes.
+  headers?: Record<string, string>;
   onProgress?: (progress: UploadProgress) => void;
 }
 
@@ -50,6 +54,9 @@ export function uploadFile<T>(
     if (sessionToken) xhr.setRequestHeader("Authorization", `Bearer ${sessionToken}`);
     if (devActorId) xhr.setRequestHeader("X-Actor-Id", devActorId);
     if (options.idempotencyKey) xhr.setRequestHeader("Idempotency-Key", options.idempotencyKey);
+    for (const [key, value] of Object.entries(options.headers ?? {})) {
+      xhr.setRequestHeader(key, value);
+    }
 
     xhr.upload.onprogress = (event) => {
       if (event.lengthComputable) {

@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, Header, Query
+from fastapi import APIRouter, Depends, File, Form, Header, Query, UploadFile
 from pydantic import BaseModel
 
 from entropia.application.commands.manual import (
@@ -26,6 +26,7 @@ from entropia.application.commands.manual import (
 )
 from entropia.application.queries.manual import get_manual_stream, search_manual
 from entropia.apps.api.deps import RequestContext, request_context
+from entropia.apps.api.upload import validate_multipart_upload
 from entropia.domain.identity.policy import require_manual_admin, require_trash_admin
 
 router = APIRouter(tags=["manual"])
@@ -42,14 +43,6 @@ _RESTORE_PATH = "/admin/manual/documents/{document_id}:restore"
 class CreateDocumentRequest(BaseModel):
     title: str
     content: str
-    allow_duplicate: bool = False
-    expected_stream_version: int | None = None
-
-
-class UploadDocumentRequest(BaseModel):
-    source_filename: str
-    content: str
-    title: str | None = None
     allow_duplicate: bool = False
     expected_stream_version: int | None = None
 
@@ -113,19 +106,28 @@ async def create_document(
 
 @router.post(_UPLOAD_PATH, status_code=201)
 async def upload_document(
-    body: UploadDocumentRequest,
+    file: UploadFile = File(...),
+    title: str | None = Form(default=None),
+    allow_duplicate: bool = Form(default=False),
+    expected_stream_version: int | None = Form(default=None),
     ctx: RequestContext = Depends(request_context),
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> dict[str, Any]:
+    """Real native document upload (F-03): the browser transfers the selected
+    UTF-8 TXT/MD/HTML file as ``multipart/form-data``. Size and UTF-8 encoding
+    are validated server-side; the TXT/MD/HTML extension gate lives in the
+    command (``MANUAL_FILE_TYPE_UNSUPPORTED``). The reader-visible title is
+    filename-derived unless an explicit override is supplied."""
     require_manual_admin(ctx.actor)
+    upload = await validate_multipart_upload(file)
     return await upload_manual_document(
         ctx.session,
         ctx.actor,
-        source_filename=body.source_filename,
-        content=body.content,
-        title=body.title,
-        allow_duplicate=body.allow_duplicate,
-        expected_stream_version=body.expected_stream_version,
+        source_filename=upload.filename or "",
+        content=upload.text,
+        title=title,
+        allow_duplicate=allow_duplicate,
+        expected_stream_version=expected_stream_version,
         idempotency_key=idempotency_key,
     )
 

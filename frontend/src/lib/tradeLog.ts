@@ -20,6 +20,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api, apiRequest } from "./apiClient";
+import { uploadFile } from "./upload";
 import type {
   RequestImportResult,
   UploadSourceAssetResult,
@@ -174,18 +175,13 @@ export function useTradeLogImportReport(jobId: string | null) {
 export function useUploadTradeLogSource() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: { content: string; originalFilename: string | null }) =>
-      apiRequest<UploadSourceAssetResult>("/trade-logs/source-assets", {
-        method: "POST",
-        body: {
-          content: input.content,
-          content_type: "text/csv",
-          ...(input.originalFilename !== null && input.originalFilename !== ""
-            ? { original_filename: input.originalFilename }
-            : {}),
-        },
-        headers: { "Idempotency-Key": crypto.randomUUID() },
-      }),
+    // F-03: real native file transfer (multipart) — the browser sends the
+    // selected TXT/CSV trade-record file itself; the server derives content type
+    // + digest and validates size/encoding/schema. No pasted-textarea content.
+    mutationFn: (input: { file: File }) =>
+      uploadFile<UploadSourceAssetResult>("/trade-logs/source-assets", input.file, {
+        idempotencyKey: crypto.randomUUID(),
+      }).promise,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["audit"] });
     },

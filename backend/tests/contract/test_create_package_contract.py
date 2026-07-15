@@ -164,3 +164,63 @@ async def test_guest_list_rejected(app) -> None:
         assert resp.json()["error"]["code"] == "UNAUTHENTICATED"
     finally:
         next(gen, None)
+
+
+# --------------------------------------------------------------------------- #
+# F-03: real native baseline CSV upload (multipart) — the size/encoding/schema  #
+# and metadata-JSON gates fire at the route BEFORE the command resolves the     #
+# request (DB), so they are asserted here without a database.                   #
+# --------------------------------------------------------------------------- #
+
+_BASELINE = "/api/v1/create-package/requests/req_x/baseline"
+
+
+async def _post_baseline(
+    app: Any, actor: Actor, *, content: bytes, metadata: str | None
+) -> tuple[int, str]:
+    gen = _override(app, actor)
+    next(gen)
+    try:
+        files = {"file": ("baseline.csv", content, "text/csv")}
+        data = {"baseline_metadata": metadata} if metadata is not None else None
+        async with await _client(app) as c:
+            resp = await c.post(_BASELINE, files=files, data=data)
+        return resp.status_code, resp.json()["error"]["code"]
+    finally:
+        next(gen, None)
+
+
+@pytest.mark.contract
+async def test_baseline_rejects_non_utf8_before_db(app) -> None:
+    status, code = await _post_baseline(
+        app,
+        _actor(Role.USER, PrincipalType.HUMAN, "user_1"),
+        content=b"\xff\xfe\x00bad",
+        metadata=None,
+    )
+    assert status == 422
+    assert code == "UPLOAD_ENCODING_INVALID"
+
+
+@pytest.mark.contract
+async def test_baseline_rejects_blank_schema_before_db(app) -> None:
+    status, code = await _post_baseline(
+        app,
+        _actor(Role.USER, PrincipalType.HUMAN, "user_1"),
+        content=b"   \n  \n",
+        metadata=None,
+    )
+    assert status == 422
+    assert code == "UPLOAD_SCHEMA_INVALID"
+
+
+@pytest.mark.contract
+async def test_baseline_rejects_malformed_metadata_json_before_db(app) -> None:
+    status, code = await _post_baseline(
+        app,
+        _actor(Role.USER, PrincipalType.HUMAN, "user_1"),
+        content=b"time,price\n1,2\n",
+        metadata="{not json",
+    )
+    assert status == 422
+    assert code == "VALIDATION_ERROR"

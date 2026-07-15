@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 
 import { TradingSignal } from "@/pages/TradingSignal";
 import { stubApi } from "./helpers/apiStub";
+import { stubUpload } from "./helpers/xhrStub";
 
 const MAINBOARD = {
   workspace_id: "ws_1",
@@ -117,7 +118,6 @@ const EXPORT_RESULT = {
 // prefix — the create path is a substring of every other POST URL.
 function stubRoutes(overrides: Record<string, unknown> = {}) {
   return stubApi({
-    "POST /trading-signals/source-assets": UPLOAD_RESULT,
     "POST /trading-signals/imports": IMPORT_ACCEPTED,
     "POST /trading-signals/root_ts/revisions": REVISION_RESULT,
     "POST /trading-signals/root_ts/export": EXPORT_RESULT,
@@ -152,12 +152,16 @@ afterEach(() => {
 });
 
 describe("TradingSignal", () => {
-  it("uploads the source asset with a fresh Idempotency-Key and prefills the import form", async () => {
-    const fetchMock = stubRoutes();
+  it("uploads the chosen file (multipart, fresh Idempotency-Key) and prefills the import form", async () => {
+    stubRoutes();
+    const { calls: uploadCalls } = stubUpload({
+      "POST /trading-signals/source-assets": UPLOAD_RESULT,
+    });
     renderPage();
 
-    fireEvent.change(await screen.findByLabelText(/File content/), {
-      target: { value: "ts,direction\n1,long" },
+    const file = new File(["ts,direction\n1,long"], "signals.csv", { type: "text/csv" });
+    fireEvent.change(await screen.findByLabelText(/Signal-event file/), {
+      target: { files: [file] },
     });
     fireEvent.click(screen.getByRole("button", { name: "Upload source asset" }));
 
@@ -165,15 +169,11 @@ describe("TradingSignal", () => {
     // The import composer picks up the stored asset id.
     expect(screen.getByDisplayValue("srcasset_1")).toBeTruthy();
 
-    const call = fetchMock.mock.calls.find(
-      ([url, init]) => String(url).includes("/source-assets") && init?.method === "POST",
-    );
-    expect(call).toBeTruthy();
-    const body = JSON.parse(String(call?.[1]?.body)) as Record<string, unknown>;
-    expect(body.content).toBe("ts,direction\n1,long");
-    expect(body.content_type).toBe("text/csv");
-    expect("original_filename" in body).toBe(false);
-    expect(headersOf(call?.[1])["Idempotency-Key"]).toBeTruthy();
+    // F-03: the real file bytes travel via multipart XHR (no pasted content).
+    expect(uploadCalls).toHaveLength(1);
+    expect(uploadCalls[0]?.url).toContain("/trading-signals/source-assets");
+    expect(uploadCalls[0]?.file?.name).toBe("signals.csv");
+    expect(uploadCalls[0]?.headers["Idempotency-Key"]).toBeTruthy();
   });
 
   it("requests the import (202) and lands on the durable ?job= report", async () => {

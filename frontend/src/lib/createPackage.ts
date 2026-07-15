@@ -21,6 +21,7 @@
 import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 
 import { api, apiRequest } from "./apiClient";
+import { uploadFile } from "./upload";
 
 // ---------------------------------------------------------------------------
 // Enums mirrored from backend domain/create_package/enums.py (CR-04: the wire
@@ -374,15 +375,15 @@ export interface BaselineParseResult {
   job_id: string;
 }
 
-// Baseline upload input — the raw bytes never travel; UTF-8 CSV text + the
-// structured metadata the parse gate re-validates (REQUIRED_BASELINE_METADATA_FIELDS).
+// Baseline upload input (F-03) — the real chosen TradingView CSV is transferred
+// as multipart; the server derives content type + digest + filename from the
+// bytes. The structured metadata the parse gate re-validates
+// (REQUIRED_BASELINE_METADATA_FIELDS) rides a JSON form field.
 export interface BaselineUploadInput {
   request_id: string;
   request_version: number;
-  content: string;
+  file: File;
   baseline_metadata: Record<string, unknown>;
-  content_type: string | null;
-  original_filename: string | null;
 }
 
 export interface RationaleFamily {
@@ -638,23 +639,19 @@ export function useRequestRevision() {
 export function useUploadBaseline() {
   const queryClient = useQueryClient();
   return useMutation({
+    // F-03: real native CSV transfer (multipart). The X-Request-Version OCC token
+    // rides a header (stale tab -> 409 verbatim) and the structured baseline
+    // metadata rides a JSON form field; a fresh Idempotency-Key per attempt.
     mutationFn: (input: BaselineUploadInput) =>
-      apiRequest<BaselineUploadResult>(
+      uploadFile<BaselineUploadResult>(
         `/create-package/requests/${encodeURIComponent(input.request_id)}/baseline`,
+        input.file,
         {
-          method: "POST",
-          headers: {
-            "X-Request-Version": String(input.request_version),
-            "Idempotency-Key": crypto.randomUUID(),
-          },
-          body: {
-            content: input.content,
-            baseline_metadata: input.baseline_metadata,
-            content_type: input.content_type,
-            original_filename: input.original_filename,
-          },
+          idempotencyKey: crypto.randomUUID(),
+          headers: { "X-Request-Version": String(input.request_version) },
+          fields: { baseline_metadata: JSON.stringify(input.baseline_metadata) },
         },
-      ),
+      ).promise,
     onSuccess: () => invalidateActions(queryClient),
   });
 }

@@ -415,18 +415,25 @@ describe("Create Package page", () => {
         throw new Error("APPROVAL_REQUIRES_ADMIN: Only an Admin may approve and publish.");
       },
       ...BASE_ROUTES,
+      // Approve unlocks only at eligible_for_approval with fresh evidence and a
+      // ready baseline (F-12); the Admin gate is enforced SERVER-side — the button
+      // is never role-gated, so a non-Admin click surfaces the 403 verbatim.
       "GET /create-package/requests/req_1": {
         ...REQUEST_DETAIL,
-        state: "draft_created",
+        state: "eligible_for_approval",
         package_root_id: "root_1",
         draft_revision_id: "rev_1",
+        validation_fresh: true,
+        baseline_ready: true,
       },
     });
     renderPage();
     await screen.findByText("req_1");
     fireEvent.click(screen.getByRole("button", { name: /req_1/ }));
 
-    fireEvent.click(await screen.findByRole("button", { name: "Approve Package" }));
+    const approveBtn = await screen.findByRole("button", { name: "Approve Package" });
+    await waitFor(() => expect(approveBtn).toBeEnabled());
+    fireEvent.click(approveBtn);
 
     expect(
       await screen.findByText("APPROVAL_REQUIRES_ADMIN: Only an Admin may approve and publish."),
@@ -469,6 +476,19 @@ describe("Create Package page", () => {
     fireEvent.click(screen.getByRole("button", { name: /req_1/ }));
 
     expect(await screen.findByRole("button", { name: "Run Validation Tests" })).toBeDisabled();
+  });
+
+  it("keeps Approve disabled for a draft that has not passed validation (F-12)", async () => {
+    // A draft_created request has evidence-free state: Approve must be locked and
+    // Run Validation must be the offered next step — a draft cannot approve directly.
+    stubApi({ ...BASE_ROUTES, "GET /create-package/requests/req_1": REQUEST_DETAIL_DRAFT });
+    renderPage();
+    await screen.findByText("req_1");
+    fireEvent.click(screen.getByRole("button", { name: /req_1/ }));
+
+    expect(await screen.findByRole("button", { name: "Approve Package" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Run Validation Tests" })).toBeEnabled();
+    expect(screen.getByText(/a draft cannot be approved directly/i)).toBeInTheDocument();
   });
 
   it("requests a revision with the OCC header (legal state enforced server-side)", async () => {

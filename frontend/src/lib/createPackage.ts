@@ -399,6 +399,132 @@ export interface RationaleFamiliesPage {
 }
 
 // ---------------------------------------------------------------------------
+// Lifecycle-action availability (F-12) — a single, testable source of truth that
+// mirrors the backend request state machine (domain/create_package/state_machine.py
+// _REQUEST_ALLOWED + the per-command gates in commands/create_package.py). The UI
+// exposes ONLY the actions the current flow state permits; the server re-validates
+// every transition, so this is presentation gating, never authorization. Deriving
+// availability here (not ad-hoc per button) is what makes the F-12 acceptance —
+// "buttons/status/disabled follow the backend state machine" and "a draft cannot
+// call approval directly" — a property of one function with unit coverage.
+// ---------------------------------------------------------------------------
+
+// States from which run_precheck can (re)scan dependencies: the pre-candidate
+// states that _REQUEST_ALLOWED lets transition into a PRECHECK_* result. Once a
+// candidate/draft exists the scan is frozen (no PRECHECK edge), so Pre-Check is off.
+const PRECHECK_STATES: ReadonlySet<string> = new Set([
+  "requested",
+  "precheck_passed",
+  "precheck_blocked",
+  "precheck_not_applicable",
+  "precheck_stale",
+  "precheck_failed",
+]);
+
+// Legal only from revision_required / rejected (request_package_revision docstring).
+const REVISION_STATES: ReadonlySet<string> = new Set(["revision_required", "rejected"]);
+
+export interface PackageActionAvailability {
+  precheck: boolean;
+  generateDraft: boolean;
+  runValidation: boolean;
+  requestRevision: boolean;
+  approve: boolean;
+  uploadBaseline: boolean;
+  parseBaseline: boolean;
+  // A one-line guide to the next legal step, so a user never hits an unexpected
+  // VALIDATION_REQUIRED dead end (F-12 acceptance #3).
+  nextStepHint: string;
+}
+
+// The reason approve is unavailable while eligible_for_approval — kept separate so
+// the panel can explain the gate (stale evidence / missing baseline) verbatim.
+export function approvalBlockReason(detail: PackageRequestDetail): string | null {
+  if (detail.state !== "eligible_for_approval") return null;
+  if (!detail.validation_fresh)
+    return "The passed validation no longer certifies the current candidate — re-run validation.";
+  if (detail.baseline_required && !detail.baseline_ready)
+    return "This request claims equivalence — upload and parse a PASSED baseline before approval.";
+  return null;
+}
+
+function nextStepHint(detail: PackageRequestDetail): string {
+  switch (detail.state) {
+    case "requested":
+      return detail.current_scan === null
+        ? "Run Pre-Check to resolve code dependencies."
+        : "Pre-Check done — generate a draft package (C.D.P).";
+    case "precheck_passed":
+    case "precheck_not_applicable":
+      return "Dependencies resolved — generate a draft package (C.D.P).";
+    case "precheck_blocked":
+    case "precheck_failed":
+      return "Create the missing Embedded System Packages, then re-run Pre-Check.";
+    case "precheck_stale":
+      return "The Pre-Check is stale — re-run it before drafting.";
+    case "candidate_generating":
+      return "Generating the candidate…";
+    case "candidate_ready":
+      return "Candidate ready — create the draft package (C.D.P).";
+    case "candidate_failed":
+      return "Candidate generation failed — request a revision to retry.";
+    case "draft_created":
+      return "Run Validation Tests to become eligible for approval.";
+    case "validation_running":
+      return "Validation is running…";
+    case "eligible_for_approval":
+      return approvalBlockReason(detail) ?? "Ready — Approve & publish the package.";
+    case "revision_required":
+      return "Validation failed — Request Revision to regenerate the candidate.";
+    case "rejected":
+      return "Rejected — Request Revision to start a fresh attempt.";
+    case "approved":
+      return "Approved & published to the Package Library.";
+    default:
+      return "";
+  }
+}
+
+// Derive, from the read-only request projection alone, which lifecycle actions the
+// UI should enable. Never inferred from a button click — the flow state is server
+// truth. A null detail (no request selected) disables everything.
+export function packageActionAvailability(
+  detail: PackageRequestDetail | null,
+): PackageActionAvailability {
+  if (detail === null) {
+    return {
+      precheck: false,
+      generateDraft: false,
+      runValidation: false,
+      requestRevision: false,
+      approve: false,
+      uploadBaseline: false,
+      parseBaseline: false,
+      nextStepHint: "",
+    };
+  }
+  const state = detail.state;
+  // A published request is terminal — its baseline/candidate are frozen.
+  const mutable = state !== "approved";
+  return {
+    precheck: PRECHECK_STATES.has(state),
+    // Draft only before one exists, once the server says a candidate can be built.
+    generateDraft:
+      detail.draft_revision_id === null &&
+      (detail.can_generate_candidate || state === "candidate_ready"),
+    // VALIDATION_RUNNING has exactly one inbound edge: draft_created.
+    runValidation: state === "draft_created",
+    requestRevision: REVISION_STATES.has(state),
+    // Approve mirrors approve_and_publish's gate: eligible_for_approval + fresh
+    // passing evidence + (baseline parsed when equivalence is claimed).
+    approve: state === "eligible_for_approval" && approvalBlockReason(detail) === null,
+    uploadBaseline: mutable,
+    parseBaseline: mutable && detail.current_baseline !== null,
+    nextStepHint: nextStepHint(detail),
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Query hooks
 // ---------------------------------------------------------------------------
 

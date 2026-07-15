@@ -10,9 +10,11 @@ import {
   CREATION_MODES,
   SOURCE_LANGUAGES,
   SUPPORTED_TARGET_RUNTIME,
+  approvalBlockReason,
   asRecordArray,
   baselineParseTone,
   outputKindsFor,
+  packageActionAvailability,
   requestStateTone,
   scanStatusTone,
   sourceKindForMode,
@@ -310,14 +312,17 @@ function RequestColumn({
   // generate-candidate → create-draft (the mockup "Create Draft Package"); the
   // accepted candidate_hash from generate becomes the draft's staleness token.
   const actionsPending = precheck.isPending || generate.isPending || draft.isPending;
+  // The state-machine truth for which lifecycle actions this request permits
+  // (F-12): the buttons below reflect it instead of always being clickable.
+  const actions = packageActionAvailability(detail);
 
   function onPrecheck() {
-    if (detail === null) return;
+    if (detail === null || !actions.precheck) return;
     precheck.mutate({ request_id: detail.request_id, request_version: detail.request_version });
   }
 
   function onCdp() {
-    if (detail === null || detail.draft_revision_id !== null) return;
+    if (detail === null || !actions.generateDraft) return;
     generate.mutate(
       { request_id: detail.request_id, request_version: detail.request_version },
       {
@@ -334,11 +339,6 @@ function RequestColumn({
     setForm(INITIAL_FORM);
     onClear();
   }
-
-  const canCdp =
-    detail !== null &&
-    detail.draft_revision_id === null &&
-    (detail.can_generate_candidate || detail.state === "candidate_ready");
 
   return (
     <form onSubmit={onSend}>
@@ -490,7 +490,7 @@ function RequestColumn({
             <button
               type="button"
               className="btn"
-              disabled={detail === null || actionsPending}
+              disabled={!actions.precheck || actionsPending}
               onClick={onPrecheck}
             >
               {precheck.isPending ? "Checking dependencies…" : "Pre-Check"}
@@ -501,7 +501,7 @@ function RequestColumn({
             <button
               type="button"
               className="btn"
-              disabled={!canCdp || actionsPending}
+              disabled={!actions.generateDraft || actionsPending}
               onClick={onCdp}
               title="Create Draft Package (generate candidate → draft)"
             >
@@ -511,6 +511,11 @@ function RequestColumn({
               Clear
             </button>
           </div>
+          {detail !== null && actions.nextStepHint.length > 0 ? (
+            <p className="cp-note" aria-live="polite" style={{ marginTop: 8, fontWeight: 600 }}>
+              Next step: {actions.nextStepHint}
+            </p>
+          ) : null}
           <p className="cp-note" style={{ marginTop: 8 }}>
             Pre-Check analyses code TA dependencies through Embedded System Packages. C.D.P creates a
             Draft Package, not an approved package.
@@ -783,6 +788,7 @@ function BaselinePanel({ detail }: { detail: PackageRequestDetail }) {
 
   const baseline = detail.current_baseline;
   const anyPending = upload.isPending || parse.isPending;
+  const actions = packageActionAvailability(detail);
 
   function onFile(event: ChangeEvent<HTMLInputElement>) {
     setFile(event.target.files?.[0] ?? null);
@@ -880,7 +886,7 @@ function BaselinePanel({ detail }: { detail: PackageRequestDetail }) {
           <button
             type="button"
             className="btn"
-            disabled={anyPending || file === null}
+            disabled={!actions.uploadBaseline || anyPending || file === null}
             onClick={onUpload}
           >
             {upload.isPending ? "Uploading…" : "Upload CSV"}
@@ -888,7 +894,7 @@ function BaselinePanel({ detail }: { detail: PackageRequestDetail }) {
           <button
             type="button"
             className="btn"
-            disabled={baseline === null || anyPending}
+            disabled={!actions.parseBaseline || anyPending}
             onClick={() =>
               parse.mutate({
                 request_id: detail.request_id,
@@ -1014,8 +1020,12 @@ function ValidationPanel({ detail }: { detail: PackageRequestDetail }) {
 
   const run = detail.current_validation_run;
   const checks = run ? run.checks : [];
-  const hasDraft = detail.draft_revision_id !== null;
   const anyPending = validate.isPending || revision.isPending || approve.isPending;
+  // Gating truth from the backend state machine (F-12): a draft cannot approve
+  // directly — approve unlocks only in eligible_for_approval with fresh evidence
+  // (+ a parsed baseline when equivalence is claimed).
+  const actions = packageActionAvailability(detail);
+  const approvalBlocked = approvalBlockReason(detail);
 
   return (
     <div className="cp-panel">
@@ -1069,7 +1079,7 @@ function ValidationPanel({ detail }: { detail: PackageRequestDetail }) {
           <button
             type="button"
             className="btn btn-primary"
-            disabled={!hasDraft || anyPending}
+            disabled={!actions.runValidation || anyPending}
             onClick={() =>
               validate.mutate({
                 request_id: detail.request_id,
@@ -1082,7 +1092,7 @@ function ValidationPanel({ detail }: { detail: PackageRequestDetail }) {
           <button
             type="button"
             className="btn"
-            disabled={anyPending}
+            disabled={!actions.requestRevision || anyPending}
             onClick={() =>
               revision.mutate({
                 request_id: detail.request_id,
@@ -1095,7 +1105,7 @@ function ValidationPanel({ detail }: { detail: PackageRequestDetail }) {
           <button
             type="button"
             className="btn"
-            disabled={!hasDraft || anyPending}
+            disabled={!actions.approve || anyPending}
             onClick={() =>
               approve.mutate({
                 request_id: detail.request_id,
@@ -1107,6 +1117,19 @@ function ValidationPanel({ detail }: { detail: PackageRequestDetail }) {
             {approve.isPending ? "Approving…" : "Approve Package"}
           </button>
         </div>
+        {/* Explain the approval gate when eligible but still blocked (stale
+            evidence / missing baseline), and why approval is locked before
+            eligibility — so a user never guesses at a disabled Approve button. */}
+        {approvalBlocked !== null ? (
+          <p className="cp-note" style={{ marginTop: 8 }}>
+            {approvalBlocked}
+          </p>
+        ) : !actions.approve && detail.state !== "approved" ? (
+          <p className="cp-note" style={{ marginTop: 8 }}>
+            Approval unlocks after a passed validation run moves the request to
+            eligible for approval — a draft cannot be approved directly.
+          </p>
+        ) : null}
 
         {validate.isError ? (
           <p role="alert" style={alertStyle}>

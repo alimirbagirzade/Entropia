@@ -201,6 +201,35 @@ async def _run_agent_tool(job_id: str) -> None:
             raise
 
 
+@dramatiq.actor(queue_name="agent-executor", max_retries=3)
+def run_agent_executor(job_id: str) -> None:
+    """Execute a durable Agent task-execution job (spec F-20, doc 18 §8.3-§8.5,
+    §10, §14).
+
+    The ``jobs`` + ``agent_task``/``agent_runtime`` rows are the source of truth.
+    A single actor on this queue means the scheduler's generic stale-job recovery
+    and QUEUED redelivery sweeps (INF-03/INF-09) cover retry/timeout for free —
+    the same guarantee ``backtest``/``agent`` already get
+    (``apps/scheduler/__main__.py::ACTOR_BY_QUEUE``)."""
+    log.info("worker.agent_executor.start", job_id=job_id)
+    asyncio.run(_run_agent_executor(job_id))
+    log.info("worker.agent_executor.done", job_id=job_id)
+
+
+async def _run_agent_executor(job_id: str) -> None:
+    from entropia.application.jobs.agent_executor import run_agent_task
+    from entropia.infrastructure.postgres.engine import get_session_factory
+
+    factory = get_session_factory()
+    async with factory() as session:
+        try:
+            await run_agent_task(session, job_id)
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+
+
 @dramatiq.actor(queue_name="maintenance", max_retries=3)
 def run_trash_purge(job_id: str) -> None:
     """Execute the durable Trash purge job (Stage 6c, doc 20 §8.3, §9.3).

@@ -5,8 +5,10 @@ import { ApiError } from "@/lib/apiClient";
 import { Loading } from "@/components/Loading";
 import { ErrorState } from "@/components/ErrorState";
 import { ReadyCheckModal } from "@/components/ReadyCheckModal";
+import { RunProgress } from "@/components/RunProgress";
 import { StatusBadge } from "@/components/StatusBadge";
 import { StrategyDetailsPanel } from "@/components/StrategyDetailsPanel";
+import { useRequestBacktestRun } from "@/lib/backtest";
 import {
   EXTERNAL_DRAFT_KINDS,
   formatHeadlineMetric,
@@ -584,6 +586,14 @@ export function Mainboard() {
   // so its readiness fetch fires on demand (the strip below already reflects the
   // real state from the default-Mainboard projection with no extra request).
   const [readyCheckOpen, setReadyCheckOpen] = useState(false);
+  // UI-15: RUN admits a backtest run INLINE (no navigation to a separate page) —
+  // the durable progress + full immutable Result render under the Mainboard, in
+  // the BACKTEST RESULTS section below. The admitted run id lives in local state
+  // (the standalone /backtest/run page keeps its ?run= deep-link separately); a
+  // retry from RunProgress swaps tracking onto the fresh run id. Every hook / OCC
+  // / Idempotency contract is the same one the standalone page uses (unchanged).
+  const requestRun = useRequestBacktestRun();
+  const [runId, setRunId] = useState<string | null>(null);
   // Transient external-draft rows added inline from the Add-menu submenu (UI-03).
   // Local presentation state — nothing is persisted until the row's workbench
   // Save (doc 03 §7.1), so these never appear in the server projection.
@@ -630,6 +640,9 @@ export function Mainboard() {
   // admission authz enforces (request_backtest_run → 422 READINESS_BLOCKED when
   // blocker_count > 0), so visual + keyboard + authz agree.
   const runnable = isReadyForRun(readyState);
+  // UI-15: the admission response carries the readiness warning count (warnings
+  // never block RUN — F-16); surface it beside the inline run panel.
+  const runWarningCount = requestRun.data?.warning_count ?? 0;
   const addingStrategy = createWorkObject.isPending || attachItem.isPending;
   const addStrategyError = createWorkObject.error ?? attachItem.error;
 
@@ -691,11 +704,27 @@ export function Mainboard() {
 
         <section aria-labelledby="results-h">
           <h2 id="results-h" className="results-title">BACKTEST RESULTS</h2>
+          {/* UI-15: RUN admits inline (below), so the durable run progress + the   */}
+          {/* full immutable Result (Metrics / charts / Trade List / Diagnostics /  */}
+          {/* Export, via ResultDetail) render right here — under the strategy rows, */}
+          {/* never on a separate page. The persisted latest-result headline stays  */}
+          {/* below as the current Mainboard's most recent succeeded result.        */}
+          {requestRun.isError && (
+            <p role="alert" style={alertStyle}>{errorMessage(requestRun.error)}</p>
+          )}
+          {runId ? (
+            <>
+              {runWarningCount > 0 && (
+                <StatusBadge tone="warn" label={`${runWarningCount} readiness warning(s)`} />
+              )}
+              <RunProgress runId={runId} onRunAdmitted={setRunId} />
+            </>
+          ) : null}
           {data.latest_result_summary ? (
             <div className="result-row">
               <LatestResultCard result={data.latest_result_summary} />
             </div>
-          ) : (
+          ) : runId ? null : (
             <p style={{ ...noteStyle, margin: 0 }}>
               No succeeded Backtest Result is available for this Mainboard yet.
             </p>
@@ -772,9 +801,24 @@ export function Mainboard() {
           title={readyStatusText(readyState)}
         />
         {runnable ? (
-          <Link to="/backtest/run" className="run-button">
+          // UI-15: RUN admits the backtest run in place — the progress + full
+          // result render inline in the BACKTEST RESULTS section above, not on a
+          // separate page. Uses the same 202 admission hook (fresh Idempotency-Key)
+          // the standalone workbench uses; the server stays authoritative on the
+          // readiness gate (422 READINESS_BLOCKED is still refused defensively).
+          <button
+            type="button"
+            className="run-button"
+            disabled={requestRun.isPending}
+            aria-busy={requestRun.isPending}
+            onClick={() =>
+              requestRun.mutate(data.workspace_id, {
+                onSuccess: (admission) => setRunId(admission.run_id),
+              })
+            }
+          >
             RUN
-          </Link>
+          </button>
         ) : (
           <button
             type="button"

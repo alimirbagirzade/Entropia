@@ -196,18 +196,45 @@ describe("Mainboard", () => {
     expect(screen.getByText("Summary not available for this result.")).toBeTruthy();
   });
 
-  it("expands a row into the type-specific editor with a root-keyed deep-link (UI-01)", async () => {
-    stubRoutes();
+  it("expands a row into the real inline Strategy Details editor (UI-02)", async () => {
+    const REVISION_DETAIL = {
+      strategy_revision_id: "wor_1",
+      strategy_root_id: "root_strat",
+      revision_number: 3,
+      config_hash: "cfg_xyz",
+      validation_status: "valid",
+      lifecycle_snapshot: "validated",
+      family_snapshot: null,
+      payload: {},
+      references: [],
+      created_at: "2026-07-01T00:00:00Z",
+    };
+    const STRATEGY_DETAIL = {
+      strategy_root_id: "root_strat",
+      display_name: "Momentum A",
+      lifecycle_state: "validated",
+      current_revision_id: "wor_1",
+      current_row_version: 3,
+      rationale_family_id: null,
+      owner_principal_id: "user_1",
+      deletion_state: "active",
+    };
+    stubRoutes({
+      "GET /strategy-revisions/wor_1": REVISION_DETAIL,
+      "GET /strategies/root_strat/revisions": [],
+      "GET /strategies/root_strat": STRATEGY_DETAIL,
+    });
     renderPage();
     await expandRow();
-    // The expand reveals the Strategy Details editor entry — not just a raw
-    // technical panel — deep-linking by the work-object root id (never label).
-    const editLink = screen.getByRole("link", { name: "Edit in Strategy Details →" });
-    expect(editLink.getAttribute("href")).toBe("/strategy?strategy=root_strat");
-    // A strategy item also links to the immutable pinned revision (read-only).
-    expect(
-      screen.getByRole("link", { name: "View pinned revision" }).getAttribute("href"),
-    ).toBe("/strategy?revision=wor_1");
+
+    // The expand reveals the real 3-column Strategy Details editor inline —
+    // not just a raw technical panel or a deep-link-only stub — keyed by the
+    // work-object root id (never the label, §14 rule 3).
+    expect(await screen.findByRole("heading", { name: /Strategy Context/ })).toBeTruthy();
+    expect(screen.getByText(/revision #3/)).toBeTruthy();
+    // A back-compat deep-link into the standalone /strategy page remains reachable.
+    const openLink = screen.getByRole("link", { name: "Open full page ↗" });
+    expect(openLink.getAttribute("href")).toBe("/strategy?strategy=root_strat");
     // The Mainboard-owned composition controls remain reachable in the same row.
     expect(screen.getByLabelText("Composition controls for Momentum A")).toBeTruthy();
   });

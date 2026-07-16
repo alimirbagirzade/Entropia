@@ -183,8 +183,8 @@ describe("StrategyDetails", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Create draft" }));
 
-    // The create response navigates to ?draft= and the editor loads.
-    expect(await screen.findByText("Editor draft")).toBeTruthy();
+    // The create response navigates to ?draft= and the panel's editor grid loads.
+    expect(await screen.findByRole("heading", { name: /Data & Execution/ })).toBeTruthy();
 
     const call = fetchMock.mock.calls.find(
       ([url, init]) =>
@@ -202,7 +202,7 @@ describe("StrategyDetails", () => {
     const fetchMock = stubRoutes();
     renderPage("/strategy?draft=draft_1");
 
-    expect(await screen.findByText("Editor draft")).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: /Data & Execution/ })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Apply payload" }));
 
     expect(await screen.findByText(/Payload applied/)).toBeTruthy();
@@ -231,7 +231,7 @@ describe("StrategyDetails", () => {
     const fetchMock = stubRoutes();
     renderPage("/strategy?draft=draft_1");
 
-    expect(await screen.findByText("Editor draft")).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: /Data & Execution/ })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Validate" }));
 
     expect(await screen.findByText("SIZING_METHOD_NOT_EXCLUSIVE")).toBeTruthy();
@@ -248,8 +248,8 @@ describe("StrategyDetails", () => {
     const fetchMock = stubRoutes();
     renderPage("/strategy?draft=draft_1");
 
-    expect(await screen.findByText("Editor draft")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Save revision" }));
+    expect(await screen.findByRole("heading", { name: /Data & Execution/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Save Strategy Revision" }));
 
     expect(await screen.findByText("Revision saved")).toBeTruthy();
     expect(screen.getByText("rev_2")).toBeTruthy();
@@ -267,7 +267,7 @@ describe("StrategyDetails", () => {
     const fetchMock = stubRoutes();
     renderPage("/strategy?draft=draft_1");
 
-    expect(await screen.findByText("Editor draft")).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: /Data & Execution/ })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Clear draft…" }));
     // Nothing sent yet — the confirm step is explicit.
     expect(
@@ -290,14 +290,14 @@ describe("StrategyDetails", () => {
     expect(await screen.findByText("Momentum A")).toBeTruthy();
     expect(screen.getByText("Validated")).toBeTruthy();
     expect(await screen.findByText("cfg_abc")).toBeTruthy();
-    expect(screen.getAllByText("View").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Open full page/).length).toBeGreaterThan(0);
   });
 
   it("renders the immutable revision deep-link with pinned references", async () => {
     stubRoutes();
     renderPage("/strategy?revision=rev_1");
 
-    expect(await screen.findByText("Strategy revision #1")).toBeTruthy();
+    expect(await screen.findByText(/revision #1/)).toBeTruthy();
     expect(screen.getByText("market_dataset")).toBeTruthy();
     expect(screen.getByText("sha256:aaa")).toBeTruthy();
     expect(screen.getByText(/market_dataset_root_id/)).toBeTruthy();

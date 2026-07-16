@@ -472,8 +472,8 @@ function ScalingSection({
 }) {
   return (
     <>
-      <h4 className="form-section-h" style={{ marginTop: 20 }}>
-        Scaling Logic <InfoPanel panel={P.scalingLogic} />
+      <h4 className="detail-card-title">
+        7. Scaling Logic <InfoPanel panel={P.scalingLogic} />
       </h4>
       <p className="cp-note">
         Scaling adds same-direction layers to an open position (doc 02 §5.7) — never a reverse
@@ -607,8 +607,8 @@ function RestrictionsSection({
 
   return (
     <>
-      <h4 className="form-section-h" style={{ marginTop: 20 }}>
-        Restrictions / Filters <InfoPanel panel={P.restrictionRule} />
+      <h4 className="detail-card-title">
+        8. Restrictions / Filters <InfoPanel panel={P.restrictionRule} />
       </h4>
       <p className="cp-note">
         Filters block a new entry even when the signal is valid (doc 02 §5.8). Disabled filters are
@@ -674,63 +674,40 @@ function RestrictionsSection({
 }
 
 // ---------------------------------------------------------------------------
-// The structured graph form
+// The structured graph form — split into independently-appliable, numbered
+// section cards (doc 02 §3.1) so a caller can place each in its
+// mockup-matching column (DECISION LOGIC / RISK MANAGEMENT). Each card seeds
+// its own local GraphFormState slice from the SAME payload and Apply merges
+// its edits back over the full payload via mergeGraphSections.
 // ---------------------------------------------------------------------------
 
-export function StrategyGraphForm({
-  payload,
-  pending,
-  onApply,
-}: {
+type GraphSetter<K extends keyof GraphFormState> = (patch: Partial<GraphFormState[K]>) => void;
+
+function useGraphSection<K extends keyof GraphFormState>(
+  payload: Record<string, unknown>,
+  key: K,
+): [GraphFormState[K], GraphSetter<K>, GraphFormState] {
+  const [form, setForm] = useState<GraphFormState>(() => extractGraphSections(payload));
+  const setSection: GraphSetter<K> = (patch) =>
+    setForm((f) => ({ ...f, [key]: { ...f[key], ...patch } }));
+  return [form[key], setSection, form];
+}
+
+interface GraphCardProps {
   payload: Record<string, unknown>;
   pending: boolean;
   onApply: (payload: Record<string, unknown>) => void;
-}) {
-  const [form, setForm] = useState<GraphFormState>(() => extractGraphSections(payload));
+}
 
-  const setEntry = (patch: Partial<GraphFormState["entry"]>) =>
-    setForm((f) => ({ ...f, entry: { ...f.entry, ...patch } }));
-  const setExit = (patch: Partial<GraphFormState["exit"]>) =>
-    setForm((f) => ({ ...f, exit: { ...f.exit, ...patch } }));
-  const setStop = (patch: Partial<GraphFormState["stop"]>) =>
-    setForm((f) => ({ ...f, stop: { ...f.stop, ...patch } }));
-  const setScaling = (patch: Partial<GraphFormState["scaling"]>) =>
-    setForm((f) => ({ ...f, scaling: { ...f.scaling, ...patch } }));
-  const setRestrictions = (patch: Partial<GraphFormState["restrictions"]>) =>
-    setForm((f) => ({ ...f, restrictions: { ...f.restrictions, ...patch } }));
-
-  const [applyError, setApplyError] = useState<string | null>(null);
-  const handleApply = () => {
-    const invalidFilter = firstInvalidFilterConfig(form);
-    if (invalidFilter !== null) {
-      setApplyError(`Not sent — the "${invalidFilter}" filter config is not valid JSON.`);
-      return;
-    }
-    setApplyError(null);
-    onApply(mergeGraphSections(payload, form));
-  };
-
-  const e = form.entry;
-  const x = form.exit;
+// ---- 3. Position Entry Logic (§5.3) — DECISION LOGIC column ----
+export function PositionEntryCard({ payload, pending, onApply }: GraphCardProps) {
+  const [e, setEntry, form] = useGraphSection(payload, "entry");
   const entryShowMin = e.signal_rule === SIGNAL_MIN_SUPPORTING_RULE;
-  const exitShowMin = x.signal_rule === SIGNAL_MIN_SUPPORTING_RULE;
 
   return (
-    <section className="card" style={{ marginTop: 18 }} aria-labelledby="strat-graph-h">
-      <h3 id="strat-graph-h" style={{ marginTop: 0 }}>
-        Position graph (Entry / Exit Logic)
-      </h3>
-      <p className="cp-note">
-        The structured editor for the package-graph decision sections — the sections that pin
-        indicator / condition packages. Apply replaces the FULL draft payload (optimistic
-        concurrency), preserving every other section and each block&apos;s advanced fields
-        (parameter overrides, reference chains). Validation happens on the server — Validate / Save
-        below.
-      </p>
-
-      {/* ---- Position Entry Logic (§5.3) ---- */}
-      <h4 className="form-section-h">
-        Position Entry Logic <InfoPanel panel={P.positionEntryLogic} />
+    <div className="detail-card">
+      <h4 className="detail-card-title">
+        3. Position Entry Logic <InfoPanel panel={P.positionEntryLogic} />
       </h4>
       <div className="cp-form strategy-form-grid">
         <SelectField
@@ -766,10 +743,29 @@ export function StrategyGraphForm({
         is required to save (doc 02 §5.3).
       </p>
       <BlockList scope="entry" blocks={e.blocks} onChange={(blocks) => setEntry({ blocks })} />
+      <div style={{ marginTop: 14 }}>
+        <button
+          type="button"
+          className="btn"
+          disabled={pending}
+          onClick={() => onApply(mergeGraphSections(payload, form))}
+        >
+          {pending ? "Applying…" : "Apply Position Entry changes"}
+        </button>
+      </div>
+    </div>
+  );
+}
 
-      {/* ---- Position Exit Logic (§5.4) ---- */}
-      <h4 className="form-section-h" style={{ marginTop: 20 }}>
-        Position Exit Logic <InfoPanel panel={P.positionExitLogic} />
+// ---- 4. Position Exit Logic (§5.4) — DECISION LOGIC column ----
+export function PositionExitCard({ payload, pending, onApply }: GraphCardProps) {
+  const [x, setExit, form] = useGraphSection(payload, "exit");
+  const exitShowMin = x.signal_rule === SIGNAL_MIN_SUPPORTING_RULE;
+
+  return (
+    <div className="detail-card">
+      <h4 className="detail-card-title">
+        4. Position Exit Logic <InfoPanel panel={P.positionExitLogic} />
       </h4>
       <p className="cp-note">
         A blank exit block is an inactive placeholder — Stop Logic alone can protect the strategy
@@ -831,43 +827,111 @@ export function StrategyGraphForm({
           <BlockList scope="exit" blocks={x.blocks} onChange={(blocks) => setExit({ blocks })} />
         </>
       ) : null}
+      <div style={{ marginTop: 14 }}>
+        <button
+          type="button"
+          className="btn"
+          disabled={pending}
+          onClick={() => onApply(mergeGraphSections(payload, form))}
+        >
+          {pending ? "Applying…" : "Apply Position Exit changes"}
+        </button>
+      </div>
+    </div>
+  );
+}
 
-      {/* ---- Logic-Based Stop Block (§5.5) — F-08 real composer ---- */}
-      <h4 className="form-section-h" style={{ marginTop: 20 }}>
+// ---- Logic-Based Stop Block (§5.5 extension) — RISK MANAGEMENT column,
+// alongside ProtectionStopCard's percentage/trailing/absolute rules ----
+export function LogicBasedStopCard({ payload, pending, onApply }: GraphCardProps) {
+  const [stop, setStop, form] = useGraphSection(payload, "stop");
+
+  return (
+    <div className="detail-card">
+      <h4 className="detail-card-title">
         Logic-Based Stop Block <InfoPanel panel={P.logicBasedStopBlock} />
       </h4>
       <p className="cp-note">
         A logic-based stop pins an indicator + conditions that emit a stop signal against the
         open position (the strategy premise broke). Percentage / trailing / absolute price stops
-        are edited in the Strategy configuration form above; the stop mode below decides how every
+        are edited in the Protection / Stop Logic card above; the stop mode below decides how every
         active stop rule combines.
       </p>
       <div className="cp-form strategy-form-grid">
         <SelectField
           label="Stop mode"
-          value={form.stop.trigger_requirement}
+          value={stop.trigger_requirement}
           onChange={(v) => setStop({ trigger_requirement: v })}
           options={STOP_TRIGGER_REQUIREMENT_OPTIONS}
         />
         <SelectField
           label="Same-bar resolution"
-          value={form.stop.conflict_resolution}
+          value={stop.conflict_resolution}
           onChange={(v) => setStop({ conflict_resolution: v })}
           options={STOP_CONFLICT_RESOLUTION_OPTIONS}
         />
       </div>
       <BlockList
         scope="stop"
-        blocks={form.stop.logic_blocks}
+        blocks={stop.logic_blocks}
         onChange={(logic_blocks) => setStop({ logic_blocks })}
       />
+      <div style={{ marginTop: 14 }}>
+        <button
+          type="button"
+          className="btn"
+          disabled={pending}
+          onClick={() => onApply(mergeGraphSections(payload, form))}
+        >
+          {pending ? "Applying…" : "Apply Logic-Based Stop changes"}
+        </button>
+      </div>
+    </div>
+  );
+}
 
-      <ScalingSection scaling={form.scaling} onChange={setScaling} />
-      <RestrictionsSection restrictions={form.restrictions} onChange={setRestrictions} />
+// ---- 7. Scaling Logic (§5.7) — RISK MANAGEMENT column ----
+export function ScalingCard({ payload, pending, onApply }: GraphCardProps) {
+  const [scaling, setScaling, form] = useGraphSection(payload, "scaling");
 
+  return (
+    <div className="detail-card">
+      <ScalingSection scaling={scaling} onChange={setScaling} />
+      <div style={{ marginTop: 14 }}>
+        <button
+          type="button"
+          className="btn"
+          disabled={pending}
+          onClick={() => onApply(mergeGraphSections(payload, form))}
+        >
+          {pending ? "Applying…" : "Apply Scaling changes"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ---- 8. Restrictions / Filters (§5.8) — RISK MANAGEMENT column ----
+export function RestrictionsCard({ payload, pending, onApply }: GraphCardProps) {
+  const [restrictions, setRestrictions, form] = useGraphSection(payload, "restrictions");
+  const [applyError, setApplyError] = useState<string | null>(null);
+
+  const handleApply = () => {
+    const invalidFilter = firstInvalidFilterConfig(form);
+    if (invalidFilter !== null) {
+      setApplyError(`Not sent — the "${invalidFilter}" filter config is not valid JSON.`);
+      return;
+    }
+    setApplyError(null);
+    onApply(mergeGraphSections(payload, form));
+  };
+
+  return (
+    <div className="detail-card">
+      <RestrictionsSection restrictions={restrictions} onChange={setRestrictions} />
       <div style={{ marginTop: 14 }}>
         <button type="button" className="btn btn-primary" disabled={pending} onClick={handleApply}>
-          {pending ? "Applying…" : "Apply graph changes"}
+          {pending ? "Applying…" : "Apply Restrictions changes"}
         </button>
       </div>
       {applyError !== null ? (
@@ -876,9 +940,9 @@ export function StrategyGraphForm({
         </p>
       ) : null}
       <p className="cp-note" style={{ marginTop: 10 }}>
-        The Advanced (JSON) editor below remains the fallback for each block&apos;s advanced fields
-        (parameter overrides, reference chains) and any key not yet surfaced.
+        Each block&apos;s advanced fields (parameter overrides, reference chains) and any key not
+        yet surfaced remain in the Advanced (raw payload) editor.
       </p>
-    </section>
+    </div>
   );
 }

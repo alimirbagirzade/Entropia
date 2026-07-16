@@ -171,7 +171,13 @@ describe("Mainboard", () => {
             period_start: "2026-01-01",
             period_end: "2026-02-01",
             total_trades: 7,
-            headline: {},
+            headline: {
+              net_profit_pct: 84.2,
+              max_drawdown_pct: -18.1,
+              romad: 4.65,
+              win_rate: 54,
+              profit_factor: 1.72,
+            },
           },
         },
       },
@@ -179,11 +185,57 @@ describe("Mainboard", () => {
     renderPage();
     const link = await screen.findByText("btr_1");
     expect(link.getAttribute("href")).toBe("/backtest/run?result=btr_1");
+    // Symbol / timeframe / trade count / date preserved (F-17).
     expect(
       screen.getByText("BTCUSD · 1h · 7 trade(s) · 2026-01-01 → 2026-02-01"),
     ).toBeTruthy();
+    // F-17: the five required headline metrics render inline, formatted by the
+    // same presentation formatter the Result detail uses (values must match).
+    const metrics = screen.getByRole("group", { name: "Headline metrics" });
+    for (const [label, value] of [
+      ["Net Profit", "+84.20%"],
+      ["Max Drawdown", "-18.10%"],
+      ["ROMAD", "4.65"],
+      ["Win Rate", "54.00%"],
+      ["Profit Factor", "1.72"],
+    ] as const) {
+      expect(within(metrics).getByText(label)).toBeTruthy();
+      expect(within(metrics).getByText(value)).toBeTruthy();
+    }
     // Matching fingerprint -> the result is current; no snapshot-differs badge.
     expect(screen.queryByText(/Result snapshot differs/)).toBeNull();
+  });
+
+  it("renders an explicit N/A for a headline metric the projection omits (L4)", async () => {
+    stubRoutes({
+      "GET /mainboards/default": {
+        ...MAINBOARD,
+        latest_result_summary: {
+          result_id: "btr_3",
+          manifest_hash: "mh_3",
+          composition_fingerprint: "hash_abc",
+          engine_version: "backtest-engine-v2",
+          created_at: "2026-07-03T12:00:00Z",
+          snapshot_differs: false,
+          summary: {
+            symbol: "ETHUSD",
+            timeframe: "4h",
+            period_start: null,
+            period_end: null,
+            total_trades: 4,
+            // The engine omitted the three ratio metrics; they must show an
+            // explicit N/A, never a fabricated 0 (L4).
+            headline: { net_profit_pct: 12.5, max_drawdown_pct: -5 },
+          },
+        },
+      },
+    });
+    renderPage();
+    const metrics = await screen.findByRole("group", { name: "Headline metrics" });
+    expect(within(metrics).getByText("+12.50%")).toBeTruthy();
+    expect(within(metrics).getByText("-5.00%")).toBeTruthy();
+    // ROMAD, Win Rate, Profit Factor were omitted -> three explicit N/A cells.
+    expect(within(metrics).getAllByText("N/A").length).toBe(3);
   });
 
   it("labels the latest result when its snapshot differs from the current composition", async () => {

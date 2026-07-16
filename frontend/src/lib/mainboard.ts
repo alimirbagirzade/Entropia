@@ -22,6 +22,10 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { api, apiRequest } from "./apiClient";
+// The canonical presentation formatter (a missing metric is NEVER a fabricated 0,
+// L4). Reused so the inline Mainboard headline reads identically to the Result
+// detail + History digests (F-17: values match the result detail).
+import { formatMetricValue } from "./backtest";
 
 // The read hook + item/workspace projection types already live in lib/backtest.ts
 // (its RUN flow was the first consumer). Re-export so the page has one import.
@@ -101,6 +105,46 @@ export function isReadyForRun(state: string): boolean {
 
 export function itemKindLabel(kind: string): string {
   return MAINBOARD_ITEM_KIND_LABELS[kind] ?? kind;
+}
+
+// F-17: the five required headline metrics for the inline Mainboard result
+// summary, in the v18 mockup's display order. Each maps a canonical metric to its
+// raw `headline` projection key + the value_format the server metric registry
+// declares (backend domain/backtest/metrics.py DEFAULT_METRICS). Presentation
+// only — the numbers come straight from the same summary the Result detail reads,
+// so formatting them the same way makes the values match (F-17 acceptance).
+export const HEADLINE_METRICS: ReadonlyArray<{
+  key: string;
+  label: string;
+  summaryKey: string;
+  valueFormat: string;
+}> = [
+  { key: "net_profit", label: "Net Profit", summaryKey: "net_profit_pct", valueFormat: "signed_percent" },
+  { key: "max_drawdown", label: "Max Drawdown", summaryKey: "max_drawdown_pct", valueFormat: "signed_percent" },
+  { key: "romad", label: "ROMAD", summaryKey: "romad", valueFormat: "decimal2" },
+  { key: "win_rate", label: "Win Rate", summaryKey: "win_rate", valueFormat: "percent" },
+  { key: "profit_factor", label: "Profit Factor", summaryKey: "profit_factor", valueFormat: "decimal2" },
+];
+
+// The explicit missing-value state (F-17 acceptance: a missing headline metric
+// renders an explicit N/A rather than disappearing or being fabricated as 0, L4).
+export const HEADLINE_NA = "N/A";
+
+// Format one headline metric from the raw projection dict. A missing or non-finite
+// value → explicit N/A; a present value is formatted by the SAME presentation
+// formatter the Result detail + History digests use, so the values match (F-17).
+export function formatHeadlineMetric(
+  headline: Record<string, unknown> | null | undefined,
+  metric: { summaryKey: string; valueFormat: string },
+): string {
+  const raw = headline?.[metric.summaryKey];
+  if (raw === null || raw === undefined) return HEADLINE_NA;
+  if (!Number.isFinite(Number(raw))) return HEADLINE_NA;
+  return formatMetricValue({
+    value: String(raw),
+    value_format: metric.valueFormat,
+    availability: "computed",
+  });
 }
 
 // --------------------------------------------------------------------------- //

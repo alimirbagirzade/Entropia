@@ -12715,6 +12715,30 @@
       }
     },
     "/api/v1/strategy-drafts": {
+      "get": {
+        "operationId": "list_strategy_drafts_api_v1_strategy_drafts_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response List Strategy Drafts Api V1 Strategy Drafts Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Strategy Drafts",
+        "tags": [
+          "strategy"
+        ]
+      },
       "post": {
         "operationId": "create_strategy_draft_api_v1_strategy_drafts_post",
         "parameters": [

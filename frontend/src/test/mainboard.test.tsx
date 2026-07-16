@@ -114,6 +114,46 @@ describe("Mainboard", () => {
     expect(await screen.findByText("Backtest Ready: Not checked yet")).toBeTruthy();
   });
 
+  it("locks RUN until a current Ready Check passes (not_ready → disabled button, not a link)", async () => {
+    // MAINBOARD ships not_ready, so RUN must be a genuinely disabled control —
+    // out of the tab order and unreachable by pointer OR keyboard (F-16).
+    stubRoutes();
+    renderPage();
+    const run = await screen.findByRole("button", { name: "RUN" });
+    expect(run).toBeDisabled();
+    // No navigable RUN link exists in the locked state.
+    expect(screen.queryByRole("link", { name: "RUN" })).toBeNull();
+    expect(
+      screen.getByText("RUN is available only after a current Backtest Ready Check passes."),
+    ).toBeTruthy();
+  });
+
+  it("unlocks RUN as a navigable link once the composition is ready", async () => {
+    stubRoutes({
+      "GET /mainboards/default": {
+        ...MAINBOARD,
+        ready_summary: { state: "ready", report_id: "rr_1" },
+      },
+    });
+    renderPage();
+    const run = await screen.findByRole("link", { name: "RUN" });
+    expect(run.getAttribute("href")).toBe("/backtest/run");
+    // The disabled placeholder is gone once RUN is a real link.
+    expect(screen.queryByRole("button", { name: "RUN" })).toBeNull();
+  });
+
+  it("unlocks RUN when the composition is ready with warnings (warnings never block)", async () => {
+    stubRoutes({
+      "GET /mainboards/default": {
+        ...MAINBOARD,
+        ready_summary: { state: "ready_with_warnings", report_id: "rr_2" },
+      },
+    });
+    renderPage();
+    const run = await screen.findByRole("link", { name: "RUN" });
+    expect(run.getAttribute("href")).toBe("/backtest/run");
+  });
+
   it("renders the latest succeeded result with its summary line and deep-link", async () => {
     stubRoutes({
       "GET /mainboards/default": {

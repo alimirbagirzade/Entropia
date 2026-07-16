@@ -33,7 +33,9 @@ const MAINBOARD = {
       row_version: 1,
     },
   ],
-  ready_summary: { state: "not_ready", report_id: null },
+  // F-16: a RUN-runnable composition (blocker-free) so the admit path is
+  // reachable; the readiness gate is exercised by its own not_ready test below.
+  ready_summary: { state: "ready_with_warnings", report_id: "rr_1" },
   latest_result_summary: null,
 };
 
@@ -206,6 +208,32 @@ describe("RUN & Backtest Results page", () => {
     );
     const runHeaders = (runCall?.[1] as RequestInit).headers as Record<string, string>;
     expect(runHeaders["Idempotency-Key"]).toBeTruthy();
+  });
+
+  it("locks admission when the composition has not passed a current Ready Check", async () => {
+    const fetchMock = stubApi({
+      "GET /mainboards/default": { ...MAINBOARD, ready_summary: { state: "not_ready", report_id: null } },
+    });
+    renderPage();
+
+    // The readiness projection is surfaced verbatim, and the admit button is a
+    // genuinely disabled control — no click round-trips to the server.
+    expect(await screen.findByText("Backtest Ready: Not Ready")).toBeInTheDocument();
+    const admit = screen.getByRole("button", { name: "Request Backtest Run" });
+    expect(admit).toBeDisabled();
+    expect(
+      screen.getByText(/RUN is available only after a current Backtest Ready Check passes/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open Backtest Ready Check" })).toBeInTheDocument();
+
+    fireEvent.click(admit);
+    // A disabled button admits nothing — no POST to backtest-runs was issued.
+    expect(
+      fetchMock.mock.calls.some(
+        ([url, init]) =>
+          String(url).includes("/backtest-runs") && (init as RequestInit)?.method === "POST",
+      ),
+    ).toBe(false);
   });
 
   it("deep-links an immutable result via ?result=", async () => {

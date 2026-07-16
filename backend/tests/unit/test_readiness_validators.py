@@ -261,6 +261,37 @@ def test_strategy_supported_order_type_does_not_block() -> None:
     assert Code.STRATEGY_ORDER_TYPE_UNSUPPORTED.value not in _codes(market_result)
 
 
+def test_strategy_unsupported_partial_close_aftermath_blocks() -> None:
+    # F-07c: a partial close (close_percentage 50) with a trailing aftermath is not modelled
+    # (deferred to slice f) → the engine fails closed → Ready Check surfaces it.
+    payload = _strategy_payload()
+    payload["position_exit_logic"] = {
+        "close_percentage": "50",
+        "partial_aftermath": "trailing_stop",
+    }
+    result = evaluate_readiness(
+        [_strategy_item(payload=payload)], allocation_enabled=False, allocation_issues=[]
+    )
+    assert Code.STRATEGY_PARTIAL_CLOSE_UNSUPPORTED.value in _codes(result)
+    assert result.state == ReadinessState.NOT_READY
+
+
+def test_strategy_supported_partial_close_does_not_block() -> None:
+    # A 50% partial with a move-stop-to-entry aftermath is modelled; a full close (default
+    # payload, close_percentage 100) likewise raises no partial-close blocker.
+    payload = _strategy_payload()
+    payload["position_exit_logic"] = {
+        "close_percentage": "50",
+        "partial_aftermath": "move_stop_to_entry",
+    }
+    partial = evaluate_readiness(
+        [_strategy_item(payload=payload)], allocation_enabled=False, allocation_issues=[]
+    )
+    assert Code.STRATEGY_PARTIAL_CLOSE_UNSUPPORTED.value not in _codes(partial)
+    full = evaluate_readiness([_strategy_item()], allocation_enabled=False, allocation_issues=[])
+    assert Code.STRATEGY_PARTIAL_CLOSE_UNSUPPORTED.value not in _codes(full)
+
+
 def test_strategy_default_costs_warns_not_blocks() -> None:
     payload = _strategy_payload()
     payload["data"]["costs"] = {"slippage_value": "0.1"}  # commission + spread unset

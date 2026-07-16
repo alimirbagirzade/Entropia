@@ -25,6 +25,7 @@ from entropia.domain.allocation.rules import AllocationIssue
 from entropia.domain.backtest.engine import (
     execution_timing_is_modelled,
     order_execution_is_modelled,
+    partial_close_is_modelled,
     sizing_is_modelled,
 )
 from entropia.domain.mainboard.enums import MainboardItemKind
@@ -407,6 +408,27 @@ def _strategy_issues(item: ReadinessItemInput, *, allocation_enabled: bool) -> l
                 "and Stop-Limit orders (no trigger price is stored), a best-bid/ask limit "
                 "price, and partial fills are not yet supported.",
                 field_path="data.order_config",
+                scope_id=item.item_id,
+            )
+        )
+
+    # F-07c: a partial close (close_percentage < 100) with an unmodelled aftermath (trailing /
+    # lock-in, deferred to slice f) must BLOCK RUN — the engine fails closed (opens no position)
+    # for it. Shares the single ``partial_close_is_modelled`` predicate with the engine so the
+    # two never diverge. A full close (close_percentage == 100) or a move-stop / close-all
+    # aftermath is modelled and raises nothing.
+    if not partial_close_is_modelled(config):
+        issues.append(
+            ReadinessIssue(
+                Code.STRATEGY_PARTIAL_CLOSE_UNSUPPORTED,
+                Sev.BLOCKER,
+                Scope.STRATEGY,
+                "The strategy's partial-close aftermath is not supported by the backtest "
+                "engine and would open no position.",
+                remediation="For a partial close (close percentage under 100), use the "
+                "'move stop to entry' or 'close all' aftermath. Trailing-stop and lock-in-"
+                "profit aftermaths are not yet supported.",
+                field_path="position_exit_logic",
                 scope_id=item.item_id,
             )
         )

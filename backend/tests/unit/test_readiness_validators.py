@@ -292,6 +292,57 @@ def test_strategy_supported_partial_close_does_not_block() -> None:
     assert Code.STRATEGY_PARTIAL_CLOSE_UNSUPPORTED.value not in _codes(full)
 
 
+def test_strategy_unsupported_scaling_blocks() -> None:
+    # F-07d: Logic-Based scaling needs separate scale-rule evaluators (a later slice) → the
+    # engine fails closed (opens no position) → Ready Check surfaces it as a BLOCKER.
+    payload = _strategy_payload()
+    payload["scaling_logic"] = {
+        "enabled": True,
+        "method": "logic_based_scaling",
+        "logic_scaling": {
+            "indicator_blocks": [
+                {
+                    "block_id": "sc_1",
+                    "display_order": 0,
+                    "package_ref": {
+                        "package_root_id": "pkg_root_1",
+                        "package_revision_id": "pkg_rev_1",
+                        "package_content_hash": "b" * 64,
+                    },
+                    "trigger_source": "indicator_native_trigger",
+                    "requirement": "required",
+                }
+            ]
+        },
+        "add_size_value": "50",
+    }
+    result = evaluate_readiness(
+        [_strategy_item(payload=payload)], allocation_enabled=False, allocation_issues=[]
+    )
+    assert Code.STRATEGY_SCALING_UNSUPPORTED.value in _codes(result)
+    assert result.state == ReadinessState.NOT_READY
+
+
+def test_strategy_supported_scaling_does_not_block() -> None:
+    # A Price-Distance ladder on the strategy timeframe with a positive add size is modelled;
+    # disabled/absent scaling (the default payload) likewise raises no scaling blocker.
+    payload = _strategy_payload()
+    payload["scaling_logic"] = {
+        "enabled": True,
+        "method": "price_distance_scaling",
+        "price_scaling": {"retracement_distance": "1.0", "layers": 2},
+        "add_size": "percent_of_initial",
+        "add_size_value": "50",
+        "scaling_limits": {"max_scaling_layers": 2, "max_total_position_size": "100"},
+    }
+    scaled = evaluate_readiness(
+        [_strategy_item(payload=payload)], allocation_enabled=False, allocation_issues=[]
+    )
+    assert Code.STRATEGY_SCALING_UNSUPPORTED.value not in _codes(scaled)
+    absent = evaluate_readiness([_strategy_item()], allocation_enabled=False, allocation_issues=[])
+    assert Code.STRATEGY_SCALING_UNSUPPORTED.value not in _codes(absent)
+
+
 def test_strategy_default_costs_warns_not_blocks() -> None:
     payload = _strategy_payload()
     payload["data"]["costs"] = {"slippage_value": "0.1"}  # commission + spread unset

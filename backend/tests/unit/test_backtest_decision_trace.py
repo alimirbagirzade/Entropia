@@ -254,10 +254,11 @@ def test_diagnostics_expose_trace_schema_and_unmodelled_classes() -> None:
     diag = out.diagnostics
     assert diag["decision_trace_schema"] == DECISION_TRACE_SCHEMA == "v1"
     assert set(diag["decision_trace_event_types"]) == set(DECISION_TRACE_EVENT_TYPES)
-    # Honest V1 boundary: scaling never occurs and a partial FILL is unmodellable over OHLCV,
-    # surfaced (never fabricated). A partial CLOSE IS modelled (F-07c) so it is NOT listed.
+    # Honest V1 boundary: a partial FILL is unmodellable over OHLCV, surfaced (never
+    # fabricated). A partial CLOSE IS modelled (F-07c) and same-direction SCALING IS
+    # modelled (F-07d) so neither is listed.
     assert diag["unmodelled_decision_classes"] == list(UNMODELLED_DECISION_CLASSES)
-    assert "same_direction_scaling" in diag["unmodelled_decision_classes"]
+    assert "same_direction_scaling" not in diag["unmodelled_decision_classes"]
     assert "partial_fill" in diag["unmodelled_decision_classes"]
     assert "partial_close" not in diag["unmodelled_decision_classes"]
 

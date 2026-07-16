@@ -26,6 +26,7 @@ from entropia.domain.backtest.engine import (
     execution_timing_is_modelled,
     order_execution_is_modelled,
     partial_close_is_modelled,
+    scaling_is_modelled,
     sizing_is_modelled,
 )
 from entropia.domain.mainboard.enums import MainboardItemKind
@@ -429,6 +430,29 @@ def _strategy_issues(item: ReadinessItemInput, *, allocation_enabled: bool) -> l
                 "'move stop to entry' or 'close all' aftermath. Trailing-stop and lock-in-"
                 "profit aftermaths are not yet supported.",
                 field_path="position_exit_logic",
+                scope_id=item.item_id,
+            )
+        )
+
+    # F-07d: an unsupported SCALING configuration must BLOCK RUN — the engine fails closed
+    # (opens no position) for it. Price-Distance scaling on the strategy's own timeframe with
+    # a positive add size is modelled; Logic-Based scaling, a per-layer timeframe override
+    # (increasing-by-layer / custom TF sequence), a missing/non-positive add size and a
+    # negative/non-positive cap are deferred or misconfigured. Shares the single
+    # ``scaling_is_modelled`` predicate with the engine so the two never diverge. Disabled
+    # (or absent) scaling raises nothing.
+    if not scaling_is_modelled(config):
+        issues.append(
+            ReadinessIssue(
+                Code.STRATEGY_SCALING_UNSUPPORTED,
+                Sev.BLOCKER,
+                Scope.STRATEGY,
+                "The strategy's scaling (additional layer) configuration is not supported "
+                "by the backtest engine and would open no position.",
+                remediation="Use Price-Distance Based scaling on the strategy timeframe "
+                "with a positive add size, or disable scaling. Logic-Based scaling and "
+                "per-layer timeframe overrides are not yet supported.",
+                field_path="scaling_logic",
                 scope_id=item.item_id,
             )
         )

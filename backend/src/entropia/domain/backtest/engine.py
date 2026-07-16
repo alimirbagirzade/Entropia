@@ -78,19 +78,19 @@ DECISION_TRACE_EVENT_TYPES = (
     "filtered_no_entry",  # a signal was filtered by the direction bias (no fill attempt)
     "exit_scheduled",  # a deferred exit was scheduled to a future bar (F-07a timing)
     "position_partial_close",  # an exit signal closed part of the position (F-07c close_percentage)
+    "scale_layer_added",  # a same-direction layer was added to the open position (F-07d scaling)
+    "scale_layer_rejected",  # a scaling candidate was rejected by an exposure/size cap (F-07d)
     "position_close",  # a position closed (trade linkage + exit reason + realized pnl)
     "stop_resolution",  # multi-rule / logic stop resolution (F-08 combination engine)
     "stop_exit_collision",  # same-bar stop+exit tie-break decision (§5.9)
     "funding_charge",  # a funding rate applied to the open position (F-11, doc 12 §8.4)
 )
-# Honest V1 boundary: the bar-replay engine never SCALES a position (one entry per lifecycle)
-# and cannot model a partial FILL (OHLCV carries no volume-at-price / order book, so the
-# filled fraction of a limit order is unknowable) — surfaced, never fabricated as a phantom
-# event. ``partial_close`` IS modelled (F-07c ``close_percentage``), so it left this list.
-UNMODELLED_DECISION_CLASSES = (
-    "same_direction_scaling",
-    "partial_fill",
-)
+# Honest V1 boundary: the bar-replay engine cannot model a partial FILL (OHLCV carries no
+# volume-at-price / order book, so the filled fraction of a limit order is unknowable) —
+# surfaced, never fabricated as a phantom event. ``partial_close`` IS modelled (F-07c
+# ``close_percentage``) and ``same_direction_scaling`` IS modelled (F-07d price-distance
+# layers), so both left this list.
+UNMODELLED_DECISION_CLASSES = ("partial_fill",)
 
 
 @dataclass(frozen=True, slots=True)
@@ -214,6 +214,19 @@ class _Position:
     trail_pct: Decimal | None
     trail_anchor: Decimal  # best price seen since entry (favourable extreme)
     entry_notional: Decimal
+    # F-07d same-direction scaling state. ``entry_price``/``size`` become the size-weighted
+    # AVERAGE basis / total across layers (the single-position invariant extends, it does not
+    # break: one lifecycle, one trade-per-lot accounting); each layer's own fill price lives in
+    # its ``scale_layer_added`` trace event. ``scale_reference`` is the RAW (pre-cost) price
+    # the next price-distance threshold is measured from — the initial entry's fill, advancing
+    # to each trigger bar's close (spec §11.3: reference = initial entry OR previous filled
+    # layer; the ladder form). Stop LEVELS stay as installed at the initial entry (documented
+    # "fixed for the position's life" invariant) — re-anchoring policies are out of scope.
+    # Defaulted (inert unless the ladder runs) so stop-combination tests constructing a
+    # position directly stay valid; ``_open`` always sets all three explicitly.
+    initial_size: Decimal = _ZERO
+    layers_filled: int = 0
+    scale_reference: Decimal = _ZERO
 
 
 @dataclass(slots=True)
@@ -541,6 +554,51 @@ def partial_close_is_modelled(config: StrategyConfig) -> bool:
     if exit_logic.close_percentage >= _HUNDRED:
         return True
     return exit_logic.partial_aftermath in _MODELLED_PARTIAL_AFTERMATHS
+
+
+# §7 Same-direction scaling modelled by the bar-replay (F-07d, Master Ref §11). The engine
+# previously never scaled: a saved scaling config was silently ignored. Now PRICE-DISTANCE
+# scaling on the strategy's own timeframe is executed as a deterministic ladder — each
+# ``retracement_distance``% adverse close from the reference (initial entry, then the
+# previous trigger close) creates ONE layer candidate; candidates pass the layer-count caps
+# at CREATION (a capped ladder simply generates no candidate, §11.4 "yeni layer oluşturulmaz")
+# and the exposure/size caps at ACCEPTANCE (an over-cap layer is REJECTED with a ledger
+# reason, never auto-trimmed — §11.4 exposure binding). NOT modelled (fail closed):
+#   * ``logic_based_scaling`` — needs separate scale-rule evaluators (a later slice);
+#   * a scaling ``timeframe`` other than ``same_as_base_tf`` (increasing-by-layer / custom
+#     TF sequence) — needs per-layer resampled evaluation;
+#   * a missing / non-positive ``add_size_value`` (no layer size is derivable);
+#   * a negative ``max_scaling_layers`` or a non-positive ``max_total_position_size``
+#     (misconfigurations the schema does not reject — spec §11.4 requires int >= 0).
+# ``enabled=false`` / an absent subtree is trivially modelled (nothing to scale — the
+# disabled-section filter collapses it to None; byte-identical baseline).
+
+
+def scaling_is_modelled(config: StrategyConfig) -> bool:
+    """Public predicate: is this strategy's same-direction scaling modelled (F-07d)?
+
+    The single shared source of truth for the readiness ``STRATEGY_SCALING_UNSUPPORTED``
+    blocker and the engine's fail-closed entry gate. Disabled/absent scaling is always
+    modelled; enabled scaling is modelled only as the price-distance ladder on the
+    strategy's own timeframe with a derivable positive add size and sane caps — anything
+    else is blocked at Ready Check AND opens no position if a stale readiness state slips
+    through to the worker (never a silently un-scaled run the user did not configure)."""
+    scaling = config.scaling_logic
+    if scaling is None or not scaling.enabled:
+        return True
+    if scaling.timeframe != "same_as_base_tf":
+        return False
+    if scaling.method != "price_distance_scaling" or scaling.price_scaling is None:
+        return False
+    if scaling.add_size_value is None or scaling.add_size_value <= _ZERO:
+        return False
+    limits = scaling.scaling_limits
+    if limits is not None:
+        if limits.max_scaling_layers is not None and limits.max_scaling_layers < 0:
+            return False
+        if limits.max_total_position_size is not None and limits.max_total_position_size <= _ZERO:
+            return False
+    return True
 
 
 def _limit_price(price_rule: str, reference: Decimal, offset: Decimal) -> Decimal:
@@ -1001,6 +1059,32 @@ def run_engine(
     if partial_aftermath == "close_all":
         close_fraction = _ONE  # the exit signal closes 100% regardless of close_percentage
 
+    # F-07d: same-direction scaling. A modelled price-distance config runs the layer ladder
+    # against the open position; an unsupported config (logic-based / TF override / missing
+    # add size / misconfigured cap) opens NO position — the fail-closed backstop to the Ready
+    # Check STRATEGY_SCALING_UNSUPPORTED blocker, never a silently un-scaled run.
+    scaling_cfg = config.scaling_logic
+    scaling_enabled = scaling_cfg is not None and scaling_cfg.enabled
+    scaling_ok = scaling_is_modelled(config)
+    scaling_active = scaling_enabled and scaling_ok
+    scale_distance = _ZERO
+    scale_max_layers = 0
+    scale_add_basis = ""
+    scale_add_value = _ZERO
+    scale_max_total: Decimal | None = None
+    if scaling_active and scaling_cfg is not None and scaling_cfg.price_scaling is not None:
+        price_scaling = scaling_cfg.price_scaling
+        scale_distance = price_scaling.retracement_distance
+        # The method's planned ladder depth, further capped by the optional global limit
+        # (§11.4 Max Additional Layers, int >= 0 — 0 legally disables the ladder).
+        scale_max_layers = price_scaling.layers
+        scale_limits = scaling_cfg.scaling_limits
+        if scale_limits is not None and scale_limits.max_scaling_layers is not None:
+            scale_max_layers = min(scale_max_layers, scale_limits.max_scaling_layers)
+        scale_max_total = scale_limits.max_total_position_size if scale_limits is not None else None
+        scale_add_basis = scaling_cfg.add_size
+        scale_add_value = scaling_cfg.add_size_value or _ZERO
+
     plan_active = indicator_plan is not None and indicator_plan.has_entry
     entry_evals: list[BlockEvaluator] = (
         build_evaluators(indicator_plan.entry_specs) if plan_active and indicator_plan else []
@@ -1044,6 +1128,8 @@ def run_engine(
     limit_orders_filled = 0
     limit_orders_cancelled = 0
     partial_closes = 0
+    scale_layers_added = 0
+    scale_layers_rejected = 0
     gross_profit = _ZERO
     gross_loss = _ZERO
     # F-11: funding cost state. ``funding_records`` is the ascending, available-time-safe
@@ -1279,6 +1365,9 @@ def run_engine(
             trail_pct=trail_pct,
             trail_anchor=fill_raw,
             entry_notional=(entry_eff * size).quantize(_MONEY),
+            initial_size=size,
+            layers_filled=0,
+            scale_reference=fill_raw,
         )
 
     def _do_open(
@@ -1363,6 +1452,9 @@ def run_engine(
             if not first_ts:
                 first_ts = bar.timestamp
             last_bar = bar
+            # F-07d: an exit lot (full or partial) realized on THIS bar appends a trade row;
+            # the scale ladder below never adds to a position a bar has already reduced.
+            trades_before_bar = len(trades)
 
             # Real indicator signals (when a plan resolved); evaluators see EVERY bar.
             entry_signal: str | None = None
@@ -1584,14 +1676,15 @@ def run_engine(
                 timing_ok
                 and order_ok
                 and partial_close_ok
+                and scaling_ok
                 and pending is None
                 and working_limit is None
             ):
                 # Flat and uncommitted: evaluate a fresh entry, then open now (immediate),
                 # schedule a deferred fill (timing), or rest a limit order. ``timing_ok``,
-                # ``order_ok`` and ``partial_close_ok`` are the fail-closed backstops — an
-                # unsupported timing / order type / partial-close aftermath opens nothing
-                # (F-07a / F-07b / F-07c).
+                # ``order_ok``, ``partial_close_ok`` and ``scaling_ok`` are the fail-closed
+                # backstops — an unsupported timing / order type / partial-close aftermath /
+                # scaling config opens nothing (F-07a / F-07b / F-07c / F-07d).
                 want: str | None = None
                 if plan_active:
                     # (3a) real indicator entry, respecting the direction bias.
@@ -1719,6 +1812,124 @@ def run_engine(
                     else:
                         _apply_partial_aftermath(position)
                 pending = None
+
+            # (5) F-07d same-direction scaling — the price-distance ladder over the OPEN
+            # position (Master Ref §11.3/§11.4). Runs AFTER every entry/exit/stop resolution
+            # of the bar so it sees the position's final state: a bar that closed or reduced
+            # the position (``trades_before_bar``) or committed an exit (``pending``) never
+            # also scales it. One threshold cross = ONE candidate: crossing
+            # ``retracement_distance``% ADVERSE from the reference (initial entry fill, then
+            # each trigger close) creates the candidate and ADVANCES the reference whether or
+            # not the candidate is accepted — bounded events (each further candidate needs a
+            # further full step), no O(bars) re-trigger spam. The layer-count caps gate
+            # candidate CREATION (an exhausted ladder generates nothing, §11.4); the
+            # exposure/size caps gate ACCEPTANCE — an over-cap layer is REJECTED with a
+            # ledger reason, never auto-trimmed (§11.4 exposure binding). An accepted layer
+            # fills at the trigger bar's CLOSE (the deterministic decision point — the
+            # F-07a deferral remains the initial entry's contract), pays one fill's
+            # commission at fill time (the close still books the round trip), and folds into
+            # the single position as a size-weighted average basis; stop LEVELS stay as
+            # installed at entry.
+            if (
+                position is not None
+                and scaling_active
+                and pending is None
+                and len(trades) == trades_before_bar
+                and position.layers_filled < scale_max_layers
+            ):
+                scale_ref = position.scale_reference
+                scale_long = position.direction == "long"
+                scale_step = scale_ref * scale_distance / _HUNDRED
+                scale_crossed = (
+                    bar.close <= scale_ref - scale_step
+                    if scale_long
+                    else bar.close >= scale_ref + scale_step
+                )
+                if scale_crossed:
+                    position.scale_reference = bar.close  # the ladder steps from this trigger
+                    if scale_add_basis == "fixed_amount":
+                        layer_size = scale_add_value.quantize(_QTY)
+                    else:
+                        layer_base = (
+                            position.initial_size
+                            if scale_add_basis == "percent_of_initial"
+                            else position.size
+                        )
+                        layer_size = (layer_base * scale_add_value / _HUNDRED).quantize(_QTY)
+                    layer_eff = _effective_fill(
+                        bar.close, is_buy=scale_long, half_spread=half_spread, slip=slippage
+                    )
+                    scaled_size = position.size + layer_size
+                    size_limits = config.position_sizing.position_size_limits
+                    reject_reason: str | None = None
+                    reject_cap: str | None = None
+                    if layer_size <= _ZERO:
+                        # A degenerate candidate (e.g. a percent basis quantized to 0) adds
+                        # nothing — rejected, never a phantom 0-size layer.
+                        reject_reason = "layer_size_not_positive"
+                    elif scale_max_total is not None and scaled_size > scale_max_total:
+                        reject_reason = "max_total_exposure"
+                        reject_cap = str(scale_max_total)
+                    elif (
+                        size_limits is not None
+                        and size_limits.max_position_size is not None
+                        and scaled_size > size_limits.max_position_size
+                    ):
+                        reject_reason = "position_size_limit"
+                        reject_cap = str(size_limits.max_position_size)
+                    elif alloc_on:
+                        sleeve_remaining = _sleeve_capital(equity) - position.entry_notional
+                        if (layer_eff * layer_size) > sleeve_remaining:
+                            reject_reason = "sleeve_capacity"
+                            reject_cap = str(max(sleeve_remaining, _ZERO).quantize(_MONEY))
+                    if reject_reason is not None:
+                        scale_layers_rejected += 1
+                        _emit(
+                            "scale_layer_rejected",
+                            event_time=bar.timestamp,
+                            direction=position.direction,
+                            bar_seq=bars_seen,
+                            detail={
+                                "position_seq": position.position_seq,
+                                "reason": reject_reason,
+                                "cap": reject_cap,
+                                "reference": str(scale_ref),
+                                "candidate_size": str(layer_size),
+                                "layers_filled": position.layers_filled,
+                            },
+                        )
+                    else:
+                        new_basis = (
+                            (position.entry_price * position.size + layer_eff * layer_size)
+                            / scaled_size
+                        ).quantize(_MONEY)
+                        position.entry_price = new_basis
+                        position.size = scaled_size
+                        position.entry_notional = (new_basis * scaled_size).quantize(_MONEY)
+                        position.layers_filled += 1
+                        scale_layers_added += 1
+                        if commission > _ZERO:
+                            # The layer's own entry fill pays its commission NOW; the close
+                            # still books one round trip (initial entry + exit) — N layers
+                            # pay exactly N extra fills, no double counting.
+                            equity = (equity - commission).quantize(_MONEY)
+                        _emit(
+                            "scale_layer_added",
+                            event_time=bar.timestamp,
+                            direction=position.direction,
+                            bar_seq=bars_seen,
+                            detail={
+                                "position_seq": position.position_seq,
+                                "layer_seq": position.layers_filled,
+                                "reference": str(scale_ref),
+                                "fill_price": str(layer_eff),
+                                "layer_size": str(layer_size),
+                                "new_size": str(scaled_size),
+                                "entry_basis": str(new_basis),
+                                "exposure": str(position.entry_notional),
+                                "method": "price_distance_scaling",
+                            },
+                        )
 
             # (6) F-11 funding cost — a backward/as-of join over the available-time-safe
             # schedule (doc 12 §8.4 rule 3). Every funding record now AVAILABLE at this bar
@@ -1871,6 +2082,18 @@ def run_engine(
         # than silently ignoring the aftermath. Ready Check raises
         # STRATEGY_PARTIAL_CLOSE_UNSUPPORTED — this L4 warning is the engine backstop.
         warnings.append(f"partial_close_unsupported:{partial_aftermath}")
+    if not scaling_ok:
+        # An enabled scaling config the ladder cannot execute (logic-based scaling, a
+        # per-layer timeframe override, a missing/non-positive add size, or a misconfigured
+        # cap) is not modelled; the run opened NO position (fail closed, F-07d) rather than
+        # silently running un-scaled. Ready Check raises STRATEGY_SCALING_UNSUPPORTED —
+        # this L4 warning is the engine backstop.
+        unsupported_method = (
+            scaling_cfg.method
+            if scaling_cfg is not None and scaling_cfg.method is not None
+            else "unconfigured"
+        )
+        warnings.append(f"scaling_unsupported:{unsupported_method}")
     if indicator_plan is not None:
         # Blocks the native-trigger foundation could not compute (deferred sources,
         # timeframe overrides, non-directional keys) are surfaced, never hidden (L4).
@@ -1977,6 +2200,13 @@ def run_engine(
         "partial_aftermath": partial_aftermath,
         "partial_close_modelled": partial_close_ok,
         "partial_closes": partial_closes,
+        # F-07d: same-direction scaling provenance + ladder counts.
+        "scaling_enabled": scaling_enabled,
+        "scaling_method": scaling_cfg.method if scaling_enabled and scaling_cfg else None,
+        "scaling_modelled": scaling_ok,
+        "scale_layers_added": scale_layers_added,
+        "scale_layers_rejected": scale_layers_rejected,
+        "max_total_exposure_active": scale_max_total is not None,
         "stop_exit_conflict": stop_exit_conflict,
         "stop_exit_collisions": stop_exit_collisions,
         "logic_stop_blocks": len(stop_evals),
@@ -2269,5 +2499,6 @@ __all__ = [
     "partial_close_is_modelled",
     "resolve_allocation_execution",
     "run_engine",
+    "scaling_is_modelled",
     "sizing_is_modelled",
 ]

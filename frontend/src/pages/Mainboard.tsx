@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { ApiError } from "@/lib/apiClient";
 import { Loading } from "@/components/Loading";
 import { ErrorState } from "@/components/ErrorState";
+import { ReadyCheckModal } from "@/components/ReadyCheckModal";
 import { StatusBadge } from "@/components/StatusBadge";
 import { StrategyDetailsPanel } from "@/components/StrategyDetailsPanel";
 import {
@@ -578,6 +579,11 @@ export function Mainboard() {
   // (F-15 acceptance: "appears as a horizontal Mainboard row and opens its
   // type-specific inline editor"). Cleared once consumed.
   const [justAddedItemId, setJustAddedItemId] = useState<string | null>(null);
+  // UI-14: the Backtest Ready Check opens as an in-context modal from the fixed
+  // lower-right shell — not a route navigation. The modal mounts only while open,
+  // so its readiness fetch fires on demand (the strip below already reflects the
+  // real state from the default-Mainboard projection with no extra request).
+  const [readyCheckOpen, setReadyCheckOpen] = useState(false);
   // Transient external-draft rows added inline from the Add-menu submenu (UI-03).
   // Local presentation state — nothing is persisted until the row's workbench
   // Save (doc 03 §7.1), so these never appear in the server projection.
@@ -707,24 +713,10 @@ export function Mainboard() {
             <dt>Workspace version</dt>
             <dd>{data.row_version}</dd>
           </dl>
+          {/* UI-14: Ready Check + RUN live in the fixed lower-right shell below   */}
+          {/* (the v18 prototype's run-controls). Only the composition-scoped      */}
+          {/* Freeze action remains inline here.                                   */}
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 14 }}>
-            <Link to="/backtest/ready-check" className="btn">Backtest Ready Check</Link>
-            {runnable ? (
-              <Link to="/backtest/run" className="btn btn-primary">RUN</Link>
-            ) : (
-              // Locked: a real disabled <button>, not a Link — it is out of the
-              // tab order and cannot be activated by pointer OR keyboard, so the
-              // RUN route is unreachable until a current Ready Check passes.
-              <button
-                type="button"
-                className="btn btn-primary"
-                disabled
-                aria-describedby="run-locked-note"
-                title="RUN is available only after a current Backtest Ready Check passes."
-              >
-                RUN
-              </button>
-            )}
             <button
               type="button"
               className="btn"
@@ -745,6 +737,64 @@ export function Mainboard() {
           )}
         </section>
       </div>
+
+      {/* UI-14: the fixed lower-right Ready Check / RUN shell (v18 prototype        */}
+      {/* .run-controls). The status strip is bound to the REAL readiness state     */}
+      {/* from the default-Mainboard projection (readyStatusTone), never static     */}
+      {/* decoration; Ready Check opens the in-context modal (no route change); RUN */}
+      {/* stays genuinely locked (a disabled button, out of the tab order) until a  */}
+      {/* current Ready Check passes (F-16 gate, unchanged).                        */}
+      <div className="run-controls">
+        <button
+          type="button"
+          className="ready-button"
+          aria-haspopup="dialog"
+          aria-expanded={readyCheckOpen}
+          aria-label="Backtest Ready Check"
+          onClick={() => setReadyCheckOpen(true)}
+        >
+          Backtest
+          <br />
+          Ready
+          <br />
+          Check
+        </button>
+        <span
+          className={`ready-status${
+            readyStatusTone(readyState) === "ok"
+              ? " ready"
+              : readyStatusTone(readyState) === "warn"
+                ? " warn"
+                : ""
+          }`}
+          role="img"
+          aria-label={readyStatusText(readyState)}
+          title={readyStatusText(readyState)}
+        />
+        {runnable ? (
+          <Link to="/backtest/run" className="run-button">
+            RUN
+          </Link>
+        ) : (
+          <button
+            type="button"
+            className="run-button locked"
+            disabled
+            aria-describedby="run-locked-note"
+            title="RUN is available only after a current Backtest Ready Check passes."
+          >
+            RUN
+          </button>
+        )}
+      </div>
+
+      {readyCheckOpen && (
+        <ReadyCheckModal
+          compositionId={data.workspace_id}
+          currentFingerprint={data.composition_hash ?? null}
+          onClose={() => setReadyCheckOpen(false)}
+        />
+      )}
     </>
   );
 }

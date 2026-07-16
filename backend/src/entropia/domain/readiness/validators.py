@@ -23,9 +23,11 @@ from entropia.domain.allocation.enums import AllocationIssueCode as AllocCode
 from entropia.domain.allocation.enums import AllocationIssueSeverity as AllocSev
 from entropia.domain.allocation.rules import AllocationIssue
 from entropia.domain.backtest.engine import (
+    conflict_handling_is_modelled,
     execution_timing_is_modelled,
     order_execution_is_modelled,
     partial_close_is_modelled,
+    restrictions_are_modelled,
     scaling_is_modelled,
     sizing_is_modelled,
 )
@@ -453,6 +455,51 @@ def _strategy_issues(item: ReadinessItemInput, *, allocation_enabled: bool) -> l
                 "with a positive add size, or disable scaling. Logic-Based scaling and "
                 "per-layer timeframe overrides are not yet supported.",
                 field_path="scaling_logic",
+                scope_id=item.item_id,
+            )
+        )
+
+    # F-07e: an unsupported Restrictions/Filters section must BLOCK RUN — the engine fails
+    # closed (opens no position) for it. Date-blackout / max-daily-loss / consecutive-loss
+    # filters with a parseable config and a block-entries action are modelled; volatility /
+    # spread / volume / correlation filters (each needs a data series OHLCV cannot honestly
+    # supply), another action (reduce / close / disable / warn) and a malformed config are
+    # not. Shares the single ``restrictions_are_modelled`` predicate with the engine so the
+    # two never diverge. Disabled filters (or an empty list) raise nothing.
+    if not restrictions_are_modelled(config):
+        issues.append(
+            ReadinessIssue(
+                Code.STRATEGY_RESTRICTIONS_UNSUPPORTED,
+                Sev.BLOCKER,
+                Scope.STRATEGY,
+                "The strategy's restrictions / filters are not supported by the backtest "
+                "engine and would open no position.",
+                remediation="Use Date Blackout Windows (date_ranges), Max Daily Loss "
+                "(limit_percent) or a Consecutive Loss Filter (max_losses) with the "
+                "block-entries action, or disable the filter. Volatility, spread, volume "
+                "and correlation filters are not yet supported.",
+                field_path="restrictions_filters",
+                scope_id=item.item_id,
+            )
+        )
+
+    # F-07e: an unsupported conflict/position-handling combination must BLOCK RUN — the
+    # engine fails closed (opens no position) for it. A true hedge (allow_hedge with
+    # exit-on-opposite off) needs two concurrent opposite positions the single-position
+    # bar-replay cannot honestly simulate. Shares the single
+    # ``conflict_handling_is_modelled`` predicate with the engine so the two never diverge.
+    if not conflict_handling_is_modelled(config):
+        issues.append(
+            ReadinessIssue(
+                Code.STRATEGY_CONFLICT_HANDLING_UNSUPPORTED,
+                Sev.BLOCKER,
+                Scope.STRATEGY,
+                "The strategy's opposite-direction hedge policy is not supported by the "
+                "backtest engine and would open no position.",
+                remediation="Enable 'exit on opposite signal', or set the opposite-"
+                "direction policy to 'close existing' or 'ignore'. Holding simultaneous "
+                "long and short positions (hedge mode) is not yet supported.",
+                field_path="conflict_position_handling",
                 scope_id=item.item_id,
             )
         )

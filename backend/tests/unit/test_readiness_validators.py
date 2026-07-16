@@ -343,6 +343,87 @@ def test_strategy_supported_scaling_does_not_block() -> None:
     assert Code.STRATEGY_SCALING_UNSUPPORTED.value not in _codes(absent)
 
 
+def test_strategy_unsupported_restriction_filter_blocks() -> None:
+    # F-07e: a volatility filter needs an ATR/indicator data series OHLCV alone cannot
+    # supply → the engine fails closed (opens no position) → Ready Check BLOCKER.
+    payload = _strategy_payload()
+    payload["restrictions_filters"] = {
+        "rule": "any",
+        "filters": [{"filter_type": "volatility_filter", "enabled": True, "filter_id": "flt_1"}],
+    }
+    result = evaluate_readiness(
+        [_strategy_item(payload=payload)], allocation_enabled=False, allocation_issues=[]
+    )
+    assert Code.STRATEGY_RESTRICTIONS_UNSUPPORTED.value in _codes(result)
+    assert result.state == ReadinessState.NOT_READY
+
+
+def test_strategy_supported_restriction_filters_do_not_block() -> None:
+    # F-07e: the modelled filters (date-blackout / max-daily-loss / consecutive-loss with
+    # canonical configs) raise nothing; a DISABLED unsupported filter is not an active rule.
+    payload = _strategy_payload()
+    payload["restrictions_filters"] = {
+        "rule": "all",
+        "filters": [
+            {
+                "filter_type": "date_blackout_filter",
+                "enabled": True,
+                "filter_id": "flt_1",
+                "config": {"date_ranges": [{"start": "2024-03-01", "end": "2024-03-05"}]},
+            },
+            {
+                "filter_type": "max_daily_loss_filter",
+                "enabled": True,
+                "filter_id": "flt_2",
+                "config": {"limit_percent": "2"},
+            },
+            {
+                "filter_type": "consecutive_loss_filter",
+                "enabled": True,
+                "filter_id": "flt_3",
+                "config": {"max_losses": 3},
+            },
+            {"filter_type": "spread_filter", "enabled": False, "filter_id": "flt_4"},
+        ],
+    }
+    result = evaluate_readiness(
+        [_strategy_item(payload=payload)], allocation_enabled=False, allocation_issues=[]
+    )
+    assert Code.STRATEGY_RESTRICTIONS_UNSUPPORTED.value not in _codes(result)
+
+
+def test_strategy_hedge_without_exit_on_opposite_blocks() -> None:
+    # F-07e: a true hedge (allow_hedge with exit-on-opposite OFF) needs two concurrent
+    # opposite positions the single-position replay cannot simulate → BLOCKER.
+    payload = _strategy_payload()
+    payload["conflict_position_handling"] = {
+        "exit_on_opposite_signal": False,
+        "opposite_direction_hedge": "allow_hedge",
+    }
+    result = evaluate_readiness(
+        [_strategy_item(payload=payload)], allocation_enabled=False, allocation_issues=[]
+    )
+    assert Code.STRATEGY_CONFLICT_HANDLING_UNSUPPORTED.value in _codes(result)
+    assert result.state == ReadinessState.NOT_READY
+
+
+def test_strategy_modelled_conflict_handling_does_not_block() -> None:
+    # F-07e: the defaults (exit-on-opposite ON) and every close/ignore combination are
+    # modelled; only the hedge-without-exit combination blocks.
+    default = evaluate_readiness([_strategy_item()], allocation_enabled=False, allocation_issues=[])
+    assert Code.STRATEGY_CONFLICT_HANDLING_UNSUPPORTED.value not in _codes(default)
+    payload = _strategy_payload()
+    payload["conflict_position_handling"] = {
+        "exit_on_opposite_signal": False,
+        "opposite_direction_hedge": "close_existing",
+        "same_direction_stacking": "replace_existing",
+    }
+    closing = evaluate_readiness(
+        [_strategy_item(payload=payload)], allocation_enabled=False, allocation_issues=[]
+    )
+    assert Code.STRATEGY_CONFLICT_HANDLING_UNSUPPORTED.value not in _codes(closing)
+
+
 def test_strategy_default_costs_warns_not_blocks() -> None:
     payload = _strategy_payload()
     payload["data"]["costs"] = {"slippage_value": "0.1"}  # commission + spread unset

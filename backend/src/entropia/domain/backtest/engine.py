@@ -29,6 +29,7 @@ from __future__ import annotations
 from collections import deque
 from collections.abc import Iterator
 from dataclasses import dataclass, replace
+from datetime import date
 from decimal import Decimal, InvalidOperation
 from typing import TYPE_CHECKING, Any
 
@@ -47,6 +48,7 @@ if TYPE_CHECKING:
     from entropia.domain.strategy.config import (
         PositionSizeLimits,
         PositionSizing,
+        RestrictionFilter,
         StrategyConfig,
     )
 
@@ -75,11 +77,18 @@ DECISION_TRACE_EVENT_TYPES = (
     "limit_order_placed",  # a resting limit ENTRY order was placed (F-07b, §2)
     "limit_order_cancelled",  # a resting limit order expired/ended unfilled (F-07b, §2)
     "entry_blocked",  # a wanted entry produced no fill (sizing / sleeve capacity)
-    "filtered_no_entry",  # a signal was filtered by the direction bias (no fill attempt)
+    # a signal was filtered with NO fill attempt; the detail's ``reason`` says why:
+    # "direction_restriction" (direction bias), "restriction_blocked" (an active
+    # Restrictions/Filters rule, F-07e), "stacking_ignored" / "stacking_scale_only"
+    # (same-direction conflict policy, F-07e), "hedge_ignored" (opposite-direction
+    # conflict policy, F-07e).
+    "filtered_no_entry",
     "exit_scheduled",  # a deferred exit was scheduled to a future bar (F-07a timing)
     "position_partial_close",  # an exit signal closed part of the position (F-07c close_percentage)
     "scale_layer_added",  # a same-direction layer was added to the open position (F-07d scaling)
     "scale_layer_rejected",  # a scaling candidate was rejected by an exposure/size cap (F-07d)
+    "stack_entry_added",  # a same-direction signal STACKED onto the open position (F-07e)
+    "stack_entry_rejected",  # a stack candidate was rejected by a size/sleeve cap (F-07e)
     "position_close",  # a position closed (trade linkage + exit reason + realized pnl)
     "stop_resolution",  # multi-rule / logic stop resolution (F-08 combination engine)
     "stop_exit_collision",  # same-bar stop+exit tie-break decision (§5.9)
@@ -601,6 +610,130 @@ def scaling_is_modelled(config: StrategyConfig) -> bool:
     return True
 
 
+# §8 Restrictions / Filters modelled by the bar-replay (F-07e, Master Ref §12). The engine
+# previously never evaluated ``restrictions_filters`` — a saved filter set was silently
+# ignored. Now the ENTRY-ELIGIBILITY gate runs over the filters the replay can decide
+# deterministically from its own bars + realized trade ledger:
+#   * ``date_blackout_filter`` — the bar's event date (UTC) inside any configured
+#     ``date_ranges`` window (inclusive, "YYYY-MM-DD") → active (§12.3);
+#   * ``max_daily_loss_filter`` — the UTC day's realized trade PnL at or beyond
+#     ``limit_percent`` of the run's initial capital → active (capital basis + UTC day
+#     are engine-version-pinned V1 choices, §12.4);
+#   * ``consecutive_loss_filter`` — the realized losing-lot streak at or beyond
+#     ``max_losses`` → active (each realized lot counts, incl. partial-close lots —
+#     the V1 aggregation policy §12.4 requires be fixed, pinned by the engine version).
+# The modelled ACTION is "block entries" only; a filter requesting another action
+# (reduce / close / disable / warn) FAILS CLOSED. NOT modelled (fail closed): volatility /
+# spread / volume / correlation filters — each needs a data series (ATR dependency, bid/ask
+# quotes, a volume-regime definition, a second instrument) OHLCV alone cannot honestly
+# supply (§12.2: a fake spread must never be derived from last price alone). ``rule`` combines
+# ACTIVE filters: "any" blocks when at least one enabled filter is active, "all" only when
+# every enabled filter is active. A disabled filter is not an active engine rule (mirrors
+# the disabled-child convention); no enabled filters → trivially modelled.
+_MODELLED_FILTER_TYPES = frozenset(
+    {"date_blackout_filter", "max_daily_loss_filter", "consecutive_loss_filter"}
+)
+_MODELLED_FILTER_ACTIONS = frozenset({"block", "block_entries"})
+
+
+@dataclass(frozen=True, slots=True)
+class _RestrictionSpec:
+    """One enabled restriction filter parsed to its modelled, typed form (F-07e)."""
+
+    filter_id: str
+    filter_type: str
+    date_ranges: tuple[tuple[date, date], ...] = ()
+    limit_percent: Decimal | None = None
+    max_losses: int | None = None
+
+
+def _parse_iso_date(value: Any) -> date | None:
+    """A strict ``YYYY-MM-DD`` calendar date from an untyped config cell, else ``None``."""
+    if not isinstance(value, str):
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def _parse_restriction(rf: RestrictionFilter) -> _RestrictionSpec | None:
+    """Parse ONE filter into its modelled spec; ``None`` = not modelled (fail closed).
+
+    The saved ``config`` is a free-form JSONB dict (the schema enforces no keys), so the
+    engine defines the canonical keys it executes: ``date_ranges`` (non-empty list of
+    ``{"start", "end"}`` ISO dates, start <= end), ``limit_percent`` (finite > 0),
+    ``max_losses`` (int >= 1). Anything missing / malformed — and any explicit ``action``
+    other than block-entries — is unmodellable and fails closed rather than guessed."""
+    if rf.filter_type not in _MODELLED_FILTER_TYPES:
+        return None
+    cfg = rf.config or {}
+    action = cfg.get("action")
+    if action is not None and action not in _MODELLED_FILTER_ACTIONS:
+        return None
+    if rf.filter_type == "date_blackout_filter":
+        raw_ranges = cfg.get("date_ranges")
+        if not isinstance(raw_ranges, list) or not raw_ranges:
+            return None
+        ranges: list[tuple[date, date]] = []
+        for item in raw_ranges:
+            if not isinstance(item, dict):
+                return None
+            start = _parse_iso_date(item.get("start"))
+            end = _parse_iso_date(item.get("end"))
+            if start is None or end is None or start > end:
+                return None
+            ranges.append((start, end))
+        return _RestrictionSpec(rf.filter_id, rf.filter_type, date_ranges=tuple(ranges))
+    if rf.filter_type == "max_daily_loss_filter":
+        limit = _safe_decimal(cfg.get("limit_percent"))
+        if limit is None or limit <= _ZERO:
+            return None
+        return _RestrictionSpec(rf.filter_id, rf.filter_type, limit_percent=limit)
+    max_losses = cfg.get("max_losses")
+    if isinstance(max_losses, bool) or not isinstance(max_losses, int) or max_losses < 1:
+        return None
+    return _RestrictionSpec(rf.filter_id, rf.filter_type, max_losses=max_losses)
+
+
+def restrictions_are_modelled(config: StrategyConfig) -> bool:
+    """Public predicate: is this strategy's Restrictions/Filters section modelled (F-07e)?
+
+    The single shared source of truth for the readiness ``STRATEGY_RESTRICTIONS_UNSUPPORTED``
+    blocker and the engine's fail-closed entry gate. No enabled filters is trivially
+    modelled; every enabled filter must be a modelled type (date-blackout / max-daily-loss /
+    consecutive-loss) with a parseable canonical config and a block-entries action —
+    anything else is blocked at Ready Check AND opens no position if a stale readiness
+    state slips through to the worker (never a silently unfiltered run)."""
+    return all(
+        _parse_restriction(rf) is not None
+        for rf in config.restrictions_filters.filters
+        if rf.enabled
+    )
+
+
+def conflict_handling_is_modelled(config: StrategyConfig) -> bool:
+    """Public predicate: is this strategy's conflict/position handling modelled (F-07e)?
+
+    The single shared source of truth for the readiness
+    ``STRATEGY_CONFLICT_HANDLING_UNSUPPORTED`` blocker and the engine's fail-closed entry
+    gate. The single-position bar-replay models every ``same_direction_stacking`` policy
+    (stack = fold-in add, replace, scale-delegate, ignore) and the opposite-direction
+    policies that resolve to ONE open position (exit-on-opposite close, ``close_existing``,
+    ``ignore``). A true HEDGE — ``opposite_direction_hedge="allow_hedge"`` with
+    ``exit_on_opposite_signal`` off — needs two concurrent opposite positions the engine
+    cannot honestly simulate, so it fails closed (with exit-on-opposite ON the opposite
+    signal closes the position first, so the hedge branch is never reached and every hedge
+    value is modelled). ``overlapping_signal_policy`` is vacuously modelled in V1: the
+    engine derives at most ONE aggregated signal per evaluation window (the signal-block
+    rule + the deterministic long-wins tie-break resolve same-window concurrency before
+    the policy could bite), so all its values share the executed behaviour."""
+    conflict = config.conflict_position_handling
+    if conflict.exit_on_opposite_signal:
+        return True
+    return conflict.opposite_direction_hedge != "allow_hedge"
+
+
 def _limit_price(price_rule: str, reference: Decimal, offset: Decimal) -> Decimal:
     """Resolve a limit level from a price rule + reference price + offset (F-07b).
 
@@ -1085,6 +1218,35 @@ def run_engine(
         scale_add_basis = scaling_cfg.add_size
         scale_add_value = scaling_cfg.add_size_value or _ZERO
 
+    # F-07e: Restrictions / Filters. The modelled filters (date-blackout / max-daily-loss /
+    # consecutive-loss, block-entries action) gate every ENTRY decision — flat entries AND
+    # conflict-driven entries (stack / replace); an unmodelled filter type or config opens
+    # NO position — the fail-closed backstop to the Ready Check
+    # STRATEGY_RESTRICTIONS_UNSUPPORTED blocker, never a silently unfiltered run.
+    restrictions_cfg = config.restrictions_filters
+    restriction_rule = restrictions_cfg.rule
+    restrictions_ok = restrictions_are_modelled(config)
+    restriction_specs: list[_RestrictionSpec] = (
+        [
+            spec
+            for spec in (_parse_restriction(rf) for rf in restrictions_cfg.filters if rf.enabled)
+            if spec is not None
+        ]
+        if restrictions_ok
+        else []
+    )
+
+    # F-07e: conflict / position handling. A NEW aggregated signal EDGE while a position is
+    # open resolves per policy: same direction → stack / replace / scale-delegate / ignore;
+    # opposite direction (when exit-on-opposite is off) → close_existing / ignore. A true
+    # hedge (allow_hedge with exit-on-opposite off) opens NO position — the fail-closed
+    # backstop to the Ready Check STRATEGY_CONFLICT_HANDLING_UNSUPPORTED blocker.
+    conflict_cfg = config.conflict_position_handling
+    stacking_policy = str(conflict_cfg.same_direction_stacking)
+    hedge_policy = str(conflict_cfg.opposite_direction_hedge)
+    overlap_policy = str(conflict_cfg.overlapping_signal_policy)
+    conflict_ok = conflict_handling_is_modelled(config)
+
     plan_active = indicator_plan is not None and indicator_plan.has_entry
     entry_evals: list[BlockEvaluator] = (
         build_evaluators(indicator_plan.entry_specs) if plan_active and indicator_plan else []
@@ -1130,6 +1292,21 @@ def run_engine(
     partial_closes = 0
     scale_layers_added = 0
     scale_layers_rejected = 0
+    # F-07e: restriction-gate + conflict-policy counters and their realized-ledger state.
+    # ``current_day`` / ``day_realized`` track the UTC calendar day's realized trade PnL
+    # (max-daily-loss basis); ``loss_streak`` counts consecutive realized losing lots
+    # (consecutive-loss basis); ``prev_entry_signal`` detects a NEW aggregated signal EDGE
+    # (a held signal is one entry event, never a per-bar stack/replace/ignore storm).
+    entries_blocked_by_restriction = 0
+    stack_entries_added = 0
+    stack_entries_rejected = 0
+    positions_replaced = 0
+    opposite_signal_closes = 0
+    conflict_signals_ignored = 0
+    current_day: date | None = None
+    day_realized = _ZERO
+    loss_streak = 0
+    prev_entry_signal: str | None = None
     gross_profit = _ZERO
     gross_loss = _ZERO
     # F-11: funding cost state. ``funding_records`` is the ascending, available-time-safe
@@ -1219,7 +1396,7 @@ def run_engine(
         whole position pay exactly one round-trip. ``fraction >= 1`` is a full close, byte-
         identical to pre-F-07c (same event type + detail)."""
         nonlocal equity, peak, winners, stops_hit, stop_streak, max_stop_streak
-        nonlocal gross_profit, gross_loss, partial_closes
+        nonlocal gross_profit, gross_loss, partial_closes, day_realized, loss_streak
         is_full = fraction >= _ONE
         close_size = pos.size if is_full else pos.size * fraction
         is_long = pos.direction == "long"
@@ -1245,6 +1422,14 @@ def run_engine(
             gross_profit += pnl
         else:
             gross_loss += -pnl
+        # F-07e: the restriction filters' realized ledger. Every realized lot (full or
+        # partial) books into the UTC day's PnL; a strictly negative lot extends the
+        # consecutive-loss streak, anything else (a 0-PnL lot is not a loss) resets it.
+        day_realized += pnl
+        if pnl < _ZERO:
+            loss_streak += 1
+        else:
+            loss_streak = 0
         if reason == "stop_loss":
             stops_hit += 1
             stop_streak += 1
@@ -1321,6 +1506,40 @@ def run_engine(
             max(_ZERO, current_equity - reserve_nominal) if alloc_compound else allocatable_initial
         )
         return allocatable * item_share / _HUNDRED
+
+    def _active_restrictions(bar_date: date | None) -> list[dict[str, str]]:
+        """The enabled filters ACTIVE at this bar (F-07e, Master Ref §12) as trace evidence.
+
+        Date-blackout: the bar's UTC date inside any configured window — an UNPARSEABLE
+        bar timestamp counts as inside (fail closed: a bar whose date the engine cannot
+        place must never trade through a blackout). Max-daily-loss: the UTC day's realized
+        trade PnL at/beyond ``limit_percent`` of the run's initial capital (the pinned V1
+        capital basis). Consecutive-loss: the realized losing-lot streak at/beyond
+        ``max_losses``."""
+        active: list[dict[str, str]] = []
+        for spec in restriction_specs:
+            if spec.filter_type == "date_blackout_filter":
+                hit = bar_date is None or any(
+                    start <= bar_date <= end for start, end in spec.date_ranges
+                )
+            elif spec.filter_type == "max_daily_loss_filter":
+                assert spec.limit_percent is not None  # guaranteed by _parse_restriction
+                limit_amount = initial_capital * spec.limit_percent / _HUNDRED
+                hit = day_realized <= -limit_amount
+            else:  # consecutive_loss_filter
+                assert spec.max_losses is not None  # guaranteed by _parse_restriction
+                hit = loss_streak >= spec.max_losses
+            if hit:
+                active.append({"filter_id": spec.filter_id, "filter_type": spec.filter_type})
+        return active
+
+    def _restrictions_block(active: list[dict[str, str]]) -> bool:
+        """Combine ACTIVE filters per the §12.1 rule: "any" = OR, "all" = AND."""
+        if not restriction_specs:
+            return False
+        if restriction_rule == "all":
+            return len(active) == len(restriction_specs)
+        return bool(active)
 
     def _open(direction: str, bar: _Bar, fill_raw: Decimal, *, bar_seq: int) -> _Position | None:
         """Open a position at the cost-adjusted fill of ``fill_raw``, or ``None`` for a
@@ -1455,6 +1674,19 @@ def run_engine(
             # F-07d: an exit lot (full or partial) realized on THIS bar appends a trade row;
             # the scale ladder below never adds to a position a bar has already reduced.
             trades_before_bar = len(trades)
+
+            # F-07e: the restriction filters' clock. The bar's UTC calendar date drives the
+            # date-blackout windows and rolls the max-daily-loss accumulator at each new
+            # day; an unparseable timestamp yields ``None`` (date-dependent filters then
+            # fail closed) and never resets the day. Skipped entirely when no modelled
+            # filter is enabled — the hot loop stays byte-identical.
+            bar_date: date | None = None
+            if restriction_specs:
+                parsed_bar_time = parse_utc(bar.timestamp)
+                bar_date = parsed_bar_time.date() if parsed_bar_time is not None else None
+                if bar_date is not None and bar_date != current_day:
+                    current_day = bar_date
+                    day_realized = _ZERO
 
             # Real indicator signals (when a plan resolved); evaluators see EVERY bar.
             entry_signal: str | None = None
@@ -1677,14 +1909,17 @@ def run_engine(
                 and order_ok
                 and partial_close_ok
                 and scaling_ok
+                and restrictions_ok
+                and conflict_ok
                 and pending is None
                 and working_limit is None
             ):
                 # Flat and uncommitted: evaluate a fresh entry, then open now (immediate),
                 # schedule a deferred fill (timing), or rest a limit order. ``timing_ok``,
-                # ``order_ok``, ``partial_close_ok`` and ``scaling_ok`` are the fail-closed
-                # backstops — an unsupported timing / order type / partial-close aftermath /
-                # scaling config opens nothing (F-07a / F-07b / F-07c / F-07d).
+                # ``order_ok``, ``partial_close_ok``, ``scaling_ok``, ``restrictions_ok``
+                # and ``conflict_ok`` are the fail-closed backstops — an unsupported timing /
+                # order type / partial-close aftermath / scaling config / restriction filter /
+                # hedge policy opens nothing (F-07a / F-07b / F-07c / F-07d / F-07e).
                 want: str | None = None
                 if plan_active:
                     # (3a) real indicator entry, respecting the direction bias.
@@ -1726,6 +1961,29 @@ def run_engine(
                     elif want_long or want_short:
                         # long wins a same-bar tie (deterministic); sides are exclusive.
                         want = "long" if want_long else "short"
+                if want is not None and restriction_specs:
+                    # F-07e: the Restrictions/Filters ENTRY gate (Master Ref §12.1 "block
+                    # entry"). Evaluated AFTER the signal + direction bias produced a wanted
+                    # entry, so the trace shows a real signal the filters vetoed — never a
+                    # phantom suppression. The gate runs at DECISION time (the signal bar);
+                    # a deferred/limit fill inherits its signal bar's verdict (V1 boundary,
+                    # engine-version-pinned).
+                    active_filters = _active_restrictions(bar_date)
+                    if _restrictions_block(active_filters):
+                        entries_blocked_by_restriction += 1
+                        _emit(
+                            "filtered_no_entry",
+                            event_time=bar.timestamp,
+                            direction=want,
+                            bar_seq=bars_seen,
+                            detail={
+                                "reason": "restriction_blocked",
+                                "rule": restriction_rule,
+                                "active_filters": active_filters,
+                                "context": "flat_entry",
+                            },
+                        )
+                        want = None
                 if want is not None:
                     # F-10: the entry DECISION (signal fired + bias allowed), carrying the
                     # evaluated rule id(s) and each nested condition's pass/fail — distinct
@@ -1812,6 +2070,215 @@ def run_engine(
                     else:
                         _apply_partial_aftermath(position)
                 pending = None
+
+            # (4b) F-07e conflict / position handling — a NEW aggregated entry-signal EDGE
+            # while a position is OPEN (Master Ref §13; plan mode only — the breakout proxy
+            # computes no signals while a position is held, so it stays byte-identical).
+            # Runs AFTER the bar's exit/stop resolution so a risk event always dominates
+            # (§13 priority order: exit/stop before entry candidates): a bar that closed or
+            # reduced the position (``trades_before_bar``) or committed an exit (``pending``)
+            # never also stacks/replaces it. The EDGE guard (``prev_entry_signal``) makes a
+            # HELD signal one entry event — never a per-bar stack/replace/churn storm.
+            # An opposite signal only reaches here when exit-on-opposite left the position
+            # open (otherwise it already closed above); ``allow_hedge`` in that state is
+            # unreachable — the ``conflict_ok`` fail-closed gate opened no position at all.
+            if (
+                position is not None
+                # The signal edge that OPENED the position this bar (flat entry, deferred
+                # fill or limit touch) is one entry event — it must never also stack /
+                # replace / close its own position on the same bar.
+                and position.entry_bar_seq != bars_seen
+                and plan_active
+                and pending is None
+                and len(trades) == trades_before_bar
+                and entry_signal is not None
+                and entry_signal != prev_entry_signal
+            ):
+                if entry_signal == position.direction:
+                    if stacking_policy == "ignore":
+                        conflict_signals_ignored += 1
+                        _emit(
+                            "filtered_no_entry",
+                            event_time=bar.timestamp,
+                            direction=entry_signal,
+                            bar_seq=bars_seen,
+                            detail={
+                                "reason": "stacking_ignored",
+                                "policy": stacking_policy,
+                                "position_seq": position.position_seq,
+                            },
+                        )
+                    elif stacking_policy == "scale_existing":
+                        # The repeated signal itself adds nothing — position growth is
+                        # DELEGATED to the scaling ladder (§13 "only if scaling allows");
+                        # with scaling disabled the signal is a traced no-op.
+                        conflict_signals_ignored += 1
+                        _emit(
+                            "filtered_no_entry",
+                            event_time=bar.timestamp,
+                            direction=entry_signal,
+                            bar_seq=bars_seen,
+                            detail={
+                                "reason": "stacking_scale_only",
+                                "policy": stacking_policy,
+                                "scaling_enabled": scaling_active,
+                                "position_seq": position.position_seq,
+                            },
+                        )
+                    else:
+                        # allow_stacking / replace_existing EXECUTE a new entry — the same
+                        # Restrictions/Filters gate that vets a flat entry vets it (§12.1
+                        # "block entry" is entry-scoped, not flat-scoped).
+                        conflict_active = (
+                            _active_restrictions(bar_date) if restriction_specs else []
+                        )
+                        if _restrictions_block(conflict_active):
+                            entries_blocked_by_restriction += 1
+                            _emit(
+                                "filtered_no_entry",
+                                event_time=bar.timestamp,
+                                direction=entry_signal,
+                                bar_seq=bars_seen,
+                                detail={
+                                    "reason": "restriction_blocked",
+                                    "rule": restriction_rule,
+                                    "active_filters": conflict_active,
+                                    "context": "conflict_entry",
+                                },
+                            )
+                        elif stacking_policy == "replace_existing":
+                            # Close the held position and re-enter fresh at the decision
+                            # bar's close (the deterministic decision point — the scale-
+                            # layer fill precedent; the F-07a deferral remains the FLAT
+                            # entry's contract). The close emits ``position_close`` with
+                            # the "replaced_by_signal" reason; the re-open emits its own
+                            # ``entry_signal`` + ``entry_fill`` so the F-10 chain stays
+                            # complete.
+                            replaced_seq = position.position_seq
+                            positions_replaced += 1
+                            _emit(
+                                "entry_signal",
+                                event_time=bar.timestamp,
+                                direction=entry_signal,
+                                bar_seq=bars_seen,
+                                detail={
+                                    "rule": _entry_rule_snapshot(entry_signal),
+                                    "conflict": "replace_existing",
+                                    "replaced_position_seq": replaced_seq,
+                                },
+                            )
+                            _close(
+                                bar.timestamp,
+                                bar.close,
+                                "replaced_by_signal",
+                                position,
+                                bar_seq=bars_seen,
+                            )
+                            position = _do_open(
+                                entry_signal, bar, bar.close, bar_seq=bars_seen, deferred=False
+                            )
+                        else:  # allow_stacking — fold a signal-driven tranche into the position
+                            stack_eff = _effective_fill(
+                                bar.close,
+                                is_buy=position.direction == "long",
+                                half_spread=half_spread,
+                                slip=slippage,
+                            )
+                            if alloc_on:
+                                sleeve = _sleeve_capital(equity)
+                                tranche = _cap_to_sleeve(
+                                    _position_size(config, stack_eff, sleeve), sleeve, stack_eff
+                                )
+                            else:
+                                tranche = _position_size(config, stack_eff, equity)
+                            stacked_size = position.size + tranche
+                            size_limits = config.position_sizing.position_size_limits
+                            stack_reject: str | None = None
+                            stack_cap: str | None = None
+                            if tranche <= _ZERO:
+                                stack_reject = "stack_size_not_positive"
+                            elif (
+                                size_limits is not None
+                                and size_limits.max_position_size is not None
+                                and stacked_size > size_limits.max_position_size
+                            ):
+                                stack_reject = "position_size_limit"
+                                stack_cap = str(size_limits.max_position_size)
+                            elif alloc_on:
+                                sleeve_remaining = _sleeve_capital(equity) - position.entry_notional
+                                if (stack_eff * tranche) > sleeve_remaining:
+                                    stack_reject = "sleeve_capacity"
+                                    stack_cap = str(max(sleeve_remaining, _ZERO).quantize(_MONEY))
+                            if stack_reject is not None:
+                                stack_entries_rejected += 1
+                                _emit(
+                                    "stack_entry_rejected",
+                                    event_time=bar.timestamp,
+                                    direction=position.direction,
+                                    bar_seq=bars_seen,
+                                    detail={
+                                        "position_seq": position.position_seq,
+                                        "reason": stack_reject,
+                                        "cap": stack_cap,
+                                        "candidate_size": str(tranche),
+                                        "policy": stacking_policy,
+                                    },
+                                )
+                            else:
+                                # One lifecycle, one trade-per-lot accounting: the tranche
+                                # folds into a size-weighted average basis exactly like a
+                                # scale layer; stop LEVELS stay as installed at entry and
+                                # the ladder's own reference/caps are untouched (a stack is
+                                # a SIGNAL entry, not a ladder layer). The tranche's fill
+                                # pays one commission now — the close still books one round
+                                # trip.
+                                new_basis = (
+                                    (position.entry_price * position.size + stack_eff * tranche)
+                                    / stacked_size
+                                ).quantize(_MONEY)
+                                position.entry_price = new_basis
+                                position.size = stacked_size
+                                position.entry_notional = (new_basis * stacked_size).quantize(
+                                    _MONEY
+                                )
+                                stack_entries_added += 1
+                                if commission > _ZERO:
+                                    equity = (equity - commission).quantize(_MONEY)
+                                _emit(
+                                    "stack_entry_added",
+                                    event_time=bar.timestamp,
+                                    direction=position.direction,
+                                    bar_seq=bars_seen,
+                                    detail={
+                                        "position_seq": position.position_seq,
+                                        "fill_price": str(stack_eff),
+                                        "stack_size": str(tranche),
+                                        "new_size": str(stacked_size),
+                                        "entry_basis": str(new_basis),
+                                        "exposure": str(position.entry_notional),
+                                        "policy": stacking_policy,
+                                    },
+                                )
+                elif hedge_policy == "close_existing":
+                    # An opposite signal with exit-on-opposite OFF: the policy closes the
+                    # held position at the decision bar's close ("Close" §13 — the flat
+                    # rules take over from the next bar; no same-bar reverse).
+                    opposite_signal_closes += 1
+                    _close(bar.timestamp, bar.close, "opposite_signal", position, bar_seq=bars_seen)
+                    position = None
+                elif hedge_policy == "ignore":
+                    conflict_signals_ignored += 1
+                    _emit(
+                        "filtered_no_entry",
+                        event_time=bar.timestamp,
+                        direction=entry_signal,
+                        bar_seq=bars_seen,
+                        detail={
+                            "reason": "hedge_ignored",
+                            "policy": hedge_policy,
+                            "position_seq": position.position_seq,
+                        },
+                    )
 
             # (5) F-07d same-direction scaling — the price-distance ladder over the OPEN
             # position (Master Ref §11.3/§11.4). Runs AFTER every entry/exit/stop resolution
@@ -1976,6 +2443,10 @@ def run_engine(
                             },
                         )
 
+            # F-07e: the conflict EDGE detector's memory — this bar's aggregated signal is
+            # the next bar's "previous" (None in proxy mode, so the detector stays inert).
+            prev_entry_signal = entry_signal
+
             window.append(bar)
 
     # End-of-data: a limit order still resting past the last bar never filled → cancel it
@@ -2094,6 +2565,26 @@ def run_engine(
             else "unconfigured"
         )
         warnings.append(f"scaling_unsupported:{unsupported_method}")
+    if not restrictions_ok:
+        # An enabled restriction filter the replay cannot decide (volatility / spread /
+        # volume / correlation, a non-block action, or an unparseable config) is not
+        # modelled; the run opened NO position (fail closed, F-07e) rather than silently
+        # trading through the filter. Ready Check raises STRATEGY_RESTRICTIONS_UNSUPPORTED —
+        # this L4 warning is the engine backstop.
+        unmodelled_types = sorted(
+            {
+                rf.filter_type
+                for rf in restrictions_cfg.filters
+                if rf.enabled and _parse_restriction(rf) is None
+            }
+        )
+        warnings.append("restrictions_unsupported:" + ",".join(unmodelled_types))
+    if not conflict_ok:
+        # A true hedge (allow_hedge with exit-on-opposite off) needs two concurrent
+        # opposite positions the single-position replay cannot honestly simulate; the run
+        # opened NO position (fail closed, F-07e). Ready Check raises
+        # STRATEGY_CONFLICT_HANDLING_UNSUPPORTED — this L4 warning is the engine backstop.
+        warnings.append("conflict_handling_unsupported:allow_hedge_without_exit_on_opposite")
     if indicator_plan is not None:
         # Blocks the native-trigger foundation could not compute (deferred sources,
         # timeframe overrides, non-directional keys) are surfaced, never hidden (L4).
@@ -2207,6 +2698,24 @@ def run_engine(
         "scale_layers_added": scale_layers_added,
         "scale_layers_rejected": scale_layers_rejected,
         "max_total_exposure_active": scale_max_total is not None,
+        # F-07e: restrictions & filters provenance + entry-gate counts.
+        "restrictions_rule": restriction_rule,
+        "restrictions_modelled": restrictions_ok,
+        "active_filter_types": sorted(
+            {rf.filter_type for rf in restrictions_cfg.filters if rf.enabled}
+        ),
+        "entries_blocked_by_restriction": entries_blocked_by_restriction,
+        # F-07e: conflict / position handling provenance + policy-outcome counts.
+        "conflict_handling_modelled": conflict_ok,
+        "overlapping_signal_policy": overlap_policy,
+        "same_direction_stacking": stacking_policy,
+        "opposite_direction_hedge": hedge_policy,
+        "exit_on_opposite_signal": bool(conflict_cfg.exit_on_opposite_signal),
+        "stack_entries_added": stack_entries_added,
+        "stack_entries_rejected": stack_entries_rejected,
+        "positions_replaced": positions_replaced,
+        "opposite_signal_closes": opposite_signal_closes,
+        "conflict_signals_ignored": conflict_signals_ignored,
         "stop_exit_conflict": stop_exit_conflict,
         "stop_exit_collisions": stop_exit_collisions,
         "logic_stop_blocks": len(stop_evals),
@@ -2494,10 +3003,12 @@ __all__ = [
     "SignalEventRow",
     "TradeRow",
     "combine_item_runs",
+    "conflict_handling_is_modelled",
     "execution_timing_is_modelled",
     "order_execution_is_modelled",
     "partial_close_is_modelled",
     "resolve_allocation_execution",
+    "restrictions_are_modelled",
     "run_engine",
     "scaling_is_modelled",
     "sizing_is_modelled",

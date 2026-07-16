@@ -4,6 +4,7 @@ import { InfoPanel } from "@/components/InfoPanel";
 import {
   DEFAULT_LIBRARY_FILTERS,
   type LibraryPackageRow,
+  useLibraryPackage,
   useLibraryPackages,
   validationTone,
 } from "@/lib/library";
@@ -91,6 +92,45 @@ function PickerBrowser({
   );
 }
 
+// F-19 — the pinned summary shows the package's human name (resolved from the
+// pinned root id via the existing Library detail read) instead of the raw
+// root/revision/hash ULIDs; the exact identifiers move to a collapsed
+// "Technical identifiers" disclosure (verifiable, no longer the primary surface).
+function PinnedPackageSummary({ value }: { value: PackageRefForm }) {
+  const detail = useLibraryPackage(value.package_root_id || null);
+  const name = detail.data?.name ?? null;
+
+  return (
+    <div>
+      <div className="pkg-picker-name" style={{ fontWeight: 600 }}>
+        {name ?? "Pinned package"}
+        {detail.data ? (
+          <span className="pkg-picker-rev"> — rev {detail.data.revision_no}</span>
+        ) : null}
+      </div>
+      <details style={{ marginTop: 4 }}>
+        <summary className="cp-note" style={{ cursor: "pointer" }}>
+          Technical identifiers
+        </summary>
+        <dl className="kv kv-compact">
+          <dt>Root</dt>
+          <dd>
+            <code>{value.package_root_id || "—"}</code>
+          </dd>
+          <dt>Revision</dt>
+          <dd>
+            <code>{value.package_revision_id || "—"}</code>
+          </dd>
+          <dt>Hash</dt>
+          <dd>
+            <code>{value.package_content_hash || "—"}</code>
+          </dd>
+        </dl>
+      </details>
+    </div>
+  );
+}
+
 export function PackagePicker({
   kind,
   label,
@@ -116,20 +156,7 @@ export function PackagePicker({
       </span>
       {value ? (
         <div className="pkg-picker-pinned">
-          <dl className="kv kv-compact">
-            <dt>Root</dt>
-            <dd>
-              <code>{value.package_root_id || "—"}</code>
-            </dd>
-            <dt>Revision</dt>
-            <dd>
-              <code>{value.package_revision_id || "—"}</code>
-            </dd>
-            <dt>Hash</dt>
-            <dd>
-              <code>{value.package_content_hash || "—"}</code>
-            </dd>
-          </dl>
+          <PinnedPackageSummary value={value} />
           <div className="pkg-picker-actions">
             <button type="button" className="btn" onClick={() => setBrowsing((b) => !b)}>
               {browsing ? "Close" : "Change"}

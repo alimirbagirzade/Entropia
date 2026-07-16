@@ -1,5 +1,6 @@
 import { useId, useState } from "react";
 
+import { DatasetPicker } from "@/components/DatasetPicker";
 import { InfoPanel } from "@/components/InfoPanel";
 import {
   ENTRY_TIMING_OPTIONS,
@@ -215,25 +216,23 @@ export function DataExecutionCard({
           onChange={(v) => setData({ initial_capital: v })}
           placeholder="e.g. 10000"
         />
-        <TextField
-          label="Data source — root id"
+        <DatasetPicker
+          kind="market"
+          label="Market data source"
           required
-          value={d.market_dataset_root_id}
-          onChange={(v) => setData({ market_dataset_root_id: v })}
+          value={{
+            rootId: d.market_dataset_root_id,
+            revisionId: d.market_dataset_revision_id,
+            contentHash: d.market_dataset_content_hash,
+          }}
+          onChange={(ref) =>
+            setData({
+              market_dataset_root_id: ref.rootId,
+              market_dataset_revision_id: ref.revisionId,
+              market_dataset_content_hash: ref.contentHash,
+            })
+          }
         />
-        <TextField
-          label="Data source — revision id"
-          required
-          value={d.market_dataset_revision_id}
-          onChange={(v) => setData({ market_dataset_revision_id: v })}
-        />
-        <TextField
-          label="Data source — content hash"
-          required
-          value={d.market_dataset_content_hash}
-          onChange={(v) => setData({ market_dataset_content_hash: v })}
-        />
-        <div className="cp-field" aria-hidden="true" />
         <TextField
           label="Backtest range — start"
           required
@@ -351,24 +350,23 @@ export function DataExecutionCard({
           panelKey="fundingFee"
         />
         {d.funding_enabled ? (
-          <>
-            <TextField
-              label="Funding source — root id"
-              value={d.funding_source_root_id}
-              onChange={(v) => setData({ funding_source_root_id: v })}
-              panelKey="fundingSource"
-            />
-            <TextField
-              label="Funding source — revision id"
-              value={d.funding_source_revision_id}
-              onChange={(v) => setData({ funding_source_revision_id: v })}
-            />
-            <TextField
-              label="Funding source — content hash"
-              value={d.funding_source_content_hash}
-              onChange={(v) => setData({ funding_source_content_hash: v })}
-            />
-          </>
+          <DatasetPicker
+            kind="funding"
+            label="Funding data source"
+            panel={STRATEGY_INFO_PANELS.fundingSource}
+            value={{
+              rootId: d.funding_source_root_id,
+              revisionId: d.funding_source_revision_id,
+              contentHash: d.funding_source_content_hash,
+            }}
+            onChange={(ref) =>
+              setData({
+                funding_source_root_id: ref.rootId,
+                funding_source_revision_id: ref.revisionId,
+                funding_source_content_hash: ref.contentHash,
+              })
+            }
+          />
         ) : null}
       </div>
       <div style={{ marginTop: 14 }}>

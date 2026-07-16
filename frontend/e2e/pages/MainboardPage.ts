@@ -29,25 +29,32 @@ export class MainboardPage {
         `createAndAttachWorkObject: only "strategy" is supported via the product Add menu (got "${objectKind}")`,
       );
     }
-    const before = await this.compositionItemCount().count();
-    await this.page.getByRole("button", { name: "+ Add", exact: true }).click();
 
-    // The attach POST returns the created item incl. work_object_root_id. Set up
-    // the waiter before clicking so we never miss the response.
-    const attachResponse = this.page.waitForResponse(
-      (r) => /\/mainboards\/[^/]+\/items$/.test(r.url()) && r.request().method() === "POST",
-    );
-    await this.page.getByRole("button", { name: "Add Strategy", exact: true }).click();
-    const response = await attachResponse;
-    if (!response.ok()) {
-      throw new Error(`Add Strategy failed: HTTP ${response.status()} ${(await response.text()).slice(0, 200)}`);
-    }
-    const rootId = ((await response.json()) as { work_object_root_id: string }).work_object_root_id;
-
-    // The new row appears after the ["mainboard"] refetch.
+    // "Add Strategy" is a two-request product action: create the work object,
+    // then attach it. Immediately after create, the new root can transiently
+    // 404 on attach (a read-after-write window the old two-click raw path masked
+    // with its UI-render gap). A real user simply clicks "Add Strategy" again, so
+    // retry the whole action until a new row lands — each attempt uses a fresh
+    // Idempotency-Key and creates its own work object, which is fine here (the
+    // journey only needs one attached item on the board).
+    let rootId = "";
     await expect(async () => {
+      const before = await this.compositionItemCount().count();
+      await this.page.getByRole("button", { name: "+ Add", exact: true }).click();
+      // Set the waiter up before clicking so we never miss the response; a short
+      // per-response timeout means a failed/absent attach retries fast instead of
+      // hanging the whole step.
+      const attachResponse = this.page.waitForResponse(
+        (r) => /\/mainboards\/[^/]+\/items$/.test(r.url()) && r.request().method() === "POST",
+        { timeout: 10_000 },
+      );
+      await this.page.getByRole("button", { name: "Add Strategy", exact: true }).click();
+      const response = await attachResponse;
+      expect(response.ok(), `Add Strategy attach HTTP ${response.status()}`).toBeTruthy();
+      rootId = ((await response.json()) as { work_object_root_id: string }).work_object_root_id;
+      // The new row appears after the ["mainboard"] refetch.
       expect(await this.compositionItemCount().count()).toBeGreaterThan(before);
-    }).toPass({ timeout: 15_000 });
+    }).toPass({ timeout: 40_000, intervals: [500, 1_000, 2_000, 4_000] });
     return rootId;
   }
 

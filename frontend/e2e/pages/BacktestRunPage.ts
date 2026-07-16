@@ -14,8 +14,31 @@ export class BacktestRunPage {
     await expect(this.page.getByRole("heading", { name: "RUN & Backtest Results", exact: true })).toBeVisible();
   }
 
-  async requestRun(): Promise<void> {
-    await this.page.getByRole("button", { name: "Request Backtest Run" }).click();
+  requestRunButton() {
+    return this.page.getByRole("button", { name: "Request Backtest Run" });
+  }
+
+  // F-16: the readiness lock note shown when the composition has not passed a
+  // current Ready Check (the admit button is disabled alongside it).
+  lockedNote() {
+    return this.page.getByText(
+      "RUN is available only after a current Backtest Ready Check passes",
+    );
+  }
+
+  // F-16: admission is gated on the composition's readiness. A generic
+  // (non-domain-validated) composition is NOT_READY, so the admit button is
+  // genuinely disabled — the client refuses up front instead of round-tripping
+  // to a 422 READINESS_BLOCKED. Click only when the button is actually enabled;
+  // return false when it is locked (the lock is itself a valid structured
+  // outcome). Waits for the button to render first (it appears only once the
+  // composition projection has loaded).
+  async requestRunIfEnabled(): Promise<boolean> {
+    const button = this.requestRunButton();
+    await button.waitFor({ state: "visible", timeout: 20_000 });
+    if (await button.isDisabled()) return false;
+    await button.click();
+    return true;
   }
 
   errorAlert() {

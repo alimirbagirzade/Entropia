@@ -56,15 +56,26 @@ test.describe("Strategy -> Mainboard -> Ready Check -> RUN", () => {
       expect(!notCheckedGone || failed).toBe(true);
     }).toPass({ timeout: 20_000 });
 
-    // 4) RUN — real POST /backtest-runs admission attempt (inline result if
-    // admitted; a structured rejection otherwise, both real outcomes).
+    // 4) RUN — F-16 gates admission on the composition's readiness. A generic
+    // composition is NOT_READY, so the admit button is genuinely disabled (the
+    // client refuses up front instead of round-tripping to a 422 — the lock IS
+    // the structured outcome, mirroring the backend authz). If the button is
+    // enabled, the real POST /backtest-runs admission fires and either sets
+    // ?run= or surfaces a structured error. All three are real outcomes; per
+    // the app's L4 rule we never fabricate a green verdict.
     const backtestRun = new BacktestRunPage(page);
     await backtestRun.goto();
-    await backtestRun.requestRun();
-    await expect(async () => {
-      const admitted = backtestRun.hasRunQueryParam();
-      const failed = await backtestRun.errorAlert().isVisible().catch(() => false);
-      expect(admitted || failed).toBe(true);
-    }).toPass({ timeout: 20_000 });
+    const clicked = await backtestRun.requestRunIfEnabled();
+    if (clicked) {
+      await expect(async () => {
+        const admitted = backtestRun.hasRunQueryParam();
+        const failed = await backtestRun.errorAlert().isVisible().catch(() => false);
+        expect(admitted || failed).toBe(true);
+      }).toPass({ timeout: 20_000 });
+    } else {
+      // Locked: the readiness gate itself is the outcome — RUN is unreachable
+      // until a current Ready Check passes.
+      await expect(backtestRun.lockedNote()).toBeVisible();
+    }
   });
 });

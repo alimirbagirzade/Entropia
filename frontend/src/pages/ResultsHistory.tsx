@@ -12,10 +12,13 @@ import {
   KEY_METRIC_COLUMNS,
   formatMetricValue,
   formatUtc,
+  useBacktestResult,
   useCompareResults,
   useResultsHistory,
   useSoftDeleteResult,
+  type HistoryRow,
   type HistorySortValue,
+  type ManifestItemRef,
 } from "@/lib/backtest";
 
 const COMPARE_CAPACITY = 2;
@@ -191,7 +194,7 @@ export function ResultsHistory() {
                     <button
                       type="button"
                       className="history-arrow"
-                      aria-label={`Metrics for ${row.result_id}`}
+                      aria-label={`Details for ${row.result_id}`}
                       aria-expanded={isOpen}
                       onClick={() => toggleExpanded(row.result_id)}
                     >
@@ -199,20 +202,10 @@ export function ResultsHistory() {
                     </button>
                   </div>
                 </div>
-                {/* Always rendered so the key metrics are addressable; CSS
-                    collapses the panel until the row is expanded. */}
-                <div className={`history-details${isOpen ? " open" : ""}`}>
-                  <table className="metrics-table">
-                    <tbody>
-                      {KEY_METRIC_COLUMNS.map((column) => (
-                        <tr key={column.key}>
-                          <th scope="row">{column.label}</th>
-                          <td>{formatMetricValue(row.key_metrics[column.key])}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                {/* Always rendered so the key metrics + provenance are
+                    addressable; CSS collapses the panel until the row is
+                    expanded. */}
+                <HistoryDetails row={row} isOpen={isOpen} />
               </div>
             );
           })}
@@ -250,6 +243,155 @@ export function ResultsHistory() {
         <ComparePanel pair={comparePair} onClose={() => setComparePair(null)} />
       ) : null}
     </>
+  );
+}
+
+const NOT_PINNED = "Not separately pinned";
+
+// A pinned manifest ref as a stable "root @ revision" identity line — mirrors
+// ResultDetail so the inline panel and the full View page read identically.
+function refLabel(ref: ManifestItemRef): string {
+  return `${ref.root_id ?? EM_DASH} @ ${ref.revision_id ?? EM_DASH}`;
+}
+
+// A pinned-ref list (or the honest "Not separately pinned" when the V1 manifest
+// carries none of that class), rendered verbatim — never re-resolved from the
+// current Mainboard (doc 16 §15).
+function RefList({ refs, prefixKind = false }: { refs: ManifestItemRef[]; prefixKind?: boolean }) {
+  if (refs.length === 0) return <span>{NOT_PINNED}</span>;
+  return (
+    <ul className="history-ref-list">
+      {refs.map((ref) => (
+        <li key={ref.item_id ?? refLabel(ref)}>
+          <code>{prefixKind ? `${ref.item_kind ?? EM_DASH} · ${refLabel(ref)}` : refLabel(ref)}</code>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+// UI-16: the inline expanded panel lets a user verify result IDENTITY and
+// PRODUCTION INPUTS without leaving for the separate View page (spec §UI-16).
+// Key metrics, Data, Date and the immutable manifest summary read straight from
+// the immutable history row; the pinned Strategies/Parameters (the manifest
+// excerpt) are lazily read from the immutable Result detail ONLY once the row is
+// expanded — a presentation reuse of the existing detail hook, never a new
+// route / react-query key / API call. The panel is always in the DOM (CSS
+// collapses it) so its content stays addressable.
+function HistoryDetails({ row, isOpen }: { row: HistoryRow; isOpen: boolean }) {
+  const detail = useBacktestResult(isOpen ? row.result_id : null);
+  const excerpt = detail.data?.manifest_excerpt ?? null;
+
+  const symbol = row.market_data_revision_summary?.symbol ?? EM_DASH;
+  const timeframe = row.timeframe ?? EM_DASH;
+  const rangeStart = row.backtest_range.start ?? EM_DASH;
+  const rangeEnd = row.backtest_range.end ?? EM_DASH;
+
+  // Pinned Strategies/Parameters need the manifest excerpt (a per-row detail
+  // read). Until it resolves, the row-level provenance already stands on its own.
+  const provenance = () => {
+    if (detail.isLoading) return <span className="page-sub">Loading pinned inputs…</span>;
+    if (detail.isError)
+      return (
+        <span className="page-sub">
+          Pinned inputs are unavailable right now — open View for the full manifest.
+        </span>
+      );
+    return null;
+  };
+
+  return (
+    <div className={`history-details${isOpen ? " open" : ""}`}>
+      <dl className="kv history-provenance">
+        <dt>Strategies</dt>
+        <dd>{excerpt ? <RefList refs={excerpt.strategy_revision_refs} /> : provenance()}</dd>
+
+        {excerpt && excerpt.external_work_refs.length > 0 ? (
+          <>
+            <dt>External work</dt>
+            <dd>
+              <RefList refs={excerpt.external_work_refs} prefixKind />
+            </dd>
+          </>
+        ) : null}
+
+        <dt>Parameters</dt>
+        <dd>
+          {excerpt ? (
+            <>
+              <div className="history-detail-note">
+                Pinned inside each immutable strategy/package revision above. The pinned
+                parameter-carrying inputs are:
+              </div>
+              <div className="history-detail-label">Packages</div>
+              <RefList refs={excerpt.package_revision_refs} />
+              <div className="history-detail-label">Allocation plan revision</div>
+              <code>{excerpt.portfolio_allocation_plan_revision_id ?? NOT_PINNED}</code>
+              <div className="history-detail-label">Execution key</div>
+              <code className="history-hash">{excerpt.execution_context.execution_key ?? EM_DASH}</code>
+            </>
+          ) : (
+            provenance()
+          )}
+        </dd>
+
+        <dt>Data</dt>
+        <dd>
+          {symbol} · {timeframe} · {excerpt?.market_data_revision ?? "stored Market Data source"}
+        </dd>
+
+        <dt>Date</dt>
+        <dd>
+          Completed {formatUtc(row.completed_at_utc)} · Range {rangeStart} → {rangeEnd}
+        </dd>
+      </dl>
+
+      <div className="history-detail-label">Key metrics</div>
+      <table className="metrics-table">
+        <tbody>
+          {KEY_METRIC_COLUMNS.map((column) => (
+            <tr key={column.key}>
+              <th scope="row">{column.label}</th>
+              <td>{formatMetricValue(row.key_metrics[column.key])}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <div className="history-detail-label">Immutable manifest summary</div>
+      <dl className="kv kv-compact history-manifest">
+        <dt>Manifest hash</dt>
+        <dd>
+          <code className="history-hash">{row.manifest_hash}</code>
+        </dd>
+        <dt>Engine version</dt>
+        <dd>
+          <code>{row.engine_version}</code>
+        </dd>
+        <dt>Composition fingerprint</dt>
+        <dd>
+          <code className="history-hash">
+            {row.composition_context.composition_fingerprint}
+          </code>
+        </dd>
+        <dt>Materialization</dt>
+        <dd>{row.materialization_status}</dd>
+        {excerpt ? (
+          <>
+            <dt>Pinned items</dt>
+            <dd>
+              {excerpt.strategy_revision_refs.length +
+                excerpt.external_work_refs.length +
+                excerpt.package_revision_refs.length}
+            </dd>
+          </>
+        ) : null}
+      </dl>
+      <p className="page-sub history-detail-foot">
+        This panel shows which strategies, parameters and data produced this result, plus
+        the immutable manifest identity — no need to open the separate View page.
+      </p>
+    </div>
   );
 }
 

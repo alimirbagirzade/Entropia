@@ -1161,9 +1161,19 @@ a:hover { text-decoration: underline; }
   color: #000;
   padding: 0;
 }
-/* Metrics collapse into the card body until the row is expanded (mockup). */
+/* Metrics + provenance collapse into the card body until expanded (mockup). */
 .history-details { display: none; background: #fff; border-top: 1px solid #4a8aa0; padding: 12px; font-size: 13px; }
 .history-details.open { display: block; }
+/* UI-16 inline provenance: Strategies/Parameters/Data/Date + manifest summary. */
+.history-provenance { margin: 0 0 12px; }
+.history-provenance dt { font-weight: bold; color: #333; }
+.history-ref-list { margin: 0; padding-left: 16px; }
+.history-ref-list li { margin: 1px 0; }
+.history-detail-label { font-weight: bold; color: #333; margin: 12px 0 4px; }
+.history-detail-note { color: var(--text-dim); margin-bottom: 4px; }
+.history-hash { word-break: break-all; }
+.history-manifest { margin: 4px 0 0; }
+.history-detail-foot { margin: 12px 0 0; }
 
 /* ---- v18 Panel: management/logs card grid (mockup .panel-grid/.panel-card) ---- */
 .panel-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }

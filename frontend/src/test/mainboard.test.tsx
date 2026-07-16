@@ -213,14 +213,14 @@ describe("Mainboard", () => {
     expect(screen.getByLabelText("Composition controls for Momentum A")).toBeTruthy();
   });
 
-  it("offers the prototype Add menu with Strategy / Package / Portfolio links (UI-01)", async () => {
+  it("offers the prototype Add menu with Strategy / Package / Portfolio actions (UI-01)", async () => {
     stubRoutes();
     renderPage();
     await screen.findByText("Momentum A");
     fireEvent.click(screen.getByRole("button", { name: "+ Add" }));
-    expect(screen.getByRole("link", { name: "Add Strategy" }).getAttribute("href")).toBe(
-      "/strategy",
-    );
+    // F-15: Add Strategy is an inline create+attach action (a button), not a
+    // deep-link — the new object appears as a Mainboard row without navigation.
+    expect(screen.getByRole("button", { name: "Add Strategy" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Add Package" }).getAttribute("href")).toBe(
       "/packages/create",
     );
@@ -369,8 +369,52 @@ describe("Mainboard", () => {
     expect(screen.queryByText(/Object kind/)).toBeNull();
     expect(screen.queryByText(/Payload \(JSON\)/)).toBeNull();
     // The separate typed actions remain (Add Strategy / Add Package / Outsource).
-    expect(screen.getByRole("link", { name: "Add Strategy" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Add Strategy" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Add Package" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Add Outsource Signal" })).toBeTruthy();
+  });
+
+  it("Add Strategy creates + attaches a strategy work object inline (F-15)", async () => {
+    const fetchMock = stubRoutes({
+      "POST /work-objects": {
+        root_id: "root_new",
+        revision_id: "wor_new1",
+        revision_no: 1,
+        object_kind: "strategy",
+        row_version: 0,
+      },
+      "POST /mainboards/ws_1/items": {
+        item_id: "item_new",
+        item_kind: "strategy",
+        work_object_root_id: "root_new",
+        pinned_revision_id: "wor_new1",
+        position_index: 1,
+        is_enabled: true,
+        display_label_override: null,
+        row_version: 0,
+        composition_hash: "hash_ghi",
+      },
+    });
+    renderPage();
+    await screen.findByText("Momentum A");
+    fireEvent.click(screen.getByRole("button", { name: "+ Add" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add Strategy" }));
+    // Real create round trip: object_kind=strategy, empty payload, fresh Idempotency-Key.
+    await screen.findByText("Momentum A");
+    const createCall = fetchMock.mock.calls.find(
+      (c) => String(c[0]).endsWith("/work-objects") && (c[1]?.method ?? "") === "POST",
+    );
+    expect(createCall).toBeTruthy();
+    expect(bodyOf(createCall?.[1]).object_kind).toBe("strategy");
+    expect(headersOf(createCall?.[1])["Idempotency-Key"]).toBeTruthy();
+    // …then attaches the created revision to the default workspace.
+    const attachCall = fetchMock.mock.calls.find(
+      (c) => String(c[0]).includes("/mainboards/ws_1/items"),
+    );
+    expect(attachCall).toBeTruthy();
+    const attachBody = bodyOf(attachCall?.[1]);
+    expect(attachBody.root_id).toBe("root_new");
+    expect(attachBody.revision_id).toBe("wor_new1");
+    expect(headersOf(attachCall?.[1])["Idempotency-Key"]).toBeTruthy();
   });
 });

@@ -11,7 +11,9 @@ import {
   itemKindLabel,
   readyStatusText,
   readyStatusTone,
+  useAttachItem,
   useCreateSnapshot,
+  useCreateWorkObject,
   useDefaultMainboard,
   usePatchItem,
   useSoftDeleteWorkObject,
@@ -78,8 +80,8 @@ function editorPath(item: MainboardItem): string {
 // carries the item's row_version as the expected_row_version OCC token.        //
 // --------------------------------------------------------------------------- //
 
-function ItemRow({ item }: { item: MainboardItem }) {
-  const [expanded, setExpanded] = useState(false);
+function ItemRow({ item, defaultExpanded = false }: { item: MainboardItem; defaultExpanded?: boolean }) {
+  const [expanded, setExpanded] = useState(defaultExpanded);
   const [labelInput, setLabelInput] = useState(item.display_label_override ?? "");
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   // UI-02: an in-progress Strategy Details draft opened inline from this row.
@@ -392,7 +394,15 @@ function OutsourceDraftRow({ kind, onRemove }: { kind: string; onRemove: () => v
 // package list endpoint (CR-01).                                                //
 // --------------------------------------------------------------------------- //
 
-function AddMenu({ onAddOutsource }: { onAddOutsource: (kind: string) => void }) {
+function AddMenu({
+  onAddStrategy,
+  addingStrategy,
+  onAddOutsource,
+}: {
+  onAddStrategy: () => void;
+  addingStrategy: boolean;
+  onAddOutsource: (kind: string) => void;
+}) {
   const [open, setOpen] = useState(false);
   const [subOpen, setSubOpen] = useState(false);
 
@@ -433,9 +443,21 @@ function AddMenu({ onAddOutsource }: { onAddOutsource: (kind: string) => void })
             <p style={{ ...noteStyle, margin: 0 }}>
               Choose what to add to this Mainboard composition.
             </p>
-            <Link to="/strategy" className="btn" onClick={() => setOpen(false)}>
-              Add Strategy
-            </Link>
+            {/* F-15: Add Strategy creates + attaches a new Strategy work object    */}
+            {/* inline as a horizontal Mainboard row (matching the v18 prototype's  */}
+            {/* addStrategyBox), then the row opens its type-specific inline editor. */}
+            {/* No navigation, no JSON, no manual ids (spec F-15 acceptance).        */}
+            <button
+              type="button"
+              className="btn"
+              disabled={addingStrategy}
+              onClick={() => {
+                onAddStrategy();
+                setOpen(false);
+              }}
+            >
+              {addingStrategy ? "Adding Strategy…" : "Add Strategy"}
+            </button>
             <Link to="/packages/create" className="btn" onClick={() => setOpen(false)}>
               Add Package
             </Link>
@@ -530,6 +552,16 @@ function LatestResultCard({ result }: { result: LatestResultSummary }) {
 export function Mainboard() {
   const board = useDefaultMainboard();
   const snapshot = useCreateSnapshot();
+  // F-15: Add Strategy creates a strategy work object and attaches it as a new
+  // inline Mainboard row (the product replacement for the removed raw-JSON path).
+  // Both hooks + endpoints + OCC/Idempotency contract are unchanged — only the
+  // trigger moved from the advanced card to the typed "Add Strategy" action.
+  const createWorkObject = useCreateWorkObject();
+  const attachItem = useAttachItem();
+  // The item id of the just-added row, so it opens its inline editor on arrival
+  // (F-15 acceptance: "appears as a horizontal Mainboard row and opens its
+  // type-specific inline editor"). Cleared once consumed.
+  const [justAddedItemId, setJustAddedItemId] = useState<string | null>(null);
   // Transient external-draft rows added inline from the Add-menu submenu (UI-03).
   // Local presentation state — nothing is persisted until the row's workbench
   // Save (doc 03 §7.1), so these never appear in the server projection.
@@ -538,6 +570,21 @@ export function Mainboard() {
   // draft data flow (POST /external-work-object-drafts/{kind}); the inline row is
   // the durable-until-save UI artifact, so it is created regardless of the result.
   const startDraft = useStartExternalDraft();
+
+  function addStrategy(workspaceId: string) {
+    // Create an empty Strategy work object, then attach its first revision as a
+    // new enabled Mainboard item. Editing happens inline in the new row.
+    createWorkObject.mutate(
+      { object_kind: "strategy", payload: {} },
+      {
+        onSuccess: (created) =>
+          attachItem.mutate(
+            { workspaceId, root_id: created.root_id, revision_id: created.revision_id },
+            { onSuccess: (item) => setJustAddedItemId(item.item_id) },
+          ),
+      },
+    );
+  }
 
   function addOutsourceDraft(kind: string) {
     setDraftRows((rows) => [...rows, { id: crypto.randomUUID(), kind }]);
@@ -556,6 +603,8 @@ export function Mainboard() {
   const data = board.data;
   const items = [...data.items].sort((a, b) => a.position_index - b.position_index);
   const readyState = data.ready_summary?.state ?? "not_ready";
+  const addingStrategy = createWorkObject.isPending || attachItem.isPending;
+  const addStrategyError = createWorkObject.error ?? attachItem.error;
 
   return (
     <>
@@ -576,8 +625,15 @@ export function Mainboard() {
             <h2 id="strategies-h" className="strategies-title" style={{ margin: 0 }}>
               STRATEGIES
             </h2>
-            <AddMenu onAddOutsource={addOutsourceDraft} />
+            <AddMenu
+              onAddStrategy={() => addStrategy(data.workspace_id)}
+              addingStrategy={addingStrategy}
+              onAddOutsource={addOutsourceDraft}
+            />
           </div>
+          {addStrategyError && (
+            <p role="alert" style={alertStyle}>{errorMessage(addStrategyError)}</p>
+          )}
           {items.length === 0 && draftRows.length === 0 ? (
             <div className="card">
               <strong>Your Mainboard is empty.</strong>
@@ -589,7 +645,11 @@ export function Mainboard() {
           ) : (
             <div className="strategy-list">
               {items.map((item) => (
-                <ItemRow key={item.item_id} item={item} />
+                <ItemRow
+                  key={item.item_id}
+                  item={item}
+                  defaultExpanded={item.item_id === justAddedItemId}
+                />
               ))}
               {draftRows.map((d) => (
                 <OutsourceDraftRow

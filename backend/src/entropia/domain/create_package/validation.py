@@ -29,9 +29,10 @@ from dataclasses import asdict, dataclass, field
 from typing import Any
 
 # Bumping this shifts the evidence namespace. F-13 turned the five stubbed checks into
-# real deterministic checks and made not_executed/blocked block, so the evidence a v1
-# validator produced is semantically incompatible and must not be reused.
-VALIDATOR_VERSION = "cp-validation-v2"
+# real deterministic checks and made not_executed/blocked block; F-14 made the runtime
+# check load + execute the generated implementation in the sandbox (a hash without a
+# loadable implementation is blocked), so v2 evidence is semantically incompatible.
+VALIDATOR_VERSION = "cp-validation-v3"
 
 # The seven mandatory checks (doc 06 §4.4 "Validation Tests"). Every one produces real
 # output; none is a cosmetic pass label.
@@ -68,6 +69,14 @@ PLAN_COMPUTABLE = "computable"  # the resolved plan yields the declared signal
 PLAN_INCOMPATIBLE = "incompatible"  # deps resolved but cannot produce the declared signal
 PLAN_UNRESOLVABLE = "unresolvable"  # no native plan resolves (empty skeleton) -> blocked
 PLAN_NOT_A_SIGNAL = "not_a_signal"  # the package produces no time-series signal (e.g. ESP)
+
+# Sandbox execution verdicts for the generated implementation (F-14). The worker
+# compiles + execs the generated source with an empty ``__builtins__`` and calls its
+# entry symbol; these describe the outcome and drive the runtime check.
+EXEC_EXECUTED = "executed"  # loaded + ran to a non-empty resolver-loadable plan
+EXEC_EMPTY = "empty"  # loaded + ran but the plan has no primitives (empty skeleton)
+EXEC_ERROR = "error"  # failed to compile/exec, or produced a malformed plan
+EXEC_ABSENT = "absent"  # no implementation stored (a hash without an implementation)
 
 
 @dataclass(frozen=True, slots=True)
@@ -136,6 +145,12 @@ class ValidationInputs:
     claims_equivalence: bool
     baseline_passed: bool
     baseline_report: dict[str, Any] | None
+    # F-14 sandbox execution of the generated implementation (one of the EXEC_* verdicts)
+    # + a human detail + the plan the loaded module returned (evidence). Defaulted so
+    # pre-F-14 fixtures that build ValidationInputs directly still construct.
+    execution_status: str = EXEC_ABSENT
+    execution_detail: str = "No generated implementation was executed."
+    execution_plan: dict[str, Any] | None = None
 
 
 def build_validation_report(inputs: ValidationInputs) -> ValidationReport:
@@ -208,23 +223,61 @@ def _syntax_check(inputs: ValidationInputs) -> ValidationCheck:
 
 
 def _runtime_check(inputs: ValidationInputs) -> ValidationCheck:
-    """Confirm the candidate's resolved native plan actually runs to a signal.
+    """Load + execute the generated implementation, then confirm its native plan (F-14).
 
-    No arbitrary code is executed: a translated/generated candidate's behaviour is
-    defined by its resolved ta.*/cond.* plan, so a computable plan is a real runtime
-    verdict. An empty skeleton (no resolvable plan) is BLOCKED — it cannot be approved.
+    The generated implementation is compiled and executed in the sandbox (empty
+    ``__builtins__``); its returned plan must be non-empty and its resolved ta.*/cond.*
+    primitives must produce the declared signal. F-14 gate: a *hash without an
+    implementation* is BLOCKED; a non-executable / empty-skeleton output is BLOCKED or
+    FAILED and can never reach approval.
     """
-    artifacts = {"plan_keys": inputs.plan_keys} if inputs.plan_keys else {}
+    artifacts: dict[str, Any] = {"execution_status": inputs.execution_status}
+    if inputs.plan_keys:
+        artifacts["plan_keys"] = inputs.plan_keys
+    if inputs.execution_plan is not None:
+        artifacts["execution_plan"] = inputs.execution_plan
+
+    # F-14 execution gate first: without a real, executed implementation there is nothing
+    # to approve, regardless of what the pinned dependencies resolve to.
+    if inputs.execution_status == EXEC_ABSENT:
+        return ValidationCheck(
+            check=CHECK_RUNTIME,
+            status=STATUS_BLOCKED,
+            detail=(
+                "No loadable implementation is stored on the revision; a candidate hash "
+                "without an implementation cannot be approved."
+            ),
+            artifacts=artifacts,
+        )
+    if inputs.execution_status == EXEC_ERROR:
+        return ValidationCheck(
+            check=CHECK_RUNTIME,
+            status=STATUS_FAILED,
+            detail=inputs.execution_detail,
+            artifacts=artifacts,
+        )
+    if inputs.execution_status == EXEC_EMPTY:
+        return ValidationCheck(
+            check=CHECK_RUNTIME,
+            status=STATUS_BLOCKED,
+            detail=inputs.execution_detail,
+            artifacts=artifacts,
+        )
+
+    # The implementation loaded + executed to a non-empty plan; confirm the native plan
+    # it declares actually produces the requested signal.
     if inputs.plan_status == PLAN_COMPUTABLE:
         status = STATUS_PASSED
+        detail = f"{inputs.execution_detail} {inputs.plan_detail}"
     elif inputs.plan_status == PLAN_INCOMPATIBLE:
         status = STATUS_FAILED
+        detail = inputs.plan_detail
     else:
-        # PLAN_UNRESOLVABLE / PLAN_NOT_A_SIGNAL: nothing runnable was resolved.
+        # Executed to a plan, but no native ta.*/cond.* primitive backs it (or not a
+        # signal-producing package) -> not runnable as the declared signal.
         status = STATUS_BLOCKED
-    return ValidationCheck(
-        check=CHECK_RUNTIME, status=status, detail=inputs.plan_detail, artifacts=artifacts
-    )
+        detail = inputs.plan_detail
+    return ValidationCheck(check=CHECK_RUNTIME, status=status, detail=detail, artifacts=artifacts)
 
 
 def _real_market_data_check(inputs: ValidationInputs) -> ValidationCheck:
@@ -301,6 +354,10 @@ def _baseline_comparison_check(inputs: ValidationInputs) -> ValidationCheck:
 
 
 __all__ = [
+    "EXEC_ABSENT",
+    "EXEC_EMPTY",
+    "EXEC_ERROR",
+    "EXEC_EXECUTED",
     "MANDATORY_CHECKS",
     "PLAN_COMPUTABLE",
     "PLAN_INCOMPATIBLE",

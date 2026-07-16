@@ -1,4 +1,4 @@
-"""Package-validation worker body (doc 06 §4.4/§5/§7, F-13).
+"""Package-validation worker body (doc 06 §4.4/§5/§7, F-13 + F-14).
 
 This is the durable-worker body for Create-Package validation: it gathers the
 request's REAL facts from the database and runs the seven mandatory checks, producing
@@ -7,23 +7,26 @@ transition and no audit — its caller (``commands.create_package.start_package_
 owns the OCC guard, the immutable run row, the state transition and the audit/outbox,
 and records the durable ``jobs`` row (CR-09 source of truth, survives browser close).
 
-What runs for real here (no arbitrary code execution, no F-14 sandbox needed):
+What runs for real here:
 
 * ``output_structure`` / ``dependency_health`` — the output kind + a live re-resolution
   of every pinned dependency against the trusted ESP registry (drift => fail).
 * ``syntax`` — a real syntax probe over the submitted source: ``compile()`` for Python,
   a deterministic structural lint (balanced delimiters, non-empty) for the other
   supplied languages. A description request has no source => not_applicable.
-* ``runtime`` / ``repaint_future_leak`` — the candidate's behaviour is defined by its
-  resolved native ta.*/cond.* plan, so a computable plan is a genuine runtime verdict
-  and the single-pass incremental evaluators give a real non-repaint proof. An empty
-  skeleton (no resolvable plan) is BLOCKED and cannot be approved.
+* ``runtime`` / ``repaint_future_leak`` — F-14: the generated implementation is compiled
+  and EXECUTED in a restricted sandbox (empty ``__builtins__``; only the deterministic
+  generated module runs, never the submitted arbitrary source), and its returned plan
+  must resolve to the declared ta.*/cond.* signal. A hash without a loadable
+  implementation, or an empty / non-executable skeleton, is BLOCKED — it cannot be
+  approved. The single-pass incremental evaluators give the real non-repaint proof.
 * ``real_market_data`` / ``baseline_comparison`` — an equivalence-claiming request must
   carry a PASSED baseline of real market data; a non-claiming one needs none.
 
 The V1 pipeline executes this body in-transaction (the established CP pattern —
 mirrors Pre-Check / candidate-generation / baseline-parse), and the function is shaped
-so a dramatiq actor can invoke it unchanged when the async plane lands.
+so a dramatiq actor can invoke it unchanged when the async plane lands. A real
+LLM/arbitrary-code generator + its isolated OS-level sandbox stays Future-Dev.
 """
 
 from __future__ import annotations
@@ -39,6 +42,10 @@ from entropia.domain.create_package.enums import (
     SourceLanguage,
 )
 from entropia.domain.create_package.validation import (
+    EXEC_ABSENT,
+    EXEC_EMPTY,
+    EXEC_ERROR,
+    EXEC_EXECUTED,
     PLAN_COMPUTABLE,
     PLAN_INCOMPATIBLE,
     PLAN_NOT_A_SIGNAL,
@@ -87,6 +94,7 @@ async def gather_validation_inputs(
         package_kind=detail.package_kind, output_kind=output_kind, resolved_keys=resolved_keys
     )
     baseline_passed, baseline_report = await _baseline_facts(session, detail)
+    exec_status, exec_detail, exec_plan = _execute_generated(detail.candidate_implementation)
     return ValidationInputs(
         package_kind=str(detail.package_kind),
         output_kind=output_kind,
@@ -99,6 +107,9 @@ async def gather_validation_inputs(
         claims_equivalence=detail.claims_equivalence,
         baseline_passed=baseline_passed,
         baseline_report=baseline_report,
+        execution_status=exec_status,
+        execution_detail=exec_detail,
+        execution_plan=exec_plan,
     )
 
 
@@ -235,6 +246,61 @@ def _require_keys(
         PLAN_UNRESOLVABLE,
         f"No '{prefix}*' dependency resolved; the '{output_kind}' plan yields no signal.",
         resolved_keys,
+    )
+
+
+# The generated implementation needs no builtins (it only builds a dict from module
+# globals), so the sandbox exec runs with an EMPTY ``__builtins__`` — no imports, no I/O.
+_SANDBOX_BUILTINS: dict[str, Any] = {}
+
+
+def _execute_generated(
+    implementation: dict[str, Any] | None,
+) -> tuple[str, str, dict[str, Any] | None]:
+    """Load + execute the generated implementation in a restricted sandbox (F-14).
+
+    Returns an EXEC_* verdict, a human detail, and the plan the loaded module returned.
+    No arbitrary user code runs here — only the deterministic generated module, exec'd
+    with an empty ``__builtins__`` (no imports/I/O), and only its declared entry symbol
+    is called. A missing / non-loadable / empty implementation is a non-pass, never a
+    silent success (F-14: a hash without a loadable implementation cannot be approved).
+    """
+    if not isinstance(implementation, dict):
+        return EXEC_ABSENT, "No generated implementation is stored on the revision.", None
+    source = implementation.get("source")
+    entry = implementation.get("entry_symbol")
+    if not isinstance(source, str) or not source.strip() or not isinstance(entry, str) or not entry:
+        return (
+            EXEC_ABSENT,
+            "The stored implementation has no loadable source or entry symbol.",
+            None,
+        )
+    namespace: dict[str, Any] = {"__builtins__": _SANDBOX_BUILTINS}
+    try:
+        compiled = compile(source, "<generated-candidate>", "exec")
+        exec(compiled, namespace)
+    except Exception as exc:
+        return EXEC_ERROR, f"The generated implementation failed to load: {exc}.", None
+    entry_fn = namespace.get(entry)
+    if not callable(entry_fn):
+        return EXEC_ERROR, f"The generated implementation exposes no callable '{entry}'.", None
+    try:
+        plan = entry_fn()
+    except Exception as exc:
+        return EXEC_ERROR, f"Executing '{entry}' raised: {exc}.", None
+    if not isinstance(plan, dict) or not isinstance(plan.get("primitives"), list):
+        return EXEC_ERROR, f"'{entry}' returned no valid plan (missing 'primitives' list).", None
+    primitives = plan["primitives"]
+    if not primitives:
+        return (
+            EXEC_EMPTY,
+            "The generated implementation loaded but its plan has no primitives (empty skeleton).",
+            plan,
+        )
+    return (
+        EXEC_EXECUTED,
+        f"The generated implementation loaded and executed to a plan over {primitives}.",
+        plan,
     )
 
 

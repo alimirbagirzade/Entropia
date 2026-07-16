@@ -92,6 +92,10 @@ class PackageRevision(Base):
         index=True,
     )
     validation_summary: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    # F-14: the immutable loadable implementation generated for this revision (source,
+    # entry symbol, plan, executable flag, provenance). NULL for pre-F-14 / hand-built
+    # revisions; the resolver/validation sandbox loads a real artifact when present.
+    implementation: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     change_note: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     created_by_principal_id: Mapped[str | None] = mapped_column(

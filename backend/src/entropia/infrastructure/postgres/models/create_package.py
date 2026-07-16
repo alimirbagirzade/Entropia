@@ -96,6 +96,10 @@ class PackageRequest(TimestampMixin, Base):
     current_scan_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
     candidate_hash: Mapped[str | None] = mapped_column(String(80), nullable=True)
     candidate_output_contract: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    # F-14: the loadable implementation generated at candidate-generation time (source,
+    # entry symbol, plan, executable flag, provenance). Copied onto the draft revision at
+    # C.D.P; NULL until a candidate is generated.
+    candidate_implementation: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     package_root_id: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
     draft_revision_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
     current_validation_run_id: Mapped[str | None] = mapped_column(String(40), nullable=True)

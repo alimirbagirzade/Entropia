@@ -49,9 +49,9 @@ from entropia.domain.create_package import (
     scan_source_calls,
     source_hash,
 )
-from entropia.domain.create_package.candidate import (
-    build_candidate_manifest,
-    candidate_hash,
+from entropia.domain.create_package.generator import (
+    GeneratedCandidate,
+    generate_candidate,
 )
 from entropia.domain.create_package.source_scan import (
     SOURCE_SCANNER_VERSION,
@@ -570,19 +570,12 @@ async def submit_candidate_generation(
             new_state=str(detail.state),
             action="candidate_generation_started",
         )
-        # Deterministic candidate compute (doc 06 §5): compose a reproducible manifest
-        # from the resolved ESP dependencies + validated output contract; its content
-        # hash is the candidate hash. A real LLM/code generator is Future-Dev.
-        resolved_refs = await _candidate_resolved_refs(session, detail)
-        manifest = build_candidate_manifest(
-            package_kind=str(detail.package_kind),
-            source_kind=detail.source_kind,
-            output_contract=detail.output_contract,
-            resolved_refs=resolved_refs,
-        )
-        new_candidate_hash = candidate_hash(manifest)
-        detail.candidate_hash = new_candidate_hash
-        detail.candidate_output_contract = manifest.output_contract
+        # Deterministic candidate generation (doc 06 §5, F-14): generate a real loadable
+        # implementation (source + test draft + plan) from the resolved ESP dependencies +
+        # validated output contract; its content hash is the candidate hash. A real
+        # LLM/arbitrary-code generator + isolated sandbox stays Future-Dev.
+        generated = await _generate_and_store_candidate(session, detail)
+        new_candidate_hash = generated.candidate_hash
         detail.state = next_request_state(detail.state, CreatePackageState.CANDIDATE_READY)
         root.row_version += 1
         _audit_and_outbox(
@@ -648,6 +641,32 @@ async def _candidate_resolved_refs(
     return list(scan.resolved_refs or [])
 
 
+async def _generate_and_store_candidate(
+    session: AsyncSession, detail: PackageRequest
+) -> GeneratedCandidate:
+    """Generate the loadable candidate (F-14) and pin it onto the request.
+
+    Shared by Send (``submit_candidate_generation``) and the revision loop
+    (``request_revision``) so both produce an identical, deterministic implementation
+    from the same inputs. Stores the candidate hash, validated output contract, and the
+    loadable implementation (source + test draft + plan) — later copied verbatim onto
+    the immutable draft revision at C.D.P.
+    """
+    resolved_refs = await _candidate_resolved_refs(session, detail)
+    generated = generate_candidate(
+        request_id=detail.entity_id,
+        package_kind=str(detail.package_kind),
+        source_kind=detail.source_kind,
+        output_contract=detail.output_contract,
+        resolved_refs=resolved_refs,
+        source_language=detail.source_language,
+    )
+    detail.candidate_hash = generated.candidate_hash
+    detail.candidate_output_contract = generated.output_contract
+    detail.candidate_implementation = generated.implementation.as_dict()
+    return generated
+
+
 async def create_draft_from_candidate(
     session: AsyncSession,
     actor: Actor,
@@ -692,6 +711,7 @@ async def create_draft_from_candidate(
             },
             output_contract=detail.candidate_output_contract or detail.output_contract,
             dependency_snapshot=dependency_snapshot,
+            implementation=detail.candidate_implementation,
             visibility_scope=VisibilityScope.PRIVATE,
             rationale_family_snapshot=rationale_snapshot,
             validation_state=PackageValidationState.PENDING,
@@ -899,15 +919,7 @@ async def request_package_revision(
         detail.draft_revision_id = None
         detail.current_validation_run_id = None
 
-        resolved_refs = await _candidate_resolved_refs(session, detail)
-        manifest = build_candidate_manifest(
-            package_kind=str(detail.package_kind),
-            source_kind=detail.source_kind,
-            output_contract=detail.output_contract,
-            resolved_refs=resolved_refs,
-        )
-        detail.candidate_hash = candidate_hash(manifest)
-        detail.candidate_output_contract = manifest.output_contract
+        await _generate_and_store_candidate(session, detail)
         detail.state = next_request_state(detail.state, CreatePackageState.CANDIDATE_READY)
         root.row_version += 1
         _audit_and_outbox(

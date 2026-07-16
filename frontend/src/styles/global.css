@@ -229,6 +229,10 @@ a:hover { text-decoration: underline; }
   background: #b60000;
 }
 .ready-status.ready { background: #00a651; }
+/* UI-14: amber strip for the cautionary readiness states (ready_with_warnings,
+   stale, superseded, not_checked) — bound to the real readyStatusTone, keeping
+   the 2-state prototype strip honest about the fuller server state set. */
+.ready-status.warn { background: #d98c00; }
 .run-button {
   width: 120px;
   height: 66px;
@@ -246,6 +250,82 @@ a:hover { text-decoration: underline; }
   text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;
 }
 .run-button:hover { background: #0092c8; text-decoration: none; }
+/* UI-14: RUN stays genuinely locked until a current Ready Check passes (F-16). */
+.run-button.locked,
+.run-button:disabled {
+  background: #9fb3bd;
+  border-color: #6f8790;
+  cursor: not-allowed;
+  opacity: 0.85;
+}
+.run-button.locked:hover,
+.run-button:disabled:hover { background: #9fb3bd; }
+
+/* UI-14: Ready Check modal — the documented 3-column Passed / Failed / Warnings
+   report (v18 showBacktestReadyReport), rendered from the server projection. */
+.modal-title { margin: 0; font-size: 18px; font-weight: 900; }
+.ready-check-modal { display: grid; gap: 14px; }
+.ready-check-modal-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.ready-check-run-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.ready-check-guard {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text);
+}
+.ready-check-actions { display: flex; justify-content: flex-end; }
+.ready-report-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.ready-report-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  background: #fafafa;
+  min-width: 0;
+}
+.ready-report-card h3 {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.ready-report-empty { margin: 0; font-size: 13px; color: #666; }
+.ready-pass { margin: 0 0 6px; font-size: 13px; color: #1a7f37; }
+.ready-fail,
+.ready-warn {
+  display: grid;
+  gap: 2px;
+  padding: 8px 0;
+  border-top: 1px solid #ececec;
+  font-size: 13px;
+}
+.ready-report-card > .ready-fail:first-of-type,
+.ready-report-card > .ready-warn:first-of-type { border-top: none; padding-top: 0; }
+.ready-fail .ready-issue-message { color: #b60000; font-weight: 700; }
+.ready-warn .ready-issue-message { color: #8a6d00; font-weight: 700; }
+.ready-issue-meta { font-size: 11px; color: #666; }
+.ready-issue-remediation { font-size: 12px; color: #555; }
+
+/* UI-14: narrower desktop / tablet — the 3 report columns stack cleanly. */
+@media (max-width: 720px) {
+  .ready-report-grid { grid-template-columns: 1fr; }
+}
 
 /* About modal */
 .modal-overlay {

@@ -643,8 +643,17 @@ class PositionSizing(BaseModel):
         "divergence_adjusted",
     ] = Field(default="no_adjustment", description="Size modulation mode")
 
-    leverage_mode: Literal["isolated", "cross"] = Field(
-        default="isolated", description="Margin mode"
+    leverage_mode: Literal["no_leverage", "isolated", "cross"] = Field(
+        default="isolated", description="Margin mode (§10.2)"
+    )
+
+    leverage: Decimal = Field(
+        default=Decimal("1"),
+        gt=Decimal("0"),
+        description=(
+            "Leverage multiplier applied to computed position size/exposure (§10.2). "
+            "'No Leverage' mode normalizes this to 1x regardless of the saved value."
+        ),
     )
 
     position_size_limits: PositionSizeLimits | None = Field(default=None)

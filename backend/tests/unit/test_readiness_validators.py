@@ -226,6 +226,41 @@ def test_strategy_supported_execution_timing_does_not_block() -> None:
     assert Code.STRATEGY_EXECUTION_TIMING_UNSUPPORTED.value not in _codes(result)
 
 
+def test_strategy_unsupported_order_type_blocks() -> None:
+    # F-07b: a Stop order carries no trigger price in the schema → the engine fails closed
+    # (opens no position) → Ready Check surfaces STRATEGY_ORDER_TYPE_UNSUPPORTED.
+    payload = _strategy_payload()
+    payload["data"]["order_config"] = {"type": "stop_order"}
+    result = evaluate_readiness(
+        [_strategy_item(payload=payload)], allocation_enabled=False, allocation_issues=[]
+    )
+    assert Code.STRATEGY_ORDER_TYPE_UNSUPPORTED.value in _codes(result)
+    assert result.state == ReadinessState.NOT_READY
+
+
+def test_strategy_supported_order_type_does_not_block() -> None:
+    # A modelled Limit order (signal price rule, not-allowed partial fill) raises no order
+    # blocker; the default market_order payload likewise does not.
+    payload = _strategy_payload()
+    payload["data"]["order_config"] = {
+        "type": "limit_order",
+        "limit": {
+            "price_rule": "entry_signal_price",
+            "validity": "3_candles",
+            "unfilled_policy": "cancel_order",
+            "partial_fill_policy": "not_allowed",
+        },
+    }
+    limit_result = evaluate_readiness(
+        [_strategy_item(payload=payload)], allocation_enabled=False, allocation_issues=[]
+    )
+    assert Code.STRATEGY_ORDER_TYPE_UNSUPPORTED.value not in _codes(limit_result)
+    market_result = evaluate_readiness(
+        [_strategy_item()], allocation_enabled=False, allocation_issues=[]
+    )
+    assert Code.STRATEGY_ORDER_TYPE_UNSUPPORTED.value not in _codes(market_result)
+
+
 def test_strategy_default_costs_warns_not_blocks() -> None:
     payload = _strategy_payload()
     payload["data"]["costs"] = {"slippage_value": "0.1"}  # commission + spread unset

@@ -72,6 +72,8 @@ DECISION_TRACE_EVENT_TYPES = (
     "entry_signal",  # strategy decided to enter (rule id + per-condition evidence)
     "entry_fill",  # a position actually opened (execution)
     "entry_scheduled",  # a deferred entry was scheduled to a future bar (F-07a timing)
+    "limit_order_placed",  # a resting limit ENTRY order was placed (F-07b, §2)
+    "limit_order_cancelled",  # a resting limit order expired/ended unfilled (F-07b, §2)
     "entry_blocked",  # a wanted entry produced no fill (sizing / sleeve capacity)
     "filtered_no_entry",  # a signal was filtered by the direction bias (no fill attempt)
     "exit_scheduled",  # a deferred exit was scheduled to a future bar (F-07a timing)
@@ -231,6 +233,28 @@ class _Pending:
     target_seq: int  # bars_seen index at which the fill executes (the next bar)
     direction: str  # entry direction ("" for an exit)
     reason: str  # exit reason ("" for an entry)
+
+
+@dataclass(slots=True)
+class _WorkingLimit:
+    """A resting limit ENTRY order spanning bars until filled or expired (F-07b, §2).
+
+    A ``limit_order`` does not fill at the decision bar (the signal is only known at that
+    bar's close — a same-bar fill would look ahead). The order rests from the NEXT bar and
+    fills at ``limit_price`` only if a bar's low (long buy) / high (short sell) reaches it
+    within the validity window. ``expires_seq`` is the last ``bars_seen`` index the order is
+    live (``None`` = until_cancelled → until fill or end-of-data). On the expiry bar, an
+    unfilled order applies its ``unfilled_policy``: cancel / keep-until-validity (no fill),
+    convert-to-market (fill at that bar's close), or re-price (a fresh limit each live bar,
+    recomputed from the prior bar's close — no look-ahead). At most one is ever outstanding
+    (it exists only while flat)."""
+
+    direction: str  # "long" | "short"
+    limit_price: Decimal  # current resting limit level (may re-price)
+    offset: Decimal  # signed offset magnitude for re-pricing
+    price_rule: str  # entry_signal_price / signal_price_(minus|plus)_offset
+    unfilled_policy: str
+    expires_seq: int | None  # last live bars_seen index (None = until_cancelled)
 
 
 def _dec(value: Any) -> Decimal:
@@ -433,6 +457,75 @@ def _fill_schedule(timing: str) -> str:
     if timing == "next_candle_close":
         return "next_close"
     return "immediate"
+
+
+# §2 Order type execution modelled by the deterministic OHLCV bar-replay (F-07b). The
+# engine previously IGNORED ``order_config`` and always filled at market — a strategy
+# configured for a Limit Order silently got a market fill. Now:
+#   * ``market_order`` / ``simulation_only`` → a market fill at the timing-chosen price
+#     (simulation_only is doc 02's "simplified virtual fill to test the entry logic" — a
+#     backtest fill IS that virtual fill, so it is byte-identical to a market order).
+#   * ``limit_order`` → a resting working order (``_WorkingLimit``) that fills only if a
+#     later bar reaches the signal-derived limit within the validity window, then applies
+#     the unfilled policy.
+#   * ``stop_order`` / ``stop_limit_order`` → the saved schema carries NO stop trigger /
+#     activation price (``OrderConfig`` has only ``type`` + ``limit``; ``LimitOrderDetails``
+#     has no stop level), and stop-limit additionally needs intrabar stop-vs-limit ordering
+#     (tick). Genuinely unmodellable → FAIL CLOSED.
+#   * a ``limit_order`` whose ``price_rule`` is ``best_bid_ask`` needs a bid/ask quote
+#     series (absent over OHLCV) and a ``partial_fill_policy`` other than ``not_allowed`` is
+#     deferred to slice (c) — both also FAIL CLOSED here (never a silent full/market fill).
+_MARKET_ORDER_TYPES = frozenset({"market_order", "simulation_only"})
+_MODELLED_LIMIT_PRICE_RULES = frozenset(
+    {"entry_signal_price", "signal_price_minus_offset", "signal_price_plus_offset"}
+)
+# Order Validity → the number of decision intervals (future bars) the unfilled order stays
+# live. ``current_candle_only`` and ``1_candle`` both give ONE live bar in the bar-replay
+# (the signal bar's intrabar is unavailable, so the first fill opportunity is the next bar);
+# ``until_cancelled`` rests until fill or end-of-data.
+_VALIDITY_BARS: dict[str, int | None] = {
+    "current_candle_only": 1,
+    "1_candle": 1,
+    "2_candles": 2,
+    "3_candles": 3,
+    "4_candles": 4,
+    "until_cancelled": None,
+}
+
+
+def order_execution_is_modelled(config: StrategyConfig) -> bool:
+    """Public predicate: is this strategy's order-type execution modelled (F-07b)?
+
+    The single shared source of truth imported by the readiness validator so Ready Check's
+    ``STRATEGY_ORDER_TYPE_UNSUPPORTED`` blocker and the engine's fail-closed entry gate
+    agree on exactly one definition. market / simulation → market fill; limit → the
+    working-order model (a modelled price rule + a ``not_allowed`` partial-fill policy);
+    stop / stop-limit / a ``best_bid_ask`` price rule / a non-``not_allowed`` partial-fill
+    policy → NOT modelled (blocked at Ready Check AND opens no position if a stale readiness
+    state reaches the worker)."""
+    order = config.data.order_config
+    if order.type in _MARKET_ORDER_TYPES:
+        return True
+    if order.type == "limit_order":
+        limit = order.limit
+        return (
+            limit is not None
+            and limit.price_rule in _MODELLED_LIMIT_PRICE_RULES
+            and limit.partial_fill_policy == "not_allowed"
+        )
+    return False
+
+
+def _limit_price(price_rule: str, reference: Decimal, offset: Decimal) -> Decimal:
+    """Resolve a limit level from a price rule + reference price + offset (F-07b).
+
+    ``entry_signal_price`` rests at the reference (the signal / re-price bar's close);
+    ``signal_price_minus_offset`` / ``_plus_offset`` shift it by the configured magnitude."""
+    if price_rule == "signal_price_minus_offset":
+        return reference - offset
+    if price_rule == "signal_price_plus_offset":
+        return reference + offset
+    return reference
 
 
 def _clamp_to_limits(size: Decimal, limits: PositionSizeLimits | None) -> Decimal:
@@ -859,6 +952,16 @@ def run_engine(
     entry_sched = _fill_schedule(config.data.execution.entry_timing)
     exit_sched = _fill_schedule(config.data.execution.exit_timing)
 
+    # F-07b: order-type execution. ``market_order`` / ``simulation_only`` fill at the
+    # timing-chosen price (byte-identical to the pre-F-07b market path); ``limit_order``
+    # rests a working order that fills only on a limit touch within the validity window;
+    # ``stop_order`` / ``stop_limit_order`` (no trigger price in the schema) and an
+    # unmodelled limit variant open NO position — the fail-closed backstop to the Ready
+    # Check STRATEGY_ORDER_TYPE_UNSUPPORTED blocker.
+    order_cfg = config.data.order_config
+    order_ok = order_execution_is_modelled(config)
+    order_is_limit = order_cfg.type == "limit_order" and order_ok
+
     plan_active = indicator_plan is not None and indicator_plan.has_entry
     entry_evals: list[BlockEvaluator] = (
         build_evaluators(indicator_plan.entry_specs) if plan_active and indicator_plan else []
@@ -886,6 +989,7 @@ def run_engine(
     window: deque[_Bar] = deque(maxlen=_BREAKOUT_WINDOW)
     position: _Position | None = None
     pending: _Pending | None = None  # a fill deferred to a future bar (F-07a timing)
+    working_limit: _WorkingLimit | None = None  # a resting limit ENTRY order (F-07b)
     bars_seen = 0
     first_ts = ""
     last_bar: _Bar | None = None
@@ -897,6 +1001,9 @@ def run_engine(
     stop_exit_collisions = 0
     deferred_entry_fills = 0
     deferred_exit_fills = 0
+    limit_orders_placed = 0
+    limit_orders_filled = 0
+    limit_orders_cancelled = 0
     gross_profit = _ZERO
     gross_loss = _ZERO
     # F-11: funding cost state. ``funding_records`` is the ascending, available-time-safe
@@ -1124,6 +1231,7 @@ def run_engine(
                     "size": str(pos.size),
                     "entry_notional": str(pos.entry_notional),
                     "timing": config.data.execution.entry_timing,
+                    "order_type": order_cfg.type,
                     "deferred": deferred,
                 },
             )
@@ -1237,6 +1345,49 @@ def run_engine(
                     position = None
                 pending = None
 
+            # (1b) Resolve a RESTING limit ENTRY order against THIS bar (F-07b). Resolves
+            # before the position block (like a next_open fill), so a same-bar protective
+            # stop can hit the just-filled position — consistent with the deferred-open path.
+            # A touch fills at the limit; on the expiry bar an unfilled order applies its
+            # policy (convert-to-market fills at the close, else cancel); otherwise a
+            # re-price policy recomputes the limit from THIS bar's close for the next bar.
+            if working_limit is not None and position is None:
+                wl = working_limit
+                touched = (
+                    bar.low <= wl.limit_price
+                    if wl.direction == "long"
+                    else bar.high >= wl.limit_price
+                )
+                expired = wl.expires_seq is not None and bars_seen >= wl.expires_seq
+                if touched:
+                    limit_orders_filled += 1
+                    position = _do_open(
+                        wl.direction, bar, wl.limit_price, bar_seq=bars_seen, deferred=True
+                    )
+                    working_limit = None
+                elif expired:
+                    if wl.unfilled_policy == "convert_to_market_order":
+                        limit_orders_filled += 1
+                        position = _do_open(
+                            wl.direction, bar, bar.close, bar_seq=bars_seen, deferred=True
+                        )
+                    else:
+                        limit_orders_cancelled += 1
+                        _emit(
+                            "limit_order_cancelled",
+                            event_time=bar.timestamp,
+                            direction=wl.direction,
+                            bar_seq=bars_seen,
+                            detail={
+                                "reason": "validity_expired",
+                                "unfilled_policy": wl.unfilled_policy,
+                                "limit_price": str(wl.limit_price),
+                            },
+                        )
+                    working_limit = None
+                elif wl.unfilled_policy == "re_price_next_candle":
+                    wl.limit_price = _limit_price(wl.price_rule, bar.close, wl.offset)
+
             if position is not None:
                 # (2) protection / stop / exit against this bar (intrabar touch).
                 if position.direction == "long":
@@ -1336,10 +1487,11 @@ def run_engine(
                         pending = _Pending(
                             "exit", exit_sched == "next_open", bars_seen + 1, "", "exit_signal"
                         )
-            elif timing_ok and pending is None:
-                # Flat and uncommitted: evaluate a fresh entry, then open now (immediate)
-                # or schedule the fill for the next bar (deferred). ``timing_ok`` is the
-                # fail-closed backstop — an unsupported timing opens nothing (F-07a).
+            elif timing_ok and order_ok and pending is None and working_limit is None:
+                # Flat and uncommitted: evaluate a fresh entry, then open now (immediate),
+                # schedule a deferred fill (timing), or rest a limit order. ``timing_ok`` and
+                # ``order_ok`` are the fail-closed backstops — an unsupported timing OR order
+                # type opens nothing (F-07a / F-07b).
                 want: str | None = None
                 if plan_active:
                     # (3a) real indicator entry, respecting the direction bias.
@@ -1392,7 +1544,40 @@ def run_engine(
                         bar_seq=bars_seen,
                         detail={"rule": _entry_rule_snapshot(want)},
                     )
-                    if entry_sched == "immediate":
+                    if order_is_limit:
+                        # F-07b: rest a limit order at the signal-derived price; it fills
+                        # only on a later touch within the validity window (resolved by the
+                        # (1b) block on subsequent bars), never on this signal bar.
+                        limit = order_cfg.limit
+                        assert limit is not None  # guaranteed by order_ok
+                        offset = limit.price_offset or _ZERO
+                        limit_level = _limit_price(limit.price_rule, bar.close, offset)
+                        validity_bars = _VALIDITY_BARS[limit.validity]
+                        working_limit = _WorkingLimit(
+                            direction=want,
+                            limit_price=limit_level,
+                            offset=offset,
+                            price_rule=limit.price_rule,
+                            unfilled_policy=limit.unfilled_policy,
+                            expires_seq=(
+                                None if validity_bars is None else bars_seen + validity_bars
+                            ),
+                        )
+                        limit_orders_placed += 1
+                        _emit(
+                            "limit_order_placed",
+                            event_time=bar.timestamp,
+                            direction=want,
+                            bar_seq=bars_seen,
+                            detail={
+                                "limit_price": str(limit_level),
+                                "price_rule": limit.price_rule,
+                                "validity": limit.validity,
+                                "unfilled_policy": limit.unfilled_policy,
+                                "expires_bar_seq": working_limit.expires_seq,
+                            },
+                        )
+                    elif entry_sched == "immediate":
                         position = _do_open(want, bar, bar.close, bar_seq=bars_seen, deferred=False)
                     else:
                         _emit(
@@ -1471,6 +1656,23 @@ def run_engine(
 
             window.append(bar)
 
+    # End-of-data: a limit order still resting past the last bar never filled → cancel it
+    # (F-07b), so an unfilled limit is an auditable no-fill, never a silent gap.
+    if working_limit is not None and last_bar is not None:
+        limit_orders_cancelled += 1
+        _emit(
+            "limit_order_cancelled",
+            event_time=last_bar.timestamp,
+            direction=working_limit.direction,
+            bar_seq=bars_seen,
+            detail={
+                "reason": "end_of_data",
+                "unfilled_policy": working_limit.unfilled_policy,
+                "limit_price": str(working_limit.limit_price),
+            },
+        )
+        working_limit = None
+
     # End-of-data: close any open position at the last bar's close (never left dangling).
     if position is not None and last_bar is not None:
         _close(last_bar.timestamp, last_bar.close, "end_of_data", position, bar_seq=bars_seen)
@@ -1544,6 +1746,14 @@ def run_engine(
         warnings.append(
             f"execution_timing_unsupported:{execution.entry_timing}/{execution.exit_timing}"
         )
+    if not order_ok:
+        # An unsupported order type (stop / stop-limit with no trigger price in the schema),
+        # a limit order with a best_bid_ask price rule (no quote series over OHLCV), or a
+        # partial-fill policy other than not_allowed (deferred to slice (c)) is not modelled;
+        # the run opened NO position (fail closed, F-07b) rather than silently market-filling.
+        # Ready Check raises STRATEGY_ORDER_TYPE_UNSUPPORTED — this L4 warning is the engine
+        # backstop when a stale readiness state reaches the worker.
+        warnings.append(f"order_type_unsupported:{order_cfg.type}")
     if indicator_plan is not None:
         # Blocks the native-trigger foundation could not compute (deferred sources,
         # timeframe overrides, non-directional keys) are surfaced, never hidden (L4).
@@ -1639,6 +1849,12 @@ def run_engine(
         "execution_timing_modelled": timing_ok,
         "deferred_entry_fills": deferred_entry_fills,
         "deferred_exit_fills": deferred_exit_fills,
+        # F-07b: order-type execution provenance + limit-order working-order counts.
+        "order_type": order_cfg.type,
+        "order_execution_modelled": order_ok,
+        "limit_orders_placed": limit_orders_placed,
+        "limit_orders_filled": limit_orders_filled,
+        "limit_orders_cancelled": limit_orders_cancelled,
         "stop_exit_conflict": stop_exit_conflict,
         "stop_exit_collisions": stop_exit_collisions,
         "logic_stop_blocks": len(stop_evals),
@@ -1927,6 +2143,7 @@ __all__ = [
     "TradeRow",
     "combine_item_runs",
     "execution_timing_is_modelled",
+    "order_execution_is_modelled",
     "resolve_allocation_execution",
     "run_engine",
     "sizing_is_modelled",

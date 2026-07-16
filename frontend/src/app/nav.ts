@@ -26,7 +26,11 @@ export const NAV: NavSection[] = [
     items: [
       { path: "/", label: "Mainboard", stage: 3 },
       { path: "/strategy", label: "Strategy Details", stage: 3 },
-      { path: "/outsource-signal", label: "Add Outsource Signal", stage: 3 },
+      // UI-03: "Add Outsource Signal" is no longer a standalone primary-workflow
+      // destination. It lives as the two-option nested submenu in the Mainboard
+      // Add menu (Trading Signal / Trade Log → inline draft rows). The
+      // /outsource-signal route + page stay reachable as a deep-link (App.tsx),
+      // so no route path is removed — only the primary-nav registry entry is.
       { path: "/trading-signal", label: "Trading Signal", stage: 3 },
       { path: "/trade-log", label: "Trade Log", stage: 3 },
     ],

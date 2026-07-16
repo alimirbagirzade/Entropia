@@ -5,8 +5,10 @@ describe("navigation skeleton", () => {
   it("exposes every Entropia V18 screen", () => {
     // 22 canonical V18 screens + 2 post-V1 surfaces (System Metrics /panel/metrics,
     // Admin Provisioning /panel/provisioning) + 1 post-V1 Instrument Registry
-    // (/instruments, GAP-16).
-    expect(ALL_NAV_ITEMS.length).toBe(25);
+    // (/instruments, GAP-16) − 1 (UI-03: "Add Outsource Signal" dropped from the
+    // primary-nav registry; it is now the Mainboard Add-menu nested submenu. Its
+    // /outsource-signal route stays a deep-link in App.tsx, just not in NAV).
+    expect(ALL_NAV_ITEMS.length).toBe(24);
   });
 
   it("has a Mainboard home route", () => {

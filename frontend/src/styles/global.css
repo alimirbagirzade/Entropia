@@ -1156,6 +1156,17 @@ a:hover { text-decoration: underline; }
 }
 .package-picker-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
 
+/* UI-03: nested "Add Outsource Signal" submenu inside the Add popover — a
+   keyboard-accessible disclosure whose two options indent under the toggle. */
+.add-submenu { display: grid; gap: 6px; }
+.add-submenu-list {
+  display: grid;
+  gap: 6px;
+  margin-left: 4px;
+  padding-left: 12px;
+  border-left: 2px solid var(--border);
+}
+
 /* ---- v18 Portfolio: numbered allocation cards (mockup .portfolio-grid/.portfolio-card) ---- */
 .portfolio-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
 .portfolio-card { border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-elev); padding: 14px; }

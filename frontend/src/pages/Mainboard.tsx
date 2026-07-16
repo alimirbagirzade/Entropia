@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { ApiError } from "@/lib/apiClient";
@@ -18,7 +18,6 @@ import {
   usePatchItem,
   useSoftDeleteWorkObject,
   useStartExternalDraft,
-  type ExternalDraft,
   type LatestResultSummary,
   type MainboardItem,
   type WorkObjectResult,
@@ -455,46 +454,65 @@ function AddWorkObjectCard({ workspaceId }: { workspaceId: string }) {
 }
 
 // --------------------------------------------------------------------------- //
-// Add Outsource Signal opener: start a transient external draft, then deep-link //
-// to the TS/TL workbench where the real object is created (CR-01, doc 03).      //
+// Outsource-signal inline draft row (UI-03, doc 03). Choosing Trading Signal or //
+// Trade Log in the Add-menu nested submenu appends one of these rows to the     //
+// STRATEGIES list and opens it inline — the correct new row is created without  //
+// leaving the Mainboard. The row is a TRANSIENT external working object: doc 03 //
+// §7.1 start_transient_outsource_draft persists nothing (no root, revision or   //
+// audit), so nothing is attached until the row's workbench Save. The real       //
+// per-kind compose editor lives on the TS/TL workbench (docs 04/05); the        //
+// expanded row deep-links there. "Remove draft" just discards the transient row //
+// — it creates no Trash entry (there is nothing persisted to trash).            //
 // --------------------------------------------------------------------------- //
 
-function OutsourceSignalCard() {
-  const start = useStartExternalDraft();
-  const draft = start.data as ExternalDraft | undefined;
-  const target = draft ? EXTERNAL_DRAFT_KINDS.find((k) => k.value === draft.kind) : undefined;
+function OutsourceDraftRow({ kind, onRemove }: { kind: string; onRemove: () => void }) {
+  // Selecting the kind opens the row already expanded ("seçim yeni TS/TL row açar
+  // inline") so the workbench continuation is visible immediately.
+  const [expanded, setExpanded] = useState(true);
+  const spec = EXTERNAL_DRAFT_KINDS.find((k) => k.value === kind);
+  const label = spec?.label ?? itemKindLabel(kind);
+  const workbenchPath = spec?.path ?? "/";
 
   return (
-    <section className="card" aria-labelledby="add-os-h">
-      <h3 id="add-os-h" style={{ marginTop: 0 }}>Add Outsource Signal</h3>
-      <p style={noteStyle}>
-        Open a Trading Signal or Trade Log draft, then continue in its workbench. Unsaved drafts are
-        not included in Backtest Ready Check or RUN.
-      </p>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        {EXTERNAL_DRAFT_KINDS.map((k) => (
-          <button
-            key={k.value}
-            type="button"
-            className="btn"
-            disabled={start.isPending}
-            onClick={() => start.mutate(k.value)}
-          >
-            {k.label}
-          </button>
-        ))}
+    <div className="strategy-package">
+      <div className={`strategy-row${expanded ? " open" : ""}`}>
+        <span className="strategy-text">
+          <strong>{label}</strong>
+          <StatusBadge label={label} tone="neutral" />
+          <StatusBadge label="Unsaved draft" tone="warn" />
+        </span>
+        <button
+          type="button"
+          className="strategy-arrow"
+          aria-expanded={expanded}
+          aria-label={expanded ? `Collapse ${label} draft` : `Expand ${label} draft`}
+          onClick={() => setExpanded((v) => !v)}
+        >
+          {expanded ? "▲" : "▼"}
+        </button>
       </div>
-      {start.isError && <p role="alert" style={alertStyle}>{errorMessage(start.error)}</p>}
-      {draft && target && (
-        <div style={{ marginTop: 12 }}>
-          <StatusBadge label="Unsaved" tone="warn" />
-          <p style={{ margin: "8px 0" }}>
-            {target.label} draft opened.{" "}
-            <Link to={target.path}>Continue in the {target.label} workbench →</Link>
+      {expanded && (
+        <div
+          className="strategy-details"
+          style={{ display: "grid", gap: 12 }}
+          role="group"
+          aria-label={`${label} draft`}
+        >
+          <p style={{ margin: 0 }}>
+            New {label} draft added to this Mainboard. It is an unsaved external working object — not
+            included in Backtest Ready Check or RUN until you save it in its workbench.
           </p>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <Link to={workbenchPath} className="btn btn-primary">
+              Continue in the {label} workbench →
+            </Link>
+            <button type="button" className="btn btn-ghost" onClick={onRemove}>
+              Remove draft
+            </button>
+          </div>
         </div>
       )}
-    </section>
+    </div>
   );
 }
 
@@ -502,16 +520,33 @@ function OutsourceSignalCard() {
 // Add menu popover: the prototype Mainboard "Add" menu (doc 01 §3.1/§3.2 —      //
 // Add Strategy, Add Package, Add Outsource Signal ▸ Trading Signal / Trade Log, //
 // Portfolio / Equity Allocation). Add Strategy / Add Package deep-link to the   //
-// dedicated editor pages; Outsource opens the TS/TL external-draft card; the    //
-// advanced raw work-object path stays available for power users. There is no    //
-// "pick an existing package" list because the backend exposes no attachable-    //
-// package list endpoint (CR-01).                                                //
+// dedicated editor pages. "Add Outsource Signal" is a KEYBOARD-ACCESSIBLE       //
+// nested submenu (a disclosure, not a hover-only fly-out): it toggles a two-    //
+// option group whose choice appends an inline Trading Signal / Trade Log draft  //
+// row to the Mainboard (UI-03, doc 03). The advanced raw work-object path stays //
+// available for power users. There is no "pick an existing package" list        //
+// because the backend exposes no attachable-package list endpoint (CR-01).      //
 // --------------------------------------------------------------------------- //
 
-type AddMode = null | "outsource" | "advanced";
+type AddMode = null | "advanced";
 
-function AddMenu({ mode, onPick }: { mode: AddMode; onPick: (mode: AddMode) => void }) {
+function AddMenu({
+  mode,
+  onPick,
+  onAddOutsource,
+}: {
+  mode: AddMode;
+  onPick: (mode: AddMode) => void;
+  onAddOutsource: (kind: string) => void;
+}) {
   const [open, setOpen] = useState(false);
+  const [subOpen, setSubOpen] = useState(false);
+
+  // Closing the popover collapses the nested submenu so it never re-opens
+  // already-expanded on the next "+ Add".
+  useEffect(() => {
+    if (!open) setSubOpen(false);
+  }, [open]);
 
   return (
     <div className="cp-popover-anchor">
@@ -550,16 +585,42 @@ function AddMenu({ mode, onPick }: { mode: AddMode; onPick: (mode: AddMode) => v
             <Link to="/packages/create" className="btn" onClick={() => setOpen(false)}>
               Add Package
             </Link>
-            <button
-              type="button"
-              className={mode === "outsource" ? "btn btn-primary" : "btn"}
-              onClick={() => {
-                onPick("outsource");
-                setOpen(false);
-              }}
-            >
-              Add Outsource Signal
-            </button>
+            <div className="add-submenu">
+              <button
+                type="button"
+                className={subOpen ? "btn btn-primary" : "btn"}
+                aria-haspopup="menu"
+                aria-expanded={subOpen}
+                aria-controls="add-outsource-submenu"
+                onClick={() => setSubOpen((v) => !v)}
+              >
+                Add Outsource Signal
+                <span aria-hidden="true">{subOpen ? " ▾" : " ▸"}</span>
+              </button>
+              {subOpen && (
+                <div
+                  id="add-outsource-submenu"
+                  className="add-submenu-list"
+                  role="menu"
+                  aria-label="Add Outsource Signal"
+                >
+                  {EXTERNAL_DRAFT_KINDS.map((k) => (
+                    <button
+                      key={k.value}
+                      type="button"
+                      role="menuitem"
+                      className="btn"
+                      onClick={() => {
+                        onAddOutsource(k.value);
+                        setOpen(false);
+                      }}
+                    >
+                      {k.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <button
               type="button"
               className={mode === "advanced" ? "btn btn-primary" : "btn"}
@@ -626,6 +687,23 @@ export function Mainboard() {
   const board = useDefaultMainboard();
   const snapshot = useCreateSnapshot();
   const [addMode, setAddMode] = useState<AddMode>(null);
+  // Transient external-draft rows added inline from the Add-menu submenu (UI-03).
+  // Local presentation state — nothing is persisted until the row's workbench
+  // Save (doc 03 §7.1), so these never appear in the server projection.
+  const [draftRows, setDraftRows] = useState<Array<{ id: string; kind: string }>>([]);
+  // Firing the transient opener on selection preserves the documented external-
+  // draft data flow (POST /external-work-object-drafts/{kind}); the inline row is
+  // the durable-until-save UI artifact, so it is created regardless of the result.
+  const startDraft = useStartExternalDraft();
+
+  function addOutsourceDraft(kind: string) {
+    setDraftRows((rows) => [...rows, { id: crypto.randomUUID(), kind }]);
+    startDraft.mutate(kind);
+  }
+
+  function removeDraftRow(id: string) {
+    setDraftRows((rows) => rows.filter((r) => r.id !== id));
+  }
 
   if (board.isLoading) return <Loading label="Loading Mainboard…" />;
   if (board.isError || !board.data) {
@@ -655,9 +733,9 @@ export function Mainboard() {
             <h2 id="strategies-h" className="strategies-title" style={{ margin: 0 }}>
               STRATEGIES
             </h2>
-            <AddMenu mode={addMode} onPick={setAddMode} />
+            <AddMenu mode={addMode} onPick={setAddMode} onAddOutsource={addOutsourceDraft} />
           </div>
-          {items.length === 0 ? (
+          {items.length === 0 && draftRows.length === 0 ? (
             <div className="card">
               <strong>Your Mainboard is empty.</strong>
               <p style={{ margin: "6px 0 0", fontSize: 13 }}>
@@ -669,6 +747,13 @@ export function Mainboard() {
             <div className="strategy-list">
               {items.map((item) => (
                 <ItemRow key={item.item_id} item={item} />
+              ))}
+              {draftRows.map((d) => (
+                <OutsourceDraftRow
+                  key={d.id}
+                  kind={d.kind}
+                  onRemove={() => removeDraftRow(d.id)}
+                />
               ))}
             </div>
           )}
@@ -721,7 +806,6 @@ export function Mainboard() {
           )}
         </section>
 
-        {addMode === "outsource" && <OutsourceSignalCard />}
         {addMode === "advanced" && <AddWorkObjectCard workspaceId={data.workspace_id} />}
       </div>
     </>

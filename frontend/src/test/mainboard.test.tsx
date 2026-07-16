@@ -226,8 +226,13 @@ describe("Mainboard", () => {
     expect(
       screen.getByRole("link", { name: "Portfolio / Equity Allocation →" }).getAttribute("href"),
     ).toBe("/portfolio");
-    // The nested Add Outsource Signal action stays present in the same menu.
-    expect(screen.getByRole("button", { name: "Add Outsource Signal" })).toBeTruthy();
+    // The nested Add Outsource Signal submenu reveals its two options (UI-03).
+    const submenuToggle = screen.getByRole("button", { name: "Add Outsource Signal" });
+    expect(submenuToggle.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(submenuToggle);
+    expect(submenuToggle.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByRole("menuitem", { name: "Trading Signal" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "Trade Log" })).toBeTruthy();
   });
 
   it("pins a revision with the item row_version OCC and a fresh Idempotency-Key", async () => {
@@ -307,22 +312,55 @@ describe("Mainboard", () => {
     expect(headersOf(call?.[1])["Idempotency-Key"]).toBeTruthy();
   });
 
-  it("starts an external work-object draft and links to the workbench", async () => {
+  it("adds an inline Trading Signal draft row from the nested Add submenu (UI-03)", async () => {
     const fetchMock = stubRoutes();
     renderPage();
     await screen.findByText("Momentum A");
-    // Prototype Add menu (UI-01): open it and choose the outsource path before
-    // the Outsource Signal card (mode-gated) renders its TS/TL buttons.
+    // Open the Add menu, expand the nested "Add Outsource Signal" submenu, then
+    // choose Trading Signal — the correct new row is created inline, without
+    // leaving Mainboard (UI-03 acceptance).
     fireEvent.click(screen.getByRole("button", { name: "+ Add" }));
     fireEvent.click(screen.getByRole("button", { name: "Add Outsource Signal" }));
-    fireEvent.click(screen.getByRole("button", { name: "Trading Signal" }));
-    expect(await screen.findByText(/Trading Signal draft opened/)).toBeTruthy();
-    const link = screen.getByRole("link", { name: /Continue in the Trading Signal workbench/ });
+    fireEvent.click(screen.getByRole("menuitem", { name: "Trading Signal" }));
+    // The popover closed (its menuitem is gone) and a new inline draft row opened.
+    expect(screen.queryByRole("menuitem", { name: "Trading Signal" })).toBeNull();
+    const row = await screen.findByRole("group", { name: "Trading Signal draft" });
+    expect(within(row).getByText(/New Trading Signal draft added to this Mainboard/)).toBeTruthy();
+    // The "Unsaved draft" badge lives in the row header (sibling of the details group).
+    expect(screen.getByText("Unsaved draft")).toBeTruthy();
+    const link = within(row).getByRole("link", {
+      name: /Continue in the Trading Signal workbench/,
+    });
     expect(link.getAttribute("href")).toBe("/trading-signal");
-    const call = fetchMock.mock.calls.find(
-      (c) => String(c[0]).includes("/external-work-object-drafts/trading_signal"),
+    // The transient opener still fires (doc 03 §7.1) — data flow unchanged.
+    const call = fetchMock.mock.calls.find((c) =>
+      String(c[0]).includes("/external-work-object-drafts/trading_signal"),
     );
     expect(call).toBeTruthy();
+  });
+
+  it("adds a Trade Log draft row inline and lets the user remove it (UI-03)", async () => {
+    stubRoutes({
+      "POST /external-work-object-drafts/trade_log": {
+        draft_id: "wodraft_2",
+        kind: "trade_log",
+        unsaved: true,
+      },
+    });
+    renderPage();
+    await screen.findByText("Momentum A");
+    fireEvent.click(screen.getByRole("button", { name: "+ Add" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add Outsource Signal" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Trade Log" }));
+    const row = await screen.findByRole("group", { name: "Trade Log draft" });
+    expect(
+      within(row).getByRole("link", { name: /Continue in the Trade Log workbench/ }).getAttribute(
+        "href",
+      ),
+    ).toBe("/trade-log");
+    // Removing the transient row discards it (no Trash — nothing was persisted).
+    fireEvent.click(within(row).getByRole("button", { name: "Remove draft" }));
+    expect(screen.queryByRole("group", { name: "Trade Log draft" })).toBeNull();
   });
 
   it("creates a generic work object then attaches its revision", async () => {

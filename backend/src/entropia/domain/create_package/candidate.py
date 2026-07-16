@@ -23,8 +23,10 @@ from entropia.domain.revision.hashing import content_hash
 from entropia.shared.errors import OutputContractInvalid
 
 # Bumping this shifts the candidate_hash namespace (mirrors ENGINE_VERSION): a manifest
-# from an older generator will not collide with a newer one for the same request.
-GENERATOR_VERSION = "cp-candidate-gen-v1"
+# from an older generator will not collide with a newer one for the same request. v2
+# accompanies F-14, where the manifest now underpins a real loadable implementation
+# (``domain/create_package/generator``), not a hash-only stub.
+GENERATOR_VERSION = "cp-candidate-gen-v2"
 
 # Canonical-key prefixes — used to check the output contract against the resolved deps
 # WITHOUT importing the backtest indicator taxonomy (keeps the CP domain independent).

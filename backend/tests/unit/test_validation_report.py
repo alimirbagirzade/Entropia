@@ -16,6 +16,10 @@ from entropia.domain.create_package.validation import (
     CHECK_REPAINT_FUTURE_LEAK,
     CHECK_RUNTIME,
     CHECK_SYNTAX,
+    EXEC_ABSENT,
+    EXEC_EMPTY,
+    EXEC_ERROR,
+    EXEC_EXECUTED,
     PLAN_COMPUTABLE,
     PLAN_UNRESOLVABLE,
     VALIDATOR_VERSION,
@@ -45,9 +49,51 @@ def _computable_indicator_inputs(**overrides) -> ValidationInputs:
         "claims_equivalence": False,
         "baseline_passed": False,
         "baseline_report": None,
+        # F-14: a well-formed candidate has a generated implementation that loaded and
+        # executed to a non-empty plan in the sandbox.
+        "execution_status": EXEC_EXECUTED,
+        "execution_detail": "The generated implementation executed to a plan over ['ta.rsi'].",
+        "execution_plan": {
+            "output_kind": "directional_signal",
+            "package_kind": "indicator",
+            "primitives": ["ta.rsi"],
+        },
     }
     base.update(overrides)
     return ValidationInputs(**base)
+
+
+def test_hash_without_implementation_blocks_runtime() -> None:
+    # F-14: a candidate hash with no stored/loadable implementation cannot be approved.
+    report = build_validation_report(_computable_indicator_inputs(execution_status=EXEC_ABSENT))
+    assert _status_of(report, CHECK_RUNTIME) == "blocked"
+    assert report.passed is False
+
+
+def test_empty_skeleton_execution_blocks_runtime() -> None:
+    # F-14: an implementation that loads but yields an empty plan is an empty skeleton.
+    report = build_validation_report(
+        _computable_indicator_inputs(
+            execution_status=EXEC_EMPTY,
+            execution_detail="loaded but the plan has no primitives (empty skeleton).",
+            plan_status=PLAN_UNRESOLVABLE,
+            plan_keys=[],
+        )
+    )
+    assert _status_of(report, CHECK_RUNTIME) == "blocked"
+    assert report.passed is False
+
+
+def test_non_executable_implementation_fails_runtime() -> None:
+    # F-14: a generated implementation that fails to load/execute is a real failure.
+    report = build_validation_report(
+        _computable_indicator_inputs(
+            execution_status=EXEC_ERROR,
+            execution_detail="The generated implementation failed to load: boom.",
+        )
+    )
+    assert _status_of(report, CHECK_RUNTIME) == "failed"
+    assert report.passed is False
 
 
 def test_well_formed_candidate_passes_all_mandatory_checks() -> None:

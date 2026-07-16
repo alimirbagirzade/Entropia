@@ -8,6 +8,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { StrategyDetailsPanel } from "@/components/StrategyDetailsPanel";
 import {
   EXTERNAL_DRAFT_KINDS,
+  isReadyForRun,
   itemKindLabel,
   readyStatusText,
   readyStatusTone,
@@ -603,6 +604,11 @@ export function Mainboard() {
   const data = board.data;
   const items = [...data.items].sort((a, b) => a.position_index - b.position_index);
   const readyState = data.ready_summary?.state ?? "not_ready";
+  // F-16: RUN is genuinely locked until a current Ready Check passes. The gate
+  // uses the same server readiness projection the badge shows AND the backend
+  // admission authz enforces (request_backtest_run → 422 READINESS_BLOCKED when
+  // blocker_count > 0), so visual + keyboard + authz agree.
+  const runnable = isReadyForRun(readyState);
   const addingStrategy = createWorkObject.isPending || attachItem.isPending;
   const addStrategyError = createWorkObject.error ?? attachItem.error;
 
@@ -688,7 +694,22 @@ export function Mainboard() {
           </dl>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 14 }}>
             <Link to="/backtest/ready-check" className="btn">Backtest Ready Check</Link>
-            <Link to="/backtest/run" className="btn btn-primary">RUN</Link>
+            {runnable ? (
+              <Link to="/backtest/run" className="btn btn-primary">RUN</Link>
+            ) : (
+              // Locked: a real disabled <button>, not a Link — it is out of the
+              // tab order and cannot be activated by pointer OR keyboard, so the
+              // RUN route is unreachable until a current Ready Check passes.
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled
+                aria-describedby="run-locked-note"
+                title="RUN is available only after a current Backtest Ready Check passes."
+              >
+                RUN
+              </button>
+            )}
             <button
               type="button"
               className="btn"
@@ -698,7 +719,7 @@ export function Mainboard() {
               Freeze composition
             </button>
           </div>
-          <p style={{ ...noteStyle, margin: "10px 0 0" }}>
+          <p id="run-locked-note" style={{ ...noteStyle, margin: "10px 0 0" }}>
             RUN is available only after a current Backtest Ready Check passes.
           </p>
           {snapshot.isError && <p role="alert" style={alertStyle}>{errorMessage(snapshot.error)}</p>}

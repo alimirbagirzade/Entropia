@@ -86,6 +86,19 @@ export function readyStatusTone(state: string): "ok" | "warn" | "down" {
   return "down";
 }
 
+// F-16: is the composition's current readiness projection RUN-runnable? Only the
+// two blocker-free terminal states — READY and READY_WITH_WARNINGS — permit RUN;
+// warnings never block, but any blocker (NOT_READY), a never-run check
+// (NOT_CHECKED), a transient CHECKING, or a currentness lapse (STALE/SUPERSEDED)
+// do. This mirrors the backend admission authz EXACTLY: request_backtest_run runs
+// a fresh nested Ready Check and refuses to queue (422 READINESS_BLOCKED) when
+// blocker_count > 0. Presentation only — the server stays authoritative
+// (defense-in-depth); this predicate keeps the visual + keyboard gate consistent
+// with that authz so RUN is genuinely locked until a current Ready Check passes.
+export function isReadyForRun(state: string): boolean {
+  return state === "ready" || state === "ready_with_warnings";
+}
+
 export function itemKindLabel(kind: string): string {
   return MAINBOARD_ITEM_KIND_LABELS[kind] ?? kind;
 }

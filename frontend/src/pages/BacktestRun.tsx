@@ -16,6 +16,7 @@ import {
   useRequestBacktestRun,
   useRetryBacktestRun,
 } from "@/lib/backtest";
+import { isReadyForRun, readyStatusText, readyStatusTone } from "@/lib/mainboard";
 
 const RUN_STATE_TONES: Record<string, "ok" | "warn" | "down" | "neutral"> = {
   queued: "neutral",
@@ -96,6 +97,13 @@ function RunWorkbench({
   const composition = mainboard.data;
   const enabledCount = composition?.items.filter((item) => item.is_enabled).length ?? 0;
   const warningCount = requestRun.data?.warning_count ?? 0;
+  // F-16: admission is gated on the SAME readiness projection the backend authz
+  // enforces (request_backtest_run refuses to queue — 422 READINESS_BLOCKED —
+  // when blocker_count > 0). Disabling the button when the composition is not
+  // RUN-runnable keeps the visual + keyboard gate consistent with that authz
+  // rather than relying only on the server rejecting the click.
+  const readyState = composition?.ready_summary.state ?? "not_ready";
+  const runnable = composition !== undefined && isReadyForRun(readyState);
 
   return (
     <>
@@ -120,12 +128,22 @@ function RunWorkbench({
               </dd>
               <dt>Composition hash</dt>
               <dd>{composition.composition_hash ?? EM_DASH}</dd>
+              <dt>Backtest readiness</dt>
+              <dd>
+                <StatusBadge tone={readyStatusTone(readyState)} label={readyStatusText(readyState)} />
+              </dd>
             </dl>
             <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 12 }}>
               <button
                 type="button"
                 className="btn btn-primary"
-                disabled={requestRun.isPending}
+                disabled={requestRun.isPending || !runnable}
+                aria-describedby={runnable ? undefined : "run-admit-locked-note"}
+                title={
+                  runnable
+                    ? undefined
+                    : "RUN is available only after a current Backtest Ready Check passes."
+                }
                 onClick={() =>
                   requestRun.mutate(composition.workspace_id, {
                     onSuccess: (admission) => onRunAdmitted(admission.run_id),
@@ -138,6 +156,15 @@ function RunWorkbench({
                 <StatusBadge tone="warn" label={`${warningCount} readiness warning(s)`} />
               ) : null}
             </div>
+            {!runnable ? (
+              // Locked: the composition has not passed a current Ready Check, so
+              // admission is refused up front (matching the backend authz) instead
+              // of round-tripping to a 422. The Ready Check page is the way out.
+              <p id="run-admit-locked-note" style={{ color: "var(--text-dim)", fontSize: 13, margin: "10px 0 0" }}>
+                RUN is available only after a current Backtest Ready Check passes.{" "}
+                <Link to="/backtest/ready-check">Open Backtest Ready Check</Link>
+              </p>
+            ) : null}
             {requestRun.isError ? (
               <p role="alert" style={{ color: "var(--down)", marginBottom: 0 }}>
                 {mutationErrorText(requestRun.error)}

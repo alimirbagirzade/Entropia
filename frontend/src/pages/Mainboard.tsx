@@ -35,6 +35,49 @@ const alertStyle = { color: "var(--down)", margin: "8px 0 0", fontSize: 13 } as 
 const noteStyle = { color: "var(--text-dim)", fontSize: 13 } as const;
 
 // --------------------------------------------------------------------------- //
+// Type-specific editor host (doc 01 §3.1 — the inline details host opens the   //
+// Strategy Details or external-data details editor for the row's kind, NOT a   //
+// generic technical panel). The real per-kind field contract lives on the      //
+// dedicated editor page; the Mainboard row deep-links to it (presentation      //
+// only — route paths and data hooks are unchanged).                            //
+// --------------------------------------------------------------------------- //
+
+interface ItemEditorSpec {
+  editorLabel: string;
+  hint: string;
+}
+
+const ITEM_EDITORS: Record<string, ItemEditorSpec> = {
+  strategy: {
+    editorLabel: "Strategy Details",
+    hint: "Edit the entry/exit rules, indicators, and execution model in the Strategy Details editor. Save a new revision there, then pin it for this Mainboard below.",
+  },
+  trading_signal: {
+    editorLabel: "Trading Signal",
+    hint: "Open the Trading Signal workbench to upload a source, run its import, and append a normalized revision. Pin the revision for this Mainboard below.",
+  },
+  trade_log: {
+    editorLabel: "Trade Log",
+    hint: "Open the Trade Log workbench to import records and append a normalized revision. Pin the revision for this Mainboard below.",
+  },
+};
+
+function itemEditor(kind: string): ItemEditorSpec {
+  return ITEM_EDITORS[kind] ?? { editorLabel: itemKindLabel(kind), hint: "" };
+}
+
+// Deep-link to the row's real type-specific editor page. A strategy item opens
+// its root header (revision history + editing); external items open their
+// workbench by root. Identity always travels as the work-object root id, never
+// the display label (§14 rule 3).
+function editorPath(item: MainboardItem): string {
+  const root = encodeURIComponent(item.work_object_root_id);
+  if (item.item_kind === "trading_signal") return `/trading-signal?root=${root}`;
+  if (item.item_kind === "trade_log") return `/trade-log?root=${root}`;
+  return `/strategy?strategy=${root}`;
+}
+
+// --------------------------------------------------------------------------- //
 // Per-item composition operations (doc 01 §5.2 / §7 / §9.3). Every mutation    //
 // carries the item's row_version as the expected_row_version OCC token.        //
 // --------------------------------------------------------------------------- //
@@ -47,7 +90,9 @@ function ItemRow({ item }: { item: MainboardItem }) {
 
   const patch = usePatchItem();
   const del = useSoftDeleteWorkObject();
-  const label = item.display_label_override ?? itemKindLabel(item.item_kind);
+  const kindLabel = itemKindLabel(item.item_kind);
+  const label = item.display_label_override ?? kindLabel;
+  const editor = itemEditor(item.item_kind);
   const busy = patch.isPending || del.isPending;
 
   return (
@@ -55,7 +100,7 @@ function ItemRow({ item }: { item: MainboardItem }) {
       <div className={`strategy-row${expanded ? " open" : ""}`}>
         <span className="strategy-text">
           <strong>{label}</strong>
-          <StatusBadge label={itemKindLabel(item.item_kind)} tone="neutral" />
+          <StatusBadge label={kindLabel} tone="neutral" />
           <StatusBadge
             label={item.is_enabled ? "Enabled" : "Disabled"}
             tone={item.is_enabled ? "ok" : "warn"}
@@ -74,177 +119,209 @@ function ItemRow({ item }: { item: MainboardItem }) {
       </div>
 
       {expanded && (
-        <div className="strategy-details" style={{ display: "grid", gap: 14 }}>
-          <dl className="kv">
-            <dt>Work object</dt>
-            <dd>{item.work_object_root_id}</dd>
-            <dt>Pinned revision</dt>
-            <dd>{item.pinned_revision_id ?? "—"}</dd>
-            <dt>Row version</dt>
-            <dd>{item.row_version}</dd>
-          </dl>
-
-          {/* Pin a specific revision — "Use This Revision" (no latest resolution, L5). */}
-          <div className="cp-field">
-            <span>Pin revision</span>
-            <p className="cp-note">
-              This Mainboard currently uses revision {item.pinned_revision_id ?? "—"}. Update the
-              pinned revision only when you want a new Ready Check and Backtest Run to use the newer
-              definition.
-            </p>
+        <div className="strategy-details" style={{ display: "grid", gap: 16 }}>
+          {/* Type-specific editor entry (§3.1). The expand reveals the real     */}
+          {/* {Strategy Details | external data} editor — not a raw technical     */}
+          {/* dump — via a deep-link into that page's editing surface.            */}
+          <section
+            aria-label={`${editor.editorLabel} editor for ${label}`}
+            style={{ display: "grid", gap: 8 }}
+          >
+            <strong>{editor.editorLabel} editor</strong>
+            {editor.hint && <p style={noteStyle}>{editor.hint}</p>}
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <input
-                aria-label={`Revision id for ${label}`}
-                value={revisionInput}
-                onChange={(e) => setRevisionInput(e.target.value)}
-                placeholder="wor_…"
-                style={{ flex: 1, minWidth: 200 }}
-              />
-              <button
-                type="button"
-                className="btn"
-                disabled={busy || revisionInput.trim() === ""}
-                onClick={() =>
-                  patch.mutate({
-                    itemId: item.item_id,
-                    intent: "pin_revision",
-                    expectedRowVersion: item.row_version,
-                    revision_id: revisionInput.trim(),
-                  })
-                }
-              >
-                Use This Revision
-              </button>
-            </div>
-          </div>
-
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button
-              type="button"
-              className="btn"
-              disabled={busy}
-              onClick={() =>
-                patch.mutate({
-                  itemId: item.item_id,
-                  intent: "set_enabled",
-                  expectedRowVersion: item.row_version,
-                  is_enabled: !item.is_enabled,
-                })
-              }
-            >
-              {item.is_enabled ? "Disable" : "Enable"}
-            </button>
-            <button
-              type="button"
-              className="btn"
-              disabled={busy || item.position_index <= 0}
-              onClick={() =>
-                patch.mutate({
-                  itemId: item.item_id,
-                  intent: "reorder",
-                  expectedRowVersion: item.row_version,
-                  position_index: item.position_index - 1,
-                })
-              }
-            >
-              Move up
-            </button>
-            <button
-              type="button"
-              className="btn"
-              disabled={busy}
-              onClick={() =>
-                patch.mutate({
-                  itemId: item.item_id,
-                  intent: "reorder",
-                  expectedRowVersion: item.row_version,
-                  position_index: item.position_index + 1,
-                })
-              }
-            >
-              Move down
-            </button>
-          </div>
-
-          {/* Presentation-only display label override. */}
-          <div className="cp-field">
-            <span>Display label</span>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <input
-                aria-label={`Display label for ${label}`}
-                value={labelInput}
-                onChange={(e) => setLabelInput(e.target.value)}
-                style={{ flex: 1, minWidth: 200 }}
-              />
-              <button
-                type="button"
-                className="btn"
-                disabled={busy}
-                onClick={() =>
-                  patch.mutate({
-                    itemId: item.item_id,
-                    intent: "set_label",
-                    expectedRowVersion: item.row_version,
-                    display_label_override: labelInput,
-                  })
-                }
-              >
-                Save label
-              </button>
-            </div>
-          </div>
-
-          {/* Type-specific soft delete (× action). Two-step confirmation. */}
-          {confirmingDelete ? (
-            <div
-              role="alertdialog"
-              aria-label={`Delete ${itemKindLabel(item.item_kind)}?`}
-              style={{ border: "1px solid var(--down)", borderRadius: 4, padding: 12 }}
-            >
-              <strong>Delete {itemKindLabel(item.item_kind)}?</strong>
-              <p style={{ margin: "6px 0", fontSize: 13 }}>
-                You are about to soft-delete “{label}”. It will be removed from the active Mainboard
-                and new selection lists. Existing Backtest Runs and Results keep their historical
-                pinned revision references.
-              </p>
-              <p style={{ ...noteStyle, margin: "0 0 8px" }}>
-                Only an Admin can restore this item from Trash.
-              </p>
-              <div style={{ display: "flex", gap: 8 }}>
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  disabled={del.isPending}
-                  onClick={() => del.mutate(item.work_object_root_id)}
+              <Link className="btn btn-primary" to={editorPath(item)}>
+                Edit in {editor.editorLabel} →
+              </Link>
+              {item.item_kind === "strategy" && item.pinned_revision_id && (
+                <Link
+                  className="btn"
+                  to={`/strategy?revision=${encodeURIComponent(item.pinned_revision_id)}`}
                 >
-                  Move to Trash
-                </button>
+                  View pinned revision
+                </Link>
+              )}
+            </div>
+          </section>
+
+          {/* Mainboard-owned composition controls (§5.2 / §7). Pin / enable /    */}
+          {/* reorder change the composition hash and make the Ready report stale.*/}
+          <section
+            aria-label={`Composition controls for ${label}`}
+            style={{ display: "grid", gap: 14 }}
+          >
+            <strong>Composition controls</strong>
+            <dl className="kv">
+              <dt>Work object</dt>
+              <dd>{item.work_object_root_id}</dd>
+              <dt>Pinned revision</dt>
+              <dd>{item.pinned_revision_id ?? "—"}</dd>
+              <dt>Row version</dt>
+              <dd>{item.row_version}</dd>
+            </dl>
+
+            {/* Pin a specific revision — "Use This Revision" (no latest resolution, L5). */}
+            <div className="cp-field">
+              <span>Pin revision</span>
+              <p className="cp-note">
+                This Mainboard currently uses revision {item.pinned_revision_id ?? "—"}. Update the
+                pinned revision only when you want a new Ready Check and Backtest Run to use the newer
+                definition.
+              </p>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <input
+                  aria-label={`Revision id for ${label}`}
+                  value={revisionInput}
+                  onChange={(e) => setRevisionInput(e.target.value)}
+                  placeholder="wor_…"
+                  style={{ flex: 1, minWidth: 200 }}
+                />
                 <button
                   type="button"
                   className="btn"
-                  disabled={del.isPending}
-                  onClick={() => setConfirmingDelete(false)}
+                  disabled={busy || revisionInput.trim() === ""}
+                  onClick={() =>
+                    patch.mutate({
+                      itemId: item.item_id,
+                      intent: "pin_revision",
+                      expectedRowVersion: item.row_version,
+                      revision_id: revisionInput.trim(),
+                    })
+                  }
                 >
-                  Cancel
+                  Use This Revision
                 </button>
               </div>
             </div>
-          ) : (
-            <div>
+
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <button
                 type="button"
                 className="btn"
                 disabled={busy}
-                aria-label={`Delete ${label}`}
-                onClick={() => setConfirmingDelete(true)}
+                onClick={() =>
+                  patch.mutate({
+                    itemId: item.item_id,
+                    intent: "set_enabled",
+                    expectedRowVersion: item.row_version,
+                    is_enabled: !item.is_enabled,
+                  })
+                }
               >
-                × Delete
+                {item.is_enabled ? "Disable" : "Enable"}
+              </button>
+              <button
+                type="button"
+                className="btn"
+                disabled={busy || item.position_index <= 0}
+                onClick={() =>
+                  patch.mutate({
+                    itemId: item.item_id,
+                    intent: "reorder",
+                    expectedRowVersion: item.row_version,
+                    position_index: item.position_index - 1,
+                  })
+                }
+              >
+                Move up
+              </button>
+              <button
+                type="button"
+                className="btn"
+                disabled={busy}
+                onClick={() =>
+                  patch.mutate({
+                    itemId: item.item_id,
+                    intent: "reorder",
+                    expectedRowVersion: item.row_version,
+                    position_index: item.position_index + 1,
+                  })
+                }
+              >
+                Move down
               </button>
             </div>
-          )}
 
-          {patch.isError && <p role="alert" style={alertStyle}>{errorMessage(patch.error)}</p>}
-          {del.isError && <p role="alert" style={alertStyle}>{errorMessage(del.error)}</p>}
+            {/* Presentation-only display label override. */}
+            <div className="cp-field">
+              <span>Display label</span>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <input
+                  aria-label={`Display label for ${label}`}
+                  value={labelInput}
+                  onChange={(e) => setLabelInput(e.target.value)}
+                  style={{ flex: 1, minWidth: 200 }}
+                />
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={busy}
+                  onClick={() =>
+                    patch.mutate({
+                      itemId: item.item_id,
+                      intent: "set_label",
+                      expectedRowVersion: item.row_version,
+                      display_label_override: labelInput,
+                    })
+                  }
+                >
+                  Save label
+                </button>
+              </div>
+            </div>
+
+            {/* Type-specific soft delete (× action). Two-step confirmation. */}
+            {confirmingDelete ? (
+              <div
+                role="alertdialog"
+                aria-label={`Delete ${kindLabel}?`}
+                style={{ border: "1px solid var(--down)", borderRadius: 4, padding: 12 }}
+              >
+                <strong>Delete {kindLabel}?</strong>
+                <p style={{ margin: "6px 0", fontSize: 13 }}>
+                  You are about to soft-delete “{label}”. It will be removed from the active Mainboard
+                  and new selection lists. Existing Backtest Runs and Results keep their historical
+                  pinned revision references.
+                </p>
+                <p style={{ ...noteStyle, margin: "0 0 8px" }}>
+                  Only an Admin can restore this item from Trash.
+                </p>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    disabled={del.isPending}
+                    onClick={() => del.mutate(item.work_object_root_id)}
+                  >
+                    Move to Trash
+                  </button>
+                  <button
+                    type="button"
+                    className="btn"
+                    disabled={del.isPending}
+                    onClick={() => setConfirmingDelete(false)}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={busy}
+                  aria-label={`Delete ${label}`}
+                  onClick={() => setConfirmingDelete(true)}
+                >
+                  × Delete {kindLabel}
+                </button>
+              </div>
+            )}
+
+            {patch.isError && <p role="alert" style={alertStyle}>{errorMessage(patch.error)}</p>}
+            {del.isError && <p role="alert" style={alertStyle}>{errorMessage(del.error)}</p>}
+          </section>
         </div>
       )}
     </div>
@@ -283,10 +360,10 @@ function AddWorkObjectCard({ workspaceId }: { workspaceId: string }) {
 
   return (
     <section className="card" aria-labelledby="add-wo-h">
-      <h3 id="add-wo-h" style={{ marginTop: 0 }}>Add work object</h3>
+      <h3 id="add-wo-h" style={{ marginTop: 0 }}>Advanced: create work object</h3>
       <p style={noteStyle}>
         Create a work object, optionally append a revision, then attach its pinned revision to this
-        Mainboard.
+        Mainboard. Prefer the dedicated editors above; this raw path is for advanced use.
       </p>
       <div className="cp-field">
         <span>Object kind</span>
@@ -422,17 +499,18 @@ function OutsourceSignalCard() {
 }
 
 // --------------------------------------------------------------------------- //
-// Add Package popover: a small launcher in the STRATEGIES header (v18 mockup     //
-// .package-picker-popover). It routes to the real attach flows — Outsource       //
-// Signal (TS/TL external draft) or a generic work object — and links to Create   //
-// Package. There is no library "pick an existing package" list because the       //
-// backend exposes no attachable-package list endpoint; the popover launches the  //
-// flows that actually attach to the composition.                                 //
+// Add menu popover: the prototype Mainboard "Add" menu (doc 01 §3.1/§3.2 —      //
+// Add Strategy, Add Package, Add Outsource Signal ▸ Trading Signal / Trade Log, //
+// Portfolio / Equity Allocation). Add Strategy / Add Package deep-link to the   //
+// dedicated editor pages; Outsource opens the TS/TL external-draft card; the    //
+// advanced raw work-object path stays available for power users. There is no    //
+// "pick an existing package" list because the backend exposes no attachable-    //
+// package list endpoint (CR-01).                                                //
 // --------------------------------------------------------------------------- //
 
 type AddMode = null | "outsource" | "advanced";
 
-function AddPackagePopover({ mode, onPick }: { mode: AddMode; onPick: (mode: AddMode) => void }) {
+function AddMenu({ mode, onPick }: { mode: AddMode; onPick: (mode: AddMode) => void }) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -444,13 +522,13 @@ function AddPackagePopover({ mode, onPick }: { mode: AddMode; onPick: (mode: Add
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
       >
-        + Add Package
+        + Add
       </button>
       {open && (
         <>
           <button
             type="button"
-            aria-label="Close Add Package"
+            aria-label="Close Add menu"
             onClick={() => setOpen(false)}
             style={{
               position: "fixed",
@@ -461,11 +539,17 @@ function AddPackagePopover({ mode, onPick }: { mode: AddMode; onPick: (mode: Add
               cursor: "default",
             }}
           />
-          <div className="package-picker-popover" role="dialog" aria-label="Add Package">
-            <div className="package-picker-title">Add Package</div>
+          <div className="package-picker-popover" role="dialog" aria-label="Add to Mainboard">
+            <div className="package-picker-title">Add to Mainboard</div>
             <p style={{ ...noteStyle, margin: 0 }}>
               Choose what to add to this Mainboard composition.
             </p>
+            <Link to="/strategy" className="btn" onClick={() => setOpen(false)}>
+              Add Strategy
+            </Link>
+            <Link to="/packages/create" className="btn" onClick={() => setOpen(false)}>
+              Add Package
+            </Link>
             <button
               type="button"
               className={mode === "outsource" ? "btn btn-primary" : "btn"}
@@ -474,7 +558,7 @@ function AddPackagePopover({ mode, onPick }: { mode: AddMode; onPick: (mode: Add
                 setOpen(false);
               }}
             >
-              Trading Signal / Trade Log
+              Add Outsource Signal
             </button>
             <button
               type="button"
@@ -484,10 +568,10 @@ function AddPackagePopover({ mode, onPick }: { mode: AddMode; onPick: (mode: Add
                 setOpen(false);
               }}
             >
-              Strategy / work object
+              Advanced: create work object
             </button>
-            <Link to="/packages/create" className="btn btn-ghost">
-              Create a new package →
+            <Link to="/portfolio" className="btn btn-ghost" onClick={() => setOpen(false)}>
+              Portfolio / Equity Allocation →
             </Link>
             <div className="package-picker-actions">
               <button type="button" className="btn btn-ghost" onClick={() => setOpen(false)}>
@@ -571,7 +655,7 @@ export function Mainboard() {
             <h2 id="strategies-h" className="strategies-title" style={{ margin: 0 }}>
               STRATEGIES
             </h2>
-            <AddPackagePopover mode={addMode} onPick={setAddMode} />
+            <AddMenu mode={addMode} onPick={setAddMode} />
           </div>
           {items.length === 0 ? (
             <div className="card">

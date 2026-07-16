@@ -54,7 +54,8 @@ Otherwise the spec's technical "broken" claims are **accurate, not errors** (ver
 | F-23 | Real browser E2E suite | P0 | Not Started | No Playwright suite against the Docker stack. |
 | F-24 | Replace tests approving incorrect behavior | P0 | In Progress | Sizing all-in tests rewritten to fail-closed with F-09 (#209). Breakout-fallback tests done with F-06: proxy-reliant fixtures reseeded with resolvable packages + fail-closed worker/admission tests added. Remaining incorrect-behavior tests tracked per future slice. |
 | F-25 | Truthful README/status | P3 | Not Started | README claims "Production V1 complete"; contradicts this backlog. |
-| UI-01..UI-22 | Page-by-page UI remediation | P0–P2 | Not Started | Inline Mainboard editor model, real uploads, prototype parity. Frontend track. |
+| **UI-01** | **Mainboard inline type-specific editor + prototype Add menu** | **P0** | **Complete (this PR)** | Every item is a long horizontal row + right-side expand arrow (▼/▲, presentation-only — §3.3). Expand now reveals the **type-specific editor** entry (doc 01 §3.1 inline details host → Strategy Details / external-data details), not a raw technical dump: a primary "Edit in {Strategy Details \| Trading Signal \| Trade Log} →" deep-link keyed by the work-object **root id** (never the label — §14 rule 3) into the real editor page (`/strategy?strategy=`, `/trading-signal?root=`, `/trade-log?root=`), plus a strategy-only "View pinned revision" (`/strategy?revision=`); the Mainboard-owned composition controls (pin/enable/reorder/label/soft-delete, each OCC-guarded by `expected_row_version`) move under a labeled "Composition controls" region. The header launcher is the prototype Add menu (§3.2): Add Strategy → `/strategy`, Add Package → `/packages/create`, nested **Add Outsource Signal** (TS/TL external draft), Advanced work object, Portfolio / Equity Allocation → `/portfolio`. Ready Check / RUN / Result stay in Mainboard context. **Presentation-only:** no route path, react-query key, OCC token, Idempotency-Key, hook, SSE, API call, or `lib/*.ts` change; `app/nav.ts` verbatim. Tests re-aligned to the new markup (OCC/Idempotency assertions unchanged) + 2 new (type-specific deep-link, Add-menu links) → 373 frontend vitest green; tsc + build clean. Branch `feat/v18-ui01-mainboard-inline-editor`. |
+| UI-02..UI-22 | Page-by-page UI remediation | P0–P2 | Not Started | Real uploads, prototype parity across remaining pages. Frontend track. |
 
 ## Environment boundaries (this headless session)
 
@@ -65,6 +66,17 @@ Otherwise the spec's technical "broken" claims are **accurate, not errors** (ver
 
 ## Change log
 
+- 2026-07-16 — UI-01 Mainboard inline type-specific editor + prototype Add menu. Each item stays a
+  long horizontal row + right expand arrow; the expand now opens the type-specific editor entry (doc
+  01 §3.1) — a root-id-keyed "Edit in {Strategy Details | Trading Signal | Trade Log} →" deep-link
+  (`/strategy?strategy=`, `/trading-signal?root=`, `/trade-log?root=`) + a strategy "View pinned
+  revision" (`/strategy?revision=`) — instead of a bare technical dump, with the OCC-guarded
+  pin/enable/reorder/label/delete controls grouped under "Composition controls". The header launcher
+  becomes the §3.2 prototype Add menu (Add Strategy / Add Package / nested Add Outsource Signal /
+  Advanced work object / Portfolio). Presentation-only: no route/key/OCC/Idempotency/hook/SSE/API/lib
+  change, `app/nav.ts` verbatim. `frontend/src/pages/Mainboard.tsx` + `test/mainboard.test.tsx`
+  (373 vitest green, tsc + build clean) + `e2e/pages/MainboardPage.ts` re-aligned to the new "+ Add"
+  menu / "Advanced: create work object" labels. Branch `feat/v18-ui01-mainboard-inline-editor`.
 - 2026-07-16 — F-14 real candidate/package generation. The candidate stub emitted a
   hash + output contract only (no loadable implementation). NEW pure
   `domain/create_package/generator.py::generate_candidate` composes a real,

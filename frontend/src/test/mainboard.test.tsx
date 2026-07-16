@@ -196,6 +196,40 @@ describe("Mainboard", () => {
     expect(screen.getByText("Summary not available for this result.")).toBeTruthy();
   });
 
+  it("expands a row into the type-specific editor with a root-keyed deep-link (UI-01)", async () => {
+    stubRoutes();
+    renderPage();
+    await expandRow();
+    // The expand reveals the Strategy Details editor entry — not just a raw
+    // technical panel — deep-linking by the work-object root id (never label).
+    const editLink = screen.getByRole("link", { name: "Edit in Strategy Details →" });
+    expect(editLink.getAttribute("href")).toBe("/strategy?strategy=root_strat");
+    // A strategy item also links to the immutable pinned revision (read-only).
+    expect(
+      screen.getByRole("link", { name: "View pinned revision" }).getAttribute("href"),
+    ).toBe("/strategy?revision=wor_1");
+    // The Mainboard-owned composition controls remain reachable in the same row.
+    expect(screen.getByLabelText("Composition controls for Momentum A")).toBeTruthy();
+  });
+
+  it("offers the prototype Add menu with Strategy / Package / Portfolio links (UI-01)", async () => {
+    stubRoutes();
+    renderPage();
+    await screen.findByText("Momentum A");
+    fireEvent.click(screen.getByRole("button", { name: "+ Add" }));
+    expect(screen.getByRole("link", { name: "Add Strategy" }).getAttribute("href")).toBe(
+      "/strategy",
+    );
+    expect(screen.getByRole("link", { name: "Add Package" }).getAttribute("href")).toBe(
+      "/packages/create",
+    );
+    expect(
+      screen.getByRole("link", { name: "Portfolio / Equity Allocation →" }).getAttribute("href"),
+    ).toBe("/portfolio");
+    // The nested Add Outsource Signal action stays present in the same menu.
+    expect(screen.getByRole("button", { name: "Add Outsource Signal" })).toBeTruthy();
+  });
+
   it("pins a revision with the item row_version OCC and a fresh Idempotency-Key", async () => {
     const fetchMock = stubRoutes();
     renderPage();
@@ -277,10 +311,10 @@ describe("Mainboard", () => {
     const fetchMock = stubRoutes();
     renderPage();
     await screen.findByText("Momentum A");
-    // Add Package popover (UI-06): open it and choose the outsource path before
+    // Prototype Add menu (UI-01): open it and choose the outsource path before
     // the Outsource Signal card (mode-gated) renders its TS/TL buttons.
-    fireEvent.click(screen.getByRole("button", { name: "+ Add Package" }));
-    fireEvent.click(screen.getByRole("button", { name: "Trading Signal / Trade Log" }));
+    fireEvent.click(screen.getByRole("button", { name: "+ Add" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add Outsource Signal" }));
     fireEvent.click(screen.getByRole("button", { name: "Trading Signal" }));
     expect(await screen.findByText(/Trading Signal draft opened/)).toBeTruthy();
     const link = screen.getByRole("link", { name: /Continue in the Trading Signal workbench/ });
@@ -294,10 +328,10 @@ describe("Mainboard", () => {
   it("creates a generic work object then attaches its revision", async () => {
     const fetchMock = stubRoutes();
     renderPage();
-    // Add Package popover (UI-06): open it and choose the work-object path before
-    // the Add work object card (mode-gated) renders.
-    fireEvent.click(await screen.findByRole("button", { name: "+ Add Package" }));
-    fireEvent.click(screen.getByRole("button", { name: "Strategy / work object" }));
+    // Prototype Add menu (UI-01): open it and choose the advanced work-object
+    // path before the Add work object card (mode-gated) renders.
+    fireEvent.click(await screen.findByRole("button", { name: "+ Add" }));
+    fireEvent.click(screen.getByRole("button", { name: "Advanced: create work object" }));
     fireEvent.click(await screen.findByText("Create work object"));
     expect(await screen.findByText("root_new")).toBeTruthy();
     fireEvent.click(screen.getByText("Attach to Mainboard"));

@@ -77,17 +77,19 @@ DECISION_TRACE_EVENT_TYPES = (
     "entry_blocked",  # a wanted entry produced no fill (sizing / sleeve capacity)
     "filtered_no_entry",  # a signal was filtered by the direction bias (no fill attempt)
     "exit_scheduled",  # a deferred exit was scheduled to a future bar (F-07a timing)
+    "position_partial_close",  # an exit signal closed part of the position (F-07c close_percentage)
     "position_close",  # a position closed (trade linkage + exit reason + realized pnl)
     "stop_resolution",  # multi-rule / logic stop resolution (F-08 combination engine)
     "stop_exit_collision",  # same-bar stop+exit tie-break decision (§5.9)
     "funding_charge",  # a funding rate applied to the open position (F-11, doc 12 §8.4)
 )
-# Honest V1 boundary: the bar-replay engine holds at most ONE full-size position, so these
-# decision classes never occur — surfaced (never fabricated as phantom events).
+# Honest V1 boundary: the bar-replay engine never SCALES a position (one entry per lifecycle)
+# and cannot model a partial FILL (OHLCV carries no volume-at-price / order book, so the
+# filled fraction of a limit order is unknowable) — surfaced, never fabricated as a phantom
+# event. ``partial_close`` IS modelled (F-07c ``close_percentage``), so it left this list.
 UNMODELLED_DECISION_CLASSES = (
     "same_direction_scaling",
     "partial_fill",
-    "partial_close",
 )
 
 
@@ -514,6 +516,31 @@ def order_execution_is_modelled(config: StrategyConfig) -> bool:
             and limit.partial_fill_policy == "not_allowed"
         )
     return False
+
+
+# §4 Partial-close aftermath modelled by the bar-replay (F-07c). ``close_percentage`` < 100
+# closes only that fraction of the position on an EXIT SIGNAL and holds the remainder; the
+# aftermath governs the remainder. ``move_stop_to_entry`` (breakeven the remainder's stop) and
+# ``close_all`` (the signal closes 100% regardless) are deterministic over OHLCV. A
+# ``trailing_stop`` / ``lock_in_profit`` aftermath needs the trailing-distance / lock-in-level
+# machinery deferred to slice (f) — they FAIL CLOSED. A full close (close_percentage == 100)
+# never produces a remainder, so its aftermath is irrelevant and always modelled.
+_MODELLED_PARTIAL_AFTERMATHS = frozenset({"move_stop_to_entry", "close_all"})
+
+
+def partial_close_is_modelled(config: StrategyConfig) -> bool:
+    """Public predicate: is this strategy's partial-close behaviour modelled (F-07c)?
+
+    The single shared source of truth for the readiness ``STRATEGY_PARTIAL_CLOSE_UNSUPPORTED``
+    blocker and the engine's fail-closed entry gate. A full close (``close_percentage`` >= 100)
+    is always modelled; a partial close is modelled only when its aftermath is (move-stop-to-
+    entry / close-all) — a trailing / lock-in aftermath is deferred to slice (f) and fails
+    closed (blocked at Ready Check AND opens no position if a stale readiness state slips
+    through to the worker)."""
+    exit_logic = config.position_exit_logic
+    if exit_logic.close_percentage >= _HUNDRED:
+        return True
+    return exit_logic.partial_aftermath in _MODELLED_PARTIAL_AFTERMATHS
 
 
 def _limit_price(price_rule: str, reference: Decimal, offset: Decimal) -> Decimal:
@@ -962,6 +989,18 @@ def run_engine(
     order_ok = order_execution_is_modelled(config)
     order_is_limit = order_cfg.type == "limit_order" and order_ok
 
+    # F-07c: partial close. An EXIT SIGNAL closes ``close_fraction`` of the position and holds
+    # the remainder (aftermath governs it); a stop / end-of-data always closes fully (a risk
+    # event is never partial). ``close_all`` collapses to a full close. An unmodelled aftermath
+    # (trailing / lock-in, slice (f)) opens NO position — the fail-closed backstop to the Ready
+    # Check STRATEGY_PARTIAL_CLOSE_UNSUPPORTED blocker.
+    exit_logic = config.position_exit_logic
+    partial_aftermath = exit_logic.partial_aftermath
+    partial_close_ok = partial_close_is_modelled(config)
+    close_fraction = (exit_logic.close_percentage / _HUNDRED) if partial_close_ok else _ONE
+    if partial_aftermath == "close_all":
+        close_fraction = _ONE  # the exit signal closes 100% regardless of close_percentage
+
     plan_active = indicator_plan is not None and indicator_plan.has_entry
     entry_evals: list[BlockEvaluator] = (
         build_evaluators(indicator_plan.entry_specs) if plan_active and indicator_plan else []
@@ -1004,6 +1043,7 @@ def run_engine(
     limit_orders_placed = 0
     limit_orders_filled = 0
     limit_orders_cancelled = 0
+    partial_closes = 0
     gross_profit = _ZERO
     gross_loss = _ZERO
     # F-11: funding cost state. ``funding_records`` is the ascending, available-time-safe
@@ -1082,22 +1122,35 @@ def run_engine(
         pos: _Position,
         *,
         bar_seq: int,
-    ) -> None:
+        fraction: Decimal = _ONE,
+    ) -> bool:
+        """Close ``fraction`` of the position; return True iff it is now FULLY closed.
+
+        A partial close (fraction < 1, F-07c ``close_percentage``) realizes PnL on
+        ``size * fraction`` as its own trade lot, reduces the position's size + notional in
+        place, and leaves it OPEN — the caller must not null it and applies the aftermath.
+        Commission is charged proportional to the fraction so N partial lots summing to the
+        whole position pay exactly one round-trip. ``fraction >= 1`` is a full close, byte-
+        identical to pre-F-07c (same event type + detail)."""
         nonlocal equity, peak, winners, stops_hit, stop_streak, max_stop_streak
-        nonlocal gross_profit, gross_loss
+        nonlocal gross_profit, gross_loss, partial_closes
+        is_full = fraction >= _ONE
+        close_size = pos.size if is_full else pos.size * fraction
         is_long = pos.direction == "long"
         exit_eff = _effective_fill(
             exit_price_raw, is_buy=not is_long, half_spread=half_spread, slip=slippage
         )
         sign = Decimal("1") if is_long else Decimal("-1")
-        gross = (exit_eff - pos.entry_price) * pos.size * sign
-        pnl = (gross - commission * 2).quantize(_MONEY)
+        gross = (exit_eff - pos.entry_price) * close_size * sign
+        commission_lot = commission * 2 if is_full else commission * 2 * fraction
+        pnl = (gross - commission_lot).quantize(_MONEY)
         equity_before = equity
         equity = (equity + pnl).quantize(_MONEY)
         peak = max(peak, equity)
         drawdown = (peak - equity).quantize(_MONEY)
+        closed_notional = (pos.entry_price * close_size).quantize(_MONEY)
         exposure = (
-            (pos.entry_notional / equity_before * _HUNDRED).quantize(_PCT)
+            (closed_notional / equity_before * _HUNDRED).quantize(_PCT)
             if equity_before > _ZERO
             else _ZERO.quantize(_PCT)
         )
@@ -1122,7 +1175,7 @@ def run_engine(
                 entry_price=pos.entry_price,
                 exit_price=exit_eff,
                 pnl=pnl,
-                exit_reason=reason,
+                exit_reason=reason if is_full else "partial_exit",
             )
         )
         equity_points.append(
@@ -1134,12 +1187,20 @@ def run_engine(
                 exposure=exposure,
             )
         )
-        # F-10: the position CLOSE decision — links the lifecycle to its immutable trade
-        # row (``trade_seq``), the exit reason, the realized pnl and the holding span so a
-        # reviewer reconstructs exactly why/when the position closed. Distinct from the
-        # ``entry_fill`` event — a close is never conflated with the open (doc 15 §16).
+        if not is_full:
+            partial_closes += 1
+            pos.size = pos.size - close_size
+            pos.entry_notional = (pos.entry_price * pos.size).quantize(_MONEY)
+        # F-10: the position CLOSE decision — links the lifecycle to its immutable trade row
+        # (``trade_seq``), the exit reason, the realized pnl and the holding span so a reviewer
+        # reconstructs exactly why/when the position closed. A partial close emits
+        # ``position_partial_close`` with the closed fraction + remaining size; a FULL close's
+        # event type + detail are byte-identical to pre-F-07c.
+        partial_detail = (
+            {} if is_full else {"closed_fraction": str(fraction), "remaining_size": str(pos.size)}
+        )
         _emit(
-            "position_close",
+            "position_close" if is_full else "position_partial_close",
             event_time=exit_time,
             direction=pos.direction,
             bar_seq=bar_seq,
@@ -1151,8 +1212,18 @@ def run_engine(
                 "pnl": str(pnl),
                 "entry_bar_seq": pos.entry_bar_seq,
                 "holding_bars": bar_seq - pos.entry_bar_seq,
+                **partial_detail,
             },
         )
+        return is_full
+
+    def _apply_partial_aftermath(pos: _Position) -> None:
+        """Govern the remainder after a partial close (F-07c §4). ``move_stop_to_entry``
+        breakevens the remainder's percentage stop (any dip back to the entry now stops it out);
+        ``close_all`` never reaches here (it closes fully); trailing / lock-in aftermaths fail
+        closed upstream (slice f)."""
+        if partial_aftermath == "move_stop_to_entry":
+            pos.pct_stop = pos.entry_price
 
     def _sleeve_capital(current_equity: Decimal) -> Decimal:
         """The replayed item's sleeve cap Ci(t) at this valuation point (doc 13 §8.3).
@@ -1341,8 +1412,19 @@ def run_engine(
                     )
                 elif pending.kind == "exit" and position is not None:
                     deferred_exit_fills += 1
-                    _close(bar.timestamp, bar.open, pending.reason, position, bar_seq=bars_seen)
-                    position = None
+                    # F-07c: a deferred exit SIGNAL closes ``close_fraction`` and holds the
+                    # remainder under the aftermath (a full close nulls the position).
+                    if _close(
+                        bar.timestamp,
+                        bar.open,
+                        pending.reason,
+                        position,
+                        bar_seq=bars_seen,
+                        fraction=close_fraction,
+                    ):
+                        position = None
+                    else:
+                        _apply_partial_aftermath(position)
                 pending = None
 
             # (1b) Resolve a RESTING limit ENTRY order against THIS bar (F-07b). Resolves
@@ -1467,8 +1549,19 @@ def run_engine(
                     pending = None
                 elif exit_wanted:
                     if exit_sched == "immediate":
-                        _close(bar.timestamp, bar.close, "exit_signal", position, bar_seq=bars_seen)
-                        position = None
+                        # F-07c: an exit signal closes ``close_fraction`` and holds the
+                        # remainder under the aftermath; a full close (fraction 1) nulls it.
+                        if _close(
+                            bar.timestamp,
+                            bar.close,
+                            "exit_signal",
+                            position,
+                            bar_seq=bars_seen,
+                            fraction=close_fraction,
+                        ):
+                            position = None
+                        else:
+                            _apply_partial_aftermath(position)
                     else:
                         # Defer the exit to the next bar's open / close (F-07a); trace the
                         # scheduling decision so the two-phase timing is reconstructable.
@@ -1487,11 +1580,18 @@ def run_engine(
                         pending = _Pending(
                             "exit", exit_sched == "next_open", bars_seen + 1, "", "exit_signal"
                         )
-            elif timing_ok and order_ok and pending is None and working_limit is None:
+            elif (
+                timing_ok
+                and order_ok
+                and partial_close_ok
+                and pending is None
+                and working_limit is None
+            ):
                 # Flat and uncommitted: evaluate a fresh entry, then open now (immediate),
-                # schedule a deferred fill (timing), or rest a limit order. ``timing_ok`` and
-                # ``order_ok`` are the fail-closed backstops — an unsupported timing OR order
-                # type opens nothing (F-07a / F-07b).
+                # schedule a deferred fill (timing), or rest a limit order. ``timing_ok``,
+                # ``order_ok`` and ``partial_close_ok`` are the fail-closed backstops — an
+                # unsupported timing / order type / partial-close aftermath opens nothing
+                # (F-07a / F-07b / F-07c).
                 want: str | None = None
                 if plan_active:
                     # (3a) real indicator entry, respecting the direction bias.
@@ -1605,8 +1705,19 @@ def run_engine(
                     )
                 elif pending.kind == "exit" and position is not None:
                     deferred_exit_fills += 1
-                    _close(bar.timestamp, bar.close, pending.reason, position, bar_seq=bars_seen)
-                    position = None
+                    # F-07c: a deferred exit SIGNAL at the close closes ``close_fraction`` and
+                    # holds the remainder under the aftermath (a full close nulls the position).
+                    if _close(
+                        bar.timestamp,
+                        bar.close,
+                        pending.reason,
+                        position,
+                        bar_seq=bars_seen,
+                        fraction=close_fraction,
+                    ):
+                        position = None
+                    else:
+                        _apply_partial_aftermath(position)
                 pending = None
 
             # (6) F-11 funding cost — a backward/as-of join over the available-time-safe
@@ -1754,6 +1865,12 @@ def run_engine(
         # Ready Check raises STRATEGY_ORDER_TYPE_UNSUPPORTED — this L4 warning is the engine
         # backstop when a stale readiness state reaches the worker.
         warnings.append(f"order_type_unsupported:{order_cfg.type}")
+    if not partial_close_ok:
+        # A partial close (close_percentage < 100) with a trailing / lock-in aftermath is not
+        # modelled (deferred to slice f); the run opened NO position (fail closed, F-07c) rather
+        # than silently ignoring the aftermath. Ready Check raises
+        # STRATEGY_PARTIAL_CLOSE_UNSUPPORTED — this L4 warning is the engine backstop.
+        warnings.append(f"partial_close_unsupported:{partial_aftermath}")
     if indicator_plan is not None:
         # Blocks the native-trigger foundation could not compute (deferred sources,
         # timeframe overrides, non-directional keys) are surfaced, never hidden (L4).
@@ -1855,6 +1972,11 @@ def run_engine(
         "limit_orders_placed": limit_orders_placed,
         "limit_orders_filled": limit_orders_filled,
         "limit_orders_cancelled": limit_orders_cancelled,
+        # F-07c: partial-close provenance + count (an exit signal closed part of a position).
+        "close_percentage": str(exit_logic.close_percentage),
+        "partial_aftermath": partial_aftermath,
+        "partial_close_modelled": partial_close_ok,
+        "partial_closes": partial_closes,
         "stop_exit_conflict": stop_exit_conflict,
         "stop_exit_collisions": stop_exit_collisions,
         "logic_stop_blocks": len(stop_evals),
@@ -2144,6 +2266,7 @@ __all__ = [
     "combine_item_runs",
     "execution_timing_is_modelled",
     "order_execution_is_modelled",
+    "partial_close_is_modelled",
     "resolve_allocation_execution",
     "run_engine",
     "sizing_is_modelled",

@@ -14,14 +14,12 @@ import {
   useAttachItem,
   useCreateSnapshot,
   useCreateWorkObject,
-  useCreateWorkObjectRevision,
   useDefaultMainboard,
   usePatchItem,
   useSoftDeleteWorkObject,
   useStartExternalDraft,
   type LatestResultSummary,
   type MainboardItem,
-  type WorkObjectResult,
 } from "@/lib/mainboard";
 
 // The canonical error envelope is shown verbatim (code: message) — the page
@@ -82,9 +80,8 @@ function editorPath(item: MainboardItem): string {
 // carries the item's row_version as the expected_row_version OCC token.        //
 // --------------------------------------------------------------------------- //
 
-function ItemRow({ item }: { item: MainboardItem }) {
-  const [expanded, setExpanded] = useState(false);
-  const [revisionInput, setRevisionInput] = useState("");
+function ItemRow({ item, defaultExpanded = false }: { item: MainboardItem; defaultExpanded?: boolean }) {
+  const [expanded, setExpanded] = useState(defaultExpanded);
   const [labelInput, setLabelInput] = useState(item.display_label_override ?? "");
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   // UI-02: an in-progress Strategy Details draft opened inline from this row.
@@ -171,47 +168,20 @@ function ItemRow({ item }: { item: MainboardItem }) {
           >
             <strong>Composition controls</strong>
             <dl className="kv">
-              <dt>Work object</dt>
-              <dd>{item.work_object_root_id}</dd>
               <dt>Pinned revision</dt>
               <dd>{item.pinned_revision_id ?? "—"}</dd>
-              <dt>Row version</dt>
-              <dd>{item.row_version}</dd>
             </dl>
 
-            {/* Pin a specific revision — "Use This Revision" (no latest resolution, L5). */}
-            <div className="cp-field">
-              <span>Pin revision</span>
-              <p className="cp-note">
-                This Mainboard currently uses revision {item.pinned_revision_id ?? "—"}. Update the
-                pinned revision only when you want a new Ready Check and Backtest Run to use the newer
-                definition.
-              </p>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <input
-                  aria-label={`Revision id for ${label}`}
-                  value={revisionInput}
-                  onChange={(e) => setRevisionInput(e.target.value)}
-                  placeholder="wor_…"
-                  style={{ flex: 1, minWidth: 200 }}
-                />
-                <button
-                  type="button"
-                  className="btn"
-                  disabled={busy || revisionInput.trim() === ""}
-                  onClick={() =>
-                    patch.mutate({
-                      itemId: item.item_id,
-                      intent: "pin_revision",
-                      expectedRowVersion: item.row_version,
-                      revision_id: revisionInput.trim(),
-                    })
-                  }
-                >
-                  Use This Revision
-                </button>
-              </div>
-            </div>
+            {/* F-15: revision selection is a user-facing action in the type-specific  */}
+            {/* editor above — no manual revision id is ever entered on the Mainboard. */}
+            {/* Saving a new Strategy revision re-pins this item automatically; an      */}
+            {/* external Trading Signal / Trade Log revision is pinned from its own     */}
+            {/* workbench. The raw revision-id input has been removed.                  */}
+            <p className="cp-note">
+              {item.item_kind === "strategy"
+                ? "This Mainboard uses the currently pinned revision. Edit and save a new revision in the Strategy Details editor above — saving re-pins this item automatically so the next Ready Check and Backtest Run use it."
+                : "This Mainboard uses the currently pinned revision. Add a newer revision from the type-specific workbench above; there is no manual revision id to enter here."}
+            </p>
 
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <button
@@ -348,132 +318,6 @@ function ItemRow({ item }: { item: MainboardItem }) {
 }
 
 // --------------------------------------------------------------------------- //
-// Advanced generic work-object path: create root+revision, append a revision, //
-// then attach the pinned revision to the workspace.                           //
-// --------------------------------------------------------------------------- //
-
-function AddWorkObjectCard({ workspaceId }: { workspaceId: string }) {
-  const [objectKind, setObjectKind] = useState("strategy");
-  const [payloadText, setPayloadText] = useState("{}");
-  const [jsonError, setJsonError] = useState<string | null>(null);
-  const [created, setCreated] = useState<{ rootId: string; revisionId: string } | null>(null);
-
-  const create = useCreateWorkObject();
-  const revise = useCreateWorkObjectRevision();
-  const attach = useAttachItem();
-
-  function parsePayload(): Record<string, unknown> | null {
-    try {
-      const parsed = JSON.parse(payloadText === "" ? "{}" : payloadText);
-      if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-        setJsonError("Payload must be a JSON object.");
-        return null;
-      }
-      setJsonError(null);
-      return parsed as Record<string, unknown>;
-    } catch {
-      setJsonError("Payload is not valid JSON.");
-      return null;
-    }
-  }
-
-  return (
-    <section className="card" aria-labelledby="add-wo-h">
-      <h3 id="add-wo-h" style={{ marginTop: 0 }}>Advanced: create work object</h3>
-      <p style={noteStyle}>
-        Create a work object, optionally append a revision, then attach its pinned revision to this
-        Mainboard. Prefer the dedicated editors above; this raw path is for advanced use.
-      </p>
-      <div className="cp-field">
-        <span>Object kind</span>
-        <select value={objectKind} onChange={(e) => setObjectKind(e.target.value)}>
-          <option value="strategy">Strategy</option>
-          <option value="trading_signal">Trading Signal</option>
-          <option value="trade_log">Trade Log</option>
-        </select>
-      </div>
-      <div className="cp-field cp-wide">
-        <span>Payload (JSON)</span>
-        <textarea value={payloadText} onChange={(e) => setPayloadText(e.target.value)} />
-      </div>
-      {jsonError && <p role="alert" style={alertStyle}>{jsonError}</p>}
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 4 }}>
-        <button
-          type="button"
-          className="btn btn-primary"
-          disabled={create.isPending}
-          onClick={() => {
-            const payload = parsePayload();
-            if (payload === null) return;
-            create.mutate(
-              { object_kind: objectKind, payload },
-              {
-                onSuccess: (r: WorkObjectResult) =>
-                  setCreated({ rootId: r.root_id, revisionId: r.revision_id }),
-              },
-            );
-          }}
-        >
-          Create work object
-        </button>
-      </div>
-      {create.isError && <p role="alert" style={alertStyle}>{errorMessage(create.error)}</p>}
-
-      {created && (
-        <div style={{ marginTop: 12, display: "grid", gap: 12 }}>
-          <dl className="kv">
-            <dt>Root</dt>
-            <dd>{created.rootId}</dd>
-            <dt>Pending revision</dt>
-            <dd>{created.revisionId}</dd>
-          </dl>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button
-              type="button"
-              className="btn"
-              disabled={revise.isPending}
-              onClick={() => {
-                const payload = parsePayload();
-                if (payload === null) return;
-                revise.mutate(
-                  {
-                    rootId: created.rootId,
-                    payload,
-                    expectedHeadRevisionId: created.revisionId,
-                  },
-                  {
-                    onSuccess: (r) =>
-                      setCreated({ rootId: r.root_id, revisionId: r.revision_id }),
-                  },
-                );
-              }}
-            >
-              Append revision
-            </button>
-            <button
-              type="button"
-              className="btn btn-primary"
-              disabled={attach.isPending}
-              onClick={() =>
-                attach.mutate({
-                  workspaceId,
-                  root_id: created.rootId,
-                  revision_id: created.revisionId,
-                })
-              }
-            >
-              Attach to Mainboard
-            </button>
-          </div>
-          {revise.isError && <p role="alert" style={alertStyle}>{errorMessage(revise.error)}</p>}
-          {attach.isError && <p role="alert" style={alertStyle}>{errorMessage(attach.error)}</p>}
-        </div>
-      )}
-    </section>
-  );
-}
-
-// --------------------------------------------------------------------------- //
 // Outsource-signal inline draft row (UI-03, doc 03). Choosing Trading Signal or //
 // Trade Log in the Add-menu nested submenu appends one of these rows to the     //
 // STRATEGIES list and opens it inline — the correct new row is created without  //
@@ -543,20 +387,20 @@ function OutsourceDraftRow({ kind, onRemove }: { kind: string; onRemove: () => v
 // dedicated editor pages. "Add Outsource Signal" is a KEYBOARD-ACCESSIBLE       //
 // nested submenu (a disclosure, not a hover-only fly-out): it toggles a two-    //
 // option group whose choice appends an inline Trading Signal / Trade Log draft  //
-// row to the Mainboard (UI-03, doc 03). The advanced raw work-object path stays //
-// available for power users. There is no "pick an existing package" list        //
-// because the backend exposes no attachable-package list endpoint (CR-01).      //
+// row to the Mainboard (UI-03, doc 03). F-15: the generic "Add work object" /   //
+// object-kind / raw-JSON path has been removed from the user flow — every add   //
+// action is a typed, product-level choice, matching the prototype. There is no  //
+// "pick an existing package" list because the backend exposes no attachable-    //
+// package list endpoint (CR-01).                                                //
 // --------------------------------------------------------------------------- //
 
-type AddMode = null | "advanced";
-
 function AddMenu({
-  mode,
-  onPick,
+  onAddStrategy,
+  addingStrategy,
   onAddOutsource,
 }: {
-  mode: AddMode;
-  onPick: (mode: AddMode) => void;
+  onAddStrategy: () => void;
+  addingStrategy: boolean;
   onAddOutsource: (kind: string) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -599,9 +443,21 @@ function AddMenu({
             <p style={{ ...noteStyle, margin: 0 }}>
               Choose what to add to this Mainboard composition.
             </p>
-            <Link to="/strategy" className="btn" onClick={() => setOpen(false)}>
-              Add Strategy
-            </Link>
+            {/* F-15: Add Strategy creates + attaches a new Strategy work object    */}
+            {/* inline as a horizontal Mainboard row (matching the v18 prototype's  */}
+            {/* addStrategyBox), then the row opens its type-specific inline editor. */}
+            {/* No navigation, no JSON, no manual ids (spec F-15 acceptance).        */}
+            <button
+              type="button"
+              className="btn"
+              disabled={addingStrategy}
+              onClick={() => {
+                onAddStrategy();
+                setOpen(false);
+              }}
+            >
+              {addingStrategy ? "Adding Strategy…" : "Add Strategy"}
+            </button>
             <Link to="/packages/create" className="btn" onClick={() => setOpen(false)}>
               Add Package
             </Link>
@@ -641,16 +497,6 @@ function AddMenu({
                 </div>
               )}
             </div>
-            <button
-              type="button"
-              className={mode === "advanced" ? "btn btn-primary" : "btn"}
-              onClick={() => {
-                onPick("advanced");
-                setOpen(false);
-              }}
-            >
-              Advanced: create work object
-            </button>
             <Link to="/portfolio" className="btn btn-ghost" onClick={() => setOpen(false)}>
               Portfolio / Equity Allocation →
             </Link>
@@ -706,7 +552,16 @@ function LatestResultCard({ result }: { result: LatestResultSummary }) {
 export function Mainboard() {
   const board = useDefaultMainboard();
   const snapshot = useCreateSnapshot();
-  const [addMode, setAddMode] = useState<AddMode>(null);
+  // F-15: Add Strategy creates a strategy work object and attaches it as a new
+  // inline Mainboard row (the product replacement for the removed raw-JSON path).
+  // Both hooks + endpoints + OCC/Idempotency contract are unchanged — only the
+  // trigger moved from the advanced card to the typed "Add Strategy" action.
+  const createWorkObject = useCreateWorkObject();
+  const attachItem = useAttachItem();
+  // The item id of the just-added row, so it opens its inline editor on arrival
+  // (F-15 acceptance: "appears as a horizontal Mainboard row and opens its
+  // type-specific inline editor"). Cleared once consumed.
+  const [justAddedItemId, setJustAddedItemId] = useState<string | null>(null);
   // Transient external-draft rows added inline from the Add-menu submenu (UI-03).
   // Local presentation state — nothing is persisted until the row's workbench
   // Save (doc 03 §7.1), so these never appear in the server projection.
@@ -715,6 +570,21 @@ export function Mainboard() {
   // draft data flow (POST /external-work-object-drafts/{kind}); the inline row is
   // the durable-until-save UI artifact, so it is created regardless of the result.
   const startDraft = useStartExternalDraft();
+
+  function addStrategy(workspaceId: string) {
+    // Create an empty Strategy work object, then attach its first revision as a
+    // new enabled Mainboard item. Editing happens inline in the new row.
+    createWorkObject.mutate(
+      { object_kind: "strategy", payload: {} },
+      {
+        onSuccess: (created) =>
+          attachItem.mutate(
+            { workspaceId, root_id: created.root_id, revision_id: created.revision_id },
+            { onSuccess: (item) => setJustAddedItemId(item.item_id) },
+          ),
+      },
+    );
+  }
 
   function addOutsourceDraft(kind: string) {
     setDraftRows((rows) => [...rows, { id: crypto.randomUUID(), kind }]);
@@ -733,6 +603,8 @@ export function Mainboard() {
   const data = board.data;
   const items = [...data.items].sort((a, b) => a.position_index - b.position_index);
   const readyState = data.ready_summary?.state ?? "not_ready";
+  const addingStrategy = createWorkObject.isPending || attachItem.isPending;
+  const addStrategyError = createWorkObject.error ?? attachItem.error;
 
   return (
     <>
@@ -753,8 +625,15 @@ export function Mainboard() {
             <h2 id="strategies-h" className="strategies-title" style={{ margin: 0 }}>
               STRATEGIES
             </h2>
-            <AddMenu mode={addMode} onPick={setAddMode} onAddOutsource={addOutsourceDraft} />
+            <AddMenu
+              onAddStrategy={() => addStrategy(data.workspace_id)}
+              addingStrategy={addingStrategy}
+              onAddOutsource={addOutsourceDraft}
+            />
           </div>
+          {addStrategyError && (
+            <p role="alert" style={alertStyle}>{errorMessage(addStrategyError)}</p>
+          )}
           {items.length === 0 && draftRows.length === 0 ? (
             <div className="card">
               <strong>Your Mainboard is empty.</strong>
@@ -766,7 +645,11 @@ export function Mainboard() {
           ) : (
             <div className="strategy-list">
               {items.map((item) => (
-                <ItemRow key={item.item_id} item={item} />
+                <ItemRow
+                  key={item.item_id}
+                  item={item}
+                  defaultExpanded={item.item_id === justAddedItemId}
+                />
               ))}
               {draftRows.map((d) => (
                 <OutsourceDraftRow
@@ -825,8 +708,6 @@ export function Mainboard() {
             </p>
           )}
         </section>
-
-        {addMode === "advanced" && <AddWorkObjectCard workspaceId={data.workspace_id} />}
       </div>
     </>
   );

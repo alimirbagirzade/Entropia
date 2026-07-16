@@ -42,38 +42,12 @@ const PATCH_RESULT = {
 const DELETE_RESULT = { root_id: "root_strat", deletion_state: "soft_deleted" };
 const SNAPSHOT_RESULT = { snapshot_id: "snap_1", composition_hash: "hash_abc", item_count: 1 };
 const EXTERNAL_DRAFT = { draft_id: "wodraft_1", kind: "trading_signal", unsaved: true };
-const CREATE_RESULT = {
-  root_id: "root_new",
-  revision_id: "wor_new1",
-  revision_no: 1,
-  object_kind: "strategy",
-  row_version: 0,
-};
-const REVISION_RESULT = {
-  root_id: "root_new",
-  revision_id: "wor_new2",
-  revision_no: 2,
-  row_version: 1,
-};
-const ATTACH_RESULT = {
-  item_id: "item_new",
-  item_kind: "strategy",
-  work_object_root_id: "root_new",
-  pinned_revision_id: "wor_new1",
-  position_index: 1,
-  is_enabled: true,
-  display_label_override: null,
-  row_version: 0,
-  composition_hash: "hash_ghi",
-};
 
-// ORDERED routes: the {root}/revisions POST fragment must precede the bare
-// "POST /work-objects" create prefix (the create path is a substring of it).
+// F-15: the generic create/revise/attach work-object routes are no longer wired
+// to any user-facing control (the raw-JSON "Advanced" card was removed), so the
+// stub set no longer needs them.
 function stubRoutes(overrides: Record<string, unknown> = {}) {
   return stubApi({
-    "POST /work-objects/root_new/revisions": REVISION_RESULT,
-    "POST /work-objects": CREATE_RESULT,
-    "POST /mainboards/ws_1/items": ATTACH_RESULT,
     "POST /mainboards/ws_1/snapshots": SNAPSHOT_RESULT,
     "POST /external-work-object-drafts/trading_signal": EXTERNAL_DRAFT,
     "PATCH /mainboard-items/item_strat": PATCH_RESULT,
@@ -239,14 +213,14 @@ describe("Mainboard", () => {
     expect(screen.getByLabelText("Composition controls for Momentum A")).toBeTruthy();
   });
 
-  it("offers the prototype Add menu with Strategy / Package / Portfolio links (UI-01)", async () => {
+  it("offers the prototype Add menu with Strategy / Package / Portfolio actions (UI-01)", async () => {
     stubRoutes();
     renderPage();
     await screen.findByText("Momentum A");
     fireEvent.click(screen.getByRole("button", { name: "+ Add" }));
-    expect(screen.getByRole("link", { name: "Add Strategy" }).getAttribute("href")).toBe(
-      "/strategy",
-    );
+    // F-15: Add Strategy is an inline create+attach action (a button), not a
+    // deep-link — the new object appears as a Mainboard row without navigation.
+    expect(screen.getByRole("button", { name: "Add Strategy" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Add Package" }).getAttribute("href")).toBe(
       "/packages/create",
     );
@@ -262,27 +236,20 @@ describe("Mainboard", () => {
     expect(screen.getByRole("menuitem", { name: "Trade Log" })).toBeTruthy();
   });
 
-  it("pins a revision with the item row_version OCC and a fresh Idempotency-Key", async () => {
-    const fetchMock = stubRoutes();
+  it("has no manual revision-id (wor_…) pin input — revision selection is user-facing (F-15)", async () => {
+    stubRoutes();
     renderPage();
     await expandRow();
-    fireEvent.change(screen.getByLabelText("Revision id for Momentum A"), {
-      target: { value: "wor_2" },
-    });
-    fireEvent.click(screen.getByText("Use This Revision"));
-    await screen.findByText("Momentum A");
-    const call = fetchMock.mock.calls.find(
-      (c) => String(c[0]).includes("/mainboard-items/item_strat"),
-    );
-    expect(call).toBeTruthy();
-    const body = bodyOf(call?.[1]);
-    expect(body.intent).toBe("pin_revision");
-    expect(body.expected_row_version).toBe(5);
-    expect(body.revision_id).toBe("wor_2");
-    expect(headersOf(call?.[1])["Idempotency-Key"]).toBeTruthy();
+    // F-15: the raw "Revision id" text input + "Use This Revision" button are gone.
+    expect(screen.queryByLabelText("Revision id for Momentum A")).toBeNull();
+    expect(screen.queryByText("Use This Revision")).toBeNull();
+    // The row instead points the user at the type-specific editor (no manual id).
+    expect(
+      screen.getByText(/saving re-pins this item automatically/),
+    ).toBeTruthy();
   });
 
-  it("toggles enable/disable via set_enabled", async () => {
+  it("toggles enable/disable via set_enabled with OCC + a fresh Idempotency-Key", async () => {
     const fetchMock = stubRoutes();
     renderPage();
     await expandRow();
@@ -295,6 +262,8 @@ describe("Mainboard", () => {
     expect(body.intent).toBe("set_enabled");
     expect(body.is_enabled).toBe(false);
     expect(body.expected_row_version).toBe(5);
+    // The PATCH OCC + Idempotency contract is unchanged by F-15.
+    expect(headersOf(call?.[1])["Idempotency-Key"]).toBeTruthy();
   });
 
   it("reorders an item via move down (position_index + 1)", async () => {
@@ -390,28 +359,62 @@ describe("Mainboard", () => {
     expect(screen.queryByRole("group", { name: "Trade Log draft" })).toBeNull();
   });
 
-  it("creates a generic work object then attaches its revision", async () => {
-    const fetchMock = stubRoutes();
+  it("removes the generic Add-work-object / object-kind / raw-JSON path from the flow (F-15)", async () => {
+    stubRoutes();
     renderPage();
-    // Prototype Add menu (UI-01): open it and choose the advanced work-object
-    // path before the Add work object card (mode-gated) renders.
     fireEvent.click(await screen.findByRole("button", { name: "+ Add" }));
-    fireEvent.click(screen.getByRole("button", { name: "Advanced: create work object" }));
-    fireEvent.click(await screen.findByText("Create work object"));
-    expect(await screen.findByText("root_new")).toBeTruthy();
-    fireEvent.click(screen.getByText("Attach to Mainboard"));
+    // The Add menu offers only typed, product-level choices — no raw path.
+    expect(screen.queryByRole("button", { name: "Advanced: create work object" })).toBeNull();
+    expect(screen.queryByText("Create work object")).toBeNull();
+    expect(screen.queryByText(/Object kind/)).toBeNull();
+    expect(screen.queryByText(/Payload \(JSON\)/)).toBeNull();
+    // The separate typed actions remain (Add Strategy / Add Package / Outsource).
+    expect(screen.getByRole("button", { name: "Add Strategy" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Add Package" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Add Outsource Signal" })).toBeTruthy();
+  });
+
+  it("Add Strategy creates + attaches a strategy work object inline (F-15)", async () => {
+    const fetchMock = stubRoutes({
+      "POST /work-objects": {
+        root_id: "root_new",
+        revision_id: "wor_new1",
+        revision_no: 1,
+        object_kind: "strategy",
+        row_version: 0,
+      },
+      "POST /mainboards/ws_1/items": {
+        item_id: "item_new",
+        item_kind: "strategy",
+        work_object_root_id: "root_new",
+        pinned_revision_id: "wor_new1",
+        position_index: 1,
+        is_enabled: true,
+        display_label_override: null,
+        row_version: 0,
+        composition_hash: "hash_ghi",
+      },
+    });
+    renderPage();
+    await screen.findByText("Momentum A");
+    fireEvent.click(screen.getByRole("button", { name: "+ Add" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add Strategy" }));
+    // Real create round trip: object_kind=strategy, empty payload, fresh Idempotency-Key.
     await screen.findByText("Momentum A");
     const createCall = fetchMock.mock.calls.find(
       (c) => String(c[0]).endsWith("/work-objects") && (c[1]?.method ?? "") === "POST",
     );
     expect(createCall).toBeTruthy();
+    expect(bodyOf(createCall?.[1]).object_kind).toBe("strategy");
     expect(headersOf(createCall?.[1])["Idempotency-Key"]).toBeTruthy();
+    // …then attaches the created revision to the default workspace.
     const attachCall = fetchMock.mock.calls.find(
       (c) => String(c[0]).includes("/mainboards/ws_1/items"),
     );
     expect(attachCall).toBeTruthy();
-    const body = bodyOf(attachCall?.[1]);
-    expect(body.root_id).toBe("root_new");
-    expect(body.revision_id).toBe("wor_new1");
+    const attachBody = bodyOf(attachCall?.[1]);
+    expect(attachBody.root_id).toBe("root_new");
+    expect(attachBody.revision_id).toBe("wor_new1");
+    expect(headersOf(attachCall?.[1])["Idempotency-Key"]).toBeTruthy();
   });
 });

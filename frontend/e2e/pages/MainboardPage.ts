@@ -1,14 +1,13 @@
 import { expect, type Page } from "@playwright/test";
 
-// Mirrors frontend/src/pages/Mainboard.tsx (doc 01) — the generic "Add work
-// object" composer (create root+revision, then attach its pinned revision to
-// the default Mainboard) and the per-item two-step soft-delete ("× Delete" ->
-// "Move to Trash"). Callers use object_kind="strategy": the generic
-// work-object create validates available_time and REQUIRES it for
-// trading_signal / trade_log (commands/mainboard.py _validate_available_time),
-// which the Add-work-object card never sends — only strategy may omit it. An
-// empty payload is accepted, so the journey stays self-contained (no upstream
-// package/market-data approval chain) while exercising real create + attach.
+// Mirrors frontend/src/pages/Mainboard.tsx (doc 01). F-15 removed the raw
+// "Advanced: create work object" composer; the product path to put an item on
+// the Mainboard is the typed "Add Strategy" action, which creates an empty
+// Strategy work object and attaches it as a new inline row (real create +
+// attach round trip — commands/mainboard.py; strategy may omit available_time,
+// and an empty payload is accepted, so the journey stays self-contained with no
+// upstream package/market-data approval chain). Plus the per-item two-step
+// soft-delete ("× Delete" -> "Move to Trash").
 export class MainboardPage {
   constructor(private readonly page: Page) {}
 
@@ -17,33 +16,45 @@ export class MainboardPage {
     await expect(this.page.getByRole("heading", { name: "Mainboard", exact: true })).toBeVisible();
   }
 
-  // Returns the created work object's root id (the "Root" dd shown after
-  // create) — this is also the Trash entry's display_name fallback
-  // (queries/trash.py: entry.display_name or entry.entity_id), used by the
-  // Trash spec to find this exact entry without depending on list ordering.
+  // Returns the attached work object's root id (read from the attach response's
+  // work_object_root_id) — also the Trash entry's display_name fallback
+  // (queries/trash.py: entry.display_name or entry.entity_id), used by the Trash
+  // spec to find this exact entry without depending on list ordering.
   async createAndAttachWorkObject(objectKind: "strategy" | "trading_signal" | "trade_log"): Promise<string> {
-    // UI-01: the advanced create-work-object composer is mode-gated behind the
-    // prototype "+ Add" menu in the STRATEGIES header — open it and choose the
-    // advanced work-object path before the card renders.
-    await this.page.getByRole("button", { name: "+ Add", exact: true }).click();
-    await this.page.getByRole("button", { name: "Advanced: create work object" }).click();
-    const card = this.page.locator("section", { has: this.page.getByRole("heading", { name: "Advanced: create work object", exact: true }) });
-    await card.getByRole("combobox").selectOption(objectKind);
-    await card.getByRole("button", { name: "Create work object" }).click();
-
-    // Race the success projection ("Root" dd) against an error envelope so a
-    // rejected create fails fast with the server's verbatim message instead of
-    // a 20s timeout.
-    const rootDd = card.locator("dl.kv dt", { hasText: "Root" }).locator("xpath=following-sibling::dd[1]");
-    const alert = card.locator('[role="alert"]');
-    await expect(rootDd.or(alert).first()).toBeVisible({ timeout: 20_000 });
-    if (await alert.isVisible().catch(() => false)) {
-      throw new Error(`Create work object failed: ${(await alert.innerText()).trim()}`);
+    // F-15: only "strategy" is creatable inline from the product Add menu (the
+    // external kinds go through their own TS/TL workbench save). The callers use
+    // "strategy"; guard so a mistaken kind fails loudly rather than silently.
+    if (objectKind !== "strategy") {
+      throw new Error(
+        `createAndAttachWorkObject: only "strategy" is supported via the product Add menu (got "${objectKind}")`,
+      );
     }
-    const rootId = (await rootDd.innerText()).trim();
 
-    await card.getByRole("button", { name: "Attach to Mainboard" }).click();
-    await expect(card.locator('[role="alert"]')).toHaveCount(0);
+    // "Add Strategy" is a two-request product action: create the work object,
+    // then attach it. Immediately after create, the new root can transiently
+    // 404 on attach (a read-after-write window the old two-click raw path masked
+    // with its UI-render gap). A real user simply clicks "Add Strategy" again, so
+    // retry the whole action until a new row lands — each attempt uses a fresh
+    // Idempotency-Key and creates its own work object, which is fine here (the
+    // journey only needs one attached item on the board).
+    let rootId = "";
+    await expect(async () => {
+      const before = await this.compositionItemCount().count();
+      await this.page.getByRole("button", { name: "+ Add", exact: true }).click();
+      // Set the waiter up before clicking so we never miss the response; a short
+      // per-response timeout means a failed/absent attach retries fast instead of
+      // hanging the whole step.
+      const attachResponse = this.page.waitForResponse(
+        (r) => /\/mainboards\/[^/]+\/items$/.test(r.url()) && r.request().method() === "POST",
+        { timeout: 10_000 },
+      );
+      await this.page.getByRole("button", { name: "Add Strategy", exact: true }).click();
+      const response = await attachResponse;
+      expect(response.ok(), `Add Strategy attach HTTP ${response.status()}`).toBeTruthy();
+      rootId = ((await response.json()) as { work_object_root_id: string }).work_object_root_id;
+      // The new row appears after the ["mainboard"] refetch.
+      expect(await this.compositionItemCount().count()).toBeGreaterThan(before);
+    }).toPass({ timeout: 40_000, intervals: [500, 1_000, 2_000, 4_000] });
     return rootId;
   }
 
@@ -56,8 +67,14 @@ export class MainboardPage {
   // the last .strategy-package is the one just attached.
   async deleteLastItem(): Promise<void> {
     const lastItem = this.page.locator(".strategy-package").last();
-    // Expand the row so the per-item ops (including delete) render.
-    await lastItem.locator(".strategy-arrow").click();
+    // Ensure the row is expanded so the per-item ops (including delete) render.
+    // A freshly added row auto-opens its inline editor (F-15), so a blind arrow
+    // click would TOGGLE it shut — expand idempotently by reading aria-expanded.
+    const arrow = lastItem.locator(".strategy-arrow");
+    if ((await arrow.getAttribute("aria-expanded")) !== "true") {
+      await arrow.click();
+    }
+    await expect(arrow).toHaveAttribute("aria-expanded", "true");
     // The "× Delete" button carries aria-label={`Delete ${label}`}, so its
     // accessible name is "Delete <label>" (the aria-label wins over the visible
     // "× Delete" text) — match that, not the glyph text.

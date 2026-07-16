@@ -1666,3 +1666,190 @@ a:hover { text-decoration: underline; }
   .lab-messages { max-height: none; }
   .lab-output-grid { grid-template-columns: 1fr; }
 }
+
+/* ---- Market Data (UI-11, doc 11 §3): process guide + 4-step ingest ribbon +
+   summary cards + collapsible dataset setup. Ported from the v18 mockup's
+   .data-workflow / .dataset-summary-* classes, re-pointed to the theme vars. The
+   .market-data-page scope keeps every field/hash inside the viewport at
+   1280/1440/1920 desktop widths (no horizontal overflow). ---- */
+.market-data-page { min-width: 0; }
+.market-data-page .card { margin-bottom: 16px; }
+/* Grid form items shrink below their content, inputs fill their cell, and long
+   hashes/ULIDs wrap instead of forcing the page wider than the viewport. */
+.market-data-page label { min-width: 0; }
+.market-data-page input,
+.market-data-page select,
+.market-data-page textarea { width: 100%; max-width: 100%; min-width: 0; }
+.market-data-page code { overflow-wrap: anywhere; word-break: break-word; }
+/* Wide tables scroll inside their own box, never the page body. */
+.market-data-page .table-scroll { overflow-x: auto; }
+
+.data-page-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.data-page-intro {
+  max-width: 1040px;
+  color: var(--text-dim);
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 0 0 14px;
+}
+
+/* 4-step ingest ribbon — states are derived from the selected dataset's real
+   revision_state projection (see deriveWorkflowSteps). */
+.data-workflow {
+  list-style: none;
+  margin: 0 0 14px;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+.data-workflow-step {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  border-radius: var(--radius);
+  background: var(--bg-elev-2);
+  padding: 9px 10px;
+}
+.data-workflow-step .workflow-number {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--bg-elev);
+  font-size: 12px;
+  font-weight: 900;
+}
+.data-workflow-step .workflow-step-body { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.data-workflow-step .workflow-step-label { font-size: 12px; font-weight: 800; color: var(--text); line-height: 1.25; }
+.data-workflow-step .workflow-step-state {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+/* State colours — always paired with the textual state word above (WCAG 1.4.1). */
+.data-workflow-step.wf-active { border-left-color: var(--accent); }
+.data-workflow-step.wf-active .workflow-number {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.data-workflow-step.wf-active .workflow-step-state { color: var(--accent-dim); }
+.data-workflow-step.wf-complete { border-left-color: var(--ok); }
+.data-workflow-step.wf-complete .workflow-step-state { color: var(--ok); }
+.data-workflow-step.wf-blocked { border-left-color: var(--warn); }
+.data-workflow-step.wf-blocked .workflow-step-state { color: var(--warn); }
+.data-workflow-step.wf-error { border-left-color: var(--down); }
+.data-workflow-step.wf-error .workflow-step-state { color: var(--down); }
+
+/* Summary cards */
+.dataset-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.dataset-summary-card {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elev);
+  padding: 10px 12px;
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.35;
+}
+.dataset-summary-label {
+  color: var(--text-faint);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.4px;
+  margin-bottom: 4px;
+}
+.dataset-summary-value { font-size: 20px; font-weight: 900; color: var(--text); margin-bottom: 2px; }
+
+.data-page-actions { margin-bottom: 14px; }
+
+/* Process guide disclosure (ⓘ SÜREÇ REHBERİ) — native <details>/<summary>. */
+.data-guide { min-width: 0; }
+.data-guide > summary {
+  list-style: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 7px 14px;
+  border: 1px solid var(--accent-dim);
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.2px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.data-guide > summary::-webkit-details-marker { display: none; }
+.data-guide > summary:hover { background: var(--accent-dim); }
+.data-guide[open] > summary { margin-bottom: 12px; }
+.data-guide-body {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elev);
+  padding: 14px;
+}
+.data-guide-lead { margin: 0 0 12px; font-size: 13px; line-height: 1.5; color: var(--text); }
+.data-guide-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.data-guide-card {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elev-2);
+  padding: 10px 12px;
+}
+.data-guide-card.data-guide-wide { grid-column: 1 / -1; }
+.data-guide-card h4 { margin: 0 0 6px; font-size: 13px; font-weight: 900; color: var(--text); }
+.data-guide-card ul,
+.data-guide-card ol { margin: 0; padding-left: 18px; }
+.data-guide-card li { font-size: 12px; line-height: 1.5; color: var(--text-dim); margin: 2px 0; }
+.data-guide-card p { margin: 7px 0 0; font-size: 12px; line-height: 1.5; color: var(--text-dim); }
+.data-guide-warning {
+  margin: 12px 0 0;
+  padding: 9px 12px;
+  border: 1px solid var(--warn);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--warn) 10%, transparent);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+@media (max-width: 1080px) {
+  .data-guide-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 860px) {
+  .data-workflow { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 520px) {
+  .data-workflow { grid-template-columns: 1fr; }
+}

@@ -22,7 +22,11 @@ from pydantic import ValidationError as PydanticValidationError
 from entropia.domain.allocation.enums import AllocationIssueCode as AllocCode
 from entropia.domain.allocation.enums import AllocationIssueSeverity as AllocSev
 from entropia.domain.allocation.rules import AllocationIssue
-from entropia.domain.backtest.engine import execution_timing_is_modelled, sizing_is_modelled
+from entropia.domain.backtest.engine import (
+    execution_timing_is_modelled,
+    order_execution_is_modelled,
+    sizing_is_modelled,
+)
 from entropia.domain.mainboard.enums import MainboardItemKind
 from entropia.domain.readiness.enums import (
     ReadinessIssueCode as Code,
@@ -380,6 +384,29 @@ def _strategy_issues(item: ReadinessItemInput, *, allocation_enabled: bool) -> l
                 "or Market Fill Simulation for both entry and exit execution. Intrabar Touch "
                 "and Limit/Stop-Limit simulation are not yet supported over OHLCV data.",
                 field_path="data.execution",
+                scope_id=item.item_id,
+            )
+        )
+
+    # F-07b: an unsupported ORDER TYPE must BLOCK RUN — the engine fails closed (opens no
+    # position) for it. A Stop / Stop-Limit order carries no trigger/activation price in the
+    # saved schema (and stop-limit needs intrabar stop-vs-limit ordering); a Limit order
+    # with a best-bid/ask price rule needs a quote series absent over OHLCV; and a partial-
+    # fill policy other than "not allowed" is deferred to a later slice. Shares the single
+    # ``order_execution_is_modelled`` predicate with the engine so the two never diverge.
+    if not order_execution_is_modelled(config):
+        issues.append(
+            ReadinessIssue(
+                Code.STRATEGY_ORDER_TYPE_UNSUPPORTED,
+                Sev.BLOCKER,
+                Scope.STRATEGY,
+                "The strategy's order type is not supported by the backtest engine and "
+                "would open no position.",
+                remediation="Use a Market Order or Simulation Only, or a Limit Order with an "
+                "entry-signal / signal±offset price rule and 'partial fill not allowed'. Stop "
+                "and Stop-Limit orders (no trigger price is stored), a best-bid/ask limit "
+                "price, and partial fills are not yet supported.",
+                field_path="data.order_config",
                 scope_id=item.item_id,
             )
         )

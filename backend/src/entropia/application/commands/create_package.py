@@ -25,17 +25,16 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from entropia.application.idempotency import run_idempotent
+from entropia.application.jobs.package_validation import run_package_validation
 from entropia.application.queries import esp as esp_query
 from entropia.domain.create_package import (
     BaselineParseStatus,
     CreatePackageState,
     CreationMode,
-    DependencyResolution,
     PrecheckScanStatus,
     SourceKind,
     SourceLanguage,
     ValidationRunStatus,
-    build_validation_report,
     clean_declared_dependencies,
     context_hash,
     ensure_can_approve_publish,
@@ -787,13 +786,14 @@ async def start_package_validation_run(
     (doc 06 §4.4/§5/§7). Revives the ``validation_running`` -> ``eligible_for_approval``
     / ``revision_required`` states.
 
-    Gate: the request must be in ``draft_created`` (has a draft revision). The V1
-    validation *compute* is deterministic (see ``domain/create_package/validation``):
-    output-structure conformance + a live re-resolution of the pinned dependencies;
-    the execution-based checks are recorded ``not_executed`` (Future-Dev worker). A
-    passed run -> ``eligible_for_approval``; a failed run -> ``revision_required``.
-    The durable job + immutable run row are produced in-transaction (mirrors
-    ``run_precheck``); the concurrency + evidence write live INSIDE the idempotent body.
+    Gate: the request must be in ``draft_created`` (has a draft revision). The seven
+    mandatory checks run in the durable validation worker body
+    (``application/jobs/package_validation``), which gathers the draft's real facts and
+    produces an honest verdict (F-13): a ``not_executed`` / ``blocked`` mandatory check
+    is NOT a pass, so only a fully-passing run reaches ``eligible_for_approval``; any
+    unsatisfied check routes to ``revision_required``. The durable job + immutable run
+    row are produced in-transaction (mirrors ``run_precheck``); the concurrency +
+    evidence write live INSIDE the idempotent body.
     """
     root, detail = await _require_request(session, actor, request_id)
 
@@ -808,10 +808,11 @@ async def start_package_validation_run(
         previous = detail.state
         detail.state = next_request_state(detail.state, CreatePackageState.VALIDATION_RUNNING)
 
-        resolutions = await _validation_dependency_resolutions(session, detail)
-        report = build_validation_report(
-            output_kind=_draft_output_kind(detail), dependency_resolutions=resolutions
-        )
+        # F-13: the seven mandatory checks run in the durable validation worker body,
+        # which gathers the draft's real facts (re-resolved deps, a real syntax probe,
+        # the resolved native plan, the baseline parse). ``passed`` is honest — a
+        # not_executed / blocked mandatory check does NOT pass and blocks approval.
+        report = await run_package_validation(session, detail)
         status = ValidationRunStatus.PASSED if report.passed else ValidationRunStatus.FAILED
         job = await _enqueue_stub_job(
             session, actor, queue="default", kind="validation", request_id=root.entity_id
@@ -867,44 +868,6 @@ async def start_package_validation_run(
         request_payload={"op": "start_package_validation_run", "request_id": request_id},
         operation=_op,
     )
-
-
-def _draft_output_kind(detail: PackageRequest) -> str | None:
-    contract = detail.candidate_output_contract or detail.output_contract
-    raw = contract.get("kind") or contract.get("output_type")
-    return raw if isinstance(raw, str) and raw else None
-
-
-async def _validation_dependency_resolutions(
-    session: AsyncSession, detail: PackageRequest
-) -> list[DependencyResolution]:
-    """Re-resolve the request's declared dependencies against the LIVE ESP registry.
-
-    Drift (a pinned resolver deactivated/deprecated after the draft was pinned) makes
-    the dependency-health check fail, blocking approval. Description / dep-less
-    requests resolve nothing (the check is ``not_executed``)."""
-    if detail.source_kind == SourceKind.DESCRIPTION or not detail.declared_dependencies:
-        return []
-    resolved_refs, missing_calls = await _resolve_declared(
-        session, detail.declared_dependencies, detail.target_runtime
-    )
-    resolutions = [
-        DependencyResolution(
-            canonical_key=str(ref.get("canonical_key") or ref.get("call")),
-            resolved=True,
-            detail=f"resolves to {ref.get('embedded_revision_id')}",
-        )
-        for ref in resolved_refs
-    ]
-    resolutions.extend(
-        DependencyResolution(
-            canonical_key=str(miss.get("call")),
-            resolved=False,
-            detail=str(miss.get("code")),
-        )
-        for miss in missing_calls
-    )
-    return resolutions
 
 
 async def request_package_revision(

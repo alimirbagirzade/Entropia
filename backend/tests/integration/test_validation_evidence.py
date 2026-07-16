@@ -158,11 +158,18 @@ async def test_validation_pass_enables_approval(session) -> None:
     await session.commit()
     assert validated["status"] == str(ValidationRunStatus.PASSED)
     assert validated["state"] == str(CreatePackageState.ELIGIBLE_FOR_APPROVAL)
-    # Evidence enumerates the executed checks (never a cosmetic label).
+    # Evidence enumerates the executed checks with real verdicts (F-13): the balanced
+    # PineScript source passes the syntax probe and the resolved ta.rsi plan makes the
+    # runtime + repaint checks real passes — no check is a cosmetic "not_executed" label.
     statuses = {c["check"]: c["status"] for c in validated["checks"]}
     assert statuses["output_structure"] == "passed"
     assert statuses["dependency_health"] == "passed"
-    assert statuses["syntax"] == "not_executed"
+    assert statuses["syntax"] == "passed"
+    assert statuses["runtime"] == "passed"
+    assert statuses["repaint_future_leak"] == "passed"
+    # No equivalence claim -> the market-data checks genuinely do not apply.
+    assert statuses["real_market_data"] == "not_applicable"
+    assert "not_executed" not in statuses.values()
 
     published = await cp_cmd.approve_and_publish(session, ADMIN, request_id=request_id)
     await session.commit()

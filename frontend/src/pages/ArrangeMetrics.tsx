@@ -79,9 +79,16 @@ function ProfileEditor({
     });
   };
 
+  // Split the already-fetched registry by availability (doc 17 §3): SELECTABLE
+  // metrics drive the checkbox grid; FUTURE/EXPERIMENTAL ones populate the
+  // always-visible reference panel below. Sourced from the registry, never
+  // hard-coded (doc 17 §3 "gri kutu/serbest metinle hard-code edilmez").
+  const selectableDefinitions = definitions.filter((definition) => definition.selectable);
+  const futureDefinitions = definitions.filter((definition) => !definition.selectable);
+
   // Preserve registry display order in the submitted selection; the server
   // normalizes anyway, but the draft mirrors what it will echo back.
-  const orderedSelection = definitions
+  const orderedSelection = selectableDefinitions
     .filter((definition) => draft.has(definition.metric_code))
     .map((definition) => definition.metric_code);
 
@@ -125,15 +132,15 @@ function ProfileEditor({
           Metric registry
         </h3>
         <div className="metrics-panel">
-          {definitions.map((definition) => (
+          {selectableDefinitions.map((definition) => (
             <label className="metric-option" key={definition.metric_code}>
               <input
                 type="checkbox"
                 aria-label={`Show ${definition.label}`}
                 checked={draft.has(definition.metric_code)}
-                // A non-selectable (future/experimental) metric can never be
-                // chosen; a locked profile refuses edits until Unlock.
-                disabled={!definition.selectable || locked}
+                // A locked profile refuses edits until Unlock; future/experimental
+                // metrics are not here at all — they live in the reference panel.
+                disabled={locked}
                 onChange={() => toggle(definition.metric_code)}
               />
               <span>
@@ -201,6 +208,32 @@ function ProfileEditor({
             Saved — revision {apply.data.revision_no} ({apply.data.reason}).
           </p>
         ) : null}
+      </section>
+
+      {/* Future Version Metrics: an always-visible reference panel (doc 17 §3.2).
+          These metrics are listed for visibility only — the server marks them
+          non-selectable, so they carry no checkbox and can never enter a profile
+          (CR-07). The list is the registry's own FUTURE/EXPERIMENTAL rows. */}
+      <section
+        className="card future-metrics-panel"
+        aria-labelledby="future-metrics-h"
+        style={{ marginTop: 18 }}
+      >
+        <h3 id="future-metrics-h" className="future-metrics-title" style={{ marginTop: 0 }}>
+          Future Version Metrics
+        </h3>
+        <p className="future-metrics-note">
+          These metrics are intentionally listed for visibility but are not selectable and
+          cannot be added to Backtest Results in this version.
+        </p>
+        <div className="future-metric-list">
+          {futureDefinitions.map((definition) => (
+            <div className="future-metric-item" key={definition.metric_code}>
+              {definition.label}
+              <small>Future version only</small>
+            </div>
+          ))}
+        </div>
       </section>
     </>
   );

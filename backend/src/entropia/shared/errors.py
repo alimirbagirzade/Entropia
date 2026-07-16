@@ -186,6 +186,18 @@ class TimePolicyInvalid(ValidationError):
     message = "The time policy is invalid; available time cannot be validated."
 
 
+class FundingSourceInvalid(ValidationError):
+    """A funding-enabled run's pinned Research revision cannot be used as a funding
+    source (F-11, doc 12 §2/§8.4). e.g. not Approved / wrong usage scope / wrong
+    category / content-hash mismatch, a native schema with no resolvable event-time or
+    rate column, an available-time policy that cannot be resolved from native rows, or a
+    source that yields no usable rows. Fail-closed: a funding source the engine cannot
+    interpret blocks the run rather than silently booking zero funding cost."""
+
+    code = "FUNDING_SOURCE_INVALID"
+    message = "The funding data source is invalid and cannot be applied to the backtest."
+
+
 class FieldMeaningInsufficient(ValidationError):
     """Field meaning was not enriched to field-level semantic metadata
     (Research Data §8.3, §10). A single prose paragraph is insufficient."""

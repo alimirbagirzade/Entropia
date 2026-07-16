@@ -33,6 +33,7 @@ from decimal import Decimal, InvalidOperation
 from typing import TYPE_CHECKING, Any
 
 from entropia.domain.allocation.enums import CompoundingMode
+from entropia.domain.backtest.funding import FundingSchedule, parse_utc
 from entropia.domain.backtest.indicators import (
     BUILTIN_ENTRY_MODEL,
     VOLUME_WEIGHTED_KEYS,
@@ -77,6 +78,7 @@ DECISION_TRACE_EVENT_TYPES = (
     "position_close",  # a position closed (trade linkage + exit reason + realized pnl)
     "stop_resolution",  # multi-rule / logic stop resolution (F-08 combination engine)
     "stop_exit_collision",  # same-bar stop+exit tie-break decision (§5.9)
+    "funding_charge",  # a funding rate applied to the open position (F-11, doc 12 §8.4)
 )
 # Honest V1 boundary: the bar-replay engine holds at most ONE full-size position, so these
 # decision classes never occur — surfaced (never fabricated as phantom events).
@@ -774,6 +776,7 @@ def run_engine(
     indicator_plan: IndicatorPlan | None = None,
     timeframe: str | None = None,
     allocation: AllocationExecution | None = None,
+    funding: FundingSchedule | None = None,
 ) -> EngineOutput:
     """Deterministically bar-replay one strategy over its pinned OHLCV bars.
 
@@ -796,7 +799,17 @@ def run_engine(
     single-item foundation — the replayed strategy is capitalised and capped as one
     portfolio sleeve; a genuine multi-item co-simulation over a unified clock across
     heterogeneous bar sources, and cross-currency FX conversion (GAP-16), stay
-    deferred (surfaced as L4 diagnostics, never hidden)."""
+    deferred (surfaced as L4 diagnostics, never hidden).
+
+    ``funding`` applies a pinned ``funding_rate`` Research revision as a real cost on the
+    open position (F-11, doc 12 §8.4). It is an already-resolved, available-time-safe
+    ``FundingSchedule`` (each record carries the first moment it could truly have been used —
+    event time shifted by the revision's available-time policy). The engine consumes it with
+    a backward/as-of join: a record fires at the first bar whose time is >= its
+    ``available_at`` and, while a position is held, charges ``notional * rate`` (a long pays
+    a positive rate, a short receives). A value dated after the last replayed bar can never
+    fire, so future leakage is impossible by construction. ``None`` (the default) books no
+    funding and is BYTE-IDENTICAL to the pre-F-11 engine."""
     config = strategy_config
     alloc_on = allocation is not None
     alloc_compound = False
@@ -886,6 +899,14 @@ def run_engine(
     deferred_exit_fills = 0
     gross_profit = _ZERO
     gross_loss = _ZERO
+    # F-11: funding cost state. ``funding_records`` is the ascending, available-time-safe
+    # series (empty when funding is off → the whole funding path is inert, byte-identical to
+    # pre-F-11). ``funding_idx`` is the as-of cursor (a record fires at most once, in order);
+    # ``funding_paid`` is the cumulative signed cost booked against equity.
+    funding_records = funding.records if funding is not None else ()
+    funding_idx = 0
+    funding_charges = 0
+    funding_paid = _ZERO
     # F-10: monotonic position-lifecycle id linking every decision-trace event of one
     # position (entry_signal -> entry_fill -> ... -> position_close) so a reviewer can
     # reconstruct WHY each position opened / did not open / closed. Incremented only on a
@@ -1403,6 +1424,51 @@ def run_engine(
                     position = None
                 pending = None
 
+            # (6) F-11 funding cost — a backward/as-of join over the available-time-safe
+            # schedule (doc 12 §8.4 rule 3). Every funding record now AVAILABLE at this bar
+            # (``available_at <= bar_time``) fires exactly once; while a position is held it
+            # charges ``notional * rate`` (a long pays a positive rate, a short receives),
+            # reducing equity mid-run so funding-on and funding-off produce a verifiably
+            # different result. A record dated after the last replayed bar never fires — a
+            # future value can never leak into the run. Records that become available while
+            # flat are consumed without a charge: funding is paid only for the interval the
+            # position is actually held (perp funding convention). An unparseable bar
+            # timestamp fires nothing this bar rather than draining the schedule (no leak).
+            if funding_records:
+                bar_time = parse_utc(bar.timestamp)
+                if bar_time is not None:
+                    while (
+                        funding_idx < len(funding_records)
+                        and funding_records[funding_idx].available_at <= bar_time
+                    ):
+                        rec = funding_records[funding_idx]
+                        funding_idx += 1
+                        if position is None:
+                            continue
+                        fsign = _ONE if position.direction == "long" else -_ONE
+                        charge = (position.entry_notional * rec.rate * fsign).quantize(_MONEY)
+                        if charge != _ZERO:
+                            equity = (equity - charge).quantize(_MONEY)
+                            peak = max(peak, equity)
+                            funding_paid += charge
+                        funding_charges += 1
+                        _emit(
+                            "funding_charge",
+                            event_time=bar.timestamp,
+                            direction=position.direction,
+                            bar_seq=bars_seen,
+                            detail={
+                                "position_seq": position.position_seq,
+                                "rate": str(rec.rate),
+                                "charge": str(charge),
+                                "available_at": rec.available_at.isoformat(),
+                                "event_at": rec.event_at.isoformat(),
+                                "source_revision_id": (
+                                    funding.source_revision_id if funding is not None else None
+                                ),
+                            },
+                        )
+
             window.append(bar)
 
     # End-of-data: close any open position at the last bar's close (never left dangling).
@@ -1454,6 +1520,10 @@ def run_engine(
         "total_stops": stops_hit,
         "max_stop_streak": max_stop_streak,
         "total_winning_trades": winners,
+        # F-11: cumulative signed funding cost booked against equity (positive = net paid).
+        # Already reflected in ``final_equity`` / ``net_profit``; surfaced so the funding
+        # contribution is auditable on its own.
+        "funding_paid": funding_paid.quantize(_MONEY),
     }
     warnings: list[str] = []
     if not bars_seen:
@@ -1579,6 +1649,12 @@ def run_engine(
         "allocation_compounding": ("compound" if alloc_compound else "fixed") if alloc_on else None,
         "allocation_items_executed": 1 if (alloc_on and item_share > _ZERO) else 0,
         "allocation_sleeve_cap_active": alloc_on and item_share > _ZERO,
+        # F-11: funding provenance + application counts (the used revision is pinned in the
+        # manifest via the strategy config; surfaced here for the decision-trace audit).
+        "funding_enabled": funding is not None,
+        "funding_source_revision_id": funding.source_revision_id if funding is not None else None,
+        "funding_records": len(funding_records),
+        "funding_charges": funding_charges,
         "item_count": item_count,
         "decision_trace_count": len(signal_events),
         "decision_trace_schema": DECISION_TRACE_SCHEMA,
@@ -1609,6 +1685,7 @@ _DIAG_SUM_KEYS = (
     "deferred_entry_fills",
     "deferred_exit_fills",
     "logic_stop_triggers",
+    "funding_charges",
 )
 
 # Sequential composite curve is NOT a unified-clock portfolio valuation (each strategy

@@ -1016,6 +1016,30 @@ a:hover { text-decoration: underline; }
 .dashed-box > div:last-child { border-bottom: none; }
 .settings-panel { border: 1px dashed var(--text-dim); border-radius: var(--radius); padding: 6px; font-size: 13px; line-height: 1.5; }
 
+/* ---- v18 Trading Signal / Trade Log (UI-04/05): 2-column SOURCE / BULK IMPORT
+   inline panel (mockup .details-grid two-column). Reuses the UI-02
+   .detail-card / .column-title / .panel-actions sticky toolbar; only the
+   column count differs from Strategy Details' 3-column proportions. */
+.details-grid.two-col { grid-template-columns: 1fr 1fr; }
+@media (max-width: 980px) { .details-grid.two-col { grid-template-columns: 1fr; } }
+
+/* Read-only monospace format guidance box (mockup .trading-data-format-box) —
+   the required/optional columns + example. Purely presentational: the system
+   never accepts a paste box, only the TXT/CSV file selector supplies data. */
+.format-guide {
+  white-space: pre-wrap;
+  overflow-x: auto;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  margin: 10px 0 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.format-note { font-size: 12px; color: var(--text-dim); margin: 8px 0 0; }
+
 /* ---- v18 Rationale Families: shared card grid (mockup .rationale-grid/card) ---- */
 .rationale-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; }
 .rationale-card { border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-elev); padding: 12px; }

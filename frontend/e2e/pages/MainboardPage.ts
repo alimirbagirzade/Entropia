@@ -67,8 +67,14 @@ export class MainboardPage {
   // the last .strategy-package is the one just attached.
   async deleteLastItem(): Promise<void> {
     const lastItem = this.page.locator(".strategy-package").last();
-    // Expand the row so the per-item ops (including delete) render.
-    await lastItem.locator(".strategy-arrow").click();
+    // Ensure the row is expanded so the per-item ops (including delete) render.
+    // A freshly added row auto-opens its inline editor (F-15), so a blind arrow
+    // click would TOGGLE it shut — expand idempotently by reading aria-expanded.
+    const arrow = lastItem.locator(".strategy-arrow");
+    if ((await arrow.getAttribute("aria-expanded")) !== "true") {
+      await arrow.click();
+    }
+    await expect(arrow).toHaveAttribute("aria-expanded", "true");
     // The "× Delete" button carries aria-label={`Delete ${label}`}, so its
     // accessible name is "Delete <label>" (the aria-label wins over the visible
     // "× Delete" text) — match that, not the glyph text.

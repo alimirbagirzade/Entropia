@@ -158,10 +158,31 @@ function CheckboxField({
 }
 
 // ---------------------------------------------------------------------------
-// The structured form
+// The structured form — split into independently-appliable, numbered section
+// cards (doc 02 §3.1) so a caller can place each in its mockup-matching
+// column (SETUP & DATA / RISK MANAGEMENT). Each card seeds its own local
+// StrategyFlatForm slice from the SAME payload and Apply merges its edits
+// back over the full payload via mergeFlatSections — sections another card
+// hasn't touched round-trip unchanged, so applying card A never clobbers
+// unsaved edits already applied from card B (each Apply is its own PATCH).
 // ---------------------------------------------------------------------------
 
-export function StrategyConfigForm({
+type FlatSetter<K extends keyof StrategyFlatForm> = (
+  patch: Partial<StrategyFlatForm[K]>,
+) => void;
+
+function useFlatSection<K extends keyof StrategyFlatForm>(
+  payload: Record<string, unknown>,
+  key: K,
+): [StrategyFlatForm[K], FlatSetter<K>, StrategyFlatForm] {
+  const [form, setForm] = useState<StrategyFlatForm>(() => extractFlatSections(payload));
+  const setSection: FlatSetter<K> = (patch) =>
+    setForm((f) => ({ ...f, [key]: { ...f[key], ...patch } }));
+  return [form[key], setSection, form];
+}
+
+// ---- 2. Data & Execution (§5.2) — SETUP & DATA column ----
+export function DataExecutionCard({
   payload,
   pending,
   onApply,
@@ -170,38 +191,15 @@ export function StrategyConfigForm({
   pending: boolean;
   onApply: (payload: Record<string, unknown>) => void;
 }) {
-  const [form, setForm] = useState<StrategyFlatForm>(() => extractFlatSections(payload));
-
-  const setData = (patch: Partial<StrategyFlatForm["data"]>) =>
-    setForm((f) => ({ ...f, data: { ...f.data, ...patch } }));
-  const setProtection = (patch: Partial<StrategyFlatForm["protection"]>) =>
-    setForm((f) => ({ ...f, protection: { ...f.protection, ...patch } }));
-  const setSizing = (patch: Partial<StrategyFlatForm["sizing"]>) =>
-    setForm((f) => ({ ...f, sizing: { ...f.sizing, ...patch } }));
-  const setConflict = (patch: Partial<StrategyFlatForm["conflict"]>) =>
-    setForm((f) => ({ ...f, conflict: { ...f.conflict, ...patch } }));
-
-  const d = form.data;
+  const [d, setData, form] = useFlatSection(payload, "data");
   const showLimit = LIMIT_ORDER_TYPES.has(d.order_type);
   const showSlippageValue = d.slippage_mode === "percentage_slippage";
-  const s = form.sizing;
-  const p = form.protection;
-  const c = form.conflict;
 
   return (
-    <section className="card" style={{ marginTop: 18 }} aria-labelledby="strat-form-h">
-      <h3 id="strat-form-h" style={{ marginTop: 0 }}>
-        Strategy configuration
-      </h3>
-      <p className="cp-note">
-        A structured editor for the flat sections. Apply replaces the FULL draft payload
-        (optimistic concurrency), preserving the Position Entry/Exit Logic, Scaling and
-        Restrictions sections you edit in the Advanced (JSON) editor below. Validation happens on
-        the server — Validate / Save below.
-      </p>
-
-      {/* ---- Data & Execution (§5.2) ---- */}
-      <h4 className="form-section-h">Data &amp; Execution</h4>
+    <div className="detail-card" aria-labelledby="strat-form-h">
+      <h4 id="strat-form-h" className="detail-card-title">
+        2. Data &amp; Execution
+      </h4>
       <div className="cp-form strategy-form-grid">
         <TextField
           label="Market (instrument)"
@@ -373,10 +371,36 @@ export function StrategyConfigForm({
           </>
         ) : null}
       </div>
+      <div style={{ marginTop: 14 }}>
+        <button
+          type="button"
+          className="btn"
+          disabled={pending}
+          onClick={() => onApply(mergeFlatSections(payload, form))}
+        >
+          {pending ? "Applying…" : "Apply Data & Execution changes"}
+        </button>
+      </div>
+    </div>
+  );
+}
 
-      {/* ---- Protection / Stop Logic (§5.5) ---- */}
-      <h4 className="form-section-h">
-        Protection / Stop Logic <InfoPanel panel={STRATEGY_INFO_PANELS.protectionStopLogic} />
+// ---- 5. Protection / Stop Logic (§5.5, percentage/trailing/absolute) — RISK MANAGEMENT column ----
+export function ProtectionStopCard({
+  payload,
+  pending,
+  onApply,
+}: {
+  payload: Record<string, unknown>;
+  pending: boolean;
+  onApply: (payload: Record<string, unknown>) => void;
+}) {
+  const [p, setProtection, form] = useFlatSection(payload, "protection");
+
+  return (
+    <div className="detail-card">
+      <h4 className="detail-card-title">
+        5. Protection / Stop Logic <InfoPanel panel={STRATEGY_INFO_PANELS.protectionStopLogic} />
         <InfoPanel panel={STRATEGY_INFO_PANELS.stopRules} />
       </h4>
       <p className="cp-note">
@@ -434,9 +458,35 @@ export function StrategyConfigForm({
           />
         ) : null}
       </div>
+      <div style={{ marginTop: 14 }}>
+        <button
+          type="button"
+          className="btn"
+          disabled={pending}
+          onClick={() => onApply(mergeFlatSections(payload, form))}
+        >
+          {pending ? "Applying…" : "Apply Protection / Stop changes"}
+        </button>
+      </div>
+    </div>
+  );
+}
 
-      {/* ---- Position Sizing (§5.6) ---- */}
-      <h4 className="form-section-h">Position Sizing</h4>
+// ---- 6. Position Sizing (§5.6) — RISK MANAGEMENT column ----
+export function PositionSizingCard({
+  payload,
+  pending,
+  onApply,
+}: {
+  payload: Record<string, unknown>;
+  pending: boolean;
+  onApply: (payload: Record<string, unknown>) => void;
+}) {
+  const [s, setSizing, form] = useFlatSection(payload, "sizing");
+
+  return (
+    <div className="detail-card">
+      <h4 className="detail-card-title">6. Position Sizing</h4>
       <p className="cp-note">
         Exactly one sizing method is active per revision — the server rejects a multi-method
         config with SIZING_METHOD_NOT_EXCLUSIVE (doc 02 §5.6).
@@ -523,10 +573,36 @@ export function StrategyConfigForm({
           this form edits the formula type only.
         </p>
       ) : null}
+      <div style={{ marginTop: 14 }}>
+        <button
+          type="button"
+          className="btn"
+          disabled={pending}
+          onClick={() => onApply(mergeFlatSections(payload, form))}
+        >
+          {pending ? "Applying…" : "Apply Position Sizing changes"}
+        </button>
+      </div>
+    </div>
+  );
+}
 
-      {/* ---- Conflict / Position Handling (§5.9) ---- */}
-      <h4 className="form-section-h">
-        Conflict / Position Handling <InfoPanel panel={STRATEGY_INFO_PANELS.stopExitConflict} />
+// ---- 9. Conflict / Position Handling (§5.9) — RISK MANAGEMENT column ----
+export function ConflictCard({
+  payload,
+  pending,
+  onApply,
+}: {
+  payload: Record<string, unknown>;
+  pending: boolean;
+  onApply: (payload: Record<string, unknown>) => void;
+}) {
+  const [c, setConflict, form] = useFlatSection(payload, "conflict");
+
+  return (
+    <div className="detail-card">
+      <h4 className="detail-card-title">
+        9. Conflict / Position Handling <InfoPanel panel={STRATEGY_INFO_PANELS.stopExitConflict} />
         <InfoPanel panel={STRATEGY_INFO_PANELS.multipleStopsConflict} />
       </h4>
       <div className="cp-form strategy-form-grid">
@@ -560,7 +636,6 @@ export function StrategyConfigForm({
           onChange={(checked) => setConflict({ exit_on_opposite_signal: checked })}
         />
       </div>
-
       <div style={{ marginTop: 14 }}>
         <button
           type="button"
@@ -568,13 +643,9 @@ export function StrategyConfigForm({
           disabled={pending}
           onClick={() => onApply(mergeFlatSections(payload, form))}
         >
-          {pending ? "Applying…" : "Apply structured changes"}
+          {pending ? "Applying…" : "Apply Conflict / Position Handling changes"}
         </button>
       </div>
-      <p className="cp-note" style={{ marginTop: 10 }}>
-        The package-graph sections — Position Entry / Exit Logic (which pin indicator / condition
-        packages), Scaling and Restrictions / Filters — are edited in the Position graph form below.
-      </p>
-    </section>
+    </div>
   );
 }

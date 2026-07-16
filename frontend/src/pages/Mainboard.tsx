@@ -5,6 +5,7 @@ import { ApiError } from "@/lib/apiClient";
 import { Loading } from "@/components/Loading";
 import { ErrorState } from "@/components/ErrorState";
 import { StatusBadge } from "@/components/StatusBadge";
+import { StrategyDetailsPanel } from "@/components/StrategyDetailsPanel";
 import {
   EXTERNAL_DRAFT_KINDS,
   itemKindLabel,
@@ -87,6 +88,11 @@ function ItemRow({ item }: { item: MainboardItem }) {
   const [revisionInput, setRevisionInput] = useState("");
   const [labelInput, setLabelInput] = useState(item.display_label_override ?? "");
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  // UI-02: an in-progress Strategy Details draft opened inline from this row.
+  // Local-only — the backend has NO root→draft lookup, so a fresh draft id is
+  // held here for the life of the expanded row (collapsing forgets it, same
+  // boundary the standalone /strategy?draft= page already has without a URL).
+  const [strategyDraftId, setStrategyDraftId] = useState<string | null>(null);
 
   const patch = usePatchItem();
   const del = useSoftDeleteWorkObject();
@@ -120,29 +126,43 @@ function ItemRow({ item }: { item: MainboardItem }) {
 
       {expanded && (
         <div className="strategy-details" style={{ display: "grid", gap: 16 }}>
-          {/* Type-specific editor entry (§3.1). The expand reveals the real     */}
-          {/* {Strategy Details | external data} editor — not a raw technical     */}
-          {/* dump — via a deep-link into that page's editing surface.            */}
-          <section
-            aria-label={`${editor.editorLabel} editor for ${label}`}
-            style={{ display: "grid", gap: 8 }}
-          >
-            <strong>{editor.editorLabel} editor</strong>
-            {editor.hint && <p style={noteStyle}>{editor.hint}</p>}
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <Link className="btn btn-primary" to={editorPath(item)}>
-                Edit in {editor.editorLabel} →
-              </Link>
-              {item.item_kind === "strategy" && item.pinned_revision_id && (
-                <Link
-                  className="btn"
-                  to={`/strategy?revision=${encodeURIComponent(item.pinned_revision_id)}`}
-                >
-                  View pinned revision
+          {/* Type-specific editor entry (§3.1 / UI-02). Strategy items open the */}
+          {/* real 3-column Strategy Details editor INLINE, in the row — not a  */}
+          {/* deep-link-only stub. Trading Signal / Trade Log items still open  */}
+          {/* their own workbench page (a separate UI slice, UI-04/UI-05).      */}
+          {item.item_kind === "strategy" ? (
+            <section
+              aria-label={`${editor.editorLabel} editor for ${label}`}
+              style={{ display: "grid", gap: 8 }}
+            >
+              <strong>{editor.editorLabel} editor</strong>
+              <StrategyDetailsPanel
+                rootId={item.work_object_root_id}
+                revisionId={item.pinned_revision_id}
+                draftId={strategyDraftId}
+                onDraftCreated={setStrategyDraftId}
+                onCancel={() => setExpanded(false)}
+              />
+              <div>
+                <Link className="btn btn-ghost" to={editorPath(item)}>
+                  Open full page ↗
                 </Link>
-              )}
-            </div>
-          </section>
+              </div>
+            </section>
+          ) : (
+            <section
+              aria-label={`${editor.editorLabel} editor for ${label}`}
+              style={{ display: "grid", gap: 8 }}
+            >
+              <strong>{editor.editorLabel} editor</strong>
+              {editor.hint && <p style={noteStyle}>{editor.hint}</p>}
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <Link className="btn btn-primary" to={editorPath(item)}>
+                  Edit in {editor.editorLabel} →
+                </Link>
+              </div>
+            </section>
+          )}
 
           {/* Mainboard-owned composition controls (§5.2 / §7). Pin / enable /    */}
           {/* reorder change the composition hash and make the Ready report stale.*/}

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 
-import { StrategyConfigForm } from "@/components/StrategyConfigForm";
+import { DataExecutionCard, PositionSizingCard } from "@/components/StrategyConfigForm";
 import {
   STRATEGY_INFO_PANELS,
   extractFlatSections,
@@ -149,17 +149,16 @@ describe("STRATEGY_INFO_PANELS", () => {
   });
 });
 
-describe("StrategyConfigForm", () => {
-  it("renders the four flat sections", () => {
-    render(<StrategyConfigForm payload={{}} pending={false} onApply={() => {}} />);
-    expect(screen.getByText("Data & Execution")).toBeTruthy();
-    expect(screen.getByText("Position Sizing")).toBeTruthy();
+describe("DataExecutionCard", () => {
+  it("renders the numbered Data & Execution section", () => {
+    render(<DataExecutionCard payload={{}} pending={false} onApply={() => {}} />);
+    expect(screen.getByRole("heading", { name: /Data & Execution/ })).toBeTruthy();
     expect(screen.getByLabelText(/Market \(instrument\)/)).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Apply structured changes" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Apply Data & Execution changes" })).toBeTruthy();
   });
 
   it("reveals the Limit Order Details subtree only for a limit order type", () => {
-    render(<StrategyConfigForm payload={{}} pending={false} onApply={() => {}} />);
+    render(<DataExecutionCard payload={{}} pending={false} onApply={() => {}} />);
     expect(screen.queryByLabelText(/Limit price rule/)).toBeNull();
     fireEvent.change(screen.getByLabelText(/Order type/), {
       target: { value: "limit_order" },
@@ -167,25 +166,15 @@ describe("StrategyConfigForm", () => {
     expect(screen.getByLabelText(/Limit price rule/)).toBeTruthy();
   });
 
-  it("swaps sizing sub-fields when the method changes", () => {
-    render(<StrategyConfigForm payload={{}} pending={false} onApply={() => {}} />);
-    expect(screen.getByLabelText(/Base position size/)).toBeTruthy();
-    fireEvent.change(screen.getByLabelText(/Sizing method/), {
-      target: { value: "risk_based_sizing" },
-    });
-    expect(screen.getByLabelText(/Risk % per trade/)).toBeTruthy();
-    expect(screen.queryByLabelText(/Base position size/)).toBeNull();
-  });
-
-  it("Apply merges the edited sections while preserving the graph payload", () => {
+  it("Apply merges the edited section while preserving the graph payload", () => {
     const onApply = vi.fn();
     const payload = { strategy_root_id: "root_9", position_entry_logic: { signal_block: {} } };
-    render(<StrategyConfigForm payload={payload} pending={false} onApply={onApply} />);
+    render(<DataExecutionCard payload={payload} pending={false} onApply={onApply} />);
 
     fireEvent.change(screen.getByLabelText(/Market \(instrument\)/), {
       target: { value: "ETHUSDT" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Apply structured changes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Apply Data & Execution changes" }));
 
     expect(onApply).toHaveBeenCalledTimes(1);
     const sent = onApply.mock.calls[0][0] as Record<string, Record<string, unknown>>;
@@ -193,5 +182,23 @@ describe("StrategyConfigForm", () => {
     expect(sent.position_entry_logic).toEqual(payload.position_entry_logic);
     expect(sent.data.instrument_id).toBe("ETHUSDT");
     expect(sent.conflict_position_handling).toBeDefined();
+  });
+});
+
+describe("PositionSizingCard", () => {
+  it("renders the numbered Position Sizing section", () => {
+    render(<PositionSizingCard payload={{}} pending={false} onApply={() => {}} />);
+    expect(screen.getByRole("heading", { name: /Position Sizing/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Apply Position Sizing changes" })).toBeTruthy();
+  });
+
+  it("swaps sizing sub-fields when the method changes", () => {
+    render(<PositionSizingCard payload={{}} pending={false} onApply={() => {}} />);
+    expect(screen.getByLabelText(/Base position size/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText(/Sizing method/), {
+      target: { value: "risk_based_sizing" },
+    });
+    expect(screen.getByLabelText(/Risk % per trade/)).toBeTruthy();
+    expect(screen.queryByLabelText(/Base position size/)).toBeNull();
   });
 });

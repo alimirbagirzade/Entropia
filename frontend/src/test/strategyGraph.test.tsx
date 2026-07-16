@@ -2,7 +2,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
-import { StrategyGraphForm } from "@/components/StrategyGraphForm";
+import {
+  LogicBasedStopCard,
+  PositionEntryCard,
+  PositionExitCard,
+  RestrictionsCard,
+  ScalingCard,
+} from "@/components/StrategyGraphForm";
 import {
   extractGraphSections,
   firstInvalidFilterConfig,
@@ -288,24 +294,39 @@ const LIBRARY_PAGE = {
   meta: { cursor: null, has_more: false },
 };
 
-function renderForm(payload: Record<string, unknown>, onApply = vi.fn()) {
+function renderComponent(
+  Component: (props: {
+    payload: Record<string, unknown>;
+    pending: boolean;
+    onApply: (payload: Record<string, unknown>) => void;
+  }) => JSX.Element,
+  payload: Record<string, unknown>,
+  onApply = vi.fn(),
+) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={client}>
-      <StrategyGraphForm payload={payload} pending={false} onApply={onApply} />
+      <Component payload={payload} pending={false} onApply={onApply} />
     </QueryClientProvider>,
   );
   return onApply;
 }
 
-describe("StrategyGraphForm", () => {
-  it("renders the Entry, Exit and Logic-Based Stop sections", () => {
+describe("PositionEntryCard / PositionExitCard / LogicBasedStopCard", () => {
+  it("render as independently numbered sections", () => {
     stubApi({ "GET /library": LIBRARY_PAGE });
-    renderForm({});
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <PositionEntryCard payload={{}} pending={false} onApply={() => {}} />
+        <PositionExitCard payload={{}} pending={false} onApply={() => {}} />
+        <LogicBasedStopCard payload={{}} pending={false} onApply={() => {}} />
+      </QueryClientProvider>,
+    );
     // Anchor at the start of the accessible name — the Scaling Logic ⓘ body
     // references "Position Exit Logic", so an unanchored match is ambiguous.
-    expect(screen.getByRole("heading", { name: /^Position Entry Logic/ })).toBeTruthy();
-    expect(screen.getByRole("heading", { name: /^Position Exit Logic/ })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: /^3\. Position Entry Logic/ })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: /^4\. Position Exit Logic/ })).toBeTruthy();
     expect(screen.getByRole("heading", { name: /^Logic-Based Stop Block/ })).toBeTruthy();
     // F-08: the logic-based stop is now a real composer with a Stop mode selector.
     expect(screen.getByLabelText("Stop mode")).toBeTruthy();
@@ -313,9 +334,9 @@ describe("StrategyGraphForm", () => {
     expect(screen.queryByText(/does not yet implement/i)).toBeNull();
   });
 
-  it("pins a package via the picker browsing the Library catalog", async () => {
+  it("pins an entry indicator package via the picker browsing the Library catalog", async () => {
     stubApi({ "GET /library": LIBRARY_PAGE });
-    renderForm({});
+    renderComponent(PositionEntryCard, {});
     fireEvent.click(screen.getByRole("button", { name: "Choose indicator" }));
     const row = await screen.findByRole("button", { name: /Reversal Sensor/ });
     fireEvent.click(row);
@@ -323,10 +344,10 @@ describe("StrategyGraphForm", () => {
     await waitFor(() => expect(screen.getByText("pkg_lib")).toBeTruthy());
   });
 
-  it("applies the merged payload preserving uncovered sections", () => {
+  it("Apply on the Entry card merges the payload preserving uncovered sections", () => {
     stubApi({ "GET /library": LIBRARY_PAGE });
-    const onApply = renderForm(fullPayload());
-    fireEvent.click(screen.getByRole("button", { name: "Apply graph changes" }));
+    const onApply = renderComponent(PositionEntryCard, fullPayload());
+    fireEvent.click(screen.getByRole("button", { name: "Apply Position Entry changes" }));
     expect(onApply).toHaveBeenCalledTimes(1);
     const sent = onApply.mock.calls[0][0] as Record<string, unknown>;
     expect(sent.untouched_future_key).toBe("preserved");
@@ -334,19 +355,27 @@ describe("StrategyGraphForm", () => {
     const blocks = entry.indicator_blocks as Record<string, unknown>[];
     expect(blocks[0].parameter_overrides).toEqual({ length: 14 });
   });
+});
 
-  it("renders the Scaling and Restrictions sections", () => {
+describe("ScalingCard / RestrictionsCard", () => {
+  it("render as independently numbered sections", () => {
     stubApi({ "GET /library": LIBRARY_PAGE });
-    renderForm(fullPayload());
-    expect(screen.getByRole("heading", { name: /^Scaling Logic/ })).toBeTruthy();
-    expect(screen.getByRole("heading", { name: /^Restrictions \/ Filters/ })).toBeTruthy();
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <ScalingCard payload={fullPayload()} pending={false} onApply={() => {}} />
+        <RestrictionsCard payload={fullPayload()} pending={false} onApply={() => {}} />
+      </QueryClientProvider>,
+    );
+    expect(screen.getByRole("heading", { name: /^7\. Scaling Logic/ })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: /^8\. Restrictions \/ Filters/ })).toBeTruthy();
   });
 
   it("blocks apply when a filter config is invalid JSON", () => {
     stubApi({ "GET /library": LIBRARY_PAGE });
-    const onApply = renderForm(fullPayload());
+    const onApply = renderComponent(RestrictionsCard, fullPayload());
     fireEvent.change(screen.getByLabelText(/Config/), { target: { value: "{ not json" } });
-    fireEvent.click(screen.getByRole("button", { name: "Apply graph changes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Apply Restrictions changes" }));
     expect(onApply).not.toHaveBeenCalled();
     expect(screen.getByRole("alert").textContent).toMatch(/not valid JSON/);
   });

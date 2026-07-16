@@ -25,6 +25,19 @@ import {
   useUploadTradeLogSource,
 } from "@/lib/tradeLog";
 
+// UI-05 — the doc 05 §3 Trade Log is the near-symmetric twin of the Trading
+// Signal page (UI-04): a 2-column inline panel (TRADE LOG SOURCE / BULK TRADE
+// LOG IMPORT) closed by a sticky bottom toolbar (mockup .details-grid +
+// .panel-actions), reusing the UI-02 column/card/toolbar shell. Every hook /
+// OCC token / Idempotency header / query key below is UNCHANGED from
+// lib/tradeLog.ts — only the visual grouping (identity + source config on the
+// left, the TXT/CSV file + read-only format guide on the right, primary actions
+// in a sticky toolbar) is new. The source-import chain (upload an immutable
+// TXT/CSV asset → durable 202 import job → import report → Save & Add as a
+// native work object) is unchanged. Twin diff vs Trading Signal: the produced
+// object is a record batch and a Trade Log is HISTORICAL data — its revisions
+// carry no available_time (doc 05 §10.4).
+
 // Failures surface the backend canonical envelope verbatim — the client never
 // invents trade-log-domain messages (422 config blockers arrive in error.details).
 function mutationErrorText(error: unknown): string {
@@ -51,11 +64,24 @@ const preStyle = {
 
 const SKIPPED_ROWS_SHOWN = 20;
 
-// Trade Log (Stage 3d, doc 05 §8–§10). The near-symmetric twin of the Trading
-// Signal page: upload an immutable TXT/CSV asset → durable 202 import job →
-// import report (canonical trade-record batch) → Save & Add the native work
-// object → append revisions. Trade Log is HISTORICAL data — revisions carry no
-// available_time (doc 05 §10.4). URL modes: ?job= (durable import handle,
+// Read-only column guidance (mockup .trading-data-format-box for the Trade Log
+// panel). Canonical trade-record set per doc 05 — a Trade Log revision carries
+// at least these entry/exit fields; the browser parser is never the authority.
+// No available_time: a Trade Log is historical ledger data (doc 05 §10.4).
+const TRADE_LOG_FORMAT_GUIDE = `Required columns:
+direction, entry_time, entry_price, exit_time, exit_price
+
+Optional columns:
+size, fees, pnl, symbol, open, high, low, close, volume
+
+Accepted separators:
+comma, semicolon, tab or |
+
+Example:
+Long,2024-01-01 10:00,42100,2024-01-01 15:30,42850,1.0,2.1,750,BTCUSDT
+Short,2024-01-02 09:15,43000,2024-01-02 18:00,41950,1.0,2.4,1050,BTCUSDT`;
+
+// Trade Log (Stage 3d, doc 05 §8–§10). URL modes: ?job= (durable import handle,
 // CR-09) and ?root= (work-object detail + revision composer). Pin ("Use This
 // Revision") and delete are Mainboard operations (CR-01, TL-01).
 export function TradeLog() {
@@ -81,7 +107,7 @@ export function TradeLog() {
 }
 
 // ---------------------------------------------------------------------------
-// Workbench: upload → import → report → create. Mutations and the shared
+// Workbench: the 2-column source/import panel. Mutations and the shared
 // instrument/timezone state live HERE so results survive child remounts and
 // the report can seed the create editor.
 // ---------------------------------------------------------------------------
@@ -123,44 +149,43 @@ function Workbench({
 
   return (
     <>
-      <UploadCard
-        pending={upload.isPending}
-        onUpload={(file) =>
-          upload.mutate(
-            { file },
-            { onSuccess: (result) => setSourceAssetId(result.source_asset_id) },
-          )
-        }
-      />
-      {upload.isError ? <MutationErrorCard error={upload.error} /> : null}
-      {upload.data ? (
-        <section className="card" style={{ marginTop: 18 }}>
-          <p style={{ margin: 0 }}>
-            {upload.data.deduplicated
-              ? "Identical content already uploaded — reusing the prior source asset "
-              : "Source asset stored "}
-            <code>{upload.data.source_asset_id}</code> ({upload.data.size_bytes} bytes,{" "}
-            <code>{upload.data.raw_asset_hash}</code>)
-          </p>
-        </section>
-      ) : null}
+      {/* v18 two-column inline panel: TRADE LOG SOURCE | BULK IMPORT. */}
+      <div className="details-grid two-col">
+        <div className="details-column">
+          <div className="column-title">Trade Log Source</div>
+          <ImportIdentityCard
+            sourceAssetId={sourceAssetId}
+            instrumentId={instrumentId}
+            sourceTimezone={sourceTimezone}
+            requesting={requestImport.isPending}
+            onSourceAssetId={setSourceAssetId}
+            onInstrumentId={setInstrumentId}
+            onSourceTimezone={setSourceTimezone}
+            onRequest={(importMapping) =>
+              requestImport.mutate(
+                { sourceAssetId, instrumentId, sourceTimezone, importMapping },
+                { onSuccess: (result) => onJobAccepted(result.job_id) },
+              )
+            }
+          />
+          {requestImport.isError ? <MutationErrorCard error={requestImport.error} /> : null}
+        </div>
 
-      <ImportRequestCard
-        sourceAssetId={sourceAssetId}
-        instrumentId={instrumentId}
-        sourceTimezone={sourceTimezone}
-        pending={requestImport.isPending}
-        onSourceAssetId={setSourceAssetId}
-        onInstrumentId={setInstrumentId}
-        onSourceTimezone={setSourceTimezone}
-        onRequest={(importMapping) =>
-          requestImport.mutate(
-            { sourceAssetId, instrumentId, sourceTimezone, importMapping },
-            { onSuccess: (result) => onJobAccepted(result.job_id) },
-          )
-        }
-      />
-      {requestImport.isError ? <MutationErrorCard error={requestImport.error} /> : null}
+        <div className="details-column">
+          <div className="column-title">Bulk Trade Log Import</div>
+          <FileUploadCard
+            pending={upload.isPending}
+            result={upload.data ?? null}
+            error={upload.isError ? upload.error : null}
+            onUpload={(file) =>
+              upload.mutate(
+                { file },
+                { onSuccess: (result) => setSourceAssetId(result.source_asset_id) },
+              )
+            }
+          />
+        </div>
+      </div>
 
       {jobId !== null ? (
         <ImportReportCard
@@ -173,7 +198,7 @@ function Workbench({
         />
       ) : null}
 
-      <CreateCard
+      <CreatePanel
         key={succeededReport?.record_batch_revision_id ?? "blank"}
         template={template}
         importReady={importReady}
@@ -188,24 +213,131 @@ function Workbench({
   );
 }
 
-function UploadCard({
+// Card 1 (SOURCE column) — trade-log identity + source configuration. The
+// source asset id is auto-filled by the file upload on the right; instrument
+// and timezone are the canonical mapping inputs. The optional column mapping
+// and the "Request import" action close the card (mockup §1 IDENTITY + §2 SOURCE).
+function ImportIdentityCard({
+  sourceAssetId,
+  instrumentId,
+  sourceTimezone,
+  requesting,
+  onSourceAssetId,
+  onInstrumentId,
+  onSourceTimezone,
+  onRequest,
+}: {
+  sourceAssetId: string;
+  instrumentId: string;
+  sourceTimezone: string;
+  requesting: boolean;
+  onSourceAssetId: (value: string) => void;
+  onInstrumentId: (value: string) => void;
+  onSourceTimezone: (value: string) => void;
+  onRequest: (importMapping: Record<string, string>) => void;
+}) {
+  const [mappingText, setMappingText] = useState("");
+  return (
+    <form
+      className="detail-card"
+      aria-labelledby="tl-identity-h"
+      onSubmit={(event) => {
+        event.preventDefault();
+        onRequest(parseColumnMapping(mappingText));
+      }}
+    >
+      <h3 id="tl-identity-h" className="detail-card-title">
+        1. Trade Log Identity
+      </h3>
+      <p className="cp-note" style={{ marginTop: 0 }}>
+        Enqueues a durable normalization job on the data queue (202) — the report below stays
+        reachable through its job URL even after the browser closes (TL-14).
+      </p>
+      <div className="strategy-form-grid">
+        <label className="cp-field">
+          <span>Source asset id</span>
+          <input
+            value={sourceAssetId}
+            onChange={(event) => onSourceAssetId(event.target.value)}
+            placeholder="srcasset_…"
+            required
+          />
+        </label>
+        <label className="cp-field">
+          <span>Instrument id</span>
+          <input
+            value={instrumentId}
+            onChange={(event) => onInstrumentId(event.target.value)}
+            placeholder="BTCUSDT"
+            required
+          />
+        </label>
+        <label className="cp-field">
+          <span>Source timezone</span>
+          <input
+            value={sourceTimezone}
+            onChange={(event) => onSourceTimezone(event.target.value)}
+            required
+          />
+        </label>
+      </div>
+
+      <h4 className="detail-card-title" style={{ marginTop: 14, marginBottom: 6 }}>
+        2. Source Data Mapping
+      </h4>
+      <label className="cp-field cp-wide">
+        <span>Column mapping (optional) — one “canonical_field = source_header” per line</span>
+        <textarea
+          rows={4}
+          value={mappingText}
+          onChange={(event) => setMappingText(event.target.value)}
+          spellCheck={false}
+          placeholder={"entry_time = Open Time\nexit_time = Close Time"}
+        />
+        <small className="cp-note">
+          Leave blank when the file uses the canonical headers (or a known alias). The server never
+          infers an ambiguous mapping — map each canonical field explicitly to resolve it.
+        </small>
+      </label>
+      <div style={{ marginTop: 10 }}>
+        <button className="btn btn-primary" type="submit" disabled={requesting}>
+          {requesting ? "Requesting…" : "Request import"}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+// Card 3 (BULK IMPORT column) — the real TXT/CSV file chooser (F-03) + a
+// read-only monospace format guide. The system never accepts a paste box; only
+// this file selector supplies data (mockup §3 TXT / CSV FILE).
+function FileUploadCard({
   pending,
+  result,
+  error,
   onUpload,
 }: {
   pending: boolean;
+  result: {
+    source_asset_id: string;
+    raw_asset_hash: string;
+    size_bytes: number;
+    deduplicated: boolean;
+  } | null;
+  error: unknown;
   onUpload: (file: File) => void;
 }) {
   const [file, setFile] = useState<File | null>(null);
 
   return (
-    <section className="card" aria-labelledby="tl-upload-h">
-      <h3 id="tl-upload-h" style={{ marginTop: 0 }}>
-        Upload source file
+    <div className="detail-card" aria-labelledby="tl-upload-h">
+      <h3 id="tl-upload-h" className="detail-card-title">
+        3. Trade Log TXT / CSV File
       </h3>
-      <p className="cp-note">
-        Select a UTF-8 TXT/CSV trade-record file — the browser transfers the file itself. The
-        asset is immutable and content-addressed (an identical re-upload reuses the prior asset,
-        TL-15); size, encoding, and schema are validated on the server.
+      <p className="cp-note" style={{ marginTop: 0 }}>
+        Select a UTF-8 TXT/CSV trade-record file — the browser transfers the file itself. The asset
+        is immutable and content-addressed (an identical re-upload reuses the prior asset, TL-15);
+        size, encoding, and schema are validated on the server.
       </p>
       <form
         className="cp-form"
@@ -233,93 +365,26 @@ function UploadCard({
           </button>
         </div>
       </form>
-    </section>
-  );
-}
 
-function ImportRequestCard({
-  sourceAssetId,
-  instrumentId,
-  sourceTimezone,
-  pending,
-  onSourceAssetId,
-  onInstrumentId,
-  onSourceTimezone,
-  onRequest,
-}: {
-  sourceAssetId: string;
-  instrumentId: string;
-  sourceTimezone: string;
-  pending: boolean;
-  onSourceAssetId: (value: string) => void;
-  onInstrumentId: (value: string) => void;
-  onSourceTimezone: (value: string) => void;
-  onRequest: (importMapping: Record<string, string>) => void;
-}) {
-  const [mappingText, setMappingText] = useState("");
-  return (
-    <section className="card" style={{ marginTop: 18 }} aria-labelledby="tl-import-h">
-      <h3 id="tl-import-h" style={{ marginTop: 0 }}>
-        Request import
-      </h3>
-      <p className="cp-note">
-        Enqueues a durable normalization job on the data queue (202) — the report below stays
-        reachable through its job URL even after the browser closes (TL-14).
+      {error ? <MutationErrorCard error={error} /> : null}
+      {result ? (
+        <p className="cp-note" style={{ marginTop: 12 }}>
+          {result.deduplicated
+            ? "Identical content already uploaded — reusing the prior source asset "
+            : "Source asset stored "}
+          <code>{result.source_asset_id}</code> ({result.size_bytes} bytes,{" "}
+          <code>{result.raw_asset_hash}</code>)
+        </p>
+      ) : null}
+
+      <div className="format-guide">{TRADE_LOG_FORMAT_GUIDE}</div>
+      <p className="format-note">
+        The content format above is read-only guidance — the system does not use a paste box here;
+        the required data must be supplied through the TXT / CSV file selector. A Trade Log is
+        historical ledger data — its revisions carry no <code>available_time</code> lookahead guard
+        (doc 05 §10.4).
       </p>
-      <form
-        className="cp-form"
-        onSubmit={(event) => {
-          event.preventDefault();
-          onRequest(parseColumnMapping(mappingText));
-        }}
-      >
-        <label className="cp-field">
-          <span>Source asset id</span>
-          <input
-            value={sourceAssetId}
-            onChange={(event) => onSourceAssetId(event.target.value)}
-            placeholder="srcasset_…"
-            required
-          />
-        </label>
-        <label className="cp-field">
-          <span>Instrument id</span>
-          <input
-            value={instrumentId}
-            onChange={(event) => onInstrumentId(event.target.value)}
-            placeholder="BTCUSDT"
-            required
-          />
-        </label>
-        <label className="cp-field">
-          <span>Source timezone</span>
-          <input
-            value={sourceTimezone}
-            onChange={(event) => onSourceTimezone(event.target.value)}
-            required
-          />
-        </label>
-        <label className="cp-field cp-wide">
-          <span>Column mapping (optional) — one “canonical_field = source_header” per line</span>
-          <textarea
-            rows={4}
-            value={mappingText}
-            onChange={(event) => setMappingText(event.target.value)}
-            spellCheck={false}
-            placeholder={"entry_time = Open Time\nexit_time = Close Time"}
-          />
-          <small className="cp-note">
-            Leave blank when the file uses the canonical headers (or a known alias). The server
-            never infers an ambiguous mapping — map each canonical field explicitly to resolve it.
-          </small>
-        </label>
-        <div className="cp-field cp-wide">
-          <button className="btn btn-primary" type="submit" disabled={pending}>
-            {pending ? "Requesting…" : "Request import"}
-          </button>
-        </div>
-      </form>
-    </section>
+    </div>
   );
 }
 
@@ -430,7 +495,9 @@ function SkippedRows({
 
 // Raw JSON payload editor (Strategy precedent): parse failures stay
 // client-side; the server compiler is the sole authority on config semantics.
-function CreateCard({
+// The primary Save action lives in a sticky bottom toolbar (mockup
+// .panel-actions "Save As Trade Log Package").
+function CreatePanel({
   template,
   importReady,
   pending,
@@ -445,62 +512,69 @@ function CreateCard({
   const [attach, setAttach] = useState(true);
   const [parseError, setParseError] = useState<string | null>(null);
 
+  const submit = () => {
+    try {
+      const parsed: unknown = JSON.parse(text);
+      if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+        setParseError("The payload must be a JSON object.");
+        return;
+      }
+      setParseError(null);
+      onCreate(parsed as Record<string, unknown>, attach);
+    } catch (error) {
+      setParseError(error instanceof Error ? error.message : "Invalid JSON.");
+    }
+  };
+
   return (
-    <section className="card" style={{ marginTop: 18 }} aria-labelledby="tl-create-h">
-      <h3 id="tl-create-h" style={{ marginTop: 0 }}>
-        Create Trade Log
-      </h3>
-      <p className="cp-note">
-        Requires a succeeded, non-empty record batch — the payload below is seeded from the report
-        once available. Save is never a Ready PASS; with “attach” on (Save &amp; Add) the object
-        joins the default Mainboard and the prior Ready report goes STALE.
-        {importReady ? "" : " Complete an import above to seed the binding."}
-      </p>
-      <label className="cp-field cp-wide">
-        <span>TradeLogConfig payload</span>
-        <textarea
-          rows={16}
-          value={text}
-          onChange={(event) => setText(event.target.value)}
-          spellCheck={false}
-        />
-      </label>
-      <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
-        <input
-          type="checkbox"
-          checked={attach}
-          onChange={(event) => setAttach(event.target.checked)}
-        />
-        <span>Attach to the default Mainboard (Save &amp; Add)</span>
-      </label>
-      <div style={{ marginTop: 10 }}>
+    <>
+      <section className="card" style={{ marginTop: 18 }} aria-labelledby="tl-create-h">
+        <h3 id="tl-create-h" style={{ marginTop: 0 }}>
+          Create Trade Log
+        </h3>
+        <p className="cp-note">
+          Requires a succeeded, non-empty record batch — the payload below is seeded from the report
+          once available. Save is never a Ready PASS; with “attach” on (Save &amp; Add) the object
+          joins the default Mainboard and the prior Ready report goes STALE.
+          {importReady ? "" : " Complete an import above to seed the binding."}
+        </p>
+        <label className="cp-field cp-wide">
+          <span>TradeLogConfig payload</span>
+          <textarea
+            rows={16}
+            value={text}
+            onChange={(event) => setText(event.target.value)}
+            spellCheck={false}
+          />
+        </label>
+        <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
+          <input
+            type="checkbox"
+            checked={attach}
+            onChange={(event) => setAttach(event.target.checked)}
+          />
+          <span>Attach to the default Mainboard (Save &amp; Add)</span>
+        </label>
+        {parseError !== null ? (
+          <p role="alert" style={{ color: "var(--down)", marginBottom: 0 }}>
+            Not sent — invalid JSON: {parseError}
+          </p>
+        ) : null}
+      </section>
+
+      {/* Sticky bottom toolbar — primary Save action (mockup .panel-actions). */}
+      <div className="panel-actions">
+        <div className="panel-actions-title">Save / Package Actions</div>
         <button
           type="button"
-          className="btn btn-primary"
+          className="panel-action-button primary"
           disabled={pending}
-          onClick={() => {
-            try {
-              const parsed: unknown = JSON.parse(text);
-              if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
-                setParseError("The payload must be a JSON object.");
-                return;
-              }
-              setParseError(null);
-              onCreate(parsed as Record<string, unknown>, attach);
-            } catch (error) {
-              setParseError(error instanceof Error ? error.message : "Invalid JSON.");
-            }
-          }}
+          onClick={submit}
         >
           {pending ? "Saving…" : "Save Trade Log"}
         </button>
       </div>
-      {parseError !== null ? (
-        <p role="alert" style={{ color: "var(--down)", marginBottom: 0 }}>
-          Not sent — invalid JSON: {parseError}
-        </p>
-      ) : null}
-    </section>
+    </>
   );
 }
 
@@ -605,8 +679,9 @@ function AttachedTradeLogsCard() {
 
 // ---------------------------------------------------------------------------
 // Detail (?root=): work-object header + current revision + revision composer.
-// Mutation state lives HERE so the result survives the composer remount when
-// the head moves (the Strategy/Portfolio lesson).
+// The primary Save/Export actions sit in a sticky bottom toolbar; mutation
+// state lives HERE so results survive the composer remount when the head moves
+// (the Strategy/Portfolio lesson).
 // ---------------------------------------------------------------------------
 
 function DetailView({ rootId }: { rootId: string }) {
@@ -631,35 +706,34 @@ function DetailView({ rootId }: { rootId: string }) {
   const data = detail.data;
   if (!data) return null;
 
+  const canExport = data.current_revision_id !== null;
+
   return (
     <>
       <DetailHeaderCard data={data} />
-      {data.current_revision_id !== null ? (
-        <ExportCard
-          disabled={exportLog.isPending}
-          onExport={() => exportLog.mutate({ rootId })}
-          error={exportLog.isError ? exportLog.error : null}
-          result={exportLog.data ?? null}
-        />
-      ) : null}
       {data.current_revision !== null ? <CurrentRevisionCard data={data} /> : null}
       {data.current_revision_id !== null && data.current_revision !== null ? (
-        <RevisionComposer
+        <RevisionEditor
           key={data.current_revision_id}
           headRevisionId={data.current_revision_id}
           seedPayload={data.current_revision.payload}
-          pending={revise.isPending}
-          onSubmit={(payload) =>
+          savePending={revise.isPending}
+          canExport={canExport}
+          exportPending={exportLog.isPending}
+          onSave={(payload) =>
             revise.mutate({
               rootId,
               payload,
               expectedHeadRevisionId: data.current_revision_id ?? "",
             })
           }
+          onExport={() => exportLog.mutate({ rootId })}
         />
       ) : null}
       {revise.isError ? <MutationErrorCard error={revise.error} /> : null}
       {revise.data ? <RevisionResultCard result={revise.data} /> : null}
+      {exportLog.isError ? <MutationErrorCard error={exportLog.error} /> : null}
+      {exportLog.data ? <ExportResultCard result={exportLog.data} /> : null}
     </>
   );
 }
@@ -728,111 +802,115 @@ function CurrentRevisionCard({ data }: { data: TradeLogDetail }) {
   );
 }
 
-function RevisionComposer({
+// Revision composer + sticky bottom toolbar (Save new revision + Export As
+// Package). Export As Package (doc 05 §8, §11, §13.2) produces the immutable
+// source-mapping/provenance manifest for the pinned head revision — read-only,
+// the button stays enabled; owner/Admin is enforced server-side (403 verbatim).
+function RevisionEditor({
   headRevisionId,
   seedPayload,
-  pending,
-  onSubmit,
+  savePending,
+  canExport,
+  exportPending,
+  onSave,
+  onExport,
 }: {
   headRevisionId: string;
   seedPayload: Record<string, unknown>;
-  pending: boolean;
-  onSubmit: (payload: Record<string, unknown>) => void;
+  savePending: boolean;
+  canExport: boolean;
+  exportPending: boolean;
+  onSave: (payload: Record<string, unknown>) => void;
+  onExport: () => void;
 }) {
   const [text, setText] = useState(() => JSON.stringify(seedPayload, null, 2));
   const [parseError, setParseError] = useState<string | null>(null);
 
+  const submit = () => {
+    try {
+      const parsed: unknown = JSON.parse(text);
+      if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+        setParseError("The payload must be a JSON object.");
+        return;
+      }
+      setParseError(null);
+      onSave(parsed as Record<string, unknown>);
+    } catch (error) {
+      setParseError(error instanceof Error ? error.message : "Invalid JSON.");
+    }
+  };
+
   return (
-    <section className="card" style={{ marginTop: 18 }} aria-labelledby="tl-revise-h">
-      <h3 id="tl-revise-h" style={{ marginTop: 0 }}>
-        Save new revision
-      </h3>
-      <p className="cp-note">
-        Appends immutable revision N+1 guarded by the rendered head (<code>{headRevisionId}</code>
-        ) — a stale tab gets a 409, never last-write-wins. The Mainboard item is NEVER
-        auto-repinned (Rule 10): use “Use This Revision” on the Mainboard to change the active
-        composition.
-      </p>
-      <label className="cp-field cp-wide">
-        <span>Revision payload</span>
-        <textarea
-          rows={14}
-          value={text}
-          onChange={(event) => setText(event.target.value)}
-          spellCheck={false}
-        />
-      </label>
-      <div style={{ marginTop: 10 }}>
+    <>
+      <section className="card" style={{ marginTop: 18 }} aria-labelledby="tl-revise-h">
+        <h3 id="tl-revise-h" style={{ marginTop: 0 }}>
+          Save new revision
+        </h3>
+        <p className="cp-note">
+          Appends immutable revision N+1 guarded by the rendered head (<code>{headRevisionId}</code>
+          ) — a stale tab gets a 409, never last-write-wins. The Mainboard item is NEVER
+          auto-repinned (Rule 10): use “Use This Revision” on the Mainboard to change the active
+          composition. Export As Package produces the immutable source-mapping/provenance manifest
+          for the pinned head — it never mutates the source (repeated clicks return the same manifest
+          hash).
+        </p>
+        <label className="cp-field cp-wide">
+          <span>Revision payload</span>
+          <textarea
+            rows={14}
+            value={text}
+            onChange={(event) => setText(event.target.value)}
+            spellCheck={false}
+          />
+        </label>
+        {parseError !== null ? (
+          <p role="alert" style={{ color: "var(--down)", marginBottom: 0 }}>
+            Not sent — invalid JSON: {parseError}
+          </p>
+        ) : null}
+      </section>
+
+      <div className="panel-actions">
+        <div className="panel-actions-title">Save / Package Actions</div>
         <button
           type="button"
-          className="btn btn-primary"
-          disabled={pending}
-          onClick={() => {
-            try {
-              const parsed: unknown = JSON.parse(text);
-              if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
-                setParseError("The payload must be a JSON object.");
-                return;
-              }
-              setParseError(null);
-              onSubmit(parsed as Record<string, unknown>);
-            } catch (error) {
-              setParseError(error instanceof Error ? error.message : "Invalid JSON.");
-            }
-          }}
+          className="panel-action-button primary"
+          disabled={savePending}
+          onClick={submit}
         >
-          {pending ? "Saving…" : "Save new revision"}
+          {savePending ? "Saving…" : "Save new revision"}
         </button>
+        {canExport ? (
+          <button
+            type="button"
+            className="panel-action-button"
+            disabled={exportPending}
+            onClick={onExport}
+          >
+            {exportPending ? "Exporting…" : "Export manifest"}
+          </button>
+        ) : null}
       </div>
-      {parseError !== null ? (
-        <p role="alert" style={{ color: "var(--down)", marginBottom: 0 }}>
-          Not sent — invalid JSON: {parseError}
-        </p>
-      ) : null}
-    </section>
+    </>
   );
 }
 
-// Export As Package (doc 05 §8, §11, §13.2): produce the immutable
-// source-mapping/provenance manifest for the pinned head revision. Read-only —
-// the export never mutates the source. Owner/Admin is enforced server-side; a
-// non-owner sees the 403 envelope verbatim.
-function ExportCard({
-  disabled,
-  onExport,
-  error,
-  result,
-}: {
-  disabled: boolean;
-  onExport: () => void;
-  error: unknown;
-  result: ExportTradeLogResult | null;
-}) {
+function ExportResultCard({ result }: { result: ExportTradeLogResult }) {
   return (
     <section className="card" style={{ marginTop: 18 }} aria-labelledby="tl-export-h">
       <h3 id="tl-export-h" style={{ marginTop: 0 }}>
         Export As Package
       </h3>
-      <p className="cp-note" style={{ marginTop: 0 }}>
-        Produce the immutable source-mapping/provenance manifest for the pinned head revision. The
-        export never mutates the source — repeated clicks return the same manifest hash.
-      </p>
-      <button className="btn btn-primary" type="button" disabled={disabled} onClick={onExport}>
-        {disabled ? "Exporting…" : "Export manifest"}
-      </button>
-      {error ? <MutationErrorCard error={error} /> : null}
-      {result ? (
-        <dl className="kv" style={{ marginTop: 12 }}>
-          <dt>Revision</dt>
-          <dd>
-            <code>{result.revision_id}</code>
-          </dd>
-          <dt>Manifest hash</dt>
-          <dd>
-            <code>{result.manifest_hash}</code>
-          </dd>
-        </dl>
-      ) : null}
+      <dl className="kv">
+        <dt>Revision</dt>
+        <dd>
+          <code>{result.revision_id}</code>
+        </dd>
+        <dt>Manifest hash</dt>
+        <dd>
+          <code>{result.manifest_hash}</code>
+        </dd>
+      </dl>
     </section>
   );
 }

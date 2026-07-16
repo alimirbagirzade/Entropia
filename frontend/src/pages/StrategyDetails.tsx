@@ -1,14 +1,23 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
 import { EmptyState } from "@/components/EmptyState";
 import { ErrorState } from "@/components/ErrorState";
 import { Loading } from "@/components/Loading";
+import { StatusBadge } from "@/components/StatusBadge";
 import { StrategyDetailsPanel } from "@/components/StrategyDetailsPanel";
 import { ApiError } from "@/lib/apiClient";
-import { EM_DASH, useDefaultMainboard } from "@/lib/backtest";
+import { EM_DASH, formatUtc, useDefaultMainboard } from "@/lib/backtest";
 import { useRationaleFamilies } from "@/lib/createPackage";
-import { useCreateStrategyDraft } from "@/lib/strategy";
+import { useSoftDeleteWorkObject } from "@/lib/mainboard";
+import {
+  type StrategyDraftSummary,
+  lifecycleLabel,
+  lifecycleTone,
+  useCreateStrategyDraft,
+  useMyStrategyDrafts,
+} from "@/lib/strategy";
 
 // Failures surface the backend canonical envelope verbatim — the client never
 // invents strategy-domain messages. A stale OCC token arrives here as 409
@@ -53,6 +62,7 @@ export function StrategyDetails() {
       ) : (
         <>
           <CreateStrategyCard onCreated={(draftId) => setSearchParams({ draft: draftId })} />
+          <MyDraftsCard onOpen={(draftId) => setSearchParams({ draft: draftId })} />
           <AttachedStrategiesCard />
         </>
       )}
@@ -77,8 +87,9 @@ function CreateStrategyCard({ onCreated }: { onCreated: (draftId: string) => voi
       </h3>
       <p className="cp-note">
         Creates the strategy root and its mutable editor draft. No revision exists until the first
-        Save — an unsaved draft cannot enter Ready Check or RUN (AT-01). Keep the editor URL: the
-        draft id is the only handle to the draft.
+        Save — an unsaved draft cannot enter Ready Check or RUN (AT-01). Every draft is saved to
+        your account and reappears in “My drafts” below — you can close the browser and find it
+        again later.
       </p>
       <form
         className="cp-form"
@@ -129,9 +140,156 @@ function CreateStrategyCard({ onCreated }: { onCreated: (draftId: string) => voi
 }
 
 // ---------------------------------------------------------------------------
+// F-18 — My drafts: the durable/discoverable draft index (GET /strategy-drafts).
+// This is what removes the ?draft= URL dependency — every draft you own is listed
+// here (owner-scoped server-side; drafts never leak across users), so you can open
+// one after a browser restart / re-login without having kept the URL. Open edits it
+// in place; a saved-but-unattached draft links to the Mainboard to attach (attach
+// is a Mainboard composition operation, CR-01/doc 01); an UNATTACHED draft can be
+// deleted (soft-delete → Trash, restorable — audit/history preserved). Attaching a
+// saved strategy and deleting an attached one stay Mainboard operations.
+// ---------------------------------------------------------------------------
+
+function draftStatusBadges(draft: StrategyDraftSummary) {
+  return (
+    <span style={{ display: "inline-flex", gap: 6, flexWrap: "wrap" }}>
+      <StatusBadge label={lifecycleLabel(draft.lifecycle_state)} tone={lifecycleTone(draft.lifecycle_state)} />
+      {draft.has_revision ? (
+        <StatusBadge label="Saved" tone="ok" />
+      ) : (
+        <StatusBadge label="Never saved" tone="warn" />
+      )}
+      {draft.is_dirty ? <StatusBadge label="Unsaved edits" tone="warn" /> : null}
+      {draft.is_attached ? <StatusBadge label="Attached" tone="neutral" /> : null}
+    </span>
+  );
+}
+
+function MyDraftsCard({ onOpen }: { onOpen: (draftId: string) => void }) {
+  const drafts = useMyStrategyDrafts();
+  const queryClient = useQueryClient();
+  const softDelete = useSoftDeleteWorkObject();
+  // Two-step confirm: the strategy_root_id awaiting a confirmed delete.
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+
+  function confirmDelete(rootId: string) {
+    softDelete.mutate(rootId, {
+      onSuccess: () => {
+        setPendingDelete(null);
+        // useSoftDeleteWorkObject sweeps mainboard/readiness/audit/trash; the drafts
+        // list lives under ["strategy"], so refresh it too (it drops the deleted row).
+        void queryClient.invalidateQueries({ queryKey: ["strategy"] });
+      },
+    });
+  }
+
+  const rows = drafts.data ?? [];
+
+  return (
+    <section className="card" style={{ marginTop: 18 }} aria-labelledby="strat-drafts-h">
+      <h3 id="strat-drafts-h" style={{ marginTop: 0 }}>
+        My drafts
+      </h3>
+      <p className="cp-note">
+        Every strategy draft you own — open one to keep editing, no saved URL needed. A draft that
+        has never been attached to the Mainboard can be deleted here (it goes to Trash and can be
+        restored). Attaching a saved strategy is done from the Mainboard.
+      </p>
+      {drafts.isLoading ? (
+        <Loading />
+      ) : drafts.isError ? (
+        <ErrorState error={drafts.error} onRetry={() => void drafts.refetch()} />
+      ) : rows.length === 0 ? (
+        <EmptyState
+          title="No strategy drafts yet"
+          description="Create a strategy above and it will appear here for you to reopen anytime."
+        />
+      ) : (
+        <table className="metrics-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Status</th>
+              <th>Last edited</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((draft) => (
+              <tr key={draft.draft_id}>
+                <td>{draft.display_name || EM_DASH}</td>
+                <td>{draftStatusBadges(draft)}</td>
+                <td>{draft.updated_at ? formatUtc(draft.updated_at) : EM_DASH}</td>
+                <td>
+                  <span style={{ display: "inline-flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                    <button
+                      type="button"
+                      className="btn"
+                      onClick={() => onOpen(draft.draft_id)}
+                    >
+                      Open
+                    </button>
+                    {draft.has_revision && !draft.is_attached ? (
+                      <Link to="/" aria-label={`Attach ${draft.display_name} on the Mainboard`}>
+                        Attach on Mainboard →
+                      </Link>
+                    ) : null}
+                    {draft.is_attached && draft.strategy_root_id ? (
+                      <Link to={`/strategy?strategy=${encodeURIComponent(draft.strategy_root_id)}`}>
+                        View on Mainboard
+                      </Link>
+                    ) : null}
+                    {!draft.is_attached && draft.strategy_root_id ? (
+                      pendingDelete === draft.strategy_root_id ? (
+                        <span style={{ display: "inline-flex", gap: 8, alignItems: "center" }}>
+                          <span>Delete this draft?</span>
+                          <button
+                            type="button"
+                            className="btn btn-danger"
+                            disabled={softDelete.isPending}
+                            onClick={() => confirmDelete(draft.strategy_root_id as string)}
+                          >
+                            {softDelete.isPending ? "Deleting…" : "Confirm delete"}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn"
+                            disabled={softDelete.isPending}
+                            onClick={() => setPendingDelete(null)}
+                          >
+                            Cancel
+                          </button>
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          className="btn"
+                          onClick={() => setPendingDelete(draft.strategy_root_id)}
+                        >
+                          Delete
+                        </button>
+                      )
+                    ) : null}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {softDelete.isError ? (
+        <p role="alert" style={{ color: "var(--down)", marginBottom: 0 }}>
+          {mutationErrorText(softDelete.error)}
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Discovery: strategy items attached to the default Mainboard (RUN/Ready-Check
 // composition pattern). Only ATTACHED strategies appear here — a created but
-// never-attached strategy stays reachable through its create-time ?draft= URL.
+// never-attached strategy is now discoverable in “My drafts” above (F-18).
 // ---------------------------------------------------------------------------
 
 function AttachedStrategiesCard() {

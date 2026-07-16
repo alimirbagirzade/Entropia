@@ -42,6 +42,10 @@ const DRAFT = {
   updated_at: "2026-07-10T08:00:00+00:00",
 };
 
+// F-18: default to an empty draft index so existing no-identifier tests render
+// the "My drafts" empty state (no text collisions); F-18 tests override this.
+const DRAFTS_LIST: unknown[] = [];
+
 const STRATEGY = {
   strategy_root_id: "root_1",
   display_name: "Momentum A",
@@ -138,6 +142,7 @@ function stubRoutes(overrides: Record<string, unknown> = {}) {
     "POST /strategy-drafts/draft_1/clear": CLEAR_RESULT,
     "PATCH /strategy-drafts/draft_1": PATCH_RESULT,
     "GET /strategy-drafts/draft_1": DRAFT,
+    "GET /strategy-drafts": DRAFTS_LIST,
     "POST /strategy-drafts": CREATE_RESULT,
     "GET /strategies/root_1/revisions": REVISIONS,
     "GET /strategies/root_1": STRATEGY,
@@ -301,5 +306,107 @@ describe("StrategyDetails", () => {
     expect(screen.getByText("market_dataset")).toBeTruthy();
     expect(screen.getByText("sha256:aaa")).toBeTruthy();
     expect(screen.getByText(/market_dataset_root_id/)).toBeTruthy();
+  });
+
+  // -------------------------------------------------------------------------
+  // F-18 — durable/discoverable drafts (My drafts card)
+  // -------------------------------------------------------------------------
+
+  const NEVER_SAVED_DRAFT = {
+    draft_id: "draft_never",
+    strategy_root_id: "root_never",
+    display_name: "Fresh idea",
+    lifecycle_state: "draft",
+    is_dirty: true,
+    row_version: 0,
+    last_saved_revision_id: null,
+    has_revision: false,
+    is_attached: false,
+    owner_principal_id: "user_1",
+    updated_at: "2026-07-14T09:00:00+00:00",
+  };
+  const SAVED_UNATTACHED_DRAFT = {
+    draft_id: "draft_saved",
+    strategy_root_id: "root_saved",
+    display_name: "Saved not attached",
+    lifecycle_state: "validated",
+    is_dirty: false,
+    row_version: 3,
+    last_saved_revision_id: "rev_9",
+    has_revision: true,
+    is_attached: false,
+    owner_principal_id: "user_1",
+    updated_at: "2026-07-15T09:00:00+00:00",
+  };
+  const ATTACHED_DRAFT = {
+    draft_id: "draft_attached",
+    strategy_root_id: "root_attached",
+    display_name: "Live on board",
+    lifecycle_state: "validated",
+    is_dirty: false,
+    row_version: 4,
+    last_saved_revision_id: "rev_live",
+    has_revision: true,
+    is_attached: true,
+    owner_principal_id: "user_1",
+    updated_at: "2026-07-16T09:00:00+00:00",
+  };
+
+  it("lists the actor's drafts and opens one without a retained ?draft= URL", async () => {
+    // The listed row points at the fully-stubbed draft_1/root_1 so Open drives the
+    // real editor path; the point under test is discovery, not a kept URL.
+    const fetchMock = stubRoutes({
+      "GET /strategy-drafts": [{ ...NEVER_SAVED_DRAFT, draft_id: "draft_1", strategy_root_id: "root_1" }],
+    });
+    renderPage();
+
+    // Discoverable from a fresh page load — no create-time URL was kept.
+    expect(await screen.findByText("Fresh idea")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Open" }));
+
+    // Opening navigates to the editor, which fetches the draft by id.
+    expect(await screen.findByRole("heading", { name: /Data & Execution/ })).toBeTruthy();
+    expect(
+      fetchMock.mock.calls.find(([url]) => String(url).includes("/strategy-drafts/draft_1")),
+    ).toBeTruthy();
+  });
+
+  it("deletes an unattached draft via a two-step confirm (DELETE /work-objects + Idempotency-Key)", async () => {
+    const fetchMock = stubRoutes({
+      "GET /strategy-drafts": [SAVED_UNATTACHED_DRAFT],
+      "DELETE /work-objects/root_saved": { root_id: "root_saved", deletion_state: "soft_deleted" },
+    });
+    renderPage();
+
+    expect(await screen.findByText("Saved not attached")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    // Nothing sent until the explicit confirm step.
+    expect(
+      fetchMock.mock.calls.find(([url, init]) => String(url).includes("/work-objects/") && init?.method === "DELETE"),
+    ).toBeUndefined();
+
+    fireEvent.click(screen.getByRole("button", { name: /Confirm delete/ }));
+    const call = await vi.waitFor(() => {
+      const found = fetchMock.mock.calls.find(
+        ([url, init]) => String(url).includes("/work-objects/root_saved") && init?.method === "DELETE",
+      );
+      if (!found) throw new Error("delete not sent yet");
+      return found;
+    });
+    expect(headersOf(call?.[1])["Idempotency-Key"]).toBeTruthy();
+    expect(call?.[1]?.body).toBeUndefined(); // DELETE carries no body / no OCC token
+  });
+
+  it("offers Attach-on-Mainboard for a saved-unattached draft and hides Delete for an attached one", async () => {
+    stubRoutes({ "GET /strategy-drafts": [SAVED_UNATTACHED_DRAFT, ATTACHED_DRAFT] });
+    renderPage();
+
+    expect(await screen.findByText("Saved not attached")).toBeTruthy();
+    // Saved + unattached → an attach link; attached → a view link, never Delete.
+    expect(screen.getByRole("link", { name: /Attach Saved not attached on the Mainboard/ })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "View on Mainboard" })).toBeTruthy();
+    // The attached draft exposes no destructive Delete affordance in this list.
+    const deletes = screen.getAllByRole("button", { name: "Delete" });
+    expect(deletes.length).toBe(1); // only the unattached row
   });
 });

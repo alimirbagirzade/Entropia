@@ -378,6 +378,11 @@ async def get_revision(session: AsyncSession, revision_id: str) -> ResearchDatas
     return await session.get(ResearchDatasetRevision, revision_id)
 
 
+async def get_native_asset(session: AsyncSession, asset_id: str) -> ResearchNativeAsset | None:
+    """Fetch a parsed native asset by its id (F-11 funding source consumption)."""
+    return await session.get(ResearchNativeAsset, asset_id)
+
+
 async def list_revisions(
     session: AsyncSession, entity_id: str, *, limit: int = 50
 ) -> Sequence[ResearchDatasetRevision]:
@@ -443,6 +448,7 @@ __all__ = [
     "create_research_dataset",
     "get_dataset_root",
     "get_market_link",
+    "get_native_asset",
     "get_revision",
     "list_revisions",
     "query_revisions_for_owner",

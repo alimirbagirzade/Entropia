@@ -43,6 +43,7 @@ from typing import Any
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from entropia.application.queries.funding import FundingRowLoader, resolve_funding_schedule
 from entropia.application.queries.indicator_plan import resolve_indicator_plan
 from entropia.application.queries.market_bars import (
     BarSourceRef,
@@ -73,7 +74,7 @@ from entropia.infrastructure.postgres.repositories import backtest as bt_repo
 from entropia.infrastructure.postgres.repositories import mainboard as mb_repo
 from entropia.infrastructure.postgres.repositories import market_data as md_repo
 from entropia.infrastructure.postgres.repositories import strategy as strat_repo
-from entropia.shared.errors import NotFoundError
+from entropia.shared.errors import FundingSourceInvalid, NotFoundError
 
 _RUN_TARGET = "backtest_run"
 _RESULT_TARGET = "backtest_result"
@@ -87,6 +88,7 @@ async def run_backtest(
     job_id: str,
     *,
     stream_bars: BarBatchStreamer = iter_bar_batches,
+    load_funding_rows: FundingRowLoader | None = None,
 ) -> dict[str, Any]:
     """Execute the durable backtest job. Does not commit (the worker scope commits)."""
     job = await session.get(Job, job_id)
@@ -151,6 +153,7 @@ async def run_backtest(
             config=config,
             meta=meta,
             stream_bars=stream_bars,
+            load_funding_rows=load_funding_rows,
             capital_execution=capital_execution,
             execution_key=manifest.execution_key,
             item_count=item_count,
@@ -320,6 +323,7 @@ async def _prepare_and_run_strategy(
     config: StrategyConfig,
     meta: dict[str, Any],
     stream_bars: BarBatchStreamer,
+    load_funding_rows: FundingRowLoader | None,
     capital_execution: dict[str, Any] | None,
     execution_key: str,
     item_count: int,
@@ -394,6 +398,22 @@ async def _prepare_and_run_strategy(
             f"{list(indicator_plan.unresolved) or 'no computable entry signal'}.",
         )
 
+    # F-11: resolve the pinned funding source (a ``funding_rate`` Research revision) into an
+    # available-time-safe schedule the engine applies as a real position cost. Funding OFF
+    # resolves to None (byte-identical to pre-F-11). A funding source the engine cannot
+    # interpret (not Approved / wrong scope-category / hash mismatch / unreadable native
+    # schema) is a hard terminal failure — never a silent zero-cost run (doc 12 §8.4).
+    funding_kwargs = {"load_rows": load_funding_rows} if load_funding_rows is not None else {}
+    try:
+        funding_schedule = await resolve_funding_schedule(
+            session, config.data.funding, **funding_kwargs
+        )
+    except FundingSourceInvalid as exc:
+        return _PrepFailure(
+            RunFailureCode.FUNDING_SOURCE_INVALID,
+            f"Strategy item '{item_id}': {exc.args[0] if exc.args else exc}",
+        )
+
     base_timeframe = await md_repo.get_base_timeframe_for_revision(session, market_revision_id)
     # GAP-02: apply the pinned shared-pool capital model from the manifest snapshot
     # (doc 13 §8.3/§8.4). Independent / absent allocation resolves to None, so the engine
@@ -409,6 +429,7 @@ async def _prepare_and_run_strategy(
             indicator_plan=indicator_plan,
             timeframe=base_timeframe,
             allocation=allocation,
+            funding=funding_schedule,
         )
     except Exception as exc:
         return _PrepFailure(

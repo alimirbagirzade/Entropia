@@ -52,6 +52,10 @@ class RunFailureCode(StrEnum):
     INVALID_BACKTEST_RANGE = "RUN_FAILED_INVALID_BACKTEST_RANGE"
     INSTRUMENT_MISMATCH = "RUN_FAILED_INSTRUMENT_MISMATCH"
     EMPTY_FILTERED_RANGE = "RUN_FAILED_EMPTY_FILTERED_RANGE"
+    # F-11: a funding-enabled strategy's pinned Research revision could not be resolved
+    # into a usable funding source (not Approved / wrong scope-category / hash mismatch /
+    # unreadable native schema). Fail-closed — never a silent zero-cost run.
+    FUNDING_SOURCE_INVALID = "RUN_FAILED_FUNDING_SOURCE_INVALID"
 
 
 RUN_ACTIVE_STATES: frozenset[BacktestRunState] = frozenset(

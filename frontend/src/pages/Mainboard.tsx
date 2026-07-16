@@ -8,6 +8,8 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { StrategyDetailsPanel } from "@/components/StrategyDetailsPanel";
 import {
   EXTERNAL_DRAFT_KINDS,
+  formatHeadlineMetric,
+  HEADLINE_METRICS,
   isReadyForRun,
   itemKindLabel,
   readyStatusText,
@@ -531,7 +533,7 @@ function latestResultLine(s: NonNullable<LatestResultSummary["summary"]>): strin
 function LatestResultCard({ result }: { result: LatestResultSummary }) {
   const s = result.summary;
   return (
-    <div style={{ display: "grid", gap: 6 }}>
+    <div style={{ display: "grid", gap: 8 }}>
       <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
         <Link to={`/backtest/run?result=${encodeURIComponent(result.result_id)}`}>
           {result.result_id}
@@ -543,9 +545,22 @@ function LatestResultCard({ result }: { result: LatestResultSummary }) {
           />
         )}
       </div>
+      {/* Symbol / timeframe / trade count / date are preserved (F-17), then the
+          five required headline metrics render inline from the consumed headline
+          projection. A missing metric shows an explicit N/A, never disappears. */}
       <div style={{ fontSize: 13 }}>
         {s ? latestResultLine(s) : "Summary not available for this result."}
       </div>
+      {s && (
+        <div className="metric-grid" role="group" aria-label="Headline metrics">
+          {HEADLINE_METRICS.map((metric) => (
+            <div className="metric-box" key={metric.key}>
+              <div className="metric-label">{metric.label}</div>
+              <div className="metric-value">{formatHeadlineMetric(s.headline, metric)}</div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

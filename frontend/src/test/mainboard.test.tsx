@@ -43,6 +43,109 @@ const DELETE_RESULT = { root_id: "root_strat", deletion_state: "soft_deleted" };
 const SNAPSHOT_RESULT = { snapshot_id: "snap_1", composition_hash: "hash_abc", item_count: 1 };
 const EXTERNAL_DRAFT = { draft_id: "wodraft_1", kind: "trading_signal", unsaved: true };
 
+// UI-15: a RUN-runnable composition + the durable succeeded run it admits + the
+// immutable Result the run produced. RUN admits inline and this Result renders
+// under the Mainboard via the shared RunProgress → ResultDetail path.
+const READY_MAINBOARD = {
+  ...MAINBOARD,
+  ready_summary: { state: "ready", report_id: "rr_1" },
+};
+
+const ADMISSION = {
+  run_id: "btrun_1",
+  state: "queued",
+  manifest_hash: "mh_1",
+  composition_fingerprint: "fp_1",
+  ready_report_id: "rr_1",
+  retry_of_run_id: null,
+  warning_count: 2,
+  job_id: "job_1",
+};
+
+const SUCCEEDED_RUN = {
+  run_id: "btrun_1",
+  composition_id: "ws_1",
+  state: "succeeded",
+  manifest_hash: "mh_1",
+  composition_fingerprint: "fp_1",
+  composition_snapshot_id: null,
+  ready_report_id: "rr_1",
+  retry_of_run_id: null,
+  result_id: "res_1",
+  failure_code: null,
+  failure_message: null,
+  job_id: "job_1",
+  created_at: "2026-07-06T05:30:00+00:00",
+  started_at: "2026-07-06T05:30:05+00:00",
+  finished_at: "2026-07-06T05:31:00+00:00",
+};
+
+const RESULT_DETAIL = {
+  result_id: "res_1",
+  run_id: "btrun_1",
+  composition_id: "ws_1",
+  composition_fingerprint: "fp_1",
+  manifest_hash: "mh_1",
+  engine_version: "backtest-engine-v2",
+  summary: {
+    symbol: "BTCUSD",
+    timeframe: "15m",
+    period_start: "2020-01-01",
+    period_end: "2025-01-01",
+    total_trades: 418,
+    headline: "Net profit +84.20%",
+  },
+  metrics: [
+    {
+      key: "net_profit",
+      label: "Net Profit",
+      unit: "percent",
+      value_format: "signed_percent",
+      value: "84.2",
+      availability: "computed",
+      formula_version: "v1",
+    },
+  ],
+  manifest: {
+    manifest_hash: "mh_1",
+    execution_key: "exec_1",
+    engine_version: "backtest-engine-v2",
+    pinned_item_count: 1,
+  },
+  manifest_excerpt: {
+    result_id: "res_1",
+    composition_snapshot_id: "snap_1",
+    strategy_revision_refs: [],
+    external_work_refs: [],
+    package_revision_refs: [],
+    market_data_revision: null,
+    research_data_revision_refs: [],
+    portfolio_allocation_plan_revision_id: null,
+    execution_context: {
+      execution_key: "exec_1",
+      composition_fingerprint: "fp_1",
+      capital_execution: null,
+    },
+    engine_contract_version: "backtest-engine-v2",
+    artifact_context: null,
+    completed_at_utc: "2025-01-01T00:00:00+00:00",
+    artifact_availability: { counts: { trades: 418 }, any_available: true },
+  },
+  artifact_counts: { trades: 418 },
+};
+
+const RESULT_METRICS_VIEW = {
+  result_id: "res_1",
+  profile: {
+    profile_id: "system_default",
+    scope: "system_default",
+    is_personal: false,
+    is_locked: false,
+    registry_version: "v1",
+  },
+  metrics: RESULT_DETAIL.metrics,
+};
+
 // F-15: the generic create/revise/attach work-object routes are no longer wired
 // to any user-facing control (the raw-JSON "Advanced" card was removed), so the
 // stub set no longer needs them.
@@ -128,7 +231,7 @@ describe("Mainboard", () => {
     ).toBeTruthy();
   });
 
-  it("unlocks RUN as a navigable link once the composition is ready", async () => {
+  it("unlocks RUN as an inline-admission button once the composition is ready (UI-15)", async () => {
     stubRoutes({
       "GET /mainboards/default": {
         ...MAINBOARD,
@@ -136,10 +239,11 @@ describe("Mainboard", () => {
       },
     });
     renderPage();
-    const run = await screen.findByRole("link", { name: "RUN" });
-    expect(run.getAttribute("href")).toBe("/backtest/run");
-    // The disabled placeholder is gone once RUN is a real link.
-    expect(screen.queryByRole("button", { name: "RUN" })).toBeNull();
+    // UI-15: RUN no longer navigates to a separate page — it admits the run in
+    // place, so the unlocked control is an enabled button, never a link.
+    const run = await screen.findByRole("button", { name: "RUN" });
+    expect(run).not.toBeDisabled();
+    expect(screen.queryByRole("link", { name: "RUN" })).toBeNull();
   });
 
   it("unlocks RUN when the composition is ready with warnings (warnings never block)", async () => {
@@ -150,8 +254,9 @@ describe("Mainboard", () => {
       },
     });
     renderPage();
-    const run = await screen.findByRole("link", { name: "RUN" });
-    expect(run.getAttribute("href")).toBe("/backtest/run");
+    const run = await screen.findByRole("button", { name: "RUN" });
+    expect(run).not.toBeDisabled();
+    expect(screen.queryByRole("link", { name: "RUN" })).toBeNull();
   });
 
   it("renders the latest succeeded result with its summary line and deep-link", async () => {
@@ -508,5 +613,58 @@ describe("Mainboard", () => {
     expect(attachBody.root_id).toBe("root_new");
     expect(attachBody.revision_id).toBe("wor_new1");
     expect(headersOf(attachCall?.[1])["Idempotency-Key"]).toBeTruthy();
+  });
+
+  it("admits a run inline from RUN and renders progress + the full result under the Mainboard (UI-15)", async () => {
+    // Route-aware order: the artifacts + metrics fragments both contain the bare
+    // result fragment, so they must precede "GET /backtest-results/res_1".
+    const fetchMock = stubRoutes({
+      "GET /mainboards/default": READY_MAINBOARD,
+      "POST /mainboard-compositions/ws_1/backtest-runs": ADMISSION,
+      "GET /backtest-runs/btrun_1": SUCCEEDED_RUN,
+      "GET /backtest-results/res_1/artifacts/trade_ledger": {
+        result_id: "res_1",
+        artifact_type: "trade_ledger",
+        items: [],
+        next_cursor: null,
+      },
+      "GET /backtest-results/res_1/artifacts/diagnostics": {
+        result_id: "res_1",
+        artifact_type: "diagnostics",
+        items: [],
+        next_cursor: null,
+      },
+      "GET /backtest-results/res_1/metrics": RESULT_METRICS_VIEW,
+      "GET /backtest-results/res_1": RESULT_DETAIL,
+    });
+    renderPage();
+
+    // RUN is admittable in place; clicking it fires the 202 admission (never a
+    // navigation) with a fresh Idempotency-Key — the contract is unchanged.
+    fireEvent.click(await screen.findByRole("button", { name: "RUN" }));
+    await vi.waitFor(() => {
+      const call = fetchMock.mock.calls.find(
+        (c) =>
+          String(c[0]).includes("/mainboard-compositions/ws_1/backtest-runs") &&
+          (c[1]?.method ?? "") === "POST",
+      );
+      expect(call).toBeTruthy();
+      expect(headersOf(call?.[1])["Idempotency-Key"]).toBeTruthy();
+    });
+
+    // The durable run progress renders inline under the Mainboard (not a page).
+    expect(await screen.findByText("Run status")).toBeTruthy();
+    expect(await screen.findByText("succeeded")).toBeTruthy();
+    // Readiness warnings surface beside the inline panel (warnings never block).
+    expect(screen.getByText("2 readiness warning(s)")).toBeTruthy();
+
+    // The full immutable Result is preserved inline — Metrics + Charts + Trade
+    // List + Diagnostics + Data Export all render via the shared ResultDetail.
+    expect(await screen.findByRole("heading", { name: /Backtest Result/ })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Metrics" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Charts" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Trade List" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Diagnostics" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Data Export" })).toBeTruthy();
   });
 });

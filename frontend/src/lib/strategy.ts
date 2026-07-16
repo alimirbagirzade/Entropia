@@ -56,6 +56,24 @@ export interface SourceProvenance {
   inherited_dependencies: Record<string, unknown>;
 }
 
+// GET /strategy-drafts (queries list_strategy_drafts, F-18 durable/discoverable).
+// The actor's own drafts, newest edit first; Admins see every owner. is_attached =
+// the strategy root is on a Mainboard; has_revision = a Save produced an immutable
+// revision. Drafts never leak across users (owner-scoped server-side).
+export interface StrategyDraftSummary {
+  draft_id: string;
+  strategy_root_id: string | null;
+  display_name: string;
+  lifecycle_state: string;
+  is_dirty: boolean;
+  row_version: number;
+  last_saved_revision_id: string | null;
+  has_revision: boolean;
+  is_attached: boolean;
+  owner_principal_id: string | null;
+  updated_at: string | null;
+}
+
 // GET /strategy-drafts/{id} (queries get_strategy_draft).
 export interface StrategyDraft {
   draft_id: string;
@@ -233,6 +251,17 @@ export function validationStatusTone(status: string): Tone {
 // ---------------------------------------------------------------------------
 // Query hooks
 // ---------------------------------------------------------------------------
+
+// F-18: the actor's discoverable drafts (removes the ?draft= URL dependency — a
+// draft is now findable after a browser restart / re-login). No dedicated SSE
+// event → swept by the resource.changed full refresh with every other ["strategy"]
+// key; own create/save/clear invalidate it.
+export function useMyStrategyDrafts() {
+  return useQuery({
+    queryKey: ["strategy", "drafts", "mine"],
+    queryFn: () => api.get<StrategyDraftSummary[]>("/strategy-drafts"),
+  });
+}
 
 export function useStrategyDraft(draftId: string | null) {
   return useQuery({

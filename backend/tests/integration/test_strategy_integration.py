@@ -24,6 +24,7 @@ from sqlalchemy import select
 from entropia.application.commands import mainboard as mb_cmd
 from entropia.application.commands import strategy_draft as strat_cmd
 from entropia.application.queries import mainboard as mb_query
+from entropia.application.queries import strategy as strat_query
 from entropia.domain.identity import Actor
 from entropia.domain.lifecycle.enums import DeletionState, PrincipalType, Role
 from entropia.infrastructure.postgres.models import (
@@ -41,6 +42,7 @@ from entropia.shared.errors import (
     SizingMethodNotExclusiveError,
     StrategyDraftConflictError,
     TriggerSourceConditionRequiredError,
+    UnauthenticatedError,
 )
 
 pytestmark = pytest.mark.integration
@@ -404,3 +406,94 @@ async def test_repeated_idempotency_key_returns_cached_revision(session) -> None
     assert first["strategy_revision_id"] == second["strategy_revision_id"]
     revisions = list(await strat_repo.list_strategy_revisions(session, draft["strategy_root_id"]))
     assert len(revisions) == 1  # no second revision created
+
+
+# --------------------------------------------------------------------------- #
+# F-18 — durable/discoverable drafts: list-mine query                          #
+# --------------------------------------------------------------------------- #
+
+
+async def test_list_strategy_drafts_returns_owner_drafts_newest_first(session) -> None:
+    await _seed_principals(session)
+    first = await _new_draft(session, USER1, payload=_valid_payload("Alpha"))
+    second = await _new_draft(session, USER1, payload=_valid_payload("Beta"))
+
+    listed = await strat_query.list_strategy_drafts(session, USER1)
+
+    ids = [row["draft_id"] for row in listed]
+    assert first["draft_id"] in ids and second["draft_id"] in ids
+    # Newest edit first: ULID draft ids sort desc as a stable same-timestamp tiebreak.
+    assert ids.index(max(first["draft_id"], second["draft_id"])) == 0
+    row = next(r for r in listed if r["draft_id"] == first["draft_id"])
+    assert row["display_name"] == "Integration Strategy"
+    assert row["has_revision"] is False  # AT-01: unsaved draft has no revision
+    assert row["is_attached"] is False
+    assert row["is_dirty"] is True
+    assert row["owner_principal_id"] == "user_1"
+
+
+async def test_list_strategy_drafts_never_leaks_across_users(session) -> None:
+    await _seed_principals(session)
+    draft = await _new_draft(session, USER1)
+
+    mine = await strat_query.list_strategy_drafts(session, USER1)
+    theirs = await strat_query.list_strategy_drafts(session, USER2)
+
+    assert draft["draft_id"] in {row["draft_id"] for row in mine}
+    assert draft["draft_id"] not in {row["draft_id"] for row in theirs}
+
+
+async def test_list_strategy_drafts_admin_sees_every_owner(session) -> None:
+    await _seed_principals(session)
+    d1 = await _new_draft(session, USER1)
+    d2 = await _new_draft(session, USER2)
+
+    admin = Actor(principal_id="admin_1", principal_type=PrincipalType.HUMAN, role=Role.ADMIN)
+    listed = await strat_query.list_strategy_drafts(session, admin)
+
+    ids = {row["draft_id"] for row in listed}
+    assert d1["draft_id"] in ids and d2["draft_id"] in ids
+
+
+async def test_list_strategy_drafts_flags_saved_and_attached(session) -> None:
+    await _seed_principals(session)
+    draft = await _new_draft(session, USER1)
+    workspace_id = (await mb_query.get_default_mainboard(session, USER1))["workspace_id"]
+    saved = await strat_cmd.save_strategy_revision(
+        session, USER1, draft_id=draft["draft_id"], expected_draft_row_version=0
+    )
+    await session.flush()
+    await mb_cmd.attach_mainboard_item(
+        session,
+        USER1,
+        workspace_id=workspace_id,
+        root_id=saved["strategy_root_id"],
+        revision_id=saved["mirror_revision_id"],
+    )
+    await session.flush()
+
+    row = next(
+        r
+        for r in await strat_query.list_strategy_drafts(session, USER1)
+        if r["draft_id"] == draft["draft_id"]
+    )
+    assert row["has_revision"] is True
+    assert row["is_attached"] is True
+    assert row["last_saved_revision_id"] == saved["strategy_revision_id"]
+
+
+async def test_list_strategy_drafts_excludes_soft_deleted(session) -> None:
+    await _seed_principals(session)
+    draft = await _new_draft(session, USER1)
+    await mb_cmd.soft_delete_work_object(session, USER1, root_id=draft["strategy_root_id"])
+    await session.flush()
+
+    listed = await strat_query.list_strategy_drafts(session, USER1)
+    assert draft["draft_id"] not in {row["draft_id"] for row in listed}
+
+
+async def test_list_strategy_drafts_rejects_guest(session) -> None:
+    await _seed_principals(session)
+    await _new_draft(session, USER1)
+    with pytest.raises(UnauthenticatedError):
+        await strat_query.list_strategy_drafts(session, Actor.anonymous())

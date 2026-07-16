@@ -17,7 +17,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from entropia.domain.lifecycle.enums import DeletionState
@@ -31,6 +31,7 @@ from entropia.domain.strategy.enums import (
 )
 from entropia.infrastructure.postgres.models import (
     EntityRegistry,
+    MainboardWorkingItem,
     StrategyEditorDraft,
     StrategyRevision,
     StrategyRevisionReference,
@@ -209,6 +210,46 @@ async def get_strategy_draft(session: AsyncSession, draft_id: str) -> StrategyEd
     return await session.get(StrategyEditorDraft, draft_id)
 
 
+async def list_strategy_drafts_for_owner(
+    session: AsyncSession,
+    *,
+    owner_principal_id: str | None,
+    include_all: bool,
+    limit: int = 100,
+) -> Sequence[tuple[StrategyEditorDraft, StrategyRoot, str | None, bool]]:
+    """The actor's editor drafts on ACTIVE strategy roots, newest edit first (F-18).
+
+    Joins draft -> strategy_root -> entity_registry so each row carries the display
+    name, the registry owner (for a no-leak Admin-sees-all view), and a per-draft
+    ``is_attached`` flag (an EXISTS over ``mainboard_working_item`` on the same
+    root) — computed in ONE statement (no N+1). Soft-deleted roots are excluded;
+    ``include_all`` widens the scope to every owner (Admin) instead of a single
+    principal. Returns ``(draft, strategy_root, owner_principal_id, is_attached)``.
+    """
+    attached = (
+        exists()
+        .where(MainboardWorkingItem.work_object_root_id == StrategyEditorDraft.strategy_root_id)
+        .correlate(StrategyEditorDraft)
+    )
+    stmt = (
+        select(
+            StrategyEditorDraft,
+            StrategyRoot,
+            EntityRegistry.owner_principal_id,
+            attached.label("is_attached"),
+        )
+        .join(StrategyRoot, StrategyRoot.entity_id == StrategyEditorDraft.strategy_root_id)
+        .join(EntityRegistry, EntityRegistry.entity_id == StrategyRoot.entity_id)
+        .where(EntityRegistry.deletion_state == DeletionState.ACTIVE)
+        .order_by(StrategyEditorDraft.updated_at.desc(), StrategyEditorDraft.draft_id.desc())
+        .limit(limit)
+    )
+    if not include_all:
+        stmt = stmt.where(EntityRegistry.owner_principal_id == owner_principal_id)
+    rows = (await session.execute(stmt)).all()
+    return [(draft, root, owner, bool(is_attached)) for draft, root, owner, is_attached in rows]
+
+
 async def list_references(
     session: AsyncSession, strategy_revision_id: str
 ) -> Sequence[StrategyRevisionReference]:
@@ -237,5 +278,6 @@ __all__ = [
     "get_strategy_revision",
     "get_strategy_root",
     "list_references",
+    "list_strategy_drafts_for_owner",
     "list_strategy_revisions",
 ]

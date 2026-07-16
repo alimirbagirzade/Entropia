@@ -161,6 +161,13 @@ async def clear_strategy_draft(
 # --------------------------------------------------------------------------- #
 
 
+@router.get("/strategy-drafts")
+async def list_strategy_drafts(
+    ctx: RequestContext = Depends(request_context),
+) -> list[dict[str, Any]]:
+    return await strat_query.list_strategy_drafts(ctx.session, ctx.actor)
+
+
 @router.get("/strategy-drafts/{draft_id}")
 async def get_strategy_draft(
     draft_id: str,

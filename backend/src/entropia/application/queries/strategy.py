@@ -120,6 +120,40 @@ async def list_strategy_revisions(
     ]
 
 
+async def list_strategy_drafts(session: AsyncSession, actor: Actor) -> list[dict[str, Any]]:
+    """List the actor's editor drafts, newest edit first (F-18 durable/discoverable).
+
+    A Guest is rejected with 401 (``require_authenticated``). A non-Admin sees ONLY
+    drafts on strategy roots they own — drafts never leak across users (the repo
+    filters ``owner_principal_id`` and an Admin sees every owner). Each row carries
+    ``is_attached`` (the root is on a Mainboard) and ``has_revision`` (a Save has
+    produced an immutable revision) so the UI can gate attach/delete without a
+    second round-trip. Soft-deleted strategies are excluded.
+    """
+    require_authenticated(actor)
+    rows = await strat_repo.list_strategy_drafts_for_owner(
+        session,
+        owner_principal_id=actor.principal_id,
+        include_all=actor.is_admin,
+    )
+    return [
+        {
+            "draft_id": draft.draft_id,
+            "strategy_root_id": draft.strategy_root_id,
+            "display_name": root.display_name,
+            "lifecycle_state": str(root.lifecycle_state),
+            "is_dirty": draft.is_dirty,
+            "row_version": draft.row_version,
+            "last_saved_revision_id": draft.last_saved_revision_id,
+            "has_revision": root.current_revision_id is not None,
+            "is_attached": is_attached,
+            "owner_principal_id": owner,
+            "updated_at": draft.updated_at.isoformat() if draft.updated_at else None,
+        }
+        for draft, root, owner, is_attached in rows
+    ]
+
+
 async def _owner_of(session: AsyncSession, strategy_root_id: str | None) -> str | None:
     if strategy_root_id is None:
         return None
@@ -131,5 +165,6 @@ __all__ = [
     "get_strategy",
     "get_strategy_draft",
     "get_strategy_revision",
+    "list_strategy_drafts",
     "list_strategy_revisions",
 ]

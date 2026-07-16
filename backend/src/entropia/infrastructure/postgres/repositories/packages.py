@@ -46,6 +46,7 @@ async def create_package(
     input_contract: dict[str, Any],
     output_contract: dict[str, Any],
     dependency_snapshot: dict[str, Any],
+    implementation: dict[str, Any] | None = None,
     visibility_scope: VisibilityScope = VisibilityScope.PRIVATE,
     rationale_family_snapshot: dict[str, Any] | None = None,
     validation_state: PackageValidationState = PackageValidationState.PENDING,
@@ -93,6 +94,7 @@ async def create_package(
         validation_state=validation_state,
         approval_state=approval_state,
         validation_summary=None,
+        implementation=implementation,
         content_hash=content_hash(
             {
                 "input_contract": input_contract,
@@ -122,6 +124,7 @@ async def append_package_revision(
     approval_state: ApprovalState = ApprovalState.DRAFT,
     change_note: str | None = None,
     supersedes_revision_id: str | None = None,
+    implementation: dict[str, Any] | None = None,
 ) -> PackageRevision:
     """Insert revision N+1, advance the head pointer + row_version."""
     prior_no = await _max_revision_no(session, root.entity_id)
@@ -139,6 +142,7 @@ async def append_package_revision(
         validation_state=validation_state,
         approval_state=approval_state,
         validation_summary=None,
+        implementation=implementation,
         content_hash=content_hash(
             {
                 "input_contract": input_contract,

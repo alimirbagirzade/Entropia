@@ -169,11 +169,26 @@ async def test_full_flow_create_precheck_draft_publish(session) -> None:
     assert draft["package_root_id"] is not None
     assert draft["state"] == str(CreatePackageState.DRAFT_CREATED)
 
+    # F-14: the draft revision carries a real, loadable, executable implementation —
+    # a hash without an implementation could never survive validation.
+    draft_revision = await pkg_repo.get_revision(session, draft["draft_revision_id"])
+    assert draft_revision is not None and draft_revision.implementation is not None
+    impl = draft_revision.implementation
+    assert impl["executable"] is True and impl["entry_symbol"] == "build_signal_plan"
+    loaded: dict = {"__builtins__": {}}
+    exec(compile(impl["source"], "<rev>", "exec"), loaded)
+    plan = loaded["build_signal_plan"]()
+    assert plan["output_kind"] == "directional_signal" and plan["primitives"] == ["ta.rsi"]
+
     # GAP-07: a draft cannot be approved without a passing validation run.
     validated = await cp_cmd.start_package_validation_run(session, OWNER, request_id=request_id)
     await session.commit()
     assert validated["status"] == str(ValidationRunStatus.PASSED)
     assert validated["state"] == str(CreatePackageState.ELIGIBLE_FOR_APPROVAL)
+    # F-14: validation PASSED only because the sandbox loaded + executed this implementation.
+    runtime_check = next(c for c in validated["checks"] if c["check"] == "runtime")
+    assert runtime_check["status"] == "passed"
+    assert runtime_check["artifacts"]["execution_status"] == "executed"
 
     before_decisions = await _count(session, ApprovalDecision)
     published = await cp_cmd.approve_and_publish(

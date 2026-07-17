@@ -343,6 +343,52 @@ def test_strategy_supported_scaling_does_not_block() -> None:
     assert Code.STRATEGY_SCALING_UNSUPPORTED.value not in _codes(absent)
 
 
+def test_strategy_unsupported_leverage_blocks() -> None:
+    # F-07f: 'Cross' margin mode needs a portfolio-level risk model the single-position
+    # bar-replay engine does not implement → fails closed (opens no position) → BLOCKER.
+    payload = _strategy_payload()
+    payload["position_sizing"] = {
+        "method": "base_position_size",
+        "base_position_size": "1.0",
+        "leverage_mode": "cross",
+        "leverage": "2",
+    }
+    result = evaluate_readiness(
+        [_strategy_item(payload=payload)], allocation_enabled=False, allocation_issues=[]
+    )
+    assert Code.STRATEGY_LEVERAGE_UNSUPPORTED.value in _codes(result)
+    assert result.state == ReadinessState.NOT_READY
+
+
+def test_strategy_supported_leverage_does_not_block() -> None:
+    # 'No Leverage' and 'Isolated' with a positive multiplier are modelled; the default
+    # payload (isolated, leverage 1x) likewise raises no leverage blocker.
+    payload = _strategy_payload()
+    payload["position_sizing"] = {
+        "method": "base_position_size",
+        "base_position_size": "1.0",
+        "leverage_mode": "no_leverage",
+        "leverage": "5",
+    }
+    no_leverage = evaluate_readiness(
+        [_strategy_item(payload=payload)], allocation_enabled=False, allocation_issues=[]
+    )
+    assert Code.STRATEGY_LEVERAGE_UNSUPPORTED.value not in _codes(no_leverage)
+    isolated_payload = _strategy_payload()
+    isolated_payload["position_sizing"] = {
+        "method": "base_position_size",
+        "base_position_size": "1.0",
+        "leverage_mode": "isolated",
+        "leverage": "2",
+    }
+    isolated = evaluate_readiness(
+        [_strategy_item(payload=isolated_payload)], allocation_enabled=False, allocation_issues=[]
+    )
+    assert Code.STRATEGY_LEVERAGE_UNSUPPORTED.value not in _codes(isolated)
+    default = evaluate_readiness([_strategy_item()], allocation_enabled=False, allocation_issues=[])
+    assert Code.STRATEGY_LEVERAGE_UNSUPPORTED.value not in _codes(default)
+
+
 def test_strategy_unsupported_restriction_filter_blocks() -> None:
     # F-07e: a volatility filter needs an ATR/indicator data series OHLCV alone cannot
     # supply → the engine fails closed (opens no position) → Ready Check BLOCKER.

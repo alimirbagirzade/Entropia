@@ -7,8 +7,10 @@ describe("navigation skeleton", () => {
     // Admin Provisioning /panel/provisioning) + 1 post-V1 Instrument Registry
     // (/instruments, GAP-16) − 1 (UI-03: "Add Outsource Signal" dropped from the
     // primary-nav registry; it is now the Mainboard Add-menu nested submenu. Its
-    // /outsource-signal route stays a deep-link in App.tsx, just not in NAV).
-    expect(ALL_NAV_ITEMS.length).toBe(24);
+    // /outsource-signal route stays a deep-link in App.tsx, just not in NAV)
+    // + 1 (UI-19: the combined Panel entry splits into distinct Management and
+    // Logs nav destinations; bare /panel redirects and is not a registry item).
+    expect(ALL_NAV_ITEMS.length).toBe(25);
   });
 
   it("has a Mainboard home route", () => {
@@ -18,6 +20,33 @@ describe("navigation skeleton", () => {
   it("groups items into sections", () => {
     expect(NAV.length).toBeGreaterThan(0);
     for (const section of NAV) expect(section.items.length).toBeGreaterThan(0);
+  });
+
+  it("routes Panel Logs and Management to distinct destinations (UI-19)", () => {
+    // Acceptance: the two Panel work contexts must not resolve to the same page.
+    // Both the flat registry and the mockup menu-bar leaves are checked.
+    const registryLogs = ALL_NAV_ITEMS.find((i) => i.path === "/panel/logs");
+    const registryManagement = ALL_NAV_ITEMS.find((i) => i.path === "/panel/management");
+    expect(registryLogs).toBeDefined();
+    expect(registryManagement).toBeDefined();
+    expect(registryLogs?.path).not.toBe(registryManagement?.path);
+    // The combined /panel entry is gone from the registry (it only redirects now).
+    expect(ALL_NAV_ITEMS.some((i) => i.path === "/panel")).toBe(false);
+
+    const panelGroup = MENU_BAR.find((group) => group.label === "Panel");
+    const leaves: MenuLink[] = [];
+    const walk = (items: MenuLink[] | undefined) => {
+      for (const item of items ?? []) {
+        if (item.items) walk(item.items);
+        else leaves.push(item);
+      }
+    };
+    walk(panelGroup?.items);
+    const logs = leaves.find((leaf) => leaf.label === "Logs");
+    const management = leaves.find((leaf) => leaf.label === "Management");
+    expect(logs?.path).toBe("/panel/logs");
+    expect(management?.path).toBe("/panel/management");
+    expect(logs?.path).not.toBe(management?.path);
   });
 });
 

@@ -62,7 +62,10 @@ export const NAV: NavSection[] = [
     title: "Agent & Admin",
     items: [
       { path: "/analysis-lab", label: "Analysis Lab", stage: 6 },
-      { path: "/panel", label: "Panel / Management / Logs", stage: 6, adminOnly: true },
+      // UI-19: the combined Panel is two distinct work contexts, one nav entry
+      // each. Bare /panel still resolves (App.tsx redirects it to Management).
+      { path: "/panel/management", label: "Panel / Management", stage: 6, adminOnly: true },
+      { path: "/panel/logs", label: "Panel / Logs", stage: 6, adminOnly: true },
       // First-Admin provisioning onboarding (post-V1 TIER 2). NOT adminOnly: the
       // first Admin is not yet an Admin, so the page must be reachable pre-elevation.
       { path: "/panel/provisioning", label: "Admin Provisioning", stage: 8 },
@@ -242,8 +245,8 @@ export const MENU_BAR: MenuGroup[] = [
     label: "Panel",
     adminOnly: true,
     items: [
-      { label: "Logs", path: "/panel", adminOnly: true },
-      { label: "Management", path: "/panel", adminOnly: true },
+      { label: "Logs", path: "/panel/logs", adminOnly: true },
+      { label: "Management", path: "/panel/management", adminOnly: true },
       { label: "Trash", path: "/trash", adminOnly: true },
     ],
   },

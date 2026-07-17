@@ -100,6 +100,48 @@ describe("mergeFlatSections", () => {
     expect((order.limit as Record<string, unknown>).price_rule).toBe("entry_signal_price");
   });
 
+  it("emits the stop subtree only for stop / stop-limit order types (F-07h)", () => {
+    // A stop order carries ONLY the trigger — limit fields never travel (§6.3).
+    const stop = extractFlatSections({
+      data: {
+        order_config: {
+          type: "stop_order",
+          stop: { activation_rule: "signal_price_plus_offset", trigger_offset: "2" },
+        },
+      },
+    });
+    expect(stop.data.stop_activation_rule).toBe("signal_price_plus_offset");
+    expect(stop.data.stop_trigger_offset).toBe("2");
+    const stopMerged = mergeFlatSections({}, stop) as Record<string, Record<string, unknown>>;
+    const stopOrder = stopMerged.data.order_config as Record<string, unknown>;
+    expect((stopOrder.stop as Record<string, unknown>).activation_rule).toBe(
+      "signal_price_plus_offset",
+    );
+    expect((stopOrder.stop as Record<string, unknown>).trigger_offset).toBe("2");
+    expect(stopOrder.limit).toBeUndefined();
+
+    // A stop-limit carries BOTH subtrees; a market order carries neither.
+    const stopLimit = extractFlatSections({
+      data: {
+        order_config: {
+          type: "stop_limit_order",
+          stop: { activation_rule: "entry_signal_price" },
+          limit: { price_rule: "entry_signal_price" },
+        },
+      },
+    });
+    const stopLimitMerged = mergeFlatSections({}, stopLimit) as Record<
+      string,
+      Record<string, unknown>
+    >;
+    const stopLimitOrder = stopLimitMerged.data.order_config as Record<string, unknown>;
+    expect(stopLimitOrder.stop).toBeDefined();
+    expect(stopLimitOrder.limit).toBeDefined();
+    const market = extractFlatSections({ data: { order_config: { type: "market_order" } } });
+    const marketMerged = mergeFlatSections({}, market) as Record<string, Record<string, unknown>>;
+    expect((marketMerged.data.order_config as Record<string, unknown>).stop).toBeUndefined();
+  });
+
   it("sends decimals as strings and omits blank optionals", () => {
     const form = extractFlatSections({});
     form.data.initial_capital = "10000.50";
@@ -163,6 +205,24 @@ describe("DataExecutionCard", () => {
     fireEvent.change(screen.getByLabelText(/Order type/), {
       target: { value: "limit_order" },
     });
+    expect(screen.getByLabelText(/Limit price rule/)).toBeTruthy();
+  });
+
+  it("reveals the stop trigger fields for stop / stop-limit order types (F-07h)", () => {
+    render(<DataExecutionCard payload={{}} pending={false} onApply={() => {}} />);
+    expect(screen.queryByLabelText(/Stop activation rule/)).toBeNull();
+    // Stop Order: trigger fields visible, limit panel stays hidden (§6.3).
+    fireEvent.change(screen.getByLabelText(/Order type/), {
+      target: { value: "stop_order" },
+    });
+    expect(screen.getByLabelText(/Stop activation rule/)).toBeTruthy();
+    expect(screen.getByLabelText(/Stop trigger offset/)).toBeTruthy();
+    expect(screen.queryByLabelText(/Limit price rule/)).toBeNull();
+    // Stop-Limit: BOTH the trigger fields and the limit panel are visible.
+    fireEvent.change(screen.getByLabelText(/Order type/), {
+      target: { value: "stop_limit_order" },
+    });
+    expect(screen.getByLabelText(/Stop activation rule/)).toBeTruthy();
     expect(screen.getByLabelText(/Limit price rule/)).toBeTruthy();
   });
 

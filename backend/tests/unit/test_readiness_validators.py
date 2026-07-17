@@ -227,8 +227,9 @@ def test_strategy_supported_execution_timing_does_not_block() -> None:
 
 
 def test_strategy_unsupported_order_type_blocks() -> None:
-    # F-07b: a Stop order carries no trigger price in the schema → the engine fails closed
-    # (opens no position) → Ready Check surfaces STRATEGY_ORDER_TYPE_UNSUPPORTED.
+    # F-07h: a Stop order WITHOUT a stop trigger subtree is unexecutable → the engine
+    # fails closed (opens no position) → Ready Check surfaces
+    # STRATEGY_ORDER_TYPE_UNSUPPORTED (the trigger-missing acceptance case).
     payload = _strategy_payload()
     payload["data"]["order_config"] = {"type": "stop_order"}
     result = evaluate_readiness(
@@ -236,6 +237,37 @@ def test_strategy_unsupported_order_type_blocks() -> None:
     )
     assert Code.STRATEGY_ORDER_TYPE_UNSUPPORTED.value in _codes(result)
     assert result.state == ReadinessState.NOT_READY
+
+
+def test_strategy_stop_orders_with_trigger_do_not_block() -> None:
+    # F-07h: a Stop order with a valid trigger and a Stop-Limit with trigger + modelled
+    # limit rule are now executed by the engine → no order-type blocker.
+    stop_payload = _strategy_payload()
+    stop_payload["data"]["order_config"] = {
+        "type": "stop_order",
+        "stop": {"activation_rule": "signal_price_plus_offset", "trigger_offset": "2"},
+    }
+    stop_result = evaluate_readiness(
+        [_strategy_item(payload=stop_payload)], allocation_enabled=False, allocation_issues=[]
+    )
+    assert Code.STRATEGY_ORDER_TYPE_UNSUPPORTED.value not in _codes(stop_result)
+    stop_limit_payload = _strategy_payload()
+    stop_limit_payload["data"]["order_config"] = {
+        "type": "stop_limit_order",
+        "stop": {"activation_rule": "entry_signal_price"},
+        "limit": {
+            "price_rule": "entry_signal_price",
+            "validity": "3_candles",
+            "unfilled_policy": "cancel_order",
+            "partial_fill_policy": "not_allowed",
+        },
+    }
+    stop_limit_result = evaluate_readiness(
+        [_strategy_item(payload=stop_limit_payload)],
+        allocation_enabled=False,
+        allocation_issues=[],
+    )
+    assert Code.STRATEGY_ORDER_TYPE_UNSUPPORTED.value not in _codes(stop_limit_result)
 
 
 def test_strategy_supported_order_type_does_not_block() -> None:

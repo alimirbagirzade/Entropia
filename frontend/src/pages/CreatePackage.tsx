@@ -3,6 +3,7 @@ import { useState, type ChangeEvent, type FormEvent } from "react";
 import { EmptyState } from "@/components/EmptyState";
 import { ErrorState } from "@/components/ErrorState";
 import { Loading } from "@/components/Loading";
+import { PreCheckModal } from "@/components/PreCheckModal";
 import { StatusBadge } from "@/components/StatusBadge";
 import { ApiError } from "@/lib/apiClient";
 import {
@@ -26,7 +27,6 @@ import {
   usePackageRequests,
   useRationaleFamilies,
   useRequestRevision,
-  useRunPrecheck,
   useRunValidation,
   useStartBaselineParse,
   useUploadBaseline,
@@ -259,9 +259,11 @@ function RequestColumn({
   onClear: () => void;
 }) {
   const [form, setForm] = useState<FormState>(INITIAL_FORM);
+  // UI-07: Pre-Check is an accessible overlay opened from this workspace (the
+  // request is already selected here — no request table to walk / re-select).
+  const [precheckOpen, setPrecheckOpen] = useState(false);
   const families = useRationaleFamilies(null);
   const create = useCreatePackageRequest();
-  const precheck = useRunPrecheck();
   const generate = useGenerateCandidate();
   const draft = useCreateDraft();
 
@@ -308,18 +310,13 @@ function RequestColumn({
     );
   }
 
-  // Pre-Check runs against the selected request (doc 07). C.D.P chains
-  // generate-candidate → create-draft (the mockup "Create Draft Package"); the
-  // accepted candidate_hash from generate becomes the draft's staleness token.
-  const actionsPending = precheck.isPending || generate.isPending || draft.isPending;
+  // C.D.P chains generate-candidate → create-draft (the mockup "Create Draft
+  // Package"); the accepted candidate_hash from generate becomes the draft's
+  // staleness token. Pre-Check itself lives in its own overlay (PreCheckModal).
+  const actionsPending = generate.isPending || draft.isPending;
   // The state-machine truth for which lifecycle actions this request permits
   // (F-12): the buttons below reflect it instead of always being clickable.
   const actions = packageActionAvailability(detail);
-
-  function onPrecheck() {
-    if (detail === null || !actions.precheck) return;
-    precheck.mutate({ request_id: detail.request_id, request_version: detail.request_version });
-  }
 
   function onCdp() {
     if (detail === null || !actions.generateDraft) return;
@@ -490,11 +487,22 @@ function RequestColumn({
             <button
               type="button"
               className="btn"
-              disabled={!actions.precheck || actionsPending}
-              onClick={onPrecheck}
+              disabled={detail === null}
+              aria-haspopup="dialog"
+              onClick={() => setPrecheckOpen(true)}
             >
-              {precheck.isPending ? "Checking dependencies…" : "Pre-Check"}
+              Pre-Check
             </button>
+            {/* Status pill — the direct visual link between the Pre-Check button
+                and the Package Status TA Pre-Check row (UI-07). */}
+            {detail?.current_scan ? (
+              <StatusBadge
+                tone={scanStatusTone(detail.current_scan.status)}
+                label={`${detail.current_scan.status}${detail.precheck_fresh ? "" : " · stale"}`}
+              />
+            ) : detail !== null ? (
+              <StatusBadge tone="neutral" label="not_checked" />
+            ) : null}
             <button type="submit" className="btn btn-primary" disabled={!canSubmit}>
               {create.isPending ? "Sending…" : "Send"}
             </button>
@@ -531,17 +539,6 @@ function RequestColumn({
               Request created — <code>{create.data.request_id}</code> ({create.data.state}).
             </p>
           ) : null}
-          {precheck.isError ? (
-            <p role="alert" style={alertStyle}>
-              {mutationErrorText(precheck.error)}
-            </p>
-          ) : null}
-          {precheck.data ? (
-            <p aria-live="polite" style={liveStyle}>
-              Pre-Check {precheck.data.status} — scan <code>{precheck.data.scan_id}</code> (attempt{" "}
-              {precheck.data.attempt_no}).
-            </p>
-          ) : null}
           {generate.isError ? (
             <p role="alert" style={alertStyle}>
               {mutationErrorText(generate.error)}
@@ -562,6 +559,10 @@ function RequestColumn({
 
       <div className="cp-section-title">Draft Package Files</div>
       <DraftFiles detail={detail} />
+
+      {precheckOpen && detail !== null ? (
+        <PreCheckModal detail={detail} onClose={() => setPrecheckOpen(false)} />
+      ) : null}
     </form>
   );
 }

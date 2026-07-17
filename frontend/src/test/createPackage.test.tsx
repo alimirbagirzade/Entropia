@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 
@@ -349,9 +349,14 @@ describe("Create Package page", () => {
     await screen.findByText("req_1");
     fireEvent.click(screen.getByRole("button", { name: /req_1/ }));
 
+    // UI-07: the workspace Pre-Check button opens an accessible dialog; the run
+    // itself is dispatched from inside the modal, with the same OCC token + key.
     const preBtn = await screen.findByRole("button", { name: "Pre-Check" });
     await waitFor(() => expect(preBtn).toBeEnabled());
     fireEvent.click(preBtn);
+
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Run Pre-Check" }));
 
     expect(await screen.findByText("scan_2")).toBeInTheDocument();
     const call = fetchMock.mock.calls.find(
@@ -361,6 +366,35 @@ describe("Create Package page", () => {
     const headers = (call?.[1] as RequestInit).headers as Record<string, string>;
     expect(headers["X-Request-Version"]).toBe("2");
     expect(headers["Idempotency-Key"]).toBeTruthy();
+  });
+
+  it("opens Pre-Check in an accessible modal dialog and closes on Escape", async () => {
+    stubApi(BASE_ROUTES);
+    renderPage();
+    await screen.findByText("req_1");
+    fireEvent.click(screen.getByRole("button", { name: /req_1/ }));
+
+    // No request table to walk: the workspace Pre-Check button opens the overlay
+    // directly on the already-selected request.
+    const preBtn = await screen.findByRole("button", { name: "Pre-Check" });
+    await waitFor(() => expect(preBtn).toBeEnabled());
+    // Focus the trigger first (a real click focuses it) so the modal's focus
+    // restoration on close has a trigger to return to.
+    preBtn.focus();
+    fireEvent.click(preBtn);
+
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveAttribute("aria-modal", "true");
+    // The selected request's Pre-Check status + scan artifact render inside the
+    // dialog (the resolver output is not left behind on a separate route): the run
+    // control and the immutable-artifact viewer are both in-context.
+    expect(within(dialog).getByRole("button", { name: "Run Pre-Check" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "View scan artifact" })).toBeInTheDocument();
+
+    // Escape closes the dialog and restores focus to the trigger button.
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(preBtn).toHaveFocus();
   });
 
   it("gates Generate candidate on the server-side hint, never a UI guess", async () => {

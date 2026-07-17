@@ -25,6 +25,7 @@ from entropia.domain.allocation.rules import AllocationIssue
 from entropia.domain.backtest.engine import (
     conflict_handling_is_modelled,
     execution_timing_is_modelled,
+    leverage_is_modelled,
     order_execution_is_modelled,
     partial_close_is_modelled,
     restrictions_are_modelled,
@@ -365,6 +366,26 @@ def _strategy_issues(item: ReadinessItemInput, *, allocation_enabled: bool) -> l
                 remediation="Use an explicit base position size, risk-based sizing with a "
                 "stop distance, or a valid Kelly-criterion formula (win_probability in "
                 "(0,1) and a positive payoff_ratio).",
+                field_path="position_sizing",
+                scope_id=item.item_id,
+            )
+        )
+
+    # F-07f: an unsupported leverage configuration must BLOCK RUN — the engine fails
+    # closed (opens no position) for it. 'No Leverage' and 'Isolated' with a positive
+    # saved multiplier are modelled; 'Cross' needs a portfolio-level risk model the
+    # single-position bar-replay engine does not implement. Shares the single
+    # ``leverage_is_modelled`` predicate with the engine so the two never diverge.
+    if not leverage_is_modelled(config):
+        issues.append(
+            ReadinessIssue(
+                Code.STRATEGY_LEVERAGE_UNSUPPORTED,
+                Sev.BLOCKER,
+                Scope.STRATEGY,
+                "The strategy's leverage configuration is not supported by the backtest "
+                "engine and would open no position.",
+                remediation="Use 'No Leverage' or 'Isolated' margin mode with a positive "
+                "leverage multiplier. 'Cross' margin mode is not yet supported.",
                 field_path="position_sizing",
                 scope_id=item.item_id,
             )

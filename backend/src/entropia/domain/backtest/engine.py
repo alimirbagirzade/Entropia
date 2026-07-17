@@ -223,6 +223,10 @@ class _Position:
     trail_pct: Decimal | None
     trail_anchor: Decimal  # best price seen since entry (favourable extreme)
     entry_notional: Decimal
+    # F-07f: trailing stop profit-lock ACTIVATION threshold, as a fraction of entry price
+    # (Master Ref §9.2 "Activate After Profit %", TrailingStop.lock_in_percentage). ``None``
+    # when trailing is not configured (mirrors ``trail_pct``); see ``_trailing_activated``.
+    trail_lock_in_pct: Decimal | None = None
     # F-07d same-direction scaling state. ``entry_price``/``size`` become the size-weighted
     # AVERAGE basis / total across layers (the single-position invariant extends, it does not
     # break: one lifecycle, one trade-per-lot accounting); each layer's own fill price lives in
@@ -439,6 +443,43 @@ def sizing_is_modelled(config: StrategyConfig) -> bool:
     return _sizing_is_honored(config)
 
 
+# §10.2 Exposure & leverage (post-V1 (f), Master Ref §10.2). 'No Leverage' normalizes to
+# 1x regardless of the saved ``leverage`` value (spec: "No Leverage modunda 1x olarak
+# normalize edilir"). 'Isolated' applies the saved positive multiplier directly to this
+# position's computed size — the single-position bar-replay engine already isolates each
+# position's risk to itself (nothing else is open concurrently to share margin with),
+# which is exactly what isolated-margin semantics require. 'Cross' shares margin/risk
+# across concurrently open positions via a portfolio-level risk model the engine does not
+# implement (Master Ref §10.2: cross-margin logic depends on the Equity Allocation /
+# portfolio risk model) — NOT modelled, fails closed rather than silently degrading to
+# isolated semantics.
+def leverage_is_modelled(config: StrategyConfig) -> bool:
+    """Public predicate: is this strategy's leverage configuration modelled (F-07f)?
+
+    The single shared source of truth for the readiness ``STRATEGY_LEVERAGE_UNSUPPORTED``
+    blocker and the engine's fail-closed entry gate. 'No Leverage' is always modelled
+    (normalizes to 1x); 'Isolated' is modelled when the saved ``leverage`` multiplier is
+    a positive value (schema-enforced ``gt=0``, re-checked here defensively); 'Cross' is
+    never modelled — blocked at Ready Check AND opens no position if a stale readiness
+    state slips through to the worker (never a silently un-leveraged or mis-leveraged
+    run)."""
+    sizing = config.position_sizing
+    if sizing.leverage_mode == "no_leverage":
+        return True
+    if sizing.leverage_mode == "cross":
+        return False
+    return sizing.leverage > _ZERO
+
+
+def _leverage_multiplier(config: StrategyConfig) -> Decimal:
+    """The resolved leverage multiplier (only called once ``leverage_is_modelled`` has
+    gated position opening, so every branch here is safe/defined)."""
+    sizing = config.position_sizing
+    if sizing.leverage_mode == "no_leverage":
+        return _ONE
+    return Decimal(sizing.leverage)
+
+
 # §2 Execution timing modelled by the deterministic OHLCV bar-replay (F-07a). The
 # "immediate" modes fill at the SIGNAL bar's close (a market fill at the decision
 # point); the "next candle" modes defer the fill to the following bar's open/close,
@@ -544,25 +585,36 @@ def order_execution_is_modelled(config: StrategyConfig) -> bool:
 # closes only that fraction of the position on an EXIT SIGNAL and holds the remainder; the
 # aftermath governs the remainder. ``move_stop_to_entry`` (breakeven the remainder's stop) and
 # ``close_all`` (the signal closes 100% regardless) are deterministic over OHLCV. A
-# ``trailing_stop`` / ``lock_in_profit`` aftermath needs the trailing-distance / lock-in-level
-# machinery deferred to slice (f) — they FAIL CLOSED. A full close (close_percentage == 100)
-# never produces a remainder, so its aftermath is irrelevant and always modelled.
-_MODELLED_PARTIAL_AFTERMATHS = frozenset({"move_stop_to_entry", "close_all"})
+# ``move_stop_to_entry`` / ``lock_in_profit`` need no extra strategy config (they mutate the
+# remainder's stop from data already on the open position). A full close (close_percentage
+# == 100) never produces a remainder, so its aftermath is irrelevant and always modelled.
+# ``trailing_stop`` is CONFIG-DEPENDENT (post-V1 (f)): the schema carries no separate
+# trailing-distance/activation fields on ``PositionExitLogic`` itself, so the aftermath
+# reuses ``protection_stop_logic.trailing_stop`` — modelled only when that rule is
+# configured/enabled (checked in ``partial_close_is_modelled`` via ``_trail_pct``).
+_MODELLED_PARTIAL_AFTERMATHS = frozenset({"move_stop_to_entry", "close_all", "lock_in_profit"})
 
 
 def partial_close_is_modelled(config: StrategyConfig) -> bool:
-    """Public predicate: is this strategy's partial-close behaviour modelled (F-07c)?
+    """Public predicate: is this strategy's partial-close behaviour modelled (F-07c/f)?
 
     The single shared source of truth for the readiness ``STRATEGY_PARTIAL_CLOSE_UNSUPPORTED``
     blocker and the engine's fail-closed entry gate. A full close (``close_percentage`` >= 100)
-    is always modelled; a partial close is modelled only when its aftermath is (move-stop-to-
-    entry / close-all) — a trailing / lock-in aftermath is deferred to slice (f) and fails
-    closed (blocked at Ready Check AND opens no position if a stale readiness state slips
-    through to the worker)."""
+    is always modelled. A partial close is modelled when its aftermath is move-stop-to-entry,
+    close-all or lock-in-profit (self-contained — no extra config needed), or trailing-stop
+    WHEN the strategy's own ``protection_stop_logic.trailing_stop`` rule is configured and
+    enabled (the aftermath has no trailing parameters of its own to reuse). A trailing-stop
+    aftermath with no such rule configured fails closed (blocked at Ready Check AND opens no
+    position if a stale readiness state slips through to the worker)."""
     exit_logic = config.position_exit_logic
     if exit_logic.close_percentage >= _HUNDRED:
         return True
-    return exit_logic.partial_aftermath in _MODELLED_PARTIAL_AFTERMATHS
+    aftermath = exit_logic.partial_aftermath
+    if aftermath in _MODELLED_PARTIAL_AFTERMATHS:
+        return True
+    if aftermath == "trailing_stop":
+        return _trail_pct(config) is not None
+    return False
 
 
 # §7 Same-direction scaling modelled by the bar-replay (F-07d, Master Ref §11). The engine
@@ -818,12 +870,19 @@ def _raw_position_size(config: StrategyConfig, entry_price: Decimal, equity: Dec
 
 
 def _position_size(config: StrategyConfig, entry_price: Decimal, equity: Decimal) -> Decimal:
-    """Deterministic sizing (see ``_raw_position_size``) clamped to the configured
-    ``position_size_limits`` min/max caps (§6). The clamp applies uniformly to EVERY
-    sizing method — base, risk-based, Kelly and the notional fallback — so a global cap
-    is honoured regardless of which sizing path produced the size. A missing limits
-    subtree is a no-op, so behaviour is byte-identical to the pre-wiring engine."""
+    """Deterministic sizing (see ``_raw_position_size``), scaled by the leverage
+    multiplier (§10.2, post-V1 (f) — a leveraged strategy controls MORE notional per
+    unit of computed capital, so the multiplier scales the SIZE itself, which scales
+    every downstream notional/exposure/PnL figure with it) and clamped to the
+    configured ``position_size_limits`` min/max caps (§6). Both apply uniformly to
+    EVERY sizing method — base, risk-based, Kelly and the notional fallback — so a
+    global cap and leverage are honoured regardless of which sizing path produced the
+    size. Only called once ``leverage_is_modelled`` has gated position opening, so the
+    multiplier is always well-defined here. A 1x multiplier and a missing limits
+    subtree are both no-ops, so behaviour is byte-identical to the pre-wiring engine."""
     size = _raw_position_size(config, entry_price, equity)
+    if size > _ZERO:
+        size = size * _leverage_multiplier(config)
     return _clamp_to_limits(size, config.position_sizing.position_size_limits)
 
 
@@ -947,9 +1006,40 @@ def _trail_pct(config: StrategyConfig) -> Decimal | None:
     return trailing.trail_percentage / _HUNDRED if trailing.enabled else None
 
 
+def _trail_lock_in_pct(config: StrategyConfig) -> Decimal | None:
+    """Trailing stop's profit-lock ACTIVATION threshold, as a fraction of entry price
+    (Master Ref §9.2 "Activate After Profit %", post-V1 (f)). Mirrors ``_trail_pct``:
+    ``None`` when trailing is not configured/enabled."""
+    protection = config.protection_stop_logic
+    if protection is None or protection.trailing_stop is None:
+        return None
+    trailing = protection.trailing_stop
+    return trailing.lock_in_percentage / _HUNDRED if trailing.enabled else None
+
+
+def _trailing_activated(position: _Position) -> bool:
+    """Has the trailing stop's profit-lock activation threshold been reached?
+
+    ``trail_anchor`` tracks the favourable extreme UNCONDITIONALLY from entry (a
+    monotonic ratchet — see the bar loop), but the trailing rule contributes NO stop
+    level until the position's profit reaches ``lock_in_percentage`` (post-V1 (f)):
+    before activation there is simply no trailing protection, only whichever other
+    stop rules are enabled. Deriving activation from ``trail_anchor`` (rather than a
+    separate mutable flag) is what makes the lock "never retreat": once
+    ``trail_anchor`` has crossed the threshold it can only move further favourably,
+    so the derived trailing level can only tighten, never loosen or deactivate."""
+    if position.trail_pct is None or position.trail_lock_in_pct is None:
+        return False
+    entry = position.entry_price
+    if position.direction == "long":
+        return position.trail_anchor >= entry * (_ONE + position.trail_lock_in_pct)
+    return position.trail_anchor <= entry * (_ONE - position.trail_lock_in_pct)
+
+
 def _trailing_level(position: _Position) -> Decimal | None:
-    """Current trailing-stop level from the favourable extreme (None if inactive)."""
-    if position.trail_pct is None:
+    """Current trailing-stop level from the favourable extreme, or ``None`` when
+    trailing is not configured OR its activation threshold has not yet been reached."""
+    if position.trail_pct is None or not _trailing_activated(position):
         return None
     if position.direction == "long":
         return position.trail_anchor * (Decimal("1") - position.trail_pct)
@@ -1142,6 +1232,10 @@ def run_engine(
     long_ok, short_ok = _direction_flags(config.position_entry_logic.direction_mode)
     half_spread, slippage, commission = _cost_params(config)
     trail_pct = _trail_pct(config)
+    # F-07f: trailing stop profit-lock activation threshold (Master Ref §9.2 "Activate
+    # After Profit %") — mirrors ``trail_pct``, threaded into every opened position.
+    trail_lock_in_pct = _trail_lock_in_pct(config)
+    trailing_lock_in_active = trail_lock_in_pct is not None
     # §5.9 Stop+Exit same-bar collision policy (read straight from the pinned config so it
     # applies in BOTH plan and breakout-proxy modes; default "stop_has_priority" = V18).
     stop_exit_conflict = str(config.conflict_position_handling.stop_exit_conflict)
@@ -1159,6 +1253,12 @@ def run_engine(
     # blocker, so a stale/bypassed readiness state reaching the worker still produces a
     # financially inert run (no phantom 0-size or all-in trades).
     sizing_ok = _sizing_is_honored(config)
+
+    # F-07f: an unmodelled leverage configuration (cross-margin, or a non-positive saved
+    # multiplier) opens NO position — the fail-closed backstop to the Ready Check
+    # STRATEGY_LEVERAGE_UNSUPPORTED blocker, never a silently un-leveraged or
+    # mis-leveraged run.
+    leverage_ok = leverage_is_modelled(config)
 
     # F-07a: entry/exit execution timing. Immediate modes fill at the signal bar's
     # close; the next-candle modes defer the fill to the following bar (removing the
@@ -1290,6 +1390,10 @@ def run_engine(
     limit_orders_filled = 0
     limit_orders_cancelled = 0
     partial_closes = 0
+    # F-07f: count of partial-close aftermaths that locked in profit on the remainder
+    # (``lock_in_profit`` moving the stop to the current price, or ``trailing_stop``
+    # force-activating the trailing rule) — surfaced as a diagnostics count.
+    lock_in_locks = 0
     scale_layers_added = 0
     scale_layers_rejected = 0
     # F-07e: restriction-gate + conflict-policy counters and their realized-ledger state.
@@ -1374,6 +1478,8 @@ def run_engine(
         """Why a wanted entry produced NO fill (F-10 restriction trace)."""
         if not sizing_ok:
             return "sizing_unsupported"
+        if not leverage_ok:
+            return "leverage_unsupported"
         if alloc_on:
             return "sleeve_zero_capacity"
         return "no_fill"
@@ -1488,13 +1594,49 @@ def run_engine(
         )
         return is_full
 
-    def _apply_partial_aftermath(pos: _Position) -> None:
-        """Govern the remainder after a partial close (F-07c §4). ``move_stop_to_entry``
-        breakevens the remainder's percentage stop (any dip back to the entry now stops it out);
-        ``close_all`` never reaches here (it closes fully); trailing / lock-in aftermaths fail
-        closed upstream (slice f)."""
+    def _apply_partial_aftermath(pos: _Position, exit_price_raw: Decimal) -> None:
+        """Govern the remainder after a partial close (F-07c/f §4). ``move_stop_to_entry``
+        breakevens the remainder's percentage stop (any dip back to the entry now stops it
+        out). ``lock_in_profit`` moves the stop to the cost-adjusted price achieved AT this
+        partial close — a one-time ratchet: a LATER partial close (long via ``max``, short
+        via ``min``) can only tighten it further, never loosen it (never reaches here
+        without a prior stop level, so the initial application always sets it verbatim).
+        ``trailing_stop`` force-activates the remainder's already-configured protection
+        trailing stop (``partial_close_is_modelled`` guarantees ``trail_pct`` /
+        ``trail_lock_in_pct`` are set whenever this branch is reachable) immediately, even
+        if the protection-level profit-lock threshold has not yet been reached — the
+        partial exit itself is the activation event; ``trail_anchor`` only ever moves
+        toward the threshold (``max``/``min``), never backward, so it cannot loosen an
+        already-active trail. ``close_all`` never reaches here (it closes fully)."""
+        nonlocal lock_in_locks
+        is_long = pos.direction == "long"
         if partial_aftermath == "move_stop_to_entry":
             pos.pct_stop = pos.entry_price
+        elif partial_aftermath == "lock_in_profit":
+            exit_eff = _effective_fill(
+                exit_price_raw, is_buy=not is_long, half_spread=half_spread, slip=slippage
+            )
+            if pos.pct_stop is None:
+                pos.pct_stop = exit_eff
+            elif is_long:
+                pos.pct_stop = max(pos.pct_stop, exit_eff)
+            else:
+                pos.pct_stop = min(pos.pct_stop, exit_eff)
+            lock_in_locks += 1
+        elif (
+            partial_aftermath == "trailing_stop"
+            and pos.trail_pct is not None
+            and pos.trail_lock_in_pct is not None
+        ):
+            threshold = (
+                pos.entry_price * (_ONE + pos.trail_lock_in_pct)
+                if is_long
+                else pos.entry_price * (_ONE - pos.trail_lock_in_pct)
+            )
+            pos.trail_anchor = (
+                max(pos.trail_anchor, threshold) if is_long else min(pos.trail_anchor, threshold)
+            )
+            lock_in_locks += 1
 
     def _sleeve_capital(current_equity: Decimal) -> Decimal:
         """The replayed item's sleeve cap Ci(t) at this valuation point (doc 13 §8.3).
@@ -1552,9 +1694,9 @@ def run_engine(
         reserve) yields no fill at all — ``None`` — rather than a phantom 0-size trade
         (doc 13 §8.4 step 5/6). Independent mode books even a bust-equity 0-size fill
         (preserving the risk-based no-phantom-profit invariant), but an UNMODELLED sizing
-        method (F-09) opens nothing at all — no phantom trade for a strategy the user
-        never validly configured."""
-        if not sizing_ok:
+        method (F-09) or leverage configuration (F-07f) opens nothing at all — no phantom
+        trade for a strategy the user never validly configured."""
+        if not sizing_ok or not leverage_ok:
             return None
         is_long = direction == "long"
         entry_eff = _effective_fill(
@@ -1584,6 +1726,7 @@ def run_engine(
             trail_pct=trail_pct,
             trail_anchor=fill_raw,
             entry_notional=(entry_eff * size).quantize(_MONEY),
+            trail_lock_in_pct=trail_lock_in_pct,
             initial_size=size,
             layers_filled=0,
             scale_reference=fill_raw,
@@ -1748,7 +1891,7 @@ def run_engine(
                     ):
                         position = None
                     else:
-                        _apply_partial_aftermath(position)
+                        _apply_partial_aftermath(position, bar.open)
                 pending = None
 
             # (1b) Resolve a RESTING limit ENTRY order against THIS bar (F-07b). Resolves
@@ -1885,7 +2028,7 @@ def run_engine(
                         ):
                             position = None
                         else:
-                            _apply_partial_aftermath(position)
+                            _apply_partial_aftermath(position, bar.close)
                     else:
                         # Defer the exit to the next bar's open / close (F-07a); trace the
                         # scheduling decision so the two-phase timing is reconstructable.
@@ -2068,7 +2211,7 @@ def run_engine(
                     ):
                         position = None
                     else:
-                        _apply_partial_aftermath(position)
+                        _apply_partial_aftermath(position, bar.close)
                 pending = None
 
             # (4b) F-07e conflict / position handling — a NEW aggregated entry-signal EDGE
@@ -2529,6 +2672,12 @@ def run_engine(
         # notional all-in. Surface the divergence rather than hide it (L4).
         # risk_based_sizing with a sub-config IS honored.
         warnings.append(f"position_sizing_method_unsupported:{config.position_sizing.method}")
+    if not leverage_ok:
+        # Cross-margin (needs a portfolio risk model the engine does not implement) or a
+        # non-positive saved multiplier is not modelled; the run opened NO position (fail
+        # closed, F-07f). Ready Check raises STRATEGY_LEVERAGE_UNSUPPORTED — this L4
+        # warning is the engine backstop when a stale readiness state reaches the worker.
+        warnings.append(f"leverage_unsupported:{config.position_sizing.leverage_mode}")
     if not timing_ok:
         # An unsupported entry/exit execution timing (intrabar_touch / a limit or
         # stop-limit simulation) is not modelled over plain OHLCV; the run opened NO
@@ -2548,10 +2697,13 @@ def run_engine(
         # backstop when a stale readiness state reaches the worker.
         warnings.append(f"order_type_unsupported:{order_cfg.type}")
     if not partial_close_ok:
-        # A partial close (close_percentage < 100) with a trailing / lock-in aftermath is not
-        # modelled (deferred to slice f); the run opened NO position (fail closed, F-07c) rather
-        # than silently ignoring the aftermath. Ready Check raises
-        # STRATEGY_PARTIAL_CLOSE_UNSUPPORTED — this L4 warning is the engine backstop.
+        # A partial close (close_percentage < 100) with a trailing-stop aftermath but NO
+        # protection-level trailing_stop configured/enabled is not modelled (post-V1 (f):
+        # the aftermath has no trailing parameters of its own to reuse); the run opened NO
+        # position (fail closed, F-07c/f) rather than silently ignoring the aftermath.
+        # Ready Check raises STRATEGY_PARTIAL_CLOSE_UNSUPPORTED — this L4 warning is the
+        # engine backstop. move_stop_to_entry / lock_in_profit / close_all are always
+        # modelled and never reach here.
         warnings.append(f"partial_close_unsupported:{partial_aftermath}")
     if not scaling_ok:
         # An enabled scaling config the ladder cannot execute (logic-based scaling, a
@@ -2675,6 +2827,11 @@ def run_engine(
         "nary_reference_conditions": nary_reference_conditions,
         "vwap_blocks": vwap_blocks,
         "position_size_limits_active": config.position_sizing.position_size_limits is not None,
+        # F-07f: leverage provenance (§10.2) — the resolved multiplier actually applied to
+        # every computed position size (1x when unleveraged or 'no_leverage' normalized).
+        "leverage_mode": config.position_sizing.leverage_mode,
+        "leverage_modelled": leverage_ok,
+        "leverage_multiplier": (str(_leverage_multiplier(config)) if leverage_ok else None),
         "entry_timing": config.data.execution.entry_timing,
         "exit_timing": config.data.execution.exit_timing,
         "execution_timing_modelled": timing_ok,
@@ -2691,6 +2848,11 @@ def run_engine(
         "partial_aftermath": partial_aftermath,
         "partial_close_modelled": partial_close_ok,
         "partial_closes": partial_closes,
+        # F-07f: trailing stop profit-lock provenance — whether the protection-level
+        # activation threshold is configured at all, and how many lock events (a
+        # lock_in_profit ratchet, or a trailing_stop aftermath force-activation) fired.
+        "trailing_lock_in_active": trailing_lock_in_active,
+        "lock_in_locks": lock_in_locks,
         # F-07d: same-direction scaling provenance + ladder counts.
         "scaling_enabled": scaling_enabled,
         "scaling_method": scaling_cfg.method if scaling_enabled and scaling_cfg else None,

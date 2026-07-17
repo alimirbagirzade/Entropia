@@ -75,6 +75,9 @@ class ReadinessIssueCode(StrEnum):
     STRATEGY_SCALING_UNSUPPORTED = "STRATEGY_SCALING_UNSUPPORTED"
     STRATEGY_RESTRICTIONS_UNSUPPORTED = "STRATEGY_RESTRICTIONS_UNSUPPORTED"
     STRATEGY_CONFLICT_HANDLING_UNSUPPORTED = "STRATEGY_CONFLICT_HANDLING_UNSUPPORTED"
+    # F-07f: an unsupported leverage configuration (cross-margin, or a non-positive saved
+    # multiplier) — blocks RUN (the engine also fails closed and opens no position).
+    STRATEGY_LEVERAGE_UNSUPPORTED = "STRATEGY_LEVERAGE_UNSUPPORTED"
     STRATEGY_INDICATOR_UNRESOLVED = "STRATEGY_INDICATOR_UNRESOLVED"
     # F-08: a pinned Logic-Based Stop Block dependency does not resolve to a computable
     # stop signal — blocks RUN (the worker also fails closed on plan.unresolved).

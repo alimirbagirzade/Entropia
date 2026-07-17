@@ -1419,6 +1419,7 @@ a:hover { text-decoration: underline; }
 }
 
 /* ---- v18 Package pool: sectioned rows (mockup .package-row/.package-section-title) ---- */
+.package-pool-section { margin-bottom: 16px; }
 .package-section-title {
   font-size: 10.5px;
   font-weight: 900;
@@ -1459,6 +1460,24 @@ a:hover { text-decoration: underline; }
   border-radius: var(--radius);
   padding: 10px 12px;
   margin-bottom: 14px;
+}
+/* Filter controls sit in a responsive grid (mockup .package-filter-grid) so the
+   facet + Sort By selects wrap cleanly instead of a single overflowing row. */
+.package-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px 12px;
+  align-items: end;
+}
+.package-filter-grid label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; }
+.package-filter-grid select,
+.package-filter-grid input { width: 100%; box-sizing: border-box; }
+.package-filter-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 10px;
 }
 
 /* Expandable catalog rows (mockup .package-card/.package-row.open/.package-details). */
@@ -1853,3 +1872,105 @@ a:hover { text-decoration: underline; }
 @media (max-width: 520px) {
   .data-workflow { grid-template-columns: 1fr; }
 }
+/* Research Data (doc 12, UI-12): five-step workflow strip, Approved Market Data
+   dependency alert, status legend and the three-column setup shell. Presentation
+   only — the lock state is derived from the setup form's Linked Market Data field. */
+.rd-workflow {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 0;
+}
+.rd-step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 150px;
+  min-width: 150px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elev-2);
+  font-size: 12px;
+}
+.rd-step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+.rd-step-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.rd-step-label { font-weight: 600; color: var(--text); }
+.rd-step-lock { color: var(--warn); font-size: 11px; }
+.rd-step[data-locked="true"] { border-style: dashed; opacity: 0.7; }
+.rd-step[data-locked="true"] .rd-step-num { background: var(--text-dim); }
+
+.rd-legend { display: flex; flex-wrap: wrap; gap: 16px; }
+.rd-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.rd-alert {
+  border: 1px solid var(--warn);
+  border-left-width: 4px;
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--warn) 8%, transparent);
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  color: var(--text);
+}
+.rd-alert p { font-size: 13px; color: var(--text-dim); }
+
+.rd-columns {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  margin-bottom: 12px;
+}
+.rd-col {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+}
+.rd-col > legend {
+  padding: 0 6px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+}
+.rd-col label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+.rd-col input,
+.rd-col select,
+.rd-col textarea {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elev);
+  color: var(--text);
+  font-size: 13px;
+  font-family: inherit;
+}
+.rd-col textarea { min-height: 72px; resize: vertical; }

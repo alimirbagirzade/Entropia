@@ -129,9 +129,73 @@ function FacetSelect({
   );
 }
 
+// v18 mockup groups the catalog into per-type sections (§3.1). Production only
+// has the four canonical kinds; the order below is the mockup's submenu order.
+// A row whose kind is outside this list is surfaced under its own bucket, never
+// silently hidden (doc 08 §3.2 "unsupported values not silently hidden").
+const CATALOG_SECTIONS: readonly { kind: string; label: string }[] = [
+  { kind: "strategy", label: "Strategy Packages" },
+  { kind: "indicator", label: "Indicator Packages" },
+  { kind: "condition", label: "Condition Packages" },
+  { kind: "embedded_system", label: "Embedded System Packages" },
+];
+
+// Sort By is a CLIENT-LOCAL presentation control (mockup §3.2 "local
+// numeric/string sort"): it reorders the rows already on the current keyset page
+// over fields the row projection carries. It is never a server query param — the
+// ["library"] contract is untouched. Performance sorts are omitted here: every
+// non-Strategy row is `not_applicable` and no runs are linked (doc 08 §3.2, L4).
+type LibrarySort = "created" | "name";
+const LIBRARY_SORTS: readonly { value: LibrarySort; label: string }[] = [
+  { value: "created", label: "Created Date" },
+  { value: "name", label: "Name" },
+];
+
+function sortRows(rows: LibraryPackageRow[], sort: LibrarySort): LibraryPackageRow[] {
+  const ordered = [...rows];
+  if (sort === "name") {
+    ordered.sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
+  } else {
+    // Newest first; rows without a timestamp sort last (stable, deterministic).
+    ordered.sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""));
+  }
+  return ordered;
+}
+
+// Group the current page's rows into the canonical sections, then any leftover
+// kinds, dropping empty sections. Sorting is applied per section.
+function groupRows(
+  rows: LibraryPackageRow[],
+  sort: LibrarySort,
+): { kind: string; label: string; rows: LibraryPackageRow[] }[] {
+  const canonicalKinds = new Set(CATALOG_SECTIONS.map((section) => section.kind));
+  const sections = CATALOG_SECTIONS.map((section) => ({
+    ...section,
+    rows: sortRows(
+      rows.filter((row) => row.package_kind === section.kind),
+      sort,
+    ),
+  }));
+  const leftoverKinds = [
+    ...new Set(
+      rows.filter((row) => !canonicalKinds.has(row.package_kind)).map((r) => r.package_kind),
+    ),
+  ];
+  const extras = leftoverKinds.map((kind) => ({
+    kind,
+    label: `${kind} Packages`,
+    rows: sortRows(
+      rows.filter((row) => row.package_kind === kind),
+      sort,
+    ),
+  }));
+  return [...sections, ...extras].filter((section) => section.rows.length > 0);
+}
+
 function CatalogCard() {
   const [filters, setFilters] = useState<LibraryFilters>(DEFAULT_LIBRARY_FILTERS);
   const [draftQ, setDraftQ] = useState("");
+  const [sortBy, setSortBy] = useState<LibrarySort>("created");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const pager = useCursorStack();
   const packages = useLibraryPackages(filters, pager.cursor);
@@ -149,6 +213,14 @@ function CatalogCard() {
     applyFilter({ q: draftQ.trim() || null });
   };
 
+  const onClearFilters = () => {
+    setFilters(DEFAULT_LIBRARY_FILTERS);
+    setDraftQ("");
+    pager.reset();
+  };
+
+  const sections = packages.data ? groupRows(packages.data.data, sortBy) : [];
+
   return (
     <section className="card" aria-labelledby="library-h">
       <h3 id="library-h" style={{ marginTop: 0 }}>
@@ -160,74 +232,98 @@ function CatalogCard() {
         package object; Supervisor and Agent may edit or delete only objects they own. Visibility
         and permissions are computed by the server per role.
       </div>
-      <form
-        onSubmit={onSearch}
-        className="package-filter-bar"
-        style={{ display: "flex", flexWrap: "wrap", gap: 12 }}
-      >
-        <FacetSelect
-          id="lib-kind"
-          label="Type"
-          value={filters.type}
-          options={CATALOG_PACKAGE_KINDS}
-          onChange={(value) => applyFilter({ type: value })}
-        />
-        <FacetSelect
-          id="lib-lifecycle"
-          label="Lifecycle"
-          value={filters.lifecycle_state}
-          options={CATALOG_LIFECYCLE_STATES}
-          onChange={(value) => applyFilter({ lifecycle_state: value })}
-        />
-        <FacetSelect
-          id="lib-validation"
-          label="Validation"
-          value={filters.validation_state}
-          options={PACKAGE_VALIDATION_STATES}
-          onChange={(value) => applyFilter({ validation_state: value })}
-        />
-        <FacetSelect
-          id="lib-approval"
-          label="Approval"
-          value={filters.approval_state}
-          options={APPROVAL_STATES}
-          onChange={(value) => applyFilter({ approval_state: value })}
-        />
-        <FacetSelect
-          id="lib-visibility"
-          label="Visibility"
-          value={filters.visibility_scope}
-          options={VISIBILITY_SCOPES}
-          onChange={(value) => applyFilter({ visibility_scope: value })}
-        />
-        <label htmlFor="lib-family">
-          Rationale family{" "}
-          <select
-            id="lib-family"
-            value={filters.rationale_family_id ?? ""}
-            onChange={(event) => applyFilter({ rationale_family_id: event.target.value || null })}
-          >
-            <option value="">all</option>
-            <option value={UNASSIGNED_FAMILY}>unassigned</option>
-            {(families.data?.data ?? []).map((family) => (
-              <option key={family.entity_id} value={family.entity_id}>
-                {family.display_name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label htmlFor="lib-q">
-          Search{" "}
-          <input
-            id="lib-q"
-            value={draftQ}
-            onChange={(event) => setDraftQ(event.target.value)}
-            placeholder="package name"
+      {/* v18 mockup filter bar: a responsive grid of facet selects + a
+          client-local Sort By. The V18 "Status" control is split into the
+          orthogonal server facets it conflates (lifecycle / validation /
+          approval / visibility, doc 08 §3.2 "Canonical alignment"). Market and
+          Timeframe are absent by design — the catalog projection carries no such
+          field, so a control there would be a fabricated no-op (doc 08 §3.2
+          "unsupported values not silently hidden"). */}
+      <form onSubmit={onSearch} className="package-filter-bar">
+        <div className="package-filter-grid">
+          <FacetSelect
+            id="lib-kind"
+            label="Type"
+            value={filters.type}
+            options={CATALOG_PACKAGE_KINDS}
+            onChange={(value) => applyFilter({ type: value })}
           />
-        </label>
-        <button type="submit" className="btn">
-          Search
-        </button>
+          <label htmlFor="lib-family">
+            Rationale family
+            <select
+              id="lib-family"
+              value={filters.rationale_family_id ?? ""}
+              onChange={(event) => applyFilter({ rationale_family_id: event.target.value || null })}
+            >
+              <option value="">all</option>
+              <option value={UNASSIGNED_FAMILY}>unassigned</option>
+              {(families.data?.data ?? []).map((family) => (
+                <option key={family.entity_id} value={family.entity_id}>
+                  {family.display_name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <FacetSelect
+            id="lib-lifecycle"
+            label="Lifecycle"
+            value={filters.lifecycle_state}
+            options={CATALOG_LIFECYCLE_STATES}
+            onChange={(value) => applyFilter({ lifecycle_state: value })}
+          />
+          <FacetSelect
+            id="lib-validation"
+            label="Validation"
+            value={filters.validation_state}
+            options={PACKAGE_VALIDATION_STATES}
+            onChange={(value) => applyFilter({ validation_state: value })}
+          />
+          <FacetSelect
+            id="lib-approval"
+            label="Approval"
+            value={filters.approval_state}
+            options={APPROVAL_STATES}
+            onChange={(value) => applyFilter({ approval_state: value })}
+          />
+          <FacetSelect
+            id="lib-visibility"
+            label="Visibility"
+            value={filters.visibility_scope}
+            options={VISIBILITY_SCOPES}
+            onChange={(value) => applyFilter({ visibility_scope: value })}
+          />
+          <label htmlFor="lib-sort">
+            Sort by
+            <select
+              id="lib-sort"
+              value={sortBy}
+              onChange={(event) => setSortBy(event.target.value as LibrarySort)}
+            >
+              {LIBRARY_SORTS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label htmlFor="lib-q">
+            Search
+            <input
+              id="lib-q"
+              value={draftQ}
+              onChange={(event) => setDraftQ(event.target.value)}
+              placeholder="package name"
+            />
+          </label>
+        </div>
+        <div className="package-filter-actions">
+          <button type="submit" className="btn">
+            Search
+          </button>
+          <button type="button" className="btn" onClick={onClearFilters}>
+            Clear filters
+          </button>
+        </div>
       </form>
 
       {packages.isLoading ? (
@@ -236,21 +332,35 @@ function CatalogCard() {
         <ErrorState error={packages.error} onRetry={() => void packages.refetch()} />
       ) : packages.data ? (
         <>
-          {packages.data.data.length === 0 ? (
-            <EmptyState title="No packages match the current filters" />
+          {sections.length === 0 ? (
+            <EmptyState title="No packages matched the current filters" />
           ) : (
-            // v18 mockup: expandable .package-row rows (open → light-cyan) that
-            // embed the package detail inline, instead of a wide catalog table.
-            <div className="package-list" role="list" aria-label="Package catalog">
-              {packages.data.data.map((row) => (
-                <PackageRow
-                  key={row.entity_id}
-                  row={row}
-                  open={selectedId === row.entity_id}
-                  onToggle={() =>
-                    setSelectedId((current) => (current === row.entity_id ? null : row.entity_id))
-                  }
-                />
+            // v18 mockup: rows grouped into per-type sections; each row is an
+            // expandable .package-row (open → light-cyan) that embeds its detail
+            // inline, instead of a single wide catalog table.
+            <div className="package-pool-wrapper">
+              {sections.map((section) => (
+                <section key={section.kind} className="package-pool-section">
+                  <h4 className="package-section-title">{section.label}</h4>
+                  <div
+                    className="package-list"
+                    role="list"
+                    aria-label={`${section.label} rows`}
+                  >
+                    {section.rows.map((row) => (
+                      <PackageRow
+                        key={row.entity_id}
+                        row={row}
+                        open={selectedId === row.entity_id}
+                        onToggle={() =>
+                          setSelectedId((current) =>
+                            current === row.entity_id ? null : row.entity_id,
+                          )
+                        }
+                      />
+                    ))}
+                  </div>
+                </section>
               ))}
             </div>
           )}
@@ -416,26 +526,35 @@ function PackageDetail({ entityId, onClose }: { entityId: string; onClose: () =>
 
           {pkg.provenance ? <ProvenanceBlock provenance={pkg.provenance} /> : null}
 
-          <h5 style={{ marginBottom: 4 }}>Input contract</h5>
-          <pre style={contractStyle}>{JSON.stringify(pkg.input_contract, null, 2)}</pre>
-          <h5 style={{ marginBottom: 4 }}>Output contract</h5>
-          <pre style={contractStyle}>{JSON.stringify(pkg.output_contract, null, 2)}</pre>
-          {pkg.dependency_snapshot ? (
-            <>
-              <h5 style={{ marginBottom: 4 }}>Dependency snapshot</h5>
-              <pre style={contractStyle}>
-                {JSON.stringify(pkg.dependency_snapshot, null, 2)}
-              </pre>
-            </>
-          ) : null}
-          {pkg.validation_summary ? (
-            <>
-              <h5 style={{ marginBottom: 4 }}>Validation summary</h5>
-              <pre style={contractStyle}>
-                {JSON.stringify(pkg.validation_summary, null, 2)}
-              </pre>
-            </>
-          ) : null}
+          {/* Keep the expanded detail compact (mockup §3.1 = description +
+              metadata grid + actions): the verbose raw-JSON contracts and
+              snapshots stay one click away behind a disclosure instead of
+              turning the row into a long technical management page. */}
+          <details style={{ marginTop: 12 }}>
+            <summary style={{ cursor: "pointer", fontWeight: 600 }}>
+              Technical contracts &amp; snapshots
+            </summary>
+            <h5 style={{ marginBottom: 4 }}>Input contract</h5>
+            <pre style={contractStyle}>{JSON.stringify(pkg.input_contract, null, 2)}</pre>
+            <h5 style={{ marginBottom: 4 }}>Output contract</h5>
+            <pre style={contractStyle}>{JSON.stringify(pkg.output_contract, null, 2)}</pre>
+            {pkg.dependency_snapshot ? (
+              <>
+                <h5 style={{ marginBottom: 4 }}>Dependency snapshot</h5>
+                <pre style={contractStyle}>
+                  {JSON.stringify(pkg.dependency_snapshot, null, 2)}
+                </pre>
+              </>
+            ) : null}
+            {pkg.validation_summary ? (
+              <>
+                <h5 style={{ marginBottom: 4 }}>Validation summary</h5>
+                <pre style={contractStyle}>
+                  {JSON.stringify(pkg.validation_summary, null, 2)}
+                </pre>
+              </>
+            ) : null}
+          </details>
 
           <h5 style={{ marginBottom: 4 }}>Revision history</h5>
           <table className="metrics-table">

@@ -162,6 +162,8 @@ describe("Rationale Families page", () => {
     renderPage();
     await screen.findByText("trend");
 
+    // UI-10: the permanently-open form is gone — the compact Add row opens the inline editor.
+    fireEvent.click(screen.getByRole("button", { name: "+ New family" }));
     fireEvent.change(screen.getByLabelText(/Display name/), { target: { value: "Breakout" } });
     fireEvent.click(screen.getByRole("button", { name: "Create family" }));
 
@@ -288,6 +290,40 @@ describe("Rationale Families page", () => {
     expect(await screen.findByText("Unable to load")).toBeInTheDocument();
     expect(
       screen.getByText("AUTHENTICATION_REQUIRED: Sign in to view rationale families."),
+    ).toBeInTheDocument();
+  });
+
+  it("focuses the assignment context on the selected family (UI-10 two-column)", async () => {
+    stubApi(BASE_ROUTES);
+    renderPage();
+    await screen.findByText("trend");
+
+    // Default context prompt on the right column, before any card is selected.
+    expect(
+      screen.getByText("Select a family card on the left to focus its assigned packages."),
+    ).toBeInTheDocument();
+
+    // The card title doubles as the selection control (aria-pressed toggle).
+    const momentumTitle = within(
+      screen.getByRole("list", { name: "Rationale families" }),
+    ).getByRole("button", { name: "Momentum" });
+    expect(momentumTitle).toHaveAttribute("aria-pressed", "false");
+
+    fireEvent.click(momentumTitle);
+
+    // Right column now names the selected family as the active context…
+    expect(momentumTitle).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText(/packages assigned to this family are highlighted/)).toBeInTheDocument();
+    // …and the RSI-14 row (assigned to Momentum/fam_1) is flagged as in-context.
+    expect(screen.getByText("RSI-14").closest("tr")).toHaveAttribute("aria-current", "true");
+    // The unassigned Condition package stays out of context.
+    expect(screen.getByText("Cross Up").closest("tr")).not.toHaveAttribute("aria-current");
+
+    // Selecting again clears the context (toggle) — back to the prompt.
+    fireEvent.click(momentumTitle);
+    expect(momentumTitle).toHaveAttribute("aria-pressed", "false");
+    expect(
+      screen.getByText("Select a family card on the left to focus its assigned packages."),
     ).toBeInTheDocument();
   });
 });

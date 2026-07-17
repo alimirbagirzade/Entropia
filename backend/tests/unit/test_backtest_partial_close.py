@@ -1,14 +1,18 @@
-"""F-07c — partial-close (close_percentage) + partial-aftermath engine tests (doc 02 §4).
+"""F-07c/f — partial-close (close_percentage) + partial-aftermath engine tests (doc 02 §4).
 
 The bar-replay engine held at most ONE full-size position and always fully closed; it ignored
 ``close_percentage`` entirely. These tests pin the new behaviour: an EXIT SIGNAL closes only
 ``close_percentage`` of the position as its own trade lot and holds the remainder under the
-aftermath (move-stop-to-entry breakevens it, close-all collapses to a full close); a stop /
-end-of-data always closes fully. A trailing / lock-in aftermath on a partial close FAILS
-CLOSED (deferred to slice f). Partial FILLS stay unmodellable over OHLCV (no liquidity data)
-and remain fail-closed from slice b. Entries + exit signals are the breakout proxy: 20 flat
-bars, an upside breakout (long @102), then a downside close (< the window low) is the exit
-signal. Each setting has a positive and a negative case (spec F-07 acceptance).
+aftermath (move-stop-to-entry breakevens it, close-all collapses to a full close,
+lock-in-profit moves the stop to the current price — F-07f closes this boundary). A
+``trailing_stop`` aftermath is modelled ONLY when the strategy's own protection-level
+trailing_stop is configured/enabled (it has no trailing parameters of its own to reuse); with
+none configured it still FAILS CLOSED (see ``test_backtest_leverage_trailing.py`` for the
+positive trailing-stop-aftermath case, which needs a protection trailing config this file's
+minimal fixture does not set up). Partial FILLS stay unmodellable over OHLCV (no liquidity
+data) and remain fail-closed from slice b. Entries + exit signals are the breakout proxy: 20
+flat bars, an upside breakout (long @102), then a downside close (< the window low) is the
+exit signal. Each setting has a positive and a negative case (spec F-07 acceptance).
 """
 
 from __future__ import annotations
@@ -149,11 +153,15 @@ def test_predicate_partial_modelled_only_for_supported_aftermaths() -> None:
         _config(close_percentage="50", partial_aftermath="move_stop_to_entry")
     )
     assert partial_close_is_modelled(_config(close_percentage="50", partial_aftermath="close_all"))
+    # F-07f: lock_in_profit is self-contained (no extra config needed) -> always modelled.
+    assert partial_close_is_modelled(
+        _config(close_percentage="50", partial_aftermath="lock_in_profit")
+    )
+    # trailing_stop has no trailing parameters of its own -> modelled only when the
+    # strategy's protection_stop_logic.trailing_stop rule is configured/enabled. This
+    # fixture's minimal config carries no protection stops at all, so it stays unsupported.
     assert not partial_close_is_modelled(
         _config(close_percentage="50", partial_aftermath="trailing_stop")
-    )
-    assert not partial_close_is_modelled(
-        _config(close_percentage="50", partial_aftermath="lock_in_profit")
     )
 
 
@@ -234,11 +242,15 @@ def test_close_all_aftermath_collapses_to_a_full_close() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# Fail-closed aftermaths                                                       #
+# trailing_stop aftermath without a protection trailing config — still         #
+# fails closed (F-07f positive/effect cases live in                            #
+# test_backtest_leverage_trailing.py, which sets up a real trailing config)    #
 # --------------------------------------------------------------------------- #
 
 
-def test_partial_trailing_stop_aftermath_fails_closed() -> None:
+def test_partial_trailing_stop_aftermath_without_protection_config_fails_closed() -> None:
+    # This fixture's protection_stop_logic carries no trailing_stop rule at all -> the
+    # aftermath has no trailing distance/activation parameters to reuse -> unsupported.
     out = _run(
         _config(close_percentage="50", partial_aftermath="trailing_stop"),
         _long_then([_EXIT_SIGNAL, _fu(23, "100", "100", "100", "100")]),
@@ -248,13 +260,25 @@ def test_partial_trailing_stop_aftermath_fails_closed() -> None:
     assert "partial_close_unsupported:trailing_stop" in out.diagnostics["warnings"]
 
 
-def test_partial_lock_in_profit_aftermath_fails_closed() -> None:
+# --------------------------------------------------------------------------- #
+# lock_in_profit aftermath — now modelled (F-07f closes the F-07c boundary)    #
+# --------------------------------------------------------------------------- #
+
+
+def test_partial_lock_in_profit_aftermath_locks_the_exit_price() -> None:
+    # F-07f: lock_in_profit moves the remainder's stop to the price at partial-close time
+    # (99, the EXIT_SIGNAL close) instead of failing closed. Bar 23 stays flat at 100
+    # (above the locked 99 level) so the remainder rides to end-of-data unstopped.
     out = _run(
         _config(close_percentage="50", partial_aftermath="lock_in_profit"),
         _long_then([_EXIT_SIGNAL, _fu(23, "100", "100", "100", "100")]),
     )
-    assert out.diagnostics["partial_close_modelled"] is False
-    assert out.summary["total_trades"] == 0
+    assert out.diagnostics["partial_close_modelled"] is True
+    assert out.diagnostics["lock_in_locks"] == 1
+    assert out.summary["total_trades"] == 2
+    assert out.trades[0].exit_reason == "partial_exit"
+    assert out.trades[1].exit_reason == "end_of_data"
+    assert out.trades[1].pnl == Decimal("-50.00")  # remainder (100-102)*25
 
 
 def test_full_close_with_trailing_aftermath_still_runs() -> None:

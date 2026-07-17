@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { NAV, ALL_NAV_ITEMS } from "@/app/nav";
+import { FUTURE_DEV_SUBPAGES, MENU_BAR, NAV, ALL_NAV_ITEMS, type MenuLink } from "@/app/nav";
 
 describe("navigation skeleton", () => {
   it("exposes every Entropia V18 screen", () => {
@@ -18,5 +18,36 @@ describe("navigation skeleton", () => {
   it("groups items into sections", () => {
     expect(NAV.length).toBeGreaterThan(0);
     for (const section of NAV) expect(section.items.length).toBeGreaterThan(0);
+  });
+});
+
+describe("Future Dev submenu targets (UI-22)", () => {
+  it("declares one dedicated, distinct route path per capability sub-page", () => {
+    // App.tsx generates one real route per entry — a duplicate or off-prefix
+    // path here would silently break the no-NotFound acceptance criterion.
+    expect(FUTURE_DEV_SUBPAGES).toHaveLength(6);
+    const paths = FUTURE_DEV_SUBPAGES.map((subpage) => subpage.path);
+    expect(new Set(paths).size).toBe(6);
+    for (const path of paths) expect(path.startsWith("/future-dev/")).toBe(true);
+  });
+
+  it("points every Future Dev menu leaf at its dedicated sub-page route", () => {
+    const group = MENU_BAR.find((candidate) => candidate.label === "Future Dev");
+    const leaves: MenuLink[] = [];
+    const walk = (items: MenuLink[] | undefined) => {
+      for (const item of items ?? []) {
+        if (item.items) walk(item.items);
+        else leaves.push(item);
+      }
+    };
+    walk(group?.items);
+    // Live Trade stays the passive mockup placeholder (no target).
+    expect(leaves.find((leaf) => leaf.label === "Live Trade")?.path).toBeUndefined();
+    const targeted = leaves.filter((leaf) => leaf.label !== "Live Trade");
+    expect(targeted).toHaveLength(6);
+    const pathByLabel = Object.fromEntries(
+      FUTURE_DEV_SUBPAGES.map((subpage) => [subpage.label, subpage.path]),
+    );
+    for (const leaf of targeted) expect(leaf.path).toBe(pathByLabel[leaf.label]);
   });
 });

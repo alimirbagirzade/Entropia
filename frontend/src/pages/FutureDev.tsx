@@ -1,9 +1,11 @@
 import { useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 
 import { EmptyState } from "@/components/EmptyState";
 import { ErrorState } from "@/components/ErrorState";
 import { Loading } from "@/components/Loading";
 import { StatusBadge } from "@/components/StatusBadge";
+import { FUTURE_DEV_SUBPAGES } from "@/app/nav";
 import { ApiError } from "@/lib/apiClient";
 import { formatUtc } from "@/lib/backtest";
 import {
@@ -20,17 +22,13 @@ import {
   useCapability,
   useCapabilityTransitions,
   useCreateAnalysisArtifact,
-  useGraphicViewOverview,
-  useQueryViewDataset,
   useTransitionCapability,
-  useViewDataset,
-  useViewDatasetHistory,
   type AnalysisArtifactRow,
   type Capability,
   type CapabilityDetail,
   type CapabilityTransition,
-  type ViewDatasetRow,
 } from "@/lib/capability";
+import { useMe } from "@/lib/hooks";
 
 // One immutable reference per line — trims and drops blanks (mirrors the
 // CreatePackage declared-keys composer).
@@ -50,23 +48,26 @@ function mutationErrorText(error: unknown): string {
 
 // Future Dev (doc 22): the server-side Capability Registry rendered as-is —
 // list/detail for any authenticated principal, the Admin-only lifecycle
-// transition composer, the Graphic View overview, and the two gated
-// operational composers (View Dataset + Analysis Artifact). The registry
-// state shown here is display only; the server re-checks it on every command
-// dispatch (CR-09, FD-02) and a denial renders the error envelope verbatim.
+// transition composer and the gated Analysis Artifact composer. §UI-22: the
+// operational controls are never exposed in a placeholder view — the
+// transition composer renders only for a server-confirmed Admin identity and
+// the artifact composer only while at least one gating capability is
+// operational (Limited/Active). Both gates are presentation decisions over
+// SERVER projections (/me + the registry rows); the server independently
+// re-checks role + state on every dispatch (CR-09, FD-02) and a denial
+// renders the error envelope verbatim. The Graphic View placeholder + the
+// graphic_view-gated View Dataset surface live on /future-dev/graphic-view.
 export function FutureDev() {
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   return (
     <>
       <h1 className="page-title">Future Dev</h1>
       <p className="page-sub">
-        Capability registry — lifecycle states, activation gates, the Graphic View overview and
-        the gated operational commands
+        Capability registry — lifecycle states, activation gates and the gated operational
+        commands; each Future Dev menu area has its own placeholder page
       </p>
       <RegistryCard selectedKey={selectedKey} onSelect={setSelectedKey} />
       {selectedKey !== null ? <CapabilityDetailCard capabilityKey={selectedKey} /> : null}
-      <GraphicViewCard />
-      <ViewDatasetCard />
       <AnalysisArtifactsCard />
     </>
   );
@@ -135,10 +136,21 @@ function CapabilityRow({
   isSelected: boolean;
   onSelect: () => void;
 }) {
+  // UI-22: a capability with a dedicated sub-page links there (navigation
+  // only — never an operational control). live_trade has no sub-page.
+  const subpage = FUTURE_DEV_SUBPAGES.find(
+    (candidate) => candidate.capabilityKey === row.capability_key,
+  );
   return (
     <tr>
       <td>
-        <strong>{row.title}</strong>{" "}
+        {subpage ? (
+          <Link to={subpage.path}>
+            <strong>{row.title}</strong>
+          </Link>
+        ) : (
+          <strong>{row.title}</strong>
+        )}{" "}
         <code>{row.capability_key}</code>
       </td>
       <td>{row.menu_path}</td>
@@ -164,6 +176,12 @@ function CapabilityRow({
 
 function CapabilityDetailCard({ capabilityKey }: { capabilityKey: string }) {
   const detail = useCapability(capabilityKey);
+  // §UI-22: the lifecycle transition composer is a registry OPERATION — it
+  // renders only for a server-confirmed Admin identity (/me projection,
+  // fail-closed while unknown). Presentation only: the command layer still
+  // enforces require_capability_admin on every dispatch.
+  const me = useMe();
+  const isAdmin = me.data?.is_admin === true;
   // Owned by the card, not the composer: a successful transition bumps
   // registry_version and remounts the composer — the accepted/denied message
   // must survive that remount (mirrors Panel's UsersCard).
@@ -204,13 +222,20 @@ function CapabilityDetailCard({ capabilityKey }: { capabilityKey: string }) {
               {formatUtc(detail.data.enabled_at)} / {formatUtc(detail.data.retirement_at)}
             </dd>
           </dl>
-          {/* Remount the composer whenever the server head moves so the draft
-              re-seeds from the fresh snapshot (mirrors ArrangeMetrics). */}
-          <TransitionComposer
-            key={`${detail.data.capability_key}:${detail.data.registry_version}`}
-            detail={detail.data}
-            transition={transition}
-          />
+          {isAdmin ? (
+            /* Remount the composer whenever the server head moves so the draft
+               re-seeds from the fresh snapshot (mirrors ArrangeMetrics). */
+            <TransitionComposer
+              key={`${detail.data.capability_key}:${detail.data.registry_version}`}
+              detail={detail.data}
+              transition={transition}
+            />
+          ) : (
+            <p>
+              Lifecycle transitions are an Admin operation — the transition controls are hidden
+              for the current identity (the server enforces this on every dispatch).
+            </p>
+          )}
           <CapabilityTransitionHistory capabilityKey={detail.data.capability_key} />
         </>
       ) : null}
@@ -385,169 +410,56 @@ function TransitionComposer({
 }
 
 // ---------------------------------------------------------------------------
-// Graphic View placeholder overview (GET /future-dev/graphic-view/overview,
-// doc 22 §4.1, FD-01/03) — static intro + the six v18 mockup cards + the
-// server lifecycle state; never a chart request, a job or fake progress
-// (CR-09). This card is a pure static placeholder mirroring the v18 mockup's
-// "FUTURE DEV / GRAPHIC VIEW" page byte-for-byte — no input, table, lifecycle
-// control or form belongs here. The gated operational commands (Prepare View
-// Dataset, Analysis Artifacts) and the Capability Registry live in their own
-// sibling sections below, never inside this one.
+// Analysis Artifacts (doc 22 §8, §10.3-§10.6 — CR-09/FD-02/FD-05/09). §UI-22:
+// the composer renders ONLY while the caller is authenticated AND at least
+// one gating capability is operational (Limited/Active), and it offers ONLY
+// artifact types whose gating capability is operational — an inactive
+// capability exposes no usable operational control. Both gates are
+// presentation over SERVER projections (/me + the registry rows; fail-closed
+// while unknown): the server re-derives the gate from artifact_type on every
+// dispatch and a stale client cache still gets CAPABILITY_NOT_ACTIVE —
+// rendered verbatim, no fake job or progress. The owner-scoped output history
+// (doc 22 §7) stays a read surface in every state.
 // ---------------------------------------------------------------------------
 
-function GraphicViewCard() {
-  const overview = useGraphicViewOverview();
-  return (
-    <section className="card" aria-labelledby="graphic-view-h">
-      <h3 id="graphic-view-h" style={{ marginTop: 0 }}>
-        Graphic View
-      </h3>
-      {overview.isLoading ? (
-        <Loading label="Loading Graphic View overview…" />
-      ) : overview.isError ? (
-        <ErrorState error={overview.error} onRetry={() => void overview.refetch()} />
-      ) : overview.data ? (
-        <>
-          <p>
-            <StatusBadge
-              label={overview.data.lifecycle_state}
-              tone={STATE_TONES[overview.data.lifecycle_state] ?? "neutral"}
-            />{" "}
-            {overview.data.status_message}
-          </p>
-          <p>{overview.data.intro}</p>
-          {overview.data.cards.map((card) => (
-            <p key={card.title}>
-              <strong>{card.title}</strong> — {card.text}
-            </p>
-          ))}
-        </>
-      ) : null}
-    </section>
+function AnalysisArtifactsCard() {
+  const capabilities = useCapabilities();
+  const me = useMe();
+  const operationalKeys = new Set(
+    (capabilities.data?.capabilities ?? [])
+      .filter((row) => row.is_operational)
+      .map((row) => row.capability_key),
   );
-}
-
-// ---------------------------------------------------------------------------
-// View Dataset — the graphic_view-gated operational command (doc 22 §8, §10.2,
-// FD-04), its own section separate from the Graphic View placeholder above.
-// ---------------------------------------------------------------------------
-
-function ViewDatasetCard() {
-  return (
-    <section className="card" aria-labelledby="view-dataset-section-h">
-      <h3 id="view-dataset-section-h" style={{ marginTop: 0 }}>
-        View Dataset
-      </h3>
-      <ViewDatasetComposer />
-      <ViewDatasetHistory />
-    </section>
+  const enabledTypes = ANALYSIS_ARTIFACT_TYPES.filter((type) =>
+    operationalKeys.has(ANALYSIS_ARTIFACT_CAPABILITY[type] ?? ""),
   );
-}
-
-// ---------------------------------------------------------------------------
-// Operational POSTs (doc 22 §8, §10 — CR-09/FD-02). The composers are never
-// pre-gated on the client's cached registry state: the SERVER re-checks
-// Limited/Active on every dispatch and an inactive capability returns
-// CAPABILITY_NOT_ACTIVE — rendered verbatim, no fake job or progress.
-// ---------------------------------------------------------------------------
-
-// POST /view-datasets/query — graphic_view-gated View Dataset preparation
-// from pinned immutable source refs (doc 22 §10.2, FD-04).
-function ViewDatasetComposer() {
-  const [sourceRefs, setSourceRefs] = useState("");
-  const [schemaVersion, setSchemaVersion] = useState("");
-  const [seriesRefs, setSeriesRefs] = useState("");
-  const [markerRefs, setMarkerRefs] = useState("");
-  const prepare = useQueryViewDataset();
-
-  const onSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const series = parseRefLines(seriesRefs);
-    const markers = parseRefLines(markerRefs);
-    prepare.mutate({
-      source_manifest_refs: parseRefLines(sourceRefs),
-      schema_version: schemaVersion.trim(),
-      // Blank optional lists are OMITTED — the route treats absent and empty
-      // alike, but the request mirrors exactly what the operator pinned.
-      ...(series.length > 0 ? { series_refs: series } : {}),
-      ...(markers.length > 0 ? { marker_refs: markers } : {}),
-    });
-  };
-
+  const authenticated = me.data?.is_authenticated === true;
   return (
-    <form onSubmit={onSubmit} aria-labelledby="view-dataset-h">
-      <h4 id="view-dataset-h">Prepare View Dataset</h4>
-      <label style={{ display: "block" }}>
-        Source manifest refs{" "}
-        <textarea
-          aria-label="Source manifest refs"
-          value={sourceRefs}
-          onChange={(event) => setSourceRefs(event.target.value)}
-          placeholder="One immutable manifest ref per line (required)"
-          rows={3}
-        />
-      </label>
-      <label>
-        Schema version{" "}
-        <input
-          aria-label="Schema version"
-          value={schemaVersion}
-          onChange={(event) => setSchemaVersion(event.target.value)}
-          placeholder="e.g. v1"
-        />
-      </label>{" "}
-      <label>
-        Series refs{" "}
-        <textarea
-          aria-label="Series refs"
-          value={seriesRefs}
-          onChange={(event) => setSeriesRefs(event.target.value)}
-          placeholder="Optional — one per line"
-          rows={2}
-        />
-      </label>{" "}
-      <label>
-        Marker refs{" "}
-        <textarea
-          aria-label="Marker refs"
-          value={markerRefs}
-          onChange={(event) => setMarkerRefs(event.target.value)}
-          placeholder="Optional — one per line"
-          rows={2}
-        />
-      </label>{" "}
-      <button
-        type="submit"
-        className="btn"
-        disabled={
-          prepare.isPending ||
-          parseRefLines(sourceRefs).length === 0 ||
-          schemaVersion.trim().length === 0
-        }
-      >
-        Prepare view dataset
-      </button>
-      {prepare.isError ? (
-        <p role="alert" style={{ color: "var(--down)", marginBottom: 0 }}>
-          {mutationErrorText(prepare.error)}
+    <section className="card" aria-labelledby="analysis-artifacts-h">
+      <h3 id="analysis-artifacts-h" style={{ marginTop: 0 }}>
+        Analysis Artifacts
+      </h3>
+      {authenticated && enabledTypes.length > 0 ? (
+        /* Remount when the operational type set moves so the selected type
+           always comes from the current server registry snapshot. */
+        <AnalysisArtifactComposer key={enabledTypes.join(",")} enabledTypes={enabledTypes} />
+      ) : (
+        <p>
+          Analysis Artifact commands are hidden — they require an authenticated identity and at
+          least one gating capability in a Limited or Active state. Lifecycle progress is tracked
+          in the registry above.
         </p>
-      ) : null}
-      {prepare.data ? (
-        <p aria-live="polite">
-          View dataset prepared — <code>{prepare.data.view_dataset_id}</code> (schema{" "}
-          {prepare.data.schema_version}, {prepare.data.source_manifest_refs.length} source ref
-          {prepare.data.source_manifest_refs.length === 1 ? "" : "s"}).
-        </p>
-      ) : null}
-    </form>
+      )}
+      <AnalysisArtifactHistory />
+    </section>
   );
 }
 
 // POST /analysis-artifacts — one immutable Analysis Artifact; the gating
 // capability is derived from artifact_type SERVER-side (doc 22 §10.3-§10.6,
 // FD-05/09). The per-type gate shown here is a display-only mirror.
-function AnalysisArtifactsCard() {
-  const [artifactType, setArtifactType] = useState<string>(ANALYSIS_ARTIFACT_TYPES[0] ?? "");
+function AnalysisArtifactComposer({ enabledTypes }: { enabledTypes: string[] }) {
+  const [artifactType, setArtifactType] = useState<string>(enabledTypes[0] ?? "");
   const [inputRefs, setInputRefs] = useState("");
   const [methodVersion, setMethodVersion] = useState("");
   const [outputRef, setOutputRef] = useState("");
@@ -565,25 +477,21 @@ function AnalysisArtifactsCard() {
   };
 
   return (
-    <section className="card" aria-labelledby="analysis-artifacts-h">
-      <h3 id="analysis-artifacts-h" style={{ marginTop: 0 }}>
-        Analysis Artifacts
-      </h3>
-      <form onSubmit={onSubmit}>
-        <label>
-          Artifact type{" "}
-          <select
-            aria-label="Artifact type"
-            value={artifactType}
-            onChange={(event) => setArtifactType(event.target.value)}
-          >
-            {ANALYSIS_ARTIFACT_TYPES.map((type) => (
-              <option key={type} value={type}>
-                {type}
-              </option>
-            ))}
-          </select>
-        </label>{" "}
+    <form onSubmit={onSubmit}>
+      <label>
+        Artifact type{" "}
+        <select
+          aria-label="Artifact type"
+          value={artifactType}
+          onChange={(event) => setArtifactType(event.target.value)}
+        >
+          {enabledTypes.map((type) => (
+            <option key={type} value={type}>
+              {type}
+            </option>
+          ))}
+        </select>
+      </label>{" "}
         <span>
           Gated by <code>{ANALYSIS_ARTIFACT_CAPABILITY[artifactType] ?? "unknown"}</code> — the
           server re-checks Limited/Active on dispatch.
@@ -638,17 +546,16 @@ function AnalysisArtifactsCard() {
             {create.data.artifact_type}, gated by <code>{create.data.capability_key}</code>).
           </p>
         ) : null}
-      </form>
-      <AnalysisArtifactHistory />
-    </section>
+    </form>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Operational output history (doc 22 §7) — the read surface for the outputs
-// the two composers above create. Owner-scoped, ACTIVE-only, newest-first;
-// an empty page renders the futureDevNoHistory.empty copy verbatim. A forward
-// keyset cursor stack pages back and forth; selecting a row opens its
+// Operational output history (doc 22 §7) — the read surface for the artifacts
+// the composer above creates. Owner-scoped, ACTIVE-only, newest-first; an
+// empty page renders the futureDevNoHistory.empty copy verbatim (reachable in
+// EVERY lifecycle state — the read surface is not an operational control). A
+// forward keyset cursor stack pages back and forth; selecting a row opens its
 // owner-scoped detail (provenance + full pinned refs).
 // ---------------------------------------------------------------------------
 
@@ -684,116 +591,6 @@ function HistoryPager({
         Next
       </button>
     </div>
-  );
-}
-
-function ViewDatasetHistory() {
-  const [stack, setStack] = useState<(string | null)[]>([null]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const cursor = stack[stack.length - 1];
-  const history = useViewDatasetHistory(cursor);
-
-  return (
-    <div style={{ marginTop: "1rem" }}>
-      <h4>View Dataset history</h4>
-      {history.isLoading ? (
-        <Loading label="Loading view dataset history…" />
-      ) : history.isError ? (
-        <ErrorState error={history.error} onRetry={() => void history.refetch()} />
-      ) : history.data ? (
-        history.data.data.length === 0 ? (
-          <EmptyState title="No output history" description={NO_OUTPUT_HISTORY} />
-        ) : (
-          <>
-            <table className="metrics-table">
-              <thead>
-                <tr>
-                  <th scope="col">View dataset</th>
-                  <th scope="col">Schema</th>
-                  <th scope="col">Source refs</th>
-                  <th scope="col">Created</th>
-                  <th scope="col">Detail</th>
-                </tr>
-              </thead>
-              <tbody>
-                {history.data.data.map((row) => (
-                  <ViewDatasetHistoryRow
-                    key={row.view_dataset_id}
-                    row={row}
-                    isSelected={row.view_dataset_id === selectedId}
-                    onSelect={() => setSelectedId(row.view_dataset_id)}
-                  />
-                ))}
-              </tbody>
-            </table>
-            <HistoryPager
-              hasMore={history.data.meta.has_more}
-              nextCursor={history.data.meta.cursor}
-              canGoBack={stack.length > 1}
-              onNext={(next) => setStack((prev) => [...prev, next])}
-              onPrev={() => setStack((prev) => prev.slice(0, -1))}
-            />
-          </>
-        )
-      ) : null}
-      {selectedId !== null ? <ViewDatasetDetailCard viewDatasetId={selectedId} /> : null}
-    </div>
-  );
-}
-
-function ViewDatasetHistoryRow({
-  row,
-  isSelected,
-  onSelect,
-}: {
-  row: ViewDatasetRow;
-  isSelected: boolean;
-  onSelect: () => void;
-}) {
-  return (
-    <tr>
-      <td>
-        <code>{row.view_dataset_id}</code>
-      </td>
-      <td>{row.schema_version}</td>
-      <td>{row.source_manifest_refs.length}</td>
-      <td>{formatUtc(row.created_at)}</td>
-      <td>
-        <button type="button" className="btn" disabled={isSelected} onClick={onSelect}>
-          View
-        </button>
-      </td>
-    </tr>
-  );
-}
-
-function ViewDatasetDetailCard({ viewDatasetId }: { viewDatasetId: string }) {
-  const detail = useViewDataset(viewDatasetId);
-  if (detail.isLoading) return <Loading label="Loading view dataset…" />;
-  if (detail.isError)
-    return <ErrorState error={detail.error} onRetry={() => void detail.refetch()} />;
-  if (!detail.data) return null;
-  return (
-    <dl className="kv">
-      <dt>View dataset</dt>
-      <dd>
-        <code>{detail.data.view_dataset_id}</code>
-      </dd>
-      <dt>Capability</dt>
-      <dd>{detail.data.capability_key}</dd>
-      <dt>Schema</dt>
-      <dd>{detail.data.schema_version}</dd>
-      <dt>Source refs</dt>
-      <dd>{detail.data.source_manifest_refs.join(", ") || "—"}</dd>
-      <dt>Series / marker refs</dt>
-      <dd>
-        {detail.data.series_refs.join(", ") || "—"} / {detail.data.marker_refs.join(", ") || "—"}
-      </dd>
-      <dt>Owner</dt>
-      <dd>{detail.data.owner_principal_id ?? "—"}</dd>
-      <dt>Created</dt>
-      <dd>{formatUtc(detail.data.created_at)}</dd>
-    </dl>
   );
 }
 

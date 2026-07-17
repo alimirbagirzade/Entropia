@@ -1,9 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 
+import { FUTURE_DEV_SUBPAGES } from "@/app/nav";
 import { FutureDev } from "@/pages/FutureDev";
+import { FutureDevCapability } from "@/pages/FutureDevCapability";
+import { FutureDevGraphicView } from "@/pages/FutureDevGraphicView";
 import { stubApi } from "./helpers/apiStub";
 
 const SHADOW_CAP = {
@@ -34,7 +37,67 @@ const PLACEHOLDER_CAP = {
   status_message: "This capability is currently a controlled Future Dev placeholder.",
 };
 
-const CAPABILITIES = { capabilities: [SHADOW_CAP, PLACEHOLDER_CAP], count: 2 };
+// §UI-22 gating fixtures: two OPERATIONAL gating capabilities so the Analysis
+// Artifact composer renders (backtest_review + parameter_fields gate 5 of the
+// 7 artifact types; signal_intelligence/regime_research stay non-operational).
+const BACKTEST_CAP = {
+  capability_key: "backtest_review",
+  title: "Backtest Review",
+  menu_path: "Future Dev > AI Operations > Backtest Review",
+  lifecycle_state: "active",
+  is_operational: true,
+  ui_surface_version: "v18-placeholder",
+  domain_contract_version: "v1",
+  registry_version: 6,
+  enabled_at: "2026-07-01T09:00:00+00:00",
+  retirement_at: null,
+  status_message: "Active capability — operational commands enabled.",
+};
+
+const PARAM_CAP = {
+  capability_key: "parameter_fields",
+  title: "Parameter Fields",
+  menu_path: "Future Dev > Research > Parameter Fields",
+  lifecycle_state: "limited",
+  is_operational: true,
+  ui_surface_version: "v18-placeholder",
+  domain_contract_version: "v1",
+  registry_version: 3,
+  enabled_at: "2026-07-02T09:00:00+00:00",
+  retirement_at: null,
+  status_message: "Limited-use capability — approved surfaces only.",
+};
+
+const CAPABILITIES = {
+  capabilities: [SHADOW_CAP, PLACEHOLDER_CAP, BACKTEST_CAP, PARAM_CAP],
+  count: 4,
+};
+
+// No operational gating capability at all — §UI-22: the composer must hide.
+const INACTIVE_CAPABILITIES = { capabilities: [SHADOW_CAP, PLACEHOLDER_CAP], count: 2 };
+
+// Server-truth identity projections (/me) — the §UI-22 permission gates.
+const ME_ADMIN = {
+  principal_id: "hu_admin",
+  principal_type: "human",
+  role: "admin",
+  is_admin: true,
+  is_authenticated: true,
+};
+const ME_USER = {
+  principal_id: "hu_user",
+  principal_type: "human",
+  role: "researcher",
+  is_admin: false,
+  is_authenticated: true,
+};
+const ME_ANON = {
+  principal_id: null,
+  principal_type: "anonymous",
+  role: null,
+  is_admin: false,
+  is_authenticated: false,
+};
 
 const DETAIL = {
   ...SHADOW_CAP,
@@ -65,6 +128,16 @@ const OVERVIEW = {
     { title: "Equity Curve", text: "Future: portfolio equity curves." },
   ],
   status_message: "Shadow-state capability — internal parity runs only.",
+};
+
+// The same overview once graphic_view is operational — the View Dataset
+// surface may render (§UI-22: capability active + authenticated identity).
+const OPERATIONAL_OVERVIEW = {
+  ...OVERVIEW,
+  lifecycle_state: "limited",
+  is_operational: true,
+  registry_version: 5,
+  status_message: "Limited-use capability — approved surfaces only.",
 };
 
 const TRANSITION_RESULT = {
@@ -185,31 +258,46 @@ const NO_OUTPUT_HISTORY =
 // default to empty so every existing test that renders FutureDev stays clean.
 function baseRoutes(onTransition?: (init?: RequestInit) => unknown) {
   return {
-    "GET /future-dev/graphic-view/overview": OVERVIEW,
     "POST /capabilities/graphic_view/lifecycle-transitions":
       onTransition ?? TRANSITION_RESULT,
-    "POST /view-datasets/query": VIEW_DATASET_RESULT,
     "POST /analysis-artifacts": ARTIFACT_RESULT,
     // The lifecycle-transitions GET must precede the "/capabilities/graphic_view"
     // detail prefix it contains (apiStub matches the first fragment in the URL).
     "GET /capabilities/graphic_view/lifecycle-transitions": EMPTY_TRANSITIONS,
     "GET /capabilities/graphic_view": DETAIL,
     "GET /capabilities": CAPABILITIES,
-    "GET /view-datasets": EMPTY_VIEW_HISTORY,
     "GET /analysis-artifacts": EMPTY_ARTIFACT_HISTORY,
+    "GET /me": ME_ADMIN,
   };
 }
 
-function renderFutureDev() {
+// Routes for the /future-dev/graphic-view page (overview + gated View Dataset
+// surface). Operational + authenticated by default; tests override per case.
+function graphicViewRoutes(onPrepare?: (init?: RequestInit) => unknown) {
+  return {
+    "GET /future-dev/graphic-view/overview": OPERATIONAL_OVERVIEW,
+    "POST /view-datasets/query": onPrepare ?? VIEW_DATASET_RESULT,
+    "GET /view-datasets": EMPTY_VIEW_HISTORY,
+    "GET /me": ME_ADMIN,
+  };
+}
+
+function renderWithProviders(ui: JSX.Element, initialEntry: string) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={["/future-dev"]}>
-        <FutureDev />
-      </MemoryRouter>
+      <MemoryRouter initialEntries={[initialEntry]}>{ui}</MemoryRouter>
     </QueryClientProvider>,
   );
   return client;
+}
+
+function renderFutureDev() {
+  return renderWithProviders(<FutureDev />, "/future-dev");
+}
+
+function renderGraphicView() {
+  return renderWithProviders(<FutureDevGraphicView />, "/future-dev/graphic-view");
 }
 
 async function openGraphicViewDetail() {
@@ -231,17 +319,19 @@ describe("Future Dev page", () => {
     await screen.findByText("Live Trade");
     expect(screen.getByText("Future Dev > Live Trade")).toBeTruthy();
     expect(screen.getByText("placeholder")).toBeTruthy();
-    // Shadow badge appears on the registry row AND the Graphic View card.
     expect((await screen.findAllByText("shadow")).length).toBeGreaterThanOrEqual(1);
+    // UI-22: a capability with a dedicated sub-page links there from its row.
+    const graphicLink = screen.getByRole("link", { name: "Graphic View" });
+    expect(graphicLink.getAttribute("href")).toBe("/future-dev/graphic-view");
   });
 
   it("loads the detail projection with gate states and provenance on View", async () => {
     stubApi(baseRoutes());
     renderFutureDev();
     await openGraphicViewDetail();
-    expect((screen.getByRole("checkbox", { name: "domain" }) as HTMLInputElement).checked).toBe(
-      true,
-    );
+    expect(
+      ((await screen.findByRole("checkbox", { name: "domain" })) as HTMLInputElement).checked,
+    ).toBe(true);
     expect((screen.getByRole("checkbox", { name: "ui" }) as HTMLInputElement).checked).toBe(false);
     expect(screen.getByText(/by hu_admin/)).toBeTruthy();
   });
@@ -250,7 +340,9 @@ describe("Future Dev page", () => {
     stubApi(baseRoutes());
     renderFutureDev();
     await openGraphicViewDetail();
-    const select = screen.getByRole("combobox", { name: "Target state" }) as HTMLSelectElement;
+    const select = (await screen.findByRole("combobox", {
+      name: "Target state",
+    })) as HTMLSelectElement;
     // shadow -> limited is the single legal edge (doc 22 §9.1).
     expect(Array.from(select.options).map((option) => option.value)).toEqual(["limited"]);
   });
@@ -259,12 +351,25 @@ describe("Future Dev page", () => {
     stubApi(baseRoutes());
     renderFutureDev();
     await openGraphicViewDetail();
-    const apply = screen.getByRole("button", { name: "Apply transition" }) as HTMLButtonElement;
+    const apply = (await screen.findByRole("button", {
+      name: "Apply transition",
+    })) as HTMLButtonElement;
     expect(apply.disabled).toBe(true);
     fireEvent.change(screen.getByRole("textbox", { name: "Transition reason" }), {
       target: { value: "promote to limited" },
     });
     expect(apply.disabled).toBe(false);
+  });
+
+  it("hides the lifecycle transition composer for a non-Admin identity", async () => {
+    stubApi({ ...baseRoutes(), "GET /me": ME_USER });
+    renderFutureDev();
+    await openGraphicViewDetail();
+    // §UI-22: the registry OPERATION is exposed only with Admin permission —
+    // the detail read surface (gate provenance, timeline) stays visible.
+    expect(await screen.findByText(/Lifecycle transitions are an Admin operation/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Apply transition" })).toBeNull();
+    expect(screen.queryByRole("checkbox", { name: "domain" })).toBeNull();
   });
 
   it("POSTs the OCC registry version with an Idempotency-Key and omits an untouched snapshot", async () => {
@@ -277,7 +382,7 @@ describe("Future Dev page", () => {
     );
     renderFutureDev();
     await openGraphicViewDetail();
-    fireEvent.change(screen.getByRole("textbox", { name: "Transition reason" }), {
+    fireEvent.change(await screen.findByRole("textbox", { name: "Transition reason" }), {
       target: { value: "promote to limited" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Apply transition" }));
@@ -300,7 +405,7 @@ describe("Future Dev page", () => {
     );
     renderFutureDev();
     await openGraphicViewDetail();
-    fireEvent.click(screen.getByRole("checkbox", { name: "ui" }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: "ui" }));
     fireEvent.change(screen.getByRole("textbox", { name: "Transition reason" }), {
       target: { value: "ui gate complete" },
     });
@@ -316,103 +421,38 @@ describe("Future Dev page", () => {
     });
   });
 
-  it("renders the Graphic View placeholder overview verbatim", async () => {
+  it("offers only artifact types whose gating capability is operational", async () => {
     stubApi(baseRoutes());
     renderFutureDev();
-    await screen.findByText(/reserved for future chart and visual-review development/);
-    expect(screen.getByText("Price Chart")).toBeTruthy();
-    expect(screen.getByText(/portfolio equity curves/)).toBeTruthy();
-  });
-
-  it("POSTs the pinned view-dataset refs with an Idempotency-Key and omits blank optional lists", async () => {
-    let captured: RequestInit | undefined;
-    stubApi({
-      ...baseRoutes(),
-      "POST /view-datasets/query": (init?: RequestInit) => {
-        captured = init;
-        return VIEW_DATASET_RESULT;
-      },
-    });
-    renderFutureDev();
-    await screen.findByText("Live Trade");
-    fireEvent.change(screen.getByRole("textbox", { name: "Source manifest refs" }), {
-      target: { value: "man_1\n  man_2  \n\n" },
-    });
-    fireEvent.change(screen.getByRole("textbox", { name: "Schema version" }), {
-      target: { value: "v1" },
-    });
-    fireEvent.change(screen.getByRole("textbox", { name: "Marker refs" }), {
-      target: { value: "mk_1" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Prepare view dataset" }));
-    await screen.findByText(/View dataset prepared/);
-    expect(screen.getByText("vds_01")).toBeTruthy();
-    const body = JSON.parse(String(captured?.body)) as Record<string, unknown>;
-    expect(body.source_manifest_refs).toEqual(["man_1", "man_2"]);
-    expect(body.schema_version).toBe("v1");
-    expect(body.marker_refs).toEqual(["mk_1"]);
-    // Blank optional lists never travel — absent, not empty.
-    expect("series_refs" in body).toBe(false);
-    expect("range_spec" in body).toBe(false);
-    expect((captured?.headers as Record<string, string>)["Idempotency-Key"]).toBeTruthy();
-  });
-
-  it("blocks a view-dataset submit until source refs and schema version are pinned", async () => {
-    stubApi(baseRoutes());
-    renderFutureDev();
-    await screen.findByText("Live Trade");
-    const prepare = screen.getByRole("button", {
-      name: "Prepare view dataset",
-    }) as HTMLButtonElement;
-    expect(prepare.disabled).toBe(true);
-    fireEvent.change(screen.getByRole("textbox", { name: "Source manifest refs" }), {
-      target: { value: "man_1" },
-    });
-    expect(prepare.disabled).toBe(true);
-    fireEvent.change(screen.getByRole("textbox", { name: "Schema version" }), {
-      target: { value: "v1" },
-    });
-    expect(prepare.disabled).toBe(false);
-  });
-
-  it("surfaces CAPABILITY_NOT_ACTIVE verbatim and retries with a fresh Idempotency-Key", async () => {
-    const keys: string[] = [];
-    stubApi({
-      ...baseRoutes(),
-      "POST /view-datasets/query": (init?: RequestInit) => {
-        keys.push((init?.headers as Record<string, string>)["Idempotency-Key"] ?? "");
-        throw new Error("CAPABILITY_NOT_ACTIVE: Capability 'graphic_view' is not active.");
-      },
-    });
-    renderFutureDev();
-    await screen.findByText("Live Trade");
-    fireEvent.change(screen.getByRole("textbox", { name: "Source manifest refs" }), {
-      target: { value: "man_1" },
-    });
-    fireEvent.change(screen.getByRole("textbox", { name: "Schema version" }), {
-      target: { value: "v1" },
-    });
-    const prepare = screen.getByRole("button", { name: "Prepare view dataset" });
-    fireEvent.click(prepare);
-    await screen.findByText(/CAPABILITY_NOT_ACTIVE: Capability 'graphic_view' is not active\./);
-    fireEvent.click(prepare);
-    // A retry after a rejection is a NEW decision — never a replay of the key.
-    await vi.waitFor(() => expect(keys).toHaveLength(2));
-    expect(keys[0]).toBeTruthy();
-    expect(keys[1]).toBeTruthy();
-    expect(keys[0]).not.toBe(keys[1]);
-  });
-
-  it("scopes the gating-capability display to the selected artifact type", async () => {
-    stubApi(baseRoutes());
-    renderFutureDev();
-    await screen.findByText("Live Trade");
-    const select = screen.getByRole("combobox", { name: "Artifact type" }) as HTMLSelectElement;
-    // Sorted server `allowed` order — first option is backtest_review.
+    const region = await screen.findByRole("region", { name: "Analysis Artifacts" });
+    const select = (await within(region).findByRole("combobox", {
+      name: "Artifact type",
+    })) as HTMLSelectElement;
+    // backtest_review (active) + parameter_fields (limited) gate exactly these
+    // five types; signal_intelligence/regime_research types never appear.
+    expect(Array.from(select.options).map((option) => option.value)).toEqual([
+      "backtest_review",
+      "monte_carlo",
+      "parameter_fields",
+      "sensitivity",
+      "walk_forward",
+    ]);
     expect(select.value).toBe("backtest_review");
-    expect(screen.getByText("backtest_review", { selector: "code" })).toBeTruthy();
+    expect(within(region).getByText("backtest_review", { selector: "code" })).toBeTruthy();
     fireEvent.change(select, { target: { value: "sensitivity" } });
-    expect(screen.getByText("parameter_fields", { selector: "code" })).toBeTruthy();
+    expect(within(region).getByText("parameter_fields", { selector: "code" })).toBeTruthy();
+  });
+
+  it("hides the analysis artifact composer while no gating capability is operational", async () => {
+    stubApi({ ...baseRoutes(), "GET /capabilities": INACTIVE_CAPABILITIES });
+    renderFutureDev();
+    await screen.findByText("Live Trade");
+    // §UI-22 acceptance: an inactive capability exposes no usable operational
+    // control — no composer, no submit; the doc 22 §7 read surface stays.
+    expect(await screen.findByText(/Analysis Artifact commands are hidden/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Create analysis artifact" })).toBeNull();
+    expect(screen.queryByRole("combobox", { name: "Artifact type" })).toBeNull();
+    expect(await screen.findByText(NO_OUTPUT_HISTORY)).toBeTruthy();
   });
 
   it("POSTs the analysis artifact with an Idempotency-Key and reports the created id", async () => {
@@ -425,8 +465,7 @@ describe("Future Dev page", () => {
       },
     });
     renderFutureDev();
-    await screen.findByText("Live Trade");
-    fireEvent.change(screen.getByRole("combobox", { name: "Artifact type" }), {
+    fireEvent.change(await screen.findByRole("combobox", { name: "Artifact type" }), {
       target: { value: "monte_carlo" },
     });
     fireEvent.change(screen.getByRole("textbox", { name: "Input manifest refs" }), {
@@ -447,22 +486,14 @@ describe("Future Dev page", () => {
     expect((captured?.headers as Record<string, string>)["Idempotency-Key"]).toBeTruthy();
   });
 
-  it("renders the futureDevNoHistory.empty copy when a capability has no output", async () => {
+  it("renders the futureDevNoHistory.empty copy when the capability has no output", async () => {
     stubApi(baseRoutes());
     renderFutureDev();
     await screen.findByText("Live Trade");
-    // Both the View Dataset and the Analysis Artifact histories are empty here.
+    // The root page hosts exactly one output history (Analysis Artifacts);
+    // the View Dataset history lives on /future-dev/graphic-view.
     const empties = await screen.findAllByText(NO_OUTPUT_HISTORY);
-    expect(empties.length).toBe(2);
-  });
-
-  it("renders the owner's View Dataset history rows", async () => {
-    stubApi({ ...baseRoutes(), "GET /view-datasets": VIEW_DATASET_HISTORY });
-    renderFutureDev();
-    await screen.findByText("vds_01");
-    expect(screen.getByText("View Dataset history")).toBeTruthy();
-    // The Analysis Artifact history is still empty in this scenario.
-    expect(screen.getByText(NO_OUTPUT_HISTORY)).toBeTruthy();
+    expect(empties.length).toBe(1);
   });
 
   it("renders the owner's Analysis Artifact history with a type filter", async () => {
@@ -470,22 +501,6 @@ describe("Future Dev page", () => {
     renderFutureDev();
     await screen.findByText("art_01");
     expect(screen.getByRole("combobox", { name: "Filter artifact type" })).toBeTruthy();
-  });
-
-  it("opens the owner-scoped View Dataset detail on select", async () => {
-    stubApi({
-      // The detail fragment MUST precede the list prefix it contains.
-      "GET /view-datasets/vds_01": VIEW_DATASET_DETAIL,
-      ...baseRoutes(),
-      "GET /view-datasets": VIEW_DATASET_HISTORY,
-    });
-    renderFutureDev();
-    await screen.findByText("vds_01");
-    // The View Dataset history row's View button is the last one on the page.
-    const viewButtons = screen.getAllByRole("button", { name: "View" });
-    fireEvent.click(viewButtons[viewButtons.length - 1]);
-    // The owner provenance only exists on the detail projection.
-    await screen.findByText("hu_user");
   });
 
   it("renders the immutable transition timeline in the capability detail", async () => {
@@ -510,5 +525,206 @@ describe("Future Dev page", () => {
     expect(
       await screen.findByText("No lifecycle transition has been recorded for this capability yet."),
     ).toBeTruthy();
+  });
+});
+
+describe("Future Dev / Graphic View page", () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("renders the documented intro and the static placeholder cards verbatim", async () => {
+    stubApi({ ...graphicViewRoutes(), "GET /future-dev/graphic-view/overview": OVERVIEW });
+    renderGraphicView();
+    await screen.findByText(/reserved for future chart and visual-review development/);
+    expect(screen.getByText("Price Chart")).toBeTruthy();
+    expect(screen.getByText(/portfolio equity curves/)).toBeTruthy();
+  });
+
+  it("renders a pure placeholder while the capability is not operational", async () => {
+    stubApi({ ...graphicViewRoutes(), "GET /future-dev/graphic-view/overview": OVERVIEW });
+    renderGraphicView();
+    await screen.findByText(/reserved for future chart and visual-review development/);
+    // §UI-22: in placeholder state the page renders NO input, table,
+    // lifecycle control or operational form — not a single control.
+    expect(screen.queryAllByRole("button")).toHaveLength(0);
+    expect(screen.queryAllByRole("textbox")).toHaveLength(0);
+    expect(screen.queryAllByRole("table")).toHaveLength(0);
+    expect(screen.queryByText("Prepare View Dataset")).toBeNull();
+    expect(
+      screen.getByText(/Operational View Dataset commands unlock when this capability reaches/),
+    ).toBeTruthy();
+  });
+
+  it("hides the View Dataset surface from an unauthenticated identity", async () => {
+    stubApi({ ...graphicViewRoutes(), "GET /me": ME_ANON });
+    renderGraphicView();
+    await screen.findByText(/reserved for future chart and visual-review development/);
+    expect(screen.queryByText("Prepare View Dataset")).toBeNull();
+    expect(screen.queryAllByRole("textbox")).toHaveLength(0);
+  });
+
+  it("POSTs the pinned view-dataset refs with an Idempotency-Key and omits blank optional lists", async () => {
+    let captured: RequestInit | undefined;
+    stubApi(
+      graphicViewRoutes((init) => {
+        captured = init;
+        return VIEW_DATASET_RESULT;
+      }),
+    );
+    renderGraphicView();
+    fireEvent.change(await screen.findByRole("textbox", { name: "Source manifest refs" }), {
+      target: { value: "man_1\n  man_2  \n\n" },
+    });
+    fireEvent.change(screen.getByRole("textbox", { name: "Schema version" }), {
+      target: { value: "v1" },
+    });
+    fireEvent.change(screen.getByRole("textbox", { name: "Marker refs" }), {
+      target: { value: "mk_1" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Prepare view dataset" }));
+    await screen.findByText(/View dataset prepared/);
+    expect(screen.getByText("vds_01")).toBeTruthy();
+    const body = JSON.parse(String(captured?.body)) as Record<string, unknown>;
+    expect(body.source_manifest_refs).toEqual(["man_1", "man_2"]);
+    expect(body.schema_version).toBe("v1");
+    expect(body.marker_refs).toEqual(["mk_1"]);
+    // Blank optional lists never travel — absent, not empty.
+    expect("series_refs" in body).toBe(false);
+    expect("range_spec" in body).toBe(false);
+    expect((captured?.headers as Record<string, string>)["Idempotency-Key"]).toBeTruthy();
+  });
+
+  it("blocks a view-dataset submit until source refs and schema version are pinned", async () => {
+    stubApi(graphicViewRoutes());
+    renderGraphicView();
+    const prepare = (await screen.findByRole("button", {
+      name: "Prepare view dataset",
+    })) as HTMLButtonElement;
+    expect(prepare.disabled).toBe(true);
+    fireEvent.change(screen.getByRole("textbox", { name: "Source manifest refs" }), {
+      target: { value: "man_1" },
+    });
+    expect(prepare.disabled).toBe(true);
+    fireEvent.change(screen.getByRole("textbox", { name: "Schema version" }), {
+      target: { value: "v1" },
+    });
+    expect(prepare.disabled).toBe(false);
+  });
+
+  it("surfaces CAPABILITY_NOT_ACTIVE verbatim and retries with a fresh Idempotency-Key", async () => {
+    // The client-side gate is display only over a cached projection — a stale
+    // cache still dispatches and the SERVER denial renders verbatim (FD-02).
+    const keys: string[] = [];
+    stubApi(
+      graphicViewRoutes((init) => {
+        keys.push((init?.headers as Record<string, string>)["Idempotency-Key"] ?? "");
+        throw new Error("CAPABILITY_NOT_ACTIVE: Capability 'graphic_view' is not active.");
+      }),
+    );
+    renderGraphicView();
+    fireEvent.change(await screen.findByRole("textbox", { name: "Source manifest refs" }), {
+      target: { value: "man_1" },
+    });
+    fireEvent.change(screen.getByRole("textbox", { name: "Schema version" }), {
+      target: { value: "v1" },
+    });
+    const prepare = screen.getByRole("button", { name: "Prepare view dataset" });
+    fireEvent.click(prepare);
+    await screen.findByText(/CAPABILITY_NOT_ACTIVE: Capability 'graphic_view' is not active\./);
+    fireEvent.click(prepare);
+    // A retry after a rejection is a NEW decision — never a replay of the key.
+    await vi.waitFor(() => expect(keys).toHaveLength(2));
+    expect(keys[0]).toBeTruthy();
+    expect(keys[1]).toBeTruthy();
+    expect(keys[0]).not.toBe(keys[1]);
+  });
+
+  it("renders the owner's View Dataset history and opens the owner-scoped detail", async () => {
+    stubApi({
+      // The detail fragment MUST precede the list prefix it contains.
+      "GET /view-datasets/vds_01": VIEW_DATASET_DETAIL,
+      ...graphicViewRoutes(),
+      "GET /view-datasets": VIEW_DATASET_HISTORY,
+    });
+    renderGraphicView();
+    await screen.findByText("vds_01");
+    expect(screen.getByText("View Dataset history")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "View" }));
+    // The owner provenance only exists on the detail projection.
+    await screen.findByText("hu_user");
+  });
+
+  it("renders the futureDevNoHistory.empty copy for an operational capability with no output", async () => {
+    stubApi(graphicViewRoutes());
+    renderGraphicView();
+    expect(await screen.findByText(NO_OUTPUT_HISTORY)).toBeTruthy();
+  });
+});
+
+describe("Future Dev capability placeholder page", () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  const BACKTEST_SUBPAGE = FUTURE_DEV_SUBPAGES.find(
+    (subpage) => subpage.capabilityKey === "backtest_review",
+  )!;
+  const SIGNAL_SUBPAGE = FUTURE_DEV_SUBPAGES.find(
+    (subpage) => subpage.capabilityKey === "signal_intelligence",
+  )!;
+
+  const SIGNAL_CAP = {
+    ...PLACEHOLDER_CAP,
+    capability_key: "signal_intelligence",
+    title: "Signal Intelligence",
+    menu_path: "Future Dev > AI Operations > Signal Intelligence",
+    lifecycle_state: "designed",
+    status_message: "Designed capability — implementation has not begun.",
+  };
+
+  function renderSubpage(subpage: typeof BACKTEST_SUBPAGE) {
+    return renderWithProviders(<FutureDevCapability subpage={subpage} />, subpage.path);
+  }
+
+  it("renders the documented placeholder with zero operational controls", async () => {
+    stubApi({
+      "GET /capabilities": { capabilities: [SIGNAL_CAP], count: 1 },
+      "GET /me": ME_ADMIN,
+    });
+    renderSubpage(SIGNAL_SUBPAGE);
+    await screen.findByText(/Designed capability — implementation has not begun\./);
+    expect(screen.getByText(/intentionally inactive in this prototype stage/)).toBeTruthy();
+    // §UI-22: no input, table, lifecycle control or operational form — the
+    // page renders no control at all in placeholder state.
+    expect(screen.queryAllByRole("button")).toHaveLength(0);
+    expect(screen.queryAllByRole("textbox")).toHaveLength(0);
+    expect(screen.queryAllByRole("table")).toHaveLength(0);
+    expect(screen.getByRole("link", { name: "Future Dev registry" })).toBeTruthy();
+  });
+
+  it("points at the registry for an operational capability instead of embedding controls", async () => {
+    stubApi({
+      "GET /capabilities": CAPABILITIES,
+      "GET /me": ME_ADMIN,
+    });
+    renderSubpage(BACKTEST_SUBPAGE);
+    await screen.findByText(/Active capability — operational commands enabled\./);
+    expect(screen.getByText(/This capability is operational/)).toBeTruthy();
+    expect(screen.queryAllByRole("textbox")).toHaveLength(0);
+    expect(screen.queryAllByRole("table")).toHaveLength(0);
+  });
+
+  it("shows an honest empty state for a capability the server registry does not know", async () => {
+    stubApi({
+      "GET /capabilities": { capabilities: [], count: 0 },
+      "GET /me": ME_ADMIN,
+    });
+    renderSubpage(SIGNAL_SUBPAGE);
+    expect(await screen.findByText("Not registered")).toBeTruthy();
   });
 });

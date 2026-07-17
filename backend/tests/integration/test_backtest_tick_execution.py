@@ -40,6 +40,7 @@ from entropia.infrastructure.postgres.models import BacktestRun
 from entropia.infrastructure.postgres.repositories import backtest as bt_repo
 from entropia.infrastructure.postgres.repositories import market_data as md_repo
 from entropia.infrastructure.postgres.repositories import packages as pkg_repo
+from entropia.shared.errors import ReadinessBlockedError
 
 # Reuse the seeding helpers from the sibling backtest persistence suite.
 from tests.integration.test_backtest_persistence import (
@@ -81,7 +82,9 @@ async def _seed_tick_revision(
     return tick_rev.revision_id
 
 
-async def _tick_composition(session, actor, *, tick_policy: str = "require") -> str:
+async def _tick_composition(
+    session, actor, *, tick_policy: str = "require", entry_timing: str | None = None
+) -> str:
     """A ready composition whose one strategy carries the given intrabar tick policy.
 
     Mirrors ``test_backtest_persistence._ready_composition`` (approved OHLCV revision
@@ -132,6 +135,8 @@ async def _tick_composition(session, actor, *, tick_policy: str = "require") -> 
         )
     )
     payload["data"]["intrabar_policy"]["tick_policy"] = tick_policy
+    if entry_timing is not None:
+        payload["data"]["execution"]["entry_timing"] = entry_timing
     work_object = await mb_cmd.create_work_object(
         session, actor, object_kind="strategy", payload=payload
     )
@@ -261,3 +266,51 @@ async def test_tick_pin_without_processed_asset_fails_closed(session) -> None:
     assert out["failure_code"] == "RUN_FAILED_ASSET_UNAVAILABLE"
     run = await session.get(BacktestRun, admit["run_id"])
     assert run is not None and "no processed tick asset" in run.failure_message
+
+
+# --------------------------------------------------------------------------- #
+# F-07i (C): the tick-dependent SETTINGS through the full admission chain      #
+# --------------------------------------------------------------------------- #
+
+
+async def test_admission_blocks_a_tick_timing_without_the_tick_demand(session) -> None:
+    # ``intrabar_touch`` without 'Use Tick Data' = Yes is NOT modelled (C): the shared
+    # predicate makes Ready Check block RUN — no run/manifest/job is left behind.
+    await _seed_principals(session)
+    await _seed_tick_revision(session)  # availability alone is NOT the gate — the demand is
+    composition_id = await _tick_composition(
+        session, USER1, tick_policy="inherit", entry_timing="intrabar_touch"
+    )
+
+    with pytest.raises(ReadinessBlockedError) as exc_info:
+        await backtest_cmd.request_backtest_run(session, USER1, composition_id=composition_id)
+    await session.rollback()
+    details = exc_info.value.details or []
+    assert any(d.get("code") == "STRATEGY_EXECUTION_TIMING_UNSUPPORTED" for d in details)
+
+
+async def test_tick_timing_runs_end_to_end_over_the_pinned_print_path(session) -> None:
+    # The same timing WITH the demand admits (predicate True), pins the tick revision,
+    # and the worker replays the settings over the pinned print path -> SUCCEEDED.
+    await _seed_principals(session)
+    tick_revision_id = await _seed_tick_revision(session)
+    composition_id = await _tick_composition(session, USER1, entry_timing="intrabar_touch")
+
+    admit = await backtest_cmd.request_backtest_run(session, USER1, composition_id=composition_id)
+    await session.commit()
+    manifest = await bt_repo.get_manifest_by_run(session, admit["run_id"])
+    assert manifest is not None
+    assert next(iter(manifest.manifest["tick_data"].values()))["tick_revision_id"] == (
+        tick_revision_id
+    )
+
+    calls: list[TickSourceRef] = []
+    out = await run_backtest(
+        session, admit["job_id"], stream_bars=_e2e_bars, stream_ticks=_tick_recorder(calls)
+    )
+    await session.commit()
+
+    assert out["state"] == "succeeded"
+    assert [c.revision_id for c in calls] == [tick_revision_id]
+    run = await session.get(BacktestRun, admit["run_id"])
+    assert run is not None and run.result_id == out["result_id"]

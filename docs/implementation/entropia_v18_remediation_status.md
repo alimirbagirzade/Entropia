@@ -393,6 +393,61 @@ Otherwise the spec's technical "broken" claims are **accurate, not errors** (ver
   same-bar stop-vs-limit ordering STILL fail closed via the unchanged predicates.
   Branch `feat/v18-f07i-b-intrabar-engine`.
 
+- 2026-07-17 — F-07 follow-up (i) **sub-slice C** — tick-dependent execution SETTINGS opened over
+  the pinned print path (this PR). The (B) honest boundary closes: the settings the UI offers but
+  the engine refused now EXECUTE — each modelled ONLY when the strategy itself DEMANDS tick data
+  (`tick_data_required`, 'Use Tick Data' = Yes), because only that demand chains the (i)a
+  availability blocker → the admission pin → the worker stream; without it every predicate stays
+  False → Ready Check BLOCKER + an inert engine run (doc 02 "cannot silently imitate unavailable
+  detail" / Master Ref ~3558, 7229). **Predicates (shared source of truth, config-pure):**
+  `execution_timing_is_modelled` — `_TICK_ENTRY_TIMINGS = {intrabar_touch, limit_fill_simulation}`
+  / `_TICK_EXIT_TIMINGS = {intrabar_touch, stop_limit_priority_simulation}` modelled iff
+  tick-backed (`limit_fill_simulation` additionally needs a limit-backed order type — nothing to
+  simulate otherwise); `order_execution_is_modelled` — a `partial_fill_policy != not_allowed` is
+  modelled iff tick-backed; **`best_bid_ask` stays BLOCKED regardless** (needs the observed
+  bid/ask QUOTE series, Master Ref §2.3 Spread/Execution — a different data plane than prints);
+  validator texts updated, decision logic untouched (the predicates ARE the gate). **Engine:**
+  (1) `intrabar_touch` ENTRY = a resting TOUCH order at the signal price reusing the F-07b
+  working-limit machinery verbatim (entry-signal-price rule, until-cancelled); (2) tick-backed
+  entry timings make the print path AUTHORITATIVE for a resting order's touch
+  (`_limit_touch_evidence`: a bar extreme the prints never confirm does not fill; a PRINT-LESS
+  bar keeps the coarse bar-touch — sparsity is never proof of no fill); (3) `intrabar_touch`
+  EXIT = a resting touch exit at the exit-signal level (`exit_touch`, fills on a print return,
+  same-bar stop wins, dies with its position); (4) `stop_limit_priority_simulation` = the
+  same-bar stop-then-limit sequence resolved by the OBSERVED prints in (1c) (trigger print →
+  later print at the armed limit → SAME-bar fill; doc 02 §5.2 stays true — no print back at the
+  limit, no position; §9.1 "no assumed path" honoured: only observed sequences are taken);
+  (5) partial fills (`_fill_resting_limit` + the (1b2) remainder block): the filled FRACTION is
+  print-SIZE evidence vs `_planned_size` (the ONE sizing source `_open` also books from — no
+  drift); `allowed`/`minimum_50_percent` rest the remainder AGAINST the open position
+  (`remaining_size`/`for_position_seq` order-remaining ledger; later touches top up via
+  `_absorb_remainder` — F-07d weighted-basis mutation, stop levels stay as installed; the
+  remainder DIES with its position, traced `position_closed`, and (1b) explicitly never re-arms
+  a remainder as a fresh entry — a self-review-caught HIGH bug + regression test);
+  `fill_remaining_as_market` completes at the bar close; `cancel_remaining` drops the rest;
+  min-50 rejects a sub-half bar (`rejected_below_minimum`, order keeps resting). Size-less
+  evidence → coarse full fill + `partial_fill_evidence_unavailable` warning (L4 — a fraction is
+  never fabricated). **Taxonomy:** `partial_fill` joins `DECISION_TRACE_EVENT_TYPES`;
+  **`UNMODELLED_DECISION_CLASSES` is now EMPTY**. Diagnostics += `tick_resolved_entry_fills`/
+  `partial_fills`/`same_bar_stop_limit_fills`/`touch_orders_placed`/`touch_exit_fills` (all in
+  `_DIAG_SUM_KEYS`); `entry_fill` details gain `tick_resolved`/`partial_fill`/
+  `same_bar_stop_limit` keys ONLY when true (tick-less traces byte-identical). **Data plane:**
+  `schema_mapping` TICK_TRADES gains the OPTIONAL canonical `size` column (synonyms
+  size/qty/quantity/amount/volume/v/vol) so ingested prints carry the fraction evidence;
+  `_Tick.size` optional, non-positive/unparseable → None (price path still orders).
+  **`ENGINE_VERSION → backtest-engine-v16-tick-settings`** (execution_key ns shift, INF-04/05).
+  **NO migration** (mapping is code; alembic head stays `0023`). +24 tests (22 unit
+  `test_backtest_tick_settings.py`: predicate ± per setting incl. best_bid_ask, Ready blocker ±,
+  inert-engine backstop, touch entry fill/print-authority, limit-sim print-vs-bar-extreme, all 5
+  partial policies + size-less degrade + remainder-dies regression, same-bar stop-limit ± and
+  next-bar control, touch exit fill/rest; 2 integration: intrabar_touch + inherit → 422 blocked;
+  + require → pin + worker stream + SUCCEEDED) → **1773 backend tests green** (local, isolated
+  DB). Honest boundaries: `best_bid_ask` awaits a SPREAD_EXECUTION data layer (out of scope);
+  print sizes are assumed position-size base units (L4 docstring); `not_allowed` keeps the
+  F-07b full-fill-on-touch model verbatim; stop-vs-exit same-bar collisions stay governed by
+  the EXPLICIT §5.9 policy (spec 8805 — priority policy, not an assumed path).
+  Branch `feat/v18-f07i-c-tick-settings`.
+
 - 2026-07-17 — F-24 replace tests that approve incorrect behavior. **TESTS-ONLY** (`backend/tests/`;
   `engine.py` untouched, no migration, ENGINE_VERSION unchanged (v14), **1729 tests green** — count
   unchanged, one test rewritten in place). The two NAMED cases were already closed (sizing all-in →

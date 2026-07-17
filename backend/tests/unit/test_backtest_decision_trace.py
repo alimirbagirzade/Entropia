@@ -255,13 +255,12 @@ def test_diagnostics_expose_trace_schema_and_unmodelled_classes() -> None:
     diag = out.diagnostics
     assert diag["decision_trace_schema"] == DECISION_TRACE_SCHEMA == "v1"
     assert set(diag["decision_trace_event_types"]) == set(DECISION_TRACE_EVENT_TYPES)
-    # Honest V1 boundary: a partial FILL is unmodellable over OHLCV, surfaced (never
-    # fabricated). A partial CLOSE IS modelled (F-07c) and same-direction SCALING IS
-    # modelled (F-07d) so neither is listed.
-    assert diag["unmodelled_decision_classes"] == list(UNMODELLED_DECISION_CLASSES)
-    assert "same_direction_scaling" not in diag["unmodelled_decision_classes"]
-    assert "partial_fill" in diag["unmodelled_decision_classes"]
-    assert "partial_close" not in diag["unmodelled_decision_classes"]
+    # F-07i (C): every named decision class is now modelled — a partial FILL's fraction
+    # is computed from the tick path's print sizes (and stays fail-closed via the
+    # order predicate over plain OHLCV), so the unmodelled list is EMPTY and
+    # ``partial_fill`` is a real traced event type.
+    assert diag["unmodelled_decision_classes"] == list(UNMODELLED_DECISION_CLASSES) == []
+    assert "partial_fill" in diag["decision_trace_event_types"]
 
 
 def test_combined_events_bind_the_executing_object_revision() -> None:

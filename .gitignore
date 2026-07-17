@@ -57,3 +57,6 @@ backups/
 #      for visual reference). Canonical lives in docs/spec/ and is tracked; the copy
 #      is a duplicate, so it is never committed. ----
 frontend/public/mockup_v18.html
+
+# never track a node_modules symlink (trailing-slash rule misses symlinks)
+node_modules

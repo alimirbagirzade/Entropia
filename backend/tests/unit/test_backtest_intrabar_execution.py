@@ -29,6 +29,7 @@ from entropia.domain.backtest.engine import (
 )
 from entropia.domain.backtest.manifest import build_run_manifest
 from entropia.domain.strategy.config import StrategyConfig
+from tests.unit.engine_signal_plan import sma_entry_plan
 
 _ENTRY = Decimal("100")
 
@@ -299,8 +300,9 @@ def _bars_trailing_vs_percentage() -> list[dict[str, Any]]:
 
     Stop bar levels: trailing = 115 * 0.95 = 109.25 (ABOVE entry — locked profit),
     percentage = 102 * 0.95 = 96.90 (tighter to entry). The bar's low (94) touches
-    both. NOTE (F-07b test trap): follow-up closes stay below the running window high
-    so the breakout proxy never re-enters after the stop-out."""
+    both. The entry is a real ta.sma(20) cross (see engine_signal_plan.py — F-24): the
+    MA rests at the flat 100 baseline and the breakout bar crosses it; the follow-up
+    closes stay above the MA, so nothing re-crosses it after the stop-out."""
     day = "2024-01-{0:02d}T00:00:00Z"
     bars = [
         {
@@ -361,6 +363,7 @@ def _run_flagship(*, ticks: bool, timeframe: str | None = "1D") -> EngineOutput:
         execution_key="exec_key_test",
         timeframe=timeframe,
         tick_batches=_stop_day_ticks() if ticks else None,
+        indicator_plan=sma_entry_plan(),
     )
 
 

@@ -6,7 +6,8 @@ Sections 1-9 map to spec doc 02. Disabled sections omitted on save (Binding Deci
 Field validators enforce:
 - Name is non-blank (§1)
 - Dates: end ≥ start (§2)
-- Order config: limit details present iff type is limit/stop-limit (§2)
+- Order config: limit details present iff type is limit/stop-limit; stop trigger
+  details present iff type is stop/stop-limit (§2, Master Ref §6.2/§6.3)
 - Signal block: min_supporting_count required for min_supporting rule (§3)
 - Sizing: base_position_size required iff method='base_position_size' (§6)
 """
@@ -162,7 +163,11 @@ class ExecutionModel(BaseModel):
 
 
 class OrderConfig(BaseModel):
-    """Order type enum + conditional limit details (§2)."""
+    """Order type enum + conditional limit/stop details (§2, Master Ref §6.2/§6.3).
+
+    A ``stop_order`` carries ONLY the stop trigger subtree (Master Ref §6.3: limit-specific
+    fields are not used); a ``stop_limit_order`` carries BOTH the stop trigger (activation)
+    AND the limit fill-policy subtree."""
 
     type: Literal[
         "market_order",
@@ -176,6 +181,10 @@ class OrderConfig(BaseModel):
         default=None, description="Limit details (required iff type is limit/stop-limit)"
     )
 
+    stop: StopOrderDetails | None = Field(
+        default=None, description="Stop trigger details (required iff type is stop/stop-limit)"
+    )
+
     @field_validator("limit", mode="before")
     @classmethod
     def limit_required_if_limit_type(cls, v: Any, info: ValidationInfo) -> Any:
@@ -184,6 +193,18 @@ class OrderConfig(BaseModel):
         if order_type in ("limit_order", "stop_limit_order"):
             if v is None:
                 raise ValueError("Limit details required for limit/stop-limit orders")
+        elif v is not None:
+            return None
+        return v
+
+    @field_validator("stop", mode="before")
+    @classmethod
+    def stop_required_if_stop_type(cls, v: Any, info: ValidationInfo) -> Any:
+        """Validate stop trigger presence (F-07h; Master Ref §6.3)."""
+        order_type = info.data.get("type")
+        if order_type in ("stop_order", "stop_limit_order"):
+            if v is None:
+                raise ValueError("Stop trigger details required for stop/stop-limit orders")
         elif v is not None:
             return None
         return v
@@ -224,6 +245,36 @@ class LimitOrderDetails(BaseModel):
         "fill_remaining_as_market",
         "cancel_remaining",
     ] = Field(default="not_allowed", description="Partial fill behavior")
+
+
+class StopOrderDetails(BaseModel):
+    """Stop trigger / activation parameters (F-07h; Master Ref §6.2/§6.3, doc 02 §5.2).
+
+    Visible only if ``order_config.type`` is stop/stop-limit. Mirrors the limit
+    price-rule pattern: the trigger level is derived from the entry signal price,
+    optionally shifted by ``trigger_offset``. A Stop Order activates when price
+    reaches the trigger and fills near market (breakout/momentum entry); a
+    Stop-Limit Order arms its limit order only after the trigger fires — the
+    trigger may fire and the position still never open if the limit never fills."""
+
+    activation_rule: Literal[
+        "entry_signal_price",
+        "signal_price_minus_offset",
+        "signal_price_plus_offset",
+    ] = Field(..., description="Trigger price determination rule")
+
+    trigger_offset: Decimal | None = Field(
+        default=None, description="Offset from signal price (required for offset rules)"
+    )
+
+    @field_validator("trigger_offset", mode="before")
+    @classmethod
+    def offset_required_for_offset_rules(cls, v: Any, info: ValidationInfo) -> Any:
+        """Validate trigger offset presence for offset activation rules."""
+        rule = info.data.get("activation_rule")
+        if rule in ("signal_price_minus_offset", "signal_price_plus_offset") and v is None:
+            raise ValueError("Trigger offset required for offset activation rules")
+        return v
 
 
 class CostsModel(BaseModel):

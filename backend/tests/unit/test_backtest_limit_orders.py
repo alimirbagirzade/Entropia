@@ -3,8 +3,9 @@
 The bar-replay engine previously IGNORED ``order_config`` and always market-filled. These
 tests pin the new behaviour: market / simulation orders keep the market fill; a limit order
 rests a working order that fills only on a limit touch within the validity window, applies
-its unfilled policy at expiry, and re-prices when configured; stop / stop-limit / best-bid-
-ask / partial-fill orders FAIL CLOSED (open no position). Each setting has a positive and a
+its unfilled policy at expiry, and re-prices when configured; a TRIGGERLESS stop / stop-
+limit (F-07h models the triggered variants — see test_backtest_stop_orders.py) and best-
+bid-ask / partial-fill orders FAIL CLOSED (open no position). Each setting has a positive and a
 negative case (spec F-07 acceptance). Entries are driven by the breakout proxy: 20 flat bars
 fill the look-back window, a breakout bar produces the signal, and the following bars resolve
 the resting order. Follow-up closes stay at/under the window high (103) so no fresh breakout
@@ -176,7 +177,9 @@ def test_predicate_limit_modelled_only_for_supported_variants() -> None:
     )
 
 
-def test_predicate_stop_orders_fail_closed() -> None:
+def test_predicate_triggerless_stop_orders_fail_closed() -> None:
+    # F-07h models stop/stop-limit WITH a trigger (test_backtest_stop_orders.py); a
+    # missing ``stop`` subtree stays unexecutable → fail closed.
     assert not order_execution_is_modelled(_config(order_config={"type": "stop_order"}))
     assert not order_execution_is_modelled(
         _config(

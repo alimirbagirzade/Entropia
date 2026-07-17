@@ -16,7 +16,9 @@ import {
   PARTIAL_FILL_OPTIONS,
   SAME_DIRECTION_OPTIONS,
   SIGNAL_STRENGTH_OPTIONS,
+  STOP_ACTIVATION_RULE_OPTIONS,
   STOP_EXIT_CONFLICT_OPTIONS,
+  STOP_ORDER_TYPES,
   SIZING_METHOD_OPTIONS,
   SLIPPAGE_MODE_OPTIONS,
   STRATEGY_INFO_PANELS,
@@ -194,6 +196,7 @@ export function DataExecutionCard({
 }) {
   const [d, setData, form] = useFlatSection(payload, "data");
   const showLimit = LIMIT_ORDER_TYPES.has(d.order_type);
+  const showStop = STOP_ORDER_TYPES.has(d.order_type);
   const showSlippageValue = d.slippage_mode === "percentage_slippage";
 
   return (
@@ -271,6 +274,23 @@ export function DataExecutionCard({
           panelKey="orderType"
         />
         <div className="cp-field" aria-hidden="true" />
+        {showStop ? (
+          <>
+            <SelectField
+              label="Stop activation rule"
+              required
+              value={d.stop_activation_rule}
+              onChange={(v) => setData({ stop_activation_rule: v })}
+              options={STOP_ACTIVATION_RULE_OPTIONS}
+              placeholder="Choose activation rule"
+            />
+            <TextField
+              label="Stop trigger offset"
+              value={d.stop_trigger_offset}
+              onChange={(v) => setData({ stop_trigger_offset: v })}
+            />
+          </>
+        ) : null}
         {showLimit ? (
           <>
             <SelectField

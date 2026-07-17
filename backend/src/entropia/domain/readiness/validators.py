@@ -436,12 +436,13 @@ def _strategy_issues(item: ReadinessItemInput, *, allocation_enabled: bool) -> l
             )
         )
 
-    # F-07b: an unsupported ORDER TYPE must BLOCK RUN — the engine fails closed (opens no
-    # position) for it. A Stop / Stop-Limit order carries no trigger/activation price in the
-    # saved schema (and stop-limit needs intrabar stop-vs-limit ordering); a Limit order
-    # with a best-bid/ask price rule needs a quote series absent over OHLCV; and a partial-
-    # fill policy other than "not allowed" is deferred to a later slice. Shares the single
-    # ``order_execution_is_modelled`` predicate with the engine so the two never diverge.
+    # F-07b/F-07h: an unsupported ORDER VARIANT must BLOCK RUN — the engine fails closed
+    # (opens no position) for it. Stop / Stop-Limit orders ARE modelled (F-07h) when the
+    # saved schema carries a valid stop trigger (activation rule + offset where required);
+    # a missing/invalid trigger, a best-bid/ask price rule (needs a quote series absent
+    # over OHLCV), and a partial-fill policy other than "not allowed" remain blocked.
+    # Shares the single ``order_execution_is_modelled`` predicate with the engine so the
+    # two never diverge.
     if not order_execution_is_modelled(config):
         issues.append(
             ReadinessIssue(
@@ -450,10 +451,11 @@ def _strategy_issues(item: ReadinessItemInput, *, allocation_enabled: bool) -> l
                 Scope.STRATEGY,
                 "The strategy's order type is not supported by the backtest engine and "
                 "would open no position.",
-                remediation="Use a Market Order or Simulation Only, or a Limit Order with an "
-                "entry-signal / signal±offset price rule and 'partial fill not allowed'. Stop "
-                "and Stop-Limit orders (no trigger price is stored), a best-bid/ask limit "
-                "price, and partial fills are not yet supported.",
+                remediation="Use a Market Order or Simulation Only; a Limit Order with an "
+                "entry-signal / signal±offset price rule and 'partial fill not allowed'; or "
+                "a Stop / Stop-Limit Order with an entry-signal / signal±offset trigger "
+                "(a Stop-Limit also needs a supported limit rule). A missing stop trigger, "
+                "a best-bid/ask price rule, and partial fills are not yet supported.",
                 field_path="data.order_config",
                 scope_id=item.item_id,
             )

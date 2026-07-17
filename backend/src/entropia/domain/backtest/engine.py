@@ -49,6 +49,7 @@ if TYPE_CHECKING:
         PositionSizeLimits,
         PositionSizing,
         RestrictionFilter,
+        StopOrderDetails,
         StrategyConfig,
     )
 
@@ -76,6 +77,9 @@ DECISION_TRACE_EVENT_TYPES = (
     "entry_scheduled",  # a deferred entry was scheduled to a future bar (F-07a timing)
     "limit_order_placed",  # a resting limit ENTRY order was placed (F-07b, §2)
     "limit_order_cancelled",  # a resting limit order expired/ended unfilled (F-07b, §2)
+    "stop_order_placed",  # a resting stop ENTRY trigger was placed (F-07h, §6.2/§6.3)
+    "stop_order_triggered",  # a stop trigger fired: market-like fill or limit armed (F-07h)
+    "stop_order_cancelled",  # a stop trigger never fired by end-of-data (F-07h)
     "entry_blocked",  # a wanted entry produced no fill (sizing / sleeve capacity)
     # a signal was filtered with NO fill attempt; the detail's ``reason`` says why:
     # "direction_restriction" (direction bias), "restriction_blocked" (an active
@@ -290,6 +294,36 @@ class _WorkingLimit:
     # F-07g: the signal bar's strength multiplier — a limit fill (touch or convert-to-
     # market) inherits its SIGNAL bar's strength (the F-07e restriction-verdict
     # precedent), never re-priced at the fill bar. Inert 1x when no adjustment is active.
+    strength: Decimal = _ONE
+
+
+@dataclass(slots=True)
+class _WorkingStop:
+    """A resting stop ENTRY trigger spanning bars until fired or end-of-data (F-07h, §6.2).
+
+    A stop entry does not fill at the decision bar (the signal is only known at that bar's
+    close — a same-bar trigger would look ahead). The trigger rests from the NEXT bar and
+    fires when a bar's high (long buy-stop) / low (short sell-stop) reaches
+    ``trigger_price``. A plain ``stop_order`` then fills market-like at
+    ``max(trigger, open)`` (long; short mirror ``min``) — a gap through the trigger fills
+    at the open, the trigger price no longer exists. A ``stop_limit_order``
+    (``limit_price`` is not None) instead ARMS the F-07b ``_WorkingLimit`` machine: the
+    limit rests from the bar AFTER the trigger bar (same-bar stop-then-limit ordering
+    needs tick data — never modelled over OHLCV) and validity/unfilled policy apply
+    verbatim from the trigger bar. The stop leg itself carries no validity (Master Ref
+    §6.3: limit-specific fields are not used by the stop leg) — it rests until fired or
+    end-of-data. At most one is ever outstanding (it exists only while flat)."""
+
+    direction: str  # "long" | "short"
+    trigger_price: Decimal  # the stop activation level (signal-derived, fixed)
+    # Stop-limit only — the pre-computed limit leg armed on trigger (None = plain stop):
+    limit_price: Decimal | None
+    limit_offset: Decimal  # signed offset magnitude for limit re-pricing
+    limit_rule: str  # limit price rule (entry_signal_price / signal±offset)
+    unfilled_policy: str  # limit leg unfilled policy
+    validity_bars: int | None  # limit live-bar count from the trigger bar (None = until_cancelled)
+    # F-07g: the signal bar's strength multiplier — a stop fill (direct or via the armed
+    # limit) inherits its SIGNAL bar's strength, never re-priced at the fill bar.
     strength: Decimal = _ONE
 
 
@@ -612,17 +646,29 @@ def _fill_schedule(timing: str) -> str:
 #   * ``limit_order`` → a resting working order (``_WorkingLimit``) that fills only if a
 #     later bar reaches the signal-derived limit within the validity window, then applies
 #     the unfilled policy.
-#   * ``stop_order`` / ``stop_limit_order`` → the saved schema carries NO stop trigger /
-#     activation price (``OrderConfig`` has only ``type`` + ``limit``; ``LimitOrderDetails``
-#     has no stop level), and stop-limit additionally needs intrabar stop-vs-limit ordering
-#     (tick). Genuinely unmodellable → FAIL CLOSED.
-#   * a ``limit_order`` whose ``price_rule`` is ``best_bid_ask`` needs a bid/ask quote
-#     series (absent over OHLCV) and a ``partial_fill_policy`` other than ``not_allowed`` is
-#     deferred to slice (c) — both also FAIL CLOSED here (never a silent full/market fill).
+#   * ``stop_order`` → a resting stop trigger (``_WorkingStop``, F-07h): fires when a later
+#     bar reaches the signal-derived trigger, then fills market-like at max(trigger, open)
+#     (long; short mirror) — a gap through the trigger fills at the open.
+#   * ``stop_limit_order`` → the same trigger, which on firing ARMS the F-07b limit machine:
+#     the limit rests from the NEXT bar (same-bar stop-vs-limit ordering needs tick data —
+#     never modelled over OHLCV) with validity/unfilled policy applied verbatim.
+#   * a stop/stop-limit with NO ``stop`` subtree or an offset activation rule missing its
+#     ``trigger_offset``, a ``limit_order``/stop-limit whose ``price_rule`` is
+#     ``best_bid_ask`` (needs a bid/ask quote series, absent over OHLCV), and a
+#     ``partial_fill_policy`` other than ``not_allowed`` all FAIL CLOSED (never a silent
+#     full/market fill).
 _MARKET_ORDER_TYPES = frozenset({"market_order", "simulation_only"})
 _MODELLED_LIMIT_PRICE_RULES = frozenset(
     {"entry_signal_price", "signal_price_minus_offset", "signal_price_plus_offset"}
 )
+# F-07h: the stop activation rules the trigger model executes — the same signal-derived
+# shapes as the limit price rules (the schema's ``StopOrderDetails.activation_rule``
+# Literal). An offset rule without its ``trigger_offset`` is an invalid trigger → not
+# modelled (fail closed), mirroring the schema's conditional requiredness.
+_MODELLED_STOP_ACTIVATION_RULES = frozenset(
+    {"entry_signal_price", "signal_price_minus_offset", "signal_price_plus_offset"}
+)
+_OFFSET_ACTIVATION_RULES = frozenset({"signal_price_minus_offset", "signal_price_plus_offset"})
 # Order Validity → the number of decision intervals (future bars) the unfilled order stays
 # live. ``current_candle_only`` and ``1_candle`` both give ONE live bar in the bar-replay
 # (the signal bar's intrabar is unavailable, so the first fill opportunity is the next bar);
@@ -637,14 +683,26 @@ _VALIDITY_BARS: dict[str, int | None] = {
 }
 
 
+def _stop_trigger_is_modelled(stop: StopOrderDetails | None) -> bool:
+    """Is a stop trigger derivable from the saved ``stop`` subtree (F-07h)?
+
+    Requires the subtree itself (a triggerless stop is unexecutable), a modelled
+    activation rule, and — for the offset rules — a present ``trigger_offset``."""
+    if stop is None or stop.activation_rule not in _MODELLED_STOP_ACTIVATION_RULES:
+        return False
+    return not (stop.activation_rule in _OFFSET_ACTIVATION_RULES and stop.trigger_offset is None)
+
+
 def order_execution_is_modelled(config: StrategyConfig) -> bool:
-    """Public predicate: is this strategy's order-type execution modelled (F-07b)?
+    """Public predicate: is this strategy's order-type execution modelled (F-07b/F-07h)?
 
     The single shared source of truth imported by the readiness validator so Ready Check's
     ``STRATEGY_ORDER_TYPE_UNSUPPORTED`` blocker and the engine's fail-closed entry gate
     agree on exactly one definition. market / simulation → market fill; limit → the
     working-order model (a modelled price rule + a ``not_allowed`` partial-fill policy);
-    stop / stop-limit / a ``best_bid_ask`` price rule / a non-``not_allowed`` partial-fill
+    stop → the resting-trigger model (a modelled activation rule with its offset);
+    stop-limit → the trigger model AND the limit working-order model (both legs). A missing
+    /invalid trigger, a ``best_bid_ask`` price rule, or a non-``not_allowed`` partial-fill
     policy → NOT modelled (blocked at Ready Check AND opens no position if a stale readiness
     state reaches the worker)."""
     order = config.data.order_config
@@ -654,6 +712,16 @@ def order_execution_is_modelled(config: StrategyConfig) -> bool:
         limit = order.limit
         return (
             limit is not None
+            and limit.price_rule in _MODELLED_LIMIT_PRICE_RULES
+            and limit.partial_fill_policy == "not_allowed"
+        )
+    if order.type == "stop_order":
+        return _stop_trigger_is_modelled(order.stop)
+    if order.type == "stop_limit_order":
+        limit = order.limit
+        return (
+            _stop_trigger_is_modelled(order.stop)
+            and limit is not None
             and limit.price_rule in _MODELLED_LIMIT_PRICE_RULES
             and limit.partial_fill_policy == "not_allowed"
         )
@@ -1368,15 +1436,18 @@ def run_engine(
     entry_sched = _fill_schedule(config.data.execution.entry_timing)
     exit_sched = _fill_schedule(config.data.execution.exit_timing)
 
-    # F-07b: order-type execution. ``market_order`` / ``simulation_only`` fill at the
+    # F-07b/F-07h: order-type execution. ``market_order`` / ``simulation_only`` fill at the
     # timing-chosen price (byte-identical to the pre-F-07b market path); ``limit_order``
     # rests a working order that fills only on a limit touch within the validity window;
-    # ``stop_order`` / ``stop_limit_order`` (no trigger price in the schema) and an
-    # unmodelled limit variant open NO position — the fail-closed backstop to the Ready
-    # Check STRATEGY_ORDER_TYPE_UNSUPPORTED blocker.
+    # ``stop_order`` / ``stop_limit_order`` rest a stop trigger — a plain stop fills
+    # market-like on trigger, a stop-limit arms the limit machine from the NEXT bar. An
+    # unmodelled variant (missing/invalid trigger, best_bid_ask, partial fill) opens NO
+    # position — the fail-closed backstop to the Ready Check
+    # STRATEGY_ORDER_TYPE_UNSUPPORTED blocker.
     order_cfg = config.data.order_config
     order_ok = order_execution_is_modelled(config)
     order_is_limit = order_cfg.type == "limit_order" and order_ok
+    order_is_stop = order_cfg.type in ("stop_order", "stop_limit_order") and order_ok
 
     # F-07c: partial close. An EXIT SIGNAL closes ``close_fraction`` of the position and holds
     # the remainder (aftermath governs it); a stop / end-of-data always closes fully (a risk
@@ -1473,6 +1544,7 @@ def run_engine(
     position: _Position | None = None
     pending: _Pending | None = None  # a fill deferred to a future bar (F-07a timing)
     working_limit: _WorkingLimit | None = None  # a resting limit ENTRY order (F-07b)
+    working_stop: _WorkingStop | None = None  # a resting stop ENTRY trigger (F-07h)
     bars_seen = 0
     first_ts = ""
     last_bar: _Bar | None = None
@@ -1487,6 +1559,11 @@ def run_engine(
     limit_orders_placed = 0
     limit_orders_filled = 0
     limit_orders_cancelled = 0
+    # F-07h: stop-trigger lifecycle counts (a stop-limit's armed limit leg then counts
+    # through the limit_orders_* counters — the two machines compose, never double-count).
+    stop_orders_placed = 0
+    stop_orders_triggered = 0
+    stop_orders_cancelled = 0
     partial_closes = 0
     # F-07f: count of partial-close aftermaths that locked in profit on the remainder
     # (``lock_in_profit`` moving the stop to the current price, or ``trailing_stop``
@@ -2088,6 +2165,87 @@ def run_engine(
                 elif wl.unfilled_policy == "re_price_next_candle":
                     wl.limit_price = _limit_price(wl.price_rule, bar.close, wl.offset)
 
+            # (1c) Resolve a RESTING stop ENTRY trigger against THIS bar (F-07h). A long
+            # buy-stop fires when the bar's high reaches the trigger (short mirror: low).
+            # A plain stop then fills market-like at max(trigger, open) — a gap through
+            # the trigger fills at the open (the trigger price no longer exists),
+            # deterministic over OHLCV. A stop-limit instead ARMS the (1b) limit machine:
+            # placed HERE (below the (1b) block), the armed limit is first examined on the
+            # NEXT bar — the same-bar stop-then-limit sequence needs tick ordering, so a
+            # same-bar limit touch never fills (doc 02 §5.2: the trigger may fire and the
+            # position still never open). Validity counts from the trigger bar, and the
+            # (1b) unfilled/re-price policies then apply verbatim.
+            if working_stop is not None and position is None:
+                ws = working_stop
+                fired = (
+                    bar.high >= ws.trigger_price
+                    if ws.direction == "long"
+                    else bar.low <= ws.trigger_price
+                )
+                if fired:
+                    stop_orders_triggered += 1
+                    trigger_detail: dict[str, Any] = {
+                        "trigger_price": str(ws.trigger_price),
+                        "order_type": order_cfg.type,
+                    }
+                    if ws.limit_price is None:
+                        fill_price = (
+                            max(ws.trigger_price, bar.open)
+                            if ws.direction == "long"
+                            else min(ws.trigger_price, bar.open)
+                        )
+                        trigger_detail["fill_price"] = str(fill_price)
+                        _emit(
+                            "stop_order_triggered",
+                            event_time=bar.timestamp,
+                            direction=ws.direction,
+                            bar_seq=bars_seen,
+                            detail=trigger_detail,
+                        )
+                        position = _do_open(
+                            ws.direction,
+                            bar,
+                            fill_price,
+                            bar_seq=bars_seen,
+                            deferred=True,
+                            strength=ws.strength,
+                        )
+                    else:
+                        working_limit = _WorkingLimit(
+                            direction=ws.direction,
+                            limit_price=ws.limit_price,
+                            offset=ws.limit_offset,
+                            price_rule=ws.limit_rule,
+                            unfilled_policy=ws.unfilled_policy,
+                            expires_seq=(
+                                None if ws.validity_bars is None else bars_seen + ws.validity_bars
+                            ),
+                            strength=ws.strength,
+                        )
+                        limit_orders_placed += 1
+                        trigger_detail["limit_price"] = str(ws.limit_price)
+                        _emit(
+                            "stop_order_triggered",
+                            event_time=bar.timestamp,
+                            direction=ws.direction,
+                            bar_seq=bars_seen,
+                            detail=trigger_detail,
+                        )
+                        _emit(
+                            "limit_order_placed",
+                            event_time=bar.timestamp,
+                            direction=ws.direction,
+                            bar_seq=bars_seen,
+                            detail={
+                                "limit_price": str(ws.limit_price),
+                                "price_rule": ws.limit_rule,
+                                "unfilled_policy": ws.unfilled_policy,
+                                "expires_bar_seq": working_limit.expires_seq,
+                                "armed_by": "stop_order_triggered",
+                            },
+                        )
+                    working_stop = None
+
             if position is not None:
                 # (2) protection / stop / exit against this bar (intrabar touch).
                 if position.direction == "long":
@@ -2207,6 +2365,7 @@ def run_engine(
                 and conflict_ok
                 and pending is None
                 and working_limit is None
+                and working_stop is None
             ):
                 # Flat and uncommitted: evaluate a fresh entry, then open now (immediate),
                 # schedule a deferred fill (timing), or rest a limit order. ``timing_ok``,
@@ -2333,6 +2492,50 @@ def run_engine(
                                 "unfilled_policy": limit.unfilled_policy,
                                 "expires_bar_seq": working_limit.expires_seq,
                             },
+                        )
+                    elif order_is_stop:
+                        # F-07h: rest a stop trigger at the signal-derived level; it fires
+                        # only on a later touch (resolved by the (1c) block on subsequent
+                        # bars), never on this signal bar. For a stop-limit the limit leg
+                        # is pre-computed HERE from the same signal close, so the armed
+                        # limit is signal-derived exactly like a plain limit order's.
+                        stop = order_cfg.stop
+                        assert stop is not None  # guaranteed by order_ok
+                        trigger_level = _limit_price(
+                            stop.activation_rule, bar.close, stop.trigger_offset or _ZERO
+                        )
+                        limit = order_cfg.limit  # present iff stop_limit_order
+                        limit_offset = (limit.price_offset or _ZERO) if limit else _ZERO
+                        place_detail: dict[str, Any] = {
+                            "trigger_price": str(trigger_level),
+                            "activation_rule": stop.activation_rule,
+                            "order_type": order_cfg.type,
+                        }
+                        stop_limit_level: Decimal | None = None
+                        if limit is not None:
+                            stop_limit_level = _limit_price(
+                                limit.price_rule, bar.close, limit_offset
+                            )
+                            place_detail["limit_price"] = str(stop_limit_level)
+                            place_detail["validity"] = limit.validity
+                            place_detail["unfilled_policy"] = limit.unfilled_policy
+                        working_stop = _WorkingStop(
+                            direction=want,
+                            trigger_price=trigger_level,
+                            limit_price=stop_limit_level,
+                            limit_offset=limit_offset,
+                            limit_rule=limit.price_rule if limit else "",
+                            unfilled_policy=limit.unfilled_policy if limit else "",
+                            validity_bars=(_VALIDITY_BARS[limit.validity] if limit else None),
+                            strength=strength,
+                        )
+                        stop_orders_placed += 1
+                        _emit(
+                            "stop_order_placed",
+                            event_time=bar.timestamp,
+                            direction=want,
+                            bar_seq=bars_seen,
+                            detail=place_detail,
                         )
                     elif entry_sched == "immediate":
                         position = _do_open(
@@ -2805,6 +3008,23 @@ def run_engine(
         )
         working_limit = None
 
+    # End-of-data: a stop trigger still resting past the last bar never fired → cancel it
+    # (F-07h), so an unfired stop is an auditable no-fill, never a silent gap.
+    if working_stop is not None and last_bar is not None:
+        stop_orders_cancelled += 1
+        _emit(
+            "stop_order_cancelled",
+            event_time=last_bar.timestamp,
+            direction=working_stop.direction,
+            bar_seq=bars_seen,
+            detail={
+                "reason": "end_of_data",
+                "trigger_price": str(working_stop.trigger_price),
+                "order_type": order_cfg.type,
+            },
+        )
+        working_stop = None
+
     # End-of-data: close any open position at the last bar's close (never left dangling).
     if position is not None and last_bar is not None:
         _close(last_bar.timestamp, last_bar.close, "end_of_data", position, bar_seq=bars_seen)
@@ -2893,10 +3113,10 @@ def run_engine(
             f"execution_timing_unsupported:{execution.entry_timing}/{execution.exit_timing}"
         )
     if not order_ok:
-        # An unsupported order type (stop / stop-limit with no trigger price in the schema),
-        # a limit order with a best_bid_ask price rule (no quote series over OHLCV), or a
-        # partial-fill policy other than not_allowed (deferred to slice (c)) is not modelled;
-        # the run opened NO position (fail closed, F-07b) rather than silently market-filling.
+        # An unsupported order variant (a stop / stop-limit with a missing or invalid
+        # trigger, a best_bid_ask price rule — no quote series over OHLCV — or a
+        # partial-fill policy other than not_allowed) is not modelled; the run opened NO
+        # position (fail closed, F-07b/F-07h) rather than silently market-filling.
         # Ready Check raises STRATEGY_ORDER_TYPE_UNSUPPORTED — this L4 warning is the engine
         # backstop when a stale readiness state reaches the worker.
         warnings.append(f"order_type_unsupported:{order_cfg.type}")
@@ -3053,6 +3273,9 @@ def run_engine(
         "limit_orders_placed": limit_orders_placed,
         "limit_orders_filled": limit_orders_filled,
         "limit_orders_cancelled": limit_orders_cancelled,
+        "stop_orders_placed": stop_orders_placed,
+        "stop_orders_triggered": stop_orders_triggered,
+        "stop_orders_cancelled": stop_orders_cancelled,
         # F-07c: partial-close provenance + count (an exit signal closed part of a position).
         "close_percentage": str(exit_logic.close_percentage),
         "partial_aftermath": partial_aftermath,

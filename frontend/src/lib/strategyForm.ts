@@ -158,6 +158,17 @@ export const ORDER_TYPE_OPTIONS: SelectOption[] = [
 // Order types that reveal the conditional Limit Order Details subtree (§5.2.1).
 export const LIMIT_ORDER_TYPES = new Set(["limit_order", "stop_limit_order"]);
 
+// Order types that reveal the conditional stop trigger fields (F-07h; Master Ref
+// §6.2/§6.3: a Stop Order carries ONLY the trigger, a Stop-Limit carries BOTH the
+// trigger and the limit subtree).
+export const STOP_ORDER_TYPES = new Set(["stop_order", "stop_limit_order"]);
+
+export const STOP_ACTIVATION_RULE_OPTIONS: SelectOption[] = [
+  { value: "entry_signal_price", label: "Entry signal price" },
+  { value: "signal_price_minus_offset", label: "Signal price minus offset" },
+  { value: "signal_price_plus_offset", label: "Signal price plus offset" },
+];
+
 export const LIMIT_PRICE_RULE_OPTIONS: SelectOption[] = [
   { value: "entry_signal_price", label: "Entry signal price" },
   { value: "best_bid_ask", label: "Best bid / ask" },
@@ -276,6 +287,8 @@ export interface StrategyFlatForm {
     limit_validity: string;
     limit_unfilled_policy: string;
     limit_partial_fill_policy: string;
+    stop_activation_rule: string;
+    stop_trigger_offset: string;
     commission: string;
     spread: string;
     slippage_mode: string;
@@ -362,6 +375,7 @@ export function extractFlatSections(payload: Record<string, unknown>): StrategyF
   const execution = asRecord(data.execution);
   const order = asRecord(data.order_config);
   const limit = asRecord(order.limit);
+  const stop = asRecord(order.stop);
   const costs = asRecord(data.costs);
   const intrabar = asRecord(data.intrabar_policy);
   const funding = asRecord(data.funding);
@@ -398,6 +412,8 @@ export function extractFlatSections(payload: Record<string, unknown>): StrategyF
         limit.partial_fill_policy,
         DEFAULTS.limit_partial_fill_policy,
       ),
+      stop_activation_rule: str(stop.activation_rule),
+      stop_trigger_offset: str(stop.trigger_offset),
       commission: str(costs.commission),
       spread: str(costs.spread),
       slippage_mode: enumStr(costs.slippage_mode, DEFAULTS.slippage_mode),
@@ -482,6 +498,7 @@ export function mergeFlatSections(
 ): Record<string, unknown> {
   const d = form.data;
   const isLimit = LIMIT_ORDER_TYPES.has(d.order_type);
+  const isStop = STOP_ORDER_TYPES.has(d.order_type);
 
   const order: Record<string, unknown> = { type: d.order_type };
   if (isLimit) {
@@ -491,6 +508,14 @@ export function mergeFlatSections(
       validity: enumOrOmit(d.limit_validity),
       unfilled_policy: enumOrOmit(d.limit_unfilled_policy),
       partial_fill_policy: enumOrOmit(d.limit_partial_fill_policy),
+    });
+  }
+  if (isStop) {
+    // F-07h: the stop trigger subtree travels only for stop/stop-limit — hidden
+    // stale values never leak into the engine (doc 02 §5.2.1 conditional subtree).
+    order.stop = pruneUndefined({
+      activation_rule: enumOrOmit(d.stop_activation_rule),
+      trigger_offset: decOrOmit(d.stop_trigger_offset),
     });
   }
 

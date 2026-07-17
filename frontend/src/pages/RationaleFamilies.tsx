@@ -49,24 +49,18 @@ function linesToList(value: string): string[] {
     .filter((line) => line.length > 0);
 }
 
-const swatchStyle = (color: string | null) =>
-  ({
-    display: "inline-block",
-    width: 12,
-    height: 12,
-    borderRadius: 3,
-    marginRight: 6,
-    verticalAlign: "middle",
-    background: color ?? "transparent",
-    border: "1px solid var(--border)",
-  }) as const;
-
-// Rationale Families (doc 10 §7): the shared taxonomy plane. Two shared projections
-// — the Family registry (create / rename+enrich / soft-delete) and the Package
-// Rationale Assignment table (staged batch reclassify). Shared-editing: any signed-in
-// member may edit both (Admin-only is NOT used here); a Guest sees the 401 envelope
-// verbatim (UI visibility is never authorization, doc 10 §2).
+// Rationale Families (doc 10 §7 · UI-10): the shared taxonomy plane rendered as a
+// two-column workspace — LEFT the pastel Family cards (create / rename+enrich /
+// soft-delete via a compact Add row that expands into an inline editor), RIGHT the
+// Package Rationale Assignment table (staged batch reclassify). Selecting a family
+// card focuses the assignment column on that family (presentation only). Shared-
+// editing: any signed-in member may edit both (Admin-only is NOT used here); a Guest
+// sees the 401 envelope verbatim (UI visibility is never authorization, doc 10 §2).
 export function RationaleFamilies() {
+  // The selected card is presentation-only context for the assignment column; it
+  // never gates a mutation (the per-row select remains the source of truth).
+  const [selected, setSelected] = useState<RationaleFamilyCard | null>(null);
+
   return (
     <>
       <h1 className="page-title">Rationale Families</h1>
@@ -74,24 +68,53 @@ export function RationaleFamilies() {
         Shared taxonomy · any signed-in member may manage families and reclassify Indicator /
         Condition packages · renames create a new immutable revision (history is never rewritten)
       </p>
-      <FamilyRegistryCard />
-      <AssignmentTableCard />
+      <div className="rationale-panel">
+        <FamilyListColumn
+          selectedId={selected?.entity_id ?? null}
+          onSelect={(family) =>
+            setSelected((prev) => (prev?.entity_id === family.entity_id ? null : family))
+          }
+          onDeleted={(entityId) =>
+            setSelected((prev) => (prev?.entity_id === entityId ? null : prev))
+          }
+        />
+        <AssignmentColumn selected={selected} onClearSelection={() => setSelected(null)} />
+      </div>
     </>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Family registry — list + create + revise (rename/enrich) + soft-delete
+// Left column — pastel Family list: compact Add row + create/revise/soft-delete
 // ---------------------------------------------------------------------------
 
-function FamilyRegistryCard() {
+function FamilyListColumn({
+  selectedId,
+  onSelect,
+  onDeleted,
+}: {
+  selectedId: string | null;
+  onSelect: (family: RationaleFamilyCard) => void;
+  onDeleted: (entityId: string) => void;
+}) {
   const pager = useCursorStack();
   const families = useFamilies("active", pager.cursor);
   const create = useCreateFamily();
   const revise = useReviseFamily();
   const del = useSoftDeleteFamily();
+  // The permanently-open large form is replaced by a compact Add row: it stays
+  // collapsed until "New family" opens the inline editor (composing), and each
+  // card's Edit opens the same editor seeded from that card (editing).
+  const [composing, setComposing] = useState(false);
   const [editing, setEditing] = useState<RationaleFamilyCard | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+
+  const editorOpen = composing || editing !== null;
+
+  const closeEditor = () => {
+    setComposing(false);
+    setEditing(null);
+  };
 
   const onEditorSubmit = (form: {
     display_name: string;
@@ -100,8 +123,14 @@ function FamilyRegistryCard() {
     change_note: string | null;
   }) => {
     if (editing) {
-      // OCC token = the family's current head revision (doc 10 §5 Save).
-      revise.mutate({ ...form, entity_id: editing.entity_id, expected_head_revision_id: editing.current_revision_id });
+      // OCC token = the family's current head revision (doc 10 §5 Save). The editor
+      // stays open after Save (the "Saved —" banner reads the active mutation's data);
+      // Cancel collapses back to the compact Add row.
+      revise.mutate({
+        ...form,
+        entity_id: editing.entity_id,
+        expected_head_revision_id: editing.current_revision_id,
+      });
     } else {
       create.mutate(form);
     }
@@ -114,7 +143,7 @@ function FamilyRegistryCard() {
   return (
     <section className="card" aria-labelledby="rf-registry-h">
       <h3 id="rf-registry-h" style={{ marginTop: 0 }}>
-        Family registry
+        Rationale family list
         {families.data ? (
           <span className="page-sub" style={{ marginLeft: 8 }}>
             ({families.data.data.length} active on this page)
@@ -122,13 +151,28 @@ function FamilyRegistryCard() {
         ) : null}
       </h3>
 
-      <FamilyEditor
-        key={editing?.entity_id ?? "new"}
-        editing={editing}
-        pending={editorPending}
-        onSubmit={onEditorSubmit}
-        onNew={() => setEditing(null)}
-      />
+      <div className="rationale-add-row">
+        {editorOpen ? (
+          <FamilyEditor
+            key={editing?.entity_id ?? "new"}
+            editing={editing}
+            pending={editorPending}
+            onSubmit={onEditorSubmit}
+            onCancel={closeEditor}
+          />
+        ) : (
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => {
+              setEditing(null);
+              setComposing(true);
+            }}
+          >
+            + New family
+          </button>
+        )}
+      </div>
       {editorError ? (
         <p role="alert" style={{ color: "var(--down)" }}>
           {mutationErrorText(editorError)}
@@ -143,7 +187,7 @@ function FamilyRegistryCard() {
       ) : families.data ? (
         <>
           {families.data.data.length === 0 ? (
-            <EmptyState title="No active rationale families yet — create the first one above" />
+            <EmptyState title="No active rationale families yet — add the first one above" />
           ) : (
             <div className="rationale-grid" role="list" aria-label="Rationale families">
               {families.data.data.map((family) => (
@@ -151,9 +195,14 @@ function FamilyRegistryCard() {
                   key={family.entity_id}
                   family={family}
                   isEditing={editing?.entity_id === family.entity_id}
+                  isSelected={selectedId === family.entity_id}
                   confirming={deleteConfirm === family.entity_id}
                   deleting={del.isPending}
-                  onEdit={() => setEditing(family)}
+                  onSelect={() => onSelect(family)}
+                  onEdit={() => {
+                    setComposing(false);
+                    setEditing(family);
+                  }}
                   onAskDelete={() => setDeleteConfirm(family.entity_id)}
                   onCancelDelete={() => setDeleteConfirm(null)}
                   onConfirmDelete={() => {
@@ -163,6 +212,7 @@ function FamilyRegistryCard() {
                         onSuccess: () => {
                           setDeleteConfirm(null);
                           if (editing?.entity_id === family.entity_id) setEditing(null);
+                          onDeleted(family.entity_id);
                         },
                       },
                     );
@@ -198,7 +248,7 @@ function FamilyEditor({
   editing,
   pending,
   onSubmit,
-  onNew,
+  onCancel,
 }: {
   editing: RationaleFamilyCard | null;
   pending: boolean;
@@ -208,7 +258,7 @@ function FamilyEditor({
     compatible_output_types: string[];
     change_note: string | null;
   }) => void;
-  onNew: () => void;
+  onCancel: () => void;
 }) {
   const [displayName, setDisplayName] = useState(editing?.display_name ?? "");
   const [subfamilies, setSubfamilies] = useState((editing?.subfamilies ?? []).join("\n"));
@@ -226,16 +276,11 @@ function FamilyEditor({
   };
 
   return (
-    <form onSubmit={submit} style={{ marginBottom: 16 }}>
+    <form onSubmit={submit} className="rationale-editor">
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
         <strong>{editing ? `Edit “${editing.display_name}”` : "New family"}</strong>
-        {editing ? (
-          <button type="button" className="btn btn-ghost" onClick={onNew}>
-            New family
-          </button>
-        ) : null}
       </div>
-      <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
+      <div style={{ display: "grid", gap: 12 }}>
         <label htmlFor="rf-name">
           Display name
           <input
@@ -276,9 +321,14 @@ function FamilyEditor({
           />
         </label>
       </div>
-      <button type="submit" className="btn btn-primary" disabled={pending} style={{ marginTop: 8 }}>
-        {editing ? "Save revision" : "Create family"}
-      </button>
+      <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+        <button type="submit" className="btn btn-primary" disabled={pending}>
+          {editing ? "Save revision" : "Create family"}
+        </button>
+        <button type="button" className="btn btn-ghost" onClick={onCancel}>
+          Cancel
+        </button>
+      </div>
     </form>
   );
 }
@@ -286,8 +336,10 @@ function FamilyEditor({
 function FamilyCard({
   family,
   isEditing,
+  isSelected,
   confirming,
   deleting,
+  onSelect,
   onEdit,
   onAskDelete,
   onCancelDelete,
@@ -295,23 +347,41 @@ function FamilyCard({
 }: {
   family: RationaleFamilyCard;
   isEditing: boolean;
+  isSelected: boolean;
   confirming: boolean;
   deleting: boolean;
+  onSelect: () => void;
   onEdit: () => void;
   onAskDelete: () => void;
   onCancelDelete: () => void;
   onConfirmDelete: () => void;
 }) {
+  // The pastel family color becomes the whole-card wash (mockup V14); text is
+  // pinned dark for contrast against the light tint. A missing color falls back to
+  // the elevated surface so the theme still reads.
+  const pastel = family.display_color;
+  const cardStyle = {
+    ...(pastel ? { background: pastel, color: "#111", borderColor: "rgba(55,55,55,0.26)" } : {}),
+    ...(isSelected
+      ? { outline: "2px solid var(--accent)", outlineOffset: 1 }
+      : isEditing
+        ? { borderColor: "var(--accent)" }
+        : {}),
+  };
   return (
     <div
-      className="rationale-card"
+      className={`rationale-card${isSelected ? " is-selected" : ""}`}
       role="listitem"
-      style={isEditing ? { borderColor: "var(--accent)" } : undefined}
+      style={cardStyle}
     >
-      <div className="rationale-card-title">
-        <span style={swatchStyle(family.display_color)} aria-hidden="true" />
+      <button
+        type="button"
+        className="rationale-card-title rationale-card-select"
+        aria-pressed={isSelected}
+        onClick={onSelect}
+      >
         {family.display_name}
-      </div>
+      </button>
       <div className="rationale-card-row">
         <b>Subfamilies</b>
         <span>{family.subfamilies.length > 0 ? family.subfamilies.join(", ") : "—"}</span>
@@ -358,12 +428,18 @@ function FamilyCard({
 }
 
 // ---------------------------------------------------------------------------
-// Package Rationale Assignment table — staged batch reclassify (all-or-nothing)
+// Right column — Package Rationale Assignment: staged batch reclassify
 // ---------------------------------------------------------------------------
 
 const UNASSIGNED = "";
 
-function AssignmentTableCard() {
+function AssignmentColumn({
+  selected,
+  onClearSelection,
+}: {
+  selected: RationaleFamilyCard | null;
+  onClearSelection: () => void;
+}) {
   const pager = useCursorStack();
   const assignments = useAssignments(pager.cursor);
   // The family selector reads the first page of active families (doc 10 §7 scope).
@@ -393,8 +469,8 @@ function AssignmentTableCard() {
   const onSave = () => {
     if (assignments.data === undefined || changedRows.length === 0) return;
     const changes: AssignmentChangeInput[] = changedRows.map((row) => {
-      const selected = currentValue(row);
-      const familyId = selected === UNASSIGNED ? null : selected;
+      const selectedFamily = currentValue(row);
+      const familyId = selectedFamily === UNASSIGNED ? null : selectedFamily;
       return {
         package_root_id: row.package_root_id,
         expected_head_revision_id: row.current_package_revision_id,
@@ -417,6 +493,25 @@ function AssignmentTableCard() {
           (Indicator + Condition packages)
         </span>
       </h3>
+
+      <div className="rationale-context" aria-live="polite">
+        {selected ? (
+          <>
+            <span>
+              Context — <b>{selected.display_name}</b>
+              {selected.compatible_output_types.length > 0
+                ? ` · ${selected.compatible_output_types.join(", ")}`
+                : ""}{" "}
+              · packages assigned to this family are highlighted below
+            </span>
+            <button type="button" className="btn btn-ghost" onClick={onClearSelection}>
+              Clear
+            </button>
+          </>
+        ) : (
+          <span>Select a family card on the left to focus its assigned packages.</span>
+        )}
+      </div>
 
       {assignments.isLoading ? (
         <Loading label="Loading assignments…" />
@@ -444,6 +539,7 @@ function AssignmentTableCard() {
                     row={row}
                     value={currentValue(row)}
                     changed={isChanged(row)}
+                    inContext={selected !== null && row.rationale_family_id === selected.entity_id}
                     families={activeFamilies}
                     onSelect={(value) => onSelect(row, value)}
                   />
@@ -507,12 +603,14 @@ function AssignmentRow({
   row,
   value,
   changed,
+  inContext,
   families,
   onSelect,
 }: {
   row: RationaleAssignmentRow;
   value: string;
   changed: boolean;
+  inContext: boolean;
   families: RationaleFamilyCard[];
   onSelect: (value: string) => void;
 }) {
@@ -520,8 +618,15 @@ function AssignmentRow({
   // option set; surface it as a synthetic option so the select never renders a value
   // outside its options (the user can still reassign away from it).
   const hasCurrent = value === UNASSIGNED || families.some((family) => family.entity_id === value);
+  // A staged change wins over the selection-context highlight (edited rows always read
+  // as pending, mirroring the pre-UI-10 behavior).
+  const rowStyle = changed
+    ? { background: "var(--bg-elev)" }
+    : inContext
+      ? { background: "var(--bg-elev-2)" }
+      : undefined;
   return (
-    <tr style={changed ? { background: "var(--bg-elev)" } : undefined}>
+    <tr style={rowStyle} aria-current={inContext ? "true" : undefined}>
       <td>{row.package_name ?? row.package_root_id}</td>
       <td>
         <code>{row.package_kind}</code>

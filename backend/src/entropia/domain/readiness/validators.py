@@ -418,11 +418,13 @@ def _strategy_issues(item: ReadinessItemInput, *, allocation_enabled: bool) -> l
             )
         )
 
-    # F-07a: an unsupported entry/exit EXECUTION TIMING must BLOCK RUN — the engine
-    # fails closed (opens no position) for it, so a run would silently produce nothing.
-    # Over plain OHLCV the intrabar-touch and limit/stop-limit simulation modes cannot
-    # be faithfully reproduced (doc 02: "cannot silently imitate unavailable detail") and
-    # are deferred to later F-07 slices. Shares the single ``execution_timing_is_modelled``
+    # F-07a/F-07i (C): an unsupported entry/exit EXECUTION TIMING must BLOCK RUN — the
+    # engine fails closed (opens no position) for it, so a run would silently produce
+    # nothing. The intrabar-touch and limit/stop-limit simulation modes are executed
+    # over the REAL intrabar print path and therefore require 'Use Tick Data' = Yes
+    # (which chains the (i)a tick-availability blocker + the manifest tick pin); over
+    # plain OHLCV they cannot be faithfully reproduced (doc 02: "cannot silently
+    # imitate unavailable detail"). Shares the single ``execution_timing_is_modelled``
     # predicate with the engine so Ready Check and the worker never diverge.
     if not execution_timing_is_modelled(config):
         issues.append(
@@ -434,19 +436,24 @@ def _strategy_issues(item: ReadinessItemInput, *, allocation_enabled: bool) -> l
                 "backtest engine and would open no position.",
                 remediation="Use Current Candle Close, Next Candle Open, Next Candle Close, "
                 "or Market Fill Simulation for both entry and exit execution. Intrabar Touch "
-                "and Limit/Stop-Limit simulation are not yet supported over OHLCV data.",
+                "and Limit/Stop-Limit simulation run over tick data only: set 'Use Tick "
+                "Data' to Yes (an approved tick/trade dataset is then required); Limit Fill "
+                "Simulation also needs a Limit or Stop-Limit order type.",
                 field_path="data.execution",
                 scope_id=item.item_id,
             )
         )
 
-    # F-07b/F-07h: an unsupported ORDER VARIANT must BLOCK RUN — the engine fails closed
-    # (opens no position) for it. Stop / Stop-Limit orders ARE modelled (F-07h) when the
-    # saved schema carries a valid stop trigger (activation rule + offset where required);
-    # a missing/invalid trigger, a best-bid/ask price rule (needs a quote series absent
-    # over OHLCV), and a partial-fill policy other than "not allowed" remain blocked.
-    # Shares the single ``order_execution_is_modelled`` predicate with the engine so the
-    # two never diverge.
+    # F-07b/F-07h/F-07i (C): an unsupported ORDER VARIANT must BLOCK RUN — the engine
+    # fails closed (opens no position) for it. Stop / Stop-Limit orders ARE modelled
+    # (F-07h) when the saved schema carries a valid stop trigger (activation rule +
+    # offset where required). Partial-fill policies other than "not allowed" ARE
+    # modelled (F-07i C) when the strategy demands tick data — the filled fraction is
+    # computed from the print path's trade sizes; without that demand they remain
+    # blocked. A best-bid/ask price rule remains blocked regardless: it needs an
+    # observed bid/ask QUOTE series (Master Ref §2.3 Spread/Execution dataset), which
+    # the tick/trade print path does not carry. Shares the single
+    # ``order_execution_is_modelled`` predicate with the engine so the two never diverge.
     if not order_execution_is_modelled(config):
         issues.append(
             ReadinessIssue(
@@ -456,10 +463,11 @@ def _strategy_issues(item: ReadinessItemInput, *, allocation_enabled: bool) -> l
                 "The strategy's order type is not supported by the backtest engine and "
                 "would open no position.",
                 remediation="Use a Market Order or Simulation Only; a Limit Order with an "
-                "entry-signal / signal±offset price rule and 'partial fill not allowed'; or "
-                "a Stop / Stop-Limit Order with an entry-signal / signal±offset trigger "
-                "(a Stop-Limit also needs a supported limit rule). A missing stop trigger, "
-                "a best-bid/ask price rule, and partial fills are not yet supported.",
+                "entry-signal / signal±offset price rule; or a Stop / Stop-Limit Order "
+                "with an entry-signal / signal±offset trigger (a Stop-Limit also needs a "
+                "supported limit rule). A partial-fill policy other than 'not allowed' "
+                "requires 'Use Tick Data' = Yes. A missing stop trigger and the "
+                "best-bid/ask price rule (needs a bid/ask quote series) are not supported.",
                 field_path="data.order_config",
                 scope_id=item.item_id,
             )

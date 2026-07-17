@@ -22,7 +22,12 @@ from typing import Any
 
 from entropia.shared.manifest import manifest_hash
 
-ENGINE_VERSION = "backtest-engine-v15-intrabar-execution"
+# F-07i (C): the tick-dependent execution SETTINGS (intrabar_touch /
+# limit_fill_simulation / stop_limit_priority_simulation timings + partial-fill
+# policies) are now executed over the pinned print path — the version bump shifts the
+# execution_key namespace so a pre-(C) result is never reused for a config whose
+# settings now genuinely execute (INF-04/INF-05).
+ENGINE_VERSION = "backtest-engine-v16-tick-settings"
 METRIC_SET_VERSION = "metric-set-v1"
 OUTPUT_ARTIFACT_PROFILE = "standard-v1"
 

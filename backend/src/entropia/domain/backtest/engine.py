@@ -98,13 +98,17 @@ DECISION_TRACE_EVENT_TYPES = (
     "stop_resolution",  # multi-rule / logic stop resolution (F-08 combination engine)
     "stop_exit_collision",  # same-bar stop+exit tie-break decision (§5.9)
     "funding_charge",  # a funding rate applied to the open position (F-11, doc 12 §8.4)
+    # F-07i (C): a limit order filled PARTIALLY — the fraction computed from the intrabar
+    # print path's trade sizes vs the intended size; the detail carries the governing
+    # partial-fill policy + the remainder's disposition (rest / market / cancel / reject).
+    "partial_fill",
 )
-# Honest V1 boundary: the bar-replay engine cannot model a partial FILL (OHLCV carries no
-# volume-at-price / order book, so the filled fraction of a limit order is unknowable) —
-# surfaced, never fabricated as a phantom event. ``partial_close`` IS modelled (F-07c
-# ``close_percentage``) and ``same_direction_scaling`` IS modelled (F-07d price-distance
-# layers), so both left this list.
-UNMODELLED_DECISION_CLASSES = ("partial_fill",)
+# F-07i (C): every decision class the taxonomy names is now modelled. ``partial_fill``
+# left this list when the intrabar print path (tick sizes) made the filled fraction of a
+# limit order computable — over plain OHLCV it stays fail-closed via
+# ``order_execution_is_modelled`` (a non-``not_allowed`` policy without tick data is a
+# Ready Check blocker + an inert run), never a fabricated fraction.
+UNMODELLED_DECISION_CLASSES: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -296,6 +300,18 @@ class _WorkingLimit:
     # market) inherits its SIGNAL bar's strength (the F-07e restriction-verdict
     # precedent), never re-priced at the fill bar. Inert 1x when no adjustment is active.
     strength: Decimal = _ONE
+    # F-07i (C): ``remaining_size`` is the order-remaining ledger after a PARTIAL fill
+    # (Master Ref §6.3 Partial Fill): while set, the order rests AGAINST the open
+    # position it partially filled (``for_position_seq`` — the F-07b flat-only invariant
+    # is deliberately relaxed for the remainder), topping the position up on later
+    # touches until the validity/unfilled policy disposes of it; the remainder dies with
+    # its position. An ``intrabar_touch`` ENTRY reuses this machinery verbatim (an
+    # entry-signal-price rule, no offset, until-cancelled — see the placement site).
+    remaining_size: Decimal | None = None
+    for_position_seq: int | None = None
+    # The bar_seq the remainder was (last) written — the top-up block never consumes the
+    # SAME bar's evidence twice (the initial partial fill already exhausted it).
+    remainder_placed_seq: int | None = None
 
 
 @dataclass(slots=True)
@@ -606,35 +622,67 @@ _ENTRY_TIMING_IMMEDIATE = frozenset({"current_candle_close", "market_fill_simula
 _EXIT_TIMING_IMMEDIATE = frozenset({"current_candle_close", "market_fill_simulation"})
 _ENTRY_TIMING_MODELLED = _ENTRY_TIMING_IMMEDIATE | {"next_candle_open", "next_candle_close"}
 _EXIT_TIMING_MODELLED = _EXIT_TIMING_IMMEDIATE | {"next_candle_open", "next_candle_close"}
+# F-07i (C): the tick-dependent timing modes. Modelled ONLY when the strategy itself
+# DEMANDS tick data ('Use Tick Data' = Yes -> ``tick_data_required``): only then is the
+# intrabar print path guaranteed present at run time (Ready Check blocks RUN when no
+# approved tick revision exists — (i)a; admission pins it; the worker streams it — (i)B),
+# so the mode is executed over the REAL print path, never imitated (doc 02 / Master Ref
+# ~3558). Without the demand the modes stay a Ready Check blocker + an inert engine run.
+_TICK_ENTRY_TIMINGS = frozenset({"intrabar_touch", "limit_fill_simulation"})
+_TICK_EXIT_TIMINGS = frozenset({"intrabar_touch", "stop_limit_priority_simulation"})
+# ``limit_fill_simulation`` simulates the CONFIGURED limit order's fill over the print
+# path — with a market-like order type there is no limit order to simulate (fail closed).
+_LIMIT_BACKED_ORDER_TYPES = frozenset({"limit_order", "stop_limit_order"})
 
 
 def execution_timing_is_modelled(config: StrategyConfig) -> bool:
-    """Public predicate: are BOTH entry and exit execution timings modelled (F-07a)?
+    """Public predicate: are BOTH entry and exit execution timings modelled (F-07a/F-07i C)?
 
     The single shared source of truth for "modelled timing", imported by the readiness
     validator so Ready Check's ``STRATEGY_EXECUTION_TIMING_UNSUPPORTED`` blocker and the
-    engine's fail-closed entry gate agree on exactly one definition. An unsupported
-    value (``intrabar_touch`` / a limit or stop-limit simulation mode) is blocked at
-    Ready Check AND opens no position if a stale readiness state slips through to the
-    worker — never silently downgraded to a current-candle-close fill it did not
+    engine's fail-closed entry gate agree on exactly one definition. The base bar-replay
+    modes are always modelled. The tick-dependent modes (``intrabar_touch``,
+    ``limit_fill_simulation``, ``stop_limit_priority_simulation``) are modelled ONLY when
+    the strategy demands tick data (``tick_data_required`` — 'Use Tick Data' = Yes), which
+    chains Ready Check availability -> manifest pin -> worker tick stream, so the mode
+    runs over the real print path; ``limit_fill_simulation`` additionally needs a
+    limit-backed order type (there is no limit order to simulate otherwise). Anything
+    else is blocked at Ready Check AND opens no position if a stale readiness state
+    slips through to the worker — never silently downgraded to a fill model it did not
     request."""
     execution = config.data.execution
-    return (
-        execution.entry_timing in _ENTRY_TIMING_MODELLED
-        and execution.exit_timing in _EXIT_TIMING_MODELLED
+    entry, exit_ = execution.entry_timing, execution.exit_timing
+    tick_backed = tick_data_required(config)
+    entry_ok = entry in _ENTRY_TIMING_MODELLED or (
+        entry in _TICK_ENTRY_TIMINGS
+        and tick_backed
+        and (
+            entry != "limit_fill_simulation"
+            or config.data.order_config.type in _LIMIT_BACKED_ORDER_TYPES
+        )
     )
+    exit_ok = exit_ in _EXIT_TIMING_MODELLED or (exit_ in _TICK_EXIT_TIMINGS and tick_backed)
+    return entry_ok and exit_ok
 
 
 def _fill_schedule(timing: str) -> str:
-    """Map a timing enum to a fill schedule: ``immediate`` / ``next_open`` / ``next_close``.
+    """Map a timing enum to a fill schedule: ``immediate`` / ``next_open`` / ``next_close``
+    / ``touch``.
 
-    Immediate / market-fill (and any unsupported value) map to ``immediate`` — the
-    unsupported case is inert because the entry gate blocks trading unless
-    ``execution_timing_is_modelled`` holds (fail-closed backstop to Ready Check)."""
+    ``intrabar_touch`` (F-07i C) rests the fill as a TOUCH order at the signal price and
+    fills on a later print-touch of that level. ``limit_fill_simulation`` maps to
+    ``immediate`` (the configured limit order machinery governs the fill, not the
+    schedule); ``stop_limit_priority_simulation`` maps to ``immediate`` (exit fills at
+    the signal close — its substance is the same-bar stop-then-limit print sequence in
+    the (1c) block). Immediate / market-fill (and any unmodelled value) map to
+    ``immediate`` — the unmodelled case is inert because the entry gate blocks trading
+    unless ``execution_timing_is_modelled`` holds (fail-closed backstop to Ready Check)."""
     if timing == "next_candle_open":
         return "next_open"
     if timing == "next_candle_close":
         return "next_close"
+    if timing == "intrabar_touch":
+        return "touch"
     return "immediate"
 
 
@@ -695,26 +743,33 @@ def _stop_trigger_is_modelled(stop: StopOrderDetails | None) -> bool:
 
 
 def order_execution_is_modelled(config: StrategyConfig) -> bool:
-    """Public predicate: is this strategy's order-type execution modelled (F-07b/F-07h)?
+    """Public predicate: is this strategy's order-type execution modelled (F-07b/h/i C)?
 
     The single shared source of truth imported by the readiness validator so Ready Check's
     ``STRATEGY_ORDER_TYPE_UNSUPPORTED`` blocker and the engine's fail-closed entry gate
     agree on exactly one definition. market / simulation → market fill; limit → the
-    working-order model (a modelled price rule + a ``not_allowed`` partial-fill policy);
+    working-order model (a modelled price rule + a modelled partial-fill policy);
     stop → the resting-trigger model (a modelled activation rule with its offset);
-    stop-limit → the trigger model AND the limit working-order model (both legs). A missing
-    /invalid trigger, a ``best_bid_ask`` price rule, or a non-``not_allowed`` partial-fill
-    policy → NOT modelled (blocked at Ready Check AND opens no position if a stale readiness
-    state reaches the worker)."""
+    stop-limit → the trigger model AND the limit working-order model (both legs).
+
+    Partial-fill policies other than ``not_allowed`` are modelled ONLY when the strategy
+    demands tick data (F-07i C — the filled fraction is computed from the print path's
+    trade sizes; without prints it is unknowable and stays fail-closed, never a fabricated
+    fraction). A ``best_bid_ask`` price rule stays NOT modelled regardless: it needs an
+    observed bid/ask QUOTE series (Master Ref §2.3 Spread/Execution dataset), which the
+    tick/trade print path does not carry. A missing/invalid trigger or an unmodelled rule
+    → blocked at Ready Check AND opens no position if a stale readiness state reaches the
+    worker."""
     order = config.data.order_config
     if order.type in _MARKET_ORDER_TYPES:
         return True
+    tick_backed = tick_data_required(config)
     if order.type == "limit_order":
         limit = order.limit
         return (
             limit is not None
             and limit.price_rule in _MODELLED_LIMIT_PRICE_RULES
-            and limit.partial_fill_policy == "not_allowed"
+            and (limit.partial_fill_policy == "not_allowed" or tick_backed)
         )
     if order.type == "stop_order":
         return _stop_trigger_is_modelled(order.stop)
@@ -724,7 +779,7 @@ def order_execution_is_modelled(config: StrategyConfig) -> bool:
             _stop_trigger_is_modelled(order.stop)
             and limit is not None
             and limit.price_rule in _MODELLED_LIMIT_PRICE_RULES
-            and limit.partial_fill_policy == "not_allowed"
+            and (limit.partial_fill_policy == "not_allowed" or tick_backed)
         )
     return False
 
@@ -743,11 +798,14 @@ def tick_data_required(config: StrategyConfig) -> bool:
     / line ~3558: an unmet requirement blocks RUN rather than silently resolving over
     OHLCV); sub-slice B pins the approved tick revision into the RUN manifest at
     admission and replays its real intrabar print path (true ``first_trigger_wins``
-    stop order — see ``_TickCursor`` / ``_first_tick_touch``). The tick-dependent
-    EXECUTION settings (``intrabar_touch``, a limit/stop-limit ``best_bid_ask`` rule,
-    a non-``not_allowed`` partial fill, the same-bar stop-vs-limit ordering) STILL
-    fail closed via ``execution_timing_is_modelled`` / ``order_execution_is_modelled``
-    — opening them over the tick path is the follow-up (C)."""
+    stop order — see ``_TickCursor`` / ``_first_tick_touch``); sub-slice C executes
+    the tick-dependent EXECUTION settings over that path (``intrabar_touch`` /
+    ``limit_fill_simulation`` / ``stop_limit_priority_simulation`` timings +
+    partial-fill policies) — each modelled ONLY when this predicate holds, so the
+    demand->availability->pin->stream chain is what unlocks them
+    (``execution_timing_is_modelled`` / ``order_execution_is_modelled``). A
+    ``best_bid_ask`` price rule stays fail-closed regardless: it needs an observed
+    bid/ask QUOTE series, which the tick/trade print path does not carry."""
     return config.data.intrabar_policy.tick_policy == "require"
 
 
@@ -1235,10 +1293,18 @@ def _trailing_level(position: _Position) -> Decimal | None:
 
 @dataclass(frozen=True, slots=True)
 class _Tick:
-    """One normalized intrabar tick/trade print (canonical tick fields, doc 11)."""
+    """One normalized intrabar tick/trade print (canonical tick fields, doc 11).
+
+    ``size`` is the print's traded quantity (the canonical optional ``size`` column,
+    F-07i C) — ``None`` when the revision does not carry it. Partial-fill fractions are
+    computable only from prints WITH sizes; a size-less path degrades to the coarse
+    full-fill model (surfaced, never guessed). Size units are assumed to be the same
+    base units the position size uses (documented L4 boundary — a quote-denominated
+    size column would skew the fraction)."""
 
     epoch_ms: int
     price: Decimal
+    size: Decimal | None = None
 
 
 def _tick_epoch_ms(timestamp: str) -> int | None:
@@ -1276,7 +1342,19 @@ def _normalize_tick(raw: dict[str, Any]) -> _Tick | None:
         return None
     if price <= _ZERO:
         return None
-    return _Tick(epoch_ms=epoch, price=price)
+    # F-07i (C): the print's traded quantity (canonical optional ``size`` column). A
+    # missing/unparseable/non-positive size degrades to None — the print still orders
+    # the price path; only the partial-fill fraction computation skips it.
+    size: Decimal | None = None
+    raw_size = raw.get("size")
+    if raw_size is not None:
+        try:
+            parsed_size = _dec(raw_size)
+        except (TypeError, ArithmeticError, ValueError):
+            parsed_size = None
+        if parsed_size is not None and parsed_size > _ZERO:
+            size = parsed_size
+    return _Tick(epoch_ms=epoch, price=price, size=size)
 
 
 class _TickCursor:
@@ -1358,6 +1436,28 @@ def _first_tick_touch(
         if is_long:
             return max(touched, key=lambda k: (levels[k], -priority.get(k, len(priority))))
         return min(touched, key=lambda k: (levels[k], priority.get(k, len(priority))))
+    return None
+
+
+def _touching_ticks(ticks: tuple[_Tick, ...], level: Decimal, *, is_buy: bool) -> tuple[_Tick, ...]:
+    """The prints that would fill an order resting at ``level`` (F-07i C).
+
+    A BUY resting at ``level`` fills against prints trading at/below it; a SELL against
+    prints at/above it (standard touch/limit semantics). Order is preserved — the first
+    element is the true first touch."""
+    if is_buy:
+        return tuple(t for t in ticks if t.price <= level)
+    return tuple(t for t in ticks if t.price >= level)
+
+
+def _first_trigger_index(
+    ticks: tuple[_Tick, ...], trigger: Decimal, *, is_long: bool
+) -> int | None:
+    """Index of the first print that fires a stop ENTRY trigger (long buy-stop: at/above;
+    short sell-stop: at/below), or ``None`` when the print path never reaches it."""
+    for idx, tick in enumerate(ticks):
+        if tick.price >= trigger if is_long else tick.price <= trigger:
+            return idx
     return None
 
 
@@ -1652,6 +1752,25 @@ def run_engine(
     order_is_limit = order_cfg.type == "limit_order" and order_ok
     order_is_stop = order_cfg.type in ("stop_order", "stop_limit_order") and order_ok
 
+    # F-07i (C): the tick-dependent execution settings. They pass the predicates only
+    # when the strategy DEMANDS tick data ('Use Tick Data' = Yes), so the worker streams
+    # the pinned print path whenever these are active. ``tick_entry_authority``: under a
+    # tick-backed ENTRY timing, a bar WITH prints makes the print path authoritative for
+    # a resting order's touch (a print-less bar keeps the coarse bar-touch — data
+    # sparsity is never proof of no fill). ``stop_limit_sim``: the same-bar
+    # stop-then-limit sequence resolves over the observed prints in (1c).
+    # ``partial_active``: the configured limit's partial-fill policy is executed from
+    # print SIZE evidence (fraction never fabricated — size-less evidence degrades to
+    # the coarse full-fill model, flagged L4).
+    tick_entry_authority = config.data.execution.entry_timing in _TICK_ENTRY_TIMINGS
+    stop_limit_sim = config.data.execution.exit_timing == "stop_limit_priority_simulation"
+    partial_policy = "not_allowed"
+    if order_cfg.limit is not None and order_cfg.type in _LIMIT_BACKED_ORDER_TYPES:
+        partial_policy = order_cfg.limit.partial_fill_policy
+    partial_active = partial_policy != "not_allowed" and order_ok
+    partial_evidence_missing = False
+    exit_touch: tuple[Decimal, int] | None = None  # (touch level, placed bar_seq)
+
     # F-07c: partial close. An EXIT SIGNAL closes ``close_fraction`` of the position and holds
     # the remainder (aftermath governs it); a stop / end-of-data always closes fully (a risk
     # event is never partial). ``close_all`` collapses to a full close. An unmodelled aftermath
@@ -1767,6 +1886,14 @@ def run_engine(
     stop_orders_placed = 0
     stop_orders_triggered = 0
     stop_orders_cancelled = 0
+    # F-07i (C): tick-setting execution counts — print-resolved entry fills (a resting
+    # order whose touch the print path proved), partial fills (initial + remainder lots),
+    # same-bar stop-then-limit fills, touch-order placements and touch-exit fills.
+    tick_resolved_entry_fills = 0
+    partial_fills = 0
+    same_bar_stop_limit_fills = 0
+    touch_orders_placed = 0
+    touch_exit_fills = 0
     partial_closes = 0
     # F-07f: count of partial-close aftermaths that locked in profit on the remainder
     # (``lock_in_profit`` moving the stop to the current price, or ``trailing_stop``
@@ -2083,6 +2210,24 @@ def run_engine(
             return len(active) == len(restriction_specs)
         return bool(active)
 
+    def _planned_size(direction: str, fill_raw: Decimal, strength: Decimal) -> Decimal:
+        """The size the sizing chain would open at ``fill_raw`` right now.
+
+        The single source ``_open`` books from AND the F-07i (C) partial-fill logic
+        measures print-size evidence against — one computation, no drift. Applies the
+        full Strategy Details sizing/limits chain and (under allocation) the sleeve
+        outer cap."""
+        is_long = direction == "long"
+        entry_eff = _effective_fill(
+            fill_raw, is_buy=is_long, half_spread=half_spread, slip=slippage
+        )
+        if alloc_on:
+            sleeve = _sleeve_capital(equity)
+            return _cap_to_sleeve(
+                _position_size(config, entry_eff, sleeve, strength), sleeve, entry_eff
+            )
+        return _position_size(config, entry_eff, equity, strength)
+
     def _open(
         direction: str,
         bar: _Bar,
@@ -2090,6 +2235,7 @@ def run_engine(
         *,
         bar_seq: int,
         strength: Decimal = _ONE,
+        size_override: Decimal | None = None,
     ) -> _Position | None:
         """Open a position at the cost-adjusted fill of ``fill_raw``, or ``None`` for a
         no-fill.
@@ -2111,16 +2257,17 @@ def run_engine(
         entry_eff = _effective_fill(
             fill_raw, is_buy=is_long, half_spread=half_spread, slip=slippage
         )
-        if alloc_on:
-            # Strategy Details sizing/risk constraints first (within the item's sleeve),
-            # then the allocation remaining-sleeve outer cap (§8.4 step 5).
-            sleeve = _sleeve_capital(equity)
-            desired = _position_size(config, entry_eff, sleeve, strength)
-            size = _cap_to_sleeve(desired, sleeve, entry_eff)
-            if size <= _ZERO:
-                return None
-        else:
-            size = _position_size(config, entry_eff, equity, strength)
+        # Strategy Details sizing/risk constraints (within the item's sleeve under
+        # allocation, then the remaining-sleeve outer cap, §8.4 step 5) — via
+        # ``_planned_size`` so the F-07i (C) partial-fill evidence comparison and the
+        # booked size can never diverge.
+        size = _planned_size(direction, fill_raw, strength)
+        if alloc_on and size <= _ZERO:
+            return None
+        if size_override is not None:
+            # F-07i (C): a partial fill books the print-evidenced fraction of the planned
+            # size (already sized/capped above — the override is strictly smaller).
+            size = size_override
         nonlocal position_seq
         position_seq += 1
         return _Position(
@@ -2149,29 +2296,43 @@ def run_engine(
         bar_seq: int,
         deferred: bool,
         strength: Decimal = _ONE,
+        size_override: Decimal | None = None,
+        extra_detail: dict[str, Any] | None = None,
     ) -> _Position | None:
         """Open a position AND emit the F-10 fill/blocked decision-trace event.
 
         On a real fill: ``entry_fill`` (the execution — position_seq, price, size, timing).
         On a no-fill: ``entry_blocked`` with the concrete reason (sizing/sleeve), so a
         signalled-but-unfilled entry is never a silent gap in the trace. ``strength`` is
-        the SIGNAL bar's multiplier (F-07g), carried verbatim from the decision point."""
-        pos = _open(direction, bar, fill_raw, bar_seq=bar_seq, strength=strength)
+        the SIGNAL bar's multiplier (F-07g), carried verbatim from the decision point.
+        ``extra_detail`` (F-07i C) stamps tick-execution provenance onto the fill event
+        ONLY when present, so tick-less traces stay byte-identical."""
+        pos = _open(
+            direction,
+            bar,
+            fill_raw,
+            bar_seq=bar_seq,
+            strength=strength,
+            size_override=size_override,
+        )
         if pos is not None:
+            fill_detail: dict[str, Any] = {
+                "position_seq": pos.position_seq,
+                "fill_price": str(pos.entry_price),
+                "size": str(pos.size),
+                "entry_notional": str(pos.entry_notional),
+                "timing": config.data.execution.entry_timing,
+                "order_type": order_cfg.type,
+                "deferred": deferred,
+            }
+            if extra_detail:
+                fill_detail.update(extra_detail)
             _emit(
                 "entry_fill",
                 event_time=bar.timestamp,
                 direction=direction,
                 bar_seq=bar_seq,
-                detail={
-                    "position_seq": pos.position_seq,
-                    "fill_price": str(pos.entry_price),
-                    "size": str(pos.size),
-                    "entry_notional": str(pos.entry_notional),
-                    "timing": config.data.execution.entry_timing,
-                    "order_type": order_cfg.type,
-                    "deferred": deferred,
-                },
+                detail=fill_detail,
             )
         else:
             _emit(
@@ -2182,6 +2343,185 @@ def run_engine(
                 detail={"reason": _blocked_reason(), "deferred": deferred},
             )
         return pos
+
+    def _limit_touch_evidence(
+        wl: _WorkingLimit, bar: _Bar, ticks: tuple[_Tick, ...]
+    ) -> tuple[bool, tuple[_Tick, ...]]:
+        """(touched, touching_prints) for a resting order against THIS bar (F-07i C).
+
+        Bar-touch (low/high reaches the level) is the base F-07b model. Under a
+        tick-backed ENTRY timing (``tick_entry_authority``) a bar WITH prints makes the
+        print path AUTHORITATIVE: the order fills only if a print actually reaches the
+        level — a bar extreme the prints never confirm does not fill (that is what the
+        simulation modes promise). A print-less bar keeps the coarse bar-touch: data
+        sparsity is never treated as proof of no fill. The touching prints double as
+        the partial-fill size evidence."""
+        is_buy = wl.direction == "long"
+        bar_touched = bar.low <= wl.limit_price if is_buy else bar.high >= wl.limit_price
+        if not ticks:
+            return bar_touched, ()
+        prints = _touching_ticks(ticks, wl.limit_price, is_buy=is_buy)
+        if tick_entry_authority:
+            return bool(prints), prints
+        return bar_touched, prints
+
+    def _absorb_remainder(
+        pos: _Position, bar: _Bar, price_raw: Decimal, add_size: Decimal, *, action: str
+    ) -> None:
+        """Top an open position up with a partial-fill remainder lot (F-07i C).
+
+        Mirrors the F-07d scale-layer mutation: size-weighted average basis, notional
+        refresh, one commission per extra fill. Stop LEVELS stay as installed at the
+        initial entry (the documented fixed-for-life invariant). The lot is the SAME
+        order's remainder — already sized/capped at intent time — so no re-capping."""
+        nonlocal equity, partial_fills
+        fill_eff = _effective_fill(
+            price_raw, is_buy=pos.direction == "long", half_spread=half_spread, slip=slippage
+        )
+        new_size = pos.size + add_size
+        new_basis = ((pos.entry_price * pos.size + fill_eff * add_size) / new_size).quantize(_MONEY)
+        pos.entry_price = new_basis
+        pos.size = new_size
+        pos.entry_notional = (new_basis * new_size).quantize(_MONEY)
+        if commission > _ZERO:
+            equity = (equity - commission).quantize(_MONEY)
+        partial_fills += 1
+        _emit(
+            "partial_fill",
+            event_time=bar.timestamp,
+            direction=pos.direction,
+            bar_seq=bars_seen,
+            detail={
+                "position_seq": pos.position_seq,
+                "policy": partial_policy,
+                "action": action,
+                "fill_price": str(fill_eff),
+                "fill_size": str(add_size),
+                "new_size": str(new_size),
+                "entry_basis": str(new_basis),
+            },
+        )
+
+    def _fill_resting_limit(
+        wl: _WorkingLimit,
+        bar: _Bar,
+        prints: tuple[_Tick, ...],
+        *,
+        bar_seq: int,
+        armed_same_bar: bool = False,
+    ) -> None:
+        """Fill a TOUCHED resting entry order, applying the partial-fill policy (F-07i C).
+
+        The full-fill path (policy ``not_allowed``, no usable print-size evidence, or
+        evidence covering the whole planned size) is the F-07b model verbatim: the whole
+        planned size books at the limit level. With print-size evidence SHORT of the
+        planned size the policy governs: ``minimum_50_percent`` rejects a sub-50% bar
+        (the order keeps resting); otherwise the evidenced fraction books at the level
+        (a ``partial_fill`` trace event) and the remainder is disposed per policy —
+        ``cancel_remaining`` drops it, ``fill_remaining_as_market`` books it at this
+        bar's close, ``allowed`` / ``minimum_50_percent`` rest it against the open
+        position for later top-ups. Size-less evidence degrades to the coarse full-fill
+        model, flagged L4 (a fraction is never fabricated)."""
+        nonlocal position, working_limit, limit_orders_filled
+        nonlocal partial_fills, partial_evidence_missing
+        nonlocal tick_resolved_entry_fills, same_bar_stop_limit_fills
+        extra: dict[str, Any] = {}
+        if prints:
+            extra["tick_resolved"] = True
+        if armed_same_bar:
+            extra["same_bar_stop_limit"] = True
+        planned = _planned_size(wl.direction, wl.limit_price, wl.strength)
+        sized = [t for t in prints if t.size is not None]
+        available = sum((t.size for t in sized if t.size is not None), _ZERO)
+        if partial_active and planned > _ZERO and prints and not sized:
+            partial_evidence_missing = True
+        if not partial_active or planned <= _ZERO or not sized or available >= planned:
+            limit_orders_filled += 1
+            if prints:
+                tick_resolved_entry_fills += 1
+            if armed_same_bar:
+                same_bar_stop_limit_fills += 1
+            position = _do_open(
+                wl.direction,
+                bar,
+                wl.limit_price,
+                bar_seq=bar_seq,
+                deferred=True,
+                strength=wl.strength,
+                extra_detail=extra or None,
+            )
+            working_limit = None
+            return
+        if partial_policy == "minimum_50_percent" and available * 2 < planned:
+            partial_fills += 1
+            _emit(
+                "partial_fill",
+                event_time=bar.timestamp,
+                direction=wl.direction,
+                bar_seq=bar_seq,
+                detail={
+                    "policy": partial_policy,
+                    "action": "rejected_below_minimum",
+                    "planned_size": str(planned),
+                    "available_size": str(available),
+                    "limit_price": str(wl.limit_price),
+                },
+            )
+            return  # the order keeps resting whole; validity/unfilled policy still apply
+        limit_orders_filled += 1
+        tick_resolved_entry_fills += 1
+        if armed_same_bar:
+            same_bar_stop_limit_fills += 1
+        position = _do_open(
+            wl.direction,
+            bar,
+            wl.limit_price,
+            bar_seq=bar_seq,
+            deferred=True,
+            strength=wl.strength,
+            size_override=available,
+            extra_detail={**extra, "partial_fill": True},
+        )
+        if position is None:
+            working_limit = None
+            return
+        remainder = planned - available
+        partial_fills += 1
+        disposition_detail: dict[str, Any] = {
+            "position_seq": position.position_seq,
+            "policy": partial_policy,
+            "planned_size": str(planned),
+            "filled_size": str(available),
+            "remaining_size": str(remainder),
+            "limit_price": str(wl.limit_price),
+        }
+        if partial_policy == "cancel_remaining":
+            disposition_detail["action"] = "remainder_cancelled"
+            working_limit = None
+        elif partial_policy == "fill_remaining_as_market":
+            disposition_detail["action"] = "remainder_market_filled"
+            _emit(
+                "partial_fill",
+                event_time=bar.timestamp,
+                direction=wl.direction,
+                bar_seq=bar_seq,
+                detail=disposition_detail,
+            )
+            _absorb_remainder(position, bar, bar.close, remainder, action="market_remainder")
+            working_limit = None
+            return
+        else:  # allowed / minimum_50_percent (>= 50% already ensured above)
+            disposition_detail["action"] = "remainder_resting"
+            wl.remaining_size = remainder
+            wl.for_position_seq = position.position_seq
+            wl.remainder_placed_seq = bar_seq
+        _emit(
+            "partial_fill",
+            event_time=bar.timestamp,
+            direction=wl.direction,
+            bar_seq=bar_seq,
+            detail=disposition_detail,
+        )
 
     def _plan_exit(pos: _Position, entry_signal: str | None, exit_hit: bool) -> bool:
         """Exit on an explicit exit signal or (opt-in) an opposite entry signal."""
@@ -2330,58 +2670,132 @@ def run_engine(
                         _apply_partial_aftermath(position, bar.open)
                 pending = None
 
-            # (1b) Resolve a RESTING limit ENTRY order against THIS bar (F-07b). Resolves
-            # before the position block (like a next_open fill), so a same-bar protective
-            # stop can hit the just-filled position — consistent with the deferred-open path.
-            # A touch fills at the limit; on the expiry bar an unfilled order applies its
+            # (1b) Resolve a RESTING limit ENTRY order against THIS bar (F-07b/F-07i C).
+            # Resolves before the position block (like a next_open fill), so a same-bar
+            # protective stop can hit the just-filled position — consistent with the
+            # deferred-open path. A touch fills at the limit via ``_fill_resting_limit``
+            # (print-authoritative under a tick-backed timing; partial-fill policy from
+            # print-size evidence); on the expiry bar an order still resting applies its
             # policy (convert-to-market fills at the close, else cancel); otherwise a
             # re-price policy recomputes the limit from THIS bar's close for the next bar.
-            if working_limit is not None and position is None:
+            if (
+                working_limit is not None
+                and working_limit.remaining_size
+                is None  # a remainder is (1b2)'s, never a fresh entry
+                and position is None
+            ):
                 wl = working_limit
-                touched = (
-                    bar.low <= wl.limit_price
-                    if wl.direction == "long"
-                    else bar.high >= wl.limit_price
-                )
-                expired = wl.expires_seq is not None and bars_seen >= wl.expires_seq
+                touched, touch_prints = _limit_touch_evidence(wl, bar, bar_ticks)
                 if touched:
-                    limit_orders_filled += 1
-                    position = _do_open(
-                        wl.direction,
-                        bar,
-                        wl.limit_price,
+                    _fill_resting_limit(wl, bar, touch_prints, bar_seq=bars_seen)
+                if working_limit is not None and position is None:
+                    expired = wl.expires_seq is not None and bars_seen >= wl.expires_seq
+                    if expired:
+                        if wl.unfilled_policy == "convert_to_market_order":
+                            limit_orders_filled += 1
+                            position = _do_open(
+                                wl.direction,
+                                bar,
+                                bar.close,
+                                bar_seq=bars_seen,
+                                deferred=True,
+                                strength=wl.strength,
+                            )
+                        else:
+                            limit_orders_cancelled += 1
+                            _emit(
+                                "limit_order_cancelled",
+                                event_time=bar.timestamp,
+                                direction=wl.direction,
+                                bar_seq=bars_seen,
+                                detail={
+                                    "reason": "validity_expired",
+                                    "unfilled_policy": wl.unfilled_policy,
+                                    "limit_price": str(wl.limit_price),
+                                },
+                            )
+                        working_limit = None
+                    elif wl.unfilled_policy == "re_price_next_candle":
+                        wl.limit_price = _limit_price(wl.price_rule, bar.close, wl.offset)
+
+            # (1b2) F-07i (C): a PARTIAL fill's remaining order rests AGAINST its open
+            # position (the order-remaining ledger, Master Ref §6.3): later touches top
+            # the position up at the limit level until the validity/unfilled policy
+            # disposes of the remainder. The remainder dies with its position — a
+            # stop/exit closing the position cancels the order's remaining intent.
+            if working_limit is not None and working_limit.remaining_size is not None:
+                wl = working_limit
+                remaining = working_limit.remaining_size
+                if position is None or position.position_seq != wl.for_position_seq:
+                    # The order's position is gone — the remaining intent is cancelled,
+                    # traced (never a silent gap, and NEVER re-armed as a fresh entry).
+                    limit_orders_cancelled += 1
+                    _emit(
+                        "limit_order_cancelled",
+                        event_time=bar.timestamp,
+                        direction=wl.direction,
                         bar_seq=bars_seen,
-                        deferred=True,
-                        strength=wl.strength,
+                        detail={
+                            "reason": "position_closed",
+                            "unfilled_policy": wl.unfilled_policy,
+                            "limit_price": str(wl.limit_price),
+                            "remaining_size": str(remaining),
+                        },
                     )
                     working_limit = None
-                elif expired:
-                    if wl.unfilled_policy == "convert_to_market_order":
-                        limit_orders_filled += 1
-                        position = _do_open(
-                            wl.direction,
-                            bar,
-                            bar.close,
-                            bar_seq=bars_seen,
-                            deferred=True,
-                            strength=wl.strength,
+                elif wl.remainder_placed_seq is not None and bars_seen > wl.remainder_placed_seq:
+                    touched, touch_prints = _limit_touch_evidence(wl, bar, bar_ticks)
+                    if touched:
+                        sized = [t for t in touch_prints if t.size is not None]
+                        if touch_prints and not sized:
+                            partial_evidence_missing = True
+                        top_up = (
+                            min(
+                                remaining,
+                                sum((t.size for t in sized if t.size is not None), _ZERO),
+                            )
+                            if sized
+                            # no size evidence -> coarse model: the whole remainder fills
+                            else remaining
                         )
-                    else:
-                        limit_orders_cancelled += 1
-                        _emit(
-                            "limit_order_cancelled",
-                            event_time=bar.timestamp,
-                            direction=wl.direction,
-                            bar_seq=bars_seen,
-                            detail={
-                                "reason": "validity_expired",
-                                "unfilled_policy": wl.unfilled_policy,
-                                "limit_price": str(wl.limit_price),
-                            },
-                        )
-                    working_limit = None
-                elif wl.unfilled_policy == "re_price_next_candle":
-                    wl.limit_price = _limit_price(wl.price_rule, bar.close, wl.offset)
+                        if top_up > _ZERO:
+                            _absorb_remainder(
+                                position, bar, wl.limit_price, top_up, action="remainder_touch"
+                            )
+                            remaining = remaining - top_up
+                            if remaining <= _ZERO:
+                                working_limit = None
+                            else:
+                                wl.remaining_size = remaining
+                                wl.remainder_placed_seq = bars_seen
+                    if working_limit is not None:
+                        expired = wl.expires_seq is not None and bars_seen >= wl.expires_seq
+                        if expired:
+                            if wl.unfilled_policy == "convert_to_market_order":
+                                _absorb_remainder(
+                                    position,
+                                    bar,
+                                    bar.close,
+                                    remaining,
+                                    action="remainder_validity_market",
+                                )
+                            else:
+                                limit_orders_cancelled += 1
+                                _emit(
+                                    "limit_order_cancelled",
+                                    event_time=bar.timestamp,
+                                    direction=wl.direction,
+                                    bar_seq=bars_seen,
+                                    detail={
+                                        "reason": "partial_remainder_expired",
+                                        "unfilled_policy": wl.unfilled_policy,
+                                        "limit_price": str(wl.limit_price),
+                                        "remaining_size": str(wl.remaining_size),
+                                    },
+                                )
+                            working_limit = None
+                        elif wl.unfilled_policy == "re_price_next_candle":
+                            wl.limit_price = _limit_price(wl.price_rule, bar.close, wl.offset)
 
             # (1c) Resolve a RESTING stop ENTRY trigger against THIS bar (F-07h). A long
             # buy-stop fires when the bar's high reaches the trigger (short mirror: low).
@@ -2462,6 +2876,36 @@ def run_engine(
                                 "armed_by": "stop_order_triggered",
                             },
                         )
+                        # F-07i (C): under ``stop_limit_priority_simulation`` the
+                        # same-bar stop-then-limit sequence is resolved by the OBSERVED
+                        # print path: if a print AFTER the trigger's first touch reaches
+                        # the armed limit, the limit fills THIS bar (doc 02 §5.2 stays
+                        # true — the trigger may fire and the position still never open
+                        # when the later prints never come back to the limit). A
+                        # print-less trigger bar keeps the conservative next-bar model
+                        # (Master Ref §9.1: no assumed/implicit price path — the
+                        # sequence is only ever taken from observed prints).
+                        if stop_limit_sim and bar_ticks:
+                            trigger_idx = _first_trigger_index(
+                                bar_ticks,
+                                ws.trigger_price,
+                                is_long=ws.direction == "long",
+                            )
+                            if trigger_idx is not None:
+                                armed = working_limit
+                                after_trigger = _touching_ticks(
+                                    bar_ticks[trigger_idx + 1 :],
+                                    armed.limit_price,
+                                    is_buy=armed.direction == "long",
+                                )
+                                if after_trigger:
+                                    _fill_resting_limit(
+                                        armed,
+                                        bar,
+                                        after_trigger,
+                                        bar_seq=bars_seen,
+                                        armed_same_bar=True,
+                                    )
                     working_stop = None
 
             if position is not None:
@@ -2484,12 +2928,17 @@ def run_engine(
                 )
                 stop_touched = stop_outcome is not None
                 # A fresh exit signal is evaluated only when no exit is already committed:
-                # a deferred exit from a prior bar (``pending``) is pinned and cannot be
-                # pre-empted by a new signal — only an intrabar stop below can cancel it.
-                exit_wanted = pending is None and (
-                    _plan_exit(position, entry_signal, exit_hit)
-                    if plan_active
-                    else _exit_proxy(position, bar, window)
+                # a deferred exit from a prior bar (``pending``) — or a resting touch
+                # exit (F-07i C) — is pinned and cannot be pre-empted by a new signal;
+                # only an intrabar stop below can cancel it.
+                exit_wanted = (
+                    pending is None
+                    and exit_touch is None
+                    and (
+                        _plan_exit(position, entry_signal, exit_hit)
+                        if plan_active
+                        else _exit_proxy(position, bar, window)
+                    )
                 )
                 if stop_touched and exit_wanted and exit_sched == "immediate":
                     # §5.9 same-bar Stop+Exit collision — only when the exit ALSO fills
@@ -2542,6 +2991,39 @@ def run_engine(
                     _emit_stop_resolution(stop_outcome, bar.timestamp, position.direction)
                     position = None
                     pending = None
+                elif exit_touch is not None and bars_seen > exit_touch[1]:
+                    # F-07i (C) ``intrabar_touch`` EXIT: the resting exit fills when price
+                    # comes back to TOUCH the exit-signal level (a long SELLS at the
+                    # level — prints at/above it; short mirror). Print-authoritative on a
+                    # bar with prints; a print-less bar keeps the coarse bar-extreme
+                    # touch. Never on the signal bar itself (the level IS that bar's
+                    # close — an instant self-touch would just be a close fill). An
+                    # intrabar stop the same bar wins above (the risk event pre-empts
+                    # the resting exit, the deferred-exit precedent).
+                    touch_level, _placed_seq = exit_touch
+                    is_long_pos = position.direction == "long"
+                    if bar_ticks:
+                        exit_touched = bool(
+                            _touching_ticks(bar_ticks, touch_level, is_buy=not is_long_pos)
+                        )
+                    else:
+                        exit_touched = (
+                            bar.high >= touch_level if is_long_pos else bar.low <= touch_level
+                        )
+                    if exit_touched:
+                        touch_exit_fills += 1
+                        if _close(
+                            bar.timestamp,
+                            touch_level,
+                            "exit_signal",
+                            position,
+                            bar_seq=bars_seen,
+                            fraction=close_fraction,
+                        ):
+                            position = None
+                        else:
+                            _apply_partial_aftermath(position, touch_level)
+                        exit_touch = None
                 elif exit_wanted:
                     if exit_sched == "immediate":
                         # F-07c: an exit signal closes ``close_fraction`` and holds the
@@ -2557,6 +3039,26 @@ def run_engine(
                             position = None
                         else:
                             _apply_partial_aftermath(position, bar.close)
+                    elif exit_sched == "touch":
+                        # F-07i (C): rest the exit as a TOUCH order at the signal bar's
+                        # close level; it fills only when a later bar's prints (or, on a
+                        # print-less bar, its extreme) come back to the level — resolved
+                        # by the touch branch above. Protection stops stay live on the
+                        # position throughout (the touch exit is opportunity, the stop is
+                        # risk).
+                        _emit(
+                            "exit_scheduled",
+                            event_time=bar.timestamp,
+                            direction=position.direction,
+                            bar_seq=bars_seen,
+                            detail={
+                                "position_seq": position.position_seq,
+                                "reason": "exit_signal",
+                                "timing": config.data.execution.exit_timing,
+                                "touch_level": str(bar.close),
+                            },
+                        )
+                        exit_touch = (bar.close, bars_seen)
                     else:
                         # Defer the exit to the next bar's open / close (F-07a); trace the
                         # scheduling decision so the two-phase timing is reconstructable.
@@ -2755,6 +3257,37 @@ def run_engine(
                             direction=want,
                             bar_seq=bars_seen,
                             detail=place_detail,
+                        )
+                    elif entry_sched == "touch":
+                        # F-07i (C) ``intrabar_touch`` ENTRY: rest a TOUCH order at the
+                        # signal price (the signal bar's close) and fill only when a
+                        # later bar's prints come back to the level — reusing the F-07b
+                        # working-limit machinery verbatim (entry-signal-price rule, no
+                        # offset, until-cancelled). With a limit/stop order type the
+                        # branches above already govern the fill (the order's own touch
+                        # semantics subsume the timing).
+                        working_limit = _WorkingLimit(
+                            direction=want,
+                            limit_price=bar.close,
+                            offset=_ZERO,
+                            price_rule="entry_signal_price",
+                            unfilled_policy="keep_until_validity_ends",
+                            expires_seq=None,
+                            strength=strength,
+                        )
+                        touch_orders_placed += 1
+                        _emit(
+                            "limit_order_placed",
+                            event_time=bar.timestamp,
+                            direction=want,
+                            bar_seq=bars_seen,
+                            detail={
+                                "limit_price": str(bar.close),
+                                "price_rule": "entry_signal_price",
+                                "mode": "intrabar_touch",
+                                "unfilled_policy": "keep_until_validity_ends",
+                                "expires_bar_seq": None,
+                            },
                         )
                     elif entry_sched == "immediate":
                         position = _do_open(
@@ -3208,6 +3741,12 @@ def run_engine(
             # the next bar's "previous" (None in proxy mode, so the detector stays inert).
             prev_entry_signal = entry_signal
 
+            # F-07i (C): a resting touch exit dies with its position — whatever closed it
+            # (stop / deferred exit / the touch itself) consumed the exit intent; a later
+            # position never inherits a stale touch level.
+            if position is None:
+                exit_touch = None
+
             window.append(bar)
 
     # End-of-data: a limit order still resting past the last bar never filled → cancel it
@@ -3306,6 +3845,12 @@ def run_engine(
         # supported bar timeframe, so prints cannot be attributed to bar windows — the
         # run stayed on the conservative OHLCV model (L4, never silently guessed).
         warnings.append("tick_alignment_unavailable")
+    if partial_evidence_missing:
+        # F-07i (C): a partial-fill policy was active but the touching prints carried no
+        # usable trade sizes — the filled fraction is unknowable from this revision, so
+        # those fills degraded to the coarse full-fill model (L4, never a fabricated
+        # fraction).
+        warnings.append("partial_fill_evidence_unavailable")
     if not sizing_ok:
         # formula sizing (and a risk_based request without its sub-config) is not
         # modelled; the run opened NO position (fail closed, F-09) rather than a
@@ -3558,6 +4103,14 @@ def run_engine(
         "tick_path_enabled": tick_batches is not None,
         "tick_bars": tick_bars,
         "tick_first_trigger_resolutions": tick_first_trigger_resolutions,
+        # F-07i (C): tick-setting execution provenance — print-resolved resting-order
+        # fills, partial fills (initial + remainder lots), same-bar stop-then-limit
+        # sequences, touch-order placements and touch-exit fills.
+        "tick_resolved_entry_fills": tick_resolved_entry_fills,
+        "partial_fills": partial_fills,
+        "same_bar_stop_limit_fills": same_bar_stop_limit_fills,
+        "touch_orders_placed": touch_orders_placed,
+        "touch_exit_fills": touch_exit_fills,
         "item_count": item_count,
         "decision_trace_count": len(signal_events),
         "decision_trace_schema": DECISION_TRACE_SCHEMA,
@@ -3591,6 +4144,11 @@ _DIAG_SUM_KEYS = (
     "funding_charges",
     "tick_bars",
     "tick_first_trigger_resolutions",
+    "tick_resolved_entry_fills",
+    "partial_fills",
+    "same_bar_stop_limit_fills",
+    "touch_orders_placed",
+    "touch_exit_fills",
 )
 
 # Sequential composite curve is NOT a unified-clock portfolio valuation (each strategy

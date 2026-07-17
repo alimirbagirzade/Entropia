@@ -37,7 +37,14 @@ _ESSENTIAL_SYNONYMS: dict[MarketDataType, dict[str, frozenset[str]]] = {
 
 _OPTIONAL_SYNONYMS: dict[MarketDataType, dict[str, frozenset[str]]] = {
     MarketDataType.OHLCV: {"volume": frozenset({"volume", "v", "vol", "qty", "quantity"})},
-    MarketDataType.TICK_TRADES: {"side": frozenset({"side", "direction", "aggressor"})},
+    MarketDataType.TICK_TRADES: {
+        "side": frozenset({"side", "direction", "aggressor"}),
+        # F-07i (C): the print's traded quantity — the partial-fill fraction evidence
+        # (Master Ref §6.3 Partial Fill). Optional: a size-less tick revision still
+        # replays; only the partial-fill computation degrades to the coarse full-fill
+        # model (flagged, never fabricated).
+        "size": frozenset({"size", "qty", "quantity", "amount", "volume", "v", "vol"}),
+    },
     MarketDataType.SPREAD_EXECUTION: {},
 }
 

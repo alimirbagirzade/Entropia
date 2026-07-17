@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 
@@ -113,8 +113,11 @@ describe("Arrange Metrics page", () => {
     expect(await screen.findByText("System Default")).toBeInTheDocument();
     expect(screen.getByLabelText("Show Net Profit")).toBeChecked();
     expect(screen.getByLabelText("Show ROMAD")).not.toBeChecked();
-    // A future (non-selectable) metric can never be chosen.
-    expect(screen.getByLabelText("Show Sortino Ratio")).toBeDisabled();
+    // A future (non-selectable) metric is not a checkbox at all — it lives in the
+    // always-visible Future Version Metrics reference panel (doc 17 §3.2).
+    expect(screen.queryByLabelText("Show Sortino Ratio")).not.toBeInTheDocument();
+    const futurePanel = screen.getByRole("region", { name: "Future Version Metrics" });
+    expect(within(futurePanel).getByText("Sortino Ratio")).toBeInTheDocument();
     expect(
       screen.getByText(/first Apply creates a personal profile/),
     ).toBeInTheDocument();

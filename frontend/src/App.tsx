@@ -1,4 +1,4 @@
-import { Routes, Route } from "react-router-dom";
+import { Navigate, Routes, Route } from "react-router-dom";
 import { Layout } from "./app/Layout";
 import { ALL_NAV_ITEMS, FUTURE_DEV_SUBPAGES } from "./app/nav";
 import { AnalysisLab } from "./pages/AnalysisLab";
@@ -15,7 +15,8 @@ import { Mainboard } from "./pages/Mainboard";
 import { MarketData } from "./pages/MarketData";
 import { Metrics } from "./pages/Metrics";
 import { OutsourceSignal } from "./pages/OutsourceSignal";
-import { Panel } from "./pages/Panel";
+import { PanelLogs } from "./pages/PanelLogs";
+import { PanelManagement } from "./pages/PanelManagement";
 import { Portfolio } from "./pages/Portfolio";
 import { PreCheck } from "./pages/PreCheck";
 import { Provisioning } from "./pages/Provisioning";
@@ -42,6 +43,8 @@ const REAL_PATHS = new Set([
   "/packages/library",
   "/packages/embedded",
   "/panel",
+  "/panel/logs",
+  "/panel/management",
   "/panel/provisioning",
   "/panel/metrics",
   "/portfolio",
@@ -113,12 +116,23 @@ export default function App() {
             </ErrorBoundary>
           }
         />
-        {/* Panel / Management / Logs (doc 19): Admin-only registry + immutable logs. */}
+        {/* UI-19 (doc 19): Panel is split into two distinct Admin-only work
+            contexts. Bare /panel keeps existing deep-links alive by redirecting
+            to Management (the acting surface); Logs is the immutable read surface. */}
+        <Route path="/panel" element={<Navigate to="/panel/management" replace />} />
         <Route
-          path="/panel"
+          path="/panel/management"
           element={
             <ErrorBoundary>
-              <Panel />
+              <PanelManagement />
+            </ErrorBoundary>
+          }
+        />
+        <Route
+          path="/panel/logs"
+          element={
+            <ErrorBoundary>
+              <PanelLogs />
             </ErrorBoundary>
           }
         />

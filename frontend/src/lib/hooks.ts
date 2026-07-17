@@ -1,7 +1,23 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "./apiClient";
 import { parseMetricsSummary, type MetricsSummary } from "./metrics";
 import type { Me, Meta, ReadyResponse } from "./types";
+
+// Forward-only opaque keyset cursors (server contract): Prev replays the
+// cursor stack, the client never re-orders or fabricates a page. Drives the
+// shared <Pager> component.
+export function useCursorStack() {
+  const [stack, setStack] = useState<string[]>([]);
+  const cursor = stack.length > 0 ? stack[stack.length - 1] : null;
+  return {
+    cursor,
+    canPrev: stack.length > 0,
+    next: (nextCursor: string) => setStack((prev) => [...prev, nextCursor]),
+    prev: () => setStack((prev) => prev.slice(0, -1)),
+    reset: () => setStack([]),
+  };
+}
 
 export function useMeta() {
   return useQuery({

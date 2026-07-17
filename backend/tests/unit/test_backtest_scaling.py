@@ -8,9 +8,14 @@ nothing), exposure/size caps gate ACCEPTANCE (an over-cap layer is REJECTED with
 reason, NEVER auto-trimmed — §11.4 exposure binding). An accepted layer fills at the trigger
 bar's close and folds into the single position as a size-weighted average basis. Logic-based
 scaling, a per-layer timeframe override and a missing add size FAIL CLOSED (Ready Check
-blocker + an inert engine run). Entries/exits are the breakout proxy: 20 look-back bars, an
-upside breakout (long @102) or downside breakdown (short @98), end-of-data closes the
-position. Each setting has a positive and a negative case (spec F-07 acceptance).
+blocker + an inert engine run). Each setting has a positive and a negative case (spec F-07
+acceptance).
+
+Entries come from a real, production-reachable ``ta.sma`` cross plan (see
+tests/unit/engine_signal_plan.py — F-24: the engine's breakout proxy is unreachable in a real
+RUN, so no fixture is allowed to depend on it): 20 look-back bars establish the MA, then an
+upside breakout (long @102) or downside breakdown (short @98) crosses it; end-of-data closes
+the position.
 """
 
 from __future__ import annotations
@@ -25,6 +30,7 @@ from entropia.domain.backtest.engine import (
     scaling_is_modelled,
 )
 from entropia.domain.strategy.config import StrategyConfig
+from tests.unit.engine_signal_plan import sma_entry_plan
 
 _ZERO_COST = {"slippage_mode": "percentage_slippage", "slippage_value": "0"}
 
@@ -84,7 +90,16 @@ def _config(
     """A minimal VALID StrategyConfig; only the fields the engine reads matter.
 
     Zero costs by default so a fill lands exactly on the resolved price; no protection
-    stop so the ladder (not a stop) governs the position's life."""
+    stop so the ladder (not a stop) governs the position's life.
+
+    ``opposite_direction_hedge="ignore"`` isolates the rule under test. A ladder scales INTO
+    an adverse move, and under a real MA cross (F-24) an adverse retracement below the MA is
+    itself an opposite signal — which under the default hedge policy would close the position
+    before the ladder's later layers can trigger. Closing on an opposite signal is the
+    documented hedge/reverse rule (§9), not the scaling rule; pinning it here keeps the ladder
+    the only thing governing the position's life, exactly as this fixture's bars intend. The
+    retired breakout proxy produced no opposite signal over these retracement bars, so this
+    fixture never had to say which rule it meant."""
     sizing: dict[str, Any] = {"method": "base_position_size", "base_position_size": "50"}
     if position_size_limits is not None:
         sizing["position_size_limits"] = position_size_limits
@@ -137,7 +152,7 @@ def _config(
             "position_sizing": sizing,
             "scaling_logic": scaling,
             "restrictions_filters": {"rule": "any", "filters": []},
-            "conflict_position_handling": {},
+            "conflict_position_handling": {"opposite_direction_hedge": "ignore"},
         }
     )
 
@@ -150,15 +165,21 @@ def _fu(day: int, o: str, h: str, low: str, c: str) -> dict[str, Any]:
     return _bar(f"2024-01-{day:02d}T00:00:00Z", o, h, low, c)
 
 
-def _flat(n: int, *, low: str = "100") -> list[dict[str, Any]]:
-    """n look-back bars closing @100; ``low`` sets the window floor the exit proxy sees
-    (a deep floor keeps a long's retracement bars from tripping the breakout exit)."""
-    return [_bar(f"2024-01-{i + 1:02d}T00:00:00Z", "100", "100", low, "100") for i in range(n)]
+def _flat(n: int, *, base: str = "100") -> list[dict[str, Any]]:
+    """n flat look-back bars at ``base``, which is also where the entry MA settles."""
+    return [_bar(f"2024-01-{i + 1:02d}T00:00:00Z", base, base, base, base) for i in range(n)]
 
 
-def _long_then(followups: list[dict[str, Any]], *, floor: str = "100") -> list[dict[str, Any]]:
-    """20 look-back bars, an upside breakout (long @102), then the follow-up bars."""
-    bars = _flat(20, low=floor)
+def _long_then(followups: list[dict[str, Any]], *, base: str = "100") -> list[dict[str, Any]]:
+    """20 look-back bars at ``base``, an upside breakout (long @102), then the follow-ups.
+
+    ``base`` sets where the entry MA settles, and therefore how far a retracement can run
+    before it crosses back under the MA and becomes an EXIT signal. A ladder whose later
+    rungs sit below 100 needs a lower ``base`` so the whole ladder is a retracement WITHIN
+    the trend (the case scaling exists for) rather than a trend break. Under the retired
+    breakout proxy this knob was a window ``floor`` — the proxy exited on a new window low,
+    which a real MA-cross strategy does not do."""
+    bars = _flat(20, base=base)
     bars.append(_bar("2024-01-21T00:00:00Z", "100", "103", "100", "102"))  # breakout -> long
     return bars + followups
 
@@ -181,7 +202,12 @@ def _run(config: StrategyConfig, bars: list[dict[str, Any]], *, batch: int = 8) 
         for start in range(0, len(bars), batch):
             yield bars[start : start + batch]
 
-    return run_engine(strategy_config=config, bar_batches=batched(), execution_key="exec_key_test")
+    return run_engine(
+        strategy_config=config,
+        bar_batches=batched(),
+        execution_key="exec_key_test",
+        indicator_plan=sma_entry_plan(),
+    )
 
 
 def _events(out: EngineOutput, kind: str) -> list[dict[str, Any]]:
@@ -283,7 +309,7 @@ def test_ladder_advances_reference_and_adds_layers() -> None:
     ]
     out = _run(
         _config(scaling=_price_scaling(retracement="0.75")),
-        _long_then(followups, floor="95"),
+        _long_then(followups, base="90"),
     )
     assert out.diagnostics["scale_layers_added"] == 2
     added = _events(out, "scale_layer_added")
@@ -306,7 +332,7 @@ def test_percent_of_current_compounds_layer_size() -> None:
     ]
     out = _run(
         _config(scaling=_price_scaling(retracement="0.75", add_size="percent_of_current")),
-        _long_then(followups, floor="95"),
+        _long_then(followups, base="90"),
     )
     added = _events(out, "scale_layer_added")
     assert len(added) == 2
@@ -373,7 +399,7 @@ def test_method_layer_count_caps_candidate_creation() -> None:
     ]
     out = _run(
         _config(scaling=_price_scaling(retracement="0.75", layers=1)),
-        _long_then(followups, floor="95"),
+        _long_then(followups, base="90"),
     )
     assert out.diagnostics["scale_layers_added"] == 1
     assert out.diagnostics["scale_layers_rejected"] == 0

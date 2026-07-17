@@ -10,9 +10,14 @@ trailing_stop is configured/enabled (it has no trailing parameters of its own to
 none configured it still FAILS CLOSED (see ``test_backtest_leverage_trailing.py`` for the
 positive trailing-stop-aftermath case, which needs a protection trailing config this file's
 minimal fixture does not set up). Partial FILLS stay unmodellable over OHLCV (no liquidity
-data) and remain fail-closed from slice b. Entries + exit signals are the breakout proxy: 20
-flat bars, an upside breakout (long @102), then a downside close (< the window low) is the
-exit signal. Each setting has a positive and a negative case (spec F-07 acceptance).
+data) and remain fail-closed from slice b. Each setting has a positive and a negative case
+(spec F-07 acceptance).
+
+Entries + exit signals come from a real, production-reachable ``ta.sma`` cross plan (see
+tests/unit/engine_signal_plan.py — F-24: the engine's breakout proxy is unreachable in a real
+RUN, so no fixture is allowed to depend on it): 20 flat bars establish the MA, an upside
+breakout (long @102) crosses it, and a later downside close back under the MA is the exit
+signal.
 """
 
 from __future__ import annotations
@@ -27,6 +32,7 @@ from entropia.domain.backtest.engine import (
     run_engine,
 )
 from entropia.domain.strategy.config import StrategyConfig
+from tests.unit.engine_signal_plan import sma_entry_plan
 
 _ZERO_COST = {"slippage_mode": "percentage_slippage", "slippage_value": "0"}
 
@@ -40,7 +46,15 @@ def _config(
     """A minimal VALID StrategyConfig; only the fields the engine reads matter.
 
     Zero costs so a fill lands exactly on the resolved price. ``with_stop`` OFF by default so
-    the ONLY protective stop on a remainder is the one move-stop-to-entry installs."""
+    the ONLY protective stop on a remainder is the one move-stop-to-entry installs.
+
+    ``same_direction_stacking="ignore"`` isolates the rule under test. Driven by a real MA
+    cross (F-24), a follow-up bar that recovers above the MA re-crosses it and would STACK a
+    fresh long onto the held remainder, moving its cost basis — that is the documented
+    same-direction stacking rule (§9), covered by test_backtest_scaling.py, not partial-close
+    behaviour. The retired breakout proxy produced no second signal over these bars, so this
+    fixture never had to say which rule it meant; under a production-reachable signal it
+    must."""
     protection: dict[str, Any] = (
         {"percentage_stop": {"enabled": True, "loss_percentage": "1.0"}} if with_stop else {}
     )
@@ -93,7 +107,7 @@ def _config(
             "protection_stop_logic": protection,
             "position_sizing": {"method": "base_position_size", "base_position_size": "50"},
             "restrictions_filters": {"rule": "any", "filters": []},
-            "conflict_position_handling": {},
+            "conflict_position_handling": {"same_direction_stacking": "ignore"},
         }
     )
 
@@ -126,7 +140,12 @@ def _run(config: StrategyConfig, bars: list[dict[str, Any]], *, batch: int = 8) 
         for start in range(0, len(bars), batch):
             yield bars[start : start + batch]
 
-    return run_engine(strategy_config=config, bar_batches=batched(), execution_key="exec_key_test")
+    return run_engine(
+        strategy_config=config,
+        bar_batches=batched(),
+        execution_key="exec_key_test",
+        indicator_plan=sma_entry_plan(),
+    )
 
 
 def _events(out: EngineOutput, kind: str) -> list[dict[str, Any]]:

@@ -22,6 +22,7 @@ from entropia.domain.backtest.engine import (
     run_engine,
 )
 from entropia.domain.strategy.config import StrategyConfig
+from tests.unit.engine_signal_plan import sma_entry_plan
 
 _ENTRY = Decimal("100")
 
@@ -352,7 +353,12 @@ def _run(cfg: StrategyConfig, bars: list[dict[str, Any]]):
         for start in range(0, len(bars), 8):
             yield bars[start : start + 8]
 
-    return run_engine(strategy_config=cfg, bar_batches=_batched(), execution_key="ek")
+    return run_engine(
+        strategy_config=cfg,
+        bar_batches=_batched(),
+        execution_key="ek",
+        indicator_plan=sma_entry_plan(),
+    )
 
 
 def test_engine_any_active_stops_out_on_the_single_touched_stop() -> None:

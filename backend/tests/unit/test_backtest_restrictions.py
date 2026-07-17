@@ -29,6 +29,7 @@ from entropia.domain.backtest.engine import (
 )
 from entropia.domain.backtest.indicators import IndicatorPlan, IndicatorSpec, SignalRule
 from entropia.domain.strategy.config import StrategyConfig
+from tests.unit.engine_signal_plan import sma_entry_plan
 
 _ZERO_COST = {"slippage_mode": "percentage_slippage", "slippage_value": "0"}
 
@@ -162,6 +163,19 @@ def _run(
     batch: int = 8,
     plan: IndicatorPlan | None = None,
 ) -> EngineOutput:
+    """Replay ``bars`` under ``config``; ``plan`` defaults to the shared ``ta.sma`` cross plan.
+
+    F-24: the engine's breakout proxy is unreachable in a real RUN (F-06 makes an unresolved
+    plan a Ready Check blocker), so no fixture may depend on it — entries here come from a
+    real MA cross. A test needing a specific plan passes its own.
+
+    This module HOLDS the signal (``until_opposite_signal``) rather than treating it as a
+    one-bar edge, because that is what the rule under test needs: a restriction VETOES an
+    otherwise-valid signal, and once the restriction lifts the still-valid signal must be able
+    to enter. Under a one-bar edge the signal would expire together with the veto, making
+    "blocked inside the window, allowed after" untestable — the ban and the signal's own
+    expiry would be indistinguishable."""
+
     def batched() -> Iterator[list[dict[str, Any]]]:
         for start in range(0, len(bars), batch):
             yield bars[start : start + batch]
@@ -170,7 +184,7 @@ def _run(
         strategy_config=config,
         bar_batches=batched(),
         execution_key="exec_key_restrictions",
-        indicator_plan=plan,
+        indicator_plan=plan or sma_entry_plan(validity="until_opposite_signal"),
     )
 
 

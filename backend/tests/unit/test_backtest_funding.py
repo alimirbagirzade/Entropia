@@ -19,6 +19,7 @@ from typing import Any
 
 from entropia.domain.backtest.engine import run_engine
 from entropia.domain.backtest.funding import FundingRecord, FundingSchedule
+from tests.unit.engine_signal_plan import sma_entry_plan
 from tests.unit.test_backtest_engine import _bar, _batched, _config, _flat
 
 
@@ -63,6 +64,7 @@ def _run(cfg: Any, bars: list[dict[str, Any]], funding: Any, *, batch: int = 8) 
         bar_batches=_batched(bars, batch),
         execution_key="exec_key_funding",
         funding=funding,
+        indicator_plan=sma_entry_plan(),
     )
 
 

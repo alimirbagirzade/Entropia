@@ -1,16 +1,18 @@
 """Engine plan-path unit tests (post-V1 Slice C) — DB-free.
 
 Proves the engine drives entry/exit from a real ``IndicatorPlan`` (built-in TA native
-triggers) when one resolves, and falls back to the labelled breakout proxy otherwise.
-The plan is constructed directly (the DB-backed resolution is covered separately in
-tests/integration/test_indicator_plan_resolution.py)."""
+triggers) — the only entry path a production RUN can take. An UNRESOLVED plan is refused
+upstream (F-06: a Ready Check blocker + a worker fail-closed re-check), never silently
+substituted with a proxy; this module pins the contract those gates read rather than the
+substitution itself (F-24). The plan is constructed directly (the DB-backed resolution is
+covered separately in tests/integration/test_indicator_plan_resolution.py)."""
 
 from __future__ import annotations
 
 from collections.abc import Iterator
 from typing import Any
 
-from entropia.domain.backtest.engine import ENTRY_MODEL, EngineOutput, run_engine
+from entropia.domain.backtest.engine import EngineOutput, run_engine
 from entropia.domain.backtest.indicators import (
     BUILTIN_ENTRY_MODEL,
     IndicatorPlan,
@@ -131,18 +133,24 @@ def test_plan_drives_a_real_indicator_entry() -> None:
     assert trade.entry_time == "2024-01-07T00:00:00Z"  # cross bar (7th)
 
 
-def test_empty_plan_falls_back_to_labelled_proxy() -> None:
+def test_an_unresolved_plan_is_refused_before_the_engine_is_reached() -> None:
+    """An unresolved plan carries the two facts the upstream gates fail closed on (F-06).
+
+    This REPLACES a test that asserted the engine substitutes a labelled breakout proxy for an
+    unresolved plan — F-24: that is precisely the behaviour the product ruled out, so the suite
+    must not lock it in. Production can no longer reach the proxy: Ready Check raises
+    STRATEGY_INDICATOR_UNRESOLVED so admission refuses to queue the run, and the worker
+    re-checks ``not plan.has_entry or plan.unresolved`` and fails closed with
+    RUN_FAILED_UNRESOLVED_DEPENDENCY before the engine is ever called. Both gates are covered
+    end-to-end in tests/integration/test_backtest_persistence.py (admission-blocked + worker
+    defence-in-depth); what is pinned HERE is the plan-shaped contract they read."""
     empty = IndicatorPlan(
         entry_rule=SignalRule(rule="required_indicator_blocks_only"),
         entry_specs=(),
         unresolved=("entry:blk_1:no_directional_dependency",),
     )
-    # 20 flat + breakout so the proxy has something to do.
-    bars = _bars(["100"] * 20 + ["102"])
-    out = _run(_config(), bars, empty)
-    assert out.diagnostics["entry_model"] == ENTRY_MODEL
-    assert "indicator_plan_empty_fallback_proxy" in out.diagnostics["warnings"]
-    assert "entry:blk_1:no_directional_dependency" in out.diagnostics["warnings"]
+    assert not empty.has_entry
+    assert empty.unresolved == ("entry:blk_1:no_directional_dependency",)
 
 
 def test_plan_run_is_deterministic_across_batch_sizes() -> None:

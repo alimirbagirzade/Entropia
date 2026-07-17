@@ -20,6 +20,7 @@ from entropia.domain.backtest.engine import (
     run_engine,
 )
 from entropia.domain.strategy.config import StrategyConfig
+from tests.unit.engine_signal_plan import sma_entry_plan
 
 # --------------------------------------------------------------------------- #
 # Fixtures                                                                     #
@@ -133,6 +134,7 @@ def _run(
         bar_batches=_batched(bars),
         execution_key="exec_key_test",
         allocation=allocation,
+        indicator_plan=sma_entry_plan(),
     )
 
 

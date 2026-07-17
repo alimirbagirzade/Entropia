@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 
 import { parseMappingLines } from "@/lib/marketData";
-import { MarketData } from "@/pages/MarketData";
+import { MarketData, deriveWorkflowSteps } from "@/pages/MarketData";
 import { stubApi } from "./helpers/apiStub";
 import { stubUpload } from "./helpers/xhrStub";
 
@@ -180,12 +180,61 @@ describe("parseMappingLines", () => {
   });
 });
 
+describe("deriveWorkflowSteps (UI-11 ingest ribbon)", () => {
+  const statuses = (state: string | null) => deriveWorkflowSteps(state).map((s) => s.status);
+
+  it("is idle when no dataset is in focus", () => {
+    expect(statuses(null)).toEqual(["pending", "pending", "pending", "pending"]);
+  });
+
+  it("marks the current pipeline step active as the dataset advances", () => {
+    expect(statuses("draft")).toEqual(["active", "pending", "pending", "pending"]);
+    expect(statuses("uploading")).toEqual(["complete", "active", "pending", "pending"]);
+    expect(statuses("analyzing")).toEqual(["complete", "active", "pending", "pending"]);
+    expect(statuses("verified")).toEqual(["complete", "complete", "complete", "active"]);
+  });
+
+  it("reflects the real terminal backend states as blocked / error / complete", () => {
+    // needs_review gates the "create version" step (blocked, not active).
+    expect(statuses("needs_review")).toEqual(["complete", "complete", "blocked", "pending"]);
+    // a rejected verify decision surfaces as an error on the final gate.
+    expect(statuses("rejected")).toEqual(["complete", "complete", "complete", "error"]);
+    // approved = every gate cleared.
+    expect(statuses("approved")).toEqual(["complete", "complete", "complete", "complete"]);
+    // deprecated reached approval but is retired → final gate blocked.
+    expect(statuses("deprecated")).toEqual(["complete", "complete", "complete", "blocked"]);
+  });
+
+  it("treats an unknown state as the pipeline start (fail-open to idle)", () => {
+    expect(statuses("unknown_state")).toEqual(["active", "pending", "pending", "pending"]);
+  });
+});
+
 describe("Market Data page", () => {
   afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
+
+  it("renders the ingest ribbon reflecting the opened dataset's real state", async () => {
+    stubApi(BASE_ROUTES);
+    renderPage();
+
+    // Before any selection the ribbon is idle (four Pending gates).
+    const idleRibbon = within(
+      screen.getByRole("list", { name: "Market data ingestion workflow" }),
+    );
+    expect(idleRibbon.getAllByText("Pending")).toHaveLength(4);
+
+    await openDetail(); // opens md_1 (revision_state "approved")
+
+    const ribbon = within(screen.getByRole("list", { name: "Market data ingestion workflow" }));
+    await waitFor(() => expect(ribbon.getAllByText("Complete")).toHaveLength(4));
+    expect(ribbon.getByText("Upload raw source")).toBeInTheDocument();
+    // Two sequential fetches (registry + detail) plus a full a11y-name scan of the
+    // guide's lists — generous timeout keeps it stable under parallel file load.
+  }, 15000);
 
   it("renders the registry with revision states and validation verbatim", async () => {
     stubApi(BASE_ROUTES);
@@ -206,6 +255,8 @@ describe("Market Data page", () => {
     renderPage();
     await screen.findByText("Binance 15m OHLCV");
 
+    // The Dataset Setup shell is collapsed by default (UI-11) — open it first.
+    fireEvent.click(screen.getByRole("button", { name: "+ Add Market Dataset" }));
     fireEvent.change(screen.getByLabelText(/Title/), { target: { value: "Fresh dataset" } });
     fireEvent.change(screen.getByLabelText(/Instrument id/), { target: { value: "ETHUSDT" } });
     fireEvent.change(screen.getByLabelText(/Payload/), {
@@ -237,6 +288,7 @@ describe("Market Data page", () => {
     renderPage();
     await screen.findByText("Binance 15m OHLCV");
 
+    fireEvent.click(screen.getByRole("button", { name: "+ Add Market Dataset" }));
     fireEvent.change(screen.getByLabelText(/Payload/), { target: { value: "{not json" } });
     fireEvent.click(screen.getByRole("button", { name: "Create dataset" }));
 

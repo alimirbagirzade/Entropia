@@ -64,17 +64,279 @@ function useCursorStack() {
 // — a denial (403/409) renders the canonical envelope verbatim.
 export function MarketData() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [setupOpen, setSetupOpen] = useState(false);
+  const pager = useCursorStack();
+  const datasets = useMarketDatasets(pager.cursor);
+  // Shared cache with DetailCard's useMarketDataset — react-query dedupes on the
+  // ["market-data","detail",id] key, so the ribbon reads the SELECTED dataset's
+  // real revision_state with NO extra fetch (presentation-only derivation).
+  const detail = useMarketDataset(selectedId);
+  const steps = deriveWorkflowSteps(detail.data?.revision_state ?? null);
+
+  // REGISTERED DATASETS reflects the role-aware page projection (soft-deleted /
+  // unauthorized rows are already excluded server-side); a trailing "+" signals a
+  // further page exists rather than fabricating a total the API does not return.
+  const registeredLabel = datasets.data
+    ? `${datasets.data.data.length}${datasets.data.meta.has_more ? "+" : ""}`
+    : "—";
+
   return (
-    <>
-      <h1 className="page-title">Market Data</h1>
-      <p className="page-sub">
-        Primary price &amp; execution layer · OHLCV, tick/trades and spread/execution only · verified
-        is distinct from approved — only an ACTIVE+APPROVED revision feeds research and backtests
+    <div className="market-data-page">
+      <div className="data-page-title-row">
+        <h1 className="page-title" style={{ margin: 0 }}>
+          Market Data
+        </h1>
+        <ProcessGuide />
+      </div>
+      <p className="data-page-intro">
+        <strong>Market Data</strong> is the primary price and execution layer for research and
+        backtests. Keep only price / execution inputs here: OHLCV, tick / trades, and spread /
+        execution data. Funding, open interest, liquidations, order-book research features and other
+        supporting context belong in <strong>Research Data</strong>. Verified is distinct from
+        approved — only an ACTIVE + APPROVED revision feeds research and backtests.
       </p>
-      <CreateDatasetCard onCreated={setSelectedId} />
-      <RegistryCard selectedId={selectedId} onOpen={setSelectedId} />
+
+      <WorkflowRibbon steps={steps} />
+      <SummaryCards registeredLabel={registeredLabel} />
+
+      <div className="data-page-actions">
+        <button
+          type="button"
+          className="btn"
+          aria-expanded={setupOpen}
+          onClick={() => setSetupOpen((open) => !open)}
+        >
+          {setupOpen ? "Close Dataset Setup" : "+ Add Market Dataset"}
+        </button>
+      </div>
+      {setupOpen ? <CreateDatasetCard onCreated={setSelectedId} /> : null}
+
+      <RegistryCard datasets={datasets} pager={pager} selectedId={selectedId} onOpen={setSelectedId} />
       {selectedId !== null ? <DetailCard entityId={selectedId} /> : null}
-    </>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Workflow ribbon (doc 11 §3.1) — the four ingest steps. Step states are DERIVED
+// from the selected dataset's real revision_state projection (no new fetch): the
+// pipeline is DRAFT -> UPLOADING -> ANALYZING -> NEEDS_REVIEW -> VERIFIED ->
+// (Admin) APPROVED, with REJECTED/DEPRECATED as off-ladder terminals.
+// ---------------------------------------------------------------------------
+
+export type WorkflowStepStatus = "pending" | "active" | "complete" | "blocked" | "error";
+
+export interface WorkflowStep {
+  label: string;
+  status: WorkflowStepStatus;
+}
+
+const WORKFLOW_STEP_LABELS = [
+  "Upload raw source",
+  "Analyze & map fields",
+  "Create dataset version",
+  "Verify / approve for use",
+] as const;
+
+// Ladder position of each revision_state along the ingest pipeline. `rejected`
+// sits at the verify tier (a rejected verify decision); `deprecated` sits at the
+// approved tier (it reached approval, then was retired).
+const STATE_LADDER: Record<string, number> = {
+  draft: 0,
+  uploading: 1,
+  analyzing: 2,
+  needs_review: 3,
+  verified: 4,
+  rejected: 4,
+  approved: 5,
+  deprecated: 5,
+};
+
+// The ladder position at which each ribbon step (index 0..3) is COMPLETE.
+const STEP_COMPLETE_AT = [1, 3, 4, 5];
+
+// Pure, projection-driven derivation (unit-tested directly). null = no dataset in
+// focus yet -> the whole ribbon is idle, never falsely "active". Co-located with
+// the page per the UI-11 hot-file constraint (lib/marketData.ts is data-logic and
+// off-limits); the export is a pure helper, not a component.
+// eslint-disable-next-line react-refresh/only-export-components
+export function deriveWorkflowSteps(revisionState: string | null): WorkflowStep[] {
+  if (revisionState === null) {
+    return WORKFLOW_STEP_LABELS.map((label) => ({ label, status: "pending" as const }));
+  }
+  const progress = STATE_LADDER[revisionState] ?? 0;
+  const rejected = revisionState === "rejected";
+  const needsReview = revisionState === "needs_review";
+  const deprecated = revisionState === "deprecated";
+  let activeAssigned = false;
+  return WORKFLOW_STEP_LABELS.map((label, index) => {
+    const completeAt = STEP_COMPLETE_AT[index] ?? Number.MAX_SAFE_INTEGER;
+    if (progress >= completeAt) {
+      // A deprecated dataset reached approval but is no longer usable — the final
+      // gate reads blocked, not a clean complete.
+      const status: WorkflowStepStatus =
+        index === WORKFLOW_STEP_LABELS.length - 1 && deprecated ? "blocked" : "complete";
+      return { label, status };
+    }
+    if (!activeAssigned) {
+      activeAssigned = true;
+      // The first not-yet-complete step is where the pipeline currently sits: a
+      // rejected verify decision is an error, a needs-review gate is blocked.
+      const status: WorkflowStepStatus = rejected ? "error" : needsReview ? "blocked" : "active";
+      return { label, status };
+    }
+    return { label, status: "pending" };
+  });
+}
+
+function workflowStatusLabel(status: WorkflowStepStatus): string {
+  switch (status) {
+    case "complete":
+      return "Complete";
+    case "active":
+      return "Active";
+    case "blocked":
+      return "Blocked";
+    case "error":
+      return "Error";
+    default:
+      return "Pending";
+  }
+}
+
+function WorkflowRibbon({ steps }: { steps: WorkflowStep[] }) {
+  return (
+    <ol className="data-workflow" aria-label="Market data ingestion workflow">
+      {steps.map((step, index) => (
+        <li
+          key={step.label}
+          className={`data-workflow-step wf-${step.status}`}
+          aria-current={step.status === "active" ? "step" : undefined}
+        >
+          <span className="workflow-number">{index + 1}</span>
+          <span className="workflow-step-body">
+            <span className="workflow-step-label">{step.label}</span>
+            {/* State word is textual, never colour-only (WCAG 1.4.1). */}
+            <span className="workflow-step-state">{workflowStatusLabel(step.status)}</span>
+          </span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function SummaryCards({ registeredLabel }: { registeredLabel: string }) {
+  return (
+    <div className="dataset-summary-grid">
+      <div className="dataset-summary-card">
+        <div className="dataset-summary-label">REGISTERED DATASETS</div>
+        <div className="dataset-summary-value">{registeredLabel}</div>
+        <div>Reusable primary data sources visible to you.</div>
+      </div>
+      <div className="dataset-summary-card">
+        <div className="dataset-summary-label">ALLOWED DATA TYPES</div>
+        {/* Canonical count from the type registry mirror — never a magic literal. */}
+        <div className="dataset-summary-value">{MARKET_DATA_TYPES.length}</div>
+        <div>OHLCV, tick / trades, spread / execution.</div>
+      </div>
+      <div className="dataset-summary-card">
+        <div className="dataset-summary-label">BACKTEST RULE</div>
+        <div className="dataset-summary-value">Known Time</div>
+        <div>Time basis must be declared before approval.</div>
+      </div>
+    </div>
+  );
+}
+
+// The ⓘ SÜREÇ REHBERİ process guide (doc 11 §7). A native <details>/<summary> so
+// it is keyboard-focusable and toggles with Enter/Space (no ARIA hand-rolling);
+// help-only — it writes no form value. Content is the canonical Turkish guide from
+// the v18 mockup (getMarketDataWorkflowGuide), the production-final copy.
+function ProcessGuide() {
+  return (
+    <details className="data-guide">
+      <summary className="data-workflow-guide-button">ⓘ SÜREÇ REHBERİ</summary>
+      <div className="data-guide-body" role="note">
+        <p className="data-guide-lead">
+          <strong>Amaç:</strong> Market Data; ana fiyat ve işlem yürütme katmanıdır. Bir backtest,
+          fiyat zemini olarak onaylanmış bir Market Data sürümünü kullanır. Bu sayfada yalnızca
+          OHLCV, tick / trades veya spread / execution girdileri yer almalıdır.
+        </p>
+        <div className="data-guide-grid">
+          <section className="data-guide-card">
+            <h4>1. Bu sayfaya hangi veriler gelir?</h4>
+            <ul>
+              <li>
+                <strong>OHLCV:</strong> bar temelli fiyat ve hacim verisi.
+              </li>
+              <li>
+                <strong>Tick / Trades:</strong> tekil fiyat, miktar ve yön olayları.
+              </li>
+              <li>
+                <strong>Spread / Execution:</strong> bid/ask veya işlem maliyeti girdileri.
+              </li>
+            </ul>
+            <p>
+              Funding, open interest, liquidation, heatmap ve araştırma feature&apos;ları burada
+              değil, Research Data altında tutulur.
+            </p>
+          </section>
+          <section className="data-guide-card">
+            <h4>2. Zorunlu kimlik bilgileri</h4>
+            <ul>
+              <li>Dataset adı ve kaynak / sağlayıcı</li>
+              <li>Gerçek instrument kapsamı</li>
+              <li>Veri tipi ve çözünürlük</li>
+              <li>Timezone ve kayıt zamanının neyi temsil ettiği</li>
+              <li>Değiştirilmeden saklanan ham kaynak dosyası</li>
+            </ul>
+          </section>
+          <section className="data-guide-card data-guide-wide">
+            <h4>3. Zorunlu süreç</h4>
+            <ol>
+              <li>
+                <strong>Ham kaynağı yükle:</strong> Orijinal dosya kanıt olarak saklanır; mapping
+                işlemi ham dosyanın üzerine yazmaz.
+              </li>
+              <li>
+                <strong>Analiz et ve eşle:</strong> Ingestion servisi kolonları, timestamp&apos;leri
+                ve kaynak yapısını okur; uygun canonical şemayı önerir.
+              </li>
+              <li>
+                <strong>Validasyonu incele:</strong> Kapsamı, eksik zaman aralıklarını, duplicate
+                kayıtları, geçersiz değerleri ve belirtilen zaman bağlamını kontrol et.
+              </li>
+              <li>
+                <strong>Dataset sürümü oluştur:</strong> Sürüm numarası taşıyan bir araştırma nesnesi
+                oluşur. Mevcut çalışmalar kendi kullandıkları orijinal sürüme sabit kalır.
+              </li>
+              <li>
+                <strong>Verify / approve:</strong> Ana backtest kaynağı olarak yalnızca Approved
+                durumundaki sürüm seçilebilir olmalıdır.
+              </li>
+            </ol>
+          </section>
+          <section className="data-guide-card">
+            <h4>4. Backtest korumaları</h4>
+            <ul>
+              <li>Instrument, stratejinin hedeflediği piyasa ile gerçekten eşleşmelidir.</li>
+              <li>Timezone ile bar / event time bilgisi açık biçimde tanımlanmış olmalıdır.</li>
+              <li>
+                15m veri kaynağı, görünmeyen intrabar ayrıntısına dayanan varsayımları
+                destekleyemez.
+              </li>
+              <li>Gap, duplicate ve geçersiz OHLC / fiyat kayıtları onaydan önce incelenmelidir.</li>
+            </ul>
+          </section>
+        </div>
+        <p className="data-guide-warning">
+          <strong>Canlı sistem kuralı:</strong> Bu bağımsız arayüz süreci gösterir; gerçek onay ise
+          dosyayı ayrıştıran, ham ve eşlenmiş sürümleri saklayan, validasyon sonuçlarını hesaplayan
+          ve onaysız sürümlerin backtest&apos;e girmesini engelleyen backend işleriyle zorunlu olarak
+          uygulanmalıdır.
+        </p>
+      </div>
+    </details>
   );
 }
 
@@ -194,15 +456,16 @@ function CreateDatasetCard({ onCreated }: { onCreated: (entityId: string) => voi
 // ---------------------------------------------------------------------------
 
 function RegistryCard({
+  datasets,
+  pager,
   selectedId,
   onOpen,
 }: {
+  datasets: ReturnType<typeof useMarketDatasets>;
+  pager: ReturnType<typeof useCursorStack>;
   selectedId: string | null;
   onOpen: (entityId: string) => void;
 }) {
-  const pager = useCursorStack();
-  const datasets = useMarketDatasets(pager.cursor);
-
   return (
     <section className="card" aria-labelledby="md-registry-h">
       <h3 id="md-registry-h" style={{ marginTop: 0 }}>
@@ -222,6 +485,7 @@ function RegistryCard({
           {datasets.data.data.length === 0 ? (
             <EmptyState title="No market datasets visible yet — create the first one above" />
           ) : (
+            <div className="table-scroll">
             <table className="metrics-table">
               <thead>
                 <tr>
@@ -246,6 +510,7 @@ function RegistryCard({
                 ))}
               </tbody>
             </table>
+            </div>
           )}
           <Pager
             canPrev={pager.canPrev}
@@ -327,6 +592,7 @@ function IdentitySection({ detail }: { detail: MarketDatasetDetail }) {
         <StatusBadge label={detail.lifecycle_state} />
         {detail.validation_status !== null ? <StatusBadge label={detail.validation_status} /> : null}
       </div>
+      <div className="table-scroll">
       <table className="metrics-table" style={{ marginTop: 12 }}>
         <tbody>
           <tr>
@@ -360,6 +626,7 @@ function IdentitySection({ detail }: { detail: MarketDatasetDetail }) {
           </tr>
         </tbody>
       </table>
+      </div>
       <h4>Revision history</h4>
       {detail.revisions.length === 0 ? (
         <p className="page-sub">No revisions recorded.</p>

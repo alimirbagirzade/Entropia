@@ -11,6 +11,13 @@ export class MarketDataPage {
   }
 
   async createDataset(opts: { title: string; instrumentId?: string; type?: string }): Promise<string> {
+    // The Dataset Setup shell is collapsed by default (UI-11) — open it before
+    // touching the create form. Idempotent: only clicks when the form is hidden.
+    const titleField = this.page.locator("#md-title");
+    if (!(await titleField.isVisible().catch(() => false))) {
+      await this.page.getByRole("button", { name: "+ Add Market Dataset" }).click();
+      await expect(titleField).toBeVisible();
+    }
     if (opts.type) {
       await this.page.locator("#md-type").selectOption(opts.type);
     }

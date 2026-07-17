@@ -52,12 +52,18 @@ from entropia.application.queries.market_bars import (
     parse_range_bound,
     resolve_bar_source,
 )
+from entropia.application.queries.market_ticks import (
+    TickSourceRef,
+    iter_tick_batches,
+    resolve_tick_source,
+)
 from entropia.domain.backtest.engine import (
     EngineOutput,
     ItemRun,
     combine_item_runs,
     resolve_allocation_execution,
     run_engine,
+    tick_data_required,
 )
 from entropia.domain.backtest.enums import (
     RUN_TERMINAL_STATES,
@@ -81,6 +87,9 @@ _RESULT_TARGET = "backtest_result"
 
 # The worker owns the bar-source I/O boundary; the engine itself never touches S3.
 BarBatchStreamer = Callable[[BarSourceRef], Iterator[list[dict[str, Any]]]]
+# F-07i (B): same boundary for the pinned tick/trade print stream — injectable so
+# integration tests exercise the resolve -> replay chain without object storage.
+TickBatchStreamer = Callable[[TickSourceRef], Iterator[list[dict[str, Any]]]]
 
 
 async def run_backtest(
@@ -88,6 +97,7 @@ async def run_backtest(
     job_id: str,
     *,
     stream_bars: BarBatchStreamer = iter_bar_batches,
+    stream_ticks: TickBatchStreamer = iter_tick_batches,
     load_funding_rows: FundingRowLoader | None = None,
 ) -> dict[str, Any]:
     """Execute the durable backtest job. Does not commit (the worker scope commits)."""
@@ -153,6 +163,8 @@ async def run_backtest(
             config=config,
             meta=meta,
             stream_bars=stream_bars,
+            stream_ticks=stream_ticks,
+            tick_data=manifest.manifest.get("tick_data"),
             load_funding_rows=load_funding_rows,
             capital_execution=capital_execution,
             execution_key=manifest.execution_key,
@@ -323,6 +335,8 @@ async def _prepare_and_run_strategy(
     config: StrategyConfig,
     meta: dict[str, Any],
     stream_bars: BarBatchStreamer,
+    stream_ticks: TickBatchStreamer,
+    tick_data: dict[str, Any] | None,
     load_funding_rows: FundingRowLoader | None,
     capital_execution: dict[str, Any] | None,
     execution_key: str,
@@ -414,6 +428,32 @@ async def _prepare_and_run_strategy(
             f"Strategy item '{item_id}': {exc.args[0] if exc.args else exc}",
         )
 
+    # F-07i (B): a tick-demanding strategy replays over its PINNED tick/trade revision's
+    # processed print stream. The pin comes from the MANIFEST (admission-time resolution
+    # — the worker never falls back to 'newest approved', doc 15 §15); a missing pin (a
+    # stale pre-v15 manifest) or a missing processed asset is a hard terminal failure,
+    # never a silently tickless run. Resolved OUTSIDE the engine try (F-11/INF-12
+    # precedent) so a DB error stays a retryable job exception.
+    tick_batches: Iterator[list[dict[str, Any]]] | None = None
+    if tick_data_required(config):
+        pin = (tick_data or {}).get(item_id) or {}
+        tick_revision_id = pin.get("tick_revision_id")
+        if not tick_revision_id:
+            return _PrepFailure(
+                RunFailureCode.ASSET_UNAVAILABLE,
+                f"Strategy item '{item_id}' requires tick data but the run manifest pins "
+                "no tick/trade revision for it.",
+            )
+        try:
+            tick_source = await resolve_tick_source(session, tick_revision_id=str(tick_revision_id))
+        except NotFoundError:
+            return _PrepFailure(
+                RunFailureCode.ASSET_UNAVAILABLE,
+                f"Strategy item '{item_id}': pinned tick revision '{tick_revision_id}' "
+                "has no processed tick asset.",
+            )
+        tick_batches = stream_ticks(tick_source)
+
     base_timeframe = await md_repo.get_base_timeframe_for_revision(session, market_revision_id)
     # GAP-02: apply the pinned shared-pool capital model from the manifest snapshot
     # (doc 13 §8.3/§8.4). Independent / absent allocation resolves to None, so the engine
@@ -430,6 +470,7 @@ async def _prepare_and_run_strategy(
             timeframe=base_timeframe,
             allocation=allocation,
             funding=funding_schedule,
+            tick_batches=tick_batches,
         )
     except Exception as exc:
         return _PrepFailure(
@@ -562,4 +603,4 @@ def _emit_failure_audit(session: AsyncSession, *, run: Any, code: RunFailureCode
     )
 
 
-__all__ = ["BarBatchStreamer", "run_backtest"]
+__all__ = ["BarBatchStreamer", "TickBatchStreamer", "run_backtest"]

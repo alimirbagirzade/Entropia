@@ -345,4 +345,49 @@ Otherwise the spec's technical "broken" claims are **accurate, not errors** (ver
   predicate true/false; 2 integration: require-tick blocks → needs-review tick still blocks →
   approved matching-instrument tick clears; a wrong-instrument approved tick stays blocked) → 1729
   backend tests green (local, isolated DB). Branch `feat/v18-f07i-tick-execution`.
+- 2026-07-17 — F-07 follow-up (i) **sub-slice B** — intrabar tick-path data layer + engine (this
+  PR). The real tick replay lands in three planes, (C) settings-unlock stays a SEPARATE next PR.
+  **Pinning (admission):** `_resolve_tick_pins` in `commands/backtest_run.py` resolves the same
+  `find_approved_tick_revision_for_instrument` probe Ready Check used and freezes it into the
+  manifest as `tick_data: {item_id: {tick_revision_id, instrument_id}}` — the worker NEVER
+  resolves 'newest approved' itself (doc 15 §15 no-'latest'); a racing revocation between
+  preflight and pin → hard 422 with the `TICK_DATA_UNAVAILABLE` detail. `tick_data` sits in the
+  manifest's REPRODUCIBILITY content (`build_run_manifest(tick_data=...)`): two runs replaying
+  different tick paths can never share an `execution_key` (INF-04/05). **Data (worker):** NEW
+  `application/queries/market_ticks.py` — `TickSourceRef` + `resolve_tick_source(tick_revision_id)`
+  + `iter_tick_batches` (bounded-memory `stream_processed_batches`, INF-12 Slice A pattern; the
+  (i)a note "reuse the bar path" was overridden by the current instruction's explicit
+  `resolve_tick_source`/`iter_tick_batches` mirror — a distinct `TickSourceRef` also types the
+  injectable `stream_ticks: TickBatchStreamer` worker seam). The worker resolves ticks ONLY when
+  `tick_data_required(config)` (inherit/disable stay byte-identical); a missing pin (stale
+  pre-v15 manifest) or a pin without a processed asset → terminal FAILED `ASSET_UNAVAILABLE`,
+  never a silently tickless run; the tick stream is deliberately NOT range-filtered (the cursor
+  aligns per-bar; a range filter would truncate the LAST bar's window at the inclusive end
+  boundary). **Engine (pure):** `run_engine(+tick_batches=None)`; `_Tick`/`_tick_epoch_ms`
+  (epoch MILLISECONDS — in-bar order is the point; `round()` not `int()` against float x.9998
+  truncation)/`_normalize_tick` (fail-closed drop on unparseable time/price)/`_TickCursor`
+  (forward-only `[T, T+span)` window alignment via `timeframe_seconds`; behind-window prints
+  dropped fail-closed, in-window stably sorted, bounded memory)/`_first_tick_touch` (true
+  chronological first touch; a gap print through the stack resolves to the level a continuous
+  path hits first — long: highest). `_resolve_stop(+ticks)`: `first_trigger_wins` now executes
+  the REAL first-touched price stop (`_StopOutcome.tick_resolved`, trace key
+  `first_trigger_tick_resolved` stamped ONLY when true — tick-less traces byte-identical);
+  no-tick / contradictory-tick / logic-only cases keep the flagged conservative approximation
+  verbatim. Un-timeframed revision → `tick_alignment_unavailable` warning (L4) + conservative.
+  Diagnostics += `tick_path_enabled`/`tick_bars`/`tick_first_trigger_resolutions` (+ the two
+  counters in `_DIAG_SUM_KEYS`). **`ENGINE_VERSION → backtest-engine-v15-intrabar-execution`**
+  (execution_key ns shift; the (i)a entry's provisional name "v15-tick-execution" superseded by
+  the instruction's literal). **NO migration** (verified: pin lives in the existing manifest
+  JSONB; alembic head stays `0023`). Flagship behavioural proof (unit): long entry 102, trailing
+  locked from a 115 anchor (level 109.25 ABOVE entry) + percentage 96.90 — conservative picks
+  the entry-tighter percentage (a LOSS); the tick path proves trailing touched first → exits
+  109.25 (a locked PROFIT). +20 tests (16 unit: epoch/normalize/cursor windows+sort+behind-drop/
+  gap-touch/resolve long+short+conservative+contradictory/engine flagship+byte-identical+
+  unalignable+deterministic/manifest key-shift; 4 integration: admission pins + worker streams
+  the pinned source; inherit → no pin + `stream_ticks` never called; stripped-pin manifest →
+  FAILED; pin without processed asset → FAILED) → **1749 backend tests green** (local). Honest
+  boundary (→ C): `intrabar_touch`/`limit_fill_simulation`/`stop_limit_priority_simulation`
+  timings, `best_bid_ask` (needs the SPREAD_EXECUTION bid/ask series), partial fills and the
+  same-bar stop-vs-limit ordering STILL fail closed via the unchanged predicates.
+  Branch `feat/v18-f07i-b-intrabar-engine`.
 

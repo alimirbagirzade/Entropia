@@ -104,6 +104,63 @@ export interface MenuGroup {
   adminOnly?: boolean;
 }
 
+// UI-22: every Future Dev submenu target is a real dedicated route (spec
+// §UI-22 — no menu target may resolve to Page Not Found). One entry per
+// baseline capability key (domain/capability/enums.py BASELINE_CAPABILITY_KEYS
+// minus live_trade, which stays a passive mockup placeholder with no target).
+// App.tsx declares one route per entry; MENU_BAR below links to these paths.
+export interface FutureDevSubpage {
+  capabilityKey: string;
+  label: string;
+  path: string;
+  area: "Graphic View" | "AI Operations" | "Research";
+}
+
+export const FUTURE_DEV_SUBPAGES: FutureDevSubpage[] = [
+  {
+    capabilityKey: "graphic_view",
+    label: "Graphic View",
+    path: "/future-dev/graphic-view",
+    area: "Graphic View",
+  },
+  {
+    capabilityKey: "backtest_review",
+    label: "Backtest Review",
+    path: "/future-dev/backtest-review",
+    area: "AI Operations",
+  },
+  {
+    capabilityKey: "signal_intelligence",
+    label: "Signal Intelligence",
+    path: "/future-dev/signal-intelligence",
+    area: "AI Operations",
+  },
+  {
+    capabilityKey: "regime_research",
+    label: "Regime Research",
+    path: "/future-dev/regime-research",
+    area: "Research",
+  },
+  {
+    capabilityKey: "hypothesis_lab",
+    label: "Hypothesis Lab",
+    path: "/future-dev/hypothesis-lab",
+    area: "Research",
+  },
+  {
+    capabilityKey: "parameter_fields",
+    label: "Parameter Fields",
+    path: "/future-dev/parameter-fields",
+    area: "Research",
+  },
+];
+
+// Lookup used by the Future Dev menu below — single source of truth for the
+// submenu targets (the same list App.tsx generates the routes from).
+const FUTURE_DEV_PATH: Record<string, string> = Object.fromEntries(
+  FUTURE_DEV_SUBPAGES.map((subpage) => [subpage.capabilityKey, subpage.path]),
+);
+
 export const MENU_BAR: MenuGroup[] = [
   {
     label: "Mainboard",
@@ -160,26 +217,23 @@ export const MENU_BAR: MenuGroup[] = [
     accent: "blue",
     items: [
       { label: "Live Trade" }, // passive placeholder (mockup: no target)
-      // Graphic View / AI Operations / Research have no dedicated sub-pages —
-      // all of Future Dev's server-backed content (registry + Graphic View
-      // overview + gated commands) lives on the single real /future-dev route.
-      // The prior per-item sub-paths matched no route (not in ALL_NAV_ITEMS,
-      // so App.tsx never auto-generated a placeholder for them either) and
-      // resolved to NotFound — every entry must target an existing route.
-      { label: "Graphic View", path: "/future-dev" },
+      // UI-22: each submenu target is its own dedicated valid route from
+      // FUTURE_DEV_SUBPAGES (App.tsx declares the matching routes) — never a
+      // path that resolves to NotFound, never a shared catch-all.
+      { label: "Graphic View", path: FUTURE_DEV_PATH.graphic_view },
       {
         label: "AI Operations",
         items: [
-          { label: "Backtest Review", path: "/future-dev" },
-          { label: "Signal Intelligence", path: "/future-dev" },
+          { label: "Backtest Review", path: FUTURE_DEV_PATH.backtest_review },
+          { label: "Signal Intelligence", path: FUTURE_DEV_PATH.signal_intelligence },
         ],
       },
       {
         label: "Research",
         items: [
-          { label: "Regime Research", path: "/future-dev" },
-          { label: "Hypothesis Lab", path: "/future-dev" },
-          { label: "Parameter Fields", path: "/future-dev" },
+          { label: "Regime Research", path: FUTURE_DEV_PATH.regime_research },
+          { label: "Hypothesis Lab", path: FUTURE_DEV_PATH.hypothesis_lab },
+          { label: "Parameter Fields", path: FUTURE_DEV_PATH.parameter_fields },
         ],
       },
     ],

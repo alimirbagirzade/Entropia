@@ -1,12 +1,14 @@
 import { Routes, Route } from "react-router-dom";
 import { Layout } from "./app/Layout";
-import { ALL_NAV_ITEMS } from "./app/nav";
+import { ALL_NAV_ITEMS, FUTURE_DEV_SUBPAGES } from "./app/nav";
 import { AnalysisLab } from "./pages/AnalysisLab";
 import { ArrangeMetrics } from "./pages/ArrangeMetrics";
 import { BacktestRun } from "./pages/BacktestRun";
 import { CreatePackage } from "./pages/CreatePackage";
 import { Embedded } from "./pages/Embedded";
 import { FutureDev } from "./pages/FutureDev";
+import { FutureDevCapability } from "./pages/FutureDevCapability";
+import { FutureDevGraphicView } from "./pages/FutureDevGraphicView";
 import { Instruments } from "./pages/Instruments";
 import { Library } from "./pages/Library";
 import { Mainboard } from "./pages/Mainboard";
@@ -200,6 +202,32 @@ export default function App() {
             </ErrorBoundary>
           }
         />
+        {/* UI-22: every Future Dev submenu target is a dedicated valid route (spec
+            §UI-22 — no menu click may resolve to NotFound). Graphic View is the
+            documented intro + six static placeholder cards with the server-truth
+            gated View Dataset surface; the other capabilities render the shared
+            pure-placeholder page (no input, table, lifecycle control or form). */}
+        <Route
+          path="/future-dev/graphic-view"
+          element={
+            <ErrorBoundary>
+              <FutureDevGraphicView />
+            </ErrorBoundary>
+          }
+        />
+        {FUTURE_DEV_SUBPAGES.filter((subpage) => subpage.capabilityKey !== "graphic_view").map(
+          (subpage) => (
+            <Route
+              key={subpage.path}
+              path={subpage.path}
+              element={
+                <ErrorBoundary>
+                  <FutureDevCapability subpage={subpage} />
+                </ErrorBoundary>
+              }
+            />
+          ),
+        )}
         {/* User Manual (Stage 7a doc 21): published reader stream + search + Admin publish surface. */}
         <Route
           path="/user-manual"

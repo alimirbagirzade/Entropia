@@ -17,19 +17,25 @@ This repository is built **stage by stage** from a canonical specification (see
 | Realtime | Server-Sent Events (SSE) |
 | Runtime | Docker Compose — modular monolith with separate worker planes |
 
-> **Build status:** **Production V1 is complete** — every stage of
-> [`docs/STAGE_BUILD_PLAN.md`](docs/STAGE_BUILD_PLAN.md) (0–8) has landed, plus
-> the post-V1 wave: real local authentication (argon2id credentials + opaque
-> Bearer sessions + first-Admin bootstrap), a real bar-replay backtest engine
-> with built-in indicator compute (SMA/EMA/RMA/WMA/RSI/VWAP, condition blocks,
-> multi-timeframe resampling, risk-based & Kelly sizing, position-size limits),
-> the full **24-screen web app** bound to live data end-to-end, the Future Dev
-> capability system, and audit-log query indexes. Snapshot (CI on `main`):
-> **1089 backend tests**, **246 frontend tests**, Alembic head
-> `0023_audit_log_trgm_indexes`. The running handoff lives in
-> [`docs/STAGE2_HANDOFF.md`](docs/STAGE2_HANDOFF.md); deliberate non-goals
-> (live trading, LLM generation, retention auto-purge, Graphic View renderer)
-> are listed there and in [`docs/POST_V1_KICKOFF.md`](docs/POST_V1_KICKOFF.md).
+> **Build status:** the staged build
+> ([`docs/STAGE_BUILD_PLAN.md`](docs/STAGE_BUILD_PLAN.md), Stages 0–8) and the
+> post-V1 wave have landed — real local authentication (argon2id credentials +
+> opaque Bearer sessions + first-Admin bootstrap), a real bar-replay backtest
+> engine with built-in indicator compute (SMA/EMA/RMA/WMA/RSI/VWAP, condition
+> blocks, multi-timeframe resampling, risk-based & Kelly sizing, position-size
+> limits), the full **24-screen web app** bound to live data end-to-end, the
+> Future Dev capability system, and audit-log query indexes — followed by the
+> **V18 remediation wave**: every requirement F-01…F-25 and UI-01…UI-22 is
+> landed on `main` with code + test evidence (per-requirement traceability in
+> [`docs/implementation/entropia_v18_remediation_status.md`](docs/implementation/entropia_v18_remediation_status.md)).
+> Snapshot (verified on `main`, V18 remediation wave complete through PR #299):
+> **1773 backend tests** collected (`pytest --co`), **428 frontend tests**
+> (Vitest), Alembic head `0034_package_implementation`. This is not "everything
+> is possible" software — the engine and architecture have deliberate,
+> fail-closed boundaries and out-of-scope non-goals, listed under
+> [Known limitations](#known-limitations) and in
+> [`docs/POST_V1_KICKOFF.md`](docs/POST_V1_KICKOFF.md). The running handoff lives
+> in [`docs/STAGE2_HANDOFF.md`](docs/STAGE2_HANDOFF.md).
 
 Contributing? See [`CONTRIBUTING.md`](CONTRIBUTING.md) for local setup and the
 development workflow. Found a security issue? See [`SECURITY.md`](SECURITY.md)
@@ -630,6 +636,48 @@ jobs; large/columnar artifacts live in **object storage** as immutable, content-
 addressed Parquet. The **Agent** is a non-login system actor whose research loop
 runs continuously in the backend, independent of any browser or UI session. Read
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full model.
+
+---
+
+## Known limitations
+
+These are deliberate, fail-closed engine and architecture boundaries — not open
+bugs. Each is surfaced honestly (via engine diagnostics or a Ready Check
+blocker), never silently faked. Full per-requirement detail is in
+[`docs/implementation/entropia_v18_remediation_status.md`](docs/implementation/entropia_v18_remediation_status.md).
+
+- **Composite portfolio equity curve (F-04)** concatenates each strategy's
+  realized-PnL progression in deterministic pin order; a unified-clock,
+  simultaneous cross-margin co-simulation across heterogeneous bar sources is
+  deferred (surfaced as the L4 `portfolio_curve_sequential_not_unified_clock`
+  diagnostic, never hidden).
+- **Multi-instrument filtering (F-05)** is implemented but not exercised
+  end-to-end: the current ingestion schema is single-instrument-per-revision
+  (`MarketDatasetRevision.instrument_id` is dataset-level and the canonical
+  OHLCV Parquet schema carries no per-row instrument column), so there is
+  nothing to filter per row today. The dataset-level instrument mismatch check
+  is enforced.
+- **Research-feature → strategy-condition binding (F-11)** covers the documented
+  funding-cost rule plus the reusable anti-lookahead as-of join; a general
+  "arbitrary Research feature → condition" binding stays gated on the
+  feature-definition compiler (raw binding prohibited, doc 12 §9.2).
+- **Breakout proxy (F-06)** remains in `domain/backtest/engine.py` only as a
+  domain unit-test primitive; it is structurally unreachable on the production
+  path (Ready Check blocks admission and the worker fails closed on an
+  unresolved indicator plan).
+- **Intrabar / limit / stop-limit fills (F-07)** require tick data. F-07(i)
+  wires the tick-data requirement into Ready Check; without tick data these
+  settings fail closed (a Ready Check blocker), never a silently imitated fill
+  over plain OHLCV. A partial *fill* is likewise unmodellable over OHLCV (no
+  volume-at-price) and stays a blocker rather than a silent full fill.
+- **F-23 end-to-end gate** runs in a dedicated CI workflow
+  (`.github/workflows/e2e.yml`) that stands up the Docker Compose stack and runs
+  Playwright against it; it is CI-executable but requires Docker, so it cannot
+  be exercised on a Docker-less machine.
+- **Deliberate non-goals (out of scope for V1):** live trading, LLM-based code
+  generation (Future-Dev), retention auto-purge (doc 20 §16 — purge is always
+  explicit Admin confirm + re-auth), and the Graphic View renderer (a static
+  placeholder). See [`docs/POST_V1_KICKOFF.md`](docs/POST_V1_KICKOFF.md).
 
 ---
 

@@ -572,7 +572,7 @@ def test_engine_execution_key_namespace_shifts_with_the_engine_version() -> None
     # The ENGINE_VERSION bump must flow into the manifest so a stale pre-conflict
     # result cannot be reused under the new engine (INF-04 idempotent reuse / INF-05).
     built = _manifest("btrun_A", "snap_A", "2024-01-01T00:00:00Z")
-    assert built.manifest["identity"]["engine_version"] == "backtest-engine-v12-leverage-trailing"
+    assert built.manifest["identity"]["engine_version"] == "backtest-engine-v13-signal-strength"
 
 
 def test_stop_exit_default_is_stop_has_priority() -> None:

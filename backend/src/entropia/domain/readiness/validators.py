@@ -30,6 +30,7 @@ from entropia.domain.backtest.engine import (
     partial_close_is_modelled,
     restrictions_are_modelled,
     scaling_is_modelled,
+    signal_strength_is_modelled,
     sizing_is_modelled,
 )
 from entropia.domain.mainboard.enums import MainboardItemKind
@@ -386,6 +387,28 @@ def _strategy_issues(item: ReadinessItemInput, *, allocation_enabled: bool) -> l
                 "engine and would open no position.",
                 remediation="Use 'No Leverage' or 'Isolated' margin mode with a positive "
                 "leverage multiplier. 'Cross' margin mode is not yet supported.",
+                field_path="position_sizing",
+                scope_id=item.item_id,
+            )
+        )
+
+    # F-07g: an unsupported signal-strength adjustment must BLOCK RUN — the engine fails
+    # closed (opens no position) for it. 'no_adjustment' is inert (1x) and
+    # 'volatility_adjusted' is executed as a deterministic look-back volatility multiplier;
+    # 'trend_adjusted' / 'divergence_adjusted' need signal-source config (condition-package
+    # refs, an adjustment formula and band caps, Master Ref §10.3) the saved schema does
+    # not carry. Shares the single ``signal_strength_is_modelled`` predicate with the
+    # engine so the two never diverge.
+    if not signal_strength_is_modelled(config):
+        issues.append(
+            ReadinessIssue(
+                Code.STRATEGY_SIGNAL_STRENGTH_UNSUPPORTED,
+                Sev.BLOCKER,
+                Scope.STRATEGY,
+                "The strategy's signal-strength adjustment mode is not supported by the "
+                "backtest engine and would open no position.",
+                remediation="Use 'No Adjustment' or 'Volatility Adjusted' signal-strength "
+                "sizing. Trend- and divergence-adjusted modes are not yet supported.",
                 field_path="position_sizing",
                 scope_id=item.item_id,
             )

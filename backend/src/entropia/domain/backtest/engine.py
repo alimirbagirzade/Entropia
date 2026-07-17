@@ -261,6 +261,10 @@ class _Pending:
     target_seq: int  # bars_seen index at which the fill executes (the next bar)
     direction: str  # entry direction ("" for an exit)
     reason: str  # exit reason ("" for an entry)
+    # F-07g: the signal bar's strength multiplier — a deferred entry fill inherits its
+    # SIGNAL bar's strength (the F-07e restriction-verdict precedent), never re-priced
+    # at the fill bar. Inert 1x for exits and when no adjustment is active.
+    strength: Decimal = _ONE
 
 
 @dataclass(slots=True)
@@ -283,6 +287,10 @@ class _WorkingLimit:
     price_rule: str  # entry_signal_price / signal_price_(minus|plus)_offset
     unfilled_policy: str
     expires_seq: int | None  # last live bars_seen index (None = until_cancelled)
+    # F-07g: the signal bar's strength multiplier — a limit fill (touch or convert-to-
+    # market) inherits its SIGNAL bar's strength (the F-07e restriction-verdict
+    # precedent), never re-priced at the fill bar. Inert 1x when no adjustment is active.
+    strength: Decimal = _ONE
 
 
 def _dec(value: Any) -> Decimal:
@@ -478,6 +486,77 @@ def _leverage_multiplier(config: StrategyConfig) -> Decimal:
     if sizing.leverage_mode == "no_leverage":
         return _ONE
     return Decimal(sizing.leverage)
+
+
+# §10.3 Signal Strength Sizing (F-07g, Master Ref §10.3). ``no_adjustment`` is inert (a 1x
+# multiplier — byte-identical baseline; Master Ref: "engineye dahil edilmez").
+# ``volatility_adjusted`` IS executed: a deterministic, config-free inverse-volatility
+# multiplier computed from the bars already replayed at the signal bar (doc 02 §6's canonical
+# volatility-adjustment example: "düşük volatilitede daha büyük, yüksek volatilitede daha
+# küçük pozisyon") — a calm recent tape relative to the look-back baseline reads as a
+# STRONGER signal context (larger size), a turbulent one as WEAKER (smaller size). It derives
+# from the BAR SERIES both entry models replay, so proxy mode and plan mode share one metric.
+# ``trend_adjusted`` / ``divergence_adjusted`` are NOT modelled and FAIL CLOSED: the saved
+# schema carries only the mode literal — none of the condition-package refs, adjustment
+# formula or upper/lower band caps Master Ref §10.3 requires in the canonical payload — and
+# there is no canonical trend/divergence formula to derive from OHLCV alone (never silently
+# imitated; blocked at Ready Check + an inert engine run).
+_MODELLED_STRENGTH_MODES = frozenset({"no_adjustment", "volatility_adjusted"})
+# The strength look-back re-uses the engine's reproducibility-pinned window constant as the
+# long baseline; the short window reads the most recent tape. Both are engine-version
+# constants (part of the ``engine_version`` contract), NOT strategy inputs.
+_STRENGTH_SHORT_WINDOW = 5
+_STRENGTH_LONG_WINDOW = _BREAKOUT_WINDOW
+_STRENGTH_MULT_MIN = Decimal("0.5")
+_STRENGTH_MULT_MAX = Decimal("2.0")
+_STRENGTH_QUANT = Decimal("0.0001")
+
+
+def signal_strength_is_modelled(config: StrategyConfig) -> bool:
+    """Public predicate: is this strategy's signal-strength adjustment modelled (F-07g)?
+
+    The single shared source of truth for the readiness
+    ``STRATEGY_SIGNAL_STRENGTH_UNSUPPORTED`` blocker and the engine's fail-closed entry
+    gate. ``no_adjustment`` (inert 1x) and ``volatility_adjusted`` (the deterministic
+    look-back volatility multiplier) are modelled; ``trend_adjusted`` /
+    ``divergence_adjusted`` are blocked at Ready Check AND open no position if a stale
+    readiness state slips through to the worker — never a silently un-adjusted run."""
+    return config.position_sizing.signal_strength_adjustment in _MODELLED_STRENGTH_MODES
+
+
+def _mean_relative_range(bars: tuple[_Bar, ...]) -> Decimal:
+    """Mean per-bar relative range ``(high - low) / close`` over ``bars``.
+
+    A degenerate non-positive close collapses the whole measure to 0 so the caller
+    resolves NEUTRAL (1x) rather than dividing by a nonsense denominator."""
+    total = _ZERO
+    for b in bars:
+        if b.close <= _ZERO:
+            return _ZERO
+        total += (b.high - b.low) / b.close
+    return total / len(bars)
+
+
+def _volatility_strength(history: tuple[_Bar, ...]) -> Decimal:
+    """The ``volatility_adjusted`` strength multiplier at a signal bar (F-07g, §10.3).
+
+    ``history`` is every COMPLETED bar up to and including the signal bar (decisions
+    happen at bar close — look-back only, no look-ahead). The multiplier is the ratio of
+    the long-window baseline volatility to the short-window recent volatility, clamped to
+    [``_STRENGTH_MULT_MIN``, ``_STRENGTH_MULT_MAX``]: recent tape calmer than baseline →
+    ratio > 1 (a stronger signal context, larger size); recent tape more turbulent →
+    ratio < 1 (weaker, smaller size). Warm-up (history shorter than the long window) and
+    a zero/degenerate volatility on either side resolve NEUTRAL (exactly 1x) — the MODE
+    stays modelled; neutrality is the deterministic no-evidence default, never a fail."""
+    if len(history) < _STRENGTH_LONG_WINDOW:
+        return _ONE
+    recent = history[-_STRENGTH_LONG_WINDOW:]
+    long_vol = _mean_relative_range(recent)
+    short_vol = _mean_relative_range(recent[-_STRENGTH_SHORT_WINDOW:])
+    if long_vol <= _ZERO or short_vol <= _ZERO:
+        return _ONE
+    ratio = (long_vol / short_vol).quantize(_STRENGTH_QUANT)
+    return min(max(ratio, _STRENGTH_MULT_MIN), _STRENGTH_MULT_MAX)
 
 
 # §2 Execution timing modelled by the deterministic OHLCV bar-replay (F-07a). The
@@ -869,20 +948,29 @@ def _raw_position_size(config: StrategyConfig, entry_price: Decimal, equity: Dec
     return _ZERO
 
 
-def _position_size(config: StrategyConfig, entry_price: Decimal, equity: Decimal) -> Decimal:
+def _position_size(
+    config: StrategyConfig,
+    entry_price: Decimal,
+    equity: Decimal,
+    strength: Decimal = _ONE,
+) -> Decimal:
     """Deterministic sizing (see ``_raw_position_size``), scaled by the leverage
     multiplier (§10.2, post-V1 (f) — a leveraged strategy controls MORE notional per
     unit of computed capital, so the multiplier scales the SIZE itself, which scales
-    every downstream notional/exposure/PnL figure with it) and clamped to the
-    configured ``position_size_limits`` min/max caps (§6). Both apply uniformly to
-    EVERY sizing method — base, risk-based, Kelly and the notional fallback — so a
-    global cap and leverage are honoured regardless of which sizing path produced the
-    size. Only called once ``leverage_is_modelled`` has gated position opening, so the
-    multiplier is always well-defined here. A 1x multiplier and a missing limits
-    subtree are both no-ops, so behaviour is byte-identical to the pre-wiring engine."""
+    every downstream notional/exposure/PnL figure with it) and by the signal-strength
+    multiplier (§10.3, F-07g — the SIGNAL bar's strength scales every signal-driven
+    entry size; 1x for non-signal callers), then clamped to the configured
+    ``position_size_limits`` min/max caps (§6). All three apply uniformly to EVERY
+    sizing method — base, risk-based, Kelly and the notional fallback — so a global
+    cap, leverage and strength are honoured regardless of which sizing path produced
+    the size, and the LIMITS remain the final word (a strength-boosted size is still
+    capped). Only called once ``leverage_is_modelled`` / ``signal_strength_is_modelled``
+    have gated position opening, so both multipliers are always well-defined here. A 1x
+    multiplier and a missing limits subtree are both no-ops, so behaviour is
+    byte-identical to the pre-wiring engine."""
     size = _raw_position_size(config, entry_price, equity)
     if size > _ZERO:
-        size = size * _leverage_multiplier(config)
+        size = size * _leverage_multiplier(config) * strength
     return _clamp_to_limits(size, config.position_sizing.position_size_limits)
 
 
@@ -1260,6 +1348,16 @@ def run_engine(
     # mis-leveraged run.
     leverage_ok = leverage_is_modelled(config)
 
+    # F-07g: signal-strength adjustment (§10.3). ``no_adjustment`` is inert (1x —
+    # byte-identical baseline); ``volatility_adjusted`` scales every SIGNAL-driven entry
+    # size by the deterministic look-back volatility multiplier computed at the signal
+    # bar; ``trend_adjusted`` / ``divergence_adjusted`` open NO position — the fail-closed
+    # backstop to the Ready Check STRATEGY_SIGNAL_STRENGTH_UNSUPPORTED blocker, never a
+    # silently un-adjusted run.
+    strength_mode = config.position_sizing.signal_strength_adjustment
+    strength_ok = signal_strength_is_modelled(config)
+    strength_active = strength_ok and strength_mode == "volatility_adjusted"
+
     # F-07a: entry/exit execution timing. Immediate modes fill at the signal bar's
     # close; the next-candle modes defer the fill to the following bar (removing the
     # hardcoded current-candle-close assumption). An UNSUPPORTED timing (intrabar_touch /
@@ -1394,6 +1492,10 @@ def run_engine(
     # (``lock_in_profit`` moving the stop to the current price, or ``trailing_stop``
     # force-activating the trailing rule) — surfaced as a diagnostics count.
     lock_in_locks = 0
+    # F-07g: count of signal-driven entry decisions whose computed strength multiplier
+    # was NOT the neutral 1x (flat entries, deferred/limit entries at their signal bar,
+    # and conflict-driven stack/replace entries) — surfaced as a diagnostics count.
+    strength_adjustments = 0
     scale_layers_added = 0
     scale_layers_rejected = 0
     # F-07e: restriction-gate + conflict-policy counters and their realized-ledger state.
@@ -1480,9 +1582,27 @@ def run_engine(
             return "sizing_unsupported"
         if not leverage_ok:
             return "leverage_unsupported"
+        if not strength_ok:
+            return "signal_strength_unsupported"
         if alloc_on:
             return "sleeve_zero_capacity"
         return "no_fill"
+
+    def _signal_strength(bar: _Bar) -> Decimal:
+        """The strength multiplier at THIS signal bar (F-07g, §10.3).
+
+        Computed at DECISION time from the bars already replayed (``window`` holds the
+        prior look-back; the signal bar itself is complete at its close) — look-back
+        only, no look-ahead. Inert (exactly 1x, zero extra work) unless the
+        ``volatility_adjusted`` mode is active, so every other mode stays
+        byte-identical. A non-neutral multiplier is counted for diagnostics."""
+        nonlocal strength_adjustments
+        if not strength_active:
+            return _ONE
+        multiplier = _volatility_strength((*window, bar))
+        if multiplier != _ONE:
+            strength_adjustments += 1
+        return multiplier
 
     def _close(
         exit_time: str,
@@ -1683,20 +1803,29 @@ def run_engine(
             return len(active) == len(restriction_specs)
         return bool(active)
 
-    def _open(direction: str, bar: _Bar, fill_raw: Decimal, *, bar_seq: int) -> _Position | None:
+    def _open(
+        direction: str,
+        bar: _Bar,
+        fill_raw: Decimal,
+        *,
+        bar_seq: int,
+        strength: Decimal = _ONE,
+    ) -> _Position | None:
         """Open a position at the cost-adjusted fill of ``fill_raw``, or ``None`` for a
         no-fill.
 
         ``fill_raw`` is the raw (pre-cost) execution price chosen by the entry timing:
         the signal bar's close (immediate), or the next bar's open / close (deferred) —
-        removing the hardcoded current-candle-close assumption (F-07a). Under allocation
-        a 0-capacity sleeve (an unallocated item, or a compound pool busted below its
-        reserve) yields no fill at all — ``None`` — rather than a phantom 0-size trade
-        (doc 13 §8.4 step 5/6). Independent mode books even a bust-equity 0-size fill
-        (preserving the risk-based no-phantom-profit invariant), but an UNMODELLED sizing
-        method (F-09) or leverage configuration (F-07f) opens nothing at all — no phantom
-        trade for a strategy the user never validly configured."""
-        if not sizing_ok or not leverage_ok:
+        removing the hardcoded current-candle-close assumption (F-07a). ``strength`` is
+        the SIGNAL bar's strength multiplier (F-07g, 1x unless volatility-adjusted
+        sizing is active). Under allocation a 0-capacity sleeve (an unallocated item, or
+        a compound pool busted below its reserve) yields no fill at all — ``None`` —
+        rather than a phantom 0-size trade (doc 13 §8.4 step 5/6). Independent mode
+        books even a bust-equity 0-size fill (preserving the risk-based
+        no-phantom-profit invariant), but an UNMODELLED sizing method (F-09), leverage
+        configuration (F-07f) or signal-strength mode (F-07g) opens nothing at all — no
+        phantom trade for a strategy the user never validly configured."""
+        if not sizing_ok or not leverage_ok or not strength_ok:
             return None
         is_long = direction == "long"
         entry_eff = _effective_fill(
@@ -1706,12 +1835,12 @@ def run_engine(
             # Strategy Details sizing/risk constraints first (within the item's sleeve),
             # then the allocation remaining-sleeve outer cap (§8.4 step 5).
             sleeve = _sleeve_capital(equity)
-            desired = _position_size(config, entry_eff, sleeve)
+            desired = _position_size(config, entry_eff, sleeve, strength)
             size = _cap_to_sleeve(desired, sleeve, entry_eff)
             if size <= _ZERO:
                 return None
         else:
-            size = _position_size(config, entry_eff, equity)
+            size = _position_size(config, entry_eff, equity, strength)
         nonlocal position_seq
         position_seq += 1
         return _Position(
@@ -1733,14 +1862,21 @@ def run_engine(
         )
 
     def _do_open(
-        direction: str, bar: _Bar, fill_raw: Decimal, *, bar_seq: int, deferred: bool
+        direction: str,
+        bar: _Bar,
+        fill_raw: Decimal,
+        *,
+        bar_seq: int,
+        deferred: bool,
+        strength: Decimal = _ONE,
     ) -> _Position | None:
         """Open a position AND emit the F-10 fill/blocked decision-trace event.
 
         On a real fill: ``entry_fill`` (the execution — position_seq, price, size, timing).
         On a no-fill: ``entry_blocked`` with the concrete reason (sizing/sleeve), so a
-        signalled-but-unfilled entry is never a silent gap in the trace."""
-        pos = _open(direction, bar, fill_raw, bar_seq=bar_seq)
+        signalled-but-unfilled entry is never a silent gap in the trace. ``strength`` is
+        the SIGNAL bar's multiplier (F-07g), carried verbatim from the decision point."""
+        pos = _open(direction, bar, fill_raw, bar_seq=bar_seq, strength=strength)
         if pos is not None:
             _emit(
                 "entry_fill",
@@ -1875,7 +2011,12 @@ def run_engine(
                 if pending.kind == "entry" and position is None:
                     deferred_entry_fills += 1
                     position = _do_open(
-                        pending.direction, bar, bar.open, bar_seq=bars_seen, deferred=True
+                        pending.direction,
+                        bar,
+                        bar.open,
+                        bar_seq=bars_seen,
+                        deferred=True,
+                        strength=pending.strength,
                     )
                 elif pending.kind == "exit" and position is not None:
                     deferred_exit_fills += 1
@@ -1911,14 +2052,24 @@ def run_engine(
                 if touched:
                     limit_orders_filled += 1
                     position = _do_open(
-                        wl.direction, bar, wl.limit_price, bar_seq=bars_seen, deferred=True
+                        wl.direction,
+                        bar,
+                        wl.limit_price,
+                        bar_seq=bars_seen,
+                        deferred=True,
+                        strength=wl.strength,
                     )
                     working_limit = None
                 elif expired:
                     if wl.unfilled_policy == "convert_to_market_order":
                         limit_orders_filled += 1
                         position = _do_open(
-                            wl.direction, bar, bar.close, bar_seq=bars_seen, deferred=True
+                            wl.direction,
+                            bar,
+                            bar.close,
+                            bar_seq=bars_seen,
+                            deferred=True,
+                            strength=wl.strength,
                         )
                     else:
                         limit_orders_cancelled += 1
@@ -2128,6 +2279,17 @@ def run_engine(
                         )
                         want = None
                 if want is not None:
+                    # F-07g: the SIGNAL bar's strength multiplier, computed once at the
+                    # decision point (after the restriction gate — a vetoed signal never
+                    # computes strength) and inherited verbatim by whichever fill path
+                    # executes (immediate / deferred / limit) — never re-priced later.
+                    strength = _signal_strength(bar)
+                    entry_detail: dict[str, Any] = {"rule": _entry_rule_snapshot(want)}
+                    if strength_active:
+                        entry_detail["signal_strength"] = {
+                            "mode": strength_mode,
+                            "multiplier": str(strength),
+                        }
                     # F-10: the entry DECISION (signal fired + bias allowed), carrying the
                     # evaluated rule id(s) and each nested condition's pass/fail — distinct
                     # from the ``entry_fill`` execution event (doc 15 §16).
@@ -2136,7 +2298,7 @@ def run_engine(
                         event_time=bar.timestamp,
                         direction=want,
                         bar_seq=bars_seen,
-                        detail={"rule": _entry_rule_snapshot(want)},
+                        detail=entry_detail,
                     )
                     if order_is_limit:
                         # F-07b: rest a limit order at the signal-derived price; it fills
@@ -2156,6 +2318,7 @@ def run_engine(
                             expires_seq=(
                                 None if validity_bars is None else bars_seen + validity_bars
                             ),
+                            strength=strength,
                         )
                         limit_orders_placed += 1
                         _emit(
@@ -2172,7 +2335,14 @@ def run_engine(
                             },
                         )
                     elif entry_sched == "immediate":
-                        position = _do_open(want, bar, bar.close, bar_seq=bars_seen, deferred=False)
+                        position = _do_open(
+                            want,
+                            bar,
+                            bar.close,
+                            bar_seq=bars_seen,
+                            deferred=False,
+                            strength=strength,
+                        )
                     else:
                         _emit(
                             "entry_scheduled",
@@ -2185,7 +2355,7 @@ def run_engine(
                             },
                         )
                         pending = _Pending(
-                            "entry", entry_sched == "next_open", bars_seen + 1, want, ""
+                            "entry", entry_sched == "next_open", bars_seen + 1, want, "", strength
                         )
 
             # (4) Resolve a fill deferred to THIS bar's CLOSE (next_candle_close). Runs at
@@ -2195,7 +2365,12 @@ def run_engine(
                 if pending.kind == "entry" and position is None:
                     deferred_entry_fills += 1
                     position = _do_open(
-                        pending.direction, bar, bar.close, bar_seq=bars_seen, deferred=True
+                        pending.direction,
+                        bar,
+                        bar.close,
+                        bar_seq=bars_seen,
+                        deferred=True,
+                        strength=pending.strength,
                     )
                 elif pending.kind == "exit" and position is not None:
                     deferred_exit_fills += 1
@@ -2299,16 +2474,26 @@ def run_engine(
                             # complete.
                             replaced_seq = position.position_seq
                             positions_replaced += 1
+                            # F-07g: the conflict entry is a SIGNAL entry — it gets its
+                            # own decision bar's strength multiplier, exactly like a
+                            # flat entry.
+                            conflict_strength = _signal_strength(bar)
+                            replace_detail: dict[str, Any] = {
+                                "rule": _entry_rule_snapshot(entry_signal),
+                                "conflict": "replace_existing",
+                                "replaced_position_seq": replaced_seq,
+                            }
+                            if strength_active:
+                                replace_detail["signal_strength"] = {
+                                    "mode": strength_mode,
+                                    "multiplier": str(conflict_strength),
+                                }
                             _emit(
                                 "entry_signal",
                                 event_time=bar.timestamp,
                                 direction=entry_signal,
                                 bar_seq=bars_seen,
-                                detail={
-                                    "rule": _entry_rule_snapshot(entry_signal),
-                                    "conflict": "replace_existing",
-                                    "replaced_position_seq": replaced_seq,
-                                },
+                                detail=replace_detail,
                             )
                             _close(
                                 bar.timestamp,
@@ -2318,7 +2503,12 @@ def run_engine(
                                 bar_seq=bars_seen,
                             )
                             position = _do_open(
-                                entry_signal, bar, bar.close, bar_seq=bars_seen, deferred=False
+                                entry_signal,
+                                bar,
+                                bar.close,
+                                bar_seq=bars_seen,
+                                deferred=False,
+                                strength=conflict_strength,
                             )
                         else:  # allow_stacking — fold a signal-driven tranche into the position
                             stack_eff = _effective_fill(
@@ -2327,13 +2517,19 @@ def run_engine(
                                 half_spread=half_spread,
                                 slip=slippage,
                             )
+                            # F-07g: a stack tranche is a SIGNAL entry — its size gets its
+                            # own decision bar's strength multiplier (the traced
+                            # ``stack_size`` reflects it).
+                            stack_strength = _signal_strength(bar)
                             if alloc_on:
                                 sleeve = _sleeve_capital(equity)
                                 tranche = _cap_to_sleeve(
-                                    _position_size(config, stack_eff, sleeve), sleeve, stack_eff
+                                    _position_size(config, stack_eff, sleeve, stack_strength),
+                                    sleeve,
+                                    stack_eff,
                                 )
                             else:
-                                tranche = _position_size(config, stack_eff, equity)
+                                tranche = _position_size(config, stack_eff, equity, stack_strength)
                             stacked_size = position.size + tranche
                             size_limits = config.position_sizing.position_size_limits
                             stack_reject: str | None = None
@@ -2678,6 +2874,14 @@ def run_engine(
         # closed, F-07f). Ready Check raises STRATEGY_LEVERAGE_UNSUPPORTED — this L4
         # warning is the engine backstop when a stale readiness state reaches the worker.
         warnings.append(f"leverage_unsupported:{config.position_sizing.leverage_mode}")
+    if not strength_ok:
+        # A trend- / divergence-adjusted signal-strength mode is not modelled (the saved
+        # schema carries no condition refs / multiplier / band config to execute it,
+        # Master Ref §10.3); the run opened NO position (fail closed, F-07g) rather than
+        # silently sizing un-adjusted. Ready Check raises
+        # STRATEGY_SIGNAL_STRENGTH_UNSUPPORTED — this L4 warning is the engine backstop
+        # when a stale readiness state reaches the worker.
+        warnings.append(f"signal_strength_unsupported:{strength_mode}")
     if not timing_ok:
         # An unsupported entry/exit execution timing (intrabar_touch / a limit or
         # stop-limit simulation) is not modelled over plain OHLCV; the run opened NO
@@ -2832,6 +3036,12 @@ def run_engine(
         "leverage_mode": config.position_sizing.leverage_mode,
         "leverage_modelled": leverage_ok,
         "leverage_multiplier": (str(_leverage_multiplier(config)) if leverage_ok else None),
+        # F-07g: signal-strength provenance (§10.3) — the saved adjustment mode, whether
+        # this engine version models it, and how many signal-driven entry decisions
+        # computed a non-neutral (≠1x) multiplier.
+        "signal_strength_mode": strength_mode,
+        "signal_strength_modelled": strength_ok,
+        "strength_adjustments": strength_adjustments,
         "entry_timing": config.data.execution.entry_timing,
         "exit_timing": config.data.execution.exit_timing,
         "execution_timing_modelled": timing_ok,

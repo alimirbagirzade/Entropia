@@ -343,6 +343,42 @@ def test_strategy_supported_scaling_does_not_block() -> None:
     assert Code.STRATEGY_SCALING_UNSUPPORTED.value not in _codes(absent)
 
 
+def test_strategy_unsupported_signal_strength_blocks() -> None:
+    # F-07g: trend-/divergence-adjusted signal-strength modes carry no executable config
+    # in the saved schema (no condition refs / multiplier / bands, Master Ref §10.3) →
+    # the engine fails closed (opens no position) → BLOCKER.
+    for mode in ("trend_adjusted", "divergence_adjusted"):
+        payload = _strategy_payload()
+        payload["position_sizing"] = {
+            "method": "base_position_size",
+            "base_position_size": "1.0",
+            "signal_strength_adjustment": mode,
+        }
+        result = evaluate_readiness(
+            [_strategy_item(payload=payload)], allocation_enabled=False, allocation_issues=[]
+        )
+        assert Code.STRATEGY_SIGNAL_STRENGTH_UNSUPPORTED.value in _codes(result)
+        assert result.state == ReadinessState.NOT_READY
+
+
+def test_strategy_supported_signal_strength_does_not_block() -> None:
+    # 'no_adjustment' (inert 1x) and 'volatility_adjusted' (the deterministic look-back
+    # volatility multiplier) are modelled; the default payload likewise raises no blocker.
+    for mode in ("no_adjustment", "volatility_adjusted"):
+        payload = _strategy_payload()
+        payload["position_sizing"] = {
+            "method": "base_position_size",
+            "base_position_size": "1.0",
+            "signal_strength_adjustment": mode,
+        }
+        result = evaluate_readiness(
+            [_strategy_item(payload=payload)], allocation_enabled=False, allocation_issues=[]
+        )
+        assert Code.STRATEGY_SIGNAL_STRENGTH_UNSUPPORTED.value not in _codes(result)
+    default = evaluate_readiness([_strategy_item()], allocation_enabled=False, allocation_issues=[])
+    assert Code.STRATEGY_SIGNAL_STRENGTH_UNSUPPORTED.value not in _codes(default)
+
+
 def test_strategy_unsupported_leverage_blocks() -> None:
     # F-07f: 'Cross' margin mode needs a portfolio-level risk model the single-position
     # bar-replay engine does not implement → fails closed (opens no position) → BLOCKER.

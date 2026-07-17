@@ -160,13 +160,15 @@ describe("Package Library page", () => {
 
     expect(await screen.findByText("RSI Bundle")).toBeInTheDocument();
     expect(screen.getByText("Breakout Alpha")).toBeInTheDocument();
-    // The V18 Status dropdown stays split into orthogonal facets (doc 08 §13) —
-    // scoped to the catalog list because the facet selects list the same values
-    // (the catalog is now an expandable .package-row list, not a table).
-    const list = screen.getByRole("list", { name: /package catalog/i });
-    expect(within(list).getByText("passed")).toBeInTheDocument();
-    expect(within(list).getByText("warning")).toBeInTheDocument();
-    expect(within(list).getByText("deprecated")).toBeInTheDocument();
+    // The V18 Status dropdown stays split into orthogonal facets (doc 08 §13).
+    // Rows are now grouped into per-type sections, so the state badges are
+    // asserted within each section's list (the facet selects list the same
+    // values, so scoping to the row lists disambiguates them from the options).
+    const strategyList = screen.getByRole("list", { name: /strategy packages rows/i });
+    expect(within(strategyList).getByText("warning")).toBeInTheDocument();
+    expect(within(strategyList).getByText("deprecated")).toBeInTheDocument();
+    const indicatorList = screen.getByRole("list", { name: /indicator packages rows/i });
+    expect(within(indicatorList).getByText("passed")).toBeInTheDocument();
   });
 
   it("applies a facet filter as a server-side query param and never sends empty facets", async () => {
@@ -223,7 +225,10 @@ describe("Package Library page", () => {
     renderPage();
     await screen.findByText("RSI Bundle");
 
-    fireEvent.click(screen.getAllByRole("button", { name: "Detail" })[0]);
+    // Rows are grouped into per-type sections; only pkg_1 (RSI Bundle, indicator)
+    // has a stubbed detail route, so scope the Detail toggle to that section.
+    const indicatorList = screen.getByRole("list", { name: /indicator packages rows/i });
+    fireEvent.click(within(indicatorList).getByRole("button", { name: "Detail" }));
 
     expect(await screen.findByText("Permissions (server-computed)")).toBeInTheDocument();
     // Server-computed flags render as text, never colour-only.
@@ -272,6 +277,58 @@ describe("Package Library page", () => {
       ).length;
       expect(after).toBeGreaterThan(before);
     });
+  });
+
+  it("groups the catalog into per-type sections (doc 08 §3.1)", async () => {
+    stubApi(BASE_ROUTES);
+    renderPage();
+    await screen.findByText("RSI Bundle");
+
+    expect(screen.getByText("Strategy Packages")).toBeInTheDocument();
+    expect(screen.getByText("Indicator Packages")).toBeInTheDocument();
+    // Only kinds present on the current page get a section — no empty sections.
+    expect(screen.queryByText("Condition Packages")).not.toBeInTheDocument();
+    expect(screen.queryByText("Embedded System Packages")).not.toBeInTheDocument();
+  });
+
+  it("reorders rows within a section via the client-local Sort By control", async () => {
+    const ZETA_ROW = {
+      ...INDICATOR_ROW,
+      entity_id: "pkg_z",
+      name: "Zeta Bands",
+      created_at: "2026-07-05T00:00:00+00:00",
+    };
+    // Two indicator rows so the intra-section order is observable; Sort By is a
+    // pure client-local reorder (never a server query param).
+    stubApi({
+      ...BASE_ROUTES,
+      "GET /library": { data: [INDICATOR_ROW, ZETA_ROW], meta: { cursor: null, has_more: false } },
+    });
+    renderPage();
+    await screen.findByText("Zeta Bands");
+
+    const firstRowText = () =>
+      within(screen.getByRole("list", { name: /indicator packages rows/i })).getAllByRole(
+        "listitem",
+      )[0].textContent;
+    // Default: Created Date descending → the newer Zeta Bands (07-05) leads.
+    expect(firstRowText()).toContain("Zeta Bands");
+
+    fireEvent.change(screen.getByLabelText(/Sort by/), { target: { value: "name" } });
+    await waitFor(() => expect(firstRowText()).toContain("RSI Bundle"));
+  });
+
+  it("resets every facet with Clear filters (defined state behavior)", async () => {
+    stubApi(BASE_ROUTES);
+    renderPage();
+    await screen.findByText("RSI Bundle");
+
+    const typeSelect = screen.getByLabelText(/^Type/) as HTMLSelectElement;
+    fireEvent.change(typeSelect, { target: { value: "indicator" } });
+    expect(typeSelect.value).toBe("indicator");
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+    expect(typeSelect.value).toBe("");
   });
 
   it("surfaces the authentication gate verbatim (doc 08 §2 — no catalog for Guests)", async () => {

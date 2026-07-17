@@ -1419,6 +1419,7 @@ a:hover { text-decoration: underline; }
 }
 
 /* ---- v18 Package pool: sectioned rows (mockup .package-row/.package-section-title) ---- */
+.package-pool-section { margin-bottom: 16px; }
 .package-section-title {
   font-size: 10.5px;
   font-weight: 900;
@@ -1459,6 +1460,24 @@ a:hover { text-decoration: underline; }
   border-radius: var(--radius);
   padding: 10px 12px;
   margin-bottom: 14px;
+}
+/* Filter controls sit in a responsive grid (mockup .package-filter-grid) so the
+   facet + Sort By selects wrap cleanly instead of a single overflowing row. */
+.package-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px 12px;
+  align-items: end;
+}
+.package-filter-grid label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; }
+.package-filter-grid select,
+.package-filter-grid input { width: 100%; box-sizing: border-box; }
+.package-filter-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 10px;
 }
 
 /* Expandable catalog rows (mockup .package-card/.package-row.open/.package-details). */

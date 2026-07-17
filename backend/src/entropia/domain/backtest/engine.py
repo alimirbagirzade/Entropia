@@ -728,6 +728,27 @@ def order_execution_is_modelled(config: StrategyConfig) -> bool:
     return False
 
 
+def tick_data_required(config: StrategyConfig) -> bool:
+    """Public predicate: does this strategy DEMAND an intrabar tick path (F-07i-A)?
+
+    'Use Tick Data = Yes' saves ``intrabar_policy.tick_policy = 'require'`` (doc 02
+    Data & Execution row; Master Ref §6.4). 'None' / 'No' (``inherit`` / ``disable``)
+    never demand tick data — ``inherit`` falls back to the conservative OHLCV
+    resolution and ``disable`` forces it even when tick data exists. The single shared
+    source of truth imported by the readiness command so Ready Check's
+    ``TICK_DATA_UNAVAILABLE`` blocker has exactly one definition of "requires tick".
+
+    NOTE (F-07i sub-slice A): this only wires the REQUIREMENT to Ready Check (Master
+    Ref §11.2 / line ~3558: Ready Check evaluates dataset resolution sufficiency for
+    intrabar-sensitive execution — an unmet requirement blocks RUN rather than
+    silently resolving over OHLCV). The engine's real intrabar-path replay is the
+    follow-up (B); until then the tick-dependent EXECUTION settings (``intrabar_touch``,
+    a limit/stop-limit ``best_bid_ask`` rule, a non-``not_allowed`` partial fill, the
+    same-bar stop-vs-limit ordering) STILL fail closed via
+    ``execution_timing_is_modelled`` / ``order_execution_is_modelled``."""
+    return config.data.intrabar_policy.tick_policy == "require"
+
+
 # §4 Partial-close aftermath modelled by the bar-replay (F-07c). ``close_percentage`` < 100
 # closes only that fraction of the position on an EXIT SIGNAL and holds the remainder; the
 # aftermath governs the remainder. ``move_stop_to_entry`` (breakeven the remainder's stop) and
@@ -3607,4 +3628,5 @@ __all__ = [
     "run_engine",
     "scaling_is_modelled",
     "sizing_is_modelled",
+    "tick_data_required",
 ]

@@ -112,6 +112,7 @@ def evaluate_readiness(
     allocation_enabled: bool,
     allocation_issues: Sequence[AllocationIssue],
     market_data_issues: Sequence[ReadinessIssue] = (),
+    tick_data_issues: Sequence[ReadinessIssue] = (),
     strategy_indicator_issues: Sequence[ReadinessIssue] = (),
 ) -> ReadinessEvaluation:
     """Aggregate all validator layers into an immutable evaluation (doc 14 §9.2).
@@ -122,7 +123,9 @@ def evaluate_readiness(
     ``strategy_indicator_issues`` are the F-06 upfront-RUN-gate blockers the command
     resolved from each strategy's pinned indicator plan (a DB read, like
     ``market_data_issues``) — an unresolved required dependency blocks RUN so the
-    worker can never silently substitute the breakout proxy.
+    worker can never silently substitute the breakout proxy. ``tick_data_issues`` are
+    the F-07i blockers the command resolved for strategies that demand tick data
+    ('Use Tick Data' = Yes) but have no approved tick/trade dataset — also a DB read.
     """
     issues: list[ReadinessIssue] = []
     issues.extend(_composition_issues(items))
@@ -130,6 +133,7 @@ def evaluate_readiness(
     for item in items:
         issues.extend(_item_issues(item, allocation_enabled=allocation_enabled))
     issues.extend(market_data_issues)
+    issues.extend(tick_data_issues)
     issues.extend(strategy_indicator_issues)
     issues.extend(_map_allocation_issues(allocation_issues))
 

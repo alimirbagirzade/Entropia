@@ -322,6 +322,38 @@ def add_coverage_slice(
     return slice_row
 
 
+async def find_approved_tick_revision_for_instrument(
+    session: AsyncSession, instrument_id: str
+) -> MarketDatasetRevision | None:
+    """Newest APPROVED tick/trade revision for an instrument on an ACTIVE root (F-07i).
+
+    The tick-data availability probe behind Ready Check's tick requirement: 'Use Tick
+    Data = Yes' needs an approved tick/trade revision for the strategy's selected
+    instrument (Master Ref §6.4). Mirrors ``_resolve_market_data_issues`` approval
+    semantics — APPROVED revision + ACTIVE dataset root, matched by the dataset-level
+    ``instrument_id``. Processed-asset presence is deliberately NOT required here (an
+    asset can exist before approval, and a missing processed asset is a worker-time
+    ``ASSET_UNAVAILABLE`` failure, not a readiness fact). ``None`` when none exists.
+    """
+    stmt = (
+        select(MarketDatasetRevision)
+        .join(EntityRegistry, EntityRegistry.entity_id == MarketDatasetRevision.entity_id)
+        .where(
+            MarketDatasetRevision.market_data_type == MarketDataType.TICK_TRADES,
+            MarketDatasetRevision.revision_state == MarketRevisionState.APPROVED,
+            MarketDatasetRevision.instrument_id == instrument_id,
+            EntityRegistry.entity_type == ENTITY_TYPE,
+            EntityRegistry.deletion_state == DeletionState.ACTIVE,
+        )
+        .order_by(
+            MarketDatasetRevision.created_at.desc(),
+            MarketDatasetRevision.revision_id.desc(),
+        )
+        .limit(1)
+    )
+    return (await session.execute(stmt)).scalar_one_or_none()
+
+
 async def get_dataset_root(session: AsyncSession, entity_id: str) -> EntityRegistry | None:
     """Return the registry Root iff it is a market dataset."""
     root = await session.get(EntityRegistry, entity_id)

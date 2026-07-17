@@ -317,4 +317,32 @@ Otherwise the spec's technical "broken" claims are **accurate, not errors** (ver
   `stop_orders_*`. Frontend: conditional stop trigger fields for stop/stop-limit
   (`STOP_ORDER_TYPES`). `ENGINE_VERSION → backtest-engine-v14-stop-orders`. No migration
   (`order_config.stop` is an additive JSONB payload key). Branch `feat/v18-f07h-stop-orders`.
+- 2026-07-17 — F-07 follow-up (i) **sub-slice A** — tick-data requirement wired to Ready Check
+  (this PR). SCOPE DECISION recorded: (i) is a large DATA + ENGINE slice, split A→B→C. The data
+  layer was found LARGELY PRESENT — `MarketDataType.TICK_TRADES` (canonical `{timestamp, price,
+  side?}`) and `SPREAD_EXECUTION` (`{timestamp, bid, ask}`, the `best_bid_ask` source) are already
+  first-class with ingest→validate→Parquet→pin working, and `resolve_bar_source`/`iter_bar_batches`
+  are TYPE-AGNOSTIC (revision id → processed parquet), so a tick/spread revision streams through the
+  SAME path — no new `iter_tick_batches` is needed (recorded for B). Documented pinning path (doc 02
+  + Master Ref §6.4, not invented): the schema carries NO separate tick pin — only
+  `intrabar_policy.tick_policy` (None/Yes/No → inherit/require/disable); Master Ref: "manifestte
+  resolved choice yer alır", so the resolved tick revision is frozen into the manifest at admission
+  (B), NOT a new config field → NO migration under any sub-slice. **Sub-slice A delivers ONLY the
+  Ready Check requirement (Master Ref §11.2 / line ~3558: Ready Check evaluates dataset resolution
+  sufficiency; unmet → block RUN, never silently resolve over OHLCV):** a strategy with 'Use Tick
+  Data = Yes' (`tick_policy == 'require'`) whose instrument has no APPROVED tick/trade revision is a
+  BLOCKER (`TICK_DATA_UNAVAILABLE`). New engine-owned pure predicate `tick_data_required(config)` (the
+  single source of truth, imported by the readiness command) + repo reader
+  `find_approved_tick_revision_for_instrument` (APPROVED tick revision on an ACTIVE root, matched by
+  dataset-level `instrument_id`, mirrors `_resolve_market_data_issues` approval semantics — asset
+  presence deliberately not required) + `_resolve_tick_data_issues` command resolver (DB read, mirrors
+  the market-data resolver) + `evaluate_readiness(tick_data_issues=...)`. The engine STILL fails closed
+  on the tick-DEPENDENT execution SETTINGS (`intrabar_touch`, `best_bid_ask`, non-`not_allowed` partial
+  fill, same-bar stop-vs-limit ordering) via the existing `execution_timing_is_modelled` /
+  `order_execution_is_modelled` — the real intrabar-path replay is **sub-slice B**
+  (`ENGINE_VERSION → backtest-engine-v15-tick-execution`), then **C** flips each predicate to
+  "modelled iff tick resolves". **NO migration, ENGINE_VERSION UNCHANGED (v14).** +4 tests (2 unit
+  predicate true/false; 2 integration: require-tick blocks → needs-review tick still blocks →
+  approved matching-instrument tick clears; a wrong-instrument approved tick stays blocked) → 1729
+  backend tests green (local, isolated DB). Branch `feat/v18-f07i-tick-execution`.
 

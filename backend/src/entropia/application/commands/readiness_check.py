@@ -36,6 +36,7 @@ from entropia.domain.allocation.rules import (
     compute_config_hash,
     validate_allocation,
 )
+from entropia.domain.backtest.engine import tick_data_required
 from entropia.domain.identity import Actor
 from entropia.domain.identity.policy import ensure_can_view, require_authenticated
 from entropia.domain.lifecycle.enums import DeletionState
@@ -103,12 +104,14 @@ async def run_readiness_check(
 
         items = await _build_item_inputs(session, enabled)
         market_data_issues = await _resolve_market_data_issues(session, items)
+        tick_data_issues = await _resolve_tick_data_issues(session, items)
         strategy_indicator_issues = await _resolve_strategy_indicator_issues(session, items)
         evaluation = evaluate_readiness(
             items,
             allocation_enabled=allocation_enabled,
             allocation_issues=allocation_issues,
             market_data_issues=market_data_issues,
+            tick_data_issues=tick_data_issues,
             strategy_indicator_issues=strategy_indicator_issues,
         )
 
@@ -278,6 +281,60 @@ async def _resolve_market_data_issues(
                     "then re-run the check."
                 ),
                 field_path="data.market_dataset_revision_id",
+                scope_id=item.item_id,
+            )
+        )
+    return issues
+
+
+async def _resolve_tick_data_issues(
+    session: AsyncSession, items: list[ReadinessItemInput]
+) -> list[ReadinessIssue]:
+    """F-07i: fail closed when a strategy demands tick data but none is approved.
+
+    'Use Tick Data = Yes' (``intrabar_policy.tick_policy == 'require'``) makes an
+    approved tick/trade revision for the strategy's instrument MANDATORY (Master Ref
+    §6.4). Master Ref §11.2 (line ~3558): Ready Check evaluates dataset resolution
+    sufficiency for intrabar-sensitive execution — an unmet requirement blocks RUN
+    rather than silently resolving over OHLCV ('cannot silently imitate unavailable
+    detail'). 'None'/'No' (``inherit``/``disable``) never require tick data.
+
+    Resolving availability is a DB read (approved tick revision lookup), so it lives
+    here in the command, not in the pure validators — the same shape as
+    ``_resolve_market_data_issues``. A config that does not even parse is left to the
+    ``STRATEGY_CONFIG_INVALID`` validator. The ``tick_data_required`` predicate is the
+    single engine-owned source of truth for 'requires tick', shared so the engine's
+    later intrabar gate (sub-slice B) and this blocker never diverge.
+    """
+    issues: list[ReadinessIssue] = []
+    for item in items:
+        if not item.available or item.kind != MainboardItemKind.STRATEGY:
+            continue
+        try:
+            config = StrategyConfig(**item.payload)
+        except PydanticValidationError:
+            continue  # STRATEGY_CONFIG_INVALID already surfaces this in the validators.
+        if not tick_data_required(config):
+            continue
+        revision = await market_repo.find_approved_tick_revision_for_instrument(
+            session, config.data.instrument_id
+        )
+        if revision is not None:
+            continue
+        issues.append(
+            ReadinessIssue(
+                code=ReadinessIssueCode.TICK_DATA_UNAVAILABLE,
+                severity=ReadinessSeverity.BLOCKER,
+                scope=ReadinessScope.MARKET_DATA,
+                message=(
+                    "The strategy requires tick data ('Use Tick Data' = Yes) but no approved "
+                    "tick/trade dataset is available for its instrument."
+                ),
+                remediation=(
+                    "Approve a tick/trade dataset revision for this instrument, or set 'Use "
+                    "Tick Data' to None or No to run on the conservative OHLCV model."
+                ),
+                field_path="data.intrabar_policy.tick_policy",
                 scope_id=item.item_id,
             )
         )

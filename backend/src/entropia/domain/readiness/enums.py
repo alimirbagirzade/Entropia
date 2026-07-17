@@ -90,6 +90,11 @@ class ReadinessIssueCode(StrEnum):
 
     # Market data (§9.2, §11 approved-only gate)
     MARKET_DATASET_NOT_APPROVED = "MARKET_DATASET_NOT_APPROVED"
+    # F-07i: 'Use Tick Data = Yes' (intrabar_policy.tick_policy == 'require') needs an
+    # approved tick/trade dataset for the strategy's instrument (Master Ref §6.4). When
+    # none is available, Ready Check blocks RUN rather than silently resolving the
+    # intrabar-sensitive execution over OHLCV (Master Ref §11.2 / line ~3558).
+    TICK_DATA_UNAVAILABLE = "TICK_DATA_UNAVAILABLE"
 
     # External working objects — Trading Signal / Trade Log (§5.1, §9.2, RC-07/RC-08)
     EXTERNAL_IMPORT_UNRESOLVED = "EXTERNAL_IMPORT_UNRESOLVED"

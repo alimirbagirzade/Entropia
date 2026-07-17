@@ -68,6 +68,22 @@ function parseJsonObject(
   }
 }
 
+// Doc 12 §3 workflow strip: the five-step pipeline this page visualizes. The
+// order is documentation-fixed; the real revision status still comes from the
+// worker/job state, never from this strip. Steps 4–5 (create the version, verify/
+// approve) cannot happen without an Approved Market Data link (DR3), so they are
+// shown locked while the dependency is unmet (see WorkflowStrip).
+const WORKFLOW_STEPS = [
+  { n: 1, label: "Upload raw source" },
+  { n: 2, label: "Define meaning" },
+  { n: 3, label: "Set time & market link" },
+  { n: 4, label: "Create dataset version" },
+  { n: 5, label: "Verify / approve for use" },
+] as const;
+
+// Steps gated on the Approved Market Data dependency (create + approve).
+const DEPENDENCY_GATED_STEPS = new Set<number>([4, 5]);
+
 // Research Data (doc 12): the secondary/context layer above Market Data — open
 // interest, funding, liquidations, order-book, on-chain and macro datasets that
 // feed Agent research and (after approval) Backtest evidence bundles. Every
@@ -76,8 +92,20 @@ function parseJsonObject(
 // analyze) AND the full revision lifecycle (revise/time-policy/field+feature
 // defs/Admin approve+revoke/evidence bundles — see ResearchLifecycle). Page access
 // is Admin/Supervisor/Agent server-side — a denial renders the 403 envelope verbatim.
+//
+// UI-12 remediation: the generic "create dataset + registry" surface is presented
+// as the documented workflow — a five-step strip, an Approved Market Data
+// dependency alert, a status legend, and a three-column setup shell (SOURCE &
+// MEANING / TIME & ALIGNMENT / VALIDATION & USE). Presentation only: routes,
+// query keys, OCC/Idempotency tokens, hooks and the lib data logic are unchanged.
+// The dependency alert and the step lock are derived from the setup form's own
+// Linked Market Data field — until an Approved Market Data dataset is linked, the
+// later steps stay locked and the required action is spelled out.
 export function ResearchData() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Lifted from the setup form so the workflow strip can reflect the lock state.
+  const [marketEntityId, setMarketEntityId] = useState("");
+  const dependencyReady = marketEntityId.trim().length > 0;
   return (
     <>
       <h1 className="page-title">Research Data</h1>
@@ -86,7 +114,14 @@ export function ResearchData() {
         macro · every dataset pins an Approved Market Data dataset — only an ACTIVE+APPROVED revision
         feeds research and backtest evidence bundles
       </p>
-      <CreateDatasetCard onCreated={setSelectedId} />
+      <WorkflowStrip dependencyReady={dependencyReady} />
+      <StatusLegend />
+      <SetupCard
+        marketEntityId={marketEntityId}
+        onMarketEntityIdChange={setMarketEntityId}
+        dependencyReady={dependencyReady}
+        onCreated={setSelectedId}
+      />
       <RegistryCard selectedId={selectedId} onOpen={setSelectedId} />
       {selectedId !== null ? <DetailCard entityId={selectedId} /> : null}
     </>
@@ -94,13 +129,93 @@ export function ResearchData() {
 }
 
 // ---------------------------------------------------------------------------
-// Create dataset — Root + first DRAFT revision pinned to an Approved market
-// dataset (DR3). No approved market link -> 409 DEPENDENCY_BLOCKED verbatim.
+// Workflow strip (doc 12 §3) — visual pipeline order. Steps 4–5 render locked
+// while no Approved Market Data dataset is linked, mirroring the dependency
+// contract without duplicating any server check.
 // ---------------------------------------------------------------------------
 
-function CreateDatasetCard({ onCreated }: { onCreated: (entityId: string) => void }) {
+function WorkflowStrip({ dependencyReady }: { dependencyReady: boolean }) {
+  return (
+    <section className="card" aria-labelledby="rd-workflow-h">
+      <h3 id="rd-workflow-h" style={{ marginTop: 0 }}>
+        Research data workflow
+      </h3>
+      <ol className="rd-workflow" aria-label="Research data workflow">
+        {WORKFLOW_STEPS.map((step) => {
+          const locked = !dependencyReady && DEPENDENCY_GATED_STEPS.has(step.n);
+          return (
+            <li key={step.n} className="rd-step" data-locked={locked ? "true" : undefined}>
+              <span className="rd-step-num" aria-hidden="true">
+                {step.n}
+              </span>
+              <span className="rd-step-body">
+                <span className="rd-step-label">{step.label}</span>
+                {locked ? (
+                  <span className="rd-step-lock">Locked — link approved Market Data</span>
+                ) : null}
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+      <p className="page-sub" style={{ margin: 0 }}>
+        The strip visualizes the pipeline order; the real revision status comes from the worker / job
+        state, not this view.
+      </p>
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Status legend (doc 12 §3) — revision validation/approval states, never job
+// states. Human labels here do not collide with the lowercase state values the
+// registry renders.
+// ---------------------------------------------------------------------------
+
+function StatusLegend() {
+  return (
+    <section className="card" aria-labelledby="rd-legend-h">
+      <h3 id="rd-legend-h" style={{ marginTop: 0 }}>
+        Status legend
+      </h3>
+      <div className="rd-legend" role="group" aria-label="Revision status legend">
+        <span className="rd-legend-item">
+          <StatusBadge tone="ok" label="Approved" /> eligible for its usage scope
+        </span>
+        <span className="rd-legend-item">
+          <StatusBadge tone="ok" label="Verified" /> passed validation, awaiting Admin approval
+        </span>
+        <span className="rd-legend-item">
+          <StatusBadge tone="warn" label="Needs Review" /> a blocking check needs attention
+        </span>
+      </div>
+      <p className="page-sub" style={{ margin: "8px 0 0" }}>
+        Revision validation / approval state — not the analysis job state.
+      </p>
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Dataset setup shell (doc 12 §3) — Root + first DRAFT revision pinned to an
+// Approved market dataset (DR3). The three columns (SOURCE & MEANING / TIME &
+// ALIGNMENT / VALIDATION & USE) reorganize the same fields the command already
+// takes. No approved market link -> 409 DEPENDENCY_BLOCKED verbatim; the client
+// also locks the Create step while the Linked Market Data field is blank.
+// ---------------------------------------------------------------------------
+
+function SetupCard({
+  marketEntityId,
+  onMarketEntityIdChange,
+  dependencyReady,
+  onCreated,
+}: {
+  marketEntityId: string;
+  onMarketEntityIdChange: (value: string) => void;
+  dependencyReady: boolean;
+  onCreated: (entityId: string) => void;
+}) {
   const create = useCreateDataset();
-  const [marketEntityId, setMarketEntityId] = useState("");
   const [category, setCategory] = useState<string>(RESEARCH_CATEGORIES[0]);
   const [customCategory, setCustomCategory] = useState("");
   const [usageScope, setUsageScope] = useState<string>(USAGE_SCOPES[0]);
@@ -135,88 +250,136 @@ function CreateDatasetCard({ onCreated }: { onCreated: (entityId: string) => voi
   return (
     <section className="card" aria-labelledby="rd-create-h">
       <h3 id="rd-create-h" style={{ marginTop: 0 }}>
-        Add research dataset
+        Dataset setup
       </h3>
       <p className="page-sub" style={{ marginTop: 0 }}>
-        Link to the exact Market Data dataset whose Approved revision this pins (DR3). Without an
-        ACTIVE+APPROVED market dataset the create is rejected with DEPENDENCY_BLOCKED.
+        Define meaning and timing before the supporting dataset can be created. Every dataset version
+        pins one Approved Market Data revision (DR3); without an ACTIVE+APPROVED market link the create
+        is rejected with DEPENDENCY_BLOCKED.
       </p>
+      {!dependencyReady ? <DependencyAlert /> : null}
       <form onSubmit={submit}>
-        <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
-          <label htmlFor="rd-market">
-            Linked Market Data entity id
-            <input
-              id="rd-market"
-              value={marketEntityId}
-              onChange={(event) => setMarketEntityId(event.target.value)}
-              placeholder="md_…"
-              required
-            />
-          </label>
-          <label htmlFor="rd-category">
-            Category
-            <select id="rd-category" value={category} onChange={(event) => setCategory(event.target.value)}>
-              {RESEARCH_CATEGORIES.map((value) => (
-                <option key={value} value={value}>
-                  {value}
-                </option>
-              ))}
-            </select>
-          </label>
-          {isCustom ? (
-            <label htmlFor="rd-custom-category">
-              Custom category (required for other_custom)
+        <div className="rd-columns">
+          <fieldset className="rd-col">
+            <legend>SOURCE &amp; MEANING</legend>
+            <label htmlFor="rd-display">
+              Display name (optional)
               <input
-                id="rd-custom-category"
-                value={customCategory}
-                onChange={(event) => setCustomCategory(event.target.value)}
-                placeholder="exchange_reserves"
-                required
+                id="rd-display"
+                value={displayName}
+                onChange={(event) => setDisplayName(event.target.value)}
+                placeholder="Binance Futures Open Interest · 8h"
               />
             </label>
-          ) : null}
-          <label htmlFor="rd-usage">
-            Usage scope
-            <select id="rd-usage" value={usageScope} onChange={(event) => setUsageScope(event.target.value)}>
-              {USAGE_SCOPES.map((value) => (
-                <option key={value} value={value}>
-                  {value}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label htmlFor="rd-display">
-            Display name (optional)
-            <input
-              id="rd-display"
-              value={displayName}
-              onChange={(event) => setDisplayName(event.target.value)}
-              placeholder="Binance Futures Open Interest · 8h"
-            />
-          </label>
-          <label htmlFor="rd-provider">
-            Provider (optional)
-            <input
-              id="rd-provider"
-              value={providerName}
-              onChange={(event) => setProviderName(event.target.value)}
-              placeholder="coinglass"
-            />
-          </label>
-          <label htmlFor="rd-payload">
-            Payload (optional JSON object)
-            <textarea
-              id="rd-payload"
-              rows={3}
-              value={payloadText}
-              onChange={(event) => setPayloadText(event.target.value)}
-              placeholder='{"instrument": "BTCUSDT"}'
-            />
-          </label>
+            <label htmlFor="rd-provider">
+              Provider (optional)
+              <input
+                id="rd-provider"
+                value={providerName}
+                onChange={(event) => setProviderName(event.target.value)}
+                placeholder="coinglass"
+              />
+            </label>
+            <label htmlFor="rd-category">
+              Category
+              <select
+                id="rd-category"
+                value={category}
+                onChange={(event) => setCategory(event.target.value)}
+              >
+                {RESEARCH_CATEGORIES.map((value) => (
+                  <option key={value} value={value}>
+                    {value}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {isCustom ? (
+              <label htmlFor="rd-custom-category">
+                Custom category (required for other_custom)
+                <input
+                  id="rd-custom-category"
+                  value={customCategory}
+                  onChange={(event) => setCustomCategory(event.target.value)}
+                  placeholder="exchange_reserves"
+                  required
+                />
+              </label>
+            ) : null}
+            <label htmlFor="rd-payload">
+              Payload (optional JSON object)
+              <textarea
+                id="rd-payload"
+                rows={3}
+                value={payloadText}
+                onChange={(event) => setPayloadText(event.target.value)}
+                placeholder='{"instrument": "BTCUSDT"}'
+              />
+            </label>
+            <p className="page-sub" style={{ margin: 0 }}>
+              Describe each key field so a person, an Agent and the backtest pipeline read it the same
+              way — name, meaning, unit/scale, how it was measured and what missing values mean.
+            </p>
+          </fieldset>
+
+          <fieldset className="rd-col">
+            <legend>TIME &amp; ALIGNMENT</legend>
+            <label htmlFor="rd-market">
+              Linked Market Data entity id
+              <input
+                id="rd-market"
+                value={marketEntityId}
+                onChange={(event) => onMarketEntityIdChange(event.target.value)}
+                placeholder="md_…"
+                required
+                aria-describedby="rd-market-help"
+              />
+            </label>
+            <p id="rd-market-help" className="page-sub" style={{ margin: 0 }}>
+              Every active Research Data revision must link to one Approved Market Data revision. The
+              link is stored by immutable revision ID, not by displayed name — this is what lets the
+              system validate instrument mapping, timeframe compatibility and reproducible backtest
+              manifests. Event time and available time are set later, on the revision.
+            </p>
+          </fieldset>
+
+          <fieldset className="rd-col">
+            <legend>VALIDATION &amp; USE</legend>
+            <label htmlFor="rd-usage">
+              Usage scope
+              <select
+                id="rd-usage"
+                value={usageScope}
+                onChange={(event) => setUsageScope(event.target.value)}
+              >
+                {USAGE_SCOPES.map((value) => (
+                  <option key={value} value={value}>
+                    {value}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <p className="page-sub" style={{ margin: 0 }}>
+              Usage scope controls which system behavior may consume this revision after approval.
+              Validation results and Admin approval come later in the lifecycle — a single green badge
+              is never sufficient.
+            </p>
+          </fieldset>
         </div>
-        <button type="submit" className="btn btn-primary" disabled={create.isPending} style={{ marginTop: 8 }}>
-          Create dataset
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <button
+            type="submit"
+            className="btn btn-primary"
+            disabled={create.isPending || !dependencyReady}
+          >
+            Create dataset
+          </button>
+          {!dependencyReady ? (
+            <span className="page-sub" style={{ margin: 0 }}>
+              Link an Approved Market Data dataset to unlock this step.
+            </span>
+          ) : null}
+        </div>
       </form>
       {payloadError ? (
         <p role="alert" style={{ color: "var(--down)" }}>
@@ -234,6 +397,23 @@ function CreateDatasetCard({ onCreated }: { onCreated: (entityId: string) => voi
         </p>
       ) : null}
     </section>
+  );
+}
+
+// Approved Market Data dependency (doc 12 §3 integrity alert / §6.1 text). Shown
+// while the setup form has no Linked Market Data value — it names the required
+// action and, together with the locked Create button, keeps invalid later steps
+// from being attempted. The doc copy is used verbatim.
+function DependencyAlert() {
+  return (
+    <div className="rd-alert" role="status">
+      <strong>Create and approve Market Data before adding Research Data</strong>
+      <p style={{ margin: "4px 0 0" }}>
+        Research Data setup is waiting for an Approved Market Data version. Create and approve the
+        primary price / execution dataset first; Research Data must always link to an approved
+        market-data version.
+      </p>
+    </div>
   );
 }
 
@@ -268,7 +448,7 @@ function RegistryCard({
       ) : datasets.data ? (
         <>
           {datasets.data.data.length === 0 ? (
-            <EmptyState title="No research datasets visible yet — create the first one above" />
+            <EmptyState title="No registered research dataset matches the current filter." />
           ) : (
             <table className="metrics-table">
               <thead>
@@ -470,15 +650,26 @@ function IdentitySection({ detail }: { detail: ResearchDatasetDetail }) {
 // The owner ingest chain (doc 12 §3 workflow strip): Step 1 register + finalize
 // the raw asset, Step 2 run the durable analysis job (DRAFT -> ANALYZING).
 // Buttons are never role-pre-gated — the server's owner/Admin draft gate answers
-// with the canonical envelope verbatim. The revision lifecycle (revise,
-// time-policy, field/feature definitions, Admin approve/revoke, evidence bundles)
-// follows in the ResearchLifecycle section below.
+// with the canonical envelope verbatim. When the revision has no Approved Market
+// Data link, the dependency alert explains the required action and analysis stays
+// locked (the invalid later step) — the server also enforces DR3. The revision
+// lifecycle (revise, time-policy, field/feature definitions, Admin approve/revoke,
+// evidence bundles) follows in the ResearchLifecycle section below.
 function IngestSection({ detail }: { detail: ResearchDatasetDetail }) {
+  const hasMarketLink = detail.linked_market_dataset_revision_id !== null;
   return (
     <>
       <h4>Ingest workflow</h4>
+      {!hasMarketLink ? (
+        <div className="rd-alert" role="status">
+          <strong>Approved Market Data link required</strong>
+          <p style={{ margin: "4px 0 0" }}>
+            Link this Research Data version to an Approved Market Data dataset before analysis.
+          </p>
+        </div>
+      ) : null}
       <UploadComposer entityId={detail.entity_id} />
-      <AnalysisAction entityId={detail.entity_id} />
+      <AnalysisAction entityId={detail.entity_id} disabled={!hasMarketLink} />
     </>
   );
 }
@@ -621,7 +812,7 @@ function UploadComposer({ entityId }: { entityId: string }) {
   );
 }
 
-function AnalysisAction({ entityId }: { entityId: string }) {
+function AnalysisAction({ entityId, disabled }: { entityId: string; disabled: boolean }) {
   const analysis = useRequestAnalysis();
   return (
     <div style={{ marginBottom: 16 }}>
@@ -633,7 +824,7 @@ function AnalysisAction({ entityId }: { entityId: string }) {
       <button
         type="button"
         className="btn"
-        disabled={analysis.isPending}
+        disabled={analysis.isPending || disabled}
         onClick={() => analysis.mutate({ entity_id: entityId })}
       >
         Request analysis

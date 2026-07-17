@@ -29,6 +29,7 @@ from entropia.domain.backtest.indicators import (
     SignalRule,
 )
 from entropia.domain.strategy.config import StrategyConfig
+from tests.unit.engine_signal_plan import sma_entry_plan
 
 
 def _config(
@@ -145,7 +146,7 @@ def _run(
         strategy_config=config,
         bar_batches=_batched(bars, batch),
         execution_key="exec_key_trace",
-        indicator_plan=plan,
+        indicator_plan=plan or sma_entry_plan(),
     )
 
 

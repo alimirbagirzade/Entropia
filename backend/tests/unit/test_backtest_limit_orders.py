@@ -6,10 +6,13 @@ rests a working order that fills only on a limit touch within the validity windo
 its unfilled policy at expiry, and re-prices when configured; a TRIGGERLESS stop / stop-
 limit (F-07h models the triggered variants — see test_backtest_stop_orders.py) and best-
 bid-ask / partial-fill orders FAIL CLOSED (open no position). Each setting has a positive and a
-negative case (spec F-07 acceptance). Entries are driven by the breakout proxy: 20 flat bars
-fill the look-back window, a breakout bar produces the signal, and the following bars resolve
-the resting order. Follow-up closes stay at/under the window high (103) so no fresh breakout
-re-fires while a resting order is being resolved.
+negative case (spec F-07 acceptance).
+
+Entries are driven by a real, production-reachable ``ta.sma`` cross plan (see
+tests/unit/engine_signal_plan.py — F-24: the engine's breakout proxy is unreachable in a real
+RUN, so no fixture is allowed to depend on it): 20 flat bars establish the MA, a breakout bar
+crosses it and produces the signal, and the following bars resolve the resting order. Follow-up
+closes stay at/under 103 so the MA is never re-crossed while a resting order is being resolved.
 """
 
 from __future__ import annotations
@@ -24,6 +27,7 @@ from entropia.domain.backtest.engine import (
     run_engine,
 )
 from entropia.domain.strategy.config import StrategyConfig
+from tests.unit.engine_signal_plan import sma_entry_plan
 
 _ZERO_COST = {"slippage_mode": "percentage_slippage", "slippage_value": "0"}
 
@@ -150,7 +154,12 @@ def _run(config: StrategyConfig, bars: list[dict[str, Any]], *, batch: int = 8) 
         for start in range(0, len(bars), batch):
             yield bars[start : start + batch]
 
-    return run_engine(strategy_config=config, bar_batches=batched(), execution_key="exec_key_test")
+    return run_engine(
+        strategy_config=config,
+        bar_batches=batched(),
+        execution_key="exec_key_test",
+        indicator_plan=sma_entry_plan(),
+    )
 
 
 def _events(out: EngineOutput, kind: str) -> list[dict[str, Any]]:

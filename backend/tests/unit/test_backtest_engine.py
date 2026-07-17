@@ -14,7 +14,6 @@ from typing import Any
 
 from entropia.domain.backtest.engine import (
     COMPOSITION_CURVE_WARNING,
-    ENTRY_MODEL,
     EngineOutput,
     ItemRun,
     _clamp_to_limits,
@@ -29,9 +28,11 @@ from entropia.domain.backtest.enums import (
     BacktestRunState,
     MetricAvailability,
 )
+from entropia.domain.backtest.indicators import BUILTIN_ENTRY_MODEL
 from entropia.domain.backtest.manifest import build_run_manifest
 from entropia.domain.backtest.metrics import DEFAULT_METRICS, derive_metric_values
 from entropia.domain.strategy.config import PositionSizeLimits, StrategyConfig
+from tests.unit.engine_signal_plan import sma_entry_plan
 
 
 # ---------------------------------------------------------------------------
@@ -230,6 +231,7 @@ def _run(config: StrategyConfig, bars: list[dict[str, Any]], *, batch: int = 8) 
         strategy_config=config,
         bar_batches=_batched(bars, batch),
         execution_key="exec_key_test",
+        indicator_plan=sma_entry_plan(),
     )
 
 
@@ -245,7 +247,10 @@ def test_engine_bar_replay_produces_a_real_stop_out_trade() -> None:
     assert trade.pnl < Decimal("0")
     assert out.summary["net_profit"] == trade.pnl
     assert out.diagnostics["engine_kind"] == "v1_bar_replay"
-    assert out.diagnostics["entry_model"] == ENTRY_MODEL
+    # The signal came from the resolved indicator plan — the model a real RUN reports (F-06:
+    # an unresolved plan is a Ready Check blocker, so the breakout proxy never labels a
+    # production result).
+    assert out.diagnostics["entry_model"] == BUILTIN_ENTRY_MODEL
     assert out.diagnostics["bars_processed"] == 22
 
 
@@ -273,7 +278,10 @@ def test_engine_direction_restriction_suppresses_and_traces_no_entry() -> None:
 
 def test_engine_yields_no_trades_and_empty_warning_on_no_bars() -> None:
     out = run_engine(
-        strategy_config=_config(), bar_batches=iter([]), execution_key="exec_key_empty"
+        strategy_config=_config(),
+        bar_batches=iter([]),
+        execution_key="exec_key_empty",
+        indicator_plan=sma_entry_plan(),
     )
     assert out.summary["total_trades"] == 0
     assert out.summary["net_profit"] == Decimal("0.00")
@@ -644,6 +652,7 @@ def test_summary_carries_the_caller_resolved_timeframe() -> None:
         bar_batches=_batched(_long_breakout_then_stop(), 8),
         execution_key="exec_key_test",
         timeframe="1m",
+        indicator_plan=sma_entry_plan(),
     )
     assert out.summary["timeframe"] == "1m"
 
@@ -808,13 +817,19 @@ def _entry_timing_bars() -> list[dict[str, Any]]:
 
 
 def _exit_timing_bars() -> list[dict[str, Any]]:
-    """20 flat bars fill the window; bar 21 breaks out up (immediate long entry at 102);
-    19 flat bars at 100 hold the position; the next bar closes below the window low (96 →
-    exit signal); the final bar is the deferred-exit fill with a distinct open (90) and
-    close (85). immediate exit → 96, next_candle_open → 90, next_candle_close → 85."""
+    """20 flat bars at 100 establish the MA; bar 21 crosses it (immediate long entry at 102);
+    19 bars hold AT the entry price (above the MA — the trend is intact, so no exit signal);
+    the next bar closes back under the MA (96 → exit signal); the final bar is the
+    deferred-exit fill with a distinct open (90) and close (85). immediate exit → 96,
+    next_candle_open → 90, next_candle_close → 85.
+
+    The hold bars sit at 102, not 100: under a real MA cross (F-24) a fall back to the 100
+    baseline IS a down-cross, i.e. a genuine exit signal, which would end the position before
+    the bar this fixture designates as the exit. The retired breakout proxy exited only on a
+    new window LOW, so flat-at-100 hold bars happened not to trip it."""
     bars = _flat(20, "100")
     bars.append(_bar("2024-01-21T00:00:00Z", "100", "102", "100", "102"))
-    bars += [_bar(f"2024-02-{i + 1:02d}T00:00:00Z", "100", "100", "100", "100") for i in range(19)]
+    bars += [_bar(f"2024-02-{i + 1:02d}T00:00:00Z", "102", "102", "102", "102") for i in range(19)]
     bars.append(_bar("2024-03-01T00:00:00Z", "100", "100", "95", "96"))
     bars.append(_bar("2024-03-02T00:00:00Z", "90", "91", "84", "85"))
     return bars

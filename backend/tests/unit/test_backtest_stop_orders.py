@@ -36,6 +36,7 @@ from entropia.domain.strategy.config import (
     StopOrderDetails,
     StrategyConfig,
 )
+from tests.unit.engine_signal_plan import sma_entry_plan
 
 _ZERO_COST = {"slippage_mode": "percentage_slippage", "slippage_value": "0"}
 
@@ -172,7 +173,12 @@ def _run(config: StrategyConfig, bars: list[dict[str, Any]], *, batch: int = 8) 
         for start in range(0, len(bars), batch):
             yield bars[start : start + batch]
 
-    return run_engine(strategy_config=config, bar_batches=batched(), execution_key="exec_key_test")
+    return run_engine(
+        strategy_config=config,
+        bar_batches=batched(),
+        execution_key="exec_key_test",
+        indicator_plan=sma_entry_plan(),
+    )
 
 
 def _events(out: EngineOutput, kind: str) -> list[dict[str, Any]]:

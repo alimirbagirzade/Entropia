@@ -304,6 +304,18 @@ Otherwise the spec's technical "broken" claims are **accurate, not errors** (ver
   the schema). Honest PERMANENT boundary: a partial FILL is unmodellable over plain OHLCV (no
   volume-at-price / order book → the filled fraction of a limit order is unknowable) and is the sole
   remaining `UNMODELLED_DECISION_CLASSES` member — surfaced as a blocker, never a silent full fill.
+  **[UPDATE 2026-07-17 — F-07 TRULY COMPLETE after the tick chain (i)a #293 → (i)B #294 → (i)C
+  #299]:** the "over plain OHLCV" qualifier above was the LAST boundary and it is now CLOSED for
+  tick-demanding strategies. The original "entries always occur at the current candle close /
+  exits are normally full closes" assumption is gone in FULL generality: entries can rest and
+  fill intrabar at a touched level (touch orders, print-authoritative limit simulation, same-bar
+  stop-then-limit sequences), exits can rest and fill intrabar at a touched level, and a limit
+  order can PARTIALLY fill with the fraction computed from real print sizes.
+  **`UNMODELLED_DECISION_CLASSES` is EMPTY** — every decision class the trace taxonomy names is
+  executed by the engine; what remains fail-closed is exactly what remains configured-but-unbacked
+  (a tick setting without 'Use Tick Data' = Yes, `best_bid_ask` without a Spread/Execution quote
+  series) and each of those is a Ready Check BLOCKER, never an ignored field or a silent
+  approximation (spec F-07 acceptance, Master Ref ~3558).
 - 2026-07-17 — F-07 follow-up (h) stop + stop-limit orders (this PR). The (b) honest boundary
   closed: doc 02 §5.2 lists Stop / Stop-Limit as selectable, but the schema carried no trigger →
   both were permanent blockers (a schema gap, the F-08 precedent). `OrderConfig.stop`

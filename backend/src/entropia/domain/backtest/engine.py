@@ -42,6 +42,7 @@ from entropia.domain.backtest.indicators import (
     IndicatorPlan,
     aggregate,
     build_evaluators,
+    timeframe_seconds,
 )
 
 if TYPE_CHECKING:
@@ -738,14 +739,15 @@ def tick_data_required(config: StrategyConfig) -> bool:
     source of truth imported by the readiness command so Ready Check's
     ``TICK_DATA_UNAVAILABLE`` blocker has exactly one definition of "requires tick".
 
-    NOTE (F-07i sub-slice A): this only wires the REQUIREMENT to Ready Check (Master
-    Ref §11.2 / line ~3558: Ready Check evaluates dataset resolution sufficiency for
-    intrabar-sensitive execution — an unmet requirement blocks RUN rather than
-    silently resolving over OHLCV). The engine's real intrabar-path replay is the
-    follow-up (B); until then the tick-dependent EXECUTION settings (``intrabar_touch``,
-    a limit/stop-limit ``best_bid_ask`` rule, a non-``not_allowed`` partial fill, the
-    same-bar stop-vs-limit ordering) STILL fail closed via
-    ``execution_timing_is_modelled`` / ``order_execution_is_modelled``."""
+    NOTE (F-07i): sub-slice A wired the REQUIREMENT to Ready Check (Master Ref §11.2
+    / line ~3558: an unmet requirement blocks RUN rather than silently resolving over
+    OHLCV); sub-slice B pins the approved tick revision into the RUN manifest at
+    admission and replays its real intrabar print path (true ``first_trigger_wins``
+    stop order — see ``_TickCursor`` / ``_first_tick_touch``). The tick-dependent
+    EXECUTION settings (``intrabar_touch``, a limit/stop-limit ``best_bid_ask`` rule,
+    a non-``not_allowed`` partial fill, the same-bar stop-vs-limit ordering) STILL
+    fail closed via ``execution_timing_is_modelled`` / ``order_execution_is_modelled``
+    — opening them over the tick path is the follow-up (C)."""
     return config.data.intrabar_policy.tick_policy == "require"
 
 
@@ -1223,6 +1225,142 @@ def _trailing_level(position: _Position) -> Decimal | None:
     return position.trail_anchor * (Decimal("1") + position.trail_pct)
 
 
+# F-07i (B): the intrabar tick path. The worker injects the PINNED tick/trade
+# revision's processed print stream only when the strategy demands tick data
+# (``tick_data_required``); the engine aligns it to per-bar windows and uses the true
+# print order to resolve what OHLCV alone cannot — for this slice, the
+# ``first_trigger_wins`` stop-conflict order that was previously approximated
+# conservative (``approximated_first``). Without ticks every path stays byte-identical.
+
+
+@dataclass(frozen=True, slots=True)
+class _Tick:
+    """One normalized intrabar tick/trade print (canonical tick fields, doc 11)."""
+
+    epoch_ms: int
+    price: Decimal
+
+
+def _tick_epoch_ms(timestamp: str) -> int | None:
+    """Parse a tick timestamp (ISO-8601 or bare epoch) to UTC epoch MILLISECONDS.
+
+    Millisecond resolution (not the bar path's whole seconds) because in-bar print
+    ORDER is the whole point of the tick path. ``None`` on anything unparseable —
+    the print is dropped fail-closed, never guessed into a bar window."""
+    text = timestamp.strip()
+    if not text:
+        return None
+    if text.isdigit():
+        value = int(text)
+        return value if len(text) >= 13 else value * 1000
+    parsed = parse_utc(text)
+    if parsed is None:
+        return None
+    # round(), not int(): float epoch*1000 can land at x.9998 for sub-second ISO
+    # fractions, and truncation would shift the print 1ms early.
+    return round(parsed.timestamp() * 1000)
+
+
+def _normalize_tick(raw: dict[str, Any]) -> _Tick | None:
+    """Project a raw tick/trade row to a typed print; drop rows missing time or price.
+
+    Fail-closed: a row whose ``timestamp`` cannot be parsed or whose ``price`` is not
+    a positive decimal can never be proven to belong to a bar's intrabar window (doc
+    02: unavailable detail is never imitated), so it is dropped rather than guessed."""
+    epoch = _tick_epoch_ms(str(raw.get("timestamp", "")))
+    if epoch is None:
+        return None
+    try:
+        price = _dec(raw["price"])
+    except (KeyError, TypeError, ArithmeticError, ValueError):
+        return None
+    if price <= _ZERO:
+        return None
+    return _Tick(epoch_ms=epoch, price=price)
+
+
+class _TickCursor:
+    """Forward-only cursor aligning a global tick stream to per-bar intrabar windows.
+
+    A bar timestamped ``T`` with base span ``S`` owns the prints in ``[T, T+S)``.
+    Ordering contract: the processed tick asset is globally time-ordered (the same
+    normalization contract the processed bar stream carries); the cursor stops pulling
+    at the first print at/after the window end and buffers it for the next bar, so a
+    print arriving BEHIND the already-consumed window is dropped fail-closed — it can
+    no longer be attributed to its true bar and is never applied to a later one.
+    Prints inside one window are stably sorted by epoch so equal-millisecond prints
+    keep their source order — deterministic for a given asset. Bounded memory: at most
+    one bar window of prints is resident."""
+
+    __slots__ = ("_exhausted", "_pending", "_rows", "_span_ms")
+
+    def __init__(self, batches: Iterator[list[dict[str, Any]]], span_seconds: int) -> None:
+        self._rows = (row for batch in batches for row in batch)
+        self._span_ms = span_seconds * 1000
+        self._pending: _Tick | None = None
+        self._exhausted = False
+
+    def for_bar(self, bar_timestamp: str) -> tuple[_Tick, ...]:
+        """The bar's intrabar prints in true time order (empty when none/unalignable)."""
+        start = _tick_epoch_ms(bar_timestamp)
+        if start is None:
+            return ()
+        end = start + self._span_ms
+        collected: list[_Tick] = []
+        if self._pending is not None:
+            if self._pending.epoch_ms >= end:
+                return ()  # the buffered print belongs to a later bar
+            if self._pending.epoch_ms >= start:
+                collected.append(self._pending)
+            self._pending = None  # behind the window -> dropped fail-closed
+        while not self._exhausted:
+            row = next(self._rows, None)
+            if row is None:
+                self._exhausted = True
+                break
+            tick = _normalize_tick(row)
+            if tick is None:
+                continue
+            if tick.epoch_ms >= end:
+                self._pending = tick
+                break
+            if tick.epoch_ms >= start:
+                collected.append(tick)
+            # else: behind the window — dropped fail-closed (pre-range / out-of-order)
+        collected.sort(key=lambda t: t.epoch_ms)  # stable: equal-ms keep source order
+        return tuple(collected)
+
+
+def _first_tick_touch(
+    levels: dict[str, Decimal],
+    ticks: tuple[_Tick, ...],
+    *,
+    is_long: bool,
+    priority: dict[str, int],
+) -> str | None:
+    """The FIRST price-stop level the bar's tick path touches, in true time order.
+
+    Walks the intrabar prints chronologically; the first print that reaches any level
+    resolves the winner. A single print reaching several levels at once (a gap trade
+    through the stack) resolves to the level a continuous path would have touched
+    first — the one closest to the pre-gap price (long: highest; short: lowest) —
+    with the priority index as the deterministic equal-level tie-break. ``None`` when
+    no print reaches any level (the tick path contradicts the bar's OHLC extremes —
+    the caller falls back to the conservative model, never a guessed order)."""
+    for tick in ticks:
+        touched = [
+            key
+            for key, level in levels.items()
+            if (tick.price <= level if is_long else tick.price >= level)
+        ]
+        if not touched:
+            continue
+        if is_long:
+            return max(touched, key=lambda k: (levels[k], -priority.get(k, len(priority))))
+        return min(touched, key=lambda k: (levels[k], priority.get(k, len(priority))))
+    return None
+
+
 # Canonical §9.2 stop precedence AFTER any logic blocks (which come first, in display
 # order): percentage, then trailing, then absolute. Used for priority_order resolution
 # when no explicit stop_priority_order is configured, and as the deterministic tie-break
@@ -1253,6 +1391,7 @@ class _StopOutcome:
     executed_key: str  # winning stop key (e.g. "percentage" / "logic:<block_id>")
     triggered: tuple[str, ...]  # every stop key that fired this bar (sorted)
     approximated_first: bool  # first_trigger_wins resolved to conservative over OHLCV
+    tick_resolved: bool = False  # first_trigger_wins resolved by the REAL tick order (F-07i B)
 
 
 def _resolve_stop(
@@ -1262,6 +1401,7 @@ def _resolve_stop(
     *,
     logic_enabled: list[str],
     logic_triggered: list[str],
+    ticks: tuple[_Tick, ...] = (),
 ) -> _StopOutcome | None:
     """Combine every enabled protection stop rule for THIS bar (Master Ref §9.1/§9.3).
 
@@ -1310,16 +1450,34 @@ def _resolve_stop(
     resolution = (
         protection.stop_conflict_resolution if protection is not None else "most_conservative"
     )
-    approximated_first = False
-    if resolution == "first_trigger_wins":
-        # OHLCV carries no intrabar tick path, so true first-touch order is unknowable;
-        # resolve to the conservative model and flag it (Master Ref §9.3), never faked.
-        resolution = "most_conservative"
-        approximated_first = True
-
     priority = _stop_priority_index(
         protection.stop_priority_order if protection is not None else None, logic_enabled
     )
+    approximated_first = False
+    if resolution == "first_trigger_wins":
+        # F-07i (B): a real intrabar tick path resolves the TRUE first touch among the
+        # bar-triggered PRICE stops — a logic stop confirms only at the bar close, so
+        # any intrabar price touch precedes it by construction. Without ticks — or when
+        # the tick path never reaches a bar-triggered level (incomplete/contradictory
+        # coverage) — the order stays unknowable over OHLCV: resolve to the
+        # conservative model and flag it (Master Ref §9.3), never faked.
+        price_triggered = {key: triggered[key] for key in triggered if key in price_levels}
+        winner = (
+            _first_tick_touch(price_triggered, ticks, is_long=is_long, priority=priority)
+            if ticks and price_triggered
+            else None
+        )
+        if winner is not None:
+            return _StopOutcome(
+                price=triggered[winner],
+                executed_key=winner,
+                triggered=tuple(sorted(triggered)),
+                approximated_first=False,
+                tick_resolved=True,
+            )
+        resolution = "most_conservative"
+        approximated_first = True
+
     if resolution in ("priority_order", "record_all_execute_highest"):
         winner = min(triggered, key=lambda k: priority.get(k, len(priority)))
     else:  # most_conservative: tightest adverse move, canonical priority as tie-break
@@ -1355,6 +1513,7 @@ def run_engine(
     timeframe: str | None = None,
     allocation: AllocationExecution | None = None,
     funding: FundingSchedule | None = None,
+    tick_batches: Iterator[list[dict[str, Any]]] | None = None,
 ) -> EngineOutput:
     """Deterministically bar-replay one strategy over its pinned OHLCV bars.
 
@@ -1387,7 +1546,16 @@ def run_engine(
     ``available_at`` and, while a position is held, charges ``notional * rate`` (a long pays
     a positive rate, a short receives). A value dated after the last replayed bar can never
     fire, so future leakage is impossible by construction. ``None`` (the default) books no
-    funding and is BYTE-IDENTICAL to the pre-F-11 engine."""
+    funding and is BYTE-IDENTICAL to the pre-F-11 engine.
+
+    ``tick_batches`` injects the PINNED tick/trade revision's processed print stream
+    (F-07i B) — the worker resolves it from the manifest pin ONLY when the strategy
+    demands tick data (``tick_data_required``), mirroring the bar path (the engine stays
+    pure — no I/O). The prints are aligned to per-bar windows via ``timeframe`` (an
+    un-timeframed revision cannot be aligned — surfaced as a warning, L4, and the run
+    stays on the conservative OHLCV model) and resolve the ``first_trigger_wins``
+    stop-conflict order by TRUE first touch instead of the flagged conservative
+    approximation. ``None`` (the default) is BYTE-IDENTICAL to the pre-F-07i engine."""
     config = strategy_config
     alloc_on = allocation is not None
     alloc_compound = False
@@ -1424,6 +1592,20 @@ def run_engine(
     stop_conflict_resolution = (
         _protection.stop_conflict_resolution if _protection is not None else "most_conservative"
     )
+
+    # F-07i (B): the optional intrabar tick path. Aligning prints to bars needs the base
+    # bar span; an un-timeframed revision leaves the cursor unset and the run on the
+    # conservative OHLCV model (surfaced as a warning, L4 — never guessed).
+    tick_cursor: _TickCursor | None = None
+    tick_alignment_unavailable = False
+    if tick_batches is not None:
+        tick_span = timeframe_seconds(timeframe) if timeframe is not None else None
+        if tick_span is None:
+            tick_alignment_unavailable = True
+        else:
+            tick_cursor = _TickCursor(tick_batches, tick_span)
+    tick_bars = 0
+    tick_first_trigger_resolutions = 0
 
     # F-09: an unmodelled / misconfigured sizing method opens NO position at all — the
     # engine is a fail-closed backstop to the Ready Check STRATEGY_SIZING_UNSUPPORTED
@@ -2015,27 +2197,35 @@ def run_engine(
         the executed rule was a Logic-Based Stop, or the OHLCV first-trigger approximation
         applied. The single-price-stop default path emits nothing extra (byte-identical to
         pre-F-08 output)."""
-        nonlocal logic_stop_triggers
+        nonlocal logic_stop_triggers, tick_first_trigger_resolutions
         if any(k.startswith("logic:") for k in outcome.triggered):
             logic_stop_triggers += 1
+        if outcome.tick_resolved:
+            tick_first_trigger_resolutions += 1
         if (
             len(outcome.triggered) > 1
             or outcome.approximated_first
+            or outcome.tick_resolved
             or outcome.executed_key.startswith("logic:")
         ):
+            detail: dict[str, Any] = {
+                "executed": outcome.executed_key,
+                "triggered": list(outcome.triggered),
+                "requirement": stop_trigger_requirement,
+                "resolution": stop_conflict_resolution,
+                "first_trigger_approximated": outcome.approximated_first,
+            }
+            # F-07i (B): only stamped when the REAL tick order resolved the winner, so
+            # tick-less traces stay byte-identical.
+            if outcome.tick_resolved:
+                detail["first_trigger_tick_resolved"] = True
             signal_events.append(
                 SignalEventRow(
                     seq=len(signal_events),
                     event_time=event_time,
                     event_type="stop_resolution",
                     direction=direction,
-                    detail={
-                        "executed": outcome.executed_key,
-                        "triggered": list(outcome.triggered),
-                        "requirement": stop_trigger_requirement,
-                        "resolution": stop_conflict_resolution,
-                        "first_trigger_approximated": outcome.approximated_first,
-                    },
+                    detail=detail,
                 )
             )
 
@@ -2048,6 +2238,13 @@ def run_engine(
             if not first_ts:
                 first_ts = bar.timestamp
             last_bar = bar
+            # F-07i (B): advance the tick cursor EVERY bar (position open or not) so the
+            # forward-only stream stays aligned to the bar clock.
+            bar_ticks: tuple[_Tick, ...] = ()
+            if tick_cursor is not None:
+                bar_ticks = tick_cursor.for_bar(bar.timestamp)
+                if bar_ticks:
+                    tick_bars += 1
             # F-07d: an exit lot (full or partial) realized on THIS bar appends a trade row;
             # the scale ladder below never adds to a position a bar has already reduced.
             trades_before_bar = len(trades)
@@ -2283,6 +2480,7 @@ def run_engine(
                     bar,
                     logic_enabled=logic_enabled,
                     logic_triggered=logic_triggered,
+                    ticks=bar_ticks,
                 )
                 stop_touched = stop_outcome is not None
                 # A fresh exit signal is evaluated only when no exit is already committed:
@@ -3103,6 +3301,11 @@ def run_engine(
     warnings: list[str] = []
     if not bars_seen:
         warnings.append("no_bars_in_source")
+    if tick_alignment_unavailable:
+        # F-07i (B): a tick stream was injected but the pinned revision carries no
+        # supported bar timeframe, so prints cannot be attributed to bar windows — the
+        # run stayed on the conservative OHLCV model (L4, never silently guessed).
+        warnings.append("tick_alignment_unavailable")
     if not sizing_ok:
         # formula sizing (and a risk_based request without its sub-config) is not
         # modelled; the run opened NO position (fail closed, F-09) rather than a
@@ -3348,6 +3551,13 @@ def run_engine(
         "funding_source_revision_id": funding.source_revision_id if funding is not None else None,
         "funding_records": len(funding_records),
         "funding_charges": funding_charges,
+        # F-07i (B): intrabar tick-path provenance — whether a pinned tick stream was
+        # injected, how many bars carried a print sub-path, and how many
+        # first_trigger_wins stops the REAL print order resolved (vs the flagged
+        # conservative OHLCV approximation).
+        "tick_path_enabled": tick_batches is not None,
+        "tick_bars": tick_bars,
+        "tick_first_trigger_resolutions": tick_first_trigger_resolutions,
         "item_count": item_count,
         "decision_trace_count": len(signal_events),
         "decision_trace_schema": DECISION_TRACE_SCHEMA,
@@ -3379,6 +3589,8 @@ _DIAG_SUM_KEYS = (
     "deferred_exit_fills",
     "logic_stop_triggers",
     "funding_charges",
+    "tick_bars",
+    "tick_first_trigger_resolutions",
 )
 
 # Sequential composite curve is NOT a unified-clock portfolio valuation (each strategy

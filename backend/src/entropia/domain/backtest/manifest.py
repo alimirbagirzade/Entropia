@@ -22,7 +22,7 @@ from typing import Any
 
 from entropia.shared.manifest import manifest_hash
 
-ENGINE_VERSION = "backtest-engine-v14-stop-orders"
+ENGINE_VERSION = "backtest-engine-v15-intrabar-execution"
 METRIC_SET_VERSION = "metric-set-v1"
 OUTPUT_ARTIFACT_PROFILE = "standard-v1"
 
@@ -71,8 +71,15 @@ def build_run_manifest(
     engine_version: str = ENGINE_VERSION,
     metric_set_version: str = METRIC_SET_VERSION,
     output_artifact_profile: str = OUTPUT_ARTIFACT_PROFILE,
+    tick_data: dict[str, Any] | None = None,
 ) -> ManifestBuildResult:
-    """Assemble the immutable manifest (doc 15 §9.2 minimum content)."""
+    """Assemble the immutable manifest (doc 15 §9.2 minimum content).
+
+    ``tick_data`` (F-07i B) pins the approved tick/trade revision per tick-demanding
+    Strategy item (``{item_id: {"tick_revision_id", "instrument_id"}}``) — resolved
+    at ADMISSION so the worker never falls back to 'newest approved' (doc 15 §15).
+    It is part of the REPRODUCIBILITY content: two runs replaying different tick
+    paths must never share an ``execution_key`` (INF-04/INF-05)."""
     items = _pinned_items(item_manifest)
     artifact_context = {
         "metric_set_version": metric_set_version,
@@ -84,6 +91,7 @@ def build_run_manifest(
         "capital_execution": capital_mode,
         "result_artifact_context": artifact_context,
         "engine_version": engine_version,
+        "tick_data": tick_data,
     }
     execution_key = manifest_hash(execution_content)
     manifest = {
@@ -100,6 +108,7 @@ def build_run_manifest(
         "mainboard_items": items,
         "capital_execution": capital_mode,
         "result_artifact_context": artifact_context,
+        "tick_data": tick_data,
         "preflight": preflight,
         "execution_key": execution_key,
     }

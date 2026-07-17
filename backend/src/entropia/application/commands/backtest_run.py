@@ -31,20 +31,33 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
+from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from entropia.application.commands.readiness_check import run_readiness_check
+from entropia.application.commands.readiness_check import (
+    _resolve_strategy_payload,
+    run_readiness_check,
+)
 from entropia.application.idempotency import run_idempotent
+from entropia.domain.backtest.engine import tick_data_required
 from entropia.domain.backtest.enums import RUN_RETRYABLE_STATES, BacktestRunState
 from entropia.domain.backtest.manifest import build_run_manifest
 from entropia.domain.identity import Actor
 from entropia.domain.identity.policy import ensure_can_edit, ensure_can_view, require_authenticated
 from entropia.domain.lifecycle.enums import DeletionState
+from entropia.domain.mainboard.enums import MainboardItemKind
+from entropia.domain.readiness.enums import (
+    ReadinessIssueCode,
+    ReadinessScope,
+    ReadinessSeverity,
+)
+from entropia.domain.strategy.config import StrategyConfig
 from entropia.domain.trash.page import original_location_for
 from entropia.infrastructure.postgres.models import MainboardCompositionSnapshot
 from entropia.infrastructure.postgres.repositories import audit as audit_repo
 from entropia.infrastructure.postgres.repositories import backtest as bt_repo
 from entropia.infrastructure.postgres.repositories import mainboard as mb_repo
+from entropia.infrastructure.postgres.repositories import market_data as market_repo
 from entropia.infrastructure.postgres.repositories import readiness as readiness_repo
 from entropia.infrastructure.postgres.repositories import trash as trash_repo
 from entropia.infrastructure.queues.enqueue import enqueue_job
@@ -178,6 +191,12 @@ async def _admit_run(
     if snapshot is None:  # pragma: no cover - snapshot was just written in this tx
         raise CompositionNotFoundError()
 
+    # F-07i (B): pin the approved tick/trade revision for every tick-demanding Strategy
+    # NOW, into the immutable manifest — the worker must never resolve 'newest approved'
+    # itself (doc 15 §15), and two runs replaying different tick paths must never share
+    # an execution_key (INF-04/INF-05).
+    tick_data = await _resolve_tick_pins(session, snapshot.item_manifest)
+
     run_id = new_id("btrun")
     manifest_id = new_id("btman")
     built = build_run_manifest(
@@ -195,6 +214,7 @@ async def _admit_run(
         },
         correlation_id=actor.correlation_id,
         created_at_iso=datetime.now(UTC).isoformat(),
+        tick_data=tick_data,
     )
     run = await bt_repo.create_run(
         session,
@@ -335,6 +355,63 @@ async def _assert_ready_report_current(
         or report.composition_fingerprint != current_fingerprint
     ):
         raise ReadyReportStaleError()
+
+
+async def _resolve_tick_pins(
+    session: AsyncSession, item_manifest: dict[str, Any] | None
+) -> dict[str, Any] | None:
+    """Pin the approved tick/trade revision for every tick-demanding Strategy (F-07i B).
+
+    The manifest must carry EVERY input the worker replays: resolving 'newest approved'
+    at worker time would be a 'latest' leak (doc 15 §15) and would let two runs sharing
+    an ``execution_key`` replay different tick paths (INF-04/INF-05). Ready Check —
+    same tx, just passed with zero blockers — already proved availability via the same
+    ``find_approved_tick_revision_for_instrument`` probe; a requirement that STILL
+    fails to resolve here (a racing approval revocation) is a hard 422 admission
+    reject, never a silently tickless run. ``None`` when no enabled Strategy demands
+    tick data — the manifest then carries an explicit ``tick_data: null``."""
+    pins: dict[str, Any] = {}
+    raw = item_manifest.get("items", []) if isinstance(item_manifest, dict) else []
+    for entry in raw:
+        if entry.get("kind") != MainboardItemKind.STRATEGY or entry.get("enabled") is False:
+            continue
+        revision_id = entry.get("revision_id")
+        if revision_id is None:
+            continue
+        revision = await mb_repo.get_work_object_revision(session, str(revision_id))
+        if revision is None:
+            continue
+        payload = await _resolve_strategy_payload(session, dict(revision.payload))
+        try:
+            config = StrategyConfig.model_validate(payload)
+        except PydanticValidationError:
+            continue  # readiness STRATEGY_CONFIG_INVALID already gates this upstream
+        if not tick_data_required(config):
+            continue
+        tick_revision = await market_repo.find_approved_tick_revision_for_instrument(
+            session, config.data.instrument_id
+        )
+        if tick_revision is None:
+            raise ReadinessBlockedError(
+                details=[
+                    {
+                        "code": ReadinessIssueCode.TICK_DATA_UNAVAILABLE.value,
+                        "severity": ReadinessSeverity.BLOCKER.value,
+                        "scope": ReadinessScope.MARKET_DATA.value,
+                        "field": "data.intrabar_policy.tick_policy",
+                        "scope_id": str(entry.get("item_id")),
+                        "message": (
+                            "The strategy requires tick data but no approved tick/trade "
+                            "dataset could be pinned for its instrument at admission."
+                        ),
+                    }
+                ]
+            )
+        pins[str(entry.get("item_id"))] = {
+            "tick_revision_id": tick_revision.revision_id,
+            "instrument_id": config.data.instrument_id,
+        }
+    return pins or None
 
 
 def _issue_detail(issue: dict[str, Any]) -> dict[str, Any]:

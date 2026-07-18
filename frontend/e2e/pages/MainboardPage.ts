@@ -67,6 +67,16 @@ export class MainboardPage {
     await lastItem.getByRole("button", { name: /^Delete / }).click();
     const dialog = lastItem.getByRole("alertdialog");
     await expect(dialog).toBeVisible();
+    // Set the waiter up before clicking so we never miss the response, and
+    // await it before returning — the caller (06-trash-reauth.spec.ts)
+    // navigates to /trash immediately after this resolves, and a same-tab
+    // navigation can abort an in-flight DELETE, leaving no Trash entry behind.
+    const deleteResponse = this.page.waitForResponse(
+      (r) => /\/work-objects\/[^/]+$/.test(r.url()) && r.request().method() === "DELETE",
+      { timeout: 10_000 },
+    );
     await dialog.getByRole("button", { name: "Move to Trash" }).click();
+    const response = await deleteResponse;
+    expect(response.ok(), `Move to Trash HTTP ${response.status()}`).toBeTruthy();
   }
 }

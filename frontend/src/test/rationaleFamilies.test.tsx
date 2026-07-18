@@ -237,7 +237,7 @@ describe("Rationale Families page", () => {
     fireEvent.change(screen.getByLabelText("Reassign Cross Up"), { target: { value: "fam_1" } });
     expect(screen.getByText("1 pending change(s)")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Save assignments" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save Assignment Changes" }));
 
     expect(await screen.findByText("Saved — 1 package revision(s) created.")).toBeInTheDocument();
     // The non-blocking output-mismatch warning renders verbatim.

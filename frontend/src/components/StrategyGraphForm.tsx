@@ -63,6 +63,7 @@ function TextField({
   panel,
   placeholder,
   required,
+  unit,
 }: {
   label: string;
   value: string;
@@ -70,24 +71,41 @@ function TextField({
   panel?: InfoPanelContent;
   placeholder?: string;
   required?: boolean;
+  unit?: string;
 }) {
   const id = useId();
+  const input = (
+    <input
+      id={id}
+      className={`sd-input${unit ? " small-number" : ""}`}
+      value={value}
+      placeholder={placeholder}
+      onChange={(event) => onChange(event.target.value)}
+      spellCheck={false}
+    />
+  );
   return (
-    <div className="cp-field">
+    <div className="field-row wide-label">
       <span className="field-head">
         <label htmlFor={id}>
           {label}
-          {required ? <span aria-hidden="true"> *</span> : null}
+          {required ? (
+            <span className="required-hint" aria-hidden="true">
+              {" "}
+              *
+            </span>
+          ) : null}
         </label>
         {panel ? <InfoPanel panel={panel} /> : null}
       </span>
-      <input
-        id={id}
-        value={value}
-        placeholder={placeholder}
-        onChange={(event) => onChange(event.target.value)}
-        spellCheck={false}
-      />
+      {unit ? (
+        <div className="inline-fields">
+          {input}
+          <span className="inline-unit">{unit}</span>
+        </div>
+      ) : (
+        input
+      )}
     </div>
   );
 }
@@ -111,15 +129,25 @@ function SelectField({
 }) {
   const id = useId();
   return (
-    <div className="cp-field">
+    <div className="field-row wide-label">
       <span className="field-head">
         <label htmlFor={id}>
           {label}
-          {required ? <span aria-hidden="true"> *</span> : null}
+          {required ? (
+            <span className="required-hint" aria-hidden="true">
+              {" "}
+              *
+            </span>
+          ) : null}
         </label>
         {panel ? <InfoPanel panel={panel} /> : null}
       </span>
-      <select id={id} value={value} onChange={(event) => onChange(event.target.value)}>
+      <select
+        id={id}
+        className="sd-select"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      >
         {placeholder !== undefined ? <option value="">{placeholder}</option> : null}
         {options.map((option) => (
           <option key={option.value} value={option.value}>
@@ -143,18 +171,16 @@ function CheckboxField({
   panel?: InfoPanelContent;
 }) {
   return (
-    <div className="cp-field cp-wide">
-      <span className="field-head">
-        <label className="checkbox-label">
-          <input
-            type="checkbox"
-            checked={checked}
-            onChange={(event) => onChange(event.target.checked)}
-          />
-          {label}
-        </label>
-        {panel ? <InfoPanel panel={panel} /> : null}
-      </span>
+    <div className="checkbox-field cp-wide">
+      <label className="checkbox-line">
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={(event) => onChange(event.target.checked)}
+        />
+        <span>{label}</span>
+      </label>
+      {panel ? <InfoPanel panel={panel} /> : null}
     </div>
   );
 }
@@ -505,7 +531,8 @@ function ScalingSection({
       {scaling.method === "price_distance_scaling" ? (
         <div className="cp-form strategy-form-grid">
           <TextField
-            label="Retracement distance %"
+            label="Retracement distance"
+            unit="%"
             required
             value={scaling.price.retracement_distance}
             onChange={(v) => onChange({ price: { ...scaling.price, retracement_distance: v } })}

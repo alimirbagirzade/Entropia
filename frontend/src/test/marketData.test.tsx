@@ -257,11 +257,8 @@ describe("Market Data page", () => {
 
     // The Dataset Setup shell is collapsed by default (UI-11) — open it first.
     fireEvent.click(screen.getByRole("button", { name: "+ Add Market Dataset" }));
-    fireEvent.change(screen.getByLabelText(/Title/), { target: { value: "Fresh dataset" } });
-    fireEvent.change(screen.getByLabelText(/Instrument id/), { target: { value: "ETHUSDT" } });
-    fireEvent.change(screen.getByLabelText(/Payload/), {
-      target: { value: '{"source": "binance"}' },
-    });
+    fireEvent.change(screen.getByLabelText(/Dataset Name/), { target: { value: "Fresh dataset" } });
+    fireEvent.change(screen.getByLabelText(/Instrument Scope/), { target: { value: "ETHUSDT" } });
     fireEvent.click(screen.getByRole("button", { name: "Create dataset" }));
 
     expect(await screen.findByText("Created — md_new (draft).")).toBeInTheDocument();
@@ -273,9 +270,17 @@ describe("Market Data page", () => {
     );
     expect(call).toBeDefined();
     const init = call?.[1] as RequestInit;
+    // The v18 §4 descriptive facets fold into the free-form payload; the body
+    // shape (market_data_type / payload / title / instrument_id) is unchanged.
     expect(JSON.parse(String(init.body))).toEqual({
       market_data_type: "ohlcv",
-      payload: { source: "binance" },
+      payload: {
+        market: "Crypto",
+        source_provider: null,
+        resolution: "15m",
+        timezone: "UTC",
+        record_time_basis: "Bar Close / End Time",
+      },
       title: "Fresh dataset",
       instrument_id: "ETHUSDT",
     });
@@ -283,18 +288,34 @@ describe("Market Data page", () => {
     expect((init.headers as Record<string, string>)["Idempotency-Key"]).toBeUndefined();
   });
 
-  it("blocks an unparseable payload locally instead of sending it", async () => {
+  it("folds the v18 §4 descriptive facets into the create payload", async () => {
     const fetchMock = stubApi(BASE_ROUTES);
     renderPage();
     await screen.findByText("Binance 15m OHLCV");
 
     fireEvent.click(screen.getByRole("button", { name: "+ Add Market Dataset" }));
-    fireEvent.change(screen.getByLabelText(/Payload/), { target: { value: "{not json" } });
+    // Anchor on the required-field label ("Market *") — a bare /Market/ also
+    // matches the ribbon's aria-label ("Market data ingestion workflow").
+    fireEvent.change(screen.getByLabelText(/Market \*/), { target: { value: "Forex" } });
+    fireEvent.change(screen.getByLabelText(/Source \/ Provider/), {
+      target: { value: "Binance Futures" },
+    });
+    fireEvent.change(screen.getByLabelText(/Resolution/), { target: { value: "1h" } });
     fireEvent.click(screen.getByRole("button", { name: "Create dataset" }));
 
-    expect(await screen.findByText("Payload is not valid JSON.")).toBeInTheDocument();
-    const posted = fetchMock.mock.calls.some(([, init]) => init?.method === "POST");
-    expect(posted).toBe(false);
+    expect(await screen.findByText("Created — md_new (draft).")).toBeInTheDocument();
+
+    const call = fetchMock.mock.calls.find(
+      ([url, init]) => String(url).endsWith("/market-datasets") && init?.method === "POST",
+    );
+    const body = JSON.parse(String((call?.[1] as RequestInit).body));
+    expect(body.payload).toEqual({
+      market: "Forex",
+      source_provider: "Binance Futures",
+      resolution: "1h",
+      timezone: "UTC",
+      record_time_basis: "Bar Close / End Time",
+    });
   });
 
   it("opens the detail with identity, hashes and revision history", async () => {

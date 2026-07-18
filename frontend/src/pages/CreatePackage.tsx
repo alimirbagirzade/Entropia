@@ -1,6 +1,5 @@
-import { useState, type ChangeEvent, type FormEvent } from "react";
+import { useState, type ChangeEvent } from "react";
 
-import { EmptyState } from "@/components/EmptyState";
 import { ErrorState } from "@/components/ErrorState";
 import { Loading } from "@/components/Loading";
 import { PreCheckModal } from "@/components/PreCheckModal";
@@ -87,12 +86,14 @@ function useCursorStack() {
 }
 
 // ---------------------------------------------------------------------------
-// Create Package (doc 06) — v18 CP Agent workspace. The page is a single
-// composition plane: a request/AI compose column on the left (chat board + draft
-// files) and a Package Status / Baseline / Resolver / Validation / Library-Target
-// panel on the right. Every action reuses the real backend hooks unchanged; the
-// server re-validates every field/transition and a denial (e.g. a guest, or a
-// non-Admin approve) surfaces the canonical error envelope verbatim.
+// Create Package (doc 06) — v18 §3 CP Agent workspace. The page is a single
+// composition plane: a full-width controls row + Package Identity / Compatibility
+// grid on top, then a two-column split — a request/AI compose column on the left
+// (chat board + draft files) and a Package Status / Baseline / Resolver /
+// Validation / Library-Target side panel on the right. Every action reuses the
+// real backend hooks unchanged; the server re-validates every field/transition
+// and a denial (e.g. a guest, or a non-Admin approve) surfaces the canonical
+// error envelope verbatim.
 // ---------------------------------------------------------------------------
 
 export function CreatePackage() {
@@ -111,33 +112,13 @@ export function CreatePackage() {
 
       <RequestSwitcher selectedId={selectedId} onSelect={setSelectedId} />
 
-      <div className="cp-create-layout">
-        <section>
-          <RequestColumn
-            detail={detail}
-            loading={selectedId !== null && request.isLoading}
-            error={selectedId !== null && request.isError ? request.error : null}
-            onCreated={setSelectedId}
-            onClear={() => setSelectedId(null)}
-          />
-        </section>
-        <aside style={{ display: "grid", gap: 4 }}>
-          <StatusPanel detail={detail} />
-          {detail !== null ? (
-            <>
-              <BaselinePanel detail={detail} />
-              <ResolverPanel detail={detail} />
-              <ValidationPanel detail={detail} />
-              <LibraryTargetPanel detail={detail} />
-            </>
-          ) : (
-            <p className="cp-note" style={{ marginTop: 8 }}>
-              Create or select a request to reveal Baseline, Resolver, Validation
-              Tests and the Library Target.
-            </p>
-          )}
-        </aside>
-      </div>
+      <Workspace
+        detail={detail}
+        loading={selectedId !== null && request.isLoading}
+        error={selectedId !== null && request.isError ? request.error : null}
+        onCreated={setSelectedId}
+        onClear={() => setSelectedId(null)}
+      />
     </>
   );
 }
@@ -216,9 +197,10 @@ function RequestSwitcher({
 }
 
 // ---------------------------------------------------------------------------
-// Left column — identity controls + the CP Agent chat board + compose + actions
-// + draft package files. When no request is selected the compose Send creates an
-// immutable request (doc 06 §4). When one is selected the chat board is derived
+// Workspace — full-width identity controls + the CP Agent chat board / compose /
+// actions / draft files on the left, and the Package Status side panel on the
+// right. When no request is selected the compose Send creates an immutable
+// request (doc 06 §4). When one is selected the chat board is derived
 // deterministically from its server projection and the lifecycle actions operate
 // on it (Pre-Check / C.D.P / Clear); Send always composes a fresh request.
 // ---------------------------------------------------------------------------
@@ -245,7 +227,7 @@ const INITIAL_FORM: FormState = {
   declared_keys: "",
 };
 
-function RequestColumn({
+function Workspace({
   detail,
   loading,
   error,
@@ -286,8 +268,7 @@ function RequestColumn({
     setForm((prev) => ({ ...prev, package_type: next, output_kind: nextKinds[0] ?? "" }));
   }
 
-  function onSend(event: FormEvent) {
-    event.preventDefault();
+  function onSend() {
     if (!canSubmit) return;
     const declared = form.declared_keys
       .split("\n")
@@ -338,9 +319,11 @@ function RequestColumn({
   }
 
   return (
-    <form onSubmit={onSend}>
+    <div className="cp-page">
       {/* Identity controls (doc 06 §4 field contract). Requiredness is mirrored
-          client-side only for Send gating; the server re-validates every field. */}
+          client-side only for Send gating; the server re-validates every field.
+          The Send button (below) is the only submit path — there is no <form>
+          element, so a stray Enter in a side-panel field can never dispatch. */}
       <div className="cp-controls-row">
         <label>
           <span>Package type</span>
@@ -398,20 +381,27 @@ function RequestColumn({
             <option value={SUPPORTED_TARGET_RUNTIME}>{SUPPORTED_TARGET_RUNTIME}</option>
           </select>
         </label>
-        <label>
-          <span>Output contract kind</span>
-          <select
-            aria-label="Output contract kind"
-            value={form.output_kind}
-            onChange={(e) => setForm((prev) => ({ ...prev, output_kind: e.target.value }))}
-          >
-            {kindOptions.map((k) => (
-              <option key={k} value={k}>
-                {k}
-              </option>
-            ))}
-          </select>
-        </label>
+        {needsLabel ? (
+          <label>
+            <span>Other language + version</span>
+            <input
+              aria-label="Other language and version"
+              value={form.other_language_label}
+              onChange={(e) =>
+                setForm((prev) => ({ ...prev, other_language_label: e.target.value }))
+              }
+              placeholder="e.g. MQL5 build 3980"
+            />
+          </label>
+        ) : null}
+      </div>
+
+      {/* Package Identity / Compatibility grid (mockup §3). Output type and the
+          rationale family feed the real request; compatible family + explicit
+          indicator link follow the v18 layout but are not yet bound to the
+          backend (V1) — the server owns those relationships on approval. */}
+      <div className="cp-section-title">Package Identity / Compatibility</div>
+      <div className="cp-identity-grid">
         <label>
           <span>Rationale family</span>
           {isEsp ? (
@@ -431,139 +421,169 @@ function RequestColumn({
             </select>
           )}
         </label>
-        {needsLabel ? (
-          <label>
-            <span>Other language + version</span>
-            <input
-              aria-label="Other language and version"
-              value={form.other_language_label}
-              onChange={(e) =>
-                setForm((prev) => ({ ...prev, other_language_label: e.target.value }))
-              }
-              placeholder="e.g. MQL5 build 3980"
-            />
-          </label>
-        ) : null}
+        <label>
+          <span>Output type</span>
+          <select
+            aria-label="Output contract kind"
+            value={form.output_kind}
+            onChange={(e) => setForm((prev) => ({ ...prev, output_kind: e.target.value }))}
+          >
+            {kindOptions.map((k) => (
+              <option key={k} value={k}>
+                {k}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>Compatible family</span>
+          <select aria-label="Compatible family" defaultValue="same" disabled>
+            <option value="same">Same Rationale Family</option>
+          </select>
+        </label>
+        <label>
+          <span>Explicit indicator link</span>
+          <select aria-label="Explicit indicator link" defaultValue="optional" disabled>
+            <option value="optional">Optional / Not Required</option>
+          </select>
+        </label>
       </div>
 
       {!isEsp && familyRows.length === 0 && !families.isLoading ? (
-        <p className="cp-note" style={{ marginTop: -4, marginBottom: 12 }}>
+        <p className="cp-note" style={{ marginTop: -4, marginBottom: 8 }}>
           No active Rationale Family — create one first (required for Indicator / Condition).
         </p>
       ) : null}
+      <p className="cp-note" style={{ marginTop: 0, marginBottom: 14 }}>
+        Compatible family and explicit indicator link follow the v18 layout; they are not yet sent
+        to the backend (V1).
+      </p>
 
-      {/* CP Agent chat board + compose + actions. */}
-      <div className="cp-panel">
-        <div className="cp-panel-head">
-          <span>Package Request / AI Workspace</span>
-          <span className="cp-sub">{detail ? detail.request_id : "Not created"}</span>
-        </div>
-        <MessagesBoard detail={detail} loading={loading} error={error} />
-        <div className="cp-compose">
-          <label>
-            <span>{isCodeMode ? "Source code" : "Description"}</span>
-            <textarea
-              aria-label={isCodeMode ? "Source code" : "Description"}
-              value={form.request_body}
-              onChange={(e) => setForm((prev) => ({ ...prev, request_body: e.target.value }))}
-              placeholder={
-                isCodeMode
-                  ? "Paste the source to translate / repair / review…"
-                  : "Describe the package to generate…"
-              }
-            />
-          </label>
-          <label style={{ display: "block", marginTop: 10 }}>
-            <span>Declared dependencies (one canonical key per line, optional)</span>
-            <textarea
-              aria-label="Declared dependencies"
-              value={form.declared_keys}
-              onChange={(e) => setForm((prev) => ({ ...prev, declared_keys: e.target.value }))}
-              placeholder={"ta.sma\nta.rsi"}
-              style={{ minHeight: 64 }}
-            />
-          </label>
-          <div className="cp-button-row">
-            <button
-              type="button"
-              className="btn"
-              disabled={detail === null}
-              aria-haspopup="dialog"
-              onClick={() => setPrecheckOpen(true)}
-            >
-              Pre-Check
-            </button>
-            {/* Status pill — the direct visual link between the Pre-Check button
-                and the Package Status TA Pre-Check row (UI-07). */}
-            {detail?.current_scan ? (
-              <StatusBadge
-                tone={scanStatusTone(detail.current_scan.status)}
-                label={`${detail.current_scan.status}${detail.precheck_fresh ? "" : " · stale"}`}
-              />
-            ) : detail !== null ? (
-              <StatusBadge tone="neutral" label="not_checked" />
-            ) : null}
-            <button type="submit" className="btn btn-primary" disabled={!canSubmit}>
-              {create.isPending ? "Sending…" : "Send"}
-            </button>
-            <button
-              type="button"
-              className="btn"
-              disabled={!actions.generateDraft || actionsPending}
-              onClick={onCdp}
-              title="Create Draft Package (generate candidate → draft)"
-            >
-              {generate.isPending || draft.isPending ? "Drafting…" : "C.D.P"}
-            </button>
-            <button type="button" className="btn btn-ghost" onClick={onClearAll}>
-              Clear
-            </button>
+      <div className="cp-create-layout">
+        <section>
+          {/* CP Agent chat board + compose + actions. */}
+          <div className="cp-panel">
+            <div className="cp-panel-head">
+              <span>Package Request / AI Workspace</span>
+              <span className="cp-sub">{detail ? detail.request_id : "Not created"}</span>
+            </div>
+            <MessagesBoard detail={detail} loading={loading} error={error} />
+            <div className="cp-compose">
+              <label>
+                <span>{isCodeMode ? "Source code" : "Description"}</span>
+                <textarea
+                  aria-label={isCodeMode ? "Source code" : "Description"}
+                  value={form.request_body}
+                  onChange={(e) => setForm((prev) => ({ ...prev, request_body: e.target.value }))}
+                  placeholder={
+                    isCodeMode
+                      ? "Paste the source to translate / repair / review…"
+                      : "Describe the package to generate…"
+                  }
+                />
+              </label>
+              <label style={{ display: "block", marginTop: 10 }}>
+                <span>Declared dependencies (one canonical key per line, optional)</span>
+                <textarea
+                  aria-label="Declared dependencies"
+                  value={form.declared_keys}
+                  onChange={(e) => setForm((prev) => ({ ...prev, declared_keys: e.target.value }))}
+                  placeholder={"ta.sma\nta.rsi"}
+                  style={{ minHeight: 64 }}
+                />
+              </label>
+              <div className="cp-button-row">
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={detail === null}
+                  aria-haspopup="dialog"
+                  onClick={() => setPrecheckOpen(true)}
+                >
+                  Pre-Check
+                </button>
+                {/* Status pill — the direct visual link between the Pre-Check
+                    button and the Package Status TA Pre-Check row (UI-07). */}
+                {detail?.current_scan ? (
+                  <StatusBadge
+                    tone={scanStatusTone(detail.current_scan.status)}
+                    label={`${detail.current_scan.status}${detail.precheck_fresh ? "" : " · stale"}`}
+                  />
+                ) : detail !== null ? (
+                  <StatusBadge tone="neutral" label="not_checked" />
+                ) : null}
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  disabled={!canSubmit}
+                  onClick={onSend}
+                >
+                  {create.isPending ? "Sending…" : "Send"}
+                </button>
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={!actions.generateDraft || actionsPending}
+                  onClick={onCdp}
+                  title="Create Draft Package (generate candidate → draft)"
+                >
+                  {generate.isPending || draft.isPending ? "Drafting…" : "C.D.P"}
+                </button>
+                <button type="button" className="btn btn-ghost" onClick={onClearAll}>
+                  Clear
+                </button>
+              </div>
+              {detail !== null && actions.nextStepHint.length > 0 ? (
+                <p className="cp-note" aria-live="polite" style={{ marginTop: 8, fontWeight: 600 }}>
+                  Next step: {actions.nextStepHint}
+                </p>
+              ) : null}
+              <p className="cp-note" style={{ marginTop: 8 }}>
+                Pre-Check analyses code TA dependencies through Embedded System Packages. C.D.P
+                creates a Draft Package, not an approved package.
+              </p>
+
+              {create.isError ? (
+                <p role="alert" style={alertStyle}>
+                  {mutationErrorText(create.error)}
+                </p>
+              ) : null}
+              {create.data ? (
+                <p aria-live="polite" style={liveStyle}>
+                  Request created — <code>{create.data.request_id}</code> ({create.data.state}).
+                </p>
+              ) : null}
+              {generate.isError ? (
+                <p role="alert" style={alertStyle}>
+                  {mutationErrorText(generate.error)}
+                </p>
+              ) : null}
+              {draft.isError ? (
+                <p role="alert" style={alertStyle}>
+                  {mutationErrorText(draft.error)}
+                </p>
+              ) : null}
+              {draft.data ? (
+                <p aria-live="polite" style={liveStyle}>
+                  Draft created — revision <code>{draft.data.draft_revision_id ?? "—"}</code>.
+                </p>
+              ) : null}
+            </div>
           </div>
-          {detail !== null && actions.nextStepHint.length > 0 ? (
-            <p className="cp-note" aria-live="polite" style={{ marginTop: 8, fontWeight: 600 }}>
-              Next step: {actions.nextStepHint}
-            </p>
-          ) : null}
-          <p className="cp-note" style={{ marginTop: 8 }}>
-            Pre-Check analyses code TA dependencies through Embedded System Packages. C.D.P creates a
-            Draft Package, not an approved package.
-          </p>
 
-          {create.isError ? (
-            <p role="alert" style={alertStyle}>
-              {mutationErrorText(create.error)}
-            </p>
-          ) : null}
-          {create.data ? (
-            <p aria-live="polite" style={liveStyle}>
-              Request created — <code>{create.data.request_id}</code> ({create.data.state}).
-            </p>
-          ) : null}
-          {generate.isError ? (
-            <p role="alert" style={alertStyle}>
-              {mutationErrorText(generate.error)}
-            </p>
-          ) : null}
-          {draft.isError ? (
-            <p role="alert" style={alertStyle}>
-              {mutationErrorText(draft.error)}
-            </p>
-          ) : null}
-          {draft.data ? (
-            <p aria-live="polite" style={liveStyle}>
-              Draft created — revision <code>{draft.data.draft_revision_id ?? "—"}</code>.
-            </p>
-          ) : null}
-        </div>
+          <div className="cp-section-title">Draft Package Files</div>
+          <DraftFiles detail={detail} />
+        </section>
+
+        <aside>
+          <SidePanel detail={detail} />
+        </aside>
       </div>
-
-      <div className="cp-section-title">Draft Package Files</div>
-      <DraftFiles detail={detail} />
 
       {precheckOpen && detail !== null ? (
         <PreCheckModal detail={detail} onClose={() => setPrecheckOpen(false)} />
       ) : null}
-    </form>
+    </div>
   );
 }
 
@@ -693,10 +713,12 @@ function DraftFiles({ detail }: { detail: PackageRequestDetail | null }) {
 }
 
 // ---------------------------------------------------------------------------
-// Right column panels.
+// Right column — a single Package Status side panel (mockup §3 aside). The state
+// summary sits at the top; Baseline, Resolver, Validation Tests and the Library
+// Target follow as section-titled blocks inside the one panel body.
 // ---------------------------------------------------------------------------
 
-function StatusPanel({ detail }: { detail: PackageRequestDetail | null }) {
+function SidePanel({ detail }: { detail: PackageRequestDetail | null }) {
   return (
     <div className="cp-panel" aria-label="Package status">
       <div className="cp-panel-head">
@@ -704,83 +726,115 @@ function StatusPanel({ detail }: { detail: PackageRequestDetail | null }) {
         <span className="cp-sub">{detail ? detail.request_id : "Not created"}</span>
       </div>
       <div className="cp-panel-body">
-        {detail === null ? (
-          <EmptyState title="No request" description="Compose a request to see its status." />
+        <StateCard detail={detail} />
+        {detail !== null ? (
+          <>
+            <BaselineSection detail={detail} />
+            <ResolverSection detail={detail} />
+            <ValidationSection detail={detail} />
+            <LibraryTargetSection detail={detail} />
+          </>
         ) : (
-          <div className="cp-status-card" style={{ marginBottom: 0 }}>
-            <div className="cp-status-row">
-              <span className="cp-status-label">Type</span>
-              <span>{prettyToken(detail.package_type)}</span>
-            </div>
-            <div className="cp-status-row">
-              <span className="cp-status-label">Version</span>
-              <span>{detail.request_version}</span>
-            </div>
-            <div className="cp-status-row">
-              <span className="cp-status-label">Status</span>
-              <StatusBadge tone={requestStateTone(detail.state)} label={prettyToken(detail.state)} />
-            </div>
-            <div className="cp-status-row">
-              <span className="cp-status-label">Target Library</span>
-              <span>{targetLibrary(detail.package_type)}</span>
-            </div>
-            <div className="cp-status-row">
-              <span className="cp-status-label">TA Pre-Check</span>
-              <span>
-                {detail.current_scan ? (
-                  <StatusBadge
-                    tone={scanStatusTone(detail.current_scan.status)}
-                    label={`${prettyToken(detail.current_scan.status)}${
-                      detail.precheck_fresh ? "" : " · stale"
-                    }`}
-                  />
-                ) : (
-                  "Not Checked"
-                )}
-              </span>
-            </div>
-            <div className="cp-status-row">
-              <span className="cp-status-label">Candidate</span>
-              <span>
-                {detail.can_generate_candidate
-                  ? "Ready"
-                  : detail.draft_revision_id
-                    ? "Drafted"
-                    : "Not ready"}
-              </span>
-            </div>
-            <div className="cp-status-row">
-              <span className="cp-status-label">Draft</span>
-              <span>{detail.draft_revision_id ? "Present" : "—"}</span>
-            </div>
-            <div className="cp-status-row">
-              <span className="cp-status-label">Validation</span>
-              <span>
-                {detail.current_validation_run ? (
-                  <StatusBadge
-                    tone={validationRunTone(detail.current_validation_run.status)}
-                    label={`${prettyToken(detail.current_validation_run.status)}${
-                      detail.validation_fresh ? "" : " · stale"
-                    }`}
-                  />
-                ) : (
-                  "—"
-                )}
-              </span>
-            </div>
-          </div>
+          <p className="cp-note" style={{ marginTop: 12 }}>
+            Create or select a request to reveal Baseline, Resolver, Validation Tests and the
+            Library Target.
+          </p>
         )}
       </div>
     </div>
   );
 }
 
+// The Package Status state summary card (mockup .cp-state-card). Before a request
+// exists the rows show canonical placeholders; once one is selected each value is
+// driven by its server projection.
+function StateCard({ detail }: { detail: PackageRequestDetail | null }) {
+  return (
+    <div className="cp-status-card" style={{ marginBottom: 0 }}>
+      <div className="cp-status-row">
+        <span className="cp-status-label">Package Name</span>
+        <span>{detail?.package_root_id ?? "—"}</span>
+      </div>
+      <div className="cp-status-row">
+        <span className="cp-status-label">Type</span>
+        <span>{detail ? prettyToken(detail.package_type) : "—"}</span>
+      </div>
+      <div className="cp-status-row">
+        <span className="cp-status-label">Version</span>
+        <span>{detail ? detail.request_version : "—"}</span>
+      </div>
+      <div className="cp-status-row">
+        <span className="cp-status-label">Status</span>
+        <span>
+          {detail ? (
+            <StatusBadge tone={requestStateTone(detail.state)} label={prettyToken(detail.state)} />
+          ) : (
+            <span className="cp-inactive-text">Not Created</span>
+          )}
+        </span>
+      </div>
+      <div className="cp-status-row">
+        <span className="cp-status-label">Target Library</span>
+        <span>{detail ? targetLibrary(detail.package_type) : "—"}</span>
+      </div>
+      <div className="cp-status-row">
+        <span className="cp-status-label">TA Pre-Check</span>
+        <span>
+          {detail?.current_scan ? (
+            <StatusBadge
+              tone={scanStatusTone(detail.current_scan.status)}
+              label={`${prettyToken(detail.current_scan.status)}${
+                detail.precheck_fresh ? "" : " · stale"
+              }`}
+            />
+          ) : (
+            "Not Checked"
+          )}
+        </span>
+      </div>
+      {detail !== null ? (
+        <>
+          <div className="cp-status-row">
+            <span className="cp-status-label">Candidate</span>
+            <span>
+              {detail.can_generate_candidate
+                ? "Ready"
+                : detail.draft_revision_id
+                  ? "Drafted"
+                  : "Not ready"}
+            </span>
+          </div>
+          <div className="cp-status-row">
+            <span className="cp-status-label">Draft</span>
+            <span>{detail.draft_revision_id ? "Present" : "—"}</span>
+          </div>
+          <div className="cp-status-row">
+            <span className="cp-status-label">Validation</span>
+            <span>
+              {detail.current_validation_run ? (
+                <StatusBadge
+                  tone={validationRunTone(detail.current_validation_run.status)}
+                  label={`${prettyToken(detail.current_validation_run.status)}${
+                    detail.validation_fresh ? "" : " · stale"
+                  }`}
+                />
+              ) : (
+                "—"
+              )}
+            </span>
+          </div>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
 // Baseline (equivalence evidence) — doc 06 §4.4/§8.3. Real TradingView CSV: the
-// file is read as UTF-8 text in the browser (raw bytes never travel; the server
-// stores a content-addressed digest + parse report) and fed to the same
-// useUploadBaseline hook. A package claiming translation/repair/equivalence may
-// publish only with a PASSED baseline parse.
-function BaselinePanel({ detail }: { detail: PackageRequestDetail }) {
+// file is transferred as multipart bytes (raw bytes never travel as pasted text;
+// the server stores a content-addressed digest + parse report) and fed to the
+// same useUploadBaseline hook. A package claiming translation/repair/equivalence
+// may publish only with a PASSED baseline parse.
+function BaselineSection({ detail }: { detail: PackageRequestDetail }) {
   const upload = useUploadBaseline();
   const parse = useStartBaselineParse();
   const [file, setFile] = useState<File | null>(null);
@@ -825,195 +879,232 @@ function BaselinePanel({ detail }: { detail: PackageRequestDetail }) {
   }
 
   return (
-    <div className="cp-panel">
-      <div className="cp-panel-head">
-        <span>TradingView Baseline / Comparison Report</span>
+    <>
+      <div className="cp-section-title">TradingView Baseline / Comparison Report</div>
+      <p className="cp-note" style={{ marginTop: 0 }}>
+        {detail.baseline_required
+          ? "This request claims equivalence — a PASSED baseline parse is required to publish."
+          : "This request does not claim equivalence — a baseline is optional."}
+      </p>
+
+      <div className="cp-baseline-upload">
+        <span>
+          {file
+            ? `${file.name} selected (${file.size} bytes)`
+            : baseline
+              ? `${baseline.original_filename ?? "baseline.csv"} uploaded`
+              : "No baseline CSV selected."}
+        </span>
+        <input
+          type="file"
+          accept=".csv,text/csv"
+          aria-label="TradingView baseline CSV file"
+          onChange={onFile}
+        />
       </div>
-      <div className="cp-panel-body">
-        <p className="cp-note" style={{ marginTop: 0 }}>
-          {detail.baseline_required
-            ? "This request claims equivalence — a PASSED baseline parse is required to publish."
-            : "This request does not claim equivalence — a baseline is optional."}
-        </p>
 
-        <div className="cp-baseline-upload">
-          <span>
-            {file
-              ? `${file.name} selected (${file.size} bytes)`
-              : baseline
-                ? `${baseline.original_filename ?? "baseline.csv"} uploaded`
-                : "No baseline CSV selected."}
-          </span>
-          <input
-            type="file"
-            accept=".csv,text/csv"
-            aria-label="TradingView baseline CSV file"
-            onChange={onFile}
-          />
-        </div>
+      {baseline ? (
+        <dl className="kv" style={{ marginTop: 10 }}>
+          <dt>Parse status</dt>
+          <dd>
+            <StatusBadge
+              tone={baselineParseTone(baseline.parse_status)}
+              label={baseline.parse_status}
+            />
+          </dd>
+          <dt>Asset</dt>
+          <dd>
+            <code>{baseline.baseline_asset_id}</code> (attempt {baseline.attempt_no})
+          </dd>
+          <dt>Digest</dt>
+          <dd>
+            <code>{baseline.content_digest ?? "—"}</code>
+          </dd>
+        </dl>
+      ) : null}
 
-        {baseline ? (
-          <dl className="kv" style={{ marginTop: 10 }}>
-            <dt>Parse status</dt>
-            <dd>
-              <StatusBadge
-                tone={baselineParseTone(baseline.parse_status)}
-                label={baseline.parse_status}
-              />
-            </dd>
-            <dt>Asset</dt>
-            <dd>
-              <code>{baseline.baseline_asset_id}</code> (attempt {baseline.attempt_no})
-            </dd>
-            <dt>Digest</dt>
-            <dd>
-              <code>{baseline.content_digest ?? "—"}</code>
-            </dd>
-          </dl>
-        ) : null}
+      <label style={{ display: "block", marginTop: 10 }}>
+        <span className="cp-note">Baseline metadata (JSON)</span>
+        <textarea
+          aria-label="Baseline metadata"
+          value={metadataText}
+          onChange={(e) => setMetadataText(e.target.value)}
+          rows={3}
+          placeholder='{"provider":"…","symbol":"…","timeframe":"…","range":"…"}'
+        />
+      </label>
 
-        <label style={{ display: "block", marginTop: 10 }}>
-          <span className="cp-note">Baseline metadata (JSON)</span>
-          <textarea
-            aria-label="Baseline metadata"
-            value={metadataText}
-            onChange={(e) => setMetadataText(e.target.value)}
-            rows={3}
-            placeholder='{"provider":"…","symbol":"…","timeframe":"…","range":"…"}'
-          />
-        </label>
-
-        <div className="cp-button-row">
-          <button
-            type="button"
-            className="btn"
-            disabled={!actions.uploadBaseline || anyPending || file === null}
-            onClick={onUpload}
-          >
-            {upload.isPending ? "Uploading…" : "Upload CSV"}
-          </button>
-          <button
-            type="button"
-            className="btn"
-            disabled={!actions.parseBaseline || anyPending}
-            onClick={() =>
-              parse.mutate({
-                request_id: detail.request_id,
-                request_version: detail.request_version,
-              })
-            }
-          >
-            {parse.isPending ? "Parsing…" : "Run baseline parse"}
-          </button>
-        </div>
-        <p className="cp-note" style={{ marginTop: 8 }}>
-          The Baseline Comparison Report compares the TradingView CSV signals with the translated
-          runtime output: matched, missing and extra signals, and timing / value mismatch.
-        </p>
-
-        {metadataError ? (
-          <p role="alert" style={alertStyle}>
-            {metadataError}
-          </p>
-        ) : null}
-        {upload.isError ? (
-          <p role="alert" style={alertStyle}>
-            {mutationErrorText(upload.error)}
-          </p>
-        ) : null}
-        {upload.data ? (
-          <p aria-live="polite" style={liveStyle}>
-            Baseline uploaded — asset <code>{upload.data.baseline_asset_id}</code> (
-            {upload.data.size_bytes} bytes).
-          </p>
-        ) : null}
-        {parse.isError ? (
-          <p role="alert" style={alertStyle}>
-            {mutationErrorText(parse.error)}
-          </p>
-        ) : null}
-        {parse.data ? (
-          <p aria-live="polite" style={liveStyle}>
-            Baseline parse {parse.data.parse_status} — parser {parse.data.parser_version}.
-          </p>
-        ) : null}
+      <div className="cp-button-row">
+        <button
+          type="button"
+          className="btn"
+          disabled={!actions.uploadBaseline || anyPending || file === null}
+          onClick={onUpload}
+        >
+          {upload.isPending ? "Uploading…" : "Upload CSV"}
+        </button>
+        <button
+          type="button"
+          className="btn"
+          disabled={!actions.parseBaseline || anyPending}
+          onClick={() =>
+            parse.mutate({
+              request_id: detail.request_id,
+              request_version: detail.request_version,
+            })
+          }
+        >
+          {parse.isPending ? "Parsing…" : "Run baseline parse"}
+        </button>
       </div>
-    </div>
+      <p className="cp-note" style={{ marginTop: 8 }}>
+        The Baseline Comparison Report compares the TradingView CSV signals with the translated
+        runtime output: matched, missing and extra signals, and timing / value mismatch.
+      </p>
+
+      {metadataError ? (
+        <p role="alert" style={alertStyle}>
+          {metadataError}
+        </p>
+      ) : null}
+      {upload.isError ? (
+        <p role="alert" style={alertStyle}>
+          {mutationErrorText(upload.error)}
+        </p>
+      ) : null}
+      {upload.data ? (
+        <p aria-live="polite" style={liveStyle}>
+          Baseline uploaded — asset <code>{upload.data.baseline_asset_id}</code> (
+          {upload.data.size_bytes} bytes).
+        </p>
+      ) : null}
+      {parse.isError ? (
+        <p role="alert" style={alertStyle}>
+          {mutationErrorText(parse.error)}
+        </p>
+      ) : null}
+      {parse.data ? (
+        <p aria-live="polite" style={liveStyle}>
+          Baseline parse {parse.data.parse_status} — parser {parse.data.parser_version}.
+        </p>
+      ) : null}
+    </>
   );
 }
 
 // Pine TA / Embedded System Package resolver — the resolved/missing rows from the
 // current immutable Pre-Check scan (doc 07 §7.1). Each resolved ref pins the exact
 // ESP revision (never name-only/latest); a missing call carries its typed code.
-function ResolverPanel({ detail }: { detail: PackageRequestDetail }) {
+function ResolverSection({ detail }: { detail: PackageRequestDetail }) {
   const scan = detail.current_scan;
   const resolved = scan ? (asRecordArray(scan.resolved) as ResolvedRef[]) : [];
   const missing = scan ? (asRecordArray(scan.missing) as MissingCall[]) : [];
 
   return (
-    <div className="cp-panel">
-      <div className="cp-panel-head">
-        <span>Pine TA / ESP Resolver</span>
-        {scan ? <span className="cp-sub">{prettyToken(scan.status)}</span> : null}
-      </div>
-      <div className="cp-panel-body">
-        {scan === null ? (
-          <p className="cp-note" style={{ marginTop: 0 }}>
-            Run Pre-Check to scan code TA calls (ta.sma, ta.ema, ta.rsi, ta.atr…) against the Embedded
-            System Packages.
-          </p>
-        ) : (
-          <>
-            <div className="cp-file-list">
-              {resolved.length === 0 ? (
-                <div className="cp-file-row cp-inactive-text">
-                  <span>No resolved TA calls.</span>
-                  <span>—</span>
+    <>
+      <div className="cp-section-title">Pine TA / ESP Resolver</div>
+      {scan === null ? (
+        <p className="cp-note" style={{ marginTop: 0 }}>
+          Run Pre-Check to scan code TA calls (ta.sma, ta.ema, ta.rsi, ta.atr…) against the Embedded
+          System Packages.
+        </p>
+      ) : (
+        <>
+          <div className="cp-file-list">
+            {resolved.length === 0 ? (
+              <div className="cp-file-row cp-inactive-text">
+                <span>No resolved TA calls.</span>
+                <span>—</span>
+              </div>
+            ) : (
+              resolved.map((ref, i) => (
+                <div className="cp-file-row" key={`r-${i}`}>
+                  <span>
+                    <code>{ref.call ?? ref.canonical_key ?? "—"}</code>
+                  </span>
+                  <span className="cp-file-purpose">
+                    {ref.embedded_revision_id ? `→ ${ref.embedded_revision_id}` : "resolved"}
+                  </span>
                 </div>
-              ) : (
-                resolved.map((ref, i) => (
-                  <div className="cp-file-row" key={`r-${i}`}>
+              ))
+            )}
+          </div>
+          {missing.length > 0 ? (
+            <>
+              <div className="cp-section-title">Missing dependencies</div>
+              <div className="cp-file-list">
+                {missing.map((call, i) => (
+                  <div className="cp-file-row" key={`m-${i}`}>
                     <span>
-                      <code>{ref.call ?? ref.canonical_key ?? "—"}</code>
+                      <code>{call.call ?? "—"}</code>
                     </span>
-                    <span className="cp-file-purpose">
-                      {ref.embedded_revision_id ? `→ ${ref.embedded_revision_id}` : "resolved"}
-                    </span>
+                    <span className="cp-check-result fail">{call.code ?? "MISSING"}</span>
                   </div>
-                ))
-              )}
-            </div>
-            {missing.length > 0 ? (
-              <>
-                <div className="cp-section-title">Missing dependencies</div>
-                <div className="cp-file-list">
-                  {missing.map((call, i) => (
-                    <div className="cp-file-row" key={`m-${i}`}>
-                      <span>
-                        <code>{call.call ?? "—"}</code>
-                      </span>
-                      <span className="cp-check-result fail">{call.code ?? "MISSING"}</span>
-                    </div>
-                  ))}
-                </div>
-                <p className="cp-note" style={{ marginTop: 8 }}>
-                  Create the missing call as an Embedded System Package in Package Library, then re-run
-                  Pre-Check.
-                </p>
-              </>
-            ) : null}
-          </>
-        )}
-      </div>
-    </div>
+                ))}
+              </div>
+              <p className="cp-note" style={{ marginTop: 8 }}>
+                Create the missing call as an Embedded System Package in Package Library, then re-run
+                Pre-Check.
+              </p>
+            </>
+          ) : null}
+        </>
+      )}
+    </>
   );
 }
 
-// Validation Tests + lifecycle actions (doc 06 §7). The per-check rows come from
-// the immutable current validation run's ``checks``; the buttons run validation,
-// request a revision or approve. Approve is Admin-only SERVER-side (CR-02) — the
-// button is never role-gated; a denial surfaces the canonical envelope verbatim.
-function ValidationPanel({ detail }: { detail: PackageRequestDetail }) {
+// The six canonical v18 §3 validation rows (mockup cpVSyntax…cpVBaseline). Server
+// checks are mapped onto these fixed rows by name; an unmatched row shows NOT
+// STARTED and any surplus server check is appended below so no evidence is hidden.
+const VALIDATION_ROWS: Array<{ label: string; keys: string[] }> = [
+  { label: "Syntax Check", keys: ["syntax", "syntax_check"] },
+  { label: "Runtime Check", keys: ["runtime", "runtime_check"] },
+  {
+    label: "Output Structure Check",
+    keys: ["output_structure", "output", "output_structure_check", "output_contract"],
+  },
+  {
+    label: "Real Market Data Test",
+    keys: ["real_market_data", "real_market_data_test", "market_data", "market"],
+  },
+  {
+    label: "Repaint / Future Leak Review",
+    keys: ["repaint", "future_leak", "repaint_future_leak", "repaint_review", "risk"],
+  },
+  { label: "Baseline Comparison", keys: ["baseline", "baseline_comparison"] },
+];
+
+function normalizeCheckKey(raw: string): string {
+  return raw.trim().toLowerCase().replace(/[\s/-]+/g, "_");
+}
+
+// The raw check status (status/result/passed boolean) reduced to a display token
+// + a cp-check-result tone class — the server's evidence still drives it.
+function checkStatusView(check: Record<string, unknown>): { text: string; tone: string } {
+  const rawStatus =
+    check.status ??
+    check.result ??
+    (check.passed === true ? "passed" : check.passed === false ? "failed" : null);
+  const status = rawStatus === null || rawStatus === undefined ? "—" : String(rawStatus);
+  const lower = status.toLowerCase();
+  const tone =
+    lower === "passed" || lower === "pass"
+      ? "pass"
+      : lower === "failed" || lower === "fail"
+        ? "fail"
+        : lower === "—"
+          ? ""
+          : "ready";
+  return { text: status === "—" ? "—" : status.toUpperCase(), tone };
+}
+
+// Validation Tests + lifecycle actions (doc 06 §7). The six fixed rows above come
+// from the immutable current validation run's ``checks``; the buttons run
+// validation, request a revision or approve. Approve is Admin-only SERVER-side
+// (CR-02) — the button is never role-gated; a denial surfaces the canonical
+// envelope verbatim.
+function ValidationSection({ detail }: { detail: PackageRequestDetail }) {
   const validate = useRunValidation();
   const revision = useRequestRevision();
   const approve = useApproveRequest();
@@ -1028,165 +1119,163 @@ function ValidationPanel({ detail }: { detail: PackageRequestDetail }) {
   const actions = packageActionAvailability(detail);
   const approvalBlocked = approvalBlockReason(detail);
 
+  // Map each server check to a normalized key; a row claims the first matching
+  // check and surplus checks (no canonical row) are appended below.
+  const claimed = new Set<number>();
+  const rows = VALIDATION_ROWS.map((row) => {
+    const index = checks.findIndex((check, i) => {
+      if (claimed.has(i)) return false;
+      const key = normalizeCheckKey(String(check.name ?? check.check ?? check.id ?? ""));
+      return row.keys.includes(key);
+    });
+    if (index >= 0) claimed.add(index);
+    return { label: row.label, check: index >= 0 ? checks[index] : null };
+  });
+  const surplus = checks
+    .map((check, i) => ({ check, i }))
+    .filter(({ i }) => !claimed.has(i));
+
   return (
-    <div className="cp-panel">
-      <div className="cp-panel-head">
-        <span>Validation Tests</span>
-        {run ? (
-          <span className="cp-sub">
-            {prettyToken(run.status)}
-            {detail.validation_fresh ? "" : " · stale"}
-          </span>
-        ) : null}
-      </div>
-      <div className="cp-panel-body">
-        <div className="cp-validation-list">
-          {checks.length === 0 ? (
-            <div className="cp-validation-row cp-inactive-text">
-              <span>No validation run yet.</span>
-              <span className="cp-check-result">NOT STARTED</span>
+    <>
+      <div className="cp-section-title">Validation Tests</div>
+      <div className="cp-validation-list">
+        {rows.map((row) => {
+          const view = row.check ? checkStatusView(row.check) : { text: "NOT STARTED", tone: "" };
+          return (
+            <div className="cp-validation-row" key={row.label}>
+              <span>{row.label}</span>
+              <span className={`cp-check-result ${view.tone}`}>{view.text}</span>
             </div>
-          ) : (
-            checks.map((check, i) => {
-              const name = String(check.name ?? check.check ?? check.id ?? `Check ${i + 1}`);
-              const status = String(check.status ?? check.result ?? "—");
-              const tone =
-                status === "passed" || status === "pass"
-                  ? "pass"
-                  : status === "failed" || status === "fail"
-                    ? "fail"
-                    : "ready";
-              return (
-                <div className="cp-validation-row" key={`c-${i}`}>
-                  <span>{prettyToken(name)}</span>
-                  <span className={`cp-check-result ${tone}`}>{status.toUpperCase()}</span>
-                </div>
-              );
-            })
-          )}
-        </div>
-
-        <label style={{ display: "block", marginTop: 10 }}>
-          <span className="cp-note">Approval note (optional)</span>
-          <input
-            aria-label="Approval note"
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            placeholder="Recorded on the approval decision…"
-          />
-        </label>
-
-        <div className="cp-button-row">
-          <button
-            type="button"
-            className="btn btn-primary"
-            disabled={!actions.runValidation || anyPending}
-            onClick={() =>
-              validate.mutate({
-                request_id: detail.request_id,
-                request_version: detail.request_version,
-              })
-            }
-          >
-            {validate.isPending ? "Running validation…" : "Run Validation Tests"}
-          </button>
-          <button
-            type="button"
-            className="btn"
-            disabled={!actions.requestRevision || anyPending}
-            onClick={() =>
-              revision.mutate({
-                request_id: detail.request_id,
-                request_version: detail.request_version,
-              })
-            }
-          >
-            {revision.isPending ? "Requesting revision…" : "Request Revision"}
-          </button>
-          <button
-            type="button"
-            className="btn"
-            disabled={!actions.approve || anyPending}
-            onClick={() =>
-              approve.mutate({
-                request_id: detail.request_id,
-                expected_head_revision_id: detail.draft_revision_id,
-                note: note.trim().length > 0 ? note.trim() : null,
-              })
-            }
-          >
-            {approve.isPending ? "Approving…" : "Approve Package"}
-          </button>
-        </div>
-        {/* Explain the approval gate when eligible but still blocked (stale
-            evidence / missing baseline), and why approval is locked before
-            eligibility — so a user never guesses at a disabled Approve button. */}
-        {approvalBlocked !== null ? (
-          <p className="cp-note" style={{ marginTop: 8 }}>
-            {approvalBlocked}
-          </p>
-        ) : !actions.approve && detail.state !== "approved" ? (
-          <p className="cp-note" style={{ marginTop: 8 }}>
-            Approval unlocks after a passed validation run moves the request to
-            eligible for approval — a draft cannot be approved directly.
-          </p>
-        ) : null}
-
-        {validate.isError ? (
-          <p role="alert" style={alertStyle}>
-            {mutationErrorText(validate.error)}
-          </p>
-        ) : null}
-        {validate.data ? (
-          <p aria-live="polite" style={liveStyle}>
-            Validation {validate.data.status} — run <code>{validate.data.validation_run_id}</code> →{" "}
-            {prettyToken(validate.data.state)}.
-          </p>
-        ) : null}
-        {revision.isError ? (
-          <p role="alert" style={alertStyle}>
-            {mutationErrorText(revision.error)}
-          </p>
-        ) : null}
-        {revision.data ? (
-          <p aria-live="polite" style={liveStyle}>
-            Revision requested — {prettyToken(revision.data.state)}.
-          </p>
-        ) : null}
-        {approve.isError ? (
-          <p role="alert" style={alertStyle}>
-            {mutationErrorText(approve.error)}
-          </p>
-        ) : null}
-        {approve.data ? (
-          <p aria-live="polite" style={liveStyle}>
-            Approved &amp; published — revision <code>{approve.data.revision_id ?? "—"}</code> (
-            {approve.data.visibility_scope}).
-          </p>
-        ) : null}
+          );
+        })}
+        {surplus.map(({ check, i }) => {
+          const name = String(check.name ?? check.check ?? check.id ?? `Check ${i + 1}`);
+          const view = checkStatusView(check);
+          return (
+            <div className="cp-validation-row" key={`surplus-${i}`}>
+              <span>{prettyToken(name)}</span>
+              <span className={`cp-check-result ${view.tone}`}>{view.text}</span>
+            </div>
+          );
+        })}
       </div>
-    </div>
+
+      <label style={{ display: "block", marginTop: 10 }}>
+        <span className="cp-note">Approval note (optional)</span>
+        <input
+          aria-label="Approval note"
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          placeholder="Recorded on the approval decision…"
+        />
+      </label>
+
+      <div className="cp-button-row">
+        <button
+          type="button"
+          className="btn btn-primary"
+          disabled={!actions.runValidation || anyPending}
+          onClick={() =>
+            validate.mutate({
+              request_id: detail.request_id,
+              request_version: detail.request_version,
+            })
+          }
+        >
+          {validate.isPending ? "Running validation…" : "Run Validation Tests"}
+        </button>
+        <button
+          type="button"
+          className="btn"
+          disabled={!actions.approve || anyPending}
+          onClick={() =>
+            approve.mutate({
+              request_id: detail.request_id,
+              expected_head_revision_id: detail.draft_revision_id,
+              note: note.trim().length > 0 ? note.trim() : null,
+            })
+          }
+        >
+          {approve.isPending ? "Approving…" : "Approve Package"}
+        </button>
+        <button
+          type="button"
+          className="btn"
+          disabled={!actions.requestRevision || anyPending}
+          onClick={() =>
+            revision.mutate({
+              request_id: detail.request_id,
+              request_version: detail.request_version,
+            })
+          }
+        >
+          {revision.isPending ? "Requesting revision…" : "Request Revision"}
+        </button>
+      </div>
+      {/* Explain the approval gate when eligible but still blocked (stale
+          evidence / missing baseline), and why approval is locked before
+          eligibility — so a user never guesses at a disabled Approve button. */}
+      {approvalBlocked !== null ? (
+        <p className="cp-note" style={{ marginTop: 8 }}>
+          {approvalBlocked}
+        </p>
+      ) : !actions.approve && detail.state !== "approved" ? (
+        <p className="cp-note" style={{ marginTop: 8 }}>
+          Approval unlocks after a passed validation run moves the request to eligible for approval
+          — a draft cannot be approved directly.
+        </p>
+      ) : null}
+
+      {validate.isError ? (
+        <p role="alert" style={alertStyle}>
+          {mutationErrorText(validate.error)}
+        </p>
+      ) : null}
+      {validate.data ? (
+        <p aria-live="polite" style={liveStyle}>
+          Validation {validate.data.status} — run <code>{validate.data.validation_run_id}</code> →{" "}
+          {prettyToken(validate.data.state)}.
+        </p>
+      ) : null}
+      {revision.isError ? (
+        <p role="alert" style={alertStyle}>
+          {mutationErrorText(revision.error)}
+        </p>
+      ) : null}
+      {revision.data ? (
+        <p aria-live="polite" style={liveStyle}>
+          Revision requested — {prettyToken(revision.data.state)}.
+        </p>
+      ) : null}
+      {approve.isError ? (
+        <p role="alert" style={alertStyle}>
+          {mutationErrorText(approve.error)}
+        </p>
+      ) : null}
+      {approve.data ? (
+        <p aria-live="polite" style={liveStyle}>
+          Approved &amp; published — revision <code>{approve.data.revision_id ?? "—"}</code> (
+          {approve.data.visibility_scope}).
+        </p>
+      ) : null}
+    </>
   );
 }
 
-function LibraryTargetPanel({ detail }: { detail: PackageRequestDetail }) {
+function LibraryTargetSection({ detail }: { detail: PackageRequestDetail }) {
   const approved = detail.state === "approved" || detail.state === "published";
   return (
-    <div className="cp-panel">
-      <div className="cp-panel-head">
-        <span>Package Library Target</span>
+    <>
+      <div className="cp-section-title">Package Library Target</div>
+      <div className="cp-target-pool">
+        <span>{targetLibrary(detail.package_type)}</span>
+        {approved ? (
+          <StatusBadge tone="ok" label={prettyToken(detail.state)} />
+        ) : (
+          <span className="cp-inactive-text">Awaiting approval</span>
+        )}
       </div>
-      <div className="cp-panel-body">
-        <div className="cp-target-pool">
-          <span>{targetLibrary(detail.package_type)}</span>
-          {approved ? (
-            <StatusBadge tone="ok" label={prettyToken(detail.state)} />
-          ) : (
-            <span className="cp-inactive-text">Awaiting approval</span>
-          )}
-        </div>
-      </div>
-    </div>
+    </>
   );
 }
 

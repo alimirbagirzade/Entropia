@@ -17,6 +17,7 @@ import {
   type DerivedAmounts,
   type RevisionResult,
   type SaveDraftResult,
+  type SleeveAmount,
   type SyncPreview,
   allocationStateLabel,
   allocationStateTone,
@@ -63,6 +64,26 @@ interface EntryRow {
   item_type: string;
   active: boolean;
   share: string;
+}
+
+// Friendly labels for the server-DERIVED MainboardItemKind (§8.2). The Type
+// column in the sleeve table shows these (mockup "Strategy / Trading Signal /
+// Trade Log"); an unknown token falls back to its raw wire value.
+const ITEM_TYPE_LABELS: Record<string, string> = {
+  strategy: "Strategy",
+  trading_signal: "Trading Signal",
+  trade_log: "Trade Log",
+};
+
+function itemTypeLabel(itemType: string): string {
+  return ITEM_TYPE_LABELS[itemType] ?? itemType;
+}
+
+// Per-item sleeve capital rendered VERBATIM from the server derivation (never
+// recomputed client-side, doc 13 §8.3) — appends the pool currency when known.
+function sleeveCapitalText(sleeve: SleeveAmount | undefined, currency: string | null): string {
+  if (!sleeve) return EM_DASH;
+  return currency ? `${sleeve.initial_sleeve_capital} ${currency}` : sleeve.initial_sleeve_capital;
 }
 
 // Portfolio / Equity Allocation (Stage 4a, doc 13). Editor of the mutable
@@ -349,7 +370,12 @@ function DraftEditor({
           <div className="portfolio-card">
             <div className="section-title-upper">2. Equity allocation</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-              <EntriesTable entries={entries} onChange={setEntries} disabled={!enabled} />
+              <EntriesTable
+                entries={entries}
+                onChange={setEntries}
+                disabled={!enabled}
+                derived={previewDerived}
+              />
               <CandidatePicker
                 candidates={candidates}
                 totalCandidates={data.candidate_items.length}
@@ -376,7 +402,10 @@ function DraftEditor({
             {!enabled ? (
               <p className="alloc-muted">Not in use.</p>
             ) : previewDerived ? (
-              <CalculationPreview derived={previewDerived} />
+              <>
+                <CalculationPreview derived={previewDerived} />
+                <AllocationExampleText derived={previewDerived} />
+              </>
             ) : (
               <EmptyState
                 glyph="Σ"
@@ -477,14 +506,45 @@ function CalculationPreview({ derived }: { derived: DerivedAmounts }) {
   );
 }
 
+// Live example line (mockup #allocationExampleText). Built from the SERVER
+// derivation's first active sleeve — the sleeve capital and share are rendered
+// verbatim, never recomputed client-side (doc 13 §8.3). With no active sleeve
+// yet, the mockup's neutral placeholder stands in.
+function AllocationExampleText({ derived }: { derived: DerivedAmounts }) {
+  const sleeve = derived.sleeves[0];
+  if (!sleeve) {
+    return (
+      <p className="portfolio-allocation-note">
+        Allocation preview appears here when shared Equity Allocation is enabled.
+      </p>
+    );
+  }
+  return (
+    <p className="portfolio-allocation-note">
+      <b>Example:</b> <code>{sleeve.composition_item_id}</code> gets{" "}
+      {sleeve.equity_share_percent}% of the shared pool:{" "}
+      {sleeveCapitalText(sleeve, derived.currency)}. Position Sizing uses this allocated capital as
+      its base.
+    </p>
+  );
+}
+
+// Per-item equity sleeve rows (mockup Card 2 "2. EQUITY ALLOCATION" — the
+// Active | Item | Type | Equity Share | Capital | Sizing Base grid). The Item
+// column carries composition_item_id (the wire binding key, §8.2) and Type its
+// server-derived kind; the Capital column shows the server-DERIVED per-sleeve
+// amount verbatim (never recomputed here), and Sizing Base is the fixed
+// "Allocation" base the mockup renders for every allocated sleeve.
 function EntriesTable({
   entries,
   onChange,
   disabled,
+  derived,
 }: {
   entries: EntryRow[];
   onChange: (next: EntryRow[]) => void;
   disabled: boolean;
+  derived: DerivedAmounts | null;
 }) {
   if (entries.length === 0) {
     return (
@@ -495,26 +555,27 @@ function EntriesTable({
       />
     );
   }
+  const sleeveByItem = new Map(
+    (derived?.sleeves ?? []).map((sleeve) => [sleeve.composition_item_id, sleeve]),
+  );
   const update = (id: string, patch: Partial<EntryRow>) =>
     onChange(entries.map((row) => (row.composition_item_id === id ? { ...row, ...patch } : row)));
   return (
     <table className="metrics-table">
       <thead>
         <tr>
+          <th>Active</th>
           <th>Item</th>
           <th>Type</th>
-          <th>Active</th>
           <th>Equity share %</th>
+          <th>Capital</th>
+          <th>Sizing base</th>
           <th />
         </tr>
       </thead>
       <tbody>
         {entries.map((row) => (
           <tr key={row.composition_item_id}>
-            <td>
-              <code>{row.composition_item_id}</code>
-            </td>
-            <td>{row.item_type}</td>
             <td>
               <input
                 type="checkbox"
@@ -525,6 +586,10 @@ function EntriesTable({
               />
             </td>
             <td>
+              <code>{row.composition_item_id}</code>
+            </td>
+            <td>{itemTypeLabel(row.item_type)}</td>
+            <td>
               <input
                 aria-label={`share ${row.composition_item_id}`}
                 value={row.share}
@@ -533,6 +598,12 @@ function EntriesTable({
                 onChange={(event) => update(row.composition_item_id, { share: event.target.value })}
               />
             </td>
+            <td>
+              {/* Server-derived sleeve capital, verbatim; EM_DASH until a Save
+                  or Validate has computed one (never recomputed client-side). */}
+              {sleeveCapitalText(sleeveByItem.get(row.composition_item_id), derived?.currency ?? null)}
+            </td>
+            <td>Allocation</td>
             <td>
               {/* Removal is applied by the explicit Save PUT — never silently (§14#9). */}
               <button

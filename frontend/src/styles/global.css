@@ -460,24 +460,24 @@ a:hover { text-decoration: underline; }
   padding: 24px;
   background: var(--bg);
 }
-.auth-card { width: 100%; max-width: 380px; }
+.auth-card { width: 100%; max-width: 340px; }
 .auth-tabs {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 4px;
-  padding: 4px;
-  margin-bottom: 20px;
+  padding: 3px;
+  margin-bottom: 16px;
   border-radius: var(--radius);
   background: var(--bg-elev-2);
   border: 1px solid var(--border);
 }
 .auth-tab {
-  padding: 8px;
+  padding: 6px;
   border: 0;
   border-radius: var(--radius);
   background: transparent;
   color: var(--text-dim);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   cursor: pointer;
 }
@@ -505,6 +505,22 @@ a:hover { text-decoration: underline; }
   font-size: 13px;
 }
 .auth-submit { width: 100%; margin-top: 4px; }
+
+/* v18 §auth-popover chrome — the prototype has no full-page login, so the
+   standalone /login card adopts the popover's compact density: bold small
+   labels, thin inputs, on the 10.5px shell scale. Scoped to .auth-card so the
+   shared .auth-field/.auth-input primitives (Portfolio/UserManual/History)
+   keep their own local metrics untouched. */
+.auth-card .auth-field { gap: 3px; margin-bottom: 11px; }
+.auth-card .auth-field > span {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+.auth-card .auth-optional { font-weight: 400; letter-spacing: 0; }
+.auth-card .auth-input { padding: 5px 8px; font-size: 12px; }
+.auth-card .auth-hint { font-size: 11px; }
+.auth-card .auth-error { margin: 4px 0 12px; padding: 7px 10px; font-size: 12px; }
 
 /* Create Package compose form (doc 06 §4): a two-column field grid that
    collapses to one column on narrow viewports. */
@@ -1037,9 +1053,59 @@ a:hover { text-decoration: underline; }
   margin: 0 0 2px;
 }
 
-/* Packed field grid so the structured form reads like the mockup's columns. */
-.strategy-form-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
-@media (max-width: 720px) { .strategy-form-grid { grid-template-columns: 1fr; } }
+/* v18 §2 prototype: fields stack vertically inside each numbered .detail-card
+   (the three top-level columns already carry the horizontal split), so each
+   row is a horizontal label | control pair (mockup .field-row). Used only by
+   the Strategy Details editor forms. */
+.strategy-form-grid { display: grid; gap: 8px; grid-template-columns: 1fr; }
+/* Conditional layout spacers (empty aria-hidden cells) collapse in a stack. */
+.strategy-form-grid > .cp-field[aria-hidden="true"] { display: none; }
+
+/* Field row (mockup .field-row / .sd-input / .sd-select / .required-hint /
+   .inline-unit) — themed with app CSS variables, never the prototype's raw hex. */
+.field-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 190px) minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+.field-row.wide-label { grid-template-columns: minmax(140px, 220px) minmax(0, 1fr); }
+.field-row.cp-wide { grid-column: 1 / -1; }
+.field-row > .field-head > label { font-weight: 600; color: var(--text); }
+@media (max-width: 720px) {
+  .field-row,
+  .field-row.wide-label { grid-template-columns: 1fr; }
+}
+.sd-input,
+.sd-select {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 7px 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elev);
+  color: var(--text);
+  font-size: 13px;
+  font-family: inherit;
+}
+.sd-input:disabled,
+.sd-select:disabled { opacity: 0.6; cursor: not-allowed; }
+.sd-input[readonly] { background: var(--bg-elev-2); color: var(--text-dim); cursor: default; }
+.sd-input.small-number { max-width: 130px; }
+.inline-fields { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.inline-fields .sd-input { width: auto; min-width: 90px; }
+.inline-unit { font-size: 13px; font-weight: 700; color: var(--text-dim); }
+.required-hint { color: var(--down); font-weight: 800; }
+.checkbox-field { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.checkbox-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--text);
+  cursor: pointer;
+}
 
 /* Compact label + control field row (mockup .field-row / .sd-input / .sd-select) —
    the dense two-column form primitive shared by the numbered detail cards. */
@@ -1433,6 +1499,41 @@ a:hover { text-decoration: underline; }
 }
 .cp-inactive-text { color: var(--text-faint); }
 
+/* ---- v18 Create Package: controls + identity/compatibility grid (mockup §3) ---- */
+.cp-page { display: block; }
+.cp-identity-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.cp-controls-row label,
+.cp-identity-grid label { display: flex; flex-direction: column; gap: 6px; }
+.cp-controls-row label > span,
+.cp-identity-grid label > span {
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.cp-controls-row select,
+.cp-controls-row input,
+.cp-identity-grid select,
+.cp-identity-grid input {
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg-elev);
+  color: var(--text);
+  font-size: 13px;
+  font-family: inherit;
+}
+.cp-controls-row select:disabled,
+.cp-identity-grid select:disabled { opacity: 0.6; cursor: not-allowed; }
+.cp-controls-row label > .cp-note,
+.cp-identity-grid label > .cp-note { align-self: flex-start; margin-top: 2px; }
+
 /* ---- v18 Mainboard: small Add Package popover (mockup .package-picker-popover) ---- */
 .cp-popover-anchor { position: relative; display: inline-block; }
 .package-picker-popover {
@@ -1484,6 +1585,19 @@ a:hover { text-decoration: underline; }
 .alloc-workspace-disabled button { cursor: not-allowed; }
 
 .alloc-muted { font-size: 13px; color: var(--text-dim); margin: 0; }
+
+/* Live example line (mockup .portfolio-allocation-note) — accent left border,
+   subtle tinted panel; theme-aware via the accent token. */
+.portfolio-allocation-note {
+  font-size: 12px;
+  line-height: 1.45;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  padding: 8px 10px;
+  margin: 10px 0 0;
+  color: var(--text);
+}
 
 .alloc-confirm-box {
   border: 1px solid var(--warn);
@@ -2060,3 +2174,120 @@ a:hover { text-decoration: underline; }
   font-family: inherit;
 }
 .rd-col textarea { min-height: 72px; resize: vertical; }
+
+/* v18 §4 dataset setup shell (mockup renderMarketDataUploader /
+   renderResearchDataUploader) — themed with app CSS variables, never the
+   prototype's raw hex. Shared by Market Data + Research Data setup forms. */
+.data-setup-shell {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  margin-bottom: 12px;
+  background: var(--bg-elev);
+}
+.data-setup-heading {
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+  margin-bottom: 12px;
+}
+.data-setup-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+.data-setup-column { min-width: 0; }
+.data-column-title {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 10px;
+}
+.data-upload-box {
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  background: var(--bg-elev-2);
+}
+.data-upload-filename {
+  display: inline-block;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.data-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+.data-field > label { font-weight: 600; color: var(--text); }
+.data-field input,
+.data-field select,
+.data-field textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elev);
+  color: var(--text);
+  font-size: 13px;
+  font-family: inherit;
+}
+.data-field textarea { min-height: 64px; resize: vertical; }
+.data-preview-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  background: var(--bg-elev-2);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+.data-quality-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.data-quality-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.data-inline-note {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+.data-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.data-compact-help { margin-top: 8px; font-size: 12px; color: var(--text-dim); }
+.dataset-status-pill {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--text-dim);
+  background: var(--bg-elev-2);
+}

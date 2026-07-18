@@ -296,6 +296,16 @@ describe("Portfolio / Equity Allocation page", () => {
     // The invalidation refetch re-seeds the editor from the new server head
     // (the DRAFT_SAVED head is enabled → the editor badge flips).
     expect(await screen.findByText("shared allocation")).toBeInTheDocument();
+
+    // §6 per-item sleeve row + live example: the Capital cell renders the
+    // SERVER-derived sleeve amount verbatim (never recomputed client-side) with
+    // the fixed Allocation sizing base; the example line names the sleeve's
+    // composition item + share and its server-derived capital.
+    expect(screen.getByText("8100.00 USDT")).toBeInTheDocument();
+    expect(screen.getByText("Allocation")).toBeInTheDocument();
+    expect(
+      screen.getByText(/gets 90% of the shared pool: 8100.00 USDT/),
+    ).toBeInTheDocument();
   });
 
   it("surfaces a stale-draft conflict verbatim", async () => {

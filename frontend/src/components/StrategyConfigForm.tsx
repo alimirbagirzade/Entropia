@@ -60,7 +60,12 @@ function FieldHead({
     <span className="field-head">
       <label htmlFor={id}>
         {label}
-        {required ? <span aria-hidden="true"> *</span> : null}
+        {required ? (
+          <span className="required-hint" aria-hidden="true">
+            {" "}
+            *
+          </span>
+        ) : null}
       </label>
       {panelKey ? <InfoPanel panel={STRATEGY_INFO_PANELS[panelKey]} /> : null}
     </span>
@@ -75,6 +80,7 @@ function TextField({
   panelKey,
   placeholder,
   wide,
+  unit,
 }: {
   label: string;
   value: string;
@@ -83,18 +89,30 @@ function TextField({
   panelKey?: keyof typeof STRATEGY_INFO_PANELS;
   placeholder?: string;
   wide?: boolean;
+  unit?: string;
 }) {
   const id = useId();
+  const input = (
+    <input
+      id={id}
+      className={`sd-input${unit ? " small-number" : ""}`}
+      value={value}
+      placeholder={placeholder}
+      onChange={(event) => onChange(event.target.value)}
+      spellCheck={false}
+    />
+  );
   return (
-    <div className={`cp-field${wide ? " cp-wide" : ""}`}>
+    <div className={`field-row wide-label${wide ? " cp-wide" : ""}`}>
       <FieldHead id={id} label={label} required={required} panelKey={panelKey} />
-      <input
-        id={id}
-        value={value}
-        placeholder={placeholder}
-        onChange={(event) => onChange(event.target.value)}
-        spellCheck={false}
-      />
+      {unit ? (
+        <div className="inline-fields">
+          {input}
+          <span className="inline-unit">{unit}</span>
+        </div>
+      ) : (
+        input
+      )}
     </div>
   );
 }
@@ -118,9 +136,14 @@ function SelectField({
 }) {
   const id = useId();
   return (
-    <div className="cp-field">
+    <div className="field-row wide-label">
       <FieldHead id={id} label={label} required={required} panelKey={panelKey} />
-      <select id={id} value={value} onChange={(event) => onChange(event.target.value)}>
+      <select
+        id={id}
+        className="sd-select"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      >
         {placeholder !== undefined ? <option value="">{placeholder}</option> : null}
         {options.map((option) => (
           <option key={option.value} value={option.value}>
@@ -144,18 +167,16 @@ function CheckboxField({
   panelKey?: keyof typeof STRATEGY_INFO_PANELS;
 }) {
   return (
-    <div className="cp-field cp-wide">
-      <span className="field-head">
-        <label className="checkbox-label">
-          <input
-            type="checkbox"
-            checked={checked}
-            onChange={(event) => onChange(event.target.checked)}
-          />
-          {label}
-        </label>
-        {panelKey ? <InfoPanel panel={STRATEGY_INFO_PANELS[panelKey]} /> : null}
-      </span>
+    <div className="checkbox-field cp-wide">
+      <label className="checkbox-line">
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={(event) => onChange(event.target.checked)}
+        />
+        <span>{label}</span>
+      </label>
+      {panelKey ? <InfoPanel panel={STRATEGY_INFO_PANELS[panelKey]} /> : null}
     </div>
   );
 }
@@ -435,7 +456,8 @@ export function ProtectionStopCard({
         />
         {p.percentage_enabled ? (
           <TextField
-            label="Stop distance %"
+            label="Stop distance"
+            unit="%"
             required
             value={p.percentage_loss}
             onChange={(v) => setProtection({ percentage_loss: v })}
@@ -450,13 +472,15 @@ export function ProtectionStopCard({
         {p.trailing_enabled ? (
           <>
             <TextField
-              label="Trailing distance %"
+              label="Trailing distance"
+              unit="%"
               required
               value={p.trailing_trail}
               onChange={(v) => setProtection({ trailing_trail: v })}
             />
             <TextField
-              label="Activate after profit % (profit lock)"
+              label="Activate after profit (profit lock)"
+              unit="%"
               value={p.trailing_lock_in}
               onChange={(v) => setProtection({ trailing_lock_in: v })}
             />
@@ -527,6 +551,7 @@ export function PositionSizingCard({
         {s.method === "base_position_size" ? (
           <TextField
             label="Base position size"
+            unit="%"
             required
             value={s.base_position_size}
             onChange={(v) => setSizing({ base_position_size: v })}
@@ -536,7 +561,8 @@ export function PositionSizingCard({
         {s.method === "risk_based_sizing" ? (
           <>
             <TextField
-              label="Risk % per trade"
+              label="Risk per trade"
+              unit="%"
               required
               value={s.risk_percentage_per_trade}
               onChange={(v) => setSizing({ risk_percentage_per_trade: v })}
@@ -575,11 +601,13 @@ export function PositionSizingCard({
         />
         <TextField
           label="Min position size"
+          unit="%"
           value={s.min_position_size}
           onChange={(v) => setSizing({ min_position_size: v })}
         />
         <TextField
           label="Max position size"
+          unit="%"
           value={s.max_position_size}
           onChange={(v) => setSizing({ max_position_size: v })}
           panelKey="maxSinglePosition"

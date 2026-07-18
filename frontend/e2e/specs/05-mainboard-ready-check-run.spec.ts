@@ -6,21 +6,22 @@ import { MainboardPage } from "../pages/MainboardPage";
 import { ReadyCheckPage } from "../pages/ReadyCheckPage";
 import { StrategyPage } from "../pages/StrategyPage";
 
-// The composition chain: Strategy creation -> Mainboard attach -> Ready
-// Check -> RUN -> inline result.
+// The composition chain: Strategy creation -> Mainboard draft row -> Ready
+// Check -> RUN.
 //
 // Honest boundary (see README): a schema-valid, RUN-able composition needs an
 // Admin-approved indicator package (Create Package lifecycle, doc 06) pinned
 // into a saved Strategy revision plus an approved Market Data revision — a
-// deep cross-journey seed this suite doesn't set up. This spec instead
-// attaches a generic (non-domain-validated) work object, which is enough to
-// move the composition hash and exercise the real Ready Check / RUN admission
-// endpoints end to end. Per this app's own L4 rule (never fabricate success),
-// we assert that *a* structured outcome comes back from each real call, not a
-// specific verdict — a "blocked"/"not ready" report is as valid a result here
-// as a green one.
+// deep cross-journey seed this suite doesn't set up. "Add Strategy" follows
+// the strategy-editor family (doc 02 §7): it creates an UNSAVED draft row and
+// attaches nothing until the first Save, so the composition hash is unmoved
+// here — the spec still exercises the real draft-create round trip plus the
+// real Ready Check / RUN admission endpoints end to end. Per this app's own
+// L4 rule (never fabricate success), we assert that *a* structured outcome
+// comes back from each real call, not a specific verdict — a "blocked"/"not
+// ready" report is as valid a result here as a green one.
 test.describe("Strategy -> Mainboard -> Ready Check -> RUN", () => {
-  test("creates a strategy draft, attaches a work object, runs Ready Check and requests a RUN", async ({
+  test("creates a strategy draft row, runs Ready Check and requests a RUN", async ({
     page,
   }) => {
     await signUp(page, freshActor("compose"));
@@ -31,11 +32,12 @@ test.describe("Strategy -> Mainboard -> Ready Check -> RUN", () => {
     await strategy.createDraft(`E2E Strategy ${Date.now()}`);
     await strategy.waitForDraftWorkbench();
 
-    // 2) Mainboard attach — generic work object, real create+attach round trip.
+    // 2) Mainboard "Add Strategy" — real POST /strategy-drafts round trip; the
+    // new unsaved draft renders immediately as a horizontal row.
     const mainboard = new MainboardPage(page);
     await mainboard.goto();
     const itemsBefore = await mainboard.compositionItemCount().count();
-    await mainboard.createAndAttachWorkObject("strategy");
+    await mainboard.addStrategyDraft();
     await expect(async () => {
       const itemsAfter = await mainboard.compositionItemCount().count();
       expect(itemsAfter).toBeGreaterThan(itemsBefore);

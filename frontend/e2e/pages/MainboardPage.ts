@@ -1,13 +1,13 @@
 import { expect, type Page } from "@playwright/test";
 
-// Mirrors frontend/src/pages/Mainboard.tsx (doc 01). F-15 removed the raw
-// "Advanced: create work object" composer; the product path to put an item on
-// the Mainboard is the typed "Add Strategy" action, which creates an empty
-// Strategy work object and attaches it as a new inline row (real create +
-// attach round trip — commands/mainboard.py; strategy may omit available_time,
-// and an empty payload is accepted, so the journey stays self-contained with no
-// upstream package/market-data approval chain). Plus the per-item two-step
-// soft-delete ("× Delete" -> "Move to Trash").
+// Mirrors frontend/src/pages/Mainboard.tsx (doc 01). "Add Strategy" follows the
+// strategy-editor family (doc 02 §7): it creates a DRAFT via POST
+// /strategy-drafts — the strat_ root is simultaneously the Mainboard work
+// object, but NO revision exists until the first Save, so nothing attaches at
+// add time. The new draft renders immediately as a horizontal
+// .strategy-package row hosting the inline editor; the first Save attaches the
+// §7.1 mirror revision. Plus the per-row two-step soft-delete
+// ("× Delete" -> "Move to Trash").
 export class MainboardPage {
   constructor(private readonly page: Page) {}
 
@@ -16,43 +16,29 @@ export class MainboardPage {
     await expect(this.page.getByRole("heading", { name: "Mainboard", exact: true })).toBeVisible();
   }
 
-  // Returns the attached work object's root id (read from the attach response's
-  // work_object_root_id) — also the Trash entry's display_name fallback
-  // (queries/trash.py: entry.display_name or entry.entity_id), used by the Trash
-  // spec to find this exact entry without depending on list ordering.
-  async createAndAttachWorkObject(objectKind: "strategy" | "trading_signal" | "trade_log"): Promise<string> {
-    // F-15: only "strategy" is creatable inline from the product Add menu (the
-    // external kinds go through their own TS/TL workbench save). The callers use
-    // "strategy"; guard so a mistaken kind fails loudly rather than silently.
-    if (objectKind !== "strategy") {
-      throw new Error(
-        `createAndAttachWorkObject: only "strategy" is supported via the product Add menu (got "${objectKind}")`,
-      );
-    }
-
-    // "Add Strategy" is a two-request product action: create the work object,
-    // then attach it. Immediately after create, the new root can transiently
-    // 404 on attach (a read-after-write window the old two-click raw path masked
-    // with its UI-render gap). A real user simply clicks "Add Strategy" again, so
-    // retry the whole action until a new row lands — each attempt uses a fresh
-    // Idempotency-Key and creates its own work object, which is fine here (the
-    // journey only needs one attached item on the board).
+  // "Add Strategy" -> a new unsaved strategy draft row. Returns the strategy
+  // root id (from the create response's strategy_root_id) — also the Trash
+  // entry's display identity (soft_delete_work_object records no display_name,
+  // so queries/trash.py falls back to the entity_id), used by the Trash spec to
+  // find this exact entry without depending on list ordering.
+  async addStrategyDraft(): Promise<string> {
+    // Retry the whole action until a new row lands — each attempt uses a fresh
+    // Idempotency-Key and creates its own draft, which is fine here (the
+    // journey only needs one row on the board).
     let rootId = "";
     await expect(async () => {
       const before = await this.compositionItemCount().count();
       await this.page.getByRole("button", { name: "+ Add", exact: true }).click();
-      // Set the waiter up before clicking so we never miss the response; a short
-      // per-response timeout means a failed/absent attach retries fast instead of
-      // hanging the whole step.
-      const attachResponse = this.page.waitForResponse(
-        (r) => /\/mainboards\/[^/]+\/items$/.test(r.url()) && r.request().method() === "POST",
+      // Set the waiter up before clicking so we never miss the response.
+      const createResponse = this.page.waitForResponse(
+        (r) => /\/strategy-drafts$/.test(r.url()) && r.request().method() === "POST",
         { timeout: 10_000 },
       );
       await this.page.getByRole("button", { name: "Add Strategy", exact: true }).click();
-      const response = await attachResponse;
-      expect(response.ok(), `Add Strategy attach HTTP ${response.status()}`).toBeTruthy();
-      rootId = ((await response.json()) as { work_object_root_id: string }).work_object_root_id;
-      // The new row appears after the ["mainboard"] refetch.
+      const response = await createResponse;
+      expect(response.ok(), `Add Strategy create HTTP ${response.status()}`).toBeTruthy();
+      rootId = ((await response.json()) as { strategy_root_id: string }).strategy_root_id;
+      // The new draft row appears after the ["strategy"] drafts refetch.
       expect(await this.compositionItemCount().count()).toBeGreaterThan(before);
     }).toPass({ timeout: 40_000, intervals: [500, 1_000, 2_000, 4_000] });
     return rootId;

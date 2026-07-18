@@ -189,11 +189,8 @@ describe("Research Data page", () => {
     fireEvent.change(screen.getByLabelText(/Linked Market Data entity id/), {
       target: { value: "md_1" },
     });
-    fireEvent.change(screen.getByLabelText(/Display name/), { target: { value: "Fresh research" } });
+    fireEvent.change(screen.getByLabelText(/Dataset Name/), { target: { value: "Fresh research" } });
     fireEvent.change(screen.getByLabelText(/Provider/), { target: { value: "coinglass" } });
-    fireEvent.change(screen.getByLabelText(/Payload/), {
-      target: { value: '{"source": "coinglass"}' },
-    });
     fireEvent.click(screen.getByRole("button", { name: "Create dataset" }));
 
     expect(await screen.findByText("Created — rd_new (draft).")).toBeInTheDocument();
@@ -205,9 +202,16 @@ describe("Research Data page", () => {
     );
     expect(call).toBeDefined();
     const init = call?.[1] as RequestInit;
+    // The v18 §4 descriptive facets fold into the free-form payload; the body
+    // shape is unchanged.
     expect(JSON.parse(String(init.body))).toEqual({
       market_entity_id: "md_1",
-      payload: { source: "coinglass" },
+      payload: {
+        field_meaning: null,
+        instrument_scope: null,
+        frequency: "5m",
+        timezone: "UTC",
+      },
       category: "open_interest",
       usage_scope: "research_backtest",
       // A built-in category carries no custom value (server rejects a stray one).
@@ -242,7 +246,7 @@ describe("Research Data page", () => {
     expect(body.custom_category).toBe("exchange_reserves");
   });
 
-  it("blocks an unparseable payload locally instead of sending it", async () => {
+  it("folds the v18 §4 descriptive facets into the create payload", async () => {
     const fetchMock = stubApi(BASE_ROUTES);
     renderPage();
     await screen.findByText("Binance OI 8h");
@@ -250,12 +254,26 @@ describe("Research Data page", () => {
     fireEvent.change(screen.getByLabelText(/Linked Market Data entity id/), {
       target: { value: "md_1" },
     });
-    fireEvent.change(screen.getByLabelText(/Payload/), { target: { value: "{not json" } });
+    fireEvent.change(screen.getByLabelText(/Field Meaning/), {
+      target: { value: "open interest in USD" },
+    });
+    fireEvent.change(screen.getByLabelText(/Instrument Scope/), {
+      target: { value: "BTCUSDT Perpetual" },
+    });
+    fireEvent.change(screen.getByLabelText(/Frequency/), { target: { value: "8h" } });
     fireEvent.click(screen.getByRole("button", { name: "Create dataset" }));
 
-    expect(await screen.findByText("Payload is not valid JSON.")).toBeInTheDocument();
-    const posted = fetchMock.mock.calls.some(([, init]) => init?.method === "POST");
-    expect(posted).toBe(false);
+    await screen.findByText("Created — rd_new (draft).");
+    const call = fetchMock.mock.calls.find(
+      ([url, init]) => String(url).endsWith("/research-datasets") && init?.method === "POST",
+    );
+    const body = JSON.parse(String((call?.[1] as RequestInit).body));
+    expect(body.payload).toEqual({
+      field_meaning: "open interest in USD",
+      instrument_scope: "BTCUSDT Perpetual",
+      frequency: "8h",
+      timezone: "UTC",
+    });
   });
 
   it("opens the detail with meaning, timing metadata and revision history", async () => {

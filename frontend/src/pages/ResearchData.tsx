@@ -47,26 +47,21 @@ function useCursorStack() {
   };
 }
 
-// Parse an optional JSON-object payload for transport only — an unserializable
-// payload cannot be sent at all. Domain validation stays server-side. Returns the
-// object, or null with the error message set via onError.
-function parseJsonObject(
-  text: string,
-  onError: (message: string) => void,
-): Record<string, unknown> | null {
-  if (text.trim().length === 0) return {};
-  try {
-    const parsed: unknown = JSON.parse(text);
-    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
-      onError("Payload must be a JSON object.");
-      return null;
-    }
-    return parsed as Record<string, unknown>;
-  } catch {
-    onError("Payload is not valid JSON.");
-    return null;
-  }
-}
+// v18 §4 presentation option sets (mockup renderResearchDataUploader). Frequency
+// and timezone are descriptive facets folded into the free-form `payload` at
+// create; the wire body shape is unchanged. Event/available time stay on the
+// revision lifecycle (ResearchLifecycle), not the create command.
+const RESEARCH_FREQUENCIES = [
+  "Event Based",
+  "1m",
+  "5m",
+  "15m",
+  "1h",
+  "8h",
+  "1D",
+  "Provider Native",
+] as const;
+const RESEARCH_TIMEZONES = ["UTC", "Exchange Time", "Custom"] as const;
 
 // Doc 12 §3 workflow strip: the five-step pipeline this page visualizes. The
 // order is documentation-fixed; the real revision status still comes from the
@@ -221,16 +216,23 @@ function SetupCard({
   const [usageScope, setUsageScope] = useState<string>(USAGE_SCOPES[0]);
   const [displayName, setDisplayName] = useState("");
   const [providerName, setProviderName] = useState("");
-  const [payloadText, setPayloadText] = useState("");
-  const [payloadError, setPayloadError] = useState<string | null>(null);
+  const [fieldMeaning, setFieldMeaning] = useState("");
+  const [instrumentScope, setInstrumentScope] = useState("");
+  const [frequency, setFrequency] = useState<string>("5m");
+  const [timezone, setTimezone] = useState<string>(RESEARCH_TIMEZONES[0]);
 
   const isCustom = category === OTHER_CUSTOM_CATEGORY;
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    const payload = parseJsonObject(payloadText, setPayloadError);
-    if (payload === null) return;
-    setPayloadError(null);
+    // v18 §4 descriptive facets fold into the free-form payload — same route,
+    // same body shape, no new headers. Domain validation stays server-side.
+    const payload: Record<string, unknown> = {
+      field_meaning: fieldMeaning.trim() || null,
+      instrument_scope: instrumentScope.trim() || null,
+      frequency,
+      timezone,
+    };
     create.mutate(
       {
         market_entity_id: marketEntityId.trim(),
@@ -263,21 +265,21 @@ function SetupCard({
           <fieldset className="rd-col">
             <legend>SOURCE &amp; MEANING</legend>
             <label htmlFor="rd-display">
-              Display name (optional)
+              Dataset Name <span className="required-hint">*</span>
               <input
                 id="rd-display"
                 value={displayName}
                 onChange={(event) => setDisplayName(event.target.value)}
-                placeholder="Binance Futures Open Interest · 8h"
+                placeholder="e.g. BTCUSDT Open Interest · 5m"
               />
             </label>
             <label htmlFor="rd-provider">
-              Provider (optional)
+              Source / Provider <span className="required-hint">*</span>
               <input
                 id="rd-provider"
                 value={providerName}
                 onChange={(event) => setProviderName(event.target.value)}
-                placeholder="coinglass"
+                placeholder="e.g. Binance Futures API"
               />
             </label>
             <label htmlFor="rd-category">
@@ -306,14 +308,14 @@ function SetupCard({
                 />
               </label>
             ) : null}
-            <label htmlFor="rd-payload">
-              Payload (optional JSON object)
+            <label htmlFor="rd-meaning">
+              Field Meaning <span className="required-hint">*</span>
               <textarea
-                id="rd-payload"
+                id="rd-meaning"
                 rows={3}
-                value={payloadText}
-                onChange={(event) => setPayloadText(event.target.value)}
-                placeholder='{"instrument": "BTCUSDT"}'
+                value={fieldMeaning}
+                onChange={(event) => setFieldMeaning(event.target.value)}
+                placeholder="Briefly define what each key field represents and how it was measured."
               />
             </label>
             <p className="page-sub" style={{ margin: 0 }}>
@@ -340,6 +342,47 @@ function SetupCard({
               link is stored by immutable revision ID, not by displayed name — this is what lets the
               system validate instrument mapping, timeframe compatibility and reproducible backtest
               manifests. Event time and available time are set later, on the revision.
+            </p>
+            <label htmlFor="rd-instrument">
+              Instrument Scope <span className="required-hint">*</span>
+              <input
+                id="rd-instrument"
+                value={instrumentScope}
+                onChange={(event) => setInstrumentScope(event.target.value)}
+                placeholder="e.g. BTCUSDT Perpetual"
+              />
+            </label>
+            <label htmlFor="rd-frequency">
+              Frequency <span className="required-hint">*</span>
+              <select
+                id="rd-frequency"
+                value={frequency}
+                onChange={(event) => setFrequency(event.target.value)}
+              >
+                {RESEARCH_FREQUENCIES.map((value) => (
+                  <option key={value} value={value}>
+                    {value}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label htmlFor="rd-timezone">
+              Timezone <span className="required-hint">*</span>
+              <select
+                id="rd-timezone"
+                value={timezone}
+                onChange={(event) => setTimezone(event.target.value)}
+              >
+                {RESEARCH_TIMEZONES.map((value) => (
+                  <option key={value} value={value}>
+                    {value}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <p className="page-sub" style={{ margin: 0 }}>
+              Frequency and timezone describe the source cadence; the precise event time and available
+              time rules are documented per revision in the lifecycle below.
             </p>
           </fieldset>
 
@@ -381,11 +424,6 @@ function SetupCard({
           ) : null}
         </div>
       </form>
-      {payloadError ? (
-        <p role="alert" style={{ color: "var(--down)" }}>
-          {payloadError}
-        </p>
-      ) : null}
       {create.isError ? (
         <p role="alert" style={{ color: "var(--down)" }}>
           {mutationErrorText(create.error)}

@@ -344,33 +344,65 @@ function ProcessGuide() {
 // Create dataset — Root + first DRAFT revision (workflow entry)
 // ---------------------------------------------------------------------------
 
+// v18 §4 presentation option sets (mockup renderMarketDataUploader). These are
+// display facets folded into the free-form `payload` — the wire body shape
+// (market_data_type / payload / title / instrument_id) is unchanged.
+const MARKETS = ["Crypto", "Forex", "Other"] as const;
+const RESOLUTIONS = ["1m", "5m", "15m", "1h", "1D", "Event Based"] as const;
+const DISPLAY_TIMEZONES = ["UTC", "Exchange Time", "Custom"] as const;
+const RECORD_TIME_BASES = [
+  "Bar Close / End Time",
+  "Bar Open / Start Time",
+  "Event Time",
+] as const;
+
+// Canonical MARKET_DATA_TYPES value → v18 human label (option VALUES stay the
+// canonical server tokens; only the visible text mirrors the mockup).
+const DATA_TYPE_LABELS: Record<string, string> = {
+  ohlcv: "OHLCV",
+  tick_trades: "Tick / Trades",
+  spread_execution: "Spread / Execution",
+};
+
+// The post-create quality checks the analysis/verify pipeline runs (doc 11 §3.1
+// column 3). Static guidance — the real states land on the revision after
+// Analyze; the ribbon + detail reflect live progress.
+const QUALITY_CHECKS = [
+  "Schema mapping",
+  "Time gaps / duplicates",
+  "Price / execution consistency",
+  "Instrument & timezone",
+] as const;
+
+// v18 §4 "MARKET DATASET SETUP" shell (mockup renderMarketDataUploader): a
+// three-column setup form (SOURCE & IDENTITY / TIME & INSTRUMENT / ANALYSIS &
+// USE). The descriptive facets (market, source/provider, resolution, timezone,
+// record-time basis) fold into the create command's free-form `payload`; the
+// wire body shape is unchanged. The raw source file is transferred AFTER create,
+// in the detail Ingest workflow (upload needs the created entity id) — the ribbon
+// step 1 and the detail's Step 1 hold the real <input type="file"> (F-01).
 function CreateDatasetCard({ onCreated }: { onCreated: (entityId: string) => void }) {
   const create = useCreateDataset();
   const [dataType, setDataType] = useState<string>(MARKET_DATA_TYPES[0]);
   const [title, setTitle] = useState("");
+  const [market, setMarket] = useState<string>(MARKETS[0]);
+  const [sourceProvider, setSourceProvider] = useState("");
   const [instrumentId, setInstrumentId] = useState("");
-  const [payloadText, setPayloadText] = useState("");
-  const [payloadError, setPayloadError] = useState<string | null>(null);
+  const [resolution, setResolution] = useState<string>("15m");
+  const [timezone, setTimezone] = useState<string>(DISPLAY_TIMEZONES[0]);
+  const [recordTimeBasis, setRecordTimeBasis] = useState<string>(RECORD_TIME_BASES[0]);
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    // Transport shaping only: an unparseable payload cannot be serialized at
-    // all. Domain validation stays server-side.
-    let payload: Record<string, unknown> = {};
-    if (payloadText.trim().length > 0) {
-      try {
-        const parsed: unknown = JSON.parse(payloadText);
-        if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
-          setPayloadError("Payload must be a JSON object.");
-          return;
-        }
-        payload = parsed as Record<string, unknown>;
-      } catch {
-        setPayloadError("Payload is not valid JSON.");
-        return;
-      }
-    }
-    setPayloadError(null);
+    // Descriptive facets fold into the free-form payload — same route, same body
+    // shape, no new headers. Domain validation stays server-side.
+    const payload: Record<string, unknown> = {
+      market,
+      source_provider: sourceProvider.trim() || null,
+      resolution,
+      timezone,
+      record_time_basis: recordTimeBasis,
+    };
     create.mutate(
       {
         market_data_type: dataType,
@@ -388,55 +420,161 @@ function CreateDatasetCard({ onCreated }: { onCreated: (entityId: string) => voi
         Add market dataset
       </h3>
       <form onSubmit={submit}>
-        <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
-          <label htmlFor="md-type">
-            Market data type
-            <select id="md-type" value={dataType} onChange={(event) => setDataType(event.target.value)}>
-              {MARKET_DATA_TYPES.map((value) => (
-                <option key={value} value={value}>
-                  {value}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label htmlFor="md-title">
-            Title (optional)
-            <input
-              id="md-title"
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              placeholder="Binance Futures Core Universe · 15m OHLCV"
-            />
-          </label>
-          <label htmlFor="md-instrument">
-            Instrument id (optional)
-            <input
-              id="md-instrument"
-              value={instrumentId}
-              onChange={(event) => setInstrumentId(event.target.value)}
-              placeholder="BTCUSDT"
-            />
-          </label>
-          <label htmlFor="md-payload">
-            Payload (optional JSON object)
-            <textarea
-              id="md-payload"
-              rows={3}
-              value={payloadText}
-              onChange={(event) => setPayloadText(event.target.value)}
-              placeholder='{"source": "binance_futures"}'
-            />
-          </label>
+        <div className="data-setup-shell">
+          <div className="data-setup-heading">MARKET DATASET SETUP</div>
+          <div className="data-setup-grid">
+            <section className="data-setup-column" aria-label="Source and identity">
+              <div className="data-column-title">SOURCE &amp; IDENTITY</div>
+              <div className="data-upload-box">
+                <b>
+                  Raw source file <span className="required-hint">*</span>
+                </b>
+                <p className="data-inline-note" style={{ marginTop: 4 }}>
+                  Create the dataset first, then transfer the original CSV/TXT bytes in the Ingest
+                  workflow below (Step 1). The raw source is stored unchanged as evidence.
+                </p>
+              </div>
+              <div className="data-field">
+                <label htmlFor="md-title">
+                  Dataset Name <span className="required-hint">*</span>
+                </label>
+                <input
+                  id="md-title"
+                  value={title}
+                  onChange={(event) => setTitle(event.target.value)}
+                  placeholder="e.g. Binance Futures BTCUSDT · 15m OHLCV"
+                />
+              </div>
+              <div className="data-field">
+                <label htmlFor="md-market">
+                  Market <span className="required-hint">*</span>
+                </label>
+                <select id="md-market" value={market} onChange={(event) => setMarket(event.target.value)}>
+                  {MARKETS.map((value) => (
+                    <option key={value} value={value}>
+                      {value}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="data-field">
+                <label htmlFor="md-type">
+                  Data Type <span className="required-hint">*</span>
+                </label>
+                <select id="md-type" value={dataType} onChange={(event) => setDataType(event.target.value)}>
+                  {MARKET_DATA_TYPES.map((value) => (
+                    <option key={value} value={value}>
+                      {DATA_TYPE_LABELS[value] ?? value}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="data-field">
+                <label htmlFor="md-source">
+                  Source / Provider <span className="required-hint">*</span>
+                </label>
+                <input
+                  id="md-source"
+                  value={sourceProvider}
+                  onChange={(event) => setSourceProvider(event.target.value)}
+                  placeholder="e.g. Binance Futures"
+                />
+              </div>
+            </section>
+
+            <section className="data-setup-column" aria-label="Time and instrument">
+              <div className="data-column-title">TIME &amp; INSTRUMENT</div>
+              <div className="data-field">
+                <label htmlFor="md-instrument">
+                  Instrument Scope <span className="required-hint">*</span>
+                </label>
+                <input
+                  id="md-instrument"
+                  value={instrumentId}
+                  onChange={(event) => setInstrumentId(event.target.value)}
+                  placeholder="e.g. BTCUSDT Perpetual"
+                />
+              </div>
+              <div className="data-field">
+                <label htmlFor="md-resolution">
+                  Resolution <span className="required-hint">*</span>
+                </label>
+                <select
+                  id="md-resolution"
+                  value={resolution}
+                  onChange={(event) => setResolution(event.target.value)}
+                >
+                  {RESOLUTIONS.map((value) => (
+                    <option key={value} value={value}>
+                      {value}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="data-field">
+                <label htmlFor="md-tz">
+                  Timezone <span className="required-hint">*</span>
+                </label>
+                <select id="md-tz" value={timezone} onChange={(event) => setTimezone(event.target.value)}>
+                  {DISPLAY_TIMEZONES.map((value) => (
+                    <option key={value} value={value}>
+                      {value}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="data-field">
+                <label htmlFor="md-record-time">
+                  Record Time Basis <span className="required-hint">*</span>
+                </label>
+                <select
+                  id="md-record-time"
+                  value={recordTimeBasis}
+                  onChange={(event) => setRecordTimeBasis(event.target.value)}
+                >
+                  {RECORD_TIME_BASES.map((value) => (
+                    <option key={value} value={value}>
+                      {value}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="data-preview-card">
+                <b>What will be standardized?</b>
+                <br />
+                Only the price / execution fields needed by the selected data type. The raw source
+                remains unchanged and is stored separately.
+              </div>
+            </section>
+
+            <section className="data-setup-column" aria-label="Analysis and use">
+              <div className="data-column-title">ANALYSIS &amp; USE</div>
+              <div className="data-preview-card">
+                <b>Standardization preview</b>
+                <br />
+                Choose the source and minimum context, then create the dataset and run Analyze in the
+                Ingest workflow. The backend maps fields into the correct canonical schema.
+              </div>
+              <ul className="data-quality-list" aria-label="Post-create quality checks">
+                {QUALITY_CHECKS.map((check) => (
+                  <li key={check}>
+                    <span>{check}</span>
+                    <span className="dataset-status-pill">Runs after analyze</span>
+                  </li>
+                ))}
+              </ul>
+              <div className="data-action-row">
+                <button type="submit" className="btn btn-primary" disabled={create.isPending}>
+                  Create dataset
+                </button>
+              </div>
+              <p className="data-compact-help">
+                Analyze &amp; map, verify and Admin approve happen on the created dataset below.
+              </p>
+            </section>
+          </div>
         </div>
-        <button type="submit" className="btn btn-primary" disabled={create.isPending} style={{ marginTop: 8 }}>
-          Create dataset
-        </button>
       </form>
-      {payloadError ? (
-        <p role="alert" style={{ color: "var(--down)" }}>
-          {payloadError}
-        </p>
-      ) : null}
       {create.isError ? (
         <p role="alert" style={{ color: "var(--down)" }}>
           {mutationErrorText(create.error)}

@@ -1026,8 +1026,15 @@ a:hover { text-decoration: underline; }
   flex-wrap: wrap;
   gap: 6px;
   margin: 0 0 10px;
-  font-size: 13px;
+  padding: 5px 7px;
+  font-size: 12px;
   font-weight: 900;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  color: var(--text);
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
 }
 .column-title {
   font-size: 10px;

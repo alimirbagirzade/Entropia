@@ -253,13 +253,13 @@ a:hover { text-decoration: underline; }
 /* UI-14: RUN stays genuinely locked until a current Ready Check passes (F-16). */
 .run-button.locked,
 .run-button:disabled {
-  background: #9fb3bd;
-  border-color: #6f8790;
+  background: #8b8b8b;
+  border-color: #555;
   cursor: not-allowed;
-  opacity: 0.85;
+  opacity: 0.72;
 }
 .run-button.locked:hover,
-.run-button:disabled:hover { background: #9fb3bd; }
+.run-button:disabled:hover { background: #8b8b8b; }
 
 /* UI-14: Ready Check modal — the documented 3-column Passed / Failed / Warnings
    report (v18 showBacktestReadyReport), rendered from the server projection. */
@@ -943,18 +943,33 @@ a:hover { text-decoration: underline; }
   border-color: #4a8aa0;
 }
 .strategy-text { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+/* Row action cluster: arrow (expand) + delete (mockup .strategy-actions). */
+.strategy-actions { display: flex; align-items: center; flex-shrink: 0; height: 34px; }
 .strategy-arrow {
   width: 34px;
   height: 34px;
   flex-shrink: 0;
   border: none;
   background: transparent;
-  font-size: 17px;
+  font-size: 19px;
   line-height: 34px;
   cursor: pointer;
   color: #000;
   padding: 0;
 }
+.strategy-delete {
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-left: 1px solid #d0d0d0;
+  background: transparent;
+  font-size: 20px;
+  line-height: 34px;
+  cursor: pointer;
+  color: #333;
+  padding: 0;
+}
+.strategy-delete:hover { background: #ffd6d6; color: #b00000; }
 .strategy-details {
   border-left: 1px solid #4a8aa0;
   border-right: 1px solid #4a8aa0;
@@ -1025,6 +1040,42 @@ a:hover { text-decoration: underline; }
 /* Packed field grid so the structured form reads like the mockup's columns. */
 .strategy-form-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
 @media (max-width: 720px) { .strategy-form-grid { grid-template-columns: 1fr; } }
+
+/* Compact label + control field row (mockup .field-row / .sd-input / .sd-select) —
+   the dense two-column form primitive shared by the numbered detail cards. */
+.field-row {
+  display: grid;
+  grid-template-columns: 92px 1fr;
+  gap: 4px;
+  align-items: center;
+  margin: 2px 0;
+  font-size: 10.25px;
+}
+.field-row.wide-label { grid-template-columns: 118px 1fr; }
+.field-row label {
+  color: #333;
+  font-weight: 700;
+  line-height: 1.15;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+}
+.sd-input,
+.sd-select {
+  width: 100%;
+  min-width: 0;
+  height: 20px;
+  border: 1px solid #9b9b9b;
+  background: #ffffff;
+  border-radius: 2px;
+  box-sizing: border-box;
+  padding: 1px 4px;
+  font-size: 10.2px;
+  color: #111;
+}
+.sd-input.small-number { max-width: 64px; }
+.sd-input[readonly] { background: #f2f3f4; color: #555; cursor: default; }
 
 /* Sticky bottom toolbar — "10. SAVE / PACKAGE ACTIONS" (mockup .panel-actions).
    Sticks to the bottom of the SCROLLING ANCESTOR (the expanded Mainboard row

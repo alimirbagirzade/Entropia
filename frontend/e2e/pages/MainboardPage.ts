@@ -21,26 +21,32 @@ export class MainboardPage {
   // entry's display identity (soft_delete_work_object records no display_name,
   // so queries/trash.py falls back to the entity_id), used by the Trash spec to
   // find this exact entry without depending on list ordering.
+  //
+  // Single-shot on purpose (no retry loop): unlike the old create+attach path
+  // whose attach could transiently 404 on a read-after-write window, a draft
+  // create is a single insert that does not 404. Each "Add Strategy" click uses
+  // a fresh Idempotency-Key, so a retry would create a SECOND draft — and since
+  // the drafts list renders newest-first, deleteLastItem()'s `.last()` would
+  // then target the OTHER draft, whose id would not match this returned rootId
+  // (the Trash spec searches by this id and would find nothing). One click, one
+  // draft, one row keeps the returned id and the deleted row in lockstep.
   async addStrategyDraft(): Promise<string> {
-    // Retry the whole action until a new row lands — each attempt uses a fresh
-    // Idempotency-Key and creates its own draft, which is fine here (the
-    // journey only needs one row on the board).
-    let rootId = "";
-    await expect(async () => {
-      const before = await this.compositionItemCount().count();
-      await this.page.getByRole("button", { name: "+ Add", exact: true }).click();
-      // Set the waiter up before clicking so we never miss the response.
-      const createResponse = this.page.waitForResponse(
-        (r) => /\/strategy-drafts$/.test(r.url()) && r.request().method() === "POST",
-        { timeout: 10_000 },
-      );
-      await this.page.getByRole("button", { name: "Add Strategy", exact: true }).click();
-      const response = await createResponse;
-      expect(response.ok(), `Add Strategy create HTTP ${response.status()}`).toBeTruthy();
-      rootId = ((await response.json()) as { strategy_root_id: string }).strategy_root_id;
-      // The new draft row appears after the ["strategy"] drafts refetch.
-      expect(await this.compositionItemCount().count()).toBeGreaterThan(before);
-    }).toPass({ timeout: 40_000, intervals: [500, 1_000, 2_000, 4_000] });
+    const before = await this.compositionItemCount().count();
+    await this.page.getByRole("button", { name: "+ Add", exact: true }).click();
+    // Set the waiter up before clicking so we never miss the response.
+    const createResponse = this.page.waitForResponse(
+      (r) => /\/strategy-drafts$/.test(r.url()) && r.request().method() === "POST",
+      { timeout: 15_000 },
+    );
+    await this.page.getByRole("button", { name: "Add Strategy", exact: true }).click();
+    const response = await createResponse;
+    expect(response.ok(), `Add Strategy create HTTP ${response.status()}`).toBeTruthy();
+    const rootId = ((await response.json()) as { strategy_root_id: string }).strategy_root_id;
+    // The new draft row appears after the ["strategy"] drafts refetch — poll the
+    // count up (no re-click, so no duplicate draft is ever created).
+    await expect
+      .poll(() => this.compositionItemCount().count(), { timeout: 20_000 })
+      .toBeGreaterThan(before);
     return rootId;
   }
 
@@ -48,9 +54,9 @@ export class MainboardPage {
     return this.page.locator(".strategy-package");
   }
 
-  // Deletes the most recently attached item — new items are appended to the
-  // tail of the composition, so immediately after createAndAttachWorkObject
-  // the last .strategy-package is the one just attached.
+  // Deletes the last .strategy-package on the board. After a single-shot
+  // addStrategyDraft() there is exactly one draft row, so `.last()` is
+  // unambiguously the row whose rootId was just returned.
   async deleteLastItem(): Promise<void> {
     const lastItem = this.page.locator(".strategy-package").last();
     // Ensure the row is expanded so the per-item ops (including delete) render.

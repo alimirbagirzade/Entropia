@@ -1430,6 +1430,41 @@ a:hover { text-decoration: underline; }
 }
 .cp-inactive-text { color: var(--text-faint); }
 
+/* ---- v18 Create Package: controls + identity/compatibility grid (mockup §3) ---- */
+.cp-page { display: block; }
+.cp-identity-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.cp-controls-row label,
+.cp-identity-grid label { display: flex; flex-direction: column; gap: 6px; }
+.cp-controls-row label > span,
+.cp-identity-grid label > span {
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.cp-controls-row select,
+.cp-controls-row input,
+.cp-identity-grid select,
+.cp-identity-grid input {
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg-elev);
+  color: var(--text);
+  font-size: 13px;
+  font-family: inherit;
+}
+.cp-controls-row select:disabled,
+.cp-identity-grid select:disabled { opacity: 0.6; cursor: not-allowed; }
+.cp-controls-row label > .cp-note,
+.cp-identity-grid label > .cp-note { align-self: flex-start; margin-top: 2px; }
+
 /* ---- v18 Mainboard: small Add Package popover (mockup .package-picker-popover) ---- */
 .cp-popover-anchor { position: relative; display: inline-block; }
 .package-picker-popover {

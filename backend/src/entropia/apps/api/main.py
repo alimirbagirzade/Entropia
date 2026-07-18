@@ -17,6 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from entropia import __version__
 from entropia.apps.api import sse
 from entropia.apps.api.context import RequestContextMiddleware
+from entropia.apps.api.deps import TransactionBoundaryMiddleware
 from entropia.apps.api.errors import install_exception_handlers
 from entropia.apps.api.hardening import (
     MetricsMiddleware,
@@ -89,9 +90,12 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # Middleware stack (added inner -> outer): CORS, then rate limiting (a 429
-    # is shed before route work), metrics (counts every response incl. 429),
-    # security headers (ride EVERY response), and request context outermost.
+    # Middleware stack (added inner -> outer): transaction boundary innermost
+    # (commits the request session BEFORE the response leaves the app — closes
+    # the create->immediate-read race), CORS, then rate limiting (a 429 is shed
+    # before route work), metrics (counts every response incl. 429), security
+    # headers (ride EVERY response), and request context outermost.
+    app.add_middleware(TransactionBoundaryMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origin_list,

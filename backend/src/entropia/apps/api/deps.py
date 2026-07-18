@@ -20,6 +20,8 @@ from datetime import UTC, datetime
 
 from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
+from starlette.responses import Response
 
 from entropia.application.commands.auth import hash_token
 from entropia.application.identity import resolve_actor
@@ -33,15 +35,54 @@ from entropia.shared.errors import ServiceLineForbiddenError, SessionInvalidErro
 ACTOR_ID_HEADER = "X-Actor-Id"
 
 
-async def db_session() -> AsyncIterator[AsyncSession]:
+async def db_session(request: Request) -> AsyncIterator[AsyncSession]:
     factory = get_session_factory()
     async with factory() as session:
+        # Expose the session so TransactionBoundaryMiddleware can commit it
+        # BEFORE the response reaches the client (see the middleware docstring).
+        request.state.db_session = session
         try:
             yield session
-            await session.commit()
+            if not getattr(request.state, "tx_boundary_active", False):
+                # Bare-app fallback (e.g. a TestClient built without the
+                # middleware): preserve the original commit-on-success teardown.
+                await session.commit()
         except Exception:
             await session.rollback()
             raise
+
+
+class TransactionBoundaryMiddleware(BaseHTTPMiddleware):
+    """Commit the request-scoped session BEFORE the response reaches the client.
+
+    FastAPI runs yield-dependency teardown only after the response body has
+    already been handed off toward the client, so a client that fires a
+    dependent request immediately after a 2xx (the Mainboard create->attach
+    chain) could race the commit and read a not-yet-visible row
+    (WORK_OBJECT_NOT_FOUND). Owning the commit here closes that window: the
+    response object exists but has not been forwarded upstream yet.
+
+    Error responses (>=400, produced by the exception handlers inside
+    ``call_next``) roll back, preserving the old raise->rollback semantics;
+    unhandled exceptions propagate after an explicit rollback.
+    """
+
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+        request.state.tx_boundary_active = True
+        try:
+            response = await call_next(request)
+        except Exception:
+            session = getattr(request.state, "db_session", None)
+            if session is not None:
+                await session.rollback()
+            raise
+        session = getattr(request.state, "db_session", None)
+        if session is not None:
+            if response.status_code < 400:
+                await session.commit()
+            else:
+                await session.rollback()
+        return response
 
 
 def bearer_token(request: Request) -> str | None:

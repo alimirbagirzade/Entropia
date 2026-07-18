@@ -64,10 +64,12 @@ export function RationaleFamilies() {
   return (
     <>
       <h1 className="page-title">Rationale Families</h1>
-      <p className="page-sub">
-        Shared taxonomy · any signed-in member may manage families and reclassify Indicator /
-        Condition packages · renames create a new immutable revision (history is never rewritten)
-      </p>
+      <div className="package-pool-intro">
+        Rationale Families are a shared-editing workspace used by Create Package, Package Library and
+        strategy workflows. Any signed-in member — Admin, Supervisor, User or Agent — may add, edit,
+        remove, save and use every Family card and every Package Rationale Assignment, including cards
+        created by other actors. Renames create a new immutable revision (history is never rewritten).
+      </div>
       <div className="rationale-panel">
         <FamilyListColumn
           selectedId={selected?.entity_id ?? null}
@@ -142,10 +144,10 @@ function FamilyListColumn({
 
   return (
     <section className="card" aria-labelledby="rf-registry-h">
-      <h3 id="rf-registry-h" style={{ marginTop: 0 }}>
-        Rationale family list
+      <h3 id="rf-registry-h" className="package-section-title" style={{ marginTop: 0 }}>
+        RATIONALE FAMILY LIST
         {families.data ? (
-          <span className="page-sub" style={{ marginLeft: 8 }}>
+          <span className="page-sub" style={{ marginLeft: 8, textTransform: "none" }}>
             ({families.data.data.length} active on this page)
           </span>
         ) : null}
@@ -387,7 +389,7 @@ function FamilyCard({
         <span>{family.subfamilies.length > 0 ? family.subfamilies.join(", ") : "—"}</span>
       </div>
       <div className="rationale-card-row">
-        <b>Compatible outputs</b>
+        <b>Compatible Output Types</b>
         <span>
           {family.compatible_output_types.length > 0
             ? family.compatible_output_types.join(", ")
@@ -487,12 +489,17 @@ function AssignmentColumn({
 
   return (
     <section className="card" aria-labelledby="rf-assign-h">
-      <h3 id="rf-assign-h" style={{ marginTop: 0 }}>
-        Package rationale assignments
-        <span className="page-sub" style={{ marginLeft: 8 }}>
+      <h3 id="rf-assign-h" className="package-section-title" style={{ marginTop: 0 }}>
+        PACKAGE RATIONALE ASSIGNMENT
+        <span className="page-sub" style={{ marginLeft: 8, textTransform: "none" }}>
           (Indicator + Condition packages)
         </span>
       </h3>
+
+      <div className="rationale-assignment-note">
+        Select the appropriate shared Rationale Family for each package, then save the assignment
+        changes. Every role can edit and save this shared assignment table.
+      </div>
 
       <div className="rationale-context" aria-live="polite">
         {selected ? (
@@ -555,7 +562,7 @@ function AssignmentColumn({
               disabled={changedRows.length === 0 || batch.isPending}
               onClick={onSave}
             >
-              Save assignments
+              Save Assignment Changes
             </button>
             <span className="page-sub">
               {changedRows.length > 0 ? `${changedRows.length} pending change(s)` : "no pending changes"}

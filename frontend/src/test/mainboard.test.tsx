@@ -493,6 +493,21 @@ describe("Mainboard", () => {
     expect(headersOf(call?.[1])["Idempotency-Key"]).toBeTruthy();
   });
 
+  it("exposes the × delete in the collapsed row header (v18 box format: text + ▼/▲ + ×)", async () => {
+    // The v18 mockup row header (.strategy-actions) carries both the expand arrow
+    // AND the × delete — the delete is reachable WITHOUT first expanding the row.
+    const fetchMock = stubRoutes();
+    renderPage();
+    fireEvent.click(await screen.findByLabelText("Delete Momentum A"));
+    const dialog = screen.getByRole("alertdialog");
+    fireEvent.click(within(dialog).getByText("Move to Trash"));
+    await screen.findByText("Momentum A");
+    const call = fetchMock.mock.calls.find(
+      (c) => String(c[0]).includes("/work-objects/root_strat") && (c[1]?.method ?? "") === "DELETE",
+    );
+    expect(call).toBeTruthy();
+  });
+
   it("freezes the composition into a snapshot", async () => {
     const fetchMock = stubRoutes();
     renderPage();

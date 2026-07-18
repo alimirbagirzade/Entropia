@@ -615,6 +615,51 @@ describe("Mainboard", () => {
     expect(headersOf(attachCall?.[1])["Idempotency-Key"]).toBeTruthy();
   });
 
+  it("Add Strategy refetches and attaches to the CURRENT workspace when the cached id is stale", async () => {
+    // Simulate the dev DB being reset under a running page: the first default GET
+    // returns ws_1 (the id the page mounted with), but the refetch triggered by
+    // Add Strategy returns a fresh auto-created workspace ws_2. The attach must
+    // target ws_2 — never the stale ws_1 — so it cannot 404 on a gone workspace.
+    let defaultCalls = 0;
+    const fetchMock = stubRoutes({
+      "GET /mainboards/default": () => {
+        defaultCalls += 1;
+        return defaultCalls === 1 ? MAINBOARD : { ...MAINBOARD, workspace_id: "ws_2", items: [] };
+      },
+      "POST /work-objects": {
+        root_id: "root_new",
+        revision_id: "wor_new1",
+        revision_no: 1,
+        object_kind: "strategy",
+        row_version: 0,
+      },
+      "POST /mainboards/ws_2/items": {
+        item_id: "item_new",
+        item_kind: "strategy",
+        work_object_root_id: "root_new",
+        pinned_revision_id: "wor_new1",
+        position_index: 1,
+        is_enabled: true,
+        display_label_override: null,
+        row_version: 0,
+        composition_hash: "hash_ghi",
+      },
+    });
+    renderPage();
+    await screen.findByText("Momentum A");
+    fireEvent.click(screen.getByRole("button", { name: "+ Add" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add Strategy" }));
+    // The attach lands on the refreshed workspace id (ws_2), not the stale ws_1.
+    await vi.waitFor(() => {
+      const attachCall = fetchMock.mock.calls.find((c) => String(c[0]).includes("/mainboards/ws_2/items"));
+      expect(attachCall).toBeTruthy();
+      expect(bodyOf(attachCall?.[1]).root_id).toBe("root_new");
+    });
+    // No attach was ever issued against the stale ws_1.
+    const staleAttach = fetchMock.mock.calls.find((c) => String(c[0]).includes("/mainboards/ws_1/items"));
+    expect(staleAttach).toBeFalsy();
+  });
+
   it("admits a run inline from RUN and renders progress + the full result under the Mainboard (UI-15)", async () => {
     // Route-aware order: the artifacts + metrics fragments both contain the bare
     // result fragment, so they must precede "GET /backtest-results/res_1".

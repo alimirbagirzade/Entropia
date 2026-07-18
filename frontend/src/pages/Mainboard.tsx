@@ -603,15 +603,28 @@ export function Mainboard() {
   // the durable-until-save UI artifact, so it is created regardless of the result.
   const startDraft = useStartExternalDraft();
 
-  function addStrategy(workspaceId: string) {
+  async function addStrategy(workspaceId: string) {
     // Create an empty Strategy work object, then attach its first revision as a
     // new enabled Mainboard item. Editing happens inline in the new row.
+    //
+    // Self-heal a stale workspace id: a cached `workspace_id` can point at a
+    // workspace that no longer exists (e.g. the dev DB was reset under a running
+    // page), which makes attach 404 on the second request. Refetch the default
+    // Mainboard first so create/attach always target the CURRENT workspace — the
+    // GET auto-creates it if missing (query-before-create) — and fall back to the
+    // captured id if the refetch yields nothing.
+    const refreshed = await board.refetch();
+    const targetWorkspaceId = refreshed.data?.workspace_id ?? workspaceId;
     createWorkObject.mutate(
       { object_kind: "strategy", payload: {} },
       {
         onSuccess: (created) =>
           attachItem.mutate(
-            { workspaceId, root_id: created.root_id, revision_id: created.revision_id },
+            {
+              workspaceId: targetWorkspaceId,
+              root_id: created.root_id,
+              revision_id: created.revision_id,
+            },
             { onSuccess: (item) => setJustAddedItemId(item.item_id) },
           ),
       },
@@ -666,7 +679,7 @@ export function Mainboard() {
               STRATEGIES
             </h2>
             <AddMenu
-              onAddStrategy={() => addStrategy(data.workspace_id)}
+              onAddStrategy={() => void addStrategy(data.workspace_id)}
               addingStrategy={addingStrategy}
               onAddOutsource={addOutsourceDraft}
             />

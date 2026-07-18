@@ -1022,9 +1022,59 @@ a:hover { text-decoration: underline; }
   margin: 0 0 2px;
 }
 
-/* Packed field grid so the structured form reads like the mockup's columns. */
-.strategy-form-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
-@media (max-width: 720px) { .strategy-form-grid { grid-template-columns: 1fr; } }
+/* v18 §2 prototype: fields stack vertically inside each numbered .detail-card
+   (the three top-level columns already carry the horizontal split), so each
+   row is a horizontal label | control pair (mockup .field-row). Used only by
+   the Strategy Details editor forms. */
+.strategy-form-grid { display: grid; gap: 8px; grid-template-columns: 1fr; }
+/* Conditional layout spacers (empty aria-hidden cells) collapse in a stack. */
+.strategy-form-grid > .cp-field[aria-hidden="true"] { display: none; }
+
+/* Field row (mockup .field-row / .sd-input / .sd-select / .required-hint /
+   .inline-unit) — themed with app CSS variables, never the prototype's raw hex. */
+.field-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 190px) minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+.field-row.wide-label { grid-template-columns: minmax(140px, 220px) minmax(0, 1fr); }
+.field-row.cp-wide { grid-column: 1 / -1; }
+.field-row > .field-head > label { font-weight: 600; color: var(--text); }
+@media (max-width: 720px) {
+  .field-row,
+  .field-row.wide-label { grid-template-columns: 1fr; }
+}
+.sd-input,
+.sd-select {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 7px 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elev);
+  color: var(--text);
+  font-size: 13px;
+  font-family: inherit;
+}
+.sd-input:disabled,
+.sd-select:disabled { opacity: 0.6; cursor: not-allowed; }
+.sd-input[readonly] { background: var(--bg-elev-2); color: var(--text-dim); cursor: default; }
+.sd-input.small-number { max-width: 130px; }
+.inline-fields { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.inline-fields .sd-input { width: auto; min-width: 90px; }
+.inline-unit { font-size: 13px; font-weight: 700; color: var(--text-dim); }
+.required-hint { color: var(--down); font-weight: 800; }
+.checkbox-field { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.checkbox-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--text);
+  cursor: pointer;
+}
 
 /* Sticky bottom toolbar — "10. SAVE / PACKAGE ACTIONS" (mockup .panel-actions).
    Sticks to the bottom of the SCROLLING ANCESTOR (the expanded Mainboard row

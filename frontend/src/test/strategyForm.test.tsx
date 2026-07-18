@@ -258,7 +258,7 @@ describe("PositionSizingCard", () => {
     fireEvent.change(screen.getByLabelText(/Sizing method/), {
       target: { value: "risk_based_sizing" },
     });
-    expect(screen.getByLabelText(/Risk % per trade/)).toBeTruthy();
+    expect(screen.getByLabelText(/Risk per trade/)).toBeTruthy();
     expect(screen.queryByLabelText(/Base position size/)).toBeNull();
   });
 });

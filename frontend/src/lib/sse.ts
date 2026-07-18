@@ -127,40 +127,42 @@ export function connectEvents(
     };
   }
 
-  // A full-document navigation or bfcache freeze does NOT run the dispose cleanup
-  // below (React effect cleanup only fires on SPA unmount), so the EventSource
-  // would linger and hold one of the browser's ~6 per-host connections open. A few
-  // such leaked streams (e.g. across repeated hard navigations or bfcached pages)
-  // exhaust the pool and every subsequent API request queues indefinitely. Close
-  // the stream when the page is hidden; a bfcache restore (persisted pageshow)
-  // reopens it, and that reopen's onopen fires the INF-11 gap full-refresh.
-  function suspend(): void {
+  // A full-page navigation (or a back/forward-cache freeze) never runs React's
+  // effect cleanup, so without an unload hook the active EventSource lingers and
+  // keeps holding one of the browser's ~6 per-host HTTP/1.1 connection slots — one
+  // leaked slot per bfcached page until eviction — which can starve every later
+  // same-host request (the next GET queues indefinitely). `pagehide` fires for both
+  // real unload and bfcache freeze, so release the stream (and any pending backoff
+  // timer) there; `pageshow` reopens it if the page is later restored from bfcache.
+  // (beforeunload is intentionally avoided: registering one can disqualify a page
+  // from bfcache in some browsers, defeating the point.)
+  function closeCurrentSource(): void {
     if (reconnectTimer !== null) {
       clearTimeout(reconnectTimer);
       reconnectTimer = null;
     }
     teardownSource?.();
     teardownSource = null;
+    onStatus?.("closed");
   }
-  function resume(event: PageTransitionEvent): void {
+  function reopenOnRestore(event: PageTransitionEvent): void {
+    // Only a bfcache restore (persisted) needs a fresh stream; the initial-load
+    // pageshow (persisted === false) is a no-op. The reopen's onopen full-refresh
+    // heals any gap missed while frozen (hasOpened is still true from before).
     if (disposed || !event.persisted) return;
-    attempt = 0;
+    onStatus?.("connecting");
     openSource();
   }
-  if (typeof window !== "undefined") {
-    window.addEventListener("pagehide", suspend);
-    window.addEventListener("pageshow", resume);
-  }
+  window.addEventListener("pagehide", closeCurrentSource);
+  window.addEventListener("pageshow", reopenOnRestore);
 
   onStatus?.("connecting");
   openSource();
 
   return () => {
     disposed = true;
-    if (typeof window !== "undefined") {
-      window.removeEventListener("pagehide", suspend);
-      window.removeEventListener("pageshow", resume);
-    }
+    window.removeEventListener("pagehide", closeCurrentSource);
+    window.removeEventListener("pageshow", reopenOnRestore);
     if (reconnectTimer !== null) {
       clearTimeout(reconnectTimer);
       reconnectTimer = null;

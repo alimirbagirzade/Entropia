@@ -1482,6 +1482,19 @@ a:hover { text-decoration: underline; }
 
 .alloc-muted { font-size: 13px; color: var(--text-dim); margin: 0; }
 
+/* Live example line (mockup .portfolio-allocation-note) — accent left border,
+   subtle tinted panel; theme-aware via the accent token. */
+.portfolio-allocation-note {
+  font-size: 12px;
+  line-height: 1.45;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  padding: 8px 10px;
+  margin: 10px 0 0;
+  color: var(--text);
+}
+
 .alloc-confirm-box {
   border: 1px solid var(--warn);
   border-radius: var(--radius);

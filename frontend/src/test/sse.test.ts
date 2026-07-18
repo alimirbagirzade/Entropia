@@ -72,14 +72,29 @@ class FakeEventSource {
   }
 }
 
+// Every connection opened this test, so afterEach can dispose them all.
+// connectEvents registers window pagehide/pageshow listeners (removed on dispose);
+// a leaked, still-live pageshow listener would reopen a stream on the next
+// bfcache-restore dispatch and corrupt FakeEventSource.constructed.
+const openConnections: Array<() => void> = [];
+
 function setup() {
   const queryClient = new QueryClient();
   const spy = vi.spyOn(queryClient, "invalidateQueries").mockResolvedValue(undefined);
   const statuses: SseStatus[] = [];
   const dispose = connectEvents(queryClient, (s) => statuses.push(s));
+  openConnections.push(dispose);
   const src = FakeEventSource.last;
   if (!src) throw new Error("connectEvents did not construct an EventSource");
   return { spy, src, dispose, statuses };
+}
+
+// A bfcache-restore pageshow with `persisted: true`, built without relying on the
+// PageTransitionEvent constructor (not guaranteed across DOM shims).
+function pageShowEvent(persisted: boolean): Event {
+  const event = new Event("pageshow");
+  Object.defineProperty(event, "persisted", { value: persisted });
+  return event;
 }
 
 describe("connectEvents SSE live-invalidation", () => {
@@ -90,6 +105,7 @@ describe("connectEvents SSE live-invalidation", () => {
   });
 
   afterEach(() => {
+    while (openConnections.length) openConnections.pop()?.();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
@@ -214,5 +230,49 @@ describe("connectEvents SSE live-invalidation", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  // --- unload / bfcache resilience (connection-slot leak prevention) ---
+
+  it("closes the source and cancels a pending reconnect on pagehide", () => {
+    vi.useFakeTimers();
+    try {
+      const { src, statuses } = setup();
+      src.open();
+      src.error(FakeEventSource.CLOSED); // schedules a backoff reconnect
+      window.dispatchEvent(new Event("pagehide"));
+      // A full-page navigation / bfcache freeze must release the connection slot.
+      expect(src.closed).toBe(true);
+      expect(statuses.at(-1)).toBe("closed");
+      vi.advanceTimersByTime(60000);
+      // The pending backoff was cancelled — a hidden page never reopens the stream.
+      expect(FakeEventSource.constructed).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("reopens the stream when the page is restored from bfcache", () => {
+    const { src, spy } = setup();
+    src.open(); // healthy once (hasOpened = true)
+    window.dispatchEvent(new Event("pagehide")); // frozen into bfcache
+    expect(src.closed).toBe(true);
+    spy.mockClear();
+
+    window.dispatchEvent(pageShowEvent(true)); // restored from bfcache
+    expect(FakeEventSource.constructed).toBe(2); // a fresh stream is opened
+    const restored = FakeEventSource.last;
+    if (!restored) throw new Error("bfcache restore did not reopen an EventSource");
+    expect(restored).not.toBe(src);
+    restored.open();
+    // Reopening after the frozen gap full-refreshes authoritative state (INF-11).
+    expect(spy).toHaveBeenCalledWith();
+  });
+
+  it("ignores the initial-load pageshow (not a bfcache restore)", () => {
+    setup();
+    window.dispatchEvent(pageShowEvent(false));
+    // persisted === false is the normal first load — no extra stream is opened.
+    expect(FakeEventSource.constructed).toBe(1);
   });
 });

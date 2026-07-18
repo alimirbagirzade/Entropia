@@ -115,16 +115,69 @@ function ItemRow({ item, defaultExpanded = false }: { item: MainboardItem; defau
           />
           <span style={noteStyle}>#{item.position_index}</span>
         </span>
-        <button
-          type="button"
-          className="strategy-arrow"
-          aria-expanded={expanded}
-          aria-label={expanded ? `Collapse ${label}` : `Expand ${label}`}
-          onClick={() => setExpanded((v) => !v)}
-        >
-          {expanded ? "▲" : "▼"}
-        </button>
+        {/* Row action cluster (mockup .strategy-actions): arrow (expand/collapse) */}
+        {/* + delete ×. Both live in the collapsed row header, always visible.    */}
+        <div className="strategy-actions">
+          <button
+            type="button"
+            className="strategy-arrow"
+            aria-expanded={expanded}
+            aria-label={expanded ? `Collapse ${label}` : `Expand ${label}`}
+            onClick={() => setExpanded((v) => !v)}
+          >
+            {expanded ? "▲" : "▼"}
+          </button>
+          <button
+            type="button"
+            className="strategy-delete"
+            disabled={busy}
+            aria-label={`Delete ${label}`}
+            onClick={() => setConfirmingDelete(true)}
+          >
+            ×
+          </button>
+        </div>
       </div>
+
+      {/* Two-step soft-delete confirmation for the × action (doc 01 §6.2).       */}
+      {/* Rendered at the row level so it is reachable whether or not the row is  */}
+      {/* expanded — the × delete now lives in the always-visible row header.     */}
+      {confirmingDelete && (
+        <div
+          role="alertdialog"
+          aria-label={`Delete ${kindLabel}?`}
+          style={{ border: "1px solid var(--down)", borderRadius: 4, padding: 12, margin: "8px 0" }}
+        >
+          <strong>Delete {kindLabel}?</strong>
+          <p style={{ margin: "6px 0", fontSize: 13 }}>
+            You are about to soft-delete “{label}”. It will be removed from the active Mainboard
+            and new selection lists. Existing Backtest Runs and Results keep their historical
+            pinned revision references.
+          </p>
+          <p style={{ ...noteStyle, margin: "0 0 8px" }}>
+            Only an Admin can restore this item from Trash.
+          </p>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={del.isPending}
+              onClick={() => del.mutate(item.work_object_root_id)}
+            >
+              Move to Trash
+            </button>
+            <button
+              type="button"
+              className="btn"
+              disabled={del.isPending}
+              onClick={() => setConfirmingDelete(false)}
+            >
+              Cancel
+            </button>
+          </div>
+          {del.isError && <p role="alert" style={alertStyle}>{errorMessage(del.error)}</p>}
+        </div>
+      )}
 
       {expanded && (
         <div className="strategy-details" style={{ display: "grid", gap: 16 }}>
@@ -265,57 +318,9 @@ function ItemRow({ item, defaultExpanded = false }: { item: MainboardItem; defau
               </div>
             </div>
 
-            {/* Type-specific soft delete (× action). Two-step confirmation. */}
-            {confirmingDelete ? (
-              <div
-                role="alertdialog"
-                aria-label={`Delete ${kindLabel}?`}
-                style={{ border: "1px solid var(--down)", borderRadius: 4, padding: 12 }}
-              >
-                <strong>Delete {kindLabel}?</strong>
-                <p style={{ margin: "6px 0", fontSize: 13 }}>
-                  You are about to soft-delete “{label}”. It will be removed from the active Mainboard
-                  and new selection lists. Existing Backtest Runs and Results keep their historical
-                  pinned revision references.
-                </p>
-                <p style={{ ...noteStyle, margin: "0 0 8px" }}>
-                  Only an Admin can restore this item from Trash.
-                </p>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    disabled={del.isPending}
-                    onClick={() => del.mutate(item.work_object_root_id)}
-                  >
-                    Move to Trash
-                  </button>
-                  <button
-                    type="button"
-                    className="btn"
-                    disabled={del.isPending}
-                    onClick={() => setConfirmingDelete(false)}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div>
-                <button
-                  type="button"
-                  className="btn"
-                  disabled={busy}
-                  aria-label={`Delete ${label}`}
-                  onClick={() => setConfirmingDelete(true)}
-                >
-                  × Delete {kindLabel}
-                </button>
-              </div>
-            )}
-
+            {/* The × soft-delete action + its two-step confirmation now live in  */}
+            {/* the always-visible row header above (mockup .strategy-actions).   */}
             {patch.isError && <p role="alert" style={alertStyle}>{errorMessage(patch.error)}</p>}
-            {del.isError && <p role="alert" style={alertStyle}>{errorMessage(del.error)}</p>}
           </section>
         </div>
       )}
@@ -603,15 +608,28 @@ export function Mainboard() {
   // the durable-until-save UI artifact, so it is created regardless of the result.
   const startDraft = useStartExternalDraft();
 
-  function addStrategy(workspaceId: string) {
+  async function addStrategy(workspaceId: string) {
     // Create an empty Strategy work object, then attach its first revision as a
     // new enabled Mainboard item. Editing happens inline in the new row.
+    //
+    // Self-heal a stale workspace id: a cached `workspace_id` can point at a
+    // workspace that no longer exists (e.g. the dev DB was reset under a running
+    // page), which makes attach 404 on the second request. Refetch the default
+    // Mainboard first so create/attach always target the CURRENT workspace — the
+    // GET auto-creates it if missing (query-before-create) — and fall back to the
+    // captured id if the refetch yields nothing.
+    const refreshed = await board.refetch();
+    const targetWorkspaceId = refreshed.data?.workspace_id ?? workspaceId;
     createWorkObject.mutate(
       { object_kind: "strategy", payload: {} },
       {
         onSuccess: (created) =>
           attachItem.mutate(
-            { workspaceId, root_id: created.root_id, revision_id: created.revision_id },
+            {
+              workspaceId: targetWorkspaceId,
+              root_id: created.root_id,
+              revision_id: created.revision_id,
+            },
             { onSuccess: (item) => setJustAddedItemId(item.item_id) },
           ),
       },
@@ -666,7 +684,7 @@ export function Mainboard() {
               STRATEGIES
             </h2>
             <AddMenu
-              onAddStrategy={() => addStrategy(data.workspace_id)}
+              onAddStrategy={() => void addStrategy(data.workspace_id)}
               addingStrategy={addingStrategy}
               onAddOutsource={addOutsourceDraft}
             />

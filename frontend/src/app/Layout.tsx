@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { MENU_BAR, type MenuGroup, type MenuLink } from "./nav";
+import { Modal } from "@/components/Modal";
 import { connectEvents, type SseStatus } from "@/lib/sse";
 import { useMe, useMeta } from "@/lib/hooks";
 import { useLogout, useSessionToken } from "@/lib/auth";
@@ -145,23 +146,28 @@ function Menu({ group, isAdmin, onAbout }: { group: MenuGroup; isAdmin: boolean;
   );
 }
 
+// About dialog — reuses the shared Modal chrome so it inherits full focus
+// management (accessibility.md): Escape closes, Tab/Shift+Tab are trapped inside
+// while open, focus moves into the dialog on open, and focus is restored to the
+// Help ▸ About trigger on close. The visible <h3> is the accessible name via
+// aria-labelledby (stronger than a static aria-label). Presentation-only — no
+// route/key/OCC/hook/lib change.
 function AboutModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  if (!open) return null;
   return (
-    <div className="modal-overlay" role="dialog" aria-modal="true" aria-label="About" onClick={onClose}>
-      <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-        <h3 style={{ marginTop: 0 }}>Entropia V18</h3>
-        <p style={{ color: "var(--text-dim)" }}>
-          Backtest-first strategy composition workspace. Compose strategies and packages, verify
-          readiness, run deterministic backtests, and review results.
-        </p>
-        <div style={{ marginTop: 16, textAlign: "right" }}>
-          <button type="button" className="page-button" onClick={onClose}>
-            Close
-          </button>
-        </div>
+    <Modal open={open} onClose={onClose} titleId="about-modal-title">
+      <h3 id="about-modal-title" style={{ marginTop: 0 }}>
+        Entropia V18
+      </h3>
+      <p style={{ color: "var(--text-dim)" }}>
+        Backtest-first strategy composition workspace. Compose strategies and packages, verify
+        readiness, run deterministic backtests, and review results.
+      </p>
+      <div style={{ marginTop: 16, textAlign: "right" }}>
+        <button type="button" className="page-button" onClick={onClose}>
+          Close
+        </button>
       </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -183,7 +189,8 @@ export function Layout() {
 
   return (
     <div className="app-shell">
-      <div className="top-title">
+      {/* Top strip is the page banner landmark (Login / brand / act-as + status). */}
+      <header className="top-title">
         <AuthControl />
         <span className="brand-title">entropia</span>
         <div className="topbar-status">
@@ -198,7 +205,7 @@ export function Layout() {
             ● {sse}
           </span>
         </div>
-      </div>
+      </header>
 
       <nav className="menu-bar" aria-label="Primary">
         {menus.map((group) => (

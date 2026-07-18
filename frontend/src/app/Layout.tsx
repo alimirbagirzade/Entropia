@@ -210,20 +210,10 @@ export function Layout() {
         <Outlet />
       </main>
 
-      {/* Fixed global RUN / Ready-Check panel (v18 mockup, bottom-right). */}
-      <div className="run-controls">
-        <NavLink to="/backtest/ready-check" className="ready-button">
-          Backtest
-          <br />
-          Ready
-          <br />
-          Check
-        </NavLink>
-        <div className="ready-status" title="Backtest readiness — open Ready Check to compute" />
-        <NavLink to="/backtest/run" className="run-button">
-          RUN
-        </NavLink>
-      </div>
+      {/* The fixed lower-right Ready Check / RUN dock is Mainboard-scoped (v18   */}
+      {/* mockup: .run-controls lives inside #mainboardView). Mainboard renders    */}
+      {/* the real F-16-gated dock (live readiness strip + RUN locked until a      */}
+      {/* current Ready Check passes); the shell must not render a second one.     */}
 
       <AboutModal open={aboutOpen} onClose={() => setAboutOpen(false)} />
     </div>

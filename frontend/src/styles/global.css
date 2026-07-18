@@ -1041,8 +1041,15 @@ a:hover { text-decoration: underline; }
   flex-wrap: wrap;
   gap: 6px;
   margin: 0 0 10px;
-  font-size: 13px;
+  padding: 5px 7px;
+  font-size: 12px;
   font-weight: 900;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  color: var(--text);
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
 }
 .column-title {
   font-size: 10px;
@@ -2291,3 +2298,25 @@ a:hover { text-decoration: underline; }
   color: var(--text-dim);
   background: var(--bg-elev-2);
 }
+
+/* Instrument Registry (app-only page — no v18 mockup section) uses bare
+   label/input pairs. Theme its controls to the app's field look so it reads as
+   v18 chrome instead of unstyled browser defaults: a stacked label with a
+   full-width themed control. */
+.instrument-page label { font-size: 12px; font-weight: 700; color: var(--text-dim); }
+.instrument-page input,
+.instrument-page select,
+.instrument-page textarea {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  padding: 6px 8px;
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elev);
+  color: var(--text);
+  font-size: 12px;
+  font-family: inherit;
+}
+.instrument-page select { max-width: 260px; }

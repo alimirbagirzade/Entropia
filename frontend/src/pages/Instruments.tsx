@@ -41,7 +41,7 @@ function useCursorStack() {
 // 403 envelope verbatim.
 export function Instruments() {
   return (
-    <>
+    <div className="instrument-page">
       <h1 className="page-title">Instrument Registry</h1>
       <p className="page-sub">
         Canonical tradable instruments · a free-text scope ("BTCUSDT Perpetual")
@@ -51,7 +51,7 @@ export function Instruments() {
       <RegistryCard />
       <RegisterInstrumentCard />
       <ResolveScopeCard />
-    </>
+    </div>
   );
 }
 

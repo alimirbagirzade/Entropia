@@ -586,20 +586,147 @@ describe("Mainboard", () => {
     expect(screen.getByRole("button", { name: "Add Outsource Signal" })).toBeTruthy();
   });
 
-  it("Add Strategy creates + attaches a strategy work object inline (F-15)", async () => {
+  it("Add Strategy creates a strategy-editor draft and renders an unsaved draft row (F-15)", async () => {
+    // Doc 02 §7: the strat_ root has NO revision until the first Save, so the
+    // add action creates a DRAFT (editor family) and attaches nothing yet.
+    let draftsServed = 0;
     const fetchMock = stubRoutes({
-      "POST /work-objects": {
-        root_id: "root_new",
-        revision_id: "wor_new1",
-        revision_no: 1,
-        object_kind: "strategy",
+      "GET /strategy-drafts/stratdraft_1": {
+        draft_id: "stratdraft_1",
+        strategy_root_id: "strat_1",
+        payload: {},
+        is_dirty: true,
         row_version: 0,
+        last_saved_revision_id: null,
+        source_provenance: null,
+        updated_at: null,
+      },
+      "POST /strategy-drafts": {
+        draft_id: "stratdraft_1",
+        strategy_root_id: "strat_1",
+        display_name: "STRATEGY 2",
+        row_version: 0,
+      },
+      "GET /strategy-drafts": () => {
+        draftsServed += 1;
+        return draftsServed === 1
+          ? []
+          : [
+              {
+                draft_id: "stratdraft_1",
+                strategy_root_id: "strat_1",
+                display_name: "STRATEGY 2",
+                lifecycle_state: "draft",
+                is_dirty: true,
+                row_version: 0,
+                last_saved_revision_id: null,
+                has_revision: false,
+                is_attached: false,
+                owner_principal_id: "user_admin",
+                updated_at: null,
+              },
+            ];
+      },
+      "GET /strategies/strat_1/revisions": [],
+      "GET /strategies/strat_1": {
+        strategy_root_id: "strat_1",
+        display_name: "STRATEGY 2",
+        lifecycle_state: "draft",
+        current_revision_id: null,
+        current_row_version: 1,
+        rationale_family_id: null,
+        owner_principal_id: "user_admin",
+        deletion_state: "active",
+      },
+    });
+    renderPage();
+    await screen.findByText("Momentum A");
+    fireEvent.click(screen.getByRole("button", { name: "+ Add" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add Strategy" }));
+    // Editor-family create: numbered display name + fresh Idempotency-Key.
+    await vi.waitFor(() => {
+      const createCall = fetchMock.mock.calls.find(
+        (c) => String(c[0]).endsWith("/strategy-drafts") && (c[1]?.method ?? "") === "POST",
+      );
+      expect(createCall).toBeTruthy();
+      expect(String(bodyOf(createCall?.[1]).display_name)).toMatch(/^STRATEGY \d+$/);
+      expect(headersOf(createCall?.[1])["Idempotency-Key"]).toBeTruthy();
+    });
+    // The legacy generic work-object create is gone…
+    expect(
+      fetchMock.mock.calls.find(
+        (c) => String(c[0]).endsWith("/work-objects") && (c[1]?.method ?? "") === "POST",
+      ),
+    ).toBeFalsy();
+    // …and nothing attaches before the first Save (no revision exists yet).
+    expect(
+      fetchMock.mock.calls.find(
+        (c) => String(c[0]).includes("/items") && (c[1]?.method ?? "") === "POST",
+      ),
+    ).toBeFalsy();
+    // The draft renders as a horizontal unsaved-draft row (the name shows in
+    // the row header AND inside the auto-expanded inline editor).
+    await screen.findByText("Unsaved draft");
+    expect((await screen.findAllByText("STRATEGY 2")).length).toBeGreaterThan(0);
+  });
+
+  it("first Save of a draft row attaches the §7.1 mirror revision as a real item", async () => {
+    // An unattached server draft renders as a draft row; expanding hosts the
+    // inline editor, and Save Strategy Revision returns the mirror revision the
+    // page then attaches to the CURRENT workspace (root strat_1 + worev_m1).
+    const fetchMock = stubRoutes({
+      "POST /strategy-drafts/stratdraft_1/save": {
+        strategy_root_id: "strat_1",
+        strategy_revision_id: "strev_1",
+        revision_number: 1,
+        config_hash: "cfg_1",
+        mirror_revision_id: "worev_m1",
+        pinned_items: [],
+        ready_state: "STALE",
+        warnings: [],
+        correlation_id: null,
+      },
+      "GET /strategy-drafts/stratdraft_1": {
+        draft_id: "stratdraft_1",
+        strategy_root_id: "strat_1",
+        payload: {},
+        is_dirty: true,
+        row_version: 0,
+        last_saved_revision_id: null,
+        source_provenance: null,
+        updated_at: null,
+      },
+      "GET /strategy-drafts": [
+        {
+          draft_id: "stratdraft_1",
+          strategy_root_id: "strat_1",
+          display_name: "STRATEGY 2",
+          lifecycle_state: "draft",
+          is_dirty: true,
+          row_version: 0,
+          last_saved_revision_id: null,
+          has_revision: false,
+          is_attached: false,
+          owner_principal_id: "user_admin",
+          updated_at: null,
+        },
+      ],
+      "GET /strategies/strat_1/revisions": [],
+      "GET /strategies/strat_1": {
+        strategy_root_id: "strat_1",
+        display_name: "STRATEGY 2",
+        lifecycle_state: "draft",
+        current_revision_id: null,
+        current_row_version: 1,
+        rationale_family_id: null,
+        owner_principal_id: "user_admin",
+        deletion_state: "active",
       },
       "POST /mainboards/ws_1/items": {
         item_id: "item_new",
         item_kind: "strategy",
-        work_object_root_id: "root_new",
-        pinned_revision_id: "wor_new1",
+        work_object_root_id: "strat_1",
+        pinned_revision_id: "worev_m1",
         position_index: 1,
         is_enabled: true,
         display_label_override: null,
@@ -609,70 +736,22 @@ describe("Mainboard", () => {
     });
     renderPage();
     await screen.findByText("Momentum A");
-    fireEvent.click(screen.getByRole("button", { name: "+ Add" }));
-    fireEvent.click(screen.getByRole("button", { name: "Add Strategy" }));
-    // Real create round trip: object_kind=strategy, empty payload, fresh Idempotency-Key.
-    await screen.findByText("Momentum A");
-    const createCall = fetchMock.mock.calls.find(
-      (c) => String(c[0]).endsWith("/work-objects") && (c[1]?.method ?? "") === "POST",
-    );
-    expect(createCall).toBeTruthy();
-    expect(bodyOf(createCall?.[1]).object_kind).toBe("strategy");
-    expect(headersOf(createCall?.[1])["Idempotency-Key"]).toBeTruthy();
-    // …then attaches the created revision to the default workspace.
-    const attachCall = fetchMock.mock.calls.find(
-      (c) => String(c[0]).includes("/mainboards/ws_1/items"),
-    );
-    expect(attachCall).toBeTruthy();
-    const attachBody = bodyOf(attachCall?.[1]);
-    expect(attachBody.root_id).toBe("root_new");
-    expect(attachBody.revision_id).toBe("wor_new1");
-    expect(headersOf(attachCall?.[1])["Idempotency-Key"]).toBeTruthy();
-  });
-
-  it("Add Strategy refetches and attaches to the CURRENT workspace when the cached id is stale", async () => {
-    // Simulate the dev DB being reset under a running page: the first default GET
-    // returns ws_1 (the id the page mounted with), but the refetch triggered by
-    // Add Strategy returns a fresh auto-created workspace ws_2. The attach must
-    // target ws_2 — never the stale ws_1 — so it cannot 404 on a gone workspace.
-    let defaultCalls = 0;
-    const fetchMock = stubRoutes({
-      "GET /mainboards/default": () => {
-        defaultCalls += 1;
-        return defaultCalls === 1 ? MAINBOARD : { ...MAINBOARD, workspace_id: "ws_2", items: [] };
-      },
-      "POST /work-objects": {
-        root_id: "root_new",
-        revision_id: "wor_new1",
-        revision_no: 1,
-        object_kind: "strategy",
-        row_version: 0,
-      },
-      "POST /mainboards/ws_2/items": {
-        item_id: "item_new",
-        item_kind: "strategy",
-        work_object_root_id: "root_new",
-        pinned_revision_id: "wor_new1",
-        position_index: 1,
-        is_enabled: true,
-        display_label_override: null,
-        row_version: 0,
-        composition_hash: "hash_ghi",
-      },
-    });
-    renderPage();
-    await screen.findByText("Momentum A");
-    fireEvent.click(screen.getByRole("button", { name: "+ Add" }));
-    fireEvent.click(screen.getByRole("button", { name: "Add Strategy" }));
-    // The attach lands on the refreshed workspace id (ws_2), not the stale ws_1.
+    // The unattached draft arrives from GET /strategy-drafts as a draft row.
+    fireEvent.click(await screen.findByRole("button", { name: "Expand STRATEGY 2" }));
+    // The inline editor loads on the draft; Save returns the mirror revision…
+    fireEvent.click(await screen.findByRole("button", { name: "Save Strategy Revision" }));
+    // …which the page attaches (root strat_1 pinned at worev_m1, fresh Idem key).
     await vi.waitFor(() => {
-      const attachCall = fetchMock.mock.calls.find((c) => String(c[0]).includes("/mainboards/ws_2/items"));
+      const attachCall = fetchMock.mock.calls.find(
+        (c) =>
+          String(c[0]).includes("/mainboards/ws_1/items") && (c[1]?.method ?? "") === "POST",
+      );
       expect(attachCall).toBeTruthy();
-      expect(bodyOf(attachCall?.[1]).root_id).toBe("root_new");
+      const body = bodyOf(attachCall?.[1]);
+      expect(body.root_id).toBe("strat_1");
+      expect(body.revision_id).toBe("worev_m1");
+      expect(headersOf(attachCall?.[1])["Idempotency-Key"]).toBeTruthy();
     });
-    // No attach was ever issued against the stale ws_1.
-    const staleAttach = fetchMock.mock.calls.find((c) => String(c[0]).includes("/mainboards/ws_1/items"));
-    expect(staleAttach).toBeFalsy();
   });
 
   it("admits a run inline from RUN and renders progress + the full result under the Mainboard (UI-15)", async () => {

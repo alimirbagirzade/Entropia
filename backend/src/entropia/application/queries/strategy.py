@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from entropia.domain.identity import Actor
 from entropia.domain.identity.policy import ensure_can_view, require_authenticated
+from entropia.infrastructure.postgres.repositories import mainboard as mb_repo
 from entropia.infrastructure.postgres.repositories import strategy as strat_repo
 from entropia.shared.errors import (
     StrategyDraftNotFoundError,
@@ -68,6 +69,14 @@ async def get_strategy_revision(
     """Return an immutable revision + its pinned dependency references (owner/Admin)."""
     require_authenticated(actor)
     revision = await strat_repo.get_strategy_revision(session, revision_id)
+    if revision is None:
+        # Doc 02 §7.1 mirror deref (allocation_currency precedent): a Mainboard
+        # pin carries the WORK-OBJECT mirror revision id whose payload names the
+        # strategy revision — accept that id here so pinned ids resolve too.
+        mirror = await mb_repo.get_work_object_revision(session, revision_id)
+        mirror_ref = (mirror.payload or {}).get("strategy_revision_id") if mirror else None
+        if mirror_ref:
+            revision = await strat_repo.get_strategy_revision(session, str(mirror_ref))
     if revision is None:
         raise StrategyRevisionNotFoundError(f"Strategy revision '{revision_id}' not found.")
     owner = await _owner_of(session, revision.entity_id)

@@ -19,7 +19,6 @@ import {
   readyStatusTone,
   useAttachItem,
   useCreateSnapshot,
-  useCreateWorkObject,
   useDefaultMainboard,
   usePatchItem,
   useSoftDeleteWorkObject,
@@ -27,6 +26,12 @@ import {
   type LatestResultSummary,
   type MainboardItem,
 } from "@/lib/mainboard";
+import {
+  useCreateStrategyDraft,
+  useMyStrategyDrafts,
+  type SaveRevisionResult,
+  type StrategyDraftSummary,
+} from "@/lib/strategy";
 
 // The canonical error envelope is shown verbatim (code: message) — the page
 // never interprets a server rejection.
@@ -392,6 +397,119 @@ function OutsourceDraftRow({ kind, onRemove }: { kind: string; onRemove: () => v
 }
 
 // --------------------------------------------------------------------------- //
+// Strategy DRAFT row (doc 02 §7 + v18 prototype 0:55): a just-added strategy    //
+// renders immediately as the horizontal collapsible box, but as an UNSAVED      //
+// DRAFT — the strat_ root has no revision until the first Save, so it is not    //
+// part of the composition yet (the page's own empty-state text states this).    //
+// Expanding hosts the real inline Strategy Details editor bound to the draft;   //
+// the first Save hands the §7.1 mirror revision to onSaved, which attaches the  //
+// row as a real item. × soft-deletes the root (it IS a work object root).       //
+// --------------------------------------------------------------------------- //
+
+function StrategyDraftBox({
+  draft,
+  defaultExpanded = false,
+  onSaved,
+  attachError,
+}: {
+  draft: StrategyDraftSummary;
+  defaultExpanded?: boolean;
+  onSaved: (result: SaveRevisionResult) => void;
+  attachError: unknown;
+}) {
+  const [expanded, setExpanded] = useState(defaultExpanded);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const del = useSoftDeleteWorkObject();
+  const label = draft.display_name || "Strategy";
+
+  return (
+    <div className="strategy-package">
+      <div className={`strategy-row${expanded ? " open" : ""}`}>
+        <span className="strategy-text">
+          <strong>{label}</strong>
+          <StatusBadge label="Strategy" tone="neutral" />
+          <StatusBadge label="Unsaved draft" tone="warn" />
+        </span>
+        <div className="strategy-actions">
+          <button
+            type="button"
+            className="strategy-arrow"
+            aria-expanded={expanded}
+            aria-label={expanded ? `Collapse ${label}` : `Expand ${label}`}
+            onClick={() => setExpanded((v) => !v)}
+          >
+            {expanded ? "▲" : "▼"}
+          </button>
+          <button
+            type="button"
+            className="strategy-delete"
+            disabled={del.isPending}
+            aria-label={`Delete ${label} draft`}
+            onClick={() => setConfirmingDelete(true)}
+          >
+            ×
+          </button>
+        </div>
+      </div>
+
+      {confirmingDelete && (
+        <div
+          role="alertdialog"
+          aria-label={`Delete ${label} draft?`}
+          style={{ border: "1px solid var(--down)", borderRadius: 4, padding: 12, margin: "8px 0" }}
+        >
+          <strong>Delete {label}?</strong>
+          <p style={{ margin: "6px 0", fontSize: 13 }}>
+            This unsaved strategy draft will be soft-deleted. It was never part of the
+            composition, so Ready Check and RUN are unaffected.
+          </p>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={del.isPending || draft.strategy_root_id === null}
+              onClick={() =>
+                draft.strategy_root_id !== null ? del.mutate(draft.strategy_root_id) : undefined
+              }
+            >
+              Move to Trash
+            </button>
+            <button
+              type="button"
+              className="btn"
+              disabled={del.isPending}
+              onClick={() => setConfirmingDelete(false)}
+            >
+              Cancel
+            </button>
+          </div>
+          {del.isError && <p role="alert" style={alertStyle}>{errorMessage(del.error)}</p>}
+        </div>
+      )}
+
+      {expanded && (
+        <div className="strategy-details" style={{ display: "grid", gap: 8 }}>
+          <p style={noteStyle}>
+            Unsaved draft — it joins the composition (Backtest Ready Check / RUN) after its first
+            Save.
+          </p>
+          <StrategyDetailsPanel
+            rootId={draft.strategy_root_id}
+            revisionId={null}
+            draftId={draft.draft_id}
+            onSaved={onSaved}
+            onCancel={() => setExpanded(false)}
+          />
+          {attachError != null && (
+            <p role="alert" style={alertStyle}>{errorMessage(attachError)}</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// --------------------------------------------------------------------------- //
 // Add menu popover: the prototype Mainboard "Add" menu (doc 01 §3.1/§3.2 —      //
 // Add Strategy, Add Package, Add Outsource Signal ▸ Trading Signal / Trade Log, //
 // Portfolio / Equity Allocation). Add Strategy / Add Package deep-link to the   //
@@ -576,12 +694,19 @@ function LatestResultCard({ result }: { result: LatestResultSummary }) {
 export function Mainboard() {
   const board = useDefaultMainboard();
   const snapshot = useCreateSnapshot();
-  // F-15: Add Strategy creates a strategy work object and attaches it as a new
-  // inline Mainboard row (the product replacement for the removed raw-JSON path).
-  // Both hooks + endpoints + OCC/Idempotency contract are unchanged — only the
-  // trigger moved from the advanced card to the typed "Add Strategy" action.
-  const createWorkObject = useCreateWorkObject();
+  // F-15 (reworked): Add Strategy creates a strategy-editor DRAFT (doc 02 §7 —
+  // the strat_ root is simultaneously the Mainboard-attachable work object, but
+  // it has NO revision until the first Save, so nothing attaches yet). The new
+  // draft renders immediately as a horizontal draft row hosting the inline
+  // editor; the first Save returns the §7.1 mirror revision and the row is then
+  // attached as a real composition item. The previous generic
+  // create_work_object path produced a bare wo_ root the Strategy editor could
+  // never load (STRATEGY_REVISION_NOT_FOUND) — the editor family is canonical.
+  const createDraft = useCreateStrategyDraft();
+  const myDrafts = useMyStrategyDrafts();
   const attachItem = useAttachItem();
+  // The just-created draft id, so its row arrives expanded with the editor open.
+  const [justAddedDraftId, setJustAddedDraftId] = useState<string | null>(null);
   // The item id of the just-added row, so it opens its inline editor on arrival
   // (F-15 acceptance: "appears as a horizontal Mainboard row and opens its
   // type-specific inline editor"). Cleared once consumed.
@@ -608,30 +733,38 @@ export function Mainboard() {
   // the durable-until-save UI artifact, so it is created regardless of the result.
   const startDraft = useStartExternalDraft();
 
-  async function addStrategy(workspaceId: string) {
-    // Create an empty Strategy work object, then attach its first revision as a
-    // new enabled Mainboard item. Editing happens inline in the new row.
-    //
-    // Self-heal a stale workspace id: a cached `workspace_id` can point at a
-    // workspace that no longer exists (e.g. the dev DB was reset under a running
-    // page), which makes attach 404 on the second request. Refetch the default
-    // Mainboard first so create/attach always target the CURRENT workspace — the
-    // GET auto-creates it if missing (query-before-create) — and fall back to the
-    // captured id if the refetch yields nothing.
-    const refreshed = await board.refetch();
-    const targetWorkspaceId = refreshed.data?.workspace_id ?? workspaceId;
-    createWorkObject.mutate(
-      { object_kind: "strategy", payload: {} },
+  function addStrategy() {
+    // Default name mirrors the v18 prototype's STRATEGY <n> numbering: attached
+    // strategy items + unattached drafts already on the board, plus this one.
+    const attachedStrategies =
+      board.data?.items.filter((i) => i.item_kind === "strategy").length ?? 0;
+    const unattachedDrafts = (myDrafts.data ?? []).filter((d) => !d.is_attached).length;
+    const nextNumber = attachedStrategies + unattachedDrafts + 1;
+    createDraft.mutate(
+      { displayName: `STRATEGY ${nextNumber}`, rationaleFamilyId: null },
+      { onSuccess: (created) => setJustAddedDraftId(created.draft_id) },
+    );
+  }
+
+  // First Save of a draft row: attach the returned §7.1 mirror revision so the
+  // draft becomes a real composition item (later saves re-pin server-side).
+  function attachSavedDraft(result: SaveRevisionResult) {
+    const workspaceId = board.data?.workspace_id;
+    if (!workspaceId) return;
+    attachItem.mutate(
       {
-        onSuccess: (created) =>
-          attachItem.mutate(
-            {
-              workspaceId: targetWorkspaceId,
-              root_id: created.root_id,
-              revision_id: created.revision_id,
-            },
-            { onSuccess: (item) => setJustAddedItemId(item.item_id) },
-          ),
+        workspaceId,
+        root_id: result.strategy_root_id,
+        revision_id: result.mirror_revision_id,
+      },
+      {
+        onSuccess: (item) => {
+          setJustAddedDraftId(null);
+          setJustAddedItemId(item.item_id);
+          // The drafts list's is_attached flag flips server-side — refresh it so
+          // the draft row hands over to the attached ItemRow without a stale copy.
+          void myDrafts.refetch();
+        },
       },
     );
   }
@@ -661,8 +794,11 @@ export function Mainboard() {
   // UI-15: the admission response carries the readiness warning count (warnings
   // never block RUN — F-16); surface it beside the inline run panel.
   const runWarningCount = requestRun.data?.warning_count ?? 0;
-  const addingStrategy = createWorkObject.isPending || attachItem.isPending;
-  const addStrategyError = createWorkObject.error ?? attachItem.error;
+  const addingStrategy = createDraft.isPending;
+  const addStrategyError = createDraft.error ?? attachItem.error;
+  // Unattached strategy drafts render as draft rows (server-truth: they survive
+  // reload via GET /strategy-drafts; attached ones already render as ItemRows).
+  const strategyDrafts = (myDrafts.data ?? []).filter((d) => !d.is_attached);
 
   return (
     <>
@@ -684,7 +820,7 @@ export function Mainboard() {
               STRATEGIES
             </h2>
             <AddMenu
-              onAddStrategy={() => void addStrategy(data.workspace_id)}
+              onAddStrategy={addStrategy}
               addingStrategy={addingStrategy}
               onAddOutsource={addOutsourceDraft}
             />
@@ -692,7 +828,7 @@ export function Mainboard() {
           {addStrategyError && (
             <p role="alert" style={alertStyle}>{errorMessage(addStrategyError)}</p>
           )}
-          {items.length === 0 && draftRows.length === 0 ? (
+          {items.length === 0 && draftRows.length === 0 && strategyDrafts.length === 0 ? (
             <div className="card">
               <strong>Your Mainboard is empty.</strong>
               <p style={{ margin: "6px 0 0", fontSize: 13 }}>
@@ -707,6 +843,15 @@ export function Mainboard() {
                   key={item.item_id}
                   item={item}
                   defaultExpanded={item.item_id === justAddedItemId}
+                />
+              ))}
+              {strategyDrafts.map((draft) => (
+                <StrategyDraftBox
+                  key={draft.draft_id}
+                  draft={draft}
+                  defaultExpanded={draft.draft_id === justAddedDraftId}
+                  onSaved={attachSavedDraft}
+                  attachError={attachItem.isError ? attachItem.error : null}
                 />
               ))}
               {draftRows.map((d) => (

@@ -127,11 +127,40 @@ export function connectEvents(
     };
   }
 
+  // A full-document navigation or bfcache freeze does NOT run the dispose cleanup
+  // below (React effect cleanup only fires on SPA unmount), so the EventSource
+  // would linger and hold one of the browser's ~6 per-host connections open. A few
+  // such leaked streams (e.g. across repeated hard navigations or bfcached pages)
+  // exhaust the pool and every subsequent API request queues indefinitely. Close
+  // the stream when the page is hidden; a bfcache restore (persisted pageshow)
+  // reopens it, and that reopen's onopen fires the INF-11 gap full-refresh.
+  function suspend(): void {
+    if (reconnectTimer !== null) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
+    teardownSource?.();
+    teardownSource = null;
+  }
+  function resume(event: PageTransitionEvent): void {
+    if (disposed || !event.persisted) return;
+    attempt = 0;
+    openSource();
+  }
+  if (typeof window !== "undefined") {
+    window.addEventListener("pagehide", suspend);
+    window.addEventListener("pageshow", resume);
+  }
+
   onStatus?.("connecting");
   openSource();
 
   return () => {
     disposed = true;
+    if (typeof window !== "undefined") {
+      window.removeEventListener("pagehide", suspend);
+      window.removeEventListener("pageshow", resume);
+    }
     if (reconnectTimer !== null) {
       clearTimeout(reconnectTimer);
       reconnectTimer = null;

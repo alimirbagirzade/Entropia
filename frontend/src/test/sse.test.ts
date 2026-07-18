@@ -72,14 +72,27 @@ class FakeEventSource {
   }
 }
 
+// connectEvents registers window pagehide/pageshow listeners; a test that does not
+// dispose would leak them across cases (a later window.dispatchEvent would fire the
+// stale handlers and skew the construction count). Track every instance and dispose
+// them all in afterEach.
+let disposers: Array<() => void> = [];
+
 function setup() {
   const queryClient = new QueryClient();
   const spy = vi.spyOn(queryClient, "invalidateQueries").mockResolvedValue(undefined);
   const statuses: SseStatus[] = [];
   const dispose = connectEvents(queryClient, (s) => statuses.push(s));
+  disposers.push(dispose);
   const src = FakeEventSource.last;
   if (!src) throw new Error("connectEvents did not construct an EventSource");
   return { spy, src, dispose, statuses };
+}
+
+function persistedPageShow(): Event {
+  const event = new Event("pageshow");
+  Object.defineProperty(event, "persisted", { value: true });
+  return event;
 }
 
 describe("connectEvents SSE live-invalidation", () => {
@@ -90,6 +103,8 @@ describe("connectEvents SSE live-invalidation", () => {
   });
 
   afterEach(() => {
+    for (const dispose of disposers) dispose();
+    disposers = [];
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
@@ -214,5 +229,56 @@ describe("connectEvents SSE live-invalidation", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  // --- unload / bfcache lifecycle (connection-leak guard) ---
+
+  it("closes the stream on pagehide and reopens on a bfcache restore", () => {
+    const { src } = setup();
+    // A full-document navigation / bfcache freeze never runs the dispose cleanup,
+    // so the stream must proactively close on pagehide to release its connection.
+    window.dispatchEvent(new Event("pagehide"));
+    expect(src.closed).toBe(true);
+
+    // A persisted (bfcache) pageshow reopens a fresh stream so the page stays live.
+    const before = FakeEventSource.constructed;
+    window.dispatchEvent(persistedPageShow());
+    expect(FakeEventSource.constructed).toBe(before + 1);
+  });
+
+  it("does not reopen on a non-persisted pageshow", () => {
+    setup();
+    window.dispatchEvent(new Event("pagehide"));
+    const before = FakeEventSource.constructed;
+    // A normal (non-bfcache) load already opened the stream at mount — a plain
+    // pageshow must not spawn a duplicate.
+    window.dispatchEvent(new Event("pageshow"));
+    expect(FakeEventSource.constructed).toBe(before);
+  });
+
+  it("cancels a pending backoff reconnect on pagehide", () => {
+    vi.useFakeTimers();
+    try {
+      const { src } = setup();
+      src.open();
+      src.error(FakeEventSource.CLOSED); // schedules a backoff reconnect
+      window.dispatchEvent(new Event("pagehide"));
+      const before = FakeEventSource.constructed;
+      vi.advanceTimersByTime(60000);
+      // The pending backoff timer was cancelled with the stream.
+      expect(FakeEventSource.constructed).toBe(before);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("detaches the pagehide/pageshow listeners on dispose", () => {
+    const { dispose } = setup();
+    dispose();
+    const before = FakeEventSource.constructed;
+    // After dispose nothing should react to page lifecycle events.
+    window.dispatchEvent(persistedPageShow());
+    window.dispatchEvent(new Event("pagehide"));
+    expect(FakeEventSource.constructed).toBe(before);
   });
 });

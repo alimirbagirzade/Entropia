@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type FocusEvent, type KeyboardEvent } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
+import { Modal } from "@/components/Modal";
 import { MENU_BAR, type MenuGroup, type MenuLink } from "./nav";
 import { connectEvents, type SseStatus } from "@/lib/sse";
 import { useMe, useMeta } from "@/lib/hooks";
@@ -70,19 +71,39 @@ function MenuItem({
   item,
   isAdmin,
   onAbout,
+  onClose,
 }: {
   item: MenuLink;
   isAdmin: boolean;
   onAbout: () => void;
+  onClose: () => void;
 }) {
   const subItems = (item.items ?? []).filter((i) => !i.adminOnly || isAdmin);
+  const [subOpen, setSubOpen] = useState(false);
   if (subItems.length > 0) {
     return (
-      <div className="item has-sub">
-        {item.label}
-        <div className="submenu">
+      <div className="has-sub-wrap" onMouseLeave={() => setSubOpen(false)}>
+        <button
+          type="button"
+          className="item has-sub"
+          aria-haspopup="true"
+          aria-expanded={subOpen}
+          onClick={() => setSubOpen((v) => !v)}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowRight") {
+              e.preventDefault();
+              setSubOpen(true);
+            } else if ((e.key === "ArrowLeft" || e.key === "Escape") && subOpen) {
+              e.stopPropagation();
+              setSubOpen(false);
+            }
+          }}
+        >
+          {item.label}
+        </button>
+        <div className={`submenu${subOpen ? " sub-open" : ""}`}>
           {subItems.map((sub) => (
-            <MenuItem key={sub.label} item={sub} isAdmin={isAdmin} onAbout={onAbout} />
+            <MenuItem key={sub.label} item={sub} isAdmin={isAdmin} onAbout={onAbout} onClose={onClose} />
           ))}
         </div>
       </div>
@@ -90,14 +111,21 @@ function MenuItem({
   }
   if (item.path) {
     return (
-      <NavLink to={item.path} className="item">
+      <NavLink to={item.path} className="item" onClick={onClose}>
         {item.label}
       </NavLink>
     );
   }
   if (item.action === "about") {
     return (
-      <button type="button" className="item" onClick={onAbout}>
+      <button
+        type="button"
+        className="item"
+        onClick={() => {
+          onAbout();
+          onClose();
+        }}
+      >
         {item.label}
       </button>
     );
@@ -109,11 +137,18 @@ function MenuItem({
   );
 }
 
-// One top-level menu: a hover dropdown, optionally with a clickable title
-// (Mainboard opens the index on click and reveals its dropdown on hover).
-function Menu({ group, isAdmin, onAbout }: { group: MenuGroup; isAdmin: boolean; onAbout: () => void }) {
+// One top-level menu: a dropdown that opens on hover (mouse) OR keyboard focus.
+// The trigger is a real focusable control (a <button>, or the clickable NavLink
+// title for Mainboard) carrying aria-haspopup/aria-expanded; ArrowDown opens and
+// moves into the list, Escape closes and returns focus to the trigger, and focus
+// leaving the menu closes it — so the primary nav is fully keyboard-operable
+// (WCAG 2.1.1) without changing the v18 look for mouse users.
+export function Menu({ group, isAdmin, onAbout }: { group: MenuGroup; isAdmin: boolean; onAbout: () => void }) {
   const items = (group.items ?? []).filter((i) => !i.adminOnly || isAdmin);
   const blue = group.accent === "blue";
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLElement | null>(null);
 
   if (items.length === 0) {
     return group.path ? (
@@ -127,41 +162,99 @@ function Menu({ group, isAdmin, onAbout }: { group: MenuGroup; isAdmin: boolean;
     ) : null;
   }
 
+  const assignTrigger = (el: HTMLElement | null) => {
+    triggerRef.current = el;
+  };
+  const focusFirstItem = () => {
+    containerRef.current?.querySelector<HTMLElement>(".dropdown .item")?.focus();
+  };
+  const onTriggerKeyDown = (e: KeyboardEvent) => {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setOpen(true);
+      requestAnimationFrame(focusFirstItem);
+    } else if (e.key === "Escape") {
+      setOpen(false);
+    }
+  };
+  const onContainerKeyDown = (e: KeyboardEvent) => {
+    if (e.key === "Escape") {
+      setOpen(false);
+      triggerRef.current?.focus();
+    }
+  };
+  const onBlur = (e: FocusEvent) => {
+    if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOpen(false);
+  };
+
   return (
-    <div className={`menu${blue ? " menu-blue" : ""}`}>
+    <div
+      ref={containerRef}
+      className={`menu${open ? " open" : ""}${blue ? " menu-blue" : ""}`}
+      onMouseLeave={() => setOpen(false)}
+      onBlur={onBlur}
+      onKeyDown={onContainerKeyDown}
+    >
       {group.path ? (
-        <NavLink to={group.path} end={group.path === "/"} className="menu-title">
+        <NavLink
+          to={group.path}
+          end={group.path === "/"}
+          className="menu-title"
+          ref={assignTrigger}
+          aria-haspopup="true"
+          aria-expanded={open}
+          onKeyDown={onTriggerKeyDown}
+          onClick={() => setOpen(false)}
+        >
           {group.label}
         </NavLink>
       ) : (
-        group.label
+        <button
+          type="button"
+          className="menu-trigger"
+          ref={assignTrigger}
+          aria-haspopup="true"
+          aria-expanded={open}
+          onClick={() => setOpen((v) => !v)}
+          onKeyDown={onTriggerKeyDown}
+        >
+          {group.label}
+        </button>
       )}
       <div className={`dropdown${blue ? " dropdown-blue" : ""}`}>
         {items.map((item) => (
-          <MenuItem key={item.label} item={item} isAdmin={isAdmin} onAbout={onAbout} />
+          <MenuItem
+            key={item.label}
+            item={item}
+            isAdmin={isAdmin}
+            onAbout={onAbout}
+            onClose={() => setOpen(false)}
+          />
         ))}
       </div>
     </div>
   );
 }
 
+// About dialog. Delegates to the shared accessible Modal (Escape to close, focus
+// trapped while open, focus restored to the trigger on close) rather than a
+// hand-rolled overlay, so the Help ▸ About affordance matches every other dialog.
 function AboutModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  if (!open) return null;
   return (
-    <div className="modal-overlay" role="dialog" aria-modal="true" aria-label="About" onClick={onClose}>
-      <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-        <h3 style={{ marginTop: 0 }}>Entropia V18</h3>
-        <p style={{ color: "var(--text-dim)" }}>
-          Backtest-first strategy composition workspace. Compose strategies and packages, verify
-          readiness, run deterministic backtests, and review results.
-        </p>
-        <div style={{ marginTop: 16, textAlign: "right" }}>
-          <button type="button" className="page-button" onClick={onClose}>
-            Close
-          </button>
-        </div>
+    <Modal open={open} onClose={onClose} titleId="about-modal-title">
+      <h3 id="about-modal-title" style={{ marginTop: 0 }}>
+        Entropia V18
+      </h3>
+      <p style={{ color: "var(--text-dim)" }}>
+        Backtest-first strategy composition workspace. Compose strategies and packages, verify
+        readiness, run deterministic backtests, and review results.
+      </p>
+      <div style={{ marginTop: 16, textAlign: "right" }}>
+        <button type="button" className="page-button" onClick={onClose}>
+          Close
+        </button>
       </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -183,7 +276,7 @@ export function Layout() {
 
   return (
     <div className="app-shell">
-      <div className="top-title">
+      <header className="top-title">
         <AuthControl />
         <span className="brand-title">entropia</span>
         <div className="topbar-status">
@@ -198,7 +291,7 @@ export function Layout() {
             ● {sse}
           </span>
         </div>
-      </div>
+      </header>
 
       <nav className="menu-bar" aria-label="Primary">
         {menus.map((group) => (
@@ -210,20 +303,12 @@ export function Layout() {
         <Outlet />
       </main>
 
-      {/* Fixed global RUN / Ready-Check panel (v18 mockup, bottom-right). */}
-      <div className="run-controls">
-        <NavLink to="/backtest/ready-check" className="ready-button">
-          Backtest
-          <br />
-          Ready
-          <br />
-          Check
-        </NavLink>
-        <div className="ready-status" title="Backtest readiness — open Ready Check to compute" />
-        <NavLink to="/backtest/run" className="run-button">
-          RUN
-        </NavLink>
-      </div>
+      {/* The fixed lower-right Ready Check / RUN dock is owned by the Mainboard page
+          (v18: .run-controls lives inside #mainboardView), where its status strip is
+          bound to the real readiness state and RUN stays F-16-locked until a current
+          Ready Check passes. Rendering a second static dock here would paint over that
+          gated one on the Mainboard and overlap page content elsewhere, so the shell
+          intentionally has no global dock. */}
 
       <AboutModal open={aboutOpen} onClose={() => setAboutOpen(false)} />
     </div>

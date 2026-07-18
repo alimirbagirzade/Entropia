@@ -126,6 +126,19 @@ a:hover { text-decoration: underline; }
 .menu-link.active { background: #dcdcdc; font-weight: 700; }
 .menu-blue { background: #00a9e8; color: #fff; margin-left: 6px; }
 .menu-blue:hover { background: #0092c8; }
+/* Keyboard-focusable top-level trigger for a dropdown menu (pathless groups).
+   Styled to read as the plain menu text it replaces — the visual is unchanged. */
+.menu-trigger {
+  background: none;
+  border: 0;
+  padding: 0;
+  height: 100%;
+  font: inherit;
+  color: inherit;
+  cursor: default;
+  display: flex;
+  align-items: center;
+}
 
 .dropdown {
   display: none;
@@ -137,7 +150,8 @@ a:hover { text-decoration: underline; }
   border: 1px solid #777;
   z-index: 50;
 }
-.menu:hover > .dropdown { display: block; }
+.menu:hover > .dropdown,
+.menu.open > .dropdown { display: block; }
 .dropdown-blue { background: #00a9e8; border-color: #007fb0; }
 .item {
   display: block;
@@ -157,7 +171,9 @@ a:hover { text-decoration: underline; }
 .dropdown-blue .item { background: #00a9e8; color: #fff; }
 .dropdown-blue .item:hover { background: #f28c28; }
 
-/* Second-level submenu (v18 nested menu tree). */
+/* Second-level submenu (v18 nested menu tree). The has-sub trigger is a focusable
+   <button> inside a positioned wrapper; the submenu opens on hover OR keyboard. */
+.has-sub-wrap { position: relative; }
 .item.has-sub { position: relative; padding-right: 22px; }
 .item.has-sub::after { content: "›"; position: absolute; right: 8px; top: 50%; transform: translateY(-50%); }
 .submenu {
@@ -170,7 +186,8 @@ a:hover { text-decoration: underline; }
   border: 1px solid #777;
   z-index: 60;
 }
-.item.has-sub:hover > .submenu { display: block; }
+.has-sub-wrap:hover > .submenu,
+.submenu.sub-open { display: block; }
 .dropdown-blue .submenu { background: #00a9e8; border-color: #007fb0; }
 .dropdown-blue .submenu .item { background: #00a9e8; color: #fff; }
 .dropdown-blue .submenu .item:hover { background: #f28c28; }

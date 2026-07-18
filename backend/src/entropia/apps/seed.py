@@ -30,6 +30,7 @@ from entropia.domain.research_data.enums import ResearchRevisionState, UsageScop
 from entropia.infrastructure.observability import configure_logging, get_logger
 from entropia.infrastructure.postgres.engine import get_session_factory
 from entropia.infrastructure.postgres.models import Agent, HumanUser, Principal
+from entropia.infrastructure.postgres.repositories import capability as capability_repo
 from entropia.infrastructure.postgres.repositories import esp as esp_repo
 from entropia.infrastructure.postgres.repositories import instrument as instrument_repo
 from entropia.infrastructure.postgres.repositories import market_data as md_repo
@@ -184,11 +185,26 @@ async def seed_identities(session: AsyncSession) -> None:
     await session.flush()  # principals exist before FK-dependent dataset rows
 
 
+async def seed_capabilities(session: AsyncSession) -> None:
+    """Idempotently seed the seven baseline Future Dev capability slots.
+
+    Without this the Capability Registry is empty on a fresh database, so every
+    Future Dev subpage reports its key as "Not registered". Doc 22 §4/§9 requires
+    the fixed V18 keys to exist as PLACEHOLDER rows (inert — a capability below
+    Limited/Active accepts no command and produces no output). Delegates to the
+    repository's idempotent seeder; registry rows carry no principal FK, so no
+    ordering constraint applies.
+    """
+    await capability_repo.seed_baseline_capabilities(session)
+    await session.flush()
+
+
 async def _seed() -> None:
     log = get_logger("seed")
     factory = get_session_factory()
     async with factory() as session:
         await seed_identities(session)
+        await seed_capabilities(session)
 
         if SEED_DEMO_MARKET or SEED_DEMO_RESEARCH:
             market_revision_id = await _seed_demo_market_dataset(session, log)

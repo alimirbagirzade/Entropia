@@ -127,11 +127,42 @@ export function connectEvents(
     };
   }
 
+  // A full-page navigation (or a back/forward-cache freeze) never runs React's
+  // effect cleanup, so without an unload hook the active EventSource lingers and
+  // keeps holding one of the browser's ~6 per-host HTTP/1.1 connection slots — one
+  // leaked slot per bfcached page until eviction — which can starve every later
+  // same-host request (the next GET queues indefinitely). `pagehide` fires for both
+  // real unload and bfcache freeze, so release the stream (and any pending backoff
+  // timer) there; `pageshow` reopens it if the page is later restored from bfcache.
+  // (beforeunload is intentionally avoided: registering one can disqualify a page
+  // from bfcache in some browsers, defeating the point.)
+  function closeCurrentSource(): void {
+    if (reconnectTimer !== null) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
+    teardownSource?.();
+    teardownSource = null;
+    onStatus?.("closed");
+  }
+  function reopenOnRestore(event: PageTransitionEvent): void {
+    // Only a bfcache restore (persisted) needs a fresh stream; the initial-load
+    // pageshow (persisted === false) is a no-op. The reopen's onopen full-refresh
+    // heals any gap missed while frozen (hasOpened is still true from before).
+    if (disposed || !event.persisted) return;
+    onStatus?.("connecting");
+    openSource();
+  }
+  window.addEventListener("pagehide", closeCurrentSource);
+  window.addEventListener("pageshow", reopenOnRestore);
+
   onStatus?.("connecting");
   openSource();
 
   return () => {
     disposed = true;
+    window.removeEventListener("pagehide", closeCurrentSource);
+    window.removeEventListener("pageshow", reopenOnRestore);
     if (reconnectTimer !== null) {
       clearTimeout(reconnectTimer);
       reconnectTimer = null;

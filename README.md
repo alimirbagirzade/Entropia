@@ -105,9 +105,9 @@ domain state) and every mutation is a typed, audited command.
 | Packages & Data | **Rationale Families** (`/rationale-families`) | Shared strategy-taxonomy CRUD plus the package-assignment batch editor. |
 | Packages & Data | **Market Data** (`/market-data`) | Market dataset registry + owner ingest chain (upload → analyze → schema-map → approve) with revision lifecycle. |
 | Packages & Data | **Research Data** (`/research-data`) | Research dataset registry: time policies, field/feature definitions, agent/evidence bundles. |
-| Backtest | **Portfolio / Equity Allocation** (`/portfolio`) | Allocation plan draft editor with immutable validation reports. |
+| Backtest | **Portfolio / Equity Allocation** (`/portfolio`) | Allocation plan draft editor with immutable validation reports, plus portfolio-level rules: a composition-wide **Max Total Exposure** cap and a **cross-item conflict policy** for opposing same-instrument signals. |
 | Backtest | **Backtest Ready Check** (`/backtest/ready-check`) | Server preflight over the composition fingerprint; immutable readiness reports. |
-| Backtest | **RUN & Backtest Results** (`/backtest/run`) | Run admission (202 + durable tracking) and immutable result deep links with retry. |
+| Backtest | **RUN & Backtest Results** (`/backtest/run`) | Run admission (202 + durable tracking) and immutable result deep links with retry. Composite results carry a **per-item breakdown** (each strategy/trade-log's own metrics) and a **contribution** section — correlation, diversification, and each item's marginal delta to the portfolio. |
 | Backtest | **Results History** (`/backtest/history`) | Keyset-sorted result index with two-result compare and soft delete. |
 | Backtest | **Arrange Metrics** (`/backtest/metrics`) | Metric profile editor (apply / lock / unlock) shaping how results are displayed — never what was computed. |
 | Analysis & Ops | **Analysis Lab** (`/analysis-lab`) | Alpha Agent workspace: runtime pause/resume/stop, directives, tasks, checkpoints, tool-call history, hypotheses. |
@@ -119,6 +119,53 @@ domain state) and every mutation is a typed, audited command.
 | Docs | **Future Dev** (`/future-dev`) | Capability registry: lifecycle transitions with activation gates, operational POSTs, output & transition histories. |
 
 Plus `/login` (sign up / log in when `AUTH_MODE=session`).
+
+---
+
+## Using it — the strategy-universe workflow
+
+Entropia's core is a **strategy universe**: you gather many strategies (and
+external Trade Logs) on one Mainboard and analyse how they behave *together* and
+*on their own*. The end-to-end path, screen by screen:
+
+1. **Bring data in.** On **Market Data** (`/market-data`), `+ Add Market Dataset`
+   → upload a raw OHLCV file → *Analyze & map fields* → *Create version* →
+   *Verify / approve*. Only an **approved** revision feeds a backtest.
+2. **Make an indicator usable.** On **Create Package** (`/packages/create`) request
+   an Indicator Package → run **Pre-Check** → generate a candidate → draft →
+   Admin **approve**. It then shows as *usable* in **Package Library** and becomes
+   pinnable in the Strategy editor.
+3. **Add a strategy.** On the **Mainboard** (`/`), `+ Add → Add Strategy`. A thin
+   horizontal box appears at once as an **unsaved draft**; its ▼ expands the full
+   3-column Strategy Details editor (Setup & Data · Decision Logic · Risk
+   Management). Configure it — market, approved data source, backtest range, entry
+   indicator block (*Choose indicator* → your approved package), stops, sizing.
+4. **Save.** *Save Strategy Revision* writes an immutable revision and the row
+   automatically **joins the composition** (an unsaved draft is never part of
+   Ready Check or RUN). Repeat steps 3–4 to stack **many strategies** on the one
+   board — the strategy universe. `+ Add → Add Outsource Signal` adds a Trade Log
+   the same way.
+5. **Set portfolio rules (optional).** On **Portfolio / Equity Allocation**
+   (`/portfolio`), turn on *Use Equity Allocation* to share one capital pool by
+   per-item **share**, and set the composition-wide **Max Total Exposure** cap and
+   the **cross-item conflict policy** (`KEEP_SEPARATE` = each item replays
+   independently · `BLOCK_OPPOSITE` = a later item's opposing same-instrument entry
+   is blocked while an earlier item holds the other side · `NET` is validated but
+   the V1 sequential engine executes it conservatively as `BLOCK_OPPOSITE` and
+   discloses the downgrade — never a silent net-fill).
+6. **Ready Check → RUN.** **Backtest Ready Check** (`/backtest/ready-check`)
+   preflights the composition; a blocker is shown verbatim, never faked green.
+   When it passes, **RUN** admits the backtest (202 + durable tracking).
+7. **Read the result.** The immutable Result shows portfolio metrics **plus** a
+   **Per-item breakdown** (each strategy/trade-log's own PnL, drawdown, trades)
+   **and** a **Contribution** section — the correlation matrix, a diversification
+   summary, and each item's **marginal** delta (portfolio *with* vs *without* that
+   item) — i.e. "what does this item add to the universe?".
+
+> Strategy configs are related through this shared plane, not in isolation: they
+> share one capital pool + exposure cap, obey the cross-item conflict policy on the
+> same instrument, run as one composition, and are compared by correlation and
+> marginal contribution in the Result.
 
 ---
 
@@ -650,7 +697,12 @@ blocker), never silently faked. Full per-requirement detail is in
   realized-PnL progression in deterministic pin order; a unified-clock,
   simultaneous cross-margin co-simulation across heterogeneous bar sources is
   deferred (surfaced as the L4 `portfolio_curve_sequential_not_unified_clock`
-  diagnostic, never hidden).
+  diagnostic, never hidden). For the same reason the **`NET` cross-item conflict
+  policy** cannot be honestly co-simulated on the V1 sequential engine, so it is
+  executed as **`BLOCK_OPPOSITE`** with an explicit validation + engine warning
+  (`CONFLICT_POLICY_NET_V1`), never a silent net-fill. The **per-item breakdown**
+  and **contribution** analytics (correlation, diversification, marginal deltas)
+  build on this same per-item replay.
 - **Multi-instrument filtering (F-05)** is implemented but not exercised
   end-to-end: the current ingestion schema is single-instrument-per-revision
   (`MarketDatasetRevision.instrument_id` is dataset-level and the canonical

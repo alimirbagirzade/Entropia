@@ -365,7 +365,7 @@ async def _seed_esp_resolver(
         revision_id=revision.revision_id,
         canonical_key=canonical_key,
         signature=signature,
-        runtime_adapter=RuntimeAdapter.PINE_V5,
+        runtime_adapter=RuntimeAdapter.PYTHON,
         timing_semantics="closed_bar_only",
         repaint=False,
         evidence={"test_vectors": "seed", "review": "passed"},
@@ -374,7 +374,7 @@ async def _seed_esp_resolver(
         session,  # type: ignore[arg-type]
         canonical_key=canonical_key,
         package_entity_id=_root.entity_id,
-        runtime_adapter=RuntimeAdapter.PINE_V5,
+        runtime_adapter=RuntimeAdapter.PYTHON,
         trust_state=ResolverTrustState.TRUSTED_ACTIVE,
         trusted_active_revision_id=revision.revision_id,
         updated_by_principal_id=DEFAULT_ADMIN_ID,

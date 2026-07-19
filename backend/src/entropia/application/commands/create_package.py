@@ -834,6 +834,16 @@ async def start_package_validation_run(
         # not_executed / blocked mandatory check does NOT pass and blocks approval.
         report = await run_package_validation(session, detail)
         status = ValidationRunStatus.PASSED if report.passed else ValidationRunStatus.FAILED
+        # Certify the draft revision with this run's verdict. can_use requires the head
+        # revision's validation_state == PASSED (domain/package/permissions), so without
+        # this the draft stays PENDING and the approved+published package is never usable
+        # — it cannot be pinned in the Strategy editor. A FAILED run marks it FAILED; a
+        # regenerated candidate makes a fresh PENDING draft, so evidence never goes stale.
+        draft_revision = await pkg_repo.get_revision(session, detail.draft_revision_id)
+        if draft_revision is not None:
+            draft_revision.validation_state = (
+                PackageValidationState.PASSED if report.passed else PackageValidationState.FAILED
+            )
         job = await _enqueue_stub_job(
             session, actor, queue="default", kind="validation", request_id=root.entity_id
         )

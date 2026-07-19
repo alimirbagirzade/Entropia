@@ -284,10 +284,51 @@ export interface ResultArtifactPage<T> {
 // and the reproducibility note that states whether real indicator triggers or a
 // breakout proxy produced this result (doc 15 §13). `content` is an open dict; the
 // UI reads the keys it knows and never fabricates a missing one.
+// v17 per-item breakdown (engine.py combine_item_runs). Every Decimal the engine emits
+// is stringified at the JSONB persist boundary (_jsonable), so all money/percent fields
+// arrive as strings; seq/counts are ints. A non-executing object (Trading Signal / Trade
+// Log) carries null metrics + an empty equity curve (never a fabricated flat line).
+export interface PerItemEquityPoint {
+  seq: number;
+  timestamp: string;
+  equity: string;
+  drawdown: string;
+}
+
+export interface PerItemBreakdown {
+  item_id: string;
+  item_kind: string;
+  root_id: string | null;
+  revision_id: string | null;
+  executed: boolean;
+  symbol: string | null;
+  timeframe: string | null;
+  initial_capital: string | null;
+  final_equity: string | null;
+  net_profit: string | null;
+  net_profit_pct: string | null;
+  max_drawdown: string | null;
+  max_drawdown_pct: string | null;
+  total_trades: number;
+  winning_trades: number;
+  trade_seq_range: [number, number] | null;
+  equity_curve: PerItemEquityPoint[];
+  note?: string;
+}
+
+// diagnostics.composition — present ONLY for a genuine multi-item composition (a lone
+// Strategy takes the byte-identical no-compose path and emits no composition block).
+export interface CompositionDiagnostics {
+  strategy_count: number;
+  participating_item_count: number;
+  items: PerItemBreakdown[];
+}
+
 export interface DiagnosticContent {
   entry_model?: string;
   reproducibility_note?: string;
   warnings?: string[];
+  composition?: CompositionDiagnostics;
   [key: string]: unknown;
 }
 

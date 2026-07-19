@@ -17,6 +17,7 @@ import {
   type DiagnosticContent,
   type DiagnosticRow,
   type ExportFormatValue,
+  type PerItemBreakdown,
   type ManifestItemRef,
   type ResultManifestExcerpt,
   type TradeLedgerRow,
@@ -107,6 +108,7 @@ export function ResultDetail({ result }: { result: BacktestResultDetail }) {
 
       <ChartsPlaceholder />
       <TradeListSection resultId={result.result_id} />
+      <PerItemBreakdownSection resultId={result.result_id} />
       <DiagnosticsSection resultId={result.result_id} />
       <ExportSection resultId={result.result_id} />
 
@@ -346,6 +348,128 @@ const DIAGNOSTIC_DISPLAY_FIELDS: { key: string; label: string }[] = [
   { key: "condition_blocks", label: "Condition blocks" },
   { key: "decision_trace_count", label: "Decision trace events" },
 ];
+
+// Per-item breakdown (v17, engine.py combine_item_runs → diagnostics.composition).
+// A multi-item RUN simulates each enabled Strategy SEPARATELY and folds the
+// contributions into one portfolio Result; this section attributes that composite back
+// to its parts — each executing strategy's OWN isolated PnL / drawdown / trade count (on
+// its own capital basis) plus its OWN equity curve. Non-executing objects (Trading
+// Signal / Trade Log) are recorded but run no bar-replay (the honest V1 boundary), so
+// they show a note and no curve. Absent for a lone-Strategy result (no composition block
+// is emitted — the byte-identical no-compose path).
+const perItemBoxStyle = {
+  border: "1px solid var(--border)",
+  borderRadius: "var(--radius)",
+  padding: 12,
+  marginTop: 10,
+} as const;
+const equityScrollStyle = {
+  maxHeight: 220,
+  overflowY: "auto",
+  marginTop: 8,
+} as const;
+
+function perItemNum(value: string | null): string {
+  return value ?? EM_DASH;
+}
+
+function PerItemBreakdownSection({ resultId }: { resultId: string }) {
+  const page = useResultArtifact<DiagnosticRow>(resultId, "diagnostics", null);
+  const composition = page.data?.items[0]?.content?.composition ?? null;
+  if (page.isLoading || page.isError || composition === null) {
+    // No standalone loading/error UI: the Diagnostics section below owns that surface for
+    // the same artifact. A single-Strategy result legitimately has no composition block.
+    return null;
+  }
+  const items = composition.items;
+  return (
+    <>
+      <h4>Per-item breakdown</h4>
+      <p className="page-sub" style={{ marginTop: 0 }}>
+        {`${composition.strategy_count} executing ${
+          composition.strategy_count === 1 ? "strategy" : "strategies"
+        } · ${composition.participating_item_count} participating item${
+          composition.participating_item_count === 1 ? "" : "s"
+        }. Each executing strategy is simulated separately over its own bars; the figures below are its ISOLATED performance (own capital basis), not its portfolio-rebased slice.`}
+      </p>
+      {items.map((item) => (
+        <PerItemCard key={item.item_id} item={item} />
+      ))}
+    </>
+  );
+}
+
+function PerItemCard({ item }: { item: PerItemBreakdown }) {
+  return (
+    <div style={perItemBoxStyle}>
+      <strong>
+        {item.item_kind} <code style={hashStyle}>{item.item_id}</code>
+      </strong>
+      {!item.executed ? (
+        <p className="page-sub" style={{ margin: "6px 0 0" }}>
+          Recorded for traceability but not simulated — a {item.item_kind} affects a run only
+          as a Strategy data input (V1 boundary), so it has no standalone equity curve.
+        </p>
+      ) : (
+        <>
+          <dl className="kv" style={{ marginTop: 8 }}>
+            <dt>Symbol</dt>
+            <dd>{item.symbol ?? EM_DASH}</dd>
+            <dt>Initial capital</dt>
+            <dd>{perItemNum(item.initial_capital)}</dd>
+            <dt>Final equity</dt>
+            <dd>{perItemNum(item.final_equity)}</dd>
+            <dt>Net profit</dt>
+            <dd>
+              {perItemNum(item.net_profit)}
+              {item.net_profit_pct !== null ? ` (${item.net_profit_pct}%)` : ""}
+            </dd>
+            <dt>Max drawdown</dt>
+            <dd>
+              {perItemNum(item.max_drawdown)}
+              {item.max_drawdown_pct !== null ? ` (${item.max_drawdown_pct}%)` : ""}
+            </dd>
+            <dt>Trades</dt>
+            <dd>
+              {item.total_trades} ({item.winning_trades} winning)
+              {item.trade_seq_range
+                ? ` · ledger seq ${item.trade_seq_range[0]}–${item.trade_seq_range[1]}`
+                : ""}
+            </dd>
+          </dl>
+          {item.equity_curve.length > 0 ? (
+            <div style={equityScrollStyle}>
+              <table className="metrics-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Seq</th>
+                    <th scope="col">Time</th>
+                    <th scope="col">Equity</th>
+                    <th scope="col">Drawdown</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {item.equity_curve.map((point) => (
+                    <tr key={point.seq}>
+                      <td>{point.seq}</td>
+                      <td>{point.timestamp ? formatUtc(point.timestamp) : EM_DASH}</td>
+                      <td>{point.equity}</td>
+                      <td>{point.drawdown}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="page-sub" style={{ margin: "6px 0 0" }}>
+              No equity points (the strategy opened no position over its bars).
+            </p>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
 
 // Deterministic run diagnostics (doc 15 §13). The single `run_diagnostics`
 // artifact row states — via the reproducibility note and the honest L4 warnings —

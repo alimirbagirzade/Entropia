@@ -27,7 +27,13 @@ from entropia.shared.manifest import manifest_hash
 # policies) are now executed over the pinned print path — the version bump shifts the
 # execution_key namespace so a pre-(C) result is never reused for a config whose
 # settings now genuinely execute (INF-04/INF-05).
-ENGINE_VERSION = "backtest-engine-v16-tick-settings"
+# v17: a multi-item composition Result now persists a PER-ITEM breakdown (each executing
+# strategy's own equity curve + PnL/drawdown/trade-count) in ``diagnostics.composition.items``.
+# Additive to the artifact, but the version bump shifts the execution_key namespace so a
+# stale pre-v17 composite result (which lacks the per-item breakdown) is NOT idempotently
+# reused for a re-RUN of the same composition (INF-04/INF-05) — a re-RUN produces the
+# richer artifact instead of returning the older one.
+ENGINE_VERSION = "backtest-engine-v17-per-item-breakdown"
 METRIC_SET_VERSION = "metric-set-v1"
 OUTPUT_ARTIFACT_PROFILE = "standard-v1"
 

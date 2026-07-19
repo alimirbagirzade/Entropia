@@ -54,24 +54,28 @@ export class MainboardPage {
     return this.page.locator(".strategy-package");
   }
 
-  // Deletes the last .strategy-package on the board. After a single-shot
-  // addStrategyDraft() there is exactly one draft row, so `.last()` is
-  // unambiguously the row whose rootId was just returned.
-  async deleteLastItem(): Promise<void> {
-    const lastItem = this.page.locator(".strategy-package").last();
-    // Ensure the row is expanded so the per-item ops (including delete) render.
-    // A freshly added row auto-opens its inline editor (F-15), so a blind arrow
-    // click would TOGGLE it shut — expand idempotently by reading aria-expanded.
-    const arrow = lastItem.locator(".strategy-arrow");
-    if ((await arrow.getAttribute("aria-expanded")) !== "true") {
-      await arrow.click();
-    }
-    await expect(arrow).toHaveAttribute("aria-expanded", "true");
+  // Soft-deletes the draft just created by addStrategyDraft(). It targets the
+  // auto-expanded draft row — NOT `.last()`. The Trash spec runs as the shared
+  // ADMIN account, whose board can already carry OTHER admin-owned draft rows
+  // from earlier work; the drafts list renders newest-first, so `.last()` would
+  // soft-delete a PRE-EXISTING draft while the Trash search looks for `rootId`,
+  // and would silently find nothing. Right after goto() + addStrategyDraft()
+  // (no navigation in between) exactly one row is expanded — the just-added
+  // draft (its box auto-opens via justAddedDraftId) — so the open row is
+  // unambiguously the one whose id is `rootId`. We also assert the DELETE hit
+  // exactly that id, so a wrong-row deletion fails loudly instead of leaking to
+  // the Trash search.
+  async deleteLastItem(rootId: string): Promise<void> {
+    // The just-added draft's row is the only expanded .strategy-package.
+    const target = this.page
+      .locator(".strategy-package")
+      .filter({ has: this.page.locator('.strategy-arrow[aria-expanded="true"]') });
+    await expect(target).toHaveCount(1);
     // The "× Delete" button carries aria-label={`Delete ${label}`}, so its
     // accessible name is "Delete <label>" (the aria-label wins over the visible
     // "× Delete" text) — match that, not the glyph text.
-    await lastItem.getByRole("button", { name: /^Delete / }).click();
-    const dialog = lastItem.getByRole("alertdialog");
+    await target.getByRole("button", { name: /^Delete / }).click();
+    const dialog = target.getByRole("alertdialog");
     await expect(dialog).toBeVisible();
     // Set the waiter up before clicking so we never miss the response, and
     // await it before returning — the caller (06-trash-reauth.spec.ts)
@@ -84,5 +88,9 @@ export class MainboardPage {
     await dialog.getByRole("button", { name: "Move to Trash" }).click();
     const response = await deleteResponse;
     expect(response.ok(), `Move to Trash HTTP ${response.status()}`).toBeTruthy();
+    expect(
+      response.url().endsWith(`/work-objects/${rootId}`),
+      `soft-deleted the wrong root: ${response.url()} (expected ${rootId})`,
+    ).toBeTruthy();
   }
 }

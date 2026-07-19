@@ -18,7 +18,7 @@ test.describe("Trash — soft-delete then re-auth purge", () => {
     const mainboard = new MainboardPage(page);
     await mainboard.goto();
     const rootId = await mainboard.addStrategyDraft();
-    await mainboard.deleteLastItem();
+    await mainboard.deleteLastItem(rootId);
 
     const trash = new TrashPage(page);
     await trash.goto();

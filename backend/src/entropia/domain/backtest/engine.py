@@ -28,7 +28,7 @@ from __future__ import annotations
 
 from collections import deque
 from collections.abc import Iterator
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import date
 from decimal import Decimal, InvalidOperation
 from math import sqrt
@@ -149,6 +149,11 @@ class EngineOutput:
     equity_points: list[EquityPoint]
     signal_events: list[SignalEventRow]
     diagnostics: dict[str, Any]
+    # Portfolio-rules slice: every FULLY-closed position's held window
+    # ({entry_time, exit_time, direction, peak_notional}) — the raw material a
+    # LATER-pinned item's portfolio constraints are built from
+    # (``build_prior_intervals``). Not persisted into the Result artifact.
+    position_intervals: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass(frozen=True, slots=True)
@@ -203,6 +208,56 @@ class AllocationExecution:
 
 
 @dataclass(frozen=True, slots=True)
+class PriorItemInterval:
+    """One EARLIER-pinned item's fully-closed held-position window, replayed against
+    as a portfolio constraint by a LATER-pinned item (pin-order precedence).
+
+    ``start_ms`` / ``end_ms`` are UTC epoch milliseconds; ``None`` means the bound
+    could not be placed in time and the interval is UNBOUNDED on that side — fail
+    closed: an unplaceable window can only over-cover (block/cap more), never
+    under-cover. ``notional`` is the position's PEAK held notional over its life
+    (scaling/stacking included) — a conservative over-approximation for a cap.
+    ``symbol`` is the item's canonical ``instrument_id`` (``None`` = unknown —
+    treated as potentially the SAME instrument for the conflict gate, fail closed).
+    """
+
+    item_id: str
+    symbol: str | None
+    direction: str  # "long" | "short"
+    start_ms: int | None
+    end_ms: int | None
+    notional: Decimal
+
+
+@dataclass(frozen=True, slots=True)
+class PortfolioRules:
+    """Resolved PORTFOLIO-LEVEL rules for the item the engine replays (cross-item).
+
+    Built from the manifest's immutable ``capital_execution`` snapshot by
+    ``resolve_portfolio_rules`` (pure, no I/O) and per-item completed by the worker
+    (``own_symbol`` + the accumulated ``prior_intervals`` of earlier-pinned items).
+    ``None`` at ``run_engine`` means no portfolio-level rule is set — the replay is
+    byte-identical to the pre-rules engine.
+
+    Honest V1 boundary (sequential enforcement): items replay independently in
+    deterministic pin order, so constraints propagate FORWARD only — an
+    earlier-pinned item is never re-simulated because of a later one (doc 13 §8.4
+    step 6: a blocked item's share is not transferred). Surfaced as an L4 warning
+    on every rules-active run, never hidden. ``NET`` (offsetting the aggregate
+    position) needs a unified-clock co-simulation and is executed conservatively
+    as BLOCK_OPPOSITE (L4-disclosed). ``exposure_percent_invalid`` marks a
+    SET-but-unreadable/non-positive cap: the engine fails closed to a ZERO cap
+    (admits nothing) rather than silently running uncapped.
+    """
+
+    max_total_exposure_percent: Decimal | None
+    conflict_policy: str | None  # canonical CrossItemConflictPolicy token, or None
+    own_symbol: str | None
+    prior_intervals: tuple[PriorItemInterval, ...]
+    exposure_percent_invalid: bool = False
+
+
+@dataclass(frozen=True, slots=True)
 class _Bar:
     """One normalized OHLCV bar (canonical market-data field names, doc 11)."""
 
@@ -250,6 +305,10 @@ class _Position:
     initial_size: Decimal = _ZERO
     layers_filled: int = 0
     scale_reference: Decimal = _ZERO
+    # Portfolio-rules slice: the PEAK held notional over the position's life
+    # (initial entry, then ratcheted at every stack/scale/remainder add) — the
+    # conservative exposure figure a later item's portfolio cap replays against.
+    peak_notional: Decimal = _ZERO
 
 
 @dataclass(slots=True)
@@ -1197,6 +1256,88 @@ def resolve_allocation_execution(
     )
 
 
+def resolve_portfolio_rules(capital_execution: dict[str, Any] | None) -> PortfolioRules | None:
+    """Project the manifest ``capital_execution`` snapshot's PORTFOLIO-LEVEL rules
+    (cross-item Max Total Exposure + conflict policy, doc 13 §8.4), or ``None``
+    when no rule is set — the engine then replays byte-identically to the
+    pre-rules build.
+
+    Pure and defensive (the ``resolve_allocation_execution`` twin). Rules live on
+    the shared allocation plan, so a disabled/absent allocation carries none. A
+    SET-but-unreadable or non-positive exposure percent does NOT fall back to
+    "no cap" (that would silently under-enforce a cap the user configured) — it
+    is flagged ``exposure_percent_invalid`` and the engine fails closed to a ZERO
+    cap + L4 warning. An explicit KEEP_SEPARATE with no cap is the pre-rules
+    behaviour and resolves to ``None``."""
+    if not isinstance(capital_execution, dict) or not capital_execution.get("enabled"):
+        return None
+    config = capital_execution.get("config")
+    if not isinstance(config, dict):
+        return None
+    raw_pct = config.get("max_total_exposure_percent")
+    pct: Decimal | None = None
+    pct_invalid = False
+    if raw_pct is not None:
+        pct = _safe_decimal(raw_pct)
+        if pct is None or pct <= _ZERO:
+            pct = None
+            pct_invalid = True
+    raw_policy = config.get("conflict_policy")
+    policy = None
+    if raw_policy is not None and str(raw_policy).strip():
+        policy = str(raw_policy).strip().upper()
+    if pct is None and not pct_invalid and policy in (None, "KEEP_SEPARATE"):
+        return None
+    return PortfolioRules(
+        max_total_exposure_percent=pct,
+        conflict_policy=policy,
+        own_symbol=None,
+        prior_intervals=(),
+        exposure_percent_invalid=pct_invalid,
+    )
+
+
+def _epoch_ms_or_none(value: Any) -> int | None:
+    """UTC epoch ms for an ISO-8601 timestamp, else ``None`` (= unplaceable)."""
+    if not isinstance(value, str) or not value:
+        return None
+    parsed = parse_utc(value)
+    return int(parsed.timestamp() * 1000) if parsed is not None else None
+
+
+def build_prior_intervals(
+    *,
+    item_id: str,
+    symbol: str | None,
+    position_intervals: list[dict[str, Any]],
+) -> tuple[PriorItemInterval, ...]:
+    """Convert one COMPLETED item run's closed-position windows
+    (``EngineOutput.position_intervals``) into the constraint intervals a
+    later-pinned item replays against.
+
+    An unparseable bound becomes ``None`` = unbounded on that side (fail closed:
+    over-covers, never under-covers). A window whose peak notional cannot be read
+    as a positive figure constrains nothing and is dropped — it cannot block a
+    conflict either, but a fabricated notional would corrupt the cap arithmetic
+    (the honest trade-off, and unreachable from engine-produced windows)."""
+    out: list[PriorItemInterval] = []
+    for iv in position_intervals:
+        notional = _safe_decimal(iv.get("peak_notional"))
+        if notional is None or notional <= _ZERO:
+            continue
+        out.append(
+            PriorItemInterval(
+                item_id=item_id,
+                symbol=symbol,
+                direction=str(iv.get("direction")),
+                start_ms=_epoch_ms_or_none(iv.get("entry_time")),
+                end_ms=_epoch_ms_or_none(iv.get("exit_time")),
+                notional=notional,
+            )
+        )
+    return tuple(out)
+
+
 def _cap_to_sleeve(desired: Decimal, sleeve_capital: Decimal, entry_price: Decimal) -> Decimal:
     """Clamp a desired size to the sleeve's remaining capacity (doc 13 §8.3/§8.4 step 5).
 
@@ -1615,6 +1756,7 @@ def run_engine(
     allocation: AllocationExecution | None = None,
     funding: FundingSchedule | None = None,
     tick_batches: Iterator[list[dict[str, Any]]] | None = None,
+    portfolio_rules: PortfolioRules | None = None,
 ) -> EngineOutput:
     """Deterministically bar-replay one strategy over its pinned OHLCV bars.
 
@@ -1649,6 +1791,17 @@ def run_engine(
     fire, so future leakage is impossible by construction. ``None`` (the default) books no
     funding and is BYTE-IDENTICAL to the pre-F-11 engine.
 
+    ``portfolio_rules`` applies the plan's PORTFOLIO-LEVEL rules (cross-item, doc 13
+    §8.4): a composition-wide Max Total Exposure cap (percent of the pool P0, enforced
+    against the prior-pinned items' held windows + this item's own open notional at
+    every entry/stack/scale acceptance) and the opposing same-instrument conflict
+    policy (BLOCK_OPPOSITE blocks this item's entry while an earlier-pinned item held
+    the opposite direction on the same instrument; NET executes conservatively AS
+    BLOCK_OPPOSITE — L4-disclosed, never silently netted). Enforcement is sequential
+    in pin order (an earlier item is never re-simulated because of a later one — the
+    honest V1 boundary, surfaced as an L4 warning). ``None`` (the default) is
+    BYTE-IDENTICAL to the pre-rules engine.
+
     ``tick_batches`` injects the PINNED tick/trade revision's processed print stream
     (F-07i B) — the worker resolves it from the manifest pin ONLY when the strategy
     demands tick data (``tick_data_required``), mirroring the bar path (the engine stays
@@ -1675,6 +1828,33 @@ def run_engine(
         initial_capital = portfolio_pool
     else:
         initial_capital = Decimal(config.data.initial_capital).quantize(_MONEY)
+
+    # Portfolio-level rules (cross-item, doc 13 §8.4). The cap basis is the pinned
+    # capital this run replays from: the shared pool P0 under allocation (the normal
+    # rules path — rules live on the allocation plan), else the strategy's own
+    # initial capital (defensive; unreachable through the real manifest flow).
+    rules_active = portfolio_rules is not None
+    portfolio_cap_amount: Decimal | None = None
+    conflict_gate_on = False
+    conflict_downgraded_from_net = False
+    conflict_policy_unknown = False
+    if portfolio_rules is not None:
+        policy_token = (portfolio_rules.conflict_policy or "").strip().upper()
+        if policy_token and policy_token != "KEEP_SEPARATE":
+            # NET downgrades to the conservative block (L4-disclosed); an UNKNOWN
+            # token (a tampered/foreign snapshot) also fails closed to block —
+            # never silently ignored.
+            conflict_gate_on = True
+            conflict_downgraded_from_net = policy_token == "NET"
+            conflict_policy_unknown = policy_token not in ("NET", "BLOCK_OPPOSITE")
+        if portfolio_rules.exposure_percent_invalid:
+            # A SET-but-unreadable/non-positive cap admits NOTHING (fail closed +
+            # L4 warning) rather than silently running uncapped.
+            portfolio_cap_amount = _ZERO.quantize(_MONEY)
+        elif portfolio_rules.max_total_exposure_percent is not None:
+            portfolio_cap_amount = (
+                initial_capital * portfolio_rules.max_total_exposure_percent / _HUNDRED
+            ).quantize(_MONEY)
     long_ok, short_ok = _direction_flags(config.position_entry_logic.direction_mode)
     half_spread, slippage, commission = _cost_params(config)
     trail_pct = _trail_pct(config)
@@ -1923,6 +2103,15 @@ def run_engine(
     prev_entry_signal: str | None = None
     gross_profit = _ZERO
     gross_loss = _ZERO
+    # Portfolio-rules gate counters + the per-block reason handoff to _blocked_reason,
+    # and every fully-closed position's held window (the later items' constraint input).
+    portfolio_conflict_blocked_entries = 0
+    portfolio_exposure_blocked_entries = 0
+    portfolio_exposure_clamped_entries = 0
+    portfolio_symbol_unknown_gate = False
+    portfolio_time_unparseable_gate = False
+    portfolio_block_reason: str | None = None
+    position_intervals: list[dict[str, Any]] = []
     # F-11: funding cost state. ``funding_records`` is the ascending, available-time-safe
     # series (empty when funding is off → the whole funding path is inert, byte-identical to
     # pre-F-11). ``funding_idx`` is the as-of cursor (a record fires at most once, in order);
@@ -1986,6 +2175,14 @@ def run_engine(
 
     def _blocked_reason() -> str:
         """Why a wanted entry produced NO fill (F-10 restriction trace)."""
+        nonlocal portfolio_block_reason
+        if portfolio_block_reason is not None:
+            # A portfolio-rules gate (conflict block / exposure cap) set the concrete
+            # reason at decision time; consume it so a later unrelated block cannot
+            # inherit a stale portfolio reason.
+            reason = portfolio_block_reason
+            portfolio_block_reason = None
+            return reason
         if not sizing_ok:
             return "sizing_unsupported"
         if not leverage_ok:
@@ -2092,6 +2289,19 @@ def run_engine(
                 exposure=exposure,
             )
         )
+        if is_full:
+            # Portfolio-rules slice: record the position's held window (entry->exit,
+            # PEAK notional over its life) — the constraint input a LATER-pinned item
+            # replays against. Always captured (cheap, additive); consumed only when
+            # portfolio rules are configured.
+            position_intervals.append(
+                {
+                    "entry_time": pos.entry_time,
+                    "exit_time": exit_time,
+                    "direction": pos.direction,
+                    "peak_notional": max(pos.peak_notional, pos.entry_notional),
+                }
+            )
         if not is_full:
             partial_closes += 1
             pos.size = pos.size - close_size
@@ -2211,6 +2421,56 @@ def run_engine(
             return len(active) == len(restriction_specs)
         return bool(active)
 
+    def _bar_epoch_ms(ts: str) -> int | None:
+        """UTC epoch ms of a bar timestamp, ``None`` when unplaceable (fail closed:
+        the portfolio gates treat an unplaceable moment as covered by every prior
+        window — the date-blackout precedent, never trading through a rule)."""
+        parsed = parse_utc(ts)
+        return int(parsed.timestamp() * 1000) if parsed is not None else None
+
+    def _interval_covers(iv: PriorItemInterval, t_ms: int | None) -> bool:
+        if t_ms is None:
+            return True
+        if iv.start_ms is not None and t_ms < iv.start_ms:
+            return False
+        return not (iv.end_ms is not None and t_ms > iv.end_ms)
+
+    def _conflicts_with_prior(direction: str, t_ms: int | None) -> bool:
+        """Does an earlier-pinned item hold the OPPOSITE direction on the same
+        instrument at this moment? Unknown instrument identity on either side
+        cannot RULE OUT a same-instrument conflict — fail closed (counts as
+        conflicting) and surfaced via a dedicated L4 warning."""
+        nonlocal portfolio_symbol_unknown_gate, portfolio_time_unparseable_gate
+        assert portfolio_rules is not None
+        own = (portfolio_rules.own_symbol or "").strip()
+        for iv in portfolio_rules.prior_intervals:
+            if iv.direction == direction:
+                continue
+            other = (iv.symbol or "").strip()
+            if own and other and own != other:
+                continue
+            if not _interval_covers(iv, t_ms):
+                continue
+            if not (own and other):
+                portfolio_symbol_unknown_gate = True
+            if t_ms is None:
+                portfolio_time_unparseable_gate = True
+            return True
+        return False
+
+    def _prior_exposure_at(t_ms: int | None) -> Decimal:
+        """Total notional the earlier-pinned items hold at this moment (peak-notional
+        basis — conservative; an unplaceable moment counts EVERY window, fail closed)."""
+        nonlocal portfolio_time_unparseable_gate
+        assert portfolio_rules is not None
+        total = _ZERO
+        for iv in portfolio_rules.prior_intervals:
+            if _interval_covers(iv, t_ms):
+                total += iv.notional
+        if t_ms is None and portfolio_rules.prior_intervals:
+            portfolio_time_unparseable_gate = True
+        return total
+
     def _planned_size(direction: str, fill_raw: Decimal, strength: Decimal) -> Decimal:
         """The size the sizing chain would open at ``fill_raw`` right now.
 
@@ -2254,6 +2514,17 @@ def run_engine(
         phantom trade for a strategy the user never validly configured."""
         if not sizing_ok or not leverage_ok or not strength_ok:
             return None
+        nonlocal portfolio_block_reason
+        nonlocal portfolio_conflict_blocked_entries, portfolio_exposure_blocked_entries
+        nonlocal portfolio_exposure_clamped_entries
+        rules_t_ms = _bar_epoch_ms(bar.timestamp) if rules_active else None
+        if rules_active and conflict_gate_on and _conflicts_with_prior(direction, rules_t_ms):
+            # Portfolio conflict gate (cross-item, doc 13 §8.4 step 6): an
+            # earlier-pinned item holds the opposite direction on this instrument —
+            # the later item's entry is blocked, its share never re-routed.
+            portfolio_conflict_blocked_entries += 1
+            portfolio_block_reason = "portfolio_conflict_blocked"
+            return None
         is_long = direction == "long"
         entry_eff = _effective_fill(
             fill_raw, is_buy=is_long, half_spread=half_spread, slip=slippage
@@ -2265,10 +2536,30 @@ def run_engine(
         size = _planned_size(direction, fill_raw, strength)
         if alloc_on and size <= _ZERO:
             return None
+        if rules_active and portfolio_cap_amount is not None and size > _ZERO:
+            # Composition-wide Max Total Exposure: the entry may only deploy the
+            # headroom left under the cap after the earlier-pinned items' concurrent
+            # notional (the item itself is flat when opening — single-position
+            # invariant). Over-cap clamps down (an outer cap, the sleeve precedent);
+            # zero headroom blocks the fill outright — never a phantom over-cap trade.
+            headroom = portfolio_cap_amount - _prior_exposure_at(rules_t_ms)
+            allowed = (
+                (headroom / entry_eff).quantize(_QTY)
+                if headroom > _ZERO and entry_eff > _ZERO
+                else _ZERO
+            )
+            if size > allowed:
+                if allowed <= _ZERO:
+                    portfolio_exposure_blocked_entries += 1
+                    portfolio_block_reason = "portfolio_max_total_exposure"
+                    return None
+                size = allowed
+                portfolio_exposure_clamped_entries += 1
         if size_override is not None:
             # F-07i (C): a partial fill books the print-evidenced fraction of the planned
-            # size (already sized/capped above — the override is strictly smaller).
-            size = size_override
+            # size (already sized/capped above — the override is strictly smaller than
+            # the plan; the portfolio cap may have clamped further, so keep the smaller).
+            size = min(size, size_override)
         nonlocal position_seq
         position_seq += 1
         return _Position(
@@ -2287,6 +2578,7 @@ def run_engine(
             initial_size=size,
             layers_filled=0,
             scale_reference=fill_raw,
+            peak_notional=(entry_eff * size).quantize(_MONEY),
         )
 
     def _do_open(
@@ -2384,6 +2676,7 @@ def run_engine(
         pos.entry_price = new_basis
         pos.size = new_size
         pos.entry_notional = (new_basis * new_size).quantize(_MONEY)
+        pos.peak_notional = max(pos.peak_notional, pos.entry_notional)
         if commission > _ZERO:
             equity = (equity - commission).quantize(_MONEY)
         partial_fills += 1
@@ -3504,6 +3797,22 @@ def run_engine(
                                 if (stack_eff * tranche) > sleeve_remaining:
                                     stack_reject = "sleeve_capacity"
                                     stack_cap = str(max(sleeve_remaining, _ZERO).quantize(_MONEY))
+                            if (
+                                stack_reject is None
+                                and rules_active
+                                and portfolio_cap_amount is not None
+                            ):
+                                # Composition-wide cap on the ADD: prior items' concurrent
+                                # notional + this position's own. An over-cap tranche is
+                                # REJECTED, never auto-trimmed (the §11.4 acceptance rule).
+                                headroom = (
+                                    portfolio_cap_amount
+                                    - _prior_exposure_at(_bar_epoch_ms(bar.timestamp))
+                                    - position.entry_notional
+                                )
+                                if (stack_eff * tranche) > headroom:
+                                    stack_reject = "portfolio_max_total_exposure"
+                                    stack_cap = str(max(headroom, _ZERO).quantize(_MONEY))
                             if stack_reject is not None:
                                 stack_entries_rejected += 1
                                 _emit(
@@ -3535,6 +3844,9 @@ def run_engine(
                                 position.size = stacked_size
                                 position.entry_notional = (new_basis * stacked_size).quantize(
                                     _MONEY
+                                )
+                                position.peak_notional = max(
+                                    position.peak_notional, position.entry_notional
                                 )
                                 stack_entries_added += 1
                                 if commission > _ZERO:
@@ -3644,6 +3956,18 @@ def run_engine(
                         if (layer_eff * layer_size) > sleeve_remaining:
                             reject_reason = "sleeve_capacity"
                             reject_cap = str(max(sleeve_remaining, _ZERO).quantize(_MONEY))
+                    if reject_reason is None and rules_active and portfolio_cap_amount is not None:
+                        # Composition-wide cap on the ladder ADD (money basis, distinct
+                        # from the per-strategy size-units "max_total_exposure" above):
+                        # an over-cap layer is REJECTED, never auto-trimmed (§11.4).
+                        headroom = (
+                            portfolio_cap_amount
+                            - _prior_exposure_at(_bar_epoch_ms(bar.timestamp))
+                            - position.entry_notional
+                        )
+                        if (layer_eff * layer_size) > headroom:
+                            reject_reason = "portfolio_max_total_exposure"
+                            reject_cap = str(max(headroom, _ZERO).quantize(_MONEY))
                     if reject_reason is not None:
                         scale_layers_rejected += 1
                         _emit(
@@ -3668,6 +3992,9 @@ def run_engine(
                         position.entry_price = new_basis
                         position.size = scaled_size
                         position.entry_notional = (new_basis * scaled_size).quantize(_MONEY)
+                        position.peak_notional = max(
+                            position.peak_notional, position.entry_notional
+                        )
                         position.layers_filled += 1
                         scale_layers_added += 1
                         if commission > _ZERO:
@@ -3841,6 +4168,21 @@ def run_engine(
     warnings: list[str] = []
     if not bars_seen:
         warnings.append("no_bars_in_source")
+    if rules_active:
+        # Portfolio-rules provenance (L4 — every boundary surfaced, never silent):
+        # sequential pin-order precedence is inherent to every rules-active run; the
+        # rest fire only when their condition actually held.
+        warnings.append(PORTFOLIO_RULES_SEQUENTIAL_WARNING)
+        if conflict_downgraded_from_net:
+            warnings.append("conflict_policy_net_executed_as_block_opposite")
+        if conflict_policy_unknown:
+            warnings.append("portfolio_conflict_policy_unknown_fail_closed")
+        if portfolio_rules is not None and portfolio_rules.exposure_percent_invalid:
+            warnings.append("portfolio_max_exposure_unparseable_zero_cap")
+        if portfolio_symbol_unknown_gate:
+            warnings.append("portfolio_conflict_symbol_unknown_fail_closed")
+        if portfolio_time_unparseable_gate:
+            warnings.append("portfolio_rules_time_unparseable_fail_closed")
     if tick_alignment_unavailable:
         # F-07i (B): a tick stream was injected but the pinned revision carries no
         # supported bar timeframe, so prints cannot be attributed to bar windows — the
@@ -4091,6 +4433,26 @@ def run_engine(
         "allocation_compounding": ("compound" if alloc_compound else "fixed") if alloc_on else None,
         "allocation_items_executed": 1 if (alloc_on and item_share > _ZERO) else 0,
         "allocation_sleeve_cap_active": alloc_on and item_share > _ZERO,
+        # Portfolio-level rules provenance (cross-item, doc 13 §8.4): the SAVED policy
+        # token vs the EXECUTED one (NET's conservative downgrade stays visible), the
+        # resolved money cap, how many prior-item windows constrained this replay and
+        # every gate outcome count.
+        "portfolio_rules_active": rules_active,
+        "portfolio_conflict_policy": (
+            portfolio_rules.conflict_policy if portfolio_rules is not None else None
+        ),
+        "portfolio_conflict_policy_executed": (
+            ("block_opposite" if conflict_gate_on else "keep_separate") if rules_active else None
+        ),
+        "portfolio_max_total_exposure_cap": (
+            str(portfolio_cap_amount) if portfolio_cap_amount is not None else None
+        ),
+        "portfolio_prior_intervals": (
+            len(portfolio_rules.prior_intervals) if portfolio_rules is not None else 0
+        ),
+        "portfolio_conflict_blocked_entries": portfolio_conflict_blocked_entries,
+        "portfolio_exposure_blocked_entries": portfolio_exposure_blocked_entries,
+        "portfolio_exposure_clamped_entries": portfolio_exposure_clamped_entries,
         # F-11: funding provenance + application counts (the used revision is pinned in the
         # manifest via the strategy config; surfaced here for the decision-trace audit).
         "funding_enabled": funding is not None,
@@ -4127,6 +4489,7 @@ def run_engine(
         equity_points=equity_points,
         signal_events=signal_events,
         diagnostics=diagnostics,
+        position_intervals=position_intervals,
     )
 
 
@@ -4150,6 +4513,9 @@ _DIAG_SUM_KEYS = (
     "same_bar_stop_limit_fills",
     "touch_orders_placed",
     "touch_exit_fills",
+    "portfolio_conflict_blocked_entries",
+    "portfolio_exposure_blocked_entries",
+    "portfolio_exposure_clamped_entries",
 )
 
 # Sequential composite curve is NOT a unified-clock portfolio valuation (each strategy
@@ -4157,6 +4523,13 @@ _DIAG_SUM_KEYS = (
 # portfolio equity in deterministic pin order). A genuine multi-item co-simulation over
 # one clock across heterogeneous bar sources stays deferred — surfaced, never hidden (L4).
 COMPOSITION_CURVE_WARNING = "portfolio_curve_sequential_not_unified_clock"
+
+# Portfolio-level rules enforce FORWARD-only in deterministic pin order: a later-pinned
+# item replays against the earlier items' completed held windows, and an earlier item is
+# never re-simulated because of a later one (a genuine unified-clock co-simulation stays
+# deferred — the COMPOSITION_CURVE_WARNING boundary). Emitted on every rules-active run
+# so the precedence is auditable (L4), never an implicit assumption.
+PORTFOLIO_RULES_SEQUENTIAL_WARNING = "portfolio_rules_sequential_pin_order_precedence"
 
 # Contribution (doc 01 / video 3:35 — "what does an item add to the universe").
 # Marginal deltas cover the pure performance metrics; ``initial_capital`` and

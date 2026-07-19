@@ -80,6 +80,8 @@ async def upsert_allocation_draft(
     initial_capital: dict[str, Any] | None = None,
     compounding_mode: str | None = None,
     reserve_cash_percent: str | None = None,
+    max_total_exposure_percent: str | None = None,
+    conflict_policy: str | None = None,
     entries: list[dict[str, Any]] | None = None,
     idempotency_key: str | None = None,
 ) -> dict[str, Any]:
@@ -93,6 +95,8 @@ async def upsert_allocation_draft(
             "initial_capital": initial_capital,
             "compounding_mode": compounding_mode,
             "reserve_cash_percent": reserve_cash_percent,
+            "max_total_exposure_percent": max_total_exposure_percent,
+            "conflict_policy": conflict_policy,
             "entries": raw_entries,
         }
     )
@@ -122,6 +126,8 @@ async def upsert_allocation_draft(
                 initial_capital_currency=currency,
                 compounding_mode=config.compounding_mode,
                 reserve_cash_percent=config.reserve_cash_percent,
+                max_total_exposure_percent=config.max_total_exposure_percent,
+                conflict_policy=config.conflict_policy,
                 draft_fingerprint=fingerprint,
             )
         else:
@@ -133,6 +139,8 @@ async def upsert_allocation_draft(
             plan.initial_capital_currency = currency
             plan.compounding_mode = config.compounding_mode
             plan.reserve_cash_percent = config.reserve_cash_percent
+            plan.max_total_exposure_percent = config.max_total_exposure_percent
+            plan.conflict_policy = config.conflict_policy
             plan.draft_fingerprint = fingerprint
             plan.row_version += 1
 
@@ -187,6 +195,8 @@ async def upsert_allocation_draft(
             "initial_capital": initial_capital,
             "compounding_mode": compounding_mode,
             "reserve_cash_percent": reserve_cash_percent,
+            "max_total_exposure_percent": max_total_exposure_percent,
+            "conflict_policy": conflict_policy,
             "entries": raw_entries,
         },
         operation=_op,
@@ -504,6 +514,14 @@ def _plan_to_config(
         "reserve_cash_percent": (
             str(plan.reserve_cash_percent) if plan.reserve_cash_percent is not None else None
         ),
+        "max_total_exposure_percent": (
+            str(plan.max_total_exposure_percent)
+            if plan.max_total_exposure_percent is not None
+            else None
+        ),
+        "conflict_policy": (
+            str(plan.conflict_policy) if plan.conflict_policy is not None else None
+        ),
         "entries": [
             {
                 "composition_item_id": e.composition_item_id,
@@ -537,6 +555,14 @@ def _canonical_draft(
         ),
         "reserve_cash_percent": (
             str(config.reserve_cash_percent) if config.reserve_cash_percent is not None else None
+        ),
+        "max_total_exposure_percent": (
+            str(config.max_total_exposure_percent)
+            if config.max_total_exposure_percent is not None
+            else None
+        ),
+        "conflict_policy": (
+            str(config.conflict_policy) if config.conflict_policy is not None else None
         ),
         "entries": [
             {

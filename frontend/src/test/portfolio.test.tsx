@@ -288,6 +288,10 @@ describe("Portfolio / Equity Allocation page", () => {
       initial_capital: { amount: "10000", currency: "USDT" },
       compounding_mode: "COMPOUND_PORTFOLIO_EQUITY",
       reserve_cash_percent: "10",
+      // Portfolio rules untouched -> nulls travel (no cap / keep separate, the
+      // pre-rules behaviour — doc 13 §8.4).
+      max_total_exposure_percent: null,
+      conflict_policy: null,
       entries: [{ composition_item_id: "item_1", active: true, equity_share_percent: "90" }],
     });
     const headers = init.headers as Record<string, string>;
@@ -306,6 +310,30 @@ describe("Portfolio / Equity Allocation page", () => {
     expect(
       screen.getByText(/gets 90% of the shared pool: 8100.00 USDT/),
     ).toBeInTheDocument();
+  });
+
+  it("sends the portfolio rules (max exposure + conflict policy) when set", async () => {
+    const fetchMock = stubApi({
+      "PUT /mainboard-compositions/ws_1/portfolio-allocation-draft": SAVE_RESULT,
+      "GET /mainboard-compositions/ws_1/portfolio-allocation-draft": DRAFT_EMPTY,
+      "GET /mainboards/default": MAINBOARD,
+    });
+    renderPage();
+
+    fireEvent.click(await screen.findByLabelText(/USE EQUITY ALLOCATION FOR THIS BACKTEST/));
+    fireEvent.change(screen.getByLabelText("Max total exposure %"), {
+      target: { value: "150" },
+    });
+    fireEvent.change(screen.getByLabelText("Conflicting signals (same instrument)"), {
+      target: { value: "NET" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    expect(await screen.findByText("Draft saved")).toBeInTheDocument();
+
+    const init = callFor(fetchMock, "PUT", "/portfolio-allocation-draft");
+    const body = JSON.parse(String(init.body));
+    expect(body.max_total_exposure_percent).toBe("150");
+    expect(body.conflict_policy).toBe("NET");
   });
 
   it("surfaces a stale-draft conflict verbatim", async () => {

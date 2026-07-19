@@ -42,7 +42,11 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
-from entropia.domain.allocation.enums import AllocationCurrency, CompoundingMode
+from entropia.domain.allocation.enums import (
+    AllocationCurrency,
+    CompoundingMode,
+    CrossItemConflictPolicy,
+)
 from entropia.domain.mainboard.enums import MainboardItemKind
 from entropia.infrastructure.postgres.base import Base
 from entropia.infrastructure.postgres.mixins import TimestampMixin
@@ -80,6 +84,14 @@ class PortfolioAllocationPlan(TimestampMixin, Base):
         enum_column(CompoundingMode, "allocation_compounding_mode"), nullable=True
     )
     reserve_cash_percent: Mapped[Decimal | None] = mapped_column(_PERCENT, nullable=True)
+    # Portfolio-level rules (cross-item, doc 13 §8.4): a composition-wide exposure
+    # ceiling (% of P0; NULL = no cap — may legitimately exceed 100 for leveraged
+    # exposure, NUMERIC(9,6) bounds it at 999.999999) and the opposing
+    # same-instrument signal policy (NULL = KEEP_SEPARATE).
+    max_total_exposure_percent: Mapped[Decimal | None] = mapped_column(_PERCENT, nullable=True)
+    conflict_policy: Mapped[CrossItemConflictPolicy | None] = mapped_column(
+        enum_column(CrossItemConflictPolicy, "allocation_conflict_policy"), nullable=True
+    )
     draft_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True)
     # Plain column (no FK): set once a revision exists (mirrors entity_registry).
     current_revision_id: Mapped[str | None] = mapped_column(String(40), nullable=True)

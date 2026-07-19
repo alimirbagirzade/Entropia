@@ -16,6 +16,7 @@ from hashlib import sha256
 from entropia.domain.allocation.config import PortfolioAllocationConfigV1
 from entropia.domain.allocation.enums import AllocationIssueCode as Code
 from entropia.domain.allocation.enums import AllocationIssueSeverity as Sev
+from entropia.domain.allocation.enums import CrossItemConflictPolicy as ConflictPolicy
 from entropia.domain.mainboard.enums import MainboardItemKind
 
 _HUNDRED = Decimal(100)
@@ -157,6 +158,30 @@ def validate_allocation(
                 Sev.BLOCKER,
                 "Reserve Cash must be in the range [0, 100).",
                 field="reserve_cash_percent",
+            )
+        )
+
+    # ---- Portfolio-level rules (cross-item, doc 13 §8.4) -------------------- #
+    if config.max_total_exposure_percent is not None and config.max_total_exposure_percent <= _ZERO:
+        issues.append(
+            AllocationIssue(
+                Code.MAX_TOTAL_EXPOSURE_INVALID,
+                Sev.BLOCKER,
+                "Max Total Exposure must be a percent greater than 0 when set "
+                "(it caps total concurrent notional across all items against the pool P0).",
+                field="max_total_exposure_percent",
+            )
+        )
+    if config.conflict_policy == ConflictPolicy.NET:
+        issues.append(
+            AllocationIssue(
+                Code.CONFLICT_POLICY_NET_V1,
+                Sev.WARNING,
+                "NET requires a unified-clock multi-item co-simulation the V1 engine "
+                "does not run; the engine executes NET conservatively as BLOCK_OPPOSITE "
+                "(a later-pinned item's opposing same-instrument entry is blocked, "
+                "never netted-filled).",
+                field="conflict_policy",
             )
         )
 

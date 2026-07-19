@@ -62,6 +62,11 @@ export interface AllocationDraft {
   initial_capital: AllocationMoney | null;
   compounding_mode: string | null;
   reserve_cash_percent: string | null;
+  // Portfolio-level rules (doc 13 §8.4, cross-item): composition-wide exposure
+  // ceiling (% of P0; null = no cap) + opposing same-instrument signal policy
+  // (null = KEEP_SEPARATE). Both absent on pre-rules drafts.
+  max_total_exposure_percent?: string | null;
+  conflict_policy?: string | null;
   draft_fingerprint?: string;
   entries: AllocationEntry[];
 }
@@ -181,6 +186,8 @@ export interface AllocationDraftInput {
   initial_capital: AllocationMoney | null;
   compounding_mode: string | null;
   reserve_cash_percent: string | null;
+  max_total_exposure_percent: string | null;
+  conflict_policy: string | null;
   entries: AllocationEntryInput[];
 }
 
@@ -191,6 +198,17 @@ export interface AllocationDraftInput {
 
 // AllocationCurrency wire tokens (doc 13 §5.1).
 export const ALLOCATION_CURRENCIES = ["USD", "USDT", "EUR", "TRY"] as const;
+
+// CrossItemConflictPolicy wire tokens (doc 13 §8.4 — hydration only; the V1
+// engine executes NET conservatively as BLOCK_OPPOSITE and the server
+// pre-discloses that as the CONFLICT_POLICY_NET_V1 warning, rendered verbatim).
+export const CONFLICT_POLICIES = ["KEEP_SEPARATE", "BLOCK_OPPOSITE", "NET"] as const;
+
+export const CONFLICT_POLICY_LABELS: Record<string, string> = {
+  KEEP_SEPARATE: "Keep separate (independent items)",
+  BLOCK_OPPOSITE: "Block opposite (earlier-pinned item wins)",
+  NET: "Net (V1: executed as Block opposite)",
+};
 
 // CompoundingMode wire tokens (doc 13 §5.1, §8.3; Fixed Item Notional is NOT
 // a V1 option, §6). Labels are presentation-only.

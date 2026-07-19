@@ -15,7 +15,9 @@ from typing import Any
 from entropia.domain.backtest.engine import (
     COMPOSITION_CURVE_WARNING,
     EngineOutput,
+    EquityPoint,
     ItemRun,
+    TradeRow,
     _clamp_to_limits,
     _position_size,
     combine_item_runs,
@@ -580,7 +582,7 @@ def test_engine_execution_key_namespace_shifts_with_the_engine_version() -> None
     # The ENGINE_VERSION bump must flow into the manifest so a stale pre-conflict
     # result cannot be reused under the new engine (INF-04 idempotent reuse / INF-05).
     built = _manifest("btrun_A", "snap_A", "2024-01-01T00:00:00Z")
-    assert built.manifest["identity"]["engine_version"] == "backtest-engine-v17-per-item-breakdown"
+    assert built.manifest["identity"]["engine_version"] == "backtest-engine-v18-portfolio-rules"
 
 
 def test_stop_exit_default_is_stop_has_priority() -> None:
@@ -803,6 +805,238 @@ def test_combine_non_executing_item_has_empty_per_item_equity_curve() -> None:
     assert tl_row["equity_curve"] == []
     assert tl_row["max_drawdown"] is None
     assert tl_row["final_equity"] is None
+
+
+# ---------------------------------------------------------------------------
+# v17 Contribution — correlation matrix + diversification + marginal (video 3:35)
+# ---------------------------------------------------------------------------
+
+
+def _synthetic_run(
+    item_id: str,
+    trades_spec: list[tuple[str, str, str]],
+    *,
+    initial: str = "10000.00",
+) -> ItemRun:
+    """An executing ItemRun with hand-authored realized trades.
+
+    ``trades_spec`` is ``[(exit_time, pnl, exit_reason), ...]``; the equity curve is the
+    seed point plus one realized point per trade — exactly the shape ``run_engine``
+    emits, but with controlled timestamps/PnLs so correlation is testable by hand.
+    """
+    money = Decimal("0.01")
+    initial_d = Decimal(initial)
+    equity = initial_d
+    peak = initial_d
+    trades: list[TradeRow] = []
+    points = [EquityPoint(0, "", initial_d, Decimal("0.00"), Decimal("0"))]
+    for seq, (exit_time, pnl, reason) in enumerate(trades_spec, start=1):
+        pnl_d = Decimal(pnl)
+        equity += pnl_d
+        peak = max(peak, equity)
+        trades.append(
+            TradeRow(
+                seq, exit_time, exit_time, "long", Decimal("100"), Decimal("100"), pnl_d, reason
+            )
+        )
+        points.append(
+            EquityPoint(seq, exit_time, equity, (peak - equity).quantize(money), Decimal("0"))
+        )
+    net = equity - initial_d
+    max_dd = max(p.drawdown for p in points)
+    summary: dict[str, Any] = {
+        "symbol": "BTCUSDT",
+        "timeframe": "1m",
+        "initial_capital": initial_d,
+        "final_equity": equity.quantize(money),
+        "net_profit": net.quantize(money),
+        "net_profit_pct": (net / initial_d * Decimal("100")).quantize(Decimal("0.0001")),
+        "max_drawdown": max_dd.quantize(money),
+        "max_drawdown_pct": (max_dd / peak * Decimal("100")).quantize(Decimal("0.0001")),
+    }
+    out = EngineOutput(
+        summary=summary,
+        trades=trades,
+        equity_points=points,
+        signal_events=[],
+        diagnostics={"entry_model": "synthetic_fixture", "warnings": []},
+    )
+    return ItemRun(item_id, "strategy", f"root_{item_id}", f"rev_{item_id}", out)
+
+
+_T1, _T2, _T3, _T4 = (
+    "2024-02-01T00:00:00Z",
+    "2024-02-02T00:00:00Z",
+    "2024-02-03T00:00:00Z",
+    "2024-02-04T00:00:00Z",
+)
+
+
+def _correlated_trio() -> tuple[ItemRun, ItemRun, ItemRun]:
+    """a; b = 2xa (perfectly correlated); c = -a (perfectly anti-correlated)."""
+    spec_a = [
+        (_T1, "10.00", "target_exit"),
+        (_T2, "-5.00", "stop_loss"),
+        (_T3, "8.00", "target_exit"),
+        (_T4, "-2.00", "stop_loss"),
+    ]
+    spec_b = [(ts, str(Decimal(p) * 2), r) for ts, p, r in spec_a]
+    spec_c = [(ts, str(-Decimal(p)), r) for ts, p, r in spec_a]
+    return (
+        _synthetic_run("item_a", spec_a),
+        _synthetic_run("item_b", spec_b),
+        _synthetic_run("item_c", spec_c),
+    )
+
+
+def _combine_trio(*, shared_pool: bool = False, initial: str = "30000.00") -> EngineOutput:
+    a, b, c = _correlated_trio()
+    return combine_item_runs(
+        [a, b, c],
+        portfolio_initial_capital=Decimal(initial),
+        execution_key="exec_contrib",
+        item_count=3,
+        shared_pool=shared_pool,
+    )
+
+
+def test_contribution_correlation_matrix_from_per_item_realized_pnl() -> None:
+    combined = _combine_trio()
+    contrib = combined.diagnostics["composition"]["contribution"]
+    corr = contrib["correlation"]
+    assert corr["item_ids"] == ["item_a", "item_b", "item_c"]
+    # All three trade at the same four close times → four aligned points.
+    assert corr["aligned_point_count"] == 4
+    # b = 2xa → r=+1; c = -a → r=-1 with both a and b; diagonal is 1.
+    assert corr["matrix"] == [
+        ["1.0000", "1.0000", "-1.0000"],
+        ["1.0000", "1.0000", "-1.0000"],
+        ["-1.0000", "-1.0000", "1.0000"],
+    ]
+    # Off-diagonal pairs (a,b)=1, (a,c)=-1, (b,c)=-1 → average -1/3.
+    assert corr["average_pairwise"] == "-0.3333"
+
+
+def test_contribution_diversification_summary_sums_item_drawdowns() -> None:
+    a, b, c = _correlated_trio()
+    combined = _combine_trio()
+    assert a.output is not None and b.output is not None and c.output is not None
+    div = combined.diagnostics["composition"]["contribution"]["diversification"]
+    sum_dd = (
+        a.output.summary["max_drawdown"]
+        + b.output.summary["max_drawdown"]
+        + c.output.summary["max_drawdown"]
+    )
+    assert div["sum_of_item_max_drawdowns"] == sum_dd
+    assert div["portfolio_max_drawdown"] == combined.summary["max_drawdown"]
+    assert div["drawdown_reduction"] == sum_dd - combined.summary["max_drawdown"]
+    assert div["average_pairwise_correlation"] == "-0.3333"
+
+
+def test_contribution_marginal_without_item_equals_a_real_rerun_of_the_remaining() -> None:
+    # THE drift pin (and the INF-04 reuse claim, empirically): the persisted
+    # without-item metrics must equal what an ACTUAL engine re-RUN of the composition
+    # without that item reports — here an actual combine_item_runs over the remaining
+    # items, since each item's bar-replay output is independent of the others.
+    _a, b, c = _correlated_trio()
+    combined = _combine_trio()
+    marginal = {
+        m["item_id"]: m for m in combined.diagnostics["composition"]["contribution"]["marginal"]
+    }
+    rerun = combine_item_runs(
+        [b, c],
+        portfolio_initial_capital=Decimal("20000.00"),  # independent: 30000 - item_a's 10000
+        execution_key="exec_without_a",
+        item_count=2,
+    )
+    without = marginal["item_a"]["without_item"]
+    for key in (
+        "initial_capital",
+        "final_equity",
+        "net_profit",
+        "net_profit_pct",
+        "max_drawdown",
+        "max_drawdown_pct",
+        "romad",
+        "win_rate",
+        "profit_factor",
+        "total_trades",
+        "total_stops",
+        "max_stop_streak",
+        "total_winning_trades",
+    ):
+        assert without[key] == rerun.summary[key], key
+
+
+def test_contribution_delta_net_profit_is_the_items_own_net() -> None:
+    # Realized PnL is additive → full - without = the item's own net, per item.
+    a, b, c = _correlated_trio()
+    combined = _combine_trio()
+    marginal = {
+        m["item_id"]: m for m in combined.diagnostics["composition"]["contribution"]["marginal"]
+    }
+    for run in (a, b, c):
+        assert run.output is not None
+        delta = marginal[run.item_id]["delta"]
+        assert delta["net_profit"] == run.output.summary["net_profit"]
+        assert delta["total_trades"] == len(run.output.trades)
+
+
+def test_contribution_without_fold_capital_rule_shared_vs_independent() -> None:
+    # Shared pool: the without-run keeps the same P0. Independent: it starts from the
+    # remaining items' summed own capital.
+    shared = _combine_trio(shared_pool=True, initial="10000.00")
+    independent = _combine_trio(shared_pool=False, initial="30000.00")
+    shared_m = {
+        m["item_id"]: m for m in shared.diagnostics["composition"]["contribution"]["marginal"]
+    }
+    indep_m = {
+        m["item_id"]: m for m in independent.diagnostics["composition"]["contribution"]["marginal"]
+    }
+    assert shared.diagnostics["composition"]["capital_allocation"] == "shared_pool"
+    assert independent.diagnostics["composition"]["capital_allocation"] == "independent"
+    assert shared_m["item_a"]["without_item"]["initial_capital"] == Decimal("10000.00")
+    assert indep_m["item_a"]["without_item"]["initial_capital"] == Decimal("20000.00")
+
+
+def test_contribution_correlation_null_for_a_zero_trade_item_never_fabricated() -> None:
+    # An executing strategy that opened nothing has a zero-variance (empty) PnL series →
+    # its correlation cells are null (incl. the diagonal), never an imputed number.
+    a, _, _ = _correlated_trio()
+    idle = _synthetic_run("item_idle", [])
+    combined = combine_item_runs(
+        [a, idle],
+        portfolio_initial_capital=Decimal("20000.00"),
+        execution_key="exec_idle",
+        item_count=2,
+    )
+    contrib = combined.diagnostics["composition"]["contribution"]
+    assert contrib["correlation"]["matrix"] == [["1.0000", None], [None, None]]
+    assert contrib["correlation"]["average_pairwise"] is None
+    # The marginal fold still works: without the idle item, the composition equals the
+    # full composition's performance (delta net 0); without item_a it is the empty fold.
+    marginal = {m["item_id"]: m for m in contrib["marginal"]}
+    assert marginal["item_idle"]["delta"]["net_profit"] == Decimal("0.00")
+    assert marginal["item_a"]["without_item"]["total_trades"] == 0
+    assert marginal["item_a"]["without_item"]["win_rate"] is None
+    assert marginal["item_a"]["delta"]["win_rate"] is None
+
+
+def test_contribution_absent_for_a_single_executing_strategy() -> None:
+    # One executing strategy (+ a non-executing Trade Log): a correlation matrix is
+    # meaningless for one curve and "the universe without its only strategy" is empty →
+    # the contribution block is honestly omitted, not fabricated.
+    strat = _strategy_run("item_a")
+    tl = ItemRun("item_tl", "trade_log", "root_tl", "rev_tl", None)
+    combined = combine_item_runs(
+        [strat, tl],
+        portfolio_initial_capital=Decimal("10000.00"),
+        execution_key="exec_single",
+        item_count=2,
+    )
+    composition = combined.diagnostics["composition"]
+    assert "contribution" not in composition
+    assert composition["capital_allocation"] == "independent"
 
 
 def test_combine_net_profit_is_order_invariant() -> None:

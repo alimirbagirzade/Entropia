@@ -14,6 +14,8 @@ import {
   useResultArtifact,
   useResultMetrics,
   type BacktestResultDetail,
+  CONTRIBUTION_METRIC_ROWS,
+  type ContributionMarginal,
   type DiagnosticContent,
   type DiagnosticRow,
   type ExportFormatValue,
@@ -120,6 +122,7 @@ export function ResultDetail({ result }: { result: BacktestResultDetail }) {
       <ChartsPlaceholder />
       <TradeListSection resultId={result.result_id} />
       <PerItemBreakdownSection resultId={result.result_id} />
+      <ContributionSection resultId={result.result_id} />
       <DiagnosticsSection resultId={result.result_id} />
       <ExportSection resultId={result.result_id} />
 
@@ -478,6 +481,136 @@ function PerItemCard({ item }: { item: PerItemBreakdown }) {
           )}
         </>
       )}
+    </div>
+  );
+}
+
+// Contribution (v17, engine.py _contribution_block — video 3:35 "what does an item add
+// to the universe"). Everything below is computed ONCE server-side at run time and
+// persisted into the immutable Result; this section renders it VERBATIM — the client
+// performs no correlation, no fold, no arithmetic. Present only when the composition
+// has 2+ executing strategies (the server omits the block otherwise).
+function contributionValue(value: string | number | null): string {
+  if (value === null) return EM_DASH;
+  return String(value);
+}
+
+function ContributionSection({ resultId }: { resultId: string }) {
+  const page = useResultArtifact<DiagnosticRow>(resultId, "diagnostics", null);
+  const composition = page.data?.items[0]?.content?.composition ?? null;
+  const contribution = composition?.contribution ?? null;
+  if (page.isLoading || page.isError || composition === null || contribution === null) {
+    // Loading/error surfaces belong to the Diagnostics section (same artifact); a
+    // composition below 2 executing strategies legitimately has no contribution block.
+    return null;
+  }
+  const corr = contribution.correlation;
+  const div = contribution.diversification;
+  return (
+    <>
+      <h4>Contribution</h4>
+      <p className="page-sub" style={{ marginTop: 0 }}>
+        What each item adds to the composition — computed server-side at run time from
+        the per-item runs ({composition.capital_allocation === "shared_pool"
+          ? "shared-pool capital"
+          : "independent capital"}); rendered verbatim.
+      </p>
+
+      <div style={perItemBoxStyle}>
+        <strong>Realized-PnL correlation</strong>
+        <p className="page-sub" style={{ margin: "6px 0 0" }}>
+          {contribution.method.correlation}
+        </p>
+        <div style={{ overflowX: "auto", marginTop: 8 }}>
+          <table className="metrics-table">
+            <thead>
+              <tr>
+                <th scope="col"></th>
+                {corr.item_ids.map((id) => (
+                  <th key={id} scope="col">
+                    <code style={hashStyle}>{id}</code>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {corr.matrix.map((row, i) => (
+                <tr key={corr.item_ids[i]}>
+                  <th scope="row">
+                    <code style={hashStyle}>{corr.item_ids[i]}</code>
+                  </th>
+                  {row.map((cell, j) => (
+                    <td key={corr.item_ids[j]}>{cell ?? EM_DASH}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <dl className="kv" style={{ marginTop: 8 }}>
+          <dt>Aligned points</dt>
+          <dd>{corr.aligned_point_count}</dd>
+          <dt>Average pairwise correlation</dt>
+          <dd>{corr.average_pairwise ?? EM_DASH}</dd>
+        </dl>
+      </div>
+
+      <div style={perItemBoxStyle}>
+        <strong>Diversification</strong>
+        <dl className="kv" style={{ marginTop: 8 }}>
+          <dt>Sum of item max drawdowns</dt>
+          <dd>{div.sum_of_item_max_drawdowns}</dd>
+          <dt>Portfolio max drawdown</dt>
+          <dd>{div.portfolio_max_drawdown}</dd>
+          <dt>Drawdown reduction</dt>
+          <dd>{div.drawdown_reduction}</dd>
+          <dt>Average pairwise correlation</dt>
+          <dd>{div.average_pairwise_correlation ?? EM_DASH}</dd>
+        </dl>
+      </div>
+
+      <div style={perItemBoxStyle}>
+        <strong>Marginal contribution</strong>
+        <p className="page-sub" style={{ margin: "6px 0 0" }}>
+          {contribution.method.marginal}
+        </p>
+        {contribution.marginal.map((entry) => (
+          <MarginalCard key={entry.item_id} entry={entry} />
+        ))}
+      </div>
+    </>
+  );
+}
+
+function MarginalCard({ entry }: { entry: ContributionMarginal }) {
+  return (
+    <div style={perItemBoxStyle}>
+      <strong>
+        Without <code style={hashStyle}>{entry.item_id}</code>
+      </strong>
+      <p className="page-sub" style={{ margin: "6px 0 0" }}>
+        {`The composition without this item would have started from ${entry.without_item.initial_capital} and ended at ${entry.without_item.final_equity}. Delta = full composition minus without-item.`}
+      </p>
+      <div style={{ overflowX: "auto", marginTop: 8 }}>
+        <table className="metrics-table">
+          <thead>
+            <tr>
+              <th scope="col">Metric</th>
+              <th scope="col">Without this item</th>
+              <th scope="col">Delta (this item&apos;s contribution)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {CONTRIBUTION_METRIC_ROWS.map(({ key, label }) => (
+              <tr key={key}>
+                <td>{label}</td>
+                <td>{contributionValue(entry.without_item[key])}</td>
+                <td>{contributionValue(entry.delta[key])}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

@@ -8,6 +8,8 @@ import {
   ALLOCATION_CURRENCIES,
   COMPOUNDING_MODES,
   COMPOUNDING_MODE_LABELS,
+  CONFLICT_POLICIES,
+  CONFLICT_POLICY_LABELS,
   type AllocationCandidate,
   type AllocationDraftInput,
   type AllocationDraftResponse,
@@ -232,6 +234,8 @@ function DraftEditor({
   const [currency, setCurrency] = useState(data.draft.initial_capital?.currency ?? "");
   const [mode, setMode] = useState(data.draft.compounding_mode ?? "");
   const [reserve, setReserve] = useState(data.draft.reserve_cash_percent ?? "");
+  const [maxExposure, setMaxExposure] = useState(data.draft.max_total_exposure_percent ?? "");
+  const [conflictPolicy, setConflictPolicy] = useState(data.draft.conflict_policy ?? "");
   const [entries, setEntries] = useState<EntryRow[]>(
     data.draft.entries.map((entry) => ({
       composition_item_id: entry.composition_item_id,
@@ -253,6 +257,8 @@ function DraftEditor({
     initial_capital: amount.trim() !== "" ? { amount: amount.trim(), currency } : null,
     compounding_mode: mode !== "" ? mode : null,
     reserve_cash_percent: reserve.trim() !== "" ? reserve.trim() : null,
+    max_total_exposure_percent: maxExposure.trim() !== "" ? maxExposure.trim() : null,
+    conflict_policy: conflictPolicy !== "" ? conflictPolicy : null,
     entries: entries.map((entry) => ({
       composition_item_id: entry.composition_item_id,
       active: entry.active,
@@ -362,6 +368,40 @@ function DraftEditor({
                   disabled={!enabled}
                   onChange={(event) => setReserve(event.target.value)}
                 />
+              </label>
+            </div>
+            {/* Portfolio-level rules (doc 13 §8.4, cross-item). Both optional —
+                blank = no cap / keep separate (the pre-rules behaviour). The
+                server validates and pre-discloses the NET V1 downgrade as an
+                inline warning, rendered verbatim below. */}
+            <div className="section-title-upper" style={{ marginTop: 12 }}>
+              Portfolio rules
+            </div>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+              <label className="auth-field" style={{ maxWidth: 200 }}>
+                <span>Max total exposure %</span>
+                <input
+                  className="auth-input"
+                  value={maxExposure}
+                  placeholder="e.g. 150 (blank = no cap)"
+                  disabled={!enabled}
+                  onChange={(event) => setMaxExposure(event.target.value)}
+                />
+              </label>
+              <label className="auth-field" style={{ maxWidth: 320 }}>
+                <span>Conflicting signals (same instrument)</span>
+                <select
+                  value={conflictPolicy}
+                  disabled={!enabled}
+                  onChange={(event) => setConflictPolicy(event.target.value)}
+                >
+                  <option value="">— (keep separate)</option>
+                  {CONFLICT_POLICIES.map((token) => (
+                    <option key={token} value={token}>
+                      {CONFLICT_POLICY_LABELS[token] ?? token}
+                    </option>
+                  ))}
+                </select>
               </label>
             </div>
           </div>

@@ -14,7 +14,11 @@ from typing import Any
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from entropia.domain.allocation.enums import AllocationCurrency, CompoundingMode
+from entropia.domain.allocation.enums import (
+    AllocationCurrency,
+    CompoundingMode,
+    CrossItemConflictPolicy,
+)
 from entropia.infrastructure.postgres.models import (
     PortfolioAllocationEntry,
     PortfolioAllocationPlan,
@@ -47,6 +51,8 @@ async def create_plan(
     compounding_mode: CompoundingMode | None,
     reserve_cash_percent: Decimal | None,
     draft_fingerprint: str,
+    max_total_exposure_percent: Decimal | None = None,
+    conflict_policy: CrossItemConflictPolicy | None = None,
 ) -> PortfolioAllocationPlan:
     """Insert the plan root (row_version=1). Flushes before children (L1)."""
     plan = PortfolioAllocationPlan(
@@ -57,6 +63,8 @@ async def create_plan(
         initial_capital_currency=initial_capital_currency,
         compounding_mode=compounding_mode,
         reserve_cash_percent=reserve_cash_percent,
+        max_total_exposure_percent=max_total_exposure_percent,
+        conflict_policy=conflict_policy,
         draft_fingerprint=draft_fingerprint,
         row_version=1,
         created_by_principal_id=created_by_principal_id,

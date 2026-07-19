@@ -38,6 +38,8 @@ async def get_allocation_draft(
             "initial_capital": None,
             "compounding_mode": None,
             "reserve_cash_percent": None,
+            "max_total_exposure_percent": None,
+            "conflict_policy": None,
             "entries": [],
         }
         return {
@@ -118,6 +120,14 @@ def _draft_projection(plan: Any, entries: list[PortfolioAllocationEntry]) -> dic
         ),
         "reserve_cash_percent": (
             str(plan.reserve_cash_percent) if plan.reserve_cash_percent is not None else None
+        ),
+        "max_total_exposure_percent": (
+            str(plan.max_total_exposure_percent)
+            if plan.max_total_exposure_percent is not None
+            else None
+        ),
+        "conflict_policy": (
+            str(plan.conflict_policy) if plan.conflict_policy is not None else None
         ),
         "draft_fingerprint": plan.draft_fingerprint,
         "entries": [_entry_projection(e) for e in entries],

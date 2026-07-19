@@ -35,7 +35,7 @@ from __future__ import annotations
 
 import itertools
 from collections.abc import Callable, Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
@@ -60,8 +60,12 @@ from entropia.application.queries.market_ticks import (
 from entropia.domain.backtest.engine import (
     EngineOutput,
     ItemRun,
+    PortfolioRules,
+    PriorItemInterval,
+    build_prior_intervals,
     combine_item_runs,
     resolve_allocation_execution,
+    resolve_portfolio_rules,
     run_engine,
     tick_data_required,
 )
@@ -156,8 +160,25 @@ async def run_backtest(
     # engine error on ANY enabled Strategy) never transits through RUNNING. A single
     # enabled Strategy that fails is not silently dropped — the whole run FAILS (F-04:
     # every selected object participates or the result is honestly not produced).
+    # Portfolio-level rules (cross-item, doc 13 §8.4): resolved ONCE from the manifest
+    # snapshot; None (no rule set) keeps every item's replay byte-identical to the
+    # pre-rules engine. Enforcement is sequential in the manifest's deterministic pin
+    # order — each completed item's closed-position windows become the NEXT items'
+    # constraints (an earlier item is never re-simulated because of a later one; the
+    # engine surfaces this precedence as an L4 warning).
+    base_rules = resolve_portfolio_rules(capital_execution)
+    prior_intervals: list[PriorItemInterval] = []
     item_runs: list[ItemRun] = []
     for config, meta in strategies:
+        item_rules = (
+            replace(
+                base_rules,
+                own_symbol=config.data.instrument_id,
+                prior_intervals=tuple(prior_intervals),
+            )
+            if base_rules is not None
+            else None
+        )
         prepared = await _prepare_and_run_strategy(
             session,
             config=config,
@@ -169,9 +190,18 @@ async def run_backtest(
             capital_execution=capital_execution,
             execution_key=manifest.execution_key,
             item_count=item_count,
+            portfolio_rules=item_rules,
         )
         if isinstance(prepared, _PrepFailure):
             return _fail_run(session, job, run, code=prepared.code, message=prepared.message)
+        if base_rules is not None and prepared.output is not None:
+            prior_intervals.extend(
+                build_prior_intervals(
+                    item_id=prepared.item_id,
+                    symbol=config.data.instrument_id,
+                    position_intervals=prepared.output.position_intervals,
+                )
+            )
         item_runs.append(prepared)
 
     run.state = BacktestRunState.RUNNING
@@ -203,6 +233,9 @@ async def run_backtest(
             portfolio_initial_capital=portfolio_initial,
             execution_key=manifest.execution_key,
             item_count=item_count,
+            # Contribution's without-item fold follows the SAME capital rule as this
+            # run: shared pool keeps P0, independent subtracts the item's own capital.
+            shared_pool=alloc_probe is not None,
         )
     metric_values = derive_metric_values(output.summary)
 
@@ -341,6 +374,7 @@ async def _prepare_and_run_strategy(
     capital_execution: dict[str, Any] | None,
     execution_key: str,
     item_count: int,
+    portfolio_rules: PortfolioRules | None = None,
 ) -> ItemRun | _PrepFailure:
     """Resolve + bar-replay ONE enabled Strategy (F-04/F-05/F-06), or a ``_PrepFailure``.
 
@@ -471,6 +505,7 @@ async def _prepare_and_run_strategy(
             allocation=allocation,
             funding=funding_schedule,
             tick_batches=tick_batches,
+            portfolio_rules=portfolio_rules,
         )
     except Exception as exc:
         return _PrepFailure(

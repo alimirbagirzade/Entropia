@@ -47,6 +47,10 @@ class PutDraftBody(BaseModel):
     initial_capital: MoneyBody | None = None
     compounding_mode: str | None = None
     reserve_cash_percent: str | None = None
+    # Portfolio-level rules (doc 13 §8.4): composition-wide exposure ceiling (% of
+    # P0, None = no cap) + cross-item opposing-signal policy (None = KEEP_SEPARATE).
+    max_total_exposure_percent: str | None = None
+    conflict_policy: str | None = None
     entries: list[AllocationEntryBody] = Field(default_factory=list)
 
 
@@ -91,6 +95,8 @@ async def put_allocation_draft(
         initial_capital=body.initial_capital.model_dump() if body.initial_capital else None,
         compounding_mode=body.compounding_mode,
         reserve_cash_percent=body.reserve_cash_percent,
+        max_total_exposure_percent=body.max_total_exposure_percent,
+        conflict_policy=body.conflict_policy,
         entries=[entry.model_dump() for entry in body.entries],
         idempotency_key=idempotency_key,
     )

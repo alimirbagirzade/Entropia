@@ -33,7 +33,13 @@ from entropia.shared.manifest import manifest_hash
 # stale pre-v17 composite result (which lacks the per-item breakdown) is NOT idempotently
 # reused for a re-RUN of the same composition (INF-04/INF-05) — a re-RUN produces the
 # richer artifact instead of returning the older one.
-ENGINE_VERSION = "backtest-engine-v17-per-item-breakdown"
+# v18: PORTFOLIO-LEVEL rules now EXECUTE (doc 13 §8.4 cross-item): a composition-wide
+# Max Total Exposure cap + the opposing same-instrument conflict policy gate entries /
+# stack tranches / scale layers against the earlier-pinned items' held windows
+# (sequential pin-order precedence, fail-closed, L4-disclosed; NET executes as
+# BLOCK_OPPOSITE). The bump shifts the execution_key namespace so a pre-v18 result is
+# never reused for a plan whose rules now genuinely execute (INF-04/INF-05).
+ENGINE_VERSION = "backtest-engine-v18-portfolio-rules"
 METRIC_SET_VERSION = "metric-set-v1"
 OUTPUT_ARTIFACT_PROFILE = "standard-v1"
 

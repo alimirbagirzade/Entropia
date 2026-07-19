@@ -15,7 +15,11 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
-from entropia.domain.allocation.enums import AllocationCurrency, CompoundingMode
+from entropia.domain.allocation.enums import (
+    AllocationCurrency,
+    CompoundingMode,
+    CrossItemConflictPolicy,
+)
 from entropia.domain.mainboard.enums import MainboardItemKind
 
 
@@ -107,6 +111,12 @@ class PortfolioAllocationConfigV1(_Strict):
     initial_capital: MoneyV1 | None = None
     compounding_mode: CompoundingMode | None = None
     reserve_cash_percent: Decimal | None = None
+    # Portfolio-level rules connecting the item configs (cross-item, doc 13 §8.4):
+    # a composition-wide exposure ceiling as a percent of the shared pool P0
+    # (``None`` = no cap), and the opposing same-instrument signal policy
+    # (``None`` = KEEP_SEPARATE, the pre-rules behaviour).
+    max_total_exposure_percent: Decimal | None = None
+    conflict_policy: CrossItemConflictPolicy | None = None
     entries: list[AllocationEntryV1] = []
 
     @field_validator("compounding_mode", mode="before")
@@ -116,10 +126,17 @@ class PortfolioAllocationConfigV1(_Strict):
             return None
         return value.strip().upper() if isinstance(value, str) else value
 
-    @field_validator("reserve_cash_percent", mode="before")
+    @field_validator("reserve_cash_percent", "max_total_exposure_percent", mode="before")
     @classmethod
     def _parse_reserve(cls, value: Any) -> Any:
         return None if _blank(value) else _to_decimal(value)
+
+    @field_validator("conflict_policy", mode="before")
+    @classmethod
+    def _norm_conflict(cls, value: Any) -> Any:
+        if _blank(value):
+            return None
+        return value.strip().upper() if isinstance(value, str) else value
 
 
 __all__ = [

@@ -510,6 +510,14 @@ def _plan_to_config(
         "reserve_cash_percent": (
             str(plan.reserve_cash_percent) if plan.reserve_cash_percent is not None else None
         ),
+        "max_total_exposure_percent": (
+            str(plan.max_total_exposure_percent)
+            if plan.max_total_exposure_percent is not None
+            else None
+        ),
+        "conflict_policy": (
+            str(plan.conflict_policy) if plan.conflict_policy is not None else None
+        ),
         "entries": [
             {
                 "composition_item_id": e.composition_item_id,

@@ -164,3 +164,50 @@ def test_money_must_not_be_float() -> None:
         PortfolioAllocationConfigV1.model_validate(
             {"enabled": True, "initial_capital": {"amount": 10000.5, "currency": "USDT"}}
         )
+
+
+# --------------------------------------------------------------------------- #
+# Portfolio-level rules (cross-item, doc 13 §8.4)                              #
+# --------------------------------------------------------------------------- #
+
+
+def test_valid_portfolio_rules_add_no_issues_and_shift_the_config_hash() -> None:
+    plain = _config(entries=[_entry("a", "100")])
+    ruled = _config(
+        entries=[_entry("a", "100")],
+        max_total_exposure_percent="150",
+        conflict_policy="block_opposite",
+    )
+    issues, _ = validate_allocation(ruled, item_refs=_refs("a"))
+    assert Code.MAX_TOTAL_EXPOSURE_INVALID not in _codes(issues)
+    assert Code.CONFLICT_POLICY_NET_V1 not in _codes(issues)
+    assert ruled.max_total_exposure_percent == Decimal("150")
+    assert str(ruled.conflict_policy) == "BLOCK_OPPOSITE"  # normalized to the wire token
+    # The rules are part of the canonical identity: setting them must move the hash.
+    assert compute_config_hash(ruled) != compute_config_hash(plain)
+
+
+def test_nonpositive_max_total_exposure_blocks() -> None:
+    for bad in ("0", "-10"):
+        issues, _ = validate_allocation(
+            _config(entries=[_entry("a", "100")], max_total_exposure_percent=bad),
+            item_refs=_refs("a"),
+        )
+        assert Code.MAX_TOTAL_EXPOSURE_INVALID in _codes(issues), bad
+        assert has_blockers(issues), bad
+
+
+def test_net_policy_pre_discloses_the_v1_block_downgrade_as_a_warning() -> None:
+    issues, _ = validate_allocation(
+        _config(entries=[_entry("a", "100")], conflict_policy="NET"),
+        item_refs=_refs("a"),
+    )
+    net = [i for i in issues if str(i.code) == str(Code.CONFLICT_POLICY_NET_V1)]
+    assert len(net) == 1
+    assert str(net[0].severity) == str(Sev.WARNING)
+    assert not has_blockers(issues)
+
+
+def test_unknown_conflict_policy_token_is_rejected_at_parse() -> None:
+    with pytest.raises(ValidationError):
+        _config(entries=[_entry("a", "100")], conflict_policy="MERGE_SOMEHOW")

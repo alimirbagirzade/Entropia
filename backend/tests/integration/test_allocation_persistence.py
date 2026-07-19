@@ -278,3 +278,73 @@ async def test_idempotent_upsert_replay(session) -> None:
         await session.execute(select(func.count()).select_from(PortfolioAllocationPlanRevision))
     ).scalar_one()
     assert plans == 0  # a draft PUT never creates a revision
+
+
+# --------------------------------------------------------------------------- #
+# Portfolio-level rules (cross-item, doc 13 §8.4)                              #
+# --------------------------------------------------------------------------- #
+
+
+async def test_portfolio_rules_round_trip_and_revision_carry(session) -> None:
+    """PUT persists the two rule fields; the draft GET, the NET pre-disclosure
+    warning, the immutable revision config and the blocker path all reflect them."""
+    await _seed_principals(session)
+    composition_id, items = await _composition_with_items(session, USER1)
+
+    put = await alloc_cmd.upsert_allocation_draft(
+        session,
+        USER1,
+        composition_id=composition_id,
+        expected_row_version=None,
+        enabled=True,
+        initial_capital={"amount": "10000", "currency": "USDT"},
+        compounding_mode="COMPOUND_PORTFOLIO_EQUITY",
+        reserve_cash_percent="10",
+        max_total_exposure_percent="150",
+        conflict_policy="net",
+        entries=_entries((items[0], "40"), (items[1], "35"), (items[2], "15")),
+    )
+    await session.commit()
+    # NET is a valid save, pre-disclosed as the V1 block downgrade (warning, no blocker).
+    codes = {i["code"] for i in put["inline_issues"]}
+    assert "CONFLICT_POLICY_NET_V1" in codes
+    assert all(i["severity"] != "blocker" for i in put["inline_issues"])
+
+    draft = await alloc_query.get_allocation_draft(session, USER1, composition_id=composition_id)
+    assert draft["draft"]["max_total_exposure_percent"] == "150.000000"
+    assert draft["draft"]["conflict_policy"] == "NET"
+
+    revision = await alloc_cmd.create_allocation_revision(
+        session, USER1, composition_id=composition_id, expected_row_version=1
+    )
+    await session.commit()
+    stored = (await session.execute(select(PortfolioAllocationPlanRevision))).scalar_one()
+    assert revision["plan_revision_id"] == stored.plan_revision_id
+    # The immutable revision config (the engine's capital_mode source) carries the rules.
+    assert stored.config["max_total_exposure_percent"] == "150.000000"
+    assert stored.config["conflict_policy"] == "NET"
+
+
+async def test_nonpositive_max_total_exposure_blocks_the_revision(session) -> None:
+    await _seed_principals(session)
+    composition_id, items = await _composition_with_items(session, USER1)
+
+    put = await alloc_cmd.upsert_allocation_draft(
+        session,
+        USER1,
+        composition_id=composition_id,
+        expected_row_version=None,
+        enabled=True,
+        initial_capital={"amount": "10000", "currency": "USDT"},
+        compounding_mode="COMPOUND_PORTFOLIO_EQUITY",
+        reserve_cash_percent="10",
+        max_total_exposure_percent="0",
+        entries=_entries((items[0], "100")),
+    )
+    await session.commit()
+    assert "MAX_TOTAL_EXPOSURE_INVALID" in {i["code"] for i in put["inline_issues"]}
+
+    with pytest.raises(AllocationHasBlockersError):
+        await alloc_cmd.create_allocation_revision(
+            session, USER1, composition_id=composition_id, expected_row_version=1
+        )

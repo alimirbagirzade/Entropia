@@ -34,6 +34,25 @@ class CompoundingMode(StrEnum):
     FIXED_INITIAL_PORTFOLIO_CAPITAL = "FIXED_INITIAL_PORTFOLIO_CAPITAL"
 
 
+class CrossItemConflictPolicy(StrEnum):
+    """Portfolio-level policy for OPPOSING same-instrument signals ACROSS composition
+    items (the cross-item counterpart of doc 02's per-strategy Conflict Handling;
+    doc 13 §8.4 step 6 — a blocked item's share is never auto-transferred).
+
+    ``KEEP_SEPARATE`` is the pre-rules behaviour (each item replays independently).
+    ``BLOCK_OPPOSITE`` blocks a later-pinned item's entry while an earlier-pinned
+    item holds the opposite direction on the same instrument. ``NET`` (offsetting
+    the aggregate position) needs a unified-clock multi-item co-simulation the V1
+    sequential engine cannot honestly run — the engine executes it conservatively
+    as BLOCK_OPPOSITE and discloses the downgrade (validation warning + L4 engine
+    warning, never silent).
+    """
+
+    NET = "NET"
+    BLOCK_OPPOSITE = "BLOCK_OPPOSITE"
+    KEEP_SEPARATE = "KEEP_SEPARATE"
+
+
 class AllocationIssueSeverity(StrEnum):
     """A validation issue either blocks a plan revision or only warns (doc 13 §10.1)."""
 
@@ -61,6 +80,13 @@ class AllocationIssueCode(StrEnum):
     # converts — cross-currency pooling blocks fail-closed until a conversion
     # source exists (mirrors the engine GAP-16 single-currency assumption).
     FX_DEPENDENCY_MISSING = "FX_DEPENDENCY_MISSING"
+    # A set Max Total Exposure must be a positive percent of the shared pool P0 —
+    # a non-positive cap can never admit an entry and is a misconfiguration, not a
+    # tradable plan (portfolio-level rules slice).
+    MAX_TOTAL_EXPOSURE_INVALID = "MAX_TOTAL_EXPOSURE_INVALID"
+    # Pre-disclosure of the engine's honest V1 boundary: NET needs a unified-clock
+    # co-simulation, so the engine executes it conservatively as BLOCK_OPPOSITE.
+    CONFLICT_POLICY_NET_V1 = "CONFLICT_POLICY_NET_V1"
 
 
 __all__ = [
@@ -68,4 +94,5 @@ __all__ = [
     "AllocationIssueCode",
     "AllocationIssueSeverity",
     "CompoundingMode",
+    "CrossItemConflictPolicy",
 ]

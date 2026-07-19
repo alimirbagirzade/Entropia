@@ -63,7 +63,18 @@ export function ResultDetail({ result }: { result: BacktestResultDetail }) {
           {result.summary.headline ? (
             <>
               <dt>Headline</dt>
-              <dd>{result.summary.headline}</dd>
+              <dd>
+                <dl className="kv kv-compact" style={{ margin: 0 }}>
+                  {Object.entries(result.summary.headline).map(([key, value]) => (
+                    <div key={key} style={{ display: "flex", gap: 8 }}>
+                      <dt style={{ margin: 0, minWidth: 160 }}>{key}</dt>
+                      <dd style={{ margin: 0 }}>
+                        {value === null || value === undefined ? EM_DASH : String(value)}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              </dd>
             </>
           ) : null}
         </dl>

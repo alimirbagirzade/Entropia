@@ -102,7 +102,9 @@ export interface ResultSummary {
   period_start: string | null;
   period_end: string | null;
   total_trades: number | null;
-  headline: string | null;
+  // The engine emits headline metrics as a structured object (mirrors
+  // LatestResultSummary.headline), not a scalar string.
+  headline: Record<string, unknown> | null;
 }
 
 export interface MetricValue {

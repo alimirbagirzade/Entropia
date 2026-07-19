@@ -4329,7 +4329,7 @@ def _contribution_block(
     * ``marginal`` — per item: the full composition re-folded WITHOUT the item
       (remaining items' own deterministic bar-replay outputs REUSED, not re-simulated —
       each item's simulation is independent of the others, the INF-04 reuse that makes
-      the "second run" cheap) + ``delta = full − without`` per metric. Under the shared
+      the "second run" cheap) + ``delta = full - without`` per metric. Under the shared
       pool the without-run keeps the same P0; under independent capital it starts from
       the remaining items' summed capital.
     """
@@ -4364,9 +4364,7 @@ def _contribution_block(
             )
             for key in _CONTRIBUTION_DELTA_KEYS
         }
-        marginal.append(
-            {"item_id": excluded.item_id, "without_item": without, "delta": delta}
-        )
+        marginal.append({"item_id": excluded.item_id, "without_item": without, "delta": delta})
     return {
         "method": {
             "correlation": (

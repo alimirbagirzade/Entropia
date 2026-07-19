@@ -13,6 +13,8 @@ import pytest
 from sqlalchemy import func, select
 
 from entropia.application.commands import create_package as cp_cmd
+from entropia.application.queries import create_package as cp_query
+from entropia.application.queries import library as library_query
 from entropia.domain.create_package.enums import (
     CreatePackageState,
     CreationMode,
@@ -175,6 +177,46 @@ async def test_validation_pass_enables_approval(session) -> None:
     await session.commit()
     assert published["approval_state"] == str(ApprovalState.APPROVED)
     assert published["visibility_scope"] == str(VisibilityScope.PUBLISHED)
+
+
+async def test_validation_pass_makes_published_package_usable(session) -> None:
+    """A passing validation run certifies the draft revision, so the approved+published
+    package is usable and pinnable in the Strategy editor.
+
+    Regression: the run previously left ``PackageRevision.validation_state`` at PENDING,
+    so ``can_use`` (which requires validation_state == PASSED) stayed False and the
+    published indicator could never be pinned via "Choose indicator".
+    """
+    await _seed_principals(session)
+    await _seed_python_resolver(session)
+    family_id = await _seed_family(session)
+    request_id = await _drive_to_draft(session, family_id=family_id)
+    await session.commit()
+
+    req = await cp_query.get_package_request(session, OWNER, request_id=request_id)
+    draft = await pkg_repo.get_revision(session, req["draft_revision_id"])
+    # A fresh draft carries no validation evidence yet.
+    assert draft is not None
+    assert draft.validation_state == PackageValidationState.PENDING
+
+    await cp_cmd.start_package_validation_run(session, OWNER, request_id=request_id)
+    await session.commit()
+
+    # The passing run certifies the exact draft revision it validated.
+    certified = await pkg_repo.get_revision(session, req["draft_revision_id"])
+    assert certified is not None
+    assert certified.validation_state == PackageValidationState.PASSED
+
+    await cp_cmd.approve_and_publish(session, ADMIN, request_id=request_id)
+    await session.commit()
+
+    # The published package is now usable — the exact permission the Strategy editor's
+    # "Choose indicator" pin (and every backtest that resolves it) depends on.
+    detail = await library_query.get_package_detail(
+        session, OWNER, entity_id=req["package_root_id"]
+    )
+    assert detail["validation_state"] == str(PackageValidationState.PASSED)
+    assert detail["permissions"]["can_use"] is True
 
 
 async def test_validation_failure_routes_to_revision_and_reopens(session) -> None:

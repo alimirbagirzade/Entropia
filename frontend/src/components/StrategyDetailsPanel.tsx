@@ -61,6 +61,33 @@ function mutationErrorText(error: unknown): string {
   return error instanceof Error ? error.message : "Request failed.";
 }
 
+// A Mainboard item can carry a bare work-object root that predates the Strategy
+// editor family (the pre-#314 generic Add-Strategy path produced a wo_ root with
+// no strategy detail/revision, so the editor's read endpoints answer
+// STRATEGY_NOT_FOUND / STRATEGY_REVISION_NOT_FOUND). That is NOT a transient
+// failure to retry — the row is simply not editor-managed, so we show a calm note
+// pointing at the row's delete (×) rather than a red ErrorState. Any OTHER error
+// (network, 401, 500, an OCC conflict) stays an ErrorState with a Retry.
+function isNotEditorManaged(error: unknown): boolean {
+  return (
+    error instanceof ApiError &&
+    (error.code === "STRATEGY_NOT_FOUND" || error.code === "STRATEGY_REVISION_NOT_FOUND")
+  );
+}
+
+function NotEditorManagedNote() {
+  return (
+    <div className="card" role="note" aria-label="Not an editor-managed strategy">
+      <strong>This item is not an editor-managed strategy.</strong>
+      <p style={{ margin: "6px 0 0", fontSize: 13 }}>
+        It predates the Strategy editor (a legacy work object with no editable
+        strategy revision), so there is nothing to open here. Use the × on this
+        row to move it to Trash and add a fresh Strategy from the Add menu.
+      </p>
+    </div>
+  );
+}
+
 function optionLabel(options: SelectOption[], value: string): string {
   return options.find((option) => option.value === value)?.label ?? (value || EM_DASH);
 }
@@ -627,6 +654,7 @@ function RevisionSummaryGrid({
     return <Loading label="Loading revision…" />;
   }
   if (revision.isError) {
+    if (isNotEditorManaged(revision.error)) return <NotEditorManagedNote />;
     return <ErrorState error={revision.error} onRetry={() => void revision.refetch()} />;
   }
   const data = revision.data;
@@ -809,6 +837,13 @@ function RootSummary({
 }) {
   const strategy = useStrategy(rootId);
   const create = useCreateStrategyDraft();
+
+  // A legacy (pre-#314) work-object root has no strategy detail — the root read
+  // answers STRATEGY_NOT_FOUND. Show the calm not-editor-managed note instead of
+  // an ErrorState + a meaningless "Edit this strategy" button.
+  if (strategy.isError && isNotEditorManaged(strategy.error)) {
+    return <NotEditorManagedNote />;
+  }
 
   return (
     <div>

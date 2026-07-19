@@ -2,6 +2,21 @@ import { vi, type Mock } from "vitest";
 
 type RouteHandler = unknown | ((init?: RequestInit) => unknown);
 
+// Tagged sentinel a route can return to force a non-ok response carrying the
+// canonical error envelope, so a test can exercise the ApiError path (e.g. a
+// 404 STRATEGY_REVISION_NOT_FOUND) through the same apiClient parsing as prod.
+interface ApiErrorRoute {
+  readonly __apiError: { status: number; code: string; message: string };
+}
+
+export function apiErrorRoute(status: number, code: string, message = code): ApiErrorRoute {
+  return { __apiError: { status, code, message } };
+}
+
+function isApiErrorRoute(value: unknown): value is ApiErrorRoute {
+  return typeof value === "object" && value !== null && "__apiError" in value;
+}
+
 // Route-aware fetch double for component tests. Keys are "<METHOD> <path
 // fragment>" (e.g. "GET /mainboards/default"); the first entry whose method
 // matches and whose fragment is contained in the URL wins. Responses go
@@ -19,6 +34,15 @@ export function stubApi(routes: Record<string, RouteHandler>): Mock {
     }
     const handler = entry[1];
     const value = typeof handler === "function" ? (handler as (i?: RequestInit) => unknown)(init) : handler;
+    if (isApiErrorRoute(value)) {
+      const { status, code, message } = value.__apiError;
+      return {
+        ok: false,
+        status,
+        statusText: code,
+        text: async () => JSON.stringify({ error: { code, message, details: [] } }),
+      };
+    }
     return {
       ok: true,
       status: 200,

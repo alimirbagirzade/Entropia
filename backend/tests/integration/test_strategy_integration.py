@@ -492,6 +492,42 @@ async def test_list_strategy_drafts_excludes_soft_deleted(session) -> None:
     assert draft["draft_id"] not in {row["draft_id"] for row in listed}
 
 
+async def test_list_strategy_drafts_excludes_attached_then_trashed_draft(session) -> None:
+    # The literal "a Trashed draft must not linger on the Mainboard" case: a draft
+    # that was SAVED + ATTACHED (so the is_attached EXISTS subquery is true) and
+    # then soft-deleted must still drop out of the list — the deletion_state=ACTIVE
+    # filter wins over the standing attachment, so the Mainboard draft row does not
+    # survive the move to Trash.
+    await _seed_principals(session)
+    draft = await _new_draft(session, USER1)
+    workspace_id = (await mb_query.get_default_mainboard(session, USER1))["workspace_id"]
+    saved = await strat_cmd.save_strategy_revision(
+        session, USER1, draft_id=draft["draft_id"], expected_draft_row_version=0
+    )
+    await session.flush()
+    await mb_cmd.attach_mainboard_item(
+        session,
+        USER1,
+        workspace_id=workspace_id,
+        root_id=saved["strategy_root_id"],
+        revision_id=saved["mirror_revision_id"],
+    )
+    await session.flush()
+    # Sanity: while active it IS listed and flagged attached.
+    active = next(
+        r
+        for r in await strat_query.list_strategy_drafts(session, USER1)
+        if r["draft_id"] == draft["draft_id"]
+    )
+    assert active["is_attached"] is True
+
+    await mb_cmd.soft_delete_work_object(session, USER1, root_id=draft["strategy_root_id"])
+    await session.flush()
+
+    listed = await strat_query.list_strategy_drafts(session, USER1)
+    assert draft["draft_id"] not in {row["draft_id"] for row in listed}
+
+
 async def test_list_strategy_drafts_rejects_guest(session) -> None:
     await _seed_principals(session)
     await _new_draft(session, USER1)

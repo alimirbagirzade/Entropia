@@ -1971,6 +1971,17 @@
             ],
             "title": "Compounding Mode"
           },
+          "conflict_policy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conflict Policy"
+          },
           "enabled": {
             "default": false,
             "title": "Enabled",
@@ -2003,6 +2014,17 @@
                 "type": "null"
               }
             ]
+          },
+          "max_total_exposure_percent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Total Exposure Percent"
           },
           "reserve_cash_percent": {
             "anyOf": [

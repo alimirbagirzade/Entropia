@@ -154,6 +154,97 @@ const DIAG_CLEAN = {
   next_cursor: null,
 };
 
+// A multi-item composition run (v17): two executing strategies + one non-executing
+// Trade Log, each carrying its OWN per-item metrics and equity curve.
+const DIAG_COMPOSITION = {
+  result_id: "res_x",
+  artifact_type: "diagnostics",
+  items: [
+    {
+      diagnostic_id: "btdiag_3",
+      kind: "run_diagnostics",
+      content: {
+        engine_kind: "v1_bar_replay_composition",
+        entry_model: "builtin_indicator_native_trigger_v1",
+        reproducibility_note: "Deterministic per-strategy bar-replay composed in pin order.",
+        warnings: ["portfolio_curve_sequential_not_unified_clock"],
+        composition: {
+          strategy_count: 2,
+          participating_item_count: 3,
+          items: [
+            {
+              item_id: "item_a",
+              item_kind: "strategy",
+              root_id: "root_a",
+              revision_id: "rev_a",
+              executed: true,
+              symbol: "BTCUSDT",
+              timeframe: "1m",
+              initial_capital: "10000.00",
+              final_equity: "9949.00",
+              net_profit: "-51.00",
+              net_profit_pct: "-0.5100",
+              max_drawdown: "51.00",
+              max_drawdown_pct: "0.5100",
+              total_trades: 1,
+              winning_trades: 0,
+              trade_seq_range: [1, 1],
+              equity_curve: [
+                { seq: 0, timestamp: "", equity: "10000.00", drawdown: "0.00" },
+                { seq: 1, timestamp: "2024-01-21T00:00:00Z", equity: "9949.00", drawdown: "51.00" },
+              ],
+            },
+            {
+              item_id: "item_b",
+              item_kind: "strategy",
+              root_id: "root_b",
+              revision_id: "rev_b",
+              executed: true,
+              symbol: "BTCUSDT",
+              timeframe: "1m",
+              initial_capital: "10000.00",
+              final_equity: "9969.40",
+              net_profit: "-30.60",
+              net_profit_pct: "-0.3060",
+              max_drawdown: "30.60",
+              max_drawdown_pct: "0.3060",
+              total_trades: 1,
+              winning_trades: 0,
+              trade_seq_range: [2, 2],
+              equity_curve: [
+                { seq: 0, timestamp: "", equity: "10000.00", drawdown: "0.00" },
+                { seq: 1, timestamp: "2024-01-22T00:00:00Z", equity: "9969.40", drawdown: "30.60" },
+              ],
+            },
+            {
+              item_id: "item_tl",
+              item_kind: "trade_log",
+              root_id: "root_tl",
+              revision_id: "rev_tl",
+              executed: false,
+              symbol: null,
+              timeframe: null,
+              initial_capital: null,
+              final_equity: null,
+              net_profit: null,
+              net_profit_pct: null,
+              max_drawdown: null,
+              max_drawdown_pct: null,
+              total_trades: 0,
+              winning_trades: 0,
+              trade_seq_range: null,
+              equity_curve: [],
+              note: "non_executing_participating_object",
+            },
+          ],
+        },
+      },
+      created_at: "2026-01-03T12:00:00+00:00",
+    },
+  ],
+  next_cursor: null,
+};
+
 function renderDetail() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
@@ -285,5 +376,49 @@ describe("ResultDetail trade list + export", () => {
       await screen.findByText("No diagnostic warnings — the run produced no honesty flags."),
     ).toBeInTheDocument();
     expect(screen.getByText(/built-in indicator native triggers/)).toBeInTheDocument();
+  });
+
+  it("renders the per-item breakdown with each strategy's isolated metrics + own equity curve", async () => {
+    stubApi({
+      "GET /backtest-results/res_x/artifacts/trade_ledger": EMPTY_PAGE,
+      "GET /backtest-results/res_x/metrics": METRICS_VIEW,
+      "GET /backtest-results/res_x/artifacts/diagnostics": DIAG_COMPOSITION,
+    });
+    renderDetail();
+
+    expect(await screen.findByText("Per-item breakdown")).toBeInTheDocument();
+    // The header states the executing/participating counts verbatim.
+    expect(
+      screen.getByText(/2 executing strategies · 3 participating items/),
+    ).toBeInTheDocument();
+    // Each executing strategy shows its OWN isolated figures (not the composite).
+    expect(screen.getByText("item_a")).toBeInTheDocument();
+    expect(screen.getByText(/-51\.00 \(-0\.5100%\)/)).toBeInTheDocument();
+    expect(screen.getByText(/-30\.60 \(-0\.3060%\)/)).toBeInTheDocument();
+    // The per-item equity curve is rendered — item_a's final equity appears in BOTH the
+    // metrics block and the equity-curve table's last point.
+    expect(screen.getAllByText("9949.00").length).toBeGreaterThanOrEqual(2);
+    // The equity-curve seed point (own capital basis) is present.
+    expect(screen.getAllByText("10000.00").length).toBeGreaterThanOrEqual(1);
+    // The non-executing Trade Log is recorded but carries no curve.
+    expect(screen.getByText("item_tl")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Recorded for traceability but not simulated/),
+    ).toBeInTheDocument();
+  });
+
+  it("omits the per-item breakdown for a lone-strategy result (no composition block)", async () => {
+    stubApi({
+      "GET /backtest-results/res_x/artifacts/trade_ledger": EMPTY_PAGE,
+      "GET /backtest-results/res_x/metrics": METRICS_VIEW,
+      "GET /backtest-results/res_x/artifacts/diagnostics": DIAG_CLEAN,
+    });
+    renderDetail();
+
+    // The clean single-strategy diagnostics loaded, but no composition block → no section.
+    expect(
+      await screen.findByText("No diagnostic warnings — the run produced no honesty flags."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Per-item breakdown")).not.toBeInTheDocument();
   });
 });

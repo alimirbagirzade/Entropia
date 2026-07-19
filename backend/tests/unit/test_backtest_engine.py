@@ -580,7 +580,7 @@ def test_engine_execution_key_namespace_shifts_with_the_engine_version() -> None
     # The ENGINE_VERSION bump must flow into the manifest so a stale pre-conflict
     # result cannot be reused under the new engine (INF-04 idempotent reuse / INF-05).
     built = _manifest("btrun_A", "snap_A", "2024-01-01T00:00:00Z")
-    assert built.manifest["identity"]["engine_version"] == "backtest-engine-v16-tick-settings"
+    assert built.manifest["identity"]["engine_version"] == "backtest-engine-v17-per-item-breakdown"
 
 
 def test_stop_exit_default_is_stop_has_priority() -> None:
@@ -751,6 +751,58 @@ def test_combine_two_strategies_sums_net_profit_and_unions_trades() -> None:
     assert ids["item_a"]["net_profit"] == a.output.summary["net_profit"]
     assert ids["item_a"]["trade_seq_range"] == [1, len(a.output.trades)]
     assert COMPOSITION_CURVE_WARNING in combined.diagnostics["warnings"]
+
+
+def test_combine_per_item_breakdown_carries_isolated_metrics_and_own_equity_curve() -> None:
+    # v17 per-item breakdown: each executing strategy's OWN standalone figures (its own
+    # capital basis), NOT its portfolio-rebased slice — a per-strategy attribution.
+    a = _strategy_run("item_a", base_size="50")
+    b = _strategy_run("item_b", base_size="30")
+    combined = combine_item_runs(
+        [a, b],
+        portfolio_initial_capital=Decimal("20000.00"),
+        execution_key="exec_pi",
+        item_count=2,
+    )
+    assert a.output is not None and b.output is not None
+    rows = {row["item_id"]: row for row in combined.diagnostics["composition"]["items"]}
+    for run in (a, b):
+        row = rows[run.item_id]
+        summ = run.output.summary
+        # Basic metrics equal the item's ISOLATED standalone bar-replay, not the composite.
+        assert row["initial_capital"] == summ["initial_capital"]
+        assert row["final_equity"] == summ["final_equity"]
+        assert row["net_profit"] == summ["net_profit"]
+        assert row["max_drawdown"] == summ["max_drawdown"]
+        assert row["total_trades"] == len(run.output.trades)
+        # The item's OWN equity curve is persisted verbatim (seed + one point per trade),
+        # NOT the portfolio-rebased composite curve.
+        assert len(row["equity_curve"]) == len(run.output.equity_points)
+        assert [p["equity"] for p in row["equity_curve"]] == [
+            pt.equity for pt in run.output.equity_points
+        ]
+    # A per-item drawdown/PnL is isolated: item_a's own maxDD is independent of item_b.
+    assert rows["item_a"]["max_drawdown"] == a.output.summary["max_drawdown"]
+    assert rows["item_a"]["max_drawdown"] != rows["item_b"]["max_drawdown"]
+
+
+def test_combine_non_executing_item_has_empty_per_item_equity_curve() -> None:
+    # A Trade Log runs no bar-replay → its per-item row carries an EMPTY equity curve and
+    # null metrics (never a fabricated flat line), preserving the honest V1 boundary.
+    strat = _strategy_run("item_a")
+    tl = ItemRun("item_tl", "trade_log", "root_tl", "rev_tl", None)
+    combined = combine_item_runs(
+        [strat, tl],
+        portfolio_initial_capital=Decimal("10000.00"),
+        execution_key="exec_tl_pi",
+        item_count=2,
+    )
+    items = combined.diagnostics["composition"]["items"]
+    tl_row = next(r for r in items if r["item_id"] == "item_tl")
+    assert tl_row["executed"] is False
+    assert tl_row["equity_curve"] == []
+    assert tl_row["max_drawdown"] is None
+    assert tl_row["final_equity"] is None
 
 
 def test_combine_net_profit_is_order_invariant() -> None:

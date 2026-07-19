@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 
 import { Mainboard } from "@/pages/Mainboard";
-import { stubApi } from "./helpers/apiStub";
+import { apiErrorRoute, stubApi } from "./helpers/apiStub";
 
 const MAINBOARD = {
   workspace_id: "ws_1",
@@ -408,6 +408,42 @@ describe("Mainboard", () => {
     expect(openLink.getAttribute("href")).toBe("/strategy?strategy=root_strat");
     // The Mainboard-owned composition controls remain reachable in the same row.
     expect(screen.getByLabelText("Composition controls for Momentum A")).toBeTruthy();
+  });
+
+  it("shows a calm note (not an ErrorState) for a legacy non-editor strategy item", async () => {
+    // A pre-#314 bare wo_ strategy root has a pinned generic revision but no
+    // strategy detail — the editor's revision read answers 404
+    // STRATEGY_REVISION_NOT_FOUND. The row must guide the user to delete it,
+    // never present a red Retry (there is nothing to retry).
+    stubRoutes({
+      "GET /strategy-revisions/wor_1": apiErrorRoute(
+        404,
+        "STRATEGY_REVISION_NOT_FOUND",
+        "Strategy revision not found.",
+      ),
+    });
+    renderPage();
+    await expandRow();
+    expect(
+      await screen.findByText("This item is not an editor-managed strategy."),
+    ).toBeTruthy();
+    // Delete guidance is present; the ErrorState glyph/Retry is not.
+    expect(screen.getByText(/Use the × on this row to move it to Trash/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+    expect(screen.queryByText("Unable to load")).toBeNull();
+  });
+
+  it("keeps the ErrorState for a non-404 strategy revision failure (only the two NOT_FOUND codes are calm)", async () => {
+    // Any OTHER server error (here a 500) is a real failure — it must still
+    // render the retryable ErrorState, never the not-editor-managed note.
+    stubRoutes({
+      "GET /strategy-revisions/wor_1": apiErrorRoute(500, "INTERNAL", "Boom."),
+    });
+    renderPage();
+    await expandRow();
+    expect(await screen.findByText("Unable to load")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
+    expect(screen.queryByText("This item is not an editor-managed strategy.")).toBeNull();
   });
 
   it("offers the prototype Add menu with Strategy / Package / Portfolio actions (UI-01)", async () => {

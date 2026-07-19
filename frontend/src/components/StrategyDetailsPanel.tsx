@@ -386,7 +386,15 @@ function DraftToolbar({
 // Edit mode (draftId present) — the full 3-column, 9-card interactive editor.
 // ---------------------------------------------------------------------------
 
-function DraftEditorGrid({ draftId, onCancel }: { draftId: string; onCancel?: () => void }) {
+function DraftEditorGrid({
+  draftId,
+  onCancel,
+  onSaved,
+}: {
+  draftId: string;
+  onCancel?: () => void;
+  onSaved?: (result: SaveRevisionResult) => void;
+}) {
   const draftQuery = useStrategyDraft(draftId);
   const patch = usePatchStrategyDraft();
   const validate = useValidateStrategyDraft();
@@ -455,7 +463,12 @@ function DraftEditorGrid({ draftId, onCancel }: { draftId: string; onCancel?: ()
         savePending={save.isPending}
         clearPending={clear.isPending}
         onValidate={() => validate.mutate({ draftId })}
-        onSave={() => save.mutate({ draftId, expectedRowVersion: draft.row_version })}
+        onSave={() =>
+          save.mutate(
+            { draftId, expectedRowVersion: draft.row_version },
+            { onSuccess: (result) => onSaved?.(result) },
+          )
+        }
         onClear={() => clear.mutate({ draftId, expectedRowVersion: draft.row_version })}
       />
       {validate.isError ? <MutationErrorNote error={validate.error} /> : null}
@@ -875,15 +888,17 @@ export function StrategyDetailsPanel({
   draftId,
   onDraftCreated,
   onCancel,
+  onSaved,
 }: {
   rootId: string | null;
   revisionId: string | null;
   draftId: string | null;
   onDraftCreated?: (draftId: string) => void;
   onCancel?: () => void;
+  onSaved?: (result: SaveRevisionResult) => void;
 }) {
   if (draftId !== null) {
-    return <DraftEditorGrid draftId={draftId} onCancel={onCancel} />;
+    return <DraftEditorGrid draftId={draftId} onCancel={onCancel} onSaved={onSaved} />;
   }
   if (revisionId !== null) {
     return (

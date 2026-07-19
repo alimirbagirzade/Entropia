@@ -102,7 +102,9 @@ export interface ResultSummary {
   period_start: string | null;
   period_end: string | null;
   total_trades: number | null;
-  headline: string | null;
+  // The engine emits headline metrics as a structured object (mirrors
+  // LatestResultSummary.headline), not a scalar string.
+  headline: Record<string, unknown> | null;
 }
 
 export interface MetricValue {
@@ -316,12 +318,93 @@ export interface PerItemBreakdown {
   note?: string;
 }
 
+// v17 Contribution (engine.py _contribution_block — video 3:35 "what does an item add
+// to the universe"). Computed ONCE server-side at run time and persisted into the
+// immutable Result's diagnostics; the UI renders every value verbatim and computes
+// NOTHING. Present only when the composition has 2+ executing strategies. All money /
+// percent / ratio values arrive as strings (Decimal stringified at the JSONB persist
+// boundary); a correlation cell or metric that could not be computed is null, never a
+// fabricated number.
+export interface ContributionMetricSet {
+  initial_capital: string;
+  final_equity: string;
+  net_profit: string;
+  net_profit_pct: string | null;
+  max_drawdown: string;
+  max_drawdown_pct: string;
+  romad: string | null;
+  win_rate: string | null;
+  profit_factor: string | null;
+  total_trades: number;
+  total_stops: number;
+  max_stop_streak: number;
+  total_winning_trades: number;
+}
+
+export interface ContributionDelta {
+  net_profit: string | null;
+  net_profit_pct: string | null;
+  max_drawdown: string | null;
+  max_drawdown_pct: string | null;
+  romad: string | null;
+  win_rate: string | null;
+  profit_factor: string | null;
+  total_trades: number | null;
+  total_stops: number | null;
+  max_stop_streak: number | null;
+  total_winning_trades: number | null;
+}
+
+export interface ContributionCorrelation {
+  item_ids: string[];
+  aligned_point_count: number;
+  matrix: (string | null)[][];
+  average_pairwise: string | null;
+}
+
+export interface ContributionDiversification {
+  sum_of_item_max_drawdowns: string;
+  portfolio_max_drawdown: string;
+  drawdown_reduction: string;
+  average_pairwise_correlation: string | null;
+}
+
+export interface ContributionMarginal {
+  item_id: string;
+  without_item: ContributionMetricSet;
+  delta: ContributionDelta;
+}
+
+export interface CompositionContribution {
+  method: { correlation: string; marginal: string };
+  correlation: ContributionCorrelation;
+  diversification: ContributionDiversification;
+  marginal: ContributionMarginal[];
+}
+
+// Display order + labels for the marginal metric rows (server keys verbatim).
+export const CONTRIBUTION_METRIC_ROWS: { key: keyof ContributionDelta; label: string }[] = [
+  { key: "net_profit", label: "Net Profit" },
+  { key: "net_profit_pct", label: "Net Profit %" },
+  { key: "max_drawdown", label: "Max Drawdown" },
+  { key: "max_drawdown_pct", label: "Max Drawdown %" },
+  { key: "romad", label: "ROMAD" },
+  { key: "win_rate", label: "Win Rate" },
+  { key: "profit_factor", label: "Profit Factor" },
+  { key: "total_trades", label: "Trades" },
+  { key: "total_stops", label: "Stops" },
+  { key: "max_stop_streak", label: "Max Stop Streak" },
+  { key: "total_winning_trades", label: "Winning Trades" },
+];
+
 // diagnostics.composition — present ONLY for a genuine multi-item composition (a lone
 // Strategy takes the byte-identical no-compose path and emits no composition block).
 export interface CompositionDiagnostics {
   strategy_count: number;
   participating_item_count: number;
+  capital_allocation?: "shared_pool" | "independent";
   items: PerItemBreakdown[];
+  contribution?: CompositionContribution;
 }
 
 export interface DiagnosticContent {

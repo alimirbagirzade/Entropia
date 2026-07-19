@@ -14,6 +14,7 @@ foreign-owner 403; guest 401; and the OBJECT_IN_ACTIVE_RUN soft-delete guard.
 from __future__ import annotations
 
 from collections.abc import Iterator
+from decimal import Decimal
 from typing import Any
 
 import pytest
@@ -905,6 +906,56 @@ async def test_two_strategy_composition_runs_both_and_composes_one_result(sessio
     assert per_item_trades >= 2  # at least one real trade from EACH of the two strategies
     # The portfolio is capitalised once per strategy's own capital (independent mode).
     assert summary_row.headline["initial_capital"] == "20000.00"  # 2 x 10000
+
+
+async def test_two_strategy_composition_persists_the_contribution_analysis(session) -> None:
+    # v17 Contribution (video 3:35 — "what does an item add to the universe"): the
+    # composite Result's diagnostics carry the server-computed correlation matrix,
+    # diversification summary and per-item marginal (without-item) metrics through the
+    # real worker + JSONB persist boundary — Decimals arrive as strings, the UI renders
+    # them verbatim and computes nothing.
+    await _seed_principals(session)
+    composition_id, _revisions = await _two_strategy_composition(session, USER1)
+
+    admit = await backtest_cmd.request_backtest_run(session, USER1, composition_id=composition_id)
+    await session.commit()
+    out = await run_backtest(session, admit["job_id"], stream_bars=_e2e_bars)
+    await session.commit()
+    assert out["state"] == "succeeded"
+
+    diagnostics = await _run_diagnostics(session, out["result_id"])
+    comp = diagnostics["composition"]
+    assert comp["capital_allocation"] == "independent"
+    contrib = comp["contribution"]
+    executed = [row for row in comp["items"] if row["executed"]]
+
+    # Correlation: one row/column per executing strategy, in pin order.
+    corr = contrib["correlation"]
+    assert corr["item_ids"] == [row["item_id"] for row in executed]
+    assert len(corr["matrix"]) == 2 and all(len(r) == 2 for r in corr["matrix"])
+    # Both strategies replay the same seeded bars → identical PnL series. With at
+    # least 2 distinct aligned close times that is a defined r=1 diagonal+pair; with a
+    # single aligned point every cell is honestly null. Either way: strings or nulls,
+    # never fabricated numbers.
+    for matrix_row in corr["matrix"]:
+        for cell in matrix_row:
+            assert cell is None or isinstance(cell, str)
+
+    # Diversification: persisted as strings, sum/portfolio/reduction arithmetic holds.
+    div = contrib["diversification"]
+    sum_dd = sum(Decimal(row["max_drawdown"]) for row in executed)
+    assert Decimal(div["sum_of_item_max_drawdowns"]) == sum_dd
+    assert Decimal(div["drawdown_reduction"]) == sum_dd - Decimal(div["portfolio_max_drawdown"])
+
+    # Marginal: one entry per executing strategy; the delta of the additive metric is
+    # exactly the item's own net profit, and the without-item fold reports the
+    # remaining strategy's capital (independent allocation: 20000 - 10000).
+    marginal = {m["item_id"]: m for m in contrib["marginal"]}
+    assert set(marginal) == {row["item_id"] for row in executed}
+    for row in executed:
+        entry = marginal[row["item_id"]]
+        assert Decimal(entry["delta"]["net_profit"]) == Decimal(row["net_profit"])
+        assert Decimal(entry["without_item"]["initial_capital"]) == Decimal("10000.00")
 
 
 async def test_disabled_strategy_is_excluded_from_the_result(session) -> None:

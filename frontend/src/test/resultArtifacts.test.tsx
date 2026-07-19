@@ -171,6 +171,97 @@ const DIAG_COMPOSITION = {
         composition: {
           strategy_count: 2,
           participating_item_count: 3,
+          capital_allocation: "independent",
+          // v17 Contribution — server-computed at run time, rendered VERBATIM. The two
+          // strategies close one trade each at different times → 2 aligned points,
+          // perfectly anti-correlated zero-filled PnL series.
+          contribution: {
+            method: {
+              correlation:
+                "Pearson correlation of per-trade realized PnL aligned on the union of trade close times.",
+              marginal:
+                "The composition re-folded WITHOUT the item over the remaining items' reused outputs.",
+            },
+            correlation: {
+              item_ids: ["item_a", "item_b"],
+              aligned_point_count: 2,
+              matrix: [
+                ["1.0000", "-1.0000"],
+                ["-1.0000", "1.0000"],
+              ],
+              average_pairwise: "-1.0000",
+            },
+            diversification: {
+              sum_of_item_max_drawdowns: "81.60",
+              portfolio_max_drawdown: "81.60",
+              drawdown_reduction: "0.00",
+              average_pairwise_correlation: "-1.0000",
+            },
+            marginal: [
+              {
+                item_id: "item_a",
+                without_item: {
+                  initial_capital: "10000.00",
+                  final_equity: "9969.40",
+                  net_profit: "-30.60",
+                  net_profit_pct: "-0.3060",
+                  max_drawdown: "30.60",
+                  max_drawdown_pct: "0.3069",
+                  romad: "-1.00",
+                  win_rate: "0.0000",
+                  profit_factor: null,
+                  total_trades: 1,
+                  total_stops: 1,
+                  max_stop_streak: 1,
+                  total_winning_trades: 0,
+                },
+                delta: {
+                  net_profit: "-51.00",
+                  net_profit_pct: "-0.1040",
+                  max_drawdown: "51.00",
+                  max_drawdown_pct: "0.1031",
+                  romad: "-0.33",
+                  win_rate: "0.0000",
+                  profit_factor: null,
+                  total_trades: 1,
+                  total_stops: 1,
+                  max_stop_streak: 1,
+                  total_winning_trades: 0,
+                },
+              },
+              {
+                item_id: "item_b",
+                without_item: {
+                  initial_capital: "10000.00",
+                  final_equity: "9949.00",
+                  net_profit: "-51.00",
+                  net_profit_pct: "-0.5100",
+                  max_drawdown: "51.00",
+                  max_drawdown_pct: "0.5126",
+                  romad: "-0.99",
+                  win_rate: "0.0000",
+                  profit_factor: null,
+                  total_trades: 1,
+                  total_stops: 1,
+                  max_stop_streak: 1,
+                  total_winning_trades: 0,
+                },
+                delta: {
+                  net_profit: "-30.60",
+                  net_profit_pct: "0.1020",
+                  max_drawdown: "30.60",
+                  max_drawdown_pct: "-0.1026",
+                  romad: "0.66",
+                  win_rate: "0.0000",
+                  profit_factor: null,
+                  total_trades: 1,
+                  total_stops: 1,
+                  max_stop_streak: 1,
+                  total_winning_trades: 0,
+                },
+              },
+            ],
+          },
           items: [
             {
               item_id: "item_a",
@@ -392,7 +483,8 @@ describe("ResultDetail trade list + export", () => {
       screen.getByText(/2 executing strategies · 3 participating items/),
     ).toBeInTheDocument();
     // Each executing strategy shows its OWN isolated figures (not the composite).
-    expect(screen.getByText("item_a")).toBeInTheDocument();
+    // (item_a also appears in the Contribution correlation/marginal sections below.)
+    expect(screen.getAllByText("item_a").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText(/-51\.00 \(-0\.5100%\)/)).toBeInTheDocument();
     expect(screen.getByText(/-30\.60 \(-0\.3060%\)/)).toBeInTheDocument();
     // The per-item equity curve is rendered — item_a's final equity appears in BOTH the
@@ -420,5 +512,53 @@ describe("ResultDetail trade list + export", () => {
       await screen.findByText("No diagnostic warnings — the run produced no honesty flags."),
     ).toBeInTheDocument();
     expect(screen.queryByText("Per-item breakdown")).not.toBeInTheDocument();
+    // No composition → no Contribution section either.
+    expect(screen.queryByText("Contribution")).not.toBeInTheDocument();
+  });
+
+  it("renders the Contribution section verbatim — correlation, diversification, marginal", async () => {
+    stubApi({
+      "GET /backtest-results/res_x/artifacts/trade_ledger": EMPTY_PAGE,
+      "GET /backtest-results/res_x/metrics": METRICS_VIEW,
+      "GET /backtest-results/res_x/artifacts/diagnostics": DIAG_COMPOSITION,
+    });
+    renderDetail();
+
+    expect(await screen.findByText("Contribution")).toBeInTheDocument();
+    // Correlation matrix cells are the SERVER strings verbatim: the diagonal "1.0000"
+    // twice and the anti-correlated pair "-1.0000" twice — plus the two average rows.
+    expect(screen.getAllByText("-1.0000").length).toBeGreaterThanOrEqual(4);
+    expect(screen.getAllByText("1.0000").length).toBeGreaterThanOrEqual(2);
+    // Diversification summary values verbatim (sum + portfolio + reduction).
+    expect(screen.getAllByText("81.60").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText("Drawdown reduction")).toBeInTheDocument();
+    // Marginal: one card per executing strategy with the without/delta table; the
+    // without-item ROMAD values render verbatim (a marginal-only field — the per-item
+    // breakdown never shows ROMAD).
+    expect(screen.getAllByText(/Delta \(this item's contribution\)/).length).toBe(2);
+    expect(screen.getByText("-0.99")).toBeInTheDocument();
+    expect(screen.getByText("-0.33")).toBeInTheDocument();
+    // profit_factor is null on both sides → an em dash, never a fabricated number.
+    expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(1);
+    // Method notes render verbatim.
+    expect(
+      screen.getByText(/Pearson correlation of per-trade realized PnL aligned on the union/),
+    ).toBeInTheDocument();
+  });
+
+  it("omits the Contribution section when the composition has no contribution block", async () => {
+    // A 1-executing-strategy composition (e.g. one Strategy + one Trade Log) persists
+    // the per-item breakdown but NO contribution — the server omits it; the UI must too.
+    const diagNoContribution = JSON.parse(JSON.stringify(DIAG_COMPOSITION));
+    delete diagNoContribution.items[0].content.composition.contribution;
+    stubApi({
+      "GET /backtest-results/res_x/artifacts/trade_ledger": EMPTY_PAGE,
+      "GET /backtest-results/res_x/metrics": METRICS_VIEW,
+      "GET /backtest-results/res_x/artifacts/diagnostics": diagNoContribution,
+    });
+    renderDetail();
+
+    expect(await screen.findByText("Per-item breakdown")).toBeInTheDocument();
+    expect(screen.queryByText("Contribution")).not.toBeInTheDocument();
   });
 });

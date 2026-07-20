@@ -1,10 +1,10 @@
 import { expect, type Page } from "@playwright/test";
 
-// Mirrors frontend/src/pages/ResearchData.tsx "Add research dataset" form
-// (doc 12 §4). Create is DR3-gated — it requires marketEntityId to reference
-// an ACTIVE+APPROVED Market Data dataset, else the server rejects with
-// DEPENDENCY_BLOCKED (verbatim in a role=alert). Both outcomes are asserted
-// by callers; this page object never assumes success.
+// Mirrors frontend/src/pages/ResearchData.tsx setup form (doc 12 §4). Since
+// R2-06 the DR3 market link is server-truth: there is NO free-text entity-id
+// input — the Market Data link is chosen through MarketLinkPicker, only an
+// APPROVED head revision is selectable, and Create stays disabled until the
+// approved-bundle probe confirms the link.
 export class ResearchDataPage {
   constructor(private readonly page: Page) {}
 
@@ -13,17 +13,26 @@ export class ResearchDataPage {
     await expect(this.page.getByRole("heading", { name: "Research Data", exact: true })).toBeVisible();
   }
 
-  async submitCreate(opts: { marketEntityId: string; displayName: string }): Promise<void> {
-    await this.page.locator("#rd-market").fill(opts.marketEntityId);
-    await this.page.locator("#rd-display").fill(opts.displayName);
-    await this.page.getByRole("button", { name: "Create dataset" }).click();
+  createButton() {
+    return this.page.getByRole("button", { name: "Create dataset" });
   }
 
-  successMessage() {
-    return this.page.getByText(/Created — /);
+  freeTextMarketInput() {
+    return this.page.locator("#rd-market");
   }
 
-  errorAlert() {
-    return this.page.getByRole("alert");
+  async openMarketPicker(): Promise<void> {
+    await this.page.getByRole("button", { name: "Choose market dataset" }).click();
+    await expect(this.page.getByLabel("Search market datasets")).toBeVisible();
+  }
+
+  async searchMarketDatasets(needle: string): Promise<void> {
+    await this.page.getByLabel("Search market datasets").fill(needle);
+  }
+
+  // The picker row carrying the given title (button; disabled when the head
+  // revision is not approved).
+  pickerRow(title: string) {
+    return this.page.locator(".pkg-picker-row", { hasText: title });
   }
 }

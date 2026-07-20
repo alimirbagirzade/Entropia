@@ -2345,6 +2345,36 @@ action dispatcher) — `docs/V18_R2_ROADMAP.md` §4 R2-02 paste-ready prompt'u.
 
 ---
 
+## V18-R2 · R2-10 — App shell backend/auth/hata durumları ✅ (GAP madde 14)
+
+Sonsuz "Loading…" bitti — backend kapalıyken hiçbir primary sayfa spinner'da takılmaz:
+
+- **`lib/apiClient.ts`** — `fetchWithTimeout`: her istek AbortController deadline'ı taşır
+  (`REQUEST_TIMEOUT_MS = 15_000`, named export). Timeout + socket-level TypeError →
+  `ApiError(status: 0, code: NETWORK_UNAVAILABLE)` (envelope'a ADDITIVE); diğer tüm throw'lar
+  DOKUNULMADAN geçer (test double'ların verbatim mesajları korunur — ilk sürümde 26 test bunu
+  yakaladı, düzeltildi). Caller-supplied signal iptali NETWORK_UNAVAILABLE'a SAYILMAZ. status 0
+  queryClient "no retry < 500" kuralına takılır → otomatik retry fırtınası yok.
+- **`lib/hooks.ts` → `useApiHealth`** — `GET /health/live` (empirik en ucuz: dependency-check'siz,
+  auth-exempt — `hardening.py` exempt listesinde), 30s interval, `retry: false`.
+- **`app/Layout.tsx`** — health error → `.backend-banner` (role=alert): **Backend unavailable +
+  `API: <BASE_URL>` + Retry** (Retry = kullanıcı eylemi: health refetch, başarıda
+  `invalidateQueries()` ile takılan sayfalar toparlar). Topbar'da ÜÇ AYRI gösterge: auth rozeti
+  (mevcut) · `● api` (yeni, health tone'u) · `● sse` (SseStatus REUSE).
+- **`components/ErrorState.tsx`** — `ApiError.status === 401` → gerçek **UNAUTHENTICATED** durumu +
+  `/login` Login linki (34 sayfa/bileşen kullanıcısına otomatik yayılır); 401-dışı render verbatim.
+
+Evidence: vitest 490/490 (apiClient: fake-timer timeout → NETWORK_UNAVAILABLE, TypeError → ağ
+hatası, dış signal iptali hariç; appShellHealth: banner + adres + Retry, Retry recovery, üç ayrı
+gösterge, 401 → UNAUTHENTICATED + Login, 409 verbatim korunur); tsc/eslint/build temiz. Canlı
+tarayıcı: `frontend-alt` (:5175 → ölü :8001) Mainboard banner + `NETWORK_UNAVAILABLE` ErrorState +
+Retry gösterdi (screenshot), `frontend` (:5173 → canlı :8000) banner'sız, `● api` ok. Honest
+boundary: canlı 401 kanıtı AUTH_MODE=session backend gerektirir (lokal dev mode'da /me anonim 200
+döner) — 401 yolu vitest'te kanıtlandı. SSE taksonomisi / query key'ler / OCC / Idempotency
+byte-identical. Branch `feat/v18-r2-10-app-shell-health`.
+
+---
+
 ## V18-R2 · R2-01a — TS/TL editörleri reusable bileşenlere ayrıldı ✅ (saf refactor)
 
 **Ne landed:** `pages/TradingSignal.tsx` içindeki iki kolonlu editör gövdesi **VERBATIM** olarak

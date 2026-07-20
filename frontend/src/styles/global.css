@@ -102,6 +102,17 @@ a:hover { text-decoration: underline; }
 .topbar-badge.down { color: #b60000; }
 .topbar-badge.neutral { color: #999; }
 
+/* R2-10 (GAP madde 14): app-shell "Backend unavailable" strip — shown between the
+   menu bar and the workspace whenever the /health/live probe fails. */
+.backend-banner {
+  display: flex; align-items: center; gap: 12px;
+  padding: 8px 14px;
+  border: 1px solid #b60000; border-left-width: 4px;
+  background: #fdecec; color: #7a0000;
+  font-size: 12px;
+}
+.backend-banner-addr { font-family: monospace; color: #444; }
+
 /* Horizontal menu bar with hover dropdowns */
 .menu-bar {
   height: var(--menubar-h);

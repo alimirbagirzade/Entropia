@@ -7,6 +7,17 @@ import type { ApiErrorResponse } from "./types";
 
 const BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "/api/v1";
 
+// R2-10 (GAP madde 14): every request carries a visible timeout so a dead
+// backend surfaces as a typed error instead of an infinite pending promise
+// (react-query would otherwise sit in isLoading forever → endless spinner).
+export const REQUEST_TIMEOUT_MS = 15_000;
+
+// Transport-level failure code (timeout / connection refused / DNS). ADDITIVE to
+// the canonical envelope codes: status 0 marks "no HTTP response at all". Status
+// 0 falls under the queryClient "no retry below 500" rule, so a dead backend
+// never triggers an automatic retry storm — Retry stays a user action.
+export const NETWORK_UNAVAILABLE = "NETWORK_UNAVAILABLE";
+
 export class ApiError extends Error {
   readonly code: string;
   readonly status: number;
@@ -74,11 +85,48 @@ export function apiRequest<T>(path: string, options: RequestOptions = {}): Promi
   return pending;
 }
 
+// Runs fetch under an AbortController-armed deadline and maps the two
+// no-response outcomes (deadline hit, socket-level failure) onto ONE typed
+// ApiError so every caller's existing `error.code: error.message` render shows
+// a human-readable transport failure instead of a raw DOMException.
+async function fetchWithTimeout(input: string, init: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  // A caller-supplied signal (react-query cancellation) still aborts the shared
+  // controller, so both cancel paths flow through one fetch signal.
+  const outer = init.signal;
+  const forwardAbort = () => controller.abort(outer?.reason);
+  if (outer) {
+    if (outer.aborted) forwardAbort();
+    else outer.addEventListener("abort", forwardAbort, { once: true });
+  }
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } catch (cause) {
+    if (outer?.aborted) throw cause; // caller cancelled — not a backend failure
+    const timedOut = cause instanceof DOMException && cause.name === "AbortError";
+    const networkFailure = cause instanceof TypeError; // fetch's connection-level failure
+    // Anything else (including test doubles throwing domain errors) is not a
+    // transport failure — rethrow untouched so messages surface verbatim.
+    if (!timedOut && !networkFailure) throw cause;
+    throw new ApiError(
+      0,
+      NETWORK_UNAVAILABLE,
+      timedOut
+        ? `Request timed out after ${REQUEST_TIMEOUT_MS / 1000}s — backend unreachable at ${BASE_URL}`
+        : `Network error — backend unreachable at ${BASE_URL}`,
+    );
+  } finally {
+    clearTimeout(timer);
+    outer?.removeEventListener("abort", forwardAbort);
+  }
+}
+
 async function executeRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { body, headers, ...rest } = options;
   const devActorId = getDevActorId();
   const sessionToken = getSessionToken();
-  const response = await fetch(`${BASE_URL}${path}`, {
+  const response = await fetchWithTimeout(`${BASE_URL}${path}`, {
     ...rest,
     headers: {
       "Content-Type": "application/json",
@@ -134,7 +182,7 @@ function textError(status: number, statusText: string, body: string): ApiError {
 export async function apiGetText(path: string): Promise<string> {
   const devActorId = getDevActorId();
   const sessionToken = getSessionToken();
-  const response = await fetch(`${BASE_URL}${path}`, {
+  const response = await fetchWithTimeout(`${BASE_URL}${path}`, {
     method: "GET",
     headers: {
       Accept: "text/plain",

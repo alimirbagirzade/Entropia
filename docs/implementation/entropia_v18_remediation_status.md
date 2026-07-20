@@ -67,8 +67,17 @@ A requirement is **Complete** only with working end-to-end behavior + passing ac
 > - **UI-14/15** (Ready Check / RUN): golden-path E2E blocked'ı kabul ediyor
 >   (`05-mainboard-ready-check-run.spec.ts`); READY/PASS → RUN SUCCEEDED → inline Result
 >   kanıtı yok. → R2-07
-> - **Ortak shell**: API timeout yok (sonsuz Loading), 513px mobil overflow, 22 sayfa screenshot
->   seti yok. → R2-10/R2-11/R2-13
+> - **Ortak shell — backend/auth/hata durumları**: ~~API timeout yok (sonsuz Loading)~~ →
+>   **R2-10 (this PR) kapattı**: `apiClient` her istekte AbortController timeout
+>   (`REQUEST_TIMEOUT_MS=15s`, typed `NETWORK_UNAVAILABLE`/status 0 — envelope'a ADDITIVE, testlerin
+>   verbatim mesaj render'ı korunur); `useApiHealth` (`GET /health/live`, 30s, retry:false) →
+>   Layout'ta "Backend unavailable + API: <VITE_API_BASE_URL> + Retry" banner'ı; ErrorState 401 →
+>   UNAUTHENTICATED + Login (/login); topbar'da auth / `● api` / `● sse` ÜÇ AYRI gösterge.
+>   Tarayıcı kanıtı: backend kapalı (`.env.alt` → :8001) Mainboard spinner'da TAKILMADI —
+>   banner + `NETWORK_UNAVAILABLE` ErrorState + Retry ekran görüntüsüyle; backend açık (:8000)
+>   banner yok, `● api` ok. vitest: apiClient timeout/ağ/iptal 3 test + appShellHealth 5 test
+>   (banner, Retry recovery, üç gösterge, 401 Login, 409 verbatim) → 490/490 yeşil,
+>   tsc/eslint/build temiz. Kalan: 513px mobil overflow → R2-11; 22 sayfa screenshot seti → R2-13
 >
 > Slice planı + paste-ready prompt'lar: `docs/V18_R2_ROADMAP.md`. Bir satır ancak GERÇEK tarayıcı
 > + gerçek backend kabulü (ve R2-13/R2-14 görsel kabul zinciri) sonrası yeniden Complete yazılır.

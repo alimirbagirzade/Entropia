@@ -36,6 +36,19 @@ export function useReadiness() {
 }
 
 
+// R2-10 (GAP madde 14): app-shell "API reachable" probe. /health/live is the
+// cheapest endpoint (no dependency checks, auth-exempt). Modest 30s interval and
+// no automatic retry — a dead backend must not generate a request storm; the
+// shell's Retry action refetches on demand.
+export function useApiHealth() {
+  return useQuery({
+    queryKey: ["health", "live"],
+    queryFn: () => api.get<{ status: string }>("/health/live"),
+    refetchInterval: 30_000,
+    retry: false,
+  });
+}
+
 export function useMe() {
   return useQuery({
     queryKey: ["me"],

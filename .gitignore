@@ -60,3 +60,6 @@ frontend/public/mockup_v18.html
 
 # never track a node_modules symlink (trailing-slash rule misses symlinks)
 node_modules
+
+# large local walkthrough videos (transcript .md IS tracked)
+docs/spec/Video*/*.mp4

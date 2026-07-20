@@ -11,6 +11,34 @@ A requirement is **Complete** only with working end-to-end behavior + passing ac
 > tests** collected (`pytest --co`), **428 frontend tests** (Vitest), Alembic head
 > `0034_package_implementation`.
 
+> ## ⚠️ R2 RE-OPENING (2026-07-20) — aşağıdaki "Complete" durumları kısmen GEÇERSİZ
+>
+> `docs/spec/Entropia_V18_Guncel_Arayuz_Eksikleri_ve_Yanlis_Anlamalar.md` (GAP belgesi) kodda
+> **empirik olarak CONFIRMED** eksikler tespit etti (doğrulama tablosu:
+> `docs/V18_R2_ROADMAP.md` §1). GAP madde 17 zorunlu düzeltmesi gereği şu satırlar, R2 dalgası
+> kapanana kadar **In Progress (R2)** sayılır — tabloda yazan "Complete" bu maddeler için
+> geçersizdir:
+>
+> - **UI-01** (Mainboard inline model): TS/TL satırları hâlâ route launcher (`Mainboard.tsx`
+>   "Edit in … →" / "Continue in the … workbench →"); Add Package popover yok; üst menü Add
+>   eylemleri Mainboard'ı bypass ediyor (`nav.ts:172-180`). → R2-01b/R2-02/R2-03
+> - **UI-02** (Strategy Details): restriction/filter + formula parametreleri hâlâ Advanced JSON'da;
+>   Advanced role-gate'siz. → R2-05a/R2-05b
+> - **UI-03/04/05** (Outsource/TS/TL): inline gerçek editör yok; create/revise ham JSON
+>   (`rows={16}`); Source asset id düzenlenebilir teknik alan. → R2-01a/R2-01b/R2-04
+> - **UI-06** (Add Package / Create Package): seçim popover'ı yok; baseline metadata JSON;
+>   request→publish golden-path E2E yok. → R2-03/R2-12
+> - **UI-12** (Research Data): dependency kilidi `marketEntityId.trim().length > 0` — server-truth
+>   değil; Market Data seçimi entity-id text alanı. → R2-06/R2-08
+> - **UI-14/15** (Ready Check / RUN): golden-path E2E blocked'ı kabul ediyor
+>   (`05-mainboard-ready-check-run.spec.ts`); READY/PASS → RUN SUCCEEDED → inline Result
+>   kanıtı yok. → R2-07
+> - **Ortak shell**: API timeout yok (sonsuz Loading), 513px mobil overflow, 22 sayfa screenshot
+>   seti yok. → R2-10/R2-11/R2-13
+>
+> Slice planı + paste-ready prompt'lar: `docs/V18_R2_ROADMAP.md`. Bir satır ancak GERÇEK tarayıcı
+> + gerçek backend kabulü (ve R2-13/R2-14 görsel kabul zinciri) sonrası yeniden Complete yazılır.
+
 ## Spec document-level errors found (the "hataları")
 
 These are errors **in the spec document itself**, surfaced during review:

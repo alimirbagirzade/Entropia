@@ -2259,7 +2259,18 @@ deref); legacy orphan **cleanup script deseni** (`scripts/maintenance/*.sql` —
 attach'lıyı UI `×` yoluna bırakır); `ResultSummary.headline` = backend `Record<string,unknown>` (obje-render tuzağı).
 **Bu dalga tamamen video-alignment** — yeni backend domain YOK, migration YOK; kalan video boşlukları aşağıda (KALAN-A/B).
 
-## Next: video-alignment kalan iş — **KALAN-A + KALAN-B açık; KALAN-C TAMAM.** Bu dalga (#313–#318) Entropia Core'u (Add Strategy → yatay kutu → çok-stratejili evren) + Create Package/Result crash'lerini kapattı. Videonun (`docs/spec/Video Anlatımı /entropia_transkript.md`) hâlâ TAMAMLANMAMIŞ iki alanı:
+## Next: **V18-R2 dalgası — `docs/V18_R2_ROADMAP.md` otoritedir.** Yeni GAP belgesi
+(`docs/spec/Entropia_V18_Guncel_Arayuz_Eksikleri_ve_Yanlis_Anlamalar.md`) kodda empirik
+CONFIRMED 13 eksik kümesi tespit etti (Mainboard TS/TL inline editör yok, Add Package popover yok,
+üst menü Mainboard'ı bypass ediyor, TS/TL + Strategy + CP ham JSON formları, Research sahte
+dependency kilidi, golden-path E2E blocked'ı kabul ediyor, API timeout yok, 513px mobil overflow,
+screenshot seti yok). Yol haritası 16 slice + 2 kapanış aşaması halinde, HER SLICE İÇİN paste-ready
+prompt ile `docs/V18_R2_ROADMAP.md`'de: P0 = R2-01a/01b/02/03/04/05a/05b/06/07 (Mainboard merkezli
+tek çalışma alanı + typed formlar + server-truth kilitler + gerçek golden-path E2E), P1 =
+R2-08/09/10/11/12 + KALAN-A/KALAN-B (aşağıda, yol haritasına katlandı), P2 = R2-13/14 (screenshot
+matrisi + PO onayı). `entropia_v18_remediation_status.md`'ye R2 RE-OPENING banner'ı eklendi
+(UI-01/02/03/04/05/06/12/14/15 fiilen In Progress). Video-alignment kalan işleri (KALAN-A/B) yol
+haritasında kendi prompt'larıyla korunuyor:
 > - **KALAN-A — Market Data ham kaynak dosya UPLOAD UI (video 9:24–12:37):** videonun EN GÜÇLÜ şikâyeti — "süreci başlatacak ham kaynak dosya yükleme seçeneği maalesef yok" (11:00, 12:37). Backend ingest zinciri (`routes/market_data.py` create/upload-start/finalize/analysis) PR #103'te bağlıydı ama **Raw Source File / Browse File** akışı (ham dosyayı seçip standart Entropia yapısına dönüştürme, sonra Create Dataset / Approve for Use) UI'da eksik/çalıştırılamaz. Frontend slice — backend yüzeyi hazır.
 > - **KALAN-B — Portfolio Equity Allocation "Use Allocation Backtest" + per-item pay UI (video 7:16–9:24):** strateji evreni kuruluyorsa toplam portföyün üst seviye paylaşımı gerekir (Strategy 1 / Strategy 2 / Trade 1 / Trade Log 1 payları). Portfolio sayfası PR #113'te + portfolio-level kurallar PR #320'de (Max Total Exposure + cross-item conflict) landed; ancak videodaki **"Use Allocation Backtest" toggle + Mainboard'daki her öğeye pay atama** deneyimi tam değil. Portfolio + Mainboard hizası — backend allocation yüzeyi hazır.
 > - **KALAN-C — öğe evrene katkısı / "entropiyi nasıl değiştirdiği" (video 3:35) ✅ TAMAM:** Trade Log / bir öğenin toplam strateji evrenine katkısı **PR #319 (per-item contribution breakdown — correlation, diversification, marginal deltas) + PR #320 (portfolio-level rules)** ile karşılandı. `#321` (allocation portfolio-rule alanları için openapi snapshot rejenerasyonu) AÇIK — merge bekliyor.

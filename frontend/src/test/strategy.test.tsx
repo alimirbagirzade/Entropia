@@ -135,8 +135,20 @@ const CLEAR_RESULT = { draft_id: "draft_1", row_version: 3, cleared: true };
 // ORDERED routes: the specific draft-action fragments must precede the bare
 // "POST /strategy-drafts" create prefix (the create path is a substring of
 // every action URL); likewise the /revisions fragment precedes the root GET.
+// R2-05b: the Advanced (raw payload) surfaces are admin-gated via GET /me —
+// non-admin is the default; tests that exercise the raw editor opt into admin.
+const ME_USER = {
+  principal_id: "user_1",
+  principal_type: "user",
+  role: "user",
+  is_admin: false,
+  is_authenticated: true,
+};
+const ME_ADMIN = { ...ME_USER, role: "admin", is_admin: true };
+
 function stubRoutes(overrides: Record<string, unknown> = {}) {
   return stubApi({
+    "GET /me": ME_USER,
     "POST /strategy-drafts/draft_1/validate": VALIDATE_RESULT,
     "POST /strategy-drafts/draft_1/save": SAVE_RESULT,
     "POST /strategy-drafts/draft_1/clear": CLEAR_RESULT,
@@ -204,11 +216,14 @@ describe("StrategyDetails", () => {
   });
 
   it("applies the payload with the rendered row_version as the BODY OCC token", async () => {
-    const fetchMock = stubRoutes();
+    // The Advanced raw-payload editor is admin-only (R2-05b) — the OCC contract
+    // it exercises is unchanged.
+    const fetchMock = stubRoutes({ "GET /me": ME_ADMIN });
     renderPage("/strategy?draft=draft_1");
 
     expect(await screen.findByRole("heading", { name: /Data & Execution/ })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Apply payload" }));
+    // The admin gate renders the Advanced editor only after /me resolves.
+    fireEvent.click(await screen.findByRole("button", { name: "Apply payload" }));
 
     expect(await screen.findByText(/Payload applied/)).toBeTruthy();
     const call = fetchMock.mock.calls.find(([, init]) => init?.method === "PATCH");
@@ -218,12 +233,17 @@ describe("StrategyDetails", () => {
     // R2-05a: the server-owned Section-1 identity is overlaid onto the payload
     // so Validate never needs a hand-typed root id; the OCC token above and the
     // Idempotency-Key below are byte-identical to the pre-R2-05a contract.
-    expect(body.payload).toEqual({ ...DRAFT.payload, strategy_root_id: "root_1" });
+    expect(body.payload).toEqual({
+      ...DRAFT.payload,
+      strategy_root_id: "root_1",
+      display_name: "Momentum A",
+      rationale_family_id: "fam_1",
+    });
     expect(headersOf(call?.[1])["Idempotency-Key"]).toBeTruthy();
   });
 
   it("keeps invalid JSON client-side — nothing is sent", async () => {
-    const fetchMock = stubRoutes();
+    const fetchMock = stubRoutes({ "GET /me": ME_ADMIN });
     renderPage("/strategy?draft=draft_1");
 
     const textarea = await screen.findByLabelText(/StrategyConfig payload/);
@@ -308,6 +328,18 @@ describe("StrategyDetails", () => {
     expect(await screen.findByText(/revision #1/)).toBeTruthy();
     expect(screen.getByText("market_dataset")).toBeTruthy();
     expect(screen.getByText("sha256:aaa")).toBeTruthy();
+    // R2-05b: the raw payload dump is admin-only — a non-admin never sees raw
+    // JSON keys on the revision summary.
+    expect(screen.queryByText(/market_dataset_root_id/)).toBeNull();
+    expect(screen.queryByText("Advanced (raw payload)")).toBeNull();
+  });
+
+  it("shows the revision raw payload dump only to an admin (R2-05b)", async () => {
+    stubRoutes({ "GET /me": ME_ADMIN });
+    renderPage("/strategy?revision=rev_1");
+
+    expect(await screen.findByText(/revision #1/)).toBeTruthy();
+    expect(await screen.findByText("Advanced (raw payload)")).toBeTruthy();
     expect(screen.getByText(/market_dataset_root_id/)).toBeTruthy();
   });
 

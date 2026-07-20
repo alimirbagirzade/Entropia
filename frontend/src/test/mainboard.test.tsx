@@ -213,8 +213,20 @@ const RESULT_METRICS_VIEW = {
 // F-15: the generic create/revise/attach work-object routes are no longer wired
 // to any user-facing control (the raw-JSON "Advanced" card was removed), so the
 // stub set no longer needs them.
+// R2-05b: the Strategy Details panel's Advanced (raw payload) disclosures are
+// admin-gated via GET /me — default every test to a NON-admin principal so the
+// suite exercises the fail-closed path unless a test overrides it.
+const ME_USER = {
+  principal_id: "user_1",
+  principal_type: "user",
+  role: "user",
+  is_admin: false,
+  is_authenticated: true,
+};
+
 function stubRoutes(overrides: Record<string, unknown> = {}) {
   return stubApi({
+    "GET /me": ME_USER,
     "POST /mainboards/ws_1/snapshots": SNAPSHOT_RESULT,
     "POST /external-work-object-drafts/trading_signal": EXTERNAL_DRAFT,
     "PATCH /mainboard-items/item_strat": PATCH_RESULT,
@@ -547,6 +559,112 @@ describe("Mainboard", () => {
     expect(
       screen.getByText(/saving re-pins this item automatically/),
     ).toBeTruthy();
+  });
+
+  it("keeps composition controls in a CLOSED Composition settings disclosure (R2-05b, GAP 13)", async () => {
+    stubRoutes();
+    renderPage();
+    await expandRow();
+    // The disclosure exists but arrives collapsed — the expanded row leads with
+    // the product editor, not a second long technical form.
+    const summary = screen.getByText("Composition settings");
+    const details = summary.closest("details");
+    expect(details).toBeTruthy();
+    expect(details?.open).toBe(false);
+    // The controls (reorder / provenance / label override) still live inside it.
+    const controls = screen.getByLabelText("Composition controls for Momentum A");
+    expect(details?.contains(controls)).toBe(true);
+    expect(within(controls).getByText("Move up")).toBeTruthy();
+    expect(within(controls).getByText("Save label")).toBeTruthy();
+    expect(within(controls).getByText("Pinned revision")).toBeTruthy();
+    // Enable/disable is NOT inside the disclosure — it is the compact header
+    // row action, present even while the row is collapsed.
+    expect(details?.contains(screen.getByLabelText("Disable Momentum A"))).toBe(false);
+  });
+
+  it("toggles enable/disable from the compact header action WITHOUT expanding the row", async () => {
+    const fetchMock = stubRoutes();
+    renderPage();
+    await screen.findByText("Momentum A");
+    fireEvent.click(screen.getByLabelText("Disable Momentum A"));
+    await screen.findByText("Momentum A");
+    const call = fetchMock.mock.calls.find(
+      (c) => String(c[0]).includes("/mainboard-items/item_strat"),
+    );
+    const body = bodyOf(call?.[1]);
+    expect(body.intent).toBe("set_enabled");
+    expect(body.is_enabled).toBe(false);
+    expect(body.expected_row_version).toBe(5);
+    expect(headersOf(call?.[1])["Idempotency-Key"]).toBeTruthy();
+  });
+
+  it("hides the Advanced raw payload from a non-admin user (fail-closed role gate, R2-05b)", async () => {
+    stubRoutes({
+      "GET /strategy-revisions/wor_1": {
+        strategy_revision_id: "wor_1",
+        strategy_root_id: "root_strat",
+        revision_number: 3,
+        config_hash: "cfg_xyz",
+        validation_status: "valid",
+        lifecycle_snapshot: "validated",
+        family_snapshot: null,
+        payload: { secret_raw_key: true },
+        references: [],
+        created_at: "2026-07-01T00:00:00Z",
+      },
+      "GET /strategies/root_strat/revisions": [],
+      "GET /strategies/root_strat": {
+        strategy_root_id: "root_strat",
+        display_name: "Momentum A",
+        lifecycle_state: "validated",
+        current_revision_id: "wor_1",
+        current_row_version: 3,
+        rationale_family_id: null,
+        owner_principal_id: "user_1",
+        deletion_state: "active",
+      },
+    });
+    renderPage();
+    await expandRow();
+    await screen.findByRole("heading", { name: /Strategy Context/ });
+    // Default ME_USER is non-admin: no raw-JSON surface exists in the DOM.
+    expect(screen.queryByText("Advanced (raw payload)")).toBeNull();
+    expect(screen.queryByText(/secret_raw_key/)).toBeNull();
+  });
+
+  it("shows the Advanced raw payload disclosure to a server-truth admin (R2-05b)", async () => {
+    stubRoutes({
+      "GET /me": { ...ME_USER, role: "admin", is_admin: true },
+      "GET /strategy-revisions/wor_1": {
+        strategy_revision_id: "wor_1",
+        strategy_root_id: "root_strat",
+        revision_number: 3,
+        config_hash: "cfg_xyz",
+        validation_status: "valid",
+        lifecycle_snapshot: "validated",
+        family_snapshot: null,
+        payload: {},
+        references: [],
+        created_at: "2026-07-01T00:00:00Z",
+      },
+      "GET /strategies/root_strat/revisions": [],
+      "GET /strategies/root_strat": {
+        strategy_root_id: "root_strat",
+        display_name: "Momentum A",
+        lifecycle_state: "validated",
+        current_revision_id: "wor_1",
+        current_row_version: 3,
+        rationale_family_id: null,
+        owner_principal_id: "user_1",
+        deletion_state: "active",
+      },
+    });
+    renderPage();
+    await expandRow();
+    await screen.findByRole("heading", { name: /Strategy Context/ });
+    const advanced = await screen.findByText("Advanced (raw payload)");
+    // Present for the admin, but still collapsed by default.
+    expect(advanced.closest("details")?.open).toBe(false);
   });
 
   it("toggles enable/disable via set_enabled with OCC + a fresh Idempotency-Key", async () => {

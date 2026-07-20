@@ -4,7 +4,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Modal } from "@/components/Modal";
 import { MENU_BAR, type MenuGroup, type MenuLink } from "./nav";
 import { connectEvents, type SseStatus } from "@/lib/sse";
-import { useMe, useMeta } from "@/lib/hooks";
+import { BASE_URL } from "@/lib/apiClient";
+import { useApiHealth, useMe, useMeta } from "@/lib/hooks";
 import { useLogout, useSessionToken } from "@/lib/auth";
 import { getDevActorId, setDevActorId } from "@/lib/devActor";
 import { getStoredUser } from "@/lib/session";
@@ -284,6 +285,7 @@ export function Layout() {
   const [aboutOpen, setAboutOpen] = useState(false);
   const meta = useMeta();
   const me = useMe();
+  const health = useApiHealth();
   const token = useSessionToken();
 
   useEffect(() => {
@@ -293,6 +295,19 @@ export function Layout() {
   const isAdmin = me.data?.is_admin ?? false;
   const menus = MENU_BAR.filter((g) => !g.adminOnly || isAdmin);
   const sseTone = sse === "open" ? "ok" : sse === "connecting" ? "warn" : "down";
+  // R2-10 (GAP madde 14): API reachability is its OWN indicator, separate from
+  // SSE and authentication. Pending = warn (probing), error = down.
+  const apiTone = health.isSuccess ? "ok" : health.isError ? "down" : "warn";
+  const apiLabel = health.isSuccess ? "api" : health.isError ? "api down" : "api …";
+
+  // Retry is a USER action (no automatic retry storm): re-probe health, and once
+  // the backend answers again refetch everything so stalled pages recover.
+  async function retryBackend() {
+    const result = await health.refetch();
+    if (result.isSuccess) {
+      void queryClient.invalidateQueries();
+    }
+  }
 
   return (
     <div className="app-shell">
@@ -307,6 +322,9 @@ export function Layout() {
           <span className={`topbar-badge ${meta.isSuccess ? "ok" : "warn"}`}>
             {meta.data ? meta.data.environment : "…"}
           </span>
+          <span className={`topbar-badge ${apiTone}`} title={`API readiness: GET ${BASE_URL}/health/live`}>
+            ● {apiLabel}
+          </span>
           <span className={`topbar-badge ${sseTone}`} title={`live events: ${sse}`}>
             ● {sse}
           </span>
@@ -318,6 +336,21 @@ export function Layout() {
           <Menu key={group.label} group={group} isAdmin={isAdmin} onAbout={() => setAboutOpen(true)} />
         ))}
       </nav>
+
+      {health.isError ? (
+        <div className="backend-banner" role="alert">
+          <strong>Backend unavailable</strong>
+          <span className="backend-banner-addr">API: {BASE_URL}</span>
+          <button
+            type="button"
+            className="page-button"
+            onClick={() => void retryBackend()}
+            disabled={health.isFetching}
+          >
+            {health.isFetching ? "Retrying…" : "Retry"}
+          </button>
+        </div>
+      ) : null}
 
       <main className="workspace">
         <Outlet />

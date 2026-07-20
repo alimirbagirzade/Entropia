@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ApiError, apiRequest } from "@/lib/apiClient";
+import { ApiError, apiRequest, NETWORK_UNAVAILABLE, REQUEST_TIMEOUT_MS } from "@/lib/apiClient";
 
 // GAP-15 — the transport-level in-flight single-flight. A same-tick double
 // submit fires two apiRequest() calls before React re-renders and disables the
@@ -146,5 +146,70 @@ describe("apiRequest single-flight (GAP-15)", () => {
     vi.stubGlobal("fetch", retry);
     await apiRequest("/strategy-drafts/d1/save", { method: "POST", body: { v: 0 } });
     expect(retry).toHaveBeenCalledTimes(1);
+  });
+});
+
+// R2-10 (GAP madde 14) — no request may hang forever. A backend that never
+// answers is aborted at REQUEST_TIMEOUT_MS, and both the timeout and a
+// socket-level failure surface as one typed NETWORK_UNAVAILABLE ApiError.
+describe("apiRequest transport timeout & network failure (R2-10)", () => {
+  it("aborts a never-responding request at REQUEST_TIMEOUT_MS with NETWORK_UNAVAILABLE", async () => {
+    vi.useFakeTimers();
+    try {
+      // A fetch double that respects the abort signal but never responds.
+      const mock = vi.fn(
+        (_input: unknown, init?: RequestInit) =>
+          new Promise((_resolve, reject) => {
+            init?.signal?.addEventListener("abort", () =>
+              reject(new DOMException("The operation was aborted.", "AbortError")),
+            );
+          }),
+      );
+      vi.stubGlobal("fetch", mock);
+
+      const pending = apiRequest("/mainboards/default");
+      const assertion = expect(pending).rejects.toMatchObject({
+        status: 0,
+        code: NETWORK_UNAVAILABLE,
+        message: expect.stringContaining("timed out"),
+      });
+      await vi.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS);
+      await assertion;
+      expect(mock).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("maps a socket-level failure (fetch TypeError) onto NETWORK_UNAVAILABLE", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new TypeError("Failed to fetch");
+      }),
+    );
+
+    await expect(apiRequest("/mainboards/default")).rejects.toMatchObject({
+      status: 0,
+      code: NETWORK_UNAVAILABLE,
+      message: expect.stringContaining("Network error"),
+    });
+  });
+
+  it("keeps a caller cancellation (external signal) out of the NETWORK_UNAVAILABLE path", async () => {
+    const mock = vi.fn(
+      (_input: unknown, init?: RequestInit) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () =>
+            reject(new DOMException("The operation was aborted.", "AbortError")),
+          );
+        }),
+    );
+    vi.stubGlobal("fetch", mock);
+
+    const controller = new AbortController();
+    const pending = apiRequest("/mainboards/default", { signal: controller.signal });
+    controller.abort();
+    await expect(pending).rejects.toThrowError(DOMException);
   });
 });

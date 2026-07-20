@@ -527,6 +527,13 @@ describe("Market Data page", () => {
     renderPage();
     await openDetail();
 
+    // R2-08 (GAP item 7): there is no free-text instrument id input — the
+    // instrument comes from the registry picker; the raw payload textarea is
+    // Admin-only under Advanced (hidden for this non-admin actor).
+    expect(screen.queryByLabelText(/Instrument id/)).toBeNull();
+    expect(screen.getByRole("button", { name: "Choose instrument" })).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Payload \(optional JSON object\)/)).toBeNull();
+
     fireEvent.click(screen.getByRole("button", { name: "Append revision" }));
 
     expect(await screen.findByText(/Revision appended/)).toBeInTheDocument();

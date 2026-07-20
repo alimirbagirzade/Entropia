@@ -137,10 +137,14 @@ export function MarketLinkPicker({
   value,
   status,
   onChange,
+  label = "Linked Market Data",
+  required = true,
 }: {
   value: string | null;
   status: MarketDependencyStatus;
   onChange: (entityId: string | null) => void;
+  label?: string;
+  required?: boolean;
 }) {
   const [browsing, setBrowsing] = useState(false);
 
@@ -148,7 +152,8 @@ export function MarketLinkPicker({
     <div className="pkg-picker cp-wide">
       <span className="field-head">
         <span className="pkg-picker-label">
-          Linked Market Data <span aria-hidden="true">*</span>
+          {label}
+          {required ? <span aria-hidden="true"> *</span> : null}
         </span>
       </span>
       {value !== null ? (

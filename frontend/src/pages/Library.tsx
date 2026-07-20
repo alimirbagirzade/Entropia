@@ -1167,25 +1167,31 @@ function ImportCard() {
         its dependencies against this deployment’s registry and creates a private DRAFT — an
         unresolved dependency blocks it as non-executable, never silently runnable.
       </p>
-      <form onSubmit={onSubmit}>
-        <textarea
-          aria-label="Export manifest JSON"
-          value={manifestText}
-          onChange={(e) => setManifestText(e.target.value)}
-          rows={8}
-          placeholder='{"package_kind": "indicator", "input_contract": {…}, …}'
-          style={{ width: "100%", fontFamily: "monospace", fontSize: 12 }}
-        />
-        <div style={{ marginTop: 8 }}>
-          <button
-            type="submit"
-            className="btn"
-            disabled={submit.isPending || manifestText.trim() === ""}
-          >
-            {submit.isPending ? "Submitting…" : "Import manifest"}
-          </button>
-        </div>
-      </form>
+      {/* R2-08 (GAP item 9): the manifest is a machine-generated export artifact
+          — its schema is the export format, not a product form, so the paste
+          surface lives under an explicitly named Advanced disclosure. */}
+      <details>
+        <summary>Advanced — import from manifest JSON</summary>
+        <form onSubmit={onSubmit} style={{ marginTop: 8 }}>
+          <textarea
+            aria-label="Export manifest JSON"
+            value={manifestText}
+            onChange={(e) => setManifestText(e.target.value)}
+            rows={8}
+            placeholder='{"package_kind": "indicator", "input_contract": {…}, …}'
+            style={{ width: "100%", fontFamily: "monospace", fontSize: 12 }}
+          />
+          <div style={{ marginTop: 8 }}>
+            <button
+              type="submit"
+              className="btn"
+              disabled={submit.isPending || manifestText.trim() === ""}
+            >
+              {submit.isPending ? "Submitting…" : "Import manifest"}
+            </button>
+          </div>
+        </form>
+      </details>
       {parseError !== null ? (
         <p className="page-sub" role="alert" style={{ color: "var(--down, #b00)" }}>
           {parseError}

@@ -155,6 +155,30 @@ function stubRoutes(overrides: Record<string, unknown> = {}) {
     "GET /trade-logs/root_tl": DETAIL,
     "GET /mainboards/default": MAINBOARD,
     "GET /me": ME_USER,
+    // R2-08: the instrument is PICKED from the canonical registry; the row's
+    // instrument_id ("BTCUSDT") keeps the wire assertion unchanged.
+    "GET /instruments": {
+      data: [
+        {
+          instrument_id: "BTCUSDT",
+          resolution_key: "binance:BTCUSDT:perpetual",
+          venue_id: "binance",
+          symbol: "BTCUSDT",
+          contract_type: "perpetual",
+          display_name: "BTCUSDT Perpetual",
+          base_asset: null,
+          quote_asset: null,
+          settlement_asset: null,
+          multiplier: null,
+          market_class: null,
+          state: "active",
+          registry_version: 1,
+          deprecation_reason: null,
+        },
+      ],
+      meta: { cursor: null, has_more: false },
+    },
+    "GET /rationale-families": { data: [], meta: { cursor: null, has_more: false } },
     ...overrides,
   });
 }
@@ -210,9 +234,10 @@ describe("TradeLog", () => {
     fireEvent.click(screen.getByRole("button", { name: "Upload source asset" }));
     expect(await screen.findByText(/Source asset stored/)).toBeTruthy();
 
-    fireEvent.change(screen.getAllByLabelText(/Instrument id/)[0]!, {
-      target: { value: "BTCUSDT" },
-    });
+    // R2-08: the instrument is picked from the registry browser (never typed);
+    // the identity card's picker renders first.
+    fireEvent.click(screen.getAllByRole("button", { name: "Choose instrument" })[0]!);
+    fireEvent.click(await screen.findByRole("button", { name: /BTCUSDT Perpetual/ }));
     fireEvent.change(screen.getByLabelText(/Column mapping/), {
       target: { value: "entry_time = Open Time\nexit_time = Close Time" },
     });

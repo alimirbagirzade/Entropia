@@ -90,10 +90,18 @@ export const ALL_NAV_ITEMS: NavItem[] = NAV.flatMap((s) => s.items);
 // Every entry points at an existing route above — no new routes, no backend change.
 // ---------------------------------------------------------------------------
 
+// R2-02 (GAP madde 6): the top-menu Add actions and the Mainboard "+ Add" menu
+// share ONE action model. A menu entry carrying addIntent does not route-link;
+// it dispatches to the Mainboard, which runs the same handler its own "+ Add"
+// menu uses. The old primary targets (/strategy, /trading-signal, /trade-log,
+// /packages/create) stay alive as deep-links in App.tsx.
+export type MainboardAddIntent = "strategy" | "trading_signal" | "trade_log" | "package";
+
 export interface MenuLink {
   label: string;
   path?: string; // omitted → non-navigating action item (e.g. About modal)
   action?: "about";
+  addIntent?: MainboardAddIntent; // dispatch to the Mainboard add flow instead of routing
   adminOnly?: boolean;
   items?: MenuLink[]; // second-level submenu (v18 nested tree); a leaf with no
   // path/action/items is a passive placeholder (mockup "Live Trade").
@@ -169,15 +177,15 @@ export const MENU_BAR: MenuGroup[] = [
     label: "Mainboard",
     path: "/", // clickable title (opens the index) AND a hover dropdown
     items: [
-      { label: "Add Strategy", path: "/strategy" },
+      { label: "Add Strategy", addIntent: "strategy" },
       {
         label: "Add Outsource Signal",
         items: [
-          { label: "Trading Signal", path: "/trading-signal" },
-          { label: "Trade Log", path: "/trade-log" },
+          { label: "Trading Signal", addIntent: "trading_signal" },
+          { label: "Trade Log", addIntent: "trade_log" },
         ],
       },
-      { label: "Add Package", path: "/packages/create" },
+      { label: "Add Package", addIntent: "package" },
       { label: "Portfolio / Equity Allocation", path: "/portfolio" },
     ],
   },

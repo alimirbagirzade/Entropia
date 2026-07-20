@@ -50,6 +50,37 @@ describe("navigation skeleton", () => {
   });
 });
 
+describe("Mainboard Add actions dispatch to the Mainboard add flow (R2-02, GAP 6)", () => {
+  it("carries an addIntent (not a route path) on the four Add actions", () => {
+    const mainboardGroup = MENU_BAR.find((group) => group.label === "Mainboard");
+    const leaves: MenuLink[] = [];
+    const walk = (items: MenuLink[] | undefined) => {
+      for (const item of items ?? []) {
+        if (item.items) walk(item.items);
+        else leaves.push(item);
+      }
+    };
+    walk(mainboardGroup?.items);
+    const intentByLabel: Record<string, string> = {
+      "Add Strategy": "strategy",
+      "Trading Signal": "trading_signal",
+      "Trade Log": "trade_log",
+      "Add Package": "package",
+    };
+    for (const [label, intent] of Object.entries(intentByLabel)) {
+      const leaf = leaves.find((candidate) => candidate.label === label);
+      expect(leaf?.addIntent).toBe(intent);
+      // The old primary route targets are gone from the menu — the routes
+      // themselves stay alive as deep-links in App.tsx (back-compat).
+      expect(leaf?.path).toBeUndefined();
+    }
+    // Portfolio stays an ordinary route link (out of the add model).
+    expect(leaves.find((leaf) => leaf.label === "Portfolio / Equity Allocation")?.path).toBe(
+      "/portfolio",
+    );
+  });
+});
+
 describe("Future Dev submenu targets (UI-22)", () => {
   it("declares one dedicated, distinct route path per capability sub-page", () => {
     // App.tsx generates one real route per entry — a duplicate or off-prefix

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FocusEvent, type KeyboardEvent } from "react";
-import { NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { Modal } from "@/components/Modal";
 import { MENU_BAR, type MenuGroup, type MenuLink } from "./nav";
@@ -80,6 +80,7 @@ function MenuItem({
 }) {
   const subItems = (item.items ?? []).filter((i) => !i.adminOnly || isAdmin);
   const [subOpen, setSubOpen] = useState(false);
+  const navigate = useNavigate();
   if (subItems.length > 0) {
     return (
       <div className="has-sub-wrap" onMouseLeave={() => setSubOpen(false)}>
@@ -107,6 +108,25 @@ function MenuItem({
           ))}
         </div>
       </div>
+    );
+  }
+  if (item.addIntent) {
+    // R2-02 (GAP madde 6): Add actions dispatch to the Mainboard add flow via
+    // router state instead of route-linking to the standalone editor pages —
+    // the Mainboard consumes the intent on mount and runs its own "+ Add"
+    // handler, so the top menu and the Mainboard menu are ONE action model.
+    const intent = item.addIntent;
+    return (
+      <button
+        type="button"
+        className="item"
+        onClick={() => {
+          navigate("/", { state: { add: intent } });
+          onClose();
+        }}
+      >
+        {item.label}
+      </button>
     );
   }
   if (item.path) {

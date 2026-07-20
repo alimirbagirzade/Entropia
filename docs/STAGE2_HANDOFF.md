@@ -2259,6 +2259,26 @@ deref); legacy orphan **cleanup script deseni** (`scripts/maintenance/*.sql` —
 attach'lıyı UI `×` yoluna bırakır); `ResultSummary.headline` = backend `Record<string,unknown>` (obje-render tuzağı).
 **Bu dalga tamamen video-alignment** — yeni backend domain YOK, migration YOK; kalan video boşlukları aşağıda (KALAN-A/B).
 
+## V18-R2 · R2-02 — Üst menü Add eylemleri → Mainboard add-intent dispatcher ✅
+
+**Ne landed (GAP madde 6 — tek Add modeli):** `app/nav.ts`'e `MainboardAddIntent`
+(`"strategy" | "trading_signal" | "trade_log" | "package"`) + `MenuLink.addIntent` eklendi;
+MENU_BAR Mainboard grubundaki dört Add eylemi route-link olmaktan çıktı. `app/Layout.tsx`
+addIntent taşıyan öğeyi `navigate("/", { state: { add: intent } })` yapan buton olarak render
+eder. `pages/Mainboard.tsx` intent'i mount'ta okur, kendi "+ Add" handler'larını çağırır
+(`addStrategy` STRATEGY-n numaralandırması için board+drafts projection'larını bekler; TS/TL
+anında `OutsourceDraftRow` ekler), sonra `history.replaceState` ile temizler (reload/back
+tekrar tetiklemez). `"package"` intent'i R2-03 popover'ı gelene kadar `/packages/create`'e
+yönlenir. `/strategy`, `/trading-signal`, `/trade-log`, `/packages/create` route'ları
+deep-link olarak YAŞIYOR (App.tsx dokunulmadı); Portfolio ve diğer nav öğeleri normal link.
+
+**Reuse anchor'ları:** `MainboardAddIntent` tipi + Mainboard'daki `pendingAdd` effect çifti —
+R2-03 "package" intent'ini popover açacak şekilde bu noktadan devralır.
+
+**Testler:** `nav.test.tsx` (addIntent-not-path pin), `menu.test.tsx` (dispatcher navigasyonu),
+`mainboard.test.tsx` (router-state intent → TS satırı, tek transient-opener POST; package
+fallback). vitest 51 dosya · 449 test, tsc/eslint/build yeşil; kabul canlı tarayıcıda kanıtlandı.
+
 ## V18-R2 · R2-01b — TS/TL editörleri Mainboard satırlarına INLINE mount edildi ✅
 
 **Ne landed:** Route-launcher davranışı bitti (GAP madde 1-2). `pages/Mainboard.tsx`:

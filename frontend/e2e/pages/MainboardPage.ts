@@ -54,6 +54,62 @@ export class MainboardPage {
     return this.page.locator(".strategy-package");
   }
 
+  // ---------------------------------------------------------------------------
+  // R2-07 — the fixed lower-right Ready Check / RUN shell (UI-14/UI-15).
+  // ---------------------------------------------------------------------------
+
+  // F-16: RUN stays a genuinely disabled button until a current Ready Check
+  // passes — the golden-path spec asserts the disabled -> enabled transition.
+  runButton() {
+    return this.page.locator("button.run-button");
+  }
+
+  // UI-14: Ready Check opens as an in-context modal, no route change.
+  async runReadyCheckExpectReady(): Promise<void> {
+    await this.page.getByRole("button", { name: "Backtest Ready Check" }).click();
+    const dialog = this.page.getByRole("dialog");
+    await expect(dialog.getByRole("heading", { name: "Backtest Ready Check" })).toBeVisible();
+    await dialog.getByRole("button", { name: "Run Ready Check" }).click();
+    // GAP madde 12: the verdict must be an EXPLICIT green "Ready" — a
+    // "Not ready" / blocked report is a hard failure of this spec, never an
+    // acceptable "structured outcome". (Commission/spread are set upstream, so
+    // not even "Ready with warnings" is expected.)
+    await expect(dialog.getByText("Ready", { exact: true }).first()).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(dialog.getByText("Not ready")).toHaveCount(0);
+    await dialog.getByRole("button", { name: "Close" }).click();
+  }
+
+  // UI-15: RUN admits inline; the durable progress + immutable Result render in
+  // the BACKTEST RESULTS section on this same page. The run must reach the real
+  // terminal SUCCEEDED state — failed/cancelled/timeout are hard failures.
+  async startRunExpectSucceeded(): Promise<void> {
+    await this.runButton().click();
+    const results = this.page.locator("section", {
+      has: this.page.getByRole("heading", { name: "BACKTEST RESULTS" }),
+    });
+    // The worker replays the full bar range for real, so allow generous but
+    // bounded headroom. Any terminal non-success surfaces as a failed
+    // expectation here (the badge renders the run state verbatim).
+    await expect(results.getByText("succeeded", { exact: true }).first()).toBeVisible({
+      timeout: 180_000,
+    });
+  }
+
+  // The inline immutable Result (ResultDetail) under BACKTEST RESULTS must show
+  // headline metrics and provenance (manifest hash / execution key) — the doc 15
+  // §9.4 surface, inline on "/" and never on a separate page.
+  async expectInlineResultWithHeadlineAndProvenance(): Promise<void> {
+    const detail = this.page.locator("section", {
+      has: this.page.getByRole("heading", { name: /^Backtest Result / }),
+    });
+    await expect(detail.getByText("Headline")).toBeVisible({ timeout: 30_000 });
+    await expect(detail.getByRole("heading", { name: "Manifest", exact: true })).toBeVisible();
+    await expect(detail.getByText("Manifest hash")).toBeVisible();
+    await expect(detail.getByText("Execution key")).toBeVisible();
+  }
+
   // Soft-deletes the draft just created by addStrategyDraft(). It targets the
   // auto-expanded draft row — NOT `.last()`. The Trash spec runs as the shared
   // ADMIN account, whose board can already carry OTHER admin-owned draft rows

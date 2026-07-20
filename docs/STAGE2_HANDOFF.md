@@ -2259,6 +2259,46 @@ deref); legacy orphan **cleanup script deseni** (`scripts/maintenance/*.sql` —
 attach'lıyı UI `×` yoluna bırakır); `ResultSummary.headline` = backend `Record<string,unknown>` (obje-render tuzağı).
 **Bu dalga tamamen video-alignment** — yeni backend domain YOK, migration YOK; kalan video boşlukları aşağıda (KALAN-A/B).
 
+## V18-R2 · R2-07 — Golden-path E2E: Ready PASS → RUN SUCCEEDED → inline Result ✅ (GAP madde 12)
+
+**Ne landed (test+seed slice — uygulama davranışı DEĞİŞMEDİ):**
+- **Seed:** `backend/src/entropia/apps/seed.py`'ye idempotent `SEED_E2E_GOLDEN=1` modu —
+  yol kararı: API zinciri yerine **seed genişletmesi** (API yolu admin oturumu + iki async
+  worker pipeline'ına bağımlı; seed senkron/deterministik). İçerik: non-Admin fixture owner
+  `user_e2e_fixture` (mod, `seed_identities`'i BİLEREK atlar → bootstrap-Admin bozulmaz),
+  ACTIVE+APPROVED market dataset `E2E Golden BTCUSDT 1h` (resolution `1h` + **MinIO'da
+  processed Parquet asset** — 1500 deterministik saatlik bar; asset olmadan her RUN
+  `ASSET_UNAVAILABLE`), PUBLISHED+PASSED+APPROVED indicator package `E2E Golden SMA`
+  (dependency_snapshot → `ta.sma`), canonical 6 rationale family (`_seed_rationale_families`
+  owner-parametreli oldu).
+- **Spec:** `05-mainboard-ready-check-run.spec.ts` TAMAMEN yeniden — "structured outcome
+  yeterli" yaklaşımı kalktı; blocked/NOT_READY/error = FAIL. Akış ("/"dan hiç ayrılmadan):
+  `+ Add → Add Strategy` inline typed editör → kart kart Apply (her Apply gerçek PATCH
+  yanıtı beklenir — "Payload applied" notu bir önceki karttan görünür kalabildiği için
+  YARIŞ kaynağıydı; tam-payload replace bayat draft'ı diriltip alanları siliyordu) →
+  dataset+indicator PICKER'la pinlenir → Validate temiz → Save+auto-attach → RUN
+  disabled (stale) assert → Ready Check modal AÇIK "Ready" → RUN enabled → inline run
+  **succeeded** → inline `ResultDetail` Headline + Manifest hash/Execution key. Yeni
+  `pages/InlineStrategyEditor.ts`; `MainboardPage`'e additive ready/run/result helper'ları.
+- **CI:** `e2e.yml`'e stack-ready sonrası `docker compose exec -T -e SEED_E2E_GOLDEN=1 api
+  python -m entropia.apps.seed` adımı. `e2e/README.md` yeni gerçeğe göre yazıldı.
+- **Kanıt (gerçek koşu):** host-native tam stack (docs/LOCAL_STACK.md; Postgres+Redis+MinIO+
+  session-auth API+dramatiq worker+Vite): temiz DB **passed 10.0s**, kirli stack rerun
+  **passed 32.1s**. Full suite 13/14 (08 Trade Log importu yalnız suite sırasında, worker
+  host-native `asyncio.run`/paylaşılan async engine "attached to a different loop" flake'i —
+  izole koşuda geçiyor, R2-07'den bağımsız altyapı notu).
+
+**Bulgular (ayrı iş):** (1) **Rationale family Mainboard-inline akışta set edilemiyor** —
+`StrategyConfig.rationale_family_id` ZORUNLU ama Mainboard `addStrategy` null yollar,
+Context kartı read-only, Advanced editör admin-only, derive yolu da family geçirmez →
+normal kullanıcı inline strategy'yi asla Validate'ten geçiremez (spawn-task chip açıldı;
+spec bu yüzden bootstrap Admin + Advanced editörle family set eder — boşluk kapanınca
+plain user'a dönülmeli). (2) **Validate ↔ Ready Check parity açığı**: draft Validate,
+`slippage_value`/`base_position_size`/`rationale_family_id` eksiklerini yakalamayabiliyorken
+readiness `STRATEGY_CONFIG_INVALID` üretiyor. (3) Soft-delete edilen work object'in
+`mainboard_working_item` satırı enabled kalıp Ready Check'i süresiz `ITEM_UNAVAILABLE`
+bloklar (UI satırı gizler, readiness görür).
+
 ## V18-R2 · R2-03 — Add Package popover + Add Strategy From Package ✅
 
 **Ne landed (GAP madde 4 — Add Package ≠ Create Package):** YENİ

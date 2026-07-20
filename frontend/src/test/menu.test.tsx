@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 
 import { Menu } from "@/app/Layout";
 import type { MenuGroup } from "@/app/nav";
@@ -59,5 +59,37 @@ describe("primary menu keyboard accessibility", () => {
     expect(sub).toHaveAttribute("aria-expanded", "false");
     fireEvent.click(sub);
     expect(sub).toHaveAttribute("aria-expanded", "true");
+  });
+});
+
+// R2-02 (GAP 6): an addIntent menu entry is a dispatcher button, not a route
+// link — clicking it navigates to the Mainboard ("/") carrying the intent in
+// router state, where the Mainboard runs its own "+ Add" handler.
+describe("Mainboard add-intent dispatch (R2-02)", () => {
+  function LocationProbe() {
+    const location = useLocation();
+    const add = (location.state as { add?: string } | null)?.add;
+    return <div data-testid="probe">{`${location.pathname}|${add ?? "none"}`}</div>;
+  }
+
+  it("navigates to the Mainboard with the intent in router state", () => {
+    const group: MenuGroup = {
+      label: "Mainboard",
+      path: "/",
+      items: [{ label: "Add Strategy", addIntent: "strategy" }],
+    };
+    render(
+      <MemoryRouter initialEntries={["/research-data"]}>
+        <Menu group={group} isAdmin={false} onAbout={() => {}} />
+        <Routes>
+          <Route path="*" element={<LocationProbe />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    // The entry renders as a button (no href to /strategy anywhere).
+    const item = screen.getByRole("button", { name: "Add Strategy" });
+    expect(screen.queryByRole("link", { name: "Add Strategy" })).toBeNull();
+    fireEvent.click(item);
+    expect(screen.getByTestId("probe").textContent).toBe("/|strategy");
   });
 });

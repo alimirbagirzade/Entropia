@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+
+import type { MainboardAddIntent } from "@/app/nav";
 
 import { ApiError } from "@/lib/apiClient";
 import { Loading } from "@/components/Loading";
@@ -810,6 +812,45 @@ export function Mainboard() {
   function removeDraftRow(id: string) {
     setDraftRows((rows) => rows.filter((r) => r.id !== id));
   }
+
+  // R2-02 (GAP madde 6): the top-menu Add actions dispatch here via router
+  // state ({ add: MainboardAddIntent }). The intent is consumed through the
+  // SAME handlers the "+ Add" menu uses, then cleared from the history entry
+  // (replaceState) so a reload or back-navigation never re-fires it.
+  // "package" temporarily keeps the current Add-menu behavior (route to the
+  // Create Package workspace) until the R2-03 popover lands.
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [pendingAdd, setPendingAdd] = useState<MainboardAddIntent | null>(null);
+
+  useEffect(() => {
+    const intent = (location.state as { add?: MainboardAddIntent } | null)?.add;
+    if (!intent) return;
+    window.history.replaceState(null, "", location.pathname + location.search);
+    if (intent === "package") {
+      navigate("/packages/create", { replace: true });
+      return;
+    }
+    setPendingAdd(intent);
+  }, [location, navigate]);
+
+  // Strategy numbering (STRATEGY <n>) needs the board + drafts projections, so
+  // the strategy intent waits for them; TS/TL draft rows are purely local and
+  // dispatch immediately.
+  const boardSettled = !board.isLoading && !myDrafts.isLoading;
+  useEffect(() => {
+    if (!pendingAdd) return;
+    if (pendingAdd === "strategy") {
+      if (!boardSettled) return;
+      addStrategy();
+    } else {
+      addOutsourceDraft(pendingAdd);
+    }
+    setPendingAdd(null);
+    // addStrategy/addOutsourceDraft are stable per-render closures over hook
+    // state; the pendingAdd guard makes re-runs no-ops.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingAdd, boardSettled]);
 
   // Inline TS/TL Save & Add succeeded: the create hook has already invalidated
   // ["mainboard"] + ["readiness"] (lib contract, unchanged). Drop the transient

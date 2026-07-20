@@ -26,8 +26,8 @@ A requirement is **Complete** only with working end-to-end behavior + passing ac
 >   transient satır düşer + persisted satır expanded açılır; URL süreç boyunca "/" (Playwright
 >   `e2e/specs/08-mainboard-inline-editors.spec.ts` — TS + TL + Strategy, canlı stack'te 3/3
 >   yeşil: create → upload → import report → Save & Add → persisted → Close panel → reload).
->   Kalan: Add Package popover yok; üst menü Add eylemleri Mainboard'ı bypass ediyor
->   (`nav.ts:172-180`). → R2-02/R2-03
+>   Kalan (R2-02 this PR sonrası): üst menü Add eylemleri artık Mainboard add-intent
+>   dispatcher'ına bağlı (tek Add modeli); Add Package popover hâlâ yok → R2-03
 > - **UI-02** (Strategy Details): restriction/filter + formula parametreleri hâlâ Advanced JSON'da;
 >   Advanced role-gate'siz. → R2-05a/R2-05b
 > - **UI-03/04/05** (Outsource/TS/TL): ~~inline gerçek editör yok~~ → R2-01a (PR #325) editörleri
@@ -128,6 +128,26 @@ Otherwise the spec's technical "broken" claims are **accurate, not errors** (ver
 
 ## Change log
 
+- 2026-07-20 — **R2-02 Top-menu Add actions → Mainboard add-intent dispatcher (single Add
+  model, GAP item 6).** `app/nav.ts`: new `MainboardAddIntent` type + optional
+  `MenuLink.addIntent`; the four Mainboard-menu Add actions (Add Strategy / Trading Signal /
+  Trade Log / Add Package) no longer carry route paths — `app/Layout.tsx` renders an
+  addIntent entry as a dispatcher `<button>` that `navigate("/", { state: { add: intent } })`.
+  `pages/Mainboard.tsx` consumes the intent on mount through the SAME "+ Add" handlers
+  (`addStrategy` waits for the board+drafts projections for STRATEGY-n numbering;
+  TS/TL append the inline `OutsourceDraftRow` immediately), then clears it with
+  `history.replaceState` so reload/back never re-fires; `"package"` temporarily routes to
+  `/packages/create` (current Add-menu behaviour) until the R2-03 popover lands. Routes
+  `/strategy`, `/trading-signal`, `/trade-log`, `/packages/create` stay alive as deep-links
+  (App.tsx untouched); Portfolio and all other nav entries stay ordinary route links.
+  Evidence: real browser (dev server, act-as user_admin) — from `/research-data`, top-menu
+  Add Strategy lands on `/` with the STRATEGY 6 draft row + inline editor OPEN; on the
+  Mainboard, top-menu Trading Signal keeps URL `/` and opens the inline TS draft row;
+  Add Package routes to Create Package; `history.state` is null after each dispatch.
+  Tests: `nav.test.tsx` pins addIntent-not-path on the four actions; `menu.test.tsx` pins
+  the dispatcher navigation (`/|strategy` probe); `mainboard.test.tsx` pins router-state
+  intent consumption (TS row opens with exactly ONE transient-opener POST — cleared intent)
+  and the package fallback. tsc/eslint/vite build/vitest 51 files · 449 tests green.
 - 2026-07-20 — **R2-01b Trading Signal / Trade Log editors mounted INLINE in Mainboard rows
   (route-launcher behaviour ends).** `pages/Mainboard.tsx`: the persisted TS/TL `ItemRow` branch
   replaces the primary "Edit in {label} →" deep-link with

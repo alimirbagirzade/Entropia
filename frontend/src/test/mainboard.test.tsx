@@ -160,13 +160,16 @@ function stubRoutes(overrides: Record<string, unknown> = {}) {
   });
 }
 
-function renderPage() {
+function renderPage(
+  initialEntries: Array<string | { pathname: string; state?: unknown }> = ["/"],
+) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={["/"]}>
+      <MemoryRouter initialEntries={initialEntries}>
         <Routes>
           <Route path="/" element={<Mainboard />} />
+          <Route path="/packages/create" element={<div>Create Package workspace</div>} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -554,6 +557,34 @@ describe("Mainboard", () => {
     );
     expect(call).toBeTruthy();
     expect(headersOf(call?.[1])["Idempotency-Key"]).toBeTruthy();
+  });
+
+  // R2-02 (GAP 6): the top-menu Add actions dispatch here via router state —
+  // the Mainboard consumes the intent through the SAME "+ Add" handlers.
+  it("consumes a trading_signal add-intent from router state into an inline draft row (R2-02)", async () => {
+    const fetchMock = stubRoutes();
+    renderPage([{ pathname: "/", state: { add: "trading_signal" } }]);
+    // No menu interaction: the intent alone opens the inline draft row.
+    const row = await screen.findByRole("group", { name: "Trading Signal draft" });
+    expect(within(row).getByText("1. Trading Signal Identity")).toBeTruthy();
+    // The documented transient opener fired (same data flow as the "+ Add" menu)…
+    expect(
+      fetchMock.mock.calls.find((c) =>
+        String(c[0]).includes("/external-work-object-drafts/trading_signal"),
+      ),
+    ).toBeTruthy();
+    // …exactly once: the intent was cleared after consumption, not re-fired.
+    expect(
+      fetchMock.mock.calls.filter((c) =>
+        String(c[0]).includes("/external-work-object-drafts/trading_signal"),
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("routes a package add-intent to the Create Package workspace (pre-R2-03 behavior)", async () => {
+    stubRoutes();
+    renderPage([{ pathname: "/", state: { add: "package" } }]);
+    expect(await screen.findByText("Create Package workspace")).toBeTruthy();
   });
 
   it("adds an inline Trading Signal draft row from the nested Add submenu (UI-03)", async () => {

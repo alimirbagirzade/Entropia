@@ -2259,6 +2259,35 @@ deref); legacy orphan **cleanup script deseni** (`scripts/maintenance/*.sql` —
 attach'lıyı UI `×` yoluna bırakır); `ResultSummary.headline` = backend `Record<string,unknown>` (obje-render tuzağı).
 **Bu dalga tamamen video-alignment** — yeni backend domain YOK, migration YOK; kalan video boşlukları aşağıda (KALAN-A/B).
 
+## V18-R2 · R2-03 — Add Package popover + Add Strategy From Package ✅
+
+**Ne landed (GAP madde 4 — Add Package ≠ Create Package):** YENİ
+`components/AddPackagePopover.tsx` — Mainboard "+ Add" menüsündeki "Add Package" artık
+`/packages/create` linki değil, bağlama bağlı seçim popover'ı (mockup `.package-picker-popover`
+sınıfları REUSE). İçerik: `useLibraryPackages({type:"strategy", lifecycle_state:"active", q})`
+(TS/TL package türleri hiç listelenmez) + arama; satır seçilebilirliği SERVER-truth
+`permissions.can_use` (false → `disabled` + neden title; client eligibility türetmez). Seçimde
+kısa compatibility özeti: exact revision (rev no + id) + market/timeframe library detail
+`input_contract`'ından (alan yoksa "not provided"). Primary **"Add Strategy From Package"** →
+MEVCUT GAP-03 `useDeriveStrategyDraftFromPackage` (`POST /strategy-drafts` +
+`source_package_root_id/source_package_revision_id`, taze Idempotency-Key, OCC yok) →
+`onDerived(draftId)` → Mainboard `setJustAddedDraftId` → draft, yatay Strategy draft satırı
+olarak inline Strategy Details editörüyle AÇIK gelir (PR #314 akışının parametrize hali; yeni
+endpoint GEREKMEDİ). İkincil ghost eylem "Create new package →" `/packages/create`. R2-02
+"package" add-intent'i artık popover'ı açar (`packagePopoverOpen` state; `/packages/create`
+fallback kalktı, `useNavigate` importu düştü).
+
+**Canlı stack kanıtı:** seed edilen iki strategy package'la (PASSED/APPROVED + PENDING) popover
+yalnız usable olanı seçilebilir gösterdi; derive sonrası draft `source_provenance` exact
+revision + content hash pinli, source package `current_revision_id`/`row_version` DEĞİŞMEDİ;
+/research-data'dayken üst menü Add Package → "/" + popover açık; Create new package →
+`/packages/create`.
+
+**Testler:** `mainboard.test.tsx` +4 yeni (eligible-filtre & disabled-neden · derive akışı +
+kaynak-mutasyonsuzluk + inline draft satırı · package-intent → popover · create-new ikincil yol)
++2 hizalama (Add Package link→button) → 30/30; toplam 51 dosya · 452 test, tsc/eslint/build
+yeşil.
+
 ## V18-R2 · R2-02 — Üst menü Add eylemleri → Mainboard add-intent dispatcher ✅
 
 **Ne landed (GAP madde 6 — tek Add modeli):** `app/nav.ts`'e `MainboardAddIntent`

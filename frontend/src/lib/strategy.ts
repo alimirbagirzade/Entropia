@@ -331,6 +331,36 @@ export function useCreateStrategyDraft() {
   });
 }
 
+// R2-07 gap closure: one-time set of a NULL rationale family on the strategy
+// root (POST /strategies/{root}/rationale-family). NO OCC token — the server's
+// NULL→set transition is the guard (already-set → 409
+// STRATEGY_RATIONALE_FAMILY_ALREADY_SET verbatim; inactive family →
+// RATIONALE_FAMILY_NOT_ACTIVE). Fresh Idempotency-Key per attempt; writes a
+// strategy.rationale_family_set audit row → invalidates ["strategy"]+["audit"].
+export interface SetRationaleFamilyResult {
+  strategy_root_id: string;
+  rationale_family_id: string;
+}
+
+export function useSetStrategyRationaleFamily() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { rootId: string; rationaleFamilyId: string }) =>
+      apiRequest<SetRationaleFamilyResult>(
+        `/strategies/${encodeURIComponent(input.rootId)}/rationale-family`,
+        {
+          method: "POST",
+          body: { rationale_family_id: input.rationaleFamilyId },
+          headers: { "Idempotency-Key": crypto.randomUUID() },
+        },
+      ),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["strategy"] });
+      void queryClient.invalidateQueries({ queryKey: ["audit"] });
+    },
+  });
+}
+
 // GAP-03: derive a NEW strategy draft from a usable Strategy Package (doc 01 §8.2,
 // doc 08 §4.3). The source is pinned (root + optional exact revision, else head) and
 // provenance is recorded; the source package is never modified. No OCC (a create has

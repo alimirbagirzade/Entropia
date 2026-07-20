@@ -723,6 +723,15 @@ class StrategyDraftConflictError(ConflictError):
     message = "This draft changed in another session. Reload the latest version before saving."
 
 
+class StrategyRationaleFamilyAlreadySetError(ConflictError):
+    """A one-time rationale-family set was attempted on a strategy whose family
+    is already recorded. Identity is server-owned and set once at (or right
+    after) creation — it is never overwritten in place."""
+
+    code = "STRATEGY_RATIONALE_FAMILY_ALREADY_SET"
+    message = "This strategy already has a rationale family; it cannot be changed in place."
+
+
 class StrategyDraftNotAttachedError(ValidationError):
     """A Save was attempted on a transient draft with no strategy root. A draft
     must be bound to a root (created via POST /strategy-drafts) before Save."""

@@ -246,7 +246,12 @@ describe("StrategyDetails", () => {
     const fetchMock = stubRoutes({ "GET /me": ME_ADMIN });
     renderPage("/strategy?draft=draft_1");
 
-    const textarea = await screen.findByLabelText(/StrategyConfig payload/);
+    // Generous timeout: the admin-gated Advanced editor renders only after the
+    // chained draft → /me queries resolve — under full-suite load that can
+    // exceed the 1s findBy default (pre-existing flake, hardened here).
+    const textarea = await screen.findByLabelText(/StrategyConfig payload/, undefined, {
+      timeout: 10_000,
+    });
     fireEvent.change(textarea, { target: { value: "not json {" } });
     fireEvent.click(screen.getByRole("button", { name: "Apply payload" }));
 
@@ -443,5 +448,58 @@ describe("StrategyDetails", () => {
     // The attached draft exposes no destructive Delete affordance in this list.
     const deletes = screen.getAllByRole("button", { name: "Delete" });
     expect(deletes.length).toBe(1); // only the unattached row
+  });
+
+  // R2-07 gap closure: while the root's rationale_family_id is NULL the Strategy
+  // Context card renders a server-hydrated one-time picker; Set POSTs
+  // /strategies/{root}/rationale-family with a fresh Idempotency-Key and NO OCC
+  // token (the server's NULL→set transition is the guard).
+  it("sets a NULL rationale family via the one-time picker (fresh Idempotency-Key, no OCC)", async () => {
+    const fetchMock = stubRoutes({
+      "POST /strategies/root_1/rationale-family": {
+        strategy_root_id: "root_1",
+        rationale_family_id: "fam_1",
+      },
+      "GET /strategies/root_1": { ...STRATEGY, rationale_family_id: null },
+    });
+    renderPage("/strategy?draft=draft_1");
+
+    // Generous timeouts: under full-suite load the chained strategy → families
+    // queries can exceed the 1s findBy default (same pattern as vi.waitFor below).
+    const select = await screen.findByLabelText("Rationale family", undefined, { timeout: 10_000 });
+    await screen.findByRole("option", { name: "Trend following" }, { timeout: 10_000 });
+    fireEvent.change(select, { target: { value: "fam_1" } });
+    fireEvent.click(screen.getByRole("button", { name: "Set" }));
+
+    await vi.waitFor(
+      () => {
+        expect(
+          fetchMock.mock.calls.some(
+            ([url, init]) =>
+              String(url).includes("/strategies/root_1/rationale-family") &&
+              init?.method === "POST",
+          ),
+        ).toBe(true);
+      },
+      { timeout: 10_000 },
+    );
+    const call = fetchMock.mock.calls.find(
+      ([url, init]) =>
+        String(url).includes("/strategies/root_1/rationale-family") && init?.method === "POST",
+    );
+    expect(call).toBeTruthy();
+    const body = JSON.parse(String(call?.[1]?.body)) as Record<string, unknown>;
+    expect(body).toEqual({ rationale_family_id: "fam_1" });
+    expect("expected_draft_row_version" in body).toBe(false);
+    expect(headersOf(call?.[1])["Idempotency-Key"]).toBeTruthy();
+  });
+
+  it("shows the recorded family read-only (no picker) once identity is set", async () => {
+    stubRoutes();
+    renderPage("/strategy?draft=draft_1");
+
+    expect(await screen.findByText("fam_1", undefined, { timeout: 10_000 })).toBeTruthy();
+    expect(screen.queryByLabelText("Rationale family")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Set" })).toBeNull();
   });
 });

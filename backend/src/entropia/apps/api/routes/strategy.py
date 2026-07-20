@@ -36,6 +36,10 @@ class CreateStrategyDraftBody(BaseModel):
     source_package_revision_id: str | None = None
 
 
+class SetRationaleFamilyBody(BaseModel):
+    rationale_family_id: str
+
+
 class PatchStrategyDraftBody(BaseModel):
     payload: dict[str, Any] | None = None
     patch: dict[str, Any] | None = None
@@ -88,6 +92,24 @@ async def create_strategy_draft(
         display_name=payload.display_name or "",
         rationale_family_id=payload.rationale_family_id,
         initial_payload=payload.initial_payload,
+        idempotency_key=idempotency_key,
+    )
+
+
+@router.post("/strategies/{root_id}/rationale-family")
+async def set_strategy_rationale_family(
+    root_id: str,
+    body: SetRationaleFamilyBody,
+    ctx: RequestContext = Depends(request_context),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+) -> dict[str, Any]:
+    """One-time set of a NULL rationale family (R2-07 gap). No OCC token — the
+    NULL→set transition is itself the guard (already-set → 409)."""
+    return await strat_cmd.set_strategy_rationale_family(
+        ctx.session,
+        ctx.actor,
+        strategy_root_id=root_id,
+        rationale_family_id=body.rationale_family_id,
         idempotency_key=idempotency_key,
     )
 

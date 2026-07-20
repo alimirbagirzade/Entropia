@@ -2198,7 +2198,73 @@ KANITLANAMADI — Docker Desktop bu makinede self-update GUI onayı bekliyordu (
 `docker compose config --quiet` geçerli + CI'ın "Docker — build images" job'ı yeşil. Bir sonraki fırsatta:
 Docker Desktop'ı GUI'den güncelle/başlat → `docker compose up -d --build` → `make smoke`.
 
-## Next: post-V1 FINALIZATION sonrası — **teed-up açık iş YOK; başlarken kullanıcıya SOR.** TÜM route yüzeyleri + TIER 2 sayfa haritası (24/24) + doc-22 capability sistemi TAM; TIER 3 adayları kapalı; finalizasyon dalgası (#146 tool-call history, #147 seed FK fix, #148 smoke, #149 README, #150 USAGE/ARCHITECTURE) landed. **KAPSAM DIŞI:** retention auto-purge (doc 20 §16), LLM generation (Future-Dev), Graphic View renderer (doc 22). Proje ~%99 (V1=%100; kalan: gerçek doğal iş yok — bakım/keşif). Backend **1089** test (CI server-truth on `main`), frontend **246**. alembic head `0023_audit_log_trgm_indexes` (DEĞİŞMEDİ), `ENGINE_VERSION = backtest-engine-v2-summary-timeframe` (DEĞİŞMEDİ). Aday (hiçbiri teyitli değil): (a) Docker compose tam-stack canlı kanıtı (`docker compose up -d --build` + `make smoke` — bu seansın tek dürüst sınırı); (b) kullanıcının getireceği yeni feature; (c) orphan/dead-code taraması (#144/#146 şablonu); (d) minör backend temizlik (migration'sız). Başlamadan ilgili doc + route/command imzaları + queries/commands dönüş dict'lerini oku → wire tipleri VERBATIM ayna.
+## Video-alignment wave landed (#313–#318 MERGED) ✅ — the walkthrough (`docs/spec/Video Anlatımı /entropia_transkript.md`) driven live end-to-end
+
+**MOSTLY FRONTEND + narrow backend; migration YOK** (alembic head `0023_audit_log_trgm_indexes` SABİT;
+`ENGINE_VERSION` SABİT). Kaynak: kullanıcının prototip anlatım videosu — kodlanan yapıyı prototiple satır
+satır karşılaştıran transkript. Bu dalga videoda "çekirdek" (Entropia Core) ilan edilen **Add Strategy →
+yatay açılır kutu → çok-stratejili evren** akışını CANLI çalışır hale getirdi ve yolda çıkan çökme/kullanılamazlık
+defektlerini kapattı. Altı PR:
+
+- **#313 `fix(api)` — commit-before-response** (`fix/api-commit-before-response`): Mainboard **Add Strategy**
+  canlıda `WORK_OBJECT_NOT_FOUND` veriyordu — `POST /work-objects` 201 dönüyor ama tarayıcının hemen ardındaki
+  `POST /mainboards/{id}/items` yeni satırı GÖREMİYORDU. Kök neden: FastAPI yield-dependency teardown'ı
+  (`db_session` commit'inin yeri) yanıt gövdesi istemciye doğru YOLA ÇIKTIKTAN sonra koşuyor → aynı-makine istemci
+  bu ~1ms yarışı kazanıyor (curl'de insan-ölçekli boşlukla hep başarılı). Fix: **`TransactionBoundaryMiddleware`**
+  (en iç katman) request-scoped session'ı yanıt upstream'e iletilmeden ÖNCE commit eder; `>=400` → rollback (eski
+  raise→rollback semantiği korunur); yakalanmamış exception → rollback+propagate. `db_session` session'ı
+  `request.state`'e koyar + middleware'siz çıplak test app'leri için commit fallback tutar. 25 contract/integration
+  test izole `TEST_DATABASE_URL`'de yeşil; canlı tarayıcı kanıtı.
+- **#314 `fix(mainboard)` — Add Strategy'yi strateji-editör ailesine bağla** (`fix/mainboard-add-strategy-editor-family`):
+  video 0:55–2:52'nin çekirdeği. #313'ten sonra kutu çıkıyordu ama inline editör hep `STRATEGY_REVISION_NOT_FOUND`
+  veriyordu (add çıplak generic work object yaratıyordu, editör strateji ailesini okur). Fix: Add Strategy artık bir
+  editör **draft**'ı yaratır (`POST /strategy-drafts`, auto-ad `STRATEGY <n>`) — "Unsaved draft" rozetli yatay kutu
+  hemen render olur, `GET /strategy-drafts`'tan listelenir (reload'a dayanır); **ilk Save → attach** (`StrategyDetailsPanel`
+  `onSaved` callback'i §7.1 `mirror_revision_id`'yi gerçek item olarak pinler; Save öncesi hiçbir şey attach olmaz —
+  doc 02 §7). Backend deref: `GET /strategy-revisions/{id}` §7.1 mirror `worev_` id'yi de kabul eder (payload
+  `strategy_revision_id` deref). 438 vitest; canlı: STRATEGY 1/STRATEGY 2 bağımsız editörlerle üst üste yığılır.
+- **#315 `docs` — Docker-free local stack** (`docs/local-stack-no-docker`): YENİ `docs/LOCAL_STACK.md` (redis brew
+  services, MinIO custom LaunchAgent + `entropia-artifacts` bucket, per-session dramatiq worker); Docker Desktop bu
+  makinede self-update GUI onayında takıldığı için YOL B (Homebrew) native kurulum belgelendi. **Kod değişikliği YOK**;
+  `/health/ready` `{postgres,redis,object_storage:ok}` + `make smoke` SMOKE OK + queue↔worker round-trip kanıtı.
+- **#316 `fix(create-package)` — onaylı indicator uçtan uca kullanılabilir + pinlenebilir** (`fix/create-package-published-indicator-usable`):
+  iki defekt. (1) `apps/seed.py` canonical `ta.*`/`cond.*` resolver'ları `pine_v5` adapter'la seed'liydi ama V1 Create
+  Package her zaman `python` adapter'a sabit (`SUPPORTED_TARGET_RUNTIMES=={PYTHON}`); Pre-Check EXACT signature+adapter
+  eşleşmesi yaptığından her declared `ta.sma` `RESOLVER_ADAPTER_INCOMPATIBLE` düşüyordu → `python`'a düzeltildi. (2)
+  `start_package_validation_run` PASSED validation kaydediyor ama sertifikalı draft revision'ın `validation_state`'ini
+  set etmiyordu (PENDING kalıyordu) → `can_use` PASSED istediğinden onaylı+publish indicator `can_use=false` idi ve
+  **Choose indicator** picker'da pinlenemiyordu; revision artık verdict'le (`PASSED`/`FAILED`) sertifikalanır. +regresyon
+  `test_validation_evidence.py`; canlı: Translate PineScript `ta.sma` → Pre-Check→candidate→draft→validate→approve/publish
+  → Library `can_use: yes` → editörde pinlenir.
+- **#317 `fix(frontend)` — Result headline objesini render et (crash yerine)** (`fix/result-detail-headline-object-render`):
+  bar-replay engine `summary.headline`'ı yapısal metrik OBJESİ olarak yayıyor (`LatestResultSummary.headline`'da zaten
+  `Record<string, unknown>`) ama `ResultSummary.headline` yanlışlıkla `string | null` tipliydi → `ResultDetail` objeyi
+  doğrudan React child olarak render edip **her başarılı RUN'da beyaz ekran** ("Objects are not valid as a React child").
+  Fix: `lib/backtest.ts` tipi `Record<string, unknown> | null`'a düzeltildi + `ResultDetail.tsx` headline'ı null-safe
+  key/value listesi olarak render eder. **Presentation-only** (tek `lib` düzenlemesi backend şekline uyan tip anotasyonu).
+  Canlı: tek-strateji (1728 trade) + iki-strateji kompozisyon (3456 trade) RUN'ları Result özetini çökmeden gösterir.
+- **#318 `fix(mainboard)` — #314'ün dürüst sınırlarını kapat** (`fix/mainboard-legacy-strategy-cleanup`): (1) ESKİ akışın
+  bıraktığı legacy orphan temizliği — `strategy_root`/`strategy_revision` detay'ı OLMAYAN `wo_` root'lar (yerel DB'de 3
+  adet, hepsi active + hiçbirine attach değil) idempotent, kendi kendini seçen script
+  `scripts/maintenance/cleanup_legacy_strategy_work_objects.sql` ile soft-delete (attach'lı orphan'ları Mainboard `×`
+  yoluna bırakır). (2) `StrategyDetailsPanel` artık SADECE `STRATEGY_NOT_FOUND`/`STRATEGY_REVISION_NOT_FOUND` için sakin
+  "This item is not an editor-managed strategy" notu gösterir (diğer her hata retryable `ErrorState` kalır). (3) Drafts
+  hijyeni: `GET /strategy-drafts` zaten `deletion_state=ACTIVE` filtreler — "saved+attached sonra trashed draft listeden
+  düşer" regresyonu eklendi. 440 vitest (+2), 17 strategy integration (+1); `apiErrorRoute()` additive test infra.
+
+**Reuse anchor'ları:** `TransactionBoundaryMiddleware` (commit-before-response — aynı-makine yield-teardown yarışının
+kalıcı çözümü; her yeni-satır-yaratıp-hemen-referanslayan akışın temeli); **Add-Strategy draft akışı** (`strat_` root
+= attach edilebilir work object; **ilk Save'e kadar revision YOK**, doc 02 §7; `mirror_revision_id` attach + `worev_`
+deref); legacy orphan **cleanup script deseni** (`scripts/maintenance/*.sql` — idempotent, kendi kendini seçen, soft-delete,
+attach'lıyı UI `×` yoluna bırakır); `ResultSummary.headline` = backend `Record<string,unknown>` (obje-render tuzağı).
+**Bu dalga tamamen video-alignment** — yeni backend domain YOK, migration YOK; kalan video boşlukları aşağıda (KALAN-A/B).
+
+## Next: video-alignment kalan iş — **KALAN-A + KALAN-B açık; KALAN-C TAMAM.** Bu dalga (#313–#318) Entropia Core'u (Add Strategy → yatay kutu → çok-stratejili evren) + Create Package/Result crash'lerini kapattı. Videonun (`docs/spec/Video Anlatımı /entropia_transkript.md`) hâlâ TAMAMLANMAMIŞ iki alanı:
+> - **KALAN-A — Market Data ham kaynak dosya UPLOAD UI (video 9:24–12:37):** videonun EN GÜÇLÜ şikâyeti — "süreci başlatacak ham kaynak dosya yükleme seçeneği maalesef yok" (11:00, 12:37). Backend ingest zinciri (`routes/market_data.py` create/upload-start/finalize/analysis) PR #103'te bağlıydı ama **Raw Source File / Browse File** akışı (ham dosyayı seçip standart Entropia yapısına dönüştürme, sonra Create Dataset / Approve for Use) UI'da eksik/çalıştırılamaz. Frontend slice — backend yüzeyi hazır.
+> - **KALAN-B — Portfolio Equity Allocation "Use Allocation Backtest" + per-item pay UI (video 7:16–9:24):** strateji evreni kuruluyorsa toplam portföyün üst seviye paylaşımı gerekir (Strategy 1 / Strategy 2 / Trade 1 / Trade Log 1 payları). Portfolio sayfası PR #113'te + portfolio-level kurallar PR #320'de (Max Total Exposure + cross-item conflict) landed; ancak videodaki **"Use Allocation Backtest" toggle + Mainboard'daki her öğeye pay atama** deneyimi tam değil. Portfolio + Mainboard hizası — backend allocation yüzeyi hazır.
+> - **KALAN-C — öğe evrene katkısı / "entropiyi nasıl değiştirdiği" (video 3:35) ✅ TAMAM:** Trade Log / bir öğenin toplam strateji evrenine katkısı **PR #319 (per-item contribution breakdown — correlation, diversification, marginal deltas) + PR #320 (portfolio-level rules)** ile karşılandı. `#321` (allocation portfolio-rule alanları için openapi snapshot rejenerasyonu) AÇIK — merge bekliyor.
+>
+> **KAPSAM DIŞI (değişmedi):** retention auto-purge (doc 20 §16), LLM generation (Future-Dev), Graphic View renderer (doc 22). alembic head `0023_audit_log_trgm_indexes` SABİT, `ENGINE_VERSION` SABİT. Başlamadan ilgili doc + route/command imzaları + queries/commands dönüş dict'lerini oku → wire tipleri VERBATIM ayna.
 
 **V1 COMPLETE (Stages 0–8, docs 01–22) + Auth/IdP + Parquet Slice A + Backtest Engine Slice B + real indicator compute Slice C + `risk_based` sizing (a) + condition blocks (b) + condition extensions (b2) + two-package indicator-vs-indicator + higher-timeframe resampling (c) + per-condition multi-TF reference (i) + N-ary reference chain (ii) + VWAP directional key (d) + `formula_based` Kelly sizing + `position_size_limits` min/max cap (PR #63) landed (1015 tests).** The **Slice C indicator-compute + position-sizing follow-ups are now EFFECTIVELY COMPLETE — TIER 1 backend is DONE**:
 

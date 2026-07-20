@@ -111,9 +111,28 @@ function ItemRow({ item, defaultExpanded = false }: { item: MainboardItem; defau
           />
           <span style={noteStyle}>#{item.position_index}</span>
         </span>
-        {/* Row action cluster (mockup .strategy-actions): arrow (expand/collapse) */}
-        {/* + delete ×. Both live in the collapsed row header, always visible.    */}
+        {/* Row action cluster (mockup .strategy-actions): compact enable/disable */}
+        {/* toggle + arrow (expand/collapse) + delete ×. All live in the row      */}
+        {/* header, always visible (R2-05b: enable/disable stays a compact row    */}
+        {/* action; everything else moves into the Composition settings           */}
+        {/* disclosure below). The PATCH intent/OCC contract is unchanged.        */}
         <div className="strategy-actions">
+          <button
+            type="button"
+            className="btn"
+            disabled={busy}
+            aria-label={`${item.is_enabled ? "Disable" : "Enable"} ${label}`}
+            onClick={() =>
+              patch.mutate({
+                itemId: item.item_id,
+                intent: "set_enabled",
+                expectedRowVersion: item.row_version,
+                is_enabled: !item.is_enabled,
+              })
+            }
+          >
+            {item.is_enabled ? "Disable" : "Enable"}
+          </button>
           <button
             type="button"
             className="strategy-arrow"
@@ -228,13 +247,18 @@ function ItemRow({ item, defaultExpanded = false }: { item: MainboardItem; defau
             </section>
           )}
 
-          {/* Mainboard-owned composition controls (§5.2 / §7). Pin / enable /    */}
-          {/* reorder change the composition hash and make the Ready report stale.*/}
-          <section
-            aria-label={`Composition controls for ${label}`}
-            style={{ display: "grid", gap: 14 }}
-          >
-            <strong>Composition controls</strong>
+          {/* Mainboard-owned composition controls (§5.2 / §7). R2-05b (GAP madde */}
+          {/* 13): demoted to a CLOSED "Composition settings" disclosure so the    */}
+          {/* expanded row shows only the product editor above — no second long    */}
+          {/* technical form. Enable/disable stays a compact header row action;    */}
+          {/* reorder / pinned-revision provenance / label override / OCC notes    */}
+          {/* live here, functionally unchanged (same PATCH intents + OCC tokens). */}
+          <details className="panel-actions-history">
+            <summary>Composition settings</summary>
+            <section
+              aria-label={`Composition controls for ${label}`}
+              style={{ display: "grid", gap: 14, marginTop: 10 }}
+            >
             <dl className="kv">
               <dt>Pinned revision</dt>
               <dd>{item.pinned_revision_id ?? "—"}</dd>
@@ -252,21 +276,6 @@ function ItemRow({ item, defaultExpanded = false }: { item: MainboardItem; defau
             </p>
 
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button
-                type="button"
-                className="btn"
-                disabled={busy}
-                onClick={() =>
-                  patch.mutate({
-                    itemId: item.item_id,
-                    intent: "set_enabled",
-                    expectedRowVersion: item.row_version,
-                    is_enabled: !item.is_enabled,
-                  })
-                }
-              >
-                {item.is_enabled ? "Disable" : "Enable"}
-              </button>
               <button
                 type="button"
                 className="btn"
@@ -329,8 +338,9 @@ function ItemRow({ item, defaultExpanded = false }: { item: MainboardItem; defau
 
             {/* The × soft-delete action + its two-step confirmation now live in  */}
             {/* the always-visible row header above (mockup .strategy-actions).   */}
-            {patch.isError && <p role="alert" style={alertStyle}>{errorMessage(patch.error)}</p>}
-          </section>
+            </section>
+          </details>
+          {patch.isError && <p role="alert" style={alertStyle}>{errorMessage(patch.error)}</p>}
         </div>
       )}
     </div>

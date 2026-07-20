@@ -19,6 +19,7 @@ import {
 } from "@/components/StrategyGraphForm";
 import { ApiError } from "@/lib/apiClient";
 import { EM_DASH, formatUtc } from "@/lib/backtest";
+import { useMe } from "@/lib/hooks";
 import {
   type ClearDraftResult,
   type PatchDraftResult,
@@ -269,10 +270,12 @@ function RevisionHistoryDisclosure({ rootId }: { rootId: string | null }) {
 }
 
 // ---------------------------------------------------------------------------
-// Advanced (raw payload) editor — the JSON escape hatch for each block's
-// advanced fields (parameter overrides, reference chains) and any key not
-// yet surfaced by a structured card. Collapsed by default (doc 02 UI-02: not
-// the primary surface).
+// Advanced (raw payload) editor — the JSON verification fallback, now
+// ADMIN-ONLY (R2-05b, GAP madde 5): rendered only once /me proves
+// is_admin === true. Fail-closed — while /me is loading, on error, and for
+// every non-admin role the disclosure does not exist in the DOM, so no raw
+// JSON ever appears in the normal user flow. Collapsed by default; Apply
+// still schema-checks (JSON object) before the OCC-guarded patch.
 // ---------------------------------------------------------------------------
 
 function AdvancedPayloadEditor({
@@ -284,8 +287,11 @@ function AdvancedPayloadEditor({
   pending: boolean;
   onApply: (payload: Record<string, unknown>) => void;
 }) {
+  const me = useMe();
   const [text, setText] = useState(() => JSON.stringify(draft.payload, null, 2));
   const [parseError, setParseError] = useState<string | null>(null);
+
+  if (me.data?.is_admin !== true) return null;
 
   return (
     <details className="panel-actions-history" style={{ marginTop: 10 }}>
@@ -648,6 +654,22 @@ function ClearResultNote({ result }: { result: ClearDraftResult }) {
   );
 }
 
+// Read-only raw payload dump for the immutable revision view — same R2-05b
+// fail-closed admin gate as the draft editor's Advanced disclosure: absent
+// from the DOM unless /me proves is_admin === true.
+function AdminRawPayloadDisclosure({ payload }: { payload: unknown }) {
+  const me = useMe();
+  if (me.data?.is_admin !== true) return null;
+  return (
+    <details className="panel-actions-history" style={{ marginTop: 10 }}>
+      <summary>Advanced (raw payload)</summary>
+      <pre className="wire-table" style={{ whiteSpace: "pre-wrap", padding: 10 }}>
+        {JSON.stringify(payload, null, 2)}
+      </pre>
+    </details>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Revision mode (revisionId present, no draftId) — read-only summary of an
 // immutable revision, organized in the SAME 3-column/numbered layout. Editing
@@ -803,12 +825,7 @@ function RevisionSummaryGrid({
         )}
       </details>
 
-      <details className="panel-actions-history" style={{ marginTop: 10 }}>
-        <summary>Advanced (raw payload)</summary>
-        <pre className="wire-table" style={{ whiteSpace: "pre-wrap", padding: 10 }}>
-          {JSON.stringify(data.payload, null, 2)}
-        </pre>
-      </details>
+      <AdminRawPayloadDisclosure payload={data.payload} />
 
       <div className="panel-actions">
         <div className="panel-actions-title">10. Save / Package Actions</div>

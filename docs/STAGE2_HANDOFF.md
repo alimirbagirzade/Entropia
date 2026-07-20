@@ -2259,6 +2259,47 @@ deref); legacy orphan **cleanup script deseni** (`scripts/maintenance/*.sql` —
 attach'lıyı UI `×` yoluna bırakır); `ResultSummary.headline` = backend `Record<string,unknown>` (obje-render tuzağı).
 **Bu dalga tamamen video-alignment** — yeni backend domain YOK, migration YOK; kalan video boşlukları aşağıda (KALAN-A/B).
 
+## V18-R2 · R2-01a — TS/TL editörleri reusable bileşenlere ayrıldı ✅ (saf refactor)
+
+**Ne landed:** `pages/TradingSignal.tsx` içindeki iki kolonlu editör gövdesi **VERBATIM** olarak
+YENİ `components/TradingSignalEditor.tsx`'e; `pages/TradeLog.tsx` gövdesi YENİ
+`components/TradeLogEditor.tsx`'e taşındı. İki sayfa artık **ince wrapper** (~950 satır → 21
+satır): sadece v18 sayfa kabuğu (`.page-title` + `.page-sub`) + `<XEditor mode="page" />`.
+
+**Bileşen sözleşmesi (iki ikizde simetrik — R2-01b için forward-contract):**
+```ts
+{ mode: "page" | "inline"; initialRoot?: string;
+  onSaved?: (rootId: string) => void; onClose?: () => void }
+```
+- `mode="page"` → URL tek doğruluk kaynağı: `?job=` (dayanıklı import handle, CR-09) ve `?root=`
+  (work-object detay + revizyon composer) aynen çalışır; bileşen `useSearchParams`'ı kendisi çağırır.
+- `mode="inline"` → sayfa kabuğu render EDİLMEZ; job handle bileşen state'inde (`inlineJobId`),
+  root `initialRoot`'tan gelir; `onClose` verildiyse tek bir "Close" düğmesi çizilir (page modunda
+  ASLA çizilmez → mevcut markup byte-identical).
+- `onSaved` mevcut create mutation'ının `onSuccess`'inden yeni `root_id` ile tetiklenir; prop yoksa
+  no-op.
+
+**DEĞİŞMEYEN (kanıtlı):** `lib/tradingSignal.ts`, `lib/tradeLog.ts`, tüm hook'lar, react-query
+key'leri, OCC token (`expected_head_revision_id`, **BODY-form STR**), `Idempotency-Key`, route
+path'leri, `app/nav.ts`. Hiçbir form alanı değişmedi (typed formlar R2-04'ün işi).
+`Mainboard.tsx`'e **DOKUNULMADI** (R2-01b).
+
+**Doğrulama:** `tradingSignal.test.tsx` + `tradeLog.test.tsx` **hiç düzenlenmeden** geçti (testler
+`@/pages/*`'i import ediyor, aynı bileşen adı hâlâ export ediliyor — import path güncellemesi bile
+gerekmedi) → **445/445 frontend vitest yeşil**; `tsc --noEmit`, `eslint .`, `vite build` temiz.
+Tarayıcı (dev :5174 + local API :8000): `/trading-signal` ve `/trade-log` aynı v18 iki kolonlu
+paneli çiziyor; `?job=job_demo_1` hâlâ Import report kartını mount ediyor; `?root=…` hâlâ
+workbench yerine detail view'a geçiyor.
+
+**Reuse anchor'ları (R2-01b bunları mount edecek):**
+`components/TradingSignalEditor.tsx` → `TradingSignalEditor`, `TradingSignalEditorProps`;
+`components/TradeLogEditor.tsx` → `TradeLogEditor`, `TradeLogEditorProps`.
+
+Branch `feat/v18-r2-01a-editor-extraction`. **Sonraki: R2-01b** (editörleri Mainboard satırlarına
+inline mount et) — `docs/V18_R2_ROADMAP.md` §4 R2-01b paste-ready prompt'u.
+
+---
+
 ## Next: **V18-R2 dalgası — `docs/V18_R2_ROADMAP.md` otoritedir.** Yeni GAP belgesi
 (`docs/spec/Entropia_V18_Guncel_Arayuz_Eksikleri_ve_Yanlis_Anlamalar.md`) kodda empirik
 CONFIRMED 13 eksik kümesi tespit etti (Mainboard TS/TL inline editör yok, Add Package popover yok,

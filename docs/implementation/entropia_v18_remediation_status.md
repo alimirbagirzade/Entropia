@@ -119,6 +119,30 @@ Otherwise the spec's technical "broken" claims are **accurate, not errors** (ver
 
 ## Change log
 
+- 2026-07-20 — **R2-01a Trading Signal / Trade Log editors extracted to reusable components.**
+  **PURE REFACTOR — no behaviour change, no new hook, no new endpoint.** The whole two-column
+  editor body of `pages/TradingSignal.tsx` moved VERBATIM to NEW
+  `components/TradingSignalEditor.tsx`, and `pages/TradeLog.tsx` → NEW
+  `components/TradeLogEditor.tsx`; both pages are now thin wrappers holding only the v18 page
+  chrome (`.page-title` + `.page-sub`) plus `<XEditor mode="page" />` (~950 → 21 lines each).
+  Symmetric forward contract for R2-01b's Mainboard inline mount:
+  `{ mode: "page" | "inline"; initialRoot?: string; onSaved?: (rootId: string) => void;
+  onClose?: () => void }`. In `mode="page"` the URL stays the single source of truth for the
+  `?job=` (durable import handle, CR-09) and `?root=` (work-object detail + revision composer)
+  modes — the editor keeps calling `useSearchParams`; in `mode="inline"` the job handle lives in
+  component state, the root arrives through `initialRoot`, no page chrome renders, and a "Close"
+  control (rendered only when `mode="inline" && onClose`) reports close intent upward. `onSaved`
+  fires from the existing create mutation's `onSuccess` with the new `root_id` (a no-op when the
+  prop is absent — page-mode markup is byte-identical). **Untouched:** `lib/tradingSignal.ts`,
+  `lib/tradeLog.ts`, every hook, react-query key, OCC token (`expected_head_revision_id`,
+  BODY-form STR), `Idempotency-Key`, route path, and `app/nav.ts`. No form field changed (typed
+  forms are R2-04). `Mainboard.tsx` NOT touched (R2-01b). Tests: `tradingSignal.test.tsx` and
+  `tradeLog.test.tsx` green **UNCHANGED** (they import `@/pages/*`, which still exports the same
+  component name — zero test edits, not even import paths) → **445/445 frontend vitest green**;
+  tsc + eslint + vite build clean. Verified live in-browser (dev server :5174 + local API :8000):
+  `/trading-signal` and `/trade-log` render the identical v18 two-column panel;
+  `?job=job_demo_1` still mounts the Import report card; `?root=…` still switches the workbench
+  out for the detail view. Branch `feat/v18-r2-01a-editor-extraction`.
 - 2026-07-17 — **F-25 Truthful README/status.** Reconciled `README.md` + this file to verifiable
   sources: replaced the unqualified "Production V1 is complete" build-status claim; corrected the
   snapshot to **1773 backend tests** (`pytest --co`), **428 frontend tests** (Vitest), and Alembic

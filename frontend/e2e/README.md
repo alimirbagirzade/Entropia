@@ -13,7 +13,7 @@ real network round trip that the running backend actually served.
 | Market Data upload | `specs/02-market-data-upload.spec.ts` | `POST /market-datasets` |
 | Research Data upload | `specs/03-research-data-upload.spec.ts` | `POST /research-datasets` (DR3-gated on an approved Market Data dataset) |
 | Create Package lifecycle | `specs/04-create-package-lifecycle.spec.ts` | `POST /package-requests` + Pre-Check dependency scan |
-| Strategy creation / Mainboard attach / Ready Check / RUN / inline result | `specs/05-mainboard-ready-check-run.spec.ts` | `POST /strategy-drafts`, generic work-object create+attach, `POST /readiness-checks`, `POST /backtest-runs` |
+| **Golden path** (R2-07): inline Strategy w/ typed forms + pickers → Validate → Save+attach → Ready Check **Ready** → RUN **succeeded** → inline Result | `specs/05-mainboard-ready-check-run.spec.ts` | `POST /strategy-drafts`, per-card OCC PATCH, `POST .../validate`, `POST .../save`, `POST /readiness-checks`, `POST /backtest-runs`, run polling to the terminal state, inline `ResultDetail` |
 | Trash re-auth | `specs/06-trash-reauth.spec.ts` | Soft-delete -> Trash entry -> re-auth-gated Permanent Delete (purge) |
 
 ## Running locally
@@ -27,6 +27,14 @@ sed -i.bak -e 's/^AUTH_MODE=.*/AUTH_MODE=session/' \
            -e 's/^ENTROPIA_BOOTSTRAP_ADMIN_EMAIL=.*/ENTROPIA_BOOTSTRAP_ADMIN_EMAIL=e2e_admin@e2e.entropia.test/' .env
 docker compose up -d --build
 # Wait for: curl -f http://localhost:8000/api/v1/health/ready && curl -f http://localhost:8080
+
+# R2-07: seed the E2E golden fixture (idempotent — safe to re-run). Provides the
+# approved market dataset (with processed Parquet bars in MinIO), the
+# approved+published ta.sma indicator package and the canonical rationale
+# families the golden-path spec builds on. It deliberately does NOT create the
+# default Admin, so the ENTROPIA_BOOTSTRAP_ADMIN_EMAIL first-signup promotion
+# keeps working on a fresh database.
+docker compose exec -T -e SEED_E2E_GOLDEN=1 api python -m entropia.apps.seed
 
 cd frontend/e2e
 npm install
@@ -47,24 +55,32 @@ Open the HTML report after a run with `npm run report`.
 
 ## Honest boundaries (do not over-claim green)
 
-- **Docker on this machine could not be proven in this authoring session**
-  (Docker Desktop was not available to run `docker compose up` end to end
-  here). The suite is **authored against the real source** (every selector
-  was read from the actual page component, not guessed) but has **not been
-  run against a live stack** in this session. Treat it as *authored, needs a
-  stack to go green* until it has run once in CI or locally — do not report
-  it as "passing" without that run.
-- **Golden-path depth**: a fully schema-valid, RUN-able Strategy needs an
-  Admin-approved indicator package (full Create Package lifecycle incl.
-  candidate generation + draft + approve) pinned into a saved Strategy
-  revision, plus an Admin-approved Market Data revision for
-  `data.market_dataset_revision_id`. Wiring that whole chain is a
-  dedicated seeding effort beyond this slice's scope. `05-mainboard-ready-
-  check-run.spec.ts` instead attaches a generic (non-domain-validated) work
-  object to move the composition hash and exercises the real Ready Check /
-  RUN admission endpoints — it asserts that a *structured* outcome came back
-  (report or rejection), not a specific verdict, matching the app's own L4
-  "never fabricate success" rule.
+- **Golden path is now strict (R2-07, GAP madde 12)**: `05-mainboard-ready-
+  check-run.spec.ts` requires the REAL green chain — typed-form inline
+  Strategy on "/", approved indicator pinned from the Library picker,
+  approved market dataset pinned from the dataset picker, Validate clean,
+  Save + auto-attach, Ready Check an EXPLICIT **Ready**, RUN's
+  disabled → enabled transition, the admitted run reaching the terminal
+  **succeeded** state, and the inline Result with headline metrics +
+  provenance. Blocked / NOT_READY / error is a FAILURE. The former
+  "a structured outcome is enough" reading is retired: L4 forbids
+  *fabricating* success, it never excuses accepting a blocked report on the
+  golden path. The spec depends on the `SEED_E2E_GOLDEN=1` fixture above.
+- **Rationale family via the Admin Advanced editor** (reported product
+  finding): the Mainboard inline flow has no control for the REQUIRED
+  `StrategyConfig.rationale_family_id` (the Strategy Context card is
+  read-only and "+ Add → Add Strategy" creates the draft with no family), so
+  the golden-path spec runs as the bootstrap Admin and sets the family
+  through the admin-gated Advanced (raw payload) editor — a real product
+  surface, no mocking. When the product grows an inline family picker, the
+  spec should switch to a plain user.
+- **Where it has actually run green**: the golden-path spec passed twice
+  (fresh DB and dirty re-run) against the full **host-native local stack**
+  (Postgres + Redis + MinIO + API in session-auth mode + dramatiq worker +
+  Vite dev server, `docs/LOCAL_STACK.md`) in the R2-07 authoring session.
+  The containerized CI path runs the same seed step (`e2e.yml`) but had not
+  executed at authoring time — treat CI-green as proven only once the E2E
+  workflow has run on the PR.
 - **Research Data create** is DR3-gated on an ACTIVE+APPROVED Market Data
   dataset; a freshly created (not yet Admin-approved) dataset legitimately
   gets `DEPENDENCY_BLOCKED` back. The spec asserts *a* real outcome landed,

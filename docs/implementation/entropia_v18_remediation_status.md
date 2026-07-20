@@ -67,9 +67,20 @@ A requirement is **Complete** only with working end-to-end behavior + passing ac
 >   alanı silindi; MarketLinkPicker (yalnız approved seçilebilir) + `useMarketDependency`
 >   approved-bundle probe → strip/alert/Create tek server-truth projection'dan. Kalan teknik-ID
 >   sweep (ResearchLifecycle vb.) → R2-08
-> - **UI-14/15** (Ready Check / RUN): golden-path E2E blocked'ı kabul ediyor
->   (`05-mainboard-ready-check-run.spec.ts`); READY/PASS → RUN SUCCEEDED → inline Result
->   kanıtı yok. → R2-07
+> - **UI-14/15** (Ready Check / RUN): ~~golden-path E2E blocked'ı kabul ediyor~~ →
+>   **R2-07 (this PR) kapattı**: `05-mainboard-ready-check-run.spec.ts` tamamen yeniden
+>   yazıldı — inline typed-form Strategy ("/"da kalır) + picker'dan approved indicator
+>   (`E2E Golden SMA`) + approved market dataset (`E2E Golden BTCUSDT 1h`) + Validate
+>   temiz + Save/attach + Ready Check AÇIK **Ready** + RUN disabled→enabled + gerçek run
+>   **succeeded** + inline Result (Headline + Manifest hash/Execution key provenance);
+>   blocked/NOT_READY/error artık BAŞARISIZLIK. Fixture: `SEED_E2E_GOLDEN=1` seed modu
+>   (approved dataset + MinIO'da processed Parquet bar asset + approved+published ta.sma
+>   indicator package + canonical rationale families; idempotent, bootstrap-Admin'i
+>   bozmaz) + `e2e.yml`'e seed adımı. Kanıt: yerel tam host-native stack'te
+>   (docs/LOCAL_STACK.md; session-auth API + dramatiq worker) temiz DB'de 1 kez + kirli
+>   stack'te 1 kez YEŞİL (10s / 32s). Dürüst sınır: rationale family Mainboard-inline
+>   akışta set edilemediğinden (ZORUNLU `StrategyConfig.rationale_family_id`; ayrı bulgu)
+>   spec bootstrap Admin + admin-gated Advanced editörle family set ediyor.
 > - **Ortak shell — backend/auth/hata durumları**: ~~API timeout yok (sonsuz Loading)~~ →
 >   **R2-10 (this PR) kapattı**: `apiClient` her istekte AbortController timeout
 >   (`REQUEST_TIMEOUT_MS=15s`, typed `NETWORK_UNAVAILABLE`/status 0 — envelope'a ADDITIVE, testlerin

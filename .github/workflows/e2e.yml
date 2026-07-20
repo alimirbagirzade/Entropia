@@ -48,6 +48,13 @@ jobs:
           docker compose logs --tail 200
           exit 1
 
+      - name: Seed the E2E golden fixture (R2-07)
+        # Idempotent: approved market dataset + processed Parquet bars,
+        # approved+published ta.sma indicator package, canonical rationale
+        # families. Deliberately skips the default-Admin identity seed so the
+        # ENTROPIA_BOOTSTRAP_ADMIN_EMAIL first-signup promotion stays intact.
+        run: docker compose exec -T -e SEED_E2E_GOLDEN=1 api python -m entropia.apps.seed
+
       - uses: actions/setup-node@v4
         with:
           node-version: "20"

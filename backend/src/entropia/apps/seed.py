@@ -23,7 +23,11 @@ from entropia.domain.lifecycle.enums import (
     Role,
     VisibilityScope,
 )
-from entropia.domain.market_data.enums import MarketDataType, MarketRevisionState
+from entropia.domain.market_data.enums import (
+    MarketDataType,
+    MarketRevisionState,
+    ResolutionKind,
+)
 from entropia.domain.package.enums import PackageValidationState
 from entropia.domain.rationale import normalized_name, pick_color
 from entropia.domain.research_data.enums import ResearchRevisionState, UsageScope
@@ -45,6 +49,7 @@ DEFAULT_ADMIN_ID = os.getenv("SEED_ADMIN_ID", "user_admin")
 DEFAULT_ADMIN_USERNAME = os.getenv("SEED_ADMIN_USERNAME", "admin")
 DEFAULT_AGENT_ID = os.getenv("SEED_AGENT_ID", "agent_alpha")
 SEED_DEMO_MARKET = os.getenv("SEED_DEMO_MARKET", "0") == "1"
+SEED_E2E_GOLDEN = os.getenv("SEED_E2E_GOLDEN", "0") == "1"
 SEED_DEMO_RESEARCH = os.getenv("SEED_DEMO_RESEARCH", "0") == "1"
 SEED_ESP_TA = os.getenv("SEED_ESP_TA", "0") == "1"
 SEED_RATIONALE = os.getenv("SEED_RATIONALE", "0") == "1"
@@ -203,8 +208,17 @@ async def _seed() -> None:
     log = get_logger("seed")
     factory = get_session_factory()
     async with factory() as session:
-        await seed_identities(session)
+        # E2E golden mode deliberately SKIPS the default-Admin identity seed:
+        # the E2E suite provisions its own first Admin via the
+        # ENTROPIA_BOOTSTRAP_ADMIN_EMAIL signup path, which is fail-closed
+        # "only while no active Admin exists" — seeding user_admin here would
+        # permanently disable that bootstrap on a fresh database.
+        if not SEED_E2E_GOLDEN:
+            await seed_identities(session)
         await seed_capabilities(session)
+
+        if SEED_E2E_GOLDEN:
+            await _seed_e2e_golden_fixture(session, log)
 
         if SEED_DEMO_MARKET or SEED_DEMO_RESEARCH:
             market_revision_id = await _seed_demo_market_dataset(session, log)
@@ -222,6 +236,198 @@ async def _seed() -> None:
 
         await session.commit()
     log.info("seed.done")
+
+
+# ---------------------------------------------------------------------------
+# E2E golden fixture (SEED_E2E_GOLDEN=1) — V18-R2 slice R2-07.
+#
+# Seeds the REAL records the golden-path Playwright journey needs so a fresh
+# normal user can drive Strategy -> Ready PASS -> RUN SUCCEEDED end to end:
+#   * a non-Admin fixture owner (first-Admin bootstrap stays intact),
+#   * an ACTIVE + APPROVED OHLCV market dataset (visible to everyone — an
+#     active dataset root projects as "published") whose revision carries the
+#     bar resolution AND a processed Parquet asset in object storage (the
+#     engine streams bars from that asset; without it every RUN fails
+#     ASSET_UNAVAILABLE),
+#   * an ACTIVE + validation-PASSED + APPROVED, PUBLISHED indicator package
+#     whose frozen dependency_snapshot resolves to the directional ``ta.sma``
+#     canonical call (Library ``can_use`` = true for any authenticated user).
+#
+# Chosen over an API chain in the E2E global-setup deliberately: the API path
+# needs an Admin session plus two async worker pipelines (market-data analysis,
+# package validation) to converge; this direct repository seed is synchronous,
+# deterministic and idempotent per title/name.
+# ---------------------------------------------------------------------------
+
+E2E_FIXTURE_OWNER_ID = "user_e2e_fixture"
+E2E_MARKET_TITLE = "E2E Golden BTCUSDT 1h"
+E2E_INSTRUMENT_ID = "BTCUSDT"
+E2E_BAR_RESOLUTION = "1h"
+E2E_INDICATOR_NAME = "E2E Golden SMA"
+# Bars span 2024-01-01T00:00Z .. +1500 hours; the spec's backtest_range must
+# stay inside this window.
+E2E_BAR_START = "2024-01-01T00:00:00Z"
+E2E_BAR_COUNT = 1500
+
+
+def _e2e_golden_bars() -> list[dict[str, object]]:
+    """Deterministic synthetic OHLCV bars (no randomness — reproducible seed).
+
+    A slow sine wave around 100 gives the SMA cross real directional edges so
+    the engine produces genuine entries/exits, not a flat no-trade series.
+    """
+    import math
+    from datetime import UTC, datetime, timedelta
+
+    start = datetime(2024, 1, 1, tzinfo=UTC)
+    rows: list[dict[str, object]] = []
+    for i in range(E2E_BAR_COUNT):
+        ts = start + timedelta(hours=i)
+        mid = 100.0 + 10.0 * math.sin(i / 24.0) + 2.0 * math.sin(i / 5.0)
+        spread = 0.6
+        open_ = round(mid - 0.2, 6)
+        close = round(mid + 0.2, 6)
+        rows.append(
+            {
+                "timestamp": ts.isoformat().replace("+00:00", "Z"),
+                "open": open_,
+                "high": round(max(open_, close) + spread, 6),
+                "low": round(min(open_, close) - spread, 6),
+                "close": close,
+                "volume": 1000.0 + (i % 24) * 10.0,
+            }
+        )
+    return rows
+
+
+async def _seed_e2e_fixture_owner(session: AsyncSession) -> None:
+    """Idempotently seed the non-login, non-Admin principal that owns the
+    golden fixture rows (a plain USER so the bootstrap-Admin path stays open)."""
+    if await session.get(HumanUser, E2E_FIXTURE_OWNER_ID) is None:
+        session.add(
+            Principal(principal_id=E2E_FIXTURE_OWNER_ID, principal_type=PrincipalType.HUMAN)
+        )
+        await session.flush()
+        session.add(
+            HumanUser(
+                user_id=E2E_FIXTURE_OWNER_ID,
+                username="e2e_fixture",
+                display_name="E2E Golden Fixture",
+                current_role=Role.USER,
+                status="active",
+            )
+        )
+    await session.flush()
+
+
+async def _seed_e2e_golden_market(session: AsyncSession, log: object) -> None:
+    """Approved market dataset + processed Parquet bar asset (idempotent by title)."""
+    import io
+
+    from sqlalchemy import select
+
+    from entropia.infrastructure.postgres.models.market_data import MarketDatasetRevision
+    from entropia.infrastructure.s3.datasets import put_processed_parquet
+
+    existing = await session.scalar(
+        select(MarketDatasetRevision).where(MarketDatasetRevision.title == E2E_MARKET_TITLE)
+    )
+    if existing is not None:
+        return
+    root, revision = await md_repo.create_market_dataset(
+        session,
+        owner_principal_id=E2E_FIXTURE_OWNER_ID,
+        created_by_principal_id=E2E_FIXTURE_OWNER_ID,
+        market_data_type=MarketDataType.OHLCV,
+        payload={
+            "instrument": E2E_INSTRUMENT_ID,
+            "resolution": E2E_BAR_RESOLUTION,
+            "fixture": "e2e_golden",
+        },
+        title=E2E_MARKET_TITLE,
+        instrument_id=E2E_INSTRUMENT_ID,
+        revision_state=MarketRevisionState.APPROVED,
+        lifecycle_state="active",
+    )
+    # The engine's higher-timeframe validation reads the pinned revision's bar
+    # resolution; the repository create has no resolution kwargs, so set the
+    # columns directly on the flushed row (same transaction, same invariants).
+    revision.resolution_kind = ResolutionKind.BAR
+    revision.resolution_value = E2E_BAR_RESOLUTION
+    await session.flush()
+
+    import polars as pl
+
+    buffer = io.BytesIO()
+    pl.DataFrame(_e2e_golden_bars()).write_parquet(buffer)
+    parquet_bytes = buffer.getvalue()
+    object_key, digest = put_processed_parquet(root.entity_id, parquet_bytes)
+    md_repo.add_processed_asset(
+        session,
+        entity_id=root.entity_id,
+        revision_id=revision.revision_id,
+        object_key=object_key,
+        content_digest=digest,
+        size_bytes=len(parquet_bytes),
+        row_count=E2E_BAR_COUNT,
+        schema_descriptor={"columns": ["timestamp", "open", "high", "low", "close", "volume"]},
+    )
+    log.info(  # type: ignore[attr-defined]
+        "seed.e2e_golden_market_created",
+        entity_id=root.entity_id,
+        revision_id=revision.revision_id,
+        object_key=object_key,
+    )
+
+
+async def _seed_e2e_golden_indicator(session: AsyncSession, log: object) -> None:
+    """Published, validation-PASSED, APPROVED indicator package pinning ta.sma
+    (idempotent by the Library display name in input_contract)."""
+    from sqlalchemy import select
+
+    from entropia.infrastructure.postgres.models.packages import PackageRevision
+
+    existing = await session.scalar(
+        select(PackageRevision).where(
+            PackageRevision.input_contract.op("->>")("name") == E2E_INDICATOR_NAME
+        )
+    )
+    if existing is not None:
+        return
+    root, _detail, revision = await pkg_repo.create_package(
+        session,
+        owner_principal_id=E2E_FIXTURE_OWNER_ID,
+        created_by_principal_id=E2E_FIXTURE_OWNER_ID,
+        package_kind=PackageKind.INDICATOR,
+        input_contract={
+            "name": E2E_INDICATOR_NAME,
+            "market": E2E_INSTRUMENT_ID,
+            "timeframe": E2E_BAR_RESOLUTION,
+            "params": [{"name": "length", "type": "int", "default": 20}],
+        },
+        output_contract={"return": "series"},
+        dependency_snapshot={
+            "resolved": [{"canonical_key": "ta.sma", "runtime_adapter": "python"}]
+        },
+        visibility_scope=VisibilityScope.PUBLISHED,
+        validation_state=PackageValidationState.PASSED,
+        approval_state=ApprovalState.APPROVED,
+        change_note="Seed E2E golden indicator (ta.sma) for the golden-path journey.",
+    )
+    log.info(  # type: ignore[attr-defined]
+        "seed.e2e_golden_indicator_created",
+        entity_id=root.entity_id,
+        revision_id=revision.revision_id,
+    )
+
+
+async def _seed_e2e_golden_fixture(session: AsyncSession, log: object) -> None:
+    await _seed_e2e_fixture_owner(session)
+    await _seed_e2e_golden_market(session, log)
+    await _seed_e2e_golden_indicator(session, log)
+    # StrategyConfig.rationale_family_id is REQUIRED — the golden strategy needs
+    # at least the canonical ACTIVE families to reference.
+    await _seed_rationale_families(session, log, owner_id=E2E_FIXTURE_OWNER_ID)
 
 
 async def _seed_instruments(session: object, log: object) -> None:
@@ -382,7 +588,9 @@ async def _seed_esp_resolver(
     log.info("seed.esp_resolver_created", canonical_key=canonical_key)  # type: ignore[attr-defined]
 
 
-async def _seed_rationale_families(session: object, log: object) -> None:
+async def _seed_rationale_families(
+    session: object, log: object, *, owner_id: str = DEFAULT_ADMIN_ID
+) -> None:
     """Seed the 6 canonical ACTIVE Rationale Families (doc 10 §3.1, RF-15).
 
     Behind the ``SEED_RATIONALE=1`` flag. The admin principal (FK target) is already
@@ -398,8 +606,8 @@ async def _seed_rationale_families(session: object, log: object) -> None:
         count = await rationale_repo.count_family_roots(session)  # type: ignore[arg-type]
         root, _detail, _revision = await rationale_repo.create_family(
             session,  # type: ignore[arg-type]
-            owner_principal_id=DEFAULT_ADMIN_ID,
-            created_by_principal_id=DEFAULT_ADMIN_ID,
+            owner_principal_id=owner_id,
+            created_by_principal_id=owner_id,
             display_name=display_name,
             normalized_name=norm,
             subfamilies=subfamilies,

@@ -5,7 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 
 import { researchStateTone } from "@/lib/researchData";
 import { ResearchData } from "@/pages/ResearchData";
-import { stubApi } from "./helpers/apiStub";
+import { apiErrorRoute, stubApi } from "./helpers/apiStub";
 import { stubUpload } from "./helpers/xhrStub";
 
 const ROW_OI = {
@@ -114,6 +114,52 @@ const ANALYSIS_RESULT = {
   status: "queued",
 };
 
+// R2-06 — Market Data registry rows for the dependency picker. md_1 is
+// approved (eligible); md_dep is deprecated (visible but not selectable).
+const MARKET_ROW_APPROVED = {
+  entity_id: "md_1",
+  revision_id: "mrev_9",
+  revision_no: 3,
+  revision_state: "approved",
+  market_data_type: "ohlcv",
+  validation_status: "passed",
+  title: "BTCUSDT spot 1m",
+  instrument_id: "BTCUSDT",
+  content_hash: "sha256:mc1",
+  manifest_hash: "sha256:mm1",
+  owner_principal_id: "u_1",
+  row_version: 6,
+  lifecycle_state: "active",
+  created_at: "2026-06-01T09:00:00+00:00",
+};
+
+const MARKET_ROW_DEPRECATED = {
+  ...MARKET_ROW_APPROVED,
+  entity_id: "md_dep",
+  revision_id: "mrev_2",
+  revision_no: 1,
+  revision_state: "deprecated",
+  title: "Old ETH feed",
+  instrument_id: "ETHUSDT",
+};
+
+const MARKET_PAGE = {
+  data: [MARKET_ROW_APPROVED, MARKET_ROW_DEPRECATED],
+  meta: { cursor: null, has_more: false },
+};
+
+// The server-truth dependency projection: the exact APPROVED revision md_1
+// resolves to right now (read-only approved-bundle probe).
+const MD1_BUNDLE = {
+  entity_id: "md_1",
+  revision_id: "mrev_9",
+  revision_no: 3,
+  revision_state: "approved",
+  content_hash: "sha256:mc1",
+  manifest_hash: "sha256:mm1",
+  market_data_type: "ohlcv",
+};
+
 // Order matters for the fragment-matching stub: action/detail fragments must
 // precede their prefixes. finalize contains /upload-session; every rd_1 sub-path
 // contains /research-datasets; POST /research-datasets (create) is a substring of
@@ -127,7 +173,17 @@ const BASE_ROUTES = {
   "GET /research-datasets/rd_1": DETAIL_RD1,
   "GET /research-datasets/rd_new": DETAIL_RD_NEW,
   "GET /research-datasets": DATASETS_PAGE,
+  "GET /market-datasets/md_1/approved-bundle": MD1_BUNDLE,
+  "GET /market-datasets": MARKET_PAGE,
 };
+
+// R2-06 — link the approved market dataset through the picker and wait for the
+// server-truth `ready` verdict (the approved-bundle probe) to unlock the form.
+async function linkApprovedMarket() {
+  fireEvent.click(screen.getByRole("button", { name: "Choose market dataset" }));
+  fireEvent.click(await screen.findByRole("button", { name: /BTCUSDT spot 1m/ }));
+  await screen.findByText(/Approved for use — revision/);
+}
 
 function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -186,9 +242,7 @@ describe("Research Data page", () => {
     renderPage();
     await screen.findByText("Binance OI 8h");
 
-    fireEvent.change(screen.getByLabelText(/Linked Market Data entity id/), {
-      target: { value: "md_1" },
-    });
+    await linkApprovedMarket();
     fireEvent.change(screen.getByLabelText(/Dataset Name/), { target: { value: "Fresh research" } });
     fireEvent.change(screen.getByLabelText(/Provider/), { target: { value: "coinglass" } });
     fireEvent.click(screen.getByRole("button", { name: "Create dataset" }));
@@ -228,9 +282,7 @@ describe("Research Data page", () => {
     renderPage();
     await screen.findByText("Binance OI 8h");
 
-    fireEvent.change(screen.getByLabelText(/Linked Market Data entity id/), {
-      target: { value: "md_1" },
-    });
+    await linkApprovedMarket();
     fireEvent.change(screen.getByLabelText("Category"), { target: { value: "other_custom" } });
     fireEvent.change(screen.getByLabelText(/Custom category/), {
       target: { value: "exchange_reserves" },
@@ -251,9 +303,7 @@ describe("Research Data page", () => {
     renderPage();
     await screen.findByText("Binance OI 8h");
 
-    fireEvent.change(screen.getByLabelText(/Linked Market Data entity id/), {
-      target: { value: "md_1" },
-    });
+    await linkApprovedMarket();
     fireEvent.change(screen.getByLabelText(/Field Meaning/), {
       target: { value: "open interest in USD" },
     });
@@ -406,9 +456,9 @@ describe("Research Data page", () => {
     renderPage();
     await screen.findByText("Binance OI 8h");
 
-    fireEvent.change(screen.getByLabelText(/Linked Market Data entity id/), {
-      target: { value: "md_unapproved" },
-    });
+    // The client lock precedes — never replaces — the server's DR3 gate: even
+    // with a confirmed-approved link, a server rejection renders verbatim.
+    await linkApprovedMarket();
     fireEvent.click(screen.getByRole("button", { name: "Create dataset" }));
 
     expect(
@@ -416,6 +466,78 @@ describe("Research Data page", () => {
         "DEPENDENCY_BLOCKED: Link this Research Data version to an Approved Market Data dataset first.",
       ),
     ).toBeInTheDocument();
+  });
+
+  it("locks steps 4-5 and Create until a server-confirmed approved link exists (no free-text input)", async () => {
+    stubApi(BASE_ROUTES);
+    renderPage();
+    await screen.findByText("Binance OI 8h");
+
+    // The free-text id input is gone — the "type anything to unlock" scenario
+    // cannot be reconstructed (GAP item 8).
+    expect(screen.queryByLabelText(/Linked Market Data entity id/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create dataset" })).toBeDisabled();
+    expect(screen.getAllByText("Locked — link approved Market Data")).toHaveLength(2);
+
+    await linkApprovedMarket();
+
+    expect(screen.getByRole("button", { name: "Create dataset" })).toBeEnabled();
+    expect(screen.queryByText("Locked — link approved Market Data")).not.toBeInTheDocument();
+  });
+
+  it("shows non-approved market datasets as disabled rows in the picker", async () => {
+    stubApi(BASE_ROUTES);
+    renderPage();
+    await screen.findByText("Binance OI 8h");
+
+    fireEvent.click(screen.getByRole("button", { name: "Choose market dataset" }));
+    expect(await screen.findByRole("button", { name: /BTCUSDT spot 1m/ })).toBeEnabled();
+    const deprecated = screen.getByRole("button", { name: /Old ETH feed/ });
+    expect(deprecated).toBeDisabled();
+    expect(deprecated).toHaveTextContent("not eligible — deprecated");
+  });
+
+  it("keeps the lock and renders the probe rejection verbatim when the approved-bundle resolve fails", async () => {
+    stubApi({
+      ...BASE_ROUTES,
+      "GET /market-datasets/md_1/approved-bundle": apiErrorRoute(
+        404,
+        "MARKET_DATA_NOT_APPROVED",
+        "No active approved revision for this dataset.",
+      ),
+    });
+    renderPage();
+    await screen.findByText("Binance OI 8h");
+
+    fireEvent.click(screen.getByRole("button", { name: "Choose market dataset" }));
+    fireEvent.click(await screen.findByRole("button", { name: /BTCUSDT spot 1m/ }));
+
+    expect(
+      (await screen.findAllByText(/MARKET_DATA_NOT_APPROVED: No active approved revision/)).length,
+    ).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Create dataset" })).toBeDisabled();
+    expect(screen.getAllByText("Locked — link approved Market Data")).toHaveLength(2);
+  });
+
+  it("keeps the lock and names the denial when the probe returns 403", async () => {
+    stubApi({
+      ...BASE_ROUTES,
+      "GET /market-datasets/md_1/approved-bundle": apiErrorRoute(
+        403,
+        "ACCESS_DENIED",
+        "You cannot read this dataset.",
+      ),
+    });
+    renderPage();
+    await screen.findByText("Binance OI 8h");
+
+    fireEvent.click(screen.getByRole("button", { name: "Choose market dataset" }));
+    fireEvent.click(await screen.findByRole("button", { name: /BTCUSDT spot 1m/ }));
+
+    expect(
+      await screen.findByText(/You do not have access to the linked Market Data dataset/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create dataset" })).toBeDisabled();
   });
 
   it("surfaces the server view denial verbatim (role-aware read, not a UI hint)", async () => {

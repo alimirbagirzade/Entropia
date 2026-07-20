@@ -5,9 +5,14 @@ import { useQueryClient } from "@tanstack/react-query";
 import { EmptyState } from "@/components/EmptyState";
 import { ErrorState } from "@/components/ErrorState";
 import { Loading } from "@/components/Loading";
+import { MarketLinkPicker } from "@/components/MarketLinkPicker";
 import { ResearchLifecycle } from "@/components/ResearchLifecycle";
 import { StatusBadge } from "@/components/StatusBadge";
 import { ApiError } from "@/lib/apiClient";
+import {
+  useMarketDependency,
+  type MarketDependencyStatus,
+} from "@/lib/marketDependency";
 import { formatUtc } from "@/lib/backtest";
 import {
   OTHER_CUSTOM_CATEGORY,
@@ -93,14 +98,21 @@ const DEPENDENCY_GATED_STEPS = new Set<number>([4, 5]);
 // dependency alert, a status legend, and a three-column setup shell (SOURCE &
 // MEANING / TIME & ALIGNMENT / VALIDATION & USE). Presentation only: routes,
 // query keys, OCC/Idempotency tokens, hooks and the lib data logic are unchanged.
-// The dependency alert and the step lock are derived from the setup form's own
-// Linked Market Data field — until an Approved Market Data dataset is linked, the
-// later steps stay locked and the required action is spelled out.
+//
+// R2-06 (GAP item 8): the dependency lock is server-truth. The free-text
+// "Linked Market Data entity id" input is gone — the user picks a dataset from
+// the role-aware registry (MarketLinkPicker) and the approved-bundle probe
+// resolves the exact ACTIVE+APPROVED revision. The workflow strip, the alert
+// and the Create button all derive from that ONE projection; only a confirmed
+// `ready` verdict unlocks anything (loading/stale/invalid/denied stay locked).
+// The server's DR3 gate still runs on create — a DEPENDENCY_BLOCKED rejection
+// renders verbatim; the client lock precedes, never replaces, it.
 export function ResearchData() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // Lifted from the setup form so the workflow strip can reflect the lock state.
-  const [marketEntityId, setMarketEntityId] = useState("");
-  const dependencyReady = marketEntityId.trim().length > 0;
+  const [marketEntityId, setMarketEntityId] = useState<string | null>(null);
+  const dependency = useMarketDependency(marketEntityId);
+  const dependencyReady = dependency.kind === "ready";
   return (
     <>
       <h1 className="page-title">Research Data</h1>
@@ -114,7 +126,7 @@ export function ResearchData() {
       <SetupCard
         marketEntityId={marketEntityId}
         onMarketEntityIdChange={setMarketEntityId}
-        dependencyReady={dependencyReady}
+        dependency={dependency}
         onCreated={setSelectedId}
       />
       <RegistryCard selectedId={selectedId} onOpen={setSelectedId} />
@@ -202,14 +214,15 @@ function StatusLegend() {
 function SetupCard({
   marketEntityId,
   onMarketEntityIdChange,
-  dependencyReady,
+  dependency,
   onCreated,
 }: {
-  marketEntityId: string;
-  onMarketEntityIdChange: (value: string) => void;
-  dependencyReady: boolean;
+  marketEntityId: string | null;
+  onMarketEntityIdChange: (value: string | null) => void;
+  dependency: MarketDependencyStatus;
   onCreated: (entityId: string) => void;
 }) {
+  const dependencyReady = dependency.kind === "ready";
   const create = useCreateDataset();
   const [category, setCategory] = useState<string>(RESEARCH_CATEGORIES[0]);
   const [customCategory, setCustomCategory] = useState("");
@@ -225,6 +238,9 @@ function SetupCard({
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
+    // Fail-closed: no confirmed-approved market link, no request. The server's
+    // DR3 gate still re-validates — this lock precedes it, never replaces it.
+    if (marketEntityId === null || !dependencyReady) return;
     // v18 §4 descriptive facets fold into the free-form payload — same route,
     // same body shape, no new headers. Domain validation stays server-side.
     const payload: Record<string, unknown> = {
@@ -235,7 +251,7 @@ function SetupCard({
     };
     create.mutate(
       {
-        market_entity_id: marketEntityId.trim(),
+        market_entity_id: marketEntityId,
         payload,
         category,
         usage_scope: usageScope,
@@ -259,7 +275,7 @@ function SetupCard({
         pins one Approved Market Data revision (DR3); without an ACTIVE+APPROVED market link the create
         is rejected with DEPENDENCY_BLOCKED.
       </p>
-      {!dependencyReady ? <DependencyAlert /> : null}
+      {!dependencyReady ? <DependencyAlert status={dependency} /> : null}
       <form onSubmit={submit}>
         <div className="rd-columns">
           <fieldset className="rd-col">
@@ -326,17 +342,11 @@ function SetupCard({
 
           <fieldset className="rd-col">
             <legend>TIME &amp; ALIGNMENT</legend>
-            <label htmlFor="rd-market">
-              Linked Market Data entity id
-              <input
-                id="rd-market"
-                value={marketEntityId}
-                onChange={(event) => onMarketEntityIdChange(event.target.value)}
-                placeholder="md_…"
-                required
-                aria-describedby="rd-market-help"
-              />
-            </label>
+            <MarketLinkPicker
+              value={marketEntityId}
+              status={dependency}
+              onChange={onMarketEntityIdChange}
+            />
             <p id="rd-market-help" className="page-sub" style={{ margin: 0 }}>
               Every active Research Data revision must link to one Approved Market Data revision. The
               link is stored by immutable revision ID, not by displayed name — this is what lets the
@@ -438,19 +448,38 @@ function SetupCard({
   );
 }
 
-// Approved Market Data dependency (doc 12 §3 integrity alert / §6.1 text). Shown
-// while the setup form has no Linked Market Data value — it names the required
-// action and, together with the locked Create button, keeps invalid later steps
-// from being attempted. The doc copy is used verbatim.
-function DependencyAlert() {
+// Approved Market Data dependency (doc 12 §3 integrity alert / §6.1 text).
+// Shown whenever the server-truth projection is anything but `ready` — each
+// distinct state (none / checking / blocked / denied) is named separately
+// (GAP item 8). Server envelopes render verbatim; the doc copy is used for
+// the no-selection case.
+function DependencyAlert({ status }: { status: MarketDependencyStatus }) {
   return (
     <div className="rd-alert" role="status">
       <strong>Create and approve Market Data before adding Research Data</strong>
-      <p style={{ margin: "4px 0 0" }}>
-        Research Data setup is waiting for an Approved Market Data version. Create and approve the
-        primary price / execution dataset first; Research Data must always link to an approved
-        market-data version.
-      </p>
+      {status.kind === "none" ? (
+        <p style={{ margin: "4px 0 0" }}>
+          Research Data setup is waiting for an Approved Market Data version. Create and approve the
+          primary price / execution dataset first; Research Data must always link to an approved
+          market-data version.
+        </p>
+      ) : null}
+      {status.kind === "checking" ? (
+        <p style={{ margin: "4px 0 0" }}>
+          Checking the linked Market Data approval on the server — the workflow stays locked until
+          the approved revision is confirmed.
+        </p>
+      ) : null}
+      {status.kind === "blocked" ? (
+        <p style={{ margin: "4px 0 0" }}>
+          The linked Market Data dataset has no active approved revision — {status.message}
+        </p>
+      ) : null}
+      {status.kind === "denied" ? (
+        <p style={{ margin: "4px 0 0" }}>
+          You do not have access to the linked Market Data dataset — {status.message}
+        </p>
+      ) : null}
     </div>
   );
 }

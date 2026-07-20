@@ -5,38 +5,40 @@ import { MarketDataPage } from "../pages/MarketDataPage";
 import { ResearchDataPage } from "../pages/ResearchDataPage";
 import { uniqueSuffix } from "../utils/ids";
 
-// Real POST /research-datasets round trip (doc 12 §4). Research Data create is
-// DR3-gated on an ACTIVE+APPROVED Market Data dataset — a freshly created
-// (not yet Admin-approved) dataset legitimately gets DEPENDENCY_BLOCKED back.
-// Both outcomes exercise the real, unmocked endpoint; we assert one landed
-// rather than assuming approval state we didn't set up (L4).
+// R2-06 (GAP item 8): the DR3 Approved Market Data dependency is server-truth.
+// A freshly created (not yet Admin-approved) Market Data dataset can no longer
+// even be LINKED — its picker row is disabled ("not eligible — draft") and the
+// Create button stays locked, so the old "type an unapproved id and get
+// DEPENDENCY_BLOCKED back" flow is impossible by construction. This spec
+// exercises the real, unmocked registry against that fail-closed contract.
 test.describe("Research Data upload", () => {
-  test("submits a create request against a linked Market Data entity", async ({ page }) => {
+  test("locks create behind a server-confirmed approved Market Data link", async ({ page }) => {
     await signUp(page, freshActor("researchdata"));
 
     const marketData = new MarketDataPage(page);
     await marketData.goto();
-    const marketEntityId = await marketData.createDataset({
-      title: `E2E Linked Market Dataset ${uniqueSuffix()}`,
-    });
+    const title = `E2E Linked Market Dataset ${uniqueSuffix()}`;
+    await marketData.createDataset({ title });
 
     const researchData = new ResearchDataPage(page);
     await researchData.goto();
-    await researchData.submitCreate({
-      marketEntityId,
-      displayName: `E2E Research Dataset ${uniqueSuffix()}`,
-    });
 
-    // A fresh (not yet Admin-approved) market link legitimately yields
-    // DEPENDENCY_BLOCKED (a role=alert); a happy path yields the "Created —"
-    // line. Assert one real outcome landed. Count the alerts rather than
-    // .isVisible() them: the page can render more than one role=alert node
-    // (payload + create), which would make a single-locator visibility check
-    // throw a strict-mode error and be swallowed as "no outcome".
-    await expect(async () => {
-      const succeeded = await researchData.successMessage().isVisible().catch(() => false);
-      const alertCount = await page.getByRole("alert").count();
-      expect(succeeded || alertCount > 0).toBe(true);
-    }).toPass({ timeout: 20_000 });
+    // The free-text entity-id input is gone and the workflow is locked by
+    // default — no text can unlock it.
+    await expect(researchData.freeTextMarketInput()).toHaveCount(0);
+    await expect(researchData.createButton()).toBeDisabled();
+
+    // The fresh dataset is visible in the picker (registry is newest-first)
+    // but NOT selectable: its head revision is draft, not approved.
+    await researchData.openMarketPicker();
+    await researchData.searchMarketDatasets(title);
+    const row = researchData.pickerRow(title);
+    await expect(row).toBeVisible();
+    await expect(row).toBeDisabled();
+    await expect(row).toContainText(/not eligible — /);
+
+    // Nothing was selected, so the lock holds — the server-truth dependency
+    // was never confirmed and Create never unlocks.
+    await expect(researchData.createButton()).toBeDisabled();
   });
 });

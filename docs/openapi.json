@@ -2615,6 +2615,19 @@
         "title": "SaveStrategyDraftBody",
         "type": "object"
       },
+      "SetRationaleFamilyBody": {
+        "properties": {
+          "rationale_family_id": {
+            "title": "Rationale Family Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "rationale_family_id"
+        ],
+        "title": "SetRationaleFamilyBody",
+        "type": "object"
+      },
       "SetTimePolicyRequest": {
         "properties": {
           "available_time_policy": {
@@ -12672,6 +12685,77 @@
           }
         },
         "summary": "Get Strategy",
+        "tags": [
+          "strategy"
+        ]
+      }
+    },
+    "/api/v1/strategies/{root_id}/rationale-family": {
+      "post": {
+        "description": "One-time set of a NULL rationale family (R2-07 gap). No OCC token — the\nNULL→set transition is itself the guard (already-set → 409).",
+        "operationId": "set_strategy_rationale_family_api_v1_strategies__root_id__rationale_family_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "root_id",
+            "required": true,
+            "schema": {
+              "title": "Root Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetRationaleFamilyBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Set Strategy Rationale Family Api V1 Strategies  Root Id  Rationale Family Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Strategy Rationale Family",
         "tags": [
           "strategy"
         ]

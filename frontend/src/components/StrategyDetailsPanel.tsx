@@ -19,6 +19,7 @@ import {
 } from "@/components/StrategyGraphForm";
 import { ApiError } from "@/lib/apiClient";
 import { EM_DASH, formatUtc } from "@/lib/backtest";
+import { useRationaleFamilies } from "@/lib/createPackage";
 import { useMe } from "@/lib/hooks";
 import {
   type ClearDraftResult,
@@ -32,6 +33,7 @@ import {
   useCreateStrategyDraft,
   usePatchStrategyDraft,
   useSaveStrategyRevision,
+  useSetStrategyRationaleFamily,
   useStrategy,
   useStrategyDraft,
   useStrategyRevision,
@@ -177,6 +179,56 @@ function MutationErrorNote({ error }: { error: unknown }) {
 // server-owned at creation time, not yet part of the structured draft editor).
 // ---------------------------------------------------------------------------
 
+// R2-07 gap closure: a Mainboard-inline "+ Add Strategy" creates the root with
+// rationale_family_id NULL, yet StrategyConfig requires it — so a normal user
+// could never pass Validate (the Advanced JSON editor is admin-gated, R2-05b).
+// While the family is unset, the read-only "—" becomes a server-hydrated
+// one-time picker (POST /strategies/{root}/rationale-family). Once set the row
+// reverts to read-only — identity is never changed in place (409 verbatim).
+function RationaleFamilyPicker({ rootId }: { rootId: string }) {
+  const families = useRationaleFamilies(null);
+  const setFamily = useSetStrategyRationaleFamily();
+  const [selected, setSelected] = useState("");
+  const options = families.data?.data ?? [];
+  return (
+    <span style={{ display: "flex", gap: 6, alignItems: "center" }}>
+      <select
+        aria-label="Rationale family"
+        value={selected}
+        onChange={(event) => setSelected(event.target.value)}
+        disabled={families.isLoading || setFamily.isPending}
+      >
+        <option value="">
+          {families.isLoading ? "Loading families…" : "Select a rationale family…"}
+        </option>
+        {options.map((family) => (
+          <option key={family.entity_id} value={family.entity_id}>
+            {family.display_name}
+          </option>
+        ))}
+      </select>
+      <button
+        type="button"
+        className="btn"
+        disabled={selected === "" || setFamily.isPending}
+        onClick={() => setFamily.mutate({ rootId, rationaleFamilyId: selected })}
+      >
+        {setFamily.isPending ? "Setting…" : "Set"}
+      </button>
+      {families.isError ? (
+        <span role="alert" style={{ color: "var(--down)", fontSize: 12 }}>
+          Families failed to load.
+        </span>
+      ) : null}
+      {setFamily.isError ? (
+        <span role="alert" style={{ color: "var(--down)", fontSize: 12 }}>
+          {mutationErrorText(setFamily.error)}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
 function StrategyContextCard({ rootId }: { rootId: string | null }) {
   const strategy = useStrategy(rootId);
   return (
@@ -195,7 +247,13 @@ function StrategyContextCard({ rootId }: { rootId: string | null }) {
           <dt>Name</dt>
           <dd>{strategy.data.display_name}</dd>
           <dt>Rationale family</dt>
-          <dd>{strategy.data.rationale_family_id ?? EM_DASH}</dd>
+          <dd>
+            {strategy.data.rationale_family_id !== null ? (
+              strategy.data.rationale_family_id
+            ) : (
+              <RationaleFamilyPicker rootId={rootId} />
+            )}
+          </dd>
           <dt>Lifecycle</dt>
           <dd>
             <StatusBadge

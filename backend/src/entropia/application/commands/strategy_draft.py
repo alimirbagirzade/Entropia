@@ -61,18 +61,22 @@ from entropia.infrastructure.postgres.models import EntityRegistry, StrategyRoot
 from entropia.infrastructure.postgres.repositories import audit as audit_repo
 from entropia.infrastructure.postgres.repositories import mainboard as mb_repo
 from entropia.infrastructure.postgres.repositories import packages as pkg_repo
+from entropia.infrastructure.postgres.repositories import rationale as rationale_repo
 from entropia.infrastructure.postgres.repositories import strategy as strat_repo
 from entropia.shared.errors import (
     EntryDirectionIncoherentError,
     EntryRequiredBlockMissingError,
     PackageNotDerivableError,
     PackageNotFound,
+    RationaleFamilyNotActive,
     SignalSupportingRequirementUnmetError,
     SizingMethodNotExclusiveError,
     StrategyDraftConflictError,
     StrategyDraftNotAttachedError,
     StrategyDraftNotFoundError,
     StrategyLockedForTestError,
+    StrategyNotFoundError,
+    StrategyRationaleFamilyAlreadySetError,
     StrategyReferenceNotActiveError,
     StrategyValidationFailedError,
     TriggerSourceConditionRequiredError,
@@ -146,6 +150,76 @@ async def create_strategy_draft(
             "op": "create_strategy_draft",
             "display_name": name,
             "rationale_family_id": rationale_family_id,
+        },
+        operation=_op,
+    )
+
+
+# --------------------------------------------------------------------------- #
+# One-time rationale-family set (R2-07 gap: Mainboard-inline "+ Add Strategy"  #
+# creates the root with rationale_family_id NULL; the compiler requires it)    #
+# --------------------------------------------------------------------------- #
+
+
+async def set_strategy_rationale_family(
+    session: AsyncSession,
+    actor: Actor,
+    *,
+    strategy_root_id: str,
+    rationale_family_id: str,
+    idempotency_key: str | None = None,
+) -> dict[str, Any]:
+    """Set the server-owned rationale family on a root whose family is NULL.
+
+    Identity is set ONCE: a root that already carries a family answers 409
+    STRATEGY_RATIONALE_FAMILY_ALREADY_SET (never overwritten in place — a family
+    change is a new strategy, doc 02 §3.1 row 1). The family must be an ACTIVE
+    Rationale Family head (soft-deleted → RATIONALE_FAMILY_NOT_ACTIVE, doc 10
+    §10.2). Owner/Admin only; the FOR-UPDATE refresh serializes concurrent
+    first-set attempts so exactly one wins.
+    """
+    require_authenticated(actor)
+    family_id = (rationale_family_id or "").strip()
+    if not family_id:
+        raise ValidationError(
+            "A rationale family id is required.", details=[{"field": "rationale_family_id"}]
+        )
+    strategy_root = await strat_repo.get_strategy_root(session, strategy_root_id)
+    registry_root = await strat_repo.get_strategy_registry_root(session, strategy_root_id)
+    if strategy_root is None or registry_root is None:
+        raise StrategyNotFoundError(f"Strategy '{strategy_root_id}' not found.")
+    ensure_can_edit(actor, owner_principal_id=registry_root.owner_principal_id)
+
+    async def _op() -> dict[str, Any]:
+        await session.refresh(strategy_root, with_for_update=True)
+        if strategy_root.rationale_family_id is not None:
+            raise StrategyRationaleFamilyAlreadySetError()
+        family_root = await rationale_repo.get_family_root(session, family_id)
+        if family_root is None or family_root.deletion_state != DeletionState.ACTIVE:
+            raise RationaleFamilyNotActive()
+        strategy_root.rationale_family_id = family_id
+        _audit_and_outbox(
+            session,
+            actor,
+            event_kind="strategy.rationale_family_set",
+            target_type=_STRATEGY_TARGET_TYPE,
+            target_entity_id=strategy_root.entity_id,
+            new_state=str(strategy_root.lifecycle_state),
+            payload={"rationale_family_id": family_id},
+        )
+        return {
+            "strategy_root_id": strategy_root.entity_id,
+            "rationale_family_id": family_id,
+        }
+
+    return await run_idempotent(
+        session,
+        key=idempotency_key,
+        actor_principal_id=actor.principal_id,
+        request_payload={
+            "op": "set_strategy_rationale_family",
+            "strategy_root_id": strategy_root_id,
+            "rationale_family_id": family_id,
         },
         operation=_op,
     )

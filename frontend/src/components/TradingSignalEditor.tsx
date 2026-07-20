@@ -7,6 +7,8 @@ import { Loading } from "@/components/Loading";
 import { StatusBadge } from "@/components/StatusBadge";
 import { ApiError } from "@/lib/apiClient";
 import { EM_DASH, formatUtc, useDefaultMainboard } from "@/lib/backtest";
+import { TradingSignalConfigEditor } from "@/components/TradingSignalConfigForm";
+import { useSignalConfigEditorState } from "@/lib/tradingSignalForm";
 import {
   type CreateSignalRevisionResult,
   type CreateTradingSignalResult,
@@ -117,22 +119,17 @@ export function TradingSignalEditor({
     else setInlineJobId(id);
   };
 
-  return (
-    <>
-      {!isPage && onClose ? (
-        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
-          <button type="button" className="btn" onClick={onClose}>
-            Close panel
-          </button>
-        </div>
-      ) : null}
-
-      {rootId !== null ? (
-        <DetailView rootId={rootId} />
-      ) : (
-        <Workbench jobId={jobId} onJobAccepted={handleJobAccepted} onSaved={onSaved} />
-      )}
-    </>
+  // R2-04: Close panel moved INTO the sticky toolbar (GAP item 3 fix #4 — the
+  // toolbar carries Validate / Save / Cancel / Close panel together).
+  return rootId !== null ? (
+    <DetailView rootId={rootId} onClose={isPage ? undefined : onClose} />
+  ) : (
+    <Workbench
+      jobId={jobId}
+      onJobAccepted={handleJobAccepted}
+      onSaved={onSaved}
+      onClose={isPage ? undefined : onClose}
+    />
   );
 }
 
@@ -146,10 +143,12 @@ function Workbench({
   jobId,
   onJobAccepted,
   onSaved,
+  onClose,
 }: {
   jobId: string | null;
   onJobAccepted: (jobId: string) => void;
   onSaved?: (rootId: string) => void;
+  onClose?: () => void;
 }) {
   const [sourceAssetId, setSourceAssetId] = useState("");
   const [instrumentId, setInstrumentId] = useState("");
@@ -190,7 +189,6 @@ function Workbench({
             instrumentId={instrumentId}
             sourceTimezone={sourceTimezone}
             requesting={requestImport.isPending}
-            onSourceAssetId={setSourceAssetId}
             onInstrumentId={setInstrumentId}
             onSourceTimezone={setSourceTimezone}
             onRequest={(importMapping) =>
@@ -235,6 +233,7 @@ function Workbench({
         template={template}
         importReady={importReady}
         pending={create.isPending}
+        onClose={onClose}
         onCreate={(payload, attach) =>
           create.mutate(
             { payload, attach },
@@ -251,7 +250,8 @@ function Workbench({
 }
 
 // Card 1 (SOURCE column) — signal identity + source configuration. The source
-// asset id is auto-filled by the file upload on the right; instrument and
+// asset id is SYSTEM-CARRIED from the file upload on the right (R2-04 / GAP
+// item 3 fix #3 — never a user-editable technical field); instrument and
 // timezone are the canonical mapping inputs. The optional column mapping and
 // the "Request import" action close the card (mockup §1 IDENTITY + §2 SOURCE).
 function ImportIdentityCard({
@@ -259,7 +259,6 @@ function ImportIdentityCard({
   instrumentId,
   sourceTimezone,
   requesting,
-  onSourceAssetId,
   onInstrumentId,
   onSourceTimezone,
   onRequest,
@@ -268,7 +267,6 @@ function ImportIdentityCard({
   instrumentId: string;
   sourceTimezone: string;
   requesting: boolean;
-  onSourceAssetId: (value: string) => void;
   onInstrumentId: (value: string) => void;
   onSourceTimezone: (value: string) => void;
   onRequest: (importMapping: Record<string, string>) => void;
@@ -291,15 +289,18 @@ function ImportIdentityCard({
         reachable through its job URL even after the browser closes.
       </p>
       <div className="strategy-form-grid">
-        <label className="cp-field">
-          <span>Source asset id</span>
-          <input
-            value={sourceAssetId}
-            onChange={(event) => onSourceAssetId(event.target.value)}
-            placeholder="srcasset_…"
-            required
-          />
-        </label>
+        <div className="cp-field">
+          <span>Source asset</span>
+          <div>
+            {sourceAssetId !== "" ? (
+              <code>{sourceAssetId}</code>
+            ) : (
+              <small className="cp-note">
+                Upload the TXT/CSV file on the right — the asset id is carried automatically.
+              </small>
+            )}
+          </div>
+        </div>
         <label className="cp-field">
           <span>Instrument id</span>
           <input
@@ -338,7 +339,11 @@ function ImportIdentityCard({
         </small>
       </label>
       <div style={{ marginTop: 10 }}>
-        <button className="btn btn-primary" type="submit" disabled={requesting}>
+        <button
+          className="btn btn-primary"
+          type="submit"
+          disabled={requesting || sourceAssetId === ""}
+        >
           {requesting ? "Requesting…" : "Request import"}
         </button>
       </div>
@@ -530,60 +535,29 @@ function SkippedRows({
   );
 }
 
-// Raw JSON payload editor (Strategy precedent): parse failures stay
-// client-side; the server compiler is the sole authority on config semantics.
-// The primary Save action lives in a sticky bottom toolbar (mockup
-// .panel-actions "Save As Trading Signal Package").
+// Typed config editor (R2-04, GAP item 3): the documented §9.2 fields render
+// as typed controls and PRODUCE the payload; validation blockers (the compiler
+// rules mirrored client-side) show next to their fields. Raw JSON survives
+// only in the admin-gated Advanced disclosure. The primary actions live in the
+// sticky bottom toolbar (Validate / Save / Cancel / Close panel).
 function CreatePanel({
   template,
   importReady,
   pending,
   onCreate,
+  onClose,
 }: {
   template: Record<string, unknown>;
   importReady: boolean;
   pending: boolean;
   onCreate: (payload: Record<string, unknown>, attach: boolean) => void;
+  onClose?: () => void;
 }) {
-  const [text, setText] = useState(() => JSON.stringify(template, null, 2));
+  const editor = useSignalConfigEditorState(template);
   const [attach, setAttach] = useState(true);
-  const [parseError, setParseError] = useState<string | null>(null);
-  const [validNote, setValidNote] = useState<string | null>(null);
-
-  // Client-side structural check only — the server compiler stays the sole
-  // authority on config semantics (a Validate pass is never a Ready PASS).
-  const parsePayload = (): Record<string, unknown> | null => {
-    try {
-      const parsed: unknown = JSON.parse(text);
-      if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
-        setParseError("The payload must be a JSON object.");
-        return null;
-      }
-      setParseError(null);
-      return parsed as Record<string, unknown>;
-    } catch (error) {
-      setParseError(error instanceof Error ? error.message : "Invalid JSON.");
-      return null;
-    }
-  };
-
-  const validate = () => {
-    setValidNote(
-      parsePayload() !== null
-        ? "Payload is a valid JSON object (client-side check — the server compiler is authoritative)."
-        : null,
-    );
-  };
-
-  const cancel = () => {
-    setText(JSON.stringify(template, null, 2));
-    setParseError(null);
-    setValidNote(null);
-  };
 
   const submit = () => {
-    setValidNote(null);
-    const payload = parsePayload();
+    const payload = editor.buildPayload();
     if (payload !== null) onCreate(payload, attach);
   };
 
@@ -594,20 +568,21 @@ function CreatePanel({
           Create Trading Signal
         </h3>
         <p className="cp-note">
-          Requires a succeeded, non-empty, time-safe import — the payload below is seeded from the
-          report once available. Save is never a Ready PASS; with “attach” on (Save &amp; Add) the
-          object joins the default Mainboard and the prior Ready report goes STALE.
+          Requires a succeeded, non-empty, time-safe import — the source binding is carried from
+          the report automatically. Save is never a Ready PASS; with “attach” on (Save &amp; Add)
+          the object joins the default Mainboard and the prior Ready report goes STALE.
           {importReady ? "" : " Complete an import above to seed the binding."}
         </p>
-        <label className="cp-field cp-wide">
-          <span>TradingSignalConfig payload</span>
-          <textarea
-            rows={16}
-            value={text}
-            onChange={(event) => setText(event.target.value)}
-            spellCheck={false}
-          />
-        </label>
+        <TradingSignalConfigEditor
+          state={editor.state}
+          errors={editor.errors}
+          onChange={editor.setState}
+          rawMode={editor.rawMode}
+          rawText={editor.rawText}
+          rawError={editor.rawError}
+          onRawModeChange={editor.enterRawMode}
+          onRawTextChange={editor.setRawText}
+        />
         <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
           <input
             type="checkbox"
@@ -616,23 +591,18 @@ function CreatePanel({
           />
           <span>Attach to the default Mainboard (Save &amp; Add)</span>
         </label>
-        {parseError !== null ? (
-          <p role="alert" style={{ color: "var(--down)", marginBottom: 0 }}>
-            Not sent — invalid JSON: {parseError}
-          </p>
-        ) : null}
-        {validNote !== null ? (
+        {editor.validNote !== null ? (
           <p role="status" className="cp-note" style={{ marginBottom: 0 }}>
-            {validNote}
+            {editor.validNote}
           </p>
         ) : null}
       </section>
 
-      {/* Sticky bottom toolbar — Validate / Save / Cancel (mockup .panel-actions;
-          GAP item 3 fix #4 minimum toolbar; Close panel is the inline host's). */}
+      {/* Sticky bottom toolbar — Validate / Save / Cancel / Close panel
+          (mockup .panel-actions; GAP item 3 fix #4 full toolbar). */}
       <div className="panel-actions">
         <div className="panel-actions-title">Save / Package Actions</div>
-        <button type="button" className="panel-action-button" onClick={validate}>
+        <button type="button" className="panel-action-button" onClick={editor.validate}>
           Validate
         </button>
         <button
@@ -643,9 +613,18 @@ function CreatePanel({
         >
           {pending ? "Saving…" : "Save Trading Signal"}
         </button>
-        <button type="button" className="panel-action-button" onClick={cancel}>
+        <button
+          type="button"
+          className="panel-action-button"
+          onClick={() => editor.reset(template)}
+        >
           Cancel
         </button>
+        {onClose ? (
+          <button type="button" className="panel-action-button" onClick={onClose}>
+            Close panel
+          </button>
+        ) : null}
       </div>
     </>
   );
@@ -759,7 +738,7 @@ function AttachedSignalsCard() {
 // (the Strategy/Portfolio lesson).
 // ---------------------------------------------------------------------------
 
-function DetailView({ rootId }: { rootId: string }) {
+function DetailView({ rootId, onClose }: { rootId: string; onClose?: () => void }) {
   const detail = useTradingSignal(rootId);
   const revise = useCreateSignalRevision();
   const exportSignal = useExportTradingSignal();
@@ -795,6 +774,7 @@ function DetailView({ rootId }: { rootId: string }) {
           savePending={revise.isPending}
           canExport={canExport}
           exportPending={exportSignal.isPending}
+          onClose={onClose}
           onSave={(payload) =>
             revise.mutate({
               rootId,
@@ -889,6 +869,7 @@ function RevisionEditor({
   exportPending,
   onSave,
   onExport,
+  onClose,
 }: {
   headRevisionId: string;
   seedPayload: Record<string, unknown>;
@@ -897,43 +878,14 @@ function RevisionEditor({
   exportPending: boolean;
   onSave: (payload: Record<string, unknown>) => void;
   onExport: () => void;
+  onClose?: () => void;
 }) {
-  const [text, setText] = useState(() => JSON.stringify(seedPayload, null, 2));
-  const [parseError, setParseError] = useState<string | null>(null);
-  const [validNote, setValidNote] = useState<string | null>(null);
-
-  const parsePayload = (): Record<string, unknown> | null => {
-    try {
-      const parsed: unknown = JSON.parse(text);
-      if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
-        setParseError("The payload must be a JSON object.");
-        return null;
-      }
-      setParseError(null);
-      return parsed as Record<string, unknown>;
-    } catch (error) {
-      setParseError(error instanceof Error ? error.message : "Invalid JSON.");
-      return null;
-    }
-  };
-
-  const validate = () => {
-    setValidNote(
-      parsePayload() !== null
-        ? "Payload is a valid JSON object (client-side check — the server compiler is authoritative)."
-        : null,
-    );
-  };
-
-  const cancel = () => {
-    setText(JSON.stringify(seedPayload, null, 2));
-    setParseError(null);
-    setValidNote(null);
-  };
+  // R2-04: the revision composer uses the SAME typed form, seeded from the
+  // rendered head revision payload.
+  const editor = useSignalConfigEditorState(seedPayload);
 
   const submit = () => {
-    setValidNote(null);
-    const payload = parsePayload();
+    const payload = editor.buildPayload();
     if (payload !== null) onSave(payload);
   };
 
@@ -950,30 +902,26 @@ function RevisionEditor({
           Export As Package produces the immutable source-mapping/provenance manifest for the pinned
           head — it never mutates the source (repeated clicks return the same manifest hash).
         </p>
-        <label className="cp-field cp-wide">
-          <span>Revision payload</span>
-          <textarea
-            rows={14}
-            value={text}
-            onChange={(event) => setText(event.target.value)}
-            spellCheck={false}
-          />
-        </label>
-        {parseError !== null ? (
-          <p role="alert" style={{ color: "var(--down)", marginBottom: 0 }}>
-            Not sent — invalid JSON: {parseError}
-          </p>
-        ) : null}
-        {validNote !== null ? (
+        <TradingSignalConfigEditor
+          state={editor.state}
+          errors={editor.errors}
+          onChange={editor.setState}
+          rawMode={editor.rawMode}
+          rawText={editor.rawText}
+          rawError={editor.rawError}
+          onRawModeChange={editor.enterRawMode}
+          onRawTextChange={editor.setRawText}
+        />
+        {editor.validNote !== null ? (
           <p role="status" className="cp-note" style={{ marginBottom: 0 }}>
-            {validNote}
+            {editor.validNote}
           </p>
         ) : null}
       </section>
 
       <div className="panel-actions">
         <div className="panel-actions-title">Save / Package Actions</div>
-        <button type="button" className="panel-action-button" onClick={validate}>
+        <button type="button" className="panel-action-button" onClick={editor.validate}>
           Validate
         </button>
         <button
@@ -984,7 +932,11 @@ function RevisionEditor({
         >
           {savePending ? "Saving…" : "Save new revision"}
         </button>
-        <button type="button" className="panel-action-button" onClick={cancel}>
+        <button
+          type="button"
+          className="panel-action-button"
+          onClick={() => editor.reset(seedPayload)}
+        >
           Cancel
         </button>
         {canExport ? (
@@ -995,6 +947,11 @@ function RevisionEditor({
             onClick={onExport}
           >
             {exportPending ? "Exporting…" : "Export manifest"}
+          </button>
+        ) : null}
+        {onClose ? (
+          <button type="button" className="panel-action-button" onClick={onClose}>
+            Close panel
           </button>
         ) : null}
       </div>

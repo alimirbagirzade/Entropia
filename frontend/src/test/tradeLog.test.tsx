@@ -38,12 +38,14 @@ const MAINBOARD = {
   latest_result_summary: null,
 };
 
-const DEDUP_UPLOAD_RESULT = {
+const UPLOAD_RESULT = {
   source_asset_id: "srcasset_9",
   raw_asset_hash: "sha256:tl",
   size_bytes: 99,
-  deduplicated: true,
+  deduplicated: false,
 };
+
+const DEDUP_UPLOAD_RESULT = { ...UPLOAD_RESULT, deduplicated: true };
 
 // The twin diff vs the Trading Signal report: the produced evidence key is
 // record_batch_revision_id.
@@ -74,6 +76,23 @@ const CREATE_RESULT = {
   composition_hash: "hash_new",
 };
 
+// A full canonical §10.2 head payload so the typed revision form round-trips it.
+const HEAD_PAYLOAD = {
+  kind: "trade_log",
+  identity: { display_name: "Broker ledger" },
+  source: { provider_name: "broker", source_kind: "file" },
+  instrument_scope: { instrument_id: "ETHUSDT", display_symbol: "ETHUSDT" },
+  time_model: {
+    resolution_kind: "event_based",
+    source_timezone: "UTC",
+    normalization_timezone: "UTC",
+  },
+  data_quality: { content_profile: "entry_exit_records_only" },
+  price_policy: { source: "trade_log_entry_exit_price" },
+  ohlcv_policy: { use_mode: "ignore" },
+  import_binding: { source_asset_id: "srcasset_9", record_batch_revision_id: "ctrb_1" },
+};
+
 // available_time is always null — historical ledger data (doc 05 §10.4).
 const DETAIL = {
   root_id: "root_tl",
@@ -86,7 +105,7 @@ const DETAIL = {
   current_revision: {
     revision_id: "wor_tl1",
     revision_no: 1,
-    payload: { kind: "trade_log" },
+    payload: HEAD_PAYLOAD,
     source_provenance: { record_batch_revision_id: "ctrb_1" },
     available_time: null,
     content_hash: "sha256:tlrev",
@@ -109,16 +128,33 @@ const EXPORT_RESULT = {
   manifest: { object_kind: "trade_log", available_time: null },
 };
 
+// R2-04: the Advanced raw disclosure is gated on the /me admin projection —
+// the default stub is a normal user (fail-closed hidden).
+const ME_USER = {
+  principal_id: "user_1",
+  principal_type: "human",
+  role: "user",
+  is_admin: false,
+  is_authenticated: true,
+};
+
 // ORDERED routes: the specific POST fragments precede the bare
 // "POST /trade-logs" create prefix (a substring of every other POST URL).
 function stubRoutes(overrides: Record<string, unknown> = {}) {
   return stubApi({
+    "POST /trade-logs/imports": {
+      job_id: "job_9",
+      source_asset_id: "srcasset_9",
+      queue: "data",
+      status: "queued",
+    },
     "POST /trade-logs/root_tl/revisions": REVISION_RESULT,
     "POST /trade-logs/root_tl/export": EXPORT_RESULT,
     "POST /trade-logs": CREATE_RESULT,
     "GET /trade-logs/imports/job_9": REPORT,
     "GET /trade-logs/root_tl": DETAIL,
     "GET /mainboards/default": MAINBOARD,
+    "GET /me": ME_USER,
     ...overrides,
   });
 }
@@ -150,7 +186,7 @@ describe("TradeLog", () => {
     const fetchMock = stubRoutes();
     renderPage("/trade-log?job=job_9");
 
-    expect(await screen.findByText("ctrb_1")).toBeTruthy();
+    expect((await screen.findAllByText("ctrb_1")).length).toBeGreaterThan(0);
     expect(screen.getByText("Record batch")).toBeTruthy();
     expect(screen.getByText("succeeded")).toBeTruthy();
     expect(screen.getByText("5 / 0")).toBeTruthy();
@@ -162,20 +198,21 @@ describe("TradeLog", () => {
   });
 
   it("sends an explicit column mapping in the import request body (GAP-22)", async () => {
-    const fetchMock = stubRoutes({
-      "POST /trade-logs/imports": {
-        job_id: "job_9",
-        source_asset_id: "srcasset_9",
-        queue: "data",
-        status: "queued",
-      },
-    });
+    const fetchMock = stubRoutes();
+    stubUpload({ "POST /trade-logs/source-assets": UPLOAD_RESULT });
     renderPage("/trade-log");
 
-    fireEvent.change(screen.getByLabelText("Source asset id"), {
-      target: { value: "srcasset_9" },
+    // R2-04: the asset id is system-carried from the upload — never typed.
+    const file = new File(["ts,side,qty\n1,long,2"], "trades.csv", { type: "text/csv" });
+    fireEvent.change(await screen.findByLabelText(/Trade-record file/), {
+      target: { files: [file] },
     });
-    fireEvent.change(screen.getByLabelText("Instrument id"), { target: { value: "BTCUSDT" } });
+    fireEvent.click(screen.getByRole("button", { name: "Upload source asset" }));
+    expect(await screen.findByText(/Source asset stored/)).toBeTruthy();
+
+    fireEvent.change(screen.getAllByLabelText(/Instrument id/)[0]!, {
+      target: { value: "BTCUSDT" },
+    });
     fireEvent.change(screen.getByLabelText(/Column mapping/), {
       target: { value: "entry_time = Open Time\nexit_time = Close Time" },
     });
@@ -188,15 +225,25 @@ describe("TradeLog", () => {
       expect(found).toBeTruthy();
       return found;
     });
-    const body = JSON.parse(String(call?.[1]?.body)) as { import_mapping?: Record<string, string> };
+    const body = JSON.parse(String(call?.[1]?.body)) as {
+      source_asset_id?: string;
+      import_mapping?: Record<string, string>;
+    };
+    expect(body.source_asset_id).toBe("srcasset_9");
     expect(body.import_mapping).toEqual({ entry_time: "Open Time", exit_time: "Close Time" });
   });
 
-  it("saves the trade log with the record-batch import binding", async () => {
+  it("saves the trade log from the typed form with the record-batch import binding", async () => {
     const fetchMock = stubRoutes();
     renderPage("/trade-log?job=job_9");
 
-    expect(await screen.findByText("ctrb_1")).toBeTruthy();
+    expect((await screen.findAllByText("ctrb_1")).length).toBeGreaterThan(0);
+    fireEvent.change(screen.getByLabelText("Display name"), {
+      target: { value: "Broker ledger" },
+    });
+    fireEvent.change(screen.getByLabelText("Provider name"), {
+      target: { value: "broker" },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Save Trade Log" }));
 
     expect(await screen.findByText("Trade Log saved")).toBeTruthy();
@@ -211,6 +258,7 @@ describe("TradeLog", () => {
     };
     expect(body.attach).toBe(true);
     expect(body.payload.kind).toBe("trade_log");
+    expect(body.payload.identity).toEqual({ display_name: "Broker ledger" });
     expect(body.payload.import_binding).toEqual({
       source_asset_id: "srcasset_9",
       record_batch_revision_id: "ctrb_1",
@@ -224,12 +272,28 @@ describe("TradeLog", () => {
     expect(headersOf(call?.[1])["Idempotency-Key"]).toBeTruthy();
   });
 
+  it("blocks Save client-side with field-level errors — nothing is sent", async () => {
+    const fetchMock = stubRoutes();
+    renderPage("/trade-log?job=job_9");
+    expect((await screen.findAllByText("ctrb_1")).length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "Save Trade Log" }));
+
+    expect(await screen.findByText(/Display name must be 1\.\.160 characters\./)).toBeTruthy();
+    const createCall = fetchMock.mock.calls.find(
+      ([url, init]) => String(url).endsWith("/trade-logs") && init?.method === "POST",
+    );
+    expect(createCall).toBeUndefined();
+  });
+
   it("renders the historical (no available_time) detail and appends an OCC-guarded revision", async () => {
     const fetchMock = stubRoutes();
     renderPage("/trade-log?root=root_tl");
 
     expect(await screen.findByText("Current revision #1")).toBeTruthy();
     expect(screen.getByText(/historical ledger data/)).toBeTruthy();
+    // The typed form arrives seeded from the head revision payload.
+    expect(screen.getByLabelText("Display name")).toHaveProperty("value", "Broker ledger");
 
     fireEvent.click(screen.getByRole("button", { name: "Save new revision" }));
     expect(await screen.findByText(/Revision #2 saved/)).toBeTruthy();
@@ -240,7 +304,22 @@ describe("TradeLog", () => {
     expect(call).toBeTruthy();
     const body = JSON.parse(String(call?.[1]?.body)) as Record<string, unknown>;
     expect(body.expected_head_revision_id).toBe("wor_tl1");
+    // Round-trip: the form regenerates the head payload byte-for-byte.
+    expect(body.payload).toEqual(DETAIL.current_revision.payload);
     expect(headersOf(call?.[1])["Idempotency-Key"]).toBeTruthy();
+  });
+
+  it("hides the Advanced raw payload from a normal user and shows it to an admin (fail-closed)", async () => {
+    stubRoutes();
+    renderPage("/trade-log?job=job_9");
+    expect((await screen.findAllByText("ctrb_1")).length).toBeGreaterThan(0);
+    expect(screen.queryByText("Advanced (raw payload)")).toBeNull();
+    cleanup();
+
+    stubRoutes({ "GET /me": { ...ME_USER, role: "admin", is_admin: true } });
+    renderPage("/trade-log?job=job_9");
+    expect((await screen.findAllByText("ctrb_1")).length).toBeGreaterThan(0);
+    expect(await screen.findByText("Advanced (raw payload)")).toBeTruthy();
   });
 
   it("surfaces a content-addressed dedup upload as a reuse note", async () => {
@@ -257,7 +336,8 @@ describe("TradeLog", () => {
     fireEvent.click(screen.getByRole("button", { name: "Upload source asset" }));
 
     expect(await screen.findByText(/already uploaded/)).toBeTruthy();
-    expect(screen.getByDisplayValue("srcasset_9")).toBeTruthy();
+    // The identity card carries the asset id as read-only provenance.
+    expect(screen.getAllByText("srcasset_9").length).toBeGreaterThan(0);
     // F-03: the real file travels via multipart XHR.
     expect(uploadCalls[0]?.file?.name).toBe("trades.csv");
     expect(uploadCalls[0]?.headers["Idempotency-Key"]).toBeTruthy();

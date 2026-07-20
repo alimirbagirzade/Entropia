@@ -2386,6 +2386,43 @@ inline mount et) — `docs/V18_R2_ROADMAP.md` §4 R2-01b paste-ready prompt'u.
 
 ---
 
+## V18-R2 · R2-04 — TS/TL typed config formları ✅ (PR #TBD)
+
+**Ne landed (GAP madde 3, 7-kısmi, 9-kısmi):** Trading Signal + Trade Log create/revision
+akışlarındaki rows={16}/rows={14} ham JSON textarea'ları KALDIRILDI; payload artık typed formdan
+ÜRETİLİYOR. YENİ saf modüller `lib/tradingSignalForm.ts` + `lib/tradeLogForm.ts`
+(`*FormFromPayload` / `*FormToPayload` / `validate*Form` + `use*ConfigEditorState` hook'u) backend
+otoritesini empirik aynalar: `domain/{trading_signal,trade_log}/config.py` alan/uzunluk kuralları +
+`compiler.py` cross-field kuralları (event-based ⇄ base_timeframe, intrabar/ignore OHLCV,
+signal_events_only / entry_exit_records_only ⇄ use_for_price_context) alan yanında hata olarak.
+YENİ `components/{TradingSignalConfigForm,TradeLogConfigForm}.tsx` + paylaşılan
+`components/ConfigFormControls.tsx` (enum select'leri canonical token value'larıyla). İkiz farkları
+verbatim: TL tek `time_model` grubu, `content_profile`, ledger price source +
+`approved_market_data_revision_ref`, currency'li capital, record-batch binding; TL revision
+`available_time` null kalır (doc 05 §10.4) — form alanı DEĞİL. **Source asset id normal formdan
+kalktı** (GAP madde 3 düzeltme #3): upload sonucundan sistemce taşınır, identity kartında ve
+"Source binding (system-carried)" bölümünde read-only provenance; Request import upload'suz
+disabled. **Advanced (raw payload)**: kapalı disclosure, `/me` `is_admin` server-truth'una
+fail-closed gate'li; senkron kuralı — raw override KAPALIYKEN disclosure typed formdan üretilen
+JSON'u read-only gösterir; override AÇIKKEN textarea gönderilecek payload'dır, typed alanlar
+disabled, "Back to typed form" raw'ı parse edip formu yeniden tohumlar (parse hatası raw modda
+tutar). Toolbar: Validate / Save / Cancel / **Close panel** (Close panel üst köşeden sticky
+toolbar'a taşındı — GAP madde 3 düzeltme #4). **OCC (`expected_head_revision_id` BODY-form STR) +
+Idempotency-Key + query key'ler + route'lar BYTE-IDENTICAL**; `lib/tradingSignal.ts`/`tradeLog.ts`
+wire tipleri dokunulmadı, endpoint değişikliği YOK. Testler: yeni `configForms.test.ts` (round-trip
+byte-parity + kural aynaları, 9 test), `tradingSignal.test.tsx` 8/8 + `tradeLog.test.tsx` 9/9 yeni
+markup'a hizalandı (OCC/Idempotency assert'leri korunarak) → **464 vitest yeşil**, tsc/eslint/build
+temiz. E2E `08-mainboard-inline-editors.spec.ts` typed forma hizalandı ve canlı local stack'e karşı
+**3/3 geçti** (kullanıcı hiçbir JSON / root id / revision id / source asset id girmeden TS+TL
+oluşturdu; URL `/` kaldı); tarayıcı screenshot kanıtı alındı. Remediation status UI-04/05
+satırlarına R2-04 evidence eklendi.
+
+**Reuse anchor'ları (R2-05a/05b için):** `use*ConfigEditorState` hook deseni (typed-form + admin
+raw override senkron kuralı) Strategy Advanced JSON role-gate'inin (R2-05b) hazır şablonudur;
+`ConfigFormControls.tsx` `SelectField/TextField/ProvenanceRow` her typed-form slice'ında REUSE.
+
+---
+
 ## Next: **V18-R2 dalgası — `docs/V18_R2_ROADMAP.md` otoritedir.** Yeni GAP belgesi
 (`docs/spec/Entropia_V18_Guncel_Arayuz_Eksikleri_ve_Yanlis_Anlamalar.md`) kodda empirik
 CONFIRMED 13 eksik kümesi tespit etti (Mainboard TS/TL inline editör yok, Add Package popover yok,

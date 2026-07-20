@@ -58,18 +58,12 @@ async function landAsFreshActor(page: Page, prefix: string): Promise<void> {
   });
 }
 
-// Fill the seeded raw-JSON payload's required identity fields the way a user
-// would (the typed form replaces this in R2-04 — this slice moves the existing
-// form as-is).
-async function completePayload(draftRow: Locator, label: string, name: string): Promise<void> {
-  const box = draftRow.getByLabel(label);
-  const seeded = JSON.parse((await box.inputValue()) || "{}") as {
-    identity?: { display_name?: string };
-    source?: { provider_name?: string };
-  };
-  seeded.identity = { ...seeded.identity, display_name: name };
-  seeded.source = { ...seeded.source, provider_name: "e2e-provider" };
-  await box.fill(JSON.stringify(seeded, null, 2));
+// R2-04: the config payload is produced by the TYPED form — the journey fills
+// the two identity fields; the import binding is system-carried from the
+// report, so no JSON / root id / revision id / source asset id is ever typed.
+async function completePayload(draftRow: Locator, _label: string, name: string): Promise<void> {
+  await draftRow.getByLabel("Display name").fill(name);
+  await draftRow.getByLabel("Provider name").fill("e2e-provider");
 }
 
 const SIGNAL_CSV = (suffix: string) =>
@@ -116,7 +110,7 @@ test.describe("R2-01b Mainboard inline TS/TL editors", () => {
     });
 
     // Request the durable import and wait for the succeeded report inline.
-    await draftRow.getByLabel("Instrument id").fill("BTCUSDT");
+    await draftRow.getByLabel("Instrument id").first().fill("BTCUSDT");
     await draftRow.getByRole("button", { name: "Request import" }).click();
     await expect(draftRow.getByText("succeeded", { exact: true })).toBeVisible({
       timeout: 45_000,
@@ -167,7 +161,7 @@ test.describe("R2-01b Mainboard inline TS/TL editors", () => {
       timeout: 15_000,
     });
 
-    await draftRow.getByLabel("Instrument id").fill("BTCUSDT");
+    await draftRow.getByLabel("Instrument id").first().fill("BTCUSDT");
     await draftRow.getByRole("button", { name: "Request import" }).click();
     await expect(draftRow.getByText("succeeded", { exact: true })).toBeVisible({
       timeout: 45_000,

@@ -3,7 +3,60 @@
 > **Amaç:** V1 kapandı (Stage 0–8 COMPLETE). Bu doküman post-V1 durumunu, aday iş listesini
 > ve temiz oturumda yapıştırılacak resume prompt'u içerir.
 
-## Durum (2026-07-11, post-V1 — capability history read surfaces; PR #143 + #144 MERGED) ✅ EN GÜNCEL
+## Durum (2026-07-19, video-alignment dalgası; PR #313–#318 MERGED) ✅ EN GÜNCEL
+
+**MOSTLY FRONTEND + dar backend; migration YOK** (alembic head `0023_audit_log_trgm_indexes` SABİT;
+`ENGINE_VERSION` SABİT). `main` = `e1b9af7` (Merge #320). Kaynak: kullanıcının **prototip anlatım videosu**
+(`docs/spec/Video Anlatımı /entropia_transkript.md`) — kodlanan yapı prototiple satır satır karşılaştırıldı.
+Bu dalga videoda "çekirdek" (Entropia Core) ilan edilen **Add Strategy → yatay açılır kutu → çok-stratejili
+strateji evreni** akışını CANLI çalışır hale getirdi ve yolda çıkan çökme/kullanılamazlık defektlerini kapattı:
+
+- **#313 `fix(api)` commit-before-response:** `TransactionBoundaryMiddleware` request-scoped session'ı yanıt
+  upstream'e iletilmeden ÖNCE commit eder (`>=400`→rollback) → Add Strategy'nin `POST /work-objects` sonrası
+  hemen gelen `POST /mainboards/{id}/items`'ın yeni satırı GÖRMEDİĞİ ~1ms aynı-makine yield-teardown yarışı
+  (`WORK_OBJECT_NOT_FOUND`) kapandı. 25 contract/integration yeşil.
+- **#314 `fix(mainboard)` Add Strategy → strateji-editör ailesi:** video 0:55–2:52. Add Strategy artık editör
+  **draft**'ı yaratır (`POST /strategy-drafts`, auto-ad `STRATEGY <n>`), "Unsaved draft" kutusu hemen render +
+  reload'a dayanır; **ilk Save → attach** (`mirror_revision_id` pin, doc 02 §7 — Save öncesi attach YOK);
+  `GET /strategy-revisions/{id}` §7.1 mirror `worev_` id'yi deref eder. 438 vitest; STRATEGY 1/2 üst üste yığılır.
+- **#315 `docs` Docker-free local stack:** YENİ `docs/LOCAL_STACK.md` (redis/MinIO/dramatiq native — Homebrew YOL B);
+  kod değişikliği YOK; `/health/ready` ok + `make smoke` SMOKE OK.
+- **#316 `fix(create-package)` onaylı indicator uçtan uca kullanılabilir:** (1) `apps/seed.py` resolver'ları
+  `pine_v5`→`python` (Pre-Check EXACT adapter eşleşmesi `ta.sma`'yı `RESOLVER_ADAPTER_INCOMPATIBLE` düşürüyordu);
+  (2) `start_package_validation_run` artık sertifikalı draft revision `validation_state`'ini PASSED yapar (idi:
+  PENDING → `can_use=false`) → onaylı+publish indicator **Choose indicator** picker'da pinlenir. +`test_validation_evidence`.
+- **#317 `fix(frontend)` Result headline objesi render:** `ResultSummary.headline` tipi `string|null`→
+  `Record<string,unknown>|null` (backend'in yapısal metrik objesine uyum); `ResultDetail` key/value listesi olarak
+  render → her başarılı RUN'daki beyaz ekran ("Objects are not valid as a React child") kalktı. Presentation-only.
+- **#318 `fix(mainboard)` #314 dürüst sınırları:** legacy `wo_` orphan temizliği (idempotent
+  `scripts/maintenance/cleanup_legacy_strategy_work_objects.sql`, 3 unattached root soft-delete) + sakin "not
+  editor-managed strategy" notu (yalnız `STRATEGY_NOT_FOUND`/`STRATEGY_REVISION_NOT_FOUND`) + drafts hijyeni regresyonu.
+  440 vitest, 17 strategy integration.
+
+**Reuse anchor'ları:** `TransactionBoundaryMiddleware` (commit-before-response — yeni-satır-yaratıp-hemen-referanslayan
+her akışın temeli); **Add-Strategy draft akışı** (`strat_` root = attach edilebilir work object, ilk Save'e kadar
+revision YOK, doc 02 §7; `mirror_revision_id`/`worev_` deref); legacy orphan **cleanup script deseni**
+(`scripts/maintenance/*.sql`); `ResultSummary.headline` backend `Record<string,unknown>` obje-render tuzağı.
+
+**SIRADAKİ İŞ — video-alignment KALAN maddeleri (BAŞLARKEN kullanıcıyla TEYİT ET):**
+- **KALAN-A — Market Data ham kaynak dosya UPLOAD UI (video 9:24–12:37):** videonun EN GÜÇLÜ şikâyeti — "süreci
+  başlatacak ham kaynak dosya yükleme seçeneği maalesef yok" (11:00/12:37). Backend ingest zinciri
+  (`routes/market_data.py` create/upload-start/finalize/analysis) PR #103'te bağlı; eksik olan **Raw Source File /
+  Browse File** UI akışı (ham dosya seç → standart Entropia yapısına dönüştür → Create Dataset / Approve for Use).
+  Frontend slice — backend yüzeyi hazır.
+- **KALAN-B — Portfolio Equity Allocation "Use Allocation Backtest" + per-item pay UI (video 7:16–9:24):** Mainboard'daki
+  her öğeye (Strategy 1/2, Trade 1, Trade Log 1) üst-seviye pay atama + "Use Allocation Backtest" toggle deneyimi.
+  Portfolio sayfası PR #113 + portfolio-level kurallar PR #320 (Max Total Exposure + cross-item conflict) landed;
+  videodaki tam allocation-atama deneyimi eksik. Portfolio + Mainboard hizası — backend allocation yüzeyi hazır.
+- **KALAN-C — öğe evrene katkısı / "entropiyi nasıl değiştirdiği" (video 3:35) ✅ TAMAM:** PR #319 (per-item
+  contribution breakdown — correlation, diversification, marginal deltas) + PR #320 (portfolio-level rules) ile
+  karşılandı. `#321` (openapi snapshot rejenerasyonu) AÇIK — merge bekliyor.
+
+**KAPSAM DIŞI (değişmedi):** retention auto-purge (doc 20 §16), LLM generation (Future-Dev), Graphic View renderer
+(doc 22). Başlamadan ilgili doc + route/command imzaları + queries/commands dönüş dict'lerini oku → wire tipleri
+VERBATIM ayna.
+
+## Durum (2026-07-11, post-V1 — capability history read surfaces; PR #143 + #144 MERGED)
 
 **BACKEND + FRONTEND, migration YOK** (alembic head `0023_audit_log_trgm_indexes` SABİT; `ENGINE_VERSION =
 backtest-engine-v2-summary-timeframe` SABİT). main = `c5d97b6` (Merge #144); feat #143 `44e4b1e` + #144

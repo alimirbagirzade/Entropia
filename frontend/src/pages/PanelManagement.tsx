@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 
+import { AdminApprovalNote, useIsAdmin } from "@/components/AdminGate";
 import { EmptyState } from "@/components/EmptyState";
 import { ErrorState } from "@/components/ErrorState";
 import { Loading } from "@/components/Loading";
@@ -54,6 +55,11 @@ export function PanelManagement() {
 // ---------------------------------------------------------------------------
 
 function UsersCard() {
+  // R2-09 (GAP item 10): role assignment is Admin-only — the per-row controls
+  // render only for a server-confirmed Admin (/me projection, fail-closed).
+  // Presentation only: require_admin_panel is re-checked on every dispatch and
+  // a stale-cache denial renders the 403 envelope verbatim.
+  const isAdmin = useIsAdmin();
   const pager = useCursorStack();
   const users = useRegisteredUsers(pager.cursor);
   const matrix = useRoleMatrix();
@@ -96,6 +102,7 @@ function UsersCard() {
                   <UserRow
                     key={user.user_id}
                     user={user}
+                    isAdmin={isAdmin}
                     assignableRoles={assignableRoles}
                     draftRole={draftRoles[user.user_id] ?? user.role}
                     onDraftRole={(role) =>
@@ -140,6 +147,7 @@ function UsersCard() {
 
 function UserRow({
   user,
+  isAdmin,
   assignableRoles,
   draftRole,
   onDraftRole,
@@ -147,6 +155,7 @@ function UserRow({
   isPending,
 }: {
   user: RegisteredUser;
+  isAdmin: boolean;
   assignableRoles: string[];
   draftRole: string;
   onDraftRole: (role: string) => void;
@@ -168,25 +177,35 @@ function UserRow({
         {user.role_changed_by ? ` by ${user.role_changed_by}` : ""}
       </td>
       <td>
-        <select
-          aria-label={`Role for ${user.username}`}
-          value={draftRole}
-          onChange={(event) => onDraftRole(event.target.value)}
-        >
-          {assignableRoles.map((role) => (
-            <option key={role} value={role}>
-              {role}
-            </option>
-          ))}
-        </select>{" "}
-        <button
-          type="button"
-          className="btn"
-          disabled={isPending || draftRole === user.role}
-          onClick={() => onApply(draftRole)}
-        >
-          Apply
-        </button>
+        {isAdmin ? (
+          <>
+            <select
+              aria-label={`Role for ${user.username}`}
+              value={draftRole}
+              onChange={(event) => onDraftRole(event.target.value)}
+            >
+              {assignableRoles.map((role) => (
+                <option key={role} value={role}>
+                  {role}
+                </option>
+              ))}
+            </select>{" "}
+            <button
+              type="button"
+              className="btn"
+              disabled={isPending || draftRole === user.role}
+              onClick={() => onApply(draftRole)}
+            >
+              Apply
+            </button>
+          </>
+        ) : (
+          // R2-09: the current role stays read-only in the Role column — no
+          // primary control for an unauthorized (or not-yet-proven) session.
+          <span className="page-sub" role="note">
+            Admin approval required
+          </span>
+        )}
       </td>
     </tr>
   );
@@ -308,6 +327,10 @@ function RoleMatrixCard() {
 // requires an explicit confirm step (the Trash purge two-step precedent).
 // The disclosure is presentation only — the server re-checks Admin on every call.
 function OperatorRecoveryCard() {
+  // R2-09 (GAP item 10): the disclosure itself renders only for a
+  // server-confirmed Admin (/me projection, fail-closed) — the server still
+  // re-checks Admin on every dispatch.
+  const isAdmin = useIsAdmin();
   const [isOpen, setIsOpen] = useState(false);
   // Blank = the server's configured grace window; "0" sweeps every QUEUED data
   // job. The server validates (ge=0) and re-derives everything — this is a hint.
@@ -346,7 +369,9 @@ function OperatorRecoveryCard() {
         job is routed back to its actor via the payload <code>job_kind</code>. Redelivery is
         idempotent; the durable rows are untouched.
       </p>
-      {!isOpen ? (
+      {!isAdmin ? (
+        <AdminApprovalNote detail="Operator recovery is an Admin-only maintenance action; queue state stays read-only for your role." />
+      ) : !isOpen ? (
         <>
           <p className="page-sub">
             Admin-only maintenance action. Kept off the primary surface — open it deliberately.

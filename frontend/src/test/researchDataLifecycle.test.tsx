@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 
 import { ResearchData } from "@/pages/ResearchData";
-import { stubApi } from "./helpers/apiStub";
+import { apiErrorRoute, stubApi } from "./helpers/apiStub";
 
 const ROW = {
   entity_id: "rd_1",
@@ -112,6 +112,19 @@ const ROUTES = {
     is_authenticated: true,
   },
 };
+
+// R2-09: approve/revoke render only for a server-confirmed Admin — the wire
+// tests run under this projection; the 403 test then models the STALE-CACHE
+// admin (client believes admin, server denies) and the envelope must render
+// verbatim.
+const ME_ADMIN = {
+  principal_id: "admin_1",
+  principal_type: "human",
+  role: "admin",
+  is_admin: true,
+  is_authenticated: true,
+};
+const ADMIN_ROUTES = { ...ROUTES, "GET /me": ME_ADMIN };
 
 function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -303,11 +316,11 @@ describe("Research Data revision lifecycle", () => {
   });
 
   it("approves a revision under OCC (Admin, If-Match rv-4 + Idempotency-Key)", async () => {
-    const fetchMock = stubApi(ROUTES);
+    const fetchMock = stubApi(ADMIN_ROUTES);
     renderPage();
     await openDetail();
 
-    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Approve" }));
     expect(
       await screen.findByText((_, node) => node?.textContent === "rrev_2 is now approved."),
     ).toBeInTheDocument();
@@ -320,11 +333,11 @@ describe("Research Data revision lifecycle", () => {
   });
 
   it("revokes an approval under OCC on the selected revision", async () => {
-    const fetchMock = stubApi(ROUTES);
+    const fetchMock = stubApi(ADMIN_ROUTES);
     renderPage();
     await openDetail();
 
-    fireEvent.change(screen.getByLabelText("Revision to decide"), { target: { value: "rrev_1" } });
+    fireEvent.change(await screen.findByLabelText("Revision to decide"), { target: { value: "rrev_1" } });
     fireEvent.click(screen.getByRole("button", { name: "Revoke" }));
     expect(
       await screen.findByText((_, node) => node?.textContent === "rrev_1 is now approval_revoked."),
@@ -335,9 +348,11 @@ describe("Research Data revision lifecycle", () => {
     expect(bodyOf(call)).toEqual({ revision_id: "rrev_1", note: null });
   });
 
+  // R2-09 stale-cache scenario: /me still says admin (the composer renders)
+  // but the server has demoted the actor — the denial renders verbatim.
   it("surfaces the Admin denial verbatim on approve (403)", async () => {
     stubApi({
-      ...ROUTES,
+      ...ADMIN_ROUTES,
       "POST /research-datasets/rd_1/approve": () => {
         throw new Error("APPROVAL_REQUIRES_ADMIN: Approval requires Admin privileges.");
       },
@@ -345,10 +360,36 @@ describe("Research Data revision lifecycle", () => {
     renderPage();
     await openDetail();
 
-    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Approve" }));
     expect(
       await screen.findByText("APPROVAL_REQUIRES_ADMIN: Approval requires Admin privileges."),
     ).toBeInTheDocument();
+  });
+
+  // R2-09 (GAP item 10): approve/revoke never render as primary controls for
+  // a non-admin — the read-only note replaces them.
+  it("hides approve/revoke from a non-admin and shows the Admin approval note", async () => {
+    stubApi(ROUTES); // shared /me -> non-admin user
+    renderPage();
+    await openDetail();
+
+    expect(screen.queryByRole("button", { name: "Approve" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Revoke" })).toBeNull();
+    expect(screen.getByText(/Admin approval required/)).toBeInTheDocument();
+  });
+
+  // Fail-closed: an unknown identity projection (/me unavailable) keeps the
+  // Admin controls hidden — unknown never opens the gate.
+  it("fail-closed: hides approve/revoke while /me is unavailable", async () => {
+    stubApi({
+      ...ROUTES,
+      "GET /me": apiErrorRoute(503, "SERVICE_UNAVAILABLE", "identity projection unavailable"),
+    });
+    renderPage();
+    await openDetail();
+
+    expect(screen.queryByRole("button", { name: "Approve" })).toBeNull();
+    expect(screen.getByText(/Admin approval required/)).toBeInTheDocument();
   });
 
   it("compiles an agent bundle (no Idempotency-Key) and renders the sealed hash + members", async () => {

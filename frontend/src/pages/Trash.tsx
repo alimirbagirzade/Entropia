@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 
+import { useIsAdmin } from "@/components/AdminGate";
 import { EmptyState } from "@/components/EmptyState";
 import { ErrorState } from "@/components/ErrorState";
 import { Loading } from "@/components/Loading";
@@ -79,6 +80,11 @@ export function Trash() {
 }
 
 function TrashCard() {
+  // R2-09 (GAP item 10): restore / permanent delete are Admin-only — the row
+  // actions render only for a server-confirmed Admin (/me projection,
+  // fail-closed). Presentation only: the server re-checks require_trash_admin
+  // on every call and a stale-cache denial renders the 403 envelope verbatim.
+  const isAdmin = useIsAdmin();
   const [filters, setFilters] = useState<TrashFilters>(DEFAULT_TRASH_FILTERS);
   const [draftQ, setDraftQ] = useState("");
   const [snapshotEntryId, setSnapshotEntryId] = useState<string | null>(null);
@@ -182,6 +188,7 @@ function TrashCard() {
                   <TrashRow
                     key={entry.trash_entry_id}
                     entry={entry}
+                    isAdmin={isAdmin}
                     onRestore={() =>
                       restore.mutate({
                         trash_entry_id: entry.trash_entry_id,
@@ -263,12 +270,14 @@ function TrashCard() {
 
 function TrashRow({
   entry,
+  isAdmin,
   onRestore,
   onPurge,
   onOpenSnapshot,
   isRestoring,
 }: {
   entry: TrashEntry;
+  isAdmin: boolean;
   onRestore: () => void;
   onPurge: () => void;
   onOpenSnapshot: () => void;
@@ -293,17 +302,25 @@ function TrashRow({
       </td>
       <td>
         {entry.restore_eligible ? (
-          <>
-            <button type="button" className="btn" disabled={isRestoring} onClick={onRestore}>
-              Restore
-            </button>{" "}
-            {/* Permanent Delete is eligible on the same recoverable statuses as
-                Restore (the purge command shares _assert_entry_recoverable); it
-                opens the confirmation composer, it never purges on click. */}
-            <button type="button" className="btn btn-danger" onClick={onPurge}>
-              Permanent Delete
-            </button>{" "}
-          </>
+          isAdmin ? (
+            <>
+              <button type="button" className="btn" disabled={isRestoring} onClick={onRestore}>
+                Restore
+              </button>{" "}
+              {/* Permanent Delete is eligible on the same recoverable statuses as
+                  Restore (the purge command shares _assert_entry_recoverable); it
+                  opens the confirmation composer, it never purges on click. */}
+              <button type="button" className="btn btn-danger" onClick={onPurge}>
+                Permanent Delete
+              </button>{" "}
+            </>
+          ) : (
+            // R2-09: no primary control for an unauthorized user — the entry
+            // state stays read-only with the reason spelled out.
+            <span className="page-sub" role="note">
+              Admin approval required
+            </span>
+          )
         ) : (
           <span className="page-sub">not restorable</span>
         )}{" "}

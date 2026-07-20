@@ -4,10 +4,12 @@ import { useQueryClient } from "@tanstack/react-query";
 
 import { EmptyState } from "@/components/EmptyState";
 import { ErrorState } from "@/components/ErrorState";
+import { InstrumentPicker } from "@/components/InstrumentPicker";
 import { Loading } from "@/components/Loading";
 import { StatusBadge } from "@/components/StatusBadge";
 import { ApiError } from "@/lib/apiClient";
 import { formatUtc } from "@/lib/backtest";
+import { useMe } from "@/lib/hooks";
 import {
   MARKET_DATA_TYPES,
   TIMEZONE_MODES,
@@ -1085,6 +1087,10 @@ function revisionOptionLabel(revision: MarketRevisionRef): string {
 function RevisionComposer({ detail }: { detail: MarketDatasetDetail }) {
   const createRevision = useCreateRevision();
   const createSuccessor = useCreateSuccessor();
+  const me = useMe();
+  // Fail-closed role gate (R2-05b pattern): the raw payload disclosure renders
+  // only once /me proves is_admin — loading, error and non-admin all hide it.
+  const isAdmin = me.data?.is_admin === true;
   const [dataType, setDataType] = useState<string>(detail.market_data_type);
   const [title, setTitle] = useState("");
   const [instrumentId, setInstrumentId] = useState("");
@@ -1188,26 +1194,36 @@ function RevisionComposer({ detail }: { detail: MarketDatasetDetail }) {
             Title (optional)
             <input id="md-rev-title" value={title} onChange={(event) => setTitle(event.target.value)} />
           </label>
-          <label htmlFor="md-rev-instrument">
-            Instrument id (optional)
-            <input
-              id="md-rev-instrument"
-              value={instrumentId}
-              onChange={(event) => setInstrumentId(event.target.value)}
-              placeholder="BTCUSDT"
-            />
-          </label>
-          <label htmlFor="md-rev-payload">
-            Payload (optional JSON object)
-            <textarea
-              id="md-rev-payload"
-              rows={3}
-              value={payloadText}
-              onChange={(event) => setPayloadText(event.target.value)}
-              placeholder='{"source": "binance_futures"}'
-            />
-          </label>
         </div>
+        {/* R2-08 (GAP item 7): the instrument is picked from the canonical
+            registry; the immutable instrument_id travels system-side and shows
+            only as read-only provenance under the selection. */}
+        <div style={{ marginTop: 8 }}>
+          <InstrumentPicker
+            label="Instrument (optional)"
+            value={instrumentId}
+            onChange={setInstrumentId}
+          />
+        </div>
+        {isAdmin ? (
+          <details style={{ marginTop: 8 }}>
+            <summary>Advanced (raw revision payload)</summary>
+            <p className="cp-note" style={{ marginTop: 8 }}>
+              The revision payload has no documented product schema (doc 11 §5) — it stays a JSON
+              control, Admin-only under Advanced (GAP item 9).
+            </p>
+            <label htmlFor="md-rev-payload" style={{ display: "block" }}>
+              Payload (optional JSON object)
+              <textarea
+                id="md-rev-payload"
+                rows={3}
+                value={payloadText}
+                onChange={(event) => setPayloadText(event.target.value)}
+                placeholder='{"source": "binance_futures"}'
+              />
+            </label>
+          </details>
+        ) : null}
         <div style={{ display: "flex", gap: 12, marginTop: 8, flexWrap: "wrap" }}>
           <button type="submit" className="btn btn-primary" disabled={createRevision.isPending}>
             Append revision

@@ -567,8 +567,13 @@ describe("Create Package page", () => {
       target: { files: [csvFile] },
     });
     await screen.findByText(/baseline\.csv selected/);
-    fireEvent.change(screen.getByLabelText("Baseline metadata"), {
-      target: { value: '{"provider":"x","symbol":"BTCUSD"}' },
+    // R2-08 (GAP item 9): the documented descriptors are typed product fields;
+    // the produced baseline_metadata wire object is unchanged.
+    fireEvent.change(screen.getByLabelText("Baseline provider (optional)"), {
+      target: { value: "x" },
+    });
+    fireEvent.change(screen.getByLabelText("Baseline symbol (optional)"), {
+      target: { value: "BTCUSD" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Upload CSV" }));
 
@@ -585,7 +590,19 @@ describe("Create Package page", () => {
   });
 
   it("blocks a baseline upload with malformed metadata before dispatch", async () => {
-    const fetchMock = stubApi({ ...BASE_ROUTES, "GET /create-package/requests/req_1": REQUEST_DETAIL_DRAFT });
+    // R2-08: raw metadata JSON is Admin-only under Advanced — the malformed-JSON
+    // guard is exercised through the admin disclosure.
+    const fetchMock = stubApi({
+      ...BASE_ROUTES,
+      "GET /create-package/requests/req_1": REQUEST_DETAIL_DRAFT,
+      "GET /me": {
+        principal_id: "user_admin",
+        principal_type: "human",
+        role: "admin",
+        is_admin: true,
+        is_authenticated: true,
+      },
+    });
     renderPage();
     await screen.findByText("req_1");
     fireEvent.click(screen.getByRole("button", { name: /req_1/ }));
@@ -595,7 +612,7 @@ describe("Create Package page", () => {
       target: { files: [csvFile] },
     });
     await screen.findByText(/baseline\.csv selected/);
-    fireEvent.change(screen.getByLabelText("Baseline metadata"), {
+    fireEvent.change(await screen.findByLabelText("Baseline metadata"), {
       target: { value: "{not json" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Upload CSV" }));

@@ -339,7 +339,9 @@ describe("Research Data page", () => {
     expect(identityTable.getByText("provider_snapshot_timestamp")).toBeInTheDocument();
     expect(screen.getByText(/fixed_delay · delay 120s/)).toBeInTheDocument();
     expect(screen.getByText("sha256:c1")).toBeInTheDocument();
-    expect(screen.getByText("rrev_0")).toBeInTheDocument();
+    // rrev_0 renders in the revision history AND in the bundle checkbox group
+    // (R2-08: revisions are picked, not typed).
+    expect(screen.getAllByText("rrev_0").length).toBeGreaterThan(0);
     // rv 4 also appears in the ResearchLifecycle intro (OCC token hint) — scope to
     // the identity table where the row_version is displayed.
     expect(identityTable.getByText(/rv 4/)).toBeInTheDocument();

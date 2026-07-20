@@ -1,7 +1,11 @@
 import { useState, type CSSProperties, type FormEvent } from "react";
 
+import { MarketLinkPicker } from "@/components/MarketLinkPicker";
 import { StatusBadge } from "@/components/StatusBadge";
+import { useAgentTasks } from "@/lib/agentLab";
 import { ApiError } from "@/lib/apiClient";
+import { useMe } from "@/lib/hooks";
+import { useMarketDependency } from "@/lib/marketDependency";
 import {
   AVAILABLE_TIME_POLICIES,
   CUSTOM_TIMEZONE_MODE,
@@ -73,6 +77,22 @@ function ErrorLine({ error }: { error: unknown }) {
   );
 }
 
+// The dataset's own revisions as pick options (falls back to the head when the
+// detail projection carries no list). Shared by the base-revision select, the
+// approve/revoke select and the bundle checkbox group — a normal user always
+// PICKS a revision; the immutable id travels system-side (GAP item 7).
+function revisionOptions(detail: ResearchDatasetDetail) {
+  return detail.revisions.length > 0
+    ? detail.revisions
+    : [
+        {
+          revision_id: detail.revision_id,
+          revision_no: detail.revision_no,
+          revision_state: detail.revision_state,
+        },
+      ];
+}
+
 // Research Data revision lifecycle (doc 12 §5, §7, §8, §9) — the eight actions
 // past ingest: revise (OCC), set time policy, declare a field/feature definition,
 // Admin approve/revoke (OCC), and compile agent/backtest evidence bundles (pure
@@ -103,12 +123,18 @@ export function ResearchLifecycle({ detail }: { detail: ResearchDatasetDetail })
 
 function ReviseComposer({ detail }: { detail: ResearchDatasetDetail }) {
   const revise = useCreateRevision();
+  const me = useMe();
   const [category, setCategory] = useState<string>(RESEARCH_CATEGORIES[0]);
   const [customCategory, setCustomCategory] = useState("");
   const [usageScope, setUsageScope] = useState<string>(USAGE_SCOPES[0]);
   const [timezoneMode, setTimezoneMode] = useState<string>(RESEARCH_TIMEZONE_MODES[0]);
   const [timezoneIana, setTimezoneIana] = useState("");
-  const [marketEntityId, setMarketEntityId] = useState("");
+  // R2-08 (GAP item 7): the re-link target is PICKED from the role-aware Market
+  // Data registry (MarketLinkPicker, R2-06 reuse) — never typed as an md_… id.
+  // The approved-bundle probe verdict renders beside the selection; the server
+  // still re-validates the link on submit.
+  const [marketEntityId, setMarketEntityId] = useState<string | null>(null);
+  const dependency = useMarketDependency(marketEntityId);
   const [displayName, setDisplayName] = useState("");
   const [providerName, setProviderName] = useState("");
   const [baseRevisionId, setBaseRevisionId] = useState("");
@@ -117,6 +143,9 @@ function ReviseComposer({ detail }: { detail: ResearchDatasetDetail }) {
 
   const isCustomCategory = category === OTHER_CUSTOM_CATEGORY;
   const isCustomTimezone = timezoneMode === CUSTOM_TIMEZONE_MODE;
+  // Fail-closed role gate (R2-05b pattern): the raw payload disclosure renders
+  // only once /me proves is_admin — loading, error and non-admin all hide it.
+  const isAdmin = me.data?.is_admin === true;
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -134,10 +163,10 @@ function ReviseComposer({ detail }: { detail: ResearchDatasetDetail }) {
       custom_category: isCustomCategory ? customCategory.trim() || null : null,
       // Only `custom` carries an IANA zone; every other mode sends null.
       timezone_iana: isCustomTimezone ? timezoneIana.trim() || null : null,
-      market_entity_id: marketEntityId.trim() || null,
+      market_entity_id: marketEntityId,
       display_name: displayName.trim() || null,
       provider_name: providerName.trim() || null,
-      base_revision_id: baseRevisionId.trim() || null,
+      base_revision_id: baseRevisionId || null,
     });
   };
 
@@ -199,15 +228,6 @@ function ReviseComposer({ detail }: { detail: ResearchDatasetDetail }) {
               />
             </label>
           ) : null}
-          <label htmlFor="rl-market">
-            Re-link market entity id (optional)
-            <input
-              id="rl-market"
-              value={marketEntityId}
-              onChange={(e) => setMarketEntityId(e.target.value)}
-              placeholder="md_…"
-            />
-          </label>
           <label htmlFor="rl-display">
             Revision display name (optional)
             <input id="rl-display" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
@@ -217,25 +237,46 @@ function ReviseComposer({ detail }: { detail: ResearchDatasetDetail }) {
             <input id="rl-provider" value={providerName} onChange={(e) => setProviderName(e.target.value)} />
           </label>
           <label htmlFor="rl-base">
-            Base revision id (optional)
-            <input
-              id="rl-base"
-              value={baseRevisionId}
-              onChange={(e) => setBaseRevisionId(e.target.value)}
-              placeholder="rrev_…"
-            />
-          </label>
-          <label htmlFor="rl-payload">
-            Revision payload (optional JSON object)
-            <textarea
-              id="rl-payload"
-              rows={2}
-              value={payloadText}
-              onChange={(e) => setPayloadText(e.target.value)}
-              placeholder='{"note":"revised"}'
-            />
+            Base revision (optional)
+            <select id="rl-base" value={baseRevisionId} onChange={(e) => setBaseRevisionId(e.target.value)}>
+              <option value="">(current head)</option>
+              {revisionOptions(detail).map((r) => (
+                <option key={r.revision_id} value={r.revision_id}>
+                  v{r.revision_no} · {r.revision_state}
+                </option>
+              ))}
+            </select>
+            {baseRevisionId !== "" ? (
+              <small className="cp-note">
+                Revision id (system-carried): <code>{baseRevisionId}</code>
+              </small>
+            ) : null}
           </label>
         </div>
+        <div style={{ marginTop: 8 }}>
+          <MarketLinkPicker
+            label="Re-link market (optional)"
+            required={false}
+            value={marketEntityId}
+            status={dependency}
+            onChange={setMarketEntityId}
+          />
+        </div>
+        {isAdmin ? (
+          <details style={{ marginTop: 8 }}>
+            <summary>Advanced (raw revision payload)</summary>
+            <label htmlFor="rl-payload" style={{ display: "block", marginTop: 8 }}>
+              Revision payload (optional JSON object)
+              <textarea
+                id="rl-payload"
+                rows={2}
+                value={payloadText}
+                onChange={(e) => setPayloadText(e.target.value)}
+                placeholder='{"note":"revised"}'
+              />
+            </label>
+          </details>
+        ) : null}
         <button type="submit" className="btn" disabled={revise.isPending} style={{ marginTop: 8 }}>
           Append revision
         </button>
@@ -502,14 +543,22 @@ function FeatureDefinitionComposer({ entityId }: { entityId: string }) {
           </label>
           <label htmlFor="rl-feature-approval">
             Approval state (optional)
-            <input
+            <select
               id="rl-feature-approval"
               value={approvalState}
               onChange={(e) => setApprovalState(e.target.value)}
-              placeholder="approved"
-            />
+            >
+              <option value="">(none)</option>
+              <option value="approved">approved</option>
+            </select>
           </label>
-          <label htmlFor="rl-feature-def">
+        </div>
+        {/* GAP item 9: the definition object is intentionally schema-free (doc 12
+            §9.3 — each feature carries its own parameters), so it stays a JSON
+            control, explicitly under Advanced rather than as a primary field. */}
+        <details style={{ marginTop: 8 }}>
+          <summary>Advanced — feature definition (JSON)</summary>
+          <label htmlFor="rl-feature-def" style={{ display: "block", marginTop: 8 }}>
             Feature definition (JSON object)
             <textarea
               id="rl-feature-def"
@@ -519,7 +568,7 @@ function FeatureDefinitionComposer({ entityId }: { entityId: string }) {
               placeholder='{"window":14}'
             />
           </label>
-        </div>
+        </details>
         <button type="submit" className="btn" disabled={define.isPending} style={{ marginTop: 8 }}>
           Define feature
         </button>
@@ -550,16 +599,7 @@ function ApprovalComposer({ detail }: { detail: ResearchDatasetDetail }) {
   const [revisionId, setRevisionId] = useState(detail.revision_id);
   const [note, setNote] = useState("");
 
-  const options =
-    detail.revisions.length > 0
-      ? detail.revisions
-      : [
-          {
-            revision_id: detail.revision_id,
-            revision_no: detail.revision_no,
-            revision_state: detail.revision_state,
-          },
-        ];
+  const options = revisionOptions(detail);
 
   const decide = (action: "approve" | "revoke") => {
     const input = {
@@ -625,11 +665,23 @@ function ApprovalComposer({ detail }: { detail: ResearchDatasetDetail }) {
 function BundleComposer({ detail }: { detail: ResearchDatasetDetail }) {
   const agent = useCompileAgentBundle();
   const evidence = useCompileEvidenceBundle();
-  const [revisionIdsText, setRevisionIdsText] = useState(detail.revision_id);
+  const tasks = useAgentTasks(null, null);
+  // R2-08 (GAP item 7): revisions are PICKED from this dataset's own list and
+  // the agent task from the workspace registry — ids are never hand-typed in
+  // the normal flow. Cross-dataset revision ids and run-request correlation
+  // have no pick surface here, so they stay manual under an explicit Advanced
+  // disclosure (GAP item 7 fix #5).
+  const [selectedIds, setSelectedIds] = useState<string[]>([detail.revision_id]);
+  const [extraIdsText, setExtraIdsText] = useState("");
   const [taskId, setTaskId] = useState("");
   const [runRequestId, setRunRequestId] = useState("");
 
-  const revisionIds = linesToList(revisionIdsText);
+  const toggleRevision = (revisionId: string) =>
+    setSelectedIds((prev) =>
+      prev.includes(revisionId) ? prev.filter((id) => id !== revisionId) : [...prev, revisionId],
+    );
+
+  const revisionIds = [...new Set([...selectedIds, ...linesToList(extraIdsText)])];
   const compileAgent = () =>
     agent.mutate({ research_revision_ids: revisionIds, task_id: taskId.trim() || null });
   const compileEvidence = () =>
@@ -650,34 +702,68 @@ function BundleComposer({ detail }: { detail: ResearchDatasetDetail }) {
         content-addressed hash over the exact pinned ids, never &quot;latest&quot;.
       </p>
       <div style={GRID}>
-        <label htmlFor="rl-bundle-ids">
-          Research revision ids (one per line)
-          <textarea
-            id="rl-bundle-ids"
-            rows={2}
-            value={revisionIdsText}
-            onChange={(e) => setRevisionIdsText(e.target.value)}
-          />
-        </label>
+        <div role="group" aria-label="Research revisions to pin">
+          <span style={{ display: "block" }}>Research revisions to pin</span>
+          {revisionOptions(detail).map((r) => (
+            <label
+              key={r.revision_id}
+              style={{ display: "flex", gap: 6, alignItems: "center", fontWeight: "normal" }}
+            >
+              <input
+                type="checkbox"
+                checked={selectedIds.includes(r.revision_id)}
+                onChange={() => toggleRevision(r.revision_id)}
+              />
+              <span>
+                v{r.revision_no} · {r.revision_state} · <code>{r.revision_id}</code>
+              </span>
+            </label>
+          ))}
+        </div>
         <label htmlFor="rl-bundle-task">
-          Agent task id (optional)
-          <input
-            id="rl-bundle-task"
-            value={taskId}
-            onChange={(e) => setTaskId(e.target.value)}
-            placeholder="task_…"
-          />
-        </label>
-        <label htmlFor="rl-bundle-run">
-          Run request id (optional)
-          <input
-            id="rl-bundle-run"
-            value={runRequestId}
-            onChange={(e) => setRunRequestId(e.target.value)}
-            placeholder="run_…"
-          />
+          Agent task (optional)
+          <select id="rl-bundle-task" value={taskId} onChange={(e) => setTaskId(e.target.value)}>
+            <option value="">(none)</option>
+            {(tasks.data?.tasks ?? []).map((t) => (
+              <option key={t.task_id} value={t.task_id}>
+                {t.title} · {t.status}
+              </option>
+            ))}
+          </select>
+          {taskId !== "" ? (
+            <small className="cp-note">
+              Task id (system-carried): <code>{taskId}</code>
+            </small>
+          ) : null}
         </label>
       </div>
+      <details style={{ marginTop: 8 }}>
+        <summary>Advanced — manual ids</summary>
+        <p className="cp-note" style={{ marginTop: 8 }}>
+          Cross-dataset revision ids and run-request correlation have no pick surface on this page —
+          they stay manual, explicitly under Advanced.
+        </p>
+        <div style={GRID}>
+          <label htmlFor="rl-bundle-ids">
+            Additional research revision ids (one per line)
+            <textarea
+              id="rl-bundle-ids"
+              rows={2}
+              value={extraIdsText}
+              onChange={(e) => setExtraIdsText(e.target.value)}
+            />
+          </label>
+          <label htmlFor="rl-bundle-run">
+            Run request id (optional)
+            <input
+              id="rl-bundle-run"
+              value={runRequestId}
+              onChange={(e) => setRunRequestId(e.target.value)}
+              placeholder="run_…"
+            />
+          </label>
+        </div>
+      </details>
       <div style={{ display: "flex", gap: 12, marginTop: 8, flexWrap: "wrap" }}>
         <button type="button" className="btn" disabled={pending || noIds} onClick={compileAgent}>
           Compile agent bundle

@@ -18,6 +18,8 @@ import {
   SelectField,
   TextField,
 } from "@/components/ConfigFormControls";
+import { InstrumentPicker } from "@/components/InstrumentPicker";
+import { RationaleFamilyPicker } from "@/components/RationaleFamilyPicker";
 import { useMe } from "@/lib/hooks";
 import {
   SIGNAL_DATA_QUALITY_MODES,
@@ -67,8 +69,9 @@ export function TradingSignalConfigFields({
           disabled={disabled}
           onChange={(sourceKind) => set({ sourceKind })}
         />
-        <TextField
-          label="Instrument id"
+        <InstrumentPicker
+          label="Instrument"
+          required
           value={state.instrumentId}
           error={errors.instrumentId}
           disabled={disabled}
@@ -138,8 +141,8 @@ export function TradingSignalConfigFields({
           placeholder="10000"
           onChange={(independentInitialCapital) => set({ independentInitialCapital })}
         />
-        <TextField
-          label="Rationale family id (optional)"
+        <RationaleFamilyPicker
+          label="Rationale family (optional)"
           value={state.rationaleFamilyId}
           error={errors.rationaleFamilyId}
           disabled={disabled}

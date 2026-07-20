@@ -66,7 +66,28 @@ A requirement is **Complete** only with working end-to-end behavior + passing ac
 >   değil; Market Data seçimi entity-id text alanı~~ → **R2-06 (this PR) kapattı**: serbest metin
 >   alanı silindi; MarketLinkPicker (yalnız approved seçilebilir) + `useMarketDependency`
 >   approved-bundle probe → strip/alert/Create tek server-truth projection'dan. Kalan teknik-ID
->   sweep (ResearchLifecycle vb.) → R2-08
+>   sweep (ResearchLifecycle vb.) → R2-08 ✅ (aşağıdaki sweep bullet'ı)
+> - **Teknik-ID sweep — GAP madde 7 + 9 kalanı** → **R2-08 (this PR) kapattı**: normal kullanıcı
+>   akışlarında elle id girilen alan KALMADI. YENİ `InstrumentPicker` (canonical registry, GAP-16;
+>   active seçilebilir / deprecated disabled; `instrument_id` yalnız "system-carried" read-only
+>   provenance satırı) 5 yüzeyde: MarketData RevisionComposer + TS/TL typed config formları +
+>   TS/TL editör identity kartları. YENİ `RationaleFamilyPicker` (aktif family registry, isimle
+>   seçim) TS/TL "Rationale family id" serbest metinlerinin yerine. ResearchLifecycle: re-link
+>   market → `MarketLinkPicker` REUSE (optional varyant + canlı probe verdict); base revision →
+>   kendi revision listesinden select; bundle revision ids → checkbox grubu; agent task →
+>   `useAgentTasks` select; run-request id + cross-dataset id'ler "Advanced — manual ids"
+>   disclosure'ında (pick yüzeyi yok — gerekçeli Advanced). Raw JSON'lar (GAP 9): MarketData +
+>   Research revision payload admin-gated "Advanced (raw revision payload)" (`useMe` fail-closed,
+>   R2-05b deseni); feature definition JSON açık "Advanced" (şeması bilinçli serbest, doc 12
+>   §9.3); CP baseline metadata → typed provider/symbol/timeframe/range + admin-gated extra-JSON;
+>   Library manifest import → "Advanced — import from manifest JSON" (makine-üretimi artifact).
+>   Wire alan adları + OCC/Idempotency yüzeyleri byte-identical. Evidence: vitest 492/492 (6 test
+>   yeni markup'a hizalandı, assert'ler korunarak + elle-id-yok negatif assert'leri);
+>   tsc/eslint/build temiz; canlı tarayıcıda TS instrument picker registry satırından seçim +
+>   `instr_…` provenance, MarketData'da serbest instrument/payload alanı yok (non-admin) / Advanced
+>   payload görünür (admin), Library import default-kapalı Advanced. Dürüst sınır: dev-mode
+>   "act as" alanı kapsam dışı (açıkça Dev-mode etiketli araç); ResearchLifecycle tarayıcı kanıtı
+>   vitest+kod düzeyinde (local stack'te approved market dataset yoktu).
 > - **UI-14/15** (Ready Check / RUN): ~~golden-path E2E blocked'ı kabul ediyor~~ →
 >   **R2-07 (this PR) kapattı**: `05-mainboard-ready-check-run.spec.ts` tamamen yeniden
 >   yazıldı — inline typed-form Strategy ("/"da kalır) + picker'dan approved indicator

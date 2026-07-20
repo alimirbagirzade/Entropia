@@ -87,6 +87,30 @@ const ROUTES = {
   "POST /research-datasets/bundles/backtest-evidence": EVIDENCE_BUNDLE,
   "GET /research-datasets/rd_1": DETAIL_RD1,
   "GET /research-datasets": DATASETS_PAGE,
+  // R2-08: the bundle composer picks the agent task from the workspace list and
+  // the revise composer role-gates its raw payload via /me (non-admin here).
+  "GET /agent-tasks": {
+    tasks: [
+      {
+        task_id: "task_7",
+        title: "Scan OI",
+        task_type: "research",
+        source: "human",
+        priority: "normal",
+        status: "running",
+        stage: null,
+        progress: null,
+      },
+    ],
+    next_cursor: null,
+  },
+  "GET /me": {
+    principal_id: "user_1",
+    principal_type: "human",
+    role: "user",
+    is_admin: false,
+    is_authenticated: true,
+  },
 };
 
 function renderPage() {
@@ -134,6 +158,17 @@ describe("Research Data revision lifecycle", () => {
     const fetchMock = stubApi(ROUTES);
     renderPage();
     await openDetail();
+
+    // R2-08 (GAP item 7): the md_…/rrev_… free-text inputs are gone — re-link
+    // goes through the approved-market picker and the base revision through a
+    // select over this dataset's own revisions.
+    expect(screen.queryByLabelText(/Re-link market entity id/)).toBeNull();
+    // Two market pickers render (setup card + re-link) — both are pickers,
+    // neither is a free-text id input.
+    expect(screen.getAllByRole("button", { name: "Choose market dataset" }).length).toBeGreaterThan(
+      0,
+    );
+    expect(screen.getByLabelText("Base revision (optional)").tagName).toBe("SELECT");
 
     fireEvent.click(screen.getByRole("button", { name: "Append revision" }));
     expect(await screen.findByText(/Revision appended — rrev_3/)).toBeInTheDocument();
@@ -321,7 +356,12 @@ describe("Research Data revision lifecycle", () => {
     renderPage();
     await openDetail();
 
-    fireEvent.change(screen.getByLabelText("Agent task id (optional)"), { target: { value: "task_7" } });
+    // R2-08: the task is PICKED from the agent workspace list — the option must
+    // load before the select can change; the immutable id travels system-side.
+    await screen.findByRole("option", { name: "Scan OI · running" });
+    fireEvent.change(screen.getByLabelText("Agent task (optional)"), {
+      target: { value: "task_7" },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Compile agent bundle" }));
 
     expect(await screen.findByText(/agent_data_bundle sealed/)).toBeInTheDocument();

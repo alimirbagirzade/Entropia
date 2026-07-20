@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 
 import { EmptyState } from "@/components/EmptyState";
 import { ErrorState } from "@/components/ErrorState";
+import { InstrumentPicker } from "@/components/InstrumentPicker";
 import { Loading } from "@/components/Loading";
 import { StatusBadge } from "@/components/StatusBadge";
 import { ApiError } from "@/lib/apiClient";
@@ -300,15 +301,12 @@ function ImportIdentityCard({
             )}
           </div>
         </div>
-        <label className="cp-field">
-          <span>Instrument id</span>
-          <input
-            value={instrumentId}
-            onChange={(event) => onInstrumentId(event.target.value)}
-            placeholder="BTCUSDT"
-            required
-          />
-        </label>
+        <InstrumentPicker
+          label="Instrument"
+          required
+          value={instrumentId}
+          onChange={onInstrumentId}
+        />
         <label className="cp-field">
           <span>Source timezone</span>
           <input

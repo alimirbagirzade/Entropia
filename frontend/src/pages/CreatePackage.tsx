@@ -5,6 +5,7 @@ import { Loading } from "@/components/Loading";
 import { PreCheckModal } from "@/components/PreCheckModal";
 import { StatusBadge } from "@/components/StatusBadge";
 import { ApiError } from "@/lib/apiClient";
+import { useMe } from "@/lib/hooks";
 import {
   CREATE_PACKAGE_KINDS,
   CREATION_MODES,
@@ -837,7 +838,17 @@ function StateCard({ detail }: { detail: PackageRequestDetail | null }) {
 function BaselineSection({ detail }: { detail: PackageRequestDetail }) {
   const upload = useUploadBaseline();
   const parse = useStartBaselineParse();
+  const me = useMe();
+  // Fail-closed role gate (R2-05b pattern): the raw metadata JSON renders only
+  // once /me proves is_admin — loading, error and non-admin all hide it.
+  const isAdmin = me.data?.is_admin === true;
   const [file, setFile] = useState<File | null>(null);
+  // R2-08 (GAP item 9): the documented baseline descriptors are typed fields;
+  // undocumented extra keys stay JSON, Admin-only under Advanced.
+  const [provider, setProvider] = useState("");
+  const [symbol, setSymbol] = useState("");
+  const [timeframe, setTimeframe] = useState("");
+  const [range, setRange] = useState("");
   const [metadataText, setMetadataText] = useState("");
   const [metadataError, setMetadataError] = useState<string | null>(null);
 
@@ -853,7 +864,7 @@ function BaselineSection({ detail }: { detail: PackageRequestDetail }) {
   function onUpload() {
     setMetadataError(null);
     if (file === null) return;
-    let metadata: Record<string, unknown> = {};
+    let extras: Record<string, unknown> = {};
     const trimmed = metadataText.trim();
     if (trimmed.length > 0) {
       try {
@@ -862,12 +873,19 @@ function BaselineSection({ detail }: { detail: PackageRequestDetail }) {
           setMetadataError("Baseline metadata must be a JSON object.");
           return;
         }
-        metadata = parsed as Record<string, unknown>;
+        extras = parsed as Record<string, unknown>;
       } catch {
         setMetadataError("Baseline metadata is not valid JSON.");
         return;
       }
     }
+    // The typed descriptors win over Advanced extras on key collision; empty
+    // typed fields are omitted so the wire object matches what was filled in.
+    const metadata: Record<string, unknown> = { ...extras };
+    if (provider.trim()) metadata.provider = provider.trim();
+    if (symbol.trim()) metadata.symbol = symbol.trim();
+    if (timeframe.trim()) metadata.timeframe = timeframe.trim();
+    if (range.trim()) metadata.range = range.trim();
     // F-03: transfer the chosen CSV itself (multipart); the server derives the
     // filename/content type/digest and re-validates size/encoding/schema.
     upload.mutate({
@@ -923,16 +941,40 @@ function BaselineSection({ detail }: { detail: PackageRequestDetail }) {
         </dl>
       ) : null}
 
-      <label style={{ display: "block", marginTop: 10 }}>
-        <span className="cp-note">Baseline metadata (JSON)</span>
-        <textarea
-          aria-label="Baseline metadata"
-          value={metadataText}
-          onChange={(e) => setMetadataText(e.target.value)}
-          rows={3}
-          placeholder='{"provider":"…","symbol":"…","timeframe":"…","range":"…"}'
-        />
-      </label>
+      {/* R2-08 (GAP item 9): the documented descriptors are product fields. */}
+      <div className="strategy-form-grid" style={{ marginTop: 10 }}>
+        <label className="cp-field">
+          <span>Baseline provider (optional)</span>
+          <input value={provider} onChange={(e) => setProvider(e.target.value)} placeholder="TradingView" />
+        </label>
+        <label className="cp-field">
+          <span>Baseline symbol (optional)</span>
+          <input value={symbol} onChange={(e) => setSymbol(e.target.value)} />
+        </label>
+        <label className="cp-field">
+          <span>Baseline timeframe (optional)</span>
+          <input value={timeframe} onChange={(e) => setTimeframe(e.target.value)} placeholder="1h" />
+        </label>
+        <label className="cp-field">
+          <span>Baseline range (optional)</span>
+          <input value={range} onChange={(e) => setRange(e.target.value)} placeholder="2024-01 … 2024-06" />
+        </label>
+      </div>
+      {isAdmin ? (
+        <details style={{ marginTop: 10 }}>
+          <summary>Advanced (extra metadata JSON)</summary>
+          <label style={{ display: "block", marginTop: 8 }}>
+            <span className="cp-note">Baseline metadata (JSON)</span>
+            <textarea
+              aria-label="Baseline metadata"
+              value={metadataText}
+              onChange={(e) => setMetadataText(e.target.value)}
+              rows={3}
+              placeholder='{"broker_notes":"…"}'
+            />
+          </label>
+        </details>
+      ) : null}
 
       <div className="cp-button-row">
         <button

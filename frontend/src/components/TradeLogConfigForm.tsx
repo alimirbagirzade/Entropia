@@ -13,6 +13,8 @@ import {
   SelectField,
   TextField,
 } from "@/components/ConfigFormControls";
+import { InstrumentPicker } from "@/components/InstrumentPicker";
+import { RationaleFamilyPicker } from "@/components/RationaleFamilyPicker";
 import { useMe } from "@/lib/hooks";
 import {
   TRADE_LOG_CONTENT_PROFILES,
@@ -62,8 +64,9 @@ export function TradeLogConfigFields({
           disabled={disabled}
           onChange={(sourceKind) => set({ sourceKind })}
         />
-        <TextField
-          label="Instrument id"
+        <InstrumentPicker
+          label="Instrument"
+          required
           value={state.instrumentId}
           error={errors.instrumentId}
           disabled={disabled}
@@ -147,8 +150,8 @@ export function TradeLogConfigFields({
           disabled={disabled}
           onChange={(currency) => set({ currency })}
         />
-        <TextField
-          label="Rationale family id (optional)"
+        <RationaleFamilyPicker
+          label="Rationale family (optional)"
           value={state.rationaleFamilyId}
           error={errors.rationaleFamilyId}
           disabled={disabled}

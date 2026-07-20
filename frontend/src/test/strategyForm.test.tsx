@@ -171,6 +171,60 @@ describe("mergeFlatSections", () => {
     expect(fb.formula_params).toEqual({ W: 0.55, R: 2 });
   });
 
+  it("edits Kelly formula params as typed fields, preserving unknown params", () => {
+    const payload = {
+      position_sizing: {
+        formula_based: {
+          formula_type: "kelly_criterion",
+          formula_params: { win_probability: "0.5", custom_note: "kept" },
+        },
+      },
+    };
+    const form = extractFlatSections(payload);
+    expect(form.sizing.kelly_win_probability).toBe("0.5");
+    form.sizing.method = "formula_based_sizing";
+    form.sizing.formula_type = "kelly_criterion";
+    form.sizing.kelly_win_probability = "0.55";
+    form.sizing.kelly_payoff_ratio = "2";
+    form.sizing.kelly_fraction = ""; // blank → key omitted → full Kelly
+    const merged = mergeFlatSections(payload, form) as Record<string, Record<string, unknown>>;
+    const fb = merged.position_sizing.formula_based as Record<string, unknown>;
+    expect(fb.formula_params).toEqual({
+      win_probability: "0.55",
+      payoff_ratio: "2",
+      custom_note: "kept",
+    });
+  });
+
+  it("round-trips the leverage multiplier (previously Advanced-only)", () => {
+    const payload = { position_sizing: { method: "base_position_size", leverage: "5" } };
+    const form = extractFlatSections(payload);
+    expect(form.sizing.leverage).toBe("5");
+    form.sizing.leverage = "3";
+    form.sizing.base_position_size = "10";
+    const merged = mergeFlatSections(payload, form) as Record<string, Record<string, unknown>>;
+    expect(merged.position_sizing.leverage).toBe("3");
+  });
+
+  it("preserves graph-owned protection keys and instrument_scope on a flat Apply", () => {
+    const payload = {
+      data: { instrument_scope: { alias: "BTCUSDT perp" } },
+      protection_stop_logic: {
+        logic_blocks: [{ block_id: "b1" }],
+        stop_trigger_requirement: "all_active",
+        stop_conflict_resolution: "priority_order",
+        stop_priority_order: ["percentage"],
+      },
+    };
+    const form = extractFlatSections(payload);
+    const merged = mergeFlatSections(payload, form) as Record<string, Record<string, unknown>>;
+    expect(merged.data.instrument_scope).toEqual({ alias: "BTCUSDT perp" });
+    const stops = merged.protection_stop_logic as Record<string, unknown>;
+    expect(stops.logic_blocks).toEqual([{ block_id: "b1" }]);
+    expect(stops.stop_trigger_requirement).toBe("all_active");
+    expect(stops.stop_priority_order).toEqual(["percentage"]);
+  });
+
   it("keeps only enabled stops semantically representable (server filters disabled)", () => {
     const form = extractFlatSections({});
     form.protection.percentage_enabled = true;

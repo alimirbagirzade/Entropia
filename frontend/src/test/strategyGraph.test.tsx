@@ -130,8 +130,9 @@ describe("strategyGraph extract/merge", () => {
 
     const entry = merged.position_entry_logic as Record<string, unknown>;
     const blocks = entry.indicator_blocks as Record<string, unknown>[];
-    // parameter_overrides is not surfaced by the form but must survive.
-    expect(blocks[0].parameter_overrides).toEqual({ length: 14 });
+    // parameter_overrides is typed now (R2-05a): the canonical key survives a
+    // round-trip normalized to its string form (the engine parses digit strings).
+    expect(blocks[0].parameter_overrides).toEqual({ length: "14" });
     const conditions = blocks[0].condition_blocks as Record<string, unknown>[];
     // reference chain fields must survive.
     expect(conditions[0].reference_package_ref).toEqual({
@@ -258,17 +259,204 @@ describe("strategyGraph scaling + restrictions", () => {
     expect(filters[0].enabled).toBe(true);
   });
 
-  it("flags an invalid filter config JSON, passes a valid one", () => {
+  it("flags an out-of-order blackout range, passes a valid typed config", () => {
     const form = extractGraphSections(fullPayload());
     expect(firstInvalidFilterConfig(form)).toBeNull();
     const bad: GraphState = {
       ...form,
       restrictions: {
         ...form.restrictions,
-        filters: [{ ...form.restrictions.filters[0], config_text: "{ not json" }],
+        filters: [
+          {
+            ...form.restrictions.filters[0],
+            filter_type: "date_blackout_filter",
+            date_ranges: [{ key: "r1", start: "2024-02-01", end: "2024-01-01" }],
+          },
+        ],
       },
     };
-    expect(firstInvalidFilterConfig(bad)).toBe("volatility_filter");
+    expect(firstInvalidFilterConfig(bad)).toMatch(/start ≤ end/);
+  });
+
+  it("serializes typed filter configs to the engine's canonical keys", () => {
+    const p = fullPayload();
+    const form = extractGraphSections(p);
+    const changed: GraphState = {
+      ...form,
+      restrictions: {
+        ...form.restrictions,
+        filters: [
+          {
+            ...form.restrictions.filters[0],
+            filter_type: "date_blackout_filter",
+            date_ranges: [{ key: "r1", start: "2024-01-01", end: "2024-01-05" }],
+          },
+          {
+            key: "f2",
+            filter_id: "f2",
+            filter_type: "max_daily_loss_filter",
+            enabled: true,
+            date_ranges: [],
+            limit_percent: "3",
+            max_losses: "",
+            raw: {},
+          },
+          {
+            key: "f3",
+            filter_id: "f3",
+            filter_type: "consecutive_loss_filter",
+            enabled: true,
+            date_ranges: [],
+            limit_percent: "",
+            max_losses: "5",
+            raw: {},
+          },
+        ],
+      },
+    };
+    const restrictions = mergeGraphSections(p, changed).restrictions_filters as Record<
+      string,
+      unknown
+    >;
+    const filters = restrictions.filters as Record<string, unknown>[];
+    expect(filters[0].config).toEqual({
+      condition: "too_high",
+      date_ranges: [{ start: "2024-01-01", end: "2024-01-05" }],
+    });
+    expect(filters[1].config).toEqual({ limit_percent: "3" });
+    expect(filters[2].config).toEqual({ max_losses: 5 });
+  });
+
+  it("round-trips typed block parameter overrides via canonical keys", () => {
+    const p = fullPayload();
+    const form = extractGraphSections(p);
+    expect(form.entry.blocks[0].override_length).toBe("14");
+    const changed: GraphState = {
+      ...form,
+      entry: {
+        ...form.entry,
+        blocks: [{ ...form.entry.blocks[0], override_length: "21", override_rsi_lower: "25" }],
+      },
+    };
+    const entry = mergeGraphSections(p, changed).position_entry_logic as Record<string, unknown>;
+    const blocks = entry.indicator_blocks as Record<string, unknown>[];
+    expect(blocks[0].parameter_overrides).toEqual({ length: "21", rsi_lower: "25" });
+  });
+
+  it("extracts + re-emits the condition reference chain via typed fields", () => {
+    const p = fullPayload();
+    const form = extractGraphSections(p);
+    const cond = form.entry.blocks[0].conditions[0];
+    expect(cond.reference_package_ref?.package_root_id).toBe("pkg_ref");
+    expect(cond.reference_timeframe).toBe("1h");
+    const changed: GraphState = {
+      ...form,
+      entry: {
+        ...form.entry,
+        blocks: [
+          {
+            ...form.entry.blocks[0],
+            conditions: [
+              {
+                ...cond,
+                reference_length: "50",
+                additional_references: [
+                  {
+                    key: "leg1",
+                    package_ref: {
+                      package_root_id: "pkg_leg",
+                      package_revision_id: "rev_leg",
+                      package_content_hash: "hash_leg",
+                    },
+                    timeframe: "4h",
+                    reference_length: "200",
+                    raw: {},
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    };
+    const entry = mergeGraphSections(p, changed).position_entry_logic as Record<string, unknown>;
+    const blocks = entry.indicator_blocks as Record<string, unknown>[];
+    const conditions = blocks[0].condition_blocks as Record<string, unknown>[];
+    expect(conditions[0].parameter_overrides).toEqual({ reference_length: "50" });
+    expect(conditions[0].additional_reference_package_refs).toEqual([
+      {
+        package_ref: {
+          package_root_id: "pkg_leg",
+          package_revision_id: "rev_leg",
+          package_content_hash: "hash_leg",
+        },
+        timeframe: "4h",
+        parameter_overrides: { reference_length: "200" },
+      },
+    ]);
+  });
+
+  it("writes a constant-threshold condition and drops chain fields when unpinned", () => {
+    const p = fullPayload();
+    const form = extractGraphSections(p);
+    const cond = form.entry.blocks[0].conditions[0];
+    const changed: GraphState = {
+      ...form,
+      entry: {
+        ...form.entry,
+        blocks: [
+          {
+            ...form.entry.blocks[0],
+            conditions: [
+              {
+                ...cond,
+                reference_package_ref: null,
+                source: "indicator_output",
+                threshold: "30",
+              },
+            ],
+          },
+        ],
+      },
+    };
+    const entry = mergeGraphSections(p, changed).position_entry_logic as Record<string, unknown>;
+    const blocks = entry.indicator_blocks as Record<string, unknown>[];
+    const conditions = blocks[0].condition_blocks as Record<string, unknown>[];
+    expect(conditions[0]).not.toHaveProperty("reference_package_ref");
+    expect(conditions[0]).not.toHaveProperty("reference_timeframe");
+    expect(conditions[0].parameter_overrides).toEqual({
+      source: "indicator_output",
+      threshold: "30",
+    });
+  });
+
+  it("emits stop_priority_order only for priority-based resolutions", () => {
+    const p = fullPayload();
+    const form = extractGraphSections(p);
+    const withOrder: GraphState = {
+      ...form,
+      stop: {
+        ...form.stop,
+        conflict_resolution: "priority_order",
+        priority_order: ["percentage", "trailing"],
+      },
+    };
+    const stop = mergeGraphSections(p, withOrder).protection_stop_logic as Record<string, unknown>;
+    expect(stop.stop_priority_order).toEqual(["percentage", "trailing"]);
+
+    const conservative: GraphState = {
+      ...form,
+      stop: {
+        ...form.stop,
+        conflict_resolution: "most_conservative",
+        priority_order: ["percentage"],
+      },
+    };
+    const stop2 = mergeGraphSections(p, conservative).protection_stop_logic as Record<
+      string,
+      unknown
+    >;
+    expect(stop2).not.toHaveProperty("stop_priority_order");
   });
 });
 
@@ -353,7 +541,7 @@ describe("PositionEntryCard / PositionExitCard / LogicBasedStopCard", () => {
     expect(sent.untouched_future_key).toBe("preserved");
     const entry = sent.position_entry_logic as Record<string, unknown>;
     const blocks = entry.indicator_blocks as Record<string, unknown>[];
-    expect(blocks[0].parameter_overrides).toEqual({ length: 14 });
+    expect(blocks[0].parameter_overrides).toEqual({ length: "14" });
   });
 });
 
@@ -371,12 +559,46 @@ describe("ScalingCard / RestrictionsCard", () => {
     expect(screen.getByRole("heading", { name: /^8\. Restrictions \/ Filters/ })).toBeTruthy();
   });
 
-  it("blocks apply when a filter config is invalid JSON", () => {
+  it("blocks apply when a typed blackout range is out of order", () => {
     stubApi({ "GET /library": LIBRARY_PAGE });
-    const onApply = renderComponent(RestrictionsCard, fullPayload());
-    fireEvent.change(screen.getByLabelText(/Config/), { target: { value: "{ not json" } });
+    const payload = {
+      ...fullPayload(),
+      restrictions_filters: {
+        rule: "any",
+        filters: [
+          {
+            filter_id: "f1",
+            filter_type: "date_blackout_filter",
+            enabled: true,
+            config: { date_ranges: [{ start: "2024-02-01", end: "2024-01-01" }] },
+          },
+        ],
+      },
+    };
+    const onApply = renderComponent(RestrictionsCard, payload);
     fireEvent.click(screen.getByRole("button", { name: "Apply Restrictions changes" }));
     expect(onApply).not.toHaveBeenCalled();
-    expect(screen.getByRole("alert").textContent).toMatch(/not valid JSON/);
+    expect(screen.getByRole("alert").textContent).toMatch(/start ≤ end/);
+  });
+
+  it("renders typed config controls per modelled filter type", () => {
+    stubApi({ "GET /library": LIBRARY_PAGE });
+    const payload = {
+      restrictions_filters: {
+        rule: "any",
+        filters: [
+          {
+            filter_id: "f1",
+            filter_type: "max_daily_loss_filter",
+            enabled: true,
+            config: { limit_percent: "3" },
+          },
+        ],
+      },
+    };
+    renderComponent(RestrictionsCard, payload);
+    const limit = screen.getByLabelText(/Daily loss limit/) as HTMLInputElement;
+    expect(limit.value).toBe("3");
+    expect(screen.queryByLabelText(/Config \(JSON/)).toBeNull();
   });
 });

@@ -185,6 +185,30 @@ export const FILTER_TYPE_OPTIONS: SelectOption[] = [
   { value: "correlation_filter", label: "Correlation Filter" },
 ];
 
+// R2-05a — condition compared-source / series-reference vocabulary
+// (indicator_plan.py CONDITION_SOURCES). "" = engine default (close).
+export const CONDITION_SOURCE_OPTIONS: SelectOption[] = [
+  { value: "close", label: "Close" },
+  { value: "open", label: "Open" },
+  { value: "high", label: "High" },
+  { value: "low", label: "Low" },
+  { value: "indicator_output", label: "Indicator output (parent block)" },
+];
+
+// R2-05a — restriction filter types the V1 engine actually models
+// (engine.py _MODELLED_FILTER_TYPES); the rest fail closed at Ready Check.
+export const MODELLED_FILTER_TYPES = new Set([
+  "date_blackout_filter",
+  "max_daily_loss_filter",
+  "consecutive_loss_filter",
+]);
+
+// R2-05a — stop_conflict_resolution values that consult stop_priority_order.
+export const PRIORITY_STOP_RESOLUTIONS = new Set([
+  "priority_order",
+  "record_all_execute_highest",
+]);
+
 // ⓘ panel by filter_type where doc 02 §6 provides one (others have no panel).
 export const FILTER_TYPE_PANEL_KEY: Record<string, string> = {
   volatility_filter: "volatilityFilter",
@@ -351,6 +375,17 @@ export interface PackageRefForm {
   package_content_hash: string;
 }
 
+// R2-05a — one additional reference leg of the N-ary comparison chain
+// (config.py ReferenceLeg): its own pinned package, timeframe and look-back
+// (parameter_overrides.reference_length).
+export interface ReferenceLegForm {
+  key: string;
+  package_ref: PackageRefForm | null;
+  timeframe: string;
+  reference_length: string;
+  raw: Record<string, unknown>;
+}
+
 export interface ConditionBlockForm {
   key: string;
   condition_block_id: string;
@@ -358,6 +393,17 @@ export interface ConditionBlockForm {
   package_ref: PackageRefForm | null;
   requirement: string;
   validity: string;
+  // R2-05a — typed condition parameter overrides (indicator_plan.py canonical
+  // keys). Blank ("") = key omitted, the engine default decides.
+  source: string; // parameter_overrides.source (close/open/high/low/indicator_output)
+  threshold: string; // parameter_overrides.threshold (constant RHS)
+  bound_lower: string; // parameter_overrides.lower (cond.between)
+  bound_upper: string; // parameter_overrides.upper (cond.between)
+  series_reference: string; // parameter_overrides.reference (bounded series RHS)
+  reference_length: string; // parameter_overrides.reference_length (2nd-package RHS look-back)
+  reference_package_ref: PackageRefForm | null;
+  reference_timeframe: string;
+  additional_references: ReferenceLegForm[];
   raw: Record<string, unknown>;
 }
 
@@ -373,6 +419,11 @@ export interface IndicatorBlockForm {
   requirement: string;
   condition_block_rule: string;
   min_supporting_condition_count: string;
+  // R2-05a — typed block parameter overrides (indicator_plan.py canonical keys:
+  // length / rsi_lower / rsi_upper). Blank = engine-version default.
+  override_length: string;
+  override_rsi_lower: string;
+  override_rsi_upper: string;
   conditions: ConditionBlockForm[];
   raw: Record<string, unknown>;
 }
@@ -418,12 +469,24 @@ export interface ScalingForm {
   raw: Record<string, unknown>;
 }
 
+// R2-05a — one typed date blackout range (engine canonical config key
+// date_ranges: [{start, end}] with strict YYYY-MM-DD calendar dates).
+export interface DateRangeForm {
+  key: string;
+  start: string;
+  end: string;
+}
+
 export interface RestrictionFilterForm {
   key: string;
   filter_id: string;
   filter_type: string;
   enabled: boolean;
-  config_text: string;
+  // R2-05a — typed per-type config (engine.py canonical keys). Unknown config
+  // keys survive via raw.config; the JSON textarea is gone.
+  date_ranges: DateRangeForm[]; // date_blackout_filter
+  limit_percent: string; // max_daily_loss_filter
+  max_losses: string; // consecutive_loss_filter
   raw: Record<string, unknown>;
 }
 
@@ -440,6 +503,9 @@ export interface StopLogicForm {
   logic_blocks: IndicatorBlockForm[];
   trigger_requirement: string; // any_active | all_active
   conflict_resolution: string; // most_conservative | priority_order | ...
+  // R2-05a — stop_priority_order entries ('percentage' | 'trailing' |
+  // 'absolute' | 'logic:<block_id>'); [] = canonical §9.2 default order.
+  priority_order: string[];
   raw: Record<string, unknown>;
 }
 
@@ -497,9 +563,65 @@ function extractPackageRef(value: unknown): PackageRefForm | null {
   };
 }
 
+// Alias tuples mirror indicator_plan.py: the FIRST present alias wins on read;
+// the merge writes the canonical (first) key and drops the covered aliases so a
+// typed edit never leaves a stale alias behind.
+const LENGTH_KEYS = ["length", "period", "len"] as const;
+const RSI_LOWER_KEYS = ["rsi_lower", "lower", "oversold"] as const;
+const RSI_UPPER_KEYS = ["rsi_upper", "upper", "overbought"] as const;
+const SOURCE_KEYS = ["source", "input", "series"] as const;
+const THRESHOLD_KEYS = ["threshold", "value", "level"] as const;
+const BOUND_LOWER_KEYS = ["lower", "lower_bound", "min"] as const;
+const BOUND_UPPER_KEYS = ["upper", "upper_bound", "max"] as const;
+const REFERENCE_KEYS = ["reference", "compare_to", "other"] as const;
+const REFERENCE_LENGTH_KEYS = ["reference_length", "compare_length", "reference_len"] as const;
+
+function aliasValue(overrides: Record<string, unknown>, keys: readonly string[]): string {
+  for (const key of keys) {
+    const value = overrides[key];
+    if (value !== null && value !== undefined && value !== "") return String(value);
+  }
+  return "";
+}
+
+// Write the canonical key (or delete it when blank) and remove every covered
+// alias so the engine's first-alias-wins read sees exactly the typed value.
+function setAlias(
+  overrides: Record<string, unknown>,
+  keys: readonly string[],
+  value: string,
+): void {
+  for (const key of keys) delete overrides[key];
+  const trimmed = value.trim();
+  if (trimmed !== "") overrides[keys[0]] = trimmed;
+}
+
+function extractLeg(raw: unknown, index: number): ReferenceLegForm {
+  const leg = asRecord(raw);
+  const overrides = asRecord(leg.parameter_overrides);
+  return {
+    key: `leg-${index}-${newBlockId()}`,
+    package_ref: extractPackageRef(leg.package_ref),
+    timeframe: enumStr(leg.timeframe, "same_as_base_tf"),
+    reference_length: aliasValue(overrides, REFERENCE_LENGTH_KEYS),
+    raw: leg,
+  };
+}
+
+export function newLeg(): ReferenceLegForm {
+  return {
+    key: newBlockId(),
+    package_ref: null,
+    timeframe: "same_as_base_tf",
+    reference_length: "",
+    raw: {},
+  };
+}
+
 function extractCondition(raw: unknown, index: number): ConditionBlockForm {
   const c = asRecord(raw);
   const id = str(c.condition_block_id) || newBlockId();
+  const overrides = asRecord(c.parameter_overrides);
   return {
     key: id || `cond-${index}`,
     condition_block_id: id,
@@ -507,6 +629,17 @@ function extractCondition(raw: unknown, index: number): ConditionBlockForm {
     package_ref: extractPackageRef(c.package_ref),
     requirement: str(c.requirement),
     validity: enumStr(c.validity, "3_candles"),
+    source: aliasValue(overrides, SOURCE_KEYS),
+    threshold: aliasValue(overrides, THRESHOLD_KEYS),
+    bound_lower: aliasValue(overrides, BOUND_LOWER_KEYS),
+    bound_upper: aliasValue(overrides, BOUND_UPPER_KEYS),
+    series_reference: aliasValue(overrides, REFERENCE_KEYS),
+    reference_length: aliasValue(overrides, REFERENCE_LENGTH_KEYS),
+    reference_package_ref: extractPackageRef(c.reference_package_ref),
+    reference_timeframe: enumStr(c.reference_timeframe, "same_as_base_tf"),
+    additional_references: asArray(c.additional_reference_package_refs).map((leg, i) =>
+      extractLeg(leg, i),
+    ),
     raw: c,
   };
 }
@@ -514,6 +647,7 @@ function extractCondition(raw: unknown, index: number): ConditionBlockForm {
 function extractBlock(raw: unknown, index: number): IndicatorBlockForm {
   const b = asRecord(raw);
   const id = str(b.block_id) || newBlockId();
+  const overrides = asRecord(b.parameter_overrides);
   return {
     key: id || `block-${index}`,
     block_id: id,
@@ -526,6 +660,9 @@ function extractBlock(raw: unknown, index: number): IndicatorBlockForm {
     requirement: str(b.requirement),
     condition_block_rule: str(b.condition_block_rule),
     min_supporting_condition_count: str(b.min_supporting_condition_count),
+    override_length: aliasValue(overrides, LENGTH_KEYS),
+    override_rsi_lower: aliasValue(overrides, RSI_LOWER_KEYS),
+    override_rsi_upper: aliasValue(overrides, RSI_UPPER_KEYS),
     conditions: asArray(b.condition_blocks).map((c, i) => extractCondition(c, i)),
     raw: b,
   };
@@ -545,6 +682,9 @@ function newBlock(): IndicatorBlockForm {
     requirement: "required",
     condition_block_rule: "",
     min_supporting_condition_count: "",
+    override_length: "",
+    override_rsi_lower: "",
+    override_rsi_upper: "",
     conditions: [],
     raw: {},
   };
@@ -559,13 +699,35 @@ export function newCondition(): ConditionBlockForm {
     package_ref: null,
     requirement: "required",
     validity: "3_candles",
+    source: "",
+    threshold: "",
+    bound_lower: "",
+    bound_upper: "",
+    series_reference: "",
+    reference_length: "",
+    reference_package_ref: null,
+    reference_timeframe: "same_as_base_tf",
+    additional_references: [],
     raw: {},
   };
 }
 
 export function newFilter(): RestrictionFilterForm {
   const id = newBlockId();
-  return { key: id, filter_id: id, filter_type: "", enabled: true, config_text: "", raw: {} };
+  return {
+    key: id,
+    filter_id: id,
+    filter_type: "",
+    enabled: true,
+    date_ranges: [],
+    limit_percent: "",
+    max_losses: "",
+    raw: {},
+  };
+}
+
+export function newDateRange(): DateRangeForm {
+  return { key: newBlockId(), start: "", end: "" };
 }
 
 function extractFilter(raw: unknown, index: number): RestrictionFilterForm {
@@ -577,7 +739,12 @@ function extractFilter(raw: unknown, index: number): RestrictionFilterForm {
     filter_id: id,
     filter_type: str(f.filter_type),
     enabled: bool(f.enabled, true),
-    config_text: Object.keys(config).length > 0 ? JSON.stringify(config, null, 2) : "",
+    date_ranges: asArray(config.date_ranges).map((r, i) => {
+      const range = asRecord(r);
+      return { key: `dr-${i}-${newBlockId()}`, start: str(range.start), end: str(range.end) };
+    }),
+    limit_percent: str(config.limit_percent),
+    max_losses: str(config.max_losses),
     raw: f,
   };
 }
@@ -618,6 +785,7 @@ function extractStop(payload: Record<string, unknown>): StopLogicForm {
     logic_blocks: asArray(p.logic_blocks).map((b, i) => extractBlock(b, i)),
     trigger_requirement: enumStr(p.stop_trigger_requirement, "any_active"),
     conflict_resolution: enumStr(p.stop_conflict_resolution, "most_conservative"),
+    priority_order: asArray(p.stop_priority_order).map((e) => str(e)),
     raw: p,
   };
 }
@@ -683,6 +851,27 @@ function setOrDelete(out: Record<string, unknown>, key: string, value: unknown):
   else out[key] = value;
 }
 
+// Overlay the typed override fields onto the raw parameter_overrides dict,
+// preserving unknown keys; an all-empty result deletes the key entirely.
+function mergeOverrides(
+  raw: Record<string, unknown>,
+  writes: Array<[readonly string[], string]>,
+): Record<string, unknown> | undefined {
+  const out = { ...asRecord(raw.parameter_overrides) };
+  for (const [keys, value] of writes) setAlias(out, keys, value);
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+function mergeLeg(leg: ReferenceLegForm): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...leg.raw };
+  if (leg.package_ref) out.package_ref = { ...leg.package_ref };
+  else delete out.package_ref;
+  setOrDelete(out, "timeframe", leg.timeframe);
+  const overrides = mergeOverrides(leg.raw, [[REFERENCE_LENGTH_KEYS, leg.reference_length]]);
+  setOrDelete(out, "parameter_overrides", overrides);
+  return out;
+}
+
 function mergeCondition(c: ConditionBlockForm, index: number): Record<string, unknown> {
   const out: Record<string, unknown> = { ...c.raw };
   out.condition_block_id = c.condition_block_id;
@@ -692,6 +881,31 @@ function mergeCondition(c: ConditionBlockForm, index: number): Record<string, un
   setOrDelete(out, "validity", c.validity);
   if (c.package_ref) out.package_ref = { ...c.package_ref };
   else delete out.package_ref;
+  const hasReferencePackage = c.reference_package_ref !== null;
+  if (hasReferencePackage) {
+    out.reference_package_ref = { ...c.reference_package_ref };
+    setOrDelete(out, "reference_timeframe", c.reference_timeframe);
+    const legs = c.additional_references
+      .filter((leg) => leg.package_ref !== null)
+      .map((leg) => mergeLeg(leg));
+    if (legs.length > 0) out.additional_reference_package_refs = legs;
+    else delete out.additional_reference_package_refs;
+  } else {
+    // No primary reference package: the chain fields are meaningless (the
+    // server surfaces them as misconfigurations) — drop them entirely.
+    delete out.reference_package_ref;
+    delete out.reference_timeframe;
+    delete out.additional_reference_package_refs;
+  }
+  const overrides = mergeOverrides(c.raw, [
+    [SOURCE_KEYS, c.source],
+    [THRESHOLD_KEYS, hasReferencePackage ? "" : c.threshold],
+    [BOUND_LOWER_KEYS, hasReferencePackage ? "" : c.bound_lower],
+    [BOUND_UPPER_KEYS, hasReferencePackage ? "" : c.bound_upper],
+    [REFERENCE_KEYS, hasReferencePackage ? "" : c.series_reference],
+    [REFERENCE_LENGTH_KEYS, hasReferencePackage ? c.reference_length : ""],
+  ]);
+  setOrDelete(out, "parameter_overrides", overrides);
   return out;
 }
 
@@ -709,6 +923,12 @@ function mergeBlock(b: IndicatorBlockForm, index: number): Record<string, unknow
   setOrDelete(out, "requirement", b.requirement);
   setOrDelete(out, "condition_block_rule", b.condition_block_rule);
   setOrDelete(out, "min_supporting_condition_count", intOrOmit(b.min_supporting_condition_count));
+  const overrides = mergeOverrides(b.raw, [
+    [LENGTH_KEYS, b.override_length],
+    [RSI_LOWER_KEYS, b.override_rsi_lower],
+    [RSI_UPPER_KEYS, b.override_rsi_upper],
+  ]);
+  setOrDelete(out, "parameter_overrides", overrides);
   if (b.conditions.length > 0) {
     out.condition_blocks = b.conditions.map((c, i) => mergeCondition(c, i));
   } else {
@@ -735,28 +955,38 @@ function pruneUndefined(obj: Record<string, unknown>): Record<string, unknown> {
   return out;
 }
 
-// Parse a restriction filter's config text. "" -> {}; a valid JSON object -> it;
-// anything else -> not ok (the component blocks Apply, nothing is sent).
-export function parseFilterConfig(text: string): { ok: boolean; value: Record<string, unknown> } {
-  const trimmed = text.trim();
-  if (trimmed === "") return { ok: true, value: {} };
-  try {
-    const parsed: unknown = JSON.parse(trimmed);
-    if (parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) {
-      return { ok: true, value: parsed as Record<string, unknown> };
-    }
-    return { ok: false, value: {} };
-  } catch {
-    return { ok: false, value: {} };
-  }
-}
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
-// The label of the first restriction filter whose config text is not a valid
-// JSON object, else null — the component's client-side Apply guard (mirrors the
-// Advanced JSON editor: an invalid config is never sent).
+// R2-05a — client-side typed-config guard (replaces the old JSON-textarea
+// parse guard). Returns a human-readable problem for the FIRST filter whose
+// typed config cannot round-trip to the engine's canonical form, else null.
+// The server / Ready Check stay the authority — this only blocks an Apply that
+// would silently produce an unparseable config.
 export function firstInvalidFilterConfig(form: StrategyGraphForm): string | null {
   for (const f of form.restrictions.filters) {
-    if (!parseFilterConfig(f.config_text).ok) return f.filter_type || f.filter_id;
+    const label = f.filter_type || f.filter_id;
+    if (f.filter_type === "date_blackout_filter") {
+      for (const range of f.date_ranges) {
+        const start = range.start.trim();
+        const end = range.end.trim();
+        if (start === "" && end === "") continue;
+        if (!ISO_DATE.test(start) || !ISO_DATE.test(end)) {
+          return `${label}: each blackout range needs YYYY-MM-DD start and end dates`;
+        }
+        if (start > end) return `${label}: a blackout range must have start ≤ end`;
+      }
+    }
+    if (f.filter_type === "max_daily_loss_filter" && f.limit_percent.trim() !== "") {
+      const value = Number(f.limit_percent.trim());
+      if (!Number.isFinite(value) || value <= 0) {
+        return `${label}: limit percent must be a number > 0`;
+      }
+    }
+    if (f.filter_type === "consecutive_loss_filter" && f.max_losses.trim() !== "") {
+      if (!/^\d+$/.test(f.max_losses.trim()) || Number.parseInt(f.max_losses.trim(), 10) < 1) {
+        return `${label}: max losses must be a whole number ≥ 1`;
+      }
+    }
   }
   return null;
 }
@@ -766,8 +996,28 @@ function mergeFilter(f: RestrictionFilterForm): Record<string, unknown> {
   out.filter_id = f.filter_id;
   out.enabled = f.enabled;
   setOrDelete(out, "filter_type", f.filter_type);
-  const parsed = parseFilterConfig(f.config_text);
-  out.config = parsed.ok ? parsed.value : asRecord(f.raw.config);
+  // Typed per-type config over the raw config (unknown keys preserved).
+  const config = { ...asRecord(f.raw.config) };
+  if (f.filter_type === "date_blackout_filter") {
+    const ranges = f.date_ranges
+      .filter((r) => r.start.trim() !== "" || r.end.trim() !== "")
+      .map((r) => ({ start: r.start.trim(), end: r.end.trim() }));
+    if (ranges.length > 0) config.date_ranges = ranges;
+    else delete config.date_ranges;
+  } else {
+    delete config.date_ranges;
+  }
+  if (f.filter_type === "max_daily_loss_filter" && f.limit_percent.trim() !== "") {
+    config.limit_percent = f.limit_percent.trim();
+  } else {
+    delete config.limit_percent;
+  }
+  if (f.filter_type === "consecutive_loss_filter" && f.max_losses.trim() !== "") {
+    config.max_losses = Number.parseInt(f.max_losses.trim(), 10);
+  } else {
+    delete config.max_losses;
+  }
+  out.config = config;
   return out;
 }
 
@@ -818,6 +1068,14 @@ function mergeStop(s: StopLogicForm): Record<string, unknown> {
   }
   setOrDelete(out, "stop_trigger_requirement", s.trigger_requirement);
   setOrDelete(out, "stop_conflict_resolution", s.conflict_resolution);
+  // stop_priority_order only matters to the priority-based resolutions; an
+  // empty list means the canonical §9.2 default order (key omitted).
+  const order = s.priority_order.filter((entry) => entry.trim() !== "");
+  if (PRIORITY_STOP_RESOLUTIONS.has(s.conflict_resolution) && order.length > 0) {
+    out.stop_priority_order = order;
+  } else {
+    delete out.stop_priority_order;
+  }
   return out;
 }
 

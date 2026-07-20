@@ -292,9 +292,9 @@ function AdvancedPayloadEditor({
       <summary>Advanced (raw payload)</summary>
       <p className="cp-note">
         Apply replaces the FULL draft payload (optimistic concurrency on row version{" "}
-        {draft.row_version}). The numbered cards above cover the flat sections and the full
-        package graph — this is the fallback for each block&apos;s advanced fields (parameter
-        overrides, reference chains) and any key not yet surfaced.
+        {draft.row_version}). The numbered cards above cover every documented strategy field —
+        including parameter overrides, reference chains and typed filter configs (R2-05a) — so
+        this editor is a verification fallback, not a required input surface.
       </p>
       <label className="cp-field cp-wide">
         <span>StrategyConfig payload</span>
@@ -427,6 +427,9 @@ function DraftEditorGrid({
   const validate = useValidateStrategyDraft();
   const save = useSaveStrategyRevision();
   const clear = useClearStrategyDraft();
+  // Server-truth identity for the R2-05a payload overlay below (hook order:
+  // called unconditionally, before the early returns).
+  const strategyContext = useStrategy(draftQuery.data?.strategy_root_id ?? null);
 
   if (draftQuery.isLoading) {
     return <Loading label="Loading strategy draft…" />;
@@ -439,8 +442,25 @@ function DraftEditorGrid({
 
   // A patch replaces the FULL draft payload under BODY-form OCC (unchanged —
   // lib/strategy.ts). Every numbered card below funnels into this same call.
-  const applyPayload = (payload: Record<string, unknown>) =>
-    patch.mutate({ draftId, expectedRowVersion: draft.row_version, payload });
+  // R2-05a: the Section-1 identity keys (strategy_root_id / display_name /
+  // rationale_family_id) are SERVER-owned (creation-time, shown read-only in
+  // the Strategy Context card) but the compiler requires them in the payload —
+  // overlay them from server truth so no user ever types a root id into the
+  // Advanced editor to make Validate pass. Explicit payload values win.
+  const identity = strategyContext.data;
+  const applyPayload = (payload: Record<string, unknown>) => {
+    const withIdentity: Record<string, unknown> = { ...payload };
+    if (withIdentity.strategy_root_id === undefined && draft.strategy_root_id !== null) {
+      withIdentity.strategy_root_id = draft.strategy_root_id;
+    }
+    if (withIdentity.display_name === undefined && identity?.display_name) {
+      withIdentity.display_name = identity.display_name;
+    }
+    if (withIdentity.rationale_family_id === undefined && identity?.rationale_family_id) {
+      withIdentity.rationale_family_id = identity.rationale_family_id;
+    }
+    patch.mutate({ draftId, expectedRowVersion: draft.row_version, payload: withIdentity });
+  };
 
   const cardProps = { payload: draft.payload, pending: patch.isPending, onApply: applyPayload };
 

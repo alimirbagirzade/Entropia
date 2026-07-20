@@ -215,7 +215,10 @@ describe("StrategyDetails", () => {
     expect(call).toBeTruthy();
     const body = JSON.parse(String(call?.[1]?.body)) as Record<string, unknown>;
     expect(body.expected_draft_row_version).toBe(2);
-    expect(body.payload).toEqual(DRAFT.payload);
+    // R2-05a: the server-owned Section-1 identity is overlaid onto the payload
+    // so Validate never needs a hand-typed root id; the OCC token above and the
+    // Idempotency-Key below are byte-identical to the pre-R2-05a contract.
+    expect(body.payload).toEqual({ ...DRAFT.payload, strategy_root_id: "root_1" });
     expect(headersOf(call?.[1])["Idempotency-Key"]).toBeTruthy();
   });
 

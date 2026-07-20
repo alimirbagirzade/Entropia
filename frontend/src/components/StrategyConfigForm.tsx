@@ -585,6 +585,30 @@ export function PositionSizingCard({
             panelKey="customFormula"
           />
         ) : null}
+        {s.method === "formula_based_sizing" && s.formula_type === "kelly_criterion" ? (
+          <>
+            <TextField
+              label="Win probability (W)"
+              required
+              value={s.kelly_win_probability}
+              onChange={(v) => setSizing({ kelly_win_probability: v })}
+              placeholder="e.g. 0.55 (between 0 and 1)"
+            />
+            <TextField
+              label="Payoff ratio (R)"
+              required
+              value={s.kelly_payoff_ratio}
+              onChange={(v) => setSizing({ kelly_payoff_ratio: v })}
+              placeholder="avg win / avg loss, e.g. 2"
+            />
+            <TextField
+              label="Kelly fraction"
+              value={s.kelly_fraction}
+              onChange={(v) => setSizing({ kelly_fraction: v })}
+              placeholder="Blank = full Kelly (1)"
+            />
+          </>
+        ) : null}
         <SelectField
           label="Signal strength adjustment"
           value={s.signal_strength_adjustment}
@@ -600,6 +624,13 @@ export function PositionSizingCard({
           panelKey="leverageMode"
         />
         <TextField
+          label="Leverage"
+          unit="x"
+          value={s.leverage}
+          onChange={(v) => setSizing({ leverage: v })}
+          placeholder="e.g. 1"
+        />
+        <TextField
           label="Min position size"
           unit="%"
           value={s.min_position_size}
@@ -613,10 +644,10 @@ export function PositionSizingCard({
           panelKey="maxSinglePosition"
         />
       </div>
-      {s.method === "formula_based_sizing" ? (
+      {s.method === "formula_based_sizing" && s.formula_type === "custom_formula" ? (
         <p className="cp-note">
-          Formula parameters (e.g. Kelly inputs) are preserved from the Advanced (JSON) editor —
-          this form edits the formula type only.
+          Custom formulas are not modelled by the V1 engine (Ready Check blocks the run); any
+          existing formula parameters are preserved verbatim.
         </p>
       ) : null}
       <div style={{ marginTop: 14 }}>

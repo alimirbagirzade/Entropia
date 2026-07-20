@@ -230,6 +230,7 @@ export const SIGNAL_STRENGTH_OPTIONS: SelectOption[] = [
 ];
 
 export const LEVERAGE_MODE_OPTIONS: SelectOption[] = [
+  { value: "no_leverage", label: "No Leverage" },
   { value: "isolated", label: "Isolated" },
   { value: "cross", label: "Cross" },
 ];
@@ -314,8 +315,16 @@ export interface StrategyFlatForm {
     risk_percentage_per_trade: string;
     risk_stop_loss_point: string;
     formula_type: string;
+    // R2-05a — typed Kelly formula params (engine.py _kelly_capital_fraction
+    // canonical keys). Blank kelly_fraction = full Kelly (key omitted).
+    kelly_win_probability: string;
+    kelly_payoff_ratio: string;
+    kelly_fraction: string;
     signal_strength_adjustment: string;
     leverage_mode: string;
+    // R2-05a — leverage multiplier (§10.2); previously Advanced-only and
+    // silently DROPPED by the sizing merge.
+    leverage: string;
     min_position_size: string;
     max_position_size: string;
   };
@@ -439,11 +448,15 @@ export function extractFlatSections(payload: Record<string, unknown>): StrategyF
       risk_percentage_per_trade: str(risk.risk_percentage_per_trade),
       risk_stop_loss_point: str(risk.stop_loss_point),
       formula_type: enumStr(formula.formula_type, "kelly_criterion"),
+      kelly_win_probability: str(asRecord(formula.formula_params).win_probability),
+      kelly_payoff_ratio: str(asRecord(formula.formula_params).payoff_ratio),
+      kelly_fraction: str(asRecord(formula.formula_params).kelly_fraction),
       signal_strength_adjustment: enumStr(
         sizing.signal_strength_adjustment,
         DEFAULTS.signal_strength_adjustment,
       ),
       leverage_mode: enumStr(sizing.leverage_mode, DEFAULTS.leverage_mode),
+      leverage: str(sizing.leverage),
       min_position_size: str(limits.min_position_size),
       max_position_size: str(limits.max_position_size),
     },
@@ -531,7 +544,10 @@ export function mergeFlatSections(
     );
   }
 
+  // Spread the raw section first so uncovered keys (e.g. the optional GAP-16
+  // instrument_scope) survive the overlay untouched.
   const data: Record<string, unknown> = pruneUndefined({
+    ...asRecord(payload.data),
     instrument_id: decOrOmit(d.instrument_id),
     market_dataset_root_id: decOrOmit(d.market_dataset_root_id),
     market_dataset_revision_id: decOrOmit(d.market_dataset_revision_id),
@@ -557,7 +573,11 @@ export function mergeFlatSections(
   });
 
   const p = form.protection;
+  // Spread the raw protection object so the graph-form-owned keys
+  // (logic_blocks, stop_trigger_requirement, stop_conflict_resolution,
+  // stop_priority_order) survive a price-stop Apply untouched.
   const protection: Record<string, unknown> = {
+    ...asRecord(payload.protection_stop_logic),
     percentage_stop: pruneUndefined({
       enabled: p.percentage_enabled,
       loss_percentage: decOrOmit(p.percentage_loss),
@@ -574,7 +594,26 @@ export function mergeFlatSections(
   };
 
   const s = form.sizing;
+  // Typed Kelly params over the raw formula_params (unknown / custom-formula
+  // keys preserved; blank kelly_fraction omits the key = full Kelly default).
+  const rawFormulaParams = asRecord(
+    asRecord(asRecord(payload.position_sizing).formula_based).formula_params,
+  );
+  const formulaParams: Record<string, unknown> = { ...rawFormulaParams };
+  for (const [key, value] of [
+    ["win_probability", s.kelly_win_probability],
+    ["payoff_ratio", s.kelly_payoff_ratio],
+    ["kelly_fraction", s.kelly_fraction],
+  ] as const) {
+    if (s.formula_type === "kelly_criterion") {
+      if (value.trim() === "") delete formulaParams[key];
+      else formulaParams[key] = value.trim();
+    }
+  }
   const sizing: Record<string, unknown> = pruneUndefined({
+    // Spread raw so future uncovered sizing keys survive; the inactive method
+    // branches are explicitly overridden to undefined below (exactly-one-method).
+    ...asRecord(payload.position_sizing),
     method: s.method,
     base_position_size:
       s.method === "base_position_size" ? decOrOmit(s.base_position_size) : undefined,
@@ -587,16 +626,11 @@ export function mergeFlatSections(
         : undefined,
     formula_based:
       s.method === "formula_based_sizing"
-        ? {
-            formula_type: s.formula_type,
-            // Preserve any Kelly / custom params set via the Advanced editor.
-            formula_params: asRecord(
-              asRecord(asRecord(payload.position_sizing).formula_based).formula_params,
-            ),
-          }
+        ? { formula_type: s.formula_type, formula_params: formulaParams }
         : undefined,
     signal_strength_adjustment: s.signal_strength_adjustment,
     leverage_mode: s.leverage_mode,
+    leverage: decOrOmit(s.leverage),
     position_size_limits:
       s.min_position_size.trim() === "" && s.max_position_size.trim() === ""
         ? undefined

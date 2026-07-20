@@ -137,12 +137,16 @@ export function PackagePicker({
   value,
   onChange,
   panel,
+  optional,
 }: {
   kind: "indicator" | "condition";
   label: string;
   value: PackageRefForm | null;
   onChange: (ref: PackageRefForm | null) => void;
   panel?: InfoPanelContent;
+  // R2-05a — an optional pin (e.g. a condition's reference indicator package)
+  // renders without the required asterisk.
+  optional?: boolean;
 }) {
   const [browsing, setBrowsing] = useState(false);
 
@@ -150,7 +154,8 @@ export function PackagePicker({
     <div className="pkg-picker cp-wide">
       <span className="field-head">
         <span className="pkg-picker-label">
-          {label} <span aria-hidden="true">*</span>
+          {label}
+          {optional ? null : <span aria-hidden="true"> *</span>}
         </span>
         {panel ? <InfoPanel panel={panel} /> : null}
       </span>

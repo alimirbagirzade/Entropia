@@ -11,12 +11,15 @@ import {
   CONDITION_BLOCK_RULE_OPTIONS,
   CONDITION_MIN_SUPPORTING_RULE,
   CONDITION_REQUIRING_TRIGGERS,
+  CONDITION_SOURCE_OPTIONS,
   CONDITION_VALIDITY_OPTIONS,
   DIRECTION_MODE_OPTIONS,
   FILTER_TYPE_OPTIONS,
   FILTER_TYPE_PANEL_KEY,
   INDICATOR_VALIDITY_OPTIONS,
+  MODELLED_FILTER_TYPES,
   PARTIAL_AFTERMATH_OPTIONS,
+  PRIORITY_STOP_RESOLUTIONS,
   REQUIREMENT_OPTIONS,
   RESTRICTION_RULE_OPTIONS,
   SCALING_METHOD_OPTIONS,
@@ -28,17 +31,21 @@ import {
   TRIGGER_SOURCE_OPTIONS,
   type ConditionBlockForm,
   type IndicatorBlockForm,
+  type ReferenceLegForm,
   type RestrictionFilterForm,
   type RestrictionsForm,
   type ScalingForm,
   type SelectOption,
+  type StopLogicForm,
   type StrategyGraphForm as GraphFormState,
   extractGraphSections,
   firstInvalidFilterConfig,
   mergeGraphSections,
   newBlock,
   newCondition,
+  newDateRange,
   newFilter,
+  newLeg,
 } from "@/lib/strategyGraph";
 
 // R6 / GAP-08 — the structured editor for the package-graph decision sections
@@ -216,6 +223,59 @@ function blockPanels(scope: Scope) {
 // Condition block editor
 // ---------------------------------------------------------------------------
 
+// R2-05a — one additional reference leg of the N-ary comparison chain
+// (fast-MA vs slow-MA vs slowest-MA fan): its own pinned package, timeframe
+// and look-back, all typed (no id entry).
+function ReferenceLegEditor({
+  leg,
+  index,
+  onChange,
+  onRemove,
+}: {
+  leg: ReferenceLegForm;
+  index: number;
+  onChange: (patch: Partial<ReferenceLegForm>) => void;
+  onRemove: () => void;
+}) {
+  return (
+    <div className="graph-condition">
+      <div className="graph-block-head">
+        <span className="field-head">
+          <strong>Reference leg {index + 2}</strong>
+        </span>
+        <button
+          type="button"
+          className="btn"
+          onClick={onRemove}
+          aria-label={`Remove reference leg ${index + 2}`}
+        >
+          Remove
+        </button>
+      </div>
+      <div className="cp-form strategy-form-grid">
+        <PackagePicker
+          kind="indicator"
+          label={`Reference leg ${index + 2} package`}
+          value={leg.package_ref}
+          onChange={(ref) => onChange({ package_ref: ref })}
+        />
+        <SelectField
+          label={`Reference leg ${index + 2} timeframe`}
+          value={leg.timeframe}
+          onChange={(v) => onChange({ timeframe: v })}
+          options={BLOCK_TIMEFRAME_OPTIONS}
+        />
+        <TextField
+          label={`Reference leg ${index + 2} length`}
+          value={leg.reference_length}
+          onChange={(v) => onChange({ reference_length: v })}
+          placeholder="Engine default"
+        />
+      </div>
+    </div>
+  );
+}
+
 function ConditionEditor({
   scope,
   condition,
@@ -230,6 +290,15 @@ function ConditionEditor({
   onRemove: () => void;
 }) {
   const panels = blockPanels(scope);
+  const hasReference = condition.reference_package_ref !== null;
+
+  const updateLeg = (i: number, patch: Partial<ReferenceLegForm>) =>
+    onChange({
+      additional_references: condition.additional_references.map((leg, idx) =>
+        idx === i ? { ...leg, ...patch } : leg,
+      ),
+    });
+
   return (
     <div className="graph-condition">
       <div className="graph-block-head">
@@ -269,7 +338,101 @@ function ConditionEditor({
           checked={condition.enabled}
           onChange={(checked) => onChange({ enabled: checked })}
         />
+        <SelectField
+          label="Compared source"
+          value={condition.source}
+          onChange={(v) => onChange({ source: v })}
+          options={CONDITION_SOURCE_OPTIONS}
+          placeholder="Engine default (Close)"
+        />
+        <div className="cp-field" aria-hidden="true" />
       </div>
+
+      <p className="cp-note">
+        Comparison target: pin a reference indicator package for an
+        indicator-vs-indicator comparison, or leave it unpinned and use a constant
+        threshold / bounded series / range bounds below (doc 02 §5.3; the server
+        validates which form the condition package expects).
+      </p>
+      <div className="cp-form strategy-form-grid">
+        <PackagePicker
+          kind="indicator"
+          label="Reference indicator package (optional)"
+          optional
+          value={condition.reference_package_ref}
+          onChange={(ref) => onChange({ reference_package_ref: ref })}
+        />
+        {hasReference ? (
+          <>
+            <SelectField
+              label="Reference timeframe"
+              value={condition.reference_timeframe}
+              onChange={(v) => onChange({ reference_timeframe: v })}
+              options={BLOCK_TIMEFRAME_OPTIONS}
+            />
+            <TextField
+              label="Reference length"
+              value={condition.reference_length}
+              onChange={(v) => onChange({ reference_length: v })}
+              placeholder="Engine default"
+            />
+          </>
+        ) : (
+          <>
+            <TextField
+              label="Constant threshold"
+              value={condition.threshold}
+              onChange={(v) => onChange({ threshold: v })}
+              placeholder="e.g. 30"
+            />
+            <SelectField
+              label="Series reference"
+              value={condition.series_reference}
+              onChange={(v) => onChange({ series_reference: v })}
+              options={CONDITION_SOURCE_OPTIONS}
+              placeholder="None (use threshold)"
+            />
+            <TextField
+              label="Range lower bound (between)"
+              value={condition.bound_lower}
+              onChange={(v) => onChange({ bound_lower: v })}
+            />
+            <TextField
+              label="Range upper bound (between)"
+              value={condition.bound_upper}
+              onChange={(v) => onChange({ bound_upper: v })}
+            />
+          </>
+        )}
+      </div>
+      {hasReference ? (
+        <div className="graph-conditions">
+          {condition.additional_references.map((leg, i) => (
+            <ReferenceLegEditor
+              key={leg.key}
+              leg={leg}
+              index={i}
+              onChange={(patch) => updateLeg(i, patch)}
+              onRemove={() =>
+                onChange({
+                  additional_references: condition.additional_references.filter(
+                    (_, idx) => idx !== i,
+                  ),
+                })
+              }
+            />
+          ))}
+          <button
+            type="button"
+            className="btn"
+            onClick={() =>
+              onChange({ additional_references: [...condition.additional_references, newLeg()] })
+            }
+          >
+            + Add Reference Leg
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -406,12 +569,34 @@ function IndicatorBlockEditor({
         ) : (
           <div className="cp-field" aria-hidden="true" />
         )}
+        <TextField
+          label="Indicator length"
+          value={block.override_length}
+          onChange={(v) => onChange({ override_length: v })}
+          placeholder="Engine default"
+        />
+        <TextField
+          label="RSI oversold bound"
+          value={block.override_rsi_lower}
+          onChange={(v) => onChange({ override_rsi_lower: v })}
+          placeholder="Default 30 (RSI only)"
+        />
+        <TextField
+          label="RSI overbought bound"
+          value={block.override_rsi_upper}
+          onChange={(v) => onChange({ override_rsi_upper: v })}
+          placeholder="Default 70 (RSI only)"
+        />
         <CheckboxField
           label="Enabled"
           checked={block.enabled}
           onChange={(checked) => onChange({ enabled: checked })}
         />
       </div>
+      <p className="cp-note">
+        Parameter overrides: a blank field keeps the engine-version default (length 20 for
+        moving averages, 14 for RSI). The RSI bounds only apply to an RSI package.
+      </p>
 
       {needsCondition ? (
         <p className="cp-note">
@@ -594,27 +779,105 @@ function ScalingSection({
 // Restrictions / Filters (§5.8)
 // ---------------------------------------------------------------------------
 
-function FilterConfigField({
-  value,
+// R2-05a — typed per-type filter config (engine.py canonical keys). The JSON
+// textarea is gone; the three engine-modelled types get real controls and the
+// remaining categories carry an honest not-modelled note (Ready Check blocks a
+// run with one enabled).
+function FilterConfigFields({
+  filter,
+  index,
   onChange,
 }: {
-  value: string;
-  onChange: (value: string) => void;
+  filter: RestrictionFilterForm;
+  index: number;
+  onChange: (patch: Partial<RestrictionFilterForm>) => void;
 }) {
-  const id = useId();
-  return (
-    <div className="cp-field cp-wide">
-      <label htmlFor={id}>Config (JSON — type-specific)</label>
-      <textarea
-        id={id}
-        rows={3}
-        value={value}
-        placeholder={'{ "threshold": 0.5 }'}
-        onChange={(event) => onChange(event.target.value)}
-        spellCheck={false}
-      />
-    </div>
-  );
+  const dateId = useId();
+  if (filter.filter_type === "date_blackout_filter") {
+    const updateRange = (i: number, patch: Partial<{ start: string; end: string }>) =>
+      onChange({
+        date_ranges: filter.date_ranges.map((r, idx) => (idx === i ? { ...r, ...patch } : r)),
+      });
+    return (
+      <div className="cp-field cp-wide">
+        {filter.date_ranges.map((range, i) => (
+          <div key={range.key} className="inline-fields" style={{ marginBottom: 6 }}>
+            <label htmlFor={`${dateId}-s-${i}`}>From</label>
+            <input
+              id={`${dateId}-s-${i}`}
+              type="date"
+              className="sd-input"
+              value={range.start}
+              aria-label={`Filter ${index + 1} blackout range ${i + 1} start`}
+              onChange={(event) => updateRange(i, { start: event.target.value })}
+            />
+            <label htmlFor={`${dateId}-e-${i}`}>to</label>
+            <input
+              id={`${dateId}-e-${i}`}
+              type="date"
+              className="sd-input"
+              value={range.end}
+              aria-label={`Filter ${index + 1} blackout range ${i + 1} end`}
+              onChange={(event) => updateRange(i, { end: event.target.value })}
+            />
+            <button
+              type="button"
+              className="btn"
+              aria-label={`Remove blackout range ${i + 1}`}
+              onClick={() =>
+                onChange({ date_ranges: filter.date_ranges.filter((_, idx) => idx !== i) })
+              }
+            >
+              Remove
+            </button>
+          </div>
+        ))}
+        <button
+          type="button"
+          className="btn"
+          onClick={() => onChange({ date_ranges: [...filter.date_ranges, newDateRange()] })}
+        >
+          + Add Blackout Range
+        </button>
+      </div>
+    );
+  }
+  if (filter.filter_type === "max_daily_loss_filter") {
+    return (
+      <div className="cp-form strategy-form-grid">
+        <TextField
+          label="Daily loss limit"
+          unit="%"
+          required
+          value={filter.limit_percent}
+          onChange={(v) => onChange({ limit_percent: v })}
+          placeholder="e.g. 3"
+        />
+      </div>
+    );
+  }
+  if (filter.filter_type === "consecutive_loss_filter") {
+    return (
+      <div className="cp-form strategy-form-grid">
+        <TextField
+          label="Max consecutive losses"
+          required
+          value={filter.max_losses}
+          onChange={(v) => onChange({ max_losses: v })}
+          placeholder="e.g. 5"
+        />
+      </div>
+    );
+  }
+  if (filter.filter_type !== "" && !MODELLED_FILTER_TYPES.has(filter.filter_type)) {
+    return (
+      <p className="cp-note">
+        This filter category is not modelled by the V1 engine — Ready Check blocks a run
+        while it is enabled. Disable it (or choose a modelled category) to run.
+      </p>
+    );
+  }
+  return null;
 }
 
 function RestrictionsSection({
@@ -639,8 +902,8 @@ function RestrictionsSection({
       </h4>
       <p className="cp-note">
         Filters block a new entry even when the signal is valid (doc 02 §5.8). Disabled filters are
-        dropped from the saved revision. Each filter&apos;s typed config is edited as JSON — the V1
-        backend config is an untyped dict.
+        dropped from the saved revision. The V1 engine models date blackout, max daily loss and
+        consecutive loss filters; other categories fail closed at Ready Check.
       </p>
       <div className="cp-form strategy-form-grid">
         <SelectField
@@ -686,9 +949,10 @@ function RestrictionsSection({
                 onChange={(checked) => updateFilter(i, { enabled: checked })}
               />
             </div>
-            <FilterConfigField
-              value={filter.config_text}
-              onChange={(v) => updateFilter(i, { config_text: v })}
+            <FilterConfigFields
+              filter={filter}
+              index={i}
+              onChange={(patch) => updateFilter(i, patch)}
             />
           </div>
         );
@@ -870,6 +1134,106 @@ export function PositionExitCard({ payload, pending, onApply }: GraphCardProps) 
 
 // ---- Logic-Based Stop Block (§5.5 extension) — RISK MANAGEMENT column,
 // alongside ProtectionStopCard's percentage/trailing/absolute rules ----
+// R2-05a — typed stop_priority_order editor (previously Advanced-only). Shown
+// only for the priority-based resolutions; entries are the engine stop keys
+// ('percentage' | 'trailing' | 'absolute' | 'logic:<block_id>').
+function StopPriorityEditor({
+  stop,
+  onChange,
+}: {
+  stop: StopLogicForm;
+  onChange: (patch: Partial<StopLogicForm>) => void;
+}) {
+  const addId = useId();
+  const available = [
+    ...stop.logic_blocks.map((b, i) => ({
+      value: `logic:${b.block_id}`,
+      label: `Logic-based stop block ${i + 1}`,
+    })),
+    { value: "percentage", label: "Percentage stop" },
+    { value: "trailing", label: "Trailing stop" },
+    { value: "absolute", label: "Absolute price stop" },
+  ];
+  const remaining = available.filter((o) => !stop.priority_order.includes(o.value));
+  const labelOf = (entry: string) => available.find((o) => o.value === entry)?.label ?? entry;
+  const move = (i: number, direction: -1 | 1) => {
+    const j = i + direction;
+    if (j < 0 || j >= stop.priority_order.length) return;
+    const next = [...stop.priority_order];
+    [next[i], next[j]] = [next[j], next[i]];
+    onChange({ priority_order: next });
+  };
+
+  return (
+    <div className="cp-field cp-wide">
+      <span className="field-head">
+        <strong>Stop priority order</strong>
+      </span>
+      <p className="cp-note">
+        Highest priority first. An empty list uses the canonical default order (logic blocks in
+        display order, then percentage, trailing, absolute — doc 02 §9.2).
+      </p>
+      {stop.priority_order.map((entry, i) => (
+        <div key={entry} className="inline-fields" style={{ marginBottom: 4 }}>
+          <span>
+            {i + 1}. {labelOf(entry)}
+          </span>
+          <button
+            type="button"
+            className="btn"
+            disabled={i === 0}
+            aria-label={`Move priority entry ${i + 1} up`}
+            onClick={() => move(i, -1)}
+          >
+            ↑
+          </button>
+          <button
+            type="button"
+            className="btn"
+            disabled={i === stop.priority_order.length - 1}
+            aria-label={`Move priority entry ${i + 1} down`}
+            onClick={() => move(i, 1)}
+          >
+            ↓
+          </button>
+          <button
+            type="button"
+            className="btn"
+            aria-label={`Remove priority entry ${i + 1}`}
+            onClick={() =>
+              onChange({ priority_order: stop.priority_order.filter((_, idx) => idx !== i) })
+            }
+          >
+            Remove
+          </button>
+        </div>
+      ))}
+      {remaining.length > 0 ? (
+        <div className="inline-fields">
+          <label htmlFor={addId}>Add stop rule</label>
+          <select
+            id={addId}
+            className="sd-select"
+            value=""
+            onChange={(event) => {
+              if (event.target.value !== "") {
+                onChange({ priority_order: [...stop.priority_order, event.target.value] });
+              }
+            }}
+          >
+            <option value="">Choose stop rule…</option>
+            {remaining.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function LogicBasedStopCard({ payload, pending, onApply }: GraphCardProps) {
   const [stop, setStop, form] = useGraphSection(payload, "stop");
 
@@ -898,6 +1262,9 @@ export function LogicBasedStopCard({ payload, pending, onApply }: GraphCardProps
           options={STOP_CONFLICT_RESOLUTION_OPTIONS}
         />
       </div>
+      {PRIORITY_STOP_RESOLUTIONS.has(stop.conflict_resolution) ? (
+        <StopPriorityEditor stop={stop} onChange={setStop} />
+      ) : null}
       <BlockList
         scope="stop"
         blocks={stop.logic_blocks}
@@ -946,7 +1313,7 @@ export function RestrictionsCard({ payload, pending, onApply }: GraphCardProps) 
   const handleApply = () => {
     const invalidFilter = firstInvalidFilterConfig(form);
     if (invalidFilter !== null) {
-      setApplyError(`Not sent — the "${invalidFilter}" filter config is not valid JSON.`);
+      setApplyError(`Not sent — ${invalidFilter}.`);
       return;
     }
     setApplyError(null);
@@ -967,8 +1334,9 @@ export function RestrictionsCard({ payload, pending, onApply }: GraphCardProps) 
         </p>
       ) : null}
       <p className="cp-note" style={{ marginTop: 10 }}>
-        Each block&apos;s advanced fields (parameter overrides, reference chains) and any key not
-        yet surfaced remain in the Advanced (raw payload) editor.
+        Every documented strategy field — parameter overrides, reference chains, typed filter
+        configs — is edited by the structured cards; the Advanced (raw payload) editor is a
+        verification fallback only (R2-05a).
       </p>
     </div>
   );

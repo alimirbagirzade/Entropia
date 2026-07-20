@@ -3,14 +3,28 @@ import { useState } from "react";
 import { stateTone, useInstruments, type InstrumentRow } from "@/lib/instrument";
 
 // R2-08 (GAP item 7) — an instrument is picked from the canonical Instrument
-// Registry (GAP-16) by name/venue/symbol, never typed as a raw id. The
-// immutable instrument_id travels system-side; it surfaces only as a read-only
-// provenance line next to the selection. Deprecated instruments stay visible
-// but cannot be picked. The picker is a convenience, never authorization —
-// the server still resolves/validates the value it receives verbatim.
+// Registry (GAP-16) by name/venue/symbol, never typed as a raw id. Deprecated
+// instruments stay visible but cannot be picked. The picker is a convenience,
+// never authorization — the server still resolves/validates the value it
+// receives verbatim.
+//
+// `pickBy` controls WHICH field the picker hands back over the wire — the
+// canonical registry id is correct where the consumer stores it verbatim
+// (e.g. MarketData revision, TradingSignalConfig), but the Trading Signal /
+// Trade Log DURABLE IMPORT request still matches each CSV row's raw `symbol`
+// column against this exact string server-side (`domain/trading_signal/
+// events.py` + `domain/trade_log/records.py` — a pre-existing, canonical-id-
+// unaware check); those two call sites pass `pickBy="symbol"` so the wire
+// value stays the legacy symbol text the row-matching logic expects, while
+// the user still only ever BROWSES the registry, never hand-types an id.
+type PickBy = "instrument_id" | "symbol";
 
 function instrumentLabel(row: InstrumentRow): string {
   return row.display_name || `${row.venue_id} · ${row.symbol}`;
+}
+
+function keyFor(row: InstrumentRow, pickBy: PickBy): string {
+  return pickBy === "symbol" ? row.symbol : row.instrument_id;
 }
 
 function InstrumentBrowser({
@@ -85,18 +99,21 @@ function InstrumentBrowser({
   );
 }
 
-// The pinned selection: registry name when the id resolves, otherwise the
-// stored value verbatim (legacy datasets predate the canonical registry).
-function SelectedInstrument({ value }: { value: string }) {
+// The pinned selection: registry name when the value resolves, otherwise the
+// stored value verbatim (legacy datasets predate the canonical registry, or a
+// symbol matches more than one venue/contract — the provenance line is
+// informational only, never the authoritative match).
+function SelectedInstrument({ value, pickBy }: { value: string; pickBy: PickBy }) {
   const query = useInstruments(null, null);
-  const match = (query.data?.data ?? []).find((row) => row.instrument_id === value);
+  const match = (query.data?.data ?? []).find((row) => keyFor(row, pickBy) === value);
   return (
     <div>
       <div className="pkg-picker-name" style={{ fontWeight: 600 }}>
         {match ? instrumentLabel(match) : value}
       </div>
       <small className="cp-note">
-        Instrument id (system-carried): <code>{value}</code>
+        {pickBy === "symbol" ? "Symbol (system-carried): " : "Instrument id (system-carried): "}
+        <code>{value}</code>
         {match ? ` · ${match.venue_id} · ${match.symbol} · ${match.contract_type}` : " · not in registry"}
       </small>
     </div>
@@ -110,13 +127,15 @@ export function InstrumentPicker({
   required = false,
   disabled = false,
   error,
+  pickBy = "instrument_id",
 }: {
   label: string;
   value: string;
-  onChange: (instrumentId: string) => void;
+  onChange: (value: string) => void;
   required?: boolean;
   disabled?: boolean;
   error?: string;
+  pickBy?: PickBy;
 }) {
   const [browsing, setBrowsing] = useState(false);
 
@@ -130,7 +149,7 @@ export function InstrumentPicker({
       </span>
       {value !== "" ? (
         <div className="pkg-picker-pinned">
-          <SelectedInstrument value={value} />
+          <SelectedInstrument value={value} pickBy={pickBy} />
           <div className="pkg-picker-actions">
             <button
               type="button"
@@ -163,7 +182,7 @@ export function InstrumentPicker({
       {browsing && !disabled ? (
         <InstrumentBrowser
           onPick={(row) => {
-            onChange(row.instrument_id);
+            onChange(keyFor(row, pickBy));
             setBrowsing(false);
           }}
           onCancel={() => setBrowsing(false)}

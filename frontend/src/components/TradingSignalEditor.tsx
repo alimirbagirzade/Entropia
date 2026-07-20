@@ -307,6 +307,11 @@ function ImportIdentityCard({
           required
           value={instrumentId}
           onChange={onInstrumentId}
+          // The durable import request matches each CSV row's raw `symbol`
+          // column against this exact string server-side (domain/
+          // trading_signal/events.py) — the canonical registry id is not
+          // recognized there, so the wire value stays the legacy symbol text.
+          pickBy="symbol"
         />
         <label className="cp-field">
           <span>Source timezone</span>

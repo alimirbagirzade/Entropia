@@ -39,6 +39,70 @@ const PATCH_RESULT = {
   composition_hash: "hash_def",
 };
 
+// R2-03: Library catalog rows for the Add Package popover. Eligibility is the
+// SERVER-truth permissions.can_use flag — pkg_2 is visible but not usable.
+const PKG_PERMISSIONS = {
+  can_view: true,
+  can_use: true,
+  can_derive: false,
+  can_create_revision: false,
+  can_request_approval: false,
+  can_approve_publish: false,
+  can_deprecate: false,
+  can_soft_delete: false,
+  can_export: false,
+  can_share: false,
+};
+
+const LIBRARY_ROW = {
+  entity_id: "pkg_1",
+  package_kind: "strategy",
+  name: "Momentum Pack",
+  current_revision_id: "pkgrev_1",
+  revision_no: 3,
+  lifecycle_state: "active",
+  validation_state: "passed",
+  approval_state: "approved",
+  visibility_scope: "published",
+  rationale_family: null,
+  output_kinds: [],
+  derived_from_revision_id: null,
+  owner_principal_id: null,
+  row_version: 1,
+  content_hash: "hash_pkg1",
+  created_at: null,
+  permissions: PKG_PERMISSIONS,
+  performance: {},
+};
+
+const LIBRARY_ROW_LOCKED = {
+  ...LIBRARY_ROW,
+  entity_id: "pkg_2",
+  name: "Private Pack",
+  current_revision_id: "pkgrev_2",
+  revision_no: 1,
+  validation_state: "pending",
+  approval_state: "draft",
+  content_hash: "hash_pkg2",
+  permissions: { ...PKG_PERMISSIONS, can_use: false },
+};
+
+const LIBRARY_PAGE = {
+  data: [LIBRARY_ROW, LIBRARY_ROW_LOCKED],
+  meta: { cursor: null, has_more: false },
+};
+
+const LIBRARY_DETAIL = {
+  ...LIBRARY_ROW,
+  input_contract: { name: "Momentum Pack", market: "BTCUSD", timeframe: "15m" },
+  output_contract: {},
+  dependency_snapshot: null,
+  validation_summary: null,
+  change_note: null,
+  provenance: null,
+  revisions: [],
+};
+
 const DELETE_RESULT = { root_id: "root_strat", deletion_state: "soft_deleted" };
 const SNAPSHOT_RESULT = { snapshot_id: "snap_1", composition_hash: "hash_abc", item_count: 1 };
 const EXTERNAL_DRAFT = { draft_id: "wodraft_1", kind: "trading_signal", unsaved: true };
@@ -457,9 +521,9 @@ describe("Mainboard", () => {
     // F-15: Add Strategy is an inline create+attach action (a button), not a
     // deep-link — the new object appears as a Mainboard row without navigation.
     expect(screen.getByRole("button", { name: "Add Strategy" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Add Package" }).getAttribute("href")).toBe(
-      "/packages/create",
-    );
+    // R2-03: Add Package is a popover opener (a button), no longer a
+    // /packages/create deep-link.
+    expect(screen.getByRole("button", { name: "Add Package" })).toBeTruthy();
     expect(
       screen.getByRole("link", { name: "Portfolio / Equity Allocation →" }).getAttribute("href"),
     ).toBe("/portfolio");
@@ -581,9 +645,146 @@ describe("Mainboard", () => {
     ).toHaveLength(1);
   });
 
-  it("routes a package add-intent to the Create Package workspace (pre-R2-03 behavior)", async () => {
-    stubRoutes();
+  it("opens the Add Package popover from a package add-intent (R2-02 → R2-03)", async () => {
+    stubRoutes({ "GET /library": LIBRARY_PAGE });
     renderPage([{ pathname: "/", state: { add: "package" } }]);
+    // No route change: the intent opens the selection popover on the Mainboard.
+    expect(await screen.findByRole("dialog", { name: "Add Package" })).toBeTruthy();
+    expect(screen.queryByText("Create Package workspace")).toBeNull();
+  });
+
+  // R2-03 (GAP madde 4): the Add Package popover lists ONLY strategy packages
+  // (server-filtered catalog query) and gates selection on the server-truth
+  // permissions.can_use flag; deriving pins the exact revision into a new
+  // Strategy Draft that opens inline as a draft row.
+  it("lists eligible strategy package revisions and disables can_use=false rows (R2-03)", async () => {
+    const fetchMock = stubRoutes({ "GET /library": LIBRARY_PAGE });
+    renderPage();
+    await screen.findByText("Momentum A");
+    fireEvent.click(screen.getByRole("button", { name: "+ Add" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add Package" }));
+    const dialog = await screen.findByRole("dialog", { name: "Add Package" });
+    // The catalog query is strategy-only + active (TS/TL package kinds never listed).
+    const libCall = fetchMock.mock.calls.find((c) => String(c[0]).includes("/library?"));
+    expect(String(libCall?.[0])).toContain("type=strategy");
+    expect(String(libCall?.[0])).toContain("lifecycle_state=active");
+    // Usable row is selectable; the can_use=false row is disabled with a reason.
+    const usable = await within(dialog).findByRole("button", { name: "Momentum Pack, rev 3" });
+    expect((usable as HTMLButtonElement).disabled).toBe(false);
+    const locked = within(dialog).getByRole("button", {
+      name: "Private Pack, rev 1 (not usable)",
+    });
+    expect((locked as HTMLButtonElement).disabled).toBe(true);
+    expect(locked.getAttribute("title")).toMatch(/Not usable/);
+  });
+
+  it("derives a Strategy Draft from the selected exact revision and opens it inline (R2-03)", async () => {
+    let draftsServed = 0;
+    const fetchMock = stubRoutes({
+      "GET /library/pkg_1": LIBRARY_DETAIL,
+      "GET /library": LIBRARY_PAGE,
+      "POST /strategy-drafts": {
+        draft_id: "stratdraft_9",
+        strategy_root_id: "strat_9",
+        display_name: "Momentum Pack",
+        row_version: 0,
+        source_provenance: {
+          source_package_root_id: "pkg_1",
+          source_package_revision_id: "pkgrev_1",
+        },
+      },
+      "GET /strategy-drafts/stratdraft_9": {
+        draft_id: "stratdraft_9",
+        strategy_root_id: "strat_9",
+        payload: {},
+        is_dirty: true,
+        row_version: 0,
+        last_saved_revision_id: null,
+        source_provenance: {
+          source_package_root_id: "pkg_1",
+          source_package_revision_id: "pkgrev_1",
+        },
+        updated_at: null,
+      },
+      "GET /strategy-drafts": () => {
+        draftsServed += 1;
+        return draftsServed === 1
+          ? []
+          : [
+              {
+                draft_id: "stratdraft_9",
+                strategy_root_id: "strat_9",
+                display_name: "Momentum Pack",
+                lifecycle_state: "draft",
+                is_dirty: true,
+                row_version: 0,
+                last_saved_revision_id: null,
+                has_revision: false,
+                is_attached: false,
+                owner_principal_id: "user_admin",
+                updated_at: null,
+              },
+            ];
+      },
+      "GET /strategies/strat_9/revisions": [],
+      "GET /strategies/strat_9": {
+        strategy_root_id: "strat_9",
+        display_name: "Momentum Pack",
+        lifecycle_state: "draft",
+        current_revision_id: null,
+        current_row_version: 1,
+        rationale_family_id: null,
+        owner_principal_id: "user_admin",
+        deletion_state: "active",
+      },
+    });
+    renderPage();
+    await screen.findByText("Momentum A");
+    fireEvent.click(screen.getByRole("button", { name: "+ Add" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add Package" }));
+    const dialog = await screen.findByRole("dialog", { name: "Add Package" });
+    fireEvent.click(
+      await within(dialog).findByRole("button", { name: "Momentum Pack, rev 3" }),
+    );
+    // The compatibility summary comes from the Library detail projection.
+    expect(await within(dialog).findByText("BTCUSD")).toBeTruthy();
+    expect(within(dialog).getByText("15m")).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Add Strategy From Package" }));
+    // The derive is the existing POST /strategy-drafts source_package_* command:
+    // exact root + revision pinned, fresh Idempotency-Key, source never mutated.
+    await vi.waitFor(() => {
+      const call = fetchMock.mock.calls.find(
+        (c) => String(c[0]).endsWith("/strategy-drafts") && (c[1]?.method ?? "") === "POST",
+      );
+      expect(call).toBeTruthy();
+      const body = bodyOf(call?.[1]);
+      expect(body.source_package_root_id).toBe("pkg_1");
+      expect(body.source_package_revision_id).toBe("pkgrev_1");
+      expect(headersOf(call?.[1])["Idempotency-Key"]).toBeTruthy();
+    });
+    // No package mutation was issued against the source (library surface untouched).
+    expect(
+      fetchMock.mock.calls.find(
+        (c) => String(c[0]).includes("/library") && (c[1]?.method ?? "GET") !== "GET",
+      ),
+    ).toBeFalsy();
+    // The popover closed and the derived draft renders as an unsaved draft row
+    // with the inline Strategy Details editor open.
+    expect(screen.queryByRole("dialog", { name: "Add Package" })).toBeNull();
+    await screen.findByText("Unsaved draft");
+    expect((await screen.findAllByText("Momentum Pack")).length).toBeGreaterThan(0);
+  });
+
+  it("offers 'Create new package' as the secondary popover action → /packages/create (R2-03)", async () => {
+    stubRoutes({ "GET /library": LIBRARY_PAGE });
+    renderPage();
+    await screen.findByText("Momentum A");
+    fireEvent.click(screen.getByRole("button", { name: "+ Add" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add Package" }));
+    const dialog = await screen.findByRole("dialog", { name: "Add Package" });
+    const createNew = within(dialog).getByRole("link", { name: "Create new package →" });
+    expect(createNew.getAttribute("href")).toBe("/packages/create");
+    fireEvent.click(createNew);
     expect(await screen.findByText("Create Package workspace")).toBeTruthy();
   });
 
@@ -647,7 +848,7 @@ describe("Mainboard", () => {
     expect(screen.queryByText(/Payload \(JSON\)/)).toBeNull();
     // The separate typed actions remain (Add Strategy / Add Package / Outsource).
     expect(screen.getByRole("button", { name: "Add Strategy" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Add Package" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Add Package" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Add Outsource Signal" })).toBeTruthy();
   });
 

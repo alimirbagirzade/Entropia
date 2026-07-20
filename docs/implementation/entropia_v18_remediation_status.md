@@ -26,8 +26,9 @@ A requirement is **Complete** only with working end-to-end behavior + passing ac
 >   transient satır düşer + persisted satır expanded açılır; URL süreç boyunca "/" (Playwright
 >   `e2e/specs/08-mainboard-inline-editors.spec.ts` — TS + TL + Strategy, canlı stack'te 3/3
 >   yeşil: create → upload → import report → Save & Add → persisted → Close panel → reload).
->   Kalan (R2-02 this PR sonrası): üst menü Add eylemleri artık Mainboard add-intent
->   dispatcher'ına bağlı (tek Add modeli); Add Package popover hâlâ yok → R2-03
+>   Kalan (R2-02 sonrası): üst menü Add eylemleri artık Mainboard add-intent
+>   dispatcher'ına bağlı (tek Add modeli); ~~Add Package popover hâlâ yok~~ →
+>   **R2-03 (this PR) kapattı**: `AddPackagePopover` gerçek seçim popover'ı (aşağıda UI-06).
 > - **UI-02** (Strategy Details): restriction/filter + formula parametreleri hâlâ Advanced JSON'da;
 >   Advanced role-gate'siz. → R2-05a/R2-05b
 > - **UI-03/04/05** (Outsource/TS/TL): ~~inline gerçek editör yok~~ → R2-01a (PR #325) editörleri
@@ -35,8 +36,27 @@ A requirement is **Complete** only with working end-to-end behavior + passing ac
 >   etti ve toolbar'a Validate / Save / Cancel (+ inline "Close panel") ekledi; draft kaldırma /
 >   soft-delete / panel kapatma üç ayrı etiketli eylem. Kalan: create/revise hâlâ ham JSON
 >   (`rows={16}`); Source asset id düzenlenebilir teknik alan. → R2-04
-> - **UI-06** (Add Package / Create Package): seçim popover'ı yok; baseline metadata JSON;
->   request→publish golden-path E2E yok. → R2-03/R2-12
+> - **UI-06** (Add Package / Create Package): ~~seçim popover'ı yok~~ → **R2-03 (this PR)
+>   kapattı**: Mainboard Add menüsündeki "Add Package" artık `/packages/create`'e gitmez —
+>   `components/AddPackagePopover.tsx` bağlama bağlı seçim popover'ını açar (mockup
+>   `.package-picker-popover`). İçerik: `GET /library?type=strategy&lifecycle_state=active`
+>   (TS/TL package türleri hiç listelenmez) + satır seçilebilirliği SERVER-truth
+>   `permissions.can_use` (false → disabled + neden title'ı; client hiçbir eligibility
+>   türetmez); arama + ad + exact revision + market/timeframe compatibility özeti library
+>   detail `input_contract`'ından (alan yoksa dürüst "not provided"). "Add Strategy From
+>   Package" mevcut GAP-03 komutunu kullanır (`POST /strategy-drafts` +
+>   `source_package_root_id`/`source_package_revision_id`, taze Idempotency-Key, OCC yok) —
+>   canlı stack kanıtı: derive sonrası draft `source_provenance` exact revision + content
+>   hash pinli; source package library'de DEĞİŞMEMİŞ (current_revision_id/row_version aynı);
+>   yeni draft Mainboard'da yatay Strategy draft satırı olarak inline Strategy Details
+>   editörüyle AÇIK geldi. İkincil eylem "Create new package →" popover içinden
+>   `/packages/create`'e gider (görsel olarak ghost, primary'den ayrık). R2-02 "package"
+>   add-intent'i artık `/packages/create`'e yönlendirmek yerine bu popover'ı açar (canlı
+>   kanıt: /research-data'dayken üst menü Add Package → "/" + popover açık). vitest: 4 yeni
+>   test (eligible-filtre + disabled-neden, derive akışı + kaynak-mutasyonsuzluk, intent →
+>   popover, create-new ikincil yol) + 2 hizalama → mainboard 30/30, toplam 452 yeşil;
+>   tsc/eslint/build temiz. Kalan: baseline metadata JSON; request→publish golden-path
+>   E2E yok. → R2-12
 > - **UI-12** (Research Data): dependency kilidi `marketEntityId.trim().length > 0` — server-truth
 >   değil; Market Data seçimi entity-id text alanı. → R2-06/R2-08
 > - **UI-14/15** (Ready Check / RUN): golden-path E2E blocked'ı kabul ediyor

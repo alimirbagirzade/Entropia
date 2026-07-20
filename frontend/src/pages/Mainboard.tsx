@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 
 import type { MainboardAddIntent } from "@/app/nav";
 
@@ -9,6 +9,7 @@ import { ErrorState } from "@/components/ErrorState";
 import { ReadyCheckModal } from "@/components/ReadyCheckModal";
 import { RunProgress } from "@/components/RunProgress";
 import { StatusBadge } from "@/components/StatusBadge";
+import { AddPackagePopover } from "@/components/AddPackagePopover";
 import { StrategyDetailsPanel } from "@/components/StrategyDetailsPanel";
 import { TradeLogEditor } from "@/components/TradeLogEditor";
 import { TradingSignalEditor } from "@/components/TradingSignalEditor";
@@ -549,19 +550,21 @@ function StrategyDraftBox({
 // option group whose choice appends an inline Trading Signal / Trade Log draft  //
 // row to the Mainboard (UI-03, doc 03). F-15: the generic "Add work object" /   //
 // object-kind / raw-JSON path has been removed from the user flow — every add   //
-// action is a typed, product-level choice, matching the prototype. There is no  //
-// "pick an existing package" list because the backend exposes no attachable-    //
-// package list endpoint (CR-01).                                                //
+// action is a typed, product-level choice, matching the prototype. R2-03: Add   //
+// Package opens the contextual selection popover (AddPackagePopover) deriving a //
+// Strategy Draft from a usable Strategy Package revision (GAP madde 4).         //
 // --------------------------------------------------------------------------- //
 
 function AddMenu({
   onAddStrategy,
   addingStrategy,
   onAddOutsource,
+  onAddPackage,
 }: {
   onAddStrategy: () => void;
   addingStrategy: boolean;
   onAddOutsource: (kind: string) => void;
+  onAddPackage: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [subOpen, setSubOpen] = useState(false);
@@ -618,9 +621,21 @@ function AddMenu({
             >
               {addingStrategy ? "Adding Strategy…" : "Add Strategy"}
             </button>
-            <Link to="/packages/create" className="btn" onClick={() => setOpen(false)}>
+            {/* R2-03 (GAP madde 4): Add Package no longer routes to the Create
+                Package workspace — it opens the contextual selection popover
+                that derives a Strategy Draft from a usable Strategy Package
+                revision ("Create new package" lives INSIDE that popover as the
+                secondary action). */}
+            <button
+              type="button"
+              className="btn"
+              onClick={() => {
+                onAddPackage();
+                setOpen(false);
+              }}
+            >
               Add Package
-            </Link>
+            </button>
             <div className="add-submenu">
               <button
                 type="button"
@@ -813,14 +828,16 @@ export function Mainboard() {
     setDraftRows((rows) => rows.filter((r) => r.id !== id));
   }
 
+  // R2-03 (GAP madde 4): the contextual Add Package selection popover — opened
+  // from the "+ Add" menu AND by the R2-02 "package" add-intent.
+  const [packagePopoverOpen, setPackagePopoverOpen] = useState(false);
+
   // R2-02 (GAP madde 6): the top-menu Add actions dispatch here via router
   // state ({ add: MainboardAddIntent }). The intent is consumed through the
   // SAME handlers the "+ Add" menu uses, then cleared from the history entry
   // (replaceState) so a reload or back-navigation never re-fires it.
-  // "package" temporarily keeps the current Add-menu behavior (route to the
-  // Create Package workspace) until the R2-03 popover lands.
+  // "package" opens the R2-03 Add Package popover (no route change).
   const location = useLocation();
-  const navigate = useNavigate();
   const [pendingAdd, setPendingAdd] = useState<MainboardAddIntent | null>(null);
 
   useEffect(() => {
@@ -828,11 +845,11 @@ export function Mainboard() {
     if (!intent) return;
     window.history.replaceState(null, "", location.pathname + location.search);
     if (intent === "package") {
-      navigate("/packages/create", { replace: true });
+      setPackagePopoverOpen(true);
       return;
     }
     setPendingAdd(intent);
-  }, [location, navigate]);
+  }, [location]);
 
   // Strategy numbering (STRATEGY <n>) needs the board + drafts projections, so
   // the strategy intent waits for them; TS/TL draft rows are purely local and
@@ -901,11 +918,28 @@ export function Mainboard() {
             <h2 id="strategies-h" className="strategies-title" style={{ margin: 0 }}>
               STRATEGIES
             </h2>
-            <AddMenu
-              onAddStrategy={addStrategy}
-              addingStrategy={addingStrategy}
-              onAddOutsource={addOutsourceDraft}
-            />
+            {/* The R2-03 Add Package popover anchors on the same header cluster
+                as the "+ Add" menu (mockup: a small contextual popover). */}
+            <div className="cp-popover-anchor">
+              <AddMenu
+                onAddStrategy={addStrategy}
+                addingStrategy={addingStrategy}
+                onAddOutsource={addOutsourceDraft}
+                onAddPackage={() => setPackagePopoverOpen(true)}
+              />
+              {packagePopoverOpen && (
+                <AddPackagePopover
+                  onClose={() => setPackagePopoverOpen(false)}
+                  onDerived={(draftId) => {
+                    // The derive hook already invalidated ["strategy"], so the
+                    // refetched drafts list delivers the new draft row; opening
+                    // it expanded mounts the inline Strategy Details editor.
+                    setPackagePopoverOpen(false);
+                    setJustAddedDraftId(draftId);
+                  }}
+                />
+              )}
+            </div>
           </div>
           {addStrategyError && (
             <p role="alert" style={alertStyle}>{errorMessage(addStrategyError)}</p>

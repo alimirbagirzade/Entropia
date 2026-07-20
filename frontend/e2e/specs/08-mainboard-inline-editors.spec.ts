@@ -1,6 +1,6 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
-import { freshActor, signUp } from "../fixtures/auth";
+import { freshActor, logIn, signUp } from "../fixtures/auth";
 import { uniqueSuffix } from "../utils/ids";
 
 // R2-01b (GAP items 1–2): the Trading Signal / Trade Log editors mount INLINE
@@ -19,21 +19,37 @@ function expectMainboardUrl(page: Page): Promise<void> {
 // (X-Actor-Id) — the same identity path the dev UI itself uses.
 async function landAsFreshActor(page: Page, prefix: string): Promise<void> {
   const actor = freshActor(prefix);
-  await page.goto("/");
-  const devActor = page.locator("#dev-actor");
-  if (await devActor.isVisible().catch(() => false)) {
-    const apiBase = process.env.E2E_API_BASE_URL ?? "http://localhost:8000/api/v1";
-    const response = await page.request.post(`${apiBase}/auth/signup`, {
+  // The dev "act as" control renders whenever no session token exists — in BOTH
+  // auth modes — so visibility cannot tell the modes apart. Probe the API
+  // instead: only AUTH_MODE=dev honours X-Actor-Id.
+  // CI docker stack exposes the API on :8000 next to the :8080 frontend (see
+  // e2e/README.md); the Docker-free local stack uses the same port.
+  const apiBase = process.env.E2E_API_BASE_URL ?? "http://localhost:8000/api/v1";
+  const signup = await page.request
+    .post(`${apiBase}/auth/signup`, {
       data: {
         username: actor.username,
         password: actor.password,
         display_name: actor.displayName,
         email: actor.email,
       },
-    });
-    const created = (await response.json()) as { user_id: string };
+    })
+    .catch(() => null);
+  const created = signup?.ok() ? ((await signup.json()) as { user_id?: string }) : null;
+  const devProbe =
+    created?.user_id !== undefined &&
+    (await page.request
+      .get(`${apiBase}/mainboards/default`, { headers: { "X-Actor-Id": created.user_id } })
+      .then((r) => r.ok())
+      .catch(() => false));
+  if (devProbe && created?.user_id !== undefined) {
+    await page.goto("/");
+    const devActor = page.locator("#dev-actor");
     await devActor.fill(created.user_id);
     await devActor.press("Enter");
+  } else if (created !== null) {
+    // Account already exists (API signup succeeded) — session mode: log it in.
+    await logIn(page, actor);
   } else {
     await signUp(page, actor);
   }

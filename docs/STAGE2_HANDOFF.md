@@ -2423,6 +2423,37 @@ raw override senkron kuralı) Strategy Advanced JSON role-gate'inin (R2-05b) haz
 
 ---
 
+## V18-R2 · R2-06 — Research Data server-truth dependency picker ✅ (GAP madde 8)
+
+Sahte kilit (`dependencyReady = marketEntityId.trim().length > 0` — herhangi bir metin workflow'u
+açıyordu) kaldırıldı. Serbest metin "Linked Market Data entity id" alanı SİLİNDİ; yerine:
+
+- **`components/MarketLinkPicker.tsx` (YENİ)** — role-aware `/market-datasets` registry'sinden
+  isimle seçim (isim + tür + durum rozeti + rev); yalnız `revision_state === "approved"` satırlar
+  seçilebilir, deprecated/rejected "not eligible — {state}" ile disabled görünür. Immutable root
+  id'yi sistem taşır.
+- **`lib/marketDependency.ts` (YENİ)** — `useMarketDependency`: mevcut read-only
+  **approved-bundle resolve probe** (`useApprovedBundle`, yeni endpoint YOK — empirik yeterli)
+  üzerinden `none / checking / ready / blocked / denied` projection'ı. WorkflowStrip, dependency
+  alert ve Create butonu bu TEK projection'dan türer; yalnız server-onaylı `ready` kilidi açar.
+  Loading + stale refetch fail-closed kilitli; 404 (approved revision yok) ve 403 (erişim yok)
+  zarfları ayrı alert varyantlarında VERBATIM render edilir.
+- Create öncesi fail-closed guard + sunucu DR3 kapısı aynen: `DEPENDENCY_BLOCKED` verbatim
+  (client kilidi sunucu doğrulamasının önüne geçer, yerine geçmez). OCC/Idempotency/route/
+  query-key yüzeyleri byte-identical.
+
+Evidence: vitest 482/482 (researchData.test.tsx picker markup'ına hizalandı — DR3 verbatim +
+no-Idempotency-Key create assert'leri korundu; 4 YENİ test: default kilit + free-text input yok,
+non-approved satır disabled, probe 404 kilit + verbatim zarf, probe 403 denial); tsc/eslint/build
+temiz; canlı tarayıcı (:5173, act-as user_admin) — seçim GERÇEK `GET /market-datasets/…/
+approved-bundle → 200` tetikledi, "Approved for use — revision mrev_…" + Create enabled + 2 kilit
+temizlendi; Clear ile tam relock. Remediation status UI-12 satırına R2-06 evidence eklendi.
+
+**Reuse anchor'ları (R2-08 için):** `MarketLinkPicker` + `useMarketDependency` deseni teknik-ID
+sweep'inin (ResearchLifecycle, MarketData revision, evidence formları) hazır şablonudur.
+
+---
+
 ## Next: **V18-R2 dalgası — `docs/V18_R2_ROADMAP.md` otoritedir.** Yeni GAP belgesi
 (`docs/spec/Entropia_V18_Guncel_Arayuz_Eksikleri_ve_Yanlis_Anlamalar.md`) kodda empirik
 CONFIRMED 13 eksik kümesi tespit etti (Mainboard TS/TL inline editör yok, Add Package popover yok,

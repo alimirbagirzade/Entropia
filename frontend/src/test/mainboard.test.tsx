@@ -572,10 +572,11 @@ describe("Mainboard", () => {
     expect(within(row).getByText(/New Trading Signal draft added to this Mainboard/)).toBeTruthy();
     // The "Unsaved draft" badge lives in the row header (sibling of the details group).
     expect(screen.getByText("Unsaved draft")).toBeTruthy();
-    const link = within(row).getByRole("link", {
-      name: /Continue in the Trading Signal workbench/,
-    });
-    expect(link.getAttribute("href")).toBe("/trading-signal");
+    // R2-01b: the REAL Trading Signal workbench editor is mounted inline in the
+    // row (no navigation) — its identity card and Save action render here.
+    expect(within(row).getByText("1. Trading Signal Identity")).toBeTruthy();
+    expect(within(row).getByRole("button", { name: "Save Trading Signal" })).toBeTruthy();
+    expect(within(row).getByRole("button", { name: "Close panel" })).toBeTruthy();
     // The transient opener still fires (doc 03 §7.1) — data flow unchanged.
     const call = fetchMock.mock.calls.find((c) =>
       String(c[0]).includes("/external-work-object-drafts/trading_signal"),
@@ -597,11 +598,8 @@ describe("Mainboard", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add Outsource Signal" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "Trade Log" }));
     const row = await screen.findByRole("group", { name: "Trade Log draft" });
-    expect(
-      within(row).getByRole("link", { name: /Continue in the Trade Log workbench/ }).getAttribute(
-        "href",
-      ),
-    ).toBe("/trade-log");
+    // R2-01b: the Trade Log workbench editor mounts inline in the row.
+    expect(within(row).getByRole("button", { name: "Save Trade Log" })).toBeTruthy();
     // Removing the transient row discards it (no Trash — nothing was persisted).
     fireEvent.click(within(row).getByRole("button", { name: "Remove draft" }));
     expect(screen.queryByRole("group", { name: "Trade Log draft" })).toBeNull();

@@ -122,7 +122,7 @@ export function TradingSignalEditor({
       {!isPage && onClose ? (
         <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
           <button type="button" className="btn" onClick={onClose}>
-            Close
+            Close panel
           </button>
         </div>
       ) : null}
@@ -548,19 +548,43 @@ function CreatePanel({
   const [text, setText] = useState(() => JSON.stringify(template, null, 2));
   const [attach, setAttach] = useState(true);
   const [parseError, setParseError] = useState<string | null>(null);
+  const [validNote, setValidNote] = useState<string | null>(null);
 
-  const submit = () => {
+  // Client-side structural check only — the server compiler stays the sole
+  // authority on config semantics (a Validate pass is never a Ready PASS).
+  const parsePayload = (): Record<string, unknown> | null => {
     try {
       const parsed: unknown = JSON.parse(text);
       if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
         setParseError("The payload must be a JSON object.");
-        return;
+        return null;
       }
       setParseError(null);
-      onCreate(parsed as Record<string, unknown>, attach);
+      return parsed as Record<string, unknown>;
     } catch (error) {
       setParseError(error instanceof Error ? error.message : "Invalid JSON.");
+      return null;
     }
+  };
+
+  const validate = () => {
+    setValidNote(
+      parsePayload() !== null
+        ? "Payload is a valid JSON object (client-side check — the server compiler is authoritative)."
+        : null,
+    );
+  };
+
+  const cancel = () => {
+    setText(JSON.stringify(template, null, 2));
+    setParseError(null);
+    setValidNote(null);
+  };
+
+  const submit = () => {
+    setValidNote(null);
+    const payload = parsePayload();
+    if (payload !== null) onCreate(payload, attach);
   };
 
   return (
@@ -597,11 +621,20 @@ function CreatePanel({
             Not sent — invalid JSON: {parseError}
           </p>
         ) : null}
+        {validNote !== null ? (
+          <p role="status" className="cp-note" style={{ marginBottom: 0 }}>
+            {validNote}
+          </p>
+        ) : null}
       </section>
 
-      {/* Sticky bottom toolbar — primary Save action (mockup .panel-actions). */}
+      {/* Sticky bottom toolbar — Validate / Save / Cancel (mockup .panel-actions;
+          GAP item 3 fix #4 minimum toolbar; Close panel is the inline host's). */}
       <div className="panel-actions">
         <div className="panel-actions-title">Save / Package Actions</div>
+        <button type="button" className="panel-action-button" onClick={validate}>
+          Validate
+        </button>
         <button
           type="button"
           className="panel-action-button primary"
@@ -609,6 +642,9 @@ function CreatePanel({
           onClick={submit}
         >
           {pending ? "Saving…" : "Save Trading Signal"}
+        </button>
+        <button type="button" className="panel-action-button" onClick={cancel}>
+          Cancel
         </button>
       </div>
     </>
@@ -864,19 +900,41 @@ function RevisionEditor({
 }) {
   const [text, setText] = useState(() => JSON.stringify(seedPayload, null, 2));
   const [parseError, setParseError] = useState<string | null>(null);
+  const [validNote, setValidNote] = useState<string | null>(null);
 
-  const submit = () => {
+  const parsePayload = (): Record<string, unknown> | null => {
     try {
       const parsed: unknown = JSON.parse(text);
       if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
         setParseError("The payload must be a JSON object.");
-        return;
+        return null;
       }
       setParseError(null);
-      onSave(parsed as Record<string, unknown>);
+      return parsed as Record<string, unknown>;
     } catch (error) {
       setParseError(error instanceof Error ? error.message : "Invalid JSON.");
+      return null;
     }
+  };
+
+  const validate = () => {
+    setValidNote(
+      parsePayload() !== null
+        ? "Payload is a valid JSON object (client-side check — the server compiler is authoritative)."
+        : null,
+    );
+  };
+
+  const cancel = () => {
+    setText(JSON.stringify(seedPayload, null, 2));
+    setParseError(null);
+    setValidNote(null);
+  };
+
+  const submit = () => {
+    setValidNote(null);
+    const payload = parsePayload();
+    if (payload !== null) onSave(payload);
   };
 
   return (
@@ -906,10 +964,18 @@ function RevisionEditor({
             Not sent — invalid JSON: {parseError}
           </p>
         ) : null}
+        {validNote !== null ? (
+          <p role="status" className="cp-note" style={{ marginBottom: 0 }}>
+            {validNote}
+          </p>
+        ) : null}
       </section>
 
       <div className="panel-actions">
         <div className="panel-actions-title">Save / Package Actions</div>
+        <button type="button" className="panel-action-button" onClick={validate}>
+          Validate
+        </button>
         <button
           type="button"
           className="panel-action-button primary"
@@ -917,6 +983,9 @@ function RevisionEditor({
           onClick={submit}
         >
           {savePending ? "Saving…" : "Save new revision"}
+        </button>
+        <button type="button" className="panel-action-button" onClick={cancel}>
+          Cancel
         </button>
         {canExport ? (
           <button

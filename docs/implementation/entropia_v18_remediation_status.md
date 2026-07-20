@@ -19,13 +19,22 @@ A requirement is **Complete** only with working end-to-end behavior + passing ac
 > kapanana kadar **In Progress (R2)** sayılır — tabloda yazan "Complete" bu maddeler için
 > geçersizdir:
 >
-> - **UI-01** (Mainboard inline model): TS/TL satırları hâlâ route launcher (`Mainboard.tsx`
->   "Edit in … →" / "Continue in the … workbench →"); Add Package popover yok; üst menü Add
->   eylemleri Mainboard'ı bypass ediyor (`nav.ts:172-180`). → R2-01b/R2-02/R2-03
+> - **UI-01** (Mainboard inline model): ~~TS/TL satırları hâlâ route launcher~~ → **R2-01b (this
+>   PR) kapattı**: persisted TS/TL satırı `TradingSignalEditor`/`TradeLogEditor`'ı
+>   `mode="inline"` mount eder ("Edit in … →" kalktı; "Open full page ↗" ghost deep-link kaldı);
+>   `OutsourceDraftRow` workbench linki yerine yeni-kayıt editörünü inline açar; Save & Add →
+>   transient satır düşer + persisted satır expanded açılır; URL süreç boyunca "/" (Playwright
+>   `e2e/specs/08-mainboard-inline-editors.spec.ts` — TS + TL + Strategy, canlı stack'te 3/3
+>   yeşil: create → upload → import report → Save & Add → persisted → Close panel → reload).
+>   Kalan: Add Package popover yok; üst menü Add eylemleri Mainboard'ı bypass ediyor
+>   (`nav.ts:172-180`). → R2-02/R2-03
 > - **UI-02** (Strategy Details): restriction/filter + formula parametreleri hâlâ Advanced JSON'da;
 >   Advanced role-gate'siz. → R2-05a/R2-05b
-> - **UI-03/04/05** (Outsource/TS/TL): inline gerçek editör yok; create/revise ham JSON
->   (`rows={16}`); Source asset id düzenlenebilir teknik alan. → R2-01a/R2-01b/R2-04
+> - **UI-03/04/05** (Outsource/TS/TL): ~~inline gerçek editör yok~~ → R2-01a (PR #325) editörleri
+>   reusable bileşenlere ayırdı; **R2-01b (this PR)** onları Mainboard satırlarına inline mount
+>   etti ve toolbar'a Validate / Save / Cancel (+ inline "Close panel") ekledi; draft kaldırma /
+>   soft-delete / panel kapatma üç ayrı etiketli eylem. Kalan: create/revise hâlâ ham JSON
+>   (`rows={16}`); Source asset id düzenlenebilir teknik alan. → R2-04
 > - **UI-06** (Add Package / Create Package): seçim popover'ı yok; baseline metadata JSON;
 >   request→publish golden-path E2E yok. → R2-03/R2-12
 > - **UI-12** (Research Data): dependency kilidi `marketEntityId.trim().length > 0` — server-truth
@@ -119,6 +128,33 @@ Otherwise the spec's technical "broken" claims are **accurate, not errors** (ver
 
 ## Change log
 
+- 2026-07-20 — **R2-01b Trading Signal / Trade Log editors mounted INLINE in Mainboard rows
+  (route-launcher behaviour ends).** `pages/Mainboard.tsx`: the persisted TS/TL `ItemRow` branch
+  replaces the primary "Edit in {label} →" deep-link with
+  `<TradingSignalEditor|TradeLogEditor mode="inline" initialRoot={item.work_object_root_id}>`
+  (detail view + revision composer render in the row; "Open full page ↗" stays as a ghost
+  deep-link for back-compat); `OutsourceDraftRow` drops "Continue in the {label} workbench →"
+  and mounts the same editor in new-record mode the moment the row opens — create → file upload
+  → durable import report → Save & Add complete without leaving "/". On Save & Add success
+  `onSaved(rootId)` drops the transient draft row and opens the freshly attached persisted row
+  expanded (`justAddedRootId` match on `work_object_root_id`); the `["mainboard"]`+`["readiness"]`
+  invalidations come from the UNCHANGED `useCreateTradingSignal`/`useCreateTradeLog` hooks. Three
+  separately-labelled actions (GAP item 2): "Remove draft" (transient row ×, nothing persisted),
+  the existing two-step soft-delete on persisted rows, and "Close panel" (collapse via `onClose`).
+  Editor toolbars now show the GAP item 3 minimum — **Validate** (client-side JSON structural
+  check; explicitly never a Ready PASS, server compiler stays authoritative), **Save**, **Cancel**
+  (reset to seeded template), and inline-mode **Close panel** — in both `CreatePanel` and
+  `RevisionEditor` of both editors. **Untouched:** `lib/*.ts` data contracts, hooks, OCC tokens,
+  Idempotency-Key, route paths (TS/TL pages live on), `app/nav.ts` (R2-02'nin işi). Evidence:
+  NEW `e2e/specs/08-mainboard-inline-editors.spec.ts` — real-browser (Playwright chromium, live
+  Docker-free stack: backend + dramatiq worker + Postgres + Redis + MinIO) TS and TL journeys
+  create → upload CSV → import `succeeded` → Save & Add → persisted row expanded → Close panel →
+  reload persists, with `expect(page).toHaveURL(/\/$/)` asserted at every step, plus the Strategy
+  inline-draft journey — **3/3 green**; auth-mode-aware bootstrap (session signup form in
+  CI/docker, dev `X-Actor-Id` act-as on the local stack). vitest: `mainboard.test.tsx` UI-03 rows
+  re-aligned to the inline markup (workbench-link asserts → inline editor asserts; every
+  OCC/Idempotency/invalidation assert preserved) → **445/445 green**; tsc + eslint + vite build
+  clean. Branch `feat/v18-r2-01b-inline-editors`.
 - 2026-07-20 — **R2-01a Trading Signal / Trade Log editors extracted to reusable components.**
   **PURE REFACTOR — no behaviour change, no new hook, no new endpoint.** The whole two-column
   editor body of `pages/TradingSignal.tsx` moved VERBATIM to NEW

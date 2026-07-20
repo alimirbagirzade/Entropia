@@ -8,6 +8,8 @@ import { ReadyCheckModal } from "@/components/ReadyCheckModal";
 import { RunProgress } from "@/components/RunProgress";
 import { StatusBadge } from "@/components/StatusBadge";
 import { StrategyDetailsPanel } from "@/components/StrategyDetailsPanel";
+import { TradeLogEditor } from "@/components/TradeLogEditor";
+import { TradingSignalEditor } from "@/components/TradingSignalEditor";
 import { useRequestBacktestRun } from "@/lib/backtest";
 import {
   EXTERNAL_DRAFT_KINDS,
@@ -51,28 +53,14 @@ const noteStyle = { color: "var(--text-dim)", fontSize: 13 } as const;
 // only — route paths and data hooks are unchanged).                            //
 // --------------------------------------------------------------------------- //
 
-interface ItemEditorSpec {
-  editorLabel: string;
-  hint: string;
-}
-
-const ITEM_EDITORS: Record<string, ItemEditorSpec> = {
-  strategy: {
-    editorLabel: "Strategy Details",
-    hint: "Edit the entry/exit rules, indicators, and execution model in the Strategy Details editor. Save a new revision there, then pin it for this Mainboard below.",
-  },
-  trading_signal: {
-    editorLabel: "Trading Signal",
-    hint: "Open the Trading Signal workbench to upload a source, run its import, and append a normalized revision. Pin the revision for this Mainboard below.",
-  },
-  trade_log: {
-    editorLabel: "Trade Log",
-    hint: "Open the Trade Log workbench to import records and append a normalized revision. Pin the revision for this Mainboard below.",
-  },
+const ITEM_EDITOR_LABELS: Record<string, string> = {
+  strategy: "Strategy Details",
+  trading_signal: "Trading Signal",
+  trade_log: "Trade Log",
 };
 
-function itemEditor(kind: string): ItemEditorSpec {
-  return ITEM_EDITORS[kind] ?? { editorLabel: itemKindLabel(kind), hint: "" };
+function itemEditorLabel(kind: string): string {
+  return ITEM_EDITOR_LABELS[kind] ?? itemKindLabel(kind);
 }
 
 // Deep-link to the row's real type-specific editor page. A strategy item opens
@@ -105,7 +93,7 @@ function ItemRow({ item, defaultExpanded = false }: { item: MainboardItem; defau
   const del = useSoftDeleteWorkObject();
   const kindLabel = itemKindLabel(item.item_kind);
   const label = item.display_label_override ?? kindLabel;
-  const editor = itemEditor(item.item_kind);
+  const editorLabel = itemEditorLabel(item.item_kind);
   const busy = patch.isPending || del.isPending;
 
   return (
@@ -186,16 +174,17 @@ function ItemRow({ item, defaultExpanded = false }: { item: MainboardItem; defau
 
       {expanded && (
         <div className="strategy-details" style={{ display: "grid", gap: 16 }}>
-          {/* Type-specific editor entry (§3.1 / UI-02). Strategy items open the */}
-          {/* real 3-column Strategy Details editor INLINE, in the row — not a  */}
-          {/* deep-link-only stub. Trading Signal / Trade Log items still open  */}
-          {/* their own workbench page (a separate UI slice, UI-04/UI-05).      */}
+          {/* Type-specific editor entry (§3.1 / UI-02 + R2-01b). Strategy items */}
+          {/* open the 3-column Strategy Details editor INLINE; Trading Signal / */}
+          {/* Trade Log items now mount their real workbench editor INLINE too — */}
+          {/* the row never navigates away. "Open full page ↗" stays as a ghost  */}
+          {/* deep-link for back-compat (GAP mandatory fix #4).                  */}
           {item.item_kind === "strategy" ? (
             <section
-              aria-label={`${editor.editorLabel} editor for ${label}`}
+              aria-label={`${editorLabel} editor for ${label}`}
               style={{ display: "grid", gap: 8 }}
             >
-              <strong>{editor.editorLabel} editor</strong>
+              <strong>{editorLabel} editor</strong>
               <StrategyDetailsPanel
                 rootId={item.work_object_root_id}
                 revisionId={item.pinned_revision_id}
@@ -211,14 +200,26 @@ function ItemRow({ item, defaultExpanded = false }: { item: MainboardItem; defau
             </section>
           ) : (
             <section
-              aria-label={`${editor.editorLabel} editor for ${label}`}
+              aria-label={`${editorLabel} editor for ${label}`}
               style={{ display: "grid", gap: 8 }}
             >
-              <strong>{editor.editorLabel} editor</strong>
-              {editor.hint && <p style={noteStyle}>{editor.hint}</p>}
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <Link className="btn btn-primary" to={editorPath(item)}>
-                  Edit in {editor.editorLabel} →
+              <strong>{editorLabel} editor</strong>
+              {item.item_kind === "trading_signal" ? (
+                <TradingSignalEditor
+                  mode="inline"
+                  initialRoot={item.work_object_root_id}
+                  onClose={() => setExpanded(false)}
+                />
+              ) : (
+                <TradeLogEditor
+                  mode="inline"
+                  initialRoot={item.work_object_root_id}
+                  onClose={() => setExpanded(false)}
+                />
+              )}
+              <div>
+                <Link className="btn btn-ghost" to={editorPath(item)}>
+                  Open full page ↗
                 </Link>
               </div>
             </section>
@@ -345,13 +346,21 @@ function ItemRow({ item, defaultExpanded = false }: { item: MainboardItem; defau
 // — it creates no Trash entry (there is nothing persisted to trash).            //
 // --------------------------------------------------------------------------- //
 
-function OutsourceDraftRow({ kind, onRemove }: { kind: string; onRemove: () => void }) {
-  // Selecting the kind opens the row already expanded ("seçim yeni TS/TL row açar
-  // inline") so the workbench continuation is visible immediately.
+function OutsourceDraftRow({
+  kind,
+  onRemove,
+  onSaved,
+}: {
+  kind: string;
+  onRemove: () => void;
+  onSaved: (rootId: string) => void;
+}) {
+  // Selecting the kind opens the row already expanded with its REAL workbench
+  // editor mounted inline (R2-01b) — create → upload → import report → Save &
+  // Add all happen here; the user never leaves the Mainboard (URL stays "/").
   const [expanded, setExpanded] = useState(true);
   const spec = EXTERNAL_DRAFT_KINDS.find((k) => k.value === kind);
   const label = spec?.label ?? itemKindLabel(kind);
-  const workbenchPath = spec?.path ?? "/";
 
   return (
     <div className="strategy-package">
@@ -361,15 +370,28 @@ function OutsourceDraftRow({ kind, onRemove }: { kind: string; onRemove: () => v
           <StatusBadge label={label} tone="neutral" />
           <StatusBadge label="Unsaved draft" tone="warn" />
         </span>
-        <button
-          type="button"
-          className="strategy-arrow"
-          aria-expanded={expanded}
-          aria-label={expanded ? `Collapse ${label} draft` : `Expand ${label} draft`}
-          onClick={() => setExpanded((v) => !v)}
-        >
-          {expanded ? "▲" : "▼"}
-        </button>
+        <div className="strategy-actions">
+          <button
+            type="button"
+            className="strategy-arrow"
+            aria-expanded={expanded}
+            aria-label={expanded ? `Collapse ${label} draft` : `Expand ${label} draft`}
+            onClick={() => setExpanded((v) => !v)}
+          >
+            {expanded ? "▲" : "▼"}
+          </button>
+          {/* Removing the TRANSIENT draft row is distinct from deleting a saved */}
+          {/* object (two-step soft-delete on ItemRow) and from closing the panel */}
+          {/* (collapse) — three separately labelled actions (GAP item 2).        */}
+          <button
+            type="button"
+            className="strategy-delete"
+            aria-label={`Remove ${label} draft`}
+            onClick={onRemove}
+          >
+            ×
+          </button>
+        </div>
       </div>
       {expanded && (
         <div
@@ -380,12 +402,19 @@ function OutsourceDraftRow({ kind, onRemove }: { kind: string; onRemove: () => v
         >
           <p style={{ margin: 0 }}>
             New {label} draft added to this Mainboard. It is an unsaved external working object — not
-            included in Backtest Ready Check or RUN until you save it in its workbench.
+            included in Backtest Ready Check or RUN until Save &amp; Add below. “Remove draft”
+            discards this row only (nothing is persisted yet); “Close panel” just collapses it.
           </p>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <Link to={workbenchPath} className="btn btn-primary">
-              Continue in the {label} workbench →
-            </Link>
+          {kind === "trading_signal" ? (
+            <TradingSignalEditor
+              mode="inline"
+              onSaved={onSaved}
+              onClose={() => setExpanded(false)}
+            />
+          ) : (
+            <TradeLogEditor mode="inline" onSaved={onSaved} onClose={() => setExpanded(false)} />
+          )}
+          <div>
             <button type="button" className="btn btn-ghost" onClick={onRemove}>
               Remove draft
             </button>
@@ -711,6 +740,10 @@ export function Mainboard() {
   // (F-15 acceptance: "appears as a horizontal Mainboard row and opens its
   // type-specific inline editor"). Cleared once consumed.
   const [justAddedItemId, setJustAddedItemId] = useState<string | null>(null);
+  // R2-01b: the work-object root a TS/TL inline Save & Add just created, so the
+  // fresh persisted row arrives expanded (the item id is not known client-side —
+  // the ["mainboard"] invalidation refetch delivers the attached item).
+  const [justAddedRootId, setJustAddedRootId] = useState<string | null>(null);
   // UI-14: the Backtest Ready Check opens as an in-context modal from the fixed
   // lower-right shell — not a route navigation. The modal mounts only while open,
   // so its readiness fetch fires on demand (the strip below already reflects the
@@ -778,6 +811,14 @@ export function Mainboard() {
     setDraftRows((rows) => rows.filter((r) => r.id !== id));
   }
 
+  // Inline TS/TL Save & Add succeeded: the create hook has already invalidated
+  // ["mainboard"] + ["readiness"] (lib contract, unchanged). Drop the transient
+  // draft row and open the fresh persisted row expanded — no navigation.
+  function outsourceDraftSaved(draftRowId: string, rootId: string) {
+    setDraftRows((rows) => rows.filter((r) => r.id !== draftRowId));
+    setJustAddedRootId(rootId);
+  }
+
   if (board.isLoading) return <Loading label="Loading Mainboard…" />;
   if (board.isError || !board.data) {
     return <ErrorState error={board.error} onRetry={() => void board.refetch()} />;
@@ -842,7 +883,10 @@ export function Mainboard() {
                 <ItemRow
                   key={item.item_id}
                   item={item}
-                  defaultExpanded={item.item_id === justAddedItemId}
+                  defaultExpanded={
+                    item.item_id === justAddedItemId ||
+                    item.work_object_root_id === justAddedRootId
+                  }
                 />
               ))}
               {strategyDrafts.map((draft) => (
@@ -859,6 +903,7 @@ export function Mainboard() {
                   key={d.id}
                   kind={d.kind}
                   onRemove={() => removeDraftRow(d.id)}
+                  onSaved={(rootId) => outsourceDraftSaved(d.id, rootId)}
                 />
               ))}
             </div>

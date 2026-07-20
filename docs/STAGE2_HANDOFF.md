@@ -2259,6 +2259,43 @@ deref); legacy orphan **cleanup script deseni** (`scripts/maintenance/*.sql` —
 attach'lıyı UI `×` yoluna bırakır); `ResultSummary.headline` = backend `Record<string,unknown>` (obje-render tuzağı).
 **Bu dalga tamamen video-alignment** — yeni backend domain YOK, migration YOK; kalan video boşlukları aşağıda (KALAN-A/B).
 
+## V18-R2 · R2-01b — TS/TL editörleri Mainboard satırlarına INLINE mount edildi ✅
+
+**Ne landed:** Route-launcher davranışı bitti (GAP madde 1-2). `pages/Mainboard.tsx`:
+- **Persisted TS/TL `ItemRow`:** "Edit in {label} →" primary linki KALKTI; yerine
+  `<TradingSignalEditor|TradeLogEditor mode="inline" initialRoot={item.work_object_root_id}
+  onClose={collapse}>` mount (detail view + revizyon composer satır İÇİNDE). "Open full page ↗"
+  ghost deep-link kaldı (back-compat).
+- **`OutsourceDraftRow`:** "Continue in the {label} workbench →" KALKTI; satır açılır açılmaz
+  editör yeni-kayıt modunda inline. Save & Add başarısında `onSaved(rootId)` →
+  `outsourceDraftSaved`: transient satır listeden düşer + yeni persisted satır expanded açılır
+  (`justAddedRootId` ↔ `work_object_root_id` eşleşmesi). `["mainboard"]`+`["readiness"]`
+  invalidation'ları DEĞİŞMEYEN `useCreateTradingSignal`/`useCreateTradeLog` hook'larından gelir.
+- **Üç ayrı etiketli eylem (GAP madde 2):** "Remove draft" (transient ×, Trash yok) / persisted
+  satırda mevcut two-step soft-delete / "Close panel" (`onClose` → collapse).
+- **Toolbar (GAP madde 3 min.):** iki editörün `CreatePanel` + `RevisionEditor`'ına **Validate**
+  (client-side JSON structural check — asla Ready PASS değil) + **Cancel** (seed template'e reset)
+  eklendi; inline modda "Close panel". Typed form içeriği R2-04'te.
+
+**DEĞİŞMEYEN:** `lib/*.ts` veri sözleşmeleri, hook'lar, OCC/Idempotency, TS/TL route'ları,
+`app/nav.ts` (Add menü + üst menü R2-02).
+
+**Doğrulama:** YENİ `frontend/e2e/specs/08-mainboard-inline-editors.spec.ts` — canlı Docker'sız
+stack'te (uvicorn :8000 + dramatiq worker + Postgres + Redis + MinIO, `E2E_BASE_URL=:5173`)
+**3/3 yeşil**: TS ve TL için create → CSV upload → import report `succeeded` → payload doldur →
+Save & Add → persisted satır expanded → Close panel → reload persist; her adımda
+`expect(page).toHaveURL(/\/$/)`. Spec auth-mode-aware: session modunda gerçek signup formu,
+dev modunda API signup + `#dev-actor` act-as (X-Actor-Id). Not: seeded template'te
+`identity.display_name`/`source.provider_name` boş → server 422 `*_VALIDATION_FAILED`; test
+kullanıcı gibi JSON'u doldurur (typed form R2-04 bunu çözer). vitest `mainboard.test.tsx` UI-03
+satırları inline markup'a hizalandı (OCC/Idempotency/invalidation assert'leri korunarak) →
+**445/445**; tsc + eslint + vite build temiz.
+
+Branch `feat/v18-r2-01b-inline-editors`. **Sonraki: R2-02** (üst menü Add eylemleri → Mainboard
+action dispatcher) — `docs/V18_R2_ROADMAP.md` §4 R2-02 paste-ready prompt'u.
+
+---
+
 ## V18-R2 · R2-01a — TS/TL editörleri reusable bileşenlere ayrıldı ✅ (saf refactor)
 
 **Ne landed:** `pages/TradingSignal.tsx` içindeki iki kolonlu editör gövdesi **VERBATIM** olarak

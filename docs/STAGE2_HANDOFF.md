@@ -2567,6 +2567,33 @@ role-aware presentation envanterinin hazır şablonu.
 
 ---
 
+## V18-R2 · R2-11 — Mobil app-shell overflow sıfır ✅ (GAP madde 15, PR #339)
+
+375px'te ortak shell'in dayattığı ~513px minimum genişlik kapandı. Suçlu empirik tespit:
+`.menu-bar` min-content 513px (viewport 375 iken layout 512'ye genişliyordu; başka eleman
+taşmıyordu).
+
+- **Layout.tsx**: `mobileNavOpen` state + `.menu-hamburger` (`aria-expanded`/`aria-controls`) +
+  `.menu-bar-menus` sarmalayıcı (masaüstünde saydam flex passthrough — DOM'daki tek değişiklik).
+  Drawer içinde herhangi bir navigasyon/aksiyon delegated click ile drawer'ı kapatır.
+- **global.css**: `@media (max-width: 760px)` bloğu — menü bar hamburger disclosure; dropdown +
+  submenu'ler position:static, HER ZAMAN AÇIK in-flow ağaç (touch'ta hover bağımlılığı yok);
+  workspace padding 16/12 + alt 150px; `.run-controls` 10px köşe (viewport'u örtmez);
+  `.cp-form` tek kolon. Masaüstü (>760px) kuralları DEĞİŞMEDİ (1280'de tarayıcıda doğrulandı:
+  hamburger display:none, yatay 34px bar). Inline Strategy/TS/TL panelleri zaten ≤980
+  `.details-grid` tek kolon.
+- **e2e/specs/09-responsive-overflow.spec.ts (YENİ)**: 5 genişlik (375/768/1280/1440/1920) ×
+  4 ekran (Mainboard, TS inline draft, Market Data, Panel/Management)
+  `document.scrollWidth <= viewport` + `test-results/responsive/*.png` evidence seti + 375px
+  hamburger yolculuğu (aç → link görünür → Market Data'ya git → drawer kapanır). NOT: shell'in
+  kalıcı SSE stream'i yüzünden `networkidle` OTURMAZ — spec `main` mount + kısa settle bekler.
+
+Evidence: e2e 09 → 6/6 yeşil (dev server :5173 + gerçek API :8000); vitest 492/492;
+tsc/eslint/build temiz. Remediation status "Ortak shell — mobil overflow" bullet'ı eklendi.
+**Dürüst sınır:** screenshot seti 4 çekirdek ekran; 22 sayfa tam görsel kabul → R2-13.
+
+---
+
 ## V18-R2 · R2-09 — Role-aware presentation: Admin-only eylemler `/me` ile fail-closed gizli ✅ (GAP madde 10)
 
 Admin-only eylemler yetkisiz kullanıcıya primary kontrol olarak GÖRÜNMEZ; yerine read-only durum +

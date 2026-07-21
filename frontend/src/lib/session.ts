@@ -24,6 +24,8 @@ interface PersistedMeta {
 
 const listeners = new Set<() => void>();
 
+let invalidations = 0;
+
 function emit(): void {
   for (const listener of listeners) listener();
 }
@@ -74,5 +76,15 @@ export function clearSession(): void {
 // keeps this module free of a cycle back into queryClient/apiClient.
 export function noteSessionInvalid(): void {
   if (localStorage.getItem(TOKEN_KEY) === null) return;
+  invalidations += 1;
   clearSession();
+}
+
+// Monotonic count of INVOLUNTARY session losses. A deliberate logout is not one:
+// it clears the token too, so "the token went away" cannot tell the two apart —
+// and conflating them would bounce the user to /login on every logout, replacing
+// the shell's anonymous "Login / Sign Up" state. The shell watches this counter
+// to redirect only when the server pulled the session out from under the user.
+export function getSessionInvalidations(): number {
+  return invalidations;
 }

@@ -6,7 +6,7 @@ import { MemoryRouter } from "react-router-dom";
 import { Layout } from "@/app/Layout";
 import { resetAuthMode } from "@/lib/authMode";
 import { setDevActorId } from "@/lib/devActor";
-import { setSession } from "@/lib/session";
+import { clearSession, setSession } from "@/lib/session";
 import type { AuthUser, Meta } from "@/lib/types";
 import { stubApi } from "./helpers/apiStub";
 
@@ -97,6 +97,22 @@ describe("app shell auth mode", () => {
 
     await waitFor(() => expect(devActorField()).toBeInTheDocument());
     // ...and the shell must not claim the user is signed in.
+    expect(screen.queryByRole("button", { name: "Log out" })).not.toBeInTheDocument();
+  });
+
+  // A deliberate logout must leave the user on the app shell as an anonymous
+  // visitor — NOT bounce them to /login. Both logout and an expired session
+  // clear the token, so keying the redirect off "the token went away" would
+  // conflate them and replace this state (it broke e2e 01-auth). Only an
+  // involuntary loss redirects.
+  it("logout leaves the shell on Login / Sign Up instead of redirecting", async () => {
+    setSession({ token: "tok_live", user: USER, expiresAt: null });
+    renderShell("session");
+    await screen.findByRole("button", { name: "Log out" });
+
+    clearSession(); // what useLogout does after revoking server-side
+
+    await screen.findByRole("link", { name: /Login \/ Sign Up/i });
     expect(screen.queryByRole("button", { name: "Log out" })).not.toBeInTheDocument();
   });
 

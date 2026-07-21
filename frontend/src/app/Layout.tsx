@@ -9,7 +9,7 @@ import { useApiHealth, useMe, useMeta } from "@/lib/hooks";
 import { useLogout, useSessionToken } from "@/lib/auth";
 import { useAuthMode, type AuthMode } from "@/lib/authMode";
 import { getDevActorId, setDevActorId } from "@/lib/devActor";
-import { getStoredUser } from "@/lib/session";
+import { getSessionInvalidations, getStoredUser } from "@/lib/session";
 
 function DevActorControl() {
   const queryClient = useQueryClient();
@@ -322,19 +322,24 @@ export function Layout() {
   }, [queryClient]);
 
   // Stale-session landing. The API client clears the local session exactly once
-  // when the server answers SESSION_INVALID (expired / revoked / unknown token),
-  // which surfaces here as a token transition from present to absent. Logout
-  // produces the same transition and the same destination, so one effect covers
-  // both. Only session mode redirects — in dev mode /login is not a usable
-  // credential path. The guard is the transition itself (not "no token"), so an
-  // anonymous visitor browsing without ever having logged in is never bounced,
-  // and the redirect cannot loop: /login renders outside this Layout, so leaving
-  // unmounts the effect.
-  const hadToken = useRef(token !== null);
+  // when the server answers SESSION_INVALID (expired / revoked / unknown token);
+  // that INVOLUNTARY loss is what lands the user back on /login.
+  //
+  // A deliberate logout is deliberately NOT this case. It clears the token too,
+  // so "the token went away" cannot distinguish them — keying off the token
+  // transition would bounce the user to /login on every logout and replace the
+  // shell's anonymous "Login / Sign Up" state. So the trigger is the invalidation
+  // counter, which only the server-rejection path increments.
+  //
+  // Only session mode redirects — in dev mode /login is not a usable credential
+  // path. The redirect cannot loop: /login renders outside this Layout, so
+  // leaving unmounts the effect.
+  const seenInvalidations = useRef(getSessionInvalidations());
   useEffect(() => {
-    const lost = hadToken.current && token === null;
-    hadToken.current = token !== null;
-    if (!lost || authMode !== "session") return;
+    const current = getSessionInvalidations();
+    if (current === seenInvalidations.current) return;
+    seenInvalidations.current = current;
+    if (authMode !== "session") return;
     void queryClient.invalidateQueries(); // drop every identity-dependent read
     navigate("/login", { replace: true });
   }, [token, authMode, queryClient, navigate]);

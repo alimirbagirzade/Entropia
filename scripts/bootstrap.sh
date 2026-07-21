@@ -12,6 +12,11 @@ else
   say ".env already exists — leaving it untouched"
 fi
 
+# Session mode (the default local profile) needs a service-line credential for
+# the non-human runtimes. Generated into the git-ignored .env; an existing value
+# is never rotated.
+"$(dirname "$0")/ensure-service-token.sh"
+
 if command -v uv >/dev/null 2>&1; then
   say "Installing backend dependencies (uv sync)"
   (cd backend && uv sync --all-extras)

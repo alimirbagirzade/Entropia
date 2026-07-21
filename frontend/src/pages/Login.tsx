@@ -4,6 +4,8 @@ import { useLocation, useNavigate } from "react-router-dom";
 
 import { ApiError } from "@/lib/apiClient";
 import { useLogin, useSignup } from "@/lib/auth";
+import { useAuthMode } from "@/lib/authMode";
+import { useMeta } from "@/lib/hooks";
 
 type Mode = "login" | "signup";
 
@@ -32,6 +34,12 @@ export function Login() {
   const active = mode === "login" ? login : signup;
   const from = (location.state as { from?: string } | null)?.from ?? "/";
   const done = () => navigate(from, { replace: true });
+
+  // The login route follows the SERVER's auth mode too. /meta is fetched here
+  // because this page renders outside the app shell, so on a direct visit to
+  // /login nothing else would populate the store.
+  useMeta();
+  const authMode = useAuthMode();
 
   function onSubmit(values: FormValues) {
     if (mode === "login") {
@@ -63,6 +71,52 @@ export function Login() {
       signup.reset();
       setMode(next);
     }
+  }
+
+  // Dev mode: the API resolves identity from X-Actor-Id and ignores session
+  // tokens outright, so a working-looking form here would mint a credential the
+  // backend discards — the exact "login 200 -> protected 401" trap. Explain the
+  // mode and route back to the app, where the “act as” control does the real work.
+  if (authMode === "dev") {
+    return (
+      <div className="auth-viewport">
+        <div className="card auth-card">
+          <div className="brand" style={{ marginBottom: 18 }}>
+            <span className="logo" aria-hidden="true" />
+            <span>ENTROPIA</span>
+          </div>
+          <h2 style={{ marginTop: 0, fontSize: 16 }}>Local development mode</h2>
+          <p style={{ color: "var(--text-dim)" }}>
+            This server runs with <code>AUTH_MODE=dev</code>. Identity comes from the{" "}
+            <strong>“act as”</strong> field in the top bar (sent as <code>X-Actor-Id</code>) and is
+            resolved server-side — Sign Up and Log In are inactive because the API ignores session
+            tokens in this mode.
+          </p>
+          <p style={{ color: "var(--text-dim)" }}>
+            For real Sign Up / Log In, start the stack with <code>AUTH_MODE=session</code>.
+          </p>
+          <button type="button" className="btn btn-primary auth-submit" onClick={() => navigate("/")}>
+            Back to Entropia
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Mode not known yet (/meta in flight): a neutral placeholder, so the form
+  // never flashes on a dev-mode server before /meta answers.
+  if (authMode === null) {
+    return (
+      <div className="auth-viewport">
+        <div className="card auth-card" aria-busy="true">
+          <div className="brand" style={{ marginBottom: 18 }}>
+            <span className="logo" aria-hidden="true" />
+            <span>ENTROPIA</span>
+          </div>
+          <p style={{ color: "var(--text-dim)" }}>Loading…</p>
+        </div>
+      </div>
+    );
   }
 
   return (

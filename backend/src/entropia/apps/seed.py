@@ -13,6 +13,7 @@ import asyncio
 import os
 from typing import TYPE_CHECKING
 
+from entropia.config import get_settings
 from entropia.domain.esp.enums import ResolverTrustState, RuntimeAdapter
 from entropia.domain.instrument.enums import ContractType
 from entropia.domain.instrument.scope import normalize_alias, resolution_key
@@ -158,6 +159,26 @@ _ESP_COND_RESOLVERS: tuple[tuple[str, str, list[str]], ...] = (
 )
 
 
+def should_seed_dev_admin() -> bool:
+    """Whether to provision the credentialless ``user_admin`` HumanUser.
+
+    The dev Admin has NO login credential — it is reachable only through
+    ``X-Actor-Id``, i.e. only under ``AUTH_MODE=dev``. In session mode it is
+    both useless (nobody can log in as it) and actively harmful: it is an
+    ACTIVE Admin, and first-Admin bootstrap is fail-closed "only while no
+    active Admin exists", so seeding it permanently blocks a real installation
+    from provisioning its first Admin without a database edit.
+
+    The default therefore follows the runtime auth mode. ``SEED_DEV_ADMIN=1``
+    forces it on (an operator explicitly wanting the impersonation fixture) and
+    ``SEED_DEV_ADMIN=0`` forces it off, regardless of mode.
+    """
+    override = os.getenv("SEED_DEV_ADMIN", "")
+    if override != "":
+        return override == "1"
+    return get_settings().auth_mode == "dev"
+
+
 async def seed_identities(session: AsyncSession) -> None:
     """Idempotently seed the default Admin human and the system Agent.
 
@@ -165,9 +186,17 @@ async def seed_identities(session: AsyncSession) -> None:
     without a mapped relationship() the unit of work does not derive flush
     order from the table-level FK, so batching both adds into one flush can
     emit the child INSERT first and violate the FK on a fresh database.
+
+    In session mode the credentialless Admin HumanUser is skipped (see
+    ``should_seed_dev_admin``) while its Principal row is still created: other
+    seeds FK-reference ``DEFAULT_ADMIN_ID`` as an owner, and a bare principal
+    never counts toward the active-Admin total that gates bootstrap.
     """
     log = get_logger("seed")
-    if await session.get(HumanUser, DEFAULT_ADMIN_ID) is None:
+    if not should_seed_dev_admin():
+        await _ensure_admin_principal(session)
+        log.info("seed.dev_admin_skipped", user_id=DEFAULT_ADMIN_ID, auth_mode="session")
+    elif await session.get(HumanUser, DEFAULT_ADMIN_ID) is None:
         session.add(Principal(principal_id=DEFAULT_ADMIN_ID, principal_type=PrincipalType.HUMAN))
         await session.flush()
         session.add(

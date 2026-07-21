@@ -62,9 +62,10 @@ async function selectBtcusdtInstrument(scope: Locator): Promise<void> {
 // (X-Actor-Id) — the same identity path the dev UI itself uses.
 async function landAsFreshActor(page: Page, prefix: string): Promise<void> {
   const actor = freshActor(prefix);
-  // The dev "act as" control renders whenever no session token exists — in BOTH
-  // auth modes — so visibility cannot tell the modes apart. Probe the API
-  // instead: only AUTH_MODE=dev honours X-Actor-Id.
+  // Probe the API rather than the UI: only AUTH_MODE=dev honours X-Actor-Id.
+  // (The dev "act as" control now renders only in dev mode, so its visibility
+  // would in fact identify the mode — but a request the server actually answers
+  // is the stronger signal, so this stays API-driven.)
   // CI docker stack exposes the API on :8000 next to the :8080 frontend (see
   // e2e/README.md); the Docker-free local stack uses the same port.
   const apiBase = process.env.E2E_API_BASE_URL ?? "http://localhost:8000/api/v1";

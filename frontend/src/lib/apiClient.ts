@@ -1,8 +1,9 @@
 // Thin fetch wrapper. The backend is the source of truth; this client never
 // computes domain state. It surfaces the canonical error envelope as ApiError.
 
+import { getAuthMode } from "./authMode";
 import { getDevActorId } from "./devActor";
-import { getSessionToken } from "./session";
+import { getSessionToken, noteSessionInvalid } from "./session";
 import type { ApiErrorResponse } from "./types";
 
 const BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "/api/v1";
@@ -17,6 +18,11 @@ export const REQUEST_TIMEOUT_MS = 15_000;
 // 0 falls under the queryClient "no retry below 500" rule, so a dead backend
 // never triggers an automatic retry storm — Retry stays a user action.
 export const NETWORK_UNAVAILABLE = "NETWORK_UNAVAILABLE";
+
+// The backend's canonical "your Bearer session is not usable" code (missing,
+// expired or revoked) — shared/errors.py SessionInvalidError. This is the ONLY
+// code that may clear the local session.
+export const SESSION_INVALID = "SESSION_INVALID";
 
 export class ApiError extends Error {
   readonly code: string;
@@ -122,20 +128,42 @@ async function fetchWithTimeout(input: string, init: RequestInit): Promise<Respo
   }
 }
 
+// Explicit, mode-consistent credential selection. The backend trusts exactly one
+// mechanism per AUTH_MODE and ignores the other, so the client names the matching
+// one instead of shipping both and hoping:
+//
+//   session : the opaque Bearer session token is THE human credential. X-Actor-Id
+//             is never sent — session mode ignores a bare actor header anyway, and
+//             sending it would imply a fallback that must not exist.
+//   dev     : X-Actor-Id selects the local principal. A stale Bearer token from an
+//             earlier session-mode run is NOT sent, so it cannot linger.
+//   unknown : /meta has not answered yet. Only the auth-exempt bootstrap reads
+//             (/meta, /health) realistically land here; both credentials are
+//             offered so a first paint under either mode still resolves an
+//             identity, and the server honours only the one it trusts.
+function authHeaders(): Record<string, string> {
+  const mode = getAuthMode();
+  const sessionToken = getSessionToken();
+  const devActorId = getDevActorId();
+  if (mode === "session") {
+    return sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {};
+  }
+  if (mode === "dev") {
+    return devActorId ? { "X-Actor-Id": devActorId } : {};
+  }
+  return {
+    ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
+    ...(devActorId ? { "X-Actor-Id": devActorId } : {}),
+  };
+}
+
 async function executeRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { body, headers, ...rest } = options;
-  const devActorId = getDevActorId();
-  const sessionToken = getSessionToken();
   const response = await fetchWithTimeout(`${BASE_URL}${path}`, {
     ...rest,
     headers: {
       "Content-Type": "application/json",
-      // Real auth (AUTH_MODE=session): humans present an opaque Bearer session token.
-      ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
-      // Dev mode (AUTH_MODE=dev): pick which principal to act as. Both headers may
-      // be sent — the server honours only the one its AUTH_MODE trusts, so a stale
-      // dev header never spoofs a real session and vice-versa.
-      ...(devActorId ? { "X-Actor-Id": devActorId } : {}),
+      ...authHeaders(),
       ...headers,
     },
     body: body === undefined ? undefined : JSON.stringify(body),
@@ -150,12 +178,14 @@ async function executeRequest<T>(path: string, options: RequestOptions = {}): Pr
 
   if (!response.ok) {
     const err = (payload as ApiErrorResponse | undefined)?.error;
-    throw new ApiError(
-      response.status,
-      err?.code ?? "UNKNOWN",
-      err?.message ?? response.statusText,
-      err?.details ?? [],
-    );
+    const code = err?.code ?? "UNKNOWN";
+    // ONLY the canonical invalid-session code drops the local session. An
+    // ACCESS_DENIED/403 means "this identity may not do this" — the session is
+    // perfectly valid and must survive, or a single forbidden read would log the
+    // user out. noteSessionInvalid() is idempotent, so N concurrent 401s clear
+    // once and emit once (no clear/redirect storm).
+    if (code === SESSION_INVALID) noteSessionInvalid();
+    throw new ApiError(response.status, code, err?.message ?? response.statusText, err?.details ?? []);
   }
   return payload as T;
 }
@@ -180,19 +210,15 @@ function textError(status: number, statusText: string, body: string): ApiError {
 // Raw text GET for non-JSON endpoints: GET /v1/metrics returns the Prometheus text
 // exposition, not the JSON envelope. Auth headers mirror apiRequest.
 export async function apiGetText(path: string): Promise<string> {
-  const devActorId = getDevActorId();
-  const sessionToken = getSessionToken();
   const response = await fetchWithTimeout(`${BASE_URL}${path}`, {
     method: "GET",
-    headers: {
-      Accept: "text/plain",
-      ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
-      ...(devActorId ? { "X-Actor-Id": devActorId } : {}),
-    },
+    headers: { Accept: "text/plain", ...authHeaders() },
   });
   const text = await response.text();
   if (!response.ok) {
-    throw textError(response.status, response.statusText, text);
+    const error = textError(response.status, response.statusText, text);
+    if (error.code === SESSION_INVALID) noteSessionInvalid();
+    throw error;
   }
   return text;
 }

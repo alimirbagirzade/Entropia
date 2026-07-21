@@ -7,8 +7,9 @@ import { connectEvents, type SseStatus } from "@/lib/sse";
 import { BASE_URL } from "@/lib/apiClient";
 import { useApiHealth, useMe, useMeta } from "@/lib/hooks";
 import { useLogout, useSessionToken } from "@/lib/auth";
+import { useAuthMode, type AuthMode } from "@/lib/authMode";
 import { getDevActorId, setDevActorId } from "@/lib/devActor";
-import { getStoredUser } from "@/lib/session";
+import { getSessionInvalidations, getStoredUser } from "@/lib/session";
 
 function DevActorControl() {
   const queryClient = useQueryClient();
@@ -40,12 +41,34 @@ function DevActorControl() {
   );
 }
 
-// Real-session control: shows the signed-in user + a Log out action when a Bearer
-// session token is present, and a Log in link otherwise. In dev mode (X-Actor-Id)
-// no token exists, so this stays a Log in link and DevActorControl drives identity.
-function AuthControl() {
+// Auth control, driven by the SERVER's runtime auth mode (/meta.auth_mode) — never
+// by "a token exists in localStorage". In dev mode the backend ignores Bearer
+// tokens entirely, so offering Login / Log out there would hand the user a
+// credential the API discards; DevActorControl is the real identity control and
+// this slot just says so. While the mode is unknown (/meta in flight) the slot
+// stays neutral so the wrong control never flashes on first paint.
+function AuthControl({ mode }: { mode: AuthMode | null }) {
   const token = useSessionToken();
   const logout = useLogout();
+
+  if (mode === null) {
+    return (
+      <span className="top-auth-line" aria-busy="true">
+        …
+      </span>
+    );
+  }
+
+  if (mode === "dev") {
+    return (
+      <span
+        className="top-auth-line"
+        title="Local development: identity is selected with the “act as” field and sent as X-Actor-Id. Sign Up / Log In are inactive because the API ignores session tokens in this mode."
+      >
+        local dev — identity via “act as”
+      </span>
+    );
+  }
 
   if (!token) {
     return (
@@ -291,10 +314,35 @@ export function Layout() {
   const me = useMe();
   const health = useApiHealth();
   const token = useSessionToken();
+  const authMode = useAuthMode();
+  const navigate = useNavigate();
 
   useEffect(() => {
     return connectEvents(queryClient, setSse);
   }, [queryClient]);
+
+  // Stale-session landing. The API client clears the local session exactly once
+  // when the server answers SESSION_INVALID (expired / revoked / unknown token);
+  // that INVOLUNTARY loss is what lands the user back on /login.
+  //
+  // A deliberate logout is deliberately NOT this case. It clears the token too,
+  // so "the token went away" cannot distinguish them — keying off the token
+  // transition would bounce the user to /login on every logout and replace the
+  // shell's anonymous "Login / Sign Up" state. So the trigger is the invalidation
+  // counter, which only the server-rejection path increments.
+  //
+  // Only session mode redirects — in dev mode /login is not a usable credential
+  // path. The redirect cannot loop: /login renders outside this Layout, so
+  // leaving unmounts the effect.
+  const seenInvalidations = useRef(getSessionInvalidations());
+  useEffect(() => {
+    const current = getSessionInvalidations();
+    if (current === seenInvalidations.current) return;
+    seenInvalidations.current = current;
+    if (authMode !== "session") return;
+    void queryClient.invalidateQueries(); // drop every identity-dependent read
+    navigate("/login", { replace: true });
+  }, [token, authMode, queryClient, navigate]);
 
   const isAdmin = me.data?.is_admin ?? false;
   const menus = MENU_BAR.filter((g) => !g.adminOnly || isAdmin);
@@ -316,10 +364,13 @@ export function Layout() {
   return (
     <div className="app-shell">
       <header className="top-title">
-        <AuthControl />
+        <AuthControl mode={authMode} />
         <span className="brand-title">entropia</span>
         <div className="topbar-status">
-          {token ? null : <DevActorControl />}
+          {/* Dev-mode ONLY, and never gated on a stored token: under AUTH_MODE=dev
+              this is the sole identity control the API honours, so a leftover
+              Bearer token from a previous session-mode run must not hide it. */}
+          {authMode === "dev" ? <DevActorControl /> : null}
           <span className={`topbar-badge ${me.data?.is_authenticated ? "ok" : "neutral"}`}>
             {me.data?.is_authenticated ? me.data.role : "anonymous"}
           </span>

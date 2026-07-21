@@ -22,6 +22,10 @@ if (-not (Test-Path ".env")) {
     Warn "New .env created. For a Docker-free run, set hosts to 'localhost' (see README)."
 }
 
+# Session mode needs a service-line credential for the non-human runtimes. Only
+# fills an EMPTY value — an existing token is never rotated by an update.
+& (Join-Path $PSScriptRoot "ensure-service-token.ps1")
+
 # 3. Backend dependencies + 4. database migrations.
 if (Get-Command uv -ErrorAction SilentlyContinue) {
     Say "Updating backend dependencies (uv sync)"

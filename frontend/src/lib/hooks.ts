@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "./apiClient";
+import { setAuthMode } from "./authMode";
 import { parseMetricsSummary, type MetricsSummary } from "./metrics";
 import type { Me, Meta, ReadyResponse } from "./types";
 
@@ -19,10 +20,20 @@ export function useCursorStack() {
   };
 }
 
+// /meta is the shell's bootstrap read AND the auth-mode source of truth. The
+// store is fed from the queryFn (not a component effect) so the mode is set the
+// moment the response lands — including for the non-React caller, apiClient,
+// which must pick its credential on the very next request. /meta itself is
+// auth-exempt, so this is not a circular initialization: it stays callable
+// before any identity exists, exactly like health, signup and login.
 export function useMeta() {
   return useQuery({
     queryKey: ["meta"],
-    queryFn: () => api.get<Meta>("/meta"),
+    queryFn: async () => {
+      const meta = await api.get<Meta>("/meta");
+      setAuthMode(meta.auth_mode);
+      return meta;
+    },
     staleTime: 5 * 60_000,
   });
 }

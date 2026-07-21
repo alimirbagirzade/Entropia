@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 
 import { UserManual } from "@/pages/UserManual";
-import { stubApi } from "./helpers/apiStub";
+import { apiErrorRoute, stubApi } from "./helpers/apiStub";
 import { stubUpload } from "./helpers/xhrStub";
 
 // One stream page: the immutable baseline guide first (UM-10 — no admin
@@ -139,6 +139,24 @@ const TRASH_ENTRIES = {
 // apiStub matches in insertion order: the specific admin fragments (:upload,
 // :restore, /revisions) MUST precede the bare create fragment — the create
 // path "/admin/manual/documents" is a substring of all of them.
+// R2-09: the maintenance actions render only for a server-confirmed Admin
+// (/me projection, fail-closed) — the shared baseline runs under ME_ADMIN;
+// the visibility tests below override the projection.
+const ME_ADMIN = {
+  principal_id: "hu_admin",
+  principal_type: "human",
+  role: "admin",
+  is_admin: true,
+  is_authenticated: true,
+};
+const ME_USER = {
+  principal_id: "hu_user",
+  principal_type: "human",
+  role: "user",
+  is_admin: false,
+  is_authenticated: true,
+};
+
 function stubRoutes(extra: Record<string, unknown> = {}) {
   return stubApi({
     "POST :restore": RESTORE_RESULT,
@@ -148,6 +166,7 @@ function stubRoutes(extra: Record<string, unknown> = {}) {
     "GET /trash-entries": TRASH_ENTRIES,
     "GET /manual/search": SEARCH,
     "GET /manual/stream": STREAM,
+    "GET /me": ME_ADMIN,
     ...extra,
   });
 }
@@ -216,7 +235,7 @@ describe("User Manual page", () => {
 
     await screen.findByText("Appendix body.");
     // Only the non-baseline section carries admin actions.
-    expect(screen.getAllByRole("button", { name: "Delete…" })).toHaveLength(1);
+    expect(await screen.findAllByRole("button", { name: "Delete…" })).toHaveLength(1);
     expect(screen.getAllByRole("button", { name: "Replace content" })).toHaveLength(1);
   });
 
@@ -248,7 +267,7 @@ describe("User Manual page", () => {
     renderPage();
     await screen.findByText("Appendix body.");
 
-    fireEvent.click(screen.getByRole("button", { name: "+ Add / Paste Text" }));
+    fireEvent.click(await screen.findByRole("button", { name: "+ Add / Paste Text" }));
     fireEvent.change(await screen.findByLabelText("Title"), { target: { value: "New doc" } });
     fireEvent.change(screen.getByLabelText("Content"), { target: { value: "Body text." } });
     fireEvent.click(screen.getByRole("button", { name: "Publish document" }));
@@ -281,7 +300,7 @@ describe("User Manual page", () => {
     renderPage();
     await screen.findByText("Appendix body.");
 
-    fireEvent.click(screen.getByRole("button", { name: "Upload Document" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Upload Document" }));
     const fileInput = await screen.findByLabelText("File");
     const file = new File(["# Uploaded"], "guide.md", { type: "text/markdown" });
     fireEvent.change(fileInput, { target: { files: [file] } });
@@ -304,7 +323,7 @@ describe("User Manual page", () => {
     renderPage();
     await screen.findByText("Appendix body.");
 
-    fireEvent.click(screen.getByRole("button", { name: "Replace content" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Replace content" }));
     fireEvent.change(screen.getByLabelText("Replacement content"), {
       target: { value: "Updated appendix." },
     });
@@ -325,7 +344,7 @@ describe("User Manual page", () => {
     renderPage();
     await screen.findByText("Appendix body.");
 
-    fireEvent.click(screen.getByRole("button", { name: "Delete…" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Delete…" }));
     fireEvent.change(screen.getByLabelText("Delete reason for Appendix"), {
       target: { value: "outdated" },
     });
@@ -344,7 +363,7 @@ describe("User Manual page", () => {
     renderPage();
     await screen.findByText("Appendix body.");
 
-    fireEvent.click(screen.getByRole("button", { name: "Restore a Document" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Restore a Document" }));
     const picker = await screen.findByLabelText("Document to restore");
     expect(screen.getByText("Appendix (mdoc_2)")).toBeTruthy();
     fireEvent.change(picker, { target: { value: "mdoc_2" } });
@@ -360,5 +379,35 @@ describe("User Manual page", () => {
     const init = callFor(fetchMock, "POST", ":restore");
     expect(init.body).toBeUndefined();
     expect(headersOf(init)["Idempotency-Key"]).toBeTruthy();
+  });
+
+  // R2-09 (GAP item 10): a non-admin keeps the full read-only reader but no
+  // maintenance controls — the "Admin approval required" note replaces the
+  // sidebar actions and the per-section replace/delete row.
+  it("hides manual maintenance from a non-admin and shows the Admin approval note", async () => {
+    stubRoutes({ "GET /me": ME_USER });
+    renderPage();
+    await screen.findByText("Appendix body.");
+
+    expect(screen.queryByRole("button", { name: "+ Add / Paste Text" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Upload Document" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Restore a Document" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Replace content" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Delete…" })).toBeNull();
+    expect(screen.getByText(/Admin approval required/)).toBeInTheDocument();
+  });
+
+  // Fail-closed: an unknown identity projection (/me unavailable) keeps every
+  // maintenance control hidden — unknown never opens the gate.
+  it("fail-closed: hides manual maintenance while /me is unavailable", async () => {
+    stubRoutes({
+      "GET /me": apiErrorRoute(503, "SERVICE_UNAVAILABLE", "identity projection unavailable"),
+    });
+    renderPage();
+    await screen.findByText("Appendix body.");
+
+    expect(screen.queryByRole("button", { name: "+ Add / Paste Text" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Replace content" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Delete…" })).toBeNull();
   });
 });

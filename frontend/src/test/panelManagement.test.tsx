@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 
 import { PanelManagement } from "@/pages/PanelManagement";
-import { stubApi } from "./helpers/apiStub";
+import { apiErrorRoute, stubApi } from "./helpers/apiStub";
 
 const USERS_PAGE = {
   data: [
@@ -82,10 +82,30 @@ const ROLE_MATRIX = {
   ],
 };
 
+// R2-09: role assignment + operator recovery render only for a
+// server-confirmed Admin (/me projection, fail-closed) — the shared baseline
+// runs under ME_ADMIN; the denial test keeps exercising the stale-cache path
+// (client believes admin, server denies -> 403 envelope verbatim).
+const ME_ADMIN = {
+  principal_id: "hu_admin",
+  principal_type: "human",
+  role: "admin",
+  is_admin: true,
+  is_authenticated: true,
+};
+const ME_USER = {
+  principal_id: "hu_user",
+  principal_type: "human",
+  role: "user",
+  is_admin: false,
+  is_authenticated: true,
+};
+
 const BASE_ROUTES = {
   "GET /admin/users": USERS_PAGE,
   "GET /admin/system-actors": SYSTEM_ACTORS,
   "GET /admin/role-matrix": ROLE_MATRIX,
+  "GET /me": ME_ADMIN,
 };
 
 function renderPage() {
@@ -102,8 +122,8 @@ function renderPage() {
 
 // Reveal the secondary operator-recovery flow (UI-19: kept behind a disclosure
 // on the primary surface, never a one-click lever).
-function openRecovery() {
-  fireEvent.click(screen.getByRole("button", { name: "Open operator recovery" }));
+async function openRecovery() {
+  fireEvent.click(await screen.findByRole("button", { name: "Open operator recovery" }));
 }
 
 describe("Panel / Management page", () => {
@@ -198,7 +218,7 @@ describe("Panel / Management page", () => {
 
     // The dispatch control is not present until the operator opens the flow.
     expect(screen.queryByRole("button", { name: "Redeliver stuck jobs" })).toBeNull();
-    openRecovery();
+    await openRecovery();
     expect(screen.getByRole("button", { name: "Redeliver stuck jobs" })).toBeInTheDocument();
   });
 
@@ -217,7 +237,7 @@ describe("Panel / Management page", () => {
     renderPage();
     await screen.findByText("alice");
 
-    openRecovery();
+    await openRecovery();
     fireEvent.click(screen.getByRole("button", { name: "Redeliver stuck jobs" }));
     // Nothing is dispatched until the operator confirms the secondary step.
     expect(
@@ -258,7 +278,7 @@ describe("Panel / Management page", () => {
     renderPage();
     await screen.findByText("alice");
 
-    openRecovery();
+    await openRecovery();
     fireEvent.change(screen.getByLabelText(/Grace seconds/), { target: { value: "0" } });
     fireEvent.click(screen.getByRole("button", { name: "Redeliver stuck jobs" }));
     fireEvent.click(screen.getByRole("button", { name: "Confirm redelivery" }));
@@ -282,7 +302,7 @@ describe("Panel / Management page", () => {
     renderPage();
     await screen.findByText("alice");
 
-    openRecovery();
+    await openRecovery();
     fireEvent.change(screen.getByLabelText(/Grace seconds/), { target: { value: "-5" } });
 
     expect(screen.getByRole("button", { name: "Redeliver stuck jobs" })).toBeDisabled();
@@ -294,5 +314,33 @@ describe("Panel / Management page", () => {
       String(url).includes("/admin/data-queue/redeliver") && init?.method === "POST",
     );
     expect(posted).toBe(false);
+  });
+
+  // R2-09 (GAP item 10): a non-admin session (e.g. stale after demotion) sees
+  // the registry read-only — no Apply control, no recovery disclosure; the
+  // "Admin approval required" note replaces both.
+  it("hides role assignment and operator recovery from a non-admin", async () => {
+    stubApi({ ...BASE_ROUTES, "GET /me": ME_USER });
+    renderPage();
+    await screen.findByText("alice");
+
+    expect(screen.queryByLabelText("Role for alice")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Apply" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Open operator recovery" })).toBeNull();
+    expect(screen.getAllByText(/Admin approval required/).length).toBeGreaterThan(0);
+  });
+
+  // Fail-closed: an unknown identity projection (/me unavailable) keeps the
+  // Admin controls hidden — unknown never opens the gate.
+  it("fail-closed: hides the Admin controls while /me is unavailable", async () => {
+    stubApi({
+      ...BASE_ROUTES,
+      "GET /me": apiErrorRoute(503, "SERVICE_UNAVAILABLE", "identity projection unavailable"),
+    });
+    renderPage();
+    await screen.findByText("alice");
+
+    expect(screen.queryByRole("button", { name: "Apply" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Open operator recovery" })).toBeNull();
   });
 });

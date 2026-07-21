@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 
+import { AdminApprovalNote, useIsAdmin } from "@/components/AdminGate";
 import { EmptyState } from "@/components/EmptyState";
 import { ErrorState } from "@/components/ErrorState";
 import { Loading } from "@/components/Loading";
@@ -374,17 +375,25 @@ function PerformanceField({ field, value }: { field: string; value: string | und
 }
 
 // Registry lifecycle for the open resolver. The OCC token is the registry's own
-// registry_version; the legal action is a UI hint (state machine) — the server
-// re-validates the transition AND the Admin gate, so a stale token (409),
-// illegal jump, or non-Admin (403) all surface verbatim. Without a registry
-// pointer there is nothing to transition.
+// registry_version; the legal action is a UI hint (state machine). R2-09 (GAP
+// item 10): the composers render only for a server-confirmed Admin (/me
+// projection, fail-closed) — everyone else keeps the read-only trust state plus
+// the "Admin approval required" note. Presentation only — the server re-validates
+// the transition AND the Admin gate, so a stale token (409), illegal jump, or
+// stale-cache non-Admin (403) all surface verbatim. Without a registry pointer
+// there is nothing to transition.
 function LifecycleActions({ esp }: { esp: EspPackageDetail }) {
+  const isAdmin = useIsAdmin();
   const registry = esp.registry;
   if (!registry) return null;
   return (
     <>
       <h5 style={{ marginBottom: 4 }}>Registry lifecycle</h5>
-      {canActivate(registry.trust_state) ? (
+      {!isAdmin ? (
+        <AdminApprovalNote
+          detail={`The registry stays read-only for your role (currently ${registry.trust_state}); an Admin performs activate/deprecate.`}
+        />
+      ) : canActivate(registry.trust_state) ? (
         <ActivateComposer esp={esp} registry={registry} />
       ) : canDeprecate(registry.trust_state) ? (
         <DeprecateComposer esp={esp} registry={registry} />

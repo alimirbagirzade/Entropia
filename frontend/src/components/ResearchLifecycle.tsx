@@ -1,5 +1,6 @@
 import { useState, type CSSProperties, type FormEvent } from "react";
 
+import { AdminApprovalNote, useIsAdmin } from "@/components/AdminGate";
 import { MarketLinkPicker } from "@/components/MarketLinkPicker";
 import { StatusBadge } from "@/components/StatusBadge";
 import { useAgentTasks } from "@/lib/agentLab";
@@ -96,8 +97,9 @@ function revisionOptions(detail: ResearchDatasetDetail) {
 // Research Data revision lifecycle (doc 12 §5, §7, §8, §9) — the eight actions
 // past ingest: revise (OCC), set time policy, declare a field/feature definition,
 // Admin approve/revoke (OCC), and compile agent/backtest evidence bundles (pure
-// read). Draft edits are owner-or-Admin, approve/revoke Admin-only — ALL enforced
-// server-side; the UI never pre-gates. A denial renders the envelope verbatim.
+// read). Draft edits are owner-or-Admin; approve/revoke are Admin-only and
+// presentation-gated on the /me projection (R2-09, fail-closed). The server
+// enforces every rule regardless — a denial renders the envelope verbatim.
 export function ResearchLifecycle({ detail }: { detail: ResearchDatasetDetail }) {
   return (
     <>
@@ -589,15 +591,28 @@ function FeatureDefinitionComposer({ entityId }: { entityId: string }) {
 }
 
 // ---------------------------------------------------------------------------
-// Approve / revoke — Admin only, under OCC (If-Match rv-N + Idempotency-Key). The
-// UI never role-pre-gates; a non-Admin -> 403 APPROVAL_REQUIRES_ADMIN verbatim.
+// Approve / revoke — Admin only, under OCC (If-Match rv-N + Idempotency-Key).
+// R2-09 (GAP item 10): the composer renders only for a server-confirmed Admin
+// (/me projection, fail-closed); everyone else keeps the read-only revision
+// states plus the "Admin approval required" note. Presentation only — a
+// stale-cache Admin still gets 403 APPROVAL_REQUIRES_ADMIN verbatim.
 // ---------------------------------------------------------------------------
 
 function ApprovalComposer({ detail }: { detail: ResearchDatasetDetail }) {
+  const isAdmin = useIsAdmin();
   const approve = useApproveRevision();
   const revoke = useRevokeApproval();
   const [revisionId, setRevisionId] = useState(detail.revision_id);
   const [note, setNote] = useState("");
+
+  if (!isAdmin) {
+    return (
+      <div style={{ marginBottom: 16 }}>
+        <strong>Approve / revoke — Admin only (OCC)</strong>
+        <AdminApprovalNote detail="Revision states above stay read-only for your role; an Admin performs approve/revoke." />
+      </div>
+    );
+  }
 
   const options = revisionOptions(detail);
 

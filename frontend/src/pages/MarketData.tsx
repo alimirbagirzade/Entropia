@@ -2,6 +2,7 @@ import { useRef, useState, type ChangeEvent, type FormEvent } from "react";
 
 import { useQueryClient } from "@tanstack/react-query";
 
+import { AdminApprovalNote, useIsAdmin } from "@/components/AdminGate";
 import { EmptyState } from "@/components/EmptyState";
 import { ErrorState } from "@/components/ErrorState";
 import { InstrumentPicker } from "@/components/InstrumentPicker";
@@ -62,8 +63,9 @@ function useCursorStack() {
 // page binds the read surface, the owner ingest chain (upload -> analyze -> map)
 // AND the revision lifecycle actions: append a DRAFT revision under OCC, append a
 // superseding successor, and Admin approve/deprecate. The detail row_version is
-// the If-Match OCC token for revisions + approve; buttons are never role-pre-gated
-// — a denial (403/409) renders the canonical envelope verbatim.
+// the If-Match OCC token for revisions + approve. Approve/deprecate render only
+// for a server-confirmed Admin (/me projection, fail-closed — R2-09); the gate
+// is presentation only — a denial (403/409) still renders the envelope verbatim.
 export function MarketData() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [setupOpen, setSetupOpen] = useState(false);
@@ -1061,9 +1063,10 @@ function MappingComposer({
 
 // ---------------------------------------------------------------------------
 // Revision lifecycle (doc 11 §5): append a DRAFT revision (OCC) or a superseding
-// successor, and Admin approve/deprecate. Buttons are never role-pre-gated —
-// approve/deprecate are Admin-only server-side and a denial (403) or an illegal
-// transition / stale token (409) renders the canonical envelope verbatim.
+// successor, and Admin approve/deprecate. Approve/deprecate are presentation-
+// gated on the /me projection (R2-09, fail-closed) but the server stays the sole
+// authority — a stale-cache denial (403) or an illegal transition / stale token
+// (409) renders the canonical envelope verbatim.
 // ---------------------------------------------------------------------------
 
 function LifecycleSection({ detail }: { detail: MarketDatasetDetail }) {
@@ -1270,13 +1273,26 @@ function RevisionComposer({ detail }: { detail: MarketDatasetDetail }) {
 }
 
 // Admin approve (VERIFIED → APPROVED, OCC) / deprecate (APPROVED → DEPRECATED, no
-// OCC) a chosen revision. The picker defaults to the current head; the server is
-// the sole authority on role + legal transition — a 403/409 renders verbatim.
+// OCC) a chosen revision. R2-09 (GAP item 10): the composer renders only for a
+// server-confirmed Admin — everyone else keeps the read-only revision state plus
+// the "Admin approval required" note. The gate is presentation only; the server
+// stays the sole authority on role + legal transition — a 403/409 (including the
+// stale-cache Admin projection) renders verbatim.
 function ApprovalComposer({ detail }: { detail: MarketDatasetDetail }) {
+  const isAdmin = useIsAdmin();
   const approve = useApproveRevision();
   const deprecate = useDeprecateRevision();
   const [revisionId, setRevisionId] = useState<string>(detail.revision_id);
   const [note, setNote] = useState("");
+
+  if (!isAdmin) {
+    return (
+      <div>
+        <strong>Admin approval</strong>
+        <AdminApprovalNote detail="Revision states above stay read-only for your role; an Admin performs approve/deprecate." />
+      </div>
+    );
+  }
 
   const noteOrNull = note.trim() || null;
 

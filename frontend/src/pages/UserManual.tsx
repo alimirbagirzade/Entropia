@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
 
+import { AdminApprovalNote, useIsAdmin } from "@/components/AdminGate";
 import { EmptyState } from "@/components/EmptyState";
 import { ErrorState } from "@/components/ErrorState";
 import { Loading } from "@/components/Loading";
@@ -43,11 +44,14 @@ function publishNoticeText(result: PublishResult): string {
 // live behind an on-demand drawer (F-03: Upload reads a real chosen file via
 // FileReader, never a manually-typed filename/content pair; Restore picks
 // from real recoverable Trash entries, never a manually-typed document id).
-// Composers are never client-gated (doc 21 §2 — UI visibility is never
-// authorization); a non-Admin sees the server 403 envelope verbatim. Baseline
-// actions ARE hidden, but from the server-truth is_baseline flag on the wire,
-// not a client guess (UM-10).
+// R2-09 (GAP item 10): the maintenance actions (add / upload / restore /
+// replace / delete) render only for a server-confirmed Admin (/me projection,
+// fail-closed) — presentation only; the server re-checks require_manual_admin
+// on every dispatch and a stale-cache denial renders the 403 envelope
+// verbatim. Baseline actions are additionally hidden from the server-truth
+// is_baseline flag on the wire, not a client guess (UM-10).
 export function UserManual() {
+  const isAdmin = useIsAdmin();
   // Accumulate-on-load-more: `frontier` is the cursor for the next page to
   // fetch. Any successful mutation resets it to null (page 1), so a stale
   // accumulated tail never survives a stream_version change.
@@ -133,15 +137,21 @@ export function UserManual() {
           </div>
 
           <div className="manual-side-actions">
-            <button type="button" className="btn btn-ghost" onClick={() => setOpenDrawer("add")}>
-              + Add / Paste Text
-            </button>
-            <button type="button" className="btn btn-ghost" onClick={() => setOpenDrawer("upload")}>
-              Upload Document
-            </button>
-            <button type="button" className="btn btn-ghost" onClick={() => setOpenDrawer("restore")}>
-              Restore a Document
-            </button>
+            {isAdmin ? (
+              <>
+                <button type="button" className="btn btn-ghost" onClick={() => setOpenDrawer("add")}>
+                  + Add / Paste Text
+                </button>
+                <button type="button" className="btn btn-ghost" onClick={() => setOpenDrawer("upload")}>
+                  Upload Document
+                </button>
+                <button type="button" className="btn btn-ghost" onClick={() => setOpenDrawer("restore")}>
+                  Restore a Document
+                </button>
+              </>
+            ) : (
+              <AdminApprovalNote detail="Manual maintenance (add, upload, restore) is Admin-only; the published stream stays readable for everyone." />
+            )}
           </div>
         </aside>
 
@@ -176,6 +186,7 @@ export function UserManual() {
                 <SectionView
                   key={section.document_id}
                   section={section}
+                  isAdmin={isAdmin}
                   deletePending={softDelete.isPending}
                   deleteError={softDelete.isError ? mutationErrorText(softDelete.error) : null}
                   onDelete={requestDelete}
@@ -440,12 +451,13 @@ function BlockView({ block }: { block: ManualBlock }) {
 
 interface SectionViewProps {
   section: ManualSection;
+  isAdmin: boolean;
   deletePending: boolean;
   deleteError: string | null;
   onDelete: (documentId: string, reason: string) => void;
 }
 
-function SectionView({ section, deletePending, deleteError, onDelete }: SectionViewProps) {
+function SectionView({ section, isAdmin, deletePending, deleteError, onDelete }: SectionViewProps) {
   const [showReplace, setShowReplace] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleteReason, setDeleteReason] = useState("");
@@ -465,9 +477,11 @@ function SectionView({ section, deletePending, deleteError, onDelete }: SectionV
       </div>
       {/* Baseline is immutable through this flow (UM-10): the server-truth
           is_baseline flag hides replace/delete the way Trash gates Restore on
-          restore_eligible. Non-baseline actions still re-check Admin
-          server-side. */}
-      {section.is_baseline ? null : (
+          restore_eligible. R2-09: replace/delete additionally render only for
+          a server-confirmed Admin (fail-closed) — the reader itself stays the
+          read-only surface for everyone else, and the server still re-checks
+          Admin on every dispatch. */}
+      {section.is_baseline || !isAdmin ? null : (
         <div className="manual-document-actions">
           <button type="button" className="btn btn-ghost" onClick={() => setShowReplace((v) => !v)}>
             {showReplace ? "Close replace" : "Replace content"}

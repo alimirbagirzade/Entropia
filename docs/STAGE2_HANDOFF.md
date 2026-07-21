@@ -2592,6 +2592,44 @@ Evidence: e2e 09 → 6/6 yeşil (dev server :5173 + gerçek API :8000); vitest 4
 tsc/eslint/build temiz. Remediation status "Ortak shell — mobil overflow" bullet'ı eklendi.
 **Dürüst sınır:** screenshot seti 4 çekirdek ekran; 22 sayfa tam görsel kabul → R2-13.
 
+---
+
+## V18-R2 · R2-09 — Role-aware presentation: Admin-only eylemler `/me` ile fail-closed gizli ✅ (GAP madde 10)
+
+Admin-only eylemler yetkisiz kullanıcıya primary kontrol olarak GÖRÜNMEZ; yerine read-only durum +
+"Admin approval required" açıklaması. Presentation-only — HİÇBİR command/route çağrısı değişmedi:
+
+- **`components/AdminGate.tsx` (YENİ, ortak)** — `useIsAdmin()` (`useMe` REUSE;
+  `me.data?.is_admin === true`; loading/error/non-admin hepsi fail-closed "not admin") +
+  `AdminApprovalNote` (`role="note"`, "Admin approval required — …" + yüzeye özgü read-only
+  detay) + `AdminGate` wrapper. UI-22/R2-05b'deki dağınık `useMe` gate'lerinin ortak modülü.
+- **Envanter (6 yüzey gate'lendi):** MarketData `ApprovalComposer` (Approve/Deprecate) ·
+  ResearchLifecycle `ApprovalComposer` (Approve/Revoke) · Embedded ESP `LifecycleActions`
+  (Activate/Deprecate — trust_state read-only notta) · Trash satır eylemleri (Restore/Permanent
+  Delete gizli; Open Snapshot okuma yüzeyi kalır) · Panel/Management `UserRow` Assign hücresi +
+  `OperatorRecoveryCard` disclosure'ı · User Manual bakımı (sidebar Add/Upload/Restore +
+  section Replace/Delete; okuyucu + arama herkese açık).
+- **Zaten-doğru referanslar (değişmedi):** Library per-entity SERVER `permissions.*` projection
+  (can_approve_publish/can_deprecate/…) · FutureDev capability transition (UI-22 gate'i).
+- **Yetki modeli:** client görünürlüğü authorization DEĞİL — server her dispatch'te
+  `ensure_can_approve` / `esp_policy.ensure_can_activate` / `require_trash_admin` /
+  `require_admin_panel` / `require_manual_admin` yeniden doğrular; mevcut 403-verbatim testleri
+  ADMIN `/me` + server-denial (stale-cache) senaryosu olarak AYNEN yeşil.
+
+Evidence: vitest **504/504** (12 YENİ görünürlük testi: 6 yüzeyde non-admin gizli+not +
+fail-closed `/me` unavailable; OCC/Idempotency/403 assert gövdeleri byte-korundu — yalnız `/me`
+stub'ı eklendi ve async `findByRole` hizalaması yapıldı); tsc/eslint/build temiz. Canlı tarayıcı:
+dev server `:5179` (`.env.r209`, gitignored) → sentetik fixture stub API `:8009` (`/__role` ile
+admin flip) — non-admin taramada 6 yüzeyin hiçbirinde Admin primary butonu yok, her yüzeyde not;
+admin flip sonrası hepsi görünür/çalışır durumda (Embedded trusted_active doğru olarak yalnız
+Deprecate sundu).
+
+**Dürüst sınır:** tarayıcı kanıtı sentetik stub API üzerinde (403 verbatim davranışı zaten
+vitest'te; canlı backend E2E'leri admin aktörle koşar — gate onları etkilemez). Non-admin gerçek
+backend taraması R2-13 görsel kabul zincirinde tekrarlanacak.
+
+---
+
 ## Next: **V18-R2 dalgası — `docs/V18_R2_ROADMAP.md` otoritedir.** Yeni GAP belgesi
 (`docs/spec/Entropia_V18_Guncel_Arayuz_Eksikleri_ve_Yanlis_Anlamalar.md`) kodda empirik
 CONFIRMED 13 eksik kümesi tespit etti (Mainboard TS/TL inline editör yok, Add Package popover yok,

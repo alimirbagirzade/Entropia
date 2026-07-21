@@ -131,6 +131,28 @@ A requirement is **Complete** only with working end-to-end behavior + passing ac
 >   375px hamburger kullanılabilirlik testi (aç → Market Data'ya git → drawer kapanır) → 6/6 yeşil
 >   (dev server :5173 + gerçek API :8000). vitest 492/492; tsc/eslint/build temiz. Dürüst sınır:
 >   ekran görüntüsü seti bu slice'ta 4 çekirdek ekran; 22 sayfa tam görsel kabul R2-13'ün işi.
+> - **Role-aware presentation — GAP madde 10** → **R2-09 (this PR) kapattı**: Admin-only eylemler
+>   artık yetkisiz kullanıcıya primary kontrol olarak GÖRÜNMEZ. YENİ `components/AdminGate.tsx`
+>   (`useIsAdmin` — `useMe` REUSE, `me.data?.is_admin === true`; loading/error/non-admin hepsi
+>   fail-closed "not admin" + `AdminApprovalNote` read-only açıklama bileşeni; UI-22/R2-05b
+>   deseninin ortaklaştırılması). Envanter (6 yüzey): MarketData `ApprovalComposer`
+>   (Approve/Deprecate), ResearchLifecycle `ApprovalComposer` (Approve/Revoke), Embedded ESP
+>   `LifecycleActions` (Activate/Deprecate), Trash satır eylemleri (Restore/Permanent Delete;
+>   Open Snapshot okuma yüzeyi kalır), Panel/Management role assignment (Assign hücresi) +
+>   Operator Recovery disclosure'ı, User Manual bakımı (Add/Upload/Restore + Replace/Delete;
+>   okuyucu herkese açık kalır). Library ZATEN server per-entity `permissions.*` projection'ıyla
+>   gated (değişiklik yok — referans); Capability transition UI-22'de gated'di (referans şablon).
+>   Sınır korundu: HİÇBİR command/route çağrısı değişmedi — yalnız render koşulu; server her
+>   dispatch'te yeniden doğrular, stale-cache admin projection'ı 403 envelope'u VERBATIM render
+>   eder (mevcut 403 testleri ADMIN /me + server-denial stale-cache senaryosu olarak korundu).
+>   Evidence: vitest 504/504 (12 YENİ görünürlük testi — 6 yüzeyde non-admin gizli+not /
+>   fail-closed `/me` unavailable; OCC/Idempotency/403-verbatim assert gövdeleri DEĞİŞMEDİ);
+>   tsc/eslint/build temiz. Canlı tarayıcı (dev server :5179 → sentetik fixture stub API :8009,
+>   `/__role` ile admin flip): non-admin taramada 6 yüzeyin HİÇBİRİNDE Admin primary butonu yok +
+>   her yüzeyde "Admin approval required" notu (Panel Assign hücresi ekran görüntüsüyle); admin
+>   flip sonrası aynı yüzeylerde Approve/Deprecate, Approve/Revoke, Deprecate resolver,
+>   Restore/Permanent Delete, Role select+Apply, Open operator recovery, manual bakım butonları
+>   hepsi göründü.
 >
 > Slice planı + paste-ready prompt'lar: `docs/V18_R2_ROADMAP.md`. Bir satır ancak GERÇEK tarayıcı
 > + gerçek backend kabulü (ve R2-13/R2-14 görsel kabul zinciri) sonrası yeniden Complete yazılır.

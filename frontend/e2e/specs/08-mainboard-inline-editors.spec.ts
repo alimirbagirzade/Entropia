@@ -13,6 +13,49 @@ function expectMainboardUrl(page: Page): Promise<void> {
   return expect(page).toHaveURL(/\/$/);
 }
 
+const API_BASE = process.env.E2E_API_BASE_URL ?? "http://localhost:8000/api/v1";
+
+// R2-08 (GAP item 7): the TS/TL identity cards pick an instrument from the
+// canonical registry instead of typing an id — the registry has no default
+// seed, so the fixture registers BTCUSDT once via the real API before the UI
+// step needs to find it in the picker. Idempotent: a prior run (or the other
+// test in this file) may have already registered it — 409
+// INSTRUMENT_ALREADY_REGISTERED is treated as success, never a silent skip of
+// a real failure.
+async function ensureBtcusdtInstrument(page: Page): Promise<void> {
+  const token = await page.evaluate(() => localStorage.getItem("entropia.sessionToken"));
+  const devActorId = await page
+    .locator("#dev-actor")
+    .inputValue()
+    .catch(() => "");
+  const headers: Record<string, string> = { "Idempotency-Key": `e2e-instr-${uniqueSuffix()}` };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  else if (devActorId) headers["X-Actor-Id"] = devActorId;
+
+  const res = await page.request.post(`${API_BASE}/instruments`, {
+    headers,
+    data: {
+      venue_id: "binance",
+      symbol: "BTCUSDT",
+      contract_type: "perpetual",
+      display_name: "BTCUSDT Perpetual",
+      aliases: ["BTCUSDT"],
+    },
+  });
+  if (!res.ok() && res.status() !== 409) {
+    throw new Error(`Failed to ensure the BTCUSDT instrument exists: ${res.status()} ${await res.text()}`);
+  }
+}
+
+// Picks BTCUSDT from the registry picker within the given scope (draft row).
+// `.first()` targets the identity card's picker — it renders before the typed
+// config form's picker in DOM order (details-grid two-col, then CreatePanel).
+async function selectBtcusdtInstrument(scope: Locator): Promise<void> {
+  await scope.getByRole("button", { name: "Choose instrument" }).first().click();
+  await scope.getByLabel("Search instruments").fill("BTCUSDT");
+  await scope.getByRole("button", { name: /BTCUSDT Perpetual/ }).first().click();
+}
+
 // Auth-mode-aware bootstrap. AUTH_MODE=session (CI/docker stack): real signup
 // through the login form. AUTH_MODE=dev (Docker-free local stack): signup via
 // the API, then act as the fresh principal through the dev "act as" control
@@ -87,6 +130,7 @@ test.describe("R2-01b Mainboard inline TS/TL editors", () => {
     page,
   }) => {
     await landAsFreshActor(page, "r2ts");
+    await ensureBtcusdtInstrument(page);
     await expectMainboardUrl(page);
 
     // Add menu → nested submenu → Trading Signal opens an inline draft row.
@@ -110,7 +154,7 @@ test.describe("R2-01b Mainboard inline TS/TL editors", () => {
     });
 
     // Request the durable import and wait for the succeeded report inline.
-    await draftRow.getByLabel("Instrument id").first().fill("BTCUSDT");
+    await selectBtcusdtInstrument(draftRow);
     await draftRow.getByRole("button", { name: "Request import" }).click();
     await expect(draftRow.getByText("succeeded", { exact: true })).toBeVisible({
       timeout: 45_000,
@@ -142,6 +186,7 @@ test.describe("R2-01b Mainboard inline TS/TL editors", () => {
     page,
   }) => {
     await landAsFreshActor(page, "r2tl");
+    await ensureBtcusdtInstrument(page);
     await expectMainboardUrl(page);
 
     await page.getByRole("button", { name: "+ Add" }).click();
@@ -161,7 +206,7 @@ test.describe("R2-01b Mainboard inline TS/TL editors", () => {
       timeout: 15_000,
     });
 
-    await draftRow.getByLabel("Instrument id").first().fill("BTCUSDT");
+    await selectBtcusdtInstrument(draftRow);
     await draftRow.getByRole("button", { name: "Request import" }).click();
     await expect(draftRow.getByText("succeeded", { exact: true })).toBeVisible({
       timeout: 45_000,

@@ -2755,7 +2755,44 @@ backend taraması R2-13 görsel kabul zincirinde tekrarlanacak.
 - **Sınır:** uygulama koduna dokunulmadı (test-id dahi gerekmedi); yalnız e2e suite + docs.
   Loading/empty dürüst sınırları README §R2-13'te.
 
-## Next: **V18-R2 dalgası — `docs/V18_R2_ROADMAP.md` otoritedir.** Yeni GAP belgesi
+## V18-R2 · R2-14 — Nihai kabul geçişi ✅ (GAP madde 17 + 20) — **R2 DALGASININ SON SLICE'I**
+
+Çıktı: **`docs/implementation/v18_final_acceptance.md`** — GAP madde 20'nin 11 kabul koşulu canlı
+seed'li stack'te tek tek doğrulandı, her koşula kanıt referansı yazıldı. **10/11 PASS**; 20.11
+(22 sayfa screenshot setinin kabulü) **PO imzasına** bağlı olduğu için AÇIK.
+
+- **Kapatılan bulgular:** 375px yatay taşma — Mainboard section grid'inin auto track'i 64
+  karakterlik composition hash'inin min-content genişliğine büyüyordu (375px'te 640px section);
+  `minmax(0,1fr)` + `overflow-wrap` ile taşan eleman **110 → 0**. Escape ile kapanma — YENİ
+  `frontend/src/components/useEscapeToClose.ts` Add menüsü + Add Package popover'ına bağlandı,
+  focus tetikleyiciye döner.
+- **Kayıtlı a11y sapmaları (PO kararı):** A11Y-01 — 228 serious contrast node'unun tamamı
+  canonical v18 paletinden (`--accent #00a9e8`, `--text-dim #888888`) → **tema kararı, kod
+  düzeltmesi değil**; A11Y-02 `link-in-text-block`. 22 sayfada **critical = 0**. Tarama gate'i
+  sınırı dondurur: kayıtlı iki kural dışında serious ihlal koşuyu düşürür.
+- **Yeni opt-in katman:** `e2e/specs/13-a11y-scan.spec.ts` + `14-keyboard-flow.spec.ts`,
+  `npm run a11y` arkasında (düz `npm test`'ten hariç).
+- **Test:** e2e 20/20 · a11y 2/2 · responsive 6/6 · vitest **514/514** · tsc + eslint temiz.
+- **Sınır:** hiçbir remediation-status satırı Complete'e ÇEKİLMEDİ (GAP madde 17 — PO imzası
+  şart); ekran okuyucu denetimi YAPILMADI; klavye denetimi temel akışla sınırlı; 10 sayfanın
+  derin görsel kıyası açık; doğrulamalar host-native local stack'te (bu oturumda CI'da koşmadı).
+- **PO karar tablosu:** D-1…D-9 → `v18_final_acceptance.md` §4.
+
+## Next: **PO imzası + R2 kapanışı.** R2 dalgasının 17 slice'ı merge oldu (#325–#343); R2-14
+(nihai kabul) bu branch'te. Kod tarafında planlanan R2 işi BİTTİ. Sırada:
+> 1. **Product-owner imzası** — `docs/implementation/v18_final_acceptance.md` §4'teki D-1…D-9
+>    kararları (görsel sapmaların toptan kabulü, F-2…F-6 mini slice'ları, A11Y-01 için (a)/(b)/(c),
+>    20.11 onayı). **İmza olmadan `entropia_v18_remediation_status.md`'deki R2 RE-OPENING banner'ı
+>    kalkmaz ve hiçbir satır Complete olmaz.**
+> 2. **İmza sonrası:** banner kaldırılır, UI-01/02/03/04/05/06/12/14/15 satırları gerçek evidence
+>    referanslarıyla (spec adı + screenshot yolu + PR) Complete'e çekilir.
+> 3. **PO'nun mini slice istediği maddeler** (F-2 display label'ları, F-3 CP alan yerleşimi,
+>    F-4 Portfolio ham ULID, F-5 Results History satır özeti, F-6 TS/TL grid sıkılaştırma,
+>    A11Y-01 palet kararı) ayrı slice'lara açılır.
+> 4. **Kapsam dışı kalan açık işler:** ekran okuyucu (NVDA/VoiceOver) denetimi, 10 sayfanın derin
+>    görsel kıyası, CI'da a11y/visual katmanlarının koşturulması.
+
+## Eski Next (R2 dalgası başlarken): **`docs/V18_R2_ROADMAP.md` otoritedir.** Yeni GAP belgesi
 (`docs/spec/Entropia_V18_Guncel_Arayuz_Eksikleri_ve_Yanlis_Anlamalar.md`) kodda empirik
 CONFIRMED 13 eksik kümesi tespit etti (Mainboard TS/TL inline editör yok, Add Package popover yok,
 üst menü Mainboard'ı bypass ediyor, TS/TL + Strategy + CP ham JSON formları, Research sahte

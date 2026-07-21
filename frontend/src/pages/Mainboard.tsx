@@ -13,6 +13,7 @@ import { AddPackagePopover } from "@/components/AddPackagePopover";
 import { StrategyDetailsPanel } from "@/components/StrategyDetailsPanel";
 import { TradeLogEditor } from "@/components/TradeLogEditor";
 import { TradingSignalEditor } from "@/components/TradingSignalEditor";
+import { useAllocationDraft, type AllocationEntry } from "@/lib/allocation";
 import { useRequestBacktestRun } from "@/lib/backtest";
 import {
   EXTERNAL_DRAFT_KINDS,
@@ -82,7 +83,36 @@ function editorPath(item: MainboardItem): string {
 // carries the item's row_version as the expected_row_version OCC token.        //
 // --------------------------------------------------------------------------- //
 
-function ItemRow({ item, defaultExpanded = false }: { item: MainboardItem; defaultExpanded?: boolean }) {
+// KALAN-B (video 7:16–9:24): per-row allocation-share visibility. The share is
+// SERVER-truth from the allocation draft projection (GET portfolio-allocation-
+// draft) — the row renders equity_share_percent verbatim and never computes
+// capital math (doc 13 §8.3 / PR #113 rule). Sleeve capital amounts exist only
+// in the server's derived preview (PUT/validate responses), so the row shows
+// the percent share; amounts live on the Portfolio page.
+interface RowAllocation {
+  enabled: boolean;
+  entry: AllocationEntry | null;
+}
+
+function allocationShareBadge(entry: AllocationEntry | null): {
+  label: string;
+  tone: "ok" | "warn" | "neutral";
+} {
+  if (!entry) return { label: "No allocation share", tone: "warn" };
+  if (!entry.active) return { label: "Excluded from allocation", tone: "neutral" };
+  if (entry.equity_share_percent === null) return { label: "Share not set", tone: "warn" };
+  return { label: `Share ${entry.equity_share_percent}%`, tone: "ok" };
+}
+
+function ItemRow({
+  item,
+  allocation = null,
+  defaultExpanded = false,
+}: {
+  item: MainboardItem;
+  allocation?: RowAllocation | null;
+  defaultExpanded?: boolean;
+}) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [labelInput, setLabelInput] = useState(item.display_label_override ?? "");
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -109,6 +139,15 @@ function ItemRow({ item, defaultExpanded = false }: { item: MainboardItem; defau
             label={item.is_enabled ? "Enabled" : "Disabled"}
             tone={item.is_enabled ? "ok" : "warn"}
           />
+          {/* KALAN-B: the row's equity share, shown only while shared allocation
+              is ON (server draft.enabled) — when OFF every item runs on its own
+              Initial Capital and a per-row share would be misleading. */}
+          {allocation?.enabled && (
+            <StatusBadge
+              label={allocationShareBadge(allocation.entry).label}
+              tone={allocationShareBadge(allocation.entry).tone}
+            />
+          )}
           <span style={noteStyle}>#{item.position_index}</span>
         </span>
         {/* Row action cluster (mockup .strategy-actions): compact enable/disable */}
@@ -196,6 +235,15 @@ function ItemRow({ item, defaultExpanded = false }: { item: MainboardItem; defau
 
       {expanded && (
         <div className="strategy-details" style={{ display: "grid", gap: 16 }}>
+          {/* KALAN-B: share assignment/editing stays in the Portfolio editor
+              (the OCC draft PUT lives there) — the row deep-links to it and
+              renders the server-truth share verbatim. */}
+          {allocation?.enabled && (
+            <p style={{ ...noteStyle, margin: 0 }}>
+              Equity allocation: {allocationShareBadge(allocation.entry).label}.{" "}
+              <Link to="/portfolio">Edit share in Portfolio / Equity Allocation →</Link>
+            </p>
+          )}
           {/* Type-specific editor entry (§3.1 / UI-02 + R2-01b). Strategy items */}
           {/* open the 3-column Strategy Details editor INLINE; Trading Signal / */}
           {/* Trade Log items now mount their real workbench editor INLINE too — */}
@@ -782,6 +830,12 @@ export function Mainboard() {
   // (the standalone /backtest/run page keeps its ?run= deep-link separately); a
   // retry from RunProgress swaps tracking onto the fresh run id. Every hook / OCC
   // / Idempotency contract is the same one the standalone page uses (unchanged).
+  // KALAN-B: the composition's allocation draft (pure read, doc 13 §7.1) —
+  // source of the "Use Allocation Backtest" state + per-item shares. Keyed
+  // under ["allocation"], so a Portfolio draft PUT (which also invalidates
+  // ["mainboard"]) refreshes this projection — the Mainboard mirrors Portfolio
+  // edits through the existing invalidation chain with no new contract.
+  const allocation = useAllocationDraft(board.data?.workspace_id ?? null);
   const requestRun = useRequestBacktestRun();
   const [runId, setRunId] = useState<string | null>(null);
   // Transient external-draft rows added inline from the Add-menu submenu (UI-03).
@@ -908,6 +962,14 @@ export function Mainboard() {
   // Unattached strategy drafts render as draft rows (server-truth: they survive
   // reload via GET /strategy-drafts; attached ones already render as ItemRows).
   const strategyDrafts = (myDrafts.data ?? []).filter((d) => !d.is_attached);
+  // KALAN-B: allocation projection → per-row lookup. While the draft is still
+  // loading (or errored) nothing allocation-related renders — the page never
+  // shows a fabricated toggle state (honest-boundary rule).
+  const allocationDraft = allocation.data?.draft ?? null;
+  const allocationEnabled = allocationDraft?.enabled ?? false;
+  const allocationEntryByItem = new Map(
+    (allocationDraft?.entries ?? []).map((entry) => [entry.composition_item_id, entry]),
+  );
 
   return (
     <>
@@ -954,6 +1016,41 @@ export function Mainboard() {
           {addStrategyError && (
             <p role="alert" style={alertStyle}>{errorMessage(addStrategyError)}</p>
           )}
+          {/* KALAN-B (video 8:17 "Use Allocation Backtest"): the composition's
+              REAL allocation mode — server draft.enabled, the exact field the
+              Ready Check / RUN read (docs 13/14). The toggle itself is edited on
+              the Portfolio page (its OCC PUT contract lives there); this strip
+              is server-truth display + deep-link, never a second write path.
+              Rendered only once the draft projection has loaded. */}
+          {allocationDraft && (
+            <div
+              className="card"
+              role="group"
+              aria-label="Portfolio Equity Allocation status"
+              style={{
+                display: "flex",
+                gap: 10,
+                alignItems: "center",
+                flexWrap: "wrap",
+                margin: "10px 0",
+              }}
+            >
+              <StatusBadge
+                label={
+                  allocationEnabled
+                    ? "Use Allocation Backtest: ON"
+                    : "Use Allocation Backtest: OFF"
+                }
+                tone={allocationEnabled ? "ok" : "neutral"}
+              />
+              <span style={noteStyle}>
+                {allocationEnabled
+                  ? "Backtests use the shared capital pool — each item's equity share is shown on its row below."
+                  : "Items run independently with their own Initial Capital. Enable the shared pool in Portfolio / Equity Allocation."}
+              </span>
+              <Link to="/portfolio">Portfolio / Equity Allocation →</Link>
+            </div>
+          )}
           {items.length === 0 && draftRows.length === 0 && strategyDrafts.length === 0 ? (
             <div className="card">
               <strong>Your Mainboard is empty.</strong>
@@ -968,6 +1065,14 @@ export function Mainboard() {
                 <ItemRow
                   key={item.item_id}
                   item={item}
+                  allocation={
+                    allocationDraft
+                      ? {
+                          enabled: allocationEnabled,
+                          entry: allocationEntryByItem.get(item.item_id) ?? null,
+                        }
+                      : null
+                  }
                   defaultExpanded={
                     item.item_id === justAddedItemId ||
                     item.work_object_root_id === justAddedRootId

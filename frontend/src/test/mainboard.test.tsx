@@ -224,9 +224,55 @@ const ME_USER = {
   is_authenticated: true,
 };
 
+// KALAN-B: the composition's allocation draft projection (doc 13 §7.1). The
+// default is the pre-plan independent draft (enabled: false, no entries) —
+// row_version 0 + null plan_id, exactly what the backend returns before any
+// Portfolio save.
+const ALLOC_DRAFT_OFF = {
+  composition_id: "ws_1",
+  plan_id: null,
+  current_revision_id: null,
+  row_version: 0,
+  draft: {
+    enabled: false,
+    initial_capital: null,
+    compounding_mode: null,
+    reserve_cash_percent: null,
+    entries: [],
+  },
+  candidate_items: [],
+};
+
+// An ENABLED shared-allocation draft: item_strat holds an active 40% share.
+const ALLOC_DRAFT_ON = {
+  composition_id: "ws_1",
+  plan_id: "plan_1",
+  current_revision_id: null,
+  row_version: 2,
+  draft: {
+    enabled: true,
+    initial_capital: { amount: "10000", currency: "USDT" },
+    compounding_mode: "COMPOUND_PORTFOLIO_EQUITY",
+    reserve_cash_percent: "10",
+    draft_fingerprint: "fp_1",
+    entries: [
+      {
+        entry_id: "pae_1",
+        composition_item_id: "item_strat",
+        item_type: "strategy",
+        active: true,
+        equity_share_percent: "40",
+        position_index: 0,
+      },
+    ],
+  },
+  candidate_items: [],
+};
+
 function stubRoutes(overrides: Record<string, unknown> = {}) {
   return stubApi({
     "GET /me": ME_USER,
+    "GET /mainboard-compositions/ws_1/portfolio-allocation-draft": ALLOC_DRAFT_OFF,
     "POST /mainboards/ws_1/snapshots": SNAPSHOT_RESULT,
     "POST /external-work-object-drafts/trading_signal": EXTERNAL_DRAFT,
     "PATCH /mainboard-items/item_strat": PATCH_RESULT,
@@ -294,6 +340,50 @@ describe("Mainboard", () => {
     });
     renderPage();
     expect(await screen.findByText("Backtest Ready: Not checked yet")).toBeTruthy();
+  });
+
+  it("shows Use Allocation Backtest OFF for the default independent draft (KALAN-B)", async () => {
+    stubRoutes();
+    renderPage();
+    const strip = await screen.findByRole("group", {
+      name: "Portfolio Equity Allocation status",
+    });
+    expect(within(strip).getByText("Use Allocation Backtest: OFF")).toBeTruthy();
+    expect(
+      within(strip).getByRole("link", { name: "Portfolio / Equity Allocation →" }),
+    ).toBeTruthy();
+    // Allocation is OFF → no per-row share badge (items run independently).
+    expect(screen.queryByText(/Share \d/)).toBeNull();
+  });
+
+  it("shows the server-truth per-item share on each row when allocation is ON (KALAN-B)", async () => {
+    stubRoutes({
+      "GET /mainboard-compositions/ws_1/portfolio-allocation-draft": ALLOC_DRAFT_ON,
+    });
+    renderPage();
+    const strip = await screen.findByRole("group", {
+      name: "Portfolio Equity Allocation status",
+    });
+    expect(within(strip).getByText("Use Allocation Backtest: ON")).toBeTruthy();
+    // The row's share is the draft entry's equity_share_percent VERBATIM —
+    // never client-computed capital math (doc 13 §8.3 / PR #113 rule).
+    expect(await screen.findByText("Share 40%")).toBeTruthy();
+  });
+
+  it("flags an item missing from the ENABLED allocation plan and deep-links to Portfolio (KALAN-B)", async () => {
+    stubRoutes({
+      "GET /mainboard-compositions/ws_1/portfolio-allocation-draft": {
+        ...ALLOC_DRAFT_ON,
+        draft: { ...ALLOC_DRAFT_ON.draft, entries: [] },
+      },
+    });
+    renderPage();
+    expect(await screen.findByText("No allocation share")).toBeTruthy();
+    // Expanding the row exposes the share deep-link into the Portfolio editor.
+    fireEvent.click(screen.getByRole("button", { name: "Expand Momentum A" }));
+    expect(
+      await screen.findByRole("link", { name: "Edit share in Portfolio / Equity Allocation →" }),
+    ).toBeTruthy();
   });
 
   it("locks RUN until a current Ready Check passes (not_ready → disabled button, not a link)", async () => {

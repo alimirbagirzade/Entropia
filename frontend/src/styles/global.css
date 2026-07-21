@@ -440,9 +440,12 @@ a:hover { text-decoration: underline; }
 /* v18 mockup page heading: 18px / 900 weight (matches .page-title in the spec). */
 .page-title { margin: 0 0 12px; font-size: 18px; font-weight: 900; color: var(--text); }
 .page-sub { margin: 0 0 20px; color: var(--text-dim); font-size: 13px; }
-.kv { display: grid; grid-template-columns: max-content 1fr; gap: 6px 18px; font-size: 14px; }
+/* minmax(0,1fr) + overflow-wrap: unbreakable identifiers (composition hash,
+   ULIDs) must wrap inside the value column instead of widening the grid past
+   narrow viewports (R2-14 / GAP madde 15). */
+.kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 18px; font-size: 14px; }
 .kv dt { color: var(--text-dim); }
-.kv dd { margin: 0; }
+.kv dd { margin: 0; overflow-wrap: anywhere; }
 
 /* Data tables — v18 mockup wireframe look (bordered cells, grey bold header;
    mirrors .trade-table / .database-table in the spec). .database-table is the

@@ -71,7 +71,7 @@ bağımsız olanlar paralel gidebilir.
 
 | ID | Başlık | GAP | Bağımlılık |
 |---|---|---|---|
-| R2-13 | 22 sayfa × 5 durum × 3 genişlik screenshot matrisi + V18 side-by-side + Playwright screenshot regression | 16 | tüm P0+P1 |
+| R2-13 ✅ | 22 sayfa × 5 durum × 3 genişlik screenshot matrisi + V18 side-by-side + Playwright screenshot regression — TAMAM (STAGE2_HANDOFF "R2-13 landed"; sapma listesi `docs/implementation/v18_visual_deviations.md`) | 16 | tüm P0+P1 |
 | R2-14 | Responsive + a11y son geçiş, product-owner onayı, remediation status kapanışı | 17,20 | R2-13 |
 
 ---

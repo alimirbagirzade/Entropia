@@ -5,8 +5,12 @@
   "type": "module",
   "description": "Entropia V18 — real-browser end-to-end suite (Playwright) against the Docker Compose stack (F-23)",
   "scripts": {
-    "test": "playwright test",
-    "test:headed": "playwright test --headed",
+    "test": "playwright test --grep-invert \"@screenshots|@visual|@prototype\"",
+    "test:headed": "playwright test --headed --grep-invert \"@screenshots|@visual|@prototype\"",
+    "screenshots": "playwright test --grep @screenshots",
+    "screenshots:prototype": "playwright test --grep @prototype",
+    "visual": "playwright test --grep @visual",
+    "screenshots:update": "playwright test --grep @visual --update-snapshots",
     "test:debug": "playwright test --debug",
     "report": "playwright show-report",
     "install-browsers": "playwright install --with-deps chromium"

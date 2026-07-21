@@ -2733,6 +2733,28 @@ backend taraması R2-13 görsel kabul zincirinde tekrarlanacak.
 
 ---
 
+## V18-R2 · R2-13 — 22 sayfa screenshot matrisi + V18 side-by-side + screenshot regression ✅
+
+- **Baseline matris (canlı seeded stack, host-native):** `frontend/e2e/screenshots/baseline/`
+  — 122 PNG: `normal` 77 (22 sayfa+panel-logs × 1280/1440/1920, +375/768 Mainboard ve üç
+  inline-editör satırı), `empty` 14, `loading` 14 (API stall ile deterministik), `error` 14
+  (zorlanmış 500 zarfı), `permission-denied` 3 (adminOnly sayfalar, plain user). Adlandırma
+  `<sayfa>/<durum>--<genişlik>.png`.
+- **V18 prototip referansları:** `frontend/e2e/screenshots/prototype/` — 20 ekran @1440,
+  mockup'ın kendi `show*` fonksiyonları çağrılarak (specs/09). Mockup dev kopyası
+  `frontend/public/mockup_v18.html` (gitignored) — üretimden önce `cp docs/spec/...v18.html`.
+- **Sapma listesi:** `docs/implementation/v18_visual_deviations.md` — madde madde; 6 FIX adayı
+  (F-1 mobil taşma/katman, F-2 display-label haritası, F-3 CP form yerleşimi, F-4 allocation
+  ULID adayları, F-5 history headline metrikleri, F-6 TS/TL form yoğunluğu) + PO-APPROVE
+  kümesi. Hiçbir madde Complete İLAN EDİLMEDİ — yazılı PO onayı R2-14.
+- **Screenshot regression:** `specs/11-visual-regression.spec.ts` — 8 kritik sayfa
+  (Mainboard, Strategy/TS/TL, Market Data, Create Package, Ready Check, RUN) `toHaveScreenshot`
+  (maxDiffPixelRatio 0.02, animasyon kapalı, `time`/`[data-e2e-volatile]` maskesi, 1440×900).
+  Baseline'lar commit'li (`-darwin` platform eki); komutlar: `npm run visual` /
+  `npm run screenshots:update`. Varsayılan `npm test` bu üç katmanı grep-invert ile dışlar.
+- **Sınır:** uygulama koduna dokunulmadı (test-id dahi gerekmedi); yalnız e2e suite + docs.
+  Loading/empty dürüst sınırları README §R2-13'te.
+
 ## Next: **V18-R2 dalgası — `docs/V18_R2_ROADMAP.md` otoritedir.** Yeni GAP belgesi
 (`docs/spec/Entropia_V18_Guncel_Arayuz_Eksikleri_ve_Yanlis_Anlamalar.md`) kodda empirik
 CONFIRMED 13 eksik kümesi tespit etti (Mainboard TS/TL inline editör yok, Add Package popover yok,

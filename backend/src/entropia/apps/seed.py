@@ -527,10 +527,30 @@ async def _seed_esp_ta_resolvers(session: object, log: object) -> None:
     row so Pre-Check can resolve it. Idempotent per key. The TA resolvers return a
     numeric series; the ``cond.*`` threshold resolvers return a boolean gate.
     """
+    # R2-12: the resolver rows FK-reference the admin PRINCIPAL. Under
+    # SEED_E2E_GOLDEN the identity seed is deliberately skipped (bootstrap
+    # stays open), so ensure the bare Principal row exists WITHOUT creating an
+    # active Admin HumanUser — the first-Admin bootstrap counts human_users,
+    # never principals, so this cannot close the promotion window.
+    await _ensure_admin_principal(session)
     for resolver in _ESP_TA_RESOLVERS:
         await _seed_esp_resolver(session, log, spec=resolver, return_type="series")
     for resolver in _ESP_COND_RESOLVERS:
         await _seed_esp_resolver(session, log, spec=resolver, return_type="boolean")
+
+
+async def _ensure_admin_principal(session: object) -> None:
+    """Idempotently ensure the admin PRINCIPAL row (FK target) exists.
+
+    Adds ONLY the ``principals`` row — never a HumanUser — so the
+    ENTROPIA_BOOTSTRAP_ADMIN_EMAIL first-signup promotion (which counts
+    active Admin human_users) keeps working on a fresh E2E database.
+    """
+    if await session.get(Principal, DEFAULT_ADMIN_ID) is None:  # type: ignore[attr-defined]
+        session.add(  # type: ignore[attr-defined]
+            Principal(principal_id=DEFAULT_ADMIN_ID, principal_type=PrincipalType.HUMAN)
+        )
+        await session.flush()  # type: ignore[attr-defined]
 
 
 async def _seed_esp_resolver(

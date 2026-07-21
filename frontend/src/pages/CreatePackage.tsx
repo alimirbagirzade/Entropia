@@ -4,18 +4,19 @@ import { ErrorState } from "@/components/ErrorState";
 import { Loading } from "@/components/Loading";
 import { PreCheckModal } from "@/components/PreCheckModal";
 import { StatusBadge } from "@/components/StatusBadge";
+import { AdminGate, useIsAdmin } from "@/components/AdminGate";
 import { ApiError } from "@/lib/apiClient";
-import { useMe } from "@/lib/hooks";
 import {
   CREATE_PACKAGE_KINDS,
   CREATION_MODES,
   SOURCE_LANGUAGES,
   SUPPORTED_TARGET_RUNTIME,
-  approvalBlockReason,
   asRecordArray,
   baselineParseTone,
+  buildBaselineMetadata,
   outputKindsFor,
   packageActionAvailability,
+  parseDeclaredDependencies,
   requestStateTone,
   scanStatusTone,
   sourceKindForMode,
@@ -31,6 +32,7 @@ import {
   useStartBaselineParse,
   useUploadBaseline,
   validationRunTone,
+  type BaselineMetadataFields,
   type CreatePackageKind,
   type CreationMode,
   type MissingCall,
@@ -271,11 +273,10 @@ function Workspace({
 
   function onSend() {
     if (!canSubmit) return;
-    const declared = form.declared_keys
-      .split("\n")
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0)
-      .map((key) => ({ key }));
+    // R2-12: an optional `key(type,…)->return` signature per line — EXACT
+    // ordered types are the resolver identity (doc 09 §4.2), so a bare key
+    // cannot match a parameterised ESP contract.
+    const declared = parseDeclaredDependencies(form.declared_keys);
     create.mutate(
       {
         package_type: form.package_type,
@@ -484,12 +485,15 @@ function Workspace({
                 />
               </label>
               <label style={{ display: "block", marginTop: 10 }}>
-                <span>Declared dependencies (one canonical key per line, optional)</span>
+                <span>
+                  Declared dependencies (one per line — optional signature as
+                  key(type,…)-&gt;return)
+                </span>
                 <textarea
                   aria-label="Declared dependencies"
                   value={form.declared_keys}
                   onChange={(e) => setForm((prev) => ({ ...prev, declared_keys: e.target.value }))}
-                  placeholder={"ta.sma\nta.rsi"}
+                  placeholder={"ta.sma(series,int)->series\nta.rsi(series,int)->series"}
                   style={{ minHeight: 64 }}
                 />
               </label>
@@ -534,6 +538,10 @@ function Workspace({
                   Clear
                 </button>
               </div>
+              {/* R2-12: the locked-action reasons live NEXT TO their controls,
+                  derived from the server projection (never a client guess). */}
+              <LockReason reason={actions.reasons.precheck} />
+              <LockReason reason={actions.reasons.generateDraft} />
               {detail !== null && actions.nextStepHint.length > 0 ? (
                 <p className="cp-note" aria-live="polite" style={{ marginTop: 8, fontWeight: 600 }}>
                   Next step: {actions.nextStepHint}
@@ -830,6 +838,29 @@ function StateCard({ detail }: { detail: PackageRequestDetail | null }) {
   );
 }
 
+// R2-12: a small inline "why is this locked" note rendered directly next to a
+// disabled lifecycle control (GAP item 11 — the user never guesses at a locked
+// button). Renders nothing when the action is available.
+function LockReason({ reason }: { reason: string | null }) {
+  if (reason === null) return null;
+  return (
+    <span className="cp-note cp-lock-reason" role="note">
+      {reason}
+    </span>
+  );
+}
+
+const EMPTY_BASELINE_FIELDS: BaselineMetadataFields = {
+  provider: "",
+  symbol: "",
+  timeframe: "",
+  rangeStart: "",
+  rangeEnd: "",
+  timezone: "",
+  settings: "",
+  sourceRevisionContext: "",
+};
+
 // Baseline (equivalence evidence) — doc 06 §4.4/§8.3. Real TradingView CSV: the
 // file is transferred as multipart bytes (raw bytes never travel as pasted text;
 // the server stores a content-addressed digest + parse report) and fed to the
@@ -838,23 +869,25 @@ function StateCard({ detail }: { detail: PackageRequestDetail | null }) {
 function BaselineSection({ detail }: { detail: PackageRequestDetail }) {
   const upload = useUploadBaseline();
   const parse = useStartBaselineParse();
-  const me = useMe();
-  // Fail-closed role gate (R2-05b pattern): the raw metadata JSON renders only
-  // once /me proves is_admin — loading, error and non-admin all hide it.
-  const isAdmin = me.data?.is_admin === true;
+  // Fail-closed role gate (R2-09 AdminGate pattern): the raw metadata JSON
+  // renders only once /me proves is_admin.
+  const isAdmin = useIsAdmin();
   const [file, setFile] = useState<File | null>(null);
-  // R2-08 (GAP item 9): the documented baseline descriptors are typed fields;
-  // undocumented extra keys stay JSON, Admin-only under Advanced.
-  const [provider, setProvider] = useState("");
-  const [symbol, setSymbol] = useState("");
-  const [timeframe, setTimeframe] = useState("");
-  const [range, setRange] = useState("");
+  // R2-12 (GAP item 11): every key the baseline parse gate REQUIRES
+  // (REQUIRED_BASELINE_METADATA_FIELDS) is a typed product field — a normal
+  // user never writes JSON. Undocumented extra keys stay JSON, Admin-only
+  // under Advanced (R2-04/05 disclosure pattern).
+  const [fields, setFields] = useState<BaselineMetadataFields>(EMPTY_BASELINE_FIELDS);
   const [metadataText, setMetadataText] = useState("");
   const [metadataError, setMetadataError] = useState<string | null>(null);
 
   const baseline = detail.current_baseline;
   const anyPending = upload.isPending || parse.isPending;
   const actions = packageActionAvailability(detail);
+
+  function setField(key: keyof BaselineMetadataFields, value: string) {
+    setFields((prev) => ({ ...prev, [key]: value }));
+  }
 
   function onFile(event: ChangeEvent<HTMLInputElement>) {
     setFile(event.target.files?.[0] ?? null);
@@ -881,11 +914,7 @@ function BaselineSection({ detail }: { detail: PackageRequestDetail }) {
     }
     // The typed descriptors win over Advanced extras on key collision; empty
     // typed fields are omitted so the wire object matches what was filled in.
-    const metadata: Record<string, unknown> = { ...extras };
-    if (provider.trim()) metadata.provider = provider.trim();
-    if (symbol.trim()) metadata.symbol = symbol.trim();
-    if (timeframe.trim()) metadata.timeframe = timeframe.trim();
-    if (range.trim()) metadata.range = range.trim();
+    const metadata = buildBaselineMetadata(fields, extras);
     // F-03: transfer the chosen CSV itself (multipart); the server derives the
     // filename/content type/digest and re-validates size/encoding/schema.
     upload.mutate({
@@ -941,23 +970,76 @@ function BaselineSection({ detail }: { detail: PackageRequestDetail }) {
         </dl>
       ) : null}
 
-      {/* R2-08 (GAP item 9): the documented descriptors are product fields. */}
-      <div className="strategy-form-grid" style={{ marginTop: 10 }}>
+      {/* R2-12 (GAP item 11): every parse-required descriptor
+          (REQUIRED_BASELINE_METADATA_FIELDS) is a typed product field. */}
+      <p className="cp-note" style={{ marginTop: 10, marginBottom: 4 }}>
+        All descriptors below are required for the baseline parse to PASS — a file upload alone is
+        not proof of equivalence.
+      </p>
+      <div className="strategy-form-grid" style={{ marginTop: 6 }}>
         <label className="cp-field">
-          <span>Baseline provider (optional)</span>
-          <input value={provider} onChange={(e) => setProvider(e.target.value)} placeholder="TradingView" />
+          <span>Baseline provider</span>
+          <input
+            value={fields.provider}
+            onChange={(e) => setField("provider", e.target.value)}
+            placeholder="TradingView"
+          />
         </label>
         <label className="cp-field">
-          <span>Baseline symbol (optional)</span>
-          <input value={symbol} onChange={(e) => setSymbol(e.target.value)} />
+          <span>Baseline symbol</span>
+          <input
+            value={fields.symbol}
+            onChange={(e) => setField("symbol", e.target.value)}
+            placeholder="BTCUSDT"
+          />
         </label>
         <label className="cp-field">
-          <span>Baseline timeframe (optional)</span>
-          <input value={timeframe} onChange={(e) => setTimeframe(e.target.value)} placeholder="1h" />
+          <span>Baseline timeframe</span>
+          <input
+            value={fields.timeframe}
+            onChange={(e) => setField("timeframe", e.target.value)}
+            placeholder="1h"
+          />
         </label>
         <label className="cp-field">
-          <span>Baseline range (optional)</span>
-          <input value={range} onChange={(e) => setRange(e.target.value)} placeholder="2024-01 … 2024-06" />
+          <span>Baseline range start</span>
+          <input
+            value={fields.rangeStart}
+            onChange={(e) => setField("rangeStart", e.target.value)}
+            placeholder="2024-01-01"
+          />
+        </label>
+        <label className="cp-field">
+          <span>Baseline range end</span>
+          <input
+            value={fields.rangeEnd}
+            onChange={(e) => setField("rangeEnd", e.target.value)}
+            placeholder="2024-06-30"
+          />
+        </label>
+        <label className="cp-field">
+          <span>Baseline timezone</span>
+          <input
+            value={fields.timezone}
+            onChange={(e) => setField("timezone", e.target.value)}
+            placeholder="UTC"
+          />
+        </label>
+        <label className="cp-field">
+          <span>Baseline settings</span>
+          <input
+            value={fields.settings}
+            onChange={(e) => setField("settings", e.target.value)}
+            placeholder="length=14, source=close"
+          />
+        </label>
+        <label className="cp-field">
+          <span>Source revision context</span>
+          <input
+            value={fields.sourceRevisionContext}
+            onChange={(e) => setField("sourceRevisionContext", e.target.value)}
+            placeholder="Pine v5 script r3"
+          />
         </label>
       </div>
       {isAdmin ? (
@@ -999,6 +1081,7 @@ function BaselineSection({ detail }: { detail: PackageRequestDetail }) {
           {parse.isPending ? "Parsing…" : "Run baseline parse"}
         </button>
       </div>
+      <LockReason reason={actions.reasons.parseBaseline} />
       <p className="cp-note" style={{ marginTop: 8 }}>
         The Baseline Comparison Report compares the TradingView CSV signals with the translated
         runtime output: matched, missing and extra signals, and timing / value mismatch.
@@ -1159,7 +1242,6 @@ function ValidationSection({ detail }: { detail: PackageRequestDetail }) {
   // directly — approve unlocks only in eligible_for_approval with fresh evidence
   // (+ a parsed baseline when equivalence is claimed).
   const actions = packageActionAvailability(detail);
-  const approvalBlocked = approvalBlockReason(detail);
 
   // Map each server check to a normalized key; a row claims the first matching
   // check and surplus checks (no canonical row) are appended below.
@@ -1226,20 +1308,32 @@ function ValidationSection({ detail }: { detail: PackageRequestDetail }) {
         >
           {validate.isPending ? "Running validation…" : "Run Validation Tests"}
         </button>
-        <button
-          type="button"
-          className="btn"
-          disabled={!actions.approve || anyPending}
-          onClick={() =>
-            approve.mutate({
-              request_id: detail.request_id,
-              expected_head_revision_id: detail.draft_revision_id,
-              note: note.trim().length > 0 ? note.trim() : null,
-            })
+        {/* Approve is Admin-only end-to-end (CR-02). R2-09/R2-12: the primary
+            control is fail-closed behind the /me projection — a non-Admin sees
+            WHY instead of a button that can only 403; the server still
+            re-checks every dispatch. */}
+        <AdminGate
+          detail={
+            detail.state === "eligible_for_approval"
+              ? "This request is eligible — awaiting an Admin approval decision."
+              : undefined
           }
         >
-          {approve.isPending ? "Approving…" : "Approve Package"}
-        </button>
+          <button
+            type="button"
+            className="btn"
+            disabled={!actions.approve || anyPending}
+            onClick={() =>
+              approve.mutate({
+                request_id: detail.request_id,
+                expected_head_revision_id: detail.draft_revision_id,
+                note: note.trim().length > 0 ? note.trim() : null,
+              })
+            }
+          >
+            {approve.isPending ? "Approving…" : "Approve Package"}
+          </button>
+        </AdminGate>
         <button
           type="button"
           className="btn"
@@ -1254,19 +1348,12 @@ function ValidationSection({ detail }: { detail: PackageRequestDetail }) {
           {revision.isPending ? "Requesting revision…" : "Request Revision"}
         </button>
       </div>
-      {/* Explain the approval gate when eligible but still blocked (stale
-          evidence / missing baseline), and why approval is locked before
-          eligibility — so a user never guesses at a disabled Approve button. */}
-      {approvalBlocked !== null ? (
-        <p className="cp-note" style={{ marginTop: 8 }}>
-          {approvalBlocked}
-        </p>
-      ) : !actions.approve && detail.state !== "approved" ? (
-        <p className="cp-note" style={{ marginTop: 8 }}>
-          Approval unlocks after a passed validation run moves the request to eligible for approval
-          — a draft cannot be approved directly.
-        </p>
-      ) : null}
+      {/* R2-12: each locked action explains itself next to its control, from
+          the server projection (state / freshness / baseline flags) — a user
+          never guesses at a disabled button. A draft cannot be approved
+          directly (F-12). */}
+      <LockReason reason={actions.reasons.runValidation} />
+      <LockReason reason={actions.reasons.approve} />
 
       {validate.isError ? (
         <p role="alert" style={alertStyle}>

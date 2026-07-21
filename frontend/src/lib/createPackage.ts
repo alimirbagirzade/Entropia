@@ -263,7 +263,7 @@ export interface CreateRequestInput {
   source_language: SourceLanguage | null;
   other_language_label: string | null;
   rationale_family_id: string | null;
-  declared_dependencies: Array<{ key: string }>;
+  declared_dependencies: DeclaredDependency[];
 }
 
 // Resolved/missing row shapes (commands/create_package.py::_resolve_declared):
@@ -386,6 +386,97 @@ export interface BaselineUploadInput {
   baseline_metadata: Record<string, unknown>;
 }
 
+// ---------------------------------------------------------------------------
+// Declared dependencies (R2-12) — the ESP resolver matches EXACT ordered
+// parameter types + return shape (domain/esp/resolver.py signature_matches;
+// doc 09 §4.2 "ordered types are identity"). A bare key therefore carries an
+// EMPTY signature and can never match a parameterised resolver contract, so
+// the compose input accepts an optional signature per line:
+//   ta.sma(series,int)->series
+// A plain `key` line still travels as {key, signature:{}} (backend contract
+// unchanged — clean_declared_dependencies already accepts both).
+// ---------------------------------------------------------------------------
+
+export interface DeclaredDependency {
+  key: string;
+  signature: Record<string, unknown>;
+}
+
+export function parseDeclaredDependencyLine(line: string): DeclaredDependency {
+  const trimmed = line.trim();
+  const match = /^([^()\s]+)\(([^()]*)\)\s*(?:->\s*(\S+))?$/.exec(trimmed);
+  if (!match) return { key: trimmed, signature: {} };
+  const [, key, paramList, returnType] = match;
+  const params = paramList
+    .split(",")
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0)
+    .map((type) => ({ type }));
+  const signature: Record<string, unknown> = { params };
+  if (returnType) signature.return = returnType;
+  return { key, signature };
+}
+
+export function parseDeclaredDependencies(text: string): DeclaredDependency[] {
+  return text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .map(parseDeclaredDependencyLine);
+}
+
+// ---------------------------------------------------------------------------
+// Baseline metadata (R2-12, GAP item 11) — the parse gate requires these keys
+// (domain/create_package/baseline.py REQUIRED_BASELINE_METADATA_FIELDS
+// verbatim). The UI collects them as typed product fields; the server remains
+// the authority (missing/empty keys → BASELINE_METADATA_INVALID verbatim).
+// ---------------------------------------------------------------------------
+
+export const REQUIRED_BASELINE_METADATA_FIELDS = [
+  "provider",
+  "symbol",
+  "timeframe",
+  "range",
+  "timezone",
+  "settings",
+  "source_revision_context",
+] as const;
+
+export interface BaselineMetadataFields {
+  provider: string;
+  symbol: string;
+  timeframe: string;
+  rangeStart: string;
+  rangeEnd: string;
+  timezone: string;
+  settings: string;
+  sourceRevisionContext: string;
+}
+
+// Compose the wire baseline_metadata object from the typed fields + the
+// Admin-only Advanced extras. Typed descriptors win over extras on key
+// collision; empty typed fields are omitted so the wire object matches what was
+// actually filled in (the server's presence check treats "" as absent anyway).
+// `range` becomes a {start, end} object from the two typed inputs.
+export function buildBaselineMetadata(
+  fields: BaselineMetadataFields,
+  extras: Record<string, unknown>,
+): Record<string, unknown> {
+  const metadata: Record<string, unknown> = { ...extras };
+  if (fields.provider.trim()) metadata.provider = fields.provider.trim();
+  if (fields.symbol.trim()) metadata.symbol = fields.symbol.trim();
+  if (fields.timeframe.trim()) metadata.timeframe = fields.timeframe.trim();
+  const range: Record<string, string> = {};
+  if (fields.rangeStart.trim()) range.start = fields.rangeStart.trim();
+  if (fields.rangeEnd.trim()) range.end = fields.rangeEnd.trim();
+  if (Object.keys(range).length > 0) metadata.range = range;
+  if (fields.timezone.trim()) metadata.timezone = fields.timezone.trim();
+  if (fields.settings.trim()) metadata.settings = fields.settings.trim();
+  if (fields.sourceRevisionContext.trim())
+    metadata.source_revision_context = fields.sourceRevisionContext.trim();
+  return metadata;
+}
+
 export interface RationaleFamily {
   entity_id: string;
   display_name: string;
@@ -435,6 +526,67 @@ export interface PackageActionAvailability {
   // A one-line guide to the next legal step, so a user never hits an unexpected
   // VALIDATION_REQUIRED dead end (F-12 acceptance #3).
   nextStepHint: string;
+  // R2-12 (GAP item 11): WHY each locked action is locked, rendered directly
+  // next to its control. Derived from the server projection alone (state /
+  // scan / freshness flags) — null when the action is available.
+  reasons: PackageActionReasons;
+}
+
+export interface PackageActionReasons {
+  precheck: string | null;
+  generateDraft: string | null;
+  runValidation: string | null;
+  approve: string | null;
+  parseBaseline: string | null;
+}
+
+const NO_REASONS: PackageActionReasons = {
+  precheck: null,
+  generateDraft: null,
+  runValidation: null,
+  approve: null,
+  parseBaseline: null,
+};
+
+// The lock reason for C.D.P (generate candidate → draft), read off the server
+// projection: a present draft, an absent/blocked/stale Pre-Check, or a server
+// that has simply not flagged can_generate_candidate yet.
+function generateDraftReason(detail: PackageRequestDetail): string | null {
+  if (detail.draft_revision_id !== null) return "A draft package already exists for this request.";
+  if (detail.can_generate_candidate || detail.state === "candidate_ready") return null;
+  if (detail.current_scan === null) return "Pre-Check has not run — resolve dependencies first.";
+  if (
+    detail.current_scan.status !== "passed" &&
+    detail.current_scan.status !== "not_applicable"
+  )
+    return `Pre-Check has not PASSED (${detail.current_scan.status}).`;
+  if (!detail.precheck_fresh) return "The Pre-Check is stale — re-run it before drafting.";
+  return "The server has not cleared candidate generation yet.";
+}
+
+function runValidationReason(detail: PackageRequestDetail): string | null {
+  if (detail.state === "draft_created") return null;
+  if (detail.draft_revision_id === null)
+    return "No draft package yet — create one first (C.D.P).";
+  switch (detail.state) {
+    case "validation_running":
+      return "Validation is already running.";
+    case "eligible_for_approval":
+      return "Validation already PASSED — the request is eligible for approval.";
+    case "revision_required":
+      return "Validation failed — Request Revision to regenerate the candidate.";
+    case "approved":
+      return "The request is approved — validation evidence is frozen.";
+    default:
+      return `Validation is not available in state ${detail.state}.`;
+  }
+}
+
+function approveReason(detail: PackageRequestDetail): string | null {
+  if (detail.state === "approved") return "Already approved & published.";
+  if (detail.state !== "eligible_for_approval")
+    return "Validation has not PASSED yet — the request is not eligible for approval.";
+  return approvalBlockReason(detail);
 }
 
 // The reason approve is unavailable while eligible_for_approval — kept separate so
@@ -501,6 +653,7 @@ export function packageActionAvailability(
       uploadBaseline: false,
       parseBaseline: false,
       nextStepHint: "",
+      reasons: NO_REASONS,
     };
   }
   const state = detail.state;
@@ -521,6 +674,19 @@ export function packageActionAvailability(
     uploadBaseline: mutable,
     parseBaseline: mutable && detail.current_baseline !== null,
     nextStepHint: nextStepHint(detail),
+    reasons: {
+      precheck: PRECHECK_STATES.has(state)
+        ? null
+        : "The dependency scan is frozen — a candidate or draft already exists.",
+      generateDraft: generateDraftReason(detail),
+      runValidation: runValidationReason(detail),
+      approve: approveReason(detail),
+      parseBaseline: !mutable
+        ? "The request is approved — the baseline is frozen."
+        : detail.current_baseline === null
+          ? "Upload a baseline CSV first."
+          : null,
+    },
   };
 }
 

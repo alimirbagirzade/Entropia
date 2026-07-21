@@ -12,7 +12,7 @@ real network round trip that the running backend actually served.
 | Auth | `specs/01-auth.spec.ts` | Real signup / login / logout, error envelope, guest boundary |
 | Market Data upload | `specs/02-market-data-upload.spec.ts` | `POST /market-datasets` |
 | Research Data upload | `specs/03-research-data-upload.spec.ts` | `POST /research-datasets` (DR3-gated on an approved Market Data dataset) |
-| Create Package lifecycle | `specs/04-create-package-lifecycle.spec.ts` | `POST /package-requests` + Pre-Check dependency scan |
+| **Create Package FULL lifecycle** (R2-12): request → Pre-Check **passed** → C.D.P draft → typed baseline metadata + CSV upload + parse **passed** → validation **passed** → Admin approve → published → Library `can_use: yes` | `specs/04-create-package-lifecycle.spec.ts` | Compose + every lifecycle action (X-Request-Version OCC + fresh Idempotency-Key), multipart baseline upload, Admin approval in a second browser context, Library permission projection |
 | **Golden path** (R2-07): inline Strategy w/ typed forms + pickers → Validate → Save+attach → Ready Check **Ready** → RUN **succeeded** → inline Result | `specs/05-mainboard-ready-check-run.spec.ts` | `POST /strategy-drafts`, per-card OCC PATCH, `POST .../validate`, `POST .../save`, `POST /readiness-checks`, `POST /backtest-runs`, run polling to the terminal state, inline `ResultDetail` |
 | Trash re-auth | `specs/06-trash-reauth.spec.ts` | Soft-delete -> Trash entry -> re-auth-gated Permanent Delete (purge) |
 
@@ -34,7 +34,13 @@ docker compose up -d --build
 # families the golden-path spec builds on. It deliberately does NOT create the
 # default Admin, so the ENTROPIA_BOOTSTRAP_ADMIN_EMAIL first-signup promotion
 # keeps working on a fresh database.
-docker compose exec -T -e SEED_E2E_GOLDEN=1 api python -m entropia.apps.seed
+# R2-12: SEED_ESP_TA additionally seeds the LIVE trusted-active ESP resolver
+# registry the FULL Create Package lifecycle (spec 04) resolves against —
+# SEED_E2E_GOLDEN alone does NOT seed the live registry (the golden package
+# carries a frozen dependency snapshot instead). The registry rows reference
+# only the bare admin PRINCIPAL (no HumanUser), so the first-Admin bootstrap
+# window stays open on a fresh database.
+docker compose exec -T -e SEED_E2E_GOLDEN=1 -e SEED_ESP_TA=1 -e SEED_RATIONALE=1 api python -m entropia.apps.seed
 
 cd frontend/e2e
 npm install

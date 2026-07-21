@@ -2567,6 +2567,50 @@ role-aware presentation envanterinin hazır şablonu.
 
 ---
 
+## V18-R2 · R2-12 — CP typed baseline metadata + request→published tam lifecycle E2E ✅ (GAP madde 11)
+
+Create Package baseline metadata artık uçtan uca typed alanlar; e2e 04 Pre-Check'te durmuyor —
+request → published → Library `can_use=yes` TEK gerçek Playwright yolculuğunda kanıtlı.
+
+- **Typed baseline metadata (lib/createPackage.ts + CreatePackage.tsx):** backend'in parse
+  gate'inin GERÇEKTEN istediği 7 anahtar (`domain/create_package/baseline.py
+  REQUIRED_BASELINE_METADATA_FIELDS`: provider/symbol/timeframe/range/timezone/settings/
+  source_revision_context) typed product alanı — range iki input (`start`/`end` → `{start,end}`
+  objesi). `buildBaselineMetadata` pure composer (typed alan Advanced extras'ı gölgeler; boşlar
+  omit). Advanced JSON disclosure `useIsAdmin` (AdminGate) arkasında kaldı — normal kullanıcı
+  JSON yazmaz.
+- **Aşama gating nedenleri:** `packageActionAvailability` +`reasons` (precheck/generateDraft/
+  runValidation/approve/parseBaseline; null=açık) — hepsi server projeksiyonundan (state/
+  can_generate_candidate/scan.status/precheck_fresh/draft_revision_id/approvalBlockReason).
+  `LockReason` notu doğrudan kilitli kontrolün yanında ("Pre-Check has not PASSED (blocked).",
+  "No draft package yet — create one first (C.D.P).", …). **Approve AdminGate'li** (R2-09
+  deseni): non-Admin buton yerine "Admin approval required — … awaiting an Admin approval
+  decision" notunu görür; yetki her zaman server'da (CR-02, 403 verbatim).
+- **EMPİRİK KÖK NEDEN — declared dependency signature:** ESP resolver EXACT sıralı param tipi +
+  return eşleşmesi yapar (`domain/esp/resolver.py::signature_matches`, doc 09 §4.2); UI declared
+  dep'i yalnız `{key}` gönderiyordu → boş signature ↔ 2-param `ta.sma` kontratı =
+  `RESOLVER_SIGNATURE_MISMATCH` → UI'dan Pre-Check PASSED YAPISAL olarak imkânsızdı. Fix:
+  declared-dependencies satırı opsiyonel `key(type,…)->return` sözdizimi
+  (`parseDeclaredDependencies`; çıplak `key` hâlâ `{key, signature:{}}`) — CP command sözleşmesi
+  DEĞİŞMEDİ (`clean_declared_dependencies` ikisini de zaten kabul eder).
+- **e2e 04 tam yolculuk (6.1s yeşil):** normal kullanıcı compose (typed alanlar, family select,
+  `ta.sma(series,int)->series`) → Pre-Check **passed** (exact status line) → C.D.P draft →
+  typed baseline + CSV upload → parse **passed** → validation **passed** → owner'da AdminGate
+  notu assert → AYRI admin context (`ensureAdmin`) request'i seçip Approve → "Approved &
+  published" → owner Library'de kendi `pkg_` root detayında `can_use: yes` hücresi. Her state
+  TEK TEK assert; "blocked/error da kabul" YOK. POM `CreatePackagePage` tam lifecycle'a
+  genişletildi.
+- **Stack ön koşulu (e2e/README):** canlı DB'ye `SEED_ESP_TA=1 SEED_RATIONALE=1` plain seed
+  gerekli (SEED_E2E_GOLDEN canlı ESP registry'sini SEED ETMEZ — golden paket frozen snapshot
+  taşır); bu oturumda `entropia_e2e07` DB'sine seed edildi. X-Request-Version OCC +
+  Idempotency-Key davranışları verbatim korunmuş (vitest assert'leri değişmedi).
+
+Evidence: e2e 04 yeşil + tüm e2e suite **20/20** (dev server :5173 + gerçek API :8000);
+vitest **508/508** (createPackage 23); tsc/eslint/build temiz. GENERATOR_VERSION/ENGINE_VERSION
+sabit; backend DEĞİŞMEDİ.
+
+---
+
 ## V18-R2 · R2-11 — Mobil app-shell overflow sıfır ✅ (GAP madde 15, PR #339)
 
 375px'te ortak shell'in dayattığı ~513px minimum genişlik kapandı. Suçlu empirik tespit:

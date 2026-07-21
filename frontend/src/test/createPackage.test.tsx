@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 
+import { buildBaselineMetadata } from "@/lib/createPackage";
 import { CreatePackage } from "@/pages/CreatePackage";
 import { stubApi } from "./helpers/apiStub";
 import { stubUpload } from "./helpers/xhrStub";
@@ -176,6 +177,16 @@ const REQUEST_DETAIL_BASELINE = {
 // the list route ("/create-package/requests/req_1" contains
 // "/create-package/requests"). POST vs GET differ by method, so their order is
 // free — but keep POST first for clarity.
+// Server-truth Admin projection (R2-09 AdminGate): the Approve control renders
+// only once /me proves is_admin — non-admin tests omit this route (fail-closed).
+const ME_ADMIN = {
+  principal_id: "user_admin",
+  principal_type: "human",
+  role: "admin",
+  is_admin: true,
+  is_authenticated: true,
+};
+
 const BASE_ROUTES: Record<string, unknown> = {
   "POST /create-package/requests": CREATE_RESULT,
   "GET /create-package/requests/req_new": REQUEST_DETAIL_NEW,
@@ -221,8 +232,10 @@ describe("Create Package page", () => {
     fireEvent.change(screen.getByLabelText("Source code"), {
       target: { value: "//@version=5\nindicator('x')" },
     });
+    // R2-12: an optional `key(type,…)->return` signature per line — exact
+    // ordered types are the resolver identity; a bare key stays legal.
     fireEvent.change(screen.getByLabelText("Declared dependencies"), {
-      target: { value: "ta.sma\nta.rsi\n" },
+      target: { value: "ta.sma(series,int)->series\nta.rsi\n" },
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
@@ -244,7 +257,13 @@ describe("Create Package page", () => {
       source_language: "pinescript",
       other_language_label: null,
       rationale_family_id: "fam_1",
-      declared_dependencies: [{ key: "ta.sma" }, { key: "ta.rsi" }],
+      declared_dependencies: [
+        {
+          key: "ta.sma",
+          signature: { params: [{ type: "series" }, { type: "int" }], return: "series" },
+        },
+        { key: "ta.rsi", signature: {} },
+      ],
     });
     expect((init.headers as Record<string, string>)["Idempotency-Key"]).toBeTruthy();
   });
@@ -450,8 +469,10 @@ describe("Create Package page", () => {
       },
       ...BASE_ROUTES,
       // Approve unlocks only at eligible_for_approval with fresh evidence and a
-      // ready baseline (F-12); the Admin gate is enforced SERVER-side — the button
-      // is never role-gated, so a non-Admin click surfaces the 403 verbatim.
+      // ready baseline (F-12). R2-12: the button renders behind the AdminGate
+      // (/me is_admin) but authorization stays SERVER-side — a stale Admin
+      // projection still surfaces the 403 envelope verbatim.
+      "GET /me": ME_ADMIN,
       "GET /create-package/requests/req_1": {
         ...REQUEST_DETAIL,
         state: "eligible_for_approval",
@@ -513,16 +534,68 @@ describe("Create Package page", () => {
   });
 
   it("keeps Approve disabled for a draft that has not passed validation (F-12)", async () => {
-    // A draft_created request has evidence-free state: Approve must be locked and
-    // Run Validation must be the offered next step — a draft cannot approve directly.
-    stubApi({ ...BASE_ROUTES, "GET /create-package/requests/req_1": REQUEST_DETAIL_DRAFT });
+    // A draft_created request has evidence-free state: Approve must be locked
+    // with its lock reason rendered next to the control (R2-12) — a draft
+    // cannot approve directly.
+    stubApi({
+      ...BASE_ROUTES,
+      "GET /me": ME_ADMIN,
+      "GET /create-package/requests/req_1": REQUEST_DETAIL_DRAFT,
+    });
     renderPage();
     await screen.findByText("req_1");
     fireEvent.click(screen.getByRole("button", { name: /req_1/ }));
 
     expect(await screen.findByRole("button", { name: "Approve Package" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Run Validation Tests" })).toBeEnabled();
-    expect(screen.getByText(/a draft cannot be approved directly/i)).toBeInTheDocument();
+    expect(
+      screen.getByText("Validation has not PASSED yet — the request is not eligible for approval."),
+    ).toBeInTheDocument();
+  });
+
+  it("replaces Approve with the Admin note for a non-admin at eligible_for_approval (R2-12)", async () => {
+    // Fail-closed AdminGate: without a proven is_admin /me the primary control
+    // is absent and the user reads WHY the stage is waiting.
+    stubApi({
+      ...BASE_ROUTES,
+      "GET /create-package/requests/req_1": {
+        ...REQUEST_DETAIL,
+        state: "eligible_for_approval",
+        package_root_id: "root_1",
+        draft_revision_id: "rev_1",
+        validation_fresh: true,
+        baseline_ready: true,
+      },
+    });
+    renderPage();
+    await screen.findByText("req_1");
+    fireEvent.click(screen.getByRole("button", { name: /req_1/ }));
+
+    expect(await screen.findByText(/Admin approval required/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/awaiting an Admin approval decision/),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Approve Package" })).not.toBeInTheDocument();
+  });
+
+  it("explains a locked C.D.P next to the control when Pre-Check has not passed (R2-12)", async () => {
+    stubApi({
+      ...BASE_ROUTES,
+      "GET /create-package/requests/req_1": {
+        ...REQUEST_DETAIL,
+        state: "precheck_blocked",
+        can_generate_candidate: false,
+        current_scan: { ...REQUEST_DETAIL.current_scan, status: "blocked" },
+      },
+    });
+    renderPage();
+    await screen.findByText("req_1");
+    fireEvent.click(screen.getByRole("button", { name: /req_1/ }));
+
+    // findBy: the lock reason appears once the detail projection resolves (the
+    // C.D.P button is also disabled pre-detail, so the reason is the real wait).
+    expect(await screen.findByText("Pre-Check has not PASSED (blocked).")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "C.D.P" })).toBeDisabled();
   });
 
   it("requests a revision with the OCC header (legal state enforced server-side)", async () => {
@@ -567,13 +640,24 @@ describe("Create Package page", () => {
       target: { files: [csvFile] },
     });
     await screen.findByText(/baseline\.csv selected/);
-    // R2-08 (GAP item 9): the documented descriptors are typed product fields;
-    // the produced baseline_metadata wire object is unchanged.
-    fireEvent.change(screen.getByLabelText("Baseline provider (optional)"), {
-      target: { value: "x" },
+    // R2-12 (GAP item 11): EVERY parse-required descriptor is a typed product
+    // field — no JSON travels through the normal-user path. The wire object
+    // mirrors REQUIRED_BASELINE_METADATA_FIELDS with range as {start, end}.
+    fireEvent.change(screen.getByLabelText("Baseline provider"), { target: { value: "x" } });
+    fireEvent.change(screen.getByLabelText("Baseline symbol"), { target: { value: "BTCUSD" } });
+    fireEvent.change(screen.getByLabelText("Baseline timeframe"), { target: { value: "1h" } });
+    fireEvent.change(screen.getByLabelText("Baseline range start"), {
+      target: { value: "2024-01-01" },
     });
-    fireEvent.change(screen.getByLabelText("Baseline symbol (optional)"), {
-      target: { value: "BTCUSD" },
+    fireEvent.change(screen.getByLabelText("Baseline range end"), {
+      target: { value: "2024-06-30" },
+    });
+    fireEvent.change(screen.getByLabelText("Baseline timezone"), { target: { value: "UTC" } });
+    fireEvent.change(screen.getByLabelText("Baseline settings"), {
+      target: { value: "length=14" },
+    });
+    fireEvent.change(screen.getByLabelText("Source revision context"), {
+      target: { value: "pine v5 r3" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Upload CSV" }));
 
@@ -586,6 +670,11 @@ describe("Create Package page", () => {
     expect(JSON.parse(uploadCalls[0]!.fields.baseline_metadata)).toEqual({
       provider: "x",
       symbol: "BTCUSD",
+      timeframe: "1h",
+      range: { start: "2024-01-01", end: "2024-06-30" },
+      timezone: "UTC",
+      settings: "length=14",
+      source_revision_context: "pine v5 r3",
     });
   });
 
@@ -644,6 +733,45 @@ describe("Create Package page", () => {
     expect(call).toBeDefined();
     expect((call?.[1] as RequestInit).headers as Record<string, string>).toMatchObject({
       "X-Request-Version": "2",
+    });
+  });
+});
+
+// R2-12: the typed-field → wire-object composer (pure, unit-tested directly).
+describe("buildBaselineMetadata", () => {
+  const EMPTY = {
+    provider: "",
+    symbol: "",
+    timeframe: "",
+    rangeStart: "",
+    rangeEnd: "",
+    timezone: "",
+    settings: "",
+    sourceRevisionContext: "",
+  };
+
+  it("omits empty fields and composes range as {start, end}", () => {
+    expect(
+      buildBaselineMetadata(
+        { ...EMPTY, provider: " TradingView ", rangeStart: "2024-01-01", rangeEnd: "2024-06-30" },
+        {},
+      ),
+    ).toEqual({
+      provider: "TradingView",
+      range: { start: "2024-01-01", end: "2024-06-30" },
+    });
+  });
+
+  it("keeps a one-sided range and lets typed descriptors win over Advanced extras", () => {
+    expect(
+      buildBaselineMetadata(
+        { ...EMPTY, symbol: "BTCUSDT", rangeStart: "2024-01-01" },
+        { symbol: "SHADOWED", broker_notes: "kept" },
+      ),
+    ).toEqual({
+      symbol: "BTCUSDT",
+      range: { start: "2024-01-01" },
+      broker_notes: "kept",
     });
   });
 });

@@ -5,7 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 
 import { parseMappingLines } from "@/lib/marketData";
 import { MarketData, deriveWorkflowSteps } from "@/pages/MarketData";
-import { stubApi } from "./helpers/apiStub";
+import { apiErrorRoute, stubApi } from "./helpers/apiStub";
 import { stubUpload } from "./helpers/xhrStub";
 
 const ROW_OHLCV = {
@@ -135,6 +135,14 @@ const DEPRECATE_RESULT = { entity_id: "md_1", revision_id: "rev_1", revision_sta
 // contains /market-datasets; POST /market-datasets prefixes every other POST).
 // The raw-uploads POST itself travels over XHR (lib/upload.ts), not fetch —
 // it is stubbed separately with stubUpload() in the upload-specific tests.
+const ME_USER = {
+  principal_id: "hu_user",
+  principal_type: "human",
+  role: "user",
+  is_admin: false,
+  is_authenticated: true,
+};
+
 const BASE_ROUTES = {
   "POST /market-datasets/md_1/raw-uploads/finalize": FINALIZE_RESULT,
   "POST /market-datasets/md_1/analysis": ANALYSIS_RESULT,
@@ -148,7 +156,24 @@ const BASE_ROUTES = {
   "GET /market-datasets/md_new": DETAIL_MD_NEW,
   "POST /market-datasets": CREATE_RESULT,
   "GET /market-datasets": DATASETS_PAGE,
+  // R2-09: the Admin approval composer is presentation-gated on /me — the
+  // shared baseline is a NON-admin so the historic "hidden for this non-admin
+  // actor" assertions stay deterministic.
+  "GET /me": ME_USER,
 };
+
+// Server-truth identity projections (/me) — the R2-09 presentation gates.
+const ME_ADMIN = {
+  principal_id: "hu_admin",
+  principal_type: "human",
+  role: "admin",
+  is_admin: true,
+  is_authenticated: true,
+};
+// The Admin-visible variant: the approve/deprecate wire tests run under a
+// server-confirmed Admin; the 403 test then models the STALE-CACHE projection
+// (client believes admin, server denies) — the envelope must render verbatim.
+const ADMIN_ROUTES = { ...BASE_ROUTES, "GET /me": ME_ADMIN };
 
 function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -579,11 +604,11 @@ describe("Market Data page", () => {
   });
 
   it("approves the chosen revision with the If-Match rv token and a fresh Idempotency-Key", async () => {
-    const fetchMock = stubApi(BASE_ROUTES);
+    const fetchMock = stubApi(ADMIN_ROUTES);
     renderPage();
     await openDetail();
 
-    fireEvent.click(screen.getByRole("button", { name: "Approve (Admin)" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Approve (Admin)" }));
 
     expect(await screen.findByText(/Approved — revision/)).toBeInTheDocument();
 
@@ -600,11 +625,11 @@ describe("Market Data page", () => {
   });
 
   it("deprecates the chosen revision without an If-Match or Idempotency-Key header", async () => {
-    const fetchMock = stubApi(BASE_ROUTES);
+    const fetchMock = stubApi(ADMIN_ROUTES);
     renderPage();
     await openDetail();
 
-    fireEvent.click(screen.getByRole("button", { name: "Deprecate (Admin)" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Deprecate (Admin)" }));
 
     expect(await screen.findByText(/Deprecated — revision/)).toBeInTheDocument();
 
@@ -619,9 +644,12 @@ describe("Market Data page", () => {
     expect(JSON.parse(String(init.body))).toEqual({ revision_id: "rev_1", note: null });
   });
 
+  // R2-09 stale-cache scenario: the /me projection still says admin (so the
+  // composer renders) but the server has demoted the actor — the denial must
+  // render verbatim; client visibility is never authorization.
   it("surfaces an Admin-only approval denial verbatim (server is the sole authority)", async () => {
     stubApi({
-      ...BASE_ROUTES,
+      ...ADMIN_ROUTES,
       "POST /market-datasets/md_1/approve": () => {
         throw new Error("APPROVAL_REQUIRES_ADMIN: Only an administrator may approve a revision.");
       },
@@ -629,11 +657,37 @@ describe("Market Data page", () => {
     renderPage();
     await openDetail();
 
-    fireEvent.click(screen.getByRole("button", { name: "Approve (Admin)" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Approve (Admin)" }));
 
     expect(
       await screen.findByText("APPROVAL_REQUIRES_ADMIN: Only an administrator may approve a revision."),
     ).toBeInTheDocument();
+  });
+
+  // R2-09 (GAP item 10): the approval composer never renders as a primary
+  // control for a non-admin — the read-only note replaces it.
+  it("hides approve/deprecate from a non-admin and shows the Admin approval note", async () => {
+    stubApi(BASE_ROUTES); // /me -> non-admin user
+    renderPage();
+    await openDetail();
+
+    expect(screen.queryByRole("button", { name: "Approve (Admin)" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Deprecate (Admin)" })).toBeNull();
+    expect(screen.getByText(/Admin approval required/)).toBeInTheDocument();
+  });
+
+  // Fail-closed: while the identity projection is unknown (/me unavailable),
+  // the Admin controls stay hidden — unknown never opens the gate.
+  it("fail-closed: hides approve/deprecate while /me is unavailable", async () => {
+    stubApi({
+      ...BASE_ROUTES,
+      "GET /me": apiErrorRoute(503, "SERVICE_UNAVAILABLE", "identity projection unavailable"),
+    });
+    renderPage();
+    await openDetail();
+
+    expect(screen.queryByRole("button", { name: "Approve (Admin)" })).toBeNull();
+    expect(screen.getByText(/Admin approval required/)).toBeInTheDocument();
   });
 
   it("sends the IANA zone only for custom timezone mode", async () => {

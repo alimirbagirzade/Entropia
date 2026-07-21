@@ -5,7 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 
 import { parseSignatureParams } from "@/lib/esp";
 import { Embedded } from "@/pages/Embedded";
-import { stubApi } from "./helpers/apiStub";
+import { apiErrorRoute, stubApi } from "./helpers/apiStub";
 
 // Doc 09 §14 / L4: resolver performance is N/A by nature — the availability
 // label, never a fabricated zero.
@@ -114,6 +114,25 @@ const BASE_ROUTES = {
   "POST /embedded-system-packages/resolve": RESOLVE_OK,
   "GET /embedded-system-packages/esp_1": ESP_DETAIL,
   "GET /embedded-system-packages": REGISTRY_PAGE,
+};
+
+// R2-09: activate/deprecate render only for a server-confirmed Admin (/me
+// projection, fail-closed). The lifecycle wire tests run under ME_ADMIN; the
+// 403 test keeps ME_ADMIN too — it models the STALE-CACHE projection (client
+// believes admin, server denies) and the envelope must render verbatim.
+const ME_ADMIN = {
+  principal_id: "hu_admin",
+  principal_type: "human",
+  role: "admin",
+  is_admin: true,
+  is_authenticated: true,
+};
+const ME_USER = {
+  principal_id: "hu_user",
+  principal_type: "human",
+  role: "user",
+  is_admin: false,
+  is_authenticated: true,
 };
 
 function renderPage() {
@@ -377,6 +396,7 @@ describe("Embedded System Packages page", () => {
         data: [CANDIDATE_ROW],
         meta: { cursor: null, has_more: false },
       },
+      "GET /me": ME_ADMIN,
     });
     renderPage();
     await screen.findByText("ta.macd");
@@ -423,6 +443,7 @@ describe("Embedded System Packages page", () => {
       "POST /embedded-system-packages/esp_1/deprecate": DEPRECATE_OK,
       "GET /embedded-system-packages/esp_1": ESP_DETAIL,
       "GET /embedded-system-packages": REGISTRY_PAGE,
+      "GET /me": ME_ADMIN,
     });
     renderPage();
     await screen.findByText("ta.rsi");
@@ -533,6 +554,8 @@ describe("Embedded System Packages page", () => {
     expect(proposeBtn).toBeEnabled();
   });
 
+  // R2-09 stale-cache scenario: /me still says admin (the composer renders)
+  // but the server has demoted the actor — the denial renders verbatim.
   it("surfaces a 403 verbatim when a non-Admin activates (doc 09 §10.3)", async () => {
     stubApi({
       "POST /embedded-system-packages/esp_3/activate": () => {
@@ -545,6 +568,7 @@ describe("Embedded System Packages page", () => {
         data: [CANDIDATE_ROW],
         meta: { cursor: null, has_more: false },
       },
+      "GET /me": ME_ADMIN,
     });
     renderPage();
     await screen.findByText("ta.macd");
@@ -557,5 +581,44 @@ describe("Embedded System Packages page", () => {
         "APPROVAL_REQUIRES_ADMIN: Activating a trusted resolver requires the Admin role.",
       ),
     ).toBeInTheDocument();
+  });
+
+  // R2-09 (GAP item 10): the lifecycle composers never render as primary
+  // controls for a non-admin — the read-only trust state + note replace them.
+  it("hides activate from a non-admin and shows the Admin approval note", async () => {
+    stubApi({
+      "GET /embedded-system-packages/esp_3": CANDIDATE_DETAIL,
+      "GET /embedded-system-packages": {
+        data: [CANDIDATE_ROW],
+        meta: { cursor: null, has_more: false },
+      },
+      "GET /me": ME_USER,
+    });
+    renderPage();
+    await screen.findByText("ta.macd");
+
+    fireEvent.click(screen.getByRole("button", { name: "Detail" }));
+    await screen.findByText(/Admin approval required/);
+    expect(screen.queryByRole("button", { name: "Activate resolver" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Deprecate resolver" })).toBeNull();
+  });
+
+  // Fail-closed: an unknown identity projection (/me unavailable) keeps the
+  // Admin lifecycle controls hidden — unknown never opens the gate.
+  it("fail-closed: hides activate/deprecate while /me is unavailable", async () => {
+    stubApi({
+      "GET /embedded-system-packages/esp_3": CANDIDATE_DETAIL,
+      "GET /embedded-system-packages": {
+        data: [CANDIDATE_ROW],
+        meta: { cursor: null, has_more: false },
+      },
+      "GET /me": apiErrorRoute(503, "SERVICE_UNAVAILABLE", "identity projection unavailable"),
+    });
+    renderPage();
+    await screen.findByText("ta.macd");
+
+    fireEvent.click(screen.getByRole("button", { name: "Detail" }));
+    await screen.findByText(/Admin approval required/);
+    expect(screen.queryByRole("button", { name: "Activate resolver" })).toBeNull();
   });
 });

@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 
 import { Trash } from "@/pages/Trash";
-import { stubApi } from "./helpers/apiStub";
+import { apiErrorRoute, stubApi } from "./helpers/apiStub";
 
 const ELIGIBLE_ENTRY = {
   trash_entry_id: "t_1",
@@ -95,12 +95,32 @@ const REAUTH_RESULT = {
 
 // Order matters for the fragment-matching stub: the purge + restore + detail
 // routes must precede the list route (each contains "/trash-entries").
+// R2-09: restore / permanent delete render only for a server-confirmed Admin
+// (/me projection, fail-closed) — the Trash surface is Admin territory, so the
+// shared baseline runs under ME_ADMIN; the denial tests keep exercising the
+// stale-cache path (client believes admin, server denies -> 403 verbatim).
+const ME_ADMIN = {
+  principal_id: "hu_admin",
+  principal_type: "human",
+  role: "admin",
+  is_admin: true,
+  is_authenticated: true,
+};
+const ME_USER = {
+  principal_id: "hu_user",
+  principal_type: "human",
+  role: "user",
+  is_admin: false,
+  is_authenticated: true,
+};
+
 const BASE_ROUTES = {
   "POST /auth/reauth": REAUTH_RESULT,
   "POST /trash-entries/t_1/purge": PURGE_RESULT,
   "POST /trash-entries/t_1/restore": RESTORE_RESULT,
   "GET /trash-entries/t_1": ENTRY_DETAIL,
   "GET /trash-entries": ENTRIES_PAGE,
+  "GET /me": ME_ADMIN,
 };
 
 function renderPage() {
@@ -376,5 +396,34 @@ describe("Trash page", () => {
     expect(
       await screen.findByText("STALE_REVISION: The resource was modified by someone else."),
     ).toBeInTheDocument();
+  });
+
+  // R2-09 (GAP item 10): a non-admin (e.g. a stale session after demotion)
+  // keeps the read-only entry states — the primary Restore / Permanent Delete
+  // controls are replaced by the note.
+  it("hides Restore/Permanent Delete from a non-admin and shows the Admin approval note", async () => {
+    stubApi({ ...BASE_ROUTES, "GET /me": ME_USER });
+    renderPage();
+    await screen.findByText("Backtest Alpha");
+
+    expect(screen.queryByRole("button", { name: "Restore" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Permanent Delete" })).toBeNull();
+    expect(screen.getAllByText("Admin approval required").length).toBeGreaterThan(0);
+    // The read surface stays: snapshots remain openable.
+    expect(screen.getAllByRole("button", { name: "Open Snapshot" }).length).toBeGreaterThan(0);
+  });
+
+  // Fail-closed: an unknown identity projection (/me unavailable) keeps the
+  // Admin row actions hidden — unknown never opens the gate.
+  it("fail-closed: hides Restore/Permanent Delete while /me is unavailable", async () => {
+    stubApi({
+      ...BASE_ROUTES,
+      "GET /me": apiErrorRoute(503, "SERVICE_UNAVAILABLE", "identity projection unavailable"),
+    });
+    renderPage();
+    await screen.findByText("Backtest Alpha");
+
+    expect(screen.queryByRole("button", { name: "Restore" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Permanent Delete" })).toBeNull();
   });
 });

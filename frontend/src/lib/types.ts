@@ -1,5 +1,7 @@
 // Shared API types mirroring the backend canonical envelopes (Module 19).
 
+import type { AuthMode } from "./authMode";
+
 export interface ApiErrorBody {
   code: string;
   message: string;
@@ -28,6 +30,9 @@ export interface Meta {
   version: string;
   environment: string;
   api_base_path: string;
+  // The trust model the API enforces. Drives which auth UI the shell renders and
+  // which credential the API client sends — never inferred from a stored token.
+  auth_mode: AuthMode;
 }
 
 export interface ReadyResponse {

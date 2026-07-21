@@ -318,19 +318,31 @@ Durdurmak için terminalde **Ctrl + C**.
 Bir yönetici ve bir agent hesabı ekleyelim (API'yi durdurup, `backend` klasöründe):
 
 ```bash
-uv run python -m entropia.apps.seed   # "user_admin" (yönetici) + "agent_alpha" (agent)
+uv run python -m entropia.apps.seed   # "agent_alpha" (agent) + temel kayıtlar
 ```
 
-Denemek için (API tekrar çalışırken, **yeni** bir terminalde):
+Varsayılan `AUTH_MODE=session` modunda **kendi hesabını sen açarsın**. İlk
+yöneticiyi almak için `.env` dosyasına e-postanı yaz:
+
 ```bash
-curl     -H "X-Actor-Id: user_admin" http://localhost:8000/api/v1/me   # macOS
-curl.exe -H "X-Actor-Id: user_admin" http://localhost:8000/api/v1/me   # Windows
+ENTROPIA_BOOTSTRAP_ADMIN_EMAIL=sen@example.com
 ```
-Kim olduğunu söyleyen bir JSON dönerse tebrikler — çalışıyor! 🎉 _(Varsayılan
-`AUTH_MODE=dev` modunda kim olduğunu `X-Actor-Id` başlığı söyler; **rolü her
-zaman sunucu veritabanından çözer**. Gerçek kullanıcı adı/şifre girişi de var:
-`.env`'e `AUTH_MODE=session` yaz, web arayüzündeki `/login` sayfasından kayıt
-ol/giriş yap.)_
+
+Sonra API'yi yeniden başlat ve web arayüzündeki `/login` sayfasından **aynı
+e-postayla** kayıt ol — bu ilk kayıt yönetici olarak açılır (sadece ortada aktif
+yönetici yokken; sonrası kapanır).
+
+Denemek için (API çalışırken, **yeni** bir terminalde):
+```bash
+curl http://localhost:8000/api/v1/meta      # macOS
+curl.exe http://localhost:8000/api/v1/meta  # Windows
+```
+İçinde `"auth_mode":"session"` yazan bir JSON dönerse tebrikler — çalışıyor! 🎉
+_(Arayüz bu değeri okur ve giriş ekranını ona göre gösterir; **rolü her zaman
+sunucu veritabanından çözer**, istemci kendi rolünü asla iddia edemez. Girişsiz
+yerel geliştirme profili için `.env`'e `AUTH_MODE=dev` yaz — o modda kim olduğunu
+`X-Actor-Id` başlığı söyler ve giriş ekranı kapanır; ayrıntı:
+[Authentication — two local profiles](#authentication--two-local-profiles).)_
 
 ### 🅱️ Bölüm B — Tam deneyim (isteğe bağlı: backtest + arayüz)
 
@@ -512,35 +524,82 @@ make frontend-dev       # Vite dev server on :5173
 
 The dev frontend talks to `VITE_API_BASE_URL` (default `http://localhost:8000/api/v1`).
 
-### Authentication — dev mode and real sessions
+### Authentication — two local profiles
 
-`AUTH_MODE` selects the authentication line (default `dev`; see
-[Configuration](#configuration)):
+`AUTH_MODE` selects the authentication line. There are exactly **two** supported
+local profiles, and they are not interchangeable — the API trusts one mechanism
+and ignores the other. The web app follows whichever the server reports through
+`GET /api/v1/meta` (`auth_mode`), so the UI can never offer a credential the
+backend will discard.
 
-- **`dev`** — the transport supplies the principal via the `X-Actor-Id` header
-  (local development and tests). Seed the baseline identities and choose which
-  principal to act as (below).
-- **`session`** — real login: argon2id password credentials + opaque Bearer
-  session tokens, created on the web app's `/login` page (sign up / log in).
-  To provision the **first Admin**, set
-  `ENTROPIA_BOOTSTRAP_ADMIN_EMAIL=you@example.com` before signing up — the
-  matching sign-up is promoted to Admin only while no active Admin exists.
-  Non-human runtimes (agent/scheduler) authenticate with
-  `ENTROPIA_SERVICE_TOKEN`.
+| | 1. Normal local browser use | 2. Developer / test impersonation |
+|---|---|---|
+| `AUTH_MODE` | **`session`** (default) | `dev` (explicit opt-in) |
+| Credential | opaque Bearer session token | `X-Actor-Id` header |
+| UI | Sign Up / Log In / Log out | **act as** field; `/login` is inactive |
+| Login page | the real form | a local-development notice |
+| Environments | any (**required** for staging/production) | `ENTROPIA_ENV=local` only |
 
 In **both** modes the server resolves the **role** from the database on every
-request — the client never asserts its own role.
+request — the client never asserts its own role. Switching profiles means editing
+`AUTH_MODE` in `.env` and restarting the API; the UI follows on reload.
 
-For dev mode, seed and pick a principal:
+#### 1. Normal local browser use (`AUTH_MODE=session`)
+
+Real login: argon2id password credentials + opaque Bearer session tokens, created
+on the web app's `/login` page (sign up / log in).
+
+To provision the **first Admin**, set `ENTROPIA_BOOTSTRAP_ADMIN_EMAIL=you@example.com`
+before signing up — the matching sign-up is promoted to Admin, and only while no
+active Admin exists (fail-closed).
+
+Non-human runtimes (agent, scheduler, coordinator, workers) authenticate with
+`ENTROPIA_SERVICE_TOKEN` plus their own non-human `X-Actor-Id`. Session mode needs
+a non-empty value; `scripts/bootstrap.sh` and `scripts/update.sh` (and the `.ps1`
+twins) generate one into your git-ignored `.env` and never rotate an existing one.
+Never reuse a human session token as the service token.
+
+The seed does **not** create the credentialless `user_admin` in this mode — an
+ACTIVE Admin with no password can never log in, yet would permanently block the
+first-Admin bootstrap:
 
 ```bash
-# inside the backend (DB must be migrated):
+cd backend
+uv run python -m entropia.apps.seed        # agent "agent_alpha" + baseline registries
+```
+
+> **Upgrading a database created before this change?** If your local database
+> already has the credentialless `user_admin`, bootstrap is currently blocked.
+> Retire that one row — nothing is deleted, and every principal, ownership, audit
+> record and domain row is preserved:
+>
+> ```bash
+> cd backend
+> uv run python -m entropia.apps.retire_dev_admin
+> ```
+>
+> It is idempotent and fail-closed: it refuses if the row carries a real password
+> credential, or if another active Admin already exists. The transition is
+> recorded as a `user.dev_admin_retired` audit event. Afterwards, sign up with
+> `ENTROPIA_BOOTSTRAP_ADMIN_EMAIL` to provision your real Admin.
+
+#### 2. Developer / test impersonation (`AUTH_MODE=dev`)
+
+The transport supplies the principal via `X-Actor-Id`; session tokens are ignored
+outright. Set `AUTH_MODE=dev` in `.env`, then seed the fixture identities:
+
+```bash
+cd backend
 uv run python -m entropia.apps.seed        # creates admin "user_admin" + agent "agent_alpha"
 ```
 
 The web app's header has an **act as** field (sends `X-Actor-Id`); set it to
-`user_admin` to use Admin-only screens (Panel, Trash). With Docker, run the seed
-once: `docker compose run --rm api python -m entropia.apps.seed`.
+`user_admin` to use Admin-only screens (Panel, Trash). Sign Up / Log In are
+deliberately not offered here. With Docker, run the seed once:
+`docker compose run --rm api python -m entropia.apps.seed`.
+
+`SEED_DEV_ADMIN=1` / `=0` forces the `user_admin` fixture on or off regardless of
+the mode.
 
 ### 5. (Optional) Run worker planes natively
 

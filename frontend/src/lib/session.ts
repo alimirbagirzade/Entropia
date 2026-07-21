@@ -62,3 +62,17 @@ export function clearSession(): void {
   localStorage.removeItem(SESSION_KEY);
   emit();
 }
+
+// The server rejected our Bearer token (missing / expired / revoked). Clearing is
+// guarded on "a token is actually stored" so it happens EXACTLY ONCE even when a
+// page fires ten parallel requests that all fail: the first call clears and emits,
+// the rest are no-ops. Without the guard every failed request would emit another
+// token transition and the shell's redirect-on-transition would fire repeatedly.
+//
+// This function deliberately knows nothing about routing or react-query — the
+// shell observes the token transition and owns the invalidate + redirect, which
+// keeps this module free of a cycle back into queryClient/apiClient.
+export function noteSessionInvalid(): void {
+  if (localStorage.getItem(TOKEN_KEY) === null) return;
+  clearSession();
+}

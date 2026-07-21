@@ -11,6 +11,11 @@ if (-not (Test-Path ".env")) {
     Say ".env already exists — leaving it untouched"
 }
 
+# Session mode (the default local profile) needs a service-line credential for
+# the non-human runtimes. Generated into the git-ignored .env; an existing value
+# is never rotated.
+& (Join-Path $PSScriptRoot "ensure-service-token.ps1")
+
 if (Get-Command uv -ErrorAction SilentlyContinue) {
     Say "Installing backend dependencies (uv sync)"
     Push-Location backend; uv sync --all-extras; Pop-Location

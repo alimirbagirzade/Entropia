@@ -27,6 +27,10 @@ if [ ! -f .env ]; then
   warn "New .env created. For a Docker-free run, set hosts to 'localhost' (see README)."
 fi
 
+# Session mode needs a service-line credential for the non-human runtimes. Only
+# fills an EMPTY value — an existing token is never rotated by an update.
+"$(dirname "$0")/ensure-service-token.sh"
+
 # 3. Backend dependencies (uv resolves + installs from the committed lockfile).
 if command -v uv >/dev/null 2>&1; then
   say "Updating backend dependencies (uv sync)"

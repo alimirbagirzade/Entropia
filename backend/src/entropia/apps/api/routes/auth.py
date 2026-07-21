@@ -18,7 +18,7 @@ from entropia.application.commands import auth as auth_commands
 from entropia.apps.api.deps import RequestContext, bearer_token, db_session, request_context
 from entropia.config import get_settings
 from entropia.domain.identity.policy import require_authenticated
-from entropia.shared.errors import SessionInvalidError
+from entropia.shared.errors import AuthModeMismatchError, SessionInvalidError
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -103,6 +103,14 @@ async def login(
     session: AsyncSession = Depends(db_session),
 ) -> LoginResponse:
     settings = get_settings()
+    # BACK-01: issuance and acceptance are ONE decision. Under AUTH_MODE=dev the
+    # request pipeline ignores Bearer sessions entirely (deps.py resolves only
+    # X-Actor-Id), so minting a session here would hand the caller a token that
+    # is dead on arrival — the "login 200 -> protected 401" mismatch. Fail before
+    # touching credentials: no hash is verified, no session row is written, and
+    # no login audit event is emitted for a mode that cannot honour the result.
+    if settings.auth_mode != "session":
+        raise AuthModeMismatchError
     result = await auth_commands.login(
         session,
         username=body.username,

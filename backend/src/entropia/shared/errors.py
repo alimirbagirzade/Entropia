@@ -1661,6 +1661,30 @@ class ServiceLineForbiddenError(UnauthenticatedError):
     message = "The service line cannot act as a human principal."
 
 
+class AuthModeMismatchError(ConflictError):
+    """The endpoint cannot be honoured under the running ``AUTH_MODE``.
+
+    Raised by ``POST /auth/login`` under ``AUTH_MODE=dev``: token *issuance* and
+    token *acceptance* must be one decision, and dev mode's request pipeline
+    ignores Bearer sessions outright (``deps.py`` resolves only ``X-Actor-Id``).
+    Returning 200 with a session that the very next protected request will
+    ignore is the "login 200 -> protected 401" mismatch at the API boundary —
+    UI gating alone cannot make it impossible, because a direct API call
+    reproduces it.
+
+    409 rather than a 4xx-auth code: nothing is wrong with the credential and
+    nothing is forbidden to the caller — the *server's runtime state* is
+    incompatible with the request. The remedy is to switch mode, not to retry
+    or to present a different credential.
+    """
+
+    code = "AUTH_MODE_MISMATCH"
+    message = (
+        "This endpoint is unavailable under the server's current authentication mode. "
+        "Human login requires AUTH_MODE=session."
+    )
+
+
 # --------------------------------------------------------------------------- #
 # GAP-16 — Canonical Instrument Registry (Master Reference §8.1, §9.1)         #
 # --------------------------------------------------------------------------- #

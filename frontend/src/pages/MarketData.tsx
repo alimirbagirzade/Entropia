@@ -385,8 +385,29 @@ const QUALITY_CHECKS = [
 // wire body shape is unchanged. The raw source file is transferred AFTER create,
 // in the detail Ingest workflow (upload needs the created entity id) — the ribbon
 // step 1 and the detail's Step 1 hold the real <input type="file"> (F-01).
+// KALAN-A (video 9:24–12:37): the raw source file is selected UP FRONT — the
+// Browse File input is the primary entry point that STARTS the process. One
+// submit chains the whole owner ingest: create dataset -> transfer the real
+// bytes (progress + cancel) -> finalize -> request the durable analysis job.
+// Contracts stay verbatim: create carries NO Idempotency-Key; upload/finalize/
+// analysis each carry a FRESH key per attempt; the page never sees raw bytes —
+// the evidence line pins the server-derived asset id + digest only.
+const INGEST_STAGES = ["create", "upload", "finalize", "analysis"] as const;
+type IngestStage = (typeof INGEST_STAGES)[number];
+
+const INGEST_STAGE_LABELS: Record<IngestStage, string> = {
+  create: "Create dataset",
+  upload: "Transfer raw source file",
+  finalize: "Finalize upload",
+  analysis: "Request analysis",
+};
+
 function CreateDatasetCard({ onCreated }: { onCreated: (entityId: string) => void }) {
+  const queryClient = useQueryClient();
   const create = useCreateDataset();
+  const upload = useFileUpload<StartUploadResult>();
+  const finalize = useFinalizeUpload();
+  const analysis = useRequestAnalysis();
   const [dataType, setDataType] = useState<string>(MARKET_DATA_TYPES[0]);
   const [title, setTitle] = useState("");
   const [market, setMarket] = useState<string>(MARKETS[0]);
@@ -395,27 +416,72 @@ function CreateDatasetCard({ onCreated }: { onCreated: (entityId: string) => voi
   const [resolution, setResolution] = useState<string>("15m");
   const [timezone, setTimezone] = useState<string>(DISPLAY_TIMEZONES[0]);
   const [recordTimeBasis, setRecordTimeBasis] = useState<string>(RECORD_TIME_BASES[0]);
+  const [rawFile, setRawFile] = useState<File | null>(null);
+  const [fileMissing, setFileMissing] = useState(false);
+  // Chain progress: null = not started; a stage while running/failed; "done"
+  // after the analysis 202 admission. Completed prerequisites are pinned in
+  // refs so Retry resumes from the FAILED stage (it never re-creates a dataset
+  // or re-transfers accepted bytes).
+  const [stage, setStage] = useState<IngestStage | "done" | null>(null);
+  const [stageFailed, setStageFailed] = useState(false);
+  const entityRef = useRef<string | null>(null);
+  const assetRef = useRef<string | null>(null);
+
+  const runChain = async (file: File) => {
+    setStageFailed(false);
+    try {
+      if (entityRef.current === null) {
+        setStage("create");
+        const created = await create.mutateAsync({
+          market_data_type: dataType,
+          // Descriptive facets fold into the free-form payload — same route,
+          // same body shape, no new headers (domain validation stays server-side).
+          payload: {
+            market,
+            source_provider: sourceProvider.trim() || null,
+            resolution,
+            timezone,
+            record_time_basis: recordTimeBasis,
+          },
+          title: title.trim() || null,
+          instrument_id: instrumentId.trim() || null,
+        });
+        entityRef.current = created.entity_id;
+        onCreated(created.entity_id);
+      }
+      const entityId = entityRef.current;
+      if (entityId === null) return;
+      if (assetRef.current === null) {
+        setStage("upload");
+        const stored = await upload.upload(rawUploadPath(entityId), file, {
+          idempotencyKey: crypto.randomUUID(),
+        });
+        assetRef.current = stored.asset_id;
+        invalidateAfterRawUpload(queryClient);
+      }
+      const assetId = assetRef.current;
+      if (assetId === null) return;
+      setStage("finalize");
+      await finalize.mutateAsync({ entity_id: entityId, asset_id: assetId });
+      setStage("analysis");
+      await analysis.mutateAsync({ entity_id: entityId });
+      setStage("done");
+    } catch {
+      // The failing hook (create/upload/finalize/analysis) holds and renders
+      // its own canonical error envelope; Retry resumes from this stage.
+      setStageFailed(true);
+    }
+  };
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    // Descriptive facets fold into the free-form payload — same route, same body
-    // shape, no new headers. Domain validation stays server-side.
-    const payload: Record<string, unknown> = {
-      market,
-      source_provider: sourceProvider.trim() || null,
-      resolution,
-      timezone,
-      record_time_basis: recordTimeBasis,
-    };
-    create.mutate(
-      {
-        market_data_type: dataType,
-        payload,
-        title: title.trim() || null,
-        instrument_id: instrumentId.trim() || null,
-      },
-      { onSuccess: (result) => onCreated(result.entity_id) },
-    );
+    if (rawFile === null) {
+      // Local transport guard only — the file is what STARTS the process.
+      setFileMissing(true);
+      return;
+    }
+    setFileMissing(false);
+    void runChain(rawFile);
   };
 
   return (
@@ -430,13 +496,30 @@ function CreateDatasetCard({ onCreated }: { onCreated: (entityId: string) => voi
             <section className="data-setup-column" aria-label="Source and identity">
               <div className="data-column-title">SOURCE &amp; IDENTITY</div>
               <div className="data-upload-box">
-                <b>
-                  Raw source file <span className="required-hint">*</span>
-                </b>
+                <label htmlFor="md-setup-file">
+                  <b>
+                    Raw source file <span className="required-hint">*</span>
+                  </b>
+                </label>
                 <p className="data-inline-note" style={{ marginTop: 4 }}>
-                  Create the dataset first, then transfer the original CSV/TXT bytes in the Ingest
-                  workflow below (Step 1). The raw source is stored unchanged as evidence.
+                  Browse for the original CSV/TXT file — selecting it here is what starts the
+                  process. The raw source is stored unchanged as evidence; only its server-derived
+                  asset id and digest ever appear on this page.
                 </p>
+                <input
+                  id="md-setup-file"
+                  type="file"
+                  accept=".csv,.txt,text/csv,text/plain"
+                  onChange={(event) => {
+                    setRawFile(event.target.files?.[0] ?? null);
+                    setFileMissing(false);
+                  }}
+                />
+                {rawFile !== null ? (
+                  <p className="data-inline-note" style={{ marginTop: 4 }}>
+                    Selected: {rawFile.name} ({formatBytes(rawFile.size)})
+                  </p>
+                ) : null}
               </div>
               <div className="data-field">
                 <label htmlFor="md-title">
@@ -568,20 +651,72 @@ function CreateDatasetCard({ onCreated }: { onCreated: (entityId: string) => voi
                 ))}
               </ul>
               <div className="data-action-row">
-                <button type="submit" className="btn btn-primary" disabled={create.isPending}>
-                  Create dataset
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={stage !== null && stage !== "done" && !stageFailed}
+                >
+                  Create dataset &amp; upload
                 </button>
+                {stage === "upload" && upload.status === "uploading" ? (
+                  <button type="button" className="btn" onClick={upload.cancel}>
+                    Cancel upload
+                  </button>
+                ) : null}
+                {stageFailed && rawFile !== null ? (
+                  <button type="button" className="btn" onClick={() => void runChain(rawFile)}>
+                    Retry from failed step
+                  </button>
+                ) : null}
               </div>
               <p className="data-compact-help">
-                Analyze &amp; map, verify and Admin approve happen on the created dataset below.
+                One action runs create → upload → finalize → analysis. Review the proposed schema
+                mapping, verify result and Admin approval on the dataset below.
               </p>
             </section>
           </div>
         </div>
       </form>
+      {fileMissing ? (
+        <p role="alert" style={{ color: "var(--down)" }}>
+          Select the raw source file (Browse File) first — the file is what starts the process.
+        </p>
+      ) : null}
+      {stage !== null ? (
+        <IngestStageList
+          stage={stage}
+          stageFailed={stageFailed}
+          uploadStatus={upload.status}
+          progress={
+            upload.progress !== null
+              ? `${formatBytes(upload.progress.loaded)} / ${formatBytes(upload.progress.total)}`
+              : null
+          }
+        />
+      ) : null}
       {create.isError ? (
         <p role="alert" style={{ color: "var(--down)" }}>
           {mutationErrorText(create.error)}
+        </p>
+      ) : null}
+      {upload.status === "error" ? (
+        <p role="alert" style={{ color: "var(--down)" }}>
+          {mutationErrorText(upload.error)}
+        </p>
+      ) : null}
+      {upload.status === "cancelled" ? (
+        <p role="alert" style={{ color: "var(--down)" }}>
+          Upload cancelled — retry when ready; the created dataset is kept.
+        </p>
+      ) : null}
+      {finalize.isError ? (
+        <p role="alert" style={{ color: "var(--down)" }}>
+          {mutationErrorText(finalize.error)}
+        </p>
+      ) : null}
+      {analysis.isError ? (
+        <p role="alert" style={{ color: "var(--down)" }}>
+          {mutationErrorText(analysis.error)}
         </p>
       ) : null}
       {create.data ? (
@@ -589,7 +724,56 @@ function CreateDatasetCard({ onCreated }: { onCreated: (entityId: string) => voi
           Created — {create.data.entity_id} ({create.data.revision_state}).
         </p>
       ) : null}
+      {upload.data ? (
+        <p aria-live="polite">
+          {upload.data.deduplicated ? "Raw source already stored — reused" : "Raw source stored"} —
+          asset <code>{upload.data.asset_id}</code> ({formatBytes(upload.data.size_bytes)}, digest{" "}
+          <code>{upload.data.content_digest.slice(0, 12)}…</code>).
+        </p>
+      ) : null}
+      {analysis.data ? (
+        <p aria-live="polite">
+          Analysis requested — job <code>{analysis.data.job_id}</code> on queue{" "}
+          <code>{analysis.data.queue}</code> ({analysis.data.status}). Watch the dataset below — its
+          state advances to verified or needs review automatically.
+        </p>
+      ) : null}
     </section>
+  );
+}
+
+// Textual (never colour-only) progress of the chained ingest submit. The list
+// is aria-live so screen readers hear each stage advance.
+function IngestStageList({
+  stage,
+  stageFailed,
+  uploadStatus,
+  progress,
+}: {
+  stage: IngestStage | "done";
+  stageFailed: boolean;
+  uploadStatus: string;
+  progress: string | null;
+}) {
+  const activeIndex = stage === "done" ? INGEST_STAGES.length : INGEST_STAGES.indexOf(stage);
+  return (
+    <ol aria-label="Ingest progress" aria-live="polite" className="data-quality-list">
+      {INGEST_STAGES.map((name, index) => {
+        let status: string;
+        if (index < activeIndex) status = "Done";
+        else if (index > activeIndex) status = "Pending";
+        else if (stageFailed) status = "Failed";
+        else if (name === "upload" && uploadStatus === "uploading" && progress !== null)
+          status = `Uploading ${progress}`;
+        else status = "Running";
+        return (
+          <li key={name}>
+            <span>{INGEST_STAGE_LABELS[name]}</span>
+            <span className="dataset-status-pill">{status}</span>
+          </li>
+        );
+      })}
+    </ol>
   );
 }
 

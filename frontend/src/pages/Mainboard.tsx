@@ -13,6 +13,7 @@ import { AddPackagePopover } from "@/components/AddPackagePopover";
 import { StrategyDetailsPanel } from "@/components/StrategyDetailsPanel";
 import { TradeLogEditor } from "@/components/TradeLogEditor";
 import { TradingSignalEditor } from "@/components/TradingSignalEditor";
+import { useEscapeToClose } from "@/components/useEscapeToClose";
 import { useAllocationDraft, type AllocationEntry } from "@/lib/allocation";
 import { useRequestBacktestRun } from "@/lib/backtest";
 import {
@@ -633,6 +634,8 @@ function AddMenu({
     if (!open) setSubOpen(false);
   }, [open]);
 
+  useEscapeToClose(open, () => setOpen(false));
+
   return (
     <div className="cp-popover-anchor">
       <button
@@ -976,7 +979,10 @@ export function Mainboard() {
       <h1 className="page-title">Mainboard</h1>
       <p className="page-sub">Backtest composition · {data.workspace_kind}</p>
 
-      <div style={{ display: "grid", gap: 18 }}>
+      {/* minmax(0,1fr): the auto track would otherwise grow to the min-content
+          of the widest child (the unbreakable 64-char composition hash), pushing
+          every section past a 375px viewport (R2-14 / GAP madde 15). */}
+      <div style={{ display: "grid", gap: 18, gridTemplateColumns: "minmax(0, 1fr)" }}>
         <section aria-labelledby="strategies-h">
           <div
             style={{

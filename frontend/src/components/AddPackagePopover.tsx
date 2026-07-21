@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 
 import { ApiError } from "@/lib/apiClient";
 import { StatusBadge } from "@/components/StatusBadge";
+import { useEscapeToClose } from "@/components/useEscapeToClose";
 import {
   DEFAULT_LIBRARY_FILTERS,
   approvalTone,
@@ -108,6 +109,7 @@ export function AddPackagePopover({
 }) {
   const [q, setQ] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  useEscapeToClose(true, onClose);
   const query = useLibraryPackages(
     {
       ...DEFAULT_LIBRARY_FILTERS,

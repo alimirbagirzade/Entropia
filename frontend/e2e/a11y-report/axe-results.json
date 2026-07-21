@@ -1,0 +1,1244 @@
+[
+  {
+    "slug": "mainboard",
+    "path": "/",
+    "critical": 0,
+    "serious": 1,
+    "moderate": 0,
+    "minor": 0,
+    "violations": [
+      {
+        "id": "color-contrast",
+        "impact": "serious",
+        "nodes": 9,
+        "help": "Elements must meet minimum color contrast ratio thresholds",
+        "detail": [
+          {
+            "target": ".brand-title",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.89 (foreground color: #888888, background color: #e8e8e8, font size: 7.9pt (10.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(1)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(2)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(3)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": "span[title=\"live events: open\"]",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".menu-blue > .menu-trigger[aria-haspopup=\"true\"]",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.67 (foreground color: #ffffff, background color: #00a9e8, font size: 9.8pt (13px), font weight: normal). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".btn-primary",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.67 (foreground color: #ffffff, background color: #00a9e8, font size: 9.8pt (13px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".card[role=\"group\"] > a[href$=\"portfolio\"]",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.67 (foreground color: #00a9e8, background color: #ffffff, font size: 12.0pt (16px), font weight: normal). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".result-row > div > div:nth-child(1) > a",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.1 (foreground color: #00a9e8, background color: #b9ecff, font size: 9.8pt (13px), font weight: normal). Expected contrast ratio of 4.5:1"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "slug": "strategy-details",
+    "path": "/strategy",
+    "critical": 0,
+    "serious": 1,
+    "moderate": 0,
+    "minor": 0,
+    "violations": [
+      {
+        "id": "color-contrast",
+        "impact": "serious",
+        "nodes": 23,
+        "help": "Elements must meet minimum color contrast ratio thresholds",
+        "detail": [
+          {
+            "target": ".brand-title",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.89 (foreground color: #888888, background color: #e8e8e8, font size: 7.9pt (10.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(1)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(2)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(3)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": "span[title=\"live events: open\"]",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".menu-blue > .menu-trigger[aria-haspopup=\"true\"][type=\"button\"]",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.67 (foreground color: #ffffff, background color: #00a9e8, font size: 9.8pt (13px), font weight: normal). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": "section[aria-labelledby=\"strat-create-h\"] > .cp-note",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.54 (foreground color: #888888, background color: #ffffff, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".btn-primary",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.67 (foreground color: #ffffff, background color: #00a9e8, font size: 9.8pt (13px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": "section[aria-labelledby=\"strat-drafts-h\"] > .cp-note",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.54 (foreground color: #888888, background color: #ffffff, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": "tr:nth-child(2) > td:nth-child(4) > span > a",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.67 (foreground color: #00a9e8, background color: #ffffff, font size: 9.8pt (13px), font weight: normal). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": "tr:nth-child(5) > td:nth-child(4) > span > a",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.67 (foreground color: #00a9e8, background color: #ffffff, font size: 9.8pt (13px), font weight: normal). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": "tr:nth-child(8) > td:nth-child(4) > span > a",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.67 (foreground color: #00a9e8, background color: #ffffff, font size: 9.8pt (13px), font weight: normal). Expected contrast ratio of 4.5:1"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "slug": "outsource-signal",
+    "path": "/outsource-signal",
+    "critical": 0,
+    "serious": 1,
+    "moderate": 0,
+    "minor": 0,
+    "violations": [
+      {
+        "id": "color-contrast",
+        "impact": "serious",
+        "nodes": 8,
+        "help": "Elements must meet minimum color contrast ratio thresholds",
+        "detail": [
+          {
+            "target": ".brand-title",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.89 (foreground color: #888888, background color: #e8e8e8, font size: 7.9pt (10.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(1)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(2)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(3)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": "span[title=\"live events: open\"]",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".menu-blue > .menu-trigger[aria-haspopup=\"true\"]",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.67 (foreground color: #ffffff, background color: #00a9e8, font size: 9.8pt (13px), font weight: normal). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": "a[href$=\"trading-signal\"]",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.67 (foreground color: #00a9e8, background color: #ffffff, font size: 12.0pt (16px), font weight: normal). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": "a[href$=\"trade-log\"]",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.67 (foreground color: #00a9e8, background color: #ffffff, font size: 12.0pt (16px), font weight: normal). Expected contrast ratio of 4.5:1"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "slug": "trading-signal",
+    "path": "/trading-signal",
+    "critical": 0,
+    "serious": 1,
+    "moderate": 0,
+    "minor": 0,
+    "violations": [
+      {
+        "id": "color-contrast",
+        "impact": "serious",
+        "nodes": 18,
+        "help": "Elements must meet minimum color contrast ratio thresholds",
+        "detail": [
+          {
+            "target": ".brand-title",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.89 (foreground color: #888888, background color: #e8e8e8, font size: 7.9pt (10.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(1)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(2)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(3)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": "span[title=\"live events: open\"]",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".menu-blue > .menu-trigger[aria-haspopup=\"true\"][type=\"button\"]",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.67 (foreground color: #ffffff, background color: #00a9e8, font size: 9.8pt (13px), font weight: normal). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": "form[aria-labelledby=\"ts-identity-h\"] > p",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.54 (foreground color: #888888, background color: #ffffff, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": "form[aria-labelledby=\"ts-identity-h\"] > .strategy-form-grid > .cp-field:nth-child(1) > div > small",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.54 (foreground color: #888888, background color: #ffffff, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": "form[aria-labelledby=\"ts-identity-h\"] > .strategy-form-grid > .pkg-picker.cp-wide.cp-field > .pkg-picker-empty > .cp-note",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.39 (foreground color: #888888, background color: #fafafa, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".cp-wide > small",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.54 (foreground color: #888888, background color: #ffffff, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": "div[aria-labelledby=\"ts-upload-h\"] > p:nth-child(2)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.54 (foreground color: #888888, background color: #ffffff, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": "section[aria-labelledby=\"ts-create-h\"] > p",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.54 (foreground color: #888888, background color: #ffffff, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "slug": "trade-log",
+    "path": "/trade-log",
+    "critical": 0,
+    "serious": 1,
+    "moderate": 0,
+    "minor": 0,
+    "violations": [
+      {
+        "id": "color-contrast",
+        "impact": "serious",
+        "nodes": 18,
+        "help": "Elements must meet minimum color contrast ratio thresholds",
+        "detail": [
+          {
+            "target": ".brand-title",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.89 (foreground color: #888888, background color: #e8e8e8, font size: 7.9pt (10.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(1)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(2)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(3)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": "span[title=\"live events: open\"]",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".menu-blue > .menu-trigger[aria-haspopup=\"true\"][type=\"button\"]",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.67 (foreground color: #ffffff, background color: #00a9e8, font size: 9.8pt (13px), font weight: normal). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": "form[aria-labelledby=\"tl-identity-h\"] > p",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.54 (foreground color: #888888, background color: #ffffff, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": "form[aria-labelledby=\"tl-identity-h\"] > .strategy-form-grid > .cp-field:nth-child(1) > div > small",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.54 (foreground color: #888888, background color: #ffffff, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": "form[aria-labelledby=\"tl-identity-h\"] > .strategy-form-grid > .pkg-picker.cp-wide.cp-field > .pkg-picker-empty > .cp-note",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.39 (foreground color: #888888, background color: #fafafa, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".cp-wide > small",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.54 (foreground color: #888888, background color: #ffffff, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": "div[aria-labelledby=\"tl-upload-h\"] > p:nth-child(2)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.54 (foreground color: #888888, background color: #ffffff, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": "section[aria-labelledby=\"tl-create-h\"] > p",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.54 (foreground color: #888888, background color: #ffffff, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "slug": "create-package",
+    "path": "/packages/create",
+    "critical": 0,
+    "serious": 1,
+    "moderate": 0,
+    "minor": 0,
+    "violations": [
+      {
+        "id": "color-contrast",
+        "impact": "serious",
+        "nodes": 14,
+        "help": "Elements must meet minimum color contrast ratio thresholds",
+        "detail": [
+          {
+            "target": ".brand-title",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.89 (foreground color: #888888, background color: #e8e8e8, font size: 7.9pt (10.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(1)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(2)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(3)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": "span[title=\"live events: open\"]",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".menu-blue > .menu-trigger[aria-haspopup=\"true\"]",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.67 (foreground color: #ffffff, background color: #00a9e8, font size: 9.8pt (13px), font weight: normal). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".cp-page > .cp-note",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.54 (foreground color: #888888, background color: #ffffff, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": "section > .cp-panel > .cp-panel-head > .cp-sub",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.39 (foreground color: #888888, background color: #fafafa, font size: 8.3pt (11px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".cp-message-empty",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.54 (foreground color: #888888, background color: #ffffff, font size: 8.3pt (11px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".cp-compose > .cp-note",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.39 (foreground color: #888888, background color: #fafafa, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".cp-file-row > span:nth-child(1)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.54 (foreground color: #888888, background color: #ffffff, font size: 9.8pt (13px), font weight: normal). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": "div[aria-label=\"Package status\"] > .cp-panel-head > .cp-sub",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.39 (foreground color: #888888, background color: #fafafa, font size: 8.3pt (11px), font weight: bold). Expected contrast ratio of 4.5:1"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "slug": "pre-check",
+    "path": "/packages/pre-check",
+    "critical": 0,
+    "serious": 1,
+    "moderate": 0,
+    "minor": 0,
+    "violations": [
+      {
+        "id": "color-contrast",
+        "impact": "serious",
+        "nodes": 6,
+        "help": "Elements must meet minimum color contrast ratio thresholds",
+        "detail": [
+          {
+            "target": ".brand-title",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.89 (foreground color: #888888, background color: #e8e8e8, font size: 7.9pt (10.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(1)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(2)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(3)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": "span[title=\"live events: open\"]",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".menu-blue > .menu-trigger[aria-haspopup=\"true\"]",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.67 (foreground color: #ffffff, background color: #00a9e8, font size: 9.8pt (13px), font weight: normal). Expected contrast ratio of 4.5:1"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "slug": "package-library",
+    "path": "/packages/library",
+    "critical": 0,
+    "serious": 1,
+    "moderate": 0,
+    "minor": 0,
+    "violations": [
+      {
+        "id": "color-contrast",
+        "impact": "serious",
+        "nodes": 6,
+        "help": "Elements must meet minimum color contrast ratio thresholds",
+        "detail": [
+          {
+            "target": ".brand-title",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.89 (foreground color: #888888, background color: #e8e8e8, font size: 7.9pt (10.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(1)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(2)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(3)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": "span[title=\"live events: open\"]",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".menu-blue > .menu-trigger[aria-haspopup=\"true\"][type=\"button\"]",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.67 (foreground color: #ffffff, background color: #00a9e8, font size: 9.8pt (13px), font weight: normal). Expected contrast ratio of 4.5:1"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "slug": "embedded-packages",
+    "path": "/packages/embedded",
+    "critical": 0,
+    "serious": 1,
+    "moderate": 0,
+    "minor": 0,
+    "violations": [
+      {
+        "id": "color-contrast",
+        "impact": "serious",
+        "nodes": 6,
+        "help": "Elements must meet minimum color contrast ratio thresholds",
+        "detail": [
+          {
+            "target": ".brand-title",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.89 (foreground color: #888888, background color: #e8e8e8, font size: 7.9pt (10.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(1)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(2)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(3)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": "span[title=\"live events: open\"]",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".menu-blue > .menu-trigger[aria-haspopup=\"true\"]",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.67 (foreground color: #ffffff, background color: #00a9e8, font size: 9.8pt (13px), font weight: normal). Expected contrast ratio of 4.5:1"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "slug": "rationale-families",
+    "path": "/rationale-families",
+    "critical": 0,
+    "serious": 1,
+    "moderate": 0,
+    "minor": 0,
+    "violations": [
+      {
+        "id": "color-contrast",
+        "impact": "serious",
+        "nodes": 7,
+        "help": "Elements must meet minimum color contrast ratio thresholds",
+        "detail": [
+          {
+            "target": ".brand-title",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.89 (foreground color: #888888, background color: #e8e8e8, font size: 7.9pt (10.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(1)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(2)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(3)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": "span[title=\"live events: open\"]",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".menu-blue > .menu-trigger[aria-haspopup=\"true\"]",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.67 (foreground color: #ffffff, background color: #00a9e8, font size: 9.8pt (13px), font weight: normal). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".rationale-add-row > .btn-primary.btn",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.67 (foreground color: #ffffff, background color: #00a9e8, font size: 9.8pt (13px), font weight: bold). Expected contrast ratio of 4.5:1"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "slug": "market-data",
+    "path": "/market-data",
+    "critical": 0,
+    "serious": 1,
+    "moderate": 0,
+    "minor": 0,
+    "violations": [
+      {
+        "id": "color-contrast",
+        "impact": "serious",
+        "nodes": 14,
+        "help": "Elements must meet minimum color contrast ratio thresholds",
+        "detail": [
+          {
+            "target": ".brand-title",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.89 (foreground color: #888888, background color: #e8e8e8, font size: 7.9pt (10.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(1)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(2)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(3)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": "span[title=\"live events: open\"]",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".menu-blue > .menu-trigger[aria-haspopup=\"true\"]",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.67 (foreground color: #ffffff, background color: #00a9e8, font size: 9.8pt (13px), font weight: normal). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": "summary",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.67 (foreground color: #ffffff, background color: #00a9e8, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".data-workflow-step.wf-pending:nth-child(1) > .workflow-step-body > .workflow-step-state",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.39 (foreground color: #888888, background color: #fafafa, font size: 7.9pt (10.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".data-workflow-step.wf-pending:nth-child(2) > .workflow-step-body > .workflow-step-state",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.39 (foreground color: #888888, background color: #fafafa, font size: 7.9pt (10.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".data-workflow-step.wf-pending:nth-child(3) > .workflow-step-body > .workflow-step-state",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.39 (foreground color: #888888, background color: #fafafa, font size: 7.9pt (10.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".data-workflow-step.wf-pending:nth-child(4) > .workflow-step-body > .workflow-step-state",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.39 (foreground color: #888888, background color: #fafafa, font size: 7.9pt (10.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".dataset-summary-card:nth-child(1) > .dataset-summary-label",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.54 (foreground color: #888888, background color: #ffffff, font size: 7.5pt (10px), font weight: bold). Expected contrast ratio of 4.5:1"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "slug": "research-data",
+    "path": "/research-data",
+    "critical": 0,
+    "serious": 1,
+    "moderate": 0,
+    "minor": 0,
+    "violations": [
+      {
+        "id": "color-contrast",
+        "impact": "serious",
+        "nodes": 10,
+        "help": "Elements must meet minimum color contrast ratio thresholds",
+        "detail": [
+          {
+            "target": ".brand-title",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.89 (foreground color: #888888, background color: #e8e8e8, font size: 7.9pt (10.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(1)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(2)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(3)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": "span[title=\"live events: open\"]",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".menu-blue > .menu-trigger[aria-haspopup=\"true\"][type=\"button\"]",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.67 (foreground color: #ffffff, background color: #00a9e8, font size: 9.8pt (13px), font weight: normal). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": "li[data-locked=\"true\"]:nth-child(4) > .rd-step-body > .rd-step-lock",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.3 (foreground color: #c8a44d, background color: #fcfcfc, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": "li[data-locked=\"true\"]:nth-child(5) > .rd-step-body > .rd-step-lock",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.3 (foreground color: #c8a44d, background color: #fcfcfc, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".cp-note",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.39 (foreground color: #888888, background color: #fafafa, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".btn.btn-primary[type=\"button\"]",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.67 (foreground color: #ffffff, background color: #00a9e8, font size: 9.8pt (13px), font weight: bold). Expected contrast ratio of 4.5:1"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "slug": "portfolio",
+    "path": "/portfolio",
+    "critical": 0,
+    "serious": 1,
+    "moderate": 0,
+    "minor": 0,
+    "violations": [
+      {
+        "id": "color-contrast",
+        "impact": "serious",
+        "nodes": 7,
+        "help": "Elements must meet minimum color contrast ratio thresholds",
+        "detail": [
+          {
+            "target": ".brand-title",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.89 (foreground color: #888888, background color: #e8e8e8, font size: 7.9pt (10.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(1)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(2)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(3)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": "span[title=\"live events: open\"]",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".menu-blue > .menu-trigger[aria-haspopup=\"true\"]",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.67 (foreground color: #ffffff, background color: #00a9e8, font size: 9.8pt (13px), font weight: normal). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".btn-primary",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.67 (foreground color: #ffffff, background color: #00a9e8, font size: 9.8pt (13px), font weight: bold). Expected contrast ratio of 4.5:1"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "slug": "ready-check",
+    "path": "/backtest/ready-check",
+    "critical": 0,
+    "serious": 1,
+    "moderate": 0,
+    "minor": 0,
+    "violations": [
+      {
+        "id": "color-contrast",
+        "impact": "serious",
+        "nodes": 7,
+        "help": "Elements must meet minimum color contrast ratio thresholds",
+        "detail": [
+          {
+            "target": ".brand-title",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.89 (foreground color: #888888, background color: #e8e8e8, font size: 7.9pt (10.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(1)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(2)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(3)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": "span[title=\"live events: open\"]",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".menu-blue > .menu-trigger[aria-haspopup=\"true\"]",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.67 (foreground color: #ffffff, background color: #00a9e8, font size: 9.8pt (13px), font weight: normal). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".btn",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.67 (foreground color: #ffffff, background color: #00a9e8, font size: 9.8pt (13px), font weight: bold). Expected contrast ratio of 4.5:1"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "slug": "run-results",
+    "path": "/backtest/run",
+    "critical": 0,
+    "serious": 1,
+    "moderate": 0,
+    "minor": 0,
+    "violations": [
+      {
+        "id": "color-contrast",
+        "impact": "serious",
+        "nodes": 7,
+        "help": "Elements must meet minimum color contrast ratio thresholds",
+        "detail": [
+          {
+            "target": ".brand-title",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.89 (foreground color: #888888, background color: #e8e8e8, font size: 7.9pt (10.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(1)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(2)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(3)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": "span[title=\"live events: open\"]",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".menu-blue > .menu-trigger[aria-haspopup=\"true\"]",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.67 (foreground color: #ffffff, background color: #00a9e8, font size: 9.8pt (13px), font weight: normal). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".btn",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.67 (foreground color: #ffffff, background color: #00a9e8, font size: 9.8pt (13px), font weight: bold). Expected contrast ratio of 4.5:1"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "slug": "results-history",
+    "path": "/backtest/history",
+    "critical": 0,
+    "serious": 1,
+    "moderate": 0,
+    "minor": 0,
+    "violations": [
+      {
+        "id": "color-contrast",
+        "impact": "serious",
+        "nodes": 6,
+        "help": "Elements must meet minimum color contrast ratio thresholds",
+        "detail": [
+          {
+            "target": ".brand-title",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.89 (foreground color: #888888, background color: #e8e8e8, font size: 7.9pt (10.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(1)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(2)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(3)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": "span[title=\"live events: open\"]",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".menu-blue > .menu-trigger[aria-haspopup=\"true\"]",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.67 (foreground color: #ffffff, background color: #00a9e8, font size: 9.8pt (13px), font weight: normal). Expected contrast ratio of 4.5:1"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "slug": "arrange-metrics",
+    "path": "/backtest/metrics",
+    "critical": 0,
+    "serious": 1,
+    "moderate": 0,
+    "minor": 0,
+    "violations": [
+      {
+        "id": "color-contrast",
+        "impact": "serious",
+        "nodes": 7,
+        "help": "Elements must meet minimum color contrast ratio thresholds",
+        "detail": [
+          {
+            "target": ".brand-title",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.89 (foreground color: #888888, background color: #e8e8e8, font size: 7.9pt (10.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(1)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(2)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(3)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": "span[title=\"live events: open\"]",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".menu-blue > .menu-trigger[aria-haspopup=\"true\"]",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.67 (foreground color: #ffffff, background color: #00a9e8, font size: 9.8pt (13px), font weight: normal). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".btn-primary",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.67 (foreground color: #ffffff, background color: #00a9e8, font size: 9.8pt (13px), font weight: bold). Expected contrast ratio of 4.5:1"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "slug": "analysis-lab",
+    "path": "/analysis-lab",
+    "critical": 0,
+    "serious": 1,
+    "moderate": 0,
+    "minor": 0,
+    "violations": [
+      {
+        "id": "color-contrast",
+        "impact": "serious",
+        "nodes": 12,
+        "help": "Elements must meet minimum color contrast ratio thresholds",
+        "detail": [
+          {
+            "target": ".brand-title",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.89 (foreground color: #888888, background color: #e8e8e8, font size: 7.9pt (10.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(1)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(2)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(3)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": "span[title=\"live events: open\"]",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".menu-blue > .menu-trigger[aria-haspopup=\"true\"]",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.67 (foreground color: #ffffff, background color: #00a9e8, font size: 9.8pt (13px), font weight: normal). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".agent-data-card:nth-child(1) > .lab-context-label",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.54 (foreground color: #888888, background color: #ffffff, font size: 8.3pt (11px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".agent-data-card:nth-child(2) > .lab-context-label",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.54 (foreground color: #888888, background color: #ffffff, font size: 8.3pt (11px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".lab-context-section:nth-child(2) > .lab-context-label",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.54 (foreground color: #888888, background color: #ffffff, font size: 8.3pt (11px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".lab-context-section:nth-child(3) > .lab-context-label",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.54 (foreground color: #888888, background color: #ffffff, font size: 8.3pt (11px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".lab-context-section:nth-child(4) > .lab-context-label",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.54 (foreground color: #888888, background color: #ffffff, font size: 8.3pt (11px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".lab-compose-note",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.39 (foreground color: #888888, background color: #fafafa, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "slug": "panel-management",
+    "path": "/panel/management",
+    "critical": 0,
+    "serious": 2,
+    "moderate": 0,
+    "minor": 0,
+    "violations": [
+      {
+        "id": "color-contrast",
+        "impact": "serious",
+        "nodes": 7,
+        "help": "Elements must meet minimum color contrast ratio thresholds",
+        "detail": [
+          {
+            "target": ".brand-title",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.89 (foreground color: #888888, background color: #e8e8e8, font size: 7.9pt (10.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(1)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(2)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(3)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": "span[title=\"live events: open\"]",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".menu-blue > .menu-trigger[aria-haspopup=\"true\"]",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.67 (foreground color: #ffffff, background color: #00a9e8, font size: 9.8pt (13px), font weight: normal). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": "p > a[href$=\"logs\"]",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.67 (foreground color: #00a9e8, background color: #ffffff, font size: 9.8pt (13px), font weight: normal). Expected contrast ratio of 4.5:1"
+          }
+        ]
+      },
+      {
+        "id": "link-in-text-block",
+        "impact": "serious",
+        "nodes": 1,
+        "help": "Links must be distinguishable without relying on color",
+        "detail": [
+          {
+            "target": "p > a[href$=\"logs\"]",
+            "summary": "Fix any of the following: The link has insufficient color contrast of 2.78:1 with the surrounding text. (Minimum contrast is 3:1, link text: #00a9e8, surrounding text: #555555) The link has no styling (such as underline) to distinguish it from the surrounding text"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "slug": "panel-logs",
+    "path": "/panel/logs",
+    "critical": 0,
+    "serious": 2,
+    "moderate": 0,
+    "minor": 0,
+    "violations": [
+      {
+        "id": "color-contrast",
+        "impact": "serious",
+        "nodes": 7,
+        "help": "Elements must meet minimum color contrast ratio thresholds",
+        "detail": [
+          {
+            "target": ".brand-title",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.89 (foreground color: #888888, background color: #e8e8e8, font size: 7.9pt (10.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(1)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(2)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(3)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": "span[title=\"live events: open\"]",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".menu-blue > .menu-trigger[aria-haspopup=\"true\"][type=\"button\"]",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.67 (foreground color: #ffffff, background color: #00a9e8, font size: 9.8pt (13px), font weight: normal). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": "p > a[href$=\"management\"]",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.67 (foreground color: #00a9e8, background color: #ffffff, font size: 9.8pt (13px), font weight: normal). Expected contrast ratio of 4.5:1"
+          }
+        ]
+      },
+      {
+        "id": "link-in-text-block",
+        "impact": "serious",
+        "nodes": 1,
+        "help": "Links must be distinguishable without relying on color",
+        "detail": [
+          {
+            "target": "p > a[href$=\"management\"]",
+            "summary": "Fix any of the following: The link has insufficient color contrast of 2.78:1 with the surrounding text. (Minimum contrast is 3:1, link text: #00a9e8, surrounding text: #555555) The link has no styling (such as underline) to distinguish it from the surrounding text"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "slug": "trash",
+    "path": "/trash",
+    "critical": 0,
+    "serious": 1,
+    "moderate": 0,
+    "minor": 0,
+    "violations": [
+      {
+        "id": "color-contrast",
+        "impact": "serious",
+        "nodes": 6,
+        "help": "Elements must meet minimum color contrast ratio thresholds",
+        "detail": [
+          {
+            "target": ".brand-title",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.89 (foreground color: #888888, background color: #e8e8e8, font size: 7.9pt (10.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(1)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(2)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(3)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": "span[title=\"live events: open\"]",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".menu-blue > .menu-trigger[aria-haspopup=\"true\"][type=\"button\"]",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.67 (foreground color: #ffffff, background color: #00a9e8, font size: 9.8pt (13px), font weight: normal). Expected contrast ratio of 4.5:1"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "slug": "user-manual",
+    "path": "/user-manual",
+    "critical": 0,
+    "serious": 1,
+    "moderate": 0,
+    "minor": 0,
+    "violations": [
+      {
+        "id": "color-contrast",
+        "impact": "serious",
+        "nodes": 11,
+        "help": "Elements must meet minimum color contrast ratio thresholds",
+        "detail": [
+          {
+            "target": ".brand-title",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.89 (foreground color: #888888, background color: #e8e8e8, font size: 7.9pt (10.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(1)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(2)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(3)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": "span[title=\"live events: open\"]",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".menu-blue > .menu-trigger[aria-haspopup=\"true\"][type=\"button\"]",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.67 (foreground color: #ffffff, background color: #00a9e8, font size: 9.8pt (13px), font weight: normal). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".manual-document-meta",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.54 (foreground color: #888888, background color: #ffffff, font size: 7.2pt (9.6px), font weight: normal). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".manual-appended-document-meta",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.54 (foreground color: #888888, background color: #ffffff, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".manual-appended-document-meta > span:nth-child(2)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.54 (foreground color: #888888, background color: #ffffff, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".manual-appended-document-meta > span:nth-child(3)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.54 (foreground color: #888888, background color: #ffffff, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".manual-appended-document-meta > span:nth-child(4)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.54 (foreground color: #888888, background color: #ffffff, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "slug": "future-dev",
+    "path": "/future-dev",
+    "critical": 0,
+    "serious": 1,
+    "moderate": 0,
+    "minor": 0,
+    "violations": [
+      {
+        "id": "color-contrast",
+        "impact": "serious",
+        "nodes": 12,
+        "help": "Elements must meet minimum color contrast ratio thresholds",
+        "detail": [
+          {
+            "target": ".brand-title",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.89 (foreground color: #888888, background color: #e8e8e8, font size: 7.9pt (10.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(1)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(2)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".topbar-badge.ok:nth-child(3)",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": "span[title=\"live events: open\"]",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 3.94 (foreground color: #00842f, background color: #e8e8e8, font size: 7.1pt (9.5px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": ".menu-blue > .menu-trigger[aria-haspopup=\"true\"]",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.67 (foreground color: #ffffff, background color: #00a9e8, font size: 9.8pt (13px), font weight: normal). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": "a[href$=\"backtest-review\"] > strong",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.67 (foreground color: #00a9e8, background color: #ffffff, font size: 9.8pt (13px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": "a[href$=\"graphic-view\"] > strong",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.67 (foreground color: #00a9e8, background color: #ffffff, font size: 9.8pt (13px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": "a[href$=\"hypothesis-lab\"] > strong",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.67 (foreground color: #00a9e8, background color: #ffffff, font size: 9.8pt (13px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": "a[href$=\"parameter-fields\"] > strong",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.67 (foreground color: #00a9e8, background color: #ffffff, font size: 9.8pt (13px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": "a[href$=\"regime-research\"] > strong",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.67 (foreground color: #00a9e8, background color: #ffffff, font size: 9.8pt (13px), font weight: bold). Expected contrast ratio of 4.5:1"
+          },
+          {
+            "target": "tr:nth-child(7) > td:nth-child(1) > a > strong",
+            "summary": "Fix any of the following: Element has insufficient color contrast of 2.67 (foreground color: #00a9e8, background color: #ffffff, font size: 9.8pt (13px), font weight: bold). Expected contrast ratio of 4.5:1"
+          }
+        ]
+      }
+    ]
+  }
+]

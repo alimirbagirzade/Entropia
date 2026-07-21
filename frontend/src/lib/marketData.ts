@@ -192,6 +192,18 @@ export function useMarketDatasets(cursor: string | null) {
   });
 }
 
+// While the ingest pipeline is in flight server-side (finalize moved the
+// revision to UPLOADING, the durable job to ANALYZING) the page keeps polling
+// the detail so the verified/needs_review outcome lands without a manual
+// refresh (KALAN-A: the analysis result must be visible, not discoverable).
+const INGEST_POLL_MS = 2000;
+
+// Pure poll-decision helper (unit-tested): only the transient pipeline states
+// poll; every terminal/reviewable state stops the interval.
+export function ingestRefetchInterval(revisionState: string | null | undefined): number | false {
+  return revisionState === "uploading" || revisionState === "analyzing" ? INGEST_POLL_MS : false;
+}
+
 // Head detail + revision history. The response carries the root row_version —
 // the ETag/If-Match OCC token of the deferred lifecycle actions.
 export function useMarketDataset(entityId: string | null) {
@@ -199,6 +211,7 @@ export function useMarketDataset(entityId: string | null) {
     queryKey: ["market-data", "detail", entityId],
     queryFn: () => api.get<MarketDatasetDetail>(`/market-datasets/${encodeURIComponent(entityId ?? "")}`),
     enabled: entityId !== null,
+    refetchInterval: (query) => ingestRefetchInterval(query.state.data?.revision_state),
   });
 }
 

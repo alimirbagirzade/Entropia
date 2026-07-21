@@ -2567,6 +2567,36 @@ role-aware presentation envanterinin hazır şablonu.
 
 ---
 
+## V18-R2 · KALAN-A — Market Data ham kaynak dosya UPLOAD UI ✅ (video 9:24–12:37, GAP 18)
+
+Videodaki EN GÜÇLÜ şikâyet kapandı: kullanıcı artık Market Data kurulum kartında GERÇEK dosyayı
+**Browse File** ile seçerek süreci BAŞLATIYOR — tek submit create → upload → finalize → analysis
+zincirini koşuyor; analysis job'ı gerçek bytes'ı parse edip revizyonu `verified`'a taşıyor ve
+detail polling ile sonuç kendiliğinden görünüyor; Admin approve + approved-bundle resolve UI'dan.
+
+- **Empirik kopukluk tespiti (canlı stack):** backend zinciri (PR #103/#105) API'den uçtan uca
+  sağlamdı (`draft→uploading→analyzing→verified`, validation `pass`); UI'da (1) kurulum kartında
+  dosya seçici hiç yoktu ("önce create et, aşağıda Step 1'i bul" notu), (2) Upload/Finalize/
+  Request analysis 3 ayrı manuel buton, (3) analysis sürerken sayfa kendini yenilemiyordu.
+- **CreateDatasetCard (MarketData.tsx):** birincil `Raw source file *` Browse File girişi;
+  "Create dataset & upload" TEK submit → `create → upload (progress + Cancel) → finalize →
+  analysis` aşama listesi (`IngestStageList`, aria-live, Done/Running/Failed/Pending textual).
+  Hata → "Retry from failed step" KALINAN aşamadan devam eder (dataset yeniden yaratılmaz,
+  kabul edilmiş bytes yeniden gönderilmez). Sözleşmeler verbatim: create Idempotency-Key'siz;
+  upload/finalize/analysis her denemede TAZE key; ham bytes sayfadan geçmez — evidence satırı
+  server-türevi asset id + digest pinler.
+- **Detail polling (lib/marketData.ts, additive):** `ingestRefetchInterval` pure helper —
+  yalnız `uploading`/`analyzing` 2s poll, diğer her state durur; `useMarketDataset`
+  `refetchInterval` ile `verified`/`needs_review` sonucu manuel refresh'siz düşer.
+- **e2e 02 tam yolculuğa genişledi (26s yeşil, canlı stack):** Browse File → chained ingest →
+  `Analysis requested` (202) → detail poll ile `verified` → AYRI admin context approve →
+  owner'da `approved` + "Resolve approved bundle" → `Pinned — revision`. Her state TEK TEK
+  assert. POM `MarketDataPage` genişletildi (spec 03 aynı POM ile yeşil).
+- routes/market_data.py DEĞİŞMEDİ; migration yok. vitest 511/511 (marketData 29);
+  tsc/eslint/build temiz.
+
+---
+
 ## V18-R2 · R2-12 — CP typed baseline metadata + request→published tam lifecycle E2E ✅ (GAP madde 11)
 
 Create Package baseline metadata artık uçtan uca typed alanlar; e2e 04 Pre-Check'te durmuyor —
@@ -2686,7 +2716,7 @@ R2-08/09/10/11/12 + KALAN-A/KALAN-B (aşağıda, yol haritasına katlandı), P2 
 matrisi + PO onayı). `entropia_v18_remediation_status.md`'ye R2 RE-OPENING banner'ı eklendi
 (UI-01/02/03/04/05/06/12/14/15 fiilen In Progress). Video-alignment kalan işleri (KALAN-A/B) yol
 haritasında kendi prompt'larıyla korunuyor:
-> - **KALAN-A — Market Data ham kaynak dosya UPLOAD UI (video 9:24–12:37):** videonun EN GÜÇLÜ şikâyeti — "süreci başlatacak ham kaynak dosya yükleme seçeneği maalesef yok" (11:00, 12:37). Backend ingest zinciri (`routes/market_data.py` create/upload-start/finalize/analysis) PR #103'te bağlıydı ama **Raw Source File / Browse File** akışı (ham dosyayı seçip standart Entropia yapısına dönüştürme, sonra Create Dataset / Approve for Use) UI'da eksik/çalıştırılamaz. Frontend slice — backend yüzeyi hazır.
+> - **KALAN-A — Market Data ham kaynak dosya UPLOAD UI (video 9:24–12:37) ✅ TAMAM (yukarıdaki KALAN-A landed girdisi):** videonun EN GÜÇLÜ şikâyeti — "süreci başlatacak ham kaynak dosya yükleme seçeneği maalesef yok" (11:00, 12:37). Backend ingest zinciri (`routes/market_data.py` create/upload-start/finalize/analysis) PR #103'te bağlıydı ama **Raw Source File / Browse File** akışı (ham dosyayı seçip standart Entropia yapısına dönüştürme, sonra Create Dataset / Approve for Use) UI'da eksik/çalıştırılamaz. Frontend slice — backend yüzeyi hazır.
 > - **KALAN-B — Portfolio Equity Allocation "Use Allocation Backtest" + per-item pay UI (video 7:16–9:24):** strateji evreni kuruluyorsa toplam portföyün üst seviye paylaşımı gerekir (Strategy 1 / Strategy 2 / Trade 1 / Trade Log 1 payları). Portfolio sayfası PR #113'te + portfolio-level kurallar PR #320'de (Max Total Exposure + cross-item conflict) landed; ancak videodaki **"Use Allocation Backtest" toggle + Mainboard'daki her öğeye pay atama** deneyimi tam değil. Portfolio + Mainboard hizası — backend allocation yüzeyi hazır.
 > - **KALAN-C — öğe evrene katkısı / "entropiyi nasıl değiştirdiği" (video 3:35) ✅ TAMAM:** Trade Log / bir öğenin toplam strateji evrenine katkısı **PR #319 (per-item contribution breakdown — correlation, diversification, marginal deltas) + PR #320 (portfolio-level rules)** ile karşılandı. `#321` (allocation portfolio-rule alanları için openapi snapshot rejenerasyonu) AÇIK — merge bekliyor.
 >

@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 
-import { parseMappingLines } from "@/lib/marketData";
+import { ingestRefetchInterval, parseMappingLines } from "@/lib/marketData";
 import { MarketData, deriveWorkflowSteps } from "@/pages/MarketData";
 import { apiErrorRoute, stubApi } from "./helpers/apiStub";
 import { stubUpload } from "./helpers/xhrStub";
@@ -143,7 +143,34 @@ const ME_USER = {
   is_authenticated: true,
 };
 
+const FINALIZE_MD_NEW = {
+  entity_id: "md_new",
+  asset_id: "asset_new",
+  revision_id: "rev_new",
+  revision_state: "uploading",
+};
+
+const ANALYSIS_MD_NEW = {
+  job_id: "job_new",
+  entity_id: "md_new",
+  revision_id: "rev_new",
+  queue: "data",
+  status: "queued",
+};
+
+const START_UPLOAD_MD_NEW = {
+  asset_id: "asset_new",
+  entity_id: "md_new",
+  content_digest: "sha256:cafebabe4242",
+  size_bytes: 24,
+  content_type: "text/csv",
+  original_filename: "fresh.csv",
+  deduplicated: false,
+};
+
 const BASE_ROUTES = {
+  "POST /market-datasets/md_new/raw-uploads/finalize": FINALIZE_MD_NEW,
+  "POST /market-datasets/md_new/analysis": ANALYSIS_MD_NEW,
   "POST /market-datasets/md_1/raw-uploads/finalize": FINALIZE_RESULT,
   "POST /market-datasets/md_1/analysis": ANALYSIS_RESULT,
   "POST /market-datasets/md_1/schema-mapping": MAPPING_RESULT,
@@ -202,6 +229,18 @@ describe("parseMappingLines", () => {
         side: null,
       },
     );
+  });
+});
+
+describe("ingestRefetchInterval (KALAN-A detail polling)", () => {
+  it("polls only the transient pipeline states", () => {
+    expect(ingestRefetchInterval("uploading")).toBeGreaterThan(0);
+    expect(ingestRefetchInterval("analyzing")).toBeGreaterThan(0);
+    for (const state of ["draft", "needs_review", "verified", "approved", "rejected", "deprecated"]) {
+      expect(ingestRefetchInterval(state), state).toBe(false);
+    }
+    expect(ingestRefetchInterval(null)).toBe(false);
+    expect(ingestRefetchInterval(undefined)).toBe(false);
   });
 });
 
@@ -275,8 +314,20 @@ describe("Market Data page", () => {
     expect(registryTable.getByText("tick_trades")).toBeInTheDocument();
   });
 
-  it("creates a dataset without an Idempotency-Key and auto-opens its detail", async () => {
+  // KALAN-A: the Browse File input in the setup card is what STARTS the
+  // process — one submit chains create -> upload -> finalize -> analysis.
+  function pickSetupFile(name = "fresh.csv", content = "timestamp,close\n1,2\n") {
+    const file = new File([content], name, { type: "text/csv" });
+    const input = screen.getByLabelText(/Raw source file/) as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [file] } });
+    return file;
+  }
+
+  it("chains create → upload → finalize → analysis from one Browse File submit", async () => {
     const fetchMock = stubApi(BASE_ROUTES);
+    const { calls: uploadCalls } = stubUpload({
+      "POST /market-datasets/md_new/raw-uploads": START_UPLOAD_MD_NEW,
+    });
     renderPage();
     await screen.findByText("Binance 15m OHLCV");
 
@@ -284,9 +335,12 @@ describe("Market Data page", () => {
     fireEvent.click(screen.getByRole("button", { name: "+ Add Market Dataset" }));
     fireEvent.change(screen.getByLabelText(/Dataset Name/), { target: { value: "Fresh dataset" } });
     fireEvent.change(screen.getByLabelText(/Instrument Scope/), { target: { value: "ETHUSDT" } });
-    fireEvent.click(screen.getByRole("button", { name: "Create dataset" }));
+    const file = pickSetupFile();
+    fireEvent.click(screen.getByRole("button", { name: "Create dataset & upload" }));
 
     expect(await screen.findByText("Created — md_new (draft).")).toBeInTheDocument();
+    expect(await screen.findByText(/Raw source stored/)).toBeInTheDocument();
+    expect(await screen.findByText(/Analysis requested — job/)).toBeInTheDocument();
     // Auto-open: the new dataset's detail is fetched and rendered.
     expect(await screen.findByText("Revision history")).toBeInTheDocument();
 
@@ -311,10 +365,86 @@ describe("Market Data page", () => {
     });
     // The create route reads no Idempotency-Key — mirrored verbatim.
     expect((init.headers as Record<string, string>)["Idempotency-Key"]).toBeUndefined();
+
+    // The real bytes travelled once, with a fresh Idempotency-Key.
+    expect(uploadCalls).toHaveLength(1);
+    expect(uploadCalls[0]?.url).toContain("/market-datasets/md_new/raw-uploads");
+    expect(uploadCalls[0]?.file?.name).toBe(file.name);
+    expect(uploadCalls[0]?.headers["Idempotency-Key"]).toBeTruthy();
+
+    // Finalize + analysis each carried their own fresh Idempotency-Key.
+    for (const fragment of ["/md_new/raw-uploads/finalize", "/md_new/analysis"]) {
+      const chained = fetchMock.mock.calls.find(
+        ([url, i]) => String(url).includes(fragment) && i?.method === "POST",
+      );
+      expect(chained, fragment).toBeDefined();
+      const headers = (chained?.[1] as RequestInit).headers as Record<string, string>;
+      expect(headers["Idempotency-Key"]).toBeTruthy();
+    }
+  });
+
+  it("blocks the submit without a selected file — the file starts the process", async () => {
+    const fetchMock = stubApi(BASE_ROUTES);
+    renderPage();
+    await screen.findByText("Binance 15m OHLCV");
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Add Market Dataset" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create dataset & upload" }));
+
+    expect(
+      await screen.findByText(/Select the raw source file \(Browse File\) first/),
+    ).toBeInTheDocument();
+    const createCall = fetchMock.mock.calls.find(
+      ([url, init]) => String(url).endsWith("/market-datasets") && init?.method === "POST",
+    );
+    expect(createCall).toBeUndefined();
+  });
+
+  it("retries a failed upload from the failed stage without re-creating the dataset", async () => {
+    const fetchMock = stubApi(BASE_ROUTES);
+    let attempt = 0;
+    const { calls: uploadCalls } = stubUpload({
+      "POST /market-datasets/md_new/raw-uploads": () => {
+        attempt += 1;
+        if (attempt === 1) {
+          return {
+            status: 422,
+            error: {
+              code: "MARKET_DATA_FILE_TYPE_NOT_ALLOWED",
+              message: "Upload a CSV or TXT market data file.",
+            },
+          };
+        }
+        return START_UPLOAD_MD_NEW;
+      },
+    });
+    renderPage();
+    await screen.findByText("Binance 15m OHLCV");
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Add Market Dataset" }));
+    pickSetupFile();
+    fireEvent.click(screen.getByRole("button", { name: "Create dataset & upload" }));
+
+    expect(
+      await screen.findByText(
+        "MARKET_DATA_FILE_TYPE_NOT_ALLOWED: Upload a CSV or TXT market data file.",
+      ),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry from failed step" }));
+
+    expect(await screen.findByText(/Analysis requested — job/)).toBeInTheDocument();
+    // The dataset was created exactly ONCE; the retry resumed at the upload.
+    const createCalls = fetchMock.mock.calls.filter(
+      ([url, init]) => String(url).endsWith("/market-datasets") && init?.method === "POST",
+    );
+    expect(createCalls).toHaveLength(1);
+    expect(uploadCalls).toHaveLength(2);
   });
 
   it("folds the v18 §4 descriptive facets into the create payload", async () => {
     const fetchMock = stubApi(BASE_ROUTES);
+    stubUpload({ "POST /market-datasets/md_new/raw-uploads": START_UPLOAD_MD_NEW });
     renderPage();
     await screen.findByText("Binance 15m OHLCV");
 
@@ -326,7 +456,8 @@ describe("Market Data page", () => {
       target: { value: "Binance Futures" },
     });
     fireEvent.change(screen.getByLabelText(/Resolution/), { target: { value: "1h" } });
-    fireEvent.click(screen.getByRole("button", { name: "Create dataset" }));
+    pickSetupFile();
+    fireEvent.click(screen.getByRole("button", { name: "Create dataset & upload" }));
 
     expect(await screen.findByText("Created — md_new (draft).")).toBeInTheDocument();
 

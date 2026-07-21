@@ -64,7 +64,7 @@ bağımsız olanlar paralel gidebilir.
 | R2-10 | App shell backend/auth/hata durumları (apiClient timeout, Backend unavailable + Retry, UNAUTHENTICATED) | 14 | — |
 | R2-11 | Mobil app-shell overflow: hamburger menü, yatay taşma sıfır, tek kolon inline paneller | 15 | R2-01b (inline panel varlığı) |
 | R2-12 | Create Package typed baseline metadata + request→publish tam lifecycle E2E | 11 | — |
-| KALAN-A | Market Data ham kaynak dosya UPLOAD UI (Browse File → ingest zinciri) | video 9:24–12:37, GAP 18 | — (paralel; en yüksek P1) |
+| KALAN-A ✅ | Market Data ham kaynak dosya UPLOAD UI (Browse File → ingest zinciri) — TAMAM (STAGE2_HANDOFF "KALAN-A landed") | video 9:24–12:37, GAP 18 | — (paralel; en yüksek P1) |
 | KALAN-B | Portfolio "Use Allocation Backtest" toggle + Mainboard per-item pay UI | video 7:16–9:24 | — (paralel) |
 
 ### P2 — görsel kabul ve kapanış (GAP §19 madde 14-18)

@@ -1000,3 +1000,68 @@
   seed verisine karşı anlamlı; `-linux` baseline'ları CI'da ilk `screenshots:update` ile
   üretilecek; derin kıyası R2-14'e bırakılan sayfalar sapma dokümanında listeli. Slice
   hiçbir maddeyi "Complete" İLAN ETMEZ — PO onayı R2-14.
+
+## V18-R2 · R2-14 — Nihai kabul geçişi: axe-core taraması, klavye akışı, 375px taşma (GAP madde 17 + 20)
+
+R2 dalgasının **son slice'ı**. Çıktı: **`docs/implementation/v18_final_acceptance.md`** — GAP
+madde 20'deki 11 nihai kabul koşulu canlı seed'li stack'te TEK TEK doğrulandı, her koşula kanıt
+referansı (spec adı / screenshot yolu / PR) yazıldı. **10/11 PASS; 20.11 (22 sayfa screenshot
+setinin kabulü) yalnız product-owner imzasına bağlı** → GAP madde 17 gereği bu slice de
+`entropia_v18_remediation_status.md` içindeki HİÇBİR satırı Complete'e çekmedi.
+
+- **Kapatılan iki bulgu:** (1) **375px yatay taşma** (sapma 1.6/1.7) — kök neden: Mainboard
+  section grid'inin auto track'i 64 karakterlik composition hash'inin min-content genişliğine
+  büyüyordu (375px viewport'ta ölçülen 640px section). Fix: section grid + `.kv` value kolonuna
+  `minmax(0,1fr)` + `overflow-wrap`; taşan eleman **110 → 0**. (2) **Escape ile kapanma** — Add
+  menüsü ve Add Package popover'ı Escape'e kapanmıyordu; YENİ `useEscapeToClose` hook'u ikisine
+  de bağlandı, focus tetikleyiciye döner.
+- **Kayda geçen a11y sapmaları (PO kararına):** `A11Y-01` — 228 serious contrast node'unun
+  tamamı canonical v18 paletinden geliyor (`--accent #00a9e8`, `--text-dim #888888`), yani
+  değişiklik kod düzeltmesi değil **tema kararıdır**; `A11Y-02` `link-in-text-block`.
+  22 sayfanın hepsinde **critical = 0**. Tarama gate'i mevcut sınırı DONDURUR: kayıtlı iki kural
+  dışında herhangi bir serious ihlal koşuyu düşürür.
+- **Yeni opt-in katman:** `frontend/e2e/specs/13-a11y-scan.spec.ts` (22 sayfa axe-core) +
+  `14-keyboard-flow.spec.ts`, `npm run a11y` arkasında — düz `npm test`'ten hariç.
+- **Test (canlı stack):** e2e ana paket **20/20**, a11y **2/2**, responsive **6/6**, vitest
+  **514/514**, tsc + eslint temiz.
+- **Dürüst sınırlar:** 20.11 AÇIK (teknik kıyas tamam, imza yok); A11Y-01/02 kapatılmadı —
+  WCAG 2.2 AA kontrast maddesi bugün karşılanmıyor; **ekran okuyucu (NVDA/VoiceOver) denetimi
+  YAPILMADI** (`~/.claude/rules/accessibility.md` iki okuyucu ister) — açık iş; klavye denetimi
+  temel akışla sınırlı (login → Mainboard → Add menü); sapma listesinin 10 sayfası (03, 07, 09,
+  10, 12, 17, 18, 19, 21, 22) için derin madde-madde kıyas yapılmadı; doğrulamalar host-native
+  local stack'te, bu oturumda CI'da koşmadı.
+- **PO karar tablosu:** D-1…D-9 (`v18_final_acceptance.md` §4) — görsel sapmaların toptan kabulü,
+  F-2…F-6 mini slice kararları, A11Y-01 için (a)/(b)/(c) seçenekleri, 20.11 onayı.
+
+## V18-R2 dalgası — toplu kayıt (#325–#343 merged + R2-14)
+
+GAP belgesi (`docs/spec/Entropia_V18_Guncel_Arayuz_Eksikleri_ve_Yanlis_Anlamalar.md`) → yol
+haritası `docs/V18_R2_ROADMAP.md` (16 slice + 2 kapanış, her biri paste-ready prompt'lu) → ayrı
+oturumlarda kodlandı. Yukarıda kendi tam kaydı olmayan slice'ların özeti (ayrıntı: her birinin
+`docs/STAGE2_HANDOFF.md` landed girdisi):
+
+| Slice | PR | Ne getirdi |
+|---|---|---|
+| R2-01a | #325 | TS/TL editörleri `components/{TradingSignal,TradeLog}Editor.tsx`'e çıkarıldı (saf refactor; `mode: page\|inline` forward-contract) |
+| R2-01b | #326 | Editörler Mainboard satırlarına inline mount edildi — route launcher bitti; URL `/` kalır |
+| R2-02 | #327 | Üst menü Add eylemleri Mainboard add-intent dispatcher'ına bağlandı (tek Add modeli) |
+| R2-03 | #328 | Add Package seçim popover'ı + usable package revision'ından derived Strategy Draft |
+| R2-04 | #329 | TS/TL typed config formları — ham JSON payload editörleri kalktı |
+| R2-05a | #330 | Strategy typed formlar: override'lar, reference chain'ler, filtreler, Kelly sizing |
+| R2-05b | #331 | Advanced raw payload admin-gate'li; Mainboard composition kontrolleri kapalı disclosure'a |
+| R2-06 | #332 | Research Data server-truth Approved Market Data dependency picker (sahte kilit bitti) |
+| R2-07 | #334, #335 | Katı golden-path E2E (Ready PASS → RUN SUCCEEDED → inline Result) + `SEED_E2E_GOLDEN` fixture + tek seferlik rationale-family set |
+| R2-08 | #336, #338 | Teknik-ID sweep — picker + read-only provenance; TS/TL import instrument değeri sembol metni kalır |
+| R2-09 | #337 | Admin-only eylemler `/me` projection'ı arkasında fail-closed |
+| R2-10 | #333 | App-shell backend health + request timeout + gerçek UNAUTHENTICATED durumu |
+| R2-11 | #339 | Mobil app shell — hamburger menü, body seviyesinde sıfır yatay taşma |
+| R2-12 | #340 | CP typed baseline metadata + request→published tam lifecycle E2E |
+| KALAN-A | #341 | Market Data Browse File tam ingest zincirini başlatır (video 9:24–12:37) |
+| KALAN-B | #342 | Mainboard "Use Allocation Backtest" modu + per-item pay rozetleri (video 7:16–9:24) |
+| R2-13 | #343 | 22 sayfa screenshot matrisi + V18 side-by-side sapma listesi + visual regression |
+| R2-14 | (bu branch) | Nihai kabul geçişi — yukarıdaki tam kayıt |
+
+**Dalga boyunca sabit kalanlar:** alembic head `0035_portfolio_rules` (migration YOK),
+`ENGINE_VERSION` sabit, tüm OCC token biçimleri / Idempotency-Key davranışı / react-query key'leri
+/ SSE taksonomisi verbatim. Değişen tek guardrail: `nav.ts` menü DAVRANIŞI (R2-02/R2-03, GAP
+belgesiyle kullanıcı onaylı); route path'leri ve deep-link'ler yaşamaya devam ediyor.

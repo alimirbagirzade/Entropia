@@ -93,35 +93,33 @@ Before stopping a working session, produce **ALL** of the following:
 > Aşağıdaki değerler **2026-07-20** tarihinde repodan empirik doğrulandı. Yine de
 > **STALE-BY-DEFAULT** kabul et: §Session START adım 1'i çalıştırmadan bunlara güvenme.
 
-- **Durum:** V1 ROADMAP COMPLETE (Stages 0–8, docs 01–22) + post-V1 + **video-alignment
-  dalgası**. Tüm route yüzeyleri frontend'e bağlı; TIER 2 sayfa haritası 24/24.
-- **`main` HEAD:** `8e9a1f4` (PR **#323** merge). Açık PR **yok**.
-- **alembic head:** **`0035_portfolio_rules`** (35 migration, tek head — `0023` DEĞİL)
-- **Testler:** ⚠️ **doğrulanmadı** — sayı yazmıyorum çünkü elimdeki rakamlar bayattı.
-  CI server-truth için: `gh run list --branch main --limit 1` → job log'undan oku.
-- **Son dalga (#313–#323):** #313 request-tx commit sırası · #314/#318 Mainboard Add
-  Strategy + legacy item hijyeni · #315 Docker'sız local stack docs · #316 approved
-  indicator uçtan uca kullanılabilir · #317 Result headline render crash · **#319
-  per-item contribution breakdown** (correlation / diversification / marginal deltas) ·
-  **#320 portfolio-level rules** (Max Total Exposure + cross-item conflict policy) ·
-  #321 openapi snapshot · #322 README · #323 handoff docs
+- **Durum:** V1 ROADMAP COMPLETE (Stages 0–8, docs 01–22) + post-V1 + video-alignment +
+  **V18-R2 dalgası** (GAP belgesi remediation'ı). Tüm route yüzeyleri frontend'e bağlı;
+  TIER 2 sayfa haritası 24/24. Mainboard artık gerçek tek çalışma alanı (Strategy/TS/TL
+  inline editör, Add Package popover, typed formlar — ham JSON ve elle ID girişi yok).
+- **`main` HEAD:** `e8108ed` (PR **#343** merge). **R2-14 branch'te, PR bekliyor.**
+- **alembic head:** **`0035_portfolio_rules`** (35 migration, tek head — R2 dalgasında
+  migration YOK, `ENGINE_VERSION` sabit)
+- **Testler (R2-14 oturumu, canlı local stack):** vitest **514/514** · e2e **20/20** ·
+  a11y **2/2** · responsive **6/6** · tsc + eslint temiz. Backend sayısı ⚠️ doğrulanmadı —
+  CI server-truth: `gh run list --branch main --limit 1` → job log'u.
+- **Son dalga (V18-R2, #325–#343 + R2-14):** R2-01a/01b inline editör ayrımı+mount ·
+  R2-02 add-intent dispatcher · R2-03 Add Package popover · R2-04/05a typed formlar ·
+  R2-05b admin-gate + composition disclosure · R2-06 server-truth dependency picker ·
+  R2-07 katı golden-path E2E + `SEED_E2E_GOLDEN` · R2-08 teknik-ID sweep · R2-09 `/me`
+  fail-closed admin gate · R2-10 app-shell health/timeout · R2-11 mobil taşma sıfır ·
+  R2-12 CP typed metadata + tam lifecycle E2E · KALAN-A/B video kapanışları · R2-13
+  screenshot matrisi · **R2-14 nihai kabul (10/11 PASS, 20.11 PO imzası bekliyor)**
 
-- **Next — video-alignment kalan iş** (kaynak: `docs/spec/Video Anlatımı /entropia_transkript.md`;
-  ayrıntı `docs/STAGE2_HANDOFF.md:2262` + `docs/POST_V1_KICKOFF.md:42`):
-  - **KALAN-A ✅ TAMAM** — Market Data Browse File upload UI (video 9:24–12:37): tek submit
-    create→upload→finalize→analysis zinciri + detail poll → verified → Admin approve →
-    bundle; e2e 02 tam yolculuk canlı stack'te yeşil. Kayıt: `docs/PROJECT_HISTORY.md`
-    "KALAN-A" + `docs/STAGE2_HANDOFF.md` landed girdisi. vitest 511/511.
-  - **KALAN-B ✅ TAMAM** — Portfolio "Use Allocation Backtest" + Mainboard per-item pay
-    görünürlüğü (video 7:16–9:24): toggle backend'de `draft.enabled` olarak zaten vardı
-    (Portfolio checkbox'ı, PR #113); Mainboard'a server-truth mode şeridi + per-satır
-    `Share %` rozetleri + Portfolio deep-link eklendi. Kayıt: `docs/STAGE2_HANDOFF.md`
-    "KALAN-B" landed girdisi. vitest 514/514.
-  - **KALAN-C ✅ TAMAM** — öğenin evrene katkısı (video 3:35) → PR #319 + #320.
-  - **R2-13 ✅ TAMAM** — 22 sayfa screenshot matrisi (122 PNG baseline + 20 prototip referansı)
-    + sapma listesi `docs/implementation/v18_visual_deviations.md` (6 FIX adayı) + 8 kritik
-    sayfa `toHaveScreenshot` regression (`frontend/e2e` `npm run screenshots|visual`).
-    Sıradaki: **R2-14** (responsive+a11y son geçiş + PO onayı).
+- **Next — PO imzası + R2 kapanışı.** Kod tarafında planlanan R2 işi BİTTİ; kalan tek blokaj
+  **product-owner imzası**: `docs/implementation/v18_final_acceptance.md` §4 (D-1…D-9 kararları —
+  görsel sapmalar, F-2…F-6 mini slice'ları, A11Y-01 palet kararı, 20.11 onayı). **İmza olmadan
+  `entropia_v18_remediation_status.md`'deki R2 RE-OPENING banner'ı kalkmaz, hiçbir satır Complete
+  olmaz** (GAP madde 17). İmza sonrası: banner kaldır → UI-01/02/03/04/05/06/12/14/15 evidence'lı
+  Complete → PO'nun istediği mini slice'lar açılır. Ayrıntı: `docs/STAGE2_HANDOFF.md` §Next.
+- **Açık iş (R2 kapsamı dışı, dürüst sınır):** ekran okuyucu (NVDA/VoiceOver) denetimi yapılmadı;
+  10 sayfanın derin görsel kıyası eksik; a11y/visual katmanları CI'da koşmadı; A11Y-01 kontrast
+  (228 serious node, tamamı canonical v18 paletinden) ve A11Y-02 kayıtlı sapma olarak açık.
 - **KAPSAM DIŞI (bilerek):** retention auto-purge (doc 20 §16 — "Production V1'de kapalı"),
   LLM generation (Future-Dev), Graphic View renderer (doc 22 — V18 statik placeholder kalır).
 

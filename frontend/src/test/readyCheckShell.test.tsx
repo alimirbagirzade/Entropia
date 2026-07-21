@@ -78,6 +78,21 @@ const RUN_CHECK_RESULT = {
 function stubRoutes(overrides: Record<string, unknown> = {}) {
   return stubApi({
     "GET /mainboard-compositions/ws_1/readiness": READINESS,
+    // KALAN-B: the Mainboard now reads the allocation draft projection too.
+    "GET /mainboard-compositions/ws_1/portfolio-allocation-draft": {
+      composition_id: "ws_1",
+      plan_id: null,
+      current_revision_id: null,
+      row_version: 0,
+      draft: {
+        enabled: false,
+        initial_capital: null,
+        compounding_mode: null,
+        reserve_cash_percent: null,
+        entries: [],
+      },
+      candidate_items: [],
+    },
     "POST /mainboard-compositions/ws_1/readiness-checks": RUN_CHECK_RESULT,
     "GET /mainboards/default": MAINBOARD,
     ...overrides,

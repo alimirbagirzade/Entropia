@@ -112,10 +112,11 @@ Before stopping a working session, produce **ALL** of the following:
     create→upload→finalize→analysis zinciri + detail poll → verified → Admin approve →
     bundle; e2e 02 tam yolculuk canlı stack'te yeşil. Kayıt: `docs/PROJECT_HISTORY.md`
     "KALAN-A" + `docs/STAGE2_HANDOFF.md` landed girdisi. vitest 511/511.
-  - **KALAN-B — Portfolio "Use Allocation Backtest" + per-item pay UI** (video 7:16–9:24).
-    Portfolio sayfası #113'te, portfolio-level kurallar #320'de landed; eksik olan toggle +
-    Mainboard'daki her öğeye pay atama deneyimi. **Portfolio ↔ Mainboard hizası**,
-    backend allocation yüzeyi hazır.
+  - **KALAN-B ✅ TAMAM** — Portfolio "Use Allocation Backtest" + Mainboard per-item pay
+    görünürlüğü (video 7:16–9:24): toggle backend'de `draft.enabled` olarak zaten vardı
+    (Portfolio checkbox'ı, PR #113); Mainboard'a server-truth mode şeridi + per-satır
+    `Share %` rozetleri + Portfolio deep-link eklendi. Kayıt: `docs/STAGE2_HANDOFF.md`
+    "KALAN-B" landed girdisi. vitest 514/514.
   - **KALAN-C ✅ TAMAM** — öğenin evrene katkısı (video 3:35) → PR #319 + #320.
 - **KAPSAM DIŞI (bilerek):** retention auto-purge (doc 20 §16 — "Production V1'de kapalı"),
   LLM generation (Future-Dev), Graphic View renderer (doc 22 — V18 statik placeholder kalır).

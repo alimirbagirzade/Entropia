@@ -2567,6 +2567,35 @@ role-aware presentation envanterinin hazır şablonu.
 
 ---
 
+## V18-R2 · KALAN-B — Portfolio "Use Allocation Backtest" + Mainboard per-item pay görünürlüğü ✅ (video 7:16–9:24)
+
+Videodaki Portfolio deneyimi kapandı: **toggle backend'de birebir vardı** — `AllocationDraft.enabled`
+(routes/allocation.py PutDraftBody `enabled: bool = False`; OCC `expected_row_version` PUT'u) ve
+Portfolio sayfası onu zaten "USE EQUITY ALLOCATION FOR THIS BACKTEST" checkbox'ı olarak
+bağlıyordu (PR #113). Eksik olan Mainboard görünürlüğüydü; bu slice onu SERVER-TRUTH okumayla ekledi:
+
+- **Mainboard "Use Allocation Backtest" şeridi (Mainboard.tsx):** STRATEGIES başlığı altında
+  `useAllocationDraft(workspace_id)` pure-read projeksiyonundan `draft.enabled` rozeti
+  (ON ok-tone / OFF neutral) + açıklama + `/portfolio` deep-link. Toggle'ın YAZMA yolu
+  Portfolio'da kalır (OCC PUT orada) — şerit ikinci bir write-path değil; draft yüklenmeden
+  hiçbir allocation durumu render edilmez (sahte state yok).
+- **Per-item pay rozetleri:** allocation ON iken her satır başlığında
+  `Share {equity_share_percent}%` (VERBATIM, client capital math yok — PR #113 kuralı) /
+  `Share not set` / `Excluded from allocation` / `No allocation share`; expanded satırda
+  "Edit share in Portfolio / Equity Allocation →" deep-link. Eşleşme
+  `composition_item_id = mainboard_working_item.item_id` (models/allocation.py) üzerinden.
+- **Invalidation zinciri değişmedi ve canlı kanıtlandı:** Portfolio Save draft →
+  `["allocation"]+["readiness"]+["mainboard"]+["audit"]` (verbatim) → Mainboard şeridi
+  ON↔OFF iki yönde tarayıcıda yansıdı (canlı stack, console temiz).
+- **Dürüst sınırlar:** (1) sleeve TUTARLARI yalnız server'ın derived preview'ında
+  (PUT/validate dönüşleri) var — Mainboard yüzde payı gösterir, tutarlar Portfolio'da;
+  (2) canlı dev DB'de attached item olmadığından per-item rozet tarayıcıda boş kompozisyonla
+  değil vitest'te kanıtlandı (Share 40% / No allocation share / deep-link, 3 yeni test);
+  (3) pay atama/düzenleme Portfolio editöründe kalır (deep-link modeli, prompt'taki seçenek A).
+- Backend DEĞİŞMEDİ; migration yok. vitest 514/514 (+3); tsc/eslint/build temiz.
+
+---
+
 ## V18-R2 · KALAN-A — Market Data ham kaynak dosya UPLOAD UI ✅ (video 9:24–12:37, GAP 18)
 
 Videodaki EN GÜÇLÜ şikâyet kapandı: kullanıcı artık Market Data kurulum kartında GERÇEK dosyayı
@@ -2717,7 +2746,7 @@ matrisi + PO onayı). `entropia_v18_remediation_status.md`'ye R2 RE-OPENING bann
 (UI-01/02/03/04/05/06/12/14/15 fiilen In Progress). Video-alignment kalan işleri (KALAN-A/B) yol
 haritasında kendi prompt'larıyla korunuyor:
 > - **KALAN-A — Market Data ham kaynak dosya UPLOAD UI (video 9:24–12:37) ✅ TAMAM (yukarıdaki KALAN-A landed girdisi):** videonun EN GÜÇLÜ şikâyeti — "süreci başlatacak ham kaynak dosya yükleme seçeneği maalesef yok" (11:00, 12:37). Backend ingest zinciri (`routes/market_data.py` create/upload-start/finalize/analysis) PR #103'te bağlıydı ama **Raw Source File / Browse File** akışı (ham dosyayı seçip standart Entropia yapısına dönüştürme, sonra Create Dataset / Approve for Use) UI'da eksik/çalıştırılamaz. Frontend slice — backend yüzeyi hazır.
-> - **KALAN-B — Portfolio Equity Allocation "Use Allocation Backtest" + per-item pay UI (video 7:16–9:24):** strateji evreni kuruluyorsa toplam portföyün üst seviye paylaşımı gerekir (Strategy 1 / Strategy 2 / Trade 1 / Trade Log 1 payları). Portfolio sayfası PR #113'te + portfolio-level kurallar PR #320'de (Max Total Exposure + cross-item conflict) landed; ancak videodaki **"Use Allocation Backtest" toggle + Mainboard'daki her öğeye pay atama** deneyimi tam değil. Portfolio + Mainboard hizası — backend allocation yüzeyi hazır.
+> - **KALAN-B — Portfolio Equity Allocation "Use Allocation Backtest" + per-item pay UI (video 7:16–9:24) ✅ TAMAM (yukarıdaki KALAN-B landed girdisi):** strateji evreni kuruluyorsa toplam portföyün üst seviye paylaşımı gerekir (Strategy 1 / Strategy 2 / Trade 1 / Trade Log 1 payları). Portfolio sayfası PR #113'te + portfolio-level kurallar PR #320'de (Max Total Exposure + cross-item conflict) landed; ancak videodaki **"Use Allocation Backtest" toggle + Mainboard'daki her öğeye pay atama** deneyimi tam değil. Portfolio + Mainboard hizası — backend allocation yüzeyi hazır.
 > - **KALAN-C — öğe evrene katkısı / "entropiyi nasıl değiştirdiği" (video 3:35) ✅ TAMAM:** Trade Log / bir öğenin toplam strateji evrenine katkısı **PR #319 (per-item contribution breakdown — correlation, diversification, marginal deltas) + PR #320 (portfolio-level rules)** ile karşılandı. `#321` (allocation portfolio-rule alanları için openapi snapshot rejenerasyonu) AÇIK — merge bekliyor.
 >
 > **KAPSAM DIŞI (değişmedi):** retention auto-purge (doc 20 §16), LLM generation (Future-Dev), Graphic View renderer (doc 22). alembic head `0023_audit_log_trgm_indexes` SABİT, `ENGINE_VERSION` SABİT. Başlamadan ilgili doc + route/command imzaları + queries/commands dönüş dict'lerini oku → wire tipleri VERBATIM ayna.

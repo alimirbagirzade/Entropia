@@ -118,6 +118,10 @@ Before stopping a working session, produce **ALL** of the following:
     `Share %` rozetleri + Portfolio deep-link eklendi. Kayıt: `docs/STAGE2_HANDOFF.md`
     "KALAN-B" landed girdisi. vitest 514/514.
   - **KALAN-C ✅ TAMAM** — öğenin evrene katkısı (video 3:35) → PR #319 + #320.
+  - **R2-13 ✅ TAMAM** — 22 sayfa screenshot matrisi (122 PNG baseline + 20 prototip referansı)
+    + sapma listesi `docs/implementation/v18_visual_deviations.md` (6 FIX adayı) + 8 kritik
+    sayfa `toHaveScreenshot` regression (`frontend/e2e` `npm run screenshots|visual`).
+    Sıradaki: **R2-14** (responsive+a11y son geçiş + PO onayı).
 - **KAPSAM DIŞI (bilerek):** retention auto-purge (doc 20 §16 — "Production V1'de kapalı"),
   LLM generation (Future-Dev), Graphic View renderer (doc 22 — V18 statik placeholder kalır).
 

@@ -94,3 +94,41 @@ Open the HTML report after a run with `npm run report`.
 - Journeys go green incrementally as the underlying UI slice's markup
   stabilizes; if a selector drifts (button text, label wording) the fix is a
   one-line Page Object update in `pages/`, not a suite rewrite.
+
+## R2-13 — Screenshot matrix + visual regression
+
+Three opt-in Playwright layers (all excluded from plain `npm test`):
+
+| Layer | Spec | Command | Output |
+|---|---|---|---|
+| Baseline matrix (22 pages × state × width) | `specs/10-screenshot-matrix.spec.ts` | `npm run screenshots` | `screenshots/baseline/<page>/<state>--<width>.png` |
+| V18 prototype references | `specs/12-prototype-capture.spec.ts` | `npm run screenshots:prototype` | `screenshots/prototype/<page>--1440.png` |
+| Regression (critical pages, asserted) | `specs/11-visual-regression.spec.ts` | `npm run visual` (refresh: `npm run screenshots:update`) | `specs/11-visual-regression.spec.ts-snapshots/` |
+
+Prerequisites: the live seeded stack (same as the rest of the suite) **plus**
+the dev-only mockup copy for the prototype layer:
+
+```sh
+cp docs/spec/index_guncellenmis_duzeltilmis_v18.html frontend/public/mockup_v18.html
+cd frontend/e2e && E2E_BASE_URL=http://localhost:5173 npm run screenshots
+```
+
+States: `normal` (admin + seeded data; 1280/1440/1920, +375/768 for Mainboard
+and the three inline-editor row types), `empty` (fresh plain user @1440),
+`loading` (API stalled via route interception @1440), `error` (forced 500
+envelope @1440), `permission-denied` (plain user on adminOnly pages @1440).
+
+Flake controls for `npm run visual` (documented per R2-13 acceptance):
+animations disabled + caret hidden via injected CSS, volatile regions masked
+(`time`, `[data-e2e-volatile]`), `maxDiffPixelRatio: 0.02`, fixed 1440×900
+viewport, fullPage. Baselines are platform-suffixed by Playwright
+(`-darwin`/`-linux`): the committed set is from the authoring platform; a new
+platform (e.g. Linux CI) generates its own set once with
+`npm run screenshots:update` and commits it.
+
+Honest boundaries: `loading` freezes the genuine in-flight UI by stalling the
+API (deterministic, not a race); `empty` is a fresh user against the shared
+seeded DB, so globally-scoped registries may legitimately show seeded rows;
+regression baselines are only meaningful against the same seeded dataset they
+were captured from. The side-by-side deviation review lives in
+`docs/implementation/v18_visual_deviations.md`.

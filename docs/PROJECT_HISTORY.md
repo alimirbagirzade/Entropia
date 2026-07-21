@@ -978,3 +978,25 @@
 - **Honest boundary:** schema-mapping composer'ı `needs_review` durumu için manuel kaldı
   (temiz CSV auto-map ile verified'a gider); registry tablosu analysis bitişinde otomatik
   yenilenmez (yalnız detail poll'lar) — kullanıcı akışı detail üzerinden ilerler.
+
+## V18-R2 · R2-13 — Screenshot matrisi + V18 side-by-side + screenshot regression
+
+- **Ne landed:** (1) `frontend/e2e/specs/10-screenshot-matrix.spec.ts` — 22 sayfa (+panel-logs)
+  × 5 durum × 1280/1440/1920 (+375/768 Mainboard & inline editörler) = 122 PNG baseline
+  (`frontend/e2e/screenshots/baseline/<sayfa>/<durum>--<genişlik>.png`, ~20 MB, canlı
+  host-native seeded stack `entropia_e2e07`); (2) `12-prototype-capture.spec.ts` — V18
+  mockup'ın kendi `show*` fonksiyonlarıyla 20 referans ekran (`screenshots/prototype/`);
+  (3) `11-visual-regression.spec.ts` — 8 kritik sayfa `toHaveScreenshot` regression
+  (maxDiffPixelRatio 0.02, animasyon kapalı, `time`/`[data-e2e-volatile]` mask, baseline
+  commit'li `-darwin`); (4) `docs/implementation/v18_visual_deviations.md` — madde madde
+  sapma listesi: 6 FIX adayı (mobil taşma/katman F-1, display-label F-2, CP yerleşim F-3,
+  allocation ULID F-4, history headline F-5, TS/TL yoğunluk F-6) + PO-APPROVE kümesi.
+- **Durum üretimi dürüst:** loading = API stall (gerçek in-flight UI), error = zorlanmış 500
+  zarfı ("Backend unavailable" banner), permission-denied = server-truth 403 render'ı; empty =
+  taze kullanıcı (paylaşımlı DB sınırı README'de).
+- **Test:** matris 5/5, regression üretim + tekrar koşum 8/8 (flake yok); varsayılan
+  `npm test` yeni katmanları `--grep-invert "@screenshots|@visual|@prototype"` ile dışlar.
+- **Honest boundary:** uygulama koduna sıfır dokunuş; regression baseline'ları yalnız aynı
+  seed verisine karşı anlamlı; `-linux` baseline'ları CI'da ilk `screenshots:update` ile
+  üretilecek; derin kıyası R2-14'e bırakılan sayfalar sapma dokümanında listeli. Slice
+  hiçbir maddeyi "Complete" İLAN ETMEZ — PO onayı R2-14.

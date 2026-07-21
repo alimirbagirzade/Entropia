@@ -112,7 +112,25 @@ A requirement is **Complete** only with working end-to-end behavior + passing ac
 >   banner + `NETWORK_UNAVAILABLE` ErrorState + Retry ekran görüntüsüyle; backend açık (:8000)
 >   banner yok, `● api` ok. vitest: apiClient timeout/ağ/iptal 3 test + appShellHealth 5 test
 >   (banner, Retry recovery, üç gösterge, 401 Login, 409 verbatim) → 490/490 yeşil,
->   tsc/eslint/build temiz. Kalan: 513px mobil overflow → R2-11; 22 sayfa screenshot seti → R2-13
+>   tsc/eslint/build temiz. Kalan: ~~513px mobil overflow → R2-11~~ (aşağıda kapandı); 22 sayfa
+>   screenshot seti → R2-13
+> - **Ortak shell — mobil overflow (GAP madde 15)**: ~~375px'te shell ~513px minimum genişlik
+>   dayatıyor (UI-22 "pre-existing 513px app-shell baseline")~~ → **R2-11 (this PR) kapattı**:
+>   suçlu EMPİRİK tespit edildi — `.menu-bar` min-content 513px (375px viewport'ta layout 512px'e
+>   genişliyordu; başka hiçbir eleman taşmıyordu). Fix: ≤760px'te üst menü hamburger disclosure
+>   (`.menu-hamburger` `aria-expanded`/`aria-controls`; `.menu-bar-menus` masaüstünde saydam flex
+>   passthrough) — mobilde dropdown/submenu'ler hover'sız, her zaman açık in-flow ağaç olarak akar
+>   (touch'ta erişilemeyen hover menüsü kalmaz); navigasyon drawer'ı otomatik kapatır. Ek mobil
+>   kurallar: workspace padding 16/12 + alt 150px (fixed RUN dock içerik altında kalmaz; dock 10px
+>   köşeye iner ama viewport'u örtmez), `.cp-form` tek kolon; inline Strategy/TS/TL panelleri
+>   zaten ≤980'de `.details-grid` tek kolon. Masaüstü (>760px) CSS'i DEĞİŞMEDİ — 1280'de hamburger
+>   `display:none`, menüler yatay, bar 34px (tarayıcıda doğrulandı). Evidence: YENİ
+>   `e2e/specs/09-responsive-overflow.spec.ts` — 5 genişlik (375/768/1280/1440/1920) ×
+>   4 ekran (Mainboard, TS inline draft, Market Data, Panel/Management)
+>   `document.scrollWidth <= viewport` assert'i + `test-results/responsive/*.png` screenshot seti +
+>   375px hamburger kullanılabilirlik testi (aç → Market Data'ya git → drawer kapanır) → 6/6 yeşil
+>   (dev server :5173 + gerçek API :8000). vitest 492/492; tsc/eslint/build temiz. Dürüst sınır:
+>   ekran görüntüsü seti bu slice'ta 4 çekirdek ekran; 22 sayfa tam görsel kabul R2-13'ün işi.
 >
 > Slice planı + paste-ready prompt'lar: `docs/V18_R2_ROADMAP.md`. Bir satır ancak GERÇEK tarayıcı
 > + gerçek backend kabulü (ve R2-13/R2-14 görsel kabul zinciri) sonrası yeniden Complete yazılır.

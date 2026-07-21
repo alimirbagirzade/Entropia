@@ -122,6 +122,15 @@ a:hover { text-decoration: underline; }
   align-items: stretch;
   padding-left: 18px;
 }
+/* R2-11: wrapper around the menu groups. On desktop it is a transparent flex
+   passthrough (identical rendering to the pre-wrapper markup); on mobile it is
+   the hamburger disclosure body. */
+.menu-bar-menus {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+}
+.menu-hamburger { display: none; }
 .menu {
   position: relative;
   display: flex;
@@ -2348,3 +2357,81 @@ a:hover { text-decoration: underline; }
   font-family: inherit;
 }
 .instrument-page select { max-width: 260px; }
+
+/* ------------------------------------------------------------------ */
+/* R2-11 (GAP madde 15): mobile app shell. Below 760px the horizontal  */
+/* menu bar becomes a hamburger disclosure, dropdowns render in-flow,  */
+/* the workspace padding tightens and the fixed RUN dock hugs the      */
+/* corner without imposing width. Desktop (>760px) is untouched — the  */
+/* v18 mockup remains the 1280+ reference.                             */
+/* ------------------------------------------------------------------ */
+@media (max-width: 760px) {
+  .menu-bar {
+    height: auto;
+    min-height: var(--menubar-h);
+    flex-wrap: wrap;
+    padding-left: 10px;
+  }
+  .menu-hamburger {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: var(--menubar-h);
+    padding: 0 10px;
+    background: none;
+    border: 0;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    color: #222;
+    cursor: pointer;
+  }
+  .menu-bar-menus {
+    display: none;
+    flex-basis: 100%;
+    flex-direction: column;
+    align-items: stretch;
+    border-top: 1px solid #d0d0d0;
+    padding-bottom: 4px;
+  }
+  .menu-bar.nav-open .menu-bar-menus { display: flex; }
+  .menu {
+    min-height: var(--menubar-h);
+    padding: 0;
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .menu > .menu-title,
+  .menu-trigger,
+  .menu-link {
+    padding: 8px 12px;
+    justify-content: flex-start;
+    text-align: left;
+    width: 100%;
+  }
+  .menu-blue { margin-left: 0; }
+  /* Dropdowns and nested submenus render as an always-expanded in-flow tree:
+     no hover dependency (touch), nothing overlays or widens the viewport. */
+  .dropdown,
+  .submenu {
+    display: block;
+    position: static;
+    min-width: 0;
+    border-left: 0;
+    border-right: 0;
+  }
+  .item.has-sub::after { content: none; }
+  .submenu .item,
+  .dropdown .has-sub-wrap .submenu .item { padding-left: 26px; }
+  .item { white-space: normal; }
+  .workspace { padding: 16px 12px 150px; }
+  /* Fixed Ready Check / RUN dock: keep it a compact corner affordance that
+     content can scroll out from under (workspace bottom padding above). */
+  .run-controls { right: 10px; bottom: 10px; }
+  /* Inline Strategy/TS/TL editor grids are already single-column below 980px
+     (.details-grid rules); this guard keeps any remaining two-up form rows
+     honest on true phone widths. */
+  .cp-form { grid-template-columns: 1fr; }
+  .top-title { padding: 0 8px; }
+  .topbar-status { right: 8px; gap: 6px; }
+}

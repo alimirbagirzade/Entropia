@@ -283,6 +283,10 @@ export function Layout() {
   const queryClient = useQueryClient();
   const [sse, setSse] = useState<SseStatus>("connecting");
   const [aboutOpen, setAboutOpen] = useState(false);
+  // R2-11 (GAP madde 15): on narrow viewports the horizontal menu bar becomes a
+  // hamburger disclosure so the shell stops imposing a ~513px minimum width.
+  // Desktop (>760px) never renders the toggle and ignores this state entirely.
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const meta = useMeta();
   const me = useMe();
   const health = useApiHealth();
@@ -331,10 +335,31 @@ export function Layout() {
         </div>
       </header>
 
-      <nav className="menu-bar" aria-label="Primary">
-        {menus.map((group) => (
-          <Menu key={group.label} group={group} isAdmin={isAdmin} onAbout={() => setAboutOpen(true)} />
-        ))}
+      <nav className={`menu-bar${mobileNavOpen ? " nav-open" : ""}`} aria-label="Primary">
+        <button
+          type="button"
+          className="menu-hamburger"
+          aria-expanded={mobileNavOpen}
+          aria-controls="primary-menu-groups"
+          onClick={() => setMobileNavOpen((v) => !v)}
+        >
+          <span aria-hidden="true">☰</span> Menu
+        </button>
+        <div
+          id="primary-menu-groups"
+          className="menu-bar-menus"
+          // Delegated close: any navigation / action inside the disclosure
+          // collapses it, so the drawer never lingers over the next page.
+          onClick={(e) => {
+            if (mobileNavOpen && (e.target as HTMLElement).closest("a.item, button.item, a.menu-link, a.menu-title")) {
+              setMobileNavOpen(false);
+            }
+          }}
+        >
+          {menus.map((group) => (
+            <Menu key={group.label} group={group} isAdmin={isAdmin} onAbout={() => setAboutOpen(true)} />
+          ))}
+        </div>
       </nav>
 
       {health.isError ? (

@@ -76,13 +76,79 @@ case "$metrics" in
   *) fail "/metrics missing entropia_http_requests_total" ;;
 esac
 
-say "== Identity (dev-mode actor header) =="
-me=$(fetch -H "X-Actor-Id: $ACTOR" "$BASE_URL/me")
-case "$me" in
-  *'"principal_id":"'"$ACTOR"'"'*) pass "/me as $ACTOR -> $me" ;;
-  *'"principal_type":"anonymous"'*) warn "/me -> anonymous. Seed first: ./scripts/smoke.sh --seed (or AUTH_MODE=session is active — log in via the web app instead)" ;;
-  *) warn "/me -> ${me:-no response}" ;;
+# The identity contract depends entirely on the mode the API reports through
+# /meta.auth_mode — dev trusts the X-Actor-Id header, session requires a real
+# login and ignores that header outright. We branch on the live value so the
+# assertions match what the server actually enforces (DEP-06).
+say "== Identity (auth-mode aware) =="
+auth_mode=""
+case "$meta" in
+  *'"auth_mode":"session"'*) auth_mode="session" ;;
+  *'"auth_mode":"dev"'*)     auth_mode="dev" ;;
 esac
+
+if [ -z "$auth_mode" ]; then
+  fail "/meta did not report auth_mode — cannot verify the identity contract"
+elif [ "$auth_mode" = "dev" ]; then
+  # Dev profile: identity comes from the X-Actor-Id header; a seeded actor MUST
+  # resolve. Anonymous is now a hard FAILURE, not a warning.
+  me=$(fetch -H "X-Actor-Id: $ACTOR" "$BASE_URL/me")
+  case "$me" in
+    *'"principal_id":"'"$ACTOR"'"'*) pass "dev: /me as $ACTOR -> $me" ;;
+    *'"principal_type":"anonymous"'*) fail "dev: /me is anonymous for X-Actor-Id: $ACTOR — seed identities: ./scripts/smoke.sh --seed" ;;
+    *) fail "dev: /me -> ${me:-no response}" ;;
+  esac
+else
+  # Session profile: login-based. No X-Actor-Id in the normal path; the header
+  # must be ignored; and the login endpoint must be live and reject bad creds.
+  # 1) No credential -> anonymous is the correct, enforced state.
+  me_anon=$(fetch "$BASE_URL/me")
+  case "$me_anon" in
+    *'"principal_type":"anonymous"'*) pass "session: unauthenticated /me is anonymous (login required)" ;;
+    *) fail "session: unauthenticated /me is NOT anonymous -> ${me_anon:-no response}" ;;
+  esac
+  # 2) Regression guard: the dev impersonation header must NOT grant identity
+  #    under session mode (the "login 200 -> protected 401" mismatch, inverted).
+  me_hdr=$(fetch -H "X-Actor-Id: $ACTOR" "$BASE_URL/me")
+  case "$me_hdr" in
+    *'"principal_id":"'"$ACTOR"'"'*) fail "session: X-Actor-Id impersonation is ACTIVE — dev/session mismatch -> $me_hdr" ;;
+    *'"principal_type":"anonymous"'*) pass "session: X-Actor-Id header ignored (no impersonation)" ;;
+    *) warn "session: /me with header -> ${me_hdr:-no response}" ;;
+  esac
+  # 3) Login endpoint is live and rejects bogus credentials with 401.
+  login_code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 \
+    -X POST -H 'Content-Type: application/json' \
+    -d '{"username":"__smoke_nobody__","password":"__smoke_wrong__"}' \
+    "$BASE_URL/auth/login" 2>/dev/null)
+  case "$login_code" in
+    401) pass "session: /auth/login live and rejects bad credentials (401)" ;;
+    200) fail "session: /auth/login accepted bogus credentials (200) — auth is broken" ;;
+    *)   fail "session: /auth/login -> $login_code (expected 401)" ;;
+  esac
+  # 4) Optional full proof: real login -> Bearer /me -> logout. Credentials come
+  #    from the environment and are never echoed.
+  if [ -n "${SMOKE_USERNAME:-}" ] && [ -n "${SMOKE_PASSWORD:-}" ]; then
+    login_json=$(curl -s --max-time 5 -X POST -H 'Content-Type: application/json' \
+      -d "{\"username\":\"${SMOKE_USERNAME}\",\"password\":\"${SMOKE_PASSWORD}\"}" \
+      "$BASE_URL/auth/login" 2>/dev/null)
+    token=$(printf '%s' "$login_json" | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')
+    if [ -n "$token" ]; then
+      me_auth=$(fetch -H "Authorization: Bearer $token" "$BASE_URL/me")
+      case "$me_auth" in
+        *'"principal_type":"anonymous"'*) fail "session: Bearer /me is anonymous after a successful login" ;;
+        *'"principal_id":"'*)             pass "session: login -> Bearer /me resolves a principal" ;;
+        *) fail "session: Bearer /me -> ${me_auth:-no response}" ;;
+      esac
+      logout_code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 \
+        -X POST -H "Authorization: Bearer $token" "$BASE_URL/auth/logout" 2>/dev/null)
+      if [ "$logout_code" = "200" ]; then pass "session: logout revoked the smoke session"; else warn "session: logout -> $logout_code"; fi
+    else
+      fail "session: SMOKE_USERNAME/SMOKE_PASSWORD set but login returned no token"
+    fi
+  else
+    say "  (set SMOKE_USERNAME + SMOKE_PASSWORD to also assert a full login -> Bearer /me)"
+  fi
+fi
 
 say "== Frontend (optional) =="
 found_frontend=""

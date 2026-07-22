@@ -27,9 +27,58 @@ if [ ! -f .env ]; then
   warn "New .env created. For a Docker-free run, set hosts to 'localhost' (see README)."
 fi
 
-# Session mode needs a service-line credential for the non-human runtimes. Only
-# fills an EMPTY value — an existing token is never rotated by an update.
-"$(dirname "$0")/ensure-service-token.sh"
+# 2b. Non-destructive configuration audit + migration (DEP-03). We never echo a
+#     secret value, only key names; we back up .env before any mutation; and we
+#     refuse to declare success on unresolved required configuration.
+. "$(dirname "$0")/lib/env-audit.sh"
+
+auth_mode="$(env_get AUTH_MODE)"
+
+# Legacy / ambiguous auth profile — require an EXPLICIT, acknowledged choice
+# rather than silently accepting or silently changing an intentional setup.
+if [ -z "$auth_mode" ]; then
+  warn "AUTH_MODE is not set in .env — choose a profile before updating:"
+  warn "  • normal browser login:  ./scripts/configure-local-session.sh"
+  warn "  • local dev impersonation: set AUTH_MODE=dev in .env, re-run with ENTROPIA_ALLOW_DEV_AUTH=1"
+  exit 1
+elif [ "$auth_mode" = "dev" ] && [ "${ENTROPIA_ALLOW_DEV_AUTH:-}" != "1" ]; then
+  warn "AUTH_MODE=dev detected — local X-Actor-Id impersonation, no login."
+  warn "This is a deliberate developer profile; update will not change it silently."
+  warn "  • keep dev impersonation:  re-run with ENTROPIA_ALLOW_DEV_AUTH=1"
+  warn "  • switch to session login: ./scripts/configure-local-session.sh"
+  exit 1
+elif [ "$auth_mode" != "dev" ] && [ "$auth_mode" != "session" ]; then
+  warn "AUTH_MODE=$auth_mode is not a valid profile (expected 'session' or 'dev')."
+  exit 1
+fi
+
+# Back up .env once, then migrate — but only if there is actually something to
+# change (missing safe keys, or a session profile with no service token yet).
+needs_token=0
+if [ "$auth_mode" = "session" ] && ! env_has ENTROPIA_SERVICE_TOKEN; then needs_token=1; fi
+missing_keys="$(env_missing_example_keys .env.example)"
+if [ -n "$missing_keys" ] || [ "$needs_token" = "1" ]; then
+  backup="$(env_backup)"
+  [ -n "$backup" ] && say "Backed up .env -> $backup"
+  added="$(env_append_missing_from_example .env.example)"
+  [ -n "$added" ] && say "Added missing non-secret keys: $added"
+  # Session mode needs a service-line credential for the non-human runtimes; this
+  # only fills an EMPTY value — an existing token is never rotated by an update.
+  [ "$needs_token" = "1" ] && "$(dirname "$0")/ensure-service-token.sh"
+fi
+
+# Refuse to proceed on unresolved required configuration (values never shown).
+unresolved="$(env_unresolved_required)"
+if [ -n "$unresolved" ]; then
+  warn "Unresolved required configuration (set these in .env, values not shown): $unresolved"
+  warn "Update aborted — fix the keys above and re-run. (No changes were applied beyond the .env backup.)"
+  exit 1
+fi
+if [ "$auth_mode" = "dev" ]; then
+  say "Auth profile: dev (local impersonation, acknowledged)."
+else
+  say "Auth profile: session (browser login)."
+fi
 
 # 3. Backend dependencies (uv resolves + installs from the committed lockfile).
 if command -v uv >/dev/null 2>&1; then

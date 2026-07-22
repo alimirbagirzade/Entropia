@@ -8,7 +8,7 @@ COMPOSE := docker compose
 # session stack — same project + volumes, only AUTH_MODE flips. See DEP-04.
 COMPOSE_DEV_AUTH := docker compose -f docker-compose.yml -f docker-compose.dev-auth.yml
 
-.PHONY: help bootstrap update up up-dev-auth down restart logs ps migrate revision \
+.PHONY: help bootstrap update configure-session up up-dev-auth down restart logs ps migrate revision \
         accept accept-dev-auth \
         backend-install backend-dev backend-test backend-lint backend-format \
         openapi openapi-check \
@@ -23,6 +23,9 @@ bootstrap: ## One-time local setup (env file, backend venv, frontend deps)
 
 update: ## Pull latest + update deps + migrate DB (Docker-free)
 	@bash scripts/update.sh
+
+configure-session: ## Switch local .env to the session profile (real browser login); idempotent
+	@bash scripts/configure-local-session.sh
 
 up: ## Start the full stack — NORMAL session auth (real login). Build if needed.
 	$(COMPOSE) up -d --build

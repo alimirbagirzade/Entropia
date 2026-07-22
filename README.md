@@ -104,6 +104,10 @@ between them **preserves your data** — only `make nuke` deletes volumes.
   `COMPOSE_DEV_AUTH=1 ./scripts/acceptance.sh` for the dev-auth stack) — fails if
   **any** service exited, restarted, or is unhealthy. Every long-running plane
   carries a healthcheck; the one-shots (`migrate`, `minio-setup`) must exit 0.
+- `make e2e` (`./scripts/e2e-acceptance.sh`) — real Docker E2E of the three
+  authentication acceptance flows (session-clean, legacy-upgrade, dev-auth),
+  each in an **isolated** Compose project + volumes that never touch your normal
+  stack. See [docs/E2E_ACCEPTANCE.md](docs/E2E_ACCEPTANCE.md).
 
 ### Authoritative test command
 

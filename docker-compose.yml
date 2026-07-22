@@ -10,7 +10,10 @@ x-backend-build: &backend-build
     context: ./backend
     dockerfile: Dockerfile
   image: entropia-backend:local
-  env_file: .env
+  # Defaults to .env (the normal local stack). An isolated E2E run overrides this
+  # with ENTROPIA_ENV_FILE=.env.e2e.<flow> so its containers read a hermetic env
+  # (own AUTH_MODE + service token) without ever touching the user's real .env.
+  env_file: ${ENTROPIA_ENV_FILE:-.env}
   depends_on:
     postgres:
       condition: service_healthy
@@ -41,7 +44,9 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-entropia}
       POSTGRES_DB: ${POSTGRES_DB:-entropia}
     ports:
-      - "5432:5432"
+      # Host side is parameterized so an isolated E2E project can pick a
+      # non-colliding port and coexist with the user's normal stack.
+      - "${PG_HOST_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -54,7 +59,7 @@ services:
     image: redis:7-alpine
     command: ["redis-server", "--appendonly", "yes"]
     ports:
-      - "6379:6379"
+      - "${REDIS_HOST_PORT:-6379}:6379"
     volumes:
       - redisdata:/data
     healthcheck:
@@ -70,8 +75,8 @@ services:
       MINIO_ROOT_USER: ${OBJECT_STORAGE_ACCESS_KEY:-entropia}
       MINIO_ROOT_PASSWORD: ${OBJECT_STORAGE_SECRET_KEY:-entropia-secret}
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "${MINIO_HOST_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_HOST_PORT:-9001}:9001"
     volumes:
       - miniodata:/data
     healthcheck:
@@ -107,7 +112,7 @@ services:
     <<: *backend-build
     command: ["uvicorn", "entropia.apps.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
     ports:
-      - "8000:8000"
+      - "${API_HOST_PORT:-8000}:8000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -155,7 +160,7 @@ services:
         VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000/api/v1}
     image: entropia-web:local
     ports:
-      - "8080:80"
+      - "${WEB_HOST_PORT:-8080}:80"
     depends_on:
       - api
     restart: unless-stopped

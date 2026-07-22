@@ -22,9 +22,54 @@ if (-not (Test-Path ".env")) {
     Warn "New .env created. For a Docker-free run, set hosts to 'localhost' (see README)."
 }
 
-# Session mode needs a service-line credential for the non-human runtimes. Only
-# fills an EMPTY value — an existing token is never rotated by an update.
-& (Join-Path $PSScriptRoot "ensure-service-token.ps1")
+# 2b. Non-destructive configuration audit + migration (DEP-03). We never echo a
+#     secret value, only key names; we back up .env before any mutation; and we
+#     refuse to declare success on unresolved required configuration.
+. (Join-Path $PSScriptRoot "lib/env-audit.ps1")
+
+$authMode = Get-EnvValue "AUTH_MODE"
+
+# Legacy / ambiguous auth profile — require an EXPLICIT, acknowledged choice
+# rather than silently accepting or silently changing an intentional setup.
+if (-not $authMode) {
+    Warn "AUTH_MODE is not set in .env — choose a profile before updating:"
+    Warn "  * normal browser login:  .\scripts\configure-local-session.ps1"
+    Warn "  * local dev impersonation: set AUTH_MODE=dev in .env, re-run with ENTROPIA_ALLOW_DEV_AUTH=1"
+    exit 1
+} elseif ($authMode -eq "dev" -and $env:ENTROPIA_ALLOW_DEV_AUTH -ne "1") {
+    Warn "AUTH_MODE=dev detected — local X-Actor-Id impersonation, no login."
+    Warn "This is a deliberate developer profile; update will not change it silently."
+    Warn "  * keep dev impersonation:  re-run with ENTROPIA_ALLOW_DEV_AUTH=1"
+    Warn "  * switch to session login: .\scripts\configure-local-session.ps1"
+    exit 1
+} elseif ($authMode -ne "dev" -and $authMode -ne "session") {
+    Warn "AUTH_MODE=$authMode is not a valid profile (expected 'session' or 'dev')."
+    exit 1
+}
+
+# Back up .env once, then migrate — but only if there is actually something to
+# change (missing safe keys, or a session profile with no service token yet).
+$needsToken = ($authMode -eq "session") -and (-not (Test-EnvHas "ENTROPIA_SERVICE_TOKEN"))
+$missingKeys = Get-MissingExampleKeys ".env.example"
+if ($missingKeys.Count -gt 0 -or $needsToken) {
+    $backup = Backup-EnvFile
+    if ($backup) { Say "Backed up .env -> $backup" }
+    $added = Add-MissingExampleKeys ".env.example"
+    if ($added.Count -gt 0) { Say "Added missing non-secret keys: $($added -join ' ')" }
+    # Session mode needs a service-line credential for the non-human runtimes; this
+    # only fills an EMPTY value — an existing token is never rotated by an update.
+    if ($needsToken) { & (Join-Path $PSScriptRoot "ensure-service-token.ps1") }
+}
+
+# Refuse to proceed on unresolved required configuration (values never shown).
+$unresolved = Get-UnresolvedRequired
+if ($unresolved.Count -gt 0) {
+    Warn "Unresolved required configuration (set these in .env, values not shown): $($unresolved -join ' ')"
+    Warn "Update aborted — fix the keys above and re-run. (No changes were applied beyond the .env backup.)"
+    exit 1
+}
+if ($authMode -eq "dev") { Say "Auth profile: dev (local impersonation, acknowledged)." }
+else { Say "Auth profile: session (browser login)." }
 
 # 3. Backend dependencies + 4. database migrations.
 if (Get-Command uv -ErrorAction SilentlyContinue) {

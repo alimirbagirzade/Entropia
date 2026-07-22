@@ -125,6 +125,7 @@ export function TradeLogEditor({ mode, initialRoot, onSaved, onClose }: TradeLog
     <DetailView rootId={rootId} onClose={isPage ? undefined : onClose} />
   ) : (
     <Workbench
+      isPage={isPage}
       jobId={jobId}
       onJobAccepted={handleJobAccepted}
       onSaved={onSaved}
@@ -140,11 +141,13 @@ export function TradeLogEditor({ mode, initialRoot, onSaved, onClose }: TradeLog
 // ---------------------------------------------------------------------------
 
 function Workbench({
+  isPage,
   jobId,
   onJobAccepted,
   onSaved,
   onClose,
 }: {
+  isPage: boolean;
   jobId: string | null;
   onJobAccepted: (jobId: string) => void;
   onSaved?: (rootId: string) => void;
@@ -244,7 +247,11 @@ function Workbench({
       {create.isError ? <MutationErrorCard error={create.error} /> : null}
       {create.data ? <CreateResultCard result={create.data} /> : null}
 
-      <AttachedTradeLogsCard />
+      {/* D-6 (audit M-07): the attached-trade-logs registry is deep-management
+          content — it lives only on the standalone /trade-log workbench (page
+          mode) so the inline Mainboard panel stays the compact create / import /
+          save surface. */}
+      {isPage ? <AttachedTradeLogsCard /> : null}
     </>
   );
 }

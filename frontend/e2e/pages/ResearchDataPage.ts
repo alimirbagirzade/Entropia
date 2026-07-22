@@ -13,6 +13,14 @@ export class ResearchDataPage {
     await expect(this.page.getByRole("heading", { name: "Research Data", exact: true })).toBeVisible();
   }
 
+  // P-10 (audit): the Dataset Setup form is closed by default (registry-first).
+  // Open it via the registry "+ Add Research Dataset" action before driving the
+  // create form — the same path a user takes.
+  async openSetup(): Promise<void> {
+    await this.page.getByRole("button", { name: "+ Add Research Dataset" }).click();
+    await expect(this.createButton()).toBeVisible();
+  }
+
   createButton() {
     return this.page.getByRole("button", { name: "Create dataset" });
   }

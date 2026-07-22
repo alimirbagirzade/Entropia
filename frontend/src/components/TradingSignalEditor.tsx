@@ -126,6 +126,7 @@ export function TradingSignalEditor({
     <DetailView rootId={rootId} onClose={isPage ? undefined : onClose} />
   ) : (
     <Workbench
+      isPage={isPage}
       jobId={jobId}
       onJobAccepted={handleJobAccepted}
       onSaved={onSaved}
@@ -141,11 +142,13 @@ export function TradingSignalEditor({
 // ---------------------------------------------------------------------------
 
 function Workbench({
+  isPage,
   jobId,
   onJobAccepted,
   onSaved,
   onClose,
 }: {
+  isPage: boolean;
   jobId: string | null;
   onJobAccepted: (jobId: string) => void;
   onSaved?: (rootId: string) => void;
@@ -245,7 +248,11 @@ function Workbench({
       {create.isError ? <MutationErrorCard error={create.error} /> : null}
       {create.data ? <CreateResultCard result={create.data} /> : null}
 
-      <AttachedSignalsCard />
+      {/* D-6 (audit M-06): the attached-signals registry is deep-management
+          content — it keeps the inline Mainboard panel short by living only on
+          the standalone /trading-signal workbench (page mode). The create /
+          import / save journey above stays the compact inline surface. */}
+      {isPage ? <AttachedSignalsCard /> : null}
     </>
   );
 }

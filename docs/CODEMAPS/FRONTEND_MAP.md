@@ -64,7 +64,7 @@ Import alias: `@/` → `frontend/src/`.
 | `marketData.ts` | `["market-data","registry"\|"detail"\|"approved-bundle"]` | `["market-data"]`, `["audit"]` |
 | `metricProfile.ts` | `["metric-definitions"]`, `["metric-profile","resolved"]` | `["metric-profile"]` |
 | `packageImport.ts` | `["jobs","package-import",importJobId]` | `["package-imports"]`, `["jobs"]`, `["library"]`, `["audit"]` |
-| `provisioning.ts` | `["auth","bootstrap-status"]` | — |
+| `provisioning.ts` | `["auth","bootstrap-status"]` (yanıt: `login_capable_admin_exists` — PROV-05/#357) | — |
 | `rationale.ts` | `["rationale-families","registry",state,cursor]`, `["rationale-assignments",cursor]` | `["rationale-families"]`, `["rationale-assignments"]`, `["audit"]` |
 | `readiness.ts` | `["readiness","current",compositionId]`, `["readiness","report",reportId]` | `["readiness"]`, `["mainboard"]` |
 | `researchData.ts` | `["research-data","registry"\|"detail"]` | `["research-data"]`, `["audit"]` |

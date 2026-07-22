@@ -12,6 +12,12 @@
 
 ## Current position (keep in sync at each closing)
 
+> **2026-07-22 güncelleme (auth remediation dalgası):** `main` HEAD → **`6e3fab9`** (PR #364).
+> Auth güvenlik denetimi remediation'ı (#346–#364) COMPLETE — **migration YOK**, alembic head
+> **`0035_portfolio_rules`** SABİT, `ENGINE_VERSION` SABİT. CI server-truth: backend **1841 passed**,
+> frontend vitest **577/58 dosya**, E2E green. Tam kayıt: aşağıda "Auth remediation dalgası — tam kayıt".
+> Aşağıdaki uzun "Landed" paragrafı V18-R2 öncesi durumun tarihsel aynasıdır — güncel özet: `CLAUDE.md` §Current position.
+
 - **Landed:** **V1 ROADMAP COMPLETE — Stages 0-8** (docs 01-22 + e2e integration +
   hardening) **+ post-V1 Auth/IdP (PR #38) + Parquet batch data-access (INF-12
   Slice A, PR #41) + real bar-replay backtest engine (INF-12 Slice B, PR #43) +
@@ -1065,3 +1071,47 @@ oturumlarda kodlandı. Yukarıda kendi tam kaydı olmayan slice'ların özeti (a
 `ENGINE_VERSION` sabit, tüm OCC token biçimleri / Idempotency-Key davranışı / react-query key'leri
 / SSE taksonomisi verbatim. Değişen tek guardrail: `nav.ts` menü DAVRANIŞI (R2-02/R2-03, GAP
 belgesiyle kullanıcı onaylı); route path'leri ve deep-link'ler yaşamaya devam ediyor.
+
+## Auth remediation dalgası — tam kayıt (#346–#364 merged, main@`6e3fab9`)
+
+Kaynak: iki güvenlik denetimi —
+`docs/spec/Entropia_Authentication_Remediation_Claude_Code_Deep_Audit.md` (AUTH-01..11 /
+PROV-01..06 / DEP-01..06 / TEST-01..12) + `docs/spec/Entropia_Auth_Mode_Login_Fix_Claude_Code_Prompt.md`
+(login akışı runtime AUTH_MODE'a uymuyordu). Her madde ayrı bir W-dalgasında (W2–W8) branch'lenip
+PR olarak main'e merge oldu; ayrı oturumlarda kodlandı. **Migration YOK — alembic head
+`0035_portfolio_rules` SABİT, `ENGINE_VERSION` SABİT.** Tüm OCC token biçimleri / Idempotency-Key /
+react-query key'leri / SSE event taksonomisi verbatim korundu; sadece SSE **handshake auth'u** ve
+payload'ı sıkılaştırıldı (AUTH-11, taksonomi aynı).
+
+| Dalga / PR | Madde | Ne getirdi |
+|---|---|---|
+| Login-fix · #346 | Auth Mode Login | Frontend artık sunucunun **runtime AUTH_MODE**'unu izliyor (`de9c890`); dev-mode'da insan login'i sunucu tarafından reddediliyor, UI mode'a göre login/signup yüzeyini değiştiriyor |
+| W2 · #347, #348 | AUTH-01..07 | (a) `AUTH_MODE=dev` altında insan login **reject** (`77a4f8e`); (b) **fail-closed runtime-auth boot gate** — geçersiz/eksik auth konfigürasyonunda süreç açılmıyor + **transport başına tek credential** (`bea75ec`) |
+| W3 · #349 | AUTH-11 | **SSE handshake authenticate** edildi + payload minimize (`f330418`) — anonim SSE aboneliği kapandı; event taksonomisi (`EVENT_QUERY_KEYS`) değişmedi |
+| W4 · #357 | PROV-02..05 | **Credential-aware operational Admin count** (`1cf8a26`): `identity.count_login_capable_admins` + `count_operational_admins(auth_mode)`; sign_up / bootstrap_status / role_assignment / roles operational count kullanıyor; `roles.py`'ye eksik advisory lock; bootstrap-status'a `login_capable_admin_exists` (+openapi, `Provisioning.tsx`); seed `_ensure_principal` type-conflict fail-closed; last-Admin koruması artık login-yeteneğine göre |
+| W5 · #358 | DEP-04/05, TEST-11 | Explicit **session / dev-auth Compose profilleri** + worker healthcheck'leri + fail-fast test (`30100cd`) |
+| W6 · #359 | TEST-06..10 | **Integration DB izolasyonu** + auth test matrisi güçlendirildi (`eacd5aa`); revoked `/me` artık 401 `SESSION_INVALID` (anonim değil) assert'i (TEST-08 düzeltmesi `1e67ce4`) |
+| W7 · #360 | §9.4/9.5/9.6 | 3 auth kabul akışı için **gerçek izole Docker E2E** (`26cea44`) |
+| W8-frontend · #361 | AUTH-08/09/10 | Frontend auth residuals (`4c9ce34`): cross-tab session-sync, canonical error kodları, güvenli stale-session redirect |
+| DEP-03/06 · #362 | DEP-03/06 | Non-destructive **.env config audit** scripti + auth-mode-aware smoke (`8448484`) |
+| W8-PROV06 · #363 | PROV-06 | **Mode-safe Compose baseline provisioning** (`d9121bd`) + audit §12 legacy `retire_dev_admin` scripti kaldırıldı |
+| AUTH-09/10 residuals · #364 | AUTH-10 | Cross-tab session-sync (storage relay) kapsama testi (`46fa1c9`) — dalganın son merge'ü |
+
+Ayrıca aynı gün merge olan **dependabot** PR'ları: #350 `upload-artifact@7`, #351 `setup-node@7`,
+#352 `checkout@7` (CI actions major), #354 frontend-minor-patch grup, #355 backend-minor-patch grup,
+#356 `boto3-stubs[s3]`.
+
+**Test (CI server-truth, `main`@`6e3fab9`):** backend **1841 passed** (real-Postgres integration,
+CI job "Backend — lint, type, test") · frontend vitest **577 passed / 58 dosya** · E2E job green ·
+CI + E2E ikisi de `6e3fab9`'da yeşil.
+
+**Dürüst sınırlar / DEFERRED:**
+- **Dependabot #353 (`python 3.13-slim → 3.14-slim`) KAPATILDI** — proje `requires-python` `<3.14`
+  pinliyor (ruff target `py312`, mypy `3.12`); 3.14'e geçiş ayrı, manuel test edilen bir dal gerektirir.
+  `.github/dependabot.yml`'deki Docker `/backend` ekosisteminde **python-major ignore guard'ı henüz
+  EKLENMEDİ** → guard eklenmezse dependabot 3.14 PR'ını haftaya yeniden açar. (Frontend/CI/toolchain
+  major'ları için `ignore: version-update:semver-major` zaten var; Docker python için yok.)
+- **Tam Python 3.14 migration** (requires-python + ruff/mypy target bump + Dockerfile) ayrı bir slice.
+- Denetimin kalan maddeleri (AUTH-01..07 detay eşleme, PROV-01, DEP-01/02, TEST-01..05/12) W2–W8
+  dalgalarında ele alındı ya da önceki post-V1 auth slice'larında (PR #38/#76/#84) zaten karşılanmıştı;
+  audit dosyasındaki tam madde-madde durum `docs/spec/Entropia_Authentication_Remediation_Claude_Code_Deep_Audit.md`'de.

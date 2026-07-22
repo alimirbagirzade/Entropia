@@ -2778,8 +2778,36 @@ seed'li stack'te tek tek doğrulandı, her koşula kanıt referansı yazıldı. 
   derin görsel kıyası açık; doğrulamalar host-native local stack'te (bu oturumda CI'da koşmadı).
 - **PO karar tablosu:** D-1…D-9 → `v18_final_acceptance.md` §4.
 
-## Next: **PO imzası + R2 kapanışı.** R2 dalgasının 17 slice'ı merge oldu (#325–#343); R2-14
-(nihai kabul) bu branch'te. Kod tarafında planlanan R2 işi BİTTİ. Sırada:
+## Auth remediation wave — landed (PR #346–#364, merged → main `6e3fab9`)
+
+İki güvenlik denetimi (`docs/spec/Entropia_Authentication_Remediation_Claude_Code_Deep_Audit.md`
+AUTH/PROV/DEP/TEST + `Entropia_Auth_Mode_Login_Fix_Claude_Code_Prompt.md`) W2–W8 dalgaları halinde
+kapatıldı. **Migration YOK — alembic head `0035_portfolio_rules` SABİT, `ENGINE_VERSION` SABİT.** OCC
+token biçimleri / Idempotency-Key / react-query key'leri / SSE taksonomisi verbatim; sadece SSE
+handshake auth + payload sıkılaştırıldı (AUTH-11).
+
+- **#346** login-fix — frontend sunucunun runtime AUTH_MODE'unu izliyor; dev-mode insan login sunucu-reddi.
+- **#347/#348 (W2, AUTH-01..07)** — dev-mode human-login reject + **fail-closed runtime-auth boot gate** + transport başına tek credential.
+- **#349 (W3, AUTH-11)** — SSE handshake authenticate + payload minimize (anonim abonelik kapandı).
+- **#357 (W4, PROV-02..05)** — credential-aware operational Admin count (`identity.count_login_capable_admins` / `count_operational_admins(auth_mode)`); bootstrap-status `login_capable_admin_exists` (+openapi, `Provisioning.tsx`); `roles.py` advisory lock; seed `_ensure_principal` fail-closed.
+- **#358 (W5, DEP-04/05, TEST-11)** — explicit session/dev-auth Compose profilleri + worker healthcheck + fail-fast test.
+- **#359 (W6, TEST-06..10)** — integration DB izolasyonu + auth test matrisi; revoked `/me` → 401 `SESSION_INVALID`.
+- **#360 (W7, §9.4/9.5/9.6)** — 3 auth kabul akışı için gerçek izole Docker E2E.
+- **#361 (W8-frontend, AUTH-08/09/10)** — cross-tab session-sync + canonical error kodları + güvenli stale-session redirect.
+- **#362 (DEP-03/06)** — non-destructive .env config audit scripti + auth-mode-aware smoke.
+- **#363 (W8, PROV-06)** — mode-safe Compose baseline provisioning + legacy `retire_dev_admin` scripti kaldırıldı.
+- **#364 (AUTH-10 residual)** — cross-tab session-sync (storage relay) kapsama testi (son merge).
+
+Aynı gün dependabot: #350/#351/#352 (CI actions@7), #354/#355 minor-patch grupları, #356 boto3-stubs.
+**Test (CI server-truth `6e3fab9`):** backend **1841 passed** · frontend vitest **577/58 dosya** · E2E green.
+**DEFERRED (dürüst sınır):** dependabot #353 (python 3.13→3.14-slim) **KAPATILDI** — `requires-python <3.14`
+(ruff py312, mypy 3.12); `.github/dependabot.yml` Docker `/backend` ekosistemine **python-major ignore
+guard'ı EKLENMEDİ** (yoksa haftaya yeniden açılır); tam 3.14 migration ayrı manuel bir dal. Tam kayıt +
+madde-madde durum: `docs/PROJECT_HISTORY.md` §"Auth remediation dalgası".
+
+## Next: **PO imzası + R2 kapanışı** (auth remediation dalgası COMPLETE — kod işi kalmadı).
+Auth remediation (#346–#364) merge oldu; kalan tek açık iş **R2'nin product-owner imzası** + iki
+opsiyonel deferred. Sırada:
 > 1. **Product-owner imzası** — `docs/implementation/v18_final_acceptance.md` §4'teki D-1…D-9
 >    kararları (görsel sapmaların toptan kabulü, F-2…F-6 mini slice'ları, A11Y-01 için (a)/(b)/(c),
 >    20.11 onayı). **İmza olmadan `entropia_v18_remediation_status.md`'deki R2 RE-OPENING banner'ı
@@ -2791,6 +2819,10 @@ seed'li stack'te tek tek doğrulandı, her koşula kanıt referansı yazıldı. 
 >    A11Y-01 palet kararı) ayrı slice'lara açılır.
 > 4. **Kapsam dışı kalan açık işler:** ekran okuyucu (NVDA/VoiceOver) denetimi, 10 sayfanın derin
 >    görsel kıyası, CI'da a11y/visual katmanlarının koşturulması.
+> 5. **Auth deferred (opsiyonel, kod-değişikliği yok):** (a) `.github/dependabot.yml` Docker `/backend`
+>    ekosistemine `python` için `ignore: version-update:semver-major` guard'ı — yoksa dependabot #353
+>    (3.14-slim) haftaya yeniden açılır; (b) tam Python 3.14 migration (requires-python + ruff/mypy
+>    target + Dockerfile) ayrı manuel test edilen dal.
 
 ## Eski Next (R2 dalgası başlarken): **`docs/V18_R2_ROADMAP.md` otoritedir.** Yeni GAP belgesi
 (`docs/spec/Entropia_V18_Guncel_Arayuz_Eksikleri_ve_Yanlis_Anlamalar.md`) kodda empirik

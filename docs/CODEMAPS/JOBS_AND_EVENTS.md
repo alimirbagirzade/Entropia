@@ -81,10 +81,14 @@ domain mutasyonu ─┬─> audit_events   (aynı transaction)
                                                  │
                                           SseHub.publish (:62)
                                                  │
-                                     GET /events  (sse.py:133, EventSourceResponse)
+                                     GET /events  (sse.py:162, EventSourceResponse)
                                                  │
                                      frontend lib/sse.ts → queryClient.invalidateQueries
 ```
+
+> **AUTH-11 (#349):** `GET /events` artık **authenticated** — `_authenticated_subscriber`
+> (`sse.py:163` → `require_authenticated`, `:157`) handshake'i doğrular; anonim SSE aboneliği
+> kapalı, payload minimize edildi. Event taksonomisi / `EVENT_QUERY_KEYS` değişmedi.
 
 İki tüketici **tasarım gereği bağımsızdır**: scheduler'ın `relay_unpublished`'ı kalıcı durumu
 ilerletir; SSE poller (`fetch_events_after`, `latest_event_id`) yalnız YENİ olayları kuyruktan

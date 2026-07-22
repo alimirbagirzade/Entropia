@@ -12,15 +12,18 @@ module's job — that durable checkpoint belongs to the scheduler's relay.
 from __future__ import annotations
 
 import asyncio
-import json
 from collections.abc import AsyncIterator
 from typing import Any
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from sse_starlette.sse import EventSourceResponse
 
 from entropia.application.jobs.outbox_relay import fetch_events_after, latest_event_id
+from entropia.apps.api.deps import resolve_request_actor
+from entropia.domain.identity import Actor
+from entropia.domain.identity.policy import require_authenticated
 from entropia.infrastructure.observability import get_logger
+from entropia.infrastructure.postgres.engine import get_session_factory
 
 router = APIRouter(tags=["events"])
 
@@ -82,8 +85,6 @@ async def run_outbox_poller(
     Each iteration opens its own short session; a failing poll (e.g. database
     briefly unreachable) is logged and retried on the next tick — the poller
     never crashes the API process."""
-    from entropia.infrastructure.postgres.engine import get_session_factory
-
     sink = target or hub
     cursor: str | None = None
     bootstrapped = False
@@ -107,9 +108,15 @@ async def run_outbox_poller(
 
 
 def _sse_frame(event: dict[str, Any]) -> dict[str, str]:
+    """Project an internal outbox event onto a MINIMAL, non-sensitive invalidation
+    frame (AUTH-11). The client invalidates by the taxonomy event NAME alone and
+    never reads the body, so the frame carries ONLY that name — never the raw
+    outbox dict, whose ``resource_id`` / ``correlation_id`` / ``event_type`` would
+    leak internal identifiers to every subscriber. The data field is an empty JSON
+    object: enough to be a well-formed SSE frame, nothing a subscriber can mine."""
     return {
         "event": sse_event_name(str(event.get("event_type", "")), event.get("resource_type")),
-        "data": json.dumps(event, separators=(",", ":")),
+        "data": "{}",
     }
 
 
@@ -129,6 +136,30 @@ async def _event_source(request: Request) -> AsyncIterator[dict[str, str]]:
         hub.unsubscribe(queue)
 
 
+async def _authenticated_subscriber(request: Request) -> Actor:
+    """SSE handshake authentication (AUTH-11), in BOTH auth modes.
+
+    Resolve the caller under AUTH_MODE with a SHORT-LIVED session that is opened
+    and closed HERE — before the stream starts — so the long-lived event stream
+    never pins a database connection for its whole lifetime. An anonymous caller is
+    rejected (``UnauthenticatedError`` -> 401); a dead Bearer session surfaces as
+    ``SESSION_INVALID`` (raised inside the resolver) so the client can run its
+    one-shot invalid-session flow. The stream itself carries only a non-sensitive
+    invalidation taxonomy, so any authenticated principal may subscribe — there is
+    no per-actor authorization beyond "is authenticated".
+
+    Resolving anonymous never issues a query, so an unauthenticated handshake is
+    rejected without touching the database at all.
+    """
+    factory = get_session_factory()
+    async with factory() as session:
+        actor = await resolve_request_actor(request, session)
+    require_authenticated(actor)
+    return actor
+
+
 @router.get("/events")
-async def events(request: Request) -> EventSourceResponse:
+async def events(
+    request: Request, _subscriber: Actor = Depends(_authenticated_subscriber)
+) -> EventSourceResponse:
     return EventSourceResponse(_event_source(request))

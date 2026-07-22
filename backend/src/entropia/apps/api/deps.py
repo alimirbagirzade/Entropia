@@ -148,20 +148,32 @@ async def _session_mode_actor(
     return actor
 
 
-async def request_context(
-    request: Request, session: AsyncSession = Depends(db_session)
-) -> RequestContext:
+async def resolve_request_actor(request: Request, session: AsyncSession) -> Actor:
+    """Resolve the calling actor from the request under AUTH_MODE, using ``session``.
+
+    The single trust-model decision point (dev header vs. Bearer session). Extracted
+    from ``request_context`` so a NON-request-scoped consumer — the SSE handshake,
+    which must resolve the actor with a short-lived session it closes BEFORE the
+    long-lived stream begins rather than pinning the request-scoped session for the
+    stream's whole lifetime — can reuse the exact same logic without duplicating the
+    mode branch.
+    """
     request_id = getattr(request.state, "request_id", "")
     correlation_id = getattr(request.state, "correlation_id", "")
     if get_settings().auth_mode == "session":
-        actor = await _session_mode_actor(
+        return await _session_mode_actor(
             request, session, request_id=request_id, correlation_id=correlation_id
         )
-    else:
-        actor = await resolve_actor(
-            session,
-            principal_id=request.headers.get(ACTOR_ID_HEADER),
-            request_id=request_id,
-            correlation_id=correlation_id,
-        )
+    return await resolve_actor(
+        session,
+        principal_id=request.headers.get(ACTOR_ID_HEADER),
+        request_id=request_id,
+        correlation_id=correlation_id,
+    )
+
+
+async def request_context(
+    request: Request, session: AsyncSession = Depends(db_session)
+) -> RequestContext:
+    actor = await resolve_request_actor(request, session)
     return RequestContext(session=session, actor=actor)

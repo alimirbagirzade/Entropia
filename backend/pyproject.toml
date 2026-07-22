@@ -8,11 +8,11 @@ license = { text = "Proprietary" }
 
 dependencies = [
   # --- HTTP application layer ---
-  "fastapi>=0.139.0,<1.0",
+  "fastapi>=0.139.2,<1.0",
   "uvicorn[standard]>=0.51.0,<1.0",
   "pydantic>=2.9,<3.0",
   "pydantic-settings>=2.5,<3.0",
-  "sse-starlette>=3.4.5,<4.0",
+  "sse-starlette>=3.4.6,<4.0",
   "python-multipart>=0.0.12",
   # --- Persistence (PostgreSQL 16) ---
   "sqlalchemy[asyncio]>=2.0.51,<3.0",
@@ -23,9 +23,9 @@ dependencies = [
   "redis>=8.0.1,<9.0",
   "dramatiq[redis]>=2.2.0,<3.0",
   # --- Object storage (S3 / MinIO) ---
-  "boto3>=1.43.48,<2.0",
+  "boto3>=1.43.53,<2.0",
   # --- Columnar data toolchain ---
-  "polars>=1.42.1,<2.0",
+  "polars>=1.43.0,<2.0",
   "pyarrow>=17.0",
   # --- Observability ---
   "structlog>=24.4",
@@ -44,7 +44,7 @@ dev = [
   # ruff 0.15.21's Linux x86_64 wheel ships no `ruff` binary, so `uv run ruff`
   # fails with "Failed to spawn: ruff" in CI (the macOS wheel is fine, which is
   # why it passed locally). Pin to the last good release until a fixed one lands.
-  "ruff>=0.15.20,<0.15.21",
+  "ruff>=0.15.22,<0.15.23",
   "mypy>=1.11,<3.0",
 ]
 

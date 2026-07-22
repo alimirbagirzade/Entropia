@@ -8,7 +8,9 @@
   --border: #cfcfcf;
   --text: #222222;
   --text-dim: #555555;
-  --text-faint: #888888;
+  /* D-7b (A11Y-01 partial, PO 22-Jul): #888888 → #6e6e6e lifts help/meta text
+     to ~4.6:1 (WCAG AA) without touching the v18 signature accent blue. */
+  --text-faint: #6e6e6e;
   --accent: #00a9e8;
   --accent-dim: #0088c0;
   --ok: #00a651;
@@ -32,6 +34,11 @@ body {
 
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
+/* D-8 (A11Y-02, PO 22-Jul): a link sitting inside body text must be
+   distinguishable from surrounding text by more than colour alone (axe
+   link-in-text-block). Nav/menu/button links live outside <p>, so they keep
+   the clean v18 look; only in-paragraph content links are underlined. */
+p a { text-decoration: underline; }
 
 :focus-visible {
   outline: 2px solid var(--accent);
@@ -97,7 +104,9 @@ a:hover { text-decoration: underline; }
   background: #fff; color: #222;
 }
 .topbar-badge { font-size: 9.5px; font-weight: 700; color: #666; white-space: nowrap; }
-.topbar-badge.ok { color: #00842f; }
+/* D-7b (A11Y-01 partial, PO 22-Jul): #00842f → #006b26 lifts the OK badge to
+   ~4.8:1 on the topbar grey (closes the 92-node color-contrast cluster). */
+.topbar-badge.ok { color: #006b26; }
 .topbar-badge.warn { color: #b07d00; }
 .topbar-badge.down { color: #b60000; }
 .topbar-badge.neutral { color: #999; }

@@ -194,6 +194,11 @@ function renderPage() {
       </MemoryRouter>
     </QueryClientProvider>,
   );
+  // P-10 (audit): the Dataset Setup form is closed by default (registry-first).
+  // These suites drive the create form, so open it via the registry "+ Add
+  // Research Dataset" action — the same path a user takes. Registry-only and
+  // detail-open tests are unaffected (the registry stays mounted alongside).
+  fireEvent.click(screen.getByRole("button", { name: /Add Research Dataset/i }));
   return client;
 }
 

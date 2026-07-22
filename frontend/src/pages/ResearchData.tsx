@@ -109,6 +109,10 @@ const DEPENDENCY_GATED_STEPS = new Set<number>([4, 5]);
 // renders verbatim; the client lock precedes, never replaces, it.
 export function ResearchData() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // P-10 (audit): registry-first. The Dataset Setup form is CLOSED by default —
+  // a returning user sees the searchable registry, not a creation form. "+ Add
+  // Research Dataset" opens setup; create/cancel closes it back to the registry.
+  const [isAdding, setIsAdding] = useState(false);
   // Lifted from the setup form so the workflow strip can reflect the lock state.
   const [marketEntityId, setMarketEntityId] = useState<string | null>(null);
   const dependency = useMarketDependency(marketEntityId);
@@ -123,13 +127,25 @@ export function ResearchData() {
       </p>
       <WorkflowStrip dependencyReady={dependencyReady} />
       <StatusLegend />
-      <SetupCard
-        marketEntityId={marketEntityId}
-        onMarketEntityIdChange={setMarketEntityId}
-        dependency={dependency}
-        onCreated={setSelectedId}
+      <RegistryCard
+        selectedId={selectedId}
+        onOpen={setSelectedId}
+        onAdd={() => setIsAdding(true)}
+        isAdding={isAdding}
       />
-      <RegistryCard selectedId={selectedId} onOpen={setSelectedId} />
+      {isAdding ? (
+        <SetupCard
+          marketEntityId={marketEntityId}
+          onMarketEntityIdChange={setMarketEntityId}
+          dependency={dependency}
+          // On create the detail auto-opens below; the setup stays open showing
+          // its "Created …" confirmation (the user closes it with Cancel). The
+          // registry stays visible throughout — registry-first is preserved by
+          // the closed-by-default state, not by tearing the form down mid-flow.
+          onCreated={setSelectedId}
+          onCancel={() => setIsAdding(false)}
+        />
+      ) : null}
       {selectedId !== null ? <DetailCard entityId={selectedId} /> : null}
     </>
   );
@@ -216,11 +232,13 @@ function SetupCard({
   onMarketEntityIdChange,
   dependency,
   onCreated,
+  onCancel,
 }: {
   marketEntityId: string | null;
   onMarketEntityIdChange: (value: string | null) => void;
   dependency: MarketDependencyStatus;
   onCreated: (entityId: string) => void;
+  onCancel: () => void;
 }) {
   const dependencyReady = dependency.kind === "ready";
   const create = useCreateDataset();
@@ -427,6 +445,10 @@ function SetupCard({
           >
             Create dataset
           </button>
+          {/* P-10: Cancel closes the setup form back to the registry. */}
+          <button type="button" className="btn btn-ghost" onClick={onCancel}>
+            Cancel
+          </button>
           {!dependencyReady ? (
             <span className="page-sub" style={{ margin: 0 }}>
               Link an Approved Market Data dataset to unlock this step.
@@ -491,23 +513,42 @@ function DependencyAlert({ status }: { status: MarketDependencyStatus }) {
 function RegistryCard({
   selectedId,
   onOpen,
+  onAdd,
+  isAdding,
 }: {
   selectedId: string | null;
   onOpen: (entityId: string) => void;
+  onAdd: () => void;
+  isAdding: boolean;
 }) {
   const pager = useCursorStack();
   const datasets = useResearchDatasets(pager.cursor);
 
   return (
     <section className="card" aria-labelledby="rd-registry-h">
-      <h3 id="rd-registry-h" style={{ marginTop: 0 }}>
-        Dataset registry
-        {datasets.data ? (
-          <span className="page-sub" style={{ marginLeft: 8 }}>
-            ({datasets.data.data.length} visible on this page)
-          </span>
-        ) : null}
-      </h3>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+          flexWrap: "wrap",
+        }}
+      >
+        <h3 id="rd-registry-h" style={{ margin: 0 }}>
+          Dataset registry
+          {datasets.data ? (
+            <span className="page-sub" style={{ marginLeft: 8 }}>
+              ({datasets.data.data.length} visible on this page)
+            </span>
+          ) : null}
+        </h3>
+        {/* P-10: the primary way to add a dataset — opens the closed-by-default
+            setup form; disabled while it is already open. */}
+        <button type="button" className="btn btn-primary" onClick={onAdd} disabled={isAdding}>
+          + Add Research Dataset
+        </button>
+      </div>
       {datasets.isLoading ? (
         <Loading label="Loading research datasets…" />
       ) : datasets.isError ? (

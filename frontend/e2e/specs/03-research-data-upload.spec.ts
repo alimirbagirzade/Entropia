@@ -22,6 +22,9 @@ test.describe("Research Data upload", () => {
 
     const researchData = new ResearchDataPage(page);
     await researchData.goto();
+    // P-10: the setup form is closed by default (registry-first); open it the
+    // same way a user does before exercising the create lock.
+    await researchData.openSetup();
 
     // The free-text entity-id input is gone and the workflow is locked by
     // default — no text can unlock it.

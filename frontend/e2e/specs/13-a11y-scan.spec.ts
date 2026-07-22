@@ -24,11 +24,18 @@ const REPORT_DIR = path.join(__dirname, "..", "a11y-report");
 
 // Serious-impact rules whose findings are recorded deviations pending the
 // product-owner decision (docs/implementation/v18_final_acceptance.md §A11Y).
-// Both stem from the canonical v18 palette (--accent #00a9e8, --text-dim
-// #888888) — changing them is a theme decision, not a code defect, so this
-// slice records rather than silently "fixes" them. Any OTHER serious rule
-// appearing is an unrecorded regression and fails the gate.
-const ACCEPTED_SERIOUS_RULES = ["color-contrast", "link-in-text-block"];
+//
+// D-8 (PO 22-Jul): link-in-text-block is now FIXED (in-paragraph links are
+// underlined via `p a` in global.css), so it is no longer allow-listed — a
+// reappearance now fails the gate.
+//
+// D-7b (PO 22-Jul): color-contrast is PARTIALLY fixed — the grey/green nodes
+// were darkened (--text-faint #6e6e6e, .topbar-badge.ok #006b26), but the
+// residual nodes on the v18 signature accent blue (--accent #00a9e8) are a
+// deliberately accepted theme deviation (option b), so color-contrast stays
+// allow-listed. Any OTHER serious rule appearing is an unrecorded regression
+// and fails the gate.
+const ACCEPTED_SERIOUS_RULES = ["color-contrast"];
 
 interface PageResult {
   slug: string;

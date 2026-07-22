@@ -1488,6 +1488,16 @@ a:hover { text-decoration: underline; }
   padding: 12px;
   background: var(--bg-elev-2);
 }
+/* D-3 (audit P-04): the source/prompt is the page's dominant compose area, so
+   the input is tall by default (declared-dependencies stays compact below it). */
+.cp-compose .cp-source-input {
+  width: 100%;
+  min-height: 220px;
+  resize: vertical;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
 .cp-button-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
 .cp-section-title {
   font-size: 11px;

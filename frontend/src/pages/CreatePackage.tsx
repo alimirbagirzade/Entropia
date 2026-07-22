@@ -481,7 +481,10 @@ function Workspace({
             <div className="cp-compose">
               <label>
                 <span>{isCodeMode ? "Source code" : "Description"}</span>
+                {/* D-3 (audit P-04): the source/prompt is the dominant compose
+                    surface — a tall input, not a two-row field lost in the grid. */}
                 <textarea
+                  className="cp-source-input"
                   aria-label={isCodeMode ? "Source code" : "Description"}
                   value={form.request_body}
                   onChange={(e) => setForm((prev) => ({ ...prev, request_body: e.target.value }))}

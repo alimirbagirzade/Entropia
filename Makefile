@@ -4,8 +4,12 @@
 SHELL := /bin/bash
 
 COMPOSE := docker compose
+# dev-auth (X-Actor-Id impersonation) layers the override ON TOP of the base
+# session stack — same project + volumes, only AUTH_MODE flips. See DEP-04.
+COMPOSE_DEV_AUTH := docker compose -f docker-compose.yml -f docker-compose.dev-auth.yml
 
-.PHONY: help bootstrap update up down restart logs ps migrate revision \
+.PHONY: help bootstrap update up up-dev-auth down restart logs ps migrate revision \
+        accept accept-dev-auth \
         backend-install backend-dev backend-test backend-lint backend-format \
         openapi openapi-check \
         frontend-install frontend-dev frontend-build frontend-lint test smoke clean nuke
@@ -20,8 +24,11 @@ bootstrap: ## One-time local setup (env file, backend venv, frontend deps)
 update: ## Pull latest + update deps + migrate DB (Docker-free)
 	@bash scripts/update.sh
 
-up: ## Start the full Docker stack (build if needed)
+up: ## Start the full stack — NORMAL session auth (real login). Build if needed.
 	$(COMPOSE) up -d --build
+
+up-dev-auth: ## Start the stack in dev-auth impersonation (X-Actor-Id, no login; local-only)
+	$(COMPOSE_DEV_AUTH) up -d --build
 
 down: ## Stop the stack (keep volumes)
 	$(COMPOSE) down
@@ -74,11 +81,17 @@ frontend-build: ## Production build of the frontend
 frontend-lint: ## Lint + typecheck the frontend
 	cd frontend && npm run lint && npm run typecheck
 
-test: backend-test ## Alias: run all tests
-	cd frontend && npm test --silent || true
+test: backend-test ## Run all tests — fails if EITHER backend or frontend suite fails (TEST-11)
+	cd frontend && npm test --silent
 
 smoke: ## Smoke-test a RUNNING stack (health, deps, metrics, identity, frontend)
 	@bash scripts/smoke.sh
+
+accept: ## Acceptance gate for a RUNNING stack: fail if any service exited/restarted/unhealthy (DEP-05)
+	@bash scripts/acceptance.sh
+
+accept-dev-auth: ## Acceptance gate against the dev-auth stack (DEP-05)
+	@COMPOSE_DEV_AUTH=1 bash scripts/acceptance.sh
 
 clean: ## Remove build artifacts and caches
 	rm -rf backend/.pytest_cache backend/.ruff_cache backend/.mypy_cache frontend/dist frontend/.vite

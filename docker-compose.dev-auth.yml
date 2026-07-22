@@ -1,0 +1,42 @@
+# =============================================================================
+# Entropia V18 — EXPLICIT dev-auth (impersonation) override.
+#
+# Layer this ON TOP of the base stack — it does NOT replace it:
+#   docker compose -f docker-compose.yml -f docker-compose.dev-auth.yml up -d --build
+# Convenience wrappers: `make up-dev-auth` / `.\scripts\tasks.ps1 up-dev-auth`.
+#
+# The base stack (`make up`) is the NORMAL session profile: real Sign Up / Log
+# In with argon2id credentials + opaque Bearer session tokens (AUTH_MODE=session,
+# the .env default). This override forces AUTH_MODE=dev for every backend plane:
+# no login at all, identity resolved from the X-Actor-Id header, session tokens
+# ignored. LOCAL ONLY — the app refuses AUTH_MODE=dev under staging/production
+# (F-22 fail-closed), so this override must never reach a deployed environment.
+#
+# `environment:` wins over the `AUTH_MODE=session` coming from `env_file: .env`,
+# so no .env edit is required. Same Compose project + same named volumes as the
+# base stack: switching profiles preserves your data (only `make nuke` deletes
+# volumes). SEED_DEV_ADMIN is intentionally left unset — it follows AUTH_MODE, so
+# the credentialless `user_admin` fixture is provisioned automatically under dev.
+# =============================================================================
+
+x-dev-auth-env: &dev-auth-env
+  environment:
+    AUTH_MODE: dev
+
+services:
+  migrate:
+    <<: *dev-auth-env
+  api:
+    <<: *dev-auth-env
+  worker-default:
+    <<: *dev-auth-env
+  worker-data:
+    <<: *dev-auth-env
+  worker-backtest:
+    <<: *dev-auth-env
+  worker-agent:
+    <<: *dev-auth-env
+  agent-coordinator:
+    <<: *dev-auth-env
+  scheduler:
+    <<: *dev-auth-env

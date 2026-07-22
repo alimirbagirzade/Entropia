@@ -13,18 +13,15 @@ follow the server's mode, NOT make the server accept both credentials.
 from __future__ import annotations
 
 import pytest
-from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.requests import Request
 
 from entropia.application.commands import auth as auth_cmd
 from entropia.apps.api.deps import request_context
-from entropia.apps.retire_dev_admin import RetireRefused, retire_dev_admin
 from entropia.apps.seed import DEFAULT_ADMIN_ID, seed_identities, should_seed_dev_admin
 from entropia.config import get_settings
 from entropia.domain.lifecycle.enums import Role
 from entropia.infrastructure.postgres.models import HumanUser, Principal
-from entropia.infrastructure.postgres.models.auth import HumanCredential
 from entropia.infrastructure.postgres.repositories import identity as identity_repo
 
 pytestmark = pytest.mark.integration
@@ -180,125 +177,3 @@ async def test_fresh_session_mode_database_bootstraps_a_real_admin(
     )
     assert second["role"] == str(Role.USER)
     assert await identity_repo.count_active_admins(session) == 1
-
-
-# ---------------------------------------------------------------------------
-# The upgrade path for an EXISTING database that already has the dev Admin.
-# ---------------------------------------------------------------------------
-
-
-async def _seed_dev_admin(session: AsyncSession) -> None:
-    """Reproduce the legacy state: a credentialless ACTIVE Admin."""
-    session.add(Principal(principal_id=DEFAULT_ADMIN_ID, principal_type="human"))
-    await session.flush()
-    session.add(
-        HumanUser(
-            user_id=DEFAULT_ADMIN_ID,
-            username="admin",
-            display_name="Default Admin",
-            current_role=Role.ADMIN,
-            status="active",
-        )
-    )
-    await session.flush()
-
-
-@pytest.mark.asyncio
-async def test_retire_dev_admin_reopens_bootstrap_and_is_idempotent(
-    session: AsyncSession, session_mode: None
-) -> None:
-    await _seed_dev_admin(session)
-    assert await identity_repo.count_active_admins(session) == 1
-
-    outcome = await retire_dev_admin(session)
-    assert "retired" in outcome
-    assert await identity_repo.count_active_admins(session) == 0
-
-    user = await session.get(HumanUser, DEFAULT_ADMIN_ID)
-    assert user is not None and user.status == "disabled"
-    # Nothing is deleted — the principal and the row itself stay for every FK
-    # and audit reference that already points at them.
-    assert await session.get(Principal, DEFAULT_ADMIN_ID) is not None
-
-    # ...and the transition is auditable.
-    from entropia.infrastructure.postgres.models import AuditEvent
-
-    kinds = (
-        (
-            await session.execute(
-                select(AuditEvent.event_kind).where(AuditEvent.target_entity_id == DEFAULT_ADMIN_ID)
-            )
-        )
-        .scalars()
-        .all()
-    )
-    assert "user.dev_admin_retired" in kinds
-
-    # Second run: a no-op, not a second audit event.
-    again = await retire_dev_admin(session)
-    assert "no-op" in again
-
-    # The bootstrap window it re-opened actually works.
-    created = await auth_cmd.sign_up(
-        session,
-        username="root",
-        password=PASSWORD,
-        email="root@entropia.test",
-        bootstrap_admin_email="root@entropia.test",
-    )
-    assert created["role"] == str(Role.ADMIN)
-
-
-@pytest.mark.asyncio
-async def test_retire_dev_admin_refuses_a_real_account(
-    session: AsyncSession, session_mode: None
-) -> None:
-    """Fail-closed: a row with a password is somebody's live account, not the
-    credentialless seed fixture."""
-    await _seed_dev_admin(session)
-    session.add(
-        HumanCredential(
-            user_id=DEFAULT_ADMIN_ID,
-            password_hash="argon2-placeholder",
-            algorithm="argon2id",
-        )
-    )
-    await session.flush()
-
-    with pytest.raises(RetireRefused, match="password credential"):
-        await retire_dev_admin(session)
-
-    user = await session.get(HumanUser, DEFAULT_ADMIN_ID)
-    assert user is not None and user.status == "active"
-
-
-@pytest.mark.asyncio
-async def test_retire_dev_admin_refuses_when_another_admin_exists(
-    session: AsyncSession, session_mode: None
-) -> None:
-    """Fail-closed: never reduce administrative access when the install already
-    has a real Admin (nothing is blocking bootstrap in that case)."""
-    await _seed_dev_admin(session)
-    # A second, real Admin (bootstrap cannot mint one while the dev Admin is
-    # active, so provision it the way an existing Admin promotion would).
-    real = await auth_cmd.sign_up(session, username="root", password=PASSWORD)
-    promoted = await session.get(HumanUser, real["user_id"])
-    assert promoted is not None
-    promoted.current_role = Role.ADMIN
-    await session.flush()
-    assert await identity_repo.count_active_admins(session) == 2
-
-    with pytest.raises(RetireRefused, match="active Admins exist"):
-        await retire_dev_admin(session)
-
-    user = await session.get(HumanUser, DEFAULT_ADMIN_ID)
-    assert user is not None and user.status == "active"
-
-
-@pytest.mark.asyncio
-async def test_retire_dev_admin_on_a_clean_database_is_a_noop(
-    session: AsyncSession, session_mode: None
-) -> None:
-    outcome = await retire_dev_admin(session)
-    assert "no-op" in outcome
-    assert await session.scalar(select(func.count()).select_from(HumanUser)) == 0

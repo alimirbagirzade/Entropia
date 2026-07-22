@@ -36,6 +36,23 @@ x-worker-healthcheck: &worker-healthcheck
     retries: 5
     start_period: 20s
 
+# Runtime backend planes (api + every worker) need the schema migrated AND the
+# baseline system identities/capabilities provisioned before they start. They
+# depend on the `provision` one-shot, which itself depends on `migrate`, so the
+# effective start order is postgres-healthy -> migrate -> provision -> plane.
+# (`provision` transitively covers `migrate`; the redis/minio health gates are
+# re-listed here because a service-level `depends_on` replaces the one inherited
+# from *backend-build rather than merging with it.)
+x-needs-provision: &needs-provision
+  postgres:
+    condition: service_healthy
+  redis:
+    condition: service_healthy
+  minio:
+    condition: service_healthy
+  provision:
+    condition: service_completed_successfully
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -108,20 +125,32 @@ services:
     command: ["alembic", "upgrade", "head"]
     restart: "no"
 
+  # Mode-aware, idempotent baseline provisioning one-shot (audit PROV-06). Runs
+  # AFTER migrations and BEFORE any plane that needs system identities. In
+  # session mode (the .env default) it ensures the required Agent/system
+  # principal + baseline capability rows WITHOUT creating the credentialless
+  # human Admin (that would permanently block first-Admin bootstrap); in dev
+  # mode it also provisions the dev Admin fixture (SEED_DEV_ADMIN follows
+  # AUTH_MODE). It seeds NO demo/user-owned domain data — all such data stays
+  # behind explicit SEED_* flags. Idempotent, so it re-runs harmlessly on every
+  # `up`. Only Postgres is required (identities + capabilities are DB-only), so
+  # its depends_on intentionally omits redis/minio.
+  provision:
+    <<: *backend-build
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    command: ["python", "-m", "entropia.apps.seed"]
+    restart: "no"
+
   api:
     <<: *backend-build
     command: ["uvicorn", "entropia.apps.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
     ports:
       - "${API_HOST_PORT:-8000}:8000"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
-      migrate:
-        condition: service_completed_successfully
+    depends_on: *needs-provision
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0) if urllib.request.urlopen('http://localhost:8000/api/v1/health/live').status==200 else sys.exit(1)"]
       interval: 10s
@@ -130,26 +159,32 @@ services:
 
   worker-default:
     <<: [*backend-build, *worker-healthcheck]
+    depends_on: *needs-provision
     command: ["python", "-m", "entropia.apps.worker", "--queues", "default,maintenance"]
 
   worker-data:
     <<: [*backend-build, *worker-healthcheck]
+    depends_on: *needs-provision
     command: ["python", "-m", "entropia.apps.worker", "--queues", "data"]
 
   worker-backtest:
     <<: [*backend-build, *worker-healthcheck]
+    depends_on: *needs-provision
     command: ["python", "-m", "entropia.apps.worker", "--queues", "backtest"]
 
   worker-agent:
     <<: [*backend-build, *worker-healthcheck]
+    depends_on: *needs-provision
     command: ["python", "-m", "entropia.apps.worker", "--queues", "agent,agent-high"]
 
   agent-coordinator:
     <<: [*backend-build, *worker-healthcheck]
+    depends_on: *needs-provision
     command: ["python", "-m", "entropia.apps.agent_coordinator"]
 
   scheduler:
     <<: [*backend-build, *worker-healthcheck]
+    depends_on: *needs-provision
     command: ["python", "-m", "entropia.apps.scheduler"]
 
   web:

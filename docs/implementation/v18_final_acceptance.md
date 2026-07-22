@@ -152,15 +152,35 @@ Onay için karar verilmesi gereken maddeler:
 | D-8 | **A11Y-02** `link-in-text-block` | bu belge | Takip slice'ı / kabul |
 | D-9 | **20.11** — 22 sayfalık final screenshot setinin kabulü | GAP 20 | Onay / revizyon |
 
-**Onay kaydı** (product-owner tarafından doldurulur):
+**Onay kaydı** (product-owner tarafından dolduruldu):
 
 ```
-Onaylayan       :
-Tarih           :
-Kapsam          : D-1 … D-9 kararları
-Karar özeti     :
-Not / istisna   :
+Onaylayan       : alimirbagirzade (product owner)
+Tarih           : 2026-07-22
+Kapsam          : D-1 … D-9 kararları (22-Jul deep-audit / R3 kickoff)
+Karar özeti     : D-1 KABUL · D-2 FIX(R3) · D-3 FIX(R3) · D-4 FIX(R3) ·
+                  D-5 FIX(R3) · D-6 FIX(R3) · D-7 (b) kısmi kontrast · D-8 FIX ·
+                  D-9 KABUL (20.11 PASS)
+Not / istisna   : "FIX(R3)" maddeleri KABUL DEĞİLDİR — R3'te düzeltilecek onaylı
+                  kapsamdır; ilgili status satırları düzeltme LANDED olana kadar
+                  In Progress (R3) kalır. Yalnız D-1 ve D-9 imzayla kapanır.
+                  A-06 (10 sayfa derin görsel kıyas) ve A-08 (NVDA/VoiceOver
+                  manuel a11y) bu imzanın DIŞINDA açık iş olarak kalır.
 ```
+
+### 4.1 Karar sonuçları — madde madde
+
+| Karar # | Konu | PO kararı | Sonraki aksiyon |
+|---|---|---|---|
+| D-1 | Kalan görsel sapma listesi (`v18_visual_deviations.md`) | **KABUL (imzalı)** | R3'e alınmayan sapmalar signed-deviation; PO-APPROVE→signed |
+| D-2 | Create Package makine-değeri görünümleri | **FIX (R3)** | P-03 display-label slice |
+| D-3 | Create Package kaynak/bağımlılık yerleşimi | **FIX (R3)** | P-04 iki-kolon layout slice |
+| D-4 | Portfolio ham `mbi_…` ULID | **FIX (R3)** | P-11 human-label projection slice |
+| D-5 | Results History kapalı satır metrik digest | **FIX (R3)** | P-12 collapsed-digest slice |
+| D-6 | TS/TL dikey yoğunluk | **FIX (R3)** | M-06/M-07 kompakt inline shell slice |
+| D-7 | A11Y-01 kontrast | **(b) kısmi düzeltme** | `--text-dim`/rozet-yeşil/amber koyulaştır; accent-mavi dokunulmaz |
+| D-8 | A11Y-02 `link-in-text-block` | **FIX** | paragraf-içi link `text-decoration: underline` |
+| D-9 | 22-sayfa final screenshot seti (20.11) | **KABUL** | 20.11 → PASS; A-06 derin kıyas ayrı açık iş |
 
 ---
 

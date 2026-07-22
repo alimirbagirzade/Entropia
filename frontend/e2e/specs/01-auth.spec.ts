@@ -63,9 +63,12 @@ test.describe("Authentication", () => {
     expect(await readSessionToken(page)).toBeNull();
 
     // (9) The OLD token is rejected after logout — /me over the revoked token is
-    // anonymous (never still authenticated).
-    const afterLogout = await getMe(page, token);
-    expect(afterLogout.is_authenticated).toBe(false);
+    // a 401 SESSION_INVALID, never a silent downgrade to an anonymous 200. (Only
+    // presenting NO credential resolves anonymous; a presented-but-invalid one is
+    // an error, which is exactly what the stale-session redirect keys off.)
+    const revoked = await apiGet(page, "/me", token);
+    expect(revoked.status()).toBe(401);
+    expect(((await revoked.json()) as { error?: { code?: string } }).error?.code).toBe("SESSION_INVALID");
 
     // ...and the account can log back in as the same principal (session reset).
     await logIn(page, actor);

@@ -6,7 +6,7 @@ import { MemoryRouter } from "react-router-dom";
 import { Layout } from "@/app/Layout";
 import { resetAuthMode } from "@/lib/authMode";
 import { setDevActorId } from "@/lib/devActor";
-import { clearSession, setSession } from "@/lib/session";
+import { clearSession, setSession, subscribe } from "@/lib/session";
 import type { AuthUser, Meta } from "@/lib/types";
 import { stubApi } from "./helpers/apiStub";
 
@@ -124,5 +124,47 @@ describe("app shell auth mode", () => {
     // the wrong one flash on a dev-mode server.
     expect(devActorField()).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Login \/ Sign Up/i })).not.toBeInTheDocument();
+  });
+});
+
+// AUTH-10 / audit §9.3 — session state must be reactive ACROSS browser tabs. A
+// login/logout in another tab writes the same localStorage keys but does not call
+// this tab's in-memory listeners; the browser `storage` event is the only signal,
+// and it fires exclusively in the OTHER tabs (never the writer). session.ts relays
+// it into the external store so every subscriber re-reads.
+describe("cross-tab session sync (AUTH-10)", () => {
+  it("a logout in another tab flips this tab's shell from signed-in to anonymous", async () => {
+    setSession({ token: "tok_live", user: USER, expiresAt: null });
+    renderShell("session");
+    await screen.findByRole("button", { name: "Log out" });
+
+    // Simulate the sibling tab: it removed the session keys, and the browser now
+    // delivers the storage event to THIS tab. A cross-tab logout is a DELIBERATE
+    // clear, so the shell must land on anonymous "Login / Sign Up" — never bounce
+    // to /login (that is only the involuntary server-rejection path).
+    localStorage.removeItem("entropia.sessionToken");
+    localStorage.removeItem("entropia.session");
+    window.dispatchEvent(
+      new StorageEvent("storage", { key: "entropia.sessionToken", storageArea: localStorage }),
+    );
+
+    await screen.findByRole("link", { name: /Login \/ Sign Up/i });
+    expect(screen.queryByRole("button", { name: "Log out" })).not.toBeInTheDocument();
+  });
+
+  it("relays only session-key storage events to subscribers", () => {
+    const listener = vi.fn();
+    const unsubscribe = subscribe(listener);
+
+    // An unrelated app key must not wake session subscribers.
+    window.dispatchEvent(new StorageEvent("storage", { key: "some.other.key", storageArea: localStorage }));
+    expect(listener).not.toHaveBeenCalled();
+
+    // A targeted session write, and a whole-store clear (key === null), both do.
+    window.dispatchEvent(new StorageEvent("storage", { key: "entropia.session", storageArea: localStorage }));
+    window.dispatchEvent(new StorageEvent("storage", { key: null, storageArea: localStorage }));
+    expect(listener).toHaveBeenCalledTimes(2);
+
+    unsubscribe();
   });
 });

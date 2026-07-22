@@ -1,6 +1,7 @@
+import type { ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen } from "@testing-library/react";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Layout } from "@/app/Layout";
@@ -184,8 +185,9 @@ function renderShellWithProtectedFailure(routes: Record<string, unknown>) {
 
 describe("session-mode shell landing on an involuntary session loss", () => {
   it("a server-revoked token drives exactly one clean redirect to /login", async () => {
+    const before = getSessionInvalidations();
     setSession({ token: "tok_stale", user: USER, expiresAt: null });
-    const fetchMock = renderShellWithProtectedFailure({
+    renderShellWithProtectedFailure({
       "GET /me": apiErrorRoute(401, SESSION_INVALID, "session revoked"),
     });
 
@@ -194,11 +196,13 @@ describe("session-mode shell landing on an involuntary session loss", () => {
     // ...with the stale token cleared...
     expect(getSessionToken()).toBeNull();
 
-    // ...and no redirect loop: /login renders outside the Layout, so the failing
-    // /me query does not re-fire and re-navigate. Give any stray refetch a beat.
+    // ...and NO storm. The involuntary-loss counter is the true anti-loop signal:
+    // it ticks exactly once. removeQueries may re-init the shell's still-mounted
+    // reads, but each re-fires against a now-cleared token and hits the guarded
+    // no-op in noteSessionInvalid, so the counter never climbs again and the
+    // redirect cannot loop. Give any stray refetch a beat to prove it stays put.
     await new Promise((r) => setTimeout(r, 30));
-    const meReads = fetchMock.mock.calls.filter(([u]) => String(u).includes("/me")).length;
-    expect(meReads).toBeLessThanOrEqual(2); // initial (+ at most one retry), never a storm
+    expect(getSessionInvalidations()).toBe(before + 1);
     expect(screen.getByText("LOGIN SCREEN")).toBeInTheDocument();
   });
 
@@ -213,5 +217,63 @@ describe("session-mode shell landing on an involuntary session loss", () => {
     await screen.findByRole("button", { name: "Log out" });
     expect(screen.queryByText("LOGIN SCREEN")).not.toBeInTheDocument();
     expect(getSessionToken()).toBe("tok_live");
+  });
+});
+
+// ---- AUTH-08: the redirect preserves a safe return path and drops identity state ----
+
+// A stand-in login screen that echoes the return path the shell handed it via
+// router state, so a test can prove the originating page was preserved.
+function LoginReturnProbe() {
+  const location = useLocation();
+  const from = (location.state as { from?: string } | null)?.from ?? "(none)";
+  return <div>{`LOGIN return=${from}`}</div>;
+}
+
+describe("session-mode redirect return path and identity cleanup (AUTH-08)", () => {
+  function renderShell(loginElement: ReactNode, routes: Record<string, unknown>) {
+    vi.stubGlobal("EventSource", FakeEventSource);
+    stubApi({ "GET /meta": meta("session"), "GET /health/live": { status: "ok" }, ...routes });
+    setAuthMode("session");
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={["/panel"]}>
+          <Routes>
+            <Route path="/login" element={loginElement} />
+            <Route path="*" element={<Layout />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    return client;
+  }
+
+  it("carries the originating path to /login as a safe internal return path", async () => {
+    setSession({ token: "tok_stale", user: USER, expiresAt: null });
+    renderShell(<LoginReturnProbe />, { "GET /me": apiErrorRoute(401, SESSION_INVALID) });
+
+    // The user was on /panel when the session was revoked; a later re-login must be
+    // able to land them back there (Login.tsx reads location.state.from).
+    expect(await screen.findByText("LOGIN return=/panel")).toBeInTheDocument();
+  });
+
+  it("cancels and REMOVES identity-bound queries, not merely invalidates them", async () => {
+    setSession({ token: "tok_stale", user: USER, expiresAt: null });
+    const client = renderShell(<div>LOGIN SCREEN</div>, {
+      "GET /me": apiErrorRoute(401, SESSION_INVALID),
+    });
+    // Spy after render so construction traffic is not counted.
+    const cancelSpy = vi.spyOn(client, "cancelQueries");
+    const removeSpy = vi.spyOn(client, "removeQueries");
+
+    await screen.findByText("LOGIN SCREEN");
+
+    // invalidate would refetch the active protected reads (re-failing with the now
+    // cleared token) and leave the old principal's rows painted until each settled.
+    // The loss path instead aborts in-flight reads and drops the cache outright —
+    // the removal is deferred past the redirect (see Layout), so waitFor lets it run.
+    expect(cancelSpy).toHaveBeenCalled();
+    await waitFor(() => expect(removeSpy).toHaveBeenCalled());
   });
 });

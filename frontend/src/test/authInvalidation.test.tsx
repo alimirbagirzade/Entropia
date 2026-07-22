@@ -31,7 +31,13 @@ function makeRoutes() {
     "POST /auth/login": LOGIN_RESPONSE,
     "GET /auth/bootstrap-status": () => {
       bootstrapReads += 1;
-      return { bootstrap_configured: true, active_admin_exists: bootstrapReads > 1 };
+      // The first read reports no operational Admin (window open); a later read,
+      // after a successful signup/login refetch, reports a login-capable Admin.
+      return {
+        bootstrap_configured: true,
+        active_admin_exists: bootstrapReads > 1,
+        login_capable_admin_exists: bootstrapReads > 1,
+      };
     },
   };
   return routes;
@@ -42,7 +48,7 @@ function AuthProbe() {
   const signup = useSignup();
   const login = useLogin();
   const windowLabel = status.isSuccess
-    ? status.data.active_admin_exists
+    ? status.data.login_capable_admin_exists
       ? "closed"
       : "open"
     : "loading";

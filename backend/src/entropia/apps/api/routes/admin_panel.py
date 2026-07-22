@@ -98,6 +98,9 @@ async def assign_role(
         expected_head_revision_id=body.expected_head_revision_id,
         reason=body.reason,
         idempotency_key=idempotency_key,
+        # Mode-aware last-Admin protection (PROV-03): session mode protects the
+        # last login-capable Admin, not merely the last Admin role row.
+        auth_mode=get_settings().auth_mode,
     )
 
 

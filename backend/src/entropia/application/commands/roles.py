@@ -20,8 +20,21 @@ from entropia.shared.errors import NotFoundError
 
 
 async def change_user_role(
-    session: AsyncSession, actor: Actor, *, target_user_id: str, new_role: Role
+    session: AsyncSession,
+    actor: Actor,
+    *,
+    target_user_id: str,
+    new_role: Role,
+    auth_mode: str = "dev",
 ) -> HumanUser:
+    """Change a human user's role with mode-aware last-Admin protection.
+
+    ``auth_mode`` selects the operational Admin count (audit PROV-03): ``session``
+    protects the last login-capable Admin, ``dev`` the last active Admin role row.
+    The legacy ``/users/{id}/role`` path historically lacked the shared advisory
+    lock around count-and-demote; it now takes ``lock_admin_count`` on the demote
+    path exactly like :func:`assign_user_role`, so two concurrent demotions of
+    different Admins can no longer both read count==2 and drop to zero (TOCTOU)."""
     require_admin(actor)
     assert_role_assignable(new_role)
 
@@ -33,12 +46,17 @@ async def change_user_role(
     if previous_role == new_role:
         return user  # idempotent no-op
 
-    active_admins = await identity_repo.count_active_admins(session)
-    ensure_not_last_admin(
-        target_is_admin=previous_role == Role.ADMIN,
-        becomes_admin=new_role == Role.ADMIN,
-        active_admin_count=active_admins,
-    )
+    if previous_role == Role.ADMIN and new_role != Role.ADMIN:
+        # Demotion is the only path that can breach last-admin. Serialize the
+        # count+check against concurrent demotions of a *different* Admin with the
+        # shared transaction-scoped advisory lock (released at commit/rollback).
+        await identity_repo.lock_admin_count(session)
+        active_admins = await identity_repo.count_operational_admins(session, auth_mode=auth_mode)
+        ensure_not_last_admin(
+            target_is_admin=True,
+            becomes_admin=False,
+            active_admin_count=active_admins,
+        )
 
     user.current_role = new_role
     user.version += 1

@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from entropia.domain.lifecycle.enums import DeletionState, Role
 from entropia.infrastructure.postgres.models import Agent, HumanUser
+from entropia.infrastructure.postgres.models.auth import HumanCredential
 
 # Fixed key for the transaction-scoped advisory lock that serializes the
 # last-active-Admin critical section (count + check + demote). Any stable app-wide
@@ -50,6 +51,13 @@ async def lock_admin_count(session: AsyncSession) -> None:
 
 
 async def count_active_admins(session: AsyncSession) -> int:
+    """Count active Admin ROLE ROWS — regardless of whether they can log in.
+
+    This is the dev-mode operational count: under ``AUTH_MODE=dev`` an Admin is
+    reachable through ``X-Actor-Id`` with no password, so a credentialless Admin
+    role row IS an operator. Session mode must NOT use this count (PROV-02/03):
+    a role row without a credential is nobody who can log in — see
+    :func:`count_login_capable_admins`."""
     stmt = (
         select(func.count())
         .select_from(HumanUser)
@@ -60,3 +68,44 @@ async def count_active_admins(session: AsyncSession) -> int:
         )
     )
     return int((await session.execute(stmt)).scalar_one())
+
+
+async def count_login_capable_admins(session: AsyncSession) -> int:
+    """Count active Admins who can actually LOG IN — the session-mode operational
+    Admin count (audit PROV-02/03).
+
+    An administrator who can recover or operate a session-mode installation is an
+    active/non-deleted :class:`HumanUser` with role Admin AND a stored
+    :class:`HumanCredential` (one per user — its PK is ``user_id``, so the inner
+    join yields at most one row per Admin and never inflates the count). The
+    legacy credentialless ``user_admin`` seed has a role row but no credential, so
+    it is correctly excluded: it can neither log in nor unblock a real install."""
+    stmt = (
+        select(func.count())
+        .select_from(HumanUser)
+        .join(HumanCredential, HumanCredential.user_id == HumanUser.user_id)
+        .where(
+            HumanUser.current_role == Role.ADMIN,
+            HumanUser.status == "active",
+            HumanUser.deletion_state == DeletionState.ACTIVE,
+        )
+    )
+    return int((await session.execute(stmt)).scalar_one())
+
+
+async def count_operational_admins(session: AsyncSession, *, auth_mode: str) -> int:
+    """The operational Admin count for the active authentication mode — the ONE
+    rule both first-Admin bootstrap and last-Admin protection must share (audit
+    PROV-02/03, §6.5).
+
+    * ``session`` mode → :func:`count_login_capable_admins` (credentialed Admins);
+      a credentialless legacy role row is not an operator here.
+    * ``dev`` (or any non-session) mode → :func:`count_active_admins` (role rows);
+      an ``X-Actor-Id`` Admin needs no credential to operate.
+
+    The auth mode is passed in (never read from settings here) so this layer stays
+    free of configuration and the rule is explicit and unit-testable at each call
+    site. Call under :func:`lock_admin_count` on any count-and-decide path."""
+    if auth_mode == "session":
+        return await count_login_capable_admins(session)
+    return await count_active_admins(session)

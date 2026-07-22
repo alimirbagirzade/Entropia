@@ -83,16 +83,33 @@ interface WindowGuidance {
   detail: string;
 }
 
-// The (configured, adminExists) pair fully determines the operator's next step.
-// A closed window (an Admin already exists) is terminal regardless of the flag.
+// The operative signal is login_capable_admin_exists, NOT active_admin_exists
+// (PROV-05): a legacy credentialless Admin ROLE ROW exists but nobody can log in
+// as it, so the window must still read OPEN. Only a credentialed Admin closes it.
 function windowGuidance(status: BootstrapStatus): WindowGuidance {
-  if (status.active_admin_exists) {
+  if (status.login_capable_admin_exists) {
     return {
       tone: "ok",
-      headline: "Closed — an Admin already exists",
+      headline: "Closed — a login-capable Admin already exists",
       detail:
         "Provisioning is complete. First-Admin bootstrap no longer applies; " +
         "manage roles and promotions from the Panel.",
+    };
+  }
+  if (status.active_admin_exists) {
+    // Legacy credentialless Admin present but not login-capable: the window is
+    // OPEN because credential-aware bootstrap (PROV-02) ignores that row.
+    return {
+      tone: "warn",
+      headline: "Open — a legacy Admin exists but cannot log in",
+      detail:
+        "An Admin role row exists but has no login credential, so nobody can " +
+        "operate this install yet. " +
+        (status.bootstrap_configured
+          ? "Sign up with the configured bootstrap email to provision the first " +
+            "real Admin over it — the legacy row is left untouched."
+          : "Set ENTROPIA_BOOTSTRAP_ADMIN_EMAIL on the API, restart it, then sign " +
+            "up with that email to provision the first real Admin."),
     };
   }
   if (status.bootstrap_configured) {
@@ -120,9 +137,12 @@ function BootstrapWindow({ status }: { status: BootstrapStatus }) {
     <>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
         <StatusBadge
-          label={status.active_admin_exists ? "window closed" : "window open"}
-          tone={status.active_admin_exists ? "ok" : "warn"}
+          label={status.login_capable_admin_exists ? "window closed" : "window open"}
+          tone={status.login_capable_admin_exists ? "ok" : "warn"}
         />
+        {status.active_admin_exists && !status.login_capable_admin_exists ? (
+          <StatusBadge label="legacy admin (no login)" tone="warn" />
+        ) : null}
         <StatusBadge
           label={status.bootstrap_configured ? "email configured" : "email not configured"}
           tone={status.bootstrap_configured ? "ok" : "neutral"}

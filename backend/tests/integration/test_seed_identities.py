@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from entropia.apps.seed import (
     DEFAULT_ADMIN_ID,
     DEFAULT_AGENT_ID,
+    SeedPrincipalTypeConflict,
     seed_capabilities,
     seed_identities,
 )
@@ -61,6 +62,49 @@ async def test_seed_identities_is_idempotent(session: AsyncSession) -> None:
     assert human_count == 1
     agent_count = await session.scalar(select(func.count()).select_from(Agent))
     assert agent_count == 1
+
+
+async def test_seed_repairs_a_bare_admin_principal(session: AsyncSession) -> None:
+    """PROV-04: an interrupted upgrade / prior session-mode run can leave a bare
+    admin Principal with no HumanUser child. The old HumanUser-first check +
+    unconditional Principal INSERT would duplicate the PK; the separated ensure
+    repairs it — the seed completes and the HumanUser child is created."""
+    session.add(Principal(principal_id=DEFAULT_ADMIN_ID, principal_type=PrincipalType.HUMAN))
+    await session.commit()
+
+    await seed_identities(session)  # dev-mode default seeds the admin HumanUser
+    await session.commit()
+
+    principal_count = await session.scalar(select(func.count()).select_from(Principal))
+    assert principal_count == 2  # admin + agent, no duplicate admin principal
+    admin = await session.get(HumanUser, DEFAULT_ADMIN_ID)
+    assert admin is not None and admin.current_role == Role.ADMIN
+
+
+async def test_seed_repairs_a_bare_agent_principal(session: AsyncSession) -> None:
+    """PROV-04: a bare Agent Principal (no Agent child) is repaired without a
+    duplicate INSERT — the Agent child is created over the existing principal."""
+    session.add(Principal(principal_id=DEFAULT_AGENT_ID, principal_type=PrincipalType.AGENT))
+    await session.commit()
+
+    await seed_identities(session)
+    await session.commit()
+
+    principal_count = await session.scalar(select(func.count()).select_from(Principal))
+    assert principal_count == 2  # admin + agent, no duplicate agent principal
+    agent = await session.get(Agent, DEFAULT_AGENT_ID)
+    assert agent is not None and agent.enabled is True
+
+
+async def test_seed_fails_closed_on_principal_type_conflict(session: AsyncSession) -> None:
+    """PROV-04: an id already taken by a principal of the WRONG type must fail
+    closed — never a silent reinterpretation or a duplicate INSERT. Here the
+    agent id already exists as a HUMAN principal."""
+    session.add(Principal(principal_id=DEFAULT_AGENT_ID, principal_type=PrincipalType.HUMAN))
+    await session.commit()
+
+    with pytest.raises(SeedPrincipalTypeConflict):
+        await seed_identities(session)
 
 
 async def test_seed_capabilities_on_fresh_database(session: AsyncSession) -> None:

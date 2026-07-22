@@ -61,11 +61,18 @@ async def assign_user_role(
     expected_head_revision_id: int,
     reason: str | None = None,
     idempotency_key: str | None = None,
+    auth_mode: str = "dev",
 ) -> dict[str, Any]:
     """Assign ``target_role`` to a human user (Admin-only, atomic, OCC-guarded).
 
     Returns a JSON-safe user projection with ``changed`` (false on a no-op) and the
     ``role_assigned`` ``audit_event_id`` when a mutation actually occurred.
+
+    ``auth_mode`` selects the operational Admin count that gates last-Admin
+    protection (audit PROV-03): ``session`` mode protects the last *login-capable*
+    Admin, ``dev`` mode the last active Admin role row. Without this a
+    credentialless legacy Admin could pad the role-row count to two and let the
+    only real session Admin be demoted, locking the installation.
     """
     require_admin_panel(actor)  # service-side guard — not just the route
     assert_role_assignable(target_role)
@@ -98,7 +105,9 @@ async def assign_user_role(
             # the count+check against concurrent demotions of a *different* Admin
             # (TOCTOU -> zero admins) with a transaction-scoped advisory lock.
             await identity_repo.lock_admin_count(session)
-            active_admins = await identity_repo.count_active_admins(session)
+            active_admins = await identity_repo.count_operational_admins(
+                session, auth_mode=auth_mode
+            )
             ensure_not_last_admin(
                 target_is_admin=True,
                 becomes_admin=False,

@@ -18,14 +18,14 @@ Sütunlar:
 | GET `/ready` | `ready` `health.py:36` | — | |
 | GET `` (meta) | `meta` `meta.py:22` | — | |
 | GET `/metrics` | `metrics_endpoint` `metrics.py:54` | Prometheus text exposition | |
-| GET `/events` | `events` `sse.py:133` | `SseHub` / outbox poller | |
-| POST `/signup` | `sign_up` `auth.py:80` | `auth_commands.sign_up` | (anonim) |
-| POST `/login` | `login` `auth.py:100` | `auth_commands.login` | (anonim) |
-| POST `/logout` | `logout` `auth.py:117` | `auth_commands.logout` | |
-| GET `/bootstrap-status` | `bootstrap_status` `auth.py:133` | `auth_commands.bootstrap_status` | (anonim) |
-| POST `/reauth` | `reauth` `auth.py:149` | `auth_commands.reauthenticate` | `require_authenticated:161` |
-| GET `/me` | `me` `identity.py:36` | ctx.actor | |
-| POST `/users/{user_id}/role` | `set_user_role` `identity.py:48` | `commands.roles.change_user_role` (OCC `?`) | `require_admin:53` |
+| GET `/events` | `events` `sse.py:162` | `SseHub` / outbox poller | `_authenticated_subscriber:163` (AUTH-11 — handshake authenticate, anonim abonelik yok) |
+| POST `/signup` | `sign_up` `auth.py:84` | `auth_commands.sign_up` | (anonim) |
+| POST `/login` | `login` `auth.py:107` | `auth_commands.login` | (anonim; `AUTH_MODE=dev`'de insan login sunucu-reddi — #346/#347) |
+| POST `/logout` | `logout` `auth.py:132` | `auth_commands.logout` | |
+| GET `/bootstrap-status` | `bootstrap_status` `auth.py:148` | `auth_commands.bootstrap_status` (döner: `login_capable_admin_exists` — PROV-05) | (anonim) |
+| POST `/reauth` | `reauth` `auth.py:164` | `auth_commands.reauthenticate` | `require_authenticated` |
+| GET `/me` | `me` `identity.py:37` | ctx.actor | |
+| POST `/users/{user_id}/role` | `set_user_role` `identity.py:49` | `commands.roles.change_user_role` (OCC `?`) | `require_admin` |
 
 ## admin_panel.py
 

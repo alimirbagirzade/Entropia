@@ -53,6 +53,11 @@ export interface AllocationEntry {
   active: boolean;
   equity_share_percent: string | null;
   position_index: number;
+  // Server-owned human name of the bound composition item (null when the item
+  // is gone from the composition). The page shows it as the primary label and
+  // keeps composition_item_id as a secondary binding key (audit P-11 / F-07 —
+  // the browser never reconstructs a name from the raw mbi_ id).
+  display_label_override: string | null;
 }
 
 // The mutable draft projection (queries _draft_projection). draft_fingerprint

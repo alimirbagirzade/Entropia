@@ -82,6 +82,9 @@ const DRAFT_SAVED = {
         active: true,
         equity_share_percent: "90",
         position_index: 0,
+        // Server-owned human label of the bound item (P-11) — the sleeve row and
+        // example line name it; item_1 stays a secondary binding key.
+        display_label_override: "Momentum A",
       },
     ],
   },
@@ -152,6 +155,7 @@ const SYNC_PREVIEW = {
       active: true,
       equity_share_percent: "90",
       position_index: 0,
+      display_label_override: "Momentum A",
     },
   ],
   missing: [
@@ -162,6 +166,9 @@ const SYNC_PREVIEW = {
       active: true,
       equity_share_percent: "10",
       position_index: 1,
+      // Item no longer in the composition → server resolves label to null; the
+      // client falls back to the item-kind label.
+      display_label_override: null,
     },
   ],
   new_candidates: [
@@ -468,6 +475,22 @@ describe("Portfolio / Equity Allocation page", () => {
     expect(screen.queryByRole("button", { name: "Validate saved draft" })).not.toBeInTheDocument();
     // The toggle itself is never inside the disabled treatment.
     expect(toggle).not.toBeDisabled();
+  });
+
+  it("names sleeve rows by the server display label and keeps the id as a binding key (P-11)", async () => {
+    stubApi({
+      "GET /mainboard-compositions/ws_1/portfolio-allocation-draft": DRAFT_SAVED,
+      "GET /mainboards/default": MAINBOARD,
+    });
+    renderPage();
+
+    // The saved draft's entry carries display_label_override "Momentum A": the
+    // sleeve row's Item column AND the example line name it (audit P-11 / F-07 —
+    // the browser never reconstructs a name from the raw mbi_ id).
+    const labels = await screen.findAllByText("Momentum A");
+    expect(labels.length).toBeGreaterThan(0);
+    // The composition_item_id stays present as a secondary binding key (<code>).
+    expect(screen.getAllByText("item_1").length).toBeGreaterThan(0);
   });
 
   it("distinguishes the two Add Item empty states", async () => {

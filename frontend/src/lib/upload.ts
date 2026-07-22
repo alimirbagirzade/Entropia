@@ -7,9 +7,8 @@
 
 import { useCallback, useRef, useState } from "react";
 
-import { ApiError, BASE_URL } from "./apiClient";
-import { getDevActorId } from "./devActor";
-import { getSessionToken } from "./session";
+import { ApiError, authHeaders, BASE_URL, SESSION_INVALID } from "./apiClient";
+import { noteSessionInvalid } from "./session";
 import type { ApiErrorResponse } from "./types";
 
 export interface UploadProgress {
@@ -46,13 +45,15 @@ export function uploadFile<T>(
     formData.append(key, value);
   }
 
-  const devActorId = getDevActorId();
-  const sessionToken = getSessionToken();
-
   const promise = new Promise<T>((resolve, reject) => {
     xhr.open("POST", `${BASE_URL}${path}`);
-    if (sessionToken) xhr.setRequestHeader("Authorization", `Bearer ${sessionToken}`);
-    if (devActorId) xhr.setRequestHeader("X-Actor-Id", devActorId);
+    // One credential path for every transport: the shared mode-aware selector
+    // (apiClient.authHeaders) — never this module reading both stores and
+    // attaching both headers. An upload is a protected request too, so it must
+    // send exactly the credential the active AUTH_MODE trusts and nothing else.
+    for (const [key, value] of Object.entries(authHeaders())) {
+      xhr.setRequestHeader(key, value);
+    }
     if (options.idempotencyKey) xhr.setRequestHeader("Idempotency-Key", options.idempotencyKey);
     for (const [key, value] of Object.entries(options.headers ?? {})) {
       xhr.setRequestHeader(key, value);
@@ -76,14 +77,15 @@ export function uploadFile<T>(
         return;
       }
       const err = (payload as ApiErrorResponse | undefined)?.error;
-      reject(
-        new ApiError(
-          xhr.status,
-          err?.code ?? "UNKNOWN",
-          err?.message ?? xhr.statusText,
-          err?.details ?? [],
-        ),
-      );
+      const code = err?.code ?? "UNKNOWN";
+      // Route a rejected Bearer session through the SAME one-shot stale-session
+      // handler as fetch/text requests, so an upload that fails on an expired or
+      // revoked token clears the session once and lands the user back on /login —
+      // instead of stranding a dead token that would poison every later request.
+      // ONLY the canonical invalid-session code clears; a 403/ACCESS_DENIED leaves
+      // the (valid) session intact.
+      if (code === SESSION_INVALID) noteSessionInvalid();
+      reject(new ApiError(xhr.status, code, err?.message ?? xhr.statusText, err?.details ?? []));
     };
 
     xhr.onerror = () => {

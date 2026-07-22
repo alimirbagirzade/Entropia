@@ -128,33 +128,35 @@ async function fetchWithTimeout(input: string, init: RequestInit): Promise<Respo
   }
 }
 
-// Explicit, mode-consistent credential selection. The backend trusts exactly one
-// mechanism per AUTH_MODE and ignores the other, so the client names the matching
-// one instead of shipping both and hoping:
+// The single, mode-consistent human-credential selector. Every transport in the
+// app (fetch JSON, text GET, XHR upload) routes through this one function so the
+// incompatible header can NEVER be attached in the selected mode — the backend
+// trusts exactly one mechanism per AUTH_MODE and ignores the other, and shipping
+// both is what produced the "login 200 -> protected 401" ambiguity.
 //
 //   session : the opaque Bearer session token is THE human credential. X-Actor-Id
 //             is never sent — session mode ignores a bare actor header anyway, and
 //             sending it would imply a fallback that must not exist.
 //   dev     : X-Actor-Id selects the local principal. A stale Bearer token from an
 //             earlier session-mode run is NOT sent, so it cannot linger.
-//   unknown : /meta has not answered yet. Only the auth-exempt bootstrap reads
-//             (/meta, /health) realistically land here; both credentials are
-//             offered so a first paint under either mode still resolves an
-//             identity, and the server honours only the one it trusts.
-function authHeaders(): Record<string, string> {
+//   unknown : /meta has not answered yet, so the runtime mode is not resolved.
+//             FAIL CLOSED — attach no human credential at all. The auth-exempt
+//             bootstrap reads (/meta, /health, /auth/*) need none, and every
+//             protected request is gated behind RuntimeAuthProvider until the mode
+//             is known, so no protected call should ever reach this branch. Sending
+//             a credential here would be a guess, and a wrong guess is exactly the
+//             ambiguity this whole selector exists to remove.
+export function authHeaders(): Record<string, string> {
   const mode = getAuthMode();
-  const sessionToken = getSessionToken();
-  const devActorId = getDevActorId();
   if (mode === "session") {
+    const sessionToken = getSessionToken();
     return sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {};
   }
   if (mode === "dev") {
+    const devActorId = getDevActorId();
     return devActorId ? { "X-Actor-Id": devActorId } : {};
   }
-  return {
-    ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
-    ...(devActorId ? { "X-Actor-Id": devActorId } : {}),
-  };
+  return {};
 }
 
 async function executeRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {

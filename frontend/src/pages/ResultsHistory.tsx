@@ -202,6 +202,38 @@ export function ResultsHistory() {
                     </button>
                   </div>
                 </div>
+                {/* D-5 (audit P-12): the collapsed row carries the fixed key-
+                    metric digest — Net, ROMAD, DD, Win Rate — read straight from
+                    the server projection (row.key_metrics); a missing metric is
+                    the honest EM_DASH, never a fabricated 0, and nothing is
+                    recomputed in the browser. Users rank history at a glance
+                    before expanding any card. */}
+                <div
+                  className="history-digest"
+                  style={{
+                    display: "flex",
+                    gap: 18,
+                    flexWrap: "wrap",
+                    padding: "2px 0 4px",
+                    fontSize: 13,
+                  }}
+                >
+                  {(
+                    [
+                      { key: "net_profit", label: "Net" },
+                      { key: "romad", label: "ROMAD" },
+                      { key: "max_drawdown", label: "DD" },
+                      { key: "win_rate", label: "Win Rate" },
+                    ] as const
+                  ).map((column) => (
+                    <span key={column.key} style={{ display: "inline-flex", gap: 6 }}>
+                      <span style={{ color: "var(--text-dim)", fontWeight: 700 }}>
+                        {column.label}
+                      </span>
+                      <span>{formatMetricValue(row.key_metrics[column.key])}</span>
+                    </span>
+                  ))}
+                </div>
                 {/* Always rendered so the key metrics + provenance are
                     addressable; CSS collapses the panel until the row is
                     expanded. */}

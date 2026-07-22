@@ -1,0 +1,217 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { cleanup, render, screen } from "@testing-library/react";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { Layout } from "@/app/Layout";
+import { ApiError, api, SESSION_INVALID } from "@/lib/apiClient";
+import { resetAuthMode, setAuthMode } from "@/lib/authMode";
+import {
+  clearSession,
+  getSessionInvalidations,
+  getSessionToken,
+  setSession,
+} from "@/lib/session";
+import type { AuthUser, Meta } from "@/lib/types";
+import { apiErrorRoute, stubApi } from "./helpers/apiStub";
+
+// TEST-10 / audit §9.3 — the invalid-session lifecycle regression suite.
+//
+// A logout is a DELIBERATE clear the shell must NOT redirect on (covered in
+// authModeShell.test.tsx). This suite pins the OPPOSITE: an INVOLUNTARY,
+// server-driven session loss — an expired, revoked, or otherwise unknown Bearer
+// token the browser is still holding — discovered by unrelated protected reads.
+// The server collapses expired/revoked/unknown into ONE canonical
+// SESSION_INVALID code; the client can only see the code, so its whole contract
+// is: clear exactly once, drop identity-bound state once, return to /login once,
+// never loop — and never do any of that for a 403 (a valid session, denied act).
+
+const USER: AuthUser = { user_id: "u1", username: "alice", display_name: "Alice", role: "user" };
+
+class FakeEventSource {
+  static readonly CONNECTING = 0;
+  static readonly OPEN = 1;
+  static readonly CLOSED = 2;
+  readyState = FakeEventSource.CONNECTING;
+  onopen: (() => void) | null = null;
+  onerror: (() => void) | null = null;
+  addEventListener(): void {}
+  removeEventListener(): void {}
+  close(): void {}
+}
+
+function meta(auth_mode: Meta["auth_mode"]): Meta {
+  return {
+    name: "Entropia V18",
+    version: "0.1.0",
+    environment: "local",
+    api_base_path: "/api/v1",
+    auth_mode,
+  };
+}
+
+beforeEach(() => {
+  localStorage.clear();
+  resetAuthMode();
+});
+
+afterEach(() => {
+  cleanup();
+  clearSession();
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+  resetAuthMode();
+});
+
+// ---- The client contract: what a SESSION_INVALID answer does to local state ----
+
+describe("invalid-session client contract", () => {
+  it("a revoked/expired token (SESSION_INVALID) clears the local session exactly once", async () => {
+    setAuthMode("session");
+    setSession({ token: "tok_stale", user: USER, expiresAt: null });
+    stubApi({ "GET /mainboards/default": apiErrorRoute(401, SESSION_INVALID, "session is no longer valid") });
+    const before = getSessionInvalidations();
+
+    await expect(api.get("/mainboards/default")).rejects.toMatchObject({ code: SESSION_INVALID });
+
+    // The token the browser was holding is gone, and the involuntary-loss counter
+    // ticked exactly once — the signal the shell redirects on.
+    expect(getSessionToken()).toBeNull();
+    expect(getSessionInvalidations()).toBe(before + 1);
+  });
+
+  it("expired and revoked both surface as the same one-shot clear", async () => {
+    setAuthMode("session");
+    for (const message of ["token expired", "token revoked"]) {
+      setSession({ token: "tok", user: USER, expiresAt: null });
+      stubApi({ "GET /me": apiErrorRoute(401, SESSION_INVALID, message) });
+      const before = getSessionInvalidations();
+      await expect(api.get("/me")).rejects.toBeInstanceOf(ApiError);
+      expect(getSessionToken()).toBeNull();
+      expect(getSessionInvalidations()).toBe(before + 1);
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("N concurrent SESSION_INVALID failures clear once and count once (no storm)", async () => {
+    setAuthMode("session");
+    setSession({ token: "tok_stale", user: USER, expiresAt: null });
+    stubApi({
+      "GET /mainboards/default": apiErrorRoute(401, SESSION_INVALID),
+      "GET /strategy-drafts": apiErrorRoute(401, SESSION_INVALID),
+      "GET /me": apiErrorRoute(401, SESSION_INVALID),
+    });
+    const before = getSessionInvalidations();
+
+    const results = await Promise.allSettled([
+      api.get("/mainboards/default"),
+      api.get("/strategy-drafts"),
+      api.get("/me"),
+    ]);
+
+    expect(results.every((r) => r.status === "rejected")).toBe(true);
+    // Ten parallel 401s must still clear once and increment once — the guard in
+    // noteSessionInvalid() makes every call after the first a no-op.
+    expect(getSessionInvalidations()).toBe(before + 1);
+    expect(getSessionToken()).toBeNull();
+  });
+
+  it("a 403 ACCESS_DENIED preserves the session — a denied action is not a lost one", async () => {
+    setAuthMode("session");
+    setSession({ token: "tok_live", user: USER, expiresAt: null });
+    stubApi({ "DELETE /trash/xyz": apiErrorRoute(403, "ACCESS_DENIED", "not your resource") });
+    const before = getSessionInvalidations();
+
+    await expect(api.del("/trash/xyz")).rejects.toMatchObject({ status: 403 });
+
+    // The Bearer session is perfectly valid; a single forbidden read must never
+    // log the user out.
+    expect(getSessionToken()).toBe("tok_live");
+    expect(getSessionInvalidations()).toBe(before);
+  });
+
+  it("a non-auth error (404) preserves the session", async () => {
+    setAuthMode("session");
+    setSession({ token: "tok_live", user: USER, expiresAt: null });
+    stubApi({ "GET /strategy-drafts/nope": apiErrorRoute(404, "STRATEGY_REVISION_NOT_FOUND") });
+    const before = getSessionInvalidations();
+
+    await expect(api.get("/strategy-drafts/nope")).rejects.toMatchObject({ status: 404 });
+
+    expect(getSessionToken()).toBe("tok_live");
+    expect(getSessionInvalidations()).toBe(before);
+  });
+
+  it("the text transport honours SESSION_INVALID the same one-shot way", async () => {
+    setAuthMode("session");
+    setSession({ token: "tok_stale", user: USER, expiresAt: null });
+    stubApi({ "GET /metrics": apiErrorRoute(401, SESSION_INVALID) });
+    const before = getSessionInvalidations();
+
+    await expect(api.getText("/metrics")).rejects.toMatchObject({ code: SESSION_INVALID });
+
+    expect(getSessionToken()).toBeNull();
+    expect(getSessionInvalidations()).toBe(before + 1);
+  });
+});
+
+// ---- The shell landing: clear once, drop identity-bound reads once, redirect once ----
+
+function renderShellWithProtectedFailure(routes: Record<string, unknown>) {
+  vi.stubGlobal("EventSource", FakeEventSource);
+  const fetchMock = stubApi({
+    "GET /meta": meta("session"),
+    "GET /health/live": { status: "ok" },
+    ...routes,
+  });
+  // Match production ordering: protected queries only fire once the runtime mode
+  // is known, so the redirect effect's `authMode === "session"` guard is already
+  // satisfied when the first 401 lands (RuntimeAuthProvider gates this in prod).
+  setAuthMode("session");
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(
+    <QueryClientProvider client={client}>
+      <MemoryRouter initialEntries={["/panel"]}>
+        <Routes>
+          <Route path="/login" element={<div>LOGIN SCREEN</div>} />
+          <Route path="*" element={<Layout />} />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+  return fetchMock;
+}
+
+describe("session-mode shell landing on an involuntary session loss", () => {
+  it("a server-revoked token drives exactly one clean redirect to /login", async () => {
+    setSession({ token: "tok_stale", user: USER, expiresAt: null });
+    const fetchMock = renderShellWithProtectedFailure({
+      "GET /me": apiErrorRoute(401, SESSION_INVALID, "session revoked"),
+    });
+
+    // One clean return to the login screen...
+    await screen.findByText("LOGIN SCREEN");
+    // ...with the stale token cleared...
+    expect(getSessionToken()).toBeNull();
+
+    // ...and no redirect loop: /login renders outside the Layout, so the failing
+    // /me query does not re-fire and re-navigate. Give any stray refetch a beat.
+    await new Promise((r) => setTimeout(r, 30));
+    const meReads = fetchMock.mock.calls.filter(([u]) => String(u).includes("/me")).length;
+    expect(meReads).toBeLessThanOrEqual(2); // initial (+ at most one retry), never a storm
+    expect(screen.getByText("LOGIN SCREEN")).toBeInTheDocument();
+  });
+
+  it("a 403 on a protected read keeps the user in the shell (no redirect)", async () => {
+    setSession({ token: "tok_live", user: USER, expiresAt: null });
+    renderShellWithProtectedFailure({
+      "GET /me": { principal_id: "u1", principal_type: "human", role: "user", is_admin: false, is_authenticated: true },
+      "GET /mainboards/default": apiErrorRoute(403, "ACCESS_DENIED"),
+    });
+
+    // The authenticated shell stays put; the session survives the forbidden read.
+    await screen.findByRole("button", { name: "Log out" });
+    expect(screen.queryByText("LOGIN SCREEN")).not.toBeInTheDocument();
+    expect(getSessionToken()).toBe("tok_live");
+  });
+});

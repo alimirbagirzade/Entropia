@@ -22,11 +22,18 @@ jobs:
       - name: Build the .env for the Compose stack
         run: |
           cp .env.example .env
-          # Real-login journeys need session auth (not the dev X-Actor-Id
-          # header) and a deterministic first Admin for the Trash journey.
+          # .env.example already ships the NORMAL LOCAL profile (AUTH_MODE=session),
+          # so the E2E runs that profile verbatim — no ad-hoc auth-mode surgery that
+          # would only prove a repaired test env instead of the user's installation
+          # path (audit TEST-06). We supply ONLY test-only values, none of which
+          # correct a wrong product default:
+          #   * a deterministic first Admin for the real-login / Trash journeys;
+          #   * a strong, non-committed service token so the session profile's
+          #     non-human service line (agent/scheduler/coordinator/workers) is
+          #     enabled — the real session profile, not a degraded one (audit §9.4).
           sed -i \
-            -e 's/^AUTH_MODE=.*/AUTH_MODE=session/' \
             -e 's/^ENTROPIA_BOOTSTRAP_ADMIN_EMAIL=.*/ENTROPIA_BOOTSTRAP_ADMIN_EMAIL=e2e_admin@e2e.entropia.test/' \
+            -e "s#^ENTROPIA_SERVICE_TOKEN=.*#ENTROPIA_SERVICE_TOKEN=e2e-only-$(openssl rand -hex 24)#" \
             .env
 
       - name: Start the Docker Compose stack
@@ -88,6 +95,91 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: playwright-report
+          path: |
+            frontend/e2e/playwright-report/
+            frontend/e2e/test-results/
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Tear down the stack
+        if: always()
+        run: docker compose down -v
+
+  # audit TEST-09 / §9.6 — a SEPARATE, explicit dev-auth stack (its own runner, so
+  # its own Compose project + volumes, never the session job's). The session job
+  # above proves the normal session profile; this one proves the dev profile
+  # satisfies ITS OWN contract (X-Actor-Id identity, no login, no Bearer), rather
+  # than relying on an adaptive helper that merely works around whichever mode.
+  e2e-dev:
+    name: E2E — dev-auth acceptance (X-Actor-Id, no login)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build the .env for the dev-auth Compose stack
+        run: |
+          cp .env.example .env
+          # Dev impersonation is an EXPLICIT opt-in profile (not a corrected default):
+          # this job deliberately selects it to exercise the dev contract. ENTROPIA_ENV
+          # stays local — the backend refuses to boot dev anywhere else (F-22).
+          sed -i -e 's/^AUTH_MODE=.*/AUTH_MODE=dev/' .env
+
+      - name: Start the Docker Compose stack
+        run: docker compose up -d --build
+
+      - name: Wait for the API and web app to become ready
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:8000/api/v1/health/ready >/dev/null 2>&1 \
+              && curl -fsS http://localhost:8080 >/dev/null 2>&1; then
+              echo "Stack is ready."
+              exit 0
+            fi
+            echo "Waiting for stack... ($i/60)"
+            sleep 5
+          done
+          echo "Stack did not become ready in time." >&2
+          docker compose ps
+          docker compose logs --tail 200
+          exit 1
+
+      - name: Seed the dev identities (credentialless user_admin via X-Actor-Id)
+        # In dev mode SEED_DEV_ADMIN defaults on, so this provisions the
+        # credentialless `user_admin` principal the dev spec acts as.
+        run: docker compose exec -T api python -m entropia.apps.seed
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/e2e/package-lock.json
+
+      - name: Install E2E dependencies
+        working-directory: frontend/e2e
+        run: npm install
+
+      - name: Install Playwright browsers
+        working-directory: frontend/e2e
+        run: npx playwright install --with-deps chromium
+
+      - name: Run the dev-auth acceptance spec
+        working-directory: frontend/e2e
+        env:
+          E2E_BASE_URL: http://localhost:8080
+        # Only the dev-mode spec — the session journeys (real login) cannot run in
+        # dev mode by design, and the dev spec self-skips outside a dev stack.
+        run: npm test -- specs/16-dev-mode-auth.spec.ts
+
+      - name: Dump Compose logs on failure
+        if: failure()
+        run: docker compose logs --tail 500
+
+      - name: Upload Playwright report (screenshots, videos, traces)
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report-dev
           path: |
             frontend/e2e/playwright-report/
             frontend/e2e/test-results/

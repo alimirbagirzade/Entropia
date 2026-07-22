@@ -506,20 +506,20 @@ async def test_last_admin_race_serialized(session) -> None:
     # must serialize the count+check so exactly one succeeds and one is blocked —
     # never a zero-admin outcome (review finding F2).
     import asyncio
-    import os
 
     from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
     from sqlalchemy.pool import NullPool
+
+    from .conftest import DATABASE_URL
 
     await _seed_human(session, "adm_a", "adma", Role.ADMIN)
     await _seed_human(session, "adm_b", "admb", Role.ADMIN)
     await session.commit()
 
-    url = os.getenv(
-        "TEST_DATABASE_URL",
-        os.getenv("DATABASE_URL", "postgresql+asyncpg://entropia:entropia@localhost:5432/entropia"),
-    )
-    engine = create_async_engine(url, poolclass=NullPool)
+    # The second connection MUST hit the same isolated test database as the
+    # `session` fixture, or it would not see the two Admins seeded above (and, on
+    # the bare `pytest` default, would open a connection to the live database).
+    engine = create_async_engine(DATABASE_URL, poolclass=NullPool)
     factory = async_sessionmaker(bind=engine, expire_on_commit=False)
 
     async def _demote(uid: str) -> str:

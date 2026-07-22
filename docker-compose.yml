@@ -200,7 +200,12 @@ services:
       - api
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:80/"]
+      # F-08 (audit 22-Jul): use the IPv4 loopback literal, not "localhost".
+      # In this container "localhost" can resolve to ::1 (IPv6) while nginx
+      # listens on 0.0.0.0:80 (IPv4), so the probe failed and the container was
+      # marked unhealthy even though the served page worked. 127.0.0.1 is
+      # deterministic and address-family-safe.
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:80/"]
       interval: 15s
       timeout: 5s
       retries: 5

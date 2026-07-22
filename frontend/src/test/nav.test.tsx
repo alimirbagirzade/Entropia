@@ -81,6 +81,34 @@ describe("Mainboard Add actions dispatch to the Mainboard add flow (R2-02, GAP 6
   });
 });
 
+describe("Package Library submenu holds only Production V1 catalog kinds (M-12)", () => {
+  it("no menu leaf advertises Trading Signal / Trade Log package kinds", () => {
+    // Acceptance (audit A/M-12): no visible menu may imply a PackageKind of
+    // trading_signal or trade_log — those are not backend catalog kinds. They
+    // are reached through the Mainboard "Add Outsource Signal" flow instead.
+    const editGroup = MENU_BAR.find((group) => group.label === "Edit");
+    const packageLibrary = editGroup?.items?.find((item) => item.label === "Package Library");
+    const leaves = packageLibrary?.items ?? [];
+    expect(leaves.length).toBeGreaterThan(0);
+
+    const labels = leaves.map((leaf) => leaf.label);
+    expect(labels).not.toContain("Trading Signal Packages");
+    expect(labels).not.toContain("Trade Log Packages");
+    // Only the canonical Production V1 catalog kinds remain.
+    expect(labels).toEqual([
+      "Strategy Packages",
+      "Indicator Packages",
+      "Condition Packages",
+      "Embedded System Packages",
+    ]);
+    // No leaf points at an unfiltered /packages/library (each carries a type
+    // filter or the dedicated embedded route).
+    for (const leaf of leaves) {
+      expect(leaf.path).not.toBe("/packages/library");
+    }
+  });
+});
+
 describe("Future Dev submenu targets (UI-22)", () => {
   it("declares one dedicated, distinct route path per capability sub-page", () => {
     // App.tsx generates one real route per entry — a duplicate or off-prefix

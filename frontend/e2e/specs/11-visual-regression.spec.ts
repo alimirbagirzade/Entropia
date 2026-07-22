@@ -1,6 +1,18 @@
 // R2-13 — Playwright screenshot REGRESSION for the critical pages
-// (Mainboard, Strategy inline, Trading Signal / Trade Log inline, Market
-// Data, Create Package, Ready Check, RUN/Result).
+// (Mainboard, the three standalone working-object workbenches, Market Data,
+// Create Package, Ready Check, RUN/Result).
+//
+// A-01 (audit 22-Jul): these captures navigate DIRECTLY to the standalone
+// routes (/strategy, /trading-signal, /trade-log) — they are the standalone
+// workbench, NOT the Mainboard inline editor. They were previously named
+// "*-inline", which falsely implied inline coverage. They are now named
+// "*-standalone" to state exactly what they capture. The authoritative
+// INLINE coverage (open "/", invoke Add, expand the Mainboard row, assert the
+// URL stays "/", assert the inline editor is mounted) lives in
+// specs/08-mainboard-inline-editors.spec.ts (behavioral) and
+// specs/12-prototype-capture.spec.ts (prototype reference). This regression
+// suite proves the standalone workbenches did not change unexpectedly; it does
+// not — and must not be read as — proof of prototype/inline fidelity.
 //
 // Unlike specs/07 (a capture tool), this spec ASSERTS with toHaveScreenshot
 // against committed baselines in 11-visual-regression.spec.ts-snapshots/.
@@ -28,9 +40,10 @@ import { VIEWPORT_HEIGHT, settle } from "../utils/screenshotMatrix";
 
 const CRITICAL_PAGES: Array<{ name: string; path: string }> = [
   { name: "mainboard", path: "/" },
-  { name: "strategy-inline", path: "/strategy" },
-  { name: "trading-signal-inline", path: "/trading-signal" },
-  { name: "trade-log-inline", path: "/trade-log" },
+  // A-01: honest names — these ARE the standalone workbench routes, not inline.
+  { name: "strategy-standalone", path: "/strategy" },
+  { name: "trading-signal-standalone", path: "/trading-signal" },
+  { name: "trade-log-standalone", path: "/trade-log" },
   { name: "market-data", path: "/market-data" },
   { name: "create-package", path: "/packages/create" },
   { name: "ready-check", path: "/backtest/ready-check" },

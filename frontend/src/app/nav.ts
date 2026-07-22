@@ -195,12 +195,15 @@ export const MENU_BAR: MenuGroup[] = [
       {
         label: "Package Library",
         items: [
+          // M-12 (audit 22-Jul): the Production V1 catalog has only these package
+          // kinds. Trading Signal / Trade Log are NOT backend catalog kinds — their
+          // former menu entries pointed at an unfiltered library and implied a
+          // PackageKind that does not exist, so they were removed. Trading Signal
+          // and Trade Log are reached through the Mainboard "Add Outsource Signal"
+          // flow (external working objects), never Package Library.
           { label: "Strategy Packages", path: "/packages/library?type=strategy" },
           { label: "Indicator Packages", path: "/packages/library?type=indicator" },
           { label: "Condition Packages", path: "/packages/library?type=condition" },
-          // Trading Signal / Trade Log are not backend catalog kinds → unfiltered library.
-          { label: "Trading Signal Packages", path: "/packages/library" },
-          { label: "Trade Log Packages", path: "/packages/library" },
           { label: "Embedded System Packages", path: "/packages/embedded" },
         ],
       },

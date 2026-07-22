@@ -569,19 +569,16 @@ uv run python -m entropia.apps.seed        # agent "agent_alpha" + baseline regi
 ```
 
 > **Upgrading a database created before this change?** If your local database
-> already has the credentialless `user_admin`, bootstrap is currently blocked.
-> Retire that one row — nothing is deleted, and every principal, ownership, audit
-> record and domain row is preserved:
->
-> ```bash
-> cd backend
-> uv run python -m entropia.apps.retire_dev_admin
-> ```
->
-> It is idempotent and fail-closed: it refuses if the row carries a real password
-> credential, or if another active Admin already exists. The transition is
-> recorded as a `user.dev_admin_retired` audit event. Afterwards, sign up with
-> `ENTROPIA_BOOTSTRAP_ADMIN_EMAIL` to provision your real Admin.
+> already has the credentialless `user_admin`, you do **not** need to touch it.
+> In session mode the first-Admin bootstrap counts only **login-capable**
+> (credentialed) Admins, so a legacy Admin that nobody can log in as never blocks
+> provisioning. Just sign up with `ENTROPIA_BOOTSTRAP_ADMIN_EMAIL` — the matching
+> sign-up becomes your first real Admin **over** the legacy row, which is left
+> completely untouched (its principal, ownership, audit history and domain data
+> are preserved), and the upgrade is recorded as a `user.admin_bootstrapped`
+> audit event with a PII-free legacy-upgrade note. The Admin Provisioning page
+> shows the window as open ("a legacy Admin exists but cannot log in") until you
+> do. No database edit or row retirement is required.
 
 #### 2. Developer / test impersonation (`AUTH_MODE=dev`)
 

@@ -20,6 +20,7 @@ from entropia.infrastructure.postgres.models import (
     Agent,
     AuditEvent,
     EntityRegistry,
+    HumanCredential,
     HumanUser,
     OutboxEvent,
     Principal,
@@ -195,6 +196,53 @@ async def test_last_admin_protection(session) -> None:
     user = await session.get(HumanUser, "solo_admin")
     assert user.current_role == Role.ADMIN
     assert user.version == 1
+
+
+async def test_last_admin_protection_session_mode_counts_login_capable(session) -> None:
+    """PROV-03: a legacy credentialless Admin pads the Admin ROLE-ROW count to two,
+    but in session mode only the login-capable Admin is operational. Demoting the
+    one real Admin must still be blocked — a role-row count would wrongly allow it
+    and lock the installation out."""
+    await _seed_human(session, "user_admin", "legacy", Role.ADMIN)  # no credential
+    real = await _seed_human(session, "usr_real", "real", Role.ADMIN)
+    session.add(
+        HumanCredential(user_id="usr_real", password_hash="argon2id$stub", algorithm="argon2id")
+    )
+    await session.commit()
+
+    with pytest.raises(LastAdminProtectedError):
+        await assign_user_role(
+            session,
+            ADMIN,
+            target_user_id="usr_real",
+            target_role=Role.USER,
+            expected_head_revision_id=real.version,
+            auth_mode="session",
+        )
+    user = await session.get(HumanUser, "usr_real")
+    assert user.current_role == Role.ADMIN and user.version == 1
+
+
+async def test_last_admin_protection_dev_mode_counts_role_rows(session) -> None:
+    """Contrast to the session-mode case: in dev mode an X-Actor-Id Admin needs no
+    credential, so both Admin role rows are operational — demoting one is allowed
+    (historical behavior preserved). Proves the fix is mode-aware, not always-block."""
+    await _seed_human(session, "user_admin", "legacy", Role.ADMIN)  # no credential
+    real = await _seed_human(session, "usr_real", "real", Role.ADMIN)
+    await session.commit()
+
+    result = await assign_user_role(
+        session,
+        ADMIN,
+        target_user_id="usr_real",
+        target_role=Role.USER,
+        expected_head_revision_id=real.version,
+        auth_mode="dev",
+    )
+    await session.commit()
+    assert result["changed"] is True
+    user = await session.get(HumanUser, "usr_real")
+    assert user.current_role == Role.USER
 
 
 async def test_agent_target_rejected(session) -> None:

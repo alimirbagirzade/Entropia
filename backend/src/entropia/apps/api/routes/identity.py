@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 from entropia.application.commands.roles import change_user_role
 from entropia.apps.api.deps import RequestContext, request_context
+from entropia.config import get_settings
 from entropia.domain.identity.policy import require_admin
 from entropia.domain.lifecycle.enums import Role
 
@@ -52,7 +53,12 @@ async def set_user_role(
 ) -> UserResponse:
     require_admin(ctx.actor)  # fast 403 before touching domain
     user = await change_user_role(
-        ctx.session, ctx.actor, target_user_id=user_id, new_role=body.role
+        ctx.session,
+        ctx.actor,
+        target_user_id=user_id,
+        new_role=body.role,
+        # Mode-aware last-Admin protection (PROV-03) on the legacy role path too.
+        auth_mode=get_settings().auth_mode,
     )
     return UserResponse(
         user_id=user.user_id,

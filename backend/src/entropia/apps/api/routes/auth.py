@@ -63,7 +63,11 @@ class LogoutResponse(BaseModel):
 class BootstrapStatusResponse(BaseModel):
     # Booleans only — no email echo, no PII (see auth_commands.bootstrap_status).
     bootstrap_configured: bool
+    # An Admin ROLE ROW exists (may be a legacy credentialless one nobody can
+    # log in as — see login_capable_admin_exists to tell them apart, PROV-05).
     active_admin_exists: bool
+    # A credentialed Admin who can actually log in / operate the install exists.
+    login_capable_admin_exists: bool
 
 
 class ReauthRequest(BaseModel):
@@ -92,6 +96,9 @@ async def sign_up(
         correlation_id=getattr(request.state, "correlation_id", ""),
         # First-Admin bootstrap opt-in — server-side only, never a client field.
         bootstrap_admin_email=settings.bootstrap_admin_email or None,
+        # Mode decides the operational Admin count (PROV-02): session mode counts
+        # login-capable Admins, so a legacy credentialless row never blocks it.
+        auth_mode=settings.auth_mode,
     )
     return SignUpResponse(**result)
 

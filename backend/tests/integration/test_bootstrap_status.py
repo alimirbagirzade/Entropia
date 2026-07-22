@@ -29,13 +29,18 @@ BOOTSTRAP_EMAIL = "founder@example.com"
 
 async def test_unconfigured_fresh_db_reports_closed_and_off(session: AsyncSession) -> None:
     status = await auth_cmd.bootstrap_status(session, bootstrap_admin_email=None)
-    assert status == {"bootstrap_configured": False, "active_admin_exists": False}
+    assert status == {
+        "bootstrap_configured": False,
+        "active_admin_exists": False,
+        "login_capable_admin_exists": False,
+    }
 
 
 async def test_configured_fresh_db_window_open(session: AsyncSession) -> None:
     status = await auth_cmd.bootstrap_status(session, bootstrap_admin_email=BOOTSTRAP_EMAIL)
     assert status["bootstrap_configured"] is True
     assert status["active_admin_exists"] is False
+    assert status["login_capable_admin_exists"] is False
 
 
 async def test_window_closes_once_an_admin_exists(session: AsyncSession) -> None:
@@ -50,14 +55,20 @@ async def test_window_closes_once_an_admin_exists(session: AsyncSession) -> None
     assert provisioned["role"].lower().endswith("admin")
 
     # The configured flag is independent of the window: even with the env still
-    # set, the window is now CLOSED because an active Admin exists.
+    # set, the window is now CLOSED because a login-capable Admin exists (the
+    # bootstrap signup minted a credentialed Admin).
     status = await auth_cmd.bootstrap_status(session, bootstrap_admin_email=BOOTSTRAP_EMAIL)
     assert status["bootstrap_configured"] is True
     assert status["active_admin_exists"] is True
+    assert status["login_capable_admin_exists"] is True
 
     # And with the mechanism turned off the window is still CLOSED.
     off = await auth_cmd.bootstrap_status(session, bootstrap_admin_email=None)
-    assert off == {"bootstrap_configured": False, "active_admin_exists": True}
+    assert off == {
+        "bootstrap_configured": False,
+        "active_admin_exists": True,
+        "login_capable_admin_exists": True,
+    }
 
 
 async def test_route_reads_setting_and_returns_booleans(
@@ -71,5 +82,6 @@ async def test_route_reads_setting_and_returns_booleans(
         response = await auth_routes.bootstrap_status(session)
         assert response.bootstrap_configured is True
         assert response.active_admin_exists is False
+        assert response.login_capable_admin_exists is False
     finally:
         get_settings.cache_clear()

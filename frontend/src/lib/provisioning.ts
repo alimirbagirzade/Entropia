@@ -12,8 +12,12 @@ import { api } from "./apiClient";
 export interface BootstrapStatus {
   // Operator opt-in: ENTROPIA_BOOTSTRAP_ADMIN_EMAIL is set to a non-empty value.
   bootstrap_configured: boolean;
-  // At least one active Admin exists -> the bootstrap window is CLOSED.
+  // An Admin ROLE ROW exists — but it may be a legacy credentialless one that
+  // nobody can log in as, so this alone does NOT mean the window is closed.
   active_admin_exists: boolean;
+  // A credentialed Admin who can actually log in / operate the install exists.
+  // This is the operational truth that closes the bootstrap window (PROV-05).
+  login_capable_admin_exists: boolean;
 }
 
 const BOOTSTRAP_STATUS_STALE_MS = 30_000;

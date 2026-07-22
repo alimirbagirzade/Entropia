@@ -101,6 +101,7 @@ async def sign_up(
     display_name: str | None = None,
     correlation_id: str = "",
     bootstrap_admin_email: str | None = None,
+    auth_mode: str = "dev",
 ) -> dict[str, Any]:
     """Create a human account. The role is ALWAYS User (M1 §4.1): any
     client-sent role never reaches this command — the route schema has no
@@ -109,8 +110,16 @@ async def sign_up(
     First-Admin bootstrap (explicit operator opt-in): when the deployment sets
     ``ENTROPIA_BOOTSTRAP_ADMIN_EMAIL`` and the signup email matches it
     (case-normalized), the account is provisioned as Admin — ONLY while no
-    active Admin exists (fail-closed otherwise). The role is still decided
-    server-side; no client field can reach this branch."""
+    OPERATIONAL Admin exists (fail-closed otherwise). The role is still decided
+    server-side; no client field can reach this branch.
+
+    ``auth_mode`` selects what "operational Admin" means (audit PROV-02, §6.5):
+    in ``session`` mode only a login-capable (credentialed) Admin closes the
+    window, so a legacy credentialless ``user_admin`` role row does NOT block a
+    real first-Admin signup; in ``dev`` mode any active Admin role row counts
+    (the historical behavior). The legacy row is never deleted, demoted, renamed
+    or given a credential — a session-mode bootstrap over it is a pure add
+    (audit §12); it is only recorded as a PII-free legacy-upgrade audit note."""
     username = username.strip()
     if not (USERNAME_MIN_LENGTH <= len(username) <= USERNAME_MAX_LENGTH):
         raise ValidationError(
@@ -124,15 +133,23 @@ async def sign_up(
 
     role = Role.USER
     bootstrapped = False
+    legacy_upgrade = False
     if bootstrap_admin_matches(email, bootstrap_admin_email):
         # Same-tx race guard, mirroring the last-admin demote path: the shared
         # advisory lock serializes this count+decide section against concurrent
         # demotions AND concurrent bootstraps; a second concurrent qualifying
         # signup is additionally impossible via unique(human_users.email).
         await identity_repo.lock_admin_count(session)
-        if await identity_repo.count_active_admins(session) == 0:
+        if await identity_repo.count_operational_admins(session, auth_mode=auth_mode) == 0:
             role = Role.ADMIN
             bootstrapped = True
+            # Session-mode legacy upgrade (audit §6.5.3): zero login-capable
+            # Admins but an active credentialless Admin ROLE ROW already exists —
+            # this signup mints the first real Admin OVER the legacy row without
+            # touching it. Recorded as a PII-free audit note.
+            legacy_upgrade = (
+                auth_mode == "session" and await identity_repo.count_active_admins(session) > 0
+            )
 
     user_id = new_id("usr")
     session.add(Principal(principal_id=user_id, principal_type=PrincipalType.HUMAN))
@@ -197,6 +214,12 @@ async def sign_up(
             new_state=str(Role.ADMIN),
             correlation_id=correlation_id,
             reason="bootstrap_admin_email_match",
+            # PII-free provenance: when true, this bootstrap ran over a legacy
+            # credentialless Admin that could not log in (audit §6.5.4). No email,
+            # username or credential material is recorded — only the fact.
+            metadata=(
+                {"legacy_credentialless_admin_not_login_capable": True} if legacy_upgrade else None
+            ),
         )
         audit_repo.add_outbox_event(
             session,
@@ -223,14 +246,24 @@ async def bootstrap_status(
 
     Returns booleans ONLY — no email echo, no PII — so it is safe on the
     anonymous entry surface alongside sign up / login (the first Admin is, by
-    definition, not yet authenticated). ``active_admin_exists`` lets an operator
-    see whether the bootstrap window is still OPEN (no active Admin yet) or
-    already CLOSED. This is a hint, not a decision: the actual provisioning
-    choice in :func:`sign_up` stays guarded by the same-tx advisory lock, so a
-    stale read here can never mint a second Admin."""
+    definition, not yet authenticated).
+
+    Two distinct operational truths (audit PROV-05):
+
+    * ``active_admin_exists`` — an Admin ROLE ROW exists (may be the legacy
+      credentialless ``user_admin`` that nobody can log in as).
+    * ``login_capable_admin_exists`` — a credentialed Admin who can actually log
+      in and operate/recover a session-mode installation exists.
+
+    Exposing both lets the Provisioning page report the real state: a role row
+    that exists but cannot log in must still show the bootstrap window as OPEN
+    (the exact defect PROV-05 flags). This is a hint, not a decision: the actual
+    provisioning choice in :func:`sign_up` stays guarded by the same-tx advisory
+    lock, so a stale read here can never mint a second Admin."""
     return {
         "bootstrap_configured": bootstrap_is_configured(bootstrap_admin_email),
         "active_admin_exists": await identity_repo.count_active_admins(session) > 0,
+        "login_capable_admin_exists": (await identity_repo.count_login_capable_admins(session) > 0),
     }
 
 

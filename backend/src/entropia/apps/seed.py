@@ -193,12 +193,14 @@ async def seed_identities(session: AsyncSession) -> None:
     never counts toward the active-Admin total that gates bootstrap.
     """
     log = get_logger("seed")
+    # Ensure the admin PRINCIPAL independently of its HumanUser child (audit
+    # PROV-04): an interrupted upgrade or a prior session-mode run can legitimately
+    # leave a bare Principal, so a HumanUser-only check followed by an
+    # unconditional Principal INSERT would duplicate the row and violate its PK.
+    await _ensure_admin_principal(session)
     if not should_seed_dev_admin():
-        await _ensure_admin_principal(session)
         log.info("seed.dev_admin_skipped", user_id=DEFAULT_ADMIN_ID, auth_mode="session")
     elif await session.get(HumanUser, DEFAULT_ADMIN_ID) is None:
-        session.add(Principal(principal_id=DEFAULT_ADMIN_ID, principal_type=PrincipalType.HUMAN))
-        await session.flush()
         session.add(
             HumanUser(
                 user_id=DEFAULT_ADMIN_ID,
@@ -210,9 +212,10 @@ async def seed_identities(session: AsyncSession) -> None:
         )
         log.info("seed.admin_created", user_id=DEFAULT_ADMIN_ID)
 
+    # Same separation for the Agent identity: ensure the principal (type-checked,
+    # never duplicated) before its FK-dependent Agent child.
+    await _ensure_principal(session, DEFAULT_AGENT_ID, PrincipalType.AGENT)
     if await session.get(Agent, DEFAULT_AGENT_ID) is None:
-        session.add(Principal(principal_id=DEFAULT_AGENT_ID, principal_type=PrincipalType.AGENT))
-        await session.flush()
         session.add(Agent(agent_id=DEFAULT_AGENT_ID, name="Alpha Agent", enabled=True))
         log.info("seed.agent_created", agent_id=DEFAULT_AGENT_ID)
 
@@ -568,6 +571,38 @@ async def _seed_esp_ta_resolvers(session: object, log: object) -> None:
         await _seed_esp_resolver(session, log, spec=resolver, return_type="boolean")
 
 
+class SeedPrincipalTypeConflict(RuntimeError):
+    """A ``principals`` row exists with an unexpected ``principal_type``.
+
+    The seed fails closed (audit PROV-04) rather than silently reinterpret a
+    human id as an agent id (or vice versa) or emit a duplicate INSERT: a type
+    collision is a data-integrity fault an operator must see, not paper over."""
+
+
+async def _ensure_principal(
+    session: object, principal_id: str, principal_type: PrincipalType
+) -> None:
+    """Idempotently ensure ONE ``principals`` row with the expected type.
+
+    Checked/inserted SEPARATELY from any HumanUser/Agent child (audit PROV-04) so
+    a bare Principal left by an interrupted upgrade or a session-mode run is
+    repaired without a duplicate INSERT. Adds nothing when the row already exists
+    and matches; raises :class:`SeedPrincipalTypeConflict` when it exists with a
+    different ``principal_type`` — never a silent overwrite or duplicate."""
+    existing = await session.get(Principal, principal_id)  # type: ignore[attr-defined]
+    if existing is None:
+        session.add(  # type: ignore[attr-defined]
+            Principal(principal_id=principal_id, principal_type=principal_type)
+        )
+        await session.flush()  # type: ignore[attr-defined]
+        return
+    if existing.principal_type != principal_type:
+        raise SeedPrincipalTypeConflict(
+            f"principal {principal_id!r} already exists as {existing.principal_type} "
+            f"but the seed expected {principal_type} — refusing to reinterpret it"
+        )
+
+
 async def _ensure_admin_principal(session: object) -> None:
     """Idempotently ensure the admin PRINCIPAL row (FK target) exists.
 
@@ -575,11 +610,7 @@ async def _ensure_admin_principal(session: object) -> None:
     ENTROPIA_BOOTSTRAP_ADMIN_EMAIL first-signup promotion (which counts
     active Admin human_users) keeps working on a fresh E2E database.
     """
-    if await session.get(Principal, DEFAULT_ADMIN_ID) is None:  # type: ignore[attr-defined]
-        session.add(  # type: ignore[attr-defined]
-            Principal(principal_id=DEFAULT_ADMIN_ID, principal_type=PrincipalType.HUMAN)
-        )
-        await session.flush()  # type: ignore[attr-defined]
+    await _ensure_principal(session, DEFAULT_ADMIN_ID, PrincipalType.HUMAN)
 
 
 async def _seed_esp_resolver(

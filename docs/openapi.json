@@ -547,11 +547,16 @@
           "bootstrap_configured": {
             "title": "Bootstrap Configured",
             "type": "boolean"
+          },
+          "login_capable_admin_exists": {
+            "title": "Login Capable Admin Exists",
+            "type": "boolean"
           }
         },
         "required": [
           "bootstrap_configured",
-          "active_admin_exists"
+          "active_admin_exists",
+          "login_capable_admin_exists"
         ],
         "title": "BootstrapStatusResponse",
         "type": "object"

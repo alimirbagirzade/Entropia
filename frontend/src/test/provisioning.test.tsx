@@ -43,7 +43,11 @@ describe("Provisioning page", () => {
 
   it("open window, not configured -> prompts to set the env var", async () => {
     renderPage({
-      "GET /auth/bootstrap-status": { bootstrap_configured: false, active_admin_exists: false },
+      "GET /auth/bootstrap-status": {
+        bootstrap_configured: false,
+        active_admin_exists: false,
+        login_capable_admin_exists: false,
+      },
       "GET /me": ME_ANON,
     });
     expect(await screen.findByText("Open — bootstrap email not configured")).toBeInTheDocument();
@@ -54,7 +58,11 @@ describe("Provisioning page", () => {
 
   it("open window, configured -> prompts to sign up with the bootstrap email", async () => {
     renderPage({
-      "GET /auth/bootstrap-status": { bootstrap_configured: true, active_admin_exists: false },
+      "GET /auth/bootstrap-status": {
+        bootstrap_configured: true,
+        active_admin_exists: false,
+        login_capable_admin_exists: false,
+      },
       "GET /me": ME_ANON,
     });
     expect(
@@ -64,19 +72,47 @@ describe("Provisioning page", () => {
     expect(screen.getByText("window open")).toBeInTheDocument();
   });
 
-  it("closed window (an Admin exists) is terminal regardless of the flag", async () => {
+  it("closed window (a login-capable Admin exists) is terminal regardless of the flag", async () => {
     renderPage({
-      "GET /auth/bootstrap-status": { bootstrap_configured: true, active_admin_exists: true },
+      "GET /auth/bootstrap-status": {
+        bootstrap_configured: true,
+        active_admin_exists: true,
+        login_capable_admin_exists: true,
+      },
       "GET /me": ME_ANON,
     });
-    expect(await screen.findByText("Closed — an Admin already exists")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Closed — a login-capable Admin already exists"),
+    ).toBeInTheDocument();
     expect(screen.getByText(/Provisioning is complete/)).toBeInTheDocument();
     expect(screen.getByText("window closed")).toBeInTheDocument();
   });
 
+  it("legacy credentialless Admin -> window stays OPEN (PROV-05)", async () => {
+    // An Admin ROLE ROW exists but no login-capable Admin: the window must NOT
+    // read closed, and the legacy state is surfaced distinctly.
+    renderPage({
+      "GET /auth/bootstrap-status": {
+        bootstrap_configured: true,
+        active_admin_exists: true,
+        login_capable_admin_exists: false,
+      },
+      "GET /me": ME_ANON,
+    });
+    expect(
+      await screen.findByText("Open — a legacy Admin exists but cannot log in"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("window open")).toBeInTheDocument();
+    expect(screen.getByText("legacy admin (no login)")).toBeInTheDocument();
+  });
+
   it("shows the caller identity and, for an Admin, a Panel link", async () => {
     renderPage({
-      "GET /auth/bootstrap-status": { bootstrap_configured: false, active_admin_exists: true },
+      "GET /auth/bootstrap-status": {
+        bootstrap_configured: false,
+        active_admin_exists: true,
+        login_capable_admin_exists: true,
+      },
       "GET /me": ME_ADMIN,
     });
     // Identity card resolves from /me.
@@ -87,7 +123,11 @@ describe("Provisioning page", () => {
 
   it("hides the Panel link for a non-Admin caller", async () => {
     renderPage({
-      "GET /auth/bootstrap-status": { bootstrap_configured: true, active_admin_exists: false },
+      "GET /auth/bootstrap-status": {
+        bootstrap_configured: true,
+        active_admin_exists: false,
+        login_capable_admin_exists: false,
+      },
       "GET /me": ME_ANON,
     });
     await screen.findByText("Open — configured, awaiting first sign-up");

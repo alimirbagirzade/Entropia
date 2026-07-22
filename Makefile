@@ -15,7 +15,7 @@ COMPOSE_DEV_AUTH := docker compose -f docker-compose.yml -f docker-compose.dev-a
         frontend-install frontend-dev frontend-build frontend-lint test smoke clean nuke
 
 help: ## Show this help
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
+	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
 bootstrap: ## One-time local setup (env file, backend venv, frontend deps)
@@ -92,6 +92,20 @@ accept: ## Acceptance gate for a RUNNING stack: fail if any service exited/resta
 
 accept-dev-auth: ## Acceptance gate against the dev-auth stack (DEP-05)
 	@COMPOSE_DEV_AUTH=1 bash scripts/acceptance.sh
+
+.PHONY: e2e e2e-session e2e-legacy e2e-dev-auth
+
+e2e: ## Real Docker E2E — all 3 isolated acceptance flows (audit §9.4/9.5/9.6, W7)
+	@bash scripts/e2e-acceptance.sh all
+
+e2e-session: ## E2E §9.4 — clean session-mode bootstrap (isolated project + volumes)
+	@bash scripts/e2e-acceptance.sh session
+
+e2e-legacy: ## E2E §9.5 — legacy credentialless-Admin upgrade (isolated project + volumes)
+	@bash scripts/e2e-acceptance.sh legacy
+
+e2e-dev-auth: ## E2E §9.6 — dev-mode X-Actor-Id impersonation (isolated project + volumes)
+	@bash scripts/e2e-acceptance.sh dev-auth
 
 clean: ## Remove build artifacts and caches
 	rm -rf backend/.pytest_cache backend/.ruff_cache backend/.mypy_cache frontend/dist frontend/.vite

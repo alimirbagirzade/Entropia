@@ -21,7 +21,7 @@ if ($env:COMPOSE_DEV_AUTH -eq "1") {
     $prof = "session"
 }
 
-$oneShots = @("minio-setup", "migrate")
+$oneShots = @("minio-setup", "migrate", "provision")
 $fail = 0
 
 Write-Host "== Acceptance gate ($prof stack) =="

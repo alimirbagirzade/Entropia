@@ -26,6 +26,12 @@ x-dev-auth-env: &dev-auth-env
 services:
   migrate:
     <<: *dev-auth-env
+  # The provisioning one-shot must run under AUTH_MODE=dev too, so it seeds the
+  # credentialless `user_admin` fixture the dev spec impersonates (SEED_DEV_ADMIN
+  # follows AUTH_MODE); without this it would inherit session mode from env_file
+  # and skip it.
+  provision:
+    <<: *dev-auth-env
   api:
     <<: *dev-auth-env
   worker-default:

@@ -31,7 +31,7 @@ else
   PROFILE="session"
 fi
 
-ONE_SHOTS="minio-setup migrate"
+ONE_SHOTS="minio-setup migrate provision"
 FAIL=0
 
 echo "== Acceptance gate ($PROFILE stack) =="

@@ -82,7 +82,33 @@ MinIO bucket, and starts the API plus every worker plane
 
 Stop it with `docker compose down` (add `-v` to also delete data volumes).
 
-To verify a running stack at any time: `make smoke` (or `./scripts/smoke.sh`).
+### Authentication profiles (pick one)
+
+`docker compose up` (above) is the **normal session** profile: real Sign Up /
+Log In. For **developer / test impersonation** (no login — identity from the
+`X-Actor-Id` header, `AUTH_MODE=dev`, local-only) layer the explicit override:
+
+| | Normal session (default) | Dev-auth impersonation |
+| --- | --- | --- |
+| macOS / Linux | `make up` | `make up-dev-auth` |
+| Windows | `.\scripts\tasks.ps1 up` | `.\scripts\tasks.ps1 up-dev-auth` |
+| Raw Compose | `docker compose up -d --build` | `docker compose -f docker-compose.yml -f docker-compose.dev-auth.yml up -d --build` |
+
+Both profiles share the same Compose project and named volumes, so switching
+between them **preserves your data** — only `make nuke` deletes volumes.
+
+### Verifying a running stack
+
+- `make smoke` (`./scripts/smoke.sh`) — read-only health/deps/identity checks.
+- `make accept` (`./scripts/acceptance.sh`; `make accept-dev-auth` /
+  `COMPOSE_DEV_AUTH=1 ./scripts/acceptance.sh` for the dev-auth stack) — fails if
+  **any** service exited, restarted, or is unhealthy. Every long-running plane
+  carries a healthcheck; the one-shots (`migrate`, `minio-setup`) must exit 0.
+
+### Authoritative test command
+
+`make test` (Windows: `.\scripts\tasks.ps1 test`) runs the **backend and
+frontend** suites and fails if **either** fails — no swallowed exit codes.
 
 ---
 

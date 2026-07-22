@@ -20,6 +20,19 @@ x-backend-build: &backend-build
       condition: service_healthy
   restart: unless-stopped
 
+# Worker planes have no HTTP surface; dramatiq consumes from Redis. A live
+# broker connection is the meaningful liveness signal — the container's PID 1
+# IS the worker master, so a dead master already stops the container (caught by
+# `restart:` + the acceptance state gate in scripts/acceptance.sh). This probe
+# adds the "alive but cannot reach its broker" case on top of that.
+x-worker-healthcheck: &worker-healthcheck
+  healthcheck:
+    test: ["CMD", "python", "-c", "import os,redis,sys; sys.exit(0 if redis.from_url(os.environ['REDIS_URL']).ping() else 1)"]
+    interval: 15s
+    timeout: 5s
+    retries: 5
+    start_period: 20s
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -111,27 +124,27 @@ services:
       retries: 6
 
   worker-default:
-    <<: *backend-build
+    <<: [*backend-build, *worker-healthcheck]
     command: ["python", "-m", "entropia.apps.worker", "--queues", "default,maintenance"]
 
   worker-data:
-    <<: *backend-build
+    <<: [*backend-build, *worker-healthcheck]
     command: ["python", "-m", "entropia.apps.worker", "--queues", "data"]
 
   worker-backtest:
-    <<: *backend-build
+    <<: [*backend-build, *worker-healthcheck]
     command: ["python", "-m", "entropia.apps.worker", "--queues", "backtest"]
 
   worker-agent:
-    <<: *backend-build
+    <<: [*backend-build, *worker-healthcheck]
     command: ["python", "-m", "entropia.apps.worker", "--queues", "agent,agent-high"]
 
   agent-coordinator:
-    <<: *backend-build
+    <<: [*backend-build, *worker-healthcheck]
     command: ["python", "-m", "entropia.apps.agent_coordinator"]
 
   scheduler:
-    <<: *backend-build
+    <<: [*backend-build, *worker-healthcheck]
     command: ["python", "-m", "entropia.apps.scheduler"]
 
   web:
@@ -146,6 +159,12 @@ services:
     depends_on:
       - api
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:80/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
 volumes:
   pgdata:

@@ -91,6 +91,56 @@ export function outputKindsFor(kind: CreatePackageKind): string[] {
   return OUTPUT_KINDS_BY_KIND[kind] ?? [];
 }
 
+// D-2 (audit P-03, PO 22-Jul): human display labels for the Create Package
+// enums. The machine enum stays the option `value` (and therefore the request
+// payload — the server contract is unchanged); only the visible text is
+// humanized. Any value missing from a map falls back to a title-cased render
+// via `createPackageEnumLabel`, so a new backend enum never surfaces raw.
+export const CREATE_PACKAGE_KIND_LABELS: Record<string, string> = {
+  indicator: "Indicator Package",
+  condition: "Condition Package",
+  embedded_system: "Embedded System Package",
+};
+
+export const CREATION_MODE_LABELS: Record<string, string> = {
+  translate_existing_code: "Translate Existing Code",
+  generate_from_description: "Generate From Description",
+  repair_existing_code: "Repair Existing Code",
+  review_existing_code: "Review Existing Code",
+};
+
+export const SOURCE_LANGUAGE_LABELS: Record<string, string> = {
+  pinescript: "PineScript",
+  python: "Python",
+  cpp: "C++",
+  other: "Other",
+};
+
+export const TARGET_RUNTIME_LABELS: Record<string, string> = {
+  python: "Python",
+  pine_v5: "PineScript v5",
+};
+
+export const OUTPUT_KIND_LABELS: Record<string, string> = {
+  directional_signal: "Directional Signal",
+  numeric_series: "Numeric Series",
+  state_series: "State Series",
+  boolean_event: "Boolean Event",
+  boolean_condition: "Boolean Condition",
+  resolver_output: "Resolver Output",
+};
+
+// Title-case fallback for any enum value not present in a label map above
+// (e.g. "some_new_kind" → "Some New Kind"). Never renders a raw underscore enum.
+export function createPackageEnumLabel(map: Record<string, string>, value: string): string {
+  const known = map[value];
+  if (known !== undefined) return known;
+  return value
+    .split("_")
+    .map((part) => (part.length > 0 ? part[0].toUpperCase() + part.slice(1) : part))
+    .join(" ");
+}
+
 // Presentation-only badge tone for the read-only flow state (the wire state
 // stays a plain string). Blocked/failed/rejected are down; the passed/ready/
 // approved milestones are ok; stale warns; the rest are neutral in-flight.

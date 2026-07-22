@@ -140,11 +140,14 @@ describe("Results History page", () => {
     renderPage();
 
     expect(await screen.findByText("res_1")).toBeInTheDocument();
-    expect(screen.getByText("+12.50%")).toBeInTheDocument(); // signed_percent
-    expect(screen.getByText("-3.75%")).toBeInTheDocument(); // negative keeps its sign
-    expect(screen.getByText("55.00%")).toBeInTheDocument(); // percent
-    expect(screen.getByText("42")).toBeInTheDocument(); // integer
-    expect(screen.getByText("—")).toBeInTheDocument(); // missing digest cell, never 0
+    // D-5: Net / ROMAD / DD / Win Rate now appear in BOTH the collapsed digest
+    // and the always-rendered (CSS-collapsed) details panel, so assert presence
+    // via getAllByText. Trades stays details-only, so getByText still holds.
+    expect(screen.getAllByText("+12.50%").length).toBeGreaterThan(0); // signed_percent
+    expect(screen.getAllByText("-3.75%").length).toBeGreaterThan(0); // negative keeps its sign
+    expect(screen.getAllByText("55.00%").length).toBeGreaterThan(0); // percent
+    expect(screen.getByText("42")).toBeInTheDocument(); // integer (Trades — details only)
+    expect(screen.getAllByText("—").length).toBeGreaterThan(0); // missing cell, never 0
     expect(screen.getByText("BTCUSDT")).toBeInTheDocument(); // S7: pinned instrument
     expect(screen.getByText("2026-07-05 19:06 UTC")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "View" })).toHaveAttribute(

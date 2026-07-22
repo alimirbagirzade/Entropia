@@ -304,10 +304,12 @@ describe("Create Package page", () => {
     await screen.findByRole("option", { name: "Momentum" });
 
     // Indicator offers directional_signal; Condition collapses to boolean_condition.
-    expect(screen.getByRole("option", { name: "directional_signal" })).toBeInTheDocument();
+    // D-2: options render human labels; the enum stays the option value (asserted
+    // via the request payload elsewhere). Scoping behaviour is unchanged.
+    expect(screen.getByRole("option", { name: "Directional Signal" })).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Package type"), { target: { value: "condition" } });
-    expect(screen.getByRole("option", { name: "boolean_condition" })).toBeInTheDocument();
-    expect(screen.queryByRole("option", { name: "directional_signal" })).not.toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Boolean Condition" })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "Directional Signal" })).not.toBeInTheDocument();
   });
 
   it("opens the request detail with the read-only projection", async () => {

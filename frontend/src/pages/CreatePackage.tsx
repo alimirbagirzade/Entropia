@@ -8,12 +8,18 @@ import { AdminGate, useIsAdmin } from "@/components/AdminGate";
 import { ApiError } from "@/lib/apiClient";
 import {
   CREATE_PACKAGE_KINDS,
+  CREATE_PACKAGE_KIND_LABELS,
   CREATION_MODES,
+  CREATION_MODE_LABELS,
+  OUTPUT_KIND_LABELS,
   SOURCE_LANGUAGES,
+  SOURCE_LANGUAGE_LABELS,
   SUPPORTED_TARGET_RUNTIME,
+  TARGET_RUNTIME_LABELS,
   asRecordArray,
   baselineParseTone,
   buildBaselineMetadata,
+  createPackageEnumLabel,
   outputKindsFor,
   packageActionAvailability,
   parseDeclaredDependencies,
@@ -336,7 +342,7 @@ function Workspace({
           >
             {CREATE_PACKAGE_KINDS.map((k) => (
               <option key={k} value={k}>
-                {k}
+                {createPackageEnumLabel(CREATE_PACKAGE_KIND_LABELS, k)}
               </option>
             ))}
           </select>
@@ -352,7 +358,7 @@ function Workspace({
           >
             {CREATION_MODES.map((m) => (
               <option key={m} value={m}>
-                {m}
+                {createPackageEnumLabel(CREATION_MODE_LABELS, m)}
               </option>
             ))}
           </select>
@@ -369,7 +375,7 @@ function Workspace({
             >
               {SOURCE_LANGUAGES.map((l) => (
                 <option key={l} value={l}>
-                  {l}
+                  {createPackageEnumLabel(SOURCE_LANGUAGE_LABELS, l)}
                 </option>
               ))}
             </select>
@@ -380,7 +386,9 @@ function Workspace({
         <label>
           <span>Target runtime</span>
           <select aria-label="Target runtime" value={SUPPORTED_TARGET_RUNTIME} disabled>
-            <option value={SUPPORTED_TARGET_RUNTIME}>{SUPPORTED_TARGET_RUNTIME}</option>
+            <option value={SUPPORTED_TARGET_RUNTIME}>
+              {createPackageEnumLabel(TARGET_RUNTIME_LABELS, SUPPORTED_TARGET_RUNTIME)}
+            </option>
           </select>
         </label>
         {needsLabel ? (
@@ -432,7 +440,7 @@ function Workspace({
           >
             {kindOptions.map((k) => (
               <option key={k} value={k}>
-                {k}
+                {createPackageEnumLabel(OUTPUT_KIND_LABELS, k)}
               </option>
             ))}
           </select>

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FocusEvent, type KeyboardEvent } from "react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { Modal } from "@/components/Modal";
 import { MENU_BAR, type MenuGroup, type MenuLink } from "./nav";
@@ -316,6 +316,7 @@ export function Layout() {
   const token = useSessionToken();
   const authMode = useAuthMode();
   const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     return connectEvents(queryClient, setSse);
@@ -333,16 +334,34 @@ export function Layout() {
   //
   // Only session mode redirects — in dev mode /login is not a usable credential
   // path. The redirect cannot loop: /login renders outside this Layout, so
-  // leaving unmounts the effect.
+  // leaving unmounts the effect; the explicit `/login` guard below is belt-and-
+  // suspenders in case a future route ever mounts the shell there.
   const seenInvalidations = useRef(getSessionInvalidations());
   useEffect(() => {
     const current = getSessionInvalidations();
     if (current === seenInvalidations.current) return;
     seenInvalidations.current = current;
     if (authMode !== "session") return;
-    void queryClient.invalidateQueries(); // drop every identity-dependent read
-    navigate("/login", { replace: true });
-  }, [token, authMode, queryClient, navigate]);
+    if (location.pathname === "/login") return; // already there — do not re-navigate
+
+    // Drop identity-bound state HARD, not just invalidate it. invalidateQueries
+    // would mark the active protected reads stale and immediately refetch them —
+    // with the token now gone they would re-fail as SESSION_INVALID and the
+    // previous user's cached rows would still paint until each refetch settled.
+    // cancelQueries aborts the in-flight reads (including the /me that just failed)
+    // and removeQueries drops the cache outright, so nothing from the old principal
+    // survives the redirect. removeQueries re-inits any still-mounted observer once
+    // before the redirect unmounts it, but those reads no-op (the token is already
+    // cleared, so noteSessionInvalid is a guarded no-op) — bounded, never a loop.
+    void queryClient.cancelQueries();
+    queryClient.removeQueries();
+
+    // Preserve a safe internal return path so a re-login lands the user back where
+    // the session expired. Login.tsx reads location.state.from and navigates there
+    // on success. Never carry an external/absolute URL — only this app's own path.
+    const from = location.pathname + location.search;
+    navigate("/login", { replace: true, state: { from } });
+  }, [token, authMode, queryClient, navigate, location]);
 
   const isAdmin = me.data?.is_admin ?? false;
   const menus = MENU_BAR.filter((g) => !g.adminOnly || isAdmin);

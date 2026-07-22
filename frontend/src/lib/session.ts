@@ -88,3 +88,42 @@ export function noteSessionInvalid(): void {
 export function getSessionInvalidations(): number {
   return invalidations;
 }
+
+// AUTH-10 — cross-tab session synchronization.
+//
+// setSession/clearSession call emit() for listeners in THIS tab, but a login or
+// logout in ANOTHER tab writes these same localStorage keys without touching this
+// module's in-memory `listeners` set in the current tab. The browser `storage`
+// event is the only cross-tab signal, and it fires exclusively in the OTHER tabs
+// (never the writer), so relaying it into emit() propagates a sibling tab's
+// login/logout/clear without any risk of a double-emit in the tab that made the
+// change. This is UI reactivity only: a cross-tab logout is a DELIBERATE clear, so
+// it must NOT increment the involuntary-loss counter — otherwise a logout in one
+// tab would bounce every other tab to /login, contradicting the single-tab logout
+// contract (the shell stays on anonymous "Login / Sign Up").
+function isSessionKeyEvent(event: StorageEvent): boolean {
+  // A different storage area (e.g. sessionStorage) is never our session.
+  if (event.storageArea && event.storageArea !== localStorage) return false;
+  // localStorage.clear() fires with key === null; a targeted set/remove of a
+  // session key fires with that key. Any other key is unrelated to identity.
+  return event.key === null || event.key === TOKEN_KEY || event.key === SESSION_KEY;
+}
+
+function handleStorage(event: StorageEvent): void {
+  if (isSessionKeyEvent(event)) emit();
+}
+
+// Bound exactly once. The guard is a module-scoped flag rather than an effect, so
+// React Strict Mode's double-invoked effects cannot register a duplicate listener,
+// and a single module instance never binds twice. (HMR re-imports the module with
+// a fresh flag; the previous instance's listener is orphaned with its old `emit`,
+// the standard dev-only trade-off — one live listener per running module.)
+let storageBound = false;
+
+export function startSessionSync(): void {
+  if (storageBound || typeof window === "undefined") return;
+  storageBound = true;
+  window.addEventListener("storage", handleStorage);
+}
+
+startSessionSync();

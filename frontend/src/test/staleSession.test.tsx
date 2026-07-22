@@ -11,7 +11,9 @@ import {
   clearSession,
   getSessionInvalidations,
   getSessionToken,
+  getStoredUser,
   setSession,
+  subscribe,
 } from "@/lib/session";
 import type { AuthUser, Meta } from "@/lib/types";
 import { apiErrorRoute, stubApi } from "./helpers/apiStub";
@@ -275,5 +277,133 @@ describe("session-mode redirect return path and identity cleanup (AUTH-08)", () 
     // the removal is deferred past the redirect (see Layout), so waitFor lets it run.
     expect(cancelSpy).toHaveBeenCalled();
     await waitFor(() => expect(removeSpy).toHaveBeenCalled());
+  });
+});
+
+// ---- AUTH-10: cross-tab session sync via the browser `storage` event ----
+//
+// setSession/clearSession notify only THIS tab's in-memory listeners; a
+// login/logout in ANOTHER tab writes the same localStorage keys and the browser
+// delivers the change to the OTHER tabs as a `storage` event. session.ts relays
+// that event into the same emit() (startSessionSync, bound once at import) so
+// useSyncExternalStore re-reads the token/user and re-renders every tab. jsdom
+// never fires `storage` for a same-document write, so each case constructs the
+// event the sibling tab would deliver. These pin the four cross-tab outcomes plus
+// the two the relay must IGNORE (a foreign key, a foreign storage area), and prove
+// the single-binding and no-involuntary-counter-tick contracts.
+
+const TOKEN_KEY = "entropia.sessionToken";
+const SESSION_KEY = "entropia.session";
+
+function siblingTabEvent(init: StorageEventInit): StorageEvent {
+  return new StorageEvent("storage", { storageArea: localStorage, ...init });
+}
+
+describe("cross-tab session sync (AUTH-10)", () => {
+  it("a logout in another tab notifies this tab's subscribers exactly once", () => {
+    setSession({ token: "tok", user: USER, expiresAt: null });
+    let notified = 0;
+    const unsubscribe = subscribe(() => {
+      notified += 1;
+    });
+
+    // The sibling tab removed the token; this tab receives the storage event.
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(SESSION_KEY);
+    window.dispatchEvent(siblingTabEvent({ key: TOKEN_KEY, oldValue: "tok", newValue: null }));
+
+    // Fired once — one bound listener, not a StrictMode/HMR double.
+    expect(notified).toBe(1);
+    expect(getSessionToken()).toBeNull();
+    unsubscribe();
+  });
+
+  it("a cross-tab logout must NOT tick the involuntary-loss counter", () => {
+    setSession({ token: "tok", user: USER, expiresAt: null });
+    const before = getSessionInvalidations();
+    const unsubscribe = subscribe(() => {});
+
+    localStorage.removeItem(TOKEN_KEY);
+    window.dispatchEvent(siblingTabEvent({ key: TOKEN_KEY, newValue: null }));
+
+    // A deliberate logout elsewhere is not a server-driven loss; ticking the
+    // counter would bounce every other tab to /login, breaking the logout contract.
+    expect(getSessionInvalidations()).toBe(before);
+    unsubscribe();
+  });
+
+  it("a login in another tab notifies subscribers and exposes the new user", () => {
+    let notified = 0;
+    const unsubscribe = subscribe(() => {
+      notified += 1;
+    });
+
+    // The sibling tab logged in: it wrote both keys; this tab is told the session
+    // key changed and re-reads the freshly persisted identity.
+    const persisted = JSON.stringify({ user: USER, expiresAt: null });
+    localStorage.setItem(TOKEN_KEY, "tok_new");
+    localStorage.setItem(SESSION_KEY, persisted);
+    window.dispatchEvent(siblingTabEvent({ key: SESSION_KEY, newValue: persisted }));
+
+    expect(notified).toBe(1);
+    expect(getSessionToken()).toBe("tok_new");
+    expect(getStoredUser()).toMatchObject({ user_id: "u1" });
+    unsubscribe();
+  });
+
+  it("a localStorage.clear() in another tab (key === null) still notifies", () => {
+    setSession({ token: "tok", user: USER, expiresAt: null });
+    let notified = 0;
+    const unsubscribe = subscribe(() => {
+      notified += 1;
+    });
+
+    localStorage.clear();
+    window.dispatchEvent(siblingTabEvent({ key: null, newValue: null }));
+
+    expect(notified).toBe(1);
+    unsubscribe();
+  });
+
+  it("an unrelated key changed in another tab does NOT notify", () => {
+    let notified = 0;
+    const unsubscribe = subscribe(() => {
+      notified += 1;
+    });
+
+    window.dispatchEvent(siblingTabEvent({ key: "theme.preference", newValue: "dark" }));
+
+    expect(notified).toBe(0);
+    unsubscribe();
+  });
+
+  it("a change in a DIFFERENT storage area (sessionStorage) is ignored", () => {
+    let notified = 0;
+    const unsubscribe = subscribe(() => {
+      notified += 1;
+    });
+
+    // Same key name, foreign storageArea — never our identity store.
+    window.dispatchEvent(
+      new StorageEvent("storage", { key: TOKEN_KEY, newValue: "x", storageArea: sessionStorage }),
+    );
+
+    expect(notified).toBe(0);
+    unsubscribe();
+  });
+
+  it("two sibling-tab events fire subscribers once each — the listener is bound once", () => {
+    let notified = 0;
+    const unsubscribe = subscribe(() => {
+      notified += 1;
+    });
+
+    // A duplicate (StrictMode/HMR) binding would double every emit; one-per-event
+    // proves exactly one `storage` listener is registered.
+    window.dispatchEvent(siblingTabEvent({ key: SESSION_KEY, newValue: null }));
+    window.dispatchEvent(siblingTabEvent({ key: TOKEN_KEY, newValue: null }));
+
+    expect(notified).toBe(2);
+    unsubscribe();
   });
 });

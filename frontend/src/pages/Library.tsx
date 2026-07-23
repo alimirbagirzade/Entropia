@@ -29,10 +29,12 @@ import {
   PACKAGE_VALIDATION_STATES,
   PERFORMANCE_FIELDS,
   PERMISSION_FLAGS,
+  TIMEFRAME_SCOPES,
   UNASSIGNED_FAMILY,
   VISIBILITY_SCOPES,
   approvalTone,
   lifecycleTone,
+  scopeLabel,
   useApprovePackage,
   useCreatePackageRevision,
   useDeprecatePackage,
@@ -220,6 +222,18 @@ function CatalogCard() {
   };
 
   const sections = packages.data ? groupRows(packages.data.data, sortBy) : [];
+  // Market is an OPEN scope (doc 08 §3.2, finding P-06): offer the values the current
+  // catalog page actually carries (plus the System/Unspecified sentinels and any active
+  // selection) — the client shows only values the projection supplies, never a
+  // fabricated list. Timeframe is a closed capability vocabulary (TIMEFRAME_SCOPES).
+  const marketOptions = Array.from(
+    new Set<string>([
+      "system",
+      "unspecified",
+      ...(packages.data?.data ?? []).map((row) => row.market_scope),
+      ...(filters.market ? [filters.market] : []),
+    ]),
+  ).sort();
 
   return (
     <section className="card" aria-labelledby="library-h">
@@ -236,9 +250,9 @@ function CatalogCard() {
           client-local Sort By. The V18 "Status" control is split into the
           orthogonal server facets it conflates (lifecycle / validation /
           approval / visibility, doc 08 §3.2 "Canonical alignment"). Market and
-          Timeframe are absent by design — the catalog projection carries no such
-          field, so a control there would be a fabricated no-op (doc 08 §3.2
-          "unsupported values not silently hidden"). */}
+          Timeframe are server-queryable catalog facets (doc 08 §3.2, finding
+          P-06): the derived scope is ESP -> System and a declared/unspecified scope
+          otherwise, filtered server-side — never hidden, coerced or fabricated. */}
       <form onSubmit={onSearch} className="package-filter-bar">
         <div className="package-filter-grid">
           <FacetSelect
@@ -247,6 +261,20 @@ function CatalogCard() {
             value={filters.type}
             options={CATALOG_PACKAGE_KINDS}
             onChange={(value) => applyFilter({ type: value })}
+          />
+          <FacetSelect
+            id="lib-market"
+            label="Market"
+            value={filters.market}
+            options={marketOptions}
+            onChange={(value) => applyFilter({ market: value })}
+          />
+          <FacetSelect
+            id="lib-timeframe"
+            label="Timeframe"
+            value={filters.timeframe}
+            options={TIMEFRAME_SCOPES}
+            onChange={(value) => applyFilter({ timeframe: value })}
           />
           <label htmlFor="lib-family">
             Rationale family
@@ -396,6 +424,8 @@ function PackageRow({
           <StatusBadge tone={validationTone(row.validation_state)} label={row.validation_state} />
           <StatusBadge tone={approvalTone(row.approval_state)} label={row.approval_state} />
           <span>{row.visibility_scope}</span>
+          <span title="Market scope">{scopeLabel(row.market_scope)}</span>
+          <span title="Timeframe scope">{scopeLabel(row.timeframe_scope)}</span>
           <span>{row.rationale_family?.name ?? "—"}</span>
         </div>
         {/* aria-label keeps the accessible name "Detail" so the toggle stays the
@@ -463,6 +493,10 @@ function PackageDetail({ entityId, onClose }: { entityId: string; onClose: () =>
               />{" "}
               · {pkg.visibility_scope}
             </dd>
+            <dt>Market</dt>
+            <dd>{scopeLabel(pkg.market_scope)}</dd>
+            <dt>Timeframe</dt>
+            <dd>{scopeLabel(pkg.timeframe_scope)}</dd>
             <dt>Rationale family</dt>
             <dd>
               {pkg.rationale_family ? (

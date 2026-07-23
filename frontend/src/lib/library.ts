@@ -44,6 +44,32 @@ export const VISIBILITY_SCOPES = ["private", "explicitly_shared", "published", "
 // Sentinel rationale-family filter value: packages with no pinned family.
 export const UNASSIGNED_FAMILY = "unassigned";
 
+// Timeframe scope is a CLOSED capability vocabulary (doc 08 §3.2, finding P-06):
+// explicit / multi / same-as-base capability, System for ESP, plus the UNSPECIFIED
+// default. A hydration-only mirror of domain/package/catalog.py TIMEFRAME_SCOPES — the
+// server re-validates and rejects a bad value with the 422 envelope verbatim.
+export const TIMEFRAME_SCOPES = [
+  "explicit",
+  "multi",
+  "same_as_base",
+  "system",
+  "unspecified",
+] as const;
+
+// Human display labels for the derived Market/Timeframe scope tokens (finding P-06:
+// "human display"). Unknown open-market tokens pass through unchanged.
+const SCOPE_LABELS: Record<string, string> = {
+  system: "System",
+  unspecified: "Unspecified",
+  multi: "Multi",
+  explicit: "Explicit",
+  same_as_base: "Same as base",
+};
+
+export function scopeLabel(value: string): string {
+  return SCOPE_LABELS[value] ?? value;
+}
+
 // ---------------------------------------------------------------------------
 // Wire types (mirror application/queries/library.py `_package_row` / detail
 // verbatim)
@@ -109,6 +135,10 @@ export interface LibraryPackageRow {
   validation_state: string;
   approval_state: string;
   visibility_scope: string;
+  // Derived catalog scope (doc 08 §3.2, finding P-06): ESP -> "system"; else the
+  // declared scope or "unspecified". Rendered via scopeLabel().
+  market_scope: string;
+  timeframe_scope: string;
   rationale_family: PinnedFamilyRef | null;
   output_kinds: string[];
   derived_from_revision_id: string | null;
@@ -190,6 +220,8 @@ export interface LibraryFilters {
   approval_state: string | null;
   visibility_scope: string | null;
   rationale_family_id: string | null;
+  market: string | null;
+  timeframe: string | null;
   q: string | null;
 }
 
@@ -200,6 +232,8 @@ export const DEFAULT_LIBRARY_FILTERS: LibraryFilters = {
   approval_state: null,
   visibility_scope: null,
   rationale_family_id: null,
+  market: null,
+  timeframe: null,
   q: null,
 };
 

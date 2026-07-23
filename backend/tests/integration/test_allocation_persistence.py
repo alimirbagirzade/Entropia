@@ -31,6 +31,7 @@ from entropia.infrastructure.postgres.models import (
     PortfolioAllocationPlanRevision,
     Principal,
 )
+from entropia.infrastructure.postgres.repositories import mainboard as mb_repo
 from entropia.shared.errors import (
     AccessDeniedError,
     AllocationDependencyBlockedError,
@@ -170,6 +171,39 @@ async def test_full_flow_draft_validate_revision(session) -> None:
         )
     ).scalar_one()
     assert audit >= 1 and outbox >= 1
+
+
+async def test_projection_carries_item_display_label(session) -> None:
+    """P-11 / F-07: the candidate picker AND the persisted entry projection expose
+    the composition item's server-owned display label, so the browser never
+    reconstructs a human name from the raw ``mbi_`` id. An item with no override
+    resolves to ``None`` → the client falls back to the item-kind label.
+    """
+    await _seed_principals(session)
+    composition_id, items = await _composition_with_items(session, USER1)
+
+    # Give the first item an explicit human label (the Mainboard set-label path);
+    # the others keep the default None.
+    labelled = await mb_repo.get_item(session, items[0])
+    assert labelled is not None
+    labelled.display_label_override = "Momentum Alpha"
+    await session.commit()
+
+    # Before any plan row exists: the candidate picker carries the label.
+    draft = await alloc_query.get_allocation_draft(session, USER1, composition_id=composition_id)
+    candidates = {c["composition_item_id"]: c for c in draft["candidate_items"]}
+    assert candidates[items[0]]["display_label_override"] == "Momentum Alpha"
+    assert candidates[items[1]]["display_label_override"] is None
+
+    # After a shared draft: the persisted entry projection resolves the label from
+    # the bound composition item (the entry row stores no name of its own).
+    await _put_shared_draft(
+        session, USER1, composition_id, _entries((items[0], "40"), (items[1], "35"))
+    )
+    draft2 = await alloc_query.get_allocation_draft(session, USER1, composition_id=composition_id)
+    entries = {e["composition_item_id"]: e for e in draft2["draft"]["entries"]}
+    assert entries[items[0]]["display_label_override"] == "Momentum Alpha"
+    assert entries[items[1]]["display_label_override"] is None
 
 
 # --------------------------------------------------------------------------- #

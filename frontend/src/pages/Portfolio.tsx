@@ -66,6 +66,9 @@ interface EntryRow {
   item_type: string;
   active: boolean;
   share: string;
+  // Server-owned label carried through the editor so the Item column and the
+  // example line show a human name, not the raw id (audit P-11 / F-07).
+  display_label_override: string | null;
 }
 
 // Friendly labels for the server-DERIVED MainboardItemKind (§8.2). The Type
@@ -79,6 +82,44 @@ const ITEM_TYPE_LABELS: Record<string, string> = {
 
 function itemTypeLabel(itemType: string): string {
   return ITEM_TYPE_LABELS[itemType] ?? itemType;
+}
+
+// The primary human label for a composition item (audit P-11 / F-07). Prefers
+// the server-owned display_label_override; when absent, falls back to the
+// item-kind label — NEVER the raw mbi_ id (that stays a secondary binding key).
+// Mirrors the Mainboard page's `display_label_override ?? kindLabel` convention.
+function itemDisplayLabel(override: string | null | undefined, itemType: string): string {
+  return override != null && override.trim() !== "" ? override : itemTypeLabel(itemType);
+}
+
+// The human label as the primary text with the composition_item_id kept beneath
+// it as a secondary, muted binding key (audit P-11 / F-07). `inline` renders the
+// two on one line for list rows where a stacked cell would be too tall.
+function ItemLabel({
+  label,
+  itemId,
+  inline = false,
+}: {
+  label: string;
+  itemId: string;
+  inline?: boolean;
+}) {
+  const idCode = (
+    <code style={{ fontSize: 12, color: "var(--text-dim)" }}>{itemId}</code>
+  );
+  if (inline) {
+    return (
+      <span>
+        {label} {idCode}
+      </span>
+    );
+  }
+  return (
+    <div>
+      <div>{label}</div>
+      {idCode}
+    </div>
+  );
 }
 
 // Per-item sleeve capital rendered VERBATIM from the server derivation (never
@@ -242,6 +283,7 @@ function DraftEditor({
       item_type: entry.item_type,
       active: entry.active,
       share: entry.equity_share_percent ?? "",
+      display_label_override: entry.display_label_override,
     })),
   );
 
@@ -270,6 +312,16 @@ function DraftEditor({
   // since Validate is the authoritative allocation-readiness computation;
   // never recomputed client-side (doc 13 §8.3).
   const previewDerived = validateReport?.derived ?? savedDerived;
+
+  // Resolve each sleeve/row's server-owned human label once, keyed by the
+  // composition_item_id binding key (audit P-11 / F-07) — shared by the example
+  // line so it never renders a raw mbi_ id as the primary name.
+  const labelByItem = new Map(
+    entries.map((entry) => [
+      entry.composition_item_id,
+      itemDisplayLabel(entry.display_label_override, entry.item_type),
+    ]),
+  );
 
   return (
     <section className="card" aria-labelledby="alloc-draft-h">
@@ -428,6 +480,7 @@ function DraftEditor({
                       item_type: candidate.item_type,
                       active: true,
                       share: "",
+                      display_label_override: candidate.display_label_override,
                     },
                   ])
                 }
@@ -444,7 +497,7 @@ function DraftEditor({
             ) : previewDerived ? (
               <>
                 <CalculationPreview derived={previewDerived} />
-                <AllocationExampleText derived={previewDerived} />
+                <AllocationExampleText derived={previewDerived} labelByItem={labelByItem} />
               </>
             ) : (
               <EmptyState
@@ -550,7 +603,13 @@ function CalculationPreview({ derived }: { derived: DerivedAmounts }) {
 // derivation's first active sleeve — the sleeve capital and share are rendered
 // verbatim, never recomputed client-side (doc 13 §8.3). With no active sleeve
 // yet, the mockup's neutral placeholder stands in.
-function AllocationExampleText({ derived }: { derived: DerivedAmounts }) {
+function AllocationExampleText({
+  derived,
+  labelByItem,
+}: {
+  derived: DerivedAmounts;
+  labelByItem: Map<string, string>;
+}) {
   const sleeve = derived.sleeves[0];
   if (!sleeve) {
     return (
@@ -559,9 +618,10 @@ function AllocationExampleText({ derived }: { derived: DerivedAmounts }) {
       </p>
     );
   }
+  const label = labelByItem.get(sleeve.composition_item_id) ?? sleeve.composition_item_id;
   return (
     <p className="portfolio-allocation-note">
-      <b>Example:</b> <code>{sleeve.composition_item_id}</code> gets{" "}
+      <b>Example:</b> <ItemLabel label={label} itemId={sleeve.composition_item_id} inline /> gets{" "}
       {sleeve.equity_share_percent}% of the shared pool:{" "}
       {sleeveCapitalText(sleeve, derived.currency)}. Position Sizing uses this allocated capital as
       its base.
@@ -571,10 +631,12 @@ function AllocationExampleText({ derived }: { derived: DerivedAmounts }) {
 
 // Per-item equity sleeve rows (mockup Card 2 "2. EQUITY ALLOCATION" — the
 // Active | Item | Type | Equity Share | Capital | Sizing Base grid). The Item
-// column carries composition_item_id (the wire binding key, §8.2) and Type its
-// server-derived kind; the Capital column shows the server-DERIVED per-sleeve
-// amount verbatim (never recomputed here), and Sizing Base is the fixed
-// "Allocation" base the mockup renders for every allocated sleeve.
+// column shows the server-owned human label as the primary text with the
+// composition_item_id kept beneath it as a secondary binding key (audit P-11 /
+// F-07 — never a raw mbi_ id as the name); Type is the server-derived kind; the
+// Capital column shows the server-DERIVED per-sleeve amount verbatim (never
+// recomputed here), and Sizing Base is the fixed "Allocation" base the mockup
+// renders for every allocated sleeve.
 function EntriesTable({
   entries,
   onChange,
@@ -626,7 +688,10 @@ function EntriesTable({
               />
             </td>
             <td>
-              <code>{row.composition_item_id}</code>
+              <ItemLabel
+                label={itemDisplayLabel(row.display_label_override, row.item_type)}
+                itemId={row.composition_item_id}
+              />
             </td>
             <td>{itemTypeLabel(row.item_type)}</td>
             <td>
@@ -702,10 +767,13 @@ function CandidatePicker({
       <ul style={{ margin: 0, paddingLeft: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 6 }}>
         {candidates.map((candidate) => (
           <li key={candidate.composition_item_id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <code>{candidate.composition_item_id}</code>
+            <ItemLabel
+              label={itemDisplayLabel(candidate.display_label_override, candidate.item_type)}
+              itemId={candidate.composition_item_id}
+              inline
+            />
             <span style={{ fontSize: 12, color: "var(--text-dim)" }}>
-              {candidate.item_type}
-              {candidate.display_label_override ? ` · ${candidate.display_label_override}` : ""}
+              {itemTypeLabel(candidate.item_type)}
               {candidate.is_enabled ? "" : " · disabled on Mainboard"}
             </span>
             <button
@@ -800,7 +868,12 @@ function SyncCard({
               <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13 }}>
                 {preview.new_candidates.map((candidate) => (
                   <li key={candidate.composition_item_id}>
-                    <code>{candidate.composition_item_id}</code> · {candidate.item_type}
+                    <ItemLabel
+                      label={itemDisplayLabel(candidate.display_label_override, candidate.item_type)}
+                      itemId={candidate.composition_item_id}
+                      inline
+                    />{" "}
+                    · {itemTypeLabel(candidate.item_type)}
                   </li>
                 ))}
               </ul>
@@ -824,8 +897,12 @@ function SyncEntryList({ label, entries }: { label: string; entries: AllocationE
         <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13 }}>
           {entries.map((entry) => (
             <li key={entry.entry_id}>
-              <code>{entry.composition_item_id}</code> · {entry.item_type} ·{" "}
-              {entry.active ? "active" : "inactive"}
+              <ItemLabel
+                label={itemDisplayLabel(entry.display_label_override, entry.item_type)}
+                itemId={entry.composition_item_id}
+                inline
+              />{" "}
+              · {itemTypeLabel(entry.item_type)} · {entry.active ? "active" : "inactive"}
               {entry.equity_share_percent !== null ? ` · ${entry.equity_share_percent}%` : ""}
             </li>
           ))}

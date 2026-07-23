@@ -31,6 +31,12 @@ async def get_allocation_draft(
 
     plan = await alloc_repo.get_plan_for_workspace(session, composition_id)
     items = await mb_repo.list_active_items(session, composition_id)
+    # The persisted allocation entry binds by composition_item_id only (§8.2) and
+    # carries no human name of its own; resolve each row's server-owned display
+    # label from the composition item here so the browser NEVER reconstructs a
+    # name from the raw mbi_ id (audit P-11 / F-07). Missing (soft-deleted /
+    # detached) items fall back to None → the client shows the item-kind label.
+    label_by_item = {item.item_id: item.display_label_override for item in items}
 
     if plan is None:
         draft: dict[str, Any] = {
@@ -58,7 +64,7 @@ async def get_allocation_draft(
         "plan_id": plan.plan_id,
         "current_revision_id": plan.current_revision_id,
         "row_version": plan.row_version,
-        "draft": _draft_projection(plan, entries),
+        "draft": _draft_projection(plan, entries, label_by_item),
         "candidate_items": [_candidate(item) for item in items if item.item_id not in represented],
     }
 
@@ -73,11 +79,20 @@ async def sync_preview(
     plan = await alloc_repo.get_plan_for_workspace(session, composition_id)
     items = await mb_repo.list_active_items(session, composition_id)
     item_ids = {item.item_id for item in items}
+    label_by_item = {item.item_id: item.display_label_override for item in items}
     entries = await alloc_repo.list_entries(session, plan.plan_id) if plan is not None else []
     entry_ids = {e.composition_item_id for e in entries}
 
-    retained = [_entry_projection(e) for e in entries if e.composition_item_id in item_ids]
-    missing = [_entry_projection(e) for e in entries if e.composition_item_id not in item_ids]
+    retained = [
+        _entry_projection(e, label_by_item) for e in entries if e.composition_item_id in item_ids
+    ]
+    # A missing entry's item is gone from the composition, so its label resolves
+    # to None (label_by_item.get) → the client renders the item-kind label.
+    missing = [
+        _entry_projection(e, label_by_item)
+        for e in entries
+        if e.composition_item_id not in item_ids
+    ]
     new_candidates = [_candidate(item) for item in items if item.item_id not in entry_ids]
 
     return {
@@ -105,7 +120,11 @@ async def _load_workspace_for_view(
     ensure_can_view(actor, owner_principal_id=workspace.owner_principal_id, visibility="private")
 
 
-def _draft_projection(plan: Any, entries: list[PortfolioAllocationEntry]) -> dict[str, Any]:
+def _draft_projection(
+    plan: Any,
+    entries: list[PortfolioAllocationEntry],
+    label_by_item: dict[str, str | None],
+) -> dict[str, Any]:
     initial_capital = None
     if plan.initial_capital_amount is not None and plan.initial_capital_currency is not None:
         initial_capital = {
@@ -130,11 +149,13 @@ def _draft_projection(plan: Any, entries: list[PortfolioAllocationEntry]) -> dic
             str(plan.conflict_policy) if plan.conflict_policy is not None else None
         ),
         "draft_fingerprint": plan.draft_fingerprint,
-        "entries": [_entry_projection(e) for e in entries],
+        "entries": [_entry_projection(e, label_by_item) for e in entries],
     }
 
 
-def _entry_projection(entry: PortfolioAllocationEntry) -> dict[str, Any]:
+def _entry_projection(
+    entry: PortfolioAllocationEntry, label_by_item: dict[str, str | None]
+) -> dict[str, Any]:
     return {
         "entry_id": entry.entry_id,
         "composition_item_id": entry.composition_item_id,
@@ -144,6 +165,10 @@ def _entry_projection(entry: PortfolioAllocationEntry) -> dict[str, Any]:
             str(entry.equity_share_percent) if entry.equity_share_percent is not None else None
         ),
         "position_index": entry.position_index,
+        # Server-owned human name of the bound composition item (None when the
+        # item is gone); the client shows it as the primary label and keeps the
+        # composition_item_id as a secondary binding key only (audit P-11 / F-07).
+        "display_label_override": label_by_item.get(entry.composition_item_id),
     }
 
 

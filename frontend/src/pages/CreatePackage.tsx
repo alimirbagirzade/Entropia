@@ -41,11 +41,13 @@ import {
   type BaselineMetadataFields,
   type CreatePackageKind,
   type CreationMode,
+  type LinkedIndicator,
   type MissingCall,
   type PackageRequestDetail,
   type ResolvedRef,
   type SourceLanguage,
 } from "@/lib/createPackage";
+import { DEFAULT_LIBRARY_FILTERS, useLibraryPackages } from "@/lib/library";
 
 // Command failures surface the backend canonical envelope verbatim — the client
 // never invents Create-Package domain messages (mirrors Panel / AnalysisLab).
@@ -222,6 +224,12 @@ interface FormState {
   request_body: string;
   output_kind: string;
   rationale_family_id: string;
+  // Compatible Family: "" = "Same Rationale Family" (empty list); otherwise the one
+  // OTHER family entity id the package declares compatibility with (doc 06 §4).
+  compatible_family_id: string;
+  // Explicit Indicator Link: "" = "Optional / Not Required" (null); otherwise the
+  // selected indicator ROOT entity id — the revision is pinned from its head at Send.
+  linked_indicator_root_id: string;
   declared_keys: string;
 }
 
@@ -233,6 +241,8 @@ const INITIAL_FORM: FormState = {
   request_body: "",
   output_kind: "directional_signal",
   rationale_family_id: "",
+  compatible_family_id: "",
+  linked_indicator_root_id: "",
   declared_keys: "",
 };
 
@@ -260,9 +270,24 @@ function Workspace({
 
   const isCodeMode = sourceKindForMode(form.creation_mode) === "code";
   const isEsp = form.package_type === "embedded_system";
+  const isCondition = form.package_type === "condition";
   const needsLabel = isCodeMode && form.source_language === "other";
   const kindOptions = outputKindsFor(form.package_type);
   const familyRows = families.data?.data ?? [];
+  // Compatible Family lists OTHER families (the assigned one is implicit "Same") —
+  // and only once a primary Rationale Family is chosen, since compatibility is
+  // declared relative to that assignment (doc 06 §4).
+  const compatibleFamilyRows =
+    form.rationale_family_id.length > 0
+      ? familyRows.filter((fam) => fam.entity_id !== form.rationale_family_id)
+      : [];
+  // Explicit Indicator Link picker (doc 06 §4): published Indicator packages, each
+  // pinned by its head revision. Read reuses the shared library catalog hook.
+  const indicators = useLibraryPackages(
+    { ...DEFAULT_LIBRARY_FILTERS, type: "indicator", visibility_scope: "published" },
+    null,
+  );
+  const indicatorRows = indicators.data?.data ?? [];
 
   const canSubmit =
     form.request_body.trim().length > 0 &&
@@ -274,7 +299,15 @@ function Workspace({
 
   function onPackageType(next: CreatePackageKind) {
     const nextKinds = outputKindsFor(next);
-    setForm((prev) => ({ ...prev, package_type: next, output_kind: nextKinds[0] ?? "" }));
+    setForm((prev) => ({
+      ...prev,
+      package_type: next,
+      output_kind: nextKinds[0] ?? "",
+      // The Explicit Indicator Link is Condition-only; ESP declares no Compatible
+      // Family (it has no rationale family). Drop stale selections on a type change.
+      linked_indicator_root_id: next === "condition" ? prev.linked_indicator_root_id : "",
+      compatible_family_id: next === "embedded_system" ? "" : prev.compatible_family_id,
+    }));
   }
 
   function onSend() {
@@ -283,6 +316,22 @@ function Workspace({
     // ordered types are the resolver identity (doc 09 §4.2), so a bare key
     // cannot match a parameterised ESP contract.
     const declared = parseDeclaredDependencies(form.declared_keys);
+    // Compatible Family (doc 06 §4): "Same" is the empty list; otherwise the one
+    // declared OTHER family. ESP carries none. The server re-validates each id.
+    const compatibleFamilies =
+      isEsp || form.compatible_family_id.length === 0 ? [] : [form.compatible_family_id];
+    // Explicit Indicator Link: pin the chosen indicator ROOT + its head REVISION
+    // (never name-only). Only a Condition package may carry a link.
+    const linkedRow =
+      isCondition && form.linked_indicator_root_id.length > 0
+        ? indicatorRows.find((row) => row.entity_id === form.linked_indicator_root_id)
+        : undefined;
+    const linkedIndicator: LinkedIndicator | null = linkedRow
+      ? {
+          linked_indicator_package_root_id: linkedRow.entity_id,
+          linked_indicator_package_revision_id: linkedRow.current_revision_id,
+        }
+      : null;
     create.mutate(
       {
         package_type: form.package_type,
@@ -293,6 +342,8 @@ function Workspace({
         source_language: isCodeMode ? form.source_language : null,
         other_language_label: needsLabel ? form.other_language_label.trim() : null,
         rationale_family_id: isEsp ? null : form.rationale_family_id,
+        compatible_rationale_family_ids: compatibleFamilies,
+        linked_indicator: linkedIndicator,
         declared_dependencies: declared,
       },
       { onSuccess: (result) => onCreated(result.request_id) },
@@ -406,10 +457,11 @@ function Workspace({
         ) : null}
       </div>
 
-      {/* Package Identity / Compatibility grid (mockup §3). Output type and the
-          rationale family feed the real request; compatible family + explicit
-          indicator link follow the v18 layout but are not yet bound to the
-          backend (V1) — the server owns those relationships on approval. */}
+      {/* Package Identity / Compatibility grid (mockup §3). Every field feeds the
+          real request: output type + rationale family, the Compatible Family
+          discovery hint (compatible_rationale_family_ids) and the Explicit Indicator
+          Link (linked_indicator root+revision, Condition-only). The server
+          re-validates each against live rows (doc 06 §4). */}
       <div className="cp-section-title">Package Identity / Compatibility</div>
       <div className="cp-identity-grid">
         <label>
@@ -447,15 +499,45 @@ function Workspace({
         </label>
         <label>
           <span>Compatible family</span>
-          <select aria-label="Compatible family" defaultValue="same" disabled>
-            <option value="same">Same Rationale Family</option>
-          </select>
+          {isEsp ? (
+            <p className="cp-note">Not applicable — Embedded System has no rationale family.</p>
+          ) : (
+            <select
+              aria-label="Compatible family"
+              value={form.compatible_family_id}
+              onChange={(e) =>
+                setForm((prev) => ({ ...prev, compatible_family_id: e.target.value }))
+              }
+            >
+              <option value="">Same Rationale Family</option>
+              {compatibleFamilyRows.map((fam) => (
+                <option key={fam.entity_id} value={fam.entity_id}>
+                  {fam.display_name}
+                </option>
+              ))}
+            </select>
+          )}
         </label>
         <label>
           <span>Explicit indicator link</span>
-          <select aria-label="Explicit indicator link" defaultValue="optional" disabled>
-            <option value="optional">Optional / Not Required</option>
-          </select>
+          {isCondition ? (
+            <select
+              aria-label="Explicit indicator link"
+              value={form.linked_indicator_root_id}
+              onChange={(e) =>
+                setForm((prev) => ({ ...prev, linked_indicator_root_id: e.target.value }))
+              }
+            >
+              <option value="">Optional / Not Required</option>
+              {indicatorRows.map((row) => (
+                <option key={row.entity_id} value={row.entity_id}>
+                  {row.name ?? row.entity_id}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <p className="cp-note">Not applicable — only a Condition package links an indicator.</p>
+          )}
         </label>
       </div>
 
@@ -464,10 +546,11 @@ function Workspace({
           No active Rationale Family — create one first (required for Indicator / Condition).
         </p>
       ) : null}
-      <p className="cp-note" style={{ marginTop: 0, marginBottom: 14 }}>
-        Compatible family and explicit indicator link follow the v18 layout; they are not yet sent
-        to the backend (V1).
-      </p>
+      {isCondition && indicatorRows.length === 0 && !indicators.isLoading ? (
+        <p className="cp-note" style={{ marginTop: -4, marginBottom: 14 }}>
+          No published Indicator packages yet — the Explicit Indicator Link stays optional.
+        </p>
+      ) : null}
 
       <div className="cp-create-layout">
         <section>

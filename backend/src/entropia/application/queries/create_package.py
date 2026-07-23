@@ -63,6 +63,10 @@ def _request_dict(
         "output_contract": detail.output_contract,
         "rationale_family_id": detail.rationale_family_id,
         "compatible_rationale_family_ids": detail.compatible_rationale_family_ids,
+        # Explicit Indicator Link (doc 06 §4): the persisted root+revision pins of a
+        # linked indicator dependency (Condition packages), round-tripped so a
+        # save→reload preserves the operator's selection. NULL when not linked.
+        "linked_indicator": detail.linked_indicator,
         "declared_dependencies": detail.declared_dependencies,
         "state": str(detail.state),
         "context_hash": detail.context_hash,

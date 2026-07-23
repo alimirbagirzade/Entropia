@@ -15,6 +15,7 @@ import pytest
 from sqlalchemy import func, select
 
 from entropia.application.commands import create_package as cp_cmd
+from entropia.application.queries import create_package as cp_query
 from entropia.domain.create_package.enums import (
     CreatePackageState,
     CreationMode,
@@ -43,7 +44,12 @@ from entropia.infrastructure.postgres.repositories import create_package as cp_r
 from entropia.infrastructure.postgres.repositories import esp as esp_repo
 from entropia.infrastructure.postgres.repositories import packages as pkg_repo
 from entropia.infrastructure.postgres.repositories import rationale as rationale_repo
-from entropia.shared.errors import AccessDeniedError, PrecheckBlocked
+from entropia.shared.errors import (
+    AccessDeniedError,
+    PrecheckBlocked,
+    RationaleFamilyNotActive,
+    ValidationError,
+)
 
 pytestmark = pytest.mark.integration
 
@@ -451,3 +457,161 @@ async def test_precheck_over_declared_dependency_is_a_warning(session) -> None:
         session, OWNER, request_id=created["request_id"]
     )
     assert sent["state"] == str(CreatePackageState.CANDIDATE_READY)
+
+
+async def _seed_family_named(session, *, display_name: str, normalized_name: str) -> str:
+    root, _detail, _revision = await rationale_repo.create_family(
+        session,
+        owner_principal_id="user_admin",
+        created_by_principal_id="user_admin",
+        display_name=display_name,
+        normalized_name=normalized_name,
+        subfamilies=[],
+        compatible_output_types=["directional_signal"],
+        display_color="#CDE7FF",
+        change_note=None,
+    )
+    return root.entity_id
+
+
+async def _seed_indicator_package(session) -> tuple[str, str]:
+    """Seed a published Indicator package (root + head revision) to link against."""
+    root, _detail, revision = await pkg_repo.create_package(
+        session,
+        owner_principal_id="user_admin",
+        created_by_principal_id="user_admin",
+        package_kind=PackageKind.INDICATOR,
+        input_contract={"source_kind": "code"},
+        output_contract={"kind": "directional_signal"},
+        dependency_snapshot={},
+        visibility_scope=VisibilityScope.PUBLISHED,
+        validation_state=PackageValidationState.PASSED,
+        approval_state=ApprovalState.APPROVED,
+    )
+    return root.entity_id, revision.revision_id
+
+
+async def _create_condition_request(session, *, family_id, compatible=None, linked=None) -> dict:
+    return await cp_cmd.create_package_request(
+        session,
+        OWNER,
+        package_type="condition",
+        creation_mode=CreationMode.GENERATE_FROM_DESCRIPTION,
+        source_language=None,
+        other_language_label=None,
+        target_runtime=RuntimeAdapter.PYTHON,
+        request_body="A reversal condition on the linked indicator.",
+        output_contract={"kind": "boolean_condition"},
+        rationale_family_id=family_id,
+        compatible_rationale_family_ids=compatible,
+        linked_indicator=linked,
+        equivalence_claim=False,
+    )
+
+
+async def test_compatible_family_and_linked_indicator_round_trip(session) -> None:
+    """P-05: both compatibility declarations persist and survive save→reload.
+
+    The Compatible Family list is deduped and the assigned ("Same") family dropped;
+    the Explicit Indicator Link is pinned to the indicator root+revision. The GET
+    projection returns exactly what was saved (audit acceptance).
+    """
+    await _seed_principals(session)
+    family_id = await _seed_family(session)
+    compat_id = await _seed_family_named(
+        session, display_name="Trend / Momentum", normalized_name="trend / momentum"
+    )
+    indicator_root, indicator_rev = await _seed_indicator_package(session)
+    await session.commit()
+
+    created = await _create_condition_request(
+        session,
+        family_id=family_id,
+        # The assigned family + a duplicate are dropped; only the distinct OTHER family stays.
+        compatible=[compat_id, family_id, compat_id],
+        linked={
+            "linked_indicator_package_root_id": indicator_root,
+            "linked_indicator_package_revision_id": indicator_rev,
+        },
+    )
+    await session.commit()
+    assert created["compatible_rationale_family_ids"] == [compat_id]
+    assert created["linked_indicator"] == {
+        "linked_indicator_package_root_id": indicator_root,
+        "linked_indicator_package_revision_id": indicator_rev,
+    }
+
+    # Save→reload: the immutable request projection returns the same pins.
+    projection = await cp_query.get_package_request(
+        session, OWNER, request_id=created["request_id"]
+    )
+    assert projection["compatible_rationale_family_ids"] == [compat_id]
+    assert projection["linked_indicator"] == {
+        "linked_indicator_package_root_id": indicator_root,
+        "linked_indicator_package_revision_id": indicator_rev,
+    }
+
+
+async def test_compatible_family_must_be_active(session) -> None:
+    """A Compatible Family that is not an ACTIVE family is rejected (no auto-create)."""
+    await _seed_principals(session)
+    family_id = await _seed_family(session)
+    await session.commit()
+
+    with pytest.raises(RationaleFamilyNotActive):
+        await _create_condition_request(
+            session, family_id=family_id, compatible=["fam_does_not_exist"]
+        )
+
+
+async def test_linked_indicator_rejected_for_non_condition(session) -> None:
+    """The Explicit Indicator Link is Condition-only (doc 06 §4)."""
+    await _seed_principals(session)
+    family_id = await _seed_family(session)
+    indicator_root, indicator_rev = await _seed_indicator_package(session)
+    await session.commit()
+
+    with pytest.raises(ValidationError):
+        await _create_indicator_request_with_link(
+            session,
+            family_id=family_id,
+            linked={
+                "linked_indicator_package_root_id": indicator_root,
+                "linked_indicator_package_revision_id": indicator_rev,
+            },
+        )
+
+
+async def test_linked_indicator_unknown_revision_rejected(session) -> None:
+    """Name-only / dangling links are rejected — the revision must belong to the root."""
+    await _seed_principals(session)
+    family_id = await _seed_family(session)
+    indicator_root, _rev = await _seed_indicator_package(session)
+    await session.commit()
+
+    with pytest.raises(ValidationError):
+        await _create_condition_request(
+            session,
+            family_id=family_id,
+            linked={
+                "linked_indicator_package_root_id": indicator_root,
+                "linked_indicator_package_revision_id": "rev_not_real",
+            },
+        )
+
+
+async def _create_indicator_request_with_link(session, *, family_id, linked) -> dict:
+    return await cp_cmd.create_package_request(
+        session,
+        OWNER,
+        package_type="indicator",
+        creation_mode=CreationMode.GENERATE_FROM_DESCRIPTION,
+        source_language=None,
+        other_language_label=None,
+        target_runtime=RuntimeAdapter.PYTHON,
+        request_body="An indicator that should not carry an indicator link.",
+        output_contract=_INDICATOR_OUTPUT,
+        rationale_family_id=family_id,
+        linked_indicator=linked,
+        equivalence_claim=False,
+    )

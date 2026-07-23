@@ -322,6 +322,47 @@ def add_coverage_slice(
     return slice_row
 
 
+async def summarize_coverage_for_revisions(
+    session: AsyncSession, revision_ids: Sequence[str]
+) -> dict[str, dict[str, Any]]:
+    """Aggregate the contiguous coverage slices per revision into a compact digest.
+
+    Returns ``{revision_id: {start_at, end_at, row_count, slice_count}}`` for the
+    revisions that have at least one coverage slice; a revision the analysis job
+    has not covered yet is simply ABSENT from the map, so the registry projection
+    renders an honest "—" rather than a fabricated span (finding P-09). Values are
+    JSON-safe (``isoformat`` / ``int``). One bounded aggregate query keyed by the
+    current page's revision ids — never a per-row N+1.
+    """
+    ids = list(revision_ids)
+    if not ids:
+        return {}
+    stmt = (
+        select(
+            DatasetCoverageSlice.revision_id,
+            func.min(DatasetCoverageSlice.start_at),
+            func.max(DatasetCoverageSlice.end_at),
+            func.sum(DatasetCoverageSlice.row_count),
+            func.count(),
+        )
+        .where(DatasetCoverageSlice.revision_id.in_(ids))
+        .group_by(DatasetCoverageSlice.revision_id)
+    )
+    summary: dict[str, dict[str, Any]] = {}
+    for revision_id, start_at, end_at, row_count, slice_count in (
+        await session.execute(stmt)
+    ).all():
+        if revision_id is None:
+            continue
+        summary[revision_id] = {
+            "start_at": start_at.isoformat() if start_at is not None else None,
+            "end_at": end_at.isoformat() if end_at is not None else None,
+            "row_count": int(row_count) if row_count is not None else None,
+            "slice_count": int(slice_count),
+        }
+    return summary
+
+
 async def find_approved_tick_revision_for_instrument(
     session: AsyncSession, instrument_id: str
 ) -> MarketDatasetRevision | None:
@@ -421,5 +462,6 @@ __all__ = [
     "get_revision",
     "list_revisions",
     "query_revisions_for_owner",
+    "summarize_coverage_for_revisions",
     "upsert_schema_mapping",
 ]

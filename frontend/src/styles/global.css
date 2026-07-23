@@ -531,6 +531,32 @@ p a { text-decoration: underline; }
   cursor: pointer;
 }
 .auth-tab.active { background: var(--bg-elev); color: var(--text); box-shadow: 0 0 0 1px var(--border); }
+
+/* ---- Sub-view tabs (Panel / Logs primary backtest vs. technical audit, P-14) ---- */
+.subtabs {
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px;
+  margin-bottom: 16px;
+  border-radius: var(--radius);
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+}
+.subtab {
+  padding: 6px 14px;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.subtab[aria-selected="true"] {
+  background: var(--bg-elev);
+  color: var(--text);
+  box-shadow: 0 0 0 1px var(--border);
+}
 .auth-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
 .auth-field > span { font-size: 13px; color: var(--text-dim); }
 .auth-optional { color: var(--text-faint); font-weight: 400; }

@@ -3411,6 +3411,74 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/admin/backtest-logs": {
+      "get": {
+        "description": "Panel / Logs PRIMARY view (P-14): the cross-user \"All User Backtest Logs\"\ntable (User · Date · Backtest · Net Profit · ROMAD · Trades). Admin answers \"which\nuser ran which backtest\" from server-truth without decoding a domain event; the\naudit-event projection below stays the secondary technical view.",
+        "operationId": "list_backtest_logs_api_v1_admin_backtest_logs_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Backtest Logs Api V1 Admin Backtest Logs Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Backtest Logs",
+        "tags": [
+          "admin-panel"
+        ]
+      }
+    },
     "/api/v1/admin/data-queue/redeliver": {
       "post": {
         "description": "Operator recovery (INF-03, doc 20 §6): re-dispatch durable ``data``-queue\njobs still QUEUED past the redeliver grace window. The multi-actor ``data``\nqueue is not auto-redelivered by the scheduler — this explicit Admin action\nroutes each stuck job back to its actor via the payload ``job_kind``.\n``grace_seconds`` defaults to the configured window; ``0`` sweeps every QUEUED\ndata job.",

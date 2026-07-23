@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 from entropia.application.commands import data_queue as data_queue_cmd
 from entropia.application.commands import role_assignment as role_assignment_cmd
 from entropia.application.queries import log_projection as log_query
+from entropia.application.queries import panel_backtest_log as backtest_log_query
 from entropia.application.queries import user_registry as user_registry_query
 from entropia.apps.api.deps import RequestContext, request_context
 from entropia.config import get_settings
@@ -28,6 +29,7 @@ _USERS_PATH = "/admin/users"
 _USER_ROLE_PATH = "/admin/users/{user_id}/role"
 _SYSTEM_ACTORS_PATH = "/admin/system-actors"
 _ROLE_MATRIX_PATH = "/admin/role-matrix"
+_BACKTEST_LOGS_PATH = "/admin/backtest-logs"
 _LOGS_PATH = "/admin/logs"
 _LOG_RESOURCE_TYPES_PATH = "/admin/log-resource-types"
 _LOG_DETAIL_PATH = "/admin/logs/{event_id}"
@@ -117,6 +119,22 @@ async def role_matrix(ctx: RequestContext = Depends(request_context)) -> dict[st
 
 
 # ---------- Logs ----------
+
+
+@router.get(_BACKTEST_LOGS_PATH)
+async def list_backtest_logs(
+    ctx: RequestContext = Depends(request_context),
+    cursor: str | None = Query(default=None),
+    limit: int | None = Query(default=None),
+) -> dict[str, Any]:
+    """Panel / Logs PRIMARY view (P-14): the cross-user "All User Backtest Logs"
+    table (User · Date · Backtest · Net Profit · ROMAD · Trades). Admin answers "which
+    user ran which backtest" from server-truth without decoding a domain event; the
+    audit-event projection below stays the secondary technical view."""
+    require_admin_panel(ctx.actor)
+    return await backtest_log_query.list_admin_backtest_log(
+        ctx.session, ctx.actor, cursor=cursor, limit=limit
+    )
 
 
 @router.get(_LOGS_PATH)

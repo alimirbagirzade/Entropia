@@ -27,6 +27,17 @@ import { api, apiRequest } from "./apiClient";
 // application/commands/market_data.py return dicts verbatim.
 // ---------------------------------------------------------------------------
 
+// P-09 registry digest (doc 11 §3.3): a compact coverage summary aggregated
+// SERVER-side over the revision's analysis-written coverage slices. `null` until
+// the dataset has been analyzed — the client renders an honest "—", never a
+// fabricated span.
+export interface CoverageSummary {
+  start_at: string | null;
+  end_at: string | null;
+  row_count: number | null;
+  slice_count: number;
+}
+
 export interface MarketDatasetRow {
   entity_id: string;
   revision_id: string;
@@ -36,6 +47,14 @@ export interface MarketDatasetRow {
   validation_status: string | null;
   title: string | null;
   instrument_id: string | null;
+  // P-09 digest fields — Source/provider + market + resolution are SERVER TRUTH
+  // (folded into the revision payload at create, or a first-class resolution
+  // column); coverage is the analysis-slice aggregate. The client renders them
+  // verbatim and never derives any of them from an id (finding F-07 / P-09).
+  source_provider: string | null;
+  market: string | null;
+  resolution: string | null;
+  coverage: CoverageSummary | null;
   content_hash: string | null;
   manifest_hash: string | null;
   owner_principal_id: string | null;

@@ -28,7 +28,34 @@ def _visibility_of(root: EntityRegistry) -> str:
     return "published" if root.lifecycle_state == "active" else "private"
 
 
-def _revision_dict(root: EntityRegistry, revision: MarketDatasetRevision) -> dict[str, Any]:
+def _payload_str(payload: dict[str, Any], key: str) -> str | None:
+    """Read a trimmed string facet from the revision payload, else ``None``.
+
+    The create flow folds descriptive facets — source/provider, market, resolution
+    (doc 11 §4 "MARKET DATASET SETUP") — into the free-form revision ``payload``.
+    Reading them back here is the SERVER deriving a clean display field from
+    persisted truth; the client never re-derives a name from an id (finding F-07).
+    """
+    value = payload.get(key)
+    if not isinstance(value, str):
+        return None
+    trimmed = value.strip()
+    return trimmed or None
+
+
+def _revision_dict(
+    root: EntityRegistry,
+    revision: MarketDatasetRevision,
+    *,
+    coverage: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    # P-09 registry digest (doc 11 §3.3): each row carries Source / Resolution /
+    # Coverage as SERVER TRUTH so a user decides which dataset to open WITHOUT
+    # expanding it. Source/provider + market + the human resolution live in the
+    # revision payload the create flow persists; a revision that declares a
+    # first-class ``resolution_value`` wins over the folded payload string.
+    # ``coverage`` is the analysis-slice aggregate (None until analyzed).
+    payload = revision.payload if isinstance(revision.payload, dict) else {}
     return {
         "entity_id": root.entity_id,
         "revision_id": revision.revision_id,
@@ -40,6 +67,10 @@ def _revision_dict(root: EntityRegistry, revision: MarketDatasetRevision) -> dic
         ),
         "title": revision.title,
         "instrument_id": revision.instrument_id,
+        "source_provider": _payload_str(payload, "source_provider"),
+        "market": _payload_str(payload, "market"),
+        "resolution": revision.resolution_value or _payload_str(payload, "resolution"),
+        "coverage": coverage,
         "content_hash": revision.content_hash,
         "manifest_hash": revision.manifest_hash,
         "owner_principal_id": root.owner_principal_id,
@@ -75,8 +106,16 @@ async def list_market_dataset_revisions(
     has_more = len(visible) > params.limit
     page = visible[: params.limit]
     next_cursor = page[-1][0].entity_id if has_more and page else None
+    # Coverage digest (P-09): one bounded aggregate over the page's revisions, so
+    # every row is decision-ready without opening it — no per-row N+1.
+    coverage_by_revision = await md_repo.summarize_coverage_for_revisions(
+        session, [rev.revision_id for _root, rev in page]
+    )
     return {
-        "data": [_revision_dict(root, rev) for root, rev in page],
+        "data": [
+            _revision_dict(root, rev, coverage=coverage_by_revision.get(rev.revision_id))
+            for root, rev in page
+        ],
         "meta": {"cursor": next_cursor, "has_more": has_more},
     }
 

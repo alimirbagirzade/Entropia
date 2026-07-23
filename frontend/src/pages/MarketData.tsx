@@ -30,6 +30,7 @@ import {
   useMarketDataset,
   useMarketDatasets,
   useRequestAnalysis,
+  type CoverageSummary,
   type MarketDatasetDetail,
   type MarketDatasetRow,
   type MarketRevisionRef,
@@ -367,6 +368,13 @@ const DATA_TYPE_LABELS: Record<string, string> = {
   tick_trades: "Tick / Trades",
   spread_execution: "Spread / Execution",
 };
+
+// Registry Type column shows the v18 human label; the canonical token stays the
+// select option VALUE elsewhere. An unknown/new token falls back to the raw
+// string (never hidden) — mirrors the create-form label lookup (finding P-09).
+function dataTypeLabel(marketDataType: string): string {
+  return DATA_TYPE_LABELS[marketDataType] ?? marketDataType;
+}
 
 // The post-create quality checks the analysis/verify pipeline runs (doc 11 §3.1
 // column 3). Static guidance — the real states land on the revision after
@@ -813,15 +821,20 @@ function RegistryCard({
           ) : (
             <div className="table-scroll">
             <table className="metrics-table">
+              {/* Digest columns (doc 11 §3.3): Dataset, Type, Source, Instrument,
+                  Coverage, Resolution, Status, Version, Action — so a user decides
+                  which dataset to open WITHOUT expanding each row (finding P-09).
+                  Deeper validation + full revision history stay in the detail card. */}
               <thead>
                 <tr>
                   <th scope="col">Dataset</th>
                   <th scope="col">Type</th>
+                  <th scope="col">Source</th>
                   <th scope="col">Instrument</th>
-                  <th scope="col">Revision state</th>
-                  <th scope="col">Validation</th>
-                  <th scope="col">Rev</th>
-                  <th scope="col">Created (UTC)</th>
+                  <th scope="col">Coverage</th>
+                  <th scope="col">Resolution</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Version</th>
                   <th scope="col" aria-label="Actions" />
                 </tr>
               </thead>
@@ -850,6 +863,32 @@ function RegistryCard({
   );
 }
 
+// Compact, decision-ready coverage: a UTC date range (day granularity) plus the
+// aggregate row count, or "—" until the analysis job records coverage slices.
+// Presentation-only, co-located per the UI-11 hot-file rule (lib/*.ts is data
+// logic and off-limits); the server-truth summary is rendered verbatim.
+function coverageDateOnly(iso: string | null): string | null {
+  if (iso === null) return null;
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime()) ? iso : date.toISOString().slice(0, 10);
+}
+
+function CoverageCell({ coverage }: { coverage: CoverageSummary | null }) {
+  const start = coverage ? coverageDateOnly(coverage.start_at) : null;
+  const end = coverage ? coverageDateOnly(coverage.end_at) : null;
+  if (coverage === null || start === null || end === null) return <>—</>;
+  return (
+    <>
+      <span>
+        {start} → {end}
+      </span>
+      {coverage.row_count !== null ? (
+        <div className="page-sub">{coverage.row_count} rows</div>
+      ) : null}
+    </>
+  );
+}
+
 function RegistryRow({
   row,
   isOpen,
@@ -862,16 +901,26 @@ function RegistryRow({
   return (
     <tr style={isOpen ? { background: "var(--bg-elev)" } : undefined}>
       <td>{row.title ?? row.entity_id}</td>
+      {/* Humanized type label (finding P-09); raw canonical token kept as a
+          hover title for provenance. */}
+      <td title={row.market_data_type}>{dataTypeLabel(row.market_data_type)}</td>
+      {/* Source/provider is the primary Source cell; the market class trails as a
+          muted qualifier. Both are server truth read from the revision payload. */}
       <td>
-        <code>{row.market_data_type}</code>
+        {row.source_provider ?? row.market ?? "—"}
+        {row.source_provider !== null && row.market !== null ? (
+          <span className="page-sub"> · {row.market}</span>
+        ) : null}
       </td>
       <td>{row.instrument_id ?? "—"}</td>
       <td>
+        <CoverageCell coverage={row.coverage} />
+      </td>
+      <td>{row.resolution ?? "—"}</td>
+      <td>
         <StatusBadge tone={revisionStateTone(row.revision_state)} label={row.revision_state} />
       </td>
-      <td>{row.validation_status ?? "—"}</td>
       <td>v{row.revision_no}</td>
-      <td>{formatUtc(row.created_at)}</td>
       <td>
         <button type="button" className="btn" onClick={onOpen}>
           Open

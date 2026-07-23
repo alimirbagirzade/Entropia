@@ -17,6 +17,17 @@ const ROW_OHLCV = {
   validation_status: "passed",
   title: "Binance 15m OHLCV",
   instrument_id: "BTCUSDT",
+  // P-09 digest fields (server truth): Source/provider + market + resolution +
+  // a coverage summary aggregated over the analysis-written slices.
+  source_provider: "Binance Futures",
+  market: "Crypto",
+  resolution: "15m",
+  coverage: {
+    start_at: "2026-01-01T00:00:00+00:00",
+    end_at: "2026-06-30T00:00:00+00:00",
+    row_count: 1000,
+    slice_count: 2,
+  },
   content_hash: "sha256:c1",
   manifest_hash: "sha256:m1",
   owner_principal_id: "u_1",
@@ -34,6 +45,12 @@ const ROW_TICK = {
   validation_status: null,
   title: "BTCUSDT Tick Sessions",
   instrument_id: "BTCUSDT",
+  // No provider set -> Source falls back to the market class; resolution and
+  // coverage are absent until analysis -> the cells render an honest "—".
+  source_provider: null,
+  market: "Crypto",
+  resolution: null,
+  coverage: null,
   content_hash: null,
   manifest_hash: null,
   owner_principal_id: "u_1",
@@ -300,7 +317,7 @@ describe("Market Data page", () => {
     // guide's lists — generous timeout keeps it stable under parallel file load.
   }, 15000);
 
-  it("renders the registry with revision states and validation verbatim", async () => {
+  it("renders the registry digest (humanized type, source, coverage, resolution, status)", async () => {
     stubApi(BASE_ROUTES);
     renderPage();
 
@@ -308,10 +325,23 @@ describe("Market Data page", () => {
     expect(await screen.findByText("Binance 15m OHLCV")).toBeInTheDocument();
     const registryTable = within(screen.getAllByRole("table")[0]!);
     expect(registryTable.getByText("BTCUSDT Tick Sessions")).toBeInTheDocument();
+    // Status column keeps the revision state verbatim (digest "Status").
     expect(registryTable.getByText("approved")).toBeInTheDocument();
     expect(registryTable.getByText("needs_review")).toBeInTheDocument();
-    expect(registryTable.getByText("passed")).toBeInTheDocument();
-    expect(registryTable.getByText("tick_trades")).toBeInTheDocument();
+    // Type is the v18 human label, never machine text (finding P-09).
+    expect(registryTable.getByText("OHLCV")).toBeInTheDocument();
+    expect(registryTable.getByText("Tick / Trades")).toBeInTheDocument();
+    // Source / Resolution / Coverage are server-truth digest columns; a user can
+    // decide which dataset to open without expanding the row.
+    expect(registryTable.getByText("Binance Futures")).toBeInTheDocument();
+    expect(registryTable.getByText("15m")).toBeInTheDocument();
+    expect(registryTable.getByText("2026-01-01 → 2026-06-30")).toBeInTheDocument();
+    // No provider on the tick row -> Source falls back to the market class.
+    expect(registryTable.getByText("Crypto")).toBeInTheDocument();
+    // Deeper validation moved to the detail card — no longer a registry column;
+    // and no raw machine token leaks into the Type column.
+    expect(registryTable.queryByText("passed")).toBeNull();
+    expect(registryTable.queryByText("tick_trades")).toBeNull();
   });
 
   // KALAN-A: the Browse File input in the setup card is what STARTS the

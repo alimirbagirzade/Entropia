@@ -12,6 +12,8 @@ import {
   LOG_FAMILIES,
   LOG_SEVERITIES,
   SEVERITY_TONES,
+  backtestLogUserLabel,
+  useAdminBacktestLogs,
   useAdminLogs,
   useAuditEvents,
   useLogEvent,
@@ -20,31 +22,139 @@ import {
   type LogFamily,
   type LogFilters,
 } from "@/lib/adminPanel";
-import { formatUtc } from "@/lib/backtest";
+import { formatMetricValue, formatUtc } from "@/lib/backtest";
 import { useCursorStack } from "@/lib/hooks";
 
-// PANEL / LOGS (doc 19, UI-19): the *reading* half of the Panel — the filtered
-// projection over immutable audit events plus the raw append-only stream. It
-// carries no registry and no role assignment; those live in the separate
-// PANEL / MANAGEMENT work context at /panel/management. A hidden menu item is
-// never authorization: the projection renders the server 403 envelope verbatim
-// when denied.
+// PANEL / LOGS (doc 19, UI-19; finding P-14). The *reading* half of the Panel. The
+// PRIMARY view is the cross-user "All User Backtest Logs" table (which user ran which
+// backtest, with server-truth metrics) — the admin's actual question, answerable
+// without decoding a domain event. The immutable audit-event projection + raw stream
+// are the SECONDARY technical view behind a tab. It carries no registry and no role
+// assignment; those live in PANEL / MANAGEMENT at /panel/management. A hidden menu
+// item is never authorization: every projection renders the server 403 verbatim.
+
+type PanelLogsTab = "backtest" | "audit";
+
 export function PanelLogs() {
+  const [tab, setTab] = useState<PanelLogsTab>("backtest");
   return (
     <>
       <h1 className="page-title">PANEL / LOGS</h1>
       <p className="page-sub">
-        Immutable event log projection and raw audit stream ·{" "}
+        All-user backtest history — admin-level and cross-user. Results History is
+        current-user oriented; this is the admin log. ·{" "}
         <Link to="/panel/management">Go to PANEL / MANAGEMENT</Link>
       </p>
-      <LogsCard />
-      <AuditStreamCard />
+      <div className="subtabs" role="tablist" aria-label="Panel logs view">
+        <button
+          type="button"
+          role="tab"
+          id="panel-logs-tab-backtest"
+          aria-selected={tab === "backtest"}
+          aria-controls="panel-logs-panel-backtest"
+          className="subtab"
+          onClick={() => setTab("backtest")}
+        >
+          Backtest logs
+        </button>
+        <button
+          type="button"
+          role="tab"
+          id="panel-logs-tab-audit"
+          aria-selected={tab === "audit"}
+          aria-controls="panel-logs-panel-audit"
+          className="subtab"
+          onClick={() => setTab("audit")}
+        >
+          Audit &amp; events
+        </button>
+      </div>
+      {tab === "backtest" ? (
+        <div
+          id="panel-logs-panel-backtest"
+          role="tabpanel"
+          aria-labelledby="panel-logs-tab-backtest"
+        >
+          <BacktestLogCard />
+        </div>
+      ) : (
+        <div id="panel-logs-panel-audit" role="tabpanel" aria-labelledby="panel-logs-tab-audit">
+          <LogsCard />
+          <AuditStreamCard />
+        </div>
+      )}
     </>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Logs — filtered projection over immutable audit events (doc 19 §4.3, §5)
+// All User Backtest Logs — the PRIMARY view (doc 19 P-14; mockup showPanelLogs).
+// Cross-user backtest history from server-truth: which user ran which backtest,
+// with the same canonical metrics Results History sorts on. The browser formats
+// each MetricCell via `formatMetricValue`; it never re-computes a metric.
+// ---------------------------------------------------------------------------
+
+function BacktestLogCard() {
+  const pager = useCursorStack();
+  const logs = useAdminBacktestLogs(pager.cursor);
+  return (
+    <section className="card panel-card" aria-labelledby="backtest-logs-h">
+      <h3 id="backtest-logs-h" style={{ marginTop: 0 }}>
+        All User Backtest Logs
+      </h3>
+      <p className="page-sub" style={{ marginTop: 0 }}>
+        Backtest history across all users. Results History is current-user oriented; Logs
+        is admin-level history — read from server-truth, never re-computed here.
+      </p>
+      {logs.isLoading ? (
+        <Loading label="Loading backtest logs…" />
+      ) : logs.isError ? (
+        <ErrorState error={logs.error} onRetry={() => void logs.refetch()} />
+      ) : logs.data ? (
+        <>
+          {logs.data.data.length === 0 ? (
+            <EmptyState title="No backtest results yet" />
+          ) : (
+            <table className="database-table">
+              <thead>
+                <tr>
+                  <th scope="col">User</th>
+                  <th scope="col">Date</th>
+                  <th scope="col">Backtest</th>
+                  <th scope="col">Net Profit</th>
+                  <th scope="col">ROMAD</th>
+                  <th scope="col">Trades</th>
+                </tr>
+              </thead>
+              <tbody>
+                {logs.data.data.map((row) => (
+                  <tr key={row.result_id}>
+                    <td>{backtestLogUserLabel(row.user)}</td>
+                    <td>{formatUtc(row.completed_at_utc)}</td>
+                    <td>{row.backtest.display_title}</td>
+                    <td>{formatMetricValue(row.net_profit)}</td>
+                    <td>{formatMetricValue(row.romad)}</td>
+                    <td>{formatMetricValue(row.total_trades)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          <Pager
+            canPrev={pager.canPrev}
+            nextCursor={logs.data.meta.cursor}
+            onPrev={pager.prev}
+            onNext={pager.next}
+          />
+        </>
+      ) : null}
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Logs — filtered projection over immutable audit events (doc 19 §4.3, §5).
+// Secondary technical view: the append-only event stream, not the backtest table.
 // ---------------------------------------------------------------------------
 
 function LogsCard() {

@@ -12,6 +12,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api, apiRequest } from "./apiClient";
+import type { MetricCell } from "./backtest";
 
 // ---------------------------------------------------------------------------
 // Wire types (mirror backend application/queries/{user_registry,log_projection,
@@ -128,6 +129,46 @@ export interface AuditEventRow {
 export interface AuditEventsPage {
   data: AuditEventRow[];
   meta: { cursor: string | null; has_more: boolean };
+}
+
+// Panel / Logs PRIMARY view (P-14): the cross-user "All User Backtest Logs" table.
+// Mirrors application/queries/panel_backtest_log.py verbatim. The User label carries
+// the raw principal id alongside the (nullable) human name so the UI shows a name
+// when one resolves and the id otherwise — never a fabricated name (W3a). Net Profit
+// / ROMAD / Trades are canonical server MetricCells; the browser formats them via
+// `formatMetricValue` and never re-computes a metric.
+export interface BacktestLogUser {
+  principal_id: string | null;
+  username: string | null;
+  display_name: string | null;
+}
+
+export interface BacktestLogBacktest {
+  result_id: string;
+  workspace_entity_id: string;
+  composition_fingerprint: string;
+  display_title: string;
+}
+
+export interface BacktestLogRow {
+  result_id: string;
+  user: BacktestLogUser;
+  completed_at_utc: string | null;
+  backtest: BacktestLogBacktest;
+  net_profit: MetricCell | null;
+  romad: MetricCell | null;
+  total_trades: MetricCell | null;
+  engine_version: string;
+}
+
+export interface BacktestLogPage {
+  data: BacktestLogRow[];
+  meta: { cursor: string | null; has_more: boolean; limit: number };
+}
+
+// Human label over raw id (W3a): display_name → username → raw principal id → dash.
+export function backtestLogUserLabel(user: BacktestLogUser): string {
+  return user.display_name ?? user.username ?? user.principal_id ?? "—";
 }
 
 // ---------------------------------------------------------------------------
@@ -282,6 +323,22 @@ export function useLogEvent(eventId: string | null) {
     queryKey: ["audit", "log", eventId],
     queryFn: () => api.get<LogEventDetail>(`/admin/logs/${encodeURIComponent(eventId ?? "")}`),
     enabled: eventId !== null,
+  });
+}
+
+// Keyed under the ["audit"] SSE-invalidation prefix: a completed backtest emits an
+// `audit.event.created`, so the primary backtest-log refetches live alongside the
+// event projection and raw audit stream (lib/sse.ts EVENT_QUERY_KEYS).
+export function useAdminBacktestLogs(cursor: string | null) {
+  return useQuery({
+    queryKey: ["audit", "backtest-logs", cursor],
+    queryFn: () => {
+      const params = new URLSearchParams();
+      if (cursor !== null) params.set("cursor", cursor);
+      const qs = params.toString();
+      return api.get<BacktestLogPage>(`/admin/backtest-logs${qs ? `?${qs}` : ""}`);
+    },
+    placeholderData: (previous) => previous,
   });
 }
 

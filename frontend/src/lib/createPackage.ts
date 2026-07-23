@@ -270,6 +270,9 @@ export interface PackageRequestDetail {
   output_contract: Record<string, unknown>;
   rationale_family_id: string | null;
   compatible_rationale_family_ids: string[];
+  // Explicit Indicator Link (doc 06 §4): the persisted indicator root+revision pins
+  // (Condition packages), or null when the package declares no explicit link.
+  linked_indicator: Record<string, unknown> | null;
   declared_dependencies: Array<Record<string, unknown>>;
   state: string;
   context_hash: string;
@@ -313,7 +316,19 @@ export interface CreateRequestInput {
   source_language: SourceLanguage | null;
   other_language_label: string | null;
   rationale_family_id: string | null;
+  // Compatibility declarations (doc 06 §4). The server re-validates both: each
+  // compatible family must be an ACTIVE Rationale Family, and the linked indicator
+  // must resolve to a real indicator root+revision (name-only selection prohibited).
+  compatible_rationale_family_ids: string[];
+  linked_indicator: LinkedIndicator | null;
   declared_dependencies: DeclaredDependency[];
+}
+
+// The Explicit Indicator Link wire shape (doc 06 §4): the saved dependency is the
+// indicator ROOT + REVISION identifier — the machine pins, never a display name.
+export interface LinkedIndicator {
+  linked_indicator_package_root_id: string;
+  linked_indicator_package_revision_id: string;
 }
 
 // Resolved/missing row shapes (commands/create_package.py::_resolve_declared):

@@ -11,6 +11,35 @@ import { stubUpload } from "./helpers/xhrStub";
 const FAMILIES_PAGE = {
   data: [
     { entity_id: "fam_1", display_name: "Momentum", normalized_name: "momentum", display_color: null },
+    { entity_id: "fam_2", display_name: "Reversal", normalized_name: "reversal", display_color: null },
+  ],
+  meta: { cursor: null, has_more: false },
+};
+
+// Published Indicator packages for the Explicit Indicator Link picker (each pinned
+// by its head revision). Mirrors the /library catalog projection (LibraryPackageRow).
+const LIBRARY_INDICATORS = {
+  data: [
+    {
+      entity_id: "pkg_ind_1",
+      package_kind: "indicator",
+      name: "RSI Divergence",
+      current_revision_id: "rev_ind_1",
+      revision_no: 1,
+      lifecycle_state: "active",
+      validation_state: "passed",
+      approval_state: "approved",
+      visibility_scope: "published",
+      rationale_family: null,
+      output_kinds: ["directional_signal"],
+      derived_from_revision_id: null,
+      owner_principal_id: "u_1",
+      row_version: 1,
+      content_hash: "sha256:ind1",
+      created_at: "2026-07-08T10:00:00+00:00",
+      permissions: {},
+      performance: {},
+    },
   ],
   meta: { cursor: null, has_more: false },
 };
@@ -38,6 +67,7 @@ const REQUEST_DETAIL = {
   output_contract: { kind: "directional_signal" },
   rationale_family_id: "fam_1",
   compatible_rationale_family_ids: [],
+  linked_indicator: null,
   declared_dependencies: [{ key: "ta.sma", signature: {} }],
   state: "precheck_passed",
   context_hash: "sha256:ctx",
@@ -193,6 +223,7 @@ const BASE_ROUTES: Record<string, unknown> = {
   "GET /create-package/requests/req_1": REQUEST_DETAIL,
   "GET /create-package/requests": REQUESTS_PAGE,
   "GET /rationale-families": FAMILIES_PAGE,
+  "GET /library": LIBRARY_INDICATORS,
 };
 
 function renderPage() {
@@ -257,6 +288,8 @@ describe("Create Package page", () => {
       source_language: "pinescript",
       other_language_label: null,
       rationale_family_id: "fam_1",
+      compatible_rationale_family_ids: [],
+      linked_indicator: null,
       declared_dependencies: [
         {
           key: "ta.sma",
@@ -296,6 +329,63 @@ describe("Create Package page", () => {
     const body = JSON.parse(String((createCall?.[1] as RequestInit).body));
     expect(body.source_language).toBeNull();
     expect(body.creation_mode).toBe("generate_from_description");
+  });
+
+  it("sends the selected Compatible Family id (doc 06 §4)", async () => {
+    const fetchMock = stubApi(BASE_ROUTES);
+    renderPage();
+    await screen.findByRole("option", { name: "Momentum" });
+
+    fireEvent.change(screen.getByLabelText("Rationale family"), { target: { value: "fam_1" } });
+    // The assigned family (fam_1) is filtered out; the OTHER family is selectable.
+    fireEvent.change(screen.getByLabelText("Compatible family"), { target: { value: "fam_2" } });
+    fireEvent.change(screen.getByLabelText("Source code"), {
+      target: { value: "//@version=5\nindicator('x')" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await screen.findByText(/Request created/);
+    const createCall = fetchMock.mock.calls.find(
+      ([url, init]) =>
+        String(url).endsWith("/create-package/requests") && init?.method === "POST",
+    );
+    const body = JSON.parse(String((createCall?.[1] as RequestInit).body));
+    expect(body.compatible_rationale_family_ids).toEqual(["fam_2"]);
+    expect(body.linked_indicator).toBeNull();
+  });
+
+  it("pins the Explicit Indicator Link root+revision for a Condition package", async () => {
+    const fetchMock = stubApi(BASE_ROUTES);
+    renderPage();
+    await screen.findByRole("option", { name: "Momentum" });
+
+    fireEvent.change(screen.getByLabelText("Package type"), { target: { value: "condition" } });
+    fireEvent.change(screen.getByLabelText("Creation mode"), {
+      target: { value: "generate_from_description" },
+    });
+    fireEvent.change(screen.getByLabelText("Rationale family"), { target: { value: "fam_1" } });
+    // The published indicator hydrates from the /library catalog.
+    await screen.findByRole("option", { name: "RSI Divergence" });
+    fireEvent.change(screen.getByLabelText("Explicit indicator link"), {
+      target: { value: "pkg_ind_1" },
+    });
+    fireEvent.change(screen.getByLabelText("Description"), {
+      target: { value: "A reversal condition on the linked indicator" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await screen.findByText(/Request created/);
+    const createCall = fetchMock.mock.calls.find(
+      ([url, init]) =>
+        String(url).endsWith("/create-package/requests") && init?.method === "POST",
+    );
+    const body = JSON.parse(String((createCall?.[1] as RequestInit).body));
+    expect(body.package_type).toBe("condition");
+    // Name-only prohibited: the saved dependency is the root + head revision pins.
+    expect(body.linked_indicator).toEqual({
+      linked_indicator_package_root_id: "pkg_ind_1",
+      linked_indicator_package_revision_id: "rev_ind_1",
+    });
   });
 
   it("scopes the output-contract kinds to the selected package type", async () => {

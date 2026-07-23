@@ -22,6 +22,7 @@ function detail(overrides: Partial<PackageRequestDetail>): PackageRequestDetail 
     output_contract: { kind: "directional_signal" },
     rationale_family_id: "fam_1",
     compatible_rationale_family_ids: [],
+    linked_indicator: null,
     declared_dependencies: [],
     state: "requested",
     context_hash: "sha256:ctx",

@@ -275,6 +275,14 @@ async def create_package_request(
     )
     declared = clean_declared_dependencies(declared_dependencies)
     family_id = await _validate_family(session, normalized.package_kind, rationale_family_id)
+    # Compatibility declarations (doc 06 §4): both are persisted with the immutable
+    # request and validated against real rows — a Compatible Family must reference an
+    # ACTIVE Rationale Family (never auto-created), and an Explicit Indicator Link is
+    # pinned to an existing indicator root+revision (name-only selection prohibited).
+    compatible_ids = await _validate_compatible_families(
+        session, normalized.package_kind, family_id, compatible_rationale_family_ids
+    )
+    linked = await _validate_linked_indicator(session, normalized.package_kind, linked_indicator)
     claims_equivalence = resolve_equivalence_claim(normalized.creation_mode, equivalence_claim)
     src_hash = source_hash(request_body)
     ctx_hash = context_hash(
@@ -306,8 +314,8 @@ async def create_package_request(
             context_hash=ctx_hash,
             output_contract=normalized.output_contract,
             rationale_family_id=family_id,
-            compatible_rationale_family_ids=compatible_rationale_family_ids or [],
-            linked_indicator=linked_indicator,
+            compatible_rationale_family_ids=compatible_ids,
+            linked_indicator=linked,
             declared_dependencies=declared,
             claims_equivalence=claims_equivalence,
             state=initial_state,
@@ -331,6 +339,8 @@ async def create_package_request(
             "context_hash": ctx_hash,
             "request_version": root.row_version,
             "claims_equivalence": claims_equivalence,
+            "compatible_rationale_family_ids": compatible_ids,
+            "linked_indicator": linked,
         }
 
     return await run_idempotent(
@@ -354,6 +364,81 @@ async def _validate_family(
     if family_root is None or family_root.deletion_state != DeletionState.ACTIVE:
         raise RationaleFamilyNotActive()
     return rationale_family_id
+
+
+async def _validate_compatible_families(
+    session: AsyncSession,
+    kind: PackageKind,
+    family_id: str | None,
+    compatible_rationale_family_ids: list[str] | None,
+) -> list[str]:
+    """Resolve the Compatible Family declaration to a clean list of ACTIVE family ids.
+
+    A Compatible Family is a discovery hint (doc 06 §4: "Must not auto-create any
+    Family"): each referenced family must already exist and be ACTIVE. ESP has no
+    rationale family, so it carries none. The assigned family is implicit ("Same
+    Rationale Family") and duplicates are dropped, so the stored list is exactly the
+    distinct OTHER families the package declares compatibility with.
+    """
+    if kind == PackageKind.EMBEDDED_SYSTEM or not compatible_rationale_family_ids:
+        return []
+    seen: set[str] = set()
+    result: list[str] = []
+    for candidate_id in compatible_rationale_family_ids:
+        if candidate_id == family_id or candidate_id in seen:
+            continue
+        family_root = await rationale_repo.get_family_root(session, candidate_id)
+        if family_root is None or family_root.deletion_state != DeletionState.ACTIVE:
+            raise RationaleFamilyNotActive()
+        seen.add(candidate_id)
+        result.append(candidate_id)
+    return result
+
+
+async def _validate_linked_indicator(
+    session: AsyncSession,
+    kind: PackageKind,
+    linked_indicator: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    """Pin an Explicit Indicator Link to an existing indicator root + revision.
+
+    doc 06 §4: the link is used only when a Condition Package requires a specific
+    Indicator Package's output, and "Choosing an indicator by display name alone is
+    not sufficient; the saved dependency is the root and revision identifier." So a
+    non-Condition request rejects the link, and a link must resolve to a real
+    indicator revision that belongs to the named root (never name-only/latest).
+
+    V1 honest boundary: existence + kind + root↔revision linkage are enforced;
+    output/input contract-match against the condition is Future-Dev.
+    """
+    if linked_indicator is None:
+        return None
+    if kind != PackageKind.CONDITION:
+        raise ValidationError("An Explicit Indicator Link is only allowed for a Condition package.")
+    root_id = linked_indicator.get("linked_indicator_package_root_id")
+    revision_id = linked_indicator.get("linked_indicator_package_revision_id")
+    if not isinstance(root_id, str) or not isinstance(revision_id, str):
+        raise ValidationError(
+            "An Explicit Indicator Link requires an indicator root id and revision id."
+        )
+    if not root_id or not revision_id:
+        raise ValidationError(
+            "An Explicit Indicator Link requires an indicator root id and revision id."
+        )
+    pkg_root = await pkg_repo.get_package_root(session, root_id)
+    revision = await pkg_repo.get_revision(session, revision_id)
+    if (
+        pkg_root is None
+        or pkg_root.deletion_state != DeletionState.ACTIVE
+        or revision is None
+        or revision.entity_id != root_id
+        or revision.package_kind != PackageKind.INDICATOR
+    ):
+        raise ValidationError("The linked indicator revision was not found.")
+    return {
+        "linked_indicator_package_root_id": root_id,
+        "linked_indicator_package_revision_id": revision_id,
+    }
 
 
 async def run_precheck(

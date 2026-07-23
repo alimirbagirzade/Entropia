@@ -19,18 +19,23 @@ from __future__ import annotations
 from collections.abc import Collection
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import case, func, literal, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
 from entropia.domain.identity import Actor
 from entropia.domain.identity import policy as identity_policy
-from entropia.domain.lifecycle.enums import DeletionState, VisibilityScope
+from entropia.domain.lifecycle.enums import DeletionState, PackageKind, VisibilityScope
 from entropia.domain.package.catalog import (
     CATALOG_LIFECYCLE_STATES,
     CATALOG_PACKAGE_KINDS,
+    MARKET_SCOPE_KEY,
+    SYSTEM_SCOPE,
+    TIMEFRAME_SCOPE_KEY,
     UNASSIGNED,
+    UNSPECIFIED_SCOPE,
     CatalogFilters,
+    derive_catalog_scope,
 )
 from entropia.domain.package.permissions import package_permissions
 from entropia.infrastructure.postgres.models import (
@@ -208,6 +213,24 @@ def _visibility_conditions(actor: Actor, shared_ids: Collection[str]) -> list[Co
     return [visible]
 
 
+def _scope_expr(key: str) -> ColumnElement[str]:
+    """SQL mirror of ``derive_catalog_scope`` (doc 08 §3.2, finding P-06).
+
+    ESP -> the SYSTEM sentinel; every other kind -> the declared
+    ``input_contract[key]`` (trim + lower) or UNSPECIFIED. Keeping this identical to
+    the Python projection means a ``market``/``timeframe`` filter matches exactly what
+    the row displays — never a fabricated no-op facet.
+    """
+    declared = func.nullif(
+        func.lower(func.trim(PackageRevision.input_contract.op("->>")(key))),
+        "",
+    )
+    return case(
+        (PackageRoot.package_kind == PackageKind.EMBEDDED_SYSTEM, literal(SYSTEM_SCOPE)),
+        else_=func.coalesce(declared, literal(UNSPECIFIED_SCOPE)),
+    )
+
+
 def _filter_conditions(filters: CatalogFilters) -> list[ColumnElement[bool]]:
     conditions: list[ColumnElement[bool]] = []
     if filters.package_kind is not None:
@@ -220,6 +243,10 @@ def _filter_conditions(filters: CatalogFilters) -> list[ColumnElement[bool]]:
         conditions.append(PackageRevision.approval_state == filters.approval_state)
     if filters.visibility_scope is not None:
         conditions.append(PackageRoot.visibility_scope == filters.visibility_scope)
+    if filters.market_scope is not None:
+        conditions.append(_scope_expr(MARKET_SCOPE_KEY) == filters.market_scope)
+    if filters.timeframe_scope is not None:
+        conditions.append(_scope_expr(TIMEFRAME_SCOPE_KEY) == filters.timeframe_scope)
 
     family = filters.rationale_family_id
     family_id_expr = PackageRevision.rationale_family_snapshot.op("->>")("rationale_family_id")
@@ -267,6 +294,14 @@ def _package_row(
         "validation_state": str(revision.validation_state),
         "approval_state": str(revision.approval_state),
         "visibility_scope": str(detail.visibility_scope),
+        # Market/Timeframe scope (doc 08 §3.2, finding P-06): derived from the revision
+        # + kind, ESP -> System; identical to the SQL filter so the facet is exact.
+        "market_scope": derive_catalog_scope(
+            detail.package_kind, revision.input_contract, MARKET_SCOPE_KEY
+        ),
+        "timeframe_scope": derive_catalog_scope(
+            detail.package_kind, revision.input_contract, TIMEFRAME_SCOPE_KEY
+        ),
         "rationale_family": _pinned_family(snapshot),
         "output_kinds": _output_kinds(revision.output_contract),
         "derived_from_revision_id": detail.derived_from_revision_id,

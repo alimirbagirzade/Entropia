@@ -84,3 +84,44 @@ def test_query_is_trimmed_and_truncated() -> None:
 
 def test_blank_query_becomes_none() -> None:
     assert parse_catalog_filters(query="   ").query is None
+
+
+# --- P-06: Market + Timeframe facet parsing (doc 08 §3.2, finding P-06) ---
+
+
+def test_market_and_timeframe_default_to_none() -> None:
+    filters = parse_catalog_filters()
+    assert filters.market_scope is None
+    assert filters.timeframe_scope is None
+
+
+def test_market_filter_is_normalized_and_capped() -> None:
+    # Open market scope: whitespace trimmed + lower-cased for an exact server match.
+    assert parse_catalog_filters(market="  BTCUSDT  ").market_scope == "btcusdt"
+    # An over-long market value is capped server-side (never unbounded).
+    long_value = "x" * 500
+    capped = parse_catalog_filters(market=long_value).market_scope
+    assert capped is not None
+    assert 0 < len(capped) < len(long_value)
+
+
+def test_blank_market_becomes_none() -> None:
+    assert parse_catalog_filters(market="   ").market_scope is None
+
+
+@pytest.mark.parametrize(
+    "value", ["explicit", "multi", "same_as_base", "system", "unspecified", "  Multi  "]
+)
+def test_valid_timeframe_scopes_pass_through(value: str) -> None:
+    # The closed capability vocabulary is normalized (trim + lower) and accepted.
+    assert parse_catalog_filters(timeframe=value).timeframe_scope == value.strip().lower()
+
+
+def test_invalid_timeframe_scope_is_rejected() -> None:
+    # A value outside the capability vocabulary is a 422 (like the other closed facets).
+    with pytest.raises(CatalogFilterInvalid):
+        parse_catalog_filters(timeframe="15m")
+
+
+def test_blank_timeframe_becomes_none() -> None:
+    assert parse_catalog_filters(timeframe="   ").timeframe_scope is None

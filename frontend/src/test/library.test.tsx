@@ -39,6 +39,8 @@ const INDICATOR_ROW = {
   validation_state: "passed",
   approval_state: "approved",
   visibility_scope: "published",
+  market_scope: "multi",
+  timeframe_scope: "multi",
   rationale_family: { id: "fam_1", name: "Momentum" },
   output_kinds: ["directional_signal"],
   derived_from_revision_id: null,
@@ -61,6 +63,8 @@ const STRATEGY_ROW = {
   validation_state: "warning",
   approval_state: "draft",
   visibility_scope: "private",
+  market_scope: "btcusdt",
+  timeframe_scope: "explicit",
   rationale_family: null,
 };
 
@@ -344,5 +348,81 @@ describe("Package Library page", () => {
     expect(
       screen.getByText("UNAUTHENTICATED: Sign in to browse the package library."),
     ).toBeInTheDocument();
+  });
+});
+
+// P-06 (finding P-06): Market + Timeframe are server-queryable catalog facets, not
+// "absent by design". The projection carries a derived scope (ESP -> System; declared /
+// unspecified otherwise) and the toolbar filters it server-side with a human display.
+describe("Package Library Market + Timeframe facets (P-06)", () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("renders the Market and Timeframe filter controls (no longer absent)", async () => {
+    stubApi(BASE_ROUTES);
+    renderPage();
+    await screen.findByText("RSI Bundle");
+
+    expect(screen.getByLabelText(/^Market/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^Timeframe/)).toBeInTheDocument();
+  });
+
+  it("shows the derived scope with a human label on each row", async () => {
+    stubApi(BASE_ROUTES);
+    renderPage();
+    await screen.findByText("RSI Bundle");
+
+    // Strategy row declares a concrete scope: btcusdt / Explicit.
+    const strategyList = screen.getByRole("list", { name: /strategy packages rows/i });
+    expect(within(strategyList).getByText("btcusdt")).toBeInTheDocument();
+    expect(within(strategyList).getByText("Explicit")).toBeInTheDocument();
+    // Indicator row is multi/multi -> two "Multi" labels (market + timeframe).
+    const indicatorList = screen.getByRole("list", { name: /indicator packages rows/i });
+    expect(within(indicatorList).getAllByText("Multi")).toHaveLength(2);
+  });
+
+  it("applies the Market facet as a server-side query param", async () => {
+    const fetchMock = stubApi(BASE_ROUTES);
+    renderPage();
+    await screen.findByText("RSI Bundle");
+
+    fireEvent.change(screen.getByLabelText(/^Market/), { target: { value: "btcusdt" } });
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.find(([url]) => String(url).includes("market=btcusdt")),
+      ).toBeDefined();
+    });
+  });
+
+  it("applies the Timeframe facet as a server-side query param", async () => {
+    const fetchMock = stubApi(BASE_ROUTES);
+    renderPage();
+    await screen.findByText("RSI Bundle");
+
+    fireEvent.change(screen.getByLabelText(/^Timeframe/), { target: { value: "multi" } });
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.find(([url]) => String(url).includes("timeframe=multi")),
+      ).toBeDefined();
+    });
+  });
+
+  it("shows Market and Timeframe in the expanded package detail", async () => {
+    stubApi(BASE_ROUTES);
+    renderPage();
+    await screen.findByText("RSI Bundle");
+
+    const indicatorList = screen.getByRole("list", { name: /indicator packages rows/i });
+    fireEvent.click(within(indicatorList).getByRole("button", { name: "Detail" }));
+    await screen.findByText("Permissions (server-computed)");
+
+    // The detail adds Market / Timeframe <dt> rows on top of the filter-bar labels.
+    expect(screen.getAllByText("Market").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText("Timeframe").length).toBeGreaterThanOrEqual(2);
   });
 });

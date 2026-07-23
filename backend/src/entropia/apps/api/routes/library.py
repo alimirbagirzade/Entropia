@@ -73,6 +73,8 @@ async def list_library(
     approval_state: str | None = Query(default=None),
     visibility_scope: str | None = Query(default=None),
     rationale_family_id: str | None = Query(default=None),
+    market: str | None = Query(default=None),
+    timeframe: str | None = Query(default=None),
     q: str | None = Query(default=None),
     ctx: RequestContext = Depends(request_context),
 ) -> dict[str, Any]:
@@ -83,6 +85,8 @@ async def list_library(
         approval_state=approval_state,
         visibility_scope=visibility_scope,
         rationale_family_id=rationale_family_id,
+        market=market,
+        timeframe=timeframe,
         query=q,
     )
     return await library_query.list_packages(

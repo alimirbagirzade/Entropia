@@ -158,3 +158,44 @@ async def test_detail_emits_etag_header(app, monkeypatch) -> None:
         assert resp.headers["ETag"] == etag_for_row_version(3)
     finally:
         next(gen, None)
+
+
+@pytest.mark.contract
+async def test_market_and_timeframe_aliases_pass_through(app, monkeypatch) -> None:
+    # P-06: the market / timeframe query params reach the filter layer as scopes.
+    import entropia.apps.api.routes.library as route
+
+    captured: dict[str, Any] = {}
+
+    async def _fake_list(session: Any, actor: Any, params: Any, *, filters: Any) -> dict[str, Any]:
+        captured["filters"] = filters
+        return {"data": [], "meta": {"cursor": None, "has_more": False}}
+
+    monkeypatch.setattr(route.library_query, "list_packages", _fake_list)
+    gen = _override(app, _actor(Role.USER, PrincipalType.HUMAN, "user_1"))
+    next(gen)
+    try:
+        async with await _client(app) as c:
+            resp = await c.get(
+                "/api/v1/library", params={"market": "BTCUSDT", "timeframe": "multi"}
+            )
+        assert resp.status_code == 200
+        # Market is normalized (open scope); timeframe is a validated capability token.
+        assert captured["filters"].market_scope == "btcusdt"
+        assert captured["filters"].timeframe_scope == "multi"
+    finally:
+        next(gen, None)
+
+
+@pytest.mark.contract
+async def test_invalid_timeframe_filter_rejected(app) -> None:
+    # A timeframe outside the capability vocabulary is a typed 422 before any DB access.
+    gen = _override(app, _actor(Role.USER, PrincipalType.HUMAN, "user_1"))
+    next(gen)
+    try:
+        async with await _client(app) as c:
+            resp = await c.get("/api/v1/library", params={"timeframe": "15m"})
+        assert resp.status_code == 422
+        assert resp.json()["error"]["code"] == "CATALOG_FILTER_INVALID"
+    finally:
+        next(gen, None)

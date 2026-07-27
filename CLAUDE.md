@@ -72,6 +72,21 @@ Before stopping a working session, produce **ALL** of the following:
   + migration<->model column parity. Local Postgres on **:5432** (`entropia`/`entropia`).
 - **Git:** `feat/stage-<x>-<slug>` for features, `docs/stage-<x>-landed` for closing docs.
   Commit `<type>(stage-<x>): <subject>`. **No AI attribution** (disabled globally).
+- **Hata zarfı = tek şekil, adjudicated (O-02).** Her HTTP hatası
+  `shared/responses.py::ErrorBody`: `code, message, details, request_id, correlation_id`
+  (Module 19 orijinali, isimleri **asla değişmez**) + recovery bloğu `category, retryable,
+  suggested_action, remediation, scope_type, scope_id, field_path`. **İki spec arasındaki
+  isim farkı şöyle karara bağlandı:** doc 01 §11.2'nin `field_issues`'ı = shipped `details`
+  (aynı anlam, sevk edilmiş ad kazanır); doc 01'in `suggested_action`'ı ile doc 04 §11.1'in
+  `remediation`'ı **iki AYRI alan olarak kalır** — ilki makine token'ı (`"rerun_ready_check"`),
+  ikincisi insan metni; birleştirmek birini kaybettirirdi. `category`/`retryable` hata
+  **sınıfında** bildirilir (`shared/errors.py::ErrorCategory`); `scope_type`/`scope_id`/
+  `field_path`/`remediation` hem sınıfta hem **raise yerinde** pinlenebilir. Sınıflandırılmamış
+  hata asla `retryable=true` reklamı yapmaz. Readiness blocker'ında lider blocker'ın
+  `remediation`/`field_path`/`scope_id`'si zarfa yükseltilir
+  (`commands/backtest_run.py::_readiness_blocked`), `details` yine tüm issue'ları taşır. Yeni
+  hata sınıfı eklerken kategorisini bildir; zarf `docs/openapi.json` →
+  `components.schemas.ErrorResponse` altında yayımlanır (drift guard onu korur).
 - **Upload dosya-tipi kapısı = fail-closed (K-07).** TXT/CSV kaynak yüklemelerinde ortak kapı
   `domain/importing/source_file.py::assert_supported_source_file`: filename yok/boş → **RED**
   (asla "atla"), uzantı iddiası içerik sniff'i ile desteklenir. **Hata kodu sayfa taksonomisine

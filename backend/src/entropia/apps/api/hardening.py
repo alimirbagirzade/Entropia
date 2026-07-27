@@ -22,6 +22,7 @@ from starlette.responses import JSONResponse, Response
 from entropia.apps.api.deps import ACTOR_ID_HEADER
 from entropia.config import get_settings
 from entropia.infrastructure.observability import metrics
+from entropia.shared.errors import ErrorCategory
 from entropia.shared.responses import ErrorBody, ErrorResponse
 
 _WRITE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
@@ -122,6 +123,13 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                     details=[],
                     request_id=getattr(request.state, "request_id", None),
                     correlation_id=getattr(request.state, "correlation_id", None),
+                    category=ErrorCategory.RATE_LIMIT,
+                    retryable=True,
+                    suggested_action="retry_later",
+                    remediation=(
+                        "Wait for the window named by the Retry-After header, then resend "
+                        "the request."
+                    ),
                 )
             )
             return JSONResponse(

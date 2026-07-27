@@ -1402,6 +1402,158 @@
         "title": "DraftBody",
         "type": "object"
       },
+      "ErrorBody": {
+        "description": "The one error shape every endpoint emits (doc 01 §11.2, doc 04 §11.1).\n\nThe first five fields are the original Module 19 contract and keep their exact\nnames. The recovery block below was added by O-02 so UI and Agent recovery\nconsume the same information instead of re-deriving it from ``code`` alone.\n\nAbsent optional values are emitted as explicit ``null`` (never a missing key),\nso a client can read every field unconditionally.",
+        "properties": {
+          "category": {
+            "$ref": "#/components/schemas/ErrorCategory",
+            "default": "internal"
+          },
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "correlation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Correlation Id"
+          },
+          "details": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Details",
+            "type": "array"
+          },
+          "field_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Field Path"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "remediation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Remediation"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Request Id"
+          },
+          "retryable": {
+            "default": false,
+            "title": "Retryable",
+            "type": "boolean"
+          },
+          "scope_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Scope Id"
+          },
+          "scope_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Scope Type"
+          },
+          "suggested_action": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Suggested Action"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "ErrorBody",
+        "type": "object"
+      },
+      "ErrorCategory": {
+        "description": "Stable machine-readable failure family (doc 01 §11.1/§11.2, doc 04 §11).\n\nA category is part of the wire contract — never renamed once emitted. Clients\nbranch recovery on ``category`` + ``retryable`` instead of hard-coding every code.",
+        "enum": [
+          "validation",
+          "authorization",
+          "not_found",
+          "conflict",
+          "concurrency_or_preflight",
+          "lifecycle",
+          "dependency_validation",
+          "data_time_validation",
+          "composition_validation",
+          "active_job",
+          "async_job_failure",
+          "rate_limit",
+          "internal"
+        ],
+        "title": "ErrorCategory",
+        "type": "string"
+      },
+      "ErrorResponse": {
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ErrorBody"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "title": "ErrorResponse",
+        "type": "object"
+      },
       "EventTimeSemantics": {
         "description": "How a record's event timestamp is interpreted (doc 12 §5.2).",
         "enum": [

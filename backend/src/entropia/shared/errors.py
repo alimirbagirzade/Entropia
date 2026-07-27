@@ -1,16 +1,62 @@
 """Canonical application error model and the API error envelope.
 
-Every API failure returns the same shape (Module 19 API contract):
+Every API failure returns the same shape (Module 19 API contract, doc 01 §11.2,
+doc 04 §11.1):
 
-    { "error": { "code", "message", "details", "request_id", "correlation_id" } }
+    { "error": {
+        "code", "message", "details", "request_id", "correlation_id",
+        "category", "retryable", "suggested_action", "remediation",
+        "scope_type", "scope_id", "field_path"
+    } }
 
 Domain code raises ``AppError`` subclasses; the API layer translates them into
 HTTP responses with the right status code. Stack traces are never exposed.
+
+**Adjudication (O-02).** The two page specs name the recovery envelope slightly
+differently; one wire contract is chosen here and both spellings map onto it:
+
+* doc 01 §11.2 ``field_issues`` -> ``details`` (the shipped name; same meaning:
+  the per-field issue list). ``details`` stays canonical — it predates this slice
+  and the frontend + contract tests already read it.
+* doc 01 §11.2 ``suggested_action`` and doc 04 §11.1 ``remediation`` are kept as
+  **two distinct fields**, because the spec examples carry different content:
+  ``suggested_action`` is a machine token for UI/Agent recovery routing
+  (``"rerun_ready_check"``); ``remediation`` is human-readable prose ("Add the
+  source column or choose an explicit provider availability rule…"). Collapsing
+  them into one field would lose one of the two.
+
+``category``/``retryable`` are declared on the error *class* — they are properties
+of the failure type. ``scope_type``/``scope_id``/``field_path``/``remediation`` may
+be declared on the class **and** pinned per raise site, so a generic class can still
+report exactly which object/field failed.
 """
 
 from __future__ import annotations
 
+from enum import StrEnum
 from typing import Any
+
+
+class ErrorCategory(StrEnum):
+    """Stable machine-readable failure family (doc 01 §11.1/§11.2, doc 04 §11).
+
+    A category is part of the wire contract — never renamed once emitted. Clients
+    branch recovery on ``category`` + ``retryable`` instead of hard-coding every code.
+    """
+
+    VALIDATION = "validation"
+    AUTHORIZATION = "authorization"
+    NOT_FOUND = "not_found"
+    CONFLICT = "conflict"
+    CONCURRENCY_OR_PREFLIGHT = "concurrency_or_preflight"
+    LIFECYCLE = "lifecycle"
+    DEPENDENCY_VALIDATION = "dependency_validation"
+    DATA_TIME_VALIDATION = "data_time_validation"
+    COMPOSITION_VALIDATION = "composition_validation"
+    ACTIVE_JOB = "active_job"
+    ASYNC_JOB_FAILURE = "async_job_failure"
+    RATE_LIMIT = "rate_limit"
+    INTERNAL = "internal"
 
 
 class AppError(Exception):
@@ -19,15 +65,36 @@ class AppError(Exception):
     code: str = "INTERNAL_ERROR"
     http_status: int = 500
     message: str = "An unexpected error occurred."
+    # Recovery contract (doc 01 §11.2, doc 04 §11.1). Subclasses narrow these; the
+    # generic defaults are deliberately conservative — an unclassified failure is
+    # never advertised as retryable.
+    category: ErrorCategory = ErrorCategory.INTERNAL
+    retryable: bool = False
+    suggested_action: str | None = None
+    remediation: str | None = None
+    scope_type: str | None = None
+    field_path: str | None = None
 
     def __init__(
         self,
         message: str | None = None,
         *,
         details: list[dict[str, Any]] | None = None,
+        remediation: str | None = None,
+        suggested_action: str | None = None,
+        scope_type: str | None = None,
+        scope_id: str | None = None,
+        field_path: str | None = None,
     ) -> None:
         self.message = message or self.message
         self.details = details or []
+        # A raise site may pin the concrete object/field it failed on; otherwise the
+        # class-level declaration (if any) stands.
+        self.remediation = remediation or self.remediation
+        self.suggested_action = suggested_action or self.suggested_action
+        self.scope_type = scope_type or self.scope_type
+        self.field_path = field_path or self.field_path
+        self.scope_id = scope_id
         super().__init__(self.message)
 
 
@@ -35,30 +102,35 @@ class ValidationError(AppError):
     code = "VALIDATION_ERROR"
     http_status = 422
     message = "The request failed validation."
+    category = ErrorCategory.VALIDATION
 
 
 class NotFoundError(AppError):
     code = "NOT_FOUND"
     http_status = 404
     message = "The requested resource was not found."
+    category = ErrorCategory.NOT_FOUND
 
 
 class UnauthenticatedError(AppError):
     code = "UNAUTHENTICATED"
     http_status = 401
     message = "Authentication is required."
+    category = ErrorCategory.AUTHORIZATION
 
 
 class ForbiddenError(AppError):
     code = "FORBIDDEN"
     http_status = 403
     message = "You do not have permission to perform this action."
+    category = ErrorCategory.AUTHORIZATION
 
 
 class ConflictError(AppError):
     code = "CONFLICT"
     http_status = 409
     message = "The request conflicts with the current state."
+    category = ErrorCategory.CONFLICT
 
 
 class StaleRevisionError(ConflictError):
@@ -66,6 +138,10 @@ class StaleRevisionError(ConflictError):
 
     code = "STALE_REVISION"
     message = "The resource was modified by someone else. Refresh and retry."
+    category = ErrorCategory.CONCURRENCY_OR_PREFLIGHT
+    retryable = True
+    suggested_action = "reload_and_retry"
+    remediation = "Reload the canonical row and retry with the current version token."
 
 
 class CapabilityNotActiveError(ForbiddenError):
@@ -102,6 +178,9 @@ class RoleContextStaleError(ConflictError):
 
     code = "ROLE_CONTEXT_STALE"
     message = "Your role changed. Refresh and retry."
+    category = ErrorCategory.CONCURRENCY_OR_PREFLIGHT
+    retryable = True
+    suggested_action = "reload_and_retry"
 
 
 class AdminPanelAccessRequiredError(ForbiddenError):
@@ -118,6 +197,9 @@ class UserRoleVersionConflictError(ConflictError):
 
     code = "USER_ROLE_VERSION_CONFLICT"
     message = "This user record was updated by another Admin. The latest values have been loaded."
+    category = ErrorCategory.CONCURRENCY_OR_PREFLIGHT
+    retryable = True
+    suggested_action = "reload_and_retry"
 
 
 class LogFilterInvalidError(ValidationError):
@@ -133,6 +215,8 @@ class IdempotencyConflictError(ConflictError):
 
     code = "IDEMPOTENCY_KEY_CONFLICT"
     message = "This idempotency key was already used with a different request."
+    category = ErrorCategory.CONCURRENCY_OR_PREFLIGHT
+    suggested_action = "use_a_new_idempotency_key"
 
 
 class ApprovalRequiresAdmin(ForbiddenError):
@@ -155,6 +239,7 @@ class TimezoneRequired(ValidationError):
 
     code = "TIMEZONE_REQUIRED"
     message = "A custom timezone mode requires an IANA timezone identifier."
+    category = ErrorCategory.DATA_TIME_VALIDATION
 
 
 class MarketDataTimezoneUnresolved(ValidationError):
@@ -170,6 +255,7 @@ class MarketDataTimezoneUnresolved(ValidationError):
         "A naive source timestamp cannot be resolved to a UTC instant: the declared "
         "timezone has no IANA identifier. Declare a custom IANA timezone and rerun."
     )
+    category = ErrorCategory.DATA_TIME_VALIDATION
 
 
 class DependencyBlocked(ConflictError):
@@ -181,6 +267,7 @@ class DependencyBlocked(ConflictError):
 
     code = "DEPENDENCY_BLOCKED"
     message = "An Approved, active Market Data revision must be linked first."
+    category = ErrorCategory.DEPENDENCY_VALIDATION
 
 
 class UsageScopeForbidden(ForbiddenError):
@@ -199,6 +286,7 @@ class TimePolicyInvalid(ValidationError):
 
     code = "TIME_POLICY_INVALID"
     message = "The time policy is invalid; available time cannot be validated."
+    category = ErrorCategory.DATA_TIME_VALIDATION
 
 
 class ResearchDataTimezoneUnresolved(TimePolicyInvalid):
@@ -307,6 +395,7 @@ class ResolverNotActive(ConflictError):
 
     code = "RESOLVER_NOT_ACTIVE"
     message = "The resolver for this dependency is no longer active for new conversions."
+    category = ErrorCategory.LIFECYCLE
 
 
 class ResolverContractInvalid(ValidationError):
@@ -357,6 +446,7 @@ class DeletePolicyBlocked(ConflictError):
 
     code = "DELETE_POLICY_BLOCKED"
     message = "This resolver is active in the registry. Deprecate it before deletion."
+    category = ErrorCategory.LIFECYCLE
 
 
 class RationaleFamilyNameRequired(ValidationError):
@@ -478,6 +568,7 @@ class LifecycleBlocked(ConflictError):
 
     code = "LIFECYCLE_BLOCKED"
     message = "This object's current state does not permit the requested change."
+    category = ErrorCategory.LIFECYCLE
 
 
 class PackageRevisionConflict(ConflictError):
@@ -567,6 +658,8 @@ class RuntimeUnavailable(ValidationError):
 
     code = "RUNTIME_UNAVAILABLE"
     message = "Select a registered, active target runtime."
+    category = ErrorCategory.ASYNC_JOB_FAILURE
+    retryable = True
 
 
 class PrecheckBlocked(ConflictError):
@@ -585,6 +678,9 @@ class PrecheckStale(ConflictError):
 
     code = "PRECHECK_STALE"
     message = "Pre-Check is stale because the context or resolver registry changed. Re-run it."
+    category = ErrorCategory.CONCURRENCY_OR_PREFLIGHT
+    retryable = True
+    suggested_action = "rerun_precheck"
 
 
 class PrecheckAlreadyRunning(ConflictError):
@@ -601,6 +697,9 @@ class RequestVersionConflict(ConflictError):
 
     code = "REQUEST_VERSION_CONFLICT"
     message = "This request changed while you were working. Reload the current version and retry."
+    category = ErrorCategory.CONCURRENCY_OR_PREFLIGHT
+    retryable = True
+    suggested_action = "reload_and_retry"
 
 
 class CandidateNotReady(ConflictError):
@@ -619,6 +718,9 @@ class CandidateStale(ConflictError):
 
     code = "CANDIDATE_STALE"
     message = "This candidate is stale. Review the current candidate and retry."
+    category = ErrorCategory.CONCURRENCY_OR_PREFLIGHT
+    retryable = True
+    suggested_action = "reload_and_retry"
 
 
 class DependencyUnresolved(ConflictError):
@@ -627,6 +729,7 @@ class DependencyUnresolved(ConflictError):
 
     code = "DEPENDENCY_UNRESOLVED"
     message = "A required dependency is unresolved. Re-run Pre-Check and try again."
+    category = ErrorCategory.DEPENDENCY_VALIDATION
 
 
 class ValidationRequired(ConflictError):
@@ -645,6 +748,9 @@ class ValidationStale(ConflictError):
 
     code = "VALIDATION_STALE"
     message = "Validation evidence is stale because the candidate changed. Re-run validation."
+    category = ErrorCategory.CONCURRENCY_OR_PREFLIGHT
+    retryable = True
+    suggested_action = "rerun_validation"
 
 
 class ValidationAlreadyRunning(ConflictError):
@@ -696,6 +802,9 @@ class ServiceUnavailableError(AppError):
     code = "SERVICE_UNAVAILABLE"
     http_status = 503
     message = "A dependency is currently unavailable."
+    category = ErrorCategory.ASYNC_JOB_FAILURE
+    retryable = True
+    suggested_action = "retry_later"
 
 
 # --- Stage 3a — Mainboard composition plane (doc 01; ARCHITECTURE §9.2) ---
@@ -716,6 +825,7 @@ class ObjectNotActiveError(ConflictError):
 
     code = "OBJECT_NOT_ACTIVE"
     message = "The work object is not active."
+    category = ErrorCategory.LIFECYCLE
 
 
 class ObjectInActiveRunError(ConflictError):
@@ -724,6 +834,8 @@ class ObjectInActiveRunError(ConflictError):
 
     code = "OBJECT_IN_ACTIVE_RUN"
     message = "This work object is in use by an active run and cannot be deleted."
+    category = ErrorCategory.ACTIVE_JOB
+    suggested_action = "await_or_cancel_active_run"
 
 
 class RowVersionConflictError(ConflictError):
@@ -732,6 +844,10 @@ class RowVersionConflictError(ConflictError):
 
     code = "ROW_VERSION_CONFLICT"
     message = "This item changed after you loaded it. Reload the current version and retry."
+    category = ErrorCategory.CONCURRENCY_OR_PREFLIGHT
+    retryable = True
+    suggested_action = "reload_and_retry"
+    remediation = "Reload the canonical row and retry with its current row_version."
 
 
 class WorkObjectRevisionConflictError(ConflictError):
@@ -740,6 +856,9 @@ class WorkObjectRevisionConflictError(ConflictError):
 
     code = "WORK_OBJECT_REVISION_CONFLICT"
     message = "This work object's head changed. Reload the current revision and retry."
+    category = ErrorCategory.CONCURRENCY_OR_PREFLIGHT
+    retryable = True
+    suggested_action = "reload_and_retry"
 
 
 class WorkObjectNotFoundError(NotFoundError):
@@ -867,6 +986,8 @@ class StrategyLockedForTestError(ConflictError):
 
     code = "STRATEGY_LOCKED_FOR_TEST"
     message = "This strategy is locked for testing. Clone it to a new draft to continue editing."
+    category = ErrorCategory.ACTIVE_JOB
+    retryable = True
 
 
 class StrategyReferenceNotActiveError(ConflictError):
@@ -994,6 +1115,8 @@ class AvailableTimeRequiredError(ValidationError):
 
     code = "AVAILABLE_TIME_REQUIRED"
     message = "Every accepted signal event needs a valid available time before Save."
+    category = ErrorCategory.DATA_TIME_VALIDATION
+    scope_type = "TradingSignal"
 
 
 class SignalEventMappingRequiredError(ValidationError):
@@ -1005,6 +1128,13 @@ class SignalEventMappingRequiredError(ValidationError):
     message = (
         "Map event_time, available_time, source_record_id and signal_type, "
         "or import as a Trade Log."
+    )
+    category = ErrorCategory.DEPENDENCY_VALIDATION
+    scope_type = "TradingSignal"
+    field_path = "import_binding.mapping.available_time"
+    remediation = (
+        "Add the source column or choose an explicit provider availability rule, "
+        "then rerun import validation."
     )
 
 
@@ -1022,6 +1152,9 @@ class ImportNotReadyError(ConflictError):
 
     code = "IMPORT_NOT_READY"
     message = "The signal import has not finished successfully yet."
+    category = ErrorCategory.DEPENDENCY_VALIDATION
+    retryable = True
+    suggested_action = "await_import_completion"
 
 
 # --- Stage 3d — Trade Log (doc 05) ---
@@ -1141,6 +1274,7 @@ class AllocationDependencyBlockedError(ValidationError):
         "An allocation entry references an item that is not a current, accessible "
         "composition member."
     )
+    category = ErrorCategory.DEPENDENCY_VALIDATION
 
 
 class AllocationHasBlockersError(ValidationError):
@@ -1149,6 +1283,8 @@ class AllocationHasBlockersError(ValidationError):
 
     code = "ALLOCATION_HAS_BLOCKERS"
     message = "The allocation configuration has blocking issues and cannot become a plan revision."
+    category = ErrorCategory.COMPOSITION_VALIDATION
+    suggested_action = "resolve_blockers_and_recheck"
 
 
 class CompositionStaleError(ConflictError):
@@ -1157,6 +1293,9 @@ class CompositionStaleError(ConflictError):
 
     code = "COMPOSITION_STALE"
     message = "The composition changed since this check was requested. Re-run the Ready Check."
+    category = ErrorCategory.CONCURRENCY_OR_PREFLIGHT
+    retryable = True
+    suggested_action = "reload_and_retry"
 
 
 class ReadinessReportNotFoundError(NotFoundError):
@@ -1178,6 +1317,9 @@ class ReadinessBlockedError(ValidationError):
 
     code = "READINESS_BLOCKED"
     message = "The composition is not ready to run. Resolve the blocking issues and re-check."
+    category = ErrorCategory.COMPOSITION_VALIDATION
+    suggested_action = "resolve_blockers_and_recheck"
+    remediation = "Resolve every blocking issue in `details`, then re-run the Ready Check."
 
 
 class ReadyReportStaleError(ConflictError):
@@ -1187,6 +1329,10 @@ class ReadyReportStaleError(ConflictError):
 
     code = "READY_REPORT_STALE"
     message = "Readiness was checked against an older composition. Re-run the Ready Check."
+    category = ErrorCategory.CONCURRENCY_OR_PREFLIGHT
+    retryable = True
+    suggested_action = "rerun_ready_check"
+    remediation = "Run the Backtest Ready Check again, then retry RUN."
 
 
 class BacktestRunNotFoundError(NotFoundError):
@@ -1210,6 +1356,7 @@ class RunNotRetryableError(ConflictError):
 
     code = "RUN_NOT_RETRYABLE"
     message = "Only a failed or cancelled run can be retried."
+    category = ErrorCategory.ACTIVE_JOB
 
 
 # --------------------------------------------------------------------------- #
@@ -1299,6 +1446,9 @@ class MetricProfileStaleError(ConflictError):
     message = (
         "Metric profile changed elsewhere. Reload the latest profile before saving your changes."
     )
+    category = ErrorCategory.CONCURRENCY_OR_PREFLIGHT
+    retryable = True
+    suggested_action = "reload_and_retry"
 
 
 class ExportTypeInvalidError(ValidationError):
@@ -1462,6 +1612,7 @@ class EntityNotSoftDeletedError(ConflictError):
 
     code = "ENTITY_NOT_SOFT_DELETED"
     message = "This object is not in a recoverable soft-deleted state."
+    category = ErrorCategory.LIFECYCLE
 
 
 class PurgeInProgressError(ConflictError):
@@ -1470,6 +1621,8 @@ class PurgeInProgressError(ConflictError):
 
     code = "PURGE_IN_PROGRESS"
     message = "A purge is in progress for this object. Restore is unavailable."
+    category = ErrorCategory.ACTIVE_JOB
+    retryable = True
 
 
 class ObjectAlreadyPurgedError(ConflictError):
@@ -1478,6 +1631,7 @@ class ObjectAlreadyPurgedError(ConflictError):
 
     code = "OBJECT_ALREADY_PURGED"
     message = "This object was permanently deleted and cannot be restored."
+    category = ErrorCategory.LIFECYCLE
 
 
 class RestoreConflictError(ConflictError):
@@ -1494,6 +1648,8 @@ class PurgeNotEligibleError(ConflictError):
 
     code = "PURGE_NOT_ELIGIBLE"
     message = "This object is not eligible for permanent deletion."
+    category = ErrorCategory.ACTIVE_JOB
+    suggested_action = "await_or_cancel_active_run"
 
 
 class InvalidTrashObjectTypeError(ValidationError):
@@ -1705,6 +1861,7 @@ class CapabilityDependencyMissingError(ConflictError):
         "Activation is blocked because required domain, data, policy, API, test, "
         "or rollback dependencies are incomplete. Review the capability dependency record."
     )
+    category = ErrorCategory.DEPENDENCY_VALIDATION
 
 
 class CapabilityStateStaleError(ConflictError):
@@ -1714,6 +1871,9 @@ class CapabilityStateStaleError(ConflictError):
 
     code = "CAPABILITY_STATE_STALE"
     message = "The capability state changed while this page was open. Refresh capability status."
+    category = ErrorCategory.CONCURRENCY_OR_PREFLIGHT
+    retryable = True
+    suggested_action = "reload_and_retry"
 
 
 class InvalidCredentialsError(UnauthenticatedError):

@@ -6,7 +6,7 @@ import { ErrorState } from "@/components/ErrorState";
 import { Loading } from "@/components/Loading";
 import { StatusBadge } from "@/components/StatusBadge";
 import { formatUtc } from "@/lib/backtest";
-import { useRationaleFamilies } from "@/lib/createPackage";
+import { asRecordArray, useRationaleFamilies } from "@/lib/createPackage";
 import {
   packageImportTone,
   usePackageImportReport,
@@ -1118,9 +1118,9 @@ function ProvenanceBlock({
             <dt>Dependency scan</dt>
             <dd>
               {provenance.scan.status} (attempt {provenance.scan.attempt_no}) ·{" "}
-              {provenance.scan.resolved_refs.length} resolved ·{" "}
-              {provenance.scan.missing_calls.length} missing ·{" "}
-              {provenance.scan.unsupported_calls.length} unsupported
+              {asRecordArray(provenance.scan.resolved_refs).length} resolved ·{" "}
+              {asRecordArray(provenance.scan.missing_calls).length} missing ·{" "}
+              {asRecordArray(provenance.scan.unsupported_calls).length} unsupported
             </dd>
           </>
         ) : null}

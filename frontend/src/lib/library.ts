@@ -165,14 +165,20 @@ export interface LiveRationaleFamily {
   family_active: boolean;
 }
 
+// Dependency-scan evidence embedded in the provenance projection
+// (queries/library.py::_scan_summary). ``detected_calls`` is a JSONB list of
+// plain call names, but ``resolved_refs`` / ``missing_calls`` /
+// ``unsupported_calls`` are JSONB lists of per-call ROWS (dicts) — narrow them
+// with ``asRecordArray`` (lib/createPackage.ts) before reading, exactly as the
+// Pre-Check overlay does.
 export interface ProvenanceScan {
   scan_id: string;
   attempt_no: number;
   status: string;
   detected_calls: string[];
-  resolved_refs: string[];
-  missing_calls: string[];
-  unsupported_calls: string[];
+  resolved_refs: unknown;
+  missing_calls: unknown;
+  unsupported_calls: unknown;
   registry_fingerprint: string | null;
   context_hash: string | null;
 }

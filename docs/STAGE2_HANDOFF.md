@@ -2895,3 +2895,14 @@ haritasında kendi prompt'larıyla korunuyor:
 - **TIER 3 — data/ops (deferred):** retention auto-purge, data-queue redelivery, SSE streaming e2e (connection drops), tool-call status shadowing (CR-08 follow-up), `summary["timeframe"]` resolution from market-revision metadata.
 
 See **`docs/POST_V1_KICKOFF.md`** for reuse anchors and the paste-ready resume prompt.
+
+## K-07 devamı — Market/Research fail-closed upload kapısı landed (PR #388)
+
+K-07'nin ortak kapısı (`domain/importing/source_file.assert_supported_source_file`) artık **dört**
+komut yüzeyinin hepsinde: trade_log, trading_signal, **market_data, research_data**. Son ikisinde
+`original_filename` yok/boşsa tip kontrolü tamamen atlanıyordu; hata kodları surface bazında ayrı
+kaldı (`MARKET_DATA_FILE_TYPE_NOT_ALLOWED` / `RESEARCH_DATA_FILE_TYPE_NOT_ALLOWED`). Migration yok;
+şema/route/OCC/Idempotency değişmedi. Her yüzey için unit + integration testi eklendi.
+Tam kayıt: `docs/PROJECT_HISTORY.md` §"K-07 devamı".
+
+**Next değişmedi** (yukarıdaki §Next geçerli).

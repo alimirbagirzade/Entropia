@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,6 +19,23 @@ _ADMIN_COUNT_LOCK_KEY = 6_2000_1
 
 async def get_human_user(session: AsyncSession, user_id: str) -> HumanUser | None:
     return await session.get(HumanUser, user_id)
+
+
+async def get_human_users(session: AsyncSession, user_ids: Sequence[str]) -> dict[str, HumanUser]:
+    """Resolve many human users in ONE query, keyed by ``user_id`` (finding O-24).
+
+    The batch counterpart of :func:`get_human_user` for any projection that
+    decorates a list of principal ids with their account fields — mirroring
+    ``market_data.summarize_coverage_for_revisions``: an empty input short-circuits
+    without a round-trip, and an id with no (or a purged) row is simply ABSENT from
+    the map so the caller renders an honest ``None`` rather than a fabricated
+    identity. Never a per-row N+1.
+    """
+    ids = list(dict.fromkeys(user_ids))
+    if not ids:
+        return {}
+    stmt = select(HumanUser).where(HumanUser.user_id.in_(ids))
+    return {row.user_id: row for row in (await session.execute(stmt)).scalars().all()}
 
 
 async def get_active_user_by_email(session: AsyncSession, email: str) -> HumanUser | None:

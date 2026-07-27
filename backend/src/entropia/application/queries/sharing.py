@@ -42,9 +42,17 @@ async def list_package_shares(
     grants = await share_repo.list_active_grants(
         session, resource_type=_RESOURCE_TYPE, resource_id=entity_id
     )
+    # ONE batched lookup for every grantee (finding O-24) — the grant list is
+    # unbounded (no per-package share cap exists), so a per-grant account read
+    # made the round-trip count scale with the share count. Same pattern as
+    # ``market_data.summarize_coverage_for_revisions``; a grantee whose account
+    # row is missing is simply absent from the map and still renders ``None``.
+    grantees = await identity_repo.get_human_users(
+        session, [grant.grantee_principal_id for grant in grants]
+    )
     shares: list[dict[str, Any]] = []
     for grant in grants:
-        grantee = await identity_repo.get_human_user(session, grant.grantee_principal_id)
+        grantee = grantees.get(grant.grantee_principal_id)
         shares.append(
             {
                 "share_id": grant.share_id,

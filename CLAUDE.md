@@ -96,7 +96,8 @@ Before stopping a working session, produce **ALL** of the following:
 - **Durum:** V1 ROADMAP COMPLETE (Stages 0–8, docs 01–22) + post-V1 + video-alignment +
   V18-R2 dalgası + **auth remediation dalgası COMPLETE** (güvenlik denetimi #346–#364).
   Tüm route yüzeyleri frontend'e bağlı; TIER 2 sayfa haritası 24/24.
-- **`main` HEAD:** `658db36` (PR **#383** merge, F-01c). Üstüne **F-05/M-05** slice'ı açıldı (PR bekliyor).
+- **`main` HEAD:** `9c43de4` (PR **#384** merge, F-05/M-05). Üstüne **QA kalite kapıları**
+  slice'ı açıldı — PR **#389** (merge bekliyor).
 - **alembic head:** **`0035_portfolio_rules`** (35 migration, tek head — R3 W3'te migration YOK).
   **`ENGINE_VERSION` = `backtest-engine-v18-capability-matrix`** (F-05'te bump edildi).
 - **Testler (lokal, F-05 dalı):** backend **1986 collected** (real-Postgres integration, yeşil) ·
@@ -107,6 +108,12 @@ Before stopping a working session, produce **ALL** of the following:
   tek kaynak (59 satır / 22 `future_dev`), engine fail-closed + Ready Check
   `STRATEGY_CAPABILITY_NOT_IN_BUILD` + UI'da disabled & bağımlılık notu (üretilen TS aynası).
   Tam kayıt: `docs/PROJECT_HISTORY.md` §"V18-R3 · F-05 / M-05".
+- **QA kalite kapıları (PR #389, migration YOK):** CI coverage basıyordu ama kırılamıyordu
+  (`grep -niE 'cov|a11y|axe|npm audit|pip audit' .github/workflows/*.yml` = 0 hit). Artık backend
+  `--cov-fail-under=80` (ölçülen %90), frontend `@vitest/coverage-v8` + `thresholds` 80/78/70/68,
+  `pip-audit` + `scripts/npm-audit-gate.mjs` (dondurulmuş advisory listesi), ve `e2e.yml`'de `a11y`
+  job'ı. `ACCEPTED_SERIOUS_RULES` D-8'in bıraktığı hâliyle **değişmedi**. Frontend eşikleri doymuş
+  makinede ölçülen **alt sınırdan** kalibre — temiz koşuda yükseltilmeli.
 
 - **Next — PO imzası + R2 kapanışı** (R3 mühendislik backlog'u F-05 ile kapandı; **F-07 raw-id
   sweep kalıntısı empirik doğrulanmalı**). Kalan tek blokaj

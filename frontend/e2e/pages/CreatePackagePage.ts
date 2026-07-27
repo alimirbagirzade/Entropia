@@ -72,9 +72,11 @@ export class CreatePackagePage {
     const dialog = this.page.getByRole("dialog");
     await expect(dialog).toBeVisible();
     await dialog.getByRole("button", { name: "Run Pre-Check" }).click();
+    // The scan runs in the durable worker (F-01a), so this waits on a real
+    // background compute + its SSE-driven refetch, not an in-transaction result.
     await expect(
       dialog.getByText("Pre-Check passed. Dependency manifest is ready for candidate generation."),
-    ).toBeVisible({ timeout: 20_000 });
+    ).toBeVisible({ timeout: 30_000 });
     await dialog.getByRole("button", { name: "Close" }).click();
     await expect(dialog).not.toBeVisible();
   }
@@ -89,7 +91,11 @@ export class CreatePackagePage {
     const cdp = this.page.getByRole("button", { name: "C.D.P" });
     await expect(cdp).toBeEnabled({ timeout: 15_000 });
     await cdp.click();
-    await expect(this.page.getByText(/Candidate ready — /)).toBeVisible({ timeout: 30_000 });
+    // Match the C.D.P live region alone: the "Next step:" hint opens with the same
+    // "Candidate ready — " phrase, so the assertion pins the notice's own sentence.
+    await expect(
+      this.page.getByText(/Candidate ready — [\s\S]*Click C\.D\.P again/),
+    ).toBeVisible({ timeout: 30_000 });
 
     const draft = this.page.getByRole("button", { name: "C.D.P" });
     await expect(draft).toBeEnabled({ timeout: 15_000 });

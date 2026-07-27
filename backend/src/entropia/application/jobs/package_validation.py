@@ -3,9 +3,11 @@
 This is the durable-worker body for Create-Package validation: it gathers the
 request's REAL facts from the database and runs the seven mandatory checks, producing
 immutable evidence with per-check output/artifacts. It performs no state-machine
-transition and no audit — its caller (``commands.create_package.start_package_validation_run``)
-owns the OCC guard, the immutable run row, the state transition and the audit/outbox,
-and records the durable ``jobs`` row (CR-09 source of truth, survives browser close).
+transition and no audit — its caller (``jobs.create_package.run_validation_job``) owns the
+job lifecycle, finalises the immutable run row, advances the state and writes the
+audit/outbox, while the admission (``commands.create_package.start_package_validation_run``)
+owns the OCC guard and the durable ``jobs`` row (CR-09 source of truth, survives browser
+close).
 
 What runs for real here:
 
@@ -23,9 +25,8 @@ What runs for real here:
 * ``real_market_data`` / ``baseline_comparison`` — an equivalence-claiming request must
   carry a PASSED baseline of real market data; a non-claiming one needs none.
 
-The V1 pipeline executes this body in-transaction (the established CP pattern —
-mirrors Pre-Check / candidate-generation / baseline-parse), and the function is shaped
-so a dramatiq actor can invoke it unchanged when the async plane lands. A real
+Since F-01b this body executes inside the durable ``default``-queue worker rather than the
+request transaction, so a browser close never cancels a validation run. A real
 LLM/arbitrary-code generator + its isolated OS-level sandbox stays Future-Dev.
 """
 

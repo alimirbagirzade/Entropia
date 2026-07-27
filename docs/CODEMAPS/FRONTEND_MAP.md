@@ -12,7 +12,7 @@ Import alias: `@/` → `frontend/src/`.
 |---|---|---|---|---|
 | `/login` `App.tsx:73` | `Login.tsx` | `auth`, `apiClient` | (mutasyon; `["me"]` invalidasyonu) | `routes/auth.py` |
 | `/` (index) `:79` | `Mainboard.tsx` | `mainboard`, `backtest`, `strategy` | `["mainboard"]`, `["readiness"]`, `["audit"]`, `["trash"]` | `routes/mainboard.py` |
-| `/packages/create` `:85` | `CreatePackage.tsx` | `createPackage` | `["package-requests"]`, `["rationale-families"]`, `["audit"]` | `routes/create_package.py` |
+| `/packages/create` `:85` | `CreatePackage.tsx` | `createPackage` | `["package-requests"]`, `["rationale-families"]`, `["audit"]` | `routes/create_package.py` (C.D.P + validation = **admission**, sonuç `resource.changed` refetch'i ile gelir — F-01b) |
 | `/packages/pre-check` `:94` | `PreCheck.tsx` | `createPackage`, `backtest` | `["package-requests"]` | `routes/create_package.py` (scan) |
 | `/packages/library` `:103` | `Library.tsx` | `library`, `sharing`, `packageImport`, `createPackage`, `strategy`, `backtest` | `["library"]`, `["package-imports"]`, `["jobs"]`, `["trash"]`, `["audit"]` | `routes/library.py`, `sharing.py`, `package_import.py` |
 | `/packages/embedded` `:112` | `Embedded.tsx` | `esp`, `library`, `backtest` | `["esp"]`, `["audit"]` | `routes/esp.py` |

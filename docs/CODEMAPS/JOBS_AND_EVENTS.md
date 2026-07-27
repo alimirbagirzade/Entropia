@@ -22,8 +22,9 @@ transport'tur. Mesaj kaybolursa scheduler sweep'i (INF-03/INF-09) işi geri geti
 | `run_agent_tool` | `agent` | `:170` | `agent_tools.py` |
 | `run_agent_tool_high` | `agent-high` | `:182` | `agent_tools.py` |
 | `run_agent_executor` | `agent-executor` | `:205` | `agent_executor.py` |
-| `run_trash_purge` | `maintenance` | `:234` | `purge.py` |
-| `run_package_import` | `data` | `:261` | `package_import.py` |
+| `run_create_package_job` | `default` | `:234` | `create_package.py` (kind-dispatch) |
+| `run_trash_purge` | `maintenance` | `:263` | `purge.py` |
+| `run_package_import` | `data` | `:290` | `package_import.py` |
 
 Tüm aktörler `max_retries=3`.
 
@@ -36,6 +37,7 @@ Tüm aktörler `max_retries=3`.
 | `agent` | 1 | ✔ |
 | `agent-high` | 1 | ✔ |
 | `agent-executor` | 1 | ✔ |
+| `default` | 1 (`run_create_package_job`) | ✔ |
 | `maintenance` | 2 (`system_heartbeat`, `run_trash_purge`) | ✔ (`run_trash_purge`) |
 
 ### Neden `data` özel
@@ -52,6 +54,27 @@ Bunun yerine **operator eylemi** vardır: `POST /admin/data-queue/redeliver`
 `market_data_analysis` · `research_data_analysis` · `trading_signal_import` · `trade_log_import` · `package_import`
 
 Discriminator taşımayan eski satırlar → `skipped_unknown_kind` (asla tahmin edilmez).
+
+### `default` kuyruğu — Create-Package tek-aktör dispatch (F-01a + F-01b)
+
+`default` kuyruğunda **tek** durable aktör vardır (`run_create_package_job`), bu yüzden scheduler
+sweep'i (stale-RUNNING kurtarma + kayıp mesaj redelivery, INF-03/INF-09) otomatik çalışır.
+Aktör gövdesi `application/jobs/create_package.py::run_create_package_job`, durable
+`jobs.payload["kind"]` ayırıcısını okuyup yönlendirir:
+
+| `kind` | Worker gövdesi | Admission komutu | Terminal durumlar |
+|---|---|---|---|
+| `precheck` | `run_precheck_job` | `cp_cmd.run_precheck` | `precheck_passed/blocked/not_applicable` · hata → `precheck_failed` |
+| `candidate_generation` | `run_candidate_generation_job` | `cp_cmd.submit_candidate_generation` | `candidate_ready` · hata → `candidate_failed` |
+| `validation` | `run_validation_job` | `cp_cmd.start_package_validation_run` | `eligible_for_approval` / `revision_required` · hata → FAILED run + `revision_required` |
+
+Üçü de aynı iskeleti paylaşır: terminal-job replay (at-least-once), request root kilidi,
+superseded guard (admission'ın beklediği state'ten çıkmışsa hiçbir şey yazılmaz → `SUPERSEDED`),
+`RUNNING` → compute → durable kanıt + state ilerlemesi + audit/outbox → `SUCCEEDED`.
+Worker hatası **durable terminal** durumdur (sessiz başarı da sonsuz retry de değil).
+
+`baseline_parse` kind'ı **aktöre gitmez**: yüklenmiş CSV'nin sınırlı okuması olduğu için
+`cp_cmd.start_baseline_parse` içinde tx'te tamamlanır ve durable satır SUCCEEDED yazılır.
 
 ## Scheduler (`apps/scheduler/__main__.py`)
 

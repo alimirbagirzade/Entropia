@@ -1,11 +1,22 @@
-"""Create-Package worker bodies — Pre-Check dependency scan (docs 06 §7, 07 §8; F-01a).
+"""Create-Package worker bodies — Pre-Check, candidate generation, validation
+(docs 06 §5/§7, 07 §8; F-01a + F-01b).
 
 Runs on the ``default`` queue. The durable ``jobs`` row is the source of truth (CR-09):
-the request that admitted the Pre-Check has long since returned ``queued``, so a browser
-close / logout never cancels the scan (Finding F-01). The single ``run_create_package_job``
-body reads the durable payload ``kind`` and routes to the matching worker; only
-``precheck`` is real in F-01a — candidate-generation / validation / baseline-parse stay
-in-transaction stubs in ``commands.create_package`` until F-01b/c convert them.
+the request that admitted the work has long since returned its ``queued`` admission, so a
+browser close / logout never cancels it (Finding F-01). The single
+``run_create_package_job`` body reads the durable payload ``kind`` and routes to the
+matching worker: ``precheck`` (F-01a), ``candidate_generation`` and ``validation``
+(F-01b). Baseline parse keeps its in-transaction job row in ``commands.create_package``
+— it is a bounded read of an already-uploaded CSV, not a long compute.
+
+All three workers share one lifecycle shape:
+
+    load job (redelivery guard: a terminal job replays its durable ``result_ref``) ->
+    lock the request root -> superseded guard (the request advanced past the state this
+        delivery was admitted for => SUPERSEDED, nothing recorded) -> RUNNING ->
+    compute -> record durable evidence + advance the request state + audit/outbox ->
+    SUCCEEDED, or a DURABLE terminal failure (never a silent success, never an
+    infinite retry).
 
 The Pre-Check lifecycle mirrors ``jobs.backtest_engine`` / ``jobs.trade_log``:
 
@@ -36,22 +47,38 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from entropia.application.jobs.package_validation import run_package_validation
 from entropia.application.queries import esp as esp_query
 from entropia.domain.create_package import (
     CreatePackageState,
     PrecheckScanStatus,
     SourceKind,
+    ValidationRunStatus,
     next_request_state,
     scan_source_calls,
 )
+from entropia.domain.create_package.generator import GeneratedCandidate, generate_candidate
 from entropia.domain.create_package.source_scan import SOURCE_SCANNER_VERSION, is_scannable_key
+from entropia.domain.create_package.validation import (
+    STATUS_BLOCKED,
+    VALIDATOR_VERSION,
+    ValidationCheck,
+)
 from entropia.domain.esp.enums import RuntimeAdapter
 from entropia.domain.lifecycle.enums import ActorKind, JobStatus
+from entropia.domain.package.enums import PackageValidationState
 from entropia.domain.revision.hashing import content_hash
-from entropia.infrastructure.postgres.models import EntityRegistry, Job, PackageRequest
+from entropia.infrastructure.postgres.models import (
+    EntityRegistry,
+    Job,
+    PackageRequest,
+    PackageRevision,
+    PackageValidationRun,
+)
 from entropia.infrastructure.postgres.repositories import audit as audit_repo
 from entropia.infrastructure.postgres.repositories import create_package as cp_repo
 from entropia.infrastructure.postgres.repositories import esp as esp_repo
+from entropia.infrastructure.postgres.repositories import packages as pkg_repo
 from entropia.shared.errors import (
     ResolverAdapterIncompatible,
     ResolverNotResolved,
@@ -59,7 +86,10 @@ from entropia.shared.errors import (
 )
 
 _REQUEST_TARGET_KIND = "package_request"
+_PACKAGE_TARGET_KIND = "package"
 _PRECHECK_KIND = "precheck"
+_CANDIDATE_KIND = "candidate_generation"
+_VALIDATION_KIND = "validation"
 # The scanner semantics are the comment/string-aware source lexer (doc 07 §6.2); the
 # version tracks the domain scanner contract (mirrors the former sync command).
 _SCANNER_VERSION = SOURCE_SCANNER_VERSION
@@ -67,6 +97,8 @@ _UNDECLARED_SOURCE_CODE = "UNDECLARED_SOURCE_DEPENDENCY"
 _DECLARED_NOT_IN_SOURCE_CODE = "DECLARED_NOT_IN_SOURCE"
 _RESOLVE_ERRORS = (ResolverNotResolved, ResolverSignatureMismatch, ResolverAdapterIncompatible)
 _PRECHECK_WORKER_FAILED = "PRECHECK_WORKER_FAILED"
+_CANDIDATE_WORKER_FAILED = "CANDIDATE_GENERATION_WORKER_FAILED"
+_VALIDATION_WORKER_FAILED = "VALIDATION_WORKER_FAILED"
 
 # A redelivered job in a terminal status has already produced its durable outcome;
 # re-running would append a duplicate immutable scan attempt.
@@ -241,6 +273,49 @@ async def compute_precheck(session: AsyncSession, detail: PackageRequest) -> Pre
     )
 
 
+def _emit_worker_event(
+    session: AsyncSession,
+    job: Job,
+    *,
+    event_kind: str,
+    target_kind: str,
+    entity_id: str,
+    revision_id: str | None,
+    previous_state: str,
+    new_state: str,
+    action: str,
+) -> None:
+    """Audit + ``resource.changed`` outbox for a completed worker step (identical to the
+    sync path each worker replaced).
+
+    The worker acts as a SYSTEM_SERVICE on behalf of the requesting principal. The outbox
+    event_type stays ``resource.changed`` so the Create-Package surfaces refetch
+    server-authoritative state through the existing SSE catch-all (never ``job.updated``);
+    the taxonomy is untouched — ``action`` carries the same verbs the sync path emitted.
+    """
+    audit_repo.add_audit_event(
+        session,
+        event_kind=event_kind,
+        actor_principal_id=job.actor_principal_id,
+        actor_kind=ActorKind.SYSTEM_SERVICE,
+        target_entity_id=entity_id,
+        target_entity_type=target_kind,
+        target_revision_id=revision_id,
+        previous_state=previous_state,
+        new_state=new_state,
+        reason=None,
+        correlation_id=job.correlation_id,
+    )
+    audit_repo.add_outbox_event(
+        session,
+        event_type="resource.changed",
+        resource_type=target_kind,
+        resource_id=entity_id,
+        payload={"action": action, "revision_id": revision_id},
+        correlation_id=job.correlation_id,
+    )
+
+
 def _emit_precheck_completed(
     session: AsyncSession,
     job: Job,
@@ -251,32 +326,17 @@ def _emit_precheck_completed(
     *,
     action: str,
 ) -> None:
-    """Audit + ``resource.changed`` outbox for the request (identical to the sync path).
-
-    The worker acts as a SYSTEM_SERVICE on behalf of the requesting principal. The outbox
-    stays ``resource.changed`` on ``package_request`` so the Pre-Check overlay refetches
-    server-authoritative state through the existing SSE catch-all (never ``job.updated``).
-    """
-    audit_repo.add_audit_event(
+    """The Pre-Check completion event: request-scoped, carrying the immutable scan id."""
+    _emit_worker_event(
         session,
+        job,
         event_kind="package_precheck_completed",
-        actor_principal_id=job.actor_principal_id,
-        actor_kind=ActorKind.SYSTEM_SERVICE,
-        target_entity_id=root.entity_id,
-        target_entity_type=_REQUEST_TARGET_KIND,
-        target_revision_id=scan_id,
+        target_kind=_REQUEST_TARGET_KIND,
+        entity_id=root.entity_id,
+        revision_id=scan_id,
         previous_state=previous_state,
         new_state=new_state,
-        reason=None,
-        correlation_id=job.correlation_id,
-    )
-    audit_repo.add_outbox_event(
-        session,
-        event_type="resource.changed",
-        resource_type=_REQUEST_TARGET_KIND,
-        resource_id=root.entity_id,
-        payload={"action": action, "revision_id": scan_id},
-        correlation_id=job.correlation_id,
+        action=action,
     )
 
 
@@ -466,12 +526,347 @@ async def run_precheck_job(session: AsyncSession, job: Job) -> dict[str, Any]:
     return result
 
 
+# ---------------------------------------------------------------------------
+# Candidate generation (F-01b)
+# ---------------------------------------------------------------------------
+
+
+async def _candidate_resolved_refs(
+    session: AsyncSession, detail: PackageRequest
+) -> list[dict[str, Any]]:
+    """The resolved ESP refs the candidate compute pins (doc 06 §5).
+
+    Description requests resolve nothing; a code request reuses the current PASSED
+    scan's resolved refs (the PC-13 gate ran at admission, so the scan is fresh).
+    """
+    if detail.source_kind == SourceKind.DESCRIPTION:
+        return []
+    scan = await cp_repo.get_current_scan(session, detail)
+    if scan is None:
+        return []
+    return list(scan.resolved_refs or [])
+
+
+async def generate_and_store_candidate(
+    session: AsyncSession, detail: PackageRequest
+) -> GeneratedCandidate:
+    """Generate the loadable candidate (F-14) and pin it onto the request.
+
+    Deterministic: the same request inputs always produce the same implementation and
+    the same candidate hash. Shared by the candidate-generation worker (Send) and the
+    in-transaction revision loop (``commands.request_package_revision``) so both produce
+    an identical implementation. Stores the candidate hash, the validated output
+    contract and the loadable implementation (source + test draft + plan) — later copied
+    verbatim onto the immutable draft revision at C.D.P. A real LLM / arbitrary-code
+    generator + its isolated sandbox stays Future-Dev.
+    """
+    resolved_refs = await _candidate_resolved_refs(session, detail)
+    generated = generate_candidate(
+        request_id=detail.entity_id,
+        package_kind=str(detail.package_kind),
+        source_kind=detail.source_kind,
+        output_contract=detail.output_contract,
+        resolved_refs=resolved_refs,
+        source_language=detail.source_language,
+    )
+    detail.candidate_hash = generated.candidate_hash
+    detail.candidate_output_contract = generated.output_contract
+    detail.candidate_implementation = generated.implementation.as_dict()
+    return generated
+
+
+def _candidate_result(
+    root: EntityRegistry, detail: PackageRequest, job: Job, *, candidate_hash: str
+) -> dict[str, Any]:
+    return {
+        "request_id": root.entity_id,
+        "state": str(detail.state),
+        "candidate_hash": candidate_hash,
+        "job_id": job.job_id,
+    }
+
+
+async def _fail_candidate(
+    session: AsyncSession,
+    job: Job,
+    root: EntityRegistry,
+    detail: PackageRequest,
+    exc: Exception,
+) -> dict[str, Any]:
+    """Record a durable terminal candidate-generation failure (Finding F-01).
+
+    The request advances to CANDIDATE_FAILED (a real state with a retry edge back to
+    CANDIDATE_GENERATING) and the job is FAILED_FINAL — never a silent success, never an
+    infinite retry. The audit kind is the spec's ``candidate_generation_failed``.
+    """
+    error_detail = {"code": _CANDIDATE_WORKER_FAILED, "message": str(exc)}
+    previous = detail.state
+    detail.state = next_request_state(detail.state, CreatePackageState.CANDIDATE_FAILED)
+    root.row_version += 1
+    _emit_worker_event(
+        session,
+        job,
+        event_kind="candidate_generation_failed",
+        target_kind=_REQUEST_TARGET_KIND,
+        entity_id=root.entity_id,
+        revision_id=None,
+        previous_state=str(previous),
+        new_state=str(detail.state),
+        action="candidate_generation_failed",
+    )
+    job.status = JobStatus.FAILED_FINAL
+    job.finished_at = _now()
+    job.error = error_detail
+    result = _candidate_result(root, detail, job, candidate_hash="")
+    result["error"] = error_detail
+    job.result_ref = result
+    return result
+
+
+async def run_candidate_generation_job(session: AsyncSession, job: Job) -> dict[str, Any]:
+    """Execute the durable candidate-generation job (doc 06 §5; F-01b).
+
+    The Pre-Check gate (PC-13) already ran at admission — re-running it here would race a
+    concurrent registry change into a worker-side error instead of the typed 409 the
+    client received synchronously. What the worker owns is the compute + the durable
+    outcome. Does not commit (the actor scope commits).
+    """
+    request_id = str((job.payload or {}).get("request_id"))
+    if job.status in _JOB_TERMINAL:
+        return job.result_ref or {
+            "request_id": request_id,
+            "state": str(job.status),
+            "job_id": job.job_id,
+        }
+
+    root = await cp_repo.get_request_root(session, request_id)
+    detail = await cp_repo.get_request_detail(session, request_id)
+    if root is None or detail is None:
+        raise ValueError(
+            f"Package request '{request_id}' not found for candidate job '{job.job_id}'."
+        )
+
+    await session.refresh(root, with_for_update=True)
+    await session.refresh(detail)
+
+    # Superseded guard: only the state this delivery was admitted for may complete. A
+    # request that already advanced (a concurrent re-generate won, or a revision reset
+    # the flow) records nothing — mirrors run_precheck_job's guard.
+    if detail.state != CreatePackageState.CANDIDATE_GENERATING:
+        job.status = JobStatus.SUPERSEDED
+        job.finished_at = _now()
+        result = _superseded_ref(job, root, detail)
+        job.result_ref = result
+        return result
+
+    job.status = JobStatus.RUNNING
+    job.started_at = _now()
+    try:
+        generated = await generate_and_store_candidate(session, detail)
+    except Exception as exc:  # a compute failure becomes a durable terminal state
+        return await _fail_candidate(session, job, root, detail, exc)
+
+    previous = detail.state
+    detail.state = next_request_state(detail.state, CreatePackageState.CANDIDATE_READY)
+    root.row_version += 1
+    _emit_worker_event(
+        session,
+        job,
+        event_kind="candidate_generation_completed",
+        target_kind=_REQUEST_TARGET_KIND,
+        entity_id=root.entity_id,
+        revision_id=None,
+        previous_state=str(previous),
+        new_state=str(detail.state),
+        action="candidate_generation_completed",
+    )
+    result = _candidate_result(root, detail, job, candidate_hash=generated.candidate_hash)
+    job.status = JobStatus.SUCCEEDED
+    job.finished_at = _now()
+    job.result_ref = result
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Validation run (F-01b)
+# ---------------------------------------------------------------------------
+
+
+def _validation_result(
+    root: EntityRegistry, detail: PackageRequest, run: PackageValidationRun, job: Job
+) -> dict[str, Any]:
+    return {
+        "request_id": root.entity_id,
+        "validation_run_id": run.validation_run_id,
+        "attempt_no": run.attempt_no,
+        "status": str(run.status),
+        "state": str(detail.state),
+        "checks": run.checks,
+        "job_id": job.job_id,
+    }
+
+
+def _certify_draft_revision(revision: PackageRevision | None, *, passed: bool) -> None:
+    """Stamp the run's verdict onto the draft revision.
+
+    ``can_use`` requires the head revision's validation_state == PASSED
+    (domain/package/permissions), so without this the draft stays PENDING and an
+    approved+published package could never be pinned in the Strategy editor. A FAILED
+    run marks it FAILED; a regenerated candidate makes a fresh PENDING draft, so
+    evidence never goes stale.
+    """
+    if revision is None:
+        return
+    revision.validation_state = (
+        PackageValidationState.PASSED if passed else PackageValidationState.FAILED
+    )
+
+
+async def _fail_validation(
+    session: AsyncSession,
+    job: Job,
+    root: EntityRegistry,
+    detail: PackageRequest,
+    run: PackageValidationRun,
+    exc: Exception,
+) -> dict[str, Any]:
+    """Record a durable terminal validation failure (Finding F-01).
+
+    A worker crash is NOT a pass: the immutable run lands FAILED carrying a BLOCKED
+    check with the error, the draft revision is certified FAILED, and the request moves
+    to REVISION_REQUIRED so the user's next legal step (Request Revision) is real. The
+    job is FAILED_FINAL — never an infinite retry.
+    """
+    error_detail = {"code": _VALIDATION_WORKER_FAILED, "message": str(exc)}
+    run.status = ValidationRunStatus.FAILED
+    run.validator_version = VALIDATOR_VERSION
+    run.checks = [
+        ValidationCheck(
+            check="validator",
+            status=STATUS_BLOCKED,
+            detail="The validation worker failed before it could produce a verdict.",
+            artifacts=error_detail,
+        ).as_dict()
+    ]
+    run.completed_at = _now()
+    _certify_draft_revision(
+        await pkg_repo.get_revision(session, run.draft_revision_id), passed=False
+    )
+    previous = detail.state
+    detail.state = next_request_state(detail.state, CreatePackageState.REVISION_REQUIRED)
+    root.row_version += 1
+    _emit_worker_event(
+        session,
+        job,
+        event_kind="validation_run_completed",
+        target_kind=_PACKAGE_TARGET_KIND,
+        entity_id=run.package_root_id,
+        revision_id=run.draft_revision_id,
+        previous_state=str(previous),
+        new_state=str(detail.state),
+        action="validation_run_failed",
+    )
+    job.status = JobStatus.FAILED_FINAL
+    job.finished_at = _now()
+    job.error = error_detail
+    result = _validation_result(root, detail, run, job)
+    result["error"] = error_detail
+    job.result_ref = result
+    return result
+
+
+async def run_validation_job(session: AsyncSession, job: Job) -> dict[str, Any]:
+    """Execute the durable Validation Tests job (doc 06 §4.4/§5/§7; F-13 + F-01b).
+
+    The QUEUED immutable run row was appended at admission (the spec's queued/running
+    row states), so the UI has a real evidence row to poll from the first render. This
+    body flips it RUNNING, gathers the draft's real facts through
+    ``jobs.package_validation.run_package_validation`` and lands the honest verdict: a
+    not_executed / blocked mandatory check is NOT a pass, so only a fully-passing run
+    reaches ELIGIBLE_FOR_APPROVAL. Does not commit (the actor scope commits).
+    """
+    payload = job.payload or {}
+    request_id = str(payload.get("request_id"))
+    validation_run_id = str(payload.get("validation_run_id"))
+    if job.status in _JOB_TERMINAL:
+        return job.result_ref or {
+            "request_id": request_id,
+            "validation_run_id": validation_run_id,
+            "status": str(job.status),
+            "job_id": job.job_id,
+        }
+
+    root = await cp_repo.get_request_root(session, request_id)
+    detail = await cp_repo.get_request_detail(session, request_id)
+    run = await cp_repo.get_validation_run(session, validation_run_id)
+    if root is None or detail is None or run is None:
+        raise ValueError(f"Validation run '{validation_run_id}' not found for job '{job.job_id}'.")
+
+    await session.refresh(root, with_for_update=True)
+    await session.refresh(detail)
+    await session.refresh(run)
+
+    # Superseded guard: the request must still be running THIS run. A newer run (or a
+    # revision that reset the flow) makes this delivery a durable no-op.
+    if (
+        detail.state != CreatePackageState.VALIDATION_RUNNING
+        or detail.current_validation_run_id != run.validation_run_id
+    ):
+        job.status = JobStatus.SUPERSEDED
+        job.finished_at = _now()
+        result = _superseded_ref(job, root, detail)
+        result["validation_run_id"] = run.validation_run_id
+        job.result_ref = result
+        return result
+
+    job.status = JobStatus.RUNNING
+    job.started_at = _now()
+    run.status = ValidationRunStatus.RUNNING
+    await session.flush()
+    try:
+        report = await run_package_validation(session, detail)
+    except Exception as exc:  # a compute failure becomes a durable terminal state
+        return await _fail_validation(session, job, root, detail, run, exc)
+
+    run.validator_version = report.validator_version
+    run.checks = [check.as_dict() for check in report.checks]
+    run.status = ValidationRunStatus.PASSED if report.passed else ValidationRunStatus.FAILED
+    run.completed_at = _now()
+    _certify_draft_revision(
+        await pkg_repo.get_revision(session, run.draft_revision_id), passed=report.passed
+    )
+    previous = detail.state
+    terminal = (
+        CreatePackageState.ELIGIBLE_FOR_APPROVAL
+        if report.passed
+        else CreatePackageState.REVISION_REQUIRED
+    )
+    detail.state = next_request_state(detail.state, terminal)
+    root.row_version += 1
+    _emit_worker_event(
+        session,
+        job,
+        event_kind="validation_run_completed",
+        target_kind=_PACKAGE_TARGET_KIND,
+        entity_id=run.package_root_id,
+        revision_id=run.draft_revision_id,
+        previous_state=str(previous),
+        new_state=str(detail.state),
+        action="validation_run_completed",
+    )
+    result = _validation_result(root, detail, run, job)
+    job.status = JobStatus.SUCCEEDED
+    job.finished_at = _now()
+    job.result_ref = result
+    return result
+
+
 async def run_create_package_job(session: AsyncSession, job_id: str) -> dict[str, Any]:
     """Durable Create-Package job dispatcher (the ``default``-queue actor body).
 
-    Reads the durable ``kind`` discriminator and routes to the matching worker. F-01a
-    only wires ``precheck``; F-01b/c add branches here (candidate-generation, validation,
-    baseline-parse) without a new actor or a scheduler change.
+    Reads the durable ``kind`` discriminator and routes to the matching worker:
+    ``precheck`` (F-01a), ``candidate_generation`` / ``validation`` (F-01b). New kinds
+    add a branch here — never a new actor or a scheduler change.
     """
     job = await session.get(Job, job_id)
     if job is None:
@@ -479,13 +874,20 @@ async def run_create_package_job(session: AsyncSession, job_id: str) -> dict[str
     kind = str((job.payload or {}).get("kind"))
     if kind == _PRECHECK_KIND:
         return await run_precheck_job(session, job)
+    if kind == _CANDIDATE_KIND:
+        return await run_candidate_generation_job(session, job)
+    if kind == _VALIDATION_KIND:
+        return await run_validation_job(session, job)
     raise ValueError(f"Unsupported create-package job kind '{kind}' for job '{job_id}'.")
 
 
 __all__ = [
     "PrecheckComputation",
     "compute_precheck",
+    "generate_and_store_candidate",
     "registry_fingerprint",
+    "run_candidate_generation_job",
     "run_create_package_job",
     "run_precheck_job",
+    "run_validation_job",
 ]

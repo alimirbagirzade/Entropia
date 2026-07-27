@@ -87,6 +87,7 @@ const REQUEST_DETAIL = {
   precheck_fresh: true,
   package_root_id: null,
   draft_revision_id: null,
+  candidate_hash: null,
   can_generate_candidate: true,
   current_validation_run: null,
   validation_fresh: false,
@@ -132,11 +133,14 @@ const PRECHECK_RESULT = {
   job_id: "job_1",
 };
 
+// F-01b admission envelope: the candidate computes in the durable worker, so the POST
+// returns candidate_generating with NO hash — the real hash lands on the projection.
 const CANDIDATE_RESULT = {
   request_id: "req_1",
-  state: "candidate_ready",
-  candidate_hash: "sha256:cand",
+  state: "candidate_generating",
+  candidate_hash: "",
   job_id: "job_2",
+  request_version: 3,
 };
 
 const DRAFT_RESULT = {
@@ -146,14 +150,17 @@ const DRAFT_RESULT = {
   state: "draft_created",
 };
 
+// F-01b admission envelope: the run row is appended QUEUED and the verdict is written by
+// the durable worker, so the POST carries no checks and no terminal status.
 const VALIDATION_RESULT = {
   request_id: "req_1",
   validation_run_id: "vr_1",
   attempt_no: 1,
-  status: "passed",
-  state: "eligible_for_approval",
-  checks: [{ name: "output_structure", passed: true }],
+  status: "queued",
+  state: "validation_running",
+  checks: [],
   job_id: "job_3",
+  request_version: 3,
 };
 
 const REVISION_RESULT = {
@@ -526,30 +533,66 @@ describe("Create Package page", () => {
     expect(await screen.findByRole("button", { name: "C.D.P" })).toBeDisabled();
   });
 
-  it("passes the accepted candidate hash as the draft staleness token", async () => {
-    let generated = false;
+  it("admits a durable generation job instead of chaining a draft", async () => {
+    // F-01b phase 1: the POST only ADMITS the background job. The response carries no
+    // candidate, so the UI must not chain Create-Draft off a candidate that does not
+    // exist yet — it shows the durable-job notice and waits for the projection.
+    let admitted = false;
     const fetchMock = stubApi({
       "POST /create-package/requests/req_1/generate-candidate": () => {
-        generated = true;
+        admitted = true;
         return CANDIDATE_RESULT;
       },
       "POST /create-package/requests/req_1/draft": DRAFT_RESULT,
       ...BASE_ROUTES,
-      // The refetched projection reaches candidate_ready after generation.
       "GET /create-package/requests/req_1": () =>
-        generated ? { ...REQUEST_DETAIL, state: "candidate_ready" } : REQUEST_DETAIL,
+        admitted ? { ...REQUEST_DETAIL, state: "candidate_generating" } : REQUEST_DETAIL,
     });
     renderPage();
     await screen.findByText("req_1");
     fireEvent.click(screen.getByRole("button", { name: /req_1/ }));
 
-    // C.D.P chains generate-candidate → create-draft in one action; the accepted
-    // candidate_hash from generate is passed as the draft's staleness token.
+    const cdpBtn = await screen.findByRole("button", { name: "C.D.P" });
+    await waitFor(() => expect(cdpBtn).toBeEnabled());
+    fireEvent.click(cdpBtn);
+
+    expect(await screen.findByText(/Generating the candidate in the background/)).toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.find(
+        ([url, init]) => String(url).endsWith("/draft") && init?.method === "POST",
+      ),
+    ).toBeUndefined();
+    // A second click cannot double-submit while the durable job runs.
+    expect(await screen.findByRole("button", { name: "Generating candidate…" })).toBeDisabled();
+  });
+
+  it("drafts against the candidate hash the durable worker pinned", async () => {
+    // F-01b phase 2: the worker landed candidate_ready on the projection, so the draft's
+    // staleness token is the hash the WORKER pinned — never one the client synthesised.
+    const fetchMock = stubApi({
+      "POST /create-package/requests/req_1/draft": DRAFT_RESULT,
+      ...BASE_ROUTES,
+      "GET /create-package/requests/req_1": {
+        ...REQUEST_DETAIL,
+        state: "candidate_ready",
+        candidate_hash: "sha256:cand",
+      },
+    });
+    renderPage();
+    await screen.findByText("req_1");
+    fireEvent.click(screen.getByRole("button", { name: /req_1/ }));
+
     const cdpBtn = await screen.findByRole("button", { name: "C.D.P" });
     await waitFor(() => expect(cdpBtn).toBeEnabled());
     fireEvent.click(cdpBtn);
     expect(await screen.findByText(/Draft created/)).toBeInTheDocument();
 
+    // The candidate already exists — C.D.P must NOT re-admit a generation job.
+    expect(
+      fetchMock.mock.calls.find(
+        ([url, init]) => String(url).endsWith("/generate-candidate") && init?.method === "POST",
+      ),
+    ).toBeUndefined();
     const draftCall = fetchMock.mock.calls.find(
       ([url, init]) => String(url).endsWith("/draft") && init?.method === "POST",
     );
@@ -599,10 +642,18 @@ describe("Create Package page", () => {
   });
 
   it("runs validation with the OCC version header and a fresh Idempotency-Key", async () => {
+    // F-01b: the POST admits a durable run. The OCC token + Idempotency-Key contract is
+    // unchanged; what the UI shows afterwards is the background-running notice keyed to
+    // the queued run + job, never a verdict the server has not produced.
+    let admitted = false;
     const fetchMock = stubApi({
-      "POST /create-package/requests/req_1/validate": VALIDATION_RESULT,
+      "POST /create-package/requests/req_1/validate": () => {
+        admitted = true;
+        return VALIDATION_RESULT;
+      },
       ...BASE_ROUTES,
-      "GET /create-package/requests/req_1": REQUEST_DETAIL_DRAFT,
+      "GET /create-package/requests/req_1": () =>
+        admitted ? { ...REQUEST_DETAIL_DRAFT, state: "validation_running" } : REQUEST_DETAIL_DRAFT,
     });
     renderPage();
     await screen.findByText("req_1");
@@ -611,6 +662,7 @@ describe("Create Package page", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Run Validation Tests" }));
 
     expect(await screen.findByText("vr_1")).toBeInTheDocument();
+    expect(await screen.findByText(/Validation is running in the background/)).toBeInTheDocument();
     const call = fetchMock.mock.calls.find(
       ([url, init]) => String(url).endsWith("/validate") && init?.method === "POST",
     );
@@ -618,6 +670,43 @@ describe("Create Package page", () => {
     const headers = (call?.[1] as RequestInit).headers as Record<string, string>;
     expect(headers["X-Request-Version"]).toBe("2");
     expect(headers["Idempotency-Key"]).toBeTruthy();
+  });
+
+  it("shows the verdict only once the durable validation worker lands it", async () => {
+    // The admission returns queued/validation_running; the PASSED verdict and its checks
+    // come from the projection the worker wrote (F-01b + F-13).
+    let admitted = false;
+    stubApi({
+      "POST /create-package/requests/req_1/validate": () => {
+        admitted = true;
+        return VALIDATION_RESULT;
+      },
+      ...BASE_ROUTES,
+      "GET /create-package/requests/req_1": () =>
+        admitted
+          ? {
+              ...REQUEST_DETAIL_DRAFT,
+              state: "eligible_for_approval",
+              validation_fresh: true,
+              current_validation_run: {
+                validation_run_id: "vr_1",
+                attempt_no: 1,
+                status: "passed",
+                validator_version: "cp-validation-v3",
+                checks: [{ check: "output_structure", status: "passed" }],
+                candidate_hash: "sha256:cand",
+                draft_revision_id: "rev_1",
+              },
+            }
+          : REQUEST_DETAIL_DRAFT,
+    });
+    renderPage();
+    await screen.findByText("req_1");
+    fireEvent.click(screen.getByRole("button", { name: /req_1/ }));
+
+    fireEvent.click(await screen.findByRole("button", { name: "Run Validation Tests" }));
+
+    expect(await screen.findByText(/Validation passed — run/)).toBeInTheDocument();
   });
 
   it("gates Run Validation Tests on a server-truth draft, never a UI guess", async () => {

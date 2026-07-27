@@ -282,6 +282,10 @@ export interface PackageRequestDetail {
   precheck_fresh: boolean;
   package_root_id: string | null;
   draft_revision_id: string | null;
+  // The candidate the durable generation worker pinned (F-01b). The admission POST no
+  // longer returns a hash — it does not exist yet — so this is the staleness token the
+  // Create-Draft step sends. Null until a candidate exists.
+  candidate_hash: string | null;
   can_generate_candidate: boolean;
   // Validation evidence (doc 06 §4.4/§7): the current immutable run + whether it
   // still certifies THIS draft's candidate (false once the candidate regenerates).
@@ -373,11 +377,17 @@ export interface PrecheckActionResult {
   job_id: string;
 }
 
+// Generate Candidate (commands/create_package.py::submit_candidate_generation): an
+// ADMISSION (F-01b). The Pre-Check gate still fails fast with its typed 409, but past
+// it the POST only enqueues the durable job and returns `candidate_generating` with an
+// EMPTY candidate_hash — the real hash lands on the request projection when the worker
+// finishes, so a draft can never be chained against a candidate that does not exist.
 export interface CandidateActionResult {
   request_id: string;
   state: string;
   candidate_hash: string;
   job_id: string;
+  request_version: number;
 }
 
 export interface DraftActionResult {
@@ -396,9 +406,11 @@ export interface ApproveActionResult {
   state: string;
 }
 
-// Run Validation Tests (commands/create_package.py::start_package_validation_run):
-// a deterministic run produces immutable evidence and drives the request to
-// eligible_for_approval (passed) or revision_required (failed).
+// Run Validation Tests (commands/create_package.py::start_package_validation_run): an
+// ADMISSION (F-01b). It appends the immutable run in its `queued` state and enqueues the
+// durable job, returning `validation_running` with EMPTY checks; the seven mandatory
+// checks and the terminal verdict (eligible_for_approval / revision_required) land on
+// the projection when the worker finishes.
 export interface ValidationActionResult {
   request_id: string;
   validation_run_id: string;
@@ -407,6 +419,7 @@ export interface ValidationActionResult {
   state: string;
   checks: Array<Record<string, unknown>>;
   job_id: string;
+  request_version: number;
 }
 
 // Request Revision (commands/create_package.py::request_package_revision): reopen
@@ -618,6 +631,10 @@ const NO_REASONS: PackageActionReasons = {
 // that has simply not flagged can_generate_candidate yet.
 function generateDraftReason(detail: PackageRequestDetail): string | null {
   if (detail.draft_revision_id !== null) return "A draft package already exists for this request.";
+  // F-01b: generation runs in a durable background worker. While it runs the action is
+  // locked — the result arrives on the projection, not from a second click.
+  if (detail.state === "candidate_generating")
+    return "Candidate generation is running in the background — closing this browser does not cancel it.";
   if (detail.can_generate_candidate || detail.state === "candidate_ready") return null;
   if (detail.current_scan === null) return "Pre-Check has not run — resolve dependencies first.";
   if (
@@ -726,9 +743,11 @@ export function packageActionAvailability(
   const mutable = state !== "approved";
   return {
     precheck: PRECHECK_STATES.has(state),
-    // Draft only before one exists, once the server says a candidate can be built.
+    // Draft only before one exists, once the server says a candidate can be built —
+    // and never while the durable generation worker is still running (F-01b).
     generateDraft:
       detail.draft_revision_id === null &&
+      state !== "candidate_generating" &&
       (detail.can_generate_candidate || state === "candidate_ready"),
     // VALIDATION_RUNNING has exactly one inbound edge: draft_created.
     runValidation: state === "draft_created",

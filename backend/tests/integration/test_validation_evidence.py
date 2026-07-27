@@ -56,6 +56,22 @@ async def _count(session, model) -> int:
     return int((await session.execute(select(func.count()).select_from(model))).scalar_one())
 
 
+async def _send(session, actor, request_id: str) -> dict:
+    """Admit candidate generation, then drive the durable worker body (F-01b).
+
+    Returns the worker's completed dict — the same shape the old synchronous command
+    returned, so the downstream assertions stay meaningful.
+    """
+    admitted = await cp_cmd.submit_candidate_generation(session, actor, request_id=request_id)
+    return await cp_jobs.run_create_package_job(session, admitted["job_id"])
+
+
+async def _validate(session, actor, request_id: str) -> dict:
+    """Admit a validation run, then drive the durable worker body (F-01b)."""
+    admitted = await cp_cmd.start_package_validation_run(session, actor, request_id=request_id)
+    return await cp_jobs.run_create_package_job(session, admitted["job_id"])
+
+
 async def _seed_principals(session) -> None:
     for pid in ("user_admin", "user_1"):
         if await session.get(Principal, pid) is None:
@@ -131,7 +147,7 @@ async def _drive_to_draft(session, *, family_id: str) -> str:
     request_id = created["request_id"]
     queued_pre = await cp_cmd.run_precheck(session, OWNER, request_id=request_id)
     await cp_jobs.run_create_package_job(session, queued_pre["job_id"])
-    sent = await cp_cmd.submit_candidate_generation(session, OWNER, request_id=request_id)
+    sent = await _send(session, OWNER, request_id)
     await cp_cmd.create_draft_from_candidate(
         session, OWNER, request_id=request_id, expected_candidate_hash=sent["candidate_hash"]
     )
@@ -158,7 +174,7 @@ async def test_validation_pass_enables_approval(session) -> None:
     request_id = await _drive_to_draft(session, family_id=family_id)
     await session.commit()
 
-    validated = await cp_cmd.start_package_validation_run(session, OWNER, request_id=request_id)
+    validated = await _validate(session, OWNER, request_id)
     await session.commit()
     assert validated["status"] == str(ValidationRunStatus.PASSED)
     assert validated["state"] == str(CreatePackageState.ELIGIBLE_FOR_APPROVAL)
@@ -201,7 +217,7 @@ async def test_validation_pass_makes_published_package_usable(session) -> None:
     assert draft is not None
     assert draft.validation_state == PackageValidationState.PENDING
 
-    await cp_cmd.start_package_validation_run(session, OWNER, request_id=request_id)
+    await _validate(session, OWNER, request_id)
     await session.commit()
 
     # The passing run certifies the exact draft revision it validated.
@@ -236,7 +252,7 @@ async def test_validation_failure_routes_to_revision_and_reopens(session) -> Non
     )
     await session.commit()
 
-    failed = await cp_cmd.start_package_validation_run(session, OWNER, request_id=request_id)
+    failed = await _validate(session, OWNER, request_id)
     await session.commit()
     assert failed["status"] == str(ValidationRunStatus.FAILED)
     assert failed["state"] == str(CreatePackageState.REVISION_REQUIRED)
@@ -253,7 +269,7 @@ async def test_validation_failure_routes_to_revision_and_reopens(session) -> Non
     # A second draft + validation run appends immutable evidence (attempt_no 2).
     await cp_cmd.create_draft_from_candidate(session, OWNER, request_id=request_id)
     await session.commit()
-    await cp_cmd.start_package_validation_run(session, OWNER, request_id=request_id)
+    await _validate(session, OWNER, request_id)
     await session.commit()
     runs = (
         (
@@ -276,7 +292,7 @@ async def test_stale_evidence_blocks_approve(session) -> None:
     request_id = await _drive_to_draft(session, family_id=family_id)
     await session.commit()
 
-    await cp_cmd.start_package_validation_run(session, OWNER, request_id=request_id)
+    await _validate(session, OWNER, request_id)
     await session.commit()
 
     # Simulate the candidate moving on after the run certified the prior hash: the
@@ -291,6 +307,8 @@ async def test_stale_evidence_blocks_approve(session) -> None:
 
 
 async def test_validation_writes_audit_event(session) -> None:
+    """The async plane writes the spec's ``validation_run_started/completed`` PAIR
+    (doc 06 §7): the admission records who asked, the worker records the verdict."""
     from entropia.infrastructure.postgres.models import AuditEvent
 
     await _seed_principals(session)
@@ -300,6 +318,16 @@ async def test_validation_writes_audit_event(session) -> None:
     await session.commit()
 
     before = await _count(session, AuditEvent)
-    await cp_cmd.start_package_validation_run(session, OWNER, request_id=request_id)
+    await _validate(session, OWNER, request_id)
     await session.commit()
-    assert await _count(session, AuditEvent) == before + 1
+    assert await _count(session, AuditEvent) == before + 2
+    kinds = (
+        (
+            await session.execute(
+                select(AuditEvent.event_kind).order_by(AuditEvent.occurred_at.desc()).limit(2)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert set(kinds) == {"validation_run_started", "validation_run_completed"}

@@ -24,6 +24,7 @@ from entropia.application.jobs.data_queue import MARKET_DATA_ANALYSIS
 from entropia.application.queries import instrument as instrument_query
 from entropia.domain.identity import Actor
 from entropia.domain.identity.policy import require_authenticated
+from entropia.domain.importing.source_file import assert_supported_source_file
 from entropia.domain.lifecycle.enums import ApprovalState
 from entropia.domain.market_data import policy as md_policy
 from entropia.domain.market_data.enums import MarketDataType, MarketRevisionState
@@ -65,6 +66,7 @@ _TARGET_KIND = md_repo.ENTITY_TYPE
 # MAX_UPLOAD_BYTES is public (not "_"-prefixed) because the API route bounds its
 # read of the multipart body by this same constant (doc 11 "Validate content/
 # size server-side" — one source of truth for the limit).
+# Order matters only for the rejection message ("CSV/TXT"), not for matching.
 _ALLOWED_UPLOAD_EXTENSIONS = (".csv", ".txt")
 MAX_UPLOAD_BYTES = 200 * 1024 * 1024  # 200 MB
 
@@ -185,7 +187,7 @@ async def start_market_raw_upload(
     dataset returns the prior asset (idempotent regardless of retry) rather
     than writing a duplicate object.
     """
-    _validate_upload_file_type(original_filename)
+    _validate_upload_file_type(original_filename, content)
     _validate_upload_file_size(len(content))
 
     root = await _require_root(session, entity_id)
@@ -707,13 +709,22 @@ def now_utc() -> datetime:
 # --------------------------------------------------------------------------- #
 
 
-def _validate_upload_file_type(original_filename: str | None) -> None:
-    name = (original_filename or "").lower()
-    if name and not name.endswith(_ALLOWED_UPLOAD_EXTENSIONS):
-        raise MarketDataFileTypeNotAllowedError(
-            f"File {original_filename!r} is not a CSV/TXT file.",
-            details=[{"field": "original_filename", "actual": original_filename}],
-        )
+def _validate_upload_file_type(original_filename: str | None, content: bytes) -> None:
+    """Fail-closed CSV/TXT gate (doc 11 §3.1, §7 "validate content/size
+    server-side"), shared with the Trade Log / Trading Signal twins.
+
+    A missing or blank filename is a REJECTION, not a skip — without it the
+    declared type cannot be established at all — and the extension claim is
+    backed by a bounded content sniff, so a binary blob renamed ``dataset.csv``
+    cannot pass even when the command is called directly (agent surface), which
+    never goes through the route-level upload gate. The surface keeps its own
+    documented code (``MARKET_DATA_FILE_TYPE_NOT_ALLOWED``)."""
+    assert_supported_source_file(
+        original_filename,
+        content,
+        error=MarketDataFileTypeNotAllowedError,
+        allowed_extensions=_ALLOWED_UPLOAD_EXTENSIONS,
+    )
 
 
 def _validate_upload_file_size(size_bytes: int) -> None:

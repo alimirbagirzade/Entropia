@@ -15,16 +15,32 @@ from entropia.shared.errors import (
     ValidationError,
 )
 
+_GOOD_CSV = b"timestamp,open_interest\n2024-01-01T00:00:00Z,123456\n"
+
 
 def test_csv_and_txt_filenames_accepted() -> None:
-    rd_cmd._validate_upload_file_type("open-interest.csv")  # no raise
-    rd_cmd._validate_upload_file_type("FUNDING.TXT")  # case-insensitive
-    rd_cmd._validate_upload_file_type(None)  # missing filename never blocks
+    rd_cmd._validate_upload_file_type("open-interest.csv", _GOOD_CSV)  # no raise
+    rd_cmd._validate_upload_file_type("FUNDING.TXT", _GOOD_CSV)  # case-insensitive
+
+
+@pytest.mark.parametrize("filename", [None, "", "   "])
+def test_missing_filename_fails_closed(filename: str | None) -> None:
+    """Regression: the gate used to SKIP entirely when no filename was declared
+    (``if name and not name.endswith(...)``), so any payload was accepted."""
+    with pytest.raises(ResearchDataFileTypeNotAllowedError):
+        rd_cmd._validate_upload_file_type(filename, _GOOD_CSV)
 
 
 def test_unsupported_extension_rejected() -> None:
     with pytest.raises(ResearchDataFileTypeNotAllowedError):
-        rd_cmd._validate_upload_file_type("dataset.xlsx")
+        rd_cmd._validate_upload_file_type("dataset.xlsx", _GOOD_CSV)
+
+
+def test_binary_content_behind_a_csv_name_rejected() -> None:
+    """The extension claim is backed by a content sniff, so a renamed archive
+    cannot pass the command-level gate."""
+    with pytest.raises(ResearchDataFileTypeNotAllowedError):
+        rd_cmd._validate_upload_file_type("dataset.csv", b"PK\x03\x04\x14\x00binary")
 
 
 def test_empty_file_rejected() -> None:

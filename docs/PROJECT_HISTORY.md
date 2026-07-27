@@ -1243,3 +1243,54 @@ branch gerçekten karşılıyor mu?" sorusu tek tek yanıtlandı:
   slice'lar olarak açık.
 
 
+
+## K-07 devamı · Market/Research upload — fail-closed source-file type gate (PR #388)
+
+**Sorun.** K-07'nin Trade Log / Trading Signal'da düzelttiği fail-open dosya-tipi kapısı iki yerde daha
+duruyordu (2026-07-27'de ampirik doğrulandı):
+
+- `application/commands/market_data.py::_validate_upload_file_type`
+- `application/commands/research_data.py::_validate_upload_file_type`
+
+İkisi de `if name and not name.endswith(_ALLOWED_UPLOAD_EXTENSIONS):` deseniydi. `original_filename`
+`None`/boş olduğunda koşul kısa devre yapıyor, sunucu tarafı tip kontrolü **tamamen atlanıyor** ve
+binary dahil her payload kabul ediliyordu. Doğrudan komut çağıranlar (agent yüzeyi) route seviyesindeki
+dosya adı kontrolünden geçmediği için başka hiçbir katman yakalamıyordu.
+`domain/create_package/baseline.py::is_allowed_baseline_file` zaten fail-closed — dokunulmadı.
+
+**Çözüm.** Her iki komut da ortak K-07 kapısına devredildi:
+`domain/importing/source_file.py::assert_supported_source_file(original_filename, content, *, error=..., allowed_extensions=...)`.
+Kapı eksik/boş filename'i doğrudan reddeder ve uzantı iddiasını içerik sniff'i (binary imza / NUL byte /
+UTF-8 decode) ile destekler. Merge sonrası `main`'de **dört** komut yüzeyi de tek kapıyı çağırıyor:
+`trade_log.py` · `trading_signal.py` · `market_data.py` · `research_data.py`.
+
+**Hata kodları surface bazında korundu** — her sayfanın taksonomisi kendi yüzeyi için otoriter:
+
+| Yüzey | Hata sınıfı | Kod | Doc |
+|---|---|---|---|
+| Trade Log | `UnsupportedSourceFileTypeError` | `UNSUPPORTED_SOURCE_FILE_TYPE` | 05 §12.1 |
+| Trading Signal | `FileTypeNotAllowedError` | `FILE_TYPE_NOT_ALLOWED` | 04 §11 |
+| Market Data | `MarketDataFileTypeNotAllowedError` | `MARKET_DATA_FILE_TYPE_NOT_ALLOWED` | 11 |
+| Research Data | `ResearchDataFileTypeNotAllowedError` | `RESEARCH_DATA_FILE_TYPE_NOT_ALLOWED` | 12 |
+
+`_ALLOWED_UPLOAD_EXTENSIONS` sırası `(".csv", ".txt")` bırakıldı ki red mesajı "CSV/TXT" kalsın
+(Trade Log / Signal tarafında "TXT/CSV").
+
+**Testler.** Her yüzey için unit (yeni `(filename, content)` imzası + `test_missing_filename_fails_closed`
+parametrize `None`/`""`/`"   "` + `.csv` adlı zip blob) ve integration
+(`test_upload_file_type_gate_is_fail_closed` — 5 red vakası, kod + `details[0]["field"]` assert'i,
+"hiçbiri object storage'a veya raw-asset evidence tablosuna ulaşmadı", ardından gerçek `.csv`'nin hâlâ
+yüklendiği). Migration YOK; şema, route, OCC ve Idempotency yüzeyi değişmedi.
+
+### Dürüst sınırlar
+
+- Kapı **komut seviyesinde**; route seviyesindeki F-03 multipart gate'i ayrı katman olarak duruyor.
+- İçerik sniff'i heuristiktir — geçerli UTF-8 metin olan ama CSV olmayan bir payload bu kapıdan geçer;
+  asıl parse doğrulaması aşağıdaki ingest/parse adımının işi.
+- Codemap tazelenmedi: yeni endpoint / tablo / sayfa / job yok, yalnızca mevcut komutların iç
+  doğrulaması değişti.
+- **Ortam tuzağı (tekrar yaşamamak için):** yerel integration paketi paylaşılan `entropia_test` DB'sinde
+  her test `drop_all`/`create_all` yapar; paralel worktree oturumları birbirini ezip dalgalı hatalar
+  üretir — `TEST_DATABASE_URL` ile izole DB kullan. `uv run pytest` venv'i temel bağımlılıklara
+  sıfırlayabiliyor (`uv sync --extra dev` gerekir). `tests/acceptance` ve `tests/deterministic` boş
+  dizinler → pytest exit 5 normaldir.

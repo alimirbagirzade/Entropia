@@ -2838,6 +2838,40 @@ madde-madde durum: `docs/PROJECT_HISTORY.md` §"Auth remediation dalgası".
   `entry_blocked` decision-trace event'i hiç üretilmiyordu. Gate `_open()`'da (her entry yolu oradan
   geçer), `_blocked_reason()`'da ise **en sonda** (per-domain sebep daha spesifik ve sözleşmeli).
 
+## QA kalite kapıları landed (PR #389) — coverage + dependency audit + a11y
+
+**Migration YOK · alembic head `0035_portfolio_rules` SABİT · `ENGINE_VERSION` SABİT.**
+Yalnızca CI/tooling yüzeyi; hiçbir route, OCC token, react-query key, hook veya `lib/*.ts`
+veri mantığı değişmedi.
+
+**Sorun (ampirik):** `grep -niE 'cov|a11y|axe|npm audit|pip audit' .github/workflows/*.yml` → **0 hit**.
+CI coverage basıyordu ama kırılamıyordu; frontend'de coverage provider kurulu bile değildi;
+R2-14'ün axe-core spec'i hiçbir job'a bağlı değildi.
+
+**Ne indi:** backend `--cov-fail-under=80` + `[tool.coverage.run|report]` · frontend
+`@vitest/coverage-v8` + `coverage` script'i + `vite.config.ts` `test.coverage.thresholds`
+(80/78/70/68) · `ci.yml`'e `pip-audit` (bloklayıcı) ve `scripts/npm-audit-gate.mjs` ·
+`e2e.yml`'e `a11y` job'ı.
+
+**Yeni reuse anchor'ları:**
+- `scripts/npm-audit-gate.mjs` — `FROZEN_ADVISORIES` (dizin → advisory id + gerekçe),
+  `gateDir()`, `collectFindings()`. Yeni bir npm workspace eklenirse listeye anahtar ekle.
+- `backend/pyproject.toml` `[tool.coverage.report].exclude_lines` — yeni bir "ölçülmemeli"
+  desen çıkarsa buraya.
+- `frontend/vite.config.ts` `test.coverage.thresholds` — temiz bir yeşil koşu gerçek
+  sayıları verdiğinde **yükselt**.
+
+**Kanıt:** backend tam süit %90 (alt küme %0.27 ile `FAIL Required test coverage of 80%`),
+frontend geçici 80/80/80/75 eşiği `ERROR: ... does not meet global threshold` fırlattı,
+kalibre 80/78/70/68 ile eşik hatası kalmadı (84.1/81.68/74.4/71.58); npm kapısı
+un-freeze'de `exit=1`, restore'da `exit=0`; `pip-audit` temiz.
+
+**Honest boundary:** frontend eşikleri **alt sınırdan** kalibre edildi — ölçüm makinesi 6+
+eşzamanlı agent oturumuyla doymuştu (load ~26) ve Testing Library'nin 1000 ms `findBy*`
+sınırı aşılıp izole koşuda geçen testler düştü. Temiz koşuda sayılar daha yüksek çıkar;
+eşikler o zaman yükseltilmeli. `a11y` job'ı ilk kez PR #389'da koşuyor.
+Tam kayıt: `docs/PROJECT_HISTORY.md` §"QA kalite kapıları".
+
 ## Next: **PO imzası + R2 kapanışı** (R3 mühendislik backlog'u F-05 ile kapandı).
 R3 W3 dalgası: F-01a/b/c (durable worker'lar) · F-04+F-09 (PR #381) · **F-05/M-05 (bu slice)**
 landed. Kalan tek büyük açık iş hâlâ **R2'nin product-owner imzası**. Sırada:

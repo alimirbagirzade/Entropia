@@ -33,6 +33,7 @@ htmlcov/
 node_modules/
 frontend/dist/
 frontend/.vite/
+frontend/coverage/
 *-debug.log*
 
 # ---- Local data / artifacts ----

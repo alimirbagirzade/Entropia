@@ -685,6 +685,15 @@ Everything below is what CI runs (`.github/workflows/ci.yml`: **Backend — lint
 type, test** with a PostgreSQL 16 service · **Frontend — lint, typecheck,
 build, test** · **Docker — build images**) — run it locally before pushing.
 
+Several of those steps are **gates that fail the build**, not reports: the
+backend suite enforces `--cov-fail-under=80` (measured: 90%), `npm run coverage`
+enforces the thresholds in `frontend/vite.config.ts`, and dependency advisories
+are checked by `pip-audit` (backend) and `scripts/npm-audit-gate.mjs` (npm). The
+npm gate freezes the advisory ids that only a major upgrade would clear —
+`.github/dependabot.yml` deliberately suppresses frontend majors — and fails on
+any id not on that list. The E2E workflow adds an **A11Y** job that runs the
+axe-core scan against the seeded stack.
+
 **Backend** (from `backend/`):
 
 ```bash

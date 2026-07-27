@@ -99,7 +99,15 @@ const PACKAGE_DETAIL = {
       attempt_no: 1,
       status: "passed",
       detected_calls: ["ta.rsi"],
-      resolved_refs: ["ta.rsi"],
+      // resolved/missing/unsupported are JSONB ROW lists on the wire (dicts),
+      // not bare call names — mirror the real payload shape.
+      resolved_refs: [
+        {
+          call: "ta.rsi",
+          canonical_key: "builtin:ta.rsi",
+          embedded_entity_id: "pkg_ind_1",
+        },
+      ],
       missing_calls: [],
       unsupported_calls: [],
       registry_fingerprint: "fp_1",

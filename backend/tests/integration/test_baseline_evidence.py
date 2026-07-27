@@ -2,10 +2,13 @@
 
 Auto-skips when no PostgreSQL is reachable (tests/integration/conftest.py). Covers:
 upload -> parse happy path; incomplete metadata -> BASELINE_METADATA_INVALID; an
-unparseable CSV -> PARSE_FAILED; a non-CSV -> FILE_TYPE_NOT_ALLOWED; an equivalence-
-claiming request cannot publish without a passed baseline (BASELINE_REQUIRED) but can
-once it has one; a non-claiming request needs no baseline; re-upload is a new immutable
-attempt; upload/validate write audit events.
+unparseable CSV -> a DURABLE failed attempt; a non-CSV -> FILE_TYPE_NOT_ALLOWED; an
+equivalence-claiming request cannot publish without a passed baseline (BASELINE_REQUIRED)
+but can once it has one; a non-claiming request needs no baseline; re-upload is a new
+immutable attempt; upload/validate write audit events.
+
+F-01c: the parse is a durable background job, so every parse here goes through
+``_parse_baseline`` — admission (``parsing``, no evidence) then the real worker body.
 """
 
 from __future__ import annotations
@@ -18,6 +21,7 @@ from sqlalchemy import func, select
 
 from entropia.application.commands import create_package as cp_cmd
 from entropia.application.jobs import create_package as cp_jobs
+from entropia.application.queries import create_package as cp_query
 from entropia.domain.create_package.enums import (
     BaselineParseStatus,
     CreationMode,
@@ -27,13 +31,14 @@ from entropia.domain.esp.enums import ResolverTrustState, RuntimeAdapter
 from entropia.domain.identity import Actor
 from entropia.domain.lifecycle.enums import (
     ApprovalState,
+    JobStatus,
     PackageKind,
     PrincipalType,
     Role,
     VisibilityScope,
 )
 from entropia.domain.package.enums import PackageValidationState
-from entropia.infrastructure.postgres.models import BaselineAsset, Principal
+from entropia.infrastructure.postgres.models import BaselineAsset, Job, Principal
 from entropia.infrastructure.postgres.repositories import create_package as cp_repo
 from entropia.infrastructure.postgres.repositories import esp as esp_repo
 from entropia.infrastructure.postgres.repositories import packages as pkg_repo
@@ -108,6 +113,16 @@ async def _validate(session, actor, request_id: str) -> dict:
     """Admit a validation run, then drive the durable worker body (F-01b)."""
     admitted = await cp_cmd.start_package_validation_run(session, actor, request_id=request_id)
     return await cp_jobs.run_create_package_job(session, admitted["job_id"])
+
+
+async def _parse_baseline(session, actor, request_id: str) -> tuple[dict, dict]:
+    """Admit the baseline parse, then drive the durable worker body (F-01c).
+
+    Returns ``(admission, worker_result)``: the admission carries no parse evidence (the
+    CSV has not been read yet) and the worker result carries the terminal verdict.
+    """
+    admitted = await cp_cmd.start_baseline_parse(session, actor, request_id=request_id)
+    return admitted, await cp_jobs.run_create_package_job(session, admitted["job_id"])
 
 
 async def _seed_principals(session) -> None:
@@ -218,7 +233,12 @@ async def test_upload_and_parse_happy_path(session, fake_object_store) -> None:
     assert uploaded["parse_status"] == str(BaselineParseStatus.UPLOADED)
     assert uploaded["attempt_no"] == 1
 
-    parsed = await cp_cmd.start_baseline_parse(session, OWNER, request_id=request_id)
+    # F-01c: the admission returns `parsing` with NO evidence — the CSV has not been read
+    # yet, so a client can never render a parser version or a row count that does not exist.
+    admitted, parsed = await _parse_baseline(session, OWNER, request_id)
+    assert admitted["parse_status"] == str(BaselineParseStatus.PARSING)
+    assert admitted["parser_version"] == ""
+    assert admitted["parse_report"] == {}
     await session.commit()
     assert parsed["parse_status"] == str(BaselineParseStatus.PASSED)
     assert parsed["parse_report"]["row_count"] == 2
@@ -229,6 +249,8 @@ async def test_upload_and_parse_happy_path(session, fake_object_store) -> None:
     assert asset is not None
     assert asset.parse_status == BaselineParseStatus.PASSED
     assert asset.parsed_at is not None
+    # The durable job the admission enqueued is the one that produced the verdict (CR-09).
+    assert asset.parse_job_id == admitted["job_id"]
 
 
 async def test_incomplete_metadata_is_rejected(session, fake_object_store) -> None:
@@ -253,7 +275,13 @@ async def test_incomplete_metadata_is_rejected(session, fake_object_store) -> No
     assert asset.parse_status == BaselineParseStatus.UPLOADED
 
 
-async def test_unparseable_csv_is_rejected(session, fake_object_store) -> None:
+async def test_unparseable_csv_is_a_durable_failed_attempt(session, fake_object_store) -> None:
+    """F-01c: an unparseable CSV is a DURABLE failed asset, not a raised error.
+
+    The parse runs in the worker, so there is no request left to fail: the head asset lands
+    ``failed`` carrying the PARSE_FAILED detail, the job is FAILED_FINAL, and the
+    equivalence gate still refuses to publish (baseline_ready stays false).
+    """
     request_id = await _seed_request_at_draft(session)
     await cp_cmd.upload_baseline_asset(
         session,
@@ -265,8 +293,26 @@ async def test_unparseable_csv_is_rejected(session, fake_object_store) -> None:
     )
     await session.commit()
 
-    with pytest.raises(BaselineParseFailed):
-        await cp_cmd.start_baseline_parse(session, OWNER, request_id=request_id)
+    admitted, failed = await _parse_baseline(session, OWNER, request_id)
+    await session.commit()
+    assert failed["parse_status"] == str(BaselineParseStatus.FAILED)
+    assert failed["error"]["code"] == BaselineParseFailed.code
+
+    detail = await cp_repo.get_request_detail(session, request_id)
+    asset = await cp_repo.get_current_baseline_asset(session, detail)
+    assert asset is not None
+    assert asset.parse_status == BaselineParseStatus.FAILED
+    assert asset.parse_report["code"] == BaselineParseFailed.code
+    assert asset.parse_report["is_parseable"] is False
+    # The stored upload is untouched evidence — a corrected re-upload is the next step.
+    assert asset.object_key != ""
+
+    job = await session.get(Job, admitted["job_id"])
+    assert job is not None
+    assert job.status == JobStatus.FAILED_FINAL
+
+    projection = await cp_query.get_package_request(session, OWNER, request_id=request_id)
+    assert projection["baseline_ready"] is False
 
 
 async def test_non_csv_upload_is_rejected(session, fake_object_store) -> None:
@@ -322,7 +368,7 @@ async def test_equivalence_claim_with_passed_baseline_allows_approve(
         original_filename="baseline.csv",
     )
     await session.commit()
-    await cp_cmd.start_baseline_parse(session, OWNER, request_id=request_id)
+    await _parse_baseline(session, OWNER, request_id)
     await session.commit()
     await _validate(session, OWNER, request_id)
     await session.commit()
@@ -403,14 +449,18 @@ async def test_upload_and_parse_write_audit_events(session, fake_object_store) -
     await session.commit()
     assert await _count(session, AuditEvent) == before + 1  # baseline_uploaded
 
-    await cp_cmd.start_baseline_parse(session, OWNER, request_id=request_id)
+    # F-01c: the admission records nothing; the worker emits the single baseline_validated
+    # audit event once the CSV has actually been read.
+    admitted = await cp_cmd.start_baseline_parse(session, OWNER, request_id=request_id)
+    await session.commit()
+    assert await _count(session, AuditEvent) == before + 1
+
+    await cp_jobs.run_create_package_job(session, admitted["job_id"])
     await session.commit()
     assert await _count(session, AuditEvent) == before + 2  # + baseline_validated
 
 
 async def test_uploaded_baseline_appears_in_request_projection(session, fake_object_store) -> None:
-    from entropia.application.queries import create_package as cp_query
-
     request_id = await _seed_request_at_draft(session)
     await cp_cmd.upload_baseline_asset(
         session,
@@ -421,7 +471,7 @@ async def test_uploaded_baseline_appears_in_request_projection(session, fake_obj
         original_filename="baseline.csv",
     )
     await session.commit()
-    await cp_cmd.start_baseline_parse(session, OWNER, request_id=request_id)
+    await _parse_baseline(session, OWNER, request_id)
     await session.commit()
 
     projection = await cp_query.get_package_request(session, OWNER, request_id=request_id)
@@ -432,8 +482,6 @@ async def test_uploaded_baseline_appears_in_request_projection(session, fake_obj
 
 
 async def test_baseline_asset_detail_query(session, fake_object_store) -> None:
-    from entropia.application.queries import create_package as cp_query
-
     request_id = await _seed_request_at_draft(session)
     uploaded: dict[str, Any] = await cp_cmd.upload_baseline_asset(
         session,

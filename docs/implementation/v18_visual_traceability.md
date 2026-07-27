@@ -96,7 +96,7 @@ F-03 (multi-item unified-clock portfolio) · P-13 / F-06 (ResultDetail charts + 
 | **P-09** Market Data registry columns (Source/Coverage/Resolution) | doc | W2 | Not started |
 | **P-10** Research Data registry-first hierarchy | doc | W2 | Not started |
 | **P-14** Panel Logs backtest-log primary view | doc | W2 | Not started |
-| **F-01** synchronous `_enqueue_stub_job` → real worker lifecycle | ✔ `create_package.py:1248` | W3 | Not started |
+| **F-01** synchronous `_enqueue_stub_job` → real worker lifecycle | ✔ `jobs/create_package.py` (4 kinds) | W3 | **DONE** (F-01a/b/c: Pre-Check · candidate · validation · baseline-parse all admissions + durable workers; `_enqueue_stub_job`/`_enqueue_completed_job` deleted; acceptance in `test_create_package_{precheck,candidate_validation,baseline}_worker.py`) |
 | **F-04** breakout-proxy contradictory paths | doc | W3 | Not started |
 | **F-05 / M-05** capability matrix (UI ↔ engine parity) | doc | W3 | Not started |
 | **F-07** residual raw-id presentation sweep | overlaps P-11/12/16 | W3 | Not started |

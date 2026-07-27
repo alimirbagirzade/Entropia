@@ -2,9 +2,27 @@ import { describe, expect, it } from "vitest";
 
 import {
   approvalBlockReason,
+  baselineParseRunning,
   packageActionAvailability,
+  type BaselineSummary,
   type PackageRequestDetail,
 } from "@/lib/createPackage";
+
+// A head baseline summary as the request projection carries it — `parse_status` is the
+// only axis these gate tests vary (F-01c).
+function baselineAt(parse_status: string): BaselineSummary {
+  return {
+    baseline_asset_id: "ba_1",
+    attempt_no: 1,
+    parse_status,
+    content_digest: "sha256:csv",
+    size_bytes: 42,
+    original_filename: "baseline.csv",
+    baseline_metadata: {},
+    parse_report: null,
+    parser_version: null,
+  };
+}
 
 // F-12: the lifecycle-action availability is the single source of truth the UI
 // gates on. These pure tests pin it directly to the backend request state machine
@@ -167,6 +185,28 @@ describe("packageActionAvailability", () => {
     );
     expect(a.uploadBaseline).toBe(false);
     expect(a.parseBaseline).toBe(false);
+  });
+
+  it("locks the parse while the durable worker owns it (F-01c)", () => {
+    const inFlight = detail({
+      state: "draft_created",
+      draft_revision_id: "rev_1",
+      current_baseline: baselineAt("parsing"),
+    });
+    expect(baselineParseRunning(inFlight)).toBe(true);
+    const locked = packageActionAvailability(inFlight);
+    expect(locked.parseBaseline).toBe(false);
+    expect(locked.reasons.parseBaseline).toMatch(/running in the background/i);
+
+    // A terminal verdict releases the control (re-parsing a corrected upload is legal).
+    const parsed = detail({
+      state: "draft_created",
+      draft_revision_id: "rev_1",
+      current_baseline: baselineAt("passed"),
+    });
+    expect(baselineParseRunning(parsed)).toBe(false);
+    expect(packageActionAvailability(parsed).parseBaseline).toBe(true);
+    expect(packageActionAvailability(parsed).reasons.parseBaseline).toBeNull();
   });
 
   it("guides the next step so a draft never dead-ends before validation", () => {

@@ -10,13 +10,15 @@ for Create Draft Package and the publish head; the ESP resolver registry from 2c
 (``esp_query.resolve_embedded_dependency``) for Pre-Check dependency resolution;
 the durable job row (``enqueue_job``) as the source of truth (CR-09).
 
-Async plane (F-01a + F-01b): Pre-Check, candidate generation and Validation Tests are
-ADMISSIONS here — each enqueues a durable QUEUED job and returns immediately; the
-compute, the durable evidence and the terminal state advance happen in the
-``default``-queue worker (``application/jobs/create_package.py``), so a browser close /
-logout never cancels the work and the UI never shows a result before it exists
-(Finding F-01). Baseline parse stays in-transaction (a bounded read of an already-
-uploaded CSV), and the revision loop regenerates its deterministic candidate inline.
+Async plane (F-01a + F-01b + F-01c): ALL FOUR advertised-async operations — Pre-Check,
+candidate generation, Validation Tests and baseline parse — are ADMISSIONS here: each
+enqueues a durable QUEUED job and returns immediately; the compute, the durable evidence
+and the terminal outcome happen in the ``default``-queue worker
+(``application/jobs/create_package.py``), so a browser close / logout never cancels the
+work and the UI never shows a result before it exists (Finding F-01 closed). No command
+in this module completes advertised-async work inside its own transaction. The revision
+loop regenerates its deterministic candidate inline — a synchronous action by contract
+(doc 06 §9), never advertised as background work.
 
 V1 boundaries (Future-Dev): the candidate generator is deterministic, not an LLM, and
 the Pre-Check "parser" reads the request's explicitly declared canonical TA keys (a real
@@ -25,7 +27,6 @@ PineScript parser replaces it later) and resolves each against the trusted ESP r
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -52,7 +53,6 @@ from entropia.domain.create_package import (
     missing_baseline_metadata_fields,
     next_request_state,
     normalize_request,
-    parse_baseline_csv,
     resolve_equivalence_claim,
     source_hash,
 )
@@ -62,7 +62,6 @@ from entropia.domain.identity import Actor
 from entropia.domain.lifecycle.enums import (
     ApprovalState,
     DeletionState,
-    JobStatus,
     PackageKind,
     VisibilityScope,
 )
@@ -84,7 +83,6 @@ from entropia.shared.concurrency import check_head_revision
 from entropia.shared.errors import (
     BaselineAssetNotFound,
     BaselineMetadataInvalid,
-    BaselineParseFailed,
     BaselineRequired,
     CandidateNotReady,
     CandidateStale,
@@ -897,16 +895,23 @@ async def start_baseline_parse(
     expected_request_version: int | None = None,
     idempotency_key: str | None = None,
 ) -> dict[str, Any]:
-    """StartBaselineParse: validate the head baseline's metadata + CSV (doc 06 §8.3).
+    """StartBaselineParse: ADMIT the head baseline's parse (doc 06 §8.3; Finding F-01).
 
     Gate order (a file upload alone is not proof of equivalence, doc 06 §4.4):
-    BASELINE_ASSET_NOT_FOUND if there is no head baseline; BASELINE_METADATA_INVALID
-    if the submitted metadata is incomplete; PARSE_FAILED if the stored CSV does not
-    parse. On success the head baseline transitions ``uploaded -> passed`` with the
-    deterministic parse report, and a durable job records the work (CR-09). A failed
-    parse raises (the stored asset stays as upload evidence) and the user uploads a
-    corrected baseline (doc 06 §9). The concurrency + status write live INSIDE the
-    idempotent body.
+    BASELINE_ASSET_NOT_FOUND if there is no head baseline; BASELINE_METADATA_INVALID if
+    the submitted metadata is incomplete. Both are pure checks over rows this transaction
+    already holds, so they stay here and keep their typed fast-fail responses.
+
+    Reading the stored CSV is object-storage I/O, so it belongs to the worker: this
+    command enqueues a DURABLE ``baseline_parse`` job, flips the head asset to
+    ``parsing`` and returns immediately (F-01c). The deterministic parse report and the
+    terminal ``passed`` / ``failed`` status are written by
+    ``jobs.create_package.run_baseline_parse_job`` — closing the browser never cancels
+    the parse, and PARSE_FAILED is now a DURABLE failed asset (the stored upload stays as
+    evidence and the user uploads a corrected baseline, doc 06 §9) instead of an error
+    that leaves no record. The OCC guard + the status write live INSIDE the idempotent
+    body; the row_version is bumped at admission so a concurrent re-submit with a stale
+    token is rejected.
     """
     root, detail = await _require_request(session, actor, request_id)
 
@@ -923,38 +928,33 @@ async def start_baseline_parse(
                 "The baseline metadata is missing required fields.",
                 details=[{"field": field, "issue": "required"} for field in missing],
             )
-        report = parse_baseline_csv(datasets.get_raw_bytes(asset.object_key))
-        if not report.is_parseable:
-            raise BaselineParseFailed(report.detail)
 
-        job = await _enqueue_completed_job(
-            session, actor, queue=_WORKER_QUEUE, kind="baseline_parse", request_id=root.entity_id
-        )
-        asset.parse_status = BaselineParseStatus.PASSED
-        asset.parse_report = report.as_dict()
-        asset.parser_version = report.parser_version
-        asset.parse_job_id = job.job_id
-        asset.parsed_at = datetime.now(UTC)
-        root.row_version += 1
-        _audit_and_outbox(
+        # The exact admitted asset rides the payload: a fresh upload between admission
+        # and delivery makes a NEW head attempt, and the worker's superseded guard must
+        # be able to tell that this delivery no longer owns the head.
+        job = _enqueue_create_package_job(
             session,
             actor,
-            event_kind="baseline_validated",
-            target_kind=_REQUEST_TARGET_KIND,
-            entity_id=root.entity_id,
-            revision_id=asset.baseline_asset_id,
-            previous_state=str(BaselineParseStatus.UPLOADED),
-            new_state=str(asset.parse_status),
-            action="baseline_validated",
+            kind="baseline_parse",
+            request_id=root.entity_id,
+            payload_extra={"baseline_asset_id": asset.baseline_asset_id},
         )
+        asset.parse_status = BaselineParseStatus.PARSING
+        asset.parse_job_id = job.job_id
+        root.row_version += 1
         return {
             "request_id": root.entity_id,
             "baseline_asset_id": asset.baseline_asset_id,
             "attempt_no": asset.attempt_no,
             "parse_status": str(asset.parse_status),
-            "parser_version": report.parser_version,
-            "parse_report": asset.parse_report,
+            # No parse evidence exists yet. The empty placeholders keep the response
+            # assignable to the client's BaselineParseResult contract while making it
+            # impossible to render a parser version or a row count the worker has not
+            # produced (the UI reads the projection for the real verdict).
+            "parser_version": "",
+            "parse_report": {},
             "job_id": job.job_id,
+            "request_version": root.row_version,
         }
 
     return await run_idempotent(
@@ -1102,12 +1102,13 @@ def _enqueue_create_package_job(
     payload_extra: dict[str, Any] | None = None,
 ) -> Job:
     """Insert a durable QUEUED Create-Package job (CR-09 source of truth) for the real
-    ``default``-queue worker (F-01a/F-01b).
+    ``default``-queue worker (F-01a/F-01b/F-01c).
 
-    The ``kind`` discriminator is what ``jobs.create_package.run_create_package_job``
-    routes on. Does not commit or dispatch — the route dispatches the actor after the
-    admission tx commits (mirrors the other worker routes), and the job is NEVER marked
-    succeeded here: the compute and its durable outcome belong to the worker.
+    The ONE admission path for every advertised-async Create-Package operation. The
+    ``kind`` discriminator is what ``jobs.create_package.run_create_package_job`` routes
+    on. Does not commit or dispatch — the route dispatches the actor after the admission
+    tx commits (mirrors the other worker routes), and the job is NEVER marked succeeded
+    here: the compute and its durable outcome belong to the worker.
     """
     from entropia.infrastructure.queues.enqueue import enqueue_job
 
@@ -1118,28 +1119,6 @@ def _enqueue_create_package_job(
         actor_principal_id=actor.principal_id,
         correlation_id=actor.correlation_id or None,
     )
-
-
-async def _enqueue_completed_job(
-    session: AsyncSession, actor: Actor, *, queue: str, kind: str, request_id: str
-) -> Job:
-    """Insert a durable job row (CR-09 source of truth) and mark it succeeded.
-
-    Used by the baseline parse alone: the parse is a bounded read of an already-uploaded
-    CSV that completes inside the request transaction, so the durable row records work
-    that is genuinely done — it is not a placeholder for an absent worker.
-    """
-    from entropia.infrastructure.queues.enqueue import enqueue_job
-
-    job = enqueue_job(
-        session,
-        queue=queue,
-        payload={"kind": kind, "request_id": request_id},
-        actor_principal_id=actor.principal_id,
-        correlation_id=actor.correlation_id or None,
-    )
-    job.status = JobStatus.SUCCEEDED
-    return job
 
 
 __all__ = [

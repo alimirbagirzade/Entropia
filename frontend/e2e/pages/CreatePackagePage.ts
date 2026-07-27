@@ -137,11 +137,17 @@ export class CreatePackagePage {
     });
   }
 
+  // F-01c: the click ADMITS a durable job (the head asset flips to `parsing` and the
+  // button locks); the stored CSV is read in the worker and the PASSED verdict reaches
+  // the UI through the projection refetch. So this waits on a real background compute,
+  // and the assertion can only succeed once the parse genuinely happened.
   async runBaselineParseExpectPassed(): Promise<void> {
     const parse = this.page.getByRole("button", { name: "Run baseline parse" });
     await expect(parse).toBeEnabled({ timeout: 15_000 });
     await parse.click();
-    await expect(this.page.getByText(/Baseline parse passed/)).toBeVisible({ timeout: 20_000 });
+    await expect(this.page.getByText(/Baseline parse passed — parser/)).toBeVisible({
+      timeout: 30_000,
+    });
   }
 
   // F-01b: the click ADMITS a durable run (the row is appended queued); the seven

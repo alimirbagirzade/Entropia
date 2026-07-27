@@ -17,6 +17,7 @@ import {
   SUPPORTED_TARGET_RUNTIME,
   TARGET_RUNTIME_LABELS,
   asRecordArray,
+  baselineParseRunning,
   baselineParseTone,
   buildBaselineMetadata,
   createPackageEnumLabel,
@@ -39,6 +40,7 @@ import {
   useUploadBaseline,
   validationRunTone,
   type BaselineMetadataFields,
+  type BaselineSummary,
   type CreatePackageKind,
   type CreationMode,
   type LinkedIndicator,
@@ -1013,6 +1015,13 @@ function BaselineSection({ detail }: { detail: PackageRequestDetail }) {
   const baseline = detail.current_baseline;
   const anyPending = upload.isPending || parse.isPending;
   const actions = packageActionAvailability(detail);
+  // F-01c: in-flight comes from SERVER-authoritative sources only — the mutation being
+  // in flight, the projection's own `parsing` status (so a reload or a second tab shows
+  // the same state), and the admission's `parsing` verdict over a head asset the
+  // projection still reports as `uploaded`, covering the gap before the refetch lands.
+  const admissionParsing =
+    parse.data?.parse_status === "parsing" && baseline?.parse_status === "uploaded";
+  const parseRunning = parse.isPending || baselineParseRunning(detail) || admissionParsing;
 
   function setField(key: keyof BaselineMetadataFields, value: string) {
     setFields((prev) => ({ ...prev, [key]: value }));
@@ -1199,7 +1208,7 @@ function BaselineSection({ detail }: { detail: PackageRequestDetail }) {
         <button
           type="button"
           className="btn"
-          disabled={!actions.parseBaseline || anyPending}
+          disabled={!actions.parseBaseline || anyPending || parseRunning}
           onClick={() =>
             parse.mutate({
               request_id: detail.request_id,
@@ -1207,7 +1216,7 @@ function BaselineSection({ detail }: { detail: PackageRequestDetail }) {
             })
           }
         >
-          {parse.isPending ? "Parsing…" : "Run baseline parse"}
+          {parseRunning ? "Parsing…" : "Run baseline parse"}
         </button>
       </div>
       <LockReason reason={actions.reasons.parseBaseline} />
@@ -1237,9 +1246,26 @@ function BaselineSection({ detail }: { detail: PackageRequestDetail }) {
           {mutationErrorText(parse.error)}
         </p>
       ) : null}
-      {parse.data ? (
+      {/* F-01c: the admission returns `parsing` and carries NO evidence; the verdict is
+          read from the server projection alone, so the UI can never show a PASSED
+          baseline before the durable worker has actually read the CSV. */}
+      {parseRunning ? (
         <p aria-live="polite" style={liveStyle}>
-          Baseline parse {parse.data.parse_status} — parser {parse.data.parser_version}.
+          {BASELINE_PARSING_LINE}
+          {parse.data ? (
+            <>
+              {" "}
+              (job <code>{parse.data.job_id}</code>)
+            </>
+          ) : null}
+        </p>
+      ) : baseline?.parse_status === "passed" ? (
+        <p aria-live="polite" style={liveStyle}>
+          Baseline parse passed — parser {baseline.parser_version ?? "—"}.
+        </p>
+      ) : baseline?.parse_status === "failed" ? (
+        <p role="alert" style={alertStyle}>
+          {BASELINE_FAILED_LINE} {baselineFailureDetail(baseline)}
         </p>
       ) : null}
     </>
@@ -1591,3 +1617,20 @@ const CANDIDATE_FAILED_LINE =
 const VALIDATION_RUNNING_LINE =
   "Validation is running in the background. The verdict will appear here when the durable " +
   "job completes — closing this browser does not cancel it.";
+
+// F-01c: the baseline parse is the last Create-Package step to become a durable job, so
+// its notices mirror the three above. A failed parse is a recorded attempt, not an error
+// that vanished — the stored upload stays as evidence and a corrected CSV is the fix.
+const BASELINE_PARSING_LINE =
+  "Parsing the baseline CSV in the background. The result will appear here when the " +
+  "durable job completes — closing this browser does not cancel it.";
+const BASELINE_FAILED_LINE = "Baseline parse failed — upload a corrected CSV export.";
+
+// The worker stores the PARSE_FAILED reason on the immutable attempt's report, so the
+// panel explains the exact failure instead of a generic "it failed".
+function baselineFailureDetail(baseline: BaselineSummary): string {
+  const report = baseline.parse_report;
+  if (report === null) return "";
+  const message = report.message ?? report.detail;
+  return typeof message === "string" ? message : "";
+}

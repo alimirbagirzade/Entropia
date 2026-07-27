@@ -1,15 +1,16 @@
-"""Create-Package worker bodies — Pre-Check, candidate generation, validation
-(docs 06 §5/§7, 07 §8; F-01a + F-01b).
+"""Create-Package worker bodies — Pre-Check, candidate generation, validation, baseline
+parse (docs 06 §5/§7/§8.3, 07 §8; F-01a + F-01b + F-01c).
 
 Runs on the ``default`` queue. The durable ``jobs`` row is the source of truth (CR-09):
 the request that admitted the work has long since returned its ``queued`` admission, so a
 browser close / logout never cancels it (Finding F-01). The single
 ``run_create_package_job`` body reads the durable payload ``kind`` and routes to the
 matching worker: ``precheck`` (F-01a), ``candidate_generation`` and ``validation``
-(F-01b). Baseline parse keeps its in-transaction job row in ``commands.create_package``
-— it is a bounded read of an already-uploaded CSV, not a long compute.
+(F-01b), ``baseline_parse`` (F-01c). With the baseline parse moved here, every
+advertised-async Create-Package operation runs on a real worker — no admission path
+completes its own compute in-transaction.
 
-All three workers share one lifecycle shape:
+All four workers share one lifecycle shape:
 
     load job (redelivery guard: a terminal job replays its durable ``result_ref``) ->
     lock the request root -> superseded guard (the request advanced past the state this
@@ -50,13 +51,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from entropia.application.jobs.package_validation import run_package_validation
 from entropia.application.queries import esp as esp_query
 from entropia.domain.create_package import (
+    BaselineParseStatus,
     CreatePackageState,
     PrecheckScanStatus,
     SourceKind,
     ValidationRunStatus,
     next_request_state,
+    parse_baseline_csv,
     scan_source_calls,
 )
+from entropia.domain.create_package.baseline import BASELINE_PARSER_VERSION
 from entropia.domain.create_package.generator import GeneratedCandidate, generate_candidate
 from entropia.domain.create_package.source_scan import SOURCE_SCANNER_VERSION, is_scannable_key
 from entropia.domain.create_package.validation import (
@@ -69,6 +73,7 @@ from entropia.domain.lifecycle.enums import ActorKind, JobStatus
 from entropia.domain.package.enums import PackageValidationState
 from entropia.domain.revision.hashing import content_hash
 from entropia.infrastructure.postgres.models import (
+    BaselineAsset,
     EntityRegistry,
     Job,
     PackageRequest,
@@ -79,7 +84,9 @@ from entropia.infrastructure.postgres.repositories import audit as audit_repo
 from entropia.infrastructure.postgres.repositories import create_package as cp_repo
 from entropia.infrastructure.postgres.repositories import esp as esp_repo
 from entropia.infrastructure.postgres.repositories import packages as pkg_repo
+from entropia.infrastructure.s3 import datasets
 from entropia.shared.errors import (
+    BaselineParseFailed,
     ResolverAdapterIncompatible,
     ResolverNotResolved,
     ResolverSignatureMismatch,
@@ -90,6 +97,7 @@ _PACKAGE_TARGET_KIND = "package"
 _PRECHECK_KIND = "precheck"
 _CANDIDATE_KIND = "candidate_generation"
 _VALIDATION_KIND = "validation"
+_BASELINE_PARSE_KIND = "baseline_parse"
 # The scanner semantics are the comment/string-aware source lexer (doc 07 §6.2); the
 # version tracks the domain scanner contract (mirrors the former sync command).
 _SCANNER_VERSION = SOURCE_SCANNER_VERSION
@@ -99,6 +107,7 @@ _RESOLVE_ERRORS = (ResolverNotResolved, ResolverSignatureMismatch, ResolverAdapt
 _PRECHECK_WORKER_FAILED = "PRECHECK_WORKER_FAILED"
 _CANDIDATE_WORKER_FAILED = "CANDIDATE_GENERATION_WORKER_FAILED"
 _VALIDATION_WORKER_FAILED = "VALIDATION_WORKER_FAILED"
+_BASELINE_WORKER_FAILED = "BASELINE_PARSE_WORKER_FAILED"
 
 # A redelivered job in a terminal status has already produced its durable outcome;
 # re-running would append a duplicate immutable scan attempt.
@@ -861,12 +870,179 @@ async def run_validation_job(session: AsyncSession, job: Job) -> dict[str, Any]:
     return result
 
 
+# ---------------------------------------------------------------------------
+# Baseline parse (F-01c)
+# ---------------------------------------------------------------------------
+
+
+def _baseline_result(
+    root: EntityRegistry, asset: BaselineAsset, job: Job, *, request_version: int
+) -> dict[str, Any]:
+    return {
+        "request_id": root.entity_id,
+        "baseline_asset_id": asset.baseline_asset_id,
+        "attempt_no": asset.attempt_no,
+        "parse_status": str(asset.parse_status),
+        "parser_version": asset.parser_version or "",
+        "parse_report": asset.parse_report or {},
+        "job_id": job.job_id,
+        "request_version": request_version,
+    }
+
+
+def _emit_baseline_parsed(
+    session: AsyncSession,
+    job: Job,
+    root: EntityRegistry,
+    asset: BaselineAsset,
+    *,
+    action: str,
+) -> None:
+    """The baseline-parse completion event.
+
+    Keeps the audit ``event_kind`` the synchronous path emitted (``baseline_validated``)
+    and distinguishes the outcome through ``action`` — the same shape ``_fail_precheck``
+    uses. The taxonomy is untouched: the outbox event stays ``resource.changed`` on the
+    ``package_request``, so the baseline panel refetches server-authoritative state.
+    """
+    _emit_worker_event(
+        session,
+        job,
+        event_kind="baseline_validated",
+        target_kind=_REQUEST_TARGET_KIND,
+        entity_id=root.entity_id,
+        revision_id=asset.baseline_asset_id,
+        previous_state=str(BaselineParseStatus.PARSING),
+        new_state=str(asset.parse_status),
+        action=action,
+    )
+
+
+def _fail_baseline_parse(
+    session: AsyncSession,
+    job: Job,
+    root: EntityRegistry,
+    asset: BaselineAsset,
+    *,
+    code: str,
+    message: str,
+    report: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Record a durable terminal baseline-parse failure (Finding F-01).
+
+    Both failure modes land here: an unparseable CSV (the domain's PARSE_FAILED verdict,
+    which the synchronous command used to raise and record nothing) and a worker crash
+    before a verdict existed. The head asset becomes ``failed`` carrying the error, so
+    ``baseline_ready`` stays false and the equivalence gate still blocks approval; the
+    stored upload is untouched evidence and the user's next step is a corrected upload
+    (doc 06 §9). The job is FAILED_FINAL — never a silent success, never an infinite retry.
+    """
+    error_detail = {"code": code, "message": message}
+    asset.parse_status = BaselineParseStatus.FAILED
+    asset.parse_report = {**(report or {}), **error_detail}
+    asset.parser_version = BASELINE_PARSER_VERSION
+    asset.parsed_at = _now()
+    root.row_version += 1
+    _emit_baseline_parsed(session, job, root, asset, action="baseline_parse_failed")
+    job.status = JobStatus.FAILED_FINAL
+    job.finished_at = _now()
+    job.error = error_detail
+    result = _baseline_result(root, asset, job, request_version=root.row_version)
+    result["error"] = error_detail
+    job.result_ref = result
+    return result
+
+
+async def run_baseline_parse_job(session: AsyncSession, job: Job) -> dict[str, Any]:
+    """Execute the durable baseline-parse job (doc 06 §4.4/§8.3; F-01c).
+
+    The metadata-complete + head-baseline gates already ran at admission and returned
+    their typed errors. What the worker owns is the object-storage read, the deterministic
+    parse report and the terminal ``passed`` / ``failed`` status. Does not commit (the
+    actor scope commits).
+    """
+    payload = job.payload or {}
+    request_id = str(payload.get("request_id"))
+    baseline_asset_id = str(payload.get("baseline_asset_id"))
+    if job.status in _JOB_TERMINAL:
+        return job.result_ref or {
+            "request_id": request_id,
+            "baseline_asset_id": baseline_asset_id,
+            "status": str(job.status),
+            "job_id": job.job_id,
+        }
+
+    root = await cp_repo.get_request_root(session, request_id)
+    detail = await cp_repo.get_request_detail(session, request_id)
+    asset = await cp_repo.get_baseline_asset(session, baseline_asset_id)
+    if root is None or detail is None or asset is None:
+        raise ValueError(f"Baseline asset '{baseline_asset_id}' not found for job '{job.job_id}'.")
+
+    await session.refresh(root, with_for_update=True)
+    await session.refresh(detail)
+    await session.refresh(asset)
+
+    # Superseded guard: only the asset this delivery was admitted for, still the request's
+    # head and still in flight, may be written. A fresh upload appended a NEW attempt (the
+    # head moved) or a prior delivery already landed a terminal status => durable no-op.
+    if (
+        detail.baseline_asset_id != asset.baseline_asset_id
+        or asset.parse_status != BaselineParseStatus.PARSING
+    ):
+        job.status = JobStatus.SUPERSEDED
+        job.finished_at = _now()
+        result = _superseded_ref(job, root, detail)
+        result["baseline_asset_id"] = asset.baseline_asset_id
+        result["parse_status"] = str(asset.parse_status)
+        job.result_ref = result
+        return result
+
+    job.status = JobStatus.RUNNING
+    job.started_at = _now()
+    try:
+        report = parse_baseline_csv(datasets.get_raw_bytes(asset.object_key))
+    except Exception as exc:  # a read/compute failure becomes a durable terminal state
+        return _fail_baseline_parse(
+            session,
+            job,
+            root,
+            asset,
+            code=_BASELINE_WORKER_FAILED,
+            message=str(exc),
+            report=None,
+        )
+
+    if not report.is_parseable:
+        return _fail_baseline_parse(
+            session,
+            job,
+            root,
+            asset,
+            code=BaselineParseFailed.code,
+            message=report.detail,
+            report=report.as_dict(),
+        )
+
+    asset.parse_status = BaselineParseStatus.PASSED
+    asset.parse_report = report.as_dict()
+    asset.parser_version = report.parser_version
+    asset.parsed_at = _now()
+    root.row_version += 1
+    _emit_baseline_parsed(session, job, root, asset, action="baseline_validated")
+    result = _baseline_result(root, asset, job, request_version=root.row_version)
+    job.status = JobStatus.SUCCEEDED
+    job.finished_at = _now()
+    job.result_ref = result
+    return result
+
+
 async def run_create_package_job(session: AsyncSession, job_id: str) -> dict[str, Any]:
     """Durable Create-Package job dispatcher (the ``default``-queue actor body).
 
     Reads the durable ``kind`` discriminator and routes to the matching worker:
-    ``precheck`` (F-01a), ``candidate_generation`` / ``validation`` (F-01b). New kinds
-    add a branch here — never a new actor or a scheduler change.
+    ``precheck`` (F-01a), ``candidate_generation`` / ``validation`` (F-01b),
+    ``baseline_parse`` (F-01c). New kinds add a branch here — never a new actor or a
+    scheduler change.
     """
     job = await session.get(Job, job_id)
     if job is None:
@@ -878,6 +1054,8 @@ async def run_create_package_job(session: AsyncSession, job_id: str) -> dict[str
         return await run_candidate_generation_job(session, job)
     if kind == _VALIDATION_KIND:
         return await run_validation_job(session, job)
+    if kind == _BASELINE_PARSE_KIND:
+        return await run_baseline_parse_job(session, job)
     raise ValueError(f"Unsupported create-package job kind '{kind}' for job '{job_id}'.")
 
 
@@ -886,6 +1064,7 @@ __all__ = [
     "compute_precheck",
     "generate_and_store_candidate",
     "registry_fingerprint",
+    "run_baseline_parse_job",
     "run_candidate_generation_job",
     "run_create_package_job",
     "run_precheck_job",

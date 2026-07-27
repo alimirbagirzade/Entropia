@@ -170,10 +170,15 @@ class BaselineAsset(Base):
     content-addressed object key + digest of one uploaded CSV, the submitted
     ``BaselineMetadata`` and — after StartBaselineParse — the deterministic parse
     report + terminal ``parse_status``. A fresh upload is a new attempt; the object
-    key / digest / metadata of a prior attempt are never mutated. The parse
-    transitions ``uploaded -> passed`` on the current head; a rejected parse raises
-    a typed error (PARSE_FAILED / BASELINE_METADATA_INVALID) and the user uploads a
-    new baseline (doc 06 §9 "Baseline rejected").
+    key / digest / metadata of a prior attempt are never mutated.
+
+    The parse is a durable background job (F-01c): the admission flips the current head
+    ``uploaded -> parsing`` and pins ``parse_job_id``; the worker writes the terminal
+    ``passed`` or ``failed`` status plus the report. An unparseable CSV is therefore a
+    recorded ``failed`` attempt carrying its PARSE_FAILED detail (not a raised error with
+    no evidence), and the user uploads a new baseline (doc 06 §9 "Baseline rejected").
+    An incomplete-metadata submission is still rejected at admission
+    (BASELINE_METADATA_INVALID) and leaves the asset at ``uploaded``.
     """
 
     __tablename__ = "baseline_asset"

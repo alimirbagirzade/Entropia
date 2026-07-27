@@ -6521,6 +6521,7 @@
     },
     "/api/v1/create-package/requests/{request_id}/baseline-parse": {
       "post": {
+        "description": "Admit the head baseline's parse (F-01c). Returns ``parsing`` immediately; the\nstored CSV is read and the terminal passed/failed status written by the durable\n``default``-queue worker, so closing the tab never cancels it.",
         "operationId": "parse_baseline_api_v1_create_package_requests__request_id__baseline_parse_post",
         "parameters": [
           {

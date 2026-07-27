@@ -33,6 +33,7 @@ report exactly which object/field failed.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from enum import StrEnum
 from typing import Any
 
@@ -579,6 +580,45 @@ class PackageRevisionConflict(ConflictError):
 
     code = "PACKAGE_REVISION_CONFLICT"
     message = "This package changed while you were working. Reload the current revision and retry."
+
+
+class PackageDependencyCycle(ConflictError):
+    """A publish was attempted while the pinned dependency graph closes a loop
+    (doc 08 §10 "Dependency", §14 "Dependency cycle": *"Server rejects publish;
+    diagnostic identifies cycle path; UI preserves draft for repair."*).
+
+    The candidate revision is never mutated, so the draft survives for repair. The
+    diagnostic carries the CLOSED root-id path (``["a", "b", "a"]``) rather than a
+    bare rejection, so the offending leg is identifiable without guesswork.
+    """
+
+    code = "PACKAGE_DEPENDENCY_CYCLE"
+    message = "These package dependencies form a cycle. Repair the dependency path and retry."
+    category = ErrorCategory.DEPENDENCY_VALIDATION
+    # Never retryable as-is: the same graph fails identically until an edge is
+    # removed. doc 08 §10 recovery: repair the exact dependency in a new revision
+    # or a derived root, then re-run validation.
+    suggested_action = "repair_dependency_graph"
+    remediation = (
+        "Remove one leg of the cycle in a new revision or a derived root, then re-run "
+        "validation before requesting approval again."
+    )
+    scope_type = "PackageRevision"
+    field_path = "dependency_snapshot"
+
+    def __init__(
+        self,
+        cycle_path: Sequence[str] = (),
+        message: str | None = None,
+        *,
+        scope_id: str | None = None,
+    ) -> None:
+        self.cycle_path: tuple[str, ...] = tuple(cycle_path)
+        super().__init__(
+            message,
+            details=[{"field": "dependency_snapshot", "cycle_path": list(self.cycle_path)}],
+            scope_id=scope_id,
+        )
 
 
 class PackageDeriveInvalid(ValidationError):

@@ -58,6 +58,19 @@ class TimezoneSpec:
             raise ValidationError("Exchange timezone has no resolvable IANA identifier.")
         return ZoneInfo(self.iana)
 
+    @property
+    def resolved_zone(self) -> ZoneInfo | None:
+        """The zone a NAIVE source timestamp is localized in, or ``None`` (K-01).
+
+        The non-raising sibling of :attr:`zone`, for the ingest parse path where an
+        unresolvable declaration is data to report, not a request to reject. ``None``
+        means ``exchange`` mode, which carries no IANA identifier (``__post_init__``
+        forbids one outside ``custom``) — and ``None`` is FAIL-CLOSED: the parse path
+        refuses a naive timestamp rather than assuming UTC (doc 11 §9.1)."""
+        if self.mode == TimezoneMode.UTC:
+            return ZoneInfo("UTC")
+        return ZoneInfo(self.iana) if self.iana else None
+
 
 @dataclass(frozen=True, slots=True)
 class CoverageSlice:

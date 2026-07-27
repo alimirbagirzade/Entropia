@@ -31,8 +31,20 @@ from collections import Counter
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from entropia.domain.lifecycle.enums import ValidationStatus
+
+# ``resolve_timestamp`` lives in Market Data but is a GENERIC cell reader with no
+# market semantics. Research borrows it rather than growing a second parser, so the
+# two ingest paths can never disagree about what a timestamp means (the mirror of
+# ``backtest.funding`` borrowing ``research_data.time_policy``).
+from entropia.domain.market_data.validation_rules import resolve_timestamp
+from entropia.domain.research_data.time_policy import resolve_event_time_column
+
+# K-01: the canonical check id for "a naive event timestamp could not be localized".
+# Shared verbatim with ``shared.errors.ResearchDataTimezoneUnresolved.code``.
+TIMEZONE_UNRESOLVED_CHECK_ID = "RESEARCH_DATA_TIMEZONE_UNRESOLVED"
 
 # Severity ordering for aggregation; the worst finding decides the outcome.
 SEVERITY_RANK: dict[ValidationStatus, int] = {
@@ -297,19 +309,66 @@ def _check_instrument_mapping(
     ]
 
 
+def check_event_time_timezone(
+    columns: list[str], rows: list[dict[str, Any]], *, source_zone: ZoneInfo | None
+) -> list[QualityIssue]:
+    """Every event timestamp must resolve to a UTC instant (K-01, doc 12 §8.4 rule 1).
+
+    Rule 1 wants the source timestamp read IN its source timezone and normalized to
+    UTC. When the declared timezone resolves to no zone (``exchange`` mode) a NAIVE
+    cell cannot be converted at all — and doc 12 §5.2 makes a conversion failure block
+    approval/run, so this is a ``BLOCKING_FAIL``, never a silent UTC reading.
+
+    Returns nothing when the native schema declares no recognizable event-time column
+    (a schema-agnostic payload this convention cannot speak for) or when every cell
+    already carries an offset."""
+    time_col = resolve_event_time_column(columns)
+    if time_col is None:
+        return []
+    unresolved = sum(
+        1
+        for row in rows
+        if resolve_timestamp(row.get(time_col), source_zone=source_zone).timezone_unresolved
+    )
+    if not unresolved:
+        return []
+    return [
+        QualityIssue(
+            severity=ValidationStatus.BLOCKING_FAIL,
+            check_id=TIMEZONE_UNRESOLVED_CHECK_ID,
+            message=(
+                f"Column '{time_col}' carries naive event timestamps that the declared "
+                "source timezone cannot resolve to a UTC instant."
+            ),
+            occurrences=unresolved,
+            remediation=(
+                "Declare a Custom source timezone with a valid IANA identifier "
+                "(e.g. America/New_York), then re-analyze."
+            ),
+            evidence={"column": time_col, "unresolved_rows": unresolved},
+        )
+    ]
+
+
 def evaluate_quality(
     columns: list[str],
     rows: list[dict[str, Any]],
     *,
+    source_zone: ZoneInfo | None,
     linked_market_dataset_revision_id: str | None = None,
     instrument_mapping_ref: str | None = None,
 ) -> QualityReport:
     """Run every semantic check family over parsed native data (doc 12 §10, R9).
 
-    Families: coverage, duplicates, null density, type consistency, numeric ranges
-    and instrument mapping. Returns the ordered findings plus the worst severity, so
-    the caller can record the quality report and gate the lifecycle transition."""
+    Families: event-time timezone resolution, coverage, duplicates, null density, type
+    consistency, numeric ranges and instrument mapping. Returns the ordered findings
+    plus the worst severity, so the caller can record the quality report and gate the
+    lifecycle transition.
+
+    ``source_zone`` is the revision's declared source timezone, keyword-ONLY and
+    REQUIRED — K-01 leaves no UTC default for a caller to inherit silently."""
     issues: list[QualityIssue] = []
+    issues.extend(check_event_time_timezone(columns, rows, source_zone=source_zone))
     issues.extend(_check_coverage(rows))
     issues.extend(_check_duplicates(columns, rows))
     issues.extend(_check_null_density(columns, rows))

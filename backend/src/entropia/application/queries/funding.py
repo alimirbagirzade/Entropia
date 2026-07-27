@@ -19,6 +19,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from entropia.application.jobs.research_data import revision_source_zone
 from entropia.domain.backtest.funding import FundingSchedule, build_funding_schedule
 from entropia.domain.research_data.enums import (
     ResearchCategory,
@@ -103,6 +104,10 @@ async def resolve_funding_schedule(
         columns=columns,
         policy=revision.available_time_policy,
         delay_seconds=revision.available_delay_seconds,
+        # K-01: the pinned revision's DECLARED source timezone, not an implicit UTC.
+        # Rows normalized at ingest already carry an offset and ignore it; a legacy
+        # naive row under an unresolvable zone drops instead of booking a wrong instant.
+        source_zone=revision_source_zone(revision),
     )
 
 

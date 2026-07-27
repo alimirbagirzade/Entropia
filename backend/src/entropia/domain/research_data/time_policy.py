@@ -22,6 +22,37 @@ from entropia.shared.errors import TimePolicyInvalid
 # A defensive upper bound on a declared availability delay (doc 12: "bounded").
 MAX_AVAILABLE_DELAY = timedelta(days=31)
 
+# Native-schema column names that carry a record's EVENT time, most specific first.
+# Research payload keeps its native schema (M5 — it is never coerced to Market Data's
+# canonical OHLCV shape), so the event-time column is resolved by convention rather
+# than declared. Used by the K-01 ingest timezone normalization.
+#
+# A deliberate SUPERSET of ``backtest.funding._TIME_COLUMN_CANDIDATES``: that list
+# stays separate because resolving it is a fail-closed precondition there (an
+# unresolved column raises ``FundingSourceInvalid`` and blocks the run), whereas here
+# an unresolved column simply means "nothing to normalize". Narrowing this list to
+# match funding's would leave a ``date``-keyed research source un-normalized — the
+# exact ambiguous-date case doc 11 §9.1 forbids reading as UTC.
+EVENT_TIME_COLUMN_CANDIDATES = (
+    "event_time",
+    "event_at",
+    "funding_time",
+    "timestamp",
+    "time",
+    "ts",
+    "date",
+)
+
+
+def resolve_event_time_column(columns: list[str]) -> str | None:
+    """The native column carrying event time, matched case-insensitively.
+
+    Returns the column name AS SPELLED in the source (so the caller can index the
+    row dicts), or ``None`` when the native schema declares no recognizable event
+    time — a schema-agnostic payload the timezone normalizer must leave untouched."""
+    lookup = {col.lower(): col for col in columns}
+    return next((lookup[c] for c in EVENT_TIME_COLUMN_CANDIDATES if c in lookup), None)
+
 
 def available_time_is_consistent(event_at: datetime, available_at: datetime) -> bool:
     """Anti-lookahead: a value cannot be available before the event occurred."""

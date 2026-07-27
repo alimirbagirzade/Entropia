@@ -48,8 +48,12 @@ should trace back to it.
    ```bash
    cd backend && uv run ruff check . && uv run ruff format --check . \
      && uv run mypy src && uv run pytest
-   cd frontend && npm run lint && npm run typecheck && npm test && npm run build
+   cd frontend && npm run lint && npm run typecheck && npm run coverage && npm run build
    ```
+
+   `uv run pytest` enforces `--cov-fail-under=80`; `npm run coverage` enforces the
+   thresholds in `frontend/vite.config.ts`. Both are gates, not reports — when one
+   fails, add the missing test rather than lowering the number.
 
    Every new `create_*` command needs an FK insert-order proof; every new
    migration needs an `alembic upgrade head` / `downgrade -1` / `upgrade head`
@@ -60,8 +64,11 @@ should trace back to it.
    messages or PR text.
 6. **Open a PR against `main`.** Include a summary of the change, the
    motivation, and a test plan. Link any relevant spec section or issue.
-7. **CI must be green** (backend lint/type/test, frontend lint/typecheck/
-   test/build, Docker image build) before requesting review.
+7. **CI must be green** (backend lint/type/test + coverage gate + `pip-audit`,
+   frontend lint/typecheck/test + coverage gate/build + npm advisory gate,
+   Docker image build) before requesting review. The E2E workflow additionally
+   runs the axe-core a11y scan; its accepted-deviation list
+   (`ACCEPTED_SERIOUS_RULES`) is a product-owner decision, not a CI convenience.
 
 ## Code conventions
 

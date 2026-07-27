@@ -105,6 +105,98 @@ jobs:
         if: always()
         run: docker compose down -v
 
+  # The axe-core scan (specs/13-a11y-scan.spec.ts) was written as acceptance
+  # evidence and never ran in CI, so an a11y regression could land unnoticed. It
+  # gets its own runner (own Compose project + volumes) because it needs the same
+  # seeded stack as the session job but takes its own ~15 min budget.
+  #
+  # The pass/fail boundary lives in the spec and is NOT restated here: zero
+  # critical, and zero serious outside the spec's frozen ACCEPTED_SERIOUS_RULES.
+  # That list is currently ["color-contrast"] only — the PO's D-8 decision fixed
+  # link-in-text-block and deliberately removed it, so a reappearance must fail.
+  # Widening the list is a product-owner decision (v18_final_acceptance.md §A11Y),
+  # never a CI convenience.
+  a11y:
+    name: A11Y — axe-core scan vs. the seeded stack (R2-14)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build the .env for the Compose stack
+        run: |
+          cp .env.example .env
+          sed -i \
+            -e 's/^ENTROPIA_BOOTSTRAP_ADMIN_EMAIL=.*/ENTROPIA_BOOTSTRAP_ADMIN_EMAIL=e2e_admin@e2e.entropia.test/' \
+            -e "s#^ENTROPIA_SERVICE_TOKEN=.*#ENTROPIA_SERVICE_TOKEN=e2e-only-$(openssl rand -hex 24)#" \
+            .env
+
+      - name: Start the Docker Compose stack
+        run: docker compose up -d --build
+
+      - name: Wait for the API and web app to become ready
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:8000/api/v1/health/ready >/dev/null 2>&1 \
+              && curl -fsS http://localhost:8080 >/dev/null 2>&1; then
+              echo "Stack is ready."
+              exit 0
+            fi
+            echo "Waiting for stack... ($i/60)"
+            sleep 5
+          done
+          echo "Stack did not become ready in time." >&2
+          docker compose ps
+          docker compose logs --tail 200
+          exit 1
+
+      - name: Seed the E2E golden fixture (R2-07) + live ESP registry (R2-12)
+        # Same seed as the session job: the scan walks the 22-page matrix as
+        # Admin, and empty pages would under-report violations.
+        run: docker compose exec -T -e SEED_E2E_GOLDEN=1 -e SEED_ESP_TA=1 -e SEED_RATIONALE=1 api python -m entropia.apps.seed
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/e2e/package-lock.json
+
+      - name: Install E2E dependencies
+        working-directory: frontend/e2e
+        run: npm install
+
+      - name: Install Playwright browsers
+        working-directory: frontend/e2e
+        run: npx playwright install --with-deps chromium
+
+      - name: Run the axe-core a11y scan
+        working-directory: frontend/e2e
+        env:
+          E2E_BASE_URL: http://localhost:8080
+          E2E_ADMIN_EMAIL: e2e_admin@e2e.entropia.test
+        run: npm run a11y
+
+      - name: Dump Compose logs on failure
+        if: failure()
+        run: docker compose logs --tail 500
+
+      - name: Upload the axe report (per-page violations + summary)
+        # Always uploaded: on a pass it is the acceptance-evidence artifact, on a
+        # failure it names the offending nodes.
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: a11y-report
+          path: |
+            frontend/e2e/a11y-report/
+            frontend/e2e/playwright-report/
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Tear down the stack
+        if: always()
+        run: docker compose down -v
+
   # audit TEST-09 / §9.6 — a SEPARATE, explicit dev-auth stack (its own runner, so
   # its own Compose project + volumes, never the session job's). The session job
   # above proves the normal session profile; this one proves the dev profile

@@ -84,11 +84,43 @@ module = ["dramatiq.*", "boto3.*", "botocore.*", "pyarrow.*"]
 ignore_missing_imports = true
 
 # ----------------------------------------------------------------------------
+[tool.coverage.run]
+# The three process entry points are exec'd as separate OS processes (dramatiq
+# worker, scheduler, agent coordinator); the suite drives their actor and command
+# functions directly, so the `python -m` bootstrap lines are dead weight in the
+# measurement rather than untested behaviour.
+omit = ["*/__main__.py"]
+
+[tool.coverage.report]
+# Same omit at report time so a bare `coverage report` / `coverage html` outside
+# pytest shows the same number the gate below enforces.
+omit = ["*/__main__.py"]
+precision = 1
+exclude_lines = [
+  "pragma: no cover",
+  # Blocks and signatures that exist only for the type checker.
+  "if TYPE_CHECKING:",
+  "@overload",
+  "@(abc\\.)?abstractmethod",
+  # A bare ellipsis body is a declaration (Protocol / stub), not behaviour.
+  "^\\s*\\.\\.\\.$",
+  # Abstract seams and module bootstraps: covering these would test the seam
+  # rather than the product.
+  "raise NotImplementedError",
+  "if __name__ == .__main__.:",
+]
+
+# ----------------------------------------------------------------------------
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
-addopts = "-q --cov=entropia --cov-report=term-missing"
+# --cov-fail-under turns the coverage number into a gate. Before this, CI ran
+# WITH coverage but nothing ever failed on it, so coverage could decay silently.
+# 80 is the floor CONTRIBUTING.md already asks contributors to hold. A local
+# run that deliberately measures a subset should pass --no-cov (as the verify
+# snippet in backend/README.md does) instead of lowering this number.
+addopts = "-q --cov=entropia --cov-report=term-missing --cov-fail-under=80"
 markers = [
   "integration: requires postgres/redis/minio",
   "contract: API request/response/SSE schema tests",

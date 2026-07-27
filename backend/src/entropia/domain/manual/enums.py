@@ -30,12 +30,16 @@ class ManualSourceType(StrEnum):
 
 class PublicationState(StrEnum):
     """Immutable revision publication overlay (doc 21 §9): a Published revision
-    becomes Superseded when replaced; Removed marks purge-time redaction."""
+    becomes Superseded when replaced.
+
+    O-03: a fourth ``removed`` member once claimed to mark "purge-time redaction",
+    but nothing ever assigned it and doc 21 defines no such redaction step — purge
+    deletes the row outright. The member is gone rather than left as a name the
+    schema tolerates but no code path can produce."""
 
     DRAFT = "draft"
     PUBLISHED = "published"
     SUPERSEDED = "superseded"
-    REMOVED = "removed"
 
 
 class StreamEntryState(StrEnum):

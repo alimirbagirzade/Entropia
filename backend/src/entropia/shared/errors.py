@@ -441,15 +441,6 @@ class ResolverValidationRequired(ConflictError):
     message = "This resolver has not passed validation; run its test vectors before activation."
 
 
-class DeletePolicyBlocked(ConflictError):
-    """Soft-delete of an active trusted resolver is blocked; deprecate first
-    (ESP doc 09 §9.5, §14, §7.1 "Error - blocked delete")."""
-
-    code = "DELETE_POLICY_BLOCKED"
-    message = "This resolver is active in the registry. Deprecate it before deletion."
-    category = ErrorCategory.LIFECYCLE
-
-
 class RationaleFamilyNameRequired(ValidationError):
     """A Rationale Family name was blank/whitespace-only (doc 10 §10.1)."""
 
@@ -721,14 +712,6 @@ class PrecheckStale(ConflictError):
     category = ErrorCategory.CONCURRENCY_OR_PREFLIGHT
     retryable = True
     suggested_action = "rerun_precheck"
-
-
-class PrecheckAlreadyRunning(ConflictError):
-    """A second Pre-Check was requested while one is already in flight for the same
-    context (doc 07 §8.1). The in-flight scan is reused; no duplicate job is made."""
-
-    code = "PRECHECK_ALREADY_RUNNING"
-    message = "A Pre-Check is already running for this request."
 
 
 class RequestVersionConflict(ConflictError):

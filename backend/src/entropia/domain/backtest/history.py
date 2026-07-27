@@ -180,6 +180,72 @@ def _pinned_item_refs(manifest: dict[str, Any]) -> list[dict[str, Any]]:
     return refs
 
 
+def _package_revision_refs(manifest: dict[str, Any]) -> list[dict[str, Any]]:
+    """The transitive package revisions the run pinned (K-04, doc 15 §9.2).
+
+    Projected from ``strategy_package_context`` into the same immutable ref tuple the
+    Mainboard pins use, so an auditor sees WHICH indicator/condition/reference package
+    revision produced a Result — not just the strategy that referenced it. Empty for a
+    pre-K-04 manifest, which pinned no package group (honest, never fabricated)."""
+    refs: list[dict[str, Any]] = []
+    for entry in _group(manifest, "strategy_package_context"):
+        item_id = entry.get("item_id")
+        for position, package in enumerate(_entries(entry.get("package_revisions"))):
+            refs.append(
+                {
+                    "item_id": item_id,
+                    "item_kind": "package",
+                    "root_id": package.get("package_root_id"),
+                    "revision_id": package.get("package_revision_id"),
+                    "position": position,
+                    "enabled": True,
+                }
+            )
+    return refs
+
+
+def _research_revision_refs(manifest: dict[str, Any]) -> list[dict[str, Any]]:
+    """The research feed revisions the run pinned (K-04, doc 15 §9.2 data/time group)."""
+    refs: list[dict[str, Any]] = []
+    for entry in _group(manifest, "data_time_context"):
+        item_id = entry.get("item_id")
+        for position, feed in enumerate(_entries(entry.get("research_datasets"))):
+            refs.append(
+                {
+                    "item_id": item_id,
+                    "item_kind": "research_data",
+                    "root_id": feed.get("root_id"),
+                    "revision_id": feed.get("revision_id"),
+                    "position": position,
+                    "enabled": True,
+                }
+            )
+    return refs
+
+
+def _market_data_revision(manifest: dict[str, Any]) -> str | None:
+    """The run's pinned market dataset revision, when the composition has exactly one.
+
+    K-04 pins it per Strategy item. The DTO carries a SINGLE value, so a composition
+    whose strategies pin different datasets resolves to ``None`` — the caller renders
+    "Not available" rather than one arbitrarily chosen dataset (doc 16 §4); the full
+    per-item truth stays in the manifest's data/time group."""
+    revision_ids = {
+        str(entry["market_dataset_revision_id"])
+        for entry in _group(manifest, "data_time_context")
+        if entry.get("market_dataset_revision_id")
+    }
+    return next(iter(revision_ids)) if len(revision_ids) == 1 else None
+
+
+def _group(manifest: dict[str, Any], key: str) -> list[dict[str, Any]]:
+    return _entries(manifest.get(key))
+
+
+def _entries(raw: Any) -> list[dict[str, Any]]:
+    return [entry for entry in raw if isinstance(entry, dict)] if isinstance(raw, list) else []
+
+
 def _allocation_plan_revision_id(manifest: dict[str, Any]) -> str | None:
     """The pinned Portfolio Allocation Plan revision id, if the run pinned one.
 
@@ -196,12 +262,12 @@ def _allocation_plan_revision_id(manifest: dict[str, Any]) -> str | None:
 def extract_manifest_context(manifest: dict[str, Any] | None) -> dict[str, Any]:
     """Human-readable comparison context from a result's pinned manifest snapshot.
 
-    Only policy-permitted, immutable fields are surfaced (doc 16 §9.4). A field the
-    V1 manifest does not separately pin (e.g. a dedicated Market Data revision) is
-    left ``None`` so the caller renders "Not available" — never a fabricated 0/blank
-    (doc 16 §4, §8.2). The pinned ``strategy_revision_refs`` are the transitive
-    carrier of the Market Data revision (pinned inside the strategy config), so a
-    Market Data change surfaces as a differing strategy revision (doc 16 §8.3,
+    Only policy-permitted, immutable fields are surfaced (doc 16 §9.4). Since K-04 the
+    manifest pins the Market Data revision per Strategy item (doc 15 §9.2), so it is
+    stated directly; a pre-K-04 manifest — or a composition whose strategies pin
+    different datasets — still resolves to ``None`` so the caller renders "Not
+    available", never a fabricated 0/blank (doc 16 §4, §8.2). Either way a dataset
+    change also surfaces transitively as a differing strategy revision (doc 16 §8.3,
     RH-09).
     """
     manifest = manifest if isinstance(manifest, dict) else {}
@@ -216,10 +282,11 @@ def extract_manifest_context(manifest: dict[str, Any] | None) -> dict[str, Any]:
         "portfolio_allocation_plan_revision_id": _allocation_plan_revision_id(manifest),
         "strategy_revision_refs": [r for r in refs if r.get("item_kind") == _STRATEGY_KIND],
         "artifact_context": manifest.get("result_artifact_context"),
-        # Market Data revisions are pinned inside strategy configs, not separately
-        # in the V1 manifest — honestly surfaced as "Not available" (doc 16 §4); a
-        # change is flagged transitively via ``strategy_revision_refs``.
-        "market_data_revision": None,
+        # K-04: the manifest now pins the market dataset revision per Strategy item, so
+        # a dataset change is visible directly (not only transitively via a differing
+        # strategy revision). A pre-K-04 manifest, or a multi-dataset composition, still
+        # resolves to None — "Not available", never a fabricated value (doc 16 §4).
+        "market_data_revision": _market_data_revision(manifest),
     }
 
 
@@ -233,11 +300,12 @@ def build_manifest_excerpt(
     """Immutable ``ResultManifestExcerptDTO`` from the pinned manifest (doc 16 §9.4).
 
     Read-only over the immutable manifest snapshot; never re-resolves the current
-    Mainboard, latest package names, or cached form state (doc 16 §8.2, §15). Fields
-    the V1 manifest does not separately pin (``package_revision_refs``,
-    ``market_data_revision``, ``research_data_revision_refs``) are honestly left
-    empty/``None`` — they live inside the pinned strategy config, transitively
-    carried by ``strategy_revision_refs`` (doc 16 §4, §8.2).
+    Mainboard, latest package names, or cached form state (doc 16 §8.2, §15). Since
+    K-04 the manifest pins the transitive package, market dataset and research feed
+    revisions (doc 15 §9.2), so ``package_revision_refs`` / ``market_data_revision`` /
+    ``research_data_revision_refs`` are stated from it. A pre-K-04 manifest carries
+    none of those groups and still yields honest empty/``None`` values — those runs
+    remain identified transitively by ``strategy_revision_refs`` (doc 16 §4, §8.2).
     """
     manifest = manifest if isinstance(manifest, dict) else {}
     identity = manifest.get("identity")
@@ -248,10 +316,12 @@ def build_manifest_excerpt(
         "composition_snapshot_id": identity.get("composition_snapshot_id"),
         "strategy_revision_refs": [r for r in refs if r.get("item_kind") == _STRATEGY_KIND],
         "external_work_refs": [r for r in refs if r.get("item_kind") in _EXTERNAL_KINDS],
-        # Not separately pinned in the V1 manifest — honest empty/null (doc 16 §4).
-        "package_revision_refs": [],
-        "market_data_revision": None,
-        "research_data_revision_refs": [],
+        # K-04: the manifest now pins these groups directly (doc 15 §9.2), so the
+        # excerpt states them instead of deferring to the strategy config. A pre-K-04
+        # manifest carries none of them and still yields honest empty/null.
+        "package_revision_refs": _package_revision_refs(manifest),
+        "market_data_revision": _market_data_revision(manifest),
+        "research_data_revision_refs": _research_revision_refs(manifest),
         "portfolio_allocation_plan_revision_id": _allocation_plan_revision_id(manifest),
         "execution_context": {
             "execution_key": manifest.get("execution_key"),

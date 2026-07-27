@@ -190,7 +190,8 @@ def test_extract_context_surfaces_pinned_strategy_refs_and_allocation() -> None:
     ]
     assert ctx["portfolio_allocation_plan_revision_id"] == "plan-3"
     assert ctx["artifact_context"]["metric_set_version"] == "metric-set-v1"
-    # Market data still not separately pinned -> honest None, carried transitively.
+    # This synthetic manifest predates K-04's data/time group -> honest None, the
+    # dataset identity carried transitively by the pinned strategy revision.
     assert ctx["market_data_revision"] is None
 
 
@@ -236,10 +237,63 @@ def test_build_excerpt_reads_pinned_refs_and_availability() -> None:
     assert excerpt["execution_context"]["execution_key"] == "ek1"
     assert excerpt["completed_at_utc"] == "2026-07-14T00:00:00+00:00"
     assert excerpt["artifact_availability"]["any_available"] is True
-    # Not separately pinned in the V1 manifest -> honest empty/null.
+    # A pre-K-04 manifest pins none of these groups -> honest empty/null (never
+    # fabricated); the populated path is asserted below.
     assert excerpt["package_revision_refs"] == []
     assert excerpt["market_data_revision"] is None
     assert excerpt["research_data_revision_refs"] == []
+
+
+def test_build_excerpt_states_the_k04_pinned_package_and_dataset_groups() -> None:
+    # K-04: the manifest now pins the transitive package / market dataset / research
+    # feed revisions, so the excerpt states them instead of deferring to the strategy
+    # config — the reproducibility evidence an auditor reads (doc 15 §9.2, doc 16 §9.4).
+    manifest = _manifest()
+    manifest["strategy_package_context"] = [
+        {
+            "item_id": "it-1",
+            "package_revisions": [
+                {"package_root_id": "pkg-root", "package_revision_id": "pkg-rev-1"},
+                {"package_root_id": "cond-root", "package_revision_id": "cond-rev-1"},
+            ],
+        }
+    ]
+    manifest["data_time_context"] = [
+        {
+            "item_id": "it-1",
+            "market_dataset_revision_id": "md-rev-1",
+            "research_datasets": [{"root_id": "rd-root", "revision_id": "rd-rev-1"}],
+        }
+    ]
+    excerpt = build_manifest_excerpt(
+        manifest,
+        result_id="res-3",
+        completed_at_utc=None,
+        artifact_availability={"counts": {}, "any_available": False},
+    )
+    assert [r["revision_id"] for r in excerpt["package_revision_refs"]] == [
+        "pkg-rev-1",
+        "cond-rev-1",
+    ]
+    assert excerpt["market_data_revision"] == "md-rev-1"
+    assert [r["revision_id"] for r in excerpt["research_data_revision_refs"]] == ["rd-rev-1"]
+
+
+def test_build_excerpt_market_data_is_none_when_strategies_pin_different_datasets() -> None:
+    # The DTO carries a SINGLE value; two datasets cannot be stated as one, so the
+    # caller renders "Not available" rather than an arbitrarily chosen dataset.
+    manifest = _manifest()
+    manifest["data_time_context"] = [
+        {"item_id": "it-1", "market_dataset_revision_id": "md-rev-1"},
+        {"item_id": "it-3", "market_dataset_revision_id": "md-rev-2"},
+    ]
+    excerpt = build_manifest_excerpt(
+        manifest,
+        result_id="res-4",
+        completed_at_utc=None,
+        artifact_availability={"counts": {}, "any_available": False},
+    )
+    assert excerpt["market_data_revision"] is None
 
 
 def test_build_excerpt_handles_empty_manifest_honestly() -> None:

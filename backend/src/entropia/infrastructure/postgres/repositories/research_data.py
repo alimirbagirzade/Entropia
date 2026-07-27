@@ -395,6 +395,20 @@ async def list_revisions(
     return list((await session.execute(stmt)).scalars().all())
 
 
+async def list_feature_definitions(
+    session: AsyncSession, revision_id: str
+) -> Sequence[ResearchFeatureDefinition]:
+    """Feature definitions pinned to a research revision (K-04 manifest provenance).
+
+    Ordered by id so the Run Manifest's data/time group is content-stable."""
+    stmt = (
+        select(ResearchFeatureDefinition)
+        .where(ResearchFeatureDefinition.revision_id == revision_id)
+        .order_by(ResearchFeatureDefinition.feature_definition_id)
+    )
+    return list((await session.execute(stmt)).scalars().all())
+
+
 async def get_market_link(session: AsyncSession, revision_id: str) -> ResearchMarketLink | None:
     """Return the most recent market link pinned for a research revision."""
     stmt = (
@@ -450,6 +464,7 @@ __all__ = [
     "get_market_link",
     "get_native_asset",
     "get_revision",
+    "list_feature_definitions",
     "list_revisions",
     "query_revisions_for_owner",
     "set_time_policy",

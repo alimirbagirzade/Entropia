@@ -92,6 +92,31 @@ function itemDisplayLabel(override: string | null | undefined, itemType: string)
   return override != null && override.trim() !== "" ? override : itemTypeLabel(itemType);
 }
 
+// Last-resort PRIMARY label for a composition item that carries no server-owned
+// label in the currently loaded draft — a validation issue can name an item that
+// was just removed from the draft, and a sleeve can arrive before the draft
+// refetch settles. The raw mbi_ id NEVER becomes the primary name (audit
+// P-11 / F-07); it stays beneath as the secondary binding key via `ItemLabel`.
+const UNLABELLED_ITEM = "Composition item";
+
+// Server-owned label per composition_item_id binding key (audit P-11 / F-07).
+// The browser only maps id -> the label the server already sent; it never
+// reconstructs a name from the id itself.
+function labelsByCompositionItem(
+  entries: readonly {
+    composition_item_id: string;
+    item_type: string;
+    display_label_override: string | null;
+  }[],
+): Map<string, string> {
+  return new Map(
+    entries.map((entry) => [
+      entry.composition_item_id,
+      itemDisplayLabel(entry.display_label_override, entry.item_type),
+    ]),
+  );
+}
+
 // The human label as the primary text with the composition_item_id kept beneath
 // it as a secondary, muted binding key (audit P-11 / F-07). `inline` renders the
 // two on one line for list rows where a stacked cell would be too tall.
@@ -219,7 +244,12 @@ export function Portfolio() {
                   <InlineError message={mutationErrorText(save.error)} />
                 </div>
               ) : null}
-              {save.data ? <SaveResultCard result={save.data} /> : null}
+              {save.data ? (
+                <SaveResultCard
+                  result={save.data}
+                  labelByItem={labelsByCompositionItem(draftQuery.data.draft.entries)}
+                />
+              ) : null}
               <SyncCard
                 pending={sync.isPending}
                 error={sync.isError ? mutationErrorText(sync.error) : null}
@@ -316,12 +346,7 @@ function DraftEditor({
   // Resolve each sleeve/row's server-owned human label once, keyed by the
   // composition_item_id binding key (audit P-11 / F-07) — shared by the example
   // line so it never renders a raw mbi_ id as the primary name.
-  const labelByItem = new Map(
-    entries.map((entry) => [
-      entry.composition_item_id,
-      itemDisplayLabel(entry.display_label_override, entry.item_type),
-    ]),
-  );
+  const labelByItem = labelsByCompositionItem(entries);
 
   return (
     <section className="card" aria-labelledby="alloc-draft-h">
@@ -544,7 +569,11 @@ function DraftEditor({
                         </span>
                       ) : null}
                     </div>
-                    <IssuesTable issues={validateReport.issues} emptyText="No blockers or warnings." />
+                    <IssuesTable
+                      issues={validateReport.issues}
+                      emptyText="No blockers or warnings."
+                      labelByItem={labelByItem}
+                    />
                   </>
                 ) : (
                   <EmptyState
@@ -618,7 +647,7 @@ function AllocationExampleText({
       </p>
     );
   }
-  const label = labelByItem.get(sleeve.composition_item_id) ?? sleeve.composition_item_id;
+  const label = labelByItem.get(sleeve.composition_item_id) ?? UNLABELLED_ITEM;
   return (
     <p className="portfolio-allocation-note">
       <b>Example:</b> <ItemLabel label={label} itemId={sleeve.composition_item_id} inline /> gets{" "}
@@ -796,7 +825,13 @@ function CandidatePicker({
 // amounts, so this stays focused on the save confirmation + inline issues)
 // ---------------------------------------------------------------------------
 
-function SaveResultCard({ result }: { result: SaveDraftResult }) {
+function SaveResultCard({
+  result,
+  labelByItem,
+}: {
+  result: SaveDraftResult;
+  labelByItem: Map<string, string>;
+}) {
   return (
     <section className="card" style={{ marginTop: 18 }} aria-labelledby="alloc-saved-h">
       <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
@@ -814,7 +849,11 @@ function SaveResultCard({ result }: { result: SaveDraftResult }) {
         </p>
       ) : null}
       <div style={{ marginTop: 12 }}>
-        <IssuesTable issues={result.inline_issues} emptyText="No inline issues." />
+        <IssuesTable
+          issues={result.inline_issues}
+          emptyText="No inline issues."
+          labelByItem={labelByItem}
+        />
       </div>
     </section>
   );
@@ -970,7 +1009,19 @@ function RevisionCard({
 // recomputed client-side)
 // ---------------------------------------------------------------------------
 
-function IssuesTable({ issues, emptyText }: { issues: AllocationIssue[]; emptyText: string }) {
+// `labelByItem` carries the server-owned name for every composition item in the
+// loaded draft, so an issue that names an item shows that name as its primary
+// text instead of a bare mbi_ id (audit P-11 / F-07); the id stays beneath as
+// the secondary binding key.
+function IssuesTable({
+  issues,
+  emptyText,
+  labelByItem,
+}: {
+  issues: AllocationIssue[];
+  emptyText: string;
+  labelByItem: Map<string, string>;
+}) {
   if (issues.length === 0) {
     return <EmptyState glyph="✓" title={emptyText} description="" />;
   }
@@ -999,7 +1050,11 @@ function IssuesTable({ issues, emptyText }: { issues: AllocationIssue[]; emptyTe
               ) : null}
               {issue.composition_item_id ? (
                 <div style={{ fontSize: 12, color: "var(--text-dim)" }}>
-                  <code>{issue.composition_item_id}</code>
+                  <ItemLabel
+                    label={labelByItem.get(issue.composition_item_id) ?? UNLABELLED_ITEM}
+                    itemId={issue.composition_item_id}
+                    inline
+                  />
                 </div>
               ) : null}
             </td>

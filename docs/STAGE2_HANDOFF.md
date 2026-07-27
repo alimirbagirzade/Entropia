@@ -2838,40 +2838,6 @@ madde-madde durum: `docs/PROJECT_HISTORY.md` §"Auth remediation dalgası".
   `entry_blocked` decision-trace event'i hiç üretilmiyordu. Gate `_open()`'da (her entry yolu oradan
   geçer), `_blocked_reason()`'da ise **en sonda** (per-domain sebep daha spesifik ve sözleşmeli).
 
-## V18-R3 · K-05 — Pre-Check fail-closed hata sınıfları landed (PR #387)
-
-Pre-Check lexer'ı tanımadığı karakteri sessizce atlıyordu → bozuk/yabancı kaynak **sıfır** çağrı
-üretip boş declared listesiyle uzlaşarak **PASSED**'e ulaşabiliyordu. Doc 07 §12'nin dört zorunlu
-hata sınıfından üçü kodda hiç yoktu (grep = 0 hit).
-
-**Landed:** (a) `source_scan.py` tanınmayan-karakter muhasebesi + kapanmamış string/blok yorum →
-`PARSE_UNSUPPORTED`, `SOURCE_SCANNER_VERSION` → **`source-lexer-2.0`**; (b) YENİ
-`domain/create_package/language_detect.py` ağırlıklı marker skoru → seçimle çelişki
-`SOURCE_LANGUAGE_MISMATCH` (PC-10), rakip kanıt `REQUIRES_CLARIFICATION`; (c) `domain/esp/resolver.py`
-`deprecated`/`unavailable` → `RESOLVER_NOT_ACTIVE` (`candidate` bilerek `NOT_TRUSTED_ACTIVE` kalıyor).
-Kanonik kodlar `shared/errors.py`'de: `ParseUnsupported` (422) · `RequiresClarification` (422) ·
-`ResolverNotActive` (409). Üçü de **FAILED scan + `PRECHECK_FAILED`**; Send kapısı `PASSED` şart
-koştuğu için candidate generation başlayamıyor.
-
-**Migration YOK** — `dependency_scans.unsupported_calls` / `error_detail` kolonları zaten vardı, boş
-yazılıyordu; slice onları ilk kez dolduruyor. alembic head `0035_portfolio_rules` değişmedi.
-
-**Yolda çıkan regresyon:** `jobs/package_validation.py::_RESOLVE_ERRORS` `ResolverNotActive`'i
-yakalamıyordu → deprecated resolver validation worker'ını çökertiyordu. `run_validation_job`'ın
-`except Exception` yolu aynı `FAILED`/`REVISION_REQUIRED` sonucunu ürettiği için mevcut test **yanlış
-sebeple yeşil kalıyordu**; düzeltildi ve test `dependency_health` teşhisini şart koşuyor.
-
-**Testler:** unit `source_scan` 22 (mevcut 14 korundu) · `language_detect` 9 (yeni) · `esp_resolver` 15;
-integration precheck-worker 14 · validation_evidence 6. Lokal ruff/format/mypy temiz, tam suite exit 0.
-CI 5/5 yeşil. **Reuse anchor'ları:** `SourceScanResult.is_parse_unsupported` / `.as_evidence()`,
-`detect_source_language()`, `_fail_closed(...)`, `ResolutionReason.RESOLVER_NOT_ACTIVE`.
-
-**Dürüst sınır:** kanıt yokluğu mismatch sayılmaz (marker taşımayan snippet lexer kapısına düşer);
-`other` dili adjudike edilmez; `frontend/src/lib/library.ts::ProvenanceScan` tarama alanlarını hâlâ
-`string[]` tipliyor (backend dict gönderiyor, yalnız `.length` okunduğu için zarar yok — ayrı görev).
-
-**Test altyapısı:** paralel worktree'ler aynı `entropia_test` DB'sini paylaşıyor → sahte failure.
-Bu slice `TEST_DATABASE_URL=...entropia_k05b_test` ile izole koştu; paralel çalışırken zorunlu.
 
 ## Next: **PO imzası + R2 kapanışı** (R3 mühendislik backlog'u F-05 ile kapandı).
 R3 W3 dalgası: F-01a/b/c (durable worker'lar) · F-04+F-09 (PR #381) · **F-05/M-05 (bu slice)**

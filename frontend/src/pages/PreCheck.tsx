@@ -51,6 +51,11 @@ const STATUS_LINES: Record<string, string> = {
 
 const STALE_LINE = "Pre-Check is stale because the source changed. Run it again before sending.";
 
+// F-01a: the scan runs in a durable background worker (mirrors PreCheckModal).
+const RUNNING_LINE =
+  "Pre-Check is running in the background. The result will appear here when the durable " +
+  "job completes — closing this browser does not cancel it.";
+
 // Pre-Check (doc 07): run an immutable dependency scan for one of the actor's
 // own requests, read the §7.1 dependency result rows, and open the immutable
 // scan artifact viewer (GET /dependency-scans/{scan_id}). The scan is evidence —
@@ -175,7 +180,16 @@ function PreCheckCard({ requestId }: { requestId: string }) {
 function PreCheckBody({ detail }: { detail: PackageRequestDetail }) {
   const precheck = useRunPrecheck();
   const [scanId, setScanId] = useState<string | null>(null);
+  // F-01a: the POST returns a "checking" admission; the worker's result lands as a
+  // NEW scan attempt on the projection (mirrors PreCheckModal).
+  const [attemptAtRun, setAttemptAtRun] = useState<number | null>(null);
   const scan = detail.current_scan;
+  const latestAttempt = scan?.attempt_no ?? 0;
+  const jobRunning =
+    precheck.isPending ||
+    (precheck.data?.status === "checking" &&
+      attemptAtRun !== null &&
+      latestAttempt <= attemptAtRun);
   const isStale = scan !== null && scan.status === "passed" && !detail.precheck_fresh;
 
   return (
@@ -216,15 +230,16 @@ function PreCheckBody({ detail }: { detail: PackageRequestDetail }) {
         <button
           type="button"
           className="btn btn-primary"
-          disabled={precheck.isPending}
-          onClick={() =>
+          disabled={jobRunning}
+          onClick={() => {
+            setAttemptAtRun(latestAttempt);
             precheck.mutate({
               request_id: detail.request_id,
               request_version: detail.request_version,
-            })
-          }
+            });
+          }}
         >
-          {precheck.isPending ? "Checking dependencies…" : "Run Pre-Check"}
+          {jobRunning ? "Checking dependencies…" : "Run Pre-Check"}
         </button>
       </div>
 
@@ -233,7 +248,17 @@ function PreCheckBody({ detail }: { detail: PackageRequestDetail }) {
           {mutationErrorText(precheck.error)}
         </p>
       ) : null}
-      {precheck.data ? (
+      {jobRunning && !precheck.isPending ? (
+        <p aria-live="polite" style={{ marginBottom: 0 }}>
+          {RUNNING_LINE} (job <code>{precheck.data?.job_id}</code>)
+        </p>
+      ) : precheck.data?.status === "checking" && attemptAtRun !== null && scan ? (
+        // The admitted job finished: the projection carries the fresh scan attempt.
+        <p aria-live="polite" style={{ marginBottom: 0 }}>
+          {STATUS_LINES[scan.status] ?? `Pre-Check ${scan.status}.`} (scan{" "}
+          <code>{scan.scan_id}</code>, attempt {scan.attempt_no})
+        </p>
+      ) : precheck.data && precheck.data.status !== "checking" ? (
         <p aria-live="polite" style={{ marginBottom: 0 }}>
           {STATUS_LINES[precheck.data.status] ?? `Pre-Check ${precheck.data.status}.`} (scan{" "}
           <code>{precheck.data.scan_id}</code>, attempt {precheck.data.attempt_no})

@@ -118,15 +118,17 @@ const CREATE_RESULT = {
 };
 
 // Action results (commands/create_package.py return dicts verbatim).
+// F-01a admission envelope: the scan computes in the durable worker; the POST
+// returns "checking" and the real result lands on the request projection.
 const PRECHECK_RESULT = {
   request_id: "req_1",
-  scan_id: "scan_2",
-  attempt_no: 2,
-  status: "passed",
-  state: "precheck_passed",
-  resolved: 1,
+  scan_id: "",
+  attempt_no: 0,
+  status: "checking",
+  state: "requested",
+  resolved: 0,
   missing: [],
-  registry_fingerprint: "fp_2",
+  registry_fingerprint: "",
   job_id: "job_1",
 };
 
@@ -469,7 +471,10 @@ describe("Create Package page", () => {
     const dialog = await screen.findByRole("dialog");
     fireEvent.click(within(dialog).getByRole("button", { name: "Run Pre-Check" }));
 
-    expect(await screen.findByText("scan_2")).toBeInTheDocument();
+    // F-01a: the admission renders the background-running notice (job id), never
+    // a fabricated scan result — the real scan lands via the SSE-driven refetch.
+    expect(await screen.findByText(/Pre-Check is running in the background/)).toBeInTheDocument();
+    expect(screen.getByText("job_1")).toBeInTheDocument();
     const call = fetchMock.mock.calls.find(
       ([url, init]) => String(url).endsWith("/pre-check") && init?.method === "POST",
     );

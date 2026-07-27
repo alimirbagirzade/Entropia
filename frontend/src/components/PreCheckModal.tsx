@@ -50,6 +50,13 @@ const STATUS_LINES: Record<string, string> = {
 
 const STALE_LINE = "Pre-Check is stale because the source changed. Run it again before sending.";
 
+// F-01a: the scan runs in a durable background worker. The POST returns a
+// "checking" admission immediately; the real PASSED/BLOCKED lands via the SSE
+// refetch as a NEW scan attempt on the request projection.
+const RUNNING_LINE =
+  "Pre-Check is running in the background. The result will appear here when the durable " +
+  "job completes — closing this browser does not cancel it.";
+
 export function PreCheckModal({
   detail,
   onClose,
@@ -59,8 +66,17 @@ export function PreCheckModal({
 }) {
   const precheck = useRunPrecheck();
   const [scanId, setScanId] = useState<string | null>(null);
+  // The scan attempt visible when the run was admitted; a higher attempt arriving
+  // on the projection means the worker finished (job status made visible).
+  const [attemptAtRun, setAttemptAtRun] = useState<number | null>(null);
   const scan = detail.current_scan;
   const actions = packageActionAvailability(detail);
+  const latestAttempt = scan?.attempt_no ?? 0;
+  const jobRunning =
+    precheck.isPending ||
+    (precheck.data?.status === "checking" &&
+      attemptAtRun !== null &&
+      latestAttempt <= attemptAtRun);
   // A passed scan that no longer certifies the current source (server-truth flag).
   const isStale = scan !== null && scan.status === "passed" && !detail.precheck_fresh;
 
@@ -104,15 +120,16 @@ export function PreCheckModal({
           <button
             type="button"
             className="btn btn-primary"
-            disabled={!actions.precheck || precheck.isPending}
-            onClick={() =>
+            disabled={!actions.precheck || jobRunning}
+            onClick={() => {
+              setAttemptAtRun(latestAttempt);
               precheck.mutate({
                 request_id: detail.request_id,
                 request_version: detail.request_version,
-              })
-            }
+              });
+            }}
           >
-            {precheck.isPending ? "Checking dependencies…" : "Run Pre-Check"}
+            {jobRunning ? "Checking dependencies…" : "Run Pre-Check"}
           </button>
         </div>
 
@@ -121,7 +138,17 @@ export function PreCheckModal({
             {mutationErrorText(precheck.error)}
           </p>
         ) : null}
-        {precheck.data ? (
+        {jobRunning && !precheck.isPending ? (
+          <p aria-live="polite" style={{ margin: "0 0 10px" }}>
+            {RUNNING_LINE} (job <code>{precheck.data?.job_id}</code>)
+          </p>
+        ) : precheck.data?.status === "checking" && attemptAtRun !== null && scan ? (
+          // The admitted job finished: the projection carries the fresh scan attempt.
+          <p aria-live="polite" style={{ margin: "0 0 10px" }}>
+            {STATUS_LINES[scan.status] ?? `Pre-Check ${scan.status}.`} (scan{" "}
+            <code>{scan.scan_id}</code>, attempt {scan.attempt_no})
+          </p>
+        ) : precheck.data && precheck.data.status !== "checking" ? (
           <p aria-live="polite" style={{ margin: "0 0 10px" }}>
             {STATUS_LINES[precheck.data.status] ?? `Pre-Check ${precheck.data.status}.`} (scan{" "}
             <code>{precheck.data.scan_id}</code>, attempt {precheck.data.attempt_no})

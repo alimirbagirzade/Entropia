@@ -71,15 +71,17 @@ const REQUEST_DETAIL = {
   created_at: "2026-07-08T10:00:00+00:00",
 };
 
+// F-01a: the POST is an ADMISSION — the scan computes in the durable worker, so
+// the wire result is a "checking" envelope (no scan yet), never a fabricated pass.
 const PRECHECK_RESULT = {
   request_id: "req_1",
-  scan_id: "scan_2",
-  attempt_no: 2,
-  status: "passed",
-  state: "precheck_passed",
-  resolved: 2,
+  scan_id: "",
+  attempt_no: 0,
+  status: "checking",
+  state: "requested",
+  resolved: 0,
   missing: [],
-  registry_fingerprint: "fp_2",
+  registry_fingerprint: "",
   job_id: "job_1",
 };
 
@@ -141,7 +143,7 @@ describe("Pre-Check page", () => {
     expect(screen.getByText("pkgrev_1")).toBeInTheDocument();
   });
 
-  it("runs Pre-Check with the OCC version header and shows the canonical passed line", async () => {
+  it("runs Pre-Check with the OCC version header and shows the background-running line", async () => {
     const fetchMock = stubApi(BASE_ROUTES);
     renderPage();
     await selectRequest();
@@ -150,7 +152,7 @@ describe("Pre-Check page", () => {
 
     expect(
       await screen.findByText(
-        /Pre-Check passed\. Dependency manifest is ready for candidate generation\./,
+        /Pre-Check is running in the background\./,
       ),
     ).toBeInTheDocument();
     const call = fetchMock.mock.calls.find(

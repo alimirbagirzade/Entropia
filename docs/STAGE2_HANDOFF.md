@@ -2949,3 +2949,30 @@ imzası** (`docs/implementation/v18_final_acceptance.md` §4, D-1…D-9) — imz
 Ayrıca hâlâ açık: **F-07 raw-id presentation sweep kalıntısı** (empirik doğrulanmalı) ve
 **ortam tuzağı**: paralel worktree oturumları paylaşılan `entropia_test` DB'sini ezer —
 `TEST_DATABASE_URL` ile worktree'ye özel izole DB kullan.
+
+## O-03 — Hata kodu taksonomisi: 19 spec kodu adjudicated, 3 ölü tanım silindi (PR #407 + bu PR)
+
+**Ne landed.** Denetimin "25+ spec-kanonik hata kodu yok veya farklı isimde" bulgusu tek tek
+ampirik sınandı. Sonuç ikiye ayrıldı:
+
+- **19/19 kod gerçekten 0 hit** — ama **19/19'unun davranışı zaten fail-closed uygulanmış**, yalnız
+  farklı adla. Bu yüzden **hiçbir kod adı değiştirilmedi**; sapmalar `docs/PROJECT_HISTORY.md`
+  §O-03'te tam tablo halinde adjudicate edildi (K-07 içtihadı: her sayfanın kendi §-taksonomisi
+  otoritedir). Üç satırda spec **kendi alternatifini zaten yazıyor** (09 §1018, 01 §1620, 07 §1422).
+- **3 ölü tanım silindi** (PR #407): `PrecheckAlreadyRunning`, `DeletePolicyBlocked`,
+  `PublicationState.REMOVED`. Migration YOK — DDL byte-identical, alembic head `0035_portfolio_rules`.
+
+**Denetimin üç yanlışı.** `TICK_DATA_UNAVAILABLE` ölü değil (2 emit + 5 assertion);
+`MetricAvailability.NOT_COMPUTED` emit ediliyor (`metric_profile.py:111`); TIMEZONE üçlüsünü "tek ada
+indirmek" reddedildi — `TIMEZONE_REQUIRED` (timezone **yok**, HTTP envelope) ile `TIMEZONE_INVALID`
+(timezone **var ama geçersiz**, TL-07 whole-file blocker) aynı kusur değil.
+
+**Yeni ratchet.** `tests/unit/test_error_taxonomy_no_dead_definitions.py` hiç fırlatılmayan error
+sınıflarının kümesini pinliyor. Sweep **7** buldu (denetim 1); 2'si silindi, kalan **5'i kayıtlı borç**
+olarak `KNOWN_UNRAISED`'te — yetkilendirilmiş kapsam dışıydı, bilerek dokunulmadı.
+
+**Açık iş.** (1) Kalan 5 ölü error sınıfı ayrı bir slice bekliyor. (2) `docs/audit/audit_report.md`
+repoda yok — ÖRÜNTÜ-1 tablosunun tamamı okunamadı; doğrulama açıkça sayılan **19** kodla sınırlı,
+"25+" iddiasının kalanı hakkında bu kayıt hiçbir şey söylemiyor. (3) Lokal tam suite tek koşuda
+tamamlanamadı (ortam kaynaklı, ayrıntı PROJECT_HISTORY §O-03) — integration paketinin otoritesi
+PR #407 CI'ıdır.

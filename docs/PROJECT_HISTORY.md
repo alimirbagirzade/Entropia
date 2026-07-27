@@ -1380,3 +1380,120 @@ paralel bir worktree (`entropia-o02-error-envelope-*`) aynı paylaşılan `entro
 kendi integration paketini koşuyordu; conftest her testte `drop_all`/`create_all` yaptığından iki koşu
 birbirinin şemasını siliyor ve dalgalı, ilgisiz hatalar üretiyor. **`TEST_DATABASE_URL` ile worktree'ye
 özel izole DB kullan** (`entropia_k03_test`) — sonrasında suite ilk denemede yeşil.
+
+## O-03 · Hata kodu taksonomisi — 19 spec kodu adjudicated, 3 ölü tanım silindi (PR #A, #B)
+
+**Denetim iddiası.** ÖRÜNTÜ-1: "25+ spec-kanonik hata kodu yok veya farklı isimde + 4 ölü tanım",
+ayrıca bir TIMEZONE ad çakışması. Her madde **tek tek ampirik doğrulandı** — CLAUDE.md'nin
+"code-review CRITICAL/HIGH bulgularını düzeltmeden önce ampirik doğrula (çoğu yanlıştır)" kuralı
+bu slice'ta üç kez işe yaradı.
+
+### Doğrulanan yarı: 19/19 kod gerçekten 0 hit
+
+Listelenen 19 kodun hiçbiri `backend/src` veya `backend/tests` içinde geçmiyor (her biri ayrı grep).
+
+### Çürütülen yarı: 19/19'un davranışı zaten uygulanmış — farklı adla
+
+Kodların **yokluğu** doğru, ama **davranışın yokluğu** yanlış. Her biri için fail-closed bir yol
+zaten mevcut; sapma yalnız adlandırmada. Bu yüzden **hiçbir kod adı değiştirilmedi** — bunun
+yerine sapma burada adjudicate edildi (K-07 içtihadı: "Kodlar aynı kusuru anlatır; her sayfanın
+kendi §-taksonomisi otoritedir").
+
+| Spec kodu | Doc § | Kodda yaşayan karşılık | Kanıt |
+|---|---|---|---|
+| `PACKAGE_TIMING_INCOMPATIBLE` | 08 §1543 | `TICK_DATA_UNAVAILABLE` | `commands/readiness_check.py:326` |
+| `PACKAGE_TYPE_INVALID` | 08 §681/1258/1524 | `CLIENT_LEGACY_TYPE_REJECTED` + `CATALOG_FILTER_INVALID` | `commands/esp.py`, 3+3 raise |
+| `PACKAGE_DEPENDENCY_CYCLE` | 09 §1018 | `DEPENDENCY_UNRESOLVED` | **spec'in kendisi alternatifi yazıyor** |
+| `PACKAGE_DEPENDENCY_UNRESOLVED` | 08 §1270 | `DEPENDENCY_UNRESOLVED` | yalnız `PACKAGE_` öneki farkı |
+| `PACKAGE_EDIT_FORBIDDEN` | 08 §1282 | `ACCESS_DENIED` | `domain/identity/policy.py:140` |
+| `OWNER_REQUIRED` | 01/03/04/06/08/13 | `ACCESS_DENIED` | `ensure_can_edit` — "You can only edit resources you own." |
+| `TRASH_ADMIN_ONLY` | 08 §1282 | `TRASH_ACCESS_FORBIDDEN` | `domain/identity/policy.py:51` |
+| `INVALID_FILTER_VALUE` | 09 §794 | `CATALOG_FILTER_INVALID` / `LOG_FILTER_INVALID` | 3+3 raise |
+| `POLICY_DENIED` | 10 §884 | `ACCESS_DENIED` | rol kapısı sorgu yüzeyinde |
+| `RESOLVER_TEST_VECTOR_FAILED` | 09 §1008 | check adı `test_vectors` → `RESOLVER_VALIDATION_REQUIRED` | `domain/esp/validation.py:185` |
+| `RESOLVER_TIMING_RISK_BLOCKED` | 09 §1013 | check adı `timing_integrity` → aynı | `domain/esp/validation.py:214` |
+| `UNSAVED_MAINBOARD_DRAFT` | 01 §1119/1238 | revision'sız draft Ready Check/RUN'a giremez (AT-01) | `commands/strategy_draft.py:110` |
+| `OBJECT_EDIT_FORBIDDEN` | 01 §1620 | `ACCESS_DENIED` | **spec "ACCESS_DENIED / OBJECT_EDIT_FORBIDDEN" yazıyor** |
+| `INTRABAR_DATA_UNAVAILABLE` | 04 §604 | `TICK_DATA_UNAVAILABLE` | `domain/readiness/enums.py:106` |
+| `OHLCV_CONTEXT_REQUIRED` | 04 §599 | `OHLCV_POLICY_CONFLICT` | `domain/trading_signal/compiler.py:97` |
+| `MARKET_DATA_INSTRUMENT_MISMATCH` | 02 §2380/2861 | `RunFailureCode.INSTRUMENT_MISMATCH` | `jobs/backtest_engine.py:503`, fail-closed (F-05) |
+| `MISSING_EMBEDDED_DEPENDENCY` | 07 §1129/1422 | `PRECHECK_BLOCKED` | **spec §1422 "MISSING_EMBEDDED_DEPENDENCY/PRECHECK_BLOCKED" yazıyor** |
+| `INVALID_ITEM_KIND` | 03 §838/922 | `MAINBOARD_ITEM_KIND_MISMATCH` | 3 raise |
+| `UPLOAD_JOB_FAILED` | 21 §942 | `MANUAL_PARSE_FAILED` | `domain/manual/blocks.py:348`, `:413` |
+
+Üç satırda spec **kendi alternatifini zaten yazıyor** (09 §1018, 01 §1620, 07 §1422) — oralarda
+sapma bile yok, denetim spec'in ilk seçeneğini tek geçerli ad sanmış.
+
+### TIMEZONE — "tek ada indir" reddedildi
+
+Denetim `TIMEZONE_REQUIRED` / `TIMEZONE_INVALID` / spec `TIME_ZONE_INVALID` üçlüsünü tek ada
+indirmeyi istedi. **Uygulanmadı**, çünkü bunlar aynı şey değil:
+
+- `TIMEZONE_REQUIRED` (`shared/errors.py:156`) — Market Data yüklemesinde timezone **yok**; HTTP
+  error envelope kodu.
+- `TIMEZONE_INVALID` (`domain/trade_log/records.py:50`) — Trade Log **whole-file blocker** kodu
+  (TL-07); timezone **var ama geçersiz**; HTTP envelope değil, blocker taksonomisi.
+
+Birleştirmek iki ayrı kusuru ("yok" vs "geçersiz") ve iki ayrı yüzeyi (envelope vs blocker)
+çökertirdi. **Gerçek sapma tek karakterlik ve tek yerde:** TL blocker'ı `TIMEZONE_INVALID`,
+doc 05 §1179 ise `TIME_ZONE_INVALID` diyor. Bu da yeniden adlandırılmadı — TL blocker kodları
+kalıcı `trade_log_records` satırlarında ve kabul edilmiş import çıktılarında saklanıyor; ad
+değişikliği geçmiş kayıtları okunamaz kılardı. Doc 05 §-taksonomisi otoritedir, kod ondan tek
+alt çizgi sapar ve sapma burada kayıt altındadır.
+
+### Çürütülen iki "ölü tanım" iddiası
+
+- **`TICK_DATA_UNAVAILABLE` ölü DEĞİL.** İki emit yeri (`readiness_check.py:326`,
+  `backtest_run.py:409`) ve `tests/integration/test_readiness_tick_data.py`'de beş assertion var.
+- **`MetricAvailability.NOT_COMPUTED` emit EDİLİYOR.** `_metric_card_not_computed`,
+  `queries/metric_profile.py:111`'den çağrılıyor ve `availability: "not_computed"` yanıta yazılıyor.
+
+### Slice d — silinen üç ölü tanım
+
+| Silinen | Neden ölü | Spec durumu |
+|---|---|---|
+| `PrecheckAlreadyRunning` (`errors.py`, kod `PRECHECK_ALREADY_RUNNING`) | 0 raise | doc 07 §897 "idempotent reuse **veya** PRECHECK_ALREADY_RUNNING" diyor; kod idempotent dalı seçmiş — sınıf karşılıksız kalmış |
+| `DeletePolicyBlocked` (kod `DELETE_POLICY_BLOCKED`) | 0 raise | doc 09 §836/§896 gerektiriyor, ama `commands/deletion.py`'de package entity dalı hiç yok — koruduğu özellik (package root silme) henüz yazılmamış |
+| `PublicationState.REMOVED` | hiç atanmıyor | docstring "purge-time redaction" vaat ediyordu; doc 21'de böyle bir redaction adımı yok, purge satırı doğrudan siliyor |
+
+Denetim `PrecheckAlreadyRunning`'i `errors.py:517-521` olarak göstermişti; gerçek konum `:590` idi
+(satır numarası bayattı).
+
+**DDL etkisi yok.** `PublicationState` kolonu `enum_column(native_enum=False)` ile kuruluyor;
+derlenen DDL `VARCHAR(10)`, CHECK constraint yok (ampirik olarak compile edilerek doğrulandı).
+Kolon uzunluğu en uzun değerden türüyor ve `superseded` (10) > `removed` (7) olduğundan üye silmek
+uzunluğu da değiştirmiyor. **Migration gerekmedi**, alembic head değişmedi.
+
+### Denetimin kaçırdığı: 5 ölü sınıf daha
+
+`errors.py`'deki 219 sınıf tarandığında **7'si** `src/` içinde hiç referans edilmiyordu; denetim
+bunlardan yalnız 1'ini (`PrecheckAlreadyRunning`) bulmuştu. İkisi bu slice'ta silindi; kalan beşi
+**kayıtlı borç** olarak `tests/unit/test_error_taxonomy_no_dead_definitions.py::KNOWN_UNRAISED`
+içinde pinlendi: `RoleContextStaleError`, `ValidationAlreadyRunning`, `ServiceUnavailableError`,
+`ArtifactNotAvailableError`, `HypothesisArtifactNotFoundError`. Bunlar **yetkilendirilmiş kapsam
+dışıydı**, bilerek dokunulmadı.
+
+Test bir **ratchet**'tir: altıncı bir ölü sınıf eklenirse kırılır, listedekilerden biri gerçekten
+fırlatılmaya başlarsa da kırılır (allowlist'ten çıkarılması için). Sayı yalnız aşağı inebilir.
+
+### Dürüst sınırlar
+
+- **ÖRÜNTÜ-1 tablosunun tamamı okunamadı.** `docs/audit/audit_report.md` repoda yok ve git
+  geçmişine hiç eklenmemiş; O-numaralı bulgular checked-in olmayan harici bir belgeden geliyor.
+  Doğrulama, kullanıcının açıkça saydığı **19** kodla sınırlıdır — "25+" iddiasının kalanı
+  görülmedi ve bu kayıt onlar hakkında hiçbir şey söylemez.
+- Tarama `backend/src` + `backend/tests` kapsamındadır; frontend yalnız silinen üç tanım için
+  kontrol edildi (sıfır referans).
+- Adjudicate edilen 19 kod için **yeni integration testi yazılmadı** — yeni kod eklenmediği için
+  bağlanacak yeni davranış da yok; her satırın karşılığı zaten kendi mevcut testine sahip.
+- **Lokal tam suite tek koşuda tamamlanamadı.** Paket paket yeşil: `acceptance` + `contract` +
+  `deterministic` exit 0; `tests/unit` (yeni ratchet testi dahil) exit 0; ruff · format (602 dosya) ·
+  `mypy src` (352 dosya) temiz. `tests/integration` 55 test temiz geçtikten sonra kesildi. Üç tam-suite
+  denemesi de **test hatasıyla değil, lokal ortam tarafından** öldürüldü (bu makinede arka plan
+  süreçleri Bash çağrısını aşamıyor; `setsid`/`nohup`/`disown` dahil); en uzun koşu **%23'e kadar
+  sıfır hata** ile ilerledi ve ilk koşunun patladığı ~%15 noktasını temiz geçti. Bu, CLAUDE.md lokal
+  verify kuralından **bilinçli ve açıklanmış** bir sapmadır; integration paketinin otoritesi PR #407'nin
+  CI koşusudur.
+- **Migration/DDL etkisi ampirik olarak ölçüldü**, varsayılmadı: `publication_state` kolonu silme
+  öncesi ve sonrası derlendi, çıktı byte-identical (`VARCHAR(10)`, CHECK yok). alembic head
+  `0035_portfolio_rules` değişmedi.

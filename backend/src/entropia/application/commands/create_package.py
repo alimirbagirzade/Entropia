@@ -36,6 +36,7 @@ from entropia.application.jobs.create_package import (
     generate_and_store_candidate,
     registry_fingerprint,
 )
+from entropia.application.queries.package_dependency import ensure_no_dependency_cycle
 from entropia.domain.create_package import (
     BaselineParseStatus,
     CreatePackageState,
@@ -1029,6 +1030,15 @@ async def approve_and_publish(
         check_head_revision(pkg_root.current_revision_id, expected_head_revision_id)
         if revision.approval_state == ApprovalState.REJECTED:
             raise DependencyUnresolved("This revision was rejected; create a new attempt.")
+        # O-10 / doc 08 §14 "Dependency cycle": the same fail-closed graph gate the
+        # Library publish surface applies, so no publish path can reach PUBLISHED
+        # with an A -> B -> A dependency path. A Create-Package draft pins ESP
+        # resolver refs (a different registry, doc 09), so V1 has no reachable cycle
+        # HERE — the guard exists so a future package-level ref cannot slip through
+        # this surface unchecked. Last gate before any mutation.
+        await ensure_no_dependency_cycle(
+            session, root_id=pkg_root.entity_id, revision_id=revision.revision_id
+        )
 
         previous_approval = revision.approval_state
         revision.approval_state = ApprovalState.APPROVED

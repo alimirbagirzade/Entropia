@@ -186,7 +186,7 @@ async def _admit_run(
     # 2. Any blocker => 422 READINESS_BLOCKED; the whole tx rolls back so no run,
     #    manifest, report or job is left behind (doc 15 §11).
     if preflight["summary"]["blocker_count"] > 0:
-        raise ReadinessBlockedError(details=[_issue_detail(issue) for issue in preflight["issues"]])
+        raise _readiness_blocked(preflight["issues"])
 
     snapshot = await session.get(MainboardCompositionSnapshot, preflight["snapshot_id"])
     if snapshot is None:  # pragma: no cover - snapshot was just written in this tx
@@ -403,17 +403,21 @@ async def _resolve_tick_pins(
             session, config.data.instrument_id
         )
         if tick_revision is None:
-            raise ReadinessBlockedError(
-                details=[
+            raise _readiness_blocked(
+                [
                     {
                         "code": ReadinessIssueCode.TICK_DATA_UNAVAILABLE.value,
                         "severity": ReadinessSeverity.BLOCKER.value,
                         "scope": ReadinessScope.MARKET_DATA.value,
-                        "field": "data.intrabar_policy.tick_policy",
+                        "field_path": "data.intrabar_policy.tick_policy",
                         "scope_id": str(entry.get("item_id")),
                         "message": (
                             "The strategy requires tick data but no approved tick/trade "
                             "dataset could be pinned for its instrument at admission."
+                        ),
+                        "remediation": (
+                            "Import and approve a tick/trade dataset for the strategy's "
+                            "instrument, or switch the intrabar policy off tick data."
                         ),
                     }
                 ]
@@ -426,6 +430,9 @@ async def _resolve_tick_pins(
 
 
 def _issue_detail(issue: dict[str, Any]) -> dict[str, Any]:
+    # ``remediation`` is the actionable half of a readiness finding (doc 14 §3.2);
+    # dropping it here used to strand it inside the report while the HTTP caller
+    # only saw the symptom (O-02).
     return {
         "code": issue.get("code"),
         "severity": issue.get("severity"),
@@ -433,7 +440,26 @@ def _issue_detail(issue: dict[str, Any]) -> dict[str, Any]:
         "field": issue.get("field_path"),
         "scope_id": issue.get("scope_id"),
         "message": issue.get("message"),
+        "remediation": issue.get("remediation"),
     }
+
+
+def _readiness_blocked(issues: list[dict[str, Any]]) -> ReadinessBlockedError:
+    """Build the 422 from a preflight result, lifting the first blocker's scope and
+    remediation onto the envelope itself (doc 01 §11.2, doc 04 §11.1).
+
+    ``details`` still carries every issue; the promoted fields let a client act on
+    the leading blocker without parsing the list.
+    """
+    blockers = [i for i in issues if i.get("severity") == ReadinessSeverity.BLOCKER.value]
+    lead = blockers[0] if blockers else None
+    return ReadinessBlockedError(
+        details=[_issue_detail(issue) for issue in issues],
+        remediation=lead.get("remediation") if lead else None,
+        scope_type=str(lead["scope"]) if lead and lead.get("scope") else None,
+        scope_id=str(lead["scope_id"]) if lead and lead.get("scope_id") else None,
+        field_path=str(lead["field_path"]) if lead and lead.get("field_path") else None,
+    )
 
 
 def _emit_run_audit(

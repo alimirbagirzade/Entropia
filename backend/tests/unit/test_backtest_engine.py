@@ -589,15 +589,19 @@ def test_engine_applies_the_position_size_cap_to_a_real_trade() -> None:
 def test_engine_execution_key_namespace_shifts_with_the_engine_version() -> None:
     # The ENGINE_VERSION bump must flow into the manifest so a stale pre-conflict
     # result cannot be reused under the new engine (INF-04 idempotent reuse / INF-05).
-    # K-04 bumped it to -full-pinning: the manifest now carries all seven doc 15 §9.2
-    # field groups (the transitive package / dataset / import revisions included) and the
-    # worker re-resolves them fail-closed, so a result produced under a different — or
-    # since-removed — dependency set must never be idempotently reused for a re-RUN.
+    # K-04 bumped it to -full-pinning: the manifest carries all seven doc 15 §9.2 field
+    # groups (the transitive package / dataset / import revisions included) and the worker
+    # re-resolves them fail-closed. K-03 then bumped it to -funding-step-order: funding/fee/
+    # carry now runs at the TOP of each bar (doc 15 §9.3 step 2) instead of the end, so it
+    # reduces the equity that sizes this bar's entries/scale layers and bounds its exposure
+    # caps. Under either change a result produced under the older engine — a different (or
+    # since-removed) dependency set, or the end-of-bar funding order — must never be
+    # idempotently reused for a re-RUN.
     built = _manifest("btrun_A", "snap_A", "2024-01-01T00:00:00Z")
-    expected = "backtest-engine-v18-full-pinning"
+    expected = "backtest-engine-v18-funding-step-order"
     assert built.manifest["identity"]["engine_version"] == expected
     # The bump is a real NAMESPACE shift: the same run identity under the previous engine
-    # version hashes to a different execution_key, so a pre-K-02 result is never reused.
+    # version hashes to a different execution_key, so a pre-K-03 result is never reused.
     stale = _manifest("btrun_A", "snap_A", "2024-01-01T00:00:00Z", engine_version="prev-engine")
     assert stale.execution_key != built.execution_key
 

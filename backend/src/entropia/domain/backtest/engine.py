@@ -21,13 +21,38 @@ NEVER a production fallback. What is real either way: the bars, their timestamps
 the strategy's protection stops (percentage / trailing / absolute), the direction bias,
 the costs (commission / spread / slippage) and the position sizing.
 
-Engine order follows doc 15 §9.3 (bounded to the foundation scope): per bar —
-(1) update the rolling look-back window (feeds the test-only breakout fixture); (2) if
-in a position, evaluate protection/stop/exit against THIS bar's high/low (intrabar
-touch); (3) if flat, evaluate the entry model (the resolved indicator plan, or the
-test-only breakout fixture) and open a position. State/decision-trace counters are
-emitted per trade (bounded memory — never O(bars)); the OHLCV stream is consumed one
-batch at a time.
+Engine order is the CANONICAL, versioned doc 15 §9.3 sequence. Per bar, in this order:
+
+  (1) include only Market/Research data available by the clock time — the bar itself
+      (replayed strictly forward from the pinned revision) plus every research feed,
+      each gated by ``research_data.time_policy.is_eligible_for_decision`` (K-02);
+  (2) apply funding/fee/carry (K-03) — BEFORE anything this bar sizes or caps;
+  (3) evaluate pending fills — (3) deferred open, (3b/3b2) resting limit + its partial
+      remainder, (3c) resting stop trigger, (3d) deferred close (which by construction
+      resolves at the bar's close, i.e. later in the code than steps 4-6 below);
+  (4) evaluate protection/stop/exit rules against THIS bar's high/low (intrabar touch);
+  (5) evaluate conflict/exposure/allocation constraints — the F-07e conflict/hedge policy
+      plus the sleeve / ``max_total_exposure`` / position-size caps, which are evaluated
+      at each sizing decision point (``_sized`` / ``_sleeve_capital``) rather than as one
+      standalone block;
+  (6) evaluate entry signals and schedule orders — (6a) the resolved indicator plan or
+      (6b) the test-only breakout fixture;
+  (7) evaluate same-direction scaling (the F-07d price-distance ladder);
+  (8) write the state snapshot, decision trace and diagnostic counters.
+
+K-03: step 2 is the ordering that makes the rest of the sequence honest. ``equity`` is
+what sizes an entry and what bounds the allocation sleeve and exposure caps, so applying
+funding at the END of the bar (the pre-K-03 order) sized every entry and every scale layer
+off equity that had not yet paid its carry — under perp funding a one-directional
+CUMULATIVE bias toward systematically larger positions and a late-binding
+``max_total_exposure``. Steps 5 and 6 are interleaved in the code because the exposure /
+sleeve / size caps bind at the point a size is computed; steps 3d and 4/6 are likewise
+interleaved because a fill deferred to the bar's CLOSE cannot resolve before the close.
+Those two deviations are structural, not a reordering of the economics — every other step
+runs in canonical position, and the in-loop ``# (n)`` markers name their canonical step.
+
+State/decision-trace counters are emitted per trade (bounded memory — never O(bars)); the
+OHLCV stream is consumed one batch at a time.
 """
 
 from __future__ import annotations
@@ -2972,7 +2997,12 @@ def run_engine(
                     current_day = bar_date
                     day_realized = _ZERO
 
-            # Real indicator signals (when a plan resolved); evaluators see EVERY bar.
+            # (1) doc 15 §9.3 step 1 — admit only the Market/Research data available by this
+            # bar's clock time. The market side is the bar itself (the pinned revision is
+            # replayed strictly forward, so a later bar can never be read early); the
+            # research side is the K-02 available-time gate applied in step (2) below and in
+            # every other research feed. Real indicator signals (when a plan resolved);
+            # evaluators see EVERY bar.
             entry_signal: str | None = None
             exit_hit = False
             if plan_active and indicator_plan is not None:
@@ -3010,7 +3040,83 @@ def run_engine(
                     timestamp=bar.timestamp,
                 )
 
-            # (1) Resolve a fill deferred to THIS bar's OPEN (next_candle_open). Runs
+            # (2) K-03 / F-11 funding cost — doc 15 §9.3 step 2: funding/fee/carry is applied
+            # at the TOP of the bar, BEFORE any fill, stop, exposure check, entry or scaling
+            # of this bar. That ordering is not cosmetic: ``equity`` is what sizes an entry
+            # (``_position_size``) and what bounds the allocation sleeve / exposure caps
+            # (``_sleeve_capital``). Charging funding at the END of the bar (the pre-K-03
+            # order) sized every entry and every scale layer off an equity that had not yet
+            # paid its carry — under perp funding, a one-directional cumulative bias toward
+            # systematically LARGER positions and a late-binding ``max_total_exposure``.
+            #
+            # A backward/as-of join over the available-time-safe schedule (doc 12 §8.4
+            # rule 3). Every funding record now AVAILABLE at this bar
+            # (``available_at <= bar_time``) fires exactly once; while a position is held it
+            # charges ``notional * rate`` (a long pays a positive rate, a short receives),
+            # reducing equity mid-run so funding-on and funding-off produce a verifiably
+            # different result. A record dated after the last replayed bar never fires — a
+            # future value can never leak into the run. Records that become available while
+            # flat are consumed without a charge: funding is paid only for the interval the
+            # position is actually held (perp funding convention). Two consequences of the
+            # step-2 placement follow directly from that convention: a position still open at
+            # the START of this bar pays a record available now even if the bar later closes
+            # it (the pre-K-03 order silently DROPPED that charge), and a position OPENED on
+            # this bar does not pay it (it was not held when the record became available).
+            #
+            # K-02: the as-of comparison is NOT written inline here — it is delegated to
+            # ``research_data.time_policy.is_eligible_for_decision``, the single canonical
+            # rule-2 gate (mapping AND ``available_at <= t``). This bar's timestamp is the
+            # decision time, and ``schedule.has_instrument_mapping`` is the resolved mapping
+            # conjunct, so every research value the engine consumes passes one audited
+            # predicate rather than a hand-rolled comparison that can drift.
+            #
+            # FAIL CLOSED on an unresolvable bar timestamp: with no decision time, eligibility
+            # cannot be evaluated at all, and silently firing nothing would book an
+            # over-optimistic ZERO funding cost for the whole run. This deliberately differs
+            # from the date-blackout precedent below, where a restrictive reading exists
+            # (treat the bar as inside the window); a cost has no such reading.
+            if funding_records:
+                bar_time = parse_utc(bar.timestamp, source_zone=None)
+                if bar_time is None:
+                    raise FundingSourceInvalid(
+                        "Funding is active but bar timestamp "
+                        f"'{bar.timestamp}' cannot be resolved to a decision time; "
+                        "available-time eligibility is unprovable (doc 12 §8.4 rule 2).",
+                    )
+                while funding_idx < len(funding_records) and is_eligible_for_decision(
+                    available_at=funding_records[funding_idx].available_at,
+                    decision_time=bar_time,
+                    has_instrument_mapping=funding_has_mapping,
+                ):
+                    rec = funding_records[funding_idx]
+                    funding_idx += 1
+                    if position is None:
+                        continue
+                    fsign = _ONE if position.direction == "long" else -_ONE
+                    charge = (position.entry_notional * rec.rate * fsign).quantize(_MONEY)
+                    if charge != _ZERO:
+                        equity = (equity - charge).quantize(_MONEY)
+                        peak = max(peak, equity)
+                        funding_paid += charge
+                    funding_charges += 1
+                    _emit(
+                        "funding_charge",
+                        event_time=bar.timestamp,
+                        direction=position.direction,
+                        bar_seq=bars_seen,
+                        detail={
+                            "position_seq": position.position_seq,
+                            "rate": str(rec.rate),
+                            "charge": str(charge),
+                            "available_at": rec.available_at.isoformat(),
+                            "event_at": rec.event_at.isoformat(),
+                            "source_revision_id": (
+                                funding.source_revision_id if funding is not None else None
+                            ),
+                        },
+                    )
+
+            # (3) Resolve a fill deferred to THIS bar's OPEN (next_candle_open). Runs
             # before the intrabar stop path so the open fill precedes the bar's high/low.
             if pending is not None and pending.target_seq == bars_seen and pending.at_open:
                 if pending.kind == "entry" and position is None:
@@ -3040,7 +3146,7 @@ def run_engine(
                         _apply_partial_aftermath(position, bar.open)
                 pending = None
 
-            # (1b) Resolve a RESTING limit ENTRY order against THIS bar (F-07b/F-07i C).
+            # (3b) Resolve a RESTING limit ENTRY order against THIS bar (F-07b/F-07i C).
             # Resolves before the position block (like a next_open fill), so a same-bar
             # protective stop can hit the just-filled position — consistent with the
             # deferred-open path. A touch fills at the limit via ``_fill_resting_limit``
@@ -3088,7 +3194,7 @@ def run_engine(
                     elif wl.unfilled_policy == "re_price_next_candle":
                         wl.limit_price = _limit_price(wl.price_rule, bar.close, wl.offset)
 
-            # (1b2) F-07i (C): a PARTIAL fill's remaining order rests AGAINST its open
+            # (3b2) F-07i (C): a PARTIAL fill's remaining order rests AGAINST its open
             # position (the order-remaining ledger, Master Ref §6.3): later touches top
             # the position up at the limit level until the validity/unfilled policy
             # disposes of the remainder. The remainder dies with its position — a
@@ -3167,7 +3273,7 @@ def run_engine(
                         elif wl.unfilled_policy == "re_price_next_candle":
                             wl.limit_price = _limit_price(wl.price_rule, bar.close, wl.offset)
 
-            # (1c) Resolve a RESTING stop ENTRY trigger against THIS bar (F-07h). A long
+            # (3c) Resolve a RESTING stop ENTRY trigger against THIS bar (F-07h). A long
             # buy-stop fires when the bar's high reaches the trigger (short mirror: low).
             # A plain stop then fills market-like at max(trigger, open) — a gap through
             # the trigger fills at the open (the trigger price no longer exists),
@@ -3176,7 +3282,7 @@ def run_engine(
             # NEXT bar — the same-bar stop-then-limit sequence needs tick ordering, so a
             # same-bar limit touch never fills (doc 02 §5.2: the trigger may fire and the
             # position still never open). Validity counts from the trigger bar, and the
-            # (1b) unfilled/re-price policies then apply verbatim.
+            # (3b) unfilled/re-price policies then apply verbatim.
             if working_stop is not None and position is None:
                 ws = working_stop
                 fired = (
@@ -3279,7 +3385,7 @@ def run_engine(
                     working_stop = None
 
             if position is not None:
-                # (2) protection / stop / exit against this bar (intrabar touch).
+                # (4) protection / stop / exit against this bar (intrabar touch).
                 if position.direction == "long":
                     position.trail_anchor = max(position.trail_anchor, bar.high)
                 else:
@@ -3466,7 +3572,7 @@ def run_engine(
                 # hedge policy opens nothing (F-07a / F-07b / F-07c / F-07d / F-07e).
                 want: str | None = None
                 if plan_active:
-                    # (3a) real indicator entry, respecting the direction bias.
+                    # (6a) real indicator entry, respecting the direction bias.
                     if entry_signal is not None:
                         if (entry_signal == "long" and not long_ok) or (
                             entry_signal == "short" and not short_ok
@@ -3485,7 +3591,7 @@ def run_engine(
                         else:
                             want = entry_signal
                 elif len(window) == _BREAKOUT_WINDOW:
-                    # (3b) breakout entry proxy, with a full look-back.
+                    # (6b) breakout entry proxy, with a full look-back.
                     highest = max(b.high for b in window)
                     lowest = min(b.low for b in window)
                     want_long = bar.close > highest
@@ -3553,7 +3659,7 @@ def run_engine(
                     if order_is_limit:
                         # F-07b: rest a limit order at the signal-derived price; it fills
                         # only on a later touch within the validity window (resolved by the
-                        # (1b) block on subsequent bars), never on this signal bar.
+                        # (3b) block on subsequent bars), never on this signal bar.
                         limit = order_cfg.limit
                         assert limit is not None  # guaranteed by order_ok
                         offset = limit.price_offset or _ZERO
@@ -3683,7 +3789,7 @@ def run_engine(
                             "entry", entry_sched == "next_open", bars_seen + 1, want, "", strength
                         )
 
-            # (4) Resolve a fill deferred to THIS bar's CLOSE (next_candle_close). Runs at
+            # (3d) Resolve a fill deferred to THIS bar's CLOSE (next_candle_close). Runs at
             # end-of-bar so an intrabar stop (above) pre-empts a scheduled close exit, and
             # so a pending set THIS bar (target bars_seen+1) is never resolved early.
             if pending is not None and pending.target_seq == bars_seen and not pending.at_open:
@@ -3714,7 +3820,7 @@ def run_engine(
                         _apply_partial_aftermath(position, bar.close)
                 pending = None
 
-            # (4b) F-07e conflict / position handling — a NEW aggregated entry-signal EDGE
+            # (5) F-07e conflict / position handling — a NEW aggregated entry-signal EDGE
             # while a position is OPEN (Master Ref §13; plan mode only — the breakout proxy
             # computes no signals while a position is held, so it stays byte-identical).
             # Runs AFTER the bar's exit/stop resolution so a risk event always dominates
@@ -3963,7 +4069,7 @@ def run_engine(
                         },
                     )
 
-            # (5) F-07d same-direction scaling — the price-distance ladder over the OPEN
+            # (7) F-07d same-direction scaling — the price-distance ladder over the OPEN
             # position (Master Ref §11.3/§11.4). Runs AFTER every entry/exit/stop resolution
             # of the bar so it sees the position's final state: a bar that closed or reduced
             # the position (``trades_before_bar``) or committed an exit (``pending``) never
@@ -4096,69 +4202,7 @@ def run_engine(
                             },
                         )
 
-            # (6) F-11 funding cost — a backward/as-of join over the available-time-safe
-            # schedule (doc 12 §8.4 rule 3). Every funding record now AVAILABLE at this bar
-            # (``available_at <= bar_time``) fires exactly once; while a position is held it
-            # charges ``notional * rate`` (a long pays a positive rate, a short receives),
-            # reducing equity mid-run so funding-on and funding-off produce a verifiably
-            # different result. A record dated after the last replayed bar never fires — a
-            # future value can never leak into the run. Records that become available while
-            # flat are consumed without a charge: funding is paid only for the interval the
-            # position is actually held (perp funding convention).
-            #
-            # K-02: the as-of comparison is NOT written inline here — it is delegated to
-            # ``research_data.time_policy.is_eligible_for_decision``, the single canonical
-            # rule-2 gate (mapping AND ``available_at <= t``). This bar's timestamp is the
-            # decision time, and ``schedule.has_instrument_mapping`` is the resolved mapping
-            # conjunct, so every research value the engine consumes passes one audited
-            # predicate rather than a hand-rolled comparison that can drift.
-            #
-            # FAIL CLOSED on an unresolvable bar timestamp: with no decision time, eligibility
-            # cannot be evaluated at all, and silently firing nothing would book an
-            # over-optimistic ZERO funding cost for the whole run. This deliberately differs
-            # from the date-blackout precedent above, where a restrictive reading exists
-            # (treat the bar as inside the window); a cost has no such reading.
-            if funding_records:
-                bar_time = parse_utc(bar.timestamp, source_zone=None)
-                if bar_time is None:
-                    raise FundingSourceInvalid(
-                        "Funding is active but bar timestamp "
-                        f"'{bar.timestamp}' cannot be resolved to a decision time; "
-                        "available-time eligibility is unprovable (doc 12 §8.4 rule 2).",
-                    )
-                while funding_idx < len(funding_records) and is_eligible_for_decision(
-                    available_at=funding_records[funding_idx].available_at,
-                    decision_time=bar_time,
-                    has_instrument_mapping=funding_has_mapping,
-                ):
-                    rec = funding_records[funding_idx]
-                    funding_idx += 1
-                    if position is None:
-                        continue
-                    fsign = _ONE if position.direction == "long" else -_ONE
-                    charge = (position.entry_notional * rec.rate * fsign).quantize(_MONEY)
-                    if charge != _ZERO:
-                        equity = (equity - charge).quantize(_MONEY)
-                        peak = max(peak, equity)
-                        funding_paid += charge
-                    funding_charges += 1
-                    _emit(
-                        "funding_charge",
-                        event_time=bar.timestamp,
-                        direction=position.direction,
-                        bar_seq=bars_seen,
-                        detail={
-                            "position_seq": position.position_seq,
-                            "rate": str(rec.rate),
-                            "charge": str(charge),
-                            "available_at": rec.available_at.isoformat(),
-                            "event_at": rec.event_at.isoformat(),
-                            "source_revision_id": (
-                                funding.source_revision_id if funding is not None else None
-                            ),
-                        },
-                    )
-
+            # (8) doc 15 §9.3 step 8 — state snapshot + decision-trace tail.
             # F-07e: the conflict EDGE detector's memory — this bar's aggregated signal is
             # the next bar's "previous" (None in proxy mode, so the detector stays inert).
             prev_entry_signal = entry_signal

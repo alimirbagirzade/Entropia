@@ -59,9 +59,19 @@ jobs:
       - name: Alembic migrations apply cleanly
         working-directory: backend
         run: uv run alembic upgrade head
-      - name: Pytest (unit + contract + integration)
+      - name: Pytest (unit + contract + integration) + coverage gate
         working-directory: backend
+        # pyproject's addopts carry --cov-fail-under=80, so a coverage drop fails
+        # here rather than being printed and ignored.
         run: uv run pytest
+
+      - name: Dependency audit (pip-audit)
+        working-directory: backend
+        # `uv pip audit` does not exist (uv 0.11 has no audit subcommand), so run
+        # the real tool against the synced project environment. Blocking from the
+        # start: the backend dependency set is clean today, so any new advisory is
+        # a genuine regression with nothing to grandfather in.
+        run: uv run --with pip-audit pip-audit
 
   frontend:
     name: Frontend — lint, typecheck, build, test
@@ -82,12 +92,28 @@ jobs:
       - name: Typecheck
         working-directory: frontend
         run: npm run typecheck
-      - name: Test
+      - name: Test + coverage gate
         working-directory: frontend
-        run: npm test
+        # `npm run coverage` is `vitest run --coverage` — the same suite `npm test`
+        # runs, plus the thresholds in vite.config.ts. Running it here instead of
+        # `npm test` keeps CI to a single pass over the suite. It also raises the
+        # per-test timeout: v8 instrumentation slows jsdom + Testing Library
+        # renders enough to trip the 5 s default on a 2-core runner.
+        run: npm run coverage
       - name: Build
         working-directory: frontend
         run: npm run build
+      - name: Dependency audit (npm, high + critical)
+        # Not a bare `npm audit --audit-level=high`: the frontend carries three
+        # high advisories whose only published fix is a MAJOR upgrade (eslint 10,
+        # or the react-router v8 migration that removes react-router-dom), and
+        # .github/dependabot.yml deliberately suppresses frontend majors as
+        # "cannot be merged piecemeal". A bare audit would therefore be red on
+        # every PR, and `continue-on-error` would make it a step that can never
+        # fail. The gate freezes those three advisory ids with a written reason and
+        # fails on anything else — the same idiom as ACCEPTED_SERIOUS_RULES in the
+        # a11y scan. Runs from the lockfiles, so no npm install is needed for e2e.
+        run: node scripts/npm-audit-gate.mjs frontend frontend/e2e
 
   docker:
     name: Docker — build images

@@ -2838,30 +2838,7 @@ madde-madde durum: `docs/PROJECT_HISTORY.md` §"Auth remediation dalgası".
   `entry_blocked` decision-trace event'i hiç üretilmiyordu. Gate `_open()`'da (her entry yolu oradan
   geçer), `_blocked_reason()`'da ise **en sonda** (per-domain sebep daha spesifik ve sözleşmeli).
 
-## K-01 — ingest timezone normalization landed (PR #386, merge `eedc7f1`)
 
-- **Bulgu:** `TimezoneSpec.zone`'un ingest'te caller'ı yoktu; `parse_timestamp` / `funding.parse_utc`
-  her naive damgayı koşulsuz UTC okuyordu. Deklare `America/New_York` bir dataset gerçek anına 4 saat
-  uzakta saklanıyor ve yine de auto-verify oluyordu (doc 11 §9.1 "no silent UTC fallback" ihlali).
-- **Düzeltme:** `source_zone` her timestamp okuyucusunda **zorunlu keyword-only**; zone her iki
-  durable job'da load↔validate arasında uygulanıyor; çözülemeyen naive hücre aynen bırakılıp
-  `MARKET_DATA_TIMEZONE_UNRESOLVED` / `RESEARCH_DATA_TIMEZONE_UNRESOLVED` ile BLOCKING_FAIL →
-  `NEEDS_REVIEW`. Source timezone metadata'sı korunuyor (doc 12 §8.4 kural 1).
-- **Migration YOK (bilinçli):** yanlışlık ham byte'lara bağlı, DB'ye değil. Yerine read-only,
-  integration-test'li audit: `application/queries/timezone_audit.py` +
-  `scripts/audit_timezone_normalization.py`. Lokal dev DB: **0/0 at-risk**. Remediation = Analyze'ı
-  yeniden koş.
-- **Reuse anchor'ları:** `validation_rules.resolve_timestamp` / `TimestampParse` /
-  `TIMEZONE_UNRESOLVED_RULE_CODE` · `jobs/market_data.revision_source_zone` +
-  `normalize_source_timestamps` · `jobs/research_data.revision_source_zone` +
-  `normalize_event_timestamps` · `research_data.time_policy.EVENT_TIME_COLUMN_CANDIDATES` +
-  `resolve_event_time_column` · `quality_rules.check_event_time_timezone`.
-- **Testler:** unit (NY DST'nin iki yanı + Istanbul + UTC + naive-IANA-yok) + 8 integration
-  (uçtan uca parquet + audit sorgusu). Tam suite **2014 passed / 0 failed**. alembic ve
-  `ENGINE_VERSION` değişmedi.
-- **Açık kalan (dürüst sınır):** audit "risk altında" raporlar, kesin-yanlış değil · `exchange` modu
-  yapısı gereği çözümsüz (exchange→zone registry yok) · K-01 öncesi parquet'ler naive kalır, engine
-  onlar için fail-closed `None` döner.
 
 ## Next: **PO imzası + R2 kapanışı** (R3 mühendislik backlog'u F-05 ile kapandı).
 R3 W3 dalgası: F-01a/b/c (durable worker'lar) · F-04+F-09 (PR #381) · **F-05/M-05 (bu slice)**

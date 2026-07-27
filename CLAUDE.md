@@ -102,7 +102,7 @@ Before stopping a working session, produce **ALL** of the following:
 - **Durum:** V1 ROADMAP COMPLETE (Stages 0–8, docs 01–22) + post-V1 + video-alignment +
   V18-R2 dalgası + **auth remediation dalgası COMPLETE** (güvenlik denetimi #346–#364).
   Tüm route yüzeyleri frontend'e bağlı; TIER 2 sayfa haritası 24/24.
-- **`main` HEAD:** `604f8b4` (PR **#388** merge). K-01 `eedc7f1` (PR #386) olarak main'de.
+
 - **alembic head:** **`0035_portfolio_rules`** (35 migration, tek head — R3 W3'te migration YOK).
   **`ENGINE_VERSION` = `backtest-engine-v18-capability-matrix`** (F-05'te bump edildi).
 - **Testler (lokal, F-05 dalı):** backend **1986 collected** (real-Postgres integration, yeşil) ·
@@ -113,11 +113,7 @@ Before stopping a working session, produce **ALL** of the following:
   tek kaynak (59 satır / 22 `future_dev`), engine fail-closed + Ready Check
   `STRATEGY_CAPABILITY_NOT_IN_BUILD` + UI'da disabled & bağımlılık notu (üretilen TS aynası).
   Tam kayıt: `docs/PROJECT_HISTORY.md` §"V18-R3 · F-05 / M-05".
-- **K-01 (PR #386):** deklare timezone artık ingest'te uygulanıyor — `source_zone` her
-  timestamp okuyucusunda zorunlu, sessiz UTC fallback kaldırıldı; çözülemeyen naive damga
-  `MARKET_DATA_TIMEZONE_UNRESOLVED` / `RESEARCH_DATA_TIMEZONE_UNRESOLVED` ile fail-closed.
-  Migration YOK — read-only audit (`scripts/audit_timezone_normalization.py`). Suite 2014 ✅.
-  Tam kayıt: `docs/PROJECT_HISTORY.md` §"K-01".
+
 
 - **Next — PO imzası + R2 kapanışı** (R3 mühendislik backlog'u F-05 ile kapandı; **F-07 raw-id
   sweep kalıntısı empirik doğrulanmalı**). Kalan tek blokaj

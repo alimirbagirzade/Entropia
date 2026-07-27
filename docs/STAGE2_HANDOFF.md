@@ -2950,6 +2950,38 @@ Ayrıca hâlâ açık: **F-07 raw-id presentation sweep kalıntısı** (empirik 
 **ortam tuzağı**: paralel worktree oturumları paylaşılan `entropia_test` DB'sini ezer —
 `TEST_DATABASE_URL` ile worktree'ye özel izole DB kullan.
 
+## O-02 — Hata zarfı spec'in dayattığı recovery sözleşmesini taşıyor landed (PR #400)
+
+`main` `5ba6c0c` (feat `2981384`). **Migration yok**, alembic head `0035_portfolio_rules`
+değişmedi, yeni tablo/endpoint yok, frontend'e dokunulmadı. CI 6/6 yeşil.
+
+`ErrorBody` geriye-uyumlu genişledi: ilk beş alan (`code, message, details, request_id,
+correlation_id`) **isim ve anlam olarak birebir** korundu, üstüne recovery bloğu geldi
+(`category, retryable, suggested_action, remediation, scope_type, scope_id, field_path`).
+Boş opsiyoneller eksik anahtar değil açık `null`. `shared/errors.py` `ErrorCategory` StrEnum'u
+kazandı; `AppError` `category`/`retryable`'ı sınıfta bildiriyor, `scope_type`/`scope_id`/
+`field_path`/`remediation` raise yerinde de pinlenebiliyor — 38 spec-adlı sınıf sınıflandırıldı,
+205 importer'ın hiçbir `raise` çağrısı değişmedi.
+
+Kilit kusur kapandı: `_issue_detail` readiness `remediation`'ını düşürüyordu; yeni
+`_readiness_blocked` lider blocker'ın `remediation`/`field_path`/`scope_id`'sini zarfa
+yükseltiyor, `details` yine tüm issue'ları taşıyor. Her iki spec örneği birebir üretiliyor
+(`READY_REPORT_STALE` doc 01 §11.2, `SIGNAL_EVENT_MAPPING_REQUIRED` doc 04 §11.1).
+
+**Adjudication:** `field_issues` → sevk edilmiş `details`; `suggested_action` (makine token'ı)
+ile `remediation` (insan metni) **ayrı** kaldı. CLAUDE.md §Conventions'ta.
+
+**OpenAPI:** `ErrorResponse` şemada hiç referans edilmiyordu (hata yanıtları handler'lardan
+çıkıyor) — `_publish_error_schema` zarfı `components.schemas`'a yayımladı, path girdileri
+değişmedi (+152 satır). Talimatın ötesindeki tek ekleme; PR'da işaretlendi, kalmasına karar verildi.
+
+**Testler:** contract 8 yeni + integration 1 yeni; ruff/format/mypy (351) temiz; `tests/contract`
+158/158; temiz tam `tests/integration` exit 0.
+
+**Deferred:** kalan ~110 hata sınıfının taban-sınıf kategorisini inceltme; endpoint'lerin
+`responses=` ile hata modelini bildirmesi. Ayrıntı: `docs/PROJECT_HISTORY.md` §O-02 ve
+`docs/O02_LANDED_KICKOFF.md`.
+
 ---
 
 ## F-07 — raw-id presentation sweep landed (PR pending)
@@ -2982,17 +3014,22 @@ Ayrıntı + gerekçe: `docs/implementation/v18_visual_traceability.md §4.4`.
 **Ortam tuzağı (yine doğrulandı):** varsayılan paralel vitest koşusunda 55 test 5s timeout ile düştü;
 `--no-file-parallelism` ile 608/608 yeşil. Frontend tarafında da worker contention gerçek.
 
-## Next: **PO imzası + R2 kapanışı** (değişmedi) · F-07 sunum katmanı kapandı
+## Next: **PO imzası + R2 kapanışı** (değişmedi) · O-02 landed · F-07 sunum katmanı kapandı
 
-F-07'nin **sunum katmanı** bu slice ile kapandı; **F-07 bütün olarak Complete DEĞİL** — §4.4'teki
-dört yüzey bir backend display-DTO slice'ı bekliyor (bu, F-07'nin kendi reçetesi: "Add display DTOs
-at query boundaries"). Kalan tek büyük blokaj hâlâ **R2'nin product-owner imzası**
+K-serisi K-01…K-07 landed; **O-02 landed (#400)**; **F-07'nin SUNUM katmanı bu slice ile kapandı**.
+Kalan tek büyük blokaj hâlâ **R2'nin product-owner imzası**
 (`docs/implementation/v18_final_acceptance.md` §4, D-1…D-9) — imza olmadan
 `entropia_v18_remediation_status.md`'deki R2 RE-OPENING banner'ı kalkmaz, hiçbir satır Complete olmaz.
 
+**F-07 bütün olarak Complete DEĞİL:** dört yüzey (`PreCheck.tsx:124`, `Library.tsx:1259/1274`,
+`ResultDetail.tsx:420/589`, `ReadyCheck.tsx:291`) hâlâ okuyucudan opak tanımlayıcı tanımasını
+istiyor; bunlar bir **backend display-DTO slice'ı** bekliyor. Gerekçe ve kapsam:
+`docs/implementation/v18_visual_traceability.md §4.4`.
+
 Sıradaki iş kalemleri:
 > 1. **Product-owner imzası** (D-1…D-9) — her şeyin önündeki kapı.
-> 2. **F-07 backend display-DTO slice'ı** — §4.4'teki dört yüzeye query sınırında insan etiketi ekle
->    (PreCheck request adı, import job etiketi, `PerItemBreakdown` manifest etiketi, `ReadinessIssue`
->    scope etiketi). PO-blocked DEĞİL, saf mühendislik.
+> 2. **F-07 backend display-DTO slice'ı** — §4.4'teki dört yüzeye query sınırında insan etiketi ekle.
+>    `ResultDetail`/`ReadyCheck` **immutable pinli artefakt** okur: etiket artefakt YAZILIRKEN
+>    yakalanmalı (canlı kompozisyondan join etmek bayat/değişmiş artefaktı yanlış etiketler) —
+>    muhtemelen migration. PO-blocked DEĞİL.
 > 3. **W2 kalemleri** (P-05/P-06/P-09/P-10/P-14) hâlâ Not started.

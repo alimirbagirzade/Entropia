@@ -1381,6 +1381,106 @@ kendi integration paketini koşuyordu; conftest her testte `drop_all`/`create_al
 birbirinin şemasını siliyor ve dalgalı, ilgisiz hatalar üretiyor. **`TEST_DATABASE_URL` ile worktree'ye
 özel izole DB kullan** (`entropia_k03_test`) — sonrasında suite ilk denemede yeşil.
 
+## O-02 · Hata zarfı — spec'in dayattığı recovery sözleşmesi (PR #400)
+
+**Landed:** PR #400, merged → `main` `5ba6c0c` (feat `2981384`). CI 6/6 yeşil (Backend
+lint/type/test 26m56s, Frontend, Docker, E2E×2, A11Y). **Migration YOK** — alembic head
+`0035_portfolio_rules` değişmedi, yeni tablo/kolon/endpoint yok. Frontend'e dokunulmadı.
+
+### Kusur
+
+`docs/spec/01_..._Mainboard_..._v1_1.md` §11.2 ("IMPLEMENTATION DECISION — NON-CANONICAL GAP
+RESOLUTION") ve `docs/spec/04_..._Trading_Signal_..._v1_1.md` §11.1 makine-okur bir recovery
+zarfı dayatıyor. Sevk edilen zarf `ErrorBody(code, message, details, request_id, correlation_id)`
+idi; eksik olan: `category`, `retryable`, `suggested_action`/`remediation`, `scope_type`,
+`scope_id`, `field_path`.
+
+Kilit gözlem **ampirik doğrulandı**: `domain/readiness/issues.py::ReadinessIssue` bu alanları
+(`remediation`, `field_path`, `scope_id`) doc 14 §3.2 gereği zaten üretiyordu, ama
+`commands/backtest_run.py::_issue_detail` onları HTTP'ye taşırken düşürüyordu — çağıran semptomu
+görüyor, çözümü hiç görmüyordu.
+
+### Ne landed
+
+- **`shared/responses.py::ErrorBody`** — recovery bloğuyla genişledi. İlk beş alan **isim ve
+  anlam olarak birebir** korundu (geriye uyumluluk). Boş opsiyoneller eksik anahtar değil
+  **açık `null`**, böylece istemci her alanı koşulsuz okuyabilir.
+- **`shared/errors.py`** — `ErrorCategory` StrEnum (12 üye: `validation`, `authorization`,
+  `not_found`, `conflict`, `concurrency_or_preflight`, `lifecycle`, `dependency_validation`,
+  `data_time_validation`, `composition_validation`, `active_job`, `async_job_failure`,
+  `rate_limit`, `internal`). `AppError` `category`/`retryable`'ı **sınıf düzeyinde** bildiriyor;
+  `scope_type`/`scope_id`/`field_path`/`remediation` hem sınıfta hem **raise yerinde**
+  pinlenebiliyor (keyword-only, hepsi defaultlu → 205 importer'ın hiçbir `raise` çağrısı
+  değişmedi). **38 spec-adlı hata sınıfı** sınıflandırıldı. Sınıflandırılmamış hata **asla**
+  `retryable: true` reklamı yapmıyor.
+- **`apps/api/errors.py`** — `_Recovery` value object zarfı besliyor; `_STATUS_CATEGORIES` +
+  `_status_recovery` framework kaynaklı yanıtların (404/405/422/429) kategorisini status
+  ailesinden türetiyor, listede olmayan her şey `internal`/retryable-değil kalıyor. Şema reddi
+  **tam olarak tek** alan hatalıysa `field_path`'i adlandırıyor (birden fazlaysa keyfî seçim
+  yok, hepsi `details`'te).
+- **`apps/api/hardening.py`** — 429 `RATE_LIMITED` artık `rate_limit` / `retryable: true` /
+  `suggested_action: "retry_later"` taşıyor.
+- **`commands/backtest_run.py`** — `_issue_detail` artık `remediation`'ı düşürmüyor; yeni
+  `_readiness_blocked` lider blocker'ın `remediation`/`field_path`/`scope_id`'sini zarfa
+  yükseltiyor, `details` yine **tüm** issue'ları taşıyor. Tick-data blocker'ı da bu yoldan geçiyor.
+- **OpenAPI** — `_publish_error_schema` zarfı `components.schemas`'a yayımlıyor. Sadece
+  yenilemek diff üretmiyordu: `ErrorResponse` şemada **hiç** referans edilmiyordu (hata
+  yanıtları endpoint'lerden değil exception handler'lardan çıkıyor), yani drift guard her
+  hatanın döndüğü tek şekli korumuyordu. `docs/openapi.json` +152 satır şema kazandı,
+  **hiçbir path girdisi değişmedi**. *(Bu, "openapi.json'ı yenile" talimatının ötesindeki tek
+  eklemedir; PR'da açıkça işaretlendi, kullanıcı kalmasına karar verdi.)*
+
+### Spec örnekleri birebir üretiliyor
+
+| doc | code | üretilen |
+|---|---|---|
+| 01 §11.2 | `READY_REPORT_STALE` | `category: concurrency_or_preflight`, `retryable: true`, `suggested_action: "rerun_ready_check"` |
+| 04 §11.1 | `SIGNAL_EVENT_MAPPING_REQUIRED` | `category: dependency_validation`, `retryable: false`, `scope_type: "TradingSignal"`, `field_path: "import_binding.mapping.available_time"`, `remediation: …` |
+
+### Adjudication (bağlayıcı)
+
+İki spec zarfı farklı adlandırıyor; tek wire sözleşmesi seçildi:
+
+1. **`field_issues` → `details`.** Aynı anlam (alan-başına issue listesi); sevk edilmiş ad
+   kazandı — frontend ve mevcut contract testleri onu okuyor.
+2. **`suggested_action` ve `remediation` AYRI kaldı.** doc 01 makine token'ı veriyor
+   (`"rerun_ready_check"`), doc 04 insan metni ("Add the source column or choose an explicit
+   provider availability rule…"). Tek alanda birleştirmek ikisinden birini kaybettirirdi.
+
+Karar `CLAUDE.md` §Conventions'a ve `shared/errors.py` modül docstring'ine yazıldı.
+
+### Testler
+
+- `tests/contract/test_error_envelope_contract.py` (**yeni, 8 test**) — tam anahtar kümesi,
+  eski beş adın korunumu, iki spec örneğinin birebir üretimi, raise-yerinde scope/field
+  pinleme, sınıflandırılmamış hatanın retryable olmaması, 404 status-türetimi, 422 tek-alan
+  adlandırması, zarfın OpenAPI'de yayımlanması.
+- `tests/integration/test_error_envelope_readiness.py` (**yeni, 1 test**) — gerçek DB'de
+  çözülemeyen indikatör pinli kompozisyon → RUN admission preflight'ı → hatanın **uygulamanın
+  kendi kayıtlı handler'ından** render edilmesi → `remediation`/`field_path`/`scope_id`'nin
+  zarfta ve her `details` girdisinde bulunması.
+- Lokal: ruff + format + mypy (351 dosya) temiz · `tests/contract` 158/158 · **temiz tam
+  `tests/integration` koşusu exit 0, sıfır başarısızlık**.
+
+### Honest boundary'ler
+
+1. **Kalan ~110 hata sınıfı taban sınıf kategorisini miras alıyor** (`validation` /
+   `authorization` / `not_found` / `conflict`). Yanlış değil ama kaba; sayfa taksonomisine göre
+   incelten sweep bilerek yapılmadı (ayrı slice).
+2. **Endpoint'ler hâlâ `responses=` ile hata modelini bildirmiyor.** Zarf `components.schemas`
+   altında yayımlanıyor ama her path'in hangi hata kodlarını dönebileceği OpenAPI'de yazılı
+   değil — o, her route'a dokunacak ayrı bir iş.
+3. **`field_path` çoklu alan hatasında `null`.** Bilinçli: keyfî bir alan seçmektense
+   `details`'e yönlendiriyoruz.
+
+### Ortam tuzağı — kayıt altına alındı
+
+Tam suite koşusunu **ortada öldürmek** (TaskStop) artakalan Postgres bağlantıları bırakıyor;
+`tests/integration/conftest.py` şemayı **her test için** drop/create ettiğinden bu bağlantılar
+DDL'i `ACCESS EXCLUSIVE` lock-wait'e sokup — conftest'in kendi docstring'inin dediği gibi —
+"across a full invocation, aborts dozens of tests". Bu slice'ta tam olarak bu yaşandı:
+**51 sahte FAILED**. Ayrıştırma: aynı 51 test izole koşuda 51/51 geçti, sonra temiz tam koşu
+exit 0 verdi, sonra CI yeşil geldi. Kod ile ilgisi yoktu.
 ---
 
 ## F-07 · Raw-id presentation sweep — empirik doğrulama + Portfolio kalıntıları (bu slice)

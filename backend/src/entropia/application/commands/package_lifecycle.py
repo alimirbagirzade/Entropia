@@ -63,6 +63,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from entropia.application.commands.deletion import soft_delete_registry_root
 from entropia.application.idempotency import run_idempotent
+from entropia.application.queries.package_dependency import ensure_no_dependency_cycle
 from entropia.domain.identity import Actor
 from entropia.domain.identity.policy import (
     ensure_can_edit,
@@ -577,6 +578,12 @@ async def approve_and_publish_package(
             raise ValidationRequired()
         if revision.approval_state != ApprovalState.APPROVAL_REQUESTED:
             raise LifecycleBlocked()
+        # O-10 / doc 08 §14 "Dependency cycle": the LAST gate before any mutation.
+        # The pinned dependency graph is walked and rejected when it closes an
+        # A -> B -> A path; the 409 carries the cycle path and the draft survives
+        # untouched for repair. Validation state says nothing about the graph, so
+        # this cannot be folded into the PASSED check above.
+        await ensure_no_dependency_cycle(session, root_id=entity_id, revision_id=revision_id)
 
         previous = revision.approval_state
         revision.approval_state = ApprovalState.APPROVED

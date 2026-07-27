@@ -132,13 +132,16 @@ Before stopping a working session, produce **ALL** of the following:
 - **alembic head:** **`0035_portfolio_rules`** (35 migration, tek head — K-serisinde migration YOK).
   **`ENGINE_VERSION` = `backtest-engine-v18-funding-step-order`** (K-03'te bump edildi; öncesi
   K-04 `-full-pinning`, K-02 `-available-time-gate`).
-- **Son dalga — K-serisi kusur backlog'u:** K-01 (#386) · K-02 (#393) · **K-03 (#398, funding
-  bar başına = doc 15 §9.3 adım 2)** · K-04 (#397) · K-05 (#387) · K-06 (#395) · K-07 (#388).
-- **Testler (lokal, K-03 dalı):** backend tam suite **exit 0, hiç F/E yok** (real-Postgres) ·
-  ruff + format + mypy (352 dosya) temiz. Frontend'e dokunulmadı.
+- **Son dalga — K-serisi kusur backlog'u + O-02:** K-01 (#386) · K-02 (#393) · **K-03 (#398, funding
+  bar başına = doc 15 §9.3 adım 2)** · K-04 (#397) · K-05 (#387) · K-06 (#395) · K-07 (#388) ·
+  **O-02 (#400, hata zarfı recovery sözleşmesi — main `5ba6c0c`, migration yok)**.
+- **Testler (lokal, O-02 dalı):** backend tam suite **exit 0, hiç F/E yok** (real-Postgres) ·
+  ruff + format + mypy (351 dosya) temiz · CI 6/6 yeşil. Frontend'e dokunulmadı.
   Doğrula: `gh run list --branch main --limit 1` → job log.
   **Ortam tuzağı:** paralel worktree oturumları paylaşılan `entropia_test` DB'sini ezer
   (conftest her testte `drop_all`/`create_all`) — `TEST_DATABASE_URL` ile izole DB kullan.
+  Tam suite koşusunu **ortada öldürme**: artakalan bağlantılar DDL'i `ACCESS EXCLUSIVE`
+  lock-wait'e sokar ve sonraki koşuda düzinelerce sahte FAILED üretir (O-02'de 51 tane).
 
 
 

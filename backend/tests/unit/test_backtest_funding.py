@@ -55,6 +55,7 @@ def _schedule(*records: tuple[int, str]) -> FundingSchedule:
             FundingRecord(available_at=_ts(day), event_at=_ts(day), rate=Decimal(rate))
             for day, rate in records
         ),
+        has_instrument_mapping=True,
     )
 
 
@@ -101,6 +102,7 @@ def test_funding_value_after_last_bar_never_leaks_into_the_run() -> None:
                 rate=Decimal("0.5"),
             ),
         ),
+        has_instrument_mapping=True,
     )
     out = _run(cfg, bars, leaked)
     assert out.diagnostics["funding_charges"] == 0
@@ -118,10 +120,12 @@ def test_fixed_delay_available_time_offset_defers_when_a_rate_fires() -> None:
     within = FundingSchedule(
         source_revision_id="rd_1",
         records=(FundingRecord(available_at=_ts(24), event_at=_ts(23), rate=Decimal("0.001")),),
+        has_instrument_mapping=True,
     )
     beyond = FundingSchedule(
         source_revision_id="rd_1",
         records=(FundingRecord(available_at=_ts(28), event_at=_ts(23), rate=Decimal("0.001")),),
+        has_instrument_mapping=True,
     )
     assert _run(cfg, bars, within).diagnostics["funding_charges"] == 1
     assert _run(cfg, bars, beyond).diagnostics["funding_charges"] == 0
@@ -162,7 +166,7 @@ def test_funding_result_is_deterministic_across_batch_sizes() -> None:
 def test_empty_schedule_is_byte_identical_to_funding_off() -> None:
     cfg = _config()
     bars = _long_held()
-    empty = FundingSchedule(source_revision_id="rd_1", records=())
+    empty = FundingSchedule(source_revision_id="rd_1", records=(), has_instrument_mapping=True)
     off = _run(cfg, bars, None)
     on = _run(cfg, bars, empty)
     assert on.summary["funding_paid"] == Decimal("0.00")

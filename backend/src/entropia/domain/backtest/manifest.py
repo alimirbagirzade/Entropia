@@ -48,7 +48,15 @@ from entropia.shared.manifest import manifest_hash
 # execution_key namespace so such a result — produced under an over-optimistic fill model — is
 # never idempotently reused for a re-RUN now that the config is correctly refused
 # (INF-04/INF-05).
-ENGINE_VERSION = "backtest-engine-v18-capability-matrix"
+# v18-available-time-gate (K-02): every research-feed access in the engine is now gated by
+# the canonical ``research_data.time_policy.is_eligible_for_decision`` predicate (doc 12 §8.4
+# rule 2), and the run FAILS CLOSED wherever eligibility cannot be proven — an unresolvable
+# bar timestamp while funding is active, an incoherent available-time policy/delay pair, and
+# a funding source with no valid instrument mapping now raise instead of silently booking a
+# ZERO funding cost. A result produced under those previously-silent, over-optimistic paths
+# must never be idempotently reused for a re-RUN (INF-04/INF-05), so the bump shifts the
+# execution_key namespace.
+ENGINE_VERSION = "backtest-engine-v18-available-time-gate"
 METRIC_SET_VERSION = "metric-set-v1"
 OUTPUT_ARTIFACT_PROFILE = "standard-v1"
 

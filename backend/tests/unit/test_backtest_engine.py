@@ -31,7 +31,7 @@ from entropia.domain.backtest.enums import (
     MetricAvailability,
 )
 from entropia.domain.backtest.indicators import BUILTIN_ENTRY_MODEL
-from entropia.domain.backtest.manifest import build_run_manifest
+from entropia.domain.backtest.manifest import ENGINE_VERSION, build_run_manifest
 from entropia.domain.backtest.metrics import DEFAULT_METRICS, derive_metric_values
 from entropia.domain.strategy.config import PositionSizeLimits, StrategyConfig
 from tests.unit.engine_signal_plan import sma_entry_plan
@@ -40,7 +40,14 @@ from tests.unit.engine_signal_plan import sma_entry_plan
 # ---------------------------------------------------------------------------
 # Manifest (unchanged Stage 5a contract)
 # ---------------------------------------------------------------------------
-def _manifest(run_id: str, snapshot_id: str, created_at: str, *, fingerprint: str = "fp_1"):
+def _manifest(
+    run_id: str,
+    snapshot_id: str,
+    created_at: str,
+    *,
+    fingerprint: str = "fp_1",
+    engine_version: str = ENGINE_VERSION,
+):
     item_manifest = {
         "items": [
             {
@@ -72,6 +79,7 @@ def _manifest(run_id: str, snapshot_id: str, created_at: str, *, fingerprint: st
         preflight={"ready_report_id": "rcrpt_1", "state": "ready", "warning_count": 0},
         correlation_id="corr_1",
         created_at_iso=created_at,
+        engine_version=engine_version,
     )
 
 
@@ -581,11 +589,17 @@ def test_engine_applies_the_position_size_cap_to_a_real_trade() -> None:
 def test_engine_execution_key_namespace_shifts_with_the_engine_version() -> None:
     # The ENGINE_VERSION bump must flow into the manifest so a stale pre-conflict
     # result cannot be reused under the new engine (INF-04 idempotent reuse / INF-05).
-    # F-05 bumped it to -capability-matrix: the matrix is now a fail-closed engine gate, so a
-    # result produced when 'historical_slippage_if_available' still ran as a silent
-    # ZERO-slippage backtest must never be idempotently reused for a re-RUN.
+    # K-02 bumped it to -available-time-gate: every research-feed access now passes the
+    # canonical ``is_eligible_for_decision`` predicate and the run fails closed wherever
+    # eligibility is unprovable, so a result produced under the older silent-skip paths
+    # (which booked a ZERO funding cost) must never be idempotently reused for a re-RUN.
     built = _manifest("btrun_A", "snap_A", "2024-01-01T00:00:00Z")
-    assert built.manifest["identity"]["engine_version"] == "backtest-engine-v18-capability-matrix"
+    expected = "backtest-engine-v18-available-time-gate"
+    assert built.manifest["identity"]["engine_version"] == expected
+    # The bump is a real NAMESPACE shift: the same run identity under the previous engine
+    # version hashes to a different execution_key, so a pre-K-02 result is never reused.
+    stale = _manifest("btrun_A", "snap_A", "2024-01-01T00:00:00Z", engine_version="prev-engine")
+    assert stale.execution_key != built.execution_key
 
 
 def test_stop_exit_default_is_stop_has_priority() -> None:

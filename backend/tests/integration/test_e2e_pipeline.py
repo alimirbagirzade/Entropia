@@ -38,6 +38,7 @@ from entropia.application.commands import readiness_check as readiness_cmd
 from entropia.application.commands import research_data as rd_cmd
 from entropia.application.commands import strategy_draft as strat_cmd
 from entropia.application.commands.deletion import restore_trash_entry
+from entropia.application.jobs import create_package as cp_jobs
 from entropia.application.jobs.backtest_engine import run_backtest
 from entropia.application.queries import backtest_run as backtest_query
 from entropia.application.queries import mainboard as mb_query
@@ -264,7 +265,8 @@ async def _published_package(session, family_id: str) -> dict[str, str]:
     await session.commit()
     request_id = created["request_id"]
 
-    pre = await cp_cmd.run_precheck(session, OWNER, request_id=request_id)
+    queued_pre = await cp_cmd.run_precheck(session, OWNER, request_id=request_id)
+    pre = await cp_jobs.run_create_package_job(session, queued_pre["job_id"])
     await session.commit()
     assert pre["status"] == str(PrecheckScanStatus.PASSED)
 

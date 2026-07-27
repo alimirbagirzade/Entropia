@@ -25,8 +25,8 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from entropia.application.idempotency import run_idempotent
+from entropia.application.jobs.create_package import registry_fingerprint
 from entropia.application.jobs.package_validation import run_package_validation
-from entropia.application.queries import esp as esp_query
 from entropia.domain.create_package import (
     BaselineParseStatus,
     CreatePackageState,
@@ -46,16 +46,11 @@ from entropia.domain.create_package import (
     normalize_request,
     parse_baseline_csv,
     resolve_equivalence_claim,
-    scan_source_calls,
     source_hash,
 )
 from entropia.domain.create_package.generator import (
     GeneratedCandidate,
     generate_candidate,
-)
-from entropia.domain.create_package.source_scan import (
-    SOURCE_SCANNER_VERSION,
-    is_scannable_key,
 )
 from entropia.domain.esp.enums import RuntimeAdapter
 from entropia.domain.identity import Actor
@@ -67,7 +62,6 @@ from entropia.domain.lifecycle.enums import (
     VisibilityScope,
 )
 from entropia.domain.package.enums import PackageValidationState
-from entropia.domain.revision.hashing import content_hash
 from entropia.infrastructure.postgres.models import (
     EntityRegistry,
     Job,
@@ -78,7 +72,6 @@ from entropia.infrastructure.postgres.models import (
 from entropia.infrastructure.postgres.repositories import approvals as approval_repo
 from entropia.infrastructure.postgres.repositories import audit as audit_repo
 from entropia.infrastructure.postgres.repositories import create_package as cp_repo
-from entropia.infrastructure.postgres.repositories import esp as esp_repo
 from entropia.infrastructure.postgres.repositories import packages as pkg_repo
 from entropia.infrastructure.postgres.repositories import rationale as rationale_repo
 from entropia.infrastructure.s3 import datasets
@@ -97,9 +90,6 @@ from entropia.shared.errors import (
     PrecheckStale,
     RationaleFamilyNotActive,
     RequestVersionConflict,
-    ResolverAdapterIncompatible,
-    ResolverNotResolved,
-    ResolverSignatureMismatch,
     ValidationError,
     ValidationRequired,
     ValidationStale,
@@ -107,13 +97,9 @@ from entropia.shared.errors import (
 
 _REQUEST_TARGET_KIND = "package_request"
 _PACKAGE_TARGET_KIND = "package"
-# The scanner semantics changed from a declared-list echo to a comment/string-aware
-# source lexer (doc 07 §6.2). A prior stub scan is not equivalent, so the version
-# tracks the domain scanner contract.
-_SCANNER_VERSION = SOURCE_SCANNER_VERSION
-_UNDECLARED_SOURCE_CODE = "UNDECLARED_SOURCE_DEPENDENCY"
-_DECLARED_NOT_IN_SOURCE_CODE = "DECLARED_NOT_IN_SOURCE"
-_RESOLVE_ERRORS = (ResolverNotResolved, ResolverSignatureMismatch, ResolverAdapterIncompatible)
+# The Pre-Check worker rides the general-purpose plane consumed by the ``default,
+# maintenance`` worker (docker-compose); scan semantics live in jobs/create_package.py.
+_PRECHECK_QUEUE = "default"
 # Upload cap for a baseline CSV export (doc 06 §8.3 file type/size gate).
 _MAX_BASELINE_BYTES = 25 * 1024 * 1024
 
@@ -171,65 +157,6 @@ def _check_request_version(root: EntityRegistry, expected: int | None) -> None:
         raise RequestVersionConflict(
             f"Expected request version {expected} but current is {root.row_version}."
         )
-
-
-async def _registry_fingerprint(
-    session: AsyncSession, declared_dependencies: list[dict[str, Any]]
-) -> str:
-    """Fingerprint the consulted registry pointers so an Admin activate/deprecate
-    of any declared resolver after a scan makes that scan stale (doc 07 §8.1, IR-4)."""
-    parts: list[dict[str, Any]] = []
-    for dep in declared_dependencies:
-        key = str(dep.get("key", ""))
-        entry = await esp_repo.get_registry_by_key(session, key)
-        parts.append(
-            {
-                "key": key,
-                "active_revision_id": entry.trusted_active_revision_id if entry else None,
-                "registry_version": entry.registry_version if entry else None,
-                "trust_state": str(entry.trust_state) if entry else None,
-            }
-        )
-    parts.sort(key=lambda p: p["key"])
-    return f"sha256:{content_hash(parts)}"
-
-
-async def _resolve_declared(
-    session: AsyncSession,
-    declared_dependencies: list[dict[str, Any]],
-    target_runtime: RuntimeAdapter,
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Resolve each declared canonical TA call against the trusted ESP registry.
-
-    Returns ``(resolved_refs, missing_calls)``. Each resolved ref pins the exact
-    revision id + content hash + registry version (never name-only/latest, P4/L5).
-    A typed resolver error becomes a missing_call with its precise code.
-    """
-    resolved_refs: list[dict[str, Any]] = []
-    missing_calls: list[dict[str, Any]] = []
-    for dep in declared_dependencies:
-        key = str(dep.get("key", ""))
-        signature = dep.get("signature") if isinstance(dep.get("signature"), dict) else {}
-        try:
-            res = await esp_query.resolve_embedded_dependency(
-                session,
-                parsed_call={"key": key, "signature": signature},
-                target_runtime=target_runtime,
-            )
-            resolved_refs.append(
-                {
-                    "call": key,
-                    "canonical_key": res["canonical_key"],
-                    "embedded_entity_id": res["entity_id"],
-                    "embedded_revision_id": res["revision_id"],
-                    "content_hash": res["content_hash"],
-                    "runtime_adapter": res["runtime_adapter"],
-                    "registry_version": res["registry_version"],
-                }
-            )
-        except _RESOLVE_ERRORS as exc:
-            missing_calls.append({"call": key, "code": exc.code, "message": exc.message})
-    return resolved_refs, missing_calls
 
 
 async def create_package_request(
@@ -449,89 +376,43 @@ async def run_precheck(
     expected_request_version: int | None = None,
     idempotency_key: str | None = None,
 ) -> dict[str, Any]:
-    """Run a Pre-Check dependency scan for a request (doc 07 §8, §10).
+    """Admit a Pre-Check dependency scan for a request (doc 07 §8, §10; Finding F-01).
 
-    Description requests resolve to NOT_APPLICABLE (no resolver gate). Code requests
-    resolve each declared canonical TA call against the trusted ESP registry; if any
-    is unresolved the scan is BLOCKED, else PASSED. Each scan is immutable evidence
-    (new ``attempt_no``) pinning the exact resolved revisions + a registry
-    fingerprint. A durable job row records the work (CR-09); the V1 stub completes
-    it in-transaction. The concurrency + scan write live INSIDE the idempotent body.
+    Enqueues a DURABLE Pre-Check job and returns ``queued`` immediately — the scan runs in
+    the ``default``-queue worker (``jobs.create_package.run_precheck_job``), so a browser
+    close / logout never cancels it and the UI never shows a result before the work is
+    done. The immutable scan, the request state advance (precheck_passed / blocked /
+    not_applicable, or precheck_failed on worker failure) and the ``resource.changed``
+    outbox are produced by the worker. The OCC guard (``expected_request_version``) and the
+    row lock live INSIDE the idempotent body; the row_version is bumped at admission so a
+    concurrent re-submit with a stale token is rejected.
     """
     root, detail = await _require_request(session, actor, request_id)
 
     async def _op() -> dict[str, Any]:
         await session.refresh(root, with_for_update=True)
         _check_request_version(root, expected_request_version)
-
-        if detail.source_kind == SourceKind.DESCRIPTION:
-            return await _record_scan(
-                session,
-                actor,
-                root,
-                detail,
-                detected_calls=[],
-                resolved_refs=[],
-                missing_calls=[],
-                source_warnings=[],
-                status=PrecheckScanStatus.NOT_APPLICABLE,
-                registry_fingerprint="sha256:not_applicable",
-                next_state=CreatePackageState.PRECHECK_NOT_APPLICABLE,
-            )
-
-        # Detect the real TA/condition call nodes from the SOURCE (comment/string
-        # aware), then reconcile against the declared dependency list (doc 07 §6.2):
-        # a source call the request never declared blocks (PC-06 undeclared), and a
-        # declared call the source never invokes is a non-fatal over-declaration
-        # warning. Declared deps still drive registry resolution + the pins.
-        detected = list(scan_source_calls(detail.request_body).calls)
-        declared_keys = [str(dep["key"]) for dep in detail.declared_dependencies]
-        declared_set = set(declared_keys)
-        source_set = set(detected)
-        undeclared = [
-            {
-                "call": call,
-                "code": _UNDECLARED_SOURCE_CODE,
-                "message": f"Source calls '{call}' but it is not declared as a dependency.",
-            }
-            for call in detected
-            if call not in declared_set
-        ]
-        source_warnings = [
-            {
-                "call": key,
-                "code": _DECLARED_NOT_IN_SOURCE_CODE,
-                "message": f"Declared dependency '{key}' is not called in the source.",
-            }
-            for key in declared_keys
-            if is_scannable_key(key) and key not in source_set
-        ]
-
-        resolved_refs, missing_calls = await _resolve_declared(
-            session, detail.declared_dependencies, detail.target_runtime
-        )
-        # Registry-missing declared calls first, then undeclared source calls:
-        # both block, and the existing missing[0] contract stays the resolver miss.
-        missing_calls = missing_calls + undeclared
-        fingerprint = await _registry_fingerprint(session, detail.declared_dependencies)
-        passed = not missing_calls
-        status = PrecheckScanStatus.PASSED if passed else PrecheckScanStatus.BLOCKED
-        next_state = (
-            CreatePackageState.PRECHECK_PASSED if passed else CreatePackageState.PRECHECK_BLOCKED
-        )
-        return await _record_scan(
-            session,
-            actor,
-            root,
-            detail,
-            detected_calls=detected,
-            resolved_refs=resolved_refs,
-            missing_calls=missing_calls,
-            source_warnings=source_warnings,
-            status=status,
-            registry_fingerprint=fingerprint,
-            next_state=next_state,
-        )
+        job = _enqueue_precheck_job(session, actor, request_id=root.entity_id)
+        # Advance the request_version so expected_request_version detects a concurrent
+        # admission (the token is otherwise inert until the worker records the scan).
+        root.row_version += 1
+        return {
+            "request_id": root.entity_id,
+            "job_id": job.job_id,
+            "status": str(PrecheckScanStatus.CHECKING),
+            "state": str(detail.state),
+            # The scan does not exist yet; these placeholders keep the response
+            # assignable to the client's PrecheckActionResult contract. The overlay shows
+            # an in-flight state until the worker's resource.changed refetch lands the
+            # real scan (never a synthesized PASSED/BLOCKED).
+            "scan_id": "",
+            "attempt_no": 0,
+            "resolved": 0,
+            "missing": [],
+            "warnings": [],
+            "registry_fingerprint": "",
+            "request_version": root.row_version,
+        }
 
     return await run_idempotent(
         session,
@@ -544,76 +425,6 @@ async def run_precheck(
         },
         operation=_op,
     )
-
-
-async def _record_scan(
-    session: AsyncSession,
-    actor: Actor,
-    root: EntityRegistry,
-    detail: PackageRequest,
-    *,
-    detected_calls: list[str],
-    resolved_refs: list[dict[str, Any]],
-    missing_calls: list[dict[str, Any]],
-    source_warnings: list[dict[str, Any]],
-    status: PrecheckScanStatus,
-    registry_fingerprint: str,
-    next_state: CreatePackageState,
-) -> dict[str, Any]:
-    """Insert the immutable scan + durable job row, then advance the request."""
-    job: Job = await _enqueue_stub_job(
-        session, actor, queue="default", kind="precheck", request_id=root.entity_id
-    )
-    scan = await cp_repo.append_dependency_scan(
-        session,
-        request_entity_id=root.entity_id,
-        source_hash=detail.source_hash,
-        context_hash=detail.context_hash,
-        language=str(detail.source_language) if detail.source_language else None,
-        scanner_version=_SCANNER_VERSION,
-        registry_fingerprint=registry_fingerprint,
-        detected_calls=detected_calls,
-        resolved_refs=resolved_refs,
-        missing_calls=missing_calls,
-        unsupported_calls=[],
-        source_warnings=source_warnings,
-        status=status,
-        job_id=job.job_id,
-        error_detail=None,
-        correlation_id=actor.correlation_id or None,
-        created_by_principal_id=actor.principal_id,
-    )
-    scan.completed_at = datetime.now(UTC)
-    await session.flush()
-    detail.current_scan_id = scan.scan_id
-    previous = detail.state
-    detail.state = next_request_state(detail.state, next_state)
-    # Advance the request_version so expected_request_version can detect a
-    # concurrent state advance (the token is otherwise inert).
-    root.row_version += 1
-    _audit_and_outbox(
-        session,
-        actor,
-        event_kind="package_precheck_completed",
-        target_kind=_REQUEST_TARGET_KIND,
-        entity_id=root.entity_id,
-        revision_id=scan.scan_id,
-        previous_state=str(previous),
-        new_state=str(detail.state),
-        action="precheck_completed",
-    )
-    return {
-        "request_id": root.entity_id,
-        "scan_id": scan.scan_id,
-        "attempt_no": scan.attempt_no,
-        "status": str(scan.status),
-        "state": str(detail.state),
-        "resolved": len(resolved_refs),
-        "missing": missing_calls,
-        "warnings": source_warnings,
-        "registry_fingerprint": registry_fingerprint,
-        "job_id": job.job_id,
-    }
 
 
 async def submit_candidate_generation(
@@ -705,7 +516,7 @@ async def _enforce_precheck_gate(session: AsyncSession, detail: PackageRequest) 
         raise PrecheckBlocked()
     if scan.context_hash != detail.context_hash:
         raise PrecheckStale()
-    current_fingerprint = await _registry_fingerprint(session, detail.declared_dependencies)
+    current_fingerprint = await registry_fingerprint(session, detail.declared_dependencies)
     if scan.registry_fingerprint != current_fingerprint:
         raise PrecheckStale()
 
@@ -1328,6 +1139,26 @@ def _publish_result(detail: PackageRequest) -> dict[str, Any]:
         "visibility_scope": str(VisibilityScope.PUBLISHED),
         "state": str(detail.state),
     }
+
+
+def _enqueue_precheck_job(session: AsyncSession, actor: Actor, *, request_id: str) -> Job:
+    """Insert a durable QUEUED Pre-Check job (CR-09 source of truth), left for a real
+    worker. Does not commit or dispatch — the route dispatches the ``default``-queue actor
+    after the admission tx commits (mirrors the other worker routes).
+
+    Unlike ``_enqueue_stub_job`` (still used by the candidate-generation / validation /
+    baseline-parse V1 stubs until F-01b/c convert them), this never marks the job succeeded
+    in-transaction: the scan is computed by ``jobs.create_package.run_precheck_job``.
+    """
+    from entropia.infrastructure.queues.enqueue import enqueue_job
+
+    return enqueue_job(
+        session,
+        queue=_PRECHECK_QUEUE,
+        payload={"kind": "precheck", "request_id": request_id},
+        actor_principal_id=actor.principal_id,
+        correlation_id=actor.correlation_id or None,
+    )
 
 
 async def _enqueue_stub_job(

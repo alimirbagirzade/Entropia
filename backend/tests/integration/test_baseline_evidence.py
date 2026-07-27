@@ -17,6 +17,7 @@ import pytest
 from sqlalchemy import func, select
 
 from entropia.application.commands import create_package as cp_cmd
+from entropia.application.jobs import create_package as cp_jobs
 from entropia.domain.create_package.enums import (
     BaselineParseStatus,
     CreationMode,
@@ -165,7 +166,8 @@ async def _drive_to_draft(session, *, family_id: str, equivalence_claim: bool | 
         equivalence_claim=equivalence_claim,
     )
     request_id = created["request_id"]
-    await cp_cmd.run_precheck(session, OWNER, request_id=request_id)
+    queued_pre = await cp_cmd.run_precheck(session, OWNER, request_id=request_id)
+    await cp_jobs.run_create_package_job(session, queued_pre["job_id"])
     sent = await cp_cmd.submit_candidate_generation(session, OWNER, request_id=request_id)
     await cp_cmd.create_draft_from_candidate(
         session, OWNER, request_id=request_id, expected_candidate_hash=sent["candidate_hash"]

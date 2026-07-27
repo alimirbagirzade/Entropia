@@ -86,6 +86,16 @@ class Settings(BaseSettings):
     # before a sensitive action (Trash Permanent Delete) must request a fresh one.
     reauth_proof_ttl_minutes: int = Field(default=5, alias="REAUTH_PROOF_TTL_MINUTES")
 
+    # ---- Metrics exposition (Module 20 §11; finding O-22) ----
+    # Static Bearer credential the metrics scraper (Prometheus
+    # ``authorization.credentials``) must present on ``GET /metrics``. The
+    # exposition leaks operational intelligence (per-queue job depth, outbox lag,
+    # oldest RUNNING lease age), so it is NOT public. Deliberately separate from
+    # ``service_token``: a scraper must never be able to act on the agent service
+    # line. Empty (default) leaves the endpoint open in a LOCAL/dev profile and
+    # fail-closed (403) in production — see ``routes/metrics.py``.
+    metrics_token: str = Field(default="", alias="ENTROPIA_METRICS_TOKEN")
+
     # ---- Rate limiting (Module 20 §11; opt-in per deployment) ----
     rate_limit_enabled: bool = Field(default=False, alias="RATE_LIMIT_ENABLED")
     rate_limit_anonymous_per_minute: int = Field(default=60, alias="RATE_LIMIT_ANON_PER_MINUTE")

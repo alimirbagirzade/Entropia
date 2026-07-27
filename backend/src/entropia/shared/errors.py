@@ -1894,3 +1894,23 @@ class ResearchDataUploadIntegrityError(AppError):
     code = "RESEARCH_DATA_UPLOAD_INTEGRITY_FAILED"
     http_status = 502
     message = "The uploaded file failed integrity verification. Please retry the upload."
+
+
+class MetricsScrapeUnauthorizedError(UnauthenticatedError):
+    """A metrics scrape arrived without the configured scraper credential (O-22).
+
+    The exposition carries operational intelligence (per-queue job depth, outbox
+    lag, oldest RUNNING lease age), so a credentialless scrape is refused BEFORE
+    any database work happens."""
+
+    code = "METRICS_SCRAPE_UNAUTHORIZED"
+    message = "Metrics scraping requires the configured scraper credential."
+
+
+class MetricsScrapeForbiddenError(ForbiddenError):
+    """The presented credential is not the metrics scraper token — or no token is
+    configured at all while running in production (fail-closed: an unconfigured
+    production deployment never exposes the gauges anonymously)."""
+
+    code = "METRICS_SCRAPE_FORBIDDEN"
+    message = "The presented credential may not scrape metrics."

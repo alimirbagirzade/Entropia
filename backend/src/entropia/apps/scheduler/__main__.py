@@ -15,6 +15,7 @@ import asyncio
 import signal
 import time
 import types
+from collections.abc import Sequence
 from typing import Any
 
 from entropia.application.jobs.maintenance import recover_stale_jobs, redeliverable_queued_jobs
@@ -33,6 +34,10 @@ from entropia.infrastructure.observability import configure_logging, get_logger
 from entropia.infrastructure.queues.enqueue import send_job
 
 TICK_SECONDS = 30
+
+# Module-level logger (the repo pattern — see ``apps/api/errors.py``) so the
+# redelivery sweep can report a failed enqueue instead of swallowing it.
+log = get_logger("scheduler")
 
 # Queues with exactly ONE durable-job actor are safe to auto-redeliver.
 ACTOR_BY_QUEUE: dict[str, Any] = {
@@ -74,28 +79,39 @@ async def _maintenance_pass() -> dict[str, Any]:
             await session.rollback()
             raise
 
+    return {
+        "relayed": len(relayed),
+        "requeued": len(recovered["requeued"]),
+        "failed_terminal": len(recovered["failed"]),
+        "redelivered": _redeliver([*recovered["requeued"], *redeliverable]),
+    }
+
+
+def _redeliver(candidates: Sequence[tuple[str, str]]) -> int:
+    """Re-dispatch ``(queue, job_id)`` pairs to their actor; return the send count.
+
+    A broker send that fails is NOT fatal and NOT a data loss — the row stays
+    durably QUEUED and the next tick re-sweeps it — but it must not be silent
+    either (finding O-23): a broker that rejects every send would otherwise look
+    identical to "nothing needed redelivery" in the ``scheduler.maintenance``
+    summary. The recovery behaviour is unchanged; only the evidence is added.
+    """
     redelivered = 0
-    for queue, job_id in [*recovered["requeued"], *redeliverable]:
+    for queue, job_id in candidates:
         actor = ACTOR_BY_QUEUE.get(queue)
         if actor is None:
             continue
         try:
             send_job(actor, job_id)
-        except Exception:  # rows stay durably QUEUED; next tick re-sweeps them
+        except Exception as exc:  # rows stay durably QUEUED; next tick re-sweeps them
+            log.warning("scheduler.redeliver_failed", job_id=job_id, queue=queue, error=str(exc))
             continue
         redelivered += 1
-
-    return {
-        "relayed": len(relayed),
-        "requeued": len(recovered["requeued"]),
-        "failed_terminal": len(recovered["failed"]),
-        "redelivered": redelivered,
-    }
+    return redelivered
 
 
 def run() -> None:
     configure_logging()
-    log = get_logger("scheduler")
     signal.signal(signal.SIGTERM, _handle_stop)
     signal.signal(signal.SIGINT, _handle_stop)
 

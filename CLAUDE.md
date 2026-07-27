@@ -110,6 +110,7 @@ Before stopping a working session, produce **ALL** of the following:
   Doğrula: `gh run list --branch main --limit 1` → job log.
 
 
+
 - **Next — PO imzası + R2 kapanışı** (R3 mühendislik backlog'u F-05 ile kapandı; **F-07 raw-id
   sweep kalıntısı empirik doğrulanmalı**). Kalan tek blokaj
   **product-owner imzası**: `docs/implementation/v18_final_acceptance.md` §4 (D-1…D-9 kararları —

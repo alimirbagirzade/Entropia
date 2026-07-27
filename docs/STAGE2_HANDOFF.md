@@ -2839,6 +2839,7 @@ madde-madde durum: `docs/PROJECT_HISTORY.md` §"Auth remediation dalgası".
   geçer), `_blocked_reason()`'da ise **en sonda** (per-domain sebep daha spesifik ve sözleşmeli).
 
 
+
 ## Next: **PO imzası + R2 kapanışı** (R3 mühendislik backlog'u F-05 ile kapandı).
 R3 W3 dalgası: F-01a/b/c (durable worker'lar) · F-04+F-09 (PR #381) · **F-05/M-05 (bu slice)**
 landed. Kalan tek büyük açık iş hâlâ **R2'nin product-owner imzası**. Sırada:

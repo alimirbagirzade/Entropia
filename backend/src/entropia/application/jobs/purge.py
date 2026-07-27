@@ -35,6 +35,7 @@ from entropia.shared.errors import PurgeNotEligibleError
 
 _RESULT_ENTITY_TYPE = "backtest_result"
 _MANUAL_ENTITY_TYPE = "manual_document"
+_ARTIFACT_ENTITY_TYPE = "hypothesis_artifact"
 _RESULT_PURGE_PENDING = "purge_pending"
 _RESULT_PURGED = "purged"
 _RESULT_SOFT_DELETED = "soft_deleted"
@@ -53,11 +54,35 @@ async def _purge_preflight(session: AsyncSession, entry: TrashEntry) -> None:
         if document is not None and document.is_baseline:
             raise PurgeNotEligibleError("The built-in baseline manual cannot be purged.")
         return
+    if entry.entity_type == _ARTIFACT_ENTITY_TYPE:
+        await _assert_artifact_purge_eligible(session, entry.entity_id)
+        return
     if entry.entity_type == "work_object":
         from entropia.infrastructure.postgres.repositories import backtest as bt_repo
 
         if await bt_repo.has_active_run_for_root(session, entry.entity_id):
             raise PurgeNotEligibleError("An active run still pins this work object.")
+
+
+async def _assert_artifact_purge_eligible(session: AsyncSession, artifact_id: str) -> None:
+    """Analysis Lab output dependency re-check (K-06, doc 20 §10).
+
+    "Running task/checkpoint is not deleted via generic Trash route" — a live
+    source task still owns this output (its checkpoints carry the artifact_id),
+    so purging it here would erase evidence the Agent loop is still producing.
+    The purge is recorded as NOT ELIGIBLE and the artifact returns to
+    ``soft_deleted``; the task itself is governed by the Coordinator lifecycle
+    commands (pause/cancel/complete), never by Trash.
+    """
+    from entropia.domain.agent_lab.enums import TASK_ACTIVE_STATES
+    from entropia.infrastructure.postgres.repositories import agent_lab as al_repo
+
+    artifact = await al_repo.get_hypothesis(session, artifact_id)
+    if artifact is None or artifact.source_task_id is None:
+        return
+    task = await al_repo.get_task(session, artifact.source_task_id)
+    if task is not None and task.status in TASK_ACTIVE_STATES:
+        raise PurgeNotEligibleError("A live Agent task still owns this Analysis Lab output.")
 
 
 async def _finalize_purge(session: AsyncSession, entry: TrashEntry) -> None:
@@ -72,6 +97,17 @@ async def _finalize_purge(session: AsyncSession, entry: TrashEntry) -> None:
             raise ValueError(f"Backtest result '{entry.entity_id}' not found for purge.")
         result.deletion_state = _RESULT_PURGED
         result.row_version += 1
+    elif entry.entity_type == _ARTIFACT_ENTITY_TYPE:
+        from entropia.infrastructure.postgres.repositories import agent_lab as al_repo
+
+        artifact = await al_repo.get_hypothesis(session, entry.entity_id)
+        if artifact is None:
+            raise ValueError(f"Hypothesis artifact '{entry.entity_id}' not found for purge.")
+        artifact.deletion_state = DeletionState.PURGED
+        artifact.row_version += 1
+        # The source task, its checkpoints and the provenance artifact_links are
+        # RETAINED: the purge removes the output from the board, never the record
+        # that the Agent produced it (doc 20 §10).
     elif entry.entity_type == _MANUAL_ENTITY_TYPE:
         from entropia.infrastructure.postgres.repositories import manual as manual_repo
 
@@ -106,6 +142,14 @@ async def _return_target_soft_deleted(session: AsyncSession, entry: TrashEntry) 
         if result is not None and result.deletion_state == _RESULT_PURGE_PENDING:
             result.deletion_state = _RESULT_SOFT_DELETED
             result.row_version += 1
+        return
+    if entry.entity_type == _ARTIFACT_ENTITY_TYPE:
+        from entropia.infrastructure.postgres.repositories import agent_lab as al_repo
+
+        artifact = await al_repo.get_hypothesis(session, entry.entity_id)
+        if artifact is not None and artifact.deletion_state == DeletionState.PURGE_PENDING:
+            artifact.deletion_state = DeletionState.SOFT_DELETED
+            artifact.row_version += 1
         return
     if entry.entity_type == _MANUAL_ENTITY_TYPE:
         from entropia.infrastructure.postgres.repositories import manual as manual_repo

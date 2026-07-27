@@ -11,8 +11,10 @@ rejected by the state machine before any write.
 
 Type dispatch (doc 20 §10): registry-backed roots mutate ``EntityRegistry``;
 ``backtest_result`` entries mutate the Result row's local ``deletion_state``
-(a Result is not a registry root — CR-03). Historical revisions, run manifests
-and audit evidence are never rewritten by restore or purge.
+(a Result is not a registry root — CR-03) and ``hypothesis_artifact`` entries
+mutate the Analysis Lab output row the same way (K-06). Historical revisions,
+run manifests, agent tasks/checkpoints and audit evidence are never rewritten by
+restore or purge.
 """
 
 from __future__ import annotations
@@ -50,6 +52,9 @@ _TRASH_PURGE_REAUTH_PURPOSE = "trash_purge"
 PURGE_QUEUE = "maintenance"
 RESULT_ENTITY_TYPE = "backtest_result"
 MANUAL_ENTITY_TYPE = "manual_document"
+# Analysis Lab output (K-06, doc 20 §10): like a Result it is NOT a registry
+# root — the lifecycle lives on the artifact row's own deletion_state.
+ARTIFACT_ENTITY_TYPE = "hypothesis_artifact"
 _RESULT_ACTIVE = "active"
 _RESULT_SOFT_DELETED = "soft_deleted"
 _RESULT_PURGE_PENDING = "purge_pending"
@@ -303,6 +308,34 @@ async def _restore_result_target(
     return None, previous, _RESULT_ACTIVE
 
 
+async def _restore_artifact_target(
+    session: AsyncSession, entry: TrashEntry
+) -> tuple[str | None, str, str]:
+    """Analysis Lab output restore (K-06, doc 20 §10, §11).
+
+    The artifact returns to the active board under the SAME artifact_id; its
+    source task, checkpoint and provenance links were never touched by the
+    delete, so there is no head-pointer conflict to adjudicate. Restore stays
+    Admin-only — the owner Agent has no Trash capability (doc 20 §11)."""
+    from entropia.infrastructure.postgres.repositories import agent_lab as al_repo
+
+    artifact = await al_repo.get_hypothesis(session, entry.entity_id)
+    if artifact is None:
+        raise RestoreConflictError()
+    await session.refresh(artifact, with_for_update=True)
+    previous = artifact.deletion_state
+    if previous == DeletionState.PURGE_PENDING:
+        raise PurgeInProgressError()
+    if previous == DeletionState.PURGED:
+        raise ObjectAlreadyPurgedError()
+    if previous != DeletionState.SOFT_DELETED:
+        raise EntityNotSoftDeletedError()
+
+    artifact.deletion_state = DeletionState.ACTIVE
+    artifact.row_version += 1
+    return None, str(previous), str(DeletionState.ACTIVE)
+
+
 async def _restore_manual_target(
     session: AsyncSession, actor: Actor, entry: TrashEntry
 ) -> tuple[str | None, str, str]:
@@ -365,6 +398,8 @@ async def _restore_entry_core(
         revision_id, previous, new_state = await _restore_result_target(session, entry)
     elif entry.entity_type == MANUAL_ENTITY_TYPE:
         revision_id, previous, new_state = await _restore_manual_target(session, actor, entry)
+    elif entry.entity_type == ARTIFACT_ENTITY_TYPE:
+        revision_id, previous, new_state = await _restore_artifact_target(session, entry)
     else:
         revision_id, previous, new_state = await _restore_registry_target(session, entry)
 
@@ -480,6 +515,24 @@ async def _mark_target_purge_pending(session: AsyncSession, entry: TrashEntry) -
         document.deletion_state = DeletionState.PURGE_PENDING
         document.row_version += 1
         return str(manual_previous)
+
+    if entry.entity_type == ARTIFACT_ENTITY_TYPE:
+        from entropia.infrastructure.postgres.repositories import agent_lab as al_repo
+
+        artifact = await al_repo.get_hypothesis(session, entry.entity_id)
+        if artifact is None:
+            raise ObjectAlreadyPurgedError()
+        await session.refresh(artifact, with_for_update=True)
+        artifact_previous = artifact.deletion_state
+        if artifact_previous == DeletionState.PURGE_PENDING:
+            raise PurgeInProgressError()
+        if artifact_previous == DeletionState.PURGED:
+            raise ObjectAlreadyPurgedError()
+        if artifact_previous != DeletionState.SOFT_DELETED:
+            raise EntityNotSoftDeletedError()
+        artifact.deletion_state = DeletionState.PURGE_PENDING
+        artifact.row_version += 1
+        return str(artifact_previous)
 
     if entry.entity_type == RESULT_ENTITY_TYPE:
         from entropia.infrastructure.postgres.repositories import backtest as bt_repo

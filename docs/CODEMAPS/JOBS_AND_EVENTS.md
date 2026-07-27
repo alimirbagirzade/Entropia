@@ -55,7 +55,7 @@ Bunun yerine **operator eylemi** vardır: `POST /admin/data-queue/redeliver`
 
 Discriminator taşımayan eski satırlar → `skipped_unknown_kind` (asla tahmin edilmez).
 
-### `default` kuyruğu — Create-Package tek-aktör dispatch (F-01a + F-01b)
+### `default` kuyruğu — Create-Package tek-aktör dispatch (F-01a + F-01b + F-01c)
 
 `default` kuyruğunda **tek** durable aktör vardır (`run_create_package_job`), bu yüzden scheduler
 sweep'i (stale-RUNNING kurtarma + kayıp mesaj redelivery, INF-03/INF-09) otomatik çalışır.
@@ -67,14 +67,20 @@ Aktör gövdesi `application/jobs/create_package.py::run_create_package_job`, du
 | `precheck` | `run_precheck_job` | `cp_cmd.run_precheck` | `precheck_passed/blocked/not_applicable` · hata → `precheck_failed` |
 | `candidate_generation` | `run_candidate_generation_job` | `cp_cmd.submit_candidate_generation` | `candidate_ready` · hata → `candidate_failed` |
 | `validation` | `run_validation_job` | `cp_cmd.start_package_validation_run` | `eligible_for_approval` / `revision_required` · hata → FAILED run + `revision_required` |
+| `baseline_parse` | `run_baseline_parse_job` | `cp_cmd.start_baseline_parse` | `baseline_asset.parse_status` = `passed` · hata/parse-edilemez CSV → `failed` |
 
-Üçü de aynı iskeleti paylaşır: terminal-job replay (at-least-once), request root kilidi,
+Dördü de aynı iskeleti paylaşır: terminal-job replay (at-least-once), request root kilidi,
 superseded guard (admission'ın beklediği state'ten çıkmışsa hiçbir şey yazılmaz → `SUPERSEDED`),
 `RUNNING` → compute → durable kanıt + state ilerlemesi + audit/outbox → `SUCCEEDED`.
 Worker hatası **durable terminal** durumdur (sessiz başarı da sonsuz retry de değil).
 
-`baseline_parse` kind'ı **aktöre gitmez**: yüklenmiş CSV'nin sınırlı okuması olduğu için
-`cp_cmd.start_baseline_parse` içinde tx'te tamamlanır ve durable satır SUCCEEDED yazılır.
+**F-01c ile in-transaction compute kalmadı**: `baseline_parse` artık `_enqueue_create_package_job`
+üzerinden admission alır (`parse_status` = `parsing`, `parse_job_id` pinlenir; payload'da
+`baseline_asset_id` taşınır) ve CSV okuması worker'da yapılır. Superseded koşulu asset-scoped:
+teslim anında asset artık request'in head'i değilse (yeni upload = yeni `attempt_no`) veya
+`parse_status` `parsing` değilse hiçbir şey yazılmaz. `PARSE_FAILED` artık **kayıtlı failed
+attempt**'tir (rapor + kod asset üzerinde) — fırlatılıp iz bırakmayan bir hata değil.
+Silinen yardımcı: `_enqueue_completed_job` (eski "in-transaction stub" satırı).
 
 ## Scheduler (`apps/scheduler/__main__.py`)
 

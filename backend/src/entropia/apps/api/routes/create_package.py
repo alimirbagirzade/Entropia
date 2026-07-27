@@ -260,13 +260,18 @@ async def parse_baseline(
     request_version: str | None = Header(default=None, alias=_REQUEST_VERSION_HEADER),
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> dict[str, Any]:
-    return await cp_cmd.start_baseline_parse(
+    """Admit the head baseline's parse (F-01c). Returns ``parsing`` immediately; the
+    stored CSV is read and the terminal passed/failed status written by the durable
+    ``default``-queue worker, so closing the tab never cancels it."""
+    result = await cp_cmd.start_baseline_parse(
         ctx.session,
         ctx.actor,
         request_id=request_id,
         expected_request_version=_request_version(request_version),
         idempotency_key=idempotency_key,
     )
+    _dispatch_create_package_job(result["job_id"])
+    return result
 
 
 @router.post("/create-package/requests/{request_id}/approve")

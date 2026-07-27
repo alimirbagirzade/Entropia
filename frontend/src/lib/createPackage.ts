@@ -186,10 +186,12 @@ export function validationRunTone(status: string): "ok" | "warn" | "down" | "neu
 
 // Presentation-only badge tone for the baseline parse status
 // (BaselineParseStatus wire values verbatim: uploaded/parsing/passed/failed).
+// `parsing` is the durable worker's in-flight state (F-01c) — an in-flight parse is
+// NOT proof of equivalence, so it shares the not-yet-proven tone with `uploaded`.
 export function baselineParseTone(status: string): "ok" | "warn" | "down" | "neutral" {
   if (status === "passed") return "ok";
   if (status === "failed") return "down";
-  if (status === "uploaded") return "warn";
+  if (status === "uploaded" || status === "parsing") return "warn";
   return "neutral";
 }
 
@@ -441,8 +443,11 @@ export interface BaselineUploadResult {
   size_bytes: number;
 }
 
-// Parse Baseline (commands/create_package.py::start_baseline_parse): validate the
-// head baseline's metadata + CSV; on success uploaded -> passed with the report.
+// Parse Baseline (commands/create_package.py::start_baseline_parse): an ADMISSION —
+// the head baseline flips uploaded -> parsing and a durable job is enqueued (F-01c).
+// `parser_version` / `parse_report` are EMPTY here on purpose: the CSV has not been
+// read yet, so the real verdict is only ever read from the request projection
+// (`current_baseline`) once the worker lands it.
 export interface BaselineParseResult {
   request_id: string;
   baseline_asset_id: string;
@@ -451,6 +456,7 @@ export interface BaselineParseResult {
   parser_version: string;
   parse_report: Record<string, unknown>;
   job_id: string;
+  request_version: number;
 }
 
 // Baseline upload input (F-03) — the real chosen TradingView CSV is transferred
@@ -664,6 +670,21 @@ function runValidationReason(detail: PackageRequestDetail): string | null {
   }
 }
 
+// The head baseline's parse is running in the durable worker (F-01c). While this is
+// true the UI shows in-flight and never a verdict — the terminal status arrives with
+// the projection refetch the worker's resource.changed event triggers.
+export function baselineParseRunning(detail: PackageRequestDetail | null): boolean {
+  return detail?.current_baseline?.parse_status === "parsing";
+}
+
+function parseBaselineReason(detail: PackageRequestDetail, mutable: boolean): string | null {
+  if (!mutable) return "The request is approved — the baseline is frozen.";
+  if (detail.current_baseline === null) return "Upload a baseline CSV first.";
+  if (baselineParseRunning(detail))
+    return "The baseline parse is running in the background — it finishes even if you close this tab.";
+  return null;
+}
+
 function approveReason(detail: PackageRequestDetail): string | null {
   if (detail.state === "approved") return "Already approved & published.";
   if (detail.state !== "eligible_for_approval")
@@ -756,7 +777,9 @@ export function packageActionAvailability(
     // passing evidence + (baseline parsed when equivalence is claimed).
     approve: state === "eligible_for_approval" && approvalBlockReason(detail) === null,
     uploadBaseline: mutable,
-    parseBaseline: mutable && detail.current_baseline !== null,
+    // Never re-admit a parse the durable worker is still running (F-01c) — the head
+    // asset's own `parsing` status is server truth, not a client-side pending flag.
+    parseBaseline: mutable && detail.current_baseline !== null && !baselineParseRunning(detail),
     nextStepHint: nextStepHint(detail),
     reasons: {
       precheck: PRECHECK_STATES.has(state)
@@ -765,11 +788,7 @@ export function packageActionAvailability(
       generateDraft: generateDraftReason(detail),
       runValidation: runValidationReason(detail),
       approve: approveReason(detail),
-      parseBaseline: !mutable
-        ? "The request is approved — the baseline is frozen."
-        : detail.current_baseline === null
-          ? "Upload a baseline CSV first."
-          : null,
+      parseBaseline: parseBaselineReason(detail, mutable),
     },
   };
 }
@@ -1032,9 +1051,11 @@ export function useUploadBaseline() {
   });
 }
 
-// Parse Baseline: validate the head baseline's metadata + CSV (doc 06 §8.3). The
-// metadata-complete + CSV-parseable gates run server-side (BASELINE_METADATA_INVALID
-// / PARSE_FAILED verbatim); on success the head baseline transitions uploaded -> passed.
+// Parse Baseline: ADMIT the head baseline's parse (doc 06 §8.3; F-01c). The
+// metadata-complete gate still runs server-side at admission
+// (BASELINE_METADATA_INVALID verbatim); reading the CSV happens in the durable
+// worker, so the response says `parsing` and the terminal passed/failed status
+// arrives via the projection refetch — closing the tab never cancels the parse.
 export function useStartBaselineParse() {
   const queryClient = useQueryClient();
   return useMutation({

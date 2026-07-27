@@ -178,14 +178,17 @@ const BASELINE_UPLOAD_RESULT = {
   size_bytes: 42,
 };
 
+// F-01c: the parse POST is an ADMISSION — `parsing` with NO evidence. The parser
+// version and the report only exist once the durable worker has read the CSV.
 const BASELINE_PARSE_RESULT = {
   request_id: "req_1",
   baseline_asset_id: "ba_1",
   attempt_no: 1,
-  parse_status: "passed",
-  parser_version: "baseline-parser-v1",
-  parse_report: { rows: 3 },
+  parse_status: "parsing",
+  parser_version: "",
+  parse_report: {},
   job_id: "job_4",
+  request_version: 3,
 };
 
 // A request with a draft present (validation + approve edges are live).
@@ -209,6 +212,39 @@ const REQUEST_DETAIL_BASELINE = {
     baseline_metadata: { provider: "x", symbol: "BTCUSD" },
     parse_report: null,
     parser_version: null,
+  },
+};
+
+// F-01c projections: the head baseline mid-parse (the durable worker owns it), and the
+// two terminal verdicts the worker writes. The UI reads its verdict from HERE, never
+// from the admission response.
+const REQUEST_DETAIL_BASELINE_PARSING = {
+  ...REQUEST_DETAIL_BASELINE,
+  current_baseline: { ...REQUEST_DETAIL_BASELINE.current_baseline, parse_status: "parsing" },
+};
+
+const REQUEST_DETAIL_BASELINE_PASSED = {
+  ...REQUEST_DETAIL_BASELINE,
+  baseline_ready: true,
+  current_baseline: {
+    ...REQUEST_DETAIL_BASELINE.current_baseline,
+    parse_status: "passed",
+    parser_version: "baseline-parser-v1",
+    parse_report: { is_parseable: true, row_count: 3 },
+  },
+};
+
+const REQUEST_DETAIL_BASELINE_FAILED = {
+  ...REQUEST_DETAIL_BASELINE,
+  current_baseline: {
+    ...REQUEST_DETAIL_BASELINE.current_baseline,
+    parse_status: "failed",
+    parser_version: "baseline-parser-v1",
+    parse_report: {
+      is_parseable: false,
+      code: "PARSE_FAILED",
+      message: "The baseline file has a header but no data rows.",
+    },
   },
 };
 
@@ -898,7 +934,7 @@ describe("Create Package page", () => {
     ).toBeUndefined();
   });
 
-  it("runs baseline parse only when a baseline exists and surfaces the report", async () => {
+  it("admits the baseline parse as a durable job and shows no verdict yet", async () => {
     const fetchMock = stubApi({
       "POST /create-package/requests/req_1/baseline-parse": BASELINE_PARSE_RESULT,
       ...BASE_ROUTES,
@@ -912,7 +948,15 @@ describe("Create Package page", () => {
     expect(parseButton).toBeEnabled();
     fireEvent.click(parseButton);
 
-    expect(await screen.findByText(/baseline-parser-v1/)).toBeInTheDocument();
+    // F-01c: the click ADMITS the work. The notice is keyed to the durable job so the
+    // user knows the parse outlives this tab — and no PASSED verdict is rendered,
+    // because none exists yet.
+    expect(
+      await screen.findByText(/Parsing the baseline CSV in the background/),
+    ).toBeInTheDocument();
+    expect(await screen.findByText("job_4")).toBeInTheDocument();
+    expect(screen.queryByText(/Baseline parse passed/)).not.toBeInTheDocument();
+
     const call = fetchMock.mock.calls.find(
       ([url, init]) => String(url).endsWith("/baseline-parse") && init?.method === "POST",
     );
@@ -920,6 +964,50 @@ describe("Create Package page", () => {
     expect((call?.[1] as RequestInit).headers as Record<string, string>).toMatchObject({
       "X-Request-Version": "2",
     });
+  });
+
+  it("locks re-admission while the projection reports the parse in flight", async () => {
+    stubApi({
+      ...BASE_ROUTES,
+      "GET /create-package/requests/req_1": REQUEST_DETAIL_BASELINE_PARSING,
+    });
+    renderPage();
+    await screen.findByText("req_1");
+    fireEvent.click(screen.getByRole("button", { name: /req_1/ }));
+
+    // Server truth alone drives this: a reload mid-parse still shows in-flight.
+    expect(await screen.findByRole("button", { name: "Parsing…" })).toBeDisabled();
+    expect(screen.getByText(/The baseline parse is running in the background/)).toBeInTheDocument();
+  });
+
+  it("renders the worker's PASSED verdict from the projection", async () => {
+    stubApi({
+      ...BASE_ROUTES,
+      "GET /create-package/requests/req_1": REQUEST_DETAIL_BASELINE_PASSED,
+    });
+    renderPage();
+    await screen.findByText("req_1");
+    fireEvent.click(screen.getByRole("button", { name: /req_1/ }));
+
+    expect(
+      await screen.findByText(/Baseline parse passed — parser baseline-parser-v1/),
+    ).toBeInTheDocument();
+  });
+
+  it("renders the worker's FAILED verdict with the recorded reason", async () => {
+    stubApi({
+      ...BASE_ROUTES,
+      "GET /create-package/requests/req_1": REQUEST_DETAIL_BASELINE_FAILED,
+    });
+    renderPage();
+    await screen.findByText("req_1");
+    fireEvent.click(screen.getByRole("button", { name: /req_1/ }));
+
+    // A failed parse is a recorded attempt carrying its reason, not a vanished error.
+    expect(
+      await screen.findByText(/Baseline parse failed — upload a corrected CSV export/),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/header but no data rows/)).toBeInTheDocument();
   });
 });
 

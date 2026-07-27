@@ -203,19 +203,22 @@ Sütunlar:
 | POST `../validate` | `run_validation:194` | `cp_cmd.start_package_validation_run` → **admission + `default` aktör dispatch** | `X-Request-Version` | ✔ |
 | POST `../request-revision` | `request_revision:193` | `cp_cmd.request_package_revision` | `X-Request-Version` | ✔ |
 | POST `../baseline` (201) | `upload_baseline:209` | `cp_cmd.upload_baseline_asset` | `X-Request-Version` | ✔ |
-| POST `../baseline-parse` | `parse_baseline:237` | `cp_cmd.start_baseline_parse` | `X-Request-Version` | ✔ |
+| POST `../baseline-parse` | `parse_baseline:256` | `cp_cmd.start_baseline_parse` → **admission + `default` aktör dispatch** | `X-Request-Version` | ✔ |
 | POST `../approve` | `approve_request:253` | `cp_cmd.approve_and_publish` | **body `expected_head_revision_id` (`:64`)** | ✔ |
 | GET `/dependency-scans/{scan_id}` | `get_scan:271` | `cp_query.get_dependency_scan` | yok | — |
 | GET `/validation-runs/{validation_run_id}` | `get_validation_run:279` | `cp_query.get_validation_run` | yok | — |
 | GET `/baseline-assets/{baseline_asset_id}` | `get_baseline_asset:289` | `cp_query.get_baseline_asset` | yok | — |
 
-> **Async düzlem (F-01a + F-01b).** Pre-Check / generate-candidate / validate artık
-> **admission**'dır: durable QUEUED `jobs` satırı yazılır, `_dispatch_create_package_job:128`
-> tx commit'inden sonra `default` kuyruğundaki tek aktörü tetikler ve yanıt anında döner
-> (`checking` / `candidate_generating` / `validation_running` — asla var olmayan bir sonuç).
-> Gerçek sonuç worker'dan `resource.changed` outbox'ı ile projeksiyona iner. Gate'ler
-> admission'da kalır (PC-13 → `PRECHECK_BLOCKED/STALE`, draft yokluğu → `CANDIDATE_NOT_READY`,
-> `X-Request-Version` → 409). Ayrıntı: `JOBS_AND_EVENTS.md` §`default` kuyruğu.
+> **Async düzlem (F-01a + F-01b + F-01c).** Pre-Check / generate-candidate / validate /
+> baseline-parse artık **admission**'dır: durable QUEUED `jobs` satırı yazılır,
+> `_dispatch_create_package_job:128` tx commit'inden sonra `default` kuyruğundaki tek aktörü
+> tetikler ve yanıt anında döner (`checking` / `candidate_generating` / `validation_running` /
+> `parsing` — asla var olmayan bir sonuç). Gerçek sonuç worker'dan `resource.changed` outbox'ı
+> ile projeksiyona iner. Gate'ler admission'da kalır (PC-13 → `PRECHECK_BLOCKED/STALE`, draft
+> yokluğu → `CANDIDATE_NOT_READY`, head baseline yokluğu → `BASELINE_ASSET_NOT_FOUND`, eksik
+> metadata → `BASELINE_METADATA_INVALID`, `X-Request-Version` → 409). `PARSE_FAILED` artık
+> HTTP hatası değil, worker'ın yazdığı durable `failed` attempt'tir.
+> Ayrıntı: `JOBS_AND_EVENTS.md` §`default` kuyruğu.
 
 ## library.py · sharing.py · package_import.py
 

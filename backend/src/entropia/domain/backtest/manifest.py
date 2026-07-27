@@ -69,7 +69,18 @@ from entropia.shared.manifest import manifest_hash
 # a result produced under a different (or since-removed) dependency set is never
 # idempotently reused for a re-RUN (INF-04/INF-05) — the bump shifts the execution_key
 # namespace accordingly.
-ENGINE_VERSION = "backtest-engine-v18-full-pinning"
+# v18-funding-step-order (K-03): funding/fee/carry is now applied at the TOP of each bar
+# (doc 15 §9.3 step 2) instead of at the end of the bar loop. Because ``equity`` sizes every
+# entry (``_position_size``) and bounds the allocation sleeve / exposure caps
+# (``_sleeve_capital``), the old end-of-bar placement sized entries and scale layers off
+# equity that had not yet paid its carry — a one-directional CUMULATIVE bias toward larger
+# positions and a late-binding ``max_total_exposure`` under perp funding. It also silently
+# DROPPED a charge whose record became available on the bar that closed the position. Every
+# funding-enabled result therefore changes numerically: a result produced under the old order
+# stays valid under its own pinned engine_version but is NOT comparable with a new one, and
+# the bump shifts the execution_key namespace so it is never idempotently reused for a
+# re-RUN (INF-04/INF-05).
+ENGINE_VERSION = "backtest-engine-v18-funding-step-order"
 METRIC_SET_VERSION = "metric-set-v1"
 OUTPUT_ARTIFACT_PROFILE = "standard-v1"
 

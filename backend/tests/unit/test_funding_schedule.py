@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from decimal import Decimal
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -18,6 +19,8 @@ from entropia.domain.backtest.funding import (
 )
 from entropia.domain.research_data.enums import AvailableTimePolicy
 from entropia.shared.errors import FundingSourceInvalid
+
+_UTC = ZoneInfo("UTC")
 
 
 def _rows() -> list[dict[str, object]]:
@@ -34,6 +37,7 @@ def test_same_as_event_time_sets_available_at_to_event_time_and_sorts_ascending(
         columns=["event_time", "funding_rate"],
         policy=AvailableTimePolicy.SAME_AS_EVENT_TIME,
         delay_seconds=None,
+        source_zone=_UTC,
     )
     assert sched.source_revision_id == "rd_1"
     assert [r.available_at for r in sched.records] == [
@@ -51,6 +55,7 @@ def test_fixed_delay_shifts_available_at_by_the_delay() -> None:
         columns=["event_time", "funding_rate"],
         policy=AvailableTimePolicy.FIXED_DELAY,
         delay_seconds=3600,
+        source_zone=_UTC,
     )
     rec = sched.records[0]
     assert rec.event_at == datetime(2024, 1, 1, 0, 0, tzinfo=UTC)
@@ -72,6 +77,7 @@ def test_missing_time_or_rate_column_fails_closed() -> None:
             columns=["foo", "bar"],
             policy=AvailableTimePolicy.SAME_AS_EVENT_TIME,
             delay_seconds=None,
+            source_zone=_UTC,
         )
 
 
@@ -87,6 +93,7 @@ def test_unparseable_rows_are_dropped_but_valid_rows_kept() -> None:
         columns=["event_time", "funding_rate"],
         policy=AvailableTimePolicy.SAME_AS_EVENT_TIME,
         delay_seconds=None,
+        source_zone=_UTC,
     )
     assert len(sched.records) == 1
     assert sched.records[0].rate == Decimal("0.002")
@@ -100,6 +107,7 @@ def test_all_rows_dropped_fails_closed_never_silent_zero_cost() -> None:
             columns=["event_time", "funding_rate"],
             policy=AvailableTimePolicy.SAME_AS_EVENT_TIME,
             delay_seconds=None,
+            source_zone=_UTC,
         )
 
 
@@ -112,6 +120,7 @@ def test_empty_source_is_an_empty_schedule_not_an_error() -> None:
         columns=["event_time", "funding_rate"],
         policy=AvailableTimePolicy.SAME_AS_EVENT_TIME,
         delay_seconds=None,
+        source_zone=_UTC,
     )
     assert sched.records == ()
     assert not sched
@@ -131,6 +140,7 @@ def test_unresolvable_policies_fail_closed(policy: AvailableTimePolicy) -> None:
             columns=["event_time", "funding_rate"],
             policy=policy,
             delay_seconds=None,
+            source_zone=_UTC,
         )
 
 
@@ -147,13 +157,14 @@ def test_rate_accepts_int_float_decimal_and_string() -> None:
         columns=["event_time", "funding_rate"],
         policy=AvailableTimePolicy.SAME_AS_EVENT_TIME,
         delay_seconds=None,
+        source_zone=_UTC,
     )
     assert len(sched.records) == 4
 
 
 def test_parse_utc_handles_z_suffix_naive_datetime_and_none() -> None:
-    assert parse_utc("2024-01-01T00:00:00Z") == datetime(2024, 1, 1, tzinfo=UTC)
-    assert parse_utc(datetime(2024, 1, 1)) == datetime(2024, 1, 1, tzinfo=UTC)  # naive -> UTC
-    assert parse_utc(None) is None
-    assert parse_utc("") is None
-    assert parse_utc("garbage") is None
+    assert parse_utc("2024-01-01T00:00:00Z", source_zone=None) == datetime(2024, 1, 1, tzinfo=UTC)
+    assert parse_utc(datetime(2024, 1, 1), source_zone=_UTC) == datetime(2024, 1, 1, tzinfo=UTC)
+    assert parse_utc(None, source_zone=_UTC) is None
+    assert parse_utc("", source_zone=_UTC) is None
+    assert parse_utc("garbage", source_zone=_UTC) is None

@@ -26,6 +26,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from entropia.domain.research_data.enums import AvailableTimePolicy
 from entropia.domain.research_data.time_policy import resolve_available_at
@@ -71,12 +72,17 @@ class FundingSchedule:
         return bool(self.records)
 
 
-def parse_utc(value: Any) -> datetime | None:
+def parse_utc(value: Any, *, source_zone: ZoneInfo | None) -> datetime | None:
     """Coerce an ISO-8601 string / ``datetime`` to a tz-aware UTC ``datetime``.
 
     Returns ``None`` for an absent or unparseable value (the caller decides whether that is
-    fail-closed or a dropped row). A naive datetime is assumed UTC; a ``Z`` suffix is
-    normalized to ``+00:00`` so ``datetime.fromisoformat`` accepts it on every runtime."""
+    fail-closed or a dropped row). A ``Z`` suffix is normalized to ``+00:00`` so
+    ``datetime.fromisoformat`` accepts it on every runtime.
+
+    K-01 timezone contract: a NAIVE value is localized in ``source_zone``; when
+    ``source_zone`` is ``None`` a naive value is UNRESOLVABLE (``None``) rather than
+    silently assumed to be UTC. ``source_zone`` is keyword-ONLY and REQUIRED so no
+    call site can inherit a UTC default by omission."""
     if value is None:
         return None
     if isinstance(value, datetime):
@@ -92,7 +98,7 @@ def parse_utc(value: Any) -> datetime | None:
         except ValueError:
             return None
     if dt.tzinfo is None:
-        return dt.replace(tzinfo=UTC)
+        return None if source_zone is None else dt.replace(tzinfo=source_zone).astimezone(UTC)
     return dt.astimezone(UTC)
 
 
@@ -130,6 +136,7 @@ def build_funding_schedule(
     columns: list[str],
     policy: AvailableTimePolicy,
     delay_seconds: int | None,
+    source_zone: ZoneInfo | None,
 ) -> FundingSchedule:
     """Build an available-time-safe funding schedule from native rows (doc 12 §8.4).
 
@@ -140,7 +147,12 @@ def build_funding_schedule(
     FAIL CLOSED (``FundingSourceInvalid``) rather than silently degrade to event time — the
     exact leakage the anti-lookahead rule forbids. Rows with an unparseable event time or a
     non-finite rate are dropped (they cannot inform a decision); an all-dropped source is a
-    fail-closed error so a funding-enabled run never silently books zero cost."""
+    fail-closed error so a funding-enabled run never silently books zero cost.
+
+    ``source_zone`` is the pinned revision's declared source timezone (K-01). A naive event
+    time is localized in it; when it is ``None`` such a row is unparseable and drops — and a
+    source that is entirely naive under an unresolvable zone therefore raises rather than
+    booking funding at a wall-clock instant that was never the real one."""
     if policy not in (AvailableTimePolicy.SAME_AS_EVENT_TIME, AvailableTimePolicy.FIXED_DELAY):
         raise FundingSourceInvalid(
             f"Funding available-time policy '{policy}' cannot be resolved from native rows "
@@ -151,7 +163,7 @@ def build_funding_schedule(
 
     records: list[FundingRecord] = []
     for row in rows:
-        event_at = parse_utc(row.get(time_col))
+        event_at = parse_utc(row.get(time_col), source_zone=source_zone)
         rate = _to_rate(row.get(rate_col))
         if event_at is None or rate is None:
             continue

@@ -19,21 +19,26 @@ from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from entropia.domain.identity import policy as identity_policy
 from entropia.domain.identity.actor import Actor
 from entropia.domain.lifecycle.enums import DeletionState, JobStatus, ValidationStatus
+from entropia.domain.market_data.validation_rules import resolve_timestamp
 from entropia.domain.research_data import policy as rd_policy
-from entropia.domain.research_data.enums import ResearchRevisionState
+from entropia.domain.research_data.enums import ResearchRevisionState, ResearchTimezoneMode
 from entropia.domain.research_data.quality_rules import (
     SEVERITY_RANK,
     QualityIssue,
     evaluate_quality,
 )
 from entropia.domain.research_data.state_machine import next_research_revision_state
-from entropia.domain.research_data.time_policy import time_policy_is_valid
+from entropia.domain.research_data.time_policy import (
+    resolve_event_time_column,
+    time_policy_is_valid,
+)
 from entropia.domain.research_data.usage_scope import ensure_allows_evidence_bundle
 from entropia.infrastructure.postgres.models import (
     EntityRegistry,
@@ -83,6 +88,57 @@ _LoadAndParse = Callable[[AsyncSession, str], Awaitable[ParsedResearch]]
 _WriteNative = Callable[[AsyncSession, str, str, ParsedResearch], Awaitable[str]]
 
 
+def revision_source_zone(revision: ResearchDatasetRevision) -> ZoneInfo | None:
+    """The zone a NAIVE event timestamp is localized in, or ``None`` (K-01).
+
+    The persistence -> domain adapter for the declared source timezone: ``utc``
+    resolves to UTC, ``custom`` to its stored IANA identifier, ``exchange`` to
+    ``None`` (it carries no identifier). ``None`` is FAIL-CLOSED — doc 12 §8.4
+    rule 1 wants the source read IN its zone, never implicitly as UTC.
+
+    Never raises: a stored identifier missing from the IANA database degrades to
+    ``None`` (reported as a blocking finding) rather than crashing a durable job.
+    """
+    if revision.source_timezone_mode == ResearchTimezoneMode.UTC:
+        return ZoneInfo("UTC")
+    if revision.source_timezone_mode == ResearchTimezoneMode.CUSTOM and (
+        revision.source_timezone_iana
+    ):
+        try:
+            return ZoneInfo(revision.source_timezone_iana)
+        except (ZoneInfoNotFoundError, ValueError):
+            return None
+    return None
+
+
+def normalize_event_timestamps(
+    parsed: ParsedResearch, *, source_zone: ZoneInfo | None
+) -> ParsedResearch:
+    """Rewrite the event-time column to canonical UTC instants (K-01, doc 12 §8.4 r1).
+
+    "Source timestamp is read in the source timezone; normalized to UTC for the
+    engine" is the rule — this is where it happens. A naive cell is localized in
+    ``source_zone`` and stored as an ISO-8601 string carrying ``+00:00``, so the
+    native Parquet and every as-of join replaying it see the true instant.
+
+    The declared source timezone metadata is NOT lost: it stays on the revision
+    (``source_timezone_mode``/``source_timezone_iana``), exactly as rule 1 requires.
+    A cell that does not resolve is left VERBATIM for ``check_event_time_timezone``
+    to report as ``RESEARCH_DATA_TIMEZONE_UNRESOLVED``; the normalizer never guesses.
+    """
+    time_col = resolve_event_time_column(parsed.columns)
+    if time_col is None:
+        return parsed
+    rows: list[dict[str, Any]] = []
+    for row in parsed.rows:
+        if time_col not in row:
+            rows.append(row)
+            continue
+        moment = resolve_timestamp(row[time_col], source_zone=source_zone).moment
+        rows.append(row if moment is None else {**row, time_col: moment.isoformat()})
+    return ParsedResearch(columns=parsed.columns, rows=rows)
+
+
 def evaluate_research(parsed: ParsedResearch, revision: ResearchDatasetRevision) -> AnalysisOutcome:
     """Decide the validation outcome for a parsed research revision (pure).
 
@@ -128,6 +184,7 @@ def evaluate_research(parsed: ParsedResearch, revision: ResearchDatasetRevision)
     quality = evaluate_quality(
         parsed.columns,
         parsed.rows,
+        source_zone=revision_source_zone(revision),
         linked_market_dataset_revision_id=revision.linked_market_dataset_revision_id,
         instrument_mapping_ref=revision.instrument_mapping_ref,
     )
@@ -220,7 +277,11 @@ async def run_analysis(
     job.status = JobStatus.RUNNING
     job.started_at = datetime.now(UTC)
 
-    parsed = await load(session, entity_id)
+    # K-01: the declared source timezone is applied HERE, between load and validate,
+    # so every load path (real S3/Polars helper or an injected fake) yields canonical
+    # UTC instants before anything validates, stores or as-of joins them.
+    loaded = await load(session, entity_id)
+    parsed = normalize_event_timestamps(loaded, source_zone=revision_source_zone(revision))
     outcome = evaluate_research(parsed, revision)
 
     native_digest = await write(session, entity_id, revision_id, parsed)

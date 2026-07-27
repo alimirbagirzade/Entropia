@@ -13,11 +13,17 @@ from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
 from itertools import pairwise
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from entropia.domain.lifecycle.enums import ValidationStatus
 from entropia.domain.market_data.enums import MarketDataType, ResolutionKind, TradeSide
 
 DecimalLike = Decimal | str | int
+
+# K-01: the canonical code for "a naive source timestamp could not be localized".
+# Shared verbatim with ``shared.errors.MarketDataTimezoneUnresolved.code`` so the
+# validation-issue row and the API error surface name the same failure.
+TIMEZONE_UNRESOLVED_RULE_CODE = "MARKET_DATA_TIMEZONE_UNRESOLVED"
 
 
 def _as_decimal(value: DecimalLike) -> Decimal:
@@ -150,40 +156,83 @@ class CrossRowReport:
     coverage: tuple[CoverageSegment, ...]
 
 
-def parse_timestamp(value: Any) -> datetime | None:
-    """Best-effort parse to a timezone-aware UTC datetime; ``None`` if unresolvable.
+@dataclass(frozen=True, slots=True)
+class TimestampParse:
+    """Outcome of reading one raw timestamp cell against the declared source zone.
+
+    ``moment`` is the canonical UTC instant, or ``None`` when the cell could not be
+    resolved. ``timezone_unresolved`` distinguishes the two ways that happens: a
+    genuinely unparseable cell (``False``) versus a *parseable but naive* cell the
+    declared timezone could not localize (``True``). The second case is K-01's
+    fail-closed branch — doc 11 §9.1 forbids a silent UTC fallback for exactly it.
+    """
+
+    moment: datetime | None
+    timezone_unresolved: bool = False
+
+
+def resolve_timestamp(value: Any, *, source_zone: ZoneInfo | None) -> TimestampParse:
+    """Read one raw timestamp cell into a canonical UTC instant (doc 11 §7.3 step 5).
 
     Accepts ``datetime``/``date``, epoch seconds/milliseconds (int/float or their
-    string form) and ISO-8601 strings (trailing ``Z`` allowed). A naive value is
-    read as UTC. ``bool`` is rejected (it is an ``int`` subclass)."""
+    string form) and ISO-8601 strings (trailing ``Z`` allowed). ``bool`` is rejected
+    (it is an ``int`` subclass).
+
+    Timezone contract (K-01):
+
+    * a value that already carries an offset is converted with ``astimezone(UTC)``;
+    * an epoch number is absolute and needs no zone;
+    * a NAIVE value (bare ``datetime``/``date``/offset-less ISO string) is localized
+      in ``source_zone`` — the revision's declared timezone;
+    * when ``source_zone`` is ``None`` (an ``exchange`` mode carries no resolvable
+      IANA identifier) a naive value is UNRESOLVED, never assumed to be UTC.
+    """
     if value is None or isinstance(value, bool):
-        return None
+        return TimestampParse(None)
     if isinstance(value, datetime):
-        return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+        return _localize(value, source_zone)
     if isinstance(value, date):
-        return datetime(value.year, value.month, value.day, tzinfo=UTC)
+        return _localize(datetime(value.year, value.month, value.day), source_zone)
     if isinstance(value, (int, float)):
-        return _from_epoch(float(value))
+        return TimestampParse(_from_epoch(float(value)))
     if isinstance(value, str):
-        return _parse_timestamp_str(value)
-    return None
+        return _resolve_timestamp_str(value, source_zone)
+    return TimestampParse(None)
 
 
-def _parse_timestamp_str(text: str) -> datetime | None:
+def parse_timestamp(value: Any, *, source_zone: ZoneInfo | None) -> datetime | None:
+    """The canonical UTC instant for a raw cell, or ``None`` when unresolvable.
+
+    Thin wrapper over :func:`resolve_timestamp` for callers that do not need to tell
+    an unparseable cell apart from an unlocalizable naive one. ``source_zone`` is
+    keyword-ONLY and REQUIRED so no call site can silently inherit a UTC default."""
+    return resolve_timestamp(value, source_zone=source_zone).moment
+
+
+def _localize(moment: datetime, source_zone: ZoneInfo | None) -> TimestampParse:
+    """Normalize one parsed ``datetime`` to UTC under the declared source zone."""
+    if moment.tzinfo is not None:
+        return TimestampParse(moment.astimezone(UTC))
+    if source_zone is None:
+        return TimestampParse(None, timezone_unresolved=True)
+    return TimestampParse(moment.replace(tzinfo=source_zone).astimezone(UTC))
+
+
+def _resolve_timestamp_str(text: str, source_zone: ZoneInfo | None) -> TimestampParse:
     stripped = text.strip()
     if not stripped:
-        return None
+        return TimestampParse(None)
     iso = f"{stripped[:-1]}+00:00" if stripped.endswith("Z") else stripped
     try:
         parsed: datetime | None = datetime.fromisoformat(iso)
     except ValueError:
         parsed = None
     if parsed is not None:
-        return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
+        return _localize(parsed, source_zone)
     try:
-        return _from_epoch(float(stripped))
+        return TimestampParse(_from_epoch(float(stripped)))
     except ValueError:
-        return None
+        return TimestampParse(None)
 
 
 def _from_epoch(value: float) -> datetime | None:
@@ -218,12 +267,17 @@ def evaluate_cross_row(
     market_data_type: MarketDataType,
     rows: list[dict[str, Any]],
     *,
+    source_zone: ZoneInfo | None,
     resolution_kind: ResolutionKind | None = None,
     resolution_value: str | None = None,
     spread_unit: str | None = None,
 ) -> CrossRowReport:
     """Aggregate cross-row validation (doc 11 §7.4).
 
+    ``source_zone`` is the revision's declared source timezone (keyword-ONLY and
+    REQUIRED — K-01: there is no UTC default to fall back to silently).
+
+    * naive timestamp with no resolvable source zone -> BLOCKING_FAIL.
     * unresolvable timestamp -> BLOCKING_FAIL (an unorderable row).
     * non-monotonic timestamp (out-of-order in delivered order) -> BLOCKING_FAIL.
     * duplicate ``instrument+timestamp+resolution`` -> BLOCKING_FAIL. Instrument and
@@ -237,12 +291,29 @@ def evaluate_cross_row(
 
     resolved: list[datetime] = []
     unresolved = 0
+    timezone_unresolved = 0
     for row in rows:
-        moment = parse_timestamp(row.get("timestamp"))
-        if moment is None:
-            unresolved += 1
+        parse = resolve_timestamp(row.get("timestamp"), source_zone=source_zone)
+        if parse.moment is not None:
+            resolved.append(parse.moment)
+        elif parse.timezone_unresolved:
+            timezone_unresolved += 1
         else:
-            resolved.append(moment)
+            unresolved += 1
+
+    # K-01: a naive cell the declared timezone cannot localize is its OWN blocking
+    # finding, distinct from a garbage cell. Reading it as UTC would silently shift
+    # every bar by the source offset and still auto-verify (doc 11 §9.1).
+    if timezone_unresolved:
+        issues.append(
+            CrossRowIssue(
+                ValidationStatus.BLOCKING_FAIL,
+                TIMEZONE_UNRESOLVED_RULE_CODE,
+                "One or more rows carry a naive timestamp that the declared source "
+                "timezone cannot resolve to a UTC instant.",
+                timezone_unresolved,
+            )
+        )
 
     if unresolved:
         issues.append(

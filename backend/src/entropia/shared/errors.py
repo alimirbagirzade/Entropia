@@ -157,6 +157,21 @@ class TimezoneRequired(ValidationError):
     message = "A custom timezone mode requires an IANA timezone identifier."
 
 
+class MarketDataTimezoneUnresolved(ValidationError):
+    """A naive source timestamp could not be localized (K-01, doc 11 §9.1).
+
+    Raised when the market-data ingest parse path meets a timestamp carrying no UTC
+    offset while the revision's declared timezone resolves to no IANA identifier
+    (``exchange`` mode). Reading it as UTC would shift every bar by the true source
+    offset and still auto-verify, so the revision fails closed instead."""
+
+    code = "MARKET_DATA_TIMEZONE_UNRESOLVED"
+    message = (
+        "A naive source timestamp cannot be resolved to a UTC instant: the declared "
+        "timezone has no IANA identifier. Declare a custom IANA timezone and rerun."
+    )
+
+
 class DependencyBlocked(ConflictError):
     """A required upstream dependency is missing/inactive (Research Data §10).
 
@@ -184,6 +199,20 @@ class TimePolicyInvalid(ValidationError):
 
     code = "TIME_POLICY_INVALID"
     message = "The time policy is invalid; available time cannot be validated."
+
+
+class ResearchDataTimezoneUnresolved(TimePolicyInvalid):
+    """The research counterpart of :class:`MarketDataTimezoneUnresolved` (K-01).
+
+    Doc 12 §8.4 rule 1 requires the source timestamp to be read IN its source
+    timezone and normalized to UTC; a conversion that cannot be performed blocks
+    approval/run rather than degrading to an implicit UTC reading."""
+
+    code = "RESEARCH_DATA_TIMEZONE_UNRESOLVED"
+    message = (
+        "A naive event timestamp cannot be resolved to a UTC instant: the declared "
+        "source timezone has no IANA identifier. Declare a custom IANA timezone."
+    )
 
 
 class FundingSourceInvalid(ValidationError):

@@ -79,6 +79,18 @@ class ResearchTimezoneSpec:
             raise TimePolicyInvalid("Exchange timezone has no resolvable IANA identifier.")
         return ZoneInfo(self.iana)
 
+    @property
+    def resolved_zone(self) -> ZoneInfo | None:
+        """The zone a NAIVE source timestamp is localized in, or ``None`` (K-01).
+
+        The non-raising sibling of :attr:`zone`, for the ingest parse path where an
+        unresolvable declaration is a recorded finding rather than a rejected request.
+        ``None`` means ``exchange`` mode (no IANA identifier) and is FAIL-CLOSED: doc
+        12 §8.4 rule 1 wants the source read IN its zone, never implicitly as UTC."""
+        if self.mode == ResearchTimezoneMode.UTC:
+            return ZoneInfo("UTC")
+        return ZoneInfo(self.iana) if self.iana else None
+
 
 @dataclass(frozen=True, slots=True)
 class FieldDefinition:

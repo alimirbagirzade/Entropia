@@ -19,6 +19,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,6 +27,7 @@ from entropia.domain.lifecycle.enums import JobStatus, ValidationStatus
 from entropia.domain.market_data.enums import (
     MarketDataType,
     MarketRevisionState,
+    TimezoneMode,
     TradeSide,
 )
 from entropia.domain.market_data.schema_mapping import propose_schema_mapping
@@ -35,6 +37,7 @@ from entropia.domain.market_data.validation_rules import (
     SpreadRow,
     TickRow,
     evaluate_cross_row,
+    resolve_timestamp,
     validate_ohlcv_row,
     validate_spread_row,
     validate_tick_row,
@@ -50,6 +53,9 @@ _SEVERITY_RANK: dict[ValidationStatus, int] = {
     ValidationStatus.WARNING: 1,
     ValidationStatus.BLOCKING_FAIL: 2,
 }
+
+# The canonical normalized-row field holding the record time (schema_mapping target).
+_TIMESTAMP_FIELD = "timestamp"
 
 
 @dataclass(frozen=True, slots=True)
@@ -130,6 +136,59 @@ def decide_outcome(worst: ValidationStatus) -> MarketRevisionState:
     return MarketRevisionState.NEEDS_REVIEW
 
 
+def revision_source_zone(revision: MarketDatasetRevision) -> ZoneInfo | None:
+    """The zone a NAIVE source timestamp is localized in, or ``None`` (K-01).
+
+    The persistence -> domain adapter for the declared timezone: ``utc`` resolves to
+    UTC, ``custom`` to its stored IANA identifier, and ``exchange`` to ``None`` (it
+    carries no identifier to resolve). ``None`` is FAIL-CLOSED — the parse path then
+    refuses naive timestamps instead of assuming UTC (doc 11 §9.1).
+
+    Never raises: a stored identifier that no longer exists in the IANA database
+    degrades to ``None`` (an unresolved revision, reported) rather than crashing a
+    durable worker job mid-run.
+    """
+    if revision.timezone_mode == TimezoneMode.UTC:
+        return ZoneInfo("UTC")
+    if revision.timezone_mode == TimezoneMode.CUSTOM and revision.timezone_iana:
+        try:
+            return ZoneInfo(revision.timezone_iana)
+        except (ZoneInfoNotFoundError, ValueError):
+            return None
+    return None
+
+
+def normalize_source_timestamps(
+    parsed: ParsedDataset, *, source_zone: ZoneInfo | None
+) -> ParsedDataset:
+    """Rewrite each row's ``timestamp`` to its canonical UTC instant (K-01, doc 11 §7.3).
+
+    This is the step that makes the DECLARED timezone actually do something: a naive
+    source cell is read in ``source_zone`` and stored as an ISO-8601 string carrying
+    ``+00:00``, so the processed Parquet — and every engine that later replays it —
+    sees the true instant rather than the wall-clock digits.
+
+    A cell that does NOT resolve is left VERBATIM: the normalizer never invents a
+    value. The cross-row pass that follows reports it (``MARKET_DATA_TIMEZONE_
+    UNRESOLVED`` for a naive cell with no resolvable zone, ``TIMESTAMP_UNRESOLVABLE``
+    for a garbage cell) as BLOCKING_FAIL, so the revision lands in NEEDS_REVIEW and
+    can never auto-verify into the money-sizing engine.
+    """
+    rows: list[dict[str, Any]] = []
+    for row in parsed.rows:
+        if _TIMESTAMP_FIELD not in row:
+            rows.append(row)
+            continue
+        moment = resolve_timestamp(row[_TIMESTAMP_FIELD], source_zone=source_zone).moment
+        rows.append(row if moment is None else {**row, _TIMESTAMP_FIELD: moment.isoformat()})
+    return ParsedDataset(
+        market_data_type=parsed.market_data_type,
+        columns=parsed.columns,
+        rows=rows,
+        coverage=parsed.coverage,
+    )
+
+
 def _parse_raw_bytes(market_data_type: MarketDataType, data: bytes) -> ParsedDataset:
     """Parse CSV/TXT bytes into normalized rows via Polars (D5).
 
@@ -189,11 +248,18 @@ async def run_analysis(
     job.status = JobStatus.RUNNING
     job.started_at = datetime.now(UTC)
 
-    parsed = await (load_and_parse or _load_and_parse)(session, entity_id, revision)
+    # K-01: the declared timezone is applied HERE, between load and validate, so
+    # every load path (the real S3/Polars helper and an injected fake alike) yields
+    # canonical UTC instants before anything validates, stores or replays them.
+    source_zone = revision_source_zone(revision)
+    loaded = await (load_and_parse or _load_and_parse)(session, entity_id, revision)
+    parsed = normalize_source_timestamps(loaded, source_zone=source_zone)
+
     per_row = evaluate_rows(parsed)
     cross = evaluate_cross_row(
         parsed.market_data_type,
         parsed.rows,
+        source_zone=source_zone,
         resolution_kind=revision.resolution_kind,
         resolution_value=revision.resolution_value,
         spread_unit=(revision.payload or {}).get("spread_unit"),

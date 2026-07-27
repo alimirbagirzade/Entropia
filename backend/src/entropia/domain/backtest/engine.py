@@ -1319,10 +1319,14 @@ def resolve_portfolio_rules(capital_execution: dict[str, Any] | None) -> Portfol
 
 
 def _epoch_ms_or_none(value: Any) -> int | None:
-    """UTC epoch ms for an ISO-8601 timestamp, else ``None`` (= unplaceable)."""
+    """UTC epoch ms for an ISO-8601 timestamp, else ``None`` (= unplaceable).
+
+    ``source_zone=None`` (K-01): replayed data is UTC-normalized at ingest and carries
+    an offset, so there is no source zone to apply here. A naive value is therefore an
+    honest ``None`` (unplaceable, handled fail-closed) rather than a guessed UTC."""
     if not isinstance(value, str) or not value:
         return None
-    parsed = parse_utc(value)
+    parsed = parse_utc(value, source_zone=None)
     return int(parsed.timestamp() * 1000) if parsed is not None else None
 
 
@@ -1482,7 +1486,9 @@ def _tick_epoch_ms(timestamp: str) -> int | None:
     if text.isdigit():
         value = int(text)
         return value if len(text) >= 13 else value * 1000
-    parsed = parse_utc(text)
+    # source_zone=None (K-01): tick data is UTC-normalized at ingest; a naive print
+    # is dropped fail-closed rather than guessed into a bar window at the wrong hour.
+    parsed = parse_utc(text, source_zone=None)
     if parsed is None:
         return None
     # round(), not int(): float epoch*1000 can land at x.9998 for sub-second ISO
@@ -2482,8 +2488,10 @@ def run_engine(
     def _bar_epoch_ms(ts: str) -> int | None:
         """UTC epoch ms of a bar timestamp, ``None`` when unplaceable (fail closed:
         the portfolio gates treat an unplaceable moment as covered by every prior
-        window — the date-blackout precedent, never trading through a rule)."""
-        parsed = parse_utc(ts)
+        window — the date-blackout precedent, never trading through a rule).
+
+        ``source_zone=None`` (K-01): bars are UTC-normalized at ingest."""
+        parsed = parse_utc(ts, source_zone=None)
         return int(parsed.timestamp() * 1000) if parsed is not None else None
 
     def _interval_covers(iv: PriorItemInterval, t_ms: int | None) -> bool:
@@ -2953,7 +2961,7 @@ def run_engine(
             # filter is enabled — the hot loop stays byte-identical.
             bar_date: date | None = None
             if restriction_specs:
-                parsed_bar_time = parse_utc(bar.timestamp)
+                parsed_bar_time = parse_utc(bar.timestamp, source_zone=None)
                 bar_date = parsed_bar_time.date() if parsed_bar_time is not None else None
                 if bar_date is not None and bar_date != current_day:
                     current_day = bar_date
@@ -4094,7 +4102,7 @@ def run_engine(
             # position is actually held (perp funding convention). An unparseable bar
             # timestamp fires nothing this bar rather than draining the schedule (no leak).
             if funding_records:
-                bar_time = parse_utc(bar.timestamp)
+                bar_time = parse_utc(bar.timestamp, source_zone=None)
                 if bar_time is not None:
                     while (
                         funding_idx < len(funding_records)

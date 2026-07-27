@@ -106,7 +106,7 @@ request bağımlılığından gelen **TEK transaction**, burada **asla commit yo
 | `admin_panel` | `log_taxonomy`, `role_matrix` | Log olay taksonomisi + kanonik rol-scope matrisi (doc 19) |
 | `agent_lab` | `cursor`, `enums`, `state_machine`, `tool_gateway` | Analysis Lab durum makinesi + gateway sözleşmesi |
 | `allocation` | `config`, `enums`, `rules` | Run-scoped paylaşımlı sermaye havuzu tipleri + semantik kurallar |
-| `backtest` | `engine`, `indicators`, `manifest`, `metrics`, `artifacts`, `export`, `funding`, `history`, `enums` | Bar-replay engine, artımlı TA compute, değişmez Run Manifest, kanonik metrikler |
+| `backtest` | `engine`, `capabilities`, `indicators`, `manifest`, `metrics`, `artifacts`, `export`, `funding`, `history`, `enums` | Bar-replay engine, artımlı TA compute, değişmez Run Manifest, kanonik metrikler. **`capabilities`** = makine-okur capability matrix (F-05): her opsiyon DEĞERİ `active_v1`/`future_dev` + bağımlılık notu; engine (fail-closed gate), Ready Check (`STRATEGY_CAPABILITY_NOT_IN_BUILD`) ve UI (üretilen `frontend/src/lib/engineCapabilityMatrix.generated.ts` aynası) tek kaynak olarak bunu tüketir |
 | `capability` | `baseline`, `enums`, `lifecycle` | Future Dev capability registry durum makinesi + activation gate'leri |
 | `create_package` | `candidate`, `generator`, `source_scan`, `validation`, `state_machine`, `policy`, `baseline`, `value_objects`, `enums` | CP + Pre-Check; deterministik candidate manifest (`GENERATOR_VERSION`) |
 | `deletion` | `state_machine` | Soft-delete/restore/purge geçiş kuralları |

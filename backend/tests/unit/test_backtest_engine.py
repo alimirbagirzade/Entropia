@@ -581,8 +581,11 @@ def test_engine_applies_the_position_size_cap_to_a_real_trade() -> None:
 def test_engine_execution_key_namespace_shifts_with_the_engine_version() -> None:
     # The ENGINE_VERSION bump must flow into the manifest so a stale pre-conflict
     # result cannot be reused under the new engine (INF-04 idempotent reuse / INF-05).
+    # F-05 bumped it to -capability-matrix: the matrix is now a fail-closed engine gate, so a
+    # result produced when 'historical_slippage_if_available' still ran as a silent
+    # ZERO-slippage backtest must never be idempotently reused for a re-RUN.
     built = _manifest("btrun_A", "snap_A", "2024-01-01T00:00:00Z")
-    assert built.manifest["identity"]["engine_version"] == "backtest-engine-v18-portfolio-rules"
+    assert built.manifest["identity"]["engine_version"] == "backtest-engine-v18-capability-matrix"
 
 
 def test_stop_exit_default_is_stop_has_priority() -> None:

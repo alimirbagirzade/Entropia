@@ -2805,7 +2805,46 @@ Aynı gün dependabot: #350/#351/#352 (CI actions@7), #354/#355 minor-patch grup
 guard'ı EKLENMEDİ** (yoksa haftaya yeniden açılır); tam 3.14 migration ayrı manuel bir dal. Tam kayıt +
 madde-madde durum: `docs/PROJECT_HISTORY.md` §"Auth remediation dalgası".
 
-## Next: **PO imzası + R2 kapanışı** (auth remediation dalgası COMPLETE — kod işi kalmadı).
+## V18-R3 · F-05 / M-05 — makine-okur capability matrix landed (PR TBD)
+
+**Migration YOK** (alembic head `0035_portfolio_rules` sabit) · **`ENGINE_VERSION` →
+`backtest-engine-v18-capability-matrix`** (davranış değişti → execution_key namespace kaymalı).
+
+- **Tek kanonik veri:** `backend/src/entropia/domain/backtest/capabilities.py` — her opsiyon
+  **DEĞERİ** için `active_v1` | `future_dev` + `dependency` (bağımlılık / eksik veri serisi) +
+  `blocker_code`. **59 satır, 22 future_dev.** Public: `capabilities_are_modelled()`,
+  `future_dev_selections()`, `option_status()`.
+- **Üç tüketici, tek kaynak:** engine (fail-closed gate `_open()` choke-point'inde + L4
+  `capability_not_in_build:*` warning'leri + `capabilities_modelled` diagnostics) · Ready Check
+  (`STRATEGY_CAPABILITY_NOT_IN_BUILD` = **"Not available in this build"**, remediation = matrisin
+  `dependency`'si) · UI (üretilen `frontend/src/lib/engineCapabilityMatrix.generated.ts` aynası;
+  `SelectField capabilityField` → 9 select'te disabled + açıklama).
+- **Gerçek bulgu (silent, "fail eden" değil):** `slippage_mode='historical_slippage_if_available'`
+  dokuz per-domain predikatın HEPSİNİ geçiyordu; `_cost_params` MODE'a bakmıyor ve schema o modda
+  `slippage_value`'yu optional yapıyor → **sessizce SIFIR slippage** ile iyimser backtest. Artık
+  fail-closed + Ready Check blocker.
+- **Dokuz per-domain predikat korundu** — matrisin ifade edemediği misconfiguration'ları (eksik
+  `trigger_offset`, pozitif olmayan cap, parse edilemeyen filter config) onlar yakalıyor.
+- **Anti-drift:** `tools/export_capability_matrix.py` TS aynasını render eder;
+  `test_capability_matrix.py` byte eşitliği + **schema `Literal` ↔ matris tam küme eşitliği** iddia
+  eder → `config.py`'ye sınıflandırılmamış yeni opsiyon eklenirse CI patlar.
+- **Kayıtlı `future_dev` değer seçilebilir kalır** (aksi hâlde mevcut strateji düzenlenemez olur ve
+  form kayıtlı config'i sessizce yeniden yazar); çalıştırmayı Ready Check engeller.
+- **Testler:** backend `tests/unit/test_capability_matrix.py` (exhaustiveness · 22 future_dev için
+  blocker+inert-engine parity · active_v1 baseline gerçekten trade açar) · frontend
+  `src/test/engineCapabilityMatrix.test.tsx` (10 test). Tam kayıt: `docs/PROJECT_HISTORY.md`
+  §"V18-R3 · F-05 / M-05".
+- **Gözlemlenebilirlik notu:** `capability_ok` flat-entry gate'ine **eklenmedi** — eklenince F-10
+  `entry_blocked` decision-trace event'i hiç üretilmiyordu. Gate `_open()`'da (her entry yolu oradan
+  geçer), `_blocked_reason()`'da ise **en sonda** (per-domain sebep daha spesifik ve sözleşmeli).
+
+## Next: **PO imzası + R2 kapanışı** (R3 mühendislik backlog'u F-05 ile kapandı).
+R3 W3 dalgası: F-01a/b/c (durable worker'lar) · F-04+F-09 (PR #381) · **F-05/M-05 (bu slice)**
+landed. Kalan tek büyük açık iş hâlâ **R2'nin product-owner imzası**. Sırada:
+> 0. **F-07 (raw-id presentation sweep residuals)** — kickoff'ta W3 kalemi; traceability tablosunda
+>    "overlaps P-11/12/16" notuyla `Not started`. P-11/12/16 landed olduğu için gerçekten artık
+>    kalıntı olup olmadığı **empirik doğrulanmalı** (bu slice onu kapsamadı).
+
 Auth remediation (#346–#364) merge oldu; kalan tek açık iş **R2'nin product-owner imzası** + iki
 opsiyonel deferred. Sırada:
 > 1. **Product-owner imzası** — `docs/implementation/v18_final_acceptance.md` §4'teki D-1…D-9

@@ -39,7 +39,16 @@ from entropia.shared.manifest import manifest_hash
 # (sequential pin-order precedence, fail-closed, L4-disclosed; NET executes as
 # BLOCK_OPPOSITE). The bump shifts the execution_key namespace so a pre-v18 result is
 # never reused for a plan whose rules now genuinely execute (INF-04/INF-05).
-ENGINE_VERSION = "backtest-engine-v18-portfolio-rules"
+# v18-capability-matrix (F-05): the machine-readable capability matrix
+# (domain/backtest/capabilities.py) is now a fail-closed engine gate, so every option the
+# matrix marks ``future_dev`` opens NO position. This CHANGES executed behaviour for one
+# previously-ungated option: ``data.costs.slippage_mode = 'historical_slippage_if_available'``
+# used to run as a silent ZERO-slippage backtest (``_cost_params`` never branched on the mode
+# and the schema makes ``slippage_value`` optional under it). The bump shifts the
+# execution_key namespace so such a result — produced under an over-optimistic fill model — is
+# never idempotently reused for a re-RUN now that the config is correctly refused
+# (INF-04/INF-05).
+ENGINE_VERSION = "backtest-engine-v18-capability-matrix"
 METRIC_SET_VERSION = "metric-set-v1"
 OUTPUT_ARTIFACT_PROFILE = "standard-v1"
 

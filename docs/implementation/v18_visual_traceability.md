@@ -98,7 +98,7 @@ F-03 (multi-item unified-clock portfolio) · P-13 / F-06 (ResultDetail charts + 
 | **P-14** Panel Logs backtest-log primary view | doc | W2 | Not started |
 | **F-01** synchronous `_enqueue_stub_job` → real worker lifecycle | ✔ `jobs/create_package.py` (4 kinds) | W3 | **DONE** (F-01a/b/c: Pre-Check · candidate · validation · baseline-parse all admissions + durable workers; `_enqueue_stub_job`/`_enqueue_completed_job` deleted; acceptance in `test_create_package_{precheck,candidate_validation,baseline}_worker.py`) |
 | **F-04** breakout-proxy contradictory paths | doc | W3 | Not started |
-| **F-05 / M-05** capability matrix (UI ↔ engine parity) | doc | W3 | Not started |
+| **F-05 / M-05** capability matrix (UI ↔ engine parity) | ✔ `domain/backtest/capabilities.py` (59 rows, 22 `future_dev`) | W3 | **DONE** (canonical matrix per option VALUE; engine fail-closed gate at the `_open` choke point + `capability_not_in_build` trace/L4 warnings; Ready Check `STRATEGY_CAPABILITY_NOT_IN_BUILD` "Not available in this build"; editor disables `future_dev` options with the dependency note from the generated `engineCapabilityMatrix.generated.ts` mirror. Found + closed a real silent hole: `slippage_mode='historical_slippage_if_available'` passed all nine per-domain predicates and ran as a ZERO-slippage backtest. `ENGINE_VERSION` → `backtest-engine-v18-capability-matrix`. Acceptance in `test_capability_matrix.py` + `engineCapabilityMatrix.test.tsx`) |
 | **F-07** residual raw-id presentation sweep | overlaps P-11/12/16 | W3 | Not started |
 | **F-09** README/status honesty rewrite | doc | W3 | Not started |
 

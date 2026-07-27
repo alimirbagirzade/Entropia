@@ -41,13 +41,29 @@ delivered; **D-4 is the last unfinished signed FIX** and needs a backend project
    backtest-log projection (User/Date/Backtest/Net/ROMAD/Trades) as the first
    view; keep the event/audit stream as a secondary technical tab.
 6. **W3 backend truth:**
-   - **F-01** real worker lifecycle for `_enqueue_stub_job` (`create_package.py` —
-     currently completes in-transaction; route advertised-async work through real workers).
-   - **F-04** breakout-proxy cleanup (`domain/backtest/engine.py` — remove/fence
-     `deterministic_bar_breakout_proxy_v1` from production paths).
-   - **F-05 / M-05** machine-readable capability matrix (UI ↔ Ready Check ↔ engine parity).
-   - **F-07** raw-id presentation sweep residuals.
-   - **F-09** README / status honesty rewrite.
+   - ~~**F-01** real worker lifecycle for `_enqueue_stub_job`~~ — **DONE** (F-01a/b/c,
+     PR #380/#382/#383: Pre-Check · candidate+validation · baseline-parse all on durable
+     workers; `_enqueue_stub_job`/`_enqueue_completed_job` deleted).
+   - ~~**F-04** breakout-proxy cleanup~~ — **DONE** (PR #381: `run_engine` raises
+     `UnresolvedStrategyError` unless a resolved plan exists; the labelled breakout is
+     reachable only via the test-only `builtin_breakout_fixture=True`).
+   - ~~**F-05 / M-05** machine-readable capability matrix~~ — **DONE** (this slice):
+     `domain/backtest/capabilities.py` is the ONE canonical table, per option **VALUE**
+     (`active_v1` | `future_dev` + dependency note), consumed by the engine (fail-closed at
+     the `_open` choke point), Ready Check (`STRATEGY_CAPABILITY_NOT_IN_BUILD` = "Not
+     available in this build") and the Strategy editor (generated TS mirror →
+     disabled + dependency note). **Reuse anchors:** `capabilities_are_modelled(config)`,
+     `future_dev_selections(config)`, `option_status(field_path, value)`,
+     `CAPABILITY_MATRIX`, `FUTURE_DEV_OPTIONS`; exporter
+     `backend/tools/export_capability_matrix.py` → `frontend/src/lib/engineCapabilityMatrix.generated.ts`
+     (`capabilityOption()` / `isFutureDev()`); `SelectField capabilityField` prop.
+     **Adding a new option value to `config.py` now FAILS CI** until it is classified —
+     `test_matrix_enumerates_every_schema_literal` asserts matrix ↔ schema `Literal` set
+     equality (register a brand-new FIELD in that test's `_SCHEMA_FIELDS` map).
+   - **F-07** raw-id presentation sweep residuals — **still open**; traceability marks it
+     "overlaps P-11/12/16", which have landed, so FIRST verify empirically whether any
+     residual remains before writing code.
+   - ~~**F-09** README / status honesty rewrite~~ — **DONE** (landed with PR #381).
 7. **Kova 2 — recorded honest boundaries (NOT signed, stay open):** A-06 (10-page
    deep visual compare: 03/07/09/10/12/17/18/19/21/22) · A-08 (NVDA/VoiceOver
    manual a11y) · F-02 (NL generation Future-Dev) · F-03 (unified-clock portfolio)
@@ -81,15 +97,20 @@ delivered; **D-4 is the last unfinished signed FIX** and needs a backend project
 Entropia V18 — R3 remediation dalgasına DEVAM. Frontend D/P-item'ları bitti
 (PR #367-373). Şimdi backend-ağırlıklı kalanlar.
 
-1) ÖNCE doğrula: git fetch; gh pr list --state all -L 8; #371/#372/#373
-   merged mi? origin/main HEAD + alembic head'i teyit et.
+1) ÖNCE doğrula: git fetch; gh pr list --state all -L 8; F-05 capability-matrix
+   PR'ı merged mi? origin/main HEAD + alembic head'i teyit et
+   (beklenen: 0035_portfolio_rules, ENGINE_VERSION=backtest-engine-v18-capability-matrix).
 2) OKU (authority order): docs/STAGE_R3_KICKOFF.md, sonra
    docs/implementation/v18_visual_traceability.md §2 (47-bulgu → disposition —
    "aynı konu" guard) + v18_final_acceptance.md §4.1 (PO imzaları:
    D-2/3/4/5/6/8 FIX, D-7b, D-1/D-9 kabul).
-3) Sıradaki slice: D-4 (Portfolio mbi_ ULID → human label; allocation
-   projection'a display label ekle). Sonra P-05, P-06, P-09, P-14, sonra
-   W3 (F-01/F-04/F-05/F-07/F-09).
+3) R3 mühendislik backlog'u KAPANDI: D/P item'ları + F-01a/b/c + F-04 + F-05/M-05 + F-09
+   landed. Kalan: (a) F-07 raw-id sweep — traceability "overlaps P-11/12/16" diyor,
+   P-11/12/16 landed, o yüzden ÖNCE gerçekten kalıntı var mı empirik doğrula;
+   (b) R2 product-owner imzası (kod işi değil, docs/STAGE2_HANDOFF.md §Next).
+   Capability matrisine dokunacaksan: tek kaynak domain/backtest/capabilities.py,
+   değişince `cd backend && uv run python tools/export_capability_matrix.py` ile
+   TS aynasını yenile (parity testi byte eşitliği ister).
 4) Her slice: kendi branch'i (güncel main'den) + ayrı PR (base=main) +
    tam backend verify (ruff/mypy/pytest + FK insert-order proof + alembic
    up/down/up) + frontend verify. GateGuard: edit'te 4-fact, yeni dosya

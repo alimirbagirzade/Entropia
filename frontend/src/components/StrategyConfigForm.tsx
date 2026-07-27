@@ -3,6 +3,11 @@ import { useId, useState } from "react";
 import { DatasetPicker } from "@/components/DatasetPicker";
 import { InfoPanel } from "@/components/InfoPanel";
 import {
+  type CapabilityOption,
+  capabilityOption,
+  isFutureDev,
+} from "@/lib/engineCapabilityMatrix.generated";
+import {
   ENTRY_TIMING_OPTIONS,
   EXIT_TIMING_OPTIONS,
   FORMULA_TYPE_OPTIONS,
@@ -125,6 +130,7 @@ function SelectField({
   required,
   panelKey,
   placeholder,
+  capabilityField,
 }: {
   label: string;
   value: string;
@@ -133,8 +139,33 @@ function SelectField({
   required?: boolean;
   panelKey?: keyof typeof STRATEGY_INFO_PANELS;
   placeholder?: string;
+  // F-05: the dotted saved-config path of this field. When given, each option's status is
+  // read from the GENERATED engine capability matrix (the committed mirror of
+  // backend capabilities.py, pinned byte-for-byte by a backend parity test) and every
+  // future_dev option renders DISABLED with its dependency spelled out below the control —
+  // so the user learns the option cannot run BEFORE building a strategy on it, instead of
+  // discovering it at Ready Check or in a silently inert Result.
+  capabilityField?: string;
 }) {
   const id = useId();
+  const noteId = `${id}-capability`;
+  const field = capabilityField ?? "";
+  // An already-saved future_dev value stays SELECTABLE: disabling the CURRENT value would
+  // make an existing strategy un-editable and let the form silently rewrite saved config.
+  // Ready Check still blocks it, so it can never run — it is only kept representable.
+  const blockedValues = new Set(
+    options
+      .filter((option) => option.value !== value && isFutureDev(field, option.value))
+      .map((option) => option.value),
+  );
+  const selectedBlocked = isFutureDev(field, value) ? capabilityOption(field, value) : undefined;
+  // The NOTES come from the matrix rows (they carry the dependency text), the DISABLED flag
+  // from the value set — the option lists themselves stay label-only presentation data.
+  const notes: CapabilityOption[] = selectedBlocked
+    ? [selectedBlocked]
+    : [...blockedValues]
+        .map((blockedValue) => capabilityOption(field, blockedValue))
+        .filter((entry): entry is CapabilityOption => entry !== undefined);
   return (
     <div className="field-row wide-label">
       <FieldHead id={id} label={label} required={required} panelKey={panelKey} />
@@ -143,14 +174,33 @@ function SelectField({
         className="sd-select"
         value={value}
         onChange={(event) => onChange(event.target.value)}
+        aria-describedby={notes.length > 0 ? noteId : undefined}
       >
         {placeholder !== undefined ? <option value="">{placeholder}</option> : null}
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
+        {options.map((option) => {
+          const unavailable = blockedValues.has(option.value);
+          return (
+            <option key={option.value} value={option.value} disabled={unavailable}>
+              {unavailable ? `${option.label} — not available in this build` : option.label}
+            </option>
+          );
+        })}
       </select>
+      {notes.length > 0 ? (
+        <p className="sd-capability-note" id={noteId}>
+          {selectedBlocked ? (
+            <>
+              <strong>Not available in this build:</strong> {selectedBlocked.label} is saved but
+              will not run — Ready Check blocks it. {selectedBlocked.dependency}
+            </>
+          ) : (
+            <>
+              <strong>Not available in this build:</strong>{" "}
+              {notes.map((entry) => `${entry.label} — ${entry.dependency}`).join(" ")}
+            </>
+          )}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -277,6 +327,7 @@ export function DataExecutionCard({
           value={d.entry_timing}
           onChange={(v) => setData({ entry_timing: v })}
           options={ENTRY_TIMING_OPTIONS}
+          capabilityField="data.execution.entry_timing"
           placeholder="Choose Entry Execution"
         />
         <SelectField
@@ -285,6 +336,7 @@ export function DataExecutionCard({
           value={d.exit_timing}
           onChange={(v) => setData({ exit_timing: v })}
           options={EXIT_TIMING_OPTIONS}
+          capabilityField="data.execution.exit_timing"
           placeholder="Choose Exit Execution"
         />
         <SelectField
@@ -320,6 +372,7 @@ export function DataExecutionCard({
               value={d.limit_price_rule}
               onChange={(v) => setData({ limit_price_rule: v })}
               options={LIMIT_PRICE_RULE_OPTIONS}
+              capabilityField="data.order_config.limit.price_rule"
               placeholder="Choose price rule"
               panelKey="limitPriceRule"
             />
@@ -349,6 +402,7 @@ export function DataExecutionCard({
               value={d.limit_partial_fill_policy}
               onChange={(v) => setData({ limit_partial_fill_policy: v })}
               options={PARTIAL_FILL_OPTIONS}
+              capabilityField="data.order_config.limit.partial_fill_policy"
               panelKey="partialFill"
             />
             <div className="cp-field" aria-hidden="true" />
@@ -365,6 +419,7 @@ export function DataExecutionCard({
           value={d.slippage_mode}
           onChange={(v) => setData({ slippage_mode: v })}
           options={SLIPPAGE_MODE_OPTIONS}
+          capabilityField="data.costs.slippage_mode"
         />
         {showSlippageValue ? (
           <TextField
@@ -582,6 +637,7 @@ export function PositionSizingCard({
             value={s.formula_type}
             onChange={(v) => setSizing({ formula_type: v })}
             options={FORMULA_TYPE_OPTIONS}
+            capabilityField="position_sizing.formula_based.formula_type"
             panelKey="customFormula"
           />
         ) : null}
@@ -614,6 +670,7 @@ export function PositionSizingCard({
           value={s.signal_strength_adjustment}
           onChange={(v) => setSizing({ signal_strength_adjustment: v })}
           options={SIGNAL_STRENGTH_OPTIONS}
+          capabilityField="position_sizing.signal_strength_adjustment"
           panelKey="signalStrengthSizing"
         />
         <SelectField
@@ -621,6 +678,7 @@ export function PositionSizingCard({
           value={s.leverage_mode}
           onChange={(v) => setSizing({ leverage_mode: v })}
           options={LEVERAGE_MODE_OPTIONS}
+          capabilityField="position_sizing.leverage_mode"
           panelKey="leverageMode"
         />
         <TextField
@@ -700,6 +758,7 @@ export function ConflictCard({
           value={c.opposite_direction_hedge}
           onChange={(v) => setConflict({ opposite_direction_hedge: v })}
           options={OPPOSITE_HEDGE_OPTIONS}
+          capabilityField="conflict_position_handling.opposite_direction_hedge"
         />
         <SelectField
           label="Stop + Exit conflict"

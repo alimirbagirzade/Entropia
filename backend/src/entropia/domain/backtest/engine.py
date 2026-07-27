@@ -41,6 +41,10 @@ from math import sqrt
 from typing import TYPE_CHECKING, Any
 
 from entropia.domain.allocation.enums import CompoundingMode
+from entropia.domain.backtest.capabilities import (
+    capabilities_are_modelled,
+    future_dev_selections,
+)
 from entropia.domain.backtest.funding import FundingSchedule, parse_utc
 from entropia.domain.backtest.indicators import (
     BUILTIN_ENTRY_MODEL,
@@ -2042,6 +2046,19 @@ def run_engine(
     overlap_policy = str(conflict_cfg.overlapping_signal_policy)
     conflict_ok = conflict_handling_is_modelled(config)
 
+    # F-05: the MATRIX-driven capability gate (see domain/backtest/capabilities.py). The nine
+    # predicates above each answer a whole-CONFIG question for one domain; this one enumerates
+    # per option VALUE, which is what closes the class of hole they structurally cannot see —
+    # an option nothing was gating at all. The concrete case that motivated it:
+    # ``data.costs.slippage_mode = 'historical_slippage_if_available'`` passed all nine
+    # predicates, so Ready Check admitted the run and ``_cost_params`` (which never branches on
+    # the MODE) silently resolved slippage to ZERO — the schema makes ``slippage_value``
+    # optional under that mode — handing back an over-optimistic fill model the user never
+    # asked for. Any ``future_dev`` selection now opens NO position, exactly like the other
+    # nine, and Ready Check raises STRATEGY_CAPABILITY_NOT_IN_BUILD ahead of it.
+    capability_ok = capabilities_are_modelled(config)
+    future_dev_selected = future_dev_selections(config)
+
     plan_active = indicator_plan is not None and indicator_plan.has_entry
     if not plan_active and not builtin_breakout_fixture:
         # F-04 fail closed: no resolved trigger plan and no explicit test-only fixture
@@ -2222,6 +2239,14 @@ def run_engine(
             return "leverage_unsupported"
         if not strength_ok:
             return "signal_strength_unsupported"
+        if not capability_ok:
+            # F-05: checked LAST of the unsupported reasons, deliberately. Where a
+            # per-domain predicate already explains the refusal (cross leverage,
+            # trend-adjusted strength, ...) that reason is the more specific and
+            # already-contracted trace value, so the matrix must not overwrite it. This
+            # branch is what reports the options NO per-domain gate covers — the
+            # historical-slippage case the matrix was added for.
+            return "capability_not_in_build"
         if alloc_on:
             return "sleeve_zero_capacity"
         return "no_fill"
@@ -2543,9 +2568,14 @@ def run_engine(
         rather than a phantom 0-size trade (doc 13 §8.4 step 5/6). Independent mode
         books even a bust-equity 0-size fill (preserving the risk-based
         no-phantom-profit invariant), but an UNMODELLED sizing method (F-09), leverage
-        configuration (F-07f) or signal-strength mode (F-07g) opens nothing at all — no
-        phantom trade for a strategy the user never validly configured."""
-        if not sizing_ok or not leverage_ok or not strength_ok:
+        configuration (F-07f), signal-strength mode (F-07g) or any ``future_dev`` capability
+        selection (F-05) opens nothing at all — no phantom trade for a strategy the user
+        never validly configured.
+
+        ``capability_ok`` is enforced HERE because ``_open`` is the single choke point every
+        entry path funnels through (flat entry, conflict-driven stack / replace, and the
+        scaling ladder), so one check covers them all with no path left un-gated."""
+        if not capability_ok or not sizing_ok or not leverage_ok or not strength_ok:
             return None
         nonlocal portfolio_block_reason
         nonlocal portfolio_conflict_blocked_entries, portfolio_exposure_blocked_entries
@@ -4227,6 +4257,13 @@ def run_engine(
         # those fills degraded to the coarse full-fill model (L4, never a fabricated
         # fraction).
         warnings.append("partial_fill_evidence_unavailable")
+    for option in future_dev_selected:
+        # F-05: the strategy selected an option this build does not execute at all, so the
+        # run opened NO position. Ready Check raises STRATEGY_CAPABILITY_NOT_IN_BUILD — this
+        # L4 warning is the engine backstop when a stale readiness state reaches the worker.
+        # One warning PER selection (not one summary line) so the Result's diagnostics name
+        # every offending option, matching how the other fail-closed gates report.
+        warnings.append(f"capability_not_in_build:{option.field_path}={option.value}")
     if not sizing_ok:
         # formula sizing (and a risk_based request without its sub-config) is not
         # modelled; the run opened NO position (fail closed, F-09) rather than a
@@ -4399,6 +4436,14 @@ def run_engine(
         "nary_reference_conditions": nary_reference_conditions,
         "vwap_blocks": vwap_blocks,
         "position_size_limits_active": config.position_sizing.position_size_limits is not None,
+        # F-05: capability-matrix provenance. ``capabilities_modelled`` false means at least
+        # one selected option is future_dev in this build, so the run was financially inert;
+        # ``capability_not_in_build`` names each one as "<field_path>=<value>" so a Result can
+        # be read back to the exact options that blocked it without re-deriving the matrix.
+        "capabilities_modelled": capability_ok,
+        "capability_not_in_build": [
+            f"{option.field_path}={option.value}" for option in future_dev_selected
+        ],
         # F-07f: leverage provenance (§10.2) — the resolved multiplier actually applied to
         # every computed position size (1x when unleveraged or 'no_leverage' normalized).
         "leverage_mode": config.position_sizing.leverage_mode,

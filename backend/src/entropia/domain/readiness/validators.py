@@ -22,6 +22,7 @@ from pydantic import ValidationError as PydanticValidationError
 from entropia.domain.allocation.enums import AllocationIssueCode as AllocCode
 from entropia.domain.allocation.enums import AllocationIssueSeverity as AllocSev
 from entropia.domain.allocation.rules import AllocationIssue
+from entropia.domain.backtest.capabilities import future_dev_selections
 from entropia.domain.backtest.engine import (
     conflict_handling_is_modelled,
     execution_timing_is_modelled,
@@ -352,6 +353,35 @@ def _strategy_issues(item: ReadinessItemInput, *, allocation_enabled: bool) -> l
                 "The strategy has neither exit logic nor an active stop.",
                 remediation="Define exit logic or enable at least one protection stop.",
                 field_path="position_exit_logic",
+                scope_id=item.item_id,
+            )
+        )
+
+    # F-05: the MATRIX-driven capability blocker. Every option the capability matrix
+    # (domain/backtest/capabilities.py) marks ``future_dev`` does not execute in this build at
+    # all, so selecting one must BLOCK RUN — the engine also fails closed and opens no
+    # position. Its value is covering option values NO per-domain predicate gates: it is what
+    # caught ``data.costs.slippage_mode = 'historical_slippage_if_available'``, which passed
+    # all nine and then ran as a silent ZERO-slippage backtest. One issue per offending option
+    # so the user sees every one at once instead of fixing them one run at a time.
+    #
+    # Placed ahead of the nine per-domain checks for READING order only — Ready Check collects
+    # every issue, so an option covered by both (cross leverage, trend-adjusted strength, ...)
+    # legitimately raises this blocker AND its specific one, and the user gets both remediations.
+    # This is NOT the engine's precedence rule: ``_blocked_reason`` returns exactly ONE trace
+    # value, so there the matrix reason is checked LAST and never overwrites the more specific
+    # per-domain reason.
+    for capability in future_dev_selections(config):
+        issues.append(
+            ReadinessIssue(
+                Code.STRATEGY_CAPABILITY_NOT_IN_BUILD,
+                Sev.BLOCKER,
+                Scope.STRATEGY,
+                f"Not available in this build: {capability.label!r} "
+                f"({capability.field_path}) is not executed by the backtest engine and "
+                "would open no position.",
+                remediation=f"Choose a supported option. {capability.dependency}",
+                field_path=capability.field_path,
                 scope_id=item.item_id,
             )
         )

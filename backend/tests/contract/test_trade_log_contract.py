@@ -105,7 +105,35 @@ async def test_upload_rejects_non_csv_extension_before_db(app) -> None:
                 files={"file": ("trades.pdf", _VALID_CSV, "application/pdf")},
             )
         assert resp.status_code == 422
-        assert resp.json()["error"]["code"] == "FILE_TYPE_NOT_ALLOWED"
+        assert resp.json()["error"]["code"] == "UNSUPPORTED_SOURCE_FILE_TYPE"
+    finally:
+        next(gen, None)
+
+
+@pytest.mark.contract
+async def test_upload_rejects_blank_filename_before_db(app) -> None:
+    """K-07: a raw multipart part with ``filename=""`` used to slip PAST the type
+    gate (the check was skipped for a falsy name) and reach the repository. It is
+    now rejected with the doc 05 §12.1 code before any DB/storage work."""
+    gen = _override(app, _actor(Role.USER, PrincipalType.HUMAN, "user_1"))
+    next(gen)
+    try:
+        boundary = "----contract"
+        body = (
+            f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename=""\r\n'
+            f"Content-Type: text/csv\r\n\r\ntime,side\r\n1,buy\r\n"
+            f"\r\n--{boundary}--\r\n"
+        ).encode()
+        async with await _client(app) as c:
+            resp = await c.post(
+                "/api/v1/trade-logs/source-assets",
+                content=body,
+                headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+            )
+        assert resp.status_code == 422
+        error = resp.json()["error"]
+        assert error["code"] == "UNSUPPORTED_SOURCE_FILE_TYPE"
+        assert error["details"][0]["reason"] == "missing_filename"
     finally:
         next(gen, None)
 

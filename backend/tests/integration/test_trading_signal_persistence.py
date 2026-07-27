@@ -42,6 +42,7 @@ from entropia.infrastructure.s3 import datasets
 from entropia.shared.errors import (
     AccessDeniedError,
     AvailableTimeRequiredError,
+    FileTypeNotAllowedError,
     SignalEventMappingRequiredError,
     WorkObjectRevisionConflictError,
 )
@@ -196,6 +197,38 @@ async def test_upload_is_content_deduplicated(session, fake_object_store) -> Non
     await session.commit()
     assert second["deduplicated"] is True
     assert second["source_asset_id"] == first["source_asset_id"]
+
+
+async def test_source_file_type_gate_is_fail_closed(session, fake_object_store) -> None:
+    """K-07 twin: the TXT/CSV gate no longer SKIPS when the filename is absent.
+
+    Identical defect to the Trade Log twin — ``if name and not name.endswith(...)``
+    accepted ANY payload for a ``None``/blank ``original_filename``. Trading Signal
+    keeps its own documented code (doc 04 §11 ``FILE_TYPE_NOT_ALLOWED``)."""
+    await _seed_principals(session)
+
+    for filename in (None, "", "   ", "events.pdf", "events"):
+        with pytest.raises(FileTypeNotAllowedError) as excinfo:
+            await ts_cmd.upload_source_asset(
+                session, USER1, content=_GOOD_CSV, original_filename=filename
+            )
+        assert excinfo.value.code == "FILE_TYPE_NOT_ALLOWED"
+        assert excinfo.value.details[0]["field"] == "original_filename"
+
+    # A binary blob renamed .csv is rejected by the content sniff.
+    with pytest.raises(FileTypeNotAllowedError):
+        await ts_cmd.upload_source_asset(
+            session, USER1, content=b"%PDF-1.7 fake", original_filename="events.csv"
+        )
+
+    # Nothing above reached storage; the supported extension still uploads.
+    assert fake_object_store == {}
+    uploaded = await ts_cmd.upload_source_asset(
+        session, USER1, content=_GOOD_CSV, original_filename="events.csv"
+    )
+    await session.commit()
+    assert uploaded["deduplicated"] is False
+    assert len(fake_object_store) == 1
 
 
 # --------------------------------------------------------------------------- #

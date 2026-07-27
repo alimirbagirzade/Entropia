@@ -159,6 +159,10 @@ def _run(
         execution_key="exec_key_test",
         timeframe="1D",
         tick_batches=iter([ticks]) if ticks is not None else None,
+        # F-04: this suite exercises tick/trade-print execution timing over the built-in
+        # breakout fixture (no real indicator plan), so it opts into the test-only path
+        # explicitly — production fails closed without a resolved plan.
+        builtin_breakout_fixture=True,
     )
 
 

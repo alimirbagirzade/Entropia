@@ -4,15 +4,25 @@ Proves the engine drives entry/exit from a real ``IndicatorPlan`` (built-in TA n
 triggers) — the only entry path a production RUN can take. An UNRESOLVED plan is refused
 upstream (F-06: a Ready Check blocker + a worker fail-closed re-check), never silently
 substituted with a proxy; this module pins the contract those gates read rather than the
-substitution itself (F-24). The plan is constructed directly (the DB-backed resolution is
-covered separately in tests/integration/test_indicator_plan_resolution.py)."""
+substitution itself (F-24). F-04 adds the engine's OWN last line of defence: ``run_engine``
+raises ``UnresolvedStrategyError`` on a None/empty plan and materializes nothing, and the
+labelled breakout is reachable ONLY via the explicit ``builtin_breakout_fixture=True``
+opt-in — never a production fallback. The plan is constructed directly (the DB-backed
+resolution is covered separately in tests/integration/test_indicator_plan_resolution.py)."""
 
 from __future__ import annotations
 
 from collections.abc import Iterator
 from typing import Any
 
-from entropia.domain.backtest.engine import EngineOutput, run_engine
+import pytest
+
+from entropia.domain.backtest.engine import (
+    ENTRY_MODEL,
+    EngineOutput,
+    UnresolvedStrategyError,
+    run_engine,
+)
 from entropia.domain.backtest.indicators import (
     BUILTIN_ENTRY_MODEL,
     IndicatorPlan,
@@ -151,6 +161,67 @@ def test_an_unresolved_plan_is_refused_before_the_engine_is_reached() -> None:
     )
     assert not empty.has_entry
     assert empty.unresolved == ("entry:blk_1:no_directional_dependency",)
+
+
+def test_engine_fails_closed_when_no_plan_is_supplied() -> None:
+    """F-04 acceptance: ``run_engine`` with NO indicator plan raises and materializes nothing.
+
+    The engine's own last line of defence — even a caller that bypasses Ready Check and the
+    worker guard cannot make it fabricate a Result from a strategy the user never defined."""
+    with pytest.raises(UnresolvedStrategyError):
+        run_engine(
+            strategy_config=_config(),
+            bar_batches=_batched(_bars(_LONG_CROSS), 8),
+            execution_key="k",
+            indicator_plan=None,
+        )
+
+
+def test_engine_fails_closed_on_empty_unresolved_plan() -> None:
+    """F-04 acceptance: an unresolved / empty trigger plan cannot materialize a Result."""
+    empty = IndicatorPlan(
+        entry_rule=SignalRule(rule="required_indicator_blocks_only"),
+        entry_specs=(),
+        unresolved=("entry:blk_1:no_directional_dependency",),
+    )
+    assert not empty.has_entry
+    with pytest.raises(UnresolvedStrategyError):
+        run_engine(
+            strategy_config=_config(),
+            bar_batches=_batched(_bars(_LONG_CROSS), 8),
+            execution_key="k",
+            indicator_plan=empty,
+        )
+
+
+def test_builtin_breakout_fixture_is_the_sole_opt_in_to_the_labelled_breakout() -> None:
+    """The deterministic breakout survives ONLY as an explicit test-only fixture (F-04).
+
+    Passing ``builtin_breakout_fixture=True`` is the single code path that reaches
+    ``ENTRY_MODEL``; the honest reproducibility note flags it as test-only, so a materialized
+    production Result (which always carries a resolved plan) can never wear the proxy label."""
+    out = run_engine(
+        strategy_config=_config(),
+        bar_batches=_batched(_bars(_LONG_CROSS), 8),
+        execution_key="k",
+        indicator_plan=None,
+        builtin_breakout_fixture=True,
+    )
+    assert isinstance(out, EngineOutput)
+    assert out.diagnostics["entry_model"] == ENTRY_MODEL
+    assert "test-only" in out.diagnostics["reproducibility_note"]
+
+
+def test_resolved_plan_ignores_the_fixture_flag_and_stays_real() -> None:
+    """A resolved plan always drives real indicator compute — the fixture flag is inert."""
+    out = run_engine(
+        strategy_config=_config(),
+        bar_batches=_batched(_bars(_LONG_CROSS), 8),
+        execution_key="k",
+        indicator_plan=_sma_plan(),
+        builtin_breakout_fixture=True,
+    )
+    assert out.diagnostics["entry_model"] == BUILTIN_ENTRY_MODEL
 
 
 def test_plan_run_is_deterministic_across_batch_sizes() -> None:

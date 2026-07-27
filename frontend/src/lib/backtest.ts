@@ -282,10 +282,11 @@ export interface ResultArtifactPage<T> {
 
 // Diagnostics artifact row (backend project_row: {diagnostic_id, kind, content,
 // created_at}). The single deterministic `run_diagnostics` row carries the honest
-// L4 warnings (proxy fallback / unresolved indicator blocks / unsupported sizing)
-// and the reproducibility note that states whether real indicator triggers or a
-// breakout proxy produced this result (doc 15 §13). `content` is an open dict; the
-// UI reads the keys it knows and never fabricates a missing one.
+// L4 warnings (unresolved indicator blocks / unsupported sizing; a breakout-fixture
+// note appears only on a test-only or legacy result) and the reproducibility note
+// stating how the result was produced — production runs always fire REAL indicator
+// triggers (F-04 fail-closed), never the deterministic breakout (doc 15 §13).
+// `content` is an open dict; the UI reads the keys it knows and never fabricates one.
 // v17 per-item breakdown (engine.py combine_item_runs). Every Decimal the engine emits
 // is stringified at the JSONB persist boundary (_jsonable), so all money/percent fields
 // arrive as strings; seq/counts are ints. A non-executing object (Trading Signal / Trade

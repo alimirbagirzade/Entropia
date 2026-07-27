@@ -34,6 +34,7 @@ from entropia.infrastructure.postgres.repositories import trash as trash_repo
 from entropia.shared.errors import CursorInvalidError, TrashEntryNotFoundError
 
 _RESULT_ENTITY_TYPE = "backtest_result"
+_ARTIFACT_ENTITY_TYPE = "hypothesis_artifact"
 
 # An entry is restore-eligible when its object is recoverable-soft-deleted:
 # purge_failed returned the root to soft_deleted; purge_pending disables Restore
@@ -130,6 +131,11 @@ async def _target_deletion_state(session: AsyncSession, entry: TrashEntry) -> st
 
         result = await bt_repo.get_result(session, entry.entity_id)
         return result.deletion_state if result is not None else None
+    if entry.entity_type == _ARTIFACT_ENTITY_TYPE:
+        from entropia.infrastructure.postgres.repositories import agent_lab as al_repo
+
+        artifact = await al_repo.get_hypothesis(session, entry.entity_id)
+        return str(artifact.deletion_state) if artifact is not None else None
     root = await entity_repo.get_root(session, entry.entity_id)
     return str(root.deletion_state) if root is not None else None
 

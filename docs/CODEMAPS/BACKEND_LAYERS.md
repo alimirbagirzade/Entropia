@@ -15,13 +15,14 @@ request bağımlılığından gelen **TEK transaction**, burada **asla commit yo
 | `agent_control.py` | Analysis Lab direktif kuyruğu + Admin runtime yaşam döngüsü (pause/resume/stop) | `agent_runtime`, `task_directive`, `agent_task` |
 | `agent_coordinator.py` | Deterministik Coordinator iskeleti — safe-checkpoint makinesi | `agent_checkpoint`, `agent_task` |
 | `agent_loop.py` | Sürekli Coordinator cycle (iskeletin gerçek döngü gövdesi) | `agent_task`, `agent_checkpoint`, `agent_event` |
+| `agent_artifact.py` | Analysis Lab output soft-delete (owner Agent / Admin) — state flip + **Trash Entry** + audit/outbox tek tx (K-06) | `hypothesis_artifact`, `trash_entries` |
 | `allocation_plan.py` | Portfolio / Equity Allocation draft upsert, validate, revision append | `portfolio_allocation_plan`, `..._entry`, `..._revision` |
 | `auth.py` | Local auth: `sign_up` / `login` / `logout` / `reauthenticate` / first-Admin bootstrap | `human_credentials`, `auth_sessions`, `reauth_proofs`, `human_users` |
 | `backtest_run.py` | RUN admission (sunucu tarafı preflight) + retry + Result soft-delete | `backtest_run`, `backtest_run_manifest`, `backtest_result` |
 | `capability.py` | Future Dev capability lifecycle transition + operasyonel çıktı POST'ları | `future_capability`, `capability_activation_event`, `view_dataset`, `analysis_artifact` |
 | `create_package.py` | Create Package + Pre-Check mutasyonları (scan/candidate/draft/validate/approve). **Pre-Check · candidate · validation · baseline-parse = admission** (durable job + `default` aktör); compute `jobs/create_package.py`'de — F-01c ile tx-içi compute kalmadı | `package_request`, `dependency_scan`, `baseline_asset`, `package_validation_run`, `jobs` |
 | `data_queue.py` | Operator recovery: takılı `data` kuyruğu job'larını yeniden dağıt (INF-03) | `jobs` |
-| `deletion.py` | Soft-delete / restore / purge (owner-or-Admin; trash+tombstone+audit tek tx) | `trash_entries`, `tombstones`, `entity_registry` |
+| `deletion.py` | Soft-delete / restore / purge (owner-or-Admin; trash+tombstone+audit tek tx). Restore/purge `entity_type` ile dallanır: registry kökü · `backtest_result` · `manual_document` · `hypothesis_artifact` | `trash_entries`, `tombstones`, `entity_registry`, `backtest_result`, `manual_documents`, `hypothesis_artifact` |
 | `entities.py` | Generic root/revision omurga create/save (ürünsüz referans desen) | `entity_registry`, `entity_revisions` |
 | `esp.py` | ESP resolver create/validate/activate/deprecate | `embedded_resolver_registry`, `..._contract`, `..._validation_run` |
 | `instrument.py` | Kanonik enstrüman registry: register / alias / deprecate | `instrument_registry`, `instrument_alias` |

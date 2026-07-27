@@ -25,6 +25,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from entropia.application.commands import agent_artifact as artifact_cmd
 from entropia.application.commands import backtest_run as backtest_cmd
 from entropia.application.commands import readiness_check as readiness_cmd
 from entropia.domain.agent_lab.enums import (
@@ -51,7 +52,6 @@ from entropia.domain.research_data.usage_scope import (
 from entropia.infrastructure.postgres.models import Job
 from entropia.infrastructure.postgres.repositories import agent_lab as al_repo
 from entropia.infrastructure.postgres.repositories import agent_tool_gateway as tg_repo
-from entropia.infrastructure.postgres.repositories import audit as audit_repo
 from entropia.infrastructure.postgres.repositories import backtest as bt_repo
 from entropia.infrastructure.postgres.repositories import market_data as market_repo
 from entropia.infrastructure.postgres.repositories import research_data as research_repo
@@ -64,7 +64,6 @@ from entropia.shared.errors import (
 )
 from entropia.shared.ids import new_id
 
-_ARTIFACT_TARGET = "hypothesis_artifact"
 _TOOL_CALL_TARGET = "agent_tool_call"
 
 
@@ -415,41 +414,20 @@ async def _handle_package_proposal_create(ctx: _Ctx) -> _ToolOutcome:
 
 async def _handle_artifact_soft_delete(ctx: _Ctx) -> _ToolOutcome:
     """`artifact.soft_delete` — the Agent removes its OWN artifact from the active
-    board; provenance/audit are retained; restore/purge are Admin-only (AL-16)."""
+    board; provenance/audit are retained; restore/purge are Admin-only (AL-16).
+
+    K-06: delegated to the shared ``commands/agent_artifact`` command so the SAME
+    transaction also writes the canonical Trash Entry (doc 20 §10, §11) — without
+    it the artifact left the board but never reached the Admin Trash surface."""
     artifact_id = str(ctx.request.get("artifact_id", ""))
-    artifact = await al_repo.get_hypothesis(ctx.session, artifact_id)
-    if artifact is None:
-        raise ArtifactOwnershipError("The artifact to soft-delete was not found.")
-    if artifact.created_by_principal_id != ctx.actor.principal_id:
-        raise ArtifactOwnershipError()
-    if artifact.deletion_state is not DeletionState.ACTIVE:
-        return _ToolOutcome(
-            response={"artifact_id": artifact_id, "deletion_state": str(artifact.deletion_state)}
-        )
-    artifact.deletion_state = DeletionState.SOFT_DELETED
-    artifact.row_version += 1
-    audit_repo.add_audit_event(
-        ctx.session,
-        event_kind="agent.artifact.soft_deleted",
-        actor_principal_id=ctx.actor.principal_id,
-        actor_kind=ctx.actor.actor_kind,
-        target_entity_id=artifact_id,
-        target_entity_type=_ARTIFACT_TARGET,
-        new_state=DeletionState.SOFT_DELETED.value,
-        correlation_id=ctx.actor.correlation_id,
+    outcome = await artifact_cmd.soft_delete_hypothesis_artifact(
+        ctx.session, ctx.actor, artifact_id=artifact_id
     )
-    audit_repo.add_outbox_event(
-        ctx.session,
-        event_type="agent.artifact.soft_deleted",
-        resource_type=_ARTIFACT_TARGET,
-        resource_id=artifact_id,
-        payload={"artifact_id": artifact_id, "deletion_state": DeletionState.SOFT_DELETED.value},
-        correlation_id=ctx.actor.correlation_id,
-    )
-    return _ToolOutcome(
-        response={"artifact_id": artifact_id, "deletion_state": DeletionState.SOFT_DELETED.value},
-        artifact_output_ref=artifact_id,
-    )
+    if outcome["deletion_state"] != DeletionState.SOFT_DELETED.value:
+        # Already soft-deleted / purge-pending / purged: idempotent no-op, and the
+        # existing Trash Entry (never a duplicate) stands (doc 20 §14).
+        return _ToolOutcome(response=outcome)
+    return _ToolOutcome(response=outcome, artifact_output_ref=artifact_id)
 
 
 async def _handle_followup_task_enqueue(ctx: _Ctx) -> _ToolOutcome:

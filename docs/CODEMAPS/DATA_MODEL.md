@@ -1,7 +1,7 @@
 # DATA_MODEL — Postgres tabloları
 
 Modeller: `backend/src/entropia/infrastructure/postgres/models/*.py` (30 dosya, **63 tablo**).
-Alembic: `backend/alembic/versions/` — **head = `0035_portfolio_rules`** (35 migration).
+Alembic: `backend/alembic/versions/` — **head = `0036_manual_duplicate_override`** (36 migration).
 
 ## Kritik yapısal gerçek — DB-seviyesi FK neredeyse yok
 
@@ -177,7 +177,7 @@ her FK-bağımlı child'dan önce `Principal` flush edilmek zorundadır (`apps/s
 | `manual_stream_entries` | Yayınlanmış stream girdisi (`expected_stream_version` kaynağı) | `document_id`, `visible_revision_id` | — | ✔ |
 | `manual_content_blocks` | Kanonik güvenli-render blokları | `revision_id` | — | — |
 | `manual_search_chunks` | Arama parçaları | `document_id`, `revision_id` | — | — |
-| `manual_publication_events` | Yayın olay kaydı | `document_id`, `stream_entry_id` | — | — |
+| `manual_publication_events` | Yayın olay kaydı (published/revised/soft_deleted/**purged**; `duplicate_override` + `duplicate_of_document_id` = doc 21 §10 açık override kararı) | `document_id`, `stream_entry_id` | — | — |
 | `trash_entries` | Trash projeksiyonu (restore/purge OCC token'ı) | `entity_id`, `purge_job_id` | `deleted_at` | ✔ |
 | `tombstones` | Purge sonrası mezar taşı | `entity_id` | — | — |
 | `future_capability` | Capability registry (`registry_version` OCC) | `capability_id`, `changed_by_actor_id` | — | ✔ (`registry_version`) |

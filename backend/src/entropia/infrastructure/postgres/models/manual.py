@@ -205,6 +205,12 @@ class ManualPublicationEvent(Base):
     source_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
     source_filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
     checksum: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # Explicit duplicate-content override is a separate recorded Admin decision
+    # (doc 21 §10 MANUAL_DUPLICATE_CONTENT): TRUE only when an active duplicate
+    # existed and the Admin published over it. NULL where the notion does not
+    # apply (revise/soft delete/purge) or pre-0036 rows.
+    duplicate_override: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    duplicate_of_document_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
     correlation_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     occurred_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

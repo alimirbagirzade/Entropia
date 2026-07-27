@@ -8,6 +8,10 @@ records the immutable scan + state advance + outbox; a compute failure is a dura
 terminal FAILED state (never a silent success); a redelivered message replays the
 durable outcome (at-least-once); a request that advanced past Pre-Check supersedes
 the stale delivery; a stale OCC token is rejected at admission.
+
+Also covers the doc 07 §12 fail-closed error classes, each of which must land on a
+NEGATIVE result rather than a silently green one: SOURCE_LANGUAGE_MISMATCH (PC-10),
+REQUIRES_CLARIFICATION, PARSE_UNSUPPORTED and RESOLVER_NOT_ACTIVE.
 """
 
 from __future__ import annotations
@@ -43,7 +47,7 @@ from entropia.infrastructure.postgres.models import (
 from entropia.infrastructure.postgres.repositories import esp as esp_repo
 from entropia.infrastructure.postgres.repositories import packages as pkg_repo
 from entropia.infrastructure.postgres.repositories import rationale as rationale_repo
-from entropia.shared.errors import RequestVersionConflict
+from entropia.shared.errors import PrecheckBlocked, RequestVersionConflict
 
 pytestmark = pytest.mark.integration
 
@@ -68,7 +72,12 @@ async def _seed_principals(session) -> None:
     await session.flush()
 
 
-async def _seed_python_resolver(session, *, key: str = "ta.rsi") -> str:
+async def _seed_python_resolver(
+    session,
+    *,
+    key: str = "ta.rsi",
+    trust_state: ResolverTrustState = ResolverTrustState.TRUSTED_ACTIVE,
+) -> str:
     root, _detail, revision = await pkg_repo.create_package(
         session,
         owner_principal_id="user_admin",
@@ -94,7 +103,7 @@ async def _seed_python_resolver(session, *, key: str = "ta.rsi") -> str:
         canonical_key=key,
         package_entity_id=root.entity_id,
         runtime_adapter=RuntimeAdapter.PYTHON,
-        trust_state=ResolverTrustState.TRUSTED_ACTIVE,
+        trust_state=trust_state,
         trusted_active_revision_id=revision.revision_id,
         updated_by_principal_id="user_admin",
     )
@@ -354,6 +363,190 @@ async def test_stale_delivery_is_superseded(session) -> None:
     assert job is not None and job.status == JobStatus.SUPERSEDED
     # Only the first scan exists; the stale delivery appended nothing.
     assert await _count(session, DependencyScan) == 1
+
+
+# ---------------------------------------------------------------------------
+# Fail-closed classes (doc 07 §12, §9.5; PC-10) — none of these may reach Passed
+# ---------------------------------------------------------------------------
+
+
+async def _create_code_request(
+    session,
+    *,
+    family_id: str,
+    body: str,
+    language: SourceLanguage = SourceLanguage.PINESCRIPT,
+    deps: list[dict] | None = None,
+) -> dict:
+    """A code request with a caller-supplied body + declared source language."""
+    return await cp_cmd.create_package_request(
+        session,
+        OWNER,
+        package_type="indicator",
+        creation_mode=CreationMode.TRANSLATE_EXISTING_CODE,
+        source_language=language,
+        other_language_label=None,
+        target_runtime=RuntimeAdapter.PYTHON,
+        request_body=body,
+        output_contract=_INDICATOR_OUTPUT,
+        rationale_family_id=family_id,
+        declared_dependencies=deps or [],
+        equivalence_claim=False,
+    )
+
+
+async def _run_precheck(session, request_id: str) -> dict:
+    queued = await cp_cmd.run_precheck(session, OWNER, request_id=request_id)
+    await session.commit()
+    result = await cp_jobs.run_create_package_job(session, queued["job_id"])
+    await session.commit()
+    return result
+
+
+async def test_pc10_language_mismatch_fails_and_starts_no_candidate(session) -> None:
+    """PC-10: Source Language is PineScript but the content is Python. No candidate
+    starts; the scan is FAILED with SOURCE_LANGUAGE_MISMATCH, never Passed.
+
+    Without the content gate this body scans to ZERO ``ta.*`` calls, reconciles
+    cleanly against an empty declared list and reaches PASSED — a green Pre-Check on
+    a source the production lexer never understood.
+    """
+    await _seed_principals(session)
+    family_id = await _seed_family(session)
+    await session.commit()
+    created = await _create_code_request(
+        session,
+        family_id=family_id,
+        body="import pandas as pd\n\n\ndef rsi(series, length):\n    return series.mean()\n",
+        language=SourceLanguage.PINESCRIPT,
+    )
+    await session.commit()
+
+    result = await _run_precheck(session, created["request_id"])
+
+    assert result["status"] == str(PrecheckScanStatus.FAILED)
+    assert result["state"] == str(CreatePackageState.PRECHECK_FAILED)
+    assert result["error"]["code"] == "SOURCE_LANGUAGE_MISMATCH"
+    scan = await session.get(DependencyScan, result["scan_id"])
+    assert scan is not None
+    assert scan.status == PrecheckScanStatus.FAILED
+    assert scan.unsupported_calls[0]["code"] == "SOURCE_LANGUAGE_MISMATCH"
+    assert scan.unsupported_calls[0]["evidence"]["detected_language"] == "python"
+    assert scan.detected_calls == []
+
+    # The Send gate requires a PASSED scan, so no candidate can start on this result.
+    with pytest.raises(PrecheckBlocked):
+        await cp_cmd.submit_candidate_generation(session, OWNER, request_id=created["request_id"])
+
+
+async def test_ambiguous_language_requires_clarification(session) -> None:
+    """Competing evidence must ask, not guess (doc 07 §12 REQUIRES_CLARIFICATION)."""
+    await _seed_principals(session)
+    family_id = await _seed_family(session)
+    await session.commit()
+    created = await _create_code_request(
+        session,
+        family_id=family_id,
+        body=("//@version=5\nindicator('x')\nimport numpy as np\ndef helper():\n    return 1\n"),
+    )
+    await session.commit()
+
+    result = await _run_precheck(session, created["request_id"])
+
+    assert result["status"] == str(PrecheckScanStatus.FAILED)
+    assert result["error"]["code"] == "REQUIRES_CLARIFICATION"
+    scan = await session.get(DependencyScan, result["scan_id"])
+    assert scan is not None
+    assert scan.unsupported_calls[0]["evidence"]["detected_language"] is None
+
+
+async def test_unparseable_source_fails_with_parse_unsupported(session) -> None:
+    """doc 07 §12 PARSE_UNSUPPORTED: a body the lexer cannot account for is Failed /
+    manual review — the pre-fix scanner silently skipped these characters and passed."""
+    await _seed_principals(session)
+    family_id = await _seed_family(session)
+    await session.commit()
+    # A mis-decoded binary export pasted into the form: the header survives, the body
+    # arrives as replacement characters. (NUL bytes are not used here — Postgres
+    # rejects them at the column, so they never reach a scan.)
+    created = await _create_code_request(
+        session,
+        family_id=family_id,
+        body="//@version=5\nx = ����������",
+    )
+    await session.commit()
+
+    result = await _run_precheck(session, created["request_id"])
+
+    assert result["status"] == str(PrecheckScanStatus.FAILED)
+    assert result["state"] == str(CreatePackageState.PRECHECK_FAILED)
+    assert result["error"]["code"] == "PARSE_UNSUPPORTED"
+    scan = await session.get(DependencyScan, result["scan_id"])
+    assert scan is not None
+    assert scan.unsupported_calls[0]["evidence"]["reason"] == "unrecognized_token_ratio"
+    assert scan.scanner_version == "source-lexer-2.0"
+    # A determinate refusal is a completed job, not a crashed one: the retry path is a
+    # fresh Pre-Check on a fixed source, not a redelivery of this job.
+    job = await session.get(Job, result["job_id"])
+    assert job is not None and job.status == JobStatus.SUCCEEDED
+
+
+async def test_unterminated_string_cannot_hide_a_call(session) -> None:
+    """The unclosed quote swallows the ``ta.rsi`` call below it. Reporting an empty
+    call set here would Pass a source with a real, unresolved dependency."""
+    await _seed_principals(session)
+    await _seed_python_resolver(session)
+    family_id = await _seed_family(session)
+    await session.commit()
+    created = await _create_code_request(
+        session,
+        family_id=family_id,
+        body='//@version=5\nindicator("x")\nlabel = "unclosed\nta.rsi(close, 14)',
+    )
+    await session.commit()
+
+    result = await _run_precheck(session, created["request_id"])
+
+    assert result["status"] == str(PrecheckScanStatus.FAILED)
+    assert result["error"]["code"] == "PARSE_UNSUPPORTED"
+    scan = await session.get(DependencyScan, result["scan_id"])
+    assert scan is not None
+    assert scan.unsupported_calls[0]["evidence"]["reason"] == "unterminated_string"
+
+
+async def test_deprecated_resolver_blocks_with_resolver_not_active(session) -> None:
+    """doc 07 §12 RESOLVER_NOT_ACTIVE: a resolver deprecated for new use blocks the
+    scan with its own code — distinct from 'no resolver exists at all'."""
+    await _seed_principals(session)
+    await _seed_python_resolver(session, trust_state=ResolverTrustState.DEPRECATED)
+    family_id = await _seed_family(session)
+    await session.commit()
+    created = await _create_indicator_request(session, family_id=family_id, deps=[_RSI_DEP])
+    await session.commit()
+
+    result = await _run_precheck(session, created["request_id"])
+
+    assert result["status"] == str(PrecheckScanStatus.BLOCKED)
+    assert result["state"] == str(CreatePackageState.PRECHECK_BLOCKED)
+    assert result["missing"][0]["code"] == "RESOLVER_NOT_ACTIVE"
+    assert result["missing"][0]["call"] == "ta.rsi"
+
+
+async def test_clean_pinescript_still_passes(session) -> None:
+    """Regression guard for the whole slice: the fail-closed gates must not turn a
+    legitimate, declared, resolvable PineScript request into a refusal."""
+    await _seed_principals(session)
+    await _seed_python_resolver(session)
+    family_id = await _seed_family(session)
+    await session.commit()
+    created = await _create_indicator_request(session, family_id=family_id, deps=[_RSI_DEP])
+    await session.commit()
+
+    result = await _run_precheck(session, created["request_id"])
+
+    assert result["status"] == str(PrecheckScanStatus.PASSED)
+    assert result["unsupported"] == []
+    assert result["error"] is None
 
 
 async def test_unknown_kind_raises(session) -> None:

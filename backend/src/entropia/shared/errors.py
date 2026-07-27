@@ -265,6 +265,21 @@ class ResolverNotResolved(NotFoundError):
     message = "No trusted Embedded System Package matched this dependency."
 
 
+class ResolverNotActive(ConflictError):
+    """The canonical resolver key EXISTS in the registry but its active revision is
+    no longer selectable for new conversions — soft-deleted/withdrawn
+    (``unavailable``) or deprecated-for-new-use (``deprecated``) — doc 07 §12
+    ``RESOLVER_NOT_ACTIVE``.
+
+    Distinct from ``ResolverNotResolved`` (no canonical resolver at all): the
+    remediation is "activate an approved revision", not "propose one". Blocks the
+    scan; a Pre-Check that hits this can never report Passed.
+    """
+
+    code = "RESOLVER_NOT_ACTIVE"
+    message = "The resolver for this dependency is no longer active for new conversions."
+
+
 class ResolverContractInvalid(ValidationError):
     """The resolver contract failed typed schema validation (ESP doc 09 §11.1)."""
 
@@ -476,6 +491,35 @@ class SourceLanguageMismatch(ValidationError):
 
     code = "SOURCE_LANGUAGE_MISMATCH"
     message = "Select the correct source language for this code request."
+
+
+class ParseUnsupported(ValidationError):
+    """The production lexer cannot safely extract dependencies from this source
+    (doc 07 §12 ``PARSE_UNSUPPORTED``, §9.5).
+
+    Raised when the scanner's own accounting says it did not understand the body:
+    an unterminated string/comment swallowed the tail, or too large a share of the
+    code characters fell outside the lexical surface it parses. Silence here would
+    be the dangerous outcome — an unparsed file yields zero detected calls and
+    would otherwise reconcile to ``Passed``. Terminal for the scan: Failed /
+    manual review, never ``Passed``.
+    """
+
+    code = "PARSE_UNSUPPORTED"
+    message = "The source could not be parsed safely. Manual review is required."
+
+
+class RequiresClarification(ValidationError):
+    """The declared context and the detected content are not decidable without the
+    caller (doc 07 §12, §5 ``target_runtime`` row, PC-10).
+
+    Used when the content detector finds *competing* language evidence: guessing
+    would be worse than asking. Like ``PARSE_UNSUPPORTED`` it can only downgrade a
+    Pre-Check — it never produces a positive result.
+    """
+
+    code = "REQUIRES_CLARIFICATION"
+    message = "The source language could not be determined. Confirm the selection to continue."
 
 
 class OutputContractInvalid(ValidationError):

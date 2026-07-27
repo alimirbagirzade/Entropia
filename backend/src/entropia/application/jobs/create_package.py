@@ -42,7 +42,7 @@ commit (the actor session scope commits).
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
@@ -55,6 +55,7 @@ from entropia.domain.create_package import (
     CreatePackageState,
     PrecheckScanStatus,
     SourceKind,
+    SourceLanguage,
     ValidationRunStatus,
     next_request_state,
     parse_baseline_csv,
@@ -62,6 +63,10 @@ from entropia.domain.create_package import (
 )
 from entropia.domain.create_package.baseline import BASELINE_PARSER_VERSION
 from entropia.domain.create_package.generator import GeneratedCandidate, generate_candidate
+from entropia.domain.create_package.language_detect import (
+    LANGUAGE_DETECTOR_VERSION,
+    detect_source_language,
+)
 from entropia.domain.create_package.source_scan import SOURCE_SCANNER_VERSION, is_scannable_key
 from entropia.domain.create_package.validation import (
     STATUS_BLOCKED,
@@ -87,9 +92,13 @@ from entropia.infrastructure.postgres.repositories import packages as pkg_repo
 from entropia.infrastructure.s3 import datasets
 from entropia.shared.errors import (
     BaselineParseFailed,
+    ParseUnsupported,
+    RequiresClarification,
     ResolverAdapterIncompatible,
+    ResolverNotActive,
     ResolverNotResolved,
     ResolverSignatureMismatch,
+    SourceLanguageMismatch,
 )
 
 _REQUEST_TARGET_KIND = "package_request"
@@ -103,8 +112,18 @@ _BASELINE_PARSE_KIND = "baseline_parse"
 _SCANNER_VERSION = SOURCE_SCANNER_VERSION
 _UNDECLARED_SOURCE_CODE = "UNDECLARED_SOURCE_DEPENDENCY"
 _DECLARED_NOT_IN_SOURCE_CODE = "DECLARED_NOT_IN_SOURCE"
-_RESOLVE_ERRORS = (ResolverNotResolved, ResolverSignatureMismatch, ResolverAdapterIncompatible)
+_RESOLVE_ERRORS = (
+    ResolverNotResolved,
+    ResolverSignatureMismatch,
+    ResolverAdapterIncompatible,
+    # A deprecated / soft-deleted registry entry blocks exactly like a missing one
+    # (doc 07 §12 RESOLVER_NOT_ACTIVE) — it must never fall through to Passed.
+    ResolverNotActive,
+)
 _PRECHECK_WORKER_FAILED = "PRECHECK_WORKER_FAILED"
+# The registry was never consulted on a fail-closed scan, so there is no fingerprint
+# to pin. A FAILED scan can never satisfy the Send gate, which requires PASSED.
+_UNEVALUATED_FINGERPRINT = "sha256:not_evaluated"
 _CANDIDATE_WORKER_FAILED = "CANDIDATE_GENERATION_WORKER_FAILED"
 _VALIDATION_WORKER_FAILED = "VALIDATION_WORKER_FAILED"
 _BASELINE_WORKER_FAILED = "BASELINE_PARSE_WORKER_FAILED"
@@ -149,6 +168,76 @@ class PrecheckComputation:
     status: PrecheckScanStatus
     registry_fingerprint: str
     next_state: CreatePackageState
+    # Calls/inputs the production parser could not handle at all (doc 07 §12
+    # PARSE_UNSUPPORTED / SOURCE_LANGUAGE_MISMATCH / REQUIRES_CLARIFICATION). A
+    # non-empty list always accompanies a FAILED status — never a verdict.
+    unsupported_calls: list[dict[str, Any]] = field(default_factory=list)
+    error_detail: dict[str, Any] | None = None
+
+
+def _fail_closed(*, code: str, message: str, evidence: dict[str, Any]) -> PrecheckComputation:
+    """A determinate Pre-Check *refusal*: the scanner ran and knows it cannot judge.
+
+    Distinct from ``_fail_precheck`` (an unexpected worker crash). The scan is
+    recorded FAILED with the canonical error code, the request advances to
+    PRECHECK_FAILED, and — because the Send gate requires a PASSED scan — the
+    request can never reach candidate generation on this evidence (doc 07 §9.5,
+    §12.1: a positive result is never produced for an unparsed/mismatched source).
+    """
+    return PrecheckComputation(
+        detected_calls=[],
+        resolved_refs=[],
+        missing_calls=[],
+        source_warnings=[],
+        status=PrecheckScanStatus.FAILED,
+        registry_fingerprint=_UNEVALUATED_FINGERPRINT,
+        next_state=CreatePackageState.PRECHECK_FAILED,
+        unsupported_calls=[{"code": code, "message": message, "evidence": evidence}],
+        error_detail={"code": code, "message": message},
+    )
+
+
+def _language_verdict(
+    source_language: SourceLanguage | None, source: str
+) -> PrecheckComputation | None:
+    """Adjudicate the DECLARED language against the language the CONTENT shows (PC-10).
+
+    Returns a fail-closed computation on disagreement, otherwise ``None`` (proceed).
+    Two honest boundaries, both deliberate:
+
+    * ``other`` carries a free-text label the detector cannot adjudicate against, so
+      no verdict is issued for it (the label is a human contract, not a grammar);
+    * absence of markers is NOT treated as mismatch — a snippet too small to carry
+      evidence proceeds to the lexer, which applies its own PARSE_UNSUPPORTED rule.
+    """
+    if source_language is None or source_language == SourceLanguage.OTHER:
+        return None
+    signal = detect_source_language(source)
+    evidence = {
+        "selected_language": str(source_language),
+        "detected_language": str(signal.language) if signal.language else None,
+        "scores": signal.scores,
+        "detector_version": LANGUAGE_DETECTOR_VERSION,
+    }
+    if signal.is_ambiguous:
+        return _fail_closed(
+            code=RequiresClarification.code,
+            message=(
+                "The source content matches more than one language. "
+                "Confirm the source language before continuing."
+            ),
+            evidence=evidence,
+        )
+    if signal.language is not None and signal.language != source_language:
+        return _fail_closed(
+            code=SourceLanguageMismatch.code,
+            message=(
+                f"Source language '{source_language}' was selected but the content "
+                f"matches '{signal.language}'."
+            ),
+            evidence=evidence,
+        )
+    return None
 
 
 async def registry_fingerprint(
@@ -224,6 +313,21 @@ async def compute_precheck(session: AsyncSession, detail: PackageRequest) -> Pre
     never declared blocks (PC-06 undeclared), and a declared call the source never invokes
     is a non-fatal over-declaration warning. Declared deps drive registry resolution + the
     pins; any unresolved declared call or undeclared source call makes the scan BLOCKED.
+
+    Two fail-closed gates run BEFORE any of that, because a scanner that did not
+    understand the file would otherwise reconcile an empty call set into ``Passed``
+    (doc 07 §9.5, §12):
+
+      1. the declared language vs. the language the content actually shows —
+         SOURCE_LANGUAGE_MISMATCH, or REQUIRES_CLARIFICATION when the evidence
+         competes (PC-10). Checked first because it is the more actionable
+         diagnostic: "you picked the wrong language" beats "I could not parse it".
+      2. the lexer's own accounting — PARSE_UNSUPPORTED when an unterminated
+         string/comment swallowed the tail or too much of the body falls outside
+         the grammar it parses.
+
+    Either gate yields a FAILED scan + PRECHECK_FAILED, which the Send gate
+    (``_enforce_precheck_gate``, PASSED-only) can never satisfy.
     """
     if detail.source_kind == SourceKind.DESCRIPTION:
         return PrecheckComputation(
@@ -236,7 +340,22 @@ async def compute_precheck(session: AsyncSession, detail: PackageRequest) -> Pre
             next_state=CreatePackageState.PRECHECK_NOT_APPLICABLE,
         )
 
-    detected = list(scan_source_calls(detail.request_body).calls)
+    language_failure = _language_verdict(detail.source_language, detail.request_body)
+    if language_failure is not None:
+        return language_failure
+
+    scan = scan_source_calls(detail.request_body)
+    if scan.is_parse_unsupported:
+        return _fail_closed(
+            code=ParseUnsupported.code,
+            message=(
+                "The source could not be parsed safely "
+                f"({scan.unsupported_reason}). Manual review is required."
+            ),
+            evidence=scan.as_evidence(),
+        )
+
+    detected = list(scan.calls)
     declared_keys = [str(dep["key"]) for dep in detail.declared_dependencies]
     declared_set = set(declared_keys)
     source_set = set(detected)
@@ -372,11 +491,11 @@ async def _record_scan(
         detected_calls=computation.detected_calls,
         resolved_refs=computation.resolved_refs,
         missing_calls=computation.missing_calls,
-        unsupported_calls=[],
+        unsupported_calls=computation.unsupported_calls,
         source_warnings=computation.source_warnings,
         status=computation.status,
         job_id=job.job_id,
-        error_detail=None,
+        error_detail=computation.error_detail,
         correlation_id=job.correlation_id or None,
         created_by_principal_id=job.actor_principal_id,
     )
@@ -393,7 +512,14 @@ async def _record_scan(
         scan.scan_id,
         str(previous),
         str(detail.state),
-        action="precheck_completed",
+        # A fail-closed refusal is a completed scan with a negative verdict, so it
+        # carries the same failure verb the crash path emits — the UI must not read
+        # "completed" and infer a usable result.
+        action=(
+            "precheck_failed"
+            if computation.status == PrecheckScanStatus.FAILED
+            else "precheck_completed"
+        ),
     )
     return {
         "request_id": root.entity_id,
@@ -404,6 +530,8 @@ async def _record_scan(
         "resolved": len(computation.resolved_refs),
         "missing": computation.missing_calls,
         "warnings": computation.source_warnings,
+        "unsupported": computation.unsupported_calls,
+        "error": computation.error_detail,
         "registry_fingerprint": computation.registry_fingerprint,
         "job_id": job.job_id,
     }
@@ -470,6 +598,8 @@ async def _fail_precheck(
         "resolved": 0,
         "missing": [],
         "warnings": [],
+        "unsupported": [],
+        "error": error_detail,
         "registry_fingerprint": scan.registry_fingerprint,
         "job_id": job.job_id,
     }

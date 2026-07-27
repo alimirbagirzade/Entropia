@@ -35,6 +35,7 @@ from entropia.infrastructure.postgres.repositories import packages as pkg_repo
 from entropia.shared.errors import (
     NotFoundError,
     ResolverAdapterIncompatible,
+    ResolverNotActive,
     ResolverNotResolved,
     ResolverSignatureMismatch,
 )
@@ -206,6 +207,7 @@ def _contract_dict(contract: EmbeddedResolverContract) -> dict[str, Any]:
 _REASON_ERRORS = {
     ResolutionReason.SIGNATURE_MISMATCH: ResolverSignatureMismatch,
     ResolutionReason.ADAPTER_INCOMPATIBLE: ResolverAdapterIncompatible,
+    ResolutionReason.RESOLVER_NOT_ACTIVE: ResolverNotActive,
 }
 
 
@@ -223,7 +225,8 @@ async def resolve_embedded_dependency(
     the precise typed error so Pre-Check branches correctly:
       * signature mismatch -> RESOLVER_SIGNATURE_MISMATCH (422),
       * adapter incompatible -> RESOLVER_ADAPTER_INCOMPATIBLE (409),
-      * key not found / not trusted / not passed / not approved -> RESOLVER_NOT_RESOLVED (404).
+      * deprecated / soft-deleted registry entry -> RESOLVER_NOT_ACTIVE (409, doc 07 §12),
+      * key not found / candidate / not passed / not approved -> RESOLVER_NOT_RESOLVED (404).
     """
     canonical_key = str(parsed_call.get("key", "")).strip()
     parsed_signature = parsed_call.get("signature") or {}

@@ -33,6 +33,9 @@ _REQUEST_ALLOWED: dict[CreatePackageState, frozenset[CreatePackageState]] = {
             CreatePackageState.PRECHECK_STALE,
             CreatePackageState.PRECHECK_BLOCKED,
             CreatePackageState.PRECHECK_PASSED,
+            # A re-run whose durable Pre-Check worker fails lands in PRECHECK_FAILED
+            # (the async plane records worker failure as a terminal request state, F-01a).
+            CreatePackageState.PRECHECK_FAILED,
             CreatePackageState.CANDIDATE_GENERATING,
         }
     ),
@@ -41,12 +44,14 @@ _REQUEST_ALLOWED: dict[CreatePackageState, frozenset[CreatePackageState]] = {
             CreatePackageState.PRECHECK_STALE,
             CreatePackageState.PRECHECK_PASSED,
             CreatePackageState.PRECHECK_BLOCKED,
+            CreatePackageState.PRECHECK_FAILED,
         }
     ),
     CreatePackageState.PRECHECK_NOT_APPLICABLE: frozenset(
         {
             CreatePackageState.PRECHECK_PASSED,
             CreatePackageState.PRECHECK_BLOCKED,
+            CreatePackageState.PRECHECK_FAILED,
             CreatePackageState.CANDIDATE_GENERATING,
             CreatePackageState.PRECHECK_NOT_APPLICABLE,
         }
@@ -63,6 +68,8 @@ _REQUEST_ALLOWED: dict[CreatePackageState, frozenset[CreatePackageState]] = {
         {
             CreatePackageState.PRECHECK_PASSED,
             CreatePackageState.PRECHECK_BLOCKED,
+            # A description request whose worker failed re-runs to NOT_APPLICABLE.
+            CreatePackageState.PRECHECK_NOT_APPLICABLE,
             CreatePackageState.PRECHECK_FAILED,
             CreatePackageState.PRECHECK_STALE,
         }

@@ -21,6 +21,7 @@ from entropia.apps.api.deps import RequestContext, request_context
 from entropia.apps.api.upload import validate_multipart_upload
 from entropia.domain.create_package.enums import CreationMode, SourceLanguage
 from entropia.domain.esp.enums import RuntimeAdapter
+from entropia.infrastructure.queues import enqueue as job_enqueue
 from entropia.shared.errors import ValidationError
 from entropia.shared.pagination import PageParams
 
@@ -131,13 +132,19 @@ async def run_pre_check(
     request_version: str | None = Header(default=None, alias=_REQUEST_VERSION_HEADER),
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> dict[str, Any]:
-    return await cp_cmd.run_precheck(
+    result = await cp_cmd.run_precheck(
         ctx.session,
         ctx.actor,
         request_id=request_id,
         expected_request_version=_request_version(request_version),
         idempotency_key=idempotency_key,
     )
+    # Dispatch the durable Pre-Check worker (F-01a). The QUEUED jobs row is already the
+    # source of truth; a lost broker message is re-sent by the scheduler sweep (INF-03).
+    from entropia.apps.worker.actors import run_create_package_job
+
+    job_enqueue.send_job(run_create_package_job, result["job_id"])
+    return result
 
 
 @router.post("/create-package/requests/{request_id}/generate-candidate")

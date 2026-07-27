@@ -230,6 +230,35 @@ async def _run_agent_executor(job_id: str) -> None:
             raise
 
 
+@dramatiq.actor(queue_name="default", max_retries=3)
+def run_create_package_job(job_id: str) -> None:
+    """Execute a durable Create-Package job (F-01a, docs 06 §7 / 07 §8, CR-09).
+
+    The ``jobs`` row created at admission time is the source of truth; its payload
+    ``kind`` discriminator routes inside the single body (F-01a wires ``precheck``;
+    F-01b/c add the other kinds). This actor opens its own DB session, runs the
+    lifecycle (queued -> running -> succeeded/failed) and commits — the request that
+    admitted it returned ``queued`` long ago (browser close never cancels it).
+    """
+    log.info("worker.create_package.start", job_id=job_id)
+    asyncio.run(_run_create_package_job(job_id))
+    log.info("worker.create_package.done", job_id=job_id)
+
+
+async def _run_create_package_job(job_id: str) -> None:
+    from entropia.application.jobs.create_package import run_create_package_job as run_body
+    from entropia.infrastructure.postgres.engine import get_session_factory
+
+    factory = get_session_factory()
+    async with factory() as session:
+        try:
+            await run_body(session, job_id)
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+
+
 @dramatiq.actor(queue_name="maintenance", max_retries=3)
 def run_trash_purge(job_id: str) -> None:
     """Execute the durable Trash purge job (Stage 6c, doc 20 §8.3, §9.3).

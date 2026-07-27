@@ -24,6 +24,7 @@ from entropia.apps.worker.actors import (
     run_agent_tool,
     run_agent_tool_high,
     run_backtest_engine,
+    run_create_package_job,
     run_trash_purge,
     system_heartbeat,
 )
@@ -40,6 +41,10 @@ ACTOR_BY_QUEUE: dict[str, Any] = {
     "agent-high": run_agent_tool_high,
     "agent-executor": run_agent_executor,
     "maintenance": run_trash_purge,
+    # Create-Package (F-01a): the single kind-dispatching durable actor on ``default``
+    # gives Pre-Check the generic stale-RUNNING recovery + lost-message redelivery
+    # sweeps (INF-03/INF-09) for free.
+    "default": run_create_package_job,
 }
 
 _running = True

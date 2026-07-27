@@ -1,7 +1,7 @@
 # DATA_MODEL — Postgres tabloları
 
 Modeller: `backend/src/entropia/infrastructure/postgres/models/*.py` (30 dosya, **63 tablo**).
-Alembic: `backend/alembic/versions/` — **head = `0036_manual_duplicate_override`** (36 migration).
+Alembic: `backend/alembic/versions/` — **head = `0037_package_revision_link`** (37 migration).
 
 ## Kritik yapısal gerçek — DB-seviyesi FK neredeyse yok
 
@@ -116,10 +116,11 @@ her FK-bağımlı child'dan önce `Principal` flush edilmek zorundadır (`apps/s
 |---|---|---|---|---|
 | `package_root` | Paket kimliği (türetme kökeni dahil) | `derived_from_revision_id`, `origin_package_id` | — | — |
 | `package_revision` | Değişmez paket revizyonu (`dependency_snapshot` burada) | `entity_id`, `parent/supersedes_revision_id` | — | — |
-| `package_request` | Create Package isteği; `row_version` = request_version | `rationale_family_id`, `current_scan_id`, `draft_revision_id`, `baseline_asset_id` | (registry'de) | ✔ (registry) |
+| `package_request` | Create Package isteği; `row_version` = request_version | `rationale_family_id`, `current_scan_id`, `draft_revision_id`, `baseline_asset_id`, `parent_revision_ref`, `prior_validation_run_ref` (+ `revision_attempt_no`) | (registry'de) | ✔ (registry) |
 | `dependency_scan` | Pre-Check tarama artefaktı | `request_entity_id`, `job_id` | — | — |
 | `baseline_asset` | Yüklenmiş baseline dosyası | `request_entity_id`, `parse_job_id` | — | — |
 | `package_validation_run` | CP validation koşusu | `request_entity_id`, `draft_revision_id`, `job_id` | — | — |
+| `package_revision_link` | Request Revision zinciri (append-only; attempt 1 = orijinal draft, ilk link `attempt_no=2`) | `request_entity_id`, `parent_revision_ref`, `parent_package_root_id`, `prior_validation_run_ref` | — | — |
 | `package_import_job` | Paket import işi (export'un tersi) | `origin_package_id`, `result_package_root_id`, `job_id` | — | — |
 | `embedded_resolver_registry` | ESP resolver registry (`registry_version` = OCC kaynağı) | `package_entity_id`, `trusted_active_revision_id`, `replacement_revision_id` | — | ✔ (`registry_version`) |
 | `embedded_resolver_contract` | Resolver imza sözleşmesi | `entity_id`, `revision_id` | — | — |

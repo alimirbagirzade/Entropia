@@ -53,12 +53,18 @@ async def create_package(
     approval_state: ApprovalState = ApprovalState.DRAFT,
     change_note: str | None = None,
     derived_from_revision_id: str | None = None,
+    parent_revision_id: str | None = None,
     lifecycle_state: str | None = "active",
 ) -> tuple[EntityRegistry, PackageRoot, PackageRevision]:
     """Create the registry Root + ``package_root`` detail + first revision.
 
     The root is flushed BEFORE the detail/revision rows are added so the
     ``entity_id`` FK is satisfiable at flush time (L1/DC6).
+
+    ``parent_revision_id`` pins a revision on ANOTHER root that this first revision
+    descends from (the Create-Package revision chain, doc 06 §7 — attempt N+1 gets its
+    own root but must still name attempt N's revision). It stays NULL for an
+    origin-less package, which is every caller that does not pass it.
     """
     entity_id = new_id("pkg")
     root = EntityRegistry(
@@ -84,7 +90,7 @@ async def create_package(
         revision_id=new_id("pkgrev"),
         entity_id=entity_id,
         revision_no=next_revision_no(None),
-        parent_revision_id=None,
+        parent_revision_id=parent_revision_id,
         supersedes_revision_id=None,
         package_kind=package_kind,
         input_contract=input_contract,

@@ -95,6 +95,11 @@ const REQUEST_DETAIL = {
   current_baseline: null,
   baseline_ready: false,
   baseline_required: true,
+  revision_attempt_no: 1,
+  revision_total_attempts: 1,
+  parent_revision_ref: null,
+  prior_validation_run_ref: null,
+  revision_chain: [],
   created_at: "2026-07-08T10:00:00+00:00",
 };
 
@@ -167,6 +172,10 @@ const REVISION_RESULT = {
   request_id: "req_1",
   state: "candidate_ready",
   candidate_hash: "sha256:rev",
+  revision_attempt_no: 2,
+  parent_revision_ref: "rev_1",
+  prior_validation_run_ref: "valrun_1",
+  request_version: 3,
 };
 
 const BASELINE_UPLOAD_RESULT = {
@@ -840,6 +849,44 @@ describe("Create Package page", () => {
     expect((call?.[1] as RequestInit).headers as Record<string, string>).toMatchObject({
       "X-Request-Version": "2",
     });
+  });
+
+  // O-08: Request Revision links the new attempt to its parent instead of dropping the
+  // head pointers (doc 06 §7/§15). The chain the server projects has to be READABLE —
+  // each attempt naming the revision it descends from and that attempt's validation run.
+  it("renders the revision chain with each attempt's parent revision", async () => {
+    stubApi({
+      ...BASE_ROUTES,
+      "GET /create-package/requests/req_1": {
+        ...REQUEST_DETAIL,
+        state: "candidate_ready",
+        revision_attempt_no: 2,
+        revision_total_attempts: 2,
+        parent_revision_ref: "rev_1",
+        prior_validation_run_ref: "valrun_1",
+        revision_chain: [
+          {
+            revision_link_id: "revlink_1",
+            attempt_no: 2,
+            parent_package_root_id: "pkg_1",
+            parent_revision_ref: "rev_1",
+            prior_validation_run_ref: "valrun_1",
+            prior_candidate_hash: "sha256:first",
+            prior_state: "revision_required",
+            created_at: "2026-07-08T11:00:00+00:00",
+          },
+        ],
+      },
+    });
+    renderPage();
+    await screen.findByText("req_1");
+    fireEvent.click(screen.getByRole("button", { name: /req_1/ }));
+
+    const chain = await screen.findByLabelText("Revision chain");
+    expect(chain.textContent).toContain("Revision 2 of 2 · parent:");
+    expect(chain.textContent).toContain("rev_1");
+    expect(chain.textContent).toContain("valrun_1");
+    expect(chain.textContent).toContain("Revision Required");
   });
 
   it("uploads a real baseline file (multipart) with the OCC header and metadata field", async () => {

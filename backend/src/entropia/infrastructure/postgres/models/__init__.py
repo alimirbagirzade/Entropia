@@ -45,6 +45,7 @@ from entropia.infrastructure.postgres.models.create_package import (
     DependencyScan,
     PackageImportJob,
     PackageRequest,
+    PackageRevisionLink,
     PackageValidationRun,
 )
 from entropia.infrastructure.postgres.models.deletion import Tombstone, TrashEntry
@@ -187,6 +188,7 @@ __all__ = [
     "PackageRationaleAssignment",
     "PackageRequest",
     "PackageRevision",
+    "PackageRevisionLink",
     "PackageRoot",
     "PackageValidationRun",
     "PortfolioAllocationEntry",

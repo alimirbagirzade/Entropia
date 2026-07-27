@@ -26,6 +26,7 @@ from typing import Any
 from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from entropia.application.durable_audit import AuditSessionFactory, record_durable_audit
 from entropia.application.idempotency import run_idempotent
 from entropia.application.queries.allocation_currency import resolve_settlement_currencies
 from entropia.application.queries.indicator_plan import resolve_indicator_plan
@@ -58,10 +59,16 @@ from entropia.infrastructure.postgres.repositories import mainboard as mb_repo
 from entropia.infrastructure.postgres.repositories import market_data as market_repo
 from entropia.infrastructure.postgres.repositories import readiness as readiness_repo
 from entropia.infrastructure.postgres.repositories import strategy as strat_repo
-from entropia.shared.errors import CompositionNotFoundError, CompositionStaleError
+from entropia.shared.errors import (
+    AccessDeniedError,
+    CompositionNotFoundError,
+    CompositionStaleError,
+)
 
 _REPORT_TARGET = "ready_check_report"
 _SNAPSHOT_TARGET = "mainboard_composition_snapshot"
+_WORKSPACE_TARGET = "mainboard_workspace"
+_ACCESS_DENIED_EVENT = "readiness.access_denied"
 _SUCCEEDED = "succeeded"
 _EXTERNAL_KINDS = frozenset({MainboardItemKind.TRADING_SIGNAL, MainboardItemKind.TRADE_LOG})
 
@@ -73,11 +80,25 @@ async def run_readiness_check(
     composition_id: str,
     expected_fingerprint: str | None = None,
     idempotency_key: str | None = None,
+    parent_agent_task_id: str | None = None,
+    audit_session_factory: AuditSessionFactory | None = None,
 ) -> dict[str, Any]:
     """Run the Ready Check for a composition and persist an immutable report
-    (doc 14 §7, §9.2)."""
+    (doc 14 §7, §9.2).
+
+    ``parent_agent_task_id`` is the doc 14 §12.2 audit field for a check an Agent
+    ran as part of a task (``jobs.agent_tools`` passes its task id); a human check
+    leaves it null. ``audit_session_factory`` only reaches the DURABLE denial path
+    (O-04) — see :func:`record_readiness_access_denied`.
+    """
     require_authenticated(actor)
-    await _load_workspace_for_check(session, actor, composition_id)
+    await _load_workspace_for_check(
+        session,
+        actor,
+        composition_id,
+        operation="run_readiness_check",
+        audit_session_factory=audit_session_factory,
+    )
 
     async def _op() -> dict[str, Any]:
         enabled = await readiness_repo.list_enabled_items_with_root_state(session, composition_id)
@@ -148,6 +169,7 @@ async def run_readiness_check(
             composition_id=composition_id,
             fingerprint=current_fingerprint,
             evaluation=evaluation,
+            parent_agent_task_id=parent_agent_task_id,
         )
         return {
             "report_id": report.report_id,
@@ -182,13 +204,62 @@ async def run_readiness_check(
 # --------------------------------------------------------------------------- #
 
 
+async def record_readiness_access_denied(
+    actor: Actor,
+    *,
+    composition_id: str,
+    operation: str,
+    denial_code: str,
+    audit_session_factory: AuditSessionFactory | None = None,
+) -> None:
+    """Persist the doc 14 §12.2 ``readiness_access_denied`` audit DURABLY (O-04).
+
+    A denial is a raise, and the request tx is rolled back on the resulting 403, so
+    an in-transaction row would never survive — this one is written in its own
+    committed transaction (see ``application.durable_audit``). Shared with the RUN
+    admission surface (``commands.backtest_run``) so both denials land under one
+    event kind, distinguished by ``operation``.
+
+    The target id is the composition the actor was denied, never the owner's
+    principal id or any resource content — "target type/id redacted as policy
+    requires" (doc 14 §12.2).
+    """
+    await record_durable_audit(
+        actor,
+        event_kind=_ACCESS_DENIED_EVENT,
+        target_entity_id=composition_id,
+        target_entity_type=_WORKSPACE_TARGET,
+        new_state=denial_code,
+        reason="access_denied",
+        metadata={"operation": operation, "denial_code": denial_code},
+        audit_session_factory=audit_session_factory,
+    )
+
+
 async def _load_workspace_for_check(
-    session: AsyncSession, actor: Actor, composition_id: str
+    session: AsyncSession,
+    actor: Actor,
+    composition_id: str,
+    *,
+    operation: str = "run_readiness_check",
+    audit_session_factory: AuditSessionFactory | None = None,
 ) -> EntityRegistry:
     workspace = await mb_repo.get_workspace(session, composition_id)
     if workspace is None or workspace.deletion_state != DeletionState.ACTIVE:
         raise CompositionNotFoundError()
-    ensure_can_view(actor, owner_principal_id=workspace.owner_principal_id, visibility="private")
+    try:
+        ensure_can_view(
+            actor, owner_principal_id=workspace.owner_principal_id, visibility="private"
+        )
+    except AccessDeniedError as denial:
+        await record_readiness_access_denied(
+            actor,
+            composition_id=composition_id,
+            operation=operation,
+            denial_code=denial.code,
+            audit_session_factory=audit_session_factory,
+        )
+        raise
     return workspace
 
 
@@ -578,6 +649,7 @@ def _emit_audit(
     composition_id: str,
     fingerprint: str,
     evaluation: Any,
+    parent_agent_task_id: str | None = None,
 ) -> None:
     audit_repo.add_audit_event(
         session,
@@ -587,7 +659,12 @@ def _emit_audit(
         target_entity_id=composition_id,
         target_entity_type=_SNAPSHOT_TARGET,
         correlation_id=actor.correlation_id,
-        metadata={"composition_fingerprint": fingerprint},
+        # doc 14 §12.2 requires the parent Agent task id (nullable) on the request
+        # event; the 64-char fingerprint cannot ride ``new_state`` (VARCHAR(48)).
+        metadata={
+            "composition_fingerprint": fingerprint,
+            "parent_agent_task_id": parent_agent_task_id,
+        },
     )
     audit_repo.add_audit_event(
         session,
@@ -645,4 +722,4 @@ def _emit_audit(
     )
 
 
-__all__ = ["run_readiness_check"]
+__all__ = ["record_readiness_access_denied", "run_readiness_check"]

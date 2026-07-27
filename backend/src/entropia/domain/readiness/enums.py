@@ -45,6 +45,11 @@ class ReadinessScope(StrEnum):
     LIFECYCLE = "lifecycle"
     STRATEGY = "strategy"
     MARKET_DATA = "market_data"
+    # O-01: doc 14 §9.2 lists Research Data as its own validator layer, between
+    # Market Data and External working objects. Stored as a plain string (the
+    # ``readiness_issue.scope`` column is a CHECK-free varchar), so a new member
+    # needs no migration.
+    RESEARCH_DATA = "research_data"
     EXTERNAL_OBJECT = "external_object"
     PORTFOLIO_ALLOCATION = "portfolio_allocation"
 
@@ -104,6 +109,20 @@ class ReadinessIssueCode(StrEnum):
     # none is available, Ready Check blocks RUN rather than silently resolving the
     # intrabar-sensitive execution over OHLCV (Master Ref §11.2 / line ~3558).
     TICK_DATA_UNAVAILABLE = "TICK_DATA_UNAVAILABLE"
+
+    # Research Data (§9.2 "Research Data" validator row) — O-01.
+    # These five codes are taken VERBATIM from the doc 12 §10 taxonomy so the Ready
+    # Check finding and the Research Data page speak the same vocabulary about the
+    # same defect; they are only ever emitted under ``ReadinessScope.RESEARCH_DATA``.
+    # ``RESEARCH_COVERAGE_LIMITED`` is readiness-only: doc 12 §10 has no code for the
+    # doc 14 §9.2 Research *warning* row ("Limited coverage or low fill rate"), so it
+    # is named in this catalog's own namespace.
+    USAGE_SCOPE_FORBIDDEN = "USAGE_SCOPE_FORBIDDEN"
+    TIME_POLICY_INVALID = "TIME_POLICY_INVALID"
+    DEPENDENCY_BLOCKED = "DEPENDENCY_BLOCKED"
+    INSTRUMENT_MAPPING_INVALID = "INSTRUMENT_MAPPING_INVALID"
+    LIFECYCLE_BLOCKED = "LIFECYCLE_BLOCKED"
+    RESEARCH_COVERAGE_LIMITED = "RESEARCH_COVERAGE_LIMITED"
 
     # External working objects — Trading Signal / Trade Log (§5.1, §9.2, RC-07/RC-08)
     EXTERNAL_IMPORT_UNRESOLVED = "EXTERNAL_IMPORT_UNRESOLVED"

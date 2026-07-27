@@ -1181,6 +1181,19 @@ p a { text-decoration: underline; }
 .inline-fields .sd-input { width: auto; min-width: 90px; }
 .inline-unit { font-size: 13px; font-weight: 700; color: var(--text-dim); }
 .required-hint { color: var(--down); font-weight: 800; }
+/* F-05 capability note — why a disabled option cannot run in this build. Sits under the
+   CONTROL (column 2), not under the label, so it reads as part of the field. */
+.sd-capability-note {
+  grid-column: 2;
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-dim);
+}
+.sd-capability-note strong { color: var(--down); font-weight: 700; }
+@media (max-width: 720px) {
+  .sd-capability-note { grid-column: 1 / -1; }
+}
 .checkbox-field { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
 .checkbox-line {
   display: inline-flex;

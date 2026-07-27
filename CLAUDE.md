@@ -96,18 +96,20 @@ Before stopping a working session, produce **ALL** of the following:
 - **Durum:** V1 ROADMAP COMPLETE (Stages 0–8, docs 01–22) + post-V1 + video-alignment +
   V18-R2 dalgası + **auth remediation dalgası COMPLETE** (güvenlik denetimi #346–#364).
   Tüm route yüzeyleri frontend'e bağlı; TIER 2 sayfa haritası 24/24.
-- **`main` HEAD:** `6e3fab9` (PR **#364** merge). Auth remediation dalgası merge oldu; CI + E2E yeşil.
-- **alembic head:** **`0035_portfolio_rules`** (35 migration, tek head — auth dalgasında
-  migration YOK, `ENGINE_VERSION` sabit).
-- **Testler (CI server-truth `6e3fab9`):** backend **1841 passed** (real-Postgres integration) ·
-  frontend vitest **577/58 dosya** · E2E green. Doğrula: `gh run list --branch main --limit 1` → job log.
-- **Son dalga (auth remediation, #346–#364):** #346 login runtime-AUTH_MODE fix · W2 fail-closed
-  boot gate + tek credential · W3 SSE handshake auth (AUTH-11) · W4 credential-aware operational
-  Admin count (PROV-02..05) · W5 Compose profilleri (DEP-04/05) · W6 integration DB izolasyonu
-  (TEST-06..10) · W7 izole Docker E2E · W8 frontend residuals (AUTH-08/09/10) + PROV-06 · DEP-03/06
-  config audit. Tam kayıt: `docs/PROJECT_HISTORY.md` §"Auth remediation dalgası".
+- **`main` HEAD:** `658db36` (PR **#383** merge, F-01c). Üstüne **F-05/M-05** slice'ı açıldı (PR bekliyor).
+- **alembic head:** **`0035_portfolio_rules`** (35 migration, tek head — R3 W3'te migration YOK).
+  **`ENGINE_VERSION` = `backtest-engine-v18-capability-matrix`** (F-05'te bump edildi).
+- **Testler (lokal, F-05 dalı):** backend **1986 collected** (real-Postgres integration, yeşil) ·
+  frontend vitest **607/60 dosya** yeşil + tsc/eslint/build temiz.
+  Doğrula: `gh run list --branch main --limit 1` → job log.
+- **Son dalga (V18-R3 W3):** F-01a/b/c durable worker'lar (#380/#382/#383) · F-04 breakout fail-closed
+  + F-09 doc honesty (#381) · **F-05/M-05 makine-okur capability matrix** — `domain/backtest/capabilities.py`
+  tek kaynak (59 satır / 22 `future_dev`), engine fail-closed + Ready Check
+  `STRATEGY_CAPABILITY_NOT_IN_BUILD` + UI'da disabled & bağımlılık notu (üretilen TS aynası).
+  Tam kayıt: `docs/PROJECT_HISTORY.md` §"V18-R3 · F-05 / M-05".
 
-- **Next — PO imzası + R2 kapanışı** (auth remediation kod işi BİTTİ). Kalan tek blokaj
+- **Next — PO imzası + R2 kapanışı** (R3 mühendislik backlog'u F-05 ile kapandı; **F-07 raw-id
+  sweep kalıntısı empirik doğrulanmalı**). Kalan tek blokaj
   **product-owner imzası**: `docs/implementation/v18_final_acceptance.md` §4 (D-1…D-9 kararları —
   görsel sapmalar, F-2…F-6 mini slice'ları, A11Y-01 palet kararı, 20.11 onayı). **İmza olmadan
   `entropia_v18_remediation_status.md`'deki R2 RE-OPENING banner'ı kalkmaz, hiçbir satır Complete

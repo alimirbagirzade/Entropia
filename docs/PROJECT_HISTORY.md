@@ -1115,3 +1115,129 @@ CI + E2E ikisi de `6e3fab9`'da yeşil.
 - Denetimin kalan maddeleri (AUTH-01..07 detay eşleme, PROV-01, DEP-01/02, TEST-01..05/12) W2–W8
   dalgalarında ele alındı ya da önceki post-V1 auth slice'larında (PR #38/#76/#84) zaten karşılanmıştı;
   audit dosyasındaki tam madde-madde durum `docs/spec/Entropia_Authentication_Remediation_Claude_Code_Deep_Audit.md`'de.
+
+---
+
+## V18-R3 · F-05 / M-05 — makine-okur capability matrix (UI ↔ Ready Check ↔ engine parity)
+
+**Branch/PR:** `feat/v18-r3-f05-capability-matrix` · base `main@658db36` (F-04 = PR #381 merged doğrulandı).
+**Migration YOK** — alembic head `0035_portfolio_rules` değişmedi. `readiness_issue.code` kolonu
+zaten `String(64)` (native enum/CHECK değil), yeni readiness kodu migration gerektirmiyor.
+
+### Bulgu — neden bu slice gerçekten gerekliydi
+
+Engine'de F-07/F-09 dalgalarından kalan **dokuz** `*_is_modelled` predикat'ı vardı (sizing, leverage,
+signal-strength, execution-timing, order-execution, partial-close, scaling, restrictions,
+conflict-handling) ve her biri Ready Check ile **tek kaynak** paylaşıyordu. Yani "UI ↔ Ready Check ↔
+engine parity" kısmen zaten sağlamdı. Ama bu predikatların hepsi **config düzeyinde** bir soruya cevap
+veriyor ("bu stratejinin sizing'i modellenmiş mi?") — **enumerable değil**. Hiçbir şey onlara
+"`leverage_mode`'un HANGİ DEĞERLERİ çalışır?" diye soramaz; UI de, bir drift testi de tam olarak bunu
+sormak zorunda.
+
+Bu yapısal boşluğun somut sonucu empirik olarak bulundu:
+
+```
+slippage_mode = "historical_slippage_if_available"
+  → dokuz predikatın HEPSİ True (Ready Check RUN'a izin veriyor)
+  → _cost_params() MODE'a hiç bakmıyor, sadece slippage_value okuyor
+  → schema bu modda slippage_value'yu OPTIONAL yapıyor (validator: required iff percentage)
+  → sonuç: slippage = Decimal('0')  →  SESSİZCE SIFIR-SLIPPAGE backtest
+```
+
+Yani kullanıcı "gerçekçi tarihsel slippage" seçiyor ve **sessizce iyimser** bir fill modeli alıyordu.
+"Sonradan fail eden" değil — **hiç fail etmeyen, yanlış cevap veren** bir opsiyon; F-05'in hedeflediği
+sınıfın en kötü hâli.
+
+### Ne landed
+
+- **`backend/src/entropia/domain/backtest/capabilities.py`** (YENİ, kanonik veri) — her opsiyon
+  **DEĞERİ** için satır: `field_path`, `value`, `status` (`active_v1` | `future_dev`), `label`,
+  `dependency` (active_v1 için ek koşul; future_dev için eksik veri serisi/model = dürüst sınır),
+  `blocker_code`. **59 satır, 22 `future_dev`.** Matris saf serileştirilebilir veri; config'i okuyan
+  `_FIELD_READERS` ayrı tutuldu (TS aynasına birebir dökülebilsin diye).
+  Public yüzey: `capabilities_are_modelled()`, `future_dev_selections()`, `option_status()`.
+- **Engine fail-closed** — `capability_ok` **`_open()`** choke-point'inde (flat entry, conflict-driven
+  stack/replace ve scaling ladder'ın hepsi oradan geçer → tek kontrol, kapıda kalan yol yok).
+  Flat-entry gate'e **bilinçli olarak eklenmedi**: eklenince F-10 `entry_blocked` decision-trace event'i
+  hiç üretilmiyordu (`test_backtest_signal_strength` / `test_backtest_decision_trace` bunu yakaladı) —
+  gözlemlenebilirlik korundu. `_blocked_reason()` içinde `capability_not_in_build` **en sonda**:
+  per-domain bir predikat zaten açıklıyorsa (cross leverage, trend-adjusted…) o daha spesifik ve
+  sözleşmeli trace değeri korunur; bu dal yalnız hiçbir per-domain gate'in kapsamadığı durumları
+  (slippage) raporlar.
+- **Result diagnostics (L4)** — `capabilities_modelled: bool` + `capability_not_in_build: [...]` +
+  her seçim için `capability_not_in_build:<field_path>=<value>` warning'i.
+- **Ready Check** — yeni `STRATEGY_CAPABILITY_NOT_IN_BUILD` BLOCKER, mesaj **"Not available in this
+  build: …"** + remediation olarak matristen gelen `dependency`. Her ihlal eden opsiyon için ayrı issue
+  (kullanıcı hepsini tek seferde görür). Dokuz per-domain blocker **korundu** — onlar matrisin ifade
+  edemediği misconfiguration'ları (eksik `trigger_offset`, pozitif olmayan cap, parse edilemeyen filter
+  config) yakalamaya devam ediyor.
+- **`ENGINE_VERSION` → `backtest-engine-v18-capability-matrix`** — davranış değişti (historical-slippage
+  artık pozisyon açmıyor), execution_key namespace'i kaymalı ki iyimser fill modeliyle üretilmiş bir
+  Result idempotent olarak yeniden kullanılmasın (INF-04/INF-05).
+- **UI tek kaynak** — `tools/export_capability_matrix.py` matrisi
+  `frontend/src/lib/engineCapabilityMatrix.generated.ts`'e render eder (commit'li artefakt);
+  `test_capability_matrix.py` dosyayı yeniden render edip **byte eşitliği** iddia eder → drift CI'da
+  patlar. `SelectField` yeni `capabilityField` prop'u ile 9 select'e bağlandı: `future_dev` opsiyonlar
+  **disabled** + label'da "— not available in this build" + kontrolün altında `aria-describedby` ile
+  bağlı **bağımlılık açıklaması**.
+- **Kayıtlı saved-value istisnası** — hâlihazırda KAYITLI bir `future_dev` değer **seçilebilir kalır**
+  (disable edilirse mevcut strateji düzenlenemez hâle gelir ve form kayıtlı config'i sessizce yeniden
+  yazar); not "saved but will not run — Ready Check blocks it" der. Çalıştırmayı engelleyen Ready
+  Check'tir, form değil.
+- **`allow_hedge` nüansı** — `exit_on_opposite_signal` ON iken opposite sinyal pozisyonu hedge dalına
+  varmadan kapatır, yani değer **inert**; reader bu durumda seçim saymaz (tam olarak
+  `conflict_handling_is_modelled`'ın kuralı). OFF iken future_dev → bloklanır.
+
+### Testler
+
+- **`backend/tests/unit/test_capability_matrix.py`** (YENİ) — üç yönlü kanıt:
+  1. **Exhaustiveness**: matrisin enumere ettiği her alan için satırlar, saved schema'nın `Literal`
+     değerleriyle **tam küme eşitliği**. `config.py`'ye yeni bir opsiyon eklenirse sınıflandırılmadan
+     UI'ya ulaşamaz — bu testin asıl anti-drift değeri burada.
+  2. **Fail-closed parity**: 22 `future_dev` satırının **her biri** için gerçek config → Ready Check
+     `STRATEGY_CAPABILITY_NOT_IN_BUILD` **ve** engine `trades == []` + doğru L4 warning. Proof-overlay
+     eksikse `test_every_future_dev_option_has_a_proof_overlay` patlar (satır kaçamaz).
+  3. **Executability**: all-`active_v1` baseline gerçekten **trade açar** (her şeyi bloklayan bir
+     matrisin fail-closed testlerini geçip ürünü kullanılamaz yapması engellenir) + inert `allow_hedge`
+     ve 100% close'un aftermath'i hâlâ çalışır.
+  \+ historical-slippage için ayrı regression pin (dokuz predikatın onu kapsamadığını da iddia eder).
+- **`frontend/src/test/engineCapabilityMatrix.test.tsx`** (YENİ, 10 test) — disabled + not metni +
+  `aria-describedby` bağı, kayıtlı-değer istisnası, matris-dışı select'te not YOK.
+
+### İkinci bir sessiz boşluk var mı? — tam Literal sweep
+
+Slippage'ı bulduktan sonra `config.py`'deki **çok-değerli tüm `Literal` alanları** (39 adet)
+enumere edilip her biri için "bunu ya matris ya bir per-domain predikat ya da engine'de açık bir
+branch gerçekten karşılıyor mu?" sorusu tek tek yanıtlandı:
+
+- **13 alan** matriste sınıflandırıldı.
+- Kalanlar per-domain predikat / engine branch ile karşılanıyor: `position_sizing.method` +
+  `order_config.type` + `StopOrderDetails.activation_rule` (`sizing_is_modelled` /
+  `order_execution_is_modelled` / `_stop_trigger_is_modelled` — değer düzeyinde satır YANLIŞ olurdu,
+  çünkü geçerlilik alt-config'e bağlı) · `LimitOrderDetails.unfilled_policy` (4/4 branch) ·
+  `LimitOrderDetails.validity` (6/6 `_VALIDITY_BARS`) · `intrabar_policy.tick_policy`
+  (`tick_data_required` + `TICK_DATA_UNAVAILABLE`) · `stop_exit_conflict` (4/4) ·
+  `ScalingLogic.add_size` (3/3: `fixed_amount` / `percent_of_initial` / else `percent_of_current`) ·
+  `stop_trigger_requirement` (2/2) · `RestrictionsFilters.rule` (any/all) ·
+  `same_direction_stacking` (3 açık branch + `allow_stacking` = kasıtlı fall-through "fold-in add") ·
+  Indicator/Condition block alanları (plan resolution + `STRATEGY_INDICATOR_UNRESOLVED` /
+  `STRATEGY_LOGIC_STOP_UNRESOLVED`) · direction alanları (`_direction_flags`).
+- **Tek istisna, kayıtlı dürüst sınır:** `overlapping_signal_policy` hiç branch edilmiyor (yalnız
+  diagnostics'e yazılıyor). Engine'in kendi docstring'indeki gerekçe geçerli: V1'de değerlendirme
+  penceresi başına EN FAZLA bir agregat sinyal üretiliyor (signal-block kuralı + deterministik
+  long-wins tie-break aynı-pencere eşzamanlılığını policy devreye girmeden çözüyor), yani dört değer
+  **inşaat gereği** aynı davranışı paylaşıyor. Slippage tipi sessiz yanlış-modelleme DEĞİL — kararı
+  olmayan bir alan. Bu nedenle bilinçli olarak matrise alınmadı.
+
+**Sonuç:** `slippage_mode` gerçekten tek gate'lenmemiş alandı; ikinci bir aynı sınıf boşluk bulunamadı.
+
+### Dürüst sınırlar
+
+- Matris yalnızca **executability'si farklılaşan** alanları enumere eder. Her değeri aynı şekilde
+  çalışan alanlar (order validity pencereleri, unfilled policy'ler, slippage DEĞERİ, stop-exit collision
+  çözümü, overlapping-signal ve same-direction-stacking policy'leri) bilinçli olarak dışarıda — hepsini
+  listelemek drift yüzeyi ekler, UI veya Ready Check'in alacağı tek bir karar eklemez.
+- `_SCHEMA_FIELDS` (exhaustiveness testinin alan→model kaydı) **elle** tutulur: matrise yeni bir
+  *alan* eklenirse oraya da eklenmeli. Yeni bir *değer* otomatik yakalanır.
+- Bu slice R3 mühendislik backlog'unu kapatır; **F-07 (raw-id sweep) ve F-09 (README honesty)** ayrı
+  slice'lar olarak açık.

@@ -82,6 +82,15 @@ class ReadinessIssueCode(StrEnum):
     # the saved schema carries no condition refs / multiplier / band config to execute
     # them) — blocks RUN (the engine also fails closed and opens no position).
     STRATEGY_SIGNAL_STRENGTH_UNSUPPORTED = "STRATEGY_SIGNAL_STRENGTH_UNSUPPORTED"
+    # F-05: the strategy selects an option the machine-readable capability matrix
+    # (domain/backtest/capabilities.py) marks ``future_dev`` — it does not execute in this
+    # build at all. Blocks RUN with a "Not available in this build" message naming every
+    # offending option and its dependency (the engine also fails closed and opens no
+    # position). This is the MATRIX-driven blocker: it enumerates per option VALUE, so it
+    # catches options no per-domain predicate was gating — notably
+    # ``data.costs.slippage_mode = 'historical_slippage_if_available'``, which previously ran
+    # as a silent zero-slippage backtest.
+    STRATEGY_CAPABILITY_NOT_IN_BUILD = "STRATEGY_CAPABILITY_NOT_IN_BUILD"
     STRATEGY_INDICATOR_UNRESOLVED = "STRATEGY_INDICATOR_UNRESOLVED"
     # F-08: a pinned Logic-Based Stop Block dependency does not resolve to a computable
     # stop signal — blocks RUN (the worker also fails closed on plan.unresolved).

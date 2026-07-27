@@ -2906,3 +2906,46 @@ kaldı (`MARKET_DATA_FILE_TYPE_NOT_ALLOWED` / `RESEARCH_DATA_FILE_TYPE_NOT_ALLOW
 Tam kayıt: `docs/PROJECT_HISTORY.md` §"K-07 devamı".
 
 **Next değişmedi** (yukarıdaki §Next geçerli).
+
+## K-03 — Engine funding sırası spec adım 2'ye taşındı landed (PR #398)
+
+**Migration YOK** (alembic head `0035_portfolio_rules` sabit) · **`ENGINE_VERSION` →
+`backtest-engine-v18-funding-step-order`** (K-04'ün `-full-pinning` bump'ının üstüne; davranış
+değişti → execution_key namespace kaymalı).
+
+- **Bulgu:** doc 15 §9.3 funding/fee/carry'yi **adım 2**'ye pinliyor; motor onu bar döngüsünün
+  **sonunda** — entry ve scaling'den SONRA — uyguluyordu ve docstring'i 8 adım yerine funding
+  içermeyen 3 adım ilan ediyordu. `equity` hem `_position_size` hem `_sleeve_capital` girdisi
+  olduğu için her giriş/scale katmanı carry'si ödenmemiş equity ile boyutlanıyordu → perp funding'de
+  **tek yönlü kümülatif** sapma + bir bar geç bağlanan `max_total_exposure`. Exit barında available
+  olan charge ise tamamen **düşüyordu** (blok flat defter görüyordu).
+- **Fix:** funding bar'ın başına (adım 2) taşındı; docstring kanonik 8 adıma güncellendi; döngü içi
+  `# (n)` işaretleri kanonik numaralara hizalandı; **adım 1 K-02'nin `is_eligible_for_decision`
+  kapısına açıkça bağlandı** (PR #393). Kod≠spec sırası olan iki yer (5/6 iç içe — cap'ler boyutun
+  hesaplandığı yerde bağlanır; 3d bar close'unda çözülür) örtülmedi, belgelendi.
+- **İki yönlü sonuç:** barın BAŞINDA açık pozisyon o barın kaydını öder (bar onu kapatsa bile);
+  o barda AÇILAN pozisyon ödemez. Bir charge ile ilk giriş **asla aynı bara düşemez** (charge tutulan
+  pozisyon, giriş flat defter ister) — testlerde yazılı sınır.
+- **Ölçülen sapma:** fixture'da `funding_paid` 0.00 → 20.40, ikinci giriş 195.92000000 →
+  195.51200000, `final_equity` 9796.00 → 9775.60. Aynı-bar scaling: funding off `scale_layer_added`
+  (75.0) → funding on `scale_layer_rejected` (`sleeve_capacity`, cap 2482.19).
+- **Testler:** 6 unit (**5'i düzeltme öncesi motorda kırılıyor** — `engine.py` stash'lenip ampirik
+  doğrulandı) + 3 integration (DB revision → `resolve_funding_schedule` → `run_engine` + execution_key
+  namespace kayması). ruff/format/mypy temiz; tam backend suite **exit 0**.
+- **Uygulanamayan proof'lar (dürüst sınır):** migration ve yeni `create_*` yok → alembic up/down/up
+  ve L1 FK insert-order proof'ları bu slice'a uygulanmaz.
+- **Sürüm uyumu:** eski Result'lar kendi pinli `engine_version`'ları altında geçerli kalır fakat yeni
+  sonuçlarla **karşılaştırılamaz**; karşılaştırmak için yeniden RUN gerekir.
+
+Tam kayıt: `docs/PROJECT_HISTORY.md` §"K-03 · Engine funding sırası".
+
+## Next: **PO imzası + R2 kapanışı** (değişmedi) · K-serisi kusur backlog'unda K-03 kapandı
+
+K-serisi durumu: K-01 (#386) · K-02 (#393) · K-04 (#397) · K-05 (#387) · K-06 (#395) · K-07 (#388)
+landed; **K-03 bu slice ile landed (#398)**. Kalan tek büyük açık iş hâlâ **R2'nin product-owner
+imzası** (`docs/implementation/v18_final_acceptance.md` §4, D-1…D-9) — imza olmadan
+`entropia_v18_remediation_status.md`'deki R2 RE-OPENING banner'ı kalkmaz.
+
+Ayrıca hâlâ açık: **F-07 raw-id presentation sweep kalıntısı** (empirik doğrulanmalı) ve
+**ortam tuzağı**: paralel worktree oturumları paylaşılan `entropia_test` DB'sini ezer —
+`TEST_DATABASE_URL` ile worktree'ye özel izole DB kullan.

@@ -1294,3 +1294,89 @@ yüklendiği). Migration YOK; şema, route, OCC ve Idempotency yüzeyi değişme
   üretir — `TEST_DATABASE_URL` ile izole DB kullan. `uv run pytest` venv'i temel bağımlılıklara
   sıfırlayabiliyor (`uv sync --extra dev` gerekir). `tests/acceptance` ve `tests/deterministic` boş
   dizinler → pytest exit 5 normaldir.
+
+---
+
+## K-03 · Engine funding sırası — spec adım 2'ye taşındı (PR #398)
+
+**Sorun (ampirik doğrulama ile).** `docs/spec/15_..._RUN_ve_Backtest_Results_..._v1_1.md` §9.3 sekiz
+adımlık, sürümlenmiş ve deterministik bir bar sırası pinliyor ve **funding/fee/carry = ADIM 2**.
+Motor ikisini de tutmuyordu:
+
+- `domain/backtest/engine.py` docstring'i **3 adımlık** bir sıra ilan ediyordu (rolling look-back
+  window → protection/stop/exit → entry) ve **funding bu üçünün hiçbirinde yoktu**;
+- uygulama funding'i bar döngüsünün **SONUNDA** çalıştırıyordu — `entry_signal` değerlendirmesinden,
+  pending/resting fill'lerden, restriction/scaling merdiveninden ve exposure reject yolundan sonra.
+
+`equity` hem girişi boyutlandıran (`_position_size`) hem de allocation sleeve / exposure cap'lerini
+sınırlayan (`_sleeve_capital`) girdidir. Carry'yi en sona bırakmak bu yüzden **her** girişi ve **her**
+scale katmanını carry'si ödenmemiş equity ile boyutlandırıyordu — perp funding altında sistematik
+olarak daha büyük pozisyona doğru **tek yönlü kümülatif** bir sapma ve bir bar geç bağlanan
+`max_total_exposure`. Yerleşim ayrıca, kaydın available olduğu bar pozisyonu kapatıyorsa charge'ı
+**sessizce düşürüyordu**: blok çalıştığında defter zaten flat'ti ve kayıt ücretlendirilmeden tüketiliyordu.
+
+**Çözüm.** Funding kanonik **adım 2**'ye, bar'ın en başına taşındı — o bar'ın her fill'inden,
+stop'undan, exposure kontrolünden, girişinden ve scale katmanından önce. Docstring tam 8 adımlık §9.3
+sırasıyla değiştirildi; döngü içi `# (n)` işaretleri kanonik adım numaralarını taşıyacak şekilde
+yeniden numaralandırıldı. **Adım 1 açıkça K-02'nin `is_eligible_for_decision` kapısına bağlandı**
+(PR #393). Kod sırasının spec sırasına eşit olamadığı iki yer örtülmek yerine **belgelendi**:
+
+- adım 5 ve 6 iç içe geçer, çünkü sleeve / `max_total_exposure` / size cap'leri tek bir bağımsız blok
+  yerine bir boyutun hesaplandığı noktada bağlanır;
+- adım 3d (bar'ın CLOSE'una ertelenmiş fill) yapısı gereği adım 4–6'dan sonra çözülür.
+
+**Perp konvansiyonunun iki yönlü sonucu** ("funding yalnızca fiilen tutulan aralık için ödenir"):
+bir bar'ın **BAŞINDA** açık olan pozisyon, bar daha sonra onu kapatsa bile o bar'da available olan
+kaydı **öder** (eskiden düşüyordu); o bar'da **AÇILAN** pozisyon ise o bar'ın kaydını **ödemez**
+(eskiden ödüyordu). Bir charge tutulan pozisyon, taze bir giriş ise flat defter gerektirdiğinden
+**bir charge ile ilk giriş asla aynı bara düşemez** — testlerde açıkça yazılı bir sınır.
+
+**ENGINE_VERSION** → `backtest-engine-v18-funding-step-order` (K-04'ün `-full-pinning` bump'ının
+üstüne; her iki yorum bloğu da manifest.py'de kümülatif olarak durur). **Migration YOK.**
+
+**Ölçülen sapma (integration fixture'ına yazıldı).**
+
+```
+bar 21  long @102, 200.00000000 birim (10000 * %2 risk / 1.0 stop point)   -- her iki sıra
+bar 22  funding available (rate 0.001); %1 stop da bu barda tripliyor
+          YENİ: önce charge -> 20400.00 * 0.001 = 20.40 işlenir, SONRA stop kapatır
+          ESKİ: en son charge -> defter zaten flat, charge DÜŞTÜ
+bar 29  ikinci long @120, bar 22'den kalan equity ile boyutlanır
+          YENİ: (10000 - 204.00 - 20.40) * %2 = 195.51200000 birim
+          ESKİ: (10000 - 204.00)         * %2 = 195.92000000 birim
+final   YENİ final_equity 9775.60    ESKİ final_equity 9796.00
+```
+
+Aynı-bar exposure semptomu (scaling unit testi, %77 sleeve, rate 0.03): funding off →
+`scale_layer_added` (`new_size 75.00000000`); funding on → `scale_layer_rejected`
+(`reason sleeve_capacity`, `cap 2482.19`). Eski sırada charge merdivenden sonra düştüğü için katman
+her hâlükârda kabul ediliyordu — geç bağlanan `max_total_exposure`'ın tek satırlık kanıtı.
+
+**Testler.** `tests/unit/test_backtest_funding_step_order.py` (6 test): düşen exit-bar charge'ı ·
+`funding_charge`'ın kendi barındaki her olaydan önce gelmesi · `risk_based_sizing` altında
+before/after giriş-boyutu sapması · aynı-bar funding → scaling sleeve-cap flip'i · o barda açılan
+pozisyonun charge ödememesi · batch-size determinizmi. **6'nın 5'i düzeltme öncesi motorda kırılıyor**
+— `engine.py` stash'lenip yeniden koşularak ampirik doğrulandı; altıncısı (batch determinizmi) tasarım
+gereği sıradan bağımsız. `tests/integration/test_backtest_funding_step_order.py` (3 test): DB'de
+seed'lenmiş Approved funding Research revision → `resolve_funding_schedule` → `run_engine` zinciri,
+eski/yeni sayılar yan yana kayıtlı, artı `execution_key` / `manifest_hash` namespace kayması.
+
+**Doğrulama.** ruff · `ruff format --check` (601 dosya) · `mypy src` (352 dosya) temiz; tam backend
+suite **exit 0, hiç F/E yok**. **Migration ve yeni `create_*` komutu olmadığı için** alembic
+up/down/up proof'u ve L1 FK insert-order proof'u bu slice'a uygulanmaz.
+
+**Dürüst sınırlar.** Bir funding oranının nasıl **çözüldüğü** (provenance gate, available-time policy,
+instrument mapping) değişmedi — o K-02/F-11 ve dokunulmadı. Perp funding dışındaki fee ve carry V1
+motorunun kapsamı dışında kalmaya devam ediyor; adım 2 onların bağlanacağı yerdir.
+
+**Sürüm uyumu (PR açıklamasına da yazıldı).** Mevcut Result'lar kendi pinli `engine_version`'ları
+altında **geçerli kalır** — hiçbiri yeniden yazılmaz, silinmez veya yeniden etiketlenmez. Ancak eski
+sıra altında üretilmiş funding'li bir Result, bu PR sonrası üretilenle **KARŞILAŞTIRILAMAZ**: sayılar
+yapısal olarak farklıdır ve aradaki fark stratejinin değil motor sürümünün artefaktıdır.
+Karşılaştırmak için eski kompozisyonu yeni motorda yeniden RUN et.
+
+**Ortam tuzağı (K-07'nin notunu doğrular).** Bu slice'ta tam suite üç kez baştan koşuldu, çünkü
+paralel bir worktree (`entropia-o02-error-envelope-*`) aynı paylaşılan `entropia_test` DB'sine karşı
+kendi integration paketini koşuyordu; conftest her testte `drop_all`/`create_all` yaptığından iki koşu
+birbirinin şemasını siliyor ve dalgalı, ilgisiz hatalar üretiyor. **`TEST_DATABASE_URL` ile worktree'ye
+özel izole DB kullan** (`entropia_k03_test`) — sonrasında suite ilk denemede yeşil.

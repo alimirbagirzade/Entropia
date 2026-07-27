@@ -125,6 +125,19 @@ async def get_request(
     return await cp_query.get_package_request(ctx.session, ctx.actor, request_id=request_id)
 
 
+def _dispatch_create_package_job(job_id: str) -> None:
+    """Dispatch the durable ``default``-queue Create-Package worker (F-01a/F-01b).
+
+    The QUEUED ``jobs`` row written by the admission is already the source of truth, so a
+    lost broker message costs latency, not work: the scheduler sweep re-sends it
+    (INF-03). Called AFTER the admission returns, so the actor only ever sees a committed
+    job row.
+    """
+    from entropia.apps.worker.actors import run_create_package_job
+
+    job_enqueue.send_job(run_create_package_job, job_id)
+
+
 @router.post("/create-package/requests/{request_id}/pre-check")
 async def run_pre_check(
     request_id: str,
@@ -139,11 +152,7 @@ async def run_pre_check(
         expected_request_version=_request_version(request_version),
         idempotency_key=idempotency_key,
     )
-    # Dispatch the durable Pre-Check worker (F-01a). The QUEUED jobs row is already the
-    # source of truth; a lost broker message is re-sent by the scheduler sweep (INF-03).
-    from entropia.apps.worker.actors import run_create_package_job
-
-    job_enqueue.send_job(run_create_package_job, result["job_id"])
+    _dispatch_create_package_job(result["job_id"])
     return result
 
 
@@ -154,13 +163,15 @@ async def generate_candidate(
     request_version: str | None = Header(default=None, alias=_REQUEST_VERSION_HEADER),
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> dict[str, Any]:
-    return await cp_cmd.submit_candidate_generation(
+    result = await cp_cmd.submit_candidate_generation(
         ctx.session,
         ctx.actor,
         request_id=request_id,
         expected_request_version=_request_version(request_version),
         idempotency_key=idempotency_key,
     )
+    _dispatch_create_package_job(result["job_id"])
+    return result
 
 
 @router.post("/create-package/requests/{request_id}/draft")
@@ -187,13 +198,15 @@ async def run_validation(
     request_version: str | None = Header(default=None, alias=_REQUEST_VERSION_HEADER),
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> dict[str, Any]:
-    return await cp_cmd.start_package_validation_run(
+    result = await cp_cmd.start_package_validation_run(
         ctx.session,
         ctx.actor,
         request_id=request_id,
         expected_request_version=_request_version(request_version),
         idempotency_key=idempotency_key,
     )
+    _dispatch_create_package_job(result["job_id"])
+    return result
 
 
 @router.post("/create-package/requests/{request_id}/request-revision")

@@ -94,6 +94,22 @@ async def _count(session, model) -> int:
     return int((await session.execute(select(func.count()).select_from(model))).scalar_one())
 
 
+async def _send(session, actor, request_id: str) -> dict:
+    """Admit candidate generation, then drive the durable worker body (F-01b).
+
+    Returns the worker's completed dict — the same shape the old synchronous command
+    returned, so the downstream assertions stay meaningful.
+    """
+    admitted = await cp_cmd.submit_candidate_generation(session, actor, request_id=request_id)
+    return await cp_jobs.run_create_package_job(session, admitted["job_id"])
+
+
+async def _validate(session, actor, request_id: str) -> dict:
+    """Admit a validation run, then drive the durable worker body (F-01b)."""
+    admitted = await cp_cmd.start_package_validation_run(session, actor, request_id=request_id)
+    return await cp_jobs.run_create_package_job(session, admitted["job_id"])
+
+
 async def _seed_principals(session) -> None:
     for pid in ("user_admin", "user_1"):
         if await session.get(Principal, pid) is None:
@@ -168,7 +184,7 @@ async def _drive_to_draft(session, *, family_id: str, equivalence_claim: bool | 
     request_id = created["request_id"]
     queued_pre = await cp_cmd.run_precheck(session, OWNER, request_id=request_id)
     await cp_jobs.run_create_package_job(session, queued_pre["job_id"])
-    sent = await cp_cmd.submit_candidate_generation(session, OWNER, request_id=request_id)
+    sent = await _send(session, OWNER, request_id)
     await cp_cmd.create_draft_from_candidate(
         session, OWNER, request_id=request_id, expected_candidate_hash=sent["candidate_hash"]
     )
@@ -282,7 +298,7 @@ async def test_equivalence_claim_without_baseline_blocks_approve(
     # F-13: with no baseline, the real_market_data + baseline_comparison checks are
     # BLOCKED, so validation itself fails (a blocked mandatory check is not a pass) and
     # the request never reaches eligible_for_approval.
-    validated = await cp_cmd.start_package_validation_run(session, OWNER, request_id=request_id)
+    validated = await _validate(session, OWNER, request_id)
     await session.commit()
     assert validated["status"] == "failed"
     statuses = {c["check"]: c["status"] for c in validated["checks"]}
@@ -308,7 +324,7 @@ async def test_equivalence_claim_with_passed_baseline_allows_approve(
     await session.commit()
     await cp_cmd.start_baseline_parse(session, OWNER, request_id=request_id)
     await session.commit()
-    await cp_cmd.start_package_validation_run(session, OWNER, request_id=request_id)
+    await _validate(session, OWNER, request_id)
     await session.commit()
 
     published = await cp_cmd.approve_and_publish(session, ADMIN, request_id=request_id)
@@ -323,7 +339,7 @@ async def test_non_equivalence_request_needs_no_baseline(session, fake_object_st
     detail = await cp_repo.get_request_detail(session, request_id)
     assert detail is not None and detail.claims_equivalence is False
 
-    await cp_cmd.start_package_validation_run(session, OWNER, request_id=request_id)
+    await _validate(session, OWNER, request_id)
     await session.commit()
     published = await cp_cmd.approve_and_publish(session, ADMIN, request_id=request_id)
     await session.commit()

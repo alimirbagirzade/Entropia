@@ -19,7 +19,7 @@ request bağımlılığından gelen **TEK transaction**, burada **asla commit yo
 | `auth.py` | Local auth: `sign_up` / `login` / `logout` / `reauthenticate` / first-Admin bootstrap | `human_credentials`, `auth_sessions`, `reauth_proofs`, `human_users` |
 | `backtest_run.py` | RUN admission (sunucu tarafı preflight) + retry + Result soft-delete | `backtest_run`, `backtest_run_manifest`, `backtest_result` |
 | `capability.py` | Future Dev capability lifecycle transition + operasyonel çıktı POST'ları | `future_capability`, `capability_activation_event`, `view_dataset`, `analysis_artifact` |
-| `create_package.py` | Create Package + Pre-Check mutasyonları (scan/candidate/draft/validate/approve) | `package_request`, `dependency_scan`, `baseline_asset`, `package_validation_run` |
+| `create_package.py` | Create Package + Pre-Check mutasyonları (scan/candidate/draft/validate/approve). **Pre-Check · candidate · validation = admission** (durable job + `default` aktör); compute `jobs/create_package.py`'de | `package_request`, `dependency_scan`, `baseline_asset`, `package_validation_run`, `jobs` |
 | `data_queue.py` | Operator recovery: takılı `data` kuyruğu job'larını yeniden dağıt (INF-03) | `jobs` |
 | `deletion.py` | Soft-delete / restore / purge (owner-or-Admin; trash+tombstone+audit tek tx) | `trash_entries`, `tombstones`, `entity_registry` |
 | `entities.py` | Generic root/revision omurga create/save (ürünsüz referans desen) | `entity_registry`, `entity_revisions` |
@@ -87,12 +87,13 @@ request bağımlılığından gelen **TEK transaction**, burada **asla commit yo
 | `agent_executor.py` | `agent-executor` | Alpha Agent task executor; `jobs` satırı transport + retry backstop |
 | `agent_tools.py` | `agent` / `agent-high` | Tool Gateway — ajan, insanla **aynı** policy'li servis hattından iş yapar |
 | `backtest_engine.py` | `backtest` | Engine worker gövdesi; `jobs` + `backtest_run` tek gerçek kaynağı |
+| `create_package.py` | `default` | CP kind-dispatch worker: `precheck` · `candidate_generation` · `validation` (F-01a/F-01b); durable kanıt + state ilerlemesi + audit/outbox |
 | `data_queue.py` | (yardımcı) | `data` kuyruğu job-kind taksonomisi + operator redelivery listesi |
 | `maintenance.py` | (scheduler) | `recover_stale_jobs` (INF-09) + `redeliverable_queued_jobs` (INF-03) sweep'leri |
 | `market_data.py` | `data` | Raw asset → Polars parse → şema map → normalize → validate → processed asset |
 | `outbox_relay.py` | (scheduler + SSE) | Transactional outbox tüketici tarafı: `relay_unpublished` + `fetch_events_after` |
 | `package_import.py` | `data` | Export'un tersi: manifest doğrula → yerel bağımlılıkları yeniden çöz |
-| `package_validation.py` | (senkron/worker) | CP validation: yedi zorunlu kontrol, gerçek DB gerçeklerinden |
+| `package_validation.py` | (`default` worker gövdesi) | CP validation: yedi zorunlu kontrol, gerçek DB gerçeklerinden; `create_package.py::run_validation_job` çağırır |
 | `purge.py` | `maintenance` | Trash purge gövdesi; uygunluğu **worker yeniden kontrol eder** |
 | `research_data.py` | `data` | Research analiz + agent/evidence bundle derleyicileri (content-addressed) |
 | `trade_log.py` | `data` | Trade Log import: object storage → CSV/TXT parse → normalize/validate |

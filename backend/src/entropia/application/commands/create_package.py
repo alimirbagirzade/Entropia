@@ -10,11 +10,17 @@ for Create Draft Package and the publish head; the ESP resolver registry from 2c
 (``esp_query.resolve_embedded_dependency``) for Pre-Check dependency resolution;
 the durable job row (``enqueue_job``) as the source of truth (CR-09).
 
-V1 boundaries (Future-Dev): the candidate-generation, scan-parsing and validation
-*compute* are stubs — the durable rows, lifecycle, resolver wiring, idempotency,
-concurrency, role gates and audit are real. The Pre-Check "parser" reads the
-request's explicitly declared canonical TA keys (a real PineScript parser replaces
-this later) and resolves each against the trusted ESP registry.
+Async plane (F-01a + F-01b): Pre-Check, candidate generation and Validation Tests are
+ADMISSIONS here — each enqueues a durable QUEUED job and returns immediately; the
+compute, the durable evidence and the terminal state advance happen in the
+``default``-queue worker (``application/jobs/create_package.py``), so a browser close /
+logout never cancels the work and the UI never shows a result before it exists
+(Finding F-01). Baseline parse stays in-transaction (a bounded read of an already-
+uploaded CSV), and the revision loop regenerates its deterministic candidate inline.
+
+V1 boundaries (Future-Dev): the candidate generator is deterministic, not an LLM, and
+the Pre-Check "parser" reads the request's explicitly declared canonical TA keys (a real
+PineScript parser replaces it later) and resolves each against the trusted ESP registry.
 """
 
 from __future__ import annotations
@@ -25,8 +31,10 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from entropia.application.idempotency import run_idempotent
-from entropia.application.jobs.create_package import registry_fingerprint
-from entropia.application.jobs.package_validation import run_package_validation
+from entropia.application.jobs.create_package import (
+    generate_and_store_candidate,
+    registry_fingerprint,
+)
 from entropia.domain.create_package import (
     BaselineParseStatus,
     CreatePackageState,
@@ -48,10 +56,7 @@ from entropia.domain.create_package import (
     resolve_equivalence_claim,
     source_hash,
 )
-from entropia.domain.create_package.generator import (
-    GeneratedCandidate,
-    generate_candidate,
-)
+from entropia.domain.create_package.validation import VALIDATOR_VERSION
 from entropia.domain.esp.enums import RuntimeAdapter
 from entropia.domain.identity import Actor
 from entropia.domain.lifecycle.enums import (
@@ -97,9 +102,10 @@ from entropia.shared.errors import (
 
 _REQUEST_TARGET_KIND = "package_request"
 _PACKAGE_TARGET_KIND = "package"
-# The Pre-Check worker rides the general-purpose plane consumed by the ``default,
-# maintenance`` worker (docker-compose); scan semantics live in jobs/create_package.py.
-_PRECHECK_QUEUE = "default"
+# The Create-Package workers ride the general-purpose plane consumed by the ``default,
+# maintenance`` worker (docker-compose); the compute semantics for every kind live in
+# jobs/create_package.py.
+_WORKER_QUEUE = "default"
 # Upload cap for a baseline CSV export (doc 06 §8.3 file type/size gate).
 _MAX_BASELINE_BYTES = 25 * 1024 * 1024
 
@@ -392,7 +398,9 @@ async def run_precheck(
     async def _op() -> dict[str, Any]:
         await session.refresh(root, with_for_update=True)
         _check_request_version(root, expected_request_version)
-        job = _enqueue_precheck_job(session, actor, request_id=root.entity_id)
+        job = _enqueue_create_package_job(
+            session, actor, kind="precheck", request_id=root.entity_id
+        )
         # Advance the request_version so expected_request_version detects a concurrent
         # admission (the token is otherwise inert until the worker records the scan).
         root.row_version += 1
@@ -435,13 +443,20 @@ async def submit_candidate_generation(
     expected_request_version: int | None = None,
     idempotency_key: str | None = None,
 ) -> dict[str, Any]:
-    """Send: gate Pre-Check, then enqueue candidate generation (doc 06 §5, doc 07 §9.3).
+    """Send: gate Pre-Check, then ADMIT candidate generation (doc 06 §5, doc 07 §9.3;
+    Finding F-01).
 
-    The candidate-generation GATE (PC-13) is enforced server-side: a code request
-    needs a current PASSED scan that is not stale against the live registry; a
-    description request needs no scan. The candidate compute itself is a V1 stub —
-    the durable job + candidate summary are produced in-transaction (real LLM
-    generation is Future-Dev) so the draft step has a ready candidate to consume.
+    The candidate-generation GATE (PC-13) is enforced server-side AT ADMISSION, so a
+    blocked / stale Pre-Check still fails fast with the typed 409 the client expects: a
+    code request needs a current PASSED scan that is not stale against the live registry;
+    a description request needs no scan.
+
+    Past the gate this is an admission, not the compute: it enqueues a DURABLE job and
+    returns ``candidate_generating`` immediately. The deterministic generation, the
+    candidate pins and the advance to ``candidate_ready`` (or the durable
+    ``candidate_failed`` on worker failure) are produced by
+    ``jobs.create_package.run_candidate_generation_job`` — closing the browser never
+    cancels it, and the response never carries a candidate hash that does not exist yet.
     """
     root, detail = await _require_request(session, actor, request_id)
 
@@ -450,11 +465,14 @@ async def submit_candidate_generation(
         _check_request_version(root, expected_request_version)
         await _enforce_precheck_gate(session, detail)
 
-        job = await _enqueue_stub_job(
-            session, actor, queue="default", kind="candidate_generation", request_id=root.entity_id
+        job = _enqueue_create_package_job(
+            session, actor, kind="candidate_generation", request_id=root.entity_id
         )
         previous = detail.state
         detail.state = next_request_state(detail.state, CreatePackageState.CANDIDATE_GENERATING)
+        # The admission itself advances the request_version so a concurrent submit with
+        # a stale token is rejected (the token is otherwise inert until the worker lands).
+        root.row_version += 1
         _audit_and_outbox(
             session,
             actor,
@@ -466,30 +484,15 @@ async def submit_candidate_generation(
             new_state=str(detail.state),
             action="candidate_generation_started",
         )
-        # Deterministic candidate generation (doc 06 §5, F-14): generate a real loadable
-        # implementation (source + test draft + plan) from the resolved ESP dependencies +
-        # validated output contract; its content hash is the candidate hash. A real
-        # LLM/arbitrary-code generator + isolated sandbox stays Future-Dev.
-        generated = await _generate_and_store_candidate(session, detail)
-        new_candidate_hash = generated.candidate_hash
-        detail.state = next_request_state(detail.state, CreatePackageState.CANDIDATE_READY)
-        root.row_version += 1
-        _audit_and_outbox(
-            session,
-            actor,
-            event_kind="candidate_generation_completed",
-            target_kind=_REQUEST_TARGET_KIND,
-            entity_id=root.entity_id,
-            revision_id=None,
-            previous_state=str(CreatePackageState.CANDIDATE_GENERATING),
-            new_state=str(detail.state),
-            action="candidate_generation_completed",
-        )
         return {
             "request_id": root.entity_id,
             "state": str(detail.state),
-            "candidate_hash": new_candidate_hash,
+            # No candidate exists yet. The empty hash keeps the response assignable to
+            # the client's CandidateActionResult contract while making it impossible to
+            # chain a draft against a candidate the worker has not produced.
+            "candidate_hash": "",
             "job_id": job.job_id,
+            "request_version": root.row_version,
         }
 
     return await run_idempotent(
@@ -519,48 +522,6 @@ async def _enforce_precheck_gate(session: AsyncSession, detail: PackageRequest) 
     current_fingerprint = await registry_fingerprint(session, detail.declared_dependencies)
     if scan.registry_fingerprint != current_fingerprint:
         raise PrecheckStale()
-
-
-async def _candidate_resolved_refs(
-    session: AsyncSession, detail: PackageRequest
-) -> list[dict[str, Any]]:
-    """The resolved ESP refs the candidate compute pins (doc 06 §5).
-
-    Description requests resolve nothing; a code request reuses the current PASSED
-    scan's resolved refs (the PC-13 gate already ran, so the scan is fresh).
-    """
-    if detail.source_kind == SourceKind.DESCRIPTION:
-        return []
-    scan = await cp_repo.get_current_scan(session, detail)
-    if scan is None:
-        return []
-    return list(scan.resolved_refs or [])
-
-
-async def _generate_and_store_candidate(
-    session: AsyncSession, detail: PackageRequest
-) -> GeneratedCandidate:
-    """Generate the loadable candidate (F-14) and pin it onto the request.
-
-    Shared by Send (``submit_candidate_generation``) and the revision loop
-    (``request_revision``) so both produce an identical, deterministic implementation
-    from the same inputs. Stores the candidate hash, validated output contract, and the
-    loadable implementation (source + test draft + plan) — later copied verbatim onto
-    the immutable draft revision at C.D.P.
-    """
-    resolved_refs = await _candidate_resolved_refs(session, detail)
-    generated = generate_candidate(
-        request_id=detail.entity_id,
-        package_kind=str(detail.package_kind),
-        source_kind=detail.source_kind,
-        output_contract=detail.output_contract,
-        resolved_refs=resolved_refs,
-        source_language=detail.source_language,
-    )
-    detail.candidate_hash = generated.candidate_hash
-    detail.candidate_output_contract = generated.output_contract
-    detail.candidate_implementation = generated.implementation.as_dict()
-    return generated
 
 
 async def create_draft_from_candidate(
@@ -698,18 +659,23 @@ async def start_package_validation_run(
     expected_request_version: int | None = None,
     idempotency_key: str | None = None,
 ) -> dict[str, Any]:
-    """Run Validation Tests over a draft revision, producing immutable evidence
-    (doc 06 §4.4/§5/§7). Revives the ``validation_running`` -> ``eligible_for_approval``
-    / ``revision_required`` states.
+    """ADMIT a Validation Tests run over a draft revision (doc 06 §4.4/§5/§7;
+    Finding F-01). Drives ``validation_running`` -> ``eligible_for_approval`` /
+    ``revision_required`` through the durable worker.
 
-    Gate: the request must be in ``draft_created`` (has a draft revision). The seven
-    mandatory checks run in the durable validation worker body
-    (``application/jobs/package_validation``), which gathers the draft's real facts and
-    produces an honest verdict (F-13): a ``not_executed`` / ``blocked`` mandatory check
-    is NOT a pass, so only a fully-passing run reaches ``eligible_for_approval``; any
-    unsatisfied check routes to ``revision_required``. The durable job + immutable run
-    row are produced in-transaction (mirrors ``run_precheck``); the concurrency +
-    evidence write live INSIDE the idempotent body.
+    Gate: the request must be in ``draft_created`` (has a draft revision) — checked here
+    so an un-validatable state raises before any write. The admission appends the
+    immutable run row in its ``queued`` state (the spec's queued/running row states, so
+    the UI has a real evidence row from the first render), enqueues a DURABLE job and
+    returns immediately.
+
+    The seven mandatory checks then run in the durable worker
+    (``jobs.create_package.run_validation_job`` -> ``jobs.package_validation``), which
+    gathers the draft's real facts and produces an honest verdict (F-13): a
+    ``not_executed`` / ``blocked`` mandatory check is NOT a pass, so only a fully-passing
+    run reaches ``eligible_for_approval``; any unsatisfied check — and a worker failure —
+    routes to ``revision_required``. The OCC guard + the row lock live INSIDE the
+    idempotent body; the row_version is bumped at admission.
     """
     root, detail = await _require_request(session, actor, request_id)
 
@@ -724,58 +690,42 @@ async def start_package_validation_run(
         previous = detail.state
         detail.state = next_request_state(detail.state, CreatePackageState.VALIDATION_RUNNING)
 
-        # F-13: the seven mandatory checks run in the durable validation worker body,
-        # which gathers the draft's real facts (re-resolved deps, a real syntax probe,
-        # the resolved native plan, the baseline parse). ``passed`` is honest — a
-        # not_executed / blocked mandatory check does NOT pass and blocks approval.
-        report = await run_package_validation(session, detail)
-        status = ValidationRunStatus.PASSED if report.passed else ValidationRunStatus.FAILED
-        # Certify the draft revision with this run's verdict. can_use requires the head
-        # revision's validation_state == PASSED (domain/package/permissions), so without
-        # this the draft stays PENDING and the approved+published package is never usable
-        # — it cannot be pinned in the Strategy editor. A FAILED run marks it FAILED; a
-        # regenerated candidate makes a fresh PENDING draft, so evidence never goes stale.
-        draft_revision = await pkg_repo.get_revision(session, detail.draft_revision_id)
-        if draft_revision is not None:
-            draft_revision.validation_state = (
-                PackageValidationState.PASSED if report.passed else PackageValidationState.FAILED
-            )
-        job = await _enqueue_stub_job(
-            session, actor, queue="default", kind="validation", request_id=root.entity_id
-        )
         run = await cp_repo.append_validation_run(
             session,
             request_entity_id=root.entity_id,
             package_root_id=detail.package_root_id,
             draft_revision_id=detail.draft_revision_id,
+            # The run pins the exact candidate it will certify, so regenerating the
+            # candidate makes this evidence stale on read (validation_fresh).
             candidate_hash=detail.candidate_hash,
-            validator_version=report.validator_version,
-            checks=[check.as_dict() for check in report.checks],
-            status=status,
-            job_id=job.job_id,
+            validator_version=VALIDATOR_VERSION,
+            checks=[],
+            status=ValidationRunStatus.QUEUED,
+            job_id=None,
             correlation_id=actor.correlation_id or None,
             created_by_principal_id=actor.principal_id,
         )
-        run.completed_at = datetime.now(UTC)
         await session.flush()
-        detail.current_validation_run_id = run.validation_run_id
-        terminal = (
-            CreatePackageState.ELIGIBLE_FOR_APPROVAL
-            if report.passed
-            else CreatePackageState.REVISION_REQUIRED
+        job = _enqueue_create_package_job(
+            session,
+            actor,
+            kind="validation",
+            request_id=root.entity_id,
+            payload_extra={"validation_run_id": run.validation_run_id},
         )
-        detail.state = next_request_state(detail.state, terminal)
+        run.job_id = job.job_id
+        detail.current_validation_run_id = run.validation_run_id
         root.row_version += 1
         _audit_and_outbox(
             session,
             actor,
-            event_kind="validation_run_completed",
+            event_kind="validation_run_started",
             target_kind=_PACKAGE_TARGET_KIND,
             entity_id=detail.package_root_id,
             revision_id=detail.draft_revision_id,
             previous_state=str(previous),
             new_state=str(detail.state),
-            action="validation_run_completed",
+            action="validation_run_started",
         )
         return {
             "request_id": root.entity_id,
@@ -783,8 +733,10 @@ async def start_package_validation_run(
             "attempt_no": run.attempt_no,
             "status": str(run.status),
             "state": str(detail.state),
+            # No verdict exists yet — the checks land when the worker completes.
             "checks": run.checks,
             "job_id": job.job_id,
+            "request_version": root.row_version,
         }
 
     return await run_idempotent(
@@ -825,7 +777,7 @@ async def request_package_revision(
         detail.draft_revision_id = None
         detail.current_validation_run_id = None
 
-        await _generate_and_store_candidate(session, detail)
+        await generate_and_store_candidate(session, detail)
         detail.state = next_request_state(detail.state, CreatePackageState.CANDIDATE_READY)
         root.row_version += 1
         _audit_and_outbox(
@@ -975,8 +927,8 @@ async def start_baseline_parse(
         if not report.is_parseable:
             raise BaselineParseFailed(report.detail)
 
-        job = await _enqueue_stub_job(
-            session, actor, queue="default", kind="baseline_parse", request_id=root.entity_id
+        job = await _enqueue_completed_job(
+            session, actor, queue=_WORKER_QUEUE, kind="baseline_parse", request_id=root.entity_id
         )
         asset.parse_status = BaselineParseStatus.PASSED
         asset.parse_report = report.as_dict()
@@ -1141,33 +1093,41 @@ def _publish_result(detail: PackageRequest) -> dict[str, Any]:
     }
 
 
-def _enqueue_precheck_job(session: AsyncSession, actor: Actor, *, request_id: str) -> Job:
-    """Insert a durable QUEUED Pre-Check job (CR-09 source of truth), left for a real
-    worker. Does not commit or dispatch — the route dispatches the ``default``-queue actor
-    after the admission tx commits (mirrors the other worker routes).
+def _enqueue_create_package_job(
+    session: AsyncSession,
+    actor: Actor,
+    *,
+    kind: str,
+    request_id: str,
+    payload_extra: dict[str, Any] | None = None,
+) -> Job:
+    """Insert a durable QUEUED Create-Package job (CR-09 source of truth) for the real
+    ``default``-queue worker (F-01a/F-01b).
 
-    Unlike ``_enqueue_stub_job`` (still used by the candidate-generation / validation /
-    baseline-parse V1 stubs until F-01b/c convert them), this never marks the job succeeded
-    in-transaction: the scan is computed by ``jobs.create_package.run_precheck_job``.
+    The ``kind`` discriminator is what ``jobs.create_package.run_create_package_job``
+    routes on. Does not commit or dispatch — the route dispatches the actor after the
+    admission tx commits (mirrors the other worker routes), and the job is NEVER marked
+    succeeded here: the compute and its durable outcome belong to the worker.
     """
     from entropia.infrastructure.queues.enqueue import enqueue_job
 
     return enqueue_job(
         session,
-        queue=_PRECHECK_QUEUE,
-        payload={"kind": "precheck", "request_id": request_id},
+        queue=_WORKER_QUEUE,
+        payload={"kind": kind, "request_id": request_id, **(payload_extra or {})},
         actor_principal_id=actor.principal_id,
         correlation_id=actor.correlation_id or None,
     )
 
 
-async def _enqueue_stub_job(
+async def _enqueue_completed_job(
     session: AsyncSession, actor: Actor, *, queue: str, kind: str, request_id: str
 ) -> Job:
     """Insert a durable job row (CR-09 source of truth) and mark it succeeded.
 
-    V1 stub: the worker pipeline is Future-Dev, so the job completes in-transaction.
-    The durable row still records the work and survives browser close/logout.
+    Used by the baseline parse alone: the parse is a bounded read of an already-uploaded
+    CSV that completes inside the request transaction, so the durable row records work
+    that is genuinely done — it is not a placeholder for an absent worker.
     """
     from entropia.infrastructure.queues.enqueue import enqueue_job
 

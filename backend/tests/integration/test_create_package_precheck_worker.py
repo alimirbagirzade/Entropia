@@ -338,12 +338,14 @@ async def test_stale_delivery_is_superseded(session) -> None:
     q2 = await cp_cmd.run_precheck(session, OWNER, request_id=created["request_id"])
     await session.commit()
 
-    # The request advances past Pre-Check before the stale delivery lands.
+    # The request advances past Pre-Check before the stale delivery lands. Admitting
+    # candidate generation is enough — candidate_generating is already outside the
+    # Pre-Check-recordable states (F-01b made the generation itself async too).
     sent = await cp_cmd.submit_candidate_generation(
         session, OWNER, request_id=created["request_id"]
     )
     await session.commit()
-    assert sent["state"] == str(CreatePackageState.CANDIDATE_READY)
+    assert sent["state"] == str(CreatePackageState.CANDIDATE_GENERATING)
 
     late = await cp_jobs.run_create_package_job(session, q2["job_id"])
     await session.commit()

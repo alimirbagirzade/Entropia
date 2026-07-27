@@ -105,6 +105,18 @@ async def _count(session, model) -> int:
     return int((await session.execute(select(func.count()).select_from(model))).scalar_one())
 
 
+async def _send(session, actor, request_id: str) -> dict:
+    """Admit candidate generation, then drive the durable worker body (F-01b)."""
+    admitted = await cp_cmd.submit_candidate_generation(session, actor, request_id=request_id)
+    return await cp_jobs.run_create_package_job(session, admitted["job_id"])
+
+
+async def _validate(session, actor, request_id: str) -> dict:
+    """Admit a validation run, then drive the durable worker body (F-01b)."""
+    admitted = await cp_cmd.start_package_validation_run(session, actor, request_id=request_id)
+    return await cp_jobs.run_create_package_job(session, admitted["job_id"])
+
+
 async def _trail(session) -> tuple[int, int]:
     return await _count(session, AuditEvent), await _count(session, OutboxEvent)
 
@@ -270,7 +282,7 @@ async def _published_package(session, family_id: str) -> dict[str, str]:
     await session.commit()
     assert pre["status"] == str(PrecheckScanStatus.PASSED)
 
-    sent = await cp_cmd.submit_candidate_generation(session, OWNER, request_id=request_id)
+    sent = await _send(session, OWNER, request_id)
     await session.commit()
     assert sent["state"] == str(CreatePackageState.CANDIDATE_READY)
 
@@ -280,7 +292,7 @@ async def _published_package(session, family_id: str) -> dict[str, str]:
     await session.commit()
 
     # GAP-07: publish requires passing validation evidence on the draft revision.
-    validated = await cp_cmd.start_package_validation_run(session, OWNER, request_id=request_id)
+    validated = await _validate(session, OWNER, request_id)
     await session.commit()
     assert validated["state"] == str(CreatePackageState.ELIGIBLE_FOR_APPROVAL)
 

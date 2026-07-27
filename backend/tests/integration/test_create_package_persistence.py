@@ -80,6 +80,22 @@ async def _count(session, model) -> int:
     return int((await session.execute(select(func.count()).select_from(model))).scalar_one())
 
 
+async def _send(session, actor, request_id: str) -> dict:
+    """Admit candidate generation, then drive the durable worker body (F-01b).
+
+    Returns the worker's completed dict — the same shape the old synchronous command
+    returned, so the downstream assertions stay meaningful.
+    """
+    admitted = await cp_cmd.submit_candidate_generation(session, actor, request_id=request_id)
+    return await cp_jobs.run_create_package_job(session, admitted["job_id"])
+
+
+async def _validate(session, actor, request_id: str) -> dict:
+    """Admit a validation run, then drive the durable worker body (F-01b)."""
+    admitted = await cp_cmd.start_package_validation_run(session, actor, request_id=request_id)
+    return await cp_jobs.run_create_package_job(session, admitted["job_id"])
+
+
 async def _seed_principals(session) -> None:
     for pid in ("user_admin", "user_1", "user_2"):
         if await session.get(Principal, pid) is None:
@@ -175,7 +191,7 @@ async def test_full_flow_create_precheck_draft_publish(session) -> None:
     assert scan is not None
     assert scan.resolved_refs[0]["embedded_revision_id"] == resolver_rev
 
-    sent = await cp_cmd.submit_candidate_generation(session, OWNER, request_id=request_id)
+    sent = await _send(session, OWNER, request_id)
     await session.commit()
     assert sent["state"] == str(CreatePackageState.CANDIDATE_READY)
 
@@ -198,7 +214,7 @@ async def test_full_flow_create_precheck_draft_publish(session) -> None:
     assert plan["output_kind"] == "directional_signal" and plan["primitives"] == ["ta.rsi"]
 
     # GAP-07: a draft cannot be approved without a passing validation run.
-    validated = await cp_cmd.start_package_validation_run(session, OWNER, request_id=request_id)
+    validated = await _validate(session, OWNER, request_id)
     await session.commit()
     assert validated["status"] == str(ValidationRunStatus.PASSED)
     assert validated["state"] == str(CreatePackageState.ELIGIBLE_FOR_APPROVAL)
@@ -269,9 +285,7 @@ async def test_description_route_skips_dependency_gate(session) -> None:
     await session.commit()
     assert created["state"] == str(CreatePackageState.PRECHECK_NOT_APPLICABLE)
 
-    sent = await cp_cmd.submit_candidate_generation(
-        session, OWNER, request_id=created["request_id"]
-    )
+    sent = await _send(session, OWNER, created["request_id"])
     await session.commit()
     assert sent["state"] == str(CreatePackageState.CANDIDATE_READY)
 
@@ -290,9 +304,7 @@ async def test_create_draft_is_idempotent(session) -> None:
 
     created = await _create_indicator_request(session, family_id=family_id, deps=[_RSI_DEP])
     await _run_precheck(session, OWNER, created["request_id"])
-    sent = await cp_cmd.submit_candidate_generation(
-        session, OWNER, request_id=created["request_id"]
-    )
+    sent = await _send(session, OWNER, created["request_id"])
     await session.commit()
 
     before_packages = await _count(session, PackageRoot)
@@ -464,9 +476,7 @@ async def test_precheck_over_declared_dependency_is_a_warning(session) -> None:
     assert scan is not None
     assert scan.source_warnings[0]["call"] == "ta.ema"
     # A warning does not block Send.
-    sent = await cp_cmd.submit_candidate_generation(
-        session, OWNER, request_id=created["request_id"]
-    )
+    sent = await _send(session, OWNER, created["request_id"])
     assert sent["state"] == str(CreatePackageState.CANDIDATE_READY)
 
 

@@ -32,6 +32,7 @@ function detail(overrides: Partial<PackageRequestDetail>): PackageRequestDetail 
     precheck_fresh: false,
     package_root_id: null,
     draft_revision_id: null,
+    candidate_hash: null,
     can_generate_candidate: false,
     current_validation_run: null,
     validation_fresh: false,

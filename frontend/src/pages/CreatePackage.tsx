@@ -350,26 +350,34 @@ function Workspace({
     );
   }
 
-  // C.D.P chains generate-candidate → create-draft (the mockup "Create Draft
-  // Package"); the accepted candidate_hash from generate becomes the draft's
-  // staleness token. Pre-Check itself lives in its own overlay (PreCheckModal).
-  const actionsPending = generate.isPending || draft.isPending;
+  // C.D.P drives the mockup "Create Draft Package" in TWO server-authoritative phases
+  // (F-01b): the first click ADMITS candidate generation (a durable background job),
+  // and once the projection reports the worker's candidate_ready the second click
+  // creates the draft against the hash the worker pinned. The button never synthesises
+  // a candidate the server has not produced. Pre-Check lives in its own overlay.
+  const candidateRunning = generate.isPending || detail?.state === "candidate_generating";
+  const actionsPending = candidateRunning || draft.isPending;
   // The state-machine truth for which lifecycle actions this request permits
   // (F-12): the buttons below reflect it instead of always being clickable.
   const actions = packageActionAvailability(detail);
 
   function onCdp() {
     if (detail === null || !actions.generateDraft) return;
-    generate.mutate(
-      { request_id: detail.request_id, request_version: detail.request_version },
-      {
-        onSuccess: (res) =>
-          draft.mutate({
-            request_id: detail.request_id,
-            expected_candidate_hash: res.candidate_hash,
-          }),
-      },
-    );
+    // Phase 2: the worker landed a candidate — draft against the hash IT pinned (read
+    // off the projection, never a client-side guess).
+    if (detail.state === "candidate_ready" && detail.candidate_hash !== null) {
+      draft.mutate({
+        request_id: detail.request_id,
+        expected_candidate_hash: detail.candidate_hash,
+      });
+      return;
+    }
+    // Phase 1: admit the durable generation job. The admission carries no candidate,
+    // so there is nothing to chain — the SSE refetch brings candidate_ready.
+    generate.mutate({
+      request_id: detail.request_id,
+      request_version: detail.request_version,
+    });
   }
 
   function onClearAll() {
@@ -626,7 +634,11 @@ function Workspace({
                   onClick={onCdp}
                   title="Create Draft Package (generate candidate → draft)"
                 >
-                  {generate.isPending || draft.isPending ? "Drafting…" : "C.D.P"}
+                  {candidateRunning
+                    ? "Generating candidate…"
+                    : draft.isPending
+                      ? "Drafting…"
+                      : "C.D.P"}
                 </button>
                 <button type="button" className="btn btn-ghost" onClick={onClearAll}>
                   Clear
@@ -659,6 +671,29 @@ function Workspace({
               {generate.isError ? (
                 <p role="alert" style={alertStyle}>
                   {mutationErrorText(generate.error)}
+                </p>
+              ) : null}
+              {/* F-01b: the admission returns candidate_generating; the candidate itself
+                  lands via the worker's resource.changed refetch. The notice is keyed to
+                  the durable job so the user knows the work outlives this tab. */}
+              {candidateRunning ? (
+                <p aria-live="polite" style={liveStyle}>
+                  {CANDIDATE_RUNNING_LINE}
+                  {generate.data ? (
+                    <>
+                      {" "}
+                      (job <code>{generate.data.job_id}</code>)
+                    </>
+                  ) : null}
+                </p>
+              ) : detail?.state === "candidate_ready" && generate.data ? (
+                <p aria-live="polite" style={liveStyle}>
+                  Candidate ready — <code>{detail.candidate_hash ?? "—"}</code>. Click C.D.P again
+                  to create the draft package.
+                </p>
+              ) : detail?.state === "candidate_failed" ? (
+                <p role="alert" style={alertStyle}>
+                  {CANDIDATE_FAILED_LINE}
                 </p>
               ) : null}
               {draft.isError ? (
@@ -1331,7 +1366,11 @@ function ValidationSection({ detail }: { detail: PackageRequestDetail }) {
 
   const run = detail.current_validation_run;
   const checks = run ? run.checks : [];
-  const anyPending = validate.isPending || revision.isPending || approve.isPending;
+  // F-01b: the admission appends the run in its queued state and returns; the seven
+  // verdicts arrive when the durable worker lands them on the projection. The server
+  // state (not the mutation) is the truth about whether a run is still in flight.
+  const validationRunning = validate.isPending || detail.state === "validation_running";
+  const anyPending = validationRunning || revision.isPending || approve.isPending;
   // Gating truth from the backend state machine (F-12): a draft cannot approve
   // directly — approve unlocks only in eligible_for_approval with fresh evidence
   // (+ a parsed baseline when equivalence is claimed).
@@ -1400,7 +1439,7 @@ function ValidationSection({ detail }: { detail: PackageRequestDetail }) {
             })
           }
         >
-          {validate.isPending ? "Running validation…" : "Run Validation Tests"}
+          {validationRunning ? "Running validation…" : "Run Validation Tests"}
         </button>
         {/* Approve is Admin-only end-to-end (CR-02). R2-09/R2-12: the primary
             control is fail-closed behind the /me projection — a non-Admin sees
@@ -1454,10 +1493,17 @@ function ValidationSection({ detail }: { detail: PackageRequestDetail }) {
           {mutationErrorText(validate.error)}
         </p>
       ) : null}
-      {validate.data ? (
+      {validationRunning && validate.data ? (
         <p aria-live="polite" style={liveStyle}>
-          Validation {validate.data.status} — run <code>{validate.data.validation_run_id}</code> →{" "}
-          {prettyToken(validate.data.state)}.
+          {VALIDATION_RUNNING_LINE} (run <code>{validate.data.validation_run_id}</code>, job{" "}
+          <code>{validate.data.job_id}</code>)
+        </p>
+      ) : validate.data && run !== null ? (
+        // The admitted run finished: report the verdict the WORKER wrote, not the
+        // queued status the admission returned.
+        <p aria-live="polite" style={liveStyle}>
+          {`Validation ${run.status} — run `}
+          <code>{run.validation_run_id}</code> → {prettyToken(detail.state)}.
         </p>
       ) : null}
       {revision.isError ? (
@@ -1533,3 +1579,15 @@ function Pager({
 
 const alertStyle = { color: "var(--down)", margin: "8px 0 0", fontSize: 13 } as const;
 const liveStyle = { margin: "8px 0 0", fontSize: 13 } as const;
+
+// F-01b: candidate generation and Validation Tests run in durable background workers
+// (mirrors the Pre-Check overlay's notice). The result appears when the worker lands it
+// on the request projection — never synthesised by the client.
+const CANDIDATE_RUNNING_LINE =
+  "Generating the candidate in the background. It will appear here when the durable job " +
+  "completes — closing this browser does not cancel it.";
+const CANDIDATE_FAILED_LINE =
+  "Candidate generation failed in the background worker. Run C.D.P again to retry.";
+const VALIDATION_RUNNING_LINE =
+  "Validation is running in the background. The verdict will appear here when the durable " +
+  "job completes — closing this browser does not cancel it.";

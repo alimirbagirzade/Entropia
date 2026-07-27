@@ -76,6 +76,10 @@ def _request_dict(
         "precheck_fresh": precheck_fresh,
         "package_root_id": detail.package_root_id,
         "draft_revision_id": detail.draft_revision_id,
+        # The candidate the durable generation worker pinned (F-01b). The admission no
+        # longer returns a hash — it does not exist yet — so this projection is where the
+        # client reads the staleness token it passes to Create-Draft.
+        "candidate_hash": detail.candidate_hash,
         "current_validation_run": _validation_summary(run) if run is not None else None,
         "validation_fresh": validation_fresh,
         "can_generate_candidate": _can_generate(detail, scan, precheck_fresh),

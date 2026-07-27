@@ -197,10 +197,10 @@ Sütunlar:
 | POST `/create-package/requests` (201) | `create_request:84` | `cp_cmd.create_package_request` | yok | ✔ |
 | GET `/create-package/requests` | `list_requests:109` | `cp_query.list_package_requests` | yok | — |
 | GET `/create-package/requests/{request_id}` | `get_request:120` | `cp_query.get_package_request` | yok | — |
-| POST `../pre-check` | `run_pre_check:128` | `cp_cmd.run_precheck` | `X-Request-Version` | ✔ |
-| POST `../generate-candidate` | `generate_candidate:144` | `cp_cmd.submit_candidate_generation` | `X-Request-Version` | ✔ |
-| POST `../draft` | `create_draft:160` | `cp_cmd.create_draft_from_candidate` | **body `expected_candidate_hash` (`:60`)** | ✔ |
-| POST `../validate` | `run_validation:177` | `cp_cmd.start_package_validation_run` | `X-Request-Version` | ✔ |
+| POST `../pre-check` | `run_pre_check:141` | `cp_cmd.run_precheck` → **admission + `default` aktör dispatch** | `X-Request-Version` | ✔ |
+| POST `../generate-candidate` | `generate_candidate:159` | `cp_cmd.submit_candidate_generation` → **admission + `default` aktör dispatch** | `X-Request-Version` | ✔ |
+| POST `../draft` | `create_draft:177` | `cp_cmd.create_draft_from_candidate` | **body `expected_candidate_hash` (`:60`)** | ✔ |
+| POST `../validate` | `run_validation:194` | `cp_cmd.start_package_validation_run` → **admission + `default` aktör dispatch** | `X-Request-Version` | ✔ |
 | POST `../request-revision` | `request_revision:193` | `cp_cmd.request_package_revision` | `X-Request-Version` | ✔ |
 | POST `../baseline` (201) | `upload_baseline:209` | `cp_cmd.upload_baseline_asset` | `X-Request-Version` | ✔ |
 | POST `../baseline-parse` | `parse_baseline:237` | `cp_cmd.start_baseline_parse` | `X-Request-Version` | ✔ |
@@ -208,6 +208,14 @@ Sütunlar:
 | GET `/dependency-scans/{scan_id}` | `get_scan:271` | `cp_query.get_dependency_scan` | yok | — |
 | GET `/validation-runs/{validation_run_id}` | `get_validation_run:279` | `cp_query.get_validation_run` | yok | — |
 | GET `/baseline-assets/{baseline_asset_id}` | `get_baseline_asset:289` | `cp_query.get_baseline_asset` | yok | — |
+
+> **Async düzlem (F-01a + F-01b).** Pre-Check / generate-candidate / validate artık
+> **admission**'dır: durable QUEUED `jobs` satırı yazılır, `_dispatch_create_package_job:128`
+> tx commit'inden sonra `default` kuyruğundaki tek aktörü tetikler ve yanıt anında döner
+> (`checking` / `candidate_generating` / `validation_running` — asla var olmayan bir sonuç).
+> Gerçek sonuç worker'dan `resource.changed` outbox'ı ile projeksiyona iner. Gate'ler
+> admission'da kalır (PC-13 → `PRECHECK_BLOCKED/STALE`, draft yokluğu → `CANDIDATE_NOT_READY`,
+> `X-Request-Version` → 409). Ayrıntı: `JOBS_AND_EVENTS.md` §`default` kuyruğu.
 
 ## library.py · sharing.py · package_import.py
 

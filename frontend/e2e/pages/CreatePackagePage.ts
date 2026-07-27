@@ -79,12 +79,21 @@ export class CreatePackagePage {
     await expect(dialog).not.toBeVisible();
   }
 
-  // C.D.P — generate candidate then create the draft package. Asserts the
-  // draft revision confirmation (server dict verbatim).
+  // C.D.P — generate candidate then create the draft package. F-01b made the
+  // generation a DURABLE background job, so this is two server-authoritative
+  // phases: the first click admits the job (the button locks while it runs) and
+  // the worker lands candidate_ready on the projection; the second click drafts
+  // against the hash the worker pinned. Asserts the draft revision confirmation
+  // (server dict verbatim) — a synthesised candidate could never produce it.
   async createDraftPackage(): Promise<void> {
     const cdp = this.page.getByRole("button", { name: "C.D.P" });
     await expect(cdp).toBeEnabled({ timeout: 15_000 });
     await cdp.click();
+    await expect(this.page.getByText(/Candidate ready — /)).toBeVisible({ timeout: 30_000 });
+
+    const draft = this.page.getByRole("button", { name: "C.D.P" });
+    await expect(draft).toBeEnabled({ timeout: 15_000 });
+    await draft.click();
     await expect(this.page.getByText(/Draft created — revision/)).toBeVisible({
       timeout: 20_000,
     });
@@ -129,11 +138,14 @@ export class CreatePackagePage {
     await expect(this.page.getByText(/Baseline parse passed/)).toBeVisible({ timeout: 20_000 });
   }
 
+  // F-01b: the click ADMITS a durable run (the row is appended queued); the seven
+  // mandatory checks execute in the worker and the PASSED verdict reaches the UI
+  // through the projection refetch, so the wait covers a real background compute.
   async runValidationExpectPassed(): Promise<void> {
     const validate = this.page.getByRole("button", { name: "Run Validation Tests" });
     await expect(validate).toBeEnabled({ timeout: 15_000 });
     await validate.click();
-    await expect(this.page.getByText(/Validation passed — run/)).toBeVisible({ timeout: 30_000 });
+    await expect(this.page.getByText(/Validation passed — run/)).toBeVisible({ timeout: 45_000 });
   }
 
   // Admin-only (AdminGate over /me + CR-02 server-side). Asserts the exact

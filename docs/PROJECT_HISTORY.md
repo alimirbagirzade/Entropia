@@ -1241,3 +1241,95 @@ branch gerçekten karşılıyor mu?" sorusu tek tek yanıtlandı:
   *alan* eklenirse oraya da eklenmeli. Yeni bir *değer* otomatik yakalanır.
 - Bu slice R3 mühendislik backlog'unu kapatır; **F-07 (raw-id sweep) ve F-09 (README honesty)** ayrı
   slice'lar olarak açık.
+
+## V18-R3 · K-05 — Pre-Check fail-closed hata sınıfları (PR #387, main@`e2b75cc`)
+
+**Sorun (ampirik):** Pre-Check kaynak lexer'ı tanımadığı her karakteri sessizce atlıyordu
+(`source_scan.py` eski `i += 1` dalı). Sonuç: binary blob / kırpılmış export / yabancı gramer
+**sıfır** çağrı üretiyor, boş declared-dependency listesiyle sorunsuz uzlaşıyor ve **PASSED**'e
+ulaşıyordu — production parser'ın hiç anlamadığı bir kaynak üzerinde yeşil bir Pre-Check.
+Doc 07 §12'nin dört zorunlu hata sınıfından üçü (`PARSE_UNSUPPORTED`, `REQUIRES_CLARIFICATION`,
+`RESOLVER_NOT_ACTIVE`) `backend/src` + `frontend/src` genelinde **hiç yoktu** (grep = 0 hit);
+`SOURCE_LANGUAGE_MISMATCH` vardı ama yalnız "dil seçilmedi" ve "OTHER + boş label" durumlarında
+atılıyordu — içerik hiç incelenmiyordu.
+
+**Migration YOK.** `dependency_scans.unsupported_calls` ve `error_detail` kolonları zaten vardı,
+boş yazılıyordu; slice onları ilk kez dolduruyor. alembic head değişmedi (`0035_portfolio_rules`).
+
+**(a) `domain/create_package/source_scan.py` — PARSE_UNSUPPORTED.** Kod bölgesindeki her karakter
+sınıflandırılıyor (`code_chars` / `unrecognized_chars`); yorum ve string literal içi karakterler
+**sayılmıyor** (düzyazı, unicode, noktalama orada meşru). İki fail-closed koşul: (1) kapanmamış
+string veya blok yorum — dosyanın kuyruğunu non-code olarak yutar ve gerçek bir çağrıyı gizleyebilir,
+**koşulsuz** unsupported; (2) tanınmayan karakter oranı `_MAX_UNRECOGNIZED_RATIO` (0.10) üstü **ve**
+`_MIN_UNRECOGNIZED_CHARS` (3) tabanı aşılmış. Taban, kısa ama meşru bir snippet'te tek sapık byte'ın
+ölümcül olmasını engelliyor. `SOURCE_SCANNER_VERSION` → **`source-lexer-2.0`**. Yeni yüzey:
+`SourceScanResult.{code_chars, unrecognized_chars, unterminated_region, unrecognized_ratio,
+unsupported_reason, is_parse_unsupported, as_evidence()}` + `UNTERMINATED_STRING` /
+`UNTERMINATED_BLOCK_COMMENT` / `UNRECOGNIZED_TOKEN_RATIO` sabitleri. `calls` alanı ve
+`scan_source_calls` imzası değişmedi — mevcut 14 lexer testi aynen korundu.
+
+**(b) `domain/create_package/language_detect.py` (YENİ) — dil çelişkisi.** PineScript / Python / C++
+için ağırlıklı marker skorlaması (`LANGUAGE_DETECTOR_VERSION = language-detector-1.0`). Marker
+ağırlığı **tekrar sayısından bağımsız** (50 kez `plot(` yazmak `//@version=` başlığını geçemez).
+Karar kuralı: en yüksek skor `_MIN_CONFIDENT_SCORE` (3) altındaysa **hüküm yok**; ikinci skor da
+eşiği geçip aradaki fark `_AMBIGUITY_MARGIN` (1) içindeyse **ambiguous**; aksi halde tespit edilen dil.
+Dil kapısı parse kapısından **önce** çalışıyor (evaluate_resolution'daki "en spesifik teşhis kazanır"
+sırasının aynısı): "yanlış dili seçtin" mesajı "çözümleyemedim"den daha eyleme dönük.
+
+**(c) `domain/esp/resolver.py` — RESOLVER_NOT_ACTIVE.** `_INACTIVE_TRUST_STATES =
+{DEPRECATED, UNAVAILABLE}` → yeni `ResolutionReason.RESOLVER_NOT_ACTIVE`. `CANDIDATE` **bilerek**
+`NOT_TRUSTED_ACTIVE` kalıyor: hiç güvenilir olmamıştı, remediation "activate" değil "propose".
+`queries/esp.py::_REASON_ERRORS` yeni reason'ı `ResolverNotActive`'e (409) eşliyor; key-not-found /
+candidate / validation / approval yolları `RESOLVER_NOT_RESOLVED` (404) olarak kaldı.
+
+**Kanonik kodlar → `shared/errors.py`:** `ParseUnsupported` (422), `RequiresClarification` (422),
+`ResolverNotActive` (409). `SourceLanguageMismatch` zaten vardı, yeniden kullanıldı.
+
+**Bağlama (`jobs/create_package.py::compute_precheck`).** DESCRIPTION erken dönüşünden sonra iki kapı:
+`_language_verdict(...)` → `_fail_closed(...)`, sonra `scan.is_parse_unsupported` → `_fail_closed(...)`.
+`PrecheckComputation` iki alan kazandı: `unsupported_calls` (`[{code, message, evidence}]`) ve
+`error_detail` (`{code, message}`); `_record_scan` ikisini de kalıcılaştırıyor ve FAILED durumda audit
+verb'ünü `precheck_failed`'a çeviriyor (UI "completed" okuyup kullanılabilir sonuç çıkarmasın).
+`registry_fingerprint = sha256:not_evaluated` — fail-closed taramada registry hiç sorgulanmadı.
+Üçü de **FAILED scan + `PRECHECK_FAILED`**; Send kapısı `PASSED` şart koştuğu için bu kanıtla candidate
+generation başlayamıyor (testte `PrecheckBlocked` ile ispatlandı). `_RESOLVE_ERRORS` tuple'ına
+`ResolverNotActive` eklendi → deprecated resolver `BLOCKED` üretiyor, `PASSED` değil.
+
+**Yolda çıkan gerçek regresyon (planda yoktu).** `jobs/package_validation.py::_RESOLVE_ERRORS`
+`ResolverNotActive`'i yakalamıyordu → deprecated resolver **validation worker'ını çökertiyordu**.
+`run_validation_job`'ın `except Exception → _fail_validation` yolu aynı `FAILED` / `REVISION_REQUIRED`
+sonucunu ürettiği için `test_validation_failure_routes_to_revision_and_reopens` **yanlış sebeple yeşil
+kalıyordu** (teşhis `dependency_health` check'i yerine jenerik `VALIDATION_WORKER_FAILED` oluyordu).
+Tuple'a eklendi; test artık `checks` içinde `VALIDATION_WORKER_FAILED` **olmadığını** ve
+`dependency_health` check'inin `artifacts.drifted == ["ta.rsi"]` ile fail ettiğini şart koşuyor.
+
+**Testler.** Unit: `test_source_scan.py` **22** (mevcut 14 korundu + 8 yeni — temiz kaynak asla
+unsupported değil, binary çöp, kapanmamış string bir `ta.rsi` çağrısını gizliyor, kapanmamış blok
+yorum, tek sapık karakter eşiği tetiklemiyor, Türkçe tanımlayıcı + yorum yanlış ret üretmiyor,
+evidence payload, boş kaynak); `test_language_detect.py` **9** (YENİ); `test_esp_resolver.py` **15**
+(mevcut `candidate → NOT_TRUSTED_ACTIVE` korundu + deprecated/unavailable). Integration:
+`test_create_package_precheck_worker.py` **14** (PC-10 dil uyuşmazlığı + candidate başlayamıyor,
+belirsizlik → `REQUIRES_CLARIFICATION`, çözümlenemeyen gövde → `PARSE_UNSUPPORTED` + job SUCCEEDED
+(crash değil, determinist ret), kapanmamış string, deprecated resolver → `RESOLVER_NOT_ACTIVE` BLOCKED,
+**temiz PineScript hâlâ PASSED** regresyon koruması); `test_validation_evidence.py` **6**.
+Lokal: ruff + ruff format + mypy (348 dosya) temiz, tam backend suite exit 0 hiç F/E yok.
+CI: 5/5 yeşil (Backend 25m30s · Frontend · E2E F-23 · E2E dev-auth · Docker).
+
+**Test altyapısı notu (öğrenilen).** Birden fazla worktree'nin eşzamanlı `pytest` koşusu aynı
+`entropia_test` veritabanını paylaşıyor → `RationaleFamilyNotActive` gibi sahte failure'lar. Bu slice
+`TEST_DATABASE_URL=...entropia_k05b_test` ile izole DB kullandı. Paralel worktree çalışırken bu
+**zorunlu**; `tests/integration/db.py` varsayılanı tüm worktree'lerde aynı adı türetiyor.
+
+**Dürüst sınırlar (bilinçli).**
+- **Kanıt yokluğu mismatch değildir.** Marker taşımayacak kadar kısa/jenerik bir snippet dil
+  kapısından geçer ve lexer'ın kendi `PARSE_UNSUPPORTED` kuralına düşer. Detector bir Pre-Check'i
+  yalnız **aşağı** çekebilir, asla `Passed`'e yükseltemez.
+- `source_language = other` serbest metin etiket taşır (insan sözleşmesi, gramer değil) — detector
+  bunu adjudike etmez.
+- Satır başına sabitlenmiş marker'lar (`^\s*def`, `^\s*import`) yorum **içinde** tetiklenmez; sabitsiz
+  marker'lar (`std::`, `ta.`) her yerde sayılır. Bu, dil marker'ının yorumda da o dilin kanıtı olduğu
+  kabulüyle tutarlı ama yanlış pozitifi sınırlıyor.
+- `frontend/src/lib/library.ts` `ProvenanceScan` üç tarama alanını `string[]` tipliyor, backend dict
+  listesi gönderiyor. Yalnız `.length` okunduğu için runtime hatası yok — **kapsam dışı bırakıldı**,
+  ayrı görev olarak açıldı. Pre-Check overlay yolu (`createPackage.ts::asRecordArray`) bu alanları
+  zaten `unknown` üzerinden güvenle daraltıyor, yani yeni dict payload UI'da sorunsuz render oluyor.

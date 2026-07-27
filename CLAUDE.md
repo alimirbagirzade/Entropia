@@ -102,17 +102,22 @@ Before stopping a working session, produce **ALL** of the following:
 - **Durum:** V1 ROADMAP COMPLETE (Stages 0–8, docs 01–22) + post-V1 + video-alignment +
   V18-R2 dalgası + **auth remediation dalgası COMPLETE** (güvenlik denetimi #346–#364).
   Tüm route yüzeyleri frontend'e bağlı; TIER 2 sayfa haritası 24/24.
-- **`main` HEAD:** `658db36` (PR **#383** merge, F-01c). Üstüne **F-05/M-05** slice'ı açıldı (PR bekliyor).
+- **`main` HEAD:** `604f8b4` (PR **#388** merge, K-07). Öncesinde **K-05** (PR #387, `e2b75cc`) ve **F-05/M-05** (PR #384).
 - **alembic head:** **`0035_portfolio_rules`** (35 migration, tek head — R3 W3'te migration YOK).
   **`ENGINE_VERSION` = `backtest-engine-v18-capability-matrix`** (F-05'te bump edildi).
-- **Testler (lokal, F-05 dalı):** backend **1986 collected** (real-Postgres integration, yeşil) ·
-  frontend vitest **607/60 dosya** yeşil + tsc/eslint/build temiz.
+- **Testler (lokal, K-05 dalı):** backend tam suite **exit 0, hiç F/E yok** (real-Postgres) ·
+  ruff + format + mypy (348 dosya) temiz · CI 5/5 yeşil. Frontend'e dokunulmadı.
   Doğrula: `gh run list --branch main --limit 1` → job log.
-- **Son dalga (V18-R3 W3):** F-01a/b/c durable worker'lar (#380/#382/#383) · F-04 breakout fail-closed
-  + F-09 doc honesty (#381) · **F-05/M-05 makine-okur capability matrix** — `domain/backtest/capabilities.py`
-  tek kaynak (59 satır / 22 `future_dev`), engine fail-closed + Ready Check
-  `STRATEGY_CAPABILITY_NOT_IN_BUILD` + UI'da disabled & bağımlılık notu (üretilen TS aynası).
-  Tam kayıt: `docs/PROJECT_HISTORY.md` §"V18-R3 · F-05 / M-05".
+  ⚠️ **Paralel worktree'ler aynı `entropia_test` DB'sini paylaşıyor** → sahte failure. İzole koş:
+  `TEST_DATABASE_URL=postgresql+asyncpg://entropia:entropia@localhost:5432/entropia_<slug>_test`.
+- **Son dalga (V18-R3 W3 + fail-closed sweep):** F-01a/b/c durable worker'lar (#380/#382/#383) ·
+  F-04+F-09 (#381) · F-05/M-05 capability matrix (#384) · **K-05 Pre-Check fail-closed** (#387):
+  lexer artık tanınmayan-token oranı + kapanmamış string/yorum sayıyor → `PARSE_UNSUPPORTED`;
+  yeni `domain/create_package/language_detect.py` içerik dil sinyali → `SOURCE_LANGUAGE_MISMATCH` /
+  `REQUIRES_CLARIFICATION`; `deprecated`/`unavailable` resolver → `RESOLVER_NOT_ACTIVE`. Üçü de
+  FAILED scan + `PRECHECK_FAILED`, asla PASSED. `SOURCE_SCANNER_VERSION = source-lexer-2.0`,
+  migration yok. · K-07 upload dosya-tipi kapısı (#388).
+  Tam kayıt: `docs/PROJECT_HISTORY.md` §"V18-R3 · K-05" ve §"V18-R3 · F-05 / M-05".
 
 - **Next — PO imzası + R2 kapanışı** (R3 mühendislik backlog'u F-05 ile kapandı; **F-07 raw-id
   sweep kalıntısı empirik doğrulanmalı**). Kalan tek blokaj

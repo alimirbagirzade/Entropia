@@ -55,6 +55,8 @@ from entropia.domain.backtest.indicators import (
     build_evaluators,
     timeframe_seconds,
 )
+from entropia.domain.research_data.time_policy import is_eligible_for_decision
+from entropia.shared.errors import FundingSourceInvalid
 
 if TYPE_CHECKING:
     from entropia.domain.strategy.config import (
@@ -2173,6 +2175,9 @@ def run_engine(
     # pre-F-11). ``funding_idx`` is the as-of cursor (a record fires at most once, in order);
     # ``funding_paid`` is the cumulative signed cost booked against equity.
     funding_records = funding.records if funding is not None else ()
+    # K-02: rule 2's mapping conjunct, resolved ONCE before the bar loop — the engine only
+    # ever sees the pre-resolved schedule, never the revision it came from.
+    funding_has_mapping = funding.has_instrument_mapping if funding is not None else False
     funding_idx = 0
     funding_charges = 0
     funding_paid = _ZERO
@@ -4099,42 +4104,60 @@ def run_engine(
             # different result. A record dated after the last replayed bar never fires — a
             # future value can never leak into the run. Records that become available while
             # flat are consumed without a charge: funding is paid only for the interval the
-            # position is actually held (perp funding convention). An unparseable bar
-            # timestamp fires nothing this bar rather than draining the schedule (no leak).
+            # position is actually held (perp funding convention).
+            #
+            # K-02: the as-of comparison is NOT written inline here — it is delegated to
+            # ``research_data.time_policy.is_eligible_for_decision``, the single canonical
+            # rule-2 gate (mapping AND ``available_at <= t``). This bar's timestamp is the
+            # decision time, and ``schedule.has_instrument_mapping`` is the resolved mapping
+            # conjunct, so every research value the engine consumes passes one audited
+            # predicate rather than a hand-rolled comparison that can drift.
+            #
+            # FAIL CLOSED on an unresolvable bar timestamp: with no decision time, eligibility
+            # cannot be evaluated at all, and silently firing nothing would book an
+            # over-optimistic ZERO funding cost for the whole run. This deliberately differs
+            # from the date-blackout precedent above, where a restrictive reading exists
+            # (treat the bar as inside the window); a cost has no such reading.
             if funding_records:
                 bar_time = parse_utc(bar.timestamp, source_zone=None)
-                if bar_time is not None:
-                    while (
-                        funding_idx < len(funding_records)
-                        and funding_records[funding_idx].available_at <= bar_time
-                    ):
-                        rec = funding_records[funding_idx]
-                        funding_idx += 1
-                        if position is None:
-                            continue
-                        fsign = _ONE if position.direction == "long" else -_ONE
-                        charge = (position.entry_notional * rec.rate * fsign).quantize(_MONEY)
-                        if charge != _ZERO:
-                            equity = (equity - charge).quantize(_MONEY)
-                            peak = max(peak, equity)
-                            funding_paid += charge
-                        funding_charges += 1
-                        _emit(
-                            "funding_charge",
-                            event_time=bar.timestamp,
-                            direction=position.direction,
-                            bar_seq=bars_seen,
-                            detail={
-                                "position_seq": position.position_seq,
-                                "rate": str(rec.rate),
-                                "charge": str(charge),
-                                "available_at": rec.available_at.isoformat(),
-                                "event_at": rec.event_at.isoformat(),
-                                "source_revision_id": (
-                                    funding.source_revision_id if funding is not None else None
-                                ),
-                            },
-                        )
+                if bar_time is None:
+                    raise FundingSourceInvalid(
+                        "Funding is active but bar timestamp "
+                        f"'{bar.timestamp}' cannot be resolved to a decision time; "
+                        "available-time eligibility is unprovable (doc 12 §8.4 rule 2).",
+                    )
+                while funding_idx < len(funding_records) and is_eligible_for_decision(
+                    available_at=funding_records[funding_idx].available_at,
+                    decision_time=bar_time,
+                    has_instrument_mapping=funding_has_mapping,
+                ):
+                    rec = funding_records[funding_idx]
+                    funding_idx += 1
+                    if position is None:
+                        continue
+                    fsign = _ONE if position.direction == "long" else -_ONE
+                    charge = (position.entry_notional * rec.rate * fsign).quantize(_MONEY)
+                    if charge != _ZERO:
+                        equity = (equity - charge).quantize(_MONEY)
+                        peak = max(peak, equity)
+                        funding_paid += charge
+                    funding_charges += 1
+                    _emit(
+                        "funding_charge",
+                        event_time=bar.timestamp,
+                        direction=position.direction,
+                        bar_seq=bars_seen,
+                        detail={
+                            "position_seq": position.position_seq,
+                            "rate": str(rec.rate),
+                            "charge": str(charge),
+                            "available_at": rec.available_at.isoformat(),
+                            "event_at": rec.event_at.isoformat(),
+                            "source_revision_id": (
+                                funding.source_revision_id if funding is not None else None
+                            ),
+                        },
+                    )
 
             # F-07e: the conflict EDGE detector's memory — this bar's aggregated signal is
             # the next bar's "previous" (None in proxy mode, so the detector stays inert).

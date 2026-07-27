@@ -29,7 +29,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from entropia.domain.research_data.enums import AvailableTimePolicy
-from entropia.domain.research_data.time_policy import resolve_available_at
+from entropia.domain.research_data.time_policy import resolve_available_at, time_policy_is_valid
 from entropia.shared.errors import FundingSourceInvalid
 
 # Canonical native-column resolution (doc 12: the source keeps its native schema; there is
@@ -67,6 +67,13 @@ class FundingSchedule:
 
     source_revision_id: str
     records: tuple[FundingRecord, ...]  # sorted by available_at ascending
+    # K-02: the pinned revision's resolved MAPPING conjunct of doc 12 §8.4 rule 2, carried
+    # so the engine's gate can call ``is_eligible_for_decision`` with a PROVEN value rather
+    # than a hardcoded ``True``. Required (no default) for the K-01 reason: no call site may
+    # inherit "assume mapped" by omission. ``build_funding_schedule`` refuses to build a
+    # schedule with ``False`` — an unmappable source can never be a candidate at ANY decision
+    # time, so booking zero funding for it would be the silent degradation §8.4 forbids.
+    has_instrument_mapping: bool
 
     def __bool__(self) -> bool:
         return bool(self.records)
@@ -137,6 +144,7 @@ def build_funding_schedule(
     policy: AvailableTimePolicy,
     delay_seconds: int | None,
     source_zone: ZoneInfo | None,
+    has_instrument_mapping: bool,
 ) -> FundingSchedule:
     """Build an available-time-safe funding schedule from native rows (doc 12 §8.4).
 
@@ -152,14 +160,33 @@ def build_funding_schedule(
     ``source_zone`` is the pinned revision's declared source timezone (K-01). A naive event
     time is localized in it; when it is ``None`` such a row is unparseable and drops — and a
     source that is entirely naive under an unresolvable zone therefore raises rather than
-    booking funding at a wall-clock instant that was never the real one."""
+    booking funding at a wall-clock instant that was never the real one.
+
+    ``has_instrument_mapping`` is doc 12 §8.4 rule 2's other conjunct, resolved by the caller
+    from the pinned revision (K-02). ``False`` FAILS CLOSED here rather than producing a
+    schedule the engine's eligibility gate would silently empty."""
     if policy not in (AvailableTimePolicy.SAME_AS_EVENT_TIME, AvailableTimePolicy.FIXED_DELAY):
         raise FundingSourceInvalid(
             f"Funding available-time policy '{policy}' cannot be resolved from native rows "
             "without per-record publish/custom inputs.",
         )
-    time_col, rate_col = resolve_funding_columns(columns)
     delay = timedelta(seconds=delay_seconds) if delay_seconds is not None else None
+    # K-02: the DECLARED policy/delay pair must be structurally valid before a single row is
+    # resolved. ``resolve_available_at`` ignores ``delay`` under a non-fixed rule, so an
+    # incoherent pair (e.g. same_as_event_time carrying a stale 2h delay) would otherwise
+    # resolve every record to its raw EVENT time — silently, under a policy the revision no
+    # longer declares. That is the fallback §8.4 forbids, so it fails closed instead.
+    if not time_policy_is_valid(policy=policy, delay=delay):
+        raise FundingSourceInvalid(
+            f"Funding available-time policy '{policy}' and its declared delay are incoherent "
+            "(fixed_delay requires a positive bounded delay; every other rule requires none).",
+        )
+    if not has_instrument_mapping:
+        raise FundingSourceInvalid(
+            "Funding source has no valid instrument mapping; no record can be eligible for "
+            "any decision time (doc 12 §8.4 rule 2).",
+        )
+    time_col, rate_col = resolve_funding_columns(columns)
 
     records: list[FundingRecord] = []
     for row in rows:
@@ -175,7 +202,11 @@ def build_funding_schedule(
             "Funding source produced no usable rows (all event times / rates were unparseable).",
         )
     records.sort(key=lambda r: (r.available_at, r.event_at))
-    return FundingSchedule(source_revision_id=source_revision_id, records=tuple(records))
+    return FundingSchedule(
+        source_revision_id=source_revision_id,
+        records=tuple(records),
+        has_instrument_mapping=has_instrument_mapping,
+    )
 
 
 __all__ = [

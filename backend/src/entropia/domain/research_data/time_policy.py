@@ -117,6 +117,30 @@ def time_policy_is_valid(
     return delay is None
 
 
+def instrument_mapping_is_valid(
+    *,
+    linked_market_dataset_revision_id: str | None,
+    instrument_mapping_ref: str | None,
+) -> bool:
+    """Rule 2's MAPPING conjunct: is the revision's instrument mapping coherent?
+
+    ``is_eligible_for_decision`` requires a valid instrument mapping as well as
+    ``available_at <= t``. What "valid" can truthfully mean today is COHERENCE between
+    the two declared halves (doc 12 §5.2): a revision linked to a market dataset must
+    name its instrument mapping, and a mapping reference must not dangle without a link.
+    A revision declaring NEITHER is coherent — it reaches a run pinned by revision id,
+    not resolved through a mapping table.
+
+    Honest boundary (unchanged by K-02): canonical instrument-resolution wiring is still
+    backlog R1, so an INCOHERENT pair is the only mapping defect this predicate can
+    detect. It mirrors ``quality_rules._check_instrument_mapping``, which surfaces the
+    same gap as a validation WARNING, and never widens that into a new block on
+    revisions that were already approved."""
+    has_link = bool((linked_market_dataset_revision_id or "").strip())
+    has_ref = bool((instrument_mapping_ref or "").strip())
+    return has_link == has_ref
+
+
 def is_eligible_for_decision(
     *,
     available_at: datetime,
@@ -124,5 +148,9 @@ def is_eligible_for_decision(
     has_instrument_mapping: bool,
 ) -> bool:
     """Backward/as-of eligibility: a record may inform a decision at ``t`` only
-    when it is mapped and ``available_at <= t`` (doc 12 §8.4 rule 2)."""
+    when it is mapped and ``available_at <= t`` (doc 12 §8.4 rule 2).
+
+    K-02: this is the SINGLE gate every engine research-feed access passes through.
+    ``domain/backtest/engine.py`` calls it once per candidate funding record, so a
+    research value can never reach a decision point by an ungated comparison."""
     return has_instrument_mapping and available_at <= decision_time

@@ -26,6 +26,7 @@ from entropia.domain.research_data.enums import (
     ResearchRevisionState,
     UsageScope,
 )
+from entropia.domain.research_data.time_policy import instrument_mapping_is_valid
 from entropia.domain.strategy.config import FundingPolicy
 from entropia.infrastructure.postgres.repositories import research_data as research_repo
 from entropia.infrastructure.s3.parquet_stream import stream_processed_batches
@@ -108,6 +109,15 @@ async def resolve_funding_schedule(
         # Rows normalized at ingest already carry an offset and ignore it; a legacy
         # naive row under an unresolvable zone drops instead of booking a wrong instant.
         source_zone=revision_source_zone(revision),
+        # K-02: doc 12 §8.4 rule 2's mapping conjunct, resolved HERE (the only layer that
+        # holds the revision) so the pure schedule carries a proven value into the engine's
+        # ``is_eligible_for_decision`` gate. An incoherent link/mapping pair fails closed in
+        # ``build_funding_schedule`` rather than yielding a schedule the gate would silently
+        # empty into a zero-cost run.
+        has_instrument_mapping=instrument_mapping_is_valid(
+            linked_market_dataset_revision_id=revision.linked_market_dataset_revision_id,
+            instrument_mapping_ref=revision.instrument_mapping_ref,
+        ),
     )
 
 

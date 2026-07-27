@@ -38,6 +38,7 @@ def test_same_as_event_time_sets_available_at_to_event_time_and_sorts_ascending(
         policy=AvailableTimePolicy.SAME_AS_EVENT_TIME,
         delay_seconds=None,
         source_zone=_UTC,
+        has_instrument_mapping=True,
     )
     assert sched.source_revision_id == "rd_1"
     assert [r.available_at for r in sched.records] == [
@@ -56,6 +57,7 @@ def test_fixed_delay_shifts_available_at_by_the_delay() -> None:
         policy=AvailableTimePolicy.FIXED_DELAY,
         delay_seconds=3600,
         source_zone=_UTC,
+        has_instrument_mapping=True,
     )
     rec = sched.records[0]
     assert rec.event_at == datetime(2024, 1, 1, 0, 0, tzinfo=UTC)
@@ -78,6 +80,7 @@ def test_missing_time_or_rate_column_fails_closed() -> None:
             policy=AvailableTimePolicy.SAME_AS_EVENT_TIME,
             delay_seconds=None,
             source_zone=_UTC,
+            has_instrument_mapping=True,
         )
 
 
@@ -94,6 +97,7 @@ def test_unparseable_rows_are_dropped_but_valid_rows_kept() -> None:
         policy=AvailableTimePolicy.SAME_AS_EVENT_TIME,
         delay_seconds=None,
         source_zone=_UTC,
+        has_instrument_mapping=True,
     )
     assert len(sched.records) == 1
     assert sched.records[0].rate == Decimal("0.002")
@@ -108,6 +112,7 @@ def test_all_rows_dropped_fails_closed_never_silent_zero_cost() -> None:
             policy=AvailableTimePolicy.SAME_AS_EVENT_TIME,
             delay_seconds=None,
             source_zone=_UTC,
+            has_instrument_mapping=True,
         )
 
 
@@ -121,6 +126,7 @@ def test_empty_source_is_an_empty_schedule_not_an_error() -> None:
         policy=AvailableTimePolicy.SAME_AS_EVENT_TIME,
         delay_seconds=None,
         source_zone=_UTC,
+        has_instrument_mapping=True,
     )
     assert sched.records == ()
     assert not sched
@@ -141,6 +147,7 @@ def test_unresolvable_policies_fail_closed(policy: AvailableTimePolicy) -> None:
             policy=policy,
             delay_seconds=None,
             source_zone=_UTC,
+            has_instrument_mapping=True,
         )
 
 
@@ -158,6 +165,7 @@ def test_rate_accepts_int_float_decimal_and_string() -> None:
         policy=AvailableTimePolicy.SAME_AS_EVENT_TIME,
         delay_seconds=None,
         source_zone=_UTC,
+        has_instrument_mapping=True,
     )
     assert len(sched.records) == 4
 

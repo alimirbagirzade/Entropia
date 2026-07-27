@@ -15,6 +15,7 @@ import pytest
 from sqlalchemy import func, select
 
 from entropia.application.commands import create_package as cp_cmd
+from entropia.application.jobs import create_package as cp_jobs
 from entropia.application.queries import create_package as cp_query
 from entropia.domain.create_package.enums import (
     CreatePackageState,
@@ -63,6 +64,16 @@ _RSI_SIG = {
 }
 _RSI_DEP = {"key": "ta.rsi", "signature": _RSI_SIG}
 _INDICATOR_OUTPUT = {"kind": "directional_signal"}
+
+
+async def _run_precheck(session, actor, request_id: str) -> dict:
+    """Admit Pre-Check, then drive the durable worker body to completion (F-01a).
+
+    Returns the worker's completed-scan dict — the same shape the old synchronous
+    command returned, so the downstream assertions stay meaningful.
+    """
+    queued = await cp_cmd.run_precheck(session, actor, request_id=request_id)
+    return await cp_jobs.run_create_package_job(session, queued["job_id"])
 
 
 async def _count(session, model) -> int:
@@ -155,7 +166,7 @@ async def test_full_flow_create_precheck_draft_publish(session) -> None:
     request_id = created["request_id"]
     assert created["state"] == str(CreatePackageState.REQUESTED)
 
-    pre = await cp_cmd.run_precheck(session, OWNER, request_id=request_id)
+    pre = await _run_precheck(session, OWNER, request_id)
     await session.commit()
     assert pre["status"] == str(PrecheckScanStatus.PASSED)
     assert pre["state"] == str(CreatePackageState.PRECHECK_PASSED)
@@ -227,7 +238,7 @@ async def test_missing_resolver_blocks_precheck_and_send(session) -> None:
     await session.commit()
     request_id = created["request_id"]
 
-    pre = await cp_cmd.run_precheck(session, OWNER, request_id=request_id)
+    pre = await _run_precheck(session, OWNER, request_id)
     await session.commit()
     assert pre["status"] == str(PrecheckScanStatus.BLOCKED)
     assert pre["state"] == str(CreatePackageState.PRECHECK_BLOCKED)
@@ -278,7 +289,7 @@ async def test_create_draft_is_idempotent(session) -> None:
     await session.commit()
 
     created = await _create_indicator_request(session, family_id=family_id, deps=[_RSI_DEP])
-    await cp_cmd.run_precheck(session, OWNER, request_id=created["request_id"])
+    await _run_precheck(session, OWNER, created["request_id"])
     sent = await cp_cmd.submit_candidate_generation(
         session, OWNER, request_id=created["request_id"]
     )
@@ -321,8 +332,8 @@ async def test_scan_is_immutable_evidence(session) -> None:
     await session.commit()
 
     created = await _create_indicator_request(session, family_id=family_id, deps=[_RSI_DEP])
-    await cp_cmd.run_precheck(session, OWNER, request_id=created["request_id"])
-    await cp_cmd.run_precheck(session, OWNER, request_id=created["request_id"])
+    await _run_precheck(session, OWNER, created["request_id"])
+    await _run_precheck(session, OWNER, created["request_id"])
     await session.commit()
 
     scans = (
@@ -388,7 +399,7 @@ async def test_precheck_blocks_undeclared_source_call(session) -> None:
     )
     await session.commit()
 
-    pre = await cp_cmd.run_precheck(session, OWNER, request_id=created["request_id"])
+    pre = await _run_precheck(session, OWNER, created["request_id"])
     await session.commit()
     assert pre["status"] == str(PrecheckScanStatus.BLOCKED)
     assert pre["state"] == str(CreatePackageState.PRECHECK_BLOCKED)
@@ -417,7 +428,7 @@ async def test_precheck_comment_only_call_is_not_a_dependency(session) -> None:
     )
     await session.commit()
 
-    pre = await cp_cmd.run_precheck(session, OWNER, request_id=created["request_id"])
+    pre = await _run_precheck(session, OWNER, created["request_id"])
     await session.commit()
     assert pre["status"] == str(PrecheckScanStatus.PASSED)
     assert pre["missing"] == []
@@ -443,7 +454,7 @@ async def test_precheck_over_declared_dependency_is_a_warning(session) -> None:
     )
     await session.commit()
 
-    pre = await cp_cmd.run_precheck(session, OWNER, request_id=created["request_id"])
+    pre = await _run_precheck(session, OWNER, created["request_id"])
     await session.commit()
     assert pre["status"] == str(PrecheckScanStatus.PASSED)
     assert pre["missing"] == []

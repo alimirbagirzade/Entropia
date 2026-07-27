@@ -75,7 +75,7 @@ from entropia.domain.backtest.enums import (
     RunFailureCode,
 )
 from entropia.domain.backtest.metrics import derive_metric_values
-from entropia.domain.lifecycle.enums import ActorKind, JobStatus
+from entropia.domain.lifecycle.enums import ActorKind, DeletionState, JobStatus
 from entropia.domain.mainboard.enums import MainboardItemKind
 from entropia.domain.strategy.config import StrategyConfig
 from entropia.infrastructure.postgres.models import Job
@@ -83,6 +83,9 @@ from entropia.infrastructure.postgres.repositories import audit as audit_repo
 from entropia.infrastructure.postgres.repositories import backtest as bt_repo
 from entropia.infrastructure.postgres.repositories import mainboard as mb_repo
 from entropia.infrastructure.postgres.repositories import market_data as md_repo
+from entropia.infrastructure.postgres.repositories import packages as pkg_repo
+from entropia.infrastructure.postgres.repositories import readiness as readiness_repo
+from entropia.infrastructure.postgres.repositories import research_data as research_repo
 from entropia.infrastructure.postgres.repositories import strategy as strat_repo
 from entropia.shared.errors import FundingSourceInvalid, NotFoundError
 
@@ -266,8 +269,15 @@ async def run_backtest(
 async def _unresolved_pins(session: AsyncSession, manifest: dict[str, Any]) -> list[str]:
     """Every pinned revision that no longer resolves (soft-deleted / missing).
 
-    The worker reads ONLY the manifest; it never falls back to the current
-    Mainboard or a 'latest' revision (doc 15 §15)."""
+    The worker reads ONLY the manifest; it never falls back to the current Mainboard,
+    Package Library or a 'latest' dataset row (doc 15 §15). K-04 widens the gate from
+    the Mainboard work-object pins to EVERY dependency the manifest now records: the
+    strategy mirror revision, each transitive indicator/condition/reference package
+    revision and its resolver (ESP) revisions, the pinned market dataset revision (and
+    its dataset root's ACTIVE state — a soft-deleted dataset is unresolved, never
+    silently re-resolved to the newest revision), every research feed revision, and the
+    external Trading Signal / Trade Log import revision. A pre-K-04 manifest carries
+    none of those groups and is checked exactly as before."""
     missing: list[str] = []
     for item in manifest.get("mainboard_items", []):
         revision_id = item.get("selected_revision_id")
@@ -276,6 +286,80 @@ async def _unresolved_pins(session: AsyncSession, manifest: dict[str, Any]) -> l
             continue
         revision = await mb_repo.get_work_object_revision(session, str(revision_id))
         if revision is None:
+            missing.append(str(revision_id))
+    missing.extend(await _unresolved_package_pins(session, manifest))
+    missing.extend(await _unresolved_data_pins(session, manifest))
+    missing.extend(await _unresolved_external_pins(session, manifest))
+    return missing
+
+
+async def _unresolved_package_pins(session: AsyncSession, manifest: dict[str, Any]) -> list[str]:
+    """Strategy revision + transitive package/resolver revisions that no longer resolve."""
+    missing: list[str] = []
+    for entry in manifest.get("strategy_package_context") or []:
+        strategy_revision_id = entry.get("strategy_revision_id")
+        if strategy_revision_id is not None:
+            mirror = await strat_repo.get_strategy_revision(session, str(strategy_revision_id))
+            if mirror is None:
+                missing.append(str(strategy_revision_id))
+        pinned_ids = [
+            str(pkg["package_revision_id"])
+            for pkg in entry.get("package_revisions") or []
+            if pkg.get("package_revision_id")
+        ]
+        pinned_ids.extend(
+            str(ref["embedded_revision_id"])
+            for ref in entry.get("resolver_revisions") or []
+            if ref.get("embedded_revision_id")
+        )
+        for revision_id in pinned_ids:
+            if await pkg_repo.get_revision(session, revision_id) is None:
+                missing.append(revision_id)
+    return missing
+
+
+async def _unresolved_data_pins(session: AsyncSession, manifest: dict[str, Any]) -> list[str]:
+    """Market/research dataset pins that no longer resolve to an ACTIVE root revision."""
+    missing: list[str] = []
+    for entry in manifest.get("data_time_context") or []:
+        market_revision_id = entry.get("market_dataset_revision_id")
+        if market_revision_id is not None:
+            revision = await md_repo.get_revision(session, str(market_revision_id))
+            root = (
+                await md_repo.get_dataset_root(session, revision.entity_id)
+                if revision is not None
+                else None
+            )
+            if root is None or root.deletion_state != DeletionState.ACTIVE:
+                missing.append(str(market_revision_id))
+        for research_revision_id in entry.get("research_dataset_revision_ids") or []:
+            research = await research_repo.get_revision(session, str(research_revision_id))
+            research_root = (
+                await research_repo.get_dataset_root(session, research.entity_id)
+                if research is not None
+                else None
+            )
+            if research_root is None or research_root.deletion_state != DeletionState.ACTIVE:
+                missing.append(str(research_revision_id))
+    return missing
+
+
+async def _unresolved_external_pins(session: AsyncSession, manifest: dict[str, Any]) -> list[str]:
+    """Trading Signal / Trade Log import revisions that no longer resolve.
+
+    Uses the SAME probe Ready Check and the manifest builder used, so a normalized
+    event revision / canonical record batch that has disappeared fails the run closed
+    instead of replaying an external object with no import evidence."""
+    missing: list[str] = []
+    for entry in manifest.get("external_object_context") or []:
+        revision_id = entry.get("work_object_revision_id")
+        if revision_id is None:
+            continue
+        if entry.get("item_kind") == MainboardItemKind.TRADE_LOG:
+            resolved: Any = await readiness_repo.resolve_trade_log_batch(session, str(revision_id))
+        else:
+            resolved = await readiness_repo.resolve_signal_revision(session, str(revision_id))
+        if resolved is None:
             missing.append(str(revision_id))
     return missing
 

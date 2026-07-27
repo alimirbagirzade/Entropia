@@ -469,7 +469,8 @@ async def test_detail_excerpt_reads_real_pinned_refs_from_manifest(session) -> N
     assert excerpt["portfolio_allocation_plan_revision_id"] == "plan_rev_4"
     assert excerpt["engine_contract_version"] == "backtest-engine-v2-stub"
     assert excerpt["artifact_context"]["metric_set_version"] == "metric-set-v1"
-    # Not separately pinned -> honest empty/null (never fabricated).
+    # This seeded manifest predates the K-04 groups -> honest empty/null (never
+    # fabricated); a K-04 manifest states them (tests/unit/test_results_history.py).
     assert excerpt["package_revision_refs"] == []
     assert excerpt["market_data_revision"] is None
 

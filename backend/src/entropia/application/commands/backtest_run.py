@@ -34,6 +34,7 @@ from typing import Any
 from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from entropia.application.commands.backtest_run_context import resolve_run_manifest_context
 from entropia.application.commands.readiness_check import (
     _resolve_strategy_payload,
     run_readiness_check,
@@ -197,6 +198,13 @@ async def _admit_run(
     # an execution_key (INF-04/INF-05).
     tick_data = await _resolve_tick_pins(session, snapshot.item_manifest)
 
+    # K-04: resolve the three doc 15 §9.2 field groups that only exist behind a
+    # dereference (strategy/package, external object, data/time) NOW, so the immutable
+    # manifest proves WHICH transitive package / dataset / import revisions the run
+    # replays. The worker re-resolves these pins fail-closed and never falls back to the
+    # current Mainboard, Package Library or a 'latest' dataset row (doc 15 §15).
+    context = await resolve_run_manifest_context(session, snapshot.item_manifest)
+
     run_id = new_id("btrun")
     manifest_id = new_id("btman")
     built = build_run_manifest(
@@ -215,6 +223,9 @@ async def _admit_run(
         correlation_id=actor.correlation_id,
         created_at_iso=datetime.now(UTC).isoformat(),
         tick_data=tick_data,
+        strategy_package_context=context.strategy_package,
+        external_object_context=context.external_objects,
+        data_time_context=context.data_time,
     )
     run = await bt_repo.create_run(
         session,

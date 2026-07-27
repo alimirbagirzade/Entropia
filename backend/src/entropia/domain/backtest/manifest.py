@@ -56,7 +56,20 @@ from entropia.shared.manifest import manifest_hash
 # ZERO funding cost. A result produced under those previously-silent, over-optimistic paths
 # must never be idempotently reused for a re-RUN (INF-04/INF-05), so the bump shifts the
 # execution_key namespace.
-ENGINE_VERSION = "backtest-engine-v18-available-time-gate"
+# v18-full-pinning (K-04): the manifest now carries ALL SEVEN doc 15 §9.2 field groups.
+# The three that only exist behind a dereference — strategy/package context (the real
+# strategy revision + every transitive indicator/condition/reference package revision and
+# its resolver/ESP refs), external object context (the TS/TL import revision + its
+# mapping/timezone/availability/price-source policy) and data/time context (the market
+# dataset revision + coverage + execution resolution + the research feed's available-time
+# policy, join/instrument mapping and definition versions) — were previously re-derived by
+# the WORKER at run time, so a Result carried no proof of which revisions produced it and a
+# post-admission change to a package/dataset/import pin could go unnoticed. Those pins are
+# now part of the REPRODUCIBILITY content and are re-resolved fail-closed before replay, so
+# a result produced under a different (or since-removed) dependency set is never
+# idempotently reused for a re-RUN (INF-04/INF-05) — the bump shifts the execution_key
+# namespace accordingly.
+ENGINE_VERSION = "backtest-engine-v18-full-pinning"
 METRIC_SET_VERSION = "metric-set-v1"
 OUTPUT_ARTIFACT_PROFILE = "standard-v1"
 
@@ -106,6 +119,9 @@ def build_run_manifest(
     metric_set_version: str = METRIC_SET_VERSION,
     output_artifact_profile: str = OUTPUT_ARTIFACT_PROFILE,
     tick_data: dict[str, Any] | None = None,
+    strategy_package_context: list[dict[str, Any]] | None = None,
+    external_object_context: list[dict[str, Any]] | None = None,
+    data_time_context: list[dict[str, Any]] | None = None,
 ) -> ManifestBuildResult:
     """Assemble the immutable manifest (doc 15 §9.2 minimum content).
 
@@ -113,7 +129,15 @@ def build_run_manifest(
     Strategy item (``{item_id: {"tick_revision_id", "instrument_id"}}``) — resolved
     at ADMISSION so the worker never falls back to 'newest approved' (doc 15 §15).
     It is part of the REPRODUCIBILITY content: two runs replaying different tick
-    paths must never share an ``execution_key`` (INF-04/INF-05)."""
+    paths must never share an ``execution_key`` (INF-04/INF-05).
+
+    ``strategy_package_context`` / ``external_object_context`` / ``data_time_context``
+    (K-04) are the three doc 15 §9.2 groups that only exist behind a dereference,
+    resolved at ADMISSION by ``commands.backtest_run_context`` over the SAME paths the
+    worker walks. They are reproducibility content too: two runs whose transitive
+    package / dataset / import revisions differ replay different inputs and must never
+    share an ``execution_key``. ``None`` (no resolver supplied) keeps the pre-K-04
+    manifest shape with explicit nulls rather than a fabricated empty pin set."""
     items = _pinned_items(item_manifest)
     artifact_context = {
         "metric_set_version": metric_set_version,
@@ -126,6 +150,9 @@ def build_run_manifest(
         "result_artifact_context": artifact_context,
         "engine_version": engine_version,
         "tick_data": tick_data,
+        "strategy_package_context": strategy_package_context,
+        "external_object_context": external_object_context,
+        "data_time_context": data_time_context,
     }
     execution_key = manifest_hash(execution_content)
     manifest = {
@@ -140,6 +167,9 @@ def build_run_manifest(
             "correlation_id": correlation_id,
         },
         "mainboard_items": items,
+        "strategy_package_context": strategy_package_context,
+        "external_object_context": external_object_context,
+        "data_time_context": data_time_context,
         "capital_execution": capital_mode,
         "result_artifact_context": artifact_context,
         "tick_data": tick_data,

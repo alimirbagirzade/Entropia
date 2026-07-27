@@ -529,18 +529,52 @@ async def test_upload_is_content_deduplicated(session, fake_object_store) -> Non
     assert await _count(session, ResearchRawAsset) == before
 
 
-async def test_upload_rejects_unsupported_file_type(session, fake_object_store) -> None:
+async def test_upload_file_type_gate_is_fail_closed(session, fake_object_store) -> None:
+    """The CSV/TXT gate no longer SKIPS when the filename is absent.
+
+    Before this fix ``if name and not name.endswith(...)`` accepted ANY payload
+    as long as ``original_filename`` was ``None``/blank, so the doc 12 §7
+    server-side type control could be dropped entirely by a direct command
+    caller. Every axis now fails closed with the surface's own documented code,
+    and only a real .csv/.txt carrying text content is stored."""
     entity_id = await _draft_research(session)
 
-    with pytest.raises(ResearchDataFileTypeNotAllowedError):
-        await rd_cmd.create_upload_session(
-            session,
-            OWNER,
-            entity_id=entity_id,
-            content=b"binary-ish",
-            original_filename="dataset.xlsx",
-        )
+    good_csv = b"timestamp,open_interest\n2024-01-01T00:00:00Z,123456\n"
+    rejected: list[tuple[str | None, bytes]] = [
+        (None, good_csv),  # no filename at all (direct command caller)
+        ("", good_csv),  # raw multipart part carrying filename=""
+        ("   ", good_csv),  # blank-only filename
+        ("dataset.xlsx", b"binary-ish"),  # unsupported extension
+        ("dataset.csv", b"PK\x03\x04\x14\x00binary"),  # binary blob renamed .csv
+    ]
+    for filename, content in rejected:
+        with pytest.raises(ResearchDataFileTypeNotAllowedError) as excinfo:
+            await rd_cmd.create_upload_session(
+                session,
+                OWNER,
+                entity_id=entity_id,
+                content=content,
+                original_filename=filename,
+            )
+        assert excinfo.value.code == "RESEARCH_DATA_FILE_TYPE_NOT_ALLOWED"
+        assert excinfo.value.details[0]["field"] == "original_filename"
+
+    # Nothing above reached storage or the evidence table...
     assert await _count(session, ResearchRawAsset) == 0
+    assert fake_object_store == {}
+
+    # ...and the supported extension with text content still uploads.
+    accepted = await rd_cmd.create_upload_session(
+        session,
+        OWNER,
+        entity_id=entity_id,
+        content=good_csv,
+        original_filename="dataset.csv",
+    )
+    await session.commit()
+    assert accepted["deduplicated"] is False
+    assert await _count(session, ResearchRawAsset) == 1
+    assert len(fake_object_store) == 1
 
 
 async def test_upload_rejects_non_owner(session, fake_object_store) -> None:

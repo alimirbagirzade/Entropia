@@ -7,21 +7,27 @@ pinned market revision's processed OHLCV bars (INF-12 Slice A: ``resolve_bar_sou
 pinned market revision always yield byte-identical output (doc 15 §17 async
 reproducibility). No DB, clock, network or real randomness.
 
-Honest V1 boundary: real indicator packages are still V1 stubs, so entry/exit timing
-uses a DETERMINISTIC breakout PROXY derived purely from the bars (labelled
-``entry_model=deterministic_bar_breakout_proxy_v1`` in diagnostics), NOT real
-indicator signals. What IS real: the bars, their timestamps/prices, the strategy's
-protection stops (percentage / trailing / absolute), the direction bias, the costs
-(commission / spread / slippage) and the position sizing. When the indicator layer
-lands, only the entry/exit evaluation here changes; the run, manifest and result
-contracts stay put.
+Fail-closed entry model (F-04): production entry/exit timing uses REAL built-in
+indicator signals — a run REQUIRES a resolved ``indicator_plan`` (post-V1 Slice C:
+SMA/EMA/RMA/WMA/RSI/VWAP native triggers, condition blocks, multi-timeframe resampling).
+A run with NO resolved trigger plan cannot materialize a Result: admission (Ready Check
+``STRATEGY_INDICATOR_UNRESOLVED``) and the worker (``RUN_FAILED_UNRESOLVED_DEPENDENCY``)
+both refuse it, and ``run_engine`` itself now raises ``UnresolvedStrategyError`` rather
+than fabricate metrics from a strategy the user never defined. The historical
+``entry_model=deterministic_bar_breakout_proxy_v1`` breakout is retained ONLY as an
+explicit TEST-ONLY fixture (``run_engine(..., builtin_breakout_fixture=True)``) that
+exercises the price/stop/cost/sizing machinery without a real indicator layer — it is
+NEVER a production fallback. What is real either way: the bars, their timestamps/prices,
+the strategy's protection stops (percentage / trailing / absolute), the direction bias,
+the costs (commission / spread / slippage) and the position sizing.
 
 Engine order follows doc 15 §9.3 (bounded to the foundation scope): per bar —
-(1) update the rolling breakout window; (2) if in a position, evaluate
-protection/stop/exit against THIS bar's high/low (intrabar touch); (3) if flat,
-evaluate the breakout entry proxy and open a position. State/decision-trace
-counters are emitted per trade (bounded memory — never O(bars)); the OHLCV stream
-is consumed one batch at a time.
+(1) update the rolling look-back window (feeds the test-only breakout fixture); (2) if
+in a position, evaluate protection/stop/exit against THIS bar's high/low (intrabar
+touch); (3) if flat, evaluate the entry model (the resolved indicator plan, or the
+test-only breakout fixture) and open a position. State/decision-trace counters are
+emitted per trade (bounded memory — never O(bars)); the OHLCV stream is consumed one
+batch at a time.
 """
 
 from __future__ import annotations
@@ -63,11 +69,22 @@ _HUNDRED = Decimal("100")
 _ZERO = Decimal("0")
 _ONE = Decimal("1")
 
-# Rolling look-back for the breakout entry/exit proxy. A constant of the engine
-# version (part of the reproducibility contract via ``engine_version``), NOT a
-# strategy input — real indicator look-backs arrive with the indicator layer.
+# Rolling look-back for the TEST-ONLY breakout entry/exit fixture (F-04). A constant of
+# the engine version (part of the reproducibility contract via ``engine_version``), NOT a
+# strategy input; production runs always drive entries from a resolved indicator plan.
 _BREAKOUT_WINDOW = 20
 ENTRY_MODEL = "deterministic_bar_breakout_proxy_v1"
+
+
+class UnresolvedStrategyError(ValueError):
+    """``run_engine`` was invoked without a resolved indicator plan and without the
+    explicit test-only breakout fixture opt-in (F-04). The engine FAILS CLOSED — it
+    never fabricates metrics from a strategy the user did not define, so an unresolved
+    or empty trigger plan can never materialize a Result. Production is already guarded
+    twice upstream (Ready Check ``STRATEGY_INDICATOR_UNRESOLVED`` at admission + the
+    worker's ``RUN_FAILED_UNRESOLVED_DEPENDENCY`` re-check); this is the engine's own
+    last line of defence against a caller that bypasses both."""
+
 
 # F-10 complete decision trace (doc 15 §9.3 step 8, §14, §16). The full event taxonomy the
 # bar-replay engine emits, so a reviewer can reconstruct WHY every position opened / did not
@@ -1757,13 +1774,19 @@ def run_engine(
     funding: FundingSchedule | None = None,
     tick_batches: Iterator[list[dict[str, Any]]] | None = None,
     portfolio_rules: PortfolioRules | None = None,
+    builtin_breakout_fixture: bool = False,
 ) -> EngineOutput:
     """Deterministically bar-replay one strategy over its pinned OHLCV bars.
 
-    Entry/exit timing uses real built-in indicator signals when ``indicator_plan``
-    resolves to at least one computable entry block; otherwise it falls back to the
-    labelled deterministic breakout proxy (Slice B behaviour), so callers without a
-    plan — and the pure unit tests — are unaffected.
+    Entry/exit timing uses real built-in indicator signals: the run REQUIRES an
+    ``indicator_plan`` that resolves to at least one computable entry block. F-04 —
+    FAIL CLOSED: with no such plan the engine raises ``UnresolvedStrategyError`` and
+    materializes NOTHING, rather than fabricate metrics from a strategy the user never
+    defined (production is also guarded at admission and in the worker). The historical
+    deterministic breakout is available ONLY as an explicit test-only fixture: pass
+    ``builtin_breakout_fixture=True`` to exercise the price/stop/cost/sizing machinery
+    without a real indicator layer. That opt-in is the sole way to reach the proxy — it
+    is never a production fallback.
 
     ``timeframe`` is the pinned market revision's base bar timeframe, resolved by
     the CALLER (the engine is pure — no I/O); ``None`` means the revision is not
@@ -2020,6 +2043,16 @@ def run_engine(
     conflict_ok = conflict_handling_is_modelled(config)
 
     plan_active = indicator_plan is not None and indicator_plan.has_entry
+    if not plan_active and not builtin_breakout_fixture:
+        # F-04 fail closed: no resolved trigger plan and no explicit test-only fixture
+        # opt-in → refuse before any state is built, so an unresolved/empty plan can never
+        # materialize a Result. The engine never invents entries the user did not define;
+        # the labelled breakout is reachable ONLY via builtin_breakout_fixture=True (tests).
+        raise UnresolvedStrategyError(
+            "run_engine requires a resolved indicator_plan with at least one computable "
+            "entry block; it refuses to fabricate a result from the deterministic breakout "
+            "fixture unless builtin_breakout_fixture=True is explicitly passed (test-only)."
+        )
     entry_evals: list[BlockEvaluator] = (
         build_evaluators(indicator_plan.entry_specs) if plan_active and indicator_plan else []
     )
@@ -4278,6 +4311,8 @@ def run_engine(
         # timeframe overrides, non-directional keys) are surfaced, never hidden (L4).
         warnings.extend(indicator_plan.unresolved)
         if not plan_active:
+            # Reachable ONLY under builtin_breakout_fixture=True (a test passing an empty
+            # plan); production fails closed before this point (F-04, UnresolvedStrategyError).
             warnings.append("indicator_plan_empty_fallback_proxy")
     if alloc_on:
         # FX conversion across a mixed-currency pool is out of scope (GAP-16); the run
@@ -4348,7 +4383,8 @@ def run_engine(
         "protection stops and built-in indicator native triggers."
         if plan_active
         else "Deterministic bar-replay over the pinned market revision; real bars and "
-        "protection stops, breakout entry proxy (indicator layer still stubbed)."
+        "protection stops, deterministic breakout entry fixture (test-only — production "
+        "requires a resolved indicator plan)."
     )
     diagnostics = {
         "engine_kind": "v1_bar_replay",
@@ -5041,6 +5077,7 @@ __all__ = [
     "ItemRun",
     "SignalEventRow",
     "TradeRow",
+    "UnresolvedStrategyError",
     "combine_item_runs",
     "conflict_handling_is_modelled",
     "execution_timing_is_modelled",

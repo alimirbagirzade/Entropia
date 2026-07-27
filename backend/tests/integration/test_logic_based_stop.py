@@ -161,6 +161,10 @@ async def test_run_engine_builds_and_consumes_the_stop_plan(session) -> None:
         bar_batches=_bars(),
         execution_key="ek_logic_stop",
         indicator_plan=plan,
+        # F-04: this plan carries a logic STOP but no entry block (has_entry=False), a shape
+        # production refuses upstream. We opt into the breakout fixture purely to give the
+        # logic-stop evaluators positions to act on while asserting their wiring.
+        builtin_breakout_fixture=True,
     )
     # The stop evaluators were built from the resolved plan and carried through the run.
     assert out.diagnostics["logic_stop_blocks"] == 1

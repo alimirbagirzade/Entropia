@@ -100,8 +100,10 @@ const EXPORT_RECEIPT = {
   status: "completed",
 };
 
-// A run that fell back to the breakout proxy AND could not model the requested
-// sizing method — the two honest L4 warnings the Diagnostics card must surface.
+// A test-only / legacy result carrying the deterministic breakout fixture note AND an
+// unmodellable sizing method — the two honest L4 warnings the Diagnostics card must
+// surface. Production runs fail closed without a resolved plan (F-04), so a real result
+// never wears the breakout label; the UI must still render it honestly if it appears.
 const DIAG_PAGE = {
   result_id: "res_x",
   artifact_type: "diagnostics",
@@ -114,7 +116,8 @@ const DIAG_PAGE = {
         entry_model: "deterministic_bar_breakout_proxy_v1",
         reproducibility_note:
           "Deterministic bar-replay over the pinned market revision; real bars and " +
-          "protection stops, breakout entry proxy (indicator layer still stubbed).",
+          "protection stops, deterministic breakout entry fixture (test-only — " +
+          "production requires a resolved indicator plan).",
         bars_processed: 500,
         indicator_blocks: 0,
         condition_blocks: 0,
@@ -451,7 +454,7 @@ describe("ResultDetail trade list + export", () => {
     expect(screen.getByText("2 diagnostic warnings")).toBeInTheDocument();
     // The reproducibility note states how the result was produced.
     expect(
-      screen.getByText(/breakout entry proxy \(indicator layer still stubbed\)/),
+      screen.getByText(/deterministic breakout entry fixture \(test-only/),
     ).toBeInTheDocument();
   });
 

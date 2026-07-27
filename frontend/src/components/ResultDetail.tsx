@@ -617,11 +617,13 @@ function MarginalCard({ entry }: { entry: ContributionMarginal }) {
 
 // Deterministic run diagnostics (doc 15 §13). The single `run_diagnostics`
 // artifact row states — via the reproducibility note and the honest L4 warnings —
-// how this result was produced: whether real indicator triggers or a breakout
-// proxy fired, whether an indicator block went unresolved, or whether an
-// unsupported sizing method fell back to notional. Diagnostics is the
-// deterministic engine artifact, NOT a numeric truth source that overrides the
-// metrics (§13). AI Review below is an explicit V1 placeholder — never fabricated.
+// how this result was produced: production runs always fire REAL indicator triggers
+// (F-04 fail-closed — a run with no resolved plan never materializes), so the
+// deterministic breakout only ever appears on a test-only fixture / legacy result;
+// the note also flags whether an indicator block went unresolved or an unsupported
+// sizing method fell back to notional. Diagnostics is the deterministic engine
+// artifact, NOT a numeric truth source that overrides the metrics (§13). AI Review
+// below is an explicit V1 placeholder — never fabricated.
 function DiagnosticsSection({ resultId }: { resultId: string }) {
   const page = useResultArtifact<DiagnosticRow>(resultId, "diagnostics", null);
   const content = page.data?.items[0]?.content ?? null;

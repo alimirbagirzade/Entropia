@@ -180,7 +180,7 @@ Not / istisna   : "FIX(R3)" maddeleri KABUL DEĞİLDİR — R3'te düzeltilecek 
 | D-6 | TS/TL dikey yoğunluk | **FIX (R3)** | M-06/M-07 kompakt inline shell slice |
 | D-7 | A11Y-01 kontrast | **(b) kısmi düzeltme** | `--text-dim`/rozet-yeşil/amber koyulaştır; accent-mavi dokunulmaz |
 | D-8 | A11Y-02 `link-in-text-block` | **FIX** | paragraf-içi link `text-decoration: underline` |
-| D-9 | 22-sayfa final screenshot seti (20.11) | **KABUL** | 20.11 → PASS; A-06 derin kıyas ayrı açık iş |
+| D-9 | 22-sayfa final screenshot seti (20.11) | **KABUL** | 20.11 → PASS. **F-09 eksen notu:** bu PASS "PO screenshot SETİNİ kabul etti" demektir — sayfa-sayfa görsel fidelity doğrulaması (A-06: 10 sayfa hâlâ yalnız ilk gözlem) ve ekran-okuyucu a11y (A-08: NVDA/VoiceOver yapılmadı) bu imzanın DIŞINDA ve AÇIK kalır; iki eksen birbirinin yerine sayılmaz |
 
 ---
 

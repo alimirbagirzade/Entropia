@@ -23,17 +23,34 @@ This repository is built **stage by stage** from a canonical specification (see
 > opaque Bearer sessions + first-Admin bootstrap), a real bar-replay backtest
 > engine with built-in indicator compute (SMA/EMA/RMA/WMA/RSI/VWAP, condition
 > blocks, multi-timeframe resampling, risk-based & Kelly sizing, position-size
-> limits), the full **24-screen web app** bound to live data end-to-end, the
-> Future Dev capability system, and audit-log query indexes — followed by the
-> **V18 remediation wave**: every requirement F-01…F-25 and UI-01…UI-22 is
-> landed on `main` with code + test evidence (per-requirement traceability in
-> [`docs/implementation/entropia_v18_remediation_status.md`](docs/implementation/entropia_v18_remediation_status.md)).
-> Snapshot (verified on `main`, V18 remediation wave complete through PR #299):
-> **1773 backend tests** collected (`pytest --co`), **428 frontend tests**
-> (Vitest), Alembic head `0034_package_implementation`. This is not "everything
-> is possible" software — the engine and architecture have deliberate,
-> fail-closed boundaries and out-of-scope non-goals, listed under
-> [Known limitations](#known-limitations) and in
+> limits), all **24 screens routed and bound to live server projections**, the
+> Future Dev capability system, and audit-log query indexes.
+>
+> **"Landed" is not one binary state (F-09).** Completion is reported on six
+> independent axes, each with its own evidence — never collapsed into a single
+> "everything is done" sentence: (1) **route exists**; (2) **UI bound** to live
+> server data (no client-computed domain state); (3) **functional completion**
+> end-to-end — Future-Dev stubs are NEVER counted here (e.g. Create Package's
+> in-transaction candidate stub, the test-only breakout fixture); (4) **visual
+> fidelity** vs the v18 prototype (10 pages are still observed-only, not deep
+> item-by-item compared); (5) **accessibility** (axe AA with recorded contrast
+> deviations A11Y-01/02; NVDA/VoiceOver manual audit not yet done); (6)
+> **product-owner acceptance** (signed in
+> [`docs/implementation/v18_final_acceptance.md`](docs/implementation/v18_final_acceptance.md) §4 —
+> D-1/D-9 accepted, D-2…D-6/D-8 are FIX items still open). All 24 routes are green
+> on axes 1–2; several remain **In Progress** on axes 3–6 under the **R2 re-opening**
+> (see the status doc's banner) and the **R3 deep-audit backlog** (F-01 worker
+> lifecycle, F-04 breakout-proxy fence, F-05 capability matrix, F-07 raw-id
+> residuals, F-09 doc honesty). Per-requirement, per-axis status lives in
+> [`entropia_v18_remediation_status.md`](docs/implementation/entropia_v18_remediation_status.md).
+>
+> **Test/schema figures are recomputable, not a frozen claim (F-09).** Recompute on
+> `main` with `make test` (runs the backend **and** frontend suites, no swallowed
+> exit codes); CI is the authoritative source. Alembic head: `0035_portfolio_rules`.
+> Last empirically verified on `main` at the R2 close (PR #364, 2026-07-22): ≈**1841
+> backend** tests, ≈**577 frontend** tests. This is not "everything is possible"
+> software — the engine and architecture have deliberate, fail-closed boundaries and
+> out-of-scope non-goals, listed under [Known limitations](#known-limitations) and in
 > [`docs/POST_V1_KICKOFF.md`](docs/POST_V1_KICKOFF.md). The running handoff lives
 > in [`docs/STAGE2_HANDOFF.md`](docs/STAGE2_HANDOFF.md).
 
@@ -128,7 +145,7 @@ domain state) and every mutation is a typed, audited command.
 | Workspace | **Add Outsource Signal** (`/outsource-signal`) | Type chooser routing external work into the Trading Signal / Trade Log workbenches. |
 | Workspace | **Trading Signal** (`/trading-signal`) | Upload a signal file → durable import job → report → save as a native work object with OCC-guarded revisions. |
 | Workspace | **Trade Log** (`/trade-log`) | The same import chain for historical trade records (twin surface of Trading Signal). |
-| Packages & Data | **Create Package** (`/packages/create`) | Package request lifecycle: compose a request, run dependency scans, generate a deterministic candidate, draft, approve. |
+| Packages & Data | **Create Package** (`/packages/create`) | Package request lifecycle: compose a request, run dependency scans, generate a deterministic **in-transaction candidate stub** (the real generation worker pipeline is Future-Dev — F-01), draft, approve. |
 | Packages & Data | **Pre-Check** (`/packages/pre-check`) | Dependency scan viewer: resolved vs missing canonical keys against the resolver registry. |
 | Packages & Data | **Package Library** (`/packages/library`) | Read-only catalog of every package: permissions, provenance, scan summary, revision history. |
 | Packages & Data | **Embedded System Packages** (`/packages/embedded`) | Resolver registry: propose candidates, Admin activate/deprecate, Pre-Check-parity resolve probe. |
@@ -761,9 +778,13 @@ Entropia/
 ## Architecture in one paragraph
 
 The backend is a **modular monolith** (one codebase, domain-oriented modules)
-with **separate worker processes** for long-running work. The API never runs
-heavy work inline — it creates a durable **job** and returns immediately; workers
-publish authoritative state in a transaction and emit an **SSE** refresh signal.
+with **separate worker processes** for long-running work. Backtest and data-ingest
+work runs on dedicated worker planes: the API creates a durable **job** and returns
+immediately; workers publish authoritative state in a transaction and emit an
+**SSE** refresh signal. Honest boundary (F-09/F-01): Create Package's
+pre-check / candidate / publish jobs are V1 **synchronous in-transaction stubs**
+(the generation worker pipeline is Future-Dev) — durable job rows exist but do not
+yet dispatch to a worker plane.
 **PostgreSQL** is the source of truth for metadata, roots, revisions, audit, and
 jobs; large/columnar artifacts live in **object storage** as immutable, content-
 addressed Parquet. The **Agent** is a non-login system actor whose research loop
@@ -799,10 +820,16 @@ blocker), never silently faked. Full per-requirement detail is in
   funding-cost rule plus the reusable anti-lookahead as-of join; a general
   "arbitrary Research feature → condition" binding stays gated on the
   feature-definition compiler (raw binding prohibited, doc 12 §9.2).
-- **Breakout proxy (F-06)** remains in `domain/backtest/engine.py` only as a
-  domain unit-test primitive; it is structurally unreachable on the production
-  path (Ready Check blocks admission and the worker fails closed on an
-  unresolved indicator plan).
+- **Breakout proxy (spec F-06 / R3 deep-audit F-04)** survives in
+  `domain/backtest/engine.py` ONLY as an explicit test-only fixture
+  (`run_engine(..., builtin_breakout_fixture=True)`). Every production path fails
+  closed on an unresolved/empty indicator plan — Ready Check blocks admission, the
+  worker returns `RUN_FAILED_UNRESOLVED_DEPENDENCY`, and `run_engine` itself now
+  raises `UnresolvedStrategyError` (defence-in-depth) rather than fabricate a
+  Result from a strategy the user never defined. R3 tracks deleting the fixture
+  from the shipped module. (Spec requirement **F-06** "remove unresolved-indicator
+  breakout fallback" and deep-audit finding **F-04** "breakout-proxy fail-closed"
+  refer to the same code — cross-referenced here so the two governance docs agree.)
 - **Intrabar / limit / stop-limit fills (F-07)** require tick data. F-07(i)
   wires the tick-data requirement into Ready Check; without tick data these
   settings fail closed (a Ready Check blocker), never a silently imitated fill

@@ -77,6 +77,19 @@ def test_non_trusted_active_is_not_resolved() -> None:
     assert outcome.reason == ResolutionReason.NOT_TRUSTED_ACTIVE
 
 
+def test_deprecated_resolver_reports_not_active() -> None:
+    """doc 07 §12 RESOLVER_NOT_ACTIVE: the key exists but was deprecated for new use.
+    Distinct from a candidate that was never trusted — the remediation differs."""
+    outcome = _evaluate(trust_state=ResolverTrustState.DEPRECATED)
+    assert outcome.reason == ResolutionReason.RESOLVER_NOT_ACTIVE
+    assert outcome.is_resolved is False
+
+
+def test_soft_deleted_resolver_reports_not_active() -> None:
+    outcome = _evaluate(trust_state=ResolverTrustState.UNAVAILABLE)
+    assert outcome.reason == ResolutionReason.RESOLVER_NOT_ACTIVE
+
+
 def test_validation_not_passed_is_not_resolved() -> None:
     outcome = _evaluate(validation_state=PackageValidationState.WARNING)
     assert outcome.reason == ResolutionReason.VALIDATION_NOT_PASSED

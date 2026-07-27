@@ -34,9 +34,20 @@ class ResolutionReason(StrEnum):
     KEY_NOT_FOUND = "key_not_found"
     SIGNATURE_MISMATCH = "signature_mismatch"
     ADAPTER_INCOMPATIBLE = "adapter_incompatible"
+    # The registry entry exists but was deprecated-for-new-use or soft-deleted /
+    # withdrawn — doc 07 §12 RESOLVER_NOT_ACTIVE. Kept separate from
+    # NOT_TRUSTED_ACTIVE (a ``candidate`` that was never trusted in the first
+    # place) because the remediation differs: activate vs. propose.
+    RESOLVER_NOT_ACTIVE = "resolver_not_active"
     NOT_TRUSTED_ACTIVE = "not_trusted_active"
     VALIDATION_NOT_PASSED = "validation_not_passed"
     NOT_APPROVED = "not_approved"
+
+
+# Trust states that mean "this resolver was trusted once and is not selectable for
+# NEW conversions any more" — the doc 07 §12 RESOLVER_NOT_ACTIVE class. A
+# ``candidate`` is NOT here: it was never trusted, so it stays NOT_TRUSTED_ACTIVE.
+_INACTIVE_TRUST_STATES = frozenset({ResolverTrustState.DEPRECATED, ResolverTrustState.UNAVAILABLE})
 
 
 @dataclass(frozen=True, slots=True)
@@ -118,6 +129,8 @@ def evaluate_resolution(
         return ResolutionOutcome(ResolutionReason.SIGNATURE_MISMATCH)
     if not _adapter_compatible(contract_adapter, target_runtime):
         return ResolutionOutcome(ResolutionReason.ADAPTER_INCOMPATIBLE)
+    if trust_state in _INACTIVE_TRUST_STATES:
+        return ResolutionOutcome(ResolutionReason.RESOLVER_NOT_ACTIVE)
     if trust_state != ResolverTrustState.TRUSTED_ACTIVE:
         return ResolutionOutcome(ResolutionReason.NOT_TRUSTED_ACTIVE)
     if validation_state != PackageValidationState.PASSED:

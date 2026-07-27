@@ -21,6 +21,12 @@ from entropia.domain.create_package.enums import (
     SourceLanguage,
     ValidationRunStatus,
 )
+from entropia.domain.create_package.language_detect import (
+    LANGUAGE_DETECTOR_VERSION,
+    LanguageSignal,
+    detect_source_language,
+    score_language_markers,
+)
 from entropia.domain.create_package.policy import (
     ensure_can_approve_publish,
     ensure_can_create_request,
@@ -29,6 +35,9 @@ from entropia.domain.create_package.policy import (
 from entropia.domain.create_package.source_scan import (
     SCANNED_NAMESPACES,
     SOURCE_SCANNER_VERSION,
+    UNRECOGNIZED_TOKEN_RATIO,
+    UNTERMINATED_BLOCK_COMMENT,
+    UNTERMINATED_STRING,
     SourceScanResult,
     is_scannable_key,
     scan_source_calls,
@@ -58,17 +67,22 @@ from entropia.domain.create_package.value_objects import (
 __all__ = [
     "BASELINE_PARSER_VERSION",
     "CREATE_PACKAGE_KINDS",
+    "LANGUAGE_DETECTOR_VERSION",
     "REQUIRED_BASELINE_METADATA_FIELDS",
     "SCANNED_NAMESPACES",
     "SCAN_BLOCKING_STATES",
     "SOURCE_SCANNER_VERSION",
     "SUPPORTED_TARGET_RUNTIMES",
+    "UNRECOGNIZED_TOKEN_RATIO",
+    "UNTERMINATED_BLOCK_COMMENT",
+    "UNTERMINATED_STRING",
     "VALIDATOR_VERSION",
     "BaselineParseReport",
     "BaselineParseStatus",
     "CreatePackageState",
     "CreationMode",
     "DependencyResolution",
+    "LanguageSignal",
     "NormalizedRequest",
     "PrecheckScanStatus",
     "SourceKind",
@@ -79,6 +93,7 @@ __all__ = [
     "build_validation_report",
     "clean_declared_dependencies",
     "context_hash",
+    "detect_source_language",
     "ensure_can_approve_publish",
     "ensure_can_create_request",
     "ensure_can_operate_request",
@@ -92,6 +107,7 @@ __all__ = [
     "parse_baseline_csv",
     "resolve_equivalence_claim",
     "scan_source_calls",
+    "score_language_markers",
     "source_hash",
     "source_kind_for_mode",
 ]

@@ -256,6 +256,18 @@ async def test_validation_failure_routes_to_revision_and_reopens(session) -> Non
     await session.commit()
     assert failed["status"] == str(ValidationRunStatus.FAILED)
     assert failed["state"] == str(CreatePackageState.REVISION_REQUIRED)
+    # The run must fail through the dependency_health CHECK — not through the generic
+    # worker-crash path, which produces the SAME status/state from a single blocked
+    # ``validator`` check and would silently mask an unhandled resolver error. The
+    # deprecated entry raises ResolverNotActive (doc 07 §12), so the validation worker
+    # has to catch it as a resolution failure; if it does not, there is no
+    # dependency_health check here at all.
+    run = await session.get(PackageValidationRun, failed["validation_run_id"])
+    assert run is not None
+    assert "VALIDATION_WORKER_FAILED" not in str(run.checks)
+    health = next(c for c in run.checks if c["check"] == "dependency_health")
+    assert health["status"] != "passed"
+    assert health["artifacts"]["drifted"] == ["ta.rsi"]
 
     # A failed draft cannot be approved.
     with pytest.raises(ValidationRequired):

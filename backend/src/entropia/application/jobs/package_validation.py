@@ -61,11 +61,19 @@ from entropia.infrastructure.postgres.models import PackageRequest
 from entropia.infrastructure.postgres.repositories import create_package as cp_repo
 from entropia.shared.errors import (
     ResolverAdapterIncompatible,
+    ResolverNotActive,
     ResolverNotResolved,
     ResolverSignatureMismatch,
 )
 
-_RESOLVE_ERRORS = (ResolverNotResolved, ResolverSignatureMismatch, ResolverAdapterIncompatible)
+_RESOLVE_ERRORS = (
+    ResolverNotResolved,
+    ResolverSignatureMismatch,
+    ResolverAdapterIncompatible,
+    # A deprecated / soft-deleted registry entry is a dependency-health FAILURE to
+    # report (doc 07 §12 RESOLVER_NOT_ACTIVE), not an exception to escape the worker.
+    ResolverNotActive,
+)
 
 # Canonical-key prefixes for the native plan (mirrors candidate.py; keeps the CP domain
 # independent of the backtest indicator taxonomy).

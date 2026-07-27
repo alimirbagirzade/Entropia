@@ -1242,5 +1242,4 @@ branch gerçekten karşılıyor mu?" sorusu tek tek yanıtlandı:
 - Bu slice R3 mühendislik backlog'unu kapatır; **F-07 (raw-id sweep) ve F-09 (README honesty)** ayrı
   slice'lar olarak açık.
 
----
 

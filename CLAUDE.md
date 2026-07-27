@@ -113,14 +113,10 @@ Before stopping a working session, produce **ALL** of the following:
 
 - **alembic head:** **`0035_portfolio_rules`** (35 migration, tek head — R3 W3'te migration YOK).
   **`ENGINE_VERSION` = `backtest-engine-v18-capability-matrix`** (F-05'te bump edildi).
-- **Testler (lokal, F-05 dalı):** backend **1986 collected** (real-Postgres integration, yeşil) ·
-  frontend vitest **607/60 dosya** yeşil + tsc/eslint/build temiz.
+- **Testler (lokal, K-05 dalı):** backend tam suite **exit 0, hiç F/E yok** (real-Postgres) ·
+  ruff + format + mypy (348 dosya) temiz · CI 5/5 yeşil. Frontend'e dokunulmadı.
   Doğrula: `gh run list --branch main --limit 1` → job log.
-- **Son dalga (V18-R3 W3):** F-01a/b/c durable worker'lar (#380/#382/#383) · F-04 breakout fail-closed
-  + F-09 doc honesty (#381) · **F-05/M-05 makine-okur capability matrix** — `domain/backtest/capabilities.py`
-  tek kaynak (59 satır / 22 `future_dev`), engine fail-closed + Ready Check
-  `STRATEGY_CAPABILITY_NOT_IN_BUILD` + UI'da disabled & bağımlılık notu (üretilen TS aynası).
-  Tam kayıt: `docs/PROJECT_HISTORY.md` §"V18-R3 · F-05 / M-05".
+
 
 
 - **Next — PO imzası + R2 kapanışı** (R3 mühendislik backlog'u F-05 ile kapandı; **F-07 raw-id

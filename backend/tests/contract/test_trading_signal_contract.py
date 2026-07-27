@@ -104,6 +104,33 @@ async def test_upload_rejects_non_csv_extension_before_db(app) -> None:
 
 
 @pytest.mark.contract
+async def test_upload_rejects_blank_filename_before_db(app) -> None:
+    """K-07 twin: a raw multipart part with ``filename=""`` used to slip PAST the
+    type gate and reach the repository; it now fails closed (doc 04 §11)."""
+    gen = _override(app, _actor(Role.USER, PrincipalType.HUMAN, "prin_x"))
+    next(gen)
+    try:
+        boundary = "----contract"
+        body = (
+            f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename=""\r\n'
+            f"Content-Type: text/csv\r\n\r\ntime,side\r\n1,buy\r\n"
+            f"\r\n--{boundary}--\r\n"
+        ).encode()
+        async with await _client(app) as c:
+            resp = await c.post(
+                "/api/v1/trading-signals/source-assets",
+                content=body,
+                headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+            )
+        assert resp.status_code == 422
+        error = resp.json()["error"]
+        assert error["code"] == "FILE_TYPE_NOT_ALLOWED"
+        assert error["details"][0]["reason"] == "missing_filename"
+    finally:
+        next(gen, None)
+
+
+@pytest.mark.contract
 async def test_upload_rejects_non_utf8_bytes_before_db(app) -> None:
     gen = _override(app, _actor(Role.USER, PrincipalType.HUMAN, "prin_x"))
     next(gen)

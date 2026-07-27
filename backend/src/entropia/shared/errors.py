@@ -841,10 +841,24 @@ class OhlcvPolicyConflictError(ValidationError):
 
 
 class FileTypeNotAllowedError(ValidationError):
-    """An uploaded source asset was not an accepted TXT/CSV file (doc 04 §11)."""
+    """An uploaded source asset was not an accepted TXT/CSV file (doc 04 §11).
+
+    Trading Signal (doc 04 §11) and Create Package baseline (doc 06 §8.3) name this
+    code verbatim. The Trade Log twin has its OWN documented code — see
+    ``UnsupportedSourceFileTypeError`` (doc 05 §12.1)."""
 
     code = "FILE_TYPE_NOT_ALLOWED"
     message = "Upload a TXT or CSV signal-event file."
+
+
+class UnsupportedSourceFileTypeError(ValidationError):
+    """A Trade Log source asset was not an accepted TXT/CSV file (doc 05 §12.1).
+
+    Same defect class as ``FileTypeNotAllowedError``; the two codes stay apart
+    because each page's error taxonomy is authoritative for its own surface."""
+
+    code = "UNSUPPORTED_SOURCE_FILE_TYPE"
+    message = "Only TXT and CSV source files are supported."
 
 
 # --------------------------------------------------------------------------- #

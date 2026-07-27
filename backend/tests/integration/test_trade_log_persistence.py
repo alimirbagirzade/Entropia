@@ -43,6 +43,7 @@ from entropia.infrastructure.s3 import datasets
 from entropia.shared.errors import (
     AccessDeniedError,
     RequiredColumnMissingError,
+    UnsupportedSourceFileTypeError,
     WorkObjectRevisionConflictError,
 )
 
@@ -206,6 +207,40 @@ async def test_upload_is_content_deduplicated(session, fake_object_store) -> Non
     await session.commit()
     assert second["deduplicated"] is True
     assert second["source_asset_id"] == first["source_asset_id"]
+
+
+async def test_source_file_type_gate_is_fail_closed(session, fake_object_store) -> None:
+    """K-07: the TXT/CSV gate no longer SKIPS when the filename is absent.
+
+    Before this fix ``if name and not name.endswith(...)`` accepted ANY payload as
+    long as ``original_filename`` was ``None``/blank, so the doc 05 §5.2 server-side
+    type control could be dropped entirely. Now every axis fails closed with the
+    doc 05 §12.1 code, and only a real .csv/.txt with text content is stored."""
+    await _seed_principals(session)
+
+    for filename in (None, "", "   ", "trades.pdf", "trades"):
+        with pytest.raises(UnsupportedSourceFileTypeError) as excinfo:
+            await tl_cmd.upload_source_asset(
+                session, USER1, content=_GOOD_CSV, original_filename=filename
+            )
+        assert excinfo.value.code == "UNSUPPORTED_SOURCE_FILE_TYPE"
+        assert excinfo.value.details[0]["field"] == "original_filename"
+
+    # A binary blob renamed .csv is rejected by the content sniff (the extension
+    # claim alone is not evidence of the type).
+    with pytest.raises(UnsupportedSourceFileTypeError):
+        await tl_cmd.upload_source_asset(
+            session, USER1, content=b"PK\x03\x04\x14\x00binary", original_filename="trades.csv"
+        )
+
+    # Nothing above reached storage; the supported extension still uploads.
+    assert fake_object_store == {}
+    uploaded = await tl_cmd.upload_source_asset(
+        session, USER1, content=_GOOD_CSV, original_filename="trades.csv"
+    )
+    await session.commit()
+    assert uploaded["deduplicated"] is False
+    assert len(fake_object_store) == 1
 
 
 # --------------------------------------------------------------------------- #

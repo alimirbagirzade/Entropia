@@ -47,6 +47,7 @@ from entropia.domain.importing.column_mapping import (
     BLOCKER_AMBIGUOUS_COLUMN_MAPPING,
     BLOCKER_INVALID_COLUMN_MAPPING,
 )
+from entropia.domain.importing.source_file import assert_supported_source_file
 from entropia.domain.lifecycle.enums import DeletionState
 from entropia.domain.mainboard.enums import MainboardItemKind
 from entropia.domain.trading_signal.compiler import (
@@ -96,7 +97,6 @@ _DATA_QUEUE = "data"
 _WORK_OBJECT_TARGET = "work_object"
 _SOURCE_ASSET_TARGET = "source_asset"
 _KIND = MainboardItemKind.TRADING_SIGNAL
-_ALLOWED_EXTENSIONS = (".txt", ".csv")
 
 
 # --------------------------------------------------------------------------- #
@@ -121,7 +121,7 @@ async def upload_source_asset(
     to object storage; the immutable metadata row is the evidence.
     """
     require_authenticated(actor)
-    _validate_file_type(original_filename)
+    _validate_file_type(original_filename, content)
     digest = datasets.content_digest(content)
 
     existing = await ts_repo.find_source_asset_by_hash(
@@ -542,13 +542,15 @@ async def export_trading_signal(
 # --------------------------------------------------------------------------- #
 
 
-def _validate_file_type(original_filename: str | None) -> None:
-    name = (original_filename or "").lower()
-    if name and not name.endswith(_ALLOWED_EXTENSIONS):
-        raise FileTypeNotAllowedError(
-            f"File {original_filename!r} is not a TXT/CSV file.",
-            details=[{"field": "original_filename", "actual": original_filename}],
-        )
+def _validate_file_type(original_filename: str | None, content: bytes) -> None:
+    """Fail-closed TXT/CSV gate (doc 04 §7 server-side type validation, §11
+    ``FILE_TYPE_NOT_ALLOWED``).
+
+    Mirrors the Trade Log twin: a missing/blank filename is a REJECTION, not a
+    skip, and the extension claim is backed by a content sniff so the gate also
+    holds for direct command callers (agent surface), which never pass through the
+    route-level F-03 upload gate."""
+    assert_supported_source_file(original_filename, content, error=FileTypeNotAllowedError)
 
 
 def _clean_mapping(import_mapping: dict[str, str] | None) -> dict[str, str] | None:

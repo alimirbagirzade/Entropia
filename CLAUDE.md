@@ -72,6 +72,12 @@ Before stopping a working session, produce **ALL** of the following:
   + migration<->model column parity. Local Postgres on **:5432** (`entropia`/`entropia`).
 - **Git:** `feat/stage-<x>-<slug>` for features, `docs/stage-<x>-landed` for closing docs.
   Commit `<type>(stage-<x>): <subject>`. **No AI attribution** (disabled globally).
+- **Upload dosya-tipi kapısı = fail-closed (K-07).** TXT/CSV kaynak yüklemelerinde ortak kapı
+  `domain/importing/source_file.py::assert_supported_source_file`: filename yok/boş → **RED**
+  (asla "atla"), uzantı iddiası içerik sniff'i ile desteklenir. **Hata kodu sayfa taksonomisine
+  göre ayrışır** (adjudicated): Trade Log → `UNSUPPORTED_SOURCE_FILE_TYPE` (doc 05 §12.1),
+  Trading Signal → `FILE_TYPE_NOT_ALLOWED` (doc 04 §11), Create Package baseline → aynı kod
+  (doc 06 §8.3). İki kod aynı kusuru anlatır; her sayfanın kendi §-taksonomisi otoritedir.
 - **Stage order is authoritative** (`STAGE_BUILD_PLAN.md`) — never skip sub-stages.
   Stage 5 = docs 15/16/17; Stage 6 = docs 18/19/20; Stage 7 = docs 21/22.
 - **UI / frontend = v18 mockup is the visual reference (mandatory).** Every frontend/UI

@@ -49,6 +49,7 @@ from entropia.domain.importing.column_mapping import (
     BLOCKER_AMBIGUOUS_COLUMN_MAPPING,
     BLOCKER_INVALID_COLUMN_MAPPING,
 )
+from entropia.domain.importing.source_file import assert_supported_source_file
 from entropia.domain.lifecycle.enums import DeletionState
 from entropia.domain.mainboard.enums import MainboardItemKind
 from entropia.domain.trade_log.compiler import (
@@ -79,7 +80,6 @@ from entropia.infrastructure.s3 import datasets
 from entropia.shared.errors import (
     AmbiguousColumnMappingError,
     EventModelPolicyConflictError,
-    FileTypeNotAllowedError,
     ImportNotReadyError,
     InvalidColumnMappingError,
     NoAcceptedTradeRecordsError,
@@ -90,6 +90,7 @@ from entropia.shared.errors import (
     TradeLogPriceContextConflictError,
     TradeLogValidationFailedError,
     TradeRecordBatchNotFoundError,
+    UnsupportedSourceFileTypeError,
     WorkObjectNotFoundError,
     WorkObjectRevisionConflictError,
 )
@@ -100,7 +101,6 @@ _DATA_QUEUE = "data"
 _WORK_OBJECT_TARGET = "work_object"
 _SOURCE_ASSET_TARGET = "source_asset"
 _KIND = MainboardItemKind.TRADE_LOG
-_ALLOWED_EXTENSIONS = (".txt", ".csv")
 
 
 # --------------------------------------------------------------------------- #
@@ -125,7 +125,7 @@ async def upload_source_asset(
     object storage; the immutable metadata row is the evidence.
     """
     require_authenticated(actor)
-    _validate_file_type(original_filename)
+    _validate_file_type(original_filename, content)
     digest = datasets.content_digest(content)
 
     existing = await asset_repo.find_source_asset_by_hash(
@@ -538,13 +538,15 @@ async def export_trade_log(
 # --------------------------------------------------------------------------- #
 
 
-def _validate_file_type(original_filename: str | None) -> None:
-    name = (original_filename or "").lower()
-    if name and not name.endswith(_ALLOWED_EXTENSIONS):
-        raise FileTypeNotAllowedError(
-            f"File {original_filename!r} is not a TXT/CSV file.",
-            details=[{"field": "original_filename", "actual": original_filename}],
-        )
+def _validate_file_type(original_filename: str | None, content: bytes) -> None:
+    """Fail-closed TXT/CSV gate (doc 05 §5.2 "Extension/parseability/type validated
+    server-side", §12.1 ``UNSUPPORTED_SOURCE_FILE_TYPE``).
+
+    A missing/blank filename is a REJECTION, not a skip — without it the declared
+    type cannot be established — and the extension claim is backed by a content
+    sniff so the gate also holds for direct command callers (agent surface), which
+    never pass through the route-level F-03 upload gate."""
+    assert_supported_source_file(original_filename, content, error=UnsupportedSourceFileTypeError)
 
 
 def _clean_mapping(import_mapping: dict[str, str] | None) -> dict[str, str] | None:

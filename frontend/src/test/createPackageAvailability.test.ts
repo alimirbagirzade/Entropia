@@ -58,6 +58,11 @@ function detail(overrides: Partial<PackageRequestDetail>): PackageRequestDetail 
     current_baseline: null,
     baseline_ready: false,
     baseline_required: false,
+    revision_attempt_no: 1,
+    revision_total_attempts: 1,
+    parent_revision_ref: null,
+    prior_validation_run_ref: null,
+    revision_chain: [],
     created_at: null,
     ...overrides,
   };

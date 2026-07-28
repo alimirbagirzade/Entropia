@@ -693,7 +693,12 @@ async def create_draft_from_candidate(
             rationale_family_snapshot=rationale_snapshot,
             validation_state=PackageValidationState.PENDING,
             approval_state=ApprovalState.DRAFT,
-            change_note="Draft created from candidate.",
+            change_note=_draft_change_note(detail),
+            # Revision chain (doc 06 §7): a revision attempt's draft records the prior
+            # attempt's revision as its parent / origin, so the package plane carries the
+            # same link the request head does. NULL for the first attempt.
+            parent_revision_id=detail.parent_revision_ref,
+            derived_from_revision_id=detail.parent_revision_ref,
         )
         await session.flush()
         detail.package_root_id = pkg_root.entity_id
@@ -723,12 +728,24 @@ async def create_draft_from_candidate(
     )
 
 
+def _draft_change_note(detail: PackageRequest) -> str:
+    """The draft's change note names its attempt so the chain reads without a join."""
+    if detail.revision_attempt_no <= 1 or detail.parent_revision_ref is None:
+        return "Draft created from candidate."
+    return (
+        f"Revision attempt {detail.revision_attempt_no} created from candidate "
+        f"(parent revision {detail.parent_revision_ref})."
+    )
+
+
 def _draft_result(detail: PackageRequest) -> dict[str, Any]:
     return {
         "request_id": detail.entity_id,
         "package_root_id": detail.package_root_id,
         "draft_revision_id": detail.draft_revision_id,
         "state": str(detail.state),
+        "revision_attempt_no": detail.revision_attempt_no,
+        "parent_revision_ref": detail.parent_revision_ref,
     }
 
 
@@ -896,18 +913,52 @@ async def request_package_revision(
     Legal from ``revision_required`` / ``rejected`` (state machine); moves through
     ``candidate_generating`` and regenerates a deterministic candidate so the loop
     (fail validation -> request revision -> new candidate -> new draft -> re-validate)
-    closes. The draft head pointers are cleared so the next Create-Draft produces a
-    fresh attempt. (A true parent-linked revision CHAIN needs the package
-    revision-append machinery — GAP-06 — and is out of scope here.)
+    closes.
+
+    The next attempt is PARENT-LINKED (doc 06 §7 "Creates immutable next attempt linked
+    to parent revision and prior validation summary"; §15 "Revision immutability"). The
+    draft head pointers still have to be cleared — otherwise Create-Draft replays the
+    existing draft instead of building a fresh attempt — but clearing them no longer
+    erases the chain: BEFORE the clear, the prior attempt's draft revision + root and
+    its validation summary reference are pinned onto the request head
+    (``parent_revision_ref`` / ``prior_validation_run_ref``) and appended as an
+    immutable ``package_revision_link`` row, so attempt N always keeps its own parent.
+    Nothing in the prior attempt is mutated: its draft revision, its generated code and
+    its validation report stay exactly as they were.
+
+    Honest boundary: each attempt is still its OWN package root (Create-Draft calls
+    ``pkg_repo.create_package``), so the chain is cross-root — the new draft revision
+    records the prior one as ``parent_revision_id`` / ``derived_from_revision_id``
+    instead of being appended onto the same root. Same-root revision-append (GAP-06)
+    remains out of scope.
     """
     root, detail = await _require_request(session, actor, request_id)
 
     async def _op() -> dict[str, Any]:
         await session.refresh(root, with_for_update=True)
         await session.refresh(detail)
+        # OCC (doc 06 §7 "Errors: ACCESS_DENIED / STALE_REVISION"): the route already
+        # carries the X-Request-Version token, so a stale tab must not silently re-parent
+        # a chain that another actor has already moved on.
+        _check_request_version(root, expected_request_version)
         previous = detail.state
         # Legality FIRST (L2): only revision_required / rejected have this edge.
         detail.state = next_request_state(detail.state, CreatePackageState.CANDIDATE_GENERATING)
+        # Pin the attempt we descend FROM before the head pointers are cleared.
+        link = await cp_repo.append_revision_link(
+            session,
+            request_entity_id=root.entity_id,
+            parent_package_root_id=detail.package_root_id,
+            parent_revision_ref=detail.draft_revision_id,
+            prior_validation_run_ref=detail.current_validation_run_id,
+            prior_candidate_hash=detail.candidate_hash,
+            prior_state=previous,
+            correlation_id=actor.correlation_id or None,
+            created_by_principal_id=actor.principal_id,
+        )
+        detail.parent_revision_ref = detail.draft_revision_id
+        detail.prior_validation_run_ref = detail.current_validation_run_id
+        detail.revision_attempt_no = link.attempt_no
         detail.package_root_id = None
         detail.draft_revision_id = None
         detail.current_validation_run_id = None
@@ -921,7 +972,9 @@ async def request_package_revision(
             event_kind="revision_requested",
             target_kind=_REQUEST_TARGET_KIND,
             entity_id=root.entity_id,
-            revision_id=None,
+            # The audit trail carries the PARENT revision this attempt descends from — a
+            # revision_requested event with no revision_id told the reader nothing.
+            revision_id=detail.parent_revision_ref,
             previous_state=str(previous),
             new_state=str(detail.state),
             action="revision_requested",
@@ -930,6 +983,10 @@ async def request_package_revision(
             "request_id": root.entity_id,
             "state": str(detail.state),
             "candidate_hash": detail.candidate_hash,
+            "revision_attempt_no": detail.revision_attempt_no,
+            "parent_revision_ref": detail.parent_revision_ref,
+            "prior_validation_run_ref": detail.prior_validation_run_ref,
+            "request_version": root.row_version,
         }
 
     return await run_idempotent(

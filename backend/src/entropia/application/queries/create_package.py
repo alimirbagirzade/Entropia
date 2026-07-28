@@ -28,6 +28,7 @@ from entropia.infrastructure.postgres.models import (
     DependencyScan,
     EntityRegistry,
     PackageRequest,
+    PackageRevisionLink,
     PackageValidationRun,
 )
 from entropia.infrastructure.postgres.repositories import create_package as cp_repo
@@ -41,6 +42,7 @@ def _request_dict(
     scan: DependencyScan | None,
     run: PackageValidationRun | None,
     baseline: BaselineAsset | None,
+    revision_links: list[PackageRevisionLink],
 ) -> dict[str, Any]:
     precheck_fresh = (
         scan is not None
@@ -91,7 +93,31 @@ def _request_dict(
         "current_baseline": _baseline_summary(baseline) if baseline is not None else None,
         "baseline_ready": baseline_ready,
         "baseline_required": bool(detail.claims_equivalence),
+        # Revision chain (doc 06 §7/§15). ``revision_attempt_no`` is the attempt the
+        # request is ON (1 = the original), so the UI reads "Revision N of M" straight
+        # off the projection with M = the same number (the head is always the newest
+        # attempt) and each chain entry naming its own attempt. ``parent_revision_ref``
+        # / ``prior_validation_run_ref`` are the head pins — the prior attempt's draft
+        # revision and validation run survive the head clearing Request Revision does.
+        "revision_attempt_no": detail.revision_attempt_no,
+        "revision_total_attempts": detail.revision_attempt_no,
+        "parent_revision_ref": detail.parent_revision_ref,
+        "prior_validation_run_ref": detail.prior_validation_run_ref,
+        "revision_chain": [_revision_link_summary(link) for link in revision_links],
         "created_at": root.created_at.isoformat() if root.created_at else None,
+    }
+
+
+def _revision_link_summary(link: PackageRevisionLink) -> dict[str, Any]:
+    return {
+        "revision_link_id": link.revision_link_id,
+        "attempt_no": link.attempt_no,
+        "parent_package_root_id": link.parent_package_root_id,
+        "parent_revision_ref": link.parent_revision_ref,
+        "prior_validation_run_ref": link.prior_validation_run_ref,
+        "prior_candidate_hash": link.prior_candidate_hash,
+        "prior_state": str(link.prior_state),
+        "created_at": link.created_at.isoformat() if link.created_at else None,
     }
 
 
@@ -157,7 +183,8 @@ async def get_package_request(
     scan = await cp_repo.get_current_scan(session, detail)
     run = await cp_repo.get_current_validation_run(session, detail)
     baseline = await cp_repo.get_current_baseline_asset(session, detail)
-    return _request_dict(root, detail, scan, run, baseline)
+    revision_links = await cp_repo.list_revision_links(session, detail.entity_id)
+    return _request_dict(root, detail, scan, run, baseline, revision_links)
 
 
 async def get_dependency_scan(

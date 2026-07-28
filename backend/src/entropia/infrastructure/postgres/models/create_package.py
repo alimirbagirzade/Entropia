@@ -113,6 +113,18 @@ class PackageRequest(TimestampMixin, Base):
     # Head pointer to the current immutable baseline_asset (its parse_status +
     # parse_report are the equivalence-comparison evidence).
     baseline_asset_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    # Revision chain (doc 06 §7 "Creates immutable next attempt linked to parent
+    # revision and prior validation summary"; §15 acceptance "Revision immutability").
+    # Request Revision has to clear the draft head so the next C.D.P builds a FRESH
+    # attempt — these three columns are what stops that clearing from erasing history:
+    # the attempt counter (1 = the original attempt), plus the prior attempt's draft
+    # revision and validation run kept PINNED. The full multi-attempt chain is the
+    # append-only ``package_revision_link`` ledger below; these are its head pins.
+    revision_attempt_no: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
+    parent_revision_ref: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    prior_validation_run_ref: Mapped[str | None] = mapped_column(String(40), nullable=True)
 
 
 class DependencyScan(Base):
@@ -254,6 +266,54 @@ class PackageValidationRun(Base):
         String(40), ForeignKey(_PRINCIPAL_FK), nullable=True
     )
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class PackageRevisionLink(Base):
+    """Immutable Request-Revision chain evidence (doc 06 §7, §15). Never UPDATEd.
+
+    One row per Request Revision: it pins WHICH attempt the new attempt descends from
+    (``parent_revision_ref`` = the prior draft revision, ``parent_package_root_id`` =
+    its root) and the prior attempt's validation summary reference
+    (``prior_validation_run_ref`` + ``prior_candidate_hash``), plus the state the
+    request was reopened FROM (``revision_required`` / ``rejected``).
+
+    Why a ledger and not just the head pins on ``package_request``: the request detail
+    is a mutable head row, so a second Request Revision would overwrite the first
+    parent and the chain would collapse to one level. These rows are append-only, so
+    attempt N always keeps its own parent — the chain stays readable end-to-end and no
+    prior attempt (draft revision, code, validation report) is ever mutated.
+
+    ``attempt_no`` is the ordinal of the attempt this link OPENS: the original draft is
+    attempt 1, so the first Request Revision writes ``attempt_no = 2``. It always
+    equals ``package_request.revision_attempt_no`` right after the command commits.
+    """
+
+    __tablename__ = "package_revision_link"
+    __table_args__ = (
+        UniqueConstraint(
+            "request_entity_id", "attempt_no", name="uq_package_revision_link_attempt"
+        ),
+    )
+
+    revision_link_id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    request_entity_id: Mapped[str] = mapped_column(
+        String(40), ForeignKey(_ENTITY_FK), nullable=False, index=True
+    )
+    attempt_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    parent_package_root_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    parent_revision_ref: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    prior_validation_run_ref: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    prior_candidate_hash: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    prior_state: Mapped[CreatePackageState] = mapped_column(
+        enum_column(CreatePackageState, "create_package_state"), nullable=False
+    )
+    correlation_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_by_principal_id: Mapped[str | None] = mapped_column(
+        String(40), ForeignKey(_PRINCIPAL_FK), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

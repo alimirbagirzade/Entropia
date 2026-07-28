@@ -86,8 +86,10 @@ export class CreatePackagePage {
     // that the scan reached PASSED, not that the overlay outlived its own refetch;
     // the substring still separates passed from blocked / failed / not_applicable.
     // The overlay's own teardown is a separate UI defect, tracked on its own.
+    // DURABLE-JOB WAIT — the scan runs in the worker (same budget rationale as the
+    // candidate, parse and validation waits below).
     await expect(this.page.getByText(/Pre-Check passed/).first()).toBeVisible({
-      timeout: 30_000,
+      timeout: 120_000,
     });
     // Close the overlay only while it is still mounted, so a torn-down dialog does
     // not fail the journey — and a surviving one never covers the next click.
@@ -109,9 +111,15 @@ export class CreatePackagePage {
     await cdp.click();
     // Match the C.D.P live region alone: the "Next step:" hint opens with the same
     // "Candidate ready — " phrase, so the assertion pins the notice's own sentence.
+    // DURABLE-JOB WAIT. Generation runs in the worker, so this budget must cover a
+    // cold CI round-trip, not a request. At 30s the CI artifact caught the request
+    // projection still reporting `candidate_generating` with the button disabled —
+    // the job was in progress, not failed — and the retry cleared this same step.
+    // The wait still fails on a genuinely stuck or errored job; it just stops
+    // calling a slow-but-healthy worker a failure.
     await expect(
       this.page.getByText(/Candidate ready — [\s\S]*Click C\.D\.P again/),
-    ).toBeVisible({ timeout: 30_000 });
+    ).toBeVisible({ timeout: 120_000 });
 
     const draft = this.page.getByRole("button", { name: "C.D.P" });
     await expect(draft).toBeEnabled({ timeout: 15_000 });
@@ -161,8 +169,10 @@ export class CreatePackagePage {
     const parse = this.page.getByRole("button", { name: "Run baseline parse" });
     await expect(parse).toBeEnabled({ timeout: 15_000 });
     await parse.click();
+    // DURABLE-JOB WAIT — the parse runs in the worker (same budget rationale as the
+    // candidate and validation waits).
     await expect(this.page.getByText(/Baseline parse passed — parser/)).toBeVisible({
-      timeout: 30_000,
+      timeout: 120_000,
     });
   }
 
@@ -173,7 +183,11 @@ export class CreatePackagePage {
     const validate = this.page.getByRole("button", { name: "Run Validation Tests" });
     await expect(validate).toBeEnabled({ timeout: 15_000 });
     await validate.click();
-    await expect(this.page.getByText(/Validation passed — run/)).toBeVisible({ timeout: 45_000 });
+    // DURABLE-JOB WAIT — same reasoning as the candidate wait above: seven checks
+    // in the worker, so the budget covers a cold CI round-trip rather than a request.
+    await expect(this.page.getByText(/Validation passed — run/)).toBeVisible({
+      timeout: 120_000,
+    });
   }
 
   // Admin-only (AdminGate over /me + CR-02 server-side). Asserts the exact

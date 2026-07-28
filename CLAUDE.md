@@ -148,10 +148,11 @@ Before stopping a working session, produce **ALL** of the following:
   V18-R2 dalgası + **auth remediation dalgası COMPLETE** (güvenlik denetimi #346–#364).
   Tüm route yüzeyleri frontend'e bağlı; TIER 2 sayfa haritası 24/24.
 
-- **alembic head:** **`0039_backtest_run_cancellation`** (39 migration, tek head; O-06'da eklendi —
-  öncesi `0038_backtest_run_event`). **`ENGINE_VERSION` = `backtest-engine-v18-funding-step-order`**
-  (`manifest.py:83`; K-03'te bump edildi, öncesi K-04 `-full-pinning`, K-02 `-available-time-gate`;
-  **O-05/O-06 bump ETMEDİ**).
+- **alembic head:** **`0040_filtered_event_artifact`** (40 migration, tek head; I-02'de eklendi —
+  öncesi `0039_backtest_run_cancellation`). **`ENGINE_VERSION` =
+  `backtest-engine-v18-filtered-events-artifact`** (`manifest.py`; I-02'de bump edildi çünkü Result
+  artifact ŞEKLİ değişti — öncesi K-03 `-funding-step-order`, K-04 `-full-pinning`, K-02
+  `-available-time-gate`; **O-05/O-06 bump ETMEDİ**).
 - **Son dalga — O-serisi (spec-uyum kusurları):** O-01 (#403) · O-02 (#400) · **O-03 (#407 + #413;
   #408 boş merge oldu, içeriğini #413 yeniden indirdi)** · O-04 (#405) · O-05 (#412) ·
   **O-06 (#419 — CancelBacktestRun, migration `0039`)** · O-08 (#406) · O-09 (#410) · O-10 (#402) ·
@@ -159,7 +160,12 @@ Before stopping a working session, produce **ALL** of the following:
   seçenek kümesi taşıyor; yeni `domain/trash/restore.py` katalogu + salt-okuma
   `GET /trash-entries/{id}/restore-preflight`; bilinmeyen resolution 422
   `UNSUPPORTED_RESTORE_RESOLUTION`; migration YOK)** ·
-  O-21 (#430) · **O-27 (#450 — AOS-03 `INVALID_ITEM_KIND`, migration YOK)**.
+  O-21 (#430) · **O-27 (#450 — AOS-03 `INVALID_ITEM_KIND`, migration YOK)** ·
+  **I-02 (`feat/i02-filtered-events-artifact` — doc 15 §3.2'nin bağlanmamış "View Filtered Events"
+  aksiyonu: `ArtifactType.FILTERED_EVENTS` + `filtered_event` tablosu (motor vetoları artık
+  `signal_events`'ten AYRI journal) + `result_artifact_checksum` (beş artifact tipi için, doc 15
+  §7/§8.3); migration `0040`, ENGINE_VERSION bump. **REGIME_TABLE bilerek EKLENMEDİ** — doc 22
+  Future-Dev sınırı, gerekçe `PROJECT_HISTORY.md`)**.
   **O-27 O-03'ün bir satırını bilerek geri alır:** `INVALID_ITEM_KIND` artık gerçek bir kod —
   `signal_package`/`trade_log_package` **yalnız bu iki etiket** 422 `INVALID_ITEM_KIND` alır
   (tek kapı `domain/mainboard/item_kind.py`), geri kalan her şey `MAINBOARD_ITEM_KIND_MISMATCH`

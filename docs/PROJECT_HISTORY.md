@@ -1728,3 +1728,124 @@ kod için 400'e sapmak kategori ↔ status tutarlılığını kırardı.
   bağlamında `strategy`'yi de `INVALID_ITEM_KIND` yapmayı okumaya açıktır. **Yapılmadı:**
   `strategy` `POST /work-objects` için meşru bir kind'dır ve external-only opener'daki reddi
   CR-01'in kendi kodudur. Bu, kayıtlı bir yorum sınırıdır.
+
+---
+
+## I-02 — Filtered Events kendi artifact'ı oldu; REGIME_TABLE Future-Dev sınırı olarak kayda geçti
+
+**Branch:** `feat/i02-filtered-events-artifact` · **Migration:** `0040_filtered_event_artifact`
+(alembic head `0039_backtest_run_cancellation` → `0040_filtered_event_artifact`, 40 migration) ·
+**ENGINE_VERSION:** `backtest-engine-v18-funding-step-order` → **`backtest-engine-v18-filtered-events-artifact`**
+
+### Kusur (ampirik)
+
+Doc 15 §3.2'nin "Research Data / Agent Data" satırı **beş** aksiyon sayar: Export Agent Dataset ·
+View Signal Events · View Filtered Events · View Trade Ledger · View Regime Table. Bunlardan
+**dördü** bağlıydı; **View Filtered Events** ve **View Regime Table** hiç bağlanmamıştı:
+
+- `domain/backtest/artifacts.py::ArtifactType` **4** üye taşıyordu (`equity_curve`, `trade_ledger`,
+  `signal_events`, `diagnostics`).
+- `grep -rn "filtered_event\|FILTERED" backend/src` → yalnızca `RunFailureCode.EMPTY_FILTERED_RANGE`
+  (`domain/backtest/enums.py:73`, alakasız).
+- Motor `filtered_no_entry` olaylarını **7 yerde** üretiyordu ama bunları fill'lerle ve order
+  olaylarıyla **aynı** `signal_events` journal'ına yazıyordu — doc 15 §16 ("Signal Events ve
+  Filtered Events gerçek fill ile aynı yapı olarak zorla birleştirilmez; no-entry/filtered decision
+  trace okunabilir") burada karşılanmıyordu.
+- Ayrıca doc 15 §7 "artifact checksum verification" ve §8.3 "artifact'ları **checksum'larıyla**
+  persist eder" derken **hiçbir artifact checksum'ı saklanmıyordu** — doğrulanacak değer yoktu.
+
+### Ne landed
+
+**Motor.** `execution/state.py::FILTERED_EVENT_TYPES` (bugün tek üye: `filtered_no_entry`) +
+`_Ledger.filtered_events`. Yönlendirme **tek noktada**, `execution/booking.py::emit_event`'te:
+veto olayları kendi journal'ına, kendi bağımsız `seq`'iyle yazılır — hiçbir çağrı yeri journal
+seçmez. `EngineOutput.filtered_events` alanı **en sona** eklendi (mevcut pozisyonel kurulumlar
+korunsun diye). `execution/portfolio.py::combine_item_runs` veto journal'ını da item bazında
+`item_id`/`root_id`/`revision_id` ile etiketleyip **ayrı** yeniden sıralar. Diagnostics'e
+`filtered_event_count` + `filtered_event_types` eklendi; `decision_trace_count` artık **yalnız**
+signal journal'ını sayar (birleşik bir toplam, okurun hangi ize baktığını gizlerdi).
+
+**Sınır — bilerek dar tutuldu.** `entry_blocked`, `stack_entry_rejected`, `scale_layer_rejected`
+**taşınmadı**: bunlarda sinyal her filtreyi **geçti**, fill'in olmaması sizing / sleeve / exposure
+**kapasitesinden** kaynaklanıyor — bu bir execution sonucudur, filtre vetosu değil. Yeni bir veto
+**reason**'ı eklemek `FILTERED_EVENT_TYPES`'a dokunmaz; yeni bir veto **event type**'ı eklemek
+dokunur (modül docstring'i bunu yazıyor).
+
+**Persistence.** `filtered_event` tablosu (`signal_event` ile aynı şekil, `UNIQUE(result_id, seq)`,
+`result_id` FK CASCADE) — bayrak değil ayrı tablo, çünkü iki ayrı drill-down'ın bağımsız `seq`
+dizisi ve bağımsız checksum'ı var. `create_result` beş artifact'ı da listeler hâlde kurup
+`session.add_all` ile yazar; kök flush'tan **sonra** (L1 korunur).
+
+**Checksum.** `result_artifact_checksum` tablosu — (result, artifact tipi) başına `checksum` +
+`row_count` + `schema_version`. `domain/backtest/artifacts.py::compute_artifact_checksum`
+`compute_export_checksum` desenini aynalar (sha256, kanonik JSON, `artifact_type`'a pinli).
+Checksum **beş** artifact tipinin hepsi için yazılır — yalnız yeni tip için yazmak, bir sonraki
+artifact'ın yeniden icat etmesi gereken tek seferlik bir istisna olurdu. Hash girdisi drill-down'ın
+**servis ettiği** projeksiyondur (eksi `created_at`: materialization bookkeeping'i, üstelik
+checksum hesaplanırken server default henüz yok) → çağıran, aldığı satırlardan değeri
+**yeniden türetebilir**. I-02 öncesi Result'lar `checksum: null` döner — okuma anında geriye dönük
+doldurmak, bugünkü satırlara şahitlik eden bir değer üretirdi; yani tam da tespit etmesi beklenen
+kurcalamayı gizlerdi.
+
+**API.** `GET /backtest-results/{id}/artifacts/filtered_events` (alias `filtered`, `no_entry`) —
+mevcut keyset cursor + görünürlük kapısı aynen kullanılır, route imzası değişmedi. Yanıt zarfına
+`row_count` / `checksum` / `checksum_schema_version` eklendi (additive).
+
+### REGIME_TABLE — SEÇİM: artifact tipi EKLENMEDİ, Future-Dev sınırı olarak kayda geçti
+
+Gerekçe (ampirik):
+
+- V1 bar-replay motorunda **hiçbir** regime hesabı yok: `domain/backtest/` altında trend/range/
+  volatilite/likidite sınıflandırması üreten tek bir kod yolu bulunmuyor.
+- "Regime" repoda yalnız **iki** yerde var, ikisi de Future-Dev: `domain/capability/enums.py:22`
+  `REGIME_RESEARCH` capability token'ı ve `domain/metric_profile/registry.py` içindeki **FUTURE**
+  metrik `regime_sensitivity` (seçilebilir değil).
+- Doc 22 bu sınırı açıkça çiziyor: Regime Research "V18'de clickable değildir; no-op",
+  "**Future** versioned feature/regime artifact slotu" (§ Future Dev menü tablosu) ve Regime
+  Overlay yalnızca "published feature/regime artifact ve as-of availability policy ile" beslenir.
+- Doc 15 §3.2'nin placeholder sınırı da aynı yöne bakıyor: "Production V1 bu kartın varlığına
+  dayanarak otomatik model kararı, gizli Agent task'ı veya **sahte numeric diagnosis** üretmez."
+
+Bugün `REGIME_TABLE` artifact tipi eklemek iki sonuçtan birini verirdi: **daima boş** bir artifact
+(kullanıcıya "hesaplandı ama veri yok" diye okunur) ya da **uydurulmuş** bir regime sınıflandırması.
+İkisi de spec'in yasakladığı şey. Bu yüzden `ArtifactType` **beş** üyede kalıyor; REGIME_TABLE,
+Regime Research capability'si published feature definition üretmeye başladığında — as-of
+availability policy'siyle birlikte — açılacak. Bu, kapatılmış bir madde değil, **kayıtlı bir
+sınırdır**.
+
+### Doğrulama
+
+- `ruff check` · `ruff format --check` (656 dosya) · `mypy src` temiz.
+- **Golden ampirik kanıt:** regenerate etmeden ÖNCE, 46 senaryonun her biri için iki değişmez
+  alt-digest (`numeric` = summary+trades+equity+position_intervals; `trace` = iki journal'ın
+  havuzlanmış olay içeriği, `seq` düşürülmüş) I-02 öncesi/sonrası karşılaştırıldı
+  (`git stash` ile HEAD'e dönülerek): **`numeric` 1/46 değişti — yalnız `contract.execution_key`**
+  (ENGINE_VERSION namespace kayması, kasıtlı), **`trace` 0/46 değişti**. Yani hiçbir fiyat, fill,
+  trade veya metrik oynamadı; yalnızca olayın hangi journal'da durduğu ve `seq` numaralandırması
+  değişti. Ardından baseline
+  `uv run --extra dev python -m tests.unit.test_backtest_engine_golden` ile yeniden üretildi.
+- Migration `0040` up/down/up (izole DB, `DROP SCHEMA public CASCADE` sonrası) → head temiz;
+  migration↔model **kolon + nullability paritesi** iki yeni tablo için doğrulandı
+  (`filtered_event` 7 kolon, `result_artifact_checksum` 6 kolon; PK/FK/UNIQUE constraint'ler yerinde).
+- Yeni `tests/integration/test_filtered_events_artifact.py` (2 test): gerçek `run_engine` →
+  gerçek `create_result` → gerçek HTTP route. `GET .../artifacts/filtered_events` **200**, satırlar
+  `signal_events`'ten ayrı (hem servis edilen payload'da hem tabloda), veto `seq`'i kendi yoğun
+  dizisi, cursor sayfalaması tekrarsız/boşluksuz, **checksum servis edilen satırlardan yeniden
+  türetildi ve eşleşti**, signal journal'ın checksum'ı farklı değer.
+- Ayrıca hizalanan mevcut testler (assertion'lar aynı, okudukları journal değişti):
+  `test_backtest_restrictions.py::_filtered`, `test_backtest_decision_trace.py`,
+  `test_backtest_engine.py`, `test_backtest_engine_indicator_plan.py`, integration
+  `test_backtest_funding_step_order.py` (ENGINE_VERSION literali).
+
+### Dürüst sınırlar
+
+- **Frontend dokunulmadı.** V18 mockup'ındaki "View Filtered Events" düğmesi hâlâ bağlı değil;
+  bu slice backend yüzeyini açar. Frontend bağlama ayrı bir kalem.
+- **Filtered Events için export tipi eklenmedi.** Doc 15 §3.2'nin Data Export listesi Trade Log CSV
+  / Signal Events CSV / Equity Curve CSV / PineScript / Result JSON sayar — Filtered Events CSV
+  orada yok, uydurulmadı.
+- **Checksum eski Result'lar için geriye dönük doldurulmadı** (yukarıdaki gerekçe). I-02 öncesi
+  materialize edilmiş Result'lar `checksum`/`row_count`/`checksum_schema_version` = `null` döner.
+- **`decision_trace_count` anlamı daraldı** (artık yalnız signal journal). Bu bir diagnostics
+  alanıdır ve ENGINE_VERSION bump'ı kapsar; eski Result'lar kendi pinli sürümleri altında geçerli
+  kalır ama yeni Result'larla artifact bazında **kıyaslanabilir değildir**.

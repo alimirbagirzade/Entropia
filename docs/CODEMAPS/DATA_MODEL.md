@@ -1,7 +1,7 @@
 # DATA_MODEL — Postgres tabloları
 
 Modeller: `backend/src/entropia/infrastructure/postgres/models/*.py` (30 dosya, **102 tablo**).
-Alembic: `backend/alembic/versions/` — **head = `0039_backtest_run_cancellation`** (39 migration).
+Alembic: `backend/alembic/versions/` — **head = `0040_filtered_event_artifact`** (40 migration).
 
 > **Sayı tazeleme (2026-07-28, ampirik).** Tablo sayısı uzun süre **63** yazıyordu — gerçek
 > **102**. Yeniden üretmek için:
@@ -159,6 +159,8 @@ CLAUDE.md'deki **"her yeni `create_*` için L1 FK insert-order proof"** kuralın
 | `result_summary` | Headline özet (ör. `timeframe`) | `result_id` | — | — |
 | `metric_value` | Kalıcı metrik satırları | `result_id` | — | — |
 | `result_equity_point` / `trade_ledger_row` / `signal_event` / `diagnostic_artifact` | Ağır artifact'lar (keyset drill-down) | `result_id` | — | — |
+| `filtered_event` | **I-02** — filtre vetolarının AYRI artifact'ı (`filtered_no_entry`). `signal_event` ile aynı şekil, ama kendi `seq` dizisi: doc 15 §3.2 "View Signal Events" + "View Filtered Events" iki ayrı drill-down | `result_id` (FK → `backtest_result`, CASCADE), `UNIQUE(result_id, seq)` | — | — |
+| `result_artifact_checksum` | **I-02** — (result, artifact tipi) başına içerik checksum'ı + `row_count` (doc 15 §7 "artifact checksum verification", §8.3). Beş artifact tipinin **hepsi** için yazılır | `result_id` (FK, CASCADE), `UNIQUE(result_id, artifact_type)` | — | — |
 | `result_manifest_snapshot` | Result'a bağlı manifest kopyası | `result_id` | — | — |
 | `export_artifact` | Result'ın şema-versiyonlu türevi | `result_id` | — | — |
 | `ready_check_report` / `readiness_issue` | Değişmez readiness raporu + bulguları | `composition_snapshot_id`, `report_id` | — | — |

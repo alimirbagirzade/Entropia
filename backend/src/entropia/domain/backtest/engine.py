@@ -136,6 +136,7 @@ from entropia.domain.backtest.execution.sizing import (
     sleeve_capital,
 )
 from entropia.domain.backtest.execution.state import (
+    FILTERED_EVENT_TYPES,
     AllocationExecution,
     EquityPoint,
     PortfolioRules,
@@ -238,6 +239,12 @@ class EngineOutput:
     # LATER-pinned item's portfolio constraints are built from
     # (``build_prior_intervals``). Not persisted into the Result artifact.
     position_intervals: list[dict[str, Any]] = field(default_factory=list)
+    # I-02: the filter-veto journal, kept APART from ``signal_events`` and persisted as
+    # its own ``filtered_events`` artifact (doc 15 §3.2 "View Filtered Events"; §16 —
+    # the no-entry/filtered decision trace stays readable in its own right and is never
+    # forced into the shape of a real fill). Appended LAST so every existing positional
+    # construction keeps its meaning; ``run_engine`` and ``combine_item_runs`` set it.
+    filtered_events: list[SignalEventRow] = field(default_factory=list)
 
 
 @dataclass(frozen=True, slots=True)
@@ -3330,6 +3337,11 @@ def run_engine(
         "touch_exit_fills": touch_exit_fills,
         "item_count": item_count,
         "decision_trace_count": len(led.signal_events),
+        # I-02: the filter vetoes are their own artifact, so they are counted (and
+        # named) separately — ``decision_trace_count`` is the SIGNAL journal's length,
+        # never a merged total that would hide which trace a reader is looking at.
+        "filtered_event_count": len(led.filtered_events),
+        "filtered_event_types": sorted(FILTERED_EVENT_TYPES),
         "decision_trace_schema": DECISION_TRACE_SCHEMA,
         "decision_trace_event_types": list(DECISION_TRACE_EVENT_TYPES),
         "unmodelled_decision_classes": list(UNMODELLED_DECISION_CLASSES),
@@ -3344,6 +3356,7 @@ def run_engine(
         signal_events=led.signal_events,
         diagnostics=diagnostics,
         position_intervals=led.position_intervals,
+        filtered_events=led.filtered_events,
     )
 
 
@@ -3359,6 +3372,7 @@ __all__ = [
     "DECISION_TRACE_EVENT_TYPES",
     "DECISION_TRACE_SCHEMA",
     "ENTRY_MODEL",
+    "FILTERED_EVENT_TYPES",
     "UNMODELLED_DECISION_CLASSES",
     "AllocationExecution",
     "EngineOutput",

@@ -80,7 +80,16 @@ from entropia.shared.manifest import manifest_hash
 # stays valid under its own pinned engine_version but is NOT comparable with a new one, and
 # the bump shifts the execution_key namespace so it is never idempotently reused for a
 # re-RUN (INF-04/INF-05).
-ENGINE_VERSION = "backtest-engine-v18-funding-step-order"
+# v18-restriction-min-n (I-15a): the Restrictions/Filters combination gained the spec's
+# third option (doc 02 §5.8) — ``rule="min_n_of_m"`` + ``min_true_count``. The entry gate
+# ``_restrictions_block`` now has a third branch, so a strategy saved under the new rule
+# opens a DIFFERENT set of positions than the same filter set would have under the old
+# any/all-only engine (which could not even parse the value). ``any``/``all`` are
+# untouched and reproduce their prior results exactly; the bump exists because the saved
+# config space widened, and it shifts the execution_key namespace so a result produced by
+# an engine that could not evaluate Minimum-N is never idempotently reused for a re-RUN
+# (INF-04/INF-05).
+ENGINE_VERSION = "backtest-engine-v18-restriction-min-n"
 METRIC_SET_VERSION = "metric-set-v1"
 OUTPUT_ARTIFACT_PROFILE = "standard-v1"
 

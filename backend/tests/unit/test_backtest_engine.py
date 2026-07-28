@@ -597,11 +597,17 @@ def test_engine_execution_key_namespace_shifts_with_the_engine_version() -> None
     # re-resolves them fail-closed. K-03 then bumped it to -funding-step-order: funding/fee/
     # carry now runs at the TOP of each bar (doc 15 §9.3 step 2) instead of the end, so it
     # reduces the equity that sizes this bar's entries/scale layers and bounds its exposure
-    # caps. Under either change a result produced under the older engine — a different (or
-    # since-removed) dependency set, or the end-of-bar funding order — must never be
+    # caps. I-15a (a) bumped it to -restriction-min-n: the Restrictions/Filters combination
+    # gained the spec's third option (doc 02 §5.8, rule="min_n_of_m" + min_true_count), so
+    # the saved config space widened and the entry gate has a branch the old engine could
+    # not evaluate — this one shifts the namespace WITHOUT restating any existing number
+    # (any/all reproduce their prior output byte-for-byte; see engine_golden_digests.json,
+    # where only contract.execution_key moved). Under every one of these changes a result
+    # produced under the older engine — a different (or since-removed) dependency set, the
+    # end-of-bar funding order, or an unevaluatable Minimum-N gate — must never be
     # idempotently reused for a re-RUN.
     built = _manifest("btrun_A", "snap_A", "2024-01-01T00:00:00Z")
-    expected = "backtest-engine-v18-funding-step-order"
+    expected = "backtest-engine-v18-restriction-min-n"
     assert built.manifest["identity"]["engine_version"] == expected
     # The bump is a real NAMESPACE shift: the same run identity under the previous engine
     # version hashes to a different execution_key, so a pre-K-03 result is never reused.

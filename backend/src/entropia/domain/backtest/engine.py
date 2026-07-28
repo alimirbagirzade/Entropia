@@ -1030,6 +1030,11 @@ def run_engine(
     # STRATEGY_RESTRICTIONS_UNSUPPORTED blocker, never a silently unfiltered run.
     restrictions_cfg = config.restrictions_filters
     restriction_rule = restrictions_cfg.rule
+    # I-15a: N for the Minimum-N-of-M combination. The compiler already rejects an N
+    # above the enabled filter count, so the engine only needs the floor of 1 for a
+    # config that reached the worker without one (never a gate that blocks on zero
+    # active filters — that would veto every entry).
+    restriction_min_true = max(1, restrictions_cfg.min_true_count or 1)
     restrictions_ok = restrictions_are_modelled(config)
     restriction_specs: list[_RestrictionSpec] = (
         [
@@ -1295,11 +1300,19 @@ def run_engine(
         return active
 
     def _restrictions_block(active: list[dict[str, str]]) -> bool:
-        """Combine ACTIVE filters per the §12.1 rule: "any" = OR, "all" = AND."""
+        """Combine ACTIVE filters per the §12.1 rule: "any" = OR, "all" = AND,
+        "min_n_of_m" = at least N of the modelled filters active (I-15a, doc 02 §5.8).
+
+        Minimum-N sits strictly between the two: N=1 reproduces "any" and
+        N=len(specs) reproduces "all", so the existing two rules keep their exact
+        pre-I-15a behaviour byte-for-byte.
+        """
         if not restriction_specs:
             return False
         if restriction_rule == "all":
             return len(active) == len(restriction_specs)
+        if restriction_rule == "min_n_of_m":
+            return len(active) >= restriction_min_true
         return bool(active)
 
     def _bar_epoch_ms(ts: str) -> int | None:

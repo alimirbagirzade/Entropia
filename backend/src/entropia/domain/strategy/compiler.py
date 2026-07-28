@@ -22,6 +22,7 @@ CODE_TRIGGER_CONDITION_REQUIRED = "TRIGGER_SOURCE_CONDITION_REQUIRED"
 CODE_ENTRY_REQUIRED_BLOCK_MISSING = "ENTRY_REQUIRED_BLOCK_MISSING"
 CODE_SIGNAL_SUPPORTING_REQUIREMENT_UNMET = "SIGNAL_SUPPORTING_REQUIREMENT_UNMET"
 CODE_ENTRY_DIRECTION_INCOHERENT = "ENTRY_DIRECTION_INCOHERENT"
+CODE_RESTRICTION_MIN_COUNT_UNSATISFIABLE = "RESTRICTION_MIN_COUNT_UNSATISFIABLE"
 
 _CONDITION_BEARING_TRIGGERS = frozenset(
     {"indicator_native_trigger_plus_condition", "indicator_output_plus_condition"}
@@ -107,11 +108,14 @@ def validate_semantics(config: StrategyConfig) -> list[dict[str, Any]]:
     * **Signal aggregation satisfiability** (doc 02 §3, line 758): a signal rule
       that consumes Supporting blocks must have enough active Supporting blocks to
       be satisfiable (``min_supporting_count`` for the min-supporting rule).
+    * **Restriction Minimum-N satisfiability** (doc 02 §5.8, I-15a): a
+      ``rule="min_n_of_m"`` restriction set whose ``min_true_count`` exceeds the
+      number of ENABLED filters can never block, so the gate is dead config.
     * **Direction coherence** (doc 02 §9, AT-08, line 1306): an active entry block
       whose ``direction`` can never fire under the strategy's ``direction_mode``
       (mode=long vs block=short, or mode=short vs block=long) is dead config.
 
-    Only entry logic is validated for the last three rules; exit logic depth is a
+    Only entry logic is validated for the entry-graph rules; exit logic depth is a
     separate concern (doc 02 §4 placeholder semantics) and out of scope here.
     """
     issues: list[dict[str, Any]] = []
@@ -185,6 +189,27 @@ def validate_semantics(config: StrategyConfig) -> list[dict[str, Any]]:
                     "message": (
                         f"This signal rule needs at least {required_support} active "
                         f"Supporting entry Indicator Block(s); found {len(supporting)}."
+                    ),
+                }
+            )
+
+    # Restriction Minimum-N-of-M satisfiability (I-15a, doc 02 §5.8): a count above the
+    # number of ENABLED filters can never be reached, so the gate would silently never
+    # block — the same dead-config class as the entry supporting-count rule above. The
+    # M of "N of M" is the enabled filter set (the disabled-child convention), so a
+    # config whose N fits the total but not the enabled subset is still unsatisfiable.
+    restrictions = config.restrictions_filters
+    if restrictions.rule == "min_n_of_m":
+        enabled_filters = [rf for rf in restrictions.filters if rf.enabled]
+        required_active = restrictions.min_true_count or 1
+        if required_active > len(enabled_filters):
+            issues.append(
+                {
+                    "field": "restrictions_filters.min_true_count",
+                    "code": CODE_RESTRICTION_MIN_COUNT_UNSATISFIABLE,
+                    "message": (
+                        f"Minimum N of M needs at least {required_active} enabled "
+                        f"restriction(s); found {len(enabled_filters)}."
                     ),
                 }
             )

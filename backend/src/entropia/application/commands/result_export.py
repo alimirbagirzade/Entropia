@@ -17,6 +17,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from entropia.application.idempotency import run_idempotent
+from entropia.application.queries import result_access
 from entropia.domain.backtest.export import (
     EXPORT_SCHEMA_VERSION,
     build_object_key,
@@ -25,13 +26,11 @@ from entropia.domain.backtest.export import (
     normalize_export_type,
 )
 from entropia.domain.identity import Actor
-from entropia.domain.identity.policy import ensure_can_view, require_authenticated
-from entropia.domain.lifecycle.enums import DeletionState
+from entropia.domain.identity.policy import require_authenticated
 from entropia.infrastructure.postgres.repositories import audit as audit_repo
 from entropia.infrastructure.postgres.repositories import backtest as bt_repo
 from entropia.infrastructure.postgres.repositories import export as export_repo
-from entropia.infrastructure.postgres.repositories import mainboard as mb_repo
-from entropia.shared.errors import BacktestResultNotFoundError, CompositionNotFoundError
+from entropia.shared.errors import BacktestResultNotFoundError
 from entropia.shared.ids import new_id
 
 _EXPORT_TARGET = "export_artifact"
@@ -53,7 +52,12 @@ async def request_result_export(
     result = await bt_repo.get_result(session, result_id)
     if result is None or result.deletion_state != _ACTIVE:
         raise BacktestResultNotFoundError()
-    await _ensure_can_view_workspace(session, actor, result.workspace_entity_id)
+    # Doc 15 §2 keeps "Result view / export" on ONE row: whoever may read an
+    # accessible Result may export it when policy permits. So this gate is the SAME
+    # composition-view rule the history list/detail/compare use (O-14) — otherwise a
+    # grantee sees a card advertising ``allowed_actions.export=True`` and is then
+    # denied. Starting a RUN stays owner-only; exporting an existing Result is a read.
+    await result_access.ensure_can_view_composition(session, actor, result.workspace_entity_id)
     # Validate the export contract before any mutation (422 on bad type/format).
     canonical_type = normalize_export_type(export_type)
     canonical_format = normalize_export_format(export_format)
@@ -115,15 +119,6 @@ async def request_result_export(
 # --------------------------------------------------------------------------- #
 # Helpers                                                                     #
 # --------------------------------------------------------------------------- #
-
-
-async def _ensure_can_view_workspace(
-    session: AsyncSession, actor: Actor, workspace_entity_id: str
-) -> None:
-    workspace = await mb_repo.get_workspace(session, workspace_entity_id)
-    if workspace is None or workspace.deletion_state != DeletionState.ACTIVE:
-        raise CompositionNotFoundError()
-    ensure_can_view(actor, owner_principal_id=workspace.owner_principal_id, visibility="private")
 
 
 def _projection(export: Any) -> dict[str, Any]:

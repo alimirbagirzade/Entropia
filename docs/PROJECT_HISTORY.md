@@ -1514,3 +1514,126 @@ sonra yeniden hesaplandı. PR #407 CI'ı **6/6 yeşil** (backend, frontend, iki 
 - Adjudicate edilen kodlar için **yeni integration testi yazılmadı** — yeni kod eklenmediği için
   bağlanacak yeni davranış yok; her satırın karşılığı kendi mevcut testine sahip.
 
+---
+
+## O-14 · Results History — explicitly shared görünürlük + Supervisor ayrımı (PR #417)
+
+**Merge:** 2026-07-28, `main` · **Migration:** yok · **ENGINE_VERSION:** değişmedi ·
+**Route/şema:** değişmedi (OpenAPI drift yok) · **Frontend:** dokunulmadı.
+
+### Kusur (ampirik olarak doğrulandı)
+
+`backtest_result` satırının **kendi visibility kolonu yok**. Doc 16 §1 Result'ı bir composition'ın
+değişmez kanıt artifact'ı olarak tanımlıyor, dolayısıyla okuma yetkisinin kökü composition'ın
+(`mainboard_workspace`) `entity_registry` root'u. History indeksi bu kökü tek bir eşitlikle
+çözüyordu:
+
+```python
+# queries/results_history.py:106-118 (öncesi)
+if not actor.is_admin:
+    stmt = stmt.where(EntityRegistry.owner_principal_id == actor.principal_id)
+```
+
+Üç sonuç: (1) `resource_share` tablosu — Package paylaşımı için GAP-17'den beri **mevcut** — history
+sorgusuna hiç bağlanmamıştı, dolayısıyla doc 16 §2'nin User satırı ("Kendi + explicitly shared +
+published") sadece "kendi"ye çöküyordu; (2) **Supervisor sorgu düzeyinde User'dan ayrışmıyordu**
+(doc 16 §2: "Erişilebilir/shared çalışma kapsamındaki sonuçlar; başkasının sonucu salt-okunur");
+(3) aynı daralma **dört dosyada birebir kopyalanmış** `_ensure_can_view_workspace(...,
+visibility="private")` yardımcısında tekrarlanıyordu (`results_history`, `backtest_run`,
+`metric_profile`, `result_artifacts`) — detail, compare, metrics ve artifacts hep birlikte kayıyordu.
+
+### Ne landed
+
+| Dosya | Rol |
+|---|---|
+| `domain/backtest/result_visibility.py` (**yeni**) | Saf yüklem. Paylaşılan identity `can_view`'ini **`EXPLICITLY_SHARED`** görünürlükle çağırır — grant'leri saydıran şey budur. `shared_principal_ids=None` fail-closed kalır (çözülmüş grant yoksa owner+Admin). `LAB_SCOPE_ROLES = (ADMIN, SUPERVISOR)`. |
+| `application/queries/result_access.py` (**yeni**) | DB tarafı. `shared_composition_ids` (istek başına TEK küme okuması, satır başına probe yok — `library._viewer_shared_ids` deseni), `visible_composition_stmt` (list SQL yüklemi), `ensure_can_view_composition` (satır-bazlı yeniden kontrol; owner/Admin için hızlı yol → eski sorgu sayısı korunur). |
+| `domain/sharing/enums.py` | `COMPOSITION = "mainboard_workspace"`. Değer = paylaşılan kökün `entity_type`'ı (`PACKAGE = "package"` ile aynı kural). Tablonun kendi docstring'inde tarif edilen uzantı noktası. |
+| 4 sorgu modülü | Kopya `_ensure_can_view_workspace` yardımcıları **silindi**, tek kurala bağlandı. |
+
+Grant'ler Package paylaşımının kullandığı **aynı** repo fonksiyonlarından okunur
+(`share_repo.shared_resource_ids` / `active_grantee_ids`); aktif grant = `revoked_at IS NULL`, yani
+revoke edilen grant bir sonraki sorguda sonucu indeksten düşürür, ek defter tutulmaz.
+
+Filtreleme **SQL'in içinde** kalır: `has_more`/cursor post-filtered bir sayfayı değil **yetkili
+kümeyi** sayar (doc 16 §9.3). Lab kapsamı için `mainboard_workspace` detay tablosu yalnız o kapsamın
+geçerli olduğu roller için ve **OUTER** join'lenir — detay satırı eksik bir composition'da sahibin
+kendi kanıt satırını kaybetmesi bir onarım boşluğudur, görünürlük gerekçesi değil.
+
+### Karar: Supervisor ayrımı neye dayandırıldı
+
+Sistemde takım/proje/organizasyon kapsamı diye bir şey **yok**. Doc 16 §2'nin "erişilebilir/shared
+çalışma kapsamı" ifadesini karşılamak için kapsam **uydurmak** yerine, sistemin gerçekten modellediği
+tek kapsam kullanıldı: Analysis Lab'in **sahiplikten bağımsız** olarak tam `(Admin, Supervisor)`'a
+açtığı **Agent research** kapsamı (`queries/agent_workspace.py::_LAB_ROLES`, doc 18 §2).
+`result_visibility.LAB_SCOPE_ROLES` bilerek o demetin ikizidir ve docstring'i gerekçeyi taşır: bir
+Agent research workspace'inde üretilen Result, o workspace'in task/hypothesis/message kayıtlarını
+zaten okuyabilen rolden başkasına açılmaz.
+
+"Başkasının sonucu salt-okunur" için **ikinci bir kural yazılmadı** — `identity.can_edit` her
+non-owner yazmayı zaten reddediyor, dolayısıyla `_row_dto.allowed_actions.soft_delete` o satırlarda
+`false` döner ve `soft_delete_backtest_result` komutu da aynı kapıyı korur.
+
+### Dürüst sınırlar
+
+1. **"Published result" V1'de YOK.** `mainboard_workspace`'te `visibility_scope` kolonu yok (yalnız
+   `package_root`'ta var — ampirik doğrulandı), dolayısıyla hiçbir composition published/system
+   olamaz. Doc 16 §2'nin bu dalı **uydurulmadı**; erişilemez bırakıldı ve iki docstring'de açıkça
+   öyle yazıyor.
+2. **Composition grant'ini YAZAN komut yüzeyi eklenmedi.** Talimat açıkça "YENİ paylaşım mekanizması
+   İCAT ETME" diyordu; bu yüzden yalnız **okuma** yolu mevcut altyapıya bağlandı. Bugün bir
+   composition grant'i ancak repo katmanından (`share_repo.create_share`) yazılabilir — testler de
+   öyle yazıyor. Grant/revoke komutu + route + OCC + audit ayrı bir slice.
+3. **RUN kabul yüzeyi bilinçli olarak genişletilmedi.**
+   `commands/backtest_run.py::_require_viewable_composition` kendi `visibility="private"` kapısını
+   koruyor: paylaşılan bir composition'ın sonuçlarını okuyan biri orada **run başlatamaz**. Doc 16
+   §2 paylaşılan kapsama okuma/compare/export verir; RUN kabulü doc 15 §2'nin konusudur.
+4. Yazma yolu (`soft_delete_backtest_result` → `ensure_can_edit(owner=created_by_principal_id)`)
+   dokunulmadı. DTO'nun `soft_delete` bayrağı **workspace sahibine**, komut ise result'ın
+   **`created_by`**'ına bakar; run başlatma owner/Admin ile sınırlı olduğu için bu ikisi bugün
+   ayrışamaz — ama composition-share komutu geldiğinde **yeniden bakılmalı**.
+
+### Testler
+
+Yeni `tests/integration/test_results_history_visibility.py` — 12 case, gerçek Postgres: owner ·
+grantee (list + detail + compare) · revoke edilen grant indeksten düşürür (list boş, detail 403) ·
+`resource_type='package'` grant'i aynı composition id ile bile açmaz (grant iki kolonla anahtarlı —
+fail-closed kanıtı) · yabancı hiçbir şey görmez, detail ve compare reddedilir · Admin hepsini görür ·
+Supervisor Agent research kapsamını **salt-okunur** görür · Supervisor başka bir insanın private
+sonucunu görmez (lab kapsamı ana anahtar değil) · düz User lab sonuçlarını asla görmez ·
+Supervisor'da kapsam **additive** (kendi + shared + lab) · karışık kümede cursor yürüyüşü her satırı
+tam bir kez döndürür.
+
+Doğrulama: 12/12 · `ruff check` + `ruff format --check` + `mypy src` (358 dosya) temiz · lokal tam
+suite **exit 0** (0 `FAILED`/`ERROR`, ~2242 test) · **CI 6/6 yeşil** (Backend lint/type/test 30m5s).
+
+### Takip (aynı finding, ikinci dalga): export kapısı
+
+O-14'ün ilk dalgası dört okuma yüzeyini (`results_history`, `backtest_run`, `metric_profile`,
+`result_artifacts`) tek kurala bağladı ama **beşinci yüzeyi atladı**:
+`commands/result_export.py::_ensure_can_view_workspace` hâlâ kendi
+`ensure_can_view(..., visibility="private")` kopyasını taşıyordu. Sonuç, O-14'ün **kendi ürettiği**
+bir tutarsızlıktı: grantee/Supervisor artık history kartını görüyor, kart
+`allowed_actions.export=true` reklamı yapıyor, export komutu ise 403 veriyordu (O-14 öncesi kart hiç
+görünmediği için çelişki yoktu).
+
+Doc 15 §2 view ve export'u **tek satırda** derecelendiriyor — Supervisor: "Erişilebilir resultları
+okuyabilir ve policy uygunsa export alabilir"; doc 16 §2 ise export'u kendi tablosunda hiç
+derecelendirmiyor, yetkisini Sayfa 15'e devrediyor. Bu yüzden kapı
+`result_access.ensure_can_view_composition`'a bağlandı, yerel kopya silindi
+(`mb_repo`/`DeletionState`/`ensure_can_view`/`CompositionNotFoundError` import'ları da düştü).
+**RUN kabulü genişletilmedi** — `commands/backtest_run.py` kendi `private` kapısını koruyor: grantee
+okur ve export alır, run **başlatamaz**.
+
++3 integration case (`test_results_history_visibility.py` → **15/15**): grantee paylaşılan sonucu
+export edebilir (kart `export=true` ile birlikte assert edilir) · Supervisor lab kapsamındaki sonucu
+export edebilir · yabancı **ve** başka bir insanın private sonucundaki Supervisor reddedilir —
+okuyuculara açmak, okuyucu-olmayanlara açmak değildir. Komşu suite'ler regresyonsuz
+(`test_arrange_metrics` export provenance/idempotency dahil 81/81). Migration yok, route/şema yok.
+
+### Ortam dersi (tekrar teyit edildi)
+
+Tam suite'in **ilk** koşusu düzinelerce `ERROR` verdi; aynı dosyalar izole koşuda temiz geçti
+(`test_bootstrap_status.py` 4/4). CLAUDE.md'deki lock-wait tuzağı gerçektir. İki pratik kural:
+çıktıyı `| tail -N` ile kırpma (pytest özet satırı kaybolur, yalnız ERROR kuyruğu görünür — yanlış
+teşhise götürür), tamamını dosyaya yaz; ve otoriteyi CI'a bırak.

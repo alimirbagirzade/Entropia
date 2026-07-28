@@ -1,7 +1,7 @@
 # DATA_MODEL — Postgres tabloları
 
 Modeller: `backend/src/entropia/infrastructure/postgres/models/*.py` (30 dosya, **63 tablo**).
-Alembic: `backend/alembic/versions/` — **head = `0037_package_revision_link`** (37 migration).
+Alembic: `backend/alembic/versions/` — **head = `0038_backtest_run_event`** (38 migration).
 
 ## Kritik yapısal gerçek — DB-seviyesi FK neredeyse yok
 
@@ -135,6 +135,7 @@ her FK-bağımlı child'dan önce `Principal` flush edilmek zorundadır (`apps/s
 | Tablo | Amacı | Ana bağlar | soft-del | OCC |
 |---|---|---|---|---|
 | `backtest_run` | RUN admission satırı | `composition_snapshot_id`, `manifest_id`, `ready_report_id`, `retry_of_run_id`, `job_id`, `result_id` | — | ✔ |
+| `backtest_run_event` | **O-05** — kalıcı, run başına monoton `sequence_no` taşıyan stage olayları (`RUN_STARTED` / `RUN_STAGE_CHANGED` / terminal). Worker her stage'i ayrı commit eder → PROVISIONING/RUNNING dışarıdan görünür | `run_id` (FK → `backtest_run`, CASCADE), `UNIQUE(run_id, sequence_no)` | — | — |
 | `backtest_run_manifest` | Değişmez Run Manifest (pinlenmiş her şey) | `run_id`, `composition_snapshot_id` | — | — |
 | `backtest_result` | Değişmez sonuç kökü | `run_id`, `manifest_id` | `deletion_state` | ✔ |
 | `result_summary` | Headline özet (ör. `timeframe`) | `result_id` | — | — |

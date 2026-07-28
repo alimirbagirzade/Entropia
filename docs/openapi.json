@@ -6057,6 +6057,74 @@
         ]
       }
     },
+    "/api/v1/backtest-runs/{run_id}/events": {
+      "get": {
+        "description": "Replay the run's durable stage events after ``last_sequence`` (doc 15 §7, §11).\n\nRead-only reconnect path: a client whose SSE/polling connection dropped passes the\nlast sequence it saw and receives every later event exactly once, ascending.",
+        "operationId": "list_backtest_run_events_api_v1_backtest_runs__run_id__events_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "last_sequence",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Last Sequence",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Backtest Run Events Api V1 Backtest Runs  Run Id  Events Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Backtest Run Events",
+        "tags": [
+          "backtest"
+        ]
+      }
+    },
     "/api/v1/backtest-runs/{run_id}/retries": {
       "post": {
         "operationId": "retry_backtest_run_api_v1_backtest_runs__run_id__retries_post",

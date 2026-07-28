@@ -104,11 +104,19 @@ Sütunlar:
 
 | METHOD path | fonksiyon | çağırdığı | OCC | Idem |
 |---|---|---|---|---|
-| POST `/mainboard-compositions/{composition_id}/backtest-runs` (202) | `request_backtest_run:54` | `backtest_cmd.request_backtest_run` | **body `expected_fingerprint`** / If-Match (`_resolve_fingerprint:42` — sayısal If-Match reddedilir) | ✔ |
-| GET `/backtest-runs/{run_id}` | `get_backtest_run:75` | `backtest_query.get_backtest_run` | yok | — |
-| POST `/backtest-runs/{run_id}/retries` (202) | `retry_backtest_run:83` | `backtest_cmd.retry_backtest_run` | yok | ✔ |
-| GET `/backtest-results/{result_id}` | `get_backtest_result:96` | `backtest_query.get_backtest_result` | yok | — |
-| DELETE `/backtest-results/{result_id}` | `soft_delete_backtest_result:104` | `backtest_cmd.soft_delete_backtest_result` | **body `expected_row_version` (int)** / If-Match `rv-N` (`:112-114`) | ✔ |
+| POST `/mainboard-compositions/{composition_id}/backtest-runs` (202) | `request_backtest_run:57` | `backtest_cmd.request_backtest_run` | **body `expected_fingerprint`** / If-Match (`_resolve_fingerprint:45` — sayısal If-Match reddedilir) | ✔ |
+| GET `/backtest-runs/{run_id}` | `get_backtest_run:78` | `backtest_query.get_backtest_run` | yok | — |
+| GET `/backtest-runs/{run_id}/events` | `list_backtest_run_events:86` | `backtest_query.list_backtest_run_events` | yok | — |
+| POST `/backtest-runs/{run_id}/retries` (202) | `retry_backtest_run:106` | `backtest_cmd.retry_backtest_run` | yok | ✔ |
+| GET `/backtest-results/{result_id}` | `get_backtest_result:119` | `backtest_query.get_backtest_result` | yok | — |
+| DELETE `/backtest-results/{result_id}` | `soft_delete_backtest_result:127` | `backtest_cmd.soft_delete_backtest_result` | **body `expected_row_version` (int)** / If-Match `rv-N` (`:135-137`) | ✔ |
+
+> **Run stage replay (O-05).** `GET /backtest-runs/{run_id}/events?last_sequence=&limit=`
+> yalnız `sequence_no > last_sequence` olaylarını artan sırada döner (limit 1–500,
+> varsayılan 200). `get_backtest_run` projeksiyonu `last_sequence` taşır — önce run'ı oku,
+> sonra o sequence'tan devam et; arada kayıp olmaz. Aynı mantıksal olay sonsuza dek aynı
+> `sequence_no`'yu tutar (`UNIQUE(run_id, sequence_no)`), tekrar teslim edilen olay bu
+> anahtarla de-dupe edilir (doc 15 §7, §11).
 
 ## results_history.py
 

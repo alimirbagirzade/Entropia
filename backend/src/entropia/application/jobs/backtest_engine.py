@@ -4,7 +4,7 @@ Runs on the ``backtest`` queue. The durable ``jobs`` row + the ``backtest_run`` 
 are the source of truth — the request that admitted the run has long since returned
 (CR-09); browser close / logout never cancels it (doc 15 §8.2). Steps:
 
-    load job + run + immutable manifest -> mark RUNNING ->
+    load job + run + immutable manifest -> mark PROVISIONING (durable, committed) ->
     RE-RESOLVE every pinned revision from the manifest (NO 'latest' fallback;
         any unresolved pin => terminal FAILED, doc 15 §11, §15) ->
     resolve EVERY enabled Strategy's pinned config + its pinned market revision's
@@ -21,6 +21,15 @@ are the source of truth — the request that admitted the run has long since ret
     ONLY on success: materialize the immutable Result + summary + metrics +
         artifacts (CR-03), back-fill run.result_id, run -> SUCCEEDED ->
     audit + outbox.
+
+O-05 — stage observability. Each stage transition writes a durable
+``backtest_run_event`` (per-run monotonic ``sequence_no``) + audit + outbox row and
+is COMMITTED before the next stage begins, so PROVISIONING and RUNNING are visible
+to any other reader while the engine is still working (doc 15 §8.3, §12) and a
+disconnected client replays from its ``last_sequence`` (doc 15 §7, §11). The
+at-least-once guard is untouched: a TERMINAL run is still never re-run. A
+non-terminal run left behind by a killed worker is genuinely incomplete, so a
+redelivery re-attempts it and simply appends further events to the same sequence.
 
 A FAILED run is a normal recorded terminal outcome (diagnostics only, no Result,
 no history row), NOT a job exception — so the worker does not retry a permanent
@@ -72,6 +81,7 @@ from entropia.domain.backtest.engine import (
 from entropia.domain.backtest.enums import (
     RUN_TERMINAL_STATES,
     BacktestRunState,
+    RunEventType,
     RunFailureCode,
 )
 from entropia.domain.backtest.metrics import derive_metric_values
@@ -92,6 +102,15 @@ from entropia.shared.errors import FundingSourceInvalid, NotFoundError
 _RUN_TARGET = "backtest_run"
 _RESULT_TARGET = "backtest_result"
 
+# The spec's run event token (doc 15 §12) -> the shipped dotted audit/outbox kind.
+# Both names are kept on purpose: the token identifies the durable stream row a
+# client replays, the dotted kind matches the audit plane's existing
+# ``backtest.run_succeeded`` / ``backtest.run_failed`` convention.
+_STAGE_AUDIT_KIND: dict[RunEventType, str] = {
+    RunEventType.RUN_STARTED: "backtest.run_started",
+    RunEventType.RUN_STAGE_CHANGED: "backtest.run_stage_changed",
+}
+
 # The worker owns the bar-source I/O boundary; the engine itself never touches S3.
 BarBatchStreamer = Callable[[BarSourceRef], Iterator[list[dict[str, Any]]]]
 # F-07i (B): same boundary for the pinned tick/trade print stream — injectable so
@@ -107,7 +126,11 @@ async def run_backtest(
     stream_ticks: TickBatchStreamer = iter_tick_batches,
     load_funding_rows: FundingRowLoader | None = None,
 ) -> dict[str, Any]:
-    """Execute the durable backtest job. Does not commit (the worker scope commits)."""
+    """Execute the durable backtest job.
+
+    Commits at each stage boundary (O-05) so PROVISIONING/RUNNING are observable
+    while the engine works; the FINAL segment (terminal state + Result + audit) is
+    left uncommitted for the worker scope to commit, exactly as before."""
     job = await session.get(Job, job_id)
     if job is None:
         raise ValueError(f"Job '{job_id}' not found.")
@@ -125,17 +148,34 @@ async def run_backtest(
     if run.state in RUN_TERMINAL_STATES:
         return _terminal_ref(run)
 
+    entry_state = run.state
     job.status = JobStatus.RUNNING
     job.started_at = datetime.now(UTC)
     run.state = BacktestRunState.PROVISIONING
     run.started_at = datetime.now(UTC)
+    await _record_stage(
+        session,
+        run,
+        event_type=RunEventType.RUN_STARTED,
+        previous_state=entry_state,
+        state=BacktestRunState.PROVISIONING,
+        detail={"job_id": job_id, "manifest_hash": run.manifest_hash},
+    )
+    # O-05 stage checkpoint. Without this commit the whole body lands in ONE
+    # transaction (the actor's), so PROVISIONING/RUNNING never exist for any other
+    # reader and the run looks like QUEUED -> terminal from outside — while doc 15
+    # §8.3 requires the worker to WRITE these events. Committing here also means a
+    # worker killed mid-replay leaves a truthful durable stage instead of silently
+    # reverting to QUEUED.
+    await session.commit()
 
     # Re-resolve pins while still PROVISIONING; advance to RUNNING only when the
-    # manifest fully resolves AND the bar source is available, so the fail path
-    # never transits through RUNNING.
+    # manifest fully resolves AND every enabled Strategy's assets / range /
+    # instrument / indicator plan are in hand, so the resolution fail path never
+    # transits through RUNNING.
     missing = await _unresolved_pins(session, manifest.manifest)
     if missing:
-        return _fail_run(
+        return await _fail_run(
             session,
             job,
             run,
@@ -148,7 +188,7 @@ async def run_backtest(
     # their contributions into one portfolio result.
     strategies = await _resolve_enabled_strategies(session, manifest.manifest)
     if not strategies:
-        return _fail_run(
+        return await _fail_run(
             session,
             job,
             run,
@@ -158,31 +198,17 @@ async def run_backtest(
 
     capital_execution = manifest.manifest.get("capital_execution")
     item_count = len(manifest.manifest.get("mainboard_items", []))
-    # Prepare + bar-replay each enabled Strategy while still PROVISIONING, so the fail
-    # path (a missing asset / bad range / instrument mismatch / unresolved dependency /
-    # engine error on ANY enabled Strategy) never transits through RUNNING. A single
-    # enabled Strategy that fails is not silently dropped — the whole run FAILS (F-04:
-    # every selected object participates or the result is honestly not produced).
-    # Portfolio-level rules (cross-item, doc 13 §8.4): resolved ONCE from the manifest
-    # snapshot; None (no rule set) keeps every item's replay byte-identical to the
-    # pre-rules engine. Enforcement is sequential in the manifest's deterministic pin
-    # order — each completed item's closed-position windows become the NEXT items'
-    # constraints (an earlier item is never re-simulated because of a later one; the
-    # engine surfaces this precedence as an L4 warning).
-    base_rules = resolve_portfolio_rules(capital_execution)
-    prior_intervals: list[PriorItemInterval] = []
-    item_runs: list[ItemRun] = []
+
+    # PROVISIONING = resolve every enabled Strategy's assets (bar/tick source, range,
+    # instrument, indicator plan, funding schedule, allocation sleeve). A resolution
+    # failure on ANY enabled Strategy fails the whole run here, so the resolution fail
+    # path still never transits through RUNNING (F-04: a selected Strategy is never
+    # silently dropped). O-05 splits this from the replay — previously both happened
+    # under PROVISIONING and RUNNING was a zero-duration state set AFTER the engine had
+    # already finished, which is exactly why RUNNING was never observable.
+    prepared_items: list[_PreparedStrategy] = []
     for config, meta in strategies:
-        item_rules = (
-            replace(
-                base_rules,
-                own_symbol=config.data.instrument_id,
-                prior_intervals=tuple(prior_intervals),
-            )
-            if base_rules is not None
-            else None
-        )
-        prepared = await _prepare_and_run_strategy(
+        prepared = await _prepare_strategy(
             session,
             config=config,
             meta=meta,
@@ -191,23 +217,62 @@ async def run_backtest(
             tick_data=manifest.manifest.get("tick_data"),
             load_funding_rows=load_funding_rows,
             capital_execution=capital_execution,
+        )
+        if isinstance(prepared, _PrepFailure):
+            return await _fail_run(session, job, run, code=prepared.code, message=prepared.message)
+        prepared_items.append(prepared)
+
+    # Everything the engine needs is resolved -> the simulation itself starts NOW. This
+    # is the stage a watching client actually cares about, and the checkpoint commit is
+    # what makes it visible while the replay is still running.
+    await _record_stage(
+        session,
+        run,
+        event_type=RunEventType.RUN_STAGE_CHANGED,
+        previous_state=BacktestRunState.PROVISIONING,
+        state=BacktestRunState.RUNNING,
+        detail={"strategy_item_count": len(prepared_items), "item_count": item_count},
+    )
+    run.state = BacktestRunState.RUNNING
+    await session.commit()
+
+    # RUNNING = bar-replay each prepared Strategy. Portfolio-level rules (cross-item,
+    # doc 13 §8.4): resolved ONCE from the manifest snapshot; None (no rule set) keeps
+    # every item's replay byte-identical to the pre-rules engine. Enforcement is
+    # sequential in the manifest's deterministic pin order — each completed item's
+    # closed-position windows become the NEXT items' constraints (an earlier item is
+    # never re-simulated because of a later one; the engine surfaces this precedence as
+    # an L4 warning). An engine error on ANY item fails the whole run.
+    base_rules = resolve_portfolio_rules(capital_execution)
+    prior_intervals: list[PriorItemInterval] = []
+    item_runs: list[ItemRun] = []
+    for prepared in prepared_items:
+        item_rules = (
+            replace(
+                base_rules,
+                own_symbol=prepared.config.data.instrument_id,
+                prior_intervals=tuple(prior_intervals),
+            )
+            if base_rules is not None
+            else None
+        )
+        replayed = _replay_strategy(
+            prepared,
             execution_key=manifest.execution_key,
             item_count=item_count,
             portfolio_rules=item_rules,
         )
-        if isinstance(prepared, _PrepFailure):
-            return _fail_run(session, job, run, code=prepared.code, message=prepared.message)
-        if base_rules is not None and prepared.output is not None:
+        if isinstance(replayed, _PrepFailure):
+            return await _fail_run(session, job, run, code=replayed.code, message=replayed.message)
+        if base_rules is not None and replayed.output is not None:
             prior_intervals.extend(
                 build_prior_intervals(
-                    item_id=prepared.item_id,
-                    symbol=config.data.instrument_id,
-                    position_intervals=prepared.output.position_intervals,
+                    item_id=replayed.item_id,
+                    symbol=prepared.config.data.instrument_id,
+                    position_intervals=replayed.output.position_intervals,
                 )
             )
-        item_runs.append(prepared)
-
-    run.state = BacktestRunState.RUNNING
+        item_runs.append(replayed)
 
     # Enabled non-Strategy items (Trading Signal / Trade Log) are pinned + recorded for
     # traceability but run no standalone V1 bar-replay (F-04 honest boundary): their
@@ -249,10 +314,22 @@ async def run_backtest(
         engine_output=output,
         metric_values=metric_values,
     )
+    terminal_from = run.state
     run.result_id = result.result_id
     run.state = BacktestRunState.SUCCEEDED
     run.finished_at = datetime.now(UTC)
 
+    # The terminal event closes the stream a reconnecting client is replaying — without
+    # it a client that resumes from ``last_sequence`` would never learn the run ended.
+    await bt_repo.record_run_event(
+        session,
+        run_id=run.run_id,
+        event_type=RunEventType.RUN_SUCCEEDED,
+        previous_state=terminal_from,
+        state=BacktestRunState.SUCCEEDED,
+        correlation_id=run.correlation_id,
+        detail={"result_id": result.result_id, "manifest_hash": run.manifest_hash},
+    )
     _emit_success_audit(session, run=run, result_id=result.result_id)
     job.status = JobStatus.SUCCEEDED
     job.finished_at = datetime.now(UTC)
@@ -446,7 +523,27 @@ def _enabled_non_strategy_items(manifest: dict[str, Any]) -> list[ItemRun]:
     return items
 
 
-async def _prepare_and_run_strategy(
+@dataclass(frozen=True, slots=True)
+class _PreparedStrategy:
+    """One enabled Strategy with every engine input resolved, ready to replay.
+
+    Everything here is settled while the run is PROVISIONING; nothing in it touches
+    the database, so the replay stage is pure compute over already-resolved pins."""
+
+    item_id: str
+    item_kind: str
+    root_id: Any
+    revision_id: str
+    config: StrategyConfig
+    bar_batches: Iterator[list[dict[str, Any]]]
+    tick_batches: Iterator[list[dict[str, Any]]] | None
+    indicator_plan: Any
+    funding_schedule: Any
+    timeframe: str | None
+    allocation: Any
+
+
+async def _prepare_strategy(
     session: AsyncSession,
     *,
     config: StrategyConfig,
@@ -456,17 +553,16 @@ async def _prepare_and_run_strategy(
     tick_data: dict[str, Any] | None,
     load_funding_rows: FundingRowLoader | None,
     capital_execution: dict[str, Any] | None,
-    execution_key: str,
-    item_count: int,
-    portfolio_rules: PortfolioRules | None = None,
-) -> ItemRun | _PrepFailure:
-    """Resolve + bar-replay ONE enabled Strategy (F-04/F-05/F-06), or a ``_PrepFailure``.
+) -> _PreparedStrategy | _PrepFailure:
+    """Resolve every engine input for ONE enabled Strategy (F-04/F-05/F-06/F-11).
 
-    Mirrors the pre-F-04 single-strategy chain exactly (asset -> F-05 range/instrument
-    filter -> F-06 indicator plan -> allocation sleeve -> ``run_engine``), so a lone
-    Strategy replays byte-identically. Every failure is attributed to its ``item_id``
-    for traceability, and fails the whole run upstream — a selected Strategy is never
-    silently skipped."""
+    Mirrors the pre-F-04 single-strategy resolution chain exactly (asset -> F-05
+    range/instrument filter -> F-06 indicator plan -> funding source -> tick pin ->
+    allocation sleeve), so a lone Strategy replays byte-identically. Every failure is
+    attributed to its ``item_id`` for traceability and fails the whole run upstream —
+    a selected Strategy is never silently skipped. Nothing here runs the engine: the
+    split is what lets the run sit in PROVISIONING for exactly the resolution work and
+    enter RUNNING for exactly the simulation (O-05)."""
     item_id = meta["item_id"]
     market_revision_id = config.data.market_dataset_revision_id
     try:
@@ -578,29 +674,55 @@ async def _prepare_and_run_strategy(
     # sizes from the strategy's own initial_capital. The item id joins the allocation
     # entries to this item's sleeve share.
     allocation = resolve_allocation_execution(capital_execution, item_id=item_id)
+    return _PreparedStrategy(
+        item_id=item_id,
+        item_kind=meta["item_kind"],
+        root_id=meta["root_id"],
+        revision_id=meta["revision_id"],
+        config=config,
+        bar_batches=bar_batches,
+        tick_batches=tick_batches,
+        indicator_plan=indicator_plan,
+        funding_schedule=funding_schedule,
+        timeframe=base_timeframe,
+        allocation=allocation,
+    )
+
+
+def _replay_strategy(
+    prepared: _PreparedStrategy,
+    *,
+    execution_key: str,
+    item_count: int,
+    portfolio_rules: PortfolioRules | None = None,
+) -> ItemRun | _PrepFailure:
+    """Bar-replay ONE prepared Strategy. Pure compute — no database access.
+
+    Runs while the durable run state is RUNNING. An engine error is attributed to
+    the item and fails the whole run upstream (F-04)."""
     try:
         output = run_engine(
-            strategy_config=config,
-            bar_batches=bar_batches,
+            strategy_config=prepared.config,
+            bar_batches=prepared.bar_batches,
             execution_key=execution_key,
             item_count=item_count,
-            indicator_plan=indicator_plan,
-            timeframe=base_timeframe,
-            allocation=allocation,
-            funding=funding_schedule,
-            tick_batches=tick_batches,
+            indicator_plan=prepared.indicator_plan,
+            timeframe=prepared.timeframe,
+            allocation=prepared.allocation,
+            funding=prepared.funding_schedule,
+            tick_batches=prepared.tick_batches,
             portfolio_rules=portfolio_rules,
         )
     except Exception as exc:
         return _PrepFailure(
             RunFailureCode.ENGINE_ERROR,
-            f"Strategy item '{item_id}': engine error during bar-replay: {exc}",
+            f"Strategy item '{prepared.item_id}': engine error during bar-replay: {exc}",
         )
     return ItemRun(
-        item_id=item_id,
-        item_kind=meta["item_kind"],
-        root_id=meta["root_id"],
-        revision_id=meta["revision_id"],
+        item_id=prepared.item_id,
+        item_kind=prepared.item_kind,
+        root_id=prepared.root_id,
+        revision_id=prepared.revision_id,
         output=output,
     )
 
@@ -624,7 +746,54 @@ async def _resolve_strategy_payload(
     return dict(revision.payload)
 
 
-def _fail_run(
+async def _record_stage(
+    session: AsyncSession,
+    run: Any,
+    *,
+    event_type: RunEventType,
+    previous_state: Any,
+    state: BacktestRunState,
+    detail: dict[str, Any] | None = None,
+) -> None:
+    """Write ONE durable stage event + its audit/outbox twins (doc 15 §12).
+
+    Three planes, one transaction: the ``backtest_run_event`` row is what a client
+    replays by ``sequence_no``; the ``audit_events`` row keeps the shipped dotted
+    ``backtest.*`` kind convention; the outbox row fans the change out over SSE
+    (``resource_type`` starting with ``backtest`` maps to ``backtest.run.updated``).
+    """
+    await bt_repo.record_run_event(
+        session,
+        run_id=run.run_id,
+        event_type=event_type,
+        previous_state=previous_state,
+        state=state,
+        correlation_id=run.correlation_id,
+        detail=detail,
+    )
+    audit_repo.add_audit_event(
+        session,
+        event_kind=_STAGE_AUDIT_KIND[event_type],
+        actor_principal_id=run.requested_by_principal_id,
+        actor_kind=ActorKind.SYSTEM_SERVICE,
+        target_entity_id=run.run_id,
+        target_entity_type=_RUN_TARGET,
+        previous_state=str(previous_state) if previous_state is not None else None,
+        new_state=str(state),
+        correlation_id=run.correlation_id,
+        metadata=detail,
+    )
+    audit_repo.add_outbox_event(
+        session,
+        event_type=_STAGE_AUDIT_KIND[event_type],
+        resource_type=_RUN_TARGET,
+        resource_id=run.run_id,
+        payload={"run_id": run.run_id, "state": str(state), "event_type": str(event_type)},
+        correlation_id=run.correlation_id,
+    )
+
+
+async def _fail_run(
     session: AsyncSession,
     job: Job,
     run: Any,
@@ -632,10 +801,21 @@ def _fail_run(
     code: RunFailureCode,
     message: str,
 ) -> dict[str, Any]:
+    terminal_from = run.state
     run.state = BacktestRunState.FAILED
     run.failure_code = code.value
     run.failure_message = message
     run.finished_at = datetime.now(UTC)
+    # Terminal event: closes the replay stream for a client watching by sequence.
+    await bt_repo.record_run_event(
+        session,
+        run_id=run.run_id,
+        event_type=RunEventType.RUN_FAILED,
+        previous_state=terminal_from,
+        state=BacktestRunState.FAILED,
+        correlation_id=run.correlation_id,
+        detail={"failure_code": code.value, "failure_message": message},
+    )
     _emit_failure_audit(session, run=run, code=code)
     # The job itself completed (it produced a terminal run); a permanent manifest
     # failure is not retried by re-running the same job (doc 15 §11 — retry is a

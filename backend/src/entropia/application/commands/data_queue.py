@@ -19,6 +19,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from entropia.application.idempotency import run_idempotent
 from entropia.application.jobs.data_queue import list_redeliverable_data_jobs
 from entropia.domain.identity import Actor
 from entropia.domain.identity.policy import require_admin_panel
@@ -33,6 +34,7 @@ async def redeliver_data_queue_jobs(
     actor: Actor,
     *,
     grace_seconds: int,
+    idempotency_key: str | None = None,
 ) -> dict[str, Any]:
     """List + resolve stuck ``data``-queue jobs for operator re-dispatch. Does not
     commit (the request scope commits) and does not send actors (the route does)."""
@@ -44,39 +46,47 @@ async def redeliver_data_queue_jobs(
     ]
     skipped_unknown_kind = sum(1 for kind, _ in candidates if kind is None)
 
-    summary = {
+    summary: dict[str, Any] = {
         "scanned": len(candidates),
         "redeliverable": routable,
         "skipped_unknown_kind": skipped_unknown_kind,
     }
 
-    audit_repo.add_audit_event(
-        session,
-        event_kind=_EVENT_KIND,
-        actor_principal_id=actor.principal_id,
-        actor_kind=actor.actor_kind,
-        target_entity_type=_JOB_TARGET,
-        correlation_id=actor.correlation_id,
-        metadata={
-            "scanned": summary["scanned"],
-            "routable": len(routable),
-            "skipped_unknown_kind": skipped_unknown_kind,
-        },
-    )
-    audit_repo.add_outbox_event(
-        session,
-        event_type=_EVENT_KIND,
-        resource_type=_JOB_TARGET,
-        resource_id=None,
-        payload={
-            "scanned": summary["scanned"],
-            "routable": len(routable),
-            "skipped_unknown_kind": skipped_unknown_kind,
-        },
-        correlation_id=actor.correlation_id,
-    )
+    async def _op() -> dict[str, Any]:
+        audit_repo.add_audit_event(
+            session,
+            event_kind=_EVENT_KIND,
+            actor_principal_id=actor.principal_id,
+            actor_kind=actor.actor_kind,
+            target_entity_type=_JOB_TARGET,
+            correlation_id=actor.correlation_id,
+            metadata={
+                "scanned": summary["scanned"],
+                "routable": len(routable),
+                "skipped_unknown_kind": skipped_unknown_kind,
+            },
+        )
+        audit_repo.add_outbox_event(
+            session,
+            event_type=_EVENT_KIND,
+            resource_type=_JOB_TARGET,
+            resource_id=None,
+            payload={
+                "scanned": summary["scanned"],
+                "routable": len(routable),
+                "skipped_unknown_kind": skipped_unknown_kind,
+            },
+            correlation_id=actor.correlation_id,
+        )
+        return summary
 
-    return summary
+    return await run_idempotent(
+        session,
+        key=idempotency_key,
+        actor_principal_id=actor.principal_id,
+        request_payload={"op": "redeliver_data_queue_jobs", "grace_seconds": grace_seconds},
+        operation=_op,
+    )
 
 
 __all__ = ["redeliver_data_queue_jobs"]

@@ -74,6 +74,7 @@ async def create_dataset(
     body: CreateDatasetRequest,
     response: Response,
     ctx: RequestContext = Depends(request_context),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> dict[str, Any]:
     root, revision = await md_cmd.create_market_dataset(
         ctx.session,
@@ -83,6 +84,7 @@ async def create_dataset(
         title=body.title,
         instrument_id=body.instrument_id,
         instrument_scope=body.instrument_scope,
+        idempotency_key=idempotency_key,
     )
     response.headers["ETag"] = etag_for_row_version(root.row_version)
     return {
@@ -158,6 +160,7 @@ async def confirm_mapping(
     entity_id: str,
     body: ConfirmMappingRequest,
     ctx: RequestContext = Depends(request_context),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> dict[str, Any]:
     mapping = await md_cmd.confirm_market_schema_mapping(
         ctx.session,
@@ -166,6 +169,7 @@ async def confirm_mapping(
         market_data_type=body.market_data_type,
         source_columns=body.source_columns,
         confirmed_mapping=body.confirmed_mapping,
+        idempotency_key=idempotency_key,
     )
     return {
         "mapping_id": mapping.mapping_id,
@@ -221,6 +225,7 @@ async def create_successor(
     entity_id: str,
     body: CreateRevisionRequest,
     ctx: RequestContext = Depends(request_context),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> dict[str, Any]:
     revision = await md_cmd.create_successor_revision(
         ctx.session,
@@ -230,6 +235,7 @@ async def create_successor(
         market_data_type=body.market_data_type,
         title=body.title,
         instrument_id=body.instrument_id,
+        idempotency_key=idempotency_key,
     )
     return {
         "entity_id": entity_id,
@@ -244,6 +250,7 @@ async def deprecate(
     entity_id: str,
     body: DeprecateRequest,
     ctx: RequestContext = Depends(request_context),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> dict[str, Any]:
     return await md_cmd.deprecate_market_dataset_revision(
         ctx.session,
@@ -251,6 +258,7 @@ async def deprecate(
         entity_id=entity_id,
         revision_id=body.revision_id,
         note=body.note,
+        idempotency_key=idempotency_key,
     )
 
 

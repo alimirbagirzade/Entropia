@@ -28,6 +28,7 @@ from entropia.application.queries.manual import get_manual_stream, search_manual
 from entropia.apps.api.deps import RequestContext, request_context
 from entropia.apps.api.upload import validate_multipart_upload
 from entropia.domain.identity.policy import require_manual_admin, require_trash_admin
+from entropia.shared.concurrency import reconcile_occ_tokens
 
 router = APIRouter(tags=["manual"])
 
@@ -59,12 +60,13 @@ class DeleteDocumentRequest(BaseModel):
 
 
 def _expected_revision(body_value: str | None, if_match: str | None) -> str | None:
-    """Body token wins; ``If-Match`` transports the same head revision id."""
-    if body_value is not None:
-        return body_value
-    if if_match is None:
-        return None
-    return if_match.strip().strip('"') or None
+    """Body token wins; ``If-Match`` transports the same head revision id.
+
+    Dual-token rule (O-12): the two spellings must agree — a disagreement is 409
+    OCC_TOKEN_CONFLICT, never a silent pick (doc 21 §7).
+    """
+    header_value = None if if_match is None else (if_match.strip().strip('"') or None)
+    return reconcile_occ_tokens(body_value, header_value, field="expected_head_revision_id")
 
 
 @router.get(_STREAM_PATH)

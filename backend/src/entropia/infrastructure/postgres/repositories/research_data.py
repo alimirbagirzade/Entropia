@@ -366,6 +366,25 @@ def add_validation_issue(
     return issue
 
 
+async def get_field_definition(
+    session: AsyncSession, field_definition_id: str
+) -> ResearchFieldDefinition | None:
+    """Re-read a field definition to replay an idempotent define_field."""
+    return await session.get(ResearchFieldDefinition, field_definition_id)
+
+
+async def get_feature_definition(
+    session: AsyncSession, feature_definition_id: str
+) -> ResearchFeatureDefinition | None:
+    """Re-read a feature definition to replay an idempotent define_feature."""
+    return await session.get(ResearchFeatureDefinition, feature_definition_id)
+
+
+async def get_time_policy(session: AsyncSession, time_policy_id: str) -> ResearchTimePolicy | None:
+    """Re-read a time policy to replay an idempotent set_time_policy."""
+    return await session.get(ResearchTimePolicy, time_policy_id)
+
+
 async def get_dataset_root(session: AsyncSession, entity_id: str) -> EntityRegistry | None:
     """Return the registry Root iff it is a research dataset."""
     root = await session.get(EntityRegistry, entity_id)

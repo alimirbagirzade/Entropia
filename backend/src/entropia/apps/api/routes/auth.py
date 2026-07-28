@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Header, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -85,6 +85,7 @@ async def sign_up(
     body: SignUpRequest,
     request: Request,
     session: AsyncSession = Depends(db_session),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> SignUpResponse:
     settings = get_settings()
     result = await auth_commands.sign_up(
@@ -99,6 +100,7 @@ async def sign_up(
         # Mode decides the operational Admin count (PROV-02): session mode counts
         # login-capable Admins, so a legacy credentialless row never blocks it.
         auth_mode=settings.auth_mode,
+        idempotency_key=idempotency_key,
     )
     return SignUpResponse(**result)
 

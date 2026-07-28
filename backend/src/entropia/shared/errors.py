@@ -271,6 +271,60 @@ class TimezoneRequired(ValidationError):
     category = ErrorCategory.DATA_TIME_VALIDATION
 
 
+class TradeLogTimeZoneInvalidError(ValidationError):
+    """The Trade Log config declared a source time zone that ``zoneinfo`` cannot
+    resolve (doc 05 §5.2 "Invalid/ambiguous timezone rejected", §12.1
+    ``TIME_ZONE_INVALID``). Also raised when the import request itself carries an
+    unresolvable zone, so a bad zone never reaches the durable job."""
+
+    code = "TIME_ZONE_INVALID"
+    message = "The declared source time zone is invalid or ambiguous."
+    category = ErrorCategory.DATA_TIME_VALIDATION
+    suggested_action = "select_a_valid_iana_time_zone"
+    remediation = "Select a valid IANA zone or provide offset-aware timestamps."
+    field_path = "time_model.source_timezone"
+
+
+class TradingSignalTimezoneInvalidError(ValidationError):
+    """Trading Signal twin of :class:`TradeLogTimeZoneInvalidError`.
+
+    Same defect, different code: doc 04 §11 names it ``TIMEZONE_INVALID`` while doc 05
+    §12.1 names it ``TIME_ZONE_INVALID``. Each page's taxonomy is authoritative for its
+    own surface (the K-07 precedent), so both names ship."""
+
+    code = "TIMEZONE_INVALID"
+    message = "The declared source time zone is invalid or ambiguous."
+    category = ErrorCategory.DATA_TIME_VALIDATION
+    suggested_action = "select_a_valid_iana_time_zone"
+    remediation = "Select a valid IANA zone or provide offset-aware timestamps."
+    field_path = "time_policy.source_timezone"
+
+
+class SourceTimezoneMismatchError(ValidationError):
+    """The saved config's source time zone is NOT the one the pinned import ran under
+    (O-28). Shared by the Trade Log and Trading Signal save paths.
+
+    The import takes its ``source_timezone`` as a separate job parameter, so a config
+    declaring ``America/New_York`` could pin a batch normalized as ``UTC``: every stored
+    instant would be off by the true offset while the save still succeeded. Doc 04 §5
+    ("Market / timezone / event model changed after import") states the normalized
+    import revision then cannot be reused as valid and a reparse/remap job is required,
+    so this fails closed rather than silently picking a side. Neither page names a code
+    for it; ``TIMEZONE_MISMATCH`` is adjudicated here. NOT retryable — resending the
+    same pair always disagrees; the caller must re-import or correct the declared zone."""
+
+    code = "TIMEZONE_MISMATCH"
+    message = "The declared source time zone does not match the imported record batch."
+    category = ErrorCategory.DATA_TIME_VALIDATION
+    retryable = False
+    suggested_action = "reimport_with_the_declared_time_zone"
+    remediation = (
+        "Re-run the import using the time zone this configuration declares, or change "
+        "the declared time zone to the one the import used. Timestamps normalized under "
+        "a different zone cannot be reused."
+    )
+
+
 class MarketDataTimezoneUnresolved(ValidationError):
     """A naive source timestamp could not be localized (K-01, doc 11 §9.1).
 

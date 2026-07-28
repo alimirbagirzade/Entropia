@@ -11,7 +11,8 @@ Command chain (doc 04 §9.3):
     request_trading_signal_import  -> durable jobs row (data queue, CR-09); worker
                                       produces a normalized_signal_event_revision
     create_trading_signal_and_attach -> validate §9.2 config + require a succeeded,
-                                      non-empty, time-safe import -> create native
+                                      non-empty, time-safe import whose zone matches
+                                      the config's -> create native
                                       work object + pin the normalized revision ->
                                       (Save & Add) attach onto the Mainboard (REUSE
                                       3a attach_mainboard_item)
@@ -48,6 +49,7 @@ from entropia.domain.importing.column_mapping import (
     BLOCKER_INVALID_COLUMN_MAPPING,
 )
 from entropia.domain.importing.source_file import assert_supported_source_file
+from entropia.domain.importing.timezone import is_valid_iana_timezone, timezones_agree
 from entropia.domain.lifecycle.enums import DeletionState
 from entropia.domain.mainboard.enums import MainboardItemKind
 from entropia.domain.trading_signal.compiler import (
@@ -86,6 +88,8 @@ from entropia.shared.errors import (
     SignalEventMappingRequiredError,
     SourceAssetNotFoundError,
     SourceProviderRequiredError,
+    SourceTimezoneMismatchError,
+    TradingSignalTimezoneInvalidError,
     TradingSignalValidationFailedError,
     WorkObjectNotFoundError,
     WorkObjectRevisionConflictError,
@@ -209,6 +213,7 @@ async def request_trading_signal_import(
     the legacy free-text ``instrument_id`` is carried verbatim (backward compatible).
     """
     require_authenticated(actor)
+    _validate_source_timezone(source_timezone)
     asset = await ts_repo.get_source_asset(session, source_asset_id)
     if asset is None:
         raise SourceAssetNotFoundError(f"Source asset '{source_asset_id}' not found.")
@@ -275,7 +280,8 @@ async def create_trading_signal_and_attach(
     """Save a Trading Signal revision 1 and (optionally) attach it (doc 04 §8.1).
 
     Validates the §9.2 config, requires the referenced import to be a succeeded,
-    non-empty, time-safe normalized revision, then in ONE tx: create the native
+    non-empty, time-safe normalized revision produced UNDER THE DECLARED TIME ZONE
+    (O-28), then in ONE tx: create the native
     work object (root + immutable revision 1, ``object_kind=trading_signal``,
     ``available_time`` = earliest accepted event) -> pin the normalized revision to
     that revision -> if ``attach`` (Save & Add), attach onto the Mainboard (REUSE 3a
@@ -286,9 +292,7 @@ async def create_trading_signal_and_attach(
     config = _validate_config(payload)
     canonical = config_to_dict(config)
     config_hash = compute_config_hash(config)
-    normalized = await _require_ready_import(
-        session, config.import_binding.normalized_event_revision_id
-    )
+    normalized = await _require_ready_import(session, config)
     await _require_source_asset(session, config.import_binding.source_asset_id)
     available_time = normalized.earliest_available_time
 
@@ -388,9 +392,7 @@ async def create_trading_signal_revision(
     config = _validate_config(payload)
     canonical = config_to_dict(config)
     config_hash = compute_config_hash(config)
-    normalized = await _require_ready_import(
-        session, config.import_binding.normalized_event_revision_id
-    )
+    normalized = await _require_ready_import(session, config)
     await _require_source_asset(session, config.import_binding.source_asset_id)
     available_time = normalized.earliest_available_time
 
@@ -565,6 +567,26 @@ def _clean_mapping(import_mapping: dict[str, str] | None) -> dict[str, str] | No
     return cleaned or None
 
 
+def _validate_source_timezone(source_timezone: str) -> None:
+    """Reject a non-IANA import zone BEFORE the durable job is enqueued (O-28).
+
+    Doc 04 §5 requires an ``IANA identifier``. Catching it here matters more on this
+    twin than on the Trade Log one: ``domain/trading_signal/events.py::_resolve_timezone``
+    silently falls back to UTC for an unresolvable zone, so an invalid zone reaching the
+    worker would shift every event without any blocker."""
+    if not is_valid_iana_timezone(source_timezone):
+        raise TradingSignalTimezoneInvalidError(
+            details=[
+                {
+                    "field": "source_timezone",
+                    "code": TradingSignalTimezoneInvalidError.code,
+                    "message": f"'{source_timezone}' is not a valid IANA time zone identifier.",
+                }
+            ],
+            field_path="source_timezone",
+        )
+
+
 def _import_provenance(
     config: TradingSignalConfig,
     normalized: NormalizedSignalEventRevision,
@@ -600,17 +622,27 @@ def _raise_for_issues(issues: list[dict[str, Any]]) -> None:
         raise OhlcvPolicyConflictError(details=issues)
     if any(field and str(field).startswith("source.provider_name") for field in fields):
         raise SourceProviderRequiredError(details=issues)
+    # O-28: a bad source zone is doc 04 §11's own TIMEZONE_INVALID, not a generic
+    # failure — the UI must be able to point at the Time Zone field.
+    if any(field and str(field).endswith("source_timezone") for field in fields):
+        raise TradingSignalTimezoneInvalidError(details=issues)
     raise TradingSignalValidationFailedError(details=issues)
 
 
 async def _require_ready_import(
-    session: AsyncSession, normalized_revision_id: str
+    session: AsyncSession, config: TradingSignalConfig
 ) -> NormalizedSignalEventRevision:
-    """Resolve a succeeded, non-empty, time-safe normalized import revision.
+    """Resolve a succeeded, non-empty, time-safe normalized import revision that was
+    normalized under the SAME time zone this config declares.
 
     A missing revision -> 404; an unfinished/failed import -> the most specific
-    blocker (legacy schema / available-time / no-events / not-ready).
+    blocker (legacy schema / available-time / no-events / not-ready); a revision parsed
+    under a different zone -> ``TIMEZONE_MISMATCH`` (O-28).
+
+    The whole config is taken rather than just the revision id so no future save path
+    can bind an import while skipping the time-zone cross-check.
     """
+    normalized_revision_id = config.import_binding.normalized_event_revision_id
     normalized = await ts_repo.get_normalized_revision(session, normalized_revision_id)
     if normalized is None:
         raise NormalizedRevisionNotFoundError(
@@ -622,7 +654,44 @@ async def _require_ready_import(
         raise NoAcceptedSignalEventsError()
     if normalized.earliest_available_time is None:
         raise AvailableTimeRequiredError()
+    _require_timezone_agreement(config, normalized)
     return normalized
+
+
+def _require_timezone_agreement(
+    config: TradingSignalConfig, normalized: NormalizedSignalEventRevision
+) -> None:
+    """Trade Log twin (O-28): the declared zone must be the one the import ran under.
+
+    ``request_trading_signal_import`` carries ``source_timezone`` as its own job
+    parameter, so a config declaring ``America/New_York`` could pin a revision
+    normalized as ``UTC`` — shifting every ``event_time``/``available_time`` by the true
+    offset while the anti-lookahead contract still looked satisfied. Doc 04 §5 says a
+    timezone changed after import makes the normalized revision unusable and requires a
+    reparse; an import declaring no zone cannot be shown to agree, so it fails too.
+    """
+    declared = config.time_policy.source_timezone
+    imported = (normalized.validation_summary or {}).get("source_timezone")
+    if timezones_agree(declared, imported):
+        return
+    raise SourceTimezoneMismatchError(
+        details=[
+            {
+                "field": "time_policy.source_timezone",
+                "code": SourceTimezoneMismatchError.code,
+                "message": (
+                    f"The configuration declares '{declared}' but the pinned normalized "
+                    f"import was produced under '{imported or 'an undeclared zone'}'."
+                ),
+                "declared_source_timezone": declared,
+                "imported_source_timezone": imported,
+                "normalized_event_revision_id": normalized.normalized_revision_id,
+            }
+        ],
+        field_path="time_policy.source_timezone",
+        scope_type="normalized_signal_event_revision",
+        scope_id=normalized.normalized_revision_id,
+    )
 
 
 def _raise_for_failed_import(normalized: NormalizedSignalEventRevision) -> None:

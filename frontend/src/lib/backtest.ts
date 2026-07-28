@@ -500,11 +500,44 @@ export const KEY_METRIC_COLUMNS = [
 
 export const EM_DASH = "—";
 
+// Doc 17 §6.1 "Nihai UI metni", VERBATIM — the text that replaces a null metric
+// VALUE. `no_drawdown` / `no_losing_trade` are the two divide-by-zero cases: doc 17
+// §6 romadInfo/profitFactorInfo each say the metric "is reported as Not available
+// with a no_drawdown / no_losing_trade status", so the value text stays the generic
+// "Not available" and the STATUS carries the reason (never infinity, never 0 — L4).
 const AVAILABILITY_LABELS: Record<string, string> = {
+  not_computed: "Not computed for this result",
+  not_available: "Not available",
+  no_qualifying_trades: "No qualifying trades",
+  no_drawdown: "Not available",
+  no_losing_trade: "Not available",
+};
+
+// The status word shown in the Availability column — short, so a row never repeats
+// its own value text, and human, so the raw wire token is not the UI surface.
+const AVAILABILITY_STATUS_LABELS: Record<string, string> = {
+  computed: "Computed",
   not_computed: "Not computed",
   not_available: "Not available",
   no_qualifying_trades: "No qualifying trades",
+  no_drawdown: "No drawdown",
+  no_losing_trade: "No losing trade",
 };
+
+// Doc 17 §6 romadInfo / profitFactorInfo (and §6.1 for the other two), VERBATIM —
+// the sentence that explains WHY the value is absent.
+export const METRIC_AVAILABILITY_NOTES: Record<string, string> = {
+  no_drawdown:
+    "ROMAD is return over maximum drawdown. When maximum drawdown is zero, ROMAD is not shown as infinity; it is reported as Not available with a no_drawdown status.",
+  no_losing_trade:
+    "Profit Factor is gross profit divided by absolute gross loss. When there are no losing trades, it is reported as Not available with a no_losing_trade status rather than as infinity.",
+  no_qualifying_trades: "Metric denominator requires trade roots but none qualify.",
+  not_computed: "Metric definition existed but this immutable result was not calculated with it.",
+};
+
+export function metricAvailabilityStatusLabel(availability: string): string {
+  return AVAILABILITY_STATUS_LABELS[availability] ?? availability;
+}
 
 export function formatMetricValue(
   cell: Pick<MetricCell, "value" | "value_format" | "availability"> | null | undefined,

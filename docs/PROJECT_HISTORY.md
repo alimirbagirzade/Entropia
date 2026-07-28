@@ -1619,3 +1619,97 @@ Docker, iki E2E (dev-auth + gerçek tarayıcı/Compose) ve A11Y axe-core taramas
 - `blocked` outcome'ı (purge_pending / purged / restored) preflight'ta raporlanır ama frontend
   paneli bunu ayrıca ele almaz: bu durumlarda satır zaten `restore_eligible=false` olduğu için
   Restore düğmesi hiç render edilmiyor.
+
+---
+
+## I-01 · Metric null status granularity — `no_drawdown` / `no_losing_trade` (branch `feat/i01-metric-null-status-granularity`)
+
+### Kusur (ampirik doğrulandı) — ve düzeltilen bir yanlış teşhis
+
+`domain/backtest/metrics.py::derive_metric_values` **her** null metriği tek bir ikili kurala
+düşürüyordu: `total_trades == 0` ise `NO_QUALIFYING_TRADES`, değilse `NOT_AVAILABLE`. İki sonuç:
+
+1. **Neden-null bilgisi kayboluyordu.** Doc 17 §9.2 ROMAD için "Max drawdown=0 ise null +
+   `no_drawdown`; infinity yasak", Profit Factor için "Gross loss=0 ise null + `no_losing_trade`"
+   diyor; doc 16 §9.3 böyle bir ROMAD'ı null-last sıralıyor. `MetricAvailability` (enums.py:48)
+   bu iki değeri **hiç tanımlamıyordu** — motor doğru şekilde `None` üretiyor (`engine.py:2969-2976`,
+   `execution/portfolio.py:147-152`: her ikisi de sıfır bölene karşı fail-closed), ama okuyucu
+   "neden" bilgisini asla göremiyordu.
+2. **Yanlış gerekçe etiketleniyordu.** `total_trades == 0` olan bir koşuda `net_profit` /
+   `max_drawdown` / `romad` gibi **equity-curve** metrikleri de `NO_QUALIFYING_TRADES` damgası
+   alıyordu. Bu metriklerin paydası trade root'a bağlı değil — sebep olarak trade yokluğunu
+   göstermek düpedüz yanlış bir ifadeydi.
+
+**Görev tanımındaki "NOT_COMPUTED ölü enum" iddiası ampirik olarak YANLIŞ çıktı.** Tek üretici
+`derive_metric_values` değil: `application/queries/metric_profile.py:196::_metric_card_not_computed`
+onu gerçekten emit ediyor — kullanıcının Arrange Metrics profilinin **seçtiği** ama bu immutable
+Result'ın **hiç hesaplamadığı** metrik için (doc 17 §6.1 "Not computed for this result"). Bu,
+"motor çalıştı ve değer üretemedi"den **farklı bir olgu**. Dolayısıyla enum kaldırılmadı; iki
+üreticinin ayrık (disjoint) olduğu enum docstring'ine ve bir regresyon testine yazıldı.
+
+### Ne landed
+
+**Enum — iki yeni granül durum (`domain/backtest/enums.py`).** `MetricAvailability` artık altı
+değer: mevcut `computed` / `not_computed` / `not_available` / `no_qualifying_trades` **isim ve
+değer olarak dokunulmadan** + `NO_DRAWDOWN = "no_drawdown"` ve `NO_LOSING_TRADE = "no_losing_trade"`.
+Docstring iki üreticiyi (motor fold'u vs. Arrange Metrics profil görünümü) ayrık olarak tanımlıyor.
+
+**Registry — `trade_dependent` bayrağı (`domain/backtest/metrics.py`).** `MetricDefinition`'a
+varsayılanı `False` olan bir alan eklendi; doc 17 §9.2'ye göre paydası kapalı trade root'a bağlı
+altı metrik (`win_rate`, `profit_factor`, `total_trades`, `total_stops`, `max_stop_streak`,
+`total_winning_trades`) `True`. Equity metrikleri (`net_profit`, `max_drawdown`, `romad`) `False`
+— **yalnız** `trade_dependent` bir metrik `NO_QUALIFYING_TRADES` etiketi alabilir.
+
+**Tek karar noktası — `_null_availability()`.** Sıra bilinçli:
+`summary_key` **hiç yoksa** → `NOT_AVAILABLE` (yokluk dışında bilinen bir sebep yok; anahtarın
+VAR olup `None` olması ise bir fold'un bilerek null'ladığı anlamına gelir, ancak o zaman sebep
+adlandırılabilir) → `romad` + `max_drawdown_pct == 0` → `NO_DRAWDOWN` → `profit_factor` +
+`total_trades > 0` → `NO_LOSING_TRADE` (her iki fold da profit_factor'ü **tek** koşulda null'lar:
+`gross_loss == 0`; trade varken sebep "kayıp trade yok"tur) → `trade_dependent` + 0 trade →
+`NO_QUALIFYING_TRADES` → aksi halde `NOT_AVAILABLE`. `FORMULA_VERSION` ve registry **dokunulmadı**.
+
+**Frontend (`lib/backtest.ts`, `components/ResultDetail.tsx`) — salt sunum.**
+`AVAILABILITY_LABELS` doc 17 §6.1'in "Nihai UI metni" sütununa **verbatim** hizalandı:
+`not_computed` → **"Not computed for this result"** (önce kısaltılmış "Not computed" idi),
+`no_drawdown` / `no_losing_trade` → **"Not available"** (doc 17 §6 romadInfo/profitFactorInfo:
+"it is reported as Not available with a no_drawdown status"). Availability sütunu artık ham wire
+token yerine kısa insan etiketi gösteriyor (`metricAvailabilityStatusLabel`) ve `title` olarak doc
+17 §6'nın **verbatim** gerekçe cümlesini taşıyor (`METRIC_AVAILABILITY_NOTES`). Route path, react-
+query key, OCC token, Idempotency-Key, hook ve SSE taksonomisi dokunulmadı.
+
+### Testler
+
+`backend/tests/unit/test_metric_availability.py` (YENİ, 6 test — hepsi **gerçek motoru** koşturur,
+sentetik summary yalnız "anahtar hiç yok" vakasında): drawdown'sız kazançlı koşuda ROMAD
+`no_drawdown` (0 DEĞİL, `not_available` DEĞİL) · aynı koşuda profit_factor `no_losing_trade` ·
+sıfır-trade koşusunda equity metrikleri `computed`, ROMAD `no_drawdown`, yalnız win_rate/
+profit_factor `no_qualifying_trades` · eksik anahtar `not_available` kalır (I-01 regresyonu) ·
+`derive_metric_values` **asla** `not_computed` emit etmez · `trade_dependent` kümesi doc 17 §9.2
+listesiyle birebir. Fixture geometrisi `tests/unit/test_backtest_engine` yardımcılarından alınıyor
+(repoda 7 dosyanın izlediği mevcut desen) — ikinci bir config kopyası drift üretirdi.
+
+`test_backtest_engine.py::test_missing_ratio_metric_is_non_computed_never_zero` yeni semantiğe
+hizalandı: equity metrikleri `NOT_AVAILABLE`, trade-paydalı ikisi `NO_QUALIFYING_TRADES`.
+
+`frontend/src/test/metricAvailabilityText.test.tsx` (YENİ, 5 test): §6.1 verbatim metinleri ·
+`no_drawdown`/`no_losing_trade` "Not available" (em-dash DEĞİL, "0.00" DEĞİL) · statü etiketleri ·
+§6 gerekçe cümleleri · `not_available` için uydurma not YOK. `backtestRun.test.tsx` tek assert'i
+`getAllByText("Not available")` (2 düğüm) olarak yeni markup'a hizalandı.
+
+### Dürüst sınırlar
+
+- **Migration YOK, alembic head `0039_backtest_run_cancellation` olarak kaldı.** `metric_value.
+  availability` non-native enum (`types.py::enum_column`, `native_enum=False`) → CHECK constraint
+  **üretilmiyor**, kolon `VARCHAR(20)`; yeni değerler 11 ve 15 karakter. `CreateTable` çıktısıyla
+  ampirik doğrulandı: kolon tipi değişmedi.
+- **`ENGINE_VERSION` bump EDİLMEDİ** ve motor dosyalarına dokunulmadı. Fark salt okuma-modelinde:
+  aynı summary, aynı sayılar, farklı **statü adı**. Reprodüksiyon sözleşmesi etkilenmiyor.
+- **`gross_loss` motor summary'sine eklenmedi.** `no_losing_trade` çıkarımı "profit_factor null +
+  trade var" üzerinden yapılıyor; bu iki fold'da da tam olarak `gross_loss == 0` demek (kod yorumu
+  bu bağı pinliyor). Summary'ye yeni alan eklemek sonuç değerlerini değiştirmeden persist edilen
+  şekli genişletirdi — kapsam dışı bırakıldı.
+- **Geçmiş Result satırları geriye dönük yeniden etiketlenmedi.** `metric_value` satırları immutable;
+  I-01 öncesi yazılmış bir ROMAD null'u `no_qualifying_trades`/`not_available` olarak kalır. Yeni
+  granülerlik yalnız bundan sonraki koşularda görünür — kayıtlı, bilinçli sınır.
+- `no_drawdown` ve `no_losing_trade` **openapi.json'a yansımadı** çünkü `availability` yayımlanan
+  şemada serbest `string`; enum olarak publish edilmiş değil (drift guard tetiklenmedi).

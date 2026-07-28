@@ -159,6 +159,12 @@ Before stopping a working session, produce **ALL** of the following:
   seçenek kümesi taşıyor; yeni `domain/trash/restore.py` katalogu + salt-okuma
   `GET /trash-entries/{id}/restore-preflight`; bilinmeyen resolution 422
   `UNSUPPORTED_RESTORE_RESOLUTION`; migration YOK)** ·
+- **I-01 (`feat/i01-metric-null-status-granularity`):** `MetricAvailability` +2 granül statü
+  (`no_drawdown`, `no_losing_trade`, doc 17 §9.2); `metrics.py::_null_availability` sebebi metrik
+  başına adlandırıyor ve `trade_dependent` olmayan equity metriklerini artık `no_qualifying_trades`
+  diye suçlamıyor. `NOT_COMPUTED` **ölü değildi** — tek üreticisi
+  `queries/metric_profile.py::_metric_card_not_computed`, korundu. **Migration YOK**
+  (`metric_value.availability` = `VARCHAR(20)`, CHECK yok), **`ENGINE_VERSION` bump YOK**.
 
 
 - **Testler:** son yeşil referans CI (O-serisi PR'ları). Lokal tam suite tek koşuda

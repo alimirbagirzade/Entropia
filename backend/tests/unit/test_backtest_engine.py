@@ -701,8 +701,13 @@ def test_metrics_registry_maps_all_nine_defaults() -> None:
 
 def test_missing_ratio_metric_is_non_computed_never_zero() -> None:
     # A no-qualifying-trades summary: ratio/percent metrics that CANNOT be computed
-    # surface as None + NO_QUALIFYING_TRADES (never a fabricated 0), while count
-    # metrics that legitimately ARE 0 show the real computed 0 (L4, §5).
+    # surface as None + a status that NAMES the reason (never a fabricated 0), while
+    # count metrics that legitimately ARE 0 show the real computed 0 (L4, §5).
+    # I-01: the reason is per-metric. Only a metric whose denominator needs trade
+    # roots may be blamed on the missing trades; an equity-curve metric that is null
+    # for another cause (here: no percentage denominator at all) stays NOT_AVAILABLE.
+    # The granular no_drawdown / no_losing_trade cases live in
+    # tests/unit/test_metric_availability.py.
     summary = {
         "net_profit_pct": None,
         "max_drawdown_pct": None,
@@ -717,6 +722,9 @@ def test_missing_ratio_metric_is_non_computed_never_zero() -> None:
     values = {v.key: v for v in derive_metric_values(summary)}
     for key in ("net_profit", "max_drawdown", "romad", "win_rate", "profit_factor"):
         assert values[key].value is None
+    for key in ("net_profit", "max_drawdown", "romad"):
+        assert values[key].availability == MetricAvailability.NOT_AVAILABLE
+    for key in ("win_rate", "profit_factor"):
         assert values[key].availability == MetricAvailability.NO_QUALIFYING_TRADES
     for key in ("total_trades", "total_stops", "max_stop_streak", "total_winning_trades"):
         assert values[key].value == Decimal("0")

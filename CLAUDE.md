@@ -145,8 +145,13 @@ Before stopping a working session, produce **ALL** of the following:
 
 
 
-- **Next — PO imzası + R2 kapanışı** (R3 mühendislik backlog'u F-05 ile kapandı; **F-07 raw-id
-  sweep kalıntısı empirik doğrulanmalı**). Kalan tek blokaj
+- **F-07 raw-id sweep — SUNUM katmanı kapandı (bu slice).** 31 dosyada 161 `*_id` render'ı tarandı;
+  P-11/P-12/P-16 gerçekten landed (traceability 10/13/16 gerekçeleri bayattı → düzeltildi), Portfolio'da
+  2 kalıntı presentation-only düzeltildi, **4 kalıntı açık** (backend display-DTO → `§4.4`). vitest
+  **608/608** (**`--no-file-parallelism` ZORUNLU**). Backend'e dokunulmadı: ENGINE_VERSION/migration yok.
+  **F-07 bütün olarak Complete DEĞİL.**
+
+- **Next — PO imzası + R2 kapanışı.** Kalan tek blokaj
   **product-owner imzası**: `docs/implementation/v18_final_acceptance.md` §4 (D-1…D-9 kararları —
   görsel sapmalar, F-2…F-6 mini slice'ları, A11Y-01 palet kararı, 20.11 onayı). **İmza olmadan
   `entropia_v18_remediation_status.md`'deki R2 RE-OPENING banner'ı kalkmaz, hiçbir satır Complete

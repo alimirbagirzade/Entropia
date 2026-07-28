@@ -4,8 +4,8 @@ Before O-14 the history index answered ``owner OR Admin`` only: the generic
 ``resource_share`` table (already carrying Package grants, GAP-17) was never
 joined, so doc 16 §2's "own + explicitly shared + published" collapsed to "own",
 and Supervisor was indistinguishable from User at the query level. These tests
-pin the corrected contract end to end — list, detail and compare — plus the
-fail-closed edges (revoked grant, wrong resource_type, stranger).
+pin the corrected contract end to end — list, detail, compare and export — plus
+the fail-closed edges (revoked grant, wrong resource_type, stranger).
 
 Auto-skips without PostgreSQL (tests/integration/conftest.py).
 """
@@ -18,6 +18,7 @@ from typing import Any
 
 import pytest
 
+from entropia.application.commands import result_export as export_cmd
 from entropia.application.queries import results_history as history_query
 from entropia.application.queries.backtest_run import get_backtest_result
 from entropia.domain.backtest.enums import MetricAvailability
@@ -325,3 +326,54 @@ async def test_shared_and_lab_rows_page_through_one_authorized_set(session) -> N
             break
 
     assert sorted(seen) == ["res_lab", "res_o1", "res_o2"]
+
+
+# --------------------------------------------------------------------------- #
+# Export — doc 15 §2 keeps "Result view / export" on ONE row                   #
+# --------------------------------------------------------------------------- #
+
+
+async def _export(session, actor: Actor, *, result_id: str, key: str) -> dict[str, Any]:
+    return await export_cmd.request_result_export(
+        session,
+        actor,
+        result_id=result_id,
+        export_type="trade_ledger",
+        export_format="csv",
+        idempotency_key=key,
+    )
+
+
+async def test_grantee_can_export_a_shared_result(session) -> None:
+    """The history row advertises ``allowed_actions.export=True`` to every viewer,
+    and doc 15 §2 rates view and export together — so a reader must not be denied
+    at the export command after being shown the card."""
+    workspace_id = await _seed_owner_workspace(session)
+    _grant(session, workspace_id=workspace_id, grantee="user_grantee")
+    await session.commit()
+
+    page = await history_query.list_backtest_results(session, GRANTEE)
+    assert page["items"][0]["allowed_actions"]["export"] is True
+
+    out = await _export(session, GRANTEE, result_id="res_o1", key="exp_grantee")
+    assert out["result_id"] == "res_o1"
+
+
+async def test_supervisor_can_export_a_lab_scope_result(session) -> None:
+    await _seed_owner_workspace(session)
+    await _seed_agent_workspace(session)
+
+    out = await _export(session, SUPERVISOR, result_id="res_lab", key="exp_supervisor")
+    assert out["result_id"] == "res_lab"
+
+
+async def test_stranger_cannot_export(session) -> None:
+    """Opening export to READERS must not open it to non-readers."""
+    workspace_id = await _seed_owner_workspace(session)
+    _grant(session, workspace_id=workspace_id, grantee="user_grantee")
+    await session.commit()
+
+    with pytest.raises(AccessDeniedError):
+        await _export(session, STRANGER, result_id="res_o1", key="exp_stranger")
+    with pytest.raises(AccessDeniedError):
+        await _export(session, SUPERVISOR, result_id="res_o1", key="exp_sup_private")

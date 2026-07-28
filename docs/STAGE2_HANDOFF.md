@@ -2978,66 +2978,72 @@ iddiasının kalanı hakkında bu kayıt hiçbir şey söylemiyor. (3) Lokal tam
 tamamlanamadı (ortam kaynaklı); integration'ın otoritesi #407 CI'ıdır (6/6 yeşil).
 
 
+## O-14 — Results History: explicitly shared görünürlük + Supervisor ayrımı landed (PR #417)
+
+**Kusur (ampirik).** `backtest_result` satırının kendi visibility kolonu **yok**; doc 16 §1'e göre
+Result bir composition'ın değişmez kanıt artifact'ı, dolayısıyla yetkinin kökü composition'ın
+(`mainboard_workspace`) registry root'u. History indeksi bu kökü yalnız `owner OR Admin` çözüyordu
+(`queries/results_history.py:106-118`); `resource_share` tablosu (Package paylaşımı için GAP-17'den
+beri **mevcut**) sorguya hiç bağlanmamıştı. Sonuç: doc 16 §2'nin User satırı ("Kendi + explicitly
+shared + published") sadece "kendi"ye çöküyordu ve **Supervisor sorgu düzeyinde User'dan
+ayrışmıyordu**. Aynı daralma dört dosyada birebir kopyalanmış
+`_ensure_can_view_workspace(..., visibility="private")` yardımcısında tekrarlanıyordu — detail,
+compare, metrics ve artifacts hep birlikte kayıyordu.
+
+**Ne landed.** Yetki artık TEK yerde: `domain/backtest/result_visibility.py` (saf yüklem —
+paylaşılan identity `can_view`'ini **`EXPLICITLY_SHARED`** görünürlükle çağırır; grant'leri saydıran
+şey budur, `shared_principal_ids=None` fail-closed kalır) + `application/queries/result_access.py`
+(DB tarafı: `share_repo.shared_resource_ids`/`active_grantee_ids` — Package paylaşımının **aynı**
+repo'su; `visible_composition_stmt` = list SQL yüklemi, `ensure_can_view_composition` = satır-bazlı
+yeniden kontrol, owner/Admin için hızlı yol ile eski sorgu sayısı korunur). Dört kopya yardımcı
+silindi; `results_history`, `backtest_run`, `metric_profile`, `result_artifacts` tek kurala bağlandı.
+`ShareResourceType.COMPOSITION = "mainboard_workspace"` (generic tablonun kendi docstring'inde tarif
+ettiği uzantı noktası). **Migration YOK · ENGINE_VERSION değişmedi · route/şema değişmedi
+(OpenAPI drift yok) · frontend'e dokunulmadı.**
+
+**Supervisor ayrımı — neye dayandırıldı.** Sistemde takım/proje kapsamı diye bir şey yok; uydurmak
+yerine **gerçekten modellenen tek "erişilebilir çalışma kapsamı"** kullanıldı: Analysis Lab'in
+sahiplikten bağımsız olarak tam `(Admin, Supervisor)`'a açtığı **Agent research** kapsamı
+(`queries/agent_workspace.py::_LAB_ROLES`, doc 18 §2). `LAB_SCOPE_ROLES` bilerek o demetin ikizi.
+"Başkasının sonucu salt-okunur" ikinci kural gerektirmedi — `can_edit` her non-owner yazmayı zaten
+reddediyor → `allowed_actions.soft_delete=false`.
+
+**Dürüst sınırlar (hepsi bilinçli, PR gövdesinde de yazılı).**
+1. **"Published result" V1'de YOK** — `mainboard_workspace`'te `visibility_scope` kolonu yok, hiçbir
+   composition published/system olamaz; doc 16 §2'nin bu dalı **uydurulmadı**, erişilemez bırakıldı.
+2. **Composition grant'ini YAZAN komut yüzeyi eklenmedi** — "yeni paylaşım mekanizması icat etme"
+   kısıtı gereği yalnız OKUMA yolu bağlandı. Bugün grant ancak repo katmanından yazılabilir; bir
+   composition-share komut/route slice'ı açık iş olarak duruyor.
+3. **RUN kabul yüzeyi genişletilmedi** — `commands/backtest_run.py::_require_viewable_composition`
+   kendi `visibility="private"` kapısını koruyor: grantee paylaşılan composition'ın sonuçlarını
+   okur, orada run **başlatamaz**.
+4. Yazma yolu (`soft_delete_backtest_result` → `ensure_can_edit`) dokunulmadı.
+
+**Testler.** Yeni `tests/integration/test_results_history_visibility.py` — **12 case**: owner ·
+grantee (list + detail + compare) · revoke edilen grant indeksten düşürür ·
+`resource_type='package'` grant'i aynı id ile bile composition'ı **açmaz** (iki kolonlu fail-closed
+kanıtı) · yabancı hiçbir şey görmez (detail/compare 403) · Admin hepsini görür · Supervisor lab
+kapsamını salt-okunur görür ama başka bir insanın private sonucunu görmez · düz User lab sonuçlarını
+asla görmez · Supervisor'da kapsam additive · karışık own/shared/lab kümesinde cursor yürüyüşü her
+satırı tam bir kez döndürür (`has_more` yetkili kümeyi sayar). Lokal: 12/12 · ruff+format+mypy
+(358 dosya) temiz · tam suite exit 0 (0 F/E, ~2242 test) · **CI 6/6 yeşil** (Backend job 30m5s).
+
+**Takip dalgası — export kapısı (aynı finding).** İlk dalga dört okuma yüzeyini birleştirdi ama
+**beşincisini atladı**: `commands/result_export.py` kendi `visibility="private"` kopyasını koruyordu.
+Bu, O-14'ün kendi ürettiği bir tutarsızlıktı — grantee/Supervisor artık `allowed_actions.export=true`
+diyen kartı görüyor, export komutu ise 403 veriyordu. Doc 15 §2 "Result view / export"u **tek satırda**
+derecelendirdiği (Supervisor: "Erişilebilir resultları okuyabilir ve policy uygunsa export alabilir"),
+doc 16 §2 ise export'u kendi tablosunda derecelendirmeyip Sayfa 15'e devrettiği için kapı
+`result_access.ensure_can_view_composition`'a bağlandı, yerel yardımcı silindi. RUN kabulü
+genişletilmedi. **+3 case → 15/15**; komşu suite'ler regresyonsuz (81/81); migration/route/şema yok.
+
+**Ortam notu (tekrar teyit).** Tam suite'in İLK koşusu düzinelerce `ERROR` verdi; aynı dosyalar izole
+koşuda geçti (`test_bootstrap_status.py` 4/4). CLAUDE.md'deki lock-wait tuzağı gerçek — çıktıyı
+`tail -N` ile kırpma (özet satırı kaybolur), tamamını dosyaya yaz ve otoriteyi CI'a bırak.
+
+## Next: **PO imzası + R2 kapanışı** (değişmedi) · O-14 landed (#417)
 
 Kalan tek büyük açık iş hâlâ **R2'nin product-owner imzası**
 (`docs/implementation/v18_final_acceptance.md` §4, D-1…D-9) — imza olmadan
 `entropia_v18_remediation_status.md`'deki R2 RE-OPENING banner'ı kalkmaz.
 
-
-
-## O-16 — User Manual: stale search anchor recovery landed (PR #444)
-
-**Kusur (ampirik).** `frontend/src/pages/UserManual.tsx:364` arama sonucunu **çıplak** bir
-`<a href={"#"+row.anchor}>` olarak render ediyordu: anchor varlık kontrolü, stream refetch, retry —
-hiçbiri yok. Arama indeksi kendi gördüğü snapshot'tan cevap verdiği için reader'ın gösterdiği
-stream'in gerisinde kalabilir; o durumda tıklama **sessizce hiçbir yere** gidiyordu.
-`grep -rn "no longer available" frontend/src` → **0 hit**, yani doc 21 §7'nin zorunlu kıldığı
-"missing anchor" metni kod tabanında hiç yoktu. Aynı kusur §14 satır 464'te ("Click target
-missing/stale ise stream refetch then anchor retry") ve acceptance **UM-18**'de ("Client refetch +
-anchor retry; bulunamazsa precise unavailable message") ayrıca yazılı.
-
-**Ne landed.** `ManualSearchNav` sonuç tıklamasını `preventDefault` edip modül-içi
-`openResult(anchor)`'a veriyor; sıra doc 21 §7'nin cümlesinin birebir karşılığı:
-1. `document.getElementById(anchor)` → varsa `scrollToAnchor` (`scrollIntoView({behavior:"smooth",
-   block:"start"})`), **refetch yok**;
-2. yoksa `onRefetchStream()` (parent'ın `stream.refetch()`'i) → `waitForAnchorElement` ile sınırlı
-   poll (`ANCHOR_RETRY_ATTEMPTS=10` × `ANCHOR_RETRY_POLL_MS=16`) — rehydrate edilen bölümün render
-   pass'ini beklemek için, DOM'u bir kez okuyup "yok" demek yerine;
-3. hâlâ yoksa `ANCHOR_UNAVAILABLE_MESSAGE` = **"The section is no longer available in the current
-   manual."** (doc 21 §7'den verbatim, sabit olarak pinlendi) `role="status" aria-live="polite"`
-   bölgesinde. Bölge **her zaman mount**, böylece sonuç sessiz bir DOM eklemesi olarak gelmiyor.
-
-`href` korundu (kopyala / orta tık çalışmaya devam ediyor). Yeni arama gönderiminde mesaj
-temizleniyor. **Migration YOK · ENGINE_VERSION değişmedi · backend'e dokunulmadı · route path,
-react-query key (`["manual", …]`), OCC token, `Idempotency-Key`, hook imzaları ve `lib/manual.ts`
-aynen kaldı** — tek yeni yüzey modül-içi `ManualSearchNav`'ın `onRefetchStream` prop'u.
-
-**Neden refetch, reset değil.** Parent `stream.refetch()` veriyor, `resetToFirstPage()` değil:
-`frontier=null` yapmak biriken kuyruğu (accumulate-on-load-more) düşürür ve **anchor'ı kurtarma
-adımının kendisi silebilirdi**. Refetch mevcut cursor sayfasını tazeler, önceki sayfalardan biriken
-bölümler state'te kalır, DOM kontrolü hepsini görür.
-
-**Dürüst sınırlar.**
-1. Retry **yalnız stream query'sinin döndürdüğünü** bulabilir — henüz yüklenmemiş bir "Load more"
-   sayfasının arkasındaki bölüm `unavailable` okunur. Kod içine yorumlandı; spec'in reçetesi
-   ("refetch then resolve") tam olarak bu.
-2. **Kenar çubuğu bölüm listesi linklerine dokunulmadı** (`UserManual.tsx:118`) — onlar render
-   edildikleri **aynı** snapshot'tan türüyor, bayatlayamazlar; bayatlayabilen yüzey arama indeksi.
-   Doc 21 §7 satırı "Open result / section" dese de riski taşıyan taraf yalnız result.
-3. Refetch hata verirse verdict verilmiyor — `catch` yutuyor ve karar yine **render edilmiş olana**
-   bakan retry'a bırakılıyor.
-
-**Testler.** `frontend/src/test/userManual.test.tsx` içinde yeni `describe("stale anchor recovery")`
-— **3 case**: canlı anchor → doğru elemente smooth scroll + **stream GET sayısı artmıyor** + mesaj
-yok · bayat anchor (LATE_SECTION yalnız İKİNCİ stream fetch'te gelir) → refetch + retry →
-`#sec-mdoc-9` elementine scroll · hiç var olmayan anchor → verbatim mesaj + **scroll YOK**.
-`scrollIntoView` jsdom'da tanımlı olmadığı için hedefi de kaydeden bir double kuruluyor
-(`stubScrollIntoView`), böylece "scroll oldu" değil "doğru bölüme scroll oldu" kanıtlanıyor.
-Lokal: **vitest 622/622** (60 dosya, `--no-file-parallelism` ZORUNLU) · `tsc -b --noEmit` temiz ·
-`eslint` 0 uyarı. CI PR #444.
-
-**Ortam notu.** Bu worktree'de `frontend/node_modules` yoktu; `npm ci` gerekti. Vitest'in ilk
-çalıştırması config'i çözemeyip `ERR_MODULE_NOT_FOUND` verdi — bu bir test hatası değil, kurulum
-eksiğidir.
-
-## Next: **PO imzası + R2 kapanışı** (değişmedi) · O-16 landed (#444)

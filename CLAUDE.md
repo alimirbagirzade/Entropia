@@ -155,8 +155,6 @@ Before stopping a working session, produce **ALL** of the following:
 - **Son dalga — O-serisi (spec-uyum kusurları):** O-01 (#403) · O-02 (#400) · **O-03 (#407 + #413;
   #408 boş merge oldu, içeriğini #413 yeniden indirdi)** · O-04 (#405) · O-05 (#412) ·
   **O-06 (#419 — CancelBacktestRun, migration `0039`)** · O-08 (#406) · O-09 (#410) · O-10 (#402) ·
-  O-15 (#409) · **O-16 (#444 — User Manual stale search-anchor recovery: doc 21 §7 verbatim mesaj +
-  stream refetch + retry; frontend-only, migration YOK)**.
 
 
 - **Testler:** son yeşil referans CI (O-serisi PR'ları). Lokal tam suite tek koşuda

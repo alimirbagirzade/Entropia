@@ -190,7 +190,9 @@ rv-N` kullanmaya devam ediyor).
 > (Analysis Lab) kapsamı — başkasının sonucu **salt-okunur** (`can_edit` yazmayı zaten
 > reddeder → `allowed_actions.soft_delete=false`). List yüklemi SQL'de (`has_more`/cursor
 > yetkili kümeyi sayar); `GET /backtest-results/{id}`, `POST /backtest-results/compare`,
-> `.../metrics` ve `.../artifacts/{type}` aynı kuralı satır bazında yeniden değerlendirir.
+> `.../metrics`, `.../artifacts/{type}` ve `POST .../exports` aynı kuralı satır bazında yeniden
+> değerlendirir (export doc 15 §2'de view ile **aynı satırda** derecelendirilir; RUN kabulü değil —
+> `commands/backtest_run.py` kendi `private` kapısını korur).
 > **Dürüst sınır:** "published result" V1'de yok — composition'da `visibility_scope`
 > kolonu yoktur; composition grant'i YAZAN bir komut yüzeyi de V1'de yok (yalnız okuma).
 

@@ -122,21 +122,23 @@ Before stopping a working session, produce **ALL** of the following:
 
 ## Current position (keep in sync at each closing)
 
-> Aşağıdaki değerler **2026-07-22** tarihinde repodan empirik doğrulandı. Yine de
-> **STALE-BY-DEFAULT** kabul et: §Session START adım 1'i çalıştırmadan bunlara güvenme.
+> Aşağıdaki değerler **2026-07-28** tarihinde repodan empirik doğrulandı (`origin/main` @
+> `eff8ffe`). Yine de **STALE-BY-DEFAULT** kabul et: §Session START adım 1'i çalıştırmadan
+> bunlara güvenme.
 
 - **Durum:** V1 ROADMAP COMPLETE (Stages 0–8, docs 01–22) + post-V1 + video-alignment +
   V18-R2 dalgası + **auth remediation dalgası COMPLETE** (güvenlik denetimi #346–#364).
   Tüm route yüzeyleri frontend'e bağlı; TIER 2 sayfa haritası 24/24.
 
-- **alembic head:** **`0035_portfolio_rules`** (35 migration, tek head — K-serisinde migration YOK).
-  **`ENGINE_VERSION` = `backtest-engine-v18-funding-step-order`** (K-03'te bump edildi; öncesi
-  K-04 `-full-pinning`, K-02 `-available-time-gate`).
-- **Son dalga — K-serisi kusur backlog'u + O-02:** K-01 (#386) · K-02 (#393) · **K-03 (#398, funding
-  bar başına = doc 15 §9.3 adım 2)** · K-04 (#397) · K-05 (#387) · K-06 (#395) · K-07 (#388) ·
-  **O-02 (#400, hata zarfı recovery sözleşmesi — main `5ba6c0c`, migration yok)**.
-- **Testler (lokal, O-02 dalı):** backend tam suite **exit 0, hiç F/E yok** (real-Postgres) ·
-  ruff + format + mypy (351 dosya) temiz · CI 6/6 yeşil. Frontend'e dokunulmadı.
+- **alembic head:** **`0038_backtest_run_event`** (38 migration, tek head).
+  **`ENGINE_VERSION` = `backtest-engine-v18-funding-step-order`** (`manifest.py:83`; K-03'te bump
+  edildi, öncesi K-04 `-full-pinning`, K-02 `-available-time-gate`).
+- **Son dalga — O-serisi (spec-uyum kusurları):** O-01 (#403) · O-02 (#400) · **O-03 (#407 + #413;
+  #408 boş merge oldu, içeriğini #413 yeniden indirdi)** · O-04 (#405) · O-05 (#412) · O-08 (#406)
+  · O-09 (#410) · O-10 (#402) · O-15 (#409) landed;
+  **#414 (O-12/O-13/O-18 — OCC + Idempotency disiplini) AÇIK.** Öncesi: K-serisi (#386–#398).
+- **Testler:** son yeşil referans CI 6/6 (O-serisi PR'ları). Lokal tam suite tek koşuda
+  tamamlanamayabilir (ortam kaynaklı) — **otorite CI'dır.**
   Doğrula: `gh run list --branch main --limit 1` → job log.
   **Ortam tuzağı:** paralel worktree oturumları paylaşılan `entropia_test` DB'sini ezer
   (conftest her testte `drop_all`/`create_all`) — `TEST_DATABASE_URL` ile izole DB kullan.
@@ -145,18 +147,21 @@ Before stopping a working session, produce **ALL** of the following:
 
 
 
-- **F-07 raw-id sweep — SUNUM katmanı kapandı (bu slice).** 31 dosyada 161 `*_id` render'ı tarandı;
-  P-11/P-12/P-16 gerçekten landed (traceability 10/13/16 gerekçeleri bayattı → düzeltildi), Portfolio'da
-  2 kalıntı presentation-only düzeltildi, **4 kalıntı açık** (backend display-DTO → `§4.4`). vitest
-  **608/608** (**`--no-file-parallelism` ZORUNLU**). Backend'e dokunulmadı: ENGINE_VERSION/migration yok.
-  **F-07 bütün olarak Complete DEĞİL.**
+- **F-07 raw-id sweep — SUNUM katmanı kapandı (PR #404).** 31 dosyada 161 `*_id` render'ı tarandı;
+  **4 kalıntı açık** (backend display-DTO → `v18_visual_traceability.md §4.4`) — yani **F-07 bütün
+  olarak Complete DEĞİL**. vitest **608/608** (**`--no-file-parallelism` ZORUNLU**).
 
-- **Next — PO imzası + R2 kapanışı.** Kalan tek blokaj
-  **product-owner imzası**: `docs/implementation/v18_final_acceptance.md` §4 (D-1…D-9 kararları —
-  görsel sapmalar, F-2…F-6 mini slice'ları, A11Y-01 palet kararı, 20.11 onayı). **İmza olmadan
-  `entropia_v18_remediation_status.md`'deki R2 RE-OPENING banner'ı kalkmaz, hiçbir satır Complete
-  olmaz** (GAP madde 17). İmza sonrası: banner kaldır → UI-01/02/03/04/05/06/12/14/15 evidence'lı
-  Complete → PO'nun istediği mini slice'lar açılır. Ayrıntı: `docs/STAGE2_HANDOFF.md` §Next.
+- **Next — PO imzası ARTIK BLOKAJ DEĞİL (2026-07-28 düzeltmesi).** İmza **2026-07-22'de atıldı**:
+  `docs/implementation/v18_final_acceptance.md:155-169` (D-1 KABUL · D-2/3/4/5/6/8 FIX(R3) ·
+  D-7 (b) · D-9 KABUL). İmzanın beklettiği FIX(R3) düzeltmelerinin **hepsi de landed**
+  (#368–#373, #375–#379). Sıradaki gerçek iş:
+  1. **R2 banner kapanışı (docs işi):** `entropia_v18_remediation_status.md`'deki RE-OPENING
+     banner'ının koşulu artık sağlandı → banner'ı kaldır, UI satırlarını evidence'lı Complete yap.
+  2. **#414'ü bitir** (O-12/O-13/O-18 OCC + Idempotency), sonra O-03 kalıntısı: 5 ölü error
+     sınıfı (`KNOWN_UNRAISED`).
+  3. **F-07 §4.4** — 4 yüzey backend display-DTO bekliyor (`v18_visual_traceability.md §4.4`).
+  4. **Round-3 backlog'unda kalanlar:** S5 (a/b/c/d) + S-L1…S-L6
+     (`docs/POST_V1_SPEC_GAP_BACKLOG_ROUND3.md` §DURUM TAZELEME — diğer 8 madde landed).
 - **Açık iş (R2 kapsamı dışı, dürüst sınır):** ekran okuyucu (NVDA/VoiceOver) denetimi yapılmadı;
   10 sayfanın derin görsel kıyası eksik; a11y/visual katmanları CI'da koşmadı; A11Y-01 kontrast
   (228 serious node, tamamı canonical v18 paletinden) ve A11Y-02 kayıtlı sapma olarak açık.

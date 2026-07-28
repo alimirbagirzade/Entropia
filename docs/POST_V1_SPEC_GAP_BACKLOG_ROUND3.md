@@ -1,5 +1,54 @@
 # Entropia — Post-V1 Spec-Gap Backlog, ROUND 3
 
+> ## ⚠️ DURUM TAZELEME (2026-07-28) — "grep = 0" İDDİALARININ ÇOĞU ARTIK YANLIŞ
+>
+> Bu belgenin gövdesi **2026-07-14** tarihli denetimi (`main` @ `226ca92`, alembic
+> `0029_esp_validation_run`) anlatır. O tarihten bu yana **8 madde landed**; gövdedeki
+> "**grep = 0**" cümleleri bugünkü ağaçta **doğrulanamaz**. Aşağıdaki tablolar 2026-07-28'de
+> tek tek ampirik olarak yeniden ölçüldü (`main` @ `eff8ffe`, alembic `0038_backtest_run_event`).
+>
+> ### ✅ LANDED — bu maddelere DOKUNMA
+>
+> | Madde | Eski iddia | 2026-07-28 ölçümü |
+> |---|---|---|
+> | **S9** Lab Pause/Stop onayı | onay metni render edilmiyor | `pages/AnalysisLab.tsx:40-42,163` — iki-adım confirm, doc 18 §6.1 VERBATIM |
+> | **S1** Portfolio FX blocker | `grep settlement\|fx_` = 0 | **11 hit** — `domain/allocation/enums.py:82` `FX_DEPENDENCY_MISSING`, `rules.py:95,104` `settlement_currency` |
+> | **S8** CP validation-run + baseline UI | `validation-runs\|baseline` = 0 | **172 hit** (`lib/createPackage.ts` + `pages/CreatePackage.tsx`) |
+> | **S4** Gateway allocation + trade_log | ToolName'de = 0 | **72 hit** (`jobs/agent_tools.py` + `domain/agent_lab/tool_gateway.py`) |
+> | **S6** TS/TL export | `export` = 0 | **14 hit** (`apps/api/routes/trading_signal.py`, `trade_log.py`) |
+> | **S2** Pre-Check kaynak lexer | `lexer\|tokenize\|parse_source` = 0 | `domain/create_package/source_scan.py` **var** (12 fonksiyon) |
+> | **S3** Package import | `package_import\|import_job` = 0 | migration `0031_package_import_job` + commands/queries/jobs/repositories |
+> | **S7** History manifest excerpt | `results_history.py:273` `None` hardcode | `:276` artık gerçek ifade döndürüyor |
+>
+> ### 🔴 GERÇEKTEN AÇIK — kalan iş bunlar
+>
+> | Madde | 2026-07-28 ölçümü |
+> |---|---|
+> | **S5 (a/b/c/d)** Strategy config derinliği | `domain/strategy/config.py`'de `min_true_count` · `stop_mode` · `any_active_rule` · `all_active_rules` · `multiple_stops` · `same_candle_entry_exit` · `timeframe_mode` · `custom_sequence` → **hepsi 0 hit**. Yalnız `logic_based_scaling` (:768) var. **Dört alt-slice de açık.** |
+> | **S-L1** Allocation 409 gövdesi | `AllocationDraftConflictError` hâlâ statik (`code`+`message`); `current_draft`/`changed_paths` yok |
+> | **S-L2** Export tipleri | `pinescript_signal_marker` · `agent_dataset` → 0 hit |
+> | **S-L3** Library request-validation | `routes/library.py`'de `validation-runs` → 0 hit |
+> | **S-L4** Manifest warning satırları | `commands/backtest_run.py` preflight'ta warning issue row'u yok |
+> | **S-L5** `rationale-families:suggest` | `routes/rationale.py`'de `suggest` → 0 hit |
+> | **S-L6** `UPLOAD_JOB_FAILED` | backend'de 0 hit |
+>
+> ### ⚪ KONUSU KAPANMIŞ (fix değil, karar)
+>
+> **S-L7** — "Trading Signal Packages" / "Trade Log Packages" etiketleri `nav.ts`'te **artık yok**;
+> `frontend/src/test/nav.test.tsx:95-96` yokluklarını **regresyon testiyle** sabitliyor.
+> Karar doc-01 lehine verilmiş; ayrı adjudication notuna gerek kalmadı.
+>
+> ### 📍 Kaymış satır/dizin referansları (gövdede düzeltilmedi — burası otorite)
+>
+> - **S-L1:** `shared/errors.py:964` → gerçek **`:1277`**
+> - **S6:** `routes/trading_signal.py` → gerçek dizin **`backend/src/entropia/apps/api/routes/`**
+> - **S-L7:** `nav.ts:130-131` → o satırlar artık `FUTURE_DEV_SUBPAGES` bloğu (dosya 272 satır)
+>
+> **Not:** Aşağıdaki her bölümün "Doğrulanan durum" paragrafı ve paste-ready prompt'u **2026-07-14
+> tarihli** hâliyle bırakıldı — landed maddelerde bunlar tarihsel kayıttır, yeniden uygulanacak
+> talimat DEĞİLDİR. Açık maddelerde (S5, S-L1…S-L6) hâlâ geçerlidir, ama satır numaralarını
+> yapıştırmadan önce ampirik doğrula.
+
 > **Kaynak:** 2026-07-14, R1–R9 (PR #179–196) merge edildikten SONRA yapılan üçüncü
 > kapsamlı spec-vs-implementation denetimi (7 paralel read-only ajan + inline ampirik
 > grep doğrulama; her bulgu `file:line` kanıtlı). Kod tabanı = `main` @ `226ca92`,
@@ -24,14 +73,17 @@
 - Frontend verify: `cd frontend && npm run lint && npm run typecheck && npm run test && npm run build`.
 - Git: `feat/<slug>`; commit `<type>(<slug>): <subject>`; **NO AI attribution**; PR aç → checks → self-merge yok, kullanıcıdan merge iste.
 
-## Önerilen sıra (değer/maliyet)
-S9 (ucuz, hazır fix taslağı) → S1 (correctness, para motoruna değiyor) → S8 (backend hazır, UI bağla) →
-S4 (gateway parity) → S6 (TS/TL export) → S7 (history excerpt) → S2 (Pre-Check lexer) →
-S3 (package import, epic) → S5 (strategy config derinliği, en büyük).
+## ~~Önerilen sıra (değer/maliyet)~~ — TÜKENDİ (2026-07-28)
+
+> Bu sıradaki dokuz maddeden **sekizi landed**. Geriye yalnızca **S5** (en büyük) ve
+> **LOW listesinden S-L1…S-L6** kaldı. Güncel öncelik için yukarıdaki "🔴 GERÇEKTEN AÇIK"
+> tablosuna bak. Tarihsel sıra kaydı:
+>
+> ~~S9 → S1 → S8 → S4 → S6 → S7 → S2 → S3 → S5~~
 
 ---
 
-## S9 — Analysis Lab Pause/Stop onay modalı (doc 18 §6.1) 🟢
+## S9 — Analysis Lab Pause/Stop onay modalı (doc 18 §6.1) — ✅ **LANDED** (2026-07-28 doğrulaması)
 **Boyut:** Küçük (frontend-only, 1 dosya + test). **Öncelik:** İlk (ucuz, fix taslağı hazır).
 
 **Doğrulanan durum:** `frontend/src/pages/AnalysisLab.tsx:175-204` Pause/Stop butonları
@@ -61,7 +113,7 @@ feat/s9-lab-pause-stop-confirm, ayrı PR, NO AI attribution.
 
 ---
 
-## S1 — Portfolio FX settlement-currency blocker (doc 13 §5.1) 🔴
+## S1 — Portfolio FX settlement-currency blocker (doc 13 §5.1) — ✅ **LANDED** (2026-07-28 doğrulaması)
 **Boyut:** Orta (backend). **Öncelik:** Yüksek (correctness — para-boyutlandıran motora değiyor).
 
 **Doğrulanan durum:** `domain/allocation/rules.py` yalnız `initial_capital.currency`
@@ -89,7 +141,7 @@ check yok. Fix: validate + readiness'e cross-currency FX-dataset blocker (fail-c
 
 ---
 
-## S8 — Create Package sayfası: validation-run + baseline UI bağlama (doc 06 §3.2/§5/§7) 🟠
+## S8 — Create Package sayfası: validation-run + baseline UI bağlama (doc 06 §3.2/§5/§7) — ✅ **LANDED**
 **Boyut:** Orta (frontend-only). **Öncelik:** Yüksek-orta (backend zincirleri HAZIR, yalnız UI yok).
 
 **Doğrulanan durum:** GAP-07 (#169) validation-evidence plane'i, GAP-07b (#171) baseline CSV
@@ -117,7 +169,7 @@ feat/s8-cp-validation-baseline-ui, ayrı PR, NO AI attribution.
 
 ---
 
-## S4 — Agent Tool Gateway parity: allocation + trade_log (doc 13 §9, doc 05 §11) 🟠
+## S4 — Agent Tool Gateway parity: allocation + trade_log (doc 13 §9, doc 05 §11) — ✅ **LANDED**
 **Boyut:** Orta (backend-only). **Öncelik:** Orta-yüksek.
 
 **Doğrulanan durum:** `application/jobs/agent_tools.py` `_HANDLERS` + `domain/agent_lab/tool_gateway.py`
@@ -145,7 +197,7 @@ feat/s4-gateway-allocation-tradelog, ayrı PR, NO AI attribution.
 
 ---
 
-## S6 — TS/TL export komutu (doc 04 §7/Rule 17, doc 05 §8/§11/§13.2) 🟠
+## S6 — TS/TL export komutu (doc 04 §7/Rule 17, doc 05 §8/§11/§13.2) — ✅ **LANDED**
 **Boyut:** Orta (backend + küçük UI). **Öncelik:** Orta.
 
 **Doğrulanan durum:** `routes/trading_signal.py` + `routes/trade_log.py`'de `export` grep = 0.
@@ -171,7 +223,7 @@ mevcut R2c export deseni (commands/package_lifecycle.py export_package + routes/
 
 ---
 
-## S7 — History detail manifest excerpt zenginleştirme (doc 16 §8.2/§9.4, RH-09) 🟠
+## S7 — History detail manifest excerpt zenginleştirme (doc 16 §8.2/§9.4, RH-09) — ✅ **LANDED**
 **Boyut:** Orta (backend + küçük UI). **Öncelik:** Orta.
 
 **Doğrulanan durum:** `application/queries/results_history.py:273` her satırda
@@ -200,7 +252,7 @@ Backend+frontend verify. feat/s7-history-manifest-excerpt, ayrı PR, NO AI attri
 
 ---
 
-## S2 — Pre-Check kaynak-kod lexer'ı (doc 07 §6.2, PC-05/PC-06) 🟠
+## S2 — Pre-Check kaynak-kod lexer'ı (doc 07 §6.2, PC-05/PC-06) — ✅ **LANDED**
 **Boyut:** Orta-büyük (backend, saf domain). **Öncelik:** Orta.
 
 **Doğrulanan durum:** `commands/create_package.py::run_precheck` (~L350-417) detected listesini
@@ -228,7 +280,7 @@ Backend verify. feat/s2-precheck-source-lexer, ayrı PR, NO AI attribution.
 
 ---
 
-## S3 — Package import (doc 08 §9.1/§10/§14, master ref Modül 7 §12) 🔴
+## S3 — Package import (doc 08 §9.1/§10/§14, master ref Modül 7 §12) — ✅ **LANDED**
 **Boyut:** BÜYÜK (epic — R2c export'un tersi; job + tablo gerekebilir). **Öncelik:** Orta (export tek yönlü kaldıkça değeri sınırlı).
 
 **Doğrulanan durum:** Export R2c'de landed (`routes/library.py:238` POST /library/{id}/export →
@@ -259,7 +311,7 @@ feat/s3-package-import-*, ayrı PR'lar, NO AI attribution.
 
 ---
 
-## S5 — Strategy config katalog derinliği (doc 02 §5.5/§5.7/§5.8/§5.9) 🟡
+## S5 — Strategy config katalog derinliği (doc 02 §5.5/§5.7/§5.8/§5.9) — 🔴 **AÇIK** (dört alt-slice de)
 **Boyut:** EN BÜYÜK (backend şema + engine + frontend form; ENGINE_VERSION bump). **Öncelik:** Düşük-orta (mevcut davranış fail-closed L4 — sessiz yanlışlık yok).
 
 **Doğrulanan durum:** `domain/strategy/config.py`'de yok (grep=0): §5.5 logic-based stop block +
@@ -291,8 +343,8 @@ feat/s5<x>-strategy-<slug>, ayrı PR'lar, NO AI attribution.
 ---
 
 ## LOW (opsiyonel, tek-oturumluk küçükler)
-- **S-L1 — Allocation 409 gövdesi** (doc 13 §7.2/§10.2 Flow E): `AllocationDraftConflictError`
-  (shared/errors.py:964) statik; `current_draft` + `changed_paths[]` eklenebilir (route zaten
+- **S-L1 — Allocation 409 gövdesi** 🔴 **AÇIK** (doc 13 §7.2/§10.2 Flow E): `AllocationDraftConflictError`
+  (~~shared/errors.py:964~~ → **gerçek `shared/errors.py:1277`**) statik; `current_draft` + `changed_paths[]` eklenebilir (route zaten
   draft'ı okuyabiliyor). Frontend conflict UX'i buna göre zenginleşir.
 - **S-L2 — Export tipleri** (doc 15 §3.2): ExportType'a `pinescript_signal_marker` +
   `agent_dataset` ekle (domain/backtest/export.py — mevcut 5 tip deseni).
@@ -306,6 +358,8 @@ feat/s5<x>-strategy-<slug>, ayrı PR'lar, NO AI attribution.
   endpoint'i (q= substring, mutation yok) + Create Package composer'da öneri chip'leri.
 - **S-L6 — `UPLOAD_JOB_FAILED`** (doc 21 §10): manual upload pipeline teknik hatası için ayrı
   kanonik kod (şimdi generic); errors.py + jobs/manual upload fail path + test.
-- **S-L7 — Nav legacy etiketleri** (doc 01 §6.3 vs v18-verbatim kuralı): "Trading Signal
-  Packages"/"Trade Log Packages" (nav.ts:130-131) bilinçli v18-verbatim çelişkisi — KARAR
-  maddesi: ya doc-01 migration notunu uygula ya CLAUDE.md'ye adjudication notu düş.
+- ~~**S-L7 — Nav legacy etiketleri**~~ ⚪ **KONUSU KAPANDI (2026-07-28).** "Trading Signal
+  Packages"/"Trade Log Packages" etiketleri `frontend/src/app/nav.ts`'te **artık yok**; yokluk
+  `frontend/src/test/nav.test.tsx:95-96`'da regresyon testiyle sabitlenmiş. Karar doc-01 lehine
+  verilmiş, ayrı adjudication notuna gerek kalmadı. (Eski `nav.ts:130-131` referansı da bayat —
+  o satırlar bugün `FUTURE_DEV_SUBPAGES` bloğu.)

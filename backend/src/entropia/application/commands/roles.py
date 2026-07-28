@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from entropia.application.idempotency import run_idempotent
 from entropia.domain.identity import Actor
 from entropia.domain.identity.policy import (
     assert_role_assignable,
@@ -26,6 +28,7 @@ async def change_user_role(
     target_user_id: str,
     new_role: Role,
     auth_mode: str = "dev",
+    idempotency_key: str | None = None,
 ) -> HumanUser:
     """Change a human user's role with mode-aware last-Admin protection.
 
@@ -58,28 +61,43 @@ async def change_user_role(
             active_admin_count=active_admins,
         )
 
-    user.current_role = new_role
-    user.version += 1
-    user.role_changed_at = datetime.now(UTC)
-    user.role_changed_by = actor.principal_id
+    async def _op() -> dict[str, Any]:
+        user.current_role = new_role
+        user.version += 1
+        user.role_changed_at = datetime.now(UTC)
+        user.role_changed_by = actor.principal_id
 
-    audit_repo.add_audit_event(
+        audit_repo.add_audit_event(
+            session,
+            event_kind="user.role_changed",
+            actor_principal_id=actor.principal_id,
+            actor_kind=actor.actor_kind,
+            target_entity_id=user.user_id,
+            target_entity_type="human_user",
+            previous_state=str(previous_role),
+            new_state=str(new_role),
+            correlation_id=actor.correlation_id,
+        )
+        audit_repo.add_outbox_event(
+            session,
+            event_type="resource.changed",
+            resource_type="human_user",
+            resource_id=user.user_id,
+            payload={"action": "role_changed", "role": str(new_role)},
+            correlation_id=actor.correlation_id,
+        )
+        return {"user_id": user.user_id, "version": user.version}
+
+    await run_idempotent(
         session,
-        event_kind="user.role_changed",
+        key=idempotency_key,
         actor_principal_id=actor.principal_id,
-        actor_kind=actor.actor_kind,
-        target_entity_id=user.user_id,
-        target_entity_type="human_user",
-        previous_state=str(previous_role),
-        new_state=str(new_role),
-        correlation_id=actor.correlation_id,
+        request_payload={
+            "op": "change_user_role",
+            "target_user_id": target_user_id,
+            "new_role": str(new_role),
+        },
+        operation=_op,
     )
-    audit_repo.add_outbox_event(
-        session,
-        event_type="resource.changed",
-        resource_type="human_user",
-        resource_id=user.user_id,
-        payload={"action": "role_changed", "role": str(new_role)},
-        correlation_id=actor.correlation_id,
-    )
+    # A replay must not bump ``version`` a second time; the same row is returned.
     return user

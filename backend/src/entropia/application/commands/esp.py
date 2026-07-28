@@ -110,6 +110,7 @@ async def create_esp_package(
     package_kind: str | PackageKind = PackageKind.EMBEDDED_SYSTEM,
     visibility_scope: VisibilityScope = VisibilityScope.PRIVATE,
     change_note: str | None = None,
+    idempotency_key: str | None = None,
 ) -> dict[str, Any]:
     """Create an embedded_system PackageRoot + first revision + resolver contract.
 
@@ -129,6 +130,54 @@ async def create_esp_package(
         raise ResolverContractInvalid("A resolver signature must define params and a return shape.")
 
     deps = dependency_snapshot if dependency_snapshot is not None else {}
+
+    async def _op() -> dict[str, Any]:
+        return await _create_esp_package_op(
+            session,
+            actor,
+            canonical_key=canonical_key,
+            signature=signature,
+            runtime_adapter=runtime_adapter,
+            input_contract=input_contract,
+            output_contract=output_contract,
+            deps=deps,
+            warm_up_period=warm_up_period,
+            timing_semantics=timing_semantics,
+            repaint=repaint,
+            evidence=evidence,
+            kind=kind,
+            visibility_scope=visibility_scope,
+            change_note=change_note,
+        )
+
+    return await run_idempotent(
+        session,
+        key=idempotency_key,
+        actor_principal_id=actor.principal_id,
+        request_payload={"op": "create_esp_package", "canonical_key": canonical_key},
+        operation=_op,
+    )
+
+
+async def _create_esp_package_op(
+    session: AsyncSession,
+    actor: Actor,
+    *,
+    canonical_key: str,
+    signature: dict[str, Any],
+    runtime_adapter: RuntimeAdapter,
+    input_contract: dict[str, Any],
+    output_contract: dict[str, Any],
+    deps: dict[str, Any],
+    warm_up_period: int | None,
+    timing_semantics: str | None,
+    repaint: bool,
+    evidence: dict[str, Any] | None,
+    kind: PackageKind,
+    visibility_scope: VisibilityScope,
+    change_note: str | None,
+) -> dict[str, Any]:
+    """The durable body of :func:`create_esp_package`, run at most once per key."""
     root, _detail, revision = await pkg_repo.create_package(
         session,
         owner_principal_id=actor.principal_id,

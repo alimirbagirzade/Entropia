@@ -157,6 +157,7 @@ async def create_research_dataset(
     usage_scope: UsageScope,
     display_name: str | None = None,
     provider_name: str | None = None,
+    idempotency_key: str | None = None,
 ) -> tuple[Any, ResearchDatasetRevision]:
     """Create the dataset Root + first DRAFT revision pinned to an Approved market.
 
@@ -167,34 +168,59 @@ async def create_research_dataset(
     require_authenticated(actor)
     bundle = await _resolve_market_link(session, market_entity_id)
 
-    root, revision = await rd_repo.create_research_dataset(
+    async def _op() -> dict[str, Any]:
+        root, revision = await rd_repo.create_research_dataset(
+            session,
+            owner_principal_id=actor.principal_id,
+            created_by_principal_id=actor.principal_id,
+            payload=payload,
+            display_name=display_name,
+            category_key=category.category_key,
+            custom_category=category.custom_category,
+            provider_name=provider_name,
+            usage_scope=usage_scope,
+            linked_market_dataset_revision_id=bundle["revision_id"],
+        )
+        rd_repo.add_market_link(
+            session,
+            entity_id=root.entity_id,
+            market_dataset_revision_id=bundle["revision_id"],
+            revision_id=revision.revision_id,
+            market_content_hash=bundle.get("content_hash"),
+        )
+        _audit_and_outbox(
+            session,
+            actor,
+            event_kind="research.dataset.created",
+            entity_id=root.entity_id,
+            revision_id=revision.revision_id,
+            new_state=str(revision.revision_state),
+            action="created",
+        )
+        # The API session runs with autoflush=False (engine.py), so the re-read below
+        # would not see these pending INSERTs. Flush explicitly — never rely on
+        # autoflush, which is on in tests but OFF in the app.
+        await session.flush()
+        return {"entity_id": root.entity_id, "revision_id": revision.revision_id}
+
+    ref = await run_idempotent(
         session,
-        owner_principal_id=actor.principal_id,
-        created_by_principal_id=actor.principal_id,
-        payload=payload,
-        display_name=display_name,
-        category_key=category.category_key,
-        custom_category=category.custom_category,
-        provider_name=provider_name,
-        usage_scope=usage_scope,
-        linked_market_dataset_revision_id=bundle["revision_id"],
+        key=idempotency_key,
+        actor_principal_id=actor.principal_id,
+        request_payload={
+            "op": "create_research_dataset",
+            "market_entity_id": market_entity_id,
+            "display_name": display_name,
+            "category_key": category.category_key,
+        },
+        operation=_op,
     )
-    rd_repo.add_market_link(
-        session,
-        entity_id=root.entity_id,
-        market_dataset_revision_id=bundle["revision_id"],
-        revision_id=revision.revision_id,
-        market_content_hash=bundle.get("content_hash"),
-    )
-    _audit_and_outbox(
-        session,
-        actor,
-        event_kind="research.dataset.created",
-        entity_id=root.entity_id,
-        revision_id=revision.revision_id,
-        new_state=str(revision.revision_state),
-        action="created",
-    )
+    # A replay resolves the SAME root + revision through the stored reference rather
+    # than creating a second dataset (and a second immutable market link).
+    root = await _require_root(session, ref["entity_id"])
+    revision = await rd_repo.get_revision(session, ref["revision_id"])
+    if revision is None:  # pragma: no cover - the reference is written with the row
+        raise NotFoundError(f"Revision '{ref['revision_id']}' not found for this dataset.")
     return root, revision
 
 
@@ -477,6 +503,7 @@ async def set_time_policy(
     available_time: AvailableTimeSpec,
     timezone_spec: ResearchTimezoneSpec,
     time_policy_version: int = 1,
+    idempotency_key: str | None = None,
 ) -> ResearchTimePolicy:
     """Set the event/available time policy (doc 12 §5.2, §8.4).
 
@@ -495,31 +522,53 @@ async def set_time_policy(
     if not time_policy_is_valid(policy=available_time.policy, delay=delay):
         raise TimePolicyInvalid("The available-time rule and delay are inconsistent.")
 
-    policy = rd_repo.set_time_policy(
+    async def _op() -> dict[str, Any]:
+        policy = rd_repo.set_time_policy(
+            session,
+            entity_id=entity_id,
+            event_time_semantics=event_time_semantics,
+            available_time_policy=available_time.policy,
+            source_timezone_mode=timezone_spec.mode,
+            revision_id=root.current_revision_id,
+            time_policy_version=time_policy_version,
+            delay_seconds=available_time.delay_seconds,
+            source_timezone_iana=timezone_spec.iana,
+        )
+        revision = await _require_current_revision(session, root)
+        revision.event_time_semantics = event_time_semantics
+        revision.available_time_policy = available_time.policy
+        revision.available_delay_seconds = available_time.delay_seconds
+        revision.source_timezone_mode = timezone_spec.mode
+        revision.source_timezone_iana = timezone_spec.iana
+        _audit_and_outbox(
+            session,
+            actor,
+            event_kind="research.time_policy.set",
+            entity_id=entity_id,
+            revision_id=root.current_revision_id,
+            action="time_policy_set",
+        )
+        await session.flush()
+        return {"time_policy_id": policy.time_policy_id}
+
+    ref = await run_idempotent(
         session,
-        entity_id=entity_id,
-        event_time_semantics=event_time_semantics,
-        available_time_policy=available_time.policy,
-        source_timezone_mode=timezone_spec.mode,
-        revision_id=root.current_revision_id,
-        time_policy_version=time_policy_version,
-        delay_seconds=available_time.delay_seconds,
-        source_timezone_iana=timezone_spec.iana,
+        key=idempotency_key,
+        actor_principal_id=actor.principal_id,
+        request_payload={
+            "op": "set_time_policy",
+            "entity_id": entity_id,
+            "event_time_semantics": str(event_time_semantics),
+            "available_time_policy": str(available_time.policy),
+            "delay_seconds": available_time.delay_seconds,
+            "timezone_mode": str(timezone_spec.mode),
+            "timezone_iana": timezone_spec.iana,
+        },
+        operation=_op,
     )
-    revision = await _require_current_revision(session, root)
-    revision.event_time_semantics = event_time_semantics
-    revision.available_time_policy = available_time.policy
-    revision.available_delay_seconds = available_time.delay_seconds
-    revision.source_timezone_mode = timezone_spec.mode
-    revision.source_timezone_iana = timezone_spec.iana
-    _audit_and_outbox(
-        session,
-        actor,
-        event_kind="research.time_policy.set",
-        entity_id=entity_id,
-        revision_id=root.current_revision_id,
-        action="time_policy_set",
-    )
+    policy = await rd_repo.get_time_policy(session, ref["time_policy_id"])
+    if policy is None:  # pragma: no cover - the reference is written with the row
+        raise NotFoundError(f"Time policy '{ref['time_policy_id']}' not found.")
     return policy
 
 
@@ -530,6 +579,7 @@ async def define_field(
     entity_id: str,
     field: FieldDefinition,
     definition_version: int = 1,
+    idempotency_key: str | None = None,
 ) -> ResearchFieldDefinition:
     """Persist one field-level semantic definition (doc 12 §8.3).
 
@@ -537,28 +587,49 @@ async def define_field(
     (FIELD_MEANING_INSUFFICIENT)."""
     root = await _require_root(session, entity_id)
     rd_policy.ensure_can_edit_draft(actor, owner_principal_id=root.owner_principal_id)
-    row = rd_repo.add_field_definition(
+
+    async def _op() -> dict[str, Any]:
+        row = rd_repo.add_field_definition(
+            session,
+            entity_id=entity_id,
+            field_name=field.field_name,
+            semantic_type=field.semantic_type,
+            revision_id=root.current_revision_id,
+            definition_version=definition_version,
+            unit_or_scale=field.unit_or_scale,
+            measurement_method=field.measurement_method,
+            null_semantics=field.null_semantics,
+            event_time_source=field.event_time_source,
+            availability_rule=field.availability_rule,
+            allowed_usage=field.allowed_usage,
+        )
+        _audit_and_outbox(
+            session,
+            actor,
+            event_kind="research.field_definition.defined",
+            entity_id=entity_id,
+            revision_id=root.current_revision_id,
+            action="field_defined",
+        )
+        await session.flush()
+        return {"field_definition_id": row.field_definition_id}
+
+    ref = await run_idempotent(
         session,
-        entity_id=entity_id,
-        field_name=field.field_name,
-        semantic_type=field.semantic_type,
-        revision_id=root.current_revision_id,
-        definition_version=definition_version,
-        unit_or_scale=field.unit_or_scale,
-        measurement_method=field.measurement_method,
-        null_semantics=field.null_semantics,
-        event_time_source=field.event_time_source,
-        availability_rule=field.availability_rule,
-        allowed_usage=field.allowed_usage,
+        key=idempotency_key,
+        actor_principal_id=actor.principal_id,
+        request_payload={
+            "op": "define_field",
+            "entity_id": entity_id,
+            "field_name": field.field_name,
+            "definition_version": definition_version,
+        },
+        operation=_op,
     )
-    _audit_and_outbox(
-        session,
-        actor,
-        event_kind="research.field_definition.defined",
-        entity_id=entity_id,
-        revision_id=root.current_revision_id,
-        action="field_defined",
-    )
+    # A replay returns the field already defined — never a duplicate definition row.
+    row = await rd_repo.get_field_definition(session, ref["field_definition_id"])
+    if row is None:  # pragma: no cover - the reference is written with the row
+        raise NotFoundError(f"Field definition '{ref['field_definition_id']}' not found.")
     return row
 
 
@@ -571,28 +642,50 @@ async def define_feature(
     definition: dict[str, Any],
     feature_version: int = 1,
     approval_state: str | None = None,
+    idempotency_key: str | None = None,
 ) -> ResearchFeatureDefinition:
     """Persist a versioned feature definition (doc 12 §9.3). Required path before a
     Feature-Input-Only revision can feed Strategy logic."""
     root = await _require_root(session, entity_id)
     rd_policy.ensure_can_edit_draft(actor, owner_principal_id=root.owner_principal_id)
-    row = rd_repo.add_feature_definition(
+
+    async def _op() -> dict[str, Any]:
+        row = rd_repo.add_feature_definition(
+            session,
+            entity_id=entity_id,
+            feature_name=feature_name,
+            definition=definition,
+            revision_id=root.current_revision_id,
+            feature_version=feature_version,
+            approval_state=approval_state,
+        )
+        _audit_and_outbox(
+            session,
+            actor,
+            event_kind="research.feature_definition.defined",
+            entity_id=entity_id,
+            revision_id=root.current_revision_id,
+            action="feature_defined",
+        )
+        await session.flush()
+        return {"feature_definition_id": row.feature_definition_id}
+
+    ref = await run_idempotent(
         session,
-        entity_id=entity_id,
-        feature_name=feature_name,
-        definition=definition,
-        revision_id=root.current_revision_id,
-        feature_version=feature_version,
-        approval_state=approval_state,
+        key=idempotency_key,
+        actor_principal_id=actor.principal_id,
+        request_payload={
+            "op": "define_feature",
+            "entity_id": entity_id,
+            "feature_name": feature_name,
+            "feature_version": feature_version,
+        },
+        operation=_op,
     )
-    _audit_and_outbox(
-        session,
-        actor,
-        event_kind="research.feature_definition.defined",
-        entity_id=entity_id,
-        revision_id=root.current_revision_id,
-        action="feature_defined",
-    )
+    # A replay returns the feature already defined — never a duplicate definition row.
+    row = await rd_repo.get_feature_definition(session, ref["feature_definition_id"])
+    if row is None:  # pragma: no cover - the reference is written with the row
+        raise NotFoundError(f"Feature definition '{ref['feature_definition_id']}' not found.")
     return row
 
 

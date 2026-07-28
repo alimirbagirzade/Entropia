@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Header
 from pydantic import BaseModel
 
 from entropia.application.commands.roles import change_user_role
@@ -50,6 +50,7 @@ async def set_user_role(
     user_id: str,
     body: ChangeRoleRequest,
     ctx: RequestContext = Depends(request_context),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> UserResponse:
     require_admin(ctx.actor)  # fast 403 before touching domain
     user = await change_user_role(
@@ -59,6 +60,7 @@ async def set_user_role(
         new_role=body.role,
         # Mode-aware last-Admin protection (PROV-03) on the legacy role path too.
         auth_mode=get_settings().auth_mode,
+        idempotency_key=idempotency_key,
     )
     return UserResponse(
         user_id=user.user_id,

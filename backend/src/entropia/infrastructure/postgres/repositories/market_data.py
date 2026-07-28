@@ -403,6 +403,17 @@ async def get_dataset_root(session: AsyncSession, entity_id: str) -> EntityRegis
     return root
 
 
+async def get_schema_mapping(session: AsyncSession, entity_id: str) -> MarketSchemaMapping | None:
+    """Latest schema mapping for a dataset (used to replay an idempotent confirm)."""
+    stmt = (
+        select(MarketSchemaMapping)
+        .where(MarketSchemaMapping.entity_id == entity_id)
+        .order_by(MarketSchemaMapping.mapping_id.desc())
+        .limit(1)
+    )
+    return (await session.execute(stmt)).scalars().first()
+
+
 async def get_revision(session: AsyncSession, revision_id: str) -> MarketDatasetRevision | None:
     return await session.get(MarketDatasetRevision, revision_id)
 

@@ -17,6 +17,7 @@ from typing import Any
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from entropia.application.idempotency import run_idempotent
 from entropia.domain.lifecycle.enums import ActorKind, DeletionState, PrincipalType, Role
 from entropia.infrastructure.observability import get_logger
 from entropia.infrastructure.postgres.engine import get_session_factory
@@ -102,6 +103,7 @@ async def sign_up(
     correlation_id: str = "",
     bootstrap_admin_email: str | None = None,
     auth_mode: str = "dev",
+    idempotency_key: str | None = None,
 ) -> dict[str, Any]:
     """Create a human account. The role is ALWAYS User (M1 §4.1): any
     client-sent role never reaches this command — the route schema has no
@@ -128,113 +130,131 @@ async def sign_up(
     if len(password) < MIN_PASSWORD_LENGTH:
         raise PasswordPolicyError(f"Password must be at least {MIN_PASSWORD_LENGTH} characters.")
 
-    if await auth_repo.get_user_by_username(session, username) is not None:
-        raise UsernameTakenError()
+    async def _op() -> dict[str, Any]:
+        # The username-taken check lives INSIDE the idempotent body on purpose: a
+        # retry of the SAME key must replay the stored account projection, not trip
+        # USERNAME_TAKEN on the row the first attempt already wrote.
+        if await auth_repo.get_user_by_username(session, username) is not None:
+            raise UsernameTakenError()
 
-    role = Role.USER
-    bootstrapped = False
-    legacy_upgrade = False
-    if bootstrap_admin_matches(email, bootstrap_admin_email):
-        # Same-tx race guard, mirroring the last-admin demote path: the shared
-        # advisory lock serializes this count+decide section against concurrent
-        # demotions AND concurrent bootstraps; a second concurrent qualifying
-        # signup is additionally impossible via unique(human_users.email).
-        await identity_repo.lock_admin_count(session)
-        if await identity_repo.count_operational_admins(session, auth_mode=auth_mode) == 0:
-            role = Role.ADMIN
-            bootstrapped = True
-            # Session-mode legacy upgrade (audit §6.5.3): zero login-capable
-            # Admins but an active credentialless Admin ROLE ROW already exists —
-            # this signup mints the first real Admin OVER the legacy row without
-            # touching it. Recorded as a PII-free audit note.
-            legacy_upgrade = (
-                auth_mode == "session" and await identity_repo.count_active_admins(session) > 0
-            )
+        role = Role.USER
+        bootstrapped = False
+        legacy_upgrade = False
+        if bootstrap_admin_matches(email, bootstrap_admin_email):
+            # Same-tx race guard, mirroring the last-admin demote path: the shared
+            # advisory lock serializes this count+decide section against concurrent
+            # demotions AND concurrent bootstraps; a second concurrent qualifying
+            # signup is additionally impossible via unique(human_users.email).
+            await identity_repo.lock_admin_count(session)
+            if await identity_repo.count_operational_admins(session, auth_mode=auth_mode) == 0:
+                role = Role.ADMIN
+                bootstrapped = True
+                # Session-mode legacy upgrade (audit §6.5.3): zero login-capable
+                # Admins but an active credentialless Admin ROLE ROW already exists —
+                # this signup mints the first real Admin OVER the legacy row without
+                # touching it. Recorded as a PII-free audit note.
+                legacy_upgrade = (
+                    auth_mode == "session" and await identity_repo.count_active_admins(session) > 0
+                )
 
-    user_id = new_id("usr")
-    session.add(Principal(principal_id=user_id, principal_type=PrincipalType.HUMAN))
-    await session.flush()  # principal must exist before the FK-dependent user row
-    user = HumanUser(
-        user_id=user_id,
-        username=username,
-        email=email,
-        display_name=display_name or username,
-        current_role=role,
-        status="active",
-        version=1,
-    )
-    session.add(user)
-    try:
-        await session.flush()  # unique(username) is enforced here
-    except IntegrityError as exc:
-        # Lost the unique race after the pre-check — same contract either way.
-        raise UsernameTakenError() from exc
-    session.add(
-        HumanCredential(
+        user_id = new_id("usr")
+        session.add(Principal(principal_id=user_id, principal_type=PrincipalType.HUMAN))
+        await session.flush()  # principal must exist before the FK-dependent user row
+        user = HumanUser(
             user_id=user_id,
-            password_hash=hash_password(password),
-            algorithm=PASSWORD_ALGORITHM,
+            username=username,
+            email=email,
+            display_name=display_name or username,
+            current_role=role,
+            status="active",
+            version=1,
         )
-    )
-    await session.flush()
+        session.add(user)
+        try:
+            await session.flush()  # unique(username) is enforced here
+        except IntegrityError as exc:
+            # Lost the unique race after the pre-check — same contract either way.
+            raise UsernameTakenError() from exc
+        session.add(
+            HumanCredential(
+                user_id=user_id,
+                password_hash=hash_password(password),
+                algorithm=PASSWORD_ALGORITHM,
+            )
+        )
+        await session.flush()
 
-    event = audit_repo.add_audit_event(
-        session,
-        event_kind="user.signed_up",
-        actor_principal_id=user_id,  # self-registration: the new user is the actor
-        actor_kind=ActorKind.HUMAN,
-        target_entity_id=user_id,
-        target_entity_type=_TARGET_TYPE,
-        new_state="active",
-        correlation_id=correlation_id,
-    )
-    audit_repo.add_outbox_event(
-        session,
-        event_type="user_created",
-        resource_type=_TARGET_TYPE,
-        resource_id=user_id,
-        payload={
-            "action": "user_created",
-            "username": user.username,
-            "role": str(user.current_role),
-            "audit_event_id": event.event_id,
-        },
-        correlation_id=correlation_id,
-    )
-    if bootstrapped:
-        # The provisioning itself is a distinct auditable action (M1 §4.1:
-        # Sign Up never assigns elevated roles — this is operator provisioning).
-        bootstrap_event = audit_repo.add_audit_event(
+        event = audit_repo.add_audit_event(
             session,
-            event_kind="user.admin_bootstrapped",
-            actor_principal_id=user_id,
+            event_kind="user.signed_up",
+            actor_principal_id=user_id,  # self-registration: the new user is the actor
             actor_kind=ActorKind.HUMAN,
             target_entity_id=user_id,
             target_entity_type=_TARGET_TYPE,
-            new_state=str(Role.ADMIN),
+            new_state="active",
             correlation_id=correlation_id,
-            reason="bootstrap_admin_email_match",
-            # PII-free provenance: when true, this bootstrap ran over a legacy
-            # credentialless Admin that could not log in (audit §6.5.4). No email,
-            # username or credential material is recorded — only the fact.
-            metadata=(
-                {"legacy_credentialless_admin_not_login_capable": True} if legacy_upgrade else None
-            ),
         )
         audit_repo.add_outbox_event(
             session,
-            event_type="admin_bootstrapped",
+            event_type="user_created",
             resource_type=_TARGET_TYPE,
             resource_id=user_id,
             payload={
-                "action": "admin_bootstrapped",
+                "action": "user_created",
                 "username": user.username,
-                "role": str(Role.ADMIN),
-                "audit_event_id": bootstrap_event.event_id,
+                "role": str(user.current_role),
+                "audit_event_id": event.event_id,
             },
             correlation_id=correlation_id,
         )
-    return _user_projection(user)
+        if bootstrapped:
+            # The provisioning itself is a distinct auditable action (M1 §4.1:
+            # Sign Up never assigns elevated roles — this is operator provisioning).
+            bootstrap_event = audit_repo.add_audit_event(
+                session,
+                event_kind="user.admin_bootstrapped",
+                actor_principal_id=user_id,
+                actor_kind=ActorKind.HUMAN,
+                target_entity_id=user_id,
+                target_entity_type=_TARGET_TYPE,
+                new_state=str(Role.ADMIN),
+                correlation_id=correlation_id,
+                reason="bootstrap_admin_email_match",
+                # PII-free provenance: when true, this bootstrap ran over a legacy
+                # credentialless Admin that could not log in (audit §6.5.4). No email,
+                # username or credential material is recorded — only the fact.
+                metadata=(
+                    {"legacy_credentialless_admin_not_login_capable": True}
+                    if legacy_upgrade
+                    else None
+                ),
+            )
+            audit_repo.add_outbox_event(
+                session,
+                event_type="admin_bootstrapped",
+                resource_type=_TARGET_TYPE,
+                resource_id=user_id,
+                payload={
+                    "action": "admin_bootstrapped",
+                    "username": user.username,
+                    "role": str(Role.ADMIN),
+                    "audit_event_id": bootstrap_event.event_id,
+                },
+                correlation_id=correlation_id,
+            )
+        return _user_projection(user)
+
+    return await run_idempotent(
+        session,
+        key=idempotency_key,
+        # Sign Up is anonymous — there is no authenticated principal to scope the
+        # key by, so the request fingerprint (which includes the username) is what
+        # separates two callers' keys: a same-key/different-username replay is a
+        # 409 IDEMPOTENCY_KEY_CONFLICT rather than another account's projection.
+        actor_principal_id=None,
+        request_payload={"op": "sign_up", "username": username, "email": email},
+        operation=_op,
+    )
 
 
 async def bootstrap_status(

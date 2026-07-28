@@ -26,6 +26,7 @@ Binding rules (Stage 4a acceptance, doc 13 §13/§14):
 from __future__ import annotations
 
 import json
+from decimal import Decimal, InvalidOperation
 from hashlib import sha256
 from typing import Any
 
@@ -116,7 +117,16 @@ async def upsert_allocation_draft(
 
         if plan is None:
             if expected_row_version not in (None, 0):
-                raise AllocationDraftConflictError()
+                # The caller believes it is editing a draft that does not exist —
+                # there is nothing to compare against, so ``current_draft`` is an
+                # explicit null rather than a fabricated empty draft.
+                raise _draft_conflict(
+                    plan_id=None,
+                    expected_row_version=expected_row_version,
+                    current_row_version=0,
+                    current_draft=None,
+                    submitted_draft=canonical,
+                )
             plan = await alloc_repo.create_plan(
                 session,
                 workspace_entity_id=composition_id,
@@ -133,7 +143,17 @@ async def upsert_allocation_draft(
         else:
             await session.refresh(plan, with_for_update=True)
             if expected_row_version is None or plan.row_version != expected_row_version:
-                raise AllocationDraftConflictError()
+                # Flow E: "server current draft + changed paths". The entries are
+                # re-read AFTER the lock so the compare view shows what is on the
+                # server right now, not what was loaded before the refresh.
+                server_entries = await alloc_repo.list_entries(session, plan.plan_id)
+                raise _draft_conflict(
+                    plan_id=plan.plan_id,
+                    expected_row_version=expected_row_version,
+                    current_row_version=plan.row_version,
+                    current_draft=_stored_canonical_draft(plan, server_entries),
+                    submitted_draft=canonical,
+                )
             plan.enabled = config.enabled
             plan.initial_capital_amount = amount
             plan.initial_capital_currency = currency
@@ -315,7 +335,16 @@ async def create_allocation_revision(
     async def _op() -> dict[str, Any]:
         await session.refresh(plan, with_for_update=True)
         if expected_row_version is None or plan.row_version != expected_row_version:
-            raise AllocationDraftConflictError()
+            # A revision request submits no draft body, so there is nothing to diff:
+            # ``changed_paths`` is empty and the caller reloads ``current_draft``.
+            stale_entries = await alloc_repo.list_entries(session, plan.plan_id)
+            raise _draft_conflict(
+                plan_id=plan.plan_id,
+                expected_row_version=expected_row_version,
+                current_row_version=plan.row_version,
+                current_draft=_stored_canonical_draft(plan, stale_entries),
+                submitted_draft=None,
+            )
 
         entries = await alloc_repo.list_entries(session, plan.plan_id)
         config = _plan_to_config(plan, entries)
@@ -578,6 +607,123 @@ def _canonical_draft(
             for e in resolved
         ],
     }
+
+
+# --------------------------------------------------------------------------- #
+# Stale-draft conflict body (doc 13 §7.2, §10.2 Flow E)                        #
+# --------------------------------------------------------------------------- #
+
+
+def _stored_canonical_draft(plan: Any, entries: list[PortfolioAllocationEntry]) -> dict[str, Any]:
+    """The SERVER's draft in the same canonical shape the caller submits.
+
+    Reuses ``_plan_to_config`` + ``_canonical_draft`` rather than hand-projecting the
+    ORM rows, so the compare view and the fingerprint can never drift apart.
+    """
+    config = _plan_to_config(plan, entries)
+    resolved = [
+        {
+            "composition_item_id": e.composition_item_id,
+            "item_type": e.item_type,
+            "active": e.active,
+            "equity_share_percent": e.equity_share_percent,
+        }
+        for e in entries
+    ]
+    return _canonical_draft(config, resolved)
+
+
+def _same_value(left: Any, right: Any) -> bool:
+    """Compare two canonical-draft values by VALUE, not by spelling.
+
+    The submitted draft stringifies the parsed input (``"10000"``, ``"40"``) while the
+    server draft stringifies what NUMERIC gave back (``"10000.000000000000000000"``,
+    ``"40.000000"``). Comparing those as text reports every money/percent field as
+    disputed on any conflict — the compare view would light up fields the user never
+    touched, which is worse than no diff at all.
+    """
+    if left == right:
+        return True
+    if isinstance(left, str) and isinstance(right, str):
+        try:
+            return Decimal(left) == Decimal(right)
+        except InvalidOperation:
+            return False
+    return False
+
+
+def _changed_paths(current: dict[str, Any] | None, submitted: dict[str, Any] | None) -> list[str]:
+    """Dotted paths where the submitted draft and the server draft disagree.
+
+    This is what turns a 409 into a usable compare view (Flow E step 3): the UI can
+    highlight exactly the fields in dispute instead of asking the user to eyeball two
+    whole drafts. Entries are keyed by ``composition_item_id`` — never by list index,
+    which would report every row as changed after a single insertion.
+
+    Both sides absent (a revision request, which submits no body) -> empty list.
+    """
+    if current is None or submitted is None:
+        return []
+
+    paths: list[str] = []
+    for field in (
+        "enabled",
+        "compounding_mode",
+        "reserve_cash_percent",
+        "max_total_exposure_percent",
+        "conflict_policy",
+    ):
+        if not _same_value(current.get(field), submitted.get(field)):
+            paths.append(field)
+
+    cur_capital = current.get("initial_capital") or {}
+    sub_capital = submitted.get("initial_capital") or {}
+    for key in ("amount", "currency"):
+        if not _same_value(cur_capital.get(key), sub_capital.get(key)):
+            paths.append(f"initial_capital.{key}")
+
+    cur_entries = {e["composition_item_id"]: e for e in current.get("entries", [])}
+    sub_entries = {e["composition_item_id"]: e for e in submitted.get("entries", [])}
+    for cid in sorted(set(cur_entries) | set(sub_entries)):
+        if cid not in cur_entries or cid not in sub_entries:
+            # Added on one side only — the whole entry is the disputed unit.
+            paths.append(f"entries[{cid}]")
+            continue
+        for key in ("item_type", "active", "equity_share_percent"):
+            if not _same_value(cur_entries[cid].get(key), sub_entries[cid].get(key)):
+                paths.append(f"entries[{cid}].{key}")
+    return paths
+
+
+def _draft_conflict(
+    *,
+    plan_id: str | None,
+    expected_row_version: int | None,
+    current_row_version: int,
+    current_draft: dict[str, Any] | None,
+    submitted_draft: dict[str, Any] | None,
+) -> AllocationDraftConflictError:
+    """Build the 409 body doc 13 §7.2 specifies: ``current_draft`` + ``changed_paths[]``.
+
+    The error used to be a bare ``code`` + ``message``, which left the client with no
+    way to honour Flow E (the UI presents the local unsaved fields against the server
+    state in a compare view; last-write-wins is forbidden) — it could only tell the
+    user something changed and discard their edits, or blindly re-PUT and clobber.
+    Both are the outcome §10.2 rules out.
+    """
+    return AllocationDraftConflictError(
+        details=[
+            {
+                "code": "ALLOCATION_DRAFT_STALE",
+                "expected_row_version": expected_row_version,
+                "current_row_version": current_row_version,
+                "current_draft": current_draft,
+                "changed_paths": _changed_paths(current_draft, submitted_draft),
+            }
+        ],
+        scope_type=_PLAN_TARGET,
+        scope_id=plan_id,
+    )
 
 
 def _hash_dict(payload: dict[str, Any]) -> str:

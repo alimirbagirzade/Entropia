@@ -23,6 +23,7 @@ from entropia.infrastructure.postgres.models.auth import AuthSession, HumanCrede
 from entropia.infrastructure.postgres.models.backtest import (
     BacktestResult,
     BacktestRun,
+    BacktestRunEvent,
     BacktestRunManifest,
     DiagnosticArtifact,
     MetricValueRow,
@@ -141,6 +142,7 @@ __all__ = [
     "AuthSession",
     "BacktestResult",
     "BacktestRun",
+    "BacktestRunEvent",
     "BacktestRunManifest",
     "BaselineAsset",
     "CanonicalTradeRecordBatch",

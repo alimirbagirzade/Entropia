@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, Depends, Header, Query
 from pydantic import BaseModel
 
 from entropia.application.commands import backtest_run as backtest_cmd
@@ -26,8 +26,11 @@ router = APIRouter(tags=["backtest"])
 
 _RUNS_PATH = "/mainboard-compositions/{composition_id}/backtest-runs"
 _RUN_PATH = "/backtest-runs/{run_id}"
+_RUN_EVENTS_PATH = "/backtest-runs/{run_id}/events"
 _RETRY_PATH = "/backtest-runs/{run_id}/retries"
 _RESULT_PATH = "/backtest-results/{result_id}"
+_DEFAULT_EVENT_LIMIT = 200
+_MAX_EVENT_LIMIT = 500
 
 
 class RequestRunBody(BaseModel):
@@ -77,6 +80,26 @@ async def get_backtest_run(
     ctx: RequestContext = Depends(request_context),
 ) -> dict[str, Any]:
     return await backtest_query.get_backtest_run(ctx.session, ctx.actor, run_id=run_id)
+
+
+@router.get(_RUN_EVENTS_PATH)
+async def list_backtest_run_events(
+    run_id: str,
+    ctx: RequestContext = Depends(request_context),
+    last_sequence: int = Query(default=0, ge=0),
+    limit: int = Query(default=_DEFAULT_EVENT_LIMIT, ge=1, le=_MAX_EVENT_LIMIT),
+) -> dict[str, Any]:
+    """Replay the run's durable stage events after ``last_sequence`` (doc 15 §7, §11).
+
+    Read-only reconnect path: a client whose SSE/polling connection dropped passes the
+    last sequence it saw and receives every later event exactly once, ascending."""
+    return await backtest_query.list_backtest_run_events(
+        ctx.session,
+        ctx.actor,
+        run_id=run_id,
+        last_sequence=last_sequence,
+        limit=limit,
+    )
 
 
 @router.post(_RETRY_PATH, status_code=202)

@@ -1,13 +1,17 @@
 """Backtest execution + result plane persistence (Stage 5a, doc 15 §9.1).
 
-Ten tables spanning the RUN -> Result pipeline. The RUN lifecycle root is mutable
-(state advances QUEUED -> ... -> terminal); everything else is INSERT-only and
-never UPDATEd once written:
+Eleven tables spanning the RUN -> Result pipeline. The RUN lifecycle root is
+mutable (state advances QUEUED -> ... -> terminal); everything else is
+INSERT-only and never UPDATEd once written:
 
 * ``backtest_run`` — MUTABLE lifecycle root: pinned ``manifest_id`` +
   ``manifest_hash`` + ``composition_snapshot_id``/``composition_fingerprint``, the
   ``state`` machine, retry link, durable ``job_id`` and terminal failure metadata.
   ``result_id`` is back-filled only when a succeeded run materializes a Result.
+* ``backtest_run_event`` — INSERT-only, per-run monotonic ``sequence_no`` stage
+  stream (O-05). Committed at each stage boundary, so PROVISIONING/RUNNING are
+  observable from outside the worker and a disconnected client replays from its
+  ``last_sequence`` (doc 15 §7, §8.3, §11, §12).
 * ``backtest_run_manifest`` — IMMUTABLE, hash-pinned exact dependency + engine
   context. ``manifest_hash`` is unique (one manifest per run). The worker's ONLY
   input; no 'latest' fallback (doc 15 §9.2, §15).
@@ -48,12 +52,13 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
-from entropia.domain.backtest.enums import BacktestRunState, MetricAvailability
+from entropia.domain.backtest.enums import BacktestRunState, MetricAvailability, RunEventType
 from entropia.infrastructure.postgres.base import Base
 from entropia.infrastructure.postgres.types import enum_column
 
 _PRINCIPAL_FK = "principals.principal_id"
 _RESULT_FK = "backtest_result.result_id"
+_RUN_FK = "backtest_run.run_id"
 _MONEY = Numeric(38, 10)
 
 
@@ -90,6 +95,48 @@ class BacktestRun(Base):
     )
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class BacktestRunEvent(Base):
+    """Durable, per-run monotonically sequenced stage event (doc 15 §7, §8.3, §12).
+
+    INSERT-only. This is the ONLY externally observable record of a run's
+    PROVISIONING/RUNNING progress: the worker commits one row per stage
+    transition, so a reader on another connection sees the stage while the
+    engine is still executing (before O-05 the transitions lived only in the
+    worker's in-memory session and the run appeared to jump QUEUED -> terminal).
+
+    ``sequence_no`` starts at 1 and increases by 1 per run. ``UNIQUE(run_id,
+    sequence_no)`` is what makes doc 15 §7 "Duplicate events de-duplicated by
+    sequence_no" enforceable: one logical event always carries the SAME
+    sequence, so a client reconnecting with ``last_sequence`` (doc 15 §11)
+    neither double-counts a redelivered event nor skips one.
+    """
+
+    __tablename__ = "backtest_run_event"
+    __table_args__ = (
+        UniqueConstraint("run_id", "sequence_no", name="uq_backtest_run_event_sequence"),
+    )
+
+    event_id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    run_id: Mapped[str] = mapped_column(
+        String(40), ForeignKey(_RUN_FK, ondelete="CASCADE"), nullable=False, index=True
+    )
+    sequence_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    event_type: Mapped[RunEventType] = mapped_column(
+        enum_column(RunEventType, "backtest_run_event_type"), nullable=False
+    )
+    previous_state: Mapped[BacktestRunState | None] = mapped_column(
+        enum_column(BacktestRunState, "backtest_run_state"), nullable=True
+    )
+    state: Mapped[BacktestRunState] = mapped_column(
+        enum_column(BacktestRunState, "backtest_run_state"), nullable=False
+    )
+    correlation_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    detail: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
 
 
 class BacktestRunManifest(Base):

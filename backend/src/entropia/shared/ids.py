@@ -27,6 +27,25 @@ def new_id(prefix: str) -> str:
     return f"{prefix}_{_encode(ts, 10)}{_encode(rand, 16)}"
 
 
+_ID_BODY_LENGTH = 26
+
+
+def looks_like_id(value: str, *, prefix: str) -> bool:
+    """Whether ``value`` has the exact shape ``new_id(prefix)`` mints.
+
+    The shape check lives beside the minter so a caller that must decide whether an
+    id came from us — a client-supplied SSE ``Last-Event-ID`` cursor, say — never
+    re-derives (and drifts from) the alphabet. Shape only: an id of the right form
+    may still name no row."""
+    head, separator, body = value.partition("_")
+    return (
+        head == prefix
+        and separator == "_"
+        and len(body) == _ID_BODY_LENGTH
+        and all(char in _CROCKFORD for char in body)
+    )
+
+
 def new_correlation_id() -> str:
     return new_id("corr")
 

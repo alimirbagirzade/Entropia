@@ -90,15 +90,24 @@ Import alias: `@/` → `frontend/src/`.
 | `audit.event.created` | `[["audit"]]` | Panel/Logs |
 | `resource.changed` | `[]` → **tam refresh** (`invalidateForEvent:39-43`) | catch-all: strategy, packages, market/research data, portfolio … |
 
+**Kontrol çerçeveleri** (taksonominin **dışında**, `EVENT_QUERY_KEYS`'te yoktur):
+`heartbeat` → etkisiz (akış canlı sinyali); `stream.resync` (`STREAM_RESYNC`) → **tam refresh**
+(sunucu "veremediğim olaylar var" diyor, O-21).
+
 **Sunucu tarafı projeksiyon** (`apps/api/sse.py:33-44` `sse_event_name`):
 `resource_type` `backtest*` → `backtest.run.updated`; `job` → `job.updated`;
 `agent*` veya `hypothesis_artifact` → `agent.task.updated`;
 `event_type` `audit.` ile başlıyorsa → `audit.event.created`; aksi hâlde → `resource.changed`.
 
-**Reconnect davranışı** (`lib/sse.ts:50-68`): `readyState === CONNECTING` iken tarayıcının kendi
-retry'si çalışır; `CLOSED` olduğunda kendi üstel backoff'u devreye girer
-(`RECONNECT_BASE_MS=1000` → `RECONNECT_MAX_MS=30000`). Her başarılı yeniden açılış
-**tam refresh** tetikler (INF-11 kayıp-toleransı).
+**Reconnect davranışı**: client native `EventSource` **değil** `fetch` stream'i kullanır (AUTH-11 —
+kimlik header'da taşınmalı), bu yüzden yeniden bağlanmayı kendi üstel backoff'u yürütür
+(`RECONNECT_BASE_MS=1000` → `RECONNECT_MAX_MS=30000`).
+
+**Resume (O-21)**: tarayıcının otomatik `Last-Event-ID` davranışı `fetch` yolunda yoktur, bu yüzden
+client işlediği son `id:`'yi kendi tutar ve her yeniden açılışta **`Last-Event-ID` header'ı** olarak
+gönderir → sunucu boşluğu outbox'tan replay eder. Boş `id:` cursor'ı silmez; `heartbeat` /
+`stream.resync` cursor'ı ilerletmez. Her başarılı yeniden açılıştaki **tam refresh** *fallback olarak
+korunur* (ilk bağlantı, resync ve replay penceresini aşan boşluk için) — INF-11 kayıp-toleransı.
 
 ---
 

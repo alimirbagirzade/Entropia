@@ -105,6 +105,14 @@ from entropia.domain.backtest.execution.fills import (
     order_execution_is_modelled,
     tick_data_required,
 )
+from entropia.domain.backtest.execution.scaling import (
+    apply_partial_aftermath,
+    partial_close_is_modelled,
+    resolve_scale_layer_size,
+    resolve_scale_rejection,
+    scale_threshold_crossed,
+    scaling_is_modelled,
+)
 from entropia.domain.backtest.execution.sizing import (
     _cap_to_sleeve,
     _leverage_multiplier,
@@ -523,42 +531,6 @@ _VALIDITY_BARS: dict[str, int | None] = {
 }
 
 
-# §4 Partial-close aftermath modelled by the bar-replay (F-07c). ``close_percentage`` < 100
-# closes only that fraction of the position on an EXIT SIGNAL and holds the remainder; the
-# aftermath governs the remainder. ``move_stop_to_entry`` (breakeven the remainder's stop) and
-# ``close_all`` (the signal closes 100% regardless) are deterministic over OHLCV. A
-# ``move_stop_to_entry`` / ``lock_in_profit`` need no extra strategy config (they mutate the
-# remainder's stop from data already on the open position). A full close (close_percentage
-# == 100) never produces a remainder, so its aftermath is irrelevant and always modelled.
-# ``trailing_stop`` is CONFIG-DEPENDENT (post-V1 (f)): the schema carries no separate
-# trailing-distance/activation fields on ``PositionExitLogic`` itself, so the aftermath
-# reuses ``protection_stop_logic.trailing_stop`` — modelled only when that rule is
-# configured/enabled (checked in ``partial_close_is_modelled`` via ``_trail_pct``).
-_MODELLED_PARTIAL_AFTERMATHS = frozenset({"move_stop_to_entry", "close_all", "lock_in_profit"})
-
-
-def partial_close_is_modelled(config: StrategyConfig) -> bool:
-    """Public predicate: is this strategy's partial-close behaviour modelled (F-07c/f)?
-
-    The single shared source of truth for the readiness ``STRATEGY_PARTIAL_CLOSE_UNSUPPORTED``
-    blocker and the engine's fail-closed entry gate. A full close (``close_percentage`` >= 100)
-    is always modelled. A partial close is modelled when its aftermath is move-stop-to-entry,
-    close-all or lock-in-profit (self-contained — no extra config needed), or trailing-stop
-    WHEN the strategy's own ``protection_stop_logic.trailing_stop`` rule is configured and
-    enabled (the aftermath has no trailing parameters of its own to reuse). A trailing-stop
-    aftermath with no such rule configured fails closed (blocked at Ready Check AND opens no
-    position if a stale readiness state slips through to the worker)."""
-    exit_logic = config.position_exit_logic
-    if exit_logic.close_percentage >= _HUNDRED:
-        return True
-    aftermath = exit_logic.partial_aftermath
-    if aftermath in _MODELLED_PARTIAL_AFTERMATHS:
-        return True
-    if aftermath == "trailing_stop":
-        return _trail_pct(config) is not None
-    return False
-
-
 # §7 Same-direction scaling modelled by the bar-replay (F-07d, Master Ref §11). The engine
 # previously never scaled: a saved scaling config was silently ignored. Now PRICE-DISTANCE
 # scaling on the strategy's own timeframe is executed as a deterministic ladder — each
@@ -575,33 +547,6 @@ def partial_close_is_modelled(config: StrategyConfig) -> bool:
 #     (misconfigurations the schema does not reject — spec §11.4 requires int >= 0).
 # ``enabled=false`` / an absent subtree is trivially modelled (nothing to scale — the
 # disabled-section filter collapses it to None; byte-identical baseline).
-
-
-def scaling_is_modelled(config: StrategyConfig) -> bool:
-    """Public predicate: is this strategy's same-direction scaling modelled (F-07d)?
-
-    The single shared source of truth for the readiness ``STRATEGY_SCALING_UNSUPPORTED``
-    blocker and the engine's fail-closed entry gate. Disabled/absent scaling is always
-    modelled; enabled scaling is modelled only as the price-distance ladder on the
-    strategy's own timeframe with a derivable positive add size and sane caps — anything
-    else is blocked at Ready Check AND opens no position if a stale readiness state slips
-    through to the worker (never a silently un-scaled run the user did not configure)."""
-    scaling = config.scaling_logic
-    if scaling is None or not scaling.enabled:
-        return True
-    if scaling.timeframe != "same_as_base_tf":
-        return False
-    if scaling.method != "price_distance_scaling" or scaling.price_scaling is None:
-        return False
-    if scaling.add_size_value is None or scaling.add_size_value <= _ZERO:
-        return False
-    limits = scaling.scaling_limits
-    if limits is not None:
-        if limits.max_scaling_layers is not None and limits.max_scaling_layers < 0:
-            return False
-        if limits.max_total_position_size is not None and limits.max_total_position_size <= _ZERO:
-            return False
-    return True
 
 
 # §8 Restrictions / Filters modelled by the bar-replay (F-07e, Master Ref §12). The engine
@@ -1532,47 +1477,15 @@ def run_engine(
         return is_full
 
     def _apply_partial_aftermath(pos: _Position, exit_price_raw: Decimal) -> None:
-        """Govern the remainder after a partial close (F-07c/f §4). ``move_stop_to_entry``
-        breakevens the remainder's percentage stop (any dip back to the entry now stops it
-        out). ``lock_in_profit`` moves the stop to the cost-adjusted price achieved AT this
-        partial close — a one-time ratchet: a LATER partial close (long via ``max``, short
-        via ``min``) can only tighten it further, never loosen it (never reaches here
-        without a prior stop level, so the initial application always sets it verbatim).
-        ``trailing_stop`` force-activates the remainder's already-configured protection
-        trailing stop (``partial_close_is_modelled`` guarantees ``trail_pct`` /
-        ``trail_lock_in_pct`` are set whenever this branch is reachable) immediately, even
-        if the protection-level profit-lock threshold has not yet been reached — the
-        partial exit itself is the activation event; ``trail_anchor`` only ever moves
-        toward the threshold (``max``/``min``), never backward, so it cannot loosen an
-        already-active trail. ``close_all`` never reaches here (it closes fully)."""
+        """Bind the pinned aftermath policy + cost params to the extracted ratchet."""
         nonlocal lock_in_locks
-        is_long = pos.direction == "long"
-        if partial_aftermath == "move_stop_to_entry":
-            pos.pct_stop = pos.entry_price
-        elif partial_aftermath == "lock_in_profit":
-            exit_eff = _effective_fill(
-                exit_price_raw, is_buy=not is_long, half_spread=half_spread, slip=slippage
-            )
-            if pos.pct_stop is None:
-                pos.pct_stop = exit_eff
-            elif is_long:
-                pos.pct_stop = max(pos.pct_stop, exit_eff)
-            else:
-                pos.pct_stop = min(pos.pct_stop, exit_eff)
-            lock_in_locks += 1
-        elif (
-            partial_aftermath == "trailing_stop"
-            and pos.trail_pct is not None
-            and pos.trail_lock_in_pct is not None
+        if apply_partial_aftermath(
+            pos,
+            exit_price_raw,
+            aftermath=partial_aftermath,
+            half_spread=half_spread,
+            slippage=slippage,
         ):
-            threshold = (
-                pos.entry_price * (_ONE + pos.trail_lock_in_pct)
-                if is_long
-                else pos.entry_price * (_ONE - pos.trail_lock_in_pct)
-            )
-            pos.trail_anchor = (
-                max(pos.trail_anchor, threshold) if is_long else min(pos.trail_anchor, threshold)
-            )
             lock_in_locks += 1
 
     def _sleeve_capital(current_equity: Decimal) -> Decimal:
@@ -3192,63 +3105,50 @@ def run_engine(
                 and len(trades) == trades_before_bar
                 and position.layers_filled < scale_max_layers
             ):
+                # Captured BEFORE the cross advances it — the trace reports the
+                # reference the candidate was measured from, not the new one.
                 scale_ref = position.scale_reference
                 scale_long = position.direction == "long"
-                scale_step = scale_ref * scale_distance / _HUNDRED
-                scale_crossed = (
-                    bar.close <= scale_ref - scale_step
-                    if scale_long
-                    else bar.close >= scale_ref + scale_step
-                )
-                if scale_crossed:
+                if scale_threshold_crossed(
+                    reference=scale_ref,
+                    distance_pct=scale_distance,
+                    close=bar.close,
+                    is_long=scale_long,
+                ):
                     position.scale_reference = bar.close  # the ladder steps from this trigger
-                    if scale_add_basis == "fixed_amount":
-                        layer_size = scale_add_value.quantize(_QTY)
-                    else:
-                        layer_base = (
-                            position.initial_size
-                            if scale_add_basis == "percent_of_initial"
-                            else position.size
-                        )
-                        layer_size = (layer_base * scale_add_value / _HUNDRED).quantize(_QTY)
+                    layer_size = resolve_scale_layer_size(
+                        basis=scale_add_basis,
+                        value=scale_add_value,
+                        initial_size=position.initial_size,
+                        current_size=position.size,
+                    )
                     layer_eff = _effective_fill(
                         bar.close, is_buy=scale_long, half_spread=half_spread, slip=slippage
                     )
                     scaled_size = position.size + layer_size
                     size_limits = config.position_sizing.position_size_limits
-                    reject_reason: str | None = None
-                    reject_cap: str | None = None
-                    if layer_size <= _ZERO:
-                        # A degenerate candidate (e.g. a percent basis quantized to 0) adds
-                        # nothing — rejected, never a phantom 0-size layer.
-                        reject_reason = "layer_size_not_positive"
-                    elif scale_max_total is not None and scaled_size > scale_max_total:
-                        reject_reason = "max_total_exposure"
-                        reject_cap = str(scale_max_total)
-                    elif (
-                        size_limits is not None
-                        and size_limits.max_position_size is not None
-                        and scaled_size > size_limits.max_position_size
-                    ):
-                        reject_reason = "position_size_limit"
-                        reject_cap = str(size_limits.max_position_size)
-                    elif alloc_on:
-                        sleeve_remaining = _sleeve_capital(equity) - position.entry_notional
-                        if (layer_eff * layer_size) > sleeve_remaining:
-                            reject_reason = "sleeve_capacity"
-                            reject_cap = str(max(sleeve_remaining, _ZERO).quantize(_MONEY))
-                    if reject_reason is None and rules_active and portfolio_cap_amount is not None:
-                        # Composition-wide cap on the ladder ADD (money basis, distinct
-                        # from the per-strategy size-units "max_total_exposure" above):
-                        # an over-cap layer is REJECTED, never auto-trimmed (§11.4).
-                        headroom = (
+                    # The composition-wide cap is a MONEY basis, distinct from the
+                    # per-strategy size-units "max_total_exposure"; both bind here and
+                    # the precedence order decides which name reaches the ledger.
+                    reject_reason, reject_cap = resolve_scale_rejection(
+                        layer_size=layer_size,
+                        layer_notional=layer_eff * layer_size,
+                        scaled_size=scaled_size,
+                        max_total_size=scale_max_total,
+                        max_position_size=(
+                            size_limits.max_position_size if size_limits is not None else None
+                        ),
+                        sleeve_remaining=(
+                            _sleeve_capital(equity) - position.entry_notional if alloc_on else None
+                        ),
+                        portfolio_headroom=(
                             portfolio_cap_amount
                             - _prior_exposure_at(_bar_epoch_ms(bar.timestamp))
                             - position.entry_notional
-                        )
-                        if (layer_eff * layer_size) > headroom:
-                            reject_reason = "portfolio_max_total_exposure"
-                            reject_cap = str(max(headroom, _ZERO).quantize(_MONEY))
+                            if rules_active and portfolio_cap_amount is not None
+                            else None
+                        ),
+                    )
                     if reject_reason is not None:
                         scale_layers_rejected += 1
                         _emit(

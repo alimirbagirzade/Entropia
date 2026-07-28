@@ -152,7 +152,7 @@ CLAUDE.md'deki **"her yeni `create_*` için L1 FK insert-order proof"** kuralın
 
 | Tablo | Amacı | Ana bağlar | soft-del | OCC |
 |---|---|---|---|---|
-| `backtest_run` | RUN admission satırı | `composition_snapshot_id`, `manifest_id`, `ready_report_id`, `retry_of_run_id`, `job_id`, `result_id` | — | ✔ |
+| `backtest_run` | RUN admission satırı. **O-06:** `cancel_requested_at` / `cancel_requested_by_principal_id` (FK → `principals`) cancel **niyetini**, `cancellation_reason` doc 15 §16 terminal gerekçesini taşır — cancel bir state DEĞİL, state kümesi doc 15 §4'te sabittir | `composition_snapshot_id`, `manifest_id`, `ready_report_id`, `retry_of_run_id`, `job_id`, `result_id`, `cancel_requested_by_principal_id` | — | ✔ |
 | `backtest_run_event` | **O-05** — kalıcı, run başına monoton `sequence_no` taşıyan stage olayları (`RUN_STARTED` / `RUN_STAGE_CHANGED` / terminal). Worker her stage'i ayrı commit eder → PROVISIONING/RUNNING dışarıdan görünür | `run_id` (FK → `backtest_run`, CASCADE), `UNIQUE(run_id, sequence_no)` | — | — |
 | `backtest_run_manifest` | Değişmez Run Manifest (pinlenmiş her şey) | `run_id`, `composition_snapshot_id` | — | — |
 | `backtest_result` | Değişmez sonuç kökü | `run_id`, `manifest_id` | `deletion_state` | ✔ |

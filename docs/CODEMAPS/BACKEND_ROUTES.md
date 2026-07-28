@@ -30,9 +30,10 @@ oradan geçer; kural route'a kopyalanmaz, bu yüzden drift edemez. Hata sınıf�
 çağıran isteği düzeltmeli), `suggested_action="resend_with_a_single_occ_token"`; `details`
 hem `body_value` hem `if_match_value`'yu yankılar.
 
-**Dual-token 16 op:** `admin_panel.assign_role` · `mainboard.patch_mainboard_item` ·
+**Dual-token 17 op:** `admin_panel.assign_role` · `mainboard.patch_mainboard_item` ·
 `strategy.patch/save/clear` (3) · `allocation.put_draft/create_revision` (2) ·
 `readiness.run_readiness_check` · `backtest.request_backtest_run/soft_delete_result` (2) ·
+**`backtest.cancel_backtest_run` (O-06'da eklendi)** ·
 `results_history.soft_delete_backtest_result` · `manual.replace_revision` ·
 `metric_profile.create_metric_profile_revision` · `trash.restore/purge` (2) ·
 `trash.soft_delete` (O-18'de dual oldu).
@@ -153,8 +154,9 @@ rv-N` kullanmaya devam ediyor).
 | GET `/backtest-runs/{run_id}` | `get_backtest_run:78` | `backtest_query.get_backtest_run` | yok | — |
 | GET `/backtest-runs/{run_id}/events` | `list_backtest_run_events:86` | `backtest_query.list_backtest_run_events` | yok | — |
 | POST `/backtest-runs/{run_id}/retries` (202) | `retry_backtest_run:106` | `backtest_cmd.retry_backtest_run` | yok | ✔ |
-| GET `/backtest-results/{result_id}` | `get_backtest_result:119` | `backtest_query.get_backtest_result` | yok | — |
-| DELETE `/backtest-results/{result_id}` | `soft_delete_backtest_result:127` | `backtest_cmd.soft_delete_backtest_result` | **body `expected_row_version` (int)** / If-Match `rv-N` (`:135-137`) | ✔ |
+| POST `/backtest-runs/{run_id}/cancel` (202) | `cancel_backtest_run:133` | `backtest_cmd.cancel_backtest_run` | **DUAL** — body `expected_row_version` (int) + sayısal `If-Match`, `reconcile_occ_tokens` ile uzlaştırılır; çelişki → 409 `OCC_TOKEN_CONFLICT` | ✔ |
+| GET `/backtest-results/{result_id}` | `get_backtest_result:153` | `backtest_query.get_backtest_result` | yok | — |
+| DELETE `/backtest-results/{result_id}` | `soft_delete_backtest_result:161` | `backtest_cmd.soft_delete_backtest_result` | **body `expected_row_version` (int)** / If-Match `rv-N` (`:169-171`) | ✔ |
 
 > **Run stage replay (O-05).** `GET /backtest-runs/{run_id}/events?last_sequence=&limit=`
 > yalnız `sequence_no > last_sequence` olaylarını artan sırada döner (limit 1–500,
@@ -162,6 +164,16 @@ rv-N` kullanmaya devam ediyor).
 > sonra o sequence'tan devam et; arada kayıp olmaz. Aynı mantıksal olay sonsuza dek aynı
 > `sequence_no`'yu tutar (`UNIQUE(run_id, sequence_no)`), tekrar teslim edilen olay bu
 > anahtarla de-dupe edilir (doc 15 §7, §11).
+
+> **Cancel (O-06).** `POST /backtest-runs/{run_id}/cancel` owner/Admin (`ensure_can_edit`,
+> run'ın `requested_by_principal_id`'si üzerinden) — 403 yabancı aktöre, 409
+> `RUN_NOT_CANCELLABLE` terminal run'a, 409 stale `expected_row_version`'a. **İki yol,
+> satır kilidi altında ayrılır:** QUEUED run burada terminal `cancelled` olur (worker'ın
+> at-least-once terminal guard'ı teslimatı no-op'a çevirir); PROVISIONING/RUNNING run'da
+> yalnız **niyet** yazılır (`cancel_requested_at`) ve worker onu kendi O-05 stage
+> sınırında sonlandırır → yanıt `cancellation: "requested"`, `delivery_policy:
+> "cancellation_safe_boundary"`. **Hiçbir durumda BacktestResult yaratılmaz** (CR-03,
+> doc 15 §16) — dolayısıyla Results History'ye de girmez.
 
 ## results_history.py
 

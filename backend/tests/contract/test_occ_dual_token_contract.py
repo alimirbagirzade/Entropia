@@ -1,6 +1,6 @@
 """O-12: the dual-token OCC conflict rule over HTTP.
 
-Sixteen mutating endpoints accept the concurrency token in TWO places — the body
+Seventeen mutating endpoints accept the concurrency token in TWO places — the body
 (`expected_*`, the domain identity) and `If-Match` (the HTTP transport of that
 identity). Every page spec says they are two spellings of one value and must not
 be treated as interchangeable fields (doc 15 §11, doc 20 §14, doc 21 §7), but the
@@ -101,6 +101,13 @@ _CONFLICTS = [
         "backtest-result-delete",
         "POST",
         "/api/v1/backtest-results/br_1/delete",
+        {"expected_row_version": 5},
+        '"rv-6"',
+    ),
+    (
+        "backtest-run-cancel",
+        "POST",
+        "/api/v1/backtest-runs/btrun_1/cancel",
         {"expected_row_version": 5},
         '"rv-6"',
     ),

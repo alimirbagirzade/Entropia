@@ -31,9 +31,21 @@ at-least-once guard is untouched: a TERMINAL run is still never re-run. A
 non-terminal run left behind by a killed worker is genuinely incomplete, so a
 redelivery re-attempts it and simply appends further events to the same sequence.
 
+O-06 — controlled cancellation. The worker is never killed mid-flight. An
+authorized ``cancel_backtest_run`` records an INTENT on the run row; the worker
+reads it at four SAFE CHECKPOINTS (after the PROVISIONING commit, between two
+strategies' asset resolution, between two items' bar-replays, and last of all
+immediately before the Result is materialized) and only then writes terminal
+CANCELLED. Checkpoint four is what makes doc 15 §16 true: past it the immutable
+Result exists and the run can only end SUCCEEDED, so a later cancel is honestly
+not honored — which is exactly what the command's ``cancellation_safe_boundary``
+delivery policy promises. The claim/cancel race at the very start is closed by a
+row lock both sides take (see ``run_backtest``).
+
 A FAILED run is a normal recorded terminal outcome (diagnostics only, no Result,
 no history row), NOT a job exception — so the worker does not retry a permanent
-manifest/asset/engine failure. Only an unexpected/missing-row condition raises.
+manifest/asset/engine failure. A CANCELLED run is the same shape. Only an
+unexpected/missing-row condition raises.
 
 Bars are injected via ``stream_bars`` (default: the real S3-backed
 ``iter_bar_batches``) so integration tests exercise the full resolve → replay →
@@ -135,7 +147,15 @@ async def run_backtest(
     if job is None:
         raise ValueError(f"Job '{job_id}' not found.")
     run_id = str((job.payload or {}).get("run_id"))
-    run = await bt_repo.get_run(session, run_id)
+    # O-06: claim the run under its row lock, held across the QUEUED -> PROVISIONING
+    # transition below. ``cancel_backtest_run`` takes the SAME lock, so the two can
+    # never interleave: either the cancel lands first (and the terminal guard below
+    # turns this delivery into a no-op), or this worker claims the run and the cancel
+    # then observes PROVISIONING and downgrades itself to a checkpoint request.
+    # Without the lock a cancel could write ``cancelled`` between this read and the
+    # write below, and the worker would silently overwrite it and materialize a
+    # Result for a run the user cancelled.
+    run = await bt_repo.get_run(session, run_id, for_update=True)
     if run is None:
         raise ValueError(f"Backtest run '{run_id}' not found for job '{job_id}'.")
     manifest = await bt_repo.get_manifest_by_run(session, run_id)
@@ -144,7 +164,9 @@ async def run_backtest(
 
     # At-least-once delivery guard: a redelivered message for an already-terminal
     # run must NOT re-run the engine (a second create_result would violate
-    # UNIQUE(backtest_result.run_id)). Return the durable outcome unchanged.
+    # UNIQUE(backtest_result.run_id)). Return the durable outcome unchanged. This
+    # is also what makes a QUEUED-stage cancel final: the run is already
+    # ``cancelled``, so the engine never starts.
     if run.state in RUN_TERMINAL_STATES:
         return _terminal_ref(run)
 
@@ -168,6 +190,12 @@ async def run_backtest(
     # worker killed mid-replay leaves a truthful durable stage instead of silently
     # reverting to QUEUED.
     await session.commit()
+
+    # O-06 safe checkpoint #1 — the run is durably PROVISIONING and the lock is
+    # released, so an authorized cancel can now be observed. Checked BEFORE the pin
+    # re-resolution because that pass is many round trips wide.
+    if await _cancellation_requested(session, run):
+        return await _cancel_run(session, job, run, stage=BacktestRunState.PROVISIONING)
 
     # Re-resolve pins while still PROVISIONING; advance to RUNNING only when the
     # manifest fully resolves AND every enabled Strategy's assets / range /
@@ -208,6 +236,20 @@ async def run_backtest(
     # already finished, which is exactly why RUNNING was never observable.
     prepared_items: list[_PreparedStrategy] = []
     for config, meta in strategies:
+        # O-06 safe checkpoint #2 — between two strategies' asset resolution. Each
+        # item opens its own bar/tick stream, so this is a real boundary, not a
+        # cosmetic one.
+        if await _cancellation_requested(session, run):
+            return await _cancel_run(
+                session,
+                job,
+                run,
+                stage=BacktestRunState.PROVISIONING,
+                progress={
+                    "prepared_item_count": len(prepared_items),
+                    "strategy_item_count": len(strategies),
+                },
+            )
         prepared = await _prepare_strategy(
             session,
             config=config,
@@ -247,6 +289,20 @@ async def run_backtest(
     prior_intervals: list[PriorItemInterval] = []
     item_runs: list[ItemRun] = []
     for prepared in prepared_items:
+        # O-06 safe checkpoint #3 — between two items' bar-replays, and (on the
+        # first pass) immediately after the RUNNING commit. This is the checkpoint
+        # a user watching a long simulation actually hits.
+        if await _cancellation_requested(session, run):
+            return await _cancel_run(
+                session,
+                job,
+                run,
+                stage=BacktestRunState.RUNNING,
+                progress={
+                    "replayed_item_count": len(item_runs),
+                    "strategy_item_count": len(prepared_items),
+                },
+            )
         item_rules = (
             replace(
                 base_rules,
@@ -306,6 +362,25 @@ async def run_backtest(
             shared_pool=alloc_probe is not None,
         )
     metric_values = derive_metric_values(output.summary)
+
+    # O-06 safe checkpoint #4 — the LAST point at which no Result exists yet. This
+    # is the checkpoint that actually enforces doc 15 §16 ("CANCELLED run no
+    # BacktestResult üretir"): past this line the immutable Result root is written
+    # and the run can only end SUCCEEDED. A cancel that arrives after this point is
+    # honestly not honored — the response the caller got said ``requested`` under
+    # the ``cancellation_safe_boundary`` policy, never ``cancelled``.
+    if await _cancellation_requested(session, run):
+        return await _cancel_run(
+            session,
+            job,
+            run,
+            stage=BacktestRunState.RUNNING,
+            progress={
+                "replayed_item_count": len(item_runs),
+                "strategy_item_count": len(prepared_items),
+                "engine_replay_complete": True,
+            },
+        )
 
     result = await bt_repo.create_result(
         session,
@@ -789,6 +864,108 @@ async def _record_stage(
         resource_type=_RUN_TARGET,
         resource_id=run.run_id,
         payload={"run_id": run.run_id, "state": str(state), "event_type": str(event_type)},
+        correlation_id=run.correlation_id,
+    )
+
+
+async def _cancellation_requested(session: AsyncSession, run: Any) -> bool:
+    """Is an authorized cancellation pending for this run? (O-06, doc 15 §8.4)
+
+    Called ONLY at stage boundaries, where the session holds no pending changes to
+    ``run`` — so this refresh cannot discard work. Refreshing the whole row rather
+    than selecting one column is deliberate: it also pulls in the requester and the
+    ``row_version`` the cancel command bumped on another connection, so the terminal
+    write below neither clobbers that bump nor attributes the cancellation to nobody.
+    """
+    await session.refresh(run)
+    return run.cancel_requested_at is not None
+
+
+async def _cancel_run(
+    session: AsyncSession,
+    job: Job,
+    run: Any,
+    *,
+    stage: BacktestRunState,
+    progress: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Honor a pending cancellation at a safe checkpoint (doc 15 §8.4, §16).
+
+    Writes the terminal state, the ``RUN_CANCELLED`` stream event that closes the
+    replay a reconnecting client is following, the cancellation audit, and the
+    finalized job row — and NO Backtest Result (CR-03), so the run never produces a
+    current-result card or a Results History entry either.
+
+    Partial diagnostics survive in the event ``detail``: which checkpoint stopped
+    the run and how far it got. HONEST BOUNDARY: they do NOT survive as
+    ``diagnostic_artifact`` rows, because that table is FK-bound to a
+    ``backtest_result`` and only a SUCCEEDED run may create one — writing a Result
+    to host cancellation diagnostics would break the very rule this path enforces.
+    """
+    reason = (
+        f"Cancellation honored at the {stage.value} safe checkpoint; "
+        "no Backtest Result was materialized."
+    )
+    terminal_from = run.state
+    run.state = BacktestRunState.CANCELLED
+    run.cancellation_reason = reason
+    run.finished_at = datetime.now(UTC)
+    detail: dict[str, Any] = {
+        "cancellation_reason": reason,
+        "cancelled_at_stage": stage.value,
+        "requested_by_principal_id": run.cancel_requested_by_principal_id,
+        "result_id": None,
+        **(progress or {}),
+    }
+    await bt_repo.record_run_event(
+        session,
+        run_id=run.run_id,
+        event_type=RunEventType.RUN_CANCELLED,
+        previous_state=terminal_from,
+        state=BacktestRunState.CANCELLED,
+        correlation_id=run.correlation_id,
+        detail=detail,
+    )
+    _emit_cancellation_audit(session, run=run, detail=detail)
+    # The job did complete — it produced a terminal run — but it did not succeed;
+    # ``cancelled`` is the honest generic job outcome (Module 20 §6) and is terminal,
+    # so no redelivery re-attempts it.
+    job.status = JobStatus.CANCELLED
+    job.finished_at = datetime.now(UTC)
+    result_ref = {
+        "run_id": run.run_id,
+        "state": BacktestRunState.CANCELLED.value,
+        "result_id": None,
+        "cancellation_reason": reason,
+    }
+    job.result_ref = result_ref
+    return result_ref
+
+
+def _emit_cancellation_audit(session: AsyncSession, *, run: Any, detail: dict[str, Any]) -> None:
+    """Terminal cancellation audit + SSE outbox twin (doc 15 §16).
+
+    Attributed to the SYSTEM SERVICE acting on the requester's principal: the human
+    intent was already audited by ``cancel_backtest_run`` as
+    ``backtest.run_cancellation_requested``; THIS row records the worker actually
+    carrying it out at a checkpoint."""
+    audit_repo.add_audit_event(
+        session,
+        event_kind="backtest.run_cancelled",
+        actor_principal_id=run.cancel_requested_by_principal_id or run.requested_by_principal_id,
+        actor_kind=ActorKind.SYSTEM_SERVICE,
+        target_entity_id=run.run_id,
+        target_entity_type=_RUN_TARGET,
+        new_state=str(run.state),
+        correlation_id=run.correlation_id,
+        metadata={"manifest_hash": run.manifest_hash, **detail},
+    )
+    audit_repo.add_outbox_event(
+        session,
+        event_type="backtest.run_cancelled",
+        resource_type=_RUN_TARGET,
+        resource_id=run.run_id,
+        payload={"run_id": run.run_id, "state": str(run.state), **detail},
         correlation_id=run.correlation_id,
     )
 

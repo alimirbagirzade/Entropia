@@ -54,6 +54,16 @@ async def get_backtest_run(
         "result_id": run.result_id,
         "failure_code": run.failure_code,
         "failure_message": run.failure_message,
+        # O-06: the cancellation trail, doc 15 §16 ("cancellation audit event ve
+        # terminal reason korunur"). ``cancel_requested_at`` set while the state is
+        # still PROVISIONING/RUNNING is a cancel in flight, awaiting the worker's
+        # next safe checkpoint; ``cancellation_reason`` is the preserved terminal
+        # reason and names the checkpoint that stopped the run. ``row_version`` is
+        # the OCC token a client echoes back as ``expected_row_version``.
+        "cancel_requested_at": _iso(run.cancel_requested_at),
+        "cancel_requested_by_principal_id": run.cancel_requested_by_principal_id,
+        "cancellation_reason": run.cancellation_reason,
+        "row_version": run.row_version,
         "job_id": run.job_id,
         "created_at": _iso(run.created_at),
         "started_at": _iso(run.started_at),

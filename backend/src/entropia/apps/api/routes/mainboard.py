@@ -20,7 +20,11 @@ from pydantic import BaseModel, Field
 from entropia.application.commands import mainboard as mb_cmd
 from entropia.application.queries import mainboard as mb_query
 from entropia.apps.api.deps import RequestContext, request_context
-from entropia.shared.concurrency import etag_for_row_version, row_version_from_if_match
+from entropia.shared.concurrency import (
+    etag_for_row_version,
+    reconcile_occ_tokens,
+    row_version_from_if_match,
+)
 from entropia.shared.errors import ValidationError
 
 router = APIRouter(tags=["mainboard"])
@@ -154,9 +158,13 @@ async def patch_mainboard_item(
     if_match: str | None = Header(default=None, alias="If-Match"),
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> dict[str, Any]:
-    expected_row_version = body.expected_row_version
-    if expected_row_version is None:
-        expected_row_version = row_version_from_if_match(if_match)
+    # Dual-token rule (O-12): body and If-Match are two spellings of ONE value; a
+    # disagreement is 409 OCC_TOKEN_CONFLICT, never a silent pick.
+    expected_row_version = reconcile_occ_tokens(
+        body.expected_row_version,
+        row_version_from_if_match(if_match),
+        field="expected_row_version",
+    )
     if expected_row_version is None:
         raise ValidationError(
             "expected_row_version (body) or If-Match header is required.",

@@ -127,6 +127,7 @@ async def create_market_dataset(
     title: str | None = None,
     instrument_id: str | None = None,
     instrument_scope: dict[str, Any] | None = None,
+    idempotency_key: str | None = None,
 ) -> tuple[Any, MarketDatasetRevision]:
     """Create the dataset Root + first DRAFT revision (owner = actor).
 
@@ -147,24 +148,47 @@ async def create_market_dataset(
             alias=instrument_scope.get("alias"),
         )
         resolved_instrument_id = resolved["instrument_id"]
-    root, revision = await md_repo.create_market_dataset(
+
+    async def _op() -> dict[str, Any]:
+        root, revision = await md_repo.create_market_dataset(
+            session,
+            owner_principal_id=actor.principal_id,
+            created_by_principal_id=actor.principal_id,
+            market_data_type=market_data_type,
+            payload=payload,
+            title=title,
+            instrument_id=resolved_instrument_id,
+        )
+        _audit_and_outbox(
+            session,
+            actor,
+            event_kind="market.dataset.created",
+            entity_id=root.entity_id,
+            revision_id=revision.revision_id,
+            new_state=str(revision.revision_state),
+            action="created",
+        )
+        return {"entity_id": root.entity_id, "revision_id": revision.revision_id}
+
+    ref = await run_idempotent(
         session,
-        owner_principal_id=actor.principal_id,
-        created_by_principal_id=actor.principal_id,
-        market_data_type=market_data_type,
-        payload=payload,
-        title=title,
-        instrument_id=resolved_instrument_id,
+        key=idempotency_key,
+        actor_principal_id=actor.principal_id,
+        request_payload={
+            "op": "create_market_dataset",
+            "market_data_type": str(market_data_type),
+            "title": title,
+            "instrument_id": resolved_instrument_id,
+        },
+        operation=_op,
     )
-    _audit_and_outbox(
-        session,
-        actor,
-        event_kind="market.dataset.created",
-        entity_id=root.entity_id,
-        revision_id=revision.revision_id,
-        new_state=str(revision.revision_state),
-        action="created",
-    )
+    # A replay resolves the SAME root + revision through the stored reference rather
+    # than creating a second dataset; the fresh path re-reads them from the identity
+    # map, so both paths return the caller's declared (root, revision) shape.
+    root = await _require_root(session, ref["entity_id"])
+    revision = await md_repo.get_revision(session, ref["revision_id"])
+    if revision is None:  # pragma: no cover - the reference is written with the row
+        raise NotFoundError(f"Revision '{ref['revision_id']}' not found for this dataset.")
     return root, revision
 
 
@@ -366,6 +390,7 @@ async def confirm_market_schema_mapping(
     market_data_type: MarketDataType,
     source_columns: list[str],
     confirmed_mapping: dict[str, str | None] | None = None,
+    idempotency_key: str | None = None,
 ) -> MarketSchemaMapping:
     """Propose (and optionally confirm) the canonical schema mapping (D7).
 
@@ -392,24 +417,45 @@ async def confirm_market_schema_mapping(
         final_confirmed = dict(proposal.proposed)
         review_required = False
 
-    mapping = md_repo.upsert_schema_mapping(
+    async def _op() -> dict[str, Any]:
+        mapping = md_repo.upsert_schema_mapping(
+            session,
+            entity_id=entity_id,
+            market_data_type=market_data_type,
+            proposed_mapping=dict(proposal.proposed),
+            revision_id=root.current_revision_id,
+            confirmed_mapping=final_confirmed,
+            review_required=review_required,
+            confirmed_by_principal_id=actor.principal_id,
+        )
+        _audit_and_outbox(
+            session,
+            actor,
+            event_kind="market.schema_mapping.confirmed",
+            entity_id=entity_id,
+            revision_id=root.current_revision_id,
+            action="schema_mapping_confirmed",
+        )
+        await session.flush()
+        return {"entity_id": entity_id, "mapping_id": mapping.mapping_id}
+
+    await run_idempotent(
         session,
-        entity_id=entity_id,
-        market_data_type=market_data_type,
-        proposed_mapping=dict(proposal.proposed),
-        revision_id=root.current_revision_id,
-        confirmed_mapping=final_confirmed,
-        review_required=review_required,
-        confirmed_by_principal_id=actor.principal_id,
+        key=idempotency_key,
+        actor_principal_id=actor.principal_id,
+        request_payload={
+            "op": "confirm_market_schema_mapping",
+            "entity_id": entity_id,
+            "source_columns": sorted(source_columns),
+            "confirmed_mapping": confirmed_mapping,
+        },
+        operation=_op,
     )
-    _audit_and_outbox(
-        session,
-        actor,
-        event_kind="market.schema_mapping.confirmed",
-        entity_id=entity_id,
-        revision_id=root.current_revision_id,
-        action="schema_mapping_confirmed",
-    )
+    # The write itself is an upsert, so a replay must not append a second audit
+    # trail; the mapping row is re-read so both paths return the same object.
+    mapping = await md_repo.get_schema_mapping(session, entity_id)
+    if mapping is None:  # pragma: no cover - the upsert above guarantees a row
+        raise NotFoundError(f"Schema mapping for '{entity_id}' not found.")
     return mapping
 
 
@@ -563,6 +609,7 @@ async def create_successor_revision(
     market_data_type: MarketDataType,
     title: str | None = None,
     instrument_id: str | None = None,
+    idempotency_key: str | None = None,
 ) -> MarketDatasetRevision:
     """Append a successor DRAFT revision that supersedes the current head.
 
@@ -572,25 +619,46 @@ async def create_successor_revision(
     root = await _require_root(session, entity_id)
     md_policy.ensure_can_edit_draft(actor, owner_principal_id=root.owner_principal_id)
 
-    revision = await md_repo.append_market_dataset_revision(
+    async def _op() -> dict[str, Any]:
+        revision = await md_repo.append_market_dataset_revision(
+            session,
+            root,
+            market_data_type=market_data_type,
+            payload=payload,
+            created_by_principal_id=actor.principal_id,
+            supersedes_revision_id=root.current_revision_id,
+            title=title,
+            instrument_id=instrument_id,
+        )
+        _audit_and_outbox(
+            session,
+            actor,
+            event_kind="market.dataset.successor_created",
+            entity_id=entity_id,
+            revision_id=revision.revision_id,
+            new_state=str(revision.revision_state),
+            action="successor_created",
+        )
+        return {"revision_id": revision.revision_id}
+
+    ref = await run_idempotent(
         session,
-        root,
-        market_data_type=market_data_type,
-        payload=payload,
-        created_by_principal_id=actor.principal_id,
-        supersedes_revision_id=root.current_revision_id,
-        title=title,
-        instrument_id=instrument_id,
+        key=idempotency_key,
+        actor_principal_id=actor.principal_id,
+        # The fingerprint must NOT include the head pointer this operation itself
+        # moves: a retry would then hash differently and 409 forever, defeating the
+        # key. Mirrors the sibling create_market_dataset_revision (op/entity/payload).
+        request_payload={
+            "op": "create_successor_revision",
+            "entity_id": entity_id,
+            "payload": payload,
+        },
+        operation=_op,
     )
-    _audit_and_outbox(
-        session,
-        actor,
-        event_kind="market.dataset.successor_created",
-        entity_id=entity_id,
-        revision_id=revision.revision_id,
-        new_state=str(revision.revision_state),
-        action="successor_created",
-    )
+    # A replay returns the successor already appended — never a second revision.
+    revision = await md_repo.get_revision(session, ref["revision_id"])
+    if revision is None:  # pragma: no cover - the reference is written with the row
+        raise NotFoundError(f"Revision '{ref['revision_id']}' not found for this dataset.")
     return revision
 
 
@@ -601,6 +669,7 @@ async def deprecate_market_dataset_revision(
     entity_id: str,
     revision_id: str,
     note: str | None = None,
+    idempotency_key: str | None = None,
 ) -> dict[str, Any]:
     """Admin-only: move an APPROVED revision -> DEPRECATED."""
     md_policy.ensure_can_approve(actor)
@@ -613,35 +682,51 @@ async def deprecate_market_dataset_revision(
         next_market_revision_state(revision.revision_state, MarketRevisionState.DEPRECATED)
 
     previous = revision.revision_state
-    revision.revision_state = next_market_revision_state(previous, MarketRevisionState.DEPRECATED)
-    root.lifecycle_state = "deprecated"
-    approval_repo.add_approval_decision(
+
+    async def _op() -> dict[str, Any]:
+        revision.revision_state = next_market_revision_state(
+            previous, MarketRevisionState.DEPRECATED
+        )
+        root.lifecycle_state = "deprecated"
+        approval_repo.add_approval_decision(
+            session,
+            target_entity_id=entity_id,
+            target_kind=_TARGET_KIND,
+            decision=ApprovalState.REJECTED,
+            target_revision_id=revision_id,
+            approver_principal_id=actor.principal_id,
+            prior_state=str(previous),
+            new_state=str(revision.revision_state),
+            note=note,
+            policy_context={"action": "deprecate"},
+        )
+        _audit_and_outbox(
+            session,
+            actor,
+            event_kind="market.dataset.deprecated",
+            entity_id=entity_id,
+            revision_id=revision_id,
+            previous_state=str(previous),
+            new_state=str(revision.revision_state),
+            action="deprecated",
+        )
+        return {
+            "entity_id": entity_id,
+            "revision_id": revision_id,
+            "revision_state": str(revision.revision_state),
+        }
+
+    return await run_idempotent(
         session,
-        target_entity_id=entity_id,
-        target_kind=_TARGET_KIND,
-        decision=ApprovalState.REJECTED,
-        target_revision_id=revision_id,
-        approver_principal_id=actor.principal_id,
-        prior_state=str(previous),
-        new_state=str(revision.revision_state),
-        note=note,
-        policy_context={"action": "deprecate"},
+        key=idempotency_key,
+        actor_principal_id=actor.principal_id,
+        request_payload={
+            "op": "deprecate_market_dataset_revision",
+            "entity_id": entity_id,
+            "revision_id": revision_id,
+        },
+        operation=_op,
     )
-    _audit_and_outbox(
-        session,
-        actor,
-        event_kind="market.dataset.deprecated",
-        entity_id=entity_id,
-        revision_id=revision_id,
-        previous_state=str(previous),
-        new_state=str(revision.revision_state),
-        action="deprecated",
-    )
-    return {
-        "entity_id": entity_id,
-        "revision_id": revision_id,
-        "revision_state": str(revision.revision_state),
-    }
 
 
 async def soft_delete_market_dataset(

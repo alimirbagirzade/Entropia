@@ -123,6 +123,7 @@ async def create_dataset(
     body: CreateDatasetRequest,
     response: Response,
     ctx: RequestContext = Depends(request_context),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> dict[str, Any]:
     category = CategorySpec(category=body.category, custom_category=body.custom_category)
     root, revision = await rd_cmd.create_research_dataset(
@@ -134,6 +135,7 @@ async def create_dataset(
         usage_scope=body.usage_scope,
         display_name=body.display_name,
         provider_name=body.provider_name,
+        idempotency_key=idempotency_key,
     )
     response.headers["ETag"] = etag_for_row_version(root.row_version)
     return {
@@ -236,6 +238,7 @@ async def set_time_policy(
     entity_id: str,
     body: SetTimePolicyRequest,
     ctx: RequestContext = Depends(request_context),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> dict[str, Any]:
     available_time = AvailableTimeSpec(
         policy=body.available_time_policy, delay_seconds=body.delay_seconds
@@ -248,6 +251,7 @@ async def set_time_policy(
         event_time_semantics=body.event_time_semantics,
         available_time=available_time,
         timezone_spec=timezone_spec,
+        idempotency_key=idempotency_key,
     )
     return {
         "time_policy_id": policy.time_policy_id,
@@ -261,6 +265,7 @@ async def define_field(
     entity_id: str,
     body: FieldDefinitionRequest,
     ctx: RequestContext = Depends(request_context),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> dict[str, Any]:
     field = FieldDefinition(
         field_name=body.field_name,
@@ -272,7 +277,13 @@ async def define_field(
         allowed_usage=body.allowed_usage,
         unit_or_scale=body.unit_or_scale,
     )
-    row = await rd_cmd.define_field(ctx.session, ctx.actor, entity_id=entity_id, field=field)
+    row = await rd_cmd.define_field(
+        ctx.session,
+        ctx.actor,
+        entity_id=entity_id,
+        field=field,
+        idempotency_key=idempotency_key,
+    )
     return {"field_definition_id": row.field_definition_id, "field_name": row.field_name}
 
 
@@ -281,6 +292,7 @@ async def define_feature(
     entity_id: str,
     body: FeatureDefinitionRequest,
     ctx: RequestContext = Depends(request_context),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> dict[str, Any]:
     row = await rd_cmd.define_feature(
         ctx.session,
@@ -290,6 +302,7 @@ async def define_feature(
         definition=body.definition,
         feature_version=body.feature_version,
         approval_state=body.approval_state,
+        idempotency_key=idempotency_key,
     )
     return {
         "feature_definition_id": row.feature_definition_id,

@@ -87,6 +87,26 @@ Before stopping a working session, produce **ALL** of the following:
   (`commands/backtest_run.py::_readiness_blocked`), `details` yine tüm issue'ları taşır. Yeni
   hata sınıfı eklerken kategorisini bildir; zarf `docs/openapi.json` →
   `components.schemas.ErrorResponse` altında yayımlanır (drift guard onu korur).
+- **OCC dual-token = TEK kural, çelişki 409 (O-12).** 16 mutating op token'ı hem gövdeden
+  (`expected_*`) hem `If-Match`'ten kabul eder. Bunlar **tek değerin iki yazımıdır**, iki
+  bağımsız önkoşul değil (doc 15 §11, doc 20 §14 "Do not treat them as interchangeable
+  fields", doc 21 §7). Kural tek yerde: `shared/concurrency.py::reconcile_occ_tokens` —
+  **ikisi de verilmiş ve ÇELİŞİYORSA → 409 `OCC_TOKEN_CONFLICT`**
+  (`shared/errors.py::OccTokenConflictError`, `category=concurrency_or_preflight`,
+  **`retryable=false`** çünkü aynı çelişkiyi tekrar göndermek hep aynı hatayı verir;
+  `details` iki değeri de yankılar). Biri verilmişse o kazanır; anlaşıyorlarsa gövde geçer →
+  **tek-token çağıranlar (frontend dahil) etkilenmez**. Yeni dual-token uç eklerken kuralı
+  route'a KOPYALAMA, bu fonksiyondan geçir. `rationale.revise_family` bilerek dışarıda:
+  oradaki `If-Match` atıldı ve farklı eksendi (ETag=row_version, token=revision id) →
+  parametre kaldırıldı. Tam liste: `docs/CODEMAPS/BACKEND_ROUTES.md` §DUAL-TOKEN.
+- **Idempotency-Key = `run_idempotent`, yeni altyapı YOK (O-13).** Kalıcı satır yazan her
+  mutating op `Idempotency-Key` okumalı ve komut gövdesini
+  `application/idempotency.py::run_idempotent` ile sarmalı. **Fingerprint'e komutun KENDİSİNİN
+  değiştirdiği durumu koyma** (head pointer, row_version) — retry farklı hash'lenir ve sonsuza
+  dek 409 verir; girdileri hash'le (`op`, id'ler, payload, çağıranın gönderdiği `expected_*`).
+  ORM döndüren komutlarda `_op()` JSON `response_ref` döner, sonra satır o referanstan
+  **yeniden okunur** → replay aynı kaynağı, aynı tipte döner. Idempotency-Key okumayan 16 op
+  gerekçeli (salt-okuma POST, oturum işlemi, OCC korumalı soft-delete, geçici opener).
 - **Upload dosya-tipi kapısı = fail-closed (K-07).** TXT/CSV kaynak yüklemelerinde ortak kapı
   `domain/importing/source_file.py::assert_supported_source_file`: filename yok/boş → **RED**
   (asla "atla"), uzantı iddiası içerik sniff'i ile desteklenir. **Hata kodu sayfa taksonomisine

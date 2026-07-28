@@ -108,16 +108,25 @@ async def soft_delete_entity(
     display_name: str | None = None,
     original_location: str | None = None,
     deletion_snapshot: dict[str, Any] | None = None,
+    expected_row_version: int | None = None,
+    idempotency_key: str | None = None,
 ) -> EntityRegistry:
     """Owner-or-Admin soft delete of a registry root (doc 20 §9.3 entity.soft_delete).
 
     Row-locks the root, short-circuits an already-soft-deleted root as an
     idempotent no-op (same entry, no duplicate audit), runs the type-specific
     preflight, then writes root state + Trash Entry + audit + outbox atomically.
+
+    O-18: ``expected_row_version`` is the concurrency precondition this entry point
+    previously lacked — checked AFTER the row lock so the comparison sees the
+    committed head, exactly like every sibling soft-delete. It stays optional
+    (``None`` = no precondition) so existing callers are unaffected.
     """
     root = await _require_root(session, entity_id)
     ensure_can_edit(actor, owner_principal_id=root.owner_principal_id)
     await session.refresh(root, with_for_update=True)
+    # Under the lock: a stale token loses to the committed head (409 STALE_REVISION).
+    check_row_version(root.row_version, expected_row_version)
 
     previous = root.deletion_state
     if previous == DeletionState.SOFT_DELETED:
@@ -139,38 +148,49 @@ async def soft_delete_entity(
     snapshot = dict(deletion_snapshot or {})
     snapshot.setdefault("current_revision_id", root.current_revision_id)
     snapshot.setdefault("domain_lifecycle_state", root.lifecycle_state)
-    trash_repo.add_trash_entry(
+
+    async def _op() -> dict[str, Any]:
+        trash_repo.add_trash_entry(
+            session,
+            entity_id=root.entity_id,
+            entity_type=root.entity_type,
+            deleted_by=actor.principal_id,
+            reason=reason,
+            owner_at_deletion=root.owner_principal_id,
+            dependency_snapshot={"current_revision_id": root.current_revision_id},
+            display_name=display_name,
+            original_location=original_location or original_location_for(root.entity_type),
+            deletion_snapshot=snapshot,
+            correlation_id=actor.correlation_id,
+        )
+        audit_repo.add_audit_event(
+            session,
+            event_kind="entity.soft_deleted",
+            actor_principal_id=actor.principal_id,
+            actor_kind=actor.actor_kind,
+            target_entity_id=root.entity_id,
+            target_entity_type=root.entity_type,
+            previous_state=str(previous),
+            new_state=str(root.deletion_state),
+            reason=reason,
+            correlation_id=actor.correlation_id,
+        )
+        audit_repo.add_outbox_event(
+            session,
+            event_type="entity.soft_deleted",
+            resource_type=root.entity_type,
+            resource_id=root.entity_id,
+            payload={"reason": reason},
+            correlation_id=actor.correlation_id,
+        )
+        return {"entity_id": root.entity_id}
+
+    await run_idempotent(
         session,
-        entity_id=root.entity_id,
-        entity_type=root.entity_type,
-        deleted_by=actor.principal_id,
-        reason=reason,
-        owner_at_deletion=root.owner_principal_id,
-        dependency_snapshot={"current_revision_id": root.current_revision_id},
-        display_name=display_name,
-        original_location=original_location or original_location_for(root.entity_type),
-        deletion_snapshot=snapshot,
-        correlation_id=actor.correlation_id,
-    )
-    audit_repo.add_audit_event(
-        session,
-        event_kind="entity.soft_deleted",
+        key=idempotency_key,
         actor_principal_id=actor.principal_id,
-        actor_kind=actor.actor_kind,
-        target_entity_id=root.entity_id,
-        target_entity_type=root.entity_type,
-        previous_state=str(previous),
-        new_state=str(root.deletion_state),
-        reason=reason,
-        correlation_id=actor.correlation_id,
-    )
-    audit_repo.add_outbox_event(
-        session,
-        event_type="entity.soft_deleted",
-        resource_type=root.entity_type,
-        resource_id=root.entity_id,
-        payload={"reason": reason},
-        correlation_id=actor.correlation_id,
+        request_payload={"op": "soft_delete_entity", "entity_id": entity_id},
+        operation=_op,
     )
     return root
 

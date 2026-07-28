@@ -26,7 +26,7 @@ from entropia.application.queries.trash import get_trash_entry_detail, list_tras
 from entropia.apps.api.deps import RequestContext, request_context
 from entropia.domain.identity.policy import require_trash_admin
 from entropia.infrastructure.queues import enqueue as job_enqueue
-from entropia.shared.concurrency import row_version_from_if_match
+from entropia.shared.concurrency import reconcile_occ_tokens, row_version_from_if_match
 
 router = APIRouter(tags=["trash"])
 
@@ -37,6 +37,10 @@ _PURGE_PATH = "/trash-entries/{trash_entry_id}/purge"
 
 
 class DeleteRequest(BaseModel):
+    # O-18: the generic soft-delete entry point had NO concurrency token at all, so a
+    # racing edit could be deleted out from under its author. Optional to keep the
+    # existing (already state-idempotent) callers working; enforced when supplied.
+    expected_row_version: int | None = None
     reason: str | None = None
 
 
@@ -50,9 +54,15 @@ class PurgeRequest(BaseModel):
     expected_head_revision_id: int | None = None
 
 
-def _expected_version(body_value: int | None, if_match: str | None) -> int | None:
-    """Body token wins; ``If-Match`` is transport support only (doc 20 §14)."""
-    return body_value if body_value is not None else row_version_from_if_match(if_match)
+def _expected_version(
+    body_value: int | None, if_match: str | None, *, field: str = "expected_head_revision_id"
+) -> int | None:
+    """Body token wins; ``If-Match`` is transport support only (doc 20 §14).
+
+    Dual-token rule (O-12): the two spellings must agree — a disagreement is 409
+    OCC_TOKEN_CONFLICT, never a silent pick.
+    """
+    return reconcile_occ_tokens(body_value, row_version_from_if_match(if_match), field=field)
 
 
 @router.delete("/entities/{entity_id}", status_code=204)
@@ -60,9 +70,27 @@ async def soft_delete(
     entity_id: str,
     body: DeleteRequest | None = None,
     ctx: RequestContext = Depends(request_context),
+    if_match: str | None = Header(default=None, alias="If-Match"),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> Response:
+    """Generic soft-delete entry point (doc 20 §9.3 ``entity.soft_delete``).
+
+    O-18: this surface previously carried NO concurrency token, so it was the one
+    delete path that could silently discard a concurrent edit. It now takes the root
+    ``expected_row_version`` in the body or as an ``If-Match`` ``rv-N`` ETag, under
+    the same dual-token rule as every other mutation, plus an ``Idempotency-Key`` so
+    a retried submit cannot write a second audit trail (doc 20 §14).
+    """
+    payload = body or DeleteRequest()
     await soft_delete_entity(
-        ctx.session, ctx.actor, entity_id=entity_id, reason=body.reason if body else None
+        ctx.session,
+        ctx.actor,
+        entity_id=entity_id,
+        reason=payload.reason,
+        expected_row_version=_expected_version(
+            payload.expected_row_version, if_match, field="expected_row_version"
+        ),
+        idempotency_key=idempotency_key,
     )
     return Response(status_code=204)
 

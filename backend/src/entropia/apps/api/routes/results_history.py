@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field
 from entropia.application.commands import backtest_run as backtest_cmd
 from entropia.application.queries import results_history as history_query
 from entropia.apps.api.deps import RequestContext, request_context
-from entropia.shared.concurrency import row_version_from_if_match
+from entropia.shared.concurrency import reconcile_occ_tokens, row_version_from_if_match
 from entropia.shared.pagination import MAX_LIMIT
 
 router = APIRouter(tags=["results-history"])
@@ -71,9 +71,13 @@ async def soft_delete_backtest_result(
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> dict[str, Any]:
     payload = body or DeleteResultBody()
-    expected = payload.expected_row_version
-    if expected is None and if_match is not None:
-        expected = row_version_from_if_match(if_match)
+    # Dual-token rule (O-12): body and If-Match are two spellings of ONE value; a
+    # disagreement is 409 OCC_TOKEN_CONFLICT, never a silent pick.
+    expected = reconcile_occ_tokens(
+        payload.expected_row_version,
+        row_version_from_if_match(if_match),
+        field="expected_row_version",
+    )
     return await backtest_cmd.soft_delete_backtest_result(
         ctx.session,
         ctx.actor,

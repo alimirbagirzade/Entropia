@@ -18,7 +18,11 @@ from pydantic import BaseModel, Field
 from entropia.application.commands import allocation_plan as alloc_cmd
 from entropia.application.queries import allocation_plan as alloc_query
 from entropia.apps.api.deps import RequestContext, request_context
-from entropia.shared.concurrency import etag_for_row_version, row_version_from_if_match
+from entropia.shared.concurrency import (
+    etag_for_row_version,
+    reconcile_occ_tokens,
+    row_version_from_if_match,
+)
 
 router = APIRouter(tags=["portfolio-allocation"])
 
@@ -59,9 +63,11 @@ class CreateRevisionBody(BaseModel):
 
 
 def _resolve_expected(body_value: int | None, if_match: str | None) -> int | None:
-    if body_value is not None:
-        return body_value
-    return row_version_from_if_match(if_match)
+    # Dual-token rule (O-12): body and If-Match are two spellings of ONE value; a
+    # disagreement is 409 OCC_TOKEN_CONFLICT, never a silent pick.
+    return reconcile_occ_tokens(
+        body_value, row_version_from_if_match(if_match), field="expected_row_version"
+    )
 
 
 @router.get(_DRAFT_PATH)

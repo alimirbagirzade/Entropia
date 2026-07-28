@@ -3099,3 +3099,58 @@ Kalan tek büyük açık iş hâlâ **R2'nin product-owner imzası**
 
 Ayrıca açık: **F-07 §4.4** (4 yüzey backend display-DTO bekliyor) · **O-03 kalıntısı** (5 ölü
 error sınıfı, `KNOWN_UNRAISED`) · **Round-3 backlog** (S5 a/b/c/d + S-L1…S-L6).
+
+## O-30 — Purge-request 202 gövdesi: doc 20 §4/§7 ↔ §9.2 çelişkisi adjudicated (PR #451)
+
+**Ne landed.** Doc 20 purge-request 202 gövdesini iki yerde ve iki farklı şekilde tarif ediyor:
+§7'nin literali `root_lifecycle_state: 'soft_deleted'` derken §9.2'nin state machine'i (ve §4,
+§9.3, §12) `soft_deleted --purge request--> PURGE_PENDING` diyor. **Adjudicated:** DEĞER'de §9.2
+kanonik (satır gerçekten `purge_pending` olur, `PURGE_PENDING -> restore` yasaktır;
+`'soft_deleted'` reklamı "restore hâlâ açık" yalanı olurdu), AD'da §4/§7 kanonik. Yanıt artık
+**iki anahtarı birden** aynı değerle taşıyor. **Migration YOK**, alembic head
+`0039_backtest_run_cancellation` sabit, `ENGINE_VERSION` sabit.
+
+**İki dalga.** (1) `commands/deletion.py::request_purge` gövdesine `root_lifecycle_state` eklendi
+(additive; hiçbir anahtar yeniden adlandırılmadı). (2) İlk turda dürüst sınır olarak kaydedilen
+"`docs/openapi.json` değişmedi" maddesi **aynı slice içinde kapatıldı**: route dönüş tipi
+`dict[str, Any]` olduğu için şema bu gövdeyi hiç saymıyordu — drift guard yeşilken sözleşme
+görünmezdi. Yeni `routes/trash.py::PurgeAcceptedResponse` + `response_model=` ile gövde
+`components.schemas` altında yayımlanıyor (`openapi.json` +61/−3).
+
+**Yakalanan gerçek risk.** `run_idempotent` replay'de `response_ref`'i birebir döndürür
+(`idempotency.py:53-54`). Katı response model altında, O-30 ÖNCESİ yazılmış bir Idempotency-Key
+kaydı `root_lifecycle_state` taşımadığı için replay'de doğrulamayı patlatır — hiçbir şeyi yanlış
+yapmamış çağırana **500**. `request_purge` bunu `deletion_state`'ten backfill ederek kapatır,
+**kopyalayarak** (JSON kolonu mutate edilmez).
+
+**Rebase sırasında yakalanan #408 tekrarı.** PR branch'ine `main` merge edildiğinde (`0af080f`)
+`docs/PROJECT_HISTORY.md`'deki **O-30 bölümü tamamen düşmüştü** (`git show 0af080f:… | grep -c
+"^## O-30"` → 0), `CLAUDE.md` bullet'ı sağ kalmıştı. Bu, O-03'te #408'in yaptığının aynısı.
+Rebase çakışması kendi tarafımız alınarak çözüldü, kayıt geri getirildi.
+
+**Testler:** `purge_pending_shape` + legacy-envelope replay + contract şema testi dahil
+**250 passed** (tests/contract + trash + restore-conflict + idempotency), exit 0;
+ruff + format (662 dosya) + mypy (371 dosya) temiz; frontend `tsc -b` exit 0,
+`vitest -t "purge"` 4 passed. PR #451 CI ilk turda 6/6 yeşildi.
+
+**Uygulanamayan proof'lar (dürüst sınır):** migration ve yeni `create_*` yok → alembic up/down/up
+ve L1 FK insert-order proof'ları uygulanmaz. Yeni endpoint/tablo/job olmadığı için codemap
+tazelemesi gerekmedi — ancak `docs/CODEMAPS/BACKEND_ROUTES.md`'deki purge satırının `purge:113`
+satır numarası **bayat** (O-17 route'ları kaydırmış); bu slice'ın ürettiği bir sapma değil,
+kayıtlı gözlem.
+
+Tam kayıt: `docs/PROJECT_HISTORY.md` §"O-30 · Purge-request 202 gövdesi".
+
+## Next: **PO imzası + R2 kapanışı** (değişmedi) — O-30 landed (#451)
+
+O-serisi durumu: O-01 (#403) · O-02 (#400) · O-03 (#407 + #413) · O-04 (#405) · O-05 (#412) ·
+O-06 (#419) · O-08 (#406) · O-09 (#410) · O-10 (#402) · O-14 (#417 + #445) · O-16 (#444) ·
+O-17 (#446) · O-18 (#442) · O-21 (#430) · O-27 (#450); **O-30 bu slice (#451)**.
+Yanı sıra K-08 (#443) landed.
+
+Kalan tek büyük açık iş hâlâ **R2'nin product-owner imzası**
+(`docs/implementation/v18_final_acceptance.md` §4, D-1…D-9).
+
+Ayrıca açık: **F-07 §4.4** (4 yüzey backend display-DTO bekliyor) · **O-03 kalıntısı** (5 ölü
+error sınıfı, `KNOWN_UNRAISED`) · **Round-3 backlog** (S5 a/b/c/d + S-L1…S-L6) ·
+**codemap satır numaraları** (`BACKEND_ROUTES.md`) bayat.

@@ -45,7 +45,7 @@ from entropia.domain.identity.policy import ensure_can_view, require_authenticat
 from entropia.domain.lifecycle.enums import DeletionState
 from entropia.domain.mainboard.composition import CompositionMember, composition_hash
 from entropia.domain.mainboard.enums import MainboardItemKind
-from entropia.domain.market_data.enums import MarketRevisionState
+from entropia.domain.market_data.enums import MarketRevisionState, supports_intrabar_execution
 from entropia.domain.readiness.enums import ReadinessIssueCode, ReadinessScope, ReadinessSeverity
 from entropia.domain.readiness.issues import (
     ExternalImportState,
@@ -55,6 +55,8 @@ from entropia.domain.readiness.issues import (
 )
 from entropia.domain.readiness.validators import evaluate_readiness
 from entropia.domain.strategy.config import StrategyConfig
+from entropia.domain.trading_signal.config import TradingSignalConfig
+from entropia.domain.trading_signal.enums import PriceSourceMode as SignalPriceSource
 from entropia.infrastructure.postgres.models import (
     EntityRegistry,
     MainboardWorkingItem,
@@ -71,6 +73,16 @@ from entropia.shared.errors import (
     AccessDeniedError,
     CompositionNotFoundError,
     CompositionStaleError,
+)
+
+# K-08: the two Trading Signal price sources that must be backed by approved Market
+# Data (doc 04 §5 Price Source row). Kept as strings for the same reason the pure
+# validator does — the Trade Log twin declares the identical values.
+_SIGNAL_OHLCV_FALLBACK_SOURCES = frozenset(
+    {
+        str(SignalPriceSource.OHLCV_CLOSE_IF_NEEDED),
+        str(SignalPriceSource.OHLCV_INTRABAR_IF_AVAILABLE),
+    }
 )
 
 _REPORT_TARGET = "ready_check_report"
@@ -134,6 +146,7 @@ async def run_readiness_check(
         items = await _build_item_inputs(session, enabled)
         market_data_issues = await _resolve_market_data_issues(session, items)
         tick_data_issues = await _resolve_tick_data_issues(session, items)
+        signal_market_data_issues = await _resolve_signal_market_data_issues(session, items)
         strategy_indicator_issues = await _resolve_strategy_indicator_issues(session, items)
         research_sources = await _resolve_research_sources(session, items)
         evaluation = evaluate_readiness(
@@ -142,6 +155,7 @@ async def run_readiness_check(
             allocation_issues=allocation_issues,
             market_data_issues=market_data_issues,
             tick_data_issues=tick_data_issues,
+            signal_market_data_issues=signal_market_data_issues,
             strategy_indicator_issues=strategy_indicator_issues,
             research_sources=research_sources,
         )
@@ -419,6 +433,95 @@ async def _resolve_tick_data_issues(
                 scope_id=item.item_id,
             )
         )
+    return issues
+
+
+async def _resolve_signal_market_data_issues(
+    session: AsyncSession, items: list[ReadinessItemInput]
+) -> list[ReadinessIssue]:
+    """K-08: prove a Trading Signal's OHLCV pin is approved AND intrabar-capable.
+
+    Doc 04 §5 Price Source row requires "compatible approved Market Data at Ready
+    Check" — two words the pure validator cannot check on its own:
+
+    * *approved* — the declared ``price_policy.approved_market_data_revision_ref`` must
+      still resolve to an APPROVED revision on an ACTIVE dataset root. Same approval
+      semantics as ``_resolve_market_data_issues``; an unresolvable / revoked pin is
+      reported with the doc 04 §11 Dependency code ``MARKET_DATA_DEPENDENCY_BLOCKED``,
+      the same code the pure layer uses for a MISSING pin (one page vocabulary for one
+      defect: "the market data this fallback needs is not there").
+    * *compatible* — doc 04 §5.2 "Price Source = OHLCV Intrabar If Available" needs a
+      dataset that carries sub-bar detail. ``supports_intrabar_execution`` is the single
+      shared definition; a bar-only OHLCV pin yields ``INTRABAR_DATA_UNAVAILABLE``
+      rather than an intrabar resolution the data cannot support.
+
+    A config that does not parse is left to ``EXTERNAL_IMPORT_INVALID``, and a config
+    with NO reference at all is left to the pure validator — this resolver deliberately
+    stays silent on both so one defect never produces two blockers.
+    """
+    issues: list[ReadinessIssue] = []
+    for item in items:
+        if not item.available or item.kind != MainboardItemKind.TRADING_SIGNAL:
+            continue
+        try:
+            config = TradingSignalConfig(**item.payload)
+        except PydanticValidationError:
+            continue  # EXTERNAL_IMPORT_INVALID already surfaces this in the validators.
+        price = config.price_policy
+        ref = price.approved_market_data_revision_ref
+        if str(price.source) not in _SIGNAL_OHLCV_FALLBACK_SOURCES or ref is None:
+            continue
+        revision = await market_repo.get_revision(session, ref)
+        root = (
+            await market_repo.get_dataset_root(session, revision.entity_id)
+            if revision is not None
+            else None
+        )
+        approved = (
+            revision is not None
+            and revision.revision_state == MarketRevisionState.APPROVED
+            and root is not None
+            and root.deletion_state == DeletionState.ACTIVE
+        )
+        if not approved:
+            issues.append(
+                ReadinessIssue(
+                    code=ReadinessIssueCode.MARKET_DATA_DEPENDENCY_BLOCKED,
+                    severity=ReadinessSeverity.BLOCKER,
+                    scope=ReadinessScope.MARKET_DATA,
+                    message=(
+                        "The Market Data revision this price fallback pins is not an APPROVED "
+                        "revision of an ACTIVE dataset."
+                    ),
+                    remediation=(
+                        "Pin an Approved Market Data revision on an active dataset (or ask an "
+                        "Admin to approve/restore it), then re-run the check."
+                    ),
+                    field_path="price_policy.approved_market_data_revision_ref",
+                    scope_id=item.item_id,
+                )
+            )
+            continue  # intrabar capability of an unusable pin is not a separate defect
+        if str(price.source) == str(
+            SignalPriceSource.OHLCV_INTRABAR_IF_AVAILABLE
+        ) and not supports_intrabar_execution(revision.market_data_type if revision else ""):
+            issues.append(
+                ReadinessIssue(
+                    code=ReadinessIssueCode.INTRABAR_DATA_UNAVAILABLE,
+                    severity=ReadinessSeverity.BLOCKER,
+                    scope=ReadinessScope.MARKET_DATA,
+                    message=(
+                        "'OHLCV Intrabar If Available' needs a dataset carrying intrabar "
+                        "detail, but the pinned revision is not a tick/trade dataset."
+                    ),
+                    remediation=(
+                        "Pin an Approved tick/trade Market Data revision, or select 'OHLCV "
+                        "Close If Needed' to run on the conservative bar model."
+                    ),
+                    field_path="price_policy.approved_market_data_revision_ref",
+                    scope_id=item.item_id,
+                )
+            )
     return issues
 
 

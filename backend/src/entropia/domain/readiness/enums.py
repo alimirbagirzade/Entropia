@@ -132,7 +132,29 @@ class ReadinessIssueCode(StrEnum):
     # GAP-16 (Master §8.1): an external import's canonical instrument must match the
     # strategy's — a spot import under a perpetual strategy is a Ready blocker.
     INSTRUMENT_SCOPE_MISMATCH = "INSTRUMENT_SCOPE_MISMATCH"
+    # Trade Log's OHLCV price fallback with no approved Market Data pin (doc 05 §5.3).
     OHLCV_FALLBACK_MARKET_DATA_MISSING = "OHLCV_FALLBACK_MARKET_DATA_MISSING"
+    # K-08: the Trading Signal TWIN of the code above. Doc 04 §5 Price Source row —
+    # "Fallback options require compatible approved Market Data at Ready Check" —
+    # applies to a Trading Signal exactly as doc 05 §5.3 applies to a Trade Log, but
+    # each page's own §-taxonomy names the defect (the K-07 adjudication): doc 04 §11
+    # Dependency row says ``MARKET_DATA_DEPENDENCY_BLOCKED``, so a Trading Signal emits
+    # THAT while a Trade Log keeps ``OHLCV_FALLBACK_MARKET_DATA_MISSING``. Same defect,
+    # two page vocabularies; renaming either would break the page already speaking it.
+    MARKET_DATA_DEPENDENCY_BLOCKED = "MARKET_DATA_DEPENDENCY_BLOCKED"
+    # Doc 04 §5.2 "Price Source = OHLCV Intrabar If Available": the pinned approved
+    # market dataset must actually CARRY sub-bar detail. A bar-only (``ohlcv``) or
+    # spread dataset cannot, and resolving intrabar execution over it would silently
+    # imitate unavailable detail — so it blocks RUN. Distinct from
+    # ``TICK_DATA_UNAVAILABLE``, which is the STRATEGY-side 'Use Tick Data = Yes'
+    # requirement (Master Ref §6.4) resolved by instrument rather than by pinned ref.
+    INTRABAR_DATA_UNAVAILABLE = "INTRABAR_DATA_UNAVAILABLE"
+    # Doc 04 §5.2 "OHLCV Use = Use for price context and validation": the declared
+    # context must come from somewhere. ``signal_events_with_source_ohlcv`` supplies it
+    # from the source file; ``signal_events_with_market_context`` supplies NO source
+    # OHLCV, so an approved Market Data pin is the only remaining provider — without
+    # one the validation the user explicitly asked for cannot run at all.
+    OHLCV_CONTEXT_REQUIRED = "OHLCV_CONTEXT_REQUIRED"
 
     # Capital / allocation (§5.1, §9.2, RC-03/RC-04)
     INDEPENDENT_CAPITAL_REQUIRED = "INDEPENDENT_CAPITAL_REQUIRED"

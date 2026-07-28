@@ -243,6 +243,53 @@ describe("STRATEGY_INFO_PANELS", () => {
     expect(STRATEGY_INFO_PANELS.percentageStop.title).toBe("Percentage Stop");
     expect(STRATEGY_INFO_PANELS.leverageMode.body).toContain("Isolated");
   });
+
+  // AT-25 "Info content" (doc 02 §12): every rendered ⓘ key must resolve to a
+  // catalog entry with a real title AND body, and opening a panel must not add
+  // hidden config or silently change a field.
+  it("gives every catalog key a non-empty title and body (AT-25)", () => {
+    const keys = Object.keys(STRATEGY_INFO_PANELS);
+    expect(keys.length).toBeGreaterThan(0);
+    for (const key of keys) {
+      const panel = STRATEGY_INFO_PANELS[key];
+      expect(panel, `catalog entry missing for '${key}'`).toBeTruthy();
+      expect(panel.title.trim(), `blank title for '${key}'`).not.toBe("");
+      expect(panel.body.trim(), `blank body for '${key}'`).not.toBe("");
+    }
+  });
+
+  it("resolves every ⓘ the strategy cards actually render (AT-25)", () => {
+    // A panelKey that is not in the catalog would render an ⓘ with undefined
+    // title/body — the exact "rendered key without catalog content" AT-25 forbids.
+    const rendered = [
+      "orderType", "limitPriceRule", "orderValidity", "ifNotFilled", "partialFill",
+      "useTickData", "fundingFee", "basePositionSize", "riskPerTrade", "customFormula",
+      "signalStrengthSizing", "maxSinglePosition", "leverageMode", "percentageStop",
+      "trailingStop",
+    ];
+    for (const key of rendered) {
+      expect(STRATEGY_INFO_PANELS[key], `rendered ⓘ '${key}' has no catalog entry`).toBeTruthy();
+    }
+  });
+
+  it("opening an ⓘ panel changes no form value and submits nothing (AT-25)", () => {
+    const onApply = vi.fn();
+    const { container } = render(
+      <DataExecutionCard payload={{}} pending={false} onApply={onApply} />,
+    );
+    const orderType = screen.getByLabelText(/Order type/) as HTMLSelectElement;
+    const before = orderType.value;
+
+    const panels = container.querySelectorAll("details.info-panel");
+    expect(panels.length).toBeGreaterThan(0);
+    for (const panel of Array.from(panels)) {
+      fireEvent.click(panel.querySelector("summary")!);
+    }
+
+    // Help-only: the disclosure is presentation. No value moved, nothing was applied.
+    expect(orderType.value).toBe(before);
+    expect(onApply).not.toHaveBeenCalled();
+  });
 });
 
 describe("DataExecutionCard", () => {

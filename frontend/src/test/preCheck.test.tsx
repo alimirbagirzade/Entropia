@@ -179,6 +179,8 @@ describe("Pre-Check page", () => {
     expect(scanCall).toBeDefined();
   });
 
+  // PC-08: once the Source Text moves under a Passed result the UI state becomes
+  // Stale, and the server refuses the candidate command until a fresh Pre-Check.
   it("warns that a passed scan is stale when the request context moved", async () => {
     stubApi({
       ...BASE_ROUTES,

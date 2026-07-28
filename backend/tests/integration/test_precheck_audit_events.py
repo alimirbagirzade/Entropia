@@ -17,6 +17,11 @@ session back exactly as the middleware would and reads the row through a SEPARAT
 committed session.
 
 Auto-skips when no PostgreSQL is reachable (see tests/integration/conftest.py).
+
+Acceptance (doc 07 §16): PC-08/PC-09 (a Passed scan is refused for reuse once the
+source text or the resolver registry moved — ``precheck_stale`` is the durable
+evidence of that refusal, and the old scan survives as historical evidence) and
+PC-04 (``dependency_resolved`` records WHICH resolver revision the scan pinned).
 """
 
 from __future__ import annotations

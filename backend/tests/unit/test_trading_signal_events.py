@@ -2,6 +2,13 @@
 
 Infra-free: exercises ``domain.trading_signal.events`` directly (no DB/MinIO). The
 clock is seamed via ``now`` so event/available times are deterministic.
+
+Acceptance (doc 04 §15): TS-05 (missing available_time is a whole-file blocker —
+availability is never inferred), TS-06 (an entry/exit ledger file is not silently
+accepted as a Signal), TS-07 (an event may not be usable before its available_time
+— asserted here at SCHEMA level; the engine-side decision gate is recorded as a
+gap in docs/audit/acceptance_id_traceability.md) and TS-08 (instrument + timezone
+normalization: an unmapped symbol is skipped, a naive stamp is localized).
 """
 
 from __future__ import annotations
@@ -66,6 +73,7 @@ def test_happy_path_accepts_and_records_earliest_available_time() -> None:
 
 
 def test_available_time_required_blocks_when_nothing_accepted() -> None:
+    """TS-05: no accepted event -> AVAILABLE_TIME_REQUIRED, never an inferred stamp."""
     outcome = _normalize(_csv("r1,2024-05-01T10:00:00Z,,long,entry"))
     assert outcome.status == NormalizedRevisionStatus.FAILED
     assert outcome.accepted_count == 0
@@ -73,6 +81,7 @@ def test_available_time_required_blocks_when_nothing_accepted() -> None:
 
 
 def test_available_time_before_event_time_is_skipped() -> None:
+    """TS-07: availability may never precede the event it describes (no lookahead)."""
     outcome = _normalize(_csv("r1,2024-05-01T10:00:00Z,2024-05-01T09:59:00Z,long,entry"))
     assert outcome.accepted_count == 0
     assert outcome.skipped[0].reason_code == REASON_AVAILABLE_TIME_INVALID
@@ -97,6 +106,7 @@ def test_unmapped_signal_type_is_skipped() -> None:
 
 
 def test_instrument_mismatch_is_skipped() -> None:
+    """TS-08: a symbol outside the pinned instrument never enters the revision."""
     data = _csv(
         "r1,2024-05-01T10:00:00Z,2024-05-01T10:00:00Z,long,entry,ETHUSDT",
         header=_HEADER + ",symbol",
@@ -118,6 +128,7 @@ def test_duplicate_source_record_id_is_skipped() -> None:
 
 
 def test_legacy_trade_log_schema_is_a_whole_file_blocker() -> None:
+    """TS-06: an entry/exit ledger is never silently accepted as a Trading Signal."""
     data = _csv(
         "2024-05-01T10:00:00Z,100,2024-05-01T12:00:00Z,110",
         header="entry_time,entry_price,exit_time,exit_price",
@@ -138,7 +149,7 @@ def test_event_id_and_content_hash_are_deterministic() -> None:
 
 
 def test_naive_timestamp_localized_to_source_timezone() -> None:
-    # A tz-naive event_time is localized via the source timezone (UTC here).
+    # TS-08: a tz-naive event_time is localized via the source timezone (UTC here).
     columns, rows = parse_delimited(_csv("r1,2024-05-01T10:00:00,2024-05-01T10:00:00,long,entry"))
     outcome = normalize_signal_rows(
         columns, rows, source_timezone="UTC", instrument_id="BTCUSDT", now=_NOW

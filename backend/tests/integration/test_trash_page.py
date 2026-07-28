@@ -1,5 +1,14 @@
 """Stage 6c — Trash page contract (doc 20 §4, §5, §7, §9, §10, §15) against a real DB.
 
+Acceptance — the Trash-restriction row of four pages: TS-19 / TL-21 / AOS-19 /
+RF-06-adjacent (User, Supervisor and Agent are denied direct list/restore/purge;
+only Admin may restore or purge, and restore returns the SAME root/current revision
+without appending a new one) -> test_trash_surfaces_reject_non_admin plus
+test_restore_keeps_identity_marks_entry_and_audits.
+
+PC-20 (doc 07) rides the same guard: a User/Supervisor/Agent Trash restore is
+denied and only an Admin may restore or permanently delete.
+
 Covers: soft-delete page-contract entry + idempotent repeat; Admin-only list/
 detail/restore/purge (User AND Agent -> TRASH_ACCESS_FORBIDDEN); keyset
 pagination stability on deleted_at ties; object_type filter validation; restore

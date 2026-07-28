@@ -1,3 +1,13 @@
+// Trade Log workbench (doc 05).
+//
+// Acceptance (doc 05 §16): TL-01 (the board discovers only trade_log WORK ITEMS —
+// never a package), TL-03 (Save is blocked client-side with field-level errors and
+// nothing is sent), TL-14/TL-15 (the durable import report is keyed by
+// record_batch_revision_id and a content-addressed re-upload surfaces as a reuse
+// note rather than a second asset), TL-12/TL-16 (an OCC-guarded revision append),
+// TL-17 (the Advanced raw payload is fail-closed role-gated) and TL-23 (export
+// emits a manifest only — it never creates a Backtest Result).
+
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";

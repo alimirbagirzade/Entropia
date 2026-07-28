@@ -996,6 +996,8 @@ describe("Mainboard", () => {
     expect(await screen.findByText("Create Package workspace")).toBeTruthy();
   });
 
+  // TS-02 / AOS-04: choosing Trading Signal yields a VISIBLE but Unsaved draft row —
+  // it has no root/revision/item id, so Ready Check and RUN exclude it.
   it("adds an inline Trading Signal draft row from the nested Add submenu (UI-03)", async () => {
     const fetchMock = stubRoutes();
     renderPage();
@@ -1024,6 +1026,8 @@ describe("Mainboard", () => {
     expect(call).toBeTruthy();
   });
 
+  // TL-02 / AOS-05: the Trade Log draft is Unsaved and starts no import job; removing
+  // it is AOS-06 transient discard — no Trash entry, no audit, no composition change.
   it("adds a Trade Log draft row inline and lets the user remove it (UI-03)", async () => {
     stubRoutes({
       "POST /external-work-object-drafts/trade_log": {
@@ -1060,6 +1064,8 @@ describe("Mainboard", () => {
     expect(screen.getByRole("button", { name: "Add Outsource Signal" })).toBeTruthy();
   });
 
+  // AT-01: Add Strategy opens an editable draft; the unsaved draft is not a Ready
+  // Check / RUN input.
   it("Add Strategy creates a strategy-editor draft and renders an unsaved draft row (F-15)", async () => {
     // Doc 02 §7: the strat_ root has NO revision until the first Save, so the
     // add action creates a DRAFT (editor family) and attaches nothing yet.
@@ -1144,6 +1150,8 @@ describe("Mainboard", () => {
     expect((await screen.findAllByText("STRATEGY 2")).length).toBeGreaterThan(0);
   });
 
+  // AOS-10: Save and attach is atomic — the response carries root + immutable revision
+  // + MainboardWorkingItem, and the UI rehydrates from it (prior Ready report goes STALE).
   it("first Save of a draft row attaches the §7.1 mirror revision as a real item", async () => {
     // An unattached server draft renders as a draft row; expanding hosts the
     // inline editor, and Save Strategy Revision returns the mirror revision the

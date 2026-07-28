@@ -12,6 +12,17 @@ the stale delivery; a stale OCC token is rejected at admission.
 Also covers the doc 07 §12 fail-closed error classes, each of which must land on a
 NEGATIVE result rather than a silently green one: SOURCE_LANGUAGE_MISMATCH (PC-10),
 REQUIRES_CLARIFICATION, PARSE_UNSUPPORTED and RESOLVER_NOT_ACTIVE.
+
+Acceptance (doc 07 §16) by behaviour:
+- PC-04  passed scan pins exact resolver revision refs -> the PASSED lifecycle case
+- PC-05  missing resolver -> BLOCKED, no candidate job queued
+- PC-07  RESOLVER_NOT_ACTIVE / signature mismatch is BLOCKED, never passed
+- PC-09  registry revision moved under a Passed scan -> PRECHECK_STALE on recheck
+- PC-11  duplicate admission / same idempotency key -> one scan, replayed outcome
+- PC-12  source edited while the scan runs -> the superseded stale delivery case
+  (the completed old scan never overwrites the newer context)
+- PC-17  browser close / refresh does not cancel the DURABLE queued job
+- PC-21  no TA dependency found -> PASSED (NOT_APPLICABLE/empty-call lifecycle)
 """
 
 from __future__ import annotations

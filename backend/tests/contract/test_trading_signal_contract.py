@@ -6,6 +6,13 @@ event-model conflict both surface their typed 422 before ``_require_ready_import
 touches the session. DB-touching flows live in
 tests/integration/test_trading_signal_persistence.py. DI-override style mirrors
 test_strategy_save_contract.py.
+
+Acceptance (doc 04 §15): TS-03 (blank identity -> structured field error, nothing
+persisted), TS-09 (event-model / data-policy conflict rejected before the DB) and
+TS-15 (authorization — a Guest cannot upload, create or read, and the endpoint
+enforces it regardless of which UI control was visible). The upload assertions
+(non-CSV extension, blank filename, non-UTF8 bytes) are the K-07 fail-closed
+source-file gate reached from the Trading Signal surface.
 """
 
 from __future__ import annotations

@@ -3047,3 +3047,55 @@ Kalan tek büyük açık iş hâlâ **R2'nin product-owner imzası**
 (`docs/implementation/v18_final_acceptance.md` §4, D-1…D-9) — imza olmadan
 `entropia_v18_remediation_status.md`'deki R2 RE-OPENING banner'ı kalkmaz.
 
+
+## O-27 — AOS-03: legacy `item_kind` etiketleri spec adıyla reddediliyor (PR #450)
+
+**Ne landed.** Doc 03 acceptance AOS-03, `item_kind=signal_package` / `trade_log_package` gönderen
+bir client'a **`INVALID_ITEM_KIND`** dönmesini ve hiçbir root/revision/item yaratılmamasını şart
+koşar. Bu kod `backend/src`'te **hiç yoktu** (0 hit); iki etiket `MAINBOARD_ITEM_KIND_MISMATCH`'e
+düşüyordu. Yeni `domain/mainboard/item_kind.py` guard'ı üç yüzeyin de (chooser opener,
+`POST /work-objects`, attach) tek chokepoint'i oldu; `shared/errors.py::InvalidItemKindError`
+(422, `category=validation`, `retryable=false`) eklendi. **Migration YOK**, alembic head
+`0039_backtest_run_cancellation` sabit, `ENGINE_VERSION` sabit, frontend dokunulmadı.
+
+**O-03'ün bir satırı bilerek geri alındı.** O-03 tablosu `INVALID_ITEM_KIND` → 
+`MAINBOARD_ITEM_KIND_MISMATCH` adjudication'ını taşıyordu. O-03'ün "aynı kusur, sevk edilmiş ad
+kazanır" içtihadı burada tutmuyor: CR-01 kodu *"gönderdiğin kind root'un kind'ıyla çelişiyor"*
+der, AOS-03 kodu ise *"bu, sistemin sahip olduğu bir kind değil"*. `signal_package` için
+kıyaslanacak ikinci bir kind yok. Kapsam dar: yalnız spec'in saydığı iki etiket kod değiştirdi;
+`strategy` ve `not_a_kind` hâlâ `MAINBOARD_ITEM_KIND_MISMATCH` döner (contract testinde pinli).
+
+**`LEGACY_PACKAGE_TYPES` KALDIRILMADI.** İki guard ters yöne bakar — o biri
+`trading_signal`/`trade_log`'u `PackageKind`'ın dışında tutar (TS-01/TL-01), bu yeni olan
+`signal_package`/`trade_log_package`'ı `MainboardItemKind`'ın dışında tutar (AOS-03). Bir unit
+test iki sözlüğün kesişmediğini assert eder.
+
+**Kayıtlı sapma:** spec §8.3 `400`, §11 taksonomisi type/schema validation diyor → **422**
+seçildi (her sevk edilmiş `ValidationError` 422; kategori ↔ status tutarlılığı).
+
+**Testler:** kontrol adımı 11 passed (4 unit + 5 contract + 2 integration); **tam backend suite
+tek koşuda 2538 passed, 0 failed** (izole DB); ruff + format + mypy temiz.
+
+**Uygulanamayan proof'lar (dürüst sınır):** migration ve yeni `create_*` yok → alembic up/down/up
+ve L1 FK insert-order proof'ları bu slice'a uygulanmaz; yeni route/tablo/job olmadığı için
+codemap tazelemesi de gerekmedi.
+
+Tam kayıt: `docs/PROJECT_HISTORY.md` §"O-27 · AOS-03".
+
+## Next: **PO imzası + R2 kapanışı** (değişmedi) — O-27 landed (#450)
+
+O-serisi durumu: O-01 (#403) · O-02 (#400) · O-03 (#407 + #413) · O-04 (#405) · O-05 (#412) ·
+O-06 (#419) · O-08 (#406) · O-09 (#410) · O-10 (#402) · O-14 (#417 + #445) · O-16 (#444) ·
+O-17 (#446) · O-18 (#442) · O-21 (#430); **O-27 bu slice (#450)**. Yanı sıra K-08 (#443) landed.
+
+> **Not:** O-27 dalı `defab8e` üzerine kuruldu; bu docs girdisi yazılırken `origin/main`
+> `72aaa6c`'ye ilerlemişti (O-16/O-17/O-18/K-08 + O-14 export-gate düzeltmesi araya girdi).
+> Bu docs dalı **güncel main** üzerine kurulmuştur; #450'yi merge etmeden önce güncelliğini
+> doğrula.
+
+Kalan tek büyük açık iş hâlâ **R2'nin product-owner imzası**
+(`docs/implementation/v18_final_acceptance.md` §4, D-1…D-9) — imza olmadan
+`entropia_v18_remediation_status.md`'deki R2 RE-OPENING banner'ı kalkmaz.
+
+Ayrıca açık: **F-07 §4.4** (4 yüzey backend display-DTO bekliyor) · **O-03 kalıntısı** (5 ölü
+error sınıfı, `KNOWN_UNRAISED`) · **Round-3 backlog** (S5 a/b/c/d + S-L1…S-L6).

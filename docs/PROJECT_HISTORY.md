@@ -1619,3 +1619,112 @@ Docker, iki E2E (dev-auth + gerçek tarayıcı/Compose) ve A11Y axe-core taramas
 - `blocked` outcome'ı (purge_pending / purged / restored) preflight'ta raporlanır ama frontend
   paneli bunu ayrıca ele almaz: bu durumlarda satır zaten `restore_eligible=false` olduğu için
   Restore düğmesi hiç render edilmiyor.
+---
+
+## O-27 · AOS-03 — legacy `item_kind` etiketleri spec adıyla reddediliyor (PR #450)
+
+**Denetim iddiası.** "Spec'in adlandırdığı değerler ve hata kodu kodda yok": doc 03 acceptance
+**AOS-03**, client `item_kind=signal_package` veya `trade_log_package` gönderdiğinde
+`INVALID_ITEM_KIND` bekler ve **hiçbir** PackageKind expansion / root / revision / item
+yaratılmamasını şart koşar.
+
+### Doğrulanan yarı
+
+`grep -rn "signal_package\|trade_log_package\|INVALID_ITEM_KIND" backend/src` → **0 hit**.
+Üç yüzey de (chooser opener `POST /external-work-object-drafts/{kind}`, `POST /work-objects`
+`object_kind`, attach `POST /mainboards/{id}/items` `item_kind`) bu iki etiketi
+`commands/mainboard.py::_coerce_item_kind` üzerinden **`MAINBOARD_ITEM_KIND_MISMATCH`**'e
+düşürüyordu.
+
+### Bu, O-03'ün bir satırını GERİ ALIR — bilerek
+
+O-03 tablosu (yukarıda, §"Çürütülen yarı") şu satırı taşıyordu:
+
+| `INVALID_ITEM_KIND` | 03 §838/922 | `MAINBOARD_ITEM_KIND_MISMATCH` | 3 raise |
+
+**Bu adjudication bu senaryo için yanlıştı** ve O-27 onu düzeltir. O-03'ün genel içtihadı ("kodlar
+aynı kusuru anlatır, sevk edilmiş ad kazanır") burada tutmuyor, çünkü **iki kod aynı kusuru
+anlatmıyor**:
+
+- `MAINBOARD_ITEM_KIND_MISMATCH` (CR-01) = *"gönderdiğin kind, root'un `object_kind`'ıyla
+  uyuşmuyor"* — iki geçerli kind arasındaki **çelişki**.
+- `INVALID_ITEM_KIND` (AOS-03) = *"bu, sistemin sahip olduğu bir kind değil"* — kıyaslanacak
+  ikinci bir kind **yok**.
+
+`signal_package` gönderen bir client için ikincisi doğrudur; birincisi ona var olmayan bir
+"root kind çelişkisi" anlatır. Bu, `PACKAGE_DEPENDENCY_CYCLE`'ın O-10'da adjudication'dan
+gerçek koda terfi etmesiyle aynı örüntüdür (yukarıda §"19. kod").
+
+**Kapsam dar tutuldu:** yalnız spec'in adıyla saydığı iki etiket kod değiştirdi. `strategy`
+(external-only opener'da) ve `not_a_kind` gibi her şey **hâlâ** `MAINBOARD_ITEM_KIND_MISMATCH`
+döner — contract testi bunu aynı dosyada pinliyor ki ileride biri iki kodu sessizce tek koda
+çökertmesin.
+
+### `LEGACY_PACKAGE_TYPES` KALDIRILMADI — iki guard ters yöne bakar
+
+| Guard | Yön | Acceptance |
+|---|---|---|
+| `domain/package/kind.py::LEGACY_PACKAGE_TYPES` = `{trading_signal, trade_log}` | bu ikisini **`PackageKind`'ın dışında** tutar | TS-01 (doc 04) / TL-01 (doc 05) |
+| `domain/mainboard/item_kind.py::LEGACY_ITEM_KIND_ALIASES` = `{signal_package, trade_log_package}` | bu ikisini **`MainboardItemKind`'ın dışında** tutar | AOS-03 (doc 03) |
+
+İki sözlük **kesişmez**; bir unit test bunu doğrudan assert eder
+(`test_package_guard_still_faces_the_other_way`) → hiçbir guard diğerini gölgeleyemez.
+`tests/unit/test_package_kind.py` docstring'i AOS-03'ün orada karşılandığını iddia ediyordu
+(O-03 döneminden kalma); düzeltildi.
+
+### Ne landed
+
+- **Yeni** `backend/src/entropia/domain/mainboard/item_kind.py` —
+  `LEGACY_ITEM_KIND_ALIASES: dict[str, MainboardItemKind]` (alias → kastettiği kanonik kind) +
+  `ensure_mainboard_item_kind(value, *, field="object_kind")`. Alias'lar **sadece isimle
+  reddedilmek için** tanınır; kastettikleri kind'a **asla çevrilmez** — çevrilseydi AOS-03'ün
+  ikinci yarısı ("no root/revision/item is created") ihlal edilirdi. Alias eşleşmesi
+  `strip().lower()` ile fail-closed; kanonik kind çözümü enum'un kendi katı eşleşmesinde kalır.
+- **Yeni** `shared/errors.py::InvalidItemKindError` — kod `INVALID_ITEM_KIND`, **422**,
+  `category=validation`, `retryable=false`, sınıfta pinli `suggested_action="choose_item_kind"`
+  ve insan-okur `remediation`.
+- `commands/mainboard.py::_coerce_item_kind` bu guard'a delege eder ve `field` parametresi alır →
+  zarf artık hangi alanda patladığını söyler (`kind` / `object_kind` / `item_kind`), `field_path`
+  ve `details[0].field` o alanı taşır. Üç yüzey de tek chokepoint'ten geçer.
+
+### Kayıtlı sapma: 400 mü 422 mi
+
+Spec kendi içinde tutarsız — doc 03 §8.3 satırı `400 INVALID_ITEM_KIND` yazar, §11 taksonomi
+tablosu ise aynı kodu type/schema validation sınıfına koyar. **422 seçildi**: sevk edilmiş her
+`ValidationError` 422 döner ve `ErrorCategory.VALIDATION` zarf sözleşmesi buna bağlıdır; tek bir
+kod için 400'e sapmak kategori ↔ status tutarlılığını kırardı.
+
+### Doğrulama
+
+- Kontrol adımı `uv run pytest -k "aos_03 or invalid_item_kind" -q --no-cov` → **11 passed**
+  (4 unit + 5 contract + 2 integration).
+- **Tam backend suite tek koşuda: 2538 passed, 0 failed** (43dk39sn), worktree'ye özel izole DB
+  (`TEST_DATABASE_URL=…/entropia_o27_test`).
+- `ruff check` · `ruff format --check` (654 dosya) · `mypy src` (369 dosya) temiz.
+- Yeni test dosyaları: `tests/unit/test_mainboard_item_kind.py`,
+  `tests/contract/test_mainboard_invalid_item_kind_contract.py`,
+  `tests/integration/test_mainboard_invalid_item_kind.py`.
+- Contract testleri **DB'siz** yolu kullanır (guard session'a dokunmadan reddeder) — bu aynı
+  zamanda AOS-03'ün "hiçbir şey yaratılmadı" yarısının en ucuz kanıtıdır. Attach yüzeyi
+  workspace/root/revision'ı önce çözdüğü için DB'siz kanıtlanamaz → integration testi board'un
+  rejection sonrası **boş** kaldığını assert eder.
+
+### Dürüst sınırlar
+
+- **`ErrorCategory` ve zarf şekli değişmedi**; yalnız yeni bir `code` değeri ortaya çıkabilir.
+  `docs/openapi.json` hata kodlarını enumerate etmez → drift guard'ı tetikleyecek bir değişiklik
+  yok, `make openapi` gerekmedi.
+- **Migration YOK**, alembic head **`0039_backtest_run_cancellation`** sabit; `ENGINE_VERSION`
+  sabit. Yeni `create_*` repo fonksiyonu yok → L1 FK insert-order proof'u bu slice'a uygulanmaz.
+- **Frontend dokunulmadı.** `grep` ile doğrulandı: frontend `signal_package` /
+  `trade_log_package` göndermiyor ve iki hata kodundan hiçbirine dallanmıyor (`frontend/src` →
+  0 hit) → kullanıcıya görünen davranış değişmez. Codemap'lerde de 0 hit (yeni route/tablo/job
+  yok) → `docs/CODEMAPS/` tazelemesi bu slice'a uygulanmaz.
+- **Attach yüzeyinde hata sırası değişmedi** — workspace/root/revision çözümü hâlâ kind
+  doğrulamasından önce koşar. Yani hem bozuk workspace hem legacy `item_kind` taşıyan bir istek
+  eskisi gibi workspace hatasını alır; erken doğrulama bilerek eklenmedi (mevcut öncelik
+  sözleşmesini değiştirirdi).
+- Doc 03 §11'in `item_kind must be exactly trading_signal or trade_log` satırı, AOS sayfası
+  bağlamında `strategy`'yi de `INVALID_ITEM_KIND` yapmayı okumaya açıktır. **Yapılmadı:**
+  `strategy` `POST /work-objects` için meşru bir kind'dır ve external-only opener'daki reddi
+  CR-01'in kendi kodudur. Bu, kayıtlı bir yorum sınırıdır.

@@ -1513,3 +1513,105 @@ sonra yeniden hesaplandı. PR #407 CI'ı **6/6 yeşil** (backend, frontend, iki 
   lokal-verify kuralından bilinçli ve açıklanmış sapmadır; integration'ın otoritesi #407 CI'ıdır.
 - Adjudicate edilen kodlar için **yeni integration testi yazılmadı** — yeni kod eklenmediği için
   bağlanacak yeni davranış yok; her satırın karşılığı kendi mevcut testine sahip.
+
+## I-17 · Acceptance test ID izlenebilirliği — 74 ID etiketlendi, 4 test yazıldı (PR #416)
+
+**Baseline:** `eff8ffe` (origin/main) · **Ölçüm:** 2026-07-28 · **Migration YOK · ENGINE_VERSION değişmedi.**
+
+### Problem
+`docs/spec/NN_*` §"Acceptance Tests" ürünün kabul sözleşmesi. Ama satırların çoğu suite'ten
+alıntılanamıyordu: bir kabul ID'sinden onu karşılayan teste giden yol yoktu. **Sıfır referans
+"davranış test edilmemiş" DEMEK DEĞİL** — bu slice'ta kapatılan ID'lerin çoğu zaten kapsanıyordu,
+testler yalnızca ID'yi anmıyordu. İzlenebilirlik boşluğu ile kapsam boşluğu ayrı raporlandı.
+
+### Sayım kuralı (önemli)
+Yalnız **test** dosyaları sayılır: `backend/tests/**/*.py` + `frontend/src/**/*.test.*`.
+Production kaynak yorumları **bilerek dışlandı** — `lib/tradeLog.ts` içindeki bir etiket
+implementasyonu belgeler, test kanıtlamaz. Slice öncesi tablo bu yüzden olduğundan iyi görünüyordu.
+
+### Brief'in sayımına düzeltmeler
+| İddia | Ampirik |
+|---|---|
+| `PC-10` etiketsiz (doc 07 = 3/19) | **YANLIŞ** — `test_language_detect.py:1` + `test_create_package_precheck_worker.py:13`. Doğrusu **4/18**. |
+| `AOS-01 = 1`, `AOS-02…21 = 0` | Doğru — ama `AOS-02` yalnız `pages/OutsourceSignal.tsx` yorumunda vardı (test değil). |
+| `TL-01/02/03/04, TL-12…21, TL-23 = 0` | Doğru (test-izlenebilirliği olarak). `TL-01/14/15` naif grep'e etiketli görünür, kaynağı `lib/tradeLog.ts` + `TradeLogEditor.tsx`. |
+| doc 02'nin 16 `AT` ID'si = 0 | **Birebir doğru** |
+| `RF-06/12/13/15/16/18` eksik | **Birebir doğru** |
+| `TS-01…TS-21 = 0` | **Birebir doğru** |
+
+### Sonuç
+| Sayfa | Önce | Sonra | Kalan |
+|---|---|---|---|
+| 02 Add Strategy (`AT`) | 9/25 | **20/25** | AT-04, AT-06, AT-07, AT-21, AT-24 |
+| 03 Add Outsource Signal (`AOS`) | 1/21 | **18/21** | AOS-12, AOS-16, AOS-20 |
+| 04 Trading Signal (`TS`) | 0/21 | **18/21** | TS-10, TS-16, TS-20 |
+| 05 Trade Log (`TL`) | 8/23 | **22/23** | TL-18 |
+| 07 Pre-Check (`PC`) | 4/22 | **14/22** | PC-01/02/14/15/16/18/19/22 |
+| 10 Rationale Families (`RF`) | 12/18 | **16/18** | RF-13, RF-18 |
+| **Kapsam içi** | **34/130** | **108/130** | 22 |
+| **Tüm spec** | **88/215** | **162/215** | 53 |
+
+Doc 01/11/12/13/15/17/19/20 de ID sütunsuz kabul tablosu yayımlıyor — taramanın tamamen dışında.
+
+### Yazılan testler
+| ID | Test | Dosya | Durum |
+|---|---|---|---|
+| TL-04 | `test_ready_save_without_a_source_file_is_an_import_binding_issue` + blank-batch ikizi | `unit/test_trade_log_config.py` | ✅ 12/12 |
+| RF-12 | `test_strategy_without_a_rationale_family_blocks_ready_check` | `unit/test_readiness_validators.py` | ✅ 45/45 |
+| RF-16 | `test_client_manipulated_delete_still_meets_the_server_guards` | `integration/test_rationale_persistence.py` | ⚠️ lokalde koşmadı |
+| AT-25 | 3 test (katalog bütünlüğü + render edilen ⓘ çözünürlüğü + panel açmak değer değiştirmez) | `frontend/src/test/strategyForm.test.tsx` | ✅ 22/22 |
+
+### Doc 06/08/09 — ID sütunu yok
+Spec kanonik, **değiştirilmedi**. `docs/audit/acceptance_id_traceability.md` §C satır sırasına göre
+audit-local `CP-01…16` (doc 06) · `PL-01…21` (doc 08) · `ESP-01…20` (doc 09) atıyor ve 57 satırı
+karşılayan testlere eşliyor. Alıntı biçimi testte: `CP-07 (docs/audit, doc 06 row 7)` — bunlar
+**asla** `docs/spec/`'e yazılmaz. Eşlemeler **beyan**, tarayıcı-doğrulamalı değil (testler henüz
+audit-local ID'leri anmıyor; bilerek takip işi bırakıldı). Atıf yapılan 33 dosya yolu ve 32 test
+fonksiyonu adı ampirik doğrulandı (hepsi mevcut).
+
+### Adjudicated isim farkları (O-03 içtihadı: sevk edilmiş ad kazanır)
+| ID | Spec kodu | Sevk edilen | Yer |
+|---|---|---|---|
+| AOS-03 | `INVALID_ITEM_KIND` | `CLIENT_LEGACY_TYPE_REJECTED` | `domain/package/kind.py` |
+| AT-04 | `MARKET_DATA_INSTRUMENT_MISMATCH` | *(kod yok)* — worker instrument-scope guard | `test_backtest_persistence.py::test_worker_fails_closed_on_instrument_mismatch` |
+| AOS-12 | `KIND_REVISION_MISMATCH` | *(implementasyon yok)* | — |
+
+### KUSUR — RF-12 yazılırken bulundu
+`backend/src/entropia/domain/strategy/config.py:40` → `rationale_family_id: str = Field(...)`,
+**`min_length` yok**. Ampirik: anahtar **yok** → `STRATEGY_CONFIG_INVALID`/`NOT_READY` ✅ ·
+`rationale_family_id: ""` → parse ediyor, **`READY`** ❌. Manipüle client Family'siz RUN'a ulaşabilir —
+RF-12'nin tam olarak yasakladığı şey. **Bu slice düzeltmedi**: domain değişikliği + Ready Check
+regresyon testi gerekir, izlenebilirlik slice'ının kapsamı dışı. Geçen RF-12 testinin yanına yorum
+olarak sabitlendi. Takip: `fix/rf12-blank-rationale-family-blocks-ready`.
+
+### AT-25 brief uyuşmazlığı
+Brief AT-25'i "Agent private root edit reddi" diye tarif ediyor; doc 02 §12 AT-25 **"Info content"**
+(her render edilen ⓘ katalogla eşleşmeli, hiçbir popover alanı sessizce değiştirmemeli). **Spec'inki
+uygulandı** — izlenebilirliğin birimi ID'dir. Tarif edilen davranış doc 02 **AT-22** (Authorization,
+`test_strategy_integration.py`'de zaten etiketli); Agent'a özel bir test istendiyse o **AT-21**, açık.
+
+### Dürüst sınır — RF-16 lokalde koşturulamadı
+Test **collect** oluyor (16 test, importlar çözülüyor, ruff + mypy temiz) ama **çalıştırılamadı**:
+```
+asyncpg.exceptions.OutOfMemoryError: out of shared memory
+HINT: You might need to increase max_locks_per_transaction.
+```
+`max_locks_per_transaction = 64`, integration conftest'inin tüm-şema `create_all`'ı için küçük;
+paralel worktree oturumlarının sızdırdığı `idle in transaction` bağlantıları (`entropia_test_k09e`,
+`_o12`, `_o14`, `_t1` — CLAUDE.md'nin belgelediği tuzak) shared lock tablosunu ayrıca tüketiyordu.
+5 dakikadan eski sızıntı bağlantılar sonlandırıldı; parametre `PGC_POSTMASTER` olduğu ve **başka
+oturumların aktif bağlantısı bulunduğu için Postgres restart EDİLMEDİ**. RF-16'nın otoritesi #416 CI'ıdır.
+Lokal çözüm: `ALTER SYSTEM SET max_locks_per_transaction = 256;` + restart + izole `TEST_DATABASE_URL`.
+
+### Gerçek kapsam boşlukları (etiket değil)
+TS-20/AOS-20 (Trading Signal için Tool Gateway parity testi **yok** — `test_gateway_parity_s4.py`
+Allocation + Trade Log kapsıyor, Signal hattı kanıtsız) · AT-21 (Strategy save Agent parity) ·
+TS-16/TL-18/AOS-16 (expand/collapse'ın revision/audit/composition yazmadığı pinlenmemiş) ·
+RF-15/ESP-05 (V18 seed Family ACTIVE + ESP meta/filter ilişkisi) · AOS-12 · AT-24 ·
+PC-14/PC-19/PC-22 · CP-05, CP-14, PL-06, ESP-19.
+
+### Süreç notu
+GateGuard fact-force, doğru biçimli ve grep-kanıtlı fact bloklarında tekrar tekrar tetiklenmeye
+başladı; kalan docstring düzenlemeleri için hook'un **kendi belgelediği** `ECC_DISABLED_HOOKS`
+kurtarma yolu kullanıldı ve bu kullanıcıya açıkça bildirildi. Dokunulan her dosya yaprak test
+modülü: **0 importer, 0 dosya I/O, yalnız docstring/yorum**.

@@ -151,6 +151,14 @@ Before stopping a working session, produce **ALL** of the following:
   **608/608** (**`--no-file-parallelism` ZORUNLU**). Backend'e dokunulmadı: ENGINE_VERSION/migration yok.
   **F-07 bütün olarak Complete DEĞİL.**
 
+- **I-17 acceptance ID izlenebilirliği (PR #416, bu slice).** Kapsam içi izlenebilirlik
+  **34/130 → 108/130**, tüm spec **88/215 → 162/215**; 74 ID etiketlendi (davranış değişmedi) +
+  4 test yazıldı (TL-04, RF-12, RF-16, AT-25). Doc 06/08/09 ID'siz → `docs/audit/` altında
+  `CP-`/`PL-`/`ESP-` eşleme tablosu (spec DEĞİŞMEDİ). Tarayıcı: `docs/audit/acceptance_id_scan.py`.
+  Migration/ENGINE_VERSION yok. **Dürüst sınır:** RF-16 lokalde koşmadı (Postgres
+  `max_locks_per_transaction`) — otoritesi #416 CI. **KUSUR:** `rationale_family_id: ""` READY
+  veriyor (audit §E.1 → `fix/rf12-blank-rationale-family-blocks-ready`).
+
 - **Next — PO imzası + R2 kapanışı.** Kalan tek blokaj
   **product-owner imzası**: `docs/implementation/v18_final_acceptance.md` §4 (D-1…D-9 kararları —
   görsel sapmalar, F-2…F-6 mini slice'ları, A11Y-01 palet kararı, 20.11 onayı). **İmza olmadan

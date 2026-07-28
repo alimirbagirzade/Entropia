@@ -2983,3 +2983,61 @@ Kalan tek büyük açık iş hâlâ **R2'nin product-owner imzası**
 (`docs/implementation/v18_final_acceptance.md` §4, D-1…D-9) — imza olmadan
 `entropia_v18_remediation_status.md`'deki R2 RE-OPENING banner'ı kalkmaz.
 
+
+
+## O-16 — User Manual: stale search anchor recovery landed (PR #444)
+
+**Kusur (ampirik).** `frontend/src/pages/UserManual.tsx:364` arama sonucunu **çıplak** bir
+`<a href={"#"+row.anchor}>` olarak render ediyordu: anchor varlık kontrolü, stream refetch, retry —
+hiçbiri yok. Arama indeksi kendi gördüğü snapshot'tan cevap verdiği için reader'ın gösterdiği
+stream'in gerisinde kalabilir; o durumda tıklama **sessizce hiçbir yere** gidiyordu.
+`grep -rn "no longer available" frontend/src` → **0 hit**, yani doc 21 §7'nin zorunlu kıldığı
+"missing anchor" metni kod tabanında hiç yoktu. Aynı kusur §14 satır 464'te ("Click target
+missing/stale ise stream refetch then anchor retry") ve acceptance **UM-18**'de ("Client refetch +
+anchor retry; bulunamazsa precise unavailable message") ayrıca yazılı.
+
+**Ne landed.** `ManualSearchNav` sonuç tıklamasını `preventDefault` edip modül-içi
+`openResult(anchor)`'a veriyor; sıra doc 21 §7'nin cümlesinin birebir karşılığı:
+1. `document.getElementById(anchor)` → varsa `scrollToAnchor` (`scrollIntoView({behavior:"smooth",
+   block:"start"})`), **refetch yok**;
+2. yoksa `onRefetchStream()` (parent'ın `stream.refetch()`'i) → `waitForAnchorElement` ile sınırlı
+   poll (`ANCHOR_RETRY_ATTEMPTS=10` × `ANCHOR_RETRY_POLL_MS=16`) — rehydrate edilen bölümün render
+   pass'ini beklemek için, DOM'u bir kez okuyup "yok" demek yerine;
+3. hâlâ yoksa `ANCHOR_UNAVAILABLE_MESSAGE` = **"The section is no longer available in the current
+   manual."** (doc 21 §7'den verbatim, sabit olarak pinlendi) `role="status" aria-live="polite"`
+   bölgesinde. Bölge **her zaman mount**, böylece sonuç sessiz bir DOM eklemesi olarak gelmiyor.
+
+`href` korundu (kopyala / orta tık çalışmaya devam ediyor). Yeni arama gönderiminde mesaj
+temizleniyor. **Migration YOK · ENGINE_VERSION değişmedi · backend'e dokunulmadı · route path,
+react-query key (`["manual", …]`), OCC token, `Idempotency-Key`, hook imzaları ve `lib/manual.ts`
+aynen kaldı** — tek yeni yüzey modül-içi `ManualSearchNav`'ın `onRefetchStream` prop'u.
+
+**Neden refetch, reset değil.** Parent `stream.refetch()` veriyor, `resetToFirstPage()` değil:
+`frontier=null` yapmak biriken kuyruğu (accumulate-on-load-more) düşürür ve **anchor'ı kurtarma
+adımının kendisi silebilirdi**. Refetch mevcut cursor sayfasını tazeler, önceki sayfalardan biriken
+bölümler state'te kalır, DOM kontrolü hepsini görür.
+
+**Dürüst sınırlar.**
+1. Retry **yalnız stream query'sinin döndürdüğünü** bulabilir — henüz yüklenmemiş bir "Load more"
+   sayfasının arkasındaki bölüm `unavailable` okunur. Kod içine yorumlandı; spec'in reçetesi
+   ("refetch then resolve") tam olarak bu.
+2. **Kenar çubuğu bölüm listesi linklerine dokunulmadı** (`UserManual.tsx:118`) — onlar render
+   edildikleri **aynı** snapshot'tan türüyor, bayatlayamazlar; bayatlayabilen yüzey arama indeksi.
+   Doc 21 §7 satırı "Open result / section" dese de riski taşıyan taraf yalnız result.
+3. Refetch hata verirse verdict verilmiyor — `catch` yutuyor ve karar yine **render edilmiş olana**
+   bakan retry'a bırakılıyor.
+
+**Testler.** `frontend/src/test/userManual.test.tsx` içinde yeni `describe("stale anchor recovery")`
+— **3 case**: canlı anchor → doğru elemente smooth scroll + **stream GET sayısı artmıyor** + mesaj
+yok · bayat anchor (LATE_SECTION yalnız İKİNCİ stream fetch'te gelir) → refetch + retry →
+`#sec-mdoc-9` elementine scroll · hiç var olmayan anchor → verbatim mesaj + **scroll YOK**.
+`scrollIntoView` jsdom'da tanımlı olmadığı için hedefi de kaydeden bir double kuruluyor
+(`stubScrollIntoView`), böylece "scroll oldu" değil "doğru bölüme scroll oldu" kanıtlanıyor.
+Lokal: **vitest 622/622** (60 dosya, `--no-file-parallelism` ZORUNLU) · `tsc -b --noEmit` temiz ·
+`eslint` 0 uyarı. CI PR #444.
+
+**Ortam notu.** Bu worktree'de `frontend/node_modules` yoktu; `npm ci` gerekti. Vitest'in ilk
+çalıştırması config'i çözemeyip `ERR_MODULE_NOT_FOUND` verdi — bu bir test hatası değil, kurulum
+eksiğidir.
+
+## Next: **PO imzası + R2 kapanışı** (değişmedi) · O-16 landed (#444)

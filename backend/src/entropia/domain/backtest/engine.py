@@ -78,6 +78,12 @@ from entropia.domain.backtest.execution.constants import (
     _RATIO,
     _ZERO,
 )
+from entropia.domain.backtest.execution.costs import (
+    _cost_params,
+    _effective_fill,
+    due_funding_charges,
+    resolve_funding_decision_time,
+)
 from entropia.domain.backtest.execution.sizing import (
     _cap_to_sleeve,
     _leverage_multiplier,
@@ -95,8 +101,6 @@ from entropia.domain.backtest.indicators import (
     build_evaluators,
     timeframe_seconds,
 )
-from entropia.domain.research_data.time_policy import is_eligible_for_decision
-from entropia.shared.errors import FundingSourceInvalid
 
 if TYPE_CHECKING:
     from entropia.domain.strategy.config import (
@@ -500,24 +504,6 @@ def _normalize(raw: dict[str, Any]) -> _Bar | None:
 def _direction_flags(mode: str) -> tuple[bool, bool]:
     """(long_allowed, short_allowed) from the entry ``direction_mode``."""
     return mode in ("long", "long_and_short"), mode in ("short", "long_and_short")
-
-
-def _cost_params(config: StrategyConfig) -> tuple[Decimal, Decimal, Decimal]:
-    """(half_spread, slippage_fraction, per_fill_commission) — all non-negative."""
-    costs = config.data.costs
-    spread = (costs.spread or _ZERO) / Decimal("2")
-    slippage = (costs.slippage_value or _ZERO) / _HUNDRED
-    commission = costs.commission or _ZERO
-    return spread, slippage, commission
-
-
-def _effective_fill(
-    price: Decimal, *, is_buy: bool, half_spread: Decimal, slip: Decimal
-) -> Decimal:
-    """Adverse-side fill: a buy pays up, a sell receives less (spread + slippage)."""
-    adjusted = price + half_spread if is_buy else price - half_spread
-    factor = Decimal("1") + slip if is_buy else Decimal("1") - slip
-    return (adjusted * factor).quantize(_MONEY)
 
 
 # §10.3 Signal Strength Sizing (F-07g, Master Ref §10.3). ``no_adjustment`` is inert (a 1x
@@ -2838,45 +2824,43 @@ def run_engine(
             # from the date-blackout precedent below, where a restrictive reading exists
             # (treat the bar as inside the window); a cost has no such reading.
             if funding_records:
-                bar_time = parse_utc(bar.timestamp, source_zone=None)
-                if bar_time is None:
-                    raise FundingSourceInvalid(
-                        "Funding is active but bar timestamp "
-                        f"'{bar.timestamp}' cannot be resolved to a decision time; "
-                        "available-time eligibility is unprovable (doc 12 §8.4 rule 2).",
-                    )
-                while funding_idx < len(funding_records) and is_eligible_for_decision(
-                    available_at=funding_records[funding_idx].available_at,
-                    decision_time=bar_time,
+                # ``due_funding_charges`` decides WHICH records fire and what each costs;
+                # applying them (equity/peak/counters + the decision event) stays here.
+                # Records that become available while FLAT are still consumed — the cursor
+                # advances even when nothing is charged.
+                funding_idx, due_charges = due_funding_charges(
+                    funding_records,
+                    start_index=funding_idx,
+                    decision_time=resolve_funding_decision_time(bar.timestamp),
                     has_instrument_mapping=funding_has_mapping,
-                ):
-                    rec = funding_records[funding_idx]
-                    funding_idx += 1
-                    if position is None:
-                        continue
-                    fsign = _ONE if position.direction == "long" else -_ONE
-                    charge = (position.entry_notional * rec.rate * fsign).quantize(_MONEY)
-                    if charge != _ZERO:
-                        equity = (equity - charge).quantize(_MONEY)
-                        peak = max(peak, equity)
-                        funding_paid += charge
-                    funding_charges += 1
-                    _emit(
-                        "funding_charge",
-                        event_time=bar.timestamp,
-                        direction=position.direction,
-                        bar_seq=bars_seen,
-                        detail={
-                            "position_seq": position.position_seq,
-                            "rate": str(rec.rate),
-                            "charge": str(charge),
-                            "available_at": rec.available_at.isoformat(),
-                            "event_at": rec.event_at.isoformat(),
-                            "source_revision_id": (
-                                funding.source_revision_id if funding is not None else None
-                            ),
-                        },
-                    )
+                    position_direction=position.direction if position is not None else None,
+                    position_notional=(position.entry_notional if position is not None else _ZERO),
+                )
+                if position is not None:
+                    for due in due_charges:
+                        rec = due.record
+                        charge = due.amount
+                        if charge != _ZERO:
+                            equity = (equity - charge).quantize(_MONEY)
+                            peak = max(peak, equity)
+                            funding_paid += charge
+                        funding_charges += 1
+                        _emit(
+                            "funding_charge",
+                            event_time=bar.timestamp,
+                            direction=position.direction,
+                            bar_seq=bars_seen,
+                            detail={
+                                "position_seq": position.position_seq,
+                                "rate": str(rec.rate),
+                                "charge": str(charge),
+                                "available_at": rec.available_at.isoformat(),
+                                "event_at": rec.event_at.isoformat(),
+                                "source_revision_id": (
+                                    funding.source_revision_id if funding is not None else None
+                                ),
+                            },
+                        )
 
             # (3) Resolve a fill deferred to THIS bar's OPEN (next_candle_open). Runs
             # before the intrabar stop path so the open fill precedes the bar's high/low.

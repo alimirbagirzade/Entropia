@@ -265,6 +265,8 @@ def test_engine_bar_replay_produces_a_real_stop_out_trade() -> None:
 
 
 def test_engine_is_deterministic_for_identical_inputs() -> None:
+    """AT-18: same data + same engine policy version -> stable results across reruns,
+    including the same-candle Stop+Exit / multi-stop conflict resolution."""
     cfg = _config()
     first = _run(cfg, _long_breakout_then_stop())
     # Re-run with a DIFFERENT batch size: the streamed result must be identical

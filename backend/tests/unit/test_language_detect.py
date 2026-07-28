@@ -1,4 +1,10 @@
-"""Unit tests for the Pre-Check content language detector (doc 07 §9.5, PC-10)."""
+"""Unit tests for the Pre-Check content language detector (doc 07 §9.5, PC-10).
+
+Acceptance (doc 07 §16): PC-10 (declared Source Language disagrees with the detected
+content -> SOURCE_LANGUAGE_MISMATCH / REQUIRES_CLARIFICATION, no candidate starts)
+and PC-03 (a natural-language description normalizes to source_language=null rather
+than being scanned as code).
+"""
 
 from __future__ import annotations
 

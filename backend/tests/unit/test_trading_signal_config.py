@@ -1,4 +1,10 @@
-"""Unit tests for the Trading Signal §9.2 config + compiler (doc 04 §5, §5.2, §9.2)."""
+"""Unit tests for the Trading Signal §9.2 config + compiler (doc 04 §5, §5.2, §9.2).
+
+Acceptance (doc 04 §15): TS-03 (a blank Provider is a structural error, so no
+revision/import binding can be created) and TS-09 (the cross-field data-policy
+conflicts — OHLCV Use=Ignore under an intrabar price policy, and source-file OHLCV
+standing in for approved Market Data).
+"""
 
 from __future__ import annotations
 
@@ -46,6 +52,7 @@ def test_valid_config_parses_with_no_issues() -> None:
 
 
 def test_blank_provider_is_a_structural_error() -> None:
+    """TS-03: required identity — a blank Provider yields a structured field error."""
     payload = _valid_payload(source={"provider_name": "   ", "source_kind": "file"})
     config, issues = validate_trading_signal_config(payload)
     assert config is None
@@ -71,6 +78,7 @@ def test_bar_timeframe_without_base_timeframe_conflicts() -> None:
 
 
 def test_ignore_ohlcv_with_intrabar_price_conflicts() -> None:
+    """TS-09: OHLCV Use=Ignore + an intrabar price policy is a cross-field conflict."""
     payload = _valid_payload(
         price_policy={"source": "ohlcv_intrabar_if_available", "fallback": None},
         ohlcv_policy={"use_mode": "ignore"},
@@ -81,6 +89,7 @@ def test_ignore_ohlcv_with_intrabar_price_conflicts() -> None:
 
 
 def test_signal_events_only_cannot_use_source_ohlcv_context() -> None:
+    """TS-09: source-file OHLCV cannot satisfy an Approved Market Data requirement."""
     payload = _valid_payload(
         data_quality={"mode": "signal_events_only"},
         ohlcv_policy={"use_mode": "use_for_price_context_and_validation"},

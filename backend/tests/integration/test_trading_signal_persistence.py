@@ -13,6 +13,29 @@ revision); AVAILABLE_TIME_REQUIRED and legacy-schema import blockers; revision N
 does NOT auto-repin; explicit pin changes the composition hash (3a reuse); stale
 expected_head -> WORK_OBJECT_REVISION_CONFLICT; idempotent Save replay; foreign-owner
 edit 403; soft-delete drops the item from the active projection; content-dedup upload.
+
+Acceptance (doc 04 §15) by test:
+- TS-04 source import durability -> test_full_pipeline_upload_import_save_and_attach
+  (upload yields a durable asset + import job; the WORKER, not the request, produces
+  the immutable normalized revision) and test_normalized_revision_row_persists_evidence
+- TS-05 available_time required  -> test_available_time_required_blocks_save
+- TS-06 Signal vs Trade Log      -> test_legacy_schema_directs_to_trade_log
+- TS-11 revision immutability    -> test_new_revision_does_not_auto_repin (N+1 appends;
+  revision N and its content hash stay untouched)
+- TS-12 explicit pin             -> test_explicit_pin_changes_composition_hash
+- TS-13 concurrency              -> test_stale_expected_head_conflicts
+- TS-14 idempotency              -> test_idempotent_save_replay,
+  test_upload_is_content_deduplicated, test_export_idempotent_replay
+- TS-15 authorization            -> test_foreign_owner_cannot_create_revision,
+  test_export_foreign_owner_forbidden
+- TS-18 soft-delete integrity    -> test_soft_delete_removes_item_from_projection
+K-07 fail-closed upload gate     -> test_source_file_type_gate_is_fail_closed.
+
+doc 03 twins — the Add Outsource Signal page re-asserts the SAME server behaviour
+for its Trading Signal child: AOS-07 (a revision whose events cannot supply a valid
+available_time cannot be saved/attached) = TS-05; AOS-11 (specific revision pin) =
+TS-12; AOS-13 (authorization) = TS-15; AOS-14 (concurrency) = TS-13; AOS-15
+(idempotency) = TS-14; AOS-18 (soft-delete historical integrity) = TS-18.
 """
 
 from __future__ import annotations

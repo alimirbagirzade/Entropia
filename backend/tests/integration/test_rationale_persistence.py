@@ -10,6 +10,10 @@ unchanged (RF-02), Unassigned null snapshot (RF-11), idempotent no-op re-save,
 stale-package batch rejection with no partial writes (RF-09), soft-deleted family
 not selectable (RATIONALE_FAMILY_NOT_ACTIVE), and the compatible-output warning
 (RF-10).
+
+RF-15 (V18 seed / ESP consistency) is NOT covered here — this module seeds
+principals, not registry families. It is recorded as an open gap in
+docs/audit/acceptance_id_traceability.md.
 """
 
 from __future__ import annotations
@@ -39,6 +43,7 @@ from entropia.shared.errors import (
     RationaleFamilyNameConflict,
     RationaleFamilyNameReserved,
     RationaleFamilyNotActive,
+    UnauthenticatedError,
 )
 from entropia.shared.pagination import PageParams
 
@@ -183,6 +188,59 @@ async def test_soft_delete_preserves_chain_and_trash(session) -> None:
 
     listing = await rationale_query.list_families(session, USER, PageParams())
     assert created["entity_id"] not in {row["entity_id"] for row in listing["data"]}
+
+
+async def test_client_manipulated_delete_still_meets_the_server_guards(session) -> None:
+    """RF-16: the shared exception is NOT a bypass.
+
+    Doc 10 §14 RF-16 (the Delete button called from a manipulated client) requires
+    that the server still applies (a) the authenticated-actor rule, (b) the
+    expected-version guard and (c) the lifecycle guard. A manipulated caller that
+    skips the UI therefore cannot delete a family it could not delete through the UI,
+    and a refused delete writes NO Trash entry.
+    """
+    await _seed_principals(session)
+    created = await rationale_cmd.create_family(session, USER, display_name="Guarded Family")
+    await session.commit()
+    entity_id = created["entity_id"]
+    before_trash = await _count(session, TrashEntry)
+
+    root = await rationale_repo.get_family_root(session, entity_id)
+    assert root is not None
+    current_version = root.row_version
+
+    # (a) A Guest forging the call is rejected before any lifecycle work.
+    guest = Actor(principal_id=None, principal_type=PrincipalType.ANONYMOUS, role=None)
+    with pytest.raises(UnauthenticatedError):
+        await rationale_cmd.soft_delete_family(session, guest, entity_id=entity_id)
+    await session.rollback()
+
+    # (b) A stale expected_row_version is a 409 — never a silent last-write-wins delete.
+    with pytest.raises(RationaleFamilyConflict):
+        await rationale_cmd.soft_delete_family(
+            session, USER, entity_id=entity_id, expected_row_version=current_version - 1
+        )
+    await session.rollback()
+
+    # Neither refusal touched the family or the Trash projection.
+    root = await rationale_repo.get_family_root(session, entity_id)
+    assert root is not None and root.deletion_state == DeletionState.ACTIVE
+    assert await _count(session, TrashEntry) == before_trash
+
+    # The honest delete (correct version, active actor) is the ONLY one that lands.
+    await rationale_cmd.soft_delete_family(
+        session, USER, entity_id=entity_id, expected_row_version=current_version
+    )
+    await session.commit()
+    root = await rationale_repo.get_family_root(session, entity_id)
+    assert root is not None and root.deletion_state == DeletionState.SOFT_DELETED
+    assert await _count(session, TrashEntry) == before_trash + 1
+
+    # (c) Replaying the manipulated delete hits the lifecycle guard, not a 2nd entry.
+    with pytest.raises(RationaleFamilyNotActive):
+        await rationale_cmd.soft_delete_family(session, USER, entity_id=entity_id)
+    await session.rollback()
+    assert await _count(session, TrashEntry) == before_trash + 1
 
 
 async def test_idempotent_create_replay_returns_cached(session) -> None:

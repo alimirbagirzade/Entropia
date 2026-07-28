@@ -1,5 +1,11 @@
 """F-07e — Restrictions/Filters + conflict/position handling engine tests (Master Ref §12/§13).
 
+Acceptance (doc 02 §12): AT-16 (an unchecked filter rule does not block, resize or
+warn during engine evaluation — the trivial/disabled predicate case), AT-17 (an
+enabled blackout window vetoes an entry inside it and allows it after; an
+out-of-order range is a Ready Check blocker) and AT-15 (same-direction scaling goes
+through the conflict/stacking resolution path, never a silent extra layer).
+
 The bar-replay engine never evaluated ``restrictions_filters`` and only executed
 ``exit_on_opposite_signal`` + ``stop_exit_conflict`` out of ``conflict_position_handling`` —
 a saved filter set / stacking / hedge policy was silently ignored. These tests pin the new

@@ -1,3 +1,14 @@
+// Trading Signal workbench (doc 04).
+//
+// Acceptance (doc 04 §15): TS-01 (the board discovers only trading_signal WORK
+// ITEMS — never a package), TS-03 (Save is blocked client-side with field-level
+// errors and nothing is sent), TS-04 (upload -> 202 import -> the durable ?job=
+// report survives as a URL, so a refresh recovers it), TS-11/TS-12 (a revision is
+// appended against the rendered head as the BODY OCC token; no implicit re-pin),
+// TS-15 (the Advanced raw payload is fail-closed hidden from a normal user and
+// shown to a server-truth admin) and TS-21 (export emits a manifest only — it
+// never creates a Backtest Result).
+
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";

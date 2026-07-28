@@ -132,9 +132,14 @@ Before stopping a working session, produce **ALL** of the following:
   `commands/deletion.py::request_purge` gövdesi **`deletion_state` ve `root_lifecycle_state`
   anahtarlarının İKİSİNİ birden** `"purge_pending"` değeriyle döndürür — biri kaldırılmaz,
   ikisi asla ayrışmaz. Gövde `run_idempotent` zarfında birebir saklandığı için replay de aynı
-  şekli verir; `frontend/src/lib/trash.ts::PurgeResult` bu sözlüğü verbatim aynalar.
-  **Dürüst sınır:** route dönüş tipi `dict[str, Any]` olduğundan `docs/openapi.json` bu alanları
-  hiç saymaz — drift guard'ın yeşil olması alanın şemada yayımlandığı anlamına gelmez.
+  şekli verir; `frontend/src/lib/trash.ts::PurgeResult` bu sözlüğü verbatim aynalar. Gövde
+  `routes/trash.py::PurgeAcceptedResponse` ile **şemada yayımlanır** (`components.schemas`);
+  bare `dict` döndüren bir route drift guard'ı yeşil tutarken sözleşmeyi görünmez bırakıyordu —
+  `test_purge_202_publishes_both_state_field_names` bunu kilitler. O-30 ÖNCESİ yazılmış
+  Idempotency-Key kayıtları bu alanı taşımaz; `request_purge` replay'de `deletion_state`'ten
+  **backfill** eder (kopyalayarak — `response_ref` JSON kolonu mutate EDİLMEZ), aksi halde katı
+  şema eski zarfı 500'e çevirirdi. Yeni bir mutating route eklerken gövdeyi typed model olarak
+  bildir: `dict[str, Any]` dönüşü sözleşmeyi şemadan gizler.
 - **Stage order is authoritative** (`STAGE_BUILD_PLAN.md`) — never skip sub-stages.
   Stage 5 = docs 15/16/17; Stage 6 = docs 18/19/20; Stage 7 = docs 21/22.
 - **UI / frontend = v18 mockup is the visual reference (mandatory).** Every frontend/UI

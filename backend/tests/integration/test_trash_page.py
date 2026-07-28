@@ -506,6 +506,67 @@ async def test_purge_pending_shape_carries_both_state_field_names(session) -> No
     assert replay["deletion_state"] == "purge_pending"
 
 
+async def test_purge_replay_of_pre_o30_envelope_backfills_the_field(session) -> None:
+    """A key stored BEFORE O-30 has no `root_lifecycle_state` and replays verbatim.
+
+    Now that the 202 body is a declared response model, that legacy envelope would
+    fail validation on replay — a 500 for a caller doing nothing wrong. The command
+    backfills it from `deletion_state` (the same value by construction).
+    """
+    from entropia.infrastructure.postgres.repositories import idempotency as idem_repo
+    from entropia.shared.idempotency import request_fingerprint
+
+    entity_id = await _delete_one(session)
+    trash_id = (await _entry_for(session, entity_id)).id
+    key = "purge-legacy-envelope"
+
+    # Reproduce the old shape exactly: the same fingerprint the command computes,
+    # and a response_ref missing the field the pre-O-30 code never wrote.
+    row = idem_repo.add_key(
+        session,
+        key=key,
+        actor_principal_id=ADMIN.principal_id,
+        request_hash=request_fingerprint(
+            {
+                "op": "trash.purge.request",
+                "trash_entry_id": trash_id,
+                "expected_head_revision_id": None,
+                "confirmation_phrase": entity_id,
+            }
+        ),
+    )
+    idem_repo.complete_key(
+        row,
+        response_ref={
+            "purge_job_id": "job_legacy",
+            "trash_entry_id": trash_id,
+            "entity_id": entity_id,
+            "entity_type": "work_object",
+            "deletion_state": "purge_pending",
+            "purge_status": "pending",
+            "row_version": 2,
+            "correlation_id": None,
+        },
+    )
+    await session.commit()
+
+    replay = await request_purge(
+        session,
+        ADMIN,
+        trash_entry_id=trash_id,
+        confirmation_phrase=entity_id,
+        reauth_proof="replay-never-re-checks-the-proof",
+        idempotency_key=key,
+    )
+
+    # Backfilled, and equal to the value the legacy envelope did carry.
+    assert replay["root_lifecycle_state"] == "purge_pending"
+    assert replay["root_lifecycle_state"] == replay["deletion_state"]
+    # The stored row is untouched — the command copies, never mutates response_ref.
+    stored = await idem_repo.get_key(session, key)
+    assert stored is not None and "root_lifecycle_state" not in stored.response_ref
+
+
 async def test_purge_worker_failure_returns_root_to_soft_deleted(session, monkeypatch) -> None:
     entity_id = await _delete_one(session)
     entry = await _entry_for(session, entity_id)

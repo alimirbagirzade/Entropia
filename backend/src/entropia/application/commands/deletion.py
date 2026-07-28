@@ -765,7 +765,7 @@ async def request_purge(
             "correlation_id": actor.correlation_id,
         }
 
-    return await run_idempotent(
+    result = await run_idempotent(
         session,
         key=idempotency_key,
         actor_principal_id=actor.principal_id,
@@ -777,3 +777,12 @@ async def request_purge(
         },
         operation=_op,
     )
+    # A key stored BEFORE O-30 replays verbatim (run_idempotent returns
+    # `response_ref` untouched) and predates `root_lifecycle_state`. Now that the
+    # 202 body is a declared response model, that legacy envelope would fail
+    # validation on replay — so backfill it from `deletion_state`, which is the
+    # same value by construction. Copy, never mutate: `response_ref` is a JSON
+    # column value still attached to the session.
+    if "root_lifecycle_state" not in result:
+        return {**result, "root_lifecycle_state": result["deletion_state"]}
+    return result

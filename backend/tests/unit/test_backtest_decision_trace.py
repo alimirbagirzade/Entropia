@@ -20,9 +20,9 @@ from entropia.domain.backtest.engine import (
     UNMODELLED_DECISION_CLASSES,
     EngineOutput,
     ItemRun,
-    combine_item_runs,
     run_engine,
 )
+from entropia.domain.backtest.execution.portfolio import combine_item_runs
 from entropia.domain.backtest.indicators import (
     IndicatorPlan,
     IndicatorSpec,

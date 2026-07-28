@@ -13,14 +13,12 @@ from decimal import Decimal
 from typing import Any
 
 from entropia.domain.backtest.engine import (
-    COMPOSITION_CURVE_WARNING,
     EngineOutput,
     EquityPoint,
     ItemRun,
     TradeRow,
     _clamp_to_limits,
     _position_size,
-    combine_item_runs,
     run_engine,
 )
 from entropia.domain.backtest.enums import (
@@ -29,6 +27,10 @@ from entropia.domain.backtest.enums import (
     RUN_TERMINAL_STATES,
     BacktestRunState,
     MetricAvailability,
+)
+from entropia.domain.backtest.execution.portfolio import (
+    COMPOSITION_CURVE_WARNING,
+    combine_item_runs,
 )
 from entropia.domain.backtest.indicators import BUILTIN_ENTRY_MODEL
 from entropia.domain.backtest.manifest import ENGINE_VERSION, build_run_manifest

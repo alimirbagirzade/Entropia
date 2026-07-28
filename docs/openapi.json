@@ -2579,6 +2579,30 @@
         "title": "RequestRunBody",
         "type": "object"
       },
+      "RequestValidationRequest": {
+        "properties": {
+          "expected_head_revision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Head Revision Id"
+          },
+          "revision_id": {
+            "title": "Revision Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision_id"
+        ],
+        "title": "RequestValidationRequest",
+        "type": "object"
+      },
       "ResearchCategory": {
         "description": "Built-in research data categories (doc 12 §5.1). The set is *extensible*:\n``OTHER_CUSTOM`` carries a free-text ``custom_category`` and the persisted\n``category_key`` is never a closed enum at the column level (stored as text).",
         "enum": [
@@ -9734,6 +9758,77 @@
         "summary": "Revoke Package Share",
         "tags": [
           "package-sharing"
+        ]
+      }
+    },
+    "/api/v1/library/{entity_id}/validation-runs": {
+      "post": {
+        "description": "Owner-or-Admin: start a validation run for the head revision (doc 08 §7\n\"Request validation\"). The command WRAPS the CreatePackage-plane run — the seven\nchecks, the immutable evidence row, the durable job and the state machine are\nunchanged. OCC is the BODY-form ``expected_head_revision_id`` plus the head-match\nrule, exactly as ``request-approval`` uses it; a stale head -> 409\nPACKAGE_REVISION_CONFLICT, a run already in flight -> 409\nVALIDATION_ALREADY_RUNNING, a package with no validatable draft -> 422\nVALIDATION_PIPELINE_UNAVAILABLE. ``Idempotency-Key`` passes through.",
+        "operationId": "request_package_validation_api_v1_library__entity_id__validation_runs_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entity_id",
+            "required": true,
+            "schema": {
+              "title": "Entity Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestValidationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Request Package Validation Api V1 Library  Entity Id  Validation Runs Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Request Package Validation",
+        "tags": [
+          "package-library"
         ]
       }
     },

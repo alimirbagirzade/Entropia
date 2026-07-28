@@ -34,6 +34,7 @@ class PackagePermissions:
     can_use: bool
     can_derive: bool
     can_create_revision: bool
+    can_request_validation: bool
     can_request_approval: bool
     can_approve_publish: bool
     can_deprecate: bool
@@ -54,6 +55,7 @@ def package_permissions(
     validation_state: PackageValidationState,
     approval_state: ApprovalState,
     shared_principal_ids: Collection[str] | None = None,
+    has_validatable_draft: bool = False,
 ) -> PackagePermissions:
     """Project the capabilities ``actor`` has over one package head.
 
@@ -68,10 +70,14 @@ def package_permissions(
     - Approve & Publish is Admin-only and only when a revision is awaiting
       approval with passed validation (CR-02 / doc 08 §4.3).
 
-    ``can_request_validation`` is deliberately NOT projected: the Library-plane
-    validation-run command (a durable job pipeline, doc 08 §7 "Request validation")
-    is out of the R2 scope, so the catalog does not advertise an un-performable
-    action. It returns with that slice.
+    ``can_request_validation`` is now projected (S-L3): the Library-plane
+    validation-run command exists (``package_lifecycle.request_package_validation``,
+    doc 08 §7 "Request validation"). It follows ``can_edit`` on an active root AND
+    ``has_validatable_draft`` — whether an originating Create Package request with a
+    draft revision actually backs this root. That second half is what keeps the old
+    promise: a Derived or seeded package has no draft to certify, so the catalog
+    still does not advertise an un-performable action. The caller resolves it once
+    per page (``cp_repo.package_roots_with_validatable_draft``), never per row.
     """
     can_view = identity_policy.can_view(
         actor,
@@ -89,6 +95,7 @@ def package_permissions(
         can_use=can_view and is_active and validation_passed,
         can_derive=can_view,
         can_create_revision=can_edit and is_active,
+        can_request_validation=can_edit and is_active and has_validatable_draft,
         can_request_approval=(
             can_edit and is_active and validation_passed and approval_state == ApprovalState.DRAFT
         ),

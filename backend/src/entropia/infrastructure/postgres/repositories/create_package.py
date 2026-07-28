@@ -12,6 +12,7 @@ helpers query for the queries layer.
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from typing import Any
 
 from sqlalchemy import func, select
@@ -120,6 +121,43 @@ async def get_request_root(session: AsyncSession, entity_id: str) -> EntityRegis
 
 async def get_request_detail(session: AsyncSession, entity_id: str) -> PackageRequest | None:
     return await session.get(PackageRequest, entity_id)
+
+
+async def get_request_for_package_root(
+    session: AsyncSession, package_root_id: str
+) -> PackageRequest | None:
+    """The create-package request that PRODUCED this package root, if any.
+
+    The Library plane addresses a package by its root, but the validation-run
+    pipeline is keyed by the request that built it (``package_validation_run``
+    carries a NOT NULL ``request_entity_id``). This is the bridge between the two,
+    and it is a lookup only — the Library-plane command owns every policy check.
+
+    ``None`` is a real answer, not an error: a package created by Derive has no
+    originating request, so it has no validation pipeline to drive. The caller turns
+    that into an explicit, typed refusal rather than pretending a run started.
+    """
+    stmt = select(PackageRequest).where(PackageRequest.package_root_id == package_root_id)
+    return (await session.execute(stmt)).scalars().first()
+
+
+async def package_roots_with_validatable_draft(
+    session: AsyncSession, root_ids: Collection[str]
+) -> set[str]:
+    """Which of ``root_ids`` have an originating request carrying a draft revision.
+
+    ONE query for a whole catalog page, not one per row: the Library projection needs
+    this to decide ``can_request_validation``, and an N+1 there would make the flag
+    cost more than the page itself.
+    """
+    ids = list(root_ids)
+    if not ids:
+        return set()
+    stmt = select(PackageRequest.package_root_id).where(
+        PackageRequest.package_root_id.in_(ids),
+        PackageRequest.draft_revision_id.is_not(None),
+    )
+    return {row for row in (await session.execute(stmt)).scalars().all() if row is not None}
 
 
 async def append_dependency_scan(

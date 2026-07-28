@@ -27,7 +27,11 @@ _SRC_ROOT = _ERRORS_FILE.parents[2]
 KNOWN_UNRAISED = frozenset(
     {
         "RoleContextStaleError",
-        "ValidationAlreadyRunning",
+        # ``ValidationAlreadyRunning`` left this set in S-L3: the Library-plane
+        # Request Validation command raises it when the CP request is already in
+        # ``validation_running``. Recorded debt is 4, down from 5 — the ratchet only
+        # ever tightens, and the "resurrected" assertion below is what forced the
+        # entry to be removed rather than quietly left behind.
         "ServiceUnavailableError",
         "ArtifactNotAvailableError",
         "HypothesisArtifactNotFoundError",

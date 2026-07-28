@@ -3018,7 +3018,9 @@ frontend 60 dosya / 612 test geçti · **migration YOK, ENGINE_VERSION değişme
 **Dürüst sınır:** RF-16 **lokalde koşturulamadı** — bu makinenin Postgres'i integration
 `create_all`'da `max_locks_per_transaction` tüketiyor (paralel worktree'lerin sızdırdığı
 `idle in transaction` bağlantıları kötüleştiriyor; parametre `PGC_POSTMASTER`, restart ister ve
-başka oturumların aktif bağlantısı olduğu için restart YAPILMADI). RF-16'nın otoritesi **#416 CI**'ıdır.
+başka oturumların aktif bağlantısı olduğu için restart YAPILMADI). RF-16'nın otoritesi **#416 CI**'ıdır — **ve o job geçti** (Backend lint/type/test, 28m38s, run
+30341329121), yani RF-16 gerçek Postgres'te doğrulandı. Lokal kısıt kayıtta tutuluyor: varsayılan
+`max_locks_per_transaction` + paralel worktree oturumları olan her makinede tekrarlayacak.
 
 **Açık kalan izlenebilirlik boşlukları (etiket değil, gerçek kapsam):** TS-20/AOS-20 (Trading Signal
 için Tool Gateway parity testi yok) · AT-21 · TS-16/TL-18/AOS-16 (expand/collapse no-op'u pinlenmemiş) ·

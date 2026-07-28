@@ -1600,7 +1600,8 @@ HINT: You might need to increase max_locks_per_transaction.
 paralel worktree oturumlarının sızdırdığı `idle in transaction` bağlantıları (`entropia_test_k09e`,
 `_o12`, `_o14`, `_t1` — CLAUDE.md'nin belgelediği tuzak) shared lock tablosunu ayrıca tüketiyordu.
 5 dakikadan eski sızıntı bağlantılar sonlandırıldı; parametre `PGC_POSTMASTER` olduğu ve **başka
-oturumların aktif bağlantısı bulunduğu için Postgres restart EDİLMEDİ**. RF-16'nın otoritesi #416 CI'ıdır.
+oturumların aktif bağlantısı bulunduğu için Postgres restart EDİLMEDİ**. RF-16'nın otoritesi #416 CI'ıdır — **o job PASS verdi** (28m38s, run 30341329121), RF-16 gerçek
+Postgres'te doğrulandı.
 Lokal çözüm: `ALTER SYSTEM SET max_locks_per_transaction = 256;` + restart + izole `TEST_DATABASE_URL`.
 
 ### Gerçek kapsam boşlukları (etiket değil)

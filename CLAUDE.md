@@ -156,7 +156,7 @@ Before stopping a working session, produce **ALL** of the following:
   4 test yazıldı (TL-04, RF-12, RF-16, AT-25). Doc 06/08/09 ID'siz → `docs/audit/` altında
   `CP-`/`PL-`/`ESP-` eşleme tablosu (spec DEĞİŞMEDİ). Tarayıcı: `docs/audit/acceptance_id_scan.py`.
   Migration/ENGINE_VERSION yok. **Dürüst sınır:** RF-16 lokalde koşmadı (Postgres
-  `max_locks_per_transaction`) — otoritesi #416 CI. **KUSUR:** `rationale_family_id: ""` READY
+  `max_locks_per_transaction`) — #416 CI'da **PASS**. **KUSUR:** `rationale_family_id: ""` READY
   veriyor (audit §E.1 → `fix/rf12-blank-rationale-family-blocks-ready`).
 
 - **Next — PO imzası + R2 kapanışı.** Kalan tek blokaj

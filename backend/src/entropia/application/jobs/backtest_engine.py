@@ -84,7 +84,6 @@ from entropia.domain.backtest.engine import (
     PortfolioRules,
     PriorItemInterval,
     build_prior_intervals,
-    combine_item_runs,
     resolve_allocation_execution,
     resolve_portfolio_rules,
     run_engine,
@@ -96,6 +95,7 @@ from entropia.domain.backtest.enums import (
     RunEventType,
     RunFailureCode,
 )
+from entropia.domain.backtest.execution.portfolio import combine_item_runs
 from entropia.domain.backtest.metrics import derive_metric_values
 from entropia.domain.lifecycle.enums import ActorKind, DeletionState, JobStatus
 from entropia.domain.mainboard.enums import MainboardItemKind

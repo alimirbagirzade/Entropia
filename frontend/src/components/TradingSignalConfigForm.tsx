@@ -134,6 +134,13 @@ export function TradingSignalConfigFields({
           onChange={(ohlcvUseMode) => set({ ohlcvUseMode })}
         />
         <TextField
+          label="Approved market data revision (optional)"
+          value={state.approvedMarketDataRevisionRef}
+          error={errors.approvedMarketDataRevisionRef}
+          disabled={disabled}
+          onChange={(approvedMarketDataRevisionRef) => set({ approvedMarketDataRevisionRef })}
+        />
+        <TextField
           label="Independent initial capital (optional)"
           value={state.independentInitialCapital}
           error={errors.independentInitialCapital}

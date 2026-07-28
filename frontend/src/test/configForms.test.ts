@@ -45,6 +45,31 @@ describe("tradingSignalForm", () => {
     });
   });
 
+  // K-08: the OHLCV fallbacks are Ready-blocked without an approved Market Data
+  // revision (doc 04 §5). The form must be able to SUPPLY that ref, or the backend
+  // blocker would be unsatisfiable from the Trading Signal page.
+  it("emits the approved market data ref only once the user supplies one", () => {
+    const state = signalFormFromPayload(SIGNAL_TEMPLATE);
+    state.priceSource = "ohlcv_close_if_needed";
+    const withoutRef = signalFormToPayload(state).price_policy as Record<string, unknown>;
+    expect(withoutRef.approved_market_data_revision_ref).toBeUndefined();
+
+    state.approvedMarketDataRevisionRef = "mdrev_synthetic_1";
+    const withRef = signalFormToPayload(state).price_policy as Record<string, unknown>;
+    expect(withRef.approved_market_data_revision_ref).toBe("mdrev_synthetic_1");
+  });
+
+  it("seeds the approved market data ref back from a saved revision", () => {
+    const state = signalFormFromPayload({
+      ...SIGNAL_TEMPLATE,
+      price_policy: {
+        source: "ohlcv_intrabar_if_available",
+        approved_market_data_revision_ref: "mdrev_synthetic_1",
+      },
+    });
+    expect(state.approvedMarketDataRevisionRef).toBe("mdrev_synthetic_1");
+  });
+
   it("keeps the mapping hash in the import binding when the report carried one", () => {
     const template = buildSignalPayloadTemplate({
       sourceAssetId: "srcasset_1",

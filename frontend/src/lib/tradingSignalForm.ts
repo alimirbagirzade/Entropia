@@ -56,6 +56,10 @@ export interface TradingSignalFormState {
   sourceTimezone: string;
   priceSource: string;
   priceFallback: string;
+  // K-08: the OHLCV price fallbacks need an approved Market Data revision behind
+  // them at Ready Check (doc 04 §5). Mirrors the Trade Log form field of the same
+  // name — without it the backend blocker had no control to satisfy it from.
+  approvedMarketDataRevisionRef: string;
   ohlcvUseMode: string;
   independentInitialCapital: string;
   binding: SignalBinding;
@@ -103,6 +107,7 @@ export function signalFormFromPayload(
     sourceTimezone: str(timePolicy.source_timezone) || "UTC",
     priceSource: str(pricePolicy.source) || "suggested_signal_price",
     priceFallback: str(pricePolicy.fallback),
+    approvedMarketDataRevisionRef: str(pricePolicy.approved_market_data_revision_ref),
     ohlcvUseMode: str(ohlcvPolicy.use_mode) || "ignore",
     independentInitialCapital:
       typeof capitalValue === "number" ? String(capitalValue) : str(capitalValue),
@@ -152,6 +157,9 @@ export function signalFormToPayload(
     price_policy: {
       source: state.priceSource,
       ...(state.priceFallback.trim() !== "" ? { fallback: state.priceFallback.trim() } : {}),
+      ...(state.approvedMarketDataRevisionRef.trim() !== ""
+        ? { approved_market_data_revision_ref: state.approvedMarketDataRevisionRef.trim() }
+        : {}),
     },
     ohlcv_policy: { use_mode: state.ohlcvUseMode },
     ...(state.independentInitialCapital.trim() !== ""

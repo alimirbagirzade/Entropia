@@ -159,6 +159,8 @@ Before stopping a working session, produce **ALL** of the following:
   seçenek kümesi taşıyor; yeni `domain/trash/restore.py` katalogu + salt-okuma
   `GET /trash-entries/{id}/restore-preflight`; bilinmeyen resolution 422
   `UNSUPPORTED_RESTORE_RESOLUTION`; migration YOK)** ·
+  **O-29 (#448 — coverage slice artık tick/spread + cadence'siz OHLCV için de üretiliyor;
+  ardışık UTC günü segmentasyonu, `CADENCE_GAP` cadence kapısında kaldı; migration YOK)** ·
 
 
 - **Testler:** son yeşil referans CI (O-serisi PR'ları). Lokal tam suite tek koşuda

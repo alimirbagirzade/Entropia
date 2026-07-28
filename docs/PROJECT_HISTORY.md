@@ -1619,6 +1619,7 @@ Docker, iki E2E (dev-auth + gerçek tarayıcı/Compose) ve A11Y axe-core taramas
 - `blocked` outcome'ı (purge_pending / purged / restored) preflight'ta raporlanır ama frontend
   paneli bunu ayrıca ele almaz: bu durumlarda satır zaten `restore_eligible=false` olduğu için
   Restore düğmesi hiç render edilmiyor.
+
 ---
 
 ## O-29 · Coverage slice yalnız OHLCV'de üretiliyordu — cadence'siz tiplere genişletildi

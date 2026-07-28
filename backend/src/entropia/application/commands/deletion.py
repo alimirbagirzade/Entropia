@@ -20,7 +20,7 @@ restore or purge.
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, NamedTuple
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -30,6 +30,13 @@ from entropia.domain.identity import Actor
 from entropia.domain.identity.policy import ensure_can_edit, require_trash_admin
 from entropia.domain.lifecycle.enums import DeletionState
 from entropia.domain.trash.page import TrashEntryStatus, original_location_for
+from entropia.domain.trash.restore import (
+    RestoreConflictKind,
+    RestoreResolution,
+    parse_resolution,
+    restore_conflict,
+    supports_resolution,
+)
 from entropia.infrastructure.postgres.models import EntityRegistry, TrashEntry
 from entropia.infrastructure.postgres.repositories import audit as audit_repo
 from entropia.infrastructure.postgres.repositories import entities as entity_repo
@@ -273,14 +280,51 @@ def _assert_entry_recoverable(entry: TrashEntry) -> None:
         raise EntityNotSoftDeletedError()
 
 
+class _TargetRestore(NamedTuple):
+    """What a per-type restore adapter reports back to the shared body.
+
+    ``applied_resolution`` is the typed resolution the Admin's choice ACTUALLY
+    unlocked (O-17) — it goes into the audit metadata so the trail records that a
+    human, not the handler, adopted the non-default outcome. ``None`` means the
+    target restored cleanly and no resolution was needed.
+    """
+
+    revision_id: str | None
+    previous_state: str
+    new_state: str
+    applied_resolution: str | None = None
+
+
+def _head_pointer_conflict(
+    entry: TrashEntry, *, expected_head: Any, current_head: Any
+) -> RestoreConflictError:
+    return restore_conflict(
+        RestoreConflictKind.HEAD_POINTER_MOVED,
+        entity_type=entry.entity_type,
+        entity_id=entry.entity_id,
+        expected_head=expected_head,
+        current_head=current_head,
+    )
+
+
+def _target_missing_conflict(entry: TrashEntry) -> RestoreConflictError:
+    """The record left the state machine — there is NO honest repair, so this
+    conflict carries an EMPTY option set (doc 20 §8.2) rather than a guess."""
+    return restore_conflict(
+        RestoreConflictKind.TARGET_MISSING,
+        entity_type=entry.entity_type,
+        entity_id=entry.entity_id,
+    )
+
+
 async def _restore_registry_target(
-    session: AsyncSession, entry: TrashEntry
-) -> tuple[str | None, str, str]:
-    """Return (revision_id, previous_state, new_state) after reactivating a root."""
+    session: AsyncSession, entry: TrashEntry, resolution: RestoreResolution | None
+) -> _TargetRestore:
+    """Reactivate a registry root; conflicts carry their typed alternatives."""
     root = await entity_repo.get_root(session, entry.entity_id)
     if root is None:
         # The root vanished outside the state machine — never guess a repair.
-        raise RestoreConflictError()
+        raise _target_missing_conflict(entry)
     await session.refresh(root, with_for_update=True)
     previous = root.deletion_state
     if previous == DeletionState.PURGE_PENDING:
@@ -292,11 +336,17 @@ async def _restore_registry_target(
 
     # Historical-integrity preflight (doc 20 §10): restore returns the SAME
     # head pointer the snapshot recorded; a moved head is a conflict, not a
-    # silent adoption of newer content.
+    # silent adoption of newer content. O-17: the Admin MAY adopt the moved head,
+    # but only by explicitly submitting the typed resolution the catalog offers.
     snap = entry.dependency_snapshot or {}
     expected_head = snap.get("current_revision_id")
+    applied: str | None = None
     if expected_head is not None and expected_head != root.current_revision_id:
-        raise RestoreConflictError()
+        if not supports_resolution(RestoreConflictKind.HEAD_POINTER_MOVED, resolution):
+            raise _head_pointer_conflict(
+                entry, expected_head=expected_head, current_head=root.current_revision_id
+            )
+        applied = str(resolution)
 
     from entropia.domain.deletion import next_deletion_state
 
@@ -304,17 +354,17 @@ async def _restore_registry_target(
     root.deleted_at = None
     root.deleted_by = None
     root.delete_reason = None
-    return root.current_revision_id, str(previous), str(root.deletion_state)
+    return _TargetRestore(
+        root.current_revision_id, str(previous), str(root.deletion_state), applied
+    )
 
 
-async def _restore_result_target(
-    session: AsyncSession, entry: TrashEntry
-) -> tuple[str | None, str, str]:
+async def _restore_result_target(session: AsyncSession, entry: TrashEntry) -> _TargetRestore:
     from entropia.infrastructure.postgres.repositories import backtest as bt_repo
 
     result = await bt_repo.get_result(session, entry.entity_id)
     if result is None:
-        raise RestoreConflictError()
+        raise _target_missing_conflict(entry)
     await session.refresh(result, with_for_update=True)
     previous = result.deletion_state
     if previous == _RESULT_PURGE_PENDING:
@@ -325,12 +375,10 @@ async def _restore_result_target(
         raise EntityNotSoftDeletedError()
     result.deletion_state = _RESULT_ACTIVE
     result.row_version += 1
-    return None, previous, _RESULT_ACTIVE
+    return _TargetRestore(None, previous, _RESULT_ACTIVE)
 
 
-async def _restore_artifact_target(
-    session: AsyncSession, entry: TrashEntry
-) -> tuple[str | None, str, str]:
+async def _restore_artifact_target(session: AsyncSession, entry: TrashEntry) -> _TargetRestore:
     """Analysis Lab output restore (K-06, doc 20 §10, §11).
 
     The artifact returns to the active board under the SAME artifact_id; its
@@ -341,7 +389,7 @@ async def _restore_artifact_target(
 
     artifact = await al_repo.get_hypothesis(session, entry.entity_id)
     if artifact is None:
-        raise RestoreConflictError()
+        raise _target_missing_conflict(entry)
     await session.refresh(artifact, with_for_update=True)
     previous = artifact.deletion_state
     if previous == DeletionState.PURGE_PENDING:
@@ -353,12 +401,12 @@ async def _restore_artifact_target(
 
     artifact.deletion_state = DeletionState.ACTIVE
     artifact.row_version += 1
-    return None, str(previous), str(DeletionState.ACTIVE)
+    return _TargetRestore(None, str(previous), str(DeletionState.ACTIVE))
 
 
 async def _restore_manual_target(
-    session: AsyncSession, actor: Actor, entry: TrashEntry
-) -> tuple[str | None, str, str]:
+    session: AsyncSession, actor: Actor, entry: TrashEntry, resolution: RestoreResolution | None
+) -> _TargetRestore:
     """Manual documents are page-local roots (doc 21 §8.4, UM-09): restore
     reactivates the SAME root/revision chain and the stream entry returns at
     its original (never-reassigned) stream_position, bumping stream_version."""
@@ -367,7 +415,7 @@ async def _restore_manual_target(
 
     document = await manual_repo.get_document(session, entry.entity_id)
     if document is None:
-        raise RestoreConflictError()
+        raise _target_missing_conflict(entry)
     await manual_repo.lock_stream(session)
     await session.refresh(document, with_for_update=True)
     previous = document.deletion_state
@@ -380,10 +428,16 @@ async def _restore_manual_target(
 
     # Head-pointer integrity (doc 20 §10): restore returns the SAME revision
     # the snapshot recorded; a moved head is a conflict, never silent adoption.
+    # O-17: adopting the moved head requires the Admin's explicit typed choice.
     snap = entry.dependency_snapshot or {}
     expected_head = snap.get("current_revision_id")
+    applied: str | None = None
     if expected_head is not None and expected_head != document.current_revision_id:
-        raise RestoreConflictError()
+        if not supports_resolution(RestoreConflictKind.HEAD_POINTER_MOVED, resolution):
+            raise _head_pointer_conflict(
+                entry, expected_head=expected_head, current_head=document.current_revision_id
+            )
+        applied = str(resolution)
 
     document.deletion_state = DeletionState.ACTIVE
     document.deleted_at = None
@@ -406,22 +460,32 @@ async def _restore_manual_target(
         resulting_stream_version=prior_version + 1,
         correlation_id=actor.correlation_id,
     )
-    return document.current_revision_id, str(previous), str(DeletionState.ACTIVE)
+    return _TargetRestore(
+        document.current_revision_id, str(previous), str(DeletionState.ACTIVE), applied
+    )
 
 
 async def _restore_entry_core(
-    session: AsyncSession, actor: Actor, entry: TrashEntry
+    session: AsyncSession,
+    actor: Actor,
+    entry: TrashEntry,
+    resolution: RestoreResolution | None = None,
 ) -> dict[str, Any]:
     """Shared restore body: entry + target mutation + audit/outbox, one tx."""
     _assert_entry_recoverable(entry)
     if entry.entity_type == RESULT_ENTITY_TYPE:
-        revision_id, previous, new_state = await _restore_result_target(session, entry)
+        outcome = await _restore_result_target(session, entry)
     elif entry.entity_type == MANUAL_ENTITY_TYPE:
-        revision_id, previous, new_state = await _restore_manual_target(session, actor, entry)
+        outcome = await _restore_manual_target(session, actor, entry, resolution)
     elif entry.entity_type == ARTIFACT_ENTITY_TYPE:
-        revision_id, previous, new_state = await _restore_artifact_target(session, entry)
+        outcome = await _restore_artifact_target(session, entry)
     else:
-        revision_id, previous, new_state = await _restore_registry_target(session, entry)
+        outcome = await _restore_registry_target(session, entry, resolution)
+    revision_id, previous, new_state = (
+        outcome.revision_id,
+        outcome.previous_state,
+        outcome.new_state,
+    )
 
     entry.status = TrashEntryStatus.RESTORED
     entry.restored_at = datetime.now(UTC)
@@ -440,6 +504,13 @@ async def _restore_entry_core(
         previous_state=previous,
         new_state=new_state,
         correlation_id=actor.correlation_id,
+        # O-17: a restore that only succeeded because the Admin adopted a typed
+        # resolution says so in the trail — the handler never repaired silently.
+        metadata=(
+            {"restore_resolution": outcome.applied_resolution}
+            if outcome.applied_resolution is not None
+            else None
+        ),
     )
     audit_repo.add_outbox_event(
         session,
@@ -457,6 +528,7 @@ async def _restore_entry_core(
         "status": str(entry.status),
         "deletion_state": new_state,
         "current_revision_id": revision_id,
+        "applied_resolution": outcome.applied_resolution,
         "row_version": entry.row_version,
         "correlation_id": actor.correlation_id,
     }
@@ -468,11 +540,19 @@ async def restore_trash_entry(
     *,
     trash_entry_id: str,
     expected_head_revision_id: int | None = None,
+    resolution: str | None = None,
     idempotency_key: str | None = None,
 ) -> dict[str, Any]:
     """Admin restore by Trash Entry id (doc 20 §7): OCC + idempotency + atomic
-    root reactivation with the SAME entity_id/current_revision_id (no new revision)."""
+    root reactivation with the SAME entity_id/current_revision_id (no new revision).
+
+    ``resolution`` (O-17, doc 20 §5/§8.2) is the typed choice the Admin made from
+    the preflight's option set. It is parsed BEFORE any work — an unknown token is
+    a 422, never a silently dropped field — and it only ever unlocks the specific
+    conflict its catalog entry covers; it can never invent a repair of its own.
+    """
     require_trash_admin(actor)
+    parsed_resolution = parse_resolution(resolution)
 
     async def _op() -> dict[str, Any]:
         entry = await trash_repo.get_entry(session, trash_entry_id)
@@ -481,16 +561,20 @@ async def restore_trash_entry(
         await session.refresh(entry, with_for_update=True)
         if expected_head_revision_id is not None and entry.row_version != expected_head_revision_id:
             raise StaleRevisionError()
-        return await _restore_entry_core(session, actor, entry)
+        return await _restore_entry_core(session, actor, entry, parsed_resolution)
 
     return await run_idempotent(
         session,
         key=idempotency_key,
         actor_principal_id=actor.principal_id,
+        # O-13: hash the caller's INPUTS. `resolution` is one of them — retrying
+        # the same key with a DIFFERENT resolution is a different decision and
+        # must not replay the first outcome.
         request_payload={
             "op": "trash.restore",
             "trash_entry_id": trash_entry_id,
             "expected_head_revision_id": expected_head_revision_id,
+            "resolution": resolution,
         },
         operation=_op,
     )

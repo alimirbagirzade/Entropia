@@ -6,11 +6,24 @@ type RouteHandler = unknown | ((init?: RequestInit) => unknown);
 // canonical error envelope, so a test can exercise the ApiError path (e.g. a
 // 404 STRATEGY_REVISION_NOT_FOUND) through the same apiClient parsing as prod.
 interface ApiErrorRoute {
-  readonly __apiError: { status: number; code: string; message: string };
+  readonly __apiError: {
+    status: number;
+    code: string;
+    message: string;
+    details: Array<Record<string, unknown>>;
+  };
 }
 
-export function apiErrorRoute(status: number, code: string, message = code): ApiErrorRoute {
-  return { __apiError: { status, code, message } };
+// `details` carries the envelope's structured payload — e.g. O-17's typed
+// restore-resolution catalog on a RESTORE_CONFLICT. Defaults to empty so every
+// existing 2/3-argument call site is unchanged.
+export function apiErrorRoute(
+  status: number,
+  code: string,
+  message = code,
+  details: Array<Record<string, unknown>> = [],
+): ApiErrorRoute {
+  return { __apiError: { status, code, message, details } };
 }
 
 function isApiErrorRoute(value: unknown): value is ApiErrorRoute {
@@ -35,12 +48,12 @@ export function stubApi(routes: Record<string, RouteHandler>): Mock {
     const handler = entry[1];
     const value = typeof handler === "function" ? (handler as (i?: RequestInit) => unknown)(init) : handler;
     if (isApiErrorRoute(value)) {
-      const { status, code, message } = value.__apiError;
+      const { status, code, message, details } = value.__apiError;
       return {
         ok: false,
         status,
         statusText: code,
-        text: async () => JSON.stringify({ error: { code, message, details: [] } }),
+        text: async () => JSON.stringify({ error: { code, message, details } }),
       };
     }
     return {

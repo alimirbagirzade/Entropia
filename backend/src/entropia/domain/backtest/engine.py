@@ -849,6 +849,49 @@ def _exit_proxy(position: _Position, bar: _Bar, window: deque[_Bar]) -> bool:
     return bar.close > max(b.high for b in window)
 
 
+@dataclass(slots=True)
+class _Ledger:
+    """The bar loop's running tallies, as ONE mutable object instead of 24 ``nonlocal``
+    rebindings (K-10a).
+
+    Nothing here is new state and nothing is computed differently — each field replaces a
+    local of the same name with the same initial value. What it buys is extractability:
+    a closure that only needed to bump a counter had to be nested inside ``run_engine``
+    to reach it via ``nonlocal``; now it can take a ``_Ledger`` and live at module level.
+
+    Mutable and NOT frozen on purpose — this is the accumulator the loop writes to, and
+    the engine stays deterministic because the writes are ordered by the bar replay, not
+    because the object is immutable.
+    """
+
+    winners: int = 0
+    stops_hit: int = 0
+    stop_streak: int = 0
+    max_stop_streak: int = 0
+    gross_profit: Decimal = _ZERO
+    gross_loss: Decimal = _ZERO
+    partial_closes: int = 0
+    # F-07e restriction ledger: the UTC day's realized PnL and the consecutive-loss run.
+    day_realized: Decimal = _ZERO
+    loss_streak: int = 0
+    lock_in_locks: int = 0
+    partial_fills: int = 0
+    limit_orders_filled: int = 0
+    tick_resolved_entry_fills: int = 0
+    same_bar_stop_limit_fills: int = 0
+    logic_stop_triggers: int = 0
+    tick_first_trigger_resolutions: int = 0
+    strength_adjustments: int = 0
+    # L4 flag: partial fills were active and the bar had prints, but none carried a size.
+    partial_evidence_missing: bool = False
+    portfolio_conflict_blocked_entries: int = 0
+    portfolio_exposure_blocked_entries: int = 0
+    portfolio_exposure_clamped_entries: int = 0
+    portfolio_symbol_unknown_gate: bool = False
+    portfolio_time_unparseable_gate: bool = False
+    portfolio_block_reason: str | None = None
+
+
 def run_engine(
     *,
     strategy_config: StrategyConfig,
@@ -921,6 +964,7 @@ def run_engine(
     stop-conflict order by TRUE first touch instead of the flagged conservative
     approximation. ``None`` (the default) is BYTE-IDENTICAL to the pre-F-07i engine."""
     config = strategy_config
+    led = _Ledger()
     alloc_on = allocation is not None
     alloc_compound = False
     reserve_nominal = _ZERO
@@ -996,7 +1040,6 @@ def run_engine(
         else:
             tick_cursor = _TickCursor(tick_batches, tick_span)
     tick_bars = 0
-    tick_first_trigger_resolutions = 0
 
     # F-09: an unmodelled / misconfigured sizing method opens NO position at all — the
     # engine is a fail-closed backstop to the Ready Check STRATEGY_SIZING_UNSUPPORTED
@@ -1059,7 +1102,6 @@ def run_engine(
     if order_cfg.limit is not None and order_cfg.type in _LIMIT_BACKED_ORDER_TYPES:
         partial_policy = order_cfg.limit.partial_fill_policy
     partial_active = partial_policy != "not_allowed" and order_ok
-    partial_evidence_missing = False
     exit_touch: tuple[Decimal, int] | None = None  # (touch level, placed bar_seq)
 
     # F-07c: partial close. An EXIT SIGNAL closes ``close_fraction`` of the position and holds
@@ -1167,7 +1209,6 @@ def run_engine(
     stop_evals: list[BlockEvaluator] = build_evaluators(stop_specs)
     stop_pairs = list(zip(stop_specs, stop_evals, strict=True))
     logic_enabled = [f"logic:{spec.block_id}" for spec in stop_specs]
-    logic_stop_triggers = 0
 
     equity = initial_capital
     peak = initial_capital
@@ -1184,16 +1225,11 @@ def run_engine(
     bars_seen = 0
     first_ts = ""
     last_bar: _Bar | None = None
-    winners = 0
-    stops_hit = 0
-    stop_streak = 0
-    max_stop_streak = 0
     suppressed_entries = 0
     stop_exit_collisions = 0
     deferred_entry_fills = 0
     deferred_exit_fills = 0
     limit_orders_placed = 0
-    limit_orders_filled = 0
     limit_orders_cancelled = 0
     # F-07h: stop-trigger lifecycle counts (a stop-limit's armed limit leg then counts
     # through the limit_orders_* counters — the two machines compose, never double-count).
@@ -1203,25 +1239,19 @@ def run_engine(
     # F-07i (C): tick-setting execution counts — print-resolved entry fills (a resting
     # order whose touch the print path proved), partial fills (initial + remainder lots),
     # same-bar stop-then-limit fills, touch-order placements and touch-exit fills.
-    tick_resolved_entry_fills = 0
-    partial_fills = 0
-    same_bar_stop_limit_fills = 0
     touch_orders_placed = 0
     touch_exit_fills = 0
-    partial_closes = 0
     # F-07f: count of partial-close aftermaths that locked in profit on the remainder
     # (``lock_in_profit`` moving the stop to the current price, or ``trailing_stop``
     # force-activating the trailing rule) — surfaced as a diagnostics count.
-    lock_in_locks = 0
     # F-07g: count of signal-driven entry decisions whose computed strength multiplier
     # was NOT the neutral 1x (flat entries, deferred/limit entries at their signal bar,
     # and conflict-driven stack/replace entries) — surfaced as a diagnostics count.
-    strength_adjustments = 0
     scale_layers_added = 0
     scale_layers_rejected = 0
     # F-07e: restriction-gate + conflict-policy counters and their realized-ledger state.
-    # ``current_day`` / ``day_realized`` track the UTC calendar day's realized trade PnL
-    # (max-daily-loss basis); ``loss_streak`` counts consecutive realized losing lots
+    # ``current_day`` / ``led.day_realized`` track the UTC calendar day's realized trade PnL
+    # (max-daily-loss basis); ``led.loss_streak`` counts consecutive realized losing lots
     # (consecutive-loss basis); ``prev_entry_signal`` detects a NEW aggregated signal EDGE
     # (a held signal is one entry event, never a per-bar stack/replace/ignore storm).
     entries_blocked_by_restriction = 0
@@ -1231,19 +1261,9 @@ def run_engine(
     opposite_signal_closes = 0
     conflict_signals_ignored = 0
     current_day: date | None = None
-    day_realized = _ZERO
-    loss_streak = 0
     prev_entry_signal: str | None = None
-    gross_profit = _ZERO
-    gross_loss = _ZERO
     # Portfolio-rules gate counters + the per-block reason handoff to _blocked_reason,
     # and every fully-closed position's held window (the later items' constraint input).
-    portfolio_conflict_blocked_entries = 0
-    portfolio_exposure_blocked_entries = 0
-    portfolio_exposure_clamped_entries = 0
-    portfolio_symbol_unknown_gate = False
-    portfolio_time_unparseable_gate = False
-    portfolio_block_reason: str | None = None
     position_intervals: list[dict[str, Any]] = []
     # F-11: funding cost state. ``funding_records`` is the ascending, available-time-safe
     # series (empty when funding is off → the whole funding path is inert, byte-identical to
@@ -1311,13 +1331,12 @@ def run_engine(
 
     def _blocked_reason() -> str:
         """Why a wanted entry produced NO fill (F-10 restriction trace)."""
-        nonlocal portfolio_block_reason
-        if portfolio_block_reason is not None:
+        if led.portfolio_block_reason is not None:
             # A portfolio-rules gate (conflict block / exposure cap) set the concrete
             # reason at decision time; consume it so a later unrelated block cannot
             # inherit a stale portfolio reason.
-            reason = portfolio_block_reason
-            portfolio_block_reason = None
+            reason = led.portfolio_block_reason
+            led.portfolio_block_reason = None
             return reason
         if not sizing_ok:
             return "sizing_unsupported"
@@ -1345,12 +1364,11 @@ def run_engine(
         only, no look-ahead. Inert (exactly 1x, zero extra work) unless the
         ``volatility_adjusted`` mode is active, so every other mode stays
         byte-identical. A non-neutral multiplier is counted for diagnostics."""
-        nonlocal strength_adjustments
         if not strength_active:
             return _ONE
         multiplier = _volatility_strength((*window, bar))
         if multiplier != _ONE:
-            strength_adjustments += 1
+            led.strength_adjustments += 1
         return multiplier
 
     def _close(
@@ -1370,8 +1388,7 @@ def run_engine(
         Commission is charged proportional to the fraction so N partial lots summing to the
         whole position pay exactly one round-trip. ``fraction >= 1`` is a full close, byte-
         identical to pre-F-07c (same event type + detail)."""
-        nonlocal equity, peak, winners, stops_hit, stop_streak, max_stop_streak
-        nonlocal gross_profit, gross_loss, partial_closes, day_realized, loss_streak
+        nonlocal equity, peak
         is_full = fraction >= _ONE
         close_size = pos.size if is_full else pos.size * fraction
         is_long = pos.direction == "long"
@@ -1393,24 +1410,24 @@ def run_engine(
             else _ZERO.quantize(_PCT)
         )
         if pnl > _ZERO:
-            winners += 1
-            gross_profit += pnl
+            led.winners += 1
+            led.gross_profit += pnl
         else:
-            gross_loss += -pnl
+            led.gross_loss += -pnl
         # F-07e: the restriction filters' realized ledger. Every realized lot (full or
         # partial) books into the UTC day's PnL; a strictly negative lot extends the
         # consecutive-loss streak, anything else (a 0-PnL lot is not a loss) resets it.
-        day_realized += pnl
+        led.day_realized += pnl
         if pnl < _ZERO:
-            loss_streak += 1
+            led.loss_streak += 1
         else:
-            loss_streak = 0
+            led.loss_streak = 0
         if reason == "stop_loss":
-            stops_hit += 1
-            stop_streak += 1
-            max_stop_streak = max(max_stop_streak, stop_streak)
+            led.stops_hit += 1
+            led.stop_streak += 1
+            led.max_stop_streak = max(led.max_stop_streak, led.stop_streak)
         else:
-            stop_streak = 0
+            led.stop_streak = 0
         seq = len(trades) + 1
         trades.append(
             TradeRow(
@@ -1447,7 +1464,7 @@ def run_engine(
                 }
             )
         if not is_full:
-            partial_closes += 1
+            led.partial_closes += 1
             pos.size = pos.size - close_size
             pos.entry_notional = (pos.entry_price * pos.size).quantize(_MONEY)
         # F-10: the position CLOSE decision — links the lifecycle to its immutable trade row
@@ -1478,7 +1495,6 @@ def run_engine(
 
     def _apply_partial_aftermath(pos: _Position, exit_price_raw: Decimal) -> None:
         """Bind the pinned aftermath policy + cost params to the extracted ratchet."""
-        nonlocal lock_in_locks
         if apply_partial_aftermath(
             pos,
             exit_price_raw,
@@ -1486,7 +1502,7 @@ def run_engine(
             half_spread=half_spread,
             slippage=slippage,
         ):
-            lock_in_locks += 1
+            led.lock_in_locks += 1
 
     def _sleeve_capital(current_equity: Decimal) -> Decimal:
         """The replayed item's sleeve cap Ci(t) at this valuation point (doc 13 §8.3).
@@ -1517,10 +1533,10 @@ def run_engine(
             elif spec.filter_type == "max_daily_loss_filter":
                 assert spec.limit_percent is not None  # guaranteed by _parse_restriction
                 limit_amount = initial_capital * spec.limit_percent / _HUNDRED
-                hit = day_realized <= -limit_amount
+                hit = led.day_realized <= -limit_amount
             else:  # consecutive_loss_filter
                 assert spec.max_losses is not None  # guaranteed by _parse_restriction
-                hit = loss_streak >= spec.max_losses
+                hit = led.loss_streak >= spec.max_losses
             if hit:
                 active.append({"filter_id": spec.filter_id, "filter_type": spec.filter_type})
         return active
@@ -1554,7 +1570,6 @@ def run_engine(
         instrument at this moment? Unknown instrument identity on either side
         cannot RULE OUT a same-instrument conflict — fail closed (counts as
         conflicting) and surfaced via a dedicated L4 warning."""
-        nonlocal portfolio_symbol_unknown_gate, portfolio_time_unparseable_gate
         assert portfolio_rules is not None
         own = (portfolio_rules.own_symbol or "").strip()
         for iv in portfolio_rules.prior_intervals:
@@ -1566,23 +1581,22 @@ def run_engine(
             if not _interval_covers(iv, t_ms):
                 continue
             if not (own and other):
-                portfolio_symbol_unknown_gate = True
+                led.portfolio_symbol_unknown_gate = True
             if t_ms is None:
-                portfolio_time_unparseable_gate = True
+                led.portfolio_time_unparseable_gate = True
             return True
         return False
 
     def _prior_exposure_at(t_ms: int | None) -> Decimal:
         """Total notional the earlier-pinned items hold at this moment (peak-notional
         basis — conservative; an unplaceable moment counts EVERY window, fail closed)."""
-        nonlocal portfolio_time_unparseable_gate
         assert portfolio_rules is not None
         total = _ZERO
         for iv in portfolio_rules.prior_intervals:
             if _interval_covers(iv, t_ms):
                 total += iv.notional
         if t_ms is None and portfolio_rules.prior_intervals:
-            portfolio_time_unparseable_gate = True
+            led.portfolio_time_unparseable_gate = True
         return total
 
     def _planned_size(direction: str, fill_raw: Decimal, strength: Decimal) -> Decimal:
@@ -1633,16 +1647,13 @@ def run_engine(
         scaling ladder), so one check covers them all with no path left un-gated."""
         if not capability_ok or not sizing_ok or not leverage_ok or not strength_ok:
             return None
-        nonlocal portfolio_block_reason
-        nonlocal portfolio_conflict_blocked_entries, portfolio_exposure_blocked_entries
-        nonlocal portfolio_exposure_clamped_entries
         rules_t_ms = _bar_epoch_ms(bar.timestamp) if rules_active else None
         if rules_active and conflict_gate_on and _conflicts_with_prior(direction, rules_t_ms):
             # Portfolio conflict gate (cross-item, doc 13 §8.4 step 6): an
             # earlier-pinned item holds the opposite direction on this instrument —
             # the later item's entry is blocked, its share never re-routed.
-            portfolio_conflict_blocked_entries += 1
-            portfolio_block_reason = "portfolio_conflict_blocked"
+            led.portfolio_conflict_blocked_entries += 1
+            led.portfolio_block_reason = "portfolio_conflict_blocked"
             return None
         is_long = direction == "long"
         entry_eff = _effective_fill(
@@ -1669,11 +1680,11 @@ def run_engine(
             )
             if size > allowed:
                 if allowed <= _ZERO:
-                    portfolio_exposure_blocked_entries += 1
-                    portfolio_block_reason = "portfolio_max_total_exposure"
+                    led.portfolio_exposure_blocked_entries += 1
+                    led.portfolio_block_reason = "portfolio_max_total_exposure"
                     return None
                 size = allowed
-                portfolio_exposure_clamped_entries += 1
+                led.portfolio_exposure_clamped_entries += 1
         if size_override is not None:
             # F-07i (C): a partial fill books the print-evidenced fraction of the planned
             # size (already sized/capped above — the override is strictly smaller than
@@ -1777,7 +1788,7 @@ def run_engine(
         refresh, one commission per extra fill. Stop LEVELS stay as installed at the
         initial entry (the documented fixed-for-life invariant). The lot is the SAME
         order's remainder — already sized/capped at intent time — so no re-capping."""
-        nonlocal equity, partial_fills
+        nonlocal equity
         fill_eff = _effective_fill(
             price_raw, is_buy=pos.direction == "long", half_spread=half_spread, slip=slippage
         )
@@ -1789,7 +1800,7 @@ def run_engine(
         pos.peak_notional = max(pos.peak_notional, pos.entry_notional)
         if commission > _ZERO:
             equity = (equity - commission).quantize(_MONEY)
-        partial_fills += 1
+        led.partial_fills += 1
         _emit(
             "partial_fill",
             event_time=bar.timestamp,
@@ -1826,9 +1837,7 @@ def run_engine(
         bar's close, ``allowed`` / ``minimum_50_percent`` rest it against the open
         position for later top-ups. Size-less evidence degrades to the coarse full-fill
         model, flagged L4 (a fraction is never fabricated)."""
-        nonlocal position, working_limit, limit_orders_filled
-        nonlocal partial_fills, partial_evidence_missing
-        nonlocal tick_resolved_entry_fills, same_bar_stop_limit_fills
+        nonlocal position, working_limit
         extra: dict[str, Any] = {}
         if prints:
             extra["tick_resolved"] = True
@@ -1843,13 +1852,13 @@ def run_engine(
         )
         available = decision.filled_size
         if decision.evidence_missing:
-            partial_evidence_missing = True
+            led.partial_evidence_missing = True
         if decision.outcome == "full":
-            limit_orders_filled += 1
+            led.limit_orders_filled += 1
             if prints:
-                tick_resolved_entry_fills += 1
+                led.tick_resolved_entry_fills += 1
             if armed_same_bar:
-                same_bar_stop_limit_fills += 1
+                led.same_bar_stop_limit_fills += 1
             position = _do_open(
                 wl.direction,
                 bar,
@@ -1862,7 +1871,7 @@ def run_engine(
             working_limit = None
             return
         if decision.outcome == "rejected_below_minimum":
-            partial_fills += 1
+            led.partial_fills += 1
             _emit(
                 "partial_fill",
                 event_time=bar.timestamp,
@@ -1877,10 +1886,10 @@ def run_engine(
                 },
             )
             return  # the order keeps resting whole; validity/unfilled policy still apply
-        limit_orders_filled += 1
-        tick_resolved_entry_fills += 1
+        led.limit_orders_filled += 1
+        led.tick_resolved_entry_fills += 1
         if armed_same_bar:
-            same_bar_stop_limit_fills += 1
+            led.same_bar_stop_limit_fills += 1
         position = _do_open(
             wl.direction,
             bar,
@@ -1895,7 +1904,7 @@ def run_engine(
             working_limit = None
             return
         remainder = decision.remainder
-        partial_fills += 1
+        led.partial_fills += 1
         disposition_detail: dict[str, Any] = {
             "position_seq": position.position_seq,
             "policy": partial_policy,
@@ -1946,11 +1955,10 @@ def run_engine(
         the executed rule was a Logic-Based Stop, or the OHLCV first-trigger approximation
         applied. The single-price-stop default path emits nothing extra (byte-identical to
         pre-F-08 output)."""
-        nonlocal logic_stop_triggers, tick_first_trigger_resolutions
         if any(k.startswith("logic:") for k in outcome.triggered):
-            logic_stop_triggers += 1
+            led.logic_stop_triggers += 1
         if outcome.tick_resolved:
-            tick_first_trigger_resolutions += 1
+            led.tick_first_trigger_resolutions += 1
         if (
             len(outcome.triggered) > 1
             or outcome.approximated_first
@@ -2009,7 +2017,7 @@ def run_engine(
                 bar_date = parsed_bar_time.date() if parsed_bar_time is not None else None
                 if bar_date is not None and bar_date != current_day:
                     current_day = bar_date
-                    day_realized = _ZERO
+                    led.day_realized = _ZERO
 
             # (1) doc 15 §9.3 step 1 — admit only the Market/Research data available by this
             # bar's clock time. The market side is the bar itself (the pinned revision is
@@ -2180,7 +2188,7 @@ def run_engine(
                     expired = wl.expires_seq is not None and bars_seen >= wl.expires_seq
                     if expired:
                         if wl.unfilled_policy == "convert_to_market_order":
-                            limit_orders_filled += 1
+                            led.limit_orders_filled += 1
                             position = _do_open(
                                 wl.direction,
                                 bar,
@@ -2236,7 +2244,7 @@ def run_engine(
                     if touched:
                         sized = [t for t in touch_prints if t.size is not None]
                         if touch_prints and not sized:
-                            partial_evidence_missing = True
+                            led.partial_evidence_missing = True
                         top_up = (
                             min(
                                 remaining,
@@ -3265,11 +3273,13 @@ def run_engine(
         (max_drawdown / peak * _HUNDRED).quantize(_PCT) if peak > _ZERO else _ZERO.quantize(_PCT)
     )
     win_rate = (
-        (Decimal(winners) / Decimal(total_trades) * _HUNDRED).quantize(_PCT)
+        (Decimal(led.winners) / Decimal(total_trades) * _HUNDRED).quantize(_PCT)
         if total_trades
         else None
     )
-    profit_factor = (gross_profit / gross_loss).quantize(_RATIO) if gross_loss > _ZERO else None
+    profit_factor = (
+        (led.gross_profit / led.gross_loss).quantize(_RATIO) if led.gross_loss > _ZERO else None
+    )
     romad = (
         (net_profit_pct / max_drawdown_pct).quantize(_RATIO)
         if net_profit_pct is not None and max_drawdown_pct > _ZERO
@@ -3294,9 +3304,9 @@ def run_engine(
         "win_rate": win_rate,
         "profit_factor": profit_factor,
         "total_trades": total_trades,
-        "total_stops": stops_hit,
-        "max_stop_streak": max_stop_streak,
-        "total_winning_trades": winners,
+        "total_stops": led.stops_hit,
+        "max_stop_streak": led.max_stop_streak,
+        "total_winning_trades": led.winners,
         # F-11: cumulative signed funding cost booked against equity (positive = net paid).
         # Already reflected in ``final_equity`` / ``net_profit``; surfaced so the funding
         # contribution is auditable on its own.
@@ -3316,16 +3326,16 @@ def run_engine(
             warnings.append("portfolio_conflict_policy_unknown_fail_closed")
         if portfolio_rules is not None and portfolio_rules.exposure_percent_invalid:
             warnings.append("portfolio_max_exposure_unparseable_zero_cap")
-        if portfolio_symbol_unknown_gate:
+        if led.portfolio_symbol_unknown_gate:
             warnings.append("portfolio_conflict_symbol_unknown_fail_closed")
-        if portfolio_time_unparseable_gate:
+        if led.portfolio_time_unparseable_gate:
             warnings.append("portfolio_rules_time_unparseable_fail_closed")
     if tick_alignment_unavailable:
         # F-07i (B): a tick stream was injected but the pinned revision carries no
         # supported bar timeframe, so prints cannot be attributed to bar windows — the
         # run stayed on the conservative OHLCV model (L4, never silently guessed).
         warnings.append("tick_alignment_unavailable")
-    if partial_evidence_missing:
+    if led.partial_evidence_missing:
         # F-07i (C): a partial-fill policy was active but the touching prints carried no
         # usable trade sizes — the filled fraction is unknowable from this revision, so
         # those fills degraded to the coarse full-fill model (L4, never a fabricated
@@ -3528,7 +3538,7 @@ def run_engine(
         # computed a non-neutral (≠1x) multiplier.
         "signal_strength_mode": strength_mode,
         "signal_strength_modelled": strength_ok,
-        "strength_adjustments": strength_adjustments,
+        "strength_adjustments": led.strength_adjustments,
         "entry_timing": config.data.execution.entry_timing,
         "exit_timing": config.data.execution.exit_timing,
         "execution_timing_modelled": timing_ok,
@@ -3538,7 +3548,7 @@ def run_engine(
         "order_type": order_cfg.type,
         "order_execution_modelled": order_ok,
         "limit_orders_placed": limit_orders_placed,
-        "limit_orders_filled": limit_orders_filled,
+        "limit_orders_filled": led.limit_orders_filled,
         "limit_orders_cancelled": limit_orders_cancelled,
         "stop_orders_placed": stop_orders_placed,
         "stop_orders_triggered": stop_orders_triggered,
@@ -3547,12 +3557,12 @@ def run_engine(
         "close_percentage": str(exit_logic.close_percentage),
         "partial_aftermath": partial_aftermath,
         "partial_close_modelled": partial_close_ok,
-        "partial_closes": partial_closes,
+        "partial_closes": led.partial_closes,
         # F-07f: trailing stop profit-lock provenance — whether the protection-level
         # activation threshold is configured at all, and how many lock events (a
         # lock_in_profit ratchet, or a trailing_stop aftermath force-activation) fired.
         "trailing_lock_in_active": trailing_lock_in_active,
-        "lock_in_locks": lock_in_locks,
+        "lock_in_locks": led.lock_in_locks,
         # F-07d: same-direction scaling provenance + ladder counts.
         "scaling_enabled": scaling_enabled,
         "scaling_method": scaling_cfg.method if scaling_enabled and scaling_cfg else None,
@@ -3583,7 +3593,7 @@ def run_engine(
         "logic_stop_blocks": len(stop_evals),
         "stop_trigger_requirement": stop_trigger_requirement,
         "stop_conflict_resolution": stop_conflict_resolution,
-        "logic_stop_triggers": logic_stop_triggers,
+        "logic_stop_triggers": led.logic_stop_triggers,
         "allocation_enabled": alloc_on,
         "allocation_compounding": ("compound" if alloc_compound else "fixed") if alloc_on else None,
         "allocation_items_executed": 1 if (alloc_on and item_share > _ZERO) else 0,
@@ -3605,9 +3615,9 @@ def run_engine(
         "portfolio_prior_intervals": (
             len(portfolio_rules.prior_intervals) if portfolio_rules is not None else 0
         ),
-        "portfolio_conflict_blocked_entries": portfolio_conflict_blocked_entries,
-        "portfolio_exposure_blocked_entries": portfolio_exposure_blocked_entries,
-        "portfolio_exposure_clamped_entries": portfolio_exposure_clamped_entries,
+        "portfolio_conflict_blocked_entries": led.portfolio_conflict_blocked_entries,
+        "portfolio_exposure_blocked_entries": led.portfolio_exposure_blocked_entries,
+        "portfolio_exposure_clamped_entries": led.portfolio_exposure_clamped_entries,
         # F-11: funding provenance + application counts (the used revision is pinned in the
         # manifest via the strategy config; surfaced here for the decision-trace audit).
         "funding_enabled": funding is not None,
@@ -3620,13 +3630,13 @@ def run_engine(
         # conservative OHLCV approximation).
         "tick_path_enabled": tick_batches is not None,
         "tick_bars": tick_bars,
-        "tick_first_trigger_resolutions": tick_first_trigger_resolutions,
+        "tick_first_trigger_resolutions": led.tick_first_trigger_resolutions,
         # F-07i (C): tick-setting execution provenance — print-resolved resting-order
         # fills, partial fills (initial + remainder lots), same-bar stop-then-limit
         # sequences, touch-order placements and touch-exit fills.
-        "tick_resolved_entry_fills": tick_resolved_entry_fills,
-        "partial_fills": partial_fills,
-        "same_bar_stop_limit_fills": same_bar_stop_limit_fills,
+        "tick_resolved_entry_fills": led.tick_resolved_entry_fills,
+        "partial_fills": led.partial_fills,
+        "same_bar_stop_limit_fills": led.same_bar_stop_limit_fills,
         "touch_orders_placed": touch_orders_placed,
         "touch_exit_fills": touch_exit_fills,
         "item_count": item_count,

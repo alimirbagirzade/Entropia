@@ -142,11 +142,10 @@ async def append_dependency_scan(
     created_by_principal_id: str | None,
 ) -> DependencyScan:
     """Insert immutable scan ``attempt_no = max+1`` for the request (doc 07 §8)."""
-    prior = await _max_scan_attempt(session, request_entity_id)
     scan = DependencyScan(
         scan_id=new_id("dscan"),
         request_entity_id=request_entity_id,
-        attempt_no=(prior or 0) + 1,
+        attempt_no=await next_scan_attempt(session, request_entity_id),
         source_hash=source_hash,
         context_hash=context_hash,
         language=language,
@@ -183,6 +182,17 @@ async def _max_scan_attempt(session: AsyncSession, request_entity_id: str) -> in
         DependencyScan.request_entity_id == request_entity_id
     )
     return (await session.execute(stmt)).scalar_one_or_none()
+
+
+async def next_scan_attempt(session: AsyncSession, request_entity_id: str) -> int:
+    """The ``attempt_no`` the NEXT scan for this request will carry.
+
+    ``append_dependency_scan`` assigns it, and the doc 07 §13.2 ``precheck_started``
+    audit must report the same number at admission — before the worker has written
+    anything. Both read it here so the announced attempt and the recorded attempt
+    can never diverge.
+    """
+    return (await _max_scan_attempt(session, request_entity_id) or 0) + 1
 
 
 async def append_validation_run(

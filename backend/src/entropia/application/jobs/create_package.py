@@ -468,6 +468,57 @@ def _emit_precheck_completed(
     )
 
 
+def _emit_dependency_events(
+    session: AsyncSession,
+    job: Job,
+    root: EntityRegistry,
+    scan: Any,
+    computation: PrecheckComputation,
+) -> None:
+    """doc 07 §13.2 ``dependency_resolved`` / ``dependency_missing`` — one row per
+    declared call, written in the SAME transaction as the immutable scan.
+
+    The scan row already stores the resolved/missing arrays, but a JSONB array on
+    one row is not an audit TRAIL: §13.2 asks for per-dependency provenance so an
+    operator can answer "when did ``ta.ema`` start resolving to this revision?" and
+    "which call blocked attempt 3?" from the log projection alone. Each event pins
+    the resolver revision + content hash + registry version it actually used (never
+    name-only), or the failing call's typed code — plus the request/scan refs that
+    link it back.
+
+    The worker acts as a SYSTEM_SERVICE on behalf of the requesting principal,
+    matching ``_emit_worker_event``. No outbox fan-out: these are audit-plane
+    provenance rows, and the scan's own ``resource.changed`` already tells the UI
+    to refetch.
+    """
+    for ref in computation.resolved_refs:
+        audit_repo.add_audit_event(
+            session,
+            event_kind="dependency_resolved",
+            actor_principal_id=job.actor_principal_id,
+            actor_kind=ActorKind.SYSTEM_SERVICE,
+            target_entity_id=root.entity_id,
+            target_entity_type=_REQUEST_TARGET_KIND,
+            target_revision_id=ref.get("embedded_revision_id"),
+            new_state="resolved",
+            correlation_id=job.correlation_id,
+            metadata={**ref, "scan_id": scan.scan_id, "request_id": root.entity_id},
+        )
+    for missing in computation.missing_calls:
+        audit_repo.add_audit_event(
+            session,
+            event_kind="dependency_missing",
+            actor_principal_id=job.actor_principal_id,
+            actor_kind=ActorKind.SYSTEM_SERVICE,
+            target_entity_id=root.entity_id,
+            target_entity_type=_REQUEST_TARGET_KIND,
+            new_state="missing",
+            severity="warning",
+            correlation_id=job.correlation_id,
+            metadata={**missing, "scan_id": scan.scan_id, "request_id": root.entity_id},
+        )
+
+
 async def _record_scan(
     session: AsyncSession,
     job: Job,
@@ -501,6 +552,7 @@ async def _record_scan(
     )
     scan.completed_at = _now()
     await session.flush()
+    _emit_dependency_events(session, job, root, scan, computation)
     detail.current_scan_id = scan.scan_id
     previous = detail.state
     detail.state = next_request_state(detail.state, computation.next_state)

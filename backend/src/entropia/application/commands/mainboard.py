@@ -47,6 +47,7 @@ from entropia.domain.mainboard.composition import (
     composition_hash,
 )
 from entropia.domain.mainboard.enums import MainboardItemKind
+from entropia.domain.readiness.enums import ReadinessState
 from entropia.domain.revision.hashing import content_hash
 from entropia.infrastructure.postgres.models import (
     EntityRegistry,
@@ -56,6 +57,7 @@ from entropia.infrastructure.postgres.models import (
 )
 from entropia.infrastructure.postgres.repositories import audit as audit_repo
 from entropia.infrastructure.postgres.repositories import mainboard as mb_repo
+from entropia.infrastructure.postgres.repositories import readiness as readiness_repo
 from entropia.shared.errors import (
     AccessDeniedError,
     MainboardItemKindMismatchError,
@@ -74,6 +76,10 @@ _EXTERNAL_KINDS = frozenset({MainboardItemKind.TRADING_SIGNAL, MainboardItemKind
 _ITEM_TARGET_TYPE = "mainboard_working_item"
 _WORKSPACE_TARGET_TYPE = "mainboard_workspace"
 _WORK_OBJECT_TARGET_TYPE = "work_object"
+# Same target type ``commands.readiness_check`` writes, so a Panel Log filter on
+# ready_check_report picks up the invalidation event alongside the report events.
+_READY_REPORT_TARGET_TYPE = "ready_check_report"
+_STALE_STATE = str(ReadinessState.STALE)
 
 _PIN_REVISION = "pin_revision"
 _SET_ENABLED = "set_enabled"
@@ -326,7 +332,7 @@ async def attach_mainboard_item(
             position_index=position,
             created_by_principal_id=actor.principal_id,
         )
-        new_hash = await _recompute_composition_hash(session, workspace)
+        new_hash = await _recompute_composition_hash(session, actor, workspace)
         _audit_and_outbox(
             session,
             actor,
@@ -408,7 +414,7 @@ async def patch_mainboard_item(
 
         new_hash: str | None = workspace.composition_hash
         if hash_changing:
-            new_hash = await _recompute_composition_hash(session, workspace)
+            new_hash = await _recompute_composition_hash(session, actor, workspace)
             _composition_changed(session, actor, workspace.entity_id, new_hash)
         result = _item_projection(item)
         result["composition_hash"] = new_hash
@@ -551,7 +557,7 @@ async def soft_delete_work_object(
             workspace = await mb_repo.get_workspace_detail(session, workspace_id)
             if workspace is None:
                 continue
-            new_hash = await _recompute_composition_hash(session, workspace)
+            new_hash = await _recompute_composition_hash(session, actor, workspace)
             _composition_changed(session, actor, workspace_id, new_hash)
         return {"root_id": root_id, "deletion_state": str(DeletionState.SOFT_DELETED)}
 
@@ -770,21 +776,89 @@ def _members(items: Sequence[MainboardWorkingItem]) -> list[CompositionMember]:
     ]
 
 
-async def _recompute_composition_hash(session: AsyncSession, workspace: MainboardWorkspace) -> str:
+async def _recompute_composition_hash(
+    session: AsyncSession, actor: Actor, workspace: MainboardWorkspace
+) -> str:
     """Recompute the ENABLED+ACTIVE composition hash and store it on the workspace.
 
     The workspace row is locked ``FOR UPDATE`` before the read-compute-write so
     concurrent composition mutations on the same workspace serialize (no lost
     update on the cached fingerprint), and ``row_version`` is bumped so the
     ``GET /mainboards/default`` ETag advances on every composition change.
+
+    This is also the SOURCE MUTATION for doc 14 §12.2 ``readiness_became_stale``:
+    the readiness query derives staleness at READ time (a report is stale when its
+    fingerprint no longer equals the live one), which is correct but emits nothing
+    — nobody can audit *when* or *why* a Ready Check stopped being current. The
+    mutation that actually invalidated it is right here, so the event is emitted
+    from this point, in this transaction, with the old/new fingerprint pair.
     """
     await session.refresh(workspace, with_for_update=True)
+    old_hash = workspace.composition_hash
     items = await mb_repo.list_active_items(session, workspace.entity_id)
     enabled = [item for item in items if item.is_enabled]
     new_hash = composition_hash(_members(enabled))
     workspace.composition_hash = new_hash
     workspace.row_version += 1
+    if new_hash != old_hash:
+        await _emit_readiness_became_stale(
+            session, actor, workspace.entity_id, old_hash=old_hash, new_hash=new_hash
+        )
     return new_hash
+
+
+async def _emit_readiness_became_stale(
+    session: AsyncSession,
+    actor: Actor,
+    workspace_id: str,
+    *,
+    old_hash: str | None,
+    new_hash: str,
+) -> None:
+    """Emit ``readiness.became_stale`` when this mutation invalidated a CURRENT report.
+
+    Only fires when a latest report exists AND it was current before this mutation
+    (its fingerprint matched ``old_hash``): a report that was already stale does not
+    become stale a second time, so a burst of composition edits produces exactly one
+    transition event rather than one per edit. Nothing is written when the workspace
+    was never checked — there is no readiness state to invalidate.
+
+    Same-transaction audit + outbox: this path COMMITS (the mutation succeeded), so
+    the transactional-outbox guarantee holds and no durable side-channel is needed.
+    """
+    latest = await readiness_repo.latest_report_for_workspace(session, workspace_id)
+    if latest is None or latest.composition_fingerprint != old_hash:
+        return
+    payload = {
+        "composition_id": workspace_id,
+        "previous_report_id": latest.report_id,
+        "previous_state": str(latest.state),
+        "old_fingerprint": old_hash,
+        "new_fingerprint": new_hash,
+        "source_event": "mainboard.composition_changed",
+    }
+    audit_repo.add_audit_event(
+        session,
+        event_kind="readiness.became_stale",
+        actor_principal_id=actor.principal_id,
+        actor_kind=actor.actor_kind,
+        target_entity_id=latest.report_id,
+        target_entity_type=_READY_REPORT_TARGET_TYPE,
+        previous_state=str(latest.state),
+        new_state=_STALE_STATE,
+        correlation_id=actor.correlation_id,
+        # Both fingerprints are 64 chars — over new_state's VARCHAR(48) — so they
+        # ride the JSONB metadata, exactly like ``mainboard.composition_changed``.
+        metadata=payload,
+    )
+    audit_repo.add_outbox_event(
+        session,
+        event_type="readiness.became_stale",
+        resource_type=_READY_REPORT_TARGET_TYPE,
+        resource_id=latest.report_id,
+        payload=payload,
+        correlation_id=actor.correlation_id,
+    )
 
 
 def _composition_changed(

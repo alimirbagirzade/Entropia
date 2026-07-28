@@ -462,6 +462,9 @@ async def _handle_backtest_ready_check(ctx: _Ctx) -> _ToolOutcome:
         composition_id=composition_id,
         expected_fingerprint=ctx.request.get("expected_fingerprint"),
         idempotency_key=ctx.request.get("idempotency_key"),
+        # doc 14 §12.2 requires the parent Agent task id on the check/admission
+        # audit; this is the only surface that knows it.
+        parent_agent_task_id=ctx.task_id,
     )
     return _ToolOutcome(response=report, artifact_output_ref=report.get("report_id"))
 
@@ -478,6 +481,7 @@ async def _handle_backtest_request(ctx: _Ctx) -> _ToolOutcome:
         expected_fingerprint=ctx.request.get("expected_fingerprint"),
         ready_report_id=ctx.request.get("ready_report_id"),
         idempotency_key=ctx.request.get("idempotency_key"),
+        parent_agent_task_id=ctx.task_id,
     )
     return _ToolOutcome(
         response=run,

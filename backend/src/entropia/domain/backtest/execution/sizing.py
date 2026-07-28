@@ -24,6 +24,8 @@ from decimal import Decimal, InvalidOperation
 from typing import TYPE_CHECKING, Any
 
 from entropia.domain.backtest.execution.constants import _HUNDRED, _ONE, _QTY, _ZERO
+from entropia.domain.backtest.execution.costs import _effective_fill
+from entropia.domain.backtest.execution.state import _Ledger, _RunConfig
 
 if TYPE_CHECKING:
     from entropia.domain.strategy.config import (
@@ -275,3 +277,69 @@ def _cap_to_sleeve(desired: Decimal, sleeve_capital: Decimal, entry_price: Decim
         return _ZERO
     cap_units = (sleeve_capital / entry_price).quantize(_QTY)
     return min(desired, cap_units)
+
+
+def sleeve_capital(ctx: _RunConfig, current_equity: Decimal) -> Decimal:
+    """The replayed item's sleeve cap Ci(t) at this valuation point (doc 13 §8.3).
+
+    Compound: A(t) = max(0, E(t) - R0); Ci(t) = A(t) * wi / 100, where E(t) is the
+    portfolio equity (which starts at P0 and accrues this item's realized PnL in the
+    single-item foundation). Fixed: Ci = A0 * wi / 100 (constant)."""
+    allocatable = (
+        max(_ZERO, current_equity - ctx.reserve_nominal)
+        if ctx.alloc_compound
+        else ctx.allocatable_initial
+    )
+    return allocatable * ctx.item_share / _HUNDRED
+
+
+def planned_size(
+    ctx: _RunConfig, led: _Ledger, *, direction: str, fill_raw: Decimal, strength: Decimal
+) -> Decimal:
+    """The size the sizing chain would open at ``fill_raw`` right now.
+
+    The single source the entry path books from AND the F-07i (C) partial-fill logic
+    measures print-size evidence against — one computation, no drift. Applies the
+    full Strategy Details sizing/limits chain and (under allocation) the sleeve
+    outer cap."""
+    is_long = direction == "long"
+    entry_eff = _effective_fill(
+        fill_raw,
+        is_buy=is_long,
+        half_spread=ctx.fill_costs.half_spread,
+        slip=ctx.fill_costs.slippage,
+    )
+    if ctx.alloc_on:
+        sleeve = sleeve_capital(ctx, led.equity)
+        return _cap_to_sleeve(
+            _position_size(ctx.config, entry_eff, sleeve, strength), sleeve, entry_eff
+        )
+    return _position_size(ctx.config, entry_eff, led.equity, strength)
+
+
+def blocked_reason(ctx: _RunConfig, led: _Ledger) -> str:
+    """Why a wanted entry produced NO fill (F-10 restriction trace)."""
+    if led.portfolio_block_reason is not None:
+        # A portfolio-rules gate (conflict block / exposure cap) set the concrete
+        # reason at decision time; consume it so a later unrelated block cannot
+        # inherit a stale portfolio reason.
+        reason = led.portfolio_block_reason
+        led.portfolio_block_reason = None
+        return reason
+    if not ctx.sizing_ok:
+        return "sizing_unsupported"
+    if not ctx.leverage_ok:
+        return "leverage_unsupported"
+    if not ctx.strength_ok:
+        return "signal_strength_unsupported"
+    if not ctx.capability_ok:
+        # F-05: checked LAST of the unsupported reasons, deliberately. Where a
+        # per-domain predicate already explains the refusal (cross leverage,
+        # trend-adjusted strength, ...) that reason is the more specific and
+        # already-contracted trace value, so the matrix must not overwrite it. This
+        # branch is what reports the options NO per-domain gate covers — the
+        # historical-slippage case the matrix was added for.
+        return "capability_not_in_build"
+    if ctx.alloc_on:
+        return "sleeve_zero_capacity"
+    return "no_fill"

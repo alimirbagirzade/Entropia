@@ -111,6 +111,12 @@ from entropia.domain.backtest.execution.fills import (
     order_execution_is_modelled,
     tick_data_required,
 )
+from entropia.domain.backtest.execution.rules import (
+    bar_epoch_ms,
+    conflicts_with_prior,
+    interval_covers,
+    prior_exposure_at,
+)
 from entropia.domain.backtest.execution.scaling import (
     apply_partial_aftermath,
     partial_close_is_modelled,
@@ -124,16 +130,23 @@ from entropia.domain.backtest.execution.sizing import (
     _leverage_multiplier,
     _position_size,
     _sizing_is_honored,
+    blocked_reason,
     leverage_is_modelled,
+    planned_size,
+    sleeve_capital,
 )
 from entropia.domain.backtest.execution.state import (
+    AllocationExecution,
     EquityPoint,
+    PortfolioRules,
+    PriorItemInterval,
     SignalEventRow,
     TradeRow,
     _Bar,
     _Ledger,
     _normalize,
     _Position,
+    _RunConfig,
 )
 from entropia.domain.backtest.funding import FundingSchedule, parse_utc
 from entropia.domain.backtest.indicators import (
@@ -248,84 +261,6 @@ class ItemRun:
     root_id: str | None
     revision_id: str | None
     output: EngineOutput | None
-
-
-@dataclass(frozen=True, slots=True)
-class AllocationExecution:
-    """Resolved shared-pool capital model for the item the engine replays (doc 13 §8.3).
-
-    Built from the run manifest's immutable ``capital_execution`` snapshot by
-    ``resolve_allocation_execution`` — a PURE projection, so the engine stays a
-    function of ``(config, bars, allocation)`` with no I/O. The presence of this
-    object means shared allocation is ON; ``None`` means independent / absent
-    allocation and the engine sizes from the strategy's own ``initial_capital``
-    exactly as it did pre-allocation.
-
-    * ``initial_capital`` — P0, the shared portfolio pool (overrides the strategy's own).
-    * ``reserve_percent`` — r, the fixed nominal reserve %, floored at 0.
-    * ``compound`` — ``True`` recomputes the sleeve from live portfolio equity
-      (``COMPOUND_PORTFOLIO_EQUITY``); ``False`` holds the sleeve at its initial value
-      (``FIXED_INITIAL_PORTFOLIO_CAPITAL``).
-    * ``item_share_percent`` — wi, the replayed item's active ``equity_share_percent``;
-      ``0`` when the item has no active entry → a 0-capital sleeve → no fills (an L4
-      warning, NEVER a silent fall-back to the strategy's independent capital).
-    """
-
-    initial_capital: Decimal
-    reserve_percent: Decimal
-    compound: bool
-    item_share_percent: Decimal
-    currency: str | None
-
-
-@dataclass(frozen=True, slots=True)
-class PriorItemInterval:
-    """One EARLIER-pinned item's fully-closed held-position window, replayed against
-    as a portfolio constraint by a LATER-pinned item (pin-order precedence).
-
-    ``start_ms`` / ``end_ms`` are UTC epoch milliseconds; ``None`` means the bound
-    could not be placed in time and the interval is UNBOUNDED on that side — fail
-    closed: an unplaceable window can only over-cover (block/cap more), never
-    under-cover. ``notional`` is the position's PEAK held notional over its life
-    (scaling/stacking included) — a conservative over-approximation for a cap.
-    ``symbol`` is the item's canonical ``instrument_id`` (``None`` = unknown —
-    treated as potentially the SAME instrument for the conflict gate, fail closed).
-    """
-
-    item_id: str
-    symbol: str | None
-    direction: str  # "long" | "short"
-    start_ms: int | None
-    end_ms: int | None
-    notional: Decimal
-
-
-@dataclass(frozen=True, slots=True)
-class PortfolioRules:
-    """Resolved PORTFOLIO-LEVEL rules for the item the engine replays (cross-item).
-
-    Built from the manifest's immutable ``capital_execution`` snapshot by
-    ``resolve_portfolio_rules`` (pure, no I/O) and per-item completed by the worker
-    (``own_symbol`` + the accumulated ``prior_intervals`` of earlier-pinned items).
-    ``None`` at ``run_engine`` means no portfolio-level rule is set — the replay is
-    byte-identical to the pre-rules engine.
-
-    Honest V1 boundary (sequential enforcement): items replay independently in
-    deterministic pin order, so constraints propagate FORWARD only — an
-    earlier-pinned item is never re-simulated because of a later one (doc 13 §8.4
-    step 6: a blocked item's share is not transferred). Surfaced as an L4 warning
-    on every rules-active run, never hidden. ``NET`` (offsetting the aggregate
-    position) needs a unified-clock co-simulation and is executed conservatively
-    as BLOCK_OPPOSITE (L4-disclosed). ``exposure_percent_invalid`` marks a
-    SET-but-unreadable/non-positive cap: the engine fails closed to a ZERO cap
-    (admits nothing) rather than silently running uncapped.
-    """
-
-    max_total_exposure_percent: Decimal | None
-    conflict_policy: str | None  # canonical CrossItemConflictPolicy token, or None
-    own_symbol: str | None
-    prior_intervals: tuple[PriorItemInterval, ...]
-    exposure_percent_invalid: bool = False
 
 
 @dataclass(slots=True)
@@ -1128,6 +1063,24 @@ def run_engine(
     # asked for. Any ``future_dev`` selection now opens NO position, exactly like the other
     # nine, and Ready Check raises STRATEGY_CAPABILITY_NOT_IN_BUILD ahead of it.
     capability_ok = capabilities_are_modelled(config)
+
+    # Every resolved setting the read-only helpers need, pinned once. Built HERE
+    # because ``capability_ok`` is the last of its fields to resolve; nothing below
+    # this point rebinds any of them, so the frozen snapshot cannot go stale.
+    ctx = _RunConfig(
+        config=config,
+        fill_costs=fill_costs,
+        alloc_on=alloc_on,
+        alloc_compound=alloc_compound,
+        allocatable_initial=allocatable_initial,
+        item_share=item_share,
+        reserve_nominal=reserve_nominal,
+        portfolio_rules=portfolio_rules,
+        sizing_ok=sizing_ok,
+        leverage_ok=leverage_ok,
+        strength_ok=strength_ok,
+        capability_ok=capability_ok,
+    )
     future_dev_selected = future_dev_selections(config)
 
     plan_active = indicator_plan is not None and indicator_plan.has_entry
@@ -1263,31 +1216,7 @@ def run_engine(
         return {"mode": "breakout_proxy", "window": _BREAKOUT_WINDOW, "direction": want}
 
     def _blocked_reason() -> str:
-        """Why a wanted entry produced NO fill (F-10 restriction trace)."""
-        if led.portfolio_block_reason is not None:
-            # A portfolio-rules gate (conflict block / exposure cap) set the concrete
-            # reason at decision time; consume it so a later unrelated block cannot
-            # inherit a stale portfolio reason.
-            reason = led.portfolio_block_reason
-            led.portfolio_block_reason = None
-            return reason
-        if not sizing_ok:
-            return "sizing_unsupported"
-        if not leverage_ok:
-            return "leverage_unsupported"
-        if not strength_ok:
-            return "signal_strength_unsupported"
-        if not capability_ok:
-            # F-05: checked LAST of the unsupported reasons, deliberately. Where a
-            # per-domain predicate already explains the refusal (cross leverage,
-            # trend-adjusted strength, ...) that reason is the more specific and
-            # already-contracted trace value, so the matrix must not overwrite it. This
-            # branch is what reports the options NO per-domain gate covers — the
-            # historical-slippage case the matrix was added for.
-            return "capability_not_in_build"
-        if alloc_on:
-            return "sleeve_zero_capacity"
-        return "no_fill"
+        return blocked_reason(ctx, led)
 
     def _signal_strength(bar: _Bar) -> Decimal:
         """The strength multiplier at THIS signal bar (F-07g, §10.3).
@@ -1337,15 +1266,7 @@ def run_engine(
             led.lock_in_locks += 1
 
     def _sleeve_capital(current_equity: Decimal) -> Decimal:
-        """The replayed item's sleeve cap Ci(t) at this valuation point (doc 13 §8.3).
-
-        Compound: A(t) = max(0, E(t) - R0); Ci(t) = A(t) * wi / 100, where E(t) is the
-        portfolio equity (which starts at P0 and accrues this item's realized PnL in the
-        single-item foundation). Fixed: Ci = A0 * wi / 100 (constant)."""
-        allocatable = (
-            max(_ZERO, current_equity - reserve_nominal) if alloc_compound else allocatable_initial
-        )
-        return allocatable * item_share / _HUNDRED
+        return sleeve_capital(ctx, current_equity)
 
     def _active_restrictions(bar_date: date | None) -> list[dict[str, str]]:
         """The enabled filters ACTIVE at this bar (F-07e, Master Ref §12) as trace evidence.
@@ -1382,72 +1303,21 @@ def run_engine(
         return bool(active)
 
     def _bar_epoch_ms(ts: str) -> int | None:
-        """UTC epoch ms of a bar timestamp, ``None`` when unplaceable (fail closed:
-        the portfolio gates treat an unplaceable moment as covered by every prior
-        window — the date-blackout precedent, never trading through a rule).
-
-        ``source_zone=None`` (K-01): bars are UTC-normalized at ingest."""
-        parsed = parse_utc(ts, source_zone=None)
-        return int(parsed.timestamp() * 1000) if parsed is not None else None
+        return bar_epoch_ms(ts)
 
     def _interval_covers(iv: PriorItemInterval, t_ms: int | None) -> bool:
-        if t_ms is None:
-            return True
-        if iv.start_ms is not None and t_ms < iv.start_ms:
-            return False
-        return not (iv.end_ms is not None and t_ms > iv.end_ms)
+        return interval_covers(iv, t_ms)
 
     def _conflicts_with_prior(direction: str, t_ms: int | None) -> bool:
-        """Does an earlier-pinned item hold the OPPOSITE direction on the same
-        instrument at this moment? Unknown instrument identity on either side
-        cannot RULE OUT a same-instrument conflict — fail closed (counts as
-        conflicting) and surfaced via a dedicated L4 warning."""
         assert portfolio_rules is not None
-        own = (portfolio_rules.own_symbol or "").strip()
-        for iv in portfolio_rules.prior_intervals:
-            if iv.direction == direction:
-                continue
-            other = (iv.symbol or "").strip()
-            if own and other and own != other:
-                continue
-            if not _interval_covers(iv, t_ms):
-                continue
-            if not (own and other):
-                led.portfolio_symbol_unknown_gate = True
-            if t_ms is None:
-                led.portfolio_time_unparseable_gate = True
-            return True
-        return False
+        return conflicts_with_prior(led, portfolio_rules, direction, t_ms)
 
     def _prior_exposure_at(t_ms: int | None) -> Decimal:
-        """Total notional the earlier-pinned items hold at this moment (peak-notional
-        basis — conservative; an unplaceable moment counts EVERY window, fail closed)."""
         assert portfolio_rules is not None
-        total = _ZERO
-        for iv in portfolio_rules.prior_intervals:
-            if _interval_covers(iv, t_ms):
-                total += iv.notional
-        if t_ms is None and portfolio_rules.prior_intervals:
-            led.portfolio_time_unparseable_gate = True
-        return total
+        return prior_exposure_at(led, portfolio_rules, t_ms)
 
     def _planned_size(direction: str, fill_raw: Decimal, strength: Decimal) -> Decimal:
-        """The size the sizing chain would open at ``fill_raw`` right now.
-
-        The single source ``_open`` books from AND the F-07i (C) partial-fill logic
-        measures print-size evidence against — one computation, no drift. Applies the
-        full Strategy Details sizing/limits chain and (under allocation) the sleeve
-        outer cap."""
-        is_long = direction == "long"
-        entry_eff = _effective_fill(
-            fill_raw, is_buy=is_long, half_spread=half_spread, slip=slippage
-        )
-        if alloc_on:
-            sleeve = _sleeve_capital(led.equity)
-            return _cap_to_sleeve(
-                _position_size(config, entry_eff, sleeve, strength), sleeve, entry_eff
-            )
-        return _position_size(config, entry_eff, led.equity, strength)
+        return planned_size(ctx, led, direction=direction, fill_raw=fill_raw, strength=strength)
 
     def _open(
         direction: str,
@@ -3494,6 +3364,8 @@ __all__ = [
     "EngineOutput",
     "EquityPoint",
     "ItemRun",
+    "PortfolioRules",
+    "PriorItemInterval",
     "SignalEventRow",
     "TradeRow",
     "UnresolvedStrategyError",

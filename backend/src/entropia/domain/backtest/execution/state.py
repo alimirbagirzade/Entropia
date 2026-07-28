@@ -19,6 +19,8 @@ from decimal import Decimal
 from typing import Any
 
 from entropia.domain.backtest.execution.constants import _ZERO
+from entropia.domain.backtest.execution.costs import FillCosts
+from entropia.domain.strategy.config import StrategyConfig
 
 
 @dataclass(frozen=True, slots=True)
@@ -199,3 +201,113 @@ class _Ledger:
     portfolio_symbol_unknown_gate: bool = False
     portfolio_time_unparseable_gate: bool = False
     portfolio_block_reason: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class AllocationExecution:
+    """Resolved shared-pool capital model for the item the engine replays (doc 13 §8.3).
+
+    Built from the run manifest's immutable ``capital_execution`` snapshot by
+    ``resolve_allocation_execution`` — a PURE projection, so the engine stays a
+    function of ``(config, bars, allocation)`` with no I/O. The presence of this
+    object means shared allocation is ON; ``None`` means independent / absent
+    allocation and the engine sizes from the strategy's own ``initial_capital``
+    exactly as it did pre-allocation.
+
+    * ``initial_capital`` — P0, the shared portfolio pool (overrides the strategy's own).
+    * ``reserve_percent`` — r, the fixed nominal reserve %, floored at 0.
+    * ``compound`` — ``True`` recomputes the sleeve from live portfolio equity
+      (``COMPOUND_PORTFOLIO_EQUITY``); ``False`` holds the sleeve at its initial value
+      (``FIXED_INITIAL_PORTFOLIO_CAPITAL``).
+    * ``item_share_percent`` — wi, the replayed item's active ``equity_share_percent``;
+      ``0`` when the item has no active entry → a 0-capital sleeve → no fills (an L4
+      warning, NEVER a silent fall-back to the strategy's independent capital).
+    """
+
+    initial_capital: Decimal
+    reserve_percent: Decimal
+    compound: bool
+    item_share_percent: Decimal
+    currency: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class PriorItemInterval:
+    """One EARLIER-pinned item's fully-closed held-position window, replayed against
+    as a portfolio constraint by a LATER-pinned item (pin-order precedence).
+
+    ``start_ms`` / ``end_ms`` are UTC epoch milliseconds; ``None`` means the bound
+    could not be placed in time and the interval is UNBOUNDED on that side — fail
+    closed: an unplaceable window can only over-cover (block/cap more), never
+    under-cover. ``notional`` is the position's PEAK held notional over its life
+    (scaling/stacking included) — a conservative over-approximation for a cap.
+    ``symbol`` is the item's canonical ``instrument_id`` (``None`` = unknown —
+    treated as potentially the SAME instrument for the conflict gate, fail closed).
+    """
+
+    item_id: str
+    symbol: str | None
+    direction: str  # "long" | "short"
+    start_ms: int | None
+    end_ms: int | None
+    notional: Decimal
+
+
+@dataclass(frozen=True, slots=True)
+class PortfolioRules:
+    """Resolved PORTFOLIO-LEVEL rules for the item the engine replays (cross-item).
+
+    Built from the manifest's immutable ``capital_execution`` snapshot by
+    ``resolve_portfolio_rules`` (pure, no I/O) and per-item completed by the worker
+    (``own_symbol`` + the accumulated ``prior_intervals`` of earlier-pinned items).
+    ``None`` at ``run_engine`` means no portfolio-level rule is set — the replay is
+    byte-identical to the pre-rules engine.
+
+    Honest V1 boundary (sequential enforcement): items replay independently in
+    deterministic pin order, so constraints propagate FORWARD only — an
+    earlier-pinned item is never re-simulated because of a later one (doc 13 §8.4
+    step 6: a blocked item's share is not transferred). Surfaced as an L4 warning
+    on every rules-active run, never hidden. ``NET`` (offsetting the aggregate
+    position) needs a unified-clock co-simulation and is executed conservatively
+    as BLOCK_OPPOSITE (L4-disclosed). ``exposure_percent_invalid`` marks a
+    SET-but-unreadable/non-positive cap: the engine fails closed to a ZERO cap
+    (admits nothing) rather than silently running uncapped.
+    """
+
+    max_total_exposure_percent: Decimal | None
+    conflict_policy: str | None  # canonical CrossItemConflictPolicy token, or None
+    own_symbol: str | None
+    prior_intervals: tuple[PriorItemInterval, ...]
+    exposure_percent_invalid: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class _RunConfig:
+    """The prologue's RESOLVED settings for one run, as one read-only value (K-10c).
+
+    ``run_engine`` opens by turning the pinned strategy/allocation/rules snapshots into
+    ~30 plain locals — is sizing modelled, what is the sleeve share, which costs apply.
+    Closures that only READ those locals still had to be nested to see them, which is
+    what kept ``_open`` and the sizing helpers inside the function.
+
+    FROZEN on purpose: the mutation surface does not grow. ``_Ledger`` is what the run
+    writes to; this is what it reads. Keeping the two apart is what makes an extracted
+    function's contract obvious — ``(ctx, led)`` says "reads config, writes ledger"
+    without further reading.
+    """
+
+    config: StrategyConfig
+    fill_costs: FillCosts
+    # Shared-pool allocation (doc 13 §8.3). ``alloc_on`` False leaves the rest inert.
+    alloc_on: bool
+    alloc_compound: bool
+    allocatable_initial: Decimal
+    item_share: Decimal
+    reserve_nominal: Decimal
+    # Cross-item portfolio rules (doc 13 §8.4); ``None`` = no rule configured.
+    portfolio_rules: PortfolioRules | None
+    # Fail-closed capability gates: any False opens NO position (F-05/F-09).
+    sizing_ok: bool
+    leverage_ok: bool
+    strength_ok: bool
+    capability_ok: bool

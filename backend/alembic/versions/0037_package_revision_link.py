@@ -19,8 +19,8 @@ these and ``queries.create_package.get_package_request`` projects them. Mirrors 
 ``package_validation_run`` immutable-evidence shape (0025 / 0031). Downgrade drops the
 table and the three columns.
 
-Revision ID: 0036_package_revision_link
-Revises: 0035_portfolio_rules
+Revision ID: 0037_package_revision_link
+Revises: 0036_manual_duplicate_override
 Create Date: 2026-07-27
 """
 
@@ -34,8 +34,8 @@ from alembic import op
 from entropia.domain.create_package.enums import CreatePackageState
 from entropia.infrastructure.postgres.types import enum_column
 
-revision: str = "0036_package_revision_link"
-down_revision: str | None = "0035_portfolio_rules"
+revision: str = "0037_package_revision_link"
+down_revision: str | None = "0036_manual_duplicate_override"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

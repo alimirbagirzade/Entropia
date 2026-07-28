@@ -171,6 +171,18 @@ rv-N` kullanmaya devam ediyor).
 | POST `/backtest-results/compare` | `compare_backtest_results:56` | `history_query.compare_backtest_results` (**pure read**) | yok | — |
 | POST `/backtest-results/{result_id}/delete` | `soft_delete_backtest_result:66` | `backtest_cmd.soft_delete_backtest_result` | body `expected_row_version` (`:40`) / If-Match | ✔ |
 
+> **Görünürlük (O-14, doc 16 §2).** Result okuma kapsamının kökü, sonucun üretildiği
+> composition'dır (`mainboard_workspace` registry root'u) — `backtest_result`'ın kendi
+> visibility kolonu yoktur. Tek kural `queries/result_access.py`'te: **sahip** +
+> `resource_share` (`resource_type='mainboard_workspace'`, `revoked_at IS NULL`) ile
+> **explicitly shared** + **Admin** hepsi; **Admin/Supervisor** ayrıca Agent research
+> (Analysis Lab) kapsamı — başkasının sonucu **salt-okunur** (`can_edit` yazmayı zaten
+> reddeder → `allowed_actions.soft_delete=false`). List yüklemi SQL'de (`has_more`/cursor
+> yetkili kümeyi sayar); `GET /backtest-results/{id}`, `POST /backtest-results/compare`,
+> `.../metrics` ve `.../artifacts/{type}` aynı kuralı satır bazında yeniden değerlendirir.
+> **Dürüst sınır:** "published result" V1'de yok — composition'da `visibility_scope`
+> kolonu yoktur; composition grant'i YAZAN bir komut yüzeyi de V1'de yok (yalnız okuma).
+
 ## metric_profile.py · result_export.py
 
 | METHOD path | fonksiyon | çağırdığı | OCC | Idem |

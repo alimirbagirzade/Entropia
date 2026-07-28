@@ -20,6 +20,24 @@ class MarketDataType(StrEnum):
     SPREAD_EXECUTION = "spread_execution"
 
 
+def supports_intrabar_execution(market_data_type: MarketDataType | str) -> bool:
+    """Can a dataset of this shape resolve a price BETWEEN two bar boundaries (K-08)?
+
+    Only ``tick_trades`` carries the sub-bar print sequence an intrabar resolution
+    needs. ``ohlcv`` is bar-aggregated by construction — its open/high/low/close say
+    nothing about the ORDER in which those extremes were reached inside the bar — and
+    ``spread_execution`` is a cost series, not a price path. Answering "yes" for either
+    would let the engine silently imitate detail the dataset does not contain (doc 04
+    §5.2 "Price Source = OHLCV Intrabar If Available" -> ``INTRABAR_DATA_UNAVAILABLE``).
+
+    Single source of truth, the same discipline as
+    ``domain/backtest/execution/fills.py::tick_data_required``: the readiness blocker
+    and any later engine-side intrabar gate must never disagree about what "supports
+    intrabar" means. An unknown/unparseable string answers ``False`` (fail closed).
+    """
+    return market_data_type == MarketDataType.TICK_TRADES
+
+
 class MarketRevisionState(StrEnum):
     """Market dataset revision lifecycle. ``verified`` is distinct from
     ``approved``: only an Admin moves verified -> approved, and only an

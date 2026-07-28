@@ -110,8 +110,23 @@ class TimePolicy(_Strict):
 
 
 class PricePolicy(_Strict):
+    """Which price a backtest reads, and what backs the OHLCV fallback options.
+
+    ``approved_market_data_revision_ref`` MIRRORS the Trade Log field of the same name
+    (``domain/trade_log/config.py``) on purpose (K-08). Doc 04 §5 Price Source row:
+    "Fallback options require compatible approved Market Data at Ready Check" — the
+    same sentence doc 05 §5.3 states for a Trade Log. Without this field the twin
+    check had nothing to read, so ``ohlcv_close_if_needed`` /
+    ``ohlcv_intrabar_if_available`` could reach Ready PASS with no market data behind
+    them. Optional and ``None``-defaulted: a ``suggested_signal_price`` config needs
+    no pin, and every already-persisted revision stays valid under ``extra='forbid'``.
+
+    ``fallback`` is the separate doc 04 ``fallback_policy`` slot and is untouched here.
+    """
+
     source: PriceSourceMode
     fallback: str | None = None
+    approved_market_data_revision_ref: str | None = None
 
 
 class OhlcvPolicy(_Strict):

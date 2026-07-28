@@ -75,6 +75,8 @@ from entropia.domain.trading_signal.compiler import (
     validate_semantics as validate_signal_semantics,
 )
 from entropia.domain.trading_signal.config import TradingSignalConfig
+from entropia.domain.trading_signal.enums import DataQualityMode as SignalDataQualityMode
+from entropia.domain.trading_signal.enums import OhlcvUseMode as SignalOhlcvUseMode
 
 _CANONICAL_KINDS = frozenset(
     {
@@ -86,10 +88,16 @@ _CANONICAL_KINDS = frozenset(
 _TRIGGERS_REQUIRING_CONDITION = frozenset(
     {"indicator_native_trigger_plus_condition", "indicator_output_plus_condition"}
 )
+# The price sources that cannot be served by the import alone and therefore need an
+# approved Market Data revision behind them. Held as plain STRINGS because both
+# external twins declare the identical two values under their own enum
+# (``trade_log.enums.PriceSourceMode`` / ``trading_signal.enums.PriceSourceMode``) —
+# one membership test then judges either config without depending on cross-enum
+# identity (K-08).
 _OHLCV_FALLBACK_SOURCES = frozenset(
     {
-        TradeLogPriceSource.OHLCV_CLOSE_IF_NEEDED,
-        TradeLogPriceSource.OHLCV_INTRABAR_IF_AVAILABLE,
+        str(TradeLogPriceSource.OHLCV_CLOSE_IF_NEEDED),
+        str(TradeLogPriceSource.OHLCV_INTRABAR_IF_AVAILABLE),
     }
 )
 
@@ -142,6 +150,7 @@ def evaluate_readiness(
     allocation_issues: Sequence[AllocationIssue],
     market_data_issues: Sequence[ReadinessIssue] = (),
     tick_data_issues: Sequence[ReadinessIssue] = (),
+    signal_market_data_issues: Sequence[ReadinessIssue] = (),
     strategy_indicator_issues: Sequence[ReadinessIssue] = (),
     research_sources: Sequence[ResearchSourceState] = (),
 ) -> ReadinessEvaluation:
@@ -156,6 +165,10 @@ def evaluate_readiness(
     worker can never silently substitute the breakout proxy. ``tick_data_issues`` are
     the F-07i blockers the command resolved for strategies that demand tick data
     ('Use Tick Data' = Yes) but have no approved tick/trade dataset — also a DB read.
+    ``signal_market_data_issues`` are the K-08 blockers the command resolved for a
+    Trading Signal whose price policy DOES name an approved Market Data revision:
+    whether that pin is still ACTIVE + APPROVED, and whether it can carry intrabar
+    detail, are DB facts. The pure layer above only proves a reference was declared.
     ``research_sources`` are the O-01 resolved Research Data pins (one per research
     revision a strategy consumes); they are judged HERE by the pure
     ``validate_research_sources`` rather than arriving pre-judged, because the whole
@@ -168,6 +181,7 @@ def evaluate_readiness(
         issues.extend(_item_issues(item, allocation_enabled=allocation_enabled))
     issues.extend(market_data_issues)
     issues.extend(tick_data_issues)
+    issues.extend(signal_market_data_issues)
     issues.extend(strategy_indicator_issues)
     issues.extend(validate_research_sources(research_sources))
     issues.extend(_map_allocation_issues(allocation_issues))
@@ -950,26 +964,17 @@ def _external_issues(item: ReadinessItemInput, *, allocation_enabled: bool) -> l
                 )
             )
 
-    # OHLCV fallback (Trade Log): an OHLCV price fallback needs an approved Market
-    # Data revision reference at execution time (doc 05 §5.3, Impl. Rule 8).
-    if (
-        is_trade_log
-        and isinstance(config, TradeLogConfig)
-        and config.price_policy.source in _OHLCV_FALLBACK_SOURCES
-        and config.price_policy.approved_market_data_revision_ref is None
-    ):
-        issues.append(
-            ReadinessIssue(
-                Code.OHLCV_FALLBACK_MARKET_DATA_MISSING,
-                Sev.BLOCKER,
-                Scope.EXTERNAL_OBJECT,
-                "An OHLCV price fallback requires an approved Market Data revision reference.",
-                remediation="Bind an Approved Market Data revision to price_policy, or use "
-                "the trade-log entry/exit price source.",
-                field_path="price_policy.approved_market_data_revision_ref",
-                scope_id=item.item_id,
-            )
-        )
+    # OHLCV price/context dependency — applied to BOTH external twins (K-08). This
+    # check used to be conditioned on ``is_trade_log``, which let a Trading Signal
+    # selecting ``ohlcv_close_if_needed`` / ``ohlcv_intrabar_if_available`` reach Ready
+    # PASS with no market data behind the fallback. Doc 04 §5 states the requirement for
+    # a Trading Signal in the same words doc 05 §5.3 states it for a Trade Log
+    # ("Fallback options require compatible approved Market Data at Ready Check"), so
+    # the RULE is shared and only the emitted CODE differs per page taxonomy.
+    if isinstance(config, TradeLogConfig):
+        issues.extend(_trade_log_market_data_issues(config, item_id=item.item_id))
+    else:
+        issues.extend(_signal_market_data_issues(config, item_id=item.item_id))
 
     # TL-11: in independent-capital mode each enabled external item needs its own
     # Initial Capital > 0 (doc 14 §5.1 Independent capital mode).
@@ -984,6 +989,94 @@ def _external_issues(item: ReadinessItemInput, *, allocation_enabled: bool) -> l
                 "on this item.",
                 field_path="capital.independent_initial_capital",
                 scope_id=item.item_id,
+            )
+        )
+    return issues
+
+
+def _trade_log_market_data_issues(config: TradeLogConfig, *, item_id: str) -> list[ReadinessIssue]:
+    """Trade Log side of the shared OHLCV-fallback rule (doc 05 §5.3, Impl. Rule 8).
+
+    Unchanged behaviour and unchanged code — ``OHLCV_FALLBACK_MARKET_DATA_MISSING`` is
+    what the Trade Log page, its taxonomy and its shipped tests already speak.
+    """
+    price = config.price_policy
+    if (
+        price.source not in _OHLCV_FALLBACK_SOURCES
+        or price.approved_market_data_revision_ref is not None
+    ):
+        return []
+    return [
+        ReadinessIssue(
+            Code.OHLCV_FALLBACK_MARKET_DATA_MISSING,
+            Sev.BLOCKER,
+            Scope.EXTERNAL_OBJECT,
+            "An OHLCV price fallback requires an approved Market Data revision reference.",
+            remediation="Bind an Approved Market Data revision to price_policy, or use "
+            "the trade-log entry/exit price source.",
+            field_path="price_policy.approved_market_data_revision_ref",
+            scope_id=item_id,
+        )
+    ]
+
+
+def _signal_market_data_issues(
+    config: TradingSignalConfig, *, item_id: str
+) -> list[ReadinessIssue]:
+    """Trading Signal side of the same rule, plus its OHLCV-context twin (doc 04 §5/§5.2).
+
+    Two DISTINCT defects, deliberately reported independently because they have
+    different remediations and either can hold alone:
+
+    * ``MARKET_DATA_DEPENDENCY_BLOCKED`` — an OHLCV price fallback with nothing approved
+      behind it (doc 04 §5 Price Source row; doc 04 §11 Dependency row names the code).
+      The user can either bind a revision or drop back to ``suggested_signal_price``.
+    * ``OHLCV_CONTEXT_REQUIRED`` — "OHLCV Use = Use for price context and validation"
+      was chosen while Data Quality is ``signal_events_with_market_context``, i.e. the
+      source file supplies NO OHLCV, so the only possible provider of that context is an
+      approved Market Data pin (doc 04 §5.2 OHLCV-Use row). The sibling combinations are
+      already gated elsewhere and are NOT re-reported here: with
+      ``signal_events_with_source_ohlcv`` the file itself is the context, and
+      ``signal_events_only`` + this use mode is a save-time ``OHLCV_POLICY_CONFLICT``
+      in ``trading_signal/compiler.py`` (surfaced above as ``EXTERNAL_IMPORT_INVALID``).
+
+    Honest boundary: this layer only proves a reference was DECLARED. Whether it
+    resolves to an ACTIVE + APPROVED revision, and whether that revision can actually
+    carry intrabar detail, is a DB read and lives in
+    ``commands/readiness_check.py::_resolve_signal_market_data_issues`` — the same
+    split as ``_resolve_market_data_issues`` / ``_resolve_tick_data_issues``.
+    """
+    issues: list[ReadinessIssue] = []
+    price = config.price_policy
+    if price.source in _OHLCV_FALLBACK_SOURCES and price.approved_market_data_revision_ref is None:
+        issues.append(
+            ReadinessIssue(
+                Code.MARKET_DATA_DEPENDENCY_BLOCKED,
+                Sev.BLOCKER,
+                Scope.EXTERNAL_OBJECT,
+                "An OHLCV price fallback requires a compatible approved Market Data revision.",
+                remediation="Bind an Approved Market Data revision to price_policy, or use "
+                "the suggested signal entry/exit price source.",
+                field_path="price_policy.approved_market_data_revision_ref",
+                scope_id=item_id,
+            )
+        )
+    if (
+        config.ohlcv_policy.use_mode == SignalOhlcvUseMode.USE_FOR_PRICE_CONTEXT_AND_VALIDATION
+        and config.data_quality.mode == SignalDataQualityMode.SIGNAL_EVENTS_WITH_MARKET_CONTEXT
+        and price.approved_market_data_revision_ref is None
+    ):
+        issues.append(
+            ReadinessIssue(
+                Code.OHLCV_CONTEXT_REQUIRED,
+                Sev.BLOCKER,
+                Scope.EXTERNAL_OBJECT,
+                "Using OHLCV for price context and validation requires an approved Market "
+                "Data revision, because this signal supplies no source OHLCV of its own.",
+                remediation="Bind an Approved Market Data revision to price_policy, switch "
+                "OHLCV Use to 'ignore', or re-import with source OHLCV columns.",
+                field_path="ohlcv_policy.use_mode",
+                scope_id=item_id,
             )
         )
     return issues

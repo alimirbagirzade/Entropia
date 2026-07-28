@@ -14,16 +14,14 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from entropia.application.queries import result_access
 from entropia.domain.backtest.history import build_manifest_excerpt
 from entropia.domain.identity import Actor
-from entropia.domain.identity.policy import ensure_can_view, require_authenticated
-from entropia.domain.lifecycle.enums import DeletionState
+from entropia.domain.identity.policy import require_authenticated
 from entropia.infrastructure.postgres.repositories import backtest as bt_repo
-from entropia.infrastructure.postgres.repositories import mainboard as mb_repo
 from entropia.shared.errors import (
     BacktestResultNotFoundError,
     BacktestRunNotFoundError,
-    CompositionNotFoundError,
 )
 
 _ACTIVE = "active"
@@ -43,7 +41,7 @@ async def get_backtest_run(
     run = await bt_repo.get_run(session, run_id)
     if run is None:
         raise BacktestRunNotFoundError()
-    await _ensure_can_view_workspace(session, actor, run.workspace_entity_id)
+    await result_access.ensure_can_view_composition(session, actor, run.workspace_entity_id)
     return {
         "run_id": run.run_id,
         "composition_id": run.workspace_entity_id,
@@ -56,6 +54,16 @@ async def get_backtest_run(
         "result_id": run.result_id,
         "failure_code": run.failure_code,
         "failure_message": run.failure_message,
+        # O-06: the cancellation trail, doc 15 §16 ("cancellation audit event ve
+        # terminal reason korunur"). ``cancel_requested_at`` set while the state is
+        # still PROVISIONING/RUNNING is a cancel in flight, awaiting the worker's
+        # next safe checkpoint; ``cancellation_reason`` is the preserved terminal
+        # reason and names the checkpoint that stopped the run. ``row_version`` is
+        # the OCC token a client echoes back as ``expected_row_version``.
+        "cancel_requested_at": _iso(run.cancel_requested_at),
+        "cancel_requested_by_principal_id": run.cancel_requested_by_principal_id,
+        "cancellation_reason": run.cancellation_reason,
+        "row_version": run.row_version,
         "job_id": run.job_id,
         "created_at": _iso(run.created_at),
         "started_at": _iso(run.started_at),
@@ -87,7 +95,7 @@ async def list_backtest_run_events(
     run = await bt_repo.get_run(session, run_id)
     if run is None:
         raise BacktestRunNotFoundError()
-    await _ensure_can_view_workspace(session, actor, run.workspace_entity_id)
+    await result_access.ensure_can_view_composition(session, actor, run.workspace_entity_id)
 
     cursor = max(0, last_sequence)
     bounded = max(1, min(limit, _MAX_EVENT_LIMIT))
@@ -126,7 +134,7 @@ async def get_backtest_result(
     result = await bt_repo.get_result(session, result_id)
     if result is None or result.deletion_state != _ACTIVE:
         raise BacktestResultNotFoundError()
-    await _ensure_can_view_workspace(session, actor, result.workspace_entity_id)
+    await result_access.ensure_can_view_composition(session, actor, result.workspace_entity_id)
 
     summary = await bt_repo.get_summary(session, result_id)
     metrics = await bt_repo.list_metric_values(session, result_id)
@@ -169,15 +177,6 @@ def _artifact_availability(counts: dict[str, Any]) -> dict[str, Any]:
 # --------------------------------------------------------------------------- #
 # Helpers                                                                     #
 # --------------------------------------------------------------------------- #
-
-
-async def _ensure_can_view_workspace(
-    session: AsyncSession, actor: Actor, workspace_entity_id: str
-) -> None:
-    workspace = await mb_repo.get_workspace(session, workspace_entity_id)
-    if workspace is None or workspace.deletion_state != DeletionState.ACTIVE:
-        raise CompositionNotFoundError()
-    ensure_can_view(actor, owner_principal_id=workspace.owner_principal_id, visibility="private")
 
 
 def _summary_projection(summary: Any) -> dict[str, Any] | None:

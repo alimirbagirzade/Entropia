@@ -87,6 +87,26 @@ Before stopping a working session, produce **ALL** of the following:
   (`commands/backtest_run.py::_readiness_blocked`), `details` yine tüm issue'ları taşır. Yeni
   hata sınıfı eklerken kategorisini bildir; zarf `docs/openapi.json` →
   `components.schemas.ErrorResponse` altında yayımlanır (drift guard onu korur).
+- **OCC dual-token = TEK kural, çelişki 409 (O-12).** 16 mutating op token'ı hem gövdeden
+  (`expected_*`) hem `If-Match`'ten kabul eder. Bunlar **tek değerin iki yazımıdır**, iki
+  bağımsız önkoşul değil (doc 15 §11, doc 20 §14 "Do not treat them as interchangeable
+  fields", doc 21 §7). Kural tek yerde: `shared/concurrency.py::reconcile_occ_tokens` —
+  **ikisi de verilmiş ve ÇELİŞİYORSA → 409 `OCC_TOKEN_CONFLICT`**
+  (`shared/errors.py::OccTokenConflictError`, `category=concurrency_or_preflight`,
+  **`retryable=false`** çünkü aynı çelişkiyi tekrar göndermek hep aynı hatayı verir;
+  `details` iki değeri de yankılar). Biri verilmişse o kazanır; anlaşıyorlarsa gövde geçer →
+  **tek-token çağıranlar (frontend dahil) etkilenmez**. Yeni dual-token uç eklerken kuralı
+  route'a KOPYALAMA, bu fonksiyondan geçir. `rationale.revise_family` bilerek dışarıda:
+  oradaki `If-Match` atıldı ve farklı eksendi (ETag=row_version, token=revision id) →
+  parametre kaldırıldı. Tam liste: `docs/CODEMAPS/BACKEND_ROUTES.md` §DUAL-TOKEN.
+- **Idempotency-Key = `run_idempotent`, yeni altyapı YOK (O-13).** Kalıcı satır yazan her
+  mutating op `Idempotency-Key` okumalı ve komut gövdesini
+  `application/idempotency.py::run_idempotent` ile sarmalı. **Fingerprint'e komutun KENDİSİNİN
+  değiştirdiği durumu koyma** (head pointer, row_version) — retry farklı hash'lenir ve sonsuza
+  dek 409 verir; girdileri hash'le (`op`, id'ler, payload, çağıranın gönderdiği `expected_*`).
+  ORM döndüren komutlarda `_op()` JSON `response_ref` döner, sonra satır o referanstan
+  **yeniden okunur** → replay aynı kaynağı, aynı tipte döner. Idempotency-Key okumayan 16 op
+  gerekçeli (salt-okuma POST, oturum işlemi, OCC korumalı soft-delete, geçici opener).
 - **Upload dosya-tipi kapısı = fail-closed (K-07).** TXT/CSV kaynak yüklemelerinde ortak kapı
   `domain/importing/source_file.py::assert_supported_source_file`: filename yok/boş → **RED**
   (asla "atla"), uzantı iddiası içerik sniff'i ile desteklenir. **Hata kodu sayfa taksonomisine
@@ -122,21 +142,23 @@ Before stopping a working session, produce **ALL** of the following:
 
 ## Current position (keep in sync at each closing)
 
-> Aşağıdaki değerler **2026-07-22** tarihinde repodan empirik doğrulandı. Yine de
-> **STALE-BY-DEFAULT** kabul et: §Session START adım 1'i çalıştırmadan bunlara güvenme.
+> Aşağıdaki değerler **2026-07-28** tarihinde repodan empirik doğrulandı (`origin/main` @
+> `eff8ffe`). Yine de **STALE-BY-DEFAULT** kabul et: §Session START adım 1'i çalıştırmadan
+> bunlara güvenme.
 
 - **Durum:** V1 ROADMAP COMPLETE (Stages 0–8, docs 01–22) + post-V1 + video-alignment +
   V18-R2 dalgası + **auth remediation dalgası COMPLETE** (güvenlik denetimi #346–#364).
   Tüm route yüzeyleri frontend'e bağlı; TIER 2 sayfa haritası 24/24.
 
-- **alembic head:** **`0035_portfolio_rules`** (35 migration, tek head — K-serisinde migration YOK).
-  **`ENGINE_VERSION` = `backtest-engine-v18-funding-step-order`** (K-03'te bump edildi; öncesi
-  K-04 `-full-pinning`, K-02 `-available-time-gate`).
-- **Son dalga — K-serisi kusur backlog'u + O-02:** K-01 (#386) · K-02 (#393) · **K-03 (#398, funding
-  bar başına = doc 15 §9.3 adım 2)** · K-04 (#397) · K-05 (#387) · K-06 (#395) · K-07 (#388) ·
-  **O-02 (#400, hata zarfı recovery sözleşmesi — main `5ba6c0c`, migration yok)**.
-- **Testler (lokal, O-02 dalı):** backend tam suite **exit 0, hiç F/E yok** (real-Postgres) ·
-  ruff + format + mypy (351 dosya) temiz · CI 6/6 yeşil. Frontend'e dokunulmadı.
+- **alembic head:** **`0038_backtest_run_event`** (38 migration, tek head).
+  **`ENGINE_VERSION` = `backtest-engine-v18-funding-step-order`** (`manifest.py:83`; K-03'te bump
+  edildi, öncesi K-04 `-full-pinning`, K-02 `-available-time-gate`).
+- **Son dalga — O-serisi (spec-uyum kusurları):** O-01 (#403) · O-02 (#400) · **O-03 (#407 + #413;
+  #408 boş merge oldu, içeriğini #413 yeniden indirdi)** · O-04 (#405) · O-05 (#412) · O-08 (#406)
+  · O-09 (#410) · O-10 (#402) · O-15 (#409) landed;
+  **#414 (O-12/O-13/O-18 — OCC + Idempotency disiplini) AÇIK.** Öncesi: K-serisi (#386–#398).
+- **Testler:** son yeşil referans CI 6/6 (O-serisi PR'ları). Lokal tam suite tek koşuda
+  tamamlanamayabilir (ortam kaynaklı) — **otorite CI'dır.**
   Doğrula: `gh run list --branch main --limit 1` → job log.
   **Ortam tuzağı:** paralel worktree oturumları paylaşılan `entropia_test` DB'sini ezer
   (conftest her testte `drop_all`/`create_all`) — `TEST_DATABASE_URL` ile izole DB kullan.
@@ -145,18 +167,11 @@ Before stopping a working session, produce **ALL** of the following:
 
 
 
-- **F-07 raw-id sweep — SUNUM katmanı kapandı (bu slice).** 31 dosyada 161 `*_id` render'ı tarandı;
-  P-11/P-12/P-16 gerçekten landed (traceability 10/13/16 gerekçeleri bayattı → düzeltildi), Portfolio'da
-  2 kalıntı presentation-only düzeltildi, **4 kalıntı açık** (backend display-DTO → `§4.4`). vitest
-  **608/608** (**`--no-file-parallelism` ZORUNLU**). Backend'e dokunulmadı: ENGINE_VERSION/migration yok.
-  **F-07 bütün olarak Complete DEĞİL.**
+- **F-07 raw-id sweep — SUNUM katmanı kapandı (PR #404).** 31 dosyada 161 `*_id` render'ı tarandı;
+  **4 kalıntı açık** (backend display-DTO → `v18_visual_traceability.md §4.4`) — yani **F-07 bütün
+  olarak Complete DEĞİL**. vitest **608/608** (**`--no-file-parallelism` ZORUNLU**).
 
-- **Next — PO imzası + R2 kapanışı.** Kalan tek blokaj
-  **product-owner imzası**: `docs/implementation/v18_final_acceptance.md` §4 (D-1…D-9 kararları —
-  görsel sapmalar, F-2…F-6 mini slice'ları, A11Y-01 palet kararı, 20.11 onayı). **İmza olmadan
-  `entropia_v18_remediation_status.md`'deki R2 RE-OPENING banner'ı kalkmaz, hiçbir satır Complete
-  olmaz** (GAP madde 17). İmza sonrası: banner kaldır → UI-01/02/03/04/05/06/12/14/15 evidence'lı
-  Complete → PO'nun istediği mini slice'lar açılır. Ayrıntı: `docs/STAGE2_HANDOFF.md` §Next.
+
 - **Açık iş (R2 kapsamı dışı, dürüst sınır):** ekran okuyucu (NVDA/VoiceOver) denetimi yapılmadı;
   10 sayfanın derin görsel kıyası eksik; a11y/visual katmanları CI'da koşmadı; A11Y-01 kontrast
   (228 serious node, tamamı canonical v18 paletinden) ve A11Y-02 kayıtlı sapma olarak açık.

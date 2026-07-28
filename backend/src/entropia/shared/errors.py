@@ -220,6 +220,34 @@ class IdempotencyConflictError(ConflictError):
     suggested_action = "use_a_new_idempotency_key"
 
 
+class OccTokenConflictError(ConflictError):
+    """Both OCC tokens were supplied for one mutation and they DISAGREE (O-12).
+
+    Every page spec says the same thing: the domain token (``expected_*``) is the
+    concurrency identity and HTTP ``If-Match``/ETag merely *transports* it — doc 15
+    §11 ("do not mix the expected concurrency values"), doc 20 §14 ("``If-Match``/ETag
+    only as transport support ... Do not treat them as interchangeable fields"), doc 21
+    §7 ("The HTTP ETag transports concurrency information; it is not the domain
+    revision identity"). Two spellings of one value must therefore agree.
+
+    When they do not, the caller has contradicted itself and neither token can be
+    trusted: silently preferring the body would apply a mutation under a version the
+    caller never sanctioned. This is a hard 409 — never a silent pick. A blind retry
+    of the identical request always fails again, so this is NOT retryable; the caller
+    must resend one consistent token.
+    """
+
+    code = "OCC_TOKEN_CONFLICT"
+    message = "If-Match and the request-body concurrency token disagree."
+    category = ErrorCategory.CONCURRENCY_OR_PREFLIGHT
+    retryable = False
+    suggested_action = "resend_with_a_single_occ_token"
+    remediation = (
+        "Send the expected version once — either in the request body or as If-Match. "
+        "If both are sent they must carry the same value; reload the resource and retry."
+    )
+
+
 class ApprovalRequiresAdmin(ForbiddenError):
     """Only the Admin role may approve a revision (Market Data §, CR-02)."""
 
@@ -1380,6 +1408,26 @@ class RunNotRetryableError(ConflictError):
     code = "RUN_NOT_RETRYABLE"
     message = "Only a failed or cancelled run can be retried."
     category = ErrorCategory.ACTIVE_JOB
+
+
+class RunNotCancellableError(ConflictError):
+    """Cancel was requested on an ALREADY-TERMINAL run (doc 15 §4, §8.4).
+
+    The exact mirror of ``RunNotRetryableError``: retry needs a terminal run,
+    cancel needs a non-terminal one. A succeeded run's immutable Result is never
+    withdrawn by a cancel, and a failed/cancelled run has nothing left to stop —
+    so this is ``lifecycle``, not ``active_job``, and never retryable: repeating
+    the request cannot change a terminal state.
+    """
+
+    code = "RUN_NOT_CANCELLABLE"
+    message = "Only a queued or in-progress run can be cancelled."
+    category = ErrorCategory.LIFECYCLE
+    suggested_action = "retry_run"
+    remediation = (
+        "This run already reached a terminal state. Start a new run with the retry "
+        "command if you need another attempt."
+    )
 
 
 # --------------------------------------------------------------------------- #

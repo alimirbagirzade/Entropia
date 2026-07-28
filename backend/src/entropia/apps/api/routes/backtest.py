@@ -6,7 +6,9 @@ RUN admission returns 202 (durable async job); the client never waits on the
 engine (doc 15 §8.2). The durable ``jobs`` row is written in the command tx; the
 actor is dispatched AFTER the handler returns (mirrors the other worker routes).
 ``expected_fingerprint`` (body or ``If-Match``) guards the RUN; a Result soft
-delete carries ``expected_row_version`` (body or numeric ``If-Match``).
+delete and a run cancel carry ``expected_row_version`` (body or numeric
+``If-Match``) — the run row's own OCC token, which is the form this repo already
+uses for every ``backtest_*`` row mutation.
 """
 
 from __future__ import annotations
@@ -20,7 +22,7 @@ from entropia.application.commands import backtest_run as backtest_cmd
 from entropia.application.queries import backtest_run as backtest_query
 from entropia.apps.api.deps import RequestContext, request_context
 from entropia.infrastructure.queues import enqueue as job_enqueue
-from entropia.shared.concurrency import row_version_from_if_match
+from entropia.shared.concurrency import reconcile_occ_tokens, row_version_from_if_match
 
 router = APIRouter(tags=["backtest"])
 
@@ -28,6 +30,7 @@ _RUNS_PATH = "/mainboard-compositions/{composition_id}/backtest-runs"
 _RUN_PATH = "/backtest-runs/{run_id}"
 _RUN_EVENTS_PATH = "/backtest-runs/{run_id}/events"
 _RETRY_PATH = "/backtest-runs/{run_id}/retries"
+_CANCEL_PATH = "/backtest-runs/{run_id}/cancel"
 _RESULT_PATH = "/backtest-results/{result_id}"
 _DEFAULT_EVENT_LIMIT = 200
 _MAX_EVENT_LIMIT = 500
@@ -42,15 +45,26 @@ class DeleteResultBody(BaseModel):
     expected_row_version: int | None = None
 
 
-def _resolve_fingerprint(body_value: str | None, if_match: str | None) -> str | None:
-    if body_value is not None:
-        return body_value
+class CancelRunBody(BaseModel):
+    expected_row_version: int | None = None
+
+
+def _header_fingerprint(if_match: str | None) -> str | None:
+    """Unwrap ``If-Match`` into the fingerprint spelling the body would carry."""
     if if_match is None:
         return None
     numeric = row_version_from_if_match(if_match)
     if numeric is not None:
         return str(numeric)
     return if_match.strip().strip('"')
+
+
+def _resolve_fingerprint(body_value: str | None, if_match: str | None) -> str | None:
+    # Dual-token rule (O-12): body and If-Match are two spellings of ONE value; a
+    # disagreement is 409 OCC_TOKEN_CONFLICT, never a silent pick (doc 15 §11).
+    return reconcile_occ_tokens(
+        body_value, _header_fingerprint(if_match), field="expected_fingerprint"
+    )
 
 
 @router.post(_RUNS_PATH, status_code=202)
@@ -115,6 +129,37 @@ async def retry_backtest_run(
     return result
 
 
+@router.post(_CANCEL_PATH, status_code=202)
+async def cancel_backtest_run(
+    run_id: str,
+    body: CancelRunBody | None = None,
+    ctx: RequestContext = Depends(request_context),
+    if_match: str | None = Header(default=None, alias="If-Match"),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+) -> dict[str, Any]:
+    """Cancel a queued/in-progress run (owner or Admin, doc 15 §8.4).
+
+    202 for both outcomes, because neither is a synchronous stop: a QUEUED run is
+    already terminal in the response (``cancellation: "cancelled"``), while a run
+    the worker owns returns ``cancellation: "requested"`` and is stopped at the
+    worker's next safe checkpoint. No handler ever waits on the worker."""
+    payload = body or CancelRunBody()
+    # Dual-token rule (O-12): body and If-Match are two spellings of ONE value; a
+    # disagreement is 409 OCC_TOKEN_CONFLICT, never a silent pick.
+    expected = reconcile_occ_tokens(
+        payload.expected_row_version,
+        row_version_from_if_match(if_match),
+        field="expected_row_version",
+    )
+    return await backtest_cmd.cancel_backtest_run(
+        ctx.session,
+        ctx.actor,
+        run_id=run_id,
+        expected_row_version=expected,
+        idempotency_key=idempotency_key,
+    )
+
+
 @router.get(_RESULT_PATH)
 async def get_backtest_result(
     result_id: str,
@@ -132,9 +177,13 @@ async def soft_delete_backtest_result(
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> dict[str, Any]:
     payload = body or DeleteResultBody()
-    expected = payload.expected_row_version
-    if expected is None and if_match is not None:
-        expected = row_version_from_if_match(if_match)
+    # Dual-token rule (O-12): body and If-Match are two spellings of ONE value; a
+    # disagreement is 409 OCC_TOKEN_CONFLICT, never a silent pick.
+    expected = reconcile_occ_tokens(
+        payload.expected_row_version,
+        row_version_from_if_match(if_match),
+        field="expected_row_version",
+    )
     return await backtest_cmd.soft_delete_backtest_result(
         ctx.session,
         ctx.actor,

@@ -178,6 +178,30 @@ def test_rc06_output_plus_condition_requires_condition_package() -> None:
     assert result.state == ReadinessState.NOT_READY
 
 
+def test_strategy_without_a_rationale_family_blocks_ready_check() -> None:
+    """RF-12: running Ready Check on a Strategy that never picked a Rationale Family
+    fails, so RUN stays locked.
+
+    doc 10 §14 RF-12. ``rationale_family_id`` is a REQUIRED StrategyConfig field, so a
+    family-less payload cannot parse and the item surfaces STRATEGY_CONFIG_INVALID —
+    a blocking issue, not a warning. The point of the test is the OUTCOME (NOT_READY),
+    not the parse mechanism: Ready Check must never hand RUN a family-less strategy.
+    """
+    payload = _strategy_payload()
+    del payload["rationale_family_id"]
+    result = evaluate_readiness(
+        [_strategy_item(payload=payload)], allocation_enabled=False, allocation_issues=[]
+    )
+    assert Code.STRATEGY_CONFIG_INVALID.value in _codes(result)
+    assert result.state == ReadinessState.NOT_READY
+    # HOLE (verified 2026-07-28, I-17): this blocks only a MISSING key. A payload with
+    # rationale_family_id="" parses and evaluates READY, because StrategyConfig declares
+    # the field as `str = Field(...)` with no min_length. A manipulated client can
+    # therefore reach RUN with no Family. Tracked in
+    # docs/audit/acceptance_id_traceability.md; fixing it needs a domain change
+    # (min_length=1) that is out of scope for this traceability slice.
+
+
 def test_strategy_without_exit_or_stop_blocks() -> None:
     payload = _strategy_payload(protection_stop_logic=None)
     result = evaluate_readiness(
@@ -209,6 +233,8 @@ def test_strategy_supported_sizing_does_not_block() -> None:
 
 
 def test_strategy_unsupported_execution_timing_blocks() -> None:
+    # AT-10 intrabar capability: an intrabar timing without modelled tick-compatible
+    # data is a Ready Check blocker — the engine never synthesizes a silent tick.
     # F-07a: an unsupported entry execution timing (intrabar_touch, not modelled over
     # OHLCV) must BLOCK RUN — the engine fails closed and would open no position.
     payload = _strategy_payload()

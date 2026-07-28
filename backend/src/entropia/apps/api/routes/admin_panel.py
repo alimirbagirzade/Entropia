@@ -21,6 +21,7 @@ from entropia.apps.api.deps import RequestContext, request_context
 from entropia.config import get_settings
 from entropia.domain.identity.policy import require_admin_panel
 from entropia.domain.lifecycle.enums import Role
+from entropia.shared.concurrency import reconcile_occ_tokens
 from entropia.shared.errors import ValidationError
 
 router = APIRouter(tags=["admin-panel"])
@@ -89,9 +90,15 @@ async def assign_role(
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> dict[str, Any]:
     require_admin_panel(ctx.actor)
-    if_match_version = _parse_if_match(if_match)
-    if if_match_version is not None and if_match_version != body.expected_head_revision_id:
-        raise ValidationError("If-Match must equal expected_head_revision_id.")
+    # Dual-token rule (O-12). This route already required the two tokens to agree,
+    # but reported a disagreement as a 422 VALIDATION_ERROR — a different shape from
+    # every other dual-token endpoint. It now raises the canonical 409
+    # OCC_TOKEN_CONFLICT through the shared reconciler, so one rule covers them all.
+    reconcile_occ_tokens(
+        body.expected_head_revision_id,
+        _parse_if_match(if_match),
+        field="expected_head_revision_id",
+    )
     return await role_assignment_cmd.assign_user_role(
         ctx.session,
         ctx.actor,
@@ -198,6 +205,7 @@ async def get_log(event_id: str, ctx: RequestContext = Depends(request_context))
 async def redeliver_data_queue(
     ctx: RequestContext = Depends(request_context),
     grace_seconds: int | None = Query(default=None, ge=0),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> dict[str, Any]:
     """Operator recovery (INF-03, doc 20 §6): re-dispatch durable ``data``-queue
     jobs still QUEUED past the redeliver grace window. The multi-actor ``data``
@@ -208,7 +216,7 @@ async def redeliver_data_queue(
     require_admin_panel(ctx.actor)
     window = get_settings().job_redeliver_grace_seconds if grace_seconds is None else grace_seconds
     result = await data_queue_cmd.redeliver_data_queue_jobs(
-        ctx.session, ctx.actor, grace_seconds=window
+        ctx.session, ctx.actor, grace_seconds=window, idempotency_key=idempotency_key
     )
     _dispatch_data_jobs(result["redeliverable"])
     return result

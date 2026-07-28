@@ -1,4 +1,4 @@
-"""Backtest RUN admission + retry + result soft-delete (Stage 5a, doc 15 §7-§9, §15).
+"""Backtest RUN admission + cancel + retry + result soft-delete (doc 15 §7-§9, §15).
 
 RUN is NOT a browser 'calculate' button (doc 15 §1, §15): the endpoint re-runs the
 MANDATORY server-side preflight from the CURRENT persisted composition — the client
@@ -20,7 +20,10 @@ One transaction (supplied by the request dependency, never committed here):
     }
 
 Only a succeeded worker run materializes a Result (CR-03); the worker lives in
-``application/jobs/backtest_engine``. Retry never resets the original run — it
+``application/jobs/backtest_engine``. Cancel (O-06, doc 15 §8.4) is controlled, never
+a kill: a QUEUED run is terminated here under a row lock, while a run the worker
+already owns only gets a recorded INTENT that the worker honors at one of its O-05
+stage boundaries. Retry never resets the original run — it
 re-admits the CURRENT composition with a new run_id + manifest + ``retry_of_run_id``
 (doc 15 §7, §8.4). Result soft-delete flips a local flag under owner/Admin policy +
 ``expected_row_version`` (409 on stale); Admin Trash restore/purge is Stage 6.
@@ -43,14 +46,12 @@ from entropia.application.commands.readiness_check import (
 )
 from entropia.application.durable_audit import AuditSessionFactory, record_durable_audit
 from entropia.application.idempotency import run_idempotent
-from entropia.domain.backtest.enums import RUN_RETRYABLE_STATES, BacktestRunState
-from entropia.domain.backtest.execution.fills import (
-    tick_data_required,
+
 )
 from entropia.domain.backtest.manifest import build_run_manifest
 from entropia.domain.identity import Actor
 from entropia.domain.identity.policy import ensure_can_edit, ensure_can_view, require_authenticated
-from entropia.domain.lifecycle.enums import DeletionState
+from entropia.domain.lifecycle.enums import JOB_TERMINAL_STATES, DeletionState, JobStatus
 from entropia.domain.mainboard.enums import MainboardItemKind
 from entropia.domain.readiness.enums import (
     ReadinessIssueCode,
@@ -59,7 +60,7 @@ from entropia.domain.readiness.enums import (
 )
 from entropia.domain.strategy.config import StrategyConfig
 from entropia.domain.trash.page import original_location_for
-from entropia.infrastructure.postgres.models import MainboardCompositionSnapshot
+from entropia.infrastructure.postgres.models import Job, MainboardCompositionSnapshot
 from entropia.infrastructure.postgres.repositories import audit as audit_repo
 from entropia.infrastructure.postgres.repositories import backtest as bt_repo
 from entropia.infrastructure.postgres.repositories import mainboard as mb_repo
@@ -76,6 +77,7 @@ from entropia.shared.errors import (
     ReadinessBlockedError,
     ReadyReportStaleError,
     RowVersionConflictError,
+    RunNotCancellableError,
     RunNotRetryableError,
 )
 from entropia.shared.ids import new_id
@@ -88,6 +90,11 @@ _ACTIVE = "active"
 _SOFT_DELETED = "soft_deleted"
 _ADMISSION_REJECTED_EVENT = "backtest.run_admission_rejected"
 _ADMISSION_ACCEPTED_EVENT = "backtest.run_admission_accepted"
+_CANCEL_REQUESTED_EVENT = "backtest.run_cancellation_requested"
+_CANCELLED_EVENT = "backtest.run_cancelled"
+# Doc 15 §12: an authorized cancel runs under the durable queue/lifecycle and
+# safe-checkpoint rules — the same delivery contract Analysis Lab's stop_run publishes.
+_CANCEL_DELIVERY_POLICY = "cancellation_safe_boundary"
 _ISSUE_SUMMARY_LIMIT = 10
 
 
@@ -209,6 +216,210 @@ async def retry_backtest_run(
         actor_principal_id=actor.principal_id,
         request_payload={"op": "retry_backtest_run", "run_id": run_id},
         operation=_op,
+    )
+
+
+async def cancel_backtest_run(
+    session: AsyncSession,
+    actor: Actor,
+    *,
+    run_id: str,
+    expected_row_version: int | None = None,
+    idempotency_key: str | None = None,
+    audit_session_factory: AuditSessionFactory | None = None,
+) -> dict[str, Any]:
+    """Cancel a non-terminal run under owner/Admin policy (doc 15 §8.4, §16).
+
+    Controlled cancellation, never a kill. Two paths, decided under a row lock:
+
+    * **QUEUED** — no worker owns the run yet, so the cancel IS the terminal
+      transition: ``cancelled`` + ``RUN_CANCELLED`` event + audit, written here.
+      The worker's at-least-once terminal guard turns a later delivery of the
+      same message into a no-op, so the engine never starts.
+    * **PROVISIONING / RUNNING** — the worker owns the run and is mid-flight.
+      Only the INTENT is recorded (``cancel_requested_at``); the worker observes
+      it at its next O-05 stage boundary and writes the terminal state itself.
+      Delivery is therefore ``cancellation_safe_boundary`` (the same policy
+      ``agent_control.stop_run`` publishes): a run that reaches its final
+      checkpoint before the request lands completes normally, and the response
+      says ``requested``, never ``cancelled``.
+
+    The lock is what makes the split honest: the worker takes the SAME row lock
+    before it moves QUEUED -> PROVISIONING, so this either wins the race outright
+    or blocks and then observes the stage the worker actually reached — it can
+    never terminate a run out from under a worker that is already replaying.
+
+    NO Backtest Result is ever materialized for a cancelled run (CR-03, doc 15
+    §16), so a cancelled run also never reaches Results History.
+    """
+    require_authenticated(actor)
+    run = await bt_repo.get_run(session, run_id)
+    if run is None:
+        raise BacktestRunNotFoundError()
+    await _load_workspace(
+        session,
+        actor,
+        run.workspace_entity_id,
+        operation="cancel_backtest_run",
+        audit_session_factory=audit_session_factory,
+    )
+    # Cancelling mutates someone's run, so it needs edit rights on the RUN itself
+    # (its requester), not merely view rights on the composition — owner or Admin,
+    # exactly like the Result soft delete below.
+    ensure_can_edit(actor, owner_principal_id=run.requested_by_principal_id)
+
+    async def _op() -> dict[str, Any]:
+        await session.refresh(run, with_for_update=True)
+        if run.state in RUN_TERMINAL_STATES:
+            raise RunNotCancellableError()
+        if expected_row_version is not None and expected_row_version != run.row_version:
+            raise RowVersionConflictError()
+        run.cancel_requested_at = datetime.now(UTC)
+        run.cancel_requested_by_principal_id = actor.principal_id
+        run.row_version += 1
+        if run.state == BacktestRunState.QUEUED:
+            return await _cancel_queued_run(session, actor, run=run)
+        return _request_worker_cancellation(session, actor, run=run)
+
+    return await run_idempotent(
+        session,
+        key=idempotency_key,
+        actor_principal_id=actor.principal_id,
+        request_payload={
+            "op": "cancel_backtest_run",
+            "run_id": run_id,
+            "expected_row_version": expected_row_version,
+        },
+        operation=_op,
+    )
+
+
+async def _cancel_queued_run(session: AsyncSession, actor: Actor, *, run: Any) -> dict[str, Any]:
+    """Terminal-cancel a run the worker has not started (still QUEUED).
+
+    Writes the same terminal shape the worker writes at a stage boundary — state,
+    ``cancellation_reason``, the ``RUN_CANCELLED`` stream event and the audit — so
+    a consumer cannot tell the two paths apart except by the reason text. The
+    durable job row is finalized too: nothing will ever execute it, and leaving it
+    non-terminal would strand it in the queue projection forever.
+    """
+    reason = "Cancelled by an authorized actor before the worker started (queued)."
+    run.state = BacktestRunState.CANCELLED
+    run.cancellation_reason = reason
+    run.finished_at = datetime.now(UTC)
+    await bt_repo.record_run_event(
+        session,
+        run_id=run.run_id,
+        event_type=RunEventType.RUN_CANCELLED,
+        previous_state=BacktestRunState.QUEUED,
+        state=BacktestRunState.CANCELLED,
+        correlation_id=actor.correlation_id,
+        detail={
+            "cancellation_reason": reason,
+            "cancelled_at_stage": BacktestRunState.QUEUED.value,
+            "requested_by_principal_id": actor.principal_id,
+            "result_id": None,
+        },
+    )
+    if run.job_id is not None:
+        job = await session.get(Job, run.job_id)
+        if job is not None and job.status not in JOB_TERMINAL_STATES:
+            job.status = JobStatus.CANCELLED
+            job.finished_at = datetime.now(UTC)
+            job.result_ref = {
+                "run_id": run.run_id,
+                "state": BacktestRunState.CANCELLED.value,
+                "result_id": None,
+            }
+    _emit_cancellation_audit(
+        session,
+        actor,
+        run=run,
+        event_kind=_CANCELLED_EVENT,
+        new_state=BacktestRunState.CANCELLED.value,
+        metadata={
+            "cancellation_reason": reason,
+            "cancelled_at_stage": BacktestRunState.QUEUED.value,
+        },
+    )
+    return {
+        "run_id": run.run_id,
+        "state": BacktestRunState.CANCELLED.value,
+        "cancellation": "cancelled",
+        "cancellation_reason": reason,
+        "result_id": None,
+        "row_version": run.row_version,
+    }
+
+
+def _request_worker_cancellation(
+    session: AsyncSession, actor: Actor, *, run: Any
+) -> dict[str, Any]:
+    """Record a cancel INTENT for a run the worker is actively executing.
+
+    No state transition happens here on purpose: writing ``cancelled`` while the
+    worker replays would be exactly the abrupt kill doc 15 §8.4/§12 forbids — the
+    worker would keep going and could still materialize a Result. The worker
+    honors this flag at its next safe checkpoint and owns the terminal write
+    (including the durable job row)."""
+    _emit_cancellation_audit(
+        session,
+        actor,
+        run=run,
+        event_kind=_CANCEL_REQUESTED_EVENT,
+        new_state=str(run.state),
+        metadata={
+            "requested_at_stage": str(run.state),
+            "delivery_policy": _CANCEL_DELIVERY_POLICY,
+        },
+    )
+    return {
+        "run_id": run.run_id,
+        "state": str(run.state),
+        "cancellation": "requested",
+        "delivery_policy": _CANCEL_DELIVERY_POLICY,
+        "result_id": None,
+        "row_version": run.row_version,
+    }
+
+
+def _emit_cancellation_audit(
+    session: AsyncSession,
+    actor: Actor,
+    *,
+    run: Any,
+    event_kind: str,
+    new_state: str,
+    metadata: dict[str, Any],
+) -> None:
+    """The doc 15 §16 cancellation audit event + its SSE outbox twin.
+
+    Attributed to the ACTOR (a human asked for this), unlike the worker's stage
+    audits which are attributed to the system service."""
+    payload = {
+        "run_id": run.run_id,
+        "manifest_hash": run.manifest_hash,
+        "requested_by_principal_id": run.cancel_requested_by_principal_id,
+        **metadata,
+    }
+    audit_repo.add_audit_event(
+        session,
+        event_kind=event_kind,
+        actor_principal_id=actor.principal_id,
+        actor_kind=actor.actor_kind,
+        target_entity_id=run.run_id,
+        target_entity_type=_RUN_TARGET,
+        new_state=new_state,
+        correlation_id=actor.correlation_id,
+        metadata=payload,
+    )
+    audit_repo.add_outbox_event(
+        session,
+        event_type=event_kind,
+        resource_type=_RUN_TARGET,
+        resource_id=run.run_id,
+        payload={"state": new_state, **payload},
+        correlation_id=actor.correlation_id,
     )
 
 
@@ -739,6 +950,7 @@ def _emit_delete_audit(session: AsyncSession, actor: Actor, *, result_id: str) -
 
 
 __all__ = [
+    "cancel_backtest_run",
     "request_backtest_run",
     "retry_backtest_run",
     "soft_delete_backtest_result",

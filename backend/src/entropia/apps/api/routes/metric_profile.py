@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field
 from entropia.application.commands import metric_profile as metric_profile_cmd
 from entropia.application.queries import metric_profile as metric_profile_query
 from entropia.apps.api.deps import RequestContext, request_context
+from entropia.shared.concurrency import reconcile_occ_tokens
 
 router = APIRouter(tags=["arrange-metrics"])
 
@@ -60,9 +61,12 @@ async def create_metric_profile_revision(
     if_match: str | None = Header(default=None, alias="If-Match"),
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> dict[str, Any]:
-    expected = body.expected_profile_revision_id
-    if expected is None and if_match is not None:
-        expected = if_match.strip().strip('"')
+    # Dual-token rule (O-12): body and If-Match are two spellings of ONE value; a
+    # disagreement is 409 OCC_TOKEN_CONFLICT, never a silent pick.
+    header_value = None if if_match is None else (if_match.strip().strip('"') or None)
+    expected = reconcile_occ_tokens(
+        body.expected_profile_revision_id, header_value, field="expected_profile_revision_id"
+    )
     return await metric_profile_cmd.create_metric_profile_revision(
         ctx.session,
         ctx.actor,

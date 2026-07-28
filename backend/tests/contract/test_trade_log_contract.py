@@ -6,6 +6,11 @@ price-context conflict both surface their typed 422 before ``_require_ready_impo
 touches the session. DB-touching flows live in
 tests/integration/test_trade_log_persistence.py. DI-override style mirrors
 test_trading_signal_contract.py.
+
+Acceptance (doc 05 §16): TL-03 (identity requiredness — a blank provider is a
+structured 422 field issue and no Ready revision or item pin is created), TL-10
+(the PRICE_CONTEXT_CONFLICT cross-field rule) and TL-17 (authorization — the
+endpoint denies a Guest regardless of UI button visibility).
 """
 
 from __future__ import annotations

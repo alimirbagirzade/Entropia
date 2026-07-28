@@ -88,6 +88,20 @@ class BacktestRun(Base):
     correlation_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
     failure_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
     failure_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # O-06 controlled cancellation (doc 15 §8.4, §12, §16). The cancel INTENT is
+    # recorded here rather than as a state, because doc 15 §4 fixes the run state
+    # set (queued/provisioning/running/succeeded/failed/cancelled) and a pending
+    # request is not one of them. The worker reads ``cancel_requested_at`` at its
+    # O-05 stage boundaries and only THEN writes terminal ``cancelled``.
+    # ``cancellation_reason`` is the §16 "terminal reason", preserved forever —
+    # the cancel twin of ``failure_message``.
+    cancel_requested_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    cancel_requested_by_principal_id: Mapped[str | None] = mapped_column(
+        String(40), ForeignKey(_PRINCIPAL_FK), nullable=True
+    )
+    cancellation_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     result_id: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
     row_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     created_at: Mapped[datetime] = mapped_column(

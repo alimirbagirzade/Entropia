@@ -164,6 +164,7 @@ async def deprecate_package(
     *,
     entity_id: str,
     note: str | None = None,
+    idempotency_key: str | None = None,
 ) -> dict[str, Any]:
     """Owner-or-Admin: flip an ACTIVE package root ``active -> deprecated`` (doc 08
     §7 "Deprecate").
@@ -182,19 +183,29 @@ async def deprecate_package(
         raise LifecycleBlocked()
 
     previous = root.lifecycle_state
-    root.lifecycle_state = _DEPRECATED
-    _audit_and_outbox(
+
+    async def _op() -> dict[str, Any]:
+        root.lifecycle_state = _DEPRECATED
+        _audit_and_outbox(
+            session,
+            actor,
+            event_kind="package.deprecated",
+            entity_id=entity_id,
+            revision_id=root.current_revision_id,
+            previous_state=previous,
+            new_state=_DEPRECATED,
+            action="deprecated",
+            reason=note,
+        )
+        return {"entity_id": entity_id, "lifecycle_state": root.lifecycle_state}
+
+    return await run_idempotent(
         session,
-        actor,
-        event_kind="package.deprecated",
-        entity_id=entity_id,
-        revision_id=root.current_revision_id,
-        previous_state=previous,
-        new_state=_DEPRECATED,
-        action="deprecated",
-        reason=note,
+        key=idempotency_key,
+        actor_principal_id=actor.principal_id,
+        request_payload={"op": "deprecate_package", "entity_id": entity_id},
+        operation=_op,
     )
-    return {"entity_id": entity_id, "lifecycle_state": root.lifecycle_state}
 
 
 async def soft_delete_package(

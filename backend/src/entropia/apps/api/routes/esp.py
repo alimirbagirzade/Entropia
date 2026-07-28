@@ -80,6 +80,7 @@ class ResolveRequest(BaseModel):
 async def create_esp(
     body: CreateEspRequest,
     ctx: RequestContext = Depends(request_context),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> dict[str, Any]:
     return await esp_cmd.create_esp_package(
         ctx.session,
@@ -96,6 +97,7 @@ async def create_esp(
         evidence=body.evidence,
         visibility_scope=body.visibility_scope,
         change_note=body.change_note,
+        idempotency_key=idempotency_key,
     )
 
 

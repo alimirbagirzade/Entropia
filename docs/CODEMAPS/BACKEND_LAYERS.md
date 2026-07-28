@@ -73,8 +73,9 @@ request bağımlılığından gelen **TEK transaction**, burada **asla commit yo
 | `rationale.py` | Rationale registry + atama tablosu (Guest → 401) | `rationale_family_*`, `package_rationale_assignment` |
 | `readiness_check.py` | Ready raporu; **güncellik saklanmaz** — fingerprint karşılaştırmasıyla hesaplanır | `ready_check_report`, `readiness_issue` |
 | `research_data.py` | Research Data listesi/detayı (sayfa erişimi Admin/Supervisor/Agent) | `research_dataset_revision` |
+| `result_access.py` | **Result görünürlüğünün TEK yeri (O-14):** composition (workspace) sahibi + `resource_share` grant'leri + Analysis Lab (Agent research) kapsamı. `visible_composition_stmt` = list SQL yüklemi, `ensure_can_view_composition` = detail/compare/metrics/artifacts yeniden-kontrolü | `entity_registry`, `mainboard_workspace`, `resource_share` |
 | `result_artifacts.py` | Ağır result artifact drill-down (equity/ledger/signals/diagnostics), keyset | `result_equity_point`, `trade_ledger_row`, `signal_event`, `diagnostic_artifact` |
-| `results_history.py` | Results History indeksi (değişmez `backtest_result` üzerinde; V18 dizisi değil) | `backtest_result`, `result_summary` |
+| `results_history.py` | Results History indeksi (değişmez `backtest_result` üzerinde; V18 dizisi değil). Görünürlük `result_access.py`'a delege — kendi + explicitly shared + (Admin/Supervisor için) Agent research kapsamı; filtre SQL'de, cursor yetkili kümeyi sayar | `backtest_result`, `result_summary` |
 | `sharing.py` | Bir paketin ACTIVE grantee'leri + OCC için `row_version` | `resource_share` |
 | `strategy.py` | Strategy okuma (Guest → 401, yabancı private strateji → 403) | `strategy_root`, `strategy_revision`, `strategy_editor_draft` |
 | `trade_log.py` | Import raporu + trade log okuma | `work_object_*`, `canonical_trade_record_batch` |
@@ -108,7 +109,7 @@ request bağımlılığından gelen **TEK transaction**, burada **asla commit yo
 | `admin_panel` | `log_taxonomy`, `role_matrix` | Log olay taksonomisi + kanonik rol-scope matrisi (doc 19) |
 | `agent_lab` | `cursor`, `enums`, `state_machine`, `tool_gateway` | Analysis Lab durum makinesi + gateway sözleşmesi |
 | `allocation` | `config`, `enums`, `rules` | Run-scoped paylaşımlı sermaye havuzu tipleri + semantik kurallar |
-| `backtest` | `engine`, `capabilities`, `indicators`, `manifest`, `metrics`, `artifacts`, `export`, `funding`, `history`, `enums` | Bar-replay engine, artımlı TA compute, değişmez Run Manifest, kanonik metrikler. **`capabilities`** = makine-okur capability matrix (F-05): her opsiyon DEĞERİ `active_v1`/`future_dev` + bağımlılık notu; engine (fail-closed gate), Ready Check (`STRATEGY_CAPABILITY_NOT_IN_BUILD`) ve UI (üretilen `frontend/src/lib/engineCapabilityMatrix.generated.ts` aynası) tek kaynak olarak bunu tüketir |
+| `backtest` | `engine`, `capabilities`, `indicators`, `manifest`, `metrics`, `artifacts`, `export`, `funding`, `history`, `result_visibility`, `enums` | Bar-replay engine, artımlı TA compute, değişmez Run Manifest, kanonik metrikler. **`capabilities`** = makine-okur capability matrix (F-05): her opsiyon DEĞERİ `active_v1`/`future_dev` + bağımlılık notu; engine (fail-closed gate), Ready Check (`STRATEGY_CAPABILITY_NOT_IN_BUILD`) ve UI (üretilen `frontend/src/lib/engineCapabilityMatrix.generated.ts` aynası) tek kaynak olarak bunu tüketir |
 | `capability` | `baseline`, `enums`, `lifecycle` | Future Dev capability registry durum makinesi + activation gate'leri |
 | `create_package` | `candidate`, `generator`, `source_scan`, `language_detect`, `validation`, `state_machine`, `policy`, `baseline`, `value_objects`, `enums` | CP + Pre-Check; deterministik candidate manifest (`GENERATOR_VERSION`). **Pre-Check fail-closed (K-05):** `source_scan` (`SOURCE_SCANNER_VERSION=source-lexer-2.0`) tanınmayan-token oranı + kapanmamış string/blok yorum sayar → `PARSE_UNSUPPORTED`; `language_detect` (`LANGUAGE_DETECTOR_VERSION`) içerik dil sinyali → seçimle çelişki `SOURCE_LANGUAGE_MISMATCH`, rakip kanıt `REQUIRES_CLARIFICATION`. Üçü de FAILED scan + `precheck_failed`, asla PASSED |
 | `deletion` | `state_machine` | Soft-delete/restore/purge geçiş kuralları |
@@ -126,7 +127,7 @@ request bağımlılığından gelen **TEK transaction**, burada **asla commit yo
 | `readiness` | `validators`, `issues`, `enums` | Saf, deterministik readiness doğrulayıcıları |
 | `research_data` | `time_policy`, `usage_scope`, `quality_rules`, `state_machine`, `policy`, `value_objects`, `enums` | Research Data domain yüzeyi |
 | `revision` | `hashing`, `head` | Root/revision omurgası: içerik hash + head ilerletme |
-| `sharing` | `policy`, `enums` | Açık kaynak paylaşımı |
+| `sharing` | `policy`, `enums` | Açık kaynak paylaşımı. `ShareResourceType` değeri = paylaşılan kökün `entity_type`'ı: `package` (yönetilen grant yüzeyi) + `mainboard_workspace` (O-14 — Results History'nin okuduğu composition kapsamı; grant yazan komut yüzeyi V1'de yok) |
 | `strategy` | `compiler`, `config`, `enums` | Strategy config tipleri + derleyici (blocking issue üretir) |
 | `trade_log` | `compiler`, `config`, `records`, `enums` | Trade Log external work object (CR-01/TL-01) |
 | `trading_signal` | `compiler`, `config`, `events`, `enums` | Trading Signal external work object |

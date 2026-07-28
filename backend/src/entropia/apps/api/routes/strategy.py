@@ -19,7 +19,7 @@ from pydantic import BaseModel
 from entropia.application.commands import strategy_draft as strat_cmd
 from entropia.application.queries import strategy as strat_query
 from entropia.apps.api.deps import RequestContext, request_context
-from entropia.shared.concurrency import row_version_from_if_match
+from entropia.shared.concurrency import reconcile_occ_tokens, row_version_from_if_match
 from entropia.shared.errors import ValidationError
 
 router = APIRouter(tags=["strategy"])
@@ -55,7 +55,13 @@ class ClearStrategyDraftBody(BaseModel):
 
 
 def _resolve_expected_version(explicit: int | None, if_match: str | None) -> int:
-    expected = explicit if explicit is not None else row_version_from_if_match(if_match)
+    # Dual-token rule (O-12): body and If-Match are two spellings of ONE value; a
+    # disagreement is 409 OCC_TOKEN_CONFLICT, never a silent pick.
+    expected = reconcile_occ_tokens(
+        explicit,
+        row_version_from_if_match(if_match),
+        field="expected_draft_row_version",
+    )
     if expected is None:
         raise ValidationError(
             "expected_draft_row_version (body) or If-Match header is required.",

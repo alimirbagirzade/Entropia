@@ -9,6 +9,13 @@ summary + 9 metrics + artifacts (L1 FK proof: children persist under the result)
 duplicate RUN; retry FAILED -> new run_id + retry_of + new manifest_hash; worker
 FAILED on an unresolved pin (no 'latest' fallback, no Result); result soft delete;
 foreign-owner 403; guest 401; and the OBJECT_IN_ACTIVE_RUN soft-delete guard.
+
+Acceptance — the delete-preflight and run/result boundary rows of four pages:
+TS-17 / TL-19 / AOS-17 (deleting a work object referenced by a QUEUED or RUNNING
+run is blocked and writes no Trash entry) -> test_active_run_blocks_work_object_delete;
+TS-21 / TL-23 / AOS-21 (only a SUCCEEDED asynchronous run may create an immutable
+Result — a failed or fails-closed run creates none) -> the worker fails-closed
+cases plus test_admission_queues_run_and_worker_materializes_result.
 """
 
 from __future__ import annotations

@@ -1,11 +1,25 @@
 # DATA_MODEL — Postgres tabloları
 
-Modeller: `backend/src/entropia/infrastructure/postgres/models/*.py` (30 dosya, **63 tablo**).
+Modeller: `backend/src/entropia/infrastructure/postgres/models/*.py` (30 dosya, **102 tablo**).
 Alembic: `backend/alembic/versions/` — **head = `0038_backtest_run_event`** (38 migration).
 
-## Kritik yapısal gerçek — DB-seviyesi FK neredeyse yok
+> **Sayı tazeleme (2026-07-28, ampirik).** Tablo sayısı uzun süre **63** yazıyordu — gerçek
+> **102**. Yeniden üretmek için:
+> `grep -rh __tablename__ backend/src/entropia/infrastructure/postgres/models/ | sed 's/.*= *//' | tr -d '"' | sort -u | wc -l`
+> Aşağıdaki bölümler 102 tablonun **tamamını** adlandırır. Sayı bir slice'ta değişirse bu satırı
+> da güncelle — bu dosya türetilmiş bir haritadır, otomatik tazelenmez.
 
-Tüm repoda yalnızca **8 açık `ForeignKey(...)` bildirimi** var:
+## Kritik yapısal gerçek — FK var, ama insert sırası yine de türetilemiyor
+
+> **DÜZELTME (2026-07-28, ampirik).** Bu bölüm önceden "tüm repoda yalnızca **8** açık
+> `ForeignKey(...)` bildirimi var" diyordu — ve hemen altında 9 satır listeliyordu, yani kendi
+> içinde de tutarsızdı. Gerçek: **134 `ForeignKey(...)` kolon bildirimi, 25 model dosyasında.**
+> Doğrula: `grep -rh "ForeignKey(" backend/src/entropia/infrastructure/postgres/models/ | wc -l`
+> Yoğunluk: `manual.py` 11 · `research_data.py` 11 · `agent_lab.py` 11 · `create_package.py` 10 ·
+> `market_data.py` 10 · `strategy.py` 9 · `backtest.py` 9 · `capability.py` 9 · `mainboard.py` 8.
+
+Kimlik/registry omurgasındaki **çekirdek** FK'ler (bu tablo tam liste DEĞİLDİR — yukarıdaki
+grep otoritedir):
 
 | Tablo | FK |
 |---|---|
@@ -19,9 +33,12 @@ Tüm repoda yalnızca **8 açık `ForeignKey(...)` bildirimi** var:
 | `market_validation_issue` | → `market_validation_run.run_id` |
 | `research_validation_issue` | → `research_validation_run.run_id` |
 
-Diğer tüm `*_id` kolonları **mantıksal bağdır** (ULID string, DB constraint yok).
-Sonuç: insert sırası SQLAlchemy tarafından FK'den türetilemez — bu yüzden identity seed'inde
+**Konvansiyon neden hâlâ geçerli:** FK'li kolonların yanında çok sayıda `*_id` kolonu **hâlâ
+mantıksal bağdır** (ULID string, DB constraint yok) — özellikle cross-aggregate referanslar.
+Bu yüzden insert sırası SQLAlchemy tarafından şemadan bütünüyle türetilemez ve identity seed'inde
 her FK-bağımlı child'dan önce `Principal` flush edilmek zorundadır (`apps/seed.py::seed_identities`).
+CLAUDE.md'deki **"her yeni `create_*` için L1 FK insert-order proof"** kuralının gerekçesi budur;
+**kural değişmedi** — yalnız "FK neredeyse yok" gerekçesi yanlıştı.
 
 ## OCC ve soft-delete konvansiyonu
 
@@ -125,7 +142,8 @@ her FK-bağımlı child'dan önce `Principal` flush edilmek zorundadır (`apps/s
 | `embedded_resolver_registry` | ESP resolver registry (`registry_version` = OCC kaynağı) | `package_entity_id`, `trusted_active_revision_id`, `replacement_revision_id` | — | ✔ (`registry_version`) |
 | `embedded_resolver_contract` | Resolver imza sözleşmesi | `entity_id`, `revision_id` | — | — |
 | `embedded_resolver_validation_run` | Resolver doğrulama koşusu | `entity_id`, `revision_id` | — | — |
-| `rationale_family_root` / `_revision` | Rationale ailesi kökü + revizyonları | `entity_id`, `parent_revision_id` | (registry'de) | (registry'de) |
+| `rationale_family_root` | Rationale ailesi kökü (`display_color` burada) | `entity_id` | (registry'de) | (registry'de) |
+| `rationale_family_revision` | Ailenin değişmez revizyon snapshot'ı (asla UPDATE edilmez; `uq_rationale_family_revision_no`) | `entity_id`, `parent_revision_id`, `revision_no` | — | — |
 | `package_rationale_assignment` | Paket ↔ aile ataması | `target_root_id`, `rationale_family_id`, `..._revision_id` | — | — |
 | `instrument_registry` / `instrument_alias` | Kanonik enstrüman + takma adları | `venue_id`, `instrument_id` | — | ✔ (`registry_version`)? |
 | `resource_share` | Açık paket paylaşımı | `resource_id`, `grantee_principal_id`, `revoked_by_principal_id` | (revoke) | — |
@@ -134,7 +152,7 @@ her FK-bağımlı child'dan önce `Principal` flush edilmek zorundadır (`apps/s
 
 | Tablo | Amacı | Ana bağlar | soft-del | OCC |
 |---|---|---|---|---|
-| `backtest_run` | RUN admission satırı | `composition_snapshot_id`, `manifest_id`, `ready_report_id`, `retry_of_run_id`, `job_id`, `result_id` | — | ✔ |
+| `backtest_run` | RUN admission satırı. **O-06:** `cancel_requested_at` / `cancel_requested_by_principal_id` (FK → `principals`) cancel **niyetini**, `cancellation_reason` doc 15 §16 terminal gerekçesini taşır — cancel bir state DEĞİL, state kümesi doc 15 §4'te sabittir | `composition_snapshot_id`, `manifest_id`, `ready_report_id`, `retry_of_run_id`, `job_id`, `result_id`, `cancel_requested_by_principal_id` | — | ✔ |
 | `backtest_run_event` | **O-05** — kalıcı, run başına monoton `sequence_no` taşıyan stage olayları (`RUN_STARTED` / `RUN_STAGE_CHANGED` / terminal). Worker her stage'i ayrı commit eder → PROVISIONING/RUNNING dışarıdan görünür | `run_id` (FK → `backtest_run`, CASCADE), `UNIQUE(run_id, sequence_no)` | — | — |
 | `backtest_run_manifest` | Değişmez Run Manifest (pinlenmiş her şey) | `run_id`, `composition_snapshot_id` | — | — |
 | `backtest_result` | Değişmez sonuç kökü | `run_id`, `manifest_id` | `deletion_state` | ✔ |

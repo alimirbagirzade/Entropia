@@ -4,8 +4,12 @@ The authoritative history index over immutable ``backtest_result`` rows — NOT 
 V18 in-memory array or the current Mainboard (doc 16 §15). The list is filtered to
 ``deletion_state='active'`` results only; a result only ever exists for a succeeded
 run (CR-03), so failed/cancelled runs never produce a history row (doc 16 §9.2).
-Visibility is pushed into SQL (owner or Admin) so the ``has_more``/cursor count the
-authorized set. Sorting is on the CANONICAL NUMERIC ``metric_value`` (never the
+Visibility is pushed into SQL — own + explicitly shared + (for the Analysis Lab
+roles) the Agent research scope, everything for an Admin — so the ``has_more``
+/cursor pair counts the authorized set. The rule itself lives in
+``queries/result_access.py`` and is shared verbatim with the detail/compare
+re-checks (doc 16 §2, finding O-14).
+Sorting is on the CANONICAL NUMERIC ``metric_value`` (never the
 rounded card string), nulls last, with a deterministic ``result_id`` tie-break
 (doc 16 §9.3). Compare reads two immutable manifest excerpts and flags any context
 difference — it never auto-ranks a "winner" (doc 16 §8.3).
@@ -21,6 +25,7 @@ from typing import Any
 from sqlalchemy import Select, and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from entropia.application.queries import result_access
 from entropia.domain.backtest.history import (
     KEY_METRIC_KEYS,
     SORT_SPECS,
@@ -33,7 +38,7 @@ from entropia.domain.backtest.history import (
     normalize_sort_key,
 )
 from entropia.domain.identity import Actor
-from entropia.domain.identity.policy import can_edit, ensure_can_view, require_authenticated
+from entropia.domain.identity.policy import can_edit, require_authenticated
 from entropia.domain.lifecycle.enums import DeletionState
 from entropia.infrastructure.postgres.models import EntityRegistry
 from entropia.infrastructure.postgres.models.backtest import (
@@ -42,11 +47,9 @@ from entropia.infrastructure.postgres.models.backtest import (
     ResultSummary,
 )
 from entropia.infrastructure.postgres.repositories import backtest as bt_repo
-from entropia.infrastructure.postgres.repositories import mainboard as mb_repo
 from entropia.shared.errors import (
     BacktestResultNotFoundError,
     CompareRequiresTwoDistinctResultsError,
-    CompositionNotFoundError,
     CursorInvalidError,
 )
 
@@ -71,7 +74,8 @@ async def list_backtest_results(
     sort_key = normalize_sort_key(sort)
     spec = SORT_SPECS[sort_key]
 
-    stmt = _visible_results_stmt(actor)
+    shared_ids = await result_access.shared_composition_ids(session, actor)
+    stmt = _visible_results_stmt(actor, shared_ids)
     stmt = _apply_sort_and_keyset(stmt, sort_key, spec, cursor)
     stmt = stmt.limit(limit + 1)
 
@@ -103,8 +107,13 @@ async def list_backtest_results(
     }
 
 
-def _visible_results_stmt(actor: Actor) -> Select[Any]:
-    """Active results whose composition the actor may view (owner or Admin)."""
+def _visible_results_stmt(actor: Actor, shared_ids: set[str]) -> Select[Any]:
+    """Active results whose composition the actor may view (doc 16 §2).
+
+    Owner + Admin as before, PLUS the compositions explicitly shared with the actor
+    and — for the Analysis Lab roles — the Agent research scope. Filtering stays in
+    SQL so an unauthorized row never occupies a page slot or advances the cursor.
+    """
     stmt = (
         select(BacktestResult, EntityRegistry.owner_principal_id)
         .join(EntityRegistry, EntityRegistry.entity_id == BacktestResult.workspace_entity_id)
@@ -113,9 +122,7 @@ def _visible_results_stmt(actor: Actor) -> Select[Any]:
             EntityRegistry.deletion_state == DeletionState.ACTIVE,
         )
     )
-    if not actor.is_admin:
-        stmt = stmt.where(EntityRegistry.owner_principal_id == actor.principal_id)
-    return stmt
+    return result_access.visible_composition_stmt(stmt, actor, shared_ids=shared_ids)
 
 
 def _apply_sort_and_keyset(
@@ -200,7 +207,7 @@ async def compare_backtest_results(
         result = await bt_repo.get_result(session, result_id)
         if result is None or result.deletion_state != _ACTIVE:
             raise BacktestResultNotFoundError()
-        await _ensure_can_view_workspace(session, actor, result.workspace_entity_id)
+        await result_access.ensure_can_view_composition(session, actor, result.workspace_entity_id)
         snapshot = await bt_repo.get_manifest_snapshot(session, result_id)
         summary = await bt_repo.get_summary(session, result_id)
         metrics = await bt_repo.list_metric_values(session, result_id)
@@ -222,15 +229,6 @@ async def compare_backtest_results(
 # --------------------------------------------------------------------------- #
 # Helpers                                                                     #
 # --------------------------------------------------------------------------- #
-
-
-async def _ensure_can_view_workspace(
-    session: AsyncSession, actor: Actor, workspace_entity_id: str
-) -> None:
-    workspace = await mb_repo.get_workspace(session, workspace_entity_id)
-    if workspace is None or workspace.deletion_state != DeletionState.ACTIVE:
-        raise CompositionNotFoundError()
-    ensure_can_view(actor, owner_principal_id=workspace.owner_principal_id, visibility="private")
 
 
 async def _load_digests(session: AsyncSession, result_ids: list[str]) -> dict[str, dict[str, Any]]:

@@ -17,6 +17,7 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
+from entropia.domain.importing.timezone import normalize_iana_timezone
 from entropia.domain.trading_signal.enums import (
     DataQualityMode,
     OhlcvUseMode,
@@ -95,11 +96,12 @@ class TimePolicy(_Strict):
 
     @field_validator("source_timezone")
     @classmethod
-    def _tz_present(cls, value: str) -> str:
-        trimmed = (value or "").strip()
-        if not trimmed:
-            raise ValueError("source_timezone is required.")
-        return trimmed
+    def _tz_is_iana(cls, value: str) -> str:
+        """Doc 04 §5: the declared source zone is an ``IANA identifier``, not free text.
+
+        Twin of ``domain/trade_log/config.py::TimeModel._tz_is_iana`` (O-28) — presence
+        alone let an unresolvable zone save cleanly and shift every normalized event."""
+        return normalize_iana_timezone(value)
 
     @field_validator("normalization_timezone")
     @classmethod

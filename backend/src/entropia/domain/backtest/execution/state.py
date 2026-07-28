@@ -14,7 +14,7 @@ detail is never imitated.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Any
 
@@ -112,3 +112,90 @@ def _normalize(raw: dict[str, Any]) -> _Bar | None:
         )
     except (KeyError, TypeError, ArithmeticError, ValueError):
         return None
+
+
+@dataclass(frozen=True, slots=True)
+class TradeRow:
+    seq: int
+    entry_time: str
+    exit_time: str
+    direction: str
+    entry_price: Decimal
+    exit_price: Decimal
+    pnl: Decimal
+    exit_reason: str
+
+
+@dataclass(frozen=True, slots=True)
+class EquityPoint:
+    seq: int
+    timestamp: str
+    equity: Decimal
+    drawdown: Decimal
+    exposure: Decimal
+
+
+@dataclass(frozen=True, slots=True)
+class SignalEventRow:
+    seq: int
+    event_time: str
+    event_type: str
+    direction: str | None
+    detail: dict[str, Any]
+
+
+@dataclass(slots=True)
+class _Ledger:
+    """The bar loop's running tallies, as ONE mutable object instead of 24 ``nonlocal``
+    rebindings (K-10a).
+
+    Nothing here is new state and nothing is computed differently — each field replaces a
+    local of the same name with the same initial value. What it buys is extractability:
+    a closure that only needed to bump a counter had to be nested inside ``run_engine``
+    to reach it via ``nonlocal``; now it can take a ``_Ledger`` and live at module level.
+
+    Mutable and NOT frozen on purpose — this is the accumulator the loop writes to, and
+    the engine stays deterministic because the writes are ordered by the bar replay, not
+    because the object is immutable.
+    """
+
+    # The run's four output journals. Append-only — they are never rebound, so they
+    # needed no ``nonlocal``; they live here so an extracted booking function can take
+    # ONE accumulator instead of four separate list parameters.
+    signal_events: list[SignalEventRow] = field(default_factory=list)
+    trades: list[TradeRow] = field(default_factory=list)
+    equity_points: list[EquityPoint] = field(default_factory=list)
+    position_intervals: list[dict[str, Any]] = field(default_factory=list)
+
+    # The account book. ``equity`` is what sizes an entry and what bounds the sleeve /
+    # exposure caps, so it is the loop's single most load-bearing running value;
+    # ``peak`` trails it for drawdown. Both start at the run's initial capital, which is
+    # only known inside ``run_engine`` — hence the 0 default and the explicit seeding.
+    equity: Decimal = _ZERO
+    peak: Decimal = _ZERO
+    winners: int = 0
+    stops_hit: int = 0
+    stop_streak: int = 0
+    max_stop_streak: int = 0
+    gross_profit: Decimal = _ZERO
+    gross_loss: Decimal = _ZERO
+    partial_closes: int = 0
+    # F-07e restriction ledger: the UTC day's realized PnL and the consecutive-loss run.
+    day_realized: Decimal = _ZERO
+    loss_streak: int = 0
+    lock_in_locks: int = 0
+    partial_fills: int = 0
+    limit_orders_filled: int = 0
+    tick_resolved_entry_fills: int = 0
+    same_bar_stop_limit_fills: int = 0
+    logic_stop_triggers: int = 0
+    tick_first_trigger_resolutions: int = 0
+    strength_adjustments: int = 0
+    # L4 flag: partial fills were active and the bar had prints, but none carried a size.
+    partial_evidence_missing: bool = False
+    portfolio_conflict_blocked_entries: int = 0
+    portfolio_exposure_blocked_entries: int = 0
+    portfolio_exposure_clamped_entries: int = 0
+    portfolio_symbol_unknown_gate: bool = False
+    portfolio_time_unparseable_gate: bool = False
+    portfolio_block_reason: str | None = None

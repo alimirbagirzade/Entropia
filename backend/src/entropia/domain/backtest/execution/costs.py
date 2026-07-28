@@ -44,6 +44,17 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True, slots=True)
+class FillCosts:
+    """The pinned per-fill cost triple, carried as one value instead of three parallel
+    parameters (K-10b). Built once per run from ``_cost_params``; never recomputed, so
+    every fill in a run is priced off the same pinned config."""
+
+    half_spread: Decimal
+    slippage: Decimal
+    commission: Decimal
+
+
+@dataclass(frozen=True, slots=True)
 class FundingCharge:
     """One funding record that fires at a bar, with the amount it costs the position.
 

@@ -69,6 +69,11 @@ from entropia.domain.backtest.capabilities import (
     capabilities_are_modelled,
     future_dev_selections,
 )
+from entropia.domain.backtest.execution.booking import (
+    absorb_remainder,
+    close_position,
+    emit_event,
+)
 from entropia.domain.backtest.execution.constants import (
     _HUNDRED,
     _MONEY,
@@ -79,6 +84,7 @@ from entropia.domain.backtest.execution.constants import (
     _ZERO,
 )
 from entropia.domain.backtest.execution.costs import (
+    FillCosts,
     _cost_params,
     _effective_fill,
     due_funding_charges,
@@ -121,7 +127,11 @@ from entropia.domain.backtest.execution.sizing import (
     leverage_is_modelled,
 )
 from entropia.domain.backtest.execution.state import (
+    EquityPoint,
+    SignalEventRow,
+    TradeRow,
     _Bar,
+    _Ledger,
     _normalize,
     _Position,
 )
@@ -201,36 +211,6 @@ DECISION_TRACE_EVENT_TYPES = (
 # ``order_execution_is_modelled`` (a non-``not_allowed`` policy without tick data is a
 # Ready Check blocker + an inert run), never a fabricated fraction.
 UNMODELLED_DECISION_CLASSES: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True, slots=True)
-class TradeRow:
-    seq: int
-    entry_time: str
-    exit_time: str
-    direction: str
-    entry_price: Decimal
-    exit_price: Decimal
-    pnl: Decimal
-    exit_reason: str
-
-
-@dataclass(frozen=True, slots=True)
-class EquityPoint:
-    seq: int
-    timestamp: str
-    equity: Decimal
-    drawdown: Decimal
-    exposure: Decimal
-
-
-@dataclass(frozen=True, slots=True)
-class SignalEventRow:
-    seq: int
-    event_time: str
-    event_type: str
-    direction: str | None
-    detail: dict[str, Any]
 
 
 @dataclass(frozen=True, slots=True)
@@ -849,55 +829,6 @@ def _exit_proxy(position: _Position, bar: _Bar, window: deque[_Bar]) -> bool:
     return bar.close > max(b.high for b in window)
 
 
-@dataclass(slots=True)
-class _Ledger:
-    """The bar loop's running tallies, as ONE mutable object instead of 24 ``nonlocal``
-    rebindings (K-10a).
-
-    Nothing here is new state and nothing is computed differently — each field replaces a
-    local of the same name with the same initial value. What it buys is extractability:
-    a closure that only needed to bump a counter had to be nested inside ``run_engine``
-    to reach it via ``nonlocal``; now it can take a ``_Ledger`` and live at module level.
-
-    Mutable and NOT frozen on purpose — this is the accumulator the loop writes to, and
-    the engine stays deterministic because the writes are ordered by the bar replay, not
-    because the object is immutable.
-    """
-
-    # The account book. ``equity`` is what sizes an entry and what bounds the sleeve /
-    # exposure caps, so it is the loop's single most load-bearing running value;
-    # ``peak`` trails it for drawdown. Both start at the run's initial capital, which is
-    # only known inside ``run_engine`` — hence the 0 default and the explicit seeding.
-    equity: Decimal = _ZERO
-    peak: Decimal = _ZERO
-    winners: int = 0
-    stops_hit: int = 0
-    stop_streak: int = 0
-    max_stop_streak: int = 0
-    gross_profit: Decimal = _ZERO
-    gross_loss: Decimal = _ZERO
-    partial_closes: int = 0
-    # F-07e restriction ledger: the UTC day's realized PnL and the consecutive-loss run.
-    day_realized: Decimal = _ZERO
-    loss_streak: int = 0
-    lock_in_locks: int = 0
-    partial_fills: int = 0
-    limit_orders_filled: int = 0
-    tick_resolved_entry_fills: int = 0
-    same_bar_stop_limit_fills: int = 0
-    logic_stop_triggers: int = 0
-    tick_first_trigger_resolutions: int = 0
-    strength_adjustments: int = 0
-    # L4 flag: partial fills were active and the bar had prints, but none carried a size.
-    partial_evidence_missing: bool = False
-    portfolio_conflict_blocked_entries: int = 0
-    portfolio_exposure_blocked_entries: int = 0
-    portfolio_exposure_clamped_entries: int = 0
-    portfolio_symbol_unknown_gate: bool = False
-    portfolio_time_unparseable_gate: bool = False
-    portfolio_block_reason: str | None = None
-
-
 def run_engine(
     *,
     strategy_config: StrategyConfig,
@@ -987,8 +918,15 @@ def run_engine(
         initial_capital = portfolio_pool
     else:
         initial_capital = Decimal(config.data.initial_capital).quantize(_MONEY)
-    # The account book opens at the run's initial capital; every other tally starts at 0.
-    led = _Ledger(equity=initial_capital, peak=initial_capital)
+    # The account book opens at the run's initial capital, and the equity curve opens
+    # with the corresponding zero-drawdown point; every other tally starts empty/0.
+    led = _Ledger(
+        equity=initial_capital,
+        peak=initial_capital,
+        equity_points=[
+            EquityPoint(0, "", initial_capital, _ZERO.quantize(_MONEY), _ZERO.quantize(_PCT))
+        ],
+    )
 
     # Portfolio-level rules (cross-item, doc 13 §8.4). The cap basis is the pinned
     # capital this run replays from: the shared pool P0 under allocation (the normal
@@ -1018,6 +956,7 @@ def run_engine(
             ).quantize(_MONEY)
     long_ok, short_ok = _direction_flags(config.position_entry_logic.direction_mode)
     half_spread, slippage, commission = _cost_params(config)
+    fill_costs = FillCosts(half_spread, slippage, commission)
     trail_pct = _trail_pct(config)
     # F-07f: trailing stop profit-lock activation threshold (Master Ref §9.2 "Activate
     # After Profit %") — mirrors ``trail_pct``, threaded into every opened position.
@@ -1051,7 +990,7 @@ def run_engine(
     # F-09: an unmodelled / misconfigured sizing method opens NO position at all — the
     # engine is a fail-closed backstop to the Ready Check STRATEGY_SIZING_UNSUPPORTED
     # blocker, so a stale/bypassed readiness state reaching the worker still produces a
-    # financially inert run (no phantom 0-size or all-in trades).
+    # financially inert run (no phantom 0-size or all-in led.trades).
     sizing_ok = _sizing_is_honored(config)
 
     # F-07f: an unmodelled leverage configuration (cross-margin, or a non-positive saved
@@ -1217,11 +1156,6 @@ def run_engine(
     stop_pairs = list(zip(stop_specs, stop_evals, strict=True))
     logic_enabled = [f"logic:{spec.block_id}" for spec in stop_specs]
 
-    trades: list[TradeRow] = []
-    equity_points: list[EquityPoint] = [
-        EquityPoint(0, "", initial_capital, _ZERO.quantize(_MONEY), _ZERO.quantize(_PCT))
-    ]
-    signal_events: list[SignalEventRow] = []
     window: deque[_Bar] = deque(maxlen=_BREAKOUT_WINDOW)
     position: _Position | None = None
     pending: _Pending | None = None  # a fill deferred to a future bar (F-07a timing)
@@ -1269,7 +1203,6 @@ def run_engine(
     prev_entry_signal: str | None = None
     # Portfolio-rules gate counters + the per-block reason handoff to _blocked_reason,
     # and every fully-closed position's held window (the later items' constraint input).
-    position_intervals: list[dict[str, Any]] = []
     # F-11: funding cost state. ``funding_records`` is the ascending, available-time-safe
     # series (empty when funding is off → the whole funding path is inert, byte-identical to
     # pre-F-11). ``funding_idx`` is the as-of cursor (a record fires at most once, in order);
@@ -1295,19 +1228,14 @@ def run_engine(
         bar_seq: int,
         detail: dict[str, Any],
     ) -> None:
-        """Append one immutable decision-trace event (F-10, doc 15 §9.3 step 8/§14).
-
-        ``bar_seq`` (the 1-based replayed-bar index) + ``event_time`` bind the event to
-        the exact bar; ``detail`` carries the position/order linkage and rule evidence.
-        A signal/decision event is NEVER conflated with a real fill (doc 15 §16)."""
-        signal_events.append(
-            SignalEventRow(
-                seq=len(signal_events),
-                event_time=event_time,
-                event_type=event_type,
-                direction=direction,
-                detail={"bar_seq": bar_seq, **detail},
-            )
+        """Bind the run's ledger to the extracted decision-trace journal."""
+        emit_event(
+            led,
+            event_type,
+            event_time=event_time,
+            direction=direction,
+            bar_seq=bar_seq,
+            detail=detail,
         )
 
     def _entry_rule_snapshot(want: str) -> dict[str, Any]:
@@ -1385,117 +1313,17 @@ def run_engine(
         bar_seq: int,
         fraction: Decimal = _ONE,
     ) -> bool:
-        """Close ``fraction`` of the position; return True iff it is now FULLY closed.
-
-        A partial close (fraction < 1, F-07c ``close_percentage``) realizes PnL on
-        ``size * fraction`` as its own trade lot, reduces the position's size + notional in
-        place, and leaves it OPEN — the caller must not null it and applies the aftermath.
-        Commission is charged proportional to the fraction so N partial lots summing to the
-        whole position pay exactly one round-trip. ``fraction >= 1`` is a full close, byte-
-        identical to pre-F-07c (same event type + detail)."""
-        is_full = fraction >= _ONE
-        close_size = pos.size if is_full else pos.size * fraction
-        is_long = pos.direction == "long"
-        exit_eff = _effective_fill(
-            exit_price_raw, is_buy=not is_long, half_spread=half_spread, slip=slippage
-        )
-        sign = Decimal("1") if is_long else Decimal("-1")
-        gross = (exit_eff - pos.entry_price) * close_size * sign
-        commission_lot = commission * 2 if is_full else commission * 2 * fraction
-        pnl = (gross - commission_lot).quantize(_MONEY)
-        equity_before = led.equity
-        led.equity = (led.equity + pnl).quantize(_MONEY)
-        led.peak = max(led.peak, led.equity)
-        drawdown = (led.peak - led.equity).quantize(_MONEY)
-        closed_notional = (pos.entry_price * close_size).quantize(_MONEY)
-        exposure = (
-            (closed_notional / equity_before * _HUNDRED).quantize(_PCT)
-            if equity_before > _ZERO
-            else _ZERO.quantize(_PCT)
-        )
-        if pnl > _ZERO:
-            led.winners += 1
-            led.gross_profit += pnl
-        else:
-            led.gross_loss += -pnl
-        # F-07e: the restriction filters' realized ledger. Every realized lot (full or
-        # partial) books into the UTC day's PnL; a strictly negative lot extends the
-        # consecutive-loss streak, anything else (a 0-PnL lot is not a loss) resets it.
-        led.day_realized += pnl
-        if pnl < _ZERO:
-            led.loss_streak += 1
-        else:
-            led.loss_streak = 0
-        if reason == "stop_loss":
-            led.stops_hit += 1
-            led.stop_streak += 1
-            led.max_stop_streak = max(led.max_stop_streak, led.stop_streak)
-        else:
-            led.stop_streak = 0
-        seq = len(trades) + 1
-        trades.append(
-            TradeRow(
-                seq=seq,
-                entry_time=pos.entry_time,
-                exit_time=exit_time,
-                direction=pos.direction,
-                entry_price=pos.entry_price,
-                exit_price=exit_eff,
-                pnl=pnl,
-                exit_reason=reason if is_full else "partial_exit",
-            )
-        )
-        equity_points.append(
-            EquityPoint(
-                seq=seq,
-                timestamp=exit_time,
-                equity=led.equity,
-                drawdown=drawdown,
-                exposure=exposure,
-            )
-        )
-        if is_full:
-            # Portfolio-rules slice: record the position's held window (entry->exit,
-            # PEAK notional over its life) — the constraint input a LATER-pinned item
-            # replays against. Always captured (cheap, additive); consumed only when
-            # portfolio rules are configured.
-            position_intervals.append(
-                {
-                    "entry_time": pos.entry_time,
-                    "exit_time": exit_time,
-                    "direction": pos.direction,
-                    "peak_notional": max(pos.peak_notional, pos.entry_notional),
-                }
-            )
-        if not is_full:
-            led.partial_closes += 1
-            pos.size = pos.size - close_size
-            pos.entry_notional = (pos.entry_price * pos.size).quantize(_MONEY)
-        # F-10: the position CLOSE decision — links the lifecycle to its immutable trade row
-        # (``trade_seq``), the exit reason, the realized pnl and the holding span so a reviewer
-        # reconstructs exactly why/when the position closed. A partial close emits
-        # ``position_partial_close`` with the closed fraction + remaining size; a FULL close's
-        # event type + detail are byte-identical to pre-F-07c.
-        partial_detail = (
-            {} if is_full else {"closed_fraction": str(fraction), "remaining_size": str(pos.size)}
-        )
-        _emit(
-            "position_close" if is_full else "position_partial_close",
-            event_time=exit_time,
-            direction=pos.direction,
+        """Bind the run's ledger and pinned costs to the extracted close/book routine."""
+        return close_position(
+            led,
+            pos,
+            fill_costs,
+            exit_time=exit_time,
+            exit_price_raw=exit_price_raw,
+            reason=reason,
             bar_seq=bar_seq,
-            detail={
-                "position_seq": pos.position_seq,
-                "trade_seq": seq,
-                "exit_reason": reason,
-                "exit_price": str(exit_eff),
-                "pnl": str(pnl),
-                "entry_bar_seq": pos.entry_bar_seq,
-                "holding_bars": bar_seq - pos.entry_bar_seq,
-                **partial_detail,
-            },
+            fraction=fraction,
         )
-        return is_full
 
     def _apply_partial_aftermath(pos: _Position, exit_price_raw: Decimal) -> None:
         """Bind the pinned aftermath policy + cost params to the extracted ratchet."""
@@ -1786,38 +1614,18 @@ def run_engine(
     def _absorb_remainder(
         pos: _Position, bar: _Bar, price_raw: Decimal, add_size: Decimal, *, action: str
     ) -> None:
-        """Top an open position up with a partial-fill remainder lot (F-07i C).
-
-        Mirrors the F-07d scale-layer mutation: size-weighted average basis, notional
-        refresh, one commission per extra fill. Stop LEVELS stay as installed at the
-        initial entry (the documented fixed-for-life invariant). The lot is the SAME
-        order's remainder — already sized/capped at intent time — so no re-capping."""
-        fill_eff = _effective_fill(
-            price_raw, is_buy=pos.direction == "long", half_spread=half_spread, slip=slippage
-        )
-        new_size = pos.size + add_size
-        new_basis = ((pos.entry_price * pos.size + fill_eff * add_size) / new_size).quantize(_MONEY)
-        pos.entry_price = new_basis
-        pos.size = new_size
-        pos.entry_notional = (new_basis * new_size).quantize(_MONEY)
-        pos.peak_notional = max(pos.peak_notional, pos.entry_notional)
-        if commission > _ZERO:
-            led.equity = (led.equity - commission).quantize(_MONEY)
-        led.partial_fills += 1
-        _emit(
-            "partial_fill",
-            event_time=bar.timestamp,
-            direction=pos.direction,
+        """Bind the run's ledger, pinned costs and partial policy to the extracted
+        remainder top-up."""
+        absorb_remainder(
+            led,
+            pos,
+            fill_costs,
+            bar=bar,
+            price_raw=price_raw,
+            add_size=add_size,
+            action=action,
             bar_seq=bars_seen,
-            detail={
-                "position_seq": pos.position_seq,
-                "policy": partial_policy,
-                "action": action,
-                "fill_price": str(fill_eff),
-                "fill_size": str(add_size),
-                "new_size": str(new_size),
-                "entry_basis": str(new_basis),
-            },
+            partial_policy=partial_policy,
         )
 
     def _fill_resting_limit(
@@ -1979,9 +1787,9 @@ def run_engine(
             # tick-less traces stay byte-identical.
             if outcome.tick_resolved:
                 detail["first_trigger_tick_resolved"] = True
-            signal_events.append(
+            led.signal_events.append(
                 SignalEventRow(
-                    seq=len(signal_events),
+                    seq=len(led.signal_events),
                     event_time=event_time,
                     event_type="stop_resolution",
                     direction=direction,
@@ -2007,7 +1815,7 @@ def run_engine(
                     tick_bars += 1
             # F-07d: an exit lot (full or partial) realized on THIS bar appends a trade row;
             # the scale ladder below never adds to a position a bar has already reduced.
-            trades_before_bar = len(trades)
+            trades_before_bar = len(led.trades)
 
             # F-07e: the restriction filters' clock. The bar's UTC calendar date drives the
             # date-blackout windows and rolls the max-daily-loss accumulator at each new
@@ -2862,7 +2670,7 @@ def run_engine(
                 and position.entry_bar_seq != bars_seen
                 and plan_active
                 and pending is None
-                and len(trades) == trades_before_bar
+                and len(led.trades) == trades_before_bar
                 and entry_signal is not None
                 and entry_signal != prev_entry_signal
             ):
@@ -3117,7 +2925,7 @@ def run_engine(
                 position is not None
                 and scaling_active
                 and pending is None
-                and len(trades) == trades_before_bar
+                and len(led.trades) == trades_before_bar
                 and position.layers_filled < scale_max_layers
             ):
                 # Captured BEFORE the cross advances it — the trace reports the
@@ -3270,14 +3078,14 @@ def run_engine(
         _close(last_bar.timestamp, last_bar.close, "end_of_data", position, bar_seq=bars_seen)
         position = None
 
-    total_trades = len(trades)
+    total_trades = len(led.trades)
     net_profit = (led.equity - initial_capital).quantize(_MONEY)
     net_profit_pct = (
         (net_profit / initial_capital * _HUNDRED).quantize(_PCT)
         if initial_capital > _ZERO
         else None
     )
-    max_drawdown = max((p.drawdown for p in equity_points), default=_ZERO)
+    max_drawdown = max((p.drawdown for p in led.equity_points), default=_ZERO)
     max_drawdown_pct = (
         (max_drawdown / led.peak * _HUNDRED).quantize(_PCT)
         if led.peak > _ZERO
@@ -3651,7 +3459,7 @@ def run_engine(
         "touch_orders_placed": touch_orders_placed,
         "touch_exit_fills": touch_exit_fills,
         "item_count": item_count,
-        "decision_trace_count": len(signal_events),
+        "decision_trace_count": len(led.signal_events),
         "decision_trace_schema": DECISION_TRACE_SCHEMA,
         "decision_trace_event_types": list(DECISION_TRACE_EVENT_TYPES),
         "unmodelled_decision_classes": list(UNMODELLED_DECISION_CLASSES),
@@ -3661,11 +3469,11 @@ def run_engine(
     }
     return EngineOutput(
         summary=summary,
-        trades=trades,
-        equity_points=equity_points,
-        signal_events=signal_events,
+        trades=led.trades,
+        equity_points=led.equity_points,
+        signal_events=led.signal_events,
         diagnostics=diagnostics,
-        position_intervals=position_intervals,
+        position_intervals=led.position_intervals,
     )
 
 

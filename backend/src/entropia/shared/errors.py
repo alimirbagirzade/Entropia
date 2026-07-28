@@ -924,6 +924,21 @@ class MainboardItemKindMismatchError(ValidationError):
     message = "The item kind does not match the work object's kind."
 
 
+class InvalidItemKindError(ValidationError):
+    """AOS-03 (doc 03 §14; taxonomy §11, chooser recovery §8.3): the client sent a
+    legacy V18 prototype label (``signal_package`` / ``trade_log_package``) where a
+    work object / item kind was expected. The spec names this code, so a generic
+    CR-01 mismatch code would both be the wrong answer: ``INVALID_ITEM_KIND``
+    means "that is not a kind this system has", while
+    ``MainboardItemKindMismatchError`` means "your kind disagrees with the root's".
+    The chooser recovery is to present only the two canonical choices."""
+
+    code = "INVALID_ITEM_KIND"
+    message = "That item kind is not supported. Choose Trading Signal or Trade Log."
+    suggested_action = "choose_item_kind"
+    remediation = "Send the item kind as exactly 'trading_signal' or 'trade_log'."
+
+
 class ObjectNotActiveError(ConflictError):
     """A work object referenced by an attach/pin/revision is not ACTIVE
     (soft-deleted or otherwise not live). Operations require a live root."""

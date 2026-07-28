@@ -87,13 +87,15 @@ from entropia.domain.backtest.engine import (
     resolve_allocation_execution,
     resolve_portfolio_rules,
     run_engine,
-    tick_data_required,
 )
 from entropia.domain.backtest.enums import (
     RUN_TERMINAL_STATES,
     BacktestRunState,
     RunEventType,
     RunFailureCode,
+)
+from entropia.domain.backtest.execution.fills import (
+    tick_data_required,
 )
 from entropia.domain.backtest.execution.portfolio import combine_item_runs
 from entropia.domain.backtest.metrics import derive_metric_values

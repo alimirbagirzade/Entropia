@@ -37,7 +37,9 @@ from entropia.domain.allocation.rules import (
     compute_config_hash,
     validate_allocation,
 )
-from entropia.domain.backtest.engine import tick_data_required
+from entropia.domain.backtest.execution.fills import (
+    tick_data_required,
+)
 from entropia.domain.identity import Actor
 from entropia.domain.identity.policy import ensure_can_view, require_authenticated
 from entropia.domain.lifecycle.enums import DeletionState

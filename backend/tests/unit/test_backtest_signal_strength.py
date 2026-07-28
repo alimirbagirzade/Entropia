@@ -22,11 +22,13 @@ from typing import Any
 
 from entropia.domain.backtest.engine import (
     EngineOutput,
-    _Bar,
     _position_size,
     _volatility_strength,
     run_engine,
     signal_strength_is_modelled,
+)
+from entropia.domain.backtest.execution.state import (
+    _Bar,
 )
 from entropia.domain.strategy.config import StrategyConfig
 from tests.unit.engine_signal_plan import sma_entry_plan

@@ -15,11 +15,15 @@ from decimal import Decimal
 from typing import Any
 
 from entropia.domain.backtest.engine import (
-    _Bar,
-    _Position,
+    run_engine,
+)
+from entropia.domain.backtest.execution.fills import (
     _resolve_stop,
     _StopOutcome,
-    run_engine,
+)
+from entropia.domain.backtest.execution.state import (
+    _Bar,
+    _Position,
 )
 from entropia.domain.strategy.config import StrategyConfig
 from tests.unit.engine_signal_plan import sma_entry_plan

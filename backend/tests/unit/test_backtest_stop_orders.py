@@ -27,8 +27,10 @@ from pydantic import ValidationError
 from entropia.domain.backtest.engine import (
     DECISION_TRACE_EVENT_TYPES,
     EngineOutput,
-    order_execution_is_modelled,
     run_engine,
+)
+from entropia.domain.backtest.execution.fills import (
+    order_execution_is_modelled,
 )
 from entropia.domain.strategy.config import (
     LimitOrderDetails,

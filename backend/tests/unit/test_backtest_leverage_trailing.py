@@ -25,11 +25,15 @@ from typing import Any
 
 from entropia.domain.backtest.engine import (
     EngineOutput,
-    _Position,
-    _trailing_activated,
-    _trailing_level,
     leverage_is_modelled,
     run_engine,
+)
+from entropia.domain.backtest.execution.fills import (
+    _trailing_activated,
+    _trailing_level,
+)
+from entropia.domain.backtest.execution.state import (
+    _Position,
 )
 from entropia.domain.strategy.config import StrategyConfig
 from tests.unit.engine_signal_plan import sma_entry_plan

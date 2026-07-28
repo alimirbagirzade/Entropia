@@ -173,10 +173,13 @@ async def _publish_new_document(
     if not has_visible_text(blocks):
         raise ManualContentRequiredError()
     checksum = normalized_checksum(blocks)
-    if not allow_duplicate:
-        duplicate_of = await manual_repo.find_active_duplicate(session, checksum=checksum)
-        if duplicate_of is not None:
-            raise ManualDuplicateContentError()
+    # The duplicate lookup runs even when the caller pre-authorized the override:
+    # an override is only a recorded Admin DECISION when a duplicate actually
+    # existed (doc 21 §10: an explicit override is a separately audited decision).
+    duplicate_of = await manual_repo.find_active_duplicate(session, checksum=checksum)
+    if duplicate_of is not None and not allow_duplicate:
+        raise ManualDuplicateContentError()
+    duplicate_override = duplicate_of is not None
 
     document = await manual_repo.create_document(
         session,
@@ -222,6 +225,8 @@ async def _publish_new_document(
         source_type=source_type.value,
         source_filename=source_filename,
         checksum=checksum,
+        duplicate_override=duplicate_override,
+        duplicate_of_document_id=duplicate_of,
         correlation_id=actor.correlation_id,
     )
     _audit_and_outbox(
@@ -237,7 +242,11 @@ async def _publish_new_document(
             "revision_id": revision.revision_id,
             "anchor": anchor,
             "stream_version": stream_version,
+            "allow_duplicate": allow_duplicate,
+            "duplicate_override": duplicate_override,
+            "duplicate_of_document_id": duplicate_of,
         },
+        reason=(f"Duplicate content override of {duplicate_of}." if duplicate_override else None),
     )
     return {
         "document_id": document.document_id,
@@ -249,6 +258,8 @@ async def _publish_new_document(
         "title": title,
         "checksum": checksum,
         "stream_version": stream_version,
+        "duplicate_override": duplicate_override,
+        "duplicate_of_document_id": duplicate_of,
         "correlation_id": actor.correlation_id,
     }
 
@@ -355,11 +366,19 @@ async def replace_manual_revision(
     document_id: str,
     content: str,
     title: str | None = None,
+    source_type: ManualSourceType | None = None,
+    source_filename: str | None = None,
     expected_head_revision_id: str | None = None,
     idempotency_key: str | None = None,
 ) -> dict[str, Any]:
     """Publish revision N+1 at the SAME stream position (doc 21 §7, UM-11):
-    the old revision becomes Superseded; the position never moves."""
+    the old revision becomes Superseded; the position never moves.
+
+    Provenance is CONTINUOUS: ``source_type``/``source_filename`` default to the
+    head revision's, so revising an uploaded Markdown/HTML section keeps parsing
+    it as Markdown/HTML (doc 21 §9.1 ``manual_revision.source_type``). Passing a
+    different ``source_type`` is the caller stating the new content's format
+    explicitly — the filename then defaults to none unless it too is supplied."""
     require_manual_admin(actor)
     _ensure_utf8_text(content)
 
@@ -385,7 +404,14 @@ async def replace_manual_revision(
             raise LifecycleBlocked()
 
         final_title = _normalize_title(title if title is not None else head.title)
-        blocks = parse_source(ManualSourceType.ADDED_TEXT, content)
+        final_source_type = source_type if source_type is not None else head.source_type
+        if source_filename is not None:
+            final_source_filename: str | None = source_filename
+        elif final_source_type == head.source_type:
+            final_source_filename = head.source_filename
+        else:
+            final_source_filename = None
+        blocks = parse_source(final_source_type, content)
         if not has_visible_text(blocks):
             raise ManualContentRequiredError()
         checksum = normalized_checksum(blocks)
@@ -395,8 +421,8 @@ async def replace_manual_revision(
             document_id=document_id,
             revision_no=head.revision_no + 1,
             title=final_title,
-            source_type=ManualSourceType.ADDED_TEXT,
-            source_filename=None,
+            source_type=final_source_type,
+            source_filename=final_source_filename,
             content_checksum=checksum,
             created_by_principal_id=actor.principal_id,
             blocks=blocks,
@@ -424,7 +450,8 @@ async def replace_manual_revision(
             actor_principal_id=actor.principal_id,
             prior_stream_version=prior_version,
             resulting_stream_version=stream_version,
-            source_type=ManualSourceType.ADDED_TEXT.value,
+            source_type=final_source_type.value,
+            source_filename=final_source_filename,
             checksum=checksum,
             correlation_id=actor.correlation_id,
         )
@@ -450,6 +477,8 @@ async def replace_manual_revision(
             "superseded_revision_id": head.revision_id,
             "stream_position": entry.stream_position,
             "anchor": anchor,
+            "source_type": final_source_type.value,
+            "source_filename": final_source_filename,
             "stream_version": stream_version,
             "correlation_id": actor.correlation_id,
         }
@@ -463,6 +492,8 @@ async def replace_manual_revision(
             "document_id": document_id,
             "title": title,
             "content": content,
+            "source_type": source_type.value if source_type is not None else None,
+            "source_filename": source_filename,
             "expected_head_revision_id": expected_head_revision_id,
         },
         operation=_op,

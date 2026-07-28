@@ -13,7 +13,7 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import Numeric, Row, and_, cast, delete, func, or_, select, text
+from sqlalchemy import Numeric, Row, and_, cast, delete, func, or_, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from entropia.domain.lifecycle.enums import DeletionState
@@ -237,6 +237,8 @@ def add_publication_event(
     source_type: str | None = None,
     source_filename: str | None = None,
     checksum: str | None = None,
+    duplicate_override: bool | None = None,
+    duplicate_of_document_id: str | None = None,
     correlation_id: str | None = None,
 ) -> ManualPublicationEvent:
     event = ManualPublicationEvent(
@@ -251,10 +253,28 @@ def add_publication_event(
         source_type=source_type,
         source_filename=source_filename,
         checksum=checksum,
+        duplicate_override=duplicate_override,
+        duplicate_of_document_id=duplicate_of_document_id,
         correlation_id=correlation_id,
     )
     session.add(event)
     return event
+
+
+async def mark_revisions_removed(session: AsyncSession, document_id: str) -> None:
+    """Purge-time redaction overlay (doc 21 §9, §11): every revision of a purged
+    document leaves the publishable states — ``Removed`` is exactly the state the
+    revision lifecycle reserves for it. The rows themselves are RETAINED so prior
+    Agent citations still resolve under V1 retention; only their publication
+    standing changes."""
+    await session.execute(
+        update(ManualDocumentRevision)
+        .where(
+            ManualDocumentRevision.document_id == document_id,
+            ManualDocumentRevision.publication_state != PublicationState.REMOVED,
+        )
+        .values(publication_state=PublicationState.REMOVED)
+    )
 
 
 async def delete_search_chunks_for_document(session: AsyncSession, document_id: str) -> None:

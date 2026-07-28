@@ -238,7 +238,13 @@ class ArtifactLink(Base):
 
 class AgentEvent(Base):
     """Durable observability + projection-refresh trigger (doc 18 §9, §9.2).
-    Append-only; ``seq`` gives a stable SSE ordering / Last-Event-ID."""
+
+    Append-only; ``seq`` is the stable append order these rows are replayed in
+    (``repositories.agent_lab.events_after``). It is NOT the wire cursor of the
+    live stream: ``GET /events`` fans out ``outbox_events``, a heterogeneous feed
+    covering every domain, so its ``id:`` / ``Last-Event-ID`` contract is keyed by
+    the outbox row id (``apps/api/sse.py``) — an agent-only sequence could not
+    order it. Agent mutations reach that stream as ``agent.task.updated``."""
 
     __tablename__ = "agent_event"
 

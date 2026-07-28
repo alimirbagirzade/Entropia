@@ -14,12 +14,26 @@ from __future__ import annotations
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sse_starlette.sse import ServerSentEvent
+from starlette.requests import Request
 
 from entropia.apps.api.main import create_app
-from entropia.apps.api.sse import _sse_frame
+from entropia.apps.api.sse import _sse_frame, requested_cursor
 from entropia.config import get_settings
 
 EVENTS_PATH = "/api/v1/events"
+
+
+def _request(headers: dict[str, str]) -> Request:
+    """A bare request carrying only headers — enough for the cursor read, and it
+    exercises the real (case-insensitive) Starlette header lookup."""
+    scope = {
+        "type": "http",
+        "method": "GET",
+        "path": EVENTS_PATH,
+        "headers": [(k.lower().encode(), v.encode()) for k, v in headers.items()],
+    }
+    return Request(scope)
 
 
 async def _get_events(
@@ -55,9 +69,12 @@ async def test_session_mode_ignores_a_bare_actor_header(monkeypatch: pytest.Monk
     assert body["error"]["code"] == "UNAUTHENTICATED"
 
 
-def test_sse_frame_carries_only_the_event_name_never_the_raw_payload() -> None:
+def test_sse_frame_carries_only_the_event_name_and_the_resumption_cursor() -> None:
+    """O-21 widened the AUTH-11 envelope by exactly ONE field: the outbox row id,
+    which is what a reconnect replays from. Everything else stays out — the id
+    names a log row, never an addressable domain object."""
     raw = {
-        "id": "obx_0000000000000000000000001",
+        "id": "obx_00000000000000000000000001",
         "event_type": "backtest_requested",
         "resource_type": "backtest_run",
         "resource_id": "btrun_private_id",
@@ -68,6 +85,69 @@ def test_sse_frame_carries_only_the_event_name_never_the_raw_payload() -> None:
 
     assert frame["event"] == "backtest.run.updated"  # taxonomy name still projected
     assert frame["data"] == "{}"  # minimal, non-sensitive body
-    emitted = frame["event"] + frame["data"]
-    for leaked in ("obx_0000000000000000000000001", "btrun_private_id", "corr_private_id"):
+    assert frame["id"] == "obx_00000000000000000000000001"  # resumption cursor (O-21)
+    assert set(frame) == {"event", "data", "id"}, "the envelope grew a field it must not carry"
+    emitted = "".join(frame.values())
+    for leaked in ("btrun_private_id", "corr_private_id", "backtest_requested"):
         assert leaked not in emitted, f"raw outbox field leaked into the SSE frame: {leaked}"
+
+
+def test_sse_frame_without_an_outbox_id_omits_the_cursor() -> None:
+    """A frame that cannot be resumed from must not claim it can: an id-less event
+    yields no ``id:`` line, so the client's cursor never advances past nothing."""
+    frame = _sse_frame({"event_type": "job.updated", "resource_type": "job"})
+
+    assert frame["event"] == "job.updated"
+    assert "id" not in frame
+
+
+@pytest.mark.parametrize(
+    "header",
+    ["obx_00000000000000000000000001", "  obx_00000000000000000000000001  "],
+)
+def test_a_well_formed_last_event_id_is_honoured(header: str) -> None:
+    """The cursor is what makes a reconnect lossless, so a real one (even with the
+    whitespace a proxy may add) must survive intact."""
+    assert requested_cursor(_request({"Last-Event-ID": header})) == (
+        "obx_00000000000000000000000001"
+    )
+
+
+def test_last_event_id_lookup_is_case_insensitive() -> None:
+    """The browser sends ``Last-Event-ID``; HTTP header names are case-insensitive
+    and the cursor must not hinge on which casing a client or proxy picked."""
+    assert requested_cursor(_request({"last-event-id": "obx_00000000000000000000000009"})) == (
+        "obx_00000000000000000000000009"
+    )
+
+
+@pytest.mark.parametrize(
+    ("label", "header"),
+    [
+        ("a foreign id namespace", "corr_00000000000000000000000001"),
+        ("an empty value", "   "),
+        ("an unbounded string", "obx_" + "x" * 200),
+        ("a SQL-ish payload", "obx_1' OR '1'='1"),
+    ],
+)
+def test_an_unusable_last_event_id_is_ignored(label: str, header: str) -> None:
+    """A client-supplied header is never trusted into a query: anything that is not
+    one of our outbox ids degrades to 'no cursor' (a live-only stream), which is
+    exactly the pre-O-21 behaviour — never a partial or attacker-shaped replay."""
+    assert requested_cursor(_request({"Last-Event-ID": header})) is None, label
+
+
+def test_no_last_event_id_means_no_replay() -> None:
+    assert requested_cursor(_request({})) is None
+
+
+def test_the_frame_encodes_to_a_wire_id_line() -> None:
+    """The dict is only half the contract — ``EventSourceResponse`` has to put the
+    cursor on the WIRE as an ``id:`` line, because that is what a client (and a
+    native ``EventSource``) reads to know where to resume from."""
+    wire = ServerSentEvent(
+        **_sse_frame({"id": "obx_00000000000000000000000001", "resource_type": "agent_task"})
+    ).encode()
+
+    assert b"id: obx_00000000000000000000000001" in wire
+    assert b"event: agent.task.updated" in wire

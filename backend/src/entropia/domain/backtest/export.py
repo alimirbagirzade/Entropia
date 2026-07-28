@@ -24,13 +24,23 @@ EXPORT_SCHEMA_VERSION = "v1"
 
 
 class ExportType(StrEnum):
-    """The exportable Result artifacts (doc 15 §3.2 Result export actions)."""
+    """The exportable Result artifacts (doc 15 §3.2 Result export actions).
+
+    The first five are the "Data Export" row. The last two complete §3.2:
+    ``PINESCRIPT_SIGNAL_MARKER`` is the fifth entry of that same row, and
+    ``AGENT_DATASET`` is the "Research Data / Agent Data" row's Export Agent Dataset.
+    Both are DERIVATIVES of persisted immutable artifacts like every other type —
+    §3.2 requires an agent dataset be built only from approved / scope-authorized
+    artifacts and never derived from UI local state.
+    """
 
     TRADE_LEDGER = "trade_ledger"
     EQUITY_CURVE = "equity_curve"
     SIGNAL_EVENTS = "signal_events"
     DIAGNOSTICS = "diagnostics"
     SUMMARY = "summary"
+    PINESCRIPT_SIGNAL_MARKER = "pinescript_signal_marker"
+    AGENT_DATASET = "agent_dataset"
 
 
 class ExportFormat(StrEnum):

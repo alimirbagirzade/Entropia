@@ -35,6 +35,39 @@ function publishNoticeText(result: PublishResult): string {
   return `Published “${result.title}” rev ${result.revision_no} — added to the end of the continuous manual.`;
 }
 
+// ---------------------------------------------------------------------------
+// Stale anchor recovery (doc 21 §7 / §14, acceptance UM-18). A search result
+// carries the anchor of the snapshot the SEARCH INDEX saw, which can lag the
+// rendered stream. Opening a result therefore resolves the anchor against the
+// CURRENT stream first; a miss refetches the stream and retries once; a second
+// miss shows doc 21 §7's exact wording rather than a dead jump. Presentation +
+// refetch only — no route path, react-query key, or OCC token is touched.
+// ---------------------------------------------------------------------------
+
+// Doc 21 §7, verbatim — never reworded.
+const ANCHOR_UNAVAILABLE_MESSAGE = "The section is no longer available in the current manual.";
+
+const ANCHOR_RETRY_ATTEMPTS = 10;
+const ANCHOR_RETRY_POLL_MS = 16;
+
+function scrollToAnchor(element: HTMLElement): void {
+  // Smooth scroll, no mutation (doc 21 §7). Optional call: environments
+  // without a layout engine simply have nothing to scroll.
+  element.scrollIntoView?.({ behavior: "smooth", block: "start" });
+}
+
+// After the refetch a recovered section needs a render pass before its element
+// exists, so the retry polls a bounded number of short frames instead of
+// reading the DOM once and declaring the section gone.
+async function waitForAnchorElement(anchor: string): Promise<HTMLElement | null> {
+  for (let attempt = 0; attempt < ANCHOR_RETRY_ATTEMPTS; attempt += 1) {
+    const element = document.getElementById(anchor);
+    if (element) return element;
+    await new Promise((resolve) => setTimeout(resolve, ANCHOR_RETRY_POLL_MS));
+  }
+  return null;
+}
+
 // User Manual (Stage 7a, doc 21; UI-21). One continuous Published reader
 // flow — sticky MANUAL DOCUMENTS sidebar (search + section nav primary) next
 // to a continuous reader pane: baseline guide first, appended sections in
@@ -107,7 +140,17 @@ export function UserManual() {
         <aside className="user-manual-sidebar">
           <div className="manual-side-title">MANUAL DOCUMENTS</div>
 
-          <ManualSearchNav streamVersion={streamVersion} />
+          {/* UM-18: the search index can point at a snapshot the reader no
+              longer shows, so the nav can ask the stream to rehydrate before
+              it decides an anchor is gone. Refetching the CURRENT stream query
+              keeps the accumulated tail intact (resetting to page 1 would drop
+              later sections and could itself remove the anchor). */}
+          <ManualSearchNav
+            streamVersion={streamVersion}
+            onRefetchStream={async () => {
+              await stream.refetch();
+            }}
+          />
 
           <div className="manual-document-list">
             <div className="manual-section-label">CONTINUOUS MANUAL SECTIONS</div>
@@ -311,13 +354,50 @@ function Drawer({ title, onClose, children }: { title: string; onClose: () => vo
 // list. A blank query never fetches (doc 21 §14).
 // ---------------------------------------------------------------------------
 
-function ManualSearchNav({ streamVersion }: { streamVersion: number | null }) {
+function ManualSearchNav({
+  streamVersion,
+  onRefetchStream,
+}: {
+  streamVersion: number | null;
+  onRefetchStream: () => Promise<unknown>;
+}) {
   const [input, setInput] = useState("");
   const [query, setQuery] = useState("");
   const [cursorStack, setCursorStack] = useState<string[]>([]);
   const cursor = cursorStack.length > 0 ? (cursorStack[cursorStack.length - 1] ?? null) : null;
   const search = useManualSearch(query, cursor);
   const results = search.data ?? null;
+
+  const [recoveringAnchor, setRecoveringAnchor] = useState<string | null>(null);
+  const [unavailableAnchor, setUnavailableAnchor] = useState<string | null>(null);
+
+  // Doc 21 §7: "Anchor must exist in current stream version; if stale, refetch
+  // then resolve." Honest boundary: the retry can only find what the stream
+  // query returns — a section still behind an unloaded "Load more" page reads
+  // as unavailable.
+  const openResult = async (anchor: string): Promise<void> => {
+    setUnavailableAnchor(null);
+    const present = document.getElementById(anchor);
+    if (present) {
+      scrollToAnchor(present);
+      return;
+    }
+
+    setRecoveringAnchor(anchor);
+    try {
+      await onRefetchStream();
+    } catch {
+      // A failed refetch is not a verdict — the retry below still decides from
+      // what is actually rendered.
+    }
+    const recovered = await waitForAnchorElement(anchor);
+    setRecoveringAnchor(null);
+    if (recovered) {
+      scrollToAnchor(recovered);
+      return;
+    }
+    setUnavailableAnchor(anchor);
+  };
 
   return (
     <>
@@ -327,6 +407,7 @@ function ManualSearchNav({ streamVersion }: { streamVersion: number | null }) {
           event.preventDefault();
           setCursorStack([]);
           setQuery(input);
+          setUnavailableAnchor(null);
         }}
       >
         <input
@@ -348,6 +429,14 @@ function ManualSearchNav({ streamVersion }: { streamVersion: number | null }) {
       </form>
       <div className="manual-search-results">
         <div className="manual-section-label">SEARCH RESULTS</div>
+        {/* Live region stays mounted so the recovery outcome is announced when
+            it appears rather than arriving as a silent DOM insertion. */}
+        <div role="status" aria-live="polite">
+          {recoveringAnchor !== null ? (
+            <p className="cp-note">Refreshing the manual to locate that section…</p>
+          ) : null}
+          {unavailableAnchor !== null ? <p className="cp-note">{ANCHOR_UNAVAILABLE_MESSAGE}</p> : null}
+        </div>
         {search.isLoading && query.trim().length > 0 ? <Loading label="Searching…" /> : null}
         {search.isError ? <ErrorState error={search.error} onRetry={() => void search.refetch()} /> : null}
         {results && query.trim().length > 0 ? (
@@ -361,7 +450,18 @@ function ManualSearchNav({ streamVersion }: { streamVersion: number | null }) {
               <div className="manual-empty-state">Nothing matched “{results.meta.query}”.</div>
             ) : (
               results.data.map((row) => (
-                <a key={row.chunk_id} className="manual-search-result" href={`#${row.anchor}`}>
+                // The href stays real (copyable / middle-clickable), but the
+                // click is intercepted so a stale anchor recovers instead of
+                // jumping nowhere (UM-18).
+                <a
+                  key={row.chunk_id}
+                  className="manual-search-result"
+                  href={`#${row.anchor}`}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    void openResult(row.anchor);
+                  }}
+                >
                   <b>{row.title}</b>
                   <span className="manual-result-excerpt">{row.heading_path}</span>
                   <span className="manual-result-excerpt">{row.excerpt}</span>

@@ -1619,3 +1619,79 @@ Docker, iki E2E (dev-auth + gerçek tarayıcı/Compose) ve A11Y axe-core taramas
 - `blocked` outcome'ı (purge_pending / purged / restored) preflight'ta raporlanır ama frontend
   paneli bunu ayrıca ele almaz: bu durumlarda satır zaten `restore_eligible=false` olduğu için
   Restore düğmesi hiç render edilmiyor.
+---
+
+## O-30 · Purge-request 202 gövdesi — doc 20 §4/§7 ile §9.2 çelişkisi adjudicated
+
+**Denetim iddiası.** "API ne §4/§7'nin ne §9.2'nin şeklini döndürüyor." Doğru — ama iki yarısı
+farklı sebeplerden: değer tarafında kod **zaten** §9.2'yi izliyordu (kusur yok), ad tarafında
+§4/§7'nin alanı yanıtta hiç yoktu (gerçek kusur).
+
+### Çelişkinin ampirik haritası
+
+| Yer | Ne diyor |
+|---|---|
+| doc 20 §7 (satır 633) | `-> 202 { purge_job_id, trash_entry_id, root_lifecycle_state: 'soft_deleted', purge_status: 'pending' }` |
+| doc 20 §9.2 (satır 762–766) | `soft_deleted --purge request--> PURGE_PENDING` |
+| doc 20 §4 (satır 596, 602–603) | "Disabled for purge_pending"; "Returns 202 …; **root purge_pending**, Trash Entry pending" |
+| doc 20 §9.3 (satır 792) | "root purge_pending + entry pending + job enqueue" |
+| doc 20 §12 (satır 1103) | "202 job id; root/entry become purge_pending; Restore disabled" |
+
+Yani `root_lifecycle_state: 'soft_deleted'` tek başına kalan **outlier**; aynı dokümanın diğer
+dört yeri §9.2 ile hemfikir. `root_lifecycle_state` **adı** ise yalnız §7'de (ve §11 kolon
+listesinde, satır 727) geçiyor.
+
+Kodda (`commands/deletion.py::request_purge`, dönüş sözlüğü) yanıt şuydu:
+`purge_job_id, trash_entry_id, entity_id, entity_type, deletion_state="purge_pending",
+purge_status="pending", row_version, correlation_id` — **`root_lifecycle_state` yok**.
+
+### Karar (ADJUDICATED)
+
+- **DEĞER'de §9.2 kanonik.** Satır gerçekten `purge_pending` oluyor (`_mark_target_purge_pending`
+  dört dalın hepsinde yazıyor) ve `PURGE_PENDING -> restore` yasak. `'soft_deleted'` reklamı
+  çağırana "restore hâlâ açık" derdi — **yanlış** olurdu. §7 literali burada kaybeder.
+- **AD'da §4/§7 kanonik.** `root_lifecycle_state` sevk edilmiş bir tüketici adı; onu atmak §7
+  okuyucusunu karşılıksız bırakırdı.
+- Sonuç: **iki anahtar da gönderilir, aynı değeri taşır.** `deletion_state` ve
+  `root_lifecycle_state` her ikisi de `"purge_pending"`. Hiçbir tüketici yalan bilgi almaz.
+  (K-07 içtihadının aynısı: "aynı kusuru anlatan iki ad — her sayfanın kendi §-taksonomisi
+  otoritedir"; burada iki ad **tek** değerin iki yazımı, O-12'nin dual-token kuralı gibi.)
+
+### Değişen dosyalar
+
+- `backend/src/entropia/application/commands/deletion.py` — `request_purge` dönüş sözlüğüne
+  `"root_lifecycle_state": str(DeletionState.PURGE_PENDING)` eklendi + kararı taşıyan yorum.
+  **Ek (additive)**: hiçbir anahtar yeniden adlandırılmadı/silinmedi.
+- `backend/tests/integration/test_trash_page.py` —
+  `test_purge_pending_shape_carries_both_state_field_names`: 202 gövdesi iki alanı da taşıyor,
+  ikisi eşit, satır gerçekten `PURGE_PENDING` (dolayısıyla `'soft_deleted'` yalan olurdu),
+  restore `PurgeInProgressError` veriyor, ve **idempotency replay aynı şekli** döndürüyor
+  (gövde `run_idempotent` zarfında birebir saklandığı için).
+- `frontend/src/lib/trash.ts` — `PurgeResult` arayüzü backend sözlüğünü "verbatim" aynalıyor;
+  alan tipe eklendi. Sunum/veri mantığı, route, react-query key, OCC token ve Idempotency-Key
+  dokunulmadı.
+
+### Doğrulama
+
+`uv run pytest -k "purge_pending_shape" -q --no-cov` → 1 passed.
+`test_trash_page.py` + `test_trash_agent_artifact.py` + `test_user_manual.py` +
+`tests/contract/test_openapi_contract.py` → **53 passed**, exit 0.
+`ruff check .` · `ruff format --check .` (651 dosya) · `mypy src` (368 dosya) temiz.
+Frontend `tsc -b --noEmit` exit 0; `vitest run --no-file-parallelism -t "purge"` → 4 passed.
+**Migration YOK**, alembic head `0039_backtest_run_cancellation` değişmedi; `ENGINE_VERSION`
+bump edilmedi (motor yüzeyi dokunulmadı).
+
+### Dürüst sınır — `docs/openapi.json` DEĞİŞMEDİ
+
+Snapshot yenilendi (`openapi_export.main([])`) ve drift guard yeşil (`main(['--check']) == 0`,
+`test_openapi_snapshot_is_current` dahil), ama **dosyada tek satır diff yok**:
+`apps/api/routes/trash.py::purge` dönüş tipi `dict[str, Any]` olduğu için OpenAPI şeması bu
+202 gövdesinin alanlarını hiç saymıyor. Yani bu slice'ın alan eklemesi **şemada görünmez**;
+guard'ın yeşilliği "alan yayımlandı" anlamına gelmez. Gövdeyi şemaya taşımak (typed response
+model) ayrı ve daha geniş bir iştir — bu slice'ta **yapılmadı**, HTTP yüzeyini genişletirdi.
+
+### Kapsam dışı (bilerek)
+
+- Spec dosyasının kendisi (`docs/spec/20_*_v1_1.md`) **düzeltilmedi**; spec'ler kaynak
+  belgedir, karar kodda ve bu kayıtta pinlenir (O-02/O-12 ile aynı yöntem).
+- `purge_status`, `deletion_state` gibi diğer alanların adları/anlamları tartışılmadı.

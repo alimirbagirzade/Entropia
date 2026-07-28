@@ -124,6 +124,17 @@ Before stopping a working session, produce **ALL** of the following:
   `jobs/purge.py` + `queries/trash.py` içinde **`entity_type` dalı** ile yürür; yeni tip eklerken
   hepsini birden ekle. Agent artifact: soft delete owner-Agent/Admin (doc 20 §11), restore/purge
   Admin-only, purge preflight **canlı source task**'ta `PURGE_NOT_ELIGIBLE` verir (doc 20 §10).
+- **Purge 202 gövdesi = iki ad, tek değer (O-30).** Doc 20 kendi içinde çelişiyor: §7'nin
+  literali `root_lifecycle_state: 'soft_deleted'` derken §9.2'nin state machine'i (ve §4, §9.3,
+  §12) `soft_deleted --purge request--> PURGE_PENDING` diyor. **Adjudicated:** DEĞER'de §9.2
+  kanonik (satır gerçekten `purge_pending` olur ve `PURGE_PENDING -> restore` yasaktır;
+  `'soft_deleted'` reklamı "restore hâlâ açık" yalanı olurdu), AD'da §4/§7 kanonik. Bu yüzden
+  `commands/deletion.py::request_purge` gövdesi **`deletion_state` ve `root_lifecycle_state`
+  anahtarlarının İKİSİNİ birden** `"purge_pending"` değeriyle döndürür — biri kaldırılmaz,
+  ikisi asla ayrışmaz. Gövde `run_idempotent` zarfında birebir saklandığı için replay de aynı
+  şekli verir; `frontend/src/lib/trash.ts::PurgeResult` bu sözlüğü verbatim aynalar.
+  **Dürüst sınır:** route dönüş tipi `dict[str, Any]` olduğundan `docs/openapi.json` bu alanları
+  hiç saymaz — drift guard'ın yeşil olması alanın şemada yayımlandığı anlamına gelmez.
 - **Stage order is authoritative** (`STAGE_BUILD_PLAN.md`) — never skip sub-stages.
   Stage 5 = docs 15/16/17; Stage 6 = docs 18/19/20; Stage 7 = docs 21/22.
 - **UI / frontend = v18 mockup is the visual reference (mandatory).** Every frontend/UI
@@ -155,10 +166,11 @@ Before stopping a working session, produce **ALL** of the following:
 - **Son dalga — O-serisi (spec-uyum kusurları):** O-01 (#403) · O-02 (#400) · **O-03 (#407 + #413;
   #408 boş merge oldu, içeriğini #413 yeniden indirdi)** · O-04 (#405) · O-05 (#412) ·
   **O-06 (#419 — CancelBacktestRun, migration `0039`)** · O-08 (#406) · O-09 (#410) · O-10 (#402) ·
-  **O-17 (`feat/o17-restore-conflict-resolution` — restore conflict artık typed `resolution`
-  seçenek kümesi taşıyor; yeni `domain/trash/restore.py` katalogu + salt-okuma
+  **O-17 (#446 — restore conflict artık typed `resolution` seçenek kümesi taşıyor; yeni
+  `domain/trash/restore.py` katalogu + salt-okuma
   `GET /trash-entries/{id}/restore-preflight`; bilinmeyen resolution 422
   `UNSUPPORTED_RESTORE_RESOLUTION`; migration YOK)** ·
+  **O-30 (purge 202 gövdesi — doc 20 §4/§7 ↔ §9.2 adjudicated, migration YOK; PR bekliyor)**
 
 
 - **Testler:** son yeşil referans CI (O-serisi PR'ları). Lokal tam suite tek koşuda

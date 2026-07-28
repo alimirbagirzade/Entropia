@@ -456,6 +456,56 @@ async def test_purge_request_idempotency_key_replays_same_job(session) -> None:
     assert await _count(session, Job) == jobs_before  # no second job
 
 
+async def test_purge_pending_shape_carries_both_state_field_names(session) -> None:
+    """O-30 adjudication: doc 20 §4/§7's 202 literal names the field
+    `root_lifecycle_state` and pins it to 'soft_deleted'; §9.2's state machine
+    says the request moves the root to PURGE_PENDING. §9.2 is canonical on the
+    VALUE and §4/§7 on the NAME, so the body ships BOTH keys with the same,
+    truthful value — and the row below proves 'soft_deleted' would be a lie.
+    """
+    entity_id = await _delete_one(session)
+    # Plain-str copy: ORM attribute access after the rollback below would
+    # lazy-load (same trap as test_purge_two_phase_flow_completes_with_tombstone).
+    trash_id = (await _entry_for(session, entity_id)).id
+
+    accepted = await request_purge(
+        session,
+        ADMIN,
+        trash_entry_id=trash_id,
+        confirmation_phrase=entity_id,
+        reauth_proof=await _mint_reauth_proof(session),
+        idempotency_key="purge-shape-1",
+    )
+    await session.commit()
+
+    assert accepted["deletion_state"] == "purge_pending"
+    assert accepted["root_lifecycle_state"] == "purge_pending"
+    assert accepted["root_lifecycle_state"] == accepted["deletion_state"]
+
+    # The §4/§7 literal ('soft_deleted') would have contradicted the row: the
+    # root is already purge_pending and restore is closed (§9.2 forbids
+    # PURGE_PENDING -> restore).
+    root = await session.get(EntityRegistry, entity_id)
+    assert root is not None and root.deletion_state == DeletionState.PURGE_PENDING
+    with pytest.raises(PurgeInProgressError):
+        await restore_trash_entry(session, ADMIN, trash_entry_id=trash_id)
+    await session.rollback()
+
+    # The stored idempotency envelope carries the same shape, so a replay
+    # serves a §4/§7 reader exactly like the first response did.
+    replay = await request_purge(
+        session,
+        ADMIN,
+        trash_entry_id=trash_id,
+        confirmation_phrase=entity_id,
+        reauth_proof="replay-never-re-checks-the-proof",
+        idempotency_key="purge-shape-1",
+    )
+    await session.commit()
+    assert replay["root_lifecycle_state"] == "purge_pending"
+    assert replay["deletion_state"] == "purge_pending"
+
+
 async def test_purge_worker_failure_returns_root_to_soft_deleted(session, monkeypatch) -> None:
     entity_id = await _delete_one(session)
     entry = await _entry_for(session, entity_id)

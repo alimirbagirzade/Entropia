@@ -748,7 +748,18 @@ async def request_purge(
             "trash_entry_id": entry.id,
             "entity_id": entry.entity_id,
             "entity_type": entry.entity_type,
+            # Doc 20 carries the purge-request 202 body in two places that
+            # disagree: §4/§7's literal spells the field `root_lifecycle_state`
+            # and pins it to 'soft_deleted', while §9.2's state machine (with
+            # §4 rows 596/602-603, §9.3 and §12) says the request itself moves
+            # the root to PURGE_PENDING. ADJUDICATED (O-30): §9.2 wins on the
+            # VALUE — the row really is purge_pending once this returns, and
+            # advertising 'soft_deleted' would tell the caller restore is still
+            # open when it is not. §4/§7 wins on the NAME — both keys ship,
+            # carrying the same value, so a §4/§7 reader and a §9.2 reader are
+            # each served without either being lied to.
             "deletion_state": str(DeletionState.PURGE_PENDING),
+            "root_lifecycle_state": str(DeletionState.PURGE_PENDING),
             "purge_status": "pending",
             "row_version": entry.row_version,
             "correlation_id": actor.correlation_id,

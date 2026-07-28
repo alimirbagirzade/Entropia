@@ -1,7 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { QueryClient } from "@tanstack/react-query";
 
-import { connectEvents, EVENT_QUERY_KEYS, SSE_EVENT_NAMES, type SseStatus } from "@/lib/sse";
+import {
+  connectEvents,
+  EVENT_QUERY_KEYS,
+  SSE_EVENT_NAMES,
+  STREAM_RESYNC,
+  type SseStatus,
+} from "@/lib/sse";
 import { getSessionInvalidations } from "@/lib/session";
 import { resetAuthMode, setAuthMode } from "@/lib/authMode";
 
@@ -409,5 +415,135 @@ describe("connectEvents SSE live-invalidation over fetch", () => {
     await flush();
     // persisted === false is the normal first load — no extra stream is opened.
     expect(conns.length).toBe(1);
+  });
+
+  // --- O-21: resumable stream (Last-Event-ID replay + announced resync) ---
+
+  // A server data frame now carries the outbox id it was projected from. The
+  // client must remember it and hand it back on reopen — the bookkeeping a native
+  // EventSource would do for us, which AUTH-11's header-only credential rules out.
+  const CURSOR = "obx_00000000000000000000000007";
+  const LATER = "obx_00000000000000000000000009";
+  const RECONNECT_BASE_MS = 1000;
+
+  function dataFrame(event: string, id: string): string {
+    return `id: ${id}\nevent: ${event}\ndata: {}\n\n`;
+  }
+
+  // Drop the open stream and let the backoff reopen it, returning the new attempt.
+  async function reconnect(conn: Conn): Promise<Conn> {
+    conn.dropServer();
+    await flush();
+    await vi.advanceTimersByTimeAsync(RECONNECT_BASE_MS);
+    await flush();
+    return lastConn();
+  }
+
+  it("sends no Last-Event-ID on a first connection", () => {
+    setup();
+    // Nothing has been seen yet, so there is no gap to replay — a fresh subscriber
+    // must not ask the server to walk history at it.
+    expect(lastConn().header("Last-Event-ID")).toBeUndefined();
+  });
+
+  it("presents the last processed id as Last-Event-ID when it reopens", async () => {
+    vi.useFakeTimers();
+    try {
+      setup();
+      const conn = await openAndSettle();
+      conn.stream.push(dataFrame("agent.task.updated", CURSOR));
+      await flush();
+
+      const reopened = await reconnect(conn);
+      reopened.open();
+      await flush();
+
+      expect(conns.length).toBe(2);
+      expect(reopened.header("Last-Event-ID")).toBe(CURSOR);
+      // Resumption is additive: the credential still rides along, and the cursor
+      // stays a header — never the URL, never an access log.
+      expect(reopened.header("Accept")).toBe("text/event-stream");
+      expect(reopened.url).not.toContain(CURSOR);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("advances the cursor as later events arrive", async () => {
+    vi.useFakeTimers();
+    try {
+      setup();
+      const conn = await openAndSettle();
+      conn.stream.push(dataFrame("agent.task.updated", CURSOR));
+      conn.stream.push(dataFrame("job.updated", LATER));
+      await flush();
+
+      const reopened = await reconnect(conn);
+      // Resuming from the OLDER id would replay an event we already handled.
+      expect(reopened.header("Last-Event-ID")).toBe(LATER);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not let a control frame move the cursor", async () => {
+    vi.useFakeTimers();
+    try {
+      setup();
+      const conn = await openAndSettle();
+      conn.stream.push(dataFrame("agent.task.updated", CURSOR));
+      conn.stream.push(frame("heartbeat"));
+      conn.stream.push(frame(STREAM_RESYNC));
+      await flush();
+
+      const reopened = await reconnect(conn);
+      // Heartbeat and resync are stream commentary, not resumption points.
+      expect(reopened.header("Last-Event-ID")).toBe(CURSOR);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps the cursor when a frame carries an empty id", async () => {
+    vi.useFakeTimers();
+    try {
+      setup();
+      const conn = await openAndSettle();
+      conn.stream.push(dataFrame("agent.task.updated", CURSOR));
+      // Per the SSE spec an empty `id:` clears the last event id; honouring that
+      // would silently forfeit the next replay, so it must be ignored.
+      conn.stream.push("id: \nevent: heartbeat\ndata: {}\n\n");
+      await flush();
+
+      const reopened = await reconnect(conn);
+      expect(reopened.header("Last-Event-ID")).toBe(CURSOR);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("refetches everything when the server announces a resync", async () => {
+    const { spy } = setup();
+    const conn = await openAndSettle();
+    spy.mockClear();
+
+    conn.stream.push(frame(STREAM_RESYNC));
+    await flush();
+
+    // Events were dropped server-side and cannot be replayed: the only honest
+    // recovery is a full refetch, exactly as after a connection gap.
+    expect(spy).toHaveBeenCalledWith();
+  });
+
+  it("still invalidates the mapped key for a frame that carries an id", async () => {
+    const { spy } = setup();
+    const conn = await openAndSettle();
+    spy.mockClear();
+
+    conn.stream.push(dataFrame("backtest.run.updated", CURSOR));
+    await flush();
+
+    // The id parsing must not disturb the taxonomy dispatch it sits beside.
+    expect(spy).toHaveBeenCalledWith({ queryKey: ["backtests"] });
   });
 });

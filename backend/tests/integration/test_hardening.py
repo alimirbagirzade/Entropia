@@ -129,15 +129,15 @@ async def test_sse_feed_streams_only_events_after_cursor(session) -> None:
 
 async def test_sse_hub_broadcast_and_taxonomy(session) -> None:
     hub = SseHub()
-    queue_a = hub.subscribe()
-    queue_b = hub.subscribe()
+    sub_a = hub.subscribe()
+    sub_b = hub.subscribe()
     hub.publish({"id": "obx_1", "event_type": "x", "resource_type": "demo"})
-    assert queue_a.get_nowait()["id"] == "obx_1"
-    assert queue_b.get_nowait()["id"] == "obx_1"
-    hub.unsubscribe(queue_b)
+    assert sub_a.queue.get_nowait()["id"] == "obx_1"
+    assert sub_b.queue.get_nowait()["id"] == "obx_1"
+    hub.unsubscribe(sub_b)
     hub.publish({"id": "obx_2", "event_type": "x", "resource_type": "demo"})
-    assert queue_a.get_nowait()["id"] == "obx_2"
-    assert queue_b.qsize() == 0
+    assert sub_a.queue.get_nowait()["id"] == "obx_2"
+    assert sub_b.queue.qsize() == 0
     assert hub.subscriber_count == 1
 
     # Module 20 §10 taxonomy across all domains.

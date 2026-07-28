@@ -158,12 +158,28 @@ domain mutasyonu ─┬─> audit_events   (aynı transaction)
 ilerletir; SSE poller (`fetch_events_after`, `latest_event_id`) yalnız YENİ olayları kuyruktan
 tarar — geçmiş bir sorgu meselesidir, stream'in değil.
 
-### Kayıp toleransı (INF-11)
+### Kayıp toleransı + resume (INF-11 + O-21)
 
-- `SseHub` (`sse.py:47`) sabit boyutlu buffer (`_SUBSCRIBER_BUFFER = 256`) kullanır.
-  **Yavaş bir abonenin dolu buffer'ı olay DÜŞÜRÜR** — stream best-effort'tur, kayıt defteri değildir.
-- Heartbeat: `HEARTBEAT_SECONDS = 15` (`sse.py:27`); veri yoksa `event: heartbeat` çerçevesi (`:125`).
-- Frontend her yeniden bağlanışta **tam refresh** yapar → boşlukta kaçan olaylar telafi edilir.
+Kayıp hâlâ **tolere edilir**, ama artık **sessiz değildir** ve boşluk **replay** edilir.
+
+| Mekanizma | Nerede | Davranış |
+|---|---|---|
+| `id:` alanı | `_sse_frame` | Her veri çerçevesi **outbox satır id'sini** taşır (AUTH-11 zarfına bilerek eklenen tek alan; domain nesnesi adreslemez). Kontrol çerçeveleri (`heartbeat`, `stream.resync`) **id taşımaz** — cursor'ı ilerletmezler. |
+| `Last-Event-ID` | `requested_cursor` → `replay_after` | Reconnect'te header okunur; `shared/ids.py::looks_like_id(prefix="obx")` ile **tam biçim** doğrulanır (yabancı/bozuk değer → cursor yok = eski davranış), sonra `fetch_events_after` ile kaçırılan olaylar **kısa bir session'da** DB'den replay edilir. |
+| Yarış kapatma | `_event_source` | Generator replay'den **ÖNCE** hub'a abone olur; replay sorgusu sırasında yayılan olay kuyruğa düşer ve canlı akışta `event_id <= replayed_through` ile **tekilleştirilir** (aynı olay iki kez gitmez). |
+| `stream.resync` | `_control_frame(RESYNC_EVENT)` | Üç durumda üretilir: (1) abone buffer'ı taştı (`Subscriber.mark_overflowed` → `take_overflow`), (2) boşluk `REPLAY_LIMIT = 500`'den büyük, (3) replay okuması hata verdi. Anlamı: *"veremediğim olaylar var — her şeyi refetch et"*. |
+| Tam refresh | frontend `lib/sse.ts` | **Fallback olarak korunur**: ilk bağlantı, resync ve replay penceresinin yetmediği boşluk için. |
+
+- `SseHub` sabit boyutlu buffer (`_SUBSCRIBER_BUFFER = 256`) kullanır; dolu buffer olayı **düşürür**
+  (poller asla back-pressure yemez) ama düşüş o abonenin **overflow bayrağına** yazılır → `stream.resync`.
+- Heartbeat: `HEARTBEAT_SECONDS = 15`; veri yoksa `event: heartbeat` çerçevesi.
+- Frontend `EventSource` **kullanmaz** (AUTH-11 header'lı kimlik → `fetch` stream). Bu yüzden tarayıcının
+  otomatik `Last-Event-ID` davranışı yoktur: `lib/sse.ts` son gördüğü `id:`'yi kendi tutar ve her
+  yeniden açılışta `Last-Event-ID` header'ı olarak gönderir. Boş `id:` cursor'ı **silmez** (spec'in
+  aksine, bilerek: silmek bir sonraki replay'i kaybettirirdi).
+
+> **Taksonomi değişmedi.** `stream.resync` ve `heartbeat` domain taksonomisinin **dışındadır**
+> (`EVENT_QUERY_KEYS`'te yer almazlar); resync frontend'de tam refresh'e bağlanır.
 
 ### SSE taksonomisi (`sse_event_name` `sse.py:33-44`)
 
@@ -182,6 +198,12 @@ Frontend karşılığı: `FRONTEND_MAP.md` → "SSE → react-query invalidation
 `GET /agent-events/stream` (`routes/agent_lab.py:237`) **yalnız heartbeat** üretir
 (`_event_stream:227`, `_SSE_HEARTBEAT_SECONDS`) ve `require_role(_LAB_ROLES)` ile kapıdadır.
 Ana `/events` stream'inden bağımsızdır ve frontend'de ikinci bir `EventSource` olarak bağlanmamıştır.
+
+> **Dürüst sınır (O-21):** bu ikincil stream olay taşımadığı için `id:`/replay **eklenmedi** —
+> abone başına `agent_event` yoklaması, tek-process poller mimarisinin kaçındığı bağlantı yükünü
+> geri getirirdi. Agent olayları frontend'e ana `/events` üzerinden `agent.task.updated` olarak
+> ulaşır ve replay'i oradan alır. `repositories/agent_lab.py::events_after` / `latest_event_seq`
+> hâlâ **çağrısızdır** (agent_event'in kendi replay primitifleri, bir tüketici bekliyor).
 
 ---
 

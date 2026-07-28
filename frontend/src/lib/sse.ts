@@ -4,6 +4,12 @@
 // missed event self-heals on the next refetch, and a reconnect triggers a full
 // refresh so no view is left stale across a connection gap.
 //
+// O-21: the stream is RESUMABLE. Every data frame carries an `id:`; this client
+// remembers the last one and presents it as `Last-Event-ID` when it reopens, so the
+// server replays what was missed instead of the client guessing. A `stream.resync`
+// frame — the server announcing events it dropped and cannot replay — forces the
+// full refresh, which also stays the blanket fallback on every reconnect.
+//
 // AUTH-11: the stream is a PROTECTED channel. The native `EventSource` cannot send
 // a `Bearer` / `X-Actor-Id` header, so this client streams over `fetch` instead —
 // it carries the exact same one credential the active AUTH_MODE trusts, via the
@@ -44,6 +50,12 @@ export const EVENT_QUERY_KEYS: Record<SseEventName, readonly QueryKey[]> = {
 export const SSE_EVENT_NAMES = Object.keys(EVENT_QUERY_KEYS) as SseEventName[];
 
 const EVENT_NAME_SET = new Set<string>(SSE_EVENT_NAMES);
+
+// Control frames (apps/api/sse.py). Deliberately OUTSIDE the taxonomy above: they
+// describe the stream, not a resource, so they are not in EVENT_QUERY_KEYS.
+// `stream.resync` is the server saying "you are missing events I could not hand
+// you" — the announced replacement for a silent drop, answered with a full refresh.
+export const STREAM_RESYNC = "stream.resync";
 
 function invalidateForEvent(queryClient: QueryClient, name: SseEventName): void {
   const keys = EVENT_QUERY_KEYS[name];
@@ -93,6 +105,12 @@ export function connectEvents(
   let disposed = false;
   let hasOpened = false;
   let attempt = 0;
+  // The resumption cursor: the `id:` of the last frame we actually processed. A
+  // native `EventSource` would track and resend this for us, but AUTH-11 forces a
+  // header-capable `fetch` stream instead — so the client owns the bookkeeping the
+  // browser would otherwise do, and sends `Last-Event-ID` on every reopen. Kept in
+  // memory only: it is a stream position, not session state worth persisting.
+  let lastEventId: string | null = null;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   // The AbortController for the CURRENT fetch stream. Replaced on every (re)open;
   // aborting it is how we deliberately tear a stream down (dispose / pagehide /
@@ -141,14 +159,26 @@ export function connectEvents(
   }
 
   function dispatchFrame(frame: string): void {
+    let name = "";
     for (const line of frame.split(/\r?\n/)) {
-      if (!line.startsWith("event:")) continue;
-      const name = line.slice("event:".length).trim();
-      if (EVENT_NAME_SET.has(name)) invalidateForEvent(queryClient, name as SseEventName);
-      // "heartbeat" and any unrecognized event keep the stream observable but have
-      // no cache effect — a single `event:` line per frame, so stop scanning.
+      if (line.startsWith("event:")) name = line.slice("event:".length).trim();
+      // Advance the cursor only on a non-empty id. Per the SSE spec an empty `id:`
+      // CLEARS the last event id; honouring that here would silently forfeit the
+      // replay on the next reconnect, so a blank one is ignored instead.
+      else if (line.startsWith("id:")) {
+        const id = line.slice("id:".length).trim();
+        if (id) lastEventId = id;
+      }
+    }
+    if (name === STREAM_RESYNC) {
+      // Events were dropped server-side and cannot be replayed — the cursor is
+      // still valid for what follows, but the gap it hides has to be refetched.
+      void queryClient.invalidateQueries();
       return;
     }
+    // "heartbeat" and any unrecognized event keep the stream observable but have
+    // no cache effect.
+    if (EVENT_NAME_SET.has(name)) invalidateForEvent(queryClient, name as SseEventName);
   }
 
   async function openStream(): Promise<void> {
@@ -162,7 +192,13 @@ export function connectEvents(
         method: "GET",
         // Header-only credential (AUTH-11): the shared mode-aware selector attaches
         // exactly the one credential the active AUTH_MODE trusts. Never a query param.
-        headers: { Accept: "text/event-stream", ...authHeaders() },
+        // `Last-Event-ID` rides along on a reopen so the server can replay the gap
+        // (O-21) — a header too, so the cursor never lands in a URL or an access log.
+        headers: {
+          Accept: "text/event-stream",
+          ...(lastEventId === null ? {} : { "Last-Event-ID": lastEventId }),
+          ...authHeaders(),
+        },
         signal: local.signal,
       });
       if (local.signal.aborted || controller !== local) return;
@@ -175,8 +211,11 @@ export function connectEvents(
         return;
       }
 
-      // Connected. Reset the backoff ramp; a reconnect (native drop OR our backoff)
-      // means events emitted during the gap were missed — refetch all state.
+      // Connected. Reset the backoff ramp. The gap is now covered twice over: the
+      // server replays it precisely from our `Last-Event-ID` (O-21), and this blind
+      // full refresh stays as the FALLBACK — it still covers a first connection
+      // with no cursor, a resync the server could not replay, and any event the
+      // replay window was too small to hold.
       attempt = 0;
       if (hasOpened) void queryClient.invalidateQueries();
       hasOpened = true;

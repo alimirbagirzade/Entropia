@@ -493,6 +493,33 @@ describe("Portfolio / Equity Allocation page", () => {
     expect(screen.getAllByText("item_1").length).toBeGreaterThan(0);
   });
 
+  it("names the item a validation issue points at, instead of a bare id (F-07)", async () => {
+    // The issue binds to composition item "item_1", whose server-owned label is
+    // "Momentum A". Before this sweep the issue row showed ONLY the raw id, so a
+    // reader had to recognize an opaque identifier to know which item was at
+    // fault — the exact defect F-07 names. The label is now the primary text and
+    // the id stays beneath it as the binding key.
+    const itemScopedReport = {
+      ...VALIDATION_REPORT,
+      issues: [{ ...VALIDATION_REPORT.issues[0], composition_item_id: "item_1" }],
+    };
+    stubApi({
+      "POST /portfolio-allocation/validate": itemScopedReport,
+      "GET /mainboard-compositions/ws_1/portfolio-allocation-draft": DRAFT_SAVED,
+      "GET /mainboards/default": MAINBOARD,
+    });
+    renderPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Validate saved draft" }));
+
+    const issueRow = (await screen.findByText("TOTAL_ALLOCATION_UNDER_100")).closest("tr");
+    expect(issueRow).not.toBeNull();
+    // The human label is inside the issue row itself, not merely elsewhere on the page.
+    expect(within(issueRow as HTMLElement).getByText("Momentum A")).toBeInTheDocument();
+    // The raw id is kept for support/audit, but only as the secondary key.
+    expect(within(issueRow as HTMLElement).getByText("item_1")).toBeInTheDocument();
+  });
+
   it("distinguishes the two Add Item empty states", async () => {
     // Every candidate the composition offers already has an allocation row —
     // distinct from there being no compatible items at all.

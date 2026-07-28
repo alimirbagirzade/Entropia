@@ -14,15 +14,16 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from entropia.domain.backtest.engine import EngineOutput
-from entropia.domain.backtest.enums import RUN_ACTIVE_STATES
+from entropia.domain.backtest.enums import RUN_ACTIVE_STATES, BacktestRunState, RunEventType
 from entropia.domain.backtest.metrics import MetricValue
 from entropia.infrastructure.postgres.models.backtest import (
     BacktestResult,
     BacktestRun,
+    BacktestRunEvent,
     BacktestRunManifest,
     DiagnosticArtifact,
     MetricValueRow,
@@ -132,7 +133,17 @@ async def create_manifest(
     return row
 
 
-async def get_run(session: AsyncSession, run_id: str) -> BacktestRun | None:
+async def get_run(
+    session: AsyncSession, run_id: str, *, for_update: bool = False
+) -> BacktestRun | None:
+    """Load a run; ``for_update`` takes the row lock in the SAME query (O-06).
+
+    The worker and ``cancel_backtest_run`` both serialize on this lock, which is
+    what stops a cancel from being silently overwritten by a worker claiming the
+    run (and vice versa). Locking in the initial read rather than re-selecting
+    afterwards keeps the worker at its original single round trip."""
+    if for_update:
+        return await session.get(BacktestRun, run_id, with_for_update=True)
     return await session.get(BacktestRun, run_id)
 
 
@@ -157,6 +168,77 @@ async def has_active_run_for_root(session: AsyncSession, root_id: str) -> bool:
         if any(str(item.get("root_id")) == root_id for item in items):
             return True
     return False
+
+
+# --------------------------------------------------------------------------- #
+# Run stage events (O-05, doc 15 §7, §8.3, §11, §12)                          #
+# --------------------------------------------------------------------------- #
+
+
+async def latest_run_sequence(session: AsyncSession, run_id: str) -> int:
+    """Highest ``sequence_no`` written for the run so far (0 when it has none)."""
+    stmt = select(func.coalesce(func.max(BacktestRunEvent.sequence_no), 0)).where(
+        BacktestRunEvent.run_id == run_id
+    )
+    return int((await session.execute(stmt)).scalar_one())
+
+
+async def record_run_event(
+    session: AsyncSession,
+    *,
+    run_id: str,
+    event_type: RunEventType,
+    state: BacktestRunState,
+    previous_state: BacktestRunState | None = None,
+    correlation_id: str | None = None,
+    detail: dict[str, Any] | None = None,
+) -> BacktestRunEvent:
+    """Append ONE stage event, taking the next per-run ``sequence_no``.
+
+    L1 (parent-before-child): the caller always holds a persisted ``backtest_run``
+    row — the worker loaded it and admission flushed it — so the FK is satisfiable
+    when this INSERT flushes. The sequence is allocated from the run's own MAX; a
+    concurrent second writer for the SAME run does not silently interleave, it
+    violates ``UNIQUE(run_id, sequence_no)`` and raises. That constraint is also
+    what makes doc 15 §7 de-duplication real: one logical event keeps one sequence
+    forever, so a reconnecting reader keyed on ``sequence_no`` never double-counts
+    a redelivered event.
+    """
+    event = BacktestRunEvent(
+        event_id=new_id("brev"),
+        run_id=run_id,
+        sequence_no=await latest_run_sequence(session, run_id) + 1,
+        event_type=event_type,
+        previous_state=previous_state,
+        state=state,
+        correlation_id=correlation_id,
+        detail=_jsonable(detail) if detail is not None else None,
+    )
+    session.add(event)
+    await session.flush()
+    return event
+
+
+async def list_run_events(
+    session: AsyncSession,
+    run_id: str,
+    *,
+    after_sequence: int = 0,
+    limit: int,
+) -> list[BacktestRunEvent]:
+    """Events strictly after ``after_sequence``, ascending — the reconnect replay.
+
+    Ascending + strictly-greater is the whole contract (doc 15 §11 "Reconnect by
+    event sequence"): a client that resumes from the last sequence it saw gets
+    every later event exactly once and nothing it already holds.
+    """
+    stmt = (
+        select(BacktestRunEvent)
+        .where(BacktestRunEvent.run_id == run_id, BacktestRunEvent.sequence_no > after_sequence)
+        .order_by(BacktestRunEvent.sequence_no.asc())
+        .limit(limit)
+    )
+    return list((await session.execute(stmt)).scalars().all())
 
 
 # --------------------------------------------------------------------------- #

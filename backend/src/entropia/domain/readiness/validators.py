@@ -8,7 +8,7 @@ batch state, allocation config) and calls :func:`evaluate_readiness`; it owns
 aggregation, report persistence and audit.
 
 Fixed check order (doc 14 §9.2): composition -> lifecycle -> strategy ->
-market data -> external working objects -> portfolio allocation.
+market data -> research data -> external working objects -> portfolio allocation.
 """
 
 from __future__ import annotations
@@ -25,15 +25,20 @@ from entropia.domain.allocation.rules import AllocationIssue
 from entropia.domain.backtest.capabilities import future_dev_selections
 from entropia.domain.backtest.engine import (
     conflict_handling_is_modelled,
-    execution_timing_is_modelled,
-    leverage_is_modelled,
-    order_execution_is_modelled,
     partial_close_is_modelled,
     restrictions_are_modelled,
     scaling_is_modelled,
     signal_strength_is_modelled,
+)
+from entropia.domain.backtest.execution.fills import (
+    execution_timing_is_modelled,
+    order_execution_is_modelled,
+)
+from entropia.domain.backtest.execution.sizing import (
+    leverage_is_modelled,
     sizing_is_modelled,
 )
+from entropia.domain.lifecycle.enums import ValidationStatus
 from entropia.domain.mainboard.enums import MainboardItemKind
 from entropia.domain.readiness.enums import (
     ReadinessIssueCode as Code,
@@ -47,7 +52,17 @@ from entropia.domain.readiness.enums import (
 from entropia.domain.readiness.enums import (
     ReadinessState,
 )
-from entropia.domain.readiness.issues import ReadinessIssue, ReadinessItemInput
+from entropia.domain.readiness.issues import (
+    ReadinessIssue,
+    ReadinessItemInput,
+    ResearchSourceState,
+)
+from entropia.domain.research_data.enums import (
+    AvailableTimePolicy,
+    ResearchRevisionState,
+    UsageScope,
+)
+from entropia.domain.research_data.time_policy import instrument_mapping_is_valid
 from entropia.domain.strategy.config import StrategyConfig
 from entropia.domain.trade_log.compiler import validate_semantics as validate_trade_log_semantics
 from entropia.domain.trade_log.config import TradeLogConfig
@@ -77,6 +92,19 @@ _OHLCV_FALLBACK_SOURCES = frozenset(
         TradeLogPriceSource.OHLCV_INTRABAR_IF_AVAILABLE,
     }
 )
+
+# O-01: the ONLY usage scope doc 12 §9.3 lets into a Backtest Evidence Bundle.
+# ``agent_research_only`` and ``feature_input_only`` are both "Forbidden" / "only via
+# an approved feature definition" in that matrix — neither is raw backtest input.
+_BACKTEST_ELIGIBLE_USAGE_SCOPE = str(UsageScope.RESEARCH_BACKTEST)
+# Only an APPROVED revision feeds a bundle (doc 12 §8.2; ``verified`` is NOT enough).
+_BACKTEST_ELIGIBLE_REVISION_STATE = str(ResearchRevisionState.APPROVED)
+# ``fixed_delay`` is the one policy that additionally needs a positive bounded delay
+# (doc 12 §5.2); every other policy derives availability without one.
+_FIXED_DELAY_POLICY = str(AvailableTimePolicy.FIXED_DELAY)
+# The persisted ``validation_status`` value that means "analysis recorded a
+# non-blocking quality finding" (limited coverage / low fill rate / duplicate density).
+_VALIDATION_WARNING = str(ValidationStatus.WARNING)
 
 # Allocation blocker codes that resolve to a specific readiness code; anything
 # else maps to the generic ALLOCATION_ISSUE (still carrying the original message).
@@ -115,6 +143,7 @@ def evaluate_readiness(
     market_data_issues: Sequence[ReadinessIssue] = (),
     tick_data_issues: Sequence[ReadinessIssue] = (),
     strategy_indicator_issues: Sequence[ReadinessIssue] = (),
+    research_sources: Sequence[ResearchSourceState] = (),
 ) -> ReadinessEvaluation:
     """Aggregate all validator layers into an immutable evaluation (doc 14 §9.2).
 
@@ -127,6 +156,10 @@ def evaluate_readiness(
     worker can never silently substitute the breakout proxy. ``tick_data_issues`` are
     the F-07i blockers the command resolved for strategies that demand tick data
     ('Use Tick Data' = Yes) but have no approved tick/trade dataset — also a DB read.
+    ``research_sources`` are the O-01 resolved Research Data pins (one per research
+    revision a strategy consumes); they are judged HERE by the pure
+    ``validate_research_sources`` rather than arriving pre-judged, because the whole
+    Research decision is expressible over the resolved row (doc 14 §9.2 Research row).
     """
     issues: list[ReadinessIssue] = []
     issues.extend(_composition_issues(items))
@@ -136,6 +169,7 @@ def evaluate_readiness(
     issues.extend(market_data_issues)
     issues.extend(tick_data_issues)
     issues.extend(strategy_indicator_issues)
+    issues.extend(validate_research_sources(research_sources))
     issues.extend(_map_allocation_issues(allocation_issues))
 
     blockers = sum(1 for i in issues if i.severity == Sev.BLOCKER)
@@ -627,6 +661,210 @@ def _has_exit_or_stop(config: StrategyConfig) -> bool:
 
 
 # --------------------------------------------------------------------------- #
+# Research Data (doc 14 §9.2 "Research Data" row; doc 12 §9.2/§9.3/§10) — O-01   #
+# --------------------------------------------------------------------------- #
+
+
+def validate_research_sources(
+    sources: Sequence[ResearchSourceState],
+) -> list[ReadinessIssue]:
+    """Judge every Research Data revision the composition pins (doc 14 §9.2).
+
+    Doc 12 §9.2 requires BOTH Ready Check and the Backtest worker to validate the
+    evidence bundle server-side. The worker gate (``queries/funding.py`` ->
+    ``FundingSourceInvalid``) is deliberately left in place: it is the last line of
+    defence for a revision whose eligibility changed between admission and execution.
+    This layer is the UPFRONT gate, so an ineligible pin surfaces as a Ready Check
+    BLOCKER (and a 422 ``READINESS_BLOCKED`` on RUN) instead of a mid-run crash.
+
+    Blockers (doc 14 §9.2 Research row, in evaluation order):
+
+    * ``LIFECYCLE_BLOCKED`` — the pinned revision does not resolve, its root is not
+      ACTIVE, or the revision is not APPROVED. Reported ALONE: nothing further can be
+      trusted about a revision we could not resolve or that is not eligible at all,
+      and three findings for one broken pin would be noise, not detail.
+    * ``USAGE_SCOPE_FORBIDDEN`` — the usage scope excludes backtest consumption
+      (doc 12 §9.3: ``agent_research_only`` is Forbidden in a Backtest Evidence
+      Bundle; ``feature_input_only`` only reaches a strategy through an approved
+      versioned feature definition, never as a raw pin).
+    * ``TIME_POLICY_INVALID`` — available time is undefined: no available-time policy,
+      or ``fixed_delay`` without a positive bounded delay (doc 12 §5.2, §8.4). Without
+      it the engine cannot prove ``available_at <= t`` and would leak future values.
+    * ``DEPENDENCY_BLOCKED`` — the revision declares a link to a market dataset
+      revision OTHER than the one the strategy pins ("exact Market Data compatibility
+      missing"). A revision declaring NO link is compatible: it is consumed by pinned
+      revision id, not resolved through a market link.
+    * ``INSTRUMENT_MAPPING_INVALID`` — the link/mapping pair is incoherent (reusing
+      ``instrument_mapping_is_valid``, the same predicate the engine's availability
+      gate depends on, so the two can never disagree).
+
+    Warning:
+
+    * ``RESEARCH_COVERAGE_LIMITED`` — the revision's recorded analysis outcome is
+      WARNING (doc 14 §9.2 "Limited coverage or low fill rate"). Honest boundary: the
+      analysis records per-dataset quality (null density, duplicate density, coverage),
+      NOT per-requested-interval fill rate — no such metric is computed today — so this
+      warns that the pinned dataset carries a non-blocking quality finding and points
+      at its quality report, rather than claiming an interval-scoped measurement.
+    """
+    issues: list[ReadinessIssue] = []
+    for source in sources:
+        lifecycle = _research_lifecycle_issue(source)
+        if lifecycle is not None:
+            issues.append(lifecycle)
+            continue
+        issues.extend(_research_eligibility_issues(source))
+    return issues
+
+
+def _research_lifecycle_issue(source: ResearchSourceState) -> ReadinessIssue | None:
+    """The one blocker that stops all further judgement of a pinned revision."""
+    if not source.found:
+        reason = "does not resolve to a research dataset revision"
+    elif not source.root_active:
+        reason = "belongs to a deleted or inaccessible research dataset"
+    elif source.revision_state != _BACKTEST_ELIGIBLE_REVISION_STATE:
+        reason = f"is not Approved (state={source.revision_state})"
+    else:
+        return None
+    return ReadinessIssue(
+        Code.LIFECYCLE_BLOCKED,
+        Sev.BLOCKER,
+        Scope.RESEARCH_DATA,
+        f"The pinned research dataset revision '{source.revision_id}' {reason}.",
+        remediation=(
+            "Pin an Approved revision of an active research dataset (or ask an Admin to "
+            "approve/restore it), then re-run the check."
+        ),
+        field_path=source.field_path,
+        scope_id=source.item_id,
+    )
+
+
+def _research_eligibility_issues(source: ResearchSourceState) -> list[ReadinessIssue]:
+    """Scope / available-time / market-compatibility / coverage over a RESOLVED,
+    Approved revision."""
+    issues: list[ReadinessIssue] = []
+    if source.usage_scope != _BACKTEST_ELIGIBLE_USAGE_SCOPE:
+        issues.append(
+            ReadinessIssue(
+                Code.USAGE_SCOPE_FORBIDDEN,
+                Sev.BLOCKER,
+                Scope.RESEARCH_DATA,
+                (
+                    f"Research revision '{source.revision_id}' has usage scope "
+                    f"'{source.usage_scope}', which forbids backtest consumption."
+                ),
+                remediation=(
+                    "Use the dataset for research artifacts only, or pin a revision whose "
+                    "usage scope is 'research_backtest' (a Feature Input Only dataset must "
+                    "reach the strategy through an approved versioned feature definition)."
+                ),
+                field_path=source.field_path,
+                scope_id=source.item_id,
+            )
+        )
+    if _available_time_is_undefined(source):
+        issues.append(
+            ReadinessIssue(
+                Code.TIME_POLICY_INVALID,
+                Sev.BLOCKER,
+                Scope.RESEARCH_DATA,
+                (
+                    f"Research revision '{source.revision_id}' has no usable available-time "
+                    "policy, so the engine cannot prove when a value first became known."
+                ),
+                remediation=(
+                    "Set a documented available-time policy on the dataset revision (a fixed "
+                    "delay needs a positive delay), re-analyze, then re-run the check."
+                ),
+                field_path=source.field_path,
+                scope_id=source.item_id,
+            )
+        )
+    issues.extend(_research_market_compatibility_issues(source))
+    if source.validation_status == _VALIDATION_WARNING:
+        issues.append(
+            ReadinessIssue(
+                Code.RESEARCH_COVERAGE_LIMITED,
+                Sev.WARNING,
+                Scope.RESEARCH_DATA,
+                (
+                    f"Research revision '{source.revision_id}' carries a non-blocking quality "
+                    "finding (limited coverage or low fill rate) from its analysis."
+                ),
+                remediation=(
+                    "Review the dataset's quality report and decide whether the recorded gaps "
+                    "are acceptable for this run, or pin a fuller revision."
+                ),
+                field_path=source.field_path,
+                scope_id=source.item_id,
+            )
+        )
+    return issues
+
+
+def _available_time_is_undefined(source: ResearchSourceState) -> bool:
+    """Available time is undefined when no policy is declared, or a fixed delay is
+    declared without a positive bounded delay (doc 12 §5.2)."""
+    policy = source.available_time_policy
+    if not policy:
+        return True
+    if policy != _FIXED_DELAY_POLICY:
+        return False
+    delay = source.available_delay_seconds
+    return delay is None or delay <= 0
+
+
+def _research_market_compatibility_issues(source: ResearchSourceState) -> list[ReadinessIssue]:
+    """ "Exact Market Data compatibility" — the link must point at the SAME market
+    revision the strategy pins, and the link/mapping pair must be coherent."""
+    issues: list[ReadinessIssue] = []
+    linked = (source.linked_market_dataset_revision_id or "").strip()
+    strategy_pin = (source.strategy_market_dataset_revision_id or "").strip()
+    if linked and strategy_pin and linked != strategy_pin:
+        issues.append(
+            ReadinessIssue(
+                Code.DEPENDENCY_BLOCKED,
+                Sev.BLOCKER,
+                Scope.RESEARCH_DATA,
+                (
+                    f"Research revision '{source.revision_id}' is linked to market dataset "
+                    f"revision '{linked}', but the strategy runs on '{strategy_pin}'."
+                ),
+                remediation=(
+                    "Pin a research revision linked to the strategy's market dataset revision, "
+                    "or align the strategy's market pin, then re-run the check."
+                ),
+                field_path=source.field_path,
+                scope_id=source.item_id,
+            )
+        )
+    if not instrument_mapping_is_valid(
+        linked_market_dataset_revision_id=source.linked_market_dataset_revision_id,
+        instrument_mapping_ref=source.instrument_mapping_ref,
+    ):
+        issues.append(
+            ReadinessIssue(
+                Code.INSTRUMENT_MAPPING_INVALID,
+                Sev.BLOCKER,
+                Scope.RESEARCH_DATA,
+                (
+                    f"Research revision '{source.revision_id}' declares a market link without "
+                    "an instrument mapping (or a mapping without a link)."
+                ),
+                remediation=(
+                    "Declare both the linked market dataset revision and its instrument "
+                    "mapping on the research revision, or neither, then re-run the check."
+                ),
+                field_path=source.field_path,
+                scope_id=source.item_id,
+            )
+        )
+    return issues
+
+
+# --------------------------------------------------------------------------- #
 # External working objects — Trading Signal / Trade Log (§5.1, §9.2, RC-07/08) #
 # --------------------------------------------------------------------------- #
 
@@ -811,4 +1049,5 @@ __all__ = [
     "ReadinessEvaluation",
     "evaluate_readiness",
     "is_stale",
+    "validate_research_sources",
 ]

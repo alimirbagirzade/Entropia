@@ -26,6 +26,25 @@ class BacktestRunState(StrEnum):
     CANCELLED = "cancelled"
 
 
+class RunEventType(StrEnum):
+    """Durable run stage-event kinds (doc 15 §12 "Worker state change").
+
+    These are the SPEC tokens verbatim (``RUN_STARTED``, ``RUN_STAGE_CHANGED``,
+    ``RUN_SUCCEEDED``/``RUN_FAILED``/``RUN_CANCELLED``) and name the rows of the
+    durable ``backtest_run_event`` stream a reconnecting client replays. The
+    paired ``audit_events`` rows keep the shipped dotted ``backtest.*``
+    ``event_kind`` convention (``backtest.run_succeeded`` already ships) — the
+    two naming schemes are deliberate, not drift: one is the spec's event token,
+    the other the audit plane's kind.
+    """
+
+    RUN_STARTED = "RUN_STARTED"
+    RUN_STAGE_CHANGED = "RUN_STAGE_CHANGED"
+    RUN_SUCCEEDED = "RUN_SUCCEEDED"
+    RUN_FAILED = "RUN_FAILED"
+    RUN_CANCELLED = "RUN_CANCELLED"
+
+
 class MetricAvailability(StrEnum):
     """Whether a canonical metric was computed for a result (doc 15 §5, §6).
 
@@ -75,5 +94,6 @@ __all__ = [
     "RUN_TERMINAL_STATES",
     "BacktestRunState",
     "MetricAvailability",
+    "RunEventType",
     "RunFailureCode",
 ]

@@ -143,6 +143,15 @@ write_env() {
     echo "OBJECT_STORAGE_ACCESS_KEY=entropia"
     echo "OBJECT_STORAGE_SECRET_KEY=entropia-secret"
     echo "OBJECT_STORAGE_BUCKET=entropia-artifacts"
+    # The scheduler tick also relays the outbox that feeds SSE, so at the 30s
+    # production cadence every advertised-async step (Pre-Check, candidate,
+    # baseline parse, validation) waits up to a full tick before the UI can see
+    # its result — four steps ≈ 90s, exactly the Create Package spec's budget,
+    # which made that spec pass or fail on the sum rather than on behaviour.
+    # 1s here keeps the suite measuring the REAL async path (durable job ->
+    # worker -> outbox -> SSE) while taking the sweep cadence off the clock.
+    # Hermetic file only: the developer's own .env is never touched.
+    echo "SCHEDULER_TICK_SECONDS=1"
     local kv; for kv in "$@"; do echo "$kv"; done
   } > "$REPO_ROOT/$ENVFILE"
 }

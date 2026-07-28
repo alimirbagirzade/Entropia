@@ -19,9 +19,11 @@ from typing import Any
 from entropia.domain.backtest.engine import (
     UNMODELLED_DECISION_CLASSES,
     EngineOutput,
+    run_engine,
+)
+from entropia.domain.backtest.execution.fills import (
     execution_timing_is_modelled,
     order_execution_is_modelled,
-    run_engine,
 )
 from entropia.domain.mainboard.enums import MainboardItemKind
 from entropia.domain.readiness.enums import ReadinessIssueCode as Code

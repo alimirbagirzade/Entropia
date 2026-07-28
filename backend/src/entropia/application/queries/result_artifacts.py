@@ -13,18 +13,17 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from entropia.application.queries import result_access
 from entropia.domain.backtest.artifacts import (
     decode_artifact_cursor,
     encode_artifact_cursor,
     normalize_artifact_type,
 )
 from entropia.domain.identity import Actor
-from entropia.domain.identity.policy import ensure_can_view, require_authenticated
-from entropia.domain.lifecycle.enums import DeletionState
+from entropia.domain.identity.policy import require_authenticated
 from entropia.infrastructure.postgres.repositories import backtest as bt_repo
-from entropia.infrastructure.postgres.repositories import mainboard as mb_repo
 from entropia.infrastructure.postgres.repositories import result_artifacts as ra_repo
-from entropia.shared.errors import BacktestResultNotFoundError, CompositionNotFoundError
+from entropia.shared.errors import BacktestResultNotFoundError
 
 _ACTIVE = "active"
 _DEFAULT_LIMIT = 50
@@ -46,7 +45,7 @@ async def query_result_artifact(
     result = await bt_repo.get_result(session, result_id)
     if result is None or result.deletion_state != _ACTIVE:
         raise BacktestResultNotFoundError()
-    await _ensure_can_view_workspace(session, actor, result.workspace_entity_id)
+    await result_access.ensure_can_view_composition(session, actor, result.workspace_entity_id)
 
     last_key = (
         decode_artifact_cursor(cursor, artifact_type=canonical).last_key
@@ -74,15 +73,6 @@ async def query_result_artifact(
         "items": items,
         "next_cursor": next_cursor,
     }
-
-
-async def _ensure_can_view_workspace(
-    session: AsyncSession, actor: Actor, workspace_entity_id: str
-) -> None:
-    workspace = await mb_repo.get_workspace(session, workspace_entity_id)
-    if workspace is None or workspace.deletion_state != DeletionState.ACTIVE:
-        raise CompositionNotFoundError()
-    ensure_can_view(actor, owner_principal_id=workspace.owner_principal_id, visibility="private")
 
 
 __all__ = ["query_result_artifact"]

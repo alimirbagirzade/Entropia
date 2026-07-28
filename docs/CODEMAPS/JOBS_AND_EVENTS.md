@@ -82,6 +82,41 @@ teslim anında asset artık request'in head'i değilse (yeni upload = yeni `atte
 attempt**'tir (rapor + kod asset üzerinde) — fırlatılıp iz bırakmayan bir hata değil.
 Silinen yardımcı: `_enqueue_completed_job` (eski "in-transaction stub" satırı).
 
+### Backtest run stage stream (O-05)
+
+`run_backtest` artık **tek** transaction değil. Her stage geçişinde
+`backtest_run_event` satırı (+ audit + outbox) yazılır ve **commit edilir**:
+
+| # | Stage | Olay (`event_type`) | Audit `event_kind` |
+|---|---|---|---|
+| 1 | `queued` → `provisioning` | `RUN_STARTED` | `backtest.run_started` |
+| 2 | `provisioning` → `running` | `RUN_STAGE_CHANGED` | `backtest.run_stage_changed` |
+| 3 | terminal | `RUN_SUCCEEDED` / `RUN_FAILED` / `RUN_CANCELLED` | `backtest.run_succeeded` / `backtest.run_failed` / `backtest.run_cancelled` |
+
+- `sequence_no` run başına monoton, 1'den başlar; `UNIQUE(run_id, sequence_no)`
+  de-dupe anahtarıdır (doc 15 §7). Replay: `GET /backtest-runs/{id}/events?last_sequence=`.
+- **PROVISIONING = çözümleme** (pin re-resolve, asset/range/instrument/indicator/funding),
+  **RUNNING = bar-replay**. Bu ayrım için `_prepare_and_run_strategy`,
+  `_prepare_strategy` + `_replay_strategy` olarak bölündü; çözümleme hatası hâlâ
+  RUNNING'e geçmeden FAILED verir.
+- Outbox `resource_type = "backtest_run"` → SSE adı `backtest.run.updated` (aşağıdaki
+  taksonomi tablosuna bak).
+- **Controlled cancellation (O-06).** `cancel_backtest_run` worker'ı asla öldürmez;
+  `backtest_run.cancel_requested_at` **niyetini** yazar. Worker bunu **dört güvenli
+  kontrol noktasında** okur (`_cancellation_requested`): (1) PROVISIONING commit'inden
+  hemen sonra, (2) her strateji hazırlığı arasında, (3) her bar-replay arasında,
+  (4) **Result materialize edilmeden hemen önce**. 4. nokta doc 15 §16'yı fiilen
+  garanti eder — ondan sonrası SUCCEEDED'dır ve geç kalan cancel dürüstçe
+  uygulanmaz (komut zaten `cancellation_safe_boundary` sözü verir, `cancelled` demez).
+  Terminal yazım `_cancel_run`: `cancelled` + `RUN_CANCELLED` + `backtest.run_cancelled`
+  + `jobs.status = cancelled`, **BacktestResult YOK**. Kısmi teşhis olay `detail`'inde
+  yaşar (`cancelled_at_stage`, `prepared/replayed_item_count`) — `diagnostic_artifact`
+  satırı olarak DEĞİL, çünkü o tablo `backtest_result`'a FK ile bağlıdır (dürüst sınır).
+  QUEUED/worker yarışı iki tarafın da aldığı **satır kilidi** ile kapatılır.
+- **At-least-once guard değişmedi**: terminal run asla yeniden koşmaz. Terminal olmayan
+  (worker öldürülmüş) bir run gerçekten yarımdır; redelivery onu yeniden dener ve aynı
+  sequence'a yeni olaylar ekler.
+
 ## Scheduler (`apps/scheduler/__main__.py`)
 
 `TICK_SECONDS = 30`. Her tick'te (`_maintenance_pass:53`):

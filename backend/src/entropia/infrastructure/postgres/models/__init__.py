@@ -23,6 +23,7 @@ from entropia.infrastructure.postgres.models.auth import AuthSession, HumanCrede
 from entropia.infrastructure.postgres.models.backtest import (
     BacktestResult,
     BacktestRun,
+    BacktestRunEvent,
     BacktestRunManifest,
     DiagnosticArtifact,
     MetricValueRow,
@@ -45,6 +46,7 @@ from entropia.infrastructure.postgres.models.create_package import (
     DependencyScan,
     PackageImportJob,
     PackageRequest,
+    PackageRevisionLink,
     PackageValidationRun,
 )
 from entropia.infrastructure.postgres.models.deletion import Tombstone, TrashEntry
@@ -140,6 +142,7 @@ __all__ = [
     "AuthSession",
     "BacktestResult",
     "BacktestRun",
+    "BacktestRunEvent",
     "BacktestRunManifest",
     "BaselineAsset",
     "CanonicalTradeRecordBatch",
@@ -187,6 +190,7 @@ __all__ = [
     "PackageRationaleAssignment",
     "PackageRequest",
     "PackageRevision",
+    "PackageRevisionLink",
     "PackageRoot",
     "PackageValidationRun",
     "PortfolioAllocationEntry",

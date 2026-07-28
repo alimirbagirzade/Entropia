@@ -1,4 +1,14 @@
-"""Package-kind guard (doc 09 §14, CR-01)."""
+"""Package-kind guard (doc 09 §14, CR-01).
+
+Acceptance: TS-01 (doc 04 — a client sending ``package_kind=trading_signal`` is
+rejected; the kind stays valid only as an external work object / Mainboard item)
+and TL-01 (doc 05 — the same boundary for ``trade_log``).
+
+AOS-03 (doc 03 — a client sending a legacy ``item_kind`` creates no PackageKind
+expansion, root, revision or item) is satisfied by this same guard. The spec names
+the code ``INVALID_ITEM_KIND``; the SHIPPED code is ``CLIENT_LEGACY_TYPE_REJECTED``
+(same defect, shipped name wins — see the O-03 adjudication convention).
+"""
 
 from __future__ import annotations
 

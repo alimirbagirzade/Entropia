@@ -19,7 +19,7 @@ from pydantic import BaseModel
 from entropia.application.commands import readiness_check as readiness_cmd
 from entropia.application.queries import readiness_check as readiness_query
 from entropia.apps.api.deps import RequestContext, request_context
-from entropia.shared.concurrency import row_version_from_if_match
+from entropia.shared.concurrency import reconcile_occ_tokens, row_version_from_if_match
 
 router = APIRouter(tags=["backtest-ready-check"])
 
@@ -32,9 +32,8 @@ class ReadinessCheckBody(BaseModel):
     expected_fingerprint: str | None = None
 
 
-def _resolve_expected(body_value: str | None, if_match: str | None) -> str | None:
-    if body_value is not None:
-        return body_value
+def _header_fingerprint(if_match: str | None) -> str | None:
+    """Unwrap ``If-Match`` into the fingerprint spelling the body would carry."""
     if if_match is None:
         return None
     # If-Match may carry a quoted fingerprint; reuse the shared unwrap where numeric,
@@ -43,6 +42,14 @@ def _resolve_expected(body_value: str | None, if_match: str | None) -> str | Non
     if numeric is not None:
         return str(numeric)
     return if_match.strip().strip('"')
+
+
+def _resolve_expected(body_value: str | None, if_match: str | None) -> str | None:
+    # Dual-token rule (O-12): body and If-Match are two spellings of ONE value; a
+    # disagreement is 409 OCC_TOKEN_CONFLICT, never a silent pick.
+    return reconcile_occ_tokens(
+        body_value, _header_fingerprint(if_match), field="expected_fingerprint"
+    )
 
 
 @router.post(_CHECKS_PATH, status_code=201)

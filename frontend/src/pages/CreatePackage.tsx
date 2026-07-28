@@ -948,6 +948,18 @@ function StateCard({ detail }: { detail: PackageRequestDetail | null }) {
             <span className="cp-status-label">Draft</span>
             <span>{detail.draft_revision_id ? "Present" : "—"}</span>
           </div>
+          {/* Revision chain head (doc 06 §7/§15): which attempt this request is on
+              and the parent revision it descends from. Rendered only once a Request
+              Revision has happened — attempt 1 has no parent. */}
+          {detail.revision_attempt_no > 1 ? (
+            <div className="cp-status-row">
+              <span className="cp-status-label">Revision</span>
+              <span>
+                {`Revision ${detail.revision_attempt_no} of ${detail.revision_total_attempts} · parent: `}
+                <code>{detail.parent_revision_ref ?? "—"}</code>
+              </span>
+            </div>
+          ) : null}
           <div className="cp-status-row">
             <span className="cp-status-label">Validation</span>
             <span>
@@ -1539,9 +1551,13 @@ function ValidationSection({ detail }: { detail: PackageRequestDetail }) {
       ) : null}
       {revision.data ? (
         <p aria-live="polite" style={liveStyle}>
-          Revision requested — {prettyToken(revision.data.state)}.
+          {`Revision requested — ${prettyToken(revision.data.state)}. Revision ${
+            revision.data.revision_attempt_no
+          } · parent: `}
+          <code>{revision.data.parent_revision_ref ?? "—"}</code>.
         </p>
       ) : null}
+      <RevisionChainSection detail={detail} />
       {approve.isError ? (
         <p role="alert" style={alertStyle}>
           {mutationErrorText(approve.error)}
@@ -1553,6 +1569,36 @@ function ValidationSection({ detail }: { detail: PackageRequestDetail }) {
           {approve.data.visibility_scope}).
         </p>
       ) : null}
+    </>
+  );
+}
+
+// Revision chain (doc 06 §7 "Creates immutable next attempt linked to parent revision
+// and prior validation summary"; §15 "Revision immutability"). Read-only projection of
+// the server's append-only chain: every attempt after the first names the draft
+// revision it descends from and that attempt's validation run, so the operator can walk
+// the loop back to the original draft instead of seeing history disappear.
+function RevisionChainSection({ detail }: { detail: PackageRequestDetail }) {
+  const chain = detail.revision_chain ?? [];
+  if (chain.length === 0) return null;
+  const total = detail.revision_total_attempts;
+  return (
+    <>
+      <div className="cp-section-title">Revision chain</div>
+      <div className="cp-validation-list" aria-label="Revision chain">
+        {chain.map((link) => (
+          <div className="cp-validation-row" key={link.revision_link_id}>
+            <span>
+              {`Revision ${link.attempt_no} of ${total} · parent: `}
+              <code>{link.parent_revision_ref ?? "—"}</code>
+            </span>
+            <span className="cp-note">
+              {`from ${prettyToken(link.prior_state)} · prior validation: `}
+              <code>{link.prior_validation_run_ref ?? "—"}</code>
+            </span>
+          </div>
+        ))}
+      </div>
     </>
   );
 }

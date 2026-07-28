@@ -1,3 +1,11 @@
+// Add Outsource Signal type chooser (doc 03).
+//
+// Acceptance (doc 03 §14): AOS-01 (the parent item exposes exactly Trading Signal
+// and Trade Log), AOS-02 (no default type is preselected and the §6.2 helper text
+// is rendered verbatim) and the §7.1 no-mutation rule — rendering or choosing a
+// type issues zero network traffic, so no root/revision/item can exist yet
+// (the persisted-side of AOS-04/AOS-05 lives in mainboard.test.tsx).
+
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";

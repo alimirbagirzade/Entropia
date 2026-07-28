@@ -1,5 +1,34 @@
 # Stage R3 — 22-Jul Deep-Audit Remediation · Kickoff & Resume
 
+> # ⛔ SUPERSEDED (2026-07-28) — R3 MÜHENDİSLİK BACKLOG'U KAPANDI
+>
+> **Bu dosyayı iş listesi olarak KULLANMA.** Aşağıdaki "Remaining R3 backlog" bölümü
+> **2026-07-22** tarihli durumu anlatıyor; o günden beri listelenen kalemlerin **tamamı** merge
+> oldu. Bu doküman authority order'da 1. sırada okunduğu için, tazelenmemiş hâli **bitmiş işi
+> yeniden yaptırma riski** taşıyordu (DOC-01/02/03 + I-06 denetimi bulgusu).
+>
+> **Ampirik doğrulama (2026-07-28, `gh pr view <n> --json state`):**
+>
+> | Madde | PR | Durum |
+> |---|---|---|
+> | D-4 — Portfolio human labels | #375 | **MERGED** |
+> | P-05 — Create Package persist (compatible family + indicator link) | #376 | **MERGED** |
+> | P-06 — Package Library Market/Timeframe facets | #377 | **MERGED** |
+> | P-14 — Panel Logs backtest-log primary view | #378 | **MERGED** |
+> | P-09 — Market Data registry columns | #379 | **MERGED** |
+> | F-07 — raw-id presentation sweep | #404 | **MERGED** — yalnız §4.4 backend-DTO kalıntısı açık |
+>
+> W1/W2 dalgasının tamamı da merged: #367 · #368 · #369 · #370 · **#371 · #372 · #373**
+> — aşağıdaki tabloda son üçü hâlâ "open (green)" yazıyor, **bayat**.
+>
+> **Şu an geçerli durum ve sıradaki iş:** `CLAUDE.md` §Current position + §Next, ve
+> `docs/STAGE2_HANDOFF.md` §Next. Bu dosya bundan sonra **tarihsel kayıt**.
+>
+> Aşağıdaki **"Working-loop method" bölümü hâlâ geçerlidir** (empirically-verify-first, verify
+> komutları, GateGuard, never-touch listesi) — bayat olan yalnızca iş listesidir. Ayrıca
+> §"Paste-ready resume prompt" içindeki `0035_portfolio_rules` /
+> `backtest-engine-v18-capability-matrix` beklentileri de bayattır (bkz. o bölümdeki not).
+
 > **Slice source:** `docs/spec/Entropia_V18_Current_UI_vs_Prototype_Deep_Audit_Claude_Code_Remediation.md`
 > (47 findings). **PO sign-off:** `docs/implementation/v18_final_acceptance.md §4/§4.1`
 > (D-1…D-9, recorded 2026-07-22). **Disposition map (the "same topic" guard):**
@@ -15,29 +44,34 @@
 | W2a | D-7b (partial contrast) · D-8 (in-text link underline) | #368 | merged |
 | W2b | D-2 (Create Package enum → human labels) | #369 | merged |
 | D-3 | P-04 (Create Package dominant source compose area) | #370 | merged |
-| W2c | D-6 (compact TS/TL inline panel — registry → standalone) | #371 | open (green) |
-| W2d | P-10 (Research Data registry-first) + E2E fix | #372 | open (E2E green, backend pending) |
-| W2e | D-5 (Results History collapsed metric digest) | #373 | open (green) |
+| W2c | D-6 (compact TS/TL inline panel — registry → standalone) | #371 | ~~open (green)~~ → **merged** |
+| W2d | P-10 (Research Data registry-first) + E2E fix | #372 | ~~open~~ → **merged** |
+| W2e | D-5 (Results History collapsed metric digest) | #373 | ~~open (green)~~ → **merged** |
 
 **All frontend D/P-items are done.** The PO signed D-1/D-9 (accept) and
 D-2/D-3/D-4/D-5/D-6/D-8 (FIX) + D-7b (partial contrast). D-2/3/5/6/7b/8 are now
 delivered; **D-4 is the last unfinished signed FIX** and needs a backend projection.
 
-## Remaining R3 backlog (backend-heavy — the next session's work)
+## ~~Remaining R3 backlog~~ — HEPSİ LANDED (tarihsel; 2026-07-28 doğrulaması)
 
-1. **D-4** — Portfolio human labels. `Portfolio.tsx` renders `composition_item_id`
+> **Bu bölümdeki 1–5. maddeler ARTIK AÇIK İŞ DEĞİLDİR** (#375/#376/#377/#378/#379 merged).
+> Metin, her maddenin kapsamının ne olduğunu göstermek için **olduğu gibi** bırakıldı — çünkü
+> landed slice'ların reuse anchor'larını tarif ediyor. Yeni iş için buraya değil `CLAUDE.md`
+> §Next'e bak.
+
+1. **D-4** — ✅ **LANDED (PR #375).** Portfolio human labels. `Portfolio.tsx` renders `composition_item_id`
    / `workspace_id` (`mbi_…`) as primary labels. Extend the allocation projection
    with display labels + revision summaries; keep IDs as binding keys only
    (audit P-11 / F-07: never reconstruct names from IDs in the browser).
-2. **P-05** — Create Package persist. "Compatible family" + "Explicit indicator
+2. **P-05** — ✅ **LANDED (PR #376).** Create Package persist. "Compatible family" + "Explicit indicator
    link" are visible but "not yet sent to the backend (V1)" (`CreatePackage.tsx`).
    Extend the request schema + command path (or disable with a build-boundary label).
-3. **P-06** — Package Library Market/Timeframe facets. `Library.tsx` says they are
+3. **P-06** — ✅ **LANDED (PR #377).** Package Library Market/Timeframe facets. `Library.tsx` says they are
    "absent by design". Add market/timeframe scope to the catalog DTO + indexed
    query filters; `System/Not applicable` for embedded_system.
-4. **P-09** — Market Data registry columns. Add Source/Coverage/Resolution to the
+4. **P-09** — ✅ **LANDED (PR #379).** Market Data registry columns. Add Source/Coverage/Resolution to the
    list projection; map `ohlcv` → `OHLCV`.
-5. **P-14** — Panel Logs backtest-log primary view. Add a server-side admin
+5. **P-14** — ✅ **LANDED (PR #378).** Panel Logs backtest-log primary view. Add a server-side admin
    backtest-log projection (User/Date/Backtest/Net/ROMAD/Trades) as the first
    view; keep the event/audit stream as a secondary technical tab.
 6. **W3 backend truth:**
@@ -60,9 +94,12 @@ delivered; **D-4 is the last unfinished signed FIX** and needs a backend project
      **Adding a new option value to `config.py` now FAILS CI** until it is classified —
      `test_matrix_enumerates_every_schema_literal` asserts matrix ↔ schema `Literal` set
      equality (register a brand-new FIELD in that test's `_SCHEMA_FIELDS` map).
-   - **F-07** raw-id presentation sweep residuals — **still open**; traceability marks it
-     "overlaps P-11/12/16", which have landed, so FIRST verify empirically whether any
-     residual remains before writing code.
+   - ~~**F-07** raw-id presentation sweep residuals — **still open**~~ → **SUNUM KATMANI
+     LANDED (PR #404).** 31 dosyada 161 `*_id` render'ı tarandı; P-11/P-12/P-16 gerçekten
+     landed (traceability 10/13/16 gerekçeleri bayattı → düzeltildi), Portfolio'da 2 kalıntı
+     presentation-only düzeltildi. **Kalan 4 yüzey açık ve presentation-only DEĞİL** — backend
+     display-DTO gerektiriyor: `docs/implementation/v18_visual_traceability.md §4.4`.
+     Yani **F-07 bütün olarak Complete DEĞİL**, ama "önce empirik doğrula" adımı yapıldı.
    - ~~**F-09** README / status honesty rewrite~~ — **DONE** (landed with PR #381).
 7. **Kova 2 — recorded honest boundaries (NOT signed, stay open):** A-06 (10-page
    deep visual compare: 03/07/09/10/12/17/18/19/21/22) · A-08 (NVDA/VoiceOver
@@ -91,7 +128,17 @@ delivered; **D-4 is the last unfinished signed FIX** and needs a backend project
   `expected_*_version` / `X-*-Version`), Idempotency-Key, SSE taxonomy, hooks, or
   `lib/*.ts` data logic when doing presentation work.
 
-## Paste-ready resume prompt
+## Paste-ready resume prompt — ⛔ BAYAT, YAPIŞTIRMA
+
+> **Bu blok 2026-07-22'de yazıldı ve artık yanlış yönlendirir** (2026-07-28 doğrulaması):
+> beklenen `alembic head` **`0035_portfolio_rules` DEĞİL** → gerçek **`0038_backtest_run_event`**
+> (38 migration); beklenen `ENGINE_VERSION`
+> **`backtest-engine-v18-capability-matrix` DEĞİL** → gerçek
+> **`backtest-engine-v18-funding-step-order`** (`domain/backtest/manifest.py:83`).
+> Ayrıca 3. maddedeki "kalan iş" (F-07 + PO imzası) **artık kalan iş değil**: F-07 sunum
+> katmanı #404 ile landed, PO imzası **2026-07-22'de atıldı**
+> (`docs/implementation/v18_final_acceptance.md:155-169`).
+> **Güncel resume prompt için `CLAUDE.md` §Next'e bak.** Aşağısı tarihsel kayıttır.
 
 ```
 Entropia V18 — R3 remediation dalgasına DEVAM. Frontend D/P-item'ları bitti

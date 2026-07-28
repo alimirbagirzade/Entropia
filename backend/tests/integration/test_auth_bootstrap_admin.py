@@ -169,7 +169,9 @@ async def test_route_passes_setting_through(
         body = auth_routes.SignUpRequest(
             username="founder", password=PASSWORD, email=BOOTSTRAP_EMAIL
         )
-        response = await auth_routes.sign_up(body, request, session)
+        # Called directly (no FastAPI DI), so the Header-injected argument must be
+        # supplied explicitly — over HTTP the framework resolves it to str | None.
+        response = await auth_routes.sign_up(body, request, session, idempotency_key=None)
         assert response.role == str(Role.ADMIN)
     finally:
         get_settings.cache_clear()

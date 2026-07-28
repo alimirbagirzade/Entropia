@@ -28,6 +28,16 @@ const BASELINE_CSV = [
 ].join("\n");
 
 test.describe("Create Package lifecycle", () => {
+  // This journey is the only spec that drives FOUR durable background jobs end to
+  // end (Pre-Check scan, candidate generation, baseline parse, validation run).
+  // The shared 90s per-test budget in playwright.config.ts is sized for the
+  // in-request specs and cannot hold four cold worker round-trips: CI failure
+  // artifacts show the journey timing out with the request projection still
+  // legitimately reporting `candidate_generating` — a job in progress, not a
+  // failure — and a retry then clearing that same step. The budget is raised HERE
+  // rather than globally so no other spec gets a slower failure signal.
+  test.setTimeout(300_000);
+
   test("drives a translate request from compose to published + usable in Library", async ({
     page,
     browser,

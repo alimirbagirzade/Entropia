@@ -26,6 +26,7 @@ from typing import Any
 from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from entropia.application.durable_audit import AuditSessionFactory, record_durable_audit
 from entropia.application.idempotency import run_idempotent
 from entropia.application.queries.allocation_currency import resolve_settlement_currencies
 from entropia.application.queries.indicator_plan import resolve_indicator_plan
@@ -36,7 +37,9 @@ from entropia.domain.allocation.rules import (
     compute_config_hash,
     validate_allocation,
 )
-from entropia.domain.backtest.engine import tick_data_required
+from entropia.domain.backtest.execution.fills import (
+    tick_data_required,
+)
 from entropia.domain.identity import Actor
 from entropia.domain.identity.policy import ensure_can_view, require_authenticated
 from entropia.domain.lifecycle.enums import DeletionState
@@ -44,7 +47,12 @@ from entropia.domain.mainboard.composition import CompositionMember, composition
 from entropia.domain.mainboard.enums import MainboardItemKind
 from entropia.domain.market_data.enums import MarketRevisionState
 from entropia.domain.readiness.enums import ReadinessIssueCode, ReadinessScope, ReadinessSeverity
-from entropia.domain.readiness.issues import ExternalImportState, ReadinessIssue, ReadinessItemInput
+from entropia.domain.readiness.issues import (
+    ExternalImportState,
+    ReadinessIssue,
+    ReadinessItemInput,
+    ResearchSourceState,
+)
 from entropia.domain.readiness.validators import evaluate_readiness
 from entropia.domain.strategy.config import StrategyConfig
 from entropia.infrastructure.postgres.models import (
@@ -57,11 +65,18 @@ from entropia.infrastructure.postgres.repositories import audit as audit_repo
 from entropia.infrastructure.postgres.repositories import mainboard as mb_repo
 from entropia.infrastructure.postgres.repositories import market_data as market_repo
 from entropia.infrastructure.postgres.repositories import readiness as readiness_repo
+from entropia.infrastructure.postgres.repositories import research_data as research_repo
 from entropia.infrastructure.postgres.repositories import strategy as strat_repo
-from entropia.shared.errors import CompositionNotFoundError, CompositionStaleError
+from entropia.shared.errors import (
+    AccessDeniedError,
+    CompositionNotFoundError,
+    CompositionStaleError,
+)
 
 _REPORT_TARGET = "ready_check_report"
 _SNAPSHOT_TARGET = "mainboard_composition_snapshot"
+_WORKSPACE_TARGET = "mainboard_workspace"
+_ACCESS_DENIED_EVENT = "readiness.access_denied"
 _SUCCEEDED = "succeeded"
 _EXTERNAL_KINDS = frozenset({MainboardItemKind.TRADING_SIGNAL, MainboardItemKind.TRADE_LOG})
 
@@ -73,11 +88,25 @@ async def run_readiness_check(
     composition_id: str,
     expected_fingerprint: str | None = None,
     idempotency_key: str | None = None,
+    parent_agent_task_id: str | None = None,
+    audit_session_factory: AuditSessionFactory | None = None,
 ) -> dict[str, Any]:
     """Run the Ready Check for a composition and persist an immutable report
-    (doc 14 §7, §9.2)."""
+    (doc 14 §7, §9.2).
+
+    ``parent_agent_task_id`` is the doc 14 §12.2 audit field for a check an Agent
+    ran as part of a task (``jobs.agent_tools`` passes its task id); a human check
+    leaves it null. ``audit_session_factory`` only reaches the DURABLE denial path
+    (O-04) — see :func:`record_readiness_access_denied`.
+    """
     require_authenticated(actor)
-    await _load_workspace_for_check(session, actor, composition_id)
+    await _load_workspace_for_check(
+        session,
+        actor,
+        composition_id,
+        operation="run_readiness_check",
+        audit_session_factory=audit_session_factory,
+    )
 
     async def _op() -> dict[str, Any]:
         enabled = await readiness_repo.list_enabled_items_with_root_state(session, composition_id)
@@ -106,6 +135,7 @@ async def run_readiness_check(
         market_data_issues = await _resolve_market_data_issues(session, items)
         tick_data_issues = await _resolve_tick_data_issues(session, items)
         strategy_indicator_issues = await _resolve_strategy_indicator_issues(session, items)
+        research_sources = await _resolve_research_sources(session, items)
         evaluation = evaluate_readiness(
             items,
             allocation_enabled=allocation_enabled,
@@ -113,6 +143,7 @@ async def run_readiness_check(
             market_data_issues=market_data_issues,
             tick_data_issues=tick_data_issues,
             strategy_indicator_issues=strategy_indicator_issues,
+            research_sources=research_sources,
         )
 
         blocked_ids = {
@@ -148,6 +179,7 @@ async def run_readiness_check(
             composition_id=composition_id,
             fingerprint=current_fingerprint,
             evaluation=evaluation,
+            parent_agent_task_id=parent_agent_task_id,
         )
         return {
             "report_id": report.report_id,
@@ -182,13 +214,62 @@ async def run_readiness_check(
 # --------------------------------------------------------------------------- #
 
 
+async def record_readiness_access_denied(
+    actor: Actor,
+    *,
+    composition_id: str,
+    operation: str,
+    denial_code: str,
+    audit_session_factory: AuditSessionFactory | None = None,
+) -> None:
+    """Persist the doc 14 §12.2 ``readiness_access_denied`` audit DURABLY (O-04).
+
+    A denial is a raise, and the request tx is rolled back on the resulting 403, so
+    an in-transaction row would never survive — this one is written in its own
+    committed transaction (see ``application.durable_audit``). Shared with the RUN
+    admission surface (``commands.backtest_run``) so both denials land under one
+    event kind, distinguished by ``operation``.
+
+    The target id is the composition the actor was denied, never the owner's
+    principal id or any resource content — "target type/id redacted as policy
+    requires" (doc 14 §12.2).
+    """
+    await record_durable_audit(
+        actor,
+        event_kind=_ACCESS_DENIED_EVENT,
+        target_entity_id=composition_id,
+        target_entity_type=_WORKSPACE_TARGET,
+        new_state=denial_code,
+        reason="access_denied",
+        metadata={"operation": operation, "denial_code": denial_code},
+        audit_session_factory=audit_session_factory,
+    )
+
+
 async def _load_workspace_for_check(
-    session: AsyncSession, actor: Actor, composition_id: str
+    session: AsyncSession,
+    actor: Actor,
+    composition_id: str,
+    *,
+    operation: str = "run_readiness_check",
+    audit_session_factory: AuditSessionFactory | None = None,
 ) -> EntityRegistry:
     workspace = await mb_repo.get_workspace(session, composition_id)
     if workspace is None or workspace.deletion_state != DeletionState.ACTIVE:
         raise CompositionNotFoundError()
-    ensure_can_view(actor, owner_principal_id=workspace.owner_principal_id, visibility="private")
+    try:
+        ensure_can_view(
+            actor, owner_principal_id=workspace.owner_principal_id, visibility="private"
+        )
+    except AccessDeniedError as denial:
+        await record_readiness_access_denied(
+            actor,
+            composition_id=composition_id,
+            operation=operation,
+            denial_code=denial.code,
+            audit_session_factory=audit_session_factory,
+        )
+        raise
     return workspace
 
 
@@ -418,6 +499,79 @@ async def _resolve_strategy_indicator_issues(
     return issues
 
 
+async def _resolve_research_sources(
+    session: AsyncSession, items: list[ReadinessItemInput]
+) -> list[ResearchSourceState]:
+    """O-01: dereference every Research Data revision the composition pins.
+
+    Doc 12 §9.2 makes Ready Check a MANDATORY second validator of the evidence bundle,
+    alongside the worker. Before this the Research layer was absent from Ready Check
+    entirely, so a composition pinning an ``agent_research_only`` (or unapproved, or
+    available-time-less) revision reported READY and then failed inside the worker's
+    ``FundingSourceInvalid`` gate — which stays exactly where it is (doc 12 §9.2 wants
+    BOTH layers; eligibility can change between admission and execution).
+
+    Honest boundary — deliberately identical to ``backtest_run_context._research_entries``:
+    the V1 engine consumes exactly ONE research feed, the pinned funding source, so that
+    is the only pin resolved here. Ready Check never claims to validate a feed the engine
+    does not read. When another research consumption path lands, add it here and to the
+    manifest context together.
+
+    Resolving is a DB read (revision + root dereference), so it lives in the command; the
+    judgement itself is the pure ``validate_research_sources`` (doc 14 §9.2 "validators
+    must be separate pure deterministic domain services").
+    """
+    sources: list[ResearchSourceState] = []
+    for item in items:
+        if not item.available or item.kind != MainboardItemKind.STRATEGY:
+            continue
+        try:
+            config = StrategyConfig(**item.payload)
+        except PydanticValidationError:
+            continue  # STRATEGY_CONFIG_INVALID already surfaces this in the validators.
+        funding = config.data.funding
+        if not funding.enabled:
+            continue
+        revision_id = funding.source_revision_id or ""
+        field_path = "data.funding.source_revision_id"
+        revision = await research_repo.get_revision(session, revision_id) if revision_id else None
+        if revision is None:
+            sources.append(
+                ResearchSourceState(
+                    item_id=item.item_id,
+                    revision_id=revision_id,
+                    field_path=field_path,
+                    found=False,
+                    strategy_market_dataset_revision_id=config.data.market_dataset_revision_id,
+                )
+            )
+            continue
+        root = await research_repo.get_dataset_root(session, revision.entity_id)
+        sources.append(
+            ResearchSourceState(
+                item_id=item.item_id,
+                revision_id=revision.revision_id,
+                field_path=field_path,
+                found=True,
+                root_active=root is not None and root.deletion_state == DeletionState.ACTIVE,
+                revision_state=str(revision.revision_state),
+                usage_scope=_enum_value(revision.usage_scope),
+                available_time_policy=_enum_value(revision.available_time_policy),
+                available_delay_seconds=revision.available_delay_seconds,
+                linked_market_dataset_revision_id=revision.linked_market_dataset_revision_id,
+                instrument_mapping_ref=revision.instrument_mapping_ref,
+                validation_status=_enum_value(revision.validation_status),
+                strategy_market_dataset_revision_id=config.data.market_dataset_revision_id,
+            )
+        )
+    return sources
+
+
+def _enum_value(value: Any) -> str | None:
+    """The raw persisted string of a nullable enum column (never a parsed object)."""
+    return None if value is None else str(value)
+
+
 async def _resolve_external(
     session: AsyncSession, item: MainboardWorkingItem
 ) -> ExternalImportState:
@@ -578,6 +732,7 @@ def _emit_audit(
     composition_id: str,
     fingerprint: str,
     evaluation: Any,
+    parent_agent_task_id: str | None = None,
 ) -> None:
     audit_repo.add_audit_event(
         session,
@@ -587,7 +742,12 @@ def _emit_audit(
         target_entity_id=composition_id,
         target_entity_type=_SNAPSHOT_TARGET,
         correlation_id=actor.correlation_id,
-        metadata={"composition_fingerprint": fingerprint},
+        # doc 14 §12.2 requires the parent Agent task id (nullable) on the request
+        # event; the 64-char fingerprint cannot ride ``new_state`` (VARCHAR(48)).
+        metadata={
+            "composition_fingerprint": fingerprint,
+            "parent_agent_task_id": parent_agent_task_id,
+        },
     )
     audit_repo.add_audit_event(
         session,
@@ -645,4 +805,4 @@ def _emit_audit(
     )
 
 
-__all__ = ["run_readiness_check"]
+__all__ = ["record_readiness_access_denied", "run_readiness_check"]

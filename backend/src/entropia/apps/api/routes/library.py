@@ -113,6 +113,7 @@ async def deprecate_package(
     entity_id: str,
     body: DeprecatePackageRequest | None = None,
     ctx: RequestContext = Depends(request_context),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> dict[str, Any]:
     """Owner-or-Admin: ``active -> deprecated`` (doc 08 §7 "Deprecate"). No OCC — a
     deprecate appends no revision, so it cannot race the head (mirrors the sibling
@@ -122,6 +123,7 @@ async def deprecate_package(
         ctx.actor,
         entity_id=entity_id,
         note=body.note if body else None,
+        idempotency_key=idempotency_key,
     )
 
 

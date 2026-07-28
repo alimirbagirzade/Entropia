@@ -2939,7 +2939,7 @@ değişti → execution_key namespace kaymalı).
 
 Tam kayıt: `docs/PROJECT_HISTORY.md` §"K-03 · Engine funding sırası".
 
-## Next: **PO imzası + R2 kapanışı** (değişmedi) · K-serisi kusur backlog'unda K-03 kapandı
+## Next: **PO imzası + R2 kapanışı** (değişmedi) · I-17 izlenebilirlik slice'ı landed (#416)
 
 K-serisi durumu: K-01 (#386) · K-02 (#393) · K-04 (#397) · K-05 (#387) · K-06 (#395) · K-07 (#388)
 landed; **K-03 bu slice ile landed (#398)**. Kalan tek büyük açık iş hâlâ **R2'nin product-owner
@@ -2950,47 +2950,29 @@ Ayrıca hâlâ açık: **F-07 raw-id presentation sweep kalıntısı** (empirik 
 **ortam tuzağı**: paralel worktree oturumları paylaşılan `entropia_test` DB'sini ezer —
 `TEST_DATABASE_URL` ile worktree'ye özel izole DB kullan.
 
-## O-02 — Hata zarfı spec'in dayattığı recovery sözleşmesini taşıyor landed (PR #400)
 
-`main` `5ba6c0c` (feat `2981384`). **Migration yok**, alembic head `0035_portfolio_rules`
-değişmedi, yeni tablo/endpoint yok, frontend'e dokunulmadı. CI 6/6 yeşil.
+## O-03 — Hata kodu taksonomisi: 18 kod adjudicated, 2 ölü sınıf silindi (PR #407)
 
-`ErrorBody` geriye-uyumlu genişledi: ilk beş alan (`code, message, details, request_id,
-correlation_id`) **isim ve anlam olarak birebir** korundu, üstüne recovery bloğu geldi
-(`category, retryable, suggested_action, remediation, scope_type, scope_id, field_path`).
-Boş opsiyoneller eksik anahtar değil açık `null`. `shared/errors.py` `ErrorCategory` StrEnum'u
-kazandı; `AppError` `category`/`retryable`'ı sınıfta bildiriyor, `scope_type`/`scope_id`/
-`field_path`/`remediation` raise yerinde de pinlenebiliyor — 38 spec-adlı sınıf sınıflandırıldı,
-205 importer'ın hiçbir `raise` çağrısı değişmedi.
+**Ne landed.** Denetimin "25+ spec-kanonik hata kodu yok veya farklı isimde" bulgusu tek tek
+ampirik sınandı. **19/19 kod gerçekten 0 hit** — ama davranışları zaten fail-closed uygulanmış,
+yalnız farklı adla. **Hiçbir kod adı değiştirilmedi**; sapmalar `docs/PROJECT_HISTORY.md` §O-03'te
+tam tablo halinde adjudicate edildi (K-07 içtihadı). PR #407 iki ölü sınıfı sildi
+(`PrecheckAlreadyRunning`, `DeletePolicyBlocked`) ve bir ratchet testi ekledi. **Migration YOK.**
 
-Kilit kusur kapandı: `_issue_detail` readiness `remediation`'ını düşürüyordu; yeni
-`_readiness_blocked` lider blocker'ın `remediation`/`field_path`/`scope_id`'sini zarfa
-yükseltiyor, `details` yine tüm issue'ları taşıyor. Her iki spec örneği birebir üretiliyor
-(`READY_REPORT_STALE` doc 01 §11.2, `SIGNAL_EVENT_MAPPING_REQUIRED` doc 04 §11.1).
+**Denetimin üç yanlışı.** `TICK_DATA_UNAVAILABLE` ölü değil (2 emit + 5 assertion);
+`MetricAvailability.NOT_COMPUTED` emit ediliyor; TIMEZONE üçlüsünü "tek ada indirmek" reddedildi —
+`TIMEZONE_REQUIRED` (timezone **yok**, HTTP envelope) ile `TIMEZONE_INVALID` (timezone **var ama
+geçersiz**, TL-07 whole-file blocker) aynı kusur değil.
 
-**Adjudication:** `field_issues` → sevk edilmiş `details`; `suggested_action` (makine token'ı)
-ile `remediation` (insan metni) **ayrı** kaldı. CLAUDE.md §Conventions'ta.
+**Review sırasında zemin kaydı — dikkat.** Üç bulgu, doğrulandıktan sonra paralel slice'lar main'e
+indiği için geçersizleşti: `PACKAGE_DEPENDENCY_CYCLE`'ı O-10 (#402) canonical adıyla ekledi;
+`PublicationState.REMOVED`'ı O-15 (#409) canlandırdı (silinmedi, geri kondu); O-02 (#400)
+`DeletePolicyBlocked`'a alan ekledi. Ayrıca **PR #408 boş merge oldu** — `aa75fca` çakışma çözümü
+144 satırın tamamını düşürdü, merge commit'i var içeriği yoktu; bu PR kaydı yeniden yazıyor.
+Ders: bu hızda bir main'de tek seferlik tarama yetmiyor — ratchet testi ölü kümeyi her koşuda
+ağaçtan yeniden hesaplıyor.
 
-**OpenAPI:** `ErrorResponse` şemada hiç referans edilmiyordu (hata yanıtları handler'lardan
-çıkıyor) — `_publish_error_schema` zarfı `components.schemas`'a yayımladı, path girdileri
-değişmedi (+152 satır). Talimatın ötesindeki tek ekleme; PR'da işaretlendi, kalmasına karar verildi.
-
-**Testler:** contract 8 yeni + integration 1 yeni; ruff/format/mypy (351) temiz; `tests/contract`
-158/158; temiz tam `tests/integration` exit 0.
-
-**Deferred:** kalan ~110 hata sınıfının taban-sınıf kategorisini inceltme; endpoint'lerin
-`responses=` ile hata modelini bildirmesi. Ayrıntı: `docs/PROJECT_HISTORY.md` §O-02 ve
-`docs/O02_LANDED_KICKOFF.md`.
-
-## Next: **PO imzası + R2 kapanışı** (değişmedi) · O-02 landed, K-serisi K-01…K-07 landed
-
-Kalan tek büyük açık iş hâlâ **R2'nin product-owner imzası**
-(`docs/implementation/v18_final_acceptance.md` §4, D-1…D-9) — imza olmadan
-`entropia_v18_remediation_status.md`'deki R2 RE-OPENING banner'ı kalkmaz.
-
-Ayrıca hâlâ açık: **F-07 raw-id presentation sweep kalıntısı** (empirik doğrulanmalı) ve
-**ortam tuzağı**: paralel worktree oturumları paylaşılan `entropia_test` DB'sini ezer —
-`TEST_DATABASE_URL` ile worktree'ye özel izole DB kullan; tam suite koşusunu **ortada öldürme**
-(artakalan bağlantılar sonraki koşuda düzinelerce sahte hata üretir, O-02'de 51 sahte FAILED).
-
-Devam seed'i: **`docs/O02_LANDED_KICKOFF.md`** (paste-ready resume prompt en altta).
+**Açık iş.** (1) Kalan 5 ölü error sınıfı (`KNOWN_UNRAISED`) ayrı bir slice bekliyor.
+(2) `docs/audit/audit_report.md` repoda yok — doğrulama açıkça sayılan 19 kodla sınırlı, "25+"
+iddiasının kalanı hakkında bu kayıt hiçbir şey söylemiyor. (3) Lokal tam suite tek koşuda
+tamamlanamadı (ortam kaynaklı); integration'ın otoritesi #407 CI'ıdır (6/6 yeşil).

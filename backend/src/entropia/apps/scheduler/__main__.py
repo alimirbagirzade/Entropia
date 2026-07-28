@@ -33,7 +33,27 @@ from entropia.config import get_settings
 from entropia.infrastructure.observability import configure_logging, get_logger
 from entropia.infrastructure.queues.enqueue import send_job
 
-TICK_SECONDS = 30
+DEFAULT_TICK_SECONDS = 30.0
+
+
+def tick_seconds() -> float:
+    """Seconds between maintenance passes (``SCHEDULER_TICK_SECONDS``).
+
+    This tick also relays the outbox, so it is the upper bound on how long a
+    completed worker step waits before its ``resource.changed`` reaches SSE: a
+    lifecycle with N advertised-async steps costs up to N ticks end to end. 30s
+    is the right cadence for a production sweep, but it made the four-step
+    Create Package E2E spend ~90s purely waiting on ticks — right at the test
+    budget, so a run passed or failed on the sum. A hermetic E2E stack now
+    lowers this instead of the suite raising its timeout, which would have
+    hidden the latency rather than removed it.
+
+    A non-positive value would spin the sweep at full CPU against Postgres, so
+    it falls back to the default rather than being honoured.
+    """
+    configured = get_settings().scheduler_tick_seconds
+    return configured if configured > 0 else DEFAULT_TICK_SECONDS
+
 
 # Module-level logger (the repo pattern — see ``apps/api/errors.py``) so the
 # redelivery sweep can report a failed enqueue instead of swallowing it.
@@ -126,7 +146,7 @@ def run() -> None:
             log.info("scheduler.maintenance", **summary)
         except Exception as exc:  # a failed pass rolls back whole; next tick retries
             log.warning("scheduler.maintenance_failed", error=str(exc))
-        time.sleep(TICK_SECONDS)
+        time.sleep(tick_seconds())
     log.info("scheduler.stop")
 
 

@@ -31,11 +31,13 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from entropia.application.durable_audit import AuditSessionFactory, record_durable_audit
 from entropia.application.idempotency import run_idempotent
 from entropia.application.jobs.create_package import (
     generate_and_store_candidate,
     registry_fingerprint,
 )
+from entropia.application.queries.dependency_pins import ensure_pinned_resolvers_active
 from entropia.application.queries.package_dependency import ensure_no_dependency_cycle
 from entropia.domain.create_package import (
     BaselineParseStatus,
@@ -57,6 +59,7 @@ from entropia.domain.create_package import (
     resolve_equivalence_claim,
     source_hash,
 )
+from entropia.domain.create_package.source_scan import SOURCE_SCANNER_VERSION
 from entropia.domain.create_package.validation import VALIDATOR_VERSION
 from entropia.domain.esp.enums import RuntimeAdapter
 from entropia.domain.identity import Actor
@@ -397,8 +400,22 @@ async def run_precheck(
     async def _op() -> dict[str, Any]:
         await session.refresh(root, with_for_update=True)
         _check_request_version(root, expected_request_version)
+        attempt = await cp_repo.next_scan_attempt(session, root.entity_id)
         job = _enqueue_create_package_job(
             session, actor, kind="precheck", request_id=root.entity_id
+        )
+        # doc 07 §13.2 ``precheck_started``: emitted at ADMISSION, not at worker
+        # start, because that is where duplicate/retry submissions are actually
+        # distinguished (§13.2: telling duplicates, retries and jobs apart). The
+        # attempt number the worker will assign is max+1 (``append_dependency_scan``),
+        # so it is derivable here and links this admission to the scan it produces.
+        _audit_precheck_started(
+            session,
+            actor,
+            request_id=root.entity_id,
+            scan_attempt=attempt,
+            detail=detail,
+            job_id=job.job_id,
         )
         # Advance the request_version so expected_request_version detects a concurrent
         # admission (the token is otherwise inert until the worker records the scan).
@@ -441,6 +458,7 @@ async def submit_candidate_generation(
     request_id: str,
     expected_request_version: int | None = None,
     idempotency_key: str | None = None,
+    audit_session_factory: AuditSessionFactory | None = None,
 ) -> dict[str, Any]:
     """Send: gate Pre-Check, then ADMIT candidate generation (doc 06 §5, doc 07 §9.3;
     Finding F-01).
@@ -462,7 +480,9 @@ async def submit_candidate_generation(
     async def _op() -> dict[str, Any]:
         await session.refresh(root, with_for_update=True)
         _check_request_version(root, expected_request_version)
-        await _enforce_precheck_gate(session, detail)
+        await _enforce_precheck_gate(
+            session, actor, detail, audit_session_factory=audit_session_factory
+        )
 
         job = _enqueue_create_package_job(
             session, actor, kind="candidate_generation", request_id=root.entity_id
@@ -503,13 +523,93 @@ async def submit_candidate_generation(
     )
 
 
-async def _enforce_precheck_gate(session: AsyncSession, detail: PackageRequest) -> None:
+def _audit_precheck_started(
+    session: AsyncSession,
+    actor: Actor,
+    *,
+    request_id: str,
+    scan_attempt: int,
+    detail: PackageRequest,
+    job_id: str,
+) -> None:
+    """doc 07 §13.2 ``precheck_started`` — the admission-side operational trace.
+
+    Written in the request transaction: the admission SUCCEEDS (202), so the row
+    commits with the durable job it announces. Carries the §13.2 field set: actor
+    (columns), request ref, scan attempt, source + context hash, scanner version
+    and job ref.
+    """
+    audit_repo.add_audit_event(
+        session,
+        event_kind="precheck_started",
+        actor_principal_id=actor.principal_id,
+        actor_kind=actor.actor_kind,
+        target_entity_id=request_id,
+        target_entity_type=_REQUEST_TARGET_KIND,
+        new_state=str(PrecheckScanStatus.CHECKING),
+        correlation_id=actor.correlation_id,
+        metadata={
+            "scan_attempt": scan_attempt,
+            "source_hash": detail.source_hash,
+            "context_hash": detail.context_hash,
+            "scanner_version": SOURCE_SCANNER_VERSION,
+            "job_id": job_id,
+        },
+    )
+
+
+async def _record_precheck_stale(
+    actor: Actor,
+    *,
+    request_id: str,
+    scan: Any,
+    new_context_hash: str | None,
+    new_registry_fingerprint: str | None,
+    trigger: str,
+    audit_session_factory: AuditSessionFactory | None,
+) -> None:
+    """doc 07 §13.2 ``precheck_stale``, written DURABLY (O-04).
+
+    Staleness is only ever DISCOVERED by refusing to use the old Passed scan, and
+    that refusal is a raise whose 409 rolls the request tx back — so this row goes
+    to its own committed transaction, exactly like the run-admission rejection.
+    Carries the §13.2 fields: old scan ref, old/new context hash and registry
+    version, trigger actor (columns) / system (``trigger``).
+    """
+    await record_durable_audit(
+        actor,
+        event_kind="precheck_stale",
+        target_entity_id=request_id,
+        target_entity_type=_REQUEST_TARGET_KIND,
+        new_state=str(PrecheckScanStatus.STALE),
+        reason="precheck_stale",
+        metadata={
+            "old_scan_id": scan.scan_id,
+            "old_context_hash": scan.context_hash,
+            "new_context_hash": new_context_hash,
+            "old_registry_fingerprint": scan.registry_fingerprint,
+            "new_registry_fingerprint": new_registry_fingerprint,
+            "trigger": trigger,
+        },
+        audit_session_factory=audit_session_factory,
+    )
+
+
+async def _enforce_precheck_gate(
+    session: AsyncSession,
+    actor: Actor,
+    detail: PackageRequest,
+    *,
+    trigger: str = "candidate_generation_gate",
+    audit_session_factory: AuditSessionFactory | None = None,
+) -> None:
     """Re-validate the Pre-Check gate at Send time (doc 07 §9.3 PC-13).
 
     Description requests skip the dependency gate. A code request must have a
     current PASSED scan whose context_hash + registry fingerprint still match the
     live state, else PRECHECK_BLOCKED / PRECHECK_STALE — never bypassable by a
-    stale client flag.
+    stale client flag. Each PRECHECK_STALE refusal also leaves a durable
+    ``precheck_stale`` audit (doc 07 §13.2).
     """
     if detail.source_kind == SourceKind.DESCRIPTION:
         return
@@ -517,9 +617,27 @@ async def _enforce_precheck_gate(session: AsyncSession, detail: PackageRequest) 
     if scan is None or scan.status != PrecheckScanStatus.PASSED:
         raise PrecheckBlocked()
     if scan.context_hash != detail.context_hash:
+        await _record_precheck_stale(
+            actor,
+            request_id=detail.entity_id,
+            scan=scan,
+            new_context_hash=detail.context_hash,
+            new_registry_fingerprint=None,
+            trigger=trigger,
+            audit_session_factory=audit_session_factory,
+        )
         raise PrecheckStale()
     current_fingerprint = await registry_fingerprint(session, detail.declared_dependencies)
     if scan.registry_fingerprint != current_fingerprint:
+        await _record_precheck_stale(
+            actor,
+            request_id=detail.entity_id,
+            scan=scan,
+            new_context_hash=detail.context_hash,
+            new_registry_fingerprint=current_fingerprint,
+            trigger=trigger,
+            audit_session_factory=audit_session_factory,
+        )
         raise PrecheckStale()
 
 
@@ -530,6 +648,7 @@ async def create_draft_from_candidate(
     request_id: str,
     expected_candidate_hash: str | None = None,
     idempotency_key: str | None = None,
+    audit_session_factory: AuditSessionFactory | None = None,
 ) -> dict[str, Any]:
     """C.D.P: create the Package Root + immutable Draft Revision (doc 06 §7, §13).
 
@@ -552,7 +671,9 @@ async def create_draft_from_candidate(
         if expected_candidate_hash is not None and detail.candidate_hash != expected_candidate_hash:
             raise CandidateStale()
 
-        dependency_snapshot = await _draft_dependency_snapshot(session, detail)
+        dependency_snapshot = await _draft_dependency_snapshot(
+            session, actor, detail, audit_session_factory=audit_session_factory
+        )
         rationale_snapshot = await _draft_rationale_snapshot(session, detail)
         pkg_root, _detail, revision = await pkg_repo.create_package(
             session,
@@ -572,7 +693,12 @@ async def create_draft_from_candidate(
             rationale_family_snapshot=rationale_snapshot,
             validation_state=PackageValidationState.PENDING,
             approval_state=ApprovalState.DRAFT,
-            change_note="Draft created from candidate.",
+            change_note=_draft_change_note(detail),
+            # Revision chain (doc 06 §7): a revision attempt's draft records the prior
+            # attempt's revision as its parent / origin, so the package plane carries the
+            # same link the request head does. NULL for the first attempt.
+            parent_revision_id=detail.parent_revision_ref,
+            derived_from_revision_id=detail.parent_revision_ref,
         )
         await session.flush()
         detail.package_root_id = pkg_root.entity_id
@@ -602,22 +728,40 @@ async def create_draft_from_candidate(
     )
 
 
+def _draft_change_note(detail: PackageRequest) -> str:
+    """The draft's change note names its attempt so the chain reads without a join."""
+    if detail.revision_attempt_no <= 1 or detail.parent_revision_ref is None:
+        return "Draft created from candidate."
+    return (
+        f"Revision attempt {detail.revision_attempt_no} created from candidate "
+        f"(parent revision {detail.parent_revision_ref})."
+    )
+
+
 def _draft_result(detail: PackageRequest) -> dict[str, Any]:
     return {
         "request_id": detail.entity_id,
         "package_root_id": detail.package_root_id,
         "draft_revision_id": detail.draft_revision_id,
         "state": str(detail.state),
+        "revision_attempt_no": detail.revision_attempt_no,
+        "parent_revision_ref": detail.parent_revision_ref,
     }
 
 
 async def _draft_dependency_snapshot(
-    session: AsyncSession, detail: PackageRequest
+    session: AsyncSession,
+    actor: Actor,
+    detail: PackageRequest,
+    *,
+    audit_session_factory: AuditSessionFactory | None = None,
 ) -> dict[str, Any]:
     """Pin the resolved ESP dependencies from the current scan (P4/L5).
 
     Code requests must have a current PASSED scan; its resolved refs become the
     immutable dependency snapshot. Description requests carry an empty snapshot.
+    A stale scan refuses the draft and leaves a durable ``precheck_stale`` audit
+    (doc 07 §13.2) — the second surface where the old Passed result is denied.
     """
     if detail.source_kind == SourceKind.DESCRIPTION:
         return {"resolved": [], "source": "description"}
@@ -625,6 +769,15 @@ async def _draft_dependency_snapshot(
     if scan is None or scan.status != PrecheckScanStatus.PASSED:
         raise DependencyUnresolved()
     if scan.context_hash != detail.context_hash:
+        await _record_precheck_stale(
+            actor,
+            request_id=detail.entity_id,
+            scan=scan,
+            new_context_hash=detail.context_hash,
+            new_registry_fingerprint=None,
+            trigger="draft_dependency_snapshot",
+            audit_session_factory=audit_session_factory,
+        )
         raise PrecheckStale()
     return {"resolved": scan.resolved_refs, "scan_id": scan.scan_id}
 
@@ -760,18 +913,52 @@ async def request_package_revision(
     Legal from ``revision_required`` / ``rejected`` (state machine); moves through
     ``candidate_generating`` and regenerates a deterministic candidate so the loop
     (fail validation -> request revision -> new candidate -> new draft -> re-validate)
-    closes. The draft head pointers are cleared so the next Create-Draft produces a
-    fresh attempt. (A true parent-linked revision CHAIN needs the package
-    revision-append machinery — GAP-06 — and is out of scope here.)
+    closes.
+
+    The next attempt is PARENT-LINKED (doc 06 §7 "Creates immutable next attempt linked
+    to parent revision and prior validation summary"; §15 "Revision immutability"). The
+    draft head pointers still have to be cleared — otherwise Create-Draft replays the
+    existing draft instead of building a fresh attempt — but clearing them no longer
+    erases the chain: BEFORE the clear, the prior attempt's draft revision + root and
+    its validation summary reference are pinned onto the request head
+    (``parent_revision_ref`` / ``prior_validation_run_ref``) and appended as an
+    immutable ``package_revision_link`` row, so attempt N always keeps its own parent.
+    Nothing in the prior attempt is mutated: its draft revision, its generated code and
+    its validation report stay exactly as they were.
+
+    Honest boundary: each attempt is still its OWN package root (Create-Draft calls
+    ``pkg_repo.create_package``), so the chain is cross-root — the new draft revision
+    records the prior one as ``parent_revision_id`` / ``derived_from_revision_id``
+    instead of being appended onto the same root. Same-root revision-append (GAP-06)
+    remains out of scope.
     """
     root, detail = await _require_request(session, actor, request_id)
 
     async def _op() -> dict[str, Any]:
         await session.refresh(root, with_for_update=True)
         await session.refresh(detail)
+        # OCC (doc 06 §7 "Errors: ACCESS_DENIED / STALE_REVISION"): the route already
+        # carries the X-Request-Version token, so a stale tab must not silently re-parent
+        # a chain that another actor has already moved on.
+        _check_request_version(root, expected_request_version)
         previous = detail.state
         # Legality FIRST (L2): only revision_required / rejected have this edge.
         detail.state = next_request_state(detail.state, CreatePackageState.CANDIDATE_GENERATING)
+        # Pin the attempt we descend FROM before the head pointers are cleared.
+        link = await cp_repo.append_revision_link(
+            session,
+            request_entity_id=root.entity_id,
+            parent_package_root_id=detail.package_root_id,
+            parent_revision_ref=detail.draft_revision_id,
+            prior_validation_run_ref=detail.current_validation_run_id,
+            prior_candidate_hash=detail.candidate_hash,
+            prior_state=previous,
+            correlation_id=actor.correlation_id or None,
+            created_by_principal_id=actor.principal_id,
+        )
+        detail.parent_revision_ref = detail.draft_revision_id
+        detail.prior_validation_run_ref = detail.current_validation_run_id
+        detail.revision_attempt_no = link.attempt_no
         detail.package_root_id = None
         detail.draft_revision_id = None
         detail.current_validation_run_id = None
@@ -785,7 +972,9 @@ async def request_package_revision(
             event_kind="revision_requested",
             target_kind=_REQUEST_TARGET_KIND,
             entity_id=root.entity_id,
-            revision_id=None,
+            # The audit trail carries the PARENT revision this attempt descends from — a
+            # revision_requested event with no revision_id told the reader nothing.
+            revision_id=detail.parent_revision_ref,
             previous_state=str(previous),
             new_state=str(detail.state),
             action="revision_requested",
@@ -794,6 +983,10 @@ async def request_package_revision(
             "request_id": root.entity_id,
             "state": str(detail.state),
             "candidate_hash": detail.candidate_hash,
+            "revision_attempt_no": detail.revision_attempt_no,
+            "parent_revision_ref": detail.parent_revision_ref,
+            "prior_validation_run_ref": detail.prior_validation_run_ref,
+            "request_version": root.row_version,
         }
 
     return await run_idempotent(
@@ -1030,6 +1223,16 @@ async def approve_and_publish(
         check_head_revision(pkg_root.current_revision_id, expected_head_revision_id)
         if revision.approval_state == ApprovalState.REJECTED:
             raise DependencyUnresolved("This revision was rejected; create a new attempt.")
+        # O-09 / doc 06 §7 "dependencies active": Pre-Check pinned the resolver refs,
+        # but Pre-Check and Approve are separate steps — a resolver deprecated or
+        # withdrawn in between would otherwise publish anyway (the draft's snapshot is
+        # immutable, so nothing else would notice). Re-read the registry NOW and fail
+        # closed with DEPENDENCY_UNRESOLVED listing every stale pin.
+        await ensure_pinned_resolvers_active(
+            session,
+            dependency_snapshot=revision.dependency_snapshot,
+            scope_id=revision.revision_id,
+        )
         # O-10 / doc 08 §14 "Dependency cycle": the same fail-closed graph gate the
         # Library publish surface applies, so no publish path can reach PUBLISHED
         # with an A -> B -> A dependency path. A Create-Package draft pins ESP

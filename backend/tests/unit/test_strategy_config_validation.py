@@ -11,6 +11,20 @@ Covers:
 - Disabled sections produce zero engine input
 - Signal block min_supporting validation
 - Package reference pinning (root_id, revision_id, content_hash)
+
+Acceptance (doc 02 §12) by behaviour:
+- AT-03 required fields      -> display-name blank/whitespace/length, initial capital
+  positive + 2dp, backtest range end-after-start
+- AT-09 limit branch         -> test_market_order_must_not_have_limit_details (the limit
+  subtree is absent from the engine payload) and the limit/stop-limit require-details pair
+- AT-11 stop disabled state  -> test_disabled_percentage_stop_produces_none /
+  test_enabled_percentage_stop_preserved (a disabled rule is not an engine dependency)
+- AT-12 sizing exclusivity   -> the base/risk/formula sizing method cases
+- AT-13 custom formula safe  -> test_formula_based_sizing_valid (a typed formula config,
+  never a free Python/JS/Pine expression)
+- AT-14 scaling state        -> test_disabled_scaling_logic_produces_empty_config /
+  test_enabled_scaling_with_price_distance
+- AT-15 same-direction scaling -> test_conflict_position_hedge_prevents_opposite
 """
 
 from __future__ import annotations

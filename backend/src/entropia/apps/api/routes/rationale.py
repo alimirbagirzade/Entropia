@@ -101,12 +101,15 @@ async def revise_family(
     entity_id: str,
     body: ReviseFamilyRequest,
     ctx: RequestContext = Depends(request_context),
-    if_match: str | None = Header(default=None, alias="If-Match"),
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> dict[str, Any]:
-    # If-Match carries the row_version ETag; the body may also pin the head
-    # revision. The command treats a non-null expected_head_revision_id as the
-    # concurrency token (doc 10 §5 Save row).
+    # O-12: this route used to ACCEPT an If-Match header and then ignore it entirely.
+    # It cannot be reconciled with the body token because the two carry different
+    # axes: the family ETag is a row_version ("rv-N", set on GET at :95) while the
+    # command's token is expected_head_revision_id (a revision id, doc 10 §5 Save
+    # row). Advertising a header that silently does nothing is exactly the defect
+    # this slice removes, so the inert parameter is dropped rather than pretending
+    # it is an OCC token. Soft-delete on this family DOES use If-Match rv-N.
     return await rationale_cmd.revise_family(
         ctx.session,
         ctx.actor,

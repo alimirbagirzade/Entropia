@@ -301,6 +301,29 @@ export interface PackageRequestDetail {
   current_baseline: BaselineSummary | null;
   baseline_ready: boolean;
   baseline_required: boolean;
+  // Revision chain (doc 06 §7/§15). Request Revision clears the draft head to build a
+  // fresh attempt, so these server pins are the ONLY place the prior attempt survives:
+  // the attempt number (1 = original), the parent draft revision and the prior
+  // validation run, plus the append-only chain of every earlier attempt.
+  revision_attempt_no: number;
+  revision_total_attempts: number;
+  parent_revision_ref: string | null;
+  prior_validation_run_ref: string | null;
+  revision_chain: RevisionLinkSummary[];
+  created_at: string | null;
+}
+
+// One immutable link in the Request-Revision chain: the attempt it OPENS and the
+// prior attempt (draft revision + root) plus that attempt's validation summary
+// reference it descends from.
+export interface RevisionLinkSummary {
+  revision_link_id: string;
+  attempt_no: number;
+  parent_package_root_id: string | null;
+  parent_revision_ref: string | null;
+  prior_validation_run_ref: string | null;
+  prior_candidate_hash: string | null;
+  prior_state: string;
   created_at: string | null;
 }
 
@@ -425,11 +448,17 @@ export interface ValidationActionResult {
 }
 
 // Request Revision (commands/create_package.py::request_package_revision): reopen
-// a failed/rejected draft, regenerating a fresh deterministic candidate.
+// a failed/rejected draft, regenerating a fresh deterministic candidate. The new
+// attempt is parent-linked (doc 06 §7): the response names the attempt it opened and
+// the prior attempt's draft revision + validation run it descends from.
 export interface RevisionActionResult {
   request_id: string;
   state: string;
   candidate_hash: string;
+  revision_attempt_no: number;
+  parent_revision_ref: string | null;
+  prior_validation_run_ref: string | null;
+  request_version: number;
 }
 
 // Upload Baseline (commands/create_package.py::upload_baseline_asset): store an

@@ -14,19 +14,19 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from entropia.application.queries import result_access
 from entropia.domain.backtest.history import build_manifest_excerpt
 from entropia.domain.identity import Actor
-from entropia.domain.identity.policy import ensure_can_view, require_authenticated
-from entropia.domain.lifecycle.enums import DeletionState
+from entropia.domain.identity.policy import require_authenticated
 from entropia.infrastructure.postgres.repositories import backtest as bt_repo
-from entropia.infrastructure.postgres.repositories import mainboard as mb_repo
 from entropia.shared.errors import (
     BacktestResultNotFoundError,
     BacktestRunNotFoundError,
-    CompositionNotFoundError,
 )
 
 _ACTIVE = "active"
+_DEFAULT_EVENT_LIMIT = 200
+_MAX_EVENT_LIMIT = 500
 
 
 async def get_backtest_run(
@@ -41,7 +41,7 @@ async def get_backtest_run(
     run = await bt_repo.get_run(session, run_id)
     if run is None:
         raise BacktestRunNotFoundError()
-    await _ensure_can_view_workspace(session, actor, run.workspace_entity_id)
+    await result_access.ensure_can_view_composition(session, actor, run.workspace_entity_id)
     return {
         "run_id": run.run_id,
         "composition_id": run.workspace_entity_id,
@@ -54,10 +54,72 @@ async def get_backtest_run(
         "result_id": run.result_id,
         "failure_code": run.failure_code,
         "failure_message": run.failure_message,
+        # O-06: the cancellation trail, doc 15 §16 ("cancellation audit event ve
+        # terminal reason korunur"). ``cancel_requested_at`` set while the state is
+        # still PROVISIONING/RUNNING is a cancel in flight, awaiting the worker's
+        # next safe checkpoint; ``cancellation_reason`` is the preserved terminal
+        # reason and names the checkpoint that stopped the run. ``row_version`` is
+        # the OCC token a client echoes back as ``expected_row_version``.
+        "cancel_requested_at": _iso(run.cancel_requested_at),
+        "cancel_requested_by_principal_id": run.cancel_requested_by_principal_id,
+        "cancellation_reason": run.cancellation_reason,
+        "row_version": run.row_version,
         "job_id": run.job_id,
         "created_at": _iso(run.created_at),
         "started_at": _iso(run.started_at),
         "finished_at": _iso(run.finished_at),
+        # O-05: the cursor a client resumes the event stream from. Reading the run
+        # and then asking for events after this sequence loses nothing in between.
+        "last_sequence": await bt_repo.latest_run_sequence(session, run_id),
+    }
+
+
+async def list_backtest_run_events(
+    session: AsyncSession,
+    actor: Actor,
+    *,
+    run_id: str,
+    last_sequence: int = 0,
+    limit: int = _DEFAULT_EVENT_LIMIT,
+) -> dict[str, Any]:
+    """Monotonic stage-event replay for one run (doc 15 §7, §8.3, §11).
+
+    Returns every event with ``sequence_no > last_sequence`` in ascending order, so a
+    client whose SSE/polling connection dropped resumes from the last sequence it saw:
+    nothing it already holds is repeated and nothing in the gap is skipped. One logical
+    event keeps one sequence forever (``UNIQUE(run_id, sequence_no)``), which is what
+    lets a client de-duplicate a redelivered event by ``sequence_no`` (doc 15 §7).
+    ``state`` is the run's CURRENT durable state, so a caller that has fallen behind
+    can resynchronize from a single response."""
+    require_authenticated(actor)
+    run = await bt_repo.get_run(session, run_id)
+    if run is None:
+        raise BacktestRunNotFoundError()
+    await result_access.ensure_can_view_composition(session, actor, run.workspace_entity_id)
+
+    cursor = max(0, last_sequence)
+    bounded = max(1, min(limit, _MAX_EVENT_LIMIT))
+    events = await bt_repo.list_run_events(session, run_id, after_sequence=cursor, limit=bounded)
+    latest = await bt_repo.latest_run_sequence(session, run_id)
+    return {
+        "run_id": run_id,
+        "state": str(run.state),
+        "last_sequence": latest,
+        "next_sequence": events[-1].sequence_no if events else cursor,
+        "has_more": bool(events) and events[-1].sequence_no < latest,
+        "events": [_event_projection(event) for event in events],
+    }
+
+
+def _event_projection(event: Any) -> dict[str, Any]:
+    return {
+        "sequence_no": event.sequence_no,
+        "event_type": str(event.event_type),
+        "previous_state": str(event.previous_state) if event.previous_state is not None else None,
+        "state": str(event.state),
+        "correlation_id": event.correlation_id,
+        "detail": event.detail,
+        "occurred_at": _iso(event.occurred_at),
     }
 
 
@@ -72,7 +134,7 @@ async def get_backtest_result(
     result = await bt_repo.get_result(session, result_id)
     if result is None or result.deletion_state != _ACTIVE:
         raise BacktestResultNotFoundError()
-    await _ensure_can_view_workspace(session, actor, result.workspace_entity_id)
+    await result_access.ensure_can_view_composition(session, actor, result.workspace_entity_id)
 
     summary = await bt_repo.get_summary(session, result_id)
     metrics = await bt_repo.list_metric_values(session, result_id)
@@ -115,15 +177,6 @@ def _artifact_availability(counts: dict[str, Any]) -> dict[str, Any]:
 # --------------------------------------------------------------------------- #
 # Helpers                                                                     #
 # --------------------------------------------------------------------------- #
-
-
-async def _ensure_can_view_workspace(
-    session: AsyncSession, actor: Actor, workspace_entity_id: str
-) -> None:
-    workspace = await mb_repo.get_workspace(session, workspace_entity_id)
-    if workspace is None or workspace.deletion_state != DeletionState.ACTIVE:
-        raise CompositionNotFoundError()
-    ensure_can_view(actor, owner_principal_id=workspace.owner_principal_id, visibility="private")
 
 
 def _summary_projection(summary: Any) -> dict[str, Any] | None:
@@ -171,4 +224,4 @@ def _iso(value: Any) -> str | None:
     return value.isoformat() if value is not None else None
 
 
-__all__ = ["get_backtest_result", "get_backtest_run"]
+__all__ = ["get_backtest_result", "get_backtest_run", "list_backtest_run_events"]

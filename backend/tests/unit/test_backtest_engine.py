@@ -13,14 +13,10 @@ from decimal import Decimal
 from typing import Any
 
 from entropia.domain.backtest.engine import (
-    COMPOSITION_CURVE_WARNING,
     EngineOutput,
     EquityPoint,
     ItemRun,
     TradeRow,
-    _clamp_to_limits,
-    _position_size,
-    combine_item_runs,
     run_engine,
 )
 from entropia.domain.backtest.enums import (
@@ -30,6 +26,11 @@ from entropia.domain.backtest.enums import (
     BacktestRunState,
     MetricAvailability,
 )
+from entropia.domain.backtest.execution.portfolio import (
+    COMPOSITION_CURVE_WARNING,
+    combine_item_runs,
+)
+from entropia.domain.backtest.execution.sizing import _clamp_to_limits, _position_size
 from entropia.domain.backtest.indicators import BUILTIN_ENTRY_MODEL
 from entropia.domain.backtest.manifest import ENGINE_VERSION, build_run_manifest
 from entropia.domain.backtest.metrics import DEFAULT_METRICS, derive_metric_values
@@ -265,6 +266,8 @@ def test_engine_bar_replay_produces_a_real_stop_out_trade() -> None:
 
 
 def test_engine_is_deterministic_for_identical_inputs() -> None:
+    """AT-18: same data + same engine policy version -> stable results across reruns,
+    including the same-candle Stop+Exit / multi-stop conflict resolution."""
     cfg = _config()
     first = _run(cfg, _long_breakout_then_stop())
     # Re-run with a DIFFERENT batch size: the streamed result must be identical

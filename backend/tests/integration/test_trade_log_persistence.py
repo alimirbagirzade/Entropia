@@ -14,6 +14,26 @@ explicit pin changes the composition hash (3a reuse); stale expected_head ->
 WORK_OBJECT_REVISION_CONFLICT; idempotent Save replay; foreign-owner edit 403;
 soft-delete drops the item from the active projection; content-dedup upload; batch
 evidence persisted.
+
+Acceptance (doc 05 §16) by test:
+- TL-05 required column        -> the REQUIRED_COLUMN_MISSING import blocker case
+- TL-12 revision immutability  -> revision N+1 appends; N's content hash + source
+  asset ref are unchanged (the "does NOT auto-repin" case)
+- TL-13 explicit pin           -> explicit pin changes the composition hash
+- TL-14 import durability      -> the full pipeline: upload returns a durable job and
+  the WORKER (not the request) produces the record batch
+- TL-15 idempotency            -> idempotent Save replay + content-dedup upload
+- TL-16 concurrency            -> stale expected_head -> WORK_OBJECT_REVISION_CONFLICT
+- TL-17 authorization          -> foreign-owner edit 403
+- TL-20 soft-delete integrity  -> soft-delete drops the item from the active projection
+
+doc 03 twins — the Add Outsource Signal page re-asserts the SAME server behaviour
+for its Trade Log child, so these rows are satisfied by the tests above:
+AOS-08 (background import durability) = TL-14; AOS-09 (the client parser is
+non-authoritative — only the server import revision makes a Trade Log usable) =
+the worker-produced record batch in the full pipeline; AOS-11 (specific revision
+pin) = TL-13; AOS-14 (concurrency) = TL-16; AOS-15 (idempotency) = TL-15;
+AOS-18 (soft-delete historical integrity) = TL-20.
 """
 
 from __future__ import annotations

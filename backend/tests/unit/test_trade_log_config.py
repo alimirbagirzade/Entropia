@@ -1,4 +1,9 @@
-"""Unit tests for the Trade Log §10.2 config + compiler (doc 05 §5, §5.2, §10.2)."""
+"""Unit tests for the Trade Log §10.2 config + compiler (doc 05 §5, §5.2, §10.2).
+
+Acceptance (doc 05 §16): TL-03 (identity requiredness at config level) and TL-10
+(OHLCV/price-context conflict -> PRICE_CONTEXT_CONFLICT; a fallback without an
+approved market-data ref cannot reach Ready).
+"""
 
 from __future__ import annotations
 
@@ -53,6 +58,33 @@ def test_blank_provider_is_a_structural_error() -> None:
     config, issues = validate_trade_log_config(payload)
     assert config is None
     assert any(str(i["field"]).startswith("source.provider_name") for i in issues)
+
+
+def test_ready_save_without_a_source_file_is_an_import_binding_issue() -> None:
+    """TL-04: Validate & Save Ready without a file yields an ``import_binding`` field
+    issue — the issue ``commands.trade_log._raise_for_issues`` maps to the typed
+    SOURCE_FILE_REQUIRED 422. Save Draft may omit the file (it is the transient
+    unsaved row of TL-02); a READY revision may not."""
+    payload = _valid_payload()
+    del payload["import_binding"]
+    config, issues = validate_trade_log_config(payload)
+    assert config is None
+    assert any(str(i["field"]).startswith("import_binding") for i in issues)
+
+
+def test_ready_save_with_a_blank_record_batch_is_an_import_binding_issue() -> None:
+    """TL-04: a present-but-empty binding is not a file either — same field path, so the
+    same SOURCE_FILE_REQUIRED mapping fires rather than a generic validation failure."""
+    payload = _valid_payload(
+        import_binding={
+            "source_asset_id": "srcasset_x",
+            "record_batch_revision_id": "",
+            "mapping_revision_id": None,
+        }
+    )
+    config, issues = validate_trade_log_config(payload)
+    assert config is None
+    assert any(str(i["field"]).startswith("import_binding") for i in issues)
 
 
 def test_event_based_with_base_timeframe_conflicts() -> None:

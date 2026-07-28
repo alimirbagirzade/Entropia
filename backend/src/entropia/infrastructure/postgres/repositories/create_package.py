@@ -33,6 +33,7 @@ from entropia.infrastructure.postgres.models import (
     DependencyScan,
     EntityRegistry,
     PackageRequest,
+    PackageRevisionLink,
     PackageValidationRun,
 )
 from entropia.shared.ids import new_id
@@ -142,11 +143,10 @@ async def append_dependency_scan(
     created_by_principal_id: str | None,
 ) -> DependencyScan:
     """Insert immutable scan ``attempt_no = max+1`` for the request (doc 07 §8)."""
-    prior = await _max_scan_attempt(session, request_entity_id)
     scan = DependencyScan(
         scan_id=new_id("dscan"),
         request_entity_id=request_entity_id,
-        attempt_no=(prior or 0) + 1,
+        attempt_no=await next_scan_attempt(session, request_entity_id),
         source_hash=source_hash,
         context_hash=context_hash,
         language=language,
@@ -183,6 +183,17 @@ async def _max_scan_attempt(session: AsyncSession, request_entity_id: str) -> in
         DependencyScan.request_entity_id == request_entity_id
     )
     return (await session.execute(stmt)).scalar_one_or_none()
+
+
+async def next_scan_attempt(session: AsyncSession, request_entity_id: str) -> int:
+    """The ``attempt_no`` the NEXT scan for this request will carry.
+
+    ``append_dependency_scan`` assigns it, and the doc 07 §13.2 ``precheck_started``
+    audit must report the same number at admission — before the worker has written
+    anything. Both read it here so the announced attempt and the recorded attempt
+    can never diverge.
+    """
+    return (await _max_scan_attempt(session, request_entity_id) or 0) + 1
 
 
 async def append_validation_run(
@@ -303,10 +314,64 @@ async def _max_baseline_attempt(session: AsyncSession, request_entity_id: str) -
     return (await session.execute(stmt)).scalar_one_or_none()
 
 
+async def append_revision_link(
+    session: AsyncSession,
+    *,
+    request_entity_id: str,
+    parent_package_root_id: str | None,
+    parent_revision_ref: str | None,
+    prior_validation_run_ref: str | None,
+    prior_candidate_hash: str | None,
+    prior_state: CreatePackageState,
+    correlation_id: str | None,
+    created_by_principal_id: str | None,
+) -> PackageRevisionLink:
+    """Insert the immutable Request-Revision link opening ``attempt_no = max+1`` (doc 06 §7).
+
+    The original draft is attempt 1, so the first link is attempt 2. Append-only: a
+    prior link — and the prior attempt it points at — is never mutated.
+    """
+    prior = await _max_revision_link_attempt(session, request_entity_id)
+    link = PackageRevisionLink(
+        revision_link_id=new_id("revlink"),
+        request_entity_id=request_entity_id,
+        attempt_no=(prior or 1) + 1,
+        parent_package_root_id=parent_package_root_id,
+        parent_revision_ref=parent_revision_ref,
+        prior_validation_run_ref=prior_validation_run_ref,
+        prior_candidate_hash=prior_candidate_hash,
+        prior_state=prior_state,
+        correlation_id=correlation_id,
+        created_by_principal_id=created_by_principal_id,
+    )
+    session.add(link)
+    return link
+
+
+async def list_revision_links(
+    session: AsyncSession, request_entity_id: str
+) -> list[PackageRevisionLink]:
+    """The request's full revision chain, oldest attempt first (doc 06 §7)."""
+    stmt = (
+        select(PackageRevisionLink)
+        .where(PackageRevisionLink.request_entity_id == request_entity_id)
+        .order_by(PackageRevisionLink.attempt_no)
+    )
+    return list((await session.execute(stmt)).scalars().all())
+
+
+async def _max_revision_link_attempt(session: AsyncSession, request_entity_id: str) -> int | None:
+    stmt = select(func.max(PackageRevisionLink.attempt_no)).where(
+        PackageRevisionLink.request_entity_id == request_entity_id
+    )
+    return (await session.execute(stmt)).scalar_one_or_none()
+
+
 __all__ = [
     "ENTITY_TYPE",
     "append_baseline_asset",
     "append_dependency_scan",
+    "append_revision_link",
     "append_validation_run",
     "create_request",
     "get_baseline_asset",
@@ -317,4 +382,5 @@ __all__ = [
     "get_request_root",
     "get_scan",
     "get_validation_run",
+    "list_revision_links",
 ]

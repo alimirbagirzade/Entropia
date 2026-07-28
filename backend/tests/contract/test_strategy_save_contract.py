@@ -10,6 +10,11 @@ tests/integration/test_strategy_integration.py):
   filtered out (scaling.enabled=false -> None), and the cross-field blockers
   (sizing exclusivity, trigger-source-conditional, entry Required block, signal
   aggregation satisfiability, direction coherence) surface their machine codes.
+
+Acceptance (doc 02 §12): AT-03 (a blank display_name is a 422 before any DB work —
+a UI star alone is not the gate), AT-05 (trigger-source conditional requirement),
+AT-08 (direction coherence), AT-12 (sizing exclusivity) and AT-14 (a disabled
+scaling section compiles to None, i.e. zero engine effect).
 """
 
 from __future__ import annotations

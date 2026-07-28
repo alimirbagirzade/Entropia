@@ -2976,3 +2976,56 @@ ağaçtan yeniden hesaplıyor.
 (2) `docs/audit/audit_report.md` repoda yok — doğrulama açıkça sayılan 19 kodla sınırlı, "25+"
 iddiasının kalanı hakkında bu kayıt hiçbir şey söylemiyor. (3) Lokal tam suite tek koşuda
 tamamlanamadı (ortam kaynaklı); integration'ın otoritesi #407 CI'ıdır (6/6 yeşil).
+
+
+## Doc truth-repair — dört authority dokümanı yeniden ölçüldü landed (PR #415)
+
+**Migration:** yok. **Yeni tablo:** yok. **`ENGINE_VERSION`:** bump yok. **Kod:** dokunulmadı —
+`git diff --name-only` çıktısında `.md` dışı dosya yok. **CI:** 6/6 yeşil. Merge `36957ad`.
+
+**Ne düzeldi.**
+- **`docs/STAGE_R3_KICKOFF.md` → SUPERSEDED banner.** Authority order'da 1. sırada okunuyordu ve
+  §"Remaining R3 backlog"ta **merged** beş kalemi (D-4 #375 · P-05 #376 · P-06 #377 · P-14 #378 ·
+  P-09 #379) sıradaki iş diye listeliyordu; W2 tablosunda #371/#372/#373 hâlâ "open" yazıyordu.
+  §"Working-loop method" korundu; §"Paste-ready resume prompt" **yapıştırma** işaretlendi.
+- **`CLAUDE.md`** — alembic head `0035` → `0038`; son dalga K-serisi → O-serisi; **§Next'in
+  taşıyıcı iddiası düzeltildi**: PO imzası blokaj değil, **2026-07-22'de atılmış**
+  (`v18_final_acceptance.md:155-169`) ve beklettiği FIX(R3) kalemlerinin hepsi landed.
+- **`docs/CODEMAPS/DATA_MODEL.md`** — tablo **63 → 102** (`rationale_family_revision` artık kendi
+  satırında, greplenebilir); **FK iddiası 8 → 134** (25 model dosyası). L1 FK insert-order proof
+  **kuralı değişmedi**, gerekçesi düzeltildi. İki yeniden-üretme komutu dosyaya gömüldü.
+- **`docs/POST_V1_SPEC_GAP_BACKLOG_ROUND3.md`** — §DURUM TAZELEME: **8 madde landed**
+  (S9/S1/S8/S4/S6/S2/S3/S7), açık kalanlar ayrıldı: **S5 (a/b/c/d)** + **S-L1…S-L6**;
+  S-L7 fix değil **karar** olarak kapandı. Kaymış işaretçiler: `errors.py:964` → `:1277`,
+  dizin `apps/api/routes/`, `nav.ts:130-131` artık başka blok.
+
+**Review sonucu / dürüst sınır.** Denetimin **kendi promptu da bayattı**: CLAUDE.md'de
+`658db36` / "F-05 (PR bekliyor)" hiç yoktu; tablo sayısı 100 değil **102**; S-L1 kayması
+`964→1034` değil **`964→1277`**. Ayrıca brief'in kaynak gösterdiği `docs/audit/audit_report.md`
+**git geçmişinin tamamında yok** — her düzeltme yeniden üretilebilir bir komuta / PR'a /
+`file:line`'a bağlandı.
+
+**Kapanışta ölçülen ders.** #415 merge olduktan sonra main **14 PR** daha aldı (#416–#429), yani
+bu slice'ın yazdığı §Current position **bir günde yeniden bayatladı**. STALE-BY-DEFAULT bu repo
+hızında teorik değil, ölçülmüş bir gerçek.
+
+
+## Next: **F-07 §4.4 + R2 banner kapanışı** (PO imzası artık blokaj DEĞİL)
+
+PO imzası **2026-07-22'de atıldı** (`docs/implementation/v18_final_acceptance.md:155-169`,
+D-1…D-9) ve imzanın beklettiği FIX(R3) kalemlerinin **hepsi landed** (#368–#373, #375–#379).
+Sıradaki gerçek iş, öncelik sırasıyla:
+
+1. **F-07 §4.4** — 4 yüzey **backend display-DTO** bekliyor
+   (`docs/implementation/v18_visual_traceability.md §4.4`). Presentation-only DEĞİL.
+   F-07 bütün olarak Complete değil.
+2. **R2 banner kapanışı (docs işi)** — `entropia_v18_remediation_status.md`'deki RE-OPENING
+   banner'ının koşulu artık sağlandı → banner'ı kaldır, UI-01/02/03/04/05/06/12/14/15
+   satırlarını evidence'lı Complete yap.
+3. **O-03 kalıntısı** — 5 ölü error sınıfı (`KNOWN_UNRAISED`).
+4. **Round-3 backlog** — S5 (a/b/c/d) + S-L1…S-L6
+   (`docs/POST_V1_SPEC_GAP_BACKLOG_ROUND3.md` §DURUM TAZELEME).
+
+Referans (STALE-BY-DEFAULT): main `f78404f` · alembic `0039_backtest_run_cancellation` (39) ·
+`ENGINE_VERSION = backtest-engine-v18-funding-step-order` · 102 tablo.
+Kickoff + paste-ready resume prompt: **`docs/DOC_TRUTH_REPAIR_LANDED_KICKOFF.md`**.

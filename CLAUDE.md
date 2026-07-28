@@ -143,8 +143,8 @@ Before stopping a working session, produce **ALL** of the following:
 ## Current position (keep in sync at each closing)
 
 > Aşağıdaki değerler **2026-07-28** tarihinde repodan empirik doğrulandı (`origin/main` @
-> `eff8ffe`). Yine de **STALE-BY-DEFAULT** kabul et: §Session START adım 1'i çalıştırmadan
-> bunlara güvenme.
+> `f78404f`, CI success). **STALE-BY-DEFAULT** kabul et: §Session START adım 1'i çalıştırmadan
+> bunlara güvenme — bu bölüm #415'ten sonra **bir günde 14 PR** geriden geldi.
 
 - **Durum:** V1 ROADMAP COMPLETE (Stages 0–8, docs 01–22) + post-V1 + video-alignment +
   V18-R2 dalgası + **auth remediation dalgası COMPLETE** (güvenlik denetimi #346–#364).
@@ -157,8 +157,17 @@ Before stopping a working session, produce **ALL** of the following:
 - **Son dalga — O-serisi (spec-uyum kusurları):** O-01 (#403) · O-02 (#400) · **O-03 (#407 + #413;
   #408 boş merge oldu, içeriğini #413 yeniden indirdi)** · O-04 (#405) · O-05 (#412) ·
   **O-06 (#419 — CancelBacktestRun, migration `0039`)** · O-08 (#406) · O-09 (#410) · O-10 (#402) ·
-  **O-12/O-13/O-18 (#414 — OCC + Idempotency disiplini) landed** · O-15 (#409).
+  **O-12/O-13/O-18 (#414 — OCC + Idempotency disiplini) landed** · O-14 (#417) · O-15 (#409).
   Öncesi: K-serisi (#386–#398).
+- **Son dalga — K-09/K-10 engine god-module parçalama (davranış-koruyan).** `engine.py`
+  **5212 → 3701 satır**; yeni paket `domain/backtest/execution/` (`fills` · `sizing` · `costs` ·
+  `scaling` · `portfolio` · `state` · `constants`). K-10 bar loop'un **24 nonlocal sayacını** tek
+  `_Ledger` nesnesine topladı (equity/peak dahil). PR'lar: #421/#423/#424/#425/#426 (K-09 a–e) ·
+  #428/#429 (K-10a) · **#427 golden-output regression guard** (tam çıktı digest'i pinlendi).
+  **`ENGINE_VERSION` bump YOK** — refactor davranışı değiştirmiyor, guard bunu kanıtlıyor.
+- **Ayrıca landed:** T-2 acceptance-ID traceability (#416) · I-17 (#418) · T-1 audit-log read
+  model + rol matrisi + settlement-currency resolver testleri (#422) ·
+  **docs truth-repair (#415 — dört authority dokümanı yeniden ölçüldü)**.
 - **Testler:** son yeşil referans CI (O-serisi PR'ları). Lokal tam suite tek koşuda
   tamamlanamayabilir (ortam kaynaklı — paralel worktree oturumları CPU paylaşıyor) —
   **otorite CI'dır.**
@@ -175,6 +184,15 @@ Before stopping a working session, produce **ALL** of the following:
   olarak Complete DEĞİL**. vitest **608/608** (**`--no-file-parallelism` ZORUNLU**).
 
 
+- **Next (PO imzası BLOKAJ DEĞİL — imza 2026-07-22'de atıldı,
+  `docs/implementation/v18_final_acceptance.md:155-169`; beklettiği FIX(R3) kalemlerinin hepsi
+  landed: #368–#373, #375–#379):**
+  1. **F-07 §4.4** — 4 yüzey backend display-DTO bekliyor (`v18_visual_traceability.md §4.4`).
+  2. **R2 banner kapanışı (docs işi):** `entropia_v18_remediation_status.md` RE-OPENING
+     banner'ının koşulu sağlandı → banner'ı kaldır, UI satırlarını evidence'lı Complete yap.
+  3. **O-03 kalıntısı:** 5 ölü error sınıfı (`KNOWN_UNRAISED`).
+  4. **Round-3 backlog:** S5 (a/b/c/d) + S-L1…S-L6
+     (`docs/POST_V1_SPEC_GAP_BACKLOG_ROUND3.md` §DURUM TAZELEME — diğer 8 madde landed).
 - **Açık iş (R2 kapsamı dışı, dürüst sınır):** ekran okuyucu (NVDA/VoiceOver) denetimi yapılmadı;
   10 sayfanın derin görsel kıyası eksik; a11y/visual katmanları CI'da koşmadı; A11Y-01 kontrast
   (228 serious node, tamamı canonical v18 paletinden) ve A11Y-02 kayıtlı sapma olarak açık.

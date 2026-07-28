@@ -1513,3 +1513,94 @@ sonra yeniden hesaplandı. PR #407 CI'ı **6/6 yeşil** (backend, frontend, iki 
   lokal-verify kuralından bilinçli ve açıklanmış sapmadır; integration'ın otoritesi #407 CI'ıdır.
 - Adjudicate edilen kodlar için **yeni integration testi yazılmadı** — yeni kod eklenmediği için
   bağlanacak yeni davranış yok; her satırın karşılığı kendi mevcut testine sahip.
+
+## O-08 · Request Revision parent link — kopan revision zinciri (PR #406)
+
+**Denetim iddiası.** "Request Revision `parent_revision_ref` üretmiyor, revision zinciri kopuyor;
+`create_package.py:774-776` head pointer'larını NULL'lıyor, `:763-764` yorumu itiraf ediyor."
+
+**Ampirik doğrulama — iddia DOĞRU.** Kod okundu: `request_package_revision` içinde
+`detail.package_root_id = None; detail.draft_revision_id = None; detail.current_validation_run_id = None`
+ve docstring "A true parent-linked revision CHAIN needs the package revision-append machinery —
+GAP-06 — and is out of scope here." Spec karşılığı: doc 06 §7 satır 649/885 ("Creates immutable next
+attempt linked to parent revision and prior validation summary") ve §15 satır 1351-1352 kabul satırı
+("Validation failed draft için Request Revision yeni candidate attempt ve `parent_revision_ref`
+üretir; old draft/code/report'ler değişmeden kalır"). K-serisi içtihadının aksine bu bulguda
+çürütülecek bir yan yoktu.
+
+### Neden head'i temizlemeyi bırakmak çözüm DEĞİL
+
+`create_draft_from_candidate` idempotent replay'i `if detail.package_root_id is not None and
+detail.draft_revision_id is not None: return _draft_result(detail)` ile yapıyor. Head bırakılsaydı
+Request Revision'dan sonraki C.D.P **yeni attempt üretmez, eskisini geri verirdi**. Yani temizleme
+doğru davranıştı; kusur temizlemenin **geçmişi de silmesiydi**. Düzeltme: temizlemeden önce pinle.
+
+### Şema (migration `0037_package_revision_link`)
+
+`package_request` (mutable head) += `revision_attempt_no INT NOT NULL DEFAULT 1` (1 = orijinal
+deneme; mevcut satırlar backfill'siz doğru), `parent_revision_ref VARCHAR(40) NULL`,
+`prior_validation_run_ref VARCHAR(40) NULL`.
+
+`package_revision_link` (yeni, **append-only, asla UPDATE edilmez**): `revision_link_id` PK,
+`request_entity_id` FK→`entity_registry`, `attempt_no` (link'in **açtığı** attempt; orijinal draft
+attempt 1 olduğu için ilk link `2`), `parent_package_root_id`, `parent_revision_ref`,
+`prior_validation_run_ref`, `prior_candidate_hash`, `prior_state` (`revision_required` |
+`rejected`), `correlation_id`, `created_by_principal_id`, `created_at`;
+`UNIQUE(request_entity_id, attempt_no)` — `package_validation_run` / `baseline_asset` ile aynı
+immutable-evidence kalıbı.
+
+**Neden hem head pin'i hem defter?** Head satırı mutable: ikinci Request Revision
+`parent_revision_ref`'i ezerdi ve zincir tek seviyeye çökerdi. Defter satırları append-only olduğu
+için attempt N kendi parent'ını sonsuza dek korur. Head pin'leri ise ucuz projeksiyon (join yok).
+
+### Paket düzlemi, audit, OCC
+
+- `pkg_repo.create_package` opsiyonel `parent_revision_id` kwarg'ı aldı (default `None` → 15+
+  çağıranın davranışı bit-bazında aynı). Revizyon denemesinin draft'ı artık
+  `PackageRevision.parent_revision_id` + `PackageRoot.derived_from_revision_id` ile önceki attempt'i
+  isimlendiriyor; change note "Revision attempt N created from candidate (parent revision …)".
+- `revision_requested` audit event'i `revision_id=None` yerine parent revision'ı taşıyor — eskisi
+  okuyucuya hiçbir şey söylemiyordu.
+- **Bonus kusur:** `request_package_revision` `expected_request_version` parametresini alıyor, route
+  `X-Request-Version` header'ını gönderiyor, `BACKEND_ROUTES.md` OCC'yi ✔ belgeliyordu — ama komut
+  token'ı **hiç kontrol etmiyordu**. `_check_request_version` eklendi (doc 06 §7 `STALE_REVISION`).
+  Belge doğruydu, kod eksikti; bayat bir sekme artık zinciri yeniden ebeveynleyemiyor.
+
+### Read side
+
+Projeksiyon: `revision_attempt_no`, `revision_total_attempts`, `parent_revision_ref`,
+`prior_validation_run_ref`, `revision_chain[]` (her link: attempt_no, parent revision + root, prior
+validation run, prior candidate hash, prior state, created_at). UI: durum panelinde
+"Revision N of M · parent: `<rev>`" satırı (yalnız attempt > 1) ve ValidationSection altında
+salt-okunur "Revision chain" listesi (`aria-label="Revision chain"`).
+
+### Kanıt
+
+- `tests/integration/test_create_package_revision_chain.py` — 6 test: (1) parent + prior run pin'i
+  ve **eski draft revision + validation run satırlarının kolon-kolon snapshot'ının değişmediği**;
+  (2) yeni draft'ın paket düzleminde parent taşıması ve ilk revizyonun back-fill EDİLMEMESİ;
+  (3) ikinci revizyonda zincir `[2, 3]` ve ilk link'in hâlâ orijinal draft'ı göstermesi;
+  (4) taze isteğin boş zincir projeksiyonu; (5) stale `expected_request_version` → 409 ve
+  **reddedilen çağrının hiçbir link yazmaması**; (6) **L1 FK insert-order proof** (root'suz link
+  `IntegrityError`, root varken temiz flush).
+- alembic `0037` up/down/up (izole DB) · `compare_metadata` paritesi: dokunulan tablolarda 0 fark
+  (index adı modelin `index=True` türetimiyle birebir: `ix_package_revision_link_request_entity_id`).
+- CI #406: 6/6 yeşil, backend job tam suite 28m58s.
+
+### Dürüst sınırlar
+
+1. **Cross-root zincir.** Her attempt kendi package root'unu yaratmaya devam ediyor; yeni revision
+   parent'ı isimlendiriyor ama aynı root'a append edilmiyor (GAP-06 kapalı değil).
+2. **Geriye dönük geçmiş yok.** Migration öncesi revizyon görmüş isteklerin zinciri
+   yeniden kurulamaz — `revision_attempt_no` 1'den başlar, ilk yeni revizyon `attempt_no=2` yazar.
+3. **Lokal tam suite tek koşuda tamamlanamadı** (paralel worktree'ler aynı Postgres'i ezdi + arka
+   plan süreci %13/%34'te SIGTERM aldı; kesilene kadar sıfır ilgili hata). Otorite #406 CI'ıdır.
+
+### Süreç dersi — migration numarası yarışı
+
+PR açıkken main'e `0036_manual_duplicate_override` indi; benim `0036_package_revision_link`'im ikinci
+alembic head oldu ve `alembic upgrade head` "Multiple head revisions are present" ile patladı.
+Backend + iki E2E + a11y job'ı ~50 sn'de migration adımında düştü (Docker ve Frontend geçti, çünkü
+DB'ye dokunmuyorlar) — yani **kırmızı, kodun değil numaranın çakışmasıydı**. Rebase + `0037`'ye
+renumber, tek head, up/down/up yeniden kanıtlandı. Bu tempoda push öncesi
+`git fetch && ls backend/alembic/versions | tail -1` ucuz bir sigortadır.

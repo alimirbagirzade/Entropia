@@ -2976,3 +2976,43 @@ ağaçtan yeniden hesaplıyor.
 (2) `docs/audit/audit_report.md` repoda yok — doğrulama açıkça sayılan 19 kodla sınırlı, "25+"
 iddiasının kalanı hakkında bu kayıt hiçbir şey söylemiyor. (3) Lokal tam suite tek koşuda
 tamamlanamadı (ortam kaynaklı); integration'ın otoritesi #407 CI'ıdır (6/6 yeşil).
+
+## O-08 — Request Revision artık parent-linked: kopan revision zinciri kuruldu (PR #406)
+
+**Ne landed.** `commands/create_package.py::request_package_revision` yeni denemeyi açarken
+request head pointer'larını NULL'lıyor (`package_root_id` / `draft_revision_id` /
+`current_validation_run_id`) ve geldiği attempt'e **hiçbir referans bırakmıyordu**; docstring bunu
+"GAP-06, out of scope" diye kabul ediyordu. Doc 06 §7 ("Creates immutable next attempt linked to
+parent revision and prior validation summary") ve §15 kabul satırı "Revision immutability" bunu
+şart koşuyor. Head'in temizlenmesi zorunlu (aksi halde C.D.P mevcut draft'ı replay eder) — bu yüzden
+düzeltme **temizlemeden ÖNCE parent'ı pinlemek** oldu: `package_request` += `revision_attempt_no`
+(1 = orijinal deneme) / `parent_revision_ref` / `prior_validation_run_ref`, artı **append-only**
+`package_revision_link` defteri (her Request Revision için bir satır: parent revision + root, prior
+validation run, prior candidate hash, hangi state'ten açıldığı). Yalnız head pin'i olsaydı ikinci
+revizyonda zincir tek seviyeye çökerdi. Migration **`0037_package_revision_link`**.
+
+**Yan kazanımlar.** Yeni draft aynı bağı paket düzleminde de taşıyor
+(`PackageRevision.parent_revision_id` + `PackageRoot.derived_from_revision_id`, `pkg_repo.create_package`'e
+opsiyonel additive kwarg); `revision_requested` audit event'i NULL yerine parent `revision_id`'yi
+kaydediyor; route'un gönderdiği ama komutun **yok saydığı** `X-Request-Version` OCC token'ı enforce
+edildi (doc 06 §7 `STALE_REVISION` — `BACKEND_ROUTES.md` bunu zaten ✔ olarak belgeliyordu, yani
+belge doğruydu kod eksikti). Projeksiyon `revision_attempt_no / revision_total_attempts /
+parent_revision_ref / prior_validation_run_ref / revision_chain` veriyor; Create Package sayfası
+"Revision N of M · parent: …" satırı + salt-okunur "Revision chain" listesi gösteriyor.
+
+**Testler.** Yeni `tests/integration/test_create_package_revision_chain.py` (6 test): parent pin,
+prior validation summary erişimi, **eski draft revision + validation report'un byte-bazında
+değişmediği** snapshot karşılaştırması, ikinci revizyonda tam zincir (ilk link yeniden yazılmıyor),
+boş zincir, stale-OCC reddi ve **L1 FK insert-order proof**. Frontend'e "revision chain" render
+testi eklendi. CI 6/6 yeşil (backend job tam suite'i 28m58s'de koştu).
+
+**Dürüst sınırlar.** (1) Her deneme hâlâ **kendi package root'unu** yaratıyor → zincir cross-root;
+aynı root üzerinde revision-append (GAP-06) kapsam dışı. (2) Migration öncesi isteklerin geçmişi
+geri getirilemez — zincirleri ilk yeni revizyondan başlar. (3) Lokal tam suite tek koşuda
+tamamlanamadı (paralel worktree'ler + arka plan süreç ömrü); integration'ın otoritesi #406 CI'ıdır.
+
+**Ders — migration numarası yarışı.** PR açıkken main'e `0036_manual_duplicate_override` indi ve
+benim `0036_package_revision_link`'im **ikinci alembic head** oldu: `alembic upgrade head` patladı,
+DB'ye dokunan dört job (backend + iki E2E + a11y) migration adımında ~50 sn'de düştü. Rebase +
+`0037`'ye renumber ile çözüldü. Bu hızda paralel slice akan bir main'de **push öncesi
+`git fetch && ls backend/alembic/versions | tail -1`** kontrolü ucuz bir sigortadır.

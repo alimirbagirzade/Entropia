@@ -1592,6 +1592,18 @@ alanı hiç gönderilmez · seçenek yoksa retry yok · preflight `allow` döner
 `apiStub.ts::apiErrorRoute` dördüncü opsiyonel `details` parametresi aldı (26 mevcut çağrı yeri
 etkilenmedi) — zarfın yapısal payload'ı olmadan RESTORE_CONFLICT test edilemezdi.
 
+### Doğrulama
+
+Lokal: `ruff check` · `ruff format --check` · `mypy src` (369 dosya) temiz · yeni integration
+dosyası 10/10 · `-k "restore_conflict"` 10/10 · regresyon (trash_page + trash_agent_artifact +
+user_manual + error-taxonomy ratchet) 49/49 · `tests/contract` (openapi drift guard dahil) yeşil ·
+frontend `typecheck` + `lint` temiz, `trash.test.tsx` 20/20, `-t "Restore needs attention"` 6/6.
+
+**Lokal tam backend suite tek koşuda tamamlanamadı** (%19'da bilinçli olarak durduruldu —
+CLAUDE.md'de kayıtlı ortam tuzağı, paralel worktree oturumları CPU paylaşıyor). **Otorite CI:**
+PR #446 **6/6 yeşil** — backend **2532 passed** (32m25s), frontend **625 passed** (60 dosya),
+Docker, iki E2E (dev-auth + gerçek tarayıcı/Compose) ve A11Y axe-core taraması dahil.
+
 ### Dürüst sınırlar
 
 - **Migration YOK**, alembic head değişmedi (`0039_backtest_run_cancellation`). `ENGINE_VERSION`

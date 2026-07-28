@@ -210,6 +210,38 @@ async def test_sign_up_replay_returns_the_same_account(session) -> None:
 
 
 # --------------------------------------------------------------------------- #
+# autoflush=False — the API's real session semantics                           #
+# --------------------------------------------------------------------------- #
+
+
+async def test_creates_work_with_autoflush_disabled(session) -> None:
+    """The idempotent creates re-read their rows through the stored reference; that
+    re-read must not depend on autoflush.
+
+    The API session is built with ``autoflush=False`` (``postgres/engine.py``) while
+    the test fixture defaults to ``True`` — so a missing explicit ``flush()`` inside
+    the idempotent body passes every test here and still 404s in the real app. This
+    test pins the app's configuration so that gap cannot reopen.
+    """
+    await _seed_principals(session)
+    session.autoflush = False
+
+    root, revision = await _market_dataset(session, "idem-noflush-1")
+    assert root.entity_id and revision.revision_id
+
+    successor = await md_cmd.create_successor_revision(
+        session,
+        OWNER,
+        entity_id=root.entity_id,
+        payload={"v": 2},
+        market_data_type=MarketDataType.OHLCV,
+        idempotency_key="idem-noflush-2",
+    )
+    assert successor.revision_id != revision.revision_id
+    await session.commit()
+
+
+# --------------------------------------------------------------------------- #
 # Research Data definitions                                                    #
 # --------------------------------------------------------------------------- #
 

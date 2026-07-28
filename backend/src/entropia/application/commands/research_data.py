@@ -197,6 +197,10 @@ async def create_research_dataset(
             new_state=str(revision.revision_state),
             action="created",
         )
+        # The API session runs with autoflush=False (engine.py), so the re-read below
+        # would not see these pending INSERTs. Flush explicitly — never rely on
+        # autoflush, which is on in tests but OFF in the app.
+        await session.flush()
         return {"entity_id": root.entity_id, "revision_id": revision.revision_id}
 
     ref = await run_idempotent(

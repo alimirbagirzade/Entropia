@@ -1514,3 +1514,105 @@ sonra yeniden hesaplandı. PR #407 CI'ı **6/6 yeşil** (backend, frontend, iki 
 - Adjudicate edilen kodlar için **yeni integration testi yazılmadı** — yeni kod eklenmediği için
   bağlanacak yeni davranış yok; her satırın karşılığı kendi mevcut testine sahip.
 
+Tam suite koşusunu **ortada öldürmek** (TaskStop) artakalan Postgres bağlantıları bırakıyor;
+`tests/integration/conftest.py` şemayı **her test için** drop/create ettiğinden bu bağlantılar
+DDL'i `ACCESS EXCLUSIVE` lock-wait'e sokup — conftest'in kendi docstring'inin dediği gibi —
+"across a full invocation, aborts dozens of tests". Bu slice'ta tam olarak bu yaşandı:
+**51 sahte FAILED**. Ayrıştırma: aynı 51 test izole koşuda 51/51 geçti, sonra temiz tam koşu
+exit 0 verdi, sonra CI yeşil geldi. Kod ile ilgisi yoktu.
+
+
+---
+
+## O-21 — Agent SSE sequence replay (PR #430, CI 6/6 yeşil, merge bekliyor)
+
+**Tarih:** 2026-07-28 · **Branch:** `feat/o21-agent-sse-sequence-replay` · **Commit:** `24a93d5`
+**Migration:** YOK — O-21 hiçbir migration eklemez · `ENGINE_VERSION` sabit. (Branch `0035` üzerine kuruldu; kapanış anında main head **`0039_backtest_run_cancellation`** — O-06'dan.)
+
+### Kusurun ampirik kanıtı
+
+- `infrastructure/postgres/models/agent_lab.py` — `AgentEvent.seq` docstring'i *"stable SSE ordering
+  / Last-Event-ID"* vaat ediyordu.
+- `grep -rniE "last-event-id|last_event_id|lastEventId" backend/src frontend/src` → **tek isabet: o
+  docstring**. Ne backend ne frontend'de bir uygulama vardı.
+- `apps/api/sse.py` — `_sse_frame` yalnız `{event, data}` üretiyordu (hiç `id:` yok); `_event_source`
+  hiçbir header okumuyordu; `SseHub.publish` `except asyncio.QueueFull:` altında **sessizce**
+  geçiyordu.
+- `repositories/agent_lab.py::events_after` / `latest_event_seq` — bu iş için yazılmış replay
+  primitifleri, **hiçbir çağrısı yok** (ölü kod).
+
+### Sevk edilen sözleşme
+
+1. **`id:` = outbox satır id'si.** Her veri çerçevesinde. AUTH-11 minimizasyonuna bilerek eklenen
+   tek alan; gerekçe: resumable bir stream cursor ister ve outbox id'si bir **log satırını**
+   adlandırır, hiçbir endpoint'ten adreslenemez. `resource_id`/`correlation_id`/`event_type` tel'e
+   çıkmamaya devam eder, gövde `{}` kalır.
+2. **`Last-Event-ID` → replay.** `requested_cursor` header'ı okur, yeni
+   `shared/ids.py::looks_like_id(value, prefix="obx")` ile **tam biçimi** doğrular (prefix + 26
+   karakter Crockford base32). Doğrulamayı geçemeyen değer → cursor yok → **O-21 öncesi davranış**
+   (yalnız canlı akış). `replay_after` kısa ömürlü bir session açar, `fetch_events_after`'ı
+   `limit+1` ile çağırır; `REPLAY_LIMIT = 500` aşılırsa replay yapılmaz, tek bir resync verilir.
+3. **Yarış kapalı.** `_event_source` replay'den **önce** hub'a abone olur. Replay sorgusu
+   sırasında yayılan olay mailbox'a düşer; canlı akışta `event_id <= replayed_through` (ULID
+   leksikografik = zaman sırası) ile elenir. Ne dikişe düşen olay ne çift teslim.
+4. **`stream.resync`.** `Subscriber` sınıfı bir **overflow bayrağı** taşır: `SseHub.publish`
+   `QueueFull`'da bayrağı işaretler (poller asla back-pressure yemez), stream `take_overflow()` ile
+   okuyup-temizler ve `stream.resync` yayınlar. Aynı sinyal pencereyi aşan boşlukta ve replay okuma
+   hatasında da verilir — *"boş replay"* ile *"bozuk replay"* istemci için ayırt edilemez olduğundan
+   hata sessizce "hiçbir şey kaçmadı"ya dönüşemez. Kontrol çerçeveleri `id` taşımaz.
+5. **Frontend.** Native `EventSource` **kullanılamıyor** (AUTH-11 kimliği header ister → `fetch`
+   stream), yani tarayıcının otomatik `Last-Event-ID` davranışı yok. `lib/sse.ts` işlediği son
+   `id:`'yi closure'da tutar ve her yeniden açılışta header olarak gönderir (URL'ye asla girmez).
+   Boş `id:` cursor'ı **silmez** — SSE spec'i siler, biz bilerek sapıyoruz: silmek bir sonraki
+   replay'i kaybettirirdi. `stream.resync` → `invalidateQueries()` tam refresh.
+   **Reconnect'teki blanket full-refresh fallback olarak korundu** (ilk bağlantı, replay
+   edilemeyen resync, pencereyi aşan boşluk).
+
+### Adjudicated karar — neden `agent_event.seq` değil
+
+Brief `id:` alanının `agent_event.seq` olmasını istiyordu. Frontend'in bağlandığı `/events`
+**`outbox_events`** fan-out eder — backtest/job/agent/audit/catch-all, yani her domain'i kapsayan
+**heterojen** bir akış. Agent-only bir sequence bu akışı sıralayamaz (agent olmayan olayların seq'i
+yoktur). Agent mutasyonları `sse_event_name` üzerinden zaten `agent.task.updated` olarak bu akışa
+ulaşır, dolayısıyla replay'i de outbox cursor'ından alır. `AgentEvent.seq` docstring'i düzeltildi:
+seq = bu satırların **append sırası** (`events_after`'ın replay ettiği sıra), canlı stream'in wire
+cursor'ı değil.
+
+### Test kayıtları
+
+- **Yeni** `backend/tests/integration/test_sse_replay.py` — 7 test, gerçek Postgres, gerçek
+  `_event_source` generator'ı. Stub request gerçek Starlette `Headers` taşır (case-insensitivity
+  varsayılmaz, çalıştırılır) + testin çevirdiği bir disconnect anahtarı. `_SessionFactory` replay'e
+  testin **kendi** session'ını verir (commit gerekmez, gerçek `fetch_events_after` SQL'i koşar).
+  Deterministik id'ler `f"obx_{n:026d}"` — `new_id` aynı milisaniyede rastgele sıralanabilirdi.
+- `test_sse_auth_contract.py` **+8**: zarf tam `{event,data,id}` (fazla alan büyürse kırılır),
+  id'siz olay `id:` üretmez, cursor doğrulama 4 kötü girdi + whitespace + case, ve
+  `ServerSentEvent(**frame).encode()` çıktısında gerçek `id:` satırı.
+- `test_hardening.py`: `SseHub.subscribe()` artık `Subscriber` döndürüyor → `sub.queue.…`.
+- `frontend/src/test/sse.test.ts` **+7**: ilk bağlantıda header yok · reopen'da son id gider ·
+  cursor ilerler · kontrol çerçevesi cursor'ı oynatmaz · boş `id:` silmez · resync → tam refresh ·
+  id taşıyan çerçeve hâlâ doğru key'i invalidate eder.
+
+### Doğrulama
+
+backend ruff + `format --check` + mypy (354 dosya) temiz · backend **tam suite exit 0** (izole
+`entropia_o21_test`) · SSE hedefli koşu 31 passed · frontend `tsc -b --noEmit` + eslint temiz ·
+vitest **614/614** (baseline 607 + 7) · `make openapi-check` drift yok · **CI 6/6 yeşil**.
+
+Frontend suite'te önce tek tük timeout görüldü; **stash'lenmiş temiz ağaçta baseline yeşil**,
+değişikliklerle yeniden koşum da yeşil → makine yükü kaynaklı flakiness, değişiklikle ilgisiz
+(dürüstlük kaydı: ilk koşuda 5s default timeout altında 49 sahte fail, `--testTimeout=20000` ile
+farklı tek testler düştü, sonra iki tam yeşil koşu).
+
+### Honest boundary
+
+- İkincil `GET /agent-events/stream` **dokunulmadı**: yalnız heartbeat üretiyor, frontend'de bağlı
+  değil. Abone başına `agent_event` yoklaması eklemek, ana akışın tek-process poller ile kaçındığı
+  bağlantı yükünü geri getirirdi. `events_after` / `latest_event_seq` hâlâ **çağrısız** — agent
+  event'in kendi replay primitifleri bir tüketici bekliyor.
+- `Last-Event-ID` OpenAPI'de tanımlı değil (header `Request`'ten okunuyor; `Header(...)` parametresi
+  eklemek kullanılmayan bir imza alanı = ölü kod olurdu). `docs/openapi.json` değişmedi.
+- `REPLAY_LIMIT = 500` ve `_SUBSCRIBER_BUFFER = 256` modül sabiti; settings'e bağlı değil.
+- Cursor'ın kendisi bir sızıntı yüzeyi olarak değerlendirildi: ULID zaman damgası taşır, ama
+  aboneler olayı zaten **canlı** aldığı için zamanı biliyorlar; adreslenebilir bir domain id'si
+  değil. Karar bilinçli ve contract test'te pinlenmiş durumda.

@@ -155,6 +155,8 @@ Before stopping a working session, produce **ALL** of the following:
 - **Son dalga — O-serisi (spec-uyum kusurları):** O-01 (#403) · O-02 (#400) · **O-03 (#407 + #413;
   #408 boş merge oldu, içeriğini #413 yeniden indirdi)** · O-04 (#405) · O-05 (#412) ·
   **O-06 (#419 — CancelBacktestRun, migration `0039`)** · O-08 (#406) · O-09 (#410) · O-10 (#402) ·
+  **O-21 (#430 — SSE `id:` + `Last-Event-ID` replay + `stream.resync`; cursor = outbox satır id'si,
+  `agent_event.seq` DEĞİL; migration yok — CI 6/6 yeşil, merge bekliyor)**.
 
 - **Testler:** son yeşil referans CI (O-serisi PR'ları). Lokal tam suite tek koşuda
   tamamlanamayabilir (ortam kaynaklı — paralel worktree oturumları CPU paylaşıyor) —

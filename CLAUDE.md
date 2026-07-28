@@ -143,8 +143,6 @@ Before stopping a working session, produce **ALL** of the following:
 ## Current position (keep in sync at each closing)
 
 > Aşağıdaki değerler **2026-07-28** tarihinde repodan empirik doğrulandı (`origin/main` @
-> `f78404f`, CI success). **STALE-BY-DEFAULT** kabul et: §Session START adım 1'i çalıştırmadan
-> bunlara güvenme — bu bölüm #415'ten sonra **bir günde 14 PR** geriden geldi.
 
 - **Durum:** V1 ROADMAP COMPLETE (Stages 0–8, docs 01–22) + post-V1 + video-alignment +
   V18-R2 dalgası + **auth remediation dalgası COMPLETE** (güvenlik denetimi #346–#364).
@@ -157,17 +155,7 @@ Before stopping a working session, produce **ALL** of the following:
 - **Son dalga — O-serisi (spec-uyum kusurları):** O-01 (#403) · O-02 (#400) · **O-03 (#407 + #413;
   #408 boş merge oldu, içeriğini #413 yeniden indirdi)** · O-04 (#405) · O-05 (#412) ·
   **O-06 (#419 — CancelBacktestRun, migration `0039`)** · O-08 (#406) · O-09 (#410) · O-10 (#402) ·
-  **O-12/O-13/O-18 (#414 — OCC + Idempotency disiplini) landed** · O-14 (#417) · O-15 (#409).
-  Öncesi: K-serisi (#386–#398).
-- **Son dalga — K-09/K-10 engine god-module parçalama (davranış-koruyan).** `engine.py`
-  **5212 → 3701 satır**; yeni paket `domain/backtest/execution/` (`fills` · `sizing` · `costs` ·
-  `scaling` · `portfolio` · `state` · `constants`). K-10 bar loop'un **24 nonlocal sayacını** tek
-  `_Ledger` nesnesine topladı (equity/peak dahil). PR'lar: #421/#423/#424/#425/#426 (K-09 a–e) ·
-  #428/#429 (K-10a) · **#427 golden-output regression guard** (tam çıktı digest'i pinlendi).
-  **`ENGINE_VERSION` bump YOK** — refactor davranışı değiştirmiyor, guard bunu kanıtlıyor.
-- **Ayrıca landed:** T-2 acceptance-ID traceability (#416) · I-17 (#418) · T-1 audit-log read
-  model + rol matrisi + settlement-currency resolver testleri (#422) ·
-  **docs truth-repair (#415 — dört authority dokümanı yeniden ölçüldü)**.
+
 - **Testler:** son yeşil referans CI (O-serisi PR'ları). Lokal tam suite tek koşuda
   tamamlanamayabilir (ortam kaynaklı — paralel worktree oturumları CPU paylaşıyor) —
   **otorite CI'dır.**
@@ -175,7 +163,10 @@ Before stopping a working session, produce **ALL** of the following:
   **Ortam tuzağı:** paralel worktree oturumları aynı anda koşuyor — `TEST_DATABASE_URL` ile
   worktree'ye özel izole DB kullan (conftest her testte `drop_all`/`create_all`). Tam suite'i
   **tek pytest çağrısında** koş ve **ortada öldürme**: arka arkaya iki çağrı ya da yarıda kesilmiş
-  bir koşu, artakalan bağlantılar yüzünden sonraki koşuda sahte FAILED/ERROR üretir.
+  bir koşu, artakalan bağlantılar yüzünden sonraki koşuda sahte FAILED/ERROR üretir. Suite
+  koşarken **`uv sync`/`uv run` çalıştırma** (venv ortadan yeniden kurulur → sahte ERROR) ve
+  **`pytest … | tail` KULLANMA** — exit code `tail`'in olur, pytest'in değil; T-01'de 20 ERROR
+  veren bir koşu bu yüzden bir tur "yeşil" sanıldı. Çıktıyı dosyaya yaz, `$?`'i ayrı oku.
 
 
 

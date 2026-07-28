@@ -11,7 +11,8 @@ Command chain (doc 05 §10.3):
     request_trade_log_import    -> durable jobs row (data queue, CR-09); worker
                                    produces a canonical_trade_record_batch
     create_trade_log_and_attach -> validate §10.2 config + require a succeeded,
-                                   non-empty record batch -> create native work
+                                   non-empty record batch whose import ran under the
+                                   SAME time zone the config declares -> create native work
                                    object + pin the batch -> (Save & Add) attach onto
                                    the Mainboard (REUSE 3a attach_mainboard_item)
     create_trade_log_revision   -> append an immutable revision N+1; NEVER
@@ -50,6 +51,7 @@ from entropia.domain.importing.column_mapping import (
     BLOCKER_INVALID_COLUMN_MAPPING,
 )
 from entropia.domain.importing.source_file import assert_supported_source_file
+from entropia.domain.importing.timezone import is_valid_iana_timezone, timezones_agree
 from entropia.domain.lifecycle.enums import DeletionState
 from entropia.domain.mainboard.enums import MainboardItemKind
 from entropia.domain.trade_log.compiler import (
@@ -86,8 +88,10 @@ from entropia.shared.errors import (
     RequiredColumnMissingError,
     SourceAssetNotFoundError,
     SourceFileRequiredError,
+    SourceTimezoneMismatchError,
     TimezoneRequired,
     TradeLogPriceContextConflictError,
+    TradeLogTimeZoneInvalidError,
     TradeLogValidationFailedError,
     TradeRecordBatchNotFoundError,
     UnsupportedSourceFileTypeError,
@@ -213,6 +217,7 @@ async def request_trade_log_import(
     the legacy free-text ``instrument_id`` is carried verbatim (backward compatible).
     """
     require_authenticated(actor)
+    _validate_source_timezone(source_timezone)
     asset = await asset_repo.get_source_asset(session, source_asset_id)
     if asset is None:
         raise SourceAssetNotFoundError(f"Source asset '{source_asset_id}' not found.")
@@ -279,7 +284,8 @@ async def create_trade_log_and_attach(
     """Save a Trade Log revision 1 and (optionally) attach it (doc 05 §8, §9.1).
 
     Validates the §10.2 config, requires the referenced import to be a succeeded,
-    non-empty record batch, then in ONE tx: create the native work object (root +
+    non-empty record batch NORMALIZED UNDER THE DECLARED TIME ZONE (O-28), then in ONE
+    tx: create the native work object (root +
     immutable revision 1, ``object_kind=trade_log``, ``available_time=None`` —
     historical data) -> pin the record batch to that revision -> if ``attach``
     (Save & Add), attach onto the Mainboard (REUSE 3a ``attach_mainboard_item`` so
@@ -290,7 +296,7 @@ async def create_trade_log_and_attach(
     config = _validate_config(payload)
     canonical = config_to_dict(config)
     config_hash = compute_config_hash(config)
-    batch = await _require_ready_import(session, config.import_binding.record_batch_revision_id)
+    batch = await _require_ready_import(session, config)
     await _require_source_asset(session, config.import_binding.source_asset_id)
 
     async def _op() -> dict[str, Any]:
@@ -389,7 +395,7 @@ async def create_trade_log_revision(
     config = _validate_config(payload)
     canonical = config_to_dict(config)
     config_hash = compute_config_hash(config)
-    batch = await _require_ready_import(session, config.import_binding.record_batch_revision_id)
+    batch = await _require_ready_import(session, config)
     await _require_source_asset(session, config.import_binding.source_asset_id)
 
     async def _op() -> dict[str, Any]:
@@ -549,6 +555,25 @@ def _validate_file_type(original_filename: str | None, content: bytes) -> None:
     assert_supported_source_file(original_filename, content, error=UnsupportedSourceFileTypeError)
 
 
+def _validate_source_timezone(source_timezone: str) -> None:
+    """Reject a non-IANA import zone BEFORE the durable job is enqueued (O-28).
+
+    Doc 05 §5.2 rejects an invalid/ambiguous zone; catching it here means the worker
+    never normalizes a batch under a zone the config can never legally declare, so the
+    save-time cross-check can only ever compare two real zones."""
+    if not is_valid_iana_timezone(source_timezone):
+        raise TradeLogTimeZoneInvalidError(
+            details=[
+                {
+                    "field": "source_timezone",
+                    "code": TradeLogTimeZoneInvalidError.code,
+                    "message": f"'{source_timezone}' is not a valid IANA time zone identifier.",
+                }
+            ],
+            field_path="source_timezone",
+        )
+
+
 def _clean_mapping(import_mapping: dict[str, str] | None) -> dict[str, str] | None:
     """Drop blank entries; an empty mapping degrades to ``None`` (no mapping)."""
     if not import_mapping:
@@ -594,17 +619,27 @@ def _raise_for_issues(issues: list[dict[str, Any]]) -> None:
         raise TradeLogPriceContextConflictError(details=issues)
     if any(field and str(field).startswith("import_binding") for field in fields):
         raise SourceFileRequiredError(details=issues)
+    # O-28: a bad source zone is its own doc 05 §12.1 code, not a generic failure —
+    # the UI must be able to point at the Time Zone field.
+    if any(field and str(field).endswith("source_timezone") for field in fields):
+        raise TradeLogTimeZoneInvalidError(details=issues)
     raise TradeLogValidationFailedError(details=issues)
 
 
 async def _require_ready_import(
-    session: AsyncSession, record_batch_revision_id: str
+    session: AsyncSession, config: TradeLogConfig
 ) -> CanonicalTradeRecordBatch:
-    """Resolve a succeeded, non-empty canonical trade-record batch.
+    """Resolve a succeeded, non-empty canonical trade-record batch that was normalized
+    under the SAME time zone this config declares.
 
     A missing batch -> 404; an unfinished/failed import -> the most specific
-    blocker (required-column / timezone / no-records / not-ready).
+    blocker (required-column / timezone / no-records / not-ready); a batch parsed under
+    a different zone -> ``TIMEZONE_MISMATCH`` (O-28).
+
+    The whole config is taken rather than just the batch id so no future save path can
+    bind a batch while skipping the time-zone cross-check.
     """
+    record_batch_revision_id = config.import_binding.record_batch_revision_id
     batch = await tl_repo.get_record_batch(session, record_batch_revision_id)
     if batch is None:
         raise TradeRecordBatchNotFoundError(
@@ -614,7 +649,42 @@ async def _require_ready_import(
         _raise_for_failed_import(batch)
     if batch.accepted_count == 0:
         raise NoAcceptedTradeRecordsError()
+    _require_timezone_agreement(config, batch)
     return batch
+
+
+def _require_timezone_agreement(config: TradeLogConfig, batch: CanonicalTradeRecordBatch) -> None:
+    """Fail closed when the config's zone is not the one the import ran under (O-28).
+
+    ``request_trade_log_import`` carries ``source_timezone`` as its own job parameter,
+    so the config never constrained it: a config declaring ``America/New_York`` could
+    pin a batch normalized as ``UTC``, every stored instant would be off by the true
+    offset, and no blocker anywhere would fire. The import's declared zone is durable
+    evidence on ``validation_summary["source_timezone"]``; a batch carrying none cannot
+    be shown to agree, so it is rejected too rather than assumed to match.
+    """
+    declared = config.time_model.source_timezone
+    imported = (batch.validation_summary or {}).get("source_timezone")
+    if timezones_agree(declared, imported):
+        return
+    raise SourceTimezoneMismatchError(
+        details=[
+            {
+                "field": "time_model.source_timezone",
+                "code": SourceTimezoneMismatchError.code,
+                "message": (
+                    f"The configuration declares '{declared}' but the pinned import "
+                    f"batch was normalized under '{imported or 'an undeclared zone'}'."
+                ),
+                "declared_source_timezone": declared,
+                "imported_source_timezone": imported,
+                "record_batch_revision_id": batch.record_batch_id,
+            }
+        ],
+        field_path="time_model.source_timezone",
+        scope_type="canonical_trade_record_batch",
+        scope_id=batch.record_batch_id,
+    )
 
 
 def _raise_for_failed_import(batch: CanonicalTradeRecordBatch) -> None:

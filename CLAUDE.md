@@ -159,15 +159,10 @@ Before stopping a working session, produce **ALL** of the following:
   seçenek kümesi taşıyor; yeni `domain/trash/restore.py` katalogu + salt-okuma
   `GET /trash-entries/{id}/restore-preflight`; bilinmeyen resolution 422
   `UNSUPPORTED_RESTORE_RESOLUTION`; migration YOK)** ·
-  **O-21 (#430 — SSE `id:` + `Last-Event-ID` replay + `stream.resync`; cursor = outbox satır
-  id'si, `agent_event.seq` DEĞİL; taksonomi/`EVENT_QUERY_KEYS` dokunulmadı; migration YOK.
-  Kapanış dokümanları #439'da landed, sonraki merge'ler düşürdü, `docs/o21-docs-restore` geri
-  koydu — ayrıntı `PROJECT_HISTORY.md` §O-21 "Kayıt notu")**
-
 
 - **Testler:** son yeşil referans CI (O-serisi PR'ları). Lokal tam suite tek koşuda
-  tamamlanamayabilir (ortam kaynaklı — paralel worktree oturumları CPU paylaşıyor) —
-  **otorite CI'dır.**
+  tamamlanabiliyor — O-27'de **2538 passed / 0 failed / 43dk39sn**, worktree'ye özel izole DB ile
+  (aşağıdaki ortam tuzağına uyulursa). Yine de **otorite CI'dır.**
   Doğrula: `gh run list --branch main --limit 1` → job log.
   **Ortam tuzağı:** paralel worktree oturumları aynı anda koşuyor — `TEST_DATABASE_URL` ile
   worktree'ye özel izole DB kullan (conftest her testte `drop_all`/`create_all`). Tam suite'i

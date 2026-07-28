@@ -171,17 +171,7 @@ Before stopping a working session, produce **ALL** of the following:
   **4 kalıntı açık** (backend display-DTO → `v18_visual_traceability.md §4.4`) — yani **F-07 bütün
   olarak Complete DEĞİL**. vitest **608/608** (**`--no-file-parallelism` ZORUNLU**).
 
-- **Next — PO imzası ARTIK BLOKAJ DEĞİL (2026-07-28 düzeltmesi).** İmza **2026-07-22'de atıldı**:
-  `docs/implementation/v18_final_acceptance.md:155-169` (D-1 KABUL · D-2/3/4/5/6/8 FIX(R3) ·
-  D-7 (b) · D-9 KABUL). İmzanın beklettiği FIX(R3) düzeltmelerinin **hepsi de landed**
-  (#368–#373, #375–#379). Sıradaki gerçek iş:
-  1. **R2 banner kapanışı (docs işi):** `entropia_v18_remediation_status.md`'deki RE-OPENING
-     banner'ının koşulu artık sağlandı → banner'ı kaldır, UI satırlarını evidence'lı Complete yap.
-  2. **#414'ü bitir** (O-12/O-13/O-18 OCC + Idempotency), sonra O-03 kalıntısı: 5 ölü error
-     sınıfı (`KNOWN_UNRAISED`).
-  3. **F-07 §4.4** — 4 yüzey backend display-DTO bekliyor (`v18_visual_traceability.md §4.4`).
-  4. **Round-3 backlog'unda kalanlar:** S5 (a/b/c/d) + S-L1…S-L6
-     (`docs/POST_V1_SPEC_GAP_BACKLOG_ROUND3.md` §DURUM TAZELEME — diğer 8 madde landed).
+
 - **Açık iş (R2 kapsamı dışı, dürüst sınır):** ekran okuyucu (NVDA/VoiceOver) denetimi yapılmadı;
   10 sayfanın derin görsel kıyası eksik; a11y/visual katmanları CI'da koşmadı; A11Y-01 kontrast
   (228 serious node, tamamı canonical v18 paletinden) ve A11Y-02 kayıtlı sapma olarak açık.

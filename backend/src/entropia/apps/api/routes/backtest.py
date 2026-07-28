@@ -6,7 +6,9 @@ RUN admission returns 202 (durable async job); the client never waits on the
 engine (doc 15 §8.2). The durable ``jobs`` row is written in the command tx; the
 actor is dispatched AFTER the handler returns (mirrors the other worker routes).
 ``expected_fingerprint`` (body or ``If-Match``) guards the RUN; a Result soft
-delete carries ``expected_row_version`` (body or numeric ``If-Match``).
+delete and a run cancel carry ``expected_row_version`` (body or numeric
+``If-Match``) — the run row's own OCC token, which is the form this repo already
+uses for every ``backtest_*`` row mutation.
 """
 
 from __future__ import annotations
@@ -28,6 +30,7 @@ _RUNS_PATH = "/mainboard-compositions/{composition_id}/backtest-runs"
 _RUN_PATH = "/backtest-runs/{run_id}"
 _RUN_EVENTS_PATH = "/backtest-runs/{run_id}/events"
 _RETRY_PATH = "/backtest-runs/{run_id}/retries"
+_CANCEL_PATH = "/backtest-runs/{run_id}/cancel"
 _RESULT_PATH = "/backtest-results/{result_id}"
 _DEFAULT_EVENT_LIMIT = 200
 _MAX_EVENT_LIMIT = 500
@@ -39,6 +42,10 @@ class RequestRunBody(BaseModel):
 
 
 class DeleteResultBody(BaseModel):
+    expected_row_version: int | None = None
+
+
+class CancelRunBody(BaseModel):
     expected_row_version: int | None = None
 
 
@@ -120,6 +127,37 @@ async def retry_backtest_run(
     )
     _dispatch(result)
     return result
+
+
+@router.post(_CANCEL_PATH, status_code=202)
+async def cancel_backtest_run(
+    run_id: str,
+    body: CancelRunBody | None = None,
+    ctx: RequestContext = Depends(request_context),
+    if_match: str | None = Header(default=None, alias="If-Match"),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+) -> dict[str, Any]:
+    """Cancel a queued/in-progress run (owner or Admin, doc 15 §8.4).
+
+    202 for both outcomes, because neither is a synchronous stop: a QUEUED run is
+    already terminal in the response (``cancellation: "cancelled"``), while a run
+    the worker owns returns ``cancellation: "requested"`` and is stopped at the
+    worker's next safe checkpoint. No handler ever waits on the worker."""
+    payload = body or CancelRunBody()
+    # Dual-token rule (O-12): body and If-Match are two spellings of ONE value; a
+    # disagreement is 409 OCC_TOKEN_CONFLICT, never a silent pick.
+    expected = reconcile_occ_tokens(
+        payload.expected_row_version,
+        row_version_from_if_match(if_match),
+        field="expected_row_version",
+    )
+    return await backtest_cmd.cancel_backtest_run(
+        ctx.session,
+        ctx.actor,
+        run_id=run_id,
+        expected_row_version=expected,
+        idempotency_key=idempotency_key,
+    )
 
 
 @router.get(_RESULT_PATH)

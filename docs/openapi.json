@@ -561,6 +561,23 @@
         "title": "BootstrapStatusResponse",
         "type": "object"
       },
+      "CancelRunBody": {
+        "properties": {
+          "expected_row_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Row Version"
+          }
+        },
+        "title": "CancelRunBody",
+        "type": "object"
+      },
       "ChangeRoleRequest": {
         "properties": {
           "role": {
@@ -6097,6 +6114,100 @@
           }
         },
         "summary": "Get Backtest Run",
+        "tags": [
+          "backtest"
+        ]
+      }
+    },
+    "/api/v1/backtest-runs/{run_id}/cancel": {
+      "post": {
+        "description": "Cancel a queued/in-progress run (owner or Admin, doc 15 §8.4).\n\n202 for both outcomes, because neither is a synchronous stop: a QUEUED run is\nalready terminal in the response (``cancellation: \"cancelled\"``), while a run\nthe worker owns returns ``cancellation: \"requested\"`` and is stopped at the\nworker's next safe checkpoint. No handler ever waits on the worker.",
+        "operationId": "cancel_backtest_run_api_v1_backtest_runs__run_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/CancelRunBody"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Cancel Backtest Run Api V1 Backtest Runs  Run Id  Cancel Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel Backtest Run",
         "tags": [
           "backtest"
         ]

@@ -1410,6 +1410,26 @@ class RunNotRetryableError(ConflictError):
     category = ErrorCategory.ACTIVE_JOB
 
 
+class RunNotCancellableError(ConflictError):
+    """Cancel was requested on an ALREADY-TERMINAL run (doc 15 §4, §8.4).
+
+    The exact mirror of ``RunNotRetryableError``: retry needs a terminal run,
+    cancel needs a non-terminal one. A succeeded run's immutable Result is never
+    withdrawn by a cancel, and a failed/cancelled run has nothing left to stop —
+    so this is ``lifecycle``, not ``active_job``, and never retryable: repeating
+    the request cannot change a terminal state.
+    """
+
+    code = "RUN_NOT_CANCELLABLE"
+    message = "Only a queued or in-progress run can be cancelled."
+    category = ErrorCategory.LIFECYCLE
+    suggested_action = "retry_run"
+    remediation = (
+        "This run already reached a terminal state. Start a new run with the retry "
+        "command if you need another attempt."
+    )
+
+
 # --------------------------------------------------------------------------- #
 # Stage 5b — Results History (doc 16 §5, §12)                                  #
 # --------------------------------------------------------------------------- #

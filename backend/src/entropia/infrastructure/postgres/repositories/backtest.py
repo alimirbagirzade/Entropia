@@ -133,7 +133,17 @@ async def create_manifest(
     return row
 
 
-async def get_run(session: AsyncSession, run_id: str) -> BacktestRun | None:
+async def get_run(
+    session: AsyncSession, run_id: str, *, for_update: bool = False
+) -> BacktestRun | None:
+    """Load a run; ``for_update`` takes the row lock in the SAME query (O-06).
+
+    The worker and ``cancel_backtest_run`` both serialize on this lock, which is
+    what stops a cancel from being silently overwritten by a worker claiming the
+    run (and vice versa). Locking in the initial read rather than re-selecting
+    afterwards keeps the worker at its original single round trip."""
+    if for_update:
+        return await session.get(BacktestRun, run_id, with_for_update=True)
     return await session.get(BacktestRun, run_id)
 
 

@@ -143,8 +143,9 @@ Before stopping a working session, produce **ALL** of the following:
 ## Current position (keep in sync at each closing)
 
 > Aşağıdaki değerler **2026-07-28** tarihinde repodan empirik doğrulandı (`origin/main` @
-> `eff8ffe`). Yine de **STALE-BY-DEFAULT** kabul et: §Session START adım 1'i çalıştırmadan
-> bunlara güvenme.
+> `f78404f`). Yine de **STALE-BY-DEFAULT** kabul et: §Session START adım 1'i çalıştırmadan
+> bunlara güvenme — bu kural **worktree kopyandaki bu dosyaya da** uygulanır (T-01 kapanışında
+> eski bir worktree tabanı bir an "bayat CLAUDE.md" sanıldı; değeri `origin/main`'den doğrula).
 
 - **Durum:** V1 ROADMAP COMPLETE (Stages 0–8, docs 01–22) + post-V1 + video-alignment +
   V18-R2 dalgası + **auth remediation dalgası COMPLETE** (güvenlik denetimi #346–#364).
@@ -159,6 +160,12 @@ Before stopping a working session, produce **ALL** of the following:
   **O-06 (#419 — CancelBacktestRun, migration `0039`)** · O-08 (#406) · O-09 (#410) · O-10 (#402) ·
   **O-12/O-13/O-18 (#414 — OCC + Idempotency disiplini) landed** · O-15 (#409).
   Öncesi: K-serisi (#386–#398).
+- **T-serisi (test-boşluğu kilitleme) başladı:** **T-01 (#422)** — audit-log read model, role
+  matrix ve settlement-currency resolver'ının davranışı kilitlendi (55 test, **kaynak koda
+  dokunulmadı**, migration yok). Backlog iddiası kısmen yanlıştı: `role_matrix` testsiz değil,
+  **eksik kapsanmıştı** (20 hücreden 14'ü pinsiz). **T-02 adayı:** K-09/K-10 engine
+  extraction'ından doğan modüllerin kapsamı (denetlenmedi). Devam tohumu:
+  `docs/T01_LANDED_KICKOFF.md`.
 - **Testler:** son yeşil referans CI (O-serisi PR'ları). Lokal tam suite tek koşuda
   tamamlanamayabilir (ortam kaynaklı — paralel worktree oturumları CPU paylaşıyor) —
   **otorite CI'dır.**
@@ -166,7 +173,10 @@ Before stopping a working session, produce **ALL** of the following:
   **Ortam tuzağı:** paralel worktree oturumları aynı anda koşuyor — `TEST_DATABASE_URL` ile
   worktree'ye özel izole DB kullan (conftest her testte `drop_all`/`create_all`). Tam suite'i
   **tek pytest çağrısında** koş ve **ortada öldürme**: arka arkaya iki çağrı ya da yarıda kesilmiş
-  bir koşu, artakalan bağlantılar yüzünden sonraki koşuda sahte FAILED/ERROR üretir.
+  bir koşu, artakalan bağlantılar yüzünden sonraki koşuda sahte FAILED/ERROR üretir. Suite
+  koşarken **`uv sync`/`uv run` çalıştırma** (venv ortadan yeniden kurulur → sahte ERROR) ve
+  **`pytest … | tail` KULLANMA** — exit code `tail`'in olur, pytest'in değil; T-01'de 20 ERROR
+  veren bir koşu bu yüzden bir tur "yeşil" sanıldı. Çıktıyı dosyaya yaz, `$?`'i ayrı oku.
 
 
 

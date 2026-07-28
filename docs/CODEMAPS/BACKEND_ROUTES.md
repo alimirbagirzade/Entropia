@@ -367,8 +367,9 @@ rv-N` kullanmaya devam ediyor).
 |---|---|---|---|---|---|
 | DELETE `/entities/{entity_id}` (204) | `soft_delete:59` | `commands.deletion.soft_delete_entity` | **O-18: DUAL** — body `expected_row_version` (opsiyonel) / `If-Match` `rv-N`; kilit ALTINDA `check_row_version` (önceden **hiç** token yoktu → yarışan bir düzenleme sahibinin altından silinebiliyordu) | **✔** (O-13) | |
 | GET `/trash-entries` | `get_trash_entries:71` | `queries.trash.list_trash_entries` | yok | — | `require_trash_admin:78` |
-| GET `/trash-entries/{id}` | `get_trash_entry:85` | `queries.trash.get_trash_entry_detail` | yok | — | `require_trash_admin:89` |
-| POST `/trash-entries/{id}/restore` | `restore:94` | `commands.deletion.*` | body `expected_head_revision_id` (int) / If-Match | ✔ | `require_trash_admin:101` |
+| GET `/trash-entries/{id}` | `get_trash_entry:124` | `queries.trash.get_trash_entry_detail` | yok | — | `require_trash_admin` |
+| GET `/trash-entries/{id}/restore-preflight` | `restore_preflight:133` | `queries.trash.get_restore_preflight` | yok (salt-okuma) | — (salt-okuma) | `require_trash_admin` |
+| POST `/trash-entries/{id}/restore` | `restore:149` | `commands.deletion.*` | body `expected_head_revision_id` (int) / If-Match; **O-17: body `resolution` (typed enum, opsiyonel)** | ✔ | `require_trash_admin` |
 | POST `/trash-entries/{id}/purge` (202) | `purge:113` | `commands.deletion.*` | body `expected_head_revision_id` (int) / If-Match | ✔ | `require_trash_admin:120` |
 
 ## capability.py

@@ -2695,6 +2695,17 @@
               }
             ],
             "title": "Expected Head Revision Id"
+          },
+          "resolution": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolution"
           }
         },
         "title": "RestoreRequest",
@@ -15119,6 +15130,51 @@
           }
         },
         "summary": "Restore",
+        "tags": [
+          "trash"
+        ]
+      }
+    },
+    "/api/v1/trash-entries/{trash_entry_id}/restore-preflight": {
+      "get": {
+        "description": "Read-only restore preflight (O-17, doc 20 §5, §8.2).\n\nSeparate from the command so the Admin can SEE the conflict and its typed\nresolution set before committing to anything. A pure read: no OCC token, no\n``Idempotency-Key``, no write — it echoes the ``expected_head_revision_id``\nto resubmit with. Advisory only; the command re-checks everything itself.",
+        "operationId": "restore_preflight_api_v1_trash_entries__trash_entry_id__restore_preflight_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "trash_entry_id",
+            "required": true,
+            "schema": {
+              "title": "Trash Entry Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Restore Preflight Api V1 Trash Entries  Trash Entry Id  Restore Preflight Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Restore Preflight",
         "tags": [
           "trash"
         ]

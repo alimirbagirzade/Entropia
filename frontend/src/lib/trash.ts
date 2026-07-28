@@ -12,7 +12,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { api, apiRequest } from "./apiClient";
+import { ApiError, api, apiRequest } from "./apiClient";
 
 // ---------------------------------------------------------------------------
 // Wire types (mirror backend application/queries/trash.py `_row`/detail and
@@ -72,8 +72,60 @@ export interface RestoreResult {
   status: string;
   deletion_state: string;
   current_revision_id: string | number | null;
+  // O-17: the typed resolution that actually unlocked this restore, or null when
+  // it restored cleanly and nothing needed resolving.
+  applied_resolution: string | null;
   row_version: number;
   correlation_id: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Restore preflight + typed conflict resolutions (O-17, doc 20 §5, §6, §8.2)
+// ---------------------------------------------------------------------------
+
+// One option the DOMAIN adapter offers. The client never invents, renames or
+// filters these — an empty option set means nothing can unblock the conflict
+// and the object stays in Trash (doc 20 §8.2).
+export interface RestoreResolutionOption {
+  conflict_kind: string;
+  resolution: string;
+  label: string;
+  description: string;
+}
+
+export interface RestorePreflight {
+  trash_entry_id: string;
+  entity_id: string;
+  object_type: string;
+  display_name: string;
+  expected_head_revision_id: number;
+  outcome: "allow" | "conflict" | "blocked";
+  blocked_reason: string | null;
+  conflict_kind: string | null;
+  conflict_summary: string | null;
+  resolutions: RestoreResolutionOption[];
+}
+
+export const RESTORE_CONFLICT_CODE = "RESTORE_CONFLICT";
+
+// The 409 envelope carries the same catalog the preflight read returns: message
+// is the {conflict_summary} doc 20 §6 interpolates, details is one row per typed
+// resolution. Parsed defensively — a row without a resolution token is dropped
+// rather than rendered as a nameless choice.
+export function restoreConflictOptions(error: unknown): RestoreResolutionOption[] {
+  if (!(error instanceof ApiError) || error.code !== RESTORE_CONFLICT_CODE) return [];
+  return error.details.flatMap((row) => {
+    const resolution = typeof row.resolution === "string" ? row.resolution : null;
+    if (resolution === null) return [];
+    return [
+      {
+        conflict_kind: typeof row.conflict_kind === "string" ? row.conflict_kind : "",
+        resolution,
+        label: typeof row.label === "string" ? row.label : resolution,
+        description: typeof row.description === "string" ? row.description : "",
+      },
+    ];
+  });
 }
 
 // Purge request 202 return (mirrors commands/deletion.py request_purge dict
@@ -140,6 +192,25 @@ export function useTrashEntry(trashEntryId: string | null) {
   });
 }
 
+// Restore preflight (O-17, doc 20 §5, §8.2) — a READ, so no OCC token and no
+// Idempotency-Key. Disabled until an entry is actually being adjudicated; the
+// Admin uses it to re-read the canonical conflict after the record changed
+// ("Admin refreshes canonical detail", doc 20 §8.2). Advisory only: the restore
+// command re-runs every check itself, so this is never treated as permission.
+export function useRestorePreflight(trashEntryId: string | null) {
+  return useQuery({
+    queryKey: ["trash", "restore-preflight", trashEntryId],
+    queryFn: () =>
+      api.get<RestorePreflight>(
+        `/trash-entries/${encodeURIComponent(trashEntryId ?? "")}/restore-preflight`,
+      ),
+    enabled: trashEntryId !== null,
+    // Always re-read on demand: a cached preflight would defeat its purpose.
+    staleTime: 0,
+    gcTime: 0,
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Mutation — restore (POST /trash-entries/{id}/restore)
 // ---------------------------------------------------------------------------
@@ -148,16 +219,30 @@ export function useTrashEntry(trashEntryId: string | null) {
 // gets the 409 envelope verbatim instead of restoring against a moved target.
 // A fresh Idempotency-Key per attempt keeps a retry after a rejection a new
 // decision, not a replay (the body token wins over If-Match, doc 20 §14).
+//
+// O-17: `resolution` is the typed choice the Admin picked from the conflict's
+// option set — sent ONLY when one was chosen, and only ever a token the server
+// itself offered. The retry reuses the SAME expected_head_revision_id, so a
+// record that moved in the meantime fails OCC instead of restoring blind
+// (doc 20 §8.2). An unknown token is rejected 422 server-side; the client never
+// substitutes, defaults or drops it.
 export function useRestoreEntry() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: { trash_entry_id: string; expected_head_revision_id: number }) =>
+    mutationFn: (input: {
+      trash_entry_id: string;
+      expected_head_revision_id: number;
+      resolution?: string;
+    }) =>
       apiRequest<RestoreResult>(
         `/trash-entries/${encodeURIComponent(input.trash_entry_id)}/restore`,
         {
           method: "POST",
           headers: { "Idempotency-Key": crypto.randomUUID() },
-          body: { expected_head_revision_id: input.expected_head_revision_id },
+          body: {
+            expected_head_revision_id: input.expected_head_revision_id,
+            ...(input.resolution !== undefined ? { resolution: input.resolution } : {}),
+          },
         },
       ),
     onSuccess: () => {

@@ -66,6 +66,7 @@ const ENTRY_DETAIL = {
 };
 
 const RESTORE_RESULT = {
+  applied_resolution: null,
   trash_entry_id: "t_1",
   entity_id: "e_1",
   entity_type: "backtest_result",
@@ -425,5 +426,197 @@ describe("Trash page", () => {
 
     expect(screen.queryByRole("button", { name: "Restore" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Permanent Delete" })).toBeNull();
+  });
+});
+
+
+// ---------------------------------------------------------------------------
+// O-17 — restore conflict resolution (doc 20 §5, §6, §8.2)
+// ---------------------------------------------------------------------------
+
+const CONFLICT_SUMMARY =
+  "the object's revision pointer moved after it was deleted (the deletion snapshot recorded " +
+  "'rev_1', the record now points to 'rev_7')";
+
+const HEAD_MOVED_OPTION = {
+  conflict_kind: "head_pointer_moved",
+  resolution: "restore_at_current_head",
+  label: "Restore at the current revision pointer",
+  description:
+    "Reactivate the object at the revision it points to now instead of the revision recorded " +
+    "in the deletion snapshot.",
+};
+
+const RESTORE_CONFLICT_ROUTE = apiErrorRoute(409, "RESTORE_CONFLICT", CONFLICT_SUMMARY, [
+  HEAD_MOVED_OPTION,
+]);
+
+const PREFLIGHT_CONFLICT = {
+  trash_entry_id: "t_1",
+  entity_id: "e_1",
+  object_type: "backtest_result",
+  display_name: "Backtest Alpha",
+  expected_head_revision_id: 4,
+  outcome: "conflict",
+  blocked_reason: null,
+  conflict_kind: "head_pointer_moved",
+  conflict_summary: CONFLICT_SUMMARY,
+  resolutions: [HEAD_MOVED_OPTION],
+};
+
+// The doc 20 §6 body, assembled exactly as the spec writes it. The panel must
+// render this verbatim with {conflict_summary} interpolated — no paraphrase.
+const NEEDS_ATTENTION_BODY =
+  `This object cannot be restored automatically because: ${CONFLICT_SUMMARY}. ` +
+  "Review the available domain-specific resolution options. No change has been applied; " +
+  "the object remains in Trash.";
+
+// Spelled out rather than spread over BASE_ROUTES for two reasons: a later
+// spread would re-override the restore route back to the success result, and
+// key ORDER is significant — the fragment matcher takes the first method+
+// substring hit, and "/trash-entries/t_1" is a prefix of the preflight path.
+function conflictRoutes(
+  preflight: unknown = PREFLIGHT_CONFLICT,
+  restoreRoute: unknown = RESTORE_CONFLICT_ROUTE,
+) {
+  return {
+    "POST /auth/reauth": REAUTH_RESULT,
+    "POST /trash-entries/t_1/purge": PURGE_RESULT,
+    "POST /trash-entries/t_1/restore": restoreRoute,
+    "GET /trash-entries/t_1/restore-preflight": preflight,
+    "GET /trash-entries/t_1": ENTRY_DETAIL,
+    "GET /trash-entries": ENTRIES_PAGE,
+    "GET /me": ME_ADMIN,
+  };
+}
+
+describe("Trash restore conflict — Restore needs attention", () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("renders the doc 20 §6 Restore needs attention copy verbatim with the typed options", async () => {
+    stubApi(conflictRoutes());
+    renderPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Restore" }));
+
+    const panel = await screen.findByRole("region", { name: "Restore needs attention" });
+    await waitFor(() => {
+      expect(screen.getByRole("alert").textContent).toBe(NEEDS_ATTENTION_BODY);
+    });
+
+    // The option set comes from the server catalog — label AND description.
+    expect(
+      screen.getByRole("radio", { name: /Restore at the current revision pointer/ }),
+    ).toBeInTheDocument();
+    expect(panel.textContent).toContain("Reactivate the object at the revision it points to now");
+  });
+
+  it("cannot start the command until a server-offered resolution is chosen", async () => {
+    stubApi(conflictRoutes());
+    renderPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Restore" }));
+    await screen.findByRole("region", { name: "Restore needs attention" });
+
+    // doc 20 §8.2: no resolution -> the command cannot be started.
+    expect(screen.getByRole("button", { name: "Retry restore" })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("radio", { name: /Restore at the current revision pointer/ }));
+    expect(screen.getByRole("button", { name: "Retry restore" })).toBeEnabled();
+  });
+
+  it("retries with the chosen typed resolution on the SAME expected deletion version", async () => {
+    const fetchMock = stubApi(conflictRoutes());
+    renderPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Restore" }));
+    await screen.findByRole("region", { name: "Restore needs attention" });
+    fireEvent.click(screen.getByRole("radio", { name: /Restore at the current revision pointer/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Retry restore" }));
+
+    await waitFor(() => {
+      const restoreCalls = fetchMock.mock.calls.filter(
+        ([url, init]) =>
+          String(url).endsWith("/trash-entries/t_1/restore") &&
+          (init as RequestInit | undefined)?.method === "POST",
+      );
+      expect(restoreCalls).toHaveLength(2);
+      const retry = restoreCalls[1][1] as RequestInit;
+      expect(JSON.parse(String(retry.body))).toEqual({
+        // The OCC token is the one the Admin reviewed — never re-read (doc 20 §8.2).
+        expected_head_revision_id: 4,
+        resolution: "restore_at_current_head",
+      });
+      // A retry after a rejection is a NEW decision, not a replay.
+      const headers = retry.headers as Record<string, string>;
+      expect(headers["Idempotency-Key"]).toBeTruthy();
+    });
+  });
+
+  it("sends no resolution field at all on the first attempt", async () => {
+    const fetchMock = stubApi(conflictRoutes());
+    renderPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Restore" }));
+    await screen.findByRole("region", { name: "Restore needs attention" });
+
+    const first = fetchMock.mock.calls.find(
+      ([url, init]) =>
+        String(url).endsWith("/trash-entries/t_1/restore") &&
+        (init as RequestInit | undefined)?.method === "POST",
+    );
+    expect(JSON.parse(String((first?.[1] as RequestInit).body))).toEqual({
+      expected_head_revision_id: 4,
+    });
+  });
+
+  it("offers no retry when the server returns no supported resolution", async () => {
+    stubApi(
+      conflictRoutes(
+        {
+          ...PREFLIGHT_CONFLICT,
+          conflict_kind: "target_missing",
+          conflict_summary: "the object's underlying record is no longer resolvable",
+          resolutions: [],
+        },
+        apiErrorRoute(
+          409,
+          "RESTORE_CONFLICT",
+          "the object's underlying record is no longer resolvable",
+          [],
+        ),
+      ),
+    );
+    renderPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Restore" }));
+    await screen.findByRole("region", { name: "Restore needs attention" });
+
+    // An empty option set is the server's real answer — the client invents none.
+    await waitFor(() => {
+      expect(
+        screen.getByText(/No resolution options are available for this conflict/),
+      ).toBeInTheDocument();
+    });
+    expect(screen.queryByRole("radio")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Retry restore" })).toBeNull();
+  });
+
+  it("re-reads the canonical preflight and clears the panel when the conflict resolved", async () => {
+    stubApi(conflictRoutes({ ...PREFLIGHT_CONFLICT, outcome: "allow", conflict_kind: null, conflict_summary: null, resolutions: [] }));
+    renderPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Restore" }));
+    await screen.findByRole("region", { name: "Restore needs attention" });
+
+    // doc 20 §8.2: the Admin refreshes canonical detail after the record moved.
+    await waitFor(() => {
+      expect(screen.getByText(/The conflict no longer applies/)).toBeInTheDocument();
+    });
+    expect(screen.getByRole("button", { name: "Retry restore" })).toBeEnabled();
   });
 });

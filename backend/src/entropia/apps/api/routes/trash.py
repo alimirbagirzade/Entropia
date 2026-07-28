@@ -22,7 +22,11 @@ from entropia.application.commands.deletion import (
     restore_trash_entry,
     soft_delete_entity,
 )
-from entropia.application.queries.trash import get_trash_entry_detail, list_trash_entries
+from entropia.application.queries.trash import (
+    get_restore_preflight,
+    get_trash_entry_detail,
+    list_trash_entries,
+)
 from entropia.apps.api.deps import RequestContext, request_context
 from entropia.domain.identity.policy import require_trash_admin
 from entropia.infrastructure.queues import enqueue as job_enqueue
@@ -33,6 +37,7 @@ router = APIRouter(tags=["trash"])
 _ENTRIES_PATH = "/trash-entries"
 _ENTRY_PATH = "/trash-entries/{trash_entry_id}"
 _RESTORE_PATH = "/trash-entries/{trash_entry_id}/restore"
+_RESTORE_PREFLIGHT_PATH = "/trash-entries/{trash_entry_id}/restore-preflight"
 _PURGE_PATH = "/trash-entries/{trash_entry_id}/purge"
 
 
@@ -46,6 +51,12 @@ class DeleteRequest(BaseModel):
 
 class RestoreRequest(BaseModel):
     expected_head_revision_id: int | None = None
+    # O-17 (doc 20 §5 "Restore conflict choice", §8.2): the typed choice the Admin
+    # made from the preflight's option set. Kept a plain ``str`` on purpose — the
+    # command parses it against the domain catalog so an unknown token returns the
+    # canonical 422 envelope (``UNSUPPORTED_RESTORE_RESOLUTION``) instead of
+    # pydantic's generic body, and is never silently dropped.
+    resolution: str | None = None
 
 
 class PurgeRequest(BaseModel):
@@ -118,6 +129,22 @@ async def get_trash_entry(
     return await get_trash_entry_detail(ctx.session, ctx.actor, trash_entry_id=trash_entry_id)
 
 
+@router.get(_RESTORE_PREFLIGHT_PATH)
+async def restore_preflight(
+    trash_entry_id: str,
+    ctx: RequestContext = Depends(request_context),
+) -> dict[str, Any]:
+    """Read-only restore preflight (O-17, doc 20 §5, §8.2).
+
+    Separate from the command so the Admin can SEE the conflict and its typed
+    resolution set before committing to anything. A pure read: no OCC token, no
+    ``Idempotency-Key``, no write — it echoes the ``expected_head_revision_id``
+    to resubmit with. Advisory only; the command re-checks everything itself.
+    """
+    require_trash_admin(ctx.actor)
+    return await get_restore_preflight(ctx.session, ctx.actor, trash_entry_id=trash_entry_id)
+
+
 @router.post(_RESTORE_PATH)
 async def restore(
     trash_entry_id: str,
@@ -133,6 +160,7 @@ async def restore(
         ctx.actor,
         trash_entry_id=trash_entry_id,
         expected_head_revision_id=_expected_version(payload.expected_head_revision_id, if_match),
+        resolution=payload.resolution,
         idempotency_key=idempotency_key,
     )
 

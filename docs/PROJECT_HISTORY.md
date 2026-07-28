@@ -1514,3 +1514,108 @@ sonra yeniden hesaplandı. PR #407 CI'ı **6/6 yeşil** (backend, frontend, iki 
 - Adjudicate edilen kodlar için **yeni integration testi yazılmadı** — yeni kod eklenmediği için
   bağlanacak yeni davranış yok; her satırın karşılığı kendi mevcut testine sahip.
 
+
+---
+
+## O-17 · Restore conflict resolution — typed seçenek kümesi + ayrı preflight okuma yolu (branch `feat/o17-restore-conflict-resolution`)
+
+### Kusur (ampirik doğrulandı, sabit değil)
+
+`routes/trash.py::RestoreRequest` **yalnız** `expected_head_revision_id` taşıyordu; doc 20 §5'in
+`resolution` alanı ve preflight'ın döndürmesi gereken typed seçenek kümesi **hiç yoktu**.
+`commands/deletion.py` içinde `RestoreConflictError()` **altı ayrı yerde alternatifsiz** atılıyordu.
+Sonuç: Admin 409 alıyor, doc 20 §8.2'nin "Admin yalnız domain adapter'ın sunduğu typed resolution'ı
+seçebilir" kuralının seçecek hiçbir şeyi olmuyor, doc 20 §6 "Restore needs attention" paneli de
+interpolate edecek `{conflict_summary}` bulamıyordu.
+
+### Ne landed
+
+**Tek katalog — `domain/trash/restore.py` (YENİ).** Conflict taksonomisi + typed resolution kataloğu
+tek yerde: `RestoreConflictKind` (`head_pointer_moved`, `target_missing`), `RestoreResolution`
+(`restore_at_current_head`), `_RESOLUTIONS` tablosu, `conflict_summary()`, `resolution_options()`,
+`supports_resolution()`, `parse_resolution()`, `restore_conflict()`. **Hem** komut raise site'ları
+**hem** okuma yolu bu tek tablodan cevap veriyor — iki yerde ayrışamaz.
+
+**409 artık alternatiflerini taşıyor.** `restore_conflict()` fabrikası: `message` = doc 20 §6'nın
+`{conflict_summary}`'si (iki head'i de adlandırır), `details` = resolution başına bir satır
+(`conflict_kind`/`resolution`/`label`/`description`), `remediation` = insan adımı, `scope_type`/
+`scope_id` pinlenir. Altı bare `RestoreConflictError()` bu fabrikaya bağlandı.
+**Boş `details` bir eksiklik değil, gerçek cevap:** `target_missing` için dürüst bir onarım yok →
+komut başlatılamaz, kök `soft_deleted` kalır (doc 20 §8.2).
+
+**Ayrı okuma yolu.** `GET /trash-entries/{id}/restore-preflight` →
+`queries/trash.py::get_restore_preflight`. Salt-okuma: kilit yok, mutation yok, OCC token yok,
+Idempotency-Key yok. `outcome` ∈ `allow` | `conflict` | `blocked`; `blocked_reason` komutun
+atacağı hata kodunu taşır; `expected_head_revision_id` echo edilir ki retry **aynı** sürümle
+gitsin. Preflight **advisory**, asla yetkilendirme değil — komut her kontrolü kendi tx'inde
+yeniden koşar.
+
+**422, sessiz onarım değil.** `UnsupportedRestoreResolutionError`
+(`UNSUPPORTED_RESTORE_RESOLUTION`, `field_path="resolution"`). `parse_resolution()` komutun
+**en başında**, herhangi bir DB işinden önce koşar; bilinmeyen token → 422, `details` desteklenen
+kümeyi adlandırır. Boş string de reddedilir (fail-closed). Pydantic enum'u **bilerek**
+kullanılmadı: coercion hatası framework'ün jenerik gövdesini üretir, canonical zarfı değil.
+
+**Resolution master key değil.** `supports_resolution()` yalnız kendi conflict kind'ını açar —
+`restore_at_current_head` gönderip `target_missing`'i geçmek mümkün değil. Uygulanan resolution
+audit metadata'sına yazılır (`{"restore_resolution": "restore_at_current_head"}`) ve dönüş
+projeksiyonunda `applied_resolution` olarak görünür; temiz restore'da `null` kalır — handler'ın
+sessizce onarmadığının kaydı.
+
+**O-13 uyumu:** `resolution` idempotency fingerprint'ine **girdi olarak** eklendi (komutun kendi
+değiştirdiği durum değil) — aynı key + farklı resolution farklı bir karardır, replay etmez.
+
+**Frontend.** `lib/trash.ts`: `RestoreResolutionOption`/`RestorePreflight` tipleri,
+`useRestorePreflight` (key `["trash","restore-preflight",id]`, staleTime/gcTime 0),
+`restoreConflictOptions()` (409 zarfını savunmacı parse), restore mutation'ı opsiyonel
+`resolution` alır — **yalnız seçildiğinde** gönderilir, ilk denemede alan hiç yok.
+`pages/Trash.tsx`: `RestoreConflictPanel` doc 20 §6 metnini **VERBATIM** render eder
+("Restore needs attention" + "This object cannot be restored automatically because:
+{conflict_summary}. Review the available domain-specific resolution options. No change has been
+applied; the object remains in Trash."). Seçenekler radio grubu; **resolution seçilmeden Retry
+disabled** (doc 20 §8.2 "command başlatılamaz"); seçenek yoksa Retry düğmesi hiç render edilmez;
+"Re-check" canonical preflight'ı yeniden okur (doc 20 §8.2 "Admin canonical detaili yeniler");
+conflict temizlendiyse panel bunu söyler ve düz retry'a izin verir. Yalnız RESTORE_CONFLICT paneli
+açar — diğer her hata eskisi gibi canonical zarfı verbatim gösterir.
+
+### Testler
+
+`tests/integration/test_trash_restore_conflict.py` (YENİ, 10 test): conflict typed seçeneklerini
+taşır + kök `soft_deleted` kalır · preflight mutate etmeden aynı seçenekleri raporlar · temiz
+entry'de `allow` · preflight Admin-only · desteklenen resolution açar ve audit'e yazar · temiz
+restore `applied_resolution=None` bırakır · bilinmeyen resolution 422 · boş string 422 ·
+`target_missing` sıfır seçenek sunar · başka conflict'in resolution'ı açmaz.
+`src/test/trash.test.tsx` (+6): §6 metni verbatim · resolution seçilmeden komut başlatılamaz ·
+retry aynı `expected_head_revision_id` + seçilen resolution ile gider · ilk denemede `resolution`
+alanı hiç gönderilmez · seçenek yoksa retry yok · preflight `allow` dönerse panel temizlenir.
+
+`apiStub.ts::apiErrorRoute` dördüncü opsiyonel `details` parametresi aldı (26 mevcut çağrı yeri
+etkilenmedi) — zarfın yapısal payload'ı olmadan RESTORE_CONFLICT test edilemezdi.
+
+### Doğrulama
+
+Lokal: `ruff check` · `ruff format --check` · `mypy src` (369 dosya) temiz · yeni integration
+dosyası 10/10 · `-k "restore_conflict"` 10/10 · regresyon (trash_page + trash_agent_artifact +
+user_manual + error-taxonomy ratchet) 49/49 · `tests/contract` (openapi drift guard dahil) yeşil ·
+frontend `typecheck` + `lint` temiz, `trash.test.tsx` 20/20, `-t "Restore needs attention"` 6/6.
+
+**Lokal tam backend suite tek koşuda tamamlanamadı** (%19'da bilinçli olarak durduruldu —
+CLAUDE.md'de kayıtlı ortam tuzağı, paralel worktree oturumları CPU paylaşıyor). **Otorite CI:**
+PR #446 **6/6 yeşil** — backend **2532 passed** (32m25s), frontend **625 passed** (60 dosya),
+Docker, iki E2E (dev-auth + gerçek tarayıcı/Compose) ve A11Y axe-core taraması dahil.
+
+### Dürüst sınırlar
+
+- **Migration YOK**, alembic head değişmedi (`0039_backtest_run_cancellation`). `ENGINE_VERSION`
+  bump edilmedi — motor yolu dokunulmadı.
+- Conflict taksonomisi kodun **gerçekten ürettiği** iki kusuru kapsar (`head_pointer_moved`,
+  `target_missing`). Doc 20 §5'in örnek olarak andığı "manual sequence insertion policy" ve
+  "name/location conflict" için **kod bugün böyle bir conflict üretmiyor** — uydurma bir kind
+  eklemek boş bir panel üretirdi. Yeni bir conflict doğduğunda `_CONFLICT_SUMMARY` + `_RESOLUTIONS`
+  satırları birlikte eklenir (modül docstring'i bunu yazıyor).
+- `RestoreConflictError.category` **değiştirilmedi** (`CONFLICT` olarak kaldı). Doc 20 §8.2 buna
+  "preflight conflict" diyor ve `CONCURRENCY_OR_PREFLIGHT` daha isabetli olurdu, ama yayınlanmış
+  bir kategoriyi değiştirmek istemci davranışını kırabilir — kapsam dışı bırakıldı, kayıtlı borç.
+- `blocked` outcome'ı (purge_pending / purged / restored) preflight'ta raporlanır ama frontend
+  paneli bunu ayrıca ele almaz: bu durumlarda satır zaten `restore_eligible=false` olduğu için
+  Restore düğmesi hiç render edilmiyor.

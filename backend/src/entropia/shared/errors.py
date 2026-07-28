@@ -1707,10 +1707,31 @@ class ObjectAlreadyPurgedError(ConflictError):
 
 class RestoreConflictError(ConflictError):
     """Restore preflight found a dependency/location/pointer conflict (doc 20
-    §8.2). No partial restore is applied; the root remains soft-deleted."""
+    §8.2). No partial restore is applied; the root remains soft-deleted.
+
+    O-17: build this through ``domain/trash/restore.py::restore_conflict`` — never
+    bare. That factory pins the ``{conflict_summary}`` doc 20 §6 renders as the
+    message and puts the typed resolution catalog in ``details`` (an empty list
+    means no supported alternative exists, which is itself the answer).
+    """
 
     code = "RESTORE_CONFLICT"
     message = "This object cannot be restored automatically. Review the conflict and retry."
+    suggested_action = "choose_restore_resolution"
+
+
+class UnsupportedRestoreResolutionError(ValidationError):
+    """An unknown or unsupported restore ``resolution`` was submitted (doc 20 §5
+    "unsupported/unknown -> 422"; §8.2 "Generic handler must not invent a fix").
+
+    Rejected outright: the generic Trash handler never silently drops, coerces or
+    repairs a resolution it does not recognise. The root stays ``soft_deleted``.
+    """
+
+    code = "UNSUPPORTED_RESTORE_RESOLUTION"
+    message = "That restore resolution is not supported for this object."
+    field_path = "resolution"
+    suggested_action = "choose_restore_resolution"
 
 
 class PurgeNotEligibleError(ConflictError):

@@ -10,11 +10,15 @@ import { useReauth } from "@/lib/auth";
 import { formatUtc } from "@/lib/backtest";
 import {
   DEFAULT_TRASH_FILTERS,
+  RESTORE_CONFLICT_CODE,
   purgeStatusTone,
+  restoreConflictOptions,
   useRequestPurge,
   useRestoreEntry,
+  useRestorePreflight,
   useTrashEntries,
   useTrashEntry,
+  type RestoreResolutionOption,
   type TrashEntry,
   type TrashFilters,
 } from "@/lib/trash";
@@ -92,9 +96,35 @@ function TrashCard() {
   // The purge 202 return omits display_name (only entity_id/type); capture the
   // human name at accept time so the toast can echo the object name (doc 20 §9).
   const [purgedName, setPurgedName] = useState<string | null>(null);
+  // O-17: the entry whose restore came back RESTORE_CONFLICT. Holding the entry
+  // (not just a flag) keeps the retry on the SAME expected deletion version the
+  // Admin reviewed, per doc 20 §8.2.
+  const [conflictTarget, setConflictTarget] = useState<TrashEntry | null>(null);
   const pager = useCursorStack();
   const entries = useTrashEntries(filters, pager.cursor);
   const restore = useRestoreEntry();
+
+  // A restore attempt, optionally carrying the typed resolution the Admin chose
+  // from the server's option set. Only a RESTORE_CONFLICT opens the "Restore
+  // needs attention" panel; every other failure keeps rendering the canonical
+  // envelope verbatim, exactly as before.
+  const runRestore = (entry: TrashEntry, resolution?: string) => {
+    setConflictTarget(null);
+    restore.mutate(
+      {
+        trash_entry_id: entry.trash_entry_id,
+        expected_head_revision_id: entry.row_version,
+        ...(resolution !== undefined ? { resolution } : {}),
+      },
+      {
+        onError: (error) => {
+          if (error instanceof ApiError && error.code === RESTORE_CONFLICT_CODE) {
+            setConflictTarget(entry);
+          }
+        },
+      },
+    );
+  };
   // Purge mutation state lives in the card (not the composer) so the accepted
   // result survives the composer closing after a successful request.
   const purge = useRequestPurge();
@@ -189,12 +219,7 @@ function TrashCard() {
                     key={entry.trash_entry_id}
                     entry={entry}
                     isAdmin={isAdmin}
-                    onRestore={() =>
-                      restore.mutate({
-                        trash_entry_id: entry.trash_entry_id,
-                        expected_head_revision_id: entry.row_version,
-                      })
-                    }
+                    onRestore={() => runRestore(entry)}
                     onPurge={() => {
                       purge.reset();
                       setPurgeTarget(entry);
@@ -215,15 +240,35 @@ function TrashCard() {
         </>
       ) : null}
 
-      {restore.isError ? (
+      {/* A restore conflict gets the doc 20 §6 panel instead of a bare error
+          line — it is the only failure with alternatives to choose from. */}
+      {restore.isError && conflictTarget === null ? (
         <p role="alert" style={{ color: "var(--down)", marginBottom: 0 }}>
           {mutationErrorText(restore.error)}
         </p>
+      ) : null}
+      {conflictTarget ? (
+        <RestoreConflictPanel
+          entry={conflictTarget}
+          errorSummary={
+            restore.error instanceof ApiError ? restore.error.message : "the restore preflight failed"
+          }
+          errorOptions={restoreConflictOptions(restore.error)}
+          isRestoring={restore.isPending}
+          onRetry={(resolution) => runRestore(conflictTarget, resolution)}
+          onDismiss={() => {
+            restore.reset();
+            setConflictTarget(null);
+          }}
+        />
       ) : null}
       {restore.data ? (
         <p aria-live="polite">
           Restored — {restore.data.display_name} ({restore.data.entity_type}) back to{" "}
           {restore.data.deletion_state} (v{restore.data.row_version}).
+          {restore.data.applied_resolution
+            ? ` Applied resolution: ${restore.data.applied_resolution}.`
+            : ""}
         </p>
       ) : null}
 
@@ -329,6 +374,131 @@ function TrashRow({
         </button>
       </td>
     </tr>
+  );
+}
+
+// doc 20 §6 "Restore needs attention" (O-17). The restore command refused and
+// returned a TYPED conflict; this panel renders the §6 copy verbatim and lets
+// the Admin pick ONLY from the resolutions the domain adapter offered.
+//
+// Three honest outcomes, none of them invented client-side:
+//   - options present  -> choose one, retry on the SAME expected deletion version
+//   - options empty    -> nothing can unblock it; the object stays in Trash
+//   - preflight allow  -> the record changed and the conflict cleared; plain retry
+//
+// "Re-check" re-reads the canonical preflight — doc 20 §8.2's "Admin refreshes
+// canonical detail" after the record moved. The client never repairs anything.
+function RestoreConflictPanel({
+  entry,
+  errorSummary,
+  errorOptions,
+  isRestoring,
+  onRetry,
+  onDismiss,
+}: {
+  entry: TrashEntry;
+  errorSummary: string;
+  errorOptions: RestoreResolutionOption[];
+  isRestoring: boolean;
+  onRetry: (resolution?: string) => void;
+  onDismiss: () => void;
+}) {
+  const [chosen, setChosen] = useState<string | null>(null);
+  const preflight = useRestorePreflight(entry.trash_entry_id);
+
+  // The live preflight is canonical once it lands; until then the 409 envelope
+  // (same catalog, captured a moment earlier) drives the panel.
+  const live = preflight.data;
+  const cleared = live?.outcome === "allow";
+  const summary = live?.conflict_summary ?? errorSummary;
+  const options = live ? live.resolutions : errorOptions;
+  const chosenIsOffered = chosen !== null && options.some((o) => o.resolution === chosen);
+
+  return (
+    <section
+      aria-labelledby="restore-conflict-h"
+      style={{
+        marginTop: 16,
+        padding: 12,
+        border: "1px solid var(--warn)",
+        borderRadius: 6,
+      }}
+    >
+      <h4 id="restore-conflict-h" style={{ marginTop: 0 }}>
+        Restore needs attention
+      </h4>
+      {/* doc 20 §6 conflict copy — verbatim, with {conflict_summary} filled in. */}
+      <p className="page-sub" style={{ marginTop: 0 }} role="alert">
+        This object cannot be restored automatically because: {summary}. Review the available
+        domain-specific resolution options. No change has been applied; the object remains in
+        Trash.
+      </p>
+
+      {cleared ? (
+        <p aria-live="polite">
+          The conflict no longer applies — the record changed since the failed attempt. Restore
+          can be retried as-is.
+        </p>
+      ) : options.length === 0 ? (
+        // An empty option set is the server's real answer, not a loading state.
+        <p aria-live="polite">
+          No resolution options are available for this conflict. “{entry.display_name}” stays in
+          Trash until the underlying record is repaired.
+        </p>
+      ) : (
+        <fieldset style={{ border: "1px solid var(--border)", borderRadius: 6, marginBottom: 12 }}>
+          <legend>Resolution options</legend>
+          {options.map((option) => (
+            <label
+              key={option.resolution}
+              htmlFor={`restore-resolution-${option.resolution}`}
+              style={{ display: "block", marginBottom: 8 }}
+            >
+              <input
+                id={`restore-resolution-${option.resolution}`}
+                type="radio"
+                name="restore-resolution"
+                value={option.resolution}
+                checked={chosen === option.resolution}
+                onChange={() => setChosen(option.resolution)}
+              />{" "}
+              {option.label}
+              {option.description ? (
+                <span className="page-sub" style={{ display: "block", marginLeft: 24 }}>
+                  {option.description}
+                </span>
+              ) : null}
+            </label>
+          ))}
+        </fieldset>
+      )}
+
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+        {cleared || options.length > 0 ? (
+          <button
+            type="button"
+            className="btn"
+            // doc 20 §8.2: with a conflict outstanding the command cannot be
+            // started without a resolution the server itself offered.
+            disabled={isRestoring || (!cleared && !chosenIsOffered)}
+            onClick={() => onRetry(cleared ? undefined : (chosen ?? undefined))}
+          >
+            {isRestoring ? "Restoring…" : "Retry restore"}
+          </button>
+        ) : null}
+        <button
+          type="button"
+          className="btn"
+          disabled={preflight.isFetching}
+          onClick={() => void preflight.refetch()}
+        >
+          {preflight.isFetching ? "Re-checking…" : "Re-check"}
+        </button>
+        <button type="button" className="btn" onClick={onDismiss} disabled={isRestoring}>
+          Close
+        </button>
+      </div>
+    </section>
   );
 }
 

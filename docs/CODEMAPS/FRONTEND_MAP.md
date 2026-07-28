@@ -72,7 +72,7 @@ Import alias: `@/` → `frontend/src/`.
 | `strategy.ts` | `["strategy","draft"\|"drafts"\|"root"\|"revisions"\|"revision"]` | `["strategy"]`, `["mainboard"]`, `["readiness"]`, `["audit"]` |
 | `tradeLog.ts` | `["trade-logs","root",rootId]`, `["jobs","trade-log-import",jobId]` | `["trade-logs"]`, `["jobs"]`, `["mainboard"]`, `["readiness"]`, `["audit"]` |
 | `tradingSignal.ts` | `["trading-signals","root",rootId]`, `["jobs","trading-signal-import",jobId]` | `["trading-signals"]`, `["jobs"]`, `["mainboard"]`, `["readiness"]`, `["audit"]` |
-| `trash.ts` | `["trash","entries",q,object_type,cursor]`, `["trash","entry",id]` | `["trash"]`, `["audit"]` |
+| `trash.ts` | `["trash","entries",q,object_type,cursor]`, `["trash","entry",id]`, **O-17** `["trash","restore-preflight",id]` (staleTime/gcTime 0 — salt-okuma preflight, doc 20 §5/§8.2) | `["trash"]`, `["audit"]` |
 
 **Anahtarsız yardımcı modüller** (hook barındırmaz): `apiClient.ts`, `auth.ts`, `session.ts`,
 `devActor.ts`, `queryClient.ts`, `metrics.ts` (Prometheus parser), `sse.ts`, `types.ts`,

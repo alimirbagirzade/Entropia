@@ -59,8 +59,10 @@ from entropia.infrastructure.postgres.models import (
     HumanUser,
     ManualDocument,
     ManualDocumentRevision,
+    ManualPublicationEvent,
     ManualSearchChunk,
     ManualStreamEntry,
+    OutboxEvent,
     Principal,
     Tombstone,
     TrashEntry,
@@ -166,6 +168,34 @@ async def _add_doc(session, title: str, content: str) -> dict:
     result = await create_manual_document(session, ADMIN, title=title, content=content)
     await session.commit()
     return result
+
+
+async def _publication_event(session, document_id: str, event_type: str) -> ManualPublicationEvent:
+    stmt = select(ManualPublicationEvent).where(
+        ManualPublicationEvent.document_id == document_id,
+        ManualPublicationEvent.event_type == event_type,
+    )
+    return (await session.execute(stmt)).scalars().one()
+
+
+async def _latest_audit(session, entity_id: str) -> AuditEvent:
+    stmt = (
+        select(AuditEvent)
+        .where(AuditEvent.target_entity_id == entity_id)
+        .order_by(AuditEvent.event_id.desc())
+        .limit(1)
+    )
+    return (await session.execute(stmt)).scalars().one()
+
+
+async def _latest_outbox(session, resource_id: str) -> OutboxEvent:
+    stmt = (
+        select(OutboxEvent)
+        .where(OutboxEvent.resource_id == resource_id)
+        .order_by(OutboxEvent.id.desc())
+        .limit(1)
+    )
+    return (await session.execute(stmt)).scalars().one()
 
 
 # --------------------------------------------------------------------------- #
@@ -281,7 +311,7 @@ async def test_upload_rejects_unsupported_and_parse_failures(session) -> None:
 
 async def test_duplicate_content_blocked_unless_overridden(session) -> None:
     await _seed(session)
-    await _add_doc(session, "Original", "Unique duplicate-check body.")
+    original = await _add_doc(session, "Original", "Unique duplicate-check body.")
     with pytest.raises(ManualDuplicateContentError):
         await create_manual_document(
             session, ADMIN, title="Copy", content="Unique duplicate-check body."
@@ -292,6 +322,36 @@ async def test_duplicate_content_blocked_unless_overridden(session) -> None:
     )
     await session.commit()
     assert result["stream_position"] == 3
+
+    # O-15: the override is a separate RECORDED Admin decision (doc 21 §10) —
+    # publication event, audit reason and outbox payload all name it.
+    assert result["duplicate_override"] is True
+    assert result["duplicate_of_document_id"] == original["document_id"]
+    event = await _publication_event(session, result["document_id"], "manual_document_published")
+    assert event.duplicate_override is True
+    assert event.duplicate_of_document_id == original["document_id"]
+    audit = await _latest_audit(session, result["document_id"])
+    assert audit.reason == f"Duplicate content override of {original['document_id']}."
+    outbox = await _latest_outbox(session, result["document_id"])
+    assert outbox.payload["allow_duplicate"] is True
+    assert outbox.payload["duplicate_override"] is True
+    assert outbox.payload["duplicate_of_document_id"] == original["document_id"]
+
+
+async def test_ordinary_publish_is_not_marked_as_an_override(session) -> None:
+    """``allow_duplicate=True`` with no duplicate present is NOT an override —
+    the flag alone must not manufacture an Admin decision that never happened."""
+    await _seed(session)
+    result = await create_manual_document(
+        session, ADMIN, title="Solo", content="No twin anywhere.", allow_duplicate=True
+    )
+    await session.commit()
+    assert result["duplicate_override"] is False
+    assert result["duplicate_of_document_id"] is None
+    event = await _publication_event(session, result["document_id"], "manual_document_published")
+    assert event.duplicate_override is False
+    assert event.duplicate_of_document_id is None
+    assert (await _latest_audit(session, result["document_id"])).reason is None
 
 
 # --------------------------------------------------------------------------- #
@@ -450,6 +510,59 @@ async def test_replace_revision_keeps_position_and_supersedes(session) -> None:
     await session.rollback()
 
 
+async def test_replace_keeps_the_uploaded_source_type_and_parser(session) -> None:
+    """O-15: revising an uploaded Markdown section must not silently downgrade it
+    to plain added text — the source_type is provenance (doc 21 §9.1) AND the
+    parser selector, so losing it would flatten the Markdown structure."""
+    await _seed(session)
+    uploaded = await upload_manual_document(
+        session,
+        ADMIN,
+        source_filename="runbook.md",
+        content="# Runbook\nFirst paragraph.\n",
+    )
+    await session.commit()
+
+    revised = await replace_manual_revision(
+        session,
+        ADMIN,
+        document_id=uploaded["document_id"],
+        content="# Runbook v2\nSecond paragraph.\n\n- alpha\n- beta\n",
+        expected_head_revision_id=uploaded["revision_id"],
+    )
+    await session.commit()
+
+    assert revised["source_type"] == ManualSourceType.UPLOADED_MARKDOWN.value
+    revision = await manual_repo.get_revision(session, revised["revision_id"])
+    assert revision is not None
+    assert revision.source_type == ManualSourceType.UPLOADED_MARKDOWN
+    assert revision.source_filename == "runbook.md"  # provenance survives the revision
+    blocks = (await manual_repo.load_blocks(session, [revised["revision_id"]]))[
+        revised["revision_id"]
+    ]
+    kinds = [b.block_type for b in blocks]
+    assert kinds == [BlockType.HEADING, BlockType.PARAGRAPH, BlockType.BULLET_LIST]
+
+    # An explicit source_type is the caller stating the new format; the stale
+    # upload filename does not follow content that is no longer that file.
+    plain = await replace_manual_revision(
+        session,
+        ADMIN,
+        document_id=uploaded["document_id"],
+        content="# not a heading anymore",
+        source_type=ManualSourceType.ADDED_TEXT,
+    )
+    await session.commit()
+    plain_revision = await manual_repo.get_revision(session, plain["revision_id"])
+    assert plain_revision is not None
+    assert plain_revision.source_type == ManualSourceType.ADDED_TEXT
+    assert plain_revision.source_filename is None
+    plain_blocks = (await manual_repo.load_blocks(session, [plain["revision_id"]]))[
+        plain["revision_id"]
+    ]
+    assert [b.block_type for b in plain_blocks] == [BlockType.PARAGRAPH]
+
+
 # --------------------------------------------------------------------------- #
 # Two-phase purge (doc 20 §8.3 + doc 21 §11)                                   #
 # --------------------------------------------------------------------------- #
@@ -486,6 +599,55 @@ async def test_manual_purge_redacts_search_keeps_revisions(session) -> None:
     assert chunk_count == 0  # search projection redacted
     assert await manual_repo.get_revision(session, doc["revision_id"]) is not None  # retained
     assert (await session.get(Tombstone, doc["document_id"])) is not None
+
+
+async def test_manual_purge_writes_event_and_removes_every_revision(session) -> None:
+    """O-15: doc 21 §11 puts ``manual_document_purged`` on the purge row and §9
+    reserves ``Removed`` for purge-time redaction — BOTH revisions of a revised
+    document leave the publishable states, and the trail closes with an event."""
+    await _seed(session)
+    doc = await _add_doc(session, "Twice", "First body.")
+    revised = await replace_manual_revision(
+        session, ADMIN, document_id=doc["document_id"], content="Second body."
+    )
+    await soft_delete_manual_document(session, ADMIN, document_id=doc["document_id"])
+    await session.commit()
+    version_before = await manual_repo.current_stream_version(session)
+
+    entry = await trash_repo.get_recoverable_entry_for_entity(session, doc["document_id"])
+    accepted = await request_purge(
+        session,
+        ADMIN,
+        trash_entry_id=entry.id,
+        confirmation_phrase="Twice",
+        reauth_proof=await _mint_reauth_proof(session),
+    )
+    await session.commit()
+    assert (await purge_job.run_purge(session, accepted["purge_job_id"]))["purge_status"] == (
+        "completed"
+    )
+    await session.commit()
+
+    event = await _publication_event(session, doc["document_id"], "manual_document_purged")
+    assert event.prior_stream_version == version_before
+    assert event.resulting_stream_version == version_before + 1
+    assert event.revision_id == revised["revision_id"]  # head revision at purge time
+    assert event.source_type == ManualSourceType.ADDED_TEXT.value
+    assert event.actor_principal_id == ADMIN.principal_id
+
+    states = (
+        (
+            await session.execute(
+                select(ManualDocumentRevision.publication_state).where(
+                    ManualDocumentRevision.document_id == doc["document_id"]
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(states) == 2
+    assert {s.value for s in states} == {"removed"}  # superseded v1 AND published v2
 
 
 # --------------------------------------------------------------------------- #

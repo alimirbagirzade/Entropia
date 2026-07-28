@@ -85,6 +85,60 @@ async def _assert_artifact_purge_eligible(session: AsyncSession, artifact_id: st
         raise PurgeNotEligibleError("A live Agent task still owns this Analysis Lab output.")
 
 
+async def _finalize_manual_purge(session: AsyncSession, entry: TrashEntry) -> None:
+    """Manual "Permanent purge" terminal step (doc 21 §11 lifecycle table).
+
+    Three effects land in the SAME transaction as the Trash entry/tombstone:
+
+    * root -> ``purged`` and the search projection is redacted;
+    * every revision -> ``Removed``, the publication overlay the revision
+      lifecycle reserves for purge-time redaction (doc 21 §9). The rows and
+      their blocks are RETAINED, so prior Agent citations still resolve under V1
+      retention — only their publication standing changes;
+    * a ``manual_document_purged`` publication event closes the document's
+      append-only trail with the head revision's source provenance. It advances
+      the monotonic (UNIQUE) ``resulting_stream_version``, so reader snapshots
+      taken before the purge are detectably stale.
+
+    The stream lock comes first: ``resulting_stream_version`` is read-then-written
+    and a concurrent Admin publish must not claim the same one (UM-13).
+    """
+    from entropia.infrastructure.postgres.repositories import manual as manual_repo
+
+    document = await manual_repo.get_document(session, entry.entity_id)
+    if document is None:
+        raise ValueError(f"Manual document '{entry.entity_id}' not found for purge.")
+    await manual_repo.lock_stream(session)
+
+    head = (
+        await manual_repo.get_revision(session, document.current_revision_id)
+        if document.current_revision_id
+        else None
+    )
+    stream_entry = await manual_repo.get_stream_entry(session, entry.entity_id)
+
+    document.deletion_state = DeletionState.PURGED
+    document.row_version += 1
+    await manual_repo.delete_search_chunks_for_document(session, entry.entity_id)
+    await manual_repo.mark_revisions_removed(session, entry.entity_id)
+
+    prior_version = await manual_repo.current_stream_version(session)
+    manual_repo.add_publication_event(
+        session,
+        event_type="manual_document_purged",
+        document_id=entry.entity_id,
+        revision_id=document.current_revision_id,
+        stream_entry_id=stream_entry.stream_entry_id if stream_entry is not None else None,
+        actor_principal_id=entry.purge_requested_by,
+        prior_stream_version=prior_version,
+        resulting_stream_version=prior_version + 1,
+        source_type=head.source_type.value if head is not None else None,
+        source_filename=head.source_filename if head is not None else None,
+        checksum=head.content_checksum if head is not None else None,
+        correlation_id=entry.correlation_id,
+    )
+
+
 async def _finalize_purge(session: AsyncSession, entry: TrashEntry) -> None:
     """Move the target to its terminal purged state + tombstone. The root row and
     immutable revisions are RETAINED as identity/audit evidence (V1 retention);
@@ -109,17 +163,7 @@ async def _finalize_purge(session: AsyncSession, entry: TrashEntry) -> None:
         # RETAINED: the purge removes the output from the board, never the record
         # that the Agent produced it (doc 20 §10).
     elif entry.entity_type == _MANUAL_ENTITY_TYPE:
-        from entropia.infrastructure.postgres.repositories import manual as manual_repo
-
-        document = await manual_repo.get_document(session, entry.entity_id)
-        if document is None:
-            raise ValueError(f"Manual document '{entry.entity_id}' not found for purge.")
-        document.deletion_state = DeletionState.PURGED
-        document.row_version += 1
-        # Content redaction: the search projection goes away; the root row,
-        # immutable revisions and blocks are retained for citation/audit
-        # resolution under V1 retention (doc 21 §11, UM-12).
-        await manual_repo.delete_search_chunks_for_document(session, entry.entity_id)
+        await _finalize_manual_purge(session, entry)
     else:
         root = await entity_repo.get_root(session, entry.entity_id)
         if root is None:

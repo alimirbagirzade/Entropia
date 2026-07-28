@@ -5,7 +5,7 @@ Kaynak: repo üzerinde **gözlemlenen** kod (route imzaları, model tanımları,
 dekoratörleri, frontend import/query-key'leri). Emin olunamayan yerlerde `?` var.
 
 > Üretim tarihi ana hat: `main` @ `docs/stage-video-alignment-landed` branch snapshot'ı.
-> Alembic head: **`0035_portfolio_rules`** (toplam 35 migration).
+> Alembic head: **`0036_manual_duplicate_override`** (toplam 36 migration).
 
 ---
 

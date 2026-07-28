@@ -72,6 +72,23 @@ class StrategyConfig(BaseModel):
             raise ValueError("Name cannot be blank or control-only")
         return v
 
+    @field_validator("rationale_family_id")
+    @classmethod
+    def validate_rationale_family_not_blank(cls, v: str) -> str:
+        """RF-12: a Strategy must carry a real Rationale Family to be Ready.
+
+        ``Field(...)`` only rejects a MISSING key; a blank or whitespace-only id
+        parsed happily and the composition evaluated READY, so a client that sent
+        ``rationale_family_id=""`` reached RUN with no Family — exactly what doc 10
+        §14 RF-12 forbids. ``commands/strategy_draft.set_strategy_rationale_family``
+        already strips and refuses blanks, but the model must hold its own invariant
+        no matter which write path produced the payload.
+        """
+        v = v.strip()
+        if not v:
+            raise ValueError("Rationale family id cannot be blank")
+        return v
+
 
 # ============================================================================
 # SECTION 2: Data & Execution Context

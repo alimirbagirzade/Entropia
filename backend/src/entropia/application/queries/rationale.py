@@ -21,7 +21,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from entropia.domain.identity import Actor
 from entropia.domain.identity.policy import require_authenticated
 from entropia.domain.lifecycle.enums import DeletionState
-from entropia.domain.rationale import RATIONALE_ASSIGNABLE_PACKAGE_KINDS, RationaleAssignmentState
+from entropia.domain.rationale import (
+    RATIONALE_ASSIGNABLE_PACKAGE_KINDS,
+    RationaleAssignmentState,
+    normalized_name,
+)
 from entropia.infrastructure.postgres.models import EntityRegistry, RationaleFamilyRevision
 from entropia.infrastructure.postgres.repositories import packages as pkg_repo
 from entropia.infrastructure.postgres.repositories import rationale as rationale_repo
@@ -72,6 +76,59 @@ async def list_families(
             _family_dict(root, detail.display_color, revision) for root, detail, revision in page
         ],
         "meta": {"cursor": next_cursor, "has_more": has_more},
+    }
+
+
+SUGGEST_DEFAULT_LIMIT = 10
+SUGGEST_MAX_LIMIT = 25
+# Below this a substring matches most of the catalog, which is noise rather than a
+# suggestion. A too-short q returns [] instead of dumping the whole registry.
+SUGGEST_MIN_QUERY_LEN = 2
+
+
+async def suggest_families(
+    session: AsyncSession,
+    actor: Actor,
+    *,
+    q: str,
+    limit: int = SUGGEST_DEFAULT_LIMIT,
+) -> dict[str, Any]:
+    """Read-only Family suggestions for Create Package / Pre-Check / Agent.
+
+    Master ref Module 6 §11 lists ``GET /v1/rationale-families:suggest?q=...`` as
+    suggestion-only, performing no mutation, and §9.3 says why that matters: a
+    suggestion is an INFERENCE, and the backend must never silently create a Family
+    card or change an existing package assignment on the user's or the Agent's
+    behalf. So this is a query — it writes nothing, emits no audit event and creates
+    no row. Applying a suggestion stays the caller's explicit, audited command
+    (``POST /rationale-families`` or the assignment batch).
+
+    Authentication-gated like the rest of this module (doc 10 §2); the shared-editing
+    exception means every authenticated actor sees the same catalog, so there is no
+    per-row owner filter. Only ACTIVE families are offered — suggesting a soft-deleted
+    one would propose an assignment the command layer then rejects.
+    """
+    require_authenticated(actor)
+    needle = normalized_name(q or "")
+    capped = max(1, min(limit, SUGGEST_MAX_LIMIT))
+    if len(needle) < SUGGEST_MIN_QUERY_LEN:
+        return {"data": [], "meta": {"q": needle, "has_more": False}}
+
+    rows = await rationale_repo.search_active_family_heads(session, q=needle, limit=capped + 1)
+    has_more = len(rows) > capped
+    page = rows[:capped]
+    return {
+        "data": [
+            {
+                "entity_id": root.entity_id,
+                "current_revision_id": revision.revision_id,
+                "display_name": revision.display_name,
+                "normalized_name": revision.normalized_name,
+                "subfamilies": list(revision.subfamilies_json or []),
+            }
+            for root, revision in page
+        ],
+        "meta": {"q": needle, "has_more": has_more},
     }
 
 

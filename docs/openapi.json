@@ -12299,6 +12299,64 @@
         ]
       }
     },
+    "/api/v1/rationale-families:suggest": {
+      "get": {
+        "description": "Read-only Family suggestions (master ref Module 6 §11). A GET with no\nmutation: no Idempotency-Key, no OCC token, no ETag — there is nothing to\nconcur with, and applying a suggestion stays a separate audited command.",
+        "operationId": "suggest_families_api_v1_rationale_families_suggest_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Suggest Families Api V1 Rationale Families Suggest Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Suggest Families",
+        "tags": [
+          "rationale-families"
+        ]
+      }
+    },
     "/api/v1/readiness-reports/{report_id}": {
       "get": {
         "operationId": "get_readiness_report_api_v1_readiness_reports__report_id__get",

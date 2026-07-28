@@ -64,6 +64,37 @@ const SEARCH = {
   meta: { stream_version: 7, cursor: null, has_more: false, limit: 20, query: "appendix" },
 };
 
+// UM-18 fixtures. The search index answers from the snapshot IT saw, so a
+// result can name an anchor the rendered stream does not (yet) contain:
+//  - LATE_SECTION arrives only on the SECOND stream fetch (recoverable),
+//  - "sec-mdoc-gone" never arrives at all (genuinely unavailable).
+const LATE_SECTION = {
+  document_id: "mdoc_9",
+  is_baseline: false,
+  title: "Late Appendix",
+  revision_id: "mrev_9_1",
+  revision_no: 1,
+  source_type: "added_text",
+  source_label: "Added text document",
+  stream_position: 3,
+  anchor: "sec-mdoc-9",
+  blocks: [
+    { block_id: "b9", block_type: "paragraph", anchor: "sec-mdoc-9", payload: { text: "Late appendix body." } },
+  ],
+};
+
+const STREAM_WITH_LATE_SECTION = {
+  data: [...STREAM.data, LATE_SECTION],
+  meta: { ...STREAM.meta, stream_version: 8 },
+};
+
+function searchPageFor(chunkId: string, title: string, anchor: string) {
+  return {
+    data: [{ ...SEARCH.data[0]!, chunk_id: chunkId, title, anchor }],
+    meta: SEARCH.meta,
+  };
+}
+
 const PUBLISH_RESULT = {
   document_id: "mdoc_3",
   revision_id: "mrev_3_1",
@@ -201,11 +232,41 @@ function headersOf(init: RequestInit): Record<string, string> {
   return (init.headers ?? {}) as Record<string, string>;
 }
 
+// jsdom has no layout engine, so Element.prototype.scrollIntoView does not
+// exist — install a double to observe that the reader actually scrolled.
+type ScrollHost = { scrollIntoView?: unknown };
+
+interface ScrollCall {
+  target: Element;
+  options: unknown;
+}
+
+// Records the scroll TARGET as well as the options, so a test can prove the
+// reader landed on the resolved section rather than merely scrolling.
+function stubScrollIntoView(): ScrollCall[] {
+  const calls: ScrollCall[] = [];
+  (Element.prototype as unknown as ScrollHost).scrollIntoView = function (
+    this: Element,
+    options: unknown,
+  ) {
+    calls.push({ target: this, options });
+  };
+  return calls;
+}
+
+function streamGetCount(fetchMock: ReturnType<typeof stubApi>): number {
+  return fetchMock.mock.calls.filter(
+    ([url, init]) =>
+      String(url).includes("/manual/stream") && ((init?.method ?? "GET") as string) === "GET",
+  ).length;
+}
+
 describe("User Manual page", () => {
   afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+    delete (Element.prototype as unknown as ScrollHost).scrollIntoView;
   });
 
   it("renders the published stream: baseline first, canonical blocks, one snapshot version", async () => {
@@ -395,6 +456,89 @@ describe("User Manual page", () => {
     expect(screen.queryByRole("button", { name: "Replace content" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Delete…" })).toBeNull();
     expect(screen.getByText(/Admin approval required/)).toBeInTheDocument();
+  });
+
+  // O-16 (doc 21 §7/§14, acceptance UM-18): "Anchor must exist in current
+  // stream version; if stale, refetch then resolve … Missing anchor shows
+  // 'The section is no longer available in the current manual.'"
+  describe("stale anchor recovery", () => {
+    const UNAVAILABLE = "The section is no longer available in the current manual.";
+
+    async function search(term: string) {
+      fireEvent.change(screen.getByLabelText("Search query"), { target: { value: term } });
+      fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    }
+
+    it("scrolls straight to a live anchor without refetching the stream", async () => {
+      const scrolls = stubScrollIntoView();
+      const fetchMock = stubRoutes();
+      renderPage();
+      await screen.findByText("Appendix body.");
+
+      await search("appendix");
+      const result = await screen.findByText("…the appendix body…");
+      const before = streamGetCount(fetchMock);
+
+      fireEvent.click(result);
+
+      // The anchor already exists in the rendered stream: resolve + smooth
+      // scroll, no rehydration round-trip, no unavailable message.
+      expect(scrolls).toHaveLength(1);
+      expect(scrolls[0]?.target).toBe(document.getElementById("sec-mdoc-2"));
+      expect(scrolls[0]?.options).toMatchObject({ behavior: "smooth" });
+      expect(streamGetCount(fetchMock)).toBe(before);
+      expect(screen.queryByText(UNAVAILABLE)).toBeNull();
+    });
+
+    it("refetches the stream and retries when the anchor is stale, then scrolls", async () => {
+      const scrolls = stubScrollIntoView();
+      let streamCalls = 0;
+      const fetchMock = stubRoutes({
+        "GET /manual/search": searchPageFor("chk_9", "Late Appendix", "sec-mdoc-9"),
+        "GET /manual/stream": () => {
+          streamCalls += 1;
+          return streamCalls === 1 ? STREAM : STREAM_WITH_LATE_SECTION;
+        },
+      });
+      renderPage();
+      await screen.findByText("Appendix body.");
+
+      await search("late");
+      const result = await screen.findByText("Late Appendix");
+      // The index points at a section this snapshot does not render yet.
+      expect(document.getElementById("sec-mdoc-9")).toBeNull();
+      const before = streamGetCount(fetchMock);
+
+      fireEvent.click(result);
+
+      // Refetch (not a page reset — the accumulated tail survives), then the
+      // retry finds the rehydrated section and scrolls to it.
+      await waitFor(() => expect(scrolls).toHaveLength(1));
+      expect(streamGetCount(fetchMock)).toBeGreaterThan(before);
+      expect(await screen.findByText("Late appendix body.")).toBeTruthy();
+      expect(scrolls[0]?.target).toBe(document.getElementById("sec-mdoc-9"));
+      expect(screen.queryByText(UNAVAILABLE)).toBeNull();
+    });
+
+    it("shows the spec's exact message when the anchor is gone after the retry", async () => {
+      const scrolls = stubScrollIntoView();
+      const fetchMock = stubRoutes({
+        "GET /manual/search": searchPageFor("chk_gone", "Removed Appendix", "sec-mdoc-gone"),
+      });
+      renderPage();
+      await screen.findByText("Appendix body.");
+
+      await search("removed");
+      const result = await screen.findByText("Removed Appendix");
+      const before = streamGetCount(fetchMock);
+
+      fireEvent.click(result);
+
+      // Doc 21 §7 wording, verbatim — and no phantom scroll.
+      expect(await screen.findByText(UNAVAILABLE)).toBeTruthy();
+      expect(streamGetCount(fetchMock)).toBeGreaterThan(before);
+      expect(scrolls).toHaveLength(0);
+    });
   });
 
   // Fail-closed: an unknown identity projection (/me unavailable) keeps every

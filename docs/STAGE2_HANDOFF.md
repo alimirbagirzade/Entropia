@@ -2977,3 +2977,92 @@ ağaçtan yeniden hesaplıyor.
 iddiasının kalanı hakkında bu kayıt hiçbir şey söylemiyor. (3) Lokal tam suite tek koşuda
 tamamlanamadı (ortam kaynaklı); integration'ın otoritesi #407 CI'ıdır (6/6 yeşil).
 
+**Testler:** contract 8 yeni + integration 1 yeni; ruff/format/mypy (351) temiz; `tests/contract`
+158/158; temiz tam `tests/integration` exit 0.
+
+**Deferred:** kalan ~110 hata sınıfının taban-sınıf kategorisini inceltme; endpoint'lerin
+`responses=` ile hata modelini bildirmesi. Ayrıntı: `docs/PROJECT_HISTORY.md` §O-02 ve
+`docs/O02_LANDED_KICKOFF.md`.
+
+## Next: **PO imzası + R2 kapanışı** (değişmedi) · O-02 landed, K-serisi K-01…K-07 landed
+
+Kalan tek büyük açık iş hâlâ **R2'nin product-owner imzası**
+(`docs/implementation/v18_final_acceptance.md` §4, D-1…D-9) — imza olmadan
+`entropia_v18_remediation_status.md`'deki R2 RE-OPENING banner'ı kalkmaz.
+
+Ayrıca hâlâ açık: **F-07 raw-id presentation sweep kalıntısı** (empirik doğrulanmalı) ve
+**ortam tuzağı**: paralel worktree oturumları paylaşılan `entropia_test` DB'sini ezer —
+`TEST_DATABASE_URL` ile worktree'ye özel izole DB kullan; tam suite koşusunu **ortada öldürme**
+(artakalan bağlantılar sonraki koşuda düzinelerce sahte hata üretir, O-02'de 51 sahte FAILED).
+
+Devam seed'i: **`docs/O02_LANDED_KICKOFF.md`** (paste-ready resume prompt en altta).
+
+
+---
+
+## O-21 — SSE akışı `Last-Event-ID`'den resume ediyor, düşen olay artık bildiriliyor (PR #430)
+
+**Kusur (ampirik).** `agent_event.seq` docstring'i "stable SSE ordering / **Last-Event-ID**" vaat
+ediyordu; `Last-Event-ID|last_event_id|lastEventId` araması `backend/src` + `frontend/src` genelinde
+**tamamen boştu**. `GET /events` hiç `id:` yayınlamıyor, hiçbir cursor okumuyordu ve
+`_SUBSCRIBER_BUFFER = 256` dolduğunda `SseHub.publish` olayı **sessizce düşürüyordu** — tek telafi
+istemcinin körlemesine yaptığı full-refresh'ti. Bu iş için yazılmış replay primitifleri
+(`repositories/agent_lab.py::events_after` / `latest_event_seq`) **hiç çağrılmıyordu**.
+
+**Ne landed (O-21 hiçbir migration eklemez; bu kapanış anında main'in head'i `0039_backtest_run_cancellation` — O-06'dan).**
+
+| Parça | Yer | Davranış |
+|---|---|---|
+| `id:` alanı | `apps/api/sse.py::_sse_frame` | Her veri çerçevesi projekte edildiği **outbox satır id'sini** taşır. AUTH-11 zarfına eklenen **tek** alan — bir log satırını adlandırır, adreslenebilir domain nesnesini değil; `resource_id`/`correlation_id`/`event_type` hâlâ tel'e çıkmaz. |
+| Cursor doğrulama | `requested_cursor` → `shared/ids.py::looks_like_id` | Yabancı prefix / bozuk biçim / sınırsız string → cursor yok = **O-21 öncesi davranış** (live-only). Asla sorguya güvenilerek geçirilmez, asla geri yansıtılmaz. |
+| Replay | `replay_after` → `fetch_events_after` | **Kısa ömürlü** session (stream uzun ömürlü bağlantı tutmaz). `limit+1` isteyerek pencere taşması saptanır. |
+| Yarış kapatma | `_event_source` | Generator replay'den **ÖNCE** hub'a abone olur; replay sorgusu sırasında yayılan olay kuyruğa düşer ve `event_id <= replayed_through` ile tekilleştirilir → ne kayıp ne çift teslim. |
+| `stream.resync` | `_control_frame(RESYNC_EVENT)` | Üç durumda: buffer taştı (`Subscriber.take_overflow`), boşluk `REPLAY_LIMIT = 500`'den büyük, replay okuması hata verdi. Kontrol çerçeveleri **`id` taşımaz** → cursor'ı ilerletmezler. Kayıp hâlâ tolere edilir (INF-11) ama **bildirilir**. |
+| Frontend | `lib/sse.ts` | Native `EventSource` **kullanılamaz** (AUTH-11 kimliği header'da ister → `fetch` stream), dolayısıyla tarayıcının otomatik `Last-Event-ID` davranışı yok: client cursor'ı kendi tutar, her reopen'da header olarak gönderir. Boş `id:` cursor'ı **silmez** (spec'in aksine, bilerek). `stream.resync` → tam refresh. **Full-refresh fallback korundu.** |
+
+**Adjudicated karar — cursor `agent_event.seq` DEĞİL, outbox id.** Frontend'in bağlandığı `/events`,
+`agent_event` satırlarını değil **`outbox_events`** satırlarını fan-out eder: her domain'i kapsayan
+heterojen bir akış. Agent-only bir sequence onu sıralayamaz. Agent mutasyonları oraya zaten
+`agent.task.updated` olarak ulaşır, dolayısıyla replay'i outbox cursor'ından alır.
+`AgentEvent.seq` docstring'i bu gerçeği söyleyecek şekilde düzeltildi (append sırası + kendi replay
+sorgusu; wire cursor'ı değil).
+
+**Taksonomi ve `EVENT_QUERY_KEYS` DEĞİŞMEDİ** — `stream.resync`/`heartbeat` domain taksonomisinin
+dışındadır, `heartbeat`'in bugüne kadar olduğu gibi.
+
+**Testler.** Yeni `tests/integration/test_sse_replay.py` **7 test** (gerçek Postgres + gerçek
+generator, stub request ile deterministik sonlandırma): boşluk replay'i · yeni abone geçmiş almaz ·
+replay/canlı çift-teslim yok · buffer taşması → resync · pencereyi aşan boşluk → resync · replay
+okuma hatası → resync · bozuk cursor → live-only. `test_sse_auth_contract.py` **+8**: zarf tam
+`{event,data,id}`, id'siz olay `id:` üretmez, cursor doğrulama (case-insensitive, whitespace,
+yabancı prefix, sınırsız string, SQL-şekilli payload) ve **tel formatı** (`ServerSentEvent.encode()`
+→ `id:` satırı). `test_hardening.py` `SseHub.subscribe()`'ın artık `Subscriber` döndürmesine
+hizalandı. Frontend `test/sse.test.ts` **+7** (614/614).
+
+**Doğrulama.** backend ruff + format + mypy (354 dosya) temiz · backend **tam suite exit 0** (izole
+`entropia_o21_test`) · frontend typecheck + eslint temiz · vitest **614/614** · `make openapi-check`
+drift yok · **CI 6/6 yeşil** (backend, frontend, iki E2E, a11y, docker).
+
+**Dürüst sınırlar.** (1) İkincil `GET /agent-events/stream` **dokunulmadı**: olay taşımıyor (yalnız
+heartbeat), frontend'de bağlı değil; abone başına `agent_event` yoklaması tek-process poller
+mimarisinin kaçındığı bağlantı yükünü geri getirirdi — `events_after`/`latest_event_seq` hâlâ
+çağrısız. (2) `Last-Event-ID` OpenAPI'de tanımlı değil (header `Request`'ten okunuyor, `Header(...)`
+parametresi olarak değil) → snapshot değişmedi. (3) `REPLAY_LIMIT = 500` ve `_SUBSCRIBER_BUFFER = 256`
+ayarlanabilir değil (settings'e bağlı değil) — ihtiyaç doğarsa config'e taşınır.
+
+## Next: **PO imzası + R2 kapanışı** (değişmedi) · O-21 landed, O-serisi devam ediyor
+
+Blokaj hâlâ **product-owner imzası**: `docs/implementation/v18_final_acceptance.md` §4 (D-1…D-9).
+İmza olmadan `entropia_v18_remediation_status.md`'deki R2 RE-OPENING banner'ı kalkmaz.
+
+O-serisinin geri kalanı bu kapanış sırasında **merge oldu** (main `316ec1f`): O-01 #403 · O-03
+#407+#413 · O-04 #405 · O-05 #412 · **O-06 #419 (migration `0039_backtest_run_cancellation`)** ·
+O-08 #406 · O-09 #410 · O-10 #402 · doc-truth-repair #435. **O-21 (#430) tek başına açık: CI 6/6
+yeşil, merge bekliyor** (self-merge kapalı). #430 eski main (`cbc4d7a`) üzerine kurulu — merge
+öncesi güncellik kontrolü gerekebilir.
+
+Ortam tuzağı (değişmedi, O-21'de de doğrulandı): paralel worktree oturumları paylaşılan
+`entropia_test` DB'sini ezer — `TEST_DATABASE_URL` ile worktree'ye özel izole DB kullan; tam suite
+koşusunu **ortada öldürme**.
+
+Devam seed'i: **`docs/O21_LANDED_KICKOFF.md`** (paste-ready resume prompt en altta).

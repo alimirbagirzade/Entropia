@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
+
 from entropia.domain.allocation.enums import AllocationIssueCode, AllocationIssueSeverity
 from entropia.domain.allocation.rules import AllocationIssue
 from entropia.domain.mainboard.enums import MainboardItemKind
@@ -194,12 +196,34 @@ def test_strategy_without_a_rationale_family_blocks_ready_check() -> None:
     )
     assert Code.STRATEGY_CONFIG_INVALID.value in _codes(result)
     assert result.state == ReadinessState.NOT_READY
-    # HOLE (verified 2026-07-28, I-17): this blocks only a MISSING key. A payload with
-    # rationale_family_id="" parses and evaluates READY, because StrategyConfig declares
-    # the field as `str = Field(...)` with no min_length. A manipulated client can
-    # therefore reach RUN with no Family. Tracked in
-    # docs/audit/acceptance_id_traceability.md; fixing it needs a domain change
-    # (min_length=1) that is out of scope for this traceability slice.
+
+
+@pytest.mark.parametrize("blank", ["", "   ", "\t\n"])
+def test_strategy_with_a_blank_rationale_family_blocks_ready_check(blank: str) -> None:
+    """RF-12 regression: a blank family id is refused exactly like a missing one.
+
+    Before the fix, ``Field(...)`` rejected only a MISSING key — a payload carrying
+    ``rationale_family_id=""`` parsed and the composition evaluated READY, so a
+    manipulated client reached RUN with no Rationale Family. The
+    ``validate_rationale_family_not_blank`` field validator closes that path.
+    """
+    result = evaluate_readiness(
+        [_strategy_item(payload=_strategy_payload(rationale_family_id=blank))],
+        allocation_enabled=False,
+        allocation_issues=[],
+    )
+    assert Code.STRATEGY_CONFIG_INVALID.value in _codes(result)
+    assert result.state == ReadinessState.NOT_READY
+
+
+def test_strategy_rationale_family_id_is_stripped_not_rejected() -> None:
+    """A padded but real id stays valid — the guard rejects blankness, not whitespace."""
+    result = evaluate_readiness(
+        [_strategy_item(payload=_strategy_payload(rationale_family_id="  rf_1  "))],
+        allocation_enabled=False,
+        allocation_issues=[],
+    )
+    assert Code.STRATEGY_CONFIG_INVALID.value not in _codes(result)
 
 
 def test_strategy_without_exit_or_stop_blocks() -> None:

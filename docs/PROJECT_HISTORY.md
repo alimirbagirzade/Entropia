@@ -1513,3 +1513,123 @@ sonra yeniden hesaplandı. PR #407 CI'ı **6/6 yeşil** (backend, frontend, iki 
   lokal-verify kuralından bilinçli ve açıklanmış sapmadır; integration'ın otoritesi #407 CI'ıdır.
 - Adjudicate edilen kodlar için **yeni integration testi yazılmadı** — yeni kod eklenmediği için
   bağlanacak yeni davranış yok; her satırın karşılığı kendi mevcut testine sahip.
+## O-06 · CancelBacktestRun — controlled cancellation (PR #419)
+
+**Sorun (ampirik doğrulama ile).** `BacktestRunState.CANCELLED` `domain/backtest/enums.py:26`'da
+tanımlıydı ve `:87` `RUN_RETRYABLE_STATES`'te listeleniyordu; doc 15 §4 state matrisi
+"BacktestRun - FAILED / CANCELLED" satırını, §6.1 "RUN cancelled error" metnini
+("Backtest was cancelled. No Backtest Result was created."), §8.4 Flow D "Authorized cancel command
+varsa worker controlled cancellation'a geçer" cümlesini ve §16 "CANCELLED run no BacktestResult
+üretir; cancellation audit event ve terminal reason korunur" kabulünü yazıyordu. **Buna karşılık
+kodda o state'i üretebilen tek bir yol yoktu:** `grep -i cancel` → `commands/backtest_run.py` +
+`routes/backtest.py` yalnızca docstring/enum eşleşmesi veriyordu. Yani terminal durum ilan edilmiş,
+retry'si tanımlanmış, ama **hiç ulaşılamayan** bir state'ti.
+
+**Çözüm — komut + endpoint.** `RetryBacktestRun` deseni aynalandı:
+`commands/backtest_run.py::cancel_backtest_run` + `POST /backtest-runs/{run_id}/cancel` (202).
+Yetki **owner/Admin**: `_load_workspace` (view + `readiness_access_denied` audit'i, `operation=
+"cancel_backtest_run"`) ardından run'ın `requested_by_principal_id`'si üzerinden `ensure_can_edit` —
+Result soft-delete ile birebir aynı politika. OCC biçimi **`expected_row_version`** (body veya
+sayısal `If-Match`): `backtest_run.row_version` zaten mevcuttu ve bu, repodaki her `backtest_*`
+satır mutasyonunun kullandığı biçim. `Idempotency-Key` → `run_idempotent`.
+
+**Çözüm — controlled cancellation (ani kill YOK).** İki yol, **her iki tarafın da aldığı satır
+kilidi** altında ayrılır:
+
+- **QUEUED** — worker run'ı henüz sahiplenmemiş; cancel'ın kendisi terminal geçiştir
+  (`_cancel_queued_run`: `cancelled` + `RUN_CANCELLED` olayı + audit + `jobs.status = cancelled`).
+  Worker'ın **mevcut** at-least-once terminal guard'ı sonraki teslimatı no-op'a çevirir, motor hiç
+  başlamaz.
+- **PROVISIONING / RUNNING** — worker run'ı çalıştırıyor; yalnız **niyet** yazılır
+  (`cancel_requested_at`, `cancel_requested_by_principal_id`). Yanıt `cancellation: "requested"` +
+  `delivery_policy: "cancellation_safe_boundary"` — Analysis Lab'ın `agent_control.stop_run`'ının
+  zaten yayımladığı sözleşme.
+
+Yarış, worker'ın **zaten yaptığı** okumada kilit alınarak kapatıldı:
+`bt_repo.get_run(session, run_id, for_update=True)` (yeni keyword-only `for_update`). Böylece worker
+**tek round trip**'te kalır; kilit QUEUED → PROVISIONING geçişi boyunca tutulur. Kilit olmasaydı bir
+cancel, worker'ın okuması ile yazması arasında `cancelled` yazabilir, worker bunu sessizce ezip
+kullanıcının iptal ettiği run için Result materialize edebilirdi.
+
+**Worker'ın dört güvenli kontrol noktası** (`_cancellation_requested` → `_cancel_run`):
+
+| # | Yer | Neden |
+|---|---|---|
+| 1 | PROVISIONING commit'inden hemen sonra | pin re-resolution çok round trip geniş |
+| 2 | her strateji hazırlığı arasında | her item kendi bar/tick stream'ini açar |
+| 3 | her bar-replay arasında (ilk turda RUNNING commit'inin hemen ardı) | uzun simülasyonun asıl noktası |
+| 4 | **`create_result`'tan hemen önce** | §16'yı fiilen garanti eden nokta |
+
+4. nokta sözleşmenin dürüst yarısıdır: ondan sonrası immutable Result'tır ve run yalnız SUCCEEDED
+bitebilir; geç kalan bir cancel **uygulanmaz** — komut zaten `requested` demişti, `cancelled` değil.
+
+**Migration `0039_backtest_run_cancellation`** — `backtest_run`'a üç nullable kolon:
+`cancel_requested_at` TIMESTAMPTZ, `cancel_requested_by_principal_id` VARCHAR(40) FK → `principals`,
+`cancellation_reason` TEXT (doc 15 §16 terminal gerekçesi, FAILED yolundaki `failure_message`'ın
+cancel ikizi). Backfill yok; mevcut her run davranışını aynen korur. **Cancel bilerek bir state
+DEĞİL** — doc 15 §4 state kümesini sabitliyor ve bekleyen bir istek o kümenin üyesi değil.
+`RunEventType` taksonomisine **yeni üye eklenmedi**: `RUN_CANCELLED` zaten tanımlıydı ve terminal
+olayda kullanıldı.
+
+**Yeni hata sınıfı.** `RunNotCancellableError` (409, `RUN_NOT_CANCELLABLE`,
+`category = LIFECYCLE`, `retryable = False`, `suggested_action = "retry_run"`) —
+`RunNotRetryableError`'ın tam aynası: retry terminal run ister, cancel terminal-olmayan ister.
+Kategori bilerek `ACTIVE_JOB` değil `LIFECYCLE`: çatışma run'ın yaşam döngüsü konumundadır ve
+isteği tekrarlamak terminal bir durumu değiştiremez.
+
+**Testler.** `tests/integration/test_backtest_run_cancellation.py` (13 test): QUEUED cancel terminal
++ Result yok + job finalize · cancel sonrası worker teslimatı hiçbir şey koşmaz · çalışan worker'da
+yalnız niyet yazılır (state PROVISIONING kalır, terminal olay uydurulmaz) · worker checkpoint'te
+onurlandırır ve **geçerli bar'larla bile** Result yazmaz · audit çifti
+(`backtest.run_cancellation_requested` + `backtest.run_cancelled`) + outbox + erişilebilir teşhis ·
+Results History'de görünmez · yabancı aktör 403 · Admin başkasının run'ını iptal edebilir · terminal
+run'da 409 · zaten iptal edilmişte 409 · stale `expected_row_version` reddi + doğru token kabulü ·
+idempotency replay tek kez iptal eder · **L1 FK proof** (yeni requester kolonu gerçek principal
+ister). Bir test beklentisi ampirik olarak düzeltildi: redelivery, yarım kalan run'ı yeniden
+denediği için **ikinci bir `RUN_STARTED`** ekler (belgelenmiş O-05 davranışı), bu yüzden iddia
+"kuyrukta tam olarak bir terminal olay var ve o cancellation" şeklinde yazıldı.
+
+**Doğrulama.** ruff · `ruff format --check` (623 dosya) · `mypy src` (356 dosya) temiz · OpenAPI
+snapshot yeniden üretildi, drift guard yeşil · **alembic `0039` up/down/up** (şema `DROP SCHEMA
+public CASCADE` ile sıfırlanıp) + migration↔model kolon paritesi (timestamptz / varchar(40)+FK /
+text, tek head) · backtest grubu (cancellation + O-05 events + persistence) 48/48 · tam backend
+suite exit 0.
+
+**Dürüst sınırlar.**
+- **Partial diagnostic artifact `diagnostic_artifact` satırı OLARAK yazılmaz.** O tablo
+  `backtest_result`'a `FK NOT NULL` ile bağlı ve yalnız SUCCEEDED run Result yaratabilir (CR-03);
+  cancellation teşhisini barındırmak için Result yazmak, bu yolun uyguladığı kuralın ta kendisini
+  kırardı. Doc 15 §8.4 "**mümkünse** kalır" diyor — mevcut şema altındaki dürüst maksimum:
+  teşhis `RUN_CANCELLED` olayının `detail`'inde (`cancelled_at_stage`,
+  `prepared/replayed_item_count`, `requested_by_principal_id`) ve run projeksiyonunda
+  (`cancellation_reason`, `cancel_requested_at`) yaşar; `GET /backtest-runs/{id}` ve `/events` ile
+  erişilebilir.
+- **4. checkpoint'ten sonra gelen cancel onurlandırılmaz** — run normal biter. Bu bir kusur değil,
+  yayımlanan `cancellation_safe_boundary` sözleşmesinin kendisidir.
+- Frontend'e dokunulmadı: `/cancel` için UI yok, yalnız backend yüzeyi.
+- `ENGINE_VERSION` bump YOK — motor semantiği değişmedi, yalnız durma noktaları eklendi.
+
+**Review sırasında kayan zemin — O-12 dual-token kuralı.** Slice yazıldıktan SONRA, PR açılmadan
+önce `origin/main` **#414 (O-12/O-13/O-18 — OCC + Idempotency disiplini)** ile ilerledi ve tam da bu
+slice'ın dosyasına, `routes/backtest.py`'ye dokundu. CI bunu 22 saniyede yakaladı: GitHub'ın merge
+denemesi `CancelRunBody` tanımını düşürüp 9 × `F821 Undefined name` üretti. `origin/main`'e rebase
+edildi ve cancel ucu **O-12'nin dual-token kuralına uyarlandı**: artık gövde `expected_row_version`
+ile sayısal `If-Match` `shared/concurrency.py::reconcile_occ_tokens` üzerinden uzlaştırılıyor —
+çelişki **409 `OCC_TOKEN_CONFLICT`**, sessiz tercih değil. Uç nokta O-12'nin sözleşme testine de
+eklendi (`tests/contract/test_occ_dual_token_contract.py`, dual-token op sayısı **16 → 17**) ve
+`docs/CODEMAPS/BACKEND_ROUTES.md`'deki dual-token listesi güncellendi. **Ders:** paralel O-serisi
+dalgasında aynı dosyaya dokunan iki slice varsa, PR açmadan önce `git fetch && git rebase
+origin/main` yap — lokal suite yeşilken CI kırmızı olabilir.
+
+**O-13 tuzağı denetlendi (uygulanmıyor).** #414 ile gelen O-13 düzeltmesi, uygulamanın
+`autoflush=False` (`infrastructure/postgres/engine.py:34`) koştuğunu ama integration conftest'inin
+varsayılan `autoflush=True` kullandığını gösterdi — testler yeşilken E2E kırılabiliyor. O-06'nın
+yolları denetlendi: tek re-read `bt_repo.record_run_event` içindeki `latest_run_sequence`, ve
+`record_run_event` **açıkça `flush()` ediyor**, dolayısıyla autoflush'a bağımlılık yok.
+
+**Ortam notu.** Bu slice sırasında **üç paralel worktree oturumu** (o14, k09, magical-lumiere) kendi
+tam suite'lerini koşuyordu; her biri kendi `TEST_DATABASE_URL`'ini kullandığı için şema çakışması
+olmadı — K-03/K-07'nin yazdığı izolasyon kuralı işe yaradı. Buna karşılık **arka arkaya iki ayrı
+pytest çağrısı** (tek komutta zincirlenmiş) ilk koşunun bağlantıları tam bırakılmadan ikinciyi
+başlatınca `test_backtest_run_events.py`'de dört sahte ERROR üretti; **tek çağrıda** koşulduğunda
+48/48 yeşil. Aynı ailenin tuzağı: koşuyu ortada öldürmek de sonraki koşuda sahte hata üretir.

@@ -271,6 +271,60 @@ class TimezoneRequired(ValidationError):
     category = ErrorCategory.DATA_TIME_VALIDATION
 
 
+class TradeLogTimeZoneInvalidError(ValidationError):
+    """The Trade Log config declared a source time zone that ``zoneinfo`` cannot
+    resolve (doc 05 §5.2 "Invalid/ambiguous timezone rejected", §12.1
+    ``TIME_ZONE_INVALID``). Also raised when the import request itself carries an
+    unresolvable zone, so a bad zone never reaches the durable job."""
+
+    code = "TIME_ZONE_INVALID"
+    message = "The declared source time zone is invalid or ambiguous."
+    category = ErrorCategory.DATA_TIME_VALIDATION
+    suggested_action = "select_a_valid_iana_time_zone"
+    remediation = "Select a valid IANA zone or provide offset-aware timestamps."
+    field_path = "time_model.source_timezone"
+
+
+class TradingSignalTimezoneInvalidError(ValidationError):
+    """Trading Signal twin of :class:`TradeLogTimeZoneInvalidError`.
+
+    Same defect, different code: doc 04 §11 names it ``TIMEZONE_INVALID`` while doc 05
+    §12.1 names it ``TIME_ZONE_INVALID``. Each page's taxonomy is authoritative for its
+    own surface (the K-07 precedent), so both names ship."""
+
+    code = "TIMEZONE_INVALID"
+    message = "The declared source time zone is invalid or ambiguous."
+    category = ErrorCategory.DATA_TIME_VALIDATION
+    suggested_action = "select_a_valid_iana_time_zone"
+    remediation = "Select a valid IANA zone or provide offset-aware timestamps."
+    field_path = "time_policy.source_timezone"
+
+
+class SourceTimezoneMismatchError(ValidationError):
+    """The saved config's source time zone is NOT the one the pinned import ran under
+    (O-28). Shared by the Trade Log and Trading Signal save paths.
+
+    The import takes its ``source_timezone`` as a separate job parameter, so a config
+    declaring ``America/New_York`` could pin a batch normalized as ``UTC``: every stored
+    instant would be off by the true offset while the save still succeeded. Doc 04 §5
+    ("Market / timezone / event model changed after import") states the normalized
+    import revision then cannot be reused as valid and a reparse/remap job is required,
+    so this fails closed rather than silently picking a side. Neither page names a code
+    for it; ``TIMEZONE_MISMATCH`` is adjudicated here. NOT retryable — resending the
+    same pair always disagrees; the caller must re-import or correct the declared zone."""
+
+    code = "TIMEZONE_MISMATCH"
+    message = "The declared source time zone does not match the imported record batch."
+    category = ErrorCategory.DATA_TIME_VALIDATION
+    retryable = False
+    suggested_action = "reimport_with_the_declared_time_zone"
+    remediation = (
+        "Re-run the import using the time zone this configuration declares, or change "
+        "the declared time zone to the one the import used. Timestamps normalized under "
+        "a different zone cannot be reused."
+    )
+
+
 class MarketDataTimezoneUnresolved(ValidationError):
     """A naive source timestamp could not be localized (K-01, doc 11 §9.1).
 
@@ -868,6 +922,21 @@ class MainboardItemKindMismatchError(ValidationError):
 
     code = "MAINBOARD_ITEM_KIND_MISMATCH"
     message = "The item kind does not match the work object's kind."
+
+
+class InvalidItemKindError(ValidationError):
+    """AOS-03 (doc 03 §14; taxonomy §11, chooser recovery §8.3): the client sent a
+    legacy V18 prototype label (``signal_package`` / ``trade_log_package``) where a
+    work object / item kind was expected. The spec names this code, so a generic
+    CR-01 mismatch code would both be the wrong answer: ``INVALID_ITEM_KIND``
+    means "that is not a kind this system has", while
+    ``MainboardItemKindMismatchError`` means "your kind disagrees with the root's".
+    The chooser recovery is to present only the two canonical choices."""
+
+    code = "INVALID_ITEM_KIND"
+    message = "That item kind is not supported. Choose Trading Signal or Trade Log."
+    suggested_action = "choose_item_kind"
+    remediation = "Send the item kind as exactly 'trading_signal' or 'trade_log'."
 
 
 class ObjectNotActiveError(ConflictError):

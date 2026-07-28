@@ -47,6 +47,7 @@ from entropia.domain.mainboard.composition import (
     composition_hash,
 )
 from entropia.domain.mainboard.enums import MainboardItemKind
+from entropia.domain.mainboard.item_kind import ensure_mainboard_item_kind
 from entropia.domain.readiness.enums import ReadinessState
 from entropia.domain.revision.hashing import content_hash
 from entropia.infrastructure.postgres.models import (
@@ -110,7 +111,7 @@ def start_external_work_object_draft(actor: Actor, kind: str) -> dict[str, Any]:
     MAINBOARD_ITEM_KIND_MISMATCH (422).
     """
     require_authenticated(actor)
-    resolved = _coerce_item_kind(kind)
+    resolved = _coerce_item_kind(kind, field="kind")
     if resolved not in _EXTERNAL_KINDS:
         raise MainboardItemKindMismatchError(
             f"Kind {resolved.value!r} is not an external work object kind.",
@@ -315,7 +316,7 @@ async def attach_mainboard_item(
         )
     item_kind_value = detail.object_kind
     if item_kind is not None:
-        assert_item_kind_matches(_coerce_item_kind(item_kind), item_kind_value)
+        assert_item_kind_matches(_coerce_item_kind(item_kind, field="item_kind"), item_kind_value)
 
     async def _op() -> dict[str, Any]:
         position = (
@@ -718,14 +719,14 @@ async def _apply_label(
 # --------------------------------------------------------------------------- #
 
 
-def _coerce_item_kind(value: str) -> MainboardItemKind:
-    try:
-        return MainboardItemKind(value)
-    except ValueError as exc:
-        raise MainboardItemKindMismatchError(
-            f"Unknown work object kind {value!r}.",
-            details=[{"field": "object_kind", "actual": value}],
-        ) from exc
+def _coerce_item_kind(value: str, *, field: str = "object_kind") -> MainboardItemKind:
+    """Delegate to the canonical kind guard (AOS-03).
+
+    The legacy V18 labels ``signal_package`` / ``trade_log_package`` are rejected
+    by name with ``INVALID_ITEM_KIND``; anything else outside the enum stays
+    ``MAINBOARD_ITEM_KIND_MISMATCH``.
+    """
+    return ensure_mainboard_item_kind(value, field=field)
 
 
 def _validate_available_time(kind: MainboardItemKind, available_time: datetime | None) -> None:

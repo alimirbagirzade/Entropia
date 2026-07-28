@@ -285,6 +285,11 @@ def evaluate_cross_row(
     * declared cadence gap (OHLCV bar data) -> WARNING + a coverage segment per run.
     * undeclared spread unit (spread/execution) -> WARNING.
 
+    Coverage segments are produced for EVERY data type (O-29). Declared-cadence OHLCV
+    bars are segmented against that cadence; tick/trades, spread/execution and any bar
+    series whose cadence is unreadable are segmented by consecutive covered UTC days
+    (:func:`_build_daily_coverage`). Only the cadence path raises ``CADENCE_GAP``.
+
     Blocking findings force the revision to NEEDS_REVIEW (never auto-verified), so a
     corrupt series cannot reach APPROVED and feed the money-sizing engine."""
     issues: list[CrossRowIssue] = []
@@ -349,20 +354,26 @@ def evaluate_cross_row(
             )
         )
 
+    # O-29: every analyzed revision that resolved at least one timestamp records its
+    # coverage. Which SEGMENTATION applies depends on whether a cadence was declared,
+    # not on the data type: only a declared cadence can say that a step is too wide.
     coverage: tuple[CoverageSegment, ...] = ()
     cadence = cadence_seconds(resolution_value) if resolution_kind == ResolutionKind.BAR else None
-    if market_data_type == MarketDataType.OHLCV and cadence is not None and counts:
-        segments, gap_count = _build_coverage(counts, cadence)
-        coverage = tuple(segments)
-        if gap_count:
-            issues.append(
-                CrossRowIssue(
-                    ValidationStatus.WARNING,
-                    "CADENCE_GAP",
-                    "Declared cadence gaps detected between consecutive bars.",
-                    gap_count,
+    if counts:
+        if market_data_type == MarketDataType.OHLCV and cadence is not None:
+            segments, gap_count = _build_coverage(counts, cadence)
+            if gap_count:
+                issues.append(
+                    CrossRowIssue(
+                        ValidationStatus.WARNING,
+                        "CADENCE_GAP",
+                        "Declared cadence gaps detected between consecutive bars.",
+                        gap_count,
+                    )
                 )
-            )
+        else:
+            segments = _build_daily_coverage(counts)
+        coverage = tuple(segments)
 
     if market_data_type == MarketDataType.SPREAD_EXECUTION:
         declared = (spread_unit or "").strip().lower()
@@ -405,3 +416,34 @@ def _build_coverage(counts: Counter[datetime], cadence: int) -> tuple[list[Cover
         row_count += counts[cur]
     segments.append(CoverageSegment(start, end, row_count, None))
     return segments, gap_count
+
+
+def _build_daily_coverage(counts: Counter[datetime]) -> list[CoverageSegment]:
+    """Split cadence-less timestamps into runs of consecutive covered UTC days (O-29).
+
+    Event-based data (tick/trades, spread/execution) declares no step, so there is no
+    interval a gap could be measured against. The boundary used instead is the system's
+    OWN coverage granularity: the processed asset is written in instrument + date
+    partitions (doc 11 §7.3 step 5), so a calendar day with no row closes the current
+    segment. Nothing is inferred — the day is a declared structural unit, not a tuned
+    threshold, and ``gap_seconds`` on the closed segment is the real distance to the
+    next observed instant.
+
+    No gap finding is raised here: for a "selected sessions" dataset (doc 11 §3.3's
+    tick row) an absent day is intent, not a defect, and §7.4 lists cadence gaps only
+    under OHLCV. The segments are recorded, never judged."""
+    ordered = sorted(counts)
+    segments: list[CoverageSegment] = []
+    start = ordered[0]
+    end = ordered[0]
+    row_count = counts[ordered[0]]
+    for prev, cur in pairwise(ordered):
+        if (cur.date() - prev.date()).days > 1:
+            gap = Decimal(str((cur - prev).total_seconds()))
+            segments.append(CoverageSegment(start, end, row_count, gap))
+            start = cur
+            row_count = 0
+        end = cur
+        row_count += counts[cur]
+    segments.append(CoverageSegment(start, end, row_count, None))
+    return segments

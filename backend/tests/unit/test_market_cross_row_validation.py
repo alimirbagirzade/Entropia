@@ -4,6 +4,10 @@ The per-row rules cannot see relationships between rows. These cover the aggrega
 findings: timestamp monotonicity + duplicate (BLOCKING_FAIL, keep corrupt series
 out of the money engine), declared cadence gaps (WARNING + coverage segments) and
 undeclared spread units (WARNING).
+
+Coverage segmentation is exercised on BOTH paths (O-29): the cadence path for declared
+OHLCV bars, and the consecutive-UTC-day path for cadence-less tick/trades, spread/
+execution and unreadable-cadence bars.
 """
 
 from __future__ import annotations
@@ -96,10 +100,20 @@ def test_cadence_gap_warns_and_splits_coverage() -> None:
 
 
 def test_cadence_gap_ignored_without_bar_resolution() -> None:
+    """No declared cadence -> no CADENCE_GAP verdict, but coverage is still recorded.
+
+    O-29: an unreadable/absent cadence used to drop the revision's coverage entirely,
+    so an analyzed dataset was indistinguishable from an un-analyzed one."""
     rows = [_ohlcv("2026-01-01T00:00:00Z"), _ohlcv("2026-01-01T01:00:00Z")]
     report = evaluate_cross_row(MarketDataType.OHLCV, rows, source_zone=_UTC)  # no declared cadence
     assert report.worst == ValidationStatus.PASS
-    assert report.coverage == ()
+    assert not any(i.rule_code == "CADENCE_GAP" for i in report.issues)
+    assert len(report.coverage) == 1  # same UTC day -> one contiguous segment
+    segment = report.coverage[0]
+    assert segment.start_at == datetime(2026, 1, 1, 0, 0, tzinfo=UTC)
+    assert segment.end_at == datetime(2026, 1, 1, 1, 0, tzinfo=UTC)
+    assert segment.row_count == 2
+    assert segment.gap_seconds is None
 
 
 def test_spread_unit_undeclared_warns() -> None:
@@ -118,7 +132,13 @@ def test_spread_unit_declared_passes() -> None:
     assert report.issues == ()
 
 
-def test_tick_type_has_no_cadence_or_spread_findings() -> None:
+def test_tick_type_has_no_cadence_or_spread_findings_but_records_coverage() -> None:
+    """A tick revision never inherits a bar cadence, yet it still records coverage.
+
+    O-29: the cadence is ignored for the tick type (no CADENCE_GAP verdict can be
+    fair against a step the data never declared), but the covered span is real and
+    must reach ``dataset_coverage_slice`` — doc 11 §3.3 shows a Coverage value on
+    the Tick / Trades registry row."""
     rows = [{"timestamp": "2026-01-01T00:00:00Z", "price": "1"}]
     report = evaluate_cross_row(
         MarketDataType.TICK_TRADES,
@@ -128,7 +148,55 @@ def test_tick_type_has_no_cadence_or_spread_findings() -> None:
         resolution_value="1m",
     )
     assert report.worst == ValidationStatus.PASS
-    assert report.coverage == ()  # coverage segments are OHLCV-only
+    assert not any(i.rule_code == "CADENCE_GAP" for i in report.issues)
+    assert len(report.coverage) == 1
+    assert report.coverage[0].row_count == 1
+    assert report.coverage[0].gap_seconds is None
+
+
+def test_tick_selected_sessions_split_into_one_segment_per_session() -> None:
+    """Doc 11 §3.3's "Selected 2025 sessions" tick row: disjoint days, disjoint slices.
+
+    A single min->max span would read as continuous coverage over a range the dataset
+    only samples. Consecutive covered UTC days stay in one segment; a skipped day
+    closes it and records the real distance to the next observed instant."""
+    rows = [
+        {"timestamp": "2025-03-03T09:00:00Z", "price": "1"},
+        {"timestamp": "2025-03-03T17:00:00Z", "price": "1"},
+        {"timestamp": "2025-03-04T09:00:00Z", "price": "1"},  # next day -> same segment
+        {"timestamp": "2025-06-10T09:00:00Z", "price": "1"},  # months later -> new segment
+    ]
+    report = evaluate_cross_row(MarketDataType.TICK_TRADES, rows, source_zone=_UTC)
+    assert report.worst == ValidationStatus.PASS
+    assert len(report.coverage) == 2
+    first, second = report.coverage
+    assert first.start_at == datetime(2025, 3, 3, 9, 0, tzinfo=UTC)
+    assert first.end_at == datetime(2025, 3, 4, 9, 0, tzinfo=UTC)
+    assert first.row_count == 3
+    # The real distance to the next observed instant, not an inferred cadence.
+    assert first.gap_seconds == Decimal(
+        str((datetime(2025, 6, 10, 9, 0) - datetime(2025, 3, 4, 9, 0)).total_seconds())
+    )
+    assert second.start_at == second.end_at == datetime(2025, 6, 10, 9, 0, tzinfo=UTC)
+    assert second.row_count == 1
+    assert second.gap_seconds is None
+
+
+def test_spread_execution_records_coverage_alongside_its_unit_finding() -> None:
+    """Spread/execution is event-based too: coverage is recorded on the day boundary.
+
+    The undeclared-unit WARNING (§7.4) is orthogonal — a WARNING revision still has a
+    real covered span to pin in the run manifest."""
+    rows = [
+        {"timestamp": "2026-02-01T00:00:00Z", "bid": "1", "ask": "2"},
+        {"timestamp": "2026-02-09T00:00:00Z", "bid": "1", "ask": "2"},
+    ]
+    report = evaluate_cross_row(MarketDataType.SPREAD_EXECUTION, rows, source_zone=_UTC)
+    assert report.worst == ValidationStatus.WARNING
+    assert any(i.rule_code == "SPREAD_UNIT_UNDECLARED" for i in report.issues)
+    assert len(report.coverage) == 2
+    assert report.coverage[0].gap_seconds == Decimal("691200.0")  # 8 days
+    assert report.coverage[1].gap_seconds is None
 
 
 def test_empty_dataset_is_clean() -> None:

@@ -44,7 +44,12 @@ from entropia.domain.mainboard.composition import CompositionMember, composition
 from entropia.domain.mainboard.enums import MainboardItemKind
 from entropia.domain.market_data.enums import MarketRevisionState
 from entropia.domain.readiness.enums import ReadinessIssueCode, ReadinessScope, ReadinessSeverity
-from entropia.domain.readiness.issues import ExternalImportState, ReadinessIssue, ReadinessItemInput
+from entropia.domain.readiness.issues import (
+    ExternalImportState,
+    ReadinessIssue,
+    ReadinessItemInput,
+    ResearchSourceState,
+)
 from entropia.domain.readiness.validators import evaluate_readiness
 from entropia.domain.strategy.config import StrategyConfig
 from entropia.infrastructure.postgres.models import (
@@ -57,6 +62,7 @@ from entropia.infrastructure.postgres.repositories import audit as audit_repo
 from entropia.infrastructure.postgres.repositories import mainboard as mb_repo
 from entropia.infrastructure.postgres.repositories import market_data as market_repo
 from entropia.infrastructure.postgres.repositories import readiness as readiness_repo
+from entropia.infrastructure.postgres.repositories import research_data as research_repo
 from entropia.infrastructure.postgres.repositories import strategy as strat_repo
 from entropia.shared.errors import CompositionNotFoundError, CompositionStaleError
 
@@ -106,6 +112,7 @@ async def run_readiness_check(
         market_data_issues = await _resolve_market_data_issues(session, items)
         tick_data_issues = await _resolve_tick_data_issues(session, items)
         strategy_indicator_issues = await _resolve_strategy_indicator_issues(session, items)
+        research_sources = await _resolve_research_sources(session, items)
         evaluation = evaluate_readiness(
             items,
             allocation_enabled=allocation_enabled,
@@ -113,6 +120,7 @@ async def run_readiness_check(
             market_data_issues=market_data_issues,
             tick_data_issues=tick_data_issues,
             strategy_indicator_issues=strategy_indicator_issues,
+            research_sources=research_sources,
         )
 
         blocked_ids = {
@@ -416,6 +424,79 @@ async def _resolve_strategy_indicator_issues(
                 )
             )
     return issues
+
+
+async def _resolve_research_sources(
+    session: AsyncSession, items: list[ReadinessItemInput]
+) -> list[ResearchSourceState]:
+    """O-01: dereference every Research Data revision the composition pins.
+
+    Doc 12 §9.2 makes Ready Check a MANDATORY second validator of the evidence bundle,
+    alongside the worker. Before this the Research layer was absent from Ready Check
+    entirely, so a composition pinning an ``agent_research_only`` (or unapproved, or
+    available-time-less) revision reported READY and then failed inside the worker's
+    ``FundingSourceInvalid`` gate — which stays exactly where it is (doc 12 §9.2 wants
+    BOTH layers; eligibility can change between admission and execution).
+
+    Honest boundary — deliberately identical to ``backtest_run_context._research_entries``:
+    the V1 engine consumes exactly ONE research feed, the pinned funding source, so that
+    is the only pin resolved here. Ready Check never claims to validate a feed the engine
+    does not read. When another research consumption path lands, add it here and to the
+    manifest context together.
+
+    Resolving is a DB read (revision + root dereference), so it lives in the command; the
+    judgement itself is the pure ``validate_research_sources`` (doc 14 §9.2 "validators
+    must be separate pure deterministic domain services").
+    """
+    sources: list[ResearchSourceState] = []
+    for item in items:
+        if not item.available or item.kind != MainboardItemKind.STRATEGY:
+            continue
+        try:
+            config = StrategyConfig(**item.payload)
+        except PydanticValidationError:
+            continue  # STRATEGY_CONFIG_INVALID already surfaces this in the validators.
+        funding = config.data.funding
+        if not funding.enabled:
+            continue
+        revision_id = funding.source_revision_id or ""
+        field_path = "data.funding.source_revision_id"
+        revision = await research_repo.get_revision(session, revision_id) if revision_id else None
+        if revision is None:
+            sources.append(
+                ResearchSourceState(
+                    item_id=item.item_id,
+                    revision_id=revision_id,
+                    field_path=field_path,
+                    found=False,
+                    strategy_market_dataset_revision_id=config.data.market_dataset_revision_id,
+                )
+            )
+            continue
+        root = await research_repo.get_dataset_root(session, revision.entity_id)
+        sources.append(
+            ResearchSourceState(
+                item_id=item.item_id,
+                revision_id=revision.revision_id,
+                field_path=field_path,
+                found=True,
+                root_active=root is not None and root.deletion_state == DeletionState.ACTIVE,
+                revision_state=str(revision.revision_state),
+                usage_scope=_enum_value(revision.usage_scope),
+                available_time_policy=_enum_value(revision.available_time_policy),
+                available_delay_seconds=revision.available_delay_seconds,
+                linked_market_dataset_revision_id=revision.linked_market_dataset_revision_id,
+                instrument_mapping_ref=revision.instrument_mapping_ref,
+                validation_status=_enum_value(revision.validation_status),
+                strategy_market_dataset_revision_id=config.data.market_dataset_revision_id,
+            )
+        )
+    return sources
+
+
+def _enum_value(value: Any) -> str | None:
+    """The raw persisted string of a nullable enum column (never a parsed object)."""
+    return None if value is None else str(value)
 
 
 async def _resolve_external(

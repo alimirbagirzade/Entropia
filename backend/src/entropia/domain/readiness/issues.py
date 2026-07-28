@@ -70,6 +70,42 @@ class ExternalImportState:
 
 
 @dataclass(frozen=True, slots=True)
+class ResearchSourceState:
+    """Resolved evidence for ONE Research Data revision a strategy pins (O-01).
+
+    Doc 12 §9.2: "Ready Check and Backtest worker must validate the bundle again
+    server-side." Until O-01 the Research layer existed ONLY in the worker
+    (``queries/funding.py`` -> ``FundingSourceInvalid``), so a composition pinning
+    an ineligible research revision passed Ready Check as READY and then died mid-run.
+    The command resolves each pinned revision into this plain value object and the
+    pure ``validate_research_sources`` turns it into findings — the same shape as
+    ``ExternalImportState`` (no DB access inside the validators).
+
+    ``found`` is False when the pinned revision id resolves to no row at all.
+    ``strategy_market_dataset_revision_id`` is the STRATEGY's pinned market revision,
+    carried here so the pure validator can compare it against this revision's declared
+    link without a second dereference (doc 14 §9.2 "exact Market Data compatibility").
+    Every enum-ish field carries the RAW persisted value (never a parsed object), so
+    a row written under an older enum member still reaches the validator and is judged
+    rather than silently exploding during resolution.
+    """
+
+    item_id: str
+    revision_id: str
+    field_path: str
+    found: bool
+    root_active: bool = False
+    revision_state: str | None = None
+    usage_scope: str | None = None
+    available_time_policy: str | None = None
+    available_delay_seconds: int | None = None
+    linked_market_dataset_revision_id: str | None = None
+    instrument_mapping_ref: str | None = None
+    validation_status: str | None = None
+    strategy_market_dataset_revision_id: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class ReadinessItemInput:
     """One enabled composition member resolved for validation (doc 14 §9.2).
 
@@ -92,4 +128,5 @@ __all__ = [
     "ExternalImportState",
     "ReadinessIssue",
     "ReadinessItemInput",
+    "ResearchSourceState",
 ]

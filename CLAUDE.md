@@ -155,6 +155,8 @@ Before stopping a working session, produce **ALL** of the following:
 - **Son dalga — O-serisi (spec-uyum kusurları):** O-01 (#403) · O-02 (#400) · **O-03 (#407 + #413;
   #408 boş merge oldu, içeriğini #413 yeniden indirdi)** · O-04 (#405) · O-05 (#412) ·
   **O-06 (#419 — CancelBacktestRun, migration `0039`)** · O-08 (#406) · O-09 (#410) · O-10 (#402) ·
+  O-15 (#409) · **O-16 (#444 — User Manual stale search-anchor recovery: doc 21 §7 verbatim mesaj +
+  stream refetch + retry; frontend-only, migration YOK)**.
 
 
 - **Testler:** son yeşil referans CI (O-serisi PR'ları). Lokal tam suite tek koşuda
@@ -173,7 +175,8 @@ Before stopping a working session, produce **ALL** of the following:
 
 - **F-07 raw-id sweep — SUNUM katmanı kapandı (PR #404).** 31 dosyada 161 `*_id` render'ı tarandı;
   **4 kalıntı açık** (backend display-DTO → `v18_visual_traceability.md §4.4`) — yani **F-07 bütün
-  olarak Complete DEĞİL**. vitest **608/608** (**`--no-file-parallelism` ZORUNLU**).
+  olarak Complete DEĞİL**. vitest **622/622** (**`--no-file-parallelism` ZORUNLU**; worktree'de
+  `frontend/node_modules` yoksa önce `npm ci` — ilk koşudaki `ERR_MODULE_NOT_FOUND` test hatası değil).
 
 
 - **Next (PO imzası BLOKAJ DEĞİL — imza 2026-07-22'de atıldı,

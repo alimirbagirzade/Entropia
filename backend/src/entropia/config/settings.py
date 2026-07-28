@@ -67,6 +67,11 @@ class Settings(BaseSettings):
     outbox_relay_batch_size: int = Field(default=200, alias="OUTBOX_RELAY_BATCH_SIZE")
 
     # ---- Scheduler / job recovery (Module 20 §6; INF-03/INF-09) ----
+    # The maintenance tick also drives the outbox relay, so it bounds how long a
+    # completed worker step waits before its resource.changed reaches SSE. 30s is
+    # the right cadence for a production sweep; a hermetic E2E stack lowers it so
+    # a four-step async lifecycle is not four consecutive tick waits.
+    scheduler_tick_seconds: float = Field(default=30.0, alias="SCHEDULER_TICK_SECONDS")
     job_stale_after_seconds: int = Field(default=600, alias="JOB_STALE_AFTER_SECONDS")
     job_redeliver_grace_seconds: int = Field(default=600, alias="JOB_REDELIVER_GRACE_SECONDS")
 

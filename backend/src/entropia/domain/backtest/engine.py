@@ -59,16 +59,31 @@ from __future__ import annotations
 
 from collections import deque
 from collections.abc import Iterator
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal, InvalidOperation
-from math import sqrt
 from typing import TYPE_CHECKING, Any
 
 from entropia.domain.allocation.enums import CompoundingMode
 from entropia.domain.backtest.capabilities import (
     capabilities_are_modelled,
     future_dev_selections,
+)
+from entropia.domain.backtest.execution.constants import (
+    _HUNDRED,
+    _MONEY,
+    _ONE,
+    _PCT,
+    _QTY,
+    _RATIO,
+    _ZERO,
+)
+from entropia.domain.backtest.execution.sizing import (
+    _cap_to_sleeve,
+    _leverage_multiplier,
+    _position_size,
+    _sizing_is_honored,
+    leverage_is_modelled,
 )
 from entropia.domain.backtest.funding import FundingSchedule, parse_utc
 from entropia.domain.backtest.indicators import (
@@ -85,20 +100,11 @@ from entropia.shared.errors import FundingSourceInvalid
 
 if TYPE_CHECKING:
     from entropia.domain.strategy.config import (
-        PositionSizeLimits,
-        PositionSizing,
         RestrictionFilter,
         StopOrderDetails,
         StrategyConfig,
     )
 
-_MONEY = Decimal("0.01")
-_PCT = Decimal("0.0001")
-_RATIO = Decimal("0.01")
-_QTY = Decimal("0.00000001")
-_HUNDRED = Decimal("100")
-_ZERO = Decimal("0")
-_ONE = Decimal("1")
 
 # Rolling look-back for the TEST-ONLY breakout entry/exit fixture (F-04). A constant of
 # the engine version (part of the reproducibility contract via ``engine_version``), NOT a
@@ -512,139 +518,6 @@ def _effective_fill(
     adjusted = price + half_spread if is_buy else price - half_spread
     factor = Decimal("1") + slip if is_buy else Decimal("1") - slip
     return (adjusted * factor).quantize(_MONEY)
-
-
-def _decimal_param(params: dict[str, Any], key: str) -> Decimal | None:
-    """Best-effort ``Decimal`` from a free-form ``formula_params`` entry.
-
-    Returns ``None`` when the key is absent, the value cannot be parsed as a number,
-    or it parses to a NON-FINITE ``Decimal`` (``NaN`` / ``Infinity``). ``str()`` first
-    so a non-numeric value fails closed rather than a ``Decimal`` coercion surprise;
-    the finiteness guard is load-bearing because ``formula_params`` is an unvalidated
-    ``dict[str, Any]`` — a user-supplied ``"nan"`` constructs a quiet ``Decimal('NaN')``
-    without error but then RAISES ``InvalidOperation`` on the ordered comparisons in
-    the caller (crashing the run), and an ``"Infinity"`` payoff would otherwise be
-    silently honoured as a real edge. Both must fail closed to notional + the L4
-    warning instead."""
-    if key not in params:
-        return None
-    try:
-        value = Decimal(str(params[key]))
-    except (InvalidOperation, ValueError, TypeError):
-        return None
-    return value if value.is_finite() else None
-
-
-def _kelly_capital_fraction(sizing: PositionSizing) -> Decimal | None:
-    """Fractional-Kelly capital fraction for a ``kelly_criterion`` formula config.
-
-    Grounded, deterministic and path-INDEPENDENT: the win probability ``W``, the
-    payoff ratio ``R`` (average win / average loss) and the optional fractional-Kelly
-    multiplier all come from the strategy's own ``formula_params`` — user-supplied
-    edge estimates, NOT statistics estimated from the running backtest's realized
-    trades. That adaptive form is deliberately DEFERRED: estimating ``W`` / ``R`` from
-    outcomes-so-far is path-dependent and look-ahead-prone, so it is not modelled here
-    (the honest boundary, symmetric with ``risk_based`` reading fixed config
-    constants). Kelly capital fraction::
-
-        f* = kelly_fraction * (W - (1 - W) / R)
-
-    clamped at the LOWER bound to 0 — a non-positive edge yields 0 (do not trade),
-    never a negative (bet-against-the-edge) size. No upper clamp is needed: since
-    ``(1 - W) / R >= 0`` and ``W < 1``, the edge is always ``< 1`` and so is ``f*``.
-    An absent ``kelly_fraction`` defaults to full Kelly (``1``); a present but
-    unparseable / non-finite / out-of-range one fails closed. Returns ``None`` when
-    the config is not a modelled ``kelly_criterion`` request (``custom_formula``, or a
-    missing / non-finite / out-of-range ``W`` / ``R`` / explicit ``kelly_fraction``),
-    so the caller falls back to notional sizing and surfaces the L4 diagnostics
-    warning."""
-    formula = sizing.formula_based
-    if sizing.method != "formula_based_sizing" or formula is None:
-        return None
-    if formula.formula_type != "kelly_criterion":
-        return None  # custom_formula: no safe arbitrary-expression evaluation
-    win = _decimal_param(formula.formula_params, "win_probability")
-    payoff = _decimal_param(formula.formula_params, "payoff_ratio")
-    if win is None or payoff is None or not (_ZERO < win < _ONE) or payoff <= _ZERO:
-        return None
-    if "kelly_fraction" not in formula.formula_params:
-        fraction = _ONE  # ABSENT → full Kelly (the documented default)
-    else:
-        # PRESENT: must be a valid finite multiplier in (0, 1]. An unparseable /
-        # non-finite / out-of-range value fails closed to notional — never silently
-        # upgraded to the most aggressive (full-Kelly) sizing.
-        parsed = _decimal_param(formula.formula_params, "kelly_fraction")
-        if parsed is None or not (_ZERO < parsed <= _ONE):
-            return None
-        fraction = parsed
-    edge = win - (_ONE - win) / payoff
-    return max(fraction * edge, _ZERO)
-
-
-def _sizing_is_honored(config: StrategyConfig) -> bool:
-    """Whether the requested sizing method is modelled by this engine version.
-
-    ``base_position_size`` (explicit size), ``risk_based_sizing`` (a fixed % of equity
-    risked across the stop distance) and ``formula_based_sizing`` with a valid
-    ``kelly_criterion`` config are honored. A ``formula_based_sizing`` request that is
-    ``custom_formula`` or carries missing / out-of-range Kelly params — and a
-    ``risk_based_sizing`` request that carries no ``risk_based`` sub-config — are not
-    modelled and FAIL CLOSED: the engine opens no position for them (F-09), surfaced
-    as a diagnostics warning, never hidden — L4."""
-    sizing = config.position_sizing
-    if sizing.method == "base_position_size" and sizing.base_position_size is not None:
-        return True
-    if sizing.method == "risk_based_sizing" and sizing.risk_based is not None:
-        return True
-    return _kelly_capital_fraction(sizing) is not None
-
-
-def sizing_is_modelled(config: StrategyConfig) -> bool:
-    """Public predicate: is this strategy's position sizing modelled by the engine?
-
-    The single shared source of truth for "modelled sizing", imported by the readiness
-    validator so Ready Check's ``STRATEGY_SIZING_UNSUPPORTED`` blocker and the engine's
-    fail-closed ``_open`` gate agree on exactly one definition — an unsupported method
-    is blocked at Ready Check AND opens no position if a stale readiness state slips
-    through to the worker (F-09)."""
-    return _sizing_is_honored(config)
-
-
-# §10.2 Exposure & leverage (post-V1 (f), Master Ref §10.2). 'No Leverage' normalizes to
-# 1x regardless of the saved ``leverage`` value (spec: "No Leverage modunda 1x olarak
-# normalize edilir"). 'Isolated' applies the saved positive multiplier directly to this
-# position's computed size — the single-position bar-replay engine already isolates each
-# position's risk to itself (nothing else is open concurrently to share margin with),
-# which is exactly what isolated-margin semantics require. 'Cross' shares margin/risk
-# across concurrently open positions via a portfolio-level risk model the engine does not
-# implement (Master Ref §10.2: cross-margin logic depends on the Equity Allocation /
-# portfolio risk model) — NOT modelled, fails closed rather than silently degrading to
-# isolated semantics.
-def leverage_is_modelled(config: StrategyConfig) -> bool:
-    """Public predicate: is this strategy's leverage configuration modelled (F-07f)?
-
-    The single shared source of truth for the readiness ``STRATEGY_LEVERAGE_UNSUPPORTED``
-    blocker and the engine's fail-closed entry gate. 'No Leverage' is always modelled
-    (normalizes to 1x); 'Isolated' is modelled when the saved ``leverage`` multiplier is
-    a positive value (schema-enforced ``gt=0``, re-checked here defensively); 'Cross' is
-    never modelled — blocked at Ready Check AND opens no position if a stale readiness
-    state slips through to the worker (never a silently un-leveraged or mis-leveraged
-    run)."""
-    sizing = config.position_sizing
-    if sizing.leverage_mode == "no_leverage":
-        return True
-    if sizing.leverage_mode == "cross":
-        return False
-    return sizing.leverage > _ZERO
-
-
-def _leverage_multiplier(config: StrategyConfig) -> Decimal:
-    """The resolved leverage multiplier (only called once ``leverage_is_modelled`` has
-    gated position opening, so every branch here is safe/defined)."""
-    sizing = config.position_sizing
-    if sizing.leverage_mode == "no_leverage":
-        return _ONE
-    return Decimal(sizing.leverage)
 
 
 # §10.3 Signal Strength Sizing (F-07g, Master Ref §10.3). ``no_adjustment`` is inert (a 1x
@@ -1134,103 +1007,6 @@ def _limit_price(price_rule: str, reference: Decimal, offset: Decimal) -> Decima
     return reference
 
 
-def _clamp_to_limits(size: Decimal, limits: PositionSizeLimits | None) -> Decimal:
-    """Clamp a computed size to the strategy's configured min/max position caps (§6).
-
-    A no-op when no ``position_size_limits`` are configured OR the size is already
-    non-positive: ``0`` is the fail-closed "do not open" sentinel returned by
-    ``_raw_position_size`` (bust equity / non-positive entry price), and a ``min`` cap
-    must NOT resurrect it into a live position, nor may a stray negative be lifted
-    positive. A misconfigured window (``min > max`` — no size can satisfy both) fails
-    closed to ``0`` rather than silently honouring one bound and violating the other.
-    Only a genuinely positive size is pulled DOWN to ``max`` then UP to ``min``; the
-    final ``max(., 0)`` also neutralises a nonsensical negative cap. Caps are in the
-    same UNITS as the size (contracts/coins), applied verbatim (unquantized) — mirrors
-    the unquantized ``base_position_size`` branch."""
-    if limits is None or size <= _ZERO:
-        return size
-    minimum = limits.min_position_size
-    maximum = limits.max_position_size
-    if minimum is not None and maximum is not None and minimum > maximum:
-        return _ZERO
-    if maximum is not None and size > maximum:
-        size = maximum
-    if minimum is not None and size < minimum:
-        size = minimum
-    return max(size, _ZERO)
-
-
-def _raw_position_size(config: StrategyConfig, entry_price: Decimal, equity: Decimal) -> Decimal:
-    """Deterministic sizing: explicit base size, risk-based, Kelly, else fail closed.
-
-    ``base_position_size`` returns the explicit size. ``risk_based_sizing`` risks a
-    fixed % of (non-negative) equity across the configured stop distance —
-    ``size = equity * risk% / 100 / stop_loss_point`` — and is therefore independent
-    of the entry price. ``formula_based_sizing`` with a valid ``kelly_criterion`` config
-    allocates a fractional-Kelly slice of (non-negative) equity —
-    ``size = equity * f* / entry_price`` — and is therefore entry-price DEPENDENT
-    (Kelly sizes a fraction of CAPITAL; converting that to units divides by price),
-    unlike risk-based. An unmodelled formula (``custom_formula`` / bad params) and any
-    request missing its sub-config FAIL CLOSED to size 0 — never an all-in notional
-    (F-09; surfaced as a diagnostics warning, L4). Every branch clamps to NON-NEGATIVE
-    equity: a bust
-    account yields size 0, never a negative size — a negative size would invert the
-    PnL sign of every subsequent trade (review CRITICAL). The result is then clamped
-    to the configured ``position_size_limits`` by ``_position_size``."""
-    sizing = config.position_sizing
-    if sizing.method == "base_position_size" and sizing.base_position_size is not None:
-        return Decimal(sizing.base_position_size)
-    usable_equity = max(equity, _ZERO)
-    if sizing.method == "risk_based_sizing" and sizing.risk_based is not None:
-        risk = sizing.risk_based
-        if risk.stop_loss_point > _ZERO:
-            risk_capital = usable_equity * risk.risk_percentage_per_trade / _HUNDRED
-            return (risk_capital / risk.stop_loss_point).quantize(_QTY)
-        return _ZERO
-    kelly = _kelly_capital_fraction(sizing)
-    if kelly is not None:
-        if entry_price > _ZERO:
-            return (usable_equity * kelly / entry_price).quantize(_QTY)
-        return _ZERO
-    # F-09 (fail closed): the requested sizing method is NOT modelled by this engine
-    # version (``custom_formula``, out-of-range / missing Kelly params, or a request
-    # missing its sub-config). It opens NO position — the account is never "all-in'd"
-    # by dividing all available equity by the entry price (the prior behaviour, which
-    # could fabricate a full-notional trade for a strategy the user never validly
-    # configured). Ready Check raises a ``STRATEGY_SIZING_UNSUPPORTED`` blocker so this
-    # state cannot reach a real RUN; ``run_engine`` additionally refuses to open any
-    # position when the sizing is unmodelled, so a stale/bypassed readiness state
-    # reaching the worker still produces a financially inert run. The divergence is
-    # surfaced (L4) via the ``position_sizing_method_unsupported`` diagnostics warning.
-    return _ZERO
-
-
-def _position_size(
-    config: StrategyConfig,
-    entry_price: Decimal,
-    equity: Decimal,
-    strength: Decimal = _ONE,
-) -> Decimal:
-    """Deterministic sizing (see ``_raw_position_size``), scaled by the leverage
-    multiplier (§10.2, post-V1 (f) — a leveraged strategy controls MORE notional per
-    unit of computed capital, so the multiplier scales the SIZE itself, which scales
-    every downstream notional/exposure/PnL figure with it) and by the signal-strength
-    multiplier (§10.3, F-07g — the SIGNAL bar's strength scales every signal-driven
-    entry size; 1x for non-signal callers), then clamped to the configured
-    ``position_size_limits`` min/max caps (§6). All three apply uniformly to EVERY
-    sizing method — base, risk-based, Kelly and the notional fallback — so a global
-    cap, leverage and strength are honoured regardless of which sizing path produced
-    the size, and the LIMITS remain the final word (a strength-boosted size is still
-    capped). Only called once ``leverage_is_modelled`` / ``signal_strength_is_modelled``
-    have gated position opening, so both multipliers are always well-defined here. A 1x
-    multiplier and a missing limits subtree are both no-ops, so behaviour is
-    byte-identical to the pre-wiring engine."""
-    size = _raw_position_size(config, entry_price, equity)
-    if size > _ZERO:
-        size = size * _leverage_multiplier(config) * strength
-    return _clamp_to_limits(size, config.position_sizing.position_size_limits)
-
-
 def _safe_decimal(value: Any) -> Decimal | None:
     """Best-effort finite ``Decimal`` from an untyped JSON snapshot cell, else ``None``.
 
@@ -1388,20 +1164,6 @@ def build_prior_intervals(
             )
         )
     return tuple(out)
-
-
-def _cap_to_sleeve(desired: Decimal, sleeve_capital: Decimal, entry_price: Decimal) -> Decimal:
-    """Clamp a desired size to the sleeve's remaining capacity (doc 13 §8.3/§8.4 step 5).
-
-    ``allowed_size = min(desired, remaining_sleeve_capacity / entry_price)``. The engine
-    holds at most one position at a time, so when it opens, the item's deployed capital
-    is 0 and the FULL sleeve is available (the single-item foundation — a genuine
-    multi-item co-simulation over a unified clock stays deferred). A non-positive sleeve
-    or entry price yields 0 (the item is unallocated / cannot fill)."""
-    if sleeve_capital <= _ZERO or entry_price <= _ZERO:
-        return _ZERO
-    cap_units = (sleeve_capital / entry_price).quantize(_QTY)
-    return min(desired, cap_units)
 
 
 def _pct_stop_level(
@@ -4649,544 +4411,15 @@ def run_engine(
     )
 
 
-_DIAG_SUM_KEYS = (
-    "bars_processed",
-    "indicator_blocks",
-    "condition_blocks",
-    "multi_timeframe_blocks",
-    "per_condition_timeframe_conditions",
-    "nary_reference_conditions",
-    "vwap_blocks",
-    "stop_exit_collisions",
-    "deferred_entry_fills",
-    "deferred_exit_fills",
-    "logic_stop_triggers",
-    "funding_charges",
-    "tick_bars",
-    "tick_first_trigger_resolutions",
-    "tick_resolved_entry_fills",
-    "partial_fills",
-    "same_bar_stop_limit_fills",
-    "touch_orders_placed",
-    "touch_exit_fills",
-    "portfolio_conflict_blocked_entries",
-    "portfolio_exposure_blocked_entries",
-    "portfolio_exposure_clamped_entries",
-)
-
-# Sequential composite curve is NOT a unified-clock portfolio valuation (each strategy
-# still replays over its own bar axis, then its realized PnL is concatenated onto the
-# portfolio equity in deterministic pin order). A genuine multi-item co-simulation over
-# one clock across heterogeneous bar sources stays deferred — surfaced, never hidden (L4).
-COMPOSITION_CURVE_WARNING = "portfolio_curve_sequential_not_unified_clock"
-
 # Portfolio-level rules enforce FORWARD-only in deterministic pin order: a later-pinned
 # item replays against the earlier items' completed held windows, and an earlier item is
 # never re-simulated because of a later one (a genuine unified-clock co-simulation stays
-# deferred — the COMPOSITION_CURVE_WARNING boundary). Emitted on every rules-active run
-# so the precedence is auditable (L4), never an implicit assumption.
+# deferred — the ``execution.portfolio.COMPOSITION_CURVE_WARNING`` boundary). Emitted on
+# every rules-active run so the precedence is auditable (L4), never an implicit assumption.
 PORTFOLIO_RULES_SEQUENTIAL_WARNING = "portfolio_rules_sequential_pin_order_precedence"
-
-# Contribution (doc 01 / video 3:35 — "what does an item add to the universe").
-# Marginal deltas cover the pure performance metrics; ``initial_capital`` and
-# ``final_equity`` stay OUT of the delta set because under independent allocation the
-# without-item portfolio also starts with less capital, so their raw difference mixes
-# the capital change into the performance change (they remain readable in
-# ``without_item`` verbatim).
-_CONTRIBUTION_DELTA_KEYS = (
-    "net_profit",
-    "net_profit_pct",
-    "max_drawdown",
-    "max_drawdown_pct",
-    "romad",
-    "win_rate",
-    "profit_factor",
-    "total_trades",
-    "total_stops",
-    "max_stop_streak",
-    "total_winning_trades",
-)
-
-
-def _fold_composite_metrics(runs: list[ItemRun], initial: Decimal) -> dict[str, Any]:
-    """Numeric core of the ``combine_item_runs`` fold — same order, same rebasing.
-
-    Re-folds the supplied runs' EXISTING per-item outputs into the composite summary
-    metric set without building trade/event/curve lists. Because each item's bar-replay
-    is independent of the other items, calling this over a leave-one-out subset yields
-    exactly what a real engine re-RUN of the composition-without-that-item would report
-    (the INF-04 reuse: the "second run" is this cheap in-memory fold, never a
-    re-simulation). Pinned against ``combine_item_runs`` drift by the unit test that
-    compares this fold over the remaining items to an actual ``combine_item_runs`` call.
-    """
-    initial = initial.quantize(_MONEY)
-    peak = initial
-    running_net = _ZERO
-    max_dd = _ZERO
-    winners = 0
-    stops = 0
-    stop_streak = 0
-    max_stop_streak = 0
-    gross_profit = _ZERO
-    gross_loss = _ZERO
-    total_trades = 0
-    for run in runs:
-        out = run.output
-        if out is None:
-            continue
-        run_initial = _dec(out.summary["initial_capital"])
-        base = initial + running_net
-        for idx, trade in enumerate(out.trades):
-            total_trades += 1
-            if trade.pnl > _ZERO:
-                winners += 1
-                gross_profit += trade.pnl
-            else:
-                gross_loss += -trade.pnl
-            if trade.exit_reason == "stop_loss":
-                stops += 1
-                stop_streak += 1
-                max_stop_streak = max(max_stop_streak, stop_streak)
-            else:
-                stop_streak = 0
-            run_point = out.equity_points[idx + 1]
-            portfolio_equity = (base + (run_point.equity - run_initial)).quantize(_MONEY)
-            peak = max(peak, portfolio_equity)
-            max_dd = max(max_dd, (peak - portfolio_equity).quantize(_MONEY))
-        running_net += _dec(out.summary["net_profit"])
-    final_equity = (initial + running_net).quantize(_MONEY)
-    net_profit = running_net.quantize(_MONEY)
-    net_profit_pct = (net_profit / initial * _HUNDRED).quantize(_PCT) if initial > _ZERO else None
-    max_drawdown_pct = (
-        (max_dd / peak * _HUNDRED).quantize(_PCT) if peak > _ZERO else _ZERO.quantize(_PCT)
-    )
-    win_rate = (
-        (Decimal(winners) / Decimal(total_trades) * _HUNDRED).quantize(_PCT)
-        if total_trades
-        else None
-    )
-    profit_factor = (gross_profit / gross_loss).quantize(_RATIO) if gross_loss > _ZERO else None
-    romad = (
-        (net_profit_pct / max_drawdown_pct).quantize(_RATIO)
-        if net_profit_pct is not None and max_drawdown_pct > _ZERO
-        else None
-    )
-    return {
-        "initial_capital": initial,
-        "final_equity": final_equity,
-        "net_profit": net_profit,
-        "net_profit_pct": net_profit_pct,
-        "max_drawdown": max_dd.quantize(_MONEY),
-        "max_drawdown_pct": max_drawdown_pct,
-        "romad": romad,
-        "win_rate": win_rate,
-        "profit_factor": profit_factor,
-        "total_trades": total_trades,
-        "total_stops": stops,
-        "max_stop_streak": max_stop_streak,
-        "total_winning_trades": winners,
-    }
-
-
-def _pearson(xs: list[float], ys: list[float]) -> float | None:
-    """Pearson r; ``None`` (never fabricated) below 2 points or on zero variance."""
-    n = len(xs)
-    if n < 2:
-        return None
-    mean_x = sum(xs) / n
-    mean_y = sum(ys) / n
-    cov = sum((x - mean_x) * (y - mean_y) for x, y in zip(xs, ys, strict=True))
-    var_x = sum((x - mean_x) ** 2 for x in xs)
-    var_y = sum((y - mean_y) ** 2 for y in ys)
-    if var_x <= 0.0 or var_y <= 0.0:
-        return None
-    return cov / sqrt(var_x * var_y)
-
-
-def _correlation_block(executing: list[ItemRun]) -> dict[str, Any]:
-    """Pairwise Pearson correlation of the items' per-trade realized-PnL series.
-
-    Each executing item's series is its realized trade PnL keyed by trade close time
-    (same-time closes summed), on the item's OWN capital basis. Series are aligned on
-    the sorted union of all close times; a time where an item closed nothing
-    contributes 0 (no position change realizes no PnL — not an imputed value). Cells
-    with fewer than 2 aligned points or a zero-variance series are null.
-    """
-    series: list[dict[str, Decimal]] = []
-    for run in executing:
-        assert run.output is not None  # callers pass executing runs only
-        by_close: dict[str, Decimal] = {}
-        for trade in run.output.trades:
-            by_close[trade.exit_time] = by_close.get(trade.exit_time, _ZERO) + trade.pnl
-        series.append(by_close)
-    axis = sorted({ts for s in series for ts in s})
-    vectors = [[float(s.get(ts, _ZERO)) for ts in axis] for s in series]
-    matrix: list[list[str | None]] = []
-    pair_total = 0.0
-    pair_count = 0
-    for i, vi in enumerate(vectors):
-        row: list[str | None] = []
-        for j, vj in enumerate(vectors):
-            r = _pearson(vi, vj)
-            row.append(None if r is None else f"{r:.4f}")
-            if r is not None and i < j:
-                pair_total += r
-                pair_count += 1
-        matrix.append(row)
-    return {
-        "item_ids": [run.item_id for run in executing],
-        "aligned_point_count": len(axis),
-        "matrix": matrix,
-        "average_pairwise": f"{pair_total / pair_count:.4f}" if pair_count else None,
-    }
-
-
-def _contribution_block(
-    executing: list[ItemRun],
-    *,
-    portfolio_initial: Decimal,
-    shared_pool: bool,
-    full_summary: dict[str, Any],
-) -> dict[str, Any]:
-    """The composition's Contribution analysis — computed ONCE at run time (server-side)
-    and persisted into the immutable Result artifact; the UI renders it verbatim.
-
-    * ``correlation`` — pairwise Pearson matrix over the per-item realized-PnL series.
-    * ``diversification`` — sum of the items' standalone max drawdowns vs the
-      portfolio's (sequential-fold) max drawdown; the reduction is the diversification
-      benefit of not suffering every strategy's worst stretch at once.
-    * ``marginal`` — per item: the full composition re-folded WITHOUT the item
-      (remaining items' own deterministic bar-replay outputs REUSED, not re-simulated —
-      each item's simulation is independent of the others, the INF-04 reuse that makes
-      the "second run" cheap) + ``delta = full - without`` per metric. Under the shared
-      pool the without-run keeps the same P0; under independent capital it starts from
-      the remaining items' summed capital.
-    """
-    correlation = _correlation_block(executing)
-    item_dds = [
-        _dec(run.output.summary.get("max_drawdown") or _ZERO)
-        for run in executing
-        if run.output is not None
-    ]
-    sum_item_dd = sum(item_dds, _ZERO).quantize(_MONEY)
-    portfolio_dd = _dec(full_summary["max_drawdown"])
-    marginal: list[dict[str, Any]] = []
-    for excluded in executing:
-        remaining = [run for run in executing if run.item_id != excluded.item_id]
-        if shared_pool:
-            loo_initial = portfolio_initial
-        else:
-            loo_initial = sum(
-                (
-                    _dec(run.output.summary["initial_capital"])
-                    for run in remaining
-                    if run.output is not None
-                ),
-                _ZERO,
-            )
-        without = _fold_composite_metrics(remaining, loo_initial)
-        delta = {
-            key: (
-                None
-                if full_summary.get(key) is None or without.get(key) is None
-                else full_summary[key] - without[key]
-            )
-            for key in _CONTRIBUTION_DELTA_KEYS
-        }
-        marginal.append({"item_id": excluded.item_id, "without_item": without, "delta": delta})
-    return {
-        "method": {
-            "correlation": (
-                "Pearson correlation of per-trade realized PnL aligned on the union of "
-                "trade close times (a time with no closed trade contributes 0), each "
-                "series on the item's own capital basis. Cells with fewer than 2 "
-                "aligned points or a zero-variance series are null, never fabricated."
-            ),
-            "marginal": (
-                "The composition re-folded WITHOUT the item over the remaining items' "
-                "own deterministic bar-replay outputs (reused, not re-simulated — each "
-                "item's simulation is independent of the others), in the same pin "
-                "order and capital-allocation rule. delta = full composition metric "
-                "minus without-item metric."
-            ),
-        },
-        "correlation": correlation,
-        "diversification": {
-            "sum_of_item_max_drawdowns": sum_item_dd,
-            "portfolio_max_drawdown": portfolio_dd,
-            "drawdown_reduction": (sum_item_dd - portfolio_dd).quantize(_MONEY),
-            "average_pairwise_correlation": correlation["average_pairwise"],
-        },
-        "marginal": marginal,
-    }
-
-
-def combine_item_runs(
-    runs: list[ItemRun],
-    *,
-    portfolio_initial_capital: Decimal,
-    execution_key: str,
-    item_count: int,
-    shared_pool: bool = False,
-) -> EngineOutput:
-    """Assemble ONE composite ``EngineOutput`` from every enabled item's run (F-04).
-
-    Every executing (Strategy) item's per-run output is folded into a single portfolio
-    result: trades are concatenated and re-sequenced, decision events are tagged with
-    their originating ``item_id`` and re-sequenced, and the portfolio equity curve is
-    built by applying each run's realized-PnL progression onto the shared portfolio
-    equity in the ORDER the runs are supplied (the worker supplies them in the
-    manifest's deterministic pin order, so the composite is reproducible). Realized
-    PnL is additive, so ``net_profit`` and the trade/decision sets are order-invariant;
-    only the drawdown of the concatenated curve depends on the (deterministic) order.
-
-    ``portfolio_initial_capital`` is the portfolio's starting capital: the shared pool
-    ``P0`` under shared allocation (taken ONCE — not summed, since each sleeve reports
-    the same pool), or the sum of the strategies' own ``initial_capital`` under
-    independent capital. Non-executing items (Trading Signal / Trade Log) contribute no
-    trades but ARE recorded in ``diagnostics.composition.items`` for traceability.
-
-    The caller keeps the single-strategy path byte-identical by NOT routing a lone
-    strategy through here; this function is for genuine multi-item compositions.
-    """
-    executing = [r for r in runs if r.output is not None]
-    combined_trades: list[TradeRow] = []
-    combined_events: list[SignalEventRow] = []
-    initial = portfolio_initial_capital.quantize(_MONEY)
-    combined_equity: list[EquityPoint] = [
-        EquityPoint(0, "", initial, _ZERO.quantize(_MONEY), _ZERO.quantize(_PCT))
-    ]
-    peak = initial
-    winners = 0
-    stops = 0
-    stop_streak = 0
-    max_stop_streak = 0
-    gross_profit = _ZERO
-    gross_loss = _ZERO
-    running_net = _ZERO
-    warnings: list[str] = []
-    symbols: set[Any] = set()
-    timeframes: set[Any] = set()
-    entry_models: set[str] = set()
-    diag_totals = dict.fromkeys(_DIAG_SUM_KEYS, 0)
-    per_item: list[dict[str, Any]] = []
-
-    for run in runs:
-        out = run.output
-        if out is None:
-            # A participating-but-non-executing object (Trading Signal / Trade Log):
-            # pinned + recorded, but no standalone V1 bar-replay (its effect is defined
-            # only as a Strategy data input). Recorded for traceability, never faked.
-            per_item.append(
-                {
-                    "item_id": run.item_id,
-                    "item_kind": run.item_kind,
-                    "root_id": run.root_id,
-                    "revision_id": run.revision_id,
-                    "executed": False,
-                    "symbol": None,
-                    "timeframe": None,
-                    "initial_capital": None,
-                    "final_equity": None,
-                    "net_profit": None,
-                    "net_profit_pct": None,
-                    "max_drawdown": None,
-                    "max_drawdown_pct": None,
-                    "total_trades": 0,
-                    "winning_trades": 0,
-                    "trade_seq_range": None,
-                    # A non-executing object runs no bar-replay → it HAS no equity curve
-                    # of its own (empty, never a fabricated flat line).
-                    "equity_curve": [],
-                    "note": "non_executing_participating_object",
-                }
-            )
-            continue
-        summary = out.summary
-        run_initial = _dec(summary["initial_capital"])
-        run_net = _dec(summary["net_profit"])
-        base = initial + running_net  # portfolio equity before this run's trades
-        lo_seq = len(combined_trades) + 1
-        run_winners = 0
-        for idx, trade in enumerate(out.trades):
-            seq = len(combined_trades) + 1
-            combined_trades.append(replace(trade, seq=seq))
-            if trade.pnl > _ZERO:
-                winners += 1
-                run_winners += 1
-                gross_profit += trade.pnl
-            else:
-                gross_loss += -trade.pnl
-            if trade.exit_reason == "stop_loss":
-                stops += 1
-                stop_streak += 1
-                max_stop_streak = max(max_stop_streak, stop_streak)
-            else:
-                stop_streak = 0
-            # Each closed trade has exactly one equity point (index +1 past the seed);
-            # rebase the run's realized equity onto the portfolio offset.
-            run_point = out.equity_points[idx + 1]
-            portfolio_equity = (base + (run_point.equity - run_initial)).quantize(_MONEY)
-            peak = max(peak, portfolio_equity)
-            drawdown = (peak - portfolio_equity).quantize(_MONEY)
-            combined_equity.append(
-                EquityPoint(
-                    seq=seq,
-                    timestamp=run_point.timestamp,
-                    equity=portfolio_equity,
-                    drawdown=drawdown,
-                    exposure=run_point.exposure,
-                )
-            )
-        hi_seq = len(combined_trades)
-        for event in out.signal_events:
-            combined_events.append(
-                SignalEventRow(
-                    seq=len(combined_events),
-                    event_time=event.event_time,
-                    event_type=event.event_type,
-                    direction=event.direction,
-                    # F-10: bind every decision-trace event to the exact executing item's
-                    # pinned object revision, so a reviewer resolves the rule id back to the
-                    # immutable Strategy/Package revision the run actually replayed.
-                    detail={
-                        **event.detail,
-                        "item_id": run.item_id,
-                        "root_id": run.root_id,
-                        "revision_id": run.revision_id,
-                    },
-                )
-            )
-        running_net += run_net
-        symbols.add(summary.get("symbol"))
-        timeframes.add(summary.get("timeframe"))
-        entry_models.add(str(out.diagnostics.get("entry_model")))
-        for key in _DIAG_SUM_KEYS:
-            diag_totals[key] += int(out.diagnostics.get(key) or 0)
-        warnings.extend(f"item:{run.item_id}:{w}" for w in out.diagnostics.get("warnings", []))
-        per_item.append(
-            {
-                "item_id": run.item_id,
-                "item_kind": run.item_kind,
-                "root_id": run.root_id,
-                "revision_id": run.revision_id,
-                "executed": True,
-                "symbol": summary.get("symbol"),
-                "timeframe": summary.get("timeframe"),
-                # Per-item basic metrics are the item's OWN standalone bar-replay figures
-                # (on its own ``initial_capital`` basis), NOT its portfolio-rebased slice —
-                # so a per-item drawdown/PnL is the strategy's isolated performance, exactly
-                # as if it had run alone. The composite (portfolio) figures live in
-                # ``summary_out``; these attribute each contribution back to its strategy.
-                "initial_capital": run_initial,
-                "final_equity": _dec(summary["final_equity"]),
-                "net_profit": run_net,
-                "net_profit_pct": summary.get("net_profit_pct"),
-                "max_drawdown": _dec(summary.get("max_drawdown") or _ZERO),
-                "max_drawdown_pct": summary.get("max_drawdown_pct"),
-                "total_trades": len(out.trades),
-                "winning_trades": run_winners,
-                "trade_seq_range": [lo_seq, hi_seq] if out.trades else None,
-                # The item's OWN equity curve (one seed point + one per closed trade, on its
-                # own capital basis). ``combine_item_runs`` previously discarded these and
-                # kept only the portfolio-rebased composite curve; persisting them lets the
-                # Result surface a per-strategy equity progression. Decimals stringify at
-                # the JSONB persist boundary (``_jsonable``).
-                "equity_curve": [
-                    {
-                        "seq": p.seq,
-                        "timestamp": p.timestamp,
-                        "equity": p.equity,
-                        "drawdown": p.drawdown,
-                    }
-                    for p in out.equity_points
-                ],
-            }
-        )
-
-    total_trades = len(combined_trades)
-    final_equity = (initial + running_net).quantize(_MONEY)
-    net_profit = running_net.quantize(_MONEY)
-    net_profit_pct = (net_profit / initial * _HUNDRED).quantize(_PCT) if initial > _ZERO else None
-    max_drawdown = max((p.drawdown for p in combined_equity), default=_ZERO)
-    max_drawdown_pct = (
-        (max_drawdown / peak * _HUNDRED).quantize(_PCT) if peak > _ZERO else _ZERO.quantize(_PCT)
-    )
-    win_rate = (
-        (Decimal(winners) / Decimal(total_trades) * _HUNDRED).quantize(_PCT)
-        if total_trades
-        else None
-    )
-    profit_factor = (gross_profit / gross_loss).quantize(_RATIO) if gross_loss > _ZERO else None
-    romad = (
-        (net_profit_pct / max_drawdown_pct).quantize(_RATIO)
-        if net_profit_pct is not None and max_drawdown_pct > _ZERO
-        else None
-    )
-    symbol = next(iter(symbols)) if len(symbols) == 1 else None
-    timeframe = next(iter(timeframes)) if len(timeframes) == 1 else None
-
-    summary_out: dict[str, Any] = {
-        "symbol": symbol,
-        "timeframe": timeframe,
-        "initial_capital": initial,
-        "final_equity": final_equity,
-        "net_profit": net_profit,
-        "net_profit_pct": net_profit_pct,
-        "max_drawdown": max_drawdown.quantize(_MONEY),
-        "max_drawdown_pct": max_drawdown_pct,
-        "romad": romad,
-        "win_rate": win_rate,
-        "profit_factor": profit_factor,
-        "total_trades": total_trades,
-        "total_stops": stops,
-        "max_stop_streak": max_stop_streak,
-        "total_winning_trades": winners,
-    }
-    if len(executing) > 1:
-        warnings.append(COMPOSITION_CURVE_WARNING)
-    composition: dict[str, Any] = {
-        "strategy_count": len(executing),
-        "participating_item_count": len(runs),
-        "capital_allocation": "shared_pool" if shared_pool else "independent",
-        "items": per_item,
-    }
-    if len(executing) > 1:
-        # Contribution needs at least two executing strategies: a correlation matrix is
-        # meaningless for one curve and "the composition without its only strategy" is
-        # an empty universe. Computed here (server-side, run time) so it is part of the
-        # immutable Result and the UI can only render it verbatim.
-        composition["contribution"] = _contribution_block(
-            executing,
-            portfolio_initial=initial,
-            shared_pool=shared_pool,
-            full_summary=summary_out,
-        )
-    diagnostics = {
-        "engine_kind": "v1_bar_replay_composition",
-        "entry_model": next(iter(entry_models)) if len(entry_models) == 1 else "mixed",
-        "reproducibility_note": (
-            "Deterministic per-strategy bar-replay over each pinned market revision, "
-            "composed in deterministic manifest pin order into one portfolio result."
-        ),
-        "item_count": item_count,
-        "decision_trace_count": len(combined_events),
-        "composition": composition,
-        "execution_key": execution_key,
-        "warnings": warnings,
-        **diag_totals,
-    }
-    return EngineOutput(
-        summary=summary_out,
-        trades=combined_trades,
-        equity_points=combined_equity,
-        signal_events=combined_events,
-        diagnostics=diagnostics,
-    )
 
 
 __all__ = [
-    "COMPOSITION_CURVE_WARNING",
     "DECISION_TRACE_EVENT_TYPES",
     "DECISION_TRACE_SCHEMA",
     "ENTRY_MODEL",
@@ -5198,7 +4431,6 @@ __all__ = [
     "SignalEventRow",
     "TradeRow",
     "UnresolvedStrategyError",
-    "combine_item_runs",
     "conflict_handling_is_modelled",
     "execution_timing_is_modelled",
     "order_execution_is_modelled",
@@ -5207,6 +4439,5 @@ __all__ = [
     "restrictions_are_modelled",
     "run_engine",
     "scaling_is_modelled",
-    "sizing_is_modelled",
     "tick_data_required",
 ]

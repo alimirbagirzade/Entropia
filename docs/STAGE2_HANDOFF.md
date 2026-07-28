@@ -2939,7 +2939,7 @@ değişti → execution_key namespace kaymalı).
 
 Tam kayıt: `docs/PROJECT_HISTORY.md` §"K-03 · Engine funding sırası".
 
-## Next: **PO imzası + R2 kapanışı** (değişmedi) · K-serisi kusur backlog'unda K-03 kapandı
+## Next: **PO imzası + R2 kapanışı** (değişmedi) · I-17 izlenebilirlik slice'ı landed (#416)
 
 K-serisi durumu: K-01 (#386) · K-02 (#393) · K-04 (#397) · K-05 (#387) · K-06 (#395) · K-07 (#388)
 landed; **K-03 bu slice ile landed (#398)**. Kalan tek büyük açık iş hâlâ **R2'nin product-owner
@@ -2976,54 +2976,3 @@ ağaçtan yeniden hesaplıyor.
 (2) `docs/audit/audit_report.md` repoda yok — doğrulama açıkça sayılan 19 kodla sınırlı, "25+"
 iddiasının kalanı hakkında bu kayıt hiçbir şey söylemiyor. (3) Lokal tam suite tek koşuda
 tamamlanamadı (ortam kaynaklı); integration'ın otoritesi #407 CI'ıdır (6/6 yeşil).
-## O-06 — CancelBacktestRun: controlled cancellation landed (PR #419, docs #420)
-
-**Ne getirdi.** Doc 15'in ilan ettiği ama koda hiç ulaşmamış terminal state'i gerçek kıldı.
-`BacktestRunState.CANCELLED` tanımlıydı (`domain/backtest/enums.py:26`) ve `RUN_RETRYABLE_STATES`'te
-listeliydi; `grep -i cancel` ile ampirik doğrulandığı üzere `commands/backtest_run.py` ve
-`routes/backtest.py` yalnız docstring/enum eşleşmesi veriyordu — o state'i **üretebilen tek bir yol
-yoktu**.
-
-- **Komut:** `commands/backtest_run.py::cancel_backtest_run` — owner/Admin (`ensure_can_edit`,
-  run'ın `requested_by_principal_id`'si), `expected_row_version` (body / sayısal `If-Match`),
-  `Idempotency-Key`.
-- **Endpoint:** `POST /backtest-runs/{run_id}/cancel` (202) — `/retries` desenini aynalar.
-- **Controlled cancellation:** QUEUED run komutta terminal olur; PROVISIONING/RUNNING run'da yalnız
-  **niyet** yazılır ve worker onu **dört O-05 stage sınırında** onurlandırır (sonuncusu
-  `create_result`'tan hemen önce — §16'yı fiilen garanti eden nokta). Yarış, worker'ın zaten yaptığı
-  okumada kilit alınarak kapatıldı (`bt_repo.get_run(..., for_update=True)`), worker tek round
-  trip'te kaldı. **Ani kill YOK.**
-- **Migration `0039_backtest_run_cancellation`** (alembic head **`0038_backtest_run_event` →
-  `0039_backtest_run_cancellation`**): `backtest_run`'a `cancel_requested_at`,
-  `cancel_requested_by_principal_id` (FK → `principals`), `cancellation_reason`. Cancel bilerek bir
-  **state değil** — doc 15 §4 state kümesini sabitler.
-- **Yeni hata:** `RunNotCancellableError` (409 `RUN_NOT_CANCELLABLE`, `LIFECYCLE`, retryable=false).
-- **O-12 entegrasyonu (rebase sırasında):** `origin/main` #414 ile ilerleyip aynı dosyaya
-  dokunduğu için cancel ucu **dual-token** kuralına uyarlandı — `reconcile_occ_tokens`, çelişki
-  → 409 `OCC_TOKEN_CONFLICT`. O-12 sözleşme testine eklendi (dual-token op **16 → 17**).
-- **Yeni tablo YOK. ENGINE_VERSION bump YOK. Frontend'e dokunulmadı.**
-
-**Test sayıları.** `tests/integration/test_backtest_run_cancellation.py` **13 test** (terminal
-CANCELLED + Result yok + Results History'de yok + teşhis erişilebilir · yabancı aktör 403 · terminal
-run 409 · stale row version · idempotency · L1 FK proof). Backtest grubu (cancellation + O-05 events
-+ persistence) **48/48**. Tam backend suite **exit 0**. ruff + format (623) + mypy (356) temiz.
-OpenAPI drift guard yeşil. **alembic 0039 up/down/up** + kolon paritesi doğrulandı.
-
-**Ertelenen / kapsam dışı (dürüst sınır).** Partial diagnostics `diagnostic_artifact` satırı olarak
-YAZILMAZ — o tablo `backtest_result`'a FK ile bağlı ve yalnız SUCCEEDED run Result yaratabilir
-(CR-03); teşhis `RUN_CANCELLED` olay `detail`'i + run projeksiyonu üzerinden erişilebilir. 4.
-checkpoint'ten sonra gelen cancel onurlandırılmaz (yayımlanan `cancellation_safe_boundary`
-sözleşmesi). `/cancel` için **UI yok**.
-
-## Next: **PO imzası + R2 kapanışı** (değişmedi) · O-serisi backlog'unda O-06 kapandı
-
-Blokaj hâlâ **product-owner imzası**: `docs/implementation/v18_final_acceptance.md` §4 (D-1…D-9).
-İmza olmadan `entropia_v18_remediation_status.md`'deki R2 RE-OPENING banner'ı kalkmaz.
-
-O-06 sonrası backtest RUN yüzeyinde açık kalan doğal devam adımları (hiçbiri bu slice'ın kapsamında
-değildi):
-1. **Cancel için UI** — Mainboard RUN kartında iptal düğmesi + `cancellation: "requested"` durumunun
-   gösterimi (doc 15 §6.1 "RUN cancelled error" metni zaten spec'te yazılı).
-2. **Retention/diagnostics** — cancelled run teşhisinin Result'a bağlı olmayan kalıcı bir artifact
-   yüzeyi istenirse, `diagnostic_artifact`'in FK'sini gevşetmek yerine run'a bağlı ayrı bir tablo
-   tasarlanmalı (şu an olay `detail`'i yeterli).

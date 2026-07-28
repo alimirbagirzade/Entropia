@@ -242,7 +242,7 @@ next to the passing RF-12 test so it cannot be silently lost.
 | `backend/tests/unit/test_trade_log_config.py` | ✅ 12/12 |
 | `backend/tests/unit/test_readiness_validators.py` | ✅ 45/45 |
 | `frontend/src/test/strategyForm.test.tsx` | ✅ 22/22 |
-| `backend/tests/integration/test_rationale_persistence.py` (RF-16) | ⚠️ **NOT EXECUTED** |
+| `backend/tests/integration/test_rationale_persistence.py` (RF-16) | ✅ **PASSED IN CI** — see resolution below |
 
 The RF-16 integration test **collects** (16 tests, imports resolve, ruff + mypy
 clean) but could not be **run**: this machine's PostgreSQL reports
@@ -260,7 +260,11 @@ Stale leaked connections older than 5 minutes were terminated; the limit persist
 because the parameter is `PGC_POSTMASTER` and needs a **server restart**, which was
 not performed since other sessions held active connections.
 
-**RF-16 must be treated as unverified until CI runs it.**
+**RESOLVED.** PR #416's `Backend — lint, type, test` job ran the integration suite against a
+real PostgreSQL and **passed** (28m38s,
+[run 30341329121](https://github.com/alimirbagirzade/Entropia/actions/runs/30341329121)).
+RF-16 is verified. The local limitation below is kept on record because it will recur on any
+machine with the default `max_locks_per_transaction` and parallel worktree sessions.
 
 To run it locally, raise the setting and restart PostgreSQL:
 

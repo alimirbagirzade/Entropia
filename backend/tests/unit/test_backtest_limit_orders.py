@@ -23,8 +23,10 @@ from typing import Any
 
 from entropia.domain.backtest.engine import (
     EngineOutput,
-    order_execution_is_modelled,
     run_engine,
+)
+from entropia.domain.backtest.execution.fills import (
+    order_execution_is_modelled,
 )
 from entropia.domain.strategy.config import StrategyConfig
 from tests.unit.engine_signal_plan import sma_entry_plan

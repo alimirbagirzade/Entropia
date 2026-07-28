@@ -13,7 +13,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from entropia.domain.backtest.engine import tick_data_required
+from entropia.domain.backtest.execution.fills import (
+    tick_data_required,
+)
 from entropia.domain.strategy.config import StrategyConfig
 
 

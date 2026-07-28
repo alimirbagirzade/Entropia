@@ -25,12 +25,14 @@ from entropia.domain.allocation.rules import AllocationIssue
 from entropia.domain.backtest.capabilities import future_dev_selections
 from entropia.domain.backtest.engine import (
     conflict_handling_is_modelled,
-    execution_timing_is_modelled,
-    order_execution_is_modelled,
     partial_close_is_modelled,
     restrictions_are_modelled,
     scaling_is_modelled,
     signal_strength_is_modelled,
+)
+from entropia.domain.backtest.execution.fills import (
+    execution_timing_is_modelled,
+    order_execution_is_modelled,
 )
 from entropia.domain.backtest.execution.sizing import (
     leverage_is_modelled,

@@ -25,7 +25,6 @@ from entropia.domain.backtest.engine import (
     ItemRun,
     SignalEventRow,
     TradeRow,
-    _dec,
 )
 from entropia.domain.backtest.execution.constants import (
     _HUNDRED,
@@ -34,6 +33,7 @@ from entropia.domain.backtest.execution.constants import (
     _RATIO,
     _ZERO,
 )
+from entropia.domain.backtest.execution.state import _dec
 
 _DIAG_SUM_KEYS = (
     "bars_processed",

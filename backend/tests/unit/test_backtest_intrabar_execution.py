@@ -17,15 +17,19 @@ from typing import Any
 
 from entropia.domain.backtest.engine import (
     EngineOutput,
-    _Bar,
+    run_engine,
+)
+from entropia.domain.backtest.execution.fills import (
     _first_tick_touch,
     _normalize_tick,
-    _Position,
     _resolve_stop,
     _Tick,
     _tick_epoch_ms,
     _TickCursor,
-    run_engine,
+)
+from entropia.domain.backtest.execution.state import (
+    _Bar,
+    _Position,
 )
 from entropia.domain.backtest.manifest import build_run_manifest
 from entropia.domain.strategy.config import StrategyConfig

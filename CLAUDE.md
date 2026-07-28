@@ -150,20 +150,23 @@ Before stopping a working session, produce **ALL** of the following:
   V18-R2 dalgası + **auth remediation dalgası COMPLETE** (güvenlik denetimi #346–#364).
   Tüm route yüzeyleri frontend'e bağlı; TIER 2 sayfa haritası 24/24.
 
-- **alembic head:** **`0038_backtest_run_event`** (38 migration, tek head).
-  **`ENGINE_VERSION` = `backtest-engine-v18-funding-step-order`** (`manifest.py:83`; K-03'te bump
-  edildi, öncesi K-04 `-full-pinning`, K-02 `-available-time-gate`).
+- **alembic head:** **`0039_backtest_run_cancellation`** (39 migration, tek head; O-06'da eklendi —
+  öncesi `0038_backtest_run_event`). **`ENGINE_VERSION` = `backtest-engine-v18-funding-step-order`**
+  (`manifest.py:83`; K-03'te bump edildi, öncesi K-04 `-full-pinning`, K-02 `-available-time-gate`;
+  **O-05/O-06 bump ETMEDİ**).
 - **Son dalga — O-serisi (spec-uyum kusurları):** O-01 (#403) · O-02 (#400) · **O-03 (#407 + #413;
-  #408 boş merge oldu, içeriğini #413 yeniden indirdi)** · O-04 (#405) · O-05 (#412) · O-08 (#406)
-  · O-09 (#410) · O-10 (#402) · O-15 (#409) landed;
-  **#414 (O-12/O-13/O-18 — OCC + Idempotency disiplini) AÇIK.** Öncesi: K-serisi (#386–#398).
-- **Testler:** son yeşil referans CI 6/6 (O-serisi PR'ları). Lokal tam suite tek koşuda
-  tamamlanamayabilir (ortam kaynaklı) — **otorite CI'dır.**
+  #408 boş merge oldu, içeriğini #413 yeniden indirdi)** · O-04 (#405) · O-05 (#412) ·
+  **O-06 (#419 — CancelBacktestRun, migration `0039`)** · O-08 (#406) · O-09 (#410) · O-10 (#402) ·
+  **O-12/O-13/O-18 (#414 — OCC + Idempotency disiplini) landed** · O-15 (#409).
+  Öncesi: K-serisi (#386–#398).
+- **Testler:** son yeşil referans CI (O-serisi PR'ları). Lokal tam suite tek koşuda
+  tamamlanamayabilir (ortam kaynaklı — paralel worktree oturumları CPU paylaşıyor) —
+  **otorite CI'dır.**
   Doğrula: `gh run list --branch main --limit 1` → job log.
-  **Ortam tuzağı:** paralel worktree oturumları paylaşılan `entropia_test` DB'sini ezer
-  (conftest her testte `drop_all`/`create_all`) — `TEST_DATABASE_URL` ile izole DB kullan.
-  Tam suite koşusunu **ortada öldürme**: artakalan bağlantılar DDL'i `ACCESS EXCLUSIVE`
-  lock-wait'e sokar ve sonraki koşuda düzinelerce sahte FAILED üretir (O-02'de 51 tane).
+  **Ortam tuzağı:** paralel worktree oturumları aynı anda koşuyor — `TEST_DATABASE_URL` ile
+  worktree'ye özel izole DB kullan (conftest her testte `drop_all`/`create_all`). Tam suite'i
+  **tek pytest çağrısında** koş ve **ortada öldürme**: arka arkaya iki çağrı ya da yarıda kesilmiş
+  bir koşu, artakalan bağlantılar yüzünden sonraki koşuda sahte FAILED/ERROR üretir.
 
 
 

@@ -1,7 +1,7 @@
 # DATA_MODEL — Postgres tabloları
 
 Modeller: `backend/src/entropia/infrastructure/postgres/models/*.py` (30 dosya, **102 tablo**).
-Alembic: `backend/alembic/versions/` — **head = `0038_backtest_run_event`** (38 migration).
+Alembic: `backend/alembic/versions/` — **head = `0039_backtest_run_cancellation`** (39 migration).
 
 > **Sayı tazeleme (2026-07-28, ampirik).** Tablo sayısı uzun süre **63** yazıyordu — gerçek
 > **102**. Yeniden üretmek için:

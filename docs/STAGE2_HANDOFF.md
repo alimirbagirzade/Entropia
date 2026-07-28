@@ -2950,3 +2950,29 @@ Ayrıca hâlâ açık: **F-07 raw-id presentation sweep kalıntısı** (empirik 
 **ortam tuzağı**: paralel worktree oturumları paylaşılan `entropia_test` DB'sini ezer —
 `TEST_DATABASE_URL` ile worktree'ye özel izole DB kullan.
 
+
+## O-03 — Hata kodu taksonomisi: 18 kod adjudicated, 2 ölü sınıf silindi (PR #407)
+
+**Ne landed.** Denetimin "25+ spec-kanonik hata kodu yok veya farklı isimde" bulgusu tek tek
+ampirik sınandı. **19/19 kod gerçekten 0 hit** — ama davranışları zaten fail-closed uygulanmış,
+yalnız farklı adla. **Hiçbir kod adı değiştirilmedi**; sapmalar `docs/PROJECT_HISTORY.md` §O-03'te
+tam tablo halinde adjudicate edildi (K-07 içtihadı). PR #407 iki ölü sınıfı sildi
+(`PrecheckAlreadyRunning`, `DeletePolicyBlocked`) ve bir ratchet testi ekledi. **Migration YOK.**
+
+**Denetimin üç yanlışı.** `TICK_DATA_UNAVAILABLE` ölü değil (2 emit + 5 assertion);
+`MetricAvailability.NOT_COMPUTED` emit ediliyor; TIMEZONE üçlüsünü "tek ada indirmek" reddedildi —
+`TIMEZONE_REQUIRED` (timezone **yok**, HTTP envelope) ile `TIMEZONE_INVALID` (timezone **var ama
+geçersiz**, TL-07 whole-file blocker) aynı kusur değil.
+
+**Review sırasında zemin kaydı — dikkat.** Üç bulgu, doğrulandıktan sonra paralel slice'lar main'e
+indiği için geçersizleşti: `PACKAGE_DEPENDENCY_CYCLE`'ı O-10 (#402) canonical adıyla ekledi;
+`PublicationState.REMOVED`'ı O-15 (#409) canlandırdı (silinmedi, geri kondu); O-02 (#400)
+`DeletePolicyBlocked`'a alan ekledi. Ayrıca **PR #408 boş merge oldu** — `aa75fca` çakışma çözümü
+144 satırın tamamını düşürdü, merge commit'i var içeriği yoktu; bu PR kaydı yeniden yazıyor.
+Ders: bu hızda bir main'de tek seferlik tarama yetmiyor — ratchet testi ölü kümeyi her koşuda
+ağaçtan yeniden hesaplıyor.
+
+**Açık iş.** (1) Kalan 5 ölü error sınıfı (`KNOWN_UNRAISED`) ayrı bir slice bekliyor.
+(2) `docs/audit/audit_report.md` repoda yok — doğrulama açıkça sayılan 19 kodla sınırlı, "25+"
+iddiasının kalanı hakkında bu kayıt hiçbir şey söylemiyor. (3) Lokal tam suite tek koşuda
+tamamlanamadı (ortam kaynaklı); integration'ın otoritesi #407 CI'ıdır (6/6 yeşil).

@@ -864,6 +864,12 @@ class _Ledger:
     because the object is immutable.
     """
 
+    # The account book. ``equity`` is what sizes an entry and what bounds the sleeve /
+    # exposure caps, so it is the loop's single most load-bearing running value;
+    # ``peak`` trails it for drawdown. Both start at the run's initial capital, which is
+    # only known inside ``run_engine`` — hence the 0 default and the explicit seeding.
+    equity: Decimal = _ZERO
+    peak: Decimal = _ZERO
     winners: int = 0
     stops_hit: int = 0
     stop_streak: int = 0
@@ -964,7 +970,6 @@ def run_engine(
     stop-conflict order by TRUE first touch instead of the flagged conservative
     approximation. ``None`` (the default) is BYTE-IDENTICAL to the pre-F-07i engine."""
     config = strategy_config
-    led = _Ledger()
     alloc_on = allocation is not None
     alloc_compound = False
     reserve_nominal = _ZERO
@@ -982,6 +987,8 @@ def run_engine(
         initial_capital = portfolio_pool
     else:
         initial_capital = Decimal(config.data.initial_capital).quantize(_MONEY)
+    # The account book opens at the run's initial capital; every other tally starts at 0.
+    led = _Ledger(equity=initial_capital, peak=initial_capital)
 
     # Portfolio-level rules (cross-item, doc 13 §8.4). The cap basis is the pinned
     # capital this run replays from: the shared pool P0 under allocation (the normal
@@ -1210,8 +1217,6 @@ def run_engine(
     stop_pairs = list(zip(stop_specs, stop_evals, strict=True))
     logic_enabled = [f"logic:{spec.block_id}" for spec in stop_specs]
 
-    equity = initial_capital
-    peak = initial_capital
     trades: list[TradeRow] = []
     equity_points: list[EquityPoint] = [
         EquityPoint(0, "", initial_capital, _ZERO.quantize(_MONEY), _ZERO.quantize(_PCT))
@@ -1388,7 +1393,6 @@ def run_engine(
         Commission is charged proportional to the fraction so N partial lots summing to the
         whole position pay exactly one round-trip. ``fraction >= 1`` is a full close, byte-
         identical to pre-F-07c (same event type + detail)."""
-        nonlocal equity, peak
         is_full = fraction >= _ONE
         close_size = pos.size if is_full else pos.size * fraction
         is_long = pos.direction == "long"
@@ -1399,10 +1403,10 @@ def run_engine(
         gross = (exit_eff - pos.entry_price) * close_size * sign
         commission_lot = commission * 2 if is_full else commission * 2 * fraction
         pnl = (gross - commission_lot).quantize(_MONEY)
-        equity_before = equity
-        equity = (equity + pnl).quantize(_MONEY)
-        peak = max(peak, equity)
-        drawdown = (peak - equity).quantize(_MONEY)
+        equity_before = led.equity
+        led.equity = (led.equity + pnl).quantize(_MONEY)
+        led.peak = max(led.peak, led.equity)
+        drawdown = (led.peak - led.equity).quantize(_MONEY)
         closed_notional = (pos.entry_price * close_size).quantize(_MONEY)
         exposure = (
             (closed_notional / equity_before * _HUNDRED).quantize(_PCT)
@@ -1445,7 +1449,7 @@ def run_engine(
             EquityPoint(
                 seq=seq,
                 timestamp=exit_time,
-                equity=equity,
+                equity=led.equity,
                 drawdown=drawdown,
                 exposure=exposure,
             )
@@ -1611,11 +1615,11 @@ def run_engine(
             fill_raw, is_buy=is_long, half_spread=half_spread, slip=slippage
         )
         if alloc_on:
-            sleeve = _sleeve_capital(equity)
+            sleeve = _sleeve_capital(led.equity)
             return _cap_to_sleeve(
                 _position_size(config, entry_eff, sleeve, strength), sleeve, entry_eff
             )
-        return _position_size(config, entry_eff, equity, strength)
+        return _position_size(config, entry_eff, led.equity, strength)
 
     def _open(
         direction: str,
@@ -1788,7 +1792,6 @@ def run_engine(
         refresh, one commission per extra fill. Stop LEVELS stay as installed at the
         initial entry (the documented fixed-for-life invariant). The lot is the SAME
         order's remainder — already sized/capped at intent time — so no re-capping."""
-        nonlocal equity
         fill_eff = _effective_fill(
             price_raw, is_buy=pos.direction == "long", half_spread=half_spread, slip=slippage
         )
@@ -1799,7 +1802,7 @@ def run_engine(
         pos.entry_notional = (new_basis * new_size).quantize(_MONEY)
         pos.peak_notional = max(pos.peak_notional, pos.entry_notional)
         if commission > _ZERO:
-            equity = (equity - commission).quantize(_MONEY)
+            led.equity = (led.equity - commission).quantize(_MONEY)
         led.partial_fills += 1
         _emit(
             "partial_fill",
@@ -2064,7 +2067,7 @@ def run_engine(
 
             # (2) K-03 / F-11 funding cost — doc 15 §9.3 step 2: funding/fee/carry is applied
             # at the TOP of the bar, BEFORE any fill, stop, exposure check, entry or scaling
-            # of this bar. That ordering is not cosmetic: ``equity`` is what sizes an entry
+            # of this bar. That ordering is not cosmetic: ``led.equity`` is what sizes an entry
             # (``_position_size``) and what bounds the allocation sleeve / exposure caps
             # (``_sleeve_capital``). Charging funding at the END of the bar (the pre-K-03
             # order) sized every entry and every scale layer off an equity that had not yet
@@ -2115,8 +2118,8 @@ def run_engine(
                         rec = due.record
                         charge = due.amount
                         if charge != _ZERO:
-                            equity = (equity - charge).quantize(_MONEY)
-                            peak = max(peak, equity)
+                            led.equity = (led.equity - charge).quantize(_MONEY)
+                            led.peak = max(led.peak, led.equity)
                             funding_paid += charge
                         funding_charges += 1
                         _emit(
@@ -2973,14 +2976,16 @@ def run_engine(
                             # ``stack_size`` reflects it).
                             stack_strength = _signal_strength(bar)
                             if alloc_on:
-                                sleeve = _sleeve_capital(equity)
+                                sleeve = _sleeve_capital(led.equity)
                                 tranche = _cap_to_sleeve(
                                     _position_size(config, stack_eff, sleeve, stack_strength),
                                     sleeve,
                                     stack_eff,
                                 )
                             else:
-                                tranche = _position_size(config, stack_eff, equity, stack_strength)
+                                tranche = _position_size(
+                                    config, stack_eff, led.equity, stack_strength
+                                )
                             stacked_size = position.size + tranche
                             size_limits = config.position_sizing.position_size_limits
                             stack_reject: str | None = None
@@ -2995,7 +3000,9 @@ def run_engine(
                                 stack_reject = "position_size_limit"
                                 stack_cap = str(size_limits.max_position_size)
                             elif alloc_on:
-                                sleeve_remaining = _sleeve_capital(equity) - position.entry_notional
+                                sleeve_remaining = (
+                                    _sleeve_capital(led.equity) - position.entry_notional
+                                )
                                 if (stack_eff * tranche) > sleeve_remaining:
                                     stack_reject = "sleeve_capacity"
                                     stack_cap = str(max(sleeve_remaining, _ZERO).quantize(_MONEY))
@@ -3052,7 +3059,7 @@ def run_engine(
                                 )
                                 stack_entries_added += 1
                                 if commission > _ZERO:
-                                    equity = (equity - commission).quantize(_MONEY)
+                                    led.equity = (led.equity - commission).quantize(_MONEY)
                                 _emit(
                                     "stack_entry_added",
                                     event_time=bar.timestamp,
@@ -3147,7 +3154,9 @@ def run_engine(
                             size_limits.max_position_size if size_limits is not None else None
                         ),
                         sleeve_remaining=(
-                            _sleeve_capital(equity) - position.entry_notional if alloc_on else None
+                            _sleeve_capital(led.equity) - position.entry_notional
+                            if alloc_on
+                            else None
                         ),
                         portfolio_headroom=(
                             portfolio_cap_amount
@@ -3190,7 +3199,7 @@ def run_engine(
                             # The layer's own entry fill pays its commission NOW; the close
                             # still books one round trip (initial entry + exit) — N layers
                             # pay exactly N extra fills, no double counting.
-                            equity = (equity - commission).quantize(_MONEY)
+                            led.equity = (led.equity - commission).quantize(_MONEY)
                         _emit(
                             "scale_layer_added",
                             event_time=bar.timestamp,
@@ -3262,7 +3271,7 @@ def run_engine(
         position = None
 
     total_trades = len(trades)
-    net_profit = (equity - initial_capital).quantize(_MONEY)
+    net_profit = (led.equity - initial_capital).quantize(_MONEY)
     net_profit_pct = (
         (net_profit / initial_capital * _HUNDRED).quantize(_PCT)
         if initial_capital > _ZERO
@@ -3270,7 +3279,9 @@ def run_engine(
     )
     max_drawdown = max((p.drawdown for p in equity_points), default=_ZERO)
     max_drawdown_pct = (
-        (max_drawdown / peak * _HUNDRED).quantize(_PCT) if peak > _ZERO else _ZERO.quantize(_PCT)
+        (max_drawdown / led.peak * _HUNDRED).quantize(_PCT)
+        if led.peak > _ZERO
+        else _ZERO.quantize(_PCT)
     )
     win_rate = (
         (Decimal(led.winners) / Decimal(total_trades) * _HUNDRED).quantize(_PCT)
@@ -3295,7 +3306,7 @@ def run_engine(
         "period_start": first_ts or None,
         "period_end": last_bar.timestamp if last_bar is not None else None,
         "initial_capital": initial_capital,
-        "final_equity": equity,
+        "final_equity": led.equity,
         "net_profit": net_profit,
         "net_profit_pct": net_profit_pct,
         "max_drawdown": max_drawdown.quantize(_MONEY),

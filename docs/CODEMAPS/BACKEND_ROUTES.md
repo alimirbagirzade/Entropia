@@ -18,7 +18,7 @@ Sütunlar:
 | GET `/ready` | `ready` `health.py:36` | — | |
 | GET `` (meta) | `meta` `meta.py:22` | — | |
 | GET `/metrics` | `metrics_endpoint` `metrics.py:98` | Prometheus text exposition | `require_metrics_scraper:40` (O-22 — Bearer `ENTROPIA_METRICS_TOKEN`; yok=401 `METRICS_SCRAPE_UNAUTHORIZED`, yanlış=403 `METRICS_SCRAPE_FORBIDDEN`; token yapılandırılmamışsa production'da fail-closed 403, local'de açık) |
-| GET `/events` | `events` `sse.py:162` | `SseHub` / outbox poller | `_authenticated_subscriber:163` (AUTH-11 — handshake authenticate, anonim abonelik yok) |
+| GET `/events` | `events` `sse.py` | `SseHub` / outbox poller; `Last-Event-ID` → outbox replay (O-21) | `_authenticated_subscriber` (AUTH-11 — handshake authenticate, anonim abonelik yok) |
 | POST `/signup` | `sign_up` `auth.py:84` | `auth_commands.sign_up` | (anonim) |
 | POST `/login` | `login` `auth.py:107` | `auth_commands.login` | (anonim; `AUTH_MODE=dev`'de insan login sunucu-reddi — #346/#347) |
 | POST `/logout` | `logout` `auth.py:132` | `auth_commands.logout` | |

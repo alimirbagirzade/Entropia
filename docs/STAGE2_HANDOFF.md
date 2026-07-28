@@ -3047,8 +3047,3 @@ Kalan tek büyük açık iş hâlâ **R2'nin product-owner imzası**
 (`docs/implementation/v18_final_acceptance.md` §4, D-1…D-9) — imza olmadan
 `entropia_v18_remediation_status.md`'deki R2 RE-OPENING banner'ı kalkmaz.
 
-O-14'ün bıraktığı somut açık iş: **composition-share komut yüzeyi** (grant/revoke + OCC + audit —
-okuma yolu hazır, yazma yolu yok) ve **doc 16 §2 "published" sütunu** (composition'a
-`visibility_scope` gelene kadar erişilemez kalır). Ayrıca hâlâ açık: F-07 raw-id sweep kalıntısı ve
-**ortam tuzağı** — paralel worktree oturumları paylaşılan `entropia_test` DB'sini ezer,
-`TEST_DATABASE_URL` ile worktree'ye özel izole DB kullan.

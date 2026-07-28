@@ -36,6 +36,7 @@ from entropia.application.jobs.create_package import (
     generate_and_store_candidate,
     registry_fingerprint,
 )
+from entropia.application.queries.dependency_pins import ensure_pinned_resolvers_active
 from entropia.application.queries.package_dependency import ensure_no_dependency_cycle
 from entropia.domain.create_package import (
     BaselineParseStatus,
@@ -1030,6 +1031,16 @@ async def approve_and_publish(
         check_head_revision(pkg_root.current_revision_id, expected_head_revision_id)
         if revision.approval_state == ApprovalState.REJECTED:
             raise DependencyUnresolved("This revision was rejected; create a new attempt.")
+        # O-09 / doc 06 §7 "dependencies active": Pre-Check pinned the resolver refs,
+        # but Pre-Check and Approve are separate steps — a resolver deprecated or
+        # withdrawn in between would otherwise publish anyway (the draft's snapshot is
+        # immutable, so nothing else would notice). Re-read the registry NOW and fail
+        # closed with DEPENDENCY_UNRESOLVED listing every stale pin.
+        await ensure_pinned_resolvers_active(
+            session,
+            dependency_snapshot=revision.dependency_snapshot,
+            scope_id=revision.revision_id,
+        )
         # O-10 / doc 08 §14 "Dependency cycle": the same fail-closed graph gate the
         # Library publish surface applies, so no publish path can reach PUBLISHED
         # with an A -> B -> A dependency path. A Create-Package draft pins ESP

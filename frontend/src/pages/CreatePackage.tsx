@@ -504,7 +504,7 @@ function Workspace({
             Family card or changing an assignment on the user's behalf, so an
             unmatched query says so instead of offering to create one. */}
         {!isEsp ? (
-          <div className="cp-suggest" role="group" aria-label="Rationale family suggestions">
+          <div className="cp-suggest" role="group" aria-label="Suggested families">
             <input
               aria-label="Search rationale families"
               placeholder="Search families (e.g. reversal)…"
@@ -518,7 +518,7 @@ function Workspace({
                     key={s.entity_id}
                     type="button"
                     className="cp-chip"
-                    aria-label={`Use rationale family ${s.display_name}`}
+                    aria-label={`Use family ${s.display_name}`}
                     onClick={() =>
                       setForm((prev) => ({ ...prev, rationale_family_id: s.entity_id }))
                     }

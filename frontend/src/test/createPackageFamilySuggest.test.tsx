@@ -76,7 +76,7 @@ describe("Create Package — Rationale Family suggestion chips", () => {
       target: { value: "reversal" },
     });
 
-    const chip = await screen.findByRole("button", { name: "Use rationale family Mean Reversion" });
+    const chip = await screen.findByRole("button", { name: "Use family Mean Reversion" });
     expect(chip).toHaveTextContent("Mean Reversion · reversal");
   });
 
@@ -88,7 +88,7 @@ describe("Create Package — Rationale Family suggestion chips", () => {
     fireEvent.change(screen.getByLabelText("Search rationale families"), {
       target: { value: "reversal" },
     });
-    const chip = await screen.findByRole("button", { name: "Use rationale family Mean Reversion" });
+    const chip = await screen.findByRole("button", { name: "Use family Mean Reversion" });
 
     const callsBefore = fetchMock.mock.calls.length;
     fireEvent.click(chip);
@@ -109,7 +109,7 @@ describe("Create Package — Rationale Family suggestion chips", () => {
     fireEvent.change(screen.getByLabelText("Search rationale families"), {
       target: { value: "reversal" },
     });
-    await screen.findByRole("button", { name: "Use rationale family Mean Reversion" });
+    await screen.findByRole("button", { name: "Use family Mean Reversion" });
 
     const methods = fetchMock.mock.calls.map(([, init]) =>
       String((init as RequestInit | undefined)?.method ?? "GET").toUpperCase(),

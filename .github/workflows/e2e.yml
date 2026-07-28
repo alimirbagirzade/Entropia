@@ -37,7 +37,27 @@ jobs:
             .env
 
       - name: Start the Docker Compose stack
-        run: docker compose up -d --build
+        run: |
+          # A registry/BuildKit transport blip — "target web: failed to solve:
+          # Unavailable: error reading from server: EOF" while resolving a base
+          # image — used to kill the whole job in ~30s, before a single test ran.
+          # The pull+build is therefore retried a bounded number of times, with a
+          # clean slate between attempts.
+          #
+          # This does NOT mask a real failure: a broken Dockerfile, a bad compose
+          # file, or an image that genuinely cannot be built fails all three
+          # attempts identically and the step still exits non-zero. Only the
+          # transient transport class survives the retry.
+          for attempt in 1 2 3; do
+            if docker compose up -d --build; then
+              exit 0
+            fi
+            echo "::warning::docker compose up failed (attempt ${attempt}/3); retrying"
+            docker compose down --remove-orphans --volumes || true
+            sleep $((attempt * 10))
+          done
+          echo "::error::docker compose up failed after 3 attempts"
+          exit 1
 
       - name: Wait for the API and web app to become ready
         run: |
@@ -132,7 +152,27 @@ jobs:
             .env
 
       - name: Start the Docker Compose stack
-        run: docker compose up -d --build
+        run: |
+          # A registry/BuildKit transport blip — "target web: failed to solve:
+          # Unavailable: error reading from server: EOF" while resolving a base
+          # image — used to kill the whole job in ~30s, before a single test ran.
+          # The pull+build is therefore retried a bounded number of times, with a
+          # clean slate between attempts.
+          #
+          # This does NOT mask a real failure: a broken Dockerfile, a bad compose
+          # file, or an image that genuinely cannot be built fails all three
+          # attempts identically and the step still exits non-zero. Only the
+          # transient transport class survives the retry.
+          for attempt in 1 2 3; do
+            if docker compose up -d --build; then
+              exit 0
+            fi
+            echo "::warning::docker compose up failed (attempt ${attempt}/3); retrying"
+            docker compose down --remove-orphans --volumes || true
+            sleep $((attempt * 10))
+          done
+          echo "::error::docker compose up failed after 3 attempts"
+          exit 1
 
       - name: Wait for the API and web app to become ready
         run: |
@@ -218,7 +258,27 @@ jobs:
           sed -i -e 's/^AUTH_MODE=.*/AUTH_MODE=dev/' .env
 
       - name: Start the Docker Compose stack
-        run: docker compose up -d --build
+        run: |
+          # A registry/BuildKit transport blip — "target web: failed to solve:
+          # Unavailable: error reading from server: EOF" while resolving a base
+          # image — used to kill the whole job in ~30s, before a single test ran.
+          # The pull+build is therefore retried a bounded number of times, with a
+          # clean slate between attempts.
+          #
+          # This does NOT mask a real failure: a broken Dockerfile, a bad compose
+          # file, or an image that genuinely cannot be built fails all three
+          # attempts identically and the step still exits non-zero. Only the
+          # transient transport class survives the retry.
+          for attempt in 1 2 3; do
+            if docker compose up -d --build; then
+              exit 0
+            fi
+            echo "::warning::docker compose up failed (attempt ${attempt}/3); retrying"
+            docker compose down --remove-orphans --volumes || true
+            sleep $((attempt * 10))
+          done
+          echo "::error::docker compose up failed after 3 attempts"
+          exit 1
 
       - name: Wait for the API and web app to become ready
         run: |

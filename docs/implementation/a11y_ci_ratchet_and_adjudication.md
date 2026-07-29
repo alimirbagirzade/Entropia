@@ -137,9 +137,18 @@ kodlanmış** olarak taşıyor:
 
 Değişkeni değiştirmek buraya ulaşmadı. Tek düzeltmeyle **70 düğümün 23'ü** (≈%33) kapanır.
 
-**B-2 — `.rd-step-lock` (2 düğüm).** Buradaki sorun rengin kendisi DEĞİL:
-`--warn: #b07d00` tek başına beyaz üstünde AA'yı geçer. İhlal, ebeveynin opaklığından
-doğuyor:
+> **ERRATA (A11Y-03 uygulanırken ölçüldü, 2026-07-29).** "`#888` yerine `var(--text-faint)`
+> yaz" reçetesi **tek başına yetmiyordu.** D-7(b)'nin ürettiği `#6e6e6e` beyaz üstünde
+> AA'yı geçiyor ama bu şeridin zemini beyaz değil, `#e8e8e8`: orada `#6e6e6e` yalnızca
+> **4.16:1** — eşiğin altında. Token bu yüzden bir adım daha koyulaştırıldı
+> (`#6e6e6e → #666666`, `#e8e8e8` üstünde **4.69:1**, beyaz üstünde 5.10 → 5.74:1), ve
+> `.top-title` artık sabit renk yerine token'ı okuyor. Yani B-1'in kök nedeni "sabit
+> kodlanmış renk"ti, ama düzeltmesi iki hamle: **token'ı doğru zemine göre kalibre et**
+> + **sabit rengi token'a bağla**. Aynı şeritteki ikinci sabit gri
+> (`.topbar-actor label { color: #666 }`) de token'a bağlandı — `#666` yeni token'la
+> bayt-aynı olduğu için sıfır piksel değişimi, tek amacı aynı sapmanın tekrarlamaması.
+
+**B-2 — `.rd-step-lock` (2 düğüm).** İhlal, ebeveynin opaklığından doğuyor:
 
 ```css
 .rd-step-lock { color: var(--warn); }
@@ -148,8 +157,21 @@ doğuyor:
 
 `0.7` opaklık `#b07d00`'ı ekranda `#c8a44d`'ye kompozitliyor → 2.30:1. **Bu yüzden
 D-7(b)'nin "kilit amberini koyulaştır" reçetesi tek başına çalışmazdı** — `--warn` ne
-kadar koyulaşırsa koyulaşsın 0.7 opaklık onu geri açar. Doğru düzeltme opaklığı kilit
-göstergesinden ayırmaktır (dashed border + ikon zaten sinyali taşıyor).
+kadar koyulaşırsa koyulaşsın 0.7 opaklık onu geri açar. Düzeltmenin yarısı opaklığı
+kilit göstergesinden ayırmaktır (dashed border + greyed adım numarası zaten sinyali
+taşıyor).
+
+> **ERRATA (A11Y-04 uygulanırken ölçüldü, 2026-07-29).** Bu paragraf ilk yazıldığında
+> *"buradaki sorun rengin kendisi DEĞİL: `--warn: #b07d00` tek başına beyaz üstünde
+> AA'yı geçer"* diyordu. **Bu yanlıştı.** `#b07d00` beyaz üstünde **3.63:1**, `.rd-step`
+> zemininde (`--bg-elev-2` `#fafafa`) **3.48:1** ölçülür — ikisi de AA'nın 4.5:1 metin
+> eşiğinin altında. `#b07d00` yalnızca kenarlık/nokta gibi **metin-olmayan** yüzeylerin
+> 3:1 eşiğini geçiyordu, metnin eşiğini değil. Sonucu: **opaklığı kaldırmak tek başına
+> bu 2 düğümü kapatmaz** — geriye 3.48:1 kalır, hâlâ serious ihlal. A11Y-04 bu yüzden
+> iki parçalı uygulandı: opaklık kompoziti kaldırıldı **ve** token
+> `--warn: #b07d00 → #8a6200` koyulaştırıldı (beyaz 5.49:1, `#fafafa` 5.26:1, kendi
+> %12 wash'ı 4.65:1). Token darbesi D-7(b)'nin *"amber koyulaştır"* kapsamındadır;
+> yeni PO kararı gerekmedi.
 
 **Bu iki madde YENİ bir PO kararı gerektirmez** — D-7(b) zaten imzalı. Eksik olan
 uygulamadır. Bu slice bunları **bilerek düzeltmedi**: CI sınırı değiştiren bir PR'a tema

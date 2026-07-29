@@ -9,12 +9,22 @@
   --text: #222222;
   --text-dim: #555555;
   /* D-7b (A11Y-01 partial, PO 22-Jul): #888888 → #6e6e6e lifts help/meta text
-     to ~4.6:1 (WCAG AA) without touching the v18 signature accent blue. */
-  --text-faint: #6e6e6e;
+     to WCAG AA without touching the v18 signature accent blue.
+     A11Y-03 nudges it one step further, #6e6e6e → #666666, because the token has
+     to clear AA on the one NON-white surface it lands on — the #e8e8e8 title bar,
+     where #6e6e6e measures 4.16:1 (fail) and #666666 measures 4.69:1 (pass).
+     On white it moves 5.10:1 → 5.74:1, i.e. strictly better everywhere. */
+  --text-faint: #666666;
   --accent: #00a9e8;
   --accent-dim: #0088c0;
   --ok: #00a651;
-  --warn: #b07d00;
+  /* A11Y-04: the amber is a TEXT colour (.badge-warn, .rd-step-lock,
+     .alloc-confirm-box), so it owes 4.5:1 — not the 3:1 a border or a dot owes.
+     #b07d00 measured 3.63:1 on white: it never met AA on its own, independently
+     of the .rd-step[data-locked] opacity composite that dropped it to 2.30:1.
+     #8a6200 clears AA on all three surfaces the amber TEXT lands on:
+     white 5.49:1, --bg-elev-2 5.26:1, its own 12% wash 4.65:1. */
+  --warn: #8a6200;
   --down: #b60000;
   --radius: 4px;
   --topbar-h: 28px;
@@ -67,7 +77,10 @@ p a { text-decoration: underline; }
   position: relative;
   font-size: 10.5px;
   font-weight: bold;
-  color: #888;
+  /* A11Y-03: this was a hard-coded #888 (2.89:1 on the #e8e8e8 bar), which is
+     exactly why the D-7b token change never reached the brand strip — .brand-title
+     inherits from here. Read the token so the next palette move lands here too. */
+  color: var(--text-faint);
 }
 .brand-title { letter-spacing: 0.5px; }
 
@@ -95,7 +108,10 @@ p a { text-decoration: underline; }
   gap: 8px;
 }
 .topbar-actor { display: inline-flex; align-items: center; gap: 4px; }
-.topbar-actor label { font-size: 9px; font-weight: 700; color: #666; }
+/* A11Y-03 hygiene: same hard-coded-grey-on-#e8e8e8 pattern as .top-title above.
+   #666 is byte-identical to the new --text-faint, so this is a zero-pixel change
+   that stops the bar drifting away from the token a second time. */
+.topbar-actor label { font-size: 9px; font-weight: 700; color: var(--text-faint); }
 .topbar-actor input {
   width: 96px; height: 18px;
   padding: 0 4px;
@@ -2257,7 +2273,14 @@ p a { text-decoration: underline; }
 .rd-step-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .rd-step-label { font-weight: 600; color: var(--text); }
 .rd-step-lock { color: var(--warn); font-size: 11px; }
-.rd-step[data-locked="true"] { border-style: dashed; opacity: 0.7; }
+/* A11Y-04: `opacity` here composited EVERY descendant colour against the page —
+   it rendered the lock note's --warn as #c8a44d on #fcfcfc (2.30:1), so no amount
+   of darkening the token alone could have fixed it. Opacity is the wrong tool for
+   de-emphasising a container that carries text. The locked state is still signalled
+   three ways (dashed border, greyed step number, the lock note itself), and the
+   label is dimmed with a token that clears AA (--text-dim on --bg-elev-2 = 7.2:1). */
+.rd-step[data-locked="true"] { border-style: dashed; }
+.rd-step[data-locked="true"] .rd-step-label { color: var(--text-dim); }
 .rd-step[data-locked="true"] .rd-step-num { background: var(--text-dim); }
 
 .rd-legend { display: flex; flex-wrap: wrap; gap: 16px; }

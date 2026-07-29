@@ -167,6 +167,32 @@ class LastAdminProtectedError(ConflictError):
     message = "The last active administrator cannot be demoted or deactivated."
 
 
+class LastAdminProtectionError(LastAdminProtectedError):
+    """Panel Management surface of the same last-Admin defect (doc 19 §7.1, §9.3,
+    §11, §14).
+
+    **Adjudication (K-07 shape).** The corpus names this defect twice: Master
+    Module 3 and the legacy ``PATCH /users/{id}/role`` deactivation path say
+    ``LAST_ADMIN_PROTECTED``, while Master Module 16 and doc 19 — the source of the
+    Panel ``PATCH /v1/admin/users/{user_id}/role`` command — say
+    ``LAST_ADMIN_PROTECTION`` in all four places they name it. Same defect, two page
+    taxonomies; each page's §-taxonomy is authoritative, exactly as the upload
+    file-type gate resolves one rejection into five per-page codes. Subclassing keeps
+    ONE catchable type, so a caller that does not care which surface raised still
+    writes ``except LastAdminProtectedError``.
+
+    ``retryable`` stays false (inherited): resending the identical demotion fails
+    until another Admin exists, so advertising a retry would only loop the client.
+    """
+
+    code = "LAST_ADMIN_PROTECTION"
+    message = "This change would remove the last active Admin. Assign another Admin first."
+    suggested_action = "assign_another_admin"
+    remediation = "Assign the Admin role to another active human user, then retry this change."
+    scope_type = "human_user"
+    field_path = "target_role"
+
+
 class AgentRoleNotAssignableError(ValidationError):
     """Agent is a non-login system actor; it is not an assignable human role."""
 

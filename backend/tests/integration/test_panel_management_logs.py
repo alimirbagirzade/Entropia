@@ -31,6 +31,7 @@ from entropia.shared.errors import (
     AgentRoleNotAssignableError,
     CursorInvalidError,
     LastAdminProtectedError,
+    LastAdminProtectionError,
     NotFoundError,
     UserRoleVersionConflictError,
 )
@@ -196,6 +197,86 @@ async def test_last_admin_protection(session) -> None:
     user = await session.get(HumanUser, "solo_admin")
     assert user.current_role == Role.ADMIN
     assert user.version == 1
+
+
+async def test_last_admin_protection_emits_doc19_taxonomy_code(session) -> None:
+    """Doc 19 §9.3/§11/§14: demoting the last active Admin is answered with 422
+    ``LAST_ADMIN_PROTECTION`` — the Panel page's own taxonomy code, not Module 3's
+    ``LAST_ADMIN_PROTECTED`` — and writes NEITHER a role mutation NOR an audit event.
+
+    Both halves matter: before this audit the command emitted the Module 3 code, so a
+    client branching on doc 19's documented code fell through to a generic handler and
+    never showed the "Assign another Admin first" blocker.
+    """
+    await _seed_human(session, "solo_admin", "solo", Role.ADMIN)
+    await session.commit()
+    audits_before = await _count(session, AuditEvent)
+    outbox_before = await _count(session, OutboxEvent)
+
+    with pytest.raises(LastAdminProtectionError) as exc:
+        await assign_user_role(
+            session,
+            ADMIN,
+            target_user_id="solo_admin",
+            target_role=Role.SUPERVISOR,
+            expected_head_revision_id=1,
+        )
+
+    assert exc.value.code == "LAST_ADMIN_PROTECTION"
+    assert exc.value.http_status == 422
+    assert exc.value.retryable is False
+    # §7.1 "Last Admin blocker" text is what the UI renders straight from the envelope.
+    assert exc.value.message == (
+        "This change would remove the last active Admin. Assign another Admin first."
+    )
+    assert exc.value.field_path == "target_role"
+
+    await session.rollback()
+    user = await session.get(HumanUser, "solo_admin")
+    assert user.current_role == Role.ADMIN
+    assert user.version == 1
+    assert await _count(session, AuditEvent) == audits_before
+    assert await _count(session, OutboxEvent) == outbox_before
+
+
+async def test_last_admin_protection_clears_once_a_second_admin_exists(session) -> None:
+    """The blocker is a live count, not a permanent lock: doc 19 §7.1 tells the Admin
+    to "Assign another Admin first", so that exact remedy must unblock the demotion."""
+    solo = await _seed_human(session, "solo_admin", "solo", Role.ADMIN)
+    await _seed_human(session, "second_user", "second", Role.USER)
+    await session.commit()
+
+    with pytest.raises(LastAdminProtectionError):
+        await assign_user_role(
+            session,
+            ADMIN,
+            target_user_id="solo_admin",
+            target_role=Role.USER,
+            expected_head_revision_id=solo.version,
+        )
+    await session.rollback()
+
+    # Follow the remediation: promote a second Admin, then retry the demotion.
+    promoted = await assign_user_role(
+        session,
+        ADMIN,
+        target_user_id="second_user",
+        target_role=Role.ADMIN,
+        expected_head_revision_id=1,
+    )
+    await session.commit()
+    assert promoted["changed"] is True
+
+    demoted = await assign_user_role(
+        session,
+        ADMIN,
+        target_user_id="solo_admin",
+        target_role=Role.USER,
+        expected_head_revision_id=1,
+    )
+    await session.commit()
+    assert demoted["changed"] is True
+    assert demoted["role"] == str(Role.USER)
 
 
 async def test_last_admin_protection_session_mode_counts_login_capable(session) -> None:

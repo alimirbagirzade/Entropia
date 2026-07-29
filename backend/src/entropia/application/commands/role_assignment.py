@@ -29,6 +29,7 @@ from entropia.infrastructure.postgres.repositories import audit as audit_repo
 from entropia.infrastructure.postgres.repositories import identity as identity_repo
 from entropia.shared.errors import (
     AgentRoleNotAssignableError,
+    LastAdminProtectionError,
     NotFoundError,
     UserRoleVersionConflictError,
 )
@@ -112,6 +113,10 @@ async def assign_user_role(
                 target_is_admin=True,
                 becomes_admin=False,
                 active_admin_count=active_admins,
+                # This Panel surface answers with doc 19's own taxonomy code
+                # (§7.1, §9.3, §11, §14); the legacy Module 3 path keeps
+                # LAST_ADMIN_PROTECTED. Same gate, page-specific code.
+                error=LastAdminProtectionError,
             )
 
         user.current_role = target_role

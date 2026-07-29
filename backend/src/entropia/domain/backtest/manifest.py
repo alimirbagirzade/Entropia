@@ -89,7 +89,13 @@ from entropia.shared.manifest import manifest_hash
 # config space widened, and it shifts the execution_key namespace so a result produced by
 # an engine that could not evaluate Minimum-N is never idempotently reused for a re-RUN
 # (INF-04/INF-05).
-
+# v18-scaling-tf-sequence (S5c): Logic-Based Scaling landed with the Scaling Timeframe
+# Sequence (doc 02 §5.7) — a logic-scaling block now proposes a same-direction layer on the
+# signal EDGE, gated on the closed candle of sequence entry N. A strategy saved under the new
+# mode opens a DIFFERENT ladder than the pre-S5c engine (which treated logic scaling as
+# future_dev and opened nothing), so the bump shifts the execution_key namespace and a
+# pre-S5c result is never idempotently reused for a re-RUN (INF-04/INF-05).
+ENGINE_VERSION = "backtest-engine-v18-scaling-tf-sequence"
 METRIC_SET_VERSION = "metric-set-v1"
 OUTPUT_ARTIFACT_PROFILE = "standard-v1"
 

@@ -40,8 +40,9 @@ test.describe("Future Dev boundary: placeholders stay honest (doc 22)", () => {
 
     const response = await apiGet(page, "/capabilities", token);
     expect(response.status()).toBe(200);
-    const body = (await response.json()) as { data?: Capability[] };
-    const capabilities = body.data ?? [];
+    // lib/capability.ts::CapabilityListResponse — `capabilities`, not `data`.
+    const body = (await response.json()) as { capabilities?: Capability[]; count?: number };
+    const capabilities = body.capabilities ?? [];
     expect(capabilities.length, "capability registry is empty — seed missing?").toBeGreaterThan(0);
 
     const byKey = new Map(capabilities.map((c) => [c.capability_key, c]));
@@ -64,13 +65,13 @@ test.describe("Future Dev boundary: placeholders stay honest (doc 22)", () => {
     await expect(page.getByRole("heading", { name: "Future Dev", exact: true })).toBeVisible({
       timeout: 30_000,
     });
-    // The capability table is the page's projection — its columns prove the
-    // registry rendered, not a placeholder card with no data behind it.
-    await expect(page.getByRole("columnheader", { name: "Capability" }).first()).toBeVisible({
+    // The seeded registry rendered: a user actually sees the Future-Dev slots by
+    // name. Asserted on the seeded CONTENT rather than on a column header, because
+    // the header depends on which section of the page is expanded while the
+    // capability titles are guaranteed by `seed_capabilities` (apps/seed.py).
+    await expect(page.getByText("Regime Research", { exact: false }).first()).toBeVisible({
       timeout: 30_000,
     });
-    await expect(page.getByRole("columnheader", { name: "Operational" }).first()).toBeVisible();
-    // Regime Research is present on the page a user can actually see.
-    await expect(page.getByText("Regime Research", { exact: false }).first()).toBeVisible();
+    await expect(page.getByText("Hypothesis Lab", { exact: false }).first()).toBeVisible();
   });
 });

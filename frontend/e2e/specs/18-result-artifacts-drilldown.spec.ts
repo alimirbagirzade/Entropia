@@ -39,10 +39,12 @@ test.describe("Result artifact drill-down: Filtered Events is its own artifact (
     const token = await readSessionToken(page);
     expect(token, "browser holds no session token").toBeTruthy();
 
-    const listed = await apiGet(page, "/backtest-results?limit=1", token);
+    // Results History pages under a REQUIRED `sort` and answers with `items`
+    // (lib/backtest.ts::HistoryPage) — not the `data` envelope other lists use.
+    const listed = await apiGet(page, "/backtest-results?sort=newest_current", token);
     expect(listed.status()).toBe(200);
-    const list = (await listed.json()) as { data?: Array<{ result_id: string }> };
-    const resultId = list.data?.[0]?.result_id;
+    const list = (await listed.json()) as { items?: Array<{ result_id: string }> };
+    const resultId = list.items?.[0]?.result_id;
     expect(
       resultId,
       "no Backtest Result on the stack — the golden-path journey (spec 05) must run first",
@@ -116,9 +118,9 @@ test.describe("Result artifact drill-down: Filtered Events is its own artifact (
     await ensureAdmin(page);
     const token = await readSessionToken(page);
 
-    const listed = await apiGet(page, "/backtest-results?limit=1", token);
-    const list = (await listed.json()) as { data?: Array<{ result_id: string }> };
-    const resultId = list.data?.[0]?.result_id;
+    const listed = await apiGet(page, "/backtest-results?sort=newest_current", token);
+    const list = (await listed.json()) as { items?: Array<{ result_id: string }> };
+    const resultId = list.items?.[0]?.result_id;
     test.skip(!resultId, "no Backtest Result on the stack yet");
 
     const bogus = await apiGet(

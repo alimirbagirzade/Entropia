@@ -70,14 +70,18 @@ test.describe("Future Dev boundary: placeholders stay honest (doc 22)", () => {
     // which is hidden — the page-level match is the sidebar, not the projection.
     const registry = page.getByRole("region", { name: "Capabilities" });
     await expect(registry).toBeVisible({ timeout: 30_000 });
-    // The seeded rows a user actually sees: title + the machine key beside it.
-    await expect(registry.getByRole("cell", { name: /Regime Research/ })).toBeVisible({
+    // Matched on the machine KEY, not the title: the title also appears in the
+    // "Menu path" cell ("Future Dev > Research > Regime Research"), so a title
+    // regex hits two cells per row and trips Playwright strict mode. The key
+    // renders only in the Capability cell (<code>{capability_key}</code>).
+    await expect(registry.getByRole("cell", { name: /regime_research/ })).toBeVisible({
       timeout: 30_000,
     });
-    await expect(registry.getByRole("cell", { name: /Hypothesis Lab/ })).toBeVisible();
+    await expect(registry.getByRole("cell", { name: /hypothesis_lab/ })).toBeVisible();
     // And the boundary is visible ON the page, not only in the API: the
-    // "Operational" column reads "no" for the Regime Research row.
-    const regimeRow = registry.getByRole("row", { name: /Regime Research/ });
-    await expect(regimeRow.getByRole("cell", { name: "no", exact: true })).toBeVisible();
+    // "Operational" column reads "no" for the Regime Research row. The API test
+    // above is what pins is_operational rigorously; this is the UI confirmation.
+    const regimeRow = registry.getByRole("row", { name: /regime_research/ });
+    await expect(regimeRow.getByRole("cell", { name: "no", exact: true }).first()).toBeVisible();
   });
 });

@@ -2026,6 +2026,37 @@ class ManualParseFailedError(ValidationError):
     )
 
 
+class ManualUploadJobFailedError(AppError):
+    """The manual source/parse/index pipeline failed TECHNICALLY (doc 21 §10).
+
+    Distinct from ``MANUAL_PARSE_FAILED``: that one is a caller-actionable verdict
+    on the *content* (unconvertible source, disallowed HTML tag) and the fix is to
+    edit the document. This one is the pipeline itself breaking — the parser or the
+    search-chunk indexer raising something no content can be blamed for — and the
+    fix is to retry, not to rewrite the file. Reporting a technical break under a
+    content code told the Admin to edit a document that was never the problem.
+
+    ``retryable`` is true and the envelope carries the request's ``correlation_id``,
+    which is the persistent handle doc 21 §10 requires ("Persistent failure
+    correlation id; retry action"). The whole command runs in one transaction, so a
+    failure publishes no root/revision/stream entry — "no phantom manual section".
+    """
+
+    code = "UPLOAD_JOB_FAILED"
+    http_status = 500
+    message = (
+        "The manual document could not be processed. Nothing was published — retry the upload."
+    )
+    category = ErrorCategory.ASYNC_JOB_FAILURE
+    retryable = True
+    suggested_action = "retry_upload"
+    remediation = (
+        "The upload/parse/index pipeline failed technically, not because of the document's "
+        "content. Retry the same upload; if it keeps failing, report the correlation id."
+    )
+    scope_type = "manual_document"
+
+
 class ManualDuplicateContentError(ConflictError):
     """An active stream section already carries the same normalized checksum
     (doc 21 §10). The default outcome blocks the append; an explicit Admin

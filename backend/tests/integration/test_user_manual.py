@@ -21,6 +21,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
 from entropia.application.commands import auth as auth_cmd
+from entropia.application.commands import manual as manual_cmd
 from entropia.application.commands.deletion import request_purge
 from entropia.application.commands.manual import (
     create_manual_document,
@@ -81,6 +82,7 @@ from entropia.shared.errors import (
     ManualSectionNotFoundError,
     ManualStreamConflictError,
     ManualTitleRequiredError,
+    ManualUploadJobFailedError,
 )
 from entropia.shared.passwords import PASSWORD_ALGORITHM, hash_password
 
@@ -307,6 +309,64 @@ async def test_upload_rejects_unsupported_and_parse_failures(session) -> None:
         )
     await session.rollback()
     assert await _count(session, ManualDocument) == docs_before  # no phantom section
+
+
+async def test_upload_job_failed_on_technical_parse_break(session, monkeypatch) -> None:
+    """S-L6 / doc 21 §10: a pipeline break is UPLOAD_JOB_FAILED, not a content verdict.
+
+    ``MANUAL_PARSE_FAILED`` tells the Admin their document is wrong. When the parser
+    itself dies the document may be perfectly valid, so the two must not share a code.
+    """
+    await _seed(session)
+    docs_before = await _count(session, ManualDocument)
+
+    def _boom(*_args, **_kwargs):
+        raise RuntimeError("parser backend crashed")
+
+    monkeypatch.setattr(manual_cmd, "parse_source", _boom)
+    with pytest.raises(ManualUploadJobFailedError) as excinfo:
+        await upload_manual_document(
+            session, ADMIN, source_filename="guide.md", content="# Fine\n\nBody."
+        )
+    assert excinfo.value.code == "UPLOAD_JOB_FAILED"
+    assert excinfo.value.retryable is True
+    assert excinfo.value.details == [{"stage": "parse", "source_type": "uploaded_markdown"}]
+
+    await session.rollback()
+    assert await _count(session, ManualDocument) == docs_before  # no phantom section
+
+
+async def test_upload_job_failed_on_technical_index_break(session, monkeypatch) -> None:
+    """The index stage gets the same canonical code — the parse verdict was a pass."""
+    await _seed(session)
+    docs_before = await _count(session, ManualDocument)
+
+    def _boom(*_args, **_kwargs):
+        raise RuntimeError("search chunker crashed")
+
+    monkeypatch.setattr(manual_cmd, "build_search_chunks", _boom)
+    with pytest.raises(ManualUploadJobFailedError) as excinfo:
+        await upload_manual_document(
+            session, ADMIN, source_filename="guide.md", content="# Fine\n\nBody."
+        )
+    assert excinfo.value.details == [{"stage": "index"}]
+
+    await session.rollback()
+    assert await _count(session, ManualDocument) == docs_before
+    assert await _count(session, ManualSearchChunk) > 0  # baseline index left intact
+
+
+async def test_upload_job_failed_never_masks_a_content_verdict(session) -> None:
+    """A typed AppError from the parser keeps its own code — the gate re-raises it."""
+    await _seed(session)
+    with pytest.raises(ManualParseFailedError):
+        await upload_manual_document(
+            session,
+            ADMIN,
+            source_filename="evil.html",
+            content="<p>ok</p><script>alert(1)</script>",
+        )
+    await session.rollback()
 
 
 async def test_duplicate_content_blocked_unless_overridden(session) -> None:

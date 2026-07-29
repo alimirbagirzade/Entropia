@@ -174,10 +174,6 @@ Before stopping a working session, produce **ALL** of the following:
   **O-17 (#446 — restore conflict artık typed `resolution` seçenek kümesi taşıyor; yeni
   `domain/trash/restore.py` katalogu + salt-okuma
   `GET /trash-entries/{id}/restore-preflight`; bilinmeyen resolution 422
-  `UNSUPPORTED_RESTORE_RESOLUTION`; migration YOK)** · O-18 (#442) · O-21 (#430) ·
-  **O-27 (#450 — legacy `item_kind` etiketleri spec adıyla `INVALID_ITEM_KIND`)** ·
-  **O-30 (#451 — purge 202 gövdesi doc 20 §4/§7 ↔ §9.2 adjudicated; gövde artık
-  `PurgeAcceptedResponse` ile şemada yayımlanıyor; migration YOK)**
 
 
 - **Testler:** son yeşil referans CI (O-serisi PR'ları). Lokal tam suite tek koşuda

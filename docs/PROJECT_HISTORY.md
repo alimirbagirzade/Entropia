@@ -1525,6 +1525,11 @@ ağaçtan yeniden hesaplıyor**, "en son bakıldığında yazılmış" bir liste
 Test bir ratchet'tir: altıncı ölü sınıf eklenirse kırılır, listedekilerden biri fırlatılmaya
 başlarsa da kırılır. Sayı yalnız aşağı iner.
 
+> **SÜPERSEDE — bu paragraf tarihsel kayıttır, canlı borç listesi DEĞİL.** Beşi de listeden
+> düştü: `ValidationAlreadyRunning` S-L3'te gerçek bir raise yolu kazandı, kalan dördü
+> **O-03R**'de adjudicate edilip silindi. `KNOWN_UNRAISED` bugün **boş**. Kararların spec
+> §referansları ve reddedilen (A) alternatifleri: §"O-03R · Kalan 4 ölü error sınıfı kapatıldı".
+
 ### Doğrulama
 
 `ruff check` · `ruff format --check` (619 dosya) · `mypy src` (356 dosya) temiz; `tests/unit`
@@ -2035,3 +2040,69 @@ değildir** — kaydedilmemiş olması kusurdur.
   `tests/integration/test_market_crossrow_validation.py:160`) ve **ikisi de OHLCV** kullanıyor —
   tick/spread için tip-agnostik davranışı kilitleyen bir test **yok**. Yeni test eklenmedi (bu slice
   docs-only); borç olarak kayıtlı.
+
+---
+
+## O-03R · Kalan 4 ölü error sınıfı kapatıldı — kayıtlı borç SIFIR (branch `fix/o03r-dead-error-classes`)
+
+O-03 (PR #407) yedi ölü sınıf bulmuş, ikisini silmiş, **beşini** `KNOWN_UNRAISED`'te kayıtlı borç
+olarak pinlemişti (yetki kapsamı dışıydı). S-L3 `ValidationAlreadyRunning`'e gerçek bir raise yolu
+kazandırıp listeden düşürdü. Bu slice kalan **dördünü** ayrı ayrı adjudicate etti; **dördü de
+(B) SİL** çıktı. `KNOWN_UNRAISED` artık **boş** ve ratchet mutlak: fırlatılmayan HERHANGİ bir
+error sınıfı testi kırıyor.
+
+### Karar tablosu — her satırın dayanağı ayrı
+
+| Sınıf / kod | Karar | Kararı veren spec § | Ölü olduğunun kanıtı |
+|---|---|---|---|
+| `RoleContextStaleError` / `ROLE_CONTEXT_STALE` (409) | **SİL** | Master Technical Reference **§11.1** domain hata kodu tablosu | Session role revision **taşımıyor**: `auth_sessions(session_id, user_id, token_hash, issued_at, expires_at, revoked_at)` — role kolonu yok. `apps/api/deps.py` rolü **her request'te** registry'den yeniden çözüyor (M1 §4.2, kod içinde yorumla pinli). Spec'in kendi "çözüm" sütunu ("session context yenilenir, request yeni role ile yeniden değerlendirilir") zaten koşulsuz uygulanıyor → reddedilecek bayat rol durumu hiç oluşmuyor. |
+| `ServiceUnavailableError` / `SERVICE_UNAVAILABLE` (503) | **SİL** | **Spec'te yok** — `docs/spec/` genelinde `SERVICE_UNAVAILABLE` ve `503` için **0 eşleşme** | Adı konmuş bağımlılık kesintilerinin kendi spec-dayanaklı sınıfları var (ör. `ValidationPipelineUnavailable`, doc 08 §7). Kimsenin fırlatamadığı `retryable=True` genel 503, bu modülün önlemek için var olduğu sahte vaadin ta kendisi. |
+| `ArtifactNotAvailableError` / `ARTIFACT_NOT_AVAILABLE` (404) | **SİL** | doc 15 **§7** (`QueryResultArtifact` satırı) + **§5** ("retention availability") | Spec kodu adıyla anıyor ama **ailenin tamamı yazılmamış**: result satırında retention/availability/checksum kolonu yok, kardeş kodlar `RETENTION_EXPIRED` ve `RESULT_INTEGRITY_FAILED` **tanımlı bile değil**, retention auto-purge kayıtlı V1 istisnası (doc 20 §16 "Automatic purge remains disabled in Production V1"). **Boş sayfa bu hata DEĞİL** — hiç trade üretmemiş bir run'ın ledger'ı meşru biçimde boştur; onu 404'e çevirmek olmayan bir kusuru icat ederdi. O-03'ün `DeletePolicyBlocked` presedansının aynısı: spec istiyor, koruduğu özellik hiç yazılmamış. |
+| `HypothesisArtifactNotFoundError` / `HYPOTHESIS_NOT_FOUND` (404) | **SİL** | **Spec'te yok** — `HYPOTHESIS_NOT_FOUND` için `docs/spec/` genelinde 0 eşleşme; doc 18 §3 / §8.1 / §9 / §14 | doc 18 hypothesis'leri **yalnız board/liste** olarak açıyor (`GET /hypotheses`); tek-artifact detay endpoint'i doc 18'in endpoint tablolarında **yok** — oysa kardeşleri `AgentTaskNotFoundError` / `AgentToolCallNotFoundError` gerçek detay yüzeylerinden fırlıyor. Var olan üç by-id lookup **bilerek başka taksonomiyle** cevaplıyor: `commands/agent_artifact.py` → `ARTIFACT_NOT_OWNED` (AL-16, doc 18 §12), `commands/deletion.py` restore → trash target-missing conflict, purge → `OBJECT_ALREADY_PURGED` (doc 20 §11). Ad, hizmet edecek yüzeyi olmayan bir simetri artığıydı. |
+
+**Hiçbiri (A) olmadı**, yani bu slice'ta yeni fırlatılan sınıf yok → CLAUDE.md O-02 kuralının
+"kategorini bildir + retryable'ı gerekçelendir" yükümlülüğü bu slice'ta tetiklenmiyor. Silinen
+dördün ikisi (`RoleContextStaleError`, `ServiceUnavailableError`) `retryable=True` reklamı
+yapıyordu — hiçbir isteğin alamayacağı bir retry sözü; sınıflandırma kuralının koruduğu tam da bu.
+
+### Reddedilen (A) alternatifleri — neden fırlatmadık
+
+- **`ROLE_CONTEXT_STALE` için SSE:** uzun ömürlü stream aktörü handshake'te bir kez çözüyor, rol
+  akış ortasında değişirse stream eski rolle akmaya devam eder. Bu gerçek bir soru, ama ortada
+  rol yeniden-doğrulama **özelliği** yazmak demek (periyodik re-resolve + SSE error event
+  taksonomisi) — ölü sınıf kapatma mandası değil; üstelik §11.1'in tarif ettiği şey bir **HTTP
+  hata zarfı**, SSE yüzeyine zaten oturmuyor. Kayıtlı açık soru olarak bırakıldı.
+- **`HYPOTHESIS_NOT_FOUND` için soft-delete yolu:** `agent_artifact.py`'de eksik artifact
+  `ArtifactOwnershipError("The artifact to soft-delete was not found.")` veriyor — kodu
+  `ARTIFACT_NOT_OWNED`, yani 403. Bunu 404'e çevirmek sevk edilmiş bir sözleşmeyi (AL-16,
+  owner-scoped, enumerate etmeyen yüzey) doc 20 §11 istemeden değiştirmek olurdu. Dokunulmadı.
+- **`ARTIFACT_NOT_AVAILABLE` için "0 satır → 404":** yukarıdaki tabloda; meşru boş ledger'ı
+  hataya çevirirdi.
+
+### Ratchet artık ne kilitliyor
+
+`tests/unit/test_error_taxonomy_no_dead_definitions.py` (4 test):
+`KNOWN_UNRAISED = frozenset()` + `test_recorded_debt_is_empty` (liste sessizce yeniden açılamaz)
++ `test_o03r_removed_classes_stay_removed` (dört ad ve dört kod `errors.py`'ye raiser'sız geri
+gelemez) + O-03'ün mevcut iki testi. Ölü küme **her koşuda ağaçtan yeniden hesaplanıyor** —
+"Sonradan canonical olan dört satır" bölümünün dersi burada otomatik.
+
+### Yan düzeltme — türetilmiş dokümandaki yanlış sözleşme
+
+`docs/DOMAIN_MODEL.md` "old-role requests → `ROLE_CONTEXT_STALE`" diyordu. Hiçbir istek bu cevabı
+alamıyordu; satır gerçeğe (her request'te rol yeniden çözülür) çekildi. Ölü sınıfın asıl zararı
+buydu: spec'te kalması bir yana, **türetilmiş dokümana sözleşme olarak sızmıştı.**
+
+### Dürüst sınırlar
+
+- **Migration YOK**, alembic head `0039_backtest_run_cancellation` değişmedi, `ENGINE_VERSION`
+  bump edilmedi. Veri modeline dokunulmadı.
+- **`docs/openapi.json` değişmedi** — dört kodun hiçbiri yayımlanmıyordu (`SERVICE_UNAVAILABLE`
+  için 0 eşleşme), zarf şekli (`ErrorBody`) aynı; drift guard'ın koruduğu yüzey etkilenmedi.
+- **Frontend değişmedi.** `SERVICE_UNAVAILABLE` string'i 8 frontend testinde **jenerik hata
+  fixture'ı** olarak duruyor (`apiErrorRoute(503, …)`); `frontend/src/lib|app|pages` içinde 503'e
+  dallanan üretim kodu yok, backend sınıfına bağlı değiller.
+- **Spec dosyaları değiştirilmedi.** Master ref §11.1 hâlâ `ROLE_CONTEXT_STALE` satırını, doc 15 §7
+  hâlâ `ARTIFACT_NOT_AVAILABLE`'ı taşıyor. Bunlar artık **kayıtlı sapma**: spec kodu adlandırıyor,
+  kod onu üretebilecek özelliği taşımıyor. Retention/integrity ailesi yazıldığında sınıf spec adıyla
+  geri gelecek — ratchet'in O-03R bloğu o kararı bilinçli kılmak için orada.

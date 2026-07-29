@@ -121,7 +121,7 @@ their row order, and they exist so a test can cite something.
 | CP-02 | Add package derivation | `integration/test_derive_strategy_draft.py` |
 | CP-03 | Use authorization | `unit/test_package_permissions.py`; `integration/test_package_sharing.py` |
 | CP-04 | Request requiredness | `integration/test_create_package_persistence.py::test_description_route_skips_dependency_gate` |
-| CP-05 | Runtime alignment | — **no test** (`RUNTIME_UNAVAILABLE` path) |
+| CP-05 | Runtime alignment | `unit/test_acceptance_create_package_runtime.py` *(added 2026-07-29, §H)* |
 | CP-06 | Pre-Check stale | `integration/test_precheck_audit_events.py` (`precheck_stale`) |
 | CP-07 | Missing ESP | `integration/test_create_package_persistence.py::test_missing_resolver_blocks_precheck_and_send` |
 | CP-08 | Async resilience | `integration/test_create_package_precheck_worker.py` (durable QUEUED job) |
@@ -130,7 +130,7 @@ their row order, and they exist so a test can cite something.
 | CP-11 | Baseline policy | `integration/test_create_package_baseline_worker.py` |
 | CP-12 | Future-leak validation | `integration/test_create_package_candidate_validation_worker.py` |
 | CP-13 | Approval policy | `integration/test_create_package_approve_dependency_gate.py`; `unit/test_create_package_policy.py` |
-| CP-14 | Clear boundary | — **no test** |
+| CP-14 | Clear boundary | `frontend/src/test/createPackageClearBoundary.test.tsx` *(added 2026-07-29, §H)* |
 | CP-15 | Trash / history | `integration/test_trash_page.py`; `integration/test_package_lifecycle.py` |
 | CP-16 | Agent parity | `contract/test_create_package_contract.py` (agent principal) |
 
@@ -143,7 +143,7 @@ their row order, and they exist so a test can cite something.
 | PL-03 | Filter query | `integration/test_library_persistence.py::test_type_and_family_filters`, `::test_status_facet_and_text_filters` |
 | PL-04 | External type rejection | `unit/test_package_kind.py::test_legacy_types_are_rejected` |
 | PL-05 | Status separation | `integration/test_library_persistence.py::test_detail_projection_and_guards` |
-| PL-06 | Metric applicability | — **no test** (ROMAD-on-Condition sort scope) |
+| PL-06 | Metric applicability | `integration/test_acceptance_esp_package_gaps.py::test_condition_package_romad_is_not_applicable_and_nothing_can_sort_on_it` *(added 2026-07-29, §H)* |
 | PL-07 | Use exact pinning | `integration/test_create_package_revision_chain.py` |
 | PL-08 | Compatibility | `unit/test_readiness_validators.py` (`PACKAGE_TIMING_INCOMPATIBLE` family) |
 | PL-09 | Dependency cycle | `unit/test_package_dependency_graph.py` |
@@ -168,7 +168,7 @@ their row order, and they exist so a test can cite something.
 | ESP-02 | Canonical type enforcement | `unit/test_package_kind.py::test_legacy_types_are_rejected` |
 | ESP-03 | V18 sample catalog | `integration/test_esp_persistence.py::test_seed_style_ta_resolvers_resolve` |
 | ESP-04 | System facets | `integration/test_esp_persistence.py::test_list_filters_by_visibility_scope` |
-| ESP-05 | Rationale seed | — **no test** (this is also doc 10 **RF-15**, see §E) |
+| ESP-05 | Rationale seed | `integration/test_acceptance_esp_package_gaps.py::test_seeded_ta_resolver_family_is_active_and_binds_esp_packages_by_id` *(added 2026-07-29, §H; also doc 10 **RF-15**)* |
 | ESP-06 | Resolver exact match | `integration/test_esp_persistence.py::test_resolve_returns_exact_revision_only_when_trusted` |
 | ESP-07 | Name-only rejection | `integration/test_esp_persistence.py::test_resolve_signature_mismatch_and_adapter` |
 | ESP-08 | Adapter rejection | `integration/test_esp_persistence.py::test_resolve_signature_mismatch_and_adapter` |
@@ -182,7 +182,7 @@ their row order, and they exist so a test can cite something.
 | ESP-16 | Deprecation | `integration/test_esp_persistence.py::test_deprecate_closes_new_selection` |
 | ESP-17 | Delete policy | `integration/test_esp_persistence.py::test_soft_delete_preserves_revision_chain` |
 | ESP-18 | Trash policy | `integration/test_trash_page.py::test_trash_surfaces_reject_non_admin` |
-| ESP-19 | Export integrity | — **no test** |
+| ESP-19 | Export integrity | `integration/test_acceptance_esp_package_gaps.py::test_esp_revision_export_carries_identity_hash_and_dependency_manifest` *(added 2026-07-29, §H — **partial**, see §E.4)* |
 | ESP-20 | Role-aware list | `integration/test_esp_persistence.py::test_list_filters_by_visibility_scope` |
 
 > The mappings in §C are **stated, not scanner-verified** — they were established by
@@ -235,6 +235,59 @@ change and out of scope for a traceability slice. The hole is pinned as a commen
 next to the passing RF-12 test so it cannot be silently lost.
 
 **Recommended follow-up:** `fix/rf12-blank-rationale-family-blocks-ready`.
+
+### E.2 — DEFECT found while writing the PC-19 test (added 2026-07-29, I-17-COV)
+
+A **soft-deleted ESP still resolves for a new Pre-Check.** `soft_delete_entity`
+runs no ESP-specific preflight (`commands/deletion.py::_soft_delete_preflight`
+branches only on `work_object` and `rationale_family`) and leaves
+`embedded_resolver_registry` untouched, while
+`queries/esp.py::resolve_embedded_dependency` decides on the registry entry's
+`trust_state` alone — it never reads the root's `deletion_state`. Probed
+empirically on 2026-07-29: activate `ta.sma` → soft-delete its root → resolve →
+the **same trusted revision came back**.
+
+That is the second clause of doc 07 **PC-19** ("new Pre-Check does not resolve
+soft-deleted/inactive ESP"), and the resolver's own docstring
+(`queries/esp.py:228`) already advertises `deprecated / soft-deleted registry
+entry -> RESOLVER_NOT_ACTIVE` — so the implementation contradicts its documented
+contract, not merely the spec. The PC-19 test therefore asserts only the FIRST
+clause (the historical manifest stays readable, which does hold) and pins the hole
+in its docstring.
+
+Adjacent, unasserted here: doc 09 **ESP-17** says the server should block or
+redirect a soft-delete of an *active trusted* resolver toward deprecation. No such
+preflight exists either — the probe's delete simply succeeded.
+
+**Recommended follow-up:** `fix/pc19-soft-deleted-esp-must-not-resolve`.
+
+### E.3 — Missing surfaces the "Agent parity" rows name (added 2026-07-29, I-17-COV)
+
+`domain/agent_lab/tool_gateway.py::ToolName` has **no `strategy.*` and no
+`trading_signal.*` member** (it ships task/backtest/artifact/documentation tools
+plus the post-V1 S4 allocation + trade_log set). So the literal "via Tool Gateway"
+clause of doc 02 **AT-21** and doc 04 **TS-20** has nothing to call. The tests
+added for those IDs prove the substance both rows are about — and what doc 03
+**AOS-20** states outright ("Tool Gateway/**domain commands**") — namely that the
+Agent reaches the same server truth on the same command line, under the same
+policy, with no browser. The missing tools are an implementation gap, not a test
+gap.
+
+**Recommended follow-up:** `feat/gateway-strategy-and-signal-tools`.
+
+### E.4 — Export manifest omits the ESP contract facts (added 2026-07-29, I-17-COV)
+
+Doc 09 **ESP-19** requires the export artifact to carry "root/revision identity,
+content hash, signature, adapter ref, evidence and dependency manifest".
+`commands/package_lifecycle.py::export_package` builds the manifest from the
+package **revision** only, while `runtime_adapter` and `evidence` live on
+`embedded_resolver_contract` — so an ESP export ships identity + content hash +
+dependency manifest (and the signature, because the seed/create path puts it in
+`input_contract`), but **not the adapter ref and not the evidence**. The ESP-19
+test asserts exactly what is present and names the rest as this gap rather than
+weakening the row.
+
+**Recommended follow-up:** `feat/esp19-export-carries-contract-facts`.
 
 ---
 
@@ -341,3 +394,70 @@ Unchanged from §E — this slice closed a traceability nuance, not a coverage g
 TS-20 / AOS-20 (Tool Gateway parity for Trading Signal), AT-21 (Agent parity on the
 Strategy save line), TS-16 / TL-18 / AOS-16, RF-15 / ESP-05, AOS-12, AT-24,
 PC-14 / PC-19 / PC-22, CP-05, CP-14, PL-06, ESP-19.
+
+> **Superseded on 2026-07-29 by §H** — every ID in that sentence except `AOS-12`
+> (its own slice) now has a test. §G.3 is kept verbatim as the record of where
+> §G left things.
+
+---
+
+## §H. Slice `test/i17cov-acceptance-id-gaps` (2026-07-29)
+
+The §E/§G.3 list was re-verified ID by ID against the repo and then closed with
+REAL tests — not tags. Reproduce with `python3 docs/audit/acceptance_id_scan.py`.
+
+### H.1 — Result
+
+| Page | Prefix | §G left | Now | Untraced now |
+|---|---|---|---|---|
+| 02 Add Strategy / Strategy Details | `AT` | 20/25 | **22/25** | AT-04, AT-06, AT-07 |
+| 03 Add Outsource Signal | `AOS` | 18/21 | **20/21** | AOS-12 |
+| 04 Trading Signal | `TS` | 18/21 | **20/21** | TS-10 |
+| 05 Trade Log | `TL` | 22/23 | **23/23 COMPLETE** | — |
+| 07 Pre-Check | `PC` | 14/22 | **17/22** | PC-01, PC-02, PC-15, PC-16, PC-18 |
+| 10 Rationale Families | `RF` | 16/18 | 16/18 | RF-13, RF-18 |
+| **In-scope subtotal** | | **108/130** | **118/130** | 12 |
+| **Total (all scanned pages)** | | **163/215** | **173/215 (80%)** | 42 |
+
+Docs 06/08/09 stay invisible to the scanner (§C), so `CP-05`, `CP-14`, `PL-06` and
+`ESP-05`/`ESP-19` do not move a counter — their tests cite the audit-local IDs in
+the `CP-14 (docs/audit, doc 06 row 14)` form §C prescribes.
+
+> The 163 baseline is one higher than §A's 162: `FD-03` was tagged between the two
+> measurements by the doc-22 audit slice (PR #471), outside this work.
+
+### H.2 — Tests written
+
+| ID(s) | Test | File |
+|---|---|---|
+| PC-14 | `test_user_resolver_approval_is_denied_and_the_proposal_stays_intact` | `integration/test_acceptance_esp_package_gaps.py` |
+| PC-19 *(clause 1 only, see §E.2)* | `test_soft_deleted_esp_keeps_the_historical_dependency_manifest_readable` | same |
+| ESP-19 *(partial, see §E.4)* | `test_esp_revision_export_carries_identity_hash_and_dependency_manifest` | same |
+| RF-15 / ESP-05 | `test_seeded_ta_resolver_family_is_active_and_binds_esp_packages_by_id` | same |
+| PL-06 | `test_condition_package_romad_is_not_applicable_and_nothing_can_sort_on_it` | same |
+| AT-21 | `test_agent_saves_a_strategy_revision_with_human_parity`, `test_agent_strategy_save_honours_idempotency_and_ownership` | `integration/test_acceptance_agent_parity_gaps.py` |
+| AT-24 | `test_strategy_delete_waits_for_the_run_guard_and_keeps_run_provenance` | same |
+| TS-20 / AOS-20 *(domain-command half, see §E.3)* | `test_agent_imports_and_saves_a_trading_signal_without_a_ui`, `test_agent_signal_is_not_auto_attached_to_a_human_board` | same |
+| CP-05 | `test_python_is_the_only_registered_target_runtime`, `test_registered_runtime_normalizes_and_an_unregistered_one_is_unavailable` | `unit/test_acceptance_create_package_runtime.py` |
+| TS-16 / TL-18 / AOS-16 | 2 tests — expand+collapse every row kind issues no write request; composition hash and pins unchanged | `frontend/src/test/presentationState.test.tsx` |
+| PC-22 | 3 tests — `<script>` / `onerror` / closing-tag payloads render as literal text, create no element, run no handler | `frontend/src/test/preCheckUntrustedStrings.test.tsx` |
+| CP-14 | 2 tests — Clear empties the unsent editor and sends **nothing**; the submitted request stays listed | `frontend/src/test/createPackageClearBoundary.test.tsx` |
+
+Three of these rows are deliberately partial. Each names the missing clause in its
+own docstring and in §E.2 / §E.3 / §E.4 — no assertion was weakened to make a row
+look closed, and no failing test was deleted.
+
+### H.3 — Still open after this slice
+
+* `AOS-12` — `KIND_REVISION_MISMATCH` has no implementation; its own slice
+  (`feat/aos12-kind-revision-mismatch`).
+* `AT-04`, `AT-06`, `AT-07`, `TS-10`, `PC-01`, `PC-02`, `PC-15`, `PC-16`, `PC-18`,
+  `RF-13`, `RF-18` — untraced in-scope IDs that were **never** on the §E
+  genuine-gap list; most are traceability (an existing test does not name the ID),
+  e.g. `AT-04` is enforced by
+  `test_backtest_persistence.py::test_worker_fails_closed_on_instrument_mismatch`
+  (§D). They were not touched here because a tag must be verified by reading the
+  test, and this slice's budget went to the genuine gaps.
+* Pages `14 RC`, `16 RH`, `18 AL`, `21 UM`, `22 FD` — out of scope throughout, 42
+  untraced IDs in total.
+* Docs 01/11/12/13/15/17/19/20 still publish acceptance tables with no ID column.

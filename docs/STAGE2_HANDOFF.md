@@ -3054,3 +3054,39 @@ Kalan tek büyük açık iş hâlâ **R2'nin product-owner imzası**
 (`docs/implementation/v18_final_acceptance.md` §4, D-1…D-9) — imza olmadan
 `entropia_v18_remediation_status.md`'deki R2 RE-OPENING banner'ı kalkmaz.
 
+
+---
+
+## I-17-COV — kalan kabul-ID kapsam boşlukları gerçek testlerle kapandı (PR TBD)
+
+**Branch:** `test/i17cov-acceptance-id-gaps` · **test-only: `src/` değişmedi, migration yok,
+alembic head `0039_backtest_run_cancellation`, `ENGINE_VERSION` bump yok.**
+
+**Ölçüm (`python3 docs/audit/acceptance_id_scan.py`):** **163/215 (%75) → 173/215 (%80)**;
+kapsam içi (doc 02/03/04/05/07/10) **108/130 → 118/130**; doc 05 Trade Log **COMPLETE**.
+
+I-17'nin `acceptance_id_map.md` §E'de bıraktığı "gerçek boşluk" listesi (etiketsiz değil, **testsiz**)
+ID ID yeniden doğrulandı ve **20 yeni test / 6 yeni dosya** ile kapatıldı: PC-14, PC-19 (1. cümle),
+ESP-19 (kısmi), RF-15/ESP-05, PL-06, AT-21, AT-24, TS-20/AOS-20 (domain-command yarısı), CP-05,
+TS-16/TL-18/AOS-16, PC-22, CP-14. Tam tablo + kanıt: `docs/PROJECT_HISTORY.md` §I-17-COV ve
+`docs/audit/acceptance_id_map.md` §H.
+
+**Üç kusur bulundu, yamanmadı, belgelendi** (I-17'nin RF-12 deseni):
+1. **PC-19 2. cümle tutmuyor** — soft-delete edilmiş ESP yeni Pre-Check'te hâlâ çözülüyor
+   (`resolve_embedded_dependency` kökün `deletion_state`'ine bakmıyor; fonksiyonun kendi
+   docstring'i tersini vaat ediyor) → `fix/pc19-soft-deleted-esp-must-not-resolve`.
+2. **AT-21/TS-20'nin "Tool Gateway" cümlesi karşılıksız** — `ToolName`'de `strategy.*` /
+   `trading_signal.*` üyesi yok → `feat/gateway-strategy-and-signal-tools`.
+3. **ESP-19 export'u adapter ref + evidence taşımıyor** (manifest yalnız paket revision'ından
+   kuruluyor) → `feat/esp19-export-carries-contract-facts`.
+
+**Kalan (bu slice'ın kapsamı dışı, dürüst sınır):** `AOS-12` (kendi branch'i); kapsam içi 12 etiketsiz
+ID (`AT-04/06/07`, `TS-10`, `PC-01/02/15/16/18`, `RF-13/18`) — hiçbiri §E'nin gerçek-boşluk
+listesinde değildi, çoğu izlenebilirlik borcu; `RC`/`RH`/`AL`/`UM`/`FD` sayfaları (42 ID) baştan
+kapsam dışı; doc 06/08/09 hâlâ ID sütunsuz.
+
+## Next: **PO imzası + R2 kapanışı** (değişmedi) · I-17-COV landed
+
+Kalan tek büyük açık iş hâlâ **R2'nin product-owner imzası**
+(`docs/implementation/v18_final_acceptance.md` §4, D-1…D-9). Kabul-ID izlenebilirliği tarafında
+sıradaki en yüksek değerli iş, yukarıdaki üç fix/feat slice'ı ve kalan 12 in-scope etiketi.

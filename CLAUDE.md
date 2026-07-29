@@ -197,8 +197,13 @@ Before stopping a working session, produce **ALL** of the following:
 
 - **F-07 raw-id sweep — SUNUM katmanı kapandı (PR #404).** 31 dosyada 161 `*_id` render'ı tarandı;
   **4 kalıntı açık** (backend display-DTO → `v18_visual_traceability.md §4.4`) — yani **F-07 bütün
-  olarak Complete DEĞİL**. vitest **622/622** (**`--no-file-parallelism` ZORUNLU**; worktree'de
-  `frontend/node_modules` yoksa önce `npm ci` — ilk koşudaki `ERR_MODULE_NOT_FOUND` test hatası değil).
+  olarak Complete DEĞİL**. vitest **654/654** (I-17-COV sonrası; **`--no-file-parallelism` ZORUNLU**;
+  worktree'de `frontend/node_modules` yoksa önce `npm ci` — ilk koşudaki `ERR_MODULE_NOT_FOUND`
+  test hatası değil).
+
+- **Kabul-ID izlenebilirliği (I-17 → I-17-COV):** `python3 docs/audit/acceptance_id_scan.py` →
+  **173/215 (%80)**, kapsam içi **118/130**, doc 05 COMPLETE. Denetim: `docs/audit/acceptance_id_map.md`
+  (§H = son dalga, §E.2–§E.4 = açılan üç kusur). Kalan in-scope etiketsiz 12 ID + `AOS-12`.
 
 
 - **Next (PO imzası BLOKAJ DEĞİL — imza 2026-07-22'de atıldı,
@@ -214,6 +219,11 @@ Before stopping a working session, produce **ALL** of the following:
      `docs/PROJECT_HISTORY.md` §"Sonradan canonical olan dört satır".
   4. **Round-3 backlog:** S5 (a/b/c/d) + S-L1…S-L6
      (`docs/POST_V1_SPEC_GAP_BACKLOG_ROUND3.md` §DURUM TAZELEME — diğer 8 madde landed).
+  5. **I-17-COV'un açtığı 3 kusur slice'ı** (test-only slice bilerek yamamadı, bkz.
+     `docs/audit/acceptance_id_map.md` §E.2–§E.4): `fix/pc19-soft-deleted-esp-must-not-resolve`
+     (soft-delete edilmiş ESP yeni Pre-Check'te hâlâ çözülüyor) ·
+     `feat/gateway-strategy-and-signal-tools` (AT-21/TS-20'nin Tool Gateway cümlesi karşılıksız) ·
+     `feat/esp19-export-carries-contract-facts`.
 - **Açık iş (R2 kapsamı dışı, dürüst sınır):** ekran okuyucu (NVDA/VoiceOver) denetimi yapılmadı;
   10 sayfanın derin görsel kıyası eksik; a11y/visual katmanları CI'da koşmadı; A11Y-01 kontrast
   (228 serious node, tamamı canonical v18 paletinden) ve A11Y-02 kayıtlı sapma olarak açık.

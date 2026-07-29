@@ -2035,3 +2035,66 @@ değildir** — kaydedilmemiş olması kusurdur.
   `tests/integration/test_market_crossrow_validation.py:160`) ve **ikisi de OHLCV** kullanıyor —
   tick/spread için tip-agnostik davranışı kilitleyen bir test **yok**. Yeni test eklenmedi (bu slice
   docs-only); borç olarak kayıtlı.
+
+---
+
+## I-17-COV · Kalan kabul-ID kapsam boşlukları — gerçek testlerle kapatıldı (test-only)
+
+**Branch:** `test/i17cov-acceptance-id-gaps` · **Migration YOK · ENGINE_VERSION bump YOK · `src/` DEĞİŞMEDİ.**
+**Ölçüm:** `python3 docs/audit/acceptance_id_scan.py` — **ÖNCE 163/215 (%75), SONRA 173/215 (%80)**;
+kapsam içi (doc 02/03/04/05/07/10) **108/130 → 118/130**. Doc 05 Trade Log **COMPLETE (23/23)**.
+
+### Ne kapandı
+
+I-17'nin `docs/audit/acceptance_id_map.md` §E'de "gerçek boşluk" (etiketsiz değil, **testsiz**)
+diye bıraktığı liste, her maddesi repoda yeniden doğrulanarak kapatıldı. 20 yeni test, 6 yeni dosya:
+
+| ID | Ne kanıtlanıyor | Dosya |
+|---|---|---|
+| PC-14 | Non-Admin resolver approval → `APPROVAL_REQUIRES_ADMIN` (403) **ve** registry pointer / registry_version / revision approval / ApprovalDecision satırı hiç kıpırdamıyor | `backend/tests/integration/test_acceptance_esp_package_gaps.py` |
+| PC-19 *(1. cümle)* | Tarihsel revision'ın pinlediği ESP soft-delete edilince dependency snapshot **ve** pinli ESP revision'ı (aynı content hash) hâlâ okunuyor | aynı |
+| ESP-19 *(kısmi)* | ESP revision export'u root/revision kimliği + content hash + signature + dependency manifest taşıyor | aynı |
+| RF-15 / ESP-05 | Seed `Embedded System / TA Resolver` Family'si ACTIVE ve **birebir o string** ile bulunuyor; ESP↔Family ilişkisi katalog filtresinde **id üzerinden** çözülüyor (V18'in string mismatch'i yok) | aynı |
+| PL-06 | Condition paketinin ROMAD'ı (ve tüm kardeş metrikleri) `not_applicable`, uydurma sıfır değil; katalog sorgusunda **sort parametresi hiç yok** | aynı |
+| AT-21 | Agent, insanın kullandığı **aynı** komut hattında Strategy revision kaydediyor: aynı `config_hash`, aynı Idempotency-Key sözleşmesi, aynı ownership reddi, agent principal'ıyla audit | `backend/tests/integration/test_acceptance_agent_parity_gaps.py` |
+| AT-24 | Silme önce **aktif-run guard**'ına takılıyor (`OBJECT_IN_ACTIVE_RUN`), run bitince soft-delete geçiyor, tarihsel Run Manifest/Result aynı `manifest_hash`'i çözmeye devam ediyor, restore **Admin-only** | aynı |
+| TS-20 / AOS-20 *(domain-command yarısı)* | Agent UI'siz upload→import→save&attach yapıyor; çıktı agent'a ait ve provenance'lı; **insanın board'u hiç değişmiyor**, agent kendi workspace'ine bağlanıyor | aynı |
+| CP-05 | `SUPPORTED_TARGET_RUNTIMES == {python}` (V18 PHP/Python çelişkisi Production'da erişilemez) + kayıtsız adapter → `RUNTIME_UNAVAILABLE` | `backend/tests/unit/test_acceptance_create_package_runtime.py` |
+| TS-16 / TL-18 / AOS-16 | Üç satır tipinin expand+collapse'ı **tek bir yazma isteği** üretmiyor; composition_hash ve pinler değişmiyor | `frontend/src/test/presentationState.test.tsx` |
+| PC-22 | `<script>`, `onerror` ve kapanış-etiketi payload'ları düz metin olarak render ediliyor; hiç element yaratılmıyor, hiç handler koşmuyor, layout bozulmuyor | `frontend/src/test/preCheckUntrustedStrings.test.tsx` |
+| CP-14 | Clear gönderilmemiş editörü boşaltıyor ve **hiçbir istek** göndermiyor; submitted request listede kalıyor | `frontend/src/test/createPackageClearBoundary.test.tsx` |
+
+### Bulunan kusurlar — yamanmadı, belgelendi (I-17'nin RF-12 deseni)
+
+1. **PC-19 2. cümle TUTMUYOR (ampirik).** Soft-delete edilmiş bir ESP **yeni Pre-Check'te hâlâ
+   çözülüyor**: `commands/deletion.py::_soft_delete_preflight` yalnız `work_object` ve
+   `rationale_family` dallarını tanıyor, `embedded_resolver_registry`'ye dokunmuyor;
+   `queries/esp.py::resolve_embedded_dependency` ise sadece registry `trust_state`'ine bakıyor,
+   kökün `deletion_state`'ine **hiç bakmıyor**. Probe: `ta.sma` activate → root soft-delete →
+   resolve → **aynı trusted revision döndü**. Fonksiyonun kendi docstring'i (`queries/esp.py:228`)
+   zaten "deprecated / soft-deleted registry entry -> RESOLVER_NOT_ACTIVE" diyor — yani
+   implementasyon kendi belgelediği sözleşmeyle çelişiyor. Ayrıca doc 09 **ESP-17**'nin
+   "aktif trusted resolver'ın soft-delete'i bloklanmalı" kuralının da preflight'ı yok.
+   → **`fix/pc19-soft-deleted-esp-must-not-resolve`**
+2. **AT-21 / TS-20'nin "Tool Gateway" cümlesi karşılıksız.** `ToolName` enum'unda `strategy.*` ve
+   `trading_signal.*` üyesi **yok** (S4'te allocation + trade_log geldi). Çağrılacak bir şey
+   olmadığı için o cümle test edilemez; testler satırların özünü (aynı komut hattı, aynı politika,
+   UI'siz) kanıtlıyor — AOS-20 zaten "Tool Gateway/**domain commands**" diyor.
+   → **`feat/gateway-strategy-and-signal-tools`**
+3. **ESP-19 export'u adapter ref ve evidence taşımıyor.** `export_package` manifest'i yalnız paket
+   **revision**'ından kuruluyor; `runtime_adapter` ve `evidence` ise `embedded_resolver_contract`
+   satırında. → **`feat/esp19-export-carries-contract-facts`**
+
+Üçü de `docs/audit/acceptance_id_map.md` §E.2/§E.3/§E.4'te ve ilgili testin docstring'inde kayıtlı.
+**Hiçbir assertion zayıflatılmadı, hiçbir başarısız test silinmedi.**
+
+### Dürüst sınırlar
+
+- `AOS-12` (`KIND_REVISION_MISMATCH`) bu slice'ın dışında — kendi branch'i var.
+- Kapsam içinde **12 ID hâlâ etiketsiz**: `AT-04/06/07`, `TS-10`, `PC-01/02/15/16/18`, `RF-13/18`.
+  Bunlar §E'nin "gerçek boşluk" listesinde **hiç yoktu** (çoğu izlenebilirlik: test var, ID'yi
+  anmıyor — ör. `AT-04` → `test_backtest_persistence.py::test_worker_fails_closed_on_instrument_mismatch`).
+  Etiket, testi **okumadan** atılamayacağı için bu slice'a alınmadı.
+- Doc 06/08/09 hâlâ ID sütunsuz; `CP-*`/`PL-*`/`ESP-*` testleri audit-local ID'yi
+  `CP-14 (docs/audit, doc 06 row 14)` biçiminde anıyor ama tarayıcı sayacını oynatmıyor.
+- `RC`/`RH`/`AL`/`UM`/`FD` sayfaları baştan kapsam dışı (42 etiketsiz ID).

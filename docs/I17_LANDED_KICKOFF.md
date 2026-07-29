@@ -1,5 +1,10 @@
 # I-17 landed — sıradaki slice için kickoff
 
+> **SUPERSEDED (2026-07-29):** devamı `docs/I17COV_LANDED_KICKOFF.md`'dedir. Aşağıdaki
+> §"Sıradaki adaylar" 3. maddesindeki gerçek kapsam boşlukları (`AOS-12` hariç) I-17-COV
+> slice'ında gerçek testlerle kapatıldı; ölçüm 163/215 → **173/215**. Bu dosya I-17'nin
+> kaydı olarak olduğu gibi bırakıldı.
+
 **Baseline:** PR #416 (`feat/t2-acceptance-id-traceability`) · **Migration YOK · ENGINE_VERSION değişmedi.**
 
 > **STALE-BY-DEFAULT.** Bu dosyaya güvenmeden önce `git fetch && git log --oneline origin/main -6 &&

@@ -1128,6 +1128,15 @@ class SignalSupportingRequirementUnmetError(ValidationError):
     message = "Add enough active Supporting entry Indicator Blocks for the selected signal rule."
 
 
+class RestrictionMinCountUnsatisfiableError(ValidationError):
+    """The Restrictions/Filters combination is ``Minimum N of M`` but N exceeds the
+    number of ENABLED filters, so the gate can never block an entry (doc 02 §5.8,
+    I-15a) — the restriction-side twin of SIGNAL_SUPPORTING_REQUIREMENT_UNMET."""
+
+    code = "RESTRICTION_MIN_COUNT_UNSATISFIABLE"
+    message = "Minimum N of M cannot exceed the number of enabled restrictions."
+
+
 class EntryDirectionIncoherentError(ValidationError):
     """An active entry Indicator Block's direction can never fire under the
     strategy's direction mode (doc 02 §9, AT-08, line 1306)."""

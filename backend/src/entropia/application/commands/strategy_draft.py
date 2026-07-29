@@ -43,6 +43,7 @@ from entropia.domain.package.permissions import package_permissions
 from entropia.domain.strategy.compiler import (
     CODE_ENTRY_DIRECTION_INCOHERENT,
     CODE_ENTRY_REQUIRED_BLOCK_MISSING,
+    CODE_RESTRICTION_MIN_COUNT_UNSATISFIABLE,
     CODE_SIGNAL_SUPPORTING_REQUIREMENT_UNMET,
     CODE_SIZING_NOT_EXCLUSIVE,
     CODE_TRIGGER_CONDITION_REQUIRED,
@@ -69,6 +70,7 @@ from entropia.shared.errors import (
     PackageNotDerivableError,
     PackageNotFound,
     RationaleFamilyNotActive,
+    RestrictionMinCountUnsatisfiableError,
     SignalSupportingRequirementUnmetError,
     SizingMethodNotExclusiveError,
     StrategyDraftConflictError,
@@ -763,6 +765,8 @@ def _raise_for_issues(issues: list[dict[str, Any]]) -> None:
         raise SignalSupportingRequirementUnmetError(details=issues)
     if CODE_ENTRY_DIRECTION_INCOHERENT in codes:
         raise EntryDirectionIncoherentError(details=issues)
+    if CODE_RESTRICTION_MIN_COUNT_UNSATISFIABLE in codes:
+        raise RestrictionMinCountUnsatisfiableError(details=issues)
     raise StrategyValidationFailedError(details=issues)
 
 

@@ -61,8 +61,9 @@ jobs:
         run: uv run alembic upgrade head
       - name: Pytest (unit + contract + integration) + coverage gate
         working-directory: backend
-        # pyproject's addopts carry --cov-fail-under=80, so a coverage drop fails
-        # here rather than being printed and ignored.
+        # pyproject's addopts carry --cov-fail-under=90, so a coverage drop fails
+        # here rather than being printed and ignored. The floor is calibrated
+        # against a measured 92.06% — docs/audit/coverage_baseline.md.
         run: uv run pytest
 
       - name: Dependency audit (pip-audit)

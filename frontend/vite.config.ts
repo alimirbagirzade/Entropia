@@ -52,18 +52,23 @@ export default defineConfig({
       exclude: ["src/test/**", "src/main.tsx", "src/**/*.d.ts", "src/**/*.generated.ts"],
       // A gate, not a report: `npm run coverage` fails below these numbers.
       //
-      // Calibrated from a measured run: lines 83.2, statements 80.9, functions
-      // 73.4, branches 70.7. Those figures are a LOWER bound — they come from a
-      // run whose suite was not fully green, so a clean run measures at least
-      // this much. The thresholds sit a couple of points under that floor so an
-      // ordinary regression trips them without flagging normal drift. Raise them
-      // once a green run gives the true numbers; never lower one to turn a red
-      // run green — add the missing test instead.
+      // Calibrated from a FULLY GREEN run (61 files, 641 tests, 0 failures):
+      // lines 84.67, statements 82.29, functions 75.09, branches 71.96 — recorded
+      // with the per-file breakdown in docs/audit/coverage_baseline.md. These
+      // replace the first set, which came from a run whose suite was not green and
+      // was therefore only a lower bound (lines 83.2 / statements 80.9 /
+      // functions 73.4 / branches 70.7).
+      //
+      // Each threshold sits ~2 points under its measured value: enough that an
+      // ordinary regression trips the gate, enough headroom that the untested
+      // macOS-local vs CI-Linux difference does not. Tighten by a point once CI
+      // has reported its own numbers; never lower one to turn a red run green —
+      // add the missing test instead.
       thresholds: {
-        lines: 80,
-        statements: 78,
-        functions: 70,
-        branches: 68,
+        lines: 83,
+        statements: 80,
+        functions: 73,
+        branches: 70,
       },
     },
   },

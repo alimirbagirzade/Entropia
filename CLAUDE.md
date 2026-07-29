@@ -67,8 +67,10 @@ Before stopping a working session, produce **ALL** of the following:
   public API / data schema / user request verbatim -> retry). First Bash of a session
   triggers a one-time fact gate.
 - **Local verify (backend):** `cd backend && uv run ruff check . && uv run ruff format --check . && uv run mypy src && uv run pytest -q`
-  — `addopts` artık `--cov-fail-under=80` taşıyor, yani **tam suite** koşusu CI'daki coverage
-  kapısını da doğruluyor (ölçülen toplam ~%90). **Alt küme koşarken `--no-cov` ekle:** tek
+  — `addopts` artık `--cov-fail-under=90` taşıyor, yani **tam suite** koşusu CI'daki coverage
+  kapısını da doğruluyor (**ölçülen toplam %92.06**, 2712 passed; frontend %84.67 line —
+  modül dökümü + kalibrasyon gerekçesi `docs/audit/coverage_baseline.md`).
+  **Alt küme koşarken `--no-cov` ekle:** tek
   dosyalık bir koşu paketin tamamını ~%4 ölçer ve kapı sahte kırmızı verir. Frontend karşılığı
   `npm run coverage` (eşikler `frontend/vite.config.ts`). İkisi de **kapıdır, rapor değil** —
   düşen sayıyı indirme, eksik testi yaz.

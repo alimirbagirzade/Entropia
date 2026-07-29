@@ -159,11 +159,6 @@ Before stopping a working session, produce **ALL** of the following:
   seçenek kümesi taşıyor; yeni `domain/trash/restore.py` katalogu + salt-okuma
   `GET /trash-entries/{id}/restore-preflight`; bilinmeyen resolution 422
   `UNSUPPORTED_RESTORE_RESOLUTION`; migration YOK)** ·
-  O-21 (#430) · **O-27 (#450 — AOS-03 `INVALID_ITEM_KIND`, migration YOK)**.
-  **O-27 O-03'ün bir satırını bilerek geri alır:** `INVALID_ITEM_KIND` artık gerçek bir kod —
-  `signal_package`/`trade_log_package` **yalnız bu iki etiket** 422 `INVALID_ITEM_KIND` alır
-  (tek kapı `domain/mainboard/item_kind.py`), geri kalan her şey `MAINBOARD_ITEM_KIND_MISMATCH`
-  kalır. `domain/package/kind.py::LEGACY_PACKAGE_TYPES` ters yöne bakar → **KALDIRMA**.
 
 - **Testler:** son yeşil referans CI (O-serisi PR'ları). Lokal tam suite tek koşuda
   tamamlanabiliyor — O-27'de **2538 passed / 0 failed / 43dk39sn**, worktree'ye özel izole DB ile

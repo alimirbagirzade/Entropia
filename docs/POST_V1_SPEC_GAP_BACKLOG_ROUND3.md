@@ -40,7 +40,11 @@
 >
 > ### 📍 Kaymış satır/dizin referansları (gövdede düzeltilmedi — burası otorite)
 >
-> - **S-L1:** `shared/errors.py:964` → gerçek **`:1277`**
+> - **S-L1:** `shared/errors.py:964` → ~~`:1277`~~ → gerçek **`:1449`** (2026-07-29,
+>   `origin/main` @ `9e86c99`). `:1277` başka bir hata sınıfının `suggested_action` satırıydı.
+>   **Bu satır numarası kayan bir hedeftir** — `errors.py` her hata-sınıfı slice'ında büyüyor;
+>   satır numarasına güvenme, sınıfı ada göre bul:
+>   `grep -n "class AllocationDraftConflictError" backend/src/entropia/shared/errors.py`
 > - **S6:** `routes/trading_signal.py` → gerçek dizin **`backend/src/entropia/apps/api/routes/`**
 > - **S-L7:** `nav.ts:130-131` → o satırlar artık `FUTURE_DEV_SUBPAGES` bloğu (dosya 272 satır)
 >
@@ -344,7 +348,8 @@ feat/s5<x>-strategy-<slug>, ayrı PR'lar, NO AI attribution.
 
 ## LOW (opsiyonel, tek-oturumluk küçükler)
 - **S-L1 — Allocation 409 gövdesi** 🔴 **AÇIK** (doc 13 §7.2/§10.2 Flow E): `AllocationDraftConflictError`
-  (~~shared/errors.py:964~~ → **gerçek `shared/errors.py:1277`**) statik; `current_draft` + `changed_paths[]` eklenebilir (route zaten
+  (~~shared/errors.py:964~~ → ~~`:1277`~~ → **`shared/errors.py:1449`**, 2026-07-29 @ `9e86c99`;
+  satır kayar — sınıfı ada göre grep'le) statik; `current_draft` + `changed_paths[]` eklenebilir (route zaten
   draft'ı okuyabiliyor). Frontend conflict UX'i buna göre zenginleşir.
 - **S-L2 — Export tipleri** (doc 15 §3.2): ExportType'a `pinescript_signal_marker` +
   `agent_dataset` ekle (domain/backtest/export.py — mevcut 5 tip deseni).

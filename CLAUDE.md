@@ -165,7 +165,14 @@ Before stopping a working session, produce **ALL** of the following:
 
 ## Current position (keep in sync at each closing)
 
-> Aşağıdaki değerler **2026-07-28** tarihinde repodan empirik doğrulandı (`origin/main` @
+> Aşağıdaki değerler **2026-07-29** tarihinde repodan empirik doğrulandı
+> (`origin/main` @ **`9e86c99`** — `chore(deps): update boto3-stubs[s3] requirement in
+> /backend (#480)`). Doğrula: `git fetch && git rev-parse --short origin/main` → bu sha ile
+> eşleşmeli; eşleşmiyorsa bu bölüm bayattır, önce `git log --oneline origin/main -6` oku.
+>
+> **Not (bu satır neden var):** burası uzun süre yarıda kesik bir cümleydi — "empirik
+> doğrulandı (`origin/main` @" deyip sha'yı hiç yazmıyordu, yani yukarıdaki doğrulama komutu
+> karşılaştıracak bir değer bulamıyordu. Kapanışta bu sha'yı **her zaman** tazele.
 
 - **Durum:** V1 ROADMAP COMPLETE (Stages 0–8, docs 01–22) + post-V1 + video-alignment +
   V18-R2 dalgası + **auth remediation dalgası COMPLETE** (güvenlik denetimi #346–#364).

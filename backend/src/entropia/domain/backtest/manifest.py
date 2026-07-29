@@ -89,7 +89,23 @@ from entropia.shared.manifest import manifest_hash
 # config space widened, and it shifts the execution_key namespace so a result produced by
 # an engine that could not evaluate Minimum-N is never idempotently reused for a re-RUN
 # (INF-04/INF-05).
-
+# v18-filtered-events-artifact (I-02): the FILTER vetoes (``filtered_no_entry``) leave the
+# ``signal_events`` journal and become their own ``filtered_events`` output journal +
+# persisted artifact (doc 15 §3.2 "View Filtered Events", §16). No trade, fill, price or
+# metric changes — but the artifact SHAPE does: ``signal_events`` loses those rows and every
+# surviving row's ``seq`` is renumbered, and ``diagnostics.decision_trace_count`` now counts
+# the signal journal alone. Those rows are persisted into the immutable Result and read by
+# users, so a pre-I-02 Result is NOT artifact-comparable with a new one; the bump shifts the
+# execution_key namespace so it is never idempotently reused for a re-RUN (INF-04/INF-05).
+# v18-scaling-tf-sequence (S5c): Logic-Based Scaling stopped being future_dev and
+# ``ScalingLogic`` gained ``timeframe_mode`` + ``custom_timeframe_sequence`` (doc 02 §5.7).
+# A logic-scaling block now resolves through the same resolver as entry/exit/stop and can
+# propose a same-direction layer on the signal's EDGE, gated on the closed candle of the
+# sequence entry for that layer — so a strategy that previously opened NO logic layer can
+# now open one. Price-distance ladders are untouched and reproduce byte-for-byte. The bump
+# shifts the execution_key namespace so a result produced by an engine that could not
+# evaluate logic scaling is never idempotently reused for a re-RUN (INF-04/INF-05).
+ENGINE_VERSION = "backtest-engine-v18-scaling-tf-sequence"
 METRIC_SET_VERSION = "metric-set-v1"
 OUTPUT_ARTIFACT_PROFILE = "standard-v1"
 

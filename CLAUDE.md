@@ -67,8 +67,10 @@ Before stopping a working session, produce **ALL** of the following:
   public API / data schema / user request verbatim -> retry). First Bash of a session
   triggers a one-time fact gate.
 - **Local verify (backend):** `cd backend && uv run ruff check . && uv run ruff format --check . && uv run mypy src && uv run pytest -q`
-  — `addopts` artık `--cov-fail-under=80` taşıyor, yani **tam suite** koşusu CI'daki coverage
-  kapısını da doğruluyor (ölçülen toplam ~%90). **Alt küme koşarken `--no-cov` ekle:** tek
+  — `addopts` artık `--cov-fail-under=90` taşıyor, yani **tam suite** koşusu CI'daki coverage
+  kapısını da doğruluyor (**ölçülen toplam %92.06**, 2712 passed; frontend %84.67 line —
+  modül dökümü + kalibrasyon gerekçesi `docs/audit/coverage_baseline.md`).
+  **Alt küme koşarken `--no-cov` ekle:** tek
   dosyalık bir koşu paketin tamamını ~%4 ölçer ve kapı sahte kırmızı verir. Frontend karşılığı
   `npm run coverage` (eşikler `frontend/vite.config.ts`). İkisi de **kapıdır, rapor değil** —
   düşen sayıyı indirme, eksik testi yaz.
@@ -163,7 +165,14 @@ Before stopping a working session, produce **ALL** of the following:
 
 ## Current position (keep in sync at each closing)
 
-> Aşağıdaki değerler **2026-07-28** tarihinde repodan empirik doğrulandı (`origin/main` @
+> Aşağıdaki değerler **2026-07-29** tarihinde repodan empirik doğrulandı
+> (`origin/main` @ **`9e86c99`** — `chore(deps): update boto3-stubs[s3] requirement in
+> /backend (#480)`). Doğrula: `git fetch && git rev-parse --short origin/main` → bu sha ile
+> eşleşmeli; eşleşmiyorsa bu bölüm bayattır, önce `git log --oneline origin/main -6` oku.
+>
+> **Not (bu satır neden var):** burası uzun süre yarıda kesik bir cümleydi — "empirik
+> doğrulandı (`origin/main` @" deyip sha'yı hiç yazmıyordu, yani yukarıdaki doğrulama komutu
+> karşılaştıracak bir değer bulamıyordu. Kapanışta bu sha'yı **her zaman** tazele.
 
 - **Durum:** V1 ROADMAP COMPLETE (Stages 0–8, docs 01–22) + post-V1 + video-alignment +
   V18-R2 dalgası + **auth remediation dalgası COMPLETE** (güvenlik denetimi #346–#364).

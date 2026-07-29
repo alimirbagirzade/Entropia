@@ -169,8 +169,8 @@ Before stopping a working session, produce **ALL** of the following:
   V18-R2 dalgası + **auth remediation dalgası COMPLETE** (güvenlik denetimi #346–#364).
   Tüm route yüzeyleri frontend'e bağlı; TIER 2 sayfa haritası 24/24.
 
-- **alembic head:** **`0040_filtered_event_artifact`** (40 migration, tek head; I-02'de eklendi —
-  öncesi `0039_backtest_run_cancellation`). **`ENGINE_VERSION` =
+- **alembic head:** **`0041_filtered_event_artifact`** (41 migration, tek head; I-02'de eklendi —
+  öncesi `0040_export_type_agent_pine`). **`ENGINE_VERSION` =
   `backtest-engine-v18-min-n-filtered-events-artifact`** (`manifest.py`; I-02'de bump edildi çünkü Result
   artifact ŞEKLİ değişti — öncesi K-03 `-funding-step-order`, K-04 `-full-pinning`, K-02
   `-available-time-gate`; **O-05/O-06 bump ETMEDİ**).

@@ -32,8 +32,8 @@ before this migration keep their exact rows; they simply carry no filtered-event
 and no checksum rows, and the drill-down reports ``checksum: null`` for them
 rather than inventing one. Downgrade drops both tables.
 
-Revision ID: 0040_filtered_event_artifact
-Revises: 0039_backtest_run_cancellation
+Revision ID: 0041_filtered_event_artifact
+Revises: 0040_export_type_agent_pine
 Create Date: 2026-07-28
 """
 
@@ -45,8 +45,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision: str = "0040_filtered_event_artifact"
-down_revision: str | None = "0039_backtest_run_cancellation"
+revision: str = "0041_filtered_event_artifact"
+down_revision: str | None = "0040_export_type_agent_pine"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

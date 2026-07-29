@@ -1624,8 +1624,8 @@ Docker, iki E2E (dev-auth + gerçek tarayıcı/Compose) ve A11Y axe-core taramas
 
 ## I-02 — Filtered Events kendi artifact'ı oldu; REGIME_TABLE Future-Dev sınırı olarak kayda geçti
 
-**Branch:** `feat/i02-filtered-events-artifact` · **Migration:** `0040_filtered_event_artifact`
-(alembic head `0039_backtest_run_cancellation` → `0040_filtered_event_artifact`, 40 migration) ·
+**Branch:** `feat/i02-filtered-events-artifact` · **Migration:** `0041_filtered_event_artifact`
+(alembic head `0039_backtest_run_cancellation` → `0041_filtered_event_artifact`, 40 migration) ·
 **ENGINE_VERSION:** `backtest-engine-v18-funding-step-order` → **`backtest-engine-v18-min-n-filtered-events-artifact`**
 
 ### Kusur (ampirik)

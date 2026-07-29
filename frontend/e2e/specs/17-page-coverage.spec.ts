@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { test } from "@playwright/test";
 
 import { ensureAdmin } from "../fixtures/auth";
 import { assertPageIsRealAndServed, type PageContract } from "../utils/pageTruth";

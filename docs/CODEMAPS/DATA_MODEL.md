@@ -54,6 +54,11 @@ CLAUDE.md'deki **"her yeni `create_*` için L1 FK insert-order proof"** kuralın
 ## OCC ve soft-delete konvansiyonu
 
 - **`row_version` (int)** → optimistic concurrency token'ı. Aşağıdaki tabloda ✔ olanlar taşır.
+- **OCC token'ının adı `row_version` olmak ZORUNDA DEĞİL.** Token = "int, NOT NULL, default 1,
+  mutasyonda +1, önkoşul uyuşmazlığında 409" davranışıdır; ad sayfanın kendi taksonomisinden gelir.
+  Bugün üç ad ailesi var: `row_version` (çoğunluk), `registry_version` (`instrument_registry`,
+  `embedded_resolver_registry`, `future_capability`) ve `version` (**yalnız `human_users`**).
+  **Kolon adına bakıp "OCC yok" çıkarımı yapma** — OCC sütununa bak (aşağıda §I-07).
 - **`deletion_state`** → mantıksal soft-delete bayrağı (registry/kök satırlarda).
 - **`deleted_at`** → yalnızca `entity_registry`, `human_users`, `manual_documents`, `trash_entries`.
 - Revision tabloları **değişmezdir**: ne `row_version` ne `deletion_state` taşır; yaşam döngüsü hep kök satırdadır.
@@ -73,7 +78,7 @@ CLAUDE.md'deki **"her yeni `create_*` için L1 FK insert-order proof"** kuralın
 | Tablo | Amacı | Ana bağlar | soft-del | OCC |
 |---|---|---|---|---|
 | `principals` | Tüm aktörlerin (insan + ajan) ortak kimlik satırı | `principal_id` (PK) | — | — |
-| `human_users` | İnsan kullanıcı + rol | **FK** → `principals` | `deletion_state`, `deleted_at` | — |
+| `human_users` | İnsan kullanıcı + rol | **FK** → `principals` | `deletion_state`, `deleted_at` (**yazılmıyor** — §I-07) | ✔ `version` (**`row_version` DEĞİL** — §I-07) |
 | `agents` | Sistem/ajan aktörleri | **FK** → `principals` | — | — |
 | `human_credentials` | argon2id parola özeti | **FK** → `human_users` | — | — |
 | `auth_sessions` | Opak Bearer oturum (yalnız SHA-256 özeti) | **FK** → `human_users` | — | — |
@@ -244,3 +249,46 @@ Hâlâ açık olan tek nokta:
 
 - Kolon-seviyesi index/constraint detayları bu haritada YOK (yalnızca `trash_entries` keyset index'i
   ve `audit_events` trigram/log index'leri migration'larda mevcut).
+
+---
+
+## §I-07 — `human_users` OCC taşır; adı `version` (migration YOK, bilinçli)
+
+**Şüphe neydi:** `human_users` soft-delete kolonları taşıyıp `row_version` taşımayan tek kök
+tablo görünüyordu → "OCC'siz kök" sanıldı. **Ampirik olarak yanlış.**
+
+- **OCC VAR.** `models/identity.py:40` → `version: Mapped[int]` (`Integer NOT NULL default=1`).
+  Mutasyonda +1 (`commands/role_assignment.py:123`, `commands/roles.py:66`), uyuşmazlıkta 409
+  `USER_ROLE_VERSION_CONFLICT` (`commands/role_assignment.py:94-95` →
+  `shared/errors.py:215`). Doc 19 §9.3/§11 taksonomisi bu kodu **ismen** istiyor.
+- **Dual-token da bağlı (O-12 uyumlu).** `routes/admin_panel.py:97-100`
+  `PATCH /admin/users/{id}/role` gövdesindeki `expected_head_revision_id` ile `If-Match`
+  başlığını `shared/concurrency.py::reconcile_occ_tokens` üzerinden geçirir — kural route'a
+  kopyalanmamış.
+- **Kilit + no-op + idempotency tam.** `session.refresh(user, with_for_update=True)`,
+  aynı rol → `changed=false` (**version bump YOK, audit YOK**), gövde `run_idempotent` içinde.
+
+**Neden `row_version` kolonu EKLENMEDİ (karar):**
+
+1. **İki token = O-12'nin tam olarak yasakladığı şey.** `version` zaten OCC token'ı; yanına
+   `row_version` koymak aynı satırda iki bağımsız önkoşul yaratırdı — CLAUDE.md §O-12'nin
+   "tek değerin iki yazımı, iki bağımsız önkoşul DEĞİL" kuralının ihlali.
+2. **Yeniden adlandırma kırıcı bir sözleşme değişikliği.** `version` **tel üstünde**:
+   `commands/role_assignment.py:47` + `queries/user_registry.py:32` + `routes/identity.py:69`
+   projeksiyonlarında yayımlanıyor ve `frontend/src/lib/adminPanel.ts:27,72` bunu tüketiyor.
+3. **Farklı ad zaten bu repoda konvansiyon.** `registry_version` üç tabloda aynı işi yapıyor ve
+   yukarıda ("Doğrulanmamış noktalar") ampirik olarak kapatılmış durumda. Ad, sayfanın kendi
+   hata taksonomisinden gelir; davranış tektir.
+
+**Ayrı ve dürüst sınır — soft-delete kolonları BEYAN EDİLMİŞ ama HİÇ YAZILMIYOR.**
+`human_users.deletion_state` / `deleted_at` / `deleted_by` / `delete_reason` kolonları var, ama
+onlara **yazan tek bir komut yok**; yalnızca okuma kapısı olarak kullanılıyorlar
+(`application/identity.py:30`, `commands/auth.py:364`, `:509`). `human_user`, K-06'nın
+`domain/trash/page.py::TRASH_OBJECT_LOCATIONS` kataloğunda **yok** — yani kullanıcı silme diye
+bir özellik yok, kolonlar da ileriye dönük şema. Bu tutarlı: katalogda olmayan tip için trash
+entry yazma yükümlülüğü de yok. **Kullanıcı soft-delete'i eklenirse** K-06 gereği aynı anda
+katalog + `commands/deletion.py` + `jobs/purge.py` + `queries/trash.py` dalları eklenmeli.
+
+Doğrula: `uv run pytest tests/integration/test_panel_management_logs.py -k "assign_role" -q --no-cov`
+→ `test_assign_role_version_conflict` bayat `version` ile `UserRoleVersionConflictError` bekler.
+(I-07 görevinin önerdiği `-k "user_role_occ"` seçicisi **hiçbir teste uymuyor** — gerçek seçici budur.)

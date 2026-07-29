@@ -22,7 +22,9 @@ import {
   PRIORITY_STOP_RESOLUTIONS,
   REQUIREMENT_OPTIONS,
   RESTRICTION_RULE_OPTIONS,
+  CANONICAL_TIMEFRAME_OPTIONS,
   SCALING_METHOD_OPTIONS,
+  SCALING_TIMEFRAME_MODE_OPTIONS,
   SIGNAL_MIN_SUPPORTING_RULE,
   SIGNAL_RULE_OPTIONS,
   STOP_CONFLICT_RESOLUTION_OPTIONS,
@@ -674,6 +676,55 @@ function BlockList({
 // Scaling Logic (§5.7)
 // ---------------------------------------------------------------------------
 
+// The per-layer timeframe ladder (doc 02 §5.7). Entry N is layer N's signal timeframe, so
+// the row index IS the layer number — hence an ordered list of selects rather than a
+// multi-select. The server enforces strictly-increasing; this editor only has to make the
+// ordering visible and the rows individually replaceable.
+function CustomTimeframeSequence({
+  sequence,
+  onChange,
+}: {
+  sequence: string[];
+  onChange: (next: string[]) => void;
+}) {
+  const rows = sequence.length > 0 ? sequence : [""];
+  return (
+    <div className="cp-form" aria-label="Custom timeframe sequence">
+      <p className="cp-note">
+        <InfoPanel panel={P.customTimeframeSequence} /> Layer 1 uses the first timeframe, layer 2
+        the second, and so on. The sequence must be strictly increasing, and its length is also
+        the maximum number of additional layers.
+      </p>
+      {rows.map((tf, index) => (
+        <div className="strategy-form-grid" key={`seq-${index}`}>
+          <SelectField
+            label={`Layer ${index + 1} timeframe`}
+            value={tf}
+            onChange={(v) => {
+              const next = [...rows];
+              next[index] = v;
+              onChange(next.filter((entry) => entry !== ""));
+            }}
+            options={CANONICAL_TIMEFRAME_OPTIONS}
+            placeholder="Select"
+          />
+          <button
+            type="button"
+            className="cp-btn"
+            onClick={() => onChange(rows.filter((_, i) => i !== index))}
+            aria-label={`Remove layer ${index + 1} timeframe`}
+          >
+            Remove
+          </button>
+        </div>
+      ))}
+      <button type="button" className="cp-btn" onClick={() => onChange([...sequence, ""])}>
+        + Add layer timeframe
+      </button>
+    </div>
+  );
+}
+
 function ScalingSection({
   scaling,
   onChange,
@@ -704,6 +755,13 @@ function ScalingSection({
           panel={P.scalingTimeframeStructure}
         />
         <SelectField
+          label="Timeframe mode"
+          value={scaling.timeframe_mode}
+          onChange={(v) => onChange({ timeframe_mode: v })}
+          options={SCALING_TIMEFRAME_MODE_OPTIONS}
+          panel={P.timeframeMode}
+        />
+        <SelectField
           label="Additional layer method"
           value={scaling.method}
           onChange={(v) => onChange({ method: v })}
@@ -711,8 +769,13 @@ function ScalingSection({
           placeholder="None"
           panel={P.additionalLayerMethod}
         />
-        <div className="cp-field" aria-hidden="true" />
       </div>
+      {scaling.timeframe_mode === "custom_sequence" ? (
+        <CustomTimeframeSequence
+          sequence={scaling.custom_timeframe_sequence}
+          onChange={(next) => onChange({ custom_timeframe_sequence: next })}
+        />
+      ) : null}
       {scaling.method === "price_distance_scaling" ? (
         <div className="cp-form strategy-form-grid">
           <TextField

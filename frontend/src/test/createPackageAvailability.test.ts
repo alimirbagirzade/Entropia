@@ -32,6 +32,7 @@ function baselineAt(parse_status: string): BaselineSummary {
 function detail(overrides: Partial<PackageRequestDetail>): PackageRequestDetail {
   return {
     request_id: "req_1",
+    display_label: "Indicator Package · 2026-07-08 10:00:00 UTC",
     package_type: "indicator",
     creation_mode: "translate_existing_code",
     source_kind: "code",

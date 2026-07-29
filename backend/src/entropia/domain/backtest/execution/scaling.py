@@ -24,9 +24,10 @@ from entropia.domain.backtest.execution.constants import _HUNDRED, _ONE, _QTY, _
 from entropia.domain.backtest.execution.costs import _effective_fill
 from entropia.domain.backtest.execution.fills import _trail_pct
 from entropia.domain.backtest.execution.state import _Position
+from entropia.domain.backtest.indicators import timeframe_seconds
 
 if TYPE_CHECKING:
-    from entropia.domain.strategy.config import StrategyConfig
+    from entropia.domain.strategy.config import ScalingLogic, StrategyConfig
 
 
 # §4 Partial-close aftermath modelled by the bar-replay (F-07c). ``close_percentage`` < 100
@@ -66,19 +67,46 @@ def partial_close_is_modelled(config: StrategyConfig) -> bool:
 
 
 def scaling_is_modelled(config: StrategyConfig) -> bool:
-    """Public predicate: is this strategy's same-direction scaling modelled (F-07d)?
+    """Public predicate: is this strategy's same-direction scaling modelled (F-07d, S5c)?
 
     The single shared source of truth for the readiness ``STRATEGY_SCALING_UNSUPPORTED``
     blocker and the engine's fail-closed entry gate. Disabled/absent scaling is always
-    modelled; enabled scaling is modelled only as the price-distance ladder on the
-    strategy's own timeframe with a derivable positive add size and sane caps — anything
-    else is blocked at Ready Check AND opens no position if a stale readiness state slips
-    through to the worker (never a silently un-scaled run the user did not configure)."""
+    modelled; enabled scaling is modelled only as the price-distance ladder with a
+    derivable positive add size and sane caps — anything else is blocked at Ready Check
+    AND opens no position if a stale readiness state slips through to the worker (never a
+    silently un-scaled run the user did not configure).
+
+    S5c lifted two halves of that gate. LOGIC-BASED scaling is now modelled (its blocks
+    resolve through the same plan resolver as entry/exit/stop and propose a same-direction
+    layer on the signal's EDGE), and with it the per-layer TIMEFRAME sequence that doc 02
+    §6.1 names as its ONLY consumer: ``same_strategy`` (every layer on the base timeframe)
+    and ``custom_sequence`` (layer N on sequence entry N under the closed-bar rule —
+    ``layer_timeframe`` / ``layer_bucket``) are both modelled.
+
+    Still UNMODELLED, on purpose:
+    * ``increasing_by_layer`` — doc 02 §5.7 names the mode but declares no step increment,
+      and next-rung vs. doubling are different ladders; guessing one would be exactly the
+      silent wrongness this predicate exists to prevent;
+    * a flat ``timeframe`` override — that field picks ONE evaluation timeframe for the
+      whole ladder and honouring it needs resampled bars the replay does not build (the
+      per-layer sequence needs none: it only gates WHICH base bars are decision points);
+    * an UNBOUNDED logic ladder — logic-based scaling has no ``layers`` field of its own
+      (§5.7 gives ladder depth to the price method only), so with neither
+      ``max_scaling_layers`` nor a custom sequence to bound it there is no declared depth,
+      and a ladder that adds a layer on every signal edge for the life of the position is
+      not something to run on a guess.
+    """
     scaling = config.scaling_logic
     if scaling is None or not scaling.enabled:
         return True
     if scaling.timeframe != "same_as_base_tf":
         return False
+    if scaling.timeframe_mode == "increasing_by_layer":
+        return False
+    if scaling.timeframe_mode == "custom_sequence" and not scaling.custom_timeframe_sequence:
+        return False
+    if scaling.method == "logic_based_scaling":
+        return _logic_scaling_is_modelled(scaling)
     if scaling.method != "price_distance_scaling" or scaling.price_scaling is None:
         return False
     if scaling.add_size_value is None or scaling.add_size_value <= _ZERO:
@@ -90,6 +118,72 @@ def scaling_is_modelled(config: StrategyConfig) -> bool:
         if limits.max_total_position_size is not None and limits.max_total_position_size <= _ZERO:
             return False
     return True
+
+
+def _logic_scaling_is_modelled(scaling: ScalingLogic) -> bool:
+    """The Logic-Based Scaling half of ``scaling_is_modelled`` (S5c, doc 02 §5.7).
+
+    Split out because its conditions differ in KIND from the price ladder's: it needs
+    resolvable blocks and a DECLARED DEPTH (it has no ``layers`` field of its own), where
+    the price ladder needs a distance and a subtree. Keeping them in one flat chain made
+    it read as though ``layers`` bounded both.
+    """
+    if scaling.logic_scaling is None or not scaling.logic_scaling.indicator_blocks:
+        return False
+    limits = scaling.scaling_limits
+    bounded = (limits is not None and limits.max_scaling_layers is not None) or bool(
+        scaling.timeframe_mode == "custom_sequence" and scaling.custom_timeframe_sequence
+    )
+    if not bounded:
+        return False
+    if scaling.add_size_value is None or scaling.add_size_value <= _ZERO:
+        return False
+    if limits is not None:
+        if limits.max_scaling_layers is not None and limits.max_scaling_layers < 0:
+            return False
+        if limits.max_total_position_size is not None and limits.max_total_position_size <= _ZERO:
+            return False
+    return True
+
+
+def layer_timeframe(config: StrategyConfig, layers_filled: int) -> str | None:
+    """The timeframe the NEXT scaling layer is decided on, or ``None`` when every base bar
+    is a decision point (S5c, doc 02 §5.7).
+
+    ``None`` is the same_strategy answer — the ladder is ungated and behaves exactly as it
+    did before S5c. Under custom_sequence, layer N (1-based) is decided on sequence entry N,
+    so the next layer's timeframe is ``sequence[layers_filled]``. Past the end of the
+    sequence is UNREACHABLE: the engine caps its layer count at the sequence length
+    precisely so that no "what happens after the last entry" rule has to be invented; the
+    bound is re-checked here so a future caller that forgets the cap gets no free ungated
+    layer either — it simply runs out of ladder."""
+    scaling = config.scaling_logic
+    if scaling is None or scaling.timeframe_mode != "custom_sequence":
+        return None
+    sequence = scaling.custom_timeframe_sequence
+    if not sequence or layers_filled >= len(sequence):
+        return None
+    return sequence[layers_filled]
+
+
+def layer_bucket(epoch_ms: int | None, layer_timeframe_: str | None) -> int | None:
+    """The layer timeframe's candle index a bar falls in, or ``None`` when the ladder is
+    ungated / the moment is unplaceable / the timeframe is unrecognized.
+
+    ``floor(epoch / span)`` — the SAME bucketing the multi-timeframe indicator path uses
+    (``indicators._htf_bucket``), so "a higher-TF candle closed" means one thing in this
+    engine: the bucket index CHANGED, i.e. the first base bar of the next bucket is the
+    decision point. Reusing that convention is the point — a second, subtly different
+    closed-bar rule for scaling would make two parts of the same run disagree about when a
+    15m candle ends. A ``None`` here leaves the caller's anchor untouched and the candidate
+    ungated only for same_strategy; for a gated ladder an unplaceable bar simply never
+    becomes a decision point (fail closed, the ``_epoch_seconds`` precedent)."""
+    if layer_timeframe_ is None or epoch_ms is None:
+        return None
+    span = timeframe_seconds(layer_timeframe_)
+    if span is None:
+        return None
+    return epoch_ms // (span * 1000)
 
 
 def apply_partial_aftermath(

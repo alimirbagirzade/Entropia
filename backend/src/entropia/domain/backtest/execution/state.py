@@ -71,6 +71,14 @@ class _Position:
     initial_size: Decimal = _ZERO
     layers_filled: int = 0
     scale_reference: Decimal = _ZERO
+    # S5c per-layer timeframe ladder (doc 02 §5.7 custom_sequence). The layer-timeframe
+    # candle index that was current when the CURRENT layer slot opened — set at entry for
+    # layer 1 and RE-ANCHORED (with the next layer's own timeframe) after each fill. A
+    # candidate is a decision point only once the bar's bucket differs from this anchor,
+    # i.e. a full layer-timeframe candle has closed since the last fill. ``None`` under
+    # same_strategy: the ladder is ungated and every base bar is a decision point, exactly
+    # as before S5c.
+    scale_layer_bucket: int | None = None
     # Portfolio-rules slice: the PEAK held notional over the position's life
     # (initial entry, then ratcheted at every stack/scale/remainder add) — the
     # conservative exposure figure a later item's portfolio cap replays against.

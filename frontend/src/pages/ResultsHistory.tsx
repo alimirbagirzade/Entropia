@@ -37,6 +37,33 @@ function contextText(value: unknown): string {
   return JSON.stringify(value);
 }
 
+// Last-resort PRIMARY label for a result row whose projection carried no title.
+// The raw result_id NEVER becomes the name (F-07 — "never reconstruct names from
+// IDs in the browser"); it stays beneath as the secondary binding key.
+const UNTITLED_RESULT = "Backtest Result";
+
+// The primary human label for an immutable result row (I-16a / F-07): the
+// server-owned display_title from the history projection (doc 16 §8.1
+// HistoryResultRowDTO). The browser only renders what the server already sent —
+// it never composes a name out of the id itself.
+function resultDisplayTitle(title: string | null | undefined): string {
+  return title != null && title.trim() !== "" ? title : UNTITLED_RESULT;
+}
+
+// display_title as the row's primary text with result_id kept beneath it as a
+// secondary, muted, selectable binding key — mirrors Portfolio's `ItemLabel`
+// (D-4, audit P-11 / F-07). The id keeps carrying every binding (compare
+// selection, View deep-link, delete, react-query keys); only its VISUAL rank
+// changes.
+function ResultLabel({ title, resultId }: { title: string; resultId: string }) {
+  return (
+    <div style={{ minWidth: 0 }}>
+      <div>{title}</div>
+      <code style={{ fontSize: 12, color: "var(--text-dim)" }}>{resultId}</code>
+    </div>
+  );
+}
+
 // Results History (Stage 5b, doc 16): the authoritative server-side index over
 // immutable results — sort and keyset cursor come from the backend; the client
 // never re-orders rows. "View" deep-links into the RUN page's ?result= mode.
@@ -167,7 +194,10 @@ export function ResultsHistory() {
                         onChange={() => toggleSelect(row.result_id)}
                       />
                     ) : null}
-                    <code>{row.result_id}</code>
+                    <ResultLabel
+                      title={resultDisplayTitle(row.display_title)}
+                      resultId={row.result_id}
+                    />
                     <span>{formatUtc(row.completed_at_utc)}</span>
                     <span>{row.timeframe ?? EM_DASH}</span>
                     <span>{row.market_data_revision_summary?.symbol ?? EM_DASH}</span>

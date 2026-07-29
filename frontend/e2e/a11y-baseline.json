@@ -1,0 +1,102 @@
+{
+  "_README": [
+    "FROZEN a11y baseline \u2014 the recorded-deviation ceiling enforced by",
+    "frontend/e2e/specs/13-a11y-scan.spec.ts (npm run a11y, CI job 'A11Y').",
+    "",
+    "Semantics: pages.<slug>.<axe-rule-id> = the MAXIMUM number of serious-impact",
+    "nodes that rule may produce on that page. Measured > ceiling  => CI FAILS.",
+    "A serious rule absent from a page's map has ceiling 0 => its first node FAILS.",
+    "critical-impact violations are never baselineable; any critical FAILS.",
+    "moderate/minor are reported, not gated (unchanged policy).",
+    "",
+    "Every number here is an ADJUDICATED deviation, not a convenience. Raising a",
+    "ceiling or adding a rule is a product-owner decision recorded in",
+    "docs/implementation/a11y_ci_ratchet_and_adjudication.md \u2014 never a CI fix.",
+    "Lowering a ceiling after a real fix is expected: CI prints the tightened map",
+    "and uploads a11y-report/axe-baseline.tightened.json."
+  ],
+  "provenance": {
+    "measured_by": "GitHub Actions \u2014 E2E workflow, job 'A11Y \u2014 axe-core scan vs. the seeded stack (R2-14)'",
+    "run_id": 30436036299,
+    "run_branch": "main",
+    "commit": "9e86c991853ee5704a81eb316b34ffe5a1f42c97",
+    "measured_at": "2026-07-29T08:34:11Z",
+    "conditions": "seeded Compose stack, Admin session, 1440px viewport, axe tags wcag2a/wcag2aa/wcag21a/wcag21aa/wcag22aa",
+    "total_serious_nodes": 70,
+    "supersedes": "the 228-node / 23-page figure in docs/implementation/v18_final_acceptance.md \u00a73.1, which is the 2026-07-22 PRE-remediation measurement (before the D-7b palette fix and the D-8 link-in-text-block fix landed)"
+  },
+  "adjudication": {
+    "color-contrast": "A11Y-01 \u2014 see docs/implementation/a11y_ci_ratchet_and_adjudication.md. The residual nodes split into TWO classes with DIFFERENT standing: (i) the v18 signature accent #00a9e8 surfaces, which PO decision D-7(b) deliberately left untouched, and (ii) .top-title #888 on #e8e8e8 + the .rd-step[data-locked] opacity composite, which D-7(b) INTENDED to darken but which the fix missed. Class (ii) is unfinished approved work, not an accepted deviation."
+  },
+  "pages": {
+    "mainboard": {
+      "color-contrast": 4
+    },
+    "strategy-details": {
+      "color-contrast": 3
+    },
+    "outsource-signal": {
+      "color-contrast": 4
+    },
+    "trading-signal": {
+      "color-contrast": 3
+    },
+    "trade-log": {
+      "color-contrast": 3
+    },
+    "create-package": {
+      "color-contrast": 2
+    },
+    "pre-check": {
+      "color-contrast": 2
+    },
+    "package-library": {
+      "color-contrast": 2
+    },
+    "embedded-packages": {
+      "color-contrast": 2
+    },
+    "rationale-families": {
+      "color-contrast": 3
+    },
+    "market-data": {
+      "color-contrast": 3
+    },
+    "research-data": {
+      "color-contrast": 5
+    },
+    "portfolio": {
+      "color-contrast": 3
+    },
+    "ready-check": {
+      "color-contrast": 3
+    },
+    "run-results": {
+      "color-contrast": 3
+    },
+    "results-history": {
+      "color-contrast": 2
+    },
+    "arrange-metrics": {
+      "color-contrast": 3
+    },
+    "analysis-lab": {
+      "color-contrast": 2
+    },
+    "panel-management": {
+      "color-contrast": 3
+    },
+    "panel-logs": {
+      "color-contrast": 3
+    },
+    "trash": {
+      "color-contrast": 2
+    },
+    "user-manual": {
+      "color-contrast": 2
+    },
+    "future-dev": {
+      "color-contrast": 8
+    }
+  }
+}

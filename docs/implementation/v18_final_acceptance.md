@@ -72,8 +72,29 @@ Ham çıktı: `frontend/e2e/a11y-report/axe-results.json` + `axe-summary.txt`.
 | `color-contrast` | 23 | 228 | **Kayıtlı sapma — A11Y-01** (§3.3) |
 | `link-in-text-block` | 2 | 2 | **Kayıtlı sapma — A11Y-02** (§3.3) |
 
+> ⚠️ **SUPERSEDED — yukarıdaki tablo 2026-07-22 ölçümüdür, GÜNCEL DEĞİLDİR.** O koşu, bu
+> belgenin §4.1'inde imzalanan **D-7(b) palet düzeltmesi ve D-8 `link-in-text-block`
+> düzeltmesi LANDED olmadan ÖNCE** alınmıştır — bayat olduğunun kendi kanıtı: tablo hâlâ
+> `link-in-text-block` 2 düğüm gösteriyor, oysa D-8 onu kapattı. Aynı sebeple
+> `frontend/e2e/a11y-report/*` dosyaları da **o tarihli kabul kanıtıdır**; üzerine
+> yazılmadı, güncel sayı için okunmamalıdır.
+>
+> Güncel ölçüm (CI run 30436036299, `main` @ `9e86c99`, 2026-07-29): `color-contrast`
+> **70 düğüm / 23 sayfa**, `link-in-text-block` **0**. Güncel doğruluğun tek kaynağı artık
+> `frontend/e2e/a11y-baseline.json` (provenance alanıyla). Bu 70 düğümün 45'i D-7(b)'nin
+> bilerek dokunmadığı accent-mavi yüzeylerdir; **25'i ise D-7(b)'nin kapatması gerekirken
+> kaçırdığı** gri/amber düğümlerdir (sabit kodlanmış `.top-title` rengi + `.rd-step`
+> opaklık kompoziti). Ayrıntı ve açık PO kararı **D-10**:
+> `docs/implementation/a11y_ci_ratchet_and_adjudication.md`.
+
 Tarama gate'i, kayıtlı bu iki kural DIŞINDA yeni bir serious kuralı belirirse **kırmızıya döner**
 (`ACCEPTED_SERIOUS_RULES`, spec içinde) — yani sapma kaydı bir muafiyet değil, dondurulmuş bir sınırdır.
+
+> ⚠️ **Gate sınırı da değişti (A11Y-CI ratchet slice'ı).** `ACCEPTED_SERIOUS_RULES`
+> kural-düzeyi muafiyeti kaldırıldı: bir kuralı muaf tutmak **düğümleri saymayı
+> durduruyordu** — `color-contrast` altında kaç YENİ ihlal gelirse gelsin CI yeşil kalırdı.
+> Yerine sayfa+kural başına **düğüm-sayısı tavanı** geldi (`frontend/e2e/a11y-baseline.json`).
+> Kayıtlı sapma kayıtlı kalır; bir sonraki düğüm build'i kırar.
 
 ### 3.2 Klavye-only temel akış
 

@@ -214,9 +214,12 @@ Before stopping a working session, produce **ALL** of the following:
      `docs/PROJECT_HISTORY.md` §"Sonradan canonical olan dört satır".
   4. **Round-3 backlog:** S5 (a/b/c/d) + S-L1…S-L6
      (`docs/POST_V1_SPEC_GAP_BACKLOG_ROUND3.md` §DURUM TAZELEME — diğer 8 madde landed).
-- **Açık iş (R2 kapsamı dışı, dürüst sınır):** ekran okuyucu (NVDA/VoiceOver) denetimi yapılmadı;
-  10 sayfanın derin görsel kıyası eksik; a11y/visual katmanları CI'da koşmadı; A11Y-01 kontrast
-  (228 serious node, tamamı canonical v18 paletinden) ve A11Y-02 kayıtlı sapma olarak açık.
+- **Açık iş (dürüst sınır):** ekran okuyucu (NVDA/VoiceOver) denetimi **yapılmadı** — checklist var,
+  denetim yok (`docs/implementation/a11y_screen_reader_audit_checklist.md`); 10 sayfanın derin görsel
+  kıyası eksik; **visual katmanı** CI'da koşmuyor — **a11y koşuyor** (`e2e.yml` `a11y` job'u, artık
+  düğüm-sayısı **ratchet**'i: `frontend/e2e/a11y-baseline.json`). **A11Y-01 = 70 düğüm** (228, D-7(b)
+  öncesi bayat ölçümdür): 45'i imza-mavisi imzalı sapma, **25'i D-7(b)'nin kaçırdığı gri/amber →
+  A11Y-03/04**. Açık PO kararı **D-10** → `docs/implementation/a11y_ci_ratchet_and_adjudication.md`.
 - **KAPSAM DIŞI (bilerek):** retention auto-purge (doc 20 §16 — "Production V1'de kapalı"),
   LLM generation (Future-Dev), Graphic View renderer (doc 22 — V18 statik placeholder kalır).
 

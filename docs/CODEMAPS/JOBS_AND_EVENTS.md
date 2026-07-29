@@ -117,6 +117,33 @@ Silinen yardımcı: `_enqueue_completed_job` (eski "in-transaction stub" satır�
   (worker öldürülmüş) bir run gerçekten yarımdır; redelivery onu yeniden dener ve aynı
   sequence'a yeni olaylar ekler.
 
+### Manifest'in iki hash'i — `manifest_hash` vs `execution_key`
+
+`domain/backtest/manifest.py::build_run_manifest` worker'a giden immutable manifest'i kurarken
+**iki** sha256 üretir ve ikisini de saklar:
+
+| Hash | Neyin üzerinden | Sonuç |
+|---|---|---|
+| `manifest_hash` | manifest'in **tamamı** (identity: `run_id`/`created_at`/`correlation_id` + `preflight` dahil) | her run ve her retry **benzersiz** — `backtest_run_manifest.manifest_hash` UNIQUE |
+| `execution_key` | yalnız **reproducibility içeriği** (pinlenmiş item'lar, `capital_execution`, `engine_version`, `metric_set_version`/`output_artifact_profile`, `tick_data` + K-04 üç context) — run kimliği **DIŞLANIR** | aynı hesabı tarif eden iki run **aynı** değeri taşır — `execution_key` indeksli ama **unique DEĞİL** |
+
+`manifest_hash` ile farkı tek cümle: biri "bu hangi run?", diğeri "bu hangi hesap?" sorusunu
+yanıtlar. `preflight` bilerek `execution_key` dışındadır — bir readiness uyarısı manifest_hash'i
+değiştirir, execution_key'i değiştirmez. `engine_version` ise **içindedir**: her `ENGINE_VERSION`
+bump'ı tüm execution_key uzayını kaydırır, böylece eski motorun sonucu yeni motor altında yeniden
+kullanılabilir sayılmaz.
+
+**Bugün cross-run sonuç paylaşımı YOK (dürüst sınır).** `execution_key` üzerinde hiçbir sorgu
+WHERE/JOIN yapmıyor; kolon yalnız yazılıyor + projeksiyonda okunuyor
+(`queries/backtest_run.py:213`, `history.py`). İki run aynı anahtarı taşısa bile her biri kendi
+`BacktestResult`'ını materialize eder; duplicate RUN'ı bugün engelleyen şey `Idempotency-Key`'dir.
+Cross-run idempotent-reuse (INF-04/INF-05) **hazırlanmış ama bağlanmamış** — indeks var, lookup yok.
+Fiilen uygulanan tek INF-04 reuse **run içidir**: `execution/portfolio.py::_fold_composite_metrics`
+marginal katkı için kalan item'ları yeniden simüle etmez, mevcut çıktıları yeniden fold eder.
+İkinci fiili kullanım K-09 byte-equality regresyon kapısıdır (`execution/__init__.py`).
+
+Tam kayıt + alias tablosu ve `ExportFormat.PARQUET`: `docs/PROJECT_HISTORY.md` §"B-2".
+
 ## Scheduler (`apps/scheduler/__main__.py`)
 
 `TICK_SECONDS = 30`. Her tick'te (`_maintenance_pass:53`):

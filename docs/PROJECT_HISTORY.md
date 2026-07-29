@@ -1813,3 +1813,113 @@ cap'i gevşetmez, üstüne biner.
 - **Bu bölüm doc 13'ü değiştirmez.** `docs/spec/` kanonik ve dokunulmazdır; buradaki kayıt
   yalnızca kodun spec'i **aştığı** yeri belgeler. Doc 13 bir gün bu alanları kapsayacak biçimde
   yeniden yayımlanırsa, otorite spec'e döner ve bu bölüm tarihsel not haline gelir.
+## B-2 · Backtest — kodda var, doc 15'te açıklanmayan üç kavram (docs-only)
+
+Kod değişikliği YOK; bu bölüm HEAD `dd07d48` üzerinde **ampirik olarak** doğrulanmış üç
+davranışın kaydıdır. Üçü de doc 15'te tanımsız; ikisi zararsız genişletme, biri sonuçların
+"aynı mı farklı mı" sorusunu doğrudan etkilediği için burada uzun uzun yazılıyor.
+
+### 1. `execution_key` — manifest'in İKİNCİ hash'i
+
+`domain/backtest/manifest.py::build_run_manifest` her run için **iki** sha256 üretir
+(`shared/manifest.py::manifest_hash`, kanonik JSON). `ManifestBuildResult` ikisini birden taşır.
+
+**`manifest_hash` ile farkı** tek cümlede: `manifest_hash` manifest'in **tamamı** üzerinden
+hesaplanır (identity bloğu — `run_id`, `created_at`, `correlation_id`,
+`requested_by_principal_id`, `composition_id`/`composition_snapshot_id` — ve `preflight` dahil),
+bu yüzden **her run ve her retry benzersiz** bir değer alır; `execution_key` ise SADECE
+**reproducibility içeriği** üzerinden hesaplanır ve **run kimliğini DIŞLAR**, bu yüzden aynı
+girdiyi tarif eden iki farklı run **aynı** `execution_key`'i taşır. Yani: manifest_hash "bu
+hangi run?" sorusunu, execution_key "bu hangi hesap?" sorusunu yanıtlar.
+
+`execution_content` tam olarak şu dokuz alandır (`manifest.py:166-176`):
+`composition_fingerprint` · `mainboard_items` (pinlenmiş `(root_id, selected_revision_id)`,
+sıralı) · `capital_execution` · `result_artifact_context` (`metric_set_version` +
+`output_artifact_profile`) · `engine_version` · `tick_data` (F-07i B) ·
+`strategy_package_context` · `external_object_context` · `data_time_context` (üçü K-04).
+
+**Dışarıda bırakılan ve NEDEN:** `preflight` bilerek yok. Warning taşıyan bir run'ın manifest
+byte'ları — dolayısıyla `manifest_hash`'i — değişir ama `execution_key`'i **değişmez**; readiness
+uyarısı bir hesap girdisi değildir, o yüzden bir uyarı satırı yüzünden motor sürümü uzayı kaymaz
+(`commands/backtest_run.py:875-883` bunu açıkça yazıyor).
+
+**`engine_version` execution_content'in İÇİNDE** — bu tasarımın çekirdeği. Her `ENGINE_VERSION`
+bump'ı bütün `execution_key` uzayını kaydırır, böylece eski motorun ürettiği bir sonuç yeni motor
+altında **asla** yeniden kullanılabilir sayılmaz. `manifest.py`'nin baştaki ~90 satırlık yorum
+bloğu her bump'ın gerekçesini tek tek tutar (F-07i C · v17 per-item breakdown · v18 BLOCK_OPPOSITE
+· fill modeli · available-time gate · full-pinning · funding-step-order · restriction-min-n).
+HEAD'de `ENGINE_VERSION = "backtest-engine-v18-restriction-min-n"`.
+
+**Nerede saklanıyor:**
+
+| Tablo | Kolon | Kısıt |
+|---|---|---|
+| `backtest_run_manifest` | `manifest_hash` | `String(64)` NOT NULL **UNIQUE** |
+| `backtest_run_manifest` | `execution_key` | `String(64)` NOT NULL **index=True, unique DEĞİL** |
+| `result_manifest_snapshot` | `execution_key` | `String(64)` NOT NULL, indeks yok |
+
+Duplicate `execution_key`'e izin verilmesi kaza değil — tanımı gereği tekrarlanabilir bir değer.
+Dışarı da veriliyor: `queries/backtest_run.py:213` ve `domain/backtest/history.py` whitelist'i
+(`history.py:279,327,346`).
+
+**Sonuç paylaşımı — dürüst cevap.** HEAD `dd07d48`'de `execution_key` üzerinde **hiçbir sorgu
+WHERE/JOIN yapmıyor** (`grep -rn "execution_key ==" src/` → 0 hit; kolon yalnız yazılıyor ve
+projeksiyonda okunuyor). Yani **iki run aynı `execution_key`'i taşısa bile bugün birbirinin
+sonucunu paylaşmaz** — her başarılı run kendi `BacktestResult`'ını materialize eder. Cross-run
+idempotent-reuse **hazırlanmış ama bağlanmamış** durumdadır: indeks var, lookup yok. Bir RUN
+isteğinin tekrarını bugün engelleyen şey `Idempotency-Key`/`run_idempotent`'tır, `execution_key`
+değil (doc 15 §942 de duplicate RUN'ı idempotency key'e bağlıyor).
+
+Gerçekten uygulanmış tek INF-04 reuse **run İÇİdir**: `domain/backtest/execution/portfolio.py`
+(`_fold_composite_metrics:90-99`, `:239`) — marginal katkı için "item'sız kompozisyon" yeniden
+**simüle edilmez**, kalan item'ların hâlihazırda hesaplanmış per-item çıktıları in-memory yeniden
+fold edilir. Her item'ın bar-replay'i diğerlerinden bağımsız olduğu için bu, gerçek bir re-RUN'ın
+raporlayacağının aynısını verir; `combine_item_runs` ile drift'e karşı birim testiyle pinlenmiştir.
+
+İkinci fiili kullanım bir **regresyon kapısı**: K-09 motor ayrıştırmasında her dilim, aynı fixture
+matrisi üzerinde **özdeş `execution_key` + özdeş `EngineOutput` digest**'i ile byte-equality
+kanıtına bağlandı (`domain/backtest/execution/__init__.py:8`).
+
+**Spec durumu:** doc 15'te `execution_key` **0 hit**; spec yalnız "manifest hash"ten söz eder
+(§7/§8.4 — satır 523, 545, 639, 942). İki-hash ayrımı tamamen kod tarafı bir icat.
+
+### 2. `ARTIFACT_TYPE_ALIASES` — V18 etiketleri → canonical tip
+
+`domain/backtest/artifacts.py:33-40`, altı giriş dört canonical tipe (many-to-one) eşlenir:
+`equity → EQUITY_CURVE` · `ledger → TRADE_LEDGER` · `trades → TRADE_LEDGER` ·
+`signals → SIGNAL_EVENTS` · `events → SIGNAL_EVENTS` · `diagnostics → DIAGNOSTICS`.
+
+Tek çağıran `normalize_artifact_type` (`artifacts.py:47`), tek çağrı yeri
+`queries/result_artifacts.py:43`. **Fail-closed:** alias tablosunda ve `ArtifactType` enum'unda
+olmayan bir değer sert `ARTIFACT_TYPE_INVALID` verir (`ArtifactTypeInvalidError`) — sessiz fallback
+yok, docstring bunu açıkça söylüyor.
+
+Spec'te tanımlı değil (doc 15'te ne alias tablosu ne `artifact_type` sözcüğü geçiyor). **Zararsız:**
+canonical enum yolunu daraltmıyor, yalnızca V18 UI'ın kısa sözcüklerini path değeri olarak kabul
+ediyor; canonical adlar (`equity_curve` vb.) aynen çalışmaya devam ediyor.
+
+### 3. `ExportFormat.PARQUET` — spec'te olmayan üçüncü format
+
+`domain/backtest/export.py:47-52`: `ExportFormat` = `CSV` · `JSON` · **`PARQUET`**. Doc 15 §3.2
+(satır 217) "Trade Log CSV, Signal Events CSV, Equity Curve CSV, PineScript Signal Marker, Result
+JSON" der; **"parquet" spec'te 0 hit**. Üstelik sızıntı sunum katmanına kadar gelmiş:
+`frontend/src/lib/backtest.ts:461` → `EXPORT_FORMATS = ["csv", "json", "parquet"]`, yani kullanıcı
+export formu açılır listesinde parquet'i **görüyor** ve seçebiliyor.
+
+**Dürüst sınır — bugün hiçbir formatta byte üretilmiyor.** `commands/result_export.py::_op` yalnız
+bir metadata satırı yazar (object key + checksum + `schema_version` + `row_count` + provenance =
+kaynak Result'ın `manifest_hash`'i). `compute_export_checksum` satırları **format ne olursa olsun
+her zaman JSON olarak** serialize eder; `fmt` sadece (a) checksum payload'ının bir bileşeni ve
+(b) `build_object_key`'in dosya uzantısıdır. Parquet encoder **yok** — ama csv/json encoder'ı da
+yok; V1'de object-storage put/get adapter'ı async ExportJob ile gelecek (modül docstring'i bunu
+kayıt altına alıyor). Yani parquet bugün bir *etiket*; csv/json'dan tek farkı spec'in o iki adı
+anmış, bunu anmamış olması. Format değeri checksum'a girdiği için aynı Result + aynı tip farklı
+formatta **farklı** checksum üretir — yani etiket sessiz değil, provenance'a bağlı.
+
+### Doğrulama
+
+Salt-okuma denetim; kod/test/migration değişmedi. Yukarıdaki her iddia `HEAD dd07d48` üzerinde
+`grep`/`sed` ile dosyadan okundu: `manifest.py:96-104,140-205` · `artifacts.py:23-58` ·
+`export.py:26-101` · `models/backtest.py:156-172,310-325` · `repositories/backtest.py:107-133,356-364` ·
+`commands/result_export.py:62-120` · `commands/backtest_run.py:515-525,875-890` ·
+`execution/portfolio.py:90-99,232-241` · `lib/backtest.ts:461` · `docs/spec/15_*.md`.

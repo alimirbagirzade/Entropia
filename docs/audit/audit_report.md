@@ -188,6 +188,10 @@ $ uv run pytest -k "panel or identity or role or admin or error_taxonomy or erro
                     or legacy_upgrade or stage1_persistence or log_resource" -q --no-cov
 205 passed
 
+# Tam backend suite (worktree'ye özel izole DB, tek koşu)
+$ uv run pytest --no-cov -q
+2609 passed / 0 failed
+
 $ uv run ruff check .            # All checks passed!
 $ uv run ruff format --check .   # 667 files already formatted
 $ uv run mypy src                # Success: no issues found in 371 source files

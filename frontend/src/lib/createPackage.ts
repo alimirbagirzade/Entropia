@@ -249,8 +249,14 @@ export interface BaselineSummary {
   parser_version: string | null;
 }
 
+// The server-composed human label for a request (F-07 §4.4, backend
+// `domain/create_package/labels.py::request_display_label`). A request carries no
+// user-assigned name — doc 06 §4 names the package only at draft metadata — so the
+// query boundary owns this text and the browser NEVER builds a name out of the
+// request_id. The id stays as the secondary, copyable binding key (D-4 convention).
 export interface PackageRequestSummary {
   request_id: string;
+  display_label: string;
   package_type: string;
   state: string;
   source_kind: string;
@@ -264,6 +270,8 @@ export interface PackageRequestsPage {
 
 export interface PackageRequestDetail {
   request_id: string;
+  // Same server-owned label the summary carries — see PackageRequestSummary.
+  display_label: string;
   package_type: string;
   creation_mode: string;
   source_kind: string;

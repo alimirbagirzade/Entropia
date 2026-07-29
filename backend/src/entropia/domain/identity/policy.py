@@ -148,8 +148,19 @@ def assert_role_assignable(target_role: Role) -> None:
 
 
 def ensure_not_last_admin(
-    *, target_is_admin: bool, becomes_admin: bool, active_admin_count: int
+    *,
+    target_is_admin: bool,
+    becomes_admin: bool,
+    active_admin_count: int,
+    error: type[LastAdminProtectedError] = LastAdminProtectedError,
 ) -> None:
-    """Block demoting/deactivating the last remaining active Admin."""
+    """Block demoting/deactivating the last remaining active Admin.
+
+    ONE gate, per-surface error code bound at the call site: Module 3 / the legacy
+    ``PATCH /users/{id}/role`` path keeps the default ``LAST_ADMIN_PROTECTED``, while
+    the doc 19 Panel command passes :class:`LastAdminProtectionError` so the Panel
+    emits its own taxonomy's ``LAST_ADMIN_PROTECTION``. A new surface binds its code
+    here rather than re-implementing the count-and-block rule.
+    """
     if target_is_admin and not becomes_admin and active_admin_count <= 1:
-        raise LastAdminProtectedError()
+        raise error()

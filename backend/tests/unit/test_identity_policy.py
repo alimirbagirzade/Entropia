@@ -12,6 +12,7 @@ from entropia.domain.lifecycle.enums import PrincipalType, Role
 from entropia.shared.errors import (
     AccessDeniedError,
     LastAdminProtectedError,
+    LastAdminProtectionError,
     UnauthenticatedError,
 )
 
@@ -70,3 +71,40 @@ def test_last_admin_protection() -> None:
     ensure_not_last_admin(target_is_admin=True, becomes_admin=False, active_admin_count=2)
     # Promoting to admin is always fine.
     ensure_not_last_admin(target_is_admin=False, becomes_admin=True, active_admin_count=1)
+
+
+def test_last_admin_gate_binds_the_callers_surface_error_code() -> None:
+    """Doc-19 audit: one gate, per-page code.
+
+    Master Module 3 (legacy ``PATCH /users/{id}/role``) names this defect
+    ``LAST_ADMIN_PROTECTED``; Master Module 16 / doc 19 §7.1, §9.3, §11 and §14 name
+    the Panel command's answer ``LAST_ADMIN_PROTECTION``. Both must be reachable from
+    the SAME count-and-block rule, and the Panel code must remain a subclass so
+    surface-agnostic callers keep working.
+    """
+    with pytest.raises(LastAdminProtectionError) as panel:
+        ensure_not_last_admin(
+            target_is_admin=True,
+            becomes_admin=False,
+            active_admin_count=1,
+            error=LastAdminProtectionError,
+        )
+    assert panel.value.code == "LAST_ADMIN_PROTECTION"
+    assert panel.value.http_status == 422
+    # Resending the identical demotion always fails until another Admin exists.
+    assert panel.value.retryable is False
+    # Subclass: a caller that does not care which surface raised still catches it.
+    assert isinstance(panel.value, LastAdminProtectedError)
+
+    # The default (legacy Module 3) binding is untouched by the doc-19 fix.
+    with pytest.raises(LastAdminProtectedError) as legacy:
+        ensure_not_last_admin(target_is_admin=True, becomes_admin=False, active_admin_count=1)
+    assert legacy.value.code == "LAST_ADMIN_PROTECTED"
+
+    # A supplied error class never fires when the rule itself permits the change.
+    ensure_not_last_admin(
+        target_is_admin=True,
+        becomes_admin=False,
+        active_admin_count=2,
+        error=LastAdminProtectionError,
+    )

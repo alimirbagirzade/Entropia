@@ -1417,10 +1417,42 @@ class AllocationPlanNotFoundError(NotFoundError):
 
 
 class AllocationDraftConflictError(ConflictError):
-    """Stale ``expected_row_version`` on an allocation draft (doc 13 §7.2, §10.1)."""
+    """Stale ``expected_row_version`` on an allocation draft (doc 13 §7.2, §10.1).
+
+    Doc 13 §7.2 specifies the 409 body as ``{ code, current_draft, changed_paths[] }``
+    and §10.2 Flow E says why: the UI has to present the caller's unsaved fields
+    against the server's state in a COMPARE view, and last-write-wins is forbidden. A
+    bare code + message cannot support that — the client can only discard the user's
+    edits or blindly re-PUT and clobber, which is the outcome Flow E rules out.
+
+    Both are carried in ``details`` (the shipped name for doc 01 §11.2's
+    ``field_issues`` — see the O-02 adjudication note at the top of this module), by
+    ``commands/allocation_plan.py::_draft_conflict``:
+
+        details[0] = {
+            "code": "ALLOCATION_DRAFT_STALE",
+            "expected_row_version": <what the caller sent>,
+            "current_row_version": <what the server holds>,
+            "current_draft": <canonical server draft, or null if none exists>,
+            "changed_paths": ["enabled", "entries[cmbi_1].equity_share_percent", ...],
+        }
+
+    ``retryable`` is false: replaying the identical request with the same stale token
+    always fails again. Recovery is reload -> compare -> resubmit with the fresh
+    ``expected_row_version``, which is a NEW request, not a retry of this one.
+    """
 
     code = "ALLOCATION_DRAFT_CONFLICT"
     message = "This allocation draft changed elsewhere. Refresh, compare, then reapply your update."
+    category = ErrorCategory.CONCURRENCY_OR_PREFLIGHT
+    retryable = False
+    suggested_action = "reload_and_compare_allocation_draft"
+    remediation = (
+        "Reload the allocation draft, compare your unsaved fields against the server "
+        "state in `details.current_draft` (the disputed fields are listed in "
+        "`details.changed_paths`), then reapply your update with the current "
+        "expected_row_version."
+    )
 
 
 class AllocationValidationFailedError(ValidationError):

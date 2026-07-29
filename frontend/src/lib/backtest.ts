@@ -442,12 +442,20 @@ export function diagnosticWarningLabel(code: string): string {
 // Export contract (backend domain/backtest/export.py). The label is V18 wording;
 // the value is the authoritative wire enum. `summary` has no drill-down list but
 // is exportable (doc 15 §3.2 Data Export).
+//
+// The last two complete §3.2: `pinescript_signal_marker` is the fifth Data Export
+// entry, and `agent_dataset` is the Research Data / Agent Data row's Export Agent
+// Dataset. The agent dataset is the one type the server may refuse on an otherwise
+// exportable Result (AGENT_DATASET_SOURCE_NOT_APPROVED, doc 15 §3.2) — the UI does
+// not pre-gate it; the envelope surfaces verbatim like every other refusal.
 export const EXPORT_TYPES = [
   { value: "trade_ledger", label: "Trade Ledger" },
   { value: "equity_curve", label: "Equity Curve" },
   { value: "signal_events", label: "Signal Events" },
   { value: "diagnostics", label: "Diagnostics" },
   { value: "summary", label: "Summary" },
+  { value: "pinescript_signal_marker", label: "PineScript Signal Marker" },
+  { value: "agent_dataset", label: "Agent Dataset" },
 ] as const;
 
 export const EXPORT_FORMATS = ["csv", "json", "parquet"] as const;

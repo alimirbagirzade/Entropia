@@ -1641,6 +1641,37 @@ class ExportFormatInvalidError(ValidationError):
     message = "That export format is not supported."
 
 
+class AgentDatasetSourceNotApprovedError(ValidationError):
+    """An agent dataset was requested over a Result whose manifest pins a package
+    revision that is NOT approved (doc 15 §3.2).
+
+    §3.2 puts a condition on this export type that the other six do not carry: "Agent
+    dataset yalniz approved/scope-authorized artifactsden olusturulur". The
+    scope-authorized half is the composition-view gate every export already passes;
+    this class is the approved half, checked against the run manifest's own pinned
+    ``approval_state`` values — the immutable evidence of what the Result replayed,
+    not a re-read of the current Package Library.
+
+    Not retryable: the same Result will pin the same revisions forever. The route
+    forward is to approve the package and produce a NEW run, not to retry this export.
+    Every other export type stays available on such a Result — this gate is deliberately
+    narrow, because refusing a trade-ledger export would hide data §3.2 never restricted.
+    """
+
+    code = "AGENT_DATASET_SOURCE_NOT_APPROVED"
+    message = (
+        "This result replays a package revision that is not approved, "
+        "so an agent dataset cannot be built from it."
+    )
+    category = ErrorCategory.DEPENDENCY_VALIDATION
+    retryable = False
+    suggested_action = "approve_source_package_and_rerun"
+    remediation = (
+        "Approve the package revision named in details, then run the backtest again. "
+        "The other export types remain available for this result."
+    )
+
+
 class ArtifactTypeInvalidError(ValidationError):
     """An unknown Result artifact drill-down type was requested (doc 15 §7)."""
 

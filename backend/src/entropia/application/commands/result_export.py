@@ -20,6 +20,7 @@ from entropia.application.idempotency import run_idempotent
 from entropia.application.queries import result_access
 from entropia.domain.backtest.export import (
     EXPORT_SCHEMA_VERSION,
+    ExportType,
     build_object_key,
     compute_export_checksum,
     normalize_export_format,
@@ -30,7 +31,7 @@ from entropia.domain.identity.policy import require_authenticated
 from entropia.infrastructure.postgres.repositories import audit as audit_repo
 from entropia.infrastructure.postgres.repositories import backtest as bt_repo
 from entropia.infrastructure.postgres.repositories import export as export_repo
-from entropia.shared.errors import BacktestResultNotFoundError
+from entropia.shared.errors import AgentDatasetSourceNotApprovedError, BacktestResultNotFoundError
 from entropia.shared.ids import new_id
 
 _EXPORT_TARGET = "export_artifact"
@@ -61,6 +62,12 @@ async def request_result_export(
     # Validate the export contract before any mutation (422 on bad type/format).
     canonical_type = normalize_export_type(export_type)
     canonical_format = normalize_export_format(export_format)
+    # Doc 15 §3.2 puts ONE extra condition on the agent dataset that the other six
+    # types do not carry: it may be composed only from approved / scope-authorized
+    # artifacts. The scope half is the composition-view gate just above (shared by
+    # every export); the approved half is checked here, before any write.
+    if canonical_type is ExportType.AGENT_DATASET:
+        await _assert_agent_dataset_sources_approved(session, result_id=result_id, result=result)
 
     async def _op() -> dict[str, Any]:
         snapshot = await bt_repo.get_manifest_snapshot(session, result_id)
@@ -119,6 +126,55 @@ async def request_result_export(
 # --------------------------------------------------------------------------- #
 # Helpers                                                                     #
 # --------------------------------------------------------------------------- #
+
+
+_APPROVED = "approved"
+
+
+async def _assert_agent_dataset_sources_approved(
+    session: AsyncSession, *, result_id: str, result: Any
+) -> None:
+    """Doc 15 §3.2: an agent dataset only from APPROVED source artifacts.
+
+    The evidence is the Result's own manifest snapshot, not a re-read of the current
+    Package Library: the snapshot records the ``approval_state`` each pinned package
+    revision had when the run was admitted, which is what the Result actually
+    replayed. Re-reading the library would let a package approved (or un-approved)
+    afterwards change the verdict on an immutable Result.
+
+    A Result with no manifest snapshot and no pinned package context passes — there is
+    no unapproved source to object to, and refusing would block the export on absence
+    of evidence rather than on evidence of a problem.
+    """
+    snapshot = await bt_repo.get_manifest_snapshot(session, result_id)
+    manifest = snapshot.manifest if snapshot is not None else None
+    if not isinstance(manifest, dict):
+        return
+    context = manifest.get("strategy_package_context") or []
+    unapproved: list[dict[str, Any]] = []
+    for item in context:
+        for pinned in (item or {}).get("package_revisions") or []:
+            revision = (pinned or {}).get("revision")
+            if not isinstance(revision, dict):
+                # The pin exists but its revision could not be dereferenced at
+                # admission. That is a manifest-resolution concern the worker already
+                # owns; it is not evidence of an unapproved package, so it is not
+                # reported here.
+                continue
+            if str(revision.get("approval_state")) != _APPROVED:
+                unapproved.append(
+                    {
+                        "package_revision_id": pinned.get("package_revision_id"),
+                        "role": pinned.get("role"),
+                        "approval_state": revision.get("approval_state"),
+                    }
+                )
+    if unapproved:
+        raise AgentDatasetSourceNotApprovedError(
+            details=unapproved,
+            scope_type="backtest_result",
+            scope_id=result.result_id,
+        )
 
 
 def _projection(export: Any) -> dict[str, Any]:

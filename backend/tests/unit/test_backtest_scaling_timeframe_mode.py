@@ -59,7 +59,7 @@ from entropia.domain.strategy.config import CANONICAL_TIMEFRAMES, StrategyConfig
 from tests.unit.engine_signal_plan import PLAN_MA_LENGTH, sma_entry_plan
 
 # The ENGINE_VERSION this slice replaced — the namespace the execution_key must leave.
-_PRIOR_ENGINE_VERSION = "backtest-engine-v18-restriction-min-n"
+_PRIOR_ENGINE_VERSION = "backtest-engine-v18-min-n-filtered-events-artifact"
 
 _BASE_TF_MINUTES = 15
 _START = datetime(2024, 1, 1, 0, 0, tzinfo=UTC)

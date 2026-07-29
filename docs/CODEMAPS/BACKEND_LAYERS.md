@@ -135,7 +135,7 @@ request bağımlılığından gelen **TEK transaction**, burada **asla commit yo
 | `rationale` | `colors`, `names`, `policy`, `enums` | Rationale Families |
 | `readiness` | `validators`, `issues`, `enums` | Saf, deterministik readiness doğrulayıcıları |
 | `research_data` | `time_policy`, `usage_scope`, `quality_rules`, `state_machine`, `policy`, `value_objects`, `enums` | Research Data domain yüzeyi |
-| `revision` | `hashing`, `head` | Root/revision omurgası: içerik hash + head ilerletme |
+| `revision` | `hashing`, `head` | Root/revision omurgası: içerik hash + head ilerletme. **`hashing` yalnızca re-export yüzeyi (I-04):** `canonical_json`/`content_hash` gerçekte `shared/hashing.py`'de yaşar, çünkü `shared` en alt katmandır ve `shared.idempotency` + `shared.manifest` aynı canonicalizer'a ihtiyaç duyar — `shared` → `domain` importu ters katman ihlaliydi. İkinci bir canonicalizer forklama; `tests/unit/test_layer_boundaries.py` bu yönü ve 0-döngü değişmezini kilitler |
 | `sharing` | `policy`, `enums` | Açık kaynak paylaşımı. `ShareResourceType` değeri = paylaşılan kökün `entity_type`'ı: `package` (yönetilen grant yüzeyi) + `mainboard_workspace` (O-14 — Results History'nin okuduğu composition kapsamı; grant yazan komut yüzeyi V1'de yok) |
 | `strategy` | `compiler`, `config`, `enums` | Strategy config tipleri + derleyici (blocking issue üretir) |
 | `trade_log` | `compiler`, `config`, `records`, `enums` | Trade Log external work object (CR-01/TL-01) |

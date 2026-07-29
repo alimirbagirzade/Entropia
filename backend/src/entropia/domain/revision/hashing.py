@@ -3,24 +3,16 @@
 `content_hash = sha256(canonical_json(payload))`. Canonical JSON uses sorted
 keys, compact separators, and UTF-8 so the same logical payload always hashes
 identically across processes and languages.
+
+The implementation lives in :mod:`entropia.shared.hashing` — ``shared`` is the
+bottom layer and must not import from ``domain``, and ``shared.idempotency`` /
+``shared.manifest`` need the same canonicalizer. This module re-exports it so
+the revision domain keeps its published surface and every caller keeps hashing
+identically. Do not fork a second canonicalizer here.
 """
 
 from __future__ import annotations
 
-import hashlib
-import json
-from typing import Any
+from entropia.shared.hashing import canonical_json, content_hash
 
-
-def canonical_json(payload: Any) -> str:
-    return json.dumps(
-        payload,
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=False,
-        default=str,
-    )
-
-
-def content_hash(payload: Any) -> str:
-    return hashlib.sha256(canonical_json(payload).encode("utf-8")).hexdigest()
+__all__ = ["canonical_json", "content_hash"]

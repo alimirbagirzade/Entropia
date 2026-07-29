@@ -44,13 +44,13 @@ Tüm aktörler `max_retries=3`.
 
 `data` kuyruğu dört+bir durable aktör tipini multiplex eder. Scheduler, durable satırdan hangi
 aktöre gideceğini **çıkaramaz** → otomatik sweep bu kuyruğu asla yönlendirmez
-(`apps/scheduler/__main__.py:36` yorumu: *"Queues with exactly ONE durable-job actor are safe to auto-redeliver"*).
+(`apps/scheduler/__main__.py:62` yorumu: *"Queues with exactly ONE durable-job actor are safe to auto-redeliver"*).
 
 Bunun yerine **operator eylemi** vardır: `POST /admin/data-queue/redeliver`
-(`routes/admin_panel.py:177` → `commands/data_queue.py::redeliver_data_queue_jobs`), payload'daki
-`job_kind` ayırıcısını `DATA_ACTOR_BY_KIND` (`actors.py:294`) ile eşleyerek yönlendirir.
+(`routes/admin_panel.py:205` → `commands/data_queue.py::redeliver_data_queue_jobs`), payload'daki
+`job_kind` ayırıcısını `DATA_ACTOR_BY_KIND` (`actors.py:323`) ile eşleyerek yönlendirir.
 
-**`job_kind` taksonomisi** (`application/jobs/data_queue.py:31-37`):
+**`job_kind` taksonomisi** (`application/jobs/data_queue.py:31-37`, `DATA_JOB_KINDS:37`):
 `market_data_analysis` · `research_data_analysis` · `trading_signal_import` · `trade_log_import` · `package_import`
 
 Discriminator taşımayan eski satırlar → `skipped_unknown_kind` (asla tahmin edilmez).
@@ -146,16 +146,18 @@ Tam kayıt + alias tablosu ve `ExportFormat.PARQUET`: `docs/PROJECT_HISTORY.md` 
 
 ## Scheduler (`apps/scheduler/__main__.py`)
 
-`TICK_SECONDS = 30`. Her tick'te (`_maintenance_pass:53`):
+Tick aralığı **yapılandırılabilir**: `DEFAULT_TICK_SECONDS = 30.0` (`:36`), `SCHEDULER_TICK_SECONDS`
+env değişkeniyle ezilir (pozitif olmayan değer varsayılana düşer, `:55`). Her tick'te
+(`_maintenance_pass:83`):
 
 | Adım | Fonksiyon | Ne yapar |
 |---|---|---|
 | 1 | `relay_unpublished` (`outbox_relay.py`) | Yayınlanmamış outbox satırlarını işaretler (batch: `settings.outbox_relay_batch_size`) |
 | 2 | `recover_stale_jobs` (`maintenance.py`) | Worker çökmesiyle RUNNING'de kalmış job'ları geri alır (INF-09), audit'lenir |
 | 3 | `redeliverable_queued_jobs` (`maintenance.py`) | Grace süresini aşmış QUEUED job'ları listeler (INF-03) |
-| 4 | `ACTOR_BY_QUEUE.get(queue)` (`:74`) | Tek-aktörlü kuyruklar için yeniden dağıtır; `data` atlanır |
+| 4 | `ACTOR_BY_QUEUE.get(queue)` (`:121`) | Tek-aktörlü kuyruklar için yeniden dağıtır; `data` atlanır |
 
-`ACTOR_BY_QUEUE` (`:37-43`): `backtest`, `agent`, `agent-high`, `agent-executor`, `maintenance`.
+`ACTOR_BY_QUEUE` (`:63`): `backtest`, `agent`, `agent-high`, `agent-executor`, `maintenance`.
 
 ---
 
@@ -168,18 +170,19 @@ domain mutasyonu ─┬─> audit_events   (aynı transaction)
         ┌───────────────────┴────────────────────┐
         │                                        │
   relay_unpublished                       run_outbox_poller
-  (scheduler, kalıcı işaretleme)          (apps/api/sse.py:77, in-process tail)
+  (scheduler, kalıcı işaretleme)          (apps/api/sse.py:140, in-process tail)
                                                  │
-                                          SseHub.publish (:62)
+                                          SseHub.publish (:125)
                                                  │
-                                     GET /events  (sse.py:162, EventSourceResponse)
+                                     GET /events  (sse.py:293, EventSourceResponse)
                                                  │
                                      frontend lib/sse.ts → queryClient.invalidateQueries
 ```
 
 > **AUTH-11 (#349):** `GET /events` artık **authenticated** — `_authenticated_subscriber`
-> (`sse.py:163` → `require_authenticated`, `:157`) handshake'i doğrular; anonim SSE aboneliği
-> kapalı, payload minimize edildi. Event taksonomisi / `EVENT_QUERY_KEYS` değişmedi.
+> (`sse.py:270` → `require_authenticated`) handshake'i doğrular; anonim SSE aboneliği
+> kapalı, payload minimize edildi. Anonim çözümleme hiç sorgu açmadığı için kimliksiz handshake
+> **DB'ye hiç dokunmadan** reddedilir. Event taksonomisi / `EVENT_QUERY_KEYS` değişmedi.
 
 İki tüketici **tasarım gereği bağımsızdır**: scheduler'ın `relay_unpublished`'ı kalıcı durumu
 ilerletir; SSE poller (`fetch_events_after`, `latest_event_id`) yalnız YENİ olayları kuyruktan
@@ -191,15 +194,17 @@ Kayıp hâlâ **tolere edilir**, ama artık **sessiz değildir** ve boşluk **re
 
 | Mekanizma | Nerede | Davranış |
 |---|---|---|
-| `id:` alanı | `_sse_frame` | Her veri çerçevesi **outbox satır id'sini** taşır (AUTH-11 zarfına bilerek eklenen tek alan; domain nesnesi adreslemez). Kontrol çerçeveleri (`heartbeat`, `stream.resync`) **id taşımaz** — cursor'ı ilerletmezler. |
+| `id:` alanı | `_sse_frame:170` | Her veri çerçevesi **outbox satır id'sini** taşır (AUTH-11 zarfına bilerek eklenen tek alan; domain nesnesi adreslemez). Kontrol çerçeveleri (`heartbeat`, `stream.resync`) **id taşımaz** — cursor'ı ilerletmezler. |
 | `Last-Event-ID` | `requested_cursor` → `replay_after` | Reconnect'te header okunur; `shared/ids.py::looks_like_id(prefix="obx")` ile **tam biçim** doğrulanır (yabancı/bozuk değer → cursor yok = eski davranış), sonra `fetch_events_after` ile kaçırılan olaylar **kısa bir session'da** DB'den replay edilir. |
-| Yarış kapatma | `_event_source` | Generator replay'den **ÖNCE** hub'a abone olur; replay sorgusu sırasında yayılan olay kuyruğa düşer ve canlı akışta `event_id <= replayed_through` ile **tekilleştirilir** (aynı olay iki kez gitmez). |
+| Yarış kapatma | `_event_source:231` | Generator replay'den **ÖNCE** hub'a abone olur; replay sorgusu sırasında yayılan olay kuyruğa düşer ve canlı akışta `event_id <= replayed_through` ile **tekilleştirilir** (aynı olay iki kez gitmez). |
 | `stream.resync` | `_control_frame(RESYNC_EVENT)` | Üç durumda üretilir: (1) abone buffer'ı taştı (`Subscriber.mark_overflowed` → `take_overflow`), (2) boşluk `REPLAY_LIMIT = 500`'den büyük, (3) replay okuması hata verdi. Anlamı: *"veremediğim olaylar var — her şeyi refetch et"*. |
 | Tam refresh | frontend `lib/sse.ts` | **Fallback olarak korunur**: ilk bağlantı, resync ve replay penceresinin yetmediği boşluk için. |
 
-- `SseHub` sabit boyutlu buffer (`_SUBSCRIBER_BUFFER = 256`) kullanır; dolu buffer olayı **düşürür**
-  (poller asla back-pressure yemez) ama düşüş o abonenin **overflow bayrağına** yazılır → `stream.resync`.
-- Heartbeat: `HEARTBEAT_SECONDS = 15`; veri yoksa `event: heartbeat` çerçevesi.
+- `SseHub` sabit boyutlu buffer (`_SUBSCRIBER_BUFFER = 256`, `sse.py:49`) kullanır; dolu buffer olayı
+  **düşürür** (poller asla back-pressure yemez) ama düşüş o abonenin **overflow bayrağına** yazılır
+  → `stream.resync` (`RESYNC_EVENT`, `:56`).
+- Heartbeat: `HEARTBEAT_SECONDS = 15` (`:48`); veri yoksa `event: heartbeat` çerçevesi.
+- Replay penceresi: `REPLAY_LIMIT = 500` (`:61`).
 - Frontend `EventSource` **kullanmaz** (AUTH-11 header'lı kimlik → `fetch` stream). Bu yüzden tarayıcının
   otomatik `Last-Event-ID` davranışı yoktur: `lib/sse.ts` son gördüğü `id:`'yi kendi tutar ve her
   yeniden açılışta `Last-Event-ID` header'ı olarak gönderir. Boş `id:` cursor'ı **silmez** (spec'in
@@ -208,7 +213,7 @@ Kayıp hâlâ **tolere edilir**, ama artık **sessiz değildir** ve boşluk **re
 > **Taksonomi değişmedi.** `stream.resync` ve `heartbeat` domain taksonomisinin **dışındadır**
 > (`EVENT_QUERY_KEYS`'te yer almazlar); resync frontend'de tam refresh'e bağlanır.
 
-### SSE taksonomisi (`sse_event_name` `sse.py:33-44`)
+### SSE taksonomisi (`sse_event_name` `sse.py:71-82`)
 
 | Koşul (öncelik sırasıyla) | Yayılan event adı |
 |---|---|
@@ -231,6 +236,62 @@ Ana `/events` stream'inden bağımsızdır ve frontend'de ikinci bir `EventSourc
 > geri getirirdi. Agent olayları frontend'e ana `/events` üzerinden `agent.task.updated` olarak
 > ulaşır ve replay'i oradan alır. `repositories/agent_lab.py::events_after` / `latest_event_seq`
 > hâlâ **çağrısızdır** (agent_event'in kendi replay primitifleri, bir tüketici bekliyor).
+
+---
+
+## Audit `event_kind` kataloğu (2026-07-29, ampirik)
+
+`audit_events.event_kind` **126 ayrı literal** taşır. Yeniden üretmek (yalnız düz literaller;
+`backtest_engine.py::_STAGE_AUDIT_KIND` ve `purge.py::_audit(kind=...)` gibi **dolaylı** yerler
+bu grep'e düşmez — aşağıda ayrıca listelendi):
+
+```
+grep -rhoE 'event_kind\s*=\s*"[a-z0-9_.]+"' backend/src/entropia/application/ | sort -u | wc -l
+```
+
+Bu haritanın ilgilendiği üç grup:
+
+### 1. Create-Package admission + worker düzlemi
+
+| Nerede yazılır | `event_kind` |
+|---|---|
+| **Admission** (`commands/create_package.py`) | `package_request_created` · `precheck_started` · `precheck_stale` · `candidate_generation_started` · `validation_run_started` · `package_draft_created` · `baseline_uploaded` · `revision_requested` · `revision_published` · `approval_granted` |
+| **Worker** (`jobs/create_package.py`) | `package_precheck_completed` · `candidate_generation_completed` · `candidate_generation_failed` · `validation_run_completed` · `baseline_validated` · `dependency_resolved` · `dependency_missing` |
+
+> **Tuzak — CP kind'ları noktasız yazılır ve çoğu `system_other`'a düşer.**
+> `domain/admin_panel/log_taxonomy.py::event_family` bir kind'ı **substring** eşleşmesiyle
+> sınıflar ve **ilk eşleşen aile kazanır** (`_FAMILY_PREFIXES` bildirim sırası). `package`
+> ailesinin tek token'ı `"package"` olduğu için `package_precheck_completed` /
+> `package_draft_created` / `package_request_created` **`package`** ailesine düşer; ama
+> `precheck_started`, `candidate_generation_completed`, `validation_run_started`,
+> `baseline_uploaded`, `approval_granted`, `revision_published`, `dependency_missing` hiçbir
+> token'la eşleşmez → **`system_other`**. Admin Logs'ta CP akışını "package" filtresiyle
+> ararken bu satırlar görünmez. Kayıtlı gözlem — kod ile spec arasında bir çelişki DEĞİL,
+> taksonominin bilinmesi gereken davranışı.
+
+### 2. Backtest run stage'leri (O-05/O-06) — dolaylı yazım
+
+`event_kind` bir sözlükten okunur, bu yüzden yukarıdaki grep'e düşmez:
+`jobs/backtest_engine.py:124-125` `_STAGE_AUDIT_KIND` → `RUN_STARTED: "backtest.run_started"`,
+`RUN_STAGE_CHANGED: "backtest.run_stage_changed"` (yazım yeri `:853`). Terminal kind'lar düz
+literaldir: `backtest.run_succeeded:1027` · `backtest.result_materialized:1038` ·
+`backtest.run_failed:1065` · `backtest.run_cancelled:956`. Result soft-delete komut tarafındadır
+(`commands/backtest_run.py` → `backtest.result_soft_deleted`).
+
+### 3. Trash / purge — komut + worker ayrımı
+
+| Aşama | `event_kind` | Nerede |
+|---|---|---|
+| soft delete | `entity.soft_deleted` | `commands/deletion.py` |
+| restore | `trash.restored` | `commands/deletion.py` |
+| purge **isteği** (202) | `trash.purge_requested` | `commands/deletion.py` |
+| purge **sonucu** | `trash.purge_completed` / `trash.purge_failed` | `jobs/purge.py:271` / `:260` (dolaylı: `_audit(kind=...)` `:213`) |
+
+**Manual purge'ün ikinci, ayrı kaydı var.** `jobs/purge.py::_finalize_manual_purge:88` bir
+`manual_document_purged` **publication event**'i yazar (`manual_publication_events` tablosu,
+`:126-128`) — audit akışından bağımsız, dokümanın kendi yayın zaman çizelgesini kapatan kayıt.
+Aynı finalize adımı search chunk'larını siler, revizyonları `removed` işaretler ve stream
+sürümünü ilerletir. Built-in baseline manual **purge edilemez** (`PurgeNotEligibleError`, `:55`).
 
 ---
 

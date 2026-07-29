@@ -167,9 +167,15 @@ CLAUDE.md'deki **"her yeni `create_*` için L1 FK insert-order proof"** kuralın
 
 | Tablo | Amacı | Ana bağlar | soft-del | OCC |
 |---|---|---|---|---|
-| `portfolio_allocation_plan` | Draft/plan kökü (sermaye, currency, compounding) | `workspace_entity_id`, `current_revision_id` | — | ✔ |
+| `portfolio_allocation_plan` | Draft/plan kökü (sermaye, currency, compounding) **+ portfolio-level cross-item kuralları:** `max_total_exposure_percent` `NUMERIC(9,6)` NULL (NULL = cap yok) · `conflict_policy` `VARCHAR(14)`+CHECK NULL (NULL = `KEEP_SEPARATE`) — migration `0035_portfolio_rules` | `workspace_entity_id`, `current_revision_id` | — | ✔ |
 | `portfolio_allocation_entry` | Item başına tahsis satırı | `plan_id`, `composition_item_id` | — | ✔ |
-| `portfolio_allocation_plan_revision` | Değişmez plan revizyonu | `plan_id`, `source_draft_row_version` | — | — |
+| `portfolio_allocation_plan_revision` | Değişmez plan revizyonu. **Cross-item kuralları için KOLON ALMAZ** — değerler `config` JSON snapshot'ında taşınır | `plan_id`, `source_draft_row_version` | — | — |
+
+> **Bu iki kolon doc 13 §8.2 canonical payload'ında YOK** (kod spec'ten ileri). Alanların
+> anlamı, blocker/warning davranışı, motor fail-closed kapıları ve hangi slice'ta geldiği:
+> `docs/PROJECT_HISTORY.md` §"B-1 · doc 13 §8.2'nin kapsamadığı, kodda uygulanan
+> portfolio-level cross-item kuralları". **Dikkat:** `max_total_exposure_percent` adı doc 02'de
+> **per-strategy** limit olarak da geçer — ayrı düzlem, ayrı alan.
 | `metric_definition` | Metrik registry (sistem tanımlı) | — | — | — |
 | `result_view_metric_profile_root` | Kişisel/sistem profil kökü | `owner_principal_id`, `current_revision_id` | — | ✔ |
 | `result_view_metric_profile_revision` | Değişmez profil revizyonu | `profile_id`, `previous_revision_id` | — | — |

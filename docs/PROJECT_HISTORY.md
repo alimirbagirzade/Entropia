@@ -1420,12 +1420,12 @@ kabul edilmiş import çıktısında ve tarihsel satırlarda saklı.
 | `RESOLVER_TIMING_RISK_BLOCKED` | 09 §1013 | check adı `timing_integrity` → aynı | `domain/esp/validation.py:214` |
 | `UNSAVED_MAINBOARD_DRAFT` | 01 §1119/1238 | revision'sız draft Ready Check/RUN'a giremez (AT-01) | `commands/strategy_draft.py:110` |
 | `OBJECT_EDIT_FORBIDDEN` | 01 §1620 | `ACCESS_DENIED` | **spec "ACCESS_DENIED / OBJECT_EDIT_FORBIDDEN" yazıyor** |
-| `INTRABAR_DATA_UNAVAILABLE` | 04 §604 | `TICK_DATA_UNAVAILABLE` | `domain/readiness/enums.py:106` |
-| `OHLCV_CONTEXT_REQUIRED` | 04 §599 | `OHLCV_POLICY_CONFLICT` | `domain/trading_signal/compiler.py:97` |
+| ~~`INTRABAR_DATA_UNAVAILABLE`~~ | 04 §604 | `TICK_DATA_UNAVAILABLE` | **SUPERSEDED → §"Sonradan canonical olan dört satır"** |
+| ~~`OHLCV_CONTEXT_REQUIRED`~~ | 04 §599 | `OHLCV_POLICY_CONFLICT` | **SUPERSEDED → §"Sonradan canonical olan dört satır"** |
 | `MARKET_DATA_INSTRUMENT_MISMATCH` | 02 §2380/2861 | `RunFailureCode.INSTRUMENT_MISMATCH` | `jobs/backtest_engine.py:503`, fail-closed (F-05) |
 | `MISSING_EMBEDDED_DEPENDENCY` | 07 §1129/1422 | `PRECHECK_BLOCKED` | **spec §1422 alternatifi yazıyor** |
-| `INVALID_ITEM_KIND` | 03 §838/922 | `MAINBOARD_ITEM_KIND_MISMATCH` | 3 raise |
-| `UPLOAD_JOB_FAILED` | 21 §942 | `MANUAL_PARSE_FAILED` | `domain/manual/blocks.py:348`, `:413` |
+| ~~`INVALID_ITEM_KIND`~~ | 03 §838/922 | `MAINBOARD_ITEM_KIND_MISMATCH` | **SUPERSEDED → §"Sonradan canonical olan dört satır"** |
+| ~~`UPLOAD_JOB_FAILED`~~ | 21 §942 | `MANUAL_PARSE_FAILED` | **SUPERSEDED → §"Sonradan canonical olan dört satır"** |
 
 İki satırda spec **kendi alternatifini zaten yazıyor** (01 §1620, 07 §1422) — oralarda sapma bile
 yok; denetim spec'in ilk seçeneğini tek geçerli ad sanmış.
@@ -1436,6 +1436,38 @@ Tarama sırasında bu da "`DEPENDENCY_UNRESOLVED` kapsıyor, doc 09 §1018 alter
 diye adjudicate edilmişti. **O-10 (PR #402) bu slice review'dayken canonical sınıfı ekledi**
 (`shared/errors.py:576`, `PackageDependencyCycle`, kod `PACKAGE_DEPENDENCY_CYCLE`, doc 08 §10/§14).
 Artık spec adıyla mevcut; adjudication satırı geçersizdir ve bu kayıt onun yerini alır.
+
+### Sonradan canonical olan dört satır (2026-07-29 tazelemesi)
+
+`PACKAGE_DEPENDENCY_CYCLE` tek istisna değildi. **Yukarıdaki tablo yazıldığı anda doğruydu**;
+o günden bu yana dört slice daha, adjudicate edilmiş dört kodu **spec adıyla** implement etti.
+Dördü de O-03'ün İKİ PR'ından (kod #407 · doc #413, ikisi de 2026-07-28 sabahı) **sonra** indi —
+yani tablo bayatladı, yanlış yazılmadı. Bu satırlar artık geçersizdir; adjudication DEĞİL,
+**canonical implementasyon** geçerlidir:
+
+| Spec kodu | Eski adjudication | Şimdi canonical | İndiren |
+|---|---|---|---|
+| `INTRABAR_DATA_UNAVAILABLE` | `TICK_DATA_UNAVAILABLE` | `ReadinessIssueCode.INTRABAR_DATA_UNAVAILABLE` (`domain/readiness/enums.py:151`), emit `commands/readiness_check.py:510` | `8a7a707` K-08 (2026-07-28 19:25) |
+| `OHLCV_CONTEXT_REQUIRED` | `OHLCV_POLICY_CONFLICT` | `ReadinessIssueCode.OHLCV_CONTEXT_REQUIRED` (`domain/readiness/enums.py:157`), emit `domain/readiness/validators.py:1071` | `8a7a707` K-08 (aynı commit) |
+| `INVALID_ITEM_KIND` | `MAINBOARD_ITEM_KIND_MISMATCH` | `InvalidItemKindError` / `INVALID_ITEM_KIND` (`shared/errors.py:967-972`), `domain/mainboard/item_kind.py:43` | `0b73b06` O-27 (PR #450) |
+| `UPLOAD_JOB_FAILED` | `MANUAL_PARSE_FAILED` | `ManualUploadJobFailedError` / `UPLOAD_JOB_FAILED` (`shared/errors.py:2029-2045`), raise `commands/manual.py:126`, `:141` | `c8288b3` I15B-SL6 (PR #455) |
+
+Eski karşılıklar **silinmedi** — `TICK_DATA_UNAVAILABLE`, `OHLCV_POLICY_CONFLICT`,
+`MAINBOARD_ITEM_KIND_MISMATCH`, `MANUAL_PARSE_FAILED` hepsi hâlâ kendi ayrı kusurlarını
+anlatıyor. Değişen tek şey: spec kodu artık **kendi adıyla da** mevcut, dolayısıyla
+"bu kod yok, şu kod kapsıyor" cümlesi doğru değil.
+
+> **Bu bölümün kalıcı dersi budur.** O-03 bir kez bayatladı (#408 boş merge), sonra
+> review sırasında üç kez kaydı, şimdi dördüncü kez tazelendi. Bir adjudication tablosu
+> **tarihsel bir kayıttır, canlı bir sözleşme değil** — ağaca sorulmadan alıntılanamaz.
+> Ölü-sınıf tarafında bunu `tests/unit/test_error_taxonomy_no_dead_definitions.py`
+> otomatikleştiriyor (küme her koşuda ağaçtan yeniden hesaplanıyor); **adjudication
+> satırlarının böyle bir bekçisi yok** ve bu bilinçli bir açık: "spec kodu sonradan
+> canonical oldu mu" sorusu ancak spec §-numarasıyla eşleşen bir kaynak listesi
+> tutularak makineleştirilebilir, o liste de bugün yok.
+
+Tablodaki satır numaraları (`errors.py:576`, `policy.py:140`, …) **tarama anına aittir**
+ve rutin olarak kayar; bir satırı doğrularken numaraya değil, sembol adına grep at.
 
 ### TIMEZONE — "tek ada indir" reddedildi
 

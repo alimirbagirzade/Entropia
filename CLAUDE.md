@@ -66,7 +66,12 @@ Before stopping a working session, produce **ALL** of the following:
   EDIT/WRITE to an existing file triggers fact-force (present 4 facts: importers / affected
   public API / data schema / user request verbatim -> retry). First Bash of a session
   triggers a one-time fact gate.
-- **Local verify (backend):** `cd backend && uv run ruff check . && uv run ruff format --check . && uv run mypy src && uv run pytest --no-cov -q`
+- **Local verify (backend):** `cd backend && uv run ruff check . && uv run ruff format --check . && uv run mypy src && uv run pytest -q`
+  — `addopts` artık `--cov-fail-under=80` taşıyor, yani **tam suite** koşusu CI'daki coverage
+  kapısını da doğruluyor (ölçülen toplam ~%90). **Alt küme koşarken `--no-cov` ekle:** tek
+  dosyalık bir koşu paketin tamamını ~%4 ölçer ve kapı sahte kırmızı verir. Frontend karşılığı
+  `npm run coverage` (eşikler `frontend/vite.config.ts`). İkisi de **kapıdır, rapor değil** —
+  düşen sayıyı indirme, eksik testi yaz.
   + an **L1 FK insert-order proof for every new `create_*`** + **alembic `<n>` up/down/up**
   (`LC_ALL=en_US.UTF-8`, `DROP SCHEMA public CASCADE; CREATE SCHEMA public;` before the proof)
   + migration<->model column parity. Local Postgres on **:5432** (`entropia`/`entropia`).

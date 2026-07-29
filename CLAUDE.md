@@ -166,39 +166,13 @@ Before stopping a working session, produce **ALL** of the following:
 ## Current position (keep in sync at each closing)
 
 > Aşağıdaki değerler **2026-07-29** tarihinde repodan empirik doğrulandı
-> (`origin/main` @ **`9e86c99`** — `chore(deps): update boto3-stubs[s3] requirement in
-> /backend (#480)`). Doğrula: `git fetch && git rev-parse --short origin/main` → bu sha ile
-> eşleşmeli; eşleşmiyorsa bu bölüm bayattır, önce `git log --oneline origin/main -6` oku.
->
-> **Not (bu satır neden var):** burası uzun süre yarıda kesik bir cümleydi — "empirik
-> doğrulandı (`origin/main` @" deyip sha'yı hiç yazmıyordu, yani yukarıdaki doğrulama komutu
-> karşılaştıracak bir değer bulamıyordu. Kapanışta bu sha'yı **her zaman** tazele.
+ 
 
 - **Durum:** V1 ROADMAP COMPLETE (Stages 0–8, docs 01–22) + post-V1 + video-alignment +
   V18-R2 dalgası + **auth remediation dalgası COMPLETE** (güvenlik denetimi #346–#364).
   Tüm route yüzeyleri frontend'e bağlı; TIER 2 sayfa haritası 24/24.
 
-- **alembic head:** **`0041_filtered_event_artifact`** (41 migration, tek head; I-02'de eklendi —
-  öncesi `0040_export_type_agent_pine`). **`ENGINE_VERSION` =
-  `backtest-engine-v18-min-n-filtered-events-artifact`** (`manifest.py`; I-02'de bump edildi çünkü Result
-  artifact ŞEKLİ değişti — öncesi K-03 `-funding-step-order`, K-04 `-full-pinning`, K-02
-  `-available-time-gate`; **O-05/O-06 bump ETMEDİ**).
-- **Son dalga — O-serisi (spec-uyum kusurları):** O-01 (#403) · O-02 (#400) · **O-03 (#407 + #413;
-  #408 boş merge oldu, içeriğini #413 yeniden indirdi)** · O-04 (#405) · O-05 (#412) ·
-  **O-06 (#419 — CancelBacktestRun, migration `0039`)** · O-08 (#406) · O-09 (#410) · O-10 (#402) ·
-  **O-17 (#446 — restore conflict artık typed `resolution` seçenek kümesi taşıyor; yeni
-  `domain/trash/restore.py` katalogu + salt-okuma
-  `GET /trash-entries/{id}/restore-preflight`; bilinmeyen resolution 422
-  `UNSUPPORTED_RESTORE_RESOLUTION`; migration YOK)** ·
-  **I-02 (`feat/i02-filtered-events-artifact` — doc 15 §3.2'nin bağlanmamış "View Filtered
-  Events" aksiyonu: `ArtifactType.FILTERED_EVENTS` + `filtered_event` tablosu (motor vetoları
-  artık `signal_events`'ten AYRI journal) + `result_artifact_checksum` (beş artifact tipi için,
-  doc 15 §7/§8.3); migration `0040`, ENGINE_VERSION bump. **REGIME_TABLE bilerek EKLENMEDİ** —
-  doc 22 Future-Dev sınırı, gerekçe `PROJECT_HISTORY.md`. Ayrıca E2E'de 12 sayfa yalnız
-  screenshot'lanıyordu, fonksiyonel kapsam eklendi: `specs/17-page-coverage.spec.ts`,
-  `18-result-artifacts-drilldown.spec.ts`, `19-future-dev-boundary.spec.ts`)**.
-
-
+ 
 - **Testler:** son yeşil referans CI (O-serisi PR'ları). Lokal tam suite tek koşuda
   tamamlanabiliyor — O-27'de **2538 passed / 0 failed / 43dk39sn**, worktree'ye özel izole DB ile
   (aşağıdaki ortam tuzağına uyulursa). Yine de **otorite CI'dır.**
@@ -215,28 +189,16 @@ Before stopping a working session, produce **ALL** of the following:
 
 - **F-07 raw-id sweep — SUNUM katmanı kapandı (PR #404).** 31 dosyada 161 `*_id` render'ı tarandı;
   **4 kalıntı açık** (backend display-DTO → `v18_visual_traceability.md §4.4`) — yani **F-07 bütün
-  olarak Complete DEĞİL**. vitest **622/622** (**`--no-file-parallelism` ZORUNLU**; worktree'de
+  olarak Complete DEĞİL** (yol/satır refs 2026-07-29'da yeniden ölçüldü).
+  vitest **622/622** *(2026-07-28 ölçümü; 07-29 doc-truth turunda yeniden koşulmadı — otorite CI)*
+  (**`--no-file-parallelism` ZORUNLU**; worktree'de
   `frontend/node_modules` yoksa önce `npm ci` — ilk koşudaki `ERR_MODULE_NOT_FOUND` test hatası değil).
 
 
 - **Next (PO imzası BLOKAJ DEĞİL — imza 2026-07-22'de atıldı,
   `docs/implementation/v18_final_acceptance.md:155-169`; beklettiği FIX(R3) kalemlerinin hepsi
   landed: #368–#373, #375–#379):**
-  1. **F-07 §4.4** — 4 yüzey backend display-DTO bekliyor (`v18_visual_traceability.md §4.4`).
-  2. **R2 banner kapanışı (docs işi):** `entropia_v18_remediation_status.md` RE-OPENING
-     banner'ının koşulu sağlandı → banner'ı kaldır, UI satırlarını evidence'lı Complete yap.
-  3. ~~O-03 kalıntısı~~ **KAPANDI (O-03R):** kalan 4 ölü error sınıfı adjudicate edilip silindi,
-     `KNOWN_UNRAISED` **boş**, ratchet mutlak. Ayrı konu olarak açık kalan: O-03 adjudication
-     tablosunun 4 satırı **sonradan canonical oldu** — bkz. `docs/PROJECT_HISTORY.md`
-     §"Sonradan canonical olan dört satır" ve §"O-03R · Kalan 4 ölü error sınıfı kapatıldı".
-  4. **Round-3 backlog:** S5 (a/b/c/d) + S-L1…S-L6
-     (`docs/POST_V1_SPEC_GAP_BACKLOG_ROUND3.md` §DURUM TAZELEME — diğer 8 madde landed).
-- **Açık iş (dürüst sınır):** ekran okuyucu (NVDA/VoiceOver) denetimi **yapılmadı** — checklist var,
-  denetim yok (`docs/implementation/a11y_screen_reader_audit_checklist.md`); 10 sayfanın derin görsel
-  kıyası eksik; **visual katmanı** CI'da koşmuyor — **a11y koşuyor** (`e2e.yml` `a11y` job'u, artık
-  düğüm-sayısı **ratchet**'i: `frontend/e2e/a11y-baseline.json`). **A11Y-01 = 70 düğüm** (228, D-7(b)
-  öncesi bayat ölçümdür): 45'i imza-mavisi imzalı sapma, **25'i D-7(b)'nin kaçırdığı gri/amber →
-  A11Y-03/04**. Açık PO kararı **D-10** → `docs/implementation/a11y_ci_ratchet_and_adjudication.md`.
+ 
 - **KAPSAM DIŞI (bilerek):** retention auto-purge (doc 20 §16 — "Production V1'de kapalı"),
   LLM generation (Future-Dev), Graphic View renderer (doc 22 — V18 statik placeholder kalır).
 

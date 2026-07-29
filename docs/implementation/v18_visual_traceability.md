@@ -181,14 +181,28 @@ the browser is precisely the "reconstruct names from IDs" the finding forbids. E
 F-07's stated correction — *add display DTOs at query boundaries* — which is a backend query
 change and therefore outside this presentation-only slice.
 
-| Site | Defect | Why not fixable here |
-|---|---|---|
-| `PreCheck.tsx:124` | the request picker's **"Request" column is a bare `request_id`**; Type / Source / State are kinds, not names. Choosing your own request = recognizing an opaque id — a common task, on a page F-07 names explicitly | the Create-Package request DTO (`lib/createPackage.ts`) exposes no name/title field |
-| `Library.tsx:1259`, `1274` | import-job rows identified only by `import_job_id` (status badge + `package_kind` alongside) | the import-job DTO carries no label |
-| `ResultDetail.tsx:420`, `589` | per-item breakdown rows render `{item_kind} <code>{item_id}</code>`, and leave-one-out rows render `Without <code>{entry.item_id}</code>` — reading a result breakdown is a common task | `PerItemBreakdown` / `ManifestItemRef` have no label field. The result is **immutable and pinned**; joining the *live* composition's labels would mislabel a result whose items have since changed — the label must come from the manifest, i.e. the server |
-| `ReadyCheck.tsx:291` | issue rows show a bare `scope_id` (same defect class as the Portfolio issue table that this slice fixed) | `ReadinessIssue` has no label field, and the report is immutable + `is_current`-tracked; labelling a **stale** report from the live composition would be actively wrong |
+> **Path + line refresh (2026-07-29, `origin/main` @ `9e86c99`).** These four rows previously
+> carried **bare filenames**, which read as `src/pages/` for all four — but `ResultDetail.tsx` lives
+> under **`src/components/`**, not `src/pages/`. Paths are now explicit and each row also names its
+> **enclosing symbol**, so the row survives the next line drift. Every line number was re-measured
+> today and **all four still hold** — only the paths were wrong. Re-measure with:
+>
+> ```bash
+> cd frontend
+> grep -n "request_id"    src/pages/PreCheck.tsx           # 2026-07-29 → :124
+> grep -n "import_job_id" src/pages/Library.tsx            # 2026-07-29 → :1259, :1274
+> grep -n "item_id"       src/components/ResultDetail.tsx  # 2026-07-29 → :420, :589
+> grep -n "scope_id"      src/pages/ReadyCheck.tsx         # 2026-07-29 → :291
+> ```
 
-`ResultsHistory.tsx:170` is deliberately **not** listed as a violation: a backtest result has no
+| Site (path · line · enclosing symbol) | Defect | Why not fixable here |
+|---|---|---|
+| `frontend/src/pages/PreCheck.tsx:124` — in `RequestPickerCard` (def `:83`) | the request picker's **"Request" column is a bare `request_id`**; Type / Source / State are kinds, not names. Choosing your own request = recognizing an opaque id — a common task, on a page F-07 names explicitly | the Create-Package request DTO (`lib/createPackage.ts`) exposes no name/title field |
+| `frontend/src/pages/Library.tsx:1259`, `:1274` | import-job rows identified only by `import_job_id` (status badge + `package_kind` alongside) | the import-job DTO carries no label |
+| `frontend/src/components/ResultDetail.tsx:420` — in `PerItemCard` (def `:416`) · `:589` — in `MarginalCard` (def `:585`) | per-item breakdown rows render `{item_kind} <code>{item_id}</code>`, and leave-one-out rows render `Without <code>{entry.item_id}</code>` — reading a result breakdown is a common task | `PerItemBreakdown` / `ManifestItemRef` have no label field. The result is **immutable and pinned**; joining the *live* composition's labels would mislabel a result whose items have since changed — the label must come from the manifest, i.e. the server |
+| `frontend/src/pages/ReadyCheck.tsx:291` — in `IssuesTable` (def `:258`) | issue rows show a bare `scope_id` (same defect class as the Portfolio issue table that this slice fixed) | `ReadinessIssue` has no label field, and the report is immutable + `is_current`-tracked; labelling a **stale** report from the live composition would be actively wrong |
+
+`frontend/src/pages/ResultsHistory.tsx:170` is deliberately **not** listed as a violation: a backtest result has no
 user-assigned name, and since P-12 the row carries completed-at / timeframe / symbol, so the id
 is not the sole discriminator. Its digest shape is PO-owned (D-5).
 

@@ -212,6 +212,44 @@ describe("strategyGraph scaling + restrictions", () => {
     expect((scaling.logic_scaling as Record<string, unknown>).indicator_blocks).toHaveLength(1);
   });
 
+  it("defaults the scaling timeframe structure to same_strategy with no sequence", () => {
+    const form = extractGraphSections(fullPayload());
+    expect(form.scaling.timeframe_mode).toBe("same_strategy");
+    expect(form.scaling.custom_timeframe_sequence).toEqual([]);
+    // S5c: a pre-S5c payload must not acquire a sequence on the way back out.
+    const scaling = mergeGraphSections(fullPayload(), form).scaling_logic as Record<
+      string,
+      unknown
+    >;
+    expect(scaling.timeframe_mode).toBe("same_strategy");
+    expect(scaling).not.toHaveProperty("custom_timeframe_sequence");
+  });
+
+  it("emits the custom timeframe sequence only under the custom_sequence mode", () => {
+    const p = fullPayload();
+    const form = extractGraphSections(p);
+    const custom: GraphState = {
+      ...form,
+      scaling: {
+        ...form.scaling,
+        timeframe_mode: "custom_sequence",
+        custom_timeframe_sequence: ["15m", "30m", "1h"],
+      },
+    };
+    const scaling = mergeGraphSections(p, custom).scaling_logic as Record<string, unknown>;
+    expect(scaling.timeframe_mode).toBe("custom_sequence");
+    expect(scaling.custom_timeframe_sequence).toEqual(["15m", "30m", "1h"]);
+
+    // Switching the mode back DELETES the ladder — a stale sequence must never survive in
+    // the saved revision (the I-15a min_true_count precedent).
+    const reverted: GraphState = {
+      ...custom,
+      scaling: { ...custom.scaling, timeframe_mode: "same_strategy" },
+    };
+    const back = mergeGraphSections(p, reverted).scaling_logic as Record<string, unknown>;
+    expect(back).not.toHaveProperty("custom_timeframe_sequence");
+  });
+
   it("extracts default stop-combination modes", () => {
     const form = extractGraphSections(fullPayload());
     expect(form.stop.trigger_requirement).toBe("any_active");

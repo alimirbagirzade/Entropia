@@ -105,6 +105,23 @@ Open the HTML report after a run with `npm run report`.
   stabilizes; if a selector drifts (button text, label wording) the fix is a
   one-line Page Object update in `pages/`, not a suite rewrite.
 
+## A11Y — axe-core scan + the node-count ratchet
+
+`npm run a11y` (specs/13 + specs/14) needs the same seeded stack as `npm test`. It runs on
+every PR in the E2E workflow's `a11y` job — it is a gate, not just acceptance evidence.
+
+The boundary is `a11y-baseline.json`: a **frozen ceiling of serious-impact nodes, per page,
+per axe rule**. Zero critical anywhere; a serious rule above its ceiling fails; a serious
+rule with no ceiling on that page fails on its first node; moderate/minor are reported only.
+A missing or unreadable baseline fails the run rather than allowing everything.
+
+| Situation | What to do |
+|---|---|
+| The gate went red on a rule you introduced | Fix the markup/style. Do not raise the ceiling. |
+| The violation is a deliberate, approved deviation | Get it adjudicated in `docs/implementation/a11y_ci_ratchet_and_adjudication.md` **first**, then raise the ceiling. A ceiling raised without a written decision is an undocumented regression wearing a baseline's clothes. |
+| You fixed nodes and CI warns "baseline is LOOSER than reality" | Copy `a11y-report/axe-baseline.tightened.json`'s `pages` into `a11y-baseline.json` and commit. Improvements never fail the run — this warning is the only thing pushing back on drift. |
+| You need the current real numbers | `a11y-report/axe-baseline.measured.json` from any run (CI uploads it in the `a11y-report` artifact). Do **not** read the committed `a11y-report/axe-results.json`: that is the dated 2026-07-22 R2-14 acceptance evidence and is stale on purpose. |
+
 ## R2-13 — Screenshot matrix + visual regression
 
 Three opt-in Playwright layers (all excluded from plain `npm test`):

@@ -270,7 +270,7 @@ class _Pending:
     ``current_candle_close`` / ``market_fill_simulation`` fill immediately at the
     signal bar's close and never create a ``_Pending``. ``next_candle_open`` /
     ``next_candle_close`` defer the fill to the following bar: ``target_seq`` is the
-    ``bars_seen`` index at which the fill executes (always the bar right after the
+    ``led.bars_seen`` index at which the fill executes (always the bar right after the
     signal), and ``at_open`` chooses that bar's open (resolved before the intrabar
     stop path) versus its close (resolved at end-of-bar, so an intrabar stop on the
     same bar pre-empts a scheduled close exit). At most one ``_Pending`` is ever
@@ -279,7 +279,7 @@ class _Pending:
 
     kind: str  # "entry" | "exit"
     at_open: bool  # fill at the target bar's OPEN (else its CLOSE)
-    target_seq: int  # bars_seen index at which the fill executes (the next bar)
+    target_seq: int  # led.bars_seen index at which the fill executes (the next bar)
     direction: str  # entry direction ("" for an exit)
     reason: str  # exit reason ("" for an entry)
     # F-07g: the signal bar's strength multiplier — a deferred entry fill inherits its
@@ -295,7 +295,7 @@ class _WorkingLimit:
     A ``limit_order`` does not fill at the decision bar (the signal is only known at that
     bar's close — a same-bar fill would look ahead). The order rests from the NEXT bar and
     fills at ``limit_price`` only if a bar's low (long buy) / high (short sell) reaches it
-    within the validity window. ``expires_seq`` is the last ``bars_seen`` index the order is
+    within the validity window. ``expires_seq`` is the last ``led.bars_seen`` index the order is
     live (``None`` = until_cancelled → until fill or end-of-data). On the expiry bar, an
     unfilled order applies its ``unfilled_policy``: cancel / keep-until-validity (no fill),
     convert-to-market (fill at that bar's close), or re-price (a fresh limit each live bar,
@@ -307,7 +307,7 @@ class _WorkingLimit:
     offset: Decimal  # signed offset magnitude for re-pricing
     price_rule: str  # entry_signal_price / signal_price_(minus|plus)_offset
     unfilled_policy: str
-    expires_seq: int | None  # last live bars_seen index (None = until_cancelled)
+    expires_seq: int | None  # last live led.bars_seen index (None = until_cancelled)
     # F-07g: the signal bar's strength multiplier — a limit fill (touch or convert-to-
     # market) inherits its SIGNAL bar's strength (the F-07e restriction-verdict
     # precedent), never re-priced at the fill bar. Inert 1x when no adjustment is active.
@@ -920,7 +920,6 @@ def run_engine(
             tick_alignment_unavailable = True
         else:
             tick_cursor = _TickCursor(tick_batches, tick_span)
-    tick_bars = 0
 
     # F-09: an unmodelled / misconfigured sizing method opens NO position at all — the
     # engine is a fail-closed backstop to the Ready Check STRATEGY_SIZING_UNSUPPORTED
@@ -1119,44 +1118,24 @@ def run_engine(
     pending: _Pending | None = None  # a fill deferred to a future bar (F-07a timing)
     working_limit: _WorkingLimit | None = None  # a resting limit ENTRY order (F-07b)
     working_stop: _WorkingStop | None = None  # a resting stop ENTRY trigger (F-07h)
-    bars_seen = 0
     first_ts = ""
     last_bar: _Bar | None = None
-    suppressed_entries = 0
-    stop_exit_collisions = 0
-    deferred_entry_fills = 0
-    deferred_exit_fills = 0
-    limit_orders_placed = 0
-    limit_orders_cancelled = 0
     # F-07h: stop-trigger lifecycle counts (a stop-limit's armed limit leg then counts
     # through the limit_orders_* counters — the two machines compose, never double-count).
-    stop_orders_placed = 0
-    stop_orders_triggered = 0
-    stop_orders_cancelled = 0
     # F-07i (C): tick-setting execution counts — print-resolved entry fills (a resting
     # order whose touch the print path proved), partial fills (initial + remainder lots),
     # same-bar stop-then-limit fills, touch-order placements and touch-exit fills.
-    touch_orders_placed = 0
-    touch_exit_fills = 0
     # F-07f: count of partial-close aftermaths that locked in profit on the remainder
     # (``lock_in_profit`` moving the stop to the current price, or ``trailing_stop``
     # force-activating the trailing rule) — surfaced as a diagnostics count.
     # F-07g: count of signal-driven entry decisions whose computed strength multiplier
     # was NOT the neutral 1x (flat entries, deferred/limit entries at their signal bar,
     # and conflict-driven stack/replace entries) — surfaced as a diagnostics count.
-    scale_layers_added = 0
-    scale_layers_rejected = 0
     # F-07e: restriction-gate + conflict-policy counters and their realized-ledger state.
     # ``current_day`` / ``led.day_realized`` track the UTC calendar day's realized trade PnL
     # (max-daily-loss basis); ``led.loss_streak`` counts consecutive realized losing lots
     # (consecutive-loss basis); ``prev_entry_signal`` detects a NEW aggregated signal EDGE
     # (a held signal is one entry event, never a per-bar stack/replace/ignore storm).
-    entries_blocked_by_restriction = 0
-    stack_entries_added = 0
-    stack_entries_rejected = 0
-    positions_replaced = 0
-    opposite_signal_closes = 0
-    conflict_signals_ignored = 0
     current_day: date | None = None
     prev_entry_signal: str | None = None
     # Portfolio-rules gate counters + the per-block reason handoff to _blocked_reason,
@@ -1170,7 +1149,6 @@ def run_engine(
     # ever sees the pre-resolved schedule, never the revision it came from.
     funding_has_mapping = funding.has_instrument_mapping if funding is not None else False
     funding_idx = 0
-    funding_charges = 0
     funding_paid = _ZERO
     # F-10: monotonic position-lifecycle id linking every decision-trace event of one
     # position (entry_signal -> entry_fill -> ... -> position_close) so a reviewer can
@@ -1507,7 +1485,7 @@ def run_engine(
             price_raw=price_raw,
             add_size=add_size,
             action=action,
-            bar_seq=bars_seen,
+            bar_seq=led.bars_seen,
             partial_policy=partial_policy,
         )
 
@@ -1685,7 +1663,7 @@ def run_engine(
             bar = _normalize(raw)
             if bar is None:
                 continue
-            bars_seen += 1
+            led.bars_seen += 1
             if not first_ts:
                 first_ts = bar.timestamp
             last_bar = bar
@@ -1695,7 +1673,7 @@ def run_engine(
             if tick_cursor is not None:
                 bar_ticks = tick_cursor.for_bar(bar.timestamp)
                 if bar_ticks:
-                    tick_bars += 1
+                    led.tick_bars += 1
             # F-07d: an exit lot (full or partial) realized on THIS bar appends a trade row;
             # the scale ladder below never adds to a position a bar has already reduced.
             trades_before_bar = len(led.trades)
@@ -1812,12 +1790,12 @@ def run_engine(
                             led.equity = (led.equity - charge).quantize(_MONEY)
                             led.peak = max(led.peak, led.equity)
                             funding_paid += charge
-                        funding_charges += 1
+                        led.funding_charges += 1
                         _emit(
                             "funding_charge",
                             event_time=bar.timestamp,
                             direction=position.direction,
-                            bar_seq=bars_seen,
+                            bar_seq=led.bars_seen,
                             detail={
                                 "position_seq": position.position_seq,
                                 "rate": str(rec.rate),
@@ -1832,19 +1810,19 @@ def run_engine(
 
             # (3) Resolve a fill deferred to THIS bar's OPEN (next_candle_open). Runs
             # before the intrabar stop path so the open fill precedes the bar's high/low.
-            if pending is not None and pending.target_seq == bars_seen and pending.at_open:
+            if pending is not None and pending.target_seq == led.bars_seen and pending.at_open:
                 if pending.kind == "entry" and position is None:
-                    deferred_entry_fills += 1
+                    led.deferred_entry_fills += 1
                     position = _do_open(
                         pending.direction,
                         bar,
                         bar.open,
-                        bar_seq=bars_seen,
+                        bar_seq=led.bars_seen,
                         deferred=True,
                         strength=pending.strength,
                     )
                 elif pending.kind == "exit" and position is not None:
-                    deferred_exit_fills += 1
+                    led.deferred_exit_fills += 1
                     # F-07c: a deferred exit SIGNAL closes ``close_fraction`` and holds the
                     # remainder under the aftermath (a full close nulls the position).
                     if _close(
@@ -1852,7 +1830,7 @@ def run_engine(
                         bar.open,
                         pending.reason,
                         position,
-                        bar_seq=bars_seen,
+                        bar_seq=led.bars_seen,
                         fraction=close_fraction,
                     ):
                         position = None
@@ -1877,9 +1855,9 @@ def run_engine(
                 wl = working_limit
                 touched, touch_prints = _limit_touch_evidence(wl, bar, bar_ticks)
                 if touched:
-                    _fill_resting_limit(wl, bar, touch_prints, bar_seq=bars_seen)
+                    _fill_resting_limit(wl, bar, touch_prints, bar_seq=led.bars_seen)
                 if working_limit is not None and position is None:
-                    expired = wl.expires_seq is not None and bars_seen >= wl.expires_seq
+                    expired = wl.expires_seq is not None and led.bars_seen >= wl.expires_seq
                     if expired:
                         if wl.unfilled_policy == "convert_to_market_order":
                             led.limit_orders_filled += 1
@@ -1887,17 +1865,17 @@ def run_engine(
                                 wl.direction,
                                 bar,
                                 bar.close,
-                                bar_seq=bars_seen,
+                                bar_seq=led.bars_seen,
                                 deferred=True,
                                 strength=wl.strength,
                             )
                         else:
-                            limit_orders_cancelled += 1
+                            led.limit_orders_cancelled += 1
                             _emit(
                                 "limit_order_cancelled",
                                 event_time=bar.timestamp,
                                 direction=wl.direction,
-                                bar_seq=bars_seen,
+                                bar_seq=led.bars_seen,
                                 detail={
                                     "reason": "validity_expired",
                                     "unfilled_policy": wl.unfilled_policy,
@@ -1919,12 +1897,12 @@ def run_engine(
                 if position is None or position.position_seq != wl.for_position_seq:
                     # The order's position is gone — the remaining intent is cancelled,
                     # traced (never a silent gap, and NEVER re-armed as a fresh entry).
-                    limit_orders_cancelled += 1
+                    led.limit_orders_cancelled += 1
                     _emit(
                         "limit_order_cancelled",
                         event_time=bar.timestamp,
                         direction=wl.direction,
-                        bar_seq=bars_seen,
+                        bar_seq=led.bars_seen,
                         detail={
                             "reason": "position_closed",
                             "unfilled_policy": wl.unfilled_policy,
@@ -1933,7 +1911,9 @@ def run_engine(
                         },
                     )
                     working_limit = None
-                elif wl.remainder_placed_seq is not None and bars_seen > wl.remainder_placed_seq:
+                elif (
+                    wl.remainder_placed_seq is not None and led.bars_seen > wl.remainder_placed_seq
+                ):
                     touched, touch_prints = _limit_touch_evidence(wl, bar, bar_ticks)
                     if touched:
                         sized = [t for t in touch_prints if t.size is not None]
@@ -1957,9 +1937,9 @@ def run_engine(
                                 working_limit = None
                             else:
                                 wl.remaining_size = remaining
-                                wl.remainder_placed_seq = bars_seen
+                                wl.remainder_placed_seq = led.bars_seen
                     if working_limit is not None:
-                        expired = wl.expires_seq is not None and bars_seen >= wl.expires_seq
+                        expired = wl.expires_seq is not None and led.bars_seen >= wl.expires_seq
                         if expired:
                             if wl.unfilled_policy == "convert_to_market_order":
                                 _absorb_remainder(
@@ -1970,12 +1950,12 @@ def run_engine(
                                     action="remainder_validity_market",
                                 )
                             else:
-                                limit_orders_cancelled += 1
+                                led.limit_orders_cancelled += 1
                                 _emit(
                                     "limit_order_cancelled",
                                     event_time=bar.timestamp,
                                     direction=wl.direction,
-                                    bar_seq=bars_seen,
+                                    bar_seq=led.bars_seen,
                                     detail={
                                         "reason": "partial_remainder_expired",
                                         "unfilled_policy": wl.unfilled_policy,
@@ -2005,7 +1985,7 @@ def run_engine(
                     else bar.low <= ws.trigger_price
                 )
                 if fired:
-                    stop_orders_triggered += 1
+                    led.stop_orders_triggered += 1
                     trigger_detail: dict[str, Any] = {
                         "trigger_price": str(ws.trigger_price),
                         "order_type": order_cfg.type,
@@ -2021,14 +2001,14 @@ def run_engine(
                             "stop_order_triggered",
                             event_time=bar.timestamp,
                             direction=ws.direction,
-                            bar_seq=bars_seen,
+                            bar_seq=led.bars_seen,
                             detail=trigger_detail,
                         )
                         position = _do_open(
                             ws.direction,
                             bar,
                             fill_price,
-                            bar_seq=bars_seen,
+                            bar_seq=led.bars_seen,
                             deferred=True,
                             strength=ws.strength,
                         )
@@ -2040,24 +2020,26 @@ def run_engine(
                             price_rule=ws.limit_rule,
                             unfilled_policy=ws.unfilled_policy,
                             expires_seq=(
-                                None if ws.validity_bars is None else bars_seen + ws.validity_bars
+                                None
+                                if ws.validity_bars is None
+                                else led.bars_seen + ws.validity_bars
                             ),
                             strength=ws.strength,
                         )
-                        limit_orders_placed += 1
+                        led.limit_orders_placed += 1
                         trigger_detail["limit_price"] = str(ws.limit_price)
                         _emit(
                             "stop_order_triggered",
                             event_time=bar.timestamp,
                             direction=ws.direction,
-                            bar_seq=bars_seen,
+                            bar_seq=led.bars_seen,
                             detail=trigger_detail,
                         )
                         _emit(
                             "limit_order_placed",
                             event_time=bar.timestamp,
                             direction=ws.direction,
-                            bar_seq=bars_seen,
+                            bar_seq=led.bars_seen,
                             detail={
                                 "limit_price": str(ws.limit_price),
                                 "price_rule": ws.limit_rule,
@@ -2093,7 +2075,7 @@ def run_engine(
                                         armed,
                                         bar,
                                         after_trigger,
-                                        bar_seq=bars_seen,
+                                        bar_seq=led.bars_seen,
                                         armed_same_bar=True,
                                     )
                     working_stop = None
@@ -2137,7 +2119,7 @@ def run_engine(
                     # Only "exit_has_priority" changes the OUTCOME (close at close as an
                     # exit); the other three execute the stop (the intrabar touch precedes
                     # the close-based exit), "record_both_reasons" logs both codes.
-                    stop_exit_collisions += 1
+                    led.stop_exit_collisions += 1
                     executed_reason = (
                         "exit_signal" if stop_exit_conflict == "exit_has_priority" else "stop_loss"
                     )
@@ -2148,7 +2130,7 @@ def run_engine(
                         "stop_exit_collision",
                         event_time=bar.timestamp,
                         direction=position.direction,
-                        bar_seq=bars_seen,
+                        bar_seq=led.bars_seen,
                         detail={
                             "position_seq": position.position_seq,
                             "executed": executed_reason,
@@ -2159,7 +2141,9 @@ def run_engine(
                         },
                     )
                     if stop_exit_conflict == "exit_has_priority":
-                        _close(bar.timestamp, bar.close, "exit_signal", position, bar_seq=bars_seen)
+                        _close(
+                            bar.timestamp, bar.close, "exit_signal", position, bar_seq=led.bars_seen
+                        )
                     else:
                         assert stop_outcome is not None  # implied by stop_touched
                         _close(
@@ -2167,7 +2151,7 @@ def run_engine(
                             stop_outcome.price,
                             "stop_loss",
                             position,
-                            bar_seq=bars_seen,
+                            bar_seq=led.bars_seen,
                         )
                         _emit_stop_resolution(stop_outcome, bar.timestamp, position.direction)
                     position = None
@@ -2176,12 +2160,16 @@ def run_engine(
                     # scheduled for later this bar (or a later bar) — the stop is hit first.
                     assert stop_outcome is not None  # implied by stop_touched
                     _close(
-                        bar.timestamp, stop_outcome.price, "stop_loss", position, bar_seq=bars_seen
+                        bar.timestamp,
+                        stop_outcome.price,
+                        "stop_loss",
+                        position,
+                        bar_seq=led.bars_seen,
                     )
                     _emit_stop_resolution(stop_outcome, bar.timestamp, position.direction)
                     position = None
                     pending = None
-                elif exit_touch is not None and bars_seen > exit_touch[1]:
+                elif exit_touch is not None and led.bars_seen > exit_touch[1]:
                     # F-07i (C) ``intrabar_touch`` EXIT: the resting exit fills when price
                     # comes back to TOUCH the exit-signal level (a long SELLS at the
                     # level — prints at/above it; short mirror). Print-authoritative on a
@@ -2201,13 +2189,13 @@ def run_engine(
                             bar.high >= touch_level if is_long_pos else bar.low <= touch_level
                         )
                     if exit_touched:
-                        touch_exit_fills += 1
+                        led.touch_exit_fills += 1
                         if _close(
                             bar.timestamp,
                             touch_level,
                             "exit_signal",
                             position,
-                            bar_seq=bars_seen,
+                            bar_seq=led.bars_seen,
                             fraction=close_fraction,
                         ):
                             position = None
@@ -2223,7 +2211,7 @@ def run_engine(
                             bar.close,
                             "exit_signal",
                             position,
-                            bar_seq=bars_seen,
+                            bar_seq=led.bars_seen,
                             fraction=close_fraction,
                         ):
                             position = None
@@ -2240,7 +2228,7 @@ def run_engine(
                             "exit_scheduled",
                             event_time=bar.timestamp,
                             direction=position.direction,
-                            bar_seq=bars_seen,
+                            bar_seq=led.bars_seen,
                             detail={
                                 "position_seq": position.position_seq,
                                 "reason": "exit_signal",
@@ -2248,7 +2236,7 @@ def run_engine(
                                 "touch_level": str(bar.close),
                             },
                         )
-                        exit_touch = (bar.close, bars_seen)
+                        exit_touch = (bar.close, led.bars_seen)
                     else:
                         # Defer the exit to the next bar's open / close (F-07a); trace the
                         # scheduling decision so the two-phase timing is reconstructable.
@@ -2256,16 +2244,16 @@ def run_engine(
                             "exit_scheduled",
                             event_time=bar.timestamp,
                             direction=position.direction,
-                            bar_seq=bars_seen,
+                            bar_seq=led.bars_seen,
                             detail={
                                 "position_seq": position.position_seq,
                                 "reason": "exit_signal",
                                 "timing": config.data.execution.exit_timing,
-                                "target_bar_seq": bars_seen + 1,
+                                "target_bar_seq": led.bars_seen + 1,
                             },
                         )
                         pending = _Pending(
-                            "exit", exit_sched == "next_open", bars_seen + 1, "", "exit_signal"
+                            "exit", exit_sched == "next_open", led.bars_seen + 1, "", "exit_signal"
                         )
             elif (
                 timing_ok
@@ -2291,12 +2279,12 @@ def run_engine(
                         if (entry_signal == "long" and not long_ok) or (
                             entry_signal == "short" and not short_ok
                         ):
-                            suppressed_entries += 1
+                            led.suppressed_entries += 1
                             _emit(
                                 "filtered_no_entry",
                                 event_time=bar.timestamp,
                                 direction=entry_signal,
-                                bar_seq=bars_seen,
+                                bar_seq=led.bars_seen,
                                 detail={
                                     "reason": "direction_restriction",
                                     "direction_mode": config.position_entry_logic.direction_mode,
@@ -2311,12 +2299,12 @@ def run_engine(
                     want_long = bar.close > highest
                     want_short = bar.close < lowest
                     if (want_long and not long_ok) or (want_short and not short_ok):
-                        suppressed_entries += 1
+                        led.suppressed_entries += 1
                         _emit(
                             "filtered_no_entry",
                             event_time=bar.timestamp,
                             direction="long" if want_long else "short",
-                            bar_seq=bars_seen,
+                            bar_seq=led.bars_seen,
                             detail={
                                 "reason": "direction_restriction",
                                 "direction_mode": config.position_entry_logic.direction_mode,
@@ -2334,12 +2322,12 @@ def run_engine(
                     # engine-version-pinned).
                     active_filters = _active_restrictions(bar_date)
                     if _restrictions_block(active_filters):
-                        entries_blocked_by_restriction += 1
+                        led.entries_blocked_by_restriction += 1
                         _emit(
                             "filtered_no_entry",
                             event_time=bar.timestamp,
                             direction=want,
-                            bar_seq=bars_seen,
+                            bar_seq=led.bars_seen,
                             detail={
                                 "reason": "restriction_blocked",
                                 "rule": restriction_rule,
@@ -2367,7 +2355,7 @@ def run_engine(
                         "entry_signal",
                         event_time=bar.timestamp,
                         direction=want,
-                        bar_seq=bars_seen,
+                        bar_seq=led.bars_seen,
                         detail=entry_detail,
                     )
                     if order_is_limit:
@@ -2386,16 +2374,16 @@ def run_engine(
                             price_rule=limit.price_rule,
                             unfilled_policy=limit.unfilled_policy,
                             expires_seq=(
-                                None if validity_bars is None else bars_seen + validity_bars
+                                None if validity_bars is None else led.bars_seen + validity_bars
                             ),
                             strength=strength,
                         )
-                        limit_orders_placed += 1
+                        led.limit_orders_placed += 1
                         _emit(
                             "limit_order_placed",
                             event_time=bar.timestamp,
                             direction=want,
-                            bar_seq=bars_seen,
+                            bar_seq=led.bars_seen,
                             detail={
                                 "limit_price": str(limit_level),
                                 "price_rule": limit.price_rule,
@@ -2440,12 +2428,12 @@ def run_engine(
                             validity_bars=(_VALIDITY_BARS[limit.validity] if limit else None),
                             strength=strength,
                         )
-                        stop_orders_placed += 1
+                        led.stop_orders_placed += 1
                         _emit(
                             "stop_order_placed",
                             event_time=bar.timestamp,
                             direction=want,
-                            bar_seq=bars_seen,
+                            bar_seq=led.bars_seen,
                             detail=place_detail,
                         )
                     elif entry_sched == "touch":
@@ -2465,12 +2453,12 @@ def run_engine(
                             expires_seq=None,
                             strength=strength,
                         )
-                        touch_orders_placed += 1
+                        led.touch_orders_placed += 1
                         _emit(
                             "limit_order_placed",
                             event_time=bar.timestamp,
                             direction=want,
-                            bar_seq=bars_seen,
+                            bar_seq=led.bars_seen,
                             detail={
                                 "limit_price": str(bar.close),
                                 "price_rule": "entry_signal_price",
@@ -2484,7 +2472,7 @@ def run_engine(
                             want,
                             bar,
                             bar.close,
-                            bar_seq=bars_seen,
+                            bar_seq=led.bars_seen,
                             deferred=False,
                             strength=strength,
                         )
@@ -2493,32 +2481,37 @@ def run_engine(
                             "entry_scheduled",
                             event_time=bar.timestamp,
                             direction=want,
-                            bar_seq=bars_seen,
+                            bar_seq=led.bars_seen,
                             detail={
                                 "timing": config.data.execution.entry_timing,
-                                "target_bar_seq": bars_seen + 1,
+                                "target_bar_seq": led.bars_seen + 1,
                             },
                         )
                         pending = _Pending(
-                            "entry", entry_sched == "next_open", bars_seen + 1, want, "", strength
+                            "entry",
+                            entry_sched == "next_open",
+                            led.bars_seen + 1,
+                            want,
+                            "",
+                            strength,
                         )
 
             # (3d) Resolve a fill deferred to THIS bar's CLOSE (next_candle_close). Runs at
             # end-of-bar so an intrabar stop (above) pre-empts a scheduled close exit, and
             # so a pending set THIS bar (target bars_seen+1) is never resolved early.
-            if pending is not None and pending.target_seq == bars_seen and not pending.at_open:
+            if pending is not None and pending.target_seq == led.bars_seen and not pending.at_open:
                 if pending.kind == "entry" and position is None:
-                    deferred_entry_fills += 1
+                    led.deferred_entry_fills += 1
                     position = _do_open(
                         pending.direction,
                         bar,
                         bar.close,
-                        bar_seq=bars_seen,
+                        bar_seq=led.bars_seen,
                         deferred=True,
                         strength=pending.strength,
                     )
                 elif pending.kind == "exit" and position is not None:
-                    deferred_exit_fills += 1
+                    led.deferred_exit_fills += 1
                     # F-07c: a deferred exit SIGNAL at the close closes ``close_fraction`` and
                     # holds the remainder under the aftermath (a full close nulls the position).
                     if _close(
@@ -2526,7 +2519,7 @@ def run_engine(
                         bar.close,
                         pending.reason,
                         position,
-                        bar_seq=bars_seen,
+                        bar_seq=led.bars_seen,
                         fraction=close_fraction,
                     ):
                         position = None
@@ -2550,7 +2543,7 @@ def run_engine(
                 # The signal edge that OPENED the position this bar (flat entry, deferred
                 # fill or limit touch) is one entry event — it must never also stack /
                 # replace / close its own position on the same bar.
-                and position.entry_bar_seq != bars_seen
+                and position.entry_bar_seq != led.bars_seen
                 and plan_active
                 and pending is None
                 and len(led.trades) == trades_before_bar
@@ -2559,12 +2552,12 @@ def run_engine(
             ):
                 if entry_signal == position.direction:
                     if stacking_policy == "ignore":
-                        conflict_signals_ignored += 1
+                        led.conflict_signals_ignored += 1
                         _emit(
                             "filtered_no_entry",
                             event_time=bar.timestamp,
                             direction=entry_signal,
-                            bar_seq=bars_seen,
+                            bar_seq=led.bars_seen,
                             detail={
                                 "reason": "stacking_ignored",
                                 "policy": stacking_policy,
@@ -2575,12 +2568,12 @@ def run_engine(
                         # The repeated signal itself adds nothing — position growth is
                         # DELEGATED to the scaling ladder (§13 "only if scaling allows");
                         # with scaling disabled the signal is a traced no-op.
-                        conflict_signals_ignored += 1
+                        led.conflict_signals_ignored += 1
                         _emit(
                             "filtered_no_entry",
                             event_time=bar.timestamp,
                             direction=entry_signal,
-                            bar_seq=bars_seen,
+                            bar_seq=led.bars_seen,
                             detail={
                                 "reason": "stacking_scale_only",
                                 "policy": stacking_policy,
@@ -2596,12 +2589,12 @@ def run_engine(
                             _active_restrictions(bar_date) if restriction_specs else []
                         )
                         if _restrictions_block(conflict_active):
-                            entries_blocked_by_restriction += 1
+                            led.entries_blocked_by_restriction += 1
                             _emit(
                                 "filtered_no_entry",
                                 event_time=bar.timestamp,
                                 direction=entry_signal,
-                                bar_seq=bars_seen,
+                                bar_seq=led.bars_seen,
                                 detail={
                                     "reason": "restriction_blocked",
                                     "rule": restriction_rule,
@@ -2618,7 +2611,7 @@ def run_engine(
                             # ``entry_signal`` + ``entry_fill`` so the F-10 chain stays
                             # complete.
                             replaced_seq = position.position_seq
-                            positions_replaced += 1
+                            led.positions_replaced += 1
                             # F-07g: the conflict entry is a SIGNAL entry — it gets its
                             # own decision bar's strength multiplier, exactly like a
                             # flat entry.
@@ -2637,7 +2630,7 @@ def run_engine(
                                 "entry_signal",
                                 event_time=bar.timestamp,
                                 direction=entry_signal,
-                                bar_seq=bars_seen,
+                                bar_seq=led.bars_seen,
                                 detail=replace_detail,
                             )
                             _close(
@@ -2645,13 +2638,13 @@ def run_engine(
                                 bar.close,
                                 "replaced_by_signal",
                                 position,
-                                bar_seq=bars_seen,
+                                bar_seq=led.bars_seen,
                             )
                             position = _do_open(
                                 entry_signal,
                                 bar,
                                 bar.close,
-                                bar_seq=bars_seen,
+                                bar_seq=led.bars_seen,
                                 deferred=False,
                                 strength=conflict_strength,
                             )
@@ -2714,12 +2707,12 @@ def run_engine(
                                     stack_reject = "portfolio_max_total_exposure"
                                     stack_cap = str(max(headroom, _ZERO).quantize(_MONEY))
                             if stack_reject is not None:
-                                stack_entries_rejected += 1
+                                led.stack_entries_rejected += 1
                                 _emit(
                                     "stack_entry_rejected",
                                     event_time=bar.timestamp,
                                     direction=position.direction,
-                                    bar_seq=bars_seen,
+                                    bar_seq=led.bars_seen,
                                     detail={
                                         "position_seq": position.position_seq,
                                         "reason": stack_reject,
@@ -2748,14 +2741,14 @@ def run_engine(
                                 position.peak_notional = max(
                                     position.peak_notional, position.entry_notional
                                 )
-                                stack_entries_added += 1
+                                led.stack_entries_added += 1
                                 if commission > _ZERO:
                                     led.equity = (led.equity - commission).quantize(_MONEY)
                                 _emit(
                                     "stack_entry_added",
                                     event_time=bar.timestamp,
                                     direction=position.direction,
-                                    bar_seq=bars_seen,
+                                    bar_seq=led.bars_seen,
                                     detail={
                                         "position_seq": position.position_seq,
                                         "fill_price": str(stack_eff),
@@ -2770,16 +2763,18 @@ def run_engine(
                     # An opposite signal with exit-on-opposite OFF: the policy closes the
                     # held position at the decision bar's close ("Close" §13 — the flat
                     # rules take over from the next bar; no same-bar reverse).
-                    opposite_signal_closes += 1
-                    _close(bar.timestamp, bar.close, "opposite_signal", position, bar_seq=bars_seen)
+                    led.opposite_signal_closes += 1
+                    _close(
+                        bar.timestamp, bar.close, "opposite_signal", position, bar_seq=led.bars_seen
+                    )
                     position = None
                 elif hedge_policy == "ignore":
-                    conflict_signals_ignored += 1
+                    led.conflict_signals_ignored += 1
                     _emit(
                         "filtered_no_entry",
                         event_time=bar.timestamp,
                         direction=entry_signal,
-                        bar_seq=bars_seen,
+                        bar_seq=led.bars_seen,
                         detail={
                             "reason": "hedge_ignored",
                             "policy": hedge_policy,
@@ -2858,12 +2853,12 @@ def run_engine(
                         ),
                     )
                     if reject_reason is not None:
-                        scale_layers_rejected += 1
+                        led.scale_layers_rejected += 1
                         _emit(
                             "scale_layer_rejected",
                             event_time=bar.timestamp,
                             direction=position.direction,
-                            bar_seq=bars_seen,
+                            bar_seq=led.bars_seen,
                             detail={
                                 "position_seq": position.position_seq,
                                 "reason": reject_reason,
@@ -2885,7 +2880,7 @@ def run_engine(
                             position.peak_notional, position.entry_notional
                         )
                         position.layers_filled += 1
-                        scale_layers_added += 1
+                        led.scale_layers_added += 1
                         if commission > _ZERO:
                             # The layer's own entry fill pays its commission NOW; the close
                             # still books one round trip (initial entry + exit) — N layers
@@ -2895,7 +2890,7 @@ def run_engine(
                             "scale_layer_added",
                             event_time=bar.timestamp,
                             direction=position.direction,
-                            bar_seq=bars_seen,
+                            bar_seq=led.bars_seen,
                             detail={
                                 "position_seq": position.position_seq,
                                 "layer_seq": position.layers_filled,
@@ -2925,12 +2920,12 @@ def run_engine(
     # End-of-data: a limit order still resting past the last bar never filled → cancel it
     # (F-07b), so an unfilled limit is an auditable no-fill, never a silent gap.
     if working_limit is not None and last_bar is not None:
-        limit_orders_cancelled += 1
+        led.limit_orders_cancelled += 1
         _emit(
             "limit_order_cancelled",
             event_time=last_bar.timestamp,
             direction=working_limit.direction,
-            bar_seq=bars_seen,
+            bar_seq=led.bars_seen,
             detail={
                 "reason": "end_of_data",
                 "unfilled_policy": working_limit.unfilled_policy,
@@ -2942,12 +2937,12 @@ def run_engine(
     # End-of-data: a stop trigger still resting past the last bar never fired → cancel it
     # (F-07h), so an unfired stop is an auditable no-fill, never a silent gap.
     if working_stop is not None and last_bar is not None:
-        stop_orders_cancelled += 1
+        led.stop_orders_cancelled += 1
         _emit(
             "stop_order_cancelled",
             event_time=last_bar.timestamp,
             direction=working_stop.direction,
-            bar_seq=bars_seen,
+            bar_seq=led.bars_seen,
             detail={
                 "reason": "end_of_data",
                 "trigger_price": str(working_stop.trigger_price),
@@ -2958,7 +2953,7 @@ def run_engine(
 
     # End-of-data: close any open position at the last bar's close (never left dangling).
     if position is not None and last_bar is not None:
-        _close(last_bar.timestamp, last_bar.close, "end_of_data", position, bar_seq=bars_seen)
+        _close(last_bar.timestamp, last_bar.close, "end_of_data", position, bar_seq=led.bars_seen)
         position = None
 
     total_trades = len(led.trades)
@@ -3015,7 +3010,7 @@ def run_engine(
         "funding_paid": funding_paid.quantize(_MONEY),
     }
     warnings: list[str] = []
-    if not bars_seen:
+    if not led.bars_seen:
         warnings.append("no_bars_in_source")
     if rules_active:
         # Portfolio-rules provenance (L4 — every boundary surfaced, never silent):
@@ -3213,7 +3208,7 @@ def run_engine(
         "engine_kind": "v1_bar_replay",
         "entry_model": entry_model,
         "reproducibility_note": reproducibility_note,
-        "bars_processed": bars_seen,
+        "bars_processed": led.bars_seen,
         "breakout_window": _BREAKOUT_WINDOW,
         "indicator_blocks": len(entry_evals),
         "condition_blocks": condition_count,
@@ -3244,17 +3239,17 @@ def run_engine(
         "entry_timing": config.data.execution.entry_timing,
         "exit_timing": config.data.execution.exit_timing,
         "execution_timing_modelled": timing_ok,
-        "deferred_entry_fills": deferred_entry_fills,
-        "deferred_exit_fills": deferred_exit_fills,
+        "deferred_entry_fills": led.deferred_entry_fills,
+        "deferred_exit_fills": led.deferred_exit_fills,
         # F-07b: order-type execution provenance + limit-order working-order counts.
         "order_type": order_cfg.type,
         "order_execution_modelled": order_ok,
-        "limit_orders_placed": limit_orders_placed,
+        "limit_orders_placed": led.limit_orders_placed,
         "limit_orders_filled": led.limit_orders_filled,
-        "limit_orders_cancelled": limit_orders_cancelled,
-        "stop_orders_placed": stop_orders_placed,
-        "stop_orders_triggered": stop_orders_triggered,
-        "stop_orders_cancelled": stop_orders_cancelled,
+        "limit_orders_cancelled": led.limit_orders_cancelled,
+        "stop_orders_placed": led.stop_orders_placed,
+        "stop_orders_triggered": led.stop_orders_triggered,
+        "stop_orders_cancelled": led.stop_orders_cancelled,
         # F-07c: partial-close provenance + count (an exit signal closed part of a position).
         "close_percentage": str(exit_logic.close_percentage),
         "partial_aftermath": partial_aftermath,
@@ -3269,8 +3264,8 @@ def run_engine(
         "scaling_enabled": scaling_enabled,
         "scaling_method": scaling_cfg.method if scaling_enabled and scaling_cfg else None,
         "scaling_modelled": scaling_ok,
-        "scale_layers_added": scale_layers_added,
-        "scale_layers_rejected": scale_layers_rejected,
+        "scale_layers_added": led.scale_layers_added,
+        "scale_layers_rejected": led.scale_layers_rejected,
         "max_total_exposure_active": scale_max_total is not None,
         # F-07e: restrictions & filters provenance + entry-gate counts.
         "restrictions_rule": restriction_rule,
@@ -3278,20 +3273,20 @@ def run_engine(
         "active_filter_types": sorted(
             {rf.filter_type for rf in restrictions_cfg.filters if rf.enabled}
         ),
-        "entries_blocked_by_restriction": entries_blocked_by_restriction,
+        "entries_blocked_by_restriction": led.entries_blocked_by_restriction,
         # F-07e: conflict / position handling provenance + policy-outcome counts.
         "conflict_handling_modelled": conflict_ok,
         "overlapping_signal_policy": overlap_policy,
         "same_direction_stacking": stacking_policy,
         "opposite_direction_hedge": hedge_policy,
         "exit_on_opposite_signal": bool(conflict_cfg.exit_on_opposite_signal),
-        "stack_entries_added": stack_entries_added,
-        "stack_entries_rejected": stack_entries_rejected,
-        "positions_replaced": positions_replaced,
-        "opposite_signal_closes": opposite_signal_closes,
-        "conflict_signals_ignored": conflict_signals_ignored,
+        "stack_entries_added": led.stack_entries_added,
+        "stack_entries_rejected": led.stack_entries_rejected,
+        "positions_replaced": led.positions_replaced,
+        "opposite_signal_closes": led.opposite_signal_closes,
+        "conflict_signals_ignored": led.conflict_signals_ignored,
         "stop_exit_conflict": stop_exit_conflict,
-        "stop_exit_collisions": stop_exit_collisions,
+        "stop_exit_collisions": led.stop_exit_collisions,
         "logic_stop_blocks": len(stop_evals),
         "stop_trigger_requirement": stop_trigger_requirement,
         "stop_conflict_resolution": stop_conflict_resolution,
@@ -3325,13 +3320,13 @@ def run_engine(
         "funding_enabled": funding is not None,
         "funding_source_revision_id": funding.source_revision_id if funding is not None else None,
         "funding_records": len(funding_records),
-        "funding_charges": funding_charges,
+        "funding_charges": led.funding_charges,
         # F-07i (B): intrabar tick-path provenance — whether a pinned tick stream was
         # injected, how many bars carried a print sub-path, and how many
         # first_trigger_wins stops the REAL print order resolved (vs the flagged
         # conservative OHLCV approximation).
         "tick_path_enabled": tick_batches is not None,
-        "tick_bars": tick_bars,
+        "tick_bars": led.tick_bars,
         "tick_first_trigger_resolutions": led.tick_first_trigger_resolutions,
         # F-07i (C): tick-setting execution provenance — print-resolved resting-order
         # fills, partial fills (initial + remainder lots), same-bar stop-then-limit
@@ -3339,14 +3334,14 @@ def run_engine(
         "tick_resolved_entry_fills": led.tick_resolved_entry_fills,
         "partial_fills": led.partial_fills,
         "same_bar_stop_limit_fills": led.same_bar_stop_limit_fills,
-        "touch_orders_placed": touch_orders_placed,
-        "touch_exit_fills": touch_exit_fills,
+        "touch_orders_placed": led.touch_orders_placed,
+        "touch_exit_fills": led.touch_exit_fills,
         "item_count": item_count,
         "decision_trace_count": len(led.signal_events),
         "decision_trace_schema": DECISION_TRACE_SCHEMA,
         "decision_trace_event_types": list(DECISION_TRACE_EVENT_TYPES),
         "unmodelled_decision_classes": list(UNMODELLED_DECISION_CLASSES),
-        "suppressed_entries": suppressed_entries,
+        "suppressed_entries": led.suppressed_entries,
         "execution_key": execution_key,
         "warnings": warnings,
     }

@@ -3,6 +3,10 @@
 **Slice:** `feat/t2-acceptance-id-traceability` · **Measured:** 2026-07-28 ·
 **Baseline commit:** `eff8ffe` (origin/main)
 
+> **Follow-up applied 2026-07-29** (`feat/i17-rf06-and-map-rename`): RF-06 gained a
+> dedicated test and this file was renamed from `acceptance_id_traceability.md`.
+> See **§G**. Sections §A–§F are the original 2026-07-28 record and are unchanged.
+
 Reproduce every number below with:
 
 ```bash
@@ -277,3 +281,63 @@ then restart the server and re-run with an isolated database:
 ```bash
 TEST_DATABASE_URL="postgresql+asyncpg://entropia:entropia@localhost:5432/entropia_i17" uv run pytest tests/integration/test_rationale_persistence.py -q --no-cov
 ```
+
+---
+
+## §G. Follow-up slice — `feat/i17-rf06-and-map-rename` (2026-07-29)
+
+The I-17 brief asked for two things this document did not yet satisfy. Both are
+closed here; nothing in §A–§F is retracted.
+
+### G.1 — RF-06 now has a dedicated test, not an adjacent tag
+
+`RF-06` counted as *traced* in §A, but its only tag was the word `RF-06-adjacent`
+in `integration/test_trash_page.py`. That tag was honest about its own limits: it
+covered the **generic** restore contract (Admin-only gate, same root / same current
+revision) for a `demo_entity`, and said nothing about the Rationale-Family half of
+doc 10 §14 RF-06 — *"assignment projection'ları normal ASSIGNED durumuna döner"*.
+
+New test — `integration/test_rationale_persistence.py::test_admin_restore_reactivates_family_and_assignment_projection`:
+
+| RF-06 clause | Assertion |
+|---|---|
+| same root goes ACTIVE | `root_after.entity_id == family_id`, `deletion_state == ACTIVE` |
+| same **current revision** | `root_after.current_revision_id == pinned_revision` + family-revision row count unchanged (no new revision appended) |
+| projection returns to ASSIGNED | `assignment_state` walks `assigned` → `assigned_to_deleted_family` → `assigned`; `family_active` walks `True → False → True` |
+| family selectable again | it re-enters `list_families(state="active")`, the list it left on delete (RF-05) |
+
+`test_trash_page.py`'s docstring was re-pointed accordingly: it now claims the
+generic half explicitly and names the module that owns the type-specific half.
+
+**Why the test seeds the pin directly.** `assigned_to_deleted_family` is *derived*
+at read time (`queries/rationale.py::_assignment_view`) from the package head's
+`rationale_family_snapshot` — it is never stored. And the doc 20 §10 delete
+preflight refuses to soft-delete a family that still holds a current ASSIGNED row
+(`RATIONALE_FAMILY_IN_USE`). Those two facts together mean the projection can only
+ever describe a revision that **pins** a family while no current assignment row
+holds it, so the test seeds exactly that state and drives everything else —
+delete, restore, both reads — through the real command/query path.
+
+**Verified:** `pytest tests/integration/test_rationale_persistence.py` → **17/17**
+and `test_trash_page.py` → **17/17**, both against a real PostgreSQL on an isolated
+database (`entropia_i17rf06`). `ruff check` + `ruff format --check` clean. No `src/`
+file changed — this is a test-only slice.
+
+> The §F `max_locks_per_transaction = 64` hazard did **not** bite this run: no
+> `idle in transaction` connections were leaked by parallel worktrees at the time.
+> The setting is still 64, so §F's warning stands for future runs.
+
+### G.2 — Renamed to `acceptance_id_map.md`
+
+The brief asked for `docs/audit/acceptance_id_map.md`; the slice shipped
+`acceptance_id_traceability.md`. Renamed via `git mv` (history follows the rename)
+and all six inbound references updated: `acceptance_id_scan.py`,
+`I17_LANDED_KICKOFF.md` (×3), `test_trading_signal_events.py`,
+`test_rationale_persistence.py`.
+
+### G.3 — Still open after this slice
+
+Unchanged from §E — this slice closed a traceability nuance, not a coverage gap:
+TS-20 / AOS-20 (Tool Gateway parity for Trading Signal), AT-21 (Agent parity on the
+Strategy save line), TS-16 / TL-18 / AOS-16, RF-15 / ESP-05, AOS-12, AT-24,
+PC-14 / PC-19 / PC-22, CP-05, CP-14, PL-06, ESP-19.

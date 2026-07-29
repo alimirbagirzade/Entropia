@@ -4,7 +4,8 @@ Auto-skips when no PostgreSQL is reachable (see tests/integration/conftest.py).
 Covers: create family (+audit/+outbox, pastel color, revision 1), shared-edit
 exception (User edits Admin's family — RF-01), stale-rename conflict (RF-03),
 duplicate active name (RF-07), reserved soft-deleted name (RF-08), soft delete
-preserves the revision chain + Trash entry (RF-05), idempotent create replay
+preserves the revision chain + Trash entry (RF-05), Admin Trash restore reactivating
+the same root/revision and the assignment projection (RF-06), idempotent create replay
 (RF-17), atomic package assignment producing a new package revision while owner is
 unchanged (RF-02), Unassigned null snapshot (RF-11), idempotent no-op re-save,
 stale-package batch rejection with no partial writes (RF-09), soft-deleted family
@@ -13,7 +14,7 @@ not selectable (RATIONALE_FAMILY_NOT_ACTIVE), and the compatible-output warning
 
 RF-15 (V18 seed / ESP consistency) is NOT covered here — this module seeds
 principals, not registry families. It is recorded as an open gap in
-docs/audit/acceptance_id_traceability.md.
+docs/audit/acceptance_id_map.md.
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ import pytest
 from sqlalchemy import func, select
 
 from entropia.application.commands import rationale as rationale_cmd
+from entropia.application.commands.deletion import restore_trash_entry
 from entropia.application.commands.rationale import AssignmentChange
 from entropia.application.queries import rationale as rationale_query
 from entropia.domain.identity import Actor
@@ -32,6 +34,7 @@ from entropia.infrastructure.postgres.models import (
     PackageRationaleAssignment,
     PackageRevision,
     Principal,
+    RationaleFamilyRevision,
     TrashEntry,
 )
 from entropia.infrastructure.postgres.repositories import packages as pkg_repo
@@ -188,6 +191,98 @@ async def test_soft_delete_preserves_chain_and_trash(session) -> None:
 
     listing = await rationale_query.list_families(session, USER, PageParams())
     assert created["entity_id"] not in {row["entity_id"] for row in listing["data"]}
+
+
+def _assignment_row_for(table: dict, package_root_id: str) -> dict:
+    return next(row for row in table["data"] if row["package_root_id"] == package_root_id)
+
+
+async def test_admin_restore_reactivates_family_and_assignment_projection(session) -> None:
+    """RF-06: an Admin restores a soft-deleted Family through Trash.
+
+    Doc 10 §14 RF-06 asserts two things, and this test asserts both:
+    (a) the SAME root and the SAME current revision go ACTIVE — a restore reactivates,
+        it never appends a new revision or mints a new root; and
+    (b) the assignment projections fall back from ``assigned_to_deleted_family`` to the
+        normal ``assigned`` state (doc 10 §8.5).
+
+    The projection is DERIVED at read time from the package head's pinned
+    ``rationale_family_snapshot`` (``queries/rationale.py::_assignment_view``), not
+    stored — so (b) is a property of the family root's ``deletion_state``, which is
+    exactly what restore flips back.
+
+    Why the pin is seeded directly instead of via ``batch_assign_rationale``: the doc
+    20 §10 delete preflight refuses to soft-delete a family that still has a current
+    ASSIGNED row (``RATIONALE_FAMILY_IN_USE``, covered by
+    ``test_trash_page.py::test_family_with_active_assignment_blocks_delete``). So the
+    ``assigned_to_deleted_family`` projection can only ever describe a revision that
+    PINS a family while no current assignment row holds it — which is the state this
+    test seeds.
+    """
+    await _seed_principals(session)
+    pkg_root, _pkg_rev = await _create_indicator(session, name="RF-06 Pinned Indicator")
+    family = await rationale_cmd.create_family(session, USER, display_name="RF-06 Family")
+    await session.commit()
+
+    head = await pkg_repo.get_revision(session, pkg_root.current_revision_id or "")
+    assert head is not None
+    head.rationale_family_snapshot = {
+        "rationale_family_id": family["entity_id"],
+        "rationale_family_revision_id": family["revision_id"],
+        "display_name": "RF-06 Family",
+    }
+    await session.commit()
+
+    before = _assignment_row_for(
+        await rationale_query.list_package_assignments(session, USER, PageParams()),
+        pkg_root.entity_id,
+    )
+    assert before["assignment_state"] == "assigned"
+    assert before["family_active"] is True
+
+    root_before = await rationale_repo.get_family_root(session, family["entity_id"])
+    assert root_before is not None
+    pinned_revision = root_before.current_revision_id
+    revisions_before = await _count(session, RationaleFamilyRevision)
+
+    await rationale_cmd.soft_delete_family(session, USER, entity_id=family["entity_id"])
+    await session.commit()
+
+    deleted = _assignment_row_for(
+        await rationale_query.list_package_assignments(session, USER, PageParams()),
+        pkg_root.entity_id,
+    )
+    assert deleted["assignment_state"] == "assigned_to_deleted_family"
+    assert deleted["family_active"] is False
+    # The pinned name is kept for context rather than blanked (doc 10 §8.5).
+    assert deleted["current_family_name"] == "RF-06 Family"
+
+    entry = (
+        await session.execute(select(TrashEntry).where(TrashEntry.entity_id == family["entity_id"]))
+    ).scalar_one()
+
+    restored = await restore_trash_entry(session, ADMIN, trash_entry_id=entry.id)
+    await session.commit()
+
+    assert restored["deletion_state"] == "active"
+    root_after = await rationale_repo.get_family_root(session, family["entity_id"])
+    assert root_after is not None
+    assert root_after.entity_id == family["entity_id"]  # same root
+    assert root_after.current_revision_id == pinned_revision  # same current revision
+    assert root_after.deletion_state == DeletionState.ACTIVE
+    assert await _count(session, RationaleFamilyRevision) == revisions_before  # no new revision
+
+    after = _assignment_row_for(
+        await rationale_query.list_package_assignments(session, USER, PageParams()),
+        pkg_root.entity_id,
+    )
+    assert after["assignment_state"] == "assigned"
+    assert after["family_active"] is True
+
+    # And the family is selectable again — it re-enters the active list it left on
+    # delete (RF-05), which is what "ACTIVE olur" means for the dropdown.
+    listing = await rationale_query.list_families(session, USER, PageParams())
+    assert family["entity_id"] in {row["entity_id"] for row in listing["data"]}
 
 
 async def test_client_manipulated_delete_still_meets_the_server_guards(session) -> None:

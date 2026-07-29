@@ -21,6 +21,8 @@ import entropia
 
 PACKAGE = "entropia"
 SOURCE_ROOT = pathlib.Path(entropia.__file__).parent
+ROUTES_ROOT = SOURCE_ROOT / "apps" / "api" / "routes"
+ORM_MODELS_PACKAGE = "entropia.infrastructure.postgres.models"
 
 # A layer may import anything to its left, never anything to its right.
 FORBIDDEN_DIRECTIONS = frozenset(
@@ -183,6 +185,26 @@ def test_import_graph_has_no_cycles() -> None:
         if len(component) > 1 or component[0] in graph.get(component[0], set())
     ]
     assert cycles == [], f"circular imports detected: {cycles}"
+
+
+def test_api_routes_do_not_import_orm_models() -> None:
+    """No HTTP route may reach past the command/query layer into the ORM (I-05).
+
+    ``routes/metrics.py`` was the last one: it built the operational gauges from
+    raw ``select(Job...)`` statements in the route body. Those statements now
+    live in ``application.queries.job_gauges``. The scan walks function bodies
+    too, so hiding the import inside the handler does not get past this.
+
+    ``apps/seed.py`` is deliberately out of scope — it is a seeding CLI, not an
+    HTTP surface — and it lives outside ``routes/`` anyway.
+    """
+    violations = sorted(
+        f"{_module_name(path)} -> {target}"
+        for path in sorted(ROUTES_ROOT.rglob("*.py"))
+        for target in _executed_imports(path)
+        if target == ORM_MODELS_PACKAGE or target.startswith(f"{ORM_MODELS_PACKAGE}.")
+    )
+    assert violations == [], "routes/ must go through application/: " + "; ".join(violations)
 
 
 def test_hashing_re_export_is_the_same_object() -> None:

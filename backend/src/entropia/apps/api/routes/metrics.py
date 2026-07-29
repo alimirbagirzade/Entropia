@@ -20,19 +20,15 @@ before it costs a query anyway.
 from __future__ import annotations
 
 import hmac
-from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import PlainTextResponse
-from sqlalchemy import func, select
 
-from entropia.application.jobs.outbox_relay import outbox_lag_seconds
+from entropia.application.queries.job_gauges import JobGauges, job_gauges
 from entropia.apps.api.deps import bearer_token
 from entropia.config import get_settings
-from entropia.domain.lifecycle.enums import JobStatus
 from entropia.infrastructure.observability import get_logger
 from entropia.infrastructure.observability.metrics import render_process_metrics
-from entropia.infrastructure.postgres.models import Job
 from entropia.shared.errors import MetricsScrapeForbiddenError, MetricsScrapeUnauthorizedError
 
 router = APIRouter(tags=["metrics"])
@@ -64,36 +60,35 @@ def require_metrics_scraper(request: Request) -> None:
         raise MetricsScrapeForbiddenError()
 
 
+def _render_operational_gauges(gauges: JobGauges) -> str:
+    """Format the gauge values as Prometheus text — a pure function, no I/O."""
+    lines: list[str] = ["# TYPE entropia_jobs_depth gauge"]
+    for queue, status, count in gauges.queue_depth:
+        lines.append(f'entropia_jobs_depth{{queue="{queue}",status="{status!s}"}} {count}')
+
+    lag = gauges.outbox_lag_seconds
+    lines.append("# TYPE entropia_outbox_lag_seconds gauge")
+    lines.append(f"entropia_outbox_lag_seconds {0.0 if lag is None else lag:.3f}")
+
+    lines.append("# TYPE entropia_job_lease_age_seconds gauge")
+    lines.append(f"entropia_job_lease_age_seconds {gauges.oldest_lease_age_seconds:.3f}")
+    return "\n".join(lines) + "\n"
+
+
 async def _operational_gauges() -> str:
     from entropia.infrastructure.postgres.engine import get_session_factory
 
-    lines: list[str] = []
     try:
         factory = get_session_factory()
         async with factory() as session:
-            depth_stmt = select(Job.queue, Job.status, func.count()).group_by(Job.queue, Job.status)
-            lines.append("# TYPE entropia_jobs_depth gauge")
-            for queue, status, count in (await session.execute(depth_stmt)).all():
-                lines.append(f'entropia_jobs_depth{{queue="{queue}",status="{status!s}"}} {count}')
-
-            lag = await outbox_lag_seconds(session)
-            lines.append("# TYPE entropia_outbox_lag_seconds gauge")
-            lines.append(f"entropia_outbox_lag_seconds {0.0 if lag is None else lag:.3f}")
-
-            lease_stmt = select(func.min(func.coalesce(Job.started_at, Job.claimed_at))).where(
-                Job.status == JobStatus.RUNNING
-            )
-            oldest = (await session.execute(lease_stmt)).scalar_one_or_none()
-            age = 0.0 if oldest is None else (datetime.now(UTC) - oldest).total_seconds()
-            lines.append("# TYPE entropia_job_lease_age_seconds gauge")
-            lines.append(f"entropia_job_lease_age_seconds {max(0.0, age):.3f}")
+            gauges = await job_gauges(session)
     except Exception as exc:
         # The scrape still degrades to the comment line — only the silence
         # changes. Log the exception CLASS, never str(exc): driver errors echo
         # the DSN, and this body is served to a scraper.
         log.warning("metrics.operational_gauges_probe_failed", error_type=type(exc).__name__)
         return "# operational gauges unavailable (database unreachable)\n"
-    return "\n".join(lines) + "\n"
+    return _render_operational_gauges(gauges)
 
 
 @router.get(

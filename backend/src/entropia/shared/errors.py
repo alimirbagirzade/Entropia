@@ -204,16 +204,6 @@ class AgentRoleNotAssignableError(ValidationError):
     message = "The Agent role cannot be assigned to a human user."
 
 
-class RoleContextStaleError(ConflictError):
-    """A request used a role context that has since changed."""
-
-    code = "ROLE_CONTEXT_STALE"
-    message = "Your role changed. Refresh and retry."
-    category = ErrorCategory.CONCURRENCY_OR_PREFLIGHT
-    retryable = True
-    suggested_action = "reload_and_retry"
-
-
 class AdminPanelAccessRequiredError(ForbiddenError):
     """Panel / Management / Logs is Admin-only (doc 19 §2). UI hide/disable is
     never a substitute for this server-side guard."""
@@ -967,15 +957,6 @@ class BaselineRequired(ConflictError):
 
     code = "BASELINE_REQUIRED"
     message = "This package claims equivalence; upload and parse a baseline before approving it."
-
-
-class ServiceUnavailableError(AppError):
-    code = "SERVICE_UNAVAILABLE"
-    http_status = 503
-    message = "A dependency is currently unavailable."
-    category = ErrorCategory.ASYNC_JOB_FAILURE
-    retryable = True
-    suggested_action = "retry_later"
 
 
 # --- Stage 3a — Mainboard composition plane (doc 01; ARCHITECTURE §9.2) ---
@@ -1750,14 +1731,6 @@ class ArtifactTypeInvalidError(ValidationError):
     message = "That result artifact type is not available."
 
 
-class ArtifactNotAvailableError(NotFoundError):
-    """The requested artifact scope produced no rows / is not retained (doc 15 §7
-    ARTIFACT_NOT_AVAILABLE). A soft-deleted or missing result is BACKTEST_RESULT_NOT_FOUND."""
-
-    code = "ARTIFACT_NOT_AVAILABLE"
-    message = "This result artifact is not available."
-
-
 # --- Analysis Lab (Stage 6a, doc 18) ----------------------------------------
 
 
@@ -1803,13 +1776,6 @@ class AgentToolCallNotFoundError(NotFoundError):
 
     code = "AGENT_TOOL_CALL_NOT_FOUND"
     message = "The Agent tool call was not found."
-
-
-class HypothesisArtifactNotFoundError(NotFoundError):
-    """The requested hypothesis/output artifact was not found (doc 18 §7, §9)."""
-
-    code = "HYPOTHESIS_NOT_FOUND"
-    message = "The hypothesis artifact was not found."
 
 
 class AgentRuntimeStateConflictError(StaleRevisionError):

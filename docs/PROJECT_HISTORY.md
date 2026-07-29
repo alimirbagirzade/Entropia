@@ -1525,6 +1525,11 @@ ağaçtan yeniden hesaplıyor**, "en son bakıldığında yazılmış" bir liste
 Test bir ratchet'tir: altıncı ölü sınıf eklenirse kırılır, listedekilerden biri fırlatılmaya
 başlarsa da kırılır. Sayı yalnız aşağı iner.
 
+> **SÜPERSEDE — bu paragraf tarihsel kayıttır, canlı borç listesi DEĞİL.** Beşi de listeden
+> düştü: `ValidationAlreadyRunning` S-L3'te gerçek bir raise yolu kazandı, kalan dördü
+> **O-03R**'de adjudicate edilip silindi. `KNOWN_UNRAISED` bugün **boş**. Kararların spec
+> §referansları ve reddedilen (A) alternatifleri: §"O-03R · Kalan 4 ölü error sınıfı kapatıldı".
+
 ### Doğrulama
 
 `ruff check` · `ruff format --check` (619 dosya) · `mypy src` (356 dosya) temiz; `tests/unit`
@@ -1654,4 +1659,3 @@ Docker, iki E2E (dev-auth + gerçek tarayıcı/Compose) ve A11Y axe-core taramas
 
 ---
 
- 

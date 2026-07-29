@@ -39,13 +39,11 @@ async def get_runtime(session: AsyncSession, agent_id: str) -> AgentRuntime | No
     return await session.get(AgentRuntime, agent_id)
 
 
-async def create_runtime(
-    session: AsyncSession, *, agent_id: str, mode: Any, status: Any
-) -> AgentRuntime:
-    runtime = AgentRuntime(agent_id=agent_id, mode=mode, status=status, row_version=1)
-    session.add(runtime)
-    await session.flush()
-    return runtime
+# NOTE: no ``create_runtime`` insert helper — deleted in I-12 as callerless.
+# Nothing in ``src/`` provisions an ``agent_runtime`` row today (the overview
+# query raises ``AgentRuntimeNotFoundError`` when it is missing) and the tests
+# construct the ORM object directly. Re-add it here when Alpha-agent
+# provisioning is actually wired.
 
 
 # ---------- Tasks ----------
@@ -404,6 +402,14 @@ async def append_event(
     return event
 
 
+# KEPT DELIBERATELY, callerless by design (O-21 — do not delete as "dead"):
+# ``events_after`` + ``latest_event_seq`` are ``agent_event``'s own replay
+# primitives, waiting for a consumer. The live wire cursor is the OUTBOX row id
+# (``apps/api/sse.py``), never ``agent_event.seq`` — see the ``AgentEvent``
+# docstring — so the only future caller is the secondary
+# ``GET /agent-events/stream`` if it is ever given real events instead of
+# heartbeats (recorded open item: docs/CODEMAPS/JOBS_AND_EVENTS.md, section on
+# the secondary stream, and docs/O21_LANDED_KICKOFF.md).
 async def events_after(session: AsyncSession, *, after_seq: int, limit: int) -> list[AgentEvent]:
     stmt = (
         select(AgentEvent)
@@ -426,7 +432,6 @@ __all__ = [
     "create_directive",
     "create_hypothesis",
     "create_message",
-    "create_runtime",
     "create_task",
     "events_after",
     "get_directive",

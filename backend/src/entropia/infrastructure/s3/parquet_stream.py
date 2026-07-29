@@ -1,8 +1,9 @@
 """Batched Parquet reads for large processed assets (INF-12, Module 20 §5).
 
-``get_processed_parquet`` materializes the whole object in memory — fine for
-metadata-sized reads, wrong for large market revisions. This module keeps the
-resident footprint bounded regardless of asset size: the S3 object is streamed
+A whole-object read (``datasets.get_raw_bytes``) materializes the object in
+memory — fine for metadata-sized raw uploads, wrong for large market revisions,
+which is why the processed twin of it no longer exists (deleted in I-12). This
+module keeps the resident footprint bounded regardless of asset size: the S3 object is streamed
 to a spooled temp file (spills to disk past the cap, never fully in RAM) and
 handed to ``pyarrow.parquet.ParquetFile.iter_batches`` so consumers see one
 bounded record batch at a time. Runs on the Data Worker plane, never in the

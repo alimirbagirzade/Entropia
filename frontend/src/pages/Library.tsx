@@ -1074,6 +1074,14 @@ function PackageSharePanel({ pkg }: { pkg: LibraryPackageDetail }) {
           ))}
         </ul>
       )}
+      {/* O-24: the grant list is a bounded server page. Beyond the page size the
+          tail is NOT rendered, so say so rather than letting the list read as the
+          complete set of grantees. */}
+      {shares.data?.meta?.has_more ? (
+        <p className="page-sub">
+          Showing the first {grants.length} grantees; this package has more.
+        </p>
+      ) : null}
     </div>
   );
 }

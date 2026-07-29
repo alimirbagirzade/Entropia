@@ -72,9 +72,23 @@ async def get_active_grant(
 
 
 async def list_active_grants(
-    session: AsyncSession, *, resource_type: str, resource_id: str
+    session: AsyncSession,
+    *,
+    resource_type: str,
+    resource_id: str,
+    after_share_id: str | None = None,
+    limit: int | None = None,
 ) -> Sequence[ResourceShare]:
-    """Active grants for one resource, oldest-first (grant order is stable)."""
+    """Active grants for one resource, oldest-first (grant order is stable).
+
+    ``limit``/``after_share_id`` are the SQL-level bound behind the caller's page
+    (finding O-24): no per-package share cap exists, so an unbounded SELECT let one
+    resource's grant count decide the size of the read. ``share_id`` is a ULID-like
+    id that sorts by creation time, so it doubles as the ordering key AND the
+    forward cursor — ``> after_share_id`` walks exactly the rows the previous page
+    did not return. Omit both and the scan is unbounded again, which is why the only
+    caller always passes a limit.
+    """
     stmt = (
         select(ResourceShare)
         .where(
@@ -84,6 +98,10 @@ async def list_active_grants(
         )
         .order_by(ResourceShare.share_id.asc())
     )
+    if after_share_id is not None:
+        stmt = stmt.where(ResourceShare.share_id > after_share_id)
+    if limit is not None:
+        stmt = stmt.limit(limit)
     return list((await session.execute(stmt)).scalars().all())
 
 

@@ -163,23 +163,21 @@ Before stopping a working session, produce **ALL** of the following:
 
 ## Current position (keep in sync at each closing)
 
-> Aşağıdaki değerler **2026-07-28** tarihinde repodan empirik doğrulandı (`origin/main` @
+> Aşağıdaki değerler **2026-07-29** tarihinde repodan empirik doğrulandı
+> (`origin/main` @ `9e86c99`).
 
 - **Durum:** V1 ROADMAP COMPLETE (Stages 0–8, docs 01–22) + post-V1 + video-alignment +
   V18-R2 dalgası + **auth remediation dalgası COMPLETE** (güvenlik denetimi #346–#364).
   Tüm route yüzeyleri frontend'e bağlı; TIER 2 sayfa haritası 24/24.
 
-- **alembic head:** **`0039_backtest_run_cancellation`** (39 migration, tek head; O-06'da eklendi —
-  öncesi `0038_backtest_run_event`). **`ENGINE_VERSION` = `backtest-engine-v18-funding-step-order`**
-  (`manifest.py:83`; K-03'te bump edildi, öncesi K-04 `-full-pinning`, K-02 `-available-time-gate`;
-  **O-05/O-06 bump ETMEDİ**).
-- **Son dalga — O-serisi (spec-uyum kusurları):** O-01 (#403) · O-02 (#400) · **O-03 (#407 + #413;
-  #408 boş merge oldu, içeriğini #413 yeniden indirdi)** · O-04 (#405) · O-05 (#412) ·
-  **O-06 (#419 — CancelBacktestRun, migration `0039`)** · O-08 (#406) · O-09 (#410) · O-10 (#402) ·
-  **O-17 (#446 — restore conflict artık typed `resolution` seçenek kümesi taşıyor; yeni
-  `domain/trash/restore.py` katalogu + salt-okuma
-  `GET /trash-entries/{id}/restore-preflight`; bilinmeyen resolution 422
-
+- **alembic head:** **`0040_export_type_agent_pine`** (40 migration, tek head; S-L2 / #460'ta
+  eklendi — öncesi `0039_backtest_run_cancellation`).
+  **`ENGINE_VERSION` = `backtest-engine-v18-restriction-min-n`** (`manifest.py:92`; S5a / #458'de
+  bump edildi, öncesi K-03 `-funding-step-order`, K-04 `-full-pinning`).
+- **Son dalga — R3 backlog kapanışı + denetim (#452–#481):** S5a (#458) ve **S-L1…S-L6 (#455–#461)
+  landed**; RF-12 (#434); i09/i13/i10 (#462/#467/#468); doc19/doc22 denetimi (#464/#471);
+  k11a ledger counters (#481); codemap tazeleme (#477). Önceki O-serisi ve öncesi:
+  `docs/PROJECT_HISTORY.md`.
 
 - **Testler:** son yeşil referans CI (O-serisi PR'ları). Lokal tam suite tek koşuda
   tamamlanabiliyor — O-27'de **2538 passed / 0 failed / 43dk39sn**, worktree'ye özel izole DB ile
@@ -197,23 +195,25 @@ Before stopping a working session, produce **ALL** of the following:
 
 - **F-07 raw-id sweep — SUNUM katmanı kapandı (PR #404).** 31 dosyada 161 `*_id` render'ı tarandı;
   **4 kalıntı açık** (backend display-DTO → `v18_visual_traceability.md §4.4`) — yani **F-07 bütün
-  olarak Complete DEĞİL**. vitest **622/622** (**`--no-file-parallelism` ZORUNLU**; worktree'de
+  olarak Complete DEĞİL** (yol/satır refs 2026-07-29'da yeniden ölçüldü).
+  vitest **622/622** *(2026-07-28 ölçümü; 07-29 doc-truth turunda yeniden koşulmadı — otorite CI)*
+  (**`--no-file-parallelism` ZORUNLU**; worktree'de
   `frontend/node_modules` yoksa önce `npm ci` — ilk koşudaki `ERR_MODULE_NOT_FOUND` test hatası değil).
 
 
 - **Next (PO imzası BLOKAJ DEĞİL — imza 2026-07-22'de atıldı,
   `docs/implementation/v18_final_acceptance.md:155-169`; beklettiği FIX(R3) kalemlerinin hepsi
   landed: #368–#373, #375–#379):**
-  1. **F-07 §4.4** — 4 yüzey backend display-DTO bekliyor (`v18_visual_traceability.md §4.4`).
-  2. **R2 banner kapanışı (docs işi):** `entropia_v18_remediation_status.md` RE-OPENING
-     banner'ının koşulu sağlandı → banner'ı kaldır, UI satırlarını evidence'lı Complete yap.
+  1. **S5 b/c/d** — Strategy config katalog derinliği; **a landed (#458)**, b/c/d açık
+     (`docs/POST_V1_SPEC_GAP_BACKLOG_ROUND3.md` §DURUM TAZELEME — S-L1…S-L6 dâhil diğer her şey landed).
+  2. **F-07 §4.4** — 4 yüzey backend display-DTO bekliyor (`v18_visual_traceability.md §4.4`).
   3. **O-03 kalıntısı:** **4** ölü error sınıfı (`KNOWN_UNRAISED` — `RoleContextStaleError`,
-     `ServiceUnavailableError`, `ArtifactNotAvailableError`, `HypothesisArtifactNotFoundError`;
-     `ValidationAlreadyRunning` S-L3'te fırlatılmaya başladı, ratchet onu listeden attırdı).
-     O-03 adjudication tablosunun 4 satırı **sonradan canonical oldu** — bkz.
-     `docs/PROJECT_HISTORY.md` §"Sonradan canonical olan dört satır".
-  4. **Round-3 backlog:** S5 (a/b/c/d) + S-L1…S-L6
-     (`docs/POST_V1_SPEC_GAP_BACKLOG_ROUND3.md` §DURUM TAZELEME — diğer 8 madde landed).
+     `ServiceUnavailableError`, `ArtifactNotAvailableError`, `HypothesisArtifactNotFoundError`);
+     adjudication tablosunun 4 satırı sonradan canonical oldu — `docs/PROJECT_HISTORY.md`.
+  4. **Kabul-ID boşlukları:** `python3 docs/audit/acceptance_id_scan.py` → **163/215**; en büyük
+     delik doc 16 RH (2/16). Öncelik sırası: `docs/I17_LANDED_KICKOFF.md` §Sıradaki adaylar.
+  5. **R2 banner kapanışı (docs işi):** `entropia_v18_remediation_status.md` RE-OPENING
+     banner'ının koşulu sağlandı → banner'ı kaldır, UI satırlarını evidence'lı Complete yap.
 - **Açık iş (R2 kapsamı dışı, dürüst sınır):** ekran okuyucu (NVDA/VoiceOver) denetimi yapılmadı;
   10 sayfanın derin görsel kıyası eksik; a11y/visual katmanları CI'da koşmadı; A11Y-01 kontrast
   (228 serious node, tamamı canonical v18 paletinden) ve A11Y-02 kayıtlı sapma olarak açık.

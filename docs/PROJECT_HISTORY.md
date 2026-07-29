@@ -2035,3 +2035,81 @@ değildir** — kaydedilmemiş olması kusurdur.
   `tests/integration/test_market_crossrow_validation.py:160`) ve **ikisi de OHLCV** kullanıyor —
   tick/spread için tip-agnostik davranışı kilitleyen bir test **yok**. Yeni test eklenmedi (bu slice
   docs-only); borç olarak kayıtlı.
+
+---
+
+## DOC-TRUTH tazeleme (2026-07-29) — dört stale "Next" kaydı ampirik gerçekle hizalandı
+
+**Ölçüm tabanı:** `origin/main` @ `9e86c99`, alembic head `0040_export_type_agent_pine` (40
+migration, tek head), `ENGINE_VERSION = backtest-engine-v18-restriction-min-n`
+(`domain/backtest/manifest.py:92`). **Üretim kodu değişmedi** — bu slice yalnız docs yazar:
+migration yok, ENGINE_VERSION bump yok, test sayısı değişmedi.
+
+### Neden gerekti
+
+Üç ayrı belge aynı anda bayattı ve birbirini besliyordu: `CLAUDE.md` §Current position,
+`docs/POST_V1_SPEC_GAP_BACKLOG_ROUND3.md` §DURUM TAZELEME ve `docs/I17_LANDED_KICKOFF.md`
+§"Sıradaki adaylar". Her biri "sıradaki iş" olarak **zaten landed olmuş** kalemleri gösteriyordu;
+temiz bir oturum bunlardan birini seed alsa kapanmış işi yeniden açacaktı.
+
+### Çürütülen dört iddia (hepsi bu oturumda yeniden ölçüldü)
+
+| Bayat iddia | Nerede | Bugünkü ölçüm |
+|---|---|---|
+| "Round-3 backlog: S-L1…S-L6 açık" | `CLAUDE.md` §Next(4) | **altısı da landed** — PR #457/#460/#461/#456/#459/#455 |
+| "S5 dört alt-slice de açık" | R3 backlog §DURUM TAZELEME | **S5a landed (PR #458)**; b/c/d açık |
+| "RF-12 KUSUR, en yüksek öncelik" | `I17_LANDED_KICKOFF.md` §Sıradaki adaylar(1) | **landed (PR #434)** |
+| "F-07 §4.4 → `ResultDetail.tsx`" (yol `pages/` okunuyordu) | `v18_visual_traceability.md` §4.4 | gerçek yol **`frontend/src/components/ResultDetail.tsx`** |
+
+### Ölçme komutları ve çıktıları (bir sonraki tur yeniden koşabilsin diye)
+
+```bash
+# S-L1…S-L6 — hepsi landed, "grep = 0" iddiası artık yanlış
+grep -rn "changed_paths\|current_draft\|pinescript_signal_marker\|agent_dataset\|UPLOAD_JOB_FAILED" \
+  backend/src | wc -l                                                       # → 24
+grep -n "suggest" backend/src/entropia/apps/api/routes/rationale.py | wc -l   # → 6  (:91 route)
+grep -n "validation-runs" backend/src/entropia/apps/api/routes/library.py     # → :204
+
+# S5a landed / S5 b,c,d hâlâ 0
+grep -rn "min_true_count" backend/src | wc -l                                 # → 10
+for t in stop_mode any_active_rule all_active_rules multiple_stops \
+         same_candle_entry_exit timeframe_mode custom_sequence; do
+  printf "%-24s %s\n" "$t" "$(grep -rn "$t" backend/src | wc -l | tr -d ' ')"
+done                                                                          # → yedi token da 0
+
+# RF-12 landed
+grep -n "validate_rationale_family_not_blank" \
+  backend/src/entropia/domain/strategy/config.py                              # → :78 (dekoratör :76)
+
+# F-07 §4.4 — dört yüzeyin bugünkü yeri (satırlar HÂLÂ doğru, yalnız yol yanlıştı)
+cd frontend
+grep -n "request_id"    src/pages/PreCheck.tsx           # → :124  (RequestPickerCard, def :83)
+grep -n "import_job_id" src/pages/Library.tsx            # → :1259, :1274
+grep -n "item_id"       src/components/ResultDetail.tsx  # → :420 (PerItemCard :416), :589 (MarginalCard :585)
+grep -n "scope_id"      src/pages/ReadyCheck.tsx         # → :291  (IssuesTable, def :258)
+```
+
+### Yan bulgular (iddia edilmemişti, ölçerken çıktı)
+
+- **`CLAUDE.md`'nin alembic/ENGINE_VERSION satırı da bayattı:** `0039_backtest_run_cancellation` /
+  `-funding-step-order` (`manifest.py:83`) yazıyordu; gerçek **`0040_export_type_agent_pine`**
+  (S-L2 / #460) ve **`-restriction-min-n`** (`manifest.py:92`, S5a / #458). Düzeltildi.
+- **İki satır yarım kalmıştı:** §Current position'ın tarih satırı (`origin/main` @ — sha yok) ve
+  O-serisi "Son dalga" satırı cümle ortasında bitiyordu. İkisi de onarıldı; O-17 anlatısı zaten
+  bu dosyada tam kayıtlı olduğu için CLAUDE.md'de tek satıra indirildi.
+- **`acceptance_id_scan.py` bir tavan ölçüyor, taban değil.** Eşleşme naif metin aramasıdır
+  (`:27` `ID_RE`) ve test dosyasındaki **her** anmayı sayar — kapsamı *reddeden* bir docstring bile
+  "traced" görünür. Canlı örnek: `RF-15` doc 10'un MISSING listesinde **değil**, ama tek anması
+  `backend/tests/integration/test_rationale_persistence.py:15` → *"RF-15 … is NOT covered here"*.
+  Bugünkü çıktı `GLOBAL 163/215 (75%)` (önceki kayıt 162/215); en büyük delik **doc 16 [RH] 2/16**.
+- **Kickoff'un "kapsam içi 108/130" rakamının yeniden üretecek komutu YOK.** Tarayıcı yalnız
+  GLOBAL basıyor. Rakam doğrulanamaz olarak işaretlendi.
+- **O-03 kalıntısı hâlâ 4** — `tests/unit/test_error_taxonomy_no_dead_definitions.py:27`
+  `KNOWN_UNRAISED` = `RoleContextStaleError`, `ServiceUnavailableError`,
+  `ArtifactNotAvailableError`, `HypothesisArtifactNotFoundError`. Değişmedi, `§Next`'te kaldı.
+
+### Dürüst sınır
+
+- **`CLAUDE.md`'deki `vitest 622/622` ve `pytest 2538 passed` sayıları bu slice'ta yeniden
+  ölçülmedi** (docs-only kapsam; tam suite koşusu ~44dk). Bayat olabilirler — otorite CI'dır.
+- `docs/STAGE2_HANDOFF.md` bu slice'ta güncellenmedi; kapsam kullanıcının saydığı beş dosyaydı.

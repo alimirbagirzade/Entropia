@@ -1,36 +1,58 @@
 # Entropia — Post-V1 Spec-Gap Backlog, ROUND 3
 
-> ## ⚠️ DURUM TAZELEME (2026-07-28) — "grep = 0" İDDİALARININ ÇOĞU ARTIK YANLIŞ
+> ## ⚠️ DURUM TAZELEME (2026-07-29) — GERİYE YALNIZCA **S5 b/c/d** KALDI
 >
 > Bu belgenin gövdesi **2026-07-14** tarihli denetimi (`main` @ `226ca92`, alembic
-> `0029_esp_validation_run`) anlatır. O tarihten bu yana **8 madde landed**; gövdedeki
-> "**grep = 0**" cümleleri bugünkü ağaçta **doğrulanamaz**. Aşağıdaki tablolar 2026-07-28'de
-> tek tek ampirik olarak yeniden ölçüldü (`main` @ `eff8ffe`, alembic `0038_backtest_run_event`).
+> `0029_esp_validation_run`) anlatır. O tarihten bu yana **S1…S9'un tamamı + S5a + S-L1…S-L6**
+> landed; gövdedeki "**grep = 0**" cümlelerinin neredeyse hiçbiri bugünkü ağaçta
+> **doğrulanamaz**. Aşağıdaki tablolar **2026-07-29**'da tek tek ampirik olarak yeniden ölçüldü
+> (`origin/main` @ `9e86c99`, alembic `0040_export_type_agent_pine`).
 >
 > ### ✅ LANDED — bu maddelere DOKUNMA
 >
-> | Madde | Eski iddia | 2026-07-28 ölçümü |
+> | Madde | Eski iddia | Bugünkü ölçüm (ölçüm tarihi) |
 > |---|---|---|
-> | **S9** Lab Pause/Stop onayı | onay metni render edilmiyor | `pages/AnalysisLab.tsx:40-42,163` — iki-adım confirm, doc 18 §6.1 VERBATIM |
-> | **S1** Portfolio FX blocker | `grep settlement\|fx_` = 0 | **11 hit** — `domain/allocation/enums.py:82` `FX_DEPENDENCY_MISSING`, `rules.py:95,104` `settlement_currency` |
-> | **S8** CP validation-run + baseline UI | `validation-runs\|baseline` = 0 | **172 hit** (`lib/createPackage.ts` + `pages/CreatePackage.tsx`) |
-> | **S4** Gateway allocation + trade_log | ToolName'de = 0 | **72 hit** (`jobs/agent_tools.py` + `domain/agent_lab/tool_gateway.py`) |
-> | **S6** TS/TL export | `export` = 0 | **14 hit** (`apps/api/routes/trading_signal.py`, `trade_log.py`) |
-> | **S2** Pre-Check kaynak lexer | `lexer\|tokenize\|parse_source` = 0 | `domain/create_package/source_scan.py` **var** (12 fonksiyon) |
-> | **S3** Package import | `package_import\|import_job` = 0 | migration `0031_package_import_job` + commands/queries/jobs/repositories |
-> | **S7** History manifest excerpt | `results_history.py:273` `None` hardcode | `:276` artık gerçek ifade döndürüyor |
+> | **S9** Lab Pause/Stop onayı | onay metni render edilmiyor | `pages/AnalysisLab.tsx:40-42,163` — iki-adım confirm, doc 18 §6.1 VERBATIM (07-28) |
+> | **S1** Portfolio FX blocker | `grep settlement\|fx_` = 0 | **11 hit** — `domain/allocation/enums.py:82` `FX_DEPENDENCY_MISSING`, `rules.py:95,104` `settlement_currency` (07-28) |
+> | **S8** CP validation-run + baseline UI | `validation-runs\|baseline` = 0 | **172 hit** (`lib/createPackage.ts` + `pages/CreatePackage.tsx`) (07-28) |
+> | **S4** Gateway allocation + trade_log | ToolName'de = 0 | **72 hit** (`jobs/agent_tools.py` + `domain/agent_lab/tool_gateway.py`) (07-28) |
+> | **S6** TS/TL export | `export` = 0 | **14 hit** (`apps/api/routes/trading_signal.py`, `trade_log.py`) (07-28) |
+> | **S2** Pre-Check kaynak lexer | `lexer\|tokenize\|parse_source` = 0 | `domain/create_package/source_scan.py` **var** (12 fonksiyon) (07-28) |
+> | **S3** Package import | `package_import\|import_job` = 0 | migration `0031_package_import_job` + commands/queries/jobs/repositories (07-28) |
+> | **S7** History manifest excerpt | `results_history.py:273` `None` hardcode | `:276` artık gerçek ifade döndürüyor (07-28) |
+> | **S5a** Restriction "Minimum N of M" — **PR #458** | `min_true_count` → 0 hit | `domain/strategy/config.py:844` alan + `:868` `min_true_count_required_if_rule`; `compiler.py:204`; `engine.py:1036`. **ENGINE_VERSION** → `backtest-engine-v18-restriction-min-n` (`manifest.py:92`) (07-29) |
+> | **S-L1** Allocation 409 gövdesi — **PR #457** | `AllocationDraftConflictError` statik | `shared/errors.py:1449` sınıf, `:1466-1467` gövde sözleşmesi; `commands/allocation_plan.py:127,154` `current_draft` üretiyor (07-29) |
+> | **S-L2** Export tipleri — **PR #460** | `pinescript_signal_marker`·`agent_dataset` → 0 hit | `domain/backtest/export.py:42-43` enum üyeleri + migration **`0040_export_type_agent_pine`** (07-29) |
+> | **S-L3** Library request-validation — **PR #461** | `routes/library.py`'de `validation-runs` → 0 hit | `apps/api/routes/library.py:204` `POST /library/{entity_id}/validation-runs` (201) (07-29) |
+> | **S-L4** Manifest warning satırları — **PR #456** | preflight'ta warning issue row'u yok | `commands/backtest_run.py:553` `"warnings": _manifest_warning_rows(...)`, yardımcı `:864` (07-29) |
+> | **S-L5** `rationale-families:suggest` — **PR #459** | `routes/rationale.py`'de `suggest` → 0 hit | `apps/api/routes/rationale.py:91` `GET /rationale-families:suggest` → `:92` `suggest_families` (07-29) |
+> | **S-L6** `UPLOAD_JOB_FAILED` — **PR #455** | backend'de 0 hit | `shared/errors.py:2075` `code = "UPLOAD_JOB_FAILED"` + `commands/manual.py:109-116` pipeline aşamaları (07-29) |
 >
-> ### 🔴 GERÇEKTEN AÇIK — kalan iş bunlar
+> **Yeniden ölçme komutu (S5a + S-L1…S-L6 topluca) — komut ve 2026-07-29 çıktısı:**
+> ```bash
+> grep -rn "changed_paths\|current_draft\|pinescript_signal_marker\|agent_dataset\|UPLOAD_JOB_FAILED" \
+>   backend/src | wc -l                                                      # → 24  (0 değil)
+> grep -n "suggest" backend/src/entropia/apps/api/routes/rationale.py | wc -l  # → 6   (0 değil)
+> grep -n "validation-runs" backend/src/entropia/apps/api/routes/library.py    # → :204
+> grep -rn "min_true_count" backend/src | wc -l                                # → 10  (S5a landed)
+> ```
 >
-> | Madde | 2026-07-28 ölçümü |
+> ### 🔴 GERÇEKTEN AÇIK — kalan iş bu (S5'in üç alt-slice'ı)
+>
+> | Madde | 2026-07-29 ölçümü |
 > |---|---|
-> | **S5 (a/b/c/d)** Strategy config derinliği | `domain/strategy/config.py`'de `min_true_count` · `stop_mode` · `any_active_rule` · `all_active_rules` · `multiple_stops` · `same_candle_entry_exit` · `timeframe_mode` · `custom_sequence` → **hepsi 0 hit**. Yalnız `logic_based_scaling` (:768) var. **Dört alt-slice de açık.** |
-> | **S-L1** Allocation 409 gövdesi | `AllocationDraftConflictError` hâlâ statik (`code`+`message`); `current_draft`/`changed_paths` yok |
-> | **S-L2** Export tipleri | `pinescript_signal_marker` · `agent_dataset` → 0 hit |
-> | **S-L3** Library request-validation | `routes/library.py`'de `validation-runs` → 0 hit |
-> | **S-L4** Manifest warning satırları | `commands/backtest_run.py` preflight'ta warning issue row'u yok |
-> | **S-L5** `rationale-families:suggest` | `routes/rationale.py`'de `suggest` → 0 hit |
-> | **S-L6** `UPLOAD_JOB_FAILED` | backend'de 0 hit |
+> | **S5b** conflict matrix eksik alanları (doc 02 §5.9) | `stop_mode` · `any_active_rule` · `all_active_rules` · `multiple_stops` · `same_candle_entry_exit` → **hepsi 0 hit** |
+> | **S5c** scaling timeframe modu (doc 02 §5.7) | `timeframe_mode` · `custom_sequence` → **0 hit** |
+> | **S5d** logic-based stop blocks (doc 02 §5.5) | `logic_based_scaling` var (`config.py`), logic-based **stop** bloğu yok — `stop_mode` 0 hit |
+>
+> **Yeniden ölçme komutu (S5 b/c/d) — komut ve 2026-07-29 çıktısı:**
+> ```bash
+> for t in stop_mode any_active_rule all_active_rules multiple_stops \
+>          same_candle_entry_exit timeframe_mode custom_sequence; do
+>   printf "%-24s %s\n" "$t" "$(grep -rn "$t" backend/src | wc -l | tr -d ' ')"
+> done
+> # 2026-07-29 çıktısı: yedi token da 0.
+> ```
 >
 > ### ⚪ KONUSU KAPANMIŞ (fix değil, karar)
 >
@@ -40,14 +62,16 @@
 >
 > ### 📍 Kaymış satır/dizin referansları (gövdede düzeltilmedi — burası otorite)
 >
-> - **S-L1:** `shared/errors.py:964` → gerçek **`:1277`**
+> - **S-L1:** `shared/errors.py:964` → ~~`:1277`~~ (07-28 ölçümü) → bugün **`:1449`** (07-29)
 > - **S6:** `routes/trading_signal.py` → gerçek dizin **`backend/src/entropia/apps/api/routes/`**
 > - **S-L7:** `nav.ts:130-131` → o satırlar artık `FUTURE_DEV_SUBPAGES` bloğu (dosya 272 satır)
+> - **S5:** gövdedeki `RestrictionsFilters :692` → `min_true_count` alanı bugün
+>   `domain/strategy/config.py:844`, validator `:868`
 >
 > **Not:** Aşağıdaki her bölümün "Doğrulanan durum" paragrafı ve paste-ready prompt'u **2026-07-14
 > tarihli** hâliyle bırakıldı — landed maddelerde bunlar tarihsel kayıttır, yeniden uygulanacak
-> talimat DEĞİLDİR. Açık maddelerde (S5, S-L1…S-L6) hâlâ geçerlidir, ama satır numaralarını
-> yapıştırmadan önce ampirik doğrula.
+> talimat DEĞİLDİR. Yalnız **S5 b/c/d** için hâlâ geçerlidir, ama satır numaralarını
+> yapıştırmadan önce ampirik doğrula (yukarıdaki kaymış-referans listesine bak).
 
 > **Kaynak:** 2026-07-14, R1–R9 (PR #179–196) merge edildikten SONRA yapılan üçüncü
 > kapsamlı spec-vs-implementation denetimi (7 paralel read-only ajan + inline ampirik
@@ -73,11 +97,11 @@
 - Frontend verify: `cd frontend && npm run lint && npm run typecheck && npm run test && npm run build`.
 - Git: `feat/<slug>`; commit `<type>(<slug>): <subject>`; **NO AI attribution**; PR aç → checks → self-merge yok, kullanıcıdan merge iste.
 
-## ~~Önerilen sıra (değer/maliyet)~~ — TÜKENDİ (2026-07-28)
+## ~~Önerilen sıra (değer/maliyet)~~ — TÜKENDİ (2026-07-29 tazelemesi)
 
-> Bu sıradaki dokuz maddeden **sekizi landed**. Geriye yalnızca **S5** (en büyük) ve
-> **LOW listesinden S-L1…S-L6** kaldı. Güncel öncelik için yukarıdaki "🔴 GERÇEKTEN AÇIK"
-> tablosuna bak. Tarihsel sıra kaydı:
+> Bu sıradaki dokuz maddenin **dokuzu da** landed (S5 yalnız **a** alt-slice'ı ile), LOW
+> listesindeki **S-L1…S-L6 de** landed. Geriye yalnızca **S5 b/c/d** kaldı. Güncel öncelik
+> için yukarıdaki "🔴 GERÇEKTEN AÇIK" tablosuna bak. Tarihsel sıra kaydı:
 >
 > ~~S9 → S1 → S8 → S4 → S6 → S7 → S2 → S3 → S5~~
 
@@ -311,7 +335,12 @@ feat/s3-package-import-*, ayrı PR'lar, NO AI attribution.
 
 ---
 
-## S5 — Strategy config katalog derinliği (doc 02 §5.5/§5.7/§5.8/§5.9) — 🔴 **AÇIK** (dört alt-slice de)
+## S5 — Strategy config katalog derinliği (doc 02 §5.5/§5.7/§5.8/§5.9) — 🟡 **a LANDED (#458) · b/c/d AÇIK**
+
+> **2026-07-29 tazelemesi:** alt-slice **(a) Minimum-N-of-M landed** — `domain/strategy/config.py:844`
+> `min_true_count` + `:868` validator, `compiler.py:204`, `engine.py:1036`, ENGINE_VERSION →
+> `backtest-engine-v18-restriction-min-n`. Aşağıdaki "Doğrulanan durum" paragrafı **(a) için tarihsel
+> kayıttır**; (b)/(c)/(d) için hâlâ geçerli (yedi token da 0 hit — ölçme komutu §DURUM TAZELEME'de).
 **Boyut:** EN BÜYÜK (backend şema + engine + frontend form; ENGINE_VERSION bump). **Öncelik:** Düşük-orta (mevcut davranış fail-closed L4 — sessiz yanlışlık yok).
 
 **Doğrulanan durum:** `domain/strategy/config.py`'de yok (grep=0): §5.5 logic-based stop block +
@@ -343,21 +372,24 @@ feat/s5<x>-strategy-<slug>, ayrı PR'lar, NO AI attribution.
 ---
 
 ## LOW (opsiyonel, tek-oturumluk küçükler)
-- **S-L1 — Allocation 409 gövdesi** 🔴 **AÇIK** (doc 13 §7.2/§10.2 Flow E): `AllocationDraftConflictError`
-  (~~shared/errors.py:964~~ → **gerçek `shared/errors.py:1277`**) statik; `current_draft` + `changed_paths[]` eklenebilir (route zaten
-  draft'ı okuyabiliyor). Frontend conflict UX'i buna göre zenginleşir.
-- **S-L2 — Export tipleri** (doc 15 §3.2): ExportType'a `pinescript_signal_marker` +
-  `agent_dataset` ekle (domain/backtest/export.py — mevcut 5 tip deseni).
-- **S-L3 — Library request-validation** (doc 08 §7): POST /library/{id}/validation-runs —
-  CP-plane validation-run komutunu (gap-07) Library-plane'e sar; `can_request_validation`
-  orphan flag'i tüketilir.
-- **S-L4 — Manifest warning satırları** (doc 14 RC-03): build_run_manifest preflight'a
-  warning issue row'larını (code/scope/path/message) da koy (şimdi yalnız count + report ref —
-  transitif erişilebilir, düşük değer).
-- **S-L5 — `GET /rationale-families:suggest`** (master ref Modül 6 §11): read-only öneri
-  endpoint'i (q= substring, mutation yok) + Create Package composer'da öneri chip'leri.
-- **S-L6 — `UPLOAD_JOB_FAILED`** (doc 21 §10): manual upload pipeline teknik hatası için ayrı
-  kanonik kod (şimdi generic); errors.py + jobs/manual upload fail path + test.
+> **2026-07-29:** LOW listesinin tamamı kapandı — S-L1…S-L6 **landed** (#455–#461), S-L7 karar.
+> Aşağıdaki tarifler tarihsel kayıttır, yeniden uygulanacak talimat DEĞİLDİR; bugünkü kanıt
+> satırları için §DURUM TAZELEME'deki LANDED tablosuna bak.
+
+- ~~**S-L1 — Allocation 409 gövdesi**~~ ✅ **LANDED (PR #457)** (doc 13 §7.2/§10.2 Flow E):
+  `AllocationDraftConflictError` (~~`shared/errors.py:964`~~ → ~~`:1277`~~ → bugün **`:1449`**)
+  artık `current_draft` + `changed_paths[]` taşıyor; `commands/allocation_plan.py:127,154` üretiyor.
+- ~~**S-L2 — Export tipleri**~~ ✅ **LANDED (PR #460)** (doc 15 §3.2): `pinescript_signal_marker` +
+  `agent_dataset` → `domain/backtest/export.py:42-43`, migration `0040_export_type_agent_pine`.
+- ~~**S-L3 — Library request-validation**~~ ✅ **LANDED (PR #461)** (doc 08 §7):
+  `apps/api/routes/library.py:204` `POST /library/{entity_id}/validation-runs` (201).
+- ~~**S-L4 — Manifest warning satırları**~~ ✅ **LANDED (PR #456)** (doc 14 RC-03):
+  `commands/backtest_run.py:553` `"warnings"` alanı + `:864` `_manifest_warning_rows` — artık
+  bare count değil, satırın kendisi. Manifest hash'i warning taşıyan koşularda değişir.
+- ~~**S-L5 — `GET /rationale-families:suggest`**~~ ✅ **LANDED (PR #459)** (master ref Modül 6 §11):
+  `apps/api/routes/rationale.py:91` — read-only, mutation yok.
+- ~~**S-L6 — `UPLOAD_JOB_FAILED`**~~ ✅ **LANDED (PR #455)** (doc 21 §10):
+  `shared/errors.py:2075` kanonik kod + `commands/manual.py:109-116` pipeline aşamaları.
 - ~~**S-L7 — Nav legacy etiketleri**~~ ⚪ **KONUSU KAPANDI (2026-07-28).** "Trading Signal
   Packages"/"Trade Log Packages" etiketleri `frontend/src/app/nav.ts`'te **artık yok**; yokluk
   `frontend/src/test/nav.test.tsx:95-96`'da regresyon testiyle sabitlenmiş. Karar doc-01 lehine

@@ -215,7 +215,11 @@ Before stopping a working session, produce **ALL** of the following:
   1. **F-07 §4.4** — 4 yüzey backend display-DTO bekliyor (`v18_visual_traceability.md §4.4`).
   2. **R2 banner kapanışı (docs işi):** `entropia_v18_remediation_status.md` RE-OPENING
      banner'ının koşulu sağlandı → banner'ı kaldır, UI satırlarını evidence'lı Complete yap.
-  3. **O-03 kalıntısı:** 5 ölü error sınıfı (`KNOWN_UNRAISED`).
+  3. **O-03 kalıntısı:** **4** ölü error sınıfı (`KNOWN_UNRAISED` — `RoleContextStaleError`,
+     `ServiceUnavailableError`, `ArtifactNotAvailableError`, `HypothesisArtifactNotFoundError`;
+     `ValidationAlreadyRunning` S-L3'te fırlatılmaya başladı, ratchet onu listeden attırdı).
+     O-03 adjudication tablosunun 4 satırı **sonradan canonical oldu** — bkz.
+     `docs/PROJECT_HISTORY.md` §"Sonradan canonical olan dört satır".
   4. **Round-3 backlog:** S5 (a/b/c/d) + S-L1…S-L6
      (`docs/POST_V1_SPEC_GAP_BACKLOG_ROUND3.md` §DURUM TAZELEME — diğer 8 madde landed).
 - **Açık iş (R2 kapsamı dışı, dürüst sınır):** ekran okuyucu (NVDA/VoiceOver) denetimi yapılmadı;

@@ -65,13 +65,19 @@ test.describe("Future Dev boundary: placeholders stay honest (doc 22)", () => {
     await expect(page.getByRole("heading", { name: "Future Dev", exact: true })).toBeVisible({
       timeout: 30_000,
     });
-    // The seeded registry rendered: a user actually sees the Future-Dev slots by
-    // name. Asserted on the seeded CONTENT rather than on a column header, because
-    // the header depends on which section of the page is expanded while the
-    // capability titles are guaranteed by `seed_capabilities` (apps/seed.py).
-    await expect(page.getByText("Regime Research", { exact: false }).first()).toBeVisible({
+    // Scope to the registry SECTION. An unscoped getByText("Regime Research")
+    // resolves to the collapsed nav link (<a href="/future-dev/regime-research">),
+    // which is hidden — the page-level match is the sidebar, not the projection.
+    const registry = page.getByRole("region", { name: "Capabilities" });
+    await expect(registry).toBeVisible({ timeout: 30_000 });
+    // The seeded rows a user actually sees: title + the machine key beside it.
+    await expect(registry.getByRole("cell", { name: /Regime Research/ })).toBeVisible({
       timeout: 30_000,
     });
-    await expect(page.getByText("Hypothesis Lab", { exact: false }).first()).toBeVisible();
+    await expect(registry.getByRole("cell", { name: /Hypothesis Lab/ })).toBeVisible();
+    // And the boundary is visible ON the page, not only in the API: the
+    // "Operational" column reads "no" for the Regime Research row.
+    const regimeRow = registry.getByRole("row", { name: /Regime Research/ });
+    await expect(regimeRow.getByRole("cell", { name: "no", exact: true })).toBeVisible();
   });
 });

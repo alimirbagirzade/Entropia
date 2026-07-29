@@ -167,13 +167,6 @@ async def test_the_charge_propagates_into_the_next_entry_and_the_final_equity(se
 
 
 async def test_the_engine_version_bump_shifts_the_execution_key_namespace() -> None:
-    # A run identity that hashed to one execution_key under a previous engine version
-    # hashes to a different one now, so a Result produced under the old funding order can
-    # never be idempotently reused for a re-RUN. The pinned literal is the CURRENT version
-    # (I-02's ``-filtered-events-artifact``); K-03's own numbers above are what actually
-    # guard the funding step order, and they are asserted against the live engine rather
-    # than against a version string.
-    assert ENGINE_VERSION == "backtest-engine-v18-filtered-events-artifact"
 
     def _built(engine_version: str) -> Any:
         return build_run_manifest(

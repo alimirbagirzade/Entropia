@@ -913,7 +913,21 @@ function RestrictionsSection({
           options={RESTRICTION_RULE_OPTIONS}
           panel={P.restrictionRule}
         />
-        <div className="cp-field" aria-hidden="true" />
+        {/* I-15a — N is a conditional subtree of the min_n_of_m rule (doc 02 §5.8):
+            hidden for any/all so no stale count is ever shown, and the merge deletes
+            the key on switch-back. The spacer keeps the two-column grid intact. */}
+        {restrictions.rule === "min_n_of_m" ? (
+          <TextField
+            label="Minimum active restrictions (N)"
+            required
+            value={restrictions.min_true_count}
+            onChange={(v) => onChange({ min_true_count: v })}
+            placeholder="e.g. 2"
+            panel={P.restrictionRule}
+          />
+        ) : (
+          <div className="cp-field" aria-hidden="true" />
+        )}
       </div>
       {restrictions.filters.map((filter, i) => {
         const panelKey = FILTER_TYPE_PANEL_KEY[filter.filter_type];

@@ -61,9 +61,11 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from entropia.application.commands.create_package import start_package_validation_run
 from entropia.application.commands.deletion import soft_delete_registry_root
 from entropia.application.idempotency import run_idempotent
 from entropia.application.queries.package_dependency import ensure_no_dependency_cycle
+from entropia.domain.create_package.enums import CreatePackageState
 from entropia.domain.identity import Actor
 from entropia.domain.identity.policy import (
     ensure_can_edit,
@@ -76,6 +78,7 @@ from entropia.domain.package.enums import PackageValidationState
 from entropia.infrastructure.postgres.models import EntityRegistry
 from entropia.infrastructure.postgres.repositories import approvals as approval_repo
 from entropia.infrastructure.postgres.repositories import audit as audit_repo
+from entropia.infrastructure.postgres.repositories import create_package as cp_repo
 from entropia.infrastructure.postgres.repositories import packages as pkg_repo
 from entropia.infrastructure.postgres.repositories import resource_share as share_repo
 from entropia.shared.errors import (
@@ -83,6 +86,8 @@ from entropia.shared.errors import (
     PackageDeriveInvalid,
     PackageNotFound,
     PackageRevisionConflict,
+    ValidationAlreadyRunning,
+    ValidationPipelineUnavailable,
     ValidationRequired,
 )
 from entropia.shared.manifest import manifest_hash
@@ -537,6 +542,98 @@ async def request_package_approval(
         },
         operation=_op,
     )
+
+
+async def request_package_validation(
+    session: AsyncSession,
+    actor: Actor,
+    *,
+    entity_id: str,
+    revision_id: str,
+    expected_head_revision_id: str | None = None,
+    idempotency_key: str | None = None,
+) -> dict[str, Any]:
+    """Owner-or-Admin: start a validation run for a Library head (doc 08 §7).
+
+    A WRAPPER, not a second pipeline. The seven mandatory checks, the immutable
+    ``package_validation_run`` evidence row, the durable job and the
+    ``validation_running -> eligible_for_approval / revision_required`` state machine
+    all already live in the CreatePackage plane
+    (``create_package.start_package_validation_run``). Re-implementing any of it here
+    would give one package two ways to be certified, which is how two planes drift.
+
+    What this layer owns is the plane translation and its guards:
+
+    * the Library addresses a package by ROOT, while validation evidence is keyed by
+      the create-package REQUEST that built it (``package_validation_run.request_entity_id``
+      is NOT NULL). ``get_request_for_package_root`` bridges the two;
+    * no originating request (a Derived or seeded package) -> 422
+      ``VALIDATION_PIPELINE_UNAVAILABLE``. There is genuinely no draft to certify, and
+      a silent no-op would be the same "advertises an un-performable action" defect
+      this slice fixes on the projection side;
+    * a run already in flight -> 409 ``VALIDATION_ALREADY_RUNNING``. Returning the
+      in-flight run instead would read as "your request started this";
+    * Library OCC: ``revision_id`` must BE the head and ``expected_head_revision_id``
+      must match it, else 409 ``PACKAGE_REVISION_CONFLICT`` — the same rule as
+      ``request_package_approval``, so a stale tab cannot certify a revision the user
+      is no longer looking at.
+
+    ``Idempotency-Key`` passes through to the CP command, which already wraps the
+    admission in ``run_idempotent``; this layer adds no second idempotency record.
+    """
+    root = await _require_package_root(session, entity_id)
+    ensure_can_edit(actor, owner_principal_id=root.owner_principal_id)
+    await session.refresh(root, with_for_update=True)
+
+    if root.deletion_state != DeletionState.ACTIVE or root.lifecycle_state != _ACTIVE:
+        raise LifecycleBlocked()
+    if revision_id != root.current_revision_id or (
+        expected_head_revision_id is not None
+        and root.current_revision_id != expected_head_revision_id
+    ):
+        raise PackageRevisionConflict()
+    revision = await pkg_repo.get_revision(session, revision_id)
+    if revision is None or revision.entity_id != entity_id:
+        raise PackageNotFound()
+
+    request = await cp_repo.get_request_for_package_root(session, entity_id)
+    if request is None or request.draft_revision_id is None:
+        raise ValidationPipelineUnavailable(
+            details=[{"entity_id": entity_id, "reason": "no_originating_create_package_request"}],
+            scope_type=_TARGET_KIND,
+            scope_id=entity_id,
+        )
+    if request.state == CreatePackageState.VALIDATION_RUNNING:
+        raise ValidationAlreadyRunning(
+            details=[
+                {
+                    "entity_id": entity_id,
+                    "request_id": request.entity_id,
+                    "validation_run_id": request.current_validation_run_id,
+                }
+            ],
+            scope_type=_TARGET_KIND,
+            scope_id=entity_id,
+        )
+
+    started = await start_package_validation_run(
+        session,
+        actor,
+        request_id=request.entity_id,
+        idempotency_key=idempotency_key,
+    )
+    # The caller addressed a package, so answer in package terms; the CP identifiers
+    # come through so the two planes stay traceable to one run.
+    return {
+        "entity_id": entity_id,
+        "revision_id": revision_id,
+        "request_id": started["request_id"],
+        "validation_run_id": started["validation_run_id"],
+        "attempt_no": started["attempt_no"],
+        "status": started["status"],
+        "state": started["state"],
+        "job_id": started["job_id"],
+    }
 
 
 async def approve_and_publish_package(

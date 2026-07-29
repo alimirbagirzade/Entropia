@@ -29,6 +29,8 @@ from entropia.domain.identity.policy import require_manual_admin, require_trash_
 from entropia.domain.lifecycle.enums import DeletionState
 from entropia.domain.manual.blocks import (
     MAX_TITLE_LENGTH,
+    ContentBlock,
+    SearchChunkDraft,
     build_search_chunks,
     has_visible_text,
     normalized_checksum,
@@ -48,6 +50,7 @@ from entropia.infrastructure.postgres.repositories import audit as audit_repo
 from entropia.infrastructure.postgres.repositories import manual as manual_repo
 from entropia.infrastructure.postgres.repositories import trash as trash_repo
 from entropia.shared.errors import (
+    AppError,
     BaselineManualImmutableError,
     EntityNotSoftDeletedError,
     LifecycleBlocked,
@@ -59,6 +62,7 @@ from entropia.shared.errors import (
     ManualSourceEncodingInvalidError,
     ManualStreamConflictError,
     ManualTitleRequiredError,
+    ManualUploadJobFailedError,
     ObjectAlreadyPurgedError,
     PurgeInProgressError,
     ValidationError,
@@ -99,6 +103,42 @@ def _source_type_for_upload(source_filename: str) -> ManualSourceType:
     if source_type is None:
         raise ManualFileTypeUnsupportedError()
     return source_type
+
+
+# --------------------------------------------------------------------------- #
+# Pipeline stages (doc 21 §10 UPLOAD_JOB_FAILED)                               #
+# --------------------------------------------------------------------------- #
+#
+# Parse and index are the two stages that transform the caller's bytes. A typed
+# ``AppError`` from either is a VERDICT the Admin can act on (MANUAL_PARSE_FAILED,
+# MANUAL_CONTENT_REQUIRED) and passes through untouched. Anything else is the
+# pipeline itself breaking, and doc 21 §10 gives that its own canonical code —
+# ``UPLOAD_JOB_FAILED`` — so the response says "retry", not "fix your document".
+
+
+def _parse_blocks(source_type: ManualSourceType, content: str) -> list[ContentBlock]:
+    """Parse stage: source -> canonical blocks."""
+    try:
+        return parse_source(source_type, content)
+    except AppError:
+        raise
+    except Exception as exc:
+        raise ManualUploadJobFailedError(
+            details=[{"stage": "parse", "source_type": source_type.value}],
+            field_path="content",
+        ) from exc
+
+
+def _build_index_chunks(
+    title: str, anchor: str, blocks: list[ContentBlock]
+) -> list[SearchChunkDraft]:
+    """Index stage: canonical blocks -> search chunks."""
+    try:
+        return build_search_chunks(title, anchor, blocks)
+    except AppError:
+        raise
+    except Exception as exc:
+        raise ManualUploadJobFailedError(details=[{"stage": "index"}]) from exc
 
 
 async def _assert_stream_version(session: AsyncSession, expected: int | None) -> int:
@@ -169,7 +209,7 @@ async def _publish_new_document(
     await manual_repo.lock_stream(session)
     prior_version = await _assert_stream_version(session, expected_stream_version)
 
-    blocks = parse_source(source_type, content)
+    blocks = _parse_blocks(source_type, content)
     if not has_visible_text(blocks):
         raise ManualContentRequiredError()
     checksum = normalized_checksum(blocks)
@@ -210,7 +250,7 @@ async def _publish_new_document(
         session,
         document_id=document.document_id,
         revision_id=revision.revision_id,
-        chunks=build_search_chunks(title, anchor, blocks),
+        chunks=_build_index_chunks(title, anchor, blocks),
     )
     stream_version = prior_version + 1
     manual_repo.add_publication_event(
@@ -411,7 +451,7 @@ async def replace_manual_revision(
             final_source_filename = head.source_filename
         else:
             final_source_filename = None
-        blocks = parse_source(final_source_type, content)
+        blocks = _parse_blocks(final_source_type, content)
         if not has_visible_text(blocks):
             raise ManualContentRequiredError()
         checksum = normalized_checksum(blocks)
@@ -437,7 +477,7 @@ async def replace_manual_revision(
             session,
             document_id=document_id,
             revision_id=revision.revision_id,
-            chunks=build_search_chunks(final_title, anchor, blocks),
+            chunks=_build_index_chunks(final_title, anchor, blocks),
         )
         prior_version = await manual_repo.current_stream_version(session)
         stream_version = prior_version + 1

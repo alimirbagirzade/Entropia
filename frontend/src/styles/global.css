@@ -1614,6 +1614,27 @@ p a { text-decoration: underline; }
   gap: 12px;
   margin-bottom: 14px;
 }
+/* Rationale Family suggestion chips (master ref Module 6 §11). Spans the grid so
+   the chip row sits under the selector instead of squeezing into one column. */
+.cp-identity-grid .cp-suggest {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.cp-chip-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.cp-chip {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elev-2);
+  color: var(--text);
+  font-size: 12px;
+  padding: 4px 10px;
+  min-height: 28px;
+  cursor: pointer;
+}
+.cp-chip:hover { border-color: var(--accent); }
+.cp-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .cp-controls-row label,
 .cp-identity-grid label { display: flex; flex-direction: column; gap: 6px; }
 .cp-controls-row label > span,

@@ -167,10 +167,14 @@ export const ADD_SIZE_OPTIONS: SelectOption[] = [
   { value: "fixed_amount", label: "Fixed Amount" },
 ];
 
-// RestrictionsFilters.rule
+// RestrictionsFilters.rule. I-15a added the spec's third combination (doc 02 §5.8);
+// §6's two extra panel bullets (Restriction Score Threshold, Warning Only) are
+// deliberately NOT options — the §5.8 form table is the enum authority and the §6
+// CONTENT RULE binds the panel text to the shipped set, not the other way round.
 export const RESTRICTION_RULE_OPTIONS: SelectOption[] = [
   { value: "any", label: "If ANY restriction is active, block entry" },
   { value: "all", label: "If ALL restrictions are active, block entry" },
+  { value: "min_n_of_m", label: "Minimum N of M restrictions must be active" },
 ];
 
 // RestrictionFilter.filter_type (the seven config.py categories; the V18 spec's
@@ -348,7 +352,7 @@ export const STRATEGY_GRAPH_PANELS: Record<string, InfoPanelContent> = {
   },
   restrictionRule: {
     title: "Restriction Rule",
-    body: "Restriction, entry sinyali doğru olsa bile yeni pozisyon açılmasını sınırlayan güvenlik veya piyasa uygunluğu kontrolüdür. Bu açılır menü aktif filtrelerin nasıl birleşeceğini belirler.\n\n• If ANY restriction is active, block entry: Aktif filtrelerden biri risk gördüğünde yeni giriş engellenir. En korumacı seçimdir.\n\n• If ALL restrictions are active, block entry: Tüm aktif filtreler aynı anda risk göstermeden giriş engellenmez.\n\n• Minimum N of M restrictions must be active: Belirli sayıda filtrenin birlikte tetiklenmesi gerekir.\n\n• Restriction Score Threshold: Filtrelerin puanları toplamı eşik üzerinde olursa giriş engellenir.\n\n• Warning Only: İşlem engellenmez; yalnızca uyarı kaydı oluşur.\n\nÖrnek: Spread çok yüksekse, sinyal ne kadar iyi görünürse görünsün “ANY” seçimi yeni pozisyonu engeller; açık pozisyonu kapatmaz.",
+    body: "Restriction, entry sinyali doğru olsa bile yeni pozisyon açılmasını sınırlayan güvenlik veya piyasa uygunluğu kontrolüdür. Bu açılır menü aktif filtrelerin nasıl birleşeceğini belirler.\n\n• If ANY restriction is active, block entry: Aktif filtrelerden biri risk gördüğünde yeni giriş engellenir. En korumacı seçimdir.\n\n• If ALL restrictions are active, block entry: Tüm aktif filtreler aynı anda risk göstermeden giriş engellenmez.\n\n• Minimum N of M restrictions must be active: Belirli sayıda filtrenin birlikte tetiklenmesi gerekir. Seçildiğinde kaç filtrenin aynı anda aktif olması gerektiğini (N) yazarsın; N, etkin filtre sayısını aşamaz — aştığında kapı hiçbir zaman çalışmayacağı için Save reddedilir.\n\nÖrnek: Spread çok yüksekse, sinyal ne kadar iyi görünürse görünsün “ANY” seçimi yeni pozisyonu engeller; açık pozisyonu kapatmaz. “Minimum 2 of 3” seçiliyse tek başına spread yetmez, ikinci bir filtrenin de aynı anda risk göstermesi gerekir.",
   },
   volatilityFilter: {
     title: "Volatility Filter",
@@ -492,6 +496,10 @@ export interface RestrictionFilterForm {
 
 export interface RestrictionsForm {
   rule: string;
+  // I-15a — N for rule="min_n_of_m" (doc 02 §5.8). String-backed like every other
+  // numeric form field so a blank is representable; the merge omits the key for the
+  // any/all rules, mirroring the model's own drop-on-switch validator.
+  min_true_count: string;
   filters: RestrictionFilterForm[];
   raw: Record<string, unknown>;
 }
@@ -774,6 +782,7 @@ function extractRestrictions(payload: Record<string, unknown>): RestrictionsForm
   const r = asRecord(payload.restrictions_filters);
   return {
     rule: enumStr(r.rule, "any"),
+    min_true_count: str(r.min_true_count),
     filters: asArray(r.filters).map((f, i) => extractFilter(f, i)),
     raw: r,
   };
@@ -1111,6 +1120,14 @@ export function mergeGraphSections(
 
   const restrictions: Record<string, unknown> = { ...form.restrictions.raw };
   setOrDelete(restrictions, "rule", form.restrictions.rule);
+  // I-15a: N travels ONLY under min_n_of_m — switching back to any/all deletes it, so a
+  // stale count never survives in the saved revision (the model drops it server-side
+  // too; this keeps the wire payload honest as well).
+  setOrDelete(
+    restrictions,
+    "min_true_count",
+    form.restrictions.rule === "min_n_of_m" ? form.restrictions.min_true_count.trim() : "",
+  );
   restrictions.filters = form.restrictions.filters.map((f) => mergeFilter(f));
 
   return {

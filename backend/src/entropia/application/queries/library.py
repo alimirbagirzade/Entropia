@@ -45,6 +45,7 @@ from entropia.infrastructure.postgres.models import (
     PackageRevision,
     PackageRoot,
 )
+from entropia.infrastructure.postgres.repositories import create_package as cp_repo
 from entropia.infrastructure.postgres.repositories import packages as pkg_repo
 from entropia.infrastructure.postgres.repositories import rationale as rationale_repo
 from entropia.infrastructure.postgres.repositories import resource_share as share_repo
@@ -112,6 +113,12 @@ async def list_packages(
     has_more = len(rows) > params.limit
     page = rows[: params.limit]
     next_cursor = page[-1][0].entity_id if has_more and page else None
+    # ONE lookup for the whole page (S-L3): can_request_validation needs to know which
+    # roots are backed by a Create Package draft, and an N+1 would cost more than the
+    # page itself.
+    validatable = await cp_repo.package_roots_with_validatable_draft(
+        session, [root.entity_id for root, _detail, _revision in page]
+    )
     return {
         "data": [
             _package_row(
@@ -120,6 +127,7 @@ async def list_packages(
                 detail,
                 revision,
                 shared_principal_ids=_viewer_grant_context(actor, root, detail, shared_ids),
+                has_validatable_draft=root.entity_id in validatable,
             )
             for root, detail, revision in page
         ],
@@ -162,9 +170,19 @@ async def list_shared_with_me(
     page = rows[: params.limit]
     next_cursor = page[-1][0].entity_id if has_more and page else None
     grantee = {actor.principal_id} if actor.principal_id is not None else None
+    validatable = await cp_repo.package_roots_with_validatable_draft(
+        session, [root.entity_id for root, _detail, _revision in page]
+    )
     return {
         "data": [
-            _package_row(actor, root, detail, revision, shared_principal_ids=grantee)
+            _package_row(
+                actor,
+                root,
+                detail,
+                revision,
+                shared_principal_ids=grantee,
+                has_validatable_draft=root.entity_id in validatable,
+            )
             for root, detail, revision in page
         ],
         "meta": {"cursor": next_cursor, "has_more": has_more},
@@ -273,6 +291,7 @@ def _package_row(
     revision: PackageRevision,
     *,
     shared_principal_ids: Collection[str] | None = None,
+    has_validatable_draft: bool = False,
 ) -> dict[str, Any]:
     snapshot = revision.rationale_family_snapshot or {}
     permissions = package_permissions(
@@ -283,6 +302,7 @@ def _package_row(
         validation_state=revision.validation_state,
         approval_state=revision.approval_state,
         shared_principal_ids=shared_principal_ids,
+        has_validatable_draft=has_validatable_draft,
     )
     return {
         "entity_id": root.entity_id,
@@ -371,7 +391,15 @@ async def get_package_detail(
     if revision is None:
         raise NotFoundError(f"Package '{entity_id}' has no current revision.")
 
-    data = _package_row(actor, root, detail, revision, shared_principal_ids=grantee_ids)
+    validatable = await cp_repo.package_roots_with_validatable_draft(session, [root.entity_id])
+    data = _package_row(
+        actor,
+        root,
+        detail,
+        revision,
+        shared_principal_ids=grantee_ids,
+        has_validatable_draft=root.entity_id in validatable,
+    )
     data["input_contract"] = revision.input_contract
     data["output_contract"] = revision.output_contract
     data["dependency_snapshot"] = revision.dependency_snapshot

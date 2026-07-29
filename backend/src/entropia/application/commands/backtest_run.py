@@ -546,6 +546,11 @@ async def _admit_run_body(
             "ready_report_id": preflight["report_id"],
             "state": preflight["state"],
             "warning_count": preflight["summary"]["warning_count"],
+            # RC-03: the warning must be "retained in report AND later manifest".
+            # A bare count is not the warning — it cannot say WHICH item or field
+            # was flagged, so a later reader of the immutable manifest could not
+            # reconstruct what the run was admitted despite.
+            "warnings": _manifest_warning_rows(preflight["issues"]),
         },
         correlation_id=actor.correlation_id,
         created_at_iso=datetime.now(UTC).isoformat(),
@@ -854,6 +859,41 @@ def _issue_detail(issue: dict[str, Any]) -> dict[str, Any]:
         "message": issue.get("message"),
         "remediation": issue.get("remediation"),
     }
+
+
+def _manifest_warning_rows(issues: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The WARNING findings a run was admitted despite, for the immutable manifest.
+
+    Doc 14 RC-03 requires the warning be "retained in report AND later manifest";
+    the manifest previously carried only ``warning_count``. A count answers "were
+    there any", never "which item, which field, why" — so a reader of an archived
+    manifest could not reconstruct what the run knowingly accepted, and had to
+    dereference the readiness report (which is a separate row with its own
+    lifetime). These rows make the manifest self-contained on that point.
+
+    Blockers are deliberately absent: a blocker means no run was admitted at all
+    (:func:`_readiness_blocked` raises first), so a manifest can never carry one.
+    ``remediation`` is also omitted — it is human prose for the live modal, not
+    reproducibility evidence, and the report keeps the full issue.
+
+    Sorted for determinism: the same preflight must produce the same manifest bytes.
+    The manifest hash therefore changes for warning-carrying runs, but the
+    ``execution_key`` does NOT — ``preflight`` is not part of the execution content
+    (``domain/backtest/manifest.py``), so no engine-version namespace shifts and no
+    prior result stops being idempotently reusable.
+    """
+    rows = [
+        {
+            "code": issue.get("code"),
+            "scope": issue.get("scope"),
+            "scope_id": issue.get("scope_id"),
+            "field_path": issue.get("field_path"),
+            "message": issue.get("message"),
+        }
+        for issue in issues
+        if issue.get("severity") == ReadinessSeverity.WARNING.value
+    ]
+    return sorted(rows, key=lambda r: (str(r["code"]), str(r["scope_id"]), str(r["field_path"])))
 
 
 def _readiness_blocked(issues: list[dict[str, Any]]) -> ReadinessBlockedError:

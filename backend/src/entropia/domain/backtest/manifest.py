@@ -80,15 +80,7 @@ from entropia.shared.manifest import manifest_hash
 # stays valid under its own pinned engine_version but is NOT comparable with a new one, and
 # the bump shifts the execution_key namespace so it is never idempotently reused for a
 # re-RUN (INF-04/INF-05).
-# v18-filtered-events-artifact (I-02): the FILTER vetoes (``filtered_no_entry``) leave the
-# ``signal_events`` journal and become their own ``filtered_events`` output journal +
-# persisted artifact (doc 15 §3.2 "View Filtered Events", §16). No trade, fill, price or
-# metric changes — but the artifact SHAPE does: ``signal_events`` loses those rows and every
-# surviving row's ``seq`` is renumbered, and ``diagnostics.decision_trace_count`` now counts
-# the signal journal alone. Those rows are persisted into the immutable Result and read by
-# users, so a pre-I-02 Result is NOT artifact-comparable with a new one; the bump shifts the
-# execution_key namespace so it is never idempotently reused for a re-RUN (INF-04/INF-05).
-ENGINE_VERSION = "backtest-engine-v18-filtered-events-artifact"
+
 METRIC_SET_VERSION = "metric-set-v1"
 OUTPUT_ARTIFACT_PROFILE = "standard-v1"
 

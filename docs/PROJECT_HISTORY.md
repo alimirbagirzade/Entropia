@@ -1420,12 +1420,12 @@ kabul edilmiş import çıktısında ve tarihsel satırlarda saklı.
 | `RESOLVER_TIMING_RISK_BLOCKED` | 09 §1013 | check adı `timing_integrity` → aynı | `domain/esp/validation.py:214` |
 | `UNSAVED_MAINBOARD_DRAFT` | 01 §1119/1238 | revision'sız draft Ready Check/RUN'a giremez (AT-01) | `commands/strategy_draft.py:110` |
 | `OBJECT_EDIT_FORBIDDEN` | 01 §1620 | `ACCESS_DENIED` | **spec "ACCESS_DENIED / OBJECT_EDIT_FORBIDDEN" yazıyor** |
-| `INTRABAR_DATA_UNAVAILABLE` | 04 §604 | `TICK_DATA_UNAVAILABLE` | `domain/readiness/enums.py:106` |
-| `OHLCV_CONTEXT_REQUIRED` | 04 §599 | `OHLCV_POLICY_CONFLICT` | `domain/trading_signal/compiler.py:97` |
+| ~~`INTRABAR_DATA_UNAVAILABLE`~~ | 04 §604 | `TICK_DATA_UNAVAILABLE` | **SUPERSEDED → §"Sonradan canonical olan dört satır"** |
+| ~~`OHLCV_CONTEXT_REQUIRED`~~ | 04 §599 | `OHLCV_POLICY_CONFLICT` | **SUPERSEDED → §"Sonradan canonical olan dört satır"** |
 | `MARKET_DATA_INSTRUMENT_MISMATCH` | 02 §2380/2861 | `RunFailureCode.INSTRUMENT_MISMATCH` | `jobs/backtest_engine.py:503`, fail-closed (F-05) |
 | `MISSING_EMBEDDED_DEPENDENCY` | 07 §1129/1422 | `PRECHECK_BLOCKED` | **spec §1422 alternatifi yazıyor** |
-| `INVALID_ITEM_KIND` | 03 §838/922 | `MAINBOARD_ITEM_KIND_MISMATCH` | 3 raise |
-| `UPLOAD_JOB_FAILED` | 21 §942 | `MANUAL_PARSE_FAILED` | `domain/manual/blocks.py:348`, `:413` |
+| ~~`INVALID_ITEM_KIND`~~ | 03 §838/922 | `MAINBOARD_ITEM_KIND_MISMATCH` | **SUPERSEDED → §"Sonradan canonical olan dört satır"** |
+| ~~`UPLOAD_JOB_FAILED`~~ | 21 §942 | `MANUAL_PARSE_FAILED` | **SUPERSEDED → §"Sonradan canonical olan dört satır"** |
 
 İki satırda spec **kendi alternatifini zaten yazıyor** (01 §1620, 07 §1422) — oralarda sapma bile
 yok; denetim spec'in ilk seçeneğini tek geçerli ad sanmış.
@@ -1436,6 +1436,38 @@ Tarama sırasında bu da "`DEPENDENCY_UNRESOLVED` kapsıyor, doc 09 §1018 alter
 diye adjudicate edilmişti. **O-10 (PR #402) bu slice review'dayken canonical sınıfı ekledi**
 (`shared/errors.py:576`, `PackageDependencyCycle`, kod `PACKAGE_DEPENDENCY_CYCLE`, doc 08 §10/§14).
 Artık spec adıyla mevcut; adjudication satırı geçersizdir ve bu kayıt onun yerini alır.
+
+### Sonradan canonical olan dört satır (2026-07-29 tazelemesi)
+
+`PACKAGE_DEPENDENCY_CYCLE` tek istisna değildi. **Yukarıdaki tablo yazıldığı anda doğruydu**;
+o günden bu yana dört slice daha, adjudicate edilmiş dört kodu **spec adıyla** implement etti.
+Dördü de O-03'ün İKİ PR'ından (kod #407 · doc #413, ikisi de 2026-07-28 sabahı) **sonra** indi —
+yani tablo bayatladı, yanlış yazılmadı. Bu satırlar artık geçersizdir; adjudication DEĞİL,
+**canonical implementasyon** geçerlidir:
+
+| Spec kodu | Eski adjudication | Şimdi canonical | İndiren |
+|---|---|---|---|
+| `INTRABAR_DATA_UNAVAILABLE` | `TICK_DATA_UNAVAILABLE` | `ReadinessIssueCode.INTRABAR_DATA_UNAVAILABLE` (`domain/readiness/enums.py:151`), emit `commands/readiness_check.py:510` | `8a7a707` K-08 (2026-07-28 19:25) |
+| `OHLCV_CONTEXT_REQUIRED` | `OHLCV_POLICY_CONFLICT` | `ReadinessIssueCode.OHLCV_CONTEXT_REQUIRED` (`domain/readiness/enums.py:157`), emit `domain/readiness/validators.py:1071` | `8a7a707` K-08 (aynı commit) |
+| `INVALID_ITEM_KIND` | `MAINBOARD_ITEM_KIND_MISMATCH` | `InvalidItemKindError` / `INVALID_ITEM_KIND` (`shared/errors.py:967-972`), `domain/mainboard/item_kind.py:43` | `0b73b06` O-27 (PR #450) |
+| `UPLOAD_JOB_FAILED` | `MANUAL_PARSE_FAILED` | `ManualUploadJobFailedError` / `UPLOAD_JOB_FAILED` (`shared/errors.py:2029-2045`), raise `commands/manual.py:126`, `:141` | `c8288b3` I15B-SL6 (PR #455) |
+
+Eski karşılıklar **silinmedi** — `TICK_DATA_UNAVAILABLE`, `OHLCV_POLICY_CONFLICT`,
+`MAINBOARD_ITEM_KIND_MISMATCH`, `MANUAL_PARSE_FAILED` hepsi hâlâ kendi ayrı kusurlarını
+anlatıyor. Değişen tek şey: spec kodu artık **kendi adıyla da** mevcut, dolayısıyla
+"bu kod yok, şu kod kapsıyor" cümlesi doğru değil.
+
+> **Bu bölümün kalıcı dersi budur.** O-03 bir kez bayatladı (#408 boş merge), sonra
+> review sırasında üç kez kaydı, şimdi dördüncü kez tazelendi. Bir adjudication tablosu
+> **tarihsel bir kayıttır, canlı bir sözleşme değil** — ağaca sorulmadan alıntılanamaz.
+> Ölü-sınıf tarafında bunu `tests/unit/test_error_taxonomy_no_dead_definitions.py`
+> otomatikleştiriyor (küme her koşuda ağaçtan yeniden hesaplanıyor); **adjudication
+> satırlarının böyle bir bekçisi yok** ve bu bilinçli bir açık: "spec kodu sonradan
+> canonical oldu mu" sorusu ancak spec §-numarasıyla eşleşen bir kaynak listesi
+> tutularak makineleştirilebilir, o liste de bugün yok.
+
+Tablodaki satır numaraları (`errors.py:576`, `policy.py:140`, …) **tarama anına aittir**
+ve rutin olarak kayar; bir satırı doğrularken numaraya değil, sembol adına grep at.
 
 ### TIMEZONE — "tek ada indir" reddedildi
 
@@ -1622,94 +1654,3 @@ Docker, iki E2E (dev-auth + gerçek tarayıcı/Compose) ve A11Y axe-core taramas
 
 ---
 
-## I-01 · Metric null status granularity — `no_drawdown` / `no_losing_trade` (branch `feat/i01-metric-null-status-granularity`)
-
-### Kusur (ampirik doğrulandı) — ve düzeltilen bir yanlış teşhis
-
-`domain/backtest/metrics.py::derive_metric_values` **her** null metriği tek bir ikili kurala
-düşürüyordu: `total_trades == 0` ise `NO_QUALIFYING_TRADES`, değilse `NOT_AVAILABLE`. İki sonuç:
-
-1. **Neden-null bilgisi kayboluyordu.** Doc 17 §9.2 ROMAD için "Max drawdown=0 ise null +
-   `no_drawdown`; infinity yasak", Profit Factor için "Gross loss=0 ise null + `no_losing_trade`"
-   diyor; doc 16 §9.3 böyle bir ROMAD'ı null-last sıralıyor. `MetricAvailability` (enums.py:48)
-   bu iki değeri **hiç tanımlamıyordu** — motor doğru şekilde `None` üretiyor (`engine.py:2969-2976`,
-   `execution/portfolio.py:147-152`: her ikisi de sıfır bölene karşı fail-closed), ama okuyucu
-   "neden" bilgisini asla göremiyordu.
-2. **Yanlış gerekçe etiketleniyordu.** `total_trades == 0` olan bir koşuda `net_profit` /
-   `max_drawdown` / `romad` gibi **equity-curve** metrikleri de `NO_QUALIFYING_TRADES` damgası
-   alıyordu. Bu metriklerin paydası trade root'a bağlı değil — sebep olarak trade yokluğunu
-   göstermek düpedüz yanlış bir ifadeydi.
-
-**Görev tanımındaki "NOT_COMPUTED ölü enum" iddiası ampirik olarak YANLIŞ çıktı.** Tek üretici
-`derive_metric_values` değil: `application/queries/metric_profile.py:196::_metric_card_not_computed`
-onu gerçekten emit ediyor — kullanıcının Arrange Metrics profilinin **seçtiği** ama bu immutable
-Result'ın **hiç hesaplamadığı** metrik için (doc 17 §6.1 "Not computed for this result"). Bu,
-"motor çalıştı ve değer üretemedi"den **farklı bir olgu**. Dolayısıyla enum kaldırılmadı; iki
-üreticinin ayrık (disjoint) olduğu enum docstring'ine ve bir regresyon testine yazıldı.
-
-### Ne landed
-
-**Enum — iki yeni granül durum (`domain/backtest/enums.py`).** `MetricAvailability` artık altı
-değer: mevcut `computed` / `not_computed` / `not_available` / `no_qualifying_trades` **isim ve
-değer olarak dokunulmadan** + `NO_DRAWDOWN = "no_drawdown"` ve `NO_LOSING_TRADE = "no_losing_trade"`.
-Docstring iki üreticiyi (motor fold'u vs. Arrange Metrics profil görünümü) ayrık olarak tanımlıyor.
-
-**Registry — `trade_dependent` bayrağı (`domain/backtest/metrics.py`).** `MetricDefinition`'a
-varsayılanı `False` olan bir alan eklendi; doc 17 §9.2'ye göre paydası kapalı trade root'a bağlı
-altı metrik (`win_rate`, `profit_factor`, `total_trades`, `total_stops`, `max_stop_streak`,
-`total_winning_trades`) `True`. Equity metrikleri (`net_profit`, `max_drawdown`, `romad`) `False`
-— **yalnız** `trade_dependent` bir metrik `NO_QUALIFYING_TRADES` etiketi alabilir.
-
-**Tek karar noktası — `_null_availability()`.** Sıra bilinçli:
-`summary_key` **hiç yoksa** → `NOT_AVAILABLE` (yokluk dışında bilinen bir sebep yok; anahtarın
-VAR olup `None` olması ise bir fold'un bilerek null'ladığı anlamına gelir, ancak o zaman sebep
-adlandırılabilir) → `romad` + `max_drawdown_pct == 0` → `NO_DRAWDOWN` → `profit_factor` +
-`total_trades > 0` → `NO_LOSING_TRADE` (her iki fold da profit_factor'ü **tek** koşulda null'lar:
-`gross_loss == 0`; trade varken sebep "kayıp trade yok"tur) → `trade_dependent` + 0 trade →
-`NO_QUALIFYING_TRADES` → aksi halde `NOT_AVAILABLE`. `FORMULA_VERSION` ve registry **dokunulmadı**.
-
-**Frontend (`lib/backtest.ts`, `components/ResultDetail.tsx`) — salt sunum.**
-`AVAILABILITY_LABELS` doc 17 §6.1'in "Nihai UI metni" sütununa **verbatim** hizalandı:
-`not_computed` → **"Not computed for this result"** (önce kısaltılmış "Not computed" idi),
-`no_drawdown` / `no_losing_trade` → **"Not available"** (doc 17 §6 romadInfo/profitFactorInfo:
-"it is reported as Not available with a no_drawdown status"). Availability sütunu artık ham wire
-token yerine kısa insan etiketi gösteriyor (`metricAvailabilityStatusLabel`) ve `title` olarak doc
-17 §6'nın **verbatim** gerekçe cümlesini taşıyor (`METRIC_AVAILABILITY_NOTES`). Route path, react-
-query key, OCC token, Idempotency-Key, hook ve SSE taksonomisi dokunulmadı.
-
-### Testler
-
-`backend/tests/unit/test_metric_availability.py` (YENİ, 6 test — hepsi **gerçek motoru** koşturur,
-sentetik summary yalnız "anahtar hiç yok" vakasında): drawdown'sız kazançlı koşuda ROMAD
-`no_drawdown` (0 DEĞİL, `not_available` DEĞİL) · aynı koşuda profit_factor `no_losing_trade` ·
-sıfır-trade koşusunda equity metrikleri `computed`, ROMAD `no_drawdown`, yalnız win_rate/
-profit_factor `no_qualifying_trades` · eksik anahtar `not_available` kalır (I-01 regresyonu) ·
-`derive_metric_values` **asla** `not_computed` emit etmez · `trade_dependent` kümesi doc 17 §9.2
-listesiyle birebir. Fixture geometrisi `tests/unit/test_backtest_engine` yardımcılarından alınıyor
-(repoda 7 dosyanın izlediği mevcut desen) — ikinci bir config kopyası drift üretirdi.
-
-`test_backtest_engine.py::test_missing_ratio_metric_is_non_computed_never_zero` yeni semantiğe
-hizalandı: equity metrikleri `NOT_AVAILABLE`, trade-paydalı ikisi `NO_QUALIFYING_TRADES`.
-
-`frontend/src/test/metricAvailabilityText.test.tsx` (YENİ, 5 test): §6.1 verbatim metinleri ·
-`no_drawdown`/`no_losing_trade` "Not available" (em-dash DEĞİL, "0.00" DEĞİL) · statü etiketleri ·
-§6 gerekçe cümleleri · `not_available` için uydurma not YOK. `backtestRun.test.tsx` tek assert'i
-`getAllByText("Not available")` (2 düğüm) olarak yeni markup'a hizalandı.
-
-### Dürüst sınırlar
-
-- **Migration YOK, alembic head `0039_backtest_run_cancellation` olarak kaldı.** `metric_value.
-  availability` non-native enum (`types.py::enum_column`, `native_enum=False`) → CHECK constraint
-  **üretilmiyor**, kolon `VARCHAR(20)`; yeni değerler 11 ve 15 karakter. `CreateTable` çıktısıyla
-  ampirik doğrulandı: kolon tipi değişmedi.
-- **`ENGINE_VERSION` bump EDİLMEDİ** ve motor dosyalarına dokunulmadı. Fark salt okuma-modelinde:
-  aynı summary, aynı sayılar, farklı **statü adı**. Reprodüksiyon sözleşmesi etkilenmiyor.
-- **`gross_loss` motor summary'sine eklenmedi.** `no_losing_trade` çıkarımı "profit_factor null +
-  trade var" üzerinden yapılıyor; bu iki fold'da da tam olarak `gross_loss == 0` demek (kod yorumu
-  bu bağı pinliyor). Summary'ye yeni alan eklemek sonuç değerlerini değiştirmeden persist edilen
-  şekli genişletirdi — kapsam dışı bırakıldı.
-- **Geçmiş Result satırları geriye dönük yeniden etiketlenmedi.** `metric_value` satırları immutable;
-  I-01 öncesi yazılmış bir ROMAD null'u `no_qualifying_trades`/`not_available` olarak kalır. Yeni
-  granülerlik yalnız bundan sonraki koşularda görünür — kayıtlı, bilinçli sınır.
-- `no_drawdown` ve `no_losing_trade` **openapi.json'a yansımadı** çünkü `availability` yayımlanan
-  şemada serbest `string`; enum olarak publish edilmiş değil (drift guard tetiklenmedi).

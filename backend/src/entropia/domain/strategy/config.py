@@ -9,6 +9,7 @@ Field validators enforce:
 - Order config: limit details present iff type is limit/stop-limit; stop trigger
   details present iff type is stop/stop-limit (§2, Master Ref §6.2/§6.3)
 - Signal block: min_supporting_count required for min_supporting rule (§3)
+- Restrictions: min_true_count required for the min_n_of_m rule (§8, doc 02 §5.8)
 - Sizing: base_position_size required iff method='base_position_size' (§6)
 """
 
@@ -828,10 +829,55 @@ class ScalingLimits(BaseModel):
 class RestrictionsFilters(BaseModel):
     """Entry eligibility filters (§8)."""
 
-    rule: Literal["any", "all"] = Field(default="any", description="Filter aggregation")
+    rule: Literal["any", "all", "min_n_of_m"] = Field(
+        default="any",
+        description=(
+            "Restriction Rule / combination (doc 02 §5.8). any: ANY active restriction "
+            "blocks entry. all: entry is blocked only when EVERY enabled restriction is "
+            "active. min_n_of_m (I-15a): entry is blocked once at least "
+            "``min_true_count`` enabled restrictions are active. The shipped field name "
+            "``rule`` is kept over the spec's ``restriction.combination`` (the shipped "
+            "name wins — same adjudication precedent as ErrorBody.details vs field_issues)."
+        ),
+    )
+
+    min_true_count: int | None = Field(
+        default=None,
+        ge=1,
+        # validate_default is REQUIRED for the presence gate below to fire: a pydantic
+        # field validator does not run for a key that is simply ABSENT, only for one sent
+        # explicitly (including an explicit null). SignalBlock.min_supporting_count has the
+        # same shape WITHOUT this flag, so its presence gate only catches an explicit null
+        # and the compiler's satisfiability rule is what really closes it. Here the gate is
+        # real at the model layer too — an absent N must never quietly degrade to N=1,
+        # which is the "any" rule wearing the Minimum-N label.
+        validate_default=True,
+        description=(
+            "Minimum N of M (doc 02 §5.8): how many enabled restrictions must be active "
+            "at once before entry is blocked. Required for — and only stored for — "
+            "rule=min_n_of_m; mirrors SignalBlock.min_supporting_count."
+        ),
+    )
+
     filters: list[RestrictionFilter] = Field(
         default_factory=list, description="Individual filters (toggleable)"
     )
+
+    @field_validator("min_true_count", mode="before")
+    @classmethod
+    def min_true_count_required_if_rule(cls, v: Any, info: ValidationInfo) -> Any:
+        """Structural presence gate for Minimum-N-of-M (mirrors SignalBlock).
+
+        A count sent under any/all is DROPPED rather than rejected, so switching the
+        rule back never leaves a stale N in the saved revision (Binding Decision #2's
+        disabled-subtree convention applied to a scalar).
+        """
+        rule = info.data.get("rule")
+        if rule == "min_n_of_m" and v is None:
+            raise ValueError("Minimum restriction count required for min_n_of_m rule")
+        elif rule != "min_n_of_m":
+            return None
+        return v
 
 
 class RestrictionFilter(BaseModel):

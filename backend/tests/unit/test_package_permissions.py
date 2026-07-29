@@ -21,6 +21,7 @@ def _perms(
     lifecycle: str | None = "active",
     validation: PackageValidationState = PackageValidationState.PASSED,
     approval: ApprovalState = ApprovalState.DRAFT,
+    has_validatable_draft: bool = False,
 ) -> PackagePermissions:
     return package_permissions(
         actor,
@@ -29,6 +30,7 @@ def _perms(
         lifecycle_state=lifecycle,
         validation_state=validation,
         approval_state=approval,
+        has_validatable_draft=has_validatable_draft,
     )
 
 
@@ -40,10 +42,21 @@ def test_owner_of_active_passed_package_has_full_edit_rights() -> None:
     assert not p.can_approve_publish  # owner is not Admin (CR-02)
 
 
-def test_request_validation_flag_is_no_longer_projected() -> None:
-    # R2 does not add a Library-plane validation-run command, so the projection no
-    # longer advertises an un-performable action (doc 08 §4.3).
-    assert not hasattr(_perms(OWNER), "can_request_validation")
+def test_request_validation_flag_is_projected_once_a_draft_backs_the_root() -> None:
+    # S-L3: the Library-plane validation-run command now exists, so doc 08 §4.2's
+    # can_request_validation is projected — but only when the root is actually backed
+    # by a Create Package draft. The old promise ("never advertise an un-performable
+    # action", doc 08 §4.3) is kept by that second condition, not by hiding the flag.
+    assert _perms(OWNER, has_validatable_draft=True).can_request_validation
+    # A Derived or seeded package has no draft to certify.
+    assert not _perms(OWNER, has_validatable_draft=False).can_request_validation
+
+
+def test_request_validation_needs_edit_rights_and_an_active_root() -> None:
+    assert not _perms(OTHER, has_validatable_draft=True).can_request_validation
+    assert not _perms(
+        OWNER, lifecycle="deprecated", has_validatable_draft=True
+    ).can_request_validation
 
 
 def test_request_approval_flag_turns_off_once_requested() -> None:

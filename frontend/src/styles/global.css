@@ -560,6 +560,9 @@ p a { text-decoration: underline; }
 .auth-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
 .auth-field > span { font-size: 13px; color: var(--text-dim); }
 .auth-optional { color: var(--text-faint); font-weight: 400; }
+/* Required-field marker (doc 21 §5): the `*` matches a backend request-
+   validation requirement, so it stays visible next to the label text. */
+.auth-required { color: var(--down); font-weight: 700; }
 .auth-input {
   padding: 8px 10px;
   border-radius: var(--radius);
@@ -748,6 +751,21 @@ p a { text-decoration: underline; }
 .manual-appended-document-title { font-size: 17px; font-weight: 900; color: var(--text); line-height: 1.25; margin-bottom: 4px; }
 .manual-appended-document-meta { font-size: 10px; color: var(--text-faint); margin-bottom: 12px; }
 .manual-document-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
+/* Remove confirmation (doc 21 §6.1): title + body read as a block above the
+   Cancel | Move to Trash pair rather than inline with the action row. */
+.manual-remove-confirm {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  background: var(--bg-elev-2);
+}
+.manual-remove-confirm p { margin: 0; }
+.manual-remove-confirm .auth-input { width: 100%; }
 .manual-blocks p { margin: 8px 0; }
 .manual-code {
   background: var(--bg-elev-2);
@@ -1614,6 +1632,27 @@ p a { text-decoration: underline; }
   gap: 12px;
   margin-bottom: 14px;
 }
+/* Rationale Family suggestion chips (master ref Module 6 §11). Spans the grid so
+   the chip row sits under the selector instead of squeezing into one column. */
+.cp-identity-grid .cp-suggest {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.cp-chip-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.cp-chip {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elev-2);
+  color: var(--text);
+  font-size: 12px;
+  padding: 4px 10px;
+  min-height: 28px;
+  cursor: pointer;
+}
+.cp-chip:hover { border-color: var(--accent); }
+.cp-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .cp-controls-row label,
 .cp-identity-grid label { display: flex; flex-direction: column; gap: 6px; }
 .cp-controls-row label > span,

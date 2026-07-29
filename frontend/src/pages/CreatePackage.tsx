@@ -34,6 +34,7 @@ import {
   usePackageRequest,
   usePackageRequests,
   useRationaleFamilies,
+  useRationaleFamilySuggestions,
   useRequestRevision,
   useRunValidation,
   useStartBaselineParse,
@@ -265,6 +266,10 @@ function Workspace({
   // UI-07: Pre-Check is an accessible overlay opened from this workspace (the
   // request is already selected here — no request table to walk / re-select).
   const [precheckOpen, setPrecheckOpen] = useState(false);
+  // Family suggestion box (master ref Module 6 §11). Local-only search text; the
+  // hook is a read and stays disabled below 2 characters.
+  const [familyQuery, setFamilyQuery] = useState("");
+  const familySuggestions = useRationaleFamilySuggestions(familyQuery);
   const families = useRationaleFamilies(null);
   const create = useCreatePackageRequest();
   const generate = useGenerateCandidate();
@@ -493,6 +498,43 @@ function Workspace({
             </select>
           )}
         </label>
+        {/* Family suggestion chips (master ref Module 6 §11, §9.3). Read-only: the
+            chips come from GET /rationale-families:suggest and picking one only sets
+            the selector above. Nothing is created — §9.3 forbids silently making a
+            Family card or changing an assignment on the user's behalf, so an
+            unmatched query says so instead of offering to create one. */}
+        {!isEsp ? (
+          <div className="cp-suggest" role="group" aria-label="Suggested families">
+            <input
+              aria-label="Search rationale families"
+              placeholder="Search families (e.g. reversal)…"
+              value={familyQuery}
+              onChange={(e) => setFamilyQuery(e.target.value)}
+            />
+            {familySuggestions.data?.data.length ? (
+              <div className="cp-chip-row">
+                {familySuggestions.data.data.map((s) => (
+                  <button
+                    key={s.entity_id}
+                    type="button"
+                    className="cp-chip"
+                    aria-label={`Use family ${s.display_name}`}
+                    onClick={() =>
+                      setForm((prev) => ({ ...prev, rationale_family_id: s.entity_id }))
+                    }
+                  >
+                    {s.display_name}
+                    {s.subfamilies.length ? ` · ${s.subfamilies.join(", ")}` : ""}
+                  </button>
+                ))}
+              </div>
+            ) : familyQuery.trim().length >= 2 && !familySuggestions.isLoading ? (
+              <p className="cp-note">
+                No existing family matched — create one from the Rationale Families page.
+              </p>
+            ) : null}
+          </div>
+        ) : null}
         <label>
           <span>Output type</span>
           <select

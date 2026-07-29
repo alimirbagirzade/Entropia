@@ -18,7 +18,7 @@ python3 docs/audit/acceptance_id_scan.py
 ```
 
 Tam kayıt: `docs/PROJECT_HISTORY.md` §I-17 · Denetim artefaktı:
-`docs/audit/acceptance_id_traceability.md` (§C = doc 06/08/09 eşlemesi, §E = gerçek boşluklar).
+`docs/audit/acceptance_id_map.md` (§C = doc 06/08/09 eşlemesi, §E = gerçek boşluklar).
 
 ---
 
@@ -27,7 +27,7 @@ Tam kayıt: `docs/PROJECT_HISTORY.md` §I-17 · Denetim artefaktı:
 | Çapa | Ne için |
 |---|---|
 | `docs/audit/acceptance_id_scan.py` | ID izlenebilirliğini yeniden ölçen tarayıcı (rapor, gate değil) |
-| `docs/audit/acceptance_id_traceability.md` §C | `CP-01…16` / `PL-01…21` / `ESP-01…20` audit-local ID'leri |
+| `docs/audit/acceptance_id_map.md` §C | `CP-01…16` / `PL-01…21` / `ESP-01…20` audit-local ID'leri |
 | `tests/unit/test_source_scan.py:1,28` | Kanonik etiketleme deseni ("PC-05/PC-06") |
 | `unit/test_readiness_validators.py::test_strategy_without_a_rationale_family_blocks_ready_check` | RF-12 + yanındaki KUSUR yorumu |
 | `unit/test_trade_log_config.py::test_ready_save_without_a_source_file_is_an_import_binding_issue` | TL-04 deseni |
@@ -91,7 +91,7 @@ Session START + git doğrulama: git fetch && git log --oneline origin/main -6 &&
 PR #416'nın (I-17 acceptance ID izlenebilirliği) merge olduğunu ve Backend CI'ının YEŞİL olduğunu
 doğrula — RF-16 lokalde koşturulamadı, otoritesi o job.
 
-Bağlam: docs/PROJECT_HISTORY.md §I-17 ve docs/audit/acceptance_id_traceability.md §E.1.
+Bağlam: docs/PROJECT_HISTORY.md §I-17 ve docs/audit/acceptance_id_map.md §E.1.
 
 KUSUR (ampirik doğrulandı, 2026-07-28): backend/src/entropia/domain/strategy/config.py:40
 `rationale_family_id: str = Field(...)` min_length taşımıyor. Sonuç:

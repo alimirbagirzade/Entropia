@@ -3047,3 +3047,10 @@ Kalan tek büyük açık iş hâlâ **R2'nin product-owner imzası**
 (`docs/implementation/v18_final_acceptance.md` §4, D-1…D-9) — imza olmadan
 `entropia_v18_remediation_status.md`'deki R2 RE-OPENING banner'ı kalkmaz.
 
+
+
+
+Kalan tek büyük açık iş hâlâ **R2'nin product-owner imzası**
+(`docs/implementation/v18_final_acceptance.md` §4, D-1…D-9) — imza olmadan
+`entropia_v18_remediation_status.md`'deki R2 RE-OPENING banner'ı kalkmaz.
+

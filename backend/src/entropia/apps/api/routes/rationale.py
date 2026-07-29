@@ -85,6 +85,21 @@ async def create_family(
     )
 
 
+# Declared BEFORE ``/rationale-families/{entity_id}``: FastAPI matches routes in
+# declaration order, and ":suggest" would otherwise bind as an entity_id and 404 on
+# a family that does not exist.
+@router.get("/rationale-families:suggest")
+async def suggest_families(
+    q: str = Query(default=""),
+    limit: int = Query(default=rationale_query.SUGGEST_DEFAULT_LIMIT, ge=1, le=100),
+    ctx: RequestContext = Depends(request_context),
+) -> dict[str, Any]:
+    """Read-only Family suggestions (master ref Module 6 §11). A GET with no
+    mutation: no Idempotency-Key, no OCC token, no ETag — there is nothing to
+    concur with, and applying a suggestion stays a separate audited command."""
+    return await rationale_query.suggest_families(ctx.session, ctx.actor, q=q, limit=limit)
+
+
 @router.get("/rationale-families/{entity_id}")
 async def get_family(
     entity_id: str,

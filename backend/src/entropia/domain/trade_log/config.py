@@ -17,6 +17,7 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
+from entropia.domain.importing.timezone import normalize_iana_timezone
 from entropia.domain.trade_log.enums import (
     ContentProfile,
     OhlcvUseMode,
@@ -83,11 +84,13 @@ class TimeModel(_Strict):
 
     @field_validator("source_timezone")
     @classmethod
-    def _tz_present(cls, value: str) -> str:
-        trimmed = (value or "").strip()
-        if not trimmed:
-            raise ValueError("source_timezone is required.")
-        return trimmed
+    def _tz_is_iana(cls, value: str) -> str:
+        """Doc 05 §5.2: an invalid/ambiguous zone is REJECTED, never carried forward.
+
+        Presence alone is not validity — before O-28 a config declaring ``"EST"`` or a
+        typo'd ``"America/New York"`` saved cleanly and only surfaced (if ever) as a
+        shifted instant downstream."""
+        return normalize_iana_timezone(value)
 
     @field_validator("normalization_timezone")
     @classmethod

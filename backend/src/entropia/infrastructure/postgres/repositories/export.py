@@ -31,7 +31,20 @@ _EXPORT_TO_ARTIFACT = {
     ExportType.EQUITY_CURVE: ArtifactType.EQUITY_CURVE,
     ExportType.SIGNAL_EVENTS: ArtifactType.SIGNAL_EVENTS,
     ExportType.DIAGNOSTICS: ArtifactType.DIAGNOSTICS,
+    # A PineScript signal marker is a RENDERING of the signal-event artifact, not a
+    # separate stored artifact: the same immutable rows, re-serialized for a chart
+    # overlay. Pointing it at SIGNAL_EVENTS keeps one source of truth, so a marker
+    # export can never disagree with the signal-event export of the same Result.
+    ExportType.PINESCRIPT_SIGNAL_MARKER: ArtifactType.SIGNAL_EVENTS,
 }
+# The artifacts an agent dataset is composed FROM, in a fixed order so the composite
+# is byte-deterministic (the export checksum depends on it).
+_AGENT_DATASET_ARTIFACTS = (
+    ArtifactType.TRADE_LEDGER,
+    ArtifactType.SIGNAL_EVENTS,
+    ArtifactType.EQUITY_CURVE,
+    ArtifactType.DIAGNOSTICS,
+)
 # ``(model, order_column)`` typed ``Any`` so the per-type column access is not
 # narrowed to the common ``type[Base]`` supertype (mypy attr-defined).
 _ARTIFACT_MODEL: dict[ArtifactType, tuple[Any, Any]] = {
@@ -42,37 +55,72 @@ _ARTIFACT_MODEL: dict[ArtifactType, tuple[Any, Any]] = {
 }
 
 
+async def _summary_rows(session: AsyncSession, result_id: str) -> list[dict[str, Any]]:
+    summary = (
+        (await session.execute(select(ResultSummary).where(ResultSummary.result_id == result_id)))
+        .scalars()
+        .first()
+    )
+    if summary is None:
+        return []
+    return [
+        {
+            "symbol": summary.symbol,
+            "timeframe": summary.timeframe,
+            "period_start": summary.period_start,
+            "period_end": summary.period_end,
+            "total_trades": summary.total_trades,
+            "headline": summary.headline,
+        }
+    ]
+
+
+async def _artifact_rows(
+    session: AsyncSession, result_id: str, artifact_type: ArtifactType
+) -> list[dict[str, Any]]:
+    model, order_col = _ARTIFACT_MODEL[artifact_type]
+    stmt = select(model).where(model.result_id == result_id).order_by(order_col.asc())
+    rows = (await session.execute(stmt)).scalars().all()
+    return [project_row(artifact_type, row) for row in rows]
+
+
+async def _agent_dataset_rows(session: AsyncSession, result_id: str) -> list[dict[str, Any]]:
+    """Compose the agent dataset from the Result's persisted immutable artifacts.
+
+    Doc 15 §3.2: "Agent dataset yalniz approved/scope-authorized artifactsden olusturulur;
+    UI local stateinden turetilmez." Two halves, both enforced:
+
+    * *from artifacts, not UI state* — every row here comes from a persisted artifact
+      table through the SAME ``project_row`` the drill-down and the single-artifact
+      exports use. Nothing is read from the request, and nothing is synthesized.
+    * *approved / scope-authorized* — the caller's scope is checked by the command
+      (``result_access.ensure_can_view_composition``), and the approval half is checked
+      there too against the run manifest's pinned package revisions, BEFORE this
+      composition runs. This function is deliberately not a policy layer.
+
+    Each row is tagged with its ``artifact_type`` so a consumer can tell a trade row
+    from a signal row without positional guessing, and the artifact order is fixed so
+    the composite checksum is reproducible.
+    """
+    composed: list[dict[str, Any]] = []
+    for artifact_type in _AGENT_DATASET_ARTIFACTS:
+        rows = await _artifact_rows(session, result_id, artifact_type)
+        composed.extend({"artifact_type": str(artifact_type), **row} for row in rows)
+    composed.extend(
+        {"artifact_type": "summary", **row} for row in await _summary_rows(session, result_id)
+    )
+    return composed
+
+
 async def load_source_rows(
     session: AsyncSession, *, result_id: str, export_type: ExportType
 ) -> list[dict[str, Any]]:
     """The immutable source rows for an export, in stable order (doc 15 §8.5, §14)."""
     if export_type is ExportType.SUMMARY:
-        summary = (
-            (
-                await session.execute(
-                    select(ResultSummary).where(ResultSummary.result_id == result_id)
-                )
-            )
-            .scalars()
-            .first()
-        )
-        if summary is None:
-            return []
-        return [
-            {
-                "symbol": summary.symbol,
-                "timeframe": summary.timeframe,
-                "period_start": summary.period_start,
-                "period_end": summary.period_end,
-                "total_trades": summary.total_trades,
-                "headline": summary.headline,
-            }
-        ]
-    artifact_type = _EXPORT_TO_ARTIFACT[export_type]
-    model, order_col = _ARTIFACT_MODEL[artifact_type]
-    stmt = select(model).where(model.result_id == result_id).order_by(order_col.asc())
-    rows = (await session.execute(stmt)).scalars().all()
-    return [project_row(artifact_type, row) for row in rows]
+        return await _summary_rows(session, result_id)
+    if export_type is ExportType.AGENT_DATASET:
+        return await _agent_dataset_rows(session, result_id)
+    return await _artifact_rows(session, result_id, _EXPORT_TO_ARTIFACT[export_type])
 
 
 async def create_export(

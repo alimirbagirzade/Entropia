@@ -96,9 +96,10 @@ jobs:
         working-directory: frontend
         # `npm run coverage` is `vitest run --coverage` — the same suite `npm test`
         # runs, plus the thresholds in vite.config.ts. Running it here instead of
-        # `npm test` keeps CI to a single pass over the suite. It also raises the
-        # per-test timeout: v8 instrumentation slows jsdom + Testing Library
-        # renders enough to trip the 5 s default on a 2-core runner.
+        # `npm test` keeps CI to a single pass over the suite. The timeouts v8
+        # instrumentation needs (`testTimeout` in vite.config.ts,
+        # `asyncUtilTimeout` in src/test/setup.ts) are set in config, not as
+        # flags here, so both modes time out identically.
         run: npm run coverage
       - name: Build
         working-directory: frontend

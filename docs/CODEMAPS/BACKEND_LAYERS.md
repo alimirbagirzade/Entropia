@@ -2,6 +2,11 @@
 
 Katmanlar: `domain/` (saf, I/O yok) → `application/{commands,queries,jobs}` → `infrastructure/` → `apps/{api,worker,scheduler}`.
 
+> **Dosya sayıları (2026-07-29, ampirik):** `application/commands` **32** · `application/queries`
+> **37** · `application/jobs` **14** · `domain/` **26 paket**. Aşağıdaki tablolar bu dosyaların
+> **tamamını** adlandırır (`__init__.py` hariç). Bir modül eklendiğinde satırı da ekle — bu dosya
+> türetilmiş bir haritadır, otomatik tazelenmez.
+
 **Command konvansiyonu (her modülün docstring'inde tekrarlanan):** modül seviyesinde `async def`,
 request bağımlılığından gelen **TEK transaction**, burada **asla commit yok**, şekil =
 `policy check → pure domain state-machine → persist → audit + outbox (aynı tx)`.
@@ -16,7 +21,7 @@ request bağımlılığından gelen **TEK transaction**, burada **asla commit yo
 | `agent_coordinator.py` | Deterministik Coordinator iskeleti — safe-checkpoint makinesi | `agent_checkpoint`, `agent_task` |
 | `agent_loop.py` | Sürekli Coordinator cycle (iskeletin gerçek döngü gövdesi) | `agent_task`, `agent_checkpoint`, `agent_event` |
 | `agent_artifact.py` | Analysis Lab output soft-delete (owner Agent / Admin) — state flip + **Trash Entry** + audit/outbox tek tx (K-06) | `hypothesis_artifact`, `trash_entries` |
-| `allocation_plan.py` | Portfolio / Equity Allocation draft upsert, validate, revision append | `portfolio_allocation_plan`, `..._entry`, `..._revision` |
+| `allocation_plan.py` | Portfolio / Equity Allocation draft upsert, validate, revision append. **Portfolio-level cross-item kuralları** (`max_total_exposure_percent`, `conflict_policy`) burada plan köküne yazılır ve revision `config` snapshot'ına taşınır — bu iki alan **doc 13 §8.2'de YOK**, tam kayıt: `docs/PROJECT_HISTORY.md` §B-1 | `portfolio_allocation_plan`, `..._entry`, `..._revision` |
 | `auth.py` | Local auth: `sign_up` / `login` / `logout` / `reauthenticate` / first-Admin bootstrap | `human_credentials`, `auth_sessions`, `reauth_proofs`, `human_users` |
 | `backtest_run.py` | RUN admission (sunucu tarafı preflight) + retry + Result soft-delete | `backtest_run`, `backtest_run_manifest`, `backtest_result` |
 | `backtest_run_context.py` | K-04: manifest'in deref arkasındaki 3 alan grubu (strategy/package · external object · data/time) admission'da çözülür; worker `_unresolved_pins` ile fail-closed doğrular | okuma: `work_object_revision`, `package_revision`, `market_dataset_revision`, `dataset_coverage_slice`, `research_dataset_revision`, `normalized_signal_event_revision`, `canonical_trade_record_batch` |
@@ -57,6 +62,10 @@ request bağımlılığından gelen **TEK transaction**, burada **asla commit yo
 | `backtest_run.py` | RUN durumu + Result detayı (yalnız `result_id` + değişmez artifact'lardan hidrasyon) | `backtest_run`, `backtest_result`, `result_summary` |
 | `capability.py` | Capability registry listesi/detayı + Graphic View overview | `future_capability` |
 | `create_package.py` | CP istekleri + scan artifact (owner veya Admin görürlüğü) | `package_request`, `dependency_scan` |
+| `dependency_pins.py` | **Approve-time** pinlenmiş ESP resolver ref'lerinin yeniden doğrulaması (doc 06 §7). Pre-Check ref'leri pinler ama Pre-Check ile Approve **iki ayrı insan adımıdır**; arada `trusted_active` bir resolver deprecate olabilir → approve kapısı yeniden bakar | `embedded_resolver_registry`, `package_revision` |
+| `package_dependency.py` | **Publish-time** bağımlılık grafı çözümü + döngü kapısı (doc 08 §10/§13/§14). `A -> B -> A` yaratan publish denemesi **SUNUCU** tarafından, döngü yolunu adlandıran bir teşhisle reddedilir — UI asla kapı değildir | `package_root`, `package_revision` |
+| `panel_backtest_log.py` | Admin Panel backtest-log read model (doc 19, P-14) — `GET /admin/backtest-logs`'un PRIMARY görünümü: değişmez `backtest_result` üzerinde newest-first, cursor'lı "All User Backtest Logs" projeksiyonu. Admin "hangi kullanıcı hangi backtest'i koştu"yu **domain event çözmeden** okur. Net Profit / ROMAD / Trades kolonları `metric_value` satırlarından hidre edilir, `result_summary`'den DEĞİL | `backtest_result`, `metric_value`, `human_users`, `entity_registry` |
+| `timezone_audit.py` | **K-01 geriye-dönük denetim, SALT-OKUMA:** sessiz-UTC varsayımı altında alınmış revizyonları bulur. K-01 öncesi parse yolu beyan edilen timezone'u yok sayıp her NAIVE damgayı UTC okuyordu → `custom`+UTC-dışı IANA veya identifier taşımayan `exchange` beyan eden revizyon **yanlış an**'da saklanıp yine de auto-verify oluyordu | `market_dataset_revision`, `research_dataset_revision` |
 | `esp.py` | ESP registry listesi/detayı + resolve probe (rol-farkındalıklı) | `embedded_resolver_registry` |
 | `funding.py` | Pinlenmiş Funding kaynağını available-time-güvenli takvime çöz (F-11) | `research_*`, `market_*` |
 | `indicator_plan.py` | Pinlenmiş StrategyConfig → hesaplanabilir indicator plan (paket gövdesi çalıştırılmaz) | `package_revision` |
@@ -108,21 +117,21 @@ request bağımlılığından gelen **TEK transaction**, burada **asla commit yo
 |---|---|---|
 | `admin_panel` | `log_taxonomy`, `role_matrix` | Log olay taksonomisi + kanonik rol-scope matrisi (doc 19) |
 | `agent_lab` | `cursor`, `enums`, `state_machine`, `tool_gateway` | Analysis Lab durum makinesi + gateway sözleşmesi |
-| `allocation` | `config`, `enums`, `rules` | Run-scoped paylaşımlı sermaye havuzu tipleri + semantik kurallar |
+| `allocation` | `config`, `enums`, `rules` | Run-scoped paylaşımlı sermaye havuzu tipleri + semantik kurallar. **Portfolio-level cross-item kuralları burada tanımlı ve doc 13 §8.2'de YOK:** `config.py:118-119` iki alan · `enums.py:37-53` `CrossItemConflictPolicy` (`NET` / `BLOCK_OPPOSITE` / `KEEP_SEPARATE`) · `rules.py:164-186` `MAX_TOTAL_EXPOSURE_INVALID` (BLOCKER) + `CONFLICT_POLICY_NET_V1` (WARNING). Tam kayıt: `docs/PROJECT_HISTORY.md` §B-1 |
 | `backtest` | `engine`, `capabilities`, `indicators`, `manifest`, `metrics`, `artifacts`, `export`, `funding`, `history`, `result_visibility`, `enums` | Bar-replay engine, artımlı TA compute, değişmez Run Manifest, kanonik metrikler. **`capabilities`** = makine-okur capability matrix (F-05): her opsiyon DEĞERİ `active_v1`/`future_dev` + bağımlılık notu; engine (fail-closed gate), Ready Check (`STRATEGY_CAPABILITY_NOT_IN_BUILD`) ve UI (üretilen `frontend/src/lib/engineCapabilityMatrix.generated.ts` aynası) tek kaynak olarak bunu tüketir |
 | `capability` | `baseline`, `enums`, `lifecycle` | Future Dev capability registry durum makinesi + activation gate'leri |
 | `create_package` | `candidate`, `generator`, `source_scan`, `language_detect`, `validation`, `state_machine`, `policy`, `baseline`, `value_objects`, `enums` | CP + Pre-Check; deterministik candidate manifest (`GENERATOR_VERSION`). **Pre-Check fail-closed (K-05):** `source_scan` (`SOURCE_SCANNER_VERSION=source-lexer-2.0`) tanınmayan-token oranı + kapanmamış string/blok yorum sayar → `PARSE_UNSUPPORTED`; `language_detect` (`LANGUAGE_DETECTOR_VERSION`) içerik dil sinyali → seçimle çelişki `SOURCE_LANGUAGE_MISMATCH`, rakip kanıt `REQUIRES_CLARIFICATION`. Üçü de FAILED scan + `precheck_failed`, asla PASSED |
 | `deletion` | `state_machine` | Soft-delete/restore/purge geçiş kuralları |
 | `esp` | `resolver`, `policy`, `state_machine`, `validation`, `enums` | ESP resolver imza/trust durum makinesi |
 | `identity` | `actor`, `policy` | `require_admin` / `require_role` / `require_*_admin` — tüm yetki yardımcıları |
-| `importing` | `column_mapping` | TS + TL sınırlayıcılı dosya importer'larının paylaşımlı yardımcıları |
+| `importing` | `column_mapping`, `source_file`, `timezone` | TS + TL sınırlayıcılı dosya importer'larının paylaşımlı yardımcıları. **`source_file`** = fail-closed dosya-tipi kapısı (K-07; doc 05 §5.2 + doc 04 §7 — filename yok/boş → RED, uzantı iddiası içerik sniff'i ile desteklenir). **`timezone`** = ortak kaynak-timezone kapısı (O-28): beyan edilen zaman dilimi GERÇEK bir IANA tanımlayıcısı olmalı (`zoneinfo` çözmeli) ve kayıtları üreten import ile çapraz kontrol edilir — iki kural ikizler drift edemesin diye **tek yerde** |
 | `instrument` | `scope`, `policy`, `state_machine`, `enums` | Kanonik enstrüman kapsamı + registry durumu |
 | `lifecycle` | `enums` | `Role`, `VisibilityScope` gibi çapraz enum'lar |
-| `mainboard` | `composition`, `enums` | Kompozisyon hash/fingerprint (yalnız re-export yüzeyi) |
+| `mainboard` | `composition`, `enums`, `item_kind` | Kompozisyon hash/fingerprint (yalnız re-export yüzeyi). **`item_kind`** = istemciden gelen item-kind koruması (doc 03 §11, AOS-03): chooser yalnız `trading_signal` / `trade_log` sunar; V18 legacy prototip etiketleri (`signal_package` / `trade_log_package`) 422 **`INVALID_ITEM_KIND`** verir ve **hiçbir** PackageKind genişlemesi/kök/revizyon yaratmaz |
 | `manual` | `blocks`, `stream`, `baseline`, `enums` | Kanonik güvenli-render blokları + stream ayrımı |
 | `market_data` | `schema_mapping`, `validation_rules`, `state_machine`, `policy`, `value_objects`, `enums` | Market Data domain yüzeyi (re-export) |
 | `metric_profile` | `profile`, `registry`, `enums` | Result View Metric Profile |
-| `package` | `catalog`, `kind`, `permissions`, `policy`, `enums` | Paylaşımlı paket yüzeyi: katalog facet'leri + on izin bayrağı |
+| `package` | `catalog`, `kind`, `permissions`, `policy`, `enums`, `dependency_graph` | Paylaşımlı paket yüzeyi: katalog facet'leri + izin bayrakları (S-L3 ile `can_request_validation` eklendi). **`dependency_graph`** = saf, yan etkisiz döngü dedektörü (doc 08 §9.1/§10/§13/§14): çağıran pinlenmiş kenarları DB'den materyalize eder, bu modül TEK soruyu cevaplar — graf `A -> B -> A` kapatıyor mu? — ve döngüdeki kökleri **adlandırır** (§14 çıplak ret'ten fazlasını ister) |
 | `rationale` | `colors`, `names`, `policy`, `enums` | Rationale Families |
 | `readiness` | `validators`, `issues`, `enums` | Saf, deterministik readiness doğrulayıcıları |
 | `research_data` | `time_policy`, `usage_scope`, `quality_rules`, `state_machine`, `policy`, `value_objects`, `enums` | Research Data domain yüzeyi |
@@ -131,4 +140,4 @@ request bağımlılığından gelen **TEK transaction**, burada **asla commit yo
 | `strategy` | `compiler`, `config`, `enums` | Strategy config tipleri + derleyici (blocking issue üretir) |
 | `trade_log` | `compiler`, `config`, `records`, `enums` | Trade Log external work object (CR-01/TL-01) |
 | `trading_signal` | `compiler`, `config`, `events`, `enums` | Trading Signal external work object |
-| `trash` | `page` | Trash sayfa sözleşmesi (doc 20) |
+| `trash` | `page`, `redaction`, `restore` | Trash sayfa sözleşmesi (doc 20). **`redaction`** (I-09, doc 20 §12/§15) = snapshot redaksiyonu + boyut sınırı; I-09 öncesi detay sorgusu `deletion_snapshot`/`dependency_snapshot`'ı **verbatim** döndürüyordu, §12 ise "yalnız redakte/boyut-sınırlı veri" ve "Trash detayında asla credential/secret/token render etme" diyor. **`restore`** (O-17, doc 20 §5/§6/§8.2) = restore preflight çakışma taksonomisi + **tipli resolution kataloğu**; önceden `RestoreConflictError` **çıplak** fırlatılıyordu, Admin alternatifsiz bir 409 alıyordu ve §8.2'nin "Admin YALNIZ domain adaptörünün sunduğu tipli çözümlerden seçer" kuralının seçecek bir şeyi yoktu |

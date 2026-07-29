@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from collections.abc import Collection, Sequence
 
-from sqlalchemy import func, select
+from sqlalchemy import Text, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from entropia.domain.lifecycle.enums import DeletionState, PackageKind
@@ -214,6 +214,42 @@ async def list_active_family_heads(
         stmt = stmt.where(EntityRegistry.entity_id > cursor)
     stmt = stmt.order_by(EntityRegistry.entity_id.asc()).limit(limit)
     return [(r[0], r[1], r[2]) for r in (await session.execute(stmt)).all()]
+
+
+async def search_active_family_heads(
+    session: AsyncSession, *, q: str, limit: int
+) -> Sequence[tuple[EntityRegistry, RationaleFamilyRevision]]:
+    """Active family heads whose CURRENT revision matches ``q`` as a substring.
+
+    READ-ONLY (master ref Module 6 §11: suggestion only, never a mutation). Matching
+    is case-insensitive via the stored ``normalized_name``, so the caller does not
+    reimplement the casefold rule — ``q`` is normalized the same way before it arrives.
+
+    ``subfamilies_json`` is searched too: someone typing "reversal" should find a
+    family that carries it as a subfamily even when the display name does not, since
+    §9.3 is about matching detected LOGIC to the catalog, not matching titles.
+
+    Ordered by ``normalized_name`` so the suggestion list is stable across calls.
+    """
+    like = f"%{q}%"
+    stmt = (
+        select(EntityRegistry, RationaleFamilyRevision)
+        .join(
+            RationaleFamilyRevision,
+            RationaleFamilyRevision.revision_id == EntityRegistry.current_revision_id,
+        )
+        .where(
+            EntityRegistry.entity_type == ENTITY_TYPE,
+            EntityRegistry.deletion_state == DeletionState.ACTIVE,
+            or_(
+                RationaleFamilyRevision.normalized_name.like(like),
+                func.lower(cast(RationaleFamilyRevision.subfamilies_json, Text)).like(like),
+            ),
+        )
+        .order_by(RationaleFamilyRevision.normalized_name.asc())
+        .limit(limit)
+    )
+    return [(r[0], r[1]) for r in (await session.execute(stmt)).all()]
 
 
 async def count_family_roots(session: AsyncSession) -> int:

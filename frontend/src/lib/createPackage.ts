@@ -602,6 +602,23 @@ export interface RationaleFamiliesPage {
   meta: { cursor: string | null; has_more: boolean };
 }
 
+// GET /rationale-families:suggest (master ref Module 6 §11). Mirrors
+// application/queries/rationale.py::suggest_families verbatim. Not cursor-paginated:
+// a suggestion list is bounded by design, so `meta` carries the normalized query and
+// a has_more flag instead of a cursor.
+export interface RationaleFamilySuggestion {
+  entity_id: string;
+  current_revision_id: string;
+  display_name: string;
+  normalized_name: string;
+  subfamilies: string[];
+}
+
+export interface RationaleFamilySuggestions {
+  data: RationaleFamilySuggestion[];
+  meta: { q: string; has_more: boolean };
+}
+
 // ---------------------------------------------------------------------------
 // Lifecycle-action availability (F-12) — a single, testable source of truth that
 // mirrors the backend request state machine (domain/create_package/state_machine.py
@@ -837,6 +854,25 @@ export function useRationaleFamilies(cursor: string | null) {
       const qs = params.toString();
       return api.get<RationaleFamiliesPage>(`/rationale-families${qs ? `?${qs}` : ""}`);
     },
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+// Read-only Family suggestions for the composer (master ref Module 6 §11). A GET
+// with no mutation: no Idempotency-Key, no OCC token. Applying a suggestion stays a
+// separate explicit action — picking a chip only fills the existing selector, it
+// never creates a Family (§9.3: a suggestion is an inference, never a silent write).
+// Nested under the ["rationale-families"] prefix so the same invalidation sweeps it.
+export function useRationaleFamilySuggestions(q: string) {
+  const needle = q.trim();
+  return useQuery({
+    queryKey: ["rationale-families", "suggest", needle],
+    queryFn: () =>
+      api.get<RationaleFamilySuggestions>(
+        `/rationale-families:suggest?q=${encodeURIComponent(needle)}`,
+      ),
+    // Below 2 characters the server returns [] anyway; skip the round trip.
+    enabled: needle.length >= 2,
     staleTime: 5 * 60 * 1000,
   });
 }

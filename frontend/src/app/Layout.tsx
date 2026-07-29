@@ -89,6 +89,12 @@ function AuthControl({ mode }: { mode: AuthMode | null }) {
   );
 }
 
+// doc 22 §7 `futureDevDisabled.tooltip` — rendered VERBATIM on every disabled /
+// non-operational menu item (today only the passive "Live Trade" leaf). It is a
+// static explanation, never a command: hovering it starts nothing (CR-09).
+const FUTURE_DEV_DISABLED_TOOLTIP =
+  "This capability is planned but not active in Production V1. No operational command is available.";
+
 // A dropdown leaf, or a nested submenu parent (v18 two-level tree). A leaf with
 // no path/action/submenu is a passive placeholder (mockup "Live Trade").
 function MenuItem({
@@ -175,7 +181,7 @@ function MenuItem({
     );
   }
   return (
-    <span className="item" aria-disabled="true">
+    <span className="item" aria-disabled="true" title={FUTURE_DEV_DISABLED_TOOLTIP}>
       {item.label}
     </span>
   );

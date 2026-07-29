@@ -55,14 +55,19 @@ async def _seed_admin(session: AsyncSession) -> None:
 
 
 async def _run(
-    session: AsyncSession, rows: list[dict[str, Any]], *, resolution_value: str | None = None
+    session: AsyncSession,
+    rows: list[dict[str, Any]],
+    *,
+    resolution_value: str | None = None,
+    market_data_type: MarketDataType = MarketDataType.OHLCV,
+    columns: list[str] | None = None,
 ) -> tuple[Any, Any, dict[str, Any]]:
-    """Create an ANALYZING OHLCV revision and run the analysis job over injected rows."""
+    """Create an ANALYZING revision and run the analysis job over injected rows."""
     root, revision = await md_repo.create_market_dataset(
         session,
         owner_principal_id="user_admin",
         created_by_principal_id="user_admin",
-        market_data_type=MarketDataType.OHLCV,
+        market_data_type=market_data_type,
         payload={"v": 1},
         revision_state=MarketRevisionState.ANALYZING,
     )
@@ -81,8 +86,8 @@ async def _run(
     await session.flush()
 
     parsed = ParsedDataset(
-        market_data_type=MarketDataType.OHLCV,
-        columns=["timestamp", "open", "high", "low", "close", "volume"],
+        market_data_type=market_data_type,
+        columns=columns or ["timestamp", "open", "high", "low", "close", "volume"],
         rows=rows,
     )
 
@@ -180,3 +185,65 @@ async def test_cadence_gap_records_split_coverage_and_warns(session: AsyncSessio
     assert len(slices) == 2
     assert slices[0].gap_seconds is not None
     assert slices[1].gap_seconds is None
+
+
+async def test_tick_dataset_writes_coverage_slice_rows(session: AsyncSession) -> None:
+    """O-29: a tick/trades revision used to leave ``dataset_coverage_slice`` EMPTY.
+
+    Coverage was gated on OHLCV + a declared bar cadence, so every analyzed tick
+    dataset rendered a permanent "—" in the registry — indistinguishable from a
+    dataset nobody had analyzed yet — and pinned ``coverage: null`` into the run
+    manifest. Selected sessions now land as one slice per run of consecutive covered
+    UTC days (doc 11 §3.3's "Selected 2025 sessions" tick row)."""
+    await _seed_admin(session)
+    rows = [
+        {"timestamp": "2025-03-03T09:00:00Z", "price": "1", "size": "1", "side": "buy"},
+        {"timestamp": "2025-03-03T17:00:00Z", "price": "1", "size": "1", "side": "buy"},
+        {"timestamp": "2025-03-04T09:00:00Z", "price": "1", "size": "1", "side": "buy"},
+        {"timestamp": "2025-06-10T09:00:00Z", "price": "1", "size": "1", "side": "buy"},
+    ]
+    _root, revision, result = await _run(
+        session,
+        rows,
+        market_data_type=MarketDataType.TICK_TRADES,
+        columns=["timestamp", "price", "size", "side"],
+    )
+
+    assert result["validation_status"] == str(ValidationStatus.PASS)
+    assert revision.revision_state == MarketRevisionState.VERIFIED
+    # No cadence was declared, so no cadence verdict may be pinned on the revision.
+    assert "CADENCE_GAP" not in await _issue_codes(session)
+
+    slices = await _coverage(session, revision.revision_id)
+    assert len(slices) == 2  # the control step: count(*) > 0, and honestly segmented
+    assert slices[0].row_count == 3
+    assert slices[0].gap_seconds is not None
+    assert slices[1].row_count == 1
+    assert slices[1].gap_seconds is None
+
+    # The registry digest the page renders now resolves for a tick dataset.
+    digest = await md_repo.summarize_coverage_for_revisions(session, [revision.revision_id])
+    assert digest[revision.revision_id]["row_count"] == 4
+    assert digest[revision.revision_id]["slice_count"] == 2
+
+
+async def test_spread_execution_dataset_writes_coverage_slice_rows(
+    session: AsyncSession,
+) -> None:
+    """The same cadence-less path covers spread/execution (doc 11 §7.4's third row)."""
+    await _seed_admin(session)
+    rows = [
+        {"timestamp": "2026-02-01T00:00:00Z", "bid": "1", "ask": "2"},
+        {"timestamp": "2026-02-02T00:00:00Z", "bid": "1", "ask": "2"},
+    ]
+    _root, revision, _result = await _run(
+        session,
+        rows,
+        market_data_type=MarketDataType.SPREAD_EXECUTION,
+        columns=["timestamp", "bid", "ask"],
+    )
+
+    slices = await _coverage(session, revision.revision_id)
+    assert len(slices) == 1  # consecutive days stay contiguous
+    assert slices[0].row_count == 2
+    assert slices[0].gap_seconds is None

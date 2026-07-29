@@ -23,6 +23,26 @@ from entropia.apps.api.openapi_export import (
 )
 
 
+def test_purge_202_publishes_both_state_field_names() -> None:
+    """O-30: the adjudicated purge body must be VISIBLE in the schema.
+
+    While the handler returned a bare ``dict``, the drift guard could stay green
+    while the schema said nothing at all about this contract — a green guard was
+    not evidence the fields shipped. This test is what closes that gap: it reads
+    the published 202 component and fails if either spelling disappears.
+    """
+    schema = generate_schema()
+    purge = schema["paths"]["/api/v1/trash-entries/{trash_entry_id}/purge"]["post"]
+    ref = purge["responses"]["202"]["content"]["application/json"]["schema"]["$ref"]
+    component = schema["components"]["schemas"][ref.rsplit("/", 1)[-1]]
+
+    # Both names, because doc 20 §4/§7 and §9.2 each have a reader (see
+    # routes/trash.py::PurgeAcceptedResponse).
+    assert "deletion_state" in component["properties"]
+    assert "root_lifecycle_state" in component["properties"]
+    assert "root_lifecycle_state" in component["required"], "the §4/§7 name is not optional"
+
+
 def test_openapi_schema_is_valid() -> None:
     # Raises OpenAPIValidationError if the generated document is malformed.
     validate(generate_schema())

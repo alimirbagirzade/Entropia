@@ -47,6 +47,11 @@ class CreateRevisionRequest(BaseModel):
     dependency_snapshot: dict[str, Any] | None = None
 
 
+class RequestValidationRequest(BaseModel):
+    revision_id: str
+    expected_head_revision_id: str | None = None
+
+
 class RequestApprovalRequest(BaseModel):
     revision_id: str
     expected_head_revision_id: str | None = None
@@ -192,6 +197,31 @@ async def create_package_revision(
         input_contract=body.input_contract,
         output_contract=body.output_contract,
         dependency_snapshot=body.dependency_snapshot,
+        idempotency_key=idempotency_key,
+    )
+
+
+@router.post("/library/{entity_id}/validation-runs", status_code=201)
+async def request_package_validation(
+    entity_id: str,
+    body: RequestValidationRequest,
+    ctx: RequestContext = Depends(request_context),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+) -> dict[str, Any]:
+    """Owner-or-Admin: start a validation run for the head revision (doc 08 §7
+    "Request validation"). The command WRAPS the CreatePackage-plane run — the seven
+    checks, the immutable evidence row, the durable job and the state machine are
+    unchanged. OCC is the BODY-form ``expected_head_revision_id`` plus the head-match
+    rule, exactly as ``request-approval`` uses it; a stale head -> 409
+    PACKAGE_REVISION_CONFLICT, a run already in flight -> 409
+    VALIDATION_ALREADY_RUNNING, a package with no validatable draft -> 422
+    VALIDATION_PIPELINE_UNAVAILABLE. ``Idempotency-Key`` passes through."""
+    return await pkg_cmd.request_package_validation(
+        ctx.session,
+        ctx.actor,
+        entity_id=entity_id,
+        revision_id=body.revision_id,
+        expected_head_revision_id=body.expected_head_revision_id,
         idempotency_key=idempotency_key,
     )
 

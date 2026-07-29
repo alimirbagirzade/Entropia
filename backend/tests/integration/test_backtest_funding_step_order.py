@@ -167,10 +167,14 @@ async def test_the_charge_propagates_into_the_next_entry_and_the_final_equity(se
 
 
 async def test_the_engine_version_bump_shifts_the_execution_key_namespace() -> None:
-    # New Results carry the K-03 engine version; a run identity that hashed to one
-    # execution_key under the previous version hashes to a different one now, so a Result
+    # New Results carry the CURRENT engine version; a run identity that hashed to one
+    # execution_key under any previous version hashes to a different one now, so a Result
     # produced under the old funding order can never be idempotently reused for a re-RUN.
-    assert ENGINE_VERSION == "backtest-engine-v18-funding-step-order"
+    # The literal moved to -restriction-min-n in I-15a (a): that slice widened the saved
+    # config space (Restrictions Minimum-N-of-M, doc 02 §5.8) without restating any funding
+    # number, so K-03's own behavioural assertions above still hold verbatim — only the
+    # namespace this Result lives in changed.
+    assert ENGINE_VERSION == "backtest-engine-v18-restriction-min-n"
 
     def _built(engine_version: str) -> Any:
         return build_run_manifest(

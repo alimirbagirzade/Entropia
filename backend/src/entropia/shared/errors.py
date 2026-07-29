@@ -146,10 +146,14 @@ class StaleRevisionError(ConflictError):
 
 
 class CapabilityNotActiveError(ForbiddenError):
-    """Future Dev / activation-gated capability invoked while inactive."""
+    """Future Dev / activation-gated capability invoked while inactive.
+
+    The message is the doc 22 §7 CAPABILITY_NOT_ACTIVE catalog text VERBATIM —
+    "No operation was started." is the caller-facing half of the CR-09 promise
+    (no job, no row, no output), so it must not be dropped."""
 
     code = "CAPABILITY_NOT_ACTIVE"
-    message = "This capability is not active."
+    message = "This feature is not active in the current environment. No operation was started."
 
 
 class AccessDeniedError(ForbiddenError):
@@ -165,6 +169,32 @@ class LastAdminProtectedError(ConflictError):
     code = "LAST_ADMIN_PROTECTED"
     http_status = 422
     message = "The last active administrator cannot be demoted or deactivated."
+
+
+class LastAdminProtectionError(LastAdminProtectedError):
+    """Panel Management surface of the same last-Admin defect (doc 19 §7.1, §9.3,
+    §11, §14).
+
+    **Adjudication (K-07 shape).** The corpus names this defect twice: Master
+    Module 3 and the legacy ``PATCH /users/{id}/role`` deactivation path say
+    ``LAST_ADMIN_PROTECTED``, while Master Module 16 and doc 19 — the source of the
+    Panel ``PATCH /v1/admin/users/{user_id}/role`` command — say
+    ``LAST_ADMIN_PROTECTION`` in all four places they name it. Same defect, two page
+    taxonomies; each page's §-taxonomy is authoritative, exactly as the upload
+    file-type gate resolves one rejection into five per-page codes. Subclassing keeps
+    ONE catchable type, so a caller that does not care which surface raised still
+    writes ``except LastAdminProtectedError``.
+
+    ``retryable`` stays false (inherited): resending the identical demotion fails
+    until another Admin exists, so advertising a retry would only loop the client.
+    """
+
+    code = "LAST_ADMIN_PROTECTION"
+    message = "This change would remove the last active Admin. Assign another Admin first."
+    suggested_action = "assign_another_admin"
+    remediation = "Assign the Admin role to another active human user, then retry this change."
+    scope_type = "human_user"
+    field_path = "target_role"
 
 
 class AgentRoleNotAssignableError(ValidationError):
@@ -269,6 +299,60 @@ class TimezoneRequired(ValidationError):
     code = "TIMEZONE_REQUIRED"
     message = "A custom timezone mode requires an IANA timezone identifier."
     category = ErrorCategory.DATA_TIME_VALIDATION
+
+
+class TradeLogTimeZoneInvalidError(ValidationError):
+    """The Trade Log config declared a source time zone that ``zoneinfo`` cannot
+    resolve (doc 05 §5.2 "Invalid/ambiguous timezone rejected", §12.1
+    ``TIME_ZONE_INVALID``). Also raised when the import request itself carries an
+    unresolvable zone, so a bad zone never reaches the durable job."""
+
+    code = "TIME_ZONE_INVALID"
+    message = "The declared source time zone is invalid or ambiguous."
+    category = ErrorCategory.DATA_TIME_VALIDATION
+    suggested_action = "select_a_valid_iana_time_zone"
+    remediation = "Select a valid IANA zone or provide offset-aware timestamps."
+    field_path = "time_model.source_timezone"
+
+
+class TradingSignalTimezoneInvalidError(ValidationError):
+    """Trading Signal twin of :class:`TradeLogTimeZoneInvalidError`.
+
+    Same defect, different code: doc 04 §11 names it ``TIMEZONE_INVALID`` while doc 05
+    §12.1 names it ``TIME_ZONE_INVALID``. Each page's taxonomy is authoritative for its
+    own surface (the K-07 precedent), so both names ship."""
+
+    code = "TIMEZONE_INVALID"
+    message = "The declared source time zone is invalid or ambiguous."
+    category = ErrorCategory.DATA_TIME_VALIDATION
+    suggested_action = "select_a_valid_iana_time_zone"
+    remediation = "Select a valid IANA zone or provide offset-aware timestamps."
+    field_path = "time_policy.source_timezone"
+
+
+class SourceTimezoneMismatchError(ValidationError):
+    """The saved config's source time zone is NOT the one the pinned import ran under
+    (O-28). Shared by the Trade Log and Trading Signal save paths.
+
+    The import takes its ``source_timezone`` as a separate job parameter, so a config
+    declaring ``America/New_York`` could pin a batch normalized as ``UTC``: every stored
+    instant would be off by the true offset while the save still succeeded. Doc 04 §5
+    ("Market / timezone / event model changed after import") states the normalized
+    import revision then cannot be reused as valid and a reparse/remap job is required,
+    so this fails closed rather than silently picking a side. Neither page names a code
+    for it; ``TIMEZONE_MISMATCH`` is adjudicated here. NOT retryable — resending the
+    same pair always disagrees; the caller must re-import or correct the declared zone."""
+
+    code = "TIMEZONE_MISMATCH"
+    message = "The declared source time zone does not match the imported record batch."
+    category = ErrorCategory.DATA_TIME_VALIDATION
+    retryable = False
+    suggested_action = "reimport_with_the_declared_time_zone"
+    remediation = (
+        "Re-run the import using the time zone this configuration declares, or change "
+        "the declared time zone to the one the import used. Timestamps normalized under "
+        "a different zone cannot be reused."
+    )
 
 
 class MarketDataTimezoneUnresolved(ValidationError):
@@ -806,10 +890,46 @@ class ValidationStale(ConflictError):
 
 class ValidationAlreadyRunning(ConflictError):
     """A second validation run was requested while one is already in flight for the
-    same draft (doc 06 §5). The in-flight run is authoritative; no duplicate is made."""
+    same draft (doc 06 §5). The in-flight run is authoritative; no duplicate is made.
+
+    Raised by the Library-plane Request Validation (doc 08 §7): the CP request is
+    already in ``validation_running``, so the durable worker owns it. Returning the
+    in-flight run's identity would read as "your request started this"; a 409 says
+    plainly that nothing new was created and the existing run is authoritative.
+    """
 
     code = "VALIDATION_ALREADY_RUNNING"
     message = "A validation run is already in progress for this draft."
+    category = ErrorCategory.ACTIVE_JOB
+    retryable = False
+    suggested_action = "await_running_validation"
+    remediation = (
+        "A validation run is already in flight for this package's draft. Wait for it "
+        "to finish and read its verdict; requesting again would not create a second run."
+    )
+
+
+class ValidationPipelineUnavailable(ValidationError):
+    """Request Validation was called on a package that has no validation pipeline
+    to drive (doc 08 §7 "test prerequisites available").
+
+    The Library plane addresses a package by its ROOT, but validation-run evidence is
+    keyed by the create-package request that built it. A package produced by Derive
+    (or seeded directly) has no such request, so there is no draft to certify and no
+    pipeline to start. Saying so explicitly is the point: the alternative is a
+    silently no-op button, which is precisely the "advertises an un-performable
+    action" defect this slice removes on the other side (``can_request_validation``).
+    """
+
+    code = "VALIDATION_PIPELINE_UNAVAILABLE"
+    message = "This package has no validation pipeline; validation cannot be requested for it."
+    category = ErrorCategory.LIFECYCLE
+    retryable = False
+    suggested_action = "create_revision_through_create_package"
+    remediation = (
+        "Only a package produced by the Create Package flow carries a validatable "
+        "draft. Derive or re-create this package through Create Package to obtain one."
+    )
 
 
 class BaselineMetadataInvalid(ValidationError):
@@ -868,6 +988,21 @@ class MainboardItemKindMismatchError(ValidationError):
 
     code = "MAINBOARD_ITEM_KIND_MISMATCH"
     message = "The item kind does not match the work object's kind."
+
+
+class InvalidItemKindError(ValidationError):
+    """AOS-03 (doc 03 §14; taxonomy §11, chooser recovery §8.3): the client sent a
+    legacy V18 prototype label (``signal_package`` / ``trade_log_package``) where a
+    work object / item kind was expected. The spec names this code, so a generic
+    CR-01 mismatch code would both be the wrong answer: ``INVALID_ITEM_KIND``
+    means "that is not a kind this system has", while
+    ``MainboardItemKindMismatchError`` means "your kind disagrees with the root's".
+    The chooser recovery is to present only the two canonical choices."""
+
+    code = "INVALID_ITEM_KIND"
+    message = "That item kind is not supported. Choose Trading Signal or Trade Log."
+    suggested_action = "choose_item_kind"
+    remediation = "Send the item kind as exactly 'trading_signal' or 'trade_log'."
 
 
 class ObjectNotActiveError(ConflictError):
@@ -1021,6 +1156,15 @@ class SignalSupportingRequirementUnmetError(ValidationError):
 
     code = "SIGNAL_SUPPORTING_REQUIREMENT_UNMET"
     message = "Add enough active Supporting entry Indicator Blocks for the selected signal rule."
+
+
+class RestrictionMinCountUnsatisfiableError(ValidationError):
+    """The Restrictions/Filters combination is ``Minimum N of M`` but N exceeds the
+    number of ENABLED filters, so the gate can never block an entry (doc 02 §5.8,
+    I-15a) — the restriction-side twin of SIGNAL_SUPPORTING_REQUIREMENT_UNMET."""
+
+    code = "RESTRICTION_MIN_COUNT_UNSATISFIABLE"
+    message = "Minimum N of M cannot exceed the number of enabled restrictions."
 
 
 class EntryDirectionIncoherentError(ValidationError):
@@ -1303,10 +1447,42 @@ class AllocationPlanNotFoundError(NotFoundError):
 
 
 class AllocationDraftConflictError(ConflictError):
-    """Stale ``expected_row_version`` on an allocation draft (doc 13 §7.2, §10.1)."""
+    """Stale ``expected_row_version`` on an allocation draft (doc 13 §7.2, §10.1).
+
+    Doc 13 §7.2 specifies the 409 body as ``{ code, current_draft, changed_paths[] }``
+    and §10.2 Flow E says why: the UI has to present the caller's unsaved fields
+    against the server's state in a COMPARE view, and last-write-wins is forbidden. A
+    bare code + message cannot support that — the client can only discard the user's
+    edits or blindly re-PUT and clobber, which is the outcome Flow E rules out.
+
+    Both are carried in ``details`` (the shipped name for doc 01 §11.2's
+    ``field_issues`` — see the O-02 adjudication note at the top of this module), by
+    ``commands/allocation_plan.py::_draft_conflict``:
+
+        details[0] = {
+            "code": "ALLOCATION_DRAFT_STALE",
+            "expected_row_version": <what the caller sent>,
+            "current_row_version": <what the server holds>,
+            "current_draft": <canonical server draft, or null if none exists>,
+            "changed_paths": ["enabled", "entries[cmbi_1].equity_share_percent", ...],
+        }
+
+    ``retryable`` is false: replaying the identical request with the same stale token
+    always fails again. Recovery is reload -> compare -> resubmit with the fresh
+    ``expected_row_version``, which is a NEW request, not a retry of this one.
+    """
 
     code = "ALLOCATION_DRAFT_CONFLICT"
     message = "This allocation draft changed elsewhere. Refresh, compare, then reapply your update."
+    category = ErrorCategory.CONCURRENCY_OR_PREFLIGHT
+    retryable = False
+    suggested_action = "reload_and_compare_allocation_draft"
+    remediation = (
+        "Reload the allocation draft, compare your unsaved fields against the server "
+        "state in `details.current_draft` (the disputed fields are listed in "
+        "`details.changed_paths`), then reapply your update with the current "
+        "expected_row_version."
+    )
 
 
 class AllocationValidationFailedError(ValidationError):
@@ -1534,6 +1710,37 @@ class ExportFormatInvalidError(ValidationError):
 
     code = "EXPORT_FORMAT_INVALID"
     message = "That export format is not supported."
+
+
+class AgentDatasetSourceNotApprovedError(ValidationError):
+    """An agent dataset was requested over a Result whose manifest pins a package
+    revision that is NOT approved (doc 15 §3.2).
+
+    §3.2 puts a condition on this export type that the other six do not carry: "Agent
+    dataset yalniz approved/scope-authorized artifactsden olusturulur". The
+    scope-authorized half is the composition-view gate every export already passes;
+    this class is the approved half, checked against the run manifest's own pinned
+    ``approval_state`` values — the immutable evidence of what the Result replayed,
+    not a re-read of the current Package Library.
+
+    Not retryable: the same Result will pin the same revisions forever. The route
+    forward is to approve the package and produce a NEW run, not to retry this export.
+    Every other export type stays available on such a Result — this gate is deliberately
+    narrow, because refusing a trade-ledger export would hide data §3.2 never restricted.
+    """
+
+    code = "AGENT_DATASET_SOURCE_NOT_APPROVED"
+    message = (
+        "This result replays a package revision that is not approved, "
+        "so an agent dataset cannot be built from it."
+    )
+    category = ErrorCategory.DEPENDENCY_VALIDATION
+    retryable = False
+    suggested_action = "approve_source_package_and_rerun"
+    remediation = (
+        "Approve the package revision named in details, then run the backtest again. "
+        "The other export types remain available for this result."
+    )
 
 
 class ArtifactTypeInvalidError(ValidationError):
@@ -1849,6 +2056,37 @@ class ManualParseFailedError(ValidationError):
     )
 
 
+class ManualUploadJobFailedError(AppError):
+    """The manual source/parse/index pipeline failed TECHNICALLY (doc 21 §10).
+
+    Distinct from ``MANUAL_PARSE_FAILED``: that one is a caller-actionable verdict
+    on the *content* (unconvertible source, disallowed HTML tag) and the fix is to
+    edit the document. This one is the pipeline itself breaking — the parser or the
+    search-chunk indexer raising something no content can be blamed for — and the
+    fix is to retry, not to rewrite the file. Reporting a technical break under a
+    content code told the Admin to edit a document that was never the problem.
+
+    ``retryable`` is true and the envelope carries the request's ``correlation_id``,
+    which is the persistent handle doc 21 §10 requires ("Persistent failure
+    correlation id; retry action"). The whole command runs in one transaction, so a
+    failure publishes no root/revision/stream entry — "no phantom manual section".
+    """
+
+    code = "UPLOAD_JOB_FAILED"
+    http_status = 500
+    message = (
+        "The manual document could not be processed. Nothing was published — retry the upload."
+    )
+    category = ErrorCategory.ASYNC_JOB_FAILURE
+    retryable = True
+    suggested_action = "retry_upload"
+    remediation = (
+        "The upload/parse/index pipeline failed technically, not because of the document's "
+        "content. Retry the same upload; if it keeps failing, report the correlation id."
+    )
+    scope_type = "manual_document"
+
+
 class ManualDuplicateContentError(ConflictError):
     """An active stream section already carries the same normalized checksum
     (doc 21 §10). The default outcome blocks the append; an explicit Admin
@@ -1962,7 +2200,10 @@ class CapabilityStateStaleError(ConflictError):
     blindly."""
 
     code = "CAPABILITY_STATE_STALE"
-    message = "The capability state changed while this page was open. Refresh capability status."
+    message = (
+        "The capability state changed while this page was open. "
+        "Refresh capability status before continuing."
+    )
     category = ErrorCategory.CONCURRENCY_OR_PREFLIGHT
     retryable = True
     suggested_action = "reload_and_retry"

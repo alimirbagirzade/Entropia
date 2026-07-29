@@ -30,11 +30,13 @@ from entropia.application.jobs.outbox_relay import outbox_lag_seconds
 from entropia.apps.api.deps import bearer_token
 from entropia.config import get_settings
 from entropia.domain.lifecycle.enums import JobStatus
+from entropia.infrastructure.observability import get_logger
 from entropia.infrastructure.observability.metrics import render_process_metrics
 from entropia.infrastructure.postgres.models import Job
 from entropia.shared.errors import MetricsScrapeForbiddenError, MetricsScrapeUnauthorizedError
 
 router = APIRouter(tags=["metrics"])
+log = get_logger("metrics")
 
 
 def require_metrics_scraper(request: Request) -> None:
@@ -85,7 +87,11 @@ async def _operational_gauges() -> str:
             age = 0.0 if oldest is None else (datetime.now(UTC) - oldest).total_seconds()
             lines.append("# TYPE entropia_job_lease_age_seconds gauge")
             lines.append(f"entropia_job_lease_age_seconds {max(0.0, age):.3f}")
-    except Exception:
+    except Exception as exc:
+        # The scrape still degrades to the comment line — only the silence
+        # changes. Log the exception CLASS, never str(exc): driver errors echo
+        # the DSN, and this body is served to a scraper.
+        log.warning("metrics.operational_gauges_probe_failed", error_type=type(exc).__name__)
         return "# operational gauges unavailable (database unreachable)\n"
     return "\n".join(lines) + "\n"
 

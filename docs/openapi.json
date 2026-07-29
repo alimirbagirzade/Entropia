@@ -2123,6 +2123,66 @@
         "title": "PatchStrategyDraftBody",
         "type": "object"
       },
+      "PurgeAcceptedResponse": {
+        "description": "The 202 body doc 20 contradicts itself on (O-30) — now PUBLISHED in the schema.\n\n§7's literal names the field ``root_lifecycle_state``; §9.2's state machine\n(with §4, §9.3, §12) says the request moves the root to PURGE_PENDING. The\nadjudication ships BOTH names carrying the SAME value, so a §4/§7 reader and\na §9.2 reader are each served. Declaring this model is what puts those fields\nin ``docs/openapi.json`` — while the handler returned a bare ``dict`` the\ndrift guard could stay green without the contract being visible at all.",
+        "properties": {
+          "correlation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Correlation Id"
+          },
+          "deletion_state": {
+            "title": "Deletion State",
+            "type": "string"
+          },
+          "entity_id": {
+            "title": "Entity Id",
+            "type": "string"
+          },
+          "entity_type": {
+            "title": "Entity Type",
+            "type": "string"
+          },
+          "purge_job_id": {
+            "title": "Purge Job Id",
+            "type": "string"
+          },
+          "purge_status": {
+            "title": "Purge Status",
+            "type": "string"
+          },
+          "root_lifecycle_state": {
+            "title": "Root Lifecycle State",
+            "type": "string"
+          },
+          "row_version": {
+            "title": "Row Version",
+            "type": "integer"
+          },
+          "trash_entry_id": {
+            "title": "Trash Entry Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "purge_job_id",
+          "trash_entry_id",
+          "entity_id",
+          "entity_type",
+          "deletion_state",
+          "root_lifecycle_state",
+          "purge_status",
+          "row_version"
+        ],
+        "title": "PurgeAcceptedResponse",
+        "type": "object"
+      },
       "PurgeRequest": {
         "properties": {
           "confirmation_phrase": {
@@ -2577,6 +2637,30 @@
           }
         },
         "title": "RequestRunBody",
+        "type": "object"
+      },
+      "RequestValidationRequest": {
+        "properties": {
+          "expected_head_revision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Head Revision Id"
+          },
+          "revision_id": {
+            "title": "Revision Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision_id"
+        ],
+        "title": "RequestValidationRequest",
         "type": "object"
       },
       "ResearchCategory": {
@@ -9737,6 +9821,77 @@
         ]
       }
     },
+    "/api/v1/library/{entity_id}/validation-runs": {
+      "post": {
+        "description": "Owner-or-Admin: start a validation run for the head revision (doc 08 §7\n\"Request validation\"). The command WRAPS the CreatePackage-plane run — the seven\nchecks, the immutable evidence row, the durable job and the state machine are\nunchanged. OCC is the BODY-form ``expected_head_revision_id`` plus the head-match\nrule, exactly as ``request-approval`` uses it; a stale head -> 409\nPACKAGE_REVISION_CONFLICT, a run already in flight -> 409\nVALIDATION_ALREADY_RUNNING, a package with no validatable draft -> 422\nVALIDATION_PIPELINE_UNAVAILABLE. ``Idempotency-Key`` passes through.",
+        "operationId": "request_package_validation_api_v1_library__entity_id__validation_runs_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entity_id",
+            "required": true,
+            "schema": {
+              "title": "Entity Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestValidationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Request Package Validation Api V1 Library  Entity Id  Validation Runs Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Request Package Validation",
+        "tags": [
+          "package-library"
+        ]
+      }
+    },
     "/api/v1/mainboard-compositions/{composition_id}/backtest-runs": {
       "post": {
         "operationId": "request_backtest_run_api_v1_mainboard_compositions__composition_id__backtest_runs_post",
@@ -12294,6 +12449,64 @@
           }
         },
         "summary": "Revise Family",
+        "tags": [
+          "rationale-families"
+        ]
+      }
+    },
+    "/api/v1/rationale-families:suggest": {
+      "get": {
+        "description": "Read-only Family suggestions (master ref Module 6 §11). A GET with no\nmutation: no Idempotency-Key, no OCC token, no ETag — there is nothing to\nconcur with, and applying a suggestion stays a separate audited command.",
+        "operationId": "suggest_families_api_v1_rationale_families_suggest_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Suggest Families Api V1 Rationale Families Suggest Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Suggest Families",
         "tags": [
           "rationale-families"
         ]
@@ -15017,9 +15230,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Purge Api V1 Trash Entries  Trash Entry Id  Purge Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/PurgeAcceptedResponse"
                 }
               }
             },

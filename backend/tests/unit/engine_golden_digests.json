@@ -1,6 +1,6 @@
 {
   "digests": {
-    "contract.execution_key": "ccdc054253b2fffef1e655ef2aa7ccfdb435be37b6828a9c0ac8757348bea03c",
+    "contract.execution_key": "d1001ad6730d760d10d66047c68bc168e7b48ae803c5d7e44dc3bbacd9f84619",
     "costs.funding_batch_2": "05f7716d81561349cca360610fe6f9a5bdb9f99f1cd3e6cda7988a6297a4f86f",
     "costs.funding_future_leak": "3d6f0dda2fe465f695e16c81a8590ebeab836810cad4a244480c08b76a067d60",
     "costs.funding_long": "f2f82ef618c55dda89574cef3095a55832588ff99b5bd6609af25a0f7bc8b61c",
@@ -47,5 +47,5 @@
     "sizing.risk_based": "37c142cc711eec9cbdd08fee0ec3c2d2bf2dae1ec6c715699dbb41936f1d1b40",
     "sizing.unsupported_method": "09615810c55bec119d38a10a753c3df4347d70a29cb7ab984d6ffb75d06ce853"
   },
-  "engine_version": "backtest-engine-v18-funding-step-order"
+  "engine_version": "backtest-engine-v18-restriction-min-n"
 }

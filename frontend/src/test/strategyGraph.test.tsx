@@ -602,3 +602,82 @@ describe("ScalingCard / RestrictionsCard", () => {
     expect(screen.queryByLabelText(/Config \(JSON/)).toBeNull();
   });
 });
+
+// I-15a (a) — the Restriction Rule gained the spec's third combination (doc 02 §5.8).
+// N is a CONDITIONAL subtree: shown only for min_n_of_m, and deleted from the merged
+// payload on switch-back so no stale count ever reaches the server.
+describe("restrictions min_true_count (Minimum N of M)", () => {
+  function minNPayload(rule: string, count?: number): Record<string, unknown> {
+    const restrictions: Record<string, unknown> = {
+      rule,
+      filters: [
+        {
+          filter_id: "f1",
+          filter_type: "date_blackout_filter",
+          enabled: true,
+          config: { date_ranges: [{ start: "2024-01-01", end: "2024-01-05" }] },
+        },
+      ],
+    };
+    if (count !== undefined) restrictions.min_true_count = count;
+    return { ...fullPayload(), restrictions_filters: restrictions };
+  }
+
+  it("offers Minimum N of M and round-trips min_true_count", () => {
+    const p = minNPayload("min_n_of_m", 2);
+    const form = extractGraphSections(p);
+    expect(form.restrictions.rule).toBe("min_n_of_m");
+    expect(form.restrictions.min_true_count).toBe("2");
+    const merged = mergeGraphSections(p, form).restrictions_filters as Record<string, unknown>;
+    expect(merged.min_true_count).toBe("2");
+  });
+
+  it("omits min_true_count under the any and all rules", () => {
+    for (const rule of ["any", "all"]) {
+      const p = minNPayload(rule, 3);
+      const merged = mergeGraphSections(p, extractGraphSections(p)).restrictions_filters as Record<
+        string,
+        unknown
+      >;
+      expect(merged).not.toHaveProperty("min_true_count");
+    }
+  });
+
+  it("deletes a stale min_true_count when the rule switches back to any", () => {
+    const p = minNPayload("min_n_of_m", 2);
+    const form = extractGraphSections(p);
+    const switched: GraphState = {
+      ...form,
+      restrictions: { ...form.restrictions, rule: "any" },
+    };
+    const merged = mergeGraphSections(p, switched).restrictions_filters as Record<string, unknown>;
+    expect(merged.rule).toBe("any");
+    expect(merged).not.toHaveProperty("min_true_count");
+  });
+
+  it("shows the min_true_count field only for the Minimum N of M rule", () => {
+    stubApi({ "GET /library": LIBRARY_PAGE });
+    renderComponent(RestrictionsCard, minNPayload("any"));
+    expect(screen.queryByLabelText(/Minimum active restrictions/)).toBeNull();
+
+    cleanup();
+    renderComponent(RestrictionsCard, minNPayload("min_n_of_m", 2));
+    const n = screen.getByLabelText(/Minimum active restrictions/) as HTMLInputElement;
+    expect(n.value).toBe("2");
+  });
+
+  it("Apply sends min_true_count and preserves uncovered payload keys", () => {
+    stubApi({ "GET /library": LIBRARY_PAGE });
+    const onApply = renderComponent(RestrictionsCard, minNPayload("min_n_of_m", 2));
+    fireEvent.change(screen.getByLabelText(/Minimum active restrictions/), {
+      target: { value: "3" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Apply Restrictions changes" }));
+    expect(onApply).toHaveBeenCalledTimes(1);
+    const sent = onApply.mock.calls[0][0] as Record<string, unknown>;
+    expect(sent.untouched_future_key).toBe("preserved");
+    const restrictions = sent.restrictions_filters as Record<string, unknown>;
+    expect(restrictions.rule).toBe("min_n_of_m");
+    expect(restrictions.min_true_count).toBe("3");
+  });
+});

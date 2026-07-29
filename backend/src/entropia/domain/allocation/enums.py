@@ -87,6 +87,14 @@ class AllocationIssueCode(StrEnum):
     # Pre-disclosure of the engine's honest V1 boundary: NET needs a unified-clock
     # co-simulation, so the engine executes it conservatively as BLOCK_OPPOSITE.
     CONFLICT_POLICY_NET_V1 = "CONFLICT_POLICY_NET_V1"
+    # An active entry points at a composition item whose kind is not allocatable.
+    # doc 13 §5.2 ("selected item ... must be compatible") and §14#8 name the
+    # allocatable set exactly: Strategy, Trading Signal, Trade Log. Today
+    # ``MainboardItemKind`` holds only those three, so the guard was IMPLICIT —
+    # nothing read the resolved kind. This code makes it explicit so a future
+    # non-allocatable kind fails closed instead of being silently allocated a
+    # capital sleeve (I-03).
+    ITEM_KIND_NOT_ALLOCATABLE = "ITEM_KIND_NOT_ALLOCATABLE"
 
 
 __all__ = [

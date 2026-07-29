@@ -80,7 +80,30 @@ from entropia.shared.manifest import manifest_hash
 # stays valid under its own pinned engine_version but is NOT comparable with a new one, and
 # the bump shifts the execution_key namespace so it is never idempotently reused for a
 # re-RUN (INF-04/INF-05).
-
+# v18-restriction-min-n (I-15a): the Restrictions/Filters combination gained the spec's
+# third option (doc 02 §5.8) — ``rule="min_n_of_m"`` + ``min_true_count``. The entry gate
+# ``_restrictions_block`` now has a third branch, so a strategy saved under the new rule
+# opens a DIFFERENT set of positions than the same filter set would have under the old
+# any/all-only engine (which could not even parse the value). ``any``/``all`` are
+# untouched and reproduce their prior results exactly; the bump exists because the saved
+# config space widened, and it shifts the execution_key namespace so a result produced by
+# an engine that could not evaluate Minimum-N is never idempotently reused for a re-RUN
+# (INF-04/INF-05).
+# v18-filtered-events-artifact (I-02): the FILTER vetoes (``filtered_no_entry``) leave the
+# ``signal_events`` journal and become their own ``filtered_events`` output journal +
+# persisted artifact (doc 15 §3.2 "View Filtered Events", §16). No trade, fill, price or
+# metric changes — but the artifact SHAPE does: ``signal_events`` loses those rows and every
+# surviving row's ``seq`` is renumbered, and ``diagnostics.decision_trace_count`` now counts
+# the signal journal alone. Those rows are persisted into the immutable Result and read by
+# users, so a pre-I-02 Result is NOT artifact-comparable with a new one; the bump shifts the
+# execution_key namespace so it is never idempotently reused for a re-RUN (INF-04/INF-05).
+# v18-min-n-filtered-events-artifact (I-02 merged onto I-15a): this branch carries BOTH
+# engine changes, so the version names both. It is NOT a third behavioural change — the
+# single string exists because the namespace must shift relative to EACH predecessor: a
+# Result produced by the min-n-only engine (no filtered_events artifact) and one produced
+# by the filtered-events-only engine (no Minimum-N gate) are both incomparable with what
+# this engine emits, and neither may be idempotently reused for a re-RUN.
+ENGINE_VERSION = "backtest-engine-v18-min-n-filtered-events-artifact"
 METRIC_SET_VERSION = "metric-set-v1"
 OUTPUT_ARTIFACT_PROFILE = "standard-v1"
 

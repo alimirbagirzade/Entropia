@@ -599,7 +599,14 @@ def test_engine_execution_key_namespace_shifts_with_the_engine_version() -> None
     # re-resolves them fail-closed. K-03 then bumped it to -funding-step-order: funding/fee/
     # carry now runs at the TOP of each bar (doc 15 §9.3 step 2) instead of the end, so it
     # reduces the equity that sizes this bar's entries/scale layers and bounds its exposure
-
+    # caps. Under either change a result produced under the older engine — a different (or
+    # since-removed) dependency set, or the end-of-bar funding order — must never be
+    # idempotently reused for a re-RUN. I-02 then bumped it to -filtered-events-artifact:
+    # the filter vetoes moved out of ``signal_events`` into their own persisted artifact,
+    # so the Result's artifact SHAPE changed (rows removed + ``seq`` renumbered) even
+    # though no price or metric did.
+    built = _manifest("btrun_A", "snap_A", "2024-01-01T00:00:00Z")
+    expected = "backtest-engine-v18-min-n-filtered-events-artifact"
     assert built.manifest["identity"]["engine_version"] == expected
     # The bump is a real NAMESPACE shift: the same run identity under the previous engine
     # version hashes to a different execution_key, so a pre-K-03 result is never reused.

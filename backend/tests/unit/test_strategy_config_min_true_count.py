@@ -166,9 +166,14 @@ def _run(config: StrategyConfig) -> EngineOutput:
 
 
 def _was_blocked(out: EngineOutput) -> bool:
+    """Read the veto from the FILTERED journal (I-02).
+
+    ``filtered_no_entry`` left ``signal_events`` when Filtered Events became its own
+    artifact (doc 15 §3.2 "View Filtered Events", §16). The Minimum-N assertions below
+    are unchanged — only the journal this helper reads is."""
     return any(
         e.detail["reason"] == "restriction_blocked"
-        for e in out.signal_events
+        for e in out.filtered_events
         if e.event_type == "filtered_no_entry"
     )
 
@@ -363,7 +368,7 @@ def _manifest(engine_version: str):
 
 
 def test_strategy_config_min_true_count_bumps_engine_version_and_shifts_execution_key() -> None:
-    assert ENGINE_VERSION == "backtest-engine-v18-restriction-min-n"
+    assert ENGINE_VERSION == "backtest-engine-v18-min-n-filtered-events-artifact"
     current = _manifest(ENGINE_VERSION)
     prior = _manifest(_PRIOR_ENGINE_VERSION)
     assert current.manifest["identity"]["engine_version"] == ENGINE_VERSION

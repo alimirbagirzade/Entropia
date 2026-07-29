@@ -150,7 +150,7 @@ Before stopping a working session, produce **ALL** of the following:
 
 - **alembic head:** **`0040_filtered_event_artifact`** (40 migration, tek head; I-02'de eklendi —
   öncesi `0039_backtest_run_cancellation`). **`ENGINE_VERSION` =
-  `backtest-engine-v18-filtered-events-artifact`** (`manifest.py`; I-02'de bump edildi çünkü Result
+  `backtest-engine-v18-min-n-filtered-events-artifact`** (`manifest.py`; I-02'de bump edildi çünkü Result
   artifact ŞEKLİ değişti — öncesi K-03 `-funding-step-order`, K-04 `-full-pinning`, K-02
   `-available-time-gate`; **O-05/O-06 bump ETMEDİ**).
 - **Son dalga — O-serisi (spec-uyum kusurları):** O-01 (#403) · O-02 (#400) · **O-03 (#407 + #413;
@@ -160,6 +160,13 @@ Before stopping a working session, produce **ALL** of the following:
   seçenek kümesi taşıyor; yeni `domain/trash/restore.py` katalogu + salt-okuma
   `GET /trash-entries/{id}/restore-preflight`; bilinmeyen resolution 422
   `UNSUPPORTED_RESTORE_RESOLUTION`; migration YOK)** ·
+  **I-02 (`feat/i02-filtered-events-artifact` — doc 15 §3.2'nin bağlanmamış "View Filtered
+  Events" aksiyonu: `ArtifactType.FILTERED_EVENTS` + `filtered_event` tablosu (motor vetoları
+  artık `signal_events`'ten AYRI journal) + `result_artifact_checksum` (beş artifact tipi için,
+  doc 15 §7/§8.3); migration `0040`, ENGINE_VERSION bump. **REGIME_TABLE bilerek EKLENMEDİ** —
+  doc 22 Future-Dev sınırı, gerekçe `PROJECT_HISTORY.md`. Ayrıca E2E'de 12 sayfa yalnız
+  screenshot'lanıyordu, fonksiyonel kapsam eklendi: `specs/17-page-coverage.spec.ts`,
+  `18-result-artifacts-drilldown.spec.ts`, `19-future-dev-boundary.spec.ts`)**.
 
 - **Testler:** son yeşil referans CI (O-serisi PR'ları). Lokal tam suite tek koşuda
   tamamlanabiliyor — O-27'de **2538 passed / 0 failed / 43dk39sn**, worktree'ye özel izole DB ile

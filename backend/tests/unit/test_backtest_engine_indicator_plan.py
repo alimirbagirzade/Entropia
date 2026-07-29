@@ -246,7 +246,9 @@ def test_plan_direction_restriction_suppresses_disallowed_side() -> None:
     closes = ["10", "10", "10", "10", "10", "10", "8", "8", "8"]
     out = _run(_config(direction="long"), _bars(closes), _sma_plan())
     assert out.summary["total_trades"] == 0
-    assert "filtered_no_entry" in {e.event_type for e in out.signal_events}
+    # I-02: traced in the FILTERED journal (its own artifact), not the signal journal.
+    assert "filtered_no_entry" in {e.event_type for e in out.filtered_events}
+    assert "filtered_no_entry" not in {e.event_type for e in out.signal_events}
 
 
 def test_active_plan_still_surfaces_unresolved_warnings() -> None:

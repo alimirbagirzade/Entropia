@@ -1,7 +1,7 @@
 # DATA_MODEL — Postgres tabloları
 
 Modeller: `backend/src/entropia/infrastructure/postgres/models/*.py` (30 dosya, **102 tablo**).
-Alembic: `backend/alembic/versions/` — **head = `0040_export_type_agent_pine`** (40 migration, tek head).
+Alembic: `backend/alembic/versions/` — **head = `0041_filtered_event_artifact`** (41 migration, tek head; `0040_export_type_agent_pine` üzerine I-02'de eklendi).
 
 > **`0040` YENİ TABLO GETİRMEDİ** — bu yüzden aşağıdaki 102 sayısı değişmedi.
 > `0040_export_type_agent_pine` yalnız `export_artifact.export_type` kolonunu `VARCHAR(13)` →
@@ -170,6 +170,8 @@ CLAUDE.md'deki **"her yeni `create_*` için L1 FK insert-order proof"** kuralın
 | `result_summary` | Headline özet (ör. `timeframe`) | `result_id` | — | — |
 | `metric_value` | Kalıcı metrik satırları | `result_id` | — | — |
 | `result_equity_point` / `trade_ledger_row` / `signal_event` / `diagnostic_artifact` | Ağır artifact'lar (keyset drill-down) | `result_id` | — | — |
+| `filtered_event` | **I-02** — filtre vetolarının AYRI artifact'ı (`filtered_no_entry`). `signal_event` ile aynı şekil, ama kendi `seq` dizisi: doc 15 §3.2 "View Signal Events" + "View Filtered Events" iki ayrı drill-down | `result_id` (FK → `backtest_result`, CASCADE), `UNIQUE(result_id, seq)` | — | — |
+| `result_artifact_checksum` | **I-02** — (result, artifact tipi) başına içerik checksum'ı + `row_count` (doc 15 §7 "artifact checksum verification", §8.3). Beş artifact tipinin **hepsi** için yazılır | `result_id` (FK, CASCADE), `UNIQUE(result_id, artifact_type)` | — | — |
 | `result_manifest_snapshot` | Result'a bağlı manifest kopyası | `result_id` | — | — |
 | `export_artifact` | Result'ın şema-versiyonlu türevi. **`export_type` = non-native enum → düz `VARCHAR(24)`**, PG ENUM tipi de CHECK constraint'i de YOK; üyelik Python'da zorlanır (`domain/backtest/export.py::ExportType`). Migration `0040` bu kolonu 13 → 24'e genişletti (S-L2) | `result_id` | — | — |
 | `ready_check_report` / `readiness_issue` | Değişmez readiness raporu + bulguları | `composition_snapshot_id`, `report_id` | — | — |

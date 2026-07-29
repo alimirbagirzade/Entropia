@@ -283,6 +283,8 @@ rv-N` kullanmaya devam ediyor).
 | POST `/backtest-results/{result_id}/exports` (201) | `request_result_export:37` | `export_cmd.request_result_export` | yok | ✔ |
 | GET `/backtest-results/{result_id}/artifacts/{artifact_type}` | `query_result_artifact:55` | `artifact_query.query_result_artifact` | yok | — |
 
+> **`{artifact_type}` (I-02):** `equity_curve` · `trade_ledger` · `signal_events` · **`filtered_events`** · `diagnostics` (+ alias'lar: `equity`, `ledger`/`trades`, `signals`/`events`, `filtered`/`no_entry`). Bilinmeyen değer 422 `ARTIFACT_TYPE_INVALID` — sessiz fallback YOK. `filtered_events` `signal_events`'in alt kümesi DEĞİL, kendi tablosu (`filtered_event`) ve kendi `seq` dizisi olan ayrı artifact'tır (doc 15 §3.2, §16). Yanıt zarfı `items` + `next_cursor` yanında `row_count` / `checksum` / `checksum_schema_version` taşır (doc 15 §7); I-02 öncesi materialize edilmiş Result'larda bu üçü `null`.
+
 > **İki eksik export tipi eklendi (S-L2, #460, doc 15 §3.2).** `domain/backtest/export.py:42-43` —
 > `ExportType` artık `pinescript_signal_marker` ve `agent_dataset` üyelerini de taşıyor (Data Export
 > tablosunun Research Data / Agent Data satırları). Migration **`0040_export_type_agent_pine`**:

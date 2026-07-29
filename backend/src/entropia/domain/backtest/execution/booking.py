@@ -21,6 +21,7 @@ from typing import Any
 from entropia.domain.backtest.execution.constants import _HUNDRED, _MONEY, _ONE, _PCT, _ZERO
 from entropia.domain.backtest.execution.costs import FillCosts, _effective_fill
 from entropia.domain.backtest.execution.state import (
+    FILTERED_EVENT_TYPES,
     EquityPoint,
     SignalEventRow,
     TradeRow,
@@ -43,10 +44,17 @@ def emit_event(
 
     ``bar_seq`` (the 1-based replayed-bar index) + ``event_time`` bind the event to
     the exact bar; ``detail`` carries the position/order linkage and rule evidence.
-    A signal/decision event is NEVER conflated with a real fill (doc 15 §16)."""
-    led.signal_events.append(
+    A signal/decision event is NEVER conflated with a real fill (doc 15 §16).
+
+    I-02: a FILTER VETO (``FILTERED_EVENT_TYPES``) goes to its own journal instead,
+    with its own independent ``seq``, because doc 15 §3.2 exposes Signal Events and
+    Filtered Events as two distinct artifacts. This is the single routing point — no
+    call site picks a journal, so a new veto type is one edit in
+    ``FILTERED_EVENT_TYPES``."""
+    journal = led.filtered_events if event_type in FILTERED_EVENT_TYPES else led.signal_events
+    journal.append(
         SignalEventRow(
-            seq=len(led.signal_events),
+            seq=len(journal),
             event_time=event_time,
             event_type=event_type,
             direction=direction,

@@ -28,6 +28,7 @@ from entropia.domain.trash.page import (
     encode_trash_cursor,
     normalize_object_type,
 )
+from entropia.domain.trash.redaction import redact_snapshot
 from entropia.domain.trash.restore import (
     RestoreConflictKind,
     conflict_summary,
@@ -160,11 +161,16 @@ async def _target_deletion_state(session: AsyncSession, entry: TrashEntry) -> st
 async def get_trash_entry_detail(
     session: AsyncSession, actor: Actor, *, trash_entry_id: str
 ) -> dict[str, Any]:
-    """Admin-only snapshot reader (doc 20 §3.2, §7 Open Snapshot).
+    """Admin-only snapshot reader (doc 20 §3.2, §7 Open Snapshot, §12).
 
     Returns the immutable redacted deletion/dependency snapshots recorded at
     delete time plus the live purge/restore control state. Read-only: no root
     reactivation, no snapshot edit.
+
+    I-09: both snapshots go through ``redact_snapshot`` on the way OUT. The
+    stored columns stay untouched — ``get_restore_preflight`` below still reads
+    the raw ``dependency_snapshot`` head pointer, which is restore-integrity
+    evidence rather than rendered output.
     """
     require_trash_admin(actor)
     entry = await trash_repo.get_entry(session, trash_entry_id)
@@ -175,8 +181,8 @@ async def get_trash_entry_detail(
     tombstone = await trash_repo.get_tombstone(session, entry.entity_id)
     detail.update(
         {
-            "deletion_snapshot": entry.deletion_snapshot or {},
-            "dependency_snapshot": entry.dependency_snapshot or {},
+            "deletion_snapshot": redact_snapshot(entry.deletion_snapshot),
+            "dependency_snapshot": redact_snapshot(entry.dependency_snapshot),
             "purge_error": entry.purge_error,
             "purge_requested_by": entry.purge_requested_by,
             "restored_at": entry.restored_at.isoformat() if entry.restored_at else None,

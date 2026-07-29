@@ -14,9 +14,12 @@ import boto3
 from botocore.config import Config
 
 from entropia.config import get_settings
+from entropia.infrastructure.observability import get_logger
 
 if TYPE_CHECKING:
     from mypy_boto3_s3.client import S3Client
+
+log = get_logger("object_storage")
 
 
 @lru_cache(maxsize=1)
@@ -38,5 +41,9 @@ def check_object_storage() -> bool:
         client = get_s3_client()
         client.head_bucket(Bucket=get_settings().object_storage_bucket)
         return True
-    except Exception:
+    except Exception as exc:
+        # The probe still reports "down" — only the silence changes. Log the
+        # exception CLASS, never str(exc): botocore messages carry the endpoint
+        # URL and can carry signed request material.
+        log.warning("object_storage.probe_failed", error_type=type(exc).__name__)
         return False

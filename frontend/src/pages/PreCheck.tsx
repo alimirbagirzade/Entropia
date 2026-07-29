@@ -41,6 +41,24 @@ function useCursorStack() {
   };
 }
 
+// Last-resort PRIMARY label for a request whose projection carries no server-owned
+// label (a pre-F-07 cached page). The raw request_id NEVER becomes the primary
+// name — it stays beneath as the secondary binding key (mirrors Portfolio's D-4
+// `UNLABELLED_ITEM`).
+const UNNAMED_REQUEST = "Package request";
+
+// F-07 §4.4 / D-4 convention: the server-composed `display_label` is the primary
+// text and the raw request_id is kept beneath as the secondary, copyable binding
+// key. The browser never reconstructs a name from the id.
+function RequestLabel({ label, requestId }: { label: string; requestId: string }) {
+  return (
+    <div>
+      <div>{label.trim() !== "" ? label : UNNAMED_REQUEST}</div>
+      <code style={{ fontSize: 12, color: "var(--text-dim)" }}>{requestId}</code>
+    </div>
+  );
+}
+
 // Canonical doc 07 §7.2 status-line text per terminal scan status; any other
 // status falls back to the wire value rendered verbatim.
 const STATUS_LINES: Record<string, string> = {
@@ -122,16 +140,7 @@ function RequestPickerCard({
                 {requests.data.data.map((req) => (
                   <tr key={req.request_id}>
                     <td>
-                      {/* F-07 §4.4: the server-resolved name is the primary
-                          identification; the request id stays beneath as the
-                          copyable token. With no label the row is still not
-                          id-only — created_at below discriminates it. */}
-                      <LabelledId label={req.display_label} id={req.request_id} />
-                      {req.created_at ? (
-                        <div style={{ fontSize: 12, color: "var(--text-dim)" }}>
-                          {formatUtc(req.created_at)}
-                        </div>
-                      ) : null}
+
                     </td>
                     <td>{req.package_type}</td>
                     <td>{req.source_kind}</td>
@@ -207,7 +216,7 @@ function PreCheckBody({ detail }: { detail: PackageRequestDetail }) {
       <dl className="kv">
         <dt>Request</dt>
         <dd>
-          <code>{detail.request_id}</code>
+          <RequestLabel label={detail.display_label} requestId={detail.request_id} />
         </dd>
         <dt>State</dt>
         <dd>

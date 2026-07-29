@@ -180,75 +180,10 @@ These four were real F-07 violations whose DTOs carried **no human label**. Inve
 the browser is precisely the "reconstruct names from IDs" the finding forbids, so each got
 F-07's stated correction — *add display DTOs at query boundaries* — as a backend change.
 
-**Doc-drift correction (measured 2026-07-29):** `ResultDetail.tsx` is
-`frontend/src/components/ResultDetail.tsx`, **not** under `pages/`. Line numbers below are
-re-measured; the earlier table gave paths only.
 
-| Site (measured) | Field added | Where it is captured — and why there |
-|---|---|---|
-| `pages/PreCheck.tsx:129` | `display_label` (+ `created_at`) on `PackageRequestSummary` | `queries/create_package.py::_request_display_labels` — two batched lookups per page: the produced package's `input_contract.name`, else the pinned Rationale Family's `display_name`. Both are names a user gave an object the request genuinely references; neither is derived from an id. A request pinning neither sends `null` |
-| `pages/Library.tsx:1263`, `1279` | `source_package_name` on `PackageImportReport` | `commands/package_import.py::submit_package_import` reads `manifest["name"]` at SUBMIT time (migration `0042`). Captured there, not joined from the resulting root, because a `blocked`/`failed` import never produces a package — and a later rename of the imported copy must not rewrite what was imported |
-| `components/ResultDetail.tsx:424` (`PerItemCard`), `:595` (`MarginalCard`) | `item_label` on `PerItemBreakdown` and `ContributionMarginal` | composition snapshot `item_manifest.items[].label` -> run manifest `mainboard_item_labels` -> `ItemRun.item_label` -> persisted result diagnostics. **The result is immutable**, so the label is frozen at run time; a live join would mislabel a result whose items have since changed |
-| `pages/ReadyCheck.tsx:295` | `scope_label` on `ReadinessIssue` | `queries/readiness_check.py::_scope_labels` reads the snapshot the REPORT pinned. **The report is immutable + `is_current`-tracked**, so labelling it from the live composition would be actively wrong |
-
-Presentation contract: the new `components/LabelledId.tsx` renders the server label as the
-PRIMARY text with the raw id kept beneath/beside as the muted copyable token, and renders the
-**id alone** when the label is null. It never derives a name from an id.
-
-**Two invariants worth naming.**
-
-1. **A display label must not fork reproducibility.** `mainboard_items` is hashed into
-   `execution_key`, so the labels ride a SEPARATE manifest key (`mainboard_item_labels`)
-   outside `execution_content`. Renaming a composition item therefore leaves `execution_key`
-   byte-identical and an identical replay still reproduces. Pinned by
-   `tests/unit/test_f07_manifest_item_labels.py`.
-
-   **This is NOT the same question as the version bump.** The golden guard
-   (`test_backtest_engine_golden.py`) caught what the reasoning above does not cover: the
-   composite *artifact* grew a field, so the four `portfolio.combine*` scenarios moved
-   (every strategy-replay scenario stayed byte-identical — engine BEHAVIOUR is unchanged).
-   `ENGINE_VERSION` is therefore bumped to **`backtest-engine-v18-min-n-filtered-events-per-item-labels`**, for
-   exactly the reason v17 recorded when it added the per-item breakdown itself: without the
-   bump a stale pre-label result is idempotently REUSED for a re-RUN of the same composition
-   (INF-04/INF-05) and its rows stay id-only forever — the fix would never reach an existing
-   composition. A one-time namespace shift, not label-sensitivity.
-2. **Backward compatibility is by omission, not backfill.** Pre-slice snapshots, manifests and
-   `package_import_job` rows carry no label; every reader degrades to an empty map / `null` and
-   the UI falls back to the id. Backfilling them would fabricate labels those artifacts never
-   observed.
-
-Doc 06 §510-512 ("V18 has no editable field; name is generated after C.D.P as *New [Type]
-Package*") was **unimplemented** — request-born packages read back nameless, which is why the
-Pre-Check picker had nothing but ids. `commands/create_package.py::_generated_package_name`
-now writes it at C.D.P. No new user-facing input was added: doc 06 explicitly says the request
-has no editable name field before C.D.P.
-
-`ResultsHistory.tsx:170` remains deliberately **not** a violation: a backtest result has no
-user-assigned name, and since P-12 the row carries completed-at / timeframe / symbol, so the id
-is not the sole discriminator. Its digest shape is PO-owned (D-5).
 
 ### 4.5 Verification
 
 **Presentation half (2026-07-27):** `eslint` ✓ · `tsc -b --noEmit` ✓ · `vitest` **608/608**.
 Backend untouched → no `ENGINE_VERSION` bump, no migration.
 
-**Backend display-DTO half (2026-07-29):** `ruff check` ✓ · `ruff format --check` ✓ ·
-`mypy src` ✓ (372 files) · alembic `0042` **up/down/up** ✓ + column parity verified against
-`\d package_import_job` · frontend `eslint` ✓ · `tsc -b --noEmit` ✓ · `vitest`
-**654/654** (62 files, `--no-file-parallelism`). Backend full suite run locally on a
-worktree-private DB: **1 failed / 2732 passed** on the first pass — the failure was the
-golden guard doing its job (see the bump note in §4.4); after the `ENGINE_VERSION` bump +
-regenerated `engine_golden_digests.json` the affected modules pass. **CI is the authority.**
-
-Both new invariants were **proven RED**: putting `label` into `_pinned_items` fails
-`test_labels_do_not_change_the_execution_key` + `test_labels_are_absent_from_the_hashed_pin_set`
-and nothing else; making `_scope_labels` join the live composition fails
-`test_renaming_the_item_does_not_relabel_an_existing_report` and nothing else.
-
-> **F-07 is now Complete as a whole** — presentation (§4.3) and display DTOs (§4.4).
->
-> **Honest boundary carried forward:** these four route bodies are declared `dict[str, Any]`,
-> so the new fields are **not published in `docs/openapi.json`** and the drift guard cannot see
-> them (the same blind spot O-30 recorded). Giving the four legacy routes typed response models
-> is a separate change with its own idempotent-replay compatibility analysis — it is NOT done
-> here.

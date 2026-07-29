@@ -1744,7 +1744,7 @@ cap'i gevşetmez, üstüne biner.
 ### Kalıcılık
 
 - **Plan kökü:** iki kolon da `portfolio_allocation_plan` üzerinde (0035). Draft upsert
-  `commands/allocation_plan.py:129-130` (create) / `142-143` (update, OCC `row_version` altında).
+  `commands/allocation_plan.py:139-140` (create) / `162-163` (update, OCC `row_version` altında).
 - **Revision:** `portfolio_allocation_plan_revision` **kolon ALMADI** — değerler değişmez
   `revision.config` JSON snapshot'ında taşınır
   (`test_allocation_persistence.py`: `stored.config["max_total_exposure_percent"] == "150.000000"`).
@@ -1752,7 +1752,8 @@ cap'i gevşetmez, üstüne biner.
 
 ### Motor davranışı — fail-closed + L4, hiçbir sınır sessiz değil
 
-`_resolve_portfolio_rules` (`domain/backtest/engine.py:665-700`) → `PortfolioRules`
+`resolve_portfolio_rules` (`domain/backtest/engine.py:664-702` — **public, alt çizgisiz**; alt
+çizgili adla grep'lersen sıfır hit alırsın. Çağıran: `application/jobs/backtest_engine.py:290`) → `PortfolioRules`
 (`domain/backtest/execution/state.py:272-278`).
 
 | Durum | Motor ne yapar | L4 warning |
@@ -1783,14 +1784,14 @@ cap'i gevşetmez, üstüne biner.
 | Domain config | `domain/allocation/config.py:118-119, 129, 134` |
 | Domain enum | `domain/allocation/enums.py:37-53` |
 | Domain kurallar | `domain/allocation/rules.py:164-186` |
-| Motor | `domain/backtest/engine.py:665-700, 866-892, 1366-1371, 1399, 2714, 3020-3033, 3306-3320` · `execution/state.py:272-278` |
-| Komut | `application/commands/allocation_plan.py:83-84, 98-99, 129-130, 142-143, 198-199, 517-523, 559-565` |
+| Motor | `domain/backtest/engine.py:664-702, 866-892, 1366-1371, 1399, 2714, 3020-3033, 3306-3320` · `execution/state.py:272-278` · worker girişi `application/jobs/backtest_engine.py:88, 290` |
+| Komut | `application/commands/allocation_plan.py:84-85, 99-100, 139-140, 162-163, 218-219, 546-552, 588-594` · **409 `changed_paths` alan listesi `673-674`** (O-serisi #457 sonrası — iki alan da diff'lenir) |
 | Ready Check | `application/commands/readiness_check.py:770-777` (snapshot'a taşınır) |
 | Query | `application/queries/allocation_plan.py` (draft projeksiyonu) |
 | Repo | `infrastructure/postgres/repositories/allocation.py:54-55, 66-67` |
 | ORM | `infrastructure/postgres/models/allocation.py:91-93` |
 | Route | `apps/api/routes/allocation.py:56-57, 104-105` (draft PUT gövdesi) |
-| OpenAPI | `docs/openapi.json` → `conflict_policy` (2168), `max_total_exposure_percent` (2212) |
+| OpenAPI | `docs/openapi.json` → `conflict_policy` (2228), `max_total_exposure_percent` (2272) |
 | Frontend | `lib/allocation.ts:73-74, 194-195` · `pages/Portfolio.tsx:308-309, 332-333, 455-482` — "Portfolio rules" alan grubu: *Max total exposure %* (placeholder `e.g. 150 (blank = no cap)`) + *Conflicting signals (same instrument)* select (varsayılan `— (keep separate)`) |
 
 ### Test kapsamı

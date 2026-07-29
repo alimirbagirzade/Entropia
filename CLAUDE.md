@@ -67,8 +67,10 @@ Before stopping a working session, produce **ALL** of the following:
   public API / data schema / user request verbatim -> retry). First Bash of a session
   triggers a one-time fact gate.
 - **Local verify (backend):** `cd backend && uv run ruff check . && uv run ruff format --check . && uv run mypy src && uv run pytest -q`
-  — `addopts` artık `--cov-fail-under=80` taşıyor, yani **tam suite** koşusu CI'daki coverage
-  kapısını da doğruluyor (ölçülen toplam ~%90). **Alt küme koşarken `--no-cov` ekle:** tek
+  — `addopts` artık `--cov-fail-under=90` taşıyor, yani **tam suite** koşusu CI'daki coverage
+  kapısını da doğruluyor (**ölçülen toplam %92.06**, 2712 passed; frontend %84.67 line —
+  modül dökümü + kalibrasyon gerekçesi `docs/audit/coverage_baseline.md`).
+  **Alt küme koşarken `--no-cov` ekle:** tek
   dosyalık bir koşu paketin tamamını ~%4 ölçer ve kapı sahte kırmızı verir. Frontend karşılığı
   `npm run coverage` (eşikler `frontend/vite.config.ts`). İkisi de **kapıdır, rapor değil** —
   düşen sayıyı indirme, eksik testi yaz.
@@ -163,24 +165,14 @@ Before stopping a working session, produce **ALL** of the following:
 
 ## Current position (keep in sync at each closing)
 
-> Aşağıdaki değerler **2026-07-28** tarihinde repodan empirik doğrulandı (`origin/main` @
+> Aşağıdaki değerler **2026-07-29** tarihinde repodan empirik doğrulandı
+ 
 
 - **Durum:** V1 ROADMAP COMPLETE (Stages 0–8, docs 01–22) + post-V1 + video-alignment +
   V18-R2 dalgası + **auth remediation dalgası COMPLETE** (güvenlik denetimi #346–#364).
   Tüm route yüzeyleri frontend'e bağlı; TIER 2 sayfa haritası 24/24.
 
-- **alembic head:** **`0039_backtest_run_cancellation`** (39 migration, tek head; O-06'da eklendi —
-  öncesi `0038_backtest_run_event`). **`ENGINE_VERSION` = `backtest-engine-v18-funding-step-order`**
-  (`manifest.py:83`; K-03'te bump edildi, öncesi K-04 `-full-pinning`, K-02 `-available-time-gate`;
-  **O-05/O-06 bump ETMEDİ**).
-- **Son dalga — O-serisi (spec-uyum kusurları):** O-01 (#403) · O-02 (#400) · **O-03 (#407 + #413;
-  #408 boş merge oldu, içeriğini #413 yeniden indirdi)** · O-04 (#405) · O-05 (#412) ·
-  **O-06 (#419 — CancelBacktestRun, migration `0039`)** · O-08 (#406) · O-09 (#410) · O-10 (#402) ·
-  **O-17 (#446 — restore conflict artık typed `resolution` seçenek kümesi taşıyor; yeni
-  `domain/trash/restore.py` katalogu + salt-okuma
-  `GET /trash-entries/{id}/restore-preflight`; bilinmeyen resolution 422
-
-
+ 
 - **Testler:** son yeşil referans CI (O-serisi PR'ları). Lokal tam suite tek koşuda
   tamamlanabiliyor — O-27'de **2538 passed / 0 failed / 43dk39sn**, worktree'ye özel izole DB ile
   (aşağıdaki ortam tuzağına uyulursa). Yine de **otorite CI'dır.**
@@ -197,36 +189,13 @@ Before stopping a working session, produce **ALL** of the following:
 
 - **F-07 raw-id sweep — SUNUM katmanı kapandı (PR #404).** 31 dosyada 161 `*_id` render'ı tarandı;
   **4 kalıntı açık** (backend display-DTO → `v18_visual_traceability.md §4.4`) — yani **F-07 bütün
-  olarak Complete DEĞİL**. vitest **654/654** (I-17-COV sonrası; **`--no-file-parallelism` ZORUNLU**;
-  worktree'de `frontend/node_modules` yoksa önce `npm ci` — ilk koşudaki `ERR_MODULE_NOT_FOUND`
-  test hatası değil).
 
-- **Kabul-ID izlenebilirliği (I-17 → I-17-COV):** `python3 docs/audit/acceptance_id_scan.py` →
-  **173/215 (%80)**, kapsam içi **118/130**, doc 05 COMPLETE. Denetim: `docs/audit/acceptance_id_map.md`
-  (§H = son dalga, §E.2–§E.4 = açılan üç kusur). Kalan in-scope etiketsiz 12 ID + `AOS-12`.
 
 
 - **Next (PO imzası BLOKAJ DEĞİL — imza 2026-07-22'de atıldı,
   `docs/implementation/v18_final_acceptance.md:155-169`; beklettiği FIX(R3) kalemlerinin hepsi
   landed: #368–#373, #375–#379):**
-  1. **F-07 §4.4** — 4 yüzey backend display-DTO bekliyor (`v18_visual_traceability.md §4.4`).
-  2. **R2 banner kapanışı (docs işi):** `entropia_v18_remediation_status.md` RE-OPENING
-     banner'ının koşulu sağlandı → banner'ı kaldır, UI satırlarını evidence'lı Complete yap.
-  3. **O-03 kalıntısı:** **4** ölü error sınıfı (`KNOWN_UNRAISED` — `RoleContextStaleError`,
-     `ServiceUnavailableError`, `ArtifactNotAvailableError`, `HypothesisArtifactNotFoundError`;
-     `ValidationAlreadyRunning` S-L3'te fırlatılmaya başladı, ratchet onu listeden attırdı).
-     O-03 adjudication tablosunun 4 satırı **sonradan canonical oldu** — bkz.
-     `docs/PROJECT_HISTORY.md` §"Sonradan canonical olan dört satır".
-  4. **Round-3 backlog:** S5 (a/b/c/d) + S-L1…S-L6
-     (`docs/POST_V1_SPEC_GAP_BACKLOG_ROUND3.md` §DURUM TAZELEME — diğer 8 madde landed).
-  5. **I-17-COV'un açtığı 3 kusur slice'ı** (test-only slice bilerek yamamadı, bkz.
-     `docs/audit/acceptance_id_map.md` §E.2–§E.4): `fix/pc19-soft-deleted-esp-must-not-resolve`
-     (soft-delete edilmiş ESP yeni Pre-Check'te hâlâ çözülüyor) ·
-     `feat/gateway-strategy-and-signal-tools` (AT-21/TS-20'nin Tool Gateway cümlesi karşılıksız) ·
-     `feat/esp19-export-carries-contract-facts`.
-- **Açık iş (R2 kapsamı dışı, dürüst sınır):** ekran okuyucu (NVDA/VoiceOver) denetimi yapılmadı;
-  10 sayfanın derin görsel kıyası eksik; a11y/visual katmanları CI'da koşmadı; A11Y-01 kontrast
-  (228 serious node, tamamı canonical v18 paletinden) ve A11Y-02 kayıtlı sapma olarak açık.
+
 - **KAPSAM DIŞI (bilerek):** retention auto-purge (doc 20 §16 — "Production V1'de kapalı"),
   LLM generation (Future-Dev), Graphic View renderer (doc 22 — V18 statik placeholder kalır).
 

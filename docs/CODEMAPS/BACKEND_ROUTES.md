@@ -151,6 +151,19 @@ rv-N` kullanmaya devam ediyor).
 > `domain/mainboard/item_kind.py:43` — eski bir `item_kind` etiketi 422 **`INVALID_ITEM_KIND`**
 > verir ve **hiçbir** PackageKind genişlemesi, kök veya revizyon yaratmaz. AOS-03: ne genel
 > `VALIDATION_ERROR` ne de CR-01 mismatch kodu doğru cevaptı — kusurun kendi adı var.
+>
+> **Çapraz-kind `revision_id` spec adıyla reddedilir (AOS-12).**
+> `domain/mainboard/revision_binding.py::assert_revision_kind_matches` — revizyonun kendi
+> **değişmez** `object_kind` kolonu, bağlanan nesnenin **sunucu-türetilmiş** kind'ıyla
+> karşılaştırılır; ayrışırsa 422 **`KIND_REVISION_MISMATCH`** ve hiçbir working item yazılmaz.
+> **İKİ yüzey de** bu tek kapıdan geçer: `attach_mainboard_item` (root'un kind'ı) ve
+> `patch_mainboard_item` intent `pin_revision` (`item.item_kind`) — yeni bir revision-binding
+> yüzeyi eklerken kuralı kopyalama, buradan geçir. Kapı **belongs-to-root kontrolünden ÖNCE**
+> koşar; **aynı kind, yanlış kök** durumu bilerek generic `VALIDATION_ERROR` kalır (spec o
+> duruma ad vermiyor). **422, 409 değil:** doc 03 §11 kodu "Revision/attachment" satırına,
+> §14 ise AOS-12'yi "Type/payload mismatch" satırına koyuyor → §14 lehine adjudicated, kardeş
+> kodlarla (AOS-03 / CR-01) aynı sınıf. `retryable=false` — revizyon satırı yeniden
+> kind'lanmaz, aynı çift hep aynı hatayı verir.
 
 ## strategy.py — OCC: **body `expected_draft_row_version` (int)**, `_resolve_expected_version:57` (DUAL, `reconcile_occ_tokens:60`), sonuç ZORUNLU int
 
@@ -282,6 +295,8 @@ rv-N` kullanmaya devam ediyor).
 | GET `/backtest-results/{result_id}/metrics` | `get_result_metrics:82` | `metric_profile_query.get_result_metrics` | yok | — |
 | POST `/backtest-results/{result_id}/exports` (201) | `request_result_export:37` | `export_cmd.request_result_export` | yok | ✔ |
 | GET `/backtest-results/{result_id}/artifacts/{artifact_type}` | `query_result_artifact:55` | `artifact_query.query_result_artifact` | yok | — |
+
+> **`{artifact_type}` (I-02):** `equity_curve` · `trade_ledger` · `signal_events` · **`filtered_events`** · `diagnostics` (+ alias'lar: `equity`, `ledger`/`trades`, `signals`/`events`, `filtered`/`no_entry`). Bilinmeyen değer 422 `ARTIFACT_TYPE_INVALID` — sessiz fallback YOK. `filtered_events` `signal_events`'in alt kümesi DEĞİL, kendi tablosu (`filtered_event`) ve kendi `seq` dizisi olan ayrı artifact'tır (doc 15 §3.2, §16). Yanıt zarfı `items` + `next_cursor` yanında `row_count` / `checksum` / `checksum_schema_version` taşır (doc 15 §7); I-02 öncesi materialize edilmiş Result'larda bu üçü `null`.
 
 > **İki eksik export tipi eklendi (S-L2, #460, doc 15 §3.2).** `domain/backtest/export.py:42-43` —
 > `ExportType` artık `pinescript_signal_marker` ve `agent_dataset` üyelerini de taşıyor (Data Export

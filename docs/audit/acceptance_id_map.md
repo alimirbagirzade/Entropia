@@ -201,7 +201,7 @@ the **O-03 convention (shipped name wins)**:
 |---|---|---|---|
 | AOS-03 | `INVALID_ITEM_KIND` | `CLIENT_LEGACY_TYPE_REJECTED` | `domain/package/kind.py` |
 | AT-04 | `MARKET_DATA_INSTRUMENT_MISMATCH` | *(no such code)* — enforced by the worker instrument-scope guard | `test_backtest_persistence.py::test_worker_fails_closed_on_instrument_mismatch` |
-| AOS-12 | `KIND_REVISION_MISMATCH` | *(unimplemented)* | — |
+| AOS-12 | `KIND_REVISION_MISMATCH` | ~~*(unimplemented)*~~ → **shipped under the spec name** | `domain/mainboard/revision_binding.py` — see **§H** |
 
 ---
 
@@ -215,7 +215,7 @@ Verified by reading the code, not inferred from the absence of a tag:
 | AT-21 | No Agent-parity test for the Strategy save line. |
 | TS-16 / TL-18 / AOS-16 | No test asserts that expand/collapse writes no revision / audit / composition hash. Purely presentational today, but unpinned. |
 | RF-15 / ESP-05 | No test asserts the V18 seed Family (`Embedded System / TA Resolver`) resolves ACTIVE with a matching ESP meta/filter relation. |
-| AOS-12 | `KIND_REVISION_MISMATCH` has no implementation and no test. |
+| AOS-12 | ~~`KIND_REVISION_MISMATCH` has no implementation and no test.~~ **Closed 2026-07-29 — see §H.** |
 | AT-24 | Strategy soft-delete + historical manifest provenance is not asserted end-to-end. |
 | PC-14, PC-19, PC-22 | Resolver-approval 403, soft-deleted-ESP historical manifest, and untrusted-string rendering are unasserted. |
 | CP-05, CP-14, PL-06, ESP-19 | See §C. |
@@ -395,69 +395,4 @@ TS-20 / AOS-20 (Tool Gateway parity for Trading Signal), AT-21 (Agent parity on 
 Strategy save line), TS-16 / TL-18 / AOS-16, RF-15 / ESP-05, AOS-12, AT-24,
 PC-14 / PC-19 / PC-22, CP-05, CP-14, PL-06, ESP-19.
 
-> **Superseded on 2026-07-29 by §H** — every ID in that sentence except `AOS-12`
-> (its own slice) now has a test. §G.3 is kept verbatim as the record of where
-> §G left things.
 
----
-
-## §H. Slice `test/i17cov-acceptance-id-gaps` (2026-07-29)
-
-The §E/§G.3 list was re-verified ID by ID against the repo and then closed with
-REAL tests — not tags. Reproduce with `python3 docs/audit/acceptance_id_scan.py`.
-
-### H.1 — Result
-
-| Page | Prefix | §G left | Now | Untraced now |
-|---|---|---|---|---|
-| 02 Add Strategy / Strategy Details | `AT` | 20/25 | **22/25** | AT-04, AT-06, AT-07 |
-| 03 Add Outsource Signal | `AOS` | 18/21 | **20/21** | AOS-12 |
-| 04 Trading Signal | `TS` | 18/21 | **20/21** | TS-10 |
-| 05 Trade Log | `TL` | 22/23 | **23/23 COMPLETE** | — |
-| 07 Pre-Check | `PC` | 14/22 | **17/22** | PC-01, PC-02, PC-15, PC-16, PC-18 |
-| 10 Rationale Families | `RF` | 16/18 | 16/18 | RF-13, RF-18 |
-| **In-scope subtotal** | | **108/130** | **118/130** | 12 |
-| **Total (all scanned pages)** | | **163/215** | **173/215 (80%)** | 42 |
-
-Docs 06/08/09 stay invisible to the scanner (§C), so `CP-05`, `CP-14`, `PL-06` and
-`ESP-05`/`ESP-19` do not move a counter — their tests cite the audit-local IDs in
-the `CP-14 (docs/audit, doc 06 row 14)` form §C prescribes.
-
-> The 163 baseline is one higher than §A's 162: `FD-03` was tagged between the two
-> measurements by the doc-22 audit slice (PR #471), outside this work.
-
-### H.2 — Tests written
-
-| ID(s) | Test | File |
-|---|---|---|
-| PC-14 | `test_user_resolver_approval_is_denied_and_the_proposal_stays_intact` | `integration/test_acceptance_esp_package_gaps.py` |
-| PC-19 *(clause 1 only, see §E.2)* | `test_soft_deleted_esp_keeps_the_historical_dependency_manifest_readable` | same |
-| ESP-19 *(partial, see §E.4)* | `test_esp_revision_export_carries_identity_hash_and_dependency_manifest` | same |
-| RF-15 / ESP-05 | `test_seeded_ta_resolver_family_is_active_and_binds_esp_packages_by_id` | same |
-| PL-06 | `test_condition_package_romad_is_not_applicable_and_nothing_can_sort_on_it` | same |
-| AT-21 | `test_agent_saves_a_strategy_revision_with_human_parity`, `test_agent_strategy_save_honours_idempotency_and_ownership` | `integration/test_acceptance_agent_parity_gaps.py` |
-| AT-24 | `test_strategy_delete_waits_for_the_run_guard_and_keeps_run_provenance` | same |
-| TS-20 / AOS-20 *(domain-command half, see §E.3)* | `test_agent_imports_and_saves_a_trading_signal_without_a_ui`, `test_agent_signal_is_not_auto_attached_to_a_human_board` | same |
-| CP-05 | `test_python_is_the_only_registered_target_runtime`, `test_registered_runtime_normalizes_and_an_unregistered_one_is_unavailable` | `unit/test_acceptance_create_package_runtime.py` |
-| TS-16 / TL-18 / AOS-16 | 2 tests — expand+collapse every row kind issues no write request; composition hash and pins unchanged | `frontend/src/test/presentationState.test.tsx` |
-| PC-22 | 3 tests — `<script>` / `onerror` / closing-tag payloads render as literal text, create no element, run no handler | `frontend/src/test/preCheckUntrustedStrings.test.tsx` |
-| CP-14 | 2 tests — Clear empties the unsent editor and sends **nothing**; the submitted request stays listed | `frontend/src/test/createPackageClearBoundary.test.tsx` |
-
-Three of these rows are deliberately partial. Each names the missing clause in its
-own docstring and in §E.2 / §E.3 / §E.4 — no assertion was weakened to make a row
-look closed, and no failing test was deleted.
-
-### H.3 — Still open after this slice
-
-* `AOS-12` — `KIND_REVISION_MISMATCH` has no implementation; its own slice
-  (`feat/aos12-kind-revision-mismatch`).
-* `AT-04`, `AT-06`, `AT-07`, `TS-10`, `PC-01`, `PC-02`, `PC-15`, `PC-16`, `PC-18`,
-  `RF-13`, `RF-18` — untraced in-scope IDs that were **never** on the §E
-  genuine-gap list; most are traceability (an existing test does not name the ID),
-  e.g. `AT-04` is enforced by
-  `test_backtest_persistence.py::test_worker_fails_closed_on_instrument_mismatch`
-  (§D). They were not touched here because a tag must be verified by reading the
-  test, and this slice's budget went to the genuine gaps.
-* Pages `14 RC`, `16 RH`, `18 AL`, `21 UM`, `22 FD` — out of scope throughout, 42
-  untraced IDs in total.
-* Docs 01/11/12/13/15/17/19/20 still publish acceptance tables with no ID column.

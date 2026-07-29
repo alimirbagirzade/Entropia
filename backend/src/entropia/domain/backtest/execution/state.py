@@ -146,6 +146,21 @@ class SignalEventRow:
     detail: dict[str, Any]
 
 
+# I-02 — the decision classes that are FILTER VETOES: a candidate entry was rejected by
+# a rule/policy BEFORE any fill was attempted, so the event is a no-entry trace rather
+# than part of the signal/execution journal. They are journaled into
+# ``_Ledger.filtered_events`` and persisted as the separate ``filtered_events`` artifact
+# (doc 15 §3.2 "View Filtered Events", §16).
+#
+# The boundary is deliberately narrow and stays here so it is one edit, not a scattered
+# predicate. ``entry_blocked`` / ``stack_entry_rejected`` / ``scale_layer_rejected`` are
+# NOT filter vetoes: there the signal PASSED every filter and the no-fill came from
+# sizing / sleeve / exposure capacity — an execution outcome, which belongs with the
+# signal journal. Adding a new veto reason to ``filtered_no_entry``'s ``detail.reason``
+# needs no change here; adding a new veto EVENT TYPE does.
+FILTERED_EVENT_TYPES: frozenset[str] = frozenset({"filtered_no_entry"})
+
+
 @dataclass(slots=True)
 class _Ledger:
     """The bar loop's running tallies, as ONE mutable object instead of 24 ``nonlocal``
@@ -161,10 +176,16 @@ class _Ledger:
     because the object is immutable.
     """
 
-    # The run's four output journals. Append-only — they are never rebound, so they
+    # The run's output journals. Append-only — they are never rebound, so they
     # needed no ``nonlocal``; they live here so an extracted booking function can take
-    # ONE accumulator instead of four separate list parameters.
+    # ONE accumulator instead of separate list parameters.
     signal_events: list[SignalEventRow] = field(default_factory=list)
+    # I-02: the FILTER vetoes, journaled apart from ``signal_events`` because doc 15
+    # §3.2 exposes "View Signal Events" and "View Filtered Events" as two distinct
+    # drill-downs and §16 keeps the no-entry trace readable in its own right. Its
+    # ``seq`` runs independently, so a filtered event never reads as a gap in the
+    # signal journal.
+    filtered_events: list[SignalEventRow] = field(default_factory=list)
     trades: list[TradeRow] = field(default_factory=list)
     equity_points: list[EquityPoint] = field(default_factory=list)
     position_intervals: list[dict[str, Any]] = field(default_factory=list)
@@ -241,6 +262,17 @@ class _Ledger:
     suppressed_entries: int = 0
     # F-11: funding charges actually applied (a due record against a held position).
     funding_charges: int = 0
+
+    # ---- K-11b: the loop's terminal state, read only by the output assembly --------
+    # ``first_ts`` / ``last_bar`` are the ACTUAL first and last bars replayed after
+    # filtering — the summary reports these, never the requested backtest_range bounds,
+    # which is what proves the manifest range matches the data actually processed.
+    first_ts: str = ""
+    last_bar: _Bar | None = None
+    # Cumulative signed funding cost booked against equity (positive = net paid). It is
+    # already reflected in ``equity``; it is carried separately so the funding
+    # contribution stays auditable on its own.
+    funding_paid: Decimal = _ZERO
 
 
 @dataclass(frozen=True, slots=True)
@@ -351,3 +383,61 @@ class _RunConfig:
     leverage_ok: bool
     strength_ok: bool
     capability_ok: bool
+
+    # ---- K-11b: the rest of the resolved run --------------------------------------
+    # K-10c stopped at what the SIZING helpers needed. The output assembly reads far
+    # more: every fail-closed gate (to name the L4 warning), every saved policy token
+    # and sub-config (to report provenance), and the resolved plan / funding / tick
+    # state. They are all resolved once in the prologue and never rebound, so they
+    # belong on the same frozen record rather than in a second parallel one.
+    initial_capital: Decimal = _ZERO
+    timeframe: str | None = None
+    item_count: int = 1
+    execution_key: str = ""
+    future_dev_selected: tuple[Any, ...] = ()
+    # The six remaining fail-closed gates (sizing / leverage / strength / capability
+    # are above). Any False means the run opened NO position.
+    timing_ok: bool = True
+    order_ok: bool = True
+    partial_close_ok: bool = True
+    scaling_ok: bool = True
+    restrictions_ok: bool = True
+    conflict_ok: bool = True
+    # Saved config sub-objects, reported verbatim in the diagnostics provenance block.
+    order_cfg: Any = None
+    exit_logic: Any = None
+    scaling_cfg: Any = None
+    restrictions_cfg: Any = None
+    conflict_cfg: Any = None
+    # Resolved policy tokens.
+    strength_mode: str = ""
+    partial_aftermath: str = ""
+    restriction_rule: str = ""
+    unmodelled_restriction_types: tuple[str, ...] = ()
+    overlap_policy: str = ""
+    stacking_policy: str = ""
+    hedge_policy: str = ""
+    stop_trigger_requirement: str = ""
+    stop_conflict_resolution: str = ""
+    stop_exit_conflict: str = ""
+    trailing_lock_in_active: bool = False
+    scaling_enabled: bool = False
+    scale_max_total: Decimal | None = None
+    # Portfolio-rules provenance (doc 13 §8.4). ``conflict_gate_on`` is the EXECUTED
+    # policy; ``conflict_downgraded_from_net`` records that NET was conservatively
+    # downgraded to block_opposite, which the L4 warning must keep visible.
+    rules_active: bool = False
+    conflict_gate_on: bool = False
+    portfolio_cap_amount: Decimal | None = None
+    conflict_downgraded_from_net: bool = False
+    conflict_policy_unknown: bool = False
+    # Indicator plan + compiled evaluators.
+    indicator_plan: Any = None
+    plan_active: bool = False
+    entry_evals: tuple[Any, ...] | list[Any] = ()
+    stop_evals: tuple[Any, ...] | list[Any] = ()
+    # Funding + tick-path provenance.
+    funding: Any = None
+    funding_records: tuple[Any, ...] = ()
+    tick_batches: Any = None
+    tick_alignment_unavailable: bool = False

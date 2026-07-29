@@ -117,10 +117,20 @@ asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
 # --cov-fail-under turns the coverage number into a gate. Before this, CI ran
 # WITH coverage but nothing ever failed on it, so coverage could decay silently.
-# 80 is the floor CONTRIBUTING.md already asks contributors to hold. A local
-# run that deliberately measures a subset should pass --no-cov (as the verify
-# snippet in backend/README.md does) instead of lowering this number.
-addopts = "-q --cov=entropia --cov-report=term-missing --cov-fail-under=80"
+#
+# 90 is CALIBRATED against a measurement, not picked as a round number: a full
+# green run (2712 passed, 0 failed) measures 92.06% — docs/audit/coverage_baseline.md
+# records the run and the per-module breakdown. The gate first shipped at 80 with
+# no measurement behind it, which left twelve points of slack; the whole
+# application/commands layer could lose its tests and CI would still pass. The
+# two points between 90 and the measured 92.06 are headroom for the macOS-local
+# vs CI-Linux difference, which has not been measured separately yet — tighten
+# toward 91 once CI has reported its own number.
+#
+# A local run that deliberately measures a subset should pass --no-cov (as the
+# verify snippet in backend/README.md does) instead of lowering this number, and
+# a red run is fixed by adding the missing test, never by dropping the floor.
+addopts = "-q --cov=entropia --cov-report=term-missing --cov-fail-under=90"
 markers = [
   "integration: requires postgres/redis/minio",
   "contract: API request/response/SSE schema tests",

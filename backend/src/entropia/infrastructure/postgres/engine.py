@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
 from functools import lru_cache
 
 from sqlalchemy.ext.asyncio import (
@@ -35,13 +34,8 @@ def get_session_factory() -> async_sessionmaker[AsyncSession]:
     )
 
 
-async def session_scope() -> AsyncIterator[AsyncSession]:
-    """Yield a session that commits on success and rolls back on error."""
-    factory = get_session_factory()
-    async with factory() as session:
-        try:
-            yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
+# NOTE: there is deliberately NO ``session_scope`` helper here. Every caller
+# opens its own session from ``get_session_factory`` and owns its transaction
+# boundary explicitly — the API through ``apps/api/deps.py`` (one request = one
+# tx), workers/jobs through their own ``async with factory()`` blocks. The old
+# commit-on-exit wrapper had no callers and was deleted in I-12.

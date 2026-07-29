@@ -202,9 +202,20 @@ change and therefore outside this presentation-only slice.
 | `frontend/src/components/ResultDetail.tsx:420` — in `PerItemCard` (def `:416`) · `:589` — in `MarginalCard` (def `:585`) | per-item breakdown rows render `{item_kind} <code>{item_id}</code>`, and leave-one-out rows render `Without <code>{entry.item_id}</code>` — reading a result breakdown is a common task | `PerItemBreakdown` / `ManifestItemRef` have no label field. The result is **immutable and pinned**; joining the *live* composition's labels would mislabel a result whose items have since changed — the label must come from the manifest, i.e. the server |
 | `frontend/src/pages/ReadyCheck.tsx:291` — in `IssuesTable` (def `:258`) | issue rows show a bare `scope_id` (same defect class as the Portfolio issue table that this slice fixed) | `ReadinessIssue` has no label field, and the report is immutable + `is_current`-tracked; labelling a **stale** report from the live composition would be actively wrong |
 
-`frontend/src/pages/ResultsHistory.tsx:170` is deliberately **not** listed as a violation: a backtest result has no
-user-assigned name, and since P-12 the row carries completed-at / timeframe / symbol, so the id
-is not the sole discriminator. Its digest shape is PO-owned (D-5).
+`frontend/src/pages/ResultsHistory.tsx:170` was listed here as **not** a violation on the grounds
+that a backtest result has no user-assigned name. **Superseded by I-16a (2026-07-29):** the
+history projection has been shipping a server-owned `display_title` all along
+(`application/queries/results_history.py::_row_dto` → `HistoryRow.display_title`,
+`frontend/src/lib/backtest.ts:181`, doc 16 §8.1 `HistoryResultRowDTO`) — and the page rendered
+**zero** of it, leaving `<code>{row.result_id}</code>` as the row's primary visible identity. That
+is F-07's own prescribed correction already present at the query boundary and simply not consumed.
+The row now renders `ResultLabel` — `display_title` primary, `result_id` beneath as the secondary
+binding key (mirrors Portfolio's `ItemLabel`, §4.3). Presentation-only: no DTO, route,
+react-query key, OCC token, Idempotency-Key or `lib/*.ts` data logic changed; the id keeps
+carrying compare selection, the View deep-link and delete. Honest boundary: the shipped title is
+server-derived as `"Backtest Result <result_id>"`, so it still *contains* the id — but the string
+is composed by the **server**, never reconstructed in the browser, which is exactly the line F-07
+draws. Its digest shape remains PO-owned (D-5).
 
 ### 4.5 Verification
 

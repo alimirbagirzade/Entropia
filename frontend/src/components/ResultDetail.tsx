@@ -10,6 +10,8 @@ import {
   EXPORT_TYPES,
   formatMetricValue,
   formatUtc,
+  METRIC_AVAILABILITY_NOTES,
+  metricAvailabilityStatusLabel,
   useCreateResultExport,
   useResultArtifact,
   useResultMetrics,
@@ -112,7 +114,11 @@ export function ResultDetail({ result }: { result: BacktestResultDetail }) {
               <tr key={metric.key}>
                 <td>{metric.label}</td>
                 <td>{formatMetricValue(metric)}</td>
-                <td>{metric.availability}</td>
+                {/* The status names WHY a value is absent (doc 17 §9.2 no_drawdown /
+                    no_losing_trade); the doc 17 §6 sentence rides along as its title. */}
+                <td title={METRIC_AVAILABILITY_NOTES[metric.availability]}>
+                  {metricAvailabilityStatusLabel(metric.availability)}
+                </td>
               </tr>
             ))}
           </tbody>

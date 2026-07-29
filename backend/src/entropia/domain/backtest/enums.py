@@ -46,15 +46,31 @@ class RunEventType(StrEnum):
 
 
 class MetricAvailability(StrEnum):
-    """Whether a canonical metric was computed for a result (doc 15 §5, §6).
+    """Why a canonical metric does — or does not — carry a value (doc 15 §5, §6).
 
-    A missing metric is NEVER 0 — it is one of the non-computed states (L4).
+    A missing metric is NEVER 0 — it is one of the non-computed states (L4). The
+    null states are deliberately GRANULAR (I-01): ``NOT_AVAILABLE`` is the generic
+    "no value was produced", while ``NO_DRAWDOWN`` / ``NO_LOSING_TRADE`` name the
+    two divide-by-zero cases the spec forbids rendering as infinity — doc 17 §9.2
+    ("Max drawdown=0 ise null + `no_drawdown`; infinity yasak" / "Gross loss=0 ise
+    null + `no_losing_trade`") and doc 16 §9.3 (such a ROMAD sorts null-last, never
+    a fake large value). Collapsing them back into ``NOT_AVAILABLE`` loses the very
+    reason the value is absent, which is the whole point of the status.
+
+    ``NOT_COMPUTED`` is NOT dead and means something else entirely: it is emitted by
+    the Arrange Metrics result view (``queries/metric_profile.py::
+    _metric_card_not_computed``) for a metric the caller's profile SELECTS but this
+    immutable Result was never calculated with (doc 17 §6.1 "Not computed for this
+    result"). ``derive_metric_values`` never emits it, because an engine summary has
+    by construction run every canonical metric — the two producers are disjoint.
     """
 
     COMPUTED = "computed"
     NOT_COMPUTED = "not_computed"
     NOT_AVAILABLE = "not_available"
     NO_QUALIFYING_TRADES = "no_qualifying_trades"
+    NO_DRAWDOWN = "no_drawdown"
+    NO_LOSING_TRADE = "no_losing_trade"
 
 
 class RunFailureCode(StrEnum):

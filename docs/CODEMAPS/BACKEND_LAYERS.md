@@ -70,6 +70,7 @@ request bağımlılığından gelen **TEK transaction**, burada **asla commit yo
 | `funding.py` | Pinlenmiş Funding kaynağını available-time-güvenli takvime çöz (F-11) | `research_*`, `market_*` |
 | `indicator_plan.py` | Pinlenmiş StrategyConfig → hesaplanabilir indicator plan (paket gövdesi çalıştırılmaz) | `package_revision` |
 | `instrument.py` | Enstrüman registry okuma + `resolve_scope` | `instrument_registry`, `instrument_alias` |
+| `job_gauges.py` | **I-05:** `/metrics` operasyonel gauge'ları — kuyruk derinliği (`queue`×`status`), outbox lag, en eski RUNNING lease yaşı. Route-seviyesindeki son ORM bypass'ıydı: `routes/metrics.py` ham `select(Job...)` kuruyordu. Sorgular artık burada, route yalnız Prometheus metnini render eder (`_render_operational_gauges`, saf fonksiyon). Değer-only projeksiyon (`JobGauges`) — ORM entity dışarı sızmaz | `jobs`, `outbox_events` |
 | `library.py` | Paket katalog listesi/detayı (Guest'e katalog dönmez, 401) | `package_root`, `package_revision`, `resource_share` |
 | `log_projection.py` | Admin Logs — `audit_events` üzerinde filtreli, newest-first, keyset projeksiyon | `audit_events` |
 | `mainboard.py` | Varsayılan workspace projeksiyonu (Guest → 401, auto-create yok) | `mainboard_workspace`, `mainboard_working_item` |

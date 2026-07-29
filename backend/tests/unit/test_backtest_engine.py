@@ -598,11 +598,7 @@ def test_engine_execution_key_namespace_shifts_with_the_engine_version() -> None
     # groups (the transitive package / dataset / import revisions included) and the worker
     # re-resolves them fail-closed. K-03 then bumped it to -funding-step-order: funding/fee/
     # carry now runs at the TOP of each bar (doc 15 §9.3 step 2) instead of the end, so it
-    # reduces the equity that sizes this bar's entries/scale layers and bounds its exposure.
-    # S5c bumped it again to -scaling-tf-sequence (Logic-Based Scaling + the timeframe
-    # sequence). This test deliberately pins NO literal: it asserts the SHIFT, not the name,
-    # so a future bump never has to hand-edit an assertion that was not about the name.
-    #
+ 
     # The bump is a real NAMESPACE shift: the same run identity under the previous engine
     # version hashes to a different execution_key, so a pre-K-03 result is never reused.
     built = _manifest("btrun_A", "snap_A", "2024-01-01T00:00:00Z")

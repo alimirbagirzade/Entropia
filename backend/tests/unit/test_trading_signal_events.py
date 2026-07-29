@@ -7,7 +7,7 @@ Acceptance (doc 04 §15): TS-05 (missing available_time is a whole-file blocker 
 availability is never inferred), TS-06 (an entry/exit ledger file is not silently
 accepted as a Signal), TS-07 (an event may not be usable before its available_time
 — asserted here at SCHEMA level; the engine-side decision gate is recorded as a
-gap in docs/audit/acceptance_id_traceability.md) and TS-08 (instrument + timezone
+gap in docs/audit/acceptance_id_map.md) and TS-08 (instrument + timezone
 normalization: an unmapped symbol is skipped, a naive stamp is localized).
 """
 

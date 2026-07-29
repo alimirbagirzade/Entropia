@@ -179,8 +179,11 @@ describe("Panel / Management page", () => {
     fireEvent.change(roleSelect, { target: { value: "supervisor" } });
     fireEvent.click(screen.getByRole("button", { name: "Apply" }));
 
+    // Doc 19 §7.1 "Role success" text, verbatim.
     expect(
-      await screen.findByText("Role assignment accepted — alice → supervisor (v4)."),
+      await screen.findByText(
+        "Role updated. alice is now supervisor. The audit event will appear in Logs shortly.",
+      ),
     ).toBeInTheDocument();
     const patchCall = fetchMock.mock.calls.find(
       ([url, init]) =>
@@ -194,6 +197,36 @@ describe("Panel / Management page", () => {
     // a single role change (and one audit event) despite the OCC guard.
     const patchHeaders = (patchCall?.[1] as RequestInit).headers as Record<string, string>;
     expect(patchHeaders["Idempotency-Key"]).toBeTruthy();
+  });
+
+  it("reports a no-op role save as 'No role change was needed.' (doc 19 §4.2)", async () => {
+    // The server half of the no-op decision (no version bump, no audit event,
+    // changed=false) already shipped; this pins the UI half of the SAME decision.
+    // Merging both outcomes into one "(v3, unchanged)" line let a no-op read as a
+    // successful change whose audit event was merely slow to index.
+    stubApi({
+      ...BASE_ROUTES,
+      "PATCH /admin/users/u_1/role": {
+        user_id: "u_1",
+        username: "alice",
+        role: "user",
+        version: 3,
+        role_changed_at: null,
+        role_changed_by: null,
+        changed: false,
+        audit_event_id: null,
+        correlation_id: "corr-3",
+      },
+    });
+    renderPage();
+    await screen.findByText("alice");
+
+    const roleSelect = await screen.findByLabelText("Role for alice");
+    fireEvent.change(roleSelect, { target: { value: "supervisor" } });
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+
+    expect(await screen.findByText("No role change was needed.")).toBeInTheDocument();
+    expect(screen.queryByText(/will appear in Logs shortly/)).not.toBeInTheDocument();
   });
 
   it("surfaces the server denial verbatim (server policy, not a UI hint)", async () => {

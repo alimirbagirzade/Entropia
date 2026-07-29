@@ -135,10 +135,15 @@ function UsersCard() {
         </p>
       ) : null}
       {assign.data ? (
+        // Doc 19 §4.2 "no-op role save" has TWO halves: the server returns
+        // `changed=false` with no version bump and no audit event, and the UI says so
+        // in its own words. The backend half shipped; this renders §7.1's two exact
+        // notices instead of one merged "(v4, unchanged)" line, so an Admin can tell
+        // "nothing happened" apart from "it happened, the log is catching up".
         <p aria-live="polite">
-          Role assignment accepted — {assign.data.username} → {assign.data.role} (v
-          {assign.data.version}
-          {assign.data.changed ? "" : ", unchanged"}).
+          {assign.data.changed
+            ? `Role updated. ${assign.data.username} is now ${assign.data.role}. The audit event will appear in Logs shortly.`
+            : "No role change was needed."}
         </p>
       ) : null}
     </section>

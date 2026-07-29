@@ -31,8 +31,55 @@ function mutationErrorText(error: unknown): string {
   return error instanceof Error ? error.message : "Request failed.";
 }
 
-function publishNoticeText(result: PublishResult): string {
-  return `Published “${result.title}” rev ${result.revision_no} — added to the end of the continuous manual.`;
+// ---------------------------------------------------------------------------
+// Doc 21 §6.1 — the page's final UI copy, VERBATIM. These strings are the
+// spec's own wording: never translated, reworded or paraphrased. Only the
+// documented “{title}” slot in the remove-confirmation body is interpolated.
+// Presentation only — no route path, react-query key, OCC token or
+// Idempotency-Key is derived from anything here.
+//
+// Honest boundary: §6.1's "Unsupported type error", "Parse error", "Duplicate
+// content warning", "Unauthorized error" and "Stale conflict" rows are NOT
+// mirrored here on purpose — those five are backend failures and this page
+// renders the canonical envelope verbatim (see mutationErrorText above,
+// doc 21 §10 / O-02). Restating them client-side would invent a second
+// message for the same defect. "Upload read failure" likewise has no client
+// surface since F-03 moved the upload to multipart: the server decodes the
+// bytes, so the client never performs the read that could fail.
+// ---------------------------------------------------------------------------
+const MANUAL_COPY = {
+  searchPlaceholder: "Search headings or text",
+  composerTitlePlaceholder: "Manual document title",
+  composerContentPlaceholder:
+    "Paste or write the complete text. It will be appended below the existing manual in the same continuous reading flow.",
+  nonAdminHelper:
+    "Only Admin can upload or add manual documents. All roles can search, open and read the complete manual text.",
+  blankSearchEmptyState: "Enter a word or phrase to search every part of the continuous manual.",
+  noSearchResult: "No document text matches this search.",
+  textAppendSuccess: "Text document added to the end of the continuous manual.",
+  uploadSuccess: "Uploaded document added to the end of the continuous manual.",
+  softDeleteSuccess: "Document moved to Trash.",
+  requiredFieldsError: "A document title and full text are required.",
+  removeConfirmTitle: "Remove manual document?",
+  removeConfirmCancel: "Cancel",
+  removeConfirmProceed: "Move to Trash",
+  searchIndexNote: "Search index updating. New content may appear in search shortly.",
+} as const;
+
+function removeConfirmBody(title: string): string {
+  return `“${title}” will be removed from the published manual and moved to Trash. Existing historical citations remain preserved according to retention policy.`;
+}
+
+// The §6.1 toast is the headline; this keeps the concrete publish coordinates
+// (title / revision / stream position) as secondary detail so the verbatim
+// sentence stays an exact text node of its own.
+function publishDetailText(result: PublishResult): string {
+  return `Published “${result.title}” rev ${result.revision_no} at stream position ${result.stream_position}.`;
+}
+
+interface PublishNotice {
+  text: string;
+  detail: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -126,7 +173,7 @@ export function UserManual() {
     );
   };
 
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<PublishNotice | null>(null);
   const [openDrawer, setOpenDrawer] = useState<"add" | "upload" | "restore" | null>(null);
 
   return (
@@ -193,7 +240,15 @@ export function UserManual() {
                 </button>
               </>
             ) : (
-              <AdminApprovalNote detail="Manual maintenance (add, upload, restore) is Admin-only; the published stream stays readable for everyone." />
+              <>
+                <AdminApprovalNote />
+                {/* Doc 21 §6.1 "Non-Admin helper", verbatim and standing on its
+                    own so the spec sentence is a text node of its own rather
+                    than a suffix concatenated into the shared note. */}
+                <p className="page-sub" role="note">
+                  {MANUAL_COPY.nonAdminHelper}
+                </p>
+              </>
             )}
           </div>
         </aside>
@@ -209,12 +264,19 @@ export function UserManual() {
             </div>
           </div>
 
-          {notice ? <div className="manual-notice">{notice}</div> : null}
+          {notice ? (
+            <div className="manual-notice">
+              <strong>{notice.text}</strong> <span>{notice.detail}</span>
+            </div>
+          ) : null}
           {lastDelete ? (
             <div className="manual-notice">
-              <strong>Deleted:</strong> {lastDelete.display_name ?? lastDelete.document_id} — document{" "}
-              <code>{lastDelete.document_id}</code> moved to Trash (stream v{lastDelete.stream_version}).
-              Restore it from the sidebar or the Admin Trash page.
+              <strong>{MANUAL_COPY.softDeleteSuccess}</strong>{" "}
+              <span>
+                “{lastDelete.display_name ?? lastDelete.document_id}” — document{" "}
+                <code>{lastDelete.document_id}</code> (stream v{lastDelete.stream_version}). Restore it
+                from the sidebar or the Admin Trash page.
+              </span>
             </div>
           ) : null}
 
@@ -246,7 +308,8 @@ export function UserManual() {
             expectedStreamVersion={streamVersion}
             onPublished={(result) => {
               resetToFirstPage();
-              setNotice(publishNoticeText(result));
+              // Doc 21 §6.1 "Text append success".
+              setNotice({ text: MANUAL_COPY.textAppendSuccess, detail: publishDetailText(result) });
               setOpenDrawer(null);
             }}
           />
@@ -258,7 +321,9 @@ export function UserManual() {
             expectedStreamVersion={streamVersion}
             onPublished={(result) => {
               resetToFirstPage();
-              setNotice(publishNoticeText(result));
+              // Doc 21 §6.1 "Upload success" — a distinct sentence from the
+              // paste flow's, so the toast names how the document arrived.
+              setNotice({ text: MANUAL_COPY.uploadSuccess, detail: publishDetailText(result) });
               setOpenDrawer(null);
             }}
           />
@@ -269,7 +334,13 @@ export function UserManual() {
           <RestoreChooser
             onRestored={(result) => {
               resetToFirstPage();
-              setNotice(`Restored “${result.display_name}” — ${result.entity_id} is ${result.deletion_state}.`);
+              // Doc 21 §6.1 has no restore toast row; this stays the page's own
+              // wording rather than borrowing a sentence that means something
+              // else.
+              setNotice({
+                text: "Document restored to the continuous manual.",
+                detail: `Restored “${result.display_name}” — ${result.entity_id} is ${result.deletion_state}.`,
+              });
               setOpenDrawer(null);
             }}
           />
@@ -413,7 +484,7 @@ function ManualSearchNav({
         <input
           className="manual-search-input"
           type="search"
-          placeholder="Search headings or text"
+          placeholder={MANUAL_COPY.searchPlaceholder}
           value={input}
           onChange={(event) => setInput(event.target.value)}
           aria-label="Search query"
@@ -441,13 +512,15 @@ function ManualSearchNav({
         {search.isError ? <ErrorState error={search.error} onRetry={() => void search.refetch()} /> : null}
         {results && query.trim().length > 0 ? (
           <>
+            {/* Doc 21 §6.1 "Search index note" — the reader and the index are
+                on different snapshots, which the spec words as an indexing
+                lag rather than a reader problem. */}
             {streamVersion !== null && streamVersion !== results.meta.stream_version ? (
-              <p className="cp-note">
-                The reader shows a different snapshot; the index may lag (re-run the search).
-              </p>
+              <p className="cp-note">{MANUAL_COPY.searchIndexNote}</p>
             ) : null}
             {results.data.length === 0 ? (
-              <div className="manual-empty-state">Nothing matched “{results.meta.query}”.</div>
+              // Doc 21 §6.1 "No search result".
+              <div className="manual-empty-state">{MANUAL_COPY.noSearchResult}</div>
             ) : (
               results.data.map((row) => (
                 // The href stays real (copyable / middle-clickable), but the
@@ -492,9 +565,8 @@ function ManualSearchNav({
             </div>
           </>
         ) : (
-          <div className="manual-empty-state">
-            Enter a word or phrase to search every part of the continuous manual.
-          </div>
+          /* Doc 21 §6.1 "Blank search empty-state". */
+          <div className="manual-empty-state">{MANUAL_COPY.blankSearchEmptyState}</div>
         )}
       </div>
     </>
@@ -587,7 +659,18 @@ function SectionView({ section, isAdmin, deletePending, deleteError, onDelete }:
             {showReplace ? "Close replace" : "Replace content"}
           </button>
           {confirmingDelete ? (
-            <>
+            // Doc 21 §6.1 remove-confirmation trio: title, body ("{title}"
+            // interpolated per the spec's own slot) and the Cancel |
+            // Move to Trash action pair. Presentation only — the dispatch
+            // below still sends the same body + expected_stream_version OCC
+            // token and the same Idempotency-Key it did before.
+            <div
+              className="manual-remove-confirm"
+              role="group"
+              aria-label={MANUAL_COPY.removeConfirmTitle}
+            >
+              <strong>{MANUAL_COPY.removeConfirmTitle}</strong>
+              <p className="cp-note">{removeConfirmBody(section.title)}</p>
               <input
                 className="auth-input"
                 placeholder="Reason (optional)"
@@ -595,18 +678,18 @@ function SectionView({ section, isAdmin, deletePending, deleteError, onDelete }:
                 onChange={(event) => setDeleteReason(event.target.value)}
                 aria-label={`Delete reason for ${section.title}`}
               />
+              <button type="button" className="btn btn-ghost" onClick={() => setConfirmingDelete(false)}>
+                {MANUAL_COPY.removeConfirmCancel}
+              </button>
               <button
                 type="button"
                 className="btn"
                 disabled={deletePending}
                 onClick={() => onDelete(section.document_id, deleteReason)}
               >
-                Confirm delete
+                {MANUAL_COPY.removeConfirmProceed}
               </button>
-              <button type="button" className="btn btn-ghost" onClick={() => setConfirmingDelete(false)}>
-                Cancel
-              </button>
-            </>
+            </div>
           ) : (
             <button type="button" className="btn btn-ghost" onClick={() => setConfirmingDelete(true)}>
               Delete…
@@ -689,6 +772,12 @@ function AddComposer({
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [allowDuplicate, setAllowDuplicate] = useState(false);
+  // Doc 21 §5: Document Title * and Full Text * are "always required" while the
+  // composer is open, and the `*` is a real request-validation requirement, not
+  // decoration. The client states the missing-field reason in the spec's own
+  // words (§6.1) instead of leaving a silently dead button; the server still
+  // re-validates the same two fields.
+  const [requiredError, setRequiredError] = useState(false);
 
   return (
     <form
@@ -696,6 +785,11 @@ function AddComposer({
       onSubmit={(event) => {
         event.preventDefault();
         if (expectedStreamVersion === null) return;
+        if (title.trim().length === 0 || content.trim().length === 0) {
+          setRequiredError(true);
+          return;
+        }
+        setRequiredError(false);
         create.mutate(
           {
             title: title.trim(),
@@ -713,16 +807,28 @@ function AddComposer({
         re-read, never a silent overwrite.
       </p>
       <label className="auth-field">
-        <span>Title</span>
-        <input className="auth-input" value={title} onChange={(event) => setTitle(event.target.value)} />
+        <span>
+          Document Title <span className="auth-required">*</span>
+        </span>
+        <input
+          className="auth-input"
+          value={title}
+          onChange={(event) => setTitle(event.target.value)}
+          placeholder={MANUAL_COPY.composerTitlePlaceholder}
+          aria-required="true"
+        />
       </label>
       <label className="auth-field">
-        <span>Content</span>
+        <span>
+          Full Text <span className="auth-required">*</span>
+        </span>
         <textarea
           className="auth-input"
           rows={8}
           value={content}
           onChange={(event) => setContent(event.target.value)}
+          placeholder={MANUAL_COPY.composerContentPlaceholder}
+          aria-required="true"
         />
       </label>
       <label className="manual-check">
@@ -733,18 +839,21 @@ function AddComposer({
         />
         <span>Allow duplicate content (audited override)</span>
       </label>
+      {/* Doc 21 §5: "openken enabled unless submission in progress" — the
+          button stays reachable so a blank submit can name the missing fields
+          in §6.1's wording instead of dead-ending on a disabled control. */}
       <button
         type="submit"
         className="btn btn-primary"
-        disabled={
-          create.isPending ||
-          expectedStreamVersion === null ||
-          title.trim().length === 0 ||
-          content.trim().length === 0
-        }
+        disabled={create.isPending || expectedStreamVersion === null}
       >
         Publish document
       </button>
+      {requiredError ? (
+        <p className="auth-hint" role="alert">
+          {MANUAL_COPY.requiredFieldsError}
+        </p>
+      ) : null}
       {create.isError ? <p className="auth-hint">{mutationErrorText(create.error)}</p> : null}
     </form>
   );

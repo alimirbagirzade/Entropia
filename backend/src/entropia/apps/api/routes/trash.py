@@ -65,6 +65,29 @@ class PurgeRequest(BaseModel):
     expected_head_revision_id: int | None = None
 
 
+class PurgeAcceptedResponse(BaseModel):
+    """The 202 body doc 20 contradicts itself on (O-30) — now PUBLISHED in the schema.
+
+    §7's literal names the field ``root_lifecycle_state``; §9.2's state machine
+    (with §4, §9.3, §12) says the request moves the root to PURGE_PENDING. The
+    adjudication ships BOTH names carrying the SAME value, so a §4/§7 reader and
+    a §9.2 reader are each served. Declaring this model is what puts those fields
+    in ``docs/openapi.json`` — while the handler returned a bare ``dict`` the
+    drift guard could stay green without the contract being visible at all.
+    """
+
+    purge_job_id: str
+    trash_entry_id: str
+    entity_id: str
+    entity_type: str
+    # Two spellings of one state — never allowed to diverge (see the command).
+    deletion_state: str
+    root_lifecycle_state: str
+    purge_status: str
+    row_version: int
+    correlation_id: str | None = None
+
+
 def _expected_version(
     body_value: int | None, if_match: str | None, *, field: str = "expected_head_revision_id"
 ) -> int | None:
@@ -165,7 +188,7 @@ async def restore(
     )
 
 
-@router.post(_PURGE_PATH, status_code=202)
+@router.post(_PURGE_PATH, response_model=PurgeAcceptedResponse, status_code=202)
 async def purge(
     trash_entry_id: str,
     body: PurgeRequest,

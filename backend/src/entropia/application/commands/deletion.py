@@ -748,13 +748,24 @@ async def request_purge(
             "trash_entry_id": entry.id,
             "entity_id": entry.entity_id,
             "entity_type": entry.entity_type,
+            # Doc 20 carries the purge-request 202 body in two places that
+            # disagree: §4/§7's literal spells the field `root_lifecycle_state`
+            # and pins it to 'soft_deleted', while §9.2's state machine (with
+            # §4 rows 596/602-603, §9.3 and §12) says the request itself moves
+            # the root to PURGE_PENDING. ADJUDICATED (O-30): §9.2 wins on the
+            # VALUE — the row really is purge_pending once this returns, and
+            # advertising 'soft_deleted' would tell the caller restore is still
+            # open when it is not. §4/§7 wins on the NAME — both keys ship,
+            # carrying the same value, so a §4/§7 reader and a §9.2 reader are
+            # each served without either being lied to.
             "deletion_state": str(DeletionState.PURGE_PENDING),
+            "root_lifecycle_state": str(DeletionState.PURGE_PENDING),
             "purge_status": "pending",
             "row_version": entry.row_version,
             "correlation_id": actor.correlation_id,
         }
 
-    return await run_idempotent(
+    result = await run_idempotent(
         session,
         key=idempotency_key,
         actor_principal_id=actor.principal_id,
@@ -766,3 +777,12 @@ async def request_purge(
         },
         operation=_op,
     )
+    # A key stored BEFORE O-30 replays verbatim (run_idempotent returns
+    # `response_ref` untouched) and predates `root_lifecycle_state`. Now that the
+    # 202 body is a declared response model, that legacy envelope would fail
+    # validation on replay — so backfill it from `deletion_state`, which is the
+    # same value by construction. Copy, never mutate: `response_ref` is a JSON
+    # column value still attached to the session.
+    if "root_lifecycle_state" not in result:
+        return {**result, "root_lifecycle_state": result["deletion_state"]}
+    return result

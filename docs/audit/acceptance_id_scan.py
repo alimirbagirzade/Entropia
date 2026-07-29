@@ -73,7 +73,7 @@ def main() -> None:
         print(f"doc {page} [{prefix}] {len(hit)}/{len(ids)}{tail}")
     print(f"\nGLOBAL {tagged}/{total} ({100 * tagged // total}%)  untraced={total - tagged}")
     print("\nNOTE: docs 06, 08 and 09 have NO ID column in their acceptance tables and")
-    print("are therefore invisible to this scan. See acceptance_id_traceability.md §C.")
+    print("are therefore invisible to this scan. See acceptance_id_map.md §C.")
 
 
 if __name__ == "__main__":

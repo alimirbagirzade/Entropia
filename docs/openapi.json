@@ -2123,6 +2123,66 @@
         "title": "PatchStrategyDraftBody",
         "type": "object"
       },
+      "PurgeAcceptedResponse": {
+        "description": "The 202 body doc 20 contradicts itself on (O-30) — now PUBLISHED in the schema.\n\n§7's literal names the field ``root_lifecycle_state``; §9.2's state machine\n(with §4, §9.3, §12) says the request moves the root to PURGE_PENDING. The\nadjudication ships BOTH names carrying the SAME value, so a §4/§7 reader and\na §9.2 reader are each served. Declaring this model is what puts those fields\nin ``docs/openapi.json`` — while the handler returned a bare ``dict`` the\ndrift guard could stay green without the contract being visible at all.",
+        "properties": {
+          "correlation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Correlation Id"
+          },
+          "deletion_state": {
+            "title": "Deletion State",
+            "type": "string"
+          },
+          "entity_id": {
+            "title": "Entity Id",
+            "type": "string"
+          },
+          "entity_type": {
+            "title": "Entity Type",
+            "type": "string"
+          },
+          "purge_job_id": {
+            "title": "Purge Job Id",
+            "type": "string"
+          },
+          "purge_status": {
+            "title": "Purge Status",
+            "type": "string"
+          },
+          "root_lifecycle_state": {
+            "title": "Root Lifecycle State",
+            "type": "string"
+          },
+          "row_version": {
+            "title": "Row Version",
+            "type": "integer"
+          },
+          "trash_entry_id": {
+            "title": "Trash Entry Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "purge_job_id",
+          "trash_entry_id",
+          "entity_id",
+          "entity_type",
+          "deletion_state",
+          "root_lifecycle_state",
+          "purge_status",
+          "row_version"
+        ],
+        "title": "PurgeAcceptedResponse",
+        "type": "object"
+      },
       "PurgeRequest": {
         "properties": {
           "confirmation_phrase": {
@@ -15170,9 +15230,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Purge Api V1 Trash Entries  Trash Entry Id  Purge Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/PurgeAcceptedResponse"
                 }
               }
             },

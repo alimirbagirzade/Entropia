@@ -137,7 +137,11 @@ export interface PurgeResult {
   trash_entry_id: string;
   entity_id: string;
   entity_type: string;
+  // Two names for one state (O-30 adjudication): doc 20 §4/§7 spells the field
+  // `root_lifecycle_state`, §9.2's state machine pins the VALUE to
+  // 'purge_pending'. Both keys ship and always agree.
   deletion_state: string;
+  root_lifecycle_state: string;
   purge_status: string;
   row_version: number;
   correlation_id: string | null;

@@ -606,9 +606,17 @@ def test_engine_execution_key_namespace_shifts_with_the_engine_version() -> None
     # produced under the older engine — a different (or since-removed) dependency set, the
     # end-of-bar funding order, or an unevaluatable Minimum-N gate — must never be
     # idempotently reused for a re-RUN.
+    # S5c then bumped it again (-scaling-tf-sequence): Logic-Based Scaling and the per-layer
+    # timeframe sequence became executable, so a result from an engine that could evaluate
+    # neither must not be reused either.
+    #
+    # S5c also stopped PINNING the literal here. This assertion had to be hand-edited by
+    # K-04, K-03, I-15a and S5c in turn, none of which changed what it tests — an assertion
+    # that breaks on every unrelated bump is a tripwire, not a check (the post-PR-#45
+    # stub-version convention). What matters is that the CONSTANT reaches the manifest and
+    # that the namespace moves; both are asserted below without naming the release.
     built = _manifest("btrun_A", "snap_A", "2024-01-01T00:00:00Z")
-    expected = "backtest-engine-v18-restriction-min-n"
-    assert built.manifest["identity"]["engine_version"] == expected
+    assert built.manifest["identity"]["engine_version"] == ENGINE_VERSION
     # The bump is a real NAMESPACE shift: the same run identity under the previous engine
     # version hashes to a different execution_key, so a pre-K-03 result is never reused.
     stale = _manifest("btrun_A", "snap_A", "2024-01-01T00:00:00Z", engine_version="prev-engine")

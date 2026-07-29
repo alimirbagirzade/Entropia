@@ -363,7 +363,11 @@ def _manifest(engine_version: str):
 
 
 def test_strategy_config_min_true_count_bumps_engine_version_and_shifts_execution_key() -> None:
-    assert ENGINE_VERSION == "backtest-engine-v18-restriction-min-n"
+    # S5c: the literal assertion that stood here (ENGINE_VERSION == "...-restriction-min-n")
+    # is DELETED, not re-pinned to the next release name. It broke on the very next bump —
+    # which is exactly the failure mode the post-PR-#45 stub-version convention exists to
+    # prevent. This test is about the NAMESPACE SHIFT, and comparing the live constant
+    # against a distinct prior pin proves that without any test knowing the current name.
     current = _manifest(ENGINE_VERSION)
     prior = _manifest(_PRIOR_ENGINE_VERSION)
     assert current.manifest["identity"]["engine_version"] == ENGINE_VERSION

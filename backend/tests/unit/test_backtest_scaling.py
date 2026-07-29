@@ -72,7 +72,19 @@ def _price_scaling(
 
 
 def _logic_scaling() -> dict[str, Any]:
-    """An enabled Logic-Based scaling subtree (deferred -> fail closed)."""
+    """An enabled Logic-Based scaling subtree that still FAILS CLOSED — for a NEW reason.
+
+    S5c made Logic-Based Scaling executable, so this subtree is no longer unsupported
+    because of its METHOD. It is unsupported because it is UNBOUNDED: logic-based scaling
+    has no ``layers`` field of its own (doc 02 §5.7 gives ladder depth to the price method),
+    and this fixture pins neither ``max_scaling_layers`` nor a custom timeframe sequence, so
+    it has no declared depth. Deliberately left that way — the fail-closed path still needs
+    a fixture and an unbounded ladder is the honest remaining example. The golden scenario
+    built from it (``scaling.logic_unsupported``) keeps its name and its behaviour: no
+    position, no layers. Its digest moved in S5c for a DIAGNOSTICS-only reason — the
+    capability matrix no longer reports ``logic_based_scaling`` as a future_dev selection.
+    For the SUPPORTED logic ladder see ``test_backtest_scaling_timeframe_mode._scaling()``.
+    """
     return {
         "enabled": True,
         "method": "logic_based_scaling",

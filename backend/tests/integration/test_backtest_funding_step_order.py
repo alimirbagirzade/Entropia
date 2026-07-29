@@ -170,11 +170,13 @@ async def test_the_engine_version_bump_shifts_the_execution_key_namespace() -> N
     # New Results carry the CURRENT engine version; a run identity that hashed to one
     # execution_key under any previous version hashes to a different one now, so a Result
     # produced under the old funding order can never be idempotently reused for a re-RUN.
-    # The literal moved to -restriction-min-n in I-15a (a): that slice widened the saved
-    # config space (Restrictions Minimum-N-of-M, doc 02 §5.8) without restating any funding
-    # number, so K-03's own behavioural assertions above still hold verbatim — only the
-    # namespace this Result lives in changed.
-    assert ENGINE_VERSION == "backtest-engine-v18-restriction-min-n"
+    #
+    # S5c: the literal assertion that stood here is DELETED, not re-pinned to the next
+    # release name. It had to be edited by I-15a and again by S5c without either slice
+    # touching a single funding number — a test that breaks on unrelated changes is a
+    # tripwire, not a check. What this test is actually about is the NAMESPACE SHIFT, which
+    # the comparison below proves against a distinct prior pin without any test needing to
+    # know what the current release is called (the post-PR-#45 stub-version convention).
 
     def _built(engine_version: str) -> Any:
         return build_run_manifest(

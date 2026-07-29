@@ -119,6 +119,8 @@ from entropia.domain.backtest.execution.rules import (
 )
 from entropia.domain.backtest.execution.scaling import (
     apply_partial_aftermath,
+    layer_bucket,
+    layer_timeframe,
     partial_close_is_modelled,
     resolve_scale_layer_size,
     resolve_scale_rejection,
@@ -453,10 +455,28 @@ _VALIDITY_BARS: dict[str, int | None] = {
 # previous trigger close) creates ONE layer candidate; candidates pass the layer-count caps
 # at CREATION (a capped ladder simply generates no candidate, §11.4 "yeni layer oluşturulmaz")
 # and the exposure/size caps at ACCEPTANCE (an over-cap layer is REJECTED with a ledger
-# reason, never auto-trimmed — §11.4 exposure binding). NOT modelled (fail closed):
-#   * ``logic_based_scaling`` — needs separate scale-rule evaluators (a later slice);
-#   * a scaling ``timeframe`` other than ``same_as_base_tf`` (increasing-by-layer / custom
-#     TF sequence) — needs per-layer resampled evaluation;
+# reason, never auto-trimmed — §11.4 exposure binding).
+#
+# S5c added the SECOND method, ``logic_based_scaling``: its blocks resolve through the same
+# plan resolver as entry/exit/stop (``IndicatorPlan.scale_specs``) and propose a layer when
+# they aggregate to a signal in the OPEN POSITION'S OWN direction — on the signal's EDGE, so
+# a signal that merely stays true does not add a layer every bar, and same-direction only
+# (§5.7: an opposite signal is never scaling; the §9 conflict rules resolve it). This is
+# also the ONLY ladder the per-layer timeframe sequence gates, per doc 02 §6.1: "Price-
+# Distance Based Scaling doğrudan fiyat mesafesiyle tetiklendiğinden bu timeframe dizisini
+# kullanmaz" — a price comparison evaluates no indicator, so it has no candle to close on.
+#
+# NOT modelled (fail closed):
+#   * a scaling ``timeframe`` other than ``same_as_base_tf`` — that field picks ONE
+#     evaluation timeframe for the whole ladder and honouring it needs resampled bars;
+#   * ``timeframe_mode="increasing_by_layer"`` — doc 02 §5.7 names the mode but declares no
+#     step increment (next rung vs. doubling are different ladders), so it fails closed
+#     rather than being guessed. S5c DID lift ``timeframe_mode="custom_sequence"``: layer N
+#     is gated on the closed candle of sequence entry N (``layer_timeframe`` /
+#     ``layer_bucket``, the same bucketing the multi-TF indicator path uses), which needs no
+#     resampling because the gate only restricts WHICH base bars are decision points;
+#   * an UNBOUNDED logic ladder — logic-based scaling has no ``layers`` field of its own, so
+#     without ``max_scaling_layers`` or a custom sequence it has no declared depth;
 #   * a missing / non-positive ``add_size_value`` (no layer size is derivable);
 #   * a negative ``max_scaling_layers`` or a non-positive ``max_total_position_size``
 #     (misconfigurations the schema does not reject — spec §11.4 requires int >= 0).
@@ -1009,15 +1029,46 @@ def run_engine(
     scale_add_basis = ""
     scale_add_value = _ZERO
     scale_max_total: Decimal | None = None
-    if scaling_active and scaling_cfg is not None and scaling_cfg.price_scaling is not None:
-        price_scaling = scaling_cfg.price_scaling
-        scale_distance = price_scaling.retracement_distance
-        # The method's planned ladder depth, further capped by the optional global limit
-        # (§11.4 Max Additional Layers, int >= 0 — 0 legally disables the ladder).
-        scale_max_layers = price_scaling.layers
+    # S5c: which ladder is running. The logic ladder reads a resolved indicator signal and
+    # is the ONLY consumer of the per-layer timeframe sequence (doc 02 §6.1); the
+    # price-distance ladder compares price and ignores it.
+    scale_logic_mode = (
+        scaling_active and scaling_cfg is not None and (scaling_cfg.method == "logic_based_scaling")
+    )
+    if (
+        scaling_active
+        and scaling_cfg is not None
+        and (scaling_cfg.price_scaling is not None or scale_logic_mode)
+    ):
         scale_limits = scaling_cfg.scaling_limits
+        if scaling_cfg.price_scaling is not None:
+            price_scaling = scaling_cfg.price_scaling
+            scale_distance = price_scaling.retracement_distance
+            # The method's planned ladder depth, further capped by the optional global limit
+            # (§11.4 Max Additional Layers, int >= 0 — 0 legally disables the ladder).
+            scale_max_layers = price_scaling.layers
+        else:
+            # The logic ladder has no ``layers`` field of its own (§5.7 gives depth to the
+            # price method only), so its depth comes from the global cap — or, under
+            # custom_sequence, from the sequence length below. With neither, an unbounded
+            # logic ladder is refused by ``scaling_is_modelled`` rather than run.
+            scale_max_layers = (
+                scale_limits.max_scaling_layers
+                if scale_limits is not None and scale_limits.max_scaling_layers is not None
+                else 0
+            )
         if scale_limits is not None and scale_limits.max_scaling_layers is not None:
             scale_max_layers = min(scale_max_layers, scale_limits.max_scaling_layers)
+        # S5c: under custom_sequence the SEQUENCE LENGTH is itself a layer bound. Doc 02
+        # §5.7 gives the ladder one timeframe per layer and says nothing about running past
+        # the last entry, so the run stops there rather than inventing a repeat-the-last or
+        # fall-back-to-base rule. This also makes ``layer_timeframe``'s past-the-end branch
+        # unreachable, i.e. no layer can ever slip through ungated.
+        tf_sequence = scaling_cfg.custom_timeframe_sequence
+        if scaling_cfg.timeframe_mode == "custom_sequence" and tf_sequence:
+            scale_max_layers = (
+                min(scale_max_layers, len(tf_sequence)) if scale_max_layers else len(tf_sequence)
+            )
         scale_max_total = scale_limits.max_total_position_size if scale_limits is not None else None
         scale_add_basis = scaling_cfg.add_size
         scale_add_value = scaling_cfg.add_size_value or _ZERO
@@ -1112,6 +1163,15 @@ def run_engine(
     stop_evals: list[BlockEvaluator] = build_evaluators(stop_specs)
     stop_pairs = list(zip(stop_specs, stop_evals, strict=True))
     logic_enabled = [f"logic:{spec.block_id}" for spec in stop_specs]
+
+    # S5c Logic-Based SCALING evaluators — INDEPENDENT of the entry plan for the same reason
+    # the stop evaluators are: a strategy may scale on a different indicator than it enters
+    # on. Empty when no logic-based scaling is pinned, so the price-distance ladder is
+    # byte-identical to pre-S5c.
+    scale_specs = indicator_plan.scale_specs if indicator_plan is not None else ()
+    scale_evals: list[BlockEvaluator] = build_evaluators(scale_specs)
+    scale_signal: str | None = None
+    prev_scale_signal: str | None = None
 
     window: deque[_Bar] = deque(maxlen=_BREAKOUT_WINDOW)
     position: _Position | None = None
@@ -1401,6 +1461,12 @@ def run_engine(
             initial_size=size,
             layers_filled=0,
             scale_reference=fill_raw,
+            # S5c: anchor layer 1's closed-bar gate to the ENTRY bar's candle. The entry
+            # bar's own layer-TF candle has not closed yet, so the first candidate must
+            # wait for the next bucket — the no-lookahead half of §5.7's alignment rule.
+            scale_layer_bucket=layer_bucket(
+                _bar_epoch_ms(bar.timestamp), layer_timeframe(config, 0)
+            ),
             peak_notional=(entry_eff * size).quantize(_MONEY),
         )
 
@@ -1733,6 +1799,22 @@ def run_engine(
                     volume=bar.volume,
                     timestamp=bar.timestamp,
                 )
+
+            # S5c: logic-SCALING evaluators advance every bar for the same reason. The
+            # aggregated direction is this bar's scaling proposal; the ladder below turns it
+            # into a layer only on an EDGE, in the open position's own direction, and only
+            # on a bar that closes the layer's timeframe candle.
+            if scale_evals and indicator_plan is not None and indicator_plan.scale_rule is not None:
+                for ev in scale_evals:
+                    ev.update(
+                        bar.close,
+                        bar.high,
+                        bar.low,
+                        bar.open,
+                        volume=bar.volume,
+                        timestamp=bar.timestamp,
+                    )
+                scale_signal = aggregate(indicator_plan.scale_rule, scale_evals)
 
             # (2) K-03 / F-11 funding cost — doc 15 §9.3 step 2: funding/fee/carry is applied
             # at the TOP of the bar, BEFORE any fill, stop, exposure check, entry or scaling
@@ -2810,13 +2892,49 @@ def run_engine(
                 # reference the candidate was measured from, not the new one.
                 scale_ref = position.scale_reference
                 scale_long = position.direction == "long"
-                if scale_threshold_crossed(
-                    reference=scale_ref,
-                    distance_pct=scale_distance,
-                    close=bar.close,
-                    is_long=scale_long,
-                ):
+                # S5c per-layer closed-bar gate (doc 02 §5.7), applied ONLY to the
+                # LOGIC-BASED ladder. doc 02 §6.1's ⓘ panel is explicit and its reasoning is
+                # mechanical, not incidental: "Price-Distance Based Scaling doğrudan fiyat
+                # mesafesiyle tetiklendiğinden bu timeframe dizisini kullanmaz" — a price
+                # comparison evaluates no indicator, so it has no candle to close on. The
+                # sequence therefore governs which candle a logic-based SIGNAL is read from,
+                # and the price-distance ladder below stays exactly as it was pre-S5c.
+                # ``next_layer_tf`` is None under same_strategy, leaving even the logic
+                # ladder ungated (every base bar is a decision point).
+                next_layer_tf = (
+                    layer_timeframe(config, position.layers_filled) if scale_logic_mode else None
+                )
+                this_bucket = layer_bucket(_bar_epoch_ms(bar.timestamp), next_layer_tf)
+                layer_bar_ready = next_layer_tf is None or (
+                    this_bucket is not None and this_bucket != position.scale_layer_bucket
+                )
+                if scale_logic_mode:
+                    # The logic ladder proposes a layer when the resolved scaling blocks
+                    # aggregate to a signal in the POSITION'S OWN direction (§5.7's
+                    # same-direction-only canonical rule — an opposite signal is never
+                    # scaling; it is resolved by the §9 conflict rules). An EDGE is
+                    # required, mirroring the F-07e conflict detector: a signal that simply
+                    # stays true must not add a layer on every subsequent bar.
+                    scale_fires = (
+                        layer_bar_ready
+                        and scale_signal == position.direction
+                        and prev_scale_signal != position.direction
+                    )
+                else:
+                    scale_fires = scale_threshold_crossed(
+                        reference=scale_ref,
+                        distance_pct=scale_distance,
+                        close=bar.close,
+                        is_long=scale_long,
+                    )
+                if scale_fires:
                     position.scale_reference = bar.close  # the ladder steps from this trigger
+                    # S5c: this candle has now been SPENT on a decision, accepted or not —
+                    # advance the gate anchor so a gated logic ladder makes at most one
+                    # decision per layer-timeframe candle. Under same_strategy (and on the
+                    # whole price-distance path) ``this_bucket`` is None, which restores the
+                    # pre-S5c inert anchor exactly.
+                    position.scale_layer_bucket = this_bucket
                     layer_size = resolve_scale_layer_size(
                         basis=scale_add_basis,
                         value=scale_add_value,
@@ -2880,6 +2998,14 @@ def run_engine(
                             position.peak_notional, position.entry_notional
                         )
                         position.layers_filled += 1
+                        # S5c: the NEXT layer has its own timeframe, so the gate must be
+                        # re-anchored in that timeframe's buckets — not left in the one the
+                        # layer just filled used. Re-anchoring to THIS bar means the next
+                        # layer waits for a full candle of its own (coarser) timeframe.
+                        position.scale_layer_bucket = layer_bucket(
+                            _bar_epoch_ms(bar.timestamp),
+                            layer_timeframe(config, position.layers_filled),
+                        )
                         led.scale_layers_added += 1
                         if commission > _ZERO:
                             # The layer's own entry fill pays its commission NOW; the close
@@ -2900,7 +3026,16 @@ def run_engine(
                                 "new_size": str(scaled_size),
                                 "entry_basis": str(new_basis),
                                 "exposure": str(position.entry_notional),
-                                "method": "price_distance_scaling",
+                                "method": (
+                                    "logic_based_scaling"
+                                    if scale_logic_mode
+                                    else "price_distance_scaling"
+                                ),
+                                # S5c: which timeframe's closed candle authorized this
+                                # layer. None under same_strategy and on the whole
+                                # price-distance path (both ungated) — the trace states the
+                                # ladder's structure, it never implies one.
+                                "layer_timeframe": next_layer_tf,
                             },
                         )
 
@@ -2908,6 +3043,9 @@ def run_engine(
             # F-07e: the conflict EDGE detector's memory — this bar's aggregated signal is
             # the next bar's "previous" (None in proxy mode, so the detector stays inert).
             prev_entry_signal = entry_signal
+            # S5c: this bar's scaling proposal becomes the next bar's "previous" so the
+            # ladder fires on the signal's EDGE, not on every bar it stays true.
+            prev_scale_signal = scale_signal
 
             # F-07i (C): a resting touch exit dies with its position — whatever closed it
             # (stop / deferred exit / the touch itself) consumed the exit intent; a later

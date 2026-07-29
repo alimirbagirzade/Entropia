@@ -390,11 +390,12 @@ CAPABILITY_MATRIX: tuple[CapabilityOption, ...] = (
     CapabilityOption(
         field_path="scaling_logic.method",
         value="logic_based_scaling",
-        status="future_dev",
+        status="active_v1",
         label="Logic Based",
         dependency=(
-            "Needs separate scale-rule evaluators (an indicator/condition plan resolved "
-            "per layer); the ladder currently triggers on price retracement only."
+            "Needs at least one resolvable indicator block, a positive add_size_value and "
+            "a DECLARED depth — max_scaling_layers or a custom timeframe sequence — "
+            "because logic-based scaling has no layer count of its own (S5c)."
         ),
         blocker_code="STRATEGY_SCALING_UNSUPPORTED",
     ),
@@ -430,6 +431,42 @@ CAPABILITY_MATRIX: tuple[CapabilityOption, ...] = (
             ("4h", "4h"),
             ("1D", "1D"),
         )
+    ),
+    # -- Scaling timeframe MODE / structure (scaling_is_modelled, S5c) ------
+    # Distinct from ``scaling_logic.timeframe`` above: that field picks ONE evaluation
+    # timeframe for the whole ladder (an override there still needs a resampled series),
+    # while the mode says how the per-layer structure is shaped. S5c made the custom
+    # sequence active because it needs no resampling — it only gates which base bars are
+    # decision points.
+    CapabilityOption(
+        field_path="scaling_logic.timeframe_mode",
+        value="same_strategy",
+        status="active_v1",
+        label="Same as Strategy Timeframe",
+    ),
+    CapabilityOption(
+        field_path="scaling_logic.timeframe_mode",
+        value="custom_sequence",
+        status="active_v1",
+        label="Custom Timeframe Sequence",
+        dependency=(
+            "Needs a non-empty, strictly increasing custom_timeframe_sequence of canonical "
+            "timeframes. Layer N is gated on the closed candle of entry N, and the "
+            "sequence length also bounds the ladder."
+        ),
+        blocker_code="STRATEGY_SCALING_UNSUPPORTED",
+    ),
+    CapabilityOption(
+        field_path="scaling_logic.timeframe_mode",
+        value="increasing_by_layer",
+        status="future_dev",
+        label="Increasing Timeframe by Layer",
+        dependency=(
+            "Needs a declared step increment. Doc 02 §5.7 names the mode but not the rung "
+            "size (next canonical timeframe vs. doubling are different ladders), so the "
+            "engine fails closed rather than guessing one."
+        ),
+        blocker_code="STRATEGY_SCALING_UNSUPPORTED",
     ),
     # -- Restriction filter types (restrictions_are_modelled) --------------
     *(
@@ -579,6 +616,13 @@ def _read_scaling_method(config: StrategyConfig) -> tuple[str, ...]:
     return (scaling.method,)
 
 
+def _read_scaling_timeframe_mode(config: StrategyConfig) -> tuple[str, ...]:
+    scaling = config.scaling_logic
+    if scaling is None or not scaling.enabled:
+        return ()
+    return (scaling.timeframe_mode,)
+
+
 def _read_scaling_timeframe(config: StrategyConfig) -> tuple[str, ...]:
     scaling = config.scaling_logic
     if scaling is None or not scaling.enabled:
@@ -613,6 +657,7 @@ _FIELD_READERS: dict[str, Callable[[StrategyConfig], tuple[str, ...]]] = {
     "position_exit_logic.partial_aftermath": _read_partial_aftermath,
     "scaling_logic.method": _read_scaling_method,
     "scaling_logic.timeframe": _read_scaling_timeframe,
+    "scaling_logic.timeframe_mode": _read_scaling_timeframe_mode,
     "restrictions_filters.filters.filter_type": _read_filter_types,
     "conflict_position_handling.opposite_direction_hedge": _read_opposite_hedge,
 }

@@ -311,7 +311,43 @@ feat/s3-package-import-*, ayrı PR'lar, NO AI attribution.
 
 ---
 
-## S5 — Strategy config katalog derinliği (doc 02 §5.5/§5.7/§5.8/§5.9) — 🔴 **AÇIK** (dört alt-slice de)
+## S5 — Strategy config katalog derinliği (doc 02 §5.5/§5.7/§5.8/§5.9) — 🟡 **KISMEN AÇIK**
+
+> **DURUM TAZELEME (2026-07-29, S5c PR'ında ampirik doğrulandı).** Aşağıdaki gövde "dört
+> alt-slice de açık" diyor; bu **YANLIŞ**. Gövdenin grep'leri *literal alan adlarını* aradığı
+> için sıfır döndü, oysa kavramların çoğu F-08 dalgasında **başka adlarla** inmişti:
+>
+> | Alt-slice | Gerçek durum | Kanıt |
+> |---|---|---|
+> | **S5a** Minimum-N-of-M | ✅ LANDED (#458) | `RestrictionsFilters.min_true_count` |
+> | **S5d** logic-based stop blocks | ✅ LANDED (F-08) | `ProtectionStopLogic.logic_blocks` (16 hit) |
+> | **S5b** `stop_mode` / any-all | ✅ LANDED (F-08) | ad: `stop_trigger_requirement` (`any_active`\|`all_active`) |
+> | **S5b** `multiple_stops` | ✅ LANDED (F-08) | ad: `stop_conflict_resolution` — §5.9 "Multiple Stops" satırının **dört seçeneği de** |
+> | **S5b** stop+exit | ✅ LANDED | ad: `stop_exit_conflict` |
+> | **S5b** `same_candle_entry_exit` | 🔴 **AÇIK** | S5b'den geriye kalan **tek** kalem (gerçekten 0 hit) |
+> | **S5c** `timeframe_mode` + `custom_sequence` | ✅ **LANDED (bu PR)** | — |
+>
+> **S5c ne getirdi:** typed JSONB şema (`ScalingLogic.timeframe_mode` +
+> `custom_timeframe_sequence`, **migration YOK**) + strictly-increasing/presence validation +
+> **Logic-Based Scaling'in kendisi** (`IndicatorPlan.scale_specs`/`scale_rule`; capability
+> matrix'te `future_dev` → `active_v1`) + per-layer closed-bar gate + form + ⓘ paneller +
+> ENGINE_VERSION bump (`…-scaling-tf-sequence`).
+>
+> **S5c ADJUDICATION (doc 02 §5.7 tablosu vs. §6.1 ⓘ paneli).** §5.7 tablosu
+> `scaling.timeframe_mode`'u genel bir scaling alanı gibi listeler; §6.1'in panel metni (§6'nın
+> CONTENT RULE'u onu sözleşme yapar) ise diziyi **yalnız Logic-Based Scaling'e** bağlar, çünkü
+> Price-Distance doğrudan fiyat mesafesiyle tetiklenir. **§6.1 KAZANDI:** gerekçesi mekaniktir
+> (fiyat kıyaslaması hiçbir indikatör değerlendirmez, dolayısıyla kapanacak mumu yoktur) ve dar
+> okuma sevk edilmiş price ladder'ı bozamaz. Bu yüzden S5c, dizinin **tek tüketicisi** olan
+> Logic-Based Scaling'i de indirdi — aksi hâlde ulaşılabilir davranışı olmayan bir alan sevk
+> edilmiş olurdu. Karar `test_price_distance_ladder_ignores_the_sequence` ile kilitlendi.
+>
+> **Hâlâ bilerek fail-closed (L4):** `increasing_by_layer` (doc 02 §5.7 modun adını verir ama
+> **adım büyüklüğünü tanımlamaz** — bir üst basamak mı, iki katı mı? tahmin edilmedi) ve
+> **sınırsız** logic ladder (logic-based scaling'in kendi `layers` alanı yok; `max_scaling_layers`
+> ya da custom sequence gerekir). Düz `timeframe` override'ı eskisi gibi resampling istiyor.
+>
+> **Geriye kalan:** S5b'nin `same_candle_entry_exit` kalemi (tek başına küçük bir slice).
 **Boyut:** EN BÜYÜK (backend şema + engine + frontend form; ENGINE_VERSION bump). **Öncelik:** Düşük-orta (mevcut davranış fail-closed L4 — sessiz yanlışlık yok).
 
 **Doğrulanan durum:** `domain/strategy/config.py`'de yok (grep=0): §5.5 logic-based stop block +

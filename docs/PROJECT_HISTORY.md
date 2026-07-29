@@ -1781,3 +1781,114 @@ cap'i gevşetmez, üstüne biner.
 - **Bu bölüm doc 13'ü değiştirmez.** `docs/spec/` kanonik ve dokunulmazdır; buradaki kayıt
   yalnızca kodun spec'i **aştığı** yeri belgeler. Doc 13 bir gün bu alanları kapsayacak biçimde
   yeniden yayımlanırsa, otorite spec'e döner ve bu bölüm tarihsel not haline gelir.
+
+
+## K-09 · Engine god-module split — beş davranış-korur çıkarma + kalıcı golden guard (PR #421/#423/#424/#425/#426 + #427)
+
+> **Bu kayıt geriye dönük yazıldı.** Beş slice 2026-07 içinde merge oldu ama kendi kapanış
+> kaydını hiç almadı; `docs/T01_LANDED_KICKOFF.md:17` bunu açık bir soru olarak bırakmıştı
+> ("K-09/K-10'un kendi kapanış kayıtları ayrı gelir — veya gelmemiştir, kontrol et").
+> Aşağıdaki her sayı, merge commit'lerinden ve bugünkü `origin/main`'den **yeniden ölçüldü**.
+
+**Sorun.** `domain/backtest/engine.py` 5212 satıra, içindeki `run_engine` 2848 satıra ulaşmıştı.
+Repo kuralı dosya <800, fonksiyon <50 satır — dosya kuralı 6.5×, fonksiyon kuralı 57× aşılıyordu.
+Motor tek bir dosyada bar döngüsü, fill eşleme, kısmi doluş, sizing, funding ve portföy
+birleştirmeyi birden taşıyordu.
+
+**Yöntem — saf çıkarma, her slice ayrı PR, her slice byte-eşitlik kanıtlı.** Kabul kapısı
+`ENGINE_VERSION`'ın **değişmemesi** ve refactor öncesi/sonrası **TAM `EngineOutput`**'un
+byte-eşit olmasıydı. Yalnız summary metrikleri değil: summary + trades + equity_points +
+signal_events + diagnostics + position_intervals. Bunun için shipped engine test helper'larından
+**46 senaryoluk** bir fixture matrisi kuruldu, her slice öncesi ve sonrası digest'lendi.
+Toplam digest beş slice boyunca sabit kaldı:
+`69754888b0aaa48adca0cddf1bdce94e48330eeb38355772ce8b9cc6e39670fc` — pre-K-09 baseline
+`eff8ffe`'den beri değişmedi.
+
+### Slice sırası ve ölçülen etki
+
+| # | Slice | PR | Yeni modül | engine.py | run_engine |
+|---|---|---|---|---|---|
+| 1 | (e) portfolio compose | #421 | `execution/portfolio.py` | 5212 → 4681 (−531) | 2848 (değişmedi) |
+| 2 | (c) sizing & leverage | #423 | `execution/sizing.py` + `constants.py` | 4681 → 4443 (−238) | 2848 (değişmedi) |
+| 3 | (d) cost & funding | #424 | `execution/costs.py` | 4443 → 4427 (−16) | 2848 → 2846 (−2) |
+| 4 | (a) fills & stop resolution | #425 | `execution/fills.py` + `state.py` | 4427 → 3780 (−647) | 2846 → 2842 (−4) |
+| 5 | (b) partial close & scaling | #426 | `execution/scaling.py` | 3780 → 3680 (−100) | 2842 → 2797 (−45) |
+
+**Toplam: engine.py 5212 → 3680 (−1532, −%29); run_engine 2848 → 2797 (−51, −%1.8).**
+
+Sıra tesadüfi değil: **state bağımlılığı arttıkça ilerlendi.** (e) hiç bar-döngüsü state'i
+okumaz (tamamlanmış `ItemRun`'lar üzerinde saf fold) → state threading sıfır. (c) saf
+`(config, entry_price, equity)` fonksiyonu. (d) ilk kez `run_engine` **İÇİNDEKİ** kodu yeniden
+yazar. (a) ve (b) `run_engine` içindeki closure'ları decide/apply seam'inden böler.
+
+### Kalıcı mimari kararlar
+
+- **Bağımlılık yönü tek yönlü, aşağı doğru.** `execution.*` modülleri `engine`'den import eder,
+  asla geri değil. `run_engine` bir modülü ÇAĞIRDIĞINDA (sizing, fills) paylaşılan tipleri
+  engine'de bırakmak cycle kapatırdı → iki **leaf** modül doğdu: `execution/constants.py`
+  (quantization sabitleri — reproducibility sözleşmesinin parçası) ve `execution/state.py`
+  (`_Bar`, `_Position` + `_dec`/`_volume`/`_normalize` ham-satır coercion sınırı).
+- **decide/apply seam'i.** Saf olmayan kod "hangi karar" ve "mutasyonu uygula" olarak bölündü.
+  Funding: `due_funding_charges()` hangi pinli kaydın bu barda ateşlendiğini ve kaça mal
+  olduğunu söyler; equity/peak/counter mutasyonu + `funding_charge` decision event'i
+  `run_engine`'de, state'in yaşadığı yerde kalır. Aynı desen `apply_partial_aftermath`
+  (pozisyonu mutate eder, profit lock uygulanıp uygulanmadığını **raporlar** → `lock_in_locks`
+  çağrı yerinde kitaplanır) ve `_fill_resting_limit` (karar çıktı, booking/trace/remainder
+  kaldı) için de kullanıldı.
+- **`sizing_is_modelled` / `leverage_is_modelled` tek kaynak kalır.** `readiness/validators.py`
+  bunları yeni modülden import eder → `STRATEGY_SIZING_UNSUPPORTED` /
+  `STRATEGY_LEVERAGE_UNSUPPORTED` Ready Check blocker'ları ile motorun fail-closed giriş kapısı
+  ayrışamaz.
+- **`resolve_scale_rejection` cap PRECEDENCE'ı artık gözlemlenebilir.** Kaybeden cap'in adı
+  reddedilen katmanın ledger reason'ına yazılır, yani hangi cap'in kazandığı okunabilir
+  davranıştır. Sıra (degenerate size → per-strategy total → configured size limit → sleeve →
+  composition-wide money cap) 30 satırlık if/elif zincirinde örtük olmak yerine testle pinlendi.
+  Cap aşan katman hâlâ **REDDEDİLİR, asla otomatik kırpılmaz** (§11.4).
+- **K-03'ün step-2 funding sırası korundu** — funding hâlâ bar'ın TEPESİNDE, o barın
+  boyutlandırdığı/cap'lediği her şeyden önce uygulanır.
+- **Fail-closed davranışlar taşındı, gevşetilmedi.** Çözülemeyen bar timestamp'i
+  `resolve_funding_decision_time` içinde `FundingSourceInvalid` fırlatmaya devam eder — sessizce
+  hiçbir şey ateşlememek tüm run için fazla-iyimser SIFIR funding maliyeti kitaplardı; date
+  blackout precedent'inin aksine bir maliyetin geri düşülecek kısıtlayıcı okuması yoktur.
+  As-of karşılaştırması hâlâ elle yazılmamıştır: `research_data.time_policy.is_eligible_for_decision`
+  (kanonik rule-2 kapısı) delege edilir.
+
+### Golden guard — K-09'un kalıcı artefaktı (PR #427)
+
+Byte-eşitlik harness'i repo dışında yaşıyordu ve oturumla birlikte ölecekti. #427 onu
+`backend/tests/unit/test_backtest_engine_golden.py` + `engine_golden_digests.json` olarak
+kalıcılaştırdı. **Harness bir slice'ı fiilen yakaladı:** slice (b) ilk halinde scaling-reference
+capture'ını düşürmüştü — hiçbir davranış testi fark etmedi çünkü tüm headline metrikler doğru
+kalırken ladder'ın trace detayı **yanlış referansı** raporluyordu. Bu, "summary metrikleri yeterli"
+varsayımının neden kabul edilmediğinin tek satırlık kanıtıdır.
+
+Test kırıldığında iki durum vardır ve docstring ikisini de yazar: (1) çıktıyı değiştirmek
+istemediysen bu bir regresyondur, JSON'a dokunma, kodu düzelt; (2) istediysen `ENGINE_VERSION`'ı
+**aynı** değişiklikte bump et, sonra baseline'ı yeniden üret. Bump'sız yeniden üretim, artık
+eşleşmeyen çıktı için eski bir `execution_key` namespace'ini sessizce yeniden kullanır — sözleşmenin
+tam olarak yasakladığı şey.
+
+### Doğrulama
+
+Her slice: ruff + `ruff format --check` + `mypy src` temiz; izole DB'de tam backend suite
+0 failed / 0 error (sırasıyla 2245 → 2273 → 2287 → 2306 → 2327 test). **Migration YOK**, yeni
+`create_*` komutu YOK → alembic up/down/up proof'u ve L1 FK insert-order proof'u bu slice'a
+uygulanmaz. Çıkarma **mekanik** yapıldı (satırlar taşındı, yeniden yazılmadı), transkripsiyon
+sapması yapısal olarak imkânsız.
+
+**Çıkarmanın açtığı yeni unit kapsamı: 98 test** — daha önce yalnız bar replay ile erişilebilen
+kurallar artık doğrudan test edilebilir: (e) 15 · (c) 28 · (d) 14 · (a) 20 · (b) 21.
+
+### Dürüst sınırlar
+
+- **`run_engine` hâlâ 2797 satırlık bir fonksiyon** (bugün `origin/main`'de 2596, sonraki
+  slice'ların katkısıyla; max nesting 10). Dosya kuralı hâlâ 4.2×, fonksiyon kuralı 52× aşılıyor.
+  Beş çıkarma **dosyayı** böldü, **bar döngüsünü** değil — taşınanların çoğu zaten module-level
+  helper'lardı. Geriye kalan, `nonlocal` üzerinden equity / position / working_limit'i gerçekten
+  mutate eden closure'lardır; bunları kaldırmak ya büyük bir threaded state nesnesi ya da motoru
+  bir sınıfa çevirmeyi gerektirir — ikisi de "saf çıkarma" mandate'inin dışındaydı ve ikisini de
+  byte-eşitlik kanıtıyla savunmak daha zordur. Slice'lar bunu gizlemek yerine her commit
+  mesajında açıkça raporladı.
+- **`ENGINE_VERSION` K-09 boyunca sabit kaldı** (`backtest-engine-v18-funding-step-order`) —
+  altı commit'in altısında da doğrulandı. Sonradan `-restriction-min-n`'e taşındı, ama bu I-15a'nın
+  gerçek bir modelleme değişikliğidir, refactor'ın değil.

@@ -51,9 +51,12 @@ should trace back to it.
    cd frontend && npm run lint && npm run typecheck && npm run coverage && npm run build
    ```
 
-   `uv run pytest` enforces `--cov-fail-under=80`; `npm run coverage` enforces the
-   thresholds in `frontend/vite.config.ts`. Both are gates, not reports — when one
-   fails, add the missing test rather than lowering the number.
+   `uv run pytest` enforces `--cov-fail-under=90`; `npm run coverage` enforces the
+   thresholds in `frontend/vite.config.ts` (lines 83 / statements 80 / functions 73
+   / branches 70). Both numbers are calibrated against a measured green run —
+   backend 92.06%, frontend 84.67% lines — recorded in
+   `docs/audit/coverage_baseline.md`. Both are gates, not reports: when one fails,
+   add the missing test rather than lowering the number.
 
    Every new `create_*` command needs an FK insert-order proof; every new
    migration needs an `alembic upgrade head` / `downgrade -1` / `upgrade head`

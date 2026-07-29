@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import hashlib
 
-from entropia.domain.revision.hashing import canonical_json
+from entropia.shared.hashing import canonical_json
 
 
 def request_fingerprint(payload: object) -> str:

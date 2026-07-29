@@ -1005,6 +1005,37 @@ class InvalidItemKindError(ValidationError):
     remediation = "Send the item kind as exactly 'trading_signal' or 'trade_log'."
 
 
+class KindRevisionMismatchError(ValidationError):
+    """AOS-12 (doc 03 §14 row "Type/payload mismatch"; taxonomy §11 row
+    "Revision/attachment"): the ``revision_id`` carried by an attach/pin request
+    belongs to a work object of a DIFFERENT kind than the one being bound. The
+    spec's canonical example is a Trading Signal attach request carrying a Trade
+    Log revision id; the second half of AOS-12 is that no partial item is created.
+
+    Third member of a family whose three codes answer three different questions —
+    none substitutes for another:
+
+    * ``INVALID_ITEM_KIND`` (AOS-03) — "that is not a kind this system has".
+    * ``MAINBOARD_ITEM_KIND_MISMATCH`` (CR-01) — "your kind disagrees with the root's".
+    * this one — "your REVISION's kind disagrees with the kind you are binding".
+
+    **422, not 409.** Doc 03 §11 files the code under "Revision/attachment" next to
+    the lifecycle-flavoured ``OBJECT_SOFT_DELETED``, while §14 files AOS-12 itself
+    under "Type/payload mismatch" — the same family as AOS-03. Adjudicated in favour
+    of §14: the request is malformed at its type level, not racing a live state, so
+    it ships 422 / ``ErrorCategory.VALIDATION`` exactly like its two siblings.
+
+    ``retryable=false``: a revision row is immutable and is never re-kinded, so the
+    same (bound kind, ``revision_id``) pair fails identically forever. The recovery
+    is to choose a revision of the matching kind, never to resend."""
+
+    code = "KIND_REVISION_MISMATCH"
+    message = "The revision belongs to a work object of a different kind."
+    scope_type = "work_object_revision"
+    suggested_action = "choose_matching_revision"
+    remediation = "Pin a revision that belongs to a work object of the same kind."
+
+
 class ObjectNotActiveError(ConflictError):
     """A work object referenced by an attach/pin/revision is not ACTIVE
     (soft-deleted or otherwise not live). Operations require a live root."""

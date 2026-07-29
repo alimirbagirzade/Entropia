@@ -202,20 +202,41 @@ change and therefore outside this presentation-only slice.
 | `frontend/src/components/ResultDetail.tsx:420` — in `PerItemCard` (def `:416`) · `:589` — in `MarginalCard` (def `:585`) | per-item breakdown rows render `{item_kind} <code>{item_id}</code>`, and leave-one-out rows render `Without <code>{entry.item_id}</code>` — reading a result breakdown is a common task | `PerItemBreakdown` / `ManifestItemRef` have no label field. The result is **immutable and pinned**; joining the *live* composition's labels would mislabel a result whose items have since changed — the label must come from the manifest, i.e. the server |
 | `frontend/src/pages/ReadyCheck.tsx:291` — in `IssuesTable` (def `:258`) | issue rows show a bare `scope_id` (same defect class as the Portfolio issue table that this slice fixed) | `ReadinessIssue` has no label field, and the report is immutable + `is_current`-tracked; labelling a **stale** report from the live composition would be actively wrong |
 
-`frontend/src/pages/ResultsHistory.tsx:170` was listed here as **not** a violation on the grounds
-that a backtest result has no user-assigned name. **Superseded by I-16a (2026-07-29):** the
-history projection has been shipping a server-owned `display_title` all along
-(`application/queries/results_history.py::_row_dto` → `HistoryRow.display_title`,
-`frontend/src/lib/backtest.ts:181`, doc 16 §8.1 `HistoryResultRowDTO`) — and the page rendered
-**zero** of it, leaving `<code>{row.result_id}</code>` as the row's primary visible identity. That
-is F-07's own prescribed correction already present at the query boundary and simply not consumed.
-The row now renders `ResultLabel` — `display_title` primary, `result_id` beneath as the secondary
-binding key (mirrors Portfolio's `ItemLabel`, §4.3). Presentation-only: no DTO, route,
-react-query key, OCC token, Idempotency-Key or `lib/*.ts` data logic changed; the id keeps
-carrying compare selection, the View deep-link and delete. Honest boundary: the shipped title is
-server-derived as `"Backtest Result <result_id>"`, so it still *contains* the id — but the string
-is composed by the **server**, never reconstructed in the browser, which is exactly the line F-07
-draws. Its digest shape remains PO-owned (D-5).
+`frontend/src/pages/ResultsHistory.tsx:170` is deliberately **not** listed as a violation: a
+backtest result has no user-assigned name, and since P-12 the row carries completed-at / timeframe
+/ symbol, so the id is not the sole discriminator. Its digest shape is PO-owned (D-5).
+
+**I-16a — attempted, then reverted (2026-07-29). Do not re-open without new server-side facts.**
+The row was briefly changed to render the history projection's `display_title` as its primary
+label with the id kept beneath (`ResultLabel`, mirroring Portfolio's `ItemLabel`). The premise was
+that the query boundary had been shipping F-07's own prescribed correction all along and the page
+simply wasn't consuming it. **The premise was wrong.** `display_title` is not a name — it is the id
+with a noun glued to its front:
+
+```python
+# application/queries/results_history.py::_row_dto  (and panel_backtest_log.py::_row)
+"display_title": f"Backtest Result {result.result_id}",
+```
+
+So the shipped row read `Backtest Result res_1` over `res_1` — the same opaque identifier printed
+**twice**, zero information gained, and F-07's actual defect ("recognizing an opaque identifier for
+a common task") untouched. Reverted in full; the id is back as a single `<code>` binding key, and
+`resultsHistory.test.tsx` now carries a regression guard asserting the id-derived title is *not*
+rendered.
+
+Why no better title can be composed at the query boundary today — the two candidates and why each
+fails:
+
+| Candidate title | Why it fails |
+|---|---|
+| `symbol · timeframe · completed-at` (the I-16b `request_display_label` pattern) | those three facts are **already the row's own adjacent columns** (`ResultsHistory.tsx:201-203`), so the label would restate them a third time |
+| the composition's display name | **nothing nameable is pinned.** The manifest carries only `composition_snapshot_id` (`domain/backtest/manifest.py:130`) — no name. Resolving the *live* composition is precisely the mislabeling hazard this same table rejects for `PerItemCard`: a result is immutable, and its composition may have been renamed or recomposed since the run |
+
+Re-opening therefore requires a **new pinned fact** — e.g. the manifest starting to carry the
+composition's name at write time — not another frontend pass. Until then the id-as-binding-key plus
+the P-12 column trio is the honest rendering. The DTO field itself is left in place (doc 16 §8.1
+`HistoryResultRowDTO` names it, and `PanelLogs.tsx:134` still renders it in a table that has no
+symbol/timeframe columns to discriminate with); only this page's consumption of it was reverted.
 
 ### 4.5 Verification
 

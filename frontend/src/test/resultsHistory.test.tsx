@@ -156,39 +156,21 @@ describe("Results History page", () => {
     );
   });
 
-  // I-16a / F-07: the backend already ships a server-owned display_title on every
-  // history row; the browser must render THAT as the row's name and keep the raw
-  // result_id as a secondary binding key — never reconstructing a name from the id.
-  it("renders the server-owned display_title as the primary row label with result_id kept secondary", async () => {
+  // I-16a regression guard (attempted then reverted 2026-07-29): the projection's
+  // `display_title` ships as the literal `"Backtest Result <result_id>"`, so
+  // promoting it into the row's name slot renders the id TWICE and names nothing.
+  // The row identifies itself by the id-as-binding-key plus the completed-at /
+  // timeframe / symbol trio beside it (P-12). See v18_visual_traceability.md §4.4.
+  it("keeps the result_id as the row's binding key and never renders the id-derived display_title", async () => {
     stubApi({ "GET /backtest-results?": PAGE_ONE });
     renderPage();
 
-    const title = await screen.findByText("Backtest Result res_1");
-    const idCode = screen.getByText("res_1");
-    // The id is no longer the primary label: it sits beneath the title inside the
-    // same identity cell, in a muted <code> slot (mirrors Portfolio's ItemLabel).
+    const idCode = await screen.findByText("res_1");
     expect(idCode.tagName).toBe("CODE");
-    expect(idCode.parentElement).toBe(title.parentElement);
-    expect(
-      title.compareDocumentPosition(idCode) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    // Binding keys are untouched — the View deep-link still carries the result_id.
-    expect(screen.getByRole("link", { name: "View" })).toHaveAttribute(
-      "href",
-      "/backtest/run?result=res_1",
-    );
-  });
-
-  // A projection that carried no title falls back to the generic kind noun; the
-  // raw id is NEVER promoted into the name slot (F-07).
-  it("falls back to a generic result noun when the projection carries no display_title", async () => {
-    stubApi({
-      "GET /backtest-results?": { ...PAGE_ONE, items: [{ ...ROW, display_title: "" }] },
-    });
-    renderPage();
-
-    expect(await screen.findByText("Backtest Result")).toBeInTheDocument();
-    expect(screen.getByText("res_1").tagName).toBe("CODE");
+    expect(screen.queryByText("Backtest Result res_1")).not.toBeInTheDocument();
+    // The discriminating facts sit beside the id, not inside a synthesized name.
+    expect(screen.getByText("2026-07-05 19:06 UTC")).toBeInTheDocument();
+    expect(screen.getByText("BTCUSDT")).toBeInTheDocument();
   });
 
   it("expands a row to reveal pinned strategies, parameters, data, date and the immutable manifest summary (UI-16)", async () => {

@@ -103,18 +103,7 @@ from entropia.shared.manifest import manifest_hash
 # Result produced by the min-n-only engine (no filtered_events artifact) and one produced
 # by the filtered-events-only engine (no Minimum-N gate) are both incomparable with what
 # this engine emits, and neither may be idempotently reused for a re-RUN.
-# v18-per-item-labels (F-07 §4.4): the composite Result's per-item breakdown and its
-# leave-one-out (marginal) rows now persist ``item_label`` — the composition item's human
-# name as PINNED in the run manifest. Engine BEHAVIOUR is unchanged: every strategy-replay
-# golden scenario is byte-identical and only the four ``portfolio.combine*`` composite
-# scenarios move, because the artifact grew a field. Same class as v17 above (additive to
-# the artifact) and it gets the same treatment: without the bump a stale pre-label result
-# would be idempotently REUSED for a re-RUN of the same composition (INF-04/INF-05) and its
-# rows would stay id-only forever — the fix would never reach an existing composition.
-# NOTE this is a ONE-TIME namespace shift, not label-sensitivity: two manifests differing
-# only in a label value still share an execution_key (the labels ride ``mainboard_item_labels``,
-# outside ``execution_content``). See tests/unit/test_f07_manifest_item_labels.py.
-ENGINE_VERSION = "backtest-engine-v18-min-n-filtered-events-per-item-labels"
+ 
 METRIC_SET_VERSION = "metric-set-v1"
 OUTPUT_ARTIFACT_PROFILE = "standard-v1"
 

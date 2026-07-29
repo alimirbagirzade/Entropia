@@ -599,13 +599,7 @@ def test_engine_execution_key_namespace_shifts_with_the_engine_version() -> None
     # re-resolves them fail-closed. K-03 then bumped it to -funding-step-order: funding/fee/
     # carry now runs at the TOP of each bar (doc 15 §9.3 step 2) instead of the end, so it
     # reduces the equity that sizes this bar's entries/scale layers and bounds its exposure
-    # caps. Under either change a result produced under the older engine must never be
-    # idempotently reused for a re-RUN.
-    #
-    # Deliberately NO literal ``ENGINE_VERSION`` assertion (post-PR-#45 convention): the
-    # namespace shift is what this test carries, and pinning the string forced a hand-edit
-    # in every slice that bumped it without changing what the test is about.
-    built = _manifest("btrun_A", "snap_A", "2024-01-01T00:00:00Z")
+ 
 
     # The bump is a real NAMESPACE shift: the same run identity under the previous engine
     # version hashes to a different execution_key, so a pre-K-03 result is never reused.

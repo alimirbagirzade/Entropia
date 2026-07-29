@@ -80,7 +80,6 @@ from entropia.domain.backtest.execution.constants import (
     _ONE,
     _PCT,
     _QTY,
-    _RATIO,
     _ZERO,
 )
 from entropia.domain.backtest.execution.costs import (
@@ -111,6 +110,16 @@ from entropia.domain.backtest.execution.fills import (
     order_execution_is_modelled,
     tick_data_required,
 )
+from entropia.domain.backtest.execution.output import (
+    _BREAKOUT_WINDOW,
+    DECISION_TRACE_EVENT_TYPES,
+    DECISION_TRACE_SCHEMA,
+    ENTRY_MODEL,
+    UNMODELLED_DECISION_CLASSES,
+    build_diagnostics,
+    build_summary,
+    build_warnings,
+)
 from entropia.domain.backtest.execution.rules import (
     bar_epoch_ms,
     conflicts_with_prior,
@@ -129,7 +138,6 @@ from entropia.domain.backtest.execution.scaling import (
 )
 from entropia.domain.backtest.execution.sizing import (
     _cap_to_sleeve,
-    _leverage_multiplier,
     _position_size,
     _sizing_is_honored,
     blocked_reason,
@@ -138,6 +146,7 @@ from entropia.domain.backtest.execution.sizing import (
     sleeve_capital,
 )
 from entropia.domain.backtest.execution.state import (
+    FILTERED_EVENT_TYPES,
     AllocationExecution,
     EquityPoint,
     PortfolioRules,
@@ -152,8 +161,6 @@ from entropia.domain.backtest.execution.state import (
 )
 from entropia.domain.backtest.funding import FundingSchedule, parse_utc
 from entropia.domain.backtest.indicators import (
-    BUILTIN_ENTRY_MODEL,
-    VOLUME_WEIGHTED_KEYS,
     BlockEvaluator,
     IndicatorPlan,
     aggregate,
@@ -168,13 +175,6 @@ if TYPE_CHECKING:
     )
 
 
-# Rolling look-back for the TEST-ONLY breakout entry/exit fixture (F-04). A constant of
-# the engine version (part of the reproducibility contract via ``engine_version``), NOT a
-# strategy input; production runs always drive entries from a resolved indicator plan.
-_BREAKOUT_WINDOW = 20
-ENTRY_MODEL = "deterministic_bar_breakout_proxy_v1"
-
-
 class UnresolvedStrategyError(ValueError):
     """``run_engine`` was invoked without a resolved indicator plan and without the
     explicit test-only breakout fixture opt-in (F-04). The engine FAILS CLOSED — it
@@ -183,49 +183,6 @@ class UnresolvedStrategyError(ValueError):
     twice upstream (Ready Check ``STRATEGY_INDICATOR_UNRESOLVED`` at admission + the
     worker's ``RUN_FAILED_UNRESOLVED_DEPENDENCY`` re-check); this is the engine's own
     last line of defence against a caller that bypasses both."""
-
-
-# F-10 complete decision trace (doc 15 §9.3 step 8, §14, §16). The full event taxonomy the
-# bar-replay engine emits, so a reviewer can reconstruct WHY every position opened / did not
-# open / changed / closed. A signal/decision event is never conflated with a real fill.
-DECISION_TRACE_SCHEMA = "v1"
-DECISION_TRACE_EVENT_TYPES = (
-    "entry_signal",  # strategy decided to enter (rule id + per-condition evidence)
-    "entry_fill",  # a position actually opened (execution)
-    "entry_scheduled",  # a deferred entry was scheduled to a future bar (F-07a timing)
-    "limit_order_placed",  # a resting limit ENTRY order was placed (F-07b, §2)
-    "limit_order_cancelled",  # a resting limit order expired/ended unfilled (F-07b, §2)
-    "stop_order_placed",  # a resting stop ENTRY trigger was placed (F-07h, §6.2/§6.3)
-    "stop_order_triggered",  # a stop trigger fired: market-like fill or limit armed (F-07h)
-    "stop_order_cancelled",  # a stop trigger never fired by end-of-data (F-07h)
-    "entry_blocked",  # a wanted entry produced no fill (sizing / sleeve capacity)
-    # a signal was filtered with NO fill attempt; the detail's ``reason`` says why:
-    # "direction_restriction" (direction bias), "restriction_blocked" (an active
-    # Restrictions/Filters rule, F-07e), "stacking_ignored" / "stacking_scale_only"
-    # (same-direction conflict policy, F-07e), "hedge_ignored" (opposite-direction
-    # conflict policy, F-07e).
-    "filtered_no_entry",
-    "exit_scheduled",  # a deferred exit was scheduled to a future bar (F-07a timing)
-    "position_partial_close",  # an exit signal closed part of the position (F-07c close_percentage)
-    "scale_layer_added",  # a same-direction layer was added to the open position (F-07d scaling)
-    "scale_layer_rejected",  # a scaling candidate was rejected by an exposure/size cap (F-07d)
-    "stack_entry_added",  # a same-direction signal STACKED onto the open position (F-07e)
-    "stack_entry_rejected",  # a stack candidate was rejected by a size/sleeve cap (F-07e)
-    "position_close",  # a position closed (trade linkage + exit reason + realized pnl)
-    "stop_resolution",  # multi-rule / logic stop resolution (F-08 combination engine)
-    "stop_exit_collision",  # same-bar stop+exit tie-break decision (§5.9)
-    "funding_charge",  # a funding rate applied to the open position (F-11, doc 12 §8.4)
-    # F-07i (C): a limit order filled PARTIALLY — the fraction computed from the intrabar
-    # print path's trade sizes vs the intended size; the detail carries the governing
-    # partial-fill policy + the remainder's disposition (rest / market / cancel / reject).
-    "partial_fill",
-)
-# F-07i (C): every decision class the taxonomy names is now modelled. ``partial_fill``
-# left this list when the intrabar print path (tick sizes) made the filled fraction of a
-# limit order computable — over plain OHLCV it stays fail-closed via
-# ``order_execution_is_modelled`` (a non-``not_allowed`` policy without tick data is a
-# Ready Check blocker + an inert run), never a fabricated fraction.
-UNMODELLED_DECISION_CLASSES: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -240,6 +197,12 @@ class EngineOutput:
     # LATER-pinned item's portfolio constraints are built from
     # (``build_prior_intervals``). Not persisted into the Result artifact.
     position_intervals: list[dict[str, Any]] = field(default_factory=list)
+    # I-02: the filter-veto journal, kept APART from ``signal_events`` and persisted as
+    # its own ``filtered_events`` artifact (doc 15 §3.2 "View Filtered Events"; §16 —
+    # the no-entry/filtered decision trace stays readable in its own right and is never
+    # forced into the shape of a real fill). Appended LAST so every existing positional
+    # construction keeps its meaning; ``run_engine`` and ``combine_item_runs`` set it.
+    filtered_events: list[SignalEventRow] = field(default_factory=list)
 
 
 @dataclass(frozen=True, slots=True)
@@ -1086,6 +1049,19 @@ def run_engine(
     # active filters — that would veto every entry).
     restriction_min_true = max(1, restrictions_cfg.min_true_count or 1)
     restrictions_ok = restrictions_are_modelled(config)
+    # K-11b: the filter types the replay cannot decide, resolved HERE from the same parse
+    # that decides ``restrictions_ok`` rather than re-parsed later by the output assembly.
+    # Keeping the parse in one place is the point: a warning that named a different set
+    # than the gate that opened no position would be a lie about why the run was inert.
+    unmodelled_restriction_types = tuple(
+        sorted(
+            {
+                rf.filter_type
+                for rf in restrictions_cfg.filters
+                if rf.enabled and _parse_restriction(rf) is None
+            }
+        )
+    )
     restriction_specs: list[_RestrictionSpec] = (
         [
             spec
@@ -1119,23 +1095,6 @@ def run_engine(
     # nine, and Ready Check raises STRATEGY_CAPABILITY_NOT_IN_BUILD ahead of it.
     capability_ok = capabilities_are_modelled(config)
 
-    # Every resolved setting the read-only helpers need, pinned once. Built HERE
-    # because ``capability_ok`` is the last of its fields to resolve; nothing below
-    # this point rebinds any of them, so the frozen snapshot cannot go stale.
-    ctx = _RunConfig(
-        config=config,
-        fill_costs=fill_costs,
-        alloc_on=alloc_on,
-        alloc_compound=alloc_compound,
-        allocatable_initial=allocatable_initial,
-        item_share=item_share,
-        reserve_nominal=reserve_nominal,
-        portfolio_rules=portfolio_rules,
-        sizing_ok=sizing_ok,
-        leverage_ok=leverage_ok,
-        strength_ok=strength_ok,
-        capability_ok=capability_ok,
-    )
     future_dev_selected = future_dev_selections(config)
 
     plan_active = indicator_plan is not None and indicator_plan.has_entry
@@ -1178,8 +1137,6 @@ def run_engine(
     pending: _Pending | None = None  # a fill deferred to a future bar (F-07a timing)
     working_limit: _WorkingLimit | None = None  # a resting limit ENTRY order (F-07b)
     working_stop: _WorkingStop | None = None  # a resting stop ENTRY trigger (F-07h)
-    first_ts = ""
-    last_bar: _Bar | None = None
     # F-07h: stop-trigger lifecycle counts (a stop-limit's armed limit leg then counts
     # through the limit_orders_* counters — the two machines compose, never double-count).
     # F-07i (C): tick-setting execution counts — print-resolved entry fills (a resting
@@ -1205,11 +1162,81 @@ def run_engine(
     # pre-F-11). ``funding_idx`` is the as-of cursor (a record fires at most once, in order);
     # ``funding_paid`` is the cumulative signed cost booked against equity.
     funding_records = funding.records if funding is not None else ()
+
+    # Every resolved setting the run READS, pinned once as one frozen value. Built HERE
+    # because ``funding_records`` is the last of its fields to resolve; nothing below this
+    # point rebinds any of them, so the snapshot cannot go stale. (K-10c built this from
+    # ``capability_ok``; K-11b moved the construction down so the plan / evaluator /
+    # funding fields the output assembly reports could join it — the bar loop does not
+    # touch ``ctx`` until its first closure runs, long after this line.)
+    ctx = _RunConfig(
+        config=config,
+        fill_costs=fill_costs,
+        alloc_on=alloc_on,
+        alloc_compound=alloc_compound,
+        allocatable_initial=allocatable_initial,
+        item_share=item_share,
+        reserve_nominal=reserve_nominal,
+        portfolio_rules=portfolio_rules,
+        sizing_ok=sizing_ok,
+        leverage_ok=leverage_ok,
+        strength_ok=strength_ok,
+        capability_ok=capability_ok,
+        # ---- K-11b: the rest of the resolved run, for the output assembly ----------
+        initial_capital=initial_capital,
+        timeframe=timeframe,
+        item_count=item_count,
+        execution_key=execution_key,
+        future_dev_selected=future_dev_selected,
+        # Fail-closed capability gates (the four above plus these six). Any False means
+        # the run opened NO position and an L4 warning names the offending option.
+        timing_ok=timing_ok,
+        order_ok=order_ok,
+        partial_close_ok=partial_close_ok,
+        scaling_ok=scaling_ok,
+        restrictions_ok=restrictions_ok,
+        conflict_ok=conflict_ok,
+        # Saved config sub-objects the provenance block reports verbatim.
+        order_cfg=order_cfg,
+        exit_logic=exit_logic,
+        scaling_cfg=scaling_cfg,
+        restrictions_cfg=restrictions_cfg,
+        conflict_cfg=conflict_cfg,
+        # Resolved policy tokens.
+        strength_mode=strength_mode,
+        partial_aftermath=partial_aftermath,
+        restriction_rule=restriction_rule,
+        unmodelled_restriction_types=unmodelled_restriction_types,
+        overlap_policy=overlap_policy,
+        stacking_policy=stacking_policy,
+        hedge_policy=hedge_policy,
+        stop_trigger_requirement=stop_trigger_requirement,
+        stop_conflict_resolution=stop_conflict_resolution,
+        stop_exit_conflict=stop_exit_conflict,
+        trailing_lock_in_active=trailing_lock_in_active,
+        scaling_enabled=scaling_enabled,
+        scale_max_total=scale_max_total,
+        # Portfolio-rules provenance: the SAVED policy vs the EXECUTED one stays visible.
+        rules_active=rules_active,
+        conflict_gate_on=conflict_gate_on,
+        portfolio_cap_amount=portfolio_cap_amount,
+        conflict_downgraded_from_net=conflict_downgraded_from_net,
+        conflict_policy_unknown=conflict_policy_unknown,
+        # Indicator plan + compiled evaluators.
+        indicator_plan=indicator_plan,
+        plan_active=plan_active,
+        entry_evals=entry_evals,
+        stop_evals=stop_evals,
+        # Funding + tick provenance.
+        funding=funding,
+        funding_records=funding_records,
+        tick_batches=tick_batches,
+        tick_alignment_unavailable=tick_alignment_unavailable,
+    )
     # K-02: rule 2's mapping conjunct, resolved ONCE before the bar loop — the engine only
     # ever sees the pre-resolved schedule, never the revision it came from.
     funding_has_mapping = funding.has_instrument_mapping if funding is not None else False
     funding_idx = 0
-    funding_paid = _ZERO
     # F-10: monotonic position-lifecycle id linking every decision-trace event of one
     # position (entry_signal -> entry_fill -> ... -> position_close) so a reviewer can
     # reconstruct WHY each position opened / did not open / closed. Incremented only on a
@@ -1730,9 +1757,9 @@ def run_engine(
             if bar is None:
                 continue
             led.bars_seen += 1
-            if not first_ts:
-                first_ts = bar.timestamp
-            last_bar = bar
+            if not led.first_ts:
+                led.first_ts = bar.timestamp
+            led.last_bar = bar
             # F-07i (B): advance the tick cursor EVERY bar (position open or not) so the
             # forward-only stream stays aligned to the bar clock.
             bar_ticks: tuple[_Tick, ...] = ()
@@ -1871,7 +1898,7 @@ def run_engine(
                         if charge != _ZERO:
                             led.equity = (led.equity - charge).quantize(_MONEY)
                             led.peak = max(led.peak, led.equity)
-                            funding_paid += charge
+                            led.funding_paid += charge
                         led.funding_charges += 1
                         _emit(
                             "funding_charge",
@@ -3057,11 +3084,11 @@ def run_engine(
 
     # End-of-data: a limit order still resting past the last bar never filled → cancel it
     # (F-07b), so an unfilled limit is an auditable no-fill, never a silent gap.
-    if working_limit is not None and last_bar is not None:
+    if working_limit is not None and led.last_bar is not None:
         led.limit_orders_cancelled += 1
         _emit(
             "limit_order_cancelled",
-            event_time=last_bar.timestamp,
+            event_time=led.last_bar.timestamp,
             direction=working_limit.direction,
             bar_seq=led.bars_seen,
             detail={
@@ -3074,11 +3101,11 @@ def run_engine(
 
     # End-of-data: a stop trigger still resting past the last bar never fired → cancel it
     # (F-07h), so an unfired stop is an auditable no-fill, never a silent gap.
-    if working_stop is not None and last_bar is not None:
+    if working_stop is not None and led.last_bar is not None:
         led.stop_orders_cancelled += 1
         _emit(
             "stop_order_cancelled",
-            event_time=last_bar.timestamp,
+            event_time=led.last_bar.timestamp,
             direction=working_stop.direction,
             bar_seq=led.bars_seen,
             detail={
@@ -3090,399 +3117,22 @@ def run_engine(
         working_stop = None
 
     # End-of-data: close any open position at the last bar's close (never left dangling).
-    if position is not None and last_bar is not None:
-        _close(last_bar.timestamp, last_bar.close, "end_of_data", position, bar_seq=led.bars_seen)
+    if position is not None and led.last_bar is not None:
+        _close(
+            led.last_bar.timestamp,
+            led.last_bar.close,
+            "end_of_data",
+            position,
+            bar_seq=led.bars_seen,
+        )
         position = None
 
-    total_trades = len(led.trades)
-    net_profit = (led.equity - initial_capital).quantize(_MONEY)
-    net_profit_pct = (
-        (net_profit / initial_capital * _HUNDRED).quantize(_PCT)
-        if initial_capital > _ZERO
-        else None
-    )
-    max_drawdown = max((p.drawdown for p in led.equity_points), default=_ZERO)
-    max_drawdown_pct = (
-        (max_drawdown / led.peak * _HUNDRED).quantize(_PCT)
-        if led.peak > _ZERO
-        else _ZERO.quantize(_PCT)
-    )
-    win_rate = (
-        (Decimal(led.winners) / Decimal(total_trades) * _HUNDRED).quantize(_PCT)
-        if total_trades
-        else None
-    )
-    profit_factor = (
-        (led.gross_profit / led.gross_loss).quantize(_RATIO) if led.gross_loss > _ZERO else None
-    )
-    romad = (
-        (net_profit_pct / max_drawdown_pct).quantize(_RATIO)
-        if net_profit_pct is not None and max_drawdown_pct > _ZERO
-        else None
-    )
-
-    summary: dict[str, Any] = {
-        "symbol": config.data.instrument_id,
-        "timeframe": timeframe,
-        # F-05: the ACTUAL first/last bar timestamps replayed (post-filter), never
-        # the requested config.data.backtest_range bounds — proves the manifest
-        # range matches the data actually processed (spec F-05 acceptance).
-        "period_start": first_ts or None,
-        "period_end": last_bar.timestamp if last_bar is not None else None,
-        "initial_capital": initial_capital,
-        "final_equity": led.equity,
-        "net_profit": net_profit,
-        "net_profit_pct": net_profit_pct,
-        "max_drawdown": max_drawdown.quantize(_MONEY),
-        "max_drawdown_pct": max_drawdown_pct,
-        "romad": romad,
-        "win_rate": win_rate,
-        "profit_factor": profit_factor,
-        "total_trades": total_trades,
-        "total_stops": led.stops_hit,
-        "max_stop_streak": led.max_stop_streak,
-        "total_winning_trades": led.winners,
-        # F-11: cumulative signed funding cost booked against equity (positive = net paid).
-        # Already reflected in ``final_equity`` / ``net_profit``; surfaced so the funding
-        # contribution is auditable on its own.
-        "funding_paid": funding_paid.quantize(_MONEY),
-    }
-    warnings: list[str] = []
-    if not led.bars_seen:
-        warnings.append("no_bars_in_source")
-    if rules_active:
-        # Portfolio-rules provenance (L4 — every boundary surfaced, never silent):
-        # sequential pin-order precedence is inherent to every rules-active run; the
-        # rest fire only when their condition actually held.
-        warnings.append(PORTFOLIO_RULES_SEQUENTIAL_WARNING)
-        if conflict_downgraded_from_net:
-            warnings.append("conflict_policy_net_executed_as_block_opposite")
-        if conflict_policy_unknown:
-            warnings.append("portfolio_conflict_policy_unknown_fail_closed")
-        if portfolio_rules is not None and portfolio_rules.exposure_percent_invalid:
-            warnings.append("portfolio_max_exposure_unparseable_zero_cap")
-        if led.portfolio_symbol_unknown_gate:
-            warnings.append("portfolio_conflict_symbol_unknown_fail_closed")
-        if led.portfolio_time_unparseable_gate:
-            warnings.append("portfolio_rules_time_unparseable_fail_closed")
-    if tick_alignment_unavailable:
-        # F-07i (B): a tick stream was injected but the pinned revision carries no
-        # supported bar timeframe, so prints cannot be attributed to bar windows — the
-        # run stayed on the conservative OHLCV model (L4, never silently guessed).
-        warnings.append("tick_alignment_unavailable")
-    if led.partial_evidence_missing:
-        # F-07i (C): a partial-fill policy was active but the touching prints carried no
-        # usable trade sizes — the filled fraction is unknowable from this revision, so
-        # those fills degraded to the coarse full-fill model (L4, never a fabricated
-        # fraction).
-        warnings.append("partial_fill_evidence_unavailable")
-    for option in future_dev_selected:
-        # F-05: the strategy selected an option this build does not execute at all, so the
-        # run opened NO position. Ready Check raises STRATEGY_CAPABILITY_NOT_IN_BUILD — this
-        # L4 warning is the engine backstop when a stale readiness state reaches the worker.
-        # One warning PER selection (not one summary line) so the Result's diagnostics name
-        # every offending option, matching how the other fail-closed gates report.
-        warnings.append(f"capability_not_in_build:{option.field_path}={option.value}")
-    if not sizing_ok:
-        # formula sizing (and a risk_based request without its sub-config) is not
-        # modelled; the run opened NO position (fail closed, F-09) rather than a
-        # notional all-in. Surface the divergence rather than hide it (L4).
-        # risk_based_sizing with a sub-config IS honored.
-        warnings.append(f"position_sizing_method_unsupported:{config.position_sizing.method}")
-    if not leverage_ok:
-        # Cross-margin (needs a portfolio risk model the engine does not implement) or a
-        # non-positive saved multiplier is not modelled; the run opened NO position (fail
-        # closed, F-07f). Ready Check raises STRATEGY_LEVERAGE_UNSUPPORTED — this L4
-        # warning is the engine backstop when a stale readiness state reaches the worker.
-        warnings.append(f"leverage_unsupported:{config.position_sizing.leverage_mode}")
-    if not strength_ok:
-        # A trend- / divergence-adjusted signal-strength mode is not modelled (the saved
-        # schema carries no condition refs / multiplier / band config to execute it,
-        # Master Ref §10.3); the run opened NO position (fail closed, F-07g) rather than
-        # silently sizing un-adjusted. Ready Check raises
-        # STRATEGY_SIGNAL_STRENGTH_UNSUPPORTED — this L4 warning is the engine backstop
-        # when a stale readiness state reaches the worker.
-        warnings.append(f"signal_strength_unsupported:{strength_mode}")
-    if not timing_ok:
-        # An unsupported entry/exit execution timing (intrabar_touch / a limit or
-        # stop-limit simulation) is not modelled over plain OHLCV; the run opened NO
-        # position (fail closed, F-07a) rather than silently filling at the candle
-        # close. Ready Check raises STRATEGY_EXECUTION_TIMING_UNSUPPORTED — this L4
-        # warning is the engine backstop when a stale readiness state reaches the worker.
-        execution = config.data.execution
-        warnings.append(
-            f"execution_timing_unsupported:{execution.entry_timing}/{execution.exit_timing}"
-        )
-    if not order_ok:
-        # An unsupported order variant (a stop / stop-limit with a missing or invalid
-        # trigger, a best_bid_ask price rule — no quote series over OHLCV — or a
-        # partial-fill policy other than not_allowed) is not modelled; the run opened NO
-        # position (fail closed, F-07b/F-07h) rather than silently market-filling.
-        # Ready Check raises STRATEGY_ORDER_TYPE_UNSUPPORTED — this L4 warning is the engine
-        # backstop when a stale readiness state reaches the worker.
-        warnings.append(f"order_type_unsupported:{order_cfg.type}")
-    if not partial_close_ok:
-        # A partial close (close_percentage < 100) with a trailing-stop aftermath but NO
-        # protection-level trailing_stop configured/enabled is not modelled (post-V1 (f):
-        # the aftermath has no trailing parameters of its own to reuse); the run opened NO
-        # position (fail closed, F-07c/f) rather than silently ignoring the aftermath.
-        # Ready Check raises STRATEGY_PARTIAL_CLOSE_UNSUPPORTED — this L4 warning is the
-        # engine backstop. move_stop_to_entry / lock_in_profit / close_all are always
-        # modelled and never reach here.
-        warnings.append(f"partial_close_unsupported:{partial_aftermath}")
-    if not scaling_ok:
-        # An enabled scaling config the ladder cannot execute (logic-based scaling, a
-        # per-layer timeframe override, a missing/non-positive add size, or a misconfigured
-        # cap) is not modelled; the run opened NO position (fail closed, F-07d) rather than
-        # silently running un-scaled. Ready Check raises STRATEGY_SCALING_UNSUPPORTED —
-        # this L4 warning is the engine backstop.
-        unsupported_method = (
-            scaling_cfg.method
-            if scaling_cfg is not None and scaling_cfg.method is not None
-            else "unconfigured"
-        )
-        warnings.append(f"scaling_unsupported:{unsupported_method}")
-    if not restrictions_ok:
-        # An enabled restriction filter the replay cannot decide (volatility / spread /
-        # volume / correlation, a non-block action, or an unparseable config) is not
-        # modelled; the run opened NO position (fail closed, F-07e) rather than silently
-        # trading through the filter. Ready Check raises STRATEGY_RESTRICTIONS_UNSUPPORTED —
-        # this L4 warning is the engine backstop.
-        unmodelled_types = sorted(
-            {
-                rf.filter_type
-                for rf in restrictions_cfg.filters
-                if rf.enabled and _parse_restriction(rf) is None
-            }
-        )
-        warnings.append("restrictions_unsupported:" + ",".join(unmodelled_types))
-    if not conflict_ok:
-        # A true hedge (allow_hedge with exit-on-opposite off) needs two concurrent
-        # opposite positions the single-position replay cannot honestly simulate; the run
-        # opened NO position (fail closed, F-07e). Ready Check raises
-        # STRATEGY_CONFLICT_HANDLING_UNSUPPORTED — this L4 warning is the engine backstop.
-        warnings.append("conflict_handling_unsupported:allow_hedge_without_exit_on_opposite")
-    if indicator_plan is not None:
-        # Blocks the native-trigger foundation could not compute (deferred sources,
-        # timeframe overrides, non-directional keys) are surfaced, never hidden (L4).
-        warnings.extend(indicator_plan.unresolved)
-        if not plan_active:
-            # Reachable ONLY under builtin_breakout_fixture=True (a test passing an empty
-            # plan); production fails closed before this point (F-04, UnresolvedStrategyError).
-            warnings.append("indicator_plan_empty_fallback_proxy")
-    if alloc_on:
-        # FX conversion across a mixed-currency pool is out of scope (GAP-16); the run
-        # assumes a single-currency portfolio pool — surfaced, never hidden (L4).
-        warnings.append("allocation_single_currency_pool_assumed")
-        if item_share <= _ZERO:
-            # Allocation is enabled but the replayed item has no active entry → a
-            # 0-capital sleeve → no fills. Surface it rather than silently fall back to
-            # the strategy's own independent capital (L4).
-            warnings.append("allocation_item_not_in_active_plan")
-    condition_count = (
-        sum(len(spec.conditions) for spec in indicator_plan.entry_specs)
-        + sum(len(spec.conditions) for spec in indicator_plan.exit_specs)
-        if plan_active and indicator_plan is not None
-        else 0
-    )
-    multi_timeframe_blocks = (
-        sum(1 for spec in indicator_plan.entry_specs if spec.resample_seconds)
-        + sum(1 for spec in indicator_plan.exit_specs if spec.resample_seconds)
-        if plan_active and indicator_plan is not None
-        else 0
-    )
-    # Conditions whose RHS reference indicator computes on a coarser per-condition
-    # timeframe than its parent block (post-V1 (i)) — surfaced for reproducibility audits.
-    per_condition_timeframe_conditions = (
-        sum(
-            1
-            for spec in (*indicator_plan.entry_specs, *indicator_plan.exit_specs)
-            for cond in spec.conditions
-            if cond.reference_resample_seconds
-        )
-        if plan_active and indicator_plan is not None
-        else 0
-    )
-    # Conditions whose RHS is an N-ary reference chain (>2 packages compared — post-V1 (ii)):
-    # source vs a monotonic fan of separately-pinned indicators — surfaced for audits.
-    nary_reference_conditions = (
-        sum(
-            1
-            for spec in (*indicator_plan.entry_specs, *indicator_plan.exit_specs)
-            for cond in spec.conditions
-            if cond.extra_references
-        )
-        if plan_active and indicator_plan is not None
-        else 0
-    )
-    # Blocks/reference legs computed as a volume-weighted price line (VWAP — post-V1 (d)):
-    # the first directional key whose compute consumes the bars' volume — surfaced for audits.
-    vwap_blocks = (
-        sum(
-            1
-            for spec in (*indicator_plan.entry_specs, *indicator_plan.exit_specs)
-            if spec.canonical_key in VOLUME_WEIGHTED_KEYS
-        )
-        + sum(
-            1
-            for spec in (*indicator_plan.entry_specs, *indicator_plan.exit_specs)
-            for cond in spec.conditions
-            if cond.reference_key in VOLUME_WEIGHTED_KEYS
-            or any(leg.key in VOLUME_WEIGHTED_KEYS for leg in cond.extra_references)
-        )
-        if plan_active and indicator_plan is not None
-        else 0
-    )
-    entry_model = BUILTIN_ENTRY_MODEL if plan_active else ENTRY_MODEL
-    reproducibility_note = (
-        "Deterministic bar-replay over the pinned market revision; real bars, "
-        "protection stops and built-in indicator native triggers."
-        if plan_active
-        else "Deterministic bar-replay over the pinned market revision; real bars and "
-        "protection stops, deterministic breakout entry fixture (test-only — production "
-        "requires a resolved indicator plan)."
-    )
-    diagnostics = {
-        "engine_kind": "v1_bar_replay",
-        "entry_model": entry_model,
-        "reproducibility_note": reproducibility_note,
-        "bars_processed": led.bars_seen,
-        "breakout_window": _BREAKOUT_WINDOW,
-        "indicator_blocks": len(entry_evals),
-        "condition_blocks": condition_count,
-        "multi_timeframe_blocks": multi_timeframe_blocks,
-        "per_condition_timeframe_conditions": per_condition_timeframe_conditions,
-        "nary_reference_conditions": nary_reference_conditions,
-        "vwap_blocks": vwap_blocks,
-        "position_size_limits_active": config.position_sizing.position_size_limits is not None,
-        # F-05: capability-matrix provenance. ``capabilities_modelled`` false means at least
-        # one selected option is future_dev in this build, so the run was financially inert;
-        # ``capability_not_in_build`` names each one as "<field_path>=<value>" so a Result can
-        # be read back to the exact options that blocked it without re-deriving the matrix.
-        "capabilities_modelled": capability_ok,
-        "capability_not_in_build": [
-            f"{option.field_path}={option.value}" for option in future_dev_selected
-        ],
-        # F-07f: leverage provenance (§10.2) — the resolved multiplier actually applied to
-        # every computed position size (1x when unleveraged or 'no_leverage' normalized).
-        "leverage_mode": config.position_sizing.leverage_mode,
-        "leverage_modelled": leverage_ok,
-        "leverage_multiplier": (str(_leverage_multiplier(config)) if leverage_ok else None),
-        # F-07g: signal-strength provenance (§10.3) — the saved adjustment mode, whether
-        # this engine version models it, and how many signal-driven entry decisions
-        # computed a non-neutral (≠1x) multiplier.
-        "signal_strength_mode": strength_mode,
-        "signal_strength_modelled": strength_ok,
-        "strength_adjustments": led.strength_adjustments,
-        "entry_timing": config.data.execution.entry_timing,
-        "exit_timing": config.data.execution.exit_timing,
-        "execution_timing_modelled": timing_ok,
-        "deferred_entry_fills": led.deferred_entry_fills,
-        "deferred_exit_fills": led.deferred_exit_fills,
-        # F-07b: order-type execution provenance + limit-order working-order counts.
-        "order_type": order_cfg.type,
-        "order_execution_modelled": order_ok,
-        "limit_orders_placed": led.limit_orders_placed,
-        "limit_orders_filled": led.limit_orders_filled,
-        "limit_orders_cancelled": led.limit_orders_cancelled,
-        "stop_orders_placed": led.stop_orders_placed,
-        "stop_orders_triggered": led.stop_orders_triggered,
-        "stop_orders_cancelled": led.stop_orders_cancelled,
-        # F-07c: partial-close provenance + count (an exit signal closed part of a position).
-        "close_percentage": str(exit_logic.close_percentage),
-        "partial_aftermath": partial_aftermath,
-        "partial_close_modelled": partial_close_ok,
-        "partial_closes": led.partial_closes,
-        # F-07f: trailing stop profit-lock provenance — whether the protection-level
-        # activation threshold is configured at all, and how many lock events (a
-        # lock_in_profit ratchet, or a trailing_stop aftermath force-activation) fired.
-        "trailing_lock_in_active": trailing_lock_in_active,
-        "lock_in_locks": led.lock_in_locks,
-        # F-07d: same-direction scaling provenance + ladder counts.
-        "scaling_enabled": scaling_enabled,
-        "scaling_method": scaling_cfg.method if scaling_enabled and scaling_cfg else None,
-        "scaling_modelled": scaling_ok,
-        "scale_layers_added": led.scale_layers_added,
-        "scale_layers_rejected": led.scale_layers_rejected,
-        "max_total_exposure_active": scale_max_total is not None,
-        # F-07e: restrictions & filters provenance + entry-gate counts.
-        "restrictions_rule": restriction_rule,
-        "restrictions_modelled": restrictions_ok,
-        "active_filter_types": sorted(
-            {rf.filter_type for rf in restrictions_cfg.filters if rf.enabled}
-        ),
-        "entries_blocked_by_restriction": led.entries_blocked_by_restriction,
-        # F-07e: conflict / position handling provenance + policy-outcome counts.
-        "conflict_handling_modelled": conflict_ok,
-        "overlapping_signal_policy": overlap_policy,
-        "same_direction_stacking": stacking_policy,
-        "opposite_direction_hedge": hedge_policy,
-        "exit_on_opposite_signal": bool(conflict_cfg.exit_on_opposite_signal),
-        "stack_entries_added": led.stack_entries_added,
-        "stack_entries_rejected": led.stack_entries_rejected,
-        "positions_replaced": led.positions_replaced,
-        "opposite_signal_closes": led.opposite_signal_closes,
-        "conflict_signals_ignored": led.conflict_signals_ignored,
-        "stop_exit_conflict": stop_exit_conflict,
-        "stop_exit_collisions": led.stop_exit_collisions,
-        "logic_stop_blocks": len(stop_evals),
-        "stop_trigger_requirement": stop_trigger_requirement,
-        "stop_conflict_resolution": stop_conflict_resolution,
-        "logic_stop_triggers": led.logic_stop_triggers,
-        "allocation_enabled": alloc_on,
-        "allocation_compounding": ("compound" if alloc_compound else "fixed") if alloc_on else None,
-        "allocation_items_executed": 1 if (alloc_on and item_share > _ZERO) else 0,
-        "allocation_sleeve_cap_active": alloc_on and item_share > _ZERO,
-        # Portfolio-level rules provenance (cross-item, doc 13 §8.4): the SAVED policy
-        # token vs the EXECUTED one (NET's conservative downgrade stays visible), the
-        # resolved money cap, how many prior-item windows constrained this replay and
-        # every gate outcome count.
-        "portfolio_rules_active": rules_active,
-        "portfolio_conflict_policy": (
-            portfolio_rules.conflict_policy if portfolio_rules is not None else None
-        ),
-        "portfolio_conflict_policy_executed": (
-            ("block_opposite" if conflict_gate_on else "keep_separate") if rules_active else None
-        ),
-        "portfolio_max_total_exposure_cap": (
-            str(portfolio_cap_amount) if portfolio_cap_amount is not None else None
-        ),
-        "portfolio_prior_intervals": (
-            len(portfolio_rules.prior_intervals) if portfolio_rules is not None else 0
-        ),
-        "portfolio_conflict_blocked_entries": led.portfolio_conflict_blocked_entries,
-        "portfolio_exposure_blocked_entries": led.portfolio_exposure_blocked_entries,
-        "portfolio_exposure_clamped_entries": led.portfolio_exposure_clamped_entries,
-        # F-11: funding provenance + application counts (the used revision is pinned in the
-        # manifest via the strategy config; surfaced here for the decision-trace audit).
-        "funding_enabled": funding is not None,
-        "funding_source_revision_id": funding.source_revision_id if funding is not None else None,
-        "funding_records": len(funding_records),
-        "funding_charges": led.funding_charges,
-        # F-07i (B): intrabar tick-path provenance — whether a pinned tick stream was
-        # injected, how many bars carried a print sub-path, and how many
-        # first_trigger_wins stops the REAL print order resolved (vs the flagged
-        # conservative OHLCV approximation).
-        "tick_path_enabled": tick_batches is not None,
-        "tick_bars": led.tick_bars,
-        "tick_first_trigger_resolutions": led.tick_first_trigger_resolutions,
-        # F-07i (C): tick-setting execution provenance — print-resolved resting-order
-        # fills, partial fills (initial + remainder lots), same-bar stop-then-limit
-        # sequences, touch-order placements and touch-exit fills.
-        "tick_resolved_entry_fills": led.tick_resolved_entry_fills,
-        "partial_fills": led.partial_fills,
-        "same_bar_stop_limit_fills": led.same_bar_stop_limit_fills,
-        "touch_orders_placed": led.touch_orders_placed,
-        "touch_exit_fills": led.touch_exit_fills,
-        "item_count": item_count,
-        "decision_trace_count": len(led.signal_events),
-        "decision_trace_schema": DECISION_TRACE_SCHEMA,
-        "decision_trace_event_types": list(DECISION_TRACE_EVENT_TYPES),
-        "unmodelled_decision_classes": list(UNMODELLED_DECISION_CLASSES),
-        "suppressed_entries": led.suppressed_entries,
-        "execution_key": execution_key,
-        "warnings": warnings,
-    }
+    # K-11b: the output assembly is a pure projection of (ctx, led) — no bar is replayed
+    # here. ``warnings`` is threaded into the diagnostics block because the Result carries
+    # it under a diagnostics key, not as a field of its own.
+    summary = build_summary(ctx, led)
+    warnings = build_warnings(ctx, led)
+    diagnostics = build_diagnostics(ctx, led, warnings)
     return EngineOutput(
         summary=summary,
         trades=led.trades,
@@ -3490,21 +3140,15 @@ def run_engine(
         signal_events=led.signal_events,
         diagnostics=diagnostics,
         position_intervals=led.position_intervals,
+        filtered_events=led.filtered_events,
     )
-
-
-# Portfolio-level rules enforce FORWARD-only in deterministic pin order: a later-pinned
-# item replays against the earlier items' completed held windows, and an earlier item is
-# never re-simulated because of a later one (a genuine unified-clock co-simulation stays
-# deferred — the ``execution.portfolio.COMPOSITION_CURVE_WARNING`` boundary). Emitted on
-# every rules-active run so the precedence is auditable (L4), never an implicit assumption.
-PORTFOLIO_RULES_SEQUENTIAL_WARNING = "portfolio_rules_sequential_pin_order_precedence"
 
 
 __all__ = [
     "DECISION_TRACE_EVENT_TYPES",
     "DECISION_TRACE_SCHEMA",
     "ENTRY_MODEL",
+    "FILTERED_EVENT_TYPES",
     "UNMODELLED_DECISION_CLASSES",
     "AllocationExecution",
     "EngineOutput",

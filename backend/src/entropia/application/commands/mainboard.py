@@ -48,6 +48,7 @@ from entropia.domain.mainboard.composition import (
 )
 from entropia.domain.mainboard.enums import MainboardItemKind
 from entropia.domain.mainboard.item_kind import ensure_mainboard_item_kind
+from entropia.domain.mainboard.revision_binding import assert_revision_kind_matches
 from entropia.domain.readiness.enums import ReadinessState
 from entropia.domain.revision.hashing import content_hash
 from entropia.infrastructure.postgres.models import (
@@ -91,17 +92,13 @@ _PATCH_INTENTS = frozenset({_PIN_REVISION, _SET_ENABLED, _REORDER, _SET_LABEL})
 
 # --------------------------------------------------------------------------- #
 # Transient draft openers (NO DB) — AT#3: an unsaved draft has no identity.    #
+#                                                                             #
+# Only the EXTERNAL kinds still open transiently. The Strategy twin            #
+# (``start_strategy_draft``) was deleted in I-12: Stage 3b replaced it with a  #
+# PERSISTED draft + root (``routes/strategy.py`` POST /strategy-drafts ->      #
+# ``commands/strategy_draft.py::create_strategy_draft``, doc 02 §7), which     #
+# left the 3a opener unrouted and callerless.                                  #
 # --------------------------------------------------------------------------- #
-
-
-def start_strategy_draft(actor: Actor) -> dict[str, Any]:
-    """Open a transient Strategy draft. No root/revision/item is created (AT#3)."""
-    require_authenticated(actor)
-    return {
-        "draft_id": new_id("wodraft"),
-        "kind": MainboardItemKind.STRATEGY.value,
-        "unsaved": True,
-    }
 
 
 def start_external_work_object_draft(actor: Actor, kind: str) -> dict[str, Any]:
@@ -309,7 +306,22 @@ async def attach_mainboard_item(
         visibility="private",
     )
     revision = await mb_repo.get_work_object_revision(session, revision_id)
-    if revision is None or revision.entity_id != root_id:
+    if revision is None:
+        raise ValidationError(
+            "The pinned revision does not belong to this work object.",
+            details=[{"field": "revision_id", "actual": revision_id}],
+        )
+    # AOS-12 runs BEFORE the belongs-to-root check: a cross-kind revision id (the
+    # spec's "Trading Signal attach carrying a Trade Log revision id") is named by
+    # its own defect instead of disappearing into the generic message. A same-kind
+    # revision of the wrong root keeps the generic error — the spec names no code
+    # for it. Compared against the root's server-derived kind, never the caller's.
+    assert_revision_kind_matches(
+        revision_id=revision_id,
+        revision_kind=revision.object_kind,
+        expected_kind=detail.object_kind,
+    )
+    if revision.entity_id != root_id:
         raise ValidationError(
             "The pinned revision does not belong to this work object.",
             details=[{"field": "revision_id", "actual": revision_id}],
@@ -632,7 +644,21 @@ async def _apply_pin(
     if root.deletion_state != DeletionState.ACTIVE:
         raise ObjectNotActiveError(f"Work object '{item.work_object_root_id}' is not active.")
     revision = await mb_repo.get_work_object_revision(session, revision_id)
-    if revision is None or revision.entity_id != item.work_object_root_id:
+    if revision is None:
+        raise ValidationError(
+            "The pinned revision does not belong to this work object.",
+            details=[{"field": "revision_id", "actual": revision_id}],
+        )
+    # Same AOS-12 gate as the attach surface — a re-pin binds a revision id to an
+    # item exactly the way an attach does, so the cross-kind case cannot be named
+    # on one surface and swallowed on the other. ``item.item_kind`` is itself
+    # server-derived from the root at attach time (CR-01).
+    assert_revision_kind_matches(
+        revision_id=revision_id,
+        revision_kind=revision.object_kind,
+        expected_kind=item.item_kind,
+    )
+    if revision.entity_id != item.work_object_root_id:
         raise ValidationError(
             "The pinned revision does not belong to this work object.",
             details=[{"field": "revision_id", "actual": revision_id}],
@@ -1012,5 +1038,4 @@ __all__ = [
     "patch_mainboard_item",
     "soft_delete_work_object",
     "start_external_work_object_draft",
-    "start_strategy_draft",
 ]

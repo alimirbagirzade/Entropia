@@ -9,7 +9,6 @@ layer validates legality (state machine) and authorization (policy) first.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Any
 
@@ -131,21 +130,11 @@ async def get_contract_by_revision(
     return (await session.execute(stmt)).scalar_one_or_none()
 
 
-async def list_resolvers(
-    session: AsyncSession,
-    *,
-    trust_state: ResolverTrustState | None = None,
-    limit: int = 50,
-) -> Sequence[EmbeddedResolverRegistry]:
-    """Registry pointer rows, optionally filtered by trust state."""
-    stmt = (
-        select(EmbeddedResolverRegistry)
-        .order_by(EmbeddedResolverRegistry.canonical_key.asc())
-        .limit(limit)
-    )
-    if trust_state is not None:
-        stmt = stmt.where(EmbeddedResolverRegistry.trust_state == trust_state)
-    return list((await session.execute(stmt)).scalars().all())
+# NOTE: no ``list_resolvers`` browse query — deleted in I-12 as callerless. The
+# registry is only ever read POINT-WISE by canonical key
+# (``get_registry_by_key``): resolution, dependency pinning and packaging all
+# start from a key they already hold. Re-add a listing reader only when a real
+# resolver-catalogue surface exists to consume it.
 
 
 def add_validation_run(
@@ -199,7 +188,6 @@ __all__ = [
     "get_contract_by_revision",
     "get_latest_validation_run",
     "get_registry_by_key",
-    "list_resolvers",
     "set_trust_state",
     "upsert_registry_entry",
 ]

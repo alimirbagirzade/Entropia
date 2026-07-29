@@ -167,16 +167,7 @@ async def test_the_charge_propagates_into_the_next_entry_and_the_final_equity(se
 
 
 async def test_the_engine_version_bump_shifts_the_execution_key_namespace() -> None:
-    # New Results carry the CURRENT engine version; a run identity that hashed to one
-    # execution_key under any previous version hashes to a different one now, so a Result
-    # produced under the old funding order can never be idempotently reused for a re-RUN.
-    #
-    # S5c: the literal assertion that stood here is DELETED, not re-pinned to the next
-    # release name. It had to be edited by I-15a and again by S5c without either slice
-    # touching a single funding number — a test that breaks on unrelated changes is a
-    # tripwire, not a check. What this test is actually about is the NAMESPACE SHIFT, which
-    # the comparison below proves against a distinct prior pin without any test needing to
-    # know what the current release is called (the post-PR-#45 stub-version convention).
+
 
     def _built(engine_version: str) -> Any:
         return build_run_manifest(

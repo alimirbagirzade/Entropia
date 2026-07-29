@@ -1,7 +1,7 @@
 """Heavy result-artifact drill-down query (Stage 5c, doc-15 deferred; doc 15 §7).
 
 Read-only, cursor-paginated over the IMMUTABLE result artifacts (equity / ledger /
-signals / diagnostics). Server-side ordering + an opaque keyset cursor (never a
+signals / filtered / diagnostics). Server-side ordering + an opaque keyset cursor (never a
 browser offset or rounded-label sort — doc 15 §3.2, §7). Visibility reuses the 5a
 workspace-view guard; a soft-deleted / missing result is BACKTEST_RESULT_NOT_FOUND.
 A Trade Ledger row is a trade ROOT, so a page never double-counts a leg (doc 15 §14).
@@ -67,11 +67,22 @@ async def query_result_artifact(
         if has_more and page
         else None
     )
+    # doc 15 §7 names artifact checksum verification as part of this contract. The
+    # checksum covers the WHOLE artifact (not this page), so a caller that walked every
+    # page can re-derive it; ``row_count`` is what it should have walked. A Result
+    # materialized before I-02 carries no checksum row and honestly reports ``null``
+    # rather than a value computed from today's rows.
+    stored = await ra_repo.get_artifact_checksum(
+        session, result_id=result_id, artifact_type=canonical
+    )
     return {
         "result_id": result_id,
         "artifact_type": str(canonical),
         "items": items,
         "next_cursor": next_cursor,
+        "row_count": stored.row_count if stored is not None else None,
+        "checksum": stored.checksum if stored is not None else None,
+        "checksum_schema_version": stored.schema_version if stored is not None else None,
     }
 
 

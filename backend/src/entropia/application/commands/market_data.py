@@ -13,7 +13,6 @@ go through ``application.idempotency.run_idempotent`` (D3).
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -790,11 +789,6 @@ async def soft_delete_market_dataset(
         "deletion_state": str(root.deletion_state),
         "display_name": display_name,
     }
-
-
-def now_utc() -> datetime:
-    """Deterministic UTC clock seam (kept here so tests can patch one place)."""
-    return datetime.now(UTC)
 
 
 # --------------------------------------------------------------------------- #

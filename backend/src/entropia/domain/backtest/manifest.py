@@ -89,17 +89,7 @@ from entropia.shared.manifest import manifest_hash
 # config space widened, and it shifts the execution_key namespace so a result produced by
 # an engine that could not evaluate Minimum-N is never idempotently reused for a re-RUN
 # (INF-04/INF-05).
-# v18-scaling-tf-sequence (S5c): the Scaling Timeframe Structure gained the spec's typed
-# per-layer ladder (doc 02 §5.7) — ``timeframe_mode`` + ``custom_timeframe_sequence``. Under
-# ``custom_sequence`` a layer candidate is now GATED on the closed candle of its own
-# timeframe, so the same price path fills layers at different bars — and may fill FEWER of
-# them, since the sequence length also bounds the ladder — than any engine that could not
-# parse the field. ``same_strategy`` is the default and reproduces its prior results
-# exactly; the bump exists because the saved config space widened (and because
-# ``increasing_by_layer`` is deliberately still fail-closed), and it shifts the
-# execution_key namespace so a result produced by an engine that could not evaluate a
-# per-layer timeframe ladder is never idempotently reused for a re-RUN (INF-04/INF-05).
-ENGINE_VERSION = "backtest-engine-v18-scaling-tf-sequence"
+
 METRIC_SET_VERSION = "metric-set-v1"
 OUTPUT_ARTIFACT_PROFILE = "standard-v1"
 

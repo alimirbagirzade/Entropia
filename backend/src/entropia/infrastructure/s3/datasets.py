@@ -109,8 +109,9 @@ def put_processed_parquet(entity_id: str, data: bytes) -> tuple[str, str]:
     return key, digest
 
 
-def get_processed_parquet(object_key: str) -> bytes:
-    bucket = get_settings().object_storage_bucket
-    resp = get_s3_client().get_object(Bucket=bucket, Key=object_key)
-    body: bytes = resp["Body"].read()
-    return body
+# NOTE: no whole-object ``get_processed_parquet`` reader — deleted in I-12 as
+# callerless. Materializing a processed asset in memory is exactly what INF-12
+# removed: read Parquet through
+# ``s3/parquet_stream.py::stream_processed_batches`` instead, which spools to
+# disk and yields bounded record batches. ``get_raw_bytes`` above stays for the
+# small, metadata-sized raw uploads.

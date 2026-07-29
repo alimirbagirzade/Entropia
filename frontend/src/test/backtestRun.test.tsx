@@ -262,7 +262,10 @@ describe("RUN & Backtest Results page", () => {
     // The Metrics section is the profile-hydrated view, not the raw rows.
     expect(await screen.findByText(/Profile view · system default/)).toBeInTheDocument();
     // A non-computed metric shows its availability, never a fabricated 0 (L4).
-    expect(screen.getByText("Not available")).toBeInTheDocument();
+    // Both the value cell and the status cell read "Not available" for a plain
+    // not_available metric (doc 17 §6.1 value text + §6 status wording), so the
+    // row surfaces two matching nodes.
+    expect(screen.getAllByText("Not available")).toHaveLength(2);
     expect(screen.getByText("BTCUSDT")).toBeInTheDocument();
     expect(screen.getByText("res_1")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "← Results History" })).toBeInTheDocument();

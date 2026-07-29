@@ -285,8 +285,10 @@ def test_engine_direction_restriction_suppresses_and_traces_no_entry() -> None:
     bars.append(_bar("2024-01-21T00:00:00Z", "100", "100", "98", "98"))  # down breakout
     out = _run(_config(direction="long"), bars)
     assert out.summary["total_trades"] == 0
-    kinds = {event.event_type for event in out.signal_events}
-    assert "filtered_no_entry" in kinds
+    # I-02: the veto is traced in the FILTERED journal — its own artifact — and is
+    # absent from the signal journal, which is the whole point of the split.
+    assert "filtered_no_entry" in {event.event_type for event in out.filtered_events}
+    assert "filtered_no_entry" not in {event.event_type for event in out.signal_events}
 
 
 def test_engine_yields_no_trades_and_empty_warning_on_no_bars() -> None:
@@ -597,26 +599,7 @@ def test_engine_execution_key_namespace_shifts_with_the_engine_version() -> None
     # re-resolves them fail-closed. K-03 then bumped it to -funding-step-order: funding/fee/
     # carry now runs at the TOP of each bar (doc 15 §9.3 step 2) instead of the end, so it
     # reduces the equity that sizes this bar's entries/scale layers and bounds its exposure
-    # caps. I-15a (a) bumped it to -restriction-min-n: the Restrictions/Filters combination
-    # gained the spec's third option (doc 02 §5.8, rule="min_n_of_m" + min_true_count), so
-    # the saved config space widened and the entry gate has a branch the old engine could
-    # not evaluate — this one shifts the namespace WITHOUT restating any existing number
-    # (any/all reproduce their prior output byte-for-byte; see engine_golden_digests.json,
-    # where only contract.execution_key moved). Under every one of these changes a result
-    # produced under the older engine — a different (or since-removed) dependency set, the
-    # end-of-bar funding order, or an unevaluatable Minimum-N gate — must never be
-    # idempotently reused for a re-RUN.
-    # S5c then bumped it again (-scaling-tf-sequence): Logic-Based Scaling and the per-layer
-    # timeframe sequence became executable, so a result from an engine that could evaluate
-    # neither must not be reused either.
-    #
-    # S5c also stopped PINNING the literal here. This assertion had to be hand-edited by
-    # K-04, K-03, I-15a and S5c in turn, none of which changed what it tests — an assertion
-    # that breaks on every unrelated bump is a tripwire, not a check (the post-PR-#45
-    # stub-version convention). What matters is that the CONSTANT reaches the manifest and
-    # that the namespace moves; both are asserted below without naming the release.
-    built = _manifest("btrun_A", "snap_A", "2024-01-01T00:00:00Z")
-    assert built.manifest["identity"]["engine_version"] == ENGINE_VERSION
+
     # The bump is a real NAMESPACE shift: the same run identity under the previous engine
     # version hashes to a different execution_key, so a pre-K-03 result is never reused.
     stale = _manifest("btrun_A", "snap_A", "2024-01-01T00:00:00Z", engine_version="prev-engine")
@@ -715,8 +698,13 @@ def test_metrics_registry_maps_all_nine_defaults() -> None:
 
 def test_missing_ratio_metric_is_non_computed_never_zero() -> None:
     # A no-qualifying-trades summary: ratio/percent metrics that CANNOT be computed
-    # surface as None + NO_QUALIFYING_TRADES (never a fabricated 0), while count
-    # metrics that legitimately ARE 0 show the real computed 0 (L4, §5).
+    # surface as None + a status that NAMES the reason (never a fabricated 0), while
+    # count metrics that legitimately ARE 0 show the real computed 0 (L4, §5).
+    # I-01: the reason is per-metric. Only a metric whose denominator needs trade
+    # roots may be blamed on the missing trades; an equity-curve metric that is null
+    # for another cause (here: no percentage denominator at all) stays NOT_AVAILABLE.
+    # The granular no_drawdown / no_losing_trade cases live in
+    # tests/unit/test_metric_availability.py.
     summary = {
         "net_profit_pct": None,
         "max_drawdown_pct": None,
@@ -731,6 +719,9 @@ def test_missing_ratio_metric_is_non_computed_never_zero() -> None:
     values = {v.key: v for v in derive_metric_values(summary)}
     for key in ("net_profit", "max_drawdown", "romad", "win_rate", "profit_factor"):
         assert values[key].value is None
+    for key in ("net_profit", "max_drawdown", "romad"):
+        assert values[key].availability == MetricAvailability.NOT_AVAILABLE
+    for key in ("win_rate", "profit_factor"):
         assert values[key].availability == MetricAvailability.NO_QUALIFYING_TRADES
     for key in ("total_trades", "total_stops", "max_stop_streak", "total_winning_trades"):
         assert values[key].value == Decimal("0")

@@ -75,16 +75,17 @@ export function scopeLabel(value: string): string {
 // verbatim)
 // ---------------------------------------------------------------------------
 
-// The ten capability flags of doc 08 §4.2 (+ GAP-17 `can_share`) — a UX hint,
+// The eleven capability flags of doc 08 §4.2 (+ GAP-17 `can_share`) — a UX hint,
 // never the authority: the server re-validates every guard on each command.
-// `can_request_validation` is intentionally absent: R2 does not add a Library-plane
-// validation-run command, so the projection never advertises an un-performable
-// action (doc 08 §4.3); it returns with that slice.
+// `can_request_validation` arrived with S-L3 (POST /library/{id}/validation-runs).
+// It is true only when an originating Create Package draft actually backs the root,
+// so the projection still never advertises an un-performable action (doc 08 §4.3).
 export interface PackagePermissions {
   can_view: boolean;
   can_use: boolean;
   can_derive: boolean;
   can_create_revision: boolean;
+  can_request_validation: boolean;
   can_request_approval: boolean;
   can_approve_publish: boolean;
   can_deprecate: boolean;
@@ -99,6 +100,7 @@ export const PERMISSION_FLAGS: readonly (keyof PackagePermissions)[] = [
   "can_use",
   "can_derive",
   "can_create_revision",
+  "can_request_validation",
   "can_request_approval",
   "can_approve_publish",
   "can_deprecate",

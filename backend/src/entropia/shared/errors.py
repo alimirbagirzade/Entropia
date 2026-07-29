@@ -860,10 +860,46 @@ class ValidationStale(ConflictError):
 
 class ValidationAlreadyRunning(ConflictError):
     """A second validation run was requested while one is already in flight for the
-    same draft (doc 06 §5). The in-flight run is authoritative; no duplicate is made."""
+    same draft (doc 06 §5). The in-flight run is authoritative; no duplicate is made.
+
+    Raised by the Library-plane Request Validation (doc 08 §7): the CP request is
+    already in ``validation_running``, so the durable worker owns it. Returning the
+    in-flight run's identity would read as "your request started this"; a 409 says
+    plainly that nothing new was created and the existing run is authoritative.
+    """
 
     code = "VALIDATION_ALREADY_RUNNING"
     message = "A validation run is already in progress for this draft."
+    category = ErrorCategory.ACTIVE_JOB
+    retryable = False
+    suggested_action = "await_running_validation"
+    remediation = (
+        "A validation run is already in flight for this package's draft. Wait for it "
+        "to finish and read its verdict; requesting again would not create a second run."
+    )
+
+
+class ValidationPipelineUnavailable(ValidationError):
+    """Request Validation was called on a package that has no validation pipeline
+    to drive (doc 08 §7 "test prerequisites available").
+
+    The Library plane addresses a package by its ROOT, but validation-run evidence is
+    keyed by the create-package request that built it. A package produced by Derive
+    (or seeded directly) has no such request, so there is no draft to certify and no
+    pipeline to start. Saying so explicitly is the point: the alternative is a
+    silently no-op button, which is precisely the "advertises an un-performable
+    action" defect this slice removes on the other side (``can_request_validation``).
+    """
+
+    code = "VALIDATION_PIPELINE_UNAVAILABLE"
+    message = "This package has no validation pipeline; validation cannot be requested for it."
+    category = ErrorCategory.LIFECYCLE
+    retryable = False
+    suggested_action = "create_revision_through_create_package"
+    remediation = (
+        "Only a package produced by the Create Package flow carries a validatable "
+        "draft. Derive or re-create this package through Create Package to obtain one."
+    )
 
 
 class BaselineMetadataInvalid(ValidationError):

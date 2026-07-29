@@ -206,16 +206,7 @@ Before stopping a working session, produce **ALL** of the following:
 - **Next (PO imzası BLOKAJ DEĞİL — imza 2026-07-22'de atıldı,
   `docs/implementation/v18_final_acceptance.md:155-169`; beklettiği FIX(R3) kalemlerinin hepsi
   landed: #368–#373, #375–#379):**
-  1. **S5 b/c/d** — Strategy config katalog derinliği; **a landed (#458)**, b/c/d açık
-     (`docs/POST_V1_SPEC_GAP_BACKLOG_ROUND3.md` §DURUM TAZELEME — S-L1…S-L6 dâhil diğer her şey landed).
-  2. **F-07 §4.4** — 4 yüzey backend display-DTO bekliyor (`v18_visual_traceability.md §4.4`).
-  3. **O-03 kalıntısı:** **4** ölü error sınıfı (`KNOWN_UNRAISED` — `RoleContextStaleError`,
-     `ServiceUnavailableError`, `ArtifactNotAvailableError`, `HypothesisArtifactNotFoundError`);
-     adjudication tablosunun 4 satırı sonradan canonical oldu — `docs/PROJECT_HISTORY.md`.
-  4. **Kabul-ID boşlukları:** `python3 docs/audit/acceptance_id_scan.py` → **163/215**; en büyük
-     delik doc 16 RH (2/16). Öncelik sırası: `docs/I17_LANDED_KICKOFF.md` §Sıradaki adaylar.
-  5. **R2 banner kapanışı (docs işi):** `entropia_v18_remediation_status.md` RE-OPENING
-     banner'ının koşulu sağlandı → banner'ı kaldır, UI satırlarını evidence'lı Complete yap.
+ 
 - **Açık iş (R2 kapsamı dışı, dürüst sınır):** ekran okuyucu (NVDA/VoiceOver) denetimi yapılmadı;
   10 sayfanın derin görsel kıyası eksik; a11y/visual katmanları CI'da koşmadı; A11Y-01 kontrast
   (228 serious node, tamamı canonical v18 paletinden) ve A11Y-02 kayıtlı sapma olarak açık.

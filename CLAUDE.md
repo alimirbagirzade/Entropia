@@ -198,6 +198,7 @@ Before stopping a working session, produce **ALL** of the following:
   screenshot'lanıyordu, fonksiyonel kapsam eklendi: `specs/17-page-coverage.spec.ts`,
   `18-result-artifacts-drilldown.spec.ts`, `19-future-dev-boundary.spec.ts`)**.
 
+
 - **Testler:** son yeşil referans CI (O-serisi PR'ları). Lokal tam suite tek koşuda
   tamamlanabiliyor — O-27'de **2538 passed / 0 failed / 43dk39sn**, worktree'ye özel izole DB ile
   (aşağıdaki ortam tuzağına uyulursa). Yine de **otorite CI'dır.**

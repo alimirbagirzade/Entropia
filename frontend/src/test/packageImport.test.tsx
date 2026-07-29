@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 
@@ -11,6 +11,8 @@ const EMPTY_FAMILIES = { data: [], meta: { cursor: null, has_more: false } };
 
 const SUCCEEDED_REPORT = {
   import_job_id: "pkgimp_1",
+  // F-07 §4.4: pinned by the server from the SUBMITTED manifest at submit time.
+  source_package_name: "Imported",
   status: "succeeded",
   package_kind: "indicator",
   manifest_hash: "a".repeat(64),
@@ -27,6 +29,8 @@ const BLOCKED_LIST = {
   items: [
     {
       import_job_id: "pkgimp_2",
+      // A manifest that declared no name (and every pre-0041 row) -> the fallback.
+      source_package_name: null,
       status: "blocked",
       package_kind: "indicator",
       manifest_hash: "b".repeat(64),
@@ -138,5 +142,37 @@ describe("Library package import", () => {
       ).toBeInTheDocument(),
     );
     expect(screen.getByText(/RESOLVER_NOT_RESOLVED/)).toBeInTheDocument();
+  });
+  // F-07 §4.4 — an import row must name the package it imported, not identify itself
+  // by a bare pkgimp_ id.
+  it("names the imported package on the import row (F-07)", async () => {
+    stubApi({
+      "GET /library": EMPTY_CATALOG,
+      "GET /rationale-families": EMPTY_FAMILIES,
+      "GET /package-imports/pkgimp_1": SUCCEEDED_REPORT,
+      "GET /package-imports": { items: [SUCCEEDED_REPORT] },
+    });
+    renderLibrary();
+
+    const name = await screen.findByText("Imported");
+    const row = name.closest("button");
+    expect(row).toBeTruthy();
+    // The job id remains, as the secondary support/audit token.
+    expect(within(row as HTMLElement).getByText("pkgimp_1")).toBeInTheDocument();
+  });
+
+  // No name on the manifest -> the raw job id, never a fabricated one.
+  it("falls back to the job id when the manifest declared no name (F-07)", async () => {
+    stubApi({
+      "GET /library": EMPTY_CATALOG,
+      "GET /rationale-families": EMPTY_FAMILIES,
+      "GET /package-imports/pkgimp_2": BLOCKED_LIST.items[0],
+      "GET /package-imports": BLOCKED_LIST,
+    });
+    renderLibrary();
+
+    const id = await screen.findByText("pkgimp_2");
+    const row = id.closest("button");
+    expect(within(row as HTMLElement).queryByText("Imported")).not.toBeInTheDocument();
   });
 });

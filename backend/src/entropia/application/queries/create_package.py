@@ -28,8 +28,10 @@ from entropia.infrastructure.postgres.models import (
     DependencyScan,
     EntityRegistry,
     PackageRequest,
+    PackageRevision,
     PackageRevisionLink,
     PackageValidationRun,
+    RationaleFamilyRevision,
 )
 from entropia.infrastructure.postgres.repositories import create_package as cp_repo
 from entropia.shared.errors import AccessDeniedError, PackageRequestNotFound
@@ -284,6 +286,7 @@ async def list_package_requests(
     has_more = len(rows) > params.limit
     page = rows[: params.limit]
     next_cursor = page[-1][0].entity_id if has_more and page else None
+    labels = await _request_display_labels(session, [detail for _root, detail in page])
     return {
         "data": [
             {
@@ -292,11 +295,88 @@ async def list_package_requests(
                 "state": str(detail.state),
                 "source_kind": str(detail.source_kind),
                 "package_root_id": detail.package_root_id,
+                # F-07 §4.4 — a human name for the request, resolved SERVER-side from
+                # what the request actually pins (see ``_request_display_labels``). The
+                # Pre-Check picker shows it as the primary identification and keeps the
+                # request id as a secondary/copyable token. Null when the request pins
+                # nothing nameable yet — the browser then shows the id and never
+                # reconstructs a name from it.
+                "display_label": labels.get(detail.entity_id),
+                # A request has no user-assigned name before C.D.P (doc 06 §510-512:
+                # "V18 has no editable field; name is generated after C.D.P"), so the
+                # creation time is what distinguishes two same-type requests. Same
+                # reasoning §4.4 used to rule Results History NOT a violation. Read off
+                # the REGISTRY row, exactly like ``_request_dict`` — the two projections
+                # must not report different creation times for the same request.
+                "created_at": root.created_at.isoformat() if root.created_at else None,
             }
-            for _root, detail in page
+            for root, detail in page
         ],
         "meta": {"cursor": next_cursor, "has_more": has_more},
     }
+
+
+async def _request_display_labels(
+    session: AsyncSession, details: list[PackageRequest]
+) -> dict[str, str]:
+    """Resolve ``request_id -> human label`` for a page of requests (F-07 §4.4).
+
+    A Create-Package request carries no name of its own, so the label is taken from the
+    named object the request POINTS AT, in falling order of specificity:
+
+    1. the package the request produced — its ``input_contract.name`` (doc 06 §510-512
+       generates this at C.D.P);
+    2. the Rationale Family the request pins — the family's current ``display_name``.
+
+    Neither is derived from an identifier: both are names a user gave an object the
+    request genuinely references. A request that pins neither yields NO entry and the
+    caller sends ``display_label: null`` — a fabricated name is never substituted.
+
+    Two batched lookups per page, never one per row.
+    """
+    if not details:
+        return {}
+    labels: dict[str, str] = {}
+
+    family_ids = {d.rationale_family_id for d in details if d.rationale_family_id}
+    if family_ids:
+        family_stmt = select(EntityRegistry.entity_id, RationaleFamilyRevision.display_name).join(
+            RationaleFamilyRevision,
+            RationaleFamilyRevision.revision_id == EntityRegistry.current_revision_id,
+        )
+        family_stmt = family_stmt.where(
+            EntityRegistry.entity_id.in_(family_ids),
+            EntityRegistry.deletion_state == DeletionState.ACTIVE,
+        )
+        family_names = {
+            row[0]: row[1] for row in (await session.execute(family_stmt)).all() if row[1]
+        }
+        for detail in details:
+            name = family_names.get(detail.rationale_family_id or "")
+            if name:
+                labels[detail.entity_id] = name
+
+    package_ids = {d.package_root_id for d in details if d.package_root_id}
+    if package_ids:
+        name_expr = PackageRevision.input_contract.op("->>")("name")
+        package_stmt = select(EntityRegistry.entity_id, name_expr).join(
+            PackageRevision, PackageRevision.revision_id == EntityRegistry.current_revision_id
+        )
+        package_stmt = package_stmt.where(
+            EntityRegistry.entity_id.in_(package_ids),
+            EntityRegistry.deletion_state == DeletionState.ACTIVE,
+        )
+        package_names = {
+            row[0]: row[1] for row in (await session.execute(package_stmt)).all() if row[1]
+        }
+        for detail in details:
+            # The produced package outranks the family: it is THIS request's own result,
+            # while a family is shared by many requests.
+            name = package_names.get(detail.package_root_id or "")
+            if name:
+                labels[detail.entity_id] = name
+
+    return labels
 
 
 def _ensure_can_view(actor: Actor, root: EntityRegistry) -> None:

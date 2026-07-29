@@ -99,7 +99,7 @@ F-03 (multi-item unified-clock portfolio) · P-13 / F-06 (ResultDetail charts + 
 | **F-01** synchronous `_enqueue_stub_job` → real worker lifecycle | ✔ `jobs/create_package.py` (4 kinds) | W3 | **DONE** (F-01a/b/c: Pre-Check · candidate · validation · baseline-parse all admissions + durable workers; `_enqueue_stub_job`/`_enqueue_completed_job` deleted; acceptance in `test_create_package_{precheck,candidate_validation,baseline}_worker.py`) |
 | **F-04** breakout-proxy contradictory paths | doc | W3 | Not started |
 | **F-05 / M-05** capability matrix (UI ↔ engine parity) | ✔ `domain/backtest/capabilities.py` (59 rows, 22 `future_dev`) | W3 | **DONE** (canonical matrix per option VALUE; engine fail-closed gate at the `_open` choke point + `capability_not_in_build` trace/L4 warnings; Ready Check `STRATEGY_CAPABILITY_NOT_IN_BUILD` "Not available in this build"; editor disables `future_dev` options with the dependency note from the generated `engineCapabilityMatrix.generated.ts` mirror. Found + closed a real silent hole: `slippage_mode='historical_slippage_if_available'` passed all nine per-domain predicates and ran as a ZERO-slippage backtest. `ENGINE_VERSION` → `backtest-engine-v18-capability-matrix`. Acceptance in `test_capability_matrix.py` + `engineCapabilityMatrix.test.tsx`) |
-| **F-07** residual raw-id presentation sweep | ✔ swept empirically 2026-07-27 (§4) | W3 | **Presentation layer DONE** — 2 Portfolio residuals fixed; **4 residuals REMAIN** and need a backend display DTO (§4) |
+| **F-07** residual raw-id sweep | ✔ **COMPLETE** 2026-07-29 (§4) | W3 | Presentation half 2026-07-27 (2 Portfolio residuals fixed, §4.3); backend display-DTO half 2026-07-29 (all **4** residuals closed, §4.4). Migration `0041`; `ENGINE_VERSION` → `-per-item-labels` (artifact shape, not behaviour) |
 | **F-09** README/status honesty rewrite | doc | W3 | Not started |
 
 **Rule:** a Bucket-3 item is `DONE` only with working behavior + passing acceptance test.
@@ -124,7 +124,7 @@ A Bucket-1/2 item cannot be `Complete` without the PO signature or an explicit F
 
 ---
 
-## 4. F-07 raw-id presentation sweep — empirical result (2026-07-27)
+## 4. F-07 raw-id sweep — empirical result (presentation 2026-07-27, display DTOs 2026-07-29)
 
 **Why this section exists.** §2 Bucket 3 carried F-07 as `Not started` with the note
 "overlaps P-11/12/16". Those three landed, so the row could not be trusted either way.
@@ -174,44 +174,81 @@ instead of a bare id (F-07)"* — asserts the label is inside the **issue row it
 with the id still present. **Proven RED:** reverting only the `IssuesTable` render to the
 pre-sweep `<code>{issue.composition_item_id}</code>` fails this test and only this test.
 
-### 4.4 Residuals that REMAIN — need a backend display DTO (NOT presentation-only)
+### 4.4 Residuals CLOSED by the backend display-DTO slice (2026-07-29)
 
-These are real F-07 violations, but their DTOs carry **no human label**, and inventing one in
-the browser is precisely the "reconstruct names from IDs" the finding forbids. Each needs
-F-07's stated correction — *add display DTOs at query boundaries* — which is a backend query
-change and therefore outside this presentation-only slice.
+These four were real F-07 violations whose DTOs carried **no human label**. Inventing one in
+the browser is precisely the "reconstruct names from IDs" the finding forbids, so each got
+F-07's stated correction — *add display DTOs at query boundaries* — as a backend change.
 
-> **Path + line refresh (2026-07-29, `origin/main` @ `9e86c99`).** These four rows previously
-> carried **bare filenames**, which read as `src/pages/` for all four — but `ResultDetail.tsx` lives
-> under **`src/components/`**, not `src/pages/`. Paths are now explicit and each row also names its
-> **enclosing symbol**, so the row survives the next line drift. Every line number was re-measured
-> today and **all four still hold** — only the paths were wrong. Re-measure with:
->
-> ```bash
-> cd frontend
-> grep -n "request_id"    src/pages/PreCheck.tsx           # 2026-07-29 → :124
-> grep -n "import_job_id" src/pages/Library.tsx            # 2026-07-29 → :1259, :1274
-> grep -n "item_id"       src/components/ResultDetail.tsx  # 2026-07-29 → :420, :589
-> grep -n "scope_id"      src/pages/ReadyCheck.tsx         # 2026-07-29 → :291
-> ```
+**Doc-drift correction (measured 2026-07-29):** `ResultDetail.tsx` is
+`frontend/src/components/ResultDetail.tsx`, **not** under `pages/`. Line numbers below are
+re-measured; the earlier table gave paths only.
 
-| Site (path · line · enclosing symbol) | Defect | Why not fixable here |
+| Site (measured) | Field added | Where it is captured — and why there |
 |---|---|---|
-| `frontend/src/pages/PreCheck.tsx:124` — in `RequestPickerCard` (def `:83`) | the request picker's **"Request" column is a bare `request_id`**; Type / Source / State are kinds, not names. Choosing your own request = recognizing an opaque id — a common task, on a page F-07 names explicitly | the Create-Package request DTO (`lib/createPackage.ts`) exposes no name/title field |
-| `frontend/src/pages/Library.tsx:1259`, `:1274` | import-job rows identified only by `import_job_id` (status badge + `package_kind` alongside) | the import-job DTO carries no label |
-| `frontend/src/components/ResultDetail.tsx:420` — in `PerItemCard` (def `:416`) · `:589` — in `MarginalCard` (def `:585`) | per-item breakdown rows render `{item_kind} <code>{item_id}</code>`, and leave-one-out rows render `Without <code>{entry.item_id}</code>` — reading a result breakdown is a common task | `PerItemBreakdown` / `ManifestItemRef` have no label field. The result is **immutable and pinned**; joining the *live* composition's labels would mislabel a result whose items have since changed — the label must come from the manifest, i.e. the server |
-| `frontend/src/pages/ReadyCheck.tsx:291` — in `IssuesTable` (def `:258`) | issue rows show a bare `scope_id` (same defect class as the Portfolio issue table that this slice fixed) | `ReadinessIssue` has no label field, and the report is immutable + `is_current`-tracked; labelling a **stale** report from the live composition would be actively wrong |
+| `pages/PreCheck.tsx:129` | `display_label` (+ `created_at`) on `PackageRequestSummary` | `queries/create_package.py::_request_display_labels` — two batched lookups per page: the produced package's `input_contract.name`, else the pinned Rationale Family's `display_name`. Both are names a user gave an object the request genuinely references; neither is derived from an id. A request pinning neither sends `null` |
+| `pages/Library.tsx:1263`, `1279` | `source_package_name` on `PackageImportReport` | `commands/package_import.py::submit_package_import` reads `manifest["name"]` at SUBMIT time (migration `0042`). Captured there, not joined from the resulting root, because a `blocked`/`failed` import never produces a package — and a later rename of the imported copy must not rewrite what was imported |
+| `components/ResultDetail.tsx:424` (`PerItemCard`), `:595` (`MarginalCard`) | `item_label` on `PerItemBreakdown` and `ContributionMarginal` | composition snapshot `item_manifest.items[].label` -> run manifest `mainboard_item_labels` -> `ItemRun.item_label` -> persisted result diagnostics. **The result is immutable**, so the label is frozen at run time; a live join would mislabel a result whose items have since changed |
+| `pages/ReadyCheck.tsx:295` | `scope_label` on `ReadinessIssue` | `queries/readiness_check.py::_scope_labels` reads the snapshot the REPORT pinned. **The report is immutable + `is_current`-tracked**, so labelling it from the live composition would be actively wrong |
 
-`frontend/src/pages/ResultsHistory.tsx:170` is deliberately **not** listed as a violation: a backtest result has no
+Presentation contract: the new `components/LabelledId.tsx` renders the server label as the
+PRIMARY text with the raw id kept beneath/beside as the muted copyable token, and renders the
+**id alone** when the label is null. It never derives a name from an id.
+
+**Two invariants worth naming.**
+
+1. **A display label must not fork reproducibility.** `mainboard_items` is hashed into
+   `execution_key`, so the labels ride a SEPARATE manifest key (`mainboard_item_labels`)
+   outside `execution_content`. Renaming a composition item therefore leaves `execution_key`
+   byte-identical and an identical replay still reproduces. Pinned by
+   `tests/unit/test_f07_manifest_item_labels.py`.
+
+   **This is NOT the same question as the version bump.** The golden guard
+   (`test_backtest_engine_golden.py`) caught what the reasoning above does not cover: the
+   composite *artifact* grew a field, so the four `portfolio.combine*` scenarios moved
+   (every strategy-replay scenario stayed byte-identical — engine BEHAVIOUR is unchanged).
+   `ENGINE_VERSION` is therefore bumped to **`backtest-engine-v18-min-n-filtered-events-per-item-labels`**, for
+   exactly the reason v17 recorded when it added the per-item breakdown itself: without the
+   bump a stale pre-label result is idempotently REUSED for a re-RUN of the same composition
+   (INF-04/INF-05) and its rows stay id-only forever — the fix would never reach an existing
+   composition. A one-time namespace shift, not label-sensitivity.
+2. **Backward compatibility is by omission, not backfill.** Pre-slice snapshots, manifests and
+   `package_import_job` rows carry no label; every reader degrades to an empty map / `null` and
+   the UI falls back to the id. Backfilling them would fabricate labels those artifacts never
+   observed.
+
+Doc 06 §510-512 ("V18 has no editable field; name is generated after C.D.P as *New [Type]
+Package*") was **unimplemented** — request-born packages read back nameless, which is why the
+Pre-Check picker had nothing but ids. `commands/create_package.py::_generated_package_name`
+now writes it at C.D.P. No new user-facing input was added: doc 06 explicitly says the request
+has no editable name field before C.D.P.
+
+`ResultsHistory.tsx:170` remains deliberately **not** a violation: a backtest result has no
 user-assigned name, and since P-12 the row carries completed-at / timeframe / symbol, so the id
 is not the sole discriminator. Its digest shape is PO-owned (D-5).
 
 ### 4.5 Verification
 
-`eslint` ✓ · `tsc -b --noEmit` ✓ · `vitest` **608/608** (was 607; +1 new case), run with
-`--no-file-parallelism`. Backend untouched → **no `ENGINE_VERSION` bump** (no engine behavior
-change) and **no migration**.
+**Presentation half (2026-07-27):** `eslint` ✓ · `tsc -b --noEmit` ✓ · `vitest` **608/608**.
+Backend untouched → no `ENGINE_VERSION` bump, no migration.
 
-> **Honest boundary:** this slice closes the F-07 *presentation* layer. F-07 cannot be marked
-> Complete outright while §4.4's four surfaces still require a reader to recognize an opaque
-> identifier. Those four are the follow-up backend display-DTO slice.
+**Backend display-DTO half (2026-07-29):** `ruff check` ✓ · `ruff format --check` ✓ ·
+`mypy src` ✓ (372 files) · alembic `0042` **up/down/up** ✓ + column parity verified against
+`\d package_import_job` · frontend `eslint` ✓ · `tsc -b --noEmit` ✓ · `vitest`
+**654/654** (62 files, `--no-file-parallelism`). Backend full suite run locally on a
+worktree-private DB: **1 failed / 2732 passed** on the first pass — the failure was the
+golden guard doing its job (see the bump note in §4.4); after the `ENGINE_VERSION` bump +
+regenerated `engine_golden_digests.json` the affected modules pass. **CI is the authority.**
+
+Both new invariants were **proven RED**: putting `label` into `_pinned_items` fails
+`test_labels_do_not_change_the_execution_key` + `test_labels_are_absent_from_the_hashed_pin_set`
+and nothing else; making `_scope_labels` join the live composition fails
+`test_renaming_the_item_does_not_relabel_an_existing_report` and nothing else.
+
+> **F-07 is now Complete as a whole** — presentation (§4.3) and display DTOs (§4.4).
+>
+> **Honest boundary carried forward:** these four route bodies are declared `dict[str, Any]`,
+> so the new fields are **not published in `docs/openapi.json`** and the drift guard cannot see
+> them (the same blind spot O-30 recorded). Giving the four legacy routes typed response models
+> is a separate change with its own idempotent-replay compatibility analysis — it is NOT done
+> here.

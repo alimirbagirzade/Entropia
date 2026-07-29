@@ -1659,4 +1659,483 @@ Docker, iki E2E (dev-auth + gerçek tarayıcı/Compose) ve A11Y axe-core taramas
 
 ---
 
- 
+## B-1 · doc 13 §8.2'nin kapsamadığı, kodda uygulanan portfolio-level cross-item kuralları
+
+> **Bu bölüm neden var.** `docs/spec/` **kanonik kaynaktır ve DEĞİŞTİRİLMEZ**. Kod iki
+> portfolio-level alanı (`max_total_exposure_percent`, `conflict_policy`) uyguluyor; doc 13
+> **§8.2 canonical payload'ı bu iki alanı içermiyor**, §8.3 formülleri exposure cap tanımlamıyor
+> ve kodun atıf yaptığı §8.4 gövdesinde ne "Max Total Exposure" ne de NET/BLOCK_OPPOSITE geçiyor.
+> Yani **kod spec'ten ileri** — spec bir hata içermiyor, sadece kapsamıyor. Bu kayıt o boşluğun
+> tek referansıdır: yeni bir geliştirici bu alanların nereden geldiğini spec'e bakmadan buradan
+> bulabilmeli. Kod bu bölüme değil `doc 13 §8.4`'e atıf yapmaya devam eder (aşağıda neden meşru
+> olduğu yazıyor); atıfları **buraya çevirme**.
+
+### Spec boşluğunun tam sınırı (ampirik, 2026-07-29)
+
+| Spec yeri | Ne diyor | Kodda karşılığı |
+|---|---|---|
+| `docs/spec/13_..._v1_1.md` §8.2 (satır 875-884) | `PortfolioAllocationConfigV1 { enabled, initial_capital, compounding_mode, reserve_cash_percent, entries[] }` | Kodda **+2 alan** var: `max_total_exposure_percent`, `conflict_policy` |
+| §8.3 (satır 885-893) | `P0 / r / R0 / A0 / Ci0 / U0` + `allowed_size = min(desired, remaining_sleeve_capacity, item_risk_limits, ledger_solvency_limit)` | `min(...)` listesinde **portfolio exposure cap terimi yok**; motor onu ayrıca bağlar |
+| §8.4 adım 6 (satır 907) | "Conflict Rules item intentini engellerse o itemin share'ı diğer item'lere run içinde otomatik devredilmez" | **Invariant meşru** — kod bunu uygular. Ama §8.4 gövdesi ne "Max Total Exposure" adını ne de `NET`/`BLOCK_OPPOSITE`/`KEEP_SEPARATE` token'larını içerir |
+
+**Sonuç:** kodun `doc 13 §8.4` atfı **yalnız "engellenen item'in share'ı devredilmez"
+invariant'ı için** doğrudur. **Alan kümesi ve token sözlüğü spec'te YOK — kod-yereldir.**
+
+### İSİM ÇAKIŞMASI — iki ayrı düzlem, aynı alan adı (en sık karışan nokta)
+
+`max_total_exposure_percent` **iki yerde** geçer ve **aynı şey değildir**:
+
+| Düzlem | Nerede | Kaynak | Anlamı |
+|---|---|---|---|
+| **Per-strategy** | `limits.max_total_exposure_percent` (Strategy Details) | **Spec'te VAR** — doc 02 satır 1039 (`>0`, `>= max single`, "total main + layers cannot exceed. Allocation is external cap, not bypass") | TEK bir stratejinin ana pozisyon + layer'larının toplam exposure tavanı |
+| **Portfolio-level** | `PortfolioAllocationConfigV1.max_total_exposure_percent` | **Spec'te YOK — bu kaydın konusu** | TÜM composition item'larının eşzamanlı toplam notional'ının, paylaşılan havuz `P0`'a oran tavanı |
+
+İkisi de motorda bağlar (`engine.py:2837` yorumu bunu açıkça yazar). Doc 02'nin "Allocation is
+external cap, not bypass" cümlesi tam olarak bu ilişkiyi anlatır: portfolio cap per-strategy
+cap'i gevşetmez, üstüne biner.
+
+### Nereden geldi
+
+- **PR [#320](https://github.com/alimirbagirzade/Entropia/pull/320)** — commit `c747b7e`,
+  branch `feat/portfolio-level-rules`, merge **2026-07-19**, başlık
+  *"feat(allocation,engine): portfolio-level rules — Max Total Exposure + cross-item conflict policy"*.
+  20 dosya, +1454/−10.
+- Takip: **PR #321** (`fix/openapi-snapshot-portfolio-rules`) — `docs/openapi.json` snapshot'ını
+  tazeledi (drift guard).
+- **Migration `0035_portfolio_rules`** (revises `0034_package_implementation`). O tarihte alembic
+  head'i buydu; **bugünkü head `0039_backtest_run_cancellation`**.
+- **`ENGINE_VERSION` → `backtest-engine-v18-portfolio-rules`** (execution_key namespace kayması,
+  INF-04/INF-05). **Bugünkü değer `backtest-engine-v18-funding-step-order`** — sonraki slice'lar
+  (K-02/K-04/K-03) bump etti.
+
+### Alanlar — kanonik tanım
+
+`domain/allocation/config.py:118-119` (`PortfolioAllocationConfigV1`):
+
+| Alan | Python tipi | DB kolonu (`portfolio_allocation_plan`) | NULL anlamı |
+|---|---|---|---|
+| `max_total_exposure_percent` | `Decimal \| None` | `NUMERIC(9,6)` nullable | **cap yok** |
+| `conflict_policy` | `CrossItemConflictPolicy \| None` | `enum_column(..., "allocation_conflict_policy")` = `VARCHAR(14)` + CHECK, nullable | **`KEEP_SEPARATE`** (rules öncesi davranış) |
+
+- **`max_total_exposure_percent`** = composition-wide tavan, **paylaşılan havuz `P0`'ın yüzdesi**.
+  **100'ü aşabilir** (kaldıraçlı exposure); tip sınırı `999.999999`. Üst sınır validasyonu
+  **bilerek yok** — kaldıraç meşru bir konfigürasyon.
+- **`conflict_policy`** = **item'lar ARASI** aynı-enstrüman ters yön politikası
+  (doc 02'nin strateji-içi Conflict Handling'inin cross-item karşılığı).
+  Enum: `domain/allocation/enums.py:37-53` →
+
+  | Token | Anlamı | Motorda ne olur |
+  |---|---|---|
+  | `KEEP_SEPARATE` | Her item bağımsız replay (rules öncesi davranış) | Gate kapalı |
+  | `BLOCK_OPPOSITE` | Erken-pinlenmiş item aynı enstrümanda ters yönü tutarken geç-pinlenmiş item'in girişi bloklanır | Gate açık, doğrudan uygulanır |
+  | `NET` | Toplam pozisyonun netlenmesi | **V1'de netlenmez** — muhafazakâr biçimde `BLOCK_OPPOSITE` olarak koşar, ifşa edilir (aşağı bak) |
+
+- Her iki alan da **additive nullable, backfill yok** → mevcut planlar davranışını birebir korur.
+- Parser'lar: boş string → `None` (`_parse_reserve` validator `reserve_cash_percent` ile paylaşılır);
+  `conflict_policy` wire token'ına **normalize edilir** (`"block_opposite"` → `BLOCK_OPPOSITE`).
+
+### Validasyon — `domain/allocation/rules.py:164-186`
+
+| Kod | Şiddet | Koşul | `field` |
+|---|---|---|---|
+| `MAX_TOTAL_EXPOSURE_INVALID` | **BLOCKER** | alan **set edilmiş VE `<= 0`** | `max_total_exposure_percent` |
+| `CONFLICT_POLICY_NET_V1` | **WARNING** | `conflict_policy == NET` | `conflict_policy` |
+
+- **Set edilmemiş = geçerli** (cap yok). Blocker yalnız "kullanıcı bir cap yazdı ama anlamsız"
+  durumunda çıkar. **Üst sınır kontrolü yok** (kaldıraç meşru).
+- `CONFLICT_POLICY_NET_V1` **asla bloklamaz** — motorun `BLOCK_OPPOSITE`'a düşüşünü
+  **çalıştırmadan önce** ön-ifşa eder. Kullanıcı NET seçip kaydedebilir; sürpriz yaşamaz.
+
+### Kalıcılık
+
+- **Plan kökü:** iki kolon da `portfolio_allocation_plan` üzerinde (0035). Draft upsert
+  `commands/allocation_plan.py:139-140` (create) / `162-163` (update, OCC `row_version` altında).
+- **Revision:** `portfolio_allocation_plan_revision` **kolon ALMADI** — değerler değişmez
+  `revision.config` JSON snapshot'ında taşınır
+  (`test_allocation_persistence.py`: `stored.config["max_total_exposure_percent"] == "150.000000"`).
+  Yeni bir portfolio-level kural eklerken **kolon eklemeye gerek yok**, config snapshot'ı yeter.
+
+### Motor davranışı — fail-closed + L4, hiçbir sınır sessiz değil
+
+`resolve_portfolio_rules` (`domain/backtest/engine.py:664-702` — **public, alt çizgisiz**; alt
+çizgili adla grep'lersen sıfır hit alırsın. Çağıran: `application/jobs/backtest_engine.py:290`) → `PortfolioRules`
+(`domain/backtest/execution/state.py:272-278`).
+
+| Durum | Motor ne yapar | L4 warning |
+|---|---|---|
+| Kural yok / `KEEP_SEPARATE` + cap yok | `None` döner → **rules öncesi motorla byte-identical** | — |
+| Kural aktif (her zaman) | Sıralı pin-order uygulanır | `portfolio_rules_sequential_pin_order_precedence` (`engine.py:3368`) |
+| Cap **set ama okunamaz / `<= 0`** | **SIFIR cap** (hiçbir giriş kabul edilmez) — "cap yok"a **düşmez** | `portfolio_max_exposure_unparseable_zero_cap` |
+| `conflict_policy == NET` | `BLOCK_OPPOSITE` olarak koşar | `conflict_policy_net_executed_as_block_opposite` |
+| **Bilinmeyen** policy token'ı (kurcalanmış/yabancı snapshot) | Fail-closed → bloklar | `portfolio_conflict_policy_unknown_fail_closed` |
+| Enstrüman sembolü çözülemedi | Fail-closed → bloklar | `portfolio_conflict_symbol_unknown_fail_closed` |
+| Zaman damgası parse edilemedi | Fail-closed → bloklar | `portfolio_rules_time_unparseable_fail_closed` |
+
+- **Cap tabanı** = run'ın replay ettiği pinlenmiş sermaye: allocation altında paylaşılan havuz
+  `P0` (normal yol), yoksa stratejinin kendi initial capital'ı (savunmacı, gerçek manifest
+  akışında ulaşılmaz).
+- **Blok gerekçeleri:** `portfolio_conflict_blocked` (`engine.py:1371`),
+  `portfolio_max_total_exposure` (giriş: `1399`; stack/scale reddi: `2714`).
+- **Diagnostics anahtarları** (`engine.py:3306-3320`): `portfolio_rules_active`,
+  `portfolio_conflict_policy` (**KAYDEDİLEN** token), `portfolio_conflict_policy_executed`
+  (**KOŞAN** token — NET'in düşüşü görünür kalır), `portfolio_max_total_exposure_cap`
+  (çözülmüş para tutarı), `portfolio_prior_intervals`, `portfolio_conflict_blocked_entries`.
+  **Kaydedilen ile koşan token'ın ayrı raporlanması bilinçlidir** — biri diğerinin yerine geçmez.
+
+### Dokunulan yüzeyler (tam liste)
+
+| Katman | Dosya:satır |
+|---|---|
+| Domain config | `domain/allocation/config.py:118-119, 129, 134` |
+| Domain enum | `domain/allocation/enums.py:37-53` |
+| Domain kurallar | `domain/allocation/rules.py:164-186` |
+| Motor | `domain/backtest/engine.py:664-702, 866-892, 1366-1371, 1399, 2714, 3020-3033, 3306-3320` · `execution/state.py:272-278` · worker girişi `application/jobs/backtest_engine.py:88, 290` |
+| Komut | `application/commands/allocation_plan.py:84-85, 99-100, 139-140, 162-163, 218-219, 546-552, 588-594` · **409 `changed_paths` alan listesi `673-674`** (O-serisi #457 sonrası — iki alan da diff'lenir) |
+| Ready Check | `application/commands/readiness_check.py:770-777` (snapshot'a taşınır) |
+| Query | `application/queries/allocation_plan.py` (draft projeksiyonu) |
+| Repo | `infrastructure/postgres/repositories/allocation.py:54-55, 66-67` |
+| ORM | `infrastructure/postgres/models/allocation.py:91-93` |
+| Route | `apps/api/routes/allocation.py:56-57, 104-105` (draft PUT gövdesi) |
+| OpenAPI | `docs/openapi.json` → `conflict_policy` (2228), `max_total_exposure_percent` (2272) |
+| Frontend | `lib/allocation.ts:73-74, 194-195` · `pages/Portfolio.tsx:308-309, 332-333, 455-482` — "Portfolio rules" alan grubu: *Max total exposure %* (placeholder `e.g. 150 (blank = no cap)`) + *Conflicting signals (same instrument)* select (varsayılan `— (keep separate)`) |
+
+### Test kapsamı
+
+- `backend/tests/unit/test_backtest_portfolio_rules.py` — **15 test**, motor kapılarının tamamı.
+- `backend/tests/unit/test_allocation_rules.py:178-205` — pozitif cap + `BLOCK_OPPOSITE`
+  normalizasyonu, çoklu geçersiz değer için blocker, NET warning'i.
+- `backend/tests/integration/test_allocation_persistence.py:337-380` — draft round-trip
+  (`"150.000000"`), revision config snapshot'ı, `0` cap'in **revision'ı bloklaması**.
+- `backend/tests/unit/test_backtest_engine_golden.py` — golden/execution_key regresyonu.
+
+### Dürüst sınırlar
+
+- **Sıralı (pin-order) uygulama, unified-clock co-simulation DEĞİL.** Erken bir item, geç bir
+  item yüzünden **asla yeniden simüle edilmez**. Bu V1 sınırıdır ve her rules-aktif run'da
+  `portfolio_rules_sequential_pin_order_precedence` warning'i ile ifşa edilir.
+- **`NET` V1'de gerçekten netlemez.** Netleme, V1 motorunun koşmadığı unified-clock çok-item
+  co-simülasyonunu gerektirir; düşüş hem validation warning'i (`CONFLICT_POLICY_NET_V1`,
+  kaydetme anında) hem L4 engine warning'i (çalıştırma anında) ile **iki kez** ifşa edilir.
+- **Bu bölüm doc 13'ü değiştirmez.** `docs/spec/` kanonik ve dokunulmazdır; buradaki kayıt
+  yalnızca kodun spec'i **aştığı** yeri belgeler. Doc 13 bir gün bu alanları kapsayacak biçimde
+  yeniden yayımlanırsa, otorite spec'e döner ve bu bölüm tarihsel not haline gelir.
+## B-2 · Backtest — kodda var, doc 15'te açıklanmayan üç kavram (docs-only)
+
+Kod değişikliği YOK; bu bölüm HEAD `dd07d48` üzerinde **ampirik olarak** doğrulanmış üç
+davranışın kaydıdır. Üçü de doc 15'te tanımsız; ikisi zararsız genişletme, biri sonuçların
+"aynı mı farklı mı" sorusunu doğrudan etkilediği için burada uzun uzun yazılıyor.
+
+### 1. `execution_key` — manifest'in İKİNCİ hash'i
+
+`domain/backtest/manifest.py::build_run_manifest` her run için **iki** sha256 üretir
+(`shared/manifest.py::manifest_hash`, kanonik JSON). `ManifestBuildResult` ikisini birden taşır.
+
+**`manifest_hash` ile farkı** tek cümlede: `manifest_hash` manifest'in **tamamı** üzerinden
+hesaplanır (identity bloğu — `run_id`, `created_at`, `correlation_id`,
+`requested_by_principal_id`, `composition_id`/`composition_snapshot_id` — ve `preflight` dahil),
+bu yüzden **her run ve her retry benzersiz** bir değer alır; `execution_key` ise SADECE
+**reproducibility içeriği** üzerinden hesaplanır ve **run kimliğini DIŞLAR**, bu yüzden aynı
+girdiyi tarif eden iki farklı run **aynı** `execution_key`'i taşır. Yani: manifest_hash "bu
+hangi run?" sorusunu, execution_key "bu hangi hesap?" sorusunu yanıtlar.
+
+`execution_content` tam olarak şu dokuz alandır (`manifest.py:166-176`):
+`composition_fingerprint` · `mainboard_items` (pinlenmiş `(root_id, selected_revision_id)`,
+sıralı) · `capital_execution` · `result_artifact_context` (`metric_set_version` +
+`output_artifact_profile`) · `engine_version` · `tick_data` (F-07i B) ·
+`strategy_package_context` · `external_object_context` · `data_time_context` (üçü K-04).
+
+**Dışarıda bırakılan ve NEDEN:** `preflight` bilerek yok. Warning taşıyan bir run'ın manifest
+byte'ları — dolayısıyla `manifest_hash`'i — değişir ama `execution_key`'i **değişmez**; readiness
+uyarısı bir hesap girdisi değildir, o yüzden bir uyarı satırı yüzünden motor sürümü uzayı kaymaz
+(`commands/backtest_run.py:875-883` bunu açıkça yazıyor).
+
+**`engine_version` execution_content'in İÇİNDE** — bu tasarımın çekirdeği. Her `ENGINE_VERSION`
+bump'ı bütün `execution_key` uzayını kaydırır, böylece eski motorun ürettiği bir sonuç yeni motor
+altında **asla** yeniden kullanılabilir sayılmaz. `manifest.py`'nin baştaki ~90 satırlık yorum
+bloğu her bump'ın gerekçesini tek tek tutar (F-07i C · v17 per-item breakdown · v18 BLOCK_OPPOSITE
+· fill modeli · available-time gate · full-pinning · funding-step-order · restriction-min-n).
+HEAD'de `ENGINE_VERSION = "backtest-engine-v18-restriction-min-n"`.
+
+**Nerede saklanıyor:**
+
+| Tablo | Kolon | Kısıt |
+|---|---|---|
+| `backtest_run_manifest` | `manifest_hash` | `String(64)` NOT NULL **UNIQUE** |
+| `backtest_run_manifest` | `execution_key` | `String(64)` NOT NULL **index=True, unique DEĞİL** |
+| `result_manifest_snapshot` | `execution_key` | `String(64)` NOT NULL, indeks yok |
+
+Duplicate `execution_key`'e izin verilmesi kaza değil — tanımı gereği tekrarlanabilir bir değer.
+Dışarı da veriliyor: `queries/backtest_run.py:213` ve `domain/backtest/history.py` whitelist'i
+(`history.py:279,327,346`).
+
+**Sonuç paylaşımı — dürüst cevap.** HEAD `dd07d48`'de `execution_key` üzerinde **hiçbir sorgu
+WHERE/JOIN yapmıyor** (`grep -rn "execution_key ==" src/` → 0 hit; kolon yalnız yazılıyor ve
+projeksiyonda okunuyor). Yani **iki run aynı `execution_key`'i taşısa bile bugün birbirinin
+sonucunu paylaşmaz** — her başarılı run kendi `BacktestResult`'ını materialize eder. Cross-run
+idempotent-reuse **hazırlanmış ama bağlanmamış** durumdadır: indeks var, lookup yok. Bir RUN
+isteğinin tekrarını bugün engelleyen şey `Idempotency-Key`/`run_idempotent`'tır, `execution_key`
+değil (doc 15 §942 de duplicate RUN'ı idempotency key'e bağlıyor).
+
+Gerçekten uygulanmış tek INF-04 reuse **run İÇİdir**: `domain/backtest/execution/portfolio.py`
+(`_fold_composite_metrics:90-99`, `:239`) — marginal katkı için "item'sız kompozisyon" yeniden
+**simüle edilmez**, kalan item'ların hâlihazırda hesaplanmış per-item çıktıları in-memory yeniden
+fold edilir. Her item'ın bar-replay'i diğerlerinden bağımsız olduğu için bu, gerçek bir re-RUN'ın
+raporlayacağının aynısını verir; `combine_item_runs` ile drift'e karşı birim testiyle pinlenmiştir.
+
+İkinci fiili kullanım bir **regresyon kapısı**: K-09 motor ayrıştırmasında her dilim, aynı fixture
+matrisi üzerinde **özdeş `execution_key` + özdeş `EngineOutput` digest**'i ile byte-equality
+kanıtına bağlandı (`domain/backtest/execution/__init__.py:8`).
+
+**Spec durumu:** doc 15'te `execution_key` **0 hit**; spec yalnız "manifest hash"ten söz eder
+(§7/§8.4 — satır 523, 545, 639, 942). İki-hash ayrımı tamamen kod tarafı bir icat.
+
+### 2. `ARTIFACT_TYPE_ALIASES` — V18 etiketleri → canonical tip
+
+`domain/backtest/artifacts.py:33-40`, altı giriş dört canonical tipe (many-to-one) eşlenir:
+`equity → EQUITY_CURVE` · `ledger → TRADE_LEDGER` · `trades → TRADE_LEDGER` ·
+`signals → SIGNAL_EVENTS` · `events → SIGNAL_EVENTS` · `diagnostics → DIAGNOSTICS`.
+
+Tek çağıran `normalize_artifact_type` (`artifacts.py:47`), tek çağrı yeri
+`queries/result_artifacts.py:43`. **Fail-closed:** alias tablosunda ve `ArtifactType` enum'unda
+olmayan bir değer sert `ARTIFACT_TYPE_INVALID` verir (`ArtifactTypeInvalidError`) — sessiz fallback
+yok, docstring bunu açıkça söylüyor.
+
+Spec'te tanımlı değil (doc 15'te ne alias tablosu ne `artifact_type` sözcüğü geçiyor). **Zararsız:**
+canonical enum yolunu daraltmıyor, yalnızca V18 UI'ın kısa sözcüklerini path değeri olarak kabul
+ediyor; canonical adlar (`equity_curve` vb.) aynen çalışmaya devam ediyor.
+
+### 3. `ExportFormat.PARQUET` — spec'te olmayan üçüncü format
+
+`domain/backtest/export.py:47-52`: `ExportFormat` = `CSV` · `JSON` · **`PARQUET`**. Doc 15 §3.2
+(satır 217) "Trade Log CSV, Signal Events CSV, Equity Curve CSV, PineScript Signal Marker, Result
+JSON" der; **"parquet" spec'te 0 hit**. Üstelik sızıntı sunum katmanına kadar gelmiş:
+`frontend/src/lib/backtest.ts:461` → `EXPORT_FORMATS = ["csv", "json", "parquet"]`, yani kullanıcı
+export formu açılır listesinde parquet'i **görüyor** ve seçebiliyor.
+
+**Dürüst sınır — bugün hiçbir formatta byte üretilmiyor.** `commands/result_export.py::_op` yalnız
+bir metadata satırı yazar (object key + checksum + `schema_version` + `row_count` + provenance =
+kaynak Result'ın `manifest_hash`'i). `compute_export_checksum` satırları **format ne olursa olsun
+her zaman JSON olarak** serialize eder; `fmt` sadece (a) checksum payload'ının bir bileşeni ve
+(b) `build_object_key`'in dosya uzantısıdır. Parquet encoder **yok** — ama csv/json encoder'ı da
+yok; V1'de object-storage put/get adapter'ı async ExportJob ile gelecek (modül docstring'i bunu
+kayıt altına alıyor). Yani parquet bugün bir *etiket*; csv/json'dan tek farkı spec'in o iki adı
+anmış, bunu anmamış olması. Format değeri checksum'a girdiği için aynı Result + aynı tip farklı
+formatta **farklı** checksum üretir — yani etiket sessiz değil, provenance'a bağlı.
+
+### Doğrulama
+
+Salt-okuma denetim; kod/test/migration değişmedi. Yukarıdaki her iddia `HEAD dd07d48` üzerinde
+`grep`/`sed` ile dosyadan okundu: `manifest.py:96-104,140-205` · `artifacts.py:23-58` ·
+`export.py:26-101` · `models/backtest.py:156-172,310-325` · `repositories/backtest.py:107-133,356-364` ·
+`commands/result_export.py:62-120` · `commands/backtest_run.py:515-525,875-890` ·
+`execution/portfolio.py:90-99,232-241` · `lib/backtest.ts:461` · `docs/spec/15_*.md`.
+
+---
+
+## B-2 / B-3 · Market Data cross-row `rule_code` kataloğu + monotonluk sıkılaştırması (adjudicated)
+
+**Denetim iddiası.** B-2: "kod spec'ten daha spesifik, doküman güncellenmemiş" — cross-row
+validation altı `rule_code` üretiyor ama doc 11 bunların hiçbirini yazmıyor. B-3:
+`TIMESTAMP_NON_MONOTONIC` **tüm** veri tipleri için BLOCKING_FAIL, oysa doc 11 §7.4 ordering
+kontrolünü yalnız Tick/Trades satırında ve "Trade ID/sequence available ise" koşuluyla istiyor.
+**İkisi de doğrulandı.** Karar: **kod olduğu gibi kalıyor, sıkılaştırma bilinçli olarak
+adjudicate edildi**; eksik olan katalog burada yazılıyor. Spec dosyasına dokunulmadı.
+
+> Denetimin verdiği satır numaraları (251/262/274/290/302) bayattı; gerçek satırlar aşağıdaki
+> tabloda. Bulguların kendisi geçerli.
+
+### B-2 — kanıt: kodlar spec'te gerçekten yok
+
+`docs/spec/11_Entropia_V18_Market_Data_Page_Documentation_v1_1.md` içinde altı kodun tamamı için
+**0 hit** (tek grep, birleşik desen). §7.4 kuralları **nesir** olarak tarif ediyor ("Duplicate
+instrument+timestamp+resolution reported", "Declared cadence gaps recorded", "spread unit
+absolute/bps/% must be declared"); §10.2 ise **audit event** listesi — rule_code taksonomisi
+değil, dolayısıyla orada olmaması kusur değil. Doc 11'de rule_code kataloğu için ayrılmış bir §
+**yok**; K-07 içtihadı burada da geçerli (her sayfanın kendi §-taksonomisi otoritedir, kodlar
+aynı kusuru anlatır). Katalog bu yüzden spec'e değil **buraya** yazılıyor.
+
+### Katalog — `domain/market_data/validation_rules.py::evaluate_cross_row`
+
+| `rule_code` | Satır | Severity | Kapsam | Doc 11 nesir karşılığı |
+|---|---|---|---|---|
+| `MARKET_DATA_TIMEZONE_UNRESOLVED` | `:26` (sabit), `:316` | BLOCKING_FAIL | tüm tipler | §9.1 "Timezone/time basis" + "no silent UTC fallback" |
+| `TIMESTAMP_UNRESOLVABLE` | `:327` | BLOCKING_FAIL | tüm tipler | §7.4 OHLCV "Timestamp non-null and timezone-resolvable" |
+| `TIMESTAMP_NON_MONOTONIC` | `:338` | BLOCKING_FAIL | **tüm tipler (spec'ten SIKI — aşağıda B-3)** | §7.4 Tick "ordering kontrolü"; §4.4 (`:632`), §9.1 (`:1133`) "tick ordering" |
+| `DUPLICATE_TIMESTAMP` | `:350` | BLOCKING_FAIL | **tüm tipler (spec'ten SIKI)** | §7.4 OHLCV "Duplicate instrument+timestamp+resolution reported" |
+| `CADENCE_GAP` | `:369` | WARNING | yalnız OHLCV + `ResolutionKind.BAR` + okunabilir cadence | §7.4 OHLCV "Declared cadence gaps recorded" |
+| `SPREAD_UNIT_UNDECLARED` | `:384` | WARNING | yalnız `SPREAD_EXECUTION` | §7.4 Spread "unit absolute/bps/% must be declared" |
+
+`MARKET_DATA_TIMEZONE_UNRESOLVED`, K-01'de modül sabiti olarak pinlendi ve
+`shared/errors.py::MarketDataTimezoneUnresolved.code` ile **birebir aynı**; validation-issue satırı
+ile API hata yüzeyi aynı kusuru aynı adla söyler. Diğer beşi bugün yalnız issue satırında yaşar —
+karşılık gelen bir `shared/errors.py` sınıfı yok, çünkü bunlar bir isteği reddetmez, revizyonu
+NEEDS_REVIEW'a sürükler.
+
+**Severity → lifecycle (önemli, çünkü tabloyu yanlış okutuyor):** `jobs/market_data.py::decide_outcome`
+(`:127-136`) **PASS dışındaki her şeyi** NEEDS_REVIEW yapar — WARNING de auto-verify'ı bloklar.
+Yani WARNING/BLOCKING_FAIL ayrımı Market Data'da **raporlama** ayrımıdır, lifecycle ayrımı değil.
+Bu, doc 11 AT #9'u ("spread unit belirsizse VERIFIED state'e geçemez") `SPREAD_UNIT_UNDECLARED`
+WARNING iken bile sağlar. (Research Data bilerek farklıdır — orada WARNING verify'ı geçirir;
+gerekçe `domain/research_data/quality_rules.py` docstring §"Severity contract".)
+
+`evaluate_cross_row`'un tek çağıranı `application/jobs/market_data.py:259`. Research Data bu
+fonksiyonu **kullanmaz**, yalnız `resolve_timestamp`'ı ödünç alır (`quality_rules.py:42`) — bu
+kataloğun blast radius'u Market Data ile sınırlı.
+
+### B-3 — sıkılaştırma DOĞRU, ve **bilinçli sıkı** olarak adjudicate edildi
+
+Doc 11 ordering'i üç ayrı yerde Tick'e bağlıyor: §7.4 Tick hücresi (`:1006`), §4.4 field contract
+(`:632` "Tick ordering/side unknown"), §9.1 quality satırı (`:1133` "tick ordering/side"). OHLCV
+hücresi ordering'den **hiç söz etmiyor**. Kod ise `evaluate_cross_row`'da tip dallanması olmadan
+`pairwise(resolved)` üzerinden herkese uyguluyor. Sapma gerçek.
+
+Sıkılaştırma **kasıtlı değildi** — `48be1a9 feat(r3): cross-row market-data validation (doc 11 §7.4)`
+kuralı tek seferde tip-agnostik yazdı; K-01 ve O-29'un aynı dosyadaki adjudication yorumlarının
+aksine burada gerekçe yorumu yok. Ama **gevşetilmedi**, çünkü:
+
+1. **Teslim sırası = replay sırası, zincirde hiçbir yerde sort yok.** `_to_parquet_bytes`
+   (`jobs/market_data.py:214-221`) satırları `parsed.rows` sırasıyla yazar → `stream_processed_batches`
+   (`infrastructure/s3/parquet_stream.py:43-51`) dosya sırasıyla okur → `domain/backtest/engine.py::run_engine`
+   bar döngüsü aldığı sırayla replay eder. Sıra dışı bir OHLCV barı **motorda birebir lookahead'dir**:
+   ileri tarihli bir barın close'u, geçmiş bar işlenmeden tüketilir. Doc 11 §7.5'in known-time /
+   anti-lookahead kuralı bunu OHLCV için de kusur yapar; §7.4'ün OHLCV hücresi ordering'i **yasaklamıyor**,
+   sadece susuyor.
+2. **Spec'in tick koşulu bu kod tabanında hiç sağlanamaz.** Canonical tick satırı
+   (`validation_rules.py::TickRow`) `price` + `side` taşır; `trade_id`/`sequence` alanı **yok**.
+   "Trade ID/sequence available ise" koşuluna harfiyen uyulsaydı ordering kontrolü **hiçbir zaman**
+   çalışmazdı — ve sıra riski en yüksek tip (olay tabanlı tick) kontrolsüz kalırken, yapısı gereği
+   daha güvenli olan OHLCV kontrol edilirdi. Koşulu uygulamak sonucu tersine çevirirdi.
+3. **Yanlış pozitifin bedeli sınırlı ve fail-safe.** BLOCKING_FAIL revizyonu NEEDS_REVIEW'a alır;
+   veri silinmez, ham asset asla değiştirilmez (§9.1 recovery: "Fix source/mapping/metadata; create
+   successor revision. Never alter raw asset."), Admin inceleyip ilerletebilir. Ters yön —
+   gevşetip sıra dışı seriyi auto-verify etmek — sessizce para-boyutlandıran motora girer.
+
+**Aynı eksende ikinci sıkılaştırma:** `DUPLICATE_TIMESTAMP` de tip-agnostiktir; doc 11 duplicate'i
+OHLCV hücresinde koşulsuz, Tick hücresinde Trade ID koşuluyla anıyor. Gerekçe aynı invaryant:
+yinelenen bir bar iki kez replay edilir → çift sayım. Bu ikisi birlikte adjudicate edilmiştir.
+`CADENCE_GAP` **gevşetilmedi/sıkılaştırılmadı** — spec'e uygun biçimde yalnız OHLCV + bar cadence
+yolunda üretilir (`:363-372`); cadence'siz tipler O-29 gereği yalnız günlük coverage segmenti yazar,
+gap **yargılanmaz** (`_build_daily_coverage` docstring).
+
+### Kural (yeni cross-row kuralı eklerken)
+
+Yeni bir `rule_code`'u **bu tabloya ekle** ve tip kapsamını açıkça yaz. Tip-agnostik uygulamak
+istiyorsan gerekçeyi "teslim sırası = replay sırası" invaryantına bağla; bağlayamıyorsan kuralı
+`market_data_type` dallanmasıyla kapsa. Kodun spec nesrinden sıkı olması **kendi başına kusur
+değildir** — kaydedilmemiş olması kusurdur.
+
+### Dürüst sınırlar
+
+- **Kod değişmedi.** Bu slice yalnız `docs/PROJECT_HISTORY.md`'ye yazar; migration yok, alembic head
+  `0039_backtest_run_cancellation`, `ENGINE_VERSION` bump edilmedi, test sayısı değişmedi.
+- **Spec dosyası kasten değiştirilmedi** (görev kısıtı). Doc 11 §7.4 hâlâ ordering'i Tick'e bağlı
+  anlatıyor; kod ile spec arasındaki fark artık *kayıtlı sapma*, *bilinmeyen sapma* değil.
+- `TIMESTAMP_NON_MONOTONIC` ölçümü **teslim sırası** üzerinedir (`pairwise` ham sırada), oysa
+  `DUPLICATE_TIMESTAMP` ve coverage `Counter`/`sorted` üzerinden çalışır. Bu bilinçlidir ama
+  yan etkisi şu: sıra dışı bir seri hem NON_MONOTONIC hem (varsa) coverage segmenti üretir —
+  coverage sıralanmış veriden hesaplandığı için sıra hatasını yansıtmaz.
+- Bu kodların hiçbiri `docs/openapi.json`'da yayımlanmıyor (issue satırı gövdesi, hata zarfı değil);
+  drift guard onları korumaz.
+- Mevcut regresyon kanıtı sınırlı: monotonluk için iki test var (`tests/unit/test_market_cross_row_validation.py:56`,
+  `tests/integration/test_market_crossrow_validation.py:160`) ve **ikisi de OHLCV** kullanıyor —
+  tick/spread için tip-agnostik davranışı kilitleyen bir test **yok**. Yeni test eklenmedi (bu slice
+  docs-only); borç olarak kayıtlı.
+
+---
+
+## F-07 §4.4 · Backend display DTOs — dört yüzeyin ham `*_id`'si kapandı, F-07 BÜTÜN olarak Complete (branch `feat/f07-display-dto-residuals`)
+
+**Ne getirdi.** F-07'nin sunum yarısı PR #404'te kapanmıştı; geriye "DTO'sunda insan
+okunur ad OLMAYAN" dört yüzey kalmıştı. Bu slice F-07'nin kendi reçetesini uyguladı —
+*add display DTOs at query boundaries* — ve F-07'yi bütün olarak kapattı.
+
+**Doküman kayması (2026-07-29 ampirik).** §4.4 tablosu `ResultDetail.tsx`'i yol vermeden
+listeliyordu; dosya `pages/` altında **değil**, `frontend/src/components/ResultDetail.tsx`
+(`PerItemCard` :416, `MarginalCard` :585). Dört yüzeyin file:line'ı yeniden ölçülüp §4.4'e
+yazıldı.
+
+| # | Yüzey | Alan | Nerede doldurulur |
+|---|---|---|---|
+| 1 | `pages/PreCheck.tsx:129` | `display_label` + `created_at` | `queries/create_package.py::_request_display_labels` — sayfa başına **iki batched lookup**: üretilen paketin `input_contract.name`'i, yoksa pinlenen Rationale Family'nin `display_name`'i |
+| 2 | `pages/Library.tsx:1263`, `1279` | `source_package_name` | `commands/package_import.py::submit_package_import` — **submit anında** `manifest["name"]` (migration `0042`) |
+| 3 | `components/ResultDetail.tsx:424`, `:595` | `item_label` | snapshot `item_manifest.items[].label` → run manifest `mainboard_item_labels` → `ItemRun.item_label` → result diagnostics |
+| 4 | `pages/ReadyCheck.tsx:295` | `scope_label` | `queries/readiness_check.py::_scope_labels` — raporun **pinlediği** snapshot'tan |
+
+**Tek upstream, iki tüketici.** 3 ve 4'ün kaynağı aynı: `MainboardWorkingItem.display_label_override`
+→ composition snapshot `item_manifest.items[].label`. İki snapshot yazıcısı da yazar
+(`commands/mainboard.py::_snapshot_manifest` ve `commands/readiness_check.py::_manifest` — ikizler,
+biri değişirse diğeri de değişmeli). Snapshot JSONB olduğu için 3 ve 4 **migration istemedi**.
+
+**İki invariant (ikisi de RED kanıtlandı).**
+
+1. **Display label reproducibility'yi çatallayamaz.** `mainboard_items` `execution_key`'e
+   hash'lenir (`manifest.py::build_run_manifest` → `execution_content`). Label'ı oraya koymak,
+   bir item'ı yeniden adlandırınca **aynı kompozisyonun aynı replay'inin farklı execution_key
+   üretmesi** demekti (INF-04/INF-05 ihlali). Bu yüzden label'lar ayrı, hash'e girmeyen
+   `mainboard_item_labels` anahtarında taşınır → `execution_key` bit-aynı.
+   `_pinned_items`'a `label` eklenince
+   `test_labels_do_not_change_the_execution_key` + `test_labels_are_absent_from_the_hashed_pin_set`
+   düşüyor, başka hiçbir test düşmüyor.
+2. **Pinli artefakt canlı veriden etiketlenemez.** `_scope_labels` canlı composition'a join
+   edecek şekilde değiştirilince `test_renaming_the_item_does_not_relabel_an_existing_report`
+   düşüyor, başka hiçbir test düşmüyor. Yani rapor yazıldıktan SONRA item yeniden adlandırılırsa
+   rapor eski adı korur — `is_current` izlenen, immutable bir raporu bugünün adıyla etiketlemek
+   aktif olarak yanlış olurdu.
+
+**ENGINE_VERSION bump — golden guard yakaladı.** İlk tam suite koşusunda tek bir test düştü:
+`test_backtest_engine_golden.py::test_engine_output_matches_the_recorded_golden_digests`, ve tam
+olarak beklenen 4 senaryoda: `portfolio.combine`, `combine_reversed`, `combine_shared_pool`,
+`combine_non_executing_only`. **Strategy-replay senaryolarının hepsi bit-aynı kaldı** → engine
+DAVRANIŞI değişmedi; değişen composite **artefaktın şekli** (per-item + marginal satırlarına
+`item_label` eklendi). Bu, v17'nin per-item breakdown'ı eklerken kaydettiği durumun aynısı, o
+yüzden aynı muamele: `ENGINE_VERSION` → **`backtest-engine-v18-min-n-filtered-events-per-item-labels`** + golden
+baseline aynı commit'te yeniden üretildi. Gerekçe: bump olmadan etiketsiz eski bir result aynı
+kompozisyonun re-RUN'ında **idempotent olarak yeniden kullanılır** (INF-04/INF-05) ve satırlar
+sonsuza dek id-only kalırdı — düzeltme mevcut bir kompozisyona hiç ulaşmazdı. Bu **tek seferlik
+namespace kayması**; `test_labels_do_not_change_the_execution_key` ile çelişmez (o test versiyonu
+sabit tutup label DEĞERİNİ değiştirir). `test_strategy_config_min_true_count.py`'deki literal
+tripwire yeni sürüme güncellendi ve yeni
+`test_the_artifact_change_shifted_the_execution_key_namespace` eklendi.
+
+**İlk plan yanlıştı, kapı düzeltti.** Slice "bump YOK" varsayımıyla yürütüldü: `execution_key`'in
+GİRDİLERİ doğru analiz edilmişti ama **kalıcı artefaktın şekli** hesaba katılmamıştı. Golden guard
+tam da bunun için var.
+
+**Geriye uyum backfill ile DEĞİL, omission ile.** Slice öncesi snapshot / manifest /
+`package_import_job` satırları label taşımaz; her okuyucu boş map veya `null` üretir, UI ham
+id'ye düşer. Backfill, o artefaktların hiç görmediği adları uydurmak olurdu.
+
+**Yan bulgu — doc 06 §510-512 uygulanmamıştı.** "V18 has no editable field; name is generated
+after C.D.P as *New [Type] Package*" kuralı kodda yoktu: request-doğumlu her paket adsız
+okunuyordu (`queries/library._package_name` → None), Pre-Check picker'ının elinde bu yüzden
+id'den başka şey yoktu. `commands/create_package.py::_generated_package_name` artık C.D.P'de
+yazıyor. **Yeni bir kullanıcı input'u eklenmedi** — doc 06 request aşamasında editable ad
+alanı olmadığını açıkça söylüyor.
+
+**Sunum sözleşmesi.** Yeni `frontend/src/components/LabelledId.tsx`: label varsa PRIMARY metin
++ altında/yanında muted `<code>` id; label yoksa **yalnız id** (uydurma ad YOK). Portfolio'nun
+`ItemLabel`'ının nullable-server-label'a genellenmiş hâli.
+
+**Migration `0042_package_import_source_name`** — `package_import_job.source_package_name`
+VARCHAR(255) NULL. up/down/up ✓ (`LC_ALL=en_US.UTF-8`, temiz şema), `\d package_import_job` ile
+model↔migration kolon paritesi doğrulandı. Neden submit anında yakalanıyor: `blocked`/`failed`
+biten bir import hiç paket üretmez (join edecek kök yok) ve import edilen kopyanın sonradan
+yeniden adlandırılması "ne import edildi" tarihini yeniden yazmamalı.
+
+**Testler.** Yeni `tests/unit/test_f07_manifest_item_labels.py` (5) +
+`tests/integration/test_f07_display_labels.py` (6, `test_readiness_persistence`'ın seed
+helper'larını yeniden kullanır — duplicate item ekleyerek deterministik `DUPLICATE_ENABLED_ITEM`
+scope'u üretir). Frontend'de dört yüzeyin her biri için **label render** + **label'sız satır
+id'ye düşer** çifti. Ölçülen: frontend **654/654** (62 dosya, `--no-file-parallelism`),
+`ruff`/`ruff format`/`mypy src` (372 dosya) ✓. Backend tam suite lokal: ilk koşu **1 failed /
+2732 passed** (yukarıdaki golden guard), bump + regenerate sonrası etkilenen modüller geçiyor.
+**Otorite CI.**
+
+**Dürüst sınır.** Dört route da gövdesini `dict[str, Any]` olarak bildiriyor, bu yüzden yeni
+alanlar **`docs/openapi.json`'a yayımlanmıyor** ve drift guard onları göremiyor — O-30'un
+kaydettiği aynı kör nokta. Dört legacy route'a typed response model vermek, kendi
+idempotent-replay uyumluluk analizini gerektiren AYRI bir iş; burada yapılmadı.
+
+**Yol boyunca düzeltilen iki bayat CLAUDE.md satırı:** alembic head `0039` değil **`0040`**'tı
+(bu slice `0041` yaptı); `ENGINE_VERSION` `-funding-step-order` değil
+**`backtest-engine-v18-restriction-min-n`** (I-15a).

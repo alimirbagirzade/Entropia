@@ -172,7 +172,24 @@ Before stopping a working session, produce **ALL** of the following:
   V18-R2 dalgası + **auth remediation dalgası COMPLETE** (güvenlik denetimi #346–#364).
   Tüm route yüzeyleri frontend'e bağlı; TIER 2 sayfa haritası 24/24.
 
- 
+- **alembic head:** **`0042_package_import_source_name`** (42 migration, tek head; F-07 §4.4'te
+  eklendi — öncesi `0040_export_type_agent_pine`). **`ENGINE_VERSION` =
+  `backtest-engine-v18-min-n-filtered-events-per-item-labels`** (`manifest.py:105`; **F-07 §4.4'te bump edildi** —
+  öncesi I-15a `-restriction-min-n`, K-03 `-funding-step-order`). Bump'ın sebebi DAVRANIŞ değil
+  **artefakt şekli**: composite Result'ın per-item + leave-one-out satırları artık `item_label`
+  taşıyor (golden'da yalnız 4 `portfolio.combine*` senaryosu oynadı, strategy-replay senaryoları
+  bit-aynı). v17'nin per-item breakdown bump'ıyla aynı sınıf: bump olmadan etiketsiz eski bir
+  result re-RUN'da idempotent olarak YENİDEN KULLANILIR ve satırlar sonsuza dek id-only kalırdı.
+  **Bu tek seferlik namespace kaymasıdır**; label DEĞERİ hâlâ `execution_key`'i değiştirmez
+  (`tests/unit/test_f07_manifest_item_labels.py`).
+- **Son dalga — O-serisi (spec-uyum kusurları):** O-01 (#403) · O-02 (#400) · **O-03 (#407 + #413;
+  #408 boş merge oldu, içeriğini #413 yeniden indirdi)** · O-04 (#405) · O-05 (#412) ·
+  **O-06 (#419 — CancelBacktestRun, migration `0039`)** · O-08 (#406) · O-09 (#410) · O-10 (#402) ·
+  **O-17 (#446 — restore conflict artık typed `resolution` seçenek kümesi taşıyor; yeni
+  `domain/trash/restore.py` katalogu + salt-okuma
+  `GET /trash-entries/{id}/restore-preflight`; bilinmeyen resolution 422
+
+
 - **Testler:** son yeşil referans CI (O-serisi PR'ları). Lokal tam suite tek koşuda
   tamamlanabiliyor — O-27'de **2538 passed / 0 failed / 43dk39sn**, worktree'ye özel izole DB ile
   (aşağıdaki ortam tuzağına uyulursa). Yine de **otorite CI'dır.**
@@ -187,18 +204,29 @@ Before stopping a working session, produce **ALL** of the following:
 
 
 
-- **F-07 raw-id sweep — SUNUM katmanı kapandı (PR #404).** 31 dosyada 161 `*_id` render'ı tarandı;
-  **4 kalıntı açık** (backend display-DTO → `v18_visual_traceability.md §4.4`) — yani **F-07 bütün
-  olarak Complete DEĞİL** (yol/satır refs 2026-07-29'da yeniden ölçüldü).
-  vitest **622/622** *(2026-07-28 ölçümü; 07-29 doc-truth turunda yeniden koşulmadı — otorite CI)*
-  (**`--no-file-parallelism` ZORUNLU**; worktree'de
-  `frontend/node_modules` yoksa önce `npm ci` — ilk koşudaki `ERR_MODULE_NOT_FOUND` test hatası değil).
+- **F-07 raw-id sweep — BÜTÜN olarak COMPLETE.** Sunum katmanı PR #404 (§4.3), backend
+  display-DTO katmanı bu dalga (§4.4: `display_label`, `source_package_name`, `item_label`,
+  `scope_label` + ortak `components/LabelledId.tsx`). Pinli artefaktların (result, readiness
+  report) etiketi **snapshot/manifest'ten** gelir, canlı composition'dan ASLA join edilmez.
+  vitest **654/654** (**`--no-file-parallelism` ZORUNLU**; worktree'de `frontend/node_modules`
+  yoksa önce `npm ci` — ilk koşudaki `ERR_MODULE_NOT_FOUND` test hatası değil).
 
 
 - **Next (PO imzası BLOKAJ DEĞİL — imza 2026-07-22'de atıldı,
   `docs/implementation/v18_final_acceptance.md:155-169`; beklettiği FIX(R3) kalemlerinin hepsi
   landed: #368–#373, #375–#379):**
- 
+  1. **R2 banner kapanışı (docs işi):** `entropia_v18_remediation_status.md` RE-OPENING
+     banner'ının koşulu sağlandı → banner'ı kaldır, UI satırlarını evidence'lı Complete yap.
+  2. **O-03 kalıntısı:** **4** ölü error sınıfı (`KNOWN_UNRAISED` — `RoleContextStaleError`,
+     `ServiceUnavailableError`, `ArtifactNotAvailableError`, `HypothesisArtifactNotFoundError`;
+     `ValidationAlreadyRunning` S-L3'te fırlatılmaya başladı, ratchet onu listeden attırdı).
+     O-03 adjudication tablosunun 4 satırı **sonradan canonical oldu** — bkz.
+     `docs/PROJECT_HISTORY.md` §"Sonradan canonical olan dört satır".
+  3. **Round-3 backlog:** S5 (a/b/c/d) + S-L1…S-L6
+     (`docs/POST_V1_SPEC_GAP_BACKLOG_ROUND3.md` §DURUM TAZELEME — diğer 8 madde landed).
+- **Açık iş (R2 kapsamı dışı, dürüst sınır):** ekran okuyucu (NVDA/VoiceOver) denetimi yapılmadı;
+  10 sayfanın derin görsel kıyası eksik; a11y/visual katmanları CI'da koşmadı; A11Y-01 kontrast
+  (228 serious node, tamamı canonical v18 paletinden) ve A11Y-02 kayıtlı sapma olarak açık.
 - **KAPSAM DIŞI (bilerek):** retention auto-purge (doc 20 §16 — "Production V1'de kapalı"),
   LLM generation (Future-Dev), Graphic View renderer (doc 22 — V18 statik placeholder kalır).
 

@@ -27,6 +27,13 @@ export interface ReadinessIssue {
   remediation: string | null;
   field_path: string | null;
   scope_id: string | null;
+  // F-07 §4.4 — the human name of the composition item this issue is about, read by
+  // the server from the snapshot the REPORT pinned. A stale/superseded report keeps
+  // the names it was written against; labelling it from the live composition would
+  // be actively wrong. Optional because reports written before this field, and
+  // idempotent replays of older run-check envelopes, simply do not carry it; null /
+  // absent means the row shows its raw scope_id.
+  scope_label?: string | null;
 }
 
 export interface ReadinessSummary {

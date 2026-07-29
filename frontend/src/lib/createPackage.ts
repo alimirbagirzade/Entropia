@@ -255,6 +255,12 @@ export interface PackageRequestSummary {
   state: string;
   source_kind: string;
   package_root_id: string | null;
+  // F-07 §4.4 — a server-resolved human name for the request: the produced package's
+  // name, else the pinned Rationale Family's display name. Null when the request pins
+  // neither; the picker then falls back to created_at + the raw id and NEVER invents a
+  // name (doc 06 §510-512: a request has no editable name field before C.D.P).
+  display_label: string | null;
+  created_at: string | null;
 }
 
 export interface PackageRequestsPage {

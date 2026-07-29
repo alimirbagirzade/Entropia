@@ -301,6 +301,13 @@ export interface PerItemEquityPoint {
 export interface PerItemBreakdown {
   item_id: string;
   item_kind: string;
+  // F-07 §4.4 — the item's human name as PINNED in the run manifest at run time.
+  // Server-owned: the page renders it as the primary identification and keeps
+  // item_id as the secondary token. Null on results whose composition item had no
+  // label (and on pre-F-07 results) — the row then shows the raw id. The browser
+  // NEVER joins the live composition to fill this: the result is immutable and its
+  // items may have changed since.
+  item_label: string | null;
   root_id: string | null;
   revision_id: string | null;
   executed: boolean;
@@ -372,6 +379,9 @@ export interface ContributionDiversification {
 
 export interface ContributionMarginal {
   item_id: string;
+  // Same pinned label as PerItemBreakdown.item_label — a leave-one-out row names
+  // the item it excluded. Null falls back to the raw id.
+  item_label: string | null;
   without_item: ContributionMetricSet;
   delta: ContributionDelta;
 }

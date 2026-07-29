@@ -1,9 +1,15 @@
 # DATA_MODEL — Postgres tabloları
 
 Modeller: `backend/src/entropia/infrastructure/postgres/models/*.py` (30 dosya, **102 tablo**).
-Alembic: `backend/alembic/versions/` — **head = `0041_filtered_event_artifact`** (41 migration, tek head; `0040_export_type_agent_pine` üzerine I-02'de eklendi).
+Alembic: `backend/alembic/versions/` — **head = `0042_package_import_source_name`** (42 migration, tek head; `0041_filtered_event_artifact` (I-02) üzerine F-07 §4.4'te eklendi).
 
-> **`0040` YENİ TABLO GETİRMEDİ** — bu yüzden aşağıdaki 102 sayısı değişmedi.
+> **`0041` YENİ TABLO GETİRMEDİ** (102 sayısı değişmedi). F-07 §4.4: `package_import_job` tablosuna
+> nullable `source_package_name VARCHAR(255)` ekler — Library Import raporunun ham `import_job_id`
+> yerine gösterdiği ad. `submit_package_import` bunu **submit anında** gönderilen export
+> manifest'inin `name` alanından yakalar; `blocked`/`failed` biten bir import hiç paket üretmediği
+> için sonradan join edilemezdi. **Backfill YOK** — eski satırlar `NULL` okur ve UI ham id'ye düşer.
+>
+> **`0040` DE YENİ TABLO GETİRMEDİ.**
 > `0040_export_type_agent_pine` yalnız `export_artifact.export_type` kolonunu `VARCHAR(13)` →
 > `VARCHAR(24)` genişletir (S-L2 / doc 15 §3.2: `pinescript_signal_marker` + `agent_dataset`
 > üyeleri). Kolon **PG ENUM değildir** (`SAEnum(native_enum=False)`) ve SQLAlchemy 2.0
@@ -154,7 +160,7 @@ CLAUDE.md'deki **"her yeni `create_*` için L1 FK insert-order proof"** kuralın
 | `baseline_asset` | Yüklenmiş baseline dosyası | `request_entity_id`, `parse_job_id` | — | — |
 | `package_validation_run` | CP validation koşusu | `request_entity_id`, `draft_revision_id`, `job_id` | — | — |
 | `package_revision_link` | Request Revision zinciri (append-only; attempt 1 = orijinal draft, ilk link `attempt_no=2`) | `request_entity_id`, `parent_revision_ref`, `parent_package_root_id`, `prior_validation_run_ref` | — | — |
-| `package_import_job` | Paket import işi (export'un tersi) | `origin_package_id`, `result_package_root_id`, `job_id` | — | — |
+| `package_import_job` | Paket import işi (export'un tersi). **`source_package_name`** (nullable, migration `0042`) = import edilen paketin submit anında manifest'ten pinlenen adı (F-07 §4.4) | `origin_package_id`, `result_package_root_id`, `job_id` | — | — |
 | `embedded_resolver_registry` | ESP resolver registry (`registry_version` = OCC kaynağı) | `package_entity_id`, `trusted_active_revision_id`, `replacement_revision_id` | — | ✔ (`registry_version`) |
 | `embedded_resolver_contract` | Resolver imza sözleşmesi | `entity_id`, `revision_id` | — | — |
 | `embedded_resolver_validation_run` | Resolver doğrulama koşusu | `entity_id`, `revision_id` | — | — |

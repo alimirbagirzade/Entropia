@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import { ErrorState } from "@/components/ErrorState";
+import { LabelledId } from "@/components/LabelledId";
 import { Loading } from "@/components/Loading";
 import { ApiError } from "@/lib/apiClient";
 import {
@@ -423,7 +424,11 @@ function PerItemCard({ item }: { item: PerItemBreakdown }) {
   return (
     <div style={perItemBoxStyle}>
       <strong>
-        {item.item_kind} <code style={hashStyle}>{item.item_id}</code>
+        {/* F-07 §4.4: the item name PINNED in this result's manifest at run time.
+            Never joined from the live composition — this result is immutable and its
+            items may have been renamed or removed since. No pinned label falls back
+            to the raw id, which stays visible either way as the audit token. */}
+        {item.item_kind} <LabelledId label={item.item_label} id={item.item_id} inline />
       </strong>
       {!item.executed ? (
         <p className="page-sub" style={{ margin: "6px 0 0" }}>
@@ -592,7 +597,9 @@ function MarginalCard({ entry }: { entry: ContributionMarginal }) {
   return (
     <div style={perItemBoxStyle}>
       <strong>
-        Without <code style={hashStyle}>{entry.item_id}</code>
+        {/* Same pinned-label contract as PerItemCard: a leave-one-out row names the
+            item it excluded, from the manifest rather than from live data. */}
+        Without <LabelledId label={entry.item_label} id={entry.item_id} inline />
       </strong>
       <p className="page-sub" style={{ margin: "6px 0 0" }}>
         {`The composition without this item would have started from ${entry.without_item.initial_capital} and ended at ${entry.without_item.final_equity}. Delta = full composition minus without-item.`}

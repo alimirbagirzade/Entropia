@@ -959,6 +959,13 @@ def _snapshot_manifest(
     """Build the snapshot item manifest (doc 01 §9.2 shape).
 
     ``snapshot_id`` is backfilled by the caller once the row id exists.
+
+    ``label`` (F-07 §4.4) pins each item's human name AT SNAPSHOT TIME. Every
+    downstream reader of a pinned artifact — the readiness report's issue scopes and
+    the Result's per-item breakdown — labels its rows from here, never from the LIVE
+    composition: an item renamed or replaced after the snapshot must not re-label the
+    immutable artifact that pinned it. NULL when the item carries no override; the
+    browser then shows the raw id rather than inventing a name.
     """
     return {
         "snapshot_id": snapshot_id_holder.get("snapshot_id"),
@@ -972,6 +979,7 @@ def _snapshot_manifest(
                 "revision_id": item.pinned_revision_id,
                 "enabled": item.is_enabled,
                 "position": item.position_index,
+                "label": item.display_label_override,
             }
             for item in items
         ],

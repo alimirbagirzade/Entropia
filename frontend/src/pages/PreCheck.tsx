@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import { EmptyState } from "@/components/EmptyState";
 import { ErrorState } from "@/components/ErrorState";
+import { LabelledId } from "@/components/LabelledId";
 import { Loading } from "@/components/Loading";
 import { StatusBadge } from "@/components/StatusBadge";
 import { ApiError } from "@/lib/apiClient";
@@ -121,7 +122,16 @@ function RequestPickerCard({
                 {requests.data.data.map((req) => (
                   <tr key={req.request_id}>
                     <td>
-                      <code>{req.request_id}</code>
+                      {/* F-07 §4.4: the server-resolved name is the primary
+                          identification; the request id stays beneath as the
+                          copyable token. With no label the row is still not
+                          id-only — created_at below discriminates it. */}
+                      <LabelledId label={req.display_label} id={req.request_id} />
+                      {req.created_at ? (
+                        <div style={{ fontSize: 12, color: "var(--text-dim)" }}>
+                          {formatUtc(req.created_at)}
+                        </div>
+                      ) : null}
                     </td>
                     <td>{req.package_type}</td>
                     <td>{req.source_kind}</td>

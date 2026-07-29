@@ -339,6 +339,13 @@ class PackageImportJob(Base):
 
     import_job_id: Mapped[str] = mapped_column(String(40), primary_key=True)
     manifest_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    # F-07 §4.4 — the imported package's OWN name, copied from the submitted export
+    # manifest at submit time (migration 0041). It is evidence of what was submitted,
+    # pinned alongside ``manifest_hash``: a job that ended ``blocked``/``failed`` never
+    # produced a package to join against, and a later rename of the imported copy must
+    # not rewrite the history of what was imported. NULL for pre-0042 rows and for a
+    # manifest that declared no name — the report then shows the raw job id.
+    source_package_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     origin_package_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
     origin_revision_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
     package_kind: Mapped[PackageKind] = mapped_column(

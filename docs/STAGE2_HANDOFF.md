@@ -3054,3 +3054,63 @@ Kalan tek büyük açık iş hâlâ **R2'nin product-owner imzası**
 (`docs/implementation/v18_final_acceptance.md` §4, D-1…D-9) — imza olmadan
 `entropia_v18_remediation_status.md`'deki R2 RE-OPENING banner'ı kalkmaz.
 
+
+---
+
+## Stage F-07 §4.4 — backend display DTOs landed (branch `feat/f07-display-dto-residuals`)
+
+**F-07 artık BÜTÜN olarak Complete.** Sunum yarısı PR #404'te kapanmıştı; bu slice
+"DTO'sunda insan okunur ad olmayan" dört yüzeyi F-07'nin kendi reçetesiyle kapattı
+(*add display DTOs at query boundaries*).
+
+**Migration:** `0042_package_import_source_name` (alembic head; öncesi `0040_export_type_agent_pine`
+— CLAUDE.md'de `0039` yazıyordu, bayattı). Yeni tablo yok: `package_import_job.source_package_name`
+VARCHAR(255) NULL. **`ENGINE_VERSION` → `backtest-engine-v18-min-n-filtered-events-per-item-labels`** (öncesi I-15a
+`-restriction-min-n`): golden guard, composite artefakta `item_label` eklendiği için 4
+`portfolio.combine*` senaryosunun oynadığını yakaladı (strategy-replay senaryoları bit-aynı →
+davranış değişmedi). v17'nin per-item breakdown bump'ıyla aynı sınıf — bump olmadan etiketsiz
+eski result re-RUN'da idempotent yeniden kullanılırdı. Golden baseline aynı commit'te yenilendi.
+
+**Dört alan:** `display_label`+`created_at` (PreCheck request) · `source_package_name`
+(Library import) · `item_label` (`PerItemBreakdown` + `ContributionMarginal`) · `scope_label`
+(`ReadinessIssue`). Hepsi additive; mevcut hiçbir alan adı değişmedi.
+
+**Mimari karar — pinli artefaktın etiketi snapshot'tan gelir.** 3. ve 4. yüzeyin ortak upstream'i
+`MainboardWorkingItem.display_label_override` → composition snapshot `item_manifest.items[].label`
+(iki snapshot yazıcısı da yazar: `commands/mainboard.py::_snapshot_manifest` +
+`commands/readiness_check.py::_manifest` — **ikizler, biri değişirse diğeri de**). Snapshot JSONB
+olduğu için bu iki yüzey migration istemedi.
+
+**İki invariant, ikisi de RED kanıtlandı:**
+1. `mainboard_items` `execution_key`'e hash'lenir → label'lar ayrı, hash'e girmeyen
+   `mainboard_item_labels` anahtarında taşınır. Bir item'ı yeniden adlandırmak `execution_key`'i
+   **değiştirmez** (INF-04/INF-05). `tests/unit/test_f07_manifest_item_labels.py`.
+2. Rapor yazıldıktan sonra item yeniden adlandırılırsa rapor **eski adı korur** —
+   `test_renaming_the_item_does_not_relabel_an_existing_report`.
+
+**Yan bulgu:** doc 06 §510-512'nin "name is generated after C.D.P as *New [Type] Package*" kuralı
+uygulanmamıştı → `_generated_package_name` eklendi. Yeni kullanıcı input'u YOK.
+
+**Yeni ortak bileşen:** `frontend/src/components/LabelledId.tsx` — label PRIMARY + id muted
+secondary; label yoksa **yalnız id**. Yeni bir "server-labelled identifier" yüzeyi eklerken bunu
+kullan, kendi `<code>{x_id}</code>`'ini yazma.
+
+**Testler:** +5 unit (`test_f07_manifest_item_labels.py`) +6 integration
+(`test_f07_display_labels.py`) +7 frontend case (dört yüzeyin her biri: label render + label'sız
+satır id'ye düşer). Ölçülen: frontend **654/654** (62 dosya, `--no-file-parallelism`), lint/format/
+mypy (372 dosya) ✓, alembic `0042` up/down/up ✓ + kolon paritesi ✓. Backend tam suite lokal:
+ilk koşu 1 failed / 2732 passed (golden guard), bump sonrası etkilenen modüller yeşil → PR CI otorite.
+
+**Dürüst sınır:** dört route da `dict[str, Any]` döndürüyor → yeni alanlar `docs/openapi.json`'a
+**yayımlanmıyor**, drift guard göremiyor (O-30'un kaydettiği kör nokta). Typed response model
+vermek ayrı bir iş; burada yapılmadı.
+
+## Next: **PO imzası + R2 kapanışı** (değişmedi) · F-07 §4.4 landed
+
+`CLAUDE.md` §Next artık üç kalem taşıyor (F-07 satırı düştü):
+1. **R2 banner kapanışı** (docs işi) — `entropia_v18_remediation_status.md` RE-OPENING banner'ı.
+2. **O-03 kalıntısı** — 4 ölü error sınıfı.
+3. **Round-3 backlog** — S5 (a/b/c/d) + S-L1…S-L6.
+
+Kalan tek büyük açık iş hâlâ **R2'nin product-owner imzası**
+(`docs/implementation/v18_final_acceptance.md` §4, D-1…D-9).

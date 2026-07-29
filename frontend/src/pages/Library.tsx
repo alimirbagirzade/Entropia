@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 
 import { EmptyState } from "@/components/EmptyState";
 import { ErrorState } from "@/components/ErrorState";
+import { LabelledId } from "@/components/LabelledId";
 import { Loading } from "@/components/Loading";
 import { StatusBadge } from "@/components/StatusBadge";
 import { formatUtc } from "@/lib/backtest";
@@ -1256,7 +1257,10 @@ function ImportCard() {
             style={{ display: "flex", gap: 8, alignItems: "center", width: "100%" }}
           >
             <StatusBadge tone={packageImportTone(item.status)} label={item.status} />
-            <code>{item.import_job_id}</code>
+            {/* F-07 §4.4: the imported package's own name (pinned from the submitted
+                manifest) identifies the job; the job id stays as the secondary token,
+                and with no name the id alone is shown rather than an invented one. */}
+            <LabelledId label={item.source_package_name} id={item.import_job_id} inline />
             <span className="page-sub">{item.package_kind}</span>
           </button>
         ))}
@@ -1271,7 +1275,8 @@ function ImportReportView({ report }: { report: PackageImportReport }) {
     <div>
       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
         <StatusBadge tone={packageImportTone(report.status)} label={report.status} />
-        <code>{report.import_job_id}</code>
+        {/* Same contract as the recent-imports rows above. */}
+        <LabelledId label={report.source_package_name} id={report.import_job_id} inline />
       </div>
       {report.status === "succeeded" && report.result_package_root_id ? (
         <p className="page-sub" style={{ marginTop: 4 }}>

@@ -368,7 +368,12 @@ def _manifest(engine_version: str):
 
 
 def test_strategy_config_min_true_count_bumps_engine_version_and_shifts_execution_key() -> None:
-
+    # The literal moves whenever a LATER slice legitimately bumps the engine version.
+    # I-02 (filtered-events artifact) and F-07 §4.4 (``item_label`` on the composite
+    # per-item / leave-one-out rows) both did. What this test actually guards is
+    # unchanged: whatever the current version is, it must not share the pre-I-15a
+    # namespace, and it must be stable.
+    assert ENGINE_VERSION == "backtest-engine-v18-min-n-filtered-events-per-item-labels"
     current = _manifest(ENGINE_VERSION)
     prior = _manifest(_PRIOR_ENGINE_VERSION)
     assert current.manifest["identity"]["engine_version"] == ENGINE_VERSION

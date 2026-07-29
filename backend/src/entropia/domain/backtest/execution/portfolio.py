@@ -272,7 +272,16 @@ def _contribution_block(
             )
             for key in _CONTRIBUTION_DELTA_KEYS
         }
-        marginal.append({"item_id": excluded.item_id, "without_item": without, "delta": delta})
+        marginal.append(
+            {
+                "item_id": excluded.item_id,
+                # F-07 §4.4 — a leave-one-out row says "the composition WITHOUT this
+                # item"; naming that item from the pinned manifest is the whole point.
+                "item_label": excluded.item_label,
+                "without_item": without,
+                "delta": delta,
+            }
+        )
     return {
         "method": {
             "correlation": (
@@ -364,6 +373,10 @@ def combine_item_runs(
                 {
                     "item_id": run.item_id,
                     "item_kind": run.item_kind,
+                    # F-07 §4.4 — the item's name as PINNED in this run's manifest. The
+                    # Result is immutable, so it must never be re-labelled from the live
+                    # composition; None keeps the UI honest (it shows the raw id).
+                    "item_label": run.item_label,
                     "root_id": run.root_id,
                     "revision_id": run.revision_id,
                     "executed": False,
@@ -456,6 +469,9 @@ def combine_item_runs(
             {
                 "item_id": run.item_id,
                 "item_kind": run.item_kind,
+                # F-07 §4.4 — see the non-executing branch above: pinned label, never
+                # a live join.
+                "item_label": run.item_label,
                 "root_id": run.root_id,
                 "revision_id": run.revision_id,
                 "executed": True,

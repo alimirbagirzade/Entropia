@@ -202,6 +202,46 @@ class _Ledger:
     portfolio_time_unparseable_gate: bool = False
     portfolio_block_reason: str | None = None
 
+    # ---- K-11a: the provenance counters K-10a left behind -------------------------
+    # These 22 stayed plain ``run_engine`` locals through K-10a, which is why the bar
+    # loop's phases could not be lifted out: a phase that bumps ``limit_orders_placed``
+    # has nowhere to write it once it stops being nested. Same values, same initial 0,
+    # same increment sites — only the binding moved.
+    #
+    # ``bars_seen`` is the load-bearing one: it is the replay's bar index, and both
+    # ``_Pending.target_seq`` and ``_WorkingLimit.expires_seq`` are expressed in it.
+    bars_seen: int = 0
+    # F-07a: fills deferred to a later bar's open/close by the execution-timing model.
+    deferred_entry_fills: int = 0
+    deferred_exit_fills: int = 0
+    # F-07b: resting limit-order lifecycle (``limit_orders_filled`` is above — it was
+    # the single counter K-10a did move, and it stays where it is).
+    limit_orders_placed: int = 0
+    limit_orders_cancelled: int = 0
+    # F-07h: stop-trigger lifecycle. A stop-limit's armed limit leg then counts through
+    # the limit_orders_* counters — the two machines compose, never double-count.
+    stop_orders_placed: int = 0
+    stop_orders_triggered: int = 0
+    stop_orders_cancelled: int = 0
+    # F-07i (C): tick-setting execution counts.
+    touch_orders_placed: int = 0
+    touch_exit_fills: int = 0
+    tick_bars: int = 0
+    # F-07d: same-direction scaling ladder outcomes.
+    scale_layers_added: int = 0
+    scale_layers_rejected: int = 0
+    # F-07e: restriction gate + conflict/position-handling policy outcomes.
+    entries_blocked_by_restriction: int = 0
+    stack_entries_added: int = 0
+    stack_entries_rejected: int = 0
+    positions_replaced: int = 0
+    opposite_signal_closes: int = 0
+    conflict_signals_ignored: int = 0
+    stop_exit_collisions: int = 0
+    suppressed_entries: int = 0
+    # F-11: funding charges actually applied (a due record against a held position).
+    funding_charges: int = 0
+
 
 @dataclass(frozen=True, slots=True)
 class AllocationExecution:

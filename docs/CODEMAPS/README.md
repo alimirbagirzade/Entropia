@@ -4,8 +4,17 @@ Sıkıştırılmış, tablo ağırlıklı referans haritalar. Her biri tek ekran
 Kaynak: repo üzerinde **gözlemlenen** kod (route imzaları, model tanımları, aktör
 dekoratörleri, frontend import/query-key'leri). Emin olunamayan yerlerde `?` var.
 
-> Üretim tarihi ana hat: `main` @ `docs/stage-video-alignment-landed` branch snapshot'ı.
-> Alembic head: **`0036_manual_duplicate_override`** (toplam 36 migration).
+> **Son tazeleme: 2026-07-29** — `origin/main` @ `0995c37` (denetim sonrası dalga: O-serisi +
+> I15A/I15B slice'ları + audit-doc19). Aşağıdaki sayıların **hepsi** o gün repodan sayıldı:
+>
+> | Olgu | Değer | Nasıl doğrulanır |
+> |---|---|---|
+> | Alembic head | **`0040_export_type_agent_pine`** (40 migration, tek head) | `ls backend/alembic/versions/*.py \| wc -l` |
+> | HTTP endpoint | **196** (openapi operation sayısıyla birebir) | `BACKEND_ROUTES.md` başındaki tek satırlık python |
+> | Postgres tablosu | **102** (30 model dosyası) | `grep -rh __tablename__ …/models/ \| sort -u \| wc -l` |
+> | `ForeignKey(...)` bildirimi | **135** (25 dosyada) | `grep -rh "ForeignKey(" …/models/ \| wc -l` |
+> | audit `event_kind` | **126 düz literal** (+ dolaylı yazımlar) | `JOBS_AND_EVENTS.md` §Audit kataloğu |
+> | Frontend | **31 sayfa**, **40 `lib/*.ts`** | `ls frontend/src/pages/*.tsx \| wc -l` |
 
 ---
 

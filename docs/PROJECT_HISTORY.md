@@ -1420,12 +1420,12 @@ kabul edilmiş import çıktısında ve tarihsel satırlarda saklı.
 | `RESOLVER_TIMING_RISK_BLOCKED` | 09 §1013 | check adı `timing_integrity` → aynı | `domain/esp/validation.py:214` |
 | `UNSAVED_MAINBOARD_DRAFT` | 01 §1119/1238 | revision'sız draft Ready Check/RUN'a giremez (AT-01) | `commands/strategy_draft.py:110` |
 | `OBJECT_EDIT_FORBIDDEN` | 01 §1620 | `ACCESS_DENIED` | **spec "ACCESS_DENIED / OBJECT_EDIT_FORBIDDEN" yazıyor** |
-| `INTRABAR_DATA_UNAVAILABLE` | 04 §604 | `TICK_DATA_UNAVAILABLE` | `domain/readiness/enums.py:106` |
-| `OHLCV_CONTEXT_REQUIRED` | 04 §599 | `OHLCV_POLICY_CONFLICT` | `domain/trading_signal/compiler.py:97` |
+| ~~`INTRABAR_DATA_UNAVAILABLE`~~ | 04 §604 | `TICK_DATA_UNAVAILABLE` | **SUPERSEDED → §"Sonradan canonical olan dört satır"** |
+| ~~`OHLCV_CONTEXT_REQUIRED`~~ | 04 §599 | `OHLCV_POLICY_CONFLICT` | **SUPERSEDED → §"Sonradan canonical olan dört satır"** |
 | `MARKET_DATA_INSTRUMENT_MISMATCH` | 02 §2380/2861 | `RunFailureCode.INSTRUMENT_MISMATCH` | `jobs/backtest_engine.py:503`, fail-closed (F-05) |
 | `MISSING_EMBEDDED_DEPENDENCY` | 07 §1129/1422 | `PRECHECK_BLOCKED` | **spec §1422 alternatifi yazıyor** |
-| `INVALID_ITEM_KIND` | 03 §838/922 | `MAINBOARD_ITEM_KIND_MISMATCH` | 3 raise |
-| `UPLOAD_JOB_FAILED` | 21 §942 | `MANUAL_PARSE_FAILED` | `domain/manual/blocks.py:348`, `:413` |
+| ~~`INVALID_ITEM_KIND`~~ | 03 §838/922 | `MAINBOARD_ITEM_KIND_MISMATCH` | **SUPERSEDED → §"Sonradan canonical olan dört satır"** |
+| ~~`UPLOAD_JOB_FAILED`~~ | 21 §942 | `MANUAL_PARSE_FAILED` | **SUPERSEDED → §"Sonradan canonical olan dört satır"** |
 
 İki satırda spec **kendi alternatifini zaten yazıyor** (01 §1620, 07 §1422) — oralarda sapma bile
 yok; denetim spec'in ilk seçeneğini tek geçerli ad sanmış.
@@ -1436,6 +1436,38 @@ Tarama sırasında bu da "`DEPENDENCY_UNRESOLVED` kapsıyor, doc 09 §1018 alter
 diye adjudicate edilmişti. **O-10 (PR #402) bu slice review'dayken canonical sınıfı ekledi**
 (`shared/errors.py:576`, `PackageDependencyCycle`, kod `PACKAGE_DEPENDENCY_CYCLE`, doc 08 §10/§14).
 Artık spec adıyla mevcut; adjudication satırı geçersizdir ve bu kayıt onun yerini alır.
+
+### Sonradan canonical olan dört satır (2026-07-29 tazelemesi)
+
+`PACKAGE_DEPENDENCY_CYCLE` tek istisna değildi. **Yukarıdaki tablo yazıldığı anda doğruydu**;
+o günden bu yana dört slice daha, adjudicate edilmiş dört kodu **spec adıyla** implement etti.
+Dördü de O-03'ün İKİ PR'ından (kod #407 · doc #413, ikisi de 2026-07-28 sabahı) **sonra** indi —
+yani tablo bayatladı, yanlış yazılmadı. Bu satırlar artık geçersizdir; adjudication DEĞİL,
+**canonical implementasyon** geçerlidir:
+
+| Spec kodu | Eski adjudication | Şimdi canonical | İndiren |
+|---|---|---|---|
+| `INTRABAR_DATA_UNAVAILABLE` | `TICK_DATA_UNAVAILABLE` | `ReadinessIssueCode.INTRABAR_DATA_UNAVAILABLE` (`domain/readiness/enums.py:151`), emit `commands/readiness_check.py:510` | `8a7a707` K-08 (2026-07-28 19:25) |
+| `OHLCV_CONTEXT_REQUIRED` | `OHLCV_POLICY_CONFLICT` | `ReadinessIssueCode.OHLCV_CONTEXT_REQUIRED` (`domain/readiness/enums.py:157`), emit `domain/readiness/validators.py:1071` | `8a7a707` K-08 (aynı commit) |
+| `INVALID_ITEM_KIND` | `MAINBOARD_ITEM_KIND_MISMATCH` | `InvalidItemKindError` / `INVALID_ITEM_KIND` (`shared/errors.py:967-972`), `domain/mainboard/item_kind.py:43` | `0b73b06` O-27 (PR #450) |
+| `UPLOAD_JOB_FAILED` | `MANUAL_PARSE_FAILED` | `ManualUploadJobFailedError` / `UPLOAD_JOB_FAILED` (`shared/errors.py:2029-2045`), raise `commands/manual.py:126`, `:141` | `c8288b3` I15B-SL6 (PR #455) |
+
+Eski karşılıklar **silinmedi** — `TICK_DATA_UNAVAILABLE`, `OHLCV_POLICY_CONFLICT`,
+`MAINBOARD_ITEM_KIND_MISMATCH`, `MANUAL_PARSE_FAILED` hepsi hâlâ kendi ayrı kusurlarını
+anlatıyor. Değişen tek şey: spec kodu artık **kendi adıyla da** mevcut, dolayısıyla
+"bu kod yok, şu kod kapsıyor" cümlesi doğru değil.
+
+> **Bu bölümün kalıcı dersi budur.** O-03 bir kez bayatladı (#408 boş merge), sonra
+> review sırasında üç kez kaydı, şimdi dördüncü kez tazelendi. Bir adjudication tablosu
+> **tarihsel bir kayıttır, canlı bir sözleşme değil** — ağaca sorulmadan alıntılanamaz.
+> Ölü-sınıf tarafında bunu `tests/unit/test_error_taxonomy_no_dead_definitions.py`
+> otomatikleştiriyor (küme her koşuda ağaçtan yeniden hesaplanıyor); **adjudication
+> satırlarının böyle bir bekçisi yok** ve bu bilinçli bir açık: "spec kodu sonradan
+> canonical oldu mu" sorusu ancak spec §-numarasıyla eşleşen bir kaynak listesi
+> tutularak makineleştirilebilir, o liste de bugün yok.
+
+Tablodaki satır numaraları (`errors.py:576`, `policy.py:140`, …) **tarama anına aittir**
+ve rutin olarak kayar; bir satırı doğrularken numaraya değil, sembol adına grep at.
 
 ### TIMEZONE — "tek ada indir" reddedildi
 
@@ -1712,7 +1744,7 @@ cap'i gevşetmez, üstüne biner.
 ### Kalıcılık
 
 - **Plan kökü:** iki kolon da `portfolio_allocation_plan` üzerinde (0035). Draft upsert
-  `commands/allocation_plan.py:129-130` (create) / `142-143` (update, OCC `row_version` altında).
+  `commands/allocation_plan.py:139-140` (create) / `162-163` (update, OCC `row_version` altında).
 - **Revision:** `portfolio_allocation_plan_revision` **kolon ALMADI** — değerler değişmez
   `revision.config` JSON snapshot'ında taşınır
   (`test_allocation_persistence.py`: `stored.config["max_total_exposure_percent"] == "150.000000"`).
@@ -1720,7 +1752,8 @@ cap'i gevşetmez, üstüne biner.
 
 ### Motor davranışı — fail-closed + L4, hiçbir sınır sessiz değil
 
-`_resolve_portfolio_rules` (`domain/backtest/engine.py:665-700`) → `PortfolioRules`
+`resolve_portfolio_rules` (`domain/backtest/engine.py:664-702` — **public, alt çizgisiz**; alt
+çizgili adla grep'lersen sıfır hit alırsın. Çağıran: `application/jobs/backtest_engine.py:290`) → `PortfolioRules`
 (`domain/backtest/execution/state.py:272-278`).
 
 | Durum | Motor ne yapar | L4 warning |
@@ -1751,14 +1784,14 @@ cap'i gevşetmez, üstüne biner.
 | Domain config | `domain/allocation/config.py:118-119, 129, 134` |
 | Domain enum | `domain/allocation/enums.py:37-53` |
 | Domain kurallar | `domain/allocation/rules.py:164-186` |
-| Motor | `domain/backtest/engine.py:665-700, 866-892, 1366-1371, 1399, 2714, 3020-3033, 3306-3320` · `execution/state.py:272-278` |
-| Komut | `application/commands/allocation_plan.py:83-84, 98-99, 129-130, 142-143, 198-199, 517-523, 559-565` |
+| Motor | `domain/backtest/engine.py:664-702, 866-892, 1366-1371, 1399, 2714, 3020-3033, 3306-3320` · `execution/state.py:272-278` · worker girişi `application/jobs/backtest_engine.py:88, 290` |
+| Komut | `application/commands/allocation_plan.py:84-85, 99-100, 139-140, 162-163, 218-219, 546-552, 588-594` · **409 `changed_paths` alan listesi `673-674`** (O-serisi #457 sonrası — iki alan da diff'lenir) |
 | Ready Check | `application/commands/readiness_check.py:770-777` (snapshot'a taşınır) |
 | Query | `application/queries/allocation_plan.py` (draft projeksiyonu) |
 | Repo | `infrastructure/postgres/repositories/allocation.py:54-55, 66-67` |
 | ORM | `infrastructure/postgres/models/allocation.py:91-93` |
 | Route | `apps/api/routes/allocation.py:56-57, 104-105` (draft PUT gövdesi) |
-| OpenAPI | `docs/openapi.json` → `conflict_policy` (2168), `max_total_exposure_percent` (2212) |
+| OpenAPI | `docs/openapi.json` → `conflict_policy` (2228), `max_total_exposure_percent` (2272) |
 | Frontend | `lib/allocation.ts:73-74, 194-195` · `pages/Portfolio.tsx:308-309, 332-333, 455-482` — "Portfolio rules" alan grubu: *Max total exposure %* (placeholder `e.g. 150 (blank = no cap)`) + *Conflicting signals (same instrument)* select (varsayılan `— (keep separate)`) |
 
 ### Test kapsamı
@@ -1781,114 +1814,3 @@ cap'i gevşetmez, üstüne biner.
 - **Bu bölüm doc 13'ü değiştirmez.** `docs/spec/` kanonik ve dokunulmazdır; buradaki kayıt
   yalnızca kodun spec'i **aştığı** yeri belgeler. Doc 13 bir gün bu alanları kapsayacak biçimde
   yeniden yayımlanırsa, otorite spec'e döner ve bu bölüm tarihsel not haline gelir.
-
-
-## K-09 · Engine god-module split — beş davranış-korur çıkarma + kalıcı golden guard (PR #421/#423/#424/#425/#426 + #427)
-
-> **Bu kayıt geriye dönük yazıldı.** Beş slice 2026-07 içinde merge oldu ama kendi kapanış
-> kaydını hiç almadı; `docs/T01_LANDED_KICKOFF.md:17` bunu açık bir soru olarak bırakmıştı
-> ("K-09/K-10'un kendi kapanış kayıtları ayrı gelir — veya gelmemiştir, kontrol et").
-> Aşağıdaki her sayı, merge commit'lerinden ve bugünkü `origin/main`'den **yeniden ölçüldü**.
-
-**Sorun.** `domain/backtest/engine.py` 5212 satıra, içindeki `run_engine` 2848 satıra ulaşmıştı.
-Repo kuralı dosya <800, fonksiyon <50 satır — dosya kuralı 6.5×, fonksiyon kuralı 57× aşılıyordu.
-Motor tek bir dosyada bar döngüsü, fill eşleme, kısmi doluş, sizing, funding ve portföy
-birleştirmeyi birden taşıyordu.
-
-**Yöntem — saf çıkarma, her slice ayrı PR, her slice byte-eşitlik kanıtlı.** Kabul kapısı
-`ENGINE_VERSION`'ın **değişmemesi** ve refactor öncesi/sonrası **TAM `EngineOutput`**'un
-byte-eşit olmasıydı. Yalnız summary metrikleri değil: summary + trades + equity_points +
-signal_events + diagnostics + position_intervals. Bunun için shipped engine test helper'larından
-**46 senaryoluk** bir fixture matrisi kuruldu, her slice öncesi ve sonrası digest'lendi.
-Toplam digest beş slice boyunca sabit kaldı:
-`69754888b0aaa48adca0cddf1bdce94e48330eeb38355772ce8b9cc6e39670fc` — pre-K-09 baseline
-`eff8ffe`'den beri değişmedi.
-
-### Slice sırası ve ölçülen etki
-
-| # | Slice | PR | Yeni modül | engine.py | run_engine |
-|---|---|---|---|---|---|
-| 1 | (e) portfolio compose | #421 | `execution/portfolio.py` | 5212 → 4681 (−531) | 2848 (değişmedi) |
-| 2 | (c) sizing & leverage | #423 | `execution/sizing.py` + `constants.py` | 4681 → 4443 (−238) | 2848 (değişmedi) |
-| 3 | (d) cost & funding | #424 | `execution/costs.py` | 4443 → 4427 (−16) | 2848 → 2846 (−2) |
-| 4 | (a) fills & stop resolution | #425 | `execution/fills.py` + `state.py` | 4427 → 3780 (−647) | 2846 → 2842 (−4) |
-| 5 | (b) partial close & scaling | #426 | `execution/scaling.py` | 3780 → 3680 (−100) | 2842 → 2797 (−45) |
-
-**Toplam: engine.py 5212 → 3680 (−1532, −%29); run_engine 2848 → 2797 (−51, −%1.8).**
-
-Sıra tesadüfi değil: **state bağımlılığı arttıkça ilerlendi.** (e) hiç bar-döngüsü state'i
-okumaz (tamamlanmış `ItemRun`'lar üzerinde saf fold) → state threading sıfır. (c) saf
-`(config, entry_price, equity)` fonksiyonu. (d) ilk kez `run_engine` **İÇİNDEKİ** kodu yeniden
-yazar. (a) ve (b) `run_engine` içindeki closure'ları decide/apply seam'inden böler.
-
-### Kalıcı mimari kararlar
-
-- **Bağımlılık yönü tek yönlü, aşağı doğru.** `execution.*` modülleri `engine`'den import eder,
-  asla geri değil. `run_engine` bir modülü ÇAĞIRDIĞINDA (sizing, fills) paylaşılan tipleri
-  engine'de bırakmak cycle kapatırdı → iki **leaf** modül doğdu: `execution/constants.py`
-  (quantization sabitleri — reproducibility sözleşmesinin parçası) ve `execution/state.py`
-  (`_Bar`, `_Position` + `_dec`/`_volume`/`_normalize` ham-satır coercion sınırı).
-- **decide/apply seam'i.** Saf olmayan kod "hangi karar" ve "mutasyonu uygula" olarak bölündü.
-  Funding: `due_funding_charges()` hangi pinli kaydın bu barda ateşlendiğini ve kaça mal
-  olduğunu söyler; equity/peak/counter mutasyonu + `funding_charge` decision event'i
-  `run_engine`'de, state'in yaşadığı yerde kalır. Aynı desen `apply_partial_aftermath`
-  (pozisyonu mutate eder, profit lock uygulanıp uygulanmadığını **raporlar** → `lock_in_locks`
-  çağrı yerinde kitaplanır) ve `_fill_resting_limit` (karar çıktı, booking/trace/remainder
-  kaldı) için de kullanıldı.
-- **`sizing_is_modelled` / `leverage_is_modelled` tek kaynak kalır.** `readiness/validators.py`
-  bunları yeni modülden import eder → `STRATEGY_SIZING_UNSUPPORTED` /
-  `STRATEGY_LEVERAGE_UNSUPPORTED` Ready Check blocker'ları ile motorun fail-closed giriş kapısı
-  ayrışamaz.
-- **`resolve_scale_rejection` cap PRECEDENCE'ı artık gözlemlenebilir.** Kaybeden cap'in adı
-  reddedilen katmanın ledger reason'ına yazılır, yani hangi cap'in kazandığı okunabilir
-  davranıştır. Sıra (degenerate size → per-strategy total → configured size limit → sleeve →
-  composition-wide money cap) 30 satırlık if/elif zincirinde örtük olmak yerine testle pinlendi.
-  Cap aşan katman hâlâ **REDDEDİLİR, asla otomatik kırpılmaz** (§11.4).
-- **K-03'ün step-2 funding sırası korundu** — funding hâlâ bar'ın TEPESİNDE, o barın
-  boyutlandırdığı/cap'lediği her şeyden önce uygulanır.
-- **Fail-closed davranışlar taşındı, gevşetilmedi.** Çözülemeyen bar timestamp'i
-  `resolve_funding_decision_time` içinde `FundingSourceInvalid` fırlatmaya devam eder — sessizce
-  hiçbir şey ateşlememek tüm run için fazla-iyimser SIFIR funding maliyeti kitaplardı; date
-  blackout precedent'inin aksine bir maliyetin geri düşülecek kısıtlayıcı okuması yoktur.
-  As-of karşılaştırması hâlâ elle yazılmamıştır: `research_data.time_policy.is_eligible_for_decision`
-  (kanonik rule-2 kapısı) delege edilir.
-
-### Golden guard — K-09'un kalıcı artefaktı (PR #427)
-
-Byte-eşitlik harness'i repo dışında yaşıyordu ve oturumla birlikte ölecekti. #427 onu
-`backend/tests/unit/test_backtest_engine_golden.py` + `engine_golden_digests.json` olarak
-kalıcılaştırdı. **Harness bir slice'ı fiilen yakaladı:** slice (b) ilk halinde scaling-reference
-capture'ını düşürmüştü — hiçbir davranış testi fark etmedi çünkü tüm headline metrikler doğru
-kalırken ladder'ın trace detayı **yanlış referansı** raporluyordu. Bu, "summary metrikleri yeterli"
-varsayımının neden kabul edilmediğinin tek satırlık kanıtıdır.
-
-Test kırıldığında iki durum vardır ve docstring ikisini de yazar: (1) çıktıyı değiştirmek
-istemediysen bu bir regresyondur, JSON'a dokunma, kodu düzelt; (2) istediysen `ENGINE_VERSION`'ı
-**aynı** değişiklikte bump et, sonra baseline'ı yeniden üret. Bump'sız yeniden üretim, artık
-eşleşmeyen çıktı için eski bir `execution_key` namespace'ini sessizce yeniden kullanır — sözleşmenin
-tam olarak yasakladığı şey.
-
-### Doğrulama
-
-Her slice: ruff + `ruff format --check` + `mypy src` temiz; izole DB'de tam backend suite
-0 failed / 0 error (sırasıyla 2245 → 2273 → 2287 → 2306 → 2327 test). **Migration YOK**, yeni
-`create_*` komutu YOK → alembic up/down/up proof'u ve L1 FK insert-order proof'u bu slice'a
-uygulanmaz. Çıkarma **mekanik** yapıldı (satırlar taşındı, yeniden yazılmadı), transkripsiyon
-sapması yapısal olarak imkânsız.
-
-**Çıkarmanın açtığı yeni unit kapsamı: 98 test** — daha önce yalnız bar replay ile erişilebilen
-kurallar artık doğrudan test edilebilir: (e) 15 · (c) 28 · (d) 14 · (a) 20 · (b) 21.
-
-### Dürüst sınırlar
-
-- **`run_engine` hâlâ 2797 satırlık bir fonksiyon** (bugün `origin/main`'de 2596, sonraki
-  slice'ların katkısıyla; max nesting 10). Dosya kuralı hâlâ 4.2×, fonksiyon kuralı 52× aşılıyor.
-  Beş çıkarma **dosyayı** böldü, **bar döngüsünü** değil — taşınanların çoğu zaten module-level
-  helper'lardı. Geriye kalan, `nonlocal` üzerinden equity / position / working_limit'i gerçekten
-  mutate eden closure'lardır; bunları kaldırmak ya büyük bir threaded state nesnesi ya da motoru
-  bir sınıfa çevirmeyi gerektirir — ikisi de "saf çıkarma" mandate'inin dışındaydı ve ikisini de
-  byte-eşitlik kanıtıyla savunmak daha zordur. Slice'lar bunu gizlemek yerine her commit
-  mesajında açıkça raporladı.
-- **`ENGINE_VERSION` K-09 boyunca sabit kaldı** (`backtest-engine-v18-funding-step-order`) —
-  altı commit'in altısında da doğrulandı. Sonradan `-restriction-min-n`'e taşındı, ama bu I-15a'nın
-  gerçek bir modelleme değişikliğidir, refactor'ın değil.

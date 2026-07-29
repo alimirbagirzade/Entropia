@@ -2,6 +2,11 @@
 
 Katmanlar: `domain/` (saf, I/O yok) → `application/{commands,queries,jobs}` → `infrastructure/` → `apps/{api,worker,scheduler}`.
 
+> **Dosya sayıları (2026-07-29, ampirik):** `application/commands` **32** · `application/queries`
+> **37** · `application/jobs` **14** · `domain/` **26 paket**. Aşağıdaki tablolar bu dosyaların
+> **tamamını** adlandırır (`__init__.py` hariç). Bir modül eklendiğinde satırı da ekle — bu dosya
+> türetilmiş bir haritadır, otomatik tazelenmez.
+
 **Command konvansiyonu (her modülün docstring'inde tekrarlanan):** modül seviyesinde `async def`,
 request bağımlılığından gelen **TEK transaction**, burada **asla commit yok**, şekil =
 `policy check → pure domain state-machine → persist → audit + outbox (aynı tx)`.
@@ -57,6 +62,10 @@ request bağımlılığından gelen **TEK transaction**, burada **asla commit yo
 | `backtest_run.py` | RUN durumu + Result detayı (yalnız `result_id` + değişmez artifact'lardan hidrasyon) | `backtest_run`, `backtest_result`, `result_summary` |
 | `capability.py` | Capability registry listesi/detayı + Graphic View overview | `future_capability` |
 | `create_package.py` | CP istekleri + scan artifact (owner veya Admin görürlüğü) | `package_request`, `dependency_scan` |
+| `dependency_pins.py` | **Approve-time** pinlenmiş ESP resolver ref'lerinin yeniden doğrulaması (doc 06 §7). Pre-Check ref'leri pinler ama Pre-Check ile Approve **iki ayrı insan adımıdır**; arada `trusted_active` bir resolver deprecate olabilir → approve kapısı yeniden bakar | `embedded_resolver_registry`, `package_revision` |
+| `package_dependency.py` | **Publish-time** bağımlılık grafı çözümü + döngü kapısı (doc 08 §10/§13/§14). `A -> B -> A` yaratan publish denemesi **SUNUCU** tarafından, döngü yolunu adlandıran bir teşhisle reddedilir — UI asla kapı değildir | `package_root`, `package_revision` |
+| `panel_backtest_log.py` | Admin Panel backtest-log read model (doc 19, P-14) — `GET /admin/backtest-logs`'un PRIMARY görünümü: değişmez `backtest_result` üzerinde newest-first, cursor'lı "All User Backtest Logs" projeksiyonu. Admin "hangi kullanıcı hangi backtest'i koştu"yu **domain event çözmeden** okur. Net Profit / ROMAD / Trades kolonları `metric_value` satırlarından hidre edilir, `result_summary`'den DEĞİL | `backtest_result`, `metric_value`, `human_users`, `entity_registry` |
+| `timezone_audit.py` | **K-01 geriye-dönük denetim, SALT-OKUMA:** sessiz-UTC varsayımı altında alınmış revizyonları bulur. K-01 öncesi parse yolu beyan edilen timezone'u yok sayıp her NAIVE damgayı UTC okuyordu → `custom`+UTC-dışı IANA veya identifier taşımayan `exchange` beyan eden revizyon **yanlış an**'da saklanıp yine de auto-verify oluyordu | `market_dataset_revision`, `research_dataset_revision` |
 | `esp.py` | ESP registry listesi/detayı + resolve probe (rol-farkındalıklı) | `embedded_resolver_registry` |
 | `funding.py` | Pinlenmiş Funding kaynağını available-time-güvenli takvime çöz (F-11) | `research_*`, `market_*` |
 | `indicator_plan.py` | Pinlenmiş StrategyConfig → hesaplanabilir indicator plan (paket gövdesi çalıştırılmaz) | `package_revision` |
@@ -115,14 +124,14 @@ request bağımlılığından gelen **TEK transaction**, burada **asla commit yo
 | `deletion` | `state_machine` | Soft-delete/restore/purge geçiş kuralları |
 | `esp` | `resolver`, `policy`, `state_machine`, `validation`, `enums` | ESP resolver imza/trust durum makinesi |
 | `identity` | `actor`, `policy` | `require_admin` / `require_role` / `require_*_admin` — tüm yetki yardımcıları |
-| `importing` | `column_mapping` | TS + TL sınırlayıcılı dosya importer'larının paylaşımlı yardımcıları |
+| `importing` | `column_mapping`, `source_file`, `timezone` | TS + TL sınırlayıcılı dosya importer'larının paylaşımlı yardımcıları. **`source_file`** = fail-closed dosya-tipi kapısı (K-07; doc 05 §5.2 + doc 04 §7 — filename yok/boş → RED, uzantı iddiası içerik sniff'i ile desteklenir). **`timezone`** = ortak kaynak-timezone kapısı (O-28): beyan edilen zaman dilimi GERÇEK bir IANA tanımlayıcısı olmalı (`zoneinfo` çözmeli) ve kayıtları üreten import ile çapraz kontrol edilir — iki kural ikizler drift edemesin diye **tek yerde** |
 | `instrument` | `scope`, `policy`, `state_machine`, `enums` | Kanonik enstrüman kapsamı + registry durumu |
 | `lifecycle` | `enums` | `Role`, `VisibilityScope` gibi çapraz enum'lar |
-| `mainboard` | `composition`, `enums` | Kompozisyon hash/fingerprint (yalnız re-export yüzeyi) |
+| `mainboard` | `composition`, `enums`, `item_kind` | Kompozisyon hash/fingerprint (yalnız re-export yüzeyi). **`item_kind`** = istemciden gelen item-kind koruması (doc 03 §11, AOS-03): chooser yalnız `trading_signal` / `trade_log` sunar; V18 legacy prototip etiketleri (`signal_package` / `trade_log_package`) 422 **`INVALID_ITEM_KIND`** verir ve **hiçbir** PackageKind genişlemesi/kök/revizyon yaratmaz |
 | `manual` | `blocks`, `stream`, `baseline`, `enums` | Kanonik güvenli-render blokları + stream ayrımı |
 | `market_data` | `schema_mapping`, `validation_rules`, `state_machine`, `policy`, `value_objects`, `enums` | Market Data domain yüzeyi (re-export) |
 | `metric_profile` | `profile`, `registry`, `enums` | Result View Metric Profile |
-| `package` | `catalog`, `kind`, `permissions`, `policy`, `enums` | Paylaşımlı paket yüzeyi: katalog facet'leri + on izin bayrağı |
+| `package` | `catalog`, `kind`, `permissions`, `policy`, `enums`, `dependency_graph` | Paylaşımlı paket yüzeyi: katalog facet'leri + izin bayrakları (S-L3 ile `can_request_validation` eklendi). **`dependency_graph`** = saf, yan etkisiz döngü dedektörü (doc 08 §9.1/§10/§13/§14): çağıran pinlenmiş kenarları DB'den materyalize eder, bu modül TEK soruyu cevaplar — graf `A -> B -> A` kapatıyor mu? — ve döngüdeki kökleri **adlandırır** (§14 çıplak ret'ten fazlasını ister) |
 | `rationale` | `colors`, `names`, `policy`, `enums` | Rationale Families |
 | `readiness` | `validators`, `issues`, `enums` | Saf, deterministik readiness doğrulayıcıları |
 | `research_data` | `time_policy`, `usage_scope`, `quality_rules`, `state_machine`, `policy`, `value_objects`, `enums` | Research Data domain yüzeyi |
@@ -131,31 +140,4 @@ request bağımlılığından gelen **TEK transaction**, burada **asla commit yo
 | `strategy` | `compiler`, `config`, `enums` | Strategy config tipleri + derleyici (blocking issue üretir) |
 | `trade_log` | `compiler`, `config`, `records`, `enums` | Trade Log external work object (CR-01/TL-01) |
 | `trading_signal` | `compiler`, `config`, `events`, `enums` | Trading Signal external work object |
-| `trash` | `page` | Trash sayfa sözleşmesi (doc 20) |
 
-## `domain/backtest/execution/` — motor yürütme alt paketi (K-09)
-
-K-09 `engine.py`'ı (5212 satır) beş davranış-korur çıkarmayla böldü. **Bağımlılık yönü tek
-yönlü ve aşağı doğru:** `execution.*` `engine`'den import eder, asla geri değil. `run_engine`
-bir modülü çağırdığında paylaşılan tipleri `engine`'de bırakmak cycle kapatırdı → `constants`
-ve `state` **leaf** modüller olarak doğdu; her iki taraf da onlardan aşağı doğru import eder.
-
-| Modül | Slice | Ne yapar |
-|---|---|---|
-| `fills.py` | (a) #425 | "Bu emir doldu mu, hangi seviyeden, bu barda hangi stop kazandı". Modellenen-yürütme predikatları (`execution_timing_is_modelled`, `order_execution_is_modelled`, `tick_data_required`), limit seviye çözücü, protection-stop seviye hesaplayıcıları (pct/abs/trailing), intrabar print yolu (`_Tick`, `_TickCursor`, touch/trigger), F-08 stop kombinasyon motoru (`_resolve_stop`). Ayrıca `run_engine`'den çıkan iki karar: `limit_touch_evidence()` + `decide_partial_fill()` — booking/trace/remainder `_fill_resting_limit`'te KALDI |
-| `scaling.py` | (b) #426 | Kısmi kapatma ratchet'i + scaling merdiveni. `apply_partial_aftermath` (pozisyonu mutate eder, profit lock uygulandı mı **raporlar** → `lock_in_locks` çağrı yerinde kitaplanır), `scale_threshold_crossed`, `resolve_scale_layer_size`, `resolve_scale_rejection`. **Cap PRECEDENCE gözlemlenebilir davranıştır:** kaybeden cap'in adı reddedilen katmanın ledger reason'ına yazılır (degenerate size → per-strategy total → configured size limit → sleeve → composition-wide money cap). Cap aşan katman REDDEDİLİR, asla otomatik kırpılmaz (§11.4) |
-| `sizing.py` | (c) #423 | Saf `(config, entry_price, equity)` boyutlandırma merdiveni: ham metot, leverage çarpanı, signal-strength çarpanı, min/max cap'ler, allocation sleeve kapasite sınırı. **`sizing_is_modelled` / `leverage_is_modelled` Ready Check ile TEK kaynak** — `readiness/validators.py` buradan import eder, `STRATEGY_SIZING_UNSUPPORTED` / `STRATEGY_LEVERAGE_UNSUPPORTED` motorun fail-closed giriş kapısından ayrışamaz |
-| `costs.py` | (d) #424 | Per-fill maliyet modeli (`_cost_params`, `_effective_fill`) + funding/carry **kararı**. `due_funding_charges()` hangi pinli kaydın bu barda ateşlendiğini ve kaça mal olduğunu söyler; equity/peak/counter mutasyonu + `funding_charge` event'i `run_engine`'de kalır. As-of karşılaştırması elle yazılmaz → `research_data.time_policy.is_eligible_for_decision` (kanonik rule-2 kapısı). `resolve_funding_decision_time` çözülemeyen timestamp'te **FAIL-CLOSED** (`FundingSourceInvalid`) — sessiz sıfır funding fazla-iyimser maliyet kitaplardı. K-03'ün step-2 sırası korunur |
-| `portfolio.py` | (e) #421 | `combine_item_runs` + saf fold çekirdeği (`_fold_composite_metrics`, `_pearson`, `_correlation_block`, `_contribution_block`). Bar döngüsü state'i hiç okumaz. **Never-fabricate:** `_pearson` iki noktanın altında veya düz seride `None` döner (asla `0.0`); Contribution bloğunun "bu item olmadan" figürü leave-one-out `combine_item_runs` ile **birebir** eşittir, yaklaşıklama değildir |
-| `state.py` | (a) #425 | Leaf: paylaşılan değer tipleri (`_Bar`, `_Position`) + ham-satır coercion sınırı (`_dec`, `_volume`, `_normalize`) |
-| `constants.py` | (c) #423 | Leaf: quantization sabitleri. **Reproducibility sözleşmesinin parçası** — yayılan her figür bunlardan geçer |
-| `booking.py`, `rules.py` | sonraki slice'lar | Trade booking + portfolio rule kapıları |
-
-**Golden guard (#427).** `backend/tests/unit/test_backtest_engine_golden.py` +
-`engine_golden_digests.json`: 46 senaryo, **TAM `EngineOutput`** üzerinden digest (summary +
-trades + equity_points + signal_events + diagnostics + position_intervals). Kırıldığında ya
-regresyondur (kodu düzelt, JSON'a dokunma) ya kasıtlıdır (`ENGINE_VERSION`'ı **aynı**
-değişiklikte bump et, sonra baseline'ı yeniden üret). Tam kayıt: `docs/PROJECT_HISTORY.md` §K-09.
-
-**Dürüst sınır.** `run_engine` hâlâ ~2596 satır (max nesting 10). Beş çıkarma **dosyayı** böldü,
-**bar döngüsünü** değil.

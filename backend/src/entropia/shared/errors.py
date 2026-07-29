@@ -146,10 +146,14 @@ class StaleRevisionError(ConflictError):
 
 
 class CapabilityNotActiveError(ForbiddenError):
-    """Future Dev / activation-gated capability invoked while inactive."""
+    """Future Dev / activation-gated capability invoked while inactive.
+
+    The message is the doc 22 §7 CAPABILITY_NOT_ACTIVE catalog text VERBATIM —
+    "No operation was started." is the caller-facing half of the CR-09 promise
+    (no job, no row, no output), so it must not be dropped."""
 
     code = "CAPABILITY_NOT_ACTIVE"
-    message = "This capability is not active."
+    message = "This feature is not active in the current environment. No operation was started."
 
 
 class AccessDeniedError(ForbiddenError):
@@ -2196,7 +2200,10 @@ class CapabilityStateStaleError(ConflictError):
     blindly."""
 
     code = "CAPABILITY_STATE_STALE"
-    message = "The capability state changed while this page was open. Refresh capability status."
+    message = (
+        "The capability state changed while this page was open. "
+        "Refresh capability status before continuing."
+    )
     category = ErrorCategory.CONCURRENCY_OR_PREFLIGHT
     retryable = True
     suggested_action = "reload_and_retry"

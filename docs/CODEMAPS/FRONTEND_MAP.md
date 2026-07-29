@@ -6,19 +6,19 @@ Import alias: `@/` → `frontend/src/`.
 
 ---
 
-## Sayfalar (31 dosya `pages/*.tsx`)
+## Sayfalar (31 dosya `pages/*.tsx`, 40 dosya `lib/*.ts` — 2026-07-29 ampirik)
 
 | Route path | Sayfa | Kullandığı `lib/*` | react-query key prefix | Backend endpoint grubu |
 |---|---|---|---|---|
 | `/login` `App.tsx:73` | `Login.tsx` | `auth`, `apiClient` | (mutasyon; `["me"]` invalidasyonu) | `routes/auth.py` |
 | `/` (index) `:79` | `Mainboard.tsx` | `mainboard`, `backtest`, `strategy` | `["mainboard"]`, `["readiness"]`, `["audit"]`, `["trash"]` | `routes/mainboard.py` |
-| `/packages/create` `:85` | `CreatePackage.tsx` | `createPackage` | `["package-requests"]`, `["rationale-families"]`, `["audit"]` | `routes/create_package.py` (Pre-Check + C.D.P + validation + baseline-parse = **admission**, sonuç `resource.changed` refetch'i ile gelir — F-01a/b/c; in-flight kilit `baselineParseRunning`) |
+| `/packages/create` `:85` | `CreatePackage.tsx` | `createPackage` | `["package-requests"]`, `["rationale-families"]` (+ **`"suggest"`** alt anahtarı — `pages/CreatePackage.tsx:502`'deki chip'ler; bir chip'e tıklamak **yalnız seçiciyi doldurur**, Family yaratmaz), `["audit"]` | `routes/create_package.py` (Pre-Check + C.D.P + validation + baseline-parse = **admission**, sonuç `resource.changed` refetch'i ile gelir — F-01a/b/c; in-flight kilit `baselineParseRunning`) |
 | `/packages/pre-check` `:94` | `PreCheck.tsx` | `createPackage`, `backtest` | `["package-requests"]` | `routes/create_package.py` (scan) |
 | `/packages/library` `:103` | `Library.tsx` | `library`, `sharing`, `packageImport`, `createPackage`, `strategy`, `backtest` | `["library"]`, `["package-imports"]`, `["jobs"]`, `["trash"]`, `["audit"]` | `routes/library.py`, `sharing.py`, `package_import.py` |
 | `/packages/embedded` `:112` | `Embedded.tsx` | `esp`, `library`, `backtest` | `["esp"]`, `["audit"]` | `routes/esp.py` |
 | `/panel` `:122` | → `Navigate` `/panel/management` | — | — | — |
 | `/panel/management` `:124` | `PanelManagement.tsx` | `adminPanel`, `hooks`, `backtest` | `["admin"]`, `["audit"]` | `routes/admin_panel.py` |
-| `/panel/logs` `:132` | `PanelLogs.tsx` | `adminPanel`, `hooks`, `backtest` | `["audit"]` | `routes/admin_panel.py` (logs), `audit.py` |
+| `/panel/logs` `:132` | `PanelLogs.tsx` | `adminPanel`, `hooks`, `backtest` | `["audit"]` (hem `events` hem **`backtest-logs`** alt anahtarları) | `routes/admin_panel.py` (`/admin/backtest-logs` **PRIMARY** + `/admin/logs` ikincil), `audit.py` |
 | `/panel/provisioning` `:141` | `Provisioning.tsx` | `provisioning`, `hooks` | `["auth"]`, `["me"]` | `routes/auth.py` (bootstrap-status) |
 | `/panel/metrics` `:150` | `Metrics.tsx` | `metrics`, `hooks` | `["metrics"]` (5 sn poll) | `routes/metrics.py` (text/plain) |
 | `/portfolio` `:159` | `Portfolio.tsx` | `allocation`, `readiness`, `backtest` | `["allocation"]`, `["readiness"]`, `["mainboard"]`, `["audit"]` | `routes/allocation.py` |
@@ -49,16 +49,16 @@ Import alias: `@/` → `frontend/src/`.
 
 | lib modülü | Okuma anahtarları | Mutasyonun invalidate ettikleri |
 |---|---|---|
-| `adminPanel.ts` | `["admin","users",cursor]`, `["admin","system-actors"]`, `["admin","role-matrix"]`, `["audit","events",cursor]`, `["audit","log",eventId]`, `["audit","resource-types"]` | `["admin"]`, `["audit"]` |
+| `adminPanel.ts` | `["admin","users",cursor]`, `["admin","system-actors"]`, `["admin","role-matrix"]`, `["audit","events",cursor]`, `["audit","log",eventId]`, `["audit","resource-types"]`, **`["audit","backtest-logs",cursor]`** (`:334` → `GET /admin/backtest-logs`, P-14 PRIMARY görünüm) | `["admin"]`, `["audit"]` |
 | `agentLab.ts` | `["agent-tasks",...]` — `overview`/`list`/`detail`/`messages`/`hypotheses`/`tool-calls`/`tool-call` | `["agent-tasks"]` |
 | `allocation.ts` | `["allocation","draft",compositionId]` | `["allocation"]`, `["readiness"]`, `["mainboard"]`, `["audit"]` |
 | `backtest.ts` | `["backtests","run"\|"result"\|"history"\|"compare"\|"artifact"]`, `["mainboard","default"]`, `["metric-profile","result-metrics",resultId]` | `["backtests"]`, `["audit"]` |
 | `capability.ts` | `["capabilities",...]`, `["view-datasets",...]`, `["analysis-artifacts",...]` | `["capabilities"]`, `["audit"]` |
-| `createPackage.ts` | `["package-requests",...]` (`list`/`detail`/`scan`/`validation-run`/`baseline-asset`), `["rationale-families",cursor]` | `["package-requests"]`, `["audit"]` |
+| `createPackage.ts` | `["package-requests",...]` (`list`/`detail`/`scan`/`validation-run`/`baseline-asset`), `["rationale-families",cursor]`, **`["rationale-families","suggest",needle]`** (`useRationaleFamilySuggestions:867` → `GET /rationale-families:suggest`; `enabled: needle.length >= 2` — 2 karakterin altında sunucu zaten `[]` döner, round-trip atlanır; `staleTime` 5 dk) | `["package-requests"]`, `["audit"]` |
 | `esp.ts` | `["esp","list"\|"detail"]` | `["esp"]`, `["audit"]` |
 | `hooks.ts` | `["me"]`, `["meta"]`, `["metrics"]`, `["health","ready"]` | — |
 | `instrument.ts` | `["instruments","list"\|"detail"]` | `["instruments"]`, `["audit"]` |
-| `library.ts` | `["library","list",filters,cursor]`, `["library","detail",entityId]` | `["library"]`, `["trash"]`, `["audit"]` |
+| `library.ts` | `["library","list",filters,cursor]`, `["library","detail",entityId]` — **S-L3:** detay projeksiyonu artık `permissions.can_request_validation` bayrağını da tipler (`:80-103`). **Dürüst sınır:** `POST /library/{id}/validation-runs`'u çağıran bir hook V1'de **YOK** (uç backend-only) | `["library"]`, `["trash"]`, `["audit"]` |
 | `mainboard.ts` | (`backtest.ts`'ten re-export `["mainboard","default"]`) | `["mainboard"]`, `["readiness"]`, `["audit"]`, `["trash"]` |
 | `manual.ts` | `["manual","stream",cursor]`, `["manual","search",needle,cursor]` | `["manual"]`, `["trash"]`, `["audit"]` |
 | `marketData.ts` | `["market-data","registry"\|"detail"\|"approved-bundle"]` | `["market-data"]`, `["audit"]` |
@@ -69,7 +69,7 @@ Import alias: `@/` → `frontend/src/`.
 | `readiness.ts` | `["readiness","current",compositionId]`, `["readiness","report",reportId]` | `["readiness"]`, `["mainboard"]` |
 | `researchData.ts` | `["research-data","registry"\|"detail"]` | `["research-data"]`, `["audit"]` |
 | `sharing.ts` | `["library","shares",entityId]`, `["library","shared-with-me"]` | `["library"]`, `["audit"]` |
-| `strategy.ts` | `["strategy","draft"\|"drafts"\|"root"\|"revisions"\|"revision"]` | `["strategy"]`, `["mainboard"]`, `["readiness"]`, `["audit"]` |
+| `strategy.ts` | `["strategy","draft"\|"drafts"\|"root"\|"revisions"\|"revision"]`. Mutasyon: **`POST /strategies/{root}/rationale-family`** (`:350`) — tek seferlik family set'i, **OCC token'ı yok** (`:335` yorumu); UI'daki tetik `components/StrategyDetailsPanel.tsx:186` tek-seferlik picker'ı | `["strategy"]`, `["mainboard"]`, `["readiness"]`, `["audit"]` |
 | `tradeLog.ts` | `["trade-logs","root",rootId]`, `["jobs","trade-log-import",jobId]` | `["trade-logs"]`, `["jobs"]`, `["mainboard"]`, `["readiness"]`, `["audit"]` |
 | `tradingSignal.ts` | `["trading-signals","root",rootId]`, `["jobs","trading-signal-import",jobId]` | `["trading-signals"]`, `["jobs"]`, `["mainboard"]`, `["readiness"]`, `["audit"]` |
 | `trash.ts` | `["trash","entries",q,object_type,cursor]`, `["trash","entry",id]`, **O-17** `["trash","restore-preflight",id]` (staleTime/gcTime 0 — salt-okuma preflight, doc 20 §5/§8.2) | `["trash"]`, `["audit"]` |

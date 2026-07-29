@@ -27,6 +27,14 @@ export default defineConfig({
     setupFiles: ["./src/test/setup.ts"],
     css: false,
     execArgv: testExecArgv,
+    // v8 coverage instrumentation slows jsdom + Testing Library renders enough
+    // that a single test can run past 2.5 s, so the 5 s default is uncomfortably
+    // close. Set here rather than as a `--testTimeout` flag on the coverage
+    // script alone: `npm test` and `npm run coverage` must share one timing
+    // regime, and this has to stay above the 5 s `asyncUtilTimeout` configured
+    // in src/test/setup.ts so a stuck query reports as a Testing Library error
+    // (which dumps the DOM) instead of a bare "test timed out".
+    testTimeout: 20000,
     // e2e/ is a standalone Playwright package (its own package.json, no
     // @playwright/test in this workspace's node_modules) — exclude it from
     // Vitest's default *.spec.ts discovery alongside Vitest's own defaults.

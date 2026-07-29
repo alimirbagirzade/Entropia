@@ -329,13 +329,19 @@ describe("User Manual page", () => {
     await screen.findByText("Appendix body.");
 
     fireEvent.click(await screen.findByRole("button", { name: "+ Add / Paste Text" }));
-    fireEvent.change(await screen.findByLabelText("Title"), { target: { value: "New doc" } });
-    fireEvent.change(screen.getByLabelText("Content"), { target: { value: "Body text." } });
+    fireEvent.change(await screen.findByLabelText("Document Title *"), {
+      target: { value: "New doc" },
+    });
+    fireEvent.change(screen.getByLabelText("Full Text *"), { target: { value: "Body text." } });
     fireEvent.click(screen.getByRole("button", { name: "Publish document" }));
 
-    // The drawer closes and the reader shows the publish notice.
-    expect(await screen.findByText(/Published “New doc” rev 1/)).toBeTruthy();
-    expect(screen.queryByLabelText("Content")).toBeNull();
+    // The drawer closes and the reader shows the doc 21 §6.1 "Text append
+    // success" toast verbatim, with the publish coordinates as detail.
+    expect(
+      await screen.findByText("Text document added to the end of the continuous manual."),
+    ).toBeTruthy();
+    expect(screen.getByText(/Published “New doc” rev 1 at stream position 3\./)).toBeTruthy();
+    expect(screen.queryByLabelText("Full Text *")).toBeNull();
 
     const init = callFor(fetchMock, "POST", "/admin/manual/documents");
     const body = JSON.parse(String(init.body)) as Record<string, unknown>;
@@ -367,7 +373,11 @@ describe("User Manual page", () => {
     fireEvent.change(fileInput, { target: { files: [file] } });
     fireEvent.click(await screen.findByRole("button", { name: "Upload & publish" }));
 
-    expect(await screen.findByText(/Published “New doc” rev 1/)).toBeTruthy();
+    // Doc 21 §6.1 "Upload success" — a distinct sentence from the paste flow's.
+    expect(
+      await screen.findByText("Uploaded document added to the end of the continuous manual."),
+    ).toBeTruthy();
+    expect(screen.getByText(/Published “New doc” rev 1 at stream position 3\./)).toBeTruthy();
     // F-03: the real file bytes travel via multipart; the OCC stream version and
     // the (omitted) optional title ride form fields, not a JSON body.
     expect(uploadCalls).toHaveLength(1);
@@ -406,12 +416,24 @@ describe("User Manual page", () => {
     await screen.findByText("Appendix body.");
 
     fireEvent.click(await screen.findByRole("button", { name: "Delete…" }));
+    // Doc 21 §6.1 remove-confirmation trio, verbatim: title, "{title}"-slotted
+    // body, and the Cancel | Move to Trash action pair.
+    expect(await screen.findByText("Remove manual document?")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "“Appendix” will be removed from the published manual and moved to Trash. Existing historical citations remain preserved according to retention policy.",
+      ),
+    ).toBeTruthy();
+    const confirmGroup = screen.getByRole("group", { name: "Remove manual document?" });
+    expect(within(confirmGroup).getByRole("button", { name: "Cancel" })).toBeTruthy();
     fireEvent.change(screen.getByLabelText("Delete reason for Appendix"), {
       target: { value: "outdated" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Confirm delete" }));
+    fireEvent.click(within(confirmGroup).getByRole("button", { name: "Move to Trash" }));
 
-    expect(await screen.findByText(/moved to Trash \(stream v8\)/)).toBeTruthy();
+    // Doc 21 §6.1 "Soft delete success".
+    expect(await screen.findByText("Document moved to Trash.")).toBeTruthy();
+    expect(screen.getByText(/\(stream v8\)/)).toBeTruthy();
     const init = callFor(fetchMock, "DELETE", "/admin/manual/documents/mdoc_2");
     const body = JSON.parse(String(init.body)) as Record<string, unknown>;
     expect(body.reason).toBe("outdated");
@@ -456,6 +478,90 @@ describe("User Manual page", () => {
     expect(screen.queryByRole("button", { name: "Replace content" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Delete…" })).toBeNull();
     expect(screen.getByText(/Admin approval required/)).toBeInTheDocument();
+    // Doc 21 §6.1 "Non-Admin helper", verbatim — it stands as its own sentence
+    // rather than a suffix folded into the shared Admin note.
+    expect(
+      screen.getByText(
+        "Only Admin can upload or add manual documents. All roles can search, open and read the complete manual text.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  // I-10: doc 21 §6.1 is the page's canonical copy. Every §6.1 row the client
+  // is responsible for rendering is asserted VERBATIM — a paraphrase, a
+  // translation or a reworded variant fails here. The five backend-failure
+  // rows (unsupported type / parse / duplicate / unauthorized / stale
+  // conflict) are deliberately absent: those arrive as the canonical error
+  // envelope (doc 21 §10 / O-02), and "Upload read failure" has no client
+  // surface since F-03 made the upload multipart.
+  describe("doc 21 §6.1 canonical UI copy", () => {
+    it("renders the search-surface copy verbatim (placeholder, blank state, no result)", async () => {
+      stubRoutes({ "GET /manual/search": { data: [], meta: { ...SEARCH.meta, query: "zzz" } } });
+      renderPage();
+      await screen.findByText("Appendix body.");
+
+      // Search placeholder + blank search empty-state.
+      expect(screen.getByPlaceholderText("Search headings or text")).toBeTruthy();
+      expect(
+        screen.getByText("Enter a word or phrase to search every part of the continuous manual."),
+      ).toBeTruthy();
+
+      fireEvent.change(screen.getByLabelText("Search query"), { target: { value: "zzz" } });
+      fireEvent.click(screen.getByRole("button", { name: "Search" }));
+
+      // No search result.
+      expect(await screen.findByText("No document text matches this search.")).toBeTruthy();
+    });
+
+    it("renders the search index note verbatim when the index lags the reader", async () => {
+      // The index answers from stream_version 6 while the reader renders 7.
+      stubRoutes({
+        "GET /manual/search": { ...SEARCH, meta: { ...SEARCH.meta, stream_version: 6 } },
+      });
+      renderPage();
+      await screen.findByText("Appendix body.");
+
+      fireEvent.change(screen.getByLabelText("Search query"), { target: { value: "appendix" } });
+      fireEvent.click(screen.getByRole("button", { name: "Search" }));
+
+      expect(
+        await screen.findByText("Search index updating. New content may appear in search shortly."),
+      ).toBeTruthy();
+    });
+
+    it("marks Document Title / Full Text required and states the §6.1 error on a blank submit", async () => {
+      const fetchMock = stubRoutes();
+      renderPage();
+      await screen.findByText("Appendix body.");
+
+      fireEvent.click(await screen.findByRole("button", { name: "+ Add / Paste Text" }));
+
+      // Doc 21 §5: the `*` is a real request-validation requirement, mirrored
+      // for assistive tech by aria-required rather than by the glyph alone.
+      const titleInput = await screen.findByLabelText("Document Title *");
+      const contentInput = screen.getByLabelText("Full Text *");
+      expect(titleInput.getAttribute("aria-required")).toBe("true");
+      expect(contentInput.getAttribute("aria-required")).toBe("true");
+
+      // Composer title + content placeholders, verbatim.
+      expect(screen.getByPlaceholderText("Manual document title")).toBe(titleInput);
+      expect(
+        screen.getByPlaceholderText(
+          "Paste or write the complete text. It will be appended below the existing manual in the same continuous reading flow.",
+        ),
+      ).toBe(contentInput);
+
+      // Blank submit names the missing fields and dispatches NOTHING.
+      fireEvent.click(screen.getByRole("button", { name: "Publish document" }));
+      expect(await screen.findByText("A document title and full text are required.")).toBeTruthy();
+      expect(
+        fetchMock.mock.calls.some(
+          ([url, init]) =>
+            String(url).includes("/admin/manual/documents") &&
+            ((init?.method ?? "GET") as string) === "POST",
+        ),
+      ).toBe(false);
+    });
   });
 
   // O-16 (doc 21 §7/§14, acceptance UM-18): "Anchor must exist in current

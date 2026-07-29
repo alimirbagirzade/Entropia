@@ -197,7 +197,7 @@ change and therefore outside this presentation-only slice.
 
 | Site (path · line · enclosing symbol) | Defect | Why not fixable here |
 |---|---|---|
-| `frontend/src/pages/PreCheck.tsx:124` — in `RequestPickerCard` (def `:83`) | the request picker's **"Request" column is a bare `request_id`**; Type / Source / State are kinds, not names. Choosing your own request = recognizing an opaque id — a common task, on a page F-07 names explicitly | the Create-Package request DTO (`lib/createPackage.ts`) exposes no name/title field |
+| ~~`frontend/src/pages/PreCheck.tsx:124` — in `RequestPickerCard` (def `:83`)~~ | ~~the request picker's **"Request" column is a bare `request_id`**~~ | **CLOSED — I-16b, see §4.6.** The blocker ("the DTO exposes no name/title field") was removed by adding the display DTO, not by inventing a name in the browser |
 | `frontend/src/pages/Library.tsx:1259`, `:1274` | import-job rows identified only by `import_job_id` (status badge + `package_kind` alongside) | the import-job DTO carries no label |
 | `frontend/src/components/ResultDetail.tsx:420` — in `PerItemCard` (def `:416`) · `:589` — in `MarginalCard` (def `:585`) | per-item breakdown rows render `{item_kind} <code>{item_id}</code>`, and leave-one-out rows render `Without <code>{entry.item_id}</code>` — reading a result breakdown is a common task | `PerItemBreakdown` / `ManifestItemRef` have no label field. The result is **immutable and pinned**; joining the *live* composition's labels would mislabel a result whose items have since changed — the label must come from the manifest, i.e. the server |
 | `frontend/src/pages/ReadyCheck.tsx:291` — in `IssuesTable` (def `:258`) | issue rows show a bare `scope_id` (same defect class as the Portfolio issue table that this slice fixed) | `ReadinessIssue` has no label field, and the report is immutable + `is_current`-tracked; labelling a **stale** report from the live composition would be actively wrong |
@@ -215,3 +215,48 @@ change) and **no migration**.
 > **Honest boundary:** this slice closes the F-07 *presentation* layer. F-07 cannot be marked
 > Complete outright while §4.4's four surfaces still require a reader to recognize an opaque
 > identifier. Those four are the follow-up backend display-DTO slice.
+
+---
+
+## 4.6 I-16b — Pre-Check request label (first §4.4 residual closed, 2026-07-29)
+
+**Empirically re-verified before the fix:** `PreCheck.tsx:124` rendered the picker's Request
+column as `<code>{req.request_id}</code>` and `:200` rendered the detail `<dt>Request</dt>` as
+`<code>{detail.request_id}</code>` — no human text on either surface.
+
+**Backend search first (the row's blocker, re-checked):** confirmed still true, and *why* —
+`package_request` has no name column, `output_contract` carries only an output `kind`, and doc 06
+§4 (`:510-512`) assigns the package its display name **only at draft metadata, after a candidate
+exists**. Even `create_draft_from_candidate` writes an `input_contract` of
+`{request_id, source_kind, source_language, target_runtime}` with no `name`, so
+`library.py::_package_name` would find nothing. There was no existing label to bind to.
+
+**Fix — F-07's stated correction, at the query boundary:**
+
+| Layer | Change |
+|---|---|
+| `backend/.../domain/create_package/labels.py` (new) | `request_display_label()` — pure, deterministic: `"Indicator Package · 2026-07-29 14:03:22 UTC"`, plus `· revision N` when `revision_attempt_no > 1`. Kind wording mirrors the D-2 map; unmapped kinds title-case rather than surface raw snake_case; a naive timestamp is read as UTC, never shifted |
+| `backend/.../application/queries/create_package.py` | `_request_dict` **and** the `list_package_requests` row now ship `display_label` — one text, identical on both surfaces |
+| `frontend/src/lib/createPackage.ts` | `display_label: string` on `PackageRequestSummary` + `PackageRequestDetail` |
+| `frontend/src/pages/PreCheck.tsx` | new `RequestLabel` (label primary, `<code>` id beneath) at both sites, with `UNNAMED_REQUEST` as the honest last-resort primary — **mirrors D-4's `ItemLabel` / `UNLABELLED_ITEM` exactly** |
+
+Second-precision timestamp is deliberate: minute precision would give two same-kind requests
+created in one minute an identical label, and the label has to discriminate on its own.
+
+**Untouched:** route paths, react-query keys, OCC tokens (`request_version`), Idempotency-Key,
+hooks, SSE taxonomy, `lib/*.ts` data logic, `app/nav.ts`. **No migration, no `ENGINE_VERSION`
+bump** — the label is computed from existing columns (`package_kind`, `revision_attempt_no`,
+`entity_registry.created_at`).
+
+**Acceptance:** `tests/unit/test_precheck_projection_label.py` (8 cases: kind+instant, never
+echoes the id, revision only past the original, second-precision discrimination, UTC
+normalization, naive-as-UTC, no-timestamp fallback, unmapped kind) ·
+`test_create_package_persistence.py::test_precheck_projection_carries_a_display_label` (both
+projections ship the SAME label and still ship the id) · `preCheck.test.tsx` → *"names the
+request with a human label instead of a bare id (F-07)"* asserts the label is the row's text
+**with the id inside the same row** (`within`), and that the detail panel repeats it.
+
+**Still open in §4.4 — three surfaces:** `Library.tsx` import jobs, `ResultDetail.tsx` per-item /
+marginal rows, `ReadyCheck.tsx` issue rows. The honest boundary above now reads **three**, not
+four. Adjacent and NOT fixed here (out of this slice's scope): `CreatePackage.tsx:193` renders the
+same picker's `request_id` as its button text and can now bind to the same `display_label`.

@@ -20,6 +20,7 @@ from entropia.domain.create_package.enums import (
     SourceKind,
     ValidationRunStatus,
 )
+from entropia.domain.create_package.labels import request_display_label
 from entropia.domain.identity import Actor
 from entropia.domain.identity import policy as identity_policy
 from entropia.domain.lifecycle.enums import DeletionState
@@ -57,6 +58,15 @@ def _request_dict(
     baseline_ready = baseline is not None and baseline.parse_status == BaselineParseStatus.PASSED
     return {
         "request_id": detail.entity_id,
+        # F-07 §4.4: a request carries no user-assigned name (doc 06 §4 names the
+        # package only at draft metadata), so the QUERY BOUNDARY composes the human
+        # label — the browser never builds a name out of the request_id. The id
+        # stays alongside as the secondary, copyable binding key.
+        "display_label": request_display_label(
+            package_kind=detail.package_kind,
+            created_at=root.created_at,
+            revision_attempt_no=detail.revision_attempt_no,
+        ),
         "package_type": str(detail.package_kind),
         "creation_mode": str(detail.creation_mode),
         "source_kind": str(detail.source_kind),
@@ -288,12 +298,19 @@ async def list_package_requests(
         "data": [
             {
                 "request_id": detail.entity_id,
+                # Same server-owned label the detail projection ships (F-07 §4.4):
+                # the picker identifies a row by this text, not by its ULID.
+                "display_label": request_display_label(
+                    package_kind=detail.package_kind,
+                    created_at=root.created_at,
+                    revision_attempt_no=detail.revision_attempt_no,
+                ),
                 "package_type": str(detail.package_kind),
                 "state": str(detail.state),
                 "source_kind": str(detail.source_kind),
                 "package_root_id": detail.package_root_id,
             }
-            for _root, detail in page
+            for root, detail in page
         ],
         "meta": {"cursor": next_cursor, "has_more": has_more},
     }

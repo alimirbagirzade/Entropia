@@ -91,17 +91,13 @@ _PATCH_INTENTS = frozenset({_PIN_REVISION, _SET_ENABLED, _REORDER, _SET_LABEL})
 
 # --------------------------------------------------------------------------- #
 # Transient draft openers (NO DB) — AT#3: an unsaved draft has no identity.    #
+#                                                                             #
+# Only the EXTERNAL kinds still open transiently. The Strategy twin            #
+# (``start_strategy_draft``) was deleted in I-12: Stage 3b replaced it with a  #
+# PERSISTED draft + root (``routes/strategy.py`` POST /strategy-drafts ->      #
+# ``commands/strategy_draft.py::create_strategy_draft``, doc 02 §7), which     #
+# left the 3a opener unrouted and callerless.                                  #
 # --------------------------------------------------------------------------- #
-
-
-def start_strategy_draft(actor: Actor) -> dict[str, Any]:
-    """Open a transient Strategy draft. No root/revision/item is created (AT#3)."""
-    require_authenticated(actor)
-    return {
-        "draft_id": new_id("wodraft"),
-        "kind": MainboardItemKind.STRATEGY.value,
-        "unsaved": True,
-    }
 
 
 def start_external_work_object_draft(actor: Actor, kind: str) -> dict[str, Any]:
@@ -1012,5 +1008,4 @@ __all__ = [
     "patch_mainboard_item",
     "soft_delete_work_object",
     "start_external_work_object_draft",
-    "start_strategy_draft",
 ]

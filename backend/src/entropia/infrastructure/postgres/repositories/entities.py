@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 from typing import Any
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from entropia.domain.lifecycle.enums import DeletionState
@@ -83,11 +81,8 @@ def _current_revision_no(root: EntityRegistry) -> int | None:
     return root.row_version
 
 
-async def list_soft_deleted(session: AsyncSession, *, limit: int) -> Sequence[EntityRegistry]:
-    stmt = (
-        select(EntityRegistry)
-        .where(EntityRegistry.deletion_state == DeletionState.SOFT_DELETED)
-        .order_by(EntityRegistry.deleted_at.desc())
-        .limit(limit)
-    )
-    return list((await session.execute(stmt)).scalars().all())
+# NOTE: no ``list_soft_deleted`` registry scan — deleted in I-12 as callerless.
+# Admin Trash never scans ``entity_registry`` for ``deletion_state``: every
+# soft-delete path MUST write a ``trash_entry`` row (K-06), and
+# ``queries/trash.py`` pages those entries, resolving each root through
+# ``get_root``. A scan here would silently disagree with that catalogue.

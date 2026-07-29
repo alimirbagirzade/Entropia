@@ -83,8 +83,8 @@ async def get_default_mainboard(
 
 # NOTE: ``POST /strategy-drafts`` moved to the Strategy Details router (Stage 3b)
 # where it creates a PERSISTED draft + root instead of a transient opener. The 3a
-# transient ``mb_cmd.start_strategy_draft`` remains available as a command but is
-# no longer routed here (superseded by real persistence, doc 02 §7).
+# transient ``mb_cmd.start_strategy_draft`` was deleted in I-12 once that move
+# left it unrouted and callerless (superseded by real persistence, doc 02 §7).
 
 
 @router.post("/external-work-object-drafts/{kind}")

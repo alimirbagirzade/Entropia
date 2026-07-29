@@ -1,9 +1,17 @@
 # DATA_MODEL — Postgres tabloları
 
 Modeller: `backend/src/entropia/infrastructure/postgres/models/*.py` (30 dosya, **102 tablo**).
-Alembic: `backend/alembic/versions/` — **head = `0039_backtest_run_cancellation`** (39 migration).
+Alembic: `backend/alembic/versions/` — **head = `0040_export_type_agent_pine`** (40 migration, tek head).
 
-> **Sayı tazeleme (2026-07-28, ampirik).** Tablo sayısı uzun süre **63** yazıyordu — gerçek
+> **`0040` YENİ TABLO GETİRMEDİ** — bu yüzden aşağıdaki 102 sayısı değişmedi.
+> `0040_export_type_agent_pine` yalnız `export_artifact.export_type` kolonunu `VARCHAR(13)` →
+> `VARCHAR(24)` genişletir (S-L2 / doc 15 §3.2: `pinescript_signal_marker` + `agent_dataset`
+> üyeleri). Kolon **PG ENUM değildir** (`SAEnum(native_enum=False)`) ve SQLAlchemy 2.0
+> varsayılanıyla CHECK constraint'i de yoktur; üyelik Python'da (`validate_strings=True`)
+> zorlanır → enum'a bağlı **tek şema gerçeği uzunluktur**. Head'i ampirik doğrula:
+> `ls backend/alembic/versions/*.py | wc -l` + `down_revision` grafiğinde tek yaprak kalması.
+
+> **Sayı tazeleme (2026-07-29, ampirik).** Tablo sayısı uzun süre **63** yazıyordu — gerçek
 > **102**. Yeniden üretmek için:
 > `grep -rh __tablename__ backend/src/entropia/infrastructure/postgres/models/ | sed 's/.*= *//' | tr -d '"' | sort -u | wc -l`
 > Aşağıdaki bölümler 102 tablonun **tamamını** adlandırır. Sayı bir slice'ta değişirse bu satırı
@@ -11,12 +19,15 @@ Alembic: `backend/alembic/versions/` — **head = `0039_backtest_run_cancellatio
 
 ## Kritik yapısal gerçek — FK var, ama insert sırası yine de türetilemiyor
 
-> **DÜZELTME (2026-07-28, ampirik).** Bu bölüm önceden "tüm repoda yalnızca **8** açık
+> **DÜZELTME (2026-07-29, ampirik).** Bu bölüm önceden "tüm repoda yalnızca **8** açık
 > `ForeignKey(...)` bildirimi var" diyordu — ve hemen altında 9 satır listeliyordu, yani kendi
-> içinde de tutarsızdı. Gerçek: **134 `ForeignKey(...)` kolon bildirimi, 25 model dosyasında.**
+> içinde de tutarsızdı. Gerçek: **135 `ForeignKey(...)` kolon bildirimi, 25 model dosyasında**
+> (2026-07-28'de 134'tü; bu dalgada `backtest.py` 9 → 10'a çıktı — `backtest_run_event.run_id`
+> CASCADE FK'si + O-06 `cancel_requested_by_principal_id`).
 > Doğrula: `grep -rh "ForeignKey(" backend/src/entropia/infrastructure/postgres/models/ | wc -l`
 > Yoğunluk: `manual.py` 11 · `research_data.py` 11 · `agent_lab.py` 11 · `create_package.py` 10 ·
-> `market_data.py` 10 · `strategy.py` 9 · `backtest.py` 9 · `capability.py` 9 · `mainboard.py` 8.
+> `market_data.py` 10 · **`backtest.py` 10** · `strategy.py` 9 · `capability.py` 9 ·
+> `mainboard.py` 8 · `esp.py` 5 · `allocation.py` 5.
 
 Kimlik/registry omurgasındaki **çekirdek** FK'ler (bu tablo tam liste DEĞİLDİR — yukarıdaki
 grep otoritedir):
@@ -145,7 +156,7 @@ CLAUDE.md'deki **"her yeni `create_*` için L1 FK insert-order proof"** kuralın
 | `rationale_family_root` | Rationale ailesi kökü (`display_color` burada) | `entity_id` | (registry'de) | (registry'de) |
 | `rationale_family_revision` | Ailenin değişmez revizyon snapshot'ı (asla UPDATE edilmez; `uq_rationale_family_revision_no`) | `entity_id`, `parent_revision_id`, `revision_no` | — | — |
 | `package_rationale_assignment` | Paket ↔ aile ataması | `target_root_id`, `rationale_family_id`, `..._revision_id` | — | — |
-| `instrument_registry` / `instrument_alias` | Kanonik enstrüman + takma adları | `venue_id`, `instrument_id` | — | ✔ (`registry_version`)? |
+| `instrument_registry` / `instrument_alias` | Kanonik enstrüman + takma adları | `venue_id`, `instrument_id` | — | ✔ **`registry_version`** (`models/instrument.py:55`, `Integer NOT NULL default=1` — doğrulandı) |
 | `resource_share` | Açık paket paylaşımı | `resource_id`, `grantee_principal_id`, `revoked_by_principal_id` | (revoke) | — |
 
 ## Backtest (RUN → Result → artifacts)
@@ -160,7 +171,7 @@ CLAUDE.md'deki **"her yeni `create_*` için L1 FK insert-order proof"** kuralın
 | `metric_value` | Kalıcı metrik satırları | `result_id` | — | — |
 | `result_equity_point` / `trade_ledger_row` / `signal_event` / `diagnostic_artifact` | Ağır artifact'lar (keyset drill-down) | `result_id` | — | — |
 | `result_manifest_snapshot` | Result'a bağlı manifest kopyası | `result_id` | — | — |
-| `export_artifact` | Result'ın şema-versiyonlu türevi | `result_id` | — | — |
+| `export_artifact` | Result'ın şema-versiyonlu türevi. **`export_type` = non-native enum → düz `VARCHAR(24)`**, PG ENUM tipi de CHECK constraint'i de YOK; üyelik Python'da zorlanır (`domain/backtest/export.py::ExportType`). Migration `0040` bu kolonu 13 → 24'e genişletti (S-L2) | `result_id` | — | — |
 | `ready_check_report` / `readiness_issue` | Değişmez readiness raporu + bulguları | `composition_snapshot_id`, `report_id` | — | — |
 
 ## Portfolio / Allocation, Metric Profile
@@ -214,13 +225,20 @@ CLAUDE.md'deki **"her yeni `create_*` için L1 FK insert-order proof"** kuralın
 
 ---
 
-## Doğrulanmamış noktalar (`?`)
+## Doğrulanmamış noktalar (`?`) — **üçü de 2026-07-29'da ampirik kapandı**
 
-- `instrument_registry` OCC kolonu: route `X-Registry-Version` header'ı okuyor (`routes/instrument.py:142`)
-  ama model dosyasında `row_version`/`registry_version` kolonu grep'te **görülmedi** — token'ın hangi
-  kolondan geldiği doğrulanmalı (`models/instrument.py:31` açılmalı).
-- `embedded_resolver_registry` için de aynı: `registry_version` kolonu adı imzadan değil kullanımdan çıkarıldı.
-- `package_request` docstring'i `row_version = request_version` diyor, ancak kolon registry satırında
-  yaşıyor (`create_package.py:57` yorumu) — hangi tabloda fiziksel olarak durduğu doğrulanmalı.
+- ~~`instrument_registry` OCC kolonu~~ → **çözüldü:** kolon var ve adı `registry_version`
+  (`models/instrument.py:55`, `Integer NOT NULL default=1`). `X-Registry-Version` header'ı bu
+  kolonu taşır — `row_version` **değil**.
+- ~~`embedded_resolver_registry.registry_version`~~ → **çözüldü:** aynı biçim,
+  `models/esp.py:90` (`Integer NOT NULL default=1`). Ad kullanımdan değil, kolon bildiriminden
+  doğrulandı.
+- ~~`package_request.row_version` fiziksel olarak nerede~~ → **çözüldü:** kök satırda **değil**,
+  `entity_registry` satırında. `models/create_package.py:9` + `:57` docstring'i bunu açıkça
+  söylüyor: "The registry row owns identity, owner, deletion and `row_version` (the
+  request_version)". Yani `X-Request-Version` registry `row_version`'ının bir yazımıdır.
+
+Hâlâ açık olan tek nokta:
+
 - Kolon-seviyesi index/constraint detayları bu haritada YOK (yalnızca `trash_entries` keyset index'i
   ve `audit_events` trigram/log index'leri migration'larda mevcut).

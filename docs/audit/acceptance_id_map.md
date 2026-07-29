@@ -201,7 +201,7 @@ the **O-03 convention (shipped name wins)**:
 |---|---|---|---|
 | AOS-03 | `INVALID_ITEM_KIND` | `CLIENT_LEGACY_TYPE_REJECTED` | `domain/package/kind.py` |
 | AT-04 | `MARKET_DATA_INSTRUMENT_MISMATCH` | *(no such code)* — enforced by the worker instrument-scope guard | `test_backtest_persistence.py::test_worker_fails_closed_on_instrument_mismatch` |
-| AOS-12 | `KIND_REVISION_MISMATCH` | *(unimplemented)* | — |
+| AOS-12 | `KIND_REVISION_MISMATCH` | ~~*(unimplemented)*~~ → **shipped under the spec name** | `domain/mainboard/revision_binding.py` — see **§H** |
 
 ---
 
@@ -215,7 +215,7 @@ Verified by reading the code, not inferred from the absence of a tag:
 | AT-21 | No Agent-parity test for the Strategy save line. |
 | TS-16 / TL-18 / AOS-16 | No test asserts that expand/collapse writes no revision / audit / composition hash. Purely presentational today, but unpinned. |
 | RF-15 / ESP-05 | No test asserts the V18 seed Family (`Embedded System / TA Resolver`) resolves ACTIVE with a matching ESP meta/filter relation. |
-| AOS-12 | `KIND_REVISION_MISMATCH` has no implementation and no test. |
+| AOS-12 | ~~`KIND_REVISION_MISMATCH` has no implementation and no test.~~ **Closed 2026-07-29 — see §H.** |
 | AT-24 | Strategy soft-delete + historical manifest provenance is not asserted end-to-end. |
 | PC-14, PC-19, PC-22 | Resolver-approval 403, soft-deleted-ESP historical manifest, and untrusted-string rendering are unasserted. |
 | CP-05, CP-14, PL-06, ESP-19 | See §C. |
@@ -341,3 +341,97 @@ Unchanged from §E — this slice closed a traceability nuance, not a coverage g
 TS-20 / AOS-20 (Tool Gateway parity for Trading Signal), AT-21 (Agent parity on the
 Strategy save line), TS-16 / TL-18 / AOS-16, RF-15 / ESP-05, AOS-12, AT-24,
 PC-14 / PC-19 / PC-22, CP-05, CP-14, PL-06, ESP-19.
+
+---
+
+## §H. Follow-up slice — `feat/aos12-kind-revision-mismatch` (2026-07-29)
+
+Closes the AOS-12 row of **§E** — the one entry in that list that was a *code* gap
+rather than a test gap. Nothing in §A–§G is retracted; §D's AOS-12 row is struck
+through because the adjudication it recorded ("spec names a code the implementation
+does not ship") no longer describes the tree.
+
+### H.1 — The gap was real and it was in `src/`, not in the suite
+
+Empirically, at `origin/main` @ `9e86c99`:
+
+```
+grep -rn "KIND_REVISION_MISMATCH" backend/src frontend/src   ->   0 hits
+```
+
+Doc 03 §11 named the code in its "Revision/attachment" validation class and nothing
+implemented it. A Mainboard working item pins an exact `root_id` + `revision_id`
+(L5), and those two ids are supplied **independently**, so the spec's literal AOS-12
+scenario — *"A Trading Signal attach request carrying a Trade Log revision id"* —
+was reachable and came back as a bare `VALIDATION_ERROR` carrying the message *"The
+pinned revision does not belong to this work object."* That message describes the
+wrong defect: the request's problem is a type mismatch, not a wrong parent.
+
+### H.2 — Two adjudications, both recorded in the code
+
+**(1) 422, not 409 — §14 beats §11 on the status class.** Doc 03 §11 files
+`KIND_REVISION_MISMATCH` under "Revision/attachment", next to the lifecycle-flavoured
+`OBJECT_SOFT_DELETED`. Doc 03 §14 files **AOS-12 itself** under "Type/payload
+mismatch" — the same row family as AOS-03 (`INVALID_ITEM_KIND`, 422). Adjudicated in
+favour of §14: the request is malformed at its type level, it is not racing a live
+state, so the code ships **422 / `ErrorCategory.VALIDATION`** exactly like its two
+siblings. Following the O-02 recovery contract it also declares
+`retryable=false` (a revision row is immutable and is never re-kinded, so the same
+`(bound kind, revision_id)` pair fails identically forever),
+`scope_type="work_object_revision"`, and pins `scope_id` / `field_path` at the raise
+site.
+
+**(2) The generic error is narrowed, not replaced.** The pre-existing check
+conflated two failures. Only the cross-**kind** half is renamed:
+
+| Request | Code |
+|---|---|
+| Signal root + Trade Log revision id | **`KIND_REVISION_MISMATCH`** (new) |
+| Signal root + a *different Signal root's* revision id | `VALIDATION_ERROR` (unchanged) |
+| Client `item_kind` disagrees with its own root | `MAINBOARD_ITEM_KIND_MISMATCH` (CR-01, unchanged) |
+| Client sends a legacy V18 kind label | `INVALID_ITEM_KIND` (AOS-03, unchanged) |
+
+The spec names no code for the same-kind/wrong-root case, so inventing one would
+outrun the contract. The three-code family stays distinct — a unit test asserts
+AOS-12 is answered by neither neighbour.
+
+### H.3 — One gate, two surfaces, fail-closed
+
+`domain/mainboard/revision_binding.py::assert_revision_kind_matches` is the single
+rule (the K-07 / O-27 REUSE shape). It compares the revision row's own **immutable**
+`object_kind` column against the **server-derived** kind of the thing being bound —
+never against anything the caller asserted — and runs **before** the belongs-to-root
+check so the cross-kind case is named by its own defect instead of disappearing into
+the generic message.
+
+| Surface | Bound kind comes from |
+|---|---|
+| `attach_mainboard_item` (`POST /mainboards/{id}/items`) | the root's `object_kind` |
+| `patch_mainboard_item` intent `pin_revision` (`PATCH /mainboard-items/{id}`) | `item.item_kind` (itself server-derived at attach, CR-01) |
+
+A re-pin binds a revision id exactly the way an attach does, so covering only the
+attach surface would have left the gate open on the other one. A new
+revision-binding surface must call this function rather than copy the rule.
+
+### H.4 — Tests
+
+Both halves of the AOS-12 sentence are asserted — the code **and** *"with no partial
+item creation"*.
+
+| File | What it pins |
+|---|---|
+| `unit/test_mainboard_revision_binding.py` (9 tests) | the pure gate: matching kinds pass; both external directions raise; envelope carries `category` / `retryable` / `suggested_action` / `remediation` / `scope_type` / `scope_id` / `field_path`; `details` echo both kinds without coercing either; neither neighbouring code is reused |
+| `integration/test_mainboard_kind_revision_mismatch.py` (5 tests) | real DB, both surfaces: attach with and without a client `item_kind`, the reverse direction, `pin_revision`, and the negative half (same-kind wrong-root still generic). Every rejection re-reads the board and asserts `items == []` / the original pin survived |
+
+**Verified:** `pytest tests/unit/test_mainboard_revision_binding.py
+tests/integration/test_mainboard_kind_revision_mismatch.py` → **14/14** against a
+real PostgreSQL on an isolated database (`entropia_aos12`), plus the full backend
+gate (ruff / ruff format / mypy / full suite) and `docs/openapi.json` drift check.
+
+### H.5 — Still open after this slice
+
+§E minus AOS-12: TS-20 / AOS-20, AT-21, TS-16 / TL-18 / AOS-16, RF-15 / ESP-05,
+AT-24, PC-14 / PC-19 / PC-22, CP-05, CP-14, PL-06, ESP-19. §A's per-page counters
+are the frozen 2026-07-28 record and are deliberately **not** rewritten — re-run
+`python3 docs/audit/acceptance_id_scan.py` for the live number, which is the
+document's own standing instruction.

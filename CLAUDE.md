@@ -178,17 +178,25 @@ Before stopping a working session, produce **ALL** of the following:
   V18-R2 dalgası + **auth remediation dalgası COMPLETE** (güvenlik denetimi #346–#364).
   Tüm route yüzeyleri frontend'e bağlı; TIER 2 sayfa haritası 24/24.
 
-- **alembic head:** **`0039_backtest_run_cancellation`** (39 migration, tek head; O-06'da eklendi —
-  öncesi `0038_backtest_run_event`). **`ENGINE_VERSION` = `backtest-engine-v18-funding-step-order`**
-  (`manifest.py:83`; K-03'te bump edildi, öncesi K-04 `-full-pinning`, K-02 `-available-time-gate`;
-  **O-05/O-06 bump ETMEDİ**).
+- **alembic head:** **`0041_filtered_event_artifact`** (41 migration, tek head; I-02'de eklendi —
+  öncesi `0040_export_type_agent_pine`). **`ENGINE_VERSION` =
+  `backtest-engine-v18-min-n-filtered-events-artifact`** (`manifest.py`; I-02'de bump edildi çünkü Result
+  artifact ŞEKLİ değişti — öncesi K-03 `-funding-step-order`, K-04 `-full-pinning`, K-02
+  `-available-time-gate`; **O-05/O-06 bump ETMEDİ**).
 - **Son dalga — O-serisi (spec-uyum kusurları):** O-01 (#403) · O-02 (#400) · **O-03 (#407 + #413;
   #408 boş merge oldu, içeriğini #413 yeniden indirdi)** · O-04 (#405) · O-05 (#412) ·
   **O-06 (#419 — CancelBacktestRun, migration `0039`)** · O-08 (#406) · O-09 (#410) · O-10 (#402) ·
   **O-17 (#446 — restore conflict artık typed `resolution` seçenek kümesi taşıyor; yeni
   `domain/trash/restore.py` katalogu + salt-okuma
   `GET /trash-entries/{id}/restore-preflight`; bilinmeyen resolution 422
-
+  `UNSUPPORTED_RESTORE_RESOLUTION`; migration YOK)** ·
+  **I-02 (`feat/i02-filtered-events-artifact` — doc 15 §3.2'nin bağlanmamış "View Filtered
+  Events" aksiyonu: `ArtifactType.FILTERED_EVENTS` + `filtered_event` tablosu (motor vetoları
+  artık `signal_events`'ten AYRI journal) + `result_artifact_checksum` (beş artifact tipi için,
+  doc 15 §7/§8.3); migration `0040`, ENGINE_VERSION bump. **REGIME_TABLE bilerek EKLENMEDİ** —
+  doc 22 Future-Dev sınırı, gerekçe `PROJECT_HISTORY.md`. Ayrıca E2E'de 12 sayfa yalnız
+  screenshot'lanıyordu, fonksiyonel kapsam eklendi: `specs/17-page-coverage.spec.ts`,
+  `18-result-artifacts-drilldown.spec.ts`, `19-future-dev-boundary.spec.ts`)**.
 
 
 - **Testler:** son yeşil referans CI (O-serisi PR'ları). Lokal tam suite tek koşuda
@@ -223,9 +231,12 @@ Before stopping a working session, produce **ALL** of the following:
      §"Sonradan canonical olan dört satır" ve §"O-03R · Kalan 4 ölü error sınıfı kapatıldı".
   4. **Round-3 backlog:** S5 (a/b/c/d) + S-L1…S-L6
      (`docs/POST_V1_SPEC_GAP_BACKLOG_ROUND3.md` §DURUM TAZELEME — diğer 8 madde landed).
-- **Açık iş (R2 kapsamı dışı, dürüst sınır):** ekran okuyucu (NVDA/VoiceOver) denetimi yapılmadı;
-  10 sayfanın derin görsel kıyası eksik; a11y/visual katmanları CI'da koşmadı; A11Y-01 kontrast
-  (228 serious node, tamamı canonical v18 paletinden) ve A11Y-02 kayıtlı sapma olarak açık.
+- **Açık iş (dürüst sınır):** ekran okuyucu (NVDA/VoiceOver) denetimi **yapılmadı** — checklist var,
+  denetim yok (`docs/implementation/a11y_screen_reader_audit_checklist.md`); 10 sayfanın derin görsel
+  kıyası eksik; **visual katmanı** CI'da koşmuyor — **a11y koşuyor** (`e2e.yml` `a11y` job'u, artık
+  düğüm-sayısı **ratchet**'i: `frontend/e2e/a11y-baseline.json`). **A11Y-01 = 70 düğüm** (228, D-7(b)
+  öncesi bayat ölçümdür): 45'i imza-mavisi imzalı sapma, **25'i D-7(b)'nin kaçırdığı gri/amber →
+  A11Y-03/04**. Açık PO kararı **D-10** → `docs/implementation/a11y_ci_ratchet_and_adjudication.md`.
 - **KAPSAM DIŞI (bilerek):** retention auto-purge (doc 20 §16 — "Production V1'de kapalı"),
   LLM generation (Future-Dev), Graphic View renderer (doc 22 — V18 statik placeholder kalır).
 

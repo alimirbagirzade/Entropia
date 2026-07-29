@@ -130,12 +130,18 @@ jobs:
   # gets its own runner (own Compose project + volumes) because it needs the same
   # seeded stack as the session job but takes its own ~15 min budget.
   #
-  # The pass/fail boundary lives in the spec and is NOT restated here: zero
-  # critical, and zero serious outside the spec's frozen ACCEPTED_SERIOUS_RULES.
-  # That list is currently ["color-contrast"] only — the PO's D-8 decision fixed
-  # link-in-text-block and deliberately removed it, so a reappearance must fail.
-  # Widening the list is a product-owner decision (v18_final_acceptance.md §A11Y),
-  # never a CI convenience.
+  # The pass/fail boundary lives in the spec + frontend/e2e/a11y-baseline.json and
+  # is NOT restated here: zero critical, and no serious rule above its frozen
+  # per-page node-count ceiling. The earlier boundary allow-listed a whole rule id
+  # (`color-contrast`) on every page, which recorded the deviation but stopped
+  # measuring it — a brand-new low-contrast component would have landed green. A
+  # ceiling is a node count per page per rule, so the known nodes stay recorded
+  # and the next one fails.
+  #
+  # Raising a ceiling is a product-owner decision recorded in
+  # docs/implementation/a11y_ci_ratchet_and_adjudication.md, never a CI
+  # convenience. Lowering one after a real fix is expected: the run prints the
+  # tightened map and uploads it as a11y-report/axe-baseline.tightened.json.
   a11y:
     name: A11Y — axe-core scan vs. the seeded stack (R2-14)
     runs-on: ubuntu-latest

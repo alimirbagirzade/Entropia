@@ -62,7 +62,7 @@
 >
 > ### 📍 Kaymış satır/dizin referansları (gövdede düzeltilmedi — burası otorite)
 >
-> - **S-L1:** `shared/errors.py:964` → ~~`:1277`~~ (07-28 ölçümü) → bugün **`:1449`** (07-29)
+ 
 > - **S6:** `routes/trading_signal.py` → gerçek dizin **`backend/src/entropia/apps/api/routes/`**
 > - **S-L7:** `nav.ts:130-131` → o satırlar artık `FUTURE_DEV_SUBPAGES` bloğu (dosya 272 satır)
 > - **S5:** gövdedeki `RestrictionsFilters :692` → `min_true_count` alanı bugün
@@ -372,24 +372,7 @@ feat/s5<x>-strategy-<slug>, ayrı PR'lar, NO AI attribution.
 ---
 
 ## LOW (opsiyonel, tek-oturumluk küçükler)
-> **2026-07-29:** LOW listesinin tamamı kapandı — S-L1…S-L6 **landed** (#455–#461), S-L7 karar.
-> Aşağıdaki tarifler tarihsel kayıttır, yeniden uygulanacak talimat DEĞİLDİR; bugünkü kanıt
-> satırları için §DURUM TAZELEME'deki LANDED tablosuna bak.
-
-- ~~**S-L1 — Allocation 409 gövdesi**~~ ✅ **LANDED (PR #457)** (doc 13 §7.2/§10.2 Flow E):
-  `AllocationDraftConflictError` (~~`shared/errors.py:964`~~ → ~~`:1277`~~ → bugün **`:1449`**)
-  artık `current_draft` + `changed_paths[]` taşıyor; `commands/allocation_plan.py:127,154` üretiyor.
-- ~~**S-L2 — Export tipleri**~~ ✅ **LANDED (PR #460)** (doc 15 §3.2): `pinescript_signal_marker` +
-  `agent_dataset` → `domain/backtest/export.py:42-43`, migration `0040_export_type_agent_pine`.
-- ~~**S-L3 — Library request-validation**~~ ✅ **LANDED (PR #461)** (doc 08 §7):
-  `apps/api/routes/library.py:204` `POST /library/{entity_id}/validation-runs` (201).
-- ~~**S-L4 — Manifest warning satırları**~~ ✅ **LANDED (PR #456)** (doc 14 RC-03):
-  `commands/backtest_run.py:553` `"warnings"` alanı + `:864` `_manifest_warning_rows` — artık
-  bare count değil, satırın kendisi. Manifest hash'i warning taşıyan koşularda değişir.
-- ~~**S-L5 — `GET /rationale-families:suggest`**~~ ✅ **LANDED (PR #459)** (master ref Modül 6 §11):
-  `apps/api/routes/rationale.py:91` — read-only, mutation yok.
-- ~~**S-L6 — `UPLOAD_JOB_FAILED`**~~ ✅ **LANDED (PR #455)** (doc 21 §10):
-  `shared/errors.py:2075` kanonik kod + `commands/manual.py:109-116` pipeline aşamaları.
+ 
 - ~~**S-L7 — Nav legacy etiketleri**~~ ⚪ **KONUSU KAPANDI (2026-07-28).** "Trading Signal
   Packages"/"Trade Log Packages" etiketleri `frontend/src/app/nav.ts`'te **artık yok**; yokluk
   `frontend/src/test/nav.test.tsx:95-96`'da regresyon testiyle sabitlenmiş. Karar doc-01 lehine

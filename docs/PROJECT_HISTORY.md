@@ -1619,3 +1619,165 @@ Docker, iki E2E (dev-auth + gerçek tarayıcı/Compose) ve A11Y axe-core taramas
 - `blocked` outcome'ı (purge_pending / purged / restored) preflight'ta raporlanır ama frontend
   paneli bunu ayrıca ele almaz: bu durumlarda satır zaten `restore_eligible=false` olduğu için
   Restore düğmesi hiç render edilmiyor.
+
+---
+
+## B-1 · doc 13 §8.2'nin kapsamadığı, kodda uygulanan portfolio-level cross-item kuralları
+
+> **Bu bölüm neden var.** `docs/spec/` **kanonik kaynaktır ve DEĞİŞTİRİLMEZ**. Kod iki
+> portfolio-level alanı (`max_total_exposure_percent`, `conflict_policy`) uyguluyor; doc 13
+> **§8.2 canonical payload'ı bu iki alanı içermiyor**, §8.3 formülleri exposure cap tanımlamıyor
+> ve kodun atıf yaptığı §8.4 gövdesinde ne "Max Total Exposure" ne de NET/BLOCK_OPPOSITE geçiyor.
+> Yani **kod spec'ten ileri** — spec bir hata içermiyor, sadece kapsamıyor. Bu kayıt o boşluğun
+> tek referansıdır: yeni bir geliştirici bu alanların nereden geldiğini spec'e bakmadan buradan
+> bulabilmeli. Kod bu bölüme değil `doc 13 §8.4`'e atıf yapmaya devam eder (aşağıda neden meşru
+> olduğu yazıyor); atıfları **buraya çevirme**.
+
+### Spec boşluğunun tam sınırı (ampirik, 2026-07-29)
+
+| Spec yeri | Ne diyor | Kodda karşılığı |
+|---|---|---|
+| `docs/spec/13_..._v1_1.md` §8.2 (satır 875-884) | `PortfolioAllocationConfigV1 { enabled, initial_capital, compounding_mode, reserve_cash_percent, entries[] }` | Kodda **+2 alan** var: `max_total_exposure_percent`, `conflict_policy` |
+| §8.3 (satır 885-893) | `P0 / r / R0 / A0 / Ci0 / U0` + `allowed_size = min(desired, remaining_sleeve_capacity, item_risk_limits, ledger_solvency_limit)` | `min(...)` listesinde **portfolio exposure cap terimi yok**; motor onu ayrıca bağlar |
+| §8.4 adım 6 (satır 907) | "Conflict Rules item intentini engellerse o itemin share'ı diğer item'lere run içinde otomatik devredilmez" | **Invariant meşru** — kod bunu uygular. Ama §8.4 gövdesi ne "Max Total Exposure" adını ne de `NET`/`BLOCK_OPPOSITE`/`KEEP_SEPARATE` token'larını içerir |
+
+**Sonuç:** kodun `doc 13 §8.4` atfı **yalnız "engellenen item'in share'ı devredilmez"
+invariant'ı için** doğrudur. **Alan kümesi ve token sözlüğü spec'te YOK — kod-yereldir.**
+
+### İSİM ÇAKIŞMASI — iki ayrı düzlem, aynı alan adı (en sık karışan nokta)
+
+`max_total_exposure_percent` **iki yerde** geçer ve **aynı şey değildir**:
+
+| Düzlem | Nerede | Kaynak | Anlamı |
+|---|---|---|---|
+| **Per-strategy** | `limits.max_total_exposure_percent` (Strategy Details) | **Spec'te VAR** — doc 02 satır 1039 (`>0`, `>= max single`, "total main + layers cannot exceed. Allocation is external cap, not bypass") | TEK bir stratejinin ana pozisyon + layer'larının toplam exposure tavanı |
+| **Portfolio-level** | `PortfolioAllocationConfigV1.max_total_exposure_percent` | **Spec'te YOK — bu kaydın konusu** | TÜM composition item'larının eşzamanlı toplam notional'ının, paylaşılan havuz `P0`'a oran tavanı |
+
+İkisi de motorda bağlar (`engine.py:2837` yorumu bunu açıkça yazar). Doc 02'nin "Allocation is
+external cap, not bypass" cümlesi tam olarak bu ilişkiyi anlatır: portfolio cap per-strategy
+cap'i gevşetmez, üstüne biner.
+
+### Nereden geldi
+
+- **PR [#320](https://github.com/alimirbagirzade/Entropia/pull/320)** — commit `c747b7e`,
+  branch `feat/portfolio-level-rules`, merge **2026-07-19**, başlık
+  *"feat(allocation,engine): portfolio-level rules — Max Total Exposure + cross-item conflict policy"*.
+  20 dosya, +1454/−10.
+- Takip: **PR #321** (`fix/openapi-snapshot-portfolio-rules`) — `docs/openapi.json` snapshot'ını
+  tazeledi (drift guard).
+- **Migration `0035_portfolio_rules`** (revises `0034_package_implementation`). O tarihte alembic
+  head'i buydu; **bugünkü head `0039_backtest_run_cancellation`**.
+- **`ENGINE_VERSION` → `backtest-engine-v18-portfolio-rules`** (execution_key namespace kayması,
+  INF-04/INF-05). **Bugünkü değer `backtest-engine-v18-funding-step-order`** — sonraki slice'lar
+  (K-02/K-04/K-03) bump etti.
+
+### Alanlar — kanonik tanım
+
+`domain/allocation/config.py:118-119` (`PortfolioAllocationConfigV1`):
+
+| Alan | Python tipi | DB kolonu (`portfolio_allocation_plan`) | NULL anlamı |
+|---|---|---|---|
+| `max_total_exposure_percent` | `Decimal \| None` | `NUMERIC(9,6)` nullable | **cap yok** |
+| `conflict_policy` | `CrossItemConflictPolicy \| None` | `enum_column(..., "allocation_conflict_policy")` = `VARCHAR(14)` + CHECK, nullable | **`KEEP_SEPARATE`** (rules öncesi davranış) |
+
+- **`max_total_exposure_percent`** = composition-wide tavan, **paylaşılan havuz `P0`'ın yüzdesi**.
+  **100'ü aşabilir** (kaldıraçlı exposure); tip sınırı `999.999999`. Üst sınır validasyonu
+  **bilerek yok** — kaldıraç meşru bir konfigürasyon.
+- **`conflict_policy`** = **item'lar ARASI** aynı-enstrüman ters yön politikası
+  (doc 02'nin strateji-içi Conflict Handling'inin cross-item karşılığı).
+  Enum: `domain/allocation/enums.py:37-53` →
+
+  | Token | Anlamı | Motorda ne olur |
+  |---|---|---|
+  | `KEEP_SEPARATE` | Her item bağımsız replay (rules öncesi davranış) | Gate kapalı |
+  | `BLOCK_OPPOSITE` | Erken-pinlenmiş item aynı enstrümanda ters yönü tutarken geç-pinlenmiş item'in girişi bloklanır | Gate açık, doğrudan uygulanır |
+  | `NET` | Toplam pozisyonun netlenmesi | **V1'de netlenmez** — muhafazakâr biçimde `BLOCK_OPPOSITE` olarak koşar, ifşa edilir (aşağı bak) |
+
+- Her iki alan da **additive nullable, backfill yok** → mevcut planlar davranışını birebir korur.
+- Parser'lar: boş string → `None` (`_parse_reserve` validator `reserve_cash_percent` ile paylaşılır);
+  `conflict_policy` wire token'ına **normalize edilir** (`"block_opposite"` → `BLOCK_OPPOSITE`).
+
+### Validasyon — `domain/allocation/rules.py:164-186`
+
+| Kod | Şiddet | Koşul | `field` |
+|---|---|---|---|
+| `MAX_TOTAL_EXPOSURE_INVALID` | **BLOCKER** | alan **set edilmiş VE `<= 0`** | `max_total_exposure_percent` |
+| `CONFLICT_POLICY_NET_V1` | **WARNING** | `conflict_policy == NET` | `conflict_policy` |
+
+- **Set edilmemiş = geçerli** (cap yok). Blocker yalnız "kullanıcı bir cap yazdı ama anlamsız"
+  durumunda çıkar. **Üst sınır kontrolü yok** (kaldıraç meşru).
+- `CONFLICT_POLICY_NET_V1` **asla bloklamaz** — motorun `BLOCK_OPPOSITE`'a düşüşünü
+  **çalıştırmadan önce** ön-ifşa eder. Kullanıcı NET seçip kaydedebilir; sürpriz yaşamaz.
+
+### Kalıcılık
+
+- **Plan kökü:** iki kolon da `portfolio_allocation_plan` üzerinde (0035). Draft upsert
+  `commands/allocation_plan.py:129-130` (create) / `142-143` (update, OCC `row_version` altında).
+- **Revision:** `portfolio_allocation_plan_revision` **kolon ALMADI** — değerler değişmez
+  `revision.config` JSON snapshot'ında taşınır
+  (`test_allocation_persistence.py`: `stored.config["max_total_exposure_percent"] == "150.000000"`).
+  Yeni bir portfolio-level kural eklerken **kolon eklemeye gerek yok**, config snapshot'ı yeter.
+
+### Motor davranışı — fail-closed + L4, hiçbir sınır sessiz değil
+
+`_resolve_portfolio_rules` (`domain/backtest/engine.py:665-700`) → `PortfolioRules`
+(`domain/backtest/execution/state.py:272-278`).
+
+| Durum | Motor ne yapar | L4 warning |
+|---|---|---|
+| Kural yok / `KEEP_SEPARATE` + cap yok | `None` döner → **rules öncesi motorla byte-identical** | — |
+| Kural aktif (her zaman) | Sıralı pin-order uygulanır | `portfolio_rules_sequential_pin_order_precedence` (`engine.py:3368`) |
+| Cap **set ama okunamaz / `<= 0`** | **SIFIR cap** (hiçbir giriş kabul edilmez) — "cap yok"a **düşmez** | `portfolio_max_exposure_unparseable_zero_cap` |
+| `conflict_policy == NET` | `BLOCK_OPPOSITE` olarak koşar | `conflict_policy_net_executed_as_block_opposite` |
+| **Bilinmeyen** policy token'ı (kurcalanmış/yabancı snapshot) | Fail-closed → bloklar | `portfolio_conflict_policy_unknown_fail_closed` |
+| Enstrüman sembolü çözülemedi | Fail-closed → bloklar | `portfolio_conflict_symbol_unknown_fail_closed` |
+| Zaman damgası parse edilemedi | Fail-closed → bloklar | `portfolio_rules_time_unparseable_fail_closed` |
+
+- **Cap tabanı** = run'ın replay ettiği pinlenmiş sermaye: allocation altında paylaşılan havuz
+  `P0` (normal yol), yoksa stratejinin kendi initial capital'ı (savunmacı, gerçek manifest
+  akışında ulaşılmaz).
+- **Blok gerekçeleri:** `portfolio_conflict_blocked` (`engine.py:1371`),
+  `portfolio_max_total_exposure` (giriş: `1399`; stack/scale reddi: `2714`).
+- **Diagnostics anahtarları** (`engine.py:3306-3320`): `portfolio_rules_active`,
+  `portfolio_conflict_policy` (**KAYDEDİLEN** token), `portfolio_conflict_policy_executed`
+  (**KOŞAN** token — NET'in düşüşü görünür kalır), `portfolio_max_total_exposure_cap`
+  (çözülmüş para tutarı), `portfolio_prior_intervals`, `portfolio_conflict_blocked_entries`.
+  **Kaydedilen ile koşan token'ın ayrı raporlanması bilinçlidir** — biri diğerinin yerine geçmez.
+
+### Dokunulan yüzeyler (tam liste)
+
+| Katman | Dosya:satır |
+|---|---|
+| Domain config | `domain/allocation/config.py:118-119, 129, 134` |
+| Domain enum | `domain/allocation/enums.py:37-53` |
+| Domain kurallar | `domain/allocation/rules.py:164-186` |
+| Motor | `domain/backtest/engine.py:665-700, 866-892, 1366-1371, 1399, 2714, 3020-3033, 3306-3320` · `execution/state.py:272-278` |
+| Komut | `application/commands/allocation_plan.py:83-84, 98-99, 129-130, 142-143, 198-199, 517-523, 559-565` |
+| Ready Check | `application/commands/readiness_check.py:770-777` (snapshot'a taşınır) |
+| Query | `application/queries/allocation_plan.py` (draft projeksiyonu) |
+| Repo | `infrastructure/postgres/repositories/allocation.py:54-55, 66-67` |
+| ORM | `infrastructure/postgres/models/allocation.py:91-93` |
+| Route | `apps/api/routes/allocation.py:56-57, 104-105` (draft PUT gövdesi) |
+| OpenAPI | `docs/openapi.json` → `conflict_policy` (2168), `max_total_exposure_percent` (2212) |
+| Frontend | `lib/allocation.ts:73-74, 194-195` · `pages/Portfolio.tsx:308-309, 332-333, 455-482` — "Portfolio rules" alan grubu: *Max total exposure %* (placeholder `e.g. 150 (blank = no cap)`) + *Conflicting signals (same instrument)* select (varsayılan `— (keep separate)`) |
+
+### Test kapsamı
+
+- `backend/tests/unit/test_backtest_portfolio_rules.py` — **15 test**, motor kapılarının tamamı.
+- `backend/tests/unit/test_allocation_rules.py:178-205` — pozitif cap + `BLOCK_OPPOSITE`
+  normalizasyonu, çoklu geçersiz değer için blocker, NET warning'i.
+- `backend/tests/integration/test_allocation_persistence.py:337-380` — draft round-trip
+  (`"150.000000"`), revision config snapshot'ı, `0` cap'in **revision'ı bloklaması**.
+- `backend/tests/unit/test_backtest_engine_golden.py` — golden/execution_key regresyonu.
+
+### Dürüst sınırlar
+
+- **Sıralı (pin-order) uygulama, unified-clock co-simulation DEĞİL.** Erken bir item, geç bir
+  item yüzünden **asla yeniden simüle edilmez**. Bu V1 sınırıdır ve her rules-aktif run'da
+  `portfolio_rules_sequential_pin_order_precedence` warning'i ile ifşa edilir.
+- **`NET` V1'de gerçekten netlemez.** Netleme, V1 motorunun koşmadığı unified-clock çok-item
+  co-simülasyonunu gerektirir; düşüş hem validation warning'i (`CONFLICT_POLICY_NET_V1`,
+  kaydetme anında) hem L4 engine warning'i (çalıştırma anında) ile **iki kez** ifşa edilir.
+- **Bu bölüm doc 13'ü değiştirmez.** `docs/spec/` kanonik ve dokunulmazdır; buradaki kayıt
+  yalnızca kodun spec'i **aştığı** yeri belgeler. Doc 13 bir gün bu alanları kapsayacak biçimde
+  yeniden yayımlanırsa, otorite spec'e döner ve bu bölüm tarihsel not haline gelir.

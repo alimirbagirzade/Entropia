@@ -17,6 +17,11 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from entropia.domain.backtest.artifacts import (
+    ARTIFACT_CHECKSUM_SCHEMA_VERSION,
+    ArtifactType,
+    compute_artifact_checksum,
+)
 from entropia.domain.backtest.engine import EngineOutput
 from entropia.domain.backtest.enums import RUN_ACTIVE_STATES, BacktestRunState, RunEventType
 from entropia.domain.backtest.metrics import MetricValue
@@ -26,13 +31,16 @@ from entropia.infrastructure.postgres.models.backtest import (
     BacktestRunEvent,
     BacktestRunManifest,
     DiagnosticArtifact,
+    FilteredEventRow,
     MetricValueRow,
+    ResultArtifactChecksum,
     ResultEquityPoint,
     ResultManifestSnapshot,
     ResultSummary,
     SignalEventRow,
     TradeLedgerRow,
 )
+from entropia.infrastructure.postgres.repositories.result_artifacts import checksum_rows
 from entropia.shared.ids import new_id
 
 _SUMMARY_JSON_KEYS = (
@@ -306,53 +314,91 @@ async def create_result(
                 position_index=metric.position_index,
             )
         )
-    for point in engine_output.equity_points:
-        session.add(
-            ResultEquityPoint(
-                point_id=new_id("bteq"),
-                result_id=result_id,
-                seq=point.seq,
-                timestamp=point.timestamp,
-                equity=point.equity,
-                drawdown=point.drawdown,
-                exposure=point.exposure,
-            )
+    equity_rows = [
+        ResultEquityPoint(
+            point_id=new_id("bteq"),
+            result_id=result_id,
+            seq=point.seq,
+            timestamp=point.timestamp,
+            equity=point.equity,
+            drawdown=point.drawdown,
+            exposure=point.exposure,
         )
-    for trade in engine_output.trades:
-        session.add(
-            TradeLedgerRow(
-                trade_row_id=new_id("bttr"),
-                result_id=result_id,
-                seq=trade.seq,
-                entry_time=trade.entry_time,
-                exit_time=trade.exit_time,
-                direction=trade.direction,
-                entry_price=trade.entry_price,
-                exit_price=trade.exit_price,
-                pnl=trade.pnl,
-                exit_reason=trade.exit_reason,
-            )
+        for point in engine_output.equity_points
+    ]
+    trade_rows = [
+        TradeLedgerRow(
+            trade_row_id=new_id("bttr"),
+            result_id=result_id,
+            seq=trade.seq,
+            entry_time=trade.entry_time,
+            exit_time=trade.exit_time,
+            direction=trade.direction,
+            entry_price=trade.entry_price,
+            exit_price=trade.exit_price,
+            pnl=trade.pnl,
+            exit_reason=trade.exit_reason,
         )
-    for event in engine_output.signal_events:
-        session.add(
-            SignalEventRow(
-                signal_event_id=new_id("btse"),
-                result_id=result_id,
-                seq=event.seq,
-                event_time=event.event_time,
-                event_type=event.event_type,
-                direction=event.direction,
-                detail=_jsonable(event.detail),
-            )
+        for trade in engine_output.trades
+    ]
+    signal_rows = [
+        SignalEventRow(
+            signal_event_id=new_id("btse"),
+            result_id=result_id,
+            seq=event.seq,
+            event_time=event.event_time,
+            event_type=event.event_type,
+            direction=event.direction,
+            detail=_jsonable(event.detail),
         )
-    session.add(
+        for event in engine_output.signal_events
+    ]
+    # I-02: the filter vetoes are their OWN artifact rows with their own ``seq`` — never
+    # folded into ``signal_event`` (doc 15 §3.2 two drill-downs, §16).
+    filtered_rows = [
+        FilteredEventRow(
+            filtered_event_id=new_id("btfe"),
+            result_id=result_id,
+            seq=event.seq,
+            event_time=event.event_time,
+            event_type=event.event_type,
+            direction=event.direction,
+            detail=_jsonable(event.detail),
+        )
+        for event in engine_output.filtered_events
+    ]
+    diagnostic_rows = [
         DiagnosticArtifact(
             diagnostic_id=new_id("btdiag"),
             result_id=result_id,
             kind="run_diagnostics",
             content=_jsonable(engine_output.diagnostics),
         )
-    )
+    ]
+    for artifact_rows in (equity_rows, trade_rows, signal_rows, filtered_rows, diagnostic_rows):
+        session.add_all(artifact_rows)
+    # doc 15 §8.3: the worker persists the artifacts WITH their checksums, and §7 makes
+    # "artifact checksum verification" part of the drill-down contract. Computed from
+    # the same projection the drill-down and the export both serve, so a caller that
+    # paged the whole artifact can re-derive the value it is verifying against.
+    for artifact_type, artifact_rows in (
+        (ArtifactType.EQUITY_CURVE, equity_rows),
+        (ArtifactType.TRADE_LEDGER, trade_rows),
+        (ArtifactType.SIGNAL_EVENTS, signal_rows),
+        (ArtifactType.FILTERED_EVENTS, filtered_rows),
+        (ArtifactType.DIAGNOSTICS, diagnostic_rows),
+    ):
+        projected = checksum_rows(artifact_type, list(artifact_rows))
+        session.add(
+            ResultArtifactChecksum(
+                checksum_id=new_id("btack"),
+                result_id=result_id,
+                artifact_type=str(artifact_type),
+                row_count=len(projected),
+                checksum=compute_artifact_checksum(artifact_type, projected),
+                schema_version=ARTIFACT_CHECKSUM_SCHEMA_VERSION,
+            )
+        )
     session.add(
         ResultManifestSnapshot(
             snapshot_id=new_id("btms"),
@@ -430,6 +476,7 @@ async def count_artifacts(session: AsyncSession, result_id: str) -> dict[str, in
         ("equity_points", ResultEquityPoint),
         ("trades", TradeLedgerRow),
         ("signal_events", SignalEventRow),
+        ("filtered_events", FilteredEventRow),
     ):
         stmt = select(func.count()).select_from(model).where(model.result_id == result_id)
         counts[label] = int((await session.execute(stmt)).scalar_one())

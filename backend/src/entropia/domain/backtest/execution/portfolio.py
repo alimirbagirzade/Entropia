@@ -331,6 +331,10 @@ def combine_item_runs(
     executing = [r for r in runs if r.output is not None]
     combined_trades: list[TradeRow] = []
     combined_events: list[SignalEventRow] = []
+    # I-02: the filter vetoes compose into their OWN journal with their own ``seq``,
+    # exactly like the signal journal — merging them here would undo the split the
+    # per-item engine made (doc 15 §3.2 two drill-downs, §16).
+    combined_filtered: list[SignalEventRow] = []
     initial = portfolio_initial_capital.quantize(_MONEY)
     combined_equity: list[EquityPoint] = [
         EquityPoint(0, "", initial, _ZERO.quantize(_MONEY), _ZERO.quantize(_PCT))
@@ -418,24 +422,29 @@ def combine_item_runs(
                 )
             )
         hi_seq = len(combined_trades)
-        for event in out.signal_events:
-            combined_events.append(
-                SignalEventRow(
-                    seq=len(combined_events),
-                    event_time=event.event_time,
-                    event_type=event.event_type,
-                    direction=event.direction,
-                    # F-10: bind every decision-trace event to the exact executing item's
-                    # pinned object revision, so a reviewer resolves the rule id back to the
-                    # immutable Strategy/Package revision the run actually replayed.
-                    detail={
-                        **event.detail,
-                        "item_id": run.item_id,
-                        "root_id": run.root_id,
-                        "revision_id": run.revision_id,
-                    },
+        for journal, target in (
+            (out.signal_events, combined_events),
+            (out.filtered_events, combined_filtered),
+        ):
+            for event in journal:
+                target.append(
+                    SignalEventRow(
+                        seq=len(target),
+                        event_time=event.event_time,
+                        event_type=event.event_type,
+                        direction=event.direction,
+                        # F-10: bind every decision-trace event to the exact executing
+                        # item's pinned object revision, so a reviewer resolves the rule
+                        # id back to the immutable Strategy/Package revision the run
+                        # actually replayed.
+                        detail={
+                            **event.detail,
+                            "item_id": run.item_id,
+                            "root_id": run.root_id,
+                            "revision_id": run.revision_id,
+                        },
+                    )
                 )
-            )
         running_net += run_net
         symbols.add(summary.get("symbol"))
         timeframes.add(summary.get("timeframe"))
@@ -550,6 +559,7 @@ def combine_item_runs(
         ),
         "item_count": item_count,
         "decision_trace_count": len(combined_events),
+        "filtered_event_count": len(combined_filtered),
         "composition": composition,
         "execution_key": execution_key,
         "warnings": warnings,
@@ -561,4 +571,5 @@ def combine_item_runs(
         equity_points=combined_equity,
         signal_events=combined_events,
         diagnostics=diagnostics,
+        filtered_events=combined_filtered,
     )

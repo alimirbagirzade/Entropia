@@ -285,8 +285,10 @@ def test_engine_direction_restriction_suppresses_and_traces_no_entry() -> None:
     bars.append(_bar("2024-01-21T00:00:00Z", "100", "100", "98", "98"))  # down breakout
     out = _run(_config(direction="long"), bars)
     assert out.summary["total_trades"] == 0
-    kinds = {event.event_type for event in out.signal_events}
-    assert "filtered_no_entry" in kinds
+    # I-02: the veto is traced in the FILTERED journal — its own artifact — and is
+    # absent from the signal journal, which is the whole point of the split.
+    assert "filtered_no_entry" in {event.event_type for event in out.filtered_events}
+    assert "filtered_no_entry" not in {event.event_type for event in out.signal_events}
 
 
 def test_engine_yields_no_trades_and_empty_warning_on_no_bars() -> None:
@@ -597,17 +599,14 @@ def test_engine_execution_key_namespace_shifts_with_the_engine_version() -> None
     # re-resolves them fail-closed. K-03 then bumped it to -funding-step-order: funding/fee/
     # carry now runs at the TOP of each bar (doc 15 §9.3 step 2) instead of the end, so it
     # reduces the equity that sizes this bar's entries/scale layers and bounds its exposure
-    # caps. I-15a (a) bumped it to -restriction-min-n: the Restrictions/Filters combination
-    # gained the spec's third option (doc 02 §5.8, rule="min_n_of_m" + min_true_count), so
-    # the saved config space widened and the entry gate has a branch the old engine could
-    # not evaluate — this one shifts the namespace WITHOUT restating any existing number
-    # (any/all reproduce their prior output byte-for-byte; see engine_golden_digests.json,
-    # where only contract.execution_key moved). Under every one of these changes a result
-    # produced under the older engine — a different (or since-removed) dependency set, the
-    # end-of-bar funding order, or an unevaluatable Minimum-N gate — must never be
-    # idempotently reused for a re-RUN.
+    # caps. Under either change a result produced under the older engine — a different (or
+    # since-removed) dependency set, or the end-of-bar funding order — must never be
+    # idempotently reused for a re-RUN. I-02 then bumped it to -filtered-events-artifact:
+    # the filter vetoes moved out of ``signal_events`` into their own persisted artifact,
+    # so the Result's artifact SHAPE changed (rows removed + ``seq`` renumbered) even
+    # though no price or metric did.
     built = _manifest("btrun_A", "snap_A", "2024-01-01T00:00:00Z")
-    expected = "backtest-engine-v18-restriction-min-n"
+    expected = "backtest-engine-v18-min-n-filtered-events-artifact"
     assert built.manifest["identity"]["engine_version"] == expected
     # The bump is a real NAMESPACE shift: the same run identity under the previous engine
     # version hashes to a different execution_key, so a pre-K-03 result is never reused.

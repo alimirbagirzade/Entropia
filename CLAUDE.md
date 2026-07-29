@@ -172,15 +172,7 @@ Before stopping a working session, produce **ALL** of the following:
   V18-R2 dalgası + **auth remediation dalgası COMPLETE** (güvenlik denetimi #346–#364).
   Tüm route yüzeyleri frontend'e bağlı; TIER 2 sayfa haritası 24/24.
 
-- **alembic head:** **`0040_export_type_agent_pine`** (40 migration, tek head; S-L2 / #460'ta
-  eklendi — öncesi `0039_backtest_run_cancellation`).
-  **`ENGINE_VERSION` = `backtest-engine-v18-restriction-min-n`** (`manifest.py:92`; S5a / #458'de
-  bump edildi, öncesi K-03 `-funding-step-order`, K-04 `-full-pinning`).
-- **Son dalga — R3 backlog kapanışı + denetim (#452–#481):** S5a (#458) ve **S-L1…S-L6 (#455–#461)
-  landed**; RF-12 (#434); i09/i13/i10 (#462/#467/#468); doc19/doc22 denetimi (#464/#471);
-  k11a ledger counters (#481); codemap tazeleme (#477). Önceki O-serisi ve öncesi:
-  `docs/PROJECT_HISTORY.md`.
-
+ 
 - **Testler:** son yeşil referans CI (O-serisi PR'ları). Lokal tam suite tek koşuda
   tamamlanabiliyor — O-27'de **2538 passed / 0 failed / 43dk39sn**, worktree'ye özel izole DB ile
   (aşağıdaki ortam tuzağına uyulursa). Yine de **otorite CI'dır.**
@@ -207,9 +199,6 @@ Before stopping a working session, produce **ALL** of the following:
   `docs/implementation/v18_final_acceptance.md:155-169`; beklettiği FIX(R3) kalemlerinin hepsi
   landed: #368–#373, #375–#379):**
  
-- **Açık iş (R2 kapsamı dışı, dürüst sınır):** ekran okuyucu (NVDA/VoiceOver) denetimi yapılmadı;
-  10 sayfanın derin görsel kıyası eksik; a11y/visual katmanları CI'da koşmadı; A11Y-01 kontrast
-  (228 serious node, tamamı canonical v18 paletinden) ve A11Y-02 kayıtlı sapma olarak açık.
 - **KAPSAM DIŞI (bilerek):** retention auto-purge (doc 20 §16 — "Production V1'de kapalı"),
   LLM generation (Future-Dev), Graphic View renderer (doc 22 — V18 statik placeholder kalır).
 

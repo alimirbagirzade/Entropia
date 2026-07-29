@@ -15,6 +15,16 @@ real network round trip that the running backend actually served.
 | **Create Package FULL lifecycle** (R2-12): request → Pre-Check **passed** → C.D.P draft → typed baseline metadata + CSV upload + parse **passed** → validation **passed** → Admin approve → published → Library `can_use: yes` | `specs/04-create-package-lifecycle.spec.ts` | Compose + every lifecycle action (X-Request-Version OCC + fresh Idempotency-Key), multipart baseline upload, Admin approval in a second browser context, Library permission projection |
 | **Golden path** (R2-07): inline Strategy w/ typed forms + pickers → Validate → Save+attach → Ready Check **Ready** → RUN **succeeded** → inline Result | `specs/05-mainboard-ready-check-run.spec.ts` | `POST /strategy-drafts`, per-card OCC PATCH, `POST .../validate`, `POST .../save`, `POST /readiness-checks`, `POST /backtest-runs`, run polling to the terminal state, inline `ResultDetail` |
 | Trash re-auth | `specs/06-trash-reauth.spec.ts` | Soft-delete -> Trash entry -> re-auth-gated Permanent Delete (purge) |
+| **Page coverage** (12 previously screenshot-only pages): every nav destination renders its projection from a query the server actually served | `specs/17-page-coverage.spec.ts` | `/backtest/history`, `/backtest/metrics`, `/panel/{logs,management,metrics,provisioning}`, `/rationale-families`, `/portfolio`, `/instruments`, `/packages/embedded`, `/analysis-lab`, `/future-dev`, `/user-manual` — heading **and** the page's own protected read returning 200 to the browser's token, **and** a structural anchor (column header / landmark / search box) |
+| **Result artifact drill-down** (I-02): Filtered Events is its OWN artifact | `specs/18-result-artifacts-drilldown.spec.ts` | `GET /backtest-results/{id}/artifacts/filtered_events` + the `filtered` alias, disjointness from `signal_events`, terminating keyset cursor, stored checksum (doc 15 §7) pinned per artifact type, and `regime_table` rejected 422 `ARTIFACT_TYPE_INVALID` |
+| **Future Dev boundary** (doc 22): placeholders stay honest | `specs/19-future-dev-boundary.spec.ts` | `GET /capabilities` — `regime_research` / `hypothesis_lab` / `parameter_fields` / `backtest_review` / `signal_intelligence` registered but `is_operational: false`, and the page renders the registry table |
+
+> **Why 17 exists.** Those twelve routes previously appeared in the E2E tree ONLY
+> inside `utils/screenshotMatrix.ts`, which drives the `@screenshots` / `@visual` /
+> `@a11y` / `@prototype` specs — all excluded from the default run by
+> `--grep-invert`. The suite was green while never exercising a behaviour on them:
+> a page whose protected query returns 401/403/500 still renders its `<h1>` and
+> still screenshots cleanly. Spec 17 asserts both halves (audit TEST-08).
 
 ## Running locally
 
@@ -94,6 +104,23 @@ Open the HTML report after a run with `npm run report`.
 - Journeys go green incrementally as the underlying UI slice's markup
   stabilizes; if a selector drifts (button text, label wording) the fix is a
   one-line Page Object update in `pages/`, not a suite rewrite.
+
+## A11Y — axe-core scan + the node-count ratchet
+
+`npm run a11y` (specs/13 + specs/14) needs the same seeded stack as `npm test`. It runs on
+every PR in the E2E workflow's `a11y` job — it is a gate, not just acceptance evidence.
+
+The boundary is `a11y-baseline.json`: a **frozen ceiling of serious-impact nodes, per page,
+per axe rule**. Zero critical anywhere; a serious rule above its ceiling fails; a serious
+rule with no ceiling on that page fails on its first node; moderate/minor are reported only.
+A missing or unreadable baseline fails the run rather than allowing everything.
+
+| Situation | What to do |
+|---|---|
+| The gate went red on a rule you introduced | Fix the markup/style. Do not raise the ceiling. |
+| The violation is a deliberate, approved deviation | Get it adjudicated in `docs/implementation/a11y_ci_ratchet_and_adjudication.md` **first**, then raise the ceiling. A ceiling raised without a written decision is an undocumented regression wearing a baseline's clothes. |
+| You fixed nodes and CI warns "baseline is LOOSER than reality" | Copy `a11y-report/axe-baseline.tightened.json`'s `pages` into `a11y-baseline.json` and commit. Improvements never fail the run — this warning is the only thing pushing back on drift. |
+| You need the current real numbers | `a11y-report/axe-baseline.measured.json` from any run (CI uploads it in the `a11y-report` artifact). Do **not** read the committed `a11y-report/axe-results.json`: that is the dated 2026-07-22 R2-14 acceptance evidence and is stale on purpose. |
 
 ## R2-13 — Screenshot matrix + visual regression
 

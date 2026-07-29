@@ -1,8 +1,8 @@
 """Heavy result-artifact page reads (Stage 5c, doc-15 deferred; doc 15 §3.2, §7).
 
 Read-only, no commits. Each queryable artifact is paginated SERVER-side with a
-stable ascending key (``seq`` for equity/ledger/signals, ``diagnostic_id`` for
-diagnostics — which has no ``seq``) so a keyset cursor never skips or double-counts
+stable ascending key (``seq`` for equity/ledger/signals/filtered, ``diagnostic_id``
+for diagnostics — which has no ``seq``) so a keyset cursor never skips or double-counts
 a row. Fetches ``limit + 1`` so the caller can detect ``has_more`` without a second
 COUNT. A Trade Ledger row is a trade ROOT — legs/fills are not separate rows, so no
 root≠leg double count is possible here (doc 15 §14, §9.4).
@@ -18,6 +18,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from entropia.domain.backtest.artifacts import SEQ_ORDERED_TYPES, ArtifactType
 from entropia.infrastructure.postgres.models.backtest import (
     DiagnosticArtifact,
+    FilteredEventRow,
+    ResultArtifactChecksum,
     ResultEquityPoint,
     SignalEventRow,
     TradeLedgerRow,
@@ -29,8 +31,16 @@ _MODEL: dict[ArtifactType, Any] = {
     ArtifactType.EQUITY_CURVE: ResultEquityPoint,
     ArtifactType.TRADE_LEDGER: TradeLedgerRow,
     ArtifactType.SIGNAL_EVENTS: SignalEventRow,
+    ArtifactType.FILTERED_EVENTS: FilteredEventRow,
     ArtifactType.DIAGNOSTICS: DiagnosticArtifact,
 }
+
+# Materialization bookkeeping, not artifact content: excluded from the checksum so the
+# value a caller re-derives from the rows it was SERVED matches the stored one. Only
+# ``diagnostics`` carries one (its ``created_at`` is a server default that does not
+# exist yet while the checksum is computed); for the four seq-ordered artifacts this
+# is a no-op.
+_NON_CONTENT_KEYS = ("created_at",)
 
 
 def cursor_key_of(artifact_type: ArtifactType, row: Any) -> str:
@@ -84,7 +94,10 @@ def project_row(artifact_type: ArtifactType, row: Any) -> dict[str, Any]:
             "pnl": _dstr(row.pnl),
             "exit_reason": row.exit_reason,
         }
-    if artifact_type is ArtifactType.SIGNAL_EVENTS:
+    if artifact_type in (ArtifactType.SIGNAL_EVENTS, ArtifactType.FILTERED_EVENTS):
+        # Same projection for both journals — they are separate ARTIFACTS, not separate
+        # row shapes (I-02; doc 15 §3.2 lists them as two drill-downs of one trace
+        # vocabulary). ``event_type`` still says which decision class a row is.
         return {
             "seq": row.seq,
             "event_time": row.event_time,
@@ -100,8 +113,42 @@ def project_row(artifact_type: ArtifactType, row: Any) -> dict[str, Any]:
     }
 
 
+def checksum_rows(artifact_type: ArtifactType, rows: list[Any]) -> list[dict[str, Any]]:
+    """The full projected rows a checksum is taken over (doc 15 §7, §14).
+
+    The SAME projection the drill-down serves, minus the materialization bookkeeping
+    keys — so a caller that paged the whole artifact can re-derive the stored value.
+    """
+    return [
+        {k: v for k, v in project_row(artifact_type, row).items() if k not in _NON_CONTENT_KEYS}
+        for row in rows
+    ]
+
+
+async def get_artifact_checksum(
+    session: AsyncSession, *, result_id: str, artifact_type: ArtifactType
+) -> ResultArtifactChecksum | None:
+    """The stored checksum row, or ``None`` for a Result materialized before I-02.
+
+    A missing row is reported as ``null`` by the caller and never back-filled on read:
+    a checksum computed now would attest to the rows as they are TODAY, which is
+    exactly the tampering the stored value exists to detect (doc 15 §14).
+    """
+    stmt = select(ResultArtifactChecksum).where(
+        ResultArtifactChecksum.result_id == result_id,
+        ResultArtifactChecksum.artifact_type == str(artifact_type),
+    )
+    return (await session.execute(stmt)).scalars().first()
+
+
 def _dstr(value: Any) -> str | None:
     return None if value is None else str(value)
 
 
-__all__ = ["cursor_key_of", "page_artifacts", "project_row"]
+__all__ = [
+    "checksum_rows",
+    "cursor_key_of",
+    "get_artifact_checksum",
+    "page_artifacts",
+    "project_row",
+]

@@ -208,7 +208,12 @@ def test_filtered_no_entry_is_per_occurrence_with_direction() -> None:
     # carrying the filtered direction + reason (not a single post-run aggregate count).
     closes = ["10", "10", "10", "10", "10", "10", "8", "8", "8"]
     out = _run(_config(direction="long"), _plan_bars(closes), plan=_sma_plan())
-    filtered = [e for e in out.signal_events if e.event_type == "filtered_no_entry"]
+    # I-02: the vetoes live in their own journal / artifact, never mixed into the signal
+    # journal (doc 15 §3.2 "View Filtered Events", §16).
+    filtered = [e for e in out.filtered_events if e.event_type == "filtered_no_entry"]
+    assert not [e for e in out.signal_events if e.event_type == "filtered_no_entry"]
+    # Its ``seq`` runs independently and densely — a veto is never a gap in either journal.
+    assert [e.seq for e in filtered] == list(range(len(filtered)))
     # One event PER suppressed occurrence (the signal is disallowed while flat), never a
     # single post-run aggregate count row.
     assert filtered

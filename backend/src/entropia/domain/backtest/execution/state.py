@@ -146,6 +146,21 @@ class SignalEventRow:
     detail: dict[str, Any]
 
 
+# I-02 — the decision classes that are FILTER VETOES: a candidate entry was rejected by
+# a rule/policy BEFORE any fill was attempted, so the event is a no-entry trace rather
+# than part of the signal/execution journal. They are journaled into
+# ``_Ledger.filtered_events`` and persisted as the separate ``filtered_events`` artifact
+# (doc 15 §3.2 "View Filtered Events", §16).
+#
+# The boundary is deliberately narrow and stays here so it is one edit, not a scattered
+# predicate. ``entry_blocked`` / ``stack_entry_rejected`` / ``scale_layer_rejected`` are
+# NOT filter vetoes: there the signal PASSED every filter and the no-fill came from
+# sizing / sleeve / exposure capacity — an execution outcome, which belongs with the
+# signal journal. Adding a new veto reason to ``filtered_no_entry``'s ``detail.reason``
+# needs no change here; adding a new veto EVENT TYPE does.
+FILTERED_EVENT_TYPES: frozenset[str] = frozenset({"filtered_no_entry"})
+
+
 @dataclass(slots=True)
 class _Ledger:
     """The bar loop's running tallies, as ONE mutable object instead of 24 ``nonlocal``
@@ -161,10 +176,16 @@ class _Ledger:
     because the object is immutable.
     """
 
-    # The run's four output journals. Append-only — they are never rebound, so they
+    # The run's output journals. Append-only — they are never rebound, so they
     # needed no ``nonlocal``; they live here so an extracted booking function can take
-    # ONE accumulator instead of four separate list parameters.
+    # ONE accumulator instead of separate list parameters.
     signal_events: list[SignalEventRow] = field(default_factory=list)
+    # I-02: the FILTER vetoes, journaled apart from ``signal_events`` because doc 15
+    # §3.2 exposes "View Signal Events" and "View Filtered Events" as two distinct
+    # drill-downs and §16 keeps the no-entry trace readable in its own right. Its
+    # ``seq`` runs independently, so a filtered event never reads as a gap in the
+    # signal journal.
+    filtered_events: list[SignalEventRow] = field(default_factory=list)
     trades: list[TradeRow] = field(default_factory=list)
     equity_points: list[EquityPoint] = field(default_factory=list)
     position_intervals: list[dict[str, Any]] = field(default_factory=list)

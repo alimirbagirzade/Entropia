@@ -289,6 +289,55 @@ class SignalEventRow(Base):
     detail: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
 
 
+class FilteredEventRow(Base):
+    """Immutable FILTER-VETO decision-trace event (I-02; doc 15 §3.2, §16).
+
+    Same shape as ``SignalEventRow`` and deliberately its own table, not a flag on it:
+    doc 15 §3.2 exposes "View Signal Events" and "View Filtered Events" as two distinct
+    drill-downs, so the two artifacts carry independent ``seq`` sequences and are
+    paginated/checksummed independently. A filtered event is a signal that produced NO
+    fill attempt — never a fill (§16).
+    """
+
+    __tablename__ = "filtered_event"
+    __table_args__ = (UniqueConstraint("result_id", "seq", name="uq_filtered_event_seq"),)
+
+    filtered_event_id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    result_id: Mapped[str] = mapped_column(
+        String(40), ForeignKey(_RESULT_FK, ondelete="CASCADE"), nullable=False, index=True
+    )
+    seq: Mapped[int] = mapped_column(Integer, nullable=False)
+    event_time: Mapped[str] = mapped_column(String(32), nullable=False)
+    event_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    direction: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    detail: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+
+
+class ResultArtifactChecksum(Base):
+    """Per-artifact content checksum written at materialization (doc 15 §7, §8.3, §14).
+
+    §7 names "artifact checksum verification" as part of the drill-down contract and
+    §8.3 says the worker persists the artifacts *with their checksums* — but there was
+    no stored checksum to verify against. One row per (result, artifact type), covering
+    EVERY queryable artifact: a checksum only for the newest one would be a one-off the
+    next artifact would have to re-invent.
+    """
+
+    __tablename__ = "result_artifact_checksum"
+    __table_args__ = (
+        UniqueConstraint("result_id", "artifact_type", name="uq_result_artifact_checksum"),
+    )
+
+    checksum_id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    result_id: Mapped[str] = mapped_column(
+        String(40), ForeignKey(_RESULT_FK, ondelete="CASCADE"), nullable=False, index=True
+    )
+    artifact_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    row_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    checksum: Mapped[str] = mapped_column(String(64), nullable=False)
+    schema_version: Mapped[str] = mapped_column(String(32), nullable=False)
+
+
 class DiagnosticArtifact(Base):
     """Immutable deterministic diagnostics artifact (doc 15 §3.2, §13)."""
 

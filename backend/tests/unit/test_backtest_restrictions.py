@@ -199,7 +199,16 @@ def _events(out: EngineOutput, kind: str) -> list[dict[str, Any]]:
 
 
 def _filtered(out: EngineOutput, reason: str) -> list[dict[str, Any]]:
-    return [d for d in _events(out, "filtered_no_entry") if d["reason"] == reason]
+    """The filter vetoes, read from their OWN journal (I-02).
+
+    ``filtered_no_entry`` left ``signal_events`` when Filtered Events became a separate
+    artifact (doc 15 §3.2 "View Filtered Events", §16) — every assertion below is
+    unchanged, only the journal they read is."""
+    return [
+        e.detail
+        for e in out.filtered_events
+        if e.event_type == "filtered_no_entry" and e.detail["reason"] == reason
+    ]
 
 
 # Breakout-proxy shapes (restriction tests need no plan): 20 look-back bars @100, an

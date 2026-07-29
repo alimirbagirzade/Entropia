@@ -1,15 +1,21 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 
 import { PreCheck } from "@/pages/PreCheck";
 import { stubApi } from "./helpers/apiStub";
 
+// F-07 §4.4: the server composes the request's human label
+// (backend `domain/create_package/labels.py::request_display_label`); the browser
+// only renders it, and never builds a name out of the request_id.
+const REQUEST_LABEL = "Indicator Package · 2026-07-08 10:00:00 UTC";
+
 const REQUESTS_PAGE = {
   data: [
     {
       request_id: "req_1",
+      display_label: REQUEST_LABEL,
       package_type: "indicator",
       state: "precheck_blocked",
       source_kind: "code",
@@ -50,6 +56,7 @@ const SCAN = {
 
 const REQUEST_DETAIL = {
   request_id: "req_1",
+  display_label: REQUEST_LABEL,
   package_type: "indicator",
   creation_mode: "translate_existing_code",
   source_kind: "code",
@@ -127,6 +134,26 @@ describe("Pre-Check page", () => {
     cleanup();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+  });
+
+  it("names the request with a human label instead of a bare id (F-07)", async () => {
+    stubApi(BASE_ROUTES);
+    renderPage();
+
+    // The picker row is identified by the server-owned label; the raw ULID sits
+    // beneath it INSIDE the same row as the secondary binding key — never as the
+    // primary identity. Reverting either render to <code>{request_id}</code> fails
+    // this assertion.
+    const row = (await screen.findByText(REQUEST_LABEL)).closest("tr");
+    expect(row).not.toBeNull();
+    expect(within(row as HTMLElement).getByText("req_1")).toBeInTheDocument();
+
+    // Selecting it shows the same server-owned label on the detail panel's
+    // Request row, so the label ends up rendered twice (picker + detail).
+    // `waitFor` on the COUNT, not findAllByText — the latter resolves on the
+    // first match, which the picker already satisfies before the detail loads.
+    fireEvent.click(screen.getByRole("button", { name: "Select" }));
+    await waitFor(() => expect(screen.getAllByText(REQUEST_LABEL)).toHaveLength(2));
   });
 
   it("renders the dependency result rows with literal Resolved / Missing text", async () => {

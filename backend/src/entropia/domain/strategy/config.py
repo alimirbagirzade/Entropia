@@ -10,6 +10,8 @@ Field validators enforce:
   details present iff type is stop/stop-limit (§2, Master Ref §6.2/§6.3)
 - Signal block: min_supporting_count required for min_supporting rule (§3)
 - Restrictions: min_true_count required for the min_n_of_m rule (§8, doc 02 §5.8)
+- Scaling: custom_timeframe_sequence required, non-empty and strictly increasing for
+  timeframe_mode='custom_sequence'; dropped for every other mode (§7, doc 02 §5.7)
 - Sizing: base_position_size required iff method='base_position_size' (§6)
 """
 
@@ -17,9 +19,19 @@ from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal
+from itertools import pairwise
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
+
+# The canonical bar timeframes, ASCENDING. Kept in lock-step with the engine's
+# ``domain.backtest.indicators._TF_SECONDS`` ladder (S5c pins that with a test) — this
+# module must not import the engine, so the order is declared here and the ordinal below
+# is derived from it rather than from a second hand-maintained rank table.
+CanonicalTimeframe = Literal["1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "1D"]
+
+CANONICAL_TIMEFRAMES: tuple[str, ...] = ("1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "1D")
+
 
 # ============================================================================
 # SECTION 1: Strategy Context
@@ -765,9 +777,51 @@ class PositionSizeLimits(BaseModel):
 
 
 class ScalingLogic(BaseModel):
-    """Layered entry scaling (optional; entire subtree ignored if enabled=false) (§7)."""
+    """Layered entry scaling (optional; entire subtree ignored if enabled=false) (§7).
+
+    S5c — Scaling Timeframe Structure end to end (doc 02 §5.7). ``timeframe_mode`` is the
+    canonical three-way structure and ``custom_timeframe_sequence`` is the typed per-layer
+    ladder it consumes. The pre-existing flat ``timeframe`` field is UNCHANGED and still
+    names the single timeframe a same_strategy ladder is evaluated on; the mode says how
+    that choice is STRUCTURED across layers. Defaults (``same_strategy`` + no sequence)
+    reproduce the pre-S5c behaviour byte-for-byte.
+    """
 
     enabled: bool = Field(default=False, description="Enable scaling")
+
+    timeframe_mode: Literal[
+        "same_strategy",
+        "increasing_by_layer",
+        "custom_sequence",
+    ] = Field(
+        default="same_strategy",
+        description=(
+            "Scaling Timeframe Structure / Timeframe Mode (doc 02 §5.7). same_strategy: "
+            "every layer is decided on the strategy's own base timeframe. custom_sequence: "
+            "layer N is decided on the Nth entry of ``custom_timeframe_sequence`` under the "
+            "closed-bar rule. increasing_by_layer: each layer steps to a coarser timeframe "
+            "— the spec declares NO step increment (next rung vs. doubling are different "
+            "ladders), so it is accepted by the schema and fails closed at the engine "
+            "(STRATEGY_SCALING_UNSUPPORTED) rather than inventing a rung size."
+        ),
+    )
+
+    custom_timeframe_sequence: list[CanonicalTimeframe] | None = Field(
+        default=None,
+        # validate_default is REQUIRED for the presence gate below to fire on an ABSENT
+        # key, not merely an explicit null — same reasoning as RestrictionsFilters
+        # .min_true_count (I-15a): a custom_sequence mode with no sequence must never
+        # quietly degrade to "same as the strategy timeframe" wearing the custom label.
+        validate_default=True,
+        description=(
+            "Custom Timeframe Sequence (doc 02 §5.7): the per-layer timeframe ladder, a "
+            "typed array of canonical timeframe enums (never a free string). Layer N uses "
+            "entry N (1-based); the sequence LENGTH is itself a layer bound, so no "
+            "past-the-end rule has to be invented. Required for — and only stored for — "
+            "timeframe_mode=custom_sequence. Must be strictly increasing (the V18 seed "
+            "'15m > 30m > 1h > 4h' and the feature name are both ascending)."
+        ),
+    )
 
     timeframe: Literal[
         "same_as_base_tf",
@@ -799,6 +853,39 @@ class ScalingLogic(BaseModel):
     add_size_value: Decimal | None = Field(default=None, description="Add-size value")
 
     scaling_limits: ScalingLimits | None = Field(default=None)
+
+    @field_validator("custom_timeframe_sequence", mode="before")
+    @classmethod
+    def custom_sequence_required_if_mode(cls, v: Any, info: ValidationInfo) -> Any:
+        """Structural presence + shape gate for the Custom Timeframe Sequence (§5.7).
+
+        A sequence sent under same_strategy / increasing_by_layer is DROPPED rather than
+        rejected, so switching the mode back never leaves a stale ladder in the saved
+        revision (Binding Decision #2's disabled-subtree convention applied to a list —
+        the same shape as ``RestrictionsFilters.min_true_count``).
+
+        Under custom_sequence the sequence is REQUIRED, non-empty and STRICTLY INCREASING.
+        Strictness is the fail-closed reading: a repeated rung ('1h > 1h') makes two layers
+        indistinguishable and a descending one contradicts both the feature name and the
+        V18 seed, so neither can be silently honoured. Membership in the canonical enum is
+        already enforced by the ``CanonicalTimeframe`` annotation — this validator only has
+        to order what survives it, and a non-canonical string is left for that annotation
+        to reject rather than being mislabelled as an ordering error.
+        """
+        mode = info.data.get("timeframe_mode")
+        if mode != "custom_sequence":
+            return None
+        if v is None or (isinstance(v, list) and not v):
+            raise ValueError("Custom timeframe sequence required for custom_sequence mode")
+        if not isinstance(v, list):
+            return v
+        ranks = [CANONICAL_TIMEFRAMES.index(tf) for tf in v if tf in CANONICAL_TIMEFRAMES]
+        if len(ranks) == len(v) and any(a >= b for a, b in pairwise(ranks)):
+            raise ValueError(
+                "Custom timeframe sequence must be strictly increasing "
+                f"(got {' > '.join(str(tf) for tf in v)})"
+            )
+        return v
 
 
 class PriceDistanceScaling(BaseModel):

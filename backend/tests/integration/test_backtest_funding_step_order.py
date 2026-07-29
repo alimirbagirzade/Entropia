@@ -168,6 +168,7 @@ async def test_the_charge_propagates_into_the_next_entry_and_the_final_equity(se
 
 async def test_the_engine_version_bump_shifts_the_execution_key_namespace() -> None:
 
+
     def _built(engine_version: str) -> Any:
         return build_run_manifest(
             run_id="btrun_k03",

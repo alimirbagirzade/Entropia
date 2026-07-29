@@ -106,6 +106,12 @@ Tavanı **yükseltmek** PO kararıdır (§4) — CI'ı yeşile boyamak için de�
 
 Ölçüm: run 30436036299 `axe-results.json`, düğüm başına axe'ın raporladığı renk çifti.
 
+> **Bu tablo 2026-07-29 sabahının (main @ `9e86c99`) fotoğrafıdır ve tarihsel kayıt olarak
+> öyle bırakıldı.** Aynı günün öğleden sonrasında Sınıf B'nin 25 düğümü A11Y-03/04 ile
+> kapatıldı; güncel sayı **45** ve tamamı Sınıf A'dır (§5 DURUM kutusu). Aşağıdaki iki
+> Sınıf B satırı artık üründe **yok** — neyin neden kusurlu olduğunu anlatan teşhis
+> olarak duruyorlar.
+
 | Düğüm | Ön plan / arka plan | Oran | Nerede | Sınıf |
 |---|---|---|---|---|
 | 33 | `#ffffff` on `#00a9e8` | 2.67:1 | `.menu-trigger[aria-haspopup]`, `.btn-primary`, `.btn`, `.primary` | **A — accent** |
@@ -229,12 +235,27 @@ Karar    :  ____________________
 | A11Y-04 | `.rd-step[data-locked]` `opacity: 0.7` kompoziti (2 düğüm) | Aynı; düzeltme opaklığı kaldırmak, rengi koyulaştırmak değil |
 | A11Y-05 | Baseline'ı A11Y-03/04 sonrası 70 → 45'e sıkılaştır | Yukarıdakiler landed olunca; CI zaten sıkılaştırılmış haritayı üretir |
 
+> **DURUM (2026-07-29): üçü de KAPANDI.** A11Y-03/04 **PR #493** ile (`bfb5368`),
+> A11Y-05 onu takip eden baseline PR'ı ile landed. §5 tablosunun tahminleri gerçek
+> ölçümle şöyle karşılaştı:
+>
+> | # | Tahmin | Gerçekleşen |
+> |---|---|---|
+> | A11Y-03 | "`#888` → `--text-faint`" tek hamle | **İki hamle gerekti.** Token'ın kendisi de kalibre edilmeliydi: `#6e6e6e` beyazda AA'yı geçiyor ama bu şeridin zemini `#e8e8e8` ve orada yalnız 4.16:1. `--text-faint: #6e6e6e → #666666` + `.top-title` token'ı okuyor. 23 düğüm kapandı. |
+> | A11Y-04 | "düzeltme opaklığı kaldırmak, **rengi koyulaştırmak değil**" | **Yanlıştı** — bkz. §3 B-2 ERRATA. Opaklık kalkınca geriye 3.48:1 kalıyordu, hâlâ serious. Hem opaklık kaldırıldı hem `--warn: #b07d00 → #8a6200`. 2 düğüm kapandı. |
+> | A11Y-05 | 70 → 45 | **Birebir 45.** CI run `30448240930`, sayfa başına −1 (marka şeridi), research-data ek −2 (kilit notu). |
+>
+> Kalan 45 düğümün tamamı tek sınıf: `33 × #ffffff on #00a9e8` + `12 × #00a9e8 on #ffffff`,
+> hepsi 2.67:1 — yani **Sınıf A, D-10'un konusu**. Sınıf B artık ölçümde yok.
+
 ---
 
 ## 6. Dürüst sınırlar — bu slice'ın KAPATMADIĞI eksenler
 
 - **A11Y-01 kapanmadı.** Ratchet onu ölçülebilir ve dondurulmuş hâle getirdi; WCAG 2.2 AA
-  1.4.3 bugün **karşılanmıyor** (70 düğüm). D-10 imzalanana kadar açıktır.
+  1.4.3 bugün **karşılanmıyor** (~~70~~ **45 düğüm** — A11Y-03/04 sonrası, PR #493).
+  D-10 imzalanana kadar açıktır. **Kalan 45'in tamamı Sınıf A'dır**, yani "eksik uygulama"
+  değil imzalı tema kararı; bu yüzden A11Y-01'i kapatmanın tek yolu artık D-10'dur.
 - **Ekran okuyucu (NVDA/VoiceOver) denetimi YAPILMADI.** `~/.claude/rules/accessibility.md`
   en az iki ekran okuyucu ister. Bu slice yalnız **checklist** üretti; checklist denetim
   değildir ve otomatikleştirilemez — bkz. ayrı belge. A-08 AÇIK kalır.

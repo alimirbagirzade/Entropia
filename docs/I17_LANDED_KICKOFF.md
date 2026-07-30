@@ -1,7 +1,6 @@
 # I-17 landed — sıradaki slice için kickoff
 
-**Baseline:** PR #416 (`feat/t2-acceptance-id-traceability`, MERGED 2026-07-28) ·
-**Migration YOK · ENGINE_VERSION değişmedi.**
+
 
 > **STALE-BY-DEFAULT.** Bu dosyaya güvenmeden önce `git fetch && git log --oneline origin/main -6 &&
 > gh pr list --state all` çalıştır.

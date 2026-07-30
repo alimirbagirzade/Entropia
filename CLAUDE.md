@@ -190,35 +190,13 @@ Before stopping a working session, produce **ALL** of the following:
 
 - **F-07 raw-id sweep — SUNUM katmanı kapandı (PR #404).** 31 dosyada 161 `*_id` render'ı tarandı;
   **4 kalıntı açık** (backend display-DTO → `v18_visual_traceability.md §4.4`) — yani **F-07 bütün
-  olarak Complete DEĞİL** (yol/satır refs 2026-07-29'da yeniden ölçüldü).
-  vitest **622/622** *(2026-07-28 ölçümü; 07-29 doc-truth turunda yeniden koşulmadı — otorite CI)*
-  (**`--no-file-parallelism` ZORUNLU**; worktree'de
-  `frontend/node_modules` yoksa önce `npm ci` — ilk koşudaki `ERR_MODULE_NOT_FOUND` test hatası değil).
+
 
 
 - **Next (PO imzası BLOKAJ DEĞİL — imza 2026-07-22'de atıldı,
   `docs/implementation/v18_final_acceptance.md:155-169`; beklettiği FIX(R3) kalemlerinin hepsi
   landed: #368–#373, #375–#379):**
-  1. **F-07 §4.4** — 4 yüzey backend display-DTO bekliyor (`v18_visual_traceability.md §4.4`);
-     F-07'nin SUNUM katmanı kapandı (#404), bütün olarak Complete DEĞİL.
-  2. **Round-3 backlog:** S5 (a/b/c/d) + S-L1…S-L6
-     (`docs/POST_V1_SPEC_GAP_BACKLOG_ROUND3.md` §DURUM TAZELEME — diğer 8 madde landed).
-  3. **A11Y D-10** — açık PO kararı; aşağıdaki "Açık iş" maddesine bak.
-  > Bu listenin **kapanan** iki maddesi bilerek çıkarıldı: R2 banner kapanışı #487 ile,
-  > O-03 kalıntısı O-03R (#488) ile landed. O-03 adjudication tablosunun 4 satırının
-  > sonradan canonical olması ayrı konu → `docs/PROJECT_HISTORY.md`.
-
-- **Açık iş (dürüst sınır):** ekran okuyucu (NVDA/VoiceOver) denetimi **yapılmadı** — checklist
-  var, denetim yok (`docs/implementation/a11y_screen_reader_audit_checklist.md`, A-08 AÇIK);
-  10 sayfanın derin görsel kıyası eksik (A-06 AÇIK); **visual katmanı** CI'da koşmuyor
-  (`@visual`/`@screenshots`/`@prototype` hiçbir job tarafından çağrılmıyor) — **a11y koşuyor**
-  (`e2e.yml` `a11y` job'u, düğüm-sayısı **ratchet**'i: `frontend/e2e/a11y-baseline.json`).
-  **A11Y-01 = 45 düğüm** (228 ve 70 bayat ölçümlerdir): A11Y-03/04 landed (#493) — D-7(b)'nin
-  kaçırdığı 25 gri/amber düğüm kapandı. Kalan 45'in **tamamı** imza-mavisi imzalı sapma
-  (33× `#ffffff on #00a9e8` + 12× tersi, hepsi 2.67:1); WCAG 2.2 AA 1.4.3 **karşılanmıyor**,
-  tek çıkış açık PO kararı **D-10** → `docs/implementation/a11y_ci_ratchet_and_adjudication.md`.
-  **Uyarı:** baseline dosyası merge sırasına göre hâlâ 70 okuyor olabilir — 45'e sıkılaştırma
-  **PR #497**'de; o merge olana kadar tavan gerçeğin üstünde gevşektir.
+ 
 
 - **KAPSAM DIŞI (bilerek):** retention auto-purge (doc 20 §16 — "Production V1'de kapalı"),
   LLM generation (Future-Dev), Graphic View renderer (doc 22 — V18 statik placeholder kalır).

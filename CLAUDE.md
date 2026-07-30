@@ -199,14 +199,16 @@ Before stopping a working session, produce **ALL** of the following:
 - **Next (PO imzası BLOKAJ DEĞİL — imza 2026-07-22'de atıldı,
   `docs/implementation/v18_final_acceptance.md:155-169`; beklettiği FIX(R3) kalemlerinin hepsi
   landed: #368–#373, #375–#379):**
-  1. **Round-3 backlog:** S5 (a/b/c/d) + S-L1…S-L6
-     (`docs/POST_V1_SPEC_GAP_BACKLOG_ROUND3.md` §DURUM TAZELEME).
-  2. **A11Y D-10** — açık PO kararı.
+  1. **Round-3 backlog:** S5b'nin son gerçek kalıntısı Same Candle Entry / Exit
+     (`codex/s5b-conflict-matrix-residuals`, PR #513); S5c #498 ve S5d/F-08 #259 landed.
+  2. **Release kabul eksenleri:** A-06 derin görsel kıyas, F-7 Embedded revision
+     display-label düzeltmesi ve bloklayıcı Ubuntu visual-regression CI kapısı
+     2026-07-30'da tamamlandı. Kalan: A-08 NVDA/VoiceOver insan denetimi.
 
 - **Açık iş (dürüst sınır):** ekran okuyucu (NVDA/VoiceOver) denetimi yapılmadı;
-  10 sayfanın derin görsel kıyası eksik; visual katmanı CI'da koşmuyor. A11Y axe-core
-  ratchet'i çalışıyor ve kalan 45 düğüm imza-mavisi imzalı sapma. WCAG 2.2 AA 1.4.3
-  karşılanmıyor; çözüm açık PO kararı D-10'dur.
+  takip GitHub #514'tedir. Visual regression ve axe-core ratchet'i CI'da bloklayıcı
+  çalışıyor. Kalan 45 düğüm imza-mavisi **D-10 (2026-07-30) imzalı kalıcı sapmasıdır**.
+  WCAG 2.2 AA 1.4.3 karşılanmıyor; ürün bu ölçüt için uyumlu sayılamaz.
 
 - **KAPSAM DIŞI (bilerek):** retention auto-purge (doc 20 §16 — "Production V1'de kapalı"),
   LLM generation (Future-Dev), Graphic View renderer (doc 22 — V18 statik placeholder kalır).

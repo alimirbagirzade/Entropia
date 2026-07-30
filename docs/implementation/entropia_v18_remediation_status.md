@@ -18,26 +18,31 @@ A requirement is **Complete** only with working end-to-end behavior + passing ac
 >
 > - **Screen-reader audit (NVDA/VoiceOver) — NOT DONE.** `~/.claude/rules/accessibility.md` asks
 >   for two readers; neither was run. The axe-core layer is automated scanning, not a substitute.
-> - **Deep page-by-page visual comparison — 10 pages open** (03, 07, 09, 10, 12, 17, 18, 19, 21,
->   22): first-observation only, no item-by-item mockup diff (`v18_visual_deviations.md`; A-06 in
->   the `v18_final_acceptance.md` §4 sign-off note).
-> - **A11Y-01 contrast — OPEN as a recorded deviation.** D-7b (PO 22-Jul, PR #368) landed the
+> - **Deep page-by-page visual comparison — COMPLETE (A-06, 2026-07-30).** Docs 03, 07, 09,
+>   10, 12, 17, 18, 19, 21 and 22 were re-captured against a clean seeded stack and compared
+>   item by item with the prototype or, where no prototype image exists, the canonical page
+>   specification. Evidence and adjudication: `v18_visual_deviations.md` §A-06. One new
+>   presentation finding **F-7** (Embedded registry raw `pkgrev_…` labels) aynı acceptance
+>   slice'ında düzeltildi (GitHub #515); audit açık değildir.
+> - **A11Y-01 contrast — SIGNED permanent deviation (D-10, 2026-07-30).** D-7b
+>   (PO 22-Jul, PR #368) landed the
 >   *partial* fix (`--text-faint #888888 → #6e6e6e` ≈4.6:1, OK badge `#00842f → #006b26` —
 >   `frontend/src/styles/global.css:11-13,107-109`). The remaining
 >   `color-contrast` nodes are accent-blue (`--accent #00a9e8`) — a deliberately accepted **theme**
->   deviation, still allow-listed in `frontend/e2e/specs/13-a11y-scan.spec.ts:38`
->   (`ACCEPTED_SERIOUS_RULES`). WCAG 2.2 AA contrast is therefore **not** met today.
+>   deviation, frozen by the node-count ratchet in `frontend/e2e/a11y-baseline.json`.
+>   Product-owner chose D-10 option (i): the remaining 45 accent-blue nodes are accepted
+>   as a permanent theme deviation. WCAG 2.2 AA contrast is therefore **not** met today
+>   and the product cannot claim conformance with criterion 1.4.3.
 >   *(The "228 serious nodes" figure recorded at R2-14 predates D-7b and is historical.)*
 > - **A11Y-02 `link-in-text-block` — CLOSED**, not deviation-open: D-8 (PO 22-Jul, PR #368)
 >   underlines in-paragraph links (`global.css:40-41`) and the rule was **removed** from the
 >   allow-list (`13-a11y-scan.spec.ts:28`), so it now fails the gate if it regresses.
-> - **CI coverage of the visual layers — still absent.** The axe-core a11y layer **does** run in
->   CI as a blocking job (`.github/workflows/e2e.yml:139-217`, `npm run a11y`, on push-to-main and
->   on PRs). The **screenshot-matrix / prototype-capture / visual-regression** layers run in **no**
->   CI job, and their `toHaveScreenshot` baselines are `-darwin` only
->   (`frontend/e2e/specs/11-visual-regression.spec.ts-snapshots/` — 8 files, no `-linux`), so they
->   stay a local-only gate. *(This refines CLAUDE.md §"Açık iş", which lumps a11y in with the
->   never-run layers: a11y runs in CI, the visual layers do not.)*
+> - **Visual regression CI — CLOSED (2026-07-30).** The eight critical-page
+>   `toHaveScreenshot` assertions run in the real-session E2E job as a blocking
+>   `npm run visual` step. Eight Ubuntu (`-linux`) baselines are committed alongside the
+>   authoring-platform set; CI never runs `--update-snapshots`. The 122-image exploratory
+>   screenshot matrix and prototype-capture remain opt-in evidence generators, not blocking
+>   gates. The axe-core a11y layer continues as its own blocking CI job.
 >
 > **Snapshot figures are recomputable, never frozen — CI is the authority.** Verify with
 > `gh run list --branch main --limit 1`; locally `cd backend && uv run pytest -q` and
@@ -76,11 +81,10 @@ A requirement is **Complete** only with working end-to-end behavior + passing ac
 > | Product-owner imzası | ✅ | **2026-07-22**, `v18_final_acceptance.md:155-169` — D-1 KABUL · D-9 KABUL (20.11 PASS) · D-2…D-6 + D-8 FIX(R3) · D-7 (b) |
 > | İmzanın beklettiği FIX(R3) kalemleri | ✅ **11/11 MERGED** | `gh pr view` ile tek tek doğrulandı: **#368** (D-7b/D-8), **#369** (D-2), **#370** (D-3), **#371** (D-6), **#372** (P-10), **#373** (D-5), **#375** (D-4/P-11), **#376** (P-05), **#377** (P-06), **#378** (P-14), **#379** (P-09) — hepsi `MERGED`, 22–23 Temmuz |
 >
-> **Kapanışın KAPSAMADIĞI şey:** bu blok yalnız R2'nin *In Progress (R2)* etiketini kaldırır.
-> Yukarıdaki F-09 honesty note'unda sayılan açık eksenler (ekran okuyucu denetimi, 10 sayfanın
-> derin görsel kıyası, A11Y-01 kontrast sapması, CI'da koşmayan visual katmanlar) **açık kalır** —
-> imza da bunları dışarıda bırakmıştı (`v18_final_acceptance.md:167-168`: "A-06 … ve A-08 … bu
-> imzanın DIŞINDA açık iş olarak kalır").
+> **Kapanışın KAPSAMADIĞI şey:** bu blok yalnız R2'nin *In Progress (R2)* etiketini kaldırdı.
+> O tarihte açık bırakılan eksenlerden A-06 derin görsel kıyas ve bloklayıcı visual CI kapısı
+> 2026-07-30'da kapandı; A11Y-01 D-10 ile imzalı kalıcı sapmaya dönüştü. **A-08 ekran
+> okuyucu denetimi hâlâ açıktır** (GitHub #514).
 >
 > Kapanış anında Complete'e çekilen satırların kanıt tablosu: **§"R2 kapanış — satır bazında
 > kanıt"** (Status tablosunun hemen üstünde).
@@ -344,6 +348,11 @@ capture) **CI'da koşmaz** — bu satırların görsel kanıtı yerel koşuma da
 
 ## Change log
 
+- 2026-07-30 — **Final acceptance closure.** A-06'nın kalan 10-doc derin görsel kıyası temiz
+  seeded stack üzerinde tamamlandı; yeni F-7 collapsed resolver revision-label bulgusu aynı
+  slice'ta düzeltildi. Ubuntu için sekiz visual-regression baseline'ı eklendi ve gerçek-session
+  E2E job'ına bloklayıcı `npm run visual` kapısı bağlandı. D-10 option (i) imzalandı; A-08
+  insan denetimi GitHub #514'te açık kaldı.
 - 2026-07-29 — **R2 RE-OPENING banner closed (docs-only).** The 2026-07-20 banner is **not
   deleted** — its per-slice evidence stays as the closure's basis; only its framing flipped from
   "⚠️ RE-OPENING … Complete GEÇERSİZ" to "✅ R2 KAPANDI", and the twelve ambiguous "(this PR)"

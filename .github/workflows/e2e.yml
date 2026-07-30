@@ -106,6 +106,13 @@ jobs:
           E2E_ADMIN_EMAIL: e2e_admin@e2e.entropia.test
         run: npm test
 
+      - name: Run the visual-regression gate
+        working-directory: frontend/e2e
+        env:
+          E2E_BASE_URL: http://localhost:8080
+          E2E_ADMIN_EMAIL: e2e_admin@e2e.entropia.test
+        run: npm run visual
+
       - name: Dump Compose logs on failure
         if: failure()
         run: docker compose logs --tail 500

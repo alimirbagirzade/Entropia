@@ -33,9 +33,10 @@ kabul kararı product-owner'ındır.
 | 20.8 | Create Package süreci **request'ten publish'e** kadar browser üzerinden tamamlanıyor | **PASS** | `frontend/e2e/specs/04-create-package-lifecycle.spec.ts` (7.2s, canlı yeşil) — request → Pre-Check passed → C.D.P draft → baseline upload+parse passed → validation passed → Admin approve → **published** → Library `can_use: yes` |
 | 20.9 | Backend/auth/permission/error/loading durumları kullanıcıya **doğru ve açıklayıcı** gösteriliyor | **PASS** | Durum matrisi: `frontend/e2e/screenshots/baseline/**/{loading,error,permission-denied}--1440.png` (14 loading · 14 error · 3 permission-denied PNG). Durumların gerçekliği R2-13'te doğrulandı: loading = gerçek spinner (API stall), error = "Backend unavailable" banner'ı, permission-denied = server-truth `TRASH_ACCESS_FORBIDDEN`. Auth hata zarfı: `specs/01-auth.spec.ts` — "rejects an unknown login with the server's canonical error envelope" |
 | 20.10 | Mobil ve masaüstü genişliklerinde **yatay sayfa taşması yok** | **PASS** | `frontend/e2e/specs/09-responsive-overflow.spec.ts` — 375/768/1280/1440/1920 beşi de canlı yeşil + "mobile hamburger menu is usable at 375px" (6/6 passed, 24.6s). **Bu slice'ta kapatılan gerçek bulgu:** R2-13 sapma listesi 1.6/1.7. Kök neden: Mainboard bölüm grid'inin `auto` track'i 64 karakterlik composition hash'in min-content genişliğine büyüyordu (ölçüm: section `640px` @ 375px viewport). Düzeltme: `Mainboard.tsx` grid `minmax(0, 1fr)` + `.kv` değer kolonu `minmax(0,1fr)` + `overflow-wrap: anywhere`. Doğrulama: taşan öğe sayısı **110 → 0**, `scrollWidth` 375 |
-| 20.11 | 22 sayfanın final screenshot seti V18 prototipiyle **karşılaştırılmış** ve **product owner tarafından onaylanmış** | **PO-BEKLİYOR** | Karşılaştırma tamam: 122 baseline PNG + 20 prototip referansı + madde madde sapma listesi `docs/implementation/v18_visual_deviations.md` (R2-13). **Onay kısmı §4'te bekliyor — bu belge imzalanana kadar 20.11 açıktır.** |
+| 20.11 | 22 sayfanın final screenshot seti V18 prototipiyle **karşılaştırılmış** ve **product owner tarafından onaylanmış** | **PASS** | D-9 product-owner tarafından 2026-07-22'de imzalandı. A-06'nın kalan 10-doc derin kıyası 2026-07-30'da temiz seeded stack üzerinde tamamlandı; yeni F-7 sunum bulgusu aynı acceptance slice'ında düzeltildi: `docs/implementation/v18_visual_deviations.md` §A-06. |
 
-**Özet:** 11 koşulun **10'u PASS**; 20.11 yalnızca product-owner imzasına bağlıdır.
+**Özet:** 11 koşulun **11'i PASS**. Bu tablo A-08 manuel ekran okuyucu kapısını
+otomatik olarak kapatmaz.
 
 ---
 
@@ -84,7 +85,7 @@ Ham çıktı: `frontend/e2e/a11y-report/axe-results.json` + `axe-summary.txt`.
 > `frontend/e2e/a11y-baseline.json` (provenance alanıyla). Bu 70 düğümün 45'i D-7(b)'nin
 > bilerek dokunmadığı accent-mavi yüzeylerdir; **25'i ise D-7(b)'nin kapatması gerekirken
 > kaçırdığı** gri/amber düğümlerdir (sabit kodlanmış `.top-title` rengi + `.rd-step`
-> opaklık kompoziti). Ayrıntı ve açık PO kararı **D-10**:
+> opaklık kompoziti). Ayrıntı ve 2026-07-30'da imzalanan PO kararı **D-10**:
 > `docs/implementation/a11y_ci_ratchet_and_adjudication.md`.
 
 Tarama gate'i, kayıtlı bu iki kural DIŞINDA yeni bir serious kuralı belirirse **kırmızıya döner**
@@ -201,7 +202,7 @@ Not / istisna   : "FIX(R3)" maddeleri KABUL DEĞİLDİR — R3'te düzeltilecek 
 | D-6 | TS/TL dikey yoğunluk | **FIX (R3)** | M-06/M-07 kompakt inline shell slice |
 | D-7 | A11Y-01 kontrast | **(b) kısmi düzeltme** | `--text-dim`/rozet-yeşil/amber koyulaştır; accent-mavi dokunulmaz |
 | D-8 | A11Y-02 `link-in-text-block` | **FIX** | paragraf-içi link `text-decoration: underline` |
-| D-9 | 22-sayfa final screenshot seti (20.11) | **KABUL** | 20.11 → PASS. **F-09 eksen notu:** bu PASS "PO screenshot SETİNİ kabul etti" demektir — sayfa-sayfa görsel fidelity doğrulaması (A-06: 10 sayfa hâlâ yalnız ilk gözlem) ve ekran-okuyucu a11y (A-08: NVDA/VoiceOver yapılmadı) bu imzanın DIŞINDA ve AÇIK kalır; iki eksen birbirinin yerine sayılmaz |
+| D-9 | 22-sayfa final screenshot seti (20.11) | **KABUL** | 20.11 → PASS. **F-09 eksen notu:** PO screenshot setini kabul etti; A-06 ayrıca 2026-07-30'da tamamlandı. Ekran-okuyucu a11y (A-08: NVDA/VoiceOver yapılmadı) bu imzanın DIŞINDA ve AÇIK kalır. |
 
 ---
 
@@ -222,18 +223,19 @@ responsive spec **6/6**, vitest **514/514**, tsc + eslint temiz.
 
 ## 6. Dürüst sınırlar
 
-- **20.11 açıktır** — teknik karşılaştırma tamam, PO imzası yok. Bu belge onaysız hiçbir
-  status satırını Complete yapmaz.
-- **A11Y-01/A11Y-02 kapatılmadı**, kayıtlı sapmadır. WCAG 2.2 AA kontrast maddesi bugün
-  karşılanmıyor; §3.3'teki seçenekler PO kararına sunulmuştur.
+- **20.11 ve A-06 kapandı** — product-owner D-9'u 2026-07-22'de imzaladı; kalan 10-doc
+  derin sayfa kıyası temiz seeded stack üzerinde 2026-07-30'da tamamlandı. Yeni F-7 bulgusu
+  aynı acceptance slice'ında düzeltildi.
+- **A11Y-02 kapandı** (D-8/PR #368). **A11Y-01 ürün kararı ekseninde kapandı fakat teknik
+  sapma sürüyor:** D-10 (2026-07-30) kalan 45 accent-mavi düğümü imzalı kalıcı sapma
+  olarak kabul etti. WCAG 2.2 AA 1.4.3 karşılanmıyor ve uyumluluk iddiası yapılamaz.
 - **axe-core otomatik taraması, manuel a11y denetiminin yerine geçmez.** Ekran okuyucu
   (NVDA/VoiceOver) ile uçtan uca denetim yapılmamıştır — `~/.claude/rules/accessibility.md`
   bunu iki ekran okuyucuyla ister; R2 kapsamında yapılmamıştır ve açık iştir.
 - **Klavye denetimi temel akışla sınırlıdır** (login → Mainboard → Add menü). Her sayfanın
   tam klavye gezinimi tek tek denenmemiştir.
-- **Sapma listesinin derin kıyası kısmen R2-13'ten devralınmıştır:** `v18_visual_deviations.md`
-  §"Kalan sayfalar" başlığındaki 10 sayfa (03, 07, 09, 10, 12, 17, 18, 19, 21, 22) için
-  madde-madde derin karşılaştırma yapılmamış, yalnız ilk gözlem kaydedilmiştir. Bu sayfaların
-  baseline + prototip görüntüleri mevcuttur; derin kıyas açık iştir.
+- **A-06 görsel kıyas tamamlandı; piksel eşitliği iddiası değildir.**
+  `v18_visual_deviations.md` §A-06 her Production V1 sapmasını PASS,
+  SIGNED-DEVIATION veya FIX olarak tek tek sınıflandırır.
 - Doğrulamalar **host-native local stack**'te yapılmıştır; containerized CI yolu aynı
   spec'leri çalıştırır ancak bu oturumda CI'da koşmamıştır.

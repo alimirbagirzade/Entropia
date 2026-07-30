@@ -178,6 +178,23 @@ describe("Embedded System Packages page", () => {
     expect(within(list).getByText("deprecated")).toBeInTheDocument();
     // Each row surfaces its own visibility scope alongside the trust badge.
     expect(within(list).getAllByText("system")).toHaveLength(2);
+    // F-7: the collapsed, scannable row uses a human label. The exact opaque
+    // revision pin remains available in the expanded technical detail.
+    expect(within(list).getByText("active revision pinned")).toBeInTheDocument();
+    expect(within(list).getByText("no active revision")).toBeInTheDocument();
+    expect(within(list).queryByText("rev_r1")).not.toBeInTheDocument();
+  });
+
+  it("keeps the exact revision pin in the expanded technical detail", async () => {
+    stubApi(BASE_ROUTES);
+    renderPage();
+    await screen.findByText("ta.rsi");
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Detail" })[0]);
+
+    const detail = await screen.findByText("Resolver detail");
+    const detailCard = within(detail.closest(".package-details") as HTMLElement);
+    expect((await detailCard.findAllByText("rev_r1")).length).toBeGreaterThan(0);
   });
 
   it("applies the trust facet as a server-side query param and never sends empty facets", async () => {

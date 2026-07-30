@@ -4,8 +4,8 @@ Kapsam: `chore/a11y-ci-baseline`. Bu belge **iki** işi yapar:
 
 1. axe-core katmanının CI'daki geçme/kalma sınırını **kural muafiyetinden düğüm-sayısı
    tavanına** (ratchet) çevirir ve mevcut sapmaları dondurur.
-2. **A11Y-01** (kontrast) sapmasını yeniden ölçülmüş rakamlarla **adjudicate eder** ve
-   product-owner'a **tek bir açık karar** (D-10) bırakır.
+2. **A11Y-01** (kontrast) sapmasını yeniden ölçülmüş rakamlarla **adjudicate eder**; D-10
+   product-owner kararı 2026-07-30'da imzalanmıştır (§4).
 
 Kapatmadığı eksenleri Complete YAPMAZ — §6.
 
@@ -32,9 +32,10 @@ A11Y — axe-core scan vs. the seeded stack (R2-14) :: success :: 09:23:51Z -> 0
 Yani **kullanıcının (a) maddesinin "CI'a bağla" yarısı zaten yapılmıştı.** Gerçek boşluk
 "koşmuyor" değil, **"koşuyor ama ölçmüyor"** idi (§2).
 
-**Visual/screenshot katmanı için önerme hâlâ DOĞRU:** `@visual` / `@screenshots` /
-`@prototype` etiketli specler `npm test`'ten dışlanmış ve hiçbir CI job'u onları
-çağırmıyor. Bu slice bunu değiştirmedi (§6).
+**2026-07-30 takip notu:** Bu slice yazıldığında visual/screenshot önermesi doğruydu.
+Final acceptance slice'ı sekiz Ubuntu baseline'ını commit edip `@visual` katmanını gerçek-session
+E2E job'ına bloklayıcı `npm run visual` adımıyla bağladı. `@screenshots` ve `@prototype`,
+kanıt üreticisi oldukları için hâlâ opt-in'dir.
 
 ### 1.2 "228 serious node" — bugün YANLIŞ, gerçek sayı **70**
 
@@ -186,7 +187,7 @@ değişiklik kendi görsel kanıtını hak eder. Takip slice'ı olarak açık b�
 
 ---
 
-## 4. Product-owner kararı — D-10 (AÇIK)
+## 4. Product-owner kararı — D-10 ✅ İMZALI
 
 D-7 (22-Tem) hâlâ geçerli; bu **onu değiştirme talebi değil**, (b) uygulandıktan sonra
 geriye kalanın ne olacağı sorusudur.
@@ -204,16 +205,17 @@ kalıcı olarak ne sayılacak?
 CLAUDE.md'de **zorunlu görsel referans** olarak pinli; bu, bir a11y slice'ının tek taraflı
 alabileceği bir karar değil. (iii) "kısmen uyumlu" gibi savunulması en zor sonucu üretir.
 
-**Karar YAZILANA KADAR** baseline (i)'nin sayılarını taşır — bu bir karar değil,
-mevcut durumun donmuş hâlidir.
-
 ```
 Karar #  : D-10
 Konu     : A11Y-01 kalıntı accent-mavi seti (45 düğüm) — kalıcı statü
 Seçenekler: (i) imzalı kalıcı sapma [öneri] / (ii) tam AA tema revizyonu / (iii) hedefli
-Onaylayan:  ____________________
-Tarih    :  ____________________
-Karar    :  ____________________
+Onaylayan: alimirbagirzade (product owner)
+Tarih    : 2026-07-30
+Karar    : (i) İmzalı kalıcı sapma
+Kayıt    : 45 accent-mavi düğüm mevcut a11y baseline'ında dondurulur. V18 imza mavisi
+           korunur. Bu karar WCAG 2.2 AA 1.4.3 uyumluluğu iddiası DEĞİLDİR; ürün bu
+           ölçüt için uyumlu olarak pazarlanamaz. Yeni veya artan ihlaller CI ratchet'ini
+           kırmaya devam eder.
 ```
 
 ---
@@ -252,17 +254,15 @@ Karar    :  ____________________
 
 ## 6. Dürüst sınırlar — bu slice'ın KAPATMADIĞI eksenler
 
-- **A11Y-01 kapanmadı.** Ratchet onu ölçülebilir ve dondurulmuş hâle getirdi; WCAG 2.2 AA
-  1.4.3 bugün **karşılanmıyor** (~~70~~ **45 düğüm** — A11Y-03/04 sonrası, PR #493).
-  D-10 imzalanana kadar açıktır. **Kalan 45'in tamamı Sınıf A'dır**, yani "eksik uygulama"
-  değil imzalı tema kararı; bu yüzden A11Y-01'i kapatmanın tek yolu artık D-10'dur.
+- **A11Y-01 ürün kararı ekseninde kapandı; teknik sapma sürüyor.** D-10, kalan **45
+  düğümü** imzalı kalıcı tema sapması olarak kabul etti. Ratchet sınırı dondurur; WCAG 2.2
+  AA 1.4.3 bugün hâlâ **karşılanmıyor** ve ürün bu ölçüt için uyumlu olarak tanımlanamaz.
 - **Ekran okuyucu (NVDA/VoiceOver) denetimi YAPILMADI.** `~/.claude/rules/accessibility.md`
   en az iki ekran okuyucu ister. Bu slice yalnız **checklist** üretti; checklist denetim
   değildir ve otomatikleştirilemez — bkz. ayrı belge. A-08 AÇIK kalır.
-- **10 sayfanın derin görsel kıyası YAPILMADI** (03, 07, 09, 10, 12, 17, 18, 19, 21, 22).
-  A-06 AÇIK kalır; `v18_visual_deviations.md` §"Kalan sayfalar" hâlâ yalnız ilk gözlem.
-- **Visual/screenshot katmanı hâlâ CI'da koşmuyor.** `@visual`/`@screenshots`/`@prototype`
-  specleri hiçbir job tarafından çağrılmıyor; a11y için düzelen şey visual için düzelmedi.
+- **A-06 ve visual-regression CI sonradan kapandı (2026-07-30).** 10-doc derin kıyas
+  `v18_visual_deviations.md` §A-06'da tamamlandı; `@visual` gerçek-session E2E job'ında
+  bloklayıcıdır. Exploratory `@screenshots` ve `@prototype` bilinçli olarak opt-in kalır.
 - **Lighthouse bağlanmadı.** Kullanıcı isteği "axe-core / Lighthouse" diyordu; axe-core
   zaten mevcut katmandı ve ratchet ona uygulandı. Lighthouse ayrı bir araç (performans +
   a11y skoru) ve ayrı bir CI bütçesi ister; **eklenmedi**, açık iştir.

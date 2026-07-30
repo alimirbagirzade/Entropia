@@ -1,6 +1,6 @@
 {
   "digests": {
-    "contract.execution_key": "703f481f1b8293cdd0ffb4d911d652db00f1fffa65ac4ebac5e490913373ca9d",
+    "contract.execution_key": "b034f9495e012512e0320542090e35d1cc0890bc02bedf55ddb6eb6559ae7ce7",
     "costs.funding_batch_2": "58a295ea25b27884ca970be48e333e38748d9dd427b87b7ec44f01e3021a1f19",
     "costs.funding_future_leak": "059e1a6ca0243cb01c3f94c1f95098aacaf628815a26b9aecbfe4b505791bc3b",
     "costs.funding_long": "7198f328eb8a019e3f6fb986f08cbe764d88fe076f201d3baada4fb50fd9c204",
@@ -28,7 +28,7 @@
     "portfolio.rules_exposure_invalid": "35b14a9e7c7eaac4880d5ea63e0663735352014a06e1779ef486080ffc92a15b",
     "portfolio.rules_net_downgrade": "3f0773bdfbe237ed34d975f5b2a1e3648273b390b63aa63f868b8f4f05615c4e",
     "portfolio.rules_none": "662b7c078637c620c277143a3eb947e6d77e6af35b0347151134dd71bca1e2f4",
-    "scaling.logic_unsupported": "9150867f69fa91027ec6d603991a513eb458cc3d1228c8ba0aafbac7ffbe50f6",
+    "scaling.logic_unsupported": "a9a957e10f086bbbc2d88e5a78a3d0e03e3fb977cd652e2138fb8f7f244d6333",
     "scaling.partial_close_all": "5090ca56894cbfae15e1273bcd2ab87a87e0e31a862154654b1dc59c3fce4b42",
     "scaling.partial_lock_in_profit": "d9b124edc89ab387d363df01ed84c7c2030eeda6e0a5705317e09d7be73f9e97",
     "scaling.partial_move_stop_to_entry": "fd746b13e7c0d8c27cd69eb253fee435140c70be6c23987a3a65ccf51b593770",
@@ -47,5 +47,5 @@
     "sizing.risk_based": "7445d6f252127365ae72f5d6401a9416fc2980caf83dafd161e08c0e52644d54",
     "sizing.unsupported_method": "5bd8017f659ffd733a99e32b8e96cb581cb83a614b23369c96c0ec5579fc1159"
   },
-  "engine_version": "backtest-engine-v18-min-n-filtered-events-artifact"
+  "engine_version": "backtest-engine-v18-scaling-tf-sequence"
 }

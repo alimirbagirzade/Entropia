@@ -183,7 +183,9 @@ Before stopping a working session, produce **ALL** of the following:
 
 - **alembic head:** **`0041_filtered_event_artifact`** (41 revision dosyası, **tek head** —
   2026-07-29'da `down_revision` grafiği taranarak doğrulandı). **`ENGINE_VERSION` =
- 
+  `backtest-engine-v18-scaling-tf-sequence`** (S5c/#498'in ilan ettiği değer; sabitin
+  TANIMI o commit'te yanlışlıkla silinmişti ve bir onarım PR'ı geri getirdi)
+  (`backend/src/entropia/domain/backtest/manifest.py:113`). Her ikisinin tam geçmişi —
   hangi slice neden bump etti — `docs/PROJECT_HISTORY.md`'de; **buraya listeyi geri taşıma.**
 
 - **Testler:** son yeşil referans CI (O-serisi PR'ları). Lokal tam suite tek koşuda

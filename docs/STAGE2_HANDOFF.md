@@ -3048,11 +3048,16 @@ Kalan tek büyük açık iş hâlâ **R2'nin product-owner imzası**
 `entropia_v18_remediation_status.md`'deki R2 RE-OPENING banner'ı kalkmaz.
 
 
+## I-07 — `human_users` OCC: adlandırma yanılgısı, migration yok (PR #499)
 
+`human_users` OCC'yi zaten `version` kolonu ile taşıyor. Mutasyonda +1, typed 409,
+dual-token uzlaştırması, row-lock, no-op disiplini ve `run_idempotent` yerinde.
+`row_version` eklenmedi; ikinci token O-12'yi ihlal eder, mevcut alanı yeniden adlandırmak
+tel sözleşmesini kırardı. `DATA_MODEL.md` içindeki yanlış OCC hücresi düzeltildi.
 
-Kalan tek büyük açık iş hâlâ **R2'nin product-owner imzası**
-(`docs/implementation/v18_final_acceptance.md` §4, D-1…D-9) — imza olmadan
-`entropia_v18_remediation_status.md`'deki R2 RE-OPENING banner'ı kalkmaz.
+**Dürüst sınır:** soft-delete kolonları var, fakat kullanıcı silme özelliği ve K-06 trash
+katalog kaydı yok. Özellik eklenirse katalog + deletion command + purge job + trash query
+birlikte eklenmeli.
 
-
- 
+**Testler:** `test_panel_management_logs.py` 26 passed · frontend tsc + eslint temiz ·
+CI 6/6 yeşil. Backend kaynağı değişmedi; migration yok.

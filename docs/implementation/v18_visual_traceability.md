@@ -186,4 +186,3 @@ F-07's stated correction — *add display DTOs at query boundaries* — as a bac
 
 **Presentation half (2026-07-27):** `eslint` ✓ · `tsc -b --noEmit` ✓ · `vitest` **608/608**.
 Backend untouched → no `ENGINE_VERSION` bump, no migration.
-

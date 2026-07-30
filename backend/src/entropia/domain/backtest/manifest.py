@@ -103,7 +103,19 @@ from entropia.shared.manifest import manifest_hash
 # Result produced by the min-n-only engine (no filtered_events artifact) and one produced
 # by the filtered-events-only engine (no Minimum-N gate) are both incomparable with what
 # this engine emits, and neither may be idempotently reused for a re-RUN.
- 
+# v18-scaling-tf-sequence (S5c): Logic-Based Scaling stopped being a future_dev selection —
+# logic-scaling blocks now resolve through the same resolver as entry/exit/stop and propose
+# a same-direction layer on the signal's EDGE, gated on the closed candle of the scaling
+# timeframe sequence's Nth entry (doc 02 §5.7). A strategy carrying a logic scaling block
+# therefore opens a DIFFERENT ladder than the same config did under the engine that
+# reported it unsupported, so the bump shifts the execution_key namespace and a pre-S5c
+# Result is never idempotently reused for a re-RUN (INF-04/INF-05).
+# v18-scaling-tf-sequence-per-item-labels (F-07): immutable composite Result diagnostics
+# now persist the snapshot-owned label beside each per-item and leave-one-out row. The
+# labels stay outside execution_content so renames do not fork reproducibility, but the
+# artifact shape changed; this namespace shift prevents stale label-less Results from
+# being idempotently reused.
+ENGINE_VERSION = "backtest-engine-v18-scaling-tf-sequence-per-item-labels"
 METRIC_SET_VERSION = "metric-set-v1"
 OUTPUT_ARTIFACT_PROFILE = "standard-v1"
 

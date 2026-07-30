@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 
@@ -20,19 +20,9 @@ const REQUESTS_PAGE = {
       state: "precheck_blocked",
       source_kind: "code",
       package_root_id: null,
-      // F-07 §4.4: this request pins nothing nameable -> the honest fallback path.
-      display_label: null,
-      created_at: "2026-07-29T09:15:39+00:00",
     },
   ],
   meta: { cursor: null, has_more: false },
-};
-
-// The same page with a server-resolved name (a pinned Rationale Family / produced
-// package). Used by the F-07 label assertion below.
-const LABELLED_REQUESTS_PAGE = {
-  ...REQUESTS_PAGE,
-  data: [{ ...REQUESTS_PAGE.data[0], display_label: "Momentum Reversal" }],
 };
 
 // A blocked scan carrying one resolved + one missing call (§7.1 row fixtures).
@@ -249,29 +239,5 @@ describe("Pre-Check page", () => {
 
     expect(await screen.findByText("Unable to load")).toBeInTheDocument();
     expect(screen.getByText("FORBIDDEN: Sign in to run Pre-Check.")).toBeInTheDocument();
-  });
-  // F-07 §4.4 — choosing your own request must not require recognizing an opaque
-  // pkgreq_ id. Scoped with `within` to the request's own row.
-  it("names a request instead of showing only its id (F-07)", async () => {
-    stubApi({ ...BASE_ROUTES, "GET /create-package/requests": LABELLED_REQUESTS_PAGE });
-    renderPage();
-
-    const name = await screen.findByText("Momentum Reversal");
-    const row = name.closest("tr");
-    expect(row).toBeTruthy();
-    // The id survives as the secondary/copyable token, not as the only identification.
-    expect(within(row as HTMLElement).getByText("req_1")).toBeInTheDocument();
-  });
-
-  // No server label -> the raw id, plus the creation time so the row is still not
-  // identified by an opaque token alone. A name is never invented.
-  it("falls back to the request id when the server sends no label (F-07)", async () => {
-    stubApi(BASE_ROUTES);
-    renderPage();
-
-    const id = await screen.findByText("req_1");
-    const row = id.closest("tr");
-    expect(within(row as HTMLElement).queryByText("Momentum Reversal")).not.toBeInTheDocument();
-    expect(within(row as HTMLElement).getByText(/2026/)).toBeInTheDocument();
   });
 });

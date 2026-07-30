@@ -2,7 +2,6 @@ import { useState } from "react";
 
 import { EmptyState } from "@/components/EmptyState";
 import { ErrorState } from "@/components/ErrorState";
-import { LabelledId } from "@/components/LabelledId";
 import { Loading } from "@/components/Loading";
 import { StatusBadge } from "@/components/StatusBadge";
 import { ApiError } from "@/lib/apiClient";
@@ -140,7 +139,7 @@ function RequestPickerCard({
                 {requests.data.data.map((req) => (
                   <tr key={req.request_id}>
                     <td>
-
+                      <RequestLabel label={req.display_label} requestId={req.request_id} />
                     </td>
                     <td>{req.package_type}</td>
                     <td>{req.source_kind}</td>

@@ -1659,4 +1659,30 @@ Docker, iki E2E (dev-auth + gerçek tarayıcı/Compose) ve A11Y axe-core taramas
 
 ---
 
- 
+## I-07 · `human_users` OCC — adlandırma yanılgısı, migration yok (PR #499)
+
+I-07, `human_users` tablosunda `row_version` olmadığı için OCC bulunmadığı öncülüyle
+açıldı. Ampirik sonuç öncülü geçersiz kıldı: tablo OCC'yi zaten `version` kolonu ile
+taşıyor.
+
+| Kanıt | Yer |
+|---|---|
+| OCC kolonu | `models/identity.py:40` → `version: Mapped[int]` |
+| Mutasyonda +1 | `commands/role_assignment.py:123` · `commands/roles.py:66` |
+| Typed 409 | `USER_ROLE_VERSION_CONFLICT` |
+| Dual-token | `routes/admin_panel.py` → `reconcile_occ_tokens` |
+| Row-lock | `session.refresh(user, with_for_update=True)` |
+| No-op | aynı rol için version bump ve audit yok |
+| Idempotency | mutasyon `run_idempotent` içinde |
+
+İkinci bir `row_version` eklenmedi: bu aynı satırda iki bağımsız önkoşul yaratır ve
+O-12'yi ihlal ederdi; mevcut `version` alanını yeniden adlandırmak da tel sözleşmesini
+kırardı. `DATA_MODEL.md` içindeki yanlış OCC hücresi `✔ version` olarak düzeltildi ve
+OCC'nin kolon adıyla değil davranışıyla tanınacağı kayda geçirildi.
+
+**Dürüst sınır:** `human_users` soft-delete kolonlarını taşısa da kullanıcı silme özelliği
+ve K-06 trash katalog kaydı yoktur. Böyle bir özellik eklenirse katalog, deletion command,
+purge job ve trash query birlikte eklenmelidir.
+
+**Doğrulama:** `test_panel_management_logs.py` 26 passed · frontend tsc + eslint temiz ·
+CI 6/6 yeşil.

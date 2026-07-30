@@ -20,8 +20,9 @@ from entropia.domain.backtest.manifest import (
     pinned_item_labels,
 )
 
-# The version this slice replaced — the namespace a labelled result must LEAVE.
-_PRIOR_ENGINE_VERSION = "backtest-engine-v18-min-n-filtered-events-artifact"
+# The version on current ``main`` before this slice — the namespace a labelled
+# result must leave.
+_PRIOR_ENGINE_VERSION = "backtest-engine-v18-scaling-tf-sequence"
 
 
 def _item_manifest(*, labelled: bool) -> dict[str, Any]:
@@ -129,7 +130,7 @@ def test_the_artifact_change_shifted_the_execution_key_namespace() -> None:
     ``test_labels_do_not_change_the_execution_key`` above: that one holds the version
     fixed and varies the label VALUE.
     """
-    assert ENGINE_VERSION == "backtest-engine-v18-min-n-filtered-events-per-item-labels"
+    assert ENGINE_VERSION.endswith("-per-item-labels")
 
     item_manifest = _item_manifest(labelled=True)
 

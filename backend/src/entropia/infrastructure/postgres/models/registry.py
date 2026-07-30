@@ -35,7 +35,9 @@ class EntityRegistry(TimestampMixin, Base):
 
     entity_id: Mapped[str] = mapped_column(String(40), primary_key=True)
     entity_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
-    owner_principal_id: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
+    owner_principal_id: Mapped[str | None] = mapped_column(
+        String(40), ForeignKey("principals.principal_id"), nullable=True, index=True
+    )
     created_by_principal_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
     lifecycle_state: Mapped[str | None] = mapped_column(String(48), nullable=True)
     deletion_state: Mapped[DeletionState] = mapped_column(
@@ -44,6 +46,15 @@ class EntityRegistry(TimestampMixin, Base):
         default=DeletionState.ACTIVE,
         index=True,
     )
+    # I-08: stays FK-less BY DESIGN, not by omission — this head pointer is
+    # POLYMORPHIC. Each domain root advances it to a row in its OWN revision table:
+    # ``repositories/entities.py`` -> ``entity_revisions``, ``packages.py`` ->
+    # ``package_revision``, ``rationale.py`` -> ``rationale_family_revision``,
+    # ``market_data.py`` -> ``market_dataset_revision``, ``research_data.py`` ->
+    # ``research_dataset_revision``, ``mainboard.py`` -> its composition revision.
+    # There is no common revision supertable, so an FK to any ONE of them would
+    # reject every other entity type. Integrity here is app-enforced (the repo that
+    # owns the entity_type is the only writer).
     current_revision_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
     row_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

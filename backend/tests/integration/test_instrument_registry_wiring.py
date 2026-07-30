@@ -24,7 +24,7 @@ from entropia.domain.lifecycle.enums import PrincipalType, Role
 from entropia.infrastructure.postgres.models import Job, Principal, StrategyRevision
 from entropia.infrastructure.s3 import datasets
 from entropia.shared.errors import InstrumentScopeUnresolvableError
-from tests.integration.test_strategy_integration import _valid_payload
+from tests.integration.test_strategy_integration import _seed_rationale_family, _valid_payload
 
 pytestmark = pytest.mark.integration
 
@@ -210,11 +210,12 @@ async def test_trade_log_import_unresolvable_scope_fails(session, fake_object_st
 async def _save_strategy_with_scope(session, scope: dict[str, Any]) -> str:
     payload = _valid_payload()
     payload["data"]["instrument_scope"] = scope
+    family_id = await _seed_rationale_family(session)
     draft = await strat_cmd.create_strategy_draft(
         session,
         USER,
         display_name="Scoped Strategy",
-        rationale_family_id="ratfam_int",
+        rationale_family_id=family_id,
         initial_payload=payload,
     )
     await session.flush()
@@ -249,7 +250,7 @@ async def test_strategy_save_unresolvable_scope_fails(session) -> None:
         session,
         USER,
         display_name="Bad Scope Strategy",
-        rationale_family_id="ratfam_int",
+        rationale_family_id=await _seed_rationale_family(session),
         initial_payload=payload,
     )
     await session.flush()

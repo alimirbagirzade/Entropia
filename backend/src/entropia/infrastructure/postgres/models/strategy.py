@@ -54,6 +54,7 @@ from entropia.infrastructure.postgres.types import enum_column
 
 _ENTITY_FK = "entity_registry.entity_id"
 _PRINCIPAL_FK = "principals.principal_id"
+_RATIONALE_FAMILY_FK = "rationale_family_root.entity_id"
 _STRATEGY_ROOT_FK = "strategy_root.entity_id"
 _STRATEGY_REVISION_FK = "strategy_revision.revision_id"
 
@@ -63,9 +64,14 @@ class StrategyRoot(Base):
 
     Mutable head pointer to the current immutable revision. owner/created_by/
     deletion_state live on the registry root; this table carries strategy-specific
-    facets (display_name, rationale family, lifecycle). ``current_revision_id`` is
-    a plain column (no FK — same as ``entity_registry``) so the root and its first
-    revision can be created without a circular constraint.
+    facets (display_name, rationale family, lifecycle).
+
+    I-08: ``current_revision_id`` and ``rationale_family_id`` are now DB-enforced
+    FKs. Unlike ``entity_registry.current_revision_id`` (polymorphic across every
+    domain's revision table) this head pointer has exactly ONE target — a strategy
+    root only ever points at a ``strategy_revision`` — so the constraint is
+    expressible. The root is still created with a NULL head and repointed after the
+    first Save, so there is no circular INSERT (``create_strategy_root``).
     """
 
     __tablename__ = "strategy_root"
@@ -73,7 +79,9 @@ class StrategyRoot(Base):
     entity_id: Mapped[str] = mapped_column(
         String(40), ForeignKey(_ENTITY_FK, ondelete="CASCADE"), primary_key=True
     )
-    current_revision_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    current_revision_id: Mapped[str | None] = mapped_column(
+        String(40), ForeignKey(_STRATEGY_REVISION_FK), nullable=True
+    )
     current_row_version: Mapped[int] = mapped_column(
         Integer, nullable=False, default=1, server_default="1"
     )
@@ -87,7 +95,9 @@ class StrategyRoot(Base):
     # Name uniqueness is APP-enforced (per-owner), not a global DB unique — two
     # owners may legitimately share a display_name (follow-up: per-owner index).
     display_name: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
-    rationale_family_id: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
+    rationale_family_id: Mapped[str | None] = mapped_column(
+        String(40), ForeignKey(_RATIONALE_FAMILY_FK), nullable=True, index=True
+    )
     created_by_principal: Mapped[str] = mapped_column(
         String(40), ForeignKey(_PRINCIPAL_FK), nullable=False
     )

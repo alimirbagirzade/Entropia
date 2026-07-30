@@ -116,23 +116,39 @@ nihai karar R2-14'te product-owner'ındır.
 |---|---|---|
 | 20.1 | Başlık, Admin-only açıklaması, tür filtresi + arama + "recoverable" sayacı ve boş durum metni prototiple hizalı. Küçük farklar: arama/tür sırası ters, prototipteki "0 audit events" sayacı uygulamada satırda değil. | PO-APPROVE (minör). |
 
-## Kalan sayfalar — hızlı geçiş (detaylı inceleme R2-14)
+## A-06 — 10 sayfalık derin kıyas (30 Temmuz 2026)
 
-Aşağıdaki sayfalar bu oturumda baseline+prototip çifti üretilmiş ancak
-madde-madde derin karşılaştırması R2-14 son kabul geçişine bırakılmıştır
-(dürüst sınır — "Complete" iddiası yok):
+Bu geçiş, güncel `main` üzerinde temiz ve izole bir PostgreSQL veritabanı,
+`SEED_E2E_GOLDEN=1`, `SEED_ESP_TA=1`, `SEED_RATIONALE=1` fixture'ı ve gerçek
+API/worker/Vite yığınıyla yeniden üretilen `normal--1440.png` kanıtlarını kullanır.
+Prototip görüntüsü bulunmayan 03, 07 ve 22 için karşılaştırma doğrudan ilgili sayfa
+spesifikasyonuna yapılmıştır. Görsel benzerlik ile canonical Production V1 doğruluğu
+ayrı değerlendirilmiştir.
 
-| Sayfa | İlk gözlem |
-|---|---|
-| 03 Outsource Signal | Deep-link chooser; birincil akışta menü alt seçenekleri (UI-03 uyumlu). |
-| 07 Pre-Check | Uygulamada Create Package akışının sayfası olarak ayrı route; prototipte CP içinde. |
-| 09 Embedded System Packages | Library ile aynı kalıp; 8.2 display-label bulgusu geçerli. |
-| 10 Rationale Families | Yapı uyumlu görünüyor; derin kıyas R2-14. |
-| 12 Research Data | Market Data kalıbında; derin kıyas R2-14. |
-| 17 Arrange Metrics | Derin kıyas R2-14. |
-| 18 Analysis Lab | Derin kıyas R2-14. |
-| 19 Panel Management/Logs | Derin kıyas R2-14. |
-| 21 User Manual / 22 Future Dev | Statik içerik sayfaları; derin kıyas R2-14. |
+| Sayfa | Derin karşılaştırma sonucu | Statü |
+|---|---|---|
+| 03 Outsource Signal | İki canonical external working-object türünü açıklayan chooser, child workbench deep-linkleri ve “bu yüzey ne yapmaz” sınırı Page 03 §1 ile uyumlu. Prototipte ayrı screenshot yok; V18 hover submenu korunurken standalone yardım yüzeyi bilinçli eklenmiş. | **SIGNED-DEVIATION (D-1)** — ek route/help yüzeyi; domain davranışı uyumlu. |
+| 07 Pre-Check | Güncel ekran request listesi ve boş durumda Create Package yönlendirmesi gösteriyor. Page 07 §3, V18'de Pre-Check'in bağımsız route olmadığını ve Create Package içindeki trigger/status/modal akışı olduğunu açıkça söyler; uygulama bu gömülü akışı korurken ayrıca history/deep-link routeu sunuyor. | **SIGNED-DEVIATION (D-1)** — ek route; canonical gate Create Package içinde korunur. |
+| 09 Embedded System Packages | Prototip genel Package Library bölümlerini gösterirken Production ekranı Page 09'un istediği trusted resolver registry, trust/scope filtreleri, resolve probe ve lifecycle yüzeyini gösteriyor. Satırlardaki canonical key anlamlıydı; her satırda tekrarlanan ham `pkgrev_…` kimliği A-06 sırasında F-7 olarak bulunup collapsed row'da insan-okur “active revision pinned / no active revision” etiketine çevrildi. Exact pin expanded technical detail içinde korunur. | Yapısal fark **SIGNED-DEVIATION (D-1)**; **F-7 FIXED** (GitHub #515, bu acceptance PR'ı). |
+| 10 Rationale Families | Family listesi + package assignment iki yüzeyde de aynı. Uygulama kartları tek kolonda daha ayrıntılı revision/created metadata ile gösteriyor ve fixture paketi `E2E Golden SMA` insan-okur adıyla sunuluyor. | **SIGNED-DEVIATION (D-1)** — yoğunluk/metadata superset'i; işlevsel sapma yok. |
+| 12 Research Data | Beş adımlı workflow strip, status legend, registry ve Add Research Dataset aksiyonu prototiple hizalı. Temiz canonical seed research dataset üretmediği için uygulama gerçek empty-state, prototip örnek satırlar gösteriyor; bu veri-state farkıdır. | **PASS** — bilgi mimarisi uyumlu; fixture farkı sapma sayılmaz. |
+| 17 Arrange Metrics | Seçilebilir dokuz metrik, future-version metrikleri ve apply/lock davranışı hizalı. Uygulama ayrıca resolved profile, registry version ve metrik açıklamalarını gösteriyor. | **SIGNED-DEVIATION (D-1)** — server-truth/açıklama superset'i. |
+| 18 Analysis Lab | Alpha Agent şeridi, Lab Context, conversation, work queue, task history ve hypothesis board aynı iskelette. Temiz seed task/hypothesis üretmediğinden uygulama gerçek empty-state, prototip örnek içerik gösteriyor. | **PASS** — layout/akış uyumlu; fixture farkı sapma sayılmaz. |
+| 19 Panel Management | Registered users, role assignment ve role-scope matrisi hizalı. Uygulama system actors ile operator recovery/data-queue bölümlerini de gösteriyor. | **SIGNED-DEVIATION (D-1)** — operasyonel superset. |
+| 19 Panel Logs | Prototip basit “All User Backtest Logs” sonuç tablosu gösteriyor. Production ekranı Page 19 canonical sözleşmesine uygun immutable event log + raw audit stream, filtre, actor/resource kapsamı, detail ve sayfalama gösteriyor. | **SIGNED-DEVIATION (D-1)** — görsel olarak büyük, fakat canonical Production V1'e bilinçli geçiş. |
+| 21 User Manual | İki kolonlu document/search + continuous guide düzeni hizalı. Uygulama Admin document controls ve baseline revision metadata ekliyor; guide metni daha kısa fakat ana ürün akışlarını kapsıyor. | **SIGNED-DEVIATION (D-1)** — yönetim/meta superset'i. |
+| 22 Future Dev | Page 22'deki Capability Registry, placeholder lifecycle ve non-operational boundary doğrudan uygulanmış; gerçek/fake progress veya command üretilmiyor. Prototip screenshot setinde karşılık yok. | **PASS** — canonical spesifikasyonla uyumlu. |
+
+### A-06 sonucu
+
+- **Derin karşılaştırma tamamlandı.** Önceki “hızlı geçiş / sonra incelenecek” sınırı
+  kaldırıldı.
+- D-1'in imzaladığı bilinçli Production V1 sapmaları yukarıda tek tek
+  `SIGNED-DEVIATION` olarak görünür hâle getirildi; bunlar prototiple piksel eşitliği
+  iddiası değildir.
+- Yeni bulunan tek düzeltme **F-7**, aynı acceptance slice'ında uygulandı; exact revision
+  pin API/domain ve expanded technical detail içinde korunurken collapsed row insan-okur
+  etikete geçirildi.
 
 ---
 
@@ -146,6 +162,7 @@ madde-madde derin karşılaştırması R2-14 son kabul geçişine bırakılmış
 | F-4 | Portfolio "+ Add item" adayları ham `mbi_…` ULID (13.2) | Item display-adı projeksiyonunu kullan (frontend-only). |
 | F-5 | Results History kapalı satırında headline metrik yok (16.2) | Satır özet metrikleri — server projeksiyonda veri mevcut. |
 | F-6 | TS/TL formlarının dikey yoğunluğu prototipin kompakt grid'inden uzak (4.1, 5.1) | Ürün kararı: grid sıkılaştırma slice'ı ya da PO-APPROVE. |
+| F-7 | Embedded resolver registry satırlarında ham `pkgrev_…` kimliği (A-06 / Page 09) | **FIXED** — collapsed row insan-okur etiket; exact pin expanded technical detail'da. GitHub #515. |
 
 Kalan tüm maddeler PO-APPROVE kategorisinde ve R2-14'te product-owner'a yazılı
 onay için sunulacaktır. Bu doküman R2-13 kapsamında hiçbir maddeyi kapatmaz.
@@ -158,3 +175,5 @@ onay için sunulacaktır. Bu doküman R2-13 kapsamında hiçbir maddeyi kapatmaz
 - Durum doğrulaması: loading = gerçek spinner UI (API stall), error = "Backend
   unavailable" banner'ı + kart-içi hata, permission-denied = server-truth
   `TRASH_ACCESS_FORBIDDEN` render'ı (ekran kanıtları baseline ağacında).
+- A-06 yeniden üretim ve derin kıyas tarihi: **2026-07-30**. Kanıt yolu:
+  `frontend/e2e/screenshots/baseline/{outsource-signal,pre-check,embedded-packages,rationale-families,research-data,arrange-metrics,analysis-lab,panel-management,panel-logs,user-manual,future-dev}/normal--1440.png`.

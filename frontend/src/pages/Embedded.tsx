@@ -214,11 +214,7 @@ function RegistryRowView({
           <StatusBadge tone={trustTone(row.trust_state)} label={row.trust_state} />
           <span>{row.visibility_scope ?? "—"}</span>
           <span>{row.runtime_adapter}</span>
-          {row.trusted_active_revision_id ? (
-            <code>{row.trusted_active_revision_id}</code>
-          ) : (
-            <span>—</span>
-          )}
+          <span>{row.trusted_active_revision_id ? "active revision pinned" : "no active revision"}</span>
         </div>
         {/* aria-label keeps the accessible name "Detail"; the glyph mirrors the mockup arrow. */}
         <button

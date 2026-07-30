@@ -4,8 +4,8 @@ Kapsam: `chore/a11y-ci-baseline`. Bu belge **iki** işi yapar:
 
 1. axe-core katmanının CI'daki geçme/kalma sınırını **kural muafiyetinden düğüm-sayısı
    tavanına** (ratchet) çevirir ve mevcut sapmaları dondurur.
-2. **A11Y-01** (kontrast) sapmasını yeniden ölçülmüş rakamlarla **adjudicate eder** ve
-   product-owner'a **tek bir açık karar** (D-10) bırakır.
+2. **A11Y-01** (kontrast) sapmasını yeniden ölçülmüş rakamlarla **adjudicate eder**; D-10
+   product-owner kararı 2026-07-30'da imzalanmıştır (§4).
 
 Kapatmadığı eksenleri Complete YAPMAZ — §6.
 
@@ -186,7 +186,7 @@ değişiklik kendi görsel kanıtını hak eder. Takip slice'ı olarak açık b�
 
 ---
 
-## 4. Product-owner kararı — D-10 (AÇIK)
+## 4. Product-owner kararı — D-10 ✅ İMZALI
 
 D-7 (22-Tem) hâlâ geçerli; bu **onu değiştirme talebi değil**, (b) uygulandıktan sonra
 geriye kalanın ne olacağı sorusudur.
@@ -204,16 +204,17 @@ kalıcı olarak ne sayılacak?
 CLAUDE.md'de **zorunlu görsel referans** olarak pinli; bu, bir a11y slice'ının tek taraflı
 alabileceği bir karar değil. (iii) "kısmen uyumlu" gibi savunulması en zor sonucu üretir.
 
-**Karar YAZILANA KADAR** baseline (i)'nin sayılarını taşır — bu bir karar değil,
-mevcut durumun donmuş hâlidir.
-
 ```
 Karar #  : D-10
 Konu     : A11Y-01 kalıntı accent-mavi seti (45 düğüm) — kalıcı statü
 Seçenekler: (i) imzalı kalıcı sapma [öneri] / (ii) tam AA tema revizyonu / (iii) hedefli
-Onaylayan:  ____________________
-Tarih    :  ____________________
-Karar    :  ____________________
+Onaylayan: alimirbagirzade (product owner)
+Tarih    : 2026-07-30
+Karar    : (i) İmzalı kalıcı sapma
+Kayıt    : 45 accent-mavi düğüm mevcut a11y baseline'ında dondurulur. V18 imza mavisi
+           korunur. Bu karar WCAG 2.2 AA 1.4.3 uyumluluğu iddiası DEĞİLDİR; ürün bu
+           ölçüt için uyumlu olarak pazarlanamaz. Yeni veya artan ihlaller CI ratchet'ini
+           kırmaya devam eder.
 ```
 
 ---
@@ -252,10 +253,9 @@ Karar    :  ____________________
 
 ## 6. Dürüst sınırlar — bu slice'ın KAPATMADIĞI eksenler
 
-- **A11Y-01 kapanmadı.** Ratchet onu ölçülebilir ve dondurulmuş hâle getirdi; WCAG 2.2 AA
-  1.4.3 bugün **karşılanmıyor** (~~70~~ **45 düğüm** — A11Y-03/04 sonrası, PR #493).
-  D-10 imzalanana kadar açıktır. **Kalan 45'in tamamı Sınıf A'dır**, yani "eksik uygulama"
-  değil imzalı tema kararı; bu yüzden A11Y-01'i kapatmanın tek yolu artık D-10'dur.
+- **A11Y-01 ürün kararı ekseninde kapandı; teknik sapma sürüyor.** D-10, kalan **45
+  düğümü** imzalı kalıcı tema sapması olarak kabul etti. Ratchet sınırı dondurur; WCAG 2.2
+  AA 1.4.3 bugün hâlâ **karşılanmıyor** ve ürün bu ölçüt için uyumlu olarak tanımlanamaz.
 - **Ekran okuyucu (NVDA/VoiceOver) denetimi YAPILMADI.** `~/.claude/rules/accessibility.md`
   en az iki ekran okuyucu ister. Bu slice yalnız **checklist** üretti; checklist denetim
   değildir ve otomatikleştirilemez — bkz. ayrı belge. A-08 AÇIK kalır.

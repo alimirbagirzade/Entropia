@@ -25,7 +25,7 @@ görevi tamamlayabiliyor mu?** Bunun otomatik karşılığı yok, çünkü:
 
 | Rol | Sorumluluk | Not |
 |---|---|---|
-| **Denetimi yapan** | Ekran okuyucuyu düzenli kullanan bir denetçi (tercihen görme engelli kullanıcı ya da sertifikalı a11y denetçisi) | **ATANMADI.** Product-owner ataması gerekir. |
+| **Denetimi yapan** | Ekran okuyucuyu düzenli kullanan bir denetçi (tercihen görme engelli kullanıcı ya da sertifikalı a11y denetçisi) | **ATANMADI.** Atama ve kanıt takibi: GitHub #514. |
 | **Ortam** | Seeded Compose stack (E2E ile aynı fixture: `SEED_E2E_GOLDEN=1 SEED_ESP_TA=1 SEED_RATIONALE=1`), Admin oturumu | Aynı fixture, aksi halde boş sayfalar denetimi eksik gösterir |
 | **Bulguların kaydı** | Her bulgu → `v18_visual_deviations.md` biçiminde FIX / PO-APPROVE statüsü | Bu belgeye değil |
 

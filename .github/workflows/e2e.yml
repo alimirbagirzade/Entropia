@@ -106,6 +106,25 @@ jobs:
           E2E_ADMIN_EMAIL: e2e_admin@e2e.entropia.test
         run: npm test
 
+      # Bootstrap note: this step is intentionally `--update-snapshots` only
+      # until the first Ubuntu baseline artifact is committed. The same PR
+      # replaces it with the blocking `npm run visual` command after downloading
+      # that artifact; main never receives an update-on-CI visual gate.
+      - name: Bootstrap Ubuntu visual-regression baselines
+        working-directory: frontend/e2e
+        env:
+          E2E_BASE_URL: http://localhost:8080
+          E2E_ADMIN_EMAIL: e2e_admin@e2e.entropia.test
+        run: npm run screenshots:update
+
+      - name: Upload Ubuntu visual-regression baselines
+        uses: actions/upload-artifact@v7
+        with:
+          name: visual-regression-linux-baselines
+          path: frontend/e2e/specs/11-visual-regression.spec.ts-snapshots/*-linux.png
+          retention-days: 14
+          if-no-files-found: error
+
       - name: Dump Compose logs on failure
         if: failure()
         run: docker compose logs --tail 500

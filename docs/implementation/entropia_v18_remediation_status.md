@@ -18,15 +18,21 @@ A requirement is **Complete** only with working end-to-end behavior + passing ac
 >
 > - **Screen-reader audit (NVDA/VoiceOver) — NOT DONE.** `~/.claude/rules/accessibility.md` asks
 >   for two readers; neither was run. The axe-core layer is automated scanning, not a substitute.
-> - **Deep page-by-page visual comparison — 10 pages open** (03, 07, 09, 10, 12, 17, 18, 19, 21,
->   22): first-observation only, no item-by-item mockup diff (`v18_visual_deviations.md`; A-06 in
->   the `v18_final_acceptance.md` §4 sign-off note).
-> - **A11Y-01 contrast — OPEN as a recorded deviation.** D-7b (PO 22-Jul, PR #368) landed the
+> - **Deep page-by-page visual comparison — COMPLETE (A-06, 2026-07-30).** Docs 03, 07, 09,
+>   10, 12, 17, 18, 19, 21 and 22 were re-captured against a clean seeded stack and compared
+>   item by item with the prototype or, where no prototype image exists, the canonical page
+>   specification. Evidence and adjudication: `v18_visual_deviations.md` §A-06. One new
+>   presentation finding **F-7** (Embedded registry raw `pkgrev_…` labels) aynı acceptance
+>   slice'ında düzeltildi (GitHub #515); audit açık değildir.
+> - **A11Y-01 contrast — SIGNED permanent deviation (D-10, 2026-07-30).** D-7b
+>   (PO 22-Jul, PR #368) landed the
 >   *partial* fix (`--text-faint #888888 → #6e6e6e` ≈4.6:1, OK badge `#00842f → #006b26` —
 >   `frontend/src/styles/global.css:11-13,107-109`). The remaining
 >   `color-contrast` nodes are accent-blue (`--accent #00a9e8`) — a deliberately accepted **theme**
->   deviation, still allow-listed in `frontend/e2e/specs/13-a11y-scan.spec.ts:38`
->   (`ACCEPTED_SERIOUS_RULES`). WCAG 2.2 AA contrast is therefore **not** met today.
+>   deviation, frozen by the node-count ratchet in `frontend/e2e/a11y-baseline.json`.
+>   Product-owner chose D-10 option (i): the remaining 45 accent-blue nodes are accepted
+>   as a permanent theme deviation. WCAG 2.2 AA contrast is therefore **not** met today
+>   and the product cannot claim conformance with criterion 1.4.3.
 >   *(The "228 serious nodes" figure recorded at R2-14 predates D-7b and is historical.)*
 > - **A11Y-02 `link-in-text-block` — CLOSED**, not deviation-open: D-8 (PO 22-Jul, PR #368)
 >   underlines in-paragraph links (`global.css:40-41`) and the rule was **removed** from the

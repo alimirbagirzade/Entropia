@@ -32,6 +32,7 @@ from entropia.infrastructure.postgres.models import (
     EntityRegistry,
     OutboxEvent,
     Principal,
+    RationaleFamilyRoot,
     StrategyRevision,
     StrategyRoot,
     WorkObjectRoot,
@@ -39,6 +40,7 @@ from entropia.infrastructure.postgres.models import (
 from entropia.infrastructure.postgres.repositories import strategy as strat_repo
 from entropia.shared.errors import (
     AccessDeniedError,
+    RationaleFamilyNotActive,
     SizingMethodNotExclusiveError,
     StrategyDraftConflictError,
     TriggerSourceConditionRequiredError,
@@ -52,6 +54,7 @@ USER2 = Actor(principal_id="user_2", principal_type=PrincipalType.HUMAN, role=Ro
 
 _HASH = "a" * 64
 _PKG_HASH = "f" * 64
+_FAMILY_ID = "ratfam_int"
 
 
 def _valid_payload(display_name: str = "Integration Strategy") -> dict[str, Any]:
@@ -155,14 +158,41 @@ async def _seed_principals(session) -> None:
     await session.flush()
 
 
+async def _seed_rationale_family(session) -> str:
+    """Make the literal ``ratfam_int`` a REAL family (I-08).
+
+    ``strategy_root.rationale_family_id`` is a FK now, so the id these tests pass
+    has to exist. It stays a fixed literal rather than a generated one so it still
+    matches the ``rationale_family_id`` inside ``_valid_payload`` — the payload
+    snapshot and the column are meant to agree.
+    """
+    await _seed_principals(session)
+    if await session.get(RationaleFamilyRoot, _FAMILY_ID) is None:
+        session.add(
+            EntityRegistry(
+                entity_id=_FAMILY_ID,
+                entity_type="rationale_family",
+                owner_principal_id="user_1",
+                created_by_principal_id="user_1",
+                deletion_state=DeletionState.ACTIVE,
+                row_version=1,
+            )
+        )
+        await session.flush()
+        session.add(RationaleFamilyRoot(entity_id=_FAMILY_ID, display_color="#00a9e8"))
+        await session.flush()
+    return _FAMILY_ID
+
+
 async def _new_draft(
     session, actor: Actor = USER1, *, payload: dict[str, Any] | None = None
 ) -> dict:
+    await _seed_rationale_family(session)
     result = await strat_cmd.create_strategy_draft(
         session,
         actor,
         display_name="Integration Strategy",
-        rationale_family_id="ratfam_int",
+        rationale_family_id=_FAMILY_ID,
         initial_payload=payload if payload is not None else _valid_payload(),
     )
     await session.flush()
@@ -192,6 +222,18 @@ async def test_create_draft_persists_root_and_draft_without_revision(session) ->
     assert detail is not None and str(detail.lifecycle_state) == "draft"
     assert detail.current_revision_id is None  # AT-01: no revision until first Save
     assert work_object is not None and str(work_object.object_kind) == "strategy"
+
+
+async def test_create_draft_rejects_unknown_rationale_family_before_fk(session) -> None:
+    await _seed_principals(session)
+
+    with pytest.raises(RationaleFamilyNotActive):
+        await strat_cmd.create_strategy_draft(
+            session,
+            USER1,
+            display_name="Unknown family",
+            rationale_family_id="ratfam_missing",
+        )
 
 
 # --------------------------------------------------------------------------- #

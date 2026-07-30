@@ -120,6 +120,18 @@ async def create_strategy_draft(
     payload = initial_payload if initial_payload is not None else {}
 
     async def _op() -> dict[str, Any]:
+        # I-08: the create path used to accept ANY family id and persist it
+        # unchecked, so a typo'd or already-deleted family produced a strategy
+        # pointing at nothing — the exact dangling reference the new
+        # ``strategy_root_rationale_family_id_fkey`` now blocks. Validating here
+        # keeps the FK as the backstop rather than the first line of defence, so
+        # the caller still gets the classified RATIONALE_FAMILY_NOT_ACTIVE
+        # envelope instead of a raw IntegrityError 500. Same rule as the
+        # NULL->set transition in ``set_strategy_rationale_family``.
+        if rationale_family_id is not None:
+            family_root = await rationale_repo.get_family_root(session, rationale_family_id)
+            if family_root is None or family_root.deletion_state != DeletionState.ACTIVE:
+                raise RationaleFamilyNotActive()
         _root, strategy_root, _work_object, draft = await strat_repo.create_strategy(
             session,
             owner_principal_id=actor.principal_id or "",

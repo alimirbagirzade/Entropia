@@ -38,6 +38,7 @@ from entropia.infrastructure.postgres.models import (
     AuditEvent,
     EntityRegistry,
     IdempotencyKey,
+    Principal,
     TrashEntry,
 )
 
@@ -81,6 +82,11 @@ async def _soft_delete_audits(session) -> int:
 
 
 async def _seed_root(session) -> EntityRegistry:
+    # I-08: ``entity_registry.owner_principal_id`` is a FK now, so the acting
+    # principal has to be a real row before it can own anything.
+    if await session.get(Principal, USER.principal_id) is None:
+        session.add(Principal(principal_id=USER.principal_id, principal_type=PrincipalType.HUMAN))
+        await session.flush()
     root = await create_entity(session, USER, entity_type="demo_entity", payload={"v": 1})
     await session.commit()
     return root

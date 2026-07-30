@@ -23,6 +23,7 @@ from entropia.application.queries.trash import get_restore_preflight, get_trash_
 from entropia.domain.identity import Actor
 from entropia.domain.lifecycle.enums import PrincipalType, Role
 from entropia.domain.trash.redaction import REDACTED, TRUNCATED_KEY
+from entropia.infrastructure.postgres.models import Principal
 from entropia.infrastructure.postgres.repositories import trash as trash_repo
 
 pytestmark = pytest.mark.integration
@@ -34,6 +35,9 @@ USER = Actor(principal_id="user_1", principal_type=PrincipalType.HUMAN, role=Rol
 async def _entry_with_snapshot(session, snapshot: dict):
     """Soft-delete a root, then write ``snapshot`` onto its entry — simulating a
     writer that stores a field nobody vetted."""
+    if await session.get(Principal, USER.principal_id) is None:
+        session.add(Principal(principal_id=USER.principal_id, principal_type=PrincipalType.HUMAN))
+        await session.flush()
     root = await create_entity(session, USER, entity_type="demo_entity", payload={"v": 1})
     await session.commit()
     await soft_delete_entity(session, USER, entity_id=root.entity_id, reason="cleanup")

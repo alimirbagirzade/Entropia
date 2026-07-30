@@ -1,9 +1,11 @@
 # DATA_MODEL — Postgres tabloları
 
 Modeller: `backend/src/entropia/infrastructure/postgres/models/*.py` (30 dosya, **102 tablo**).
-Alembic: `backend/alembic/versions/` — **head = `0042_package_import_source_name`** (42 migration, tek head; `0041_filtered_event_artifact` (I-02) üzerine F-07 §4.4'te eklendi).
+Alembic: `backend/alembic/versions/` — **head = `0043_i08_registry_strategy_fks`**
+(43 migration, tek head; `0042_package_import_source_name` üzerine I-08 slice 1'de
+eklendi — **yeni tablo yok, yalnız 3 FK constraint**).
 
-> **`0041` YENİ TABLO GETİRMEDİ** (102 sayısı değişmedi). F-07 §4.4: `package_import_job` tablosuna
+> **`0042` YENİ TABLO GETİRMEDİ** (102 sayısı değişmedi). F-07 §4.4: `package_import_job` tablosuna
 > nullable `source_package_name VARCHAR(255)` ekler — Library Import raporunun ham `import_job_id`
 > yerine gösterdiği ad. `submit_package_import` bunu **submit anında** gönderilen export
 > manifest'inin `name` alanından yakalar; `blocked`/`failed` biten bir import hiç paket üretmediği
@@ -27,13 +29,35 @@ Alembic: `backend/alembic/versions/` — **head = `0042_package_import_source_na
 
 > **DÜZELTME (2026-07-29, ampirik).** Bu bölüm önceden "tüm repoda yalnızca **8** açık
 > `ForeignKey(...)` bildirimi var" diyordu — ve hemen altında 9 satır listeliyordu, yani kendi
-> içinde de tutarsızdı. Gerçek: **135 `ForeignKey(...)` kolon bildirimi, 25 model dosyasında**
-> (2026-07-28'de 134'tü; bu dalgada `backtest.py` 9 → 10'a çıktı — `backtest_run_event.run_id`
-> CASCADE FK'si + O-06 `cancel_requested_by_principal_id`).
+> içinde de tutarsızdı. Gerçek: **140 `ForeignKey(...)` kolon bildirimi, 25 model dosyasında**
+> (I-08 slice 1 öncesi 137; bu dalga +3 getirdi — `strategy.py` 9 → **11**, `registry.py` 1 → **2**).
 > Doğrula: `grep -rh "ForeignKey(" backend/src/entropia/infrastructure/postgres/models/ | wc -l`
-> Yoğunluk: `manual.py` 11 · `research_data.py` 11 · `agent_lab.py` 11 · `create_package.py` 10 ·
-> `market_data.py` 10 · **`backtest.py` 10** · `strategy.py` 9 · `capability.py` 9 ·
+> Yoğunluk: **`strategy.py` 11** · `manual.py` 11 · `research_data.py` 11 · `agent_lab.py` 11 ·
+> `create_package.py` 10 · `market_data.py` 10 · `backtest.py` 10 · `capability.py` 9 ·
 > `mainboard.py` 8 · `esp.py` 5 · `allocation.py` 5.
+
+### I-08 — cross-reference FK dalgası (slice 1 landed)
+
+`0043_i08_registry_strategy_fks` üç "mantıksal bağ"ı DB'ye devretti:
+`entity_registry.owner_principal_id` → `principals`, `strategy_root.current_revision_id` →
+`strategy_revision`, `strategy_root.rationale_family_id` → `rationale_family_root`.
+**ON DELETE = NO ACTION** (bilerek): `jobs/purge.py` V1'de hard-DELETE yapmaz (state-only,
+revision'lar RETAINED), yani bir constraint'in karşılaşacağı gerçek olay bir **bug**'dır ve
+bloklamak dürüst cevaptır; `SET NULL` canlı head pointer'ı sessizce silerdi. RESTRICT değil
+NO ACTION, çünkü `strategy_root.entity_id` + `strategy_revision.entity_id` ikisi de
+`entity_registry`'den CASCADE alır — registry seviyesindeki bir cascade tek statement'ta
+ikisini de siler ve yalnız NO ACTION kontrolü statement sonuna erteleyebilir.
+
+**FK ALAMAYAN iki kolon — polimorfik, ihmal değil (kalıcı muafiyet):**
+
+| Kolon | Neden imkânsız |
+|---|---|
+| `entity_registry.current_revision_id` | Her domain kendi revision tablosuna yazar: `repositories/entities.py` → `entity_revisions`, `packages.py` → `package_revision`, `rationale.py` → `rationale_family_revision`, `market_data.py` → `market_dataset_revision`, `research_data.py` → `research_dataset_revision`. Ortak revision supertable'ı YOK → herhangi birine FK diğer tüm entity tiplerini reddederdi. |
+| `package_rationale_assignment.target_revision_id` | `AssignmentTargetKind` iki hedef bildirir (`package_revision`, `working_item_revision`, doc 10 §9.1) → iki ayrı revision tablosu. (Buna karşılık **`target_root_id` FK ALIR**: her iki kind'ın kökü de `entity_registry`'ye asılı.) |
+
+Ayrıca `tombstones.entity_id`, `trash_entries.entity_id` (silme SONRASI kasıtlı gevşek) ve
+`audit_events.*` (audit kaydı hedefinden bağımsız yaşamalı) **kapsam dışıdır** — bunlara FK
+eklemek, kaydın anlattığı nesne yok olduğunda kaydın kendisini imkânsız kılardı.
 
 Kimlik/registry omurgasındaki **çekirdek** FK'ler (bu tablo tam liste DEĞİLDİR — yukarıdaki
 grep otoritedir):
@@ -75,8 +99,8 @@ CLAUDE.md'deki **"her yeni `create_*` için L1 FK insert-order proof"** kuralın
 
 | Tablo | Amacı | Ana bağlar | soft-del | OCC |
 |---|---|---|---|---|
-| `entity_registry` | Evrensel kimlik + yaşam döngüsü + head pointer | `owner_principal_id`, `current_revision_id` | `deletion_state`, `deleted_at` | ✔ `row_version` |
-| `entity_revisions` | Değişmez revision zinciri (tek gerçek DB FK'si) | **FK** `entity_id`, `parent_revision_id` | — | — |
+| `entity_registry` | Evrensel kimlik + yaşam döngüsü + head pointer | **FK** `owner_principal_id` (I-08) · `current_revision_id` (polimorfik, FK YOK) | `deletion_state`, `deleted_at` | ✔ `row_version` |
+| `entity_revisions` | Değişmez revision zinciri | **FK** `entity_id`, `parent_revision_id` | — | — |
 | `app_metadata` | Uygulama meta anahtar/değer | — | — | — |
 
 ## Identity & Auth
@@ -114,7 +138,7 @@ CLAUDE.md'deki **"her yeni `create_*` için L1 FK insert-order proof"** kuralın
 
 | Tablo | Amacı | Ana bağlar | soft-del | OCC |
 |---|---|---|---|---|
-| `strategy_root` | Strateji kimliği + yayınlanmış head | `current_revision_id`, `rationale_family_id` | — | ✔ `current_row_version` |
+| `strategy_root` | Strateji kimliği + yayınlanmış head | **FK** `current_revision_id`, `rationale_family_id` (ikisi de I-08) | — | ✔ `current_row_version` |
 | `strategy_revision` | Değişmez strateji config revizyonu | `entity_id`, `parent_revision_id` | — | — |
 | `strategy_revision_references` | Revizyonun pinlediği dış paket referansları | `strategy_revision_id`, `referenced_root_id`, `referenced_revision_id` | — | — |
 | `strategy_editor_draft` | Mutable editör durumu | `strategy_root_id`, `last_saved_revision_id` | — | ✔ |

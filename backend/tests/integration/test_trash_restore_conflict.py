@@ -30,7 +30,7 @@ from entropia.domain.identity import Actor
 from entropia.domain.lifecycle.enums import DeletionState, PrincipalType, Role
 from entropia.domain.trash.page import TrashEntryStatus, original_location_for
 from entropia.domain.trash.restore import RestoreResolution
-from entropia.infrastructure.postgres.models import AuditEvent, TrashEntry
+from entropia.infrastructure.postgres.models import AuditEvent, Principal, TrashEntry
 from entropia.infrastructure.postgres.repositories import trash as trash_repo
 from entropia.shared.errors import (
     RestoreConflictError,
@@ -53,6 +53,9 @@ async def _soft_deleted_entry(session) -> tuple[str, str]:
     expired by the next commit/rollback, and touching it afterwards triggers lazy
     IO outside the async greenlet context.
     """
+    if await session.get(Principal, USER.principal_id) is None:
+        session.add(Principal(principal_id=USER.principal_id, principal_type=PrincipalType.HUMAN))
+        await session.flush()
     root = await create_entity(session, USER, entity_type="demo_entity", payload={"v": 1})
     await session.commit()
     entity_id = root.entity_id

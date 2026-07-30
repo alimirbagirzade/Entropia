@@ -172,7 +172,7 @@ Before stopping a working session, produce **ALL** of the following:
   V18-R2 dalgası + **auth remediation dalgası COMPLETE** (güvenlik denetimi #346–#364).
   Tüm route yüzeyleri frontend'e bağlı; TIER 2 sayfa haritası 24/24.
 
- 
+
 
 - **Testler:** son yeşil referans CI (O-serisi PR'ları). Lokal tam suite tek koşuda
   tamamlanabiliyor — O-27'de **2538 passed / 0 failed / 43dk39sn**, worktree'ye özel izole DB ile

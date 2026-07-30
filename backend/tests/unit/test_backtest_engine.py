@@ -31,7 +31,12 @@ from entropia.domain.backtest.execution.portfolio import (
     combine_item_runs,
 )
 from entropia.domain.backtest.execution.sizing import _clamp_to_limits, _position_size
-from entropia.domain.backtest.indicators import BUILTIN_ENTRY_MODEL
+from entropia.domain.backtest.indicators import (
+    BUILTIN_ENTRY_MODEL,
+    IndicatorPlan,
+    IndicatorSpec,
+    SignalRule,
+)
 from entropia.domain.backtest.manifest import ENGINE_VERSION, build_run_manifest
 from entropia.domain.backtest.metrics import DEFAULT_METRICS, derive_metric_values
 from entropia.domain.strategy.config import PositionSizeLimits, StrategyConfig
@@ -127,6 +132,7 @@ def _config(
     min_size: str | None = None,
     max_size: str | None = None,
     stop_exit_conflict: str | None = None,
+    same_candle_entry_exit: str | None = None,
     entry_timing: str = "current_candle_close",
     exit_timing: str = "current_candle_close",
 ) -> StrategyConfig:
@@ -209,9 +215,18 @@ def _config(
             "protection_stop_logic": protection,
             "position_sizing": sizing,
             "restrictions_filters": {"rule": "any", "filters": []},
-            "conflict_position_handling": (
-                {"stop_exit_conflict": stop_exit_conflict} if stop_exit_conflict is not None else {}
-            ),
+            "conflict_position_handling": {
+                **(
+                    {"stop_exit_conflict": stop_exit_conflict}
+                    if stop_exit_conflict is not None
+                    else {}
+                ),
+                **(
+                    {"same_candle_entry_exit": same_candle_entry_exit}
+                    if same_candle_entry_exit is not None
+                    else {}
+                ),
+            },
         }
     )
 
@@ -237,12 +252,37 @@ def _batched(bars: list[dict[str, Any]], size: int) -> Iterator[list[dict[str, A
         yield bars[start : start + size]
 
 
-def _run(config: StrategyConfig, bars: list[dict[str, Any]], *, batch: int = 8) -> EngineOutput:
+def _run(
+    config: StrategyConfig,
+    bars: list[dict[str, Any]],
+    *,
+    batch: int = 8,
+    indicator_plan: IndicatorPlan | None = None,
+) -> EngineOutput:
     return run_engine(
         strategy_config=config,
         bar_batches=_batched(bars, batch),
         execution_key="exec_key_test",
-        indicator_plan=sma_entry_plan(),
+        indicator_plan=indicator_plan or sma_entry_plan(),
+    )
+
+
+def _same_candle_entry_exit_plan() -> IndicatorPlan:
+    """One close-confirmed SMA cross drives BOTH entry and exit on the same bar."""
+    spec = IndicatorSpec(
+        block_id="blk_1",
+        canonical_key="ta.sma",
+        length=20,
+        direction="long_and_short",
+        requirement="required",
+        validity="current_candle_only",
+    )
+    rule = SignalRule(rule="required_indicator_blocks_only")
+    return IndicatorPlan(
+        entry_rule=rule,
+        entry_specs=(spec,),
+        exit_rule=rule,
+        exit_specs=(spec,),
     )
 
 
@@ -670,6 +710,35 @@ def test_stop_exit_first_trigger_wins_resolves_to_the_intrabar_stop() -> None:
     assert collision[0].detail["executed"] == "stop_loss"
     assert collision[0].detail["also_triggered"] == "exit_signal"
     assert collision[0].detail["policy"] == "first_trigger_wins"
+
+
+def test_same_candle_entry_exit_default_suppresses_ambiguous_flat_entry() -> None:
+    # §5.9 default: entry + exit are both close-confirmed, so the engine cannot invent
+    # an intrabar order. No flat-position trade is opened; the collision remains visible.
+    out = _run(
+        _config(with_stop=False),
+        _long_breakout_then_stop()[:-1],
+        indicator_plan=_same_candle_entry_exit_plan(),
+    )
+    assert out.summary["total_trades"] == 0
+    collisions = [e for e in out.signal_events if e.event_type == "entry_exit_collision"]
+    assert len(collisions) == 1
+    assert collisions[0].detail["policy"] == "use_intrabar_data_if_available"
+    assert collisions[0].detail["resolution"] == "ambiguous_entry_suppressed"
+    assert collisions[0].detail["intrabar_order_available"] is False
+
+
+def test_same_candle_entry_exit_exit_first_admits_entry_after_flat_exit_noop() -> None:
+    # Explicit Exit First handles the flat-position exit as a no-op and then admits the
+    # entry. The next bar trips the normal 1% stop, proving a real position was opened.
+    out = _run(
+        _config(same_candle_entry_exit="exit_first"),
+        _long_breakout_then_stop(),
+        indicator_plan=_same_candle_entry_exit_plan(),
+    )
+    assert out.summary["total_trades"] == 1
+    collision = next(e for e in out.signal_events if e.event_type == "entry_exit_collision")
+    assert collision.detail["resolution"] == "flat_exit_noop_then_entry"
 
 
 def test_summary_carries_the_caller_resolved_timeframe() -> None:

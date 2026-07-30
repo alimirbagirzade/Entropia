@@ -1036,3 +1036,21 @@ class ConflictPositionHandling(BaseModel):
         default="stop_has_priority",
         description="Stop vs exit-signal same-bar collision resolution (§5.9)",
     )
+
+    # §5.9 "Same Candle Entry / Exit". Entry and exit indicator decisions are
+    # close-confirmed in the V1 bar replay, so ``use_intrabar_data_if_available`` cannot
+    # invent an ordering from OHLCV (or from prints that predate the close-confirmed
+    # signals). It therefore resolves conservatively to no new flat-position entry.
+    # ``exit_first`` is the explicit opt-in that processes the flat-position exit as a
+    # no-op and then admits the entry. The remaining policies suppress the ambiguous
+    # entry and are distinguished in the decision trace.
+    same_candle_entry_exit: Literal[
+        "use_intrabar_data_if_available",
+        "exit_first",
+        "stop_first",
+        "ignore_trade",
+        "conservative_rule",
+    ] = Field(
+        default="use_intrabar_data_if_available",
+        description="Flat-position same-candle entry + exit collision resolution (§5.9)",
+    )

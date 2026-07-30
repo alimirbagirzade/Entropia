@@ -115,7 +115,7 @@ from entropia.shared.manifest import manifest_hash
 # labels stay outside execution_content so renames do not fork reproducibility, but the
 # artifact shape changed; this namespace shift prevents stale label-less Results from
 # being idempotently reused.
-ENGINE_VERSION = "backtest-engine-v18-scaling-tf-sequence-per-item-labels"
+ENGINE_VERSION = "backtest-engine-v18-same-candle-entry-exit"
 METRIC_SET_VERSION = "metric-set-v1"
 OUTPUT_ARTIFACT_PROFILE = "standard-v1"
 

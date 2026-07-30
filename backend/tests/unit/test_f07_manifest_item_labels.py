@@ -130,8 +130,6 @@ def test_the_artifact_change_shifted_the_execution_key_namespace() -> None:
     ``test_labels_do_not_change_the_execution_key`` above: that one holds the version
     fixed and varies the label VALUE.
     """
-    assert ENGINE_VERSION.endswith("-per-item-labels")
-
     item_manifest = _item_manifest(labelled=True)
 
     def _with(version: str) -> str:

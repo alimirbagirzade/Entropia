@@ -85,6 +85,12 @@ async def _count(session, model) -> int:
     return int((await session.execute(select(func.count()).select_from(model))).scalar_one())
 
 
+async def _seed_user_principal(session) -> None:
+    if await session.get(Principal, USER.principal_id) is None:
+        session.add(Principal(principal_id=USER.principal_id, principal_type=PrincipalType.HUMAN))
+        await session.flush()
+
+
 async def _mint_reauth_proof(session, *, purpose: str = "trash_purge") -> str:
     """F-21: the ADMIN test actor is a plain ``Actor`` dataclass, not a real
     signed-up account — ``reauth_proofs.user_id`` FKs to ``human_users``, so
@@ -125,6 +131,7 @@ async def _mint_reauth_proof(session, *, purpose: str = "trash_purge") -> str:
 
 
 async def _delete_one(session, *, entity_type: str = "demo_entity") -> str:
+    await _seed_user_principal(session)
     root = await create_entity(session, USER, entity_type=entity_type, payload={"v": 1})
     await session.commit()
     await soft_delete_entity(session, USER, entity_id=root.entity_id, reason="cleanup")
@@ -232,6 +239,7 @@ async def test_list_search_pushdown(session) -> None:
 
 
 async def test_keyset_pagination_stable_on_deleted_at_ties(session) -> None:
+    await _seed_user_principal(session)
     ids = []
     for _ in range(5):
         root = await create_entity(session, USER, entity_type="demo_entity", payload={"v": 1})
@@ -274,6 +282,7 @@ async def test_detail_returns_redacted_snapshot_and_current_state(session) -> No
 
 
 async def test_restore_keeps_identity_marks_entry_and_audits(session) -> None:
+    await _seed_user_principal(session)
     root = await create_entity(session, USER, entity_type="demo_entity", payload={"v": 1})
     await session.commit()
     head = root.current_revision_id

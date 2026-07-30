@@ -33,7 +33,14 @@ async def _count(session, model) -> int:
     return int((await session.execute(select(func.count()).select_from(model))).scalar_one())
 
 
+async def _seed_user_principal(session) -> None:
+    if await session.get(Principal, USER.principal_id) is None:
+        session.add(Principal(principal_id=USER.principal_id, principal_type=PrincipalType.HUMAN))
+        await session.flush()
+
+
 async def test_create_inserts_revision_and_audit_and_outbox(session) -> None:
+    await _seed_user_principal(session)
     before_audit = await _count(session, AuditEvent)
     before_outbox = await _count(session, OutboxEvent)
 
@@ -48,6 +55,7 @@ async def test_create_inserts_revision_and_audit_and_outbox(session) -> None:
 
 
 async def test_save_advances_head_and_concurrency_guard(session) -> None:
+    await _seed_user_principal(session)
     root = await create_entity(session, USER, entity_type="demo_entity", payload={"v": 1})
     await session.commit()
     first_head = root.current_revision_id
@@ -67,6 +75,7 @@ async def test_save_advances_head_and_concurrency_guard(session) -> None:
 
 
 async def test_soft_delete_then_restore_reuses_identity(session) -> None:
+    await _seed_user_principal(session)
     root = await create_entity(session, USER, entity_type="demo_entity", payload={"v": 1})
     await session.commit()
     entity_id = root.entity_id

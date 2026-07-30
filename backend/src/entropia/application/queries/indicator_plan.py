@@ -33,6 +33,7 @@ back to its labelled breakout proxy.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
@@ -59,6 +60,8 @@ from entropia.domain.strategy.config import (
     ReferenceLeg,
     StrategyConfig,
 )
+from entropia.domain.strategy.pins import SCALING_ROLE, pinned_package_revision_ids
+from entropia.infrastructure.postgres.models import PackageRevision
 from entropia.infrastructure.postgres.repositories import market_data as md_repo
 from entropia.infrastructure.postgres.repositories import packages as pkg_repo
 
@@ -85,15 +88,24 @@ _REFERENCE_KEYS = ("reference", "compare_to", "other")
 # or the engine-version default (a reproducibility constant).
 _REFERENCE_LENGTH_KEYS = ("reference_length", "compare_length", "reference_len")
 
+# O-24b: the pinned package revisions are read ONCE, in a single ``IN (...)`` query, and
+# every block / condition / reference / leg then resolves out of this map. The prefetch
+# set comes from ``domain.strategy.pins`` — the SAME traversal the Run Manifest builder
+# walks — so a reference site can never be dereferenced without having been prefetched.
+# A revision with no row is simply absent from the map, so ``.get(id) is None`` keeps
+# every fail-closed reason string byte-identical to the per-id ``session.get`` miss.
+PackageRevisions = Mapping[str, PackageRevision]
+
 
 async def resolve_indicator_plan(
     session: AsyncSession, strategy_config: StrategyConfig
 ) -> IndicatorPlan:
     """Build the deterministic indicator plan for a pinned strategy config."""
     base_seconds = await _resolve_base_seconds(session, strategy_config)
+    revisions = await pkg_repo.get_revisions(session, pinned_package_revision_ids(strategy_config))
     entry_logic = strategy_config.position_entry_logic
-    entry_specs, entry_unresolved = await _resolve_blocks(
-        session, entry_logic.indicator_blocks, "entry", base_seconds
+    entry_specs, entry_unresolved = _resolve_blocks(
+        revisions, entry_logic.indicator_blocks, "entry", base_seconds
     )
     entry_rule = SignalRule(
         rule=str(entry_logic.signal_block.rule),
@@ -105,8 +117,8 @@ async def resolve_indicator_plan(
     exit_rule: SignalRule | None = None
     exit_unresolved: list[str] = []
     if exit_logic.indicator_blocks:
-        exit_specs, exit_unresolved = await _resolve_blocks(
-            session, exit_logic.indicator_blocks, "exit", base_seconds
+        exit_specs, exit_unresolved = _resolve_blocks(
+            revisions, exit_logic.indicator_blocks, "exit", base_seconds
         )
         if exit_logic.signal_block is not None:
             exit_rule = SignalRule(
@@ -122,8 +134,8 @@ async def resolve_indicator_plan(
     stop_unresolved: list[str] = []
     protection = strategy_config.protection_stop_logic
     if protection is not None and protection.logic_blocks:
-        stop_specs, stop_unresolved = await _resolve_blocks(
-            session, protection.logic_blocks, "stop", base_seconds
+        stop_specs, stop_unresolved = _resolve_blocks(
+            revisions, protection.logic_blocks, "stop", base_seconds
         )
 
     # S5c: resolve Logic-Based SCALING Blocks with the SAME block resolver as entry/exit/stop.
@@ -145,8 +157,8 @@ async def resolve_indicator_plan(
         and scaling.logic_scaling is not None
         and scaling.logic_scaling.indicator_blocks
     ):
-        scale_specs, scale_unresolved = await _resolve_blocks(
-            session, scaling.logic_scaling.indicator_blocks, "scale", base_seconds
+        scale_specs, scale_unresolved = _resolve_blocks(
+            revisions, scaling.logic_scaling.indicator_blocks, SCALING_ROLE, base_seconds
         )
         scale_rule = SignalRule(rule="required_indicator_blocks_only", min_supporting_count=None)
 
@@ -163,8 +175,8 @@ async def resolve_indicator_plan(
     )
 
 
-async def _resolve_blocks(
-    session: AsyncSession,
+def _resolve_blocks(
+    revisions: PackageRevisions,
     blocks: list[IndicatorBlock] | None,
     side: str,
     base_seconds: int | None,
@@ -174,7 +186,7 @@ async def _resolve_blocks(
     for block in blocks or []:
         if block.enabled is False:
             continue
-        spec, reason = await _resolve_block(session, block, base_seconds)
+        spec, reason = _resolve_block(revisions, block, base_seconds)
         if spec is not None:
             specs.append(spec)
         elif reason is not None:
@@ -182,8 +194,8 @@ async def _resolve_blocks(
     return tuple(specs), unresolved
 
 
-async def _resolve_block(
-    session: AsyncSession, block: IndicatorBlock, base_seconds: int | None
+def _resolve_block(
+    revisions: PackageRevisions, block: IndicatorBlock, base_seconds: int | None
 ) -> tuple[IndicatorSpec | None, str | None]:
     trigger = str(block.trigger_source)
     if trigger not in _ACCEPTED_TRIGGERS:
@@ -192,7 +204,7 @@ async def _resolve_block(
     if tf_reason is not None:
         return None, tf_reason
 
-    revision = await pkg_repo.get_revision(session, block.package_ref.package_revision_id)
+    revision = revisions.get(block.package_ref.package_revision_id)
     if revision is None:
         return None, "package_revision_unresolved"
     key = _primary_directional_key(revision.dependency_snapshot)
@@ -208,7 +220,7 @@ async def _resolve_block(
         # higher timeframe, else the base bars — the floor a per-condition reference
         # timeframe (post-V1 (i)) must be strictly coarser than.
         block_effective_seconds = resample_seconds if resample_seconds is not None else base_seconds
-        conditions, reason = await _resolve_conditions(session, block, block_effective_seconds)
+        conditions, reason = _resolve_conditions(revisions, block, block_effective_seconds)
         if reason is not None:
             return None, reason
         condition_rule = str(block.condition_block_rule) if block.condition_block_rule else None
@@ -278,8 +290,8 @@ def _resolve_timeframe(timeframe: str, base_seconds: int | None) -> tuple[int | 
     return target, None
 
 
-async def _resolve_conditions(
-    session: AsyncSession, block: IndicatorBlock, block_effective_seconds: int | None
+def _resolve_conditions(
+    revisions: PackageRevisions, block: IndicatorBlock, block_effective_seconds: int | None
 ) -> tuple[tuple[ConditionSpec, ...], str | None]:
     """Dereference a block's nested condition packages into computable threshold specs.
 
@@ -296,7 +308,7 @@ async def _resolve_conditions(
         return (), "condition_blocks_missing"
     specs: list[ConditionSpec] = []
     for cond in enabled:
-        spec, reason = await _resolve_condition(session, cond, block_effective_seconds)
+        spec, reason = _resolve_condition(revisions, cond, block_effective_seconds)
         if spec is None:
             return (), reason or "condition_unresolved"
         specs.append(spec)
@@ -321,10 +333,10 @@ def _condition_only_direction_reason(conditions: tuple[ConditionSpec, ...]) -> s
     return "condition_only_conflicting_direction"
 
 
-async def _resolve_condition(
-    session: AsyncSession, cond: ConditionBlock, block_effective_seconds: int | None
+def _resolve_condition(
+    revisions: PackageRevisions, cond: ConditionBlock, block_effective_seconds: int | None
 ) -> tuple[ConditionSpec | None, str | None]:
-    revision = await pkg_repo.get_revision(session, cond.package_ref.package_revision_id)
+    revision = revisions.get(cond.package_ref.package_revision_id)
     if revision is None:
         return None, f"condition_package_unresolved:{cond.condition_block_id}"
     key = _primary_condition_key(revision.dependency_snapshot)
@@ -337,8 +349,8 @@ async def _resolve_condition(
     # indicator package (two-package indicator-vs-indicator) plus any N-ary extra legs
     # (post-V1 (ii)), each optionally on a coarser per-condition timeframe (post-V1 (i)).
     # Fail-closed if pinned but not a computable series.
-    ref_key, ref_length, ref_resample, ref_extras, ref_reason = await _resolve_reference_package(
-        session, cond, block_effective_seconds
+    ref_key, ref_length, ref_resample, ref_extras, ref_reason = _resolve_reference_package(
+        revisions, cond, block_effective_seconds
     )
     if ref_reason is not None:
         return None, ref_reason
@@ -409,8 +421,8 @@ async def _resolve_condition(
     )
 
 
-async def _resolve_reference_package(
-    session: AsyncSession, cond: ConditionBlock, block_effective_seconds: int | None
+def _resolve_reference_package(
+    revisions: PackageRevisions, cond: ConditionBlock, block_effective_seconds: int | None
 ) -> tuple[str | None, int | None, int | None, tuple[ReferenceSeriesSpec, ...], str | None]:
     """Dereference the pinned reference chain into ``(key, length, resample, extras)``.
 
@@ -438,7 +450,7 @@ async def _resolve_reference_package(
             reason = f"condition_reference_timeframe_without_package:{cond.condition_block_id}"
             return None, None, None, (), reason
         return None, None, None, (), None
-    revision = await pkg_repo.get_revision(session, ref.package_revision_id)
+    revision = revisions.get(ref.package_revision_id)
     if revision is None:
         reason = f"condition_reference_package_unresolved:{cond.condition_block_id}"
         return None, None, None, (), reason
@@ -452,16 +464,16 @@ async def _resolve_reference_package(
         return None, None, None, (), tf_reason
     overrides = cond.parameter_overrides or {}
     length = _int_override(overrides, _REFERENCE_LENGTH_KEYS) or default_length(key)
-    extras, extra_reason = await _resolve_additional_references(
-        session, additional, block_effective_seconds, cond.condition_block_id
+    extras, extra_reason = _resolve_additional_references(
+        revisions, additional, block_effective_seconds, cond.condition_block_id
     )
     if extra_reason is not None:
         return None, None, None, (), extra_reason
     return key, length, resample, extras, None
 
 
-async def _resolve_additional_references(
-    session: AsyncSession,
+def _resolve_additional_references(
+    revisions: PackageRevisions,
     legs: list[ReferenceLeg],
     block_effective_seconds: int | None,
     condition_block_id: str,
@@ -475,7 +487,7 @@ async def _resolve_additional_references(
     reason (``:<index>`` disambiguates which leg)."""
     specs: list[ReferenceSeriesSpec] = []
     for index, leg in enumerate(legs):
-        revision = await pkg_repo.get_revision(session, leg.package_ref.package_revision_id)
+        revision = revisions.get(leg.package_ref.package_revision_id)
         if revision is None:
             return (), f"condition_additional_reference_unresolved:{condition_block_id}:{index}"
         key = _primary_directional_key(revision.dependency_snapshot)

@@ -44,7 +44,9 @@ from entropia.domain.identity import Actor
 from entropia.domain.lifecycle.enums import DeletionState, PrincipalType, Role
 from entropia.infrastructure.postgres.models import (
     AuditEvent,
+    EntityRegistry,
     Principal,
+    RationaleFamilyRoot,
     StrategyRevision,
     WorkObjectRevision,
 )
@@ -63,6 +65,7 @@ pytestmark = pytest.mark.integration
 _HUMAN_PID = "user_1"
 _AGENT_PID = "agent_alpha"
 _ADMIN_PID = "user_admin"
+_FAMILY_ID = "ratfam_int"
 
 HUMAN = Actor(principal_id=_HUMAN_PID, principal_type=PrincipalType.HUMAN, role=Role.USER)
 ADMIN = Actor(principal_id=_ADMIN_PID, principal_type=PrincipalType.HUMAN, role=Role.ADMIN)
@@ -113,6 +116,24 @@ async def _seed_principals(session) -> None:
     await session.flush()
 
 
+async def _seed_rationale_family(session) -> None:
+    await _seed_principals(session)
+    if await session.get(RationaleFamilyRoot, _FAMILY_ID) is None:
+        session.add(
+            EntityRegistry(
+                entity_id=_FAMILY_ID,
+                entity_type="rationale_family",
+                owner_principal_id=_HUMAN_PID,
+                created_by_principal_id=_HUMAN_PID,
+                deletion_state=DeletionState.ACTIVE,
+                row_version=1,
+            )
+        )
+        await session.flush()
+        session.add(RationaleFamilyRoot(entity_id=_FAMILY_ID, display_color="#00a9e8"))
+        await session.flush()
+
+
 async def _count(session, model) -> int:
     return int((await session.execute(select(func.count()).select_from(model))).scalar_one())
 
@@ -120,11 +141,12 @@ async def _count(session, model) -> int:
 async def _draft_and_save(
     session, actor: Actor, *, idempotency_key: str | None = None
 ) -> dict[str, Any]:
+    await _seed_rationale_family(session)
     draft = await strat_cmd.create_strategy_draft(
         session,
         actor,
         display_name="Parity Strategy",
-        rationale_family_id="ratfam_int",
+        rationale_family_id=_FAMILY_ID,
         initial_payload=_valid_payload("Parity Strategy"),
     )
     await session.commit()
@@ -223,7 +245,7 @@ async def test_agent_saves_a_strategy_revision_with_human_parity(session) -> Non
 async def test_agent_strategy_save_honours_idempotency_and_ownership(session) -> None:
     """AT-21's other two clauses: the SAME Idempotency-Key contract, and the SAME
     ownership policy — an Agent may not save into a human's draft."""
-    await _seed_principals(session)
+    await _seed_rationale_family(session)
 
     first = await _draft_and_save(session, AGENT, idempotency_key="agent-save-1")
     replay = await strat_cmd.save_strategy_revision(
@@ -241,7 +263,7 @@ async def test_agent_strategy_save_honours_idempotency_and_ownership(session) ->
         session,
         HUMAN,
         display_name="Human only",
-        rationale_family_id="ratfam_int",
+        rationale_family_id=_FAMILY_ID,
         initial_payload=_valid_payload("Human only"),
     )
     await session.commit()

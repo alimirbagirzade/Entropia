@@ -52,9 +52,10 @@ prototype-fidelity disposition (regression stability is a *separate* claim — a
 (03 Add Outsource Signal, 07 Pre-Check, 22 Future Dev) = 23 production baseline route dirs.
 No document is silently omitted, double-counted, or represented by the wrong host screen.
 
-**Approval column (PO fills):** every OPEN row above is closed only by a signed D-1…D-9
-decision in `v18_final_acceptance.md §4` linked to the exact screenshot pair, behavior, date,
-approver, and scope. Until then the parent requirement stays **not complete** (audit A-05).
+**Approval record:** D-1…D-9 were signed on 2026-07-22 in
+`v18_final_acceptance.md §4`. Rows that still say `OPEN` above are preserved historical
+audit findings, not unsigned decisions; their current engineering status is the cited R3
+slice/PR and the A-06 disposition in `v18_visual_deviations.md`.
 
 ---
 

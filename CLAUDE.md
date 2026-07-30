@@ -201,13 +201,13 @@ Before stopping a working session, produce **ALL** of the following:
   landed: #368–#373, #375–#379):**
   1. **Round-3 backlog:** S5b'nin son gerçek kalıntısı Same Candle Entry / Exit
      (`codex/s5b-conflict-matrix-residuals`, PR #513); S5c #498 ve S5d/F-08 #259 landed.
-  2. **Release kabul eksenleri:** A-06 derin görsel kıyas ve F-7 Embedded revision
-     display-label düzeltmesi 2026-07-30'da tamamlandı. Kalanlar: A-08 NVDA/VoiceOver
-     insan denetimi + visual katmanını CI'a taşıma.
+  2. **Release kabul eksenleri:** A-06 derin görsel kıyas, F-7 Embedded revision
+     display-label düzeltmesi ve bloklayıcı Ubuntu visual-regression CI kapısı
+     2026-07-30'da tamamlandı. Kalan: A-08 NVDA/VoiceOver insan denetimi.
 
 - **Açık iş (dürüst sınır):** ekran okuyucu (NVDA/VoiceOver) denetimi yapılmadı;
-  visual katmanı CI'da koşmuyor. A11Y axe-core ratchet'i çalışıyor ve kalan 45 düğüm
-  imza-mavisi **D-10 (2026-07-30) imzalı kalıcı sapmasıdır**.
+  takip GitHub #514'tedir. Visual regression ve axe-core ratchet'i CI'da bloklayıcı
+  çalışıyor. Kalan 45 düğüm imza-mavisi **D-10 (2026-07-30) imzalı kalıcı sapmasıdır**.
   WCAG 2.2 AA 1.4.3 karşılanmıyor; ürün bu ölçüt için uyumlu sayılamaz.
 
 - **KAPSAM DIŞI (bilerek):** retention auto-purge (doc 20 §16 — "Production V1'de kapalı"),

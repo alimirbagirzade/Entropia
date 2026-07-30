@@ -30,8 +30,8 @@
 // stacks must regenerate baselines once:
 //   npm run screenshots:update
 // Platform note: toHaveScreenshot snapshots are platform-suffixed
-// (…-darwin.png / …-linux.png); the committed set is captured on the
-// authoring platform, and a CI platform runs --update-snapshots on first use.
+// (…-darwin.png / …-linux.png). Both authoring and Ubuntu CI baselines are
+// committed; CI only asserts and never runs --update-snapshots.
 
 import { expect, test, type Page } from "@playwright/test";
 

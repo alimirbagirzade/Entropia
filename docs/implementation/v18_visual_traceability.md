@@ -7,11 +7,10 @@
 > reference **or** a documented "no independent prototype screen" rule with the correct
 > host-state reference.
 >
-> **Authored:** 2026-07-22 · **Against:** `origin/main` = `6e3fab9` (audit base commit).
-> **Nothing here is product-owner approved.** Every visual disposition that requires a PO
-> signature is marked `OPEN — PO DECISION REQUIRED` and routes to the D-1…D-9 record in
-> `docs/implementation/v18_final_acceptance.md §4`. Per the audit §2 rule 5, an unsigned
-> `PO-APPROVE` is **not** approval and its parent requirement is **not** complete.
+> **Authored:** 2026-07-22 · **A-06 refresh:** 2026-07-30.
+> D-1 and D-9 were signed by the product owner on 2026-07-22. The remaining 10-document
+> deep comparison was completed on 2026-07-30; its current item-by-item dispositions live
+> in `docs/implementation/v18_visual_deviations.md` §A-06.
 
 ---
 
@@ -31,23 +30,23 @@ prototype-fidelity disposition (regression stability is a *separate* claim — a
 | 04 | Trading Signal | `/trading-signal` **+ inline** | `trading-signal--1440.png` | `baseline/trading-signal` | OPEN — oversized workbench vs compact (M-06); PO D-6/F-6 |
 | 05 | Trade Log | `/trade-log` **+ inline** | `trade-log--1440.png` | `baseline/trade-log` | OPEN — same composition issue (M-07); PO D-6/F-6 |
 | 06 | Add / Create Package | `/packages/create` | `create-package--1440.png` | `baseline/create-package` | OPEN — labels/layout/persist (P-03/04/05); PO D-2/D-3 |
-| 07 | Pre-Check | Create Package overlay (deep `/packages/pre-check`) | **HOST-STATE** — Create Package status card + overlay | `baseline/pre-check` | OPEN — primary/secondary surface confusion (P-02) |
+| 07 | Pre-Check | Create Package overlay (deep `/packages/pre-check`) | **HOST-STATE** — Create Package status card + overlay | `baseline/pre-check` | A-06 complete — extra deep route is D-1 signed deviation; canonical Create Package gate preserved |
 | 08 | Package Library | `/packages/library` | `package-library--1440.png` | `baseline/package-library` | OPEN — Market/TF facets + IA (P-06/P-07) |
-| 09 | Embedded System Packages | `/packages/embedded` | `embedded-packages--1440.png` | `baseline/embedded-packages` | OPEN — scoped catalog presentation (P-08); deep-compare pending (A-06) |
-| 10 | Rationale Families | `/rationale-families` | `rationale-families--1440.png` | `baseline/rationale-families` | OPEN — deep-compare pending (A-06). P-16 raw-id claim is STALE: assignment rows name the package (`package_name ?? package_root_id`) and family (`current_family_name`) since `20ccacc` — verified `RationaleFamilies.tsx:637` |
+| 09 | Embedded System Packages | `/packages/embedded` | `embedded-packages--1440.png` | `baseline/embedded-packages` | A-06 complete — canonical resolver registry is D-1 signed; F-7 raw collapsed revision label fixed |
+| 10 | Rationale Families | `/rationale-families` | `rationale-families--1440.png` | `baseline/rationale-families` | A-06 complete — density/metadata superset is D-1 signed; package/family labels are human-readable |
 | 11 | Market Data | `/market-data` | `market-data--1440.png` | `baseline/market-data` | OPEN — registry digest columns (P-09) |
-| 12 | Research Data | `/research-data` | `research-data--1440.png` | `baseline/research-data` | OPEN — registry-first hierarchy (P-10); deep-compare pending (A-06) |
+| 12 | Research Data | `/research-data` | `research-data--1440.png` | `baseline/research-data` | A-06 PASS — workflow/registry hierarchy aligned; clean-seed empty state is a fixture difference |
 | 13 | Portfolio / Equity Allocation | `/portfolio` | `portfolio--1440.png` | `baseline/portfolio` | OPEN — **PO D-4 unsigned**. P-11 raw-`mbi_` claim is STALE: sleeve rows, the picker, the example line (PR #375) and — since the F-07 sweep — validation-issue rows all name the item, with the id kept as a secondary binding key |
 | 14 | Backtest Ready Check | Mainboard modal (deep `/backtest/ready-check`) | `ready-check--1440.png` | `baseline/ready-check` | OPEN — P0 surface = Mainboard modal, not standalone (M-10) |
 | 15 | RUN & Backtest Results | Mainboard RUN + `/backtest/run` | `run-results--1440.png` | `baseline/run-results` | OPEN — inline result surface + charts (M-11/P-13/F-06) |
 | 16 | Results History | `/backtest/history` | `results-history--1440.png` | `baseline/results-history` | OPEN — **PO D-5 unsigned**. P-12 collapsed metric digest landed (`3c6887c`): the row carries completed-at / timeframe / symbol beside the `result_id`, so the id is no longer the row's only discriminator |
-| 17 | Arrange Metrics | `/backtest/metrics` | `arrange-metrics--1440.png` | `baseline/arrange-metrics` | Preserve semantics; equivalent populated/locked compare pending (A-06) |
-| 18 | Analysis Lab | `/analysis-lab` | `analysis-lab--1440.png` | `baseline/analysis-lab` | OPEN — equivalent active-task compare pending (A-06) |
-| 19 | Panel Management | `/panel/management` | `panel-management--1440.png` | `baseline/panel-management` | OPEN — machine policy strings (P-15); deep-compare pending (A-06) |
-| 19 | Panel Logs | `/panel/logs` | `panel-logs--1440.png` | `baseline/panel-logs` | OPEN — backtest-log primary view (P-14); deep-compare pending (A-06) |
+| 17 | Arrange Metrics | `/backtest/metrics` | `arrange-metrics--1440.png` | `baseline/arrange-metrics` | A-06 complete — aligned selection semantics; resolved-profile metadata is D-1 signed superset |
+| 18 | Analysis Lab | `/analysis-lab` | `analysis-lab--1440.png` | `baseline/analysis-lab` | A-06 PASS — structural alignment; task/hypothesis content differs by fixture state |
+| 19 | Panel Management | `/panel/management` | `panel-management--1440.png` | `baseline/panel-management` | A-06 complete — operational/system-actor superset is D-1 signed |
+| 19 | Panel Logs | `/panel/logs` | `panel-logs--1440.png` | `baseline/panel-logs` | A-06 complete — canonical immutable audit stream replacing prototype summary is D-1 signed |
 | 20 | Trash | `/trash` | `trash--1440.png` | `baseline/trash` | Preserve lifecycle; exact row/filter compare + a11y pending |
-| 21 | User Manual | `/user-manual` | `user-manual--1440.png` | `baseline/user-manual` | OPEN — baseline completeness + anchors compare pending (A-06) |
-| 22 | Future Dev | `/future-dev` | **HOST-STATE** — placeholder / capability-gated (no active prototype screen) | `baseline/future-dev` | Placeholders NOT counted as feature completion (F-09) |
+| 21 | User Manual | `/user-manual` | `user-manual--1440.png` | `baseline/user-manual` | A-06 complete — two-column hierarchy aligned; document controls are D-1 signed superset |
+| 22 | Future Dev | `/future-dev` | **HOST-STATE** — placeholder / capability-gated (no active prototype screen) | `baseline/future-dev` | A-06 PASS — Page 22 capability-registry/placeholder boundary; not feature completion |
 
 **Inventory reconciliation (audit A-04):** 20 prototype refs + 3 HOST-STATE screens
 (03 Add Outsource Signal, 07 Pre-Check, 22 Future Dev) = 23 production baseline route dirs.
@@ -79,8 +78,8 @@ from what is **open engineering**. Verified against `6e3fab9` code + R2 truth do
 
 ### Bucket 2 — Already-documented honest boundaries (not new, tracked OPEN)
 
-A-06 (10-page deep compare: 03,07,09,10,12,17,18,19,21,22) · A-08 (NVDA/VoiceOver manual a11y) ·
-A11Y-02 `link-in-text-block` (D-8) · F-02 (NL package generation = Future-Dev) ·
+A-08 (NVDA/VoiceOver manual a11y, GitHub #514) ·
+F-02 (NL package generation = Future-Dev) ·
 F-03 (multi-item unified-clock portfolio) · P-13 / F-06 (ResultDetail charts + AI Review).
 
 ### Bucket 3 — Genuinely OPEN engineering (NOT PO-blocked) — R3 waves

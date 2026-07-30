@@ -149,9 +149,10 @@ Flake controls for `npm run visual` (documented per R2-13 acceptance):
 animations disabled + caret hidden via injected CSS, volatile regions masked
 (`time`, `[data-e2e-volatile]`), `maxDiffPixelRatio: 0.02`, fixed 1440×900
 viewport, fullPage. Baselines are platform-suffixed by Playwright
-(`-darwin`/`-linux`): the committed set is from the authoring platform; a new
-platform (e.g. Linux CI) generates its own set once with
-`npm run screenshots:update` and commits it.
+(`-darwin`/`-linux`). Both authoring-platform and Ubuntu CI baselines are
+committed. The E2E workflow runs `npm run visual` as a blocking PR/main gate.
+A new platform generates its own set once with `npm run screenshots:update`;
+CI never updates baselines automatically.
 
 Honest boundaries: `loading` freezes the genuine in-flight UI by stalling the
 API (deterministic, not a race); `empty` is a fresh user against the shared

@@ -32,9 +32,10 @@ A11Y — axe-core scan vs. the seeded stack (R2-14) :: success :: 09:23:51Z -> 0
 Yani **kullanıcının (a) maddesinin "CI'a bağla" yarısı zaten yapılmıştı.** Gerçek boşluk
 "koşmuyor" değil, **"koşuyor ama ölçmüyor"** idi (§2).
 
-**Visual/screenshot katmanı için önerme hâlâ DOĞRU:** `@visual` / `@screenshots` /
-`@prototype` etiketli specler `npm test`'ten dışlanmış ve hiçbir CI job'u onları
-çağırmıyor. Bu slice bunu değiştirmedi (§6).
+**2026-07-30 takip notu:** Bu slice yazıldığında visual/screenshot önermesi doğruydu.
+Final acceptance slice'ı sekiz Ubuntu baseline'ını commit edip `@visual` katmanını gerçek-session
+E2E job'ına bloklayıcı `npm run visual` adımıyla bağladı. `@screenshots` ve `@prototype`,
+kanıt üreticisi oldukları için hâlâ opt-in'dir.
 
 ### 1.2 "228 serious node" — bugün YANLIŞ, gerçek sayı **70**
 
@@ -259,10 +260,9 @@ Kayıt    : 45 accent-mavi düğüm mevcut a11y baseline'ında dondurulur. V18 i
 - **Ekran okuyucu (NVDA/VoiceOver) denetimi YAPILMADI.** `~/.claude/rules/accessibility.md`
   en az iki ekran okuyucu ister. Bu slice yalnız **checklist** üretti; checklist denetim
   değildir ve otomatikleştirilemez — bkz. ayrı belge. A-08 AÇIK kalır.
-- **10 sayfanın derin görsel kıyası YAPILMADI** (03, 07, 09, 10, 12, 17, 18, 19, 21, 22).
-  A-06 AÇIK kalır; `v18_visual_deviations.md` §"Kalan sayfalar" hâlâ yalnız ilk gözlem.
-- **Visual/screenshot katmanı hâlâ CI'da koşmuyor.** `@visual`/`@screenshots`/`@prototype`
-  specleri hiçbir job tarafından çağrılmıyor; a11y için düzelen şey visual için düzelmedi.
+- **A-06 ve visual-regression CI sonradan kapandı (2026-07-30).** 10-doc derin kıyas
+  `v18_visual_deviations.md` §A-06'da tamamlandı; `@visual` gerçek-session E2E job'ında
+  bloklayıcıdır. Exploratory `@screenshots` ve `@prototype` bilinçli olarak opt-in kalır.
 - **Lighthouse bağlanmadı.** Kullanıcı isteği "axe-core / Lighthouse" diyordu; axe-core
   zaten mevcut katmandı ve ratchet ona uygulandı. Lighthouse ayrı bir araç (performans +
   a11y skoru) ve ayrı bir CI bütçesi ister; **eklenmedi**, açık iştir.

@@ -741,6 +741,8 @@ def test_conflict_position_handling_defaults():
     assert config.same_direction_stacking == "allow_stacking"
     assert config.opposite_direction_hedge == "allow_hedge"
     assert config.exit_on_opposite_signal is True
+    assert config.stop_exit_conflict == "stop_has_priority"
+    assert config.same_candle_entry_exit == "use_intrabar_data_if_available"
 
 
 def test_conflict_position_hedge_prevents_opposite():

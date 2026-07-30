@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 
-import { DataExecutionCard, PositionSizingCard } from "@/components/StrategyConfigForm";
+import {
+  ConflictCard,
+  DataExecutionCard,
+  PositionSizingCard,
+} from "@/components/StrategyConfigForm";
 import {
   STRATEGY_INFO_PANELS,
   extractFlatSections,
@@ -22,6 +26,7 @@ describe("extractFlatSections", () => {
     expect(form.conflict.exit_on_opposite_signal).toBe(true);
     // §5.9 Stop+Exit collision defaults to the V18 "Stop Has Priority".
     expect(form.conflict.stop_exit_conflict).toBe("stop_has_priority");
+    expect(form.conflict.same_candle_entry_exit).toBe("use_intrabar_data_if_available");
     // Required-no-default enums stay blank — the server, not the form, decides.
     expect(form.data.entry_timing).toBe("");
     expect(form.data.exit_timing).toBe("");
@@ -85,6 +90,18 @@ describe("mergeFlatSections", () => {
     expect(form.conflict.stop_exit_conflict).toBe("exit_has_priority");
     const merged = mergeFlatSections(payload, form) as Record<string, Record<string, unknown>>;
     expect(merged.conflict_position_handling.stop_exit_conflict).toBe("exit_has_priority");
+  });
+
+  it("round-trips a non-default same-candle entry/exit policy", () => {
+    const payload = {
+      conflict_position_handling: { same_candle_entry_exit: "exit_first" },
+    };
+    const form = extractFlatSections(payload);
+    expect(form.conflict.same_candle_entry_exit).toBe("exit_first");
+    const merged = mergeFlatSections(payload, form);
+    expect(
+      (merged.conflict_position_handling as Record<string, unknown>).same_candle_entry_exit,
+    ).toBe("exit_first");
   });
 
   it("emits the limit subtree only for limit / stop-limit order types", () => {
@@ -361,5 +378,24 @@ describe("PositionSizingCard", () => {
     });
     expect(screen.getByLabelText(/Risk per trade/)).toBeTruthy();
     expect(screen.queryByLabelText(/Base position size/)).toBeNull();
+  });
+});
+
+describe("ConflictCard", () => {
+  it("renders and applies the Same Candle Entry / Exit policy", () => {
+    const onApply = vi.fn();
+    render(<ConflictCard payload={{}} pending={false} onApply={onApply} />);
+
+    const policy = screen.getByLabelText("Same Candle Entry / Exit") as HTMLSelectElement;
+    expect(policy.value).toBe("use_intrabar_data_if_available");
+    fireEvent.change(policy, { target: { value: "exit_first" } });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Apply Conflict / Position Handling changes" }),
+    );
+
+    const sent = onApply.mock.calls[0][0] as {
+      conflict_position_handling: Record<string, unknown>;
+    };
+    expect(sent.conflict_position_handling.same_candle_entry_exit).toBe("exit_first");
   });
 });

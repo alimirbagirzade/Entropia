@@ -20,11 +20,13 @@ import { stubApi } from "./helpers/apiStub";
 const XSS_SCRIPT = "<script>window.__pwned = 1;</script>";
 const XSS_IMG = '<img src=x onerror="window.__pwned = 2">';
 const LAYOUT_BREAKER = "</code></div></section><h1>hijacked</h1>";
+const REQUEST_LABEL = "Indicator Package · 2026-07-08 10:00:00 UTC";
 
 const REQUESTS_PAGE = {
   data: [
     {
       request_id: "req_1",
+      display_label: REQUEST_LABEL,
       package_type: "indicator",
       state: "precheck_blocked",
       source_kind: "code",
@@ -64,6 +66,7 @@ const SCAN = {
 
 const REQUEST_DETAIL = {
   request_id: "req_1",
+  display_label: REQUEST_LABEL,
   package_type: "indicator",
   creation_mode: "translate_existing_code",
   source_kind: "code",

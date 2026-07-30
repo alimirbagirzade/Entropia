@@ -85,6 +85,8 @@ const SHARES = {
       created_at: "2026-07-02T10:00:00+00:00",
     },
   ],
+  // O-24: the grant list is a bounded server page; this fixture is a whole page.
+  meta: { cursor: null, has_more: false },
 };
 
 const FAMILIES_PAGE = { data: [], meta: { cursor: null, has_more: false } };
@@ -150,6 +152,36 @@ describe("Package Library explicit sharing (GAP-17)", () => {
 
     expect(await screen.findByText("grantee@example.com")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Revoke" })).toBeInTheDocument();
+    // A whole page (has_more false) must NOT claim anything was withheld.
+    expect(screen.queryByText(/showing the first/i)).not.toBeInTheDocument();
+  });
+
+  // O-24: the grant list is a bounded server page. A truncated page must SAY it is
+  // truncated — rendering the first N silently would read as the full grantee set.
+  it("says so when the server withheld a tail of grantees (meta.has_more)", async () => {
+    stubApi({
+      ...routesFor(OWNER_PERMISSIONS),
+      "GET /library/pkg_own/shares": {
+        ...SHARES,
+        meta: { cursor: "shr_1", has_more: true },
+      },
+    });
+    renderPage();
+    await openDetail();
+
+    expect(await screen.findByText(/showing the first 1 grantees/i)).toBeInTheDocument();
+  });
+
+  // react-query can replay a cache entry written before `meta` shipped; the panel
+  // must render it, not crash on a missing field.
+  it("renders a payload with no meta at all", async () => {
+    const withoutMeta = { ...SHARES, meta: undefined };
+    stubApi({ ...routesFor(OWNER_PERMISSIONS), "GET /library/pkg_own/shares": withoutMeta });
+    renderPage();
+    await openDetail();
+
+    expect(await screen.findByText("grantee@example.com")).toBeInTheDocument();
+    expect(screen.queryByText(/showing the first/i)).not.toBeInTheDocument();
   });
 
   it("dispatches a share POST with the grantee email + If-Match rv-N + Idempotency-Key", async () => {

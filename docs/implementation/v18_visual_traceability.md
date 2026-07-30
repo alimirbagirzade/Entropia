@@ -181,6 +181,48 @@ the browser is precisely the "reconstruct names from IDs" the finding forbids, s
 F-07's stated correction — *add display DTOs at query boundaries* — as a backend change.
 
 
+| Site | Previous defect | Closure |
+|---|---|---|
+| `frontend/src/pages/PreCheck.tsx` | Request picker used a bare `request_id` | **CLOSED by I-16b.** The query boundary supplies the server-composed request label; the id remains secondary |
+| `frontend/src/pages/Library.tsx` | Import rows were identified only by `import_job_id` | **CLOSED here.** `source_package_name` is captured from the submitted manifest and rendered with the job id as the audit token |
+| `frontend/src/components/ResultDetail.tsx` | Per-item and leave-one-out rows used bare item ids | **CLOSED here.** `item_label` is pinned in the immutable run manifest, outside `execution_key`, and persisted into result diagnostics |
+| `frontend/src/pages/ReadyCheck.tsx` | Issue rows showed a bare `scope_id` | **CLOSED here.** `scope_label` comes from the snapshot pinned by the report, never from the live composition |
+
+`frontend/src/pages/ResultsHistory.tsx:170` is deliberately **not** listed as a violation: a
+backtest result has no user-assigned name, and since P-12 the row carries completed-at / timeframe
+/ symbol, so the id is not the sole discriminator. Its digest shape is PO-owned (D-5).
+
+**I-16a — attempted, then reverted (2026-07-29). Do not re-open without new server-side facts.**
+The row was briefly changed to render the history projection's `display_title` as its primary
+label with the id kept beneath (`ResultLabel`, mirroring Portfolio's `ItemLabel`). The premise was
+that the query boundary had been shipping F-07's own prescribed correction all along and the page
+simply wasn't consuming it. **The premise was wrong.** `display_title` is not a name — it is the id
+with a noun glued to its front:
+
+```python
+# application/queries/results_history.py::_row_dto  (and panel_backtest_log.py::_row)
+"display_title": f"Backtest Result {result.result_id}",
+```
+
+So the shipped row read `Backtest Result res_1` over `res_1` — the same opaque identifier printed
+**twice**, zero information gained, and F-07's actual defect ("recognizing an opaque identifier for
+a common task") untouched. Reverted in full; the id is back as a single `<code>` binding key, and
+`resultsHistory.test.tsx` now carries a regression guard asserting the id-derived title is *not*
+rendered.
+
+Why no better title can be composed at the query boundary today — the two candidates and why each
+fails:
+
+| Candidate title | Why it fails |
+|---|---|
+| `symbol · timeframe · completed-at` (the I-16b `request_display_label` pattern) | those three facts are **already the row's own adjacent columns** (`ResultsHistory.tsx:201-203`), so the label would restate them a third time |
+| the composition's display name | **nothing nameable is pinned.** The manifest carries only `composition_snapshot_id` (`domain/backtest/manifest.py:130`) — no name. Resolving the *live* composition is precisely the mislabeling hazard this same table rejects for `PerItemCard`: a result is immutable, and its composition may have been renamed or recomposed since the run |
+
+Re-opening therefore requires a **new pinned fact** — e.g. the manifest starting to carry the
+composition's name at write time — not another frontend pass. Until then the id-as-binding-key plus
+the P-12 column trio is the honest rendering. The DTO field itself is left in place (doc 16 §8.1
+`HistoryResultRowDTO` names it, and `PanelLogs.tsx:134` still renders it in a table that has no
+symbol/timeframe columns to discriminate with); only this page's consumption of it was reverted.
 
 ### 4.5 Verification
 

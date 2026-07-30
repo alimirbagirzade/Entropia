@@ -181,6 +181,25 @@ async def get_revision(session: AsyncSession, revision_id: str) -> PackageRevisi
     return await session.get(PackageRevision, revision_id)
 
 
+async def get_revisions(
+    session: AsyncSession, revision_ids: Sequence[str]
+) -> dict[str, PackageRevision]:
+    """Resolve many package revisions in ONE query, keyed by ``revision_id`` (O-24b).
+
+    The batch counterpart of :func:`get_revision` for a caller that dereferences a whole
+    pin SET at once (a strategy's indicator / condition / reference / leg packages),
+    mirroring ``identity.get_human_users``: an empty input short-circuits without a
+    round-trip, duplicate ids collapse, and an id with no row is simply ABSENT from the
+    map — so the caller's fail-closed branch stays byte-identical to the per-id
+    ``session.get`` miss (``.get(id) is None``). Never a per-leg N+1.
+    """
+    ids = list(dict.fromkeys(revision_ids))
+    if not ids:
+        return {}
+    stmt = select(PackageRevision).where(PackageRevision.revision_id.in_(ids))
+    return {row.revision_id: row for row in (await session.execute(stmt)).scalars().all()}
+
+
 async def list_packages(
     session: AsyncSession,
     *,

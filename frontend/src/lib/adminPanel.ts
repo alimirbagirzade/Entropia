@@ -359,7 +359,9 @@ export function useAuditEvents(cursor: string | null) {
 // Mutation — role assignment (PATCH /admin/users/{id}/role)
 // ---------------------------------------------------------------------------
 
-// OCC: expected_head_revision_id carries the registry row's `version` so a
+// OCC: expected_head_revision_id carries the `human_users.version` column — that
+// row is NOT in entity_registry, and its OCC token is named `version`, not
+// `row_version` (see DATA_MODEL.md §I-07). Sending it means a
 // stale tab gets the 409 envelope verbatim instead of silently clobbering a
 // concurrent change. The offered role list comes from the server role matrix
 // (assignable rows only) — never a hard-coded client list.

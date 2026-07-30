@@ -166,13 +166,28 @@ Before stopping a working session, produce **ALL** of the following:
 ## Current position (keep in sync at each closing)
 
 > Aşağıdaki değerler **2026-07-29** tarihinde repodan empirik doğrulandı
- 
+> (`origin/main` @ **`2cea1a6`** — `refactor(i12): delete eight callerless symbols, pin the
+> two kept on purpose (#495)`). Doğrula: `git fetch && git rev-parse --short origin/main` →
+> bu sha ile eşleşmeli; eşleşmiyorsa bu bölüm bayattır, önce `git log --oneline origin/main -6`
+> oku.
+>
+> **Not (bu satır neden var — İKİNCİ kez):** burası uzun süre yarıda kesik bir cümleydi
+> ("empirik doğrulandı (`origin/main` @" deyip sha'yı hiç yazmıyordu), 2026-07-29'da onarıldı,
+> ve **aynı gün #486 ile yeniden kesildi** — bu kez sha bloğunun tamamı silinip yerine tek bir
+> boşluk bırakıldı. Yani yukarıdaki doğrulama komutu iki kez karşılaştıracak değer bulamadı.
+> Kapanışta bu sha'yı **her zaman** tazele; silme.
 
 - **Durum:** V1 ROADMAP COMPLETE (Stages 0–8, docs 01–22) + post-V1 + video-alignment +
   V18-R2 dalgası + **auth remediation dalgası COMPLETE** (güvenlik denetimi #346–#364).
   Tüm route yüzeyleri frontend'e bağlı; TIER 2 sayfa haritası 24/24.
 
- 
+- **alembic head:** **`0041_filtered_event_artifact`** (41 revision dosyası, **tek head** —
+  2026-07-29'da `down_revision` grafiği taranarak doğrulandı). **`ENGINE_VERSION` =
+  `backtest-engine-v18-scaling-tf-sequence`** (S5c/#498'in ilan ettiği değer; sabitin
+  TANIMI o commit'te yanlışlıkla silinmişti ve bir onarım PR'ı geri getirdi)
+  (`backend/src/entropia/domain/backtest/manifest.py:113`). Her ikisinin tam geçmişi —
+  hangi slice neden bump etti — `docs/PROJECT_HISTORY.md`'de; **buraya listeyi geri taşıma.**
+
 - **Testler:** son yeşil referans CI (O-serisi PR'ları). Lokal tam suite tek koşuda
   tamamlanabiliyor — O-27'de **2538 passed / 0 failed / 43dk39sn**, worktree'ye özel izole DB ile
   (aşağıdaki ortam tuzağına uyulursa). Yine de **otorite CI'dır.**
@@ -198,7 +213,27 @@ Before stopping a working session, produce **ALL** of the following:
 - **Next (PO imzası BLOKAJ DEĞİL — imza 2026-07-22'de atıldı,
   `docs/implementation/v18_final_acceptance.md:155-169`; beklettiği FIX(R3) kalemlerinin hepsi
   landed: #368–#373, #375–#379):**
- 
+  1. **F-07 §4.4** — 4 yüzey backend display-DTO bekliyor (`v18_visual_traceability.md §4.4`);
+     F-07'nin SUNUM katmanı kapandı (#404), bütün olarak Complete DEĞİL.
+  2. **Round-3 backlog:** S5 (a/b/c/d) + S-L1…S-L6
+     (`docs/POST_V1_SPEC_GAP_BACKLOG_ROUND3.md` §DURUM TAZELEME — diğer 8 madde landed).
+  3. **A11Y D-10** — açık PO kararı; aşağıdaki "Açık iş" maddesine bak.
+  > Bu listenin **kapanan** iki maddesi bilerek çıkarıldı: R2 banner kapanışı #487 ile,
+  > O-03 kalıntısı O-03R (#488) ile landed. O-03 adjudication tablosunun 4 satırının
+  > sonradan canonical olması ayrı konu → `docs/PROJECT_HISTORY.md`.
+
+- **Açık iş (dürüst sınır):** ekran okuyucu (NVDA/VoiceOver) denetimi **yapılmadı** — checklist
+  var, denetim yok (`docs/implementation/a11y_screen_reader_audit_checklist.md`, A-08 AÇIK);
+  10 sayfanın derin görsel kıyası eksik (A-06 AÇIK); **visual katmanı** CI'da koşmuyor
+  (`@visual`/`@screenshots`/`@prototype` hiçbir job tarafından çağrılmıyor) — **a11y koşuyor**
+  (`e2e.yml` `a11y` job'u, düğüm-sayısı **ratchet**'i: `frontend/e2e/a11y-baseline.json`).
+  **A11Y-01 = 45 düğüm** (228 ve 70 bayat ölçümlerdir): A11Y-03/04 landed (#493) — D-7(b)'nin
+  kaçırdığı 25 gri/amber düğüm kapandı. Kalan 45'in **tamamı** imza-mavisi imzalı sapma
+  (33× `#ffffff on #00a9e8` + 12× tersi, hepsi 2.67:1); WCAG 2.2 AA 1.4.3 **karşılanmıyor**,
+  tek çıkış açık PO kararı **D-10** → `docs/implementation/a11y_ci_ratchet_and_adjudication.md`.
+  **Uyarı:** baseline dosyası merge sırasına göre hâlâ 70 okuyor olabilir — 45'e sıkılaştırma
+  **PR #497**'de; o merge olana kadar tavan gerçeğin üstünde gevşektir.
+
 - **KAPSAM DIŞI (bilerek):** retention auto-purge (doc 20 §16 — "Production V1'de kapalı"),
   LLM generation (Future-Dev), Graphic View renderer (doc 22 — V18 statik placeholder kalır).
 

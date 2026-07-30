@@ -51,6 +51,7 @@ from entropia.shared.errors import (
     RationaleFamilyNotActive,
     ValidationError,
 )
+from entropia.shared.pagination import PageParams
 
 pytestmark = pytest.mark.integration
 
@@ -334,6 +335,34 @@ async def test_non_owner_cannot_run_precheck(session) -> None:
 
     with pytest.raises(AccessDeniedError):
         await cp_cmd.run_precheck(session, OTHER, request_id=created["request_id"])
+
+
+async def test_precheck_projection_carries_a_display_label(session) -> None:
+    """F-07 §4.4: both request projections NAME the request, so the Pre-Check picker
+    never asks the reader to recognize a ULID. The id is still shipped alongside as
+    the secondary binding key."""
+    await _seed_principals(session)
+    family_id = await _seed_family(session)
+    await session.commit()
+
+    created = await _create_indicator_request(session, family_id=family_id, deps=[])
+    await session.commit()
+    request_id = created["request_id"]
+
+    detail = await cp_query.get_package_request(session, OWNER, request_id=request_id)
+    listing = await cp_query.list_package_requests(
+        session, OWNER, PageParams(cursor=None, limit=20)
+    )
+    row = next(item for item in listing["data"] if item["request_id"] == request_id)
+
+    # One server-owned text, identical on the picker row and the detail panel.
+    assert detail["display_label"] == row["display_label"]
+    # It names the kind + creation instant instead of echoing the opaque id...
+    assert detail["display_label"].startswith("Indicator Package · ")
+    assert request_id not in detail["display_label"]
+    # ...and the id remains available for support/audit on both surfaces.
+    assert detail["request_id"] == request_id
+    assert row["request_id"] == request_id
 
 
 async def test_scan_is_immutable_evidence(session) -> None:

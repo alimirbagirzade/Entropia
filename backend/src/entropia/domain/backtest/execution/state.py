@@ -71,6 +71,14 @@ class _Position:
     initial_size: Decimal = _ZERO
     layers_filled: int = 0
     scale_reference: Decimal = _ZERO
+    # S5c per-layer timeframe ladder (doc 02 §5.7 custom_sequence). The layer-timeframe
+    # candle index that was current when the CURRENT layer slot opened — set at entry for
+    # layer 1 and RE-ANCHORED (with the next layer's own timeframe) after each fill. A
+    # candidate is a decision point only once the bar's bucket differs from this anchor,
+    # i.e. a full layer-timeframe candle has closed since the last fill. ``None`` under
+    # same_strategy: the ladder is ungated and every base bar is a decision point, exactly
+    # as before S5c.
+    scale_layer_bucket: int | None = None
     # Portfolio-rules slice: the PEAK held notional over the position's life
     # (initial entry, then ratcheted at every stack/scale/remainder add) — the
     # conservative exposure figure a later item's portfolio cap replays against.
@@ -263,6 +271,17 @@ class _Ledger:
     # F-11: funding charges actually applied (a due record against a held position).
     funding_charges: int = 0
 
+    # ---- K-11b: the loop's terminal state, read only by the output assembly --------
+    # ``first_ts`` / ``last_bar`` are the ACTUAL first and last bars replayed after
+    # filtering — the summary reports these, never the requested backtest_range bounds,
+    # which is what proves the manifest range matches the data actually processed.
+    first_ts: str = ""
+    last_bar: _Bar | None = None
+    # Cumulative signed funding cost booked against equity (positive = net paid). It is
+    # already reflected in ``equity``; it is carried separately so the funding
+    # contribution stays auditable on its own.
+    funding_paid: Decimal = _ZERO
+
 
 @dataclass(frozen=True, slots=True)
 class AllocationExecution:
@@ -372,3 +391,61 @@ class _RunConfig:
     leverage_ok: bool
     strength_ok: bool
     capability_ok: bool
+
+    # ---- K-11b: the rest of the resolved run --------------------------------------
+    # K-10c stopped at what the SIZING helpers needed. The output assembly reads far
+    # more: every fail-closed gate (to name the L4 warning), every saved policy token
+    # and sub-config (to report provenance), and the resolved plan / funding / tick
+    # state. They are all resolved once in the prologue and never rebound, so they
+    # belong on the same frozen record rather than in a second parallel one.
+    initial_capital: Decimal = _ZERO
+    timeframe: str | None = None
+    item_count: int = 1
+    execution_key: str = ""
+    future_dev_selected: tuple[Any, ...] = ()
+    # The six remaining fail-closed gates (sizing / leverage / strength / capability
+    # are above). Any False means the run opened NO position.
+    timing_ok: bool = True
+    order_ok: bool = True
+    partial_close_ok: bool = True
+    scaling_ok: bool = True
+    restrictions_ok: bool = True
+    conflict_ok: bool = True
+    # Saved config sub-objects, reported verbatim in the diagnostics provenance block.
+    order_cfg: Any = None
+    exit_logic: Any = None
+    scaling_cfg: Any = None
+    restrictions_cfg: Any = None
+    conflict_cfg: Any = None
+    # Resolved policy tokens.
+    strength_mode: str = ""
+    partial_aftermath: str = ""
+    restriction_rule: str = ""
+    unmodelled_restriction_types: tuple[str, ...] = ()
+    overlap_policy: str = ""
+    stacking_policy: str = ""
+    hedge_policy: str = ""
+    stop_trigger_requirement: str = ""
+    stop_conflict_resolution: str = ""
+    stop_exit_conflict: str = ""
+    trailing_lock_in_active: bool = False
+    scaling_enabled: bool = False
+    scale_max_total: Decimal | None = None
+    # Portfolio-rules provenance (doc 13 §8.4). ``conflict_gate_on`` is the EXECUTED
+    # policy; ``conflict_downgraded_from_net`` records that NET was conservatively
+    # downgraded to block_opposite, which the L4 warning must keep visible.
+    rules_active: bool = False
+    conflict_gate_on: bool = False
+    portfolio_cap_amount: Decimal | None = None
+    conflict_downgraded_from_net: bool = False
+    conflict_policy_unknown: bool = False
+    # Indicator plan + compiled evaluators.
+    indicator_plan: Any = None
+    plan_active: bool = False
+    entry_evals: tuple[Any, ...] | list[Any] = ()
+    stop_evals: tuple[Any, ...] | list[Any] = ()
+    # Funding + tick-path provenance.
+    funding: Any = None
+    funding_records: tuple[Any, ...] = ()
+    tick_batches: Any = None
+    tick_alignment_unavailable: bool = False

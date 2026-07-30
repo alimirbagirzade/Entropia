@@ -293,6 +293,13 @@ class IndicatorPlan:
     # ``stop:``) and fails the RUN closed (Ready Check STRATEGY_LOGIC_STOP_UNRESOLVED).
     # Placed last to preserve positional construction of the pre-F-08 fields.
     stop_specs: tuple[IndicatorSpec, ...] = ()
+    # S5c: resolved Logic-Based SCALING blocks (each an IndicatorSpec whose signal in the
+    # OPEN POSITION'S OWN direction proposes an additional same-direction layer, doc 02
+    # §5.7). Empty when the strategy pins no logic-based scaling. Any block that failed to
+    # resolve is recorded in ``unresolved`` (prefix ``scale:``) and fails the RUN closed.
+    # Placed last to preserve positional construction of the pre-S5c fields.
+    scale_specs: tuple[IndicatorSpec, ...] = ()
+    scale_rule: SignalRule | None = None
 
     @property
     def has_entry(self) -> bool:
@@ -303,6 +310,11 @@ class IndicatorPlan:
     def has_stop(self) -> bool:
         """True when at least one Logic-Based Stop Block resolved to a computable spec."""
         return bool(self.stop_specs)
+
+    @property
+    def has_scale(self) -> bool:
+        """True when at least one Logic-Based Scaling Block resolved to a computable spec."""
+        return bool(self.scale_specs)
 
 
 # Validity window (in bars) a fired native trigger stays active. ``None`` means

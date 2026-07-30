@@ -90,6 +90,31 @@ export const BLOCK_TIMEFRAME_OPTIONS: SelectOption[] = [
   { value: "1D", label: "1D" },
 ];
 
+// ScalingLogic.timeframe_mode — the Scaling Timeframe Structure (doc 02 §5.7). The
+// engine executes same_strategy and custom_sequence; increasing_by_layer is future_dev
+// (no step increment is specified) and the capability matrix disables it in the form.
+export const SCALING_TIMEFRAME_MODE_OPTIONS: SelectOption[] = [
+  { value: "same_strategy", label: "Same as Strategy Timeframe" },
+  { value: "increasing_by_layer", label: "Increasing Timeframe by Layer" },
+  { value: "custom_sequence", label: "Custom Timeframe Sequence" },
+];
+
+// ScalingLogic.custom_timeframe_sequence entries — the CANONICAL timeframes only. Unlike
+// BLOCK_TIMEFRAME_OPTIONS this list carries no "same_as_base_tf" / "use_package_default_tf"
+// relative option: doc 02 §5.7 requires "a typed array of canonical timeframe enums, not
+// free string", and a relative entry has no fixed candle to close on.
+export const CANONICAL_TIMEFRAME_OPTIONS: SelectOption[] = [
+  { value: "1m", label: "1m" },
+  { value: "3m", label: "3m" },
+  { value: "5m", label: "5m" },
+  { value: "15m", label: "15m" },
+  { value: "30m", label: "30m" },
+  { value: "1h", label: "1h" },
+  { value: "2h", label: "2h" },
+  { value: "4h", label: "4h" },
+  { value: "1D", label: "1D" },
+];
+
 // IndicatorBlock.validity
 export const INDICATOR_VALIDITY_OPTIONS: SelectOption[] = [
   { value: "current_candle_only", label: "Current Candle Only" },
@@ -330,6 +355,14 @@ export const STRATEGY_GRAPH_PANELS: Record<string, InfoPanelContent> = {
     title: "1. Scaling Timeframe Structure",
     body: "Yalnızca Logic-Based Scaling kurallarının hangi timeframe’de değerlendirileceğini belirler. Price-Distance Based Scaling doğrudan fiyat mesafesiyle tetiklendiğinden bu timeframe dizisini kullanmaz.\n\nÖrnek: Ana strateji 15m iken layer 1 için 15m, layer 2 için 30m, layer 3 için 1h sinyali aramak, yeni kademe açıldıkça daha güçlü onay istemek anlamına gelir.",
   },
+  timeframeMode: {
+    title: "Timeframe Mode",
+    body: "• Same as Strategy Timeframe: Tüm Logic-Based layer sinyalleri Strategy Context içindeki ana timeframe ile kontrol edilir.\n\n• Increasing Timeframe by Layer: Her yeni layer’da sistem ana timeframe’den başlayarak bir üst timeframe’e geçer. Bu seçenek bu sürümde çalıştırılmaz: doc 02 §5.7 modun adını verir ama adım büyüklüğünü tanımlamaz, motor da tahmin etmek yerine Ready Check’te bloklar.\n\n• Custom Timeframe Sequence: Layer sırasına uygulanacak timeframe dizisini kullanıcı seçer.\n\nÖrnek: Ana timeframe 15m iken sırasıyla 15m → 30m → 1h onayları istemek, yeni kademe açıldıkça daha güçlü onay istemek anlamına gelir.",
+  },
+  customTimeframeSequence: {
+    title: "Custom Timeframe Sequence",
+    body: "Her yeni logic-based layer’ın hangi timeframe üzerinden sinyal arayacağını elle tanımlarsın. Bu input yalnızca Timeframe Mode içinde Custom Timeframe Sequence seçildiğinde aktif olur.\n\nKullanılabilir timeframe seçimleri: 1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 1D. Dizi kesin artan olmalıdır; aynı timeframe iki kez yazılamaz.\n\nDizinin uzunluğu aynı zamanda layer sayısının üst sınırıdır: son girdiden sonra yeni layer eklenmez.\n\nÖrnek: 15m > 30m > 1h > 4h seçilmişse birinci layer 15m, ikinci layer 30m, üçüncü layer 1h onayı ile eklenir.",
+  },
   additionalLayerMethod: {
     title: "2. Additional Layer Method",
     body: "Açık pozisyona yeni layer’ın hangi yöntemle ekleneceğini belirler. Price-Distance Based Scaling ve Logic-Based Scaling eşit seviyede iki alternatif yöntemdir; aynı anda yalnızca biri aktif olabilir.\n\nÖrnek: Fiyat her %1 düştüğünde long layer eklemek mesafe tabanlıdır. Reversal Sensor tekrar long sinyal verdiğinde layer eklemek logic tabanlıdır.",
@@ -464,6 +497,11 @@ export interface ScalingLimitsForm {
 export interface ScalingForm {
   enabled: boolean;
   timeframe: string;
+  // S5c (doc 02 §5.7): the per-layer timeframe STRUCTURE, distinct from `timeframe`
+  // (which picks one evaluation timeframe for the whole ladder).
+  timeframe_mode: string;
+  // Layer N uses entry N. Only sent under timeframe_mode === "custom_sequence".
+  custom_timeframe_sequence: string[];
   method: string;
   price: PriceScalingForm;
   logic_blocks: IndicatorBlockForm[];
@@ -765,6 +803,8 @@ function extractScaling(payload: Record<string, unknown>): ScalingForm {
   return {
     enabled: bool(s.enabled, false),
     timeframe: enumStr(s.timeframe, "same_as_base_tf"),
+    timeframe_mode: enumStr(s.timeframe_mode, "same_strategy"),
+    custom_timeframe_sequence: asArray(s.custom_timeframe_sequence).map((tf) => str(tf)),
     method: str(s.method),
     price: { retracement_distance: str(price.retracement_distance), layers: str(price.layers) },
     logic_blocks: asArray(logic.indicator_blocks).map((b, i) => extractBlock(b, i)),
@@ -1034,6 +1074,16 @@ function mergeScaling(s: ScalingForm): Record<string, unknown> {
   const out: Record<string, unknown> = { ...s.raw };
   out.enabled = s.enabled;
   setOrDelete(out, "timeframe", s.timeframe);
+  setOrDelete(out, "timeframe_mode", s.timeframe_mode);
+  // S5c: the ladder travels ONLY under custom_sequence — switching the mode back deletes
+  // it, so a stale sequence never survives in the saved revision (the model drops it
+  // server-side too; this keeps the wire payload honest as well). Same precedent as
+  // I-15a's min_true_count below.
+  if (s.timeframe_mode === "custom_sequence" && s.custom_timeframe_sequence.length > 0) {
+    out.custom_timeframe_sequence = [...s.custom_timeframe_sequence];
+  } else {
+    delete out.custom_timeframe_sequence;
+  }
   setOrDelete(out, "method", s.method);
   if (s.method === "price_distance_scaling") {
     out.price_scaling = pruneUndefined({

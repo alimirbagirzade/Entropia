@@ -332,9 +332,9 @@ export const ENGINE_CAPABILITY_MATRIX: readonly CapabilityOption[] = [
   {
     "fieldPath": "scaling_logic.method",
     "value": "logic_based_scaling",
-    "status": "future_dev",
+    "status": "active_v1",
     "label": "Logic Based",
-    "dependency": "Needs separate scale-rule evaluators (an indicator/condition plan resolved per layer); the ladder currently triggers on price retracement only.",
+    "dependency": "Needs at least one resolvable indicator block, a positive add_size_value and a DECLARED depth — max_scaling_layers or a custom timeframe sequence — because logic-based scaling has no layer count of its own (S5c).",
     "blockerCode": "STRATEGY_SCALING_UNSUPPORTED"
   },
   {
@@ -423,6 +423,30 @@ export const ENGINE_CAPABILITY_MATRIX: readonly CapabilityOption[] = [
     "status": "future_dev",
     "label": "1D",
     "dependency": "Needs per-layer resampled evaluation — the ladder is evaluated on the strategy's own replayed bars, so a per-layer timeframe override would require a second resampled series the replay does not build.",
+    "blockerCode": "STRATEGY_SCALING_UNSUPPORTED"
+  },
+  {
+    "fieldPath": "scaling_logic.timeframe_mode",
+    "value": "same_strategy",
+    "status": "active_v1",
+    "label": "Same as Strategy Timeframe",
+    "dependency": "",
+    "blockerCode": "STRATEGY_CAPABILITY_NOT_IN_BUILD"
+  },
+  {
+    "fieldPath": "scaling_logic.timeframe_mode",
+    "value": "custom_sequence",
+    "status": "active_v1",
+    "label": "Custom Timeframe Sequence",
+    "dependency": "Needs a non-empty, strictly increasing custom_timeframe_sequence of canonical timeframes. Layer N is gated on the closed candle of entry N, and the sequence length also bounds the ladder.",
+    "blockerCode": "STRATEGY_SCALING_UNSUPPORTED"
+  },
+  {
+    "fieldPath": "scaling_logic.timeframe_mode",
+    "value": "increasing_by_layer",
+    "status": "future_dev",
+    "label": "Increasing Timeframe by Layer",
+    "dependency": "Needs a declared step increment. Doc 02 §5.7 names the mode but not the rung size (next canonical timeframe vs. doubling are different ladders), so the engine fails closed rather than guessing one.",
     "blockerCode": "STRATEGY_SCALING_UNSUPPORTED"
   },
   {

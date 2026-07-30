@@ -36,8 +36,10 @@ async def get_plan_for_workspace(
     return (await session.execute(stmt)).scalars().first()
 
 
-async def get_plan(session: AsyncSession, plan_id: str) -> PortfolioAllocationPlan | None:
-    return await session.get(PortfolioAllocationPlan, plan_id)
+# NOTE: no by-plan_id ``get_plan`` reader — deleted in I-12 as callerless. Every
+# caller reaches a plan through its workspace (one plan per composition), i.e.
+# ``get_plan_for_workspace`` above; ``plan_id`` is only ever used downstream to
+# read the plan's own children (``list_entries``).
 
 
 async def create_plan(

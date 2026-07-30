@@ -17,86 +17,88 @@
   ],
   "provenance": {
     "measured_by": "GitHub Actions \u2014 E2E workflow, job 'A11Y \u2014 axe-core scan vs. the seeded stack (R2-14)'",
-    "run_id": 30436036299,
-    "run_branch": "main",
-    "commit": "9e86c991853ee5704a81eb316b34ffe5a1f42c97",
-    "measured_at": "2026-07-29T08:34:11Z",
+    "run_id": 30448240930,
+    "run_branch": "fix/a11y-03-04-contrast",
+    "commit": "4b4f98566f6106c4e966ed1509bb8df734507c89",
+    "measured_at": "2026-07-29T11:36:50Z",
     "conditions": "seeded Compose stack, Admin session, 1440px viewport, axe tags wcag2a/wcag2aa/wcag21a/wcag21aa/wcag22aa",
-    "total_serious_nodes": 70,
-    "supersedes": "the 228-node / 23-page figure in docs/implementation/v18_final_acceptance.md \u00a73.1, which is the 2026-07-22 PRE-remediation measurement (before the D-7b palette fix and the D-8 link-in-text-block fix landed)"
+    "total_serious_nodes": 45,
+    "measured_pre_merge": "Measured on the A11Y-03/04 fix branch, not on main: the point of the run was to count the tree WITH those fixes applied, and the ratchet cannot be tightened from a main run that predates them. That branch commit is unreachable from main because PR #493 was SQUASH-merged \u2014 the same tree landed as bfb5368; use that sha to find the code this measurement describes. The next main run must reproduce 45 exactly \u2014 if it does not, this file is wrong, not the run.",
+    "landed_as": "bfb5368 \u2014 'fix(a11y-03-04): finish D-7(b) \u2014 token-ise the title bar grey and unstack the locked-step opacity (#493)'",
+    "supersedes": "the 70-node figure measured on main @ 9e86c99 (run 30436036299), which still carried the 25 nodes of unfinished D-7(b) work that A11Y-03/04 closed (23 x .top-title #888 on #e8e8e8, 2 x the .rd-step[data-locked] opacity composite); and before that the 228-node / 23-page figure in docs/implementation/v18_final_acceptance.md \u00a73.1, which is the 2026-07-22 PRE-remediation measurement"
   },
   "adjudication": {
-    "color-contrast": "A11Y-01 \u2014 see docs/implementation/a11y_ci_ratchet_and_adjudication.md. The residual nodes split into TWO classes with DIFFERENT standing: (i) the v18 signature accent #00a9e8 surfaces, which PO decision D-7(b) deliberately left untouched, and (ii) .top-title #888 on #e8e8e8 + the .rd-step[data-locked] opacity composite, which D-7(b) INTENDED to darken but which the fix missed. Class (ii) is unfinished approved work, not an accepted deviation."
+    "color-contrast": "A11Y-01 \u2014 see docs/implementation/a11y_ci_ratchet_and_adjudication.md. Class (ii) \u2014 the 25 nodes D-7(b) INTENDED to darken but whose fix missed them \u2014 is CLOSED by A11Y-03/04 and is no longer represented in these ceilings. What remains is class (i) ONLY: the 45 v18 signature accent surfaces that D-7(b) deliberately left untouched, measured as 33 x #ffffff on #00a9e8 and 12 x #00a9e8 on #ffffff, every one of them 2.67:1. Their permanent standing is OPEN product-owner decision D-10; until it is signed these numbers are the frozen status quo, not an approval, and WCAG 2.2 AA 1.4.3 is NOT met."
   },
   "pages": {
     "mainboard": {
-      "color-contrast": 4
+      "color-contrast": 3
     },
     "strategy-details": {
-      "color-contrast": 3
+      "color-contrast": 2
     },
     "outsource-signal": {
-      "color-contrast": 4
+      "color-contrast": 3
     },
     "trading-signal": {
-      "color-contrast": 3
+      "color-contrast": 2
     },
     "trade-log": {
-      "color-contrast": 3
+      "color-contrast": 2
     },
     "create-package": {
-      "color-contrast": 2
+      "color-contrast": 1
     },
     "pre-check": {
-      "color-contrast": 2
+      "color-contrast": 1
     },
     "package-library": {
-      "color-contrast": 2
+      "color-contrast": 1
     },
     "embedded-packages": {
-      "color-contrast": 2
+      "color-contrast": 1
     },
     "rationale-families": {
-      "color-contrast": 3
+      "color-contrast": 2
     },
     "market-data": {
-      "color-contrast": 3
+      "color-contrast": 2
     },
     "research-data": {
-      "color-contrast": 5
+      "color-contrast": 2
     },
     "portfolio": {
-      "color-contrast": 3
+      "color-contrast": 2
     },
     "ready-check": {
-      "color-contrast": 3
+      "color-contrast": 2
     },
     "run-results": {
-      "color-contrast": 3
+      "color-contrast": 2
     },
     "results-history": {
-      "color-contrast": 2
+      "color-contrast": 1
     },
     "arrange-metrics": {
-      "color-contrast": 3
+      "color-contrast": 2
     },
     "analysis-lab": {
-      "color-contrast": 2
+      "color-contrast": 1
     },
     "panel-management": {
-      "color-contrast": 3
+      "color-contrast": 2
     },
     "panel-logs": {
-      "color-contrast": 3
+      "color-contrast": 2
     },
     "trash": {
-      "color-contrast": 2
+      "color-contrast": 1
     },
     "user-manual": {
-      "color-contrast": 2
+      "color-contrast": 1
     },
     "future-dev": {
-      "color-contrast": 8
+      "color-contrast": 7
     }
   }
 }

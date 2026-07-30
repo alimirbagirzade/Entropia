@@ -23,6 +23,24 @@ _HUNDRED = Decimal(100)
 _ZERO = Decimal(0)
 _MONEY_Q = Decimal("0.01")
 
+# The composition-item kinds that may be allocated a capital sleeve (doc 13 §5.2
+# "selected item ... must be compatible", §14#8 "compatible Strategy, Trading Signal
+# or Trade Log items").
+#
+# ``MainboardItemKind`` currently holds exactly these three, so the guard used to be
+# IMPLICIT: the command layer server-derives ``item_type`` from the composition item
+# and an unknown id is already DEPENDENCY_BLOCKED, which made a spoofed kind
+# unreachable — but nothing in this validator ever read ``ref.kind``. The set is
+# spelled out here so widening the enum with a non-allocatable kind fails CLOSED at
+# validation instead of silently earning a sleeve (I-03).
+ALLOCATABLE_ITEM_KINDS: frozenset[MainboardItemKind] = frozenset(
+    {
+        MainboardItemKind.STRATEGY,
+        MainboardItemKind.TRADING_SIGNAL,
+        MainboardItemKind.TRADE_LOG,
+    }
+)
+
 
 def _money(value: Decimal) -> str:
     return str(value.quantize(_MONEY_Q, rounding=ROUND_HALF_UP))
@@ -223,6 +241,19 @@ def validate_allocation(
                     composition_item_id=cid,
                 )
             )
+        # Compatibility is judged independently of availability: an item that IS in
+        # the composition still cannot take a sleeve unless its kind is allocatable
+        # (doc 13 §5.2, §14#8). Unresolvable refs are already blocked above.
+        if ref is not None and ref.kind not in ALLOCATABLE_ITEM_KINDS:
+            issues.append(
+                AllocationIssue(
+                    Code.ITEM_KIND_NOT_ALLOCATABLE,
+                    Sev.BLOCKER,
+                    f"Item kind '{ref.kind}' cannot be allocated a capital sleeve; only "
+                    "Strategy, Trading Signal and Trade Log items are allocatable.",
+                    composition_item_id=cid,
+                )
+            )
 
         share = entry.equity_share_percent
         if share is None or share <= _ZERO:
@@ -372,6 +403,7 @@ def compute_config_hash(config: PortfolioAllocationConfigV1) -> str:
 
 
 __all__ = [
+    "ALLOCATABLE_ITEM_KINDS",
     "AllocationIssue",
     "AllocationItemRef",
     "DerivedAmounts",

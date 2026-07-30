@@ -321,6 +321,22 @@ _FUTURE_DEV_OVERLAYS.update(
         if option.field_path == "scaling_logic.timeframe"
     }
 )
+# S5c: the per-layer timeframe STRUCTURE. Only ``increasing_by_layer`` is future_dev —
+# doc 02 §5.7 names the mode but declares no step increment — so this overlay is
+# deliberately NOT a comprehension over the field's options the way the block above is:
+# ``same_strategy`` and ``custom_sequence`` are active_v1 and must never acquire a
+# fail-closed proof (a comprehension would silently start proving them if their status
+# ever regressed, instead of failing the parity test).
+_FUTURE_DEV_OVERLAYS[("scaling_logic.timeframe_mode", "increasing_by_layer")] = {
+    "scaling_logic": {
+        "enabled": True,
+        "timeframe": "same_as_base_tf",
+        "timeframe_mode": "increasing_by_layer",
+        "method": "price_distance_scaling",
+        "price_scaling": {"retracement_distance": "1", "layers": 1},
+        "add_size_value": "1",
+    }
+}
 _FUTURE_DEV_OVERLAYS.update(
     {
         ("restrictions_filters.filters.filter_type", option.value): {

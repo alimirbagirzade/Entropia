@@ -335,12 +335,7 @@ feat/s3-package-import-*, ayrı PR'lar, NO AI attribution.
 
 ---
 
-## S5 — Strategy config katalog derinliği (doc 02 §5.5/§5.7/§5.8/§5.9) — 🟡 **a LANDED (#458) · b/c/d AÇIK**
 
-> **2026-07-29 tazelemesi:** alt-slice **(a) Minimum-N-of-M landed** — `domain/strategy/config.py:844`
-> `min_true_count` + `:868` validator, `compiler.py:204`, `engine.py:1036`, ENGINE_VERSION →
-> `backtest-engine-v18-restriction-min-n`. Aşağıdaki "Doğrulanan durum" paragrafı **(a) için tarihsel
-> kayıttır**; (b)/(c)/(d) için hâlâ geçerli (yedi token da 0 hit — ölçme komutu §DURUM TAZELEME'de).
 **Boyut:** EN BÜYÜK (backend şema + engine + frontend form; ENGINE_VERSION bump). **Öncelik:** Düşük-orta (mevcut davranış fail-closed L4 — sessiz yanlışlık yok).
 
 **Doğrulanan durum:** `domain/strategy/config.py`'de yok (grep=0): §5.5 logic-based stop block +

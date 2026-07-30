@@ -126,14 +126,40 @@ async def resolve_indicator_plan(
             session, protection.logic_blocks, "stop", base_seconds
         )
 
+    # S5c: resolve Logic-Based SCALING Blocks with the SAME block resolver as entry/exit/stop.
+    # Each is a full IndicatorBlock; its signal in the OPEN POSITION'S direction proposes an
+    # additional same-direction layer (doc 02 §5.7). Logic-based scaling carries no SignalBlock
+    # of its own in the schema, so the aggregation rule is pinned to the §5.7 "Logic
+    # Combination" default (All of the resolved blocks) rather than being inferred — an
+    # inferred rule would silently change meaning the day the schema grows one.
+    # An unresolvable scaling block is surfaced (prefix ``scale:``) and fails the RUN closed
+    # via Ready Check, never a silently un-scaled run.
+    scale_specs: tuple[IndicatorSpec, ...] = ()
+    scale_unresolved: list[str] = []
+    scale_rule: SignalRule | None = None
+    scaling = strategy_config.scaling_logic
+    if (
+        scaling is not None
+        and scaling.enabled
+        and scaling.method == "logic_based_scaling"
+        and scaling.logic_scaling is not None
+        and scaling.logic_scaling.indicator_blocks
+    ):
+        scale_specs, scale_unresolved = await _resolve_blocks(
+            session, scaling.logic_scaling.indicator_blocks, "scale", base_seconds
+        )
+        scale_rule = SignalRule(rule="required_indicator_blocks_only", min_supporting_count=None)
+
     return IndicatorPlan(
         entry_rule=entry_rule,
         entry_specs=entry_specs,
         exit_rule=exit_rule,
         exit_specs=exit_specs,
         exit_on_opposite=bool(strategy_config.conflict_position_handling.exit_on_opposite_signal),
-        unresolved=tuple(entry_unresolved + exit_unresolved + stop_unresolved),
+        unresolved=tuple(entry_unresolved + exit_unresolved + stop_unresolved + scale_unresolved),
         stop_specs=stop_specs,
+        scale_specs=scale_specs,
+        scale_rule=scale_rule,
     )
 
 

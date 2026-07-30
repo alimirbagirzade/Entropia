@@ -397,6 +397,24 @@ async def get_revision(session: AsyncSession, revision_id: str) -> ResearchDatas
     return await session.get(ResearchDatasetRevision, revision_id)
 
 
+async def get_revisions(
+    session: AsyncSession, revision_ids: Sequence[str]
+) -> dict[str, ResearchDatasetRevision]:
+    """Resolve many research dataset revisions in ONE query, keyed by id (O-24b).
+
+    The batch counterpart of :func:`get_revision` for a caller that dereferences every
+    item's pinned research feed at once, mirroring ``identity.get_human_users``: empty
+    input short-circuits, duplicate ids collapse, and an id with no row is ABSENT from
+    the map — an unresolvable feed keeps its own ``found=False`` / unresolved-pin branch
+    rather than being silently dropped. Never a per-item N+1.
+    """
+    ids = list(dict.fromkeys(revision_ids))
+    if not ids:
+        return {}
+    stmt = select(ResearchDatasetRevision).where(ResearchDatasetRevision.revision_id.in_(ids))
+    return {row.revision_id: row for row in (await session.execute(stmt)).scalars().all()}
+
+
 async def get_native_asset(session: AsyncSession, asset_id: str) -> ResearchNativeAsset | None:
     """Fetch a parsed native asset by its id (F-11 funding source consumption)."""
     return await session.get(ResearchNativeAsset, asset_id)

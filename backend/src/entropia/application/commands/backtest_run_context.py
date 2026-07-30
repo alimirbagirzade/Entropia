@@ -45,12 +45,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from entropia.application.commands.readiness_check import _resolve_strategy_payload
 from entropia.domain.mainboard.enums import MainboardItemKind
-from entropia.domain.strategy.config import (
-    FundingPolicy,
-    IndicatorBlock,
-    PackageReference,
-    StrategyConfig,
-)
+from entropia.domain.strategy.config import FundingPolicy, StrategyConfig
+from entropia.domain.strategy.pins import SCALING_ROLE, iter_pinned_packages
 from entropia.infrastructure.postgres.repositories import mainboard as mb_repo
 from entropia.infrastructure.postgres.repositories import market_data as md_repo
 from entropia.infrastructure.postgres.repositories import packages as pkg_repo
@@ -69,36 +65,38 @@ class RunManifestContext:
     data_time: list[dict[str, Any]]
 
 
-@dataclass(frozen=True, slots=True)
-class _PinnedPackage:
-    """One pinned package reference plus where in the config it sits."""
-
-    role: str
-    block_id: str
-    condition_block_id: str | None
-    leg_index: int | None
-    ref: PackageReference
-    parameter_overrides: dict[str, Any] | None
-
-
 async def resolve_run_manifest_context(
     session: AsyncSession, item_manifest: dict[str, Any] | None
 ) -> RunManifestContext:
     """Resolve the strategy/package, external-object and data/time groups.
 
     Items are consumed in the snapshot's own order and each group is sorted by
-    ``item_id`` so the manifest (and therefore its hashes) is order-stable."""
+    ``item_id`` so the manifest (and therefore its hashes) is order-stable.
+
+    O-24b: every enabled item's work-object revision is dereferenced in ONE batch up
+    front instead of once per item. An id with no row is simply absent from the map, so
+    the ``is None`` skip below is unchanged — a pin that no longer resolves still drops
+    out of these three groups and is still caught by the worker's ``_unresolved_pins``
+    gate from ``mainboard_items``."""
     strategy_package: list[dict[str, Any]] = []
     external_objects: list[dict[str, Any]] = []
     data_time: list[dict[str, Any]] = []
     raw = item_manifest.get("items", []) if isinstance(item_manifest, dict) else []
+    revisions = await mb_repo.get_work_object_revisions(
+        session,
+        [
+            str(entry["revision_id"])
+            for entry in raw
+            if entry.get("enabled") is not False and entry.get("revision_id") is not None
+        ],
+    )
     for entry in raw:
         if entry.get("enabled") is False:
             continue
         revision_id = entry.get("revision_id")
         if revision_id is None:
             continue
-        revision = await mb_repo.get_work_object_revision(session, str(revision_id))
+        revision = revisions.get(str(revision_id))
         if revision is None:
             continue
         item_id = str(entry.get("item_id"))
@@ -148,8 +146,20 @@ async def _strategy_entry(
 ) -> dict[str, Any]:
     packages: list[dict[str, Any]] = []
     resolvers: dict[str, dict[str, Any]] = {}
-    for pinned in _pinned_packages(config):
-        revision = await pkg_repo.get_revision(session, pinned.ref.package_revision_id)
+    # The shared traversal returns every package the RESOLVER dereferences, which now
+    # includes the S5c Logic-Based Scaling group. The manifest has never recorded that
+    # group, and adding it here would change ``package_revisions`` — and therefore the
+    # ``execution_key`` — for every scaling strategy. That is a reproducibility decision,
+    # not a side effect of a batching change, so the scaling pins are dropped explicitly
+    # (a visible boundary) rather than by narrowing the traversal, which would leave the
+    # resolver's own pins unprefetched.
+    pins = [p for p in iter_pinned_packages(config) if not p.role.startswith(SCALING_ROLE)]
+    # O-24b: one IN() read for the whole pin set, not one per block/condition/leg. A pin
+    # with no row is absent from the map, so ``revision is None`` below still records the
+    # id with a null detail for the worker's fail-closed gate.
+    revisions = await pkg_repo.get_revisions(session, [p.ref.package_revision_id for p in pins])
+    for pinned in pins:
+        revision = revisions.get(pinned.ref.package_revision_id)
         packages.append(
             {
                 "role": pinned.role,
@@ -184,82 +194,6 @@ async def _strategy_entry(
         "package_revisions": packages,
         "resolver_revisions": [resolvers[key] for key in sorted(resolvers)],
     }
-
-
-def _pinned_packages(config: StrategyConfig) -> list[_PinnedPackage]:
-    """Every package reference the engine's block traversal would dereference.
-
-    Mirrors ``resolve_indicator_plan``: entry, exit and Logic-Based Stop blocks, their
-    nested enabled conditions, each condition's reference package and its N-ary chain
-    legs. A DISABLED block/condition is skipped — the engine never resolves it, so the
-    manifest must not claim it as an input."""
-    pinned: list[_PinnedPackage] = []
-    stop_blocks = (
-        config.protection_stop_logic.logic_blocks
-        if config.protection_stop_logic is not None
-        else None
-    )
-    groups: list[tuple[str, list[IndicatorBlock] | None]] = [
-        ("entry", config.position_entry_logic.indicator_blocks),
-        ("exit", config.position_exit_logic.indicator_blocks),
-        ("stop", stop_blocks),
-    ]
-    for role, blocks in groups:
-        for block in blocks or []:
-            if block.enabled is False:
-                continue
-            pinned.append(
-                _PinnedPackage(
-                    role=role,
-                    block_id=block.block_id,
-                    condition_block_id=None,
-                    leg_index=None,
-                    ref=block.package_ref,
-                    parameter_overrides=block.parameter_overrides,
-                )
-            )
-            pinned.extend(_pinned_condition_packages(role, block))
-    return pinned
-
-
-def _pinned_condition_packages(role: str, block: IndicatorBlock) -> list[_PinnedPackage]:
-    pinned: list[_PinnedPackage] = []
-    for condition in block.condition_blocks or []:
-        if condition.enabled is False:
-            continue
-        pinned.append(
-            _PinnedPackage(
-                role=f"{role}_condition",
-                block_id=block.block_id,
-                condition_block_id=condition.condition_block_id,
-                leg_index=None,
-                ref=condition.package_ref,
-                parameter_overrides=condition.parameter_overrides,
-            )
-        )
-        if condition.reference_package_ref is not None:
-            pinned.append(
-                _PinnedPackage(
-                    role=f"{role}_condition_reference",
-                    block_id=block.block_id,
-                    condition_block_id=condition.condition_block_id,
-                    leg_index=None,
-                    ref=condition.reference_package_ref,
-                    parameter_overrides=condition.parameter_overrides,
-                )
-            )
-        for index, leg in enumerate(condition.additional_reference_package_refs or []):
-            pinned.append(
-                _PinnedPackage(
-                    role=f"{role}_condition_reference_leg",
-                    block_id=block.block_id,
-                    condition_block_id=condition.condition_block_id,
-                    leg_index=index,
-                    ref=leg.package_ref,
-                    parameter_overrides=leg.parameter_overrides,
-                )
-            )
-    return pinned
 
 
 def _resolver_refs(dependency_snapshot: dict[str, Any] | None) -> list[dict[str, Any]]:

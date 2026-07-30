@@ -433,13 +433,24 @@ async def _unresolved_pins(session: AsyncSession, manifest: dict[str, Any]) -> l
     external Trading Signal / Trade Log import revision. A pre-K-04 manifest carries
     none of those groups and is checked exactly as before."""
     missing: list[str] = []
-    for item in manifest.get("mainboard_items", []):
+    items = manifest.get("mainboard_items", [])
+    # O-24b: one IN() read for the whole pin set. An id with no row is absent from the
+    # map, so it lands in ``missing`` exactly as the per-id ``session.get`` miss did —
+    # same ids, same order, same RUN_FAILED_MANIFEST_RESOLUTION message.
+    revisions = await mb_repo.get_work_object_revisions(
+        session,
+        [
+            str(item["selected_revision_id"])
+            for item in items
+            if item.get("selected_revision_id") is not None
+        ],
+    )
+    for item in items:
         revision_id = item.get("selected_revision_id")
         if revision_id is None:
             missing.append(str(item.get("item_id")))
             continue
-        revision = await mb_repo.get_work_object_revision(session, str(revision_id))
-        if revision is None:
+        if revisions.get(str(revision_id)) is None:
             missing.append(str(revision_id))
     missing.extend(await _unresolved_package_pins(session, manifest))
     missing.extend(await _unresolved_data_pins(session, manifest))
@@ -450,35 +461,68 @@ async def _unresolved_pins(session: AsyncSession, manifest: dict[str, Any]) -> l
 async def _unresolved_package_pins(session: AsyncSession, manifest: dict[str, Any]) -> list[str]:
     """Strategy revision + transitive package/resolver revisions that no longer resolve."""
     missing: list[str] = []
-    for entry in manifest.get("strategy_package_context") or []:
+    entries = manifest.get("strategy_package_context") or []
+    pinned_by_entry = [_pinned_package_ids(entry) for entry in entries]
+    # O-24b: one IN() read for EVERY strategy's transitive package + resolver revisions,
+    # instead of one per block/condition/leg. An id with no row is absent from the map, so
+    # the ``is None`` branch below still appends it — same ids, same order.
+    revisions = await pkg_repo.get_revisions(
+        session, [revision_id for pinned in pinned_by_entry for revision_id in pinned]
+    )
+    for entry, pinned_ids in zip(entries, pinned_by_entry, strict=True):
         strategy_revision_id = entry.get("strategy_revision_id")
         if strategy_revision_id is not None:
             mirror = await strat_repo.get_strategy_revision(session, str(strategy_revision_id))
             if mirror is None:
                 missing.append(str(strategy_revision_id))
-        pinned_ids = [
-            str(pkg["package_revision_id"])
-            for pkg in entry.get("package_revisions") or []
-            if pkg.get("package_revision_id")
-        ]
-        pinned_ids.extend(
-            str(ref["embedded_revision_id"])
-            for ref in entry.get("resolver_revisions") or []
-            if ref.get("embedded_revision_id")
-        )
         for revision_id in pinned_ids:
-            if await pkg_repo.get_revision(session, revision_id) is None:
+            if revisions.get(revision_id) is None:
                 missing.append(revision_id)
     return missing
+
+
+def _pinned_package_ids(entry: dict[str, Any]) -> list[str]:
+    """A manifest strategy entry's package revision ids, then its resolver (ESP) ids."""
+    pinned_ids = [
+        str(pkg["package_revision_id"])
+        for pkg in entry.get("package_revisions") or []
+        if pkg.get("package_revision_id")
+    ]
+    pinned_ids.extend(
+        str(ref["embedded_revision_id"])
+        for ref in entry.get("resolver_revisions") or []
+        if ref.get("embedded_revision_id")
+    )
+    return pinned_ids
 
 
 async def _unresolved_data_pins(session: AsyncSession, manifest: dict[str, Any]) -> list[str]:
     """Market/research dataset pins that no longer resolve to an ACTIVE root revision."""
     missing: list[str] = []
-    for entry in manifest.get("data_time_context") or []:
+    entries = manifest.get("data_time_context") or []
+    # O-24b: two IN() reads (market + research) for every item's data pins, instead of one
+    # per pin. A pin with no row is absent from the map, so its root stays ``None`` and it
+    # lands in ``missing`` exactly as before — a soft-deleted dataset is still unresolved.
+    market_revisions = await md_repo.get_revisions(
+        session,
+        [
+            str(entry["market_dataset_revision_id"])
+            for entry in entries
+            if entry.get("market_dataset_revision_id") is not None
+        ],
+    )
+    research_revisions = await research_repo.get_revisions(
+        session,
+        [
+            str(research_revision_id)
+            for entry in entries
+            for research_revision_id in entry.get("research_dataset_revision_ids") or []
+        ],
+    )
+    for entry in entries:
         market_revision_id = entry.get("market_dataset_revision_id")
         if market_revision_id is not None:
-            revision = await md_repo.get_revision(session, str(market_revision_id))
+            revision = market_revisions.get(str(market_revision_id))
             root = (
                 await md_repo.get_dataset_root(session, revision.entity_id)
                 if revision is not None
@@ -487,7 +531,7 @@ async def _unresolved_data_pins(session: AsyncSession, manifest: dict[str, Any])
             if root is None or root.deletion_state != DeletionState.ACTIVE:
                 missing.append(str(market_revision_id))
         for research_revision_id in entry.get("research_dataset_revision_ids") or []:
-            research = await research_repo.get_revision(session, str(research_revision_id))
+            research = research_revisions.get(str(research_revision_id))
             research_root = (
                 await research_repo.get_dataset_root(session, research.entity_id)
                 if research is not None
@@ -543,15 +587,22 @@ async def _resolve_enabled_strategies(
     pinned revisions; a pin that no longer parses to a valid config is skipped here and
     caught upstream as a hard MANIFEST_RESOLUTION / ASSET failure."""
     resolved: list[tuple[StrategyConfig, dict[str, Any]]] = []
-    for item in manifest.get("mainboard_items", []):
-        if item.get("item_kind") != MainboardItemKind.STRATEGY:
-            continue
-        if item.get("enabled") is False:
-            continue
-        revision_id = item.get("selected_revision_id")
-        if revision_id is None:
-            continue
-        revision = await mb_repo.get_work_object_revision(session, str(revision_id))
+    selected = [
+        item
+        for item in manifest.get("mainboard_items", [])
+        if item.get("item_kind") == MainboardItemKind.STRATEGY
+        and item.get("enabled") is not False
+        and item.get("selected_revision_id") is not None
+    ]
+    # O-24b: one IN() read for every enabled Strategy's pinned revision. A pin with no row
+    # is absent from the map, so it is still skipped here and still fails the run closed
+    # upstream in ``_unresolved_pins`` — never silently re-resolved.
+    revisions = await mb_repo.get_work_object_revisions(
+        session, [str(item["selected_revision_id"]) for item in selected]
+    )
+    for item in selected:
+        revision_id = item["selected_revision_id"]
+        revision = revisions.get(str(revision_id))
         if revision is None:
             continue
         payload = await _resolve_strategy_payload(session, dict(revision.payload))

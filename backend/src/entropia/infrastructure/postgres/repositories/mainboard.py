@@ -200,6 +200,25 @@ async def get_work_object_revision(
     return await session.get(WorkObjectRevision, revision_id)
 
 
+async def get_work_object_revisions(
+    session: AsyncSession, revision_ids: Sequence[str]
+) -> dict[str, WorkObjectRevision]:
+    """Resolve many work-object revisions in ONE query, keyed by ``revision_id`` (O-24b).
+
+    The batch counterpart of :func:`get_work_object_revision` for a caller that
+    dereferences every pinned item of a composition at once (Ready Check inputs, RUN
+    admission, the worker's manifest pin gate), mirroring ``identity.get_human_users``:
+    empty input short-circuits, duplicate ids collapse, and an id with no row is ABSENT
+    from the map — so the caller's ``is None`` branch behaves exactly as the per-id
+    ``session.get`` miss did. Never a per-item N+1.
+    """
+    ids = list(dict.fromkeys(revision_ids))
+    if not ids:
+        return {}
+    stmt = select(WorkObjectRevision).where(WorkObjectRevision.revision_id.in_(ids))
+    return {row.revision_id: row for row in (await session.execute(stmt)).scalars().all()}
+
+
 async def get_workspace(session: AsyncSession, entity_id: str) -> EntityRegistry | None:
     """Return the registry Root iff it is a mainboard workspace."""
     root = await session.get(EntityRegistry, entity_id)

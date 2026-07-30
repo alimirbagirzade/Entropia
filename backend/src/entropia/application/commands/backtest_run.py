@@ -800,13 +800,23 @@ async def _resolve_tick_pins(
     tick data — the manifest then carries an explicit ``tick_data: null``."""
     pins: dict[str, Any] = {}
     raw = item_manifest.get("items", []) if isinstance(item_manifest, dict) else []
-    for entry in raw:
-        if entry.get("kind") != MainboardItemKind.STRATEGY or entry.get("enabled") is False:
-            continue
-        revision_id = entry.get("revision_id")
-        if revision_id is None:
-            continue
-        revision = await mb_repo.get_work_object_revision(session, str(revision_id))
+    strategies = [
+        entry
+        for entry in raw
+        if entry.get("kind") == MainboardItemKind.STRATEGY
+        and entry.get("enabled") is not False
+        and entry.get("revision_id") is not None
+    ]
+    # O-24b: one IN() read for every enabled Strategy's pinned revision. An id with no row
+    # is absent from the map, so the ``is None`` skip below is unchanged — a vanished pin
+    # is still not a tick requirement here, and is still caught by the worker's
+    # ``_unresolved_pins`` gate.
+    revisions = await mb_repo.get_work_object_revisions(
+        session, [str(entry["revision_id"]) for entry in strategies]
+    )
+    for entry in strategies:
+        revision_id = entry["revision_id"]
+        revision = revisions.get(str(revision_id))
         if revision is None:
             continue
         payload = await _resolve_strategy_payload(session, dict(revision.payload))

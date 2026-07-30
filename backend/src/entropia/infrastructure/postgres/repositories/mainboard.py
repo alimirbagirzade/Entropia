@@ -341,6 +341,17 @@ async def create_snapshot(
     return snapshot
 
 
+async def get_snapshot(
+    session: AsyncSession, snapshot_id: str
+) -> MainboardCompositionSnapshot | None:
+    """Load one immutable composition snapshot by id (F-07 §4.4 label source).
+
+    A reader of a PINNED artifact resolves its display labels from the snapshot that
+    artifact pinned, never from the live composition.
+    """
+    return await session.get(MainboardCompositionSnapshot, snapshot_id)
+
+
 async def _max_revision_no(session: AsyncSession, entity_id: str) -> int | None:
     stmt = select(func.max(WorkObjectRevision.revision_no)).where(
         WorkObjectRevision.entity_id == entity_id
@@ -358,6 +369,7 @@ __all__ = [
     "create_workspace",
     "find_default_workspace",
     "get_item",
+    "get_snapshot",
     "get_work_object_detail",
     "get_work_object_revision",
     "get_work_object_root",

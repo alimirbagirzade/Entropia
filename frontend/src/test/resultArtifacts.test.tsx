@@ -203,6 +203,7 @@ const DIAG_COMPOSITION = {
             marginal: [
               {
                 item_id: "item_a",
+                item_label: "Momentum A",
                 without_item: {
                   initial_capital: "10000.00",
                   final_equity: "9969.40",
@@ -234,6 +235,7 @@ const DIAG_COMPOSITION = {
               },
               {
                 item_id: "item_b",
+                item_label: null,
                 without_item: {
                   initial_capital: "10000.00",
                   final_equity: "9949.00",
@@ -269,6 +271,8 @@ const DIAG_COMPOSITION = {
             {
               item_id: "item_a",
               item_kind: "strategy",
+              // F-07 §4.4: the label PINNED in this result's manifest at run time.
+              item_label: "Momentum A",
               root_id: "root_a",
               revision_id: "rev_a",
               executed: true,
@@ -291,6 +295,8 @@ const DIAG_COMPOSITION = {
             {
               item_id: "item_b",
               item_kind: "strategy",
+              // Deliberately unlabelled -> the honest id fallback stays covered.
+              item_label: null,
               root_id: "root_b",
               revision_id: "rev_b",
               executed: true,
@@ -313,6 +319,7 @@ const DIAG_COMPOSITION = {
             {
               item_id: "item_tl",
               item_kind: "trade_log",
+              item_label: null,
               root_id: "root_tl",
               revision_id: "rev_tl",
               executed: false,
@@ -563,5 +570,26 @@ describe("ResultDetail trade list + export", () => {
 
     expect(await screen.findByText("Per-item breakdown")).toBeInTheDocument();
     expect(screen.queryByText("Contribution")).not.toBeInTheDocument();
+  });
+  // F-07 §4.4 — the per-item and leave-one-out rows must NAME their item from the
+  // result's pinned manifest. The result is immutable: the browser must never join the
+  // live composition to produce these, so an unlabelled item honestly shows its id.
+  it("names per-item and leave-one-out rows from the pinned manifest label (F-07)", async () => {
+    stubApi({
+      "GET /backtest-results/res_x/artifacts/trade_ledger": EMPTY_PAGE,
+      "GET /backtest-results/res_x/metrics": METRICS_VIEW,
+      "GET /backtest-results/res_x/artifacts/diagnostics": DIAG_COMPOSITION,
+    });
+    renderDetail();
+
+    expect(await screen.findByText("Per-item breakdown")).toBeInTheDocument();
+    // item_a carries a pinned label -> it appears as a name, in the per-item card AND
+    // in the leave-one-out card ("Without <name>").
+    expect(screen.getAllByText("Momentum A").length).toBeGreaterThanOrEqual(2);
+    // The raw ids are NOT removed — F-07 keeps them as the audit token.
+    expect(screen.getAllByText("item_a").length).toBeGreaterThanOrEqual(1);
+    // item_b / item_tl have no pinned label -> id only, and no invented name.
+    expect(screen.getAllByText("item_b").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("item_tl")).toBeInTheDocument();
   });
 });

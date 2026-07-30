@@ -20,6 +20,7 @@ Ready Check page scope).
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any
 
@@ -160,6 +161,11 @@ async def run_readiness_check(
             research_sources=research_sources,
         )
 
+        scope_labels = {
+            item.item_id: item.display_label_override
+            for item, _ok in enabled
+            if item.display_label_override
+        }
         blocked_ids = {
             i.scope_id for i in evaluation.issues if str(i.severity) == "blocker" and i.scope_id
         }
@@ -207,7 +213,11 @@ async def run_readiness_check(
                 "pass_count": pass_count,
                 "allocation_enabled": allocation_enabled,
             },
-            "issues": [i.as_dict() for i in evaluation.issues],
+            # F-07 §4.4: parity with ``queries.readiness_check`` — a just-created report
+            # returns the SAME issue shape the read model serves, so the page does not
+            # lose its labels between the POST response and the next GET. The labels
+            # come from the items this very transaction snapshotted.
+            "issues": [_labelled_issue(i, scope_labels) for i in evaluation.issues],
         }
 
     return await run_idempotent(
@@ -285,6 +295,20 @@ async def _load_workspace_for_check(
         )
         raise
     return workspace
+
+
+def _labelled_issue(
+    issue: ReadinessIssue, scope_labels: Mapping[str, str]
+) -> dict[str, str | None]:
+    """``issue.as_dict()`` plus the pinned ``scope_label`` (F-07 §4.4).
+
+    The label is NOT persisted on the issue row: the read model recovers it from the
+    report's composition snapshot, so there is exactly one stored copy and the two
+    surfaces can never drift.
+    """
+    data = issue.as_dict()
+    data["scope_label"] = scope_labels.get(issue.scope_id) if issue.scope_id else None
+    return data
 
 
 async def _build_item_inputs(
@@ -881,6 +905,12 @@ def _manifest(
                 "revision_id": item.pinned_revision_id,
                 "enabled": item.is_enabled,
                 "position": item.position_index,
+                # F-07 §4.4 — the item's human name pinned AT SNAPSHOT TIME. The report
+                # this snapshot backs is immutable and is_current-tracked, so its issue
+                # scopes MUST be labelled from here; reading the live composition would
+                # label a stale report with names it never saw. Twin of
+                # ``commands.mainboard._snapshot_manifest``.
+                "label": item.display_label_override,
             }
             for item in items
         ],

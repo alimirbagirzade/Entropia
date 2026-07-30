@@ -1658,7 +1658,6 @@ Docker, iki E2E (dev-auth + gerçek tarayıcı/Compose) ve A11Y axe-core taramas
   Restore düğmesi hiç render edilmiyor.
 
 ---
----
 
 ## I-07 · `human_users` OCC — şüphe bir adlandırma yanılgısıydı, migration YOK (PR #499)
 
@@ -1668,8 +1667,7 @@ Docker, iki E2E (dev-auth + gerçek tarayıcı/Compose) ve A11Y axe-core taramas
 ### Görev nasıl açıldı, ne çıktı
 
 I-07 şu öncülle geldi: *"soft-delete taşıyıp `row_version` taşımayan TEK asimetrik kök tablo"* —
-ve iki dallı bir karar istedi (OCC gerekiyorsa migration ile kolon ekle; gerekmiyorsa
-DATA_MODEL.md'ye "bilinçli olarak OCC'siz" notu düş). **Ampirik sonuç iki dalı da geçersiz kıldı:**
+ve iki dallı bir karar istedi. Ampirik sonuç iki dalı da geçersiz kıldı:
 `human_users` OCC'yi hem gerektiriyor hem **zaten taşıyor** — kolonun adı `row_version` değil,
 `version`.
 
@@ -1679,63 +1677,33 @@ DATA_MODEL.md'ye "bilinçli olarak OCC'siz" notu düş). **Ampirik sonuç iki da
 |---|---|
 | OCC kolonu | `models/identity.py:40` → `version: Mapped[int]` (`Integer NOT NULL default=1`) |
 | Mutasyonda +1 | `commands/role_assignment.py:123` · `commands/roles.py:66` |
-| 409 typed hata | `commands/role_assignment.py:94-95` → `shared/errors.py:215` `USER_ROLE_VERSION_CONFLICT` |
-| Dual-token (O-12) | `routes/admin_panel.py:97-100` — gövde `expected_head_revision_id` + `If-Match`, `shared/concurrency.py::reconcile_occ_tokens`'tan geçiyor (kural route'a kopyalanmamış) |
-| Row-lock | `session.refresh(user, with_for_update=True)` (`role_assignment.py:91`) |
-| No-op disiplini | aynı rol → `changed=false`, **version bump YOK, audit YOK** (`role_assignment.py:98-102`) |
-| Idempotency | gövde `run_idempotent` içinde (`role_assignment.py:156`) |
+| 409 typed hata | `commands/role_assignment.py:94-95` → `USER_ROLE_VERSION_CONFLICT` |
+| Dual-token (O-12) | `routes/admin_panel.py:97-100` → `reconcile_occ_tokens` |
+| Row-lock | `session.refresh(user, with_for_update=True)` |
+| No-op disiplini | aynı rol → `changed=false`, version bump ve audit yok |
+| Idempotency | gövde `run_idempotent` içinde |
 
-Doc 19 §9.3/§11 bu kodu **ismen** istiyor; sevk edilmiş yüzey spec'e uyuyor.
+### Karar: `row_version` kolonu EKLENMEDİ
 
-### Karar: `row_version` kolonu EKLENMEDİ — üç gerekçe
+1. `version` zaten OCC token'ı; yanına `row_version` koymak aynı satırda iki bağımsız
+   önkoşul yaratır ve O-12'yi ihlal ederdi.
+2. Yeniden adlandırma kırıcıdır; `version` tel üstünde yayımlanıyor.
+3. Farklı ad zaten repo konvansiyonudur; `registry_version` aynı davranışı başka
+   tablolarda taşır.
 
-1. **İki token = O-12'nin tam olarak yasakladığı şey.** `version` zaten OCC token'ı; yanına
-   `row_version` koymak aynı satırda **iki bağımsız önkoşul** yaratırdı. CLAUDE.md §O-12 kuralı
-   net: token'lar "tek değerin iki yazımıdır, iki bağımsız önkoşul DEĞİL".
-2. **Yeniden adlandırma kırıcı bir sözleşme değişikliği.** `version` **tel üstünde** yayımlanıyor:
-   `commands/role_assignment.py:47` + `queries/user_registry.py:32` + `routes/identity.py:69`
-   projeksiyonları, `frontend/src/lib/adminPanel.ts:27,72` tüketicisi.
-3. **Farklı ad zaten bu repoda konvansiyon.** `registry_version` üç tabloda (`instrument_registry`,
-   `embedded_resolver_registry`, `future_capability`) aynı işi yapıyor ve DATA_MODEL.md'nin
-   "Doğrulanmamış noktalar" bölümünde 2026-07-29'da zaten ampirik kapatılmıştı. Ad sayfanın kendi
-   hata taksonomisinden gelir; **davranış tektir.**
+### Asıl kusur: harita yanlış söylüyordu
 
-### Asıl kusur: harita yanlış söylüyordu (not eksikliği değil)
+`DATA_MODEL.md` içindeki `human_users` OCC hücresi `—` yerine `✔ version` olarak düzeltildi.
+OCC'nin kolon adıyla değil davranışıyla tanınacağı kayda geçirildi.
 
-`DATA_MODEL.md`'nin `human_users` satırındaki **OCC hücresi `—` diyordu.** Bu bir eksik not değil,
-**yanlış bir olgu**ydu — I-07'nin kendisi de zaten bu yanlıştan doğmuştu. Düzeltmeler:
+### Dürüst sınır
 
-- `human_users` satırı → `✔ version (row_version DEĞİL — §I-07)`.
-- OCC konvansiyonu bölümüne kural: **"OCC token'ının adı `row_version` olmak ZORUNDA DEĞİL"** —
-  token = "int, NOT NULL, default 1, mutasyonda +1, uyuşmazlıkta 409" davranışıdır; bugün üç ad
-  ailesi var. **Kolon adına bakıp 'OCC yok' çıkarımı yapma.**
-- Yeni **§I-07 karar kaydı** — yukarıdaki gerekçe + aşağıdaki dürüst sınır.
-- `frontend/src/lib/adminPanel.ts:362` yorumu token'ı *"the registry row's `version`"* diyordu;
-  `human_users` `entity_registry`'de **değil**. Yorum düzeltildi — **yorum-only, davranış yok**
-  (V18 UI kuralı gereği route/react-query key/OCC/Idempotency/lib data logic'e dokunulmadı).
-
-### Dürüst sınır — soft-delete kolonları BEYAN EDİLMİŞ ama HİÇ YAZILMIYOR
-
-`human_users.deletion_state` / `deleted_at` / `deleted_by` / `delete_reason` kolonları var, ama
-onlara **yazan tek bir komut yok**; yalnızca okuma kapısı olarak kullanılıyorlar
-(`application/identity.py:30`, `commands/auth.py:364`, `:509`). `human_user`, K-06'nın
-`domain/trash/page.py::TRASH_OBJECT_LOCATIONS` kataloğunda **yok** → kullanıcı silme diye bir özellik
-yok, kolonlar ileriye dönük şema. Katalogda olmayan tip için trash-entry yazma yükümlülüğü de
-olmadığından bu **tutarlı, kusur değil**. I-07'nin "soft-delete taşıyor" öncülü buradan geliyordu,
-o yüzden kayda geçti. **Kullanıcı soft-delete'i eklenirse** K-06 gereği katalog +
-`commands/deletion.py` + `jobs/purge.py` + `queries/trash.py` dalları **birlikte** eklenmeli.
+`human_users` soft-delete kolonlarını taşısa da bunlara yazan bir komut ve K-06 trash katalog
+kaydı yoktur. Kullanıcı silme özelliği eklenirse katalog, deletion command, purge job ve
+trash query birlikte eklenmelidir.
 
 ### Doğrulama
 
-- `tests/integration/test_panel_management_logs.py` → **26 passed** (`test_assign_role_version_conflict`
-  bayat `version` ile `UserRoleVersionConflictError` bekliyor; `test_assign_role_noop_writes_no_audit`
-  bump'sızlığı kilitliyor).
-- frontend `tsc --noEmit` temiz · `eslint src/lib/adminPanel.ts` temiz.
-- **CI 6/6 yeşil** (Backend job 36m45s — tam suite + `--cov-fail-under=90` kapısı dahil).
-
-### Görev metnindeki iki hatalı yönerge (kayda geçti)
-
-1. Önerilen kontrol seçicisi `-k "user_role_occ"` **hiçbir teste uymuyor**; gerçek seçici
-   `-k "assign_role"` (`tests/integration/test_panel_management_logs.py`).
-2. Öncül "row_version YOK → OCC yok" çıkarımını yapıyordu; kolon adı OCC'nin varlığına dair
-   **kanıt değildir** — bu ders artık DATA_MODEL.md konvansiyon bölümünde kuralleşti.
+- `test_panel_management_logs.py` 26 passed.
+- Frontend tsc + eslint temiz.
+- CI 6/6 yeşil.

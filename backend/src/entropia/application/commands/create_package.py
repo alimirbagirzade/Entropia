@@ -682,6 +682,13 @@ async def create_draft_from_candidate(
             package_kind=detail.package_kind,
             input_contract={
                 "request_id": detail.entity_id,
+                # Doc 06 §510-512: the package has no editable name field in V18; a name
+                # is GENERATED at C.D.P as "New [Type] Package". Without it every
+                # request-born package read back nameless
+                # (``queries.library._package_name`` returns None), so the Library
+                # catalog and the Pre-Check request picker had nothing but ids to show —
+                # the F-07 §4.4 defect.
+                "name": _generated_package_name(detail.package_kind),
                 "source_kind": str(detail.source_kind),
                 "source_language": str(detail.source_language) if detail.source_language else None,
                 "target_runtime": str(detail.target_runtime),
@@ -726,6 +733,17 @@ async def create_draft_from_candidate(
         request_payload={"op": "create_draft_from_candidate", "request_id": request_id},
         operation=_op,
     )
+
+
+def _generated_package_name(package_kind: PackageKind) -> str:
+    """The doc 06 §510-512 generated draft name: ``"New [Type] Package"``.
+
+    Derived from the package KIND, never from an identifier — this is the name the spec
+    says V18 assigns at C.D.P, not a name reconstructed in the browser from an id
+    (F-07). Doc 06 §512 keeps a normalized, user-edited name a pre-publish requirement;
+    this only guarantees a fresh draft is never nameless.
+    """
+    return f"New {str(package_kind).replace('_', ' ').title()} Package"
 
 
 def _draft_change_note(detail: PackageRequest) -> str:

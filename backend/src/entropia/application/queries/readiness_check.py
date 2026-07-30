@@ -51,6 +51,7 @@ async def get_readiness_report(
     effective_state = _effective_state(str(report.state), stale=stale, superseded=superseded)
 
     issues = await readiness_repo.list_issues(session, report_id)
+    scope_labels = await _scope_labels(session, report.composition_snapshot_id)
     return {
         "report_id": report.report_id,
         "composition_id": report.workspace_entity_id,
@@ -73,6 +74,13 @@ async def get_readiness_report(
                 "scope": str(row.scope),
                 "field_path": row.field_path,
                 "scope_id": row.scope_id,
+                # F-07 §4.4: the human name of the composition item this issue is
+                # about, read from the snapshot the REPORT pinned — never from the
+                # live composition. A stale/superseded report keeps the names it was
+                # written against. NULL (-> the UI shows the raw id) when the item
+                # carried no label or the snapshot predates this field; a fabricated
+                # name is never substituted.
+                "scope_label": scope_labels.get(row.scope_id) if row.scope_id else None,
                 "message": row.message,
                 "remediation": row.remediation,
             }
@@ -102,6 +110,33 @@ async def get_current_readiness(
             "report_id": None,
         }
     return await get_readiness_report(session, actor, report_id=latest.report_id)
+
+
+async def _scope_labels(session: AsyncSession, snapshot_id: str | None) -> dict[str, str]:
+    """Map ``composition_item_id -> pinned human label`` from the report's snapshot.
+
+    F-07 §4.4. The composition snapshot is immutable, so this is the composition as the
+    report saw it — the only honest label source for a report that may now be STALE or
+    SUPERSEDED. Items without a label, and snapshots written before the manifest carried
+    one, simply produce no entry; the caller then leaves ``scope_label`` null.
+    """
+    if snapshot_id is None:
+        return {}
+    snapshot = await mb_repo.get_snapshot(session, snapshot_id)
+    if snapshot is None or not isinstance(snapshot.item_manifest, dict):
+        return {}
+    raw = snapshot.item_manifest.get("items")
+    if not isinstance(raw, list):
+        return {}
+    labels: dict[str, str] = {}
+    for entry in raw:
+        if not isinstance(entry, dict):
+            continue
+        item_id = entry.get("item_id")
+        label = entry.get("label")
+        if isinstance(item_id, str) and isinstance(label, str) and label:
+            labels[item_id] = label
+    return labels
 
 
 async def _current_fingerprint(session: AsyncSession, workspace_entity_id: str) -> str:

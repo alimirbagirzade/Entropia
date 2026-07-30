@@ -29,11 +29,17 @@ async def create_import_job(
     job_id: str | None,
     correlation_id: str | None,
     created_by_principal_id: str | None,
+    source_package_name: str | None = None,
 ) -> PackageImportJob:
-    """Insert a fresh ``queued`` import-job row and return it (no commit)."""
+    """Insert a fresh ``queued`` import-job row and return it (no commit).
+
+    ``source_package_name`` (F-07 §4.4) is the imported package's own name as declared
+    by the SUBMITTED manifest; None when the manifest declared none.
+    """
     row = PackageImportJob(
         import_job_id=new_id("pkgimp"),
         manifest_hash=manifest_hash,
+        source_package_name=source_package_name,
         origin_package_id=origin_package_id,
         origin_revision_id=origin_revision_id,
         package_kind=package_kind,

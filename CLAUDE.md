@@ -188,15 +188,25 @@ Before stopping a working session, produce **ALL** of the following:
 
 
 
-- **F-07 raw-id sweep — SUNUM katmanı kapandı (PR #404).** 31 dosyada 161 `*_id` render'ı tarandı;
-  **4 kalıntı açık** (backend display-DTO → `v18_visual_traceability.md §4.4`) — yani **F-07 bütün
-
+- **F-07 raw-id sweep — BÜTÜN olarak COMPLETE.** Sunum katmanı PR #404 (§4.3), backend
+  display-DTO katmanı bu dalga (§4.4: `display_label`, `source_package_name`, `item_label`,
+  `scope_label` + ortak `components/LabelledId.tsx`). Pinli artefaktların (result, readiness
+  report) etiketi **snapshot/manifest'ten** gelir, canlı composition'dan ASLA join edilmez.
+  vitest **654/654** (**`--no-file-parallelism` ZORUNLU**; worktree'de `frontend/node_modules`
+  yoksa önce `npm ci` — ilk koşudaki `ERR_MODULE_NOT_FOUND` test hatası değil).
 
 
 - **Next (PO imzası BLOKAJ DEĞİL — imza 2026-07-22'de atıldı,
   `docs/implementation/v18_final_acceptance.md:155-169`; beklettiği FIX(R3) kalemlerinin hepsi
   landed: #368–#373, #375–#379):**
- 
+  1. **Round-3 backlog:** S5 (a/b/c/d) + S-L1…S-L6
+     (`docs/POST_V1_SPEC_GAP_BACKLOG_ROUND3.md` §DURUM TAZELEME).
+  2. **A11Y D-10** — açık PO kararı.
+
+- **Açık iş (dürüst sınır):** ekran okuyucu (NVDA/VoiceOver) denetimi yapılmadı;
+  10 sayfanın derin görsel kıyası eksik; visual katmanı CI'da koşmuyor. A11Y axe-core
+  ratchet'i çalışıyor ve kalan 45 düğüm imza-mavisi imzalı sapma. WCAG 2.2 AA 1.4.3
+  karşılanmıyor; çözüm açık PO kararı D-10'dur.
 
 - **KAPSAM DIŞI (bilerek):** retention auto-purge (doc 20 §16 — "Production V1'de kapalı"),
   LLM generation (Future-Dev), Graphic View renderer (doc 22 — V18 statik placeholder kalır).

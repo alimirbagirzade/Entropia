@@ -288,6 +288,11 @@ async def run_backtest(
     # never re-simulated because of a later one; the engine surfaces this precedence as
     # an L4 warning). An engine error on ANY item fails the whole run.
     base_rules = resolve_portfolio_rules(capital_execution)
+    # F-07 §4.4: the PINNED display labels, read once from the immutable manifest. They
+    # are not part of ``execution_key``, so they cannot influence the replay — they only
+    # travel with each item so the finished Result can name its rows without the reader
+    # ever joining the live composition.
+    item_labels = _manifest_item_labels(manifest.manifest)
     prior_intervals: list[PriorItemInterval] = []
     item_runs: list[ItemRun] = []
     for prepared in prepared_items:
@@ -319,6 +324,7 @@ async def run_backtest(
             execution_key=manifest.execution_key,
             item_count=item_count,
             portfolio_rules=item_rules,
+            item_label=item_labels.get(prepared.item_id),
         )
         if isinstance(replayed, _PrepFailure):
             return await _fail_run(session, job, run, code=replayed.code, message=replayed.message)
@@ -624,6 +630,20 @@ async def _resolve_enabled_strategies(
     return resolved
 
 
+def _manifest_item_labels(manifest: dict[str, Any]) -> dict[str, str]:
+    """Read the run manifest's pinned display labels (F-07 §4.4).
+
+    ``build_run_manifest`` already projected these out of the composition snapshot into
+    ``mainboard_item_labels`` — a key deliberately OUTSIDE the hashed execution content,
+    so reading it can never perturb ``execution_key``. A manifest written before the key
+    existed yields an empty map and every row falls back to its raw id.
+    """
+    raw = manifest.get("mainboard_item_labels")
+    if not isinstance(raw, dict):
+        return {}
+    return {k: v for k, v in raw.items() if isinstance(k, str) and isinstance(v, str) and v}
+
+
 def _enabled_non_strategy_items(manifest: dict[str, Any]) -> list[ItemRun]:
     """Enabled Trading Signal / Trade Log items — pinned + recorded, no standalone run.
 
@@ -633,19 +653,24 @@ def _enabled_non_strategy_items(manifest: dict[str, Any]) -> list[ItemRun]:
     every participating object is traceable; disabled items were already excluded from
     the snapshot and never reach here."""
     items: list[ItemRun] = []
+    labels = _manifest_item_labels(manifest)
     for item in manifest.get("mainboard_items", []):
         if item.get("item_kind") == MainboardItemKind.STRATEGY:
             continue
         if item.get("enabled") is False:
             continue
         revision_id = item.get("selected_revision_id")
+        item_id = str(item.get("item_id"))
         items.append(
             ItemRun(
-                item_id=str(item.get("item_id")),
+                item_id=item_id,
                 item_kind=str(item.get("item_kind")),
                 root_id=item.get("root_id"),
                 revision_id=str(revision_id) if revision_id is not None else None,
                 output=None,
+                # F-07 §4.4 — a non-executing item still appears in the per-item
+                # breakdown, so it needs its pinned name just as much.
+                item_label=labels.get(item_id),
             )
         )
     return items
@@ -823,6 +848,7 @@ def _replay_strategy(
     execution_key: str,
     item_count: int,
     portfolio_rules: PortfolioRules | None = None,
+    item_label: str | None = None,
 ) -> ItemRun | _PrepFailure:
     """Bar-replay ONE prepared Strategy. Pure compute — no database access.
 
@@ -852,6 +878,7 @@ def _replay_strategy(
         root_id=prepared.root_id,
         revision_id=prepared.revision_id,
         output=output,
+        item_label=item_label,
     )
 
 

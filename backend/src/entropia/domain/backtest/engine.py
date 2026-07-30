@@ -888,6 +888,11 @@ def run_engine(
     # §5.9 Stop+Exit same-bar collision policy (read straight from the pinned config so it
     # applies in BOTH plan and breakout-proxy modes; default "stop_has_priority" = V18).
     stop_exit_conflict = str(config.conflict_position_handling.stop_exit_conflict)
+    # S5b residual: the flat-position Entry+Exit collision is a separate policy from
+    # Stop+Exit. Both indicator decisions are close-confirmed, so the default never
+    # fabricates an intrabar ordering; only explicit ``exit_first`` admits the entry
+    # after treating the flat-position exit as a no-op.
+    same_candle_entry_exit = str(config.conflict_position_handling.same_candle_entry_exit)
     # F-08 stop-combination modes (read once; drive _resolve_stop + the ledger record).
     _protection = config.protection_stop_logic
     stop_trigger_requirement = (
@@ -1819,6 +1824,32 @@ def run_engine(
                 entry_signal = aggregate(indicator_plan.entry_rule, entry_evals)
                 if exit_evals and indicator_plan.exit_rule is not None:
                     exit_hit = aggregate(indicator_plan.exit_rule, exit_evals) is not None
+
+            # §5.9 Same Candle Entry / Exit — when FLAT, an entry and an explicit exit
+            # decision can be close-confirmed by the same bar. There is no position for
+            # the exit to close and no honest intrabar ordering between two close-derived
+            # signals. The default and every conservative policy suppress the new entry;
+            # explicit ``exit_first`` processes the exit as a no-op, then admits it.
+            if position is None and entry_signal is not None and exit_hit:
+                admits_entry = same_candle_entry_exit == "exit_first"
+                _emit(
+                    "entry_exit_collision",
+                    event_time=bar.timestamp,
+                    direction=entry_signal,
+                    bar_seq=led.bars_seen,
+                    detail={
+                        "policy": same_candle_entry_exit,
+                        "resolution": (
+                            "flat_exit_noop_then_entry"
+                            if admits_entry
+                            else "ambiguous_entry_suppressed"
+                        ),
+                        "intrabar_order_available": False,
+                    },
+                )
+                if not admits_entry:
+                    led.suppressed_entries += 1
+                    entry_signal = None
 
             # F-08: logic-stop evaluators advance EVERY bar (independent of the entry plan)
             # so a logic-based stop can fire against the open position.

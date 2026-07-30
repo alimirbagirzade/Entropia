@@ -19,6 +19,7 @@ import {
   ORDER_TYPE_OPTIONS,
   OVERLAPPING_SIGNAL_OPTIONS,
   PARTIAL_FILL_OPTIONS,
+  SAME_CANDLE_ENTRY_EXIT_OPTIONS,
   SAME_DIRECTION_OPTIONS,
   SIGNAL_STRENGTH_OPTIONS,
   STOP_ACTIVATION_RULE_OPTIONS,
@@ -765,6 +766,12 @@ export function ConflictCard({
           value={c.stop_exit_conflict}
           onChange={(v) => setConflict({ stop_exit_conflict: v })}
           options={STOP_EXIT_CONFLICT_OPTIONS}
+        />
+        <SelectField
+          label="Same Candle Entry / Exit"
+          value={c.same_candle_entry_exit}
+          onChange={(v) => setConflict({ same_candle_entry_exit: v })}
+          options={SAME_CANDLE_ENTRY_EXIT_OPTIONS}
         />
         <CheckboxField
           label="Exit on opposite signal"

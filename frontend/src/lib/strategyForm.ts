@@ -264,6 +264,17 @@ export const STOP_EXIT_CONFLICT_OPTIONS: SelectOption[] = [
   { value: "first_trigger_wins", label: "First Trigger Wins" },
 ];
 
+// §5.9 "Same Candle Entry / Exit". VALUE mirrors config.py Literal; the first
+// option is the V18 default and resolves conservatively when signal ordering is
+// unavailable.
+export const SAME_CANDLE_ENTRY_EXIT_OPTIONS: SelectOption[] = [
+  { value: "use_intrabar_data_if_available", label: "Use Intrabar Data If Available" },
+  { value: "exit_first", label: "Exit First" },
+  { value: "stop_first", label: "Stop First" },
+  { value: "ignore_trade", label: "Ignore Trade" },
+  { value: "conservative_rule", label: "Conservative Rule" },
+];
+
 // ---------------------------------------------------------------------------
 // Form state — a flat, string-backed mirror of the covered payload sections.
 // Numeric fields stay strings so a blank field is representable ("" → omit on
@@ -334,6 +345,7 @@ export interface StrategyFlatForm {
     opposite_direction_hedge: string;
     exit_on_opposite_signal: boolean;
     stop_exit_conflict: string;
+    same_candle_entry_exit: string;
   };
 }
 
@@ -352,6 +364,7 @@ const DEFAULTS = {
   same_direction_stacking: "allow_stacking",
   opposite_direction_hedge: "allow_hedge",
   stop_exit_conflict: "stop_has_priority",
+  same_candle_entry_exit: "use_intrabar_data_if_available",
   percentage_loss: "1.0",
   trailing_trail: "2.0",
   trailing_lock_in: "0.8",
@@ -475,6 +488,10 @@ export function extractFlatSections(payload: Record<string, unknown>): StrategyF
       ),
       exit_on_opposite_signal: bool(conflict.exit_on_opposite_signal, true),
       stop_exit_conflict: enumStr(conflict.stop_exit_conflict, DEFAULTS.stop_exit_conflict),
+      same_candle_entry_exit: enumStr(
+        conflict.same_candle_entry_exit,
+        DEFAULTS.same_candle_entry_exit,
+      ),
     },
   };
 }
@@ -647,6 +664,7 @@ export function mergeFlatSections(
     opposite_direction_hedge: c.opposite_direction_hedge,
     exit_on_opposite_signal: c.exit_on_opposite_signal,
     stop_exit_conflict: c.stop_exit_conflict,
+    same_candle_entry_exit: c.same_candle_entry_exit,
   };
 
   return {

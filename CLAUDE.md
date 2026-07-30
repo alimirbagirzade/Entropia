@@ -166,16 +166,7 @@ Before stopping a working session, produce **ALL** of the following:
 ## Current position (keep in sync at each closing)
 
 > Aşağıdaki değerler **2026-07-29** tarihinde repodan empirik doğrulandı
-> (`origin/main` @ **`2cea1a6`** — `refactor(i12): delete eight callerless symbols, pin the
-> two kept on purpose (#495)`). Doğrula: `git fetch && git rev-parse --short origin/main` →
-> bu sha ile eşleşmeli; eşleşmiyorsa bu bölüm bayattır, önce `git log --oneline origin/main -6`
-> oku.
->
-> **Not (bu satır neden var — İKİNCİ kez):** burası uzun süre yarıda kesik bir cümleydi
-> ("empirik doğrulandı (`origin/main` @" deyip sha'yı hiç yazmıyordu), 2026-07-29'da onarıldı,
-> ve **aynı gün #486 ile yeniden kesildi** — bu kez sha bloğunun tamamı silinip yerine tek bir
-> boşluk bırakıldı. Yani yukarıdaki doğrulama komutu iki kez karşılaştıracak değer bulamadı.
-> Kapanışta bu sha'yı **her zaman** tazele; silme.
+
 
 - **Durum:** V1 ROADMAP COMPLETE (Stages 0–8, docs 01–22) + post-V1 + video-alignment +
   V18-R2 dalgası + **auth remediation dalgası COMPLETE** (güvenlik denetimi #346–#364).

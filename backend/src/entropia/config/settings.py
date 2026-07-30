@@ -143,6 +143,31 @@ class Settings(BaseSettings):
             )
         return self
 
+    @model_validator(mode="after")
+    def _require_explicit_cors_origins_in_production(self) -> Settings:
+        """I-14: the API mounts CORS with ``allow_credentials=True``. Starlette
+        does NOT emit a literal ``Access-Control-Allow-Origin: *`` in that mode —
+        it echoes back whatever ``Origin`` the caller sent, so ``*`` silently
+        becomes "every site on the internet is a trusted origin for credentialed
+        requests". An empty list is the same misconfiguration read the other way:
+        the deployment believes it pinned its origins and pinned nothing. Both
+        fail closed at startup in production rather than ship a
+        browser-exploitable API that merely looks configured."""
+        if self.is_production:
+            origins = self.cors_origin_list
+            if not origins:
+                raise ValueError(
+                    "API_CORS_ORIGINS must list at least one explicit origin when "
+                    "ENTROPIA_ENV=production (empty leaves the browser policy unpinned)."
+                )
+            if "*" in origins:
+                raise ValueError(
+                    "API_CORS_ORIGINS must not contain '*' when ENTROPIA_ENV=production: "
+                    "combined with allow_credentials=True it reflects any caller's Origin, "
+                    "trusting every site on the internet with credentialed requests."
+                )
+        return self
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

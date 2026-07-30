@@ -78,6 +78,37 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     log.info("api.shutdown")
 
 
+# --- CORS allowlists (I-14) --------------------------------------------------
+# The origin list was already narrow (env-driven, no wildcard), but methods and
+# headers were ``["*"]`` while ``allow_credentials=True``. Both are now closed
+# enumerations of what this API actually serves.
+#
+# METHODS: the five verbs the routers declare (GET/POST/PATCH/PUT/DELETE), plus
+# HEAD (Starlette mints one per GET route — ``routing.py``) and OPTIONS (the
+# preflight verb itself). This currently matches what ``"*"`` expands to, so it
+# is a PIN, not a reduction: ``"*"`` means "whatever ``starlette.ALL_METHODS``
+# holds after any upgrade", this means exactly these seven and nothing else.
+CORS_ALLOWED_METHODS = ("DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT")
+
+# HEADERS: this IS the reduction. ``allow_headers=["*"]`` makes Starlette mirror
+# back whatever ``Access-Control-Request-Headers`` the caller asks for, so an
+# allowed origin got blanket preflight approval for every header name. Each entry
+# below is a header the backend genuinely reads; anything else now fails
+# preflight with 400 "Disallowed CORS headers".
+CORS_ALLOWED_HEADERS = (
+    "Authorization",  # deps.py — Bearer session token / service-line token
+    "Content-Type",  # JSON bodies + multipart uploads (also CORS-safelisted)
+    "If-Match",  # OCC dual-token — shared/concurrency.py::reconcile_occ_tokens
+    "Idempotency-Key",  # application/idempotency.py::run_idempotent
+    "X-Actor-Id",  # deps.py::ACTOR_ID_HEADER (dev profile) + rate-limit key
+    "X-Request-Version",  # OCC — routes/create_package.py
+    "X-Registry-Version",  # OCC — routes/esp.py, routes/instrument.py
+    "X-Request-Id",  # context.py — caller-supplied trace id, echoed back
+    "X-Correlation-Id",  # context.py — caller-supplied correlation id
+    "Last-Event-ID",  # sse.py::_requested_cursor — SSE reconnect cursor
+)
+
+
 def create_app() -> FastAPI:
     configure_logging()
     settings = get_settings()
@@ -100,8 +131,8 @@ def create_app() -> FastAPI:
         CORSMiddleware,
         allow_origins=settings.cors_origin_list,
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=list(CORS_ALLOWED_METHODS),
+        allow_headers=list(CORS_ALLOWED_HEADERS),
         expose_headers=["X-Request-Id", "X-Correlation-Id", "ETag"],
     )
     if settings.rate_limit_enabled:

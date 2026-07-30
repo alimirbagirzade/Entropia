@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 
@@ -117,6 +117,15 @@ const SUPERSEDED_REPORT = {
   is_current: false,
 };
 
+// F-07 §4.4 — the server now sends the composition item's name alongside scope_id,
+// read from the snapshot the REPORT pinned. LABELLED carries one; WARN_REPORT above
+// deliberately does not, so the fallback stays covered by a real fixture.
+const LABELLED_SCOPE_REPORT = {
+  ...WARN_REPORT,
+  report_id: "rep_5",
+  issues: [{ ...WARN_REPORT.issues[0], scope_label: "Momentum A" }],
+};
+
 function renderPage(initialEntry = "/backtest/ready-check") {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
@@ -228,5 +237,31 @@ describe("Backtest Ready Check page", () => {
     expect(screen.getByText("superseded · a newer report exists")).toBeInTheDocument();
     // Not the stale hint — the fix keys off state, not stored_state !== state.
     expect(screen.queryByText("stale · re-run to refresh")).not.toBeInTheDocument();
+  });
+  // F-07 §4.4 — the issue row must NAME the composition item it points at, not force
+  // the reader to recognize an opaque mbi_ id. `within` the row, so a label rendered
+  // elsewhere on the page cannot satisfy this.
+  it("names the composition item a readiness issue is scoped to (F-07)", async () => {
+    stubApi({ "GET /readiness-reports/rep_5": LABELLED_SCOPE_REPORT });
+    renderPage("/backtest/ready-check?report=rep_5");
+
+    const code = await screen.findByText("EXECUTION_ASSUMPTIONS_DEFAULT");
+    const row = code.closest("tr");
+    expect(row).toBeTruthy();
+    expect(within(row as HTMLElement).getByText("Momentum A")).toBeInTheDocument();
+    // The id is NOT removed — F-07 keeps copyable ids for support/audit, it only
+    // stops them being the sole identification.
+    expect(within(row as HTMLElement).getByText("item_1")).toBeInTheDocument();
+  });
+
+  // The honest fallback: no server label -> the raw scope_id, never an invented name.
+  it("falls back to the raw scope id when the report carries no label (F-07)", async () => {
+    stubApi({ "GET /readiness-reports/rep_1": WARN_REPORT });
+    renderPage("/backtest/ready-check?report=rep_1");
+
+    const code = await screen.findByText("EXECUTION_ASSUMPTIONS_DEFAULT");
+    const row = code.closest("tr");
+    expect(within(row as HTMLElement).getByText("item_1")).toBeInTheDocument();
+    expect(within(row as HTMLElement).queryByText("Momentum A")).not.toBeInTheDocument();
   });
 });

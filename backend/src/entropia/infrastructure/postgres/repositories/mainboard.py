@@ -200,6 +200,25 @@ async def get_work_object_revision(
     return await session.get(WorkObjectRevision, revision_id)
 
 
+async def get_work_object_revisions(
+    session: AsyncSession, revision_ids: Sequence[str]
+) -> dict[str, WorkObjectRevision]:
+    """Resolve many work-object revisions in ONE query, keyed by ``revision_id`` (O-24b).
+
+    The batch counterpart of :func:`get_work_object_revision` for a caller that
+    dereferences every pinned item of a composition at once (Ready Check inputs, RUN
+    admission, the worker's manifest pin gate), mirroring ``identity.get_human_users``:
+    empty input short-circuits, duplicate ids collapse, and an id with no row is ABSENT
+    from the map — so the caller's ``is None`` branch behaves exactly as the per-id
+    ``session.get`` miss did. Never a per-item N+1.
+    """
+    ids = list(dict.fromkeys(revision_ids))
+    if not ids:
+        return {}
+    stmt = select(WorkObjectRevision).where(WorkObjectRevision.revision_id.in_(ids))
+    return {row.revision_id: row for row in (await session.execute(stmt)).scalars().all()}
+
+
 async def get_workspace(session: AsyncSession, entity_id: str) -> EntityRegistry | None:
     """Return the registry Root iff it is a mainboard workspace."""
     root = await session.get(EntityRegistry, entity_id)
@@ -322,6 +341,17 @@ async def create_snapshot(
     return snapshot
 
 
+async def get_snapshot(
+    session: AsyncSession, snapshot_id: str
+) -> MainboardCompositionSnapshot | None:
+    """Load one immutable composition snapshot by id (F-07 §4.4 label source).
+
+    A reader of a PINNED artifact resolves its display labels from the snapshot that
+    artifact pinned, never from the live composition.
+    """
+    return await session.get(MainboardCompositionSnapshot, snapshot_id)
+
+
 async def _max_revision_no(session: AsyncSession, entity_id: str) -> int | None:
     stmt = select(func.max(WorkObjectRevision.revision_no)).where(
         WorkObjectRevision.entity_id == entity_id
@@ -339,6 +369,7 @@ __all__ = [
     "create_workspace",
     "find_default_workspace",
     "get_item",
+    "get_snapshot",
     "get_work_object_detail",
     "get_work_object_revision",
     "get_work_object_root",

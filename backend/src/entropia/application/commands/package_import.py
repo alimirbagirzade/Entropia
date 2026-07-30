@@ -66,6 +66,11 @@ async def submit_package_import(
     package_kind = _coerce_kind(manifest)
     origin_package_id = manifest.get("package_root_id")
     origin_revision_id = manifest.get("revision_id")
+    # F-07 §4.4: the imported package's own name, as the submitted manifest declares it
+    # (``commands.package_lifecycle.export_package`` writes "name"). Captured HERE, with
+    # the manifest_hash, so the Library Import report can name the job even when it later
+    # ends blocked/failed and no local package exists to join against.
+    source_name = manifest.get("name")
     digest = manifest_hash(manifest)
 
     async def _op() -> dict[str, Any]:
@@ -90,6 +95,7 @@ async def submit_package_import(
             job_id=job.job_id,
             correlation_id=actor.correlation_id,
             created_by_principal_id=actor.principal_id,
+            source_package_name=source_name if isinstance(source_name, str) else None,
         )
         await session.flush()
         audit_repo.add_audit_event(

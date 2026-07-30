@@ -5,7 +5,9 @@ logic here. The grant/revoke mutations carry the package root ``row_version`` as
 the ``If-Match "rv-N"`` ETag (the ``GET /library/{entity_id}`` detail returns it)
 plus a fresh ``Idempotency-Key``, matching the sibling package Move-to-Trash
 route. ``GET /library/{entity_id}/shares`` lists the active grantees and is
-owner/Admin-only (a grantee never learns who else a resource is shared with).
+owner/Admin-only (a grantee never learns who else a resource is shared with); it
+is cursor-paginated over ``share_id`` so an unusually shared package cannot set
+the size of the read (finding O-24).
 ``GET /library-shared-with-me`` is the grantee's inbox of shared packages (a
 distinct literal path so it never shadows ``GET /library/{entity_id}``).
 """
@@ -20,9 +22,10 @@ from pydantic import BaseModel
 from entropia.application.commands import sharing as sharing_cmd
 from entropia.application.queries import library as library_query
 from entropia.application.queries import sharing as sharing_query
+from entropia.application.queries.sharing import DEFAULT_SHARE_PAGE_LIMIT
 from entropia.apps.api.deps import RequestContext, request_context
 from entropia.shared.concurrency import etag_for_row_version, row_version_from_if_match
-from entropia.shared.pagination import PageParams
+from entropia.shared.pagination import MAX_LIMIT, PageParams
 
 router = APIRouter(tags=["package-sharing"])
 
@@ -53,9 +56,13 @@ async def share_package(
 async def list_package_shares(
     entity_id: str,
     response: Response,
+    cursor: str | None = Query(default=None),
+    limit: int = Query(default=DEFAULT_SHARE_PAGE_LIMIT, ge=1, le=MAX_LIMIT),
     ctx: RequestContext = Depends(request_context),
 ) -> dict[str, Any]:
-    result = await sharing_query.list_package_shares(ctx.session, ctx.actor, entity_id=entity_id)
+    result = await sharing_query.list_package_shares(
+        ctx.session, ctx.actor, entity_id=entity_id, params=PageParams(cursor=cursor, limit=limit)
+    )
     response.headers["ETag"] = etag_for_row_version(int(result["row_version"]))
     return result
 

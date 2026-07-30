@@ -32,6 +32,12 @@ export interface PackageSharesResult {
   visibility_scope: string;
   row_version: number;
   shares: PackageShare[];
+  // O-24: the grant list is cursor-paginated server-side (default page 100), so a
+  // package shared past the page size returns a TAIL the panel did not render.
+  // `has_more` is what keeps that honest — never drop it silently. Optional
+  // because a react-query cache entry written before this field shipped still
+  // deserializes into this type; readers must use `?.`, not assume it is there.
+  meta?: { cursor: string | null; has_more: boolean };
 }
 
 export interface ShareResult {

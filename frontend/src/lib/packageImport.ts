@@ -31,6 +31,11 @@ export interface SubmitPackageImportResult {
 // blocked import, a structural reason on a failed manifest.
 export interface PackageImportReport {
   import_job_id: string;
+  // F-07 §4.4 — the imported package's own name, pinned by the server from the
+  // SUBMITTED manifest at submit time (never joined from the resulting local root,
+  // which does not exist for a blocked/failed import). Null for a manifest that
+  // declared no name and for pre-0041 rows; the row then shows the raw job id.
+  source_package_name: string | null;
   status: string;
   package_kind: string;
   manifest_hash: string;

@@ -20,6 +20,11 @@ from entropia.shared.errors import PackageImportJobNotFound
 def _to_report(row: PackageImportJob) -> dict[str, Any]:
     return {
         "import_job_id": row.import_job_id,
+        # F-07 §4.4: the human name of the package this job imported, pinned from the
+        # submitted manifest at submit time. NULL for a manifest that declared no name
+        # and for pre-0041 rows — the report then falls back to the raw job id rather
+        # than inventing one.
+        "source_package_name": row.source_package_name,
         "status": str(row.status),
         "package_kind": str(row.package_kind),
         "manifest_hash": row.manifest_hash,

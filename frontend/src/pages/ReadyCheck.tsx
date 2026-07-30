@@ -2,6 +2,7 @@ import { Link, useSearchParams } from "react-router-dom";
 
 import { EmptyState } from "@/components/EmptyState";
 import { ErrorState } from "@/components/ErrorState";
+import { LabelledId } from "@/components/LabelledId";
 import { Loading } from "@/components/Loading";
 import { StatusBadge } from "@/components/StatusBadge";
 import { ApiError } from "@/lib/apiClient";
@@ -288,7 +289,10 @@ function IssuesTable({ issues }: { issues: ReadinessIssue[] }) {
               {issue.scope}
               {issue.scope_id ? (
                 <div style={{ fontSize: 12, color: "var(--text-dim)" }}>
-                  <code>{issue.scope_id}</code>
+                  {/* F-07 §4.4: the item name the SERVER read off the snapshot this
+                      report pinned — never the live composition, which may have moved
+                      on. No label (older report / unlabelled item) shows the raw id. */}
+                  <LabelledId label={issue.scope_label} id={issue.scope_id} inline />
                 </div>
               ) : null}
               {issue.field_path ? (

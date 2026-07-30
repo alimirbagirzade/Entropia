@@ -226,6 +226,11 @@ class ItemRun:
     root_id: str | None
     revision_id: str | None
     output: EngineOutput | None
+    # F-07 §4.4 — the item's human name as PINNED in the run manifest
+    # (``mainboard_item_labels``), never looked up live. Carried through to the
+    # immutable Result so its per-item and leave-one-out rows can be named; None
+    # when the item had no label, in which case the UI shows the raw id.
+    item_label: str | None = None
 
 
 @dataclass(slots=True)

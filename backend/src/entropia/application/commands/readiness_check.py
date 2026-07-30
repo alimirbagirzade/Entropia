@@ -20,6 +20,7 @@ Ready Check page scope).
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any
 
@@ -160,6 +161,11 @@ async def run_readiness_check(
             research_sources=research_sources,
         )
 
+        scope_labels = {
+            item.item_id: item.display_label_override
+            for item, _ok in enabled
+            if item.display_label_override
+        }
         blocked_ids = {
             i.scope_id for i in evaluation.issues if str(i.severity) == "blocker" and i.scope_id
         }
@@ -207,7 +213,11 @@ async def run_readiness_check(
                 "pass_count": pass_count,
                 "allocation_enabled": allocation_enabled,
             },
-            "issues": [i.as_dict() for i in evaluation.issues],
+            # F-07 §4.4: parity with ``queries.readiness_check`` — a just-created report
+            # returns the SAME issue shape the read model serves, so the page does not
+            # lose its labels between the POST response and the next GET. The labels
+            # come from the items this very transaction snapshotted.
+            "issues": [_labelled_issue(i, scope_labels) for i in evaluation.issues],
         }
 
     return await run_idempotent(
@@ -287,16 +297,36 @@ async def _load_workspace_for_check(
     return workspace
 
 
+def _labelled_issue(
+    issue: ReadinessIssue, scope_labels: Mapping[str, str]
+) -> dict[str, str | None]:
+    """``issue.as_dict()`` plus the pinned ``scope_label`` (F-07 §4.4).
+
+    The label is NOT persisted on the issue row: the read model recovers it from the
+    report's composition snapshot, so there is exactly one stored copy and the two
+    surfaces can never drift.
+    """
+    data = issue.as_dict()
+    data["scope_label"] = scope_labels.get(issue.scope_id) if issue.scope_id else None
+    return data
+
+
 async def _build_item_inputs(
     session: AsyncSession,
     enabled: list[tuple[MainboardWorkingItem, bool]],
 ) -> list[ReadinessItemInput]:
     inputs: list[ReadinessItemInput] = []
+    # O-24b: one IN() read for every available item's pinned revision instead of one per
+    # item. An id with no row is absent from the map, so the empty-payload fallback below
+    # is unchanged — an unresolvable pin still reaches the validators as ``payload={}``.
+    revisions = await mb_repo.get_work_object_revisions(
+        session, [item.pinned_revision_id for item, available in enabled if available]
+    )
     for item, available in enabled:
         payload: dict[str, Any] = {}
         external: ExternalImportState | None = None
         if available:
-            revision = await mb_repo.get_work_object_revision(session, item.pinned_revision_id)
+            revision = revisions.get(item.pinned_revision_id)
             payload = dict(revision.payload) if revision is not None else {}
             if item.item_kind == MainboardItemKind.STRATEGY:
                 payload = await _resolve_strategy_payload(session, payload)
@@ -337,6 +367,20 @@ async def _resolve_strategy_payload(
     return dict(revision.payload)
 
 
+def _is_strategy(item: ReadinessItemInput) -> bool:
+    return item.available and item.kind == MainboardItemKind.STRATEGY
+
+
+def _market_pin(item: ReadinessItemInput) -> str:
+    """The strategy's declared market dataset pin, or ``""`` when it declares none.
+
+    The blank stands in for 'no pin' exactly as before: it matches no row, so the item
+    falls into the NOT_APPROVED blocker instead of resolving to some other dataset."""
+    data = item.payload.get("data")
+    revision_id = data.get("market_dataset_revision_id") if isinstance(data, dict) else None
+    return str(revision_id or "")
+
+
 async def _resolve_market_data_issues(
     session: AsyncSession, items: list[ReadinessItemInput]
 ) -> list[ReadinessIssue]:
@@ -347,12 +391,16 @@ async def _resolve_market_data_issues(
     dataset root must still be ACTIVE (doc 11; doc 14 §9.2/§11).
     """
     issues: list[ReadinessIssue] = []
+    # O-24b: one IN() read for every strategy's pinned dataset. A pin that is missing (or
+    # blank) is absent from the map, so it still falls into the NOT_APPROVED blocker below
+    # exactly as the per-item ``session.get`` miss did.
+    revisions = await market_repo.get_revisions(
+        session, [_market_pin(item) for item in items if _is_strategy(item)]
+    )
     for item in items:
         if not item.available or item.kind != MainboardItemKind.STRATEGY:
             continue
-        data = item.payload.get("data")
-        revision_id = data.get("market_dataset_revision_id") if isinstance(data, dict) else None
-        revision = await market_repo.get_revision(session, str(revision_id or ""))
+        revision = revisions.get(_market_pin(item))
         root = (
             await market_repo.get_dataset_root(session, revision.entity_id)
             if revision is not None
@@ -436,6 +484,31 @@ async def _resolve_tick_data_issues(
     return issues
 
 
+def _signal_price_pins(
+    items: list[ReadinessItemInput],
+) -> list[tuple[ReadinessItemInput, TradingSignalConfig, str]]:
+    """Every Trading Signal whose price source declares an OHLCV fallback pin.
+
+    Split out of the loop so the pins can be batched, and so the two deliberate
+    silences stay in ONE place: a config that does not parse is left to
+    ``EXTERNAL_IMPORT_INVALID``, and a config with NO reference at all is left to the
+    pure validator — neither is a defect this resolver reports."""
+    pins: list[tuple[ReadinessItemInput, TradingSignalConfig, str]] = []
+    for item in items:
+        if not item.available or item.kind != MainboardItemKind.TRADING_SIGNAL:
+            continue
+        try:
+            config = TradingSignalConfig(**item.payload)
+        except PydanticValidationError:
+            continue  # EXTERNAL_IMPORT_INVALID already surfaces this in the validators.
+        price = config.price_policy
+        ref = price.approved_market_data_revision_ref
+        if str(price.source) not in _SIGNAL_OHLCV_FALLBACK_SOURCES or ref is None:
+            continue
+        pins.append((item, config, ref))
+    return pins
+
+
 async def _resolve_signal_market_data_issues(
     session: AsyncSession, items: list[ReadinessItemInput]
 ) -> list[ReadinessIssue]:
@@ -460,18 +533,13 @@ async def _resolve_signal_market_data_issues(
     stays silent on both so one defect never produces two blockers.
     """
     issues: list[ReadinessIssue] = []
-    for item in items:
-        if not item.available or item.kind != MainboardItemKind.TRADING_SIGNAL:
-            continue
-        try:
-            config = TradingSignalConfig(**item.payload)
-        except PydanticValidationError:
-            continue  # EXTERNAL_IMPORT_INVALID already surfaces this in the validators.
+    signals = _signal_price_pins(items)
+    # O-24b: one IN() read for every signal's OHLCV fallback pin. A revoked/purged pin is
+    # absent from the map, so it still produces MARKET_DATA_DEPENDENCY_BLOCKED below.
+    revisions = await market_repo.get_revisions(session, [ref for _item, _config, ref in signals])
+    for item, config, ref in signals:
         price = config.price_policy
-        ref = price.approved_market_data_revision_ref
-        if str(price.source) not in _SIGNAL_OHLCV_FALLBACK_SOURCES or ref is None:
-            continue
-        revision = await market_repo.get_revision(session, ref)
+        revision = revisions.get(ref)
         root = (
             await market_repo.get_dataset_root(session, revision.entity_id)
             if revision is not None
@@ -602,6 +670,28 @@ async def _resolve_strategy_indicator_issues(
     return issues
 
 
+def _funded_strategies(
+    items: list[ReadinessItemInput],
+) -> list[tuple[ReadinessItemInput, StrategyConfig, str]]:
+    """Every strategy with funding ON, paired with its (possibly blank) source pin.
+
+    Split out of the loop so the pins can be batched. Funding OFF and a config that does
+    not parse are skipped exactly as before — the latter is ``STRATEGY_CONFIG_INVALID``'s
+    defect, not this resolver's."""
+    funded: list[tuple[ReadinessItemInput, StrategyConfig, str]] = []
+    for item in items:
+        if not item.available or item.kind != MainboardItemKind.STRATEGY:
+            continue
+        try:
+            config = StrategyConfig(**item.payload)
+        except PydanticValidationError:
+            continue  # STRATEGY_CONFIG_INVALID already surfaces this in the validators.
+        if not config.data.funding.enabled:
+            continue
+        funded.append((item, config, config.data.funding.source_revision_id or ""))
+    return funded
+
+
 async def _resolve_research_sources(
     session: AsyncSession, items: list[ReadinessItemInput]
 ) -> list[ResearchSourceState]:
@@ -624,20 +714,17 @@ async def _resolve_research_sources(
     judgement itself is the pure ``validate_research_sources`` (doc 14 §9.2 "validators
     must be separate pure deterministic domain services").
     """
+    funded = _funded_strategies(items)
+    # O-24b: one IN() read for every enabled funding pin. A blank id is never queried (it
+    # short-circuits to ``found=False`` below, as before) and an id with no row is absent
+    # from the map, so an unresolvable feed still reports ``found=False``.
+    revisions = await research_repo.get_revisions(
+        session, [revision_id for _item, _config, revision_id in funded if revision_id]
+    )
     sources: list[ResearchSourceState] = []
-    for item in items:
-        if not item.available or item.kind != MainboardItemKind.STRATEGY:
-            continue
-        try:
-            config = StrategyConfig(**item.payload)
-        except PydanticValidationError:
-            continue  # STRATEGY_CONFIG_INVALID already surfaces this in the validators.
-        funding = config.data.funding
-        if not funding.enabled:
-            continue
-        revision_id = funding.source_revision_id or ""
+    for item, config, revision_id in funded:
         field_path = "data.funding.source_revision_id"
-        revision = await research_repo.get_revision(session, revision_id) if revision_id else None
+        revision = revisions.get(revision_id) if revision_id else None
         if revision is None:
             sources.append(
                 ResearchSourceState(
@@ -818,6 +905,12 @@ def _manifest(
                 "revision_id": item.pinned_revision_id,
                 "enabled": item.is_enabled,
                 "position": item.position_index,
+                # F-07 §4.4 — the item's human name pinned AT SNAPSHOT TIME. The report
+                # this snapshot backs is immutable and is_current-tracked, so its issue
+                # scopes MUST be labelled from here; reading the live composition would
+                # label a stale report with names it never saw. Twin of
+                # ``commands.mainboard._snapshot_manifest``.
+                "label": item.display_label_override,
             }
             for item in items
         ],

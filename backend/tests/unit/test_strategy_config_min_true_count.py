@@ -368,7 +368,6 @@ def _manifest(engine_version: str):
 
 
 def test_strategy_config_min_true_count_bumps_engine_version_and_shifts_execution_key() -> None:
-
     current = _manifest(ENGINE_VERSION)
     prior = _manifest(_PRIOR_ENGINE_VERSION)
     assert current.manifest["identity"]["engine_version"] == ENGINE_VERSION

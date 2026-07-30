@@ -99,7 +99,7 @@ F-03 (multi-item unified-clock portfolio) · P-13 / F-06 (ResultDetail charts + 
 | **F-01** synchronous `_enqueue_stub_job` → real worker lifecycle | ✔ `jobs/create_package.py` (4 kinds) | W3 | **DONE** (F-01a/b/c: Pre-Check · candidate · validation · baseline-parse all admissions + durable workers; `_enqueue_stub_job`/`_enqueue_completed_job` deleted; acceptance in `test_create_package_{precheck,candidate_validation,baseline}_worker.py`) |
 | **F-04** breakout-proxy contradictory paths | doc | W3 | Not started |
 | **F-05 / M-05** capability matrix (UI ↔ engine parity) | ✔ `domain/backtest/capabilities.py` (59 rows, 22 `future_dev`) | W3 | **DONE** (canonical matrix per option VALUE; engine fail-closed gate at the `_open` choke point + `capability_not_in_build` trace/L4 warnings; Ready Check `STRATEGY_CAPABILITY_NOT_IN_BUILD` "Not available in this build"; editor disables `future_dev` options with the dependency note from the generated `engineCapabilityMatrix.generated.ts` mirror. Found + closed a real silent hole: `slippage_mode='historical_slippage_if_available'` passed all nine per-domain predicates and ran as a ZERO-slippage backtest. `ENGINE_VERSION` → `backtest-engine-v18-capability-matrix`. Acceptance in `test_capability_matrix.py` + `engineCapabilityMatrix.test.tsx`) |
-| **F-07** residual raw-id presentation sweep | ✔ swept empirically 2026-07-27 (§4) | W3 | **Presentation layer DONE** — 2 Portfolio residuals fixed; **4 residuals REMAIN** and need a backend display DTO (§4) |
+| **F-07** residual raw-id sweep | ✔ **COMPLETE** 2026-07-29 (§4) | W3 | Presentation half 2026-07-27 (2 Portfolio residuals fixed, §4.3); backend display-DTO half 2026-07-29 (all **4** residuals closed, §4.4). Migration `0041`; `ENGINE_VERSION` → `-per-item-labels` (artifact shape, not behaviour) |
 | **F-09** README/status honesty rewrite | doc | W3 | Not started |
 
 **Rule:** a Bucket-3 item is `DONE` only with working behavior + passing acceptance test.
@@ -124,7 +124,7 @@ A Bucket-1/2 item cannot be `Complete` without the PO signature or an explicit F
 
 ---
 
-## 4. F-07 raw-id presentation sweep — empirical result (2026-07-27)
+## 4. F-07 raw-id sweep — empirical result (presentation 2026-07-27, display DTOs 2026-07-29)
 
 **Why this section exists.** §2 Bucket 3 carried F-07 as `Not started` with the note
 "overlaps P-11/12/16". Those three landed, so the row could not be trusted either way.
@@ -174,100 +174,57 @@ instead of a bare id (F-07)"* — asserts the label is inside the **issue row it
 with the id still present. **Proven RED:** reverting only the `IssuesTable` render to the
 pre-sweep `<code>{issue.composition_item_id}</code>` fails this test and only this test.
 
-### 4.4 Residuals that REMAIN — need a backend display DTO (NOT presentation-only)
+### 4.4 Residuals CLOSED by the backend display-DTO slice (2026-07-29)
 
-These are real F-07 violations, but their DTOs carry **no human label**, and inventing one in
-the browser is precisely the "reconstruct names from IDs" the finding forbids. Each needs
-F-07's stated correction — *add display DTOs at query boundaries* — which is a backend query
-change and therefore outside this presentation-only slice.
+These four were real F-07 violations whose DTOs carried **no human label**. Inventing one in
+the browser is precisely the "reconstruct names from IDs" the finding forbids, so each got
+F-07's stated correction — *add display DTOs at query boundaries* — as a backend change.
 
-> **Path + line refresh (2026-07-29, `origin/main` @ `9e86c99`).** These four rows previously
-> carried **bare filenames**, which read as `src/pages/` for all four — but `ResultDetail.tsx` lives
-> under **`src/components/`**, not `src/pages/`. Paths are now explicit and each row also names its
-> **enclosing symbol**, so the row survives the next line drift. Every line number was re-measured
-> today and **all four still hold** — only the paths were wrong. Re-measure with:
->
-> ```bash
-> cd frontend
-> grep -n "request_id"    src/pages/PreCheck.tsx           # 2026-07-29 → :124
-> grep -n "import_job_id" src/pages/Library.tsx            # 2026-07-29 → :1259, :1274
-> grep -n "item_id"       src/components/ResultDetail.tsx  # 2026-07-29 → :420, :589
-> grep -n "scope_id"      src/pages/ReadyCheck.tsx         # 2026-07-29 → :291
-> ```
 
-| Site (path · line · enclosing symbol) | Defect | Why not fixable here |
+| Site | Previous defect | Closure |
 |---|---|---|
-| ~~`frontend/src/pages/PreCheck.tsx:124` — in `RequestPickerCard` (def `:83`)~~ | ~~the request picker's **"Request" column is a bare `request_id`**~~ | **CLOSED — I-16b, see §4.6.** The blocker ("the DTO exposes no name/title field") was removed by adding the display DTO, not by inventing a name in the browser |
-| `frontend/src/pages/Library.tsx:1259`, `:1274` | import-job rows identified only by `import_job_id` (status badge + `package_kind` alongside) | the import-job DTO carries no label |
-| `frontend/src/components/ResultDetail.tsx:420` — in `PerItemCard` (def `:416`) · `:589` — in `MarginalCard` (def `:585`) | per-item breakdown rows render `{item_kind} <code>{item_id}</code>`, and leave-one-out rows render `Without <code>{entry.item_id}</code>` — reading a result breakdown is a common task | `PerItemBreakdown` / `ManifestItemRef` have no label field. The result is **immutable and pinned**; joining the *live* composition's labels would mislabel a result whose items have since changed — the label must come from the manifest, i.e. the server |
-| `frontend/src/pages/ReadyCheck.tsx:291` — in `IssuesTable` (def `:258`) | issue rows show a bare `scope_id` (same defect class as the Portfolio issue table that this slice fixed) | `ReadinessIssue` has no label field, and the report is immutable + `is_current`-tracked; labelling a **stale** report from the live composition would be actively wrong |
+| `frontend/src/pages/PreCheck.tsx` | Request picker used a bare `request_id` | **CLOSED by I-16b.** The query boundary supplies the server-composed request label; the id remains secondary |
+| `frontend/src/pages/Library.tsx` | Import rows were identified only by `import_job_id` | **CLOSED here.** `source_package_name` is captured from the submitted manifest and rendered with the job id as the audit token |
+| `frontend/src/components/ResultDetail.tsx` | Per-item and leave-one-out rows used bare item ids | **CLOSED here.** `item_label` is pinned in the immutable run manifest, outside `execution_key`, and persisted into result diagnostics |
+| `frontend/src/pages/ReadyCheck.tsx` | Issue rows showed a bare `scope_id` | **CLOSED here.** `scope_label` comes from the snapshot pinned by the report, never from the live composition |
 
-`frontend/src/pages/ResultsHistory.tsx:170` was listed here as **not** a violation on the grounds
-that a backtest result has no user-assigned name. **Superseded by I-16a (2026-07-29):** the
-history projection has been shipping a server-owned `display_title` all along
-(`application/queries/results_history.py::_row_dto` → `HistoryRow.display_title`,
-`frontend/src/lib/backtest.ts:181`, doc 16 §8.1 `HistoryResultRowDTO`) — and the page rendered
-**zero** of it, leaving `<code>{row.result_id}</code>` as the row's primary visible identity. That
-is F-07's own prescribed correction already present at the query boundary and simply not consumed.
-The row now renders `ResultLabel` — `display_title` primary, `result_id` beneath as the secondary
-binding key (mirrors Portfolio's `ItemLabel`, §4.3). Presentation-only: no DTO, route,
-react-query key, OCC token, Idempotency-Key or `lib/*.ts` data logic changed; the id keeps
-carrying compare selection, the View deep-link and delete. Honest boundary: the shipped title is
-server-derived as `"Backtest Result <result_id>"`, so it still *contains* the id — but the string
-is composed by the **server**, never reconstructed in the browser, which is exactly the line F-07
-draws. Its digest shape remains PO-owned (D-5).
+`frontend/src/pages/ResultsHistory.tsx:170` is deliberately **not** listed as a violation: a
+backtest result has no user-assigned name, and since P-12 the row carries completed-at / timeframe
+/ symbol, so the id is not the sole discriminator. Its digest shape is PO-owned (D-5).
+
+**I-16a — attempted, then reverted (2026-07-29). Do not re-open without new server-side facts.**
+The row was briefly changed to render the history projection's `display_title` as its primary
+label with the id kept beneath (`ResultLabel`, mirroring Portfolio's `ItemLabel`). The premise was
+that the query boundary had been shipping F-07's own prescribed correction all along and the page
+simply wasn't consuming it. **The premise was wrong.** `display_title` is not a name — it is the id
+with a noun glued to its front:
+
+```python
+# application/queries/results_history.py::_row_dto  (and panel_backtest_log.py::_row)
+"display_title": f"Backtest Result {result.result_id}",
+```
+
+So the shipped row read `Backtest Result res_1` over `res_1` — the same opaque identifier printed
+**twice**, zero information gained, and F-07's actual defect ("recognizing an opaque identifier for
+a common task") untouched. Reverted in full; the id is back as a single `<code>` binding key, and
+`resultsHistory.test.tsx` now carries a regression guard asserting the id-derived title is *not*
+rendered.
+
+Why no better title can be composed at the query boundary today — the two candidates and why each
+fails:
+
+| Candidate title | Why it fails |
+|---|---|
+| `symbol · timeframe · completed-at` (the I-16b `request_display_label` pattern) | those three facts are **already the row's own adjacent columns** (`ResultsHistory.tsx:201-203`), so the label would restate them a third time |
+| the composition's display name | **nothing nameable is pinned.** The manifest carries only `composition_snapshot_id` (`domain/backtest/manifest.py:130`) — no name. Resolving the *live* composition is precisely the mislabeling hazard this same table rejects for `PerItemCard`: a result is immutable, and its composition may have been renamed or recomposed since the run |
+
+Re-opening therefore requires a **new pinned fact** — e.g. the manifest starting to carry the
+composition's name at write time — not another frontend pass. Until then the id-as-binding-key plus
+the P-12 column trio is the honest rendering. The DTO field itself is left in place (doc 16 §8.1
+`HistoryResultRowDTO` names it, and `PanelLogs.tsx:134` still renders it in a table that has no
+symbol/timeframe columns to discriminate with); only this page's consumption of it was reverted.
 
 ### 4.5 Verification
 
-`eslint` ✓ · `tsc -b --noEmit` ✓ · `vitest` **608/608** (was 607; +1 new case), run with
-`--no-file-parallelism`. Backend untouched → **no `ENGINE_VERSION` bump** (no engine behavior
-change) and **no migration**.
-
-> **Honest boundary:** this slice closes the F-07 *presentation* layer. F-07 cannot be marked
-> Complete outright while §4.4's four surfaces still require a reader to recognize an opaque
-> identifier. Those four are the follow-up backend display-DTO slice.
-
----
-
-## 4.6 I-16b — Pre-Check request label (first §4.4 residual closed, 2026-07-29)
-
-**Empirically re-verified before the fix:** `PreCheck.tsx:124` rendered the picker's Request
-column as `<code>{req.request_id}</code>` and `:200` rendered the detail `<dt>Request</dt>` as
-`<code>{detail.request_id}</code>` — no human text on either surface.
-
-**Backend search first (the row's blocker, re-checked):** confirmed still true, and *why* —
-`package_request` has no name column, `output_contract` carries only an output `kind`, and doc 06
-§4 (`:510-512`) assigns the package its display name **only at draft metadata, after a candidate
-exists**. Even `create_draft_from_candidate` writes an `input_contract` of
-`{request_id, source_kind, source_language, target_runtime}` with no `name`, so
-`library.py::_package_name` would find nothing. There was no existing label to bind to.
-
-**Fix — F-07's stated correction, at the query boundary:**
-
-| Layer | Change |
-|---|---|
-| `backend/.../domain/create_package/labels.py` (new) | `request_display_label()` — pure, deterministic: `"Indicator Package · 2026-07-29 14:03:22 UTC"`, plus `· revision N` when `revision_attempt_no > 1`. Kind wording mirrors the D-2 map; unmapped kinds title-case rather than surface raw snake_case; a naive timestamp is read as UTC, never shifted |
-| `backend/.../application/queries/create_package.py` | `_request_dict` **and** the `list_package_requests` row now ship `display_label` — one text, identical on both surfaces |
-| `frontend/src/lib/createPackage.ts` | `display_label: string` on `PackageRequestSummary` + `PackageRequestDetail` |
-| `frontend/src/pages/PreCheck.tsx` | new `RequestLabel` (label primary, `<code>` id beneath) at both sites, with `UNNAMED_REQUEST` as the honest last-resort primary — **mirrors D-4's `ItemLabel` / `UNLABELLED_ITEM` exactly** |
-
-Second-precision timestamp is deliberate: minute precision would give two same-kind requests
-created in one minute an identical label, and the label has to discriminate on its own.
-
-**Untouched:** route paths, react-query keys, OCC tokens (`request_version`), Idempotency-Key,
-hooks, SSE taxonomy, `lib/*.ts` data logic, `app/nav.ts`. **No migration, no `ENGINE_VERSION`
-bump** — the label is computed from existing columns (`package_kind`, `revision_attempt_no`,
-`entity_registry.created_at`).
-
-**Acceptance:** `tests/unit/test_precheck_projection_label.py` (8 cases: kind+instant, never
-echoes the id, revision only past the original, second-precision discrimination, UTC
-normalization, naive-as-UTC, no-timestamp fallback, unmapped kind) ·
-`test_create_package_persistence.py::test_precheck_projection_carries_a_display_label` (both
-projections ship the SAME label and still ship the id) · `preCheck.test.tsx` → *"names the
-request with a human label instead of a bare id (F-07)"* asserts the label is the row's text
-**with the id inside the same row** (`within`), and that the detail panel repeats it.
-
-**Still open in §4.4 — three surfaces:** `Library.tsx` import jobs, `ResultDetail.tsx` per-item /
-marginal rows, `ReadyCheck.tsx` issue rows. The honest boundary above now reads **three**, not
-four. Adjacent and NOT fixed here (out of this slice's scope): `CreatePackage.tsx:193` renders the
-same picker's `request_id` as its button text and can now bind to the same `display_label`.
+**Presentation half (2026-07-27):** `eslint` ✓ · `tsc -b --noEmit` ✓ · `vitest` **608/608**.
+Backend untouched → no `ENGINE_VERSION` bump, no migration.

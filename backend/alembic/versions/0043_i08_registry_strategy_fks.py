@@ -34,8 +34,8 @@ Constraint names match what ``Base.metadata.create_all`` produces (Postgres defa
 ``<table>_<column>_fkey``), so the alembic-built schema and the test-built schema are
 byte-identical. Downgrade drops the three constraints and restores the loose columns.
 
-Revision ID: 0042_i08_registry_strategy_fks
-Revises: 0041_filtered_event_artifact
+Revision ID: 0043_i08_registry_strategy_fks
+Revises: 0042_package_import_source_name
 Create Date: 2026-07-29
 """
 
@@ -45,8 +45,8 @@ from collections.abc import Sequence
 
 from alembic import op
 
-revision: str = "0042_i08_registry_strategy_fks"
-down_revision: str | None = "0041_filtered_event_artifact"
+revision: str = "0043_i08_registry_strategy_fks"
+down_revision: str | None = "0042_package_import_source_name"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

@@ -3048,9 +3048,81 @@ Kalan tek büyük açık iş hâlâ **R2'nin product-owner imzası**
 `entropia_v18_remediation_status.md`'deki R2 RE-OPENING banner'ı kalkmaz.
 
 
+---
 
+## I-17-COV — kalan kabul-ID kapsam boşlukları gerçek testlerle kapandı (PR TBD)
+
+**Branch:** `test/i17cov-acceptance-id-gaps` · **test-only: `src/` değişmedi, migration yok,
+alembic head `0039_backtest_run_cancellation`, `ENGINE_VERSION` bump yok.**
+
+**Ölçüm (`python3 docs/audit/acceptance_id_scan.py`):** **163/215 (%75) → 173/215 (%80)**;
+kapsam içi (doc 02/03/04/05/07/10) **108/130 → 118/130**; doc 05 Trade Log **COMPLETE**.
+
+I-17'nin `acceptance_id_map.md` §E'de bıraktığı "gerçek boşluk" listesi (etiketsiz değil, **testsiz**)
+ID ID yeniden doğrulandı ve **20 yeni test / 6 yeni dosya** ile kapatıldı: PC-14, PC-19 (1. cümle),
+ESP-19 (kısmi), RF-15/ESP-05, PL-06, AT-21, AT-24, TS-20/AOS-20 (domain-command yarısı), CP-05,
+TS-16/TL-18/AOS-16, PC-22, CP-14. Tam tablo + kanıt: `docs/PROJECT_HISTORY.md` §I-17-COV ve
+`docs/audit/acceptance_id_map.md` §H.
+
+**Üç kusur bulundu, yamanmadı, belgelendi** (I-17'nin RF-12 deseni):
+1. **PC-19 2. cümle tutmuyor** — soft-delete edilmiş ESP yeni Pre-Check'te hâlâ çözülüyor
+   (`resolve_embedded_dependency` kökün `deletion_state`'ine bakmıyor; fonksiyonun kendi
+   docstring'i tersini vaat ediyor) → `fix/pc19-soft-deleted-esp-must-not-resolve`.
+2. **AT-21/TS-20'nin "Tool Gateway" cümlesi karşılıksız** — `ToolName`'de `strategy.*` /
+   `trading_signal.*` üyesi yok → `feat/gateway-strategy-and-signal-tools`.
+3. **ESP-19 export'u adapter ref + evidence taşımıyor** (manifest yalnız paket revision'ından
+   kuruluyor) → `feat/esp19-export-carries-contract-facts`.
+
+**Kalan (bu slice'ın kapsamı dışı, dürüst sınır):** `AOS-12` (kendi branch'i); kapsam içi 12 etiketsiz
+ID (`AT-04/06/07`, `TS-10`, `PC-01/02/15/16/18`, `RF-13/18`) — hiçbiri §E'nin gerçek-boşluk
+listesinde değildi, çoğu izlenebilirlik borcu; `RC`/`RH`/`AL`/`UM`/`FD` sayfaları (42 ID) baştan
+kapsam dışı; doc 06/08/09 hâlâ ID sütunsuz.
+
+## Next: **PO imzası + R2 kapanışı** (değişmedi) · I-17-COV landed
+
+Kalan tek büyük açık iş hâlâ **R2'nin product-owner imzası**
+(`docs/implementation/v18_final_acceptance.md` §4, D-1…D-9). Kabul-ID izlenebilirliği tarafında
+sıradaki en yüksek değerli iş, yukarıdaki üç fix/feat slice'ı ve kalan 12 in-scope etiketi.
+
+## I-07 — `human_users` OCC: şüphe adlandırma yanılgısı çıktı, migration yok (PR #499)
+
+**Durum: PR #499 AÇIK — CI 6/6 yeşil, merge bekliyor** (self-merge kapalı). Merge edildiğinde bu
+başlık "landed (PR #499)" olarak sabitlenmeli.
+
+I-07 "soft-delete taşıyıp `row_version` taşımayan TEK asimetrik kök tablo" öncülüyle açıldı ve
+migration'lı/notlu iki dallı karar istedi. **Ampirik sonuç iki dalı da geçersiz kıldı:**
+`human_users` OCC'yi hem gerektiriyor hem zaten taşıyor — kolon adı `version`
+(`models/identity.py:40`), `row_version` değil. Mutasyonda +1, uyuşmazlıkta 409
+`USER_ROLE_VERSION_CONFLICT` (`role_assignment.py:94`), dual-token `reconcile_occ_tokens`'tan
+geçiyor (`admin_panel.py:97`), row-lock + no-op + `run_idempotent` yerinde.
+
+**`row_version` EKLENMEDİ:** (1) `version` zaten token — ikincisi aynı satırda iki bağımsız önkoşul
+yaratır, O-12'nin yasağı; (2) yeniden adlandırma kırıcı — `version` tel üstünde, `adminPanel.ts:27,72`
+tüketiyor; (3) farklı ad zaten konvansiyon — `registry_version` üç tabloda aynı işi yapıyor.
+
+**Asıl kusur haritadaydı:** `DATA_MODEL.md`'nin `human_users` OCC hücresi `—` diyordu — eksik not
+değil, **yanlış olgu**. `✔ version` olarak düzeltildi; OCC konvansiyonu bölümüne "token adı
+`row_version` olmak zorunda değil, üç ad ailesi var, kolon adına bakıp OCC yok çıkarımı yapma"
+kuralı ve **§I-07 karar kaydı** eklendi. `adminPanel.ts:362` yorumu token'ı yanlışlıkla registry
+satırına atfediyordu — düzeltildi (yorum-only).
+
+**Dürüst sınır (ayrı konu, kapsam dışı):** `human_users` soft-delete kolonları beyan edilmiş ama
+**hiç yazılmıyor** — yazan komut yok, yalnız okuma kapısı (`identity.py:30`, `auth.py:364,509`).
+`human_user` K-06 `TRASH_OBJECT_LOCATIONS` kataloğunda yok → kullanıcı silme özelliği yok. Katalogda
+olmayan tip için trash-entry yükümlülüğü de yok, dolayısıyla tutarlı. Eklenirse dört yer birden.
+
+**Testler:** `test_panel_management_logs.py` 26 passed · frontend tsc + eslint temiz · **CI 6/6**
+(Backend 36m45s). **Backend kaynağı değişmedi → migration yok, alembic head `0041` sabit.**
+
+**Görev metninde iki hata:** önerilen `-k "user_role_occ"` seçicisi hiçbir teste uymuyor (gerçeği
+`-k "assign_role"`); ve "row_version yok → OCC yok" çıkarımı yanlış — kolon adı OCC'nin varlığına
+kanıt değil.
+
+## Next: **PO imzası + R2 kapanışı** (değişmedi) · I-07 PR #499 merge bekliyor
 
 Kalan tek büyük açık iş hâlâ **R2'nin product-owner imzası**
 (`docs/implementation/v18_final_acceptance.md` §4, D-1…D-9) — imza olmadan
 `entropia_v18_remediation_status.md`'deki R2 RE-OPENING banner'ı kalkmaz.
 
+Bu oturumda main ayrıca ilerledi: **#494 (I-03 allocation item kind allowlist)**,
+**#495 (I-12 sekiz callerless sembol silindi)** — ikisi de I-07'den bağımsız, `origin/main`@`2cea1a6`.

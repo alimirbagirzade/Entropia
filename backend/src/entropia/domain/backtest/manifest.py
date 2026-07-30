@@ -110,7 +110,12 @@ from entropia.shared.manifest import manifest_hash
 # therefore opens a DIFFERENT ladder than the same config did under the engine that
 # reported it unsupported, so the bump shifts the execution_key namespace and a pre-S5c
 # Result is never idempotently reused for a re-RUN (INF-04/INF-05).
-ENGINE_VERSION = "backtest-engine-v18-scaling-tf-sequence"
+# v18-scaling-tf-sequence-per-item-labels (F-07): immutable composite Result diagnostics
+# now persist the snapshot-owned label beside each per-item and leave-one-out row. The
+# labels stay outside execution_content so renames do not fork reproducibility, but the
+# artifact shape changed; this namespace shift prevents stale label-less Results from
+# being idempotently reused.
+ENGINE_VERSION = "backtest-engine-v18-scaling-tf-sequence-per-item-labels"
 METRIC_SET_VERSION = "metric-set-v1"
 OUTPUT_ARTIFACT_PROFILE = "standard-v1"
 
@@ -142,6 +147,34 @@ def _pinned_items(item_manifest: dict[str, Any]) -> list[dict[str, Any]]:
         for entry in raw
     ]
     return sorted(items, key=lambda m: (str(m["root_id"]), str(m["selected_revision_id"])))
+
+
+def pinned_item_labels(item_manifest: dict[str, Any]) -> dict[str, str]:
+    """Project the snapshot's per-item human labels (F-07 §4.4).
+
+    DELIBERATELY separate from ``_pinned_items``: that projection is hashed into
+    ``execution_key``, and a DISPLAY label must never change a run's reproducibility
+    identity — renaming a composition item would otherwise make an identical replay
+    look like a different execution. These labels therefore ride in the manifest only,
+    outside ``execution_content``.
+
+    They exist so the Result's per-item breakdown can name its rows from the PINNED
+    composition instead of the live one: the result is immutable, and an item renamed
+    or swapped after the run must not re-label a finished result.
+
+    Snapshots written before the manifest carried ``label`` simply yield no entries —
+    the reader then falls back to the raw item id rather than inventing a name.
+    """
+    raw = item_manifest.get("items", []) if isinstance(item_manifest, dict) else []
+    labels: dict[str, str] = {}
+    for entry in raw:
+        if not isinstance(entry, dict):
+            continue
+        item_id = entry.get("item_id")
+        label = entry.get("label")
+        if isinstance(item_id, str) and isinstance(label, str) and label:
+            labels[item_id] = label
+    return labels
 
 
 def build_run_manifest(
@@ -208,6 +241,12 @@ def build_run_manifest(
             "correlation_id": correlation_id,
         },
         "mainboard_items": items,
+        # F-07 §4.4 — display labels for the pinned items, NOT part of
+        # ``execution_content`` above and therefore NOT part of ``execution_key``: a
+        # rename must never fork a run's reproducibility identity. The worker copies
+        # these onto each ``ItemRun`` so the immutable Result can name its per-item and
+        # leave-one-out rows without ever joining the live composition.
+        "mainboard_item_labels": pinned_item_labels(item_manifest),
         "strategy_package_context": strategy_package_context,
         "external_object_context": external_object_context,
         "data_time_context": data_time_context,
@@ -230,4 +269,5 @@ __all__ = [
     "OUTPUT_ARTIFACT_PROFILE",
     "ManifestBuildResult",
     "build_run_manifest",
+    "pinned_item_labels",
 ]

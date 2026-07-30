@@ -1659,30 +1659,51 @@ Docker, iki E2E (dev-auth + gerçek tarayıcı/Compose) ve A11Y axe-core taramas
 
 ---
 
-## I-07 · `human_users` OCC — adlandırma yanılgısı, migration yok (PR #499)
+## I-07 · `human_users` OCC — şüphe bir adlandırma yanılgısıydı, migration YOK (PR #499)
 
-I-07, `human_users` tablosunda `row_version` olmadığı için OCC bulunmadığı öncülüyle
-açıldı. Ampirik sonuç öncülü geçersiz kıldı: tablo OCC'yi zaten `version` kolonu ile
-taşıyor.
+**Branch:** `refactor/i07-human-users-row-version` · **migration YOK** (alembic head
+`0041_filtered_event_artifact` değişmedi) · **backend kaynağı değişmedi.**
 
-| Kanıt | Yer |
+### Görev nasıl açıldı, ne çıktı
+
+I-07 şu öncülle geldi: *"soft-delete taşıyıp `row_version` taşımayan TEK asimetrik kök tablo"* —
+ve iki dallı bir karar istedi. Ampirik sonuç iki dalı da geçersiz kıldı:
+`human_users` OCC'yi hem gerektiriyor hem **zaten taşıyor** — kolonun adı `row_version` değil,
+`version`.
+
+### Kanıt (sevk edilmiş hâl, dokunulmadı)
+
+| Ne | Nerede |
 |---|---|
-| OCC kolonu | `models/identity.py:40` → `version: Mapped[int]` |
+| OCC kolonu | `models/identity.py:40` → `version: Mapped[int]` (`Integer NOT NULL default=1`) |
 | Mutasyonda +1 | `commands/role_assignment.py:123` · `commands/roles.py:66` |
-| Typed 409 | `USER_ROLE_VERSION_CONFLICT` |
-| Dual-token | `routes/admin_panel.py` → `reconcile_occ_tokens` |
+| 409 typed hata | `commands/role_assignment.py:94-95` → `USER_ROLE_VERSION_CONFLICT` |
+| Dual-token (O-12) | `routes/admin_panel.py:97-100` → `reconcile_occ_tokens` |
 | Row-lock | `session.refresh(user, with_for_update=True)` |
-| No-op | aynı rol için version bump ve audit yok |
-| Idempotency | mutasyon `run_idempotent` içinde |
+| No-op disiplini | aynı rol → `changed=false`, version bump ve audit yok |
+| Idempotency | gövde `run_idempotent` içinde |
 
-İkinci bir `row_version` eklenmedi: bu aynı satırda iki bağımsız önkoşul yaratır ve
-O-12'yi ihlal ederdi; mevcut `version` alanını yeniden adlandırmak da tel sözleşmesini
-kırardı. `DATA_MODEL.md` içindeki yanlış OCC hücresi `✔ version` olarak düzeltildi ve
+### Karar: `row_version` kolonu EKLENMEDİ
+
+1. `version` zaten OCC token'ı; yanına `row_version` koymak aynı satırda iki bağımsız
+   önkoşul yaratır ve O-12'yi ihlal ederdi.
+2. Yeniden adlandırma kırıcıdır; `version` tel üstünde yayımlanıyor.
+3. Farklı ad zaten repo konvansiyonudur; `registry_version` aynı davranışı başka
+   tablolarda taşır.
+
+### Asıl kusur: harita yanlış söylüyordu
+
+`DATA_MODEL.md` içindeki `human_users` OCC hücresi `—` yerine `✔ version` olarak düzeltildi.
 OCC'nin kolon adıyla değil davranışıyla tanınacağı kayda geçirildi.
 
-**Dürüst sınır:** `human_users` soft-delete kolonlarını taşısa da kullanıcı silme özelliği
-ve K-06 trash katalog kaydı yoktur. Böyle bir özellik eklenirse katalog, deletion command,
-purge job ve trash query birlikte eklenmelidir.
+### Dürüst sınır
 
-**Doğrulama:** `test_panel_management_logs.py` 26 passed · frontend tsc + eslint temiz ·
-CI 6/6 yeşil.
+`human_users` soft-delete kolonlarını taşısa da bunlara yazan bir komut ve K-06 trash katalog
+kaydı yoktur. Kullanıcı silme özelliği eklenirse katalog, deletion command, purge job ve
+trash query birlikte eklenmelidir.
+
+### Doğrulama
+
+- `test_panel_management_logs.py` 26 passed.
+- Frontend tsc + eslint temiz.
+- CI 6/6 yeşil.

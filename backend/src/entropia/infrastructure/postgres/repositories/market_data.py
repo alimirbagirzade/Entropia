@@ -418,6 +418,24 @@ async def get_revision(session: AsyncSession, revision_id: str) -> MarketDataset
     return await session.get(MarketDatasetRevision, revision_id)
 
 
+async def get_revisions(
+    session: AsyncSession, revision_ids: Sequence[str]
+) -> dict[str, MarketDatasetRevision]:
+    """Resolve many market dataset revisions in ONE query, keyed by id (O-24b).
+
+    The batch counterpart of :func:`get_revision` for a caller that checks every item's
+    pinned dataset at once, mirroring :func:`summarize_coverage_for_revisions`: empty
+    input short-circuits, duplicate ids collapse, and an id with no row is ABSENT from
+    the map — a missing pin keeps its own fail-closed blocker rather than being silently
+    re-resolved. Never a per-item N+1.
+    """
+    ids = list(dict.fromkeys(revision_ids))
+    if not ids:
+        return {}
+    stmt = select(MarketDatasetRevision).where(MarketDatasetRevision.revision_id.in_(ids))
+    return {row.revision_id: row for row in (await session.execute(stmt)).scalars().all()}
+
+
 async def list_revisions(
     session: AsyncSession, entity_id: str, *, limit: int = 50
 ) -> Sequence[MarketDatasetRevision]:

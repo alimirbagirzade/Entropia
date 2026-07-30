@@ -121,7 +121,7 @@ their row order, and they exist so a test can cite something.
 | CP-02 | Add package derivation | `integration/test_derive_strategy_draft.py` |
 | CP-03 | Use authorization | `unit/test_package_permissions.py`; `integration/test_package_sharing.py` |
 | CP-04 | Request requiredness | `integration/test_create_package_persistence.py::test_description_route_skips_dependency_gate` |
-| CP-05 | Runtime alignment | — **no test** (`RUNTIME_UNAVAILABLE` path) |
+| CP-05 | Runtime alignment | `unit/test_acceptance_create_package_runtime.py` *(added 2026-07-29, §H)* |
 | CP-06 | Pre-Check stale | `integration/test_precheck_audit_events.py` (`precheck_stale`) |
 | CP-07 | Missing ESP | `integration/test_create_package_persistence.py::test_missing_resolver_blocks_precheck_and_send` |
 | CP-08 | Async resilience | `integration/test_create_package_precheck_worker.py` (durable QUEUED job) |
@@ -130,7 +130,7 @@ their row order, and they exist so a test can cite something.
 | CP-11 | Baseline policy | `integration/test_create_package_baseline_worker.py` |
 | CP-12 | Future-leak validation | `integration/test_create_package_candidate_validation_worker.py` |
 | CP-13 | Approval policy | `integration/test_create_package_approve_dependency_gate.py`; `unit/test_create_package_policy.py` |
-| CP-14 | Clear boundary | — **no test** |
+| CP-14 | Clear boundary | `frontend/src/test/createPackageClearBoundary.test.tsx` *(added 2026-07-29, §H)* |
 | CP-15 | Trash / history | `integration/test_trash_page.py`; `integration/test_package_lifecycle.py` |
 | CP-16 | Agent parity | `contract/test_create_package_contract.py` (agent principal) |
 
@@ -143,7 +143,7 @@ their row order, and they exist so a test can cite something.
 | PL-03 | Filter query | `integration/test_library_persistence.py::test_type_and_family_filters`, `::test_status_facet_and_text_filters` |
 | PL-04 | External type rejection | `unit/test_package_kind.py::test_legacy_types_are_rejected` |
 | PL-05 | Status separation | `integration/test_library_persistence.py::test_detail_projection_and_guards` |
-| PL-06 | Metric applicability | — **no test** (ROMAD-on-Condition sort scope) |
+| PL-06 | Metric applicability | `integration/test_acceptance_esp_package_gaps.py::test_condition_package_romad_is_not_applicable_and_nothing_can_sort_on_it` *(added 2026-07-29, §H)* |
 | PL-07 | Use exact pinning | `integration/test_create_package_revision_chain.py` |
 | PL-08 | Compatibility | `unit/test_readiness_validators.py` (`PACKAGE_TIMING_INCOMPATIBLE` family) |
 | PL-09 | Dependency cycle | `unit/test_package_dependency_graph.py` |
@@ -168,7 +168,7 @@ their row order, and they exist so a test can cite something.
 | ESP-02 | Canonical type enforcement | `unit/test_package_kind.py::test_legacy_types_are_rejected` |
 | ESP-03 | V18 sample catalog | `integration/test_esp_persistence.py::test_seed_style_ta_resolvers_resolve` |
 | ESP-04 | System facets | `integration/test_esp_persistence.py::test_list_filters_by_visibility_scope` |
-| ESP-05 | Rationale seed | — **no test** (this is also doc 10 **RF-15**, see §E) |
+| ESP-05 | Rationale seed | `integration/test_acceptance_esp_package_gaps.py::test_seeded_ta_resolver_family_is_active_and_binds_esp_packages_by_id` *(added 2026-07-29, §H; also doc 10 **RF-15**)* |
 | ESP-06 | Resolver exact match | `integration/test_esp_persistence.py::test_resolve_returns_exact_revision_only_when_trusted` |
 | ESP-07 | Name-only rejection | `integration/test_esp_persistence.py::test_resolve_signature_mismatch_and_adapter` |
 | ESP-08 | Adapter rejection | `integration/test_esp_persistence.py::test_resolve_signature_mismatch_and_adapter` |
@@ -182,7 +182,7 @@ their row order, and they exist so a test can cite something.
 | ESP-16 | Deprecation | `integration/test_esp_persistence.py::test_deprecate_closes_new_selection` |
 | ESP-17 | Delete policy | `integration/test_esp_persistence.py::test_soft_delete_preserves_revision_chain` |
 | ESP-18 | Trash policy | `integration/test_trash_page.py::test_trash_surfaces_reject_non_admin` |
-| ESP-19 | Export integrity | — **no test** |
+| ESP-19 | Export integrity | `integration/test_acceptance_esp_package_gaps.py::test_esp_revision_export_carries_identity_hash_and_dependency_manifest` *(added 2026-07-29, §H — **partial**, see §E.4)* |
 | ESP-20 | Role-aware list | `integration/test_esp_persistence.py::test_list_filters_by_visibility_scope` |
 
 > The mappings in §C are **stated, not scanner-verified** — they were established by
@@ -235,6 +235,59 @@ change and out of scope for a traceability slice. The hole is pinned as a commen
 next to the passing RF-12 test so it cannot be silently lost.
 
 **Recommended follow-up:** `fix/rf12-blank-rationale-family-blocks-ready`.
+
+### E.2 — DEFECT found while writing the PC-19 test (added 2026-07-29, I-17-COV)
+
+A **soft-deleted ESP still resolves for a new Pre-Check.** `soft_delete_entity`
+runs no ESP-specific preflight (`commands/deletion.py::_soft_delete_preflight`
+branches only on `work_object` and `rationale_family`) and leaves
+`embedded_resolver_registry` untouched, while
+`queries/esp.py::resolve_embedded_dependency` decides on the registry entry's
+`trust_state` alone — it never reads the root's `deletion_state`. Probed
+empirically on 2026-07-29: activate `ta.sma` → soft-delete its root → resolve →
+the **same trusted revision came back**.
+
+That is the second clause of doc 07 **PC-19** ("new Pre-Check does not resolve
+soft-deleted/inactive ESP"), and the resolver's own docstring
+(`queries/esp.py:228`) already advertises `deprecated / soft-deleted registry
+entry -> RESOLVER_NOT_ACTIVE` — so the implementation contradicts its documented
+contract, not merely the spec. The PC-19 test therefore asserts only the FIRST
+clause (the historical manifest stays readable, which does hold) and pins the hole
+in its docstring.
+
+Adjacent, unasserted here: doc 09 **ESP-17** says the server should block or
+redirect a soft-delete of an *active trusted* resolver toward deprecation. No such
+preflight exists either — the probe's delete simply succeeded.
+
+**Recommended follow-up:** `fix/pc19-soft-deleted-esp-must-not-resolve`.
+
+### E.3 — Missing surfaces the "Agent parity" rows name (added 2026-07-29, I-17-COV)
+
+`domain/agent_lab/tool_gateway.py::ToolName` has **no `strategy.*` and no
+`trading_signal.*` member** (it ships task/backtest/artifact/documentation tools
+plus the post-V1 S4 allocation + trade_log set). So the literal "via Tool Gateway"
+clause of doc 02 **AT-21** and doc 04 **TS-20** has nothing to call. The tests
+added for those IDs prove the substance both rows are about — and what doc 03
+**AOS-20** states outright ("Tool Gateway/**domain commands**") — namely that the
+Agent reaches the same server truth on the same command line, under the same
+policy, with no browser. The missing tools are an implementation gap, not a test
+gap.
+
+**Recommended follow-up:** `feat/gateway-strategy-and-signal-tools`.
+
+### E.4 — Export manifest omits the ESP contract facts (added 2026-07-29, I-17-COV)
+
+Doc 09 **ESP-19** requires the export artifact to carry "root/revision identity,
+content hash, signature, adapter ref, evidence and dependency manifest".
+`commands/package_lifecycle.py::export_package` builds the manifest from the
+package **revision** only, while `runtime_adapter` and `evidence` live on
+`embedded_resolver_contract` — so an ESP export ships identity + content hash +
+dependency manifest (and the signature, because the seed/create path puts it in
+`input_contract`), but **not the adapter ref and not the evidence**. The ESP-19
+test asserts exactly what is present and names the rest as this gap rather than
+weakening the row.
+
+**Recommended follow-up:** `feat/esp19-export-carries-contract-facts`.
 
 ---
 
@@ -341,97 +394,3 @@ Unchanged from §E — this slice closed a traceability nuance, not a coverage g
 TS-20 / AOS-20 (Tool Gateway parity for Trading Signal), AT-21 (Agent parity on the
 Strategy save line), TS-16 / TL-18 / AOS-16, RF-15 / ESP-05, AOS-12, AT-24,
 PC-14 / PC-19 / PC-22, CP-05, CP-14, PL-06, ESP-19.
-
----
-
-## §H. Follow-up slice — `feat/aos12-kind-revision-mismatch` (2026-07-29)
-
-Closes the AOS-12 row of **§E** — the one entry in that list that was a *code* gap
-rather than a test gap. Nothing in §A–§G is retracted; §D's AOS-12 row is struck
-through because the adjudication it recorded ("spec names a code the implementation
-does not ship") no longer describes the tree.
-
-### H.1 — The gap was real and it was in `src/`, not in the suite
-
-Empirically, at `origin/main` @ `9e86c99`:
-
-```
-grep -rn "KIND_REVISION_MISMATCH" backend/src frontend/src   ->   0 hits
-```
-
-Doc 03 §11 named the code in its "Revision/attachment" validation class and nothing
-implemented it. A Mainboard working item pins an exact `root_id` + `revision_id`
-(L5), and those two ids are supplied **independently**, so the spec's literal AOS-12
-scenario — *"A Trading Signal attach request carrying a Trade Log revision id"* —
-was reachable and came back as a bare `VALIDATION_ERROR` carrying the message *"The
-pinned revision does not belong to this work object."* That message describes the
-wrong defect: the request's problem is a type mismatch, not a wrong parent.
-
-### H.2 — Two adjudications, both recorded in the code
-
-**(1) 422, not 409 — §14 beats §11 on the status class.** Doc 03 §11 files
-`KIND_REVISION_MISMATCH` under "Revision/attachment", next to the lifecycle-flavoured
-`OBJECT_SOFT_DELETED`. Doc 03 §14 files **AOS-12 itself** under "Type/payload
-mismatch" — the same row family as AOS-03 (`INVALID_ITEM_KIND`, 422). Adjudicated in
-favour of §14: the request is malformed at its type level, it is not racing a live
-state, so the code ships **422 / `ErrorCategory.VALIDATION`** exactly like its two
-siblings. Following the O-02 recovery contract it also declares
-`retryable=false` (a revision row is immutable and is never re-kinded, so the same
-`(bound kind, revision_id)` pair fails identically forever),
-`scope_type="work_object_revision"`, and pins `scope_id` / `field_path` at the raise
-site.
-
-**(2) The generic error is narrowed, not replaced.** The pre-existing check
-conflated two failures. Only the cross-**kind** half is renamed:
-
-| Request | Code |
-|---|---|
-| Signal root + Trade Log revision id | **`KIND_REVISION_MISMATCH`** (new) |
-| Signal root + a *different Signal root's* revision id | `VALIDATION_ERROR` (unchanged) |
-| Client `item_kind` disagrees with its own root | `MAINBOARD_ITEM_KIND_MISMATCH` (CR-01, unchanged) |
-| Client sends a legacy V18 kind label | `INVALID_ITEM_KIND` (AOS-03, unchanged) |
-
-The spec names no code for the same-kind/wrong-root case, so inventing one would
-outrun the contract. The three-code family stays distinct — a unit test asserts
-AOS-12 is answered by neither neighbour.
-
-### H.3 — One gate, two surfaces, fail-closed
-
-`domain/mainboard/revision_binding.py::assert_revision_kind_matches` is the single
-rule (the K-07 / O-27 REUSE shape). It compares the revision row's own **immutable**
-`object_kind` column against the **server-derived** kind of the thing being bound —
-never against anything the caller asserted — and runs **before** the belongs-to-root
-check so the cross-kind case is named by its own defect instead of disappearing into
-the generic message.
-
-| Surface | Bound kind comes from |
-|---|---|
-| `attach_mainboard_item` (`POST /mainboards/{id}/items`) | the root's `object_kind` |
-| `patch_mainboard_item` intent `pin_revision` (`PATCH /mainboard-items/{id}`) | `item.item_kind` (itself server-derived at attach, CR-01) |
-
-A re-pin binds a revision id exactly the way an attach does, so covering only the
-attach surface would have left the gate open on the other one. A new
-revision-binding surface must call this function rather than copy the rule.
-
-### H.4 — Tests
-
-Both halves of the AOS-12 sentence are asserted — the code **and** *"with no partial
-item creation"*.
-
-| File | What it pins |
-|---|---|
-| `unit/test_mainboard_revision_binding.py` (9 tests) | the pure gate: matching kinds pass; both external directions raise; envelope carries `category` / `retryable` / `suggested_action` / `remediation` / `scope_type` / `scope_id` / `field_path`; `details` echo both kinds without coercing either; neither neighbouring code is reused |
-| `integration/test_mainboard_kind_revision_mismatch.py` (5 tests) | real DB, both surfaces: attach with and without a client `item_kind`, the reverse direction, `pin_revision`, and the negative half (same-kind wrong-root still generic). Every rejection re-reads the board and asserts `items == []` / the original pin survived |
-
-**Verified:** `pytest tests/unit/test_mainboard_revision_binding.py
-tests/integration/test_mainboard_kind_revision_mismatch.py` → **14/14** against a
-real PostgreSQL on an isolated database (`entropia_aos12`), plus the full backend
-gate (ruff / ruff format / mypy / full suite) and `docs/openapi.json` drift check.
-
-### H.5 — Still open after this slice
-
-§E minus AOS-12: TS-20 / AOS-20, AT-21, TS-16 / TL-18 / AOS-16, RF-15 / ESP-05,
-AT-24, PC-14 / PC-19 / PC-22, CP-05, CP-14, PL-06, ESP-19. §A's per-page counters
-are the frozen 2026-07-28 record and are deliberately **not** rewritten — re-run
-`python3 docs/audit/acceptance_id_scan.py` for the live number, which is the
-document's own standing instruction.

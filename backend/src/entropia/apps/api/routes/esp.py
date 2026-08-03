@@ -19,6 +19,15 @@ from pydantic import BaseModel, Field
 from entropia.application.commands import esp as esp_cmd
 from entropia.application.queries import esp as esp_query
 from entropia.apps.api.deps import RequestContext, request_context
+from entropia.apps.api.schemas.esp import (
+    ActivateResolverResponse,
+    CreateEspResponse,
+    DeprecateResolverResponse,
+    EspPackageDetailResponse,
+    EspRegistryPageResponse,
+    EspValidationRunResponse,
+    ResolveDependencyResponse,
+)
 from entropia.domain.esp.enums import ResolverTrustState, RuntimeAdapter
 from entropia.domain.identity.policy import require_authenticated
 from entropia.domain.lifecycle.enums import VisibilityScope
@@ -76,7 +85,7 @@ class ResolveRequest(BaseModel):
     target_runtime: RuntimeAdapter
 
 
-@router.post("/embedded-system-packages", status_code=201)
+@router.post("/embedded-system-packages", status_code=201, response_model=CreateEspResponse)
 async def create_esp(
     body: CreateEspRequest,
     ctx: RequestContext = Depends(request_context),
@@ -101,7 +110,7 @@ async def create_esp(
     )
 
 
-@router.get("/embedded-system-packages")
+@router.get("/embedded-system-packages", response_model=EspRegistryPageResponse)
 async def list_esp(
     cursor: str | None = Query(default=None),
     limit: int = Query(default=20, ge=1, le=100),
@@ -118,7 +127,7 @@ async def list_esp(
     )
 
 
-@router.get("/embedded-system-packages/{entity_id}")
+@router.get("/embedded-system-packages/{entity_id}", response_model=EspPackageDetailResponse)
 async def get_esp(
     entity_id: str,
     response: Response,
@@ -129,7 +138,9 @@ async def get_esp(
     return detail
 
 
-@router.post("/embedded-system-packages/{entity_id}/validate")
+@router.post(
+    "/embedded-system-packages/{entity_id}/validate", response_model=EspValidationRunResponse
+)
 async def validate_esp(
     entity_id: str,
     body: ValidateRequest,
@@ -148,7 +159,9 @@ async def validate_esp(
     )
 
 
-@router.post("/embedded-system-packages/{entity_id}/activate")
+@router.post(
+    "/embedded-system-packages/{entity_id}/activate", response_model=ActivateResolverResponse
+)
 async def activate_esp(
     entity_id: str,
     body: ActivateRequest,
@@ -168,7 +181,9 @@ async def activate_esp(
     )
 
 
-@router.post("/embedded-system-packages/{entity_id}/deprecate")
+@router.post(
+    "/embedded-system-packages/{entity_id}/deprecate", response_model=DeprecateResolverResponse
+)
 async def deprecate_esp(
     entity_id: str,
     body: DeprecateRequest,
@@ -187,7 +202,7 @@ async def deprecate_esp(
     )
 
 
-@router.post("/embedded-system-packages/resolve")
+@router.post("/embedded-system-packages/resolve", response_model=ResolveDependencyResponse)
 async def resolve_dependency(
     body: ResolveRequest,
     ctx: RequestContext = Depends(request_context),

@@ -72,6 +72,21 @@ const ESP_DETAIL = {
     evidence: { test_vectors: "tv_1" },
   },
   registry: TRUSTED_ROW,
+  // Sent by the server since R8. The page does not render it yet, but the mock
+  // mirrors the real payload so the fixture cannot drift from the wire type.
+  latest_validation_run: {
+    run_id: "espvr_1",
+    status: "passed",
+    validator_version: "esp-validation-v1",
+    vectors_run: 1,
+    checks: {
+      validator_version: "esp-validation-v1",
+      status: "passed",
+      vectors_run: 1,
+      checks: [{ name: "contract_schema", status: "passed", detail: "ok" }],
+    },
+    completed_at: "2026-07-01T10:00:00+00:00",
+  },
   created_at: "2026-07-01T10:00:00+00:00",
   ...PERFORMANCE_NA,
 };

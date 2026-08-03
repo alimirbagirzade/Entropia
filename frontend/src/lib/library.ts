@@ -133,7 +133,9 @@ export interface LibraryPackageRow {
   name: string | null;
   current_revision_id: string;
   revision_no: number;
-  lifecycle_state: string;
+  // Nullable: `entity_registry.lifecycle_state` is a free-form nullable column,
+  // not a lifecycle enum — the server has always been able to send null here.
+  lifecycle_state: string | null;
   validation_state: string;
   approval_state: string;
   visibility_scope: string;
@@ -181,8 +183,10 @@ export interface ProvenanceScan {
   resolved_refs: unknown;
   missing_calls: unknown;
   unsupported_calls: unknown;
-  registry_fingerprint: string | null;
-  context_hash: string | null;
+  // Both are NOT NULL on `dependency_scan`: a scan cannot exist without the
+  // registry fingerprint and context it was pinned against.
+  registry_fingerprint: string;
+  context_hash: string;
 }
 
 // Best-effort Stage-2e creation provenance for a package built via a request.
@@ -260,7 +264,11 @@ export function approvalTone(state: string): "ok" | "warn" | "down" | "neutral" 
   return "neutral";
 }
 
-export function lifecycleTone(state: string): "ok" | "warn" | "neutral" {
+// A null `lifecycle_state` means the server stated none. Render that as its own
+// label instead of inventing "active" — a fabricated lifecycle reads as a fact.
+export const UNSTATED_LIFECYCLE_LABEL = "unstated";
+
+export function lifecycleTone(state: string | null): "ok" | "warn" | "neutral" {
   if (state === "active") return "ok";
   if (state === "deprecated") return "warn";
   return "neutral";

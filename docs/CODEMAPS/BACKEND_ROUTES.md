@@ -353,17 +353,29 @@ rv-N` kullanmaya devam ediyor).
 | POST `/bundles/agent` | `compile_agent_bundle:393` | `rd_jobs.compile_agent_data_bundle` (**pure read**) | yok | — |
 | POST `/bundles/backtest-evidence` | `compile_evidence_bundle:406` | `rd_jobs.compile_backtest_evidence_bundle` (**pure read**) | yok | — |
 
-## esp.py — OCC: **`X-Registry-Version` düz int header** (`_REGISTRY_VERSION_HEADER:30`)
+## esp.py — OCC: **`X-Registry-Version` düz int header** (`_REGISTRY_VERSION_HEADER:39`)
 
-| METHOD path | fonksiyon | çağırdığı | OCC | Idem | Rol kapısı |
-|---|---|---|---|---|---|
-| POST `/embedded-system-packages` (201) | `create_esp:80` | `esp_cmd.create_esp_package` | yok | **✔** (O-13) | |
-| GET `/embedded-system-packages` | `list_esp:105` | `esp_query.list_embedded_system_packages` | yok | — | |
-| GET `/embedded-system-packages/{entity_id}` | `get_esp:122` | `esp_query.get_esp_detail` | yok | — | |
-| POST `/embedded-system-packages/{entity_id}/validate` | `validate_esp:133` | `esp_cmd.run_resolver_validation` | yok | ✔ | |
-| POST `/embedded-system-packages/{entity_id}/activate` | `activate_esp:152` | `esp_cmd.activate_resolver` | `X-Registry-Version` (`_registry_version:33`) | ✔ | (command: Admin) |
-| POST `/embedded-system-packages/{entity_id}/deprecate` | `deprecate_esp:172` | `esp_cmd.deprecate_resolver` | `X-Registry-Version` | ✔ | (command: Admin) |
-| POST `/embedded-system-packages/resolve` | `resolve_dependency:191` | `esp_query.resolve_embedded_dependency` (**pure read**) | yok | — | `require_authenticated:198` |
+**Yayımlanan gövde (G-05):** yedi ucun tamamı `response_model` taşır (`apps/api/schemas/esp.py`).
+
+| METHOD path | fonksiyon | çağırdığı | OCC | Idem | Rol kapısı | response_model |
+|---|---|---|---|---|---|---|
+| POST `/embedded-system-packages` (201) | `create_esp:89` | `esp_cmd.create_esp_package` | yok | **✔** (O-13) | | `CreateEspResponse` |
+| GET `/embedded-system-packages` | `list_esp:114` | `esp_query.list_embedded_system_packages` | yok | — | | `EspRegistryPageResponse` |
+| GET `/embedded-system-packages/{entity_id}` | `get_esp:131` | `esp_query.get_esp_detail` | yok | — | | `EspPackageDetailResponse` |
+| POST `/embedded-system-packages/{entity_id}/validate` | `validate_esp:144` | `esp_cmd.run_resolver_validation` | yok | ✔ | | `EspValidationRunResponse` |
+| POST `/embedded-system-packages/{entity_id}/activate` | `activate_esp:165` | `esp_cmd.activate_resolver` | `X-Registry-Version` (`_registry_version:42`) | ✔ | (command: Admin) | `ActivateResolverResponse` |
+| POST `/embedded-system-packages/{entity_id}/deprecate` | `deprecate_esp:187` | `esp_cmd.deprecate_resolver` | `X-Registry-Version` | ✔ | (command: Admin) | `DeprecateResolverResponse` |
+| POST `/embedded-system-packages/resolve` | `resolve_dependency:206` | `esp_query.resolve_embedded_dependency` (**pure read**) | yok | — | `require_authenticated:213` | `ResolveDependencyResponse` |
+
+> **Activate ve deprecate gövdeleri BİLEREK ayrı modeldir.** Activate `revision_id` taşır,
+> deprecate `replacement_revision_id` taşır ve `revision_id` taşımaz (deprecate canonical key'i
+> hedefler, tek bir revision'ı değil). Tek modelde birleştirmek ikisini de optional yapardı ve
+> hangi ucun hangisini döndürdüğünü gizlerdi.
+>
+> **`checks` iki farklı tiptir, aynı ad.** `validate` komutu **liste** döner
+> (`[{name, status, detail}]`, sabit 3 eleman); `get_esp_detail.latest_validation_run.checks`
+> ise JSONB'den okunan **rapor zarfı dict**'idir ve `validator_version` ile sürümlenmiştir.
+> Birleştirilmezler; detay tarafı bu yüzden açık `dict[str, Any]` kalır.
 
 ## instrument.py — OCC: **`X-Registry-Version` düz int header** (`_registry_version:32`)
 
@@ -410,16 +422,16 @@ rv-N` kullanmaya devam ediyor).
 
 | METHOD path | fonksiyon | çağırdığı | OCC | Idem |
 |---|---|---|---|---|
-| GET `/library` | `list_library:72` | `library_query.list_packages` | yok | — |
-| GET `/library/{entity_id}` | `get_library_package:106` | `library_query.get_package_detail` | yok | — |
-| POST `/library/{entity_id}/deprecate` | `deprecate_package:117` | `pkg_cmd.deprecate_package` | **yok** (doğrulandı: deprecate revision eklemez, head ile yarışamaz — kardeş `market_data` deprecate ile aynı) | **✔** (O-13; key olmadan ikinci çağrı `LIFECYCLE_BLOCKED`, key ile saklı yanıt replay olur) |
-| DELETE `/library/{entity_id}` (204) | `soft_delete_package:136` | `pkg_cmd.soft_delete_package` | If-Match `rv-N` (`:151`) | — |
-| POST `/library/{entity_id}/derive` (201) | `derive_package:157` | `pkg_cmd.derive_package` | yok (docstring açıkça "No OCC") | ✔ |
-| POST `/library/{entity_id}/revisions` (201) | `create_package_revision:180` | `pkg_cmd.create_package_revision` | **body `expected_head_revision_id`** | ✔ |
-| **POST `/library/{entity_id}/validation-runs` (201)** | `request_package_validation:209` | `pkg_cmd.request_package_validation` — **S-L3 (#461):** doc 08 §7 "Request validation"; CreatePackage düzlemindeki koşuyu **sarar** (yedi kontrol, değişmez kanıt satırı, durable job ve durum makinesi aynen kalır). **G-04:** gövde artık `response_model=PackageValidationRunAcceptedResponse` ile **şemada yayımlanıyor** (8 alan: `entity_id, revision_id, request_id, validation_run_id, attempt_no, status, state, job_id`); `dict[str, Any]` dönüşü drift guard'ı yeşil tutarken sözleşmeyi gizliyordu (O-30 tuzağı). `status` = run'ın `ValidationRunStatus`'ü, `state` = request'in `CreatePackageState`'i — **birleştirilmezler** | **body `expected_head_revision_id`** + head-match kuralı (`request-approval` ile birebir aynı) | ✔ (**sınır:** koşu uçuştayken in-flight guard `run_idempotent`'tan önce çalışır → aynı key 201 replay değil 409 verir) |
-| POST `/library/{entity_id}/request-approval` | `request_package_approval:230` | `pkg_cmd.request_package_approval` | **body `expected_head_revision_id`** | ✔ |
-| POST `/library/{entity_id}/approve` | `approve_package:252` | `pkg_cmd.approve_and_publish_package` | **body `expected_head_revision_id`** | ✔ |
-| POST `/library/{entity_id}/export` | `export_package:296` | `pkg_cmd.export_package` — **G-02: export schema v2.** Gövde artık `dict[str, Any]` değil, **`PackageExportResponse`** (`library.py:71`) ile şemada yayımlanıyor (`components.schemas`). Manifest'e `export_schema_version` · `exporter_version` · `resolver_contract_snapshot` · `validation_evidence_snapshot` eklendi; **canlı registry pointer'ı manifest'in İÇİNDE değil**, zarfın kardeşi `registry_observation` alanında | yok | ✔ |
+| GET `/library` | `list_library:84` | `library_query.list_packages` | yok | — |
+| GET `/library/{entity_id}` | `get_library_package:118` | `library_query.get_package_detail` | yok | — |
+| POST `/library/{entity_id}/deprecate` | `deprecate_package:129` | `pkg_cmd.deprecate_package` | **yok** (doğrulandı: deprecate revision eklemez, head ile yarışamaz — kardeş `market_data` deprecate ile aynı) | **✔** (O-13; **ancak HTTP'den replay ERİŞİLEMEZ:** lifecycle guard `run_idempotent`'ın DIŞINDA, ikinci çağrı idempotency'e bakılmadan 409 `LIFECYCLE_BLOCKED` verir) |
+| DELETE `/library/{entity_id}` (204) | `soft_delete_package:148` | `pkg_cmd.soft_delete_package` | If-Match `rv-N` (`:163`) | — |
+| POST `/library/{entity_id}/derive` (201) | `derive_package:169` | `pkg_cmd.derive_package` | yok (docstring açıkça "No OCC") | ✔ |
+| POST `/library/{entity_id}/revisions` (201) | `create_package_revision:196` | `pkg_cmd.create_package_revision` | **body `expected_head_revision_id`** | ✔ |
+| **POST `/library/{entity_id}/validation-runs` (201)** | `request_package_validation:225` | `pkg_cmd.request_package_validation` — **S-L3 (#461):** doc 08 §7 "Request validation"; CreatePackage düzlemindeki koşuyu **sarar** (yedi kontrol, değişmez kanıt satırı, durable job ve durum makinesi aynen kalır). **G-04:** gövde artık `response_model=PackageValidationRunAcceptedResponse` ile **şemada yayımlanıyor** (8 alan: `entity_id, revision_id, request_id, validation_run_id, attempt_no, status, state, job_id`); `dict[str, Any]` dönüşü drift guard'ı yeşil tutarken sözleşmeyi gizliyordu (O-30 tuzağı). `status` = run'ın `ValidationRunStatus`'ü, `state` = request'in `CreatePackageState`'i — **birleştirilmezler** | **body `expected_head_revision_id`** + head-match kuralı (`request-approval` ile birebir aynı) | ✔ (**sınır:** koşu uçuştayken in-flight guard `run_idempotent`'tan önce çalışır → aynı key 201 replay değil 409 verir) |
+| POST `/library/{entity_id}/request-approval` | `request_package_approval:258` | `pkg_cmd.request_package_approval` | **body `expected_head_revision_id`** | ✔ |
+| POST `/library/{entity_id}/approve` | `approve_package:280` | `pkg_cmd.approve_and_publish_package` | **body `expected_head_revision_id`** | ✔ |
+| POST `/library/{entity_id}/export` | `export_package:303` | `pkg_cmd.export_package` — **G-02: export schema v2.** Gövde artık `dict[str, Any]` değil, **`PackageExportResponse`** (G-05'te `apps/api/schemas/library.py`'ye **aynı sınıf adıyla** taşındı → yayımlanan component adı değişmedi) ile şemada yayımlanıyor. Manifest'e `export_schema_version` · `exporter_version` · `resolver_contract_snapshot` · `validation_evidence_snapshot` eklendi; **canlı registry pointer'ı manifest'in İÇİNDE değil**, zarfın kardeşi `registry_observation` alanında — G-05'te bu alan `PackageRegistryObservation` ile **tiplendi ve `required` oldu** (pre-G-02 replay'de `_with_export_envelope_defaults` backfill ettiği için anahtar hep var) | yok | ✔ |
 | POST `/library/{entity_id}/shares` (201) | `share_package` `sharing.py:35` | `sharing_cmd.share_package` | If-Match `rv-N` (`:47`) | ✔ |
 | GET `/library/{entity_id}/shares` | `list_package_shares` `sharing.py:53` | `sharing_query.list_package_shares` | yok | — |
 | DELETE `/library/{entity_id}/shares/{share_id}` | `revoke_package_share` `sharing.py:64` | `sharing_cmd.revoke_package_share` | If-Match `rv-N` (`:76`) | ✔ |
@@ -455,23 +467,37 @@ rv-N` kullanmaya devam ediyor).
 > bir chip'e tıklamak yalnız mevcut seçiciyi doldurur, Family yaratmaz — uygulama ayrı, audit'li
 > bir komut olarak kalır.
 
-## agent_lab.py — OCC: **`If-Match` → int row_version** (`_parse_if_match:58`)
+## agent_lab.py — OCC: **`If-Match` → int row_version** (`_parse_if_match:62`)
 
-| METHOD path | fonksiyon | çağırdığı | OCC | Idem | Rol kapısı |
-|---|---|---|---|---|---|
-| GET `/agent-workspace/overview` | `get_overview:80` | `agent_workspace_query.get_overview` | yok | — | |
-| GET `/agent-tasks` | `list_tasks:85` | `..list_tasks` | yok | — | |
-| GET `/agent-tasks/{task_id}` | `get_task:97` | `..get_task` | yok | — | |
-| GET `/agent-tasks/{task_id}/tool-calls` | `list_task_tool_calls:102` | `tool_gateway_query.list_task_tool_calls` | yok | — | |
-| GET `/agent-tool-calls/{tool_call_id}` | `get_tool_call:113` | `tool_gateway_query.get_tool_call` | yok | — | |
-| GET `/lab/messages` | `list_lab_messages:120` | `..list_lab_messages` | yok | — | |
-| GET `/hypotheses` | `list_hypotheses:132` | `..list_hypotheses` | yok | — | |
-| POST `/lab/messages` | `send_lab_message:147` | `lab_message_cmd.record_discussion_message` | yok | ✔ | |
-| POST `/agent-directives` (202) | `queue_directive:162` | `agent_control_cmd.create_directive` | yok | ✔ | |
-| POST `/agent-runtime/pause` (202) | `pause_runtime:179` | `agent_control_cmd.pause_runtime` | If-Match → `expected_row_version` | ✔ | |
-| POST `/agent-runtime/resume` (202) | `resume_runtime:194` | `agent_control_cmd.resume_runtime` | If-Match → `expected_row_version` | ✔ | |
-| POST `/agent-runs/{run_id}/stop` (202) | `stop_run:209` | `agent_control_cmd.stop_run` | If-Match → `expected_row_version` | ✔ | |
-| GET `/agent-events/stream` | `agent_events_stream:237` | heartbeat SSE | yok | — | `require_role(_LAB_ROLES):241` |
+| METHOD path | fonksiyon | çağırdığı | OCC | Idem | Rol kapısı | response_model |
+|---|---|---|---|---|---|---|
+| GET `/agent-workspace/overview` | `get_overview:84` | `agent_workspace_query.get_overview` | yok | — | | — |
+| GET `/agent-tasks` | `list_tasks:89` | `..list_tasks` | yok | — | | — |
+| GET `/agent-tasks/{task_id}` | `get_task:101` | `..get_task` | yok | — | | — |
+| GET `/agent-tasks/{task_id}/tool-calls` | `list_task_tool_calls:106` | `tool_gateway_query.list_task_tool_calls` | yok | — | | **`AgentToolCallListResponse`** (G-05) |
+| GET `/agent-tool-calls/{tool_call_id}` | `get_tool_call:117` | `tool_gateway_query.get_tool_call` | yok | — | | **`AgentToolCallDetailResponse`** (G-05) |
+| GET `/lab/messages` | `list_lab_messages:124` | `..list_lab_messages` | yok | — | | — |
+| GET `/hypotheses` | `list_hypotheses:136` | `..list_hypotheses` | yok | — | | — |
+| POST `/lab/messages` | `send_lab_message:151` | `lab_message_cmd.record_discussion_message` | yok | ✔ | | — |
+| POST `/agent-directives` (202) | `queue_directive:166` | `agent_control_cmd.create_directive` | yok | ✔ | | — |
+| POST `/agent-runtime/pause` (202) | `pause_runtime:183` | `agent_control_cmd.pause_runtime` | If-Match → `expected_row_version` | ✔ | | — |
+| POST `/agent-runtime/resume` (202) | `resume_runtime:198` | `agent_control_cmd.resume_runtime` | If-Match → `expected_row_version` | ✔ | | — |
+| POST `/agent-runs/{run_id}/stop` (202) | `stop_run:213` | `agent_control_cmd.stop_run` | If-Match → `expected_row_version` | ✔ | | — |
+| GET `/agent-events/stream` | `agent_events_stream:241` | heartbeat SSE | yok | — | `require_role(_LAB_ROLES):245` | — |
+
+> **Tool Gateway'in HTTP yüzeyi bu İKİ okumadır — enqueue'nun route'u YOKTUR.**
+> `application/jobs/agent_tools.py::dispatch_tool_call` / `enqueue_tool_call` worker
+> düzlemindedir; `apps/api/routes/` altında `agent_tools`'u import eden hiçbir modül yok.
+> Üretimdeki tek çağıran zincirler agent executor (`apps/agent_coordinator` →
+> `run_agent_executor`) ve dramatiq actor'ları `run_agent_tool` / `run_agent_tool_high`.
+>
+> **Zarf tipli, payload açık (G-05).** Gateway'in SAHİP olduğu her alan (kimlik, provenance,
+> policy scope, terminal status, failure pointer'ları, zaman damgaları) tiplidir. `request` ve
+> `response_ref` **açık `dict[str, Any]` kalır**: `response_ref` `tool_name` ile ayrışır (33
+> kayıtlı tool — Strategy ve Trading Signal parity sonuçları dahil) ve arkasındaki komutun
+> dönüşünü **aynen** saklar. Ayrıca üç yönlü birleşimdir: `succeeded`'da tool'un kendi payload'ı
+> (**`status` anahtarı YOKTUR** — kardeş `status` kolonunu oku), `rejected`'da
+> `{status, reason_code, reason}`, `failed`'da `{status, failure_code, failure_reason, details}`.
 
 ## manual.py — iki farklı OCC token'ı
 

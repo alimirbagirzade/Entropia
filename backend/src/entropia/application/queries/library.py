@@ -339,11 +339,32 @@ def _package_name(contract: dict[str, Any]) -> str | None:
     return name if isinstance(name, str) else None
 
 
-def _pinned_family(snapshot: dict[str, Any]) -> dict[str, Any] | None:
+def _snapshot_family_id(snapshot: dict[str, Any]) -> str | None:
+    """A pinned family reference is a non-empty STRING id, or it is no reference at all.
+
+    ``rationale_family_snapshot`` is JSONB, and ``POST /package-imports`` writes a
+    caller-supplied manifest into it behind a container-level ``isinstance(dict)`` guard only
+    (``jobs/package_import.py``). A truthiness test alone therefore lets a non-string id
+    (``7``, ``["a"]``) reach the projection — where it is neither a usable family pointer nor
+    a value ``rationale_repo.get_family_root`` can look up. Screening it here mirrors what
+    ``_package_name`` already does for the contract name."""
     family_id = snapshot.get("rationale_family_id")
-    if not family_id:
+    return family_id if isinstance(family_id, str) and family_id else None
+
+
+def _snapshot_display_name(snapshot: dict[str, Any]) -> str | None:
+    """The pinned display name, or ``None`` when the snapshot holds a non-string.
+
+    Rendering ``42`` as a family name would fabricate a label the system never assigned."""
+    name = snapshot.get("display_name")
+    return name if isinstance(name, str) else None
+
+
+def _pinned_family(snapshot: dict[str, Any]) -> dict[str, Any] | None:
+    family_id = _snapshot_family_id(snapshot)
+    if family_id is None:
         return None
-    return {"id": family_id, "name": snapshot.get("display_name")}
+    return {"id": family_id, "name": _snapshot_display_name(snapshot)}
 
 
 def _output_kinds(contract: dict[str, Any]) -> list[str]:
@@ -420,10 +441,10 @@ async def _live_family(
     (doc 08 §4.3 section 6; doc 10 §8.5).
     """
     snapshot = snapshot or {}
-    family_id = snapshot.get("rationale_family_id")
-    if not family_id:
+    family_id = _snapshot_family_id(snapshot)
+    if family_id is None:
         return None
-    pinned_name = snapshot.get("display_name")
+    pinned_name = _snapshot_display_name(snapshot)
     family_root = await rationale_repo.get_family_root(session, family_id)
     if family_root is not None and family_root.deletion_state == DeletionState.ACTIVE:
         current = await rationale_repo.get_family_revision(

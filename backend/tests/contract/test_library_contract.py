@@ -24,6 +24,63 @@ class _DummySession:
     """Stand-in; guest + bad-filter paths never touch it."""
 
 
+# A FAITHFUL catalog row. The stubs below used to return `{"entity_id": "pkg_1"}` — a shape
+# the projection never produces, which the untyped route happily passed through. Now that
+# `GET /library` publishes `LibraryPageResponse`, a fictional partial row is a 500, and that
+# is the correct outcome: a contract test that asserts on a body the server cannot produce
+# is testing nothing. These constants mirror `queries/library.py::_package_row` key-for-key.
+_PERMISSIONS = {
+    "can_view": True,
+    "can_use": True,
+    "can_derive": True,
+    "can_create_revision": False,
+    "can_request_validation": False,
+    "can_request_approval": False,
+    "can_approve_publish": False,
+    "can_deprecate": False,
+    "can_soft_delete": False,
+    "can_export": True,
+    "can_share": False,
+}
+_PERFORMANCE = dict.fromkeys(
+    ("net_profit", "max_drawdown", "romad", "win_rate", "trade_count", "out_of_sample"),
+    "not_applicable",
+)
+_ROW: dict[str, Any] = {
+    "entity_id": "pkg_1",
+    "package_kind": "indicator",
+    "name": "Momentum",
+    "current_revision_id": "rev_1",
+    "revision_no": 1,
+    "lifecycle_state": "active",
+    "validation_state": "passed",
+    "approval_state": "draft",
+    "visibility_scope": "private",
+    "market_scope": "btcusdt",
+    "timeframe_scope": "15m",
+    "rationale_family": None,
+    "output_kinds": ["directional_signal"],
+    "derived_from_revision_id": None,
+    "owner_principal_id": "user_1",
+    "row_version": 3,
+    "content_hash": "a" * 64,
+    "created_at": "2026-08-03T12:00:00+00:00",
+    "permissions": _PERMISSIONS,
+    "performance": _PERFORMANCE,
+}
+_DETAIL: dict[str, Any] = {
+    **_ROW,
+    "input_contract": {"name": "Momentum"},
+    "output_contract": {"output_kinds": ["directional_signal"]},
+    "dependency_snapshot": {"resolved": []},
+    "validation_summary": None,
+    "change_note": None,
+    "rationale_family": None,
+    "provenance": None,
+    "revisions": [],
+}
+
+
 def _actor(role: Role | None, ptype: PrincipalType, pid: str | None) -> Actor:
     return Actor(principal_id=pid, principal_type=ptype, role=role)
 
@@ -105,7 +162,7 @@ async def test_list_success_returns_envelope_and_passes_aliases(app, monkeypatch
     async def _fake_list(session: Any, actor: Any, params: Any, *, filters: Any) -> dict[str, Any]:
         captured["filters"] = filters
         captured["limit"] = params.limit
-        return {"data": [{"entity_id": "pkg_1"}], "meta": {"cursor": None, "has_more": False}}
+        return {"data": [_ROW], "meta": {"cursor": None, "has_more": False}}
 
     monkeypatch.setattr(route.library_query, "list_packages", _fake_list)
     gen = _override(app, _actor(Role.USER, PrincipalType.HUMAN, "user_1"))
@@ -146,7 +203,7 @@ async def test_detail_emits_etag_header(app, monkeypatch) -> None:
     import entropia.apps.api.routes.library as route
 
     async def _fake_detail(session: Any, actor: Any, *, entity_id: str) -> dict[str, Any]:
-        return {"entity_id": entity_id, "row_version": 3, "name": "X"}
+        return {**_DETAIL, "entity_id": entity_id}
 
     monkeypatch.setattr(route.library_query, "get_package_detail", _fake_detail)
     gen = _override(app, _actor(Role.USER, PrincipalType.HUMAN, "user_1"))

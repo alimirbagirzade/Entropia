@@ -39,6 +39,7 @@ import {
   PERMISSION_FLAGS,
   TIMEFRAME_SCOPES,
   UNASSIGNED_FAMILY,
+  UNSTATED_LIFECYCLE_LABEL,
   VISIBILITY_SCOPES,
   approvalTone,
   lifecycleTone,
@@ -429,7 +430,10 @@ function PackageRow({
           <strong>{row.name ?? "—"}</strong>
           <code>{row.package_kind}</code>
           <span>v{row.revision_no}</span>
-          <StatusBadge tone={lifecycleTone(row.lifecycle_state)} label={row.lifecycle_state} />
+          <StatusBadge
+            tone={lifecycleTone(row.lifecycle_state)}
+            label={row.lifecycle_state ?? UNSTATED_LIFECYCLE_LABEL}
+          />
           <StatusBadge tone={validationTone(row.validation_state)} label={row.validation_state} />
           <StatusBadge tone={approvalTone(row.approval_state)} label={row.approval_state} />
           <span>{row.visibility_scope}</span>
@@ -490,7 +494,7 @@ function PackageDetail({ entityId, onClose }: { entityId: string; onClose: () =>
             <dd>
               <StatusBadge
                 tone={lifecycleTone(pkg.lifecycle_state)}
-                label={pkg.lifecycle_state}
+                label={pkg.lifecycle_state ?? UNSTATED_LIFECYCLE_LABEL}
               />{" "}
               <StatusBadge
                 tone={validationTone(pkg.validation_state)}

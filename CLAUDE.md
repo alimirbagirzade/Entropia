@@ -204,22 +204,14 @@ Before stopping a working session, produce **ALL** of the following:
   yoksa önce `npm ci` — ilk koşudaki `ERR_MODULE_NOT_FOUND` test hatası değil.)
 
 
-- **Next — sıra `docs/audit/current_main_ground_truth_2026-08-03.md` §18'de.** Açık issue
-  yalnız #514 (insan işi). §18 sıra 1 (#519 — ESP lifecycle), sıra 3 (#521 — ESP export
-  contract v2, §G-02 + ESP-19) ve **sıra 2 (ADIM 5 — `feat/library-request-validation-ui`,
-  §G-04: Library Request Validation yüzeyi)** landed. `docs/G02_LANDED_KICKOFF.md` artık
-  **tamamlanmış** bir slice'ın handoff'udur, canlı seed değil. Sıradaki tek slice: **§18
-  sırası 4 — `fix/i16a-panel-logs-display-title`** + `diagnosticWarningLabel` eşlemesi
-  (§G-06, §G-07).
+
 
 - **Açık iş (dürüst sınır):** ekran okuyucu (NVDA/VoiceOver) denetimi **yapılmadı**;
   takip **GitHub #514 — 2026-07-30'da kanıtsız kapatılmıştı, 2026-08-03'te yeniden açıldı**;
   kapatma yetkisi insandadır, agent kapatamaz. Visual regression ve axe-core ratchet'i
   CI'da bloklayıcı. Kalan 45 düğüm imza-mavisi **D-10 (2026-07-30) imzalı kalıcı sapmasıdır**;
   WCAG 2.2 AA 1.4.3 karşılanmıyor, ürün bu ölçüt için uyumlu sayılamaz. Ayrıca doğrulanmış
-  boşluklar: Tool Gateway `strategy.*`/`trading_signal.*`, sequential shared-equity allocation
-  (L4 ile bildirilmiş). **Library Request-Validation UI** (bu slice) ve **ESP export manifest
-  sözleşme alanları** (#521) kapandı — ayrıntı `docs/audit/…_2026-08-03.md` §G-04 / §G-02.
+
 
 - **KAPSAM DIŞI (bilerek):** retention auto-purge (doc 20 §16 — "Production V1'de kapalı"),
   LLM generation (Future-Dev), Graphic View renderer (doc 22 — V18 statik placeholder kalır).

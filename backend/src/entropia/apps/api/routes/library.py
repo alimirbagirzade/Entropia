@@ -18,6 +18,7 @@ from pydantic import BaseModel
 from entropia.application.commands import package_lifecycle as pkg_cmd
 from entropia.application.queries import library as library_query
 from entropia.apps.api.deps import RequestContext, request_context
+from entropia.apps.api.routes.create_package import dispatch_create_package_job
 from entropia.domain.package.catalog import parse_catalog_filters
 from entropia.shared.concurrency import etag_for_row_version, row_version_from_if_match
 from entropia.shared.pagination import PageParams
@@ -88,6 +89,35 @@ class PackageExportResponse(BaseModel):
     export_schema_version: int
     manifest: dict[str, Any]
     registry_observation: dict[str, Any] | None = None
+
+
+class PackageValidationRunAcceptedResponse(BaseModel):
+    """The queued-validation envelope, PUBLISHED in the schema rather than a bare dict.
+
+    Same trap O-30 closed for the purge 202 and G-02 closed for the export body: a
+    ``dict[str, Any]`` return keeps the contract invisible to ``docs/openapi.json`` while
+    the drift guard stays green, so the frontend has nothing to bind to.
+
+    The envelope deliberately names BOTH planes for one run. The caller addressed a
+    package (``entity_id`` / ``revision_id``), but the evidence, the durable job and the
+    state machine live in the CreatePackage plane (``request_id`` / ``validation_run_id`` /
+    ``attempt_no`` / ``job_id``) — this route wraps that pipeline instead of owning a
+    second one, so it reports the CP identifiers rather than minting Library-local ones.
+
+    ``status`` and ``state`` answer DIFFERENT questions and are never collapsed:
+    ``status`` is the immutable run's ``ValidationRunStatus`` (``queued`` on admission),
+    ``state`` is the request's ``CreatePackageState`` (``validation_running``). The
+    terminal verdict lands on the projection when the durable worker finishes — this
+    envelope only reports the admission."""
+
+    entity_id: str
+    revision_id: str
+    request_id: str
+    validation_run_id: str
+    attempt_no: int
+    status: str
+    state: str
+    job_id: str
 
 
 @router.get("/library")
@@ -223,7 +253,11 @@ async def create_package_revision(
     )
 
 
-@router.post("/library/{entity_id}/validation-runs", status_code=201)
+@router.post(
+    "/library/{entity_id}/validation-runs",
+    status_code=201,
+    response_model=PackageValidationRunAcceptedResponse,
+)
 async def request_package_validation(
     entity_id: str,
     body: RequestValidationRequest,
@@ -238,7 +272,7 @@ async def request_package_validation(
     PACKAGE_REVISION_CONFLICT, a run already in flight -> 409
     VALIDATION_ALREADY_RUNNING, a package with no validatable draft -> 422
     VALIDATION_PIPELINE_UNAVAILABLE. ``Idempotency-Key`` passes through."""
-    return await pkg_cmd.request_package_validation(
+    result = await pkg_cmd.request_package_validation(
         ctx.session,
         ctx.actor,
         entity_id=entity_id,
@@ -246,6 +280,14 @@ async def request_package_validation(
         expected_head_revision_id=body.expected_head_revision_id,
         idempotency_key=idempotency_key,
     )
+    # The admission writes the QUEUED ``jobs`` row; handing it to the broker is a SEPARATE
+    # step that every Create-Package admission route already performs. Omitting it here
+    # left a Library-started run sitting in `queued` until the INF-03 scheduler sweep
+    # eventually re-sent it — invisible to command-level tests, which drive the worker
+    # directly, and to the API contract, which is identical either way. The same helper is
+    # reused rather than re-implemented so the two planes cannot drift on dispatch.
+    dispatch_create_package_job(result["job_id"])
+    return result
 
 
 @router.post("/library/{entity_id}/request-approval")

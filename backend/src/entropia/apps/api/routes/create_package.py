@@ -125,7 +125,7 @@ async def get_request(
     return await cp_query.get_package_request(ctx.session, ctx.actor, request_id=request_id)
 
 
-def _dispatch_create_package_job(job_id: str) -> None:
+def dispatch_create_package_job(job_id: str) -> None:
     """Dispatch the durable ``default``-queue Create-Package worker (F-01a/F-01b).
 
     The QUEUED ``jobs`` row written by the admission is already the source of truth, so a
@@ -152,7 +152,7 @@ async def run_pre_check(
         expected_request_version=_request_version(request_version),
         idempotency_key=idempotency_key,
     )
-    _dispatch_create_package_job(result["job_id"])
+    dispatch_create_package_job(result["job_id"])
     return result
 
 
@@ -170,7 +170,7 @@ async def generate_candidate(
         expected_request_version=_request_version(request_version),
         idempotency_key=idempotency_key,
     )
-    _dispatch_create_package_job(result["job_id"])
+    dispatch_create_package_job(result["job_id"])
     return result
 
 
@@ -205,7 +205,7 @@ async def run_validation(
         expected_request_version=_request_version(request_version),
         idempotency_key=idempotency_key,
     )
-    _dispatch_create_package_job(result["job_id"])
+    dispatch_create_package_job(result["job_id"])
     return result
 
 
@@ -270,7 +270,7 @@ async def parse_baseline(
         expected_request_version=_request_version(request_version),
         idempotency_key=idempotency_key,
     )
-    _dispatch_create_package_job(result["job_id"])
+    dispatch_create_package_job(result["job_id"])
     return result
 
 

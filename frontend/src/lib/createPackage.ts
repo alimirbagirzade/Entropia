@@ -923,9 +923,30 @@ export function useDependencyScan(scanId: string | null) {
   });
 }
 
+// A validation run is terminal once the worker has written its verdict: `passed` /
+// `failed` are the two outcomes, and `stale` means the evidence no longer certifies
+// the current candidate. None of the three can move again, so polling stops there.
+const TERMINAL_VALIDATION_RUN_STATUSES = new Set(["passed", "failed", "stale"]);
+
+const VALIDATION_RUN_POLL_INTERVAL_MS = 3000;
+
 // Immutable validation-run evidence detail (queries/create_package.py::
-// get_validation_run). Like the scan artifact it never mutates once written.
-export function useValidationRun(validationRunId: string | null) {
+// get_validation_run). Once the worker writes its verdict the row never mutates.
+//
+// `live` is for the window BEFORE that verdict exists. A run admitted moments ago is
+// `queued`/`running`, and the caller watching it needs the durable state to arrive
+// without a manual reload (doc 08 §7: "Job status via durable event/poll; refresh does
+// not stop it"). SSE is the primary signal — a completing job emits `job.updated` and
+// the `resource.changed` catch-all refetches every mounted query — and this poll is the
+// loss-tolerant fallback for a closed stream (INF-11), exactly as the package-import
+// report does it. It stops itself the moment the status turns terminal, so a settled
+// run costs nothing. Omitting the option keeps the original immutable-evidence
+// behaviour (long staleTime, no polling) for every reader of a finished run.
+export function useValidationRun(
+  validationRunId: string | null,
+  options: { live?: boolean } = {},
+) {
+  const live = options.live ?? false;
   return useQuery({
     queryKey: ["package-requests", "validation-run", validationRunId],
     queryFn: () =>
@@ -933,8 +954,21 @@ export function useValidationRun(validationRunId: string | null) {
         ValidationSummary & { request_id: string; job_id: string; completed_at: string | null }
       >(`/validation-runs/${encodeURIComponent(validationRunId ?? "")}`),
     enabled: validationRunId !== null,
-    staleTime: 5 * 60 * 1000,
+    staleTime: live ? 0 : 5 * 60 * 1000,
+    refetchInterval: (query) => {
+      if (!live) return false;
+      const status = query.state.data?.status;
+      return status !== undefined && TERMINAL_VALIDATION_RUN_STATUSES.has(status)
+        ? false
+        : VALIDATION_RUN_POLL_INTERVAL_MS;
+    },
   });
+}
+
+// Has the durable worker written its verdict yet? Shared with the Library plane so
+// both surfaces agree on what "still running" means (one state machine, not two).
+export function isValidationRunTerminal(status: string | undefined): boolean {
+  return status !== undefined && TERMINAL_VALIDATION_RUN_STATUSES.has(status);
 }
 
 // Immutable baseline-asset detail + parse report (queries/create_package.py::

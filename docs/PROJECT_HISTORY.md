@@ -1897,6 +1897,153 @@ karşılıyor).
 
 ---
 
+
+## Shared portfolio containment — ADIM 3: shared capital fail-closed (PR #520)
+
+**Base SHA:** `948b6fb` (#519 merge'ü) · **commit `088e3e9`** · **merge `6c46c03`** ·
+**branch** `fix/portfolio-shared-mode-containment` · **Tarih:** 2026-08-03 ·
+**Migration YOK** · **OpenAPI drift YOK** (196 operation sabit) ·
+**`ENGINE_VERSION` BİLEREK bump EDİLMEDİ.**
+
+### Reproduction — kusur kod yazılmadan ÖNCE ampirik olarak üretildi
+
+Doc 13 §8.3/§8.4/§13 ve §14 kabul testi 11, **her timestamp'te TEK portfolio valuation
+snapshot** şart koşuyor. Engine ise timestamp yerine **ITEM üzerinde** döngü kuruyordu: her
+item kendi bar ekseninde, **tam havuz `P0` ile seed edilmiş kendi ledger'ında** replay
+ediliyor, sonra `combine_item_runs` bitmiş koşuları **pin sırasında** birleştiriyordu.
+Ölçülen üç sonuç:
+
+* Kompozit "portfolio equity curve" **zaman-sıralı DEĞİL** — iç içe geçen işlemli iki item
+  `01:00, 04:00, 02:00, 03:00` sırasıyla nokta üretiyor.
+* Sıralı fold **`max_drawdown = 5000.00`**; aynı dört kapanış **tek saatte `3000.00`** →
+  **%66 fazla**. `max_drawdown_pct` ve `romad` ondan türüyor.
+* `resolve_allocation_execution` **HER item'a tam havuzu** veriyor, **hiç çapraz-item durumu
+  yok** → sleeve kendi öz sermayesi üzerinden bileşikleniyor; havuz **yalnız isimde**
+  paylaşımlı.
+
+### Karar — bildirimi RETTE çevirmek
+
+Gerçek unified clock **YOK**. Sapma zaten bildiriliyordu
+(`portfolio_curve_sequential_not_unified_clock`) **ama sonuç yine de kanonik cevap olarak
+sevk ediliyordu**. Bu PR bildirimi **RETTE** çevirdi — main'in önceki ürün pozisyonunun
+**bilinçli tersine çevrilmesi**. **Authoring korundu, execution engellendi:** taslak HÂLÂ
+KAYDEDİLİR.
+
+Karar kaydı: **`docs/decisions/2026-08-03_shared_portfolio_containment.md`**
+(§3 reproduction · §5 mekanizma · §6 kaldırma şartları · §7 tarihsel Result'lar ·
+§8 bilinçli kapsam kaybı).
+
+### Mekanizma — tek kanonik kaynak, dört yüzey okuyor, hiçbiri tekrarlamıyor
+
+Yeni saf düzlem **`backend/src/entropia/domain/allocation/capability.py`** (DB yok, I/O yok):
+`SHARED_ALLOCATION_STATUS = "future_dev"` (tek anahtar) ·
+`SHARED_ALLOCATION_CAPABILITY_KEY = "portfolio.shared_capital_allocation"` ·
+`SHARED_ALLOCATION_FIELD_PATH = "enabled"` · `SHARED_ALLOCATION_MESSAGE` ·
+`SHARED_ALLOCATION_REMEDIATION` · `SHARED_ALLOCATION_DEPENDENCY` ·
+`LEGACY_SEQUENTIAL_RESULT_NOTE` · `shared_allocation_is_executable()` ·
+`shared_allocation_requested()` · `shared_allocation_capability_view()`.
+
+1. **`domain/allocation/rules.py::validate_allocation`** →
+   `AllocationIssueCode.SHARED_MODE_NOT_IN_BUILD` (`allocation/enums.py:105`), **BLOCKER**,
+   `field="enabled"`, **ilk sırada = lead blocker** → Portfolio sayfası + revision freeze
+   reddi. **Taslak HÂLÂ KAYDEDİLİR.**
+2. **`domain/readiness/validators.py`** →
+   `ReadinessIssueCode.ALLOCATION_SHARED_MODE_NOT_IN_BUILD` (`readiness/enums.py:176`),
+   scope `portfolio_allocation`, `remediation` + `field_path` (doc 14 §9.1). Yeni tablo
+   **`_ALLOC_REMEDIATION`** (`validators.py:136`, okunduğu yer `:1144`).
+3. **`application/commands/backtest_run.py::_admit_run_body`** (`:488`, guard `:543`) —
+   **Ready Check'ten BAĞIMSIZ** guard. `snapshot.capital_mode_snapshot`'ı **doğrudan** okur
+   ve **`build_run_manifest`'ten ÖNCE** (`:574`) çalışır → **run / manifest / job hiç
+   oluşmaz** (doc 15 §9.3). request + retry, human + Agent **hepsi** buradan geçer; dayanıklı
+   `run_admission_rejected` audit'ini `_admit_run`'ın handler'ı diğer tipli retlerle aynı
+   şekilde yazar.
+4. **`application/queries/allocation_plan.py:59,76`** → `shared_mode_capability` yayınlar;
+   **`frontend/src/pages/Portfolio.tsx:357`** **verbatim** basar. **Kontroller etkileşimli
+   kalır** — disabled UI **sunumdur, authorization DEĞİLDİR**.
+
+### Değişmeyen sınırlar
+
+* **Independent capital dokunulmadı** (doc 13 §1.1 — eksik mod değil).
+* **Kalıcı Result'lar immutable ve değiştirilmedi.** Pre-containment bir shared-pool Result
+  `diagnostics.composition.capital_allocation = "shared_pool"` değerini ve
+  `portfolio_curve_sequential_not_unified_clock` uyarısını **byte-for-byte** korur
+  (`test_a_legacy_shared_pool_result_stays_readable_and_unmodified`). Yalnız **okuma-zamanı
+  etiketi** eklendi: `frontend/src/lib/backtest.ts::diagnosticWarningLabel` (`:442`,
+  `components/ResultDetail.tsx:668` kullanır) — audit **G-07**'nin ham-token sorununun cevabı.
+* **Migration YOK:** `readiness_issue.code = String(64)`, CHECK yok, yeni değer 35 karakter;
+  `portfolio_allocation` scope üyesi zaten vardı. **Alembic head `0043_i08_registry_strategy_fks`
+  değişmedi (tek head).**
+* **OpenAPI drift YOK** — yeniden üretilip diff'lendi, **196 operation**.
+* **`ENGINE_VERSION` BİLEREK bump EDİLMEDİ:** çalışan davranış değişmedi, **çalışması
+  engellendi**. (Kaldırma sırasında bump **zorunludur** — decision record §6 madde 6,
+  INF-04/INF-05.)
+* **Route path · react-query key · OCC token · `Idempotency-Key` · hook · SSE taksonomisi ·
+  `lib/*.ts` veri mantığı değişmedi.**
+
+### Yeni / değişen dosyalar (25 dosya, +1459 / −79)
+
+**YENİ:** `domain/allocation/capability.py` (203) ·
+`tests/unit/test_shared_allocation_containment.py` (312, **9 test**) ·
+`tests/integration/test_shared_allocation_containment.py` (285, **7 test**) ·
+`frontend/src/test/legacySequentialResultLabel.test.ts` (34, **3 test**) ·
+`docs/decisions/2026-08-03_shared_portfolio_containment.md` (164).
+
+**DEĞİŞEN (backend):** `commands/backtest_run.py` · `queries/allocation_plan.py` ·
+`domain/allocation/enums.py` · `domain/allocation/rules.py` · `domain/readiness/enums.py` ·
+`domain/readiness/validators.py`.
+**DEĞİŞEN (frontend):** `lib/allocation.ts` (`SharedModeCapability`, `:115`) ·
+`lib/backtest.ts` · `pages/Portfolio.tsx` · `test/portfolio.test.tsx`.
+**Hizalanan mevcut testler:** `test_allocation_fx_dependency.py` ·
+`test_allocation_persistence.py` · `test_backtest_manifest_warnings.py` ·
+`test_backtest_persistence.py` · `test_e2e_pipeline.py` · `test_gateway_parity_s4.py` ·
+`test_allocation_item_kind.py` · `test_allocation_rules.py`.
+**CODEMAP (PR içinde güncellendi):** `docs/CODEMAPS/BACKEND_LAYERS.md` (allocation satırı →
+`capability.py` + containment notu) · `docs/CODEMAPS/BACKEND_ROUTES.md`
+(GET portfolio-allocation-draft altına `shared_mode_capability` notu).
+
+### Testler / CI
+
+Tam backend `uv run pytest -q`: **exit 0, 0 FAILED, coverage %92.43** (kapı %90) ·
+`ruff check .` / `ruff format --check .` / `mypy src` **temiz** ·
+frontend `vitest --no-file-parallelism`: **676 passed / 66 dosya, exit 0** ·
+`tsc -b --noEmit` temiz. **CI PR #520: 6/6 pass** — Backend lint/type/test 37m26s ·
+Frontend 1m58s · E2E real-browser F-23 7m02s · E2E dev-auth 2m04s ·
+A11Y axe-core R2-14 2m39s · Docker 56s.
+
+### Dürüst sınırlar
+
+**1) Bilinçli kapsam kaybı (decision record §8).** Admitted shared run kalmadığı için **üç
+davranış artık uçtan uca test edilemiyor:**
+
+* worker'ın **pinned pool `P0`** ile kapitalizasyonu — **sizing aritmetiği**
+  `tests/unit/test_backtest_engine_allocation.py`'de duruyor;
+* portfolio kurallarının (`max_total_exposure_percent`, `conflict_policy`) **DONDURULMUŞ**
+  revision'a taşınması — draft round-trip **ve** freeze reddi test ediliyor;
+* **RC-03**'ün orijinal fixture'ı — artık strateji kapsamlı `EXECUTION_ASSUMPTIONS_DEFAULT`
+  uyarısına taşındı; ulaşılamaz hale gelen yol
+  `test_shared_allocation_warning_path_is_now_fail_closed`
+  (`tests/integration/test_backtest_manifest_warnings.py:108`) ile kilitli.
+
+**Containment kaldırılırken üçü de geri getirilmeli** — sessizce bırakılmamalı. Ayrıca
+`test_composite_portfolio_curve_is_not_time_ordered` **pozitif muadiline yeniden yazılmalı,
+SİLİNMEMELİ** (decision record §6 madde 5).
+
+**2) "ADIM 20 unified oracle gate" BU REPODA TANIMLI DEĞİL.**
+`docs/audit/current_main_ground_truth_2026-08-03.md` §18 yalnız **1–8** slice'ı listeliyor;
+**ADIM 14–20 yok**. Unified-clock orada *"ürün kararı gerektirir, bu denetimin kapsamı
+dışında"* diye kayıtlı. **Uydurulmadı** — kaldırma şartları bunun yerine decision record
+**§6**'da **altı somut, denetlenebilir madde** olarak yazıldı. Gate repoda tanımlanınca
+§6'yı **referans almalı, değiştirmemeli.**
+
+**3) Ekran okuyucu denetimi (GitHub #514) hâlâ açık**; **D-10** imza-mavisi (45 düğüm) kalıcı
+imzalı sapma sürüyor, **WCAG 2.2 AA 1.4.3 karşılanmıyor.**
+
+### Kapanış kaydının zamanlaması (dürüst not)
+
+Bu kayıt geç yazıldı: **#520 (`6c46c03`) merge olduktan sonra main #521 (`a570934`) ve onun
+kapanış kaydı #522 (`b5d524d`) ile ilerlemişti.** Bu yüzden ADIM 3 kaydı, sonradan eklenen
+**G-02 (#521) kaydının ÖNÜNE** yerleştirildi — dosyadaki sıra merge sırasıdır.
+
 ## ESP export contract v2 — G-02 / ESP-19 kapatıldı (PR #521)
 
 **Base SHA:** `6c46c039ebf9f3eaa58c6f34bddb74d2ad86d073` (`6c46c03`, #520 merge'ü) ·

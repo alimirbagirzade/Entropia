@@ -205,8 +205,9 @@ Before stopping a working session, produce **ALL** of the following:
 
 
 - **Next — sıra `docs/audit/current_main_ground_truth_2026-08-03.md` §18'de.** `main` @
-  `a570934`; açık PR **yok**, açık issue yalnız #514 (insan işi). §18 sıra 1 (#519) ve
-  sıra 3 (#521 — ESP export contract v2, §G-02 + ESP-19 kapandı) landed. Sıradaki tek slice:
+  `b5d524d`; açık issue yalnız #514 (insan işi). §18 sıra 1 (#519), sıra 3 (#521 — ESP export
+  contract v2, §G-02 + ESP-19 kapandı) ve **ADIM 3 (#520 — shared capital fail-closed;
+  kayıt `docs/ADIM3_LANDED_KICKOFF.md`)** landed. Sıradaki tek slice:
   **ADIM 5 — `feat/library-request-validation-ui`** (§18 sıra 2 / §G-04: backend TAM, yalnız
   frontend hook + detay bloğu eksik). Handoff: **`docs/G02_LANDED_KICKOFF.md`** (paste-ready
   resume prompt en altta).
@@ -216,8 +217,10 @@ Before stopping a working session, produce **ALL** of the following:
   kapatma yetkisi insandadır, agent kapatamaz. Visual regression ve axe-core ratchet'i
   CI'da bloklayıcı. Kalan 45 düğüm imza-mavisi **D-10 (2026-07-30) imzalı kalıcı sapmasıdır**;
   WCAG 2.2 AA 1.4.3 karşılanmıyor, ürün bu ölçüt için uyumlu sayılamaz. Ayrıca doğrulanmış
-  boşluklar: ESP export manifest sözleşme alanları, Tool Gateway `strategy.*`/`trading_signal.*`,
-  Library Request-Validation UI, sequential shared-equity allocation (L4 ile bildirilmiş).
+  boşluklar: Tool Gateway `strategy.*`/`trading_signal.*`, Library Request-Validation UI.
+  **Shared-equity allocation artık "bildirilen sapma" DEĞİL — ADIM 3 (#520) ile fail-closed**
+  (`domain/allocation/capability.py::SHARED_ALLOCATION_STATUS="future_dev"`); kaldırma şartları
+  `docs/decisions/2026-08-03_shared_portfolio_containment.md` §6.
 
 - **KAPSAM DIŞI (bilerek):** retention auto-purge (doc 20 §16 — "Production V1'de kapalı"),
   LLM generation (Future-Dev), Graphic View renderer (doc 22 — V18 statik placeholder kalır).

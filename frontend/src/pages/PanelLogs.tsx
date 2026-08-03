@@ -131,7 +131,18 @@ function BacktestLogCard() {
                   <tr key={row.result_id}>
                     <td>{backtestLogUserLabel(row.user)}</td>
                     <td>{formatUtc(row.completed_at_utc)}</td>
-                    <td>{row.backtest.display_title}</td>
+                    {/* I-16a residual, closed 2026-08-03: the Backtest cell renders the
+                        raw `result_id` as a `<code>` binding key and NOT the projection's
+                        `backtest.display_title`. That field ships as the literal
+                        `f"Backtest Result {result_id}"`
+                        (`application/queries/panel_backtest_log.py::_row`), so rendering it
+                        printed the opaque id with a noun glued on and named nothing — the
+                        exact defect Results History reverted in PR #507. What discriminates
+                        a row here is the User / Date pair rendered beside the id. Rationale:
+                        `docs/implementation/v18_visual_traceability.md` §4.4. */}
+                    <td>
+                      <code>{row.result_id}</code>
+                    </td>
                     <td>{formatMetricValue(row.net_profit)}</td>
                     <td>{formatMetricValue(row.romad)}</td>
                     <td>{formatMetricValue(row.total_trades)}</td>

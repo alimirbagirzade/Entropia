@@ -18,6 +18,7 @@ from pydantic import BaseModel
 from entropia.application.commands import package_lifecycle as pkg_cmd
 from entropia.application.queries import library as library_query
 from entropia.apps.api.deps import RequestContext, request_context
+from entropia.apps.api.routes.create_package import dispatch_create_package_job
 from entropia.domain.package.catalog import parse_catalog_filters
 from entropia.shared.concurrency import etag_for_row_version, row_version_from_if_match
 from entropia.shared.pagination import PageParams
@@ -271,7 +272,7 @@ async def request_package_validation(
     PACKAGE_REVISION_CONFLICT, a run already in flight -> 409
     VALIDATION_ALREADY_RUNNING, a package with no validatable draft -> 422
     VALIDATION_PIPELINE_UNAVAILABLE. ``Idempotency-Key`` passes through."""
-    return await pkg_cmd.request_package_validation(
+    result = await pkg_cmd.request_package_validation(
         ctx.session,
         ctx.actor,
         entity_id=entity_id,
@@ -279,6 +280,14 @@ async def request_package_validation(
         expected_head_revision_id=body.expected_head_revision_id,
         idempotency_key=idempotency_key,
     )
+    # The admission writes the QUEUED ``jobs`` row; handing it to the broker is a SEPARATE
+    # step that every Create-Package admission route already performs. Omitting it here
+    # left a Library-started run sitting in `queued` until the INF-03 scheduler sweep
+    # eventually re-sent it — invisible to command-level tests, which drive the worker
+    # directly, and to the API contract, which is identical either way. The same helper is
+    # reused rather than re-implemented so the two planes cannot drift on dispatch.
+    dispatch_create_package_job(result["job_id"])
+    return result
 
 
 @router.post("/library/{entity_id}/request-approval")

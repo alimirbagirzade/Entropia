@@ -963,6 +963,11 @@ function PackageValidationActions({ pkg }: { pkg: LibraryPackageDetail }) {
         explicit step (doc 08 §7).
       </p>
       {requestValidation.isError ? <ErrorState error={requestValidation.error} /> : null}
+      {/* A failing run-detail read must never masquerade as "still queued". Falling back
+          to the admission's status without saying so is what let a genuinely stuck run
+          look like a slow one for three minutes; the reader has to be told the live
+          status is unavailable, not shown a stale one as if it were current. */}
+      {run.isError ? <ErrorState error={run.error} /> : null}
       {/* role="status" is an implicit polite live region: the queued -> running -> passed
           transitions arrive without a reload, so a screen reader must hear them. It is
           focusable (tabIndex -1) only so the submit can hand the caret over; it is never

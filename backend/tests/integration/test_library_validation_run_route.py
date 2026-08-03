@@ -42,6 +42,7 @@ from sqlalchemy import func, select
 from entropia.application.jobs import create_package as cp_jobs
 from entropia.application.queries import library as library_query
 from entropia.apps.api.deps import RequestContext, request_context
+from entropia.apps.api.routes import library as library_routes
 from entropia.domain.create_package.enums import CreatePackageState, ValidationRunStatus
 from entropia.domain.identity import Actor
 from entropia.domain.lifecycle.enums import PrincipalType, Role
@@ -380,3 +381,38 @@ def test_the_queued_envelope_is_published_in_the_openapi_schema(app) -> None:
     # Every field is required: a partially-populated envelope would let the UI
     # render a queued run it cannot then follow to its durable job.
     assert set(model["required"]) == set(model["properties"])
+
+
+async def test_the_route_hands_the_durable_job_to_the_broker(app, session, monkeypatch) -> None:
+    """The admission writes the jobs row; DISPATCH is a separate step.
+
+    Every Create-Package admission route calls ``dispatch_create_package_job`` after the
+    command returns. The Library route did not, so a Library-started run wrote its QUEUED
+    jobs row and then sat there until the INF-03 scheduler sweep re-sent it. Nothing
+    caught it: the API contract is byte-identical either way, and the command-level tests
+    (and the worker test above) invoke ``run_create_package_job`` directly, so they never
+    exercise the broker hand-off at all. Only a real browser journey did.
+
+    This asserts the hand-off itself — the exact job id the caller was handed.
+    """
+    entity_id, revision_id = await _library_head(session)
+    dispatched: list[str] = []
+    monkeypatch.setattr(
+        library_routes, "dispatch_create_package_job", lambda job_id: dispatched.append(job_id)
+    )
+
+    gen = _override(app, session)
+    next(gen)
+    try:
+        async with _client(app) as client:
+            resp = await client.post(
+                _PATH.format(entity_id=entity_id),
+                json={"revision_id": revision_id, "expected_head_revision_id": revision_id},
+                headers={"Idempotency-Key": "idem-lib-val-dispatch"},
+            )
+    finally:
+        next(gen, None)
+    await session.commit()
+
+    assert resp.status_code == 201
+    assert dispatched == [resp.json()["job_id"]]

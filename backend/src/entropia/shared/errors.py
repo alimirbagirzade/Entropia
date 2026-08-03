@@ -1883,6 +1883,19 @@ class AgentToolCallForbiddenError(ForbiddenError):
     message = "The Agent is not permitted to perform this action."
 
 
+class AgentToolRequestInvalidError(ValidationError):
+    """A Tool Gateway request whose SHAPE is malformed — a missing/blank required
+    id, a non-integer OCC token, a non-object payload (doc 18 §9.2, §11).
+
+    This is the tool-call EDGE contract, not a domain verdict: it is raised before
+    any application command runs, so nothing is written. The Gateway records it as
+    a durable FAILED tool call rather than letting it escape into a worker retry
+    loop — a malformed agent request must leave evidence, not crash a worker."""
+
+    code = "AGENT_TOOL_REQUEST_INVALID"
+    message = "The agent tool request is malformed."
+
+
 class ArtifactOwnershipError(ForbiddenError):
     """The Agent tried to soft-delete an artifact it does not own; restore /
     permanent delete are Admin-only (doc 18 §12, AL-16)."""

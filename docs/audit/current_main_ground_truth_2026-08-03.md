@@ -318,16 +318,37 @@ Aşağıdakilerin hepsi **current main'de doğrulandı** (dokümandan değil, ko
 
 ### G-03 · Tool Gateway'de `strategy.*` ve `trading_signal.*` araçları YOK
 
+> **STRATEGY YARISI KAPANDI — 2026-08-03, `feat/agent-strategy-tool-gateway`.** Kusur önce
+> `origin/main` @ `9944bfb` üzerinde yeniden üretildi: beş `strategy.*` literalinin beşi de
+> `parse_tool_name` ile `ToolPolicyScopeError` veriyordu (`ToolName` 23 üye, capability'siz
+> exposure 21 isim). Beş araç eklendi (`ToolName` → **28 üye**) ve **yeni iş mantığı
+> yazılmadı**: her handler insanın kullandığı aynı `commands/strategy_draft.py` +
+> `queries/strategy.py` hattına delege ediyor; ownership, `expected_draft_row_version` OCC,
+> `Idempotency-Key` (`run_idempotent`), compiler verdict, audit + outbox ve Mainboard re-pin
+> o komutların **içinde** kalıyor. Scope tablosu: get → `observation|research`;
+> create/patch/validate → `research|proposal`; save → `proposal`; beşi de **asla
+> `execution`** değil, dolayısıyla hepsi `agent` kuyruğunda (koşu ayrı araçtır, Save bir
+> Ready PASS değildir). **Gateway sertleştirmesi (dar):** yalnız strategy ailesi için tipli
+> governance-dışı hata artık **durable `FAILED` tool call** olarak yazılıyor (bayat OCC →
+> `STRATEGY_DRAFT_CONFLICT`, bozuk istek → `AGENT_TOOL_REQUEST_INVALID`), çünkü önceden
+> `dispatch_tool_call`'dan kaçıp worker rollback + 3× retry sonucu **hiç satır bırakmıyordu**;
+> S4 aileleri (allocation/trade_log) landed *propagate* sözleşmesini koruyor — bilinen,
+> tescilli asimetri. **`trading_signal.*` yarısı AÇIK** (TS-20 / AOS-20). 23 test:
+> `backend/tests/integration/test_gateway_parity_strategy.py`. Tam sözleşme + scope tablosu +
+> gerçek ToolCall zarfları: **`docs/audit/agent_strategy_tool_gateway.md`**.
+> **`ENGINE_VERSION` DEĞİŞMEDİ**, **migration YOK** (alembic head `0043_i08_registry_strategy_fks`),
+> **OpenAPI değişmedi** (yeni route yok), frontend değişmedi.
+
 | | |
 |---|---|
-| **Status** | CONFIRMED GAP |
+| **Status** | ~~CONFIRMED GAP~~ → **strategy yarısı CLOSED (2026-08-03)** · `trading_signal.*` yarısı **CONFIRMED GAP (açık)** |
 | **Canonical source** | doc 02 AT-21, doc 04 TS-20 ("via Tool Gateway") |
-| **Production path** | `backend/src/entropia/domain/agent_lab/tool_gateway.py:23-59` (`ToolName`, **23 üye**) |
-| **Kanıt** | 10/10 literal ABSENT: `strategy.get_draft`, `strategy.create_draft`, `strategy.patch_draft`, `strategy.validate_draft`, `strategy.save_revision`, `trading_signal.upload_source_asset`, `trading_signal.request_import`, `trading_signal.get_import_report`, `trading_signal.create`, `trading_signal.create_revision`. Repo genelinde bu literaller **0 hit**. |
+| **Production path** | `backend/src/entropia/domain/agent_lab/tool_gateway.py:23-59` (`ToolName`, ölçüm anında **23 üye**; kapanıştan sonra **28**) |
+| **Kanıt** | Ölçüm anında 10/10 literal ABSENT: `strategy.get_draft`, `strategy.create_draft`, `strategy.patch_draft`, `strategy.validate_draft`, `strategy.save_revision`, `trading_signal.upload_source_asset`, `trading_signal.request_import`, `trading_signal.get_import_report`, `trading_signal.create`, `trading_signal.create_revision`. Repo genelinde bu literaller **0 hit**. → **Şimdi ilk beşi VAR, son beşi hâlâ 0 hit.** |
 | **Tuzak** | `trade_log.upload_source_asset` / `request_import` / `create` / `create_revision` **VAR** — farklı work-object ailesi, parity kanıtı değil. |
 | **Domain-command parity (AYRI EKSEN)** | **TAM**: `commands/strategy_draft.py` (create/patch/validate/save_revision/derive/clear) + `queries/strategy.py`; `commands/trading_signal.py` (upload/request_import/create/create_revision/export) + `queries/trading_signal.py::get_import_report`. **Bunu Tool Gateway parity diye raporlama.** |
-| **Test/evidence** | `tests/integration/test_acceptance_agent_parity_gaps.py:16-23` boşluğu açıkça yazıyor |
-| **Risk** | Agent bu iki aileyi Gateway üzerinden hiç kullanamaz; AT-21/TS-20'nin literal cümlesi test edilemez. |
+| **Test/evidence** | `tests/integration/test_acceptance_agent_parity_gaps.py` docstring'i boşluğu açıkça yazıyordu; **güncellendi** — AT-21 yarısı artık `test_gateway_parity_strategy.py` ile kapalı, TS-20/AOS-20 sınırı yeniden doğrulanmış olarak duruyor |
+| **Risk** | ~~Agent bu iki aileyi Gateway üzerinden hiç kullanamaz~~ → **kalan risk yalnız Signal ailesinde**: Agent `trading_signal.*`'ı Gateway üzerinden hâlâ kullanamaz, TS-20/AOS-20'nin literal cümlesi test edilemez. |
 
 ### G-04 · Package Library Request Validation — **frontend-only** boşluk
 

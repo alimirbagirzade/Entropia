@@ -25,18 +25,13 @@ const BLOCKING_SEVERITIES = ["high", "critical"];
 // upstream fix stops being a major upgrade.
 const FROZEN_ADVISORIES = {
   frontend: [
-    {
-      id: "GHSA-3jxr-9vmj-r5cp",
-      pkg: "brace-expansion",
-      reason:
-        "dev-only transitive (typescript-eslint -> minimatch); npm's fix path is eslint@10, a major upgrade out of scope for a CI-gates change. Never reached by shipped app code.",
-    },
-    {
-      id: "GHSA-mh99-v99m-4gvg",
-      pkg: "brace-expansion",
-      reason:
-        "same dev-only chain as GHSA-3jxr-9vmj-r5cp; `npm audit fix` raises the reported high count from 3 to 7 instead of clearing it.",
-    },
+    // The two brace-expansion freezes that lived here were DROPPED 2026-08-03. Both
+    // stated "npm's fix path is eslint@10, a major upgrade" — and that stopped being
+    // true: brace-expansion 5.0.9 / 1.1.18 patch the same chain, so `npm audit fix`
+    // now clears them in the lockfile with no major upgrade and no package.json
+    // change. The gate's own "frozen but no longer reported" note is what surfaced
+    // it. A freeze whose reason has expired is worse than no freeze — it silently
+    // grants an exception nobody re-examined.
     {
       id: "GHSA-qwww-vcr4-c8h2",
       pkg: "react-router",

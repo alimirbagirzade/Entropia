@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { EmptyState } from "@/components/EmptyState";
@@ -6,8 +6,15 @@ import { ErrorState } from "@/components/ErrorState";
 import { LabelledId } from "@/components/LabelledId";
 import { Loading } from "@/components/Loading";
 import { StatusBadge } from "@/components/StatusBadge";
+import { ApiError } from "@/lib/apiClient";
 import { formatUtc } from "@/lib/backtest";
-import { asRecordArray, useRationaleFamilies } from "@/lib/createPackage";
+import {
+  asRecordArray,
+  isValidationRunTerminal,
+  useRationaleFamilies,
+  useValidationRun,
+  validationRunTone,
+} from "@/lib/createPackage";
 import {
   packageImportTone,
   usePackageImportReport,
@@ -44,6 +51,7 @@ import {
   useLibraryPackage,
   useLibraryPackages,
   useRequestApproval,
+  useRequestPackageValidation,
   useSoftDeletePackage,
   validationTone,
   type LibraryFilters,
@@ -543,6 +551,9 @@ function PackageDetail({ entityId, onClose }: { entityId: string; onClose: () =>
 
           <DeriveStrategyBlock pkg={pkg} />
           <PackageRevisionActions pkg={pkg} />
+          {/* Validation precedes approval in doc 08 §7's order and gates it, so it is
+              rendered above the approval block rather than beside it. */}
+          <PackageValidationActions pkg={pkg} />
           <PackageApprovalActions pkg={pkg} />
           <PackageExportBlock pkg={pkg} />
           <PackageActions pkg={pkg} onDeleted={onClose} />
@@ -842,6 +853,180 @@ function PackageExportBlock({ pkg }: { pkg: LibraryPackageDetail }) {
           </pre>
         </>
       ) : null}
+    </div>
+  );
+}
+
+// One sentence per durable-run status, so progress is legible without relying on the
+// badge colour (WCAG 1.4.1: colour is never the only carrier). The keys are the wire
+// ValidationRunStatus values verbatim.
+const VALIDATION_RUN_MESSAGES: Record<string, string> = {
+  queued:
+    "Queued — the durable job is accepted and has not started yet. Leaving or refreshing this page does not stop it.",
+  running: "Running — the seven mandatory checks are executing in the durable worker.",
+  passed:
+    "Passed — this revision is certified. Requesting approval is the next, separate step; passing does not approve or publish anything.",
+  failed:
+    "Failed — the run did not certify this revision. Open the validation report, repair it in a new revision or derive your own, then request validation again.",
+  stale:
+    "Stale — this evidence no longer certifies the current candidate. Request validation again.",
+};
+
+// The 409 that means "one is already running" carries the in-flight run in `details`
+// (commands/package_lifecycle.py). Reading it is what turns a dead-end error into a
+// recovery: the panel follows THAT run instead of offering a duplicate submit.
+function runningRunIdFrom(error: unknown): string | null {
+  if (!(error instanceof ApiError) || error.code !== "VALIDATION_ALREADY_RUNNING") return null;
+  const value = error.details[0]?.validation_run_id;
+  return typeof value === "string" ? value : null;
+}
+
+// G-04: Request Validation on the detail panel (doc 08 §7). Shown only when the SERVER
+// marks `can_request_validation` — which is true only when an originating Create Package
+// draft actually backs this root, so the panel never offers an un-performable action for
+// a Derived or seeded package. The UI still never authorizes: the command re-validates
+// ownership, lifecycle and the head match, and 403/409/422 are rendered verbatim.
+//
+// This starts the SAME pipeline the Create Package plane runs — it does not certify
+// anything itself. The queued admission names both planes' identifiers, and the durable
+// state is then read through createPackage's `useValidationRun`, so one run looks
+// identical from either surface.
+function PackageValidationActions({ pkg }: { pkg: LibraryPackageDetail }) {
+  const requestValidation = useRequestPackageValidation();
+  const [confirming, setConfirming] = useState(false);
+  const statusRef = useRef<HTMLDivElement | null>(null);
+
+  // Follow the run this submit started OR, on the already-running 409, the run that
+  // was already in flight. Either way there is exactly one run being watched.
+  const startedRunId = requestValidation.data?.validation_run_id ?? null;
+  const alreadyRunningId = runningRunIdFrom(requestValidation.error);
+  const watchedRunId = startedRunId ?? alreadyRunningId;
+  const run = useValidationRun(watchedRunId, { live: true });
+
+  // Controlled focus: the outcome renders below the trigger, so move the caret there
+  // once — keyed on the outcome, not on every poll tick.
+  const outcomeKey = watchedRunId ?? (requestValidation.isError ? "error" : null);
+  useEffect(() => {
+    if (outcomeKey !== null) statusRef.current?.focus();
+  }, [outcomeKey]);
+
+  if (!pkg.permissions.can_request_validation) return null;
+
+  // The durable row is authoritative once it has been read; the admission's `queued`
+  // is the honest answer until then.
+  const status = run.data?.status ?? requestValidation.data?.status ?? null;
+  const requestId = requestValidation.data?.request_id ?? run.data?.request_id ?? null;
+  const jobId = requestValidation.data?.job_id ?? run.data?.job_id ?? null;
+  const attemptNo = requestValidation.data?.attempt_no ?? run.data?.attempt_no ?? null;
+  // The create-package request's CreatePackageState — only the admission reports it; the
+  // immutable run row carries its own status, not the request's state.
+  const requestState = requestValidation.data?.state ?? null;
+
+  const onConfirm = () =>
+    requestValidation.mutate(
+      { entityId: pkg.entity_id, revisionId: pkg.current_revision_id },
+      { onSettled: () => setConfirming(false) },
+    );
+
+  return (
+    <div style={{ marginTop: 12 }}>
+      <h5 style={{ marginBottom: 4 }}>Validation</h5>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+        {confirming ? (
+          <>
+            <button
+              type="button"
+              className="btn"
+              onClick={onConfirm}
+              disabled={requestValidation.isPending}
+            >
+              {requestValidation.isPending ? "Requesting…" : "Confirm request validation"}
+            </button>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => setConfirming(false)}
+              disabled={requestValidation.isPending}
+            >
+              Cancel
+            </button>
+          </>
+        ) : (
+          <button type="button" className="btn" onClick={() => setConfirming(true)}>
+            Request Validation
+          </button>
+        )}
+      </div>
+      <p className="page-sub" style={{ marginTop: 4 }}>
+        Runs the seven mandatory checks over the current head (v{pkg.revision_no}) in a durable
+        job. Passing does NOT approve or publish it — Request Approval stays a separate,
+        explicit step (doc 08 §7).
+      </p>
+      {requestValidation.isError ? <ErrorState error={requestValidation.error} /> : null}
+      {/* role="status" is an implicit polite live region: the queued -> running -> passed
+          transitions arrive without a reload, so a screen reader must hear them. It is
+          focusable (tabIndex -1) only so the submit can hand the caret over; it is never
+          in the tab order. */}
+      <div
+        ref={statusRef}
+        tabIndex={-1}
+        role="status"
+        aria-label="Validation run status"
+        style={{ marginTop: 8 }}
+      >
+        {watchedRunId !== null ? (
+          <>
+            <p style={{ marginBottom: 4 }}>
+              <StatusBadge tone={validationRunTone(status ?? "queued")} label={status ?? "queued"} />{" "}
+              {VALIDATION_RUN_MESSAGES[status ?? "queued"] ??
+                `Validation run status: ${status ?? "queued"}.`}
+            </p>
+            {alreadyRunningId !== null && startedRunId === null ? (
+              <p className="page-sub" style={{ marginBottom: 4 }}>
+                Nothing new was started — the run below was already in flight and is the
+                authoritative one. Wait for it to finish rather than submitting again.
+              </p>
+            ) : null}
+            {/* Copyable support/audit tokens (F-07: keep raw ids in advanced detail, never
+                invent a name for them). Both planes are named because ONE run owns them. */}
+            <dl className="kv">
+              <dt>Package revision</dt>
+              <dd>
+                <code>{pkg.current_revision_id}</code>
+              </dd>
+              <dt>Validation run</dt>
+              <dd>
+                <code>{watchedRunId}</code>
+                {attemptNo !== null ? ` · attempt ${attemptNo}` : ""}
+              </dd>
+              {requestId !== null ? (
+                <>
+                  <dt>Create Package request</dt>
+                  <dd>
+                    <code>{requestId}</code>
+                    {/* The REQUEST's state, reported beside the RUN's status above because
+                        they answer different questions and must not be collapsed. */}
+                    {requestState !== null ? ` · ${requestState}` : ""}
+                  </dd>
+                </>
+              ) : null}
+              {jobId !== null ? (
+                <>
+                  <dt>Durable job</dt>
+                  <dd>
+                    <code>{jobId}</code>
+                  </dd>
+                </>
+              ) : null}
+            </dl>
+            {isValidationRunTerminal(status ?? undefined) ? null : (
+              <p className="page-sub">
+                This page is following the durable job; closing it does not stop the run.
+              </p>
+            )}
+          </>
+        ) : null}
+      </div>
     </div>
   );
 }

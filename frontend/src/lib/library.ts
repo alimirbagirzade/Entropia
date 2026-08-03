@@ -432,6 +432,72 @@ export function useCreatePackageRevision() {
 }
 
 // ---------------------------------------------------------------------------
+// Request Validation — G-04 (doc 08 §7 "Request validation"). The capability flag
+// `can_request_validation` shipped with S-L3 and the route behind it has existed
+// since then; this is the surface that finally reaches it, so the projection no
+// longer advertises a capability the user cannot exercise.
+//
+// It is a WRAPPER call, not a second certification path: the seven mandatory checks,
+// the immutable evidence row, the durable job and the
+// validation_running -> eligible_for_approval / revision_required state machine all
+// live in the CreatePackage plane. That is why the response names BOTH planes and why
+// the durable state is then read through createPackage's `useValidationRun` rather
+// than a Library-local read model.
+//
+// OCC is the BODY-form expected_head_revision_id (the detail current_revision_id),
+// the same rule request-approval uses — a stale tab cannot certify a revision the
+// user is no longer looking at (409 PACKAGE_REVISION_CONFLICT).
+// ---------------------------------------------------------------------------
+
+// The queued-admission envelope (routes/library.py::PackageValidationRunAcceptedResponse).
+// `status` is the immutable run's ValidationRunStatus (`queued` on admission); `state`
+// is the create-package request's CreatePackageState (`validation_running`). They answer
+// different questions and are never collapsed into one badge.
+export interface RequestValidationResult {
+  entity_id: string;
+  revision_id: string;
+  request_id: string;
+  validation_run_id: string;
+  attempt_no: number;
+  status: string;
+  state: string;
+  job_id: string;
+}
+
+// A fresh Idempotency-Key per submit. NOTE the verified boundary it does NOT buy:
+// while a run is in flight the server's guard is evaluated BEFORE run_idempotent, so
+// re-submitting with the same key still returns 409 VALIDATION_ALREADY_RUNNING rather
+// than replaying the 201 (pinned in tests/integration/test_library_validation_run_route.py).
+// The caller must therefore treat that 409 as a recovery path — it names the running
+// run in `details` — and never as a failure to start one.
+export function useRequestPackageValidation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { entityId: string; revisionId: string }) =>
+      apiRequest<RequestValidationResult>(
+        `/library/${encodeURIComponent(input.entityId)}/validation-runs`,
+        {
+          method: "POST",
+          headers: { "Idempotency-Key": crypto.randomUUID() },
+          body: {
+            revision_id: input.revisionId,
+            expected_head_revision_id: input.revisionId,
+          },
+        },
+      ),
+    onSuccess: () => {
+      // The admission moves the catalog projection and writes audit rows…
+      invalidateLibrary(queryClient);
+      // …and it moves the create-package request that owns the evidence. Sweeping
+      // both is what keeps ONE run visible identically from either plane.
+      void queryClient.invalidateQueries({ queryKey: ["package-requests"] });
+      // The durable job is now enqueued; the Jobs surface should see it immediately.
+      void queryClient.invalidateQueries({ queryKey: ["jobs"] });
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Approval sub-flow — GAP-06 epic R2b (doc 08 §7): Request Approval + Approve &
 // Publish. Both move the catalog projection AND write an audit event, so both
 // sweep ["library"] + ["audit"]. The OCC token is the BODY-form

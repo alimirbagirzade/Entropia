@@ -2061,6 +2061,55 @@
         "title": "PackageExportResponse",
         "type": "object"
       },
+      "PackageValidationRunAcceptedResponse": {
+        "description": "The queued-validation envelope, PUBLISHED in the schema rather than a bare dict.\n\nSame trap O-30 closed for the purge 202 and G-02 closed for the export body: a\n``dict[str, Any]`` return keeps the contract invisible to ``docs/openapi.json`` while\nthe drift guard stays green, so the frontend has nothing to bind to.\n\nThe envelope deliberately names BOTH planes for one run. The caller addressed a\npackage (``entity_id`` / ``revision_id``), but the evidence, the durable job and the\nstate machine live in the CreatePackage plane (``request_id`` / ``validation_run_id`` /\n``attempt_no`` / ``job_id``) — this route wraps that pipeline instead of owning a\nsecond one, so it reports the CP identifiers rather than minting Library-local ones.\n\n``status`` and ``state`` answer DIFFERENT questions and are never collapsed:\n``status`` is the immutable run's ``ValidationRunStatus`` (``queued`` on admission),\n``state`` is the request's ``CreatePackageState`` (``validation_running``). The\nterminal verdict lands on the projection when the durable worker finishes — this\nenvelope only reports the admission.",
+        "properties": {
+          "attempt_no": {
+            "title": "Attempt No",
+            "type": "integer"
+          },
+          "entity_id": {
+            "title": "Entity Id",
+            "type": "string"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "request_id": {
+            "title": "Request Id",
+            "type": "string"
+          },
+          "revision_id": {
+            "title": "Revision Id",
+            "type": "string"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "validation_run_id": {
+            "title": "Validation Run Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "entity_id",
+          "revision_id",
+          "request_id",
+          "validation_run_id",
+          "attempt_no",
+          "status",
+          "state",
+          "job_id"
+        ],
+        "title": "PackageValidationRunAcceptedResponse",
+        "type": "object"
+      },
       "PatchItemBody": {
         "properties": {
           "display_label_override": {
@@ -9940,9 +9989,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Request Package Validation Api V1 Library  Entity Id  Validation Runs Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/PackageValidationRunAcceptedResponse"
                 }
               }
             },

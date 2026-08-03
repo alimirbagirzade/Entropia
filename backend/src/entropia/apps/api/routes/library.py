@@ -90,6 +90,35 @@ class PackageExportResponse(BaseModel):
     registry_observation: dict[str, Any] | None = None
 
 
+class PackageValidationRunAcceptedResponse(BaseModel):
+    """The queued-validation envelope, PUBLISHED in the schema rather than a bare dict.
+
+    Same trap O-30 closed for the purge 202 and G-02 closed for the export body: a
+    ``dict[str, Any]`` return keeps the contract invisible to ``docs/openapi.json`` while
+    the drift guard stays green, so the frontend has nothing to bind to.
+
+    The envelope deliberately names BOTH planes for one run. The caller addressed a
+    package (``entity_id`` / ``revision_id``), but the evidence, the durable job and the
+    state machine live in the CreatePackage plane (``request_id`` / ``validation_run_id`` /
+    ``attempt_no`` / ``job_id``) — this route wraps that pipeline instead of owning a
+    second one, so it reports the CP identifiers rather than minting Library-local ones.
+
+    ``status`` and ``state`` answer DIFFERENT questions and are never collapsed:
+    ``status`` is the immutable run's ``ValidationRunStatus`` (``queued`` on admission),
+    ``state`` is the request's ``CreatePackageState`` (``validation_running``). The
+    terminal verdict lands on the projection when the durable worker finishes — this
+    envelope only reports the admission."""
+
+    entity_id: str
+    revision_id: str
+    request_id: str
+    validation_run_id: str
+    attempt_no: int
+    status: str
+    state: str
+    job_id: str
+
+
 @router.get("/library")
 async def list_library(
     cursor: str | None = Query(default=None),
@@ -223,7 +252,11 @@ async def create_package_revision(
     )
 
 
-@router.post("/library/{entity_id}/validation-runs", status_code=201)
+@router.post(
+    "/library/{entity_id}/validation-runs",
+    status_code=201,
+    response_model=PackageValidationRunAcceptedResponse,
+)
 async def request_package_validation(
     entity_id: str,
     body: RequestValidationRequest,

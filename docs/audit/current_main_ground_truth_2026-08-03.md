@@ -331,13 +331,30 @@ Aşağıdakilerin hepsi **current main'de doğrulandı** (dokümandan değil, ko
 
 ### G-04 · Package Library Request Validation — **frontend-only** boşluk
 
+> **KAPANDI — 2026-08-03, `feat/library-request-validation-ui`.** Kusur önce `origin/main`
+> @ `a570934` üzerinde empirik yeniden üretildi: `can_request_validation` `lib/library.ts:88`'de
+> **tip olarak vardı** ama `Library.tsx`'te yalnız generic `PERMISSION_FLAGS` ızgarasında
+> `yes`/`no` metni olarak basılıyordu — mutation hook yok, action yok, queued/running yüzeyi yok.
+> Kapatma **yüzey** işidir: `useRequestPackageValidation` → mevcut `POST /library/{id}/validation-runs`,
+> OCC body-form `expected_head_revision_id`, her submit'te taze `Idempotency-Key`. **İkinci
+> certification yolu yazılmadı** — durable durum CreatePackage düzlemindeki
+> `useValidationRun`'dan okunur (`live` seçeneği eklendi: terminal olana kadar 3 sn poll,
+> SSE'nin kayıp-toleranslı yedeği). Route'un gövdesi `PackageValidationRunAcceptedResponse`
+> ile **şemada yayımlandı** (O-30 tuzağı: `dict[str, Any]` drift guard'ı yeşil tutarken
+> sözleşmeyi gizliyordu). **Dürüst sınır, ölçüldü:** koşu uçuştayken aynı `Idempotency-Key`
+> ile tekrar gönderim **201 replay vermez** — wrapper'ın in-flight guard'ı `run_idempotent`'tan
+> önce çalışır, 409 `VALIDATION_ALREADY_RUNNING` döner (guard hiçbir yazımdan önce patlar,
+> ikinci kanıt satırı oluşmaz). UI bunu recovery yolu olarak render eder ve uçuştaki koşuyu
+> takip eder. **PASS approval yapmaz**; Request Approval ayrı adım olarak kaldı.
+> **`ENGINE_VERSION` DEĞİŞMEDİ**, **migration YOK** (alembic head `0043_i08_registry_strategy_fks`).
+
 | | |
 |---|---|
-| **Status** | CONFIRMED GAP (frontend) · backend COMPLETE |
+| **Status** | ~~CONFIRMED GAP (frontend) · backend COMPLETE~~ → **CLOSED (2026-08-03)** |
 | **Canonical source** | doc 08 §validation |
 | **Backend PRESENT** | Route `apps/api/routes/library.py:204` `POST /library/{entity_id}/validation-runs` (201) → `commands/package_lifecycle.py:547` → **aynı CP pipeline'ı**: `:619` `start_package_validation_run` (`commands/create_package.py:824`'ten import, `:64`). Rol kapısı: `package_lifecycle.py:585` `ensure_can_edit` (owner-or-Admin). Bayrak `can_request_validation` **list + shared + detail** DTO'da (`domain/package/permissions.py:37,98`; `queries/library.py:119/130, 173/184, 394/401`). |
-| **Frontend ABSENT** | `pages/Library.tsx`'te **action yok**; bayrak yalnız salt-okunur "yes/no" hücresi (`:537-540`). `lib/library.ts`'te **mutation hook yok**. `queued/running` durumları Library yüzeyinde **hiç yok** (yalnız CP düzleminde var). |
-| **Test** | Backend: `tests/integration/test_library_validation_run.py` (5 test, komut düzeyi) + `tests/unit/test_package_permissions.py` (2 test). **HTTP route düzeyinde test yok.** Frontend: **sıfır** test. |
+| **Frontend ~~ABSENT~~ → LANDED** | ~~`pages/Library.tsx`'te action yok; bayrak yalnız salt-okunur "yes/no" hücresi. `lib/library.ts`'te mutation hook yok.~~ → `Library.tsx::PackageValidationActions` (idle/confirm/submit/queued/running/passed/failed/stale/already-running/unavailable/forbidden), `library.ts::useRequestPackageValidation`, durable durum `createPackage.ts::useValidationRun(id,{live})`'dan. `role="status"` + `aria-label="Validation run status"` canlı bölge, renk-dışı ilerleme (durum sözcüğü + cümle), submit sonrası kontrollü focus. |
+| **Test** | Backend: `test_library_validation_run.py` (5 test, komut düzeyi) + `tests/unit/test_package_permissions.py` (2 test) + **YENİ** `test_library_validation_run_route.py` (**9 test, HTTP route düzeyi**: 201 zarf + şema yayını, OCC 409, already-running 409 + `details`, 422, 403, Idempotency-Key iki yarısı, worker → passed). Frontend: **YENİ** `libraryValidationRun.test.tsx` (**15 test**, tam state matrisi). E2E: **YENİ** `e2e/specs/20-library-request-validation.spec.ts` (Library → validation → worker → passed → approval available). |
 | **Risk** | Backend'e ulaşılamayan bir yetenek: kullanıcı "yes" görüyor ama tetikleyemiyor. |
 
 ### G-05 · Shared Equity Allocation = sequential approximation (unified clock YOK)
@@ -380,7 +397,7 @@ Aşağıdakilerin hepsi **current main'de doğrulandı** (dokümandan değil, ko
 | **E-01** | **A-08 insan ekran-okuyucu denetimi YAPILMADI** ve GitHub #514 **yanlışlıkla KAPALI** | §17 | Release kabul kaydı gerçeğe aykırı |
 | **E-02** | Fresh-install (`alembic upgrade head`, seed yok) agent runtime satırını kanıtlayan **pytest yok** | Integration conftest `create_all` kullanır (`tests/integration/conftest.py:46-47`), migration'ı koşmaz; her test satırı elle seed eder. Tek kanıt CI adımı `ci.yml` `alembic upgrade head` (satır düzeyi assert yok) | Migration seed'i sessizce kaybolursa test yakalamaz |
 | **E-03** | Acceptance ID izlenebilirliği **174/215 (%80)**, 41 ID izlenemiyor | `acceptance_id_scan.py` çıktısı; en kötü sayfa **doc 16 Results History 2/16** | Kabul sözleşmesinin %20'si teste bağlanmamış |
-| **E-04** | Library validation-run **HTTP route düzeyinde test yok**, frontend testi **sıfır** | §G-04 | Route sözleşmesi regresyona açık |
+| ~~**E-04**~~ → **KAPANDI (2026-08-03)** | ~~Library validation-run HTTP route düzeyinde test yok, frontend testi sıfır~~ → route düzeyi 9 test + frontend 15 test + 1 E2E journey | §G-04 | ~~Route sözleşmesi regresyona açık~~ |
 | **E-05** | ESP soft-delete → yeni resolution vakası **hiçbir testte yok** | §G-01 | Kusur landed edilirken fark edilmedi |
 | **E-06** | Klavye gezinimi sayfa başına denenmemiş (E2E'de **1** akış testi) | `e2e/specs/14-keyboard-flow.spec.ts` | WCAG 2.1.1 kapsamı dar |
 | **E-07** | Strategy config alanları OpenAPI'de yayımlanmıyor (`same_candle_entry_exit`, `stop_trigger_requirement` → `docs/openapi.json`'da 0 hit; draft body'ler serbest biçimli) | `components.schemas` yalnız `Create/Patch/Save/ClearStrategyDraftBody` | Strateji sözleşmesi drift guard'ın koruması dışında |
@@ -613,7 +630,7 @@ oturumunda **kapatılmayacaktır**.
 | Sıra | Slice | Kapsam | Neden bu sırada |
 |---|---|---|---|
 | **1** | **ADIM 2 — `fix/esp-lifecycle-safe-resolution`** | `queries/esp.py::resolve_embedded_dependency` root `deletion_state` + `lifecycle_state` okusun; yeni resolution'da soft-deleted/deprecated root `RESOLVER_NOT_ACTIVE` versin; historical pinned revision okunabilirliği **korunsun**; regresyon testi + PC-19 acceptance tag'i | Tek doğru davranış boşluğu ki **kod yayımlanmış docstring'iyle çelişiyor** (§G-01) |
-| 2 | `feat/library-request-validation-ui` | Library sayfasına gerçek action + mutation hook + queued/running/passed/failed durumu + route düzeyi backend testi + frontend testi | Backend hazır; yalnız yüzey eksik, risk düşük (§G-04) |
+| ~~2~~ | ~~`feat/library-request-validation-ui`~~ → **LANDED** | Library sayfasına gerçek action + mutation hook + queued/running/passed/failed durumu + route düzeyi backend testi (9) + frontend testi (15) + E2E journey; ayrıca 201 gövdesi `PackageValidationRunAcceptedResponse` ile şemada yayımlandı | Backend hazır; yalnız yüzey eksikti (§G-04) — **kapandı 2026-08-03** |
 | ~~3~~ | ~~`feat/esp-export-contract-evidence`~~ → **LANDED as `feat/esp-export-contract-v2`** | Export manifest'ine adapter/warm-up/timing/repaint/validation-run/validator-version/vectors/evidence + canonical key & signature **alan olarak** eklendi; ayrıca `export_schema_version`/`exporter_version`, immutable contract'tan ayrılmış `registry_observation` ve v1/v2 import uyumluluğu (bilinmeyen versiyon fail-closed) | Export'un yeniden üretilebilirliği (§G-02) — **kapandı 2026-08-03**, bkz. `docs/audit/esp_export_schema_v2.md` |
 | 4 | `fix/i16a-panel-logs-display-title` + `diagnosticWarningLabel` eşlemesi | Panel Logs sentetik başlığı kaldır; `portfolio_curve_sequential_not_unified_clock` için insan-okur etiket | İki küçük sunum kalıntısı (§G-06, §G-07) |
 | 5 | `test/fresh-install-acceptance` | `alembic upgrade head` üzerinden `agent_runtime` singleton'ını **assert eden** test | Coverage boşluğu; production değişikliği YOK (§N-01, §E-02) |

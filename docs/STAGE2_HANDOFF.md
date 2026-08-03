@@ -3129,6 +3129,65 @@ Bu oturumda main ayrıca ilerledi: **#494 (I-03 allocation item kind allowlist)*
 
 ---
 
+
+---
+
+## Shared portfolio containment — ADIM 3 landed (PR #520)
+
+**Base `948b6fb` → commit `088e3e9` → merge `6c46c03`** · branch
+`fix/portfolio-shared-mode-containment` · 2026-08-03 · **Migration YOK** (alembic head
+`0043_i08_registry_strategy_fks` sabit, tek head) · **OpenAPI drift YOK** (196 operation) ·
+**`ENGINE_VERSION` BİLEREK bump EDİLMEDİ** — çalışan davranış değişmedi, **çalışması
+engellendi**.
+
+Doc 13 §8.3/§8.4/§13 + §14 kabul testi 11 her timestamp'te **TEK** portfolio valuation
+snapshot şart koşuyor; engine ise timestamp yerine **ITEM** üzerinde döngü kuruyordu.
+**Kusur kod yazılmadan önce ampirik olarak üretildi:** kompozit eğri zaman-sıralı değil
+(`01:00, 04:00, 02:00, 03:00`); sıralı fold `max_drawdown = 5000.00`, aynı dört kapanış tek
+saatte `3000.00` → **%66 fazla**; `resolve_allocation_execution` **her** item'a tam havuzu
+veriyor, çapraz-item durumu **yok** → havuz yalnız isimde paylaşımlı.
+
+Gerçek unified clock **yok** → **containment**. Sapma zaten bildiriliyordu
+(`portfolio_curve_sequential_not_unified_clock`) ama yine de **kanonik cevap olarak sevk
+ediliyordu**; bu PR bildirimi **RETTE** çevirdi — main'in önceki ürün pozisyonunun bilinçli
+tersine çevrilmesi. **Taslak HÂLÂ KAYDEDİLİR** (authoring korundu, execution engellendi).
+
+**Mekanizma — tek kanonik kaynak, dört yüzey okuyor, hiçbiri tekrarlamıyor:**
+`domain/allocation/capability.py` (`SHARED_ALLOCATION_STATUS = "future_dev"`) →
+(1) `domain/allocation/rules.py::validate_allocation` → `SHARED_MODE_NOT_IN_BUILD` BLOCKER,
+`field="enabled"`, lead blocker;
+(2) `domain/readiness/validators.py` → `ALLOCATION_SHARED_MODE_NOT_IN_BUILD`, scope
+`portfolio_allocation`, yeni `_ALLOC_REMEDIATION` tablosu (doc 14 §9.1);
+(3) `commands/backtest_run.py::_admit_run_body` — **Ready Check'ten BAĞIMSIZ**, snapshot'ı
+doğrudan okur, **`build_run_manifest`'ten ÖNCE** → run/manifest/job **oluşmaz** (doc 15 §9.3);
+(4) `queries/allocation_plan.py` → `shared_mode_capability`, `pages/Portfolio.tsx:357`
+verbatim basar (kontroller etkileşimli kalır — disabled UI sunumdur, authorization değil).
+
+**Yeni:** `domain/allocation/capability.py` · `tests/unit/test_shared_allocation_containment.py`
+(9) · `tests/integration/test_shared_allocation_containment.py` (7) ·
+`frontend/src/test/legacySequentialResultLabel.test.ts` (3) ·
+`docs/decisions/2026-08-03_shared_portfolio_containment.md`. **Codemap** PR içinde güncellendi
+(`BACKEND_LAYERS.md`, `BACKEND_ROUTES.md`).
+
+**Testler:** backend tam suite **exit 0 / 0 FAILED / coverage %92.43** (kapı %90) · ruff +
+mypy temiz · frontend **676 passed / 66 dosya** · `tsc -b --noEmit` temiz · **CI 6/6 pass**
+(Backend 37m26s · Frontend 1m58s · E2E F-23 7m02s · E2E dev-auth 2m04s · A11Y R2-14 2m39s ·
+Docker 56s).
+
+**Dürüst sınır — bilinçli kapsam kaybı (decision record §8):** admitted shared run kalmadığı
+için üç davranış artık uçtan uca test edilemiyor — worker'ın pinned pool `P0` ile
+kapitalizasyonu (sizing aritmetiği `test_backtest_engine_allocation.py`'de duruyor);
+portfolio kurallarının DONDURULMUŞ revision'a taşınması (draft round-trip + freeze reddi test
+ediliyor); RC-03'ün orijinal fixture'ı (artık `EXECUTION_ASSUMPTIONS_DEFAULT` uyarısına
+taşındı, ulaşılamaz yol `test_shared_allocation_warning_path_is_now_fail_closed` ile kilitli).
+**Containment kaldırılırken üçü de geri getirilmeli.** Kaldırma şartları: decision record
+**§6** — altı somut madde. **"ADIM 20 unified oracle gate" bu repoda TANIMLI DEĞİL**
+(`current_main_ground_truth_2026-08-03.md` §18 yalnız 1–8'i listeliyor); uydurulmadı, şartlar
+bu yüzden §6'da somut yazıldı.
+
+**Deferred:** yok — kapsam dışı kalanlar zaten ayrı kalemler (§G-03 Tool Gateway,
+§G-04 Library Request-Validation UI).
+
 ## Stage post-V1 G-02 — ESP export contract v2 landed (PR #521)
 
 **Base `6c46c03` → merge `a570934`** · 2026-08-03 · **Migration YOK** (alembic head

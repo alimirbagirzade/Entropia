@@ -194,11 +194,48 @@ async def _run_agent_tool(job_id: str) -> None:
     factory = get_session_factory()
     async with factory() as session:
         try:
-            await run_tool_job(session, job_id)
+            response = await run_tool_job(session, job_id)
             await session.commit()
         except Exception:
             await session.rollback()
             raise
+    # AFTER the commit, exactly where an API route dispatches its own durable job: a
+    # tool call may have ADMITTED work onto the multi-actor ``data`` queue, and
+    # nothing else would ever start it (``data`` is deliberately excluded from the
+    # scheduler's automatic redelivery sweep). Sending before the commit would race
+    # the actor against a row it cannot yet see.
+    _dispatch_pending_data_job(response)
+
+
+def _dispatch_pending_data_job(response: dict[str, Any]) -> None:
+    """Hand a data-queue job the Tool Gateway admitted to its actor (INF-03 routing).
+
+    Mirrors ``routes/admin_panel.py::_dispatch_data_jobs``: the queue is multi-actor,
+    so the actor is resolved from the payload ``job_kind`` discriminator. A broker
+    send that fails is not data loss — the row stays durably QUEUED and the Admin
+    redelivery action still recovers it — but it must not be silent either, so it is
+    logged, and the tool call's already-committed outcome is left intact.
+    """
+    from entropia.application.jobs.agent_tools import pending_data_job_dispatch
+    from entropia.infrastructure.queues.enqueue import send_job
+
+    pending = pending_data_job_dispatch(response)
+    if pending is None:
+        return
+    job_kind, data_job_id = pending
+    actor = DATA_ACTOR_BY_KIND.get(job_kind)
+    if actor is None:
+        log.warning("worker.agent_tool.unknown_data_job_kind", job_kind=job_kind)
+        return
+    try:
+        send_job(actor, data_job_id)
+    except Exception as exc:  # the row stays QUEUED; Admin redelivery recovers it
+        log.warning(
+            "worker.agent_tool.data_dispatch_failed",
+            job_id=data_job_id,
+            job_kind=job_kind,
+            error=str(exc),
+        )
 
 
 @dramatiq.actor(queue_name="agent-executor", max_retries=3)

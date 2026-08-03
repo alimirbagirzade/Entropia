@@ -25,11 +25,30 @@ Trade Log, doc 04 §11 names ``FILE_TYPE_NOT_ALLOWED`` for Trading Signal.
 from __future__ import annotations
 
 import codecs
+import csv
+import io
 from typing import Any
 
-from entropia.shared.errors import ValidationError
+from entropia.shared.errors import (
+    UploadEncodingInvalidError,
+    UploadSchemaInvalidError,
+    UploadTooLargeError,
+    ValidationError,
+)
 
 ALLOWED_SOURCE_EXTENSIONS: tuple[str, ...] = (".txt", ".csv")
+
+# 50 MB ceiling for the text-asset surfaces (signal-event ledgers, trade logs,
+# baseline CSVs, manual documents). Market Data keeps its own larger raw ingestion
+# ceiling (F-01); these surfaces are hand-authored ledgers/documents.
+#
+# The constant lives in the DOMAIN, not at the route boundary, because the human
+# page is no longer the only caller: the Alpha Agent reaches the same upload
+# command UI-lessly through the Tool Gateway (doc 04 §10, TS-20), so a ceiling that
+# existed only in ``apps.api.upload`` would have bounded the browser and left the
+# Agent unbounded. ``apps.api.upload.DEFAULT_MAX_UPLOAD_BYTES`` IS this constant —
+# the two planes must never drift into two different ceilings.
+MAX_SOURCE_UPLOAD_BYTES = 50 * 1024 * 1024
 
 # The NUL scan covers the whole payload (a cheap memchr); the UTF-8 validation
 # runs over a bounded prefix so the command-layer gate stays O(1) on a 50 MB
@@ -105,6 +124,70 @@ def assert_supported_source_file(
             f"File {original_filename!r} does not contain {label} text.",
             details=[_detail(original_filename, reason)],
         )
+
+
+def decode_source_text(content: bytes) -> str:
+    """Decode the WHOLE document as UTF-8 (F-03 encoding gate).
+
+    Stricter than ``sniff_text_content``, which only decodes a bounded prefix so the
+    type gate stays O(1): a file whose first 8 KB are clean but whose tail is not
+    UTF-8 passes the sniff and fails here. Both run — the sniff names the *type*
+    defect, this names the *encoding* defect.
+    """
+    try:
+        text = content.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise UploadEncodingInvalidError() from exc
+    if "\x00" in text:
+        raise UploadEncodingInvalidError(
+            "The file contains NUL bytes and is not a valid text document."
+        )
+    return text
+
+
+def assert_csv_schema(text: str) -> None:
+    """Reject text that has no usable CSV header row (F-03 schema gate). A leading
+    UTF-8 BOM is tolerated; the first non-blank line must contain at least one
+    non-empty column."""
+    stripped = text.lstrip("\ufeff")
+    if not stripped.strip():
+        raise UploadSchemaInvalidError("The file has no rows.")
+    try:
+        rows = csv.reader(io.StringIO(stripped))
+        header = next((row for row in rows if any(cell.strip() for cell in row)), None)
+    except csv.Error as exc:
+        raise UploadSchemaInvalidError() from exc
+    if header is None:
+        raise UploadSchemaInvalidError("The file has no header columns.")
+
+
+def assert_source_bytes_admissible(
+    content: bytes,
+    *,
+    max_bytes: int = MAX_SOURCE_UPLOAD_BYTES,
+    require_csv_schema: bool = False,
+) -> str:
+    """The byte-level F-03 gate — empty / size / UTF-8 / CSV schema — returning the
+    decoded text.
+
+    ``apps.api.upload.validate_multipart_upload`` calls this after its bounded
+    stream read, and the UI-less Tool Gateway calls it on the bytes an agent tool
+    carried, so BOTH planes reject the same document with the same machine code
+    (``UPLOAD_TOO_LARGE`` / ``UPLOAD_ENCODING_INVALID`` / ``UPLOAD_SCHEMA_INVALID``).
+    Keeping one implementation is the point: a gate that only the route ran is
+    exactly how a browser-bound control silently stops applying to the Agent.
+    """
+    if not content:
+        raise ValidationError("The uploaded file is empty.")
+    if len(content) > max_bytes:
+        raise UploadTooLargeError(
+            f"The file exceeds the {max_bytes // (1024 * 1024)} MB upload limit.",
+            details=[{"field": "file", "actual_bytes": len(content), "limit": max_bytes}],
+        )
+    text = decode_source_text(content)
+    if require_csv_schema:
+        assert_csv_schema(text)
+    return text
 
 
 def _detail(original_filename: str | None, reason: str) -> dict[str, Any]:

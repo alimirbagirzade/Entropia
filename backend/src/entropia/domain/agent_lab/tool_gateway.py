@@ -78,6 +78,40 @@ class ToolName(StrEnum):
     STRATEGY_PATCH_DRAFT = "strategy.patch_draft"
     STRATEGY_VALIDATE_DRAFT = "strategy.validate_draft"
     STRATEGY_SAVE_REVISION = "strategy.save_revision"
+    # Post-V1 S6 — Trading Signal parity (doc 04 §10 + §15 TS-20, doc 03 §14 AOS-20):
+    # "Agent creates/imports/validates/saves/attaches a Signal via Tool Gateway
+    # without opening browser ... human board is not auto-mutated." These call the
+    # SAME upload/import/report/save/revision commands the page calls. A Trading
+    # Signal is a native external WORK OBJECT, never a Package (CR-01) — nothing here
+    # touches ``PackageKind`` and the Mainboard ``item_kind`` stays server-derived.
+    #
+    # NAMING (adjudicated, by the rule the strategy family established). Doc 04 §10's
+    # parity table is written in AGENT-INTENT terms and names the real backing command
+    # in its own "Tool / domain capability" column; the registry follows the COMMAND,
+    # because the command is what parity is actually about:
+    #   * ``trading_signal.create``        -> shipped verbatim (the table's own name).
+    #   * ``trading_signal.import_events`` -> the table backs it with TWO commands,
+    #     "UploadSourceAsset + RequestTradingSignalImport". They are genuinely two
+    #     steps with two different durability stories (an immutable content-addressed
+    #     asset vs. a durable data-queue job), so they ship as two tools; fusing them
+    #     would have hidden the admission/completion boundary the import depends on.
+    #   * ``trading_signal.validate``      -> backed by "GetImportReport". The report
+    #     IS the validation surface here (the §9.2 config compiler runs INSIDE
+    #     create/create_revision, it is not a separate command), so the read ships
+    #     under its command name rather than inventing a validate-only entry point.
+    #   * ``trading_signal.save_revision`` -> backed by ``CreateTradingSignalRevision``;
+    #     ships as ``create_revision`` so the sibling external work object
+    #     (``trade_log.create_revision``) and this one read identically.
+    # ``trading_signal.attach`` is covered by ``create`` (its ``attach`` flag runs the
+    # shared 3a ``attach_mainboard_item``). The standalone "Use This Revision" re-pin
+    # and ``trading_signal.delete`` stay OUT of this slice, on exactly the boundary the
+    # trade_log family took: they are shared Mainboard/lifecycle surfaces, not
+    # signal-specific ones, and no tool exists for them on either family yet.
+    TRADING_SIGNAL_UPLOAD_SOURCE = "trading_signal.upload_source_asset"
+    TRADING_SIGNAL_REQUEST_IMPORT = "trading_signal.request_import"
+    TRADING_SIGNAL_GET_IMPORT_REPORT = "trading_signal.get_import_report"
+    TRADING_SIGNAL_CREATE = "trading_signal.create"
+    TRADING_SIGNAL_CREATE_REVISION = "trading_signal.create_revision"
 
 
 class ToolCallStatus(StrEnum):
@@ -141,6 +175,21 @@ TOOL_ALLOWED_SCOPES: dict[ToolName, frozenset[PolicyScope]] = {
     ToolName.STRATEGY_PATCH_DRAFT: frozenset({PolicyScope.RESEARCH, PolicyScope.PROPOSAL}),
     ToolName.STRATEGY_VALIDATE_DRAFT: frozenset({PolicyScope.RESEARCH, PolicyScope.PROPOSAL}),
     ToolName.STRATEGY_SAVE_REVISION: frozenset({PolicyScope.PROPOSAL}),
+    # S6 trading_signal (doc 04 §10): the import half prepares research inputs; the
+    # save half produces a native external work object (a proposal-shaped output).
+    # Reading the import report is an OBSERVATION/RESEARCH read. NONE of them is
+    # EXECUTION — doc 04 §15 TS-21 is explicit that "Add Outsource Signal selection
+    # or save never creates Backtest Result", so all five route to the ``agent``
+    # queue and a run stays the separate ``backtest.request`` tool.
+    ToolName.TRADING_SIGNAL_UPLOAD_SOURCE: frozenset({PolicyScope.RESEARCH}),
+    ToolName.TRADING_SIGNAL_REQUEST_IMPORT: frozenset({PolicyScope.RESEARCH}),
+    ToolName.TRADING_SIGNAL_GET_IMPORT_REPORT: frozenset(
+        {PolicyScope.OBSERVATION, PolicyScope.RESEARCH}
+    ),
+    ToolName.TRADING_SIGNAL_CREATE: frozenset({PolicyScope.RESEARCH, PolicyScope.PROPOSAL}),
+    ToolName.TRADING_SIGNAL_CREATE_REVISION: frozenset(
+        {PolicyScope.RESEARCH, PolicyScope.PROPOSAL}
+    ),
 }
 
 # CR-08 (doc 22 §11): which capability keys gate a tool's contract. A gated

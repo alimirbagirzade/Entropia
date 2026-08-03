@@ -22,13 +22,22 @@ Mainboard containment). The two AT-21 tests BELOW keep proving the domain-comman
 axis — same schema, same config_hash, same Idempotency-Key contract — which stays
 valid and is the substance the Gateway tools delegate to.
 
-HONEST BOUNDARY that REMAINS for TS-20 / AOS-20 (re-verified 2026-08-03): there is
-still NO ``trading_signal.*`` ToolName member, so that row's literal "via Tool
-Gateway" clause cannot be tested — there is nothing to call. What IS proven here is
-the substance those rows are about and what AOS-20 states outright ("Tool Gateway/
-domain commands"): the Agent reaches the same server truth on the same command
-line, under the same policy, with no UI. The missing ``trading_signal.*`` tools
-remain an implementation gap, tracked in §E.2 of the map.
+BOUNDARY UPDATE — TS-20 / AOS-20 are CLOSED (2026-08-03, post-V1 S6). ``ToolName``
+now ships ``trading_signal.upload_source_asset`` / ``request_import`` /
+``get_import_report`` / ``create`` / ``create_revision``, so the literal "via Tool
+Gateway" clause of both rows is finally testable, and is proven end-to-end in
+``test_gateway_parity_trading_signal.py`` (upload -> import -> report -> create ->
+revision, plus scope/ownership/OCC/idempotency/audit parity, the F-03 byte gate,
+payload containment and Mainboard containment). The two TS-20/AOS-20 tests BELOW
+keep proving the domain-command axis — the same server truth, the same
+``available_time``, the same ownership — which stays valid and is the substance the
+Gateway tools delegate to.
+
+The §E.2 residue for this row is now the narrower one: ``trading_signal.attach`` as
+a STANDALONE re-pin and ``trading_signal.delete`` (doc 04 §10's last two rows) still
+have no tool on either external-work-object family. Attach-at-save IS covered
+(``trading_signal.create`` carries the ``attach`` flag), so TS-20's own verb list is
+served; what remains is the shared Mainboard/lifecycle surface, not the signal line.
 """
 
 from __future__ import annotations

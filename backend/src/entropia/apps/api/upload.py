@@ -23,23 +23,26 @@ extension gate still runs regardless of how it is invoked.
 
 from __future__ import annotations
 
-import csv
-import io
 from dataclasses import dataclass
 
 from fastapi import UploadFile
 
-from entropia.shared.errors import (
-    UploadEncodingInvalidError,
-    UploadSchemaInvalidError,
-    UploadTooLargeError,
-    ValidationError,
+from entropia.domain.importing.source_file import (
+    MAX_SOURCE_UPLOAD_BYTES,
+    assert_csv_schema,
+    assert_source_bytes_admissible,
 )
 
 # 50 MB default ceiling for the text-asset surfaces (signal-event ledgers, trade
 # logs, baseline CSVs, manual documents). Market Data keeps its own larger raw
 # ingestion ceiling (F-01); these surfaces are hand-authored ledgers/documents.
-DEFAULT_MAX_UPLOAD_BYTES = 50 * 1024 * 1024
+#
+# The value now lives in the domain (``MAX_SOURCE_UPLOAD_BYTES``) because the route
+# is no longer the only caller — the Alpha Agent reaches the same upload command
+# through the Tool Gateway (doc 04 §10, TS-20). Aliasing rather than re-declaring
+# is what keeps the browser plane and the UI-less plane on ONE ceiling; two
+# literals would drift the first time one of them was tuned.
+DEFAULT_MAX_UPLOAD_BYTES = MAX_SOURCE_UPLOAD_BYTES
 
 
 @dataclass(frozen=True)
@@ -54,32 +57,11 @@ class ValidatedUpload:
     content_type: str | None
 
 
-def _decode_utf8(content: bytes) -> str:
-    try:
-        text = content.decode("utf-8")
-    except UnicodeDecodeError as exc:
-        raise UploadEncodingInvalidError() from exc
-    if "\x00" in text:
-        raise UploadEncodingInvalidError(
-            "The file contains NUL bytes and is not a valid text document."
-        )
-    return text
-
-
-def validate_csv_schema(text: str) -> None:
-    """Reject text that has no usable CSV header row (F-03 schema gate). A
-    leading UTF-8 BOM is tolerated; the first non-blank line must contain at
-    least one non-empty column."""
-    stripped = text.lstrip("\ufeff")
-    if not stripped.strip():
-        raise UploadSchemaInvalidError("The file has no rows.")
-    try:
-        rows = csv.reader(io.StringIO(stripped))
-        header = next((row for row in rows if any(cell.strip() for cell in row)), None)
-    except csv.Error as exc:
-        raise UploadSchemaInvalidError() from exc
-    if header is None:
-        raise UploadSchemaInvalidError("The file has no header columns.")
+# The F-03 byte gate itself lives in ``domain/importing/source_file`` so the
+# UI-less Tool Gateway runs the SAME code (doc 04 §10, TS-20). These names stay
+# exported here because the routes and the F-03 unit tests import them from this
+# module; they are aliases, not a second implementation.
+validate_csv_schema = assert_csv_schema
 
 
 async def validate_multipart_upload(
@@ -92,17 +74,13 @@ async def validate_multipart_upload(
     schema when requested). Raises a ``ValidationError`` subclass on any failure
     before the caller reaches the database. The extension check remains the
     caller's (command's) responsibility."""
+    # The bounded read (``max_bytes + 1``) stays HERE — it is the streaming
+    # protection that keeps an oversized upload from being buffered whole. The
+    # shared gate then rules on the bytes that were actually read.
     content = await file.read(max_bytes + 1)
-    if not content:
-        raise ValidationError("The uploaded file is empty.")
-    if len(content) > max_bytes:
-        raise UploadTooLargeError(
-            f"The file exceeds the {max_bytes // (1024 * 1024)} MB upload limit.",
-            details=[{"field": "file", "actual_bytes": len(content), "limit": max_bytes}],
-        )
-    text = _decode_utf8(content)
-    if require_csv_schema:
-        validate_csv_schema(text)
+    text = assert_source_bytes_admissible(
+        content, max_bytes=max_bytes, require_csv_schema=require_csv_schema
+    )
     return ValidatedUpload(
         content=content,
         text=text,

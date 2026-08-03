@@ -211,7 +211,7 @@ Verified by reading the code, not inferred from the absence of a tag:
 
 | ID | Gap |
 |---|---|
-| TS-20 / AOS-20 | **No Tool Gateway parity test for Trading Signal.** `test_gateway_parity_s4.py` covers Allocation + Trade Log (TL-22); `test_gateway_parity.py` covers ready-check/capability. The Signal line is unproven. |
+| TS-20 / AOS-20 | ~~**No Tool Gateway parity test for Trading Signal.** `test_gateway_parity_s4.py` covers Allocation + Trade Log (TL-22); `test_gateway_parity.py` covers ready-check/capability. The Signal line is unproven.~~ **Closed 2026-08-03 — see §H.4.** |
 | AT-21 | No Agent-parity test for the Strategy save line. |
 | TS-16 / TL-18 / AOS-16 | No test asserts that expand/collapse writes no revision / audit / composition hash. Purely presentational today, but unpinned. |
 | RF-15 / ESP-05 | No test asserts the V18 seed Family (`Embedded System / TA Resolver`) resolves ACTIVE with a matching ESP meta/filter relation. |
@@ -539,3 +539,63 @@ unchanged); `derive_strategy_draft_from_package`, `clear_strategy_draft` and
 was not given a strategy step — *when* the Agent authors a strategy is a product decision
 the corpus does not state, so it was not invented. The tools are offered at plan time
 (`exposed_tool_names` → Coordinator menu) and nothing calls them autonomously yet.
+
+### H.4 — §E.2 / H.1 / H.3 Tool Gateway gap: **TS-20 / AOS-20 CLOSED 2026-08-03**
+
+`feat/agent-trading-signal-tool-gateway` (post-V1 S6) added the five `trading_signal.*`
+members H.1 and H.3 both listed as ABSENT, so `ToolName` now carries **33** (26 → 31
+exposed). The literal "via Tool Gateway" clause of doc 04 **TS-20** and doc 03 **AOS-20**
+is therefore callable and is proven end-to-end in
+`backend/tests/integration/test_gateway_parity_trading_signal.py` (**33 tests**): the
+scope table itself, upload → request_import → get_import_report → create →
+create_revision through the Gateway, content-address/dedup parity with the human line,
+the F-03 byte gate, payload de-referencing, admission-is-not-completion, the broker
+hand-off, redelivery replay, CR-01 non-classification, exact normalized-revision pin and
+`available_time`, ownership/workspace containment, OCC + no auto-repin, both idempotency
+axes, the durable `enqueue → run_tool_job` path with audit/outbox/agent events, and
+Analysis Lab history visibility with task/checkpoint provenance.
+
+**The §E.2 gap was reproduced before any code was written** — all five literals raised
+`ToolPolicyScopeError` on `d6bbe9b`. Every new guard was then verified by **negative
+control** (disable it, watch the naming test go red): five for five.
+
+**Two real defects were found while closing it, both verified in code, not inferred:**
+
+1. **The `data`-queue broker hand-off was missing on the Gateway plane.** `enqueue_job`
+   only INSERTs a QUEUED row; the caller dispatches the actor after commit, which every
+   human route does and the Tool Gateway did not. The `data` queue is deliberately
+   excluded from the scheduler's automatic redelivery sweep (`ACTOR_BY_QUEUE`), so an
+   agent-admitted import would have sat `queued` until an Admin ran the manual
+   redelivery action. Fixed for the signal family in `_run_agent_tool`
+   (`pending_data_job_dispatch` + `DATA_ACTOR_BY_KIND`), after the commit. This is the
+   same class of defect as PR #525's Library validation-run hand-off.
+2. **The F-03 size / UTF-8 / CSV-schema gate did not apply to the Agent at all.** It
+   lived at the multipart route, which a UI-less caller never reaches — so the Agent's
+   upload was unbounded while the browser's was capped at 50 MiB. The gate moved to
+   `domain/importing/source_file.py`; `apps.api.upload.DEFAULT_MAX_UPLOAD_BYTES` is now
+   an alias of the domain constant, and the 30 existing F-03 unit tests pass unchanged,
+   which is the evidence the extraction is behaviour-preserving.
+
+**Still open (narrower than before):** `trading_signal.attach` as a STANDALONE re-pin and
+`trading_signal.delete` (doc 04 §10's last two rows) have no tool on *either* external
+work-object family. Attach-at-save IS covered (`trading_signal.create` carries the
+`attach` flag), so TS-20's own verb list is served; the residue is the shared
+Mainboard/lifecycle surface. **`trade_log.request_import` carries the identical missing
+broker hand-off** — verified, left untouched because rewriting the Trade Log tools is out
+of this slice's scope, and it is the recommended next step.
+
+**Adjudicated while closing (full record: `docs/audit/agent_trading_signal_tool_gateway.md`):**
+doc 04 §10's parity table is written in agent-INTENT terms and names the real backing
+command in its own column; the registry follows the command. `import_events` ships as the
+TWO commands the table itself names (`upload_source_asset` + `request_import`) because
+they have different durability stories; `validate` ships as `get_import_report` because
+that is the only command that exists (the §9.2 compiler runs inside create/revision, and
+no validate-only entry point was invented); `save_revision` ships as `create_revision` to
+match its `trade_log` sibling. The rejected spellings are pinned by test.
+
+**Deliberately NOT done:** no approve/publish/Admin/Trash tool (doc 18 §14, AL-12/AL-16
+unchanged); `export_trading_signal` stays unexposed (the trade_log family deferred its
+export too); `jobs/agent_executor.py`'s stage machine was not given a signal-ingest step
+— *when* the Agent imports an external signal is a product decision the corpus does not
+state, so it was not invented. The tools are offered at plan time (`exposed_tool_names`
+→ Coordinator menu) and nothing calls them autonomously yet.

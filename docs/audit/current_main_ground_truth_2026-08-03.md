@@ -341,14 +341,14 @@ Aşağıdakilerin hepsi **current main'de doğrulandı** (dokümandan değil, ko
 
 | | |
 |---|---|
-| **Status** | ~~CONFIRMED GAP~~ → **strategy yarısı CLOSED (2026-08-03)** · `trading_signal.*` yarısı **CONFIRMED GAP (açık)** |
+| **Status** | ~~CONFIRMED GAP~~ → **TAMAMEN CLOSED (2026-08-03)**: strategy yarısı `feat/agent-strategy-tool-gateway` (PR #526), `trading_signal.*` yarısı `feat/agent-trading-signal-tool-gateway` (post-V1 S6) |
 | **Canonical source** | doc 02 AT-21, doc 04 TS-20 ("via Tool Gateway") |
-| **Production path** | `backend/src/entropia/domain/agent_lab/tool_gateway.py:23-59` (`ToolName`, ölçüm anında **23 üye**; kapanıştan sonra **28**) |
-| **Kanıt** | Ölçüm anında 10/10 literal ABSENT: `strategy.get_draft`, `strategy.create_draft`, `strategy.patch_draft`, `strategy.validate_draft`, `strategy.save_revision`, `trading_signal.upload_source_asset`, `trading_signal.request_import`, `trading_signal.get_import_report`, `trading_signal.create`, `trading_signal.create_revision`. Repo genelinde bu literaller **0 hit**. → **Şimdi ilk beşi VAR, son beşi hâlâ 0 hit.** |
+| **Production path** | `backend/src/entropia/domain/agent_lab/tool_gateway.py` (`ToolName`, ölçüm anında **23 üye**; strategy sonrası **28**; signal sonrası **33** / 31 exposed) |
+| **Kanıt** | Ölçüm anında 10/10 literal ABSENT: `strategy.get_draft`, `strategy.create_draft`, `strategy.patch_draft`, `strategy.validate_draft`, `strategy.save_revision`, `trading_signal.upload_source_asset`, `trading_signal.request_import`, `trading_signal.get_import_report`, `trading_signal.create`, `trading_signal.create_revision`. Repo genelinde bu literaller **0 hit**. → **Şimdi 10/10 literal VAR.** Signal yarısı kod yazılmadan ÖNCE yeniden üretildi: `d6bbe9b`'de beş literal de `ToolPolicyScopeError` verdi. |
 | **Tuzak** | `trade_log.upload_source_asset` / `request_import` / `create` / `create_revision` **VAR** — farklı work-object ailesi, parity kanıtı değil. |
 | **Domain-command parity (AYRI EKSEN)** | **TAM**: `commands/strategy_draft.py` (create/patch/validate/save_revision/derive/clear) + `queries/strategy.py`; `commands/trading_signal.py` (upload/request_import/create/create_revision/export) + `queries/trading_signal.py::get_import_report`. **Bunu Tool Gateway parity diye raporlama.** |
-| **Test/evidence** | `tests/integration/test_acceptance_agent_parity_gaps.py` docstring'i boşluğu açıkça yazıyordu; **güncellendi** — AT-21 yarısı artık `test_gateway_parity_strategy.py` ile kapalı, TS-20/AOS-20 sınırı yeniden doğrulanmış olarak duruyor |
-| **Risk** | ~~Agent bu iki aileyi Gateway üzerinden hiç kullanamaz~~ → **kalan risk yalnız Signal ailesinde**: Agent `trading_signal.*`'ı Gateway üzerinden hâlâ kullanamaz, TS-20/AOS-20'nin literal cümlesi test edilemez. |
+| **Test/evidence** | `test_gateway_parity_strategy.py` (AT-21, 23 test) + `test_gateway_parity_trading_signal.py` (TS-20/AOS-20, **33 test**). `test_acceptance_agent_parity_gaps.py` docstring'i iki kez güncellendi; artık her iki yarı da KAPALI olarak kayıtlı. Beş yeni koruma **negative control** ile ölçüldü (kapat → test kırmızı). |
+| **Risk** | ~~Agent bu iki aileyi Gateway üzerinden hiç kullanamaz~~ → **kapandı.** Kalan dar artık: `trading_signal.attach` (bağımsız re-pin) ve `trading_signal.delete` hiçbir external work-object ailesinde tool DEĞİL (attach-at-save `create` ile kapsanıyor). Ayrıca **`trade_log.request_import` aynı eksik broker hand-off'u taşıyor** — doğrulandı, bu slice'ın kapsamı dışı bırakıldı, sıradaki tek adım. Tam kayıt: `docs/audit/agent_trading_signal_tool_gateway.md`. |
 
 ### G-04 · Package Library Request Validation — **frontend-only** boşluk
 

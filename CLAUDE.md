@@ -180,11 +180,10 @@ Before stopping a working session, produce **ALL** of the following:
 
 
 
-- **Testler:** 2026-08-03 ölçümü **collection**'dır, pass değil — backend **2886 collected**
-  (271 dosya, `pytest --collect-only -q --no-cov`, exit 0), vitest **673 collected**
-  (66 dosya, `vitest list --no-file-parallelism`, exit 0), `npm run typecheck` temiz.
-  Lokal tam suite tek koşuda tamamlanabiliyor (tarihsel referans: O-27'de 2538 passed /
-  43dk39sn, worktree'ye özel izole DB ile). Yine de **otorite CI'dır.**
+- **Testler (2026-08-03, PR #521'de ölçüldü — collection değil, PASS):** backend
+  **2974 passed** tek koşuda, 0 failed/skipped/error, coverage **%92.47** (kapı ≥90);
+  frontend **680 passed** (67 dosya, `npm run coverage` exit 0), `npm run typecheck` temiz.
+  **CI 6/6 pass** (Backend job 32m39s). Yine de **otorite CI'dır.**
   Doğrula: `gh run list --branch main --limit 1` → job log.
   **Ortam tuzağı:** paralel worktree oturumları aynı anda koşuyor — `TEST_DATABASE_URL` ile
   worktree'ye özel izole DB kullan (conftest her testte `drop_all`/`create_all`). Tam suite'i
@@ -205,11 +204,12 @@ Before stopping a working session, produce **ALL** of the following:
   yoksa önce `npm ci` — ilk koşudaki `ERR_MODULE_NOT_FOUND` test hatası değil.)
 
 
-- **Next — sıra `docs/audit/current_main_ground_truth_2026-08-03.md` §18'de.** Round-3
-  (S5 b/c/d) **tamamen kapandı**; PR #513/#516/#517 merged, açık PR ve açık issue **yok**.
-  Sıradaki tek slice: **ADIM 2 — `fix/esp-lifecycle-safe-resolution`** (soft-delete edilmiş
-  Package Root yeni ESP resolution'ında hâlâ kullanılabiliyor — `queries/esp.py:214-268`
-  root `deletion_state`/`lifecycle_state` okumuyor, kendi docstring'iyle çelişiyor).
+- **Next — sıra `docs/audit/current_main_ground_truth_2026-08-03.md` §18'de.** `main` @
+  `a570934`; açık PR **yok**, açık issue yalnız #514 (insan işi). §18 sıra 1 (#519) ve
+  sıra 3 (#521 — ESP export contract v2, §G-02 + ESP-19 kapandı) landed. Sıradaki tek slice:
+  **ADIM 5 — `feat/library-request-validation-ui`** (§18 sıra 2 / §G-04: backend TAM, yalnız
+  frontend hook + detay bloğu eksik). Handoff: **`docs/G02_LANDED_KICKOFF.md`** (paste-ready
+  resume prompt en altta).
 
 - **Açık iş (dürüst sınır):** ekran okuyucu (NVDA/VoiceOver) denetimi **yapılmadı**;
   takip **GitHub #514 — 2026-07-30'da kanıtsız kapatılmıştı, 2026-08-03'te yeniden açıldı**;

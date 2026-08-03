@@ -1707,3 +1707,104 @@ trash query birlikte eklenmelidir.
 - `test_panel_management_logs.py` 26 passed.
 - Frontend tsc + eslint temiz.
 - CI 6/6 yeşil.
+
+---
+
+## Current-main ground-truth reset (2026-08-03) — docs/audit-only
+
+**Base:** `origin/main` @ `0dcce69` · **Branch:** `docs/current-main-ground-truth-reset` ·
+**Production kodu değişmedi** (`backend/src`, `backend/alembic/versions`, `frontend/src`,
+runtime config, Docker, test beklentileri, engine, API — hiçbirine dokunulmadı).
+
+**Amaç:** stale status belgelerinin sonraki oturumları yanlış migration/test/PR/issue/acceptance
+bilgisiyle çalıştırmasını durdurmak. Yeni özellik yok, davranış değişikliği yok.
+
+### Yeniden ölçülen olgular
+
+| Olgu | Değer | Komut / exit |
+|---|---|---|
+| Alembic head | `0043_i08_registry_strategy_fks`, 43 migration, **tek head** | `uv run alembic heads` · 0 |
+| OpenAPI | 177 path / 196 operation / 119 schema, **drift yok** | `openapi_export --check` · 0 |
+| Route | 195 decorator / 31 dosya | grep |
+| Tablo / FK | 104 / 140 (30 model dosyası, 25 FK dosyası) | grep |
+| Backend test | **2886 collected** / 271 dosya | `pytest --collect-only -q --no-cov` · 0 |
+| Frontend test | **673 collected** / 66 dosya; typecheck temiz | `vitest list --no-file-parallelism` · 0 ; `npm run typecheck` · 0 |
+| Capability matrix | 62 girdi — 40 `active_v1` / 22 `future_dev`; Python↔TS parity yeşil | `test_capability_matrix.py` · 0 |
+| Frontend route / nav | 33 somut route (+catch-all) · `ALL_NAV_ITEMS` 25 · 31 sayfa · 40 `lib/*.ts` | grep |
+| Acceptance ID | **174/215 (%80)**, untraced 41, 347 test dosyası | `acceptance_id_scan.py` · 0 |
+| PR / issue | **0 açık PR, 0 açık issue** (denetim başında) | `gh pr list` / `gh issue list` · 0 |
+| `ENGINE_VERSION` | `backtest-engine-v18-same-candle-entry-exit` | `manifest.py:118` |
+
+### Doğrulanmış boşluklar (implementation)
+
+1. **ESP resolver lifecycle-unsafe** — `queries/esp.py:214-268` yalnız `entry.trust_state`
+   okuyor; Package Root `deletion_state`/`lifecycle_state` **hiç okunmuyor**, soft-delete
+   `set_trust_state` çağırmıyor → soft-delete edilmiş root **yeni** resolution'da kullanılabiliyor.
+   Fonksiyonun kendi docstring'i (`:228`) tersini iddia ediyor. **Hiçbir test kapsamıyor.**
+2. **ESP export manifest eksik** — `commands/package_lifecycle.py:785-799` yalnız
+   validation/approval state taşıyor; runtime adapter, warm-up, timing semantics, repaint
+   policy, validation run id, validator version, vectors/checks, evidence **yok**; canonical
+   key + signature yalnız teamülen `input_contract` içinde hayatta kalıyor.
+3. **Tool Gateway** — `ToolName` 23 üye; 10 literal `strategy.*` / `trading_signal.*` aracının
+   **hiçbiri yok** (repo genelinde 0 hit). Domain komutları tamdır — bu **ayrı eksendir**.
+4. **Package Library Request Validation — frontend-only boşluk.** Backend tam
+   (`routes/library.py:204` → aynı CP pipeline'ı, owner-or-Admin, bayrak 3 read path'te);
+   frontend'de action/mutation hook/durum göstergesi **yok**, frontend testi sıfır.
+5. **Shared Equity Allocation = sequential approximation.** Dış döngü item üzerindedir
+   (`jobs/backtest_engine.py:298`), global valuation clock yok, ledger item başına.
+   **Gizlenmiyor:** `portfolio_curve_sequential_not_unified_clock` L4 token'ı immutable
+   Result'a yazılıyor — ama `lib/backtest.ts` bu koda insan-okur etiket vermiyor, UI'da ham
+   token görünüyor.
+6. **Panel ▸ Logs** hâlâ id'den türetilmiş `Backtest Result <id>` başlığı basıyor
+   (`PanelLogs.tsx:134`) — Results History'de bilerek terk edilmiş olan aynı kusur.
+
+### NOT-A-GAP düzeltmeleri (yanlış blocker üretilmedi)
+
+- **Agent runtime provisioning.** `agent_alpha` = principal (yalnız `apps/seed.py:217-219`),
+  `alpha-agent` = runtime (yalnız `0016_analysis_lab.py:251-261` `bulk_insert`). Fresh
+  `alembic upgrade head` runtime satırını **oluşturur**. Ayrım şemada zorunlu (`0017:37-38`
+  iki farklı FK hedefi). Yeni provisioning sistemi **önerilmedi**; tek kalan iş fresh-install
+  acceptance testidir.
+- **S5b/S5c/S5d.** Round-3 backlog'un "hepsi 0 hit" tablosu **stale token adlarıydı**:
+  Stop Mode → `stop_trigger_requirement` (`any_active`/`all_active`), Multiple Stops →
+  `stop_conflict_resolution`, Same Candle → `same_candle_entry_exit` (PR #513). S5c
+  (`timeframe_mode`/`custom_sequence`) ve S5d (`logic_blocks`) de landed. **Üçü de kapalı.**
+- **Historical pinned revision** okunabilirliği doğru davranıştır, kusur değildir.
+- **Results History `display_title`** bilerek render edilmiyor (regresyon testi var).
+
+### A-08 — insan kapısı
+
+GitHub **#514** 2026-07-30T19:05:32Z'de **kanıt commit edilmeden kapatılmıştı**. Repository'de
+NVDA/Firefox/Windows sonucu, VoiceOver/Safari/macOS sonucu, atanmış denetçi, sürüm bilgisi,
+doldurulmuş 22-sayfa matrisi ve tek bir `SR-BULGU` kaydı **yok**
+(`a11y_screen_reader_audit_checklist.md:28,38-39,89-98`). **#514 yeniden açıldı**; A-08
+hiçbir belgede `Complete`/`PASS` yazılmadı. D-10 (2026-07-30, PO imzalı) 45 accent-mavi
+düğümü kalıcı sapma yapar — bu **uyumluluk iddiası değildir**, WCAG 2.2 AA 1.4.3 karşılanmıyor.
+
+### Onarılan stale belgeler
+
+`README.md` (alembic head `0035`→`0043`, test sayıları) · `docs/CODEMAPS/README.md`
+(head `0040`→`0043`, 102→104 tablo, 135→140 FK) ·
+`entropia_v18_remediation_status.md` (olgu tablosu + A-08 issue durumu) ·
+`v18_final_acceptance.md` (A-08 issue durumu) · `POST_V1_SPEC_GAP_BACKLOG_ROUND3.md`
+(S5 b/c/d kapandı banner'ı) · `acceptance_id_map.md` §H (taze tarama) ·
+`CLAUDE.md` §Current position. Tarihsel gövdeler **değiştirilmedi**, üstlerine tarihli
+uyarı eklendi.
+
+### Yeni belge
+
+`docs/audit/current_main_ground_truth_2026-08-03.md` — 19 bölüm, her bulguda status /
+canonical source / production path / test-evidence / risk / önerilen slice.
+
+### Dürüst sınır
+
+Tam backend ve frontend suite **koşulmadı** (docs-only slice) — yukarıdaki sayılar
+`collected`'dir, `passed` değil; otorite CI'dır. Migration up/down/up ispatı yapılmadı;
+fresh-install davranışı `0016`'nın kodundan okundu, canlı DB'den değil. E2E/visual/a11y
+suite koşulmadı; kapıların varlığı workflow dosyalarından okundu. `main` bu worktree'de
+checkout edilemedi (başka worktree tutuyor) — branch doğrudan `origin/main` SHA'sından
+oluşturuldu, içerik özdeştir.
+
+### Sıradaki tek slice
+
+**ADIM 2 — `fix/esp-lifecycle-safe-resolution`** (yukarıdaki boşluk 1).

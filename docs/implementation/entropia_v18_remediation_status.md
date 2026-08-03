@@ -50,13 +50,21 @@ A requirement is **Complete** only with working end-to-end behavior + passing ac
 >
 > | Figure | Value | Provenance |
 > |---|---|---|
-> | Alembic head | **`0040_export_type_agent_pine`** | verified 2026-07-29 from `backend/alembic/versions/` (single head — no file lists it as `down_revision`) |
-> | Backend tests | ≈2538 passed | last documented full-suite run (O-27, local isolated DB — CLAUDE.md §Current position); **not** re-measured in this docs-only session |
-> | Frontend vitest | 622/622 | last documented run (PR #404 F-07 sweep; `--no-file-parallelism` required) |
+> | Alembic head | **`0043_i08_registry_strategy_fks`** (43 migrations, single head) | re-measured 2026-08-03 on `origin/main` @ `0dcce69` — `cd backend && uv run alembic heads` (exit 0) |
+> | Backend tests | **2886 collected** (271 files) | `uv run pytest --collect-only -q --no-cov` (exit 0), 2026-08-03. **Collected, not passed** — the full suite was not run in that docs-only session |
+> | Frontend vitest | **673 collected** (66 files) | `npx vitest list --no-file-parallelism` (exit 0), 2026-08-03. **Collected, not passed** |
+> | Postgres tables / FKs | **104 / 140** | `grep -rh __tablename__ …/models/ \| sort -u \| wc -l`; `grep -rh "ForeignKey(" …/models/ \| wc -l` |
+> | Capability matrix | **62 options — 40 `active_v1`, 22 `future_dev`** | module import of `CAPABILITY_MATRIX`; Python↔TS parity green (`tests/unit/test_capability_matrix.py`, exit 0) |
+>
+> The full 2026-08-03 re-measurement, with the confirmed gaps it surfaced (ESP lifecycle-unsafe
+> resolution, ESP export manifest, Tool Gateway `strategy.*`/`trading_signal.*`, Library
+> Request-Validation UI, sequential shared-equity allocation):
+> [`docs/audit/current_main_ground_truth_2026-08-03.md`](../audit/current_main_ground_truth_2026-08-03.md).
 >
 > *Historical figures, kept so older claims stay auditable:* the 2026-07-17 snapshot cited
 > 1773 backend / 428 frontend / alembic `0034`; R2 close (PR #364) cited ≈1841 backend /
-> ≈577 frontend / alembic `0035_portfolio_rules`.
+> ≈577 frontend / alembic `0035_portfolio_rules`; the 2026-07-29 refresh cited alembic
+> `0040_export_type_agent_pine`, ≈2538 backend passed and 622/622 vitest.
 
 > ## ✅ R2 KAPANDI (2026-07-29) — RE-OPENING kaldırıldı, koşulu sağlandı
 >
@@ -85,6 +93,15 @@ A requirement is **Complete** only with working end-to-end behavior + passing ac
 > O tarihte açık bırakılan eksenlerden A-06 derin görsel kıyas ve bloklayıcı visual CI kapısı
 > 2026-07-30'da kapandı; A11Y-01 D-10 ile imzalı kalıcı sapmaya dönüştü. **A-08 ekran
 > okuyucu denetimi hâlâ açıktır** (GitHub #514).
+>
+> > **A-08 issue durumu — düzeltme (2026-08-03).** GitHub #514 2026-07-30T19:05:32Z'de
+> > **kanıt commit edilmeden kapatılmıştı**. Ground-truth denetimi repository'de hiçbir insan
+> > denetim kanıtı bulamadı: `a11y_screen_reader_audit_checklist.md:38-39` SR-1/SR-2 satırları
+> > hâlâ `☐ yapılmadı`, `:28` denetçi `**ATANMADI**`, `grep -rn "SR-BULGU" docs/` tek hit
+> > döndürüyor ve o da boş şablonun `SR-BULGU-nn` satırı. Issue'nun kendi exit criteria'sı
+> > *"An agent or automated scan must not close this issue on its own"* diyor. **#514 yeniden
+> > açıldı**; A-08 hiçbir belgede `Complete`/`PASS` yazılamaz. Ayrıntı:
+> > [`docs/audit/current_main_ground_truth_2026-08-03.md`](../audit/current_main_ground_truth_2026-08-03.md) §17.
 >
 > Kapanış anında Complete'e çekilen satırların kanıt tablosu: **§"R2 kapanış — satır bazında
 > kanıt"** (Status tablosunun hemen üstünde).

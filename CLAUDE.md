@@ -165,7 +165,13 @@ Before stopping a working session, produce **ALL** of the following:
 
 ## Current position (keep in sync at each closing)
 
-> Aşağıdaki değerler **2026-07-29** tarihinde repodan empirik doğrulandı
+> Aşağıdaki değerler **2026-08-03** tarihinde `origin/main` @ `0dcce69` üzerinden repodan
+> empirik yeniden ölçüldü. **Alembic head `0043_i08_registry_strategy_fks`** (43 migration,
+> tek head) · 104 tablo / 140 FK · 196 OpenAPI operation (drift guard temiz) ·
+> `ENGINE_VERSION = backtest-engine-v18-same-candle-entry-exit` · capability matrix 62 girdi
+> (40 `active_v1` / 22 `future_dev`, Python↔TS parity yeşil). **Tam ölçüm + doğrulanmış
+> boşluk listesi: `docs/audit/current_main_ground_truth_2026-08-03.md`** — bir slice'a
+> başlamadan önce ORAYI oku, buradaki özeti değil.
 
 
 - **Durum:** V1 ROADMAP COMPLETE (Stages 0–8, docs 01–22) + post-V1 + video-alignment +
@@ -174,9 +180,11 @@ Before stopping a working session, produce **ALL** of the following:
 
 
 
-- **Testler:** son yeşil referans CI (O-serisi PR'ları). Lokal tam suite tek koşuda
-  tamamlanabiliyor — O-27'de **2538 passed / 0 failed / 43dk39sn**, worktree'ye özel izole DB ile
-  (aşağıdaki ortam tuzağına uyulursa). Yine de **otorite CI'dır.**
+- **Testler:** 2026-08-03 ölçümü **collection**'dır, pass değil — backend **2886 collected**
+  (271 dosya, `pytest --collect-only -q --no-cov`, exit 0), vitest **673 collected**
+  (66 dosya, `vitest list --no-file-parallelism`, exit 0), `npm run typecheck` temiz.
+  Lokal tam suite tek koşuda tamamlanabiliyor (tarihsel referans: O-27'de 2538 passed /
+  43dk39sn, worktree'ye özel izole DB ile). Yine de **otorite CI'dır.**
   Doğrula: `gh run list --branch main --limit 1` → job log.
   **Ortam tuzağı:** paralel worktree oturumları aynı anda koşuyor — `TEST_DATABASE_URL` ile
   worktree'ye özel izole DB kullan (conftest her testte `drop_all`/`create_all`). Tam suite'i
@@ -188,27 +196,28 @@ Before stopping a working session, produce **ALL** of the following:
 
 
 
-- **F-07 raw-id sweep — BÜTÜN olarak COMPLETE.** Sunum katmanı PR #404 (§4.3), backend
-  display-DTO katmanı bu dalga (§4.4: `display_label`, `source_package_name`, `item_label`,
-  `scope_label` + ortak `components/LabelledId.tsx`). Pinli artefaktların (result, readiness
-  report) etiketi **snapshot/manifest'ten** gelir, canlı composition'dan ASLA join edilmez.
-  vitest **654/654** (**`--no-file-parallelism` ZORUNLU**; worktree'de `frontend/node_modules`
-  yoksa önce `npm ci` — ilk koşudaki `ERR_MODULE_NOT_FOUND` test hatası değil).
+- **F-07 raw-id sweep — dört alan LANDED, bir kalıntı AÇIK.** `display_label`,
+  `source_package_name`, `item_label`, `scope_label` + ortak `components/LabelledId.tsx`
+  yerinde; pinli artefaktların etiketi snapshot/manifest'ten gelir, canlı composition'dan
+  ASLA join edilmez. **Kalıntı:** `pages/PanelLogs.tsx:134` hâlâ id'den türetilmiş
+  `Backtest Result <id>` başlığını basıyor (Results History'de bilerek terk edilmişti).
+  (vitest için **`--no-file-parallelism` ZORUNLU**; worktree'de `frontend/node_modules`
+  yoksa önce `npm ci` — ilk koşudaki `ERR_MODULE_NOT_FOUND` test hatası değil.)
 
 
-- **Next (PO imzası BLOKAJ DEĞİL — imza 2026-07-22'de atıldı,
-  `docs/implementation/v18_final_acceptance.md:155-169`; beklettiği FIX(R3) kalemlerinin hepsi
-  landed: #368–#373, #375–#379):**
-  1. **Round-3 backlog:** S5b'nin son gerçek kalıntısı Same Candle Entry / Exit
-     (`codex/s5b-conflict-matrix-residuals`, PR #513); S5c #498 ve S5d/F-08 #259 landed.
-  2. **Release kabul eksenleri:** A-06 derin görsel kıyas, F-7 Embedded revision
-     display-label düzeltmesi ve bloklayıcı Ubuntu visual-regression CI kapısı
-     2026-07-30'da tamamlandı. Kalan: A-08 NVDA/VoiceOver insan denetimi.
+- **Next — sıra `docs/audit/current_main_ground_truth_2026-08-03.md` §18'de.** Round-3
+  (S5 b/c/d) **tamamen kapandı**; PR #513/#516/#517 merged, açık PR ve açık issue **yok**.
+  Sıradaki tek slice: **ADIM 2 — `fix/esp-lifecycle-safe-resolution`** (soft-delete edilmiş
+  Package Root yeni ESP resolution'ında hâlâ kullanılabiliyor — `queries/esp.py:214-268`
+  root `deletion_state`/`lifecycle_state` okumuyor, kendi docstring'iyle çelişiyor).
 
-- **Açık iş (dürüst sınır):** ekran okuyucu (NVDA/VoiceOver) denetimi yapılmadı;
-  takip GitHub #514'tedir. Visual regression ve axe-core ratchet'i CI'da bloklayıcı
-  çalışıyor. Kalan 45 düğüm imza-mavisi **D-10 (2026-07-30) imzalı kalıcı sapmasıdır**.
-  WCAG 2.2 AA 1.4.3 karşılanmıyor; ürün bu ölçüt için uyumlu sayılamaz.
+- **Açık iş (dürüst sınır):** ekran okuyucu (NVDA/VoiceOver) denetimi **yapılmadı**;
+  takip **GitHub #514 — 2026-07-30'da kanıtsız kapatılmıştı, 2026-08-03'te yeniden açıldı**;
+  kapatma yetkisi insandadır, agent kapatamaz. Visual regression ve axe-core ratchet'i
+  CI'da bloklayıcı. Kalan 45 düğüm imza-mavisi **D-10 (2026-07-30) imzalı kalıcı sapmasıdır**;
+  WCAG 2.2 AA 1.4.3 karşılanmıyor, ürün bu ölçüt için uyumlu sayılamaz. Ayrıca doğrulanmış
+  boşluklar: ESP export manifest sözleşme alanları, Tool Gateway `strategy.*`/`trading_signal.*`,
+  Library Request-Validation UI, sequential shared-equity allocation (L4 ile bildirilmiş).
 
 - **KAPSAM DIŞI (bilerek):** retention auto-purge (doc 20 §16 — "Production V1'de kapalı"),
   LLM generation (Future-Dev), Graphic View renderer (doc 22 — V18 statik placeholder kalır).

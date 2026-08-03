@@ -394,3 +394,61 @@ Unchanged from §E — this slice closed a traceability nuance, not a coverage g
 TS-20 / AOS-20 (Tool Gateway parity for Trading Signal), AT-21 (Agent parity on the
 Strategy save line), TS-16 / TL-18 / AOS-16, RF-15 / ESP-05, AOS-12, AT-24,
 PC-14 / PC-19 / PC-22, CP-05, CP-14, PL-06, ESP-19.
+
+---
+
+## §H. Re-measurement — 2026-08-03 (`origin/main` @ `0dcce69`)
+
+> §A–§G above are the **2026-07-28 / 2026-07-29 record and are unchanged**. This section
+> is a fresh run of the same scanner on current main, nothing else. Part of the
+> ground-truth reset: [`current_main_ground_truth_2026-08-03.md`](current_main_ground_truth_2026-08-03.md).
+
+Command and **real** exit code:
+
+```bash
+python3 docs/audit/acceptance_id_scan.py     # exit 0
+```
+
+Output verbatim — 347 test files scanned:
+
+| Page | Prefix | 2026-08-03 | Missing now |
+|---|---|---|---|
+| 02 Add Strategy / Strategy Details | `AT` | **22/25** | AT-04, AT-06, AT-07 |
+| 03 Add Outsource Signal | `AOS` | **21/21** | — COMPLETE |
+| 04 Trading Signal | `TS` | **20/21** | TS-10 |
+| 05 Trade Log | `TL` | **23/23** | — COMPLETE |
+| 07 Pre-Check | `PC` | **17/22** | PC-01, PC-02, PC-15, PC-16, PC-18 |
+| 10 Rationale Families | `RF` | **16/18** | RF-13, RF-18 |
+| 14 Backtest Ready Check | `RC` | **13/18** | RC-11 … RC-15 |
+| 16 Results History | `RH` | **2/16** | 14 IDs — **worst page by far** |
+| 18 Analysis Lab | `AL` | **16/18** | AL-13, AL-15 |
+| 21 User Manual | `UM` | **13/18** | UM-05, UM-12, UM-13, UM-14, UM-17 |
+| 22 Future Dev | `FD` | **11/15** | FD-06, FD-07, FD-08, FD-09 |
+| **GLOBAL** | | **174/215 (80%)** | **untraced = 41** |
+
+Docs 06 / 08 / 09 remain invisible to the scan (no ID column — see §C), so the 80%
+figure does **not** cover them.
+
+### H.1 — §E.2 Tool Gateway gap: still open, re-verified
+
+`ToolName` (`backend/src/entropia/domain/agent_lab/tool_gateway.py:23-59`) carries **23**
+members. All ten literals below are **still ABSENT** repo-wide (0 hits in `backend/`):
+
+`strategy.get_draft` · `strategy.create_draft` · `strategy.patch_draft` ·
+`strategy.validate_draft` · `strategy.save_revision` ·
+`trading_signal.upload_source_asset` · `trading_signal.request_import` ·
+`trading_signal.get_import_report` · `trading_signal.create` · `trading_signal.create_revision`
+
+Trap worth restating: the same-shaped `trade_log.*` quartet **does** exist — a different
+work-object family, not evidence of parity. The **domain commands** for both families are
+complete (`commands/strategy_draft.py`, `commands/trading_signal.py`); that is a separate
+axis and does not close AT-21 / TS-20 / AOS-20.
+
+### H.2 — PC-19 (soft-deleted ESP still resolves): still open, re-verified
+
+The §"soft-deleted ESP still resolves" finding recorded above is **unchanged on current
+main**. `queries/esp.py:214-268` decides on `entry.trust_state` alone; the Package Root's
+`deletion_state` and `lifecycle_state` are never read, and the soft-delete path
+(`commands/deletion.py`) never calls `esp_repo.set_trust_state`. The function's own
+docstring (`queries/esp.py:228`) still advertises the opposite. **No test covers the case.**
+This is the recommended next slice (`fix/esp-lifecycle-safe-resolution`).

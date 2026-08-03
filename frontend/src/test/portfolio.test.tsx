@@ -37,6 +37,21 @@ const MAINBOARD = {
   latest_result_summary: null,
 };
 
+// ADIM 3 containment: the server publishes its own executability verdict for
+// shared capital on every draft read, and the page renders it verbatim — the
+// browser never decides availability for itself.
+const SHARED_MODE_CAPABILITY = {
+  key: "portfolio.shared_capital_allocation",
+  status: "future_dev",
+  available: false,
+  message:
+    "Shared capital allocation is not available in this build. The engine replays each composition item independently.",
+  remediation:
+    "Turn the Portfolio Allocation toggle off and give each enabled Strategy its own Initial Capital.",
+  dependency: "Needs a unified-clock multi-item co-simulation.",
+  field_path: "enabled",
+};
+
 // No plan row yet — the default independent draft; row_version 0 IS the valid
 // PUT creation token (doc 13 §7.2).
 const DRAFT_EMPTY = {
@@ -61,6 +76,7 @@ const DRAFT_EMPTY = {
       display_label_override: "Momentum A",
     },
   ],
+  shared_mode_capability: SHARED_MODE_CAPABILITY,
 };
 
 const DRAFT_SAVED = {
@@ -89,6 +105,7 @@ const DRAFT_SAVED = {
     ],
   },
   candidate_items: [],
+  shared_mode_capability: SHARED_MODE_CAPABILITY,
 };
 
 const SAVE_RESULT = {
@@ -305,8 +322,12 @@ describe("Portfolio / Equity Allocation page", () => {
     expect(headers["Idempotency-Key"]).toBeTruthy();
 
     // The invalidation refetch re-seeds the editor from the new server head
-    // (the DRAFT_SAVED head is enabled → the editor badge flips).
-    expect(await screen.findByText("shared allocation")).toBeInTheDocument();
+    // (the DRAFT_SAVED head is enabled → the editor badge flips). Under the ADIM 3
+    // containment the enabled badge also carries the server's verdict, so the
+    // badge text is the "not available in this build" variant.
+    expect(
+      await screen.findByText("shared allocation — not available in this build"),
+    ).toBeInTheDocument();
 
     // §6 per-item sleeve row + live example: the Capital cell renders the
     // SERVER-derived sleeve amount verbatim (never recomputed client-side) with
@@ -553,5 +574,54 @@ describe("Portfolio / Equity Allocation page", () => {
     renderPage();
 
     expect(await screen.findByText("No compatible items")).toBeInTheDocument();
+  });
+
+  // ADIM 3 containment ------------------------------------------------------ //
+
+  it("renders the server's shared-mode containment verdict verbatim", async () => {
+    stubApi({
+      "GET /mainboard-compositions/ws_1/portfolio-allocation-draft": DRAFT_SAVED,
+      "GET /mainboards/default": MAINBOARD,
+    });
+    renderPage();
+
+    const note = await screen.findByTestId("alloc-containment-note");
+    // Every string comes from the server block — none is authored in the browser.
+    expect(note).toHaveTextContent(SHARED_MODE_CAPABILITY.message);
+    expect(note).toHaveTextContent(SHARED_MODE_CAPABILITY.remediation);
+    expect(note).toHaveTextContent(SHARED_MODE_CAPABILITY.dependency);
+    expect(
+      screen.getByText("shared allocation — not available in this build"),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the shared plan authorable — the notice is not an input lock", async () => {
+    // UI hidden/disabled state is presentation, never authorization: the refusal
+    // lives in the allocation blocker + the run-admission guard. The user must
+    // still be able to edit and save the plan (and to toggle the mode back off,
+    // which is exactly what the remediation asks for).
+    stubApi({
+      "GET /mainboard-compositions/ws_1/portfolio-allocation-draft": DRAFT_SAVED,
+      "GET /mainboards/default": MAINBOARD,
+    });
+    renderPage();
+
+    await screen.findByTestId("alloc-containment-note");
+    const toggle = screen.getByRole("checkbox", {
+      name: /USE EQUITY ALLOCATION FOR THIS BACKTEST/i,
+    });
+    expect(toggle).toBeEnabled();
+    expect(screen.getByRole("button", { name: /save draft/i })).toBeEnabled();
+  });
+
+  it("shows no containment notice while the composition is in independent mode", async () => {
+    stubApi({
+      "GET /mainboard-compositions/ws_1/portfolio-allocation-draft": DRAFT_EMPTY,
+      "GET /mainboards/default": MAINBOARD,
+    });
+    renderPage();
+
+    expect(await screen.findByText("independent (off)")).toBeInTheDocument();
+    expect(screen.queryByTestId("alloc-containment-note")).not.toBeInTheDocument();
   });
 });

@@ -348,6 +348,15 @@ function DraftEditor({
   // line so it never renders a raw mbi_ id as the primary name.
   const labelByItem = labelsByCompositionItem(entries);
 
+  // Containment (ADIM 3): the SERVER decides whether shared capital can run; the
+  // page renders that verdict verbatim and never re-derives it. The notice appears
+  // as soon as the toggle is switched on (local `enabled`), not only after a save,
+  // so the user learns the mode cannot run before filling in a whole plan. The
+  // toggle and every field stay interactive: the plan is still authorable, only the
+  // revision freeze and the RUN are refused — and by the server, not by this markup.
+  const capability = data.shared_mode_capability;
+  const containmentActive = enabled && !capability.available;
+
   return (
     <section className="card" aria-labelledby="alloc-draft-h">
       <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
@@ -355,8 +364,14 @@ function DraftEditor({
           Allocation draft
         </h3>
         <StatusBadge
-          tone={data.draft.enabled ? "ok" : "neutral"}
-          label={data.draft.enabled ? "shared allocation" : "independent (off)"}
+          tone={data.draft.enabled ? (capability.available ? "ok" : "down") : "neutral"}
+          label={
+            data.draft.enabled
+              ? capability.available
+                ? "shared allocation"
+                : "shared allocation — not available in this build"
+              : "independent (off)"
+          }
         />
         <span style={{ fontSize: 12, color: "var(--text-dim)" }}>
           rv {data.row_version}
@@ -386,6 +401,14 @@ function DraftEditor({
             <span>{enabled ? MODE_NOTE_ON : MODE_NOTE_OFF}</span>
           </div>
         </label>
+
+        {containmentActive ? (
+          <p className="sd-capability-note" role="status" data-testid="alloc-containment-note">
+            <strong>Shared capital allocation is not available in this build:</strong>{" "}
+            {capability.message} {capability.remediation}{" "}
+            <span style={{ color: "var(--text-dim)" }}>{capability.dependency}</span>
+          </p>
+        ) : null}
 
         {/* v18 mockup workspace — 4 numbered cards. Toggle off fades + blocks
             pointer input (mockup .equity-allocation-disabled: opacity .42,

@@ -73,6 +73,10 @@ from entropia.shared.errors import (
 pytestmark = pytest.mark.integration
 
 USER1 = Actor(principal_id="user_1", principal_type=PrincipalType.HUMAN, role=Role.USER)
+
+# ADIM 3: the typed readiness blocker a shared-capital composition raises at
+# admission (domain/allocation/capability.py).
+_SHARED_MODE_BLOCKER = "ALLOCATION_SHARED_MODE_NOT_IN_BUILD"
 USER2 = Actor(principal_id="user_2", principal_type=PrincipalType.HUMAN, role=Role.USER)
 
 
@@ -129,6 +133,7 @@ def _strategy_payload(
     indicator_revision_id: str = "pkg_rev_1",
     backtest_range: dict[str, str] | None = None,
     instrument_id: str = "BTCUSDT",
+    costs: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     return {
         "strategy_root_id": "strat_root_seed",
@@ -144,7 +149,15 @@ def _strategy_payload(
             "initial_capital": "10000.00",
             "execution": {"entry_timing": "next_candle_open", "exit_timing": "next_candle_open"},
             "order_config": {"type": "market_order"},
-            "costs": {"commission": "0.04", "spread": "0.01", "slippage_value": "0.1"},
+            # ``costs={}`` leaves commission AND spread unset, which is what raises the
+            # doc 14 §9.2 EXECUTION_ASSUMPTIONS_DEFAULT *warning* — a composition that
+            # is still READY_WITH_WARNINGS and still admissible. Callers that need a
+            # warning-carrying run use it; everyone else keeps the realistic defaults.
+            "costs": (
+                {"commission": "0.04", "spread": "0.01", "slippage_value": "0.1"}
+                if costs is None
+                else costs
+            ),
             "intrabar_policy": {"tick_policy": "inherit"},
             "funding": {"enabled": False},
         },
@@ -187,6 +200,7 @@ async def _ready_composition(
     market_instrument_id: str | None = None,
     strategy_instrument_id: str = "BTCUSDT",
     backtest_range: dict[str, str] | None = None,
+    costs: dict[str, str] | None = None,
 ) -> tuple[str, str, str]:
     workspace_id = await _empty_composition(session, actor)
     # Slice B: the strategy pins a REAL market revision (FK-valid entity) and the
@@ -250,6 +264,7 @@ async def _ready_composition(
             indicator_revision_id=pkg_rev.revision_id,
             backtest_range=backtest_range,
             instrument_id=strategy_instrument_id,
+            costs=costs,
         ),
     )
     await mb_cmd.attach_mainboard_item(
@@ -753,29 +768,41 @@ async def _run_diagnostics(session, result_id: str) -> dict[str, Any]:
     return dict(row.content)
 
 
-async def test_worker_applies_the_pinned_allocation_pool_capital(session) -> None:
-    # GAP-02: the manifest pins an enabled allocation plan; the worker must READ
-    # capital_execution and capitalise the run from the portfolio pool P0 (50000),
-    # not the strategy's own initial_capital (10000). Proves the pin is now APPLIED.
+async def test_shared_allocation_run_is_refused_and_leaves_nothing_behind(session) -> None:
+    """ADIM 3 containment: a shared-capital composition never reaches the worker.
+
+    This test used to assert the OPPOSITE — that the worker capitalised the run
+    from the pinned pool P0 (50000) rather than the strategy's own 10000. That
+    behaviour still exists in the engine, but the numbers it produces for a
+    MULTI-item shared pool are not a portfolio valuation (the engine replays each
+    item independently and folds the runs in pin order, so the composite equity
+    curve is not even time-ordered — see
+    ``tests/unit/test_shared_allocation_containment.py``). Rather than keep
+    admitting runs whose portfolio drawdown is wrong, shared capital is fail-closed
+    at admission. The sizing arithmetic itself stays covered by the pure engine
+    tests in ``tests/unit/test_backtest_engine_allocation.py``.
+    """
     await _seed_principals(session)
     composition_id, _root, _rev = await _ready_composition(session, USER1)
     await _enable_allocation(session, USER1, composition_id, amount="50000.00")
 
-    admit = await backtest_cmd.request_backtest_run(session, USER1, composition_id=composition_id)
-    await session.commit()
-    out = await run_backtest(session, admit["job_id"], stream_bars=_e2e_bars)
-    await session.commit()
-    assert out["state"] == "succeeded"
+    with pytest.raises(ReadinessBlockedError) as exc_info:
+        await backtest_cmd.request_backtest_run(session, USER1, composition_id=composition_id)
+    await session.rollback()
 
-    view = await backtest_query.get_backtest_result(session, USER1, result_id=out["result_id"])
-    # The run is capitalised from the portfolio pool P0 (50000), which is only possible
-    # if the worker read + applied capital_execution (the strategy's own is 10000).
-    assert view["summary"]["headline"]["initial_capital"] == "50000.00"
+    # Doc 14 §9.1 / doc 01 §11.2: the envelope promotes the leading blocker's scope,
+    # field and remediation so a client can act without parsing `details`.
+    error = exc_info.value
+    assert error.code == "READINESS_BLOCKED"
+    assert _SHARED_MODE_BLOCKER in {d["code"] for d in error.details}
+    assert error.scope_type == "portfolio_allocation"
+    assert error.field_path == "enabled"
+    assert error.remediation
 
-    diagnostics = await _run_diagnostics(session, out["result_id"])
-    assert diagnostics["allocation_enabled"] is True
-    assert diagnostics["allocation_items_executed"] == 1
-    assert "allocation_single_currency_pool_assumed" in diagnostics["warnings"]
+    # Doc 15 §9.3: no run, no manifest, no job, no result.
+    assert await _count(session, BacktestRun) == 0
+    assert await _count(session, BacktestResult) == 0
+    assert await _count(session, Job) == 0
 
 
 async def test_worker_independent_run_uses_the_strategy_own_capital(session) -> None:

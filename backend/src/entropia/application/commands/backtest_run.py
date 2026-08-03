@@ -46,6 +46,13 @@ from entropia.application.commands.readiness_check import (
 )
 from entropia.application.durable_audit import AuditSessionFactory, record_durable_audit
 from entropia.application.idempotency import run_idempotent
+from entropia.domain.allocation.capability import (
+    SHARED_ALLOCATION_FIELD_PATH,
+    SHARED_ALLOCATION_MESSAGE,
+    SHARED_ALLOCATION_REMEDIATION,
+    shared_allocation_is_executable,
+    shared_allocation_requested,
+)
 from entropia.domain.backtest.enums import (
     RUN_RETRYABLE_STATES,
     RUN_TERMINAL_STATES,
@@ -63,6 +70,7 @@ from entropia.domain.readiness.enums import (
     ReadinessScope,
     ReadinessSeverity,
 )
+from entropia.domain.readiness.issues import ReadinessIssue
 from entropia.domain.strategy.config import StrategyConfig
 from entropia.domain.trash.page import original_location_for
 from entropia.infrastructure.postgres.models import Job, MainboardCompositionSnapshot
@@ -518,6 +526,35 @@ async def _admit_run_body(
     snapshot = await session.get(MainboardCompositionSnapshot, preflight["snapshot_id"])
     if snapshot is None:  # pragma: no cover - snapshot was just written in this tx
         raise CompositionNotFoundError()
+
+    # 3. Containment (ADIM 3) — the shared-capital admission guard, deliberately
+    #    INDEPENDENT of step 2. Step 2 refuses this composition already, because
+    #    ``validate_allocation`` leads an enabled plan with the containment blocker;
+    #    this guard reads the same fact off the IMMUTABLE capital snapshot the
+    #    manifest is about to pin, so a run is still refused if the readiness
+    #    evaluation is bypassed, regressed, or replaced by a caller-supplied report.
+    #    It is the last place a wrong financial number can be stopped before a
+    #    manifest exists. It sits AFTER the snapshot load because the snapshot is
+    #    where the pinned capital mode lives, and BEFORE ``build_run_manifest`` so no
+    #    run, manifest or job is created (doc 15 §9.3). Every admission path (request
+    #    + retry, human + Agent) funnels through here, so all of them see the same
+    #    blocker, and the durable ``run_admission_rejected`` audit is written by
+    #    ``_admit_run``'s handler exactly as for any other typed rejection.
+    if not shared_allocation_is_executable() and shared_allocation_requested(
+        snapshot.capital_mode_snapshot
+    ):
+        raise _readiness_blocked(
+            [
+                ReadinessIssue(
+                    ReadinessIssueCode.ALLOCATION_SHARED_MODE_NOT_IN_BUILD,
+                    ReadinessSeverity.BLOCKER,
+                    ReadinessScope.PORTFOLIO_ALLOCATION,
+                    SHARED_ALLOCATION_MESSAGE,
+                    remediation=SHARED_ALLOCATION_REMEDIATION,
+                    field_path=SHARED_ALLOCATION_FIELD_PATH,
+                ).as_dict()
+            ]
+        )
 
     # F-07i (B): pin the approved tick/trade revision for every tick-demanding Strategy
     # NOW, into the immutable manifest — the worker must never resolve 'newest approved'

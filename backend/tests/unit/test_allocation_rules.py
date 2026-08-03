@@ -27,6 +27,21 @@ def _entry(cid: str, share: str | None, *, active: bool = True) -> dict:
     return {"composition_item_id": cid, "active": active, "equity_share_percent": share}
 
 
+def _blocker_codes(issues) -> set[str]:
+    """Blocker codes only.
+
+    ADIM 3 containment: an ENABLED plan now always leads with
+    ``SHARED_MODE_NOT_IN_BUILD`` (shared capital does not execute in this build —
+    ``domain/allocation/capability.py``). The field-level tests below still assert
+    that no OTHER blocker fires, which is what they were always about; asserting
+    "no blockers at all" would now pass only if the containment were dropped.
+    """
+    return {str(i.code) for i in issues if str(i.severity) == str(Sev.BLOCKER)}
+
+
+_CONTAINMENT = {str(Code.SHARED_MODE_NOT_IN_BUILD)}
+
+
 def _config(**overrides) -> PortfolioAllocationConfigV1:
     base = {
         "enabled": True,
@@ -61,7 +76,7 @@ def test_valid_shared_derives_canonical_amounts() -> None:
     )
     issues, derived = validate_allocation(config, item_refs=_refs("a", "b", "c"))
 
-    assert not has_blockers(issues)
+    assert _blocker_codes(issues) == _CONTAINMENT
     assert derived is not None
     assert Decimal(derived.portfolio_initial_capital) == Decimal("10000")
     assert Decimal(derived.reserved_cash) == Decimal("1000")
@@ -144,7 +159,7 @@ def test_single_active_sleeve_warns_but_is_valid() -> None:
     )
     codes = _codes(issues)
     assert Code.ONE_ACTIVE_SLEEVE in codes
-    assert not has_blockers(issues)
+    assert _blocker_codes(issues) == _CONTAINMENT
     warning_severities = {str(i.severity) for i in issues}
     assert str(Sev.WARNING) in warning_severities
     assert derived is not None
@@ -205,7 +220,7 @@ def test_net_policy_pre_discloses_the_v1_block_downgrade_as_a_warning() -> None:
     net = [i for i in issues if str(i.code) == str(Code.CONFLICT_POLICY_NET_V1)]
     assert len(net) == 1
     assert str(net[0].severity) == str(Sev.WARNING)
-    assert not has_blockers(issues)
+    assert _blocker_codes(issues) == _CONTAINMENT
 
 
 def test_unknown_conflict_policy_token_is_rejected_at_parse() -> None:

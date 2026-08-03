@@ -13,6 +13,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from entropia.domain.allocation.capability import shared_allocation_capability_view
 from entropia.domain.identity import Actor
 from entropia.domain.identity.policy import ensure_can_view, require_authenticated
 from entropia.domain.lifecycle.enums import DeletionState
@@ -55,6 +56,7 @@ async def get_allocation_draft(
             "row_version": 0,
             "draft": draft,
             "candidate_items": [_candidate(item) for item in items],
+            "shared_mode_capability": shared_allocation_capability_view(),
         }
 
     entries = await alloc_repo.list_entries(session, plan.plan_id)
@@ -66,6 +68,12 @@ async def get_allocation_draft(
         "row_version": plan.row_version,
         "draft": _draft_projection(plan, entries, label_by_item),
         "candidate_items": [_candidate(item) for item in items if item.item_id not in represented],
+        # Containment (ADIM 3): the SERVER's executability state for shared capital,
+        # published so the page renders it verbatim instead of deciding availability
+        # for itself. A hidden or disabled control is presentation, never
+        # authorization — the enforcement is the ``validate_allocation`` blocker and
+        # the admission guard, which run whatever the browser draws.
+        "shared_mode_capability": shared_allocation_capability_view(),
     }
 
 

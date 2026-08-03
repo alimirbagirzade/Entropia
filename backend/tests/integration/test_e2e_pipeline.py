@@ -533,15 +533,34 @@ async def _ready_pipeline(session) -> dict[str, Any]:
     await session.commit()
     report = await alloc_cmd.validate_allocation_draft(session, OWNER, composition_id=workspace_id)
     await session.commit()
-    assert report["valid"] is True
-    await alloc_cmd.create_allocation_revision(
-        session, OWNER, composition_id=workspace_id, expected_row_version=1
+    # ADIM 3 containment: the shared plan SAVES (authoring is preserved) but is not
+    # valid — shared capital does not execute in this build, so no RUN can be
+    # admitted while it is on. The pipeline therefore does what the remediation
+    # tells a user to do: switch to independent capital, where the strategy's own
+    # Initial Capital funds the run (doc 13 §1.1 — a complete mode, not a degraded
+    # one). Freezing a plan revision is deliberately NOT attempted here: it is
+    # refused under containment, and that refusal is pinned in
+    # tests/integration/test_allocation_persistence.py.
+    assert report["valid"] is False
+    assert "SHARED_MODE_NOT_IN_BUILD" in {i["code"] for i in report["issues"]}
+
+    await alloc_cmd.upsert_allocation_draft(
+        session,
+        OWNER,
+        composition_id=workspace_id,
+        expected_row_version=1,
+        enabled=False,
+        initial_capital=None,
+        compounding_mode=None,
+        reserve_cash_percent=None,
+        entries=[],
     )
     await session.commit()
 
     ready = await readiness_cmd.run_readiness_check(session, OWNER, composition_id=workspace_id)
     await session.commit()
     assert ready["summary"]["blocker_count"] == 0
+    assert ready["summary"]["allocation_enabled"] is False
 
     return {
         "workspace_id": workspace_id,

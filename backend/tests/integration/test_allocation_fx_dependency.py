@@ -38,6 +38,10 @@ USER1 = Actor(principal_id="user_1", principal_type=PrincipalType.HUMAN, role=Ro
 
 _FX_CODE = "FX_DEPENDENCY_MISSING"
 _READINESS_FX_CODE = "ALLOCATION_FX_DEPENDENCY"
+# ADIM 3: every ENABLED plan now leads with the shared-capital containment blocker
+# (domain/allocation/capability.py). The FX assertions below narrow to "no OTHER
+# blocker", which is what they were always testing.
+_CONTAINMENT_CODE = "SHARED_MODE_NOT_IN_BUILD"
 
 
 async def _seed_principals(session) -> None:
@@ -182,15 +186,20 @@ async def test_matching_settlement_currency_passes(session) -> None:
     )
     await session.commit()
 
-    assert report["valid"] is True
+    # ADIM 3 containment: an ENABLED plan is never `valid` any more — shared capital
+    # does not execute in this build. This test is about the FX check, so it asserts
+    # the containment is the ONLY blocker and that no FX finding fires.
     assert not any(i["code"] == _FX_CODE for i in report["issues"])
+    assert {i["code"] for i in report["issues"] if i["severity"] == "blocker"} == {
+        _CONTAINMENT_CODE
+    }
 
-    # A clean draft yields an immutable revision.
-    revision = await alloc_cmd.create_allocation_revision(
-        session, USER1, composition_id=composition_id, expected_row_version=1
-    )
-    await session.commit()
-    assert revision["plan_revision_id"]
+    # A blocker-carrying draft can never become an immutable plan revision (§8.5) —
+    # under containment that now includes an otherwise-clean shared plan.
+    with pytest.raises(AllocationHasBlockersError):
+        await alloc_cmd.create_allocation_revision(
+            session, USER1, composition_id=composition_id, expected_row_version=1
+        )
 
 
 # --------------------------------------------------------------------------- #
@@ -210,8 +219,12 @@ async def test_unresolved_settlement_currency_skips_check(session) -> None:
     )
     await session.commit()
 
-    assert report["valid"] is True
+    # An item with no resolvable instrument yields no FX finding — never a
+    # fabricated difference. The containment blocker is the only blocker.
     assert not any(i["code"] == _FX_CODE for i in report["issues"])
+    assert {i["code"] for i in report["issues"] if i["severity"] == "blocker"} == {
+        _CONTAINMENT_CODE
+    }
 
 
 # --------------------------------------------------------------------------- #

@@ -51,7 +51,11 @@ from entropia.infrastructure.postgres.models import (
     WorkObjectRevision,
 )
 from entropia.infrastructure.s3 import datasets
-from entropia.shared.errors import AccessDeniedError
+from entropia.shared.errors import AccessDeniedError, AllocationHasBlockersError
+
+# ADIM 3: every ENABLED plan leads with the shared-capital containment blocker
+# (domain/allocation/capability.py) on BOTH the human and the Agent line.
+_CONTAINMENT_CODE = "SHARED_MODE_NOT_IN_BUILD"
 
 pytestmark = pytest.mark.integration
 
@@ -330,20 +334,38 @@ async def test_allocation_full_chain_via_gateway(session) -> None:
     )
     await session.commit()
     assert validate["status"] == "succeeded"
-    assert validate["valid"] is True
+    # ADIM 3 containment: the Agent line sees EXACTLY what the human line sees — an
+    # enabled shared plan is not valid, because shared capital does not execute in
+    # this build. The gateway is not a second policy surface; it reports the same
+    # typed blocker (doc 18 §10: an Agent is never a privileged caller).
+    assert validate["valid"] is False
+    assert _CONTAINMENT_CODE in {i["code"] for i in validate["issues"]}
 
-    revision = await agent_tools.dispatch_tool_call(
-        session,
-        AGENT,
-        tool_name="portfolio_allocation.create_revision",
-        policy_scope="proposal",
-        request={"composition_id": comp, "expected_row_version": 1},
-    )
-    await session.commit()
-    assert revision["status"] == "succeeded"
-    assert revision["revision_no"] == 1
-    assert revision["config_hash"] == validate["config_hash"]
-    assert await _count(session, PortfolioAllocationPlanRevision) == 1
+    # Human command line: the identical refusal.
+    with pytest.raises(AllocationHasBlockersError) as exc_info:
+        await alloc_cmd.create_allocation_revision(
+            session, AGENT, composition_id=comp, expected_row_version=1
+        )
+    await session.rollback()
+    assert {d["code"] for d in exc_info.value.details} == {_CONTAINMENT_CODE}
+    human_line_code = exc_info.value.code
+
+    # Gateway line: the SAME typed error, not a softer gateway-specific outcome.
+    # (Only ForbiddenError is translated into a `rejected` envelope; a validation
+    # refusal propagates identically on both lines — which is the parity claim.)
+    with pytest.raises(AllocationHasBlockersError) as gateway_exc:
+        await agent_tools.dispatch_tool_call(
+            session,
+            AGENT,
+            tool_name="portfolio_allocation.create_revision",
+            policy_scope="proposal",
+            request={"composition_id": comp, "expected_row_version": 1},
+        )
+    await session.rollback()
+    assert gateway_exc.value.code == human_line_code
+    assert {d["code"] for d in gateway_exc.value.details} == {_CONTAINMENT_CODE}
+    # Neither line left an immutable plan revision behind.
+    assert await _count(session, PortfolioAllocationPlanRevision) == 0
 
 
 async def test_allocation_foreign_owner_upsert_denial_parity(session) -> None:

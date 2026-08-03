@@ -446,6 +446,14 @@ export function diagnosticWarningLabel(code: string): string {
     return "The indicator layer produced no computable trigger — this result used a breakout entry proxy, not real indicator signals.";
   if (code.startsWith(_SIZING_UNSUPPORTED_PREFIX))
     return `Position sizing method "${code.slice(_SIZING_UNSUPPORTED_PREFIX.length)}" is not modelled — the run fell back to notional sizing.`;
+  // Containment (ADIM 3): these two tokens only ever appear on results produced
+  // BEFORE shared capital allocation was contained. The result is immutable and is
+  // kept exactly as written; the reader is told what the stored numbers are instead
+  // of being handed a raw machine token.
+  if (code === "portfolio_curve_sequential_not_unified_clock")
+    return "Legacy sequential portfolio result: each item was replayed independently and the runs were folded in pin order, so this equity curve is not a unified-clock portfolio valuation and its drawdown is not a portfolio drawdown. Shared capital allocation is no longer admitted for new runs.";
+  if (code === "portfolio_rules_sequential_pin_order_precedence")
+    return "Legacy sequential portfolio rules: the cross-item exposure cap and conflict policy were enforced forward-only in pin order — an earlier-pinned item was never re-simulated because of a later one.";
   return code;
 }
 

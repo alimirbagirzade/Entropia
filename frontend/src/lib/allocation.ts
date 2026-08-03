@@ -88,6 +88,21 @@ export interface AllocationCandidate {
   display_label_override: string | null;
 }
 
+// Containment (ADIM 3): the SERVER's executability state for shared capital
+// allocation (backend domain/allocation/capability.py). The page renders this
+// verbatim — it never decides availability for itself, because a disabled control
+// is presentation, not authorization. Enforcement is the allocation validation
+// blocker + the run-admission guard, which run whatever the browser draws.
+export interface SharedModeCapability {
+  key: string;
+  status: string;
+  available: boolean;
+  message: string;
+  remediation: string;
+  dependency: string;
+  field_path: string;
+}
+
 // GET .../portfolio-allocation-draft response. row_version 0 + null plan_id =
 // no plan row yet (the default independent draft); 0 is then the valid PUT token.
 export interface AllocationDraftResponse {
@@ -97,6 +112,7 @@ export interface AllocationDraftResponse {
   row_version: number;
   draft: AllocationDraft;
   candidate_items: AllocationCandidate[];
+  shared_mode_capability: SharedModeCapability;
 }
 
 // A single validation finding (domain rules AllocationIssue.as_dict).

@@ -165,6 +165,15 @@ class ReadinessIssueCode(StrEnum):
     # An item settles in a currency other than the Base Currency with no approved
     # pinned FX conversion dataset (doc 13 §5.1/§6.2 surfaced through Ready Check).
     ALLOCATION_FX_DEPENDENCY = "ALLOCATION_FX_DEPENDENCY"
+    # Containment (ADIM 3): the composition asks for SHARED capital allocation, which
+    # does not execute in this build — the engine replays each item independently and
+    # folds the finished runs in pin order, so there is no per-timestamp portfolio
+    # valuation snapshot and the composite equity curve is not time-ordered (doc 13
+    # §8.3, §8.4, §13, §14 test 11). Blocks RUN with the doc 14 §9.1 remediation, the
+    # twin of the strategy-side ``STRATEGY_CAPABILITY_NOT_IN_BUILD``. Independent
+    # capital (doc 13 §1.1) is unaffected. Status, texts and the removal condition
+    # live in ``domain/allocation/capability.py``.
+    ALLOCATION_SHARED_MODE_NOT_IN_BUILD = "ALLOCATION_SHARED_MODE_NOT_IN_BUILD"
     ALLOCATION_ISSUE = "ALLOCATION_ISSUE"
 
 

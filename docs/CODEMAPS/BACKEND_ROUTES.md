@@ -210,6 +210,7 @@ rv-N` kullanmaya devam ediyor).
 | METHOD path (ön ek `/mainboard-compositions/{composition_id}`) | fonksiyon | çağırdığı | OCC | Idem |
 |---|---|---|---|---|
 | GET `/portfolio-allocation-draft` | `get_allocation_draft:74` | `alloc_query.get_allocation_draft` | yok | — |
+| ↳ **CONTAINMENT (ADIM 3)** — yanıt `shared_mode_capability` bloğunu taşır (`domain/allocation/capability.py::shared_allocation_capability_view`): shared capital bu build'de `future_dev`. UI bunu **verbatim** basar, kendi karar vermez; gerçek reddi `validate_allocation` BLOCKER'ı, revision freeze ve `commands/backtest_run.py::_admit_run_body` admission guard'ı verir. | — | — | — | — |
 | PUT `/portfolio-allocation-draft` | `put_allocation_draft:87` | `alloc_cmd.upsert_allocation_draft` | body `expected_row_version` / If-Match | ✔ |
 | POST `/portfolio-allocation/validate` | `validate_allocation_draft:114` | `alloc_cmd.validate_allocation_draft` | yok | — |
 | POST `/portfolio-allocation/sync` | `sync_from_mainboard:124` | `alloc_query.sync_preview` (**pure read**) | yok | — |

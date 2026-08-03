@@ -43,6 +43,10 @@ from entropia.shared.errors import (
 pytestmark = pytest.mark.integration
 
 USER1 = Actor(principal_id="user_1", principal_type=PrincipalType.HUMAN, role=Role.USER)
+
+# ADIM 3: every ENABLED plan now leads with the shared-capital containment blocker
+# (domain/allocation/capability.py) — shared capital does not execute in this build.
+_CONTAINMENT_CODE = "SHARED_MODE_NOT_IN_BUILD"
 USER2 = Actor(principal_id="user_2", principal_type=PrincipalType.HUMAN, role=Role.USER)
 
 
@@ -138,24 +142,32 @@ async def test_full_flow_draft_validate_revision(session) -> None:
         session, USER1, composition_id=composition_id
     )
     await session.commit()
-    assert report["state"] == "READY_WITH_WARNINGS"
-    assert report["valid"] is True
+    # ADIM 3 containment: an ENABLED plan is NOT_READY and never `valid` — shared
+    # capital does not execute in this build. The draft round-trip, the derived
+    # sleeve maths and the config hash are unaffected: the plan stays authorable and
+    # previewable; only the freeze and the RUN are refused.
+    assert report["state"] == "NOT_READY"
+    assert report["valid"] is False
+    assert {i["code"] for i in report["issues"] if i["severity"] == "blocker"} == {
+        _CONTAINMENT_CODE
+    }
     assert Decimal(report["derived"]["total_allocated"]) == Decimal("8100")
     assert len(report["config_hash"]) == 64
 
-    revision = await alloc_cmd.create_allocation_revision(
-        session, USER1, composition_id=composition_id, expected_row_version=1
-    )
-    await session.commit()
-    assert revision["revision_no"] == 1
-    assert revision["current_revision_id"] == revision["plan_revision_id"]
-    assert revision["row_version"] == 2
+    # The immutable revision is refused: freezing a plan that cannot run would pin a
+    # configuration no RUN could ever honour.
+    with pytest.raises(AllocationHasBlockersError):
+        await alloc_cmd.create_allocation_revision(
+            session, USER1, composition_id=composition_id, expected_row_version=1
+        )
+    await session.rollback()
 
     stored = (
         await session.execute(select(func.count()).select_from(PortfolioAllocationPlanRevision))
     ).scalar_one()
-    assert stored == 1
+    assert stored == 0
 
+    # ... and nothing was announced: a refused freeze emits no revision audit/outbox.
     audit = (
         await session.execute(
             select(func.count())
@@ -170,7 +182,7 @@ async def test_full_flow_draft_validate_revision(session) -> None:
             .where(OutboxEvent.event_type == "portfolio_allocation.revision_created")
         )
     ).scalar_one()
-    assert audit >= 1 and outbox >= 1
+    assert audit == 0 and outbox == 0
 
 
 async def test_projection_carries_item_display_label(session) -> None:
@@ -342,21 +354,29 @@ async def test_portfolio_rules_round_trip_and_revision_carry(session) -> None:
     # NET is a valid save, pre-disclosed as the V1 block downgrade (warning, no blocker).
     codes = {i["code"] for i in put["inline_issues"]}
     assert "CONFLICT_POLICY_NET_V1" in codes
-    assert all(i["severity"] != "blocker" for i in put["inline_issues"])
+    # ADIM 3 containment: the draft still SAVES (authoring is preserved) and the only
+    # blocker among the inline issues is the shared-mode containment — NET itself is
+    # still just the pre-disclosed V1 downgrade warning it always was.
+    assert {i["code"] for i in put["inline_issues"] if i["severity"] == "blocker"} == {
+        _CONTAINMENT_CODE
+    }
 
     draft = await alloc_query.get_allocation_draft(session, USER1, composition_id=composition_id)
     assert draft["draft"]["max_total_exposure_percent"] == "150.000000"
     assert draft["draft"]["conflict_policy"] == "NET"
 
-    revision = await alloc_cmd.create_allocation_revision(
-        session, USER1, composition_id=composition_id, expected_row_version=1
-    )
-    await session.commit()
-    stored = (await session.execute(select(PortfolioAllocationPlanRevision))).scalar_one()
-    assert revision["plan_revision_id"] == stored.plan_revision_id
-    # The immutable revision config (the engine's capital_mode source) carries the rules.
-    assert stored.config["max_total_exposure_percent"] == "150.000000"
-    assert stored.config["conflict_policy"] == "NET"
+    # ADIM 3 containment: the rules still round-trip through the DRAFT (asserted
+    # above), but they can no longer be frozen into an immutable revision — shared
+    # capital does not execute in this build, so pinning a plan revision would pin a
+    # configuration no RUN could honour. The freeze is refused with the containment
+    # as its only blocker, and no revision row is written.
+    with pytest.raises(AllocationHasBlockersError) as exc_info:
+        await alloc_cmd.create_allocation_revision(
+            session, USER1, composition_id=composition_id, expected_row_version=1
+        )
+    await session.rollback()
+    assert {d["code"] for d in exc_info.value.details} == {_CONTAINMENT_CODE}
+    assert (await session.execute(select(PortfolioAllocationPlanRevision))).first() is None
 
 
 async def test_nonpositive_max_total_exposure_blocks_the_revision(session) -> None:

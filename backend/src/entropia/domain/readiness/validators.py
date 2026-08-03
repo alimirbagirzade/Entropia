@@ -19,6 +19,7 @@ from typing import Any
 
 from pydantic import ValidationError as PydanticValidationError
 
+from entropia.domain.allocation.capability import SHARED_ALLOCATION_REMEDIATION
 from entropia.domain.allocation.enums import AllocationIssueCode as AllocCode
 from entropia.domain.allocation.enums import AllocationIssueSeverity as AllocSev
 from entropia.domain.allocation.rules import AllocationIssue
@@ -123,6 +124,17 @@ _ALLOC_CODE_MAP: dict[str, Code] = {
     str(AllocCode.TOTAL_ALLOCATION_UNDER_100): Code.ALLOCATION_UNALLOCATED_CASH,
     str(AllocCode.ITEM_UNAVAILABLE): Code.ALLOCATION_ITEM_UNAVAILABLE,
     str(AllocCode.FX_DEPENDENCY_MISSING): Code.ALLOCATION_FX_DEPENDENCY,
+    str(AllocCode.SHARED_MODE_NOT_IN_BUILD): Code.ALLOCATION_SHARED_MODE_NOT_IN_BUILD,
+}
+
+# Doc 14 §9.1 requires a readiness issue to carry ``remediation`` — the actionable
+# half — but the 4a ``AllocationIssue`` value object has no such field (doc 13 §10.1
+# is a code/severity/message/field contract). Rather than widen every allocation
+# issue, the codes that HAVE a canonical remediation declare it here, sourced from
+# the same module the blocker's message comes from so the two can never drift.
+# An absent entry keeps the pre-existing ``remediation=None``.
+_ALLOC_REMEDIATION: dict[str, str] = {
+    str(AllocCode.SHARED_MODE_NOT_IN_BUILD): SHARED_ALLOCATION_REMEDIATION,
 }
 
 
@@ -1129,6 +1141,7 @@ def _map_allocation_issues(
                 severity,
                 Scope.PORTFOLIO_ALLOCATION,
                 issue.message,
+                remediation=_ALLOC_REMEDIATION.get(str(issue.code)),
                 field_path=issue.field,
                 scope_id=issue.composition_item_id,
             )

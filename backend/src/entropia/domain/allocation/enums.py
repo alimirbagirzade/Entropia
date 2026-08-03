@@ -95,6 +95,14 @@ class AllocationIssueCode(StrEnum):
     # non-allocatable kind fails closed instead of being silently allocated a
     # capital sleeve (I-03).
     ITEM_KIND_NOT_ALLOCATABLE = "ITEM_KIND_NOT_ALLOCATABLE"
+    # Containment (ADIM 3): shared capital allocation does not EXECUTE in this build.
+    # Doc 13 §8.3/§8.4/§13 require ONE portfolio valuation snapshot per timestamp that
+    # every active item sizes against; the engine instead replays each item
+    # independently and folds the finished runs in pin order, so the composite equity
+    # curve is not time-ordered and the portfolio drawdown is wrong. The single source
+    # of truth for the status, message, remediation and removal condition is
+    # ``domain/allocation/capability.py`` — never restate them at a call site.
+    SHARED_MODE_NOT_IN_BUILD = "SHARED_MODE_NOT_IN_BUILD"
 
 
 __all__ = [

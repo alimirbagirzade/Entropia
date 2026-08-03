@@ -13,6 +13,11 @@ from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal
 from hashlib import sha256
 
+from entropia.domain.allocation.capability import (
+    SHARED_ALLOCATION_FIELD_PATH,
+    SHARED_ALLOCATION_MESSAGE,
+    shared_allocation_is_executable,
+)
 from entropia.domain.allocation.config import PortfolioAllocationConfigV1
 from entropia.domain.allocation.enums import AllocationIssueCode as Code
 from entropia.domain.allocation.enums import AllocationIssueSeverity as Sev
@@ -131,11 +136,30 @@ def validate_allocation(
 
     Independent mode (``enabled=false``) is valid and engine-clear: the shared pool
     is not evaluated, so no issues and no derived amounts are produced (§4, §14#2).
+
+    Containment (ADIM 3): while ``domain.allocation.capability`` reports shared
+    capital as non-executable, an ENABLED plan leads with a BLOCKER. It is emitted
+    FIRST so it is the lead blocker every caller promotes — the Ready Check error
+    envelope lifts the leading blocker's remediation, and a user fixing sleeve
+    percentages before being told the mode cannot run at all would be wasted work.
+    The remaining field checks still run so the plan stays fully diagnosable while
+    the draft remains editable and saveable (only the freeze and the RUN are
+    refused); the shared-pool derived amounts are still computed, because they are
+    what the page previews — they are not a run result.
     """
     if not config.enabled:
         return [], None
 
     issues: list[AllocationIssue] = []
+    if not shared_allocation_is_executable():
+        issues.append(
+            AllocationIssue(
+                Code.SHARED_MODE_NOT_IN_BUILD,
+                Sev.BLOCKER,
+                SHARED_ALLOCATION_MESSAGE,
+                field=SHARED_ALLOCATION_FIELD_PATH,
+            )
+        )
 
     # ---- Shared Capital Pool field checks (§5.1) ---------------------------- #
     capital_ok = config.initial_capital is not None and config.initial_capital.amount > _ZERO

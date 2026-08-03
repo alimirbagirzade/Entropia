@@ -207,6 +207,22 @@ describe("Panel / Logs page", () => {
     expect(screen.getByText("u_2")).toBeInTheDocument();
   });
 
+  // I-16a residual (2026-08-03): the same guard Results History has carried since
+  // PR #507. `backtest.display_title` ships as the literal
+  // `f"Backtest Result {result_id}"` (`queries/panel_backtest_log.py::_row`), so
+  // rendering it in the Backtest cell prints the opaque id with a noun glued on and
+  // names nothing. The cell renders the raw `result_id` as a `<code>` binding key.
+  it("renders the result_id as the Backtest binding key, never the id-derived display_title", async () => {
+    stubApi(BASE_ROUTES);
+    renderPage();
+
+    const table = await screen.findByRole("table");
+    expect(within(table).getByText("res_1")).toBeInTheDocument();
+    expect(within(table).getByText("res_2")).toBeInTheDocument();
+    expect(within(table).queryByText("Backtest Result res_1")).not.toBeInTheDocument();
+    expect(within(table).queryByText("Backtest Result res_2")).not.toBeInTheDocument();
+  });
+
   it("keeps the filtered logs projection and raw audit stream as a secondary tab", async () => {
     stubApi(BASE_ROUTES);
     renderPage();

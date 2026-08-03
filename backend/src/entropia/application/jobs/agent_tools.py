@@ -136,7 +136,10 @@ async def dispatch_tool_call(
         checkpoint_id=checkpoint_id,
         input_manifest_id=input_manifest_id,
         idempotency_key=idempotency_key,
-        request=payload,
+        # The handler still receives ``payload`` with its bytes intact; only what is
+        # PERSISTED is de-referenced, and it happens here — before the INSERT — so an
+        # oversized file is never written to the row it is about to be rejected for.
+        request=_persistable_request(tool, payload),
         correlation_id=actor.correlation_id,
     )
     await _emit_event(
@@ -200,6 +203,43 @@ async def dispatch_tool_call(
     # handler's own ``status`` (e.g. hypothesis ``exploring``) must never shadow
     # the call's terminal ``succeeded`` — the durable row is authoritative.
     return {**outcome.response, "tool_call_id": call.tool_call_id, "status": "succeeded"}
+
+
+# Tools whose request carries raw file bytes that must NOT be copied into the
+# durable tool-call envelope. The tool-call row is the long-lived agent history
+# surface, so inlining a multi-megabyte ledger there would duplicate the asset into
+# evidence storage forever — and would do it even for a file that is about to be
+# REJECTED for being too large, which is the one case where writing it is most
+# obviously wrong. The bytes belong in object storage, content-addressed; the row
+# keeps the address. Scoped to the signal family on purpose: the landed trade_log
+# tools have their own recorded envelope shape and this slice does not restate it.
+_SOURCE_CONTENT_TOOLS: frozenset[ToolName] = frozenset({ToolName.TRADING_SIGNAL_UPLOAD_SOURCE})
+
+
+def _persistable_request(tool: ToolName, payload: dict[str, Any]) -> dict[str, Any]:
+    """The request as it should be STORED — raw source bytes replaced by a reference.
+
+    The in-memory ``payload`` the handler runs on is untouched; only the durable copy
+    is de-referenced, and the digest is the SAME sha256 the upload command
+    content-addresses the asset by, so the row still names the exact object.
+    """
+    if tool not in _SOURCE_CONTENT_TOOLS or "content" not in payload:
+        return payload
+    from entropia.infrastructure.s3 import datasets
+
+    raw = payload["content"]
+    content = raw.encode("utf-8") if isinstance(raw, str) else raw
+    stored = {key: value for key, value in payload.items() if key != "content"}
+    if not isinstance(content, bytes | bytearray):
+        # A malformed ``content`` is about to fail closed in the handler; record the
+        # shape that was sent rather than pretending an asset reference exists.
+        stored["content_ref"] = {"invalid_type": type(raw).__name__}
+        return stored
+    stored["content_ref"] = {
+        "sha256": datasets.content_digest(bytes(content)),
+        "size_bytes": len(content),
+    }
+    return stored
 
 
 def _replayed(prior: Any) -> dict[str, Any]:
@@ -925,6 +965,54 @@ def _optional_mapping(ctx: _Ctx, field: str) -> dict[str, Any] | None:
     return dict(value)
 
 
+def _require_mapping(ctx: _Ctx, field: str) -> dict[str, Any]:
+    """A required object. Absent fails as loudly as malformed — a config payload
+    defaulted to ``{}`` would reach the compiler as "every field missing" and report
+    a validation storm instead of the one real defect (the field was never sent)."""
+    value = ctx.request.get(field)
+    if not isinstance(value, dict):
+        raise AgentToolRequestInvalidError(
+            f"'{field}' must be an object.",
+            details=[{"field": field, "actual": type(value).__name__}],
+            field_path=field,
+        )
+    return dict(value)
+
+
+def _optional_int(ctx: _Ctx, field: str) -> int | None:
+    """An optional integer. ``bool`` is rejected explicitly (it is an ``int``
+    subclass, and ``True`` must never read as position 1)."""
+    value = ctx.request.get(field)
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise AgentToolRequestInvalidError(
+            f"'{field}' must be an integer when supplied.",
+            details=[{"field": field, "actual": type(value).__name__}],
+            field_path=field,
+        )
+    return value
+
+
+def _optional_string_mapping(ctx: _Ctx, field: str) -> dict[str, str] | None:
+    """An optional ``{str: str}`` map (the import column mapping, doc 04 §5.1).
+
+    Values are checked, not coerced: ``str(None)`` would hand the parser a column
+    literally named ``"None"`` and the file would fail far away from the real cause.
+    """
+    value = _optional_mapping(ctx, field)
+    if value is None:
+        return None
+    bad = sorted(key for key, item in value.items() if not isinstance(item, str))
+    if bad:
+        raise AgentToolRequestInvalidError(
+            f"'{field}' must map every key to a string column name.",
+            details=[{"field": field, "actual": bad}],
+            field_path=field,
+        )
+    return {str(key): item for key, item in value.items()}
+
+
 async def _handle_strategy_get_draft(ctx: _Ctx) -> _ToolOutcome:
     """`strategy.get_draft` — read the Agent's OWN draft (payload, ``row_version``
     OCC token, provenance) through the same read model a human's editor uses
@@ -1030,6 +1118,229 @@ async def _handle_strategy_save_revision(ctx: _Ctx) -> _ToolOutcome:
     )
 
 
+# --------------------------------------------------------------------------- #
+# S6 — Trading Signal parity (doc 04 §10, §15 TS-20; doc 03 §14 AOS-20)        #
+#                                                                             #
+# Each handler forwards to the SAME command/query the page calls, so the file  #
+# type gate, content-addressed dedup, timezone/instrument resolution, the      #
+# §9.2 config compiler, the ``expected_head_revision_id`` OCC token,           #
+# Idempotency-Key (``run_idempotent``), the available_time pin, audit +        #
+# outbox and the Mainboard attach all live INSIDE those functions. The gateway #
+# adds NO business logic — only request-shape checking, the F-03 byte gate the #
+# browser plane runs at its route, and the durable envelope.                   #
+#                                                                             #
+# A Trading Signal is a native external WORK OBJECT and is NEVER a Package     #
+# (CR-01): no handler here names ``PackageKind``, and the Mainboard            #
+# ``item_kind`` is derived server-side from the root inside                    #
+# ``attach_mainboard_item``.                                                   #
+# --------------------------------------------------------------------------- #
+
+
+def _require_source_content(ctx: _Ctx) -> bytes:
+    """The raw source bytes an upload tool carried.
+
+    Accepts ``bytes`` or a UTF-8 ``str`` (a JSON envelope cannot hold bytes).
+    Anything else fails CLOSED — notably ``bytes(5)`` would silently produce five NUL
+    bytes and hand the command a file the caller never meant to store.
+    """
+    raw = ctx.request.get("content")
+    if isinstance(raw, str):
+        return raw.encode("utf-8")
+    if isinstance(raw, bytes | bytearray):
+        return bytes(raw)
+    raise AgentToolRequestInvalidError(
+        "'content' must be raw bytes or a UTF-8 string.",
+        details=[{"field": "content", "actual": type(raw).__name__}],
+        field_path="content",
+    )
+
+
+async def _handle_trading_signal_upload_source(ctx: _Ctx) -> _ToolOutcome:
+    """`trading_signal.upload_source_asset` — store an immutable TXT/CSV signal-event
+    source asset (doc 04 §7, §10 ``UploadSourceAsset``).
+
+    The command supplies the fail-closed extension/type gate, the sha256 content
+    address and the per-owner dedup. What it does NOT supply is the F-03 byte gate
+    (size / whole-document UTF-8 / CSV header): on the human plane that runs at the
+    multipart route, which this caller has no browser to go through. Running it here
+    is what makes "the same rules" true instead of aspirational — an oversized or
+    headerless file is refused with the SAME machine code the page returns
+    (``UPLOAD_TOO_LARGE`` / ``UPLOAD_SCHEMA_INVALID``), off ONE shared ceiling, so the
+    Agent can never upload what a human cannot.
+    """
+    from entropia.application.commands.trading_signal import upload_source_asset
+    from entropia.domain.importing.source_file import assert_source_bytes_admissible
+
+    content = _require_source_content(ctx)
+    # ``require_csv_schema=True`` mirrors the Trading Signal route exactly.
+    assert_source_bytes_admissible(content, require_csv_schema=True)
+    result = await upload_source_asset(
+        ctx.session,
+        ctx.actor,
+        content=content,
+        content_type=_optional_text(ctx, "content_type"),
+        original_filename=_optional_text(ctx, "original_filename"),
+        draft_id=_optional_text(ctx, "draft_id"),
+        idempotency_key=_optional_text(ctx, "idempotency_key"),
+    )
+    return _ToolOutcome(response=result, artifact_output_ref=result.get("source_asset_id"))
+
+
+async def _handle_trading_signal_request_import(ctx: _Ctx) -> _ToolOutcome:
+    """`trading_signal.request_import` — admit a durable import onto the ``data``
+    queue (doc 04 §7; §9 makes the import job independent of browser lifetime; §10
+    backs this row with ``RequestTradingSignalImport``).
+
+    A SUCCEEDED tool call here means the work was ADMITTED, not that it finished: the
+    worker still has to parse/map/validate and write the normalized revision. The
+    job's own lifecycle is therefore reported as ``import_status``, so it can never
+    shadow the envelope's terminal call ``status`` (doc 18 §9.2 envelope-wins rule)
+    and can never be misread as "the import succeeded". Completion is observed only
+    through ``trading_signal.get_import_report``.
+    """
+    from entropia.application.commands.trading_signal import request_trading_signal_import
+    from entropia.application.jobs.data_queue import TRADING_SIGNAL_IMPORT
+
+    result = await request_trading_signal_import(
+        ctx.session,
+        ctx.actor,
+        source_asset_id=_require_text(ctx, "source_asset_id"),
+        instrument_id=_require_text(ctx, "instrument_id"),
+        instrument_scope=_optional_mapping(ctx, "instrument_scope"),
+        source_timezone=_optional_text(ctx, "source_timezone") or "UTC",
+        import_mapping=_optional_string_mapping(ctx, "import_mapping"),
+        idempotency_key=_optional_text(ctx, "idempotency_key"),
+    )
+    response = {**result, "import_status": result.get("status")}
+    response.pop("status", None)
+    # The job kind the post-commit broker hand-off routes on (see
+    # ``pending_data_job_dispatch``): ``data`` is multi-actor, so the dispatcher
+    # cannot pick the actor from the queue name alone.
+    response["import_job_kind"] = TRADING_SIGNAL_IMPORT
+    return _ToolOutcome(
+        response=response,
+        artifact_output_ref=result.get("job_id"),
+        domain_events=[("trading_signal_import_requested", {"job_id": result.get("job_id")})],
+    )
+
+
+async def _handle_trading_signal_get_import_report(ctx: _Ctx) -> _ToolOutcome:
+    """`trading_signal.get_import_report` — the durable import status + accepted/
+    skipped counts + skipped-row evidence (doc 04 §10 ``GetImportReport``).
+
+    This is the Agent's validation surface: it receives the structured blockers the
+    page shows and does not bypass availability/data policy (doc 04 §10). The report's
+    own lifecycle is namespaced to ``import_status`` for the same envelope-wins reason
+    as the admission — and note it legitimately changes vocabulary mid-flight (the
+    ``jobs`` status while the worker runs, the normalized revision's status once it
+    lands), which is precisely why it must not be read as the call's status.
+    """
+    from entropia.application.queries.trading_signal import get_import_report
+
+    result = await get_import_report(ctx.session, ctx.actor, job_id=_require_text(ctx, "job_id"))
+    response = {**result, "import_status": result.get("status")}
+    response.pop("status", None)
+    return _ToolOutcome(response=response)
+
+
+async def _handle_trading_signal_create(ctx: _Ctx) -> _ToolOutcome:
+    """`trading_signal.create` — Save (& Add): the native Trading Signal work object +
+    immutable revision 1, optionally attached (doc 04 §8.1, §10).
+
+    ``available_time`` is pinned from the normalized import's earliest accepted event
+    INSIDE the command — the gateway never computes or supplies it, so the lookahead
+    guard doc 04 §5 makes mandatory cannot be weakened from this plane. Save is never
+    a Ready PASS and never a Run: the response reports ``ready_state="STALE"`` exactly
+    as the human line does (doc 04 §15 TS-21).
+
+    Attach containment (doc 04 §10: "Agent attaches to its own agent research
+    workspace, not automatically to a human Default Mainboard"): with no
+    ``workspace_id`` the command resolves the CALLER's own default workspace, which
+    for an Agent principal is its ``agent_research`` board — a human's board is never
+    reachable by omission. An explicitly named foreign workspace is refused by
+    ``attach_mainboard_item``'s owner check and a foreign private root by its
+    ``ensure_can_view``; both surface here as a recorded REJECTED denial.
+    """
+    from entropia.application.commands.trading_signal import create_trading_signal_and_attach
+
+    attach = ctx.request.get("attach", True)
+    if not isinstance(attach, bool):
+        raise AgentToolRequestInvalidError(
+            "'attach' must be a boolean.",
+            details=[{"field": "attach", "actual": type(attach).__name__}],
+            field_path="attach",
+        )
+    result = await create_trading_signal_and_attach(
+        ctx.session,
+        ctx.actor,
+        payload=_require_mapping(ctx, "payload"),
+        workspace_id=_optional_text(ctx, "workspace_id"),
+        attach=attach,
+        position_index=_optional_int(ctx, "position_index"),
+        idempotency_key=_optional_text(ctx, "idempotency_key"),
+    )
+    return _ToolOutcome(
+        response=result,
+        artifact_output_ref=result.get("revision_id"),
+        domain_events=[("trading_signal_created", {"root_id": result.get("root_id")})],
+    )
+
+
+async def _handle_trading_signal_create_revision(ctx: _Ctx) -> _ToolOutcome:
+    """`trading_signal.create_revision` — append an immutable revision N+1 on the
+    Agent's OWN root (doc 04 §8.2 rule 9, §10 ``CreateTradingSignalRevision``).
+
+    ``expected_head_revision_id`` is the OCC token — a revision id, not a row_version;
+    this surface is deliberately NOT a dual-token op, so nothing is reconciled here. A
+    stale token is ``WORK_OBJECT_REVISION_CONFLICT``, recorded, never last-write-wins.
+    The prior revision is never mutated and the Mainboard item is NEVER auto-repinned:
+    ``auto_repinned: False`` rides in the response and moving the pin stays the
+    explicit "Use This Revision" action.
+    """
+    from entropia.application.commands.trading_signal import create_trading_signal_revision
+
+    result = await create_trading_signal_revision(
+        ctx.session,
+        ctx.actor,
+        root_id=_require_text(ctx, "root_id"),
+        payload=_require_mapping(ctx, "payload"),
+        expected_head_revision_id=_optional_text(ctx, "expected_head_revision_id"),
+        idempotency_key=_optional_text(ctx, "idempotency_key"),
+    )
+    return _ToolOutcome(
+        response=result,
+        artifact_output_ref=result.get("revision_id"),
+        domain_events=[("trading_signal_revision_created", {"root_id": result.get("root_id")})],
+    )
+
+
+def pending_data_job_dispatch(response: dict[str, Any]) -> tuple[str, str] | None:
+    """The ``(job_kind, job_id)`` a tool response ADMITTED onto the ``data`` queue.
+
+    The worker calls this AFTER its commit and hands the pair to the matching actor —
+    the step the human page performs in its own route (``routes/trading_signal.py``
+    -> ``send_job(run_trading_signal_import, ...)``). Without it an agent-admitted
+    import would sit QUEUED indefinitely: the ``data`` queue is deliberately excluded
+    from the scheduler's automatic redelivery sweep (``ACTOR_BY_QUEUE``) because the
+    queue is multi-actor, so ONLY an explicit Admin redelivery would ever have moved
+    it. A tool call reporting ``succeeded`` while its durable work could never start
+    is exactly the silent-fallback shape this system forbids.
+
+    Returns ``None`` for a REPLAY: a redelivered tool call admitted no new work, and
+    the import job body has no terminal-state guard, so re-sending it would run the
+    parse a second time and write a second normalized revision.
+    """
+    if response.get("replayed"):
+        return None
+    if response.get("status") != str(ToolCallStatus.SUCCEEDED):
+        return None
+    job_kind = response.get("import_job_kind")
+    job_id = response.get("job_id")
+    if not isinstance(job_kind, str) or not isinstance(job_id, str):
+        return None
+    return job_kind, job_id
+
+
 # Tools whose typed non-governance failures are recorded as a durable FAILED call
 # instead of propagating (see ``dispatch_tool_call``). The S4 families keep their
 # landed propagate-to-caller contract, which their acceptance tests pin.
@@ -1040,6 +1351,17 @@ _DURABLE_FAILURE_TOOLS: frozenset[ToolName] = frozenset(
         ToolName.STRATEGY_PATCH_DRAFT,
         ToolName.STRATEGY_VALIDATE_DRAFT,
         ToolName.STRATEGY_SAVE_REVISION,
+        # The signal family joins the durable-FAILED contract rather than the S4
+        # propagate one: every one of its refusals (oversize file, unmapped events,
+        # import not ready, stale OCC) is DETERMINISTIC, so letting one escape into
+        # the worker's rollback would burn three dramatiq retries and leave the Agent
+        # no tool-call row to read the blocker from. Recording it is what makes doc 04
+        # §10's "Agent receives structured blockers/warnings" true.
+        ToolName.TRADING_SIGNAL_UPLOAD_SOURCE,
+        ToolName.TRADING_SIGNAL_REQUEST_IMPORT,
+        ToolName.TRADING_SIGNAL_GET_IMPORT_REPORT,
+        ToolName.TRADING_SIGNAL_CREATE,
+        ToolName.TRADING_SIGNAL_CREATE_REVISION,
     }
 )
 
@@ -1073,6 +1395,11 @@ _HANDLERS = {
     ToolName.STRATEGY_PATCH_DRAFT: _handle_strategy_patch_draft,
     ToolName.STRATEGY_VALIDATE_DRAFT: _handle_strategy_validate_draft,
     ToolName.STRATEGY_SAVE_REVISION: _handle_strategy_save_revision,
+    ToolName.TRADING_SIGNAL_UPLOAD_SOURCE: _handle_trading_signal_upload_source,
+    ToolName.TRADING_SIGNAL_REQUEST_IMPORT: _handle_trading_signal_request_import,
+    ToolName.TRADING_SIGNAL_GET_IMPORT_REPORT: _handle_trading_signal_get_import_report,
+    ToolName.TRADING_SIGNAL_CREATE: _handle_trading_signal_create,
+    ToolName.TRADING_SIGNAL_CREATE_REVISION: _handle_trading_signal_create_revision,
 }
 
 
@@ -1146,4 +1473,9 @@ async def run_tool_job(session: AsyncSession, job_id: str) -> dict[str, Any]:
     )
 
 
-__all__ = ["dispatch_tool_call", "enqueue_tool_call", "run_tool_job"]
+__all__ = [
+    "dispatch_tool_call",
+    "enqueue_tool_call",
+    "pending_data_job_dispatch",
+    "run_tool_job",
+]

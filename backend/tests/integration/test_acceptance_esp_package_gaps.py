@@ -275,13 +275,16 @@ async def test_esp_revision_export_carries_identity_hash_and_dependency_manifest
     artifact contains root/revision identity, content hash, signature, adapter ref,
     evidence and dependency manifest."
 
-    PROVEN HERE: root/revision identity, content hash, the resolver signature
-    (carried in the revision's ``input_contract``) and the dependency manifest.
-    NOT PROVEN — see the ESP-19 row in ``docs/audit/acceptance_id_map.md`` §E: the
-    export manifest is built from the package REVISION only, while the adapter ref
-    and the evidence live on ``embedded_resolver_contract``, so they are absent
-    from the artifact. That is an implementation gap, deliberately not papered over
-    with a weaker assertion here.
+    PROVEN IN FULL as of G-02 (export schema v2). This row was previously PARTIAL: the
+    adapter ref and the evidence live on ``embedded_resolver_contract`` /
+    ``embedded_resolver_validation_run`` while the manifest was built from the package
+    REVISION only, so the artifact carried identity + content hash + dependency manifest
+    and nothing about the runtime semantics it had been certified under. The gap is closed;
+    every clause of the sentence is asserted here.
+
+    This test keeps the row's END-TO-END shape (create -> validate -> activate -> export).
+    The contract's field-by-field fidelity, determinism, tamper detection and the
+    absent-evidence behaviour live in ``test_esp_export_contract_v2.py``.
     """
     await _seed_principals(session)
     esp = await _trusted_esp(session)
@@ -292,15 +295,31 @@ async def test_esp_revision_export_carries_identity_hash_and_dependency_manifest
     await session.commit()
 
     manifest = exported["manifest"]
+    # identity
     assert manifest["package_root_id"] == esp["entity_id"]
     assert manifest["revision_id"] == esp["revision_id"]
     assert manifest["package_kind"] == str(PackageKind.EMBEDDED_SYSTEM)
+    # content hash
     revision = await pkg_repo.get_revision(session, esp["revision_id"])
     assert revision is not None
     assert manifest["content_hash"] == revision.content_hash
-    assert manifest["input_contract"]["resolver_key"] == "ta.sma"
-    assert "dependency_snapshot" in manifest
     assert exported["manifest_hash"]
+    # signature — now a first-class contract field, not only the input_contract echo
+    assert manifest["input_contract"]["resolver_key"] == "ta.sma"
+    contract_snapshot = manifest["resolver_contract_snapshot"]
+    assert contract_snapshot["canonical_key"] == "ta.sma"
+    assert contract_snapshot["signature"] == _SMA_SIG
+    # adapter ref (+ the timing semantics that make it interpretable)
+    assert contract_snapshot["runtime_adapter"] == str(RuntimeAdapter.PINE_V5)
+    assert contract_snapshot["repaint"] is False
+    # evidence
+    evidence = manifest["validation_evidence_snapshot"]
+    assert evidence["evidence_state"] == "recorded"
+    assert evidence["status"] == str(PackageValidationState.PASSED)
+    assert evidence["validator_version"]
+    assert evidence["vectors_run"] == 1
+    # dependency manifest
+    assert "dependency_snapshot" in manifest
 
 
 # --------------------------------------------------------------------------- #

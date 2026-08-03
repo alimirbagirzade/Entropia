@@ -58,7 +58,7 @@ Import alias: `@/` → `frontend/src/`.
 | `esp.ts` | `["esp","list"\|"detail"]` | `["esp"]`, `["audit"]` |
 | `hooks.ts` | `["me"]`, `["meta"]`, `["metrics"]`, `["health","ready"]` | — |
 | `instrument.ts` | `["instruments","list"\|"detail"]` | `["instruments"]`, `["audit"]` |
-| `library.ts` | `["library","list",filters,cursor]`, `["library","detail",entityId]` — **S-L3:** detay projeksiyonu artık `permissions.can_request_validation` bayrağını da tipler (`:80-103`). **Dürüst sınır:** `POST /library/{id}/validation-runs`'u çağıran bir hook V1'de **YOK** (uç backend-only) | `["library"]`, `["trash"]`, `["audit"]` |
+| `library.ts` | `["library","list",filters,cursor]`, `["library","detail",entityId]` — **S-L3:** detay projeksiyonu artık `permissions.can_request_validation` bayrağını da tipler (`:80-103`). **Dürüst sınır:** `POST /library/{id}/validation-runs`'u çağıran bir hook V1'de **YOK** (uç backend-only). **G-02:** `ExportPackageResult` artık `export_schema_version` + `registry_observation` (`RegistryObservation`) taşır; `useExportPackage`'ın route'u, `Idempotency-Key` üretimi ve `["audit"]` invalidation'ı **değişmedi**. `manifest` bilerek açık `Record<string, unknown>` — artifact kendi şeklini `export_schema_version` ile bildirir, UI verbatim basar | `["library"]`, `["trash"]`, `["audit"]` |
 | `mainboard.ts` | (`backtest.ts`'ten re-export `["mainboard","default"]`) | `["mainboard"]`, `["readiness"]`, `["audit"]`, `["trash"]` |
 | `manual.ts` | `["manual","stream",cursor]`, `["manual","search",needle,cursor]` | `["manual"]`, `["trash"]`, `["audit"]` |
 | `marketData.ts` | `["market-data","registry"\|"detail"\|"approved-bundle"]` | `["market-data"]`, `["audit"]` |

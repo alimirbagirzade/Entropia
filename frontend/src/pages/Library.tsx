@@ -813,9 +813,33 @@ function PackageExportBlock({ pkg }: { pkg: LibraryPackageDetail }) {
       {exportPkg.data ? (
         <>
           <p className="page-sub" style={{ marginTop: 4 }}>
-            Manifest hash: <code>{exportPkg.data.manifest_hash}</code>
+            Manifest hash: <code>{exportPkg.data.manifest_hash}</code> · schema v
+            {exportPkg.data.export_schema_version}
           </p>
-          <pre style={contractStyle}>{JSON.stringify(exportPkg.data.manifest, null, 2)}</pre>
+          {/* Live registry state, rendered OUTSIDE the artifact block because it is not
+              part of the artifact: it is an observation made at export time, and it may
+              disagree with the manifest tomorrow without the manifest changing. Labelling
+              it as such is the whole point — a reader must not mistake it for a fact the
+              exported revision asserts about itself. */}
+          {exportPkg.data.registry_observation ? (
+            <p className="page-sub" style={{ marginTop: 4 }} aria-label="Registry observation">
+              Registry observation (live, not part of the artifact):{" "}
+              <code>{exportPkg.data.registry_observation.canonical_key}</code> is{" "}
+              {exportPkg.data.registry_observation.trust_state} at registry version{" "}
+              {exportPkg.data.registry_observation.registry_version} —{" "}
+              {exportPkg.data.registry_observation.is_trusted_active_revision
+                ? "this revision is the trusted-active one"
+                : "this revision is NOT the trusted-active one"}
+              .
+            </p>
+          ) : null}
+          {/* The artifact itself — `data.manifest`, never `data`. What is serialized here
+              is exactly the hash preimage, so the registry observation above must stay out
+              of it. Labelled so tests can scope to this block rather than the first <pre>
+              that happens to be on the page. */}
+          <pre style={contractStyle} aria-label="Export manifest artifact">
+            {JSON.stringify(exportPkg.data.manifest, null, 2)}
+          </pre>
         </>
       ) : null}
     </div>

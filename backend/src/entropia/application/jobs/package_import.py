@@ -17,6 +17,18 @@ result row, doc 08 §10):
 
 A hard infra read error (missing job row) is raised so Dramatiq retries; a bad manifest
 is a durable ``failed`` result, not a retry. The worker session scope commits.
+
+G-02 (export schema v2) touches this worker in exactly two ways, and neither loosens the
+resolution rule below:
+
+* An ``export_schema_version`` the build cannot read is a structural defect -> ``failed``.
+  The API boundary already rejects one synchronously; this is the defence-in-depth copy for
+  a job row that reached the queue some other way.
+* A v2 manifest's ``resolver_contract_snapshot`` is recorded in ``diagnostics`` as
+  ``origin_resolver_contract`` — an ECHO of the exporting system's claim, stamped
+  ``trusted: false``. It is never written to ``embedded_resolver_contract``, never seeds an
+  ``embedded_resolver_registry`` pointer and never short-circuits ``_reresolve``: a foreign
+  adapter earns no local trust by being named in a file (doc 08 §10, §14).
 """
 
 from __future__ import annotations
@@ -35,6 +47,10 @@ from entropia.domain.lifecycle.enums import (
     PackageKind,
 )
 from entropia.domain.package.enums import PackageValidationState
+from entropia.domain.package.export_contract import (
+    describe_origin_resolver_contract,
+    resolve_import_schema_version,
+)
 from entropia.infrastructure.postgres.models import Job
 from entropia.infrastructure.postgres.repositories import audit as audit_repo
 from entropia.infrastructure.postgres.repositories import esp as esp_repo
@@ -121,6 +137,8 @@ async def _reresolve(
 
 def _manifest_defect(manifest: dict[str, Any]) -> str | None:
     """A structural reason the manifest cannot become a package, or None if usable."""
+    if resolve_import_schema_version(manifest) is None:
+        return "unsupported_export_schema_version"
     for field in ("input_contract", "output_contract", "dependency_snapshot"):
         if not isinstance(manifest.get(field), dict):
             return f"missing_or_invalid_{field}"
@@ -202,7 +220,17 @@ async def run_import(session: AsyncSession, job_id: str) -> dict[str, Any]:
     await session.flush()
 
     status = PackageImportStatus.BLOCKED if blocked else PackageImportStatus.SUCCEEDED
-    diagnostics: dict[str, Any] = {"resolved_count": len(resolved_refs)}
+    diagnostics: dict[str, Any] = {
+        "resolved_count": len(resolved_refs),
+        "export_schema_version": resolve_import_schema_version(manifest),
+    }
+    # The origin's resolver-contract claim, reported so the import report can SHOW what the
+    # foreign system asserted — carrying its own refusal (``trusted: false``). The package
+    # created above was built purely from LOCAL re-resolution; this record changes nothing
+    # about it and grants no adapter trust.
+    origin_contract = describe_origin_resolver_contract(manifest)
+    if origin_contract is not None:
+        diagnostics["origin_resolver_contract"] = origin_contract
     if blocked:
         diagnostics["missing_dependencies"] = missing_calls
     return await _finish(

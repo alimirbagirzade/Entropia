@@ -507,11 +507,30 @@ export function useApprovePackage() {
 // manifest_hash. NO OCC token — any revision of the root is exportable.
 // ---------------------------------------------------------------------------
 
+// The LIVE ESP registry pointer as observed at export time. It is a SIBLING of the
+// manifest and deliberately NOT inside it: registry trust moves independently of the
+// exported revision, so keeping it out is what lets an old artifact's manifest_hash stay
+// stable while this block's answer changes. Never treat it as part of the artifact.
+export interface RegistryObservation {
+  canonical_key: string;
+  trust_state: string;
+  trusted_active_revision_id: string | null;
+  registry_version: number;
+  runtime_adapter: string;
+  is_trusted_active_revision: boolean;
+}
+
 export interface ExportPackageResult {
   entity_id: string;
   revision_id: string;
   manifest_hash: string;
+  // Export schema v2 (G-02): the manifest carries the ESP resolver contract snapshot and
+  // its validation evidence. `manifest` stays an open record on purpose — the artifact
+  // states its own shape via `export_schema_version`, so the UI renders it verbatim
+  // instead of pinning a field list that a future version would silently break.
+  export_schema_version: number;
   manifest: Record<string, unknown>;
+  registry_observation: RegistryObservation | null;
 }
 
 export function useExportPackage() {

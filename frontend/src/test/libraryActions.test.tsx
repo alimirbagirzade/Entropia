@@ -115,11 +115,38 @@ function routesFor(permissions: typeof OWNER_PERMISSIONS) {
       approval_state: "approved",
       visibility_scope: "published",
     },
+    // Export schema v2 (G-02): the ESP resolver contract + its validation evidence ride
+    // INSIDE the manifest, while the live registry pointer is a SIBLING of it. The stub
+    // keeps that separation because the UI must render the two differently.
     "POST /library/pkg_own/export": {
       entity_id: "pkg_own",
       revision_id: "rev_1",
       manifest_hash: "sha256:deadbeef",
-      manifest: { revision_id: "rev_1", package_kind: "indicator" },
+      export_schema_version: 2,
+      manifest: {
+        export_schema_version: 2,
+        exporter_version: "entropia-package-exporter-v2",
+        revision_id: "rev_1",
+        package_kind: "embedded_system",
+        resolver_contract_snapshot: {
+          canonical_key: "ta.sma",
+          runtime_adapter: "pine_v5",
+          repaint: false,
+        },
+        validation_evidence_snapshot: {
+          evidence_state: "recorded",
+          validator_version: "esp-validation-v1",
+          status: "passed",
+        },
+      },
+      registry_observation: {
+        canonical_key: "ta.sma",
+        trust_state: "deprecated",
+        trusted_active_revision_id: "rev_9",
+        registry_version: 3,
+        runtime_adapter: "pine_v5",
+        is_trusted_active_revision: false,
+      },
     },
     "DELETE /library/pkg_own": {},
   };
@@ -440,6 +467,39 @@ describe("Package Library export (R2c)", () => {
       expect(body.revision_id).toBe("rev_1");
     });
     expect(await screen.findByText("sha256:deadbeef")).toBeInTheDocument();
+  });
+
+  it("renders the v2 contract + evidence inside the artifact and the registry state outside it", async () => {
+    // G-02: the two blocks must stay visually distinct. The resolver contract and its
+    // evidence are part of the hashed artifact and appear in the manifest body; the
+    // registry pointer is a live observation and appears in its own labelled line. A UI
+    // that merged them would invite a reader to treat "deprecated" as something the
+    // exported revision itself asserts.
+    stubApi(routesFor(OWNER_PERMISSIONS));
+    renderPage();
+    await screen.findByText("Owned RSI");
+    fireEvent.click(screen.getAllByRole("button", { name: "Detail" })[0]);
+    fireEvent.click(await screen.findByRole("button", { name: "Export manifest" }));
+
+    expect(await screen.findByText(/schema v2/)).toBeInTheDocument();
+
+    const observation = await screen.findByLabelText("Registry observation");
+    expect(observation).toHaveTextContent("deprecated");
+    expect(observation).toHaveTextContent("registry version 3");
+    expect(observation).toHaveTextContent("NOT the trusted-active one");
+
+    // The artifact itself is rendered verbatim, so the ESP contract facts a v1 export
+    // could never carry are now visible to the exporting user. Scoped by label — the first
+    // <pre> on the page is not guaranteed to be this one.
+    const artifact = await screen.findByLabelText("Export manifest artifact");
+    expect(artifact.textContent).toContain("resolver_contract_snapshot");
+    expect(artifact.textContent).toContain("pine_v5");
+    expect(artifact.textContent).toContain("validation_evidence_snapshot");
+    expect(artifact.textContent).toContain("esp-validation-v1");
+    // The stub's RESPONSE carries registry_observation at the top level, so this asserts a
+    // real component decision: it serializes `data.manifest`, not `data`. Rendering the
+    // whole envelope would put live registry state inside what reads as the hashed artifact.
+    expect(artifact.textContent).not.toContain("registry_observation");
   });
 
   it("hides the export action when the server denies can_export", async () => {

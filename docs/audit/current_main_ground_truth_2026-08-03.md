@@ -286,9 +286,27 @@ Aşağıdakilerin hepsi **current main'de doğrulandı** (dokümandan değil, ko
 
 ### G-02 · ESP export manifest'i resolver sözleşme olgularını taşımıyor
 
+> **KAPANDI — 2026-08-03, `feat/esp-export-contract-v2`.** Kusur önce `origin/main` @ `6c46c03`
+> üzerinde bir probe testiyle empirik yeniden üretildi: `embedded_resolver_contract` ve
+> `embedded_resolver_validation_run` satırları veritabanında **MEVCUTKEN** manifest dört alanı
+> birden atlıyordu. Export **schema v2**'ye taşındı (`domain/package/export_contract.py`):
+> `export_schema_version` · `exporter_version` · `resolver_contract_snapshot` ·
+> `validation_evidence_snapshot`. Alanlar **export edilen revision'ın kendi satırlarından**
+> okunur (kökün head'inden asla), `created_at` hash'e girmez ve canlı registry pointer'ı
+> manifest'in dışında `registry_observation` olarak taşınır → arada bir şey değişmediyse
+> yeniden export **birebir** aynı `manifest_hash`'i verir. **Dürüst sınır (adversarial review
+> sonrası daraltıldı, iki probe testiyle ölçüldü):** digest revision ömrü boyunca DONMUŞ
+> değildir — revision'ın kendi `validation_state`/`approval_state`'i yerinde güncellenir ve
+> yeniden validate yeni bir run satırı ekler; ikisi de kasıtlı, test edilmiş davranıştır.
+> Kanıt yoksa `legacy_incomplete_evidence`; `passed` asla uydurulmaz.
+> Import v1 (alansız) ve v2 okur, başka her versiyon iki katmanda fail-closed reddedilir;
+> yabancı adapter yerel güven kazanmaz (sıfır yeni contract/registry satırı).
+> **`ENGINE_VERSION` DEĞİŞMEDİ**, **migration YOK** (alembic head `0043_i08_registry_strategy_fks`).
+> Tam sözleşme + v1/v2 uyumluluk matrisi + determinizm kanıtı: `docs/audit/esp_export_schema_v2.md`.
+
 | | |
 |---|---|
-| **Status** | CONFIRMED GAP |
+| **Status** | ~~CONFIRMED GAP~~ → **CLOSED (2026-08-03)** |
 | **Canonical source** | doc 08 §export, doc 09 §4 |
 | **Production path** | `backend/src/entropia/application/commands/package_lifecycle.py:743-827` (manifest dict `:785-799`) |
 | **PRESENT** | `validation_state` (`:795`), `approval_state` (`:796`), root/revision kimliği, content hash, dependency snapshot, manifest hash |
@@ -596,7 +614,7 @@ oturumunda **kapatılmayacaktır**.
 |---|---|---|---|
 | **1** | **ADIM 2 — `fix/esp-lifecycle-safe-resolution`** | `queries/esp.py::resolve_embedded_dependency` root `deletion_state` + `lifecycle_state` okusun; yeni resolution'da soft-deleted/deprecated root `RESOLVER_NOT_ACTIVE` versin; historical pinned revision okunabilirliği **korunsun**; regresyon testi + PC-19 acceptance tag'i | Tek doğru davranış boşluğu ki **kod yayımlanmış docstring'iyle çelişiyor** (§G-01) |
 | 2 | `feat/library-request-validation-ui` | Library sayfasına gerçek action + mutation hook + queued/running/passed/failed durumu + route düzeyi backend testi + frontend testi | Backend hazır; yalnız yüzey eksik, risk düşük (§G-04) |
-| 3 | `feat/esp-export-contract-evidence` | Export manifest'ine adapter/warm-up/timing/repaint/validation-run/validator-version/vectors/evidence + canonical key & signature'ı **alan olarak** ekle | Export'un yeniden üretilebilirliği (§G-02) |
+| ~~3~~ | ~~`feat/esp-export-contract-evidence`~~ → **LANDED as `feat/esp-export-contract-v2`** | Export manifest'ine adapter/warm-up/timing/repaint/validation-run/validator-version/vectors/evidence + canonical key & signature **alan olarak** eklendi; ayrıca `export_schema_version`/`exporter_version`, immutable contract'tan ayrılmış `registry_observation` ve v1/v2 import uyumluluğu (bilinmeyen versiyon fail-closed) | Export'un yeniden üretilebilirliği (§G-02) — **kapandı 2026-08-03**, bkz. `docs/audit/esp_export_schema_v2.md` |
 | 4 | `fix/i16a-panel-logs-display-title` + `diagnosticWarningLabel` eşlemesi | Panel Logs sentetik başlığı kaldır; `portfolio_curve_sequential_not_unified_clock` için insan-okur etiket | İki küçük sunum kalıntısı (§G-06, §G-07) |
 | 5 | `test/fresh-install-acceptance` | `alembic upgrade head` üzerinden `agent_runtime` singleton'ını **assert eden** test | Coverage boşluğu; production değişikliği YOK (§N-01, §E-02) |
 | 6 | `feat/agent-tool-gateway-strategy-trading-signal` | 10 literal Tool Gateway aracı + scope/handler/test | Domain komutları hazır; Gateway yüzeyi eksik (§G-03) |

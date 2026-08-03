@@ -71,6 +71,22 @@ def _override(app, session, actor: Actor = OWNER) -> Iterator[None]:
         app.dependency_overrides.pop(request_context, None)
 
 
+@pytest.fixture(autouse=True)
+def dispatched(monkeypatch) -> list[str]:
+    """Record the broker hand-off instead of performing it.
+
+    The route now dispatches the durable job for real, and the Backend CI job runs
+    without a broker — an unstubbed dispatch turns every test here into a Redis
+    ConnectionError. Stubbing it is the established convention for a dispatching route
+    (see ``tests/contract/test_market_data_contract.py``); the real hand-off is covered
+    end to end by ``e2e/specs/20-library-request-validation.spec.ts`` against the Compose
+    stack. Recording rather than discarding gives the dispatch test its assertion.
+    """
+    calls: list[str] = []
+    monkeypatch.setattr(library_routes, "dispatch_create_package_job", calls.append)
+    return calls
+
+
 def _client(app) -> AsyncClient:
     return AsyncClient(transport=ASGITransport(app=app), base_url="http://t")
 
@@ -383,7 +399,7 @@ def test_the_queued_envelope_is_published_in_the_openapi_schema(app) -> None:
     assert set(model["required"]) == set(model["properties"])
 
 
-async def test_the_route_hands_the_durable_job_to_the_broker(app, session, monkeypatch) -> None:
+async def test_the_route_hands_the_durable_job_to_the_broker(app, session, dispatched) -> None:
     """The admission writes the jobs row; DISPATCH is a separate step.
 
     Every Create-Package admission route calls ``dispatch_create_package_job`` after the
@@ -396,10 +412,6 @@ async def test_the_route_hands_the_durable_job_to_the_broker(app, session, monke
     This asserts the hand-off itself — the exact job id the caller was handed.
     """
     entity_id, revision_id = await _library_head(session)
-    dispatched: list[str] = []
-    monkeypatch.setattr(
-        library_routes, "dispatch_create_package_job", lambda job_id: dispatched.append(job_id)
-    )
 
     gen = _override(app, session)
     next(gen)

@@ -232,6 +232,14 @@ responsive spec **6/6**, vitest **514/514**, tsc + eslint temiz.
 - **axe-core otomatik taraması, manuel a11y denetiminin yerine geçmez.** Ekran okuyucu
   (NVDA/VoiceOver) ile uçtan uca denetim yapılmamıştır — `~/.claude/rules/accessibility.md`
   bunu iki ekran okuyucuyla ister; R2 kapsamında yapılmamıştır ve açık iştir.
+  > **Issue durumu düzeltmesi (2026-08-03).** A-08 takip issue'su **GitHub #514**
+  > 2026-07-30T19:05:32Z'de **kanıt commit edilmeden kapatılmıştı**. Repository'de ne
+  > NVDA+Firefox+Windows ne VoiceOver+Safari+macOS sonucu, ne atanmış denetçi, ne sürüm
+  > bilgisi, ne doldurulmuş 22-sayfa matrisi, ne de tek bir `SR-BULGU` kaydı var
+  > (`a11y_screen_reader_audit_checklist.md:28,38-39`). **#514 yeniden açıldı.** A-08 bu
+  > belgede ve başka hiçbir belgede `Complete`/`PASS` yazılamaz; kapatma yetkisi insandadır.
+  > Kanıt dökümü:
+  > [`docs/audit/current_main_ground_truth_2026-08-03.md`](../audit/current_main_ground_truth_2026-08-03.md) §17.
 - **Klavye denetimi temel akışla sınırlıdır** (login → Mainboard → Add menü). Her sayfanın
   tam klavye gezinimi tek tek denenmemiştir.
 - **A-06 görsel kıyas tamamlandı; piksel eşitliği iddiası değildir.**

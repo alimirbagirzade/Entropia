@@ -46,9 +46,15 @@ This repository is built **stage by stage** from a canonical specification (see
 >
 > **Test/schema figures are recomputable, not a frozen claim (F-09).** Recompute on
 > `main` with `make test` (runs the backend **and** frontend suites, no swallowed
-> exit codes); CI is the authoritative source. Alembic head: `0035_portfolio_rules`.
-> Last empirically verified on `main` at the R2 close (PR #364, 2026-07-22): ≈**1841
-> backend** tests, ≈**577 frontend** tests. This is not "everything is possible"
+> exit codes); CI is the authoritative source. Alembic head:
+> **`0043_i08_registry_strategy_fks`** (43 migrations, single head).
+> Last empirically re-measured on `origin/main` @ `0dcce69` (2026-08-03):
+> **2886 backend** tests and **673 frontend** tests *collected* — these are
+> `--collect-only` / `vitest list` counts, **not** pass counts; only CI reports green.
+> The full re-measurement, including the gaps this repo still carries, lives in
+> [`docs/audit/current_main_ground_truth_2026-08-03.md`](docs/audit/current_main_ground_truth_2026-08-03.md).
+> *(Historical, kept auditable: the R2 close (PR #364, 2026-07-22) cited ≈1841 backend /
+> ≈577 frontend tests and alembic `0035_portfolio_rules`.)* This is not "everything is possible"
 > software — the engine and architecture have deliberate, fail-closed boundaries and
 > out-of-scope non-goals, listed under [Known limitations](#known-limitations) and in
 > [`docs/POST_V1_KICKOFF.md`](docs/POST_V1_KICKOFF.md). The running handoff lives

@@ -4,17 +4,20 @@ Sıkıştırılmış, tablo ağırlıklı referans haritalar. Her biri tek ekran
 Kaynak: repo üzerinde **gözlemlenen** kod (route imzaları, model tanımları, aktör
 dekoratörleri, frontend import/query-key'leri). Emin olunamayan yerlerde `?` var.
 
-> **Son tazeleme: 2026-07-29** — `origin/main` @ `0995c37` (denetim sonrası dalga: O-serisi +
-> I15A/I15B slice'ları + audit-doc19). Aşağıdaki sayıların **hepsi** o gün repodan sayıldı:
+> **Son tazeleme: 2026-08-03** — `origin/main` @ `0dcce69` (ground-truth reset denetimi;
+> önceki tazeleme 2026-07-29 @ `0995c37`). Aşağıdaki sayıların **hepsi** o gün repodan sayıldı:
 >
 > | Olgu | Değer | Nasıl doğrulanır |
 > |---|---|---|
-> | Alembic head | **`0040_export_type_agent_pine`** (40 migration, tek head) | `ls backend/alembic/versions/*.py \| wc -l` |
+> | Alembic head | **`0043_i08_registry_strategy_fks`** (43 migration, tek head) | `cd backend && uv run alembic heads` |
 > | HTTP endpoint | **196** (openapi operation sayısıyla birebir) | `BACKEND_ROUTES.md` başındaki tek satırlık python |
-> | Postgres tablosu | **102** (30 model dosyası) | `grep -rh __tablename__ …/models/ \| sort -u \| wc -l` |
-> | `ForeignKey(...)` bildirimi | **135** (25 dosyada) | `grep -rh "ForeignKey(" …/models/ \| wc -l` |
+> | Postgres tablosu | **104** (30 model dosyası) | `grep -rh __tablename__ …/models/ \| sort -u \| wc -l` |
+> | `ForeignKey(...)` bildirimi | **140** (25 dosyada) | `grep -rh "ForeignKey(" …/models/ \| wc -l` |
 > | audit `event_kind` | **126 düz literal** (+ dolaylı yazımlar) | `JOBS_AND_EVENTS.md` §Audit kataloğu |
 > | Frontend | **31 sayfa**, **40 `lib/*.ts`** | `ls frontend/src/pages/*.tsx \| wc -l` |
+>
+> *(Tarihsel, denetlenebilir kalsın diye: 2026-07-29 tazelemesi head
+> `0040_export_type_agent_pine` / 40 migration, 102 tablo, 135 FK sayıyordu.)*
 
 ---
 

@@ -1,5 +1,14 @@
 # Entropia — Post-V1 Spec-Gap Backlog, ROUND 3
 
+> ## ✅ ROUND-3 KAPANDI (ölçüm 2026-08-03, `origin/main` @ `0dcce69`)
+>
+> **Bu belge artık bir "kalan iş listesi" DEĞİLDİR — tarihsel kayıttır.** 2026-07-29
+> tazelemesinin açık bıraktığı son üç kalem (S5b, S5c, S5d) current main'de **landed**'dir;
+> gerekçe aşağıdaki §"S5 b/c/d ÜÇÜ DE KAPANDI" notunda. Round-3 sonrası **gerçekten açık**
+> olan işler artık burada değil,
+> [`docs/audit/current_main_ground_truth_2026-08-03.md`](audit/current_main_ground_truth_2026-08-03.md)
+> §9–§11'de listelenir. Aşağıdaki gövde **değiştirilmedi**, denetlenebilir kalsın diye duruyor.
+
 > ## ⚠️ DURUM TAZELEME (2026-07-29) — GERİYE YALNIZCA **S5 b/c/d** KALDI
 >
 > Bu belgenin gövdesi **2026-07-14** tarihli denetimi (`main` @ `226ca92`, alembic
@@ -37,9 +46,40 @@
 > grep -rn "min_true_count" backend/src | wc -l                                # → 10  (S5a landed)
 > ```
 >
-> ### 🔴 GERÇEKTEN AÇIK — kalan iş bu (S5'in üç alt-slice'ı)
+> ### ~~🔴 GERÇEKTEN AÇIK~~ → ✅ **S5 b/c/d ÜÇÜ DE KAPANDI** (ölçüm 2026-08-03)
 >
-> | Madde | 2026-07-29 ölçümü |
+> > **DUR — aşağıdaki tablo artık geçerli DEĞİLDİR.** `origin/main` @ `0dcce69` üzerinde
+> > 2026-08-03'te yeniden ölçüldü: **S5b, S5c ve S5d landed'dir.** Tablo silinmedi, çünkü
+> > *neden* yanlış göründüğü öğreticidir — ve bu belgeyi "kalan iş listesi" diye okuyan bir
+> > oturumun var olmayan bir işe girişmesini engellemek gerekiyor.
+> >
+> > **Tablonun hatası: token adı ≠ davranış.** Belgenin kendi komutu, 2026-08-03 çıktısı:
+> >
+> > ```
+> > stop_mode                0     any_active_rule    0     all_active_rules   0
+> > multiple_stops           0     same_candle_entry_exit  4
+> > timeframe_mode          18     custom_sequence        21
+> > ```
+> >
+> > Sıfır hit'ler **davranışın yokluğu değil, ad değişikliğidir.** Sevk edilmiş adlar:
+> >
+> > | doc 02 §5.6 / §5.9 adı | Sevk edilmiş alan | Yer |
+> > |---|---|---|
+> > | Stop Mode / Stop Trigger Requirement | `stop_trigger_requirement: Literal["any_active","all_active"]` | `domain/strategy/config.py:632` · engine `execution/fills.py:567-568` |
+> > | Multiple Stops (`multipleStopsConflict`) | `stop_conflict_resolution` (`most_conservative` · `first_trigger_wins` · `priority_order` · `record_all`) | `config.py:641-658` · engine `fills.py:572,599,604` |
+> > | Same Candle Entry / Exit | `same_candle_entry_exit` | `config.py:1047` · engine `engine.py:1834,1841` (PR #513) |
+> > | Stop + Exit | `stop_exit_conflict` | `config.py:1030` |
+> >
+> > **S5c** landed (`timeframe_mode` 18 / `custom_sequence` 21 — PR #498, #509).
+> > **S5d** landed (`logic_blocks` 39 hit: `config.py:621`, compiler `compiler.py:286-294`,
+> > readiness `validators.py:677`, `queries/indicator_plan.py:136`, test
+> > `tests/integration/test_logic_based_stop.py`).
+> > `ENGINE_VERSION` bugün **`backtest-engine-v18-same-candle-entry-exit`**.
+> >
+> > Tam ölçüm ve gerekçe:
+> > [`docs/audit/current_main_ground_truth_2026-08-03.md`](audit/current_main_ground_truth_2026-08-03.md) §N-02.
+>
+> | Madde | ~~2026-07-29 ölçümü~~ (geçersiz — yukarıdaki nota bak) |
 > |---|---|
 > | **S5b** conflict matrix eksik alanları (doc 02 §5.9) | `stop_mode` · `any_active_rule` · `all_active_rules` · `multiple_stops` · `same_candle_entry_exit` → **hepsi 0 hit** |
 > | **S5c** scaling timeframe modu (doc 02 §5.7) | `timeframe_mode` · `custom_sequence` → **0 hit** |

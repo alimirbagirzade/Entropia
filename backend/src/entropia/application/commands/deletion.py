@@ -62,6 +62,9 @@ MANUAL_ENTITY_TYPE = "manual_document"
 # Analysis Lab output (K-06, doc 20 §10): like a Result it is NOT a registry
 # root — the lifecycle lives on the artifact row's own deletion_state.
 ARTIFACT_ENTITY_TYPE = "hypothesis_artifact"
+# Registry ``entity_type`` for package roots (mirrors ``repositories/packages.py::
+# ENTITY_TYPE``) — the deprecate-first delete preflight keys off it.
+PACKAGE_ENTITY_TYPE = "package"
 _RESULT_ACTIVE = "active"
 _RESULT_SOFT_DELETED = "soft_deleted"
 _RESULT_PURGE_PENDING = "purge_pending"
@@ -82,7 +85,13 @@ async def _require_root(session: AsyncSession, entity_id: str) -> EntityRegistry
 async def _soft_delete_preflight(session: AsyncSession, root: EntityRegistry) -> None:
     """Blockers that must veto the delete BEFORE any Trash Entry exists.
 
-    Lazy imports keep this module free of backtest/rationale imports at module
+    One branch per registry ``entity_type``: a work object in an active run, a
+    rationale family with live assignments, and a package root that still backs a
+    trusted-active ESP resolver (deprecate-first, doc 09 §9.5). Each raises before
+    a single row is written, so a blocked delete leaves no Trash Entry, no audit
+    and no outbox event behind.
+
+    Lazy imports keep this module free of backtest/rationale/esp imports at module
     load (mirrors ``mainboard._assert_not_in_active_run``).
     """
     if root.entity_type == "work_object":
@@ -99,6 +108,23 @@ async def _soft_delete_preflight(session: AsyncSession, root: EntityRegistry) ->
 
         if await rationale_repo.count_active_family_assignments(session, root.entity_id) > 0:
             raise RationaleFamilyInUseError()
+    elif root.entity_type == PACKAGE_ENTITY_TYPE:
+        from entropia.infrastructure.postgres.repositories import esp as esp_repo
+        from entropia.shared.errors import DeletePolicyBlocked
+
+        # Deprecate-first (doc 09 §9.5 step 2, ESP-17): a root that still backs a
+        # TRUSTED_ACTIVE canonical resolver is not deletable. Deleting it would
+        # strand a live registry pointer on a Trashed package, and every new
+        # Pre-Check would keep resolving it. Non-ESP packages and candidate /
+        # deprecated resolvers are untouched — the reader returns None and the
+        # delete proceeds exactly as before.
+        entry = await esp_repo.get_trusted_active_by_entity(session, root.entity_id)
+        if entry is not None:
+            raise DeletePolicyBlocked(
+                scope_type=PACKAGE_ENTITY_TYPE,
+                scope_id=root.entity_id,
+                field_path=entry.canonical_key,
+            )
 
 
 # --------------------------------------------------------------------------- #
@@ -223,6 +249,13 @@ async def soft_delete_registry_root(
     own domain event family (``market.dataset.*`` / ``research.dataset.*``) so the
     delete lands in the Logs family filter alongside that resource's other events
     (doc 11 §10, doc 12 §11). Authorization is the caller's responsibility.
+
+    It DOES run the same ``_soft_delete_preflight`` as ``soft_delete_entity``. The
+    two are the only soft-delete entry points, and a blocker that guards one of
+    them guards nothing: ``soft_delete_package`` (doc 08 §7 "Move to Trash") is the
+    production package route and it comes through HERE, so the deprecate-first
+    rule has to live at a point both paths cross. The preflight branches on
+    ``entity_type``, so a market/research dataset root simply matches no branch.
     """
     await session.refresh(root, with_for_update=True)
     check_row_version(root.row_version, expected_row_version)
@@ -234,6 +267,10 @@ async def soft_delete_registry_root(
         raise PurgeInProgressError()
     if previous == DeletionState.PURGED:
         raise ObjectAlreadyPurgedError()
+
+    # After the idempotent short-circuits, before any mutation: a blocked delete
+    # must leave the root and the Trash exactly as it found them.
+    await _soft_delete_preflight(session, root)
 
     from entropia.domain.deletion import next_deletion_state
 

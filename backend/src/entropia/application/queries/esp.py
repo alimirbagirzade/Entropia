@@ -3,9 +3,12 @@
 Role-aware: soft-deleted and unauthorized resolvers are excluded server-side, not
 by the client (doc 09 §2, §15 "Role-aware list"). Cursor pagination uses the
 "fetch limit+1" pattern. ``resolve_embedded_dependency`` implements the DC3 /
-doc 09 §4.3 algorithm: a resolver is resolved only on exact key + signature +
-adapter + trusted_active + validation passed + approval approved; each failing
-precondition maps to the exact typed error so Pre-Check can branch precisely.
+doc 09 §4.3 algorithm: a resolver is resolved only on an ACTIVE embedded_system
+Package Root + exact key + signature + adapter + trusted_active + validation
+passed + approval approved; each failing precondition maps to the exact typed
+error so Pre-Check can branch precisely. The root-lifecycle half is what keeps a
+soft-deleted / purge-pending / deprecated resolver out of NEW work while its
+already-pinned revisions stay readable (doc 09 §9.5, §11.2).
 
 All return values are JSON-safe dicts (``str(enum)``, ``.isoformat()``). ESP
 performance fields are N/A, never fabricated zeroes (L4 / doc 09 §14).
@@ -20,7 +23,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from entropia.domain.esp import policy as esp_policy
 from entropia.domain.esp.enums import ResolverTrustState, RuntimeAdapter
-from entropia.domain.esp.resolver import ResolutionReason, evaluate_resolution
+from entropia.domain.esp.resolver import (
+    ResolutionReason,
+    ResolverRootFacts,
+    evaluate_resolution,
+)
 from entropia.domain.identity import Actor
 from entropia.domain.lifecycle.enums import DeletionState, PackageKind, VisibilityScope
 from entropia.infrastructure.postgres.models import (
@@ -208,7 +215,31 @@ _REASON_ERRORS = {
     ResolutionReason.SIGNATURE_MISMATCH: ResolverSignatureMismatch,
     ResolutionReason.ADAPTER_INCOMPATIBLE: ResolverAdapterIncompatible,
     ResolutionReason.RESOLVER_NOT_ACTIVE: ResolverNotActive,
+    # The root's own lifecycle closed the resolver for new work. doc 07 §12 files
+    # soft-deleted, deprecated-for-new-use AND removed-from-registry under the SAME
+    # code, so a dead root and a deprecated registry entry answer alike.
+    ResolutionReason.ROOT_NOT_ACTIVE: ResolverNotActive,
 }
+
+
+async def _root_facts(session: AsyncSession, entity_id: str) -> ResolverRootFacts | None:
+    """Load the registry pointer's Package Root lifecycle facets, or None if absent.
+
+    Two point-wise primary-key reads: the registry Root carries the deletion and
+    lifecycle facets, the ``package_root`` detail carries the immutable kind.
+    Either one missing means the pointer is dangling -> ``ROOT_MISSING``.
+    """
+    root = await pkg_repo.get_package_root(session, entity_id)
+    if root is None:
+        return None
+    detail = await pkg_repo.get_package_detail(session, entity_id)
+    if detail is None:
+        return None
+    return ResolverRootFacts(
+        deletion_state=root.deletion_state,
+        lifecycle_state=root.lifecycle_state,
+        package_kind=detail.package_kind,
+    )
 
 
 async def resolve_embedded_dependency(
@@ -225,8 +256,16 @@ async def resolve_embedded_dependency(
     the precise typed error so Pre-Check branches correctly:
       * signature mismatch -> RESOLVER_SIGNATURE_MISMATCH (422),
       * adapter incompatible -> RESOLVER_ADAPTER_INCOMPATIBLE (409),
-      * deprecated / soft-deleted registry entry -> RESOLVER_NOT_ACTIVE (409, doc 07 §12),
-      * key not found / candidate / not passed / not approved -> RESOLVER_NOT_RESOLVED (404).
+      * deprecated registry entry, or a root that is soft-deleted / purge-pending /
+        purged / lifecycle-deprecated -> RESOLVER_NOT_ACTIVE (409, doc 07 §12),
+      * key not found / dangling or wrong-kind root / candidate / not passed /
+        not approved -> RESOLVER_NOT_RESOLVED (404).
+
+    This is the NEW-work resolution path ONLY. A historical manifest never calls
+    it: a pinned dependency snapshot already names its exact ``embedded_revision_id``
+    and is read straight from ``package_revision``, so closing a resolver for new
+    work leaves every existing Strategy / Package / Run / Result manifest readable
+    (doc 07 §13.3 "Historical pins", doc 09 §11.2 "Historical provenance").
     """
     canonical_key = str(parsed_call.get("key", "")).strip()
     parsed_signature = parsed_call.get("signature") or {}
@@ -247,6 +286,7 @@ async def resolve_embedded_dependency(
         contract_signature=contract.signature,
         contract_adapter=contract.runtime_adapter,
         target_runtime=target_runtime,
+        root_facts=await _root_facts(session, entry.package_entity_id),
         trust_state=entry.trust_state,
         validation_state=revision.validation_state,
         approval_state=revision.approval_state,

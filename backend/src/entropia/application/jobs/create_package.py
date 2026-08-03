@@ -246,6 +246,13 @@ async def registry_fingerprint(
     """Fingerprint the consulted registry pointers so an Admin activate/deprecate of any
     declared resolver after a scan makes that scan stale (doc 07 §8.1, IR-4).
 
+    The resolver ROOT's lifecycle is hashed alongside the registry pointer, because
+    the two are separate facets (doc 09 §11.2) and only the pointer used to be
+    observed here: soft-deleting a resolver root left the fingerprint identical, so
+    a scan that had already resolved it stayed "fresh" and carried its pins through
+    the Send gate. Deriving that staleness server-side is also what keeps the
+    decision off the browser (doc 07 §8.1) — the client never sees these columns.
+
     Public because the candidate-generation gate (``_enforce_precheck_gate`` in
     ``commands.create_package``) re-computes it to detect drift — the two MUST agree, so
     they share this one implementation.
@@ -254,12 +261,15 @@ async def registry_fingerprint(
     for dep in declared_dependencies:
         key = str(dep.get("key", ""))
         entry = await esp_repo.get_registry_by_key(session, key)
+        root = await pkg_repo.get_package_root(session, entry.package_entity_id) if entry else None
         parts.append(
             {
                 "key": key,
                 "active_revision_id": entry.trusted_active_revision_id if entry else None,
                 "registry_version": entry.registry_version if entry else None,
                 "trust_state": str(entry.trust_state) if entry else None,
+                "root_deletion_state": str(root.deletion_state) if root else None,
+                "root_lifecycle_state": root.lifecycle_state if root else None,
             }
         )
     parts.sort(key=lambda p: p["key"])

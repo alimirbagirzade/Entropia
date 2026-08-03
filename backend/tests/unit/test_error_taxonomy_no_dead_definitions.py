@@ -6,7 +6,8 @@ promises a response shape that no request can ever receive. This module pins the
 exact set of such classes so the number can only go down without a deliberate edit.
 
 The O-03 sweep removed two dead definitions (``PrecheckAlreadyRunning`` and
-``DeletePolicyBlocked``) and pinned five more as recorded debt. That debt is now
+``DeletePolicyBlocked`` — the latter has since returned WITH a raiser, see
+``REMOVED_BY_O03``) and pinned five more as recorded debt. That debt is now
 ZERO: ``ValidationAlreadyRunning`` earned a raise path in S-L3, and O-03R adjudicated
 the remaining four (see ``REMOVED_BY_O03R``). ``KNOWN_UNRAISED`` is therefore empty
 and the ratchet is absolute — ANY never-raised error class fails this module now.
@@ -34,8 +35,18 @@ _SRC_ROOT = _ERRORS_FILE.parents[2]
 KNOWN_UNRAISED: frozenset[str] = frozenset()
 
 # Removed by O-03 — these names must not come back without a code path that raises them.
-REMOVED_BY_O03 = ("PrecheckAlreadyRunning", "DeletePolicyBlocked")
-REMOVED_CODES_BY_O03 = ("PRECHECK_ALREADY_RUNNING", "DELETE_POLICY_BLOCKED")
+#
+# ``DeletePolicyBlocked`` / ``DELETE_POLICY_BLOCKED`` LEFT this set: the ESP
+# lifecycle slice gave it the raise path O-03 found missing —
+# ``commands/deletion.py::_soft_delete_preflight`` raises it when a package root
+# still backs a TRUSTED_ACTIVE resolver (doc 09 §9.5 step 2 names the code
+# literally, §7.1 carries its message text, and §15 row 17 "Delete policy" is the
+# acceptance test). That is precisely the condition this list states — the names
+# must not come back WITHOUT a raiser — so the return is the sanctioned move, not
+# a loosening: ``test_no_new_never_raised_error_classes`` above fails the moment
+# that raiser is deleted. ``PrecheckAlreadyRunning`` earned no such path and stays.
+REMOVED_BY_O03 = ("PrecheckAlreadyRunning",)
+REMOVED_CODES_BY_O03 = ("PRECHECK_ALREADY_RUNNING",)
 
 # Removed by O-03R. Each was spec-visible but structurally unreachable; re-adding one
 # without a raiser must be a deliberate act, so each carries its adjudication here:

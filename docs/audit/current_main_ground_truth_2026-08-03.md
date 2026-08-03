@@ -258,16 +258,31 @@ Aşağıdakilerin hepsi **current main'de doğrulandı** (dokümandan değil, ko
 
 | | |
 |---|---|
-| **Status** | CONFIRMED GAP |
-| **Canonical source** | doc 07 §12, doc 09 §4.3 |
+| **Status** | ~~CONFIRMED GAP~~ → **KAPANDI 2026-08-03**, `fix/esp-lifecycle-resolution` (ADIM 2). Aşağıdaki tespit kapanış-öncesi kayıt olarak **olduğu gibi** bırakıldı. |
+| **Canonical source** | doc 07 §12, doc 09 §4.3, doc 09 §9.5 |
 | **Production path** | `backend/src/entropia/application/queries/esp.py:214-268` |
 | **Kanıt** | Fonksiyon yalnız `entry.trust_state` üzerinden karar veriyor (`:250`); `EntityRegistry`/`PackageRoot` **hiç yüklenmiyor**, `deletion_state` ve `lifecycle_state` **hiç okunmuyor**. `commands/deletion.py` soft-delete yolunda `esp_repo.set_trust_state` **çağırmıyor** (`set_trust_state` yalnız `commands/esp.py:281,431`'den çağrılır). Fonksiyonun kendi docstring'i (`:228`) tersini iddia ediyor: *"deprecated / soft-deleted registry entry -> RESOLVER_NOT_ACTIVE"*. |
 | **Test/evidence** | Bu vakayı **hiçbir test kapsamıyor.** En yakın isimli test `tests/unit/test_esp_resolver.py:88` saf predicate'e `trust_state=UNAVAILABLE` geçiriyor — `deletion_state`'i test etmiyor, ve soft-delete `UNAVAILABLE` yazmıyor. Repo içi kayıt: `docs/audit/acceptance_id_map.md:241-262` (2026-07-29'da ampirik olarak üretilmiş). |
 | **Risk** | Silinmiş bir paket yeni Pre-Check/paket üretiminde bağlanabilir; kod, yayımlanmış sözleşmesiyle çelişiyor. |
-| **Next slice** | **ADIM 2 — `fix/esp-lifecycle-safe-resolution`** |
+| **Next slice** | ~~**ADIM 2**~~ — **landed** olarak `fix/esp-lifecycle-resolution` |
 
 > **Kusur DEĞİL:** historical pinned revision'ın okunabilir kalması. Bu doğru davranıştır ve
-> `tests/integration/test_acceptance_esp_package_gaps.py:250-257` ile sabitlenmiştir.
+> `tests/integration/test_acceptance_esp_package_gaps.py` (PC-19 clause 1) ile sabitlenmiştir.
+> ADIM 2 bunu bozmadı: kapı yalnız YENİ-iş yolunu (`resolve_embedded_dependency`) daraltır,
+> pinlenmiş manifest ise `package_revision`'dan doğrudan okunur.
+
+> **Kapanış özeti (2026-08-03).** Kusur önce `origin/main` @ `ef47847` üzerinde yeniden
+> üretildi (activate `ta.sma` → root soft-delete → resolve → `resolved=True`, aynı revision).
+> Üç eksende kapatıldı: (1) `domain/esp/resolver.py::evaluate_resolution` artık
+> `ResolverRootFacts` alıyor — active root + `embedded_system` kind zorunlu; (2)
+> `commands/deletion.py` deprecate-first `DELETE_POLICY_BLOCKED` blocker'ı (doc 09 §9.5 adım 2)
+> ve bu preflight artık `soft_delete_registry_root`'tan da çağrılıyor — **`soft_delete_package`
+> preflight'ı tamamen atlıyordu**, tek yerde blocker yetmezdi; (3)
+> `registry_fingerprint` root lifecycle'ı da hash'liyor → registry/lifecycle değişimi eski
+> Pre-Check taramasını sunucu tarafında `PRECHECK_STALE` yapıyor.
+> **Sürüm notu:** `ENGINE_VERSION` DEĞİŞMEDİ — backtest motoru ve sayısal semantik bu slice'ta
+> hiç dokunulmadı; değişen yüzey Pre-Check/paket üretimi ve silme lifecycle'ıdır.
+> **Migration YOK** (şema değişmedi, alembic head `0043_i08_registry_strategy_fks`).
 
 ### G-02 · ESP export manifest'i resolver sözleşme olgularını taşımıyor
 

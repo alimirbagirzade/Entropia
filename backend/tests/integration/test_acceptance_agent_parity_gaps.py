@@ -13,14 +13,22 @@ rows ``docs/audit/acceptance_id_map.md`` §E listed as GENUINE coverage gaps:
   imports/saves/attaches an external work object UI-lessly, its output is owned and
   provenance-recorded, and it is NOT auto-attached to a human board.
 
-HONEST BOUNDARY for AT-21 / TS-20 (verified 2026-07-29): neither page's line has a
-Tool Gateway tool. ``domain/agent_lab/tool_gateway.py::ToolName`` ships allocation
-and trade_log tools (post-V1 S4) but NO ``strategy.*`` and no ``trading_signal.*``
-member, so the literal "via Tool Gateway" clause of AT-21/TS-20 cannot be tested —
-there is nothing to call. What IS proven here is the substance both rows are about
-and what AOS-20 states outright ("Tool Gateway/domain commands"): the Agent reaches
-the same server truth on the same command line, under the same policy, with no UI.
-The missing tools are an implementation gap, tracked in §E.2 of the map.
+BOUNDARY UPDATE — AT-21 is CLOSED (2026-08-03, post-V1 S5). ``ToolName`` now ships
+``strategy.get_draft`` / ``create_draft`` / ``patch_draft`` / ``validate_draft`` /
+``save_revision``, so AT-21's literal "via Tool Gateway" clause is finally testable
+and is proven end-to-end in ``test_gateway_parity_strategy.py`` (create -> get ->
+patch -> validate -> save, plus scope/ownership/OCC/idempotency/audit parity and
+Mainboard containment). The two AT-21 tests BELOW keep proving the domain-command
+axis — same schema, same config_hash, same Idempotency-Key contract — which stays
+valid and is the substance the Gateway tools delegate to.
+
+HONEST BOUNDARY that REMAINS for TS-20 / AOS-20 (re-verified 2026-08-03): there is
+still NO ``trading_signal.*`` ToolName member, so that row's literal "via Tool
+Gateway" clause cannot be tested — there is nothing to call. What IS proven here is
+the substance those rows are about and what AOS-20 states outright ("Tool Gateway/
+domain commands"): the Agent reaches the same server truth on the same command
+line, under the same policy, with no UI. The missing ``trading_signal.*`` tools
+remain an implementation gap, tracked in §E.2 of the map.
 """
 
 from __future__ import annotations

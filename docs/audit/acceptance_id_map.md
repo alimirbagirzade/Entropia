@@ -508,3 +508,34 @@ automatically reinstate a resolver trust pointer **without policy re-evaluation*
 re-evaluation must stay possible). The invariant "a Trashed resolver root is never
 `trusted_active`" is instead guaranteed by the deprecate-first blocker, and resolution
 reads the root lifecycle directly rather than trusting the pointer to have been demoted.
+
+### H.3 — §E.2 / H.1 Tool Gateway gap: **AT-21 half CLOSED 2026-08-03**, TS-20/AOS-20 still open
+
+`feat/agent-strategy-tool-gateway` (post-V1 S5) added the five `strategy.*` members H.1
+listed as ABSENT, so `ToolName` now carries **28**. The literal "via Tool Gateway" clause
+of doc 02 **AT-21** is therefore callable and is proven end-to-end in
+`backend/tests/integration/test_gateway_parity_strategy.py` (**23 tests**): the scope
+table itself, create → get → patch → validate → save through the Gateway, config_hash
+parity with the human line, ownership denial with the human line's own code, stale-OCC and
+compiler-blocker durable failures, malformed-request rejection, gateway- and domain-key
+idempotency, Mainboard containment, the durable `enqueue → run_tool_job` path with
+audit/outbox/agent events + redelivery replay, and Analysis Lab history visibility.
+
+**Still open, re-verified on the same commit:** the five `trading_signal.*` literals are
+**unchanged ABSENT**, so doc 04 **TS-20** and doc 03 **AOS-20** keep the §E.2/H.1 status —
+their substance is proven on the domain-command axis only. The `trade_log.*` trap in H.1
+still applies, and now so does a `strategy.*` one: a `strategy.*` tool is **not** evidence
+for the Signal family.
+
+**Adjudicated while closing (full record: `docs/audit/agent_strategy_tool_gateway.md`):**
+doc 18 §10's prose spelling `strategy.draft.create` is *not* the registry — the same table
+also names `artifact.query`, `context_manifest.read`, `market_data.query` and
+`research_data.query`, none of which are `ToolName` members either. The shipped
+`<family>.<verb_object>` convention wins, and the rejected prose spelling is pinned by test.
+
+**Deliberately NOT done:** no approve/publish/Admin/Trash tool (doc 18 §14, AL-12/AL-16
+unchanged); `derive_strategy_draft_from_package`, `clear_strategy_draft` and
+`set_strategy_rationale_family` stay unexposed; `jobs/agent_executor.py`'s stage machine
+was not given a strategy step — *when* the Agent authors a strategy is a product decision
+the corpus does not state, so it was not invented. The tools are offered at plan time
+(`exposed_tool_names` → Coordinator menu) and nothing calls them autonomously yet.

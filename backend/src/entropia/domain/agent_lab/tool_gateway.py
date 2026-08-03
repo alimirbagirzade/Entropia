@@ -57,6 +57,27 @@ class ToolName(StrEnum):
     TRADE_LOG_REQUEST_IMPORT = "trade_log.request_import"
     TRADE_LOG_CREATE = "trade_log.create"
     TRADE_LOG_CREATE_REVISION = "trade_log.create_revision"
+    # Post-V1 S5 — Strategy draft/save parity (doc 02 §12 AT-21, §11 rule 20): the
+    # SAME create/patch/validate/save command line a human uses, with no browser
+    # and no human session. The Agent mutates only its OWN draft/root (ownership
+    # enforced INSIDE each command); a human's private draft is a recorded denial,
+    # never last-write-wins. Save appends an immutable revision — it is never a
+    # Ready PASS and never a Run (doc 02 §7.1), and it never attaches anything to
+    # a human Mainboard (these tools carry no workspace/attach parameter at all).
+    #
+    # NAMING (adjudicated). Doc 18 §10's parity table writes ``strategy.draft.create``
+    # in prose; the same table also names ``artifact.query``, ``context_manifest.read``,
+    # ``market_data.query`` and ``research_data.query``, none of which are ToolName
+    # members either — that table illustrates intent, it is not the registry. The
+    # shipped registry convention is ``<family>.<verb_object>``
+    # (``trade_log.create_revision``, ``portfolio_allocation.upsert_draft``), so the
+    # strategy family follows it. These five literals are also the ones the
+    # ground-truth audit (G-03) pinned as ABSENT.
+    STRATEGY_GET_DRAFT = "strategy.get_draft"
+    STRATEGY_CREATE_DRAFT = "strategy.create_draft"
+    STRATEGY_PATCH_DRAFT = "strategy.patch_draft"
+    STRATEGY_VALIDATE_DRAFT = "strategy.validate_draft"
+    STRATEGY_SAVE_REVISION = "strategy.save_revision"
 
 
 class ToolCallStatus(StrEnum):
@@ -110,6 +131,16 @@ TOOL_ALLOWED_SCOPES: dict[ToolName, frozenset[PolicyScope]] = {
     ToolName.TRADE_LOG_REQUEST_IMPORT: frozenset({PolicyScope.RESEARCH}),
     ToolName.TRADE_LOG_CREATE: frozenset({PolicyScope.RESEARCH, PolicyScope.PROPOSAL}),
     ToolName.TRADE_LOG_CREATE_REVISION: frozenset({PolicyScope.RESEARCH, PolicyScope.PROPOSAL}),
+    # S5 strategy (doc 02 §12 AT-21): reading a draft is OBSERVATION/RESEARCH;
+    # shaping one (create/patch/validate) is RESEARCH/PROPOSAL hypothesis work;
+    # Save publishes the immutable revision the Agent proposes, so it is
+    # PROPOSAL-only — never EXECUTION (a run is the separate ``backtest.request``
+    # tool, and Save is never a Ready PASS, doc 02 §7.1).
+    ToolName.STRATEGY_GET_DRAFT: frozenset({PolicyScope.OBSERVATION, PolicyScope.RESEARCH}),
+    ToolName.STRATEGY_CREATE_DRAFT: frozenset({PolicyScope.RESEARCH, PolicyScope.PROPOSAL}),
+    ToolName.STRATEGY_PATCH_DRAFT: frozenset({PolicyScope.RESEARCH, PolicyScope.PROPOSAL}),
+    ToolName.STRATEGY_VALIDATE_DRAFT: frozenset({PolicyScope.RESEARCH, PolicyScope.PROPOSAL}),
+    ToolName.STRATEGY_SAVE_REVISION: frozenset({PolicyScope.PROPOSAL}),
 }
 
 # CR-08 (doc 22 §11): which capability keys gate a tool's contract. A gated

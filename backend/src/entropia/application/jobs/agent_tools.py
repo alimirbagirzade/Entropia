@@ -58,6 +58,8 @@ from entropia.infrastructure.postgres.repositories import research_data as resea
 from entropia.infrastructure.queues.enqueue import enqueue_job
 from entropia.shared.errors import (
     AgentToolCallForbiddenError,
+    AgentToolRequestInvalidError,
+    AppError,
     ArtifactOwnershipError,
     ForbiddenError,
     ResearchInputBlockedError,
@@ -154,9 +156,31 @@ async def dispatch_tool_call(
     )
     try:
         ensure_scope_allowed(tool, scope)
-        outcome = await _HANDLERS[tool](ctx)
+        if tool in _DURABLE_FAILURE_TOOLS:
+            # A recorded FAILED outcome must never carry HALF-DONE work into the
+            # commit. A command can flush rows (an immutable revision, its mirror)
+            # and only then hit a typed failure downstream (a Mainboard re-pin OCC
+            # clash, say); the human line is saved by the request scope's rollback,
+            # which this durable path does not get. The SAVEPOINT rolls the handler
+            # back to exactly the state before it ran — the tool-call row itself was
+            # created BEFORE the savepoint, so the evidence survives the rollback.
+            async with session.begin_nested():
+                outcome = await _HANDLERS[tool](ctx)
+        else:
+            outcome = await _HANDLERS[tool](ctx)
     except ForbiddenError as denial:
         return await _record_rejection(ctx, denial)
+    except AppError as failure:
+        # A typed NON-governance failure — malformed request, stale OCC token,
+        # compiler blockers. For the families in ``_DURABLE_FAILURE_TOOLS`` this is
+        # recorded as a terminal FAILED call (the Agent gets evidence and a code
+        # identical to the human line's) instead of escaping into the worker's
+        # rollback + dramatiq retry loop, where a deterministic denial would be
+        # retried three times and leave NO tool-call row at all. Other families
+        # keep their landed propagate-to-caller contract (see the frozenset).
+        if tool not in _DURABLE_FAILURE_TOOLS:
+            raise
+        return await _record_failure(ctx, failure)
 
     call.status = ToolCallStatus.SUCCEEDED
     call.response_ref = outcome.response
@@ -208,6 +232,33 @@ async def _record_rejection(ctx: _Ctx, denial: ForbiddenError) -> dict[str, Any]
         event_type,
         task_id=ctx.task_id,
         payload={"tool": ctx.tool.value, "reason_code": reason_code},
+    )
+    return {"tool_call_id": ctx.call.tool_call_id, **response}
+
+
+async def _record_failure(ctx: _Ctx, failure: AppError) -> dict[str, Any]:
+    """A typed non-governance failure is a durable FAILED outcome (doc 18 §11).
+
+    REJECTED stays reserved for a governance denial (AL-11); a stale OCC token or a
+    malformed request is a *failure*, so it is recorded with the SAME machine code
+    the human line raises. ``details`` rides along so the Agent can plan a fix
+    (which draft version to reload, which compiler blocker to resolve)."""
+    response: dict[str, Any] = {
+        "status": "failed",
+        "failure_code": failure.code,
+        "failure_reason": failure.message,
+        "details": list(failure.details or []),
+    }
+    ctx.call.status = ToolCallStatus.FAILED
+    ctx.call.failure_code = failure.code
+    ctx.call.failure_message = failure.message
+    ctx.call.response_ref = response
+    await _emit_event(
+        ctx.session,
+        ctx.actor,
+        "tool_call_failed",
+        task_id=ctx.task_id,
+        payload={"tool": ctx.tool.value, "failure_code": failure.code},
     )
     return {"tool_call_id": ctx.call.tool_call_id, **response}
 
@@ -807,6 +858,192 @@ async def _handle_trade_log_create_revision(ctx: _Ctx) -> _ToolOutcome:
     )
 
 
+# --------------------------------------------------------------------------- #
+# S5 — Strategy draft/save parity (doc 02 §12 AT-21, §11 rule 20)              #
+#                                                                             #
+# Each handler forwards to the SAME application command/query a human calls.   #
+# Ownership (``ensure_can_edit``/``ensure_can_view``), the ``expected_draft_    #
+# row_version`` OCC token, ``Idempotency-Key`` (``run_idempotent``), the        #
+# compiler verdict, audit + outbox and the Mainboard re-pin all live INSIDE     #
+# those functions — the gateway adds NO business logic, only request-shape      #
+# checking and the durable envelope. An ownership violation raises              #
+# ``AccessDeniedError`` (a ``ForbiddenError``) -> recorded REJECTED, identical  #
+# to the human 403; a stale OCC / compiler blocker -> recorded FAILED carrying  #
+# the human line's own code.                                                   #
+# --------------------------------------------------------------------------- #
+
+
+def _require_text(ctx: _Ctx, field: str) -> str:
+    """A required non-empty string id. Blank/absent/non-string fails CLOSED — the
+    command line must never be called with a coerced ``"None"`` id."""
+    value = ctx.request.get(field)
+    if not isinstance(value, str) or not value.strip():
+        raise AgentToolRequestInvalidError(
+            f"'{field}' must be a non-empty string.",
+            details=[{"field": field, "actual": type(value).__name__}],
+            field_path=field,
+        )
+    return value.strip()
+
+
+def _optional_text(ctx: _Ctx, field: str) -> str | None:
+    value = ctx.request.get(field)
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise AgentToolRequestInvalidError(
+            f"'{field}' must be a non-empty string when supplied.",
+            details=[{"field": field, "actual": type(value).__name__}],
+            field_path=field,
+        )
+    return value.strip()
+
+
+def _require_int(ctx: _Ctx, field: str) -> int:
+    """A required integer OCC token. ``bool`` is rejected explicitly (it is an
+    ``int`` subclass in Python, and ``True`` must never read as row_version 1)."""
+    value = ctx.request.get(field)
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise AgentToolRequestInvalidError(
+            f"'{field}' must be an integer version token.",
+            details=[{"field": field, "actual": type(value).__name__}],
+            field_path=field,
+        )
+    return value
+
+
+def _optional_mapping(ctx: _Ctx, field: str) -> dict[str, Any] | None:
+    value = ctx.request.get(field)
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise AgentToolRequestInvalidError(
+            f"'{field}' must be an object when supplied.",
+            details=[{"field": field, "actual": type(value).__name__}],
+            field_path=field,
+        )
+    return dict(value)
+
+
+async def _handle_strategy_get_draft(ctx: _Ctx) -> _ToolOutcome:
+    """`strategy.get_draft` — read the Agent's OWN draft (payload, ``row_version``
+    OCC token, provenance) through the same read model a human's editor uses
+    (doc 02 §7). A foreign private draft is a recorded REJECTED denial."""
+    from entropia.application.queries.strategy import get_strategy_draft
+
+    result = await get_strategy_draft(ctx.session, ctx.actor, _require_text(ctx, "draft_id"))
+    return _ToolOutcome(response=result)
+
+
+async def _handle_strategy_create_draft(ctx: _Ctx) -> _ToolOutcome:
+    """`strategy.create_draft` — create an Agent-OWNED strategy root + draft (doc 02
+    §7, AT-01). No revision exists yet, so the draft can never enter Ready Check or
+    a Run; nothing is attached to any Mainboard (the tool has no workspace input)."""
+    from entropia.application.commands.strategy_draft import create_strategy_draft
+
+    result = await create_strategy_draft(
+        ctx.session,
+        ctx.actor,
+        display_name=_require_text(ctx, "display_name"),
+        rationale_family_id=_optional_text(ctx, "rationale_family_id"),
+        initial_payload=_optional_mapping(ctx, "initial_payload"),
+        idempotency_key=_optional_text(ctx, "idempotency_key"),
+    )
+    return _ToolOutcome(
+        response=result,
+        artifact_output_ref=result.get("strategy_root_id"),
+        domain_events=[
+            (
+                "strategy_draft_created",
+                {
+                    "strategy_root_id": result.get("strategy_root_id"),
+                    "draft_id": result.get("draft_id"),
+                },
+            )
+        ],
+    )
+
+
+async def _handle_strategy_patch_draft(ctx: _Ctx) -> _ToolOutcome:
+    """`strategy.patch_draft` — apply a full ``payload`` replacement or a shallow
+    ``patch`` merge on the Agent's OWN draft (doc 02 §7, AT-19).
+    ``expected_draft_row_version`` is MANDATORY: a stale token is
+    STRATEGY_DRAFT_CONFLICT, recorded, never last-write-wins."""
+    from entropia.application.commands.strategy_draft import patch_strategy_draft
+
+    result = await patch_strategy_draft(
+        ctx.session,
+        ctx.actor,
+        draft_id=_require_text(ctx, "draft_id"),
+        expected_draft_row_version=_require_int(ctx, "expected_draft_row_version"),
+        payload=_optional_mapping(ctx, "payload"),
+        patch=_optional_mapping(ctx, "patch"),
+        idempotency_key=_optional_text(ctx, "idempotency_key"),
+    )
+    return _ToolOutcome(
+        response=result,
+        artifact_output_ref=result.get("draft_id"),
+        domain_events=[("strategy_draft_patched", {"draft_id": result.get("draft_id")})],
+    )
+
+
+async def _handle_strategy_validate_draft(ctx: _Ctx) -> _ToolOutcome:
+    """`strategy.validate_draft` — the compiler's verdict on the draft WITHOUT a
+    revision (doc 02 §8.4). The truth comes from ``validate_strategy_config``, the
+    same function the human Save path runs; the gateway never re-implements it."""
+    from entropia.application.commands.strategy_draft import validate_strategy_draft
+
+    result = await validate_strategy_draft(
+        ctx.session, ctx.actor, draft_id=_require_text(ctx, "draft_id")
+    )
+    return _ToolOutcome(response=result)
+
+
+async def _handle_strategy_save_revision(ctx: _Ctx) -> _ToolOutcome:
+    """`strategy.save_revision` — Save: the immutable ``strategy_revision`` with its
+    ``config_hash`` + pinned references, the mirror work-object revision, the
+    Mainboard re-pin of items already on this root, audit + outbox (doc 02 §7.1,
+    AT-02, AT-20). Save is never a Ready PASS and never a Run — the response
+    reports ``ready_state="STALE"`` exactly as the human line does."""
+    from entropia.application.commands.strategy_draft import save_strategy_revision
+
+    result = await save_strategy_revision(
+        ctx.session,
+        ctx.actor,
+        draft_id=_require_text(ctx, "draft_id"),
+        expected_draft_row_version=_require_int(ctx, "expected_draft_row_version"),
+        idempotency_key=_optional_text(ctx, "idempotency_key"),
+    )
+    return _ToolOutcome(
+        response=result,
+        artifact_output_ref=result.get("strategy_revision_id"),
+        domain_events=[
+            (
+                "strategy_revision_created",
+                {
+                    "strategy_root_id": result.get("strategy_root_id"),
+                    "strategy_revision_id": result.get("strategy_revision_id"),
+                    "config_hash": result.get("config_hash"),
+                },
+            )
+        ],
+    )
+
+
+# Tools whose typed non-governance failures are recorded as a durable FAILED call
+# instead of propagating (see ``dispatch_tool_call``). The S4 families keep their
+# landed propagate-to-caller contract, which their acceptance tests pin.
+_DURABLE_FAILURE_TOOLS: frozenset[ToolName] = frozenset(
+    {
+        ToolName.STRATEGY_GET_DRAFT,
+        ToolName.STRATEGY_CREATE_DRAFT,
+        ToolName.STRATEGY_PATCH_DRAFT,
+        ToolName.STRATEGY_VALIDATE_DRAFT,
+        ToolName.STRATEGY_SAVE_REVISION,
+    }
+)
+
+
 _HANDLERS = {
     ToolName.TASK_QUERY: _handle_task_query,
     ToolName.RESULT_QUERY: _handle_result_query,
@@ -831,6 +1068,11 @@ _HANDLERS = {
     ToolName.TRADE_LOG_REQUEST_IMPORT: _handle_trade_log_request_import,
     ToolName.TRADE_LOG_CREATE: _handle_trade_log_create,
     ToolName.TRADE_LOG_CREATE_REVISION: _handle_trade_log_create_revision,
+    ToolName.STRATEGY_GET_DRAFT: _handle_strategy_get_draft,
+    ToolName.STRATEGY_CREATE_DRAFT: _handle_strategy_create_draft,
+    ToolName.STRATEGY_PATCH_DRAFT: _handle_strategy_patch_draft,
+    ToolName.STRATEGY_VALIDATE_DRAFT: _handle_strategy_validate_draft,
+    ToolName.STRATEGY_SAVE_REVISION: _handle_strategy_save_revision,
 }
 
 

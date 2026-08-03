@@ -121,6 +121,29 @@ async def get_registry_by_key(
     return (await session.execute(stmt)).scalar_one_or_none()
 
 
+async def get_trusted_active_by_entity(
+    session: AsyncSession, entity_id: str
+) -> EmbeddedResolverRegistry | None:
+    """The TRUSTED_ACTIVE registry entry backed by this package root, if any.
+
+    The deprecate-first delete blocker (doc 09 §9.5 step 2) asks exactly one
+    question — "is this root still a live canonical resolver?" — so the trust
+    state is filtered in SQL rather than returning every entry for the root and
+    making the caller re-check. ``canonical_key`` is UNIQUE but
+    ``package_entity_id`` is not, so the query is written for the many case and
+    returns the first live pointer it finds.
+    """
+    stmt = (
+        select(EmbeddedResolverRegistry)
+        .where(
+            EmbeddedResolverRegistry.package_entity_id == entity_id,
+            EmbeddedResolverRegistry.trust_state == ResolverTrustState.TRUSTED_ACTIVE,
+        )
+        .limit(1)
+    )
+    return (await session.execute(stmt)).scalars().first()
+
+
 async def get_contract_by_revision(
     session: AsyncSession, revision_id: str
 ) -> EmbeddedResolverContract | None:
@@ -188,6 +211,7 @@ __all__ = [
     "get_contract_by_revision",
     "get_latest_validation_run",
     "get_registry_by_key",
+    "get_trusted_active_by_entity",
     "set_trust_state",
     "upsert_registry_entry",
 ]

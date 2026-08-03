@@ -19,7 +19,13 @@ from httpx import ASGITransport, AsyncClient
 from entropia.apps.api.deps import RequestContext, request_context
 from entropia.domain.esp.enums import ResolverTrustState, RuntimeAdapter
 from entropia.domain.identity import Actor
-from entropia.domain.lifecycle.enums import ApprovalState, PrincipalType, Role
+from entropia.domain.lifecycle.enums import (
+    ApprovalState,
+    DeletionState,
+    PackageKind,
+    PrincipalType,
+    Role,
+)
 from entropia.domain.package.enums import PackageValidationState
 
 _SMA_SIG = {
@@ -165,6 +171,28 @@ class _FakeRegistry:
         self.replacement_revision_id = None
 
 
+class _FakeRoot:
+    """A LIVE registry root for the resolver's package (doc 09 §9.5).
+
+    Resolution reads the root's lifecycle facets as well as the registry pointer,
+    so the double has to carry them — a root double that omitted them would make
+    every contract case below answer ``RESOLVER_NOT_RESOLVED`` for the wrong reason.
+    """
+
+    def __init__(self) -> None:
+        self.entity_id = "pkg_1"
+        self.entity_type = "package"
+        self.deletion_state = DeletionState.ACTIVE
+        self.lifecycle_state = "active"
+        self.current_revision_id = "pkgrev_1"
+
+
+class _FakeDetail:
+    def __init__(self) -> None:
+        self.entity_id = "pkg_1"
+        self.package_kind = PackageKind.EMBEDDED_SYSTEM
+
+
 class _FakeSession:
     """Minimal async-session double for the resolve query path."""
 
@@ -194,9 +222,17 @@ def _patch_repo(monkeypatch, *, registry, contract, revision) -> None:
     async def _get_revision(_session, rev_id):
         return revision if (revision and rev_id == "pkgrev_1") else None
 
+    async def _get_root(_session, entity_id):
+        return _FakeRoot() if entity_id == "pkg_1" else None
+
+    async def _get_detail(_session, entity_id):
+        return _FakeDetail() if entity_id == "pkg_1" else None
+
     monkeypatch.setattr(q.esp_repo, "get_registry_by_key", _get_registry)
     monkeypatch.setattr(q.esp_repo, "get_contract_by_revision", _get_contract)
     monkeypatch.setattr(q.pkg_repo, "get_revision", _get_revision)
+    monkeypatch.setattr(q.pkg_repo, "get_package_root", _get_root)
+    monkeypatch.setattr(q.pkg_repo, "get_package_detail", _get_detail)
 
 
 @pytest.mark.contract

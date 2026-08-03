@@ -198,19 +198,18 @@ async def test_soft_deleted_esp_keeps_the_historical_dependency_manifest_readabl
     revision it names (same content hash) — the pair a historical manifest needs to
     reproduce the run.
 
-    HOLE (empirically verified 2026-07-29, I-17-COV): PC-19's SECOND clause — "new
-    Pre-Check does not resolve soft-deleted/inactive ESP" — does NOT hold. Soft
-    delete leaves ``embedded_resolver_registry`` untouched, and
-    ``queries/esp.py::resolve_embedded_dependency`` reads only the registry entry's
-    ``trust_state``; it never looks at the root's ``deletion_state``. A probe that
-    activated ``ta.sma``, soft-deleted its root and then resolved it got the SAME
-    trusted revision back, so a fresh Pre-Check would pin a soft-deleted resolver.
-    The function's own docstring (``queries/esp.py:228``) already claims
-    "deprecated / soft-deleted registry entry -> RESOLVER_NOT_ACTIVE", so the
-    implementation contradicts its documented contract. Not patched here: that is a
-    domain behaviour change, out of scope for a coverage slice. Follow-up slice:
-    ``fix/pc19-soft-deleted-esp-must-not-resolve`` — see
-    ``docs/audit/acceptance_id_map.md`` §E.2.
+    HOLE CLOSED (``fix/esp-lifecycle-resolution``). This docstring used to record
+    that PC-19's SECOND clause — "new Pre-Check does not resolve
+    soft-deleted/inactive ESP" — did NOT hold: soft delete left
+    ``embedded_resolver_registry`` untouched and ``resolve_embedded_dependency``
+    read only ``entry.trust_state``, so a probe that activated ``ta.sma``,
+    soft-deleted its root and resolved it got the SAME trusted revision back.
+    Resolution now also reads the root's ``deletion_state`` and ``lifecycle_state``,
+    and a trusted-active resolver root cannot be deleted at all without deprecating
+    first (doc 09 §9.5 step 2) — which is why the delete below is now two calls.
+    Clause 2 lives in ``test_esp_lifecycle_resolution.py``; THIS test remains the
+    clause-1 guard, so it keeps proving that closing a resolver for new work costs
+    history nothing.
     """
     await _seed_principals(session)
     esp = await _trusted_esp(session)
@@ -241,6 +240,15 @@ async def test_soft_deleted_esp_keeps_the_historical_dependency_manifest_readabl
     )
     await session.commit()
 
+    # Deprecate-first is mandatory for a trusted-active resolver (ESP-17): a direct
+    # delete is refused with DELETE_POLICY_BLOCKED, so the ordered path is used.
+    await esp_cmd.deprecate_resolver(
+        session,
+        ADMIN,
+        canonical_key="ta.sma",
+        reason="retired",
+        expected_registry_version=2,
+    )
     await soft_delete_entity(session, ADMIN, entity_id=esp["entity_id"], reason="retired")
     await session.commit()
 

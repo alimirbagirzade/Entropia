@@ -180,7 +180,7 @@ their row order, and they exist so a test can cite something.
 | ESP-14 | Agent parity | `unit/test_esp_policy.py` (agent principal) |
 | ESP-15 | Missing resolver recovery | `integration/test_create_package_persistence.py::test_missing_resolver_blocks_precheck_and_send` |
 | ESP-16 | Deprecation | `integration/test_esp_persistence.py::test_deprecate_closes_new_selection` |
-| ESP-17 | Delete policy | `integration/test_esp_persistence.py::test_soft_delete_preserves_revision_chain` |
+| ESP-17 | Delete policy | `integration/test_esp_lifecycle_resolution.py::test_trusted_active_resolver_root_cannot_be_deleted`, `::test_deprecate_clears_the_pointer_then_the_delete_succeeds` *(added 2026-08-03, §E.2 closed)*; `integration/test_esp_persistence.py::test_soft_delete_preserves_revision_chain` (revision-chain half) |
 | ESP-18 | Trash policy | `integration/test_trash_page.py::test_trash_surfaces_reject_non_admin` |
 | ESP-19 | Export integrity | `integration/test_acceptance_esp_package_gaps.py::test_esp_revision_export_carries_identity_hash_and_dependency_manifest` *(added 2026-07-29, §H — **partial**, see §E.4)* |
 | ESP-20 | Role-aware list | `integration/test_esp_persistence.py::test_list_filters_by_visibility_scope` |
@@ -236,7 +236,32 @@ next to the passing RF-12 test so it cannot be silently lost.
 
 **Recommended follow-up:** `fix/rf12-blank-rationale-family-blocks-ready`.
 
-### E.2 — DEFECT found while writing the PC-19 test (added 2026-07-29, I-17-COV)
+### E.2 — DEFECT found while writing the PC-19 test (added 2026-07-29, I-17-COV) — **CLOSED 2026-08-03**
+
+> **CLOSED** by `fix/esp-lifecycle-resolution`. Reproduced once more on
+> `origin/main` @ `ef47847` before any code was written (activate `ta.sma` →
+> soft-delete its root → resolve → the same trusted revision came back,
+> `resolved=True`), then fixed on both axes the finding named:
+>
+> * `domain/esp/resolver.py::evaluate_resolution` now takes `ResolverRootFacts`
+>   and refuses a root that is not `deletion_state=active` +
+>   `lifecycle_state=active` + `package_kind=embedded_system`
+>   (`ROOT_NOT_ACTIVE` → `RESOLVER_NOT_ACTIVE` 409; `ROOT_MISSING` /
+>   `WRONG_PACKAGE_KIND` → `RESOLVER_NOT_RESOLVED` 404);
+> * `commands/deletion.py::_soft_delete_preflight` gained the deprecate-first
+>   `DELETE_POLICY_BLOCKED` blocker (doc 09 §9.5 step 2) and is now invoked from
+>   `soft_delete_registry_root` too, so `soft_delete_package` — the production
+>   package-delete route, which bypassed the preflight entirely — is covered;
+> * `jobs/create_package.py::registry_fingerprint` hashes the resolver root's
+>   lifecycle alongside the registry pointer, so a root lifecycle change makes an
+>   earlier PASSED scan `PRECHECK_STALE` server-side.
+>
+> Tests: `integration/test_esp_lifecycle_resolution.py` (24 cases) +
+> `unit/test_esp_resolver.py` (root-gate cases). PC-19 clause 1 stays where it was,
+> in `test_acceptance_esp_package_gaps.py`. The historical-pin guarantee is
+> unchanged — see §H.2.
+
+The original finding, kept verbatim for the record:
 
 A **soft-deleted ESP still resolves for a new Pre-Check.** `soft_delete_entity`
 runs no ESP-specific preflight (`commands/deletion.py::_soft_delete_preflight`
@@ -259,7 +284,8 @@ Adjacent, unasserted here: doc 09 **ESP-17** says the server should block or
 redirect a soft-delete of an *active trusted* resolver toward deprecation. No such
 preflight exists either — the probe's delete simply succeeded.
 
-**Recommended follow-up:** `fix/pc19-soft-deleted-esp-must-not-resolve`.
+**Recommended follow-up:** ~~`fix/pc19-soft-deleted-esp-must-not-resolve`~~ — **done**,
+landed as `fix/esp-lifecycle-resolution` (see the CLOSED block at the top of §E.2).
 
 ### E.3 — Missing surfaces the "Agent parity" rows name (added 2026-07-29, I-17-COV)
 
@@ -444,11 +470,28 @@ work-object family, not evidence of parity. The **domain commands** for both fam
 complete (`commands/strategy_draft.py`, `commands/trading_signal.py`); that is a separate
 axis and does not close AT-21 / TS-20 / AOS-20.
 
-### H.2 — PC-19 (soft-deleted ESP still resolves): still open, re-verified
+### H.2 — PC-19 (soft-deleted ESP still resolves): **CLOSED 2026-08-03**
 
-The §"soft-deleted ESP still resolves" finding recorded above is **unchanged on current
-main**. `queries/esp.py:214-268` decides on `entry.trust_state` alone; the Package Root's
-`deletion_state` and `lifecycle_state` are never read, and the soft-delete path
-(`commands/deletion.py`) never calls `esp_repo.set_trust_state`. The function's own
-docstring (`queries/esp.py:228`) still advertises the opposite. **No test covers the case.**
-This is the recommended next slice (`fix/esp-lifecycle-safe-resolution`).
+This section recorded the finding as unchanged on current main: `queries/esp.py:214-268`
+decided on `entry.trust_state` alone, the Package Root's `deletion_state` and
+`lifecycle_state` were never read, and no test covered the case. All three are now
+false — resolution reads both root facets, `DELETE_POLICY_BLOCKED` enforces
+deprecate-first, and `integration/test_esp_lifecycle_resolution.py` covers the case
+(including the pre-fix database shape: a soft-deleted root under a still-`trusted_active`
+pointer). Full record in §E.2.
+
+**Not a defect, still true, still asserted:** a historical pinned revision stays readable
+after its resolver is closed. The dependent revision is immutable and names an exact
+`embedded_revision_id`, so it is read straight from `package_revision` and never comes
+through `resolve_embedded_dependency` — the fix narrows the NEW-work path only
+(`test_historical_pin_stays_readable_after_the_resolver_is_closed`, and PC-19 clause 1 in
+`test_acceptance_esp_package_gaps.py`).
+
+**Deliberately NOT done:** the soft-delete path still does not call
+`esp_repo.set_trust_state`. Demoting the registry to `unavailable` on delete would be a
+one-way door — `unavailable` is terminal in `domain/esp/state_machine.py`, so a restored
+root could never be re-activated, contradicting doc 09 §9.5 step 4 ("restore … does not
+automatically reinstate a resolver trust pointer **without policy re-evaluation**", i.e.
+re-evaluation must stay possible). The invariant "a Trashed resolver root is never
+`trusted_active`" is instead guaranteed by the deprecate-first blocker, and resolution
+reads the root lifecycle directly rather than trusting the pointer to have been demoted.

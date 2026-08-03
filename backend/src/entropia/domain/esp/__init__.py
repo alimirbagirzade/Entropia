@@ -9,6 +9,7 @@ from entropia.domain.esp.policy import (
 from entropia.domain.esp.resolver import (
     ResolutionOutcome,
     ResolutionReason,
+    ResolverRootFacts,
     evaluate_resolution,
     signature_matches,
 )
@@ -23,6 +24,7 @@ __all__ = [
     "IllegalResolverTrustTransition",
     "ResolutionOutcome",
     "ResolutionReason",
+    "ResolverRootFacts",
     "ResolverTrustState",
     "RuntimeAdapter",
     "can_activate",

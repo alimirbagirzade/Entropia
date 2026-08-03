@@ -501,6 +501,35 @@ class ResolverNotActive(ConflictError):
     category = ErrorCategory.LIFECYCLE
 
 
+class DeletePolicyBlocked(ConflictError):
+    """Deprecate-first: a TRUSTED_ACTIVE resolver root may not be soft-deleted
+    (doc 09 §9.5 step 2, §8, §15 row 17 "Delete policy").
+
+    Deleting the root out from under a live registry pointer would leave
+    ``embedded_resolver_registry`` advertising a canonical key whose package sits
+    in the Trash, so every new Pre-Check would keep resolving a deleted resolver.
+    The ordered path is Deprecate — which clears the pointer and bumps the
+    registry version — and only then delete.
+
+    O-03 removed this class as never-raised; it returns HERE with a real raise
+    path in ``commands/deletion.py::_soft_delete_preflight`` — see the adjudication
+    in ``tests/unit/test_error_taxonomy_no_dead_definitions.py``.
+    """
+
+    code = "DELETE_POLICY_BLOCKED"
+    # doc 09 §7.1 "Error - blocked delete" catalog text, verbatim.
+    message = (
+        "This resolver is active in the canonical registry. Deprecate it or complete "
+        "the required Admin/system policy steps before deletion."
+    )
+    category = ErrorCategory.LIFECYCLE
+    suggested_action = "deprecate_resolver_first"
+    remediation = (
+        "Deprecate the resolver (with a reason and optional replacement revision), "
+        "then delete the package root."
+    )
+
+
 class ResolverContractInvalid(ValidationError):
     """The resolver contract failed typed schema validation (ESP doc 09 §11.1)."""
 

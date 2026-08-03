@@ -1808,3 +1808,89 @@ oluşturuldu, içerik özdeştir.
 ### Sıradaki tek slice
 
 **ADIM 2 — `fix/esp-lifecycle-safe-resolution`** (yukarıdaki boşluk 1).
+
+---
+
+## ESP lifecycle-safe resolution — G-01/§E.2 kapatıldı (branch `fix/esp-lifecycle-resolution`)
+
+**Base SHA:** `ef478477df532a57a4261f07e242dbfbfe0da233` (`ef47847`, #518 merge'ü) ·
+**Tarih:** 2026-08-03 · **Migration YOK** (şema değişmedi; alembic head
+`0043_i08_registry_strategy_fks`, tek head) · **OpenAPI drift YOK** ·
+**`ENGINE_VERSION` DEĞİŞMEDİ.**
+
+### Reproduction — önce kusur üretildi
+
+Kod yazılmadan önce `origin/main` üzerinde ampirik probe:
+
+```
+resolve BEFORE soft delete  -> True  pkgrev_01KZ35DARPWXMHJYK998SCSACT
+root.deletion_state         -> soft_deleted
+registry.trust_state        -> trusted_active      (hiç demote edilmiyor)
+resolve AFTER  soft delete  -> True  pkgrev_01KZ35DARPWXMHJYK998SCSACT
+direct delete of trusted_active -> soft_deleted    (hiçbir blocker yok)
+```
+
+Yani soft-deleted bir ESP **yeni** Pre-Check'e pinlenebiliyordu ve trusted-active bir
+resolver doğrudan silinebiliyordu. Fonksiyonun kendi docstring'i tersini iddia ediyordu.
+
+### Ne değişti
+
+1. **`domain/esp/resolver.py`** — `evaluate_resolution` artık `ResolverRootFacts`
+   (deletion_state + lifecycle_state + package_kind) alıyor. Yeni reason'lar:
+   `ROOT_MISSING` / `WRONG_PACKAGE_KIND` → `RESOLVER_NOT_RESOLVED` (404),
+   `ROOT_NOT_ACTIVE` → `RESOLVER_NOT_ACTIVE` (409, doc 07 §12). Kontrol sırası:
+   yapısal kimlik → contract (key/signature/adapter) → availability (root lifecycle →
+   trust → validation → approval). Root, trust'tan ÖNCE bakılır: ikisi de bozuksa sebep
+   köktür, pointer yalnızca bayat semptomdur.
+2. **`queries/esp.py`** — `_root_facts` ile kökü ve package detail'i yükler; iki facet
+   birden okunur (doc 09 §11.2 bunları ayrı tutar).
+3. **`shared/errors.py`** — `DeletePolicyBlocked` / `DELETE_POLICY_BLOCKED` (409,
+   `lifecycle`, `suggested_action=deprecate_resolver_first`) **geri geldi**; mesaj doc 09
+   §7.1 katalog metninin birebir kendisi. O-03 bunu "hiç raise edilmiyor" diye silmişti;
+   artık gerçek bir raise yolu var, bu yüzden `test_error_taxonomy_no_dead_definitions.py`
+   ratchet'i gerekçesiyle güncellendi (`KNOWN_UNRAISED` hâlâ boş).
+4. **`commands/deletion.py`** — deprecate-first blocker (doc 09 §9.5 adım 2) ve
+   **`_soft_delete_preflight` artık `soft_delete_registry_root`'tan da çağrılıyor.**
+   Bu, slice'ın en önemli bulgusuydu: paketlerin ÜRETİM silme yolu
+   `pkg_cmd.soft_delete_package` → `soft_delete_registry_root`'tur ve preflight'ı
+   **tamamen atlıyordu** — blocker'ı yalnız `soft_delete_entity`'ye koymak hiçbir şeyi
+   korumazdı. Preflight `entity_type` ile dallandığı için market/research kökleri
+   etkilenmez.
+5. **`repositories/esp.py`** — `get_trusted_active_by_entity` (trust state SQL'de
+   filtrelenir; kural çağırana kopyalanmaz).
+6. **`jobs/create_package.py::registry_fingerprint`** — root lifecycle'ı da hash'ler.
+   Önceden yalnız registry pointer'ı gözlemleniyordu, dolayısıyla bir resolver kökü
+   silindiğinde fingerprint kıpırdamıyor ve PASSED bir tarama "taze" kalıyordu. Kararı
+   sunucu türetir; browser bu kolonları hiç görmez (doc 07 §8.1).
+
+### Historical integrity ve restore semantiği
+
+- **Historical pin bozulmadı.** Kapı yalnız YENİ-iş yolunu daraltır. Pinlenmiş bir
+  dependency snapshot zaten kesin `embedded_revision_id` taşır ve doğrudan
+  `package_revision`'dan okunur — `resolve_embedded_dependency`'den hiç geçmez. Test:
+  `test_historical_pin_stays_readable_after_the_resolver_is_closed` + PC-19 clause 1.
+- **Restore trust'ı geri açmaz.** Restore kökü `active` yapar, registry'ye dokunmaz;
+  trust `deprecated` kalır, pointer `None` kalır, resolver yeni iş için hâlâ kapalıdır.
+  Yeniden seçilebilmesi için açık bir Admin activation gerekir (doc 09 §9.5 adım 4).
+- **Soft-delete registry'yi `unavailable` yapMAZ — bilinçli karar.** `unavailable`
+  `domain/esp/state_machine.py`'de terminaldir; delete'te oraya düşürmek tek yönlü kapı
+  olurdu ve restore edilmiş bir kök bir daha asla aktive edilemezdi — doc 09 §9.5 adım 4'ün
+  "policy re-evaluation" şartıyla çelişirdi. "Trash'teki resolver kökü asla `trusted_active`
+  değildir" değişmezi bunun yerine deprecate-first blocker'ıyla garanti edilir; resolution
+  ise pointer'ın demote edildiğine güvenmek yerine kök lifecycle'ını doğrudan okur.
+
+### Testler
+
+Yeni: `tests/integration/test_esp_lifecycle_resolution.py` (24 vaka) —
+active-trusted success · soft-deleted/purge_pending/purged/lifecycle-deprecated/candidate/
+deprecated failure · missing-detail + wrong-kind + signature/adapter · direct-delete
+blocked (Trash entry ve audit YAZILMAZ) · non-resolver paket hâlâ silinebilir ·
+deprecate→pointer temizlenir→delete başarılı · approval+audit+outbox · unauthorized
+deprecate · stale `expected_registry_version` 409 · idempotent replay · restore trust'ı
+açmaz · historical pin okunur · fingerprint hem registry hem lifecycle değişiminde kayar.
+`unit/test_esp_resolver.py` root-gate vakalarıyla genişletildi.
+
+Hizalanan mevcut testler: `test_acceptance_esp_package_gaps.py` PC-19 (artık deprecate-first
+yolundan siliyor; "HOLE" paragrafı kapanış kaydıyla değiştirildi) ve
+`tests/contract/test_esp_contract.py` (resolve double'ları kök/detail okumalarını da
+karşılıyor).

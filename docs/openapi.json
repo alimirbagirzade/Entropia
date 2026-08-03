@@ -2014,6 +2014,53 @@
         "title": "MoneyBody",
         "type": "object"
       },
+      "PackageExportResponse": {
+        "description": "The export envelope, declared so the contract is PUBLISHED in the schema (G-02).\n\nA ``dict[str, Any]`` return kept this body invisible to ``docs/openapi.json`` while the\ndrift guard stayed green — the same trap O-30 closed for the purge 202. ``manifest``\nstays an open object on purpose: it is a versioned, content-addressed artifact whose\nfield set is stated by its own ``export_schema_version``, and freezing it into a closed\nmodel here would make every future schema bump an API break.\n\n``registry_observation`` is a SIBLING of the manifest, never a member: it is live ESP\nregistry state read at export time, so it must not be inside the hashed artifact (see\n``domain/package/export_contract.py``). It is ``None`` for a package with no resolver\ncontract, and ``None`` on a replay of a pre-G-02 idempotency record.",
+        "properties": {
+          "entity_id": {
+            "title": "Entity Id",
+            "type": "string"
+          },
+          "export_schema_version": {
+            "title": "Export Schema Version",
+            "type": "integer"
+          },
+          "manifest": {
+            "additionalProperties": true,
+            "title": "Manifest",
+            "type": "object"
+          },
+          "manifest_hash": {
+            "title": "Manifest Hash",
+            "type": "string"
+          },
+          "registry_observation": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Registry Observation"
+          },
+          "revision_id": {
+            "title": "Revision Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "entity_id",
+          "revision_id",
+          "manifest_hash",
+          "export_schema_version",
+          "manifest"
+        ],
+        "title": "PackageExportResponse",
+        "type": "object"
+      },
       "PatchItemBody": {
         "properties": {
           "display_label_override": {
@@ -9397,7 +9444,7 @@
     },
     "/api/v1/library/{entity_id}/export": {
       "post": {
-        "description": "Any viewer: produce the immutable package-revision MANIFEST for the selected\nrevision (doc 08 §7 \"Export\"). This is the package manifest, NOT a backtest\nresult_export. Synchronous V1: returns the content-addressed manifest +\n``manifest_hash`` and records a ``package.exported`` audit; no source mutation. A\nfresh ``Idempotency-Key`` makes repeated clicks return the same manifest.",
+        "description": "Any viewer: produce the immutable package-revision MANIFEST for the selected\nrevision (doc 08 §7 \"Export\"). This is the package manifest, NOT a backtest\nresult_export. Synchronous V1: returns the content-addressed manifest +\n``manifest_hash`` and records a ``package.exported`` audit; no source mutation. A\nfresh ``Idempotency-Key`` makes repeated clicks return the same manifest.\n\nSchema v2 (G-02): for an ESP revision the manifest carries the resolver contract\nsnapshot (adapter, warm-up, timing, repaint, signature, evidence) and the validation\nevidence of the run that certified it; live registry state stays outside the artifact\nas ``registry_observation``.",
         "operationId": "export_package_api_v1_library__entity_id__export_post",
         "parameters": [
           {
@@ -9441,9 +9488,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Export Package Api V1 Library  Entity Id  Export Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/PackageExportResponse"
                 }
               }
             },

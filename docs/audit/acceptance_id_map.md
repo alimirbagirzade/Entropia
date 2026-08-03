@@ -182,7 +182,7 @@ their row order, and they exist so a test can cite something.
 | ESP-16 | Deprecation | `integration/test_esp_persistence.py::test_deprecate_closes_new_selection` |
 | ESP-17 | Delete policy | `integration/test_esp_lifecycle_resolution.py::test_trusted_active_resolver_root_cannot_be_deleted`, `::test_deprecate_clears_the_pointer_then_the_delete_succeeds` *(added 2026-08-03, §E.2 closed)*; `integration/test_esp_persistence.py::test_soft_delete_preserves_revision_chain` (revision-chain half) |
 | ESP-18 | Trash policy | `integration/test_trash_page.py::test_trash_surfaces_reject_non_admin` |
-| ESP-19 | Export integrity | `integration/test_acceptance_esp_package_gaps.py::test_esp_revision_export_carries_identity_hash_and_dependency_manifest` *(added 2026-07-29, §H — **partial**, see §E.4)* |
+| ESP-19 | Export integrity | `integration/test_acceptance_esp_package_gaps.py::test_esp_revision_export_carries_identity_hash_and_dependency_manifest` *(added 2026-07-29; **PARTIAL → FULL on 2026-08-03**, G-02 export schema v2 — §E.4 closed)*; field-by-field fidelity, determinism, tamper detection and absent-evidence behaviour in `integration/test_esp_export_contract_v2.py`; import-side v1/v2 compatibility + trust boundary in `integration/test_package_import_schema_v2.py` |
 | ESP-20 | Role-aware list | `integration/test_esp_persistence.py::test_list_filters_by_visibility_scope` |
 
 > The mappings in §C are **stated, not scanner-verified** — they were established by
@@ -301,19 +301,32 @@ gap.
 
 **Recommended follow-up:** `feat/gateway-strategy-and-signal-tools`.
 
-### E.4 — Export manifest omits the ESP contract facts (added 2026-07-29, I-17-COV)
+### E.4 — Export manifest omits the ESP contract facts — **CLOSED 2026-08-03 (G-02)**
 
-Doc 09 **ESP-19** requires the export artifact to carry "root/revision identity,
-content hash, signature, adapter ref, evidence and dependency manifest".
-`commands/package_lifecycle.py::export_package` builds the manifest from the
-package **revision** only, while `runtime_adapter` and `evidence` live on
-`embedded_resolver_contract` — so an ESP export ships identity + content hash +
-dependency manifest (and the signature, because the seed/create path puts it in
-`input_contract`), but **not the adapter ref and not the evidence**. The ESP-19
-test asserts exactly what is present and names the rest as this gap rather than
-weakening the row.
+*Original finding (2026-07-29, I-17-COV).* Doc 09 **ESP-19** requires the export
+artifact to carry "root/revision identity, content hash, signature, adapter ref,
+evidence and dependency manifest". `commands/package_lifecycle.py::export_package`
+built the manifest from the package **revision** only, while `runtime_adapter` and
+`evidence` live on `embedded_resolver_contract` — so an ESP export shipped identity
++ content hash + dependency manifest (and the signature, because the seed/create
+path puts it in `input_contract`), but **not the adapter ref and not the evidence**.
+The ESP-19 test asserted exactly what was present and named the rest as a gap rather
+than weakening the row.
 
-**Recommended follow-up:** `feat/esp19-export-carries-contract-facts`.
+**Resolution.** Export schema **v2** (`domain/package/export_contract.py`) adds
+`export_schema_version`, `exporter_version`, `resolver_contract_snapshot` (canonical
+key, signature, runtime adapter, warm-up, timing semantics, repaint, evidence) and
+`validation_evidence_snapshot` (the certifying run, or an explicit
+`legacy_incomplete_evidence` — never a fabricated pass). Both are read from the rows
+the **exported** revision owns, so no old artifact is re-read through the current
+head; live registry state stays outside the hashed manifest as `registry_observation`.
+The ESP-19 row now asserts every clause of the sentence. Full contract, v1/v2
+compatibility matrix and the determinism proof: `docs/audit/esp_export_schema_v2.md`.
+
+**Honest boundary that remains.** A v1 and a v2 artifact of the same revision hash
+differently — the field set differs. That is the point of versioning the schema, not
+a regression: hashes are never compared across versions, and every recorded v1 hash
+stays valid for the v1 artifact it covered.
 
 ---
 

@@ -53,6 +53,16 @@ computes the content-addressed manifest of a selected immutable revision and a
 ``package.exported`` audit records the ``manifest_hash`` as durable provenance — no
 source mutation, no new table (the manifest derives deterministically from the
 revision; a fresh ``Idempotency-Key`` makes repeated clicks return the same hash).
+
+G-02 raises that manifest to **export schema v2** (doc 09 §15 ESP-19, §14). v1 carried
+identity + content hash + dependency manifest; the resolver's adapter ref, warm-up,
+timing/repaint semantics and its validation evidence live on ``embedded_resolver_contract``
+/ ``embedded_resolver_validation_run`` and were absent, so an exported ESP could not state
+which runtime semantics it had been certified under. v2 adds ``export_schema_version``,
+``exporter_version``, ``resolver_contract_snapshot`` and ``validation_evidence_snapshot``,
+all shaped by the pure builders in ``domain/package/export_contract.py``. The LIVE registry
+pointer stays OUT of the manifest and rides the envelope as ``registry_observation`` — that
+is what keeps an old revision's hash stable while trust moves on around it.
 """
 
 from __future__ import annotations
@@ -75,10 +85,19 @@ from entropia.domain.identity.policy import (
 from entropia.domain.lifecycle.enums import ApprovalState, DeletionState, VisibilityScope
 from entropia.domain.package import policy as pkg_policy
 from entropia.domain.package.enums import PackageValidationState
+from entropia.domain.package.export_contract import (
+    EXPORT_SCHEMA_VERSION,
+    EXPORTER_VERSION,
+    LEGACY_EXPORT_SCHEMA_VERSION,
+    build_registry_observation,
+    build_resolver_contract_snapshot,
+    build_validation_evidence_snapshot,
+)
 from entropia.infrastructure.postgres.models import EntityRegistry
 from entropia.infrastructure.postgres.repositories import approvals as approval_repo
 from entropia.infrastructure.postgres.repositories import audit as audit_repo
 from entropia.infrastructure.postgres.repositories import create_package as cp_repo
+from entropia.infrastructure.postgres.repositories import esp as esp_repo
 from entropia.infrastructure.postgres.repositories import packages as pkg_repo
 from entropia.infrastructure.postgres.repositories import resource_share as share_repo
 from entropia.shared.errors import (
@@ -758,6 +777,25 @@ async def export_package(
     ``Idempotency-Key`` makes repeated clicks return the same manifest (doc 08 §4.4
     "repeated clicks disabled by idempotency key"). Any revision of the root may be
     exported (not only the head); a revision not on this root -> 404.
+
+    **Schema v2 (G-02, doc 09 §15 ESP-19).** For an ESP revision the manifest also carries
+    the immutable ``resolver_contract_snapshot`` (canonical key, signature, runtime adapter,
+    warm-up, timing semantics, repaint, evidence) and the ``validation_evidence_snapshot``
+    (the run that certified it — or ``legacy_incomplete_evidence`` when no run row exists;
+    never a fabricated pass). Both are read from the rows the EXPORTED revision owns, so an
+    old revision is never re-read through the current head. The LIVE registry pointer is
+    deliberately NOT in the manifest: it rides the envelope as ``registry_observation``, so
+    activating a newer revision under the same canonical key leaves this artifact's
+    ``manifest_hash`` byte-identical. Non-ESP packages get ``None`` for both snapshots —
+    the shape gains the version fields and nothing is fabricated.
+
+    **Honest boundary on reproducibility.** Re-exporting with nothing changed in between
+    reproduces the digest exactly (no export-time clock, no live registry in the artifact).
+    It is NOT frozen for the life of the revision: the revision's own ``validation_state`` /
+    ``approval_state`` are updated in place as it progresses, and a re-validation appends a
+    new run that the evidence snapshot then tracks. Those re-exports are different artifacts
+    of the same revision, and the artifact names which one it is (``validation_run_id``, the
+    two states). See ``domain/package/export_contract.py`` for the full statement.
     """
     require_authenticated(actor)
     root = await _require_package_root(session, entity_id)
@@ -779,10 +817,28 @@ async def export_package(
     if revision is None or revision.entity_id != entity_id:
         raise PackageNotFound()
 
+    # Both rows are keyed by the EXPORTED revision_id, never by the root's head — an old
+    # revision must export the contract and evidence IT was certified under (doc 09 §15).
+    resolver_contract = await esp_repo.get_contract_by_revision(session, revision.revision_id)
+    # LATEST, not first: ``run_resolver_validation`` copies the newest run's status onto
+    # ``revision.validation_state``, so an older run could advertise ``passed`` on a revision
+    # the system now considers failed. The repo orders totally (``created_at``, ``run_id``)
+    # so the selection is never a coin-flip inside a content-addressed manifest.
+    validation_run = await esp_repo.get_latest_validation_run(session, revision.revision_id)
+    # Live pointer, read for the ENVELOPE only. Keyed by the contract's canonical key, so a
+    # package with no resolver contract has nothing to observe.
+    registry_entry = (
+        await esp_repo.get_registry_by_key(session, resolver_contract.canonical_key)
+        if resolver_contract is not None
+        else None
+    )
+
     async def _op() -> dict[str, Any]:
         contract = revision.input_contract if isinstance(revision.input_contract, dict) else {}
         name = contract.get("name")
         manifest = {
+            "export_schema_version": EXPORT_SCHEMA_VERSION,
+            "exporter_version": EXPORTER_VERSION,
             "package_root_id": entity_id,
             "revision_id": revision.revision_id,
             "revision_no": revision.revision_no,
@@ -796,6 +852,19 @@ async def export_package(
             "approval_state": str(revision.approval_state),
             "content_hash": revision.content_hash,
             "derived_from_revision_id": detail.derived_from_revision_id,
+            "resolver_contract_snapshot": build_resolver_contract_snapshot(resolver_contract),
+            # Evidence is reported only where a resolver contract exists to back: a non-ESP
+            # package has no ESP validation plane, so ``None`` beats an empty stub that
+            # would read as "evidence was looked for and found missing".
+            "validation_evidence_snapshot": (
+                build_validation_evidence_snapshot(
+                    validation_run,
+                    revision_validation_state=str(revision.validation_state),
+                    revision_approval_state=str(revision.approval_state),
+                )
+                if resolver_contract is not None
+                else None
+            ),
         }
         digest = manifest_hash(manifest)
         _audit_and_outbox(
@@ -808,23 +877,51 @@ async def export_package(
             new_state="exported",
             action="exported",
             # The 64-char manifest hash lives in metadata (JSONB), not the short
-            # new_state label — it is the export's durable provenance.
-            metadata={"manifest_hash": digest},
+            # new_state label — it is the export's durable provenance. The schema/exporter
+            # versions ride along so the audit says WHICH artifact shape that hash covers.
+            metadata={
+                "manifest_hash": digest,
+                "export_schema_version": EXPORT_SCHEMA_VERSION,
+                "exporter_version": EXPORTER_VERSION,
+            },
         )
         return {
             "entity_id": entity_id,
             "revision_id": revision.revision_id,
             "manifest_hash": digest,
+            "export_schema_version": EXPORT_SCHEMA_VERSION,
             "manifest": manifest,
+            # Sibling of the manifest, NOT inside it — see domain/package/export_contract.py.
+            "registry_observation": build_registry_observation(
+                registry_entry, exported_revision_id=revision.revision_id
+            ),
         }
 
-    return await run_idempotent(
+    result = await run_idempotent(
         session,
         key=idempotency_key,
         actor_principal_id=actor.principal_id,
         request_payload={"op": "export", "entity_id": entity_id, "revision_id": revision_id},
         operation=_op,
     )
+    return _with_export_envelope_defaults(result)
+
+
+def _with_export_envelope_defaults(result: dict[str, Any]) -> dict[str, Any]:
+    """Fill the v2 envelope keys on a COPY of a pre-v2 idempotency replay (O-30 pattern).
+
+    An ``Idempotency-Key`` record written before G-02 stored a four-key envelope with no
+    ``export_schema_version`` and no ``registry_observation``; replaying it through the
+    typed response model would 500. The defaults are truthful rather than cosmetic: that
+    record IS a v1 artifact, so it is labelled v1, and its manifest is left VERBATIM — it
+    predates the version field and back-filling one would invalidate the ``manifest_hash``
+    the audit already recorded. The stored ``response_ref`` JSON is never mutated."""
+    if "export_schema_version" in result and "registry_observation" in result:
+        return result
+    filled = dict(result)
+    filled.setdefault("export_schema_version", LEGACY_EXPORT_SCHEMA_VERSION)
+    filled.setdefault("registry_observation", None)
+    return filled
 
 
 __all__ = [

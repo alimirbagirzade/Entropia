@@ -6,6 +6,12 @@ command validates it at the boundary, opens a durable ``package_import_job`` row
 worker (``application/jobs/package_import.py``) parses the manifest, re-resolves its
 dependencies against the LOCAL ESP registry and creates the DRAFT root — nothing
 executable is produced here (CR-09). Idempotent: the same key returns the same job.
+
+G-02 adds the export-schema gate. Import reads v1 (the field is absent — those artifacts
+predate it) and v2; a manifest declaring any OTHER version is rejected here, synchronously,
+before a durable job opens. Parsing a version this build has never seen would mean guessing
+at its fields, and doc 08 §10 is explicit that an import which cannot be understood must
+never become a silently executable package.
 """
 
 from __future__ import annotations
@@ -19,6 +25,10 @@ from entropia.application.jobs.data_queue import DATA_QUEUE, PACKAGE_IMPORT
 from entropia.domain.identity import Actor
 from entropia.domain.identity.policy import require_authenticated
 from entropia.domain.lifecycle.enums import ActorKind, PackageKind
+from entropia.domain.package.export_contract import (
+    SUPPORTED_IMPORT_SCHEMA_VERSIONS,
+    resolve_import_schema_version,
+)
 from entropia.infrastructure.postgres.repositories import audit as audit_repo
 from entropia.infrastructure.postgres.repositories import package_import as import_repo
 from entropia.infrastructure.queues import enqueue as job_enqueue
@@ -46,6 +56,23 @@ def _coerce_kind(manifest: dict[str, Any]) -> PackageKind:
         ) from exc
 
 
+def _coerce_schema_version(manifest: dict[str, Any]) -> int:
+    """Return the schema version this build may parse the manifest as, or 422.
+
+    Fail-closed on anything outside :data:`SUPPORTED_IMPORT_SCHEMA_VERSIONS`. Doc 08 names
+    no error code for an unreadable schema version, so no new taxonomy entry is invented
+    here: the shipped ``PACKAGE_IMPORT_MANIFEST_INVALID`` already means "structurally
+    unusable at the API boundary", which is exactly what an uninterpretable version is."""
+    version = resolve_import_schema_version(manifest)
+    if version is None:
+        supported = ", ".join(str(v) for v in sorted(SUPPORTED_IMPORT_SCHEMA_VERSIONS))
+        raise PackageImportManifestInvalid(
+            f"Unsupported export_schema_version "
+            f"{manifest.get('export_schema_version')!r}; this build reads {supported}."
+        )
+    return version
+
+
 async def submit_package_import(
     session: AsyncSession,
     actor: Actor,
@@ -63,6 +90,9 @@ async def submit_package_import(
     require_authenticated(actor)
     if not isinstance(manifest, dict) or not manifest:
         raise PackageImportManifestInvalid("The import manifest must be a non-empty object.")
+    # Version FIRST: a manifest this build cannot interpret is refused on those grounds,
+    # not on whatever its (possibly re-shaped) package_kind field happens to look like.
+    schema_version = _coerce_schema_version(manifest)
     package_kind = _coerce_kind(manifest)
     origin_package_id = manifest.get("package_root_id")
     origin_revision_id = manifest.get("revision_id")
@@ -81,6 +111,12 @@ async def submit_package_import(
                 "job_kind": PACKAGE_IMPORT,
                 "manifest": manifest,
                 "manifest_hash": digest,
+                # Provenance, exactly like ``manifest_hash`` beside it: a record of what the
+                # BOUNDARY accepted, so a durable job row can be read back later without
+                # re-deriving it. The worker deliberately does NOT consume this — it
+                # re-derives the version from the manifest itself, so a payload that reached
+                # the queue by some other path is still checked (defence in depth).
+                "export_schema_version": schema_version,
             },
             actor_principal_id=actor.principal_id,
             idempotency_key=idempotency_key,
@@ -106,7 +142,11 @@ async def submit_package_import(
             target_entity_id=import_job.import_job_id,
             target_entity_type=_TARGET_TYPE,
             new_state="queued",
-            metadata={"manifest_hash": digest, "origin_package_id": origin_package_id},
+            metadata={
+                "manifest_hash": digest,
+                "origin_package_id": origin_package_id,
+                "export_schema_version": schema_version,
+            },
             correlation_id=actor.correlation_id,
         )
         audit_repo.add_outbox_event(

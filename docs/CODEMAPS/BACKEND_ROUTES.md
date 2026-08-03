@@ -419,12 +419,12 @@ rv-N` kullanmaya devam ediyor).
 | **POST `/library/{entity_id}/validation-runs` (201)** | `request_package_validation:205` | `pkg_cmd.request_package_validation` — **S-L3 (#461):** doc 08 §7 "Request validation"; CreatePackage düzlemindeki koşuyu **sarar** (yedi kontrol, değişmez kanıt satırı, durable job ve durum makinesi aynen kalır) | **body `expected_head_revision_id`** + head-match kuralı (`request-approval` ile birebir aynı) | ✔ |
 | POST `/library/{entity_id}/request-approval` | `request_package_approval:230` | `pkg_cmd.request_package_approval` | **body `expected_head_revision_id`** | ✔ |
 | POST `/library/{entity_id}/approve` | `approve_package:252` | `pkg_cmd.approve_and_publish_package` | **body `expected_head_revision_id`** | ✔ |
-| POST `/library/{entity_id}/export` | `export_package:275` | `pkg_cmd.export_package` | yok | ✔ |
+| POST `/library/{entity_id}/export` | `export_package:296` | `pkg_cmd.export_package` — **G-02: export schema v2.** Gövde artık `dict[str, Any]` değil, **`PackageExportResponse`** (`library.py:71`) ile şemada yayımlanıyor (`components.schemas`). Manifest'e `export_schema_version` · `exporter_version` · `resolver_contract_snapshot` · `validation_evidence_snapshot` eklendi; **canlı registry pointer'ı manifest'in İÇİNDE değil**, zarfın kardeşi `registry_observation` alanında | yok | ✔ |
 | POST `/library/{entity_id}/shares` (201) | `share_package` `sharing.py:35` | `sharing_cmd.share_package` | If-Match `rv-N` (`:47`) | ✔ |
 | GET `/library/{entity_id}/shares` | `list_package_shares` `sharing.py:53` | `sharing_query.list_package_shares` | yok | — |
 | DELETE `/library/{entity_id}/shares/{share_id}` | `revoke_package_share` `sharing.py:64` | `sharing_cmd.revoke_package_share` | If-Match `rv-N` (`:76`) | ✔ |
 | GET `/library-shared-with-me` | `list_shared_with_me` `sharing.py:82` | `library_query.list_shared_with_me` | yok | — |
-| POST `/package-imports` (202) | `submit_package_import` `package_import.py:31` | `import_cmd.submit_package_import` | yok | ✔ |
+| POST `/package-imports` (202) | `submit_package_import` `package_import.py:31` | `import_cmd.submit_package_import` — **G-02:** manifest'in `export_schema_version`'ı **ilk kapı**; v1 (alan yok = eski artifact) ve v2 okunur, başka her değer → 422 `PACKAGE_IMPORT_MANIFEST_INVALID` (doc 08 yeni kod adlandırmıyor, sevk edilmiş kod yeniden kullanılır). Kabul edilen versiyon job payload'ına + audit metadata'sına yazılır | yok | ✔ |
 | GET `/package-imports` | `list_package_imports:50` | `import_query.list_import_reports` | yok | — |
 | GET `/package-imports/{import_job_id}` | `get_package_import:57` | `import_query.get_import_report` | yok | — |
 

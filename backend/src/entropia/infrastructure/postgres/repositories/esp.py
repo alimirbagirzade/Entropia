@@ -195,11 +195,24 @@ def add_validation_run(
 async def get_latest_validation_run(
     session: AsyncSession, revision_id: str
 ) -> EmbeddedResolverValidationRun | None:
-    """The most recent validation-run for a revision (newest ``created_at`` first)."""
+    """The most recent validation-run for a revision (newest ``created_at`` first).
+
+    The ordering is TOTAL on purpose. ``created_at`` is ``server_default=func.now()``, which
+    in PostgreSQL is the *transaction* timestamp — two runs inserted in one transaction tie
+    exactly, and a bare ``ORDER BY created_at DESC LIMIT 1`` would then return either row at
+    the planner's discretion. ``run_id`` breaks the tie deterministically: ``new_id`` mints a
+    fixed-width base32 timestamp + random suffix, so it sorts lexicographically by mint order
+    and is unique. This matters beyond tidiness — ``export_package`` puts the selected run's
+    id into a content-addressed manifest, and a coin-flip here would be a coin-flip in the
+    ``manifest_hash``.
+    """
     stmt = (
         select(EmbeddedResolverValidationRun)
         .where(EmbeddedResolverValidationRun.revision_id == revision_id)
-        .order_by(EmbeddedResolverValidationRun.created_at.desc())
+        .order_by(
+            EmbeddedResolverValidationRun.created_at.desc(),
+            EmbeddedResolverValidationRun.run_id.desc(),
+        )
         .limit(1)
     )
     return (await session.execute(stmt)).scalar_one_or_none()

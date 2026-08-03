@@ -68,6 +68,28 @@ class ExportPackageRequest(BaseModel):
     revision_id: str
 
 
+class PackageExportResponse(BaseModel):
+    """The export envelope, declared so the contract is PUBLISHED in the schema (G-02).
+
+    A ``dict[str, Any]`` return kept this body invisible to ``docs/openapi.json`` while the
+    drift guard stayed green — the same trap O-30 closed for the purge 202. ``manifest``
+    stays an open object on purpose: it is a versioned, content-addressed artifact whose
+    field set is stated by its own ``export_schema_version``, and freezing it into a closed
+    model here would make every future schema bump an API break.
+
+    ``registry_observation`` is a SIBLING of the manifest, never a member: it is live ESP
+    registry state read at export time, so it must not be inside the hashed artifact (see
+    ``domain/package/export_contract.py``). It is ``None`` for a package with no resolver
+    contract, and ``None`` on a replay of a pre-G-02 idempotency record."""
+
+    entity_id: str
+    revision_id: str
+    manifest_hash: str
+    export_schema_version: int
+    manifest: dict[str, Any]
+    registry_observation: dict[str, Any] | None = None
+
+
 @router.get("/library")
 async def list_library(
     cursor: str | None = Query(default=None),
@@ -271,7 +293,7 @@ async def approve_package(
     )
 
 
-@router.post("/library/{entity_id}/export")
+@router.post("/library/{entity_id}/export", response_model=PackageExportResponse)
 async def export_package(
     entity_id: str,
     body: ExportPackageRequest,
@@ -282,7 +304,12 @@ async def export_package(
     revision (doc 08 §7 "Export"). This is the package manifest, NOT a backtest
     result_export. Synchronous V1: returns the content-addressed manifest +
     ``manifest_hash`` and records a ``package.exported`` audit; no source mutation. A
-    fresh ``Idempotency-Key`` makes repeated clicks return the same manifest."""
+    fresh ``Idempotency-Key`` makes repeated clicks return the same manifest.
+
+    Schema v2 (G-02): for an ESP revision the manifest carries the resolver contract
+    snapshot (adapter, warm-up, timing, repaint, signature, evidence) and the validation
+    evidence of the run that certified it; live registry state stays outside the artifact
+    as ``registry_observation``."""
     return await pkg_cmd.export_package(
         ctx.session,
         ctx.actor,

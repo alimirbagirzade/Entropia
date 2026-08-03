@@ -3126,3 +3126,71 @@ Kalan tek büyük açık iş hâlâ **R2'nin product-owner imzası**
 
 Bu oturumda main ayrıca ilerledi: **#494 (I-03 allocation item kind allowlist)**,
 **#495 (I-12 sekiz callerless sembol silindi)** — ikisi de I-07'den bağımsız, `origin/main`@`2cea1a6`.
+
+---
+
+## Stage post-V1 G-02 — ESP export contract v2 landed (PR #521)
+
+**Base `6c46c03` → merge `a570934`** · 2026-08-03 · **Migration YOK** (alembic head
+`0043_i08_registry_strategy_fks` sabit, tek head) · **`ENGINE_VERSION` DEĞİŞMEDİ** ·
+**OpenAPI:** 1 yeni schema (`PackageExportResponse`) + 1 operation body `$ref`, **operation
+sayısı 196'da sabit**.
+
+Doc 09 §15 **ESP-19** ve doc 09 §14, export artifact'inin adapter ref + test evidence
+taşımasını istiyor. Schema v1 yalnız identity/hash/dependency yarısını taşıyordu — adapter,
+warm-up, timing, repaint ve evidence `embedded_resolver_contract`'ta, sertifikalayan run
+`embedded_resolver_validation_run`'da yaşıyordu, manifest ise yalnız `package_revision`'dan
+kuruluyordu. **Kusur kod yazılmadan önce `6c46c03` üzerinde probe ile üretildi:** satırlar
+veritabanında mevcutken manifest dört alanı birden atlıyordu.
+
+**Landed:** yeni saf düzlem `domain/package/export_contract.py`; manifest'e
+`export_schema_version` · `exporter_version` · `resolver_contract_snapshot` ·
+`validation_evidence_snapshot`; kanıt yoksa `legacy_incomplete_evidence` (**`passed` asla
+uydurulmaz** — revision `passed` okusa bile); canlı registry manifest'in DIŞINDA, zarfın
+kardeşi `registry_observation`; her iki snapshot da **export edilen revision'ın** satırlarından
+(kökün head'inden asla); import v1(+açık `null`)/v2 okur, başka versiyon **iki katmanda**
+fail-closed (sınırda 422, worker'da terminal `failed`); yabancı contract iddiası
+`diagnostics.origin_resolver_contract` olarak `trusted: false` yankılanır ve **sıfır** yeni
+contract/registry satırı yaratır; `get_latest_validation_run` sıralaması **total** yapıldı
+(`created_at` = tx timestamp olduğu için aynı tx'teki iki run eşitleniyordu).
+
+**Yeni taksonomi kodu icat EDİLMEDİ** — doc 08 okunamayan şema versiyonu için kod
+adlandırmıyor, sevk edilmiş `PACKAGE_IMPORT_MANIFEST_INVALID` yeniden kullanıldı.
+
+**Adversarial review iki fazla-iddiayı çürüttü** (ikisi de probe ile ölçüldü): yeniden
+validate ve approve geçişi hash'i hareket ettiriyor. Alanlar korundu (ESP-19 gereği),
+**dokümantasyon dört dosyada daraltıldı**. Doğru cümle: digest arada bir şey değişmediyse
+birebir yeniden üretilir, ama revision ömrü boyunca **donmuş değildir**. Review ayrıca beş
+test zayıflığı buldu (revert'te hayatta kalan determinizm testi, SHA-256'yı test eden tamper
+testi, vakum `PackageRoot` sayımı, key-set assert etmeyen "only" iddiası, private fonksiyon
+çağıran replay testi) — hepsi düzeltildi.
+
+**Testler:** yeni `test_esp_export_contract_v2.py` (13) + `test_package_import_schema_v2.py`
+(18, end-to-end round trip dahil); ESP-19 acceptance testi **PARTIAL → FULL**. Backend tam
+suite **exit 0 / 2974 passed / coverage %92.47**; frontend **680 passed**; ruff + mypy +
+OpenAPI drift temiz; **CI 6/6 pass**.
+
+**Kapanan kayıtlar:** `docs/audit/current_main_ground_truth_2026-08-03.md` §G-02 CLOSED +
+§18 sıra 3 LANDED; `docs/audit/acceptance_id_map.md` ESP-19 + §E.4 CLOSED. Yeni sözleşme
+dokümanı: **`docs/audit/esp_export_schema_v2.md`** (v1/v2 matrisi + şema + determinizm kanıtı).
+
+**Deferred (bilerek):** hiçbir şey bu slice'tan ertelenmedi. Kapsam dışı kalanlar zaten
+ayrı kalemler: §G-03 Tool Gateway `strategy.*`/`trading_signal.*`, §G-04 Library
+Request-Validation UI.
+
+## Next: **ADIM 5 — `feat/library-request-validation-ui`** (§18 sıra 2, §G-04)
+
+`docs/audit/current_main_ground_truth_2026-08-03.md` §18'de kalan sıradaki tek slice.
+**Backend TAM** — route `POST /library/{entity_id}/validation-runs` (201,
+`apps/api/routes/library.py`), komut `pkg_cmd.request_package_validation`, aynı CP pipeline'ı
+(`start_package_validation_run`), rol kapısı `ensure_can_edit` (owner-or-Admin), bayrak
+`can_request_validation` list+shared+detail DTO'sunda. **Eksik olan yalnız frontend yüzeyi:**
+`frontend/src/lib/library.ts` bayrağı tipliyor ama çağıran bir hook YOK.
+
+Ondan sonra §18 sırası: 4 → `fix/i16a-panel-logs-display-title` (+ F-07 kalıntısı
+`pages/PanelLogs.tsx:134`), 5 → `test/fresh-install-acceptance`, 6 →
+`feat/agent-tool-gateway-strategy-trading-signal` (§G-03), 7 → `ci/security-hardening`.
+
+**İnsan işi (agent kapatamaz):** **A-08 / GitHub #514** — NVDA/Firefox + VoiceOver/Safari
+ekran okuyucu kabul denetimi. 2026-07-30'da kanıtsız kapatılmıştı, 2026-08-03'te yeniden
+açıldı.

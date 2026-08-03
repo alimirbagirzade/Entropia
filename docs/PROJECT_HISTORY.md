@@ -1894,3 +1894,189 @@ Hizalanan mevcut testler: `test_acceptance_esp_package_gaps.py` PC-19 (artık de
 yolundan siliyor; "HOLE" paragrafı kapanış kaydıyla değiştirildi) ve
 `tests/contract/test_esp_contract.py` (resolve double'ları kök/detail okumalarını da
 karşılıyor).
+
+---
+
+## ESP export contract v2 — G-02 / ESP-19 kapatıldı (PR #521)
+
+**Base SHA:** `6c46c039ebf9f3eaa58c6f34bddb74d2ad86d073` (`6c46c03`, #520 merge'ü) ·
+**Merge SHA:** `a570934` · **Tarih:** 2026-08-03 · **Migration YOK** (şema değişmedi; alembic
+head `0043_i08_registry_strategy_fks`, tek head) · **`ENGINE_VERSION` DEĞİŞMEDİ** (motor ve
+sayısal semantik hiç dokunulmadı) · **OpenAPI:** 1 yeni schema + 1 operation body `$ref`,
+**operation sayısı değişmedi** (196).
+
+### Reproduction — önce kusur üretildi
+
+Kod yazılmadan önce `origin/main` @ `6c46c03` üzerinde geçici probe testi:
+
+```
+embedded_resolver_contract          -> VAR (contract_id, runtime_adapter=pine_v5, evidence)
+embedded_resolver_validation_run    -> VAR (status=passed, vectors_run=1)
+manifest omits ['export_schema_version', 'exporter_version',
+                'resolver_contract_snapshot', 'validation_evidence_snapshot']
+```
+
+Yani olgular veritabanında **mevcuttu**; manifest yalnız `package_revision`'dan kuruluyordu.
+Doc 09 §15 **ESP-19** ("root/revision identity, content hash, signature, adapter ref,
+evidence and dependency manifest") ve doc 09 §14 ("adapter ref, test evidence manifest")
+karşılanmıyordu — dışa aktarılmış bir ESP, hangi runtime/timing semantiğiyle doğrulandığını
+söyleyemiyordu. Probe ağaçta bırakılmadı; kalıcı regresyon kapısı
+`test_esp_export_contract_v2.py::test_esp_export_v2_carries_contract_adapter_and_validation_evidence`.
+
+### Ne landed
+
+**Yeni saf düzlem:** `backend/src/entropia/domain/package/export_contract.py` (I/O yok, session
+yok) — `EXPORT_SCHEMA_VERSION = 2`, `EXPORTER_VERSION`, `SUPPORTED_IMPORT_SCHEMA_VERSIONS`,
+`build_resolver_contract_snapshot` / `build_validation_evidence_snapshot` /
+`build_registry_observation` / `resolve_import_schema_version` /
+`describe_origin_resolver_contract`.
+
+**Manifest v2 alanları** (`commands/package_lifecycle.py::export_package`):
+
+| Alan | İçerik |
+|---|---|
+| `export_schema_version` | `2` — artifact'in ŞEKLİ |
+| `exporter_version` | `"entropia-package-exporter-v2"` — ÜRETEN |
+| `resolver_contract_snapshot` | `contract_id`, `canonical_key`, `signature`, `runtime_adapter`, `warm_up_period`, `timing_semantics`, `repaint`, `evidence`. **`created_at` bilerek YOK** — satır-doğum damgası, contract olgusu değil |
+| `validation_evidence_snapshot` | `evidence_state`, `validation_run_id`, `validator_version`, `status`, `vectors_run`, `checks`, `completed_at` + revision'ın KENDİ `revision_validation_state`/`revision_approval_state`'i **ayrı alanlarda** |
+
+**Kanıt yoksa `legacy_incomplete_evidence`, `status: null` — `passed` ASLA uydurulmaz.** En
+tehlikeli vaka bilerek test edildi: revision `passed` okuyup hiç run satırı olmayabilir
+(R8 öncesi legacy aktivasyon); artifact bunu doğrulayıcı-sertifikalı kanıt diye sunmaz,
+revision'ın kendi durumunu kendi adıyla ayrı raporlar (doc 09 §7).
+
+**Canlı registry immutable contract'tan AYRILDI.** ESP registry pointer'ı manifest'in İÇİNDE
+değil, zarfın kardeşi `registry_observation` (`canonical_key`, `trust_state`,
+`trusted_active_revision_id`, `registry_version`, `runtime_adapter`,
+`is_trusted_active_revision`). İki sonucu var: (1) `ta.sma` deprecate edilince aynı
+revision'ın yeniden export'u **birebir aynı `manifest_hash`**'i verir; (2) yabancı registry
+state'i import'ta hiç seyahat etmez — importer kendi registry'sinde yeniden çözmek zorunda.
+
+**Her iki snapshot da EXPORT EDİLEN revision'ın satırlarından okunur**, kökün head'inden asla.
+Head ileri alındığında eski revision'ın export'u değişmez; contract taşımayan yeni head
+`null` döner, selefinin contract'ını ödünç almaz.
+
+**Import v1/v2** (`commands/package_import.py` + `jobs/package_import.py`): alan yok veya
+`null` → v1 (bu artifact'lar alandan eski); `1`/`2` (int veya digit-string) → o versiyon;
+başka her şey (`3`, `99`, `0`, `-1`, `"next"`, `"2.0"`, `""`, `true`, `[2]`, `{...}`) →
+**iki katmanda fail-closed**: API sınırında 422 (durable job açılmadan, `_coerce_kind`'dan
+ÖNCE) ve worker'da terminal `failed` (`unsupported_export_schema_version`, kuyruğa başka
+yoldan ulaşmış payload için defence in depth). `true` bilerek listede — naif `raw in {1,2}`
+Python'da `True == 1` olduğu için onu kabul ederdi.
+
+**Hata kodu — kanonik boşlukta uydurma YOK.** Doc 08 §11 okunamayan şema versiyonu için kod
+adlandırmıyor; yeni taksonomi girdisi icat edilmedi, sevk edilmiş
+`PACKAGE_IMPORT_MANIFEST_INVALID` yeniden kullanıldı (sınıfın kendi tanımı zaten
+"structurally unusable at the API boundary").
+
+**Trust sınırı:** v2 manifestin `resolver_contract_snapshot`'ı import raporuna
+`diagnostics.origin_resolver_contract` olarak **`trusted: false` +
+`local_revalidation_required: true`** damgasıyla yankılanır. `embedded_resolver_contract`
+satırı YAZILMAZ, `embedded_resolver_registry` pointer'ı YAZILMAZ (before/after satır
+sayımıyla kanıtlı), paket DRAFT/PENDING kalır. Dosya import etmek trusted resolver basmanın
+yolu değildir.
+
+**`get_latest_validation_run` sıralaması TOTAL yapıldı** (`created_at DESC, run_id DESC`).
+`created_at` = `server_default=func.now()` = PostgreSQL'de *transaction* timestamp; tek tx'te
+insert edilen iki run tam eşitleniyordu ve çıplak `ORDER BY created_at DESC LIMIT 1` satırı
+planlayıcının insafına bırakıyordu — content-addressed bir manifest'in içinde yazı-tura.
+`run_id` (`new_id`: sabit genişlikli base32 zaman damgası + rastgele) benzersiz ve
+leksikografik sıralanabilir.
+
+**Route sözleşmesi yayımlandı:** `POST /library/{entity_id}/export` artık
+`dict[str, Any]` değil **`PackageExportResponse`** döndürüyor. `dict` dönüşü gövdeyi
+`docs/openapi.json`'dan gizlerken drift guard'ı yeşil tutuyordu — O-30'un purge 202 için
+kapattığı tuzağın aynısı. `manifest` bilerek açık `dict` bırakıldı: versiyonlu,
+content-addressed bir artifact'i kapalı modele dondurmak her şema bump'ını API kırığı yapardı.
+
+**Pre-G-02 Idempotency-Key replay'i:** `_with_export_envelope_defaults` **kopya üzerinde**
+`export_schema_version: 1` + `registry_observation: null` doldurur; saklı `response_ref`
+JSONB'si mutate EDİLMEZ ve manifest **verbatim** döner — içine versiyon alanı geri-doldurmak
+audit'in çoktan kaydettiği `manifest_hash`'i geçersiz kılardı (O-30 kalıbı).
+
+### Adversarial review — iki fazla-iddia ampirik olarak çürütüldü
+
+Read-only bir adversarial review, dokümantasyonumun determinizmi **fazla iddia ettiğini**
+buldu. İki geçici probe testiyle doğruladım ve iddiayı **dört dosyada daralttım**:
+
+| Bulgu | Probe sonucu | Aksiyon |
+|---|---|---|
+| `get_latest_validation_run` append-only kümeden seçiyor → yeniden validate hash'i değiştiriyor | `HASH_EQ=False`, iki farklı `run_id` | Sıralama total yapıldı; **"en yeni" semantiği KORUNDU** — `run_resolver_validation` en yeni run'ın status'unu `revision.validation_state`'e kopyalar, eski bir run'ı pinlemek sistemin `failed` saydığı revision'a `passed` reklamı yaptırırdı. Davranış artık test edilmiş kasıtlı sınır |
+| `validation_state`/`approval_state` yerinde mutate ediliyor → hash'lenen alanlar "immutable" değil | `draft → approved`, `HASH_EQ=False` | Alanlar korundu (ESP-19 evidence gereği); dokümantasyon daraltıldı |
+
+**Doğru cümle (dört dosyada):** artifact, bir revision'ın *export anındaki sertifikalı
+durumunun* content-addressed anlık görüntüsüdür — export-zamanı saatinden ve canlı
+registry'den bağımsız, ama revision'ın kendi lifecycle ilerleyişinden bağımsız **DEĞİL**.
+
+Review ayrıca **test zayıflıkları** buldu ve hepsi düzeltildi: determinizm testi slice revert
+edilse de geçerdi (artık v2 alanlarının hash preimage'ında olduğunu **önce** assert ediyor);
+tamper testi SHA-256'nın özelliğini test ediyordu (artık hash **sınırını** test ediyor —
+contract+evidence içeride, registry observation dışarıda); `PackageRoot` sayımı vakumdu
+(`submit_package_import` hiçbir girdide root yaratmaz → `PackageImportJob`/`Job`); "only"
+iddiası key-set assert etmiyordu (artık exact delta); legacy replay testi private fonksiyon
+çağırıyordu (artık gerçek `idempotency_keys` satırı planlanıp gerçek yoldan replay ediliyor).
+
+Review'un **doğruladığı ve dokunulmayan** iddialar: fail-closed import (bypass bulunamadı —
+sınır `run_idempotent`'tan önce, worker `_manifest_defect`'in ilk kontrolü, tek dispatch
+yüzeyi), trust minting yok, O-13 fingerprint kuralı iki tarafta da temiz, non-ESP
+değişmezliği, `legacy_incomplete_evidence` (hiçbir yoldan `passed` sızmıyor).
+
+### Dürüst sınırlar
+
+1. **Digest revision ömrü boyunca DONMUŞ değildir.** Yeniden validate yeni bir run ekler
+   (evidence snapshot en yeniyi izler) ve approve geçişi `approval_state`'i hareket ettirir.
+   İkisi de test edilmiş kasıtlı davranış; `validation_run_id` hangi kanıtın digest'i
+   desteklediğini adlandırır, artifact asla belirsiz değildir.
+2. **v1 ve v2 hash'leri karşılaştırılmaz.** Aynı revision'ın iki şekli farklı hash üretir —
+   versiyonlamanın sebebi budur. Kayıtlı v1 hash'leri kapsadıkları v1 artifact için geçerli
+   kalır.
+3. **Sistem GÖNDERİLEN bir `manifest_hash`'i asla doğrulamaz.** `submit_package_import` kendi
+   digest'ini hesaplar ve hiçbir şeyle karşılaştırmaz — bilinçli: import gelen hash'e
+   güvenmek yerine yerelde yeniden çözer. "Tamper detection" bir sistem davranışı değil,
+   digest'in bağımsız kopyasını tutan dış okuyucuya açık bir özelliktir.
+4. **Açık `null` versiyon v1 okunur.** JSON `null` değerin yokluğudur, bilinmeyen bir gelecek
+   versiyon değil; alan-yok ile aynı davranır (test edildi).
+
+### Testler
+
+Yeni: `tests/integration/test_esp_export_contract_v2.py` (**13**) — ESP-19 tam alan
+sadakati (DB satırlarına karşı) · audit metadata (`export_schema_version` + `exporter_version`)
+· iki bağımsız export determinizmi · yeniden validate yeni artifact üretir ve run'ını adlandırır
+· approve geçişi digest'i hareket ettirir · head move eski revision'ı yeniden yorumlamaz ·
+registry deprecate hash'i bozmaz · hash preimage sınırı · `legacy_incomplete_evidence`
+(passed-ama-run-yok vakası dahil) · pre-G-02 replay (gerçek `idempotency_keys` satırıyla) ·
+non-ESP exact key-set delta.
+
+Yeni: `tests/integration/test_package_import_schema_v2.py` (**18**) — v1 (versiyonsuz +
+açık `1`) · açık `null` · v2 yerel resolver'a yeniden pinler (manifest `pine_v5`, yerel güven
+`python`) · untrusted origin echo + satır sayımları · çözülemeyen adapter → BLOCKED · 10
+reddedilen versiyon (`true == 1` tuzağı dahil) · worker defence in depth · **end-to-end
+round trip** (gerçekten trusted bir ESP'nin gerçek artifact'i geri import edilir).
+
+Hizalanan: `test_acceptance_esp_package_gaps.py::test_esp_revision_export_carries_identity_hash_and_dependency_manifest`
+**PARTIAL → FULL** (ESP-19'un her cümlesi assert ediliyor).
+
+**Ölçümler:** backend tam suite **exit 0 — 2974 passed**, 0 failed/skipped/error, coverage
+**%92.47** (kapı ≥90) · frontend **680 passed** (67 dosya), `npm run coverage` exit 0 ·
+`ruff` + `ruff format --check` + `mypy src` (380 dosya) temiz · OpenAPI drift guard temiz ·
+**CI 6/6 pass** (Backend 32m39s, iki E2E dahil).
+
+### Dokümantasyon
+
+Yeni: **`docs/audit/esp_export_schema_v2.md`** — v1↔v2 uyumluluk matrisi (alan alan), versiyon
+kabul kuralı tablosu, v2 şeması, determinizm bölümü (§4.1 garanti edilen / §4.2 edilmeyen /
+§4.3 kanıtlayan testler), trust sınırı tablosu, değişen/değişmeyen yüzeyler.
+
+Güncellendi: `docs/audit/current_main_ground_truth_2026-08-03.md` §G-02 **CLOSED** + §18 sıra 3
+LANDED · `docs/audit/acceptance_id_map.md` ESP-19 satırı + §E.4 **CLOSED** ·
+`docs/CODEMAPS/BACKEND_ROUTES.md` · `BACKEND_LAYERS.md` · `FRONTEND_MAP.md`.
+
+### Frontend
+
+`lib/library.ts`: `RegistryObservation` tipi + `ExportPackageResult`'a
+`export_schema_version` + `registry_observation`. Route, `useExportPackage` hook'u,
+`Idempotency-Key` üretimi, `["audit"]` invalidation'ı **değişmedi**. `manifest` bilerek açık
+`Record<string, unknown>` kaldı. `pages/Library.tsx`: şema versiyonu satırı + **ayrı**
+`registry_observation` bloğu (canlı state artifact bloğunun dışında, "not part of the
+artifact" etiketiyle) + artifact `<pre>`'sine `aria-label="Export manifest artifact"`
+(test kapsamlama için, CLAUDE.md'nin sanctioned mekanizması).

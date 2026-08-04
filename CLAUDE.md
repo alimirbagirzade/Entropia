@@ -165,21 +165,23 @@ Before stopping a working session, produce **ALL** of the following:
 
 ## Current position (keep in sync at each closing)
 
-> **HEAD `f4e2fd3`.** Son slice: **ADIM 13** — Research Data point-in-time & Agent/Run parity
-> (PR #560, commit `4110138`, base `c610600`). Aynı gün **PR #555** de landed → **#549 CLOSED**
-> ve **`ENGINE_VERSION = backtest-engine-v18-gap-adjusted-stop-fill`** (ADIM 13 değiştirmedi).
-> **Alembic head `0043_i08_registry_strategy_fks`** (tek head) · OpenAPI + capability matrix
-> değişmedi · migration yok · frontend dokunulmadı.
-> **ADIM 13:** dört bundle-pinleme yüzeyi (Agent tool gateway / Agent bundle / evidence bundle /
-> Run manifest) karşılaştırıldı; 40 yeni senaryo + **4 `xfail(strict)`**. Dar üretim düzeltmesi
-> tek kalem: onaylı bir revizyonun available-time politikası artık **donmuş**
-> (`time_policy.py::ensure_time_policy_mutable` → 409 `LIFECYCLE_BLOCKED`). Dört uyuşmazlık
-> açıldı, düzeltilmedi: **#556**, **#557** (agent gateway parity), **#558**, **#559** (ürün kararı).
-> **Sıradaki:** **ADIM 14 — #539 + #533 TEK slice** (Strategy formu capability disclosure;
-> ayrı düzeltmek diğerini üretir). ADIM 12'nin **#550/#551/#552**'si hâlâ açık.
-> Ayrıntı: `docs/ADIM13_LANDED_KICKOFF.md` · `docs/audit/research_point_in_time_matrix.md` ·
-> `docs/PROJECT_HISTORY.md` §ADIM 13.
-> **Uyarı:** `docs/audit/current_main_ground_truth_2026-08-03.md` §18'in sıra 2/3/4/6
+> **HEAD `801791f`** — ADIM 14 (ADR, PR #563) + ADIM 13 kapanış kaydı (PR #562) landed.
+> **Alembic head `0043_i08_registry_strategy_fks`** (tek head) · **196 OpenAPI operation /
+> 151 schema** · `ENGINE_VERSION = backtest-engine-v18-gap-adjusted-stop-fill` (PR #555, #549
+> CLOSED) · capability matrix değişmedi — **ADIM 14 hiçbirine dokunmadı.**
+> **Son slice:** ADIM 14 — `docs/adr/0002-unified-clock-portfolio-simulation.md` (761 satır),
+> **docs-only**, statü **`Proposed`** (PO onayı bekliyor, `Accepted` DEĞİL); ADIM **15–20**
+> sınırlarını, **7 açık kararı (OD-1…OD-7)** ve **A1–A22 kabul matrisini** donduruyor.
+> **Sıradaki:** ADR onayı → ADIM 15 (merged-axis clock primitive). Paralel açık kalemler:
+> **R-1** (`readiness_check._resolve_allocation` canlı draft pinliyor), manifest'te eksik 3
+> kanonik alan, **#544** (NET), **#559** (DST), **#539** (CRITICAL — düzeltmesi açık PR #564),
+> ADIM 12'den **#550/#551/#552**, ADIM 13'ten **#556/#557/#558**.
+> Ayrıntı: `docs/ADIM14_LANDED_KICKOFF.md` · `docs/PROJECT_HISTORY.md` §ADIM 14 ·
+> ADR §12/§13/§14 · ADIM 13 için `docs/ADIM13_LANDED_KICKOFF.md`.
+> **Uyarı 1 — numaralandırma çakışması:** PR #562 "ADIM 14"ü frontend slice'ı (#539 + #533)
+> sanıyor; merged ADR ise kendini ADIM 14 sayıp **ADIM 15–20'yi unified-clock'a rezerve
+> ediyor**. Frontend slice'ı çakışmayan bir etikete taşınmalı — **ürün kararı**.
+> **Uyarı 2:** `docs/audit/current_main_ground_truth_2026-08-03.md` §18'in sıra 2/3/4/6
 > kalemleri ADIM 5–8 ile kapandı ama o belge güncellenmedi — ona güvenmeden önce doğrula.
 
 
@@ -198,6 +200,8 @@ Before stopping a working session, produce **ALL** of the following:
   Frontend **696 passed** (68 dosya, `npm run coverage` exit 0), `npm run typecheck` temiz.
   **CI 6/6 pass** (ADIM 13 / PR #560 Backend job **46m01s**). Yine de **otorite CI'dır.**
   Doğrula: `gh run list --branch main --limit 1` → job log.
+  **ADIM 14 docs-only olduğu için suite'i YENİDEN ÖLÇMEDİ** — yukarıdaki sayılar ADIM 13'ün
+  ölçümüdür ve geçerlidir; oracle paketinde xfail **sıfırdır** (#549 PR #555 ile kapandı).
   **Ortam tuzağı:** paralel worktree oturumları aynı anda koşuyor — `TEST_DATABASE_URL` ile
   worktree'ye özel izole DB kullan (conftest her testte `drop_all`/`create_all`; **sürücü
   `postgresql+asyncpg://` olmalı** — `psycopg` integration conftest'ini `create_async_engine`'de

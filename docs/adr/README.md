@@ -9,3 +9,4 @@ File naming: `NNNN-<slug>.md` (zero-padded, sequential).
 | ADR | Title | Status |
 |-----|-------|--------|
 | [0001](0001-naming-conventions.md) | Naming conventions (GAP-21) | Accepted |
+| [0002](0002-unified-clock-portfolio-simulation.md) | Unified-clock multi-item portfolio co-simulation | Proposed |

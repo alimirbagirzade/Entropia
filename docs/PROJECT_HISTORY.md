@@ -2227,3 +2227,174 @@ LANDED · `docs/audit/acceptance_id_map.md` ESP-19 satırı + §E.4 **CLOSED** �
 `registry_observation` bloğu (canlı state artifact bloğunun dışında, "not part of the
 artifact" etiketiyle) + artifact `<pre>`'sine `aria-label="Export manifest artifact"`
 (test kapsamlama için, CLAUDE.md'nin sanctioned mekanizması).
+
+---
+
+## ADIM 8 — Yüksek riskli API sözleşmelerini typed hale getirme (PR #529)
+
+**Base `870cc1a` → commit `62705ec` → merge `8a87460`** · 2026-08-04 · **Migration YOK**
+(alembic head `0043_i08_registry_strategy_fks` sabit, tek head) · **`ENGINE_VERSION`
+DEĞİŞMEDİ** · **OpenAPI: 30 yeni schema, 0 kaldırılan, operation sayısı 196'da sabit.**
+
+### Kusur, kod yazılmadan önce üretildi
+
+ADIM 2–7 ile değişen 16 public 2xx gövdesi `dict[str, Any]` dönüyordu. Bu, gövdeyi
+`docs/openapi.json`'dan **görünmez** tutarken drift guard'ı yeşil bırakıyor — O-30'un purge
+202 için, G-02'nin package export için kapattığı **aynı tuzak**. Frontend'in bağlanacağı bir
+sözleşme yoktu.
+
+### Landed
+
+Yeni `apps/api/schemas/` paketi (`common` · `esp` · `library` · `agent_tool_gateway`); 16 uç
+`response_model` aldı. **Wire byte'ları değişmedi** — her model bir serializer'ı anahtar-anahtar
+aynalıyor. Handler'lar `dict[str, Any]` dönmeye devam ediyor (sevk edilmiş kalıp:
+`trash.py::PurgeAcceptedResponse`), böylece serileştirmeden ÖNCE çalışan route-içi subscript'ler
+korunuyor: iki ETag için `int(detail["row_version"])` ve broker devri için
+`dispatch_create_package_job(result["job_id"])`.
+
+`PackageExportResponse` + `PackageValidationRunAcceptedResponse`, `routes/library.py`'den
+`schemas/library.py`'ye **aynı sınıf adlarıyla** taşındı → yayımlanan component anahtarı kaymadı.
+Modeller route modülünde değil ayrı pakette: o modüller kendini "thin handler" ilan ediyor ve
+~40 model inline `routes/library.py`'yi 550+ satıra çıkarırdı. `routes/trash.py`'deki üçüncü
+inline model kapsam dışı olduğu için yerinde bırakıldı.
+
+### Üç bağlayıcı kural
+
+**Her alan REQUIRED, nullability TİPTE** (`x: str | None`, default YOK) — `= None` default'u,
+asla atlanmayan bir anahtarı "atlanabilir" diye reklam eder. 17 üst düzey + 14 iç component
+için test edildi.
+
+**Enum'lar `string` olarak yayımlanır, kapalı enum olarak DEĞİL.** Serializer'lar zaten
+lowercase `StrEnum` değerini `str(x)` ile basıyor. Bir RESPONSE'ta kapalı enum, sunucunun
+meşru ürettiği bir değeri istemci tarafı doğrulama hatasına — ve `response_model` çıkışta
+doğruladığı için önce **500**'e — çevirir.
+
+**Zaman damgaları `string`, `format: date-time` DEĞİL.** Serializer'lar `.isoformat()`
+basıyor; `datetime` alanı değeri yeniden render ederdi.
+
+Bu iki kural **hand-list ile değil**, 2xx gövdesinden geçişli olarak erişilebilen HER
+component üzerinde **blanket walk** ile sınanıyor — el listesi tam da bir sonraki eklenen alanı
+kapsamayı bırakan şeydir. Ayrı bir test walk'un boş dönmediğini kanıtlıyor.
+
+**Aynı ad ≠ aynı model.** `checks` validate komutunda **liste**, detay okumasında saklı rapor
+**dict**'i; `rationale_family` list satırında 2, detayda 4 anahtar. `ActivateResolverResponse`
+ve `DeprecateResolverResponse` de ayrı kaldı (biri `revision_id`, diğeri
+`replacement_revision_id` taşır). Birleştirmek her iki tarafı da optional yapardı.
+`LibraryPackageDetailResponse` ile `LibraryPackageRow` ortak bir private taban paylaşıyor
+(`_LibraryPackageFields`) — mypy strict, alt sınıfta alan tipi daraltmayı Liskov ihlali sayıyor.
+
+### Bilerek AÇIK bırakılanlar
+
+Export `manifest`'i (sürümlü artifact, `POST /package-imports`'a **aynen** geri gönderiliyor —
+düşen alan import artifact'ini sessizce bozar), çağıran-yazımı JSONB sözleşmeler, ve gateway'in
+`request`/`response_ref`'i. Sonuncusu `tool_name` ile 33 tool üzerinde ayrışıyor, arkasındaki
+komutun dönüşünü aynen saklıyor (Strategy/Trading Signal parity sonuçları dahil) ve üç yönlü
+birleşim: `succeeded`'da tool'un payload'ı (**`status` anahtarı YOK** — kardeş kolonu oku),
+`rejected`'da `{status, reason_code, reason}`, `failed`'da
+`{status, failure_code, failure_reason, details}`. Kapalı bir union her registry eklemesinde
+yeniden kesilmeliydi. **Gateway ZARFI tam tipli; yalnız tool payload'ı açık.**
+`permissions` ise tersine kapalı (11 adlı bool) — düşen bir bayrak UI eylemini **sessizce
+gizler**; test `dataclasses.fields(PackagePermissions)`'a karşı sabitliyor.
+
+**Enqueue'nun HTTP yüzeyi YOK.** `dispatch_tool_call`/`enqueue_tool_call` worker düzlemi;
+`apps/api/routes/` altında `agent_tools`'u import eden modül yok. Gateway'in public sözleşmesi
+iki history okumasıdır.
+
+### Landing'i engelleyen ve düzeltilen kusur
+
+`POST /package-imports`, çağıranın manifest'ini JSONB `rationale_family_snapshot`'a yalnız
+kap-seviyesi `isinstance(dict)` kapısıyla yazıyor (`jobs/package_import.py:210`).
+`_pinned_family`/`_live_family` ise id'yi **çıplak truthiness** ile eliyor, `display_name`'i ham
+geçiriyordu. `{"rationale_family_id": 7, "display_name": 42}` içeren bir import eskiden çöp
+render ediyordu; `PinnedRationaleFamilyRef` altında **tüm `GET /library` sayfası için 500**
+olurdu — tek alan için değil. `_snapshot_family_id` artık boş-olmayan **string** id istiyor
+(string olmayan bir id family referansı değildir), `_snapshot_display_name` string olmayan adı
+düşürüyor (`42`'yi ad diye basmak sistemin hiç atamadığı bir etiket uydurmaktır). Kapı ayrıca
+id `rationale_repo.get_family_root`'a **ulaşmadan** çalışıyor — oraya string olmayan bir arama
+anahtarı gidiyordu. Modülün kendi emsali izlendi (`_package_name` isinstance eler,
+`_output_kinds`/`derive_catalog_scope` `str()` ile zorlar). Geçerli veri birebir aynı. Yazma
+yolu bilerek dokunulmadı: `POST /package-imports`'u keyfi manifest içeriğine karşı sertleştirmek
+ayrı bir slice'tır, projeksiyon **zaten saklanana rağmen** güvenli olmalıdır.
+
+### Frontend wire parity artık makine kontrollü
+
+`tests/contract/test_wire_contract_parity.py` OpenAPI ↔ `frontend/src/lib/*.ts` karşılaştırmasını
+alan alan + nullability ile yapıyor (27 çift), mevcut F-05 capability-matrix aynası
+(`tests/unit/test_capability_matrix.py`) üslubunda. `main` üzerinde **dört sapma** buldu:
+
+| Sapma | Yön | Düzeltme |
+|---|---|---|
+| `EspPackageDetail` `latest_validation_run`'ı hiç bildirmemiş | istemci **R8'den beri** gönderilen alana kör | alan + `EspValidationRunSummary` eklendi |
+| `EspPackageDetail.lifecycle_state: string` | TS sunucudan **dar** (kolon nullable) — gizli runtime hatası | `string \| null` |
+| `LibraryPackageRow.lifecycle_state: string` | aynı | `string \| null` |
+| `ProvenanceScan.registry_fingerprint`/`context_hash` | TS **geniş** (kolonlar NOT NULL) — ölü dal | `string` |
+
+İki genişletme üç render noktasını null-güvensiz yaptı; `lifecycleTone` artık `string | null`
+alıyor ve etiketler `UNSTATED_LIFECYCLE_LABEL` (`"unstated"`) ile düşüyor — **asla uydurma
+`"active"`**. Route path, react-query key, hook, OCC token, `Idempotency-Key`, SSE eşlemesi ve
+`lib/*.ts` veri mantığı **dokunulmadı**.
+
+### Testler
+
+`test_typed_contract_no_field_drop.py` (17) — her model **kendisini besleyen gerçek
+serializer**'a karşı sabitlendi (ORM stub'ları üzerinde saf fonksiyonlar, DB yok).
+`test_typed_contract_openapi.py` (11) · `test_wire_contract_parity.py` (27 çift) ·
+`test_typed_contract_replay_parity.py` (16).
+
+**Kritik teknik:** integration modülü HTTP gövdesini **saklı idempotency zarfıyla**
+karşılaştırıyor. `run_idempotent` komutun dönüşünü aynen saklıyor, yani saklı dict route'un
+FastAPI'ye verdiği dict'tir — `body == stored` tek hamlede hem drop'u hem fazladan alanı
+çürütüyor **ve** replay'in aynı DTO'dan geçtiğini yapısal olarak kanıtlıyor. Saklı zarfı
+olmayan `validation-runs` için komut **spy**'lanıyor; onu el yazımı bir anahtar kümesine karşı
+sabitlemek (mevcut route testinin yaptığı) modelle inşaen anlaşır ve komut dokuzuncu bir
+anahtar kazansa yeşil kalırdı. `deprecate`'in replay'i HTTP'den **erişilemez** — lifecycle
+guard'ı `run_idempotent`'ın dışında, ikinci çağrı idempotency'e bakılmadan 409.
+
+**İki eski fixture yeniden hizalandı:** `tests/contract/test_library_contract.py` list ve
+detail sorgularını `{"entity_id": "pkg_1"}` ile taklit ediyordu — projeksiyonun asla
+üretmediği bir şekil. Tipli sözleşmede bu 500'dür ve doğru sonuç budur: sunucunun
+üretemeyeceği bir gövdeyi assert eden contract testi hiçbir şey test etmiyordu. Stub'lar artık
+`_package_row`'u anahtar-anahtar aynalıyor; testlerin gerçekte kontrol ettiği şey
+(filtre alias'ları, ETag) değişmedi.
+
+**Ölçüm:** backend **3143 passed / 0 failed / 0 skipped**, coverage **%92.81** (kapı ≥90),
+exit 0 · frontend **696 passed**, `tsc -b --noEmit` temiz, eslint 0 error, `npm run coverage`
+exit 0 · `ruff` + `ruff format --check` + `mypy src` (385 dosya) temiz · OpenAPI drift guard
+temiz · **CI 6/6 pass** (Backend 44m18s).
+
+### Uyumluluk
+
+Breaking removal/rename/optional-yapma **yok** → alias veya deprecation penceresi gerekmedi.
+`registry_observation` tiplendi (`PackageRegistryObservation`) ve `required` oldu — **response
+tightening**, istemciye kesinlikle daha fazla garanti; anahtar zaten hep vardı çünkü
+`_with_export_envelope_defaults` pre-G-02 replay'de backfill ediyor (testle sabitlendi).
+`PackageValidationRunAcceptedResponse`'ta yalnız description değişti (model modül değiştirdi),
+properties ve `required` birebir aynı. `ErrorBody`/`ErrorResponse`, 201/202 statüleri, OCC
+token'ları ve `Idempotency-Key` dokunulmadı.
+
+### Yöntem notu
+
+Adversarial read-only review **iki gerçek kusur** buldu ve ikisi de düzeltildi: yukarıdaki
+poisoned-snapshot 500'ü, ve `PackageValidationRunAcceptedResponse`'ın çalışma zamanı bağı
+olmayan tek model olması. Review ayrıca sekiz zayıf/totolojik assertion işaretledi
+(`set(x) == set(x)` biçimleri, fixture'ın kendisini okuyan `isinstance`, `list[X]` için de geçen
+`is not list`) — hepsi gerçek kontrollerle değiştirildi. **Bir hata kendi ayağıma dolandı:**
+`npx prettier --write` çalıştırdım; bu repoda prettier config'i, script'i ve bağımlılığı
+**yok**, dolayısıyla beş frontend dosyası baştan aşağı yeniden biçimlendi (~700 satır ilgisiz
+churn). Dosyalar commit'lenmiş içerikten yeniden kuruldu; nihai frontend diff'i **62 ekleme /
+9 silme**.
+
+### Dokümantasyon
+
+Yeni: **`docs/audit/high_risk_api_contract_audit.md`** — 18 uçluk denetim tablosu
+(method/path/request/gövde/replay/hata/frontend/OpenAPI), OpenAPI before/after, uyumluluk
+matrisi, açık-bırakılan alanlar gerekçeleriyle, kalan risk. Güncellendi:
+`docs/CODEMAPS/BACKEND_ROUTES.md` (satır numaraları + `response_model` sütunu + gateway'in
+enqueue-route'u-yok notu) · `docs/CODEMAPS/FRONTEND_MAP.md`.
+
+### Deferred (bilerek)
+
+`GET /library-shared-with-me` (`routes/sharing.py`) birebir aynı `LibraryPage` zarfını
+döndürüyor ve hâlâ tipsiz — kapsam dışı; `LibraryPageResponse` onun için olduğu gibi
+kullanılabilir. API'nin geri kalanındaki ~161 `dict[str, Any]` route dönüşü **dokunulmadı**;
+bu slice bilerek repo çapında bir DTO rewrite değildir.

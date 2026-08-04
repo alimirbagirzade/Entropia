@@ -14,6 +14,14 @@ documents the implementation, it does not evidence a test.
 
 Usage (from the repo root):  python3 docs/audit/acceptance_id_scan.py
 Exit code is 0 always; this is a report, not a gate.
+
+SUPERSEDED AS A COVERAGE MEASURE.  A test file containing the string ``PC-19``
+satisfies this scan even when the ID appears only in a docstring, so its number
+measures *citation*, not coverage.  The gate that measures coverage is
+``acceptance_semantic_scan.py`` + ``acceptance_semantic_map.yaml``: it names the
+test node that asserts each clause and fails CI when that node stops existing.
+This script is kept because the two answer different questions — read its output
+as "which IDs are cited anywhere", never as "which behaviour is tested".
 """
 
 from __future__ import annotations

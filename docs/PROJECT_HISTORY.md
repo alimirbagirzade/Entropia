@@ -3052,3 +3052,157 @@ suite'i yeniden ÖLÇMEDİ**; tek doğrulama kanıtı #564'ün CI koşusudur.
 yetkisi **insandadır**, agent kapatamaz. **#540** (exhaustiveness guard issue'su) bilerek kapsam
 dışı bırakıldı: bu slice'ın guard'ı **12 bağlı alanı** kapsıyor, #540'ın istediği **14 alanlık**
 tam kapsam değil.
+
+---
+
+## ADIM 15 — Unified valuation clock primitive (PR #567)
+
+**Base `801791f` → commit `7888760` → merge `ef11dc9`** · 2026-08-04T20:06:44Z · branch
+`feat/portfolio-unified-clock-core` · **3 dosya, +864/-1**:
+`backend/src/entropia/domain/backtest/execution/clock.py` (**300 satır**, yeni),
+`backend/tests/unit/test_backtest_unified_clock.py` (**563 satır / 28 test**, yeni),
+`docs/CODEMAPS/BACKEND_LAYERS.md` `backtest` satırı (+1/-1). **Migration YOK** (alembic head
+`0043_i08_registry_strategy_fks`, tek head) · **OpenAPI DEĞİŞMEDİ** (196 operation / 151 schema)
+· **`ENGINE_VERSION` DEĞİŞMEDİ** · **46 golden digest'in hiçbiri oynamadı** · **containment
+değişmedi** (`SHARED_ALLOCATION_STATUS = "future_dev"`, iki admission guard yerinde).
+
+### Neden bu slice, neden bu sırayla
+
+ADR 0002 §12 (ADIM 14, PR #563) unified-clock programını altı bağımsız revert edilebilir adıma
+böldü ve **15'i en başa** koydu: **saf** clock primitive'i, engine'e hiç dokunmadan. Sebep
+operasyonel — saatin şekli ile fiyatlamanın aritmetiği **aynı digest tazelemesine** karışırsa
+hangisinin neyi kaydırdığı bir daha kanıtlanamaz. Bu yüzden ADIM 15'in tek çıktısı hiçbir yerden
+import edilmeyen bir modül ve onun kendi unit testleridir; "engine artık onu kullanıyor" ADIM
+18'in işidir.
+
+### Ne inşa edildi
+
+`domain/backtest/execution/clock.py` ADR §4'ün **birleştirilmiş karar-zamanı eksenini** kuruyor
+ve **başka hiçbir şey** yapmıyor: sermaye tutmuyor, PnL kaydetmiyor, ledger sahiplenmiyor
+(ADIM 17); intent oluşturmuyor, faz döngüsü koşmuyor, snapshot yayımlamıyor (ADIM 18); çatışma
+hakemliği yapmıyor, sleeve sınırlamıyor, emir reddetmiyor (ADIM 19); ve taze barı olmayan
+pozisyonun nasıl mark edileceğine **karar vermiyor** (OD-2 açık).
+
+**Public yüzey:**
+
+| Sembol | Sözleşme |
+|---|---|
+| `iter_ticks(streams)` | `ticks(run) = sorted(union of decision_times(item_i))`, dedup'lu (§4.2). Tek stream ile o item'ın kendi bar eksenine indirgenir — §3.2'nin sınırı. |
+| `ItemBarStream(item_id, pin_ordinal, batches)` | `batches` = worker'ın bugün tuttuğu chunk'lı iterator (`stream_bars` / `iter_bar_batches`), aynen geçirilir. `pin_ordinal` = `manifest._pinned_items` sırasındaki index (`(root_id, selected_revision_id)`), **asla DOM/varış sırası**. |
+| `ClockTick(t_ms, views)` | Tek valuation noktası; `views` **HER** stream'i `(pin_ordinal, item_id)` sırasında taşır (§4.4 serialization sırası). `.deciding`, `.view_for(item_id)`. |
+| `ItemTickView(item_id, pin_ordinal, t_ms, bars, last_closed, last_closed_t_ms)` | `.is_decision = bool(bars)` (§5: taze bar yoksa karar yok). `.staleness_ms` **ölçüm** — eşik yok, fill yok. |
+| `tick_key(timestamp)` | UTC epoch ms veya `None`. `parse_utc(source_zone=None)` üzerinden; `engine._epoch_ms_or_none` ve `execution.rules.bar_epoch_ms` ile aynı konvansiyon (üçünün anlaştığı test var). Ayrı olma sebebi tek: clock, ADIM 19'un emekli edeceği `execution.rules`'a bağlanmasın. |
+| `timeline_identity(t_ms_values, *, policy_version)` | Eksenin sha256 kimliği; **incremental** — eksen materialize edilmeden kimliklenir. |
+| `CLOCK_POLICY_VERSION = "clock-policy-v1"` | Tick-set kuralı + adjudication A-1'i pinler. **Manifest'e yazılmadı** (§10.3 → ADIM 20). |
+
+**Fail-closed hata sınıfları** (hepsi `ClockAxisError` → `ValueError`, `engine.UnresolvedStrategyError`
+kalıbı): `UnplaceableBarTimestampError`, `NonMonotonicBarStreamError`, `DuplicateItemStreamError`.
+**Hiçbiri "atla" demiyor** — ADR §11 / Modül 12 §9: tick'i yerleştiremeyen worker run'ı düşürür.
+
+**Coercion sınırı engine ile aynı:** modül `execution.state._Bar` / `_normalize` kullanıyor, yani
+engine'in düşüreceği satır burada da düşüyor — clock, replay'in görmeyeceği bir barı admit edemez.
+
+### Dört tasarım kararı — taste değil sözleşme
+
+1. **Tick anahtarı `t_ms`, string değil.** Karışık offset formları girince string sırası yalnız
+   *kazara* doğrudur; `"...T02:00:00+01:00"` ile `"...T01:00:00Z"` **tek** tick'e düşmelidir.
+2. **Tick bir valuation noktasıdır, `(item, time)` çifti değil.** Item'lar tick'in *içinde* yaşar
+   → "her item `t`'de aynı snapshot'ı görür" **yapısal** olur, sonraki reviewer'ın yeniden
+   doğrulayacağı bir disiplin değil.
+3. **Dedup EKSENİN'dir, item verisinin değil.** Bir item'ın pinli akışı aynı instant'ta iki bar
+   taşıyorsa **ikisi de** o item'ın `bars` tuple'ında görünür ve eksen bir kez ilerler. Collapse
+   kanonun vermediği bir merge kuralı ister; drop pinli piyasa verisini sessizce atar.
+4. **Streaming zorunlu.** `heapq.merge` ile k-way merge (key `(t_ms, pin_ordinal, item_id)`) +
+   `groupby`; item başına **en fazla bir** bar tutulur. Materialize etmek ADR §11'e aykırı ve bir
+   test kaynak generator'lardan çekilen satır sayısını sayıyor.
+
+### İki sınır testi — programın rollback garantisi
+
+* `test_the_clock_is_not_wired_into_production_yet` — kaynak ağacını tarar, `execution.clock`
+  geçen `clock.py` dışı dosya **olmamalı**. ADR §12'de ADIM 15'in rollback'i "modülü sil"; bu
+  ancak **makine doğruladığı sürece** doğrudur. ADIM 18 `run_portfolio`'yu bağladığında test
+  **bilinçli** güncellenir — asla kazayla düşmemeli.
+* `test_no_clock_field_ships_in_the_manifest_yet_and_the_engine_version_stands` —
+  `ENGINE_VERSION == "backtest-engine-v18-gap-adjusted-stop-fill"` **ve** `manifest.py` içinde
+  `clock_policy_version` / `arbitration_policy_version` / `mark_staleness_policy` /
+  `engine_allocation_policy_version` **geçmiyor**. ADIM 20 sınırını *niyet* değil **kapı** yapar.
+
+### Doğrulama — ve mutation testinin yakaladığı gerçek boşluk
+
+Tek `pytest` çağrısı, worktree'ye özel `postgresql+asyncpg` DB, çıktı dosyaya, exit code ayrı
+okundu (`| tail` tuzağı) → **exit `0`**, coverage **%92.93** (kapı ≥90). `clock.py` ilk koşuda
+%99.1; tek kapsanmayan dal (`view_for`'un `None` dönüşü) aynı PR'da kapatıldı. `ruff check` /
+`ruff format --check` 739 dosyada temiz, `mypy src` 386 dosyada temiz. **CI 6/6 yeşil.**
+
+**Altı mutasyon uygulandı, altısı da yakalanıyor:** cursor'ın mükerrer bardan ilkini (sonuncusu
+yerine) izlemesi · barsız view'ların düşürülmesi · **merge'ün `t_ms` yerine ham timestamp
+string'iyle anahtarlanması** · geriye-giden-akış guard'ının kaldırılması · `(pin_ordinal,
+item_id)` sıralamasının kaldırılması · mükerrer `item_id` guard'ının kaldırılması.
+
+**String-key mutasyonu ilk turda HAYATTA KALDI.** Offset fixture'ı iki kaydı tesadüfen bitişik
+bırakıyordu, bu yüzden `groupby` yanlış anahtarla bile doğru gruplamıştı — yani 28 testin
+"geçmesi" o an eksen sözleşmesinin kanıtı **değildi**. Kapatan test sonradan yazıldı:
+`test_a_mixed_offset_axis_orders_by_instant_and_not_by_text`. **Bu, ADIM 16–19 için yöntemsel
+bir kayıttır:** geçen bir suite tek başına kanıt sayılmaz.
+
+Bağımsız read-only adversarial review **0 CRITICAL / 0 HIGH** buldu; eksen sıralama ispatını,
+streaming pull sayımını, `heapq.merge`/`groupby` read-ahead'i üzerinden no-look-ahead argümanını
+ve OD-1/OD-2'nin sessizce kapatılmadığını doğruladı. Kendi mutation avını maliyet nedeniyle
+yarıda bıraktı; o boşluğu yukarıdaki altı mutasyon kapatıyor.
+
+### Beş dürüst sınır
+
+**1. ADR hâlâ `Status: Proposed`.** §16 onayı implementasyonun kapısı yapıyordu ve belgede
+kayıtlı bir onay **yok**. ADIM 15 buna rağmen **kullanıcının açık talimatıyla** başladı ve indi.
+Bu bir ihlal değil — talimat kapıyı geçersiz kıldı — ama **kayıt düzeltilmelidir**: ya ADR
+`Accepted`'a çekilip §13'ün yedi kararı bir amendment tablosuna çözüm olarak yazılır, ya da §16
+gerçek pratiği yansıtacak şekilde gevşetilir. **Karar üründedir, agent'ta değil.**
+
+**2. Manifest policy alanları bilerek yazılmadı.** Brief onları istiyordu; ADR §10.3/§12 dördünü
+`ENGINE_VERSION` bump'ıyla **birlikte** ADIM 20'ye koyuyor. Şimdi bir manifest alanı sevk etmek ya
+`execution_key`'i erken kaydırır ya da arkasında policy olmayan bir isim yayımlardı. **Uzlaşma:**
+`CLOCK_POLICY_VERSION` ve `timeline_identity()` modül düzeyinde durur — policy ilk satırından
+itibaren tek eve sahip olur — ve bir test dört alan adının `manifest.py`'de bulunmadığını
+kilitler. Sınır böylece *niyet* değil **kapı**.
+
+**3. OD-2 açık — clock ölçer, eşik koymaz.** `staleness_ms` bir ölçümdür; bayat barın ileri
+taşınıp taşınamayacağı ve ne kadar süreyle taşınacağı cevapsız. **ADIM 17 bunu çözmeden portföy
+geneli `E(t)` hesaplayamaz** — programın sıradaki gerçek blocker'ı budur.
+
+**4. Naive timestamp ekseni düşürür, ama `indicators._epoch_seconds` aynı değeri UTC varsayar.**
+`tick_key` → `parse_utc(source_zone=None)` offset'siz bir değeri çözümsüz sayar (K-01), bu yüzden
+clock onu **reddeder**; `indicators._epoch_seconds` ise aynı değeri sessizce UTC kabul eder.
+Üretim barları ingest'te UTC-normalize edildiğinden bunun tetiklenmemesi beklenir, ama **iki
+yardımcı gerçekten ayrışıyor** ve **ADIM 16/18 bununla karşılaşacak.** Bir testle pinli ve modül
+docstring'inde yazılı.
+
+**5. ADR kendi içinde çelişiyor — işaretlendi, düzeltilmedi.** §3.2 **38** senaryonun
+kımıldamamasını istiyor (`portfolio.rules_none` dahil); kabul kriteri **A13** ise **37**
+portföy-dışı digest'in değişmediğini ve "yalnız 9 `portfolio.*` senaryosunun hareket ettiğini"
+söylüyor. İkisi `portfolio.rules_none` hakkında aynı anda doğru olamaz. **ADIM 19/20'de ısırır**,
+ADIM 15'te değil — bu yüzden sessizce bir taraf seçilmedi.
+
+### Kayıt düzeltmesi — R-1 kapandı
+
+ADIM 14 kapanışı ve `CLAUDE.md`, **R-1**'i (`readiness_check._resolve_allocation`'ın pinlediğini
+iddia ettiği revision yerine canlı draft'tan config kurması) "açık, worktree boş, iş yapılmadı"
+diye taşıyordu. **O kayıt geçersiz:** R-1 **PR #565 ile indi** (merged 2026-08-04T19:30:39Z,
+merge `06809cc`) — snapshot artık adı geçen revision'ı pinliyor ve bir integration testi
+diverge etmiş draft'a karşı bunu doğruluyor. **ADIM 20'nin bu önkoşulu karşılandı.**
+Ayrıca **#539'un düzeltmesi de indi** (PR #564, merge `b8d62e2`), ama **issue #539 hâlâ OPEN** —
+kapatma yetkisi insandadır, agent kapatamaz.
+
+### Kapsam dışı bırakılanlar
+
+Shared ledger / `PortfolioSnapshot` (ADIM 17), `ItemIntent` + faz döngüsü (ADIM 18),
+conflict/sleeve/solvency arbitrasyonu (ADIM 19), manifest alanları + `ENGINE_VERSION` bump +
+containment lift (ADIM 20). `record_time_basis` semantiği **değişmedi** (A-1 / OD-1). FX kapsam
+dışı (OD-5). Historical Result, manifest ve pinli revision'lar okunmadı, yeniden yazılmadı,
+yeniden yorumlanmadı.
+
+### Kapanış kararı
+
+ADIM 15'in kalıcı çıktısı **saf bir modül ve onun kendi kanıtıdır**. Bir sonraki oturum ADIM
+16'ya (bar döngüsünün resumable stepper'a çıkarılması) başlarken **clock'a dokunmamalı** — iki
+modülün buluşması ADIM 18'dir — ve tek kabul kanıtı olarak **46 golden digest'in hiçbirinin
+oynamamasını** almalıdır. Reuse anchor'ları ve resume prompt: `docs/ADIM15_LANDED_KICKOFF.md`.

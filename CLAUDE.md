@@ -165,26 +165,26 @@ Before stopping a working session, produce **ALL** of the following:
 
 ## Current position (keep in sync at each closing)
 
-> **HEAD `893dbac`** — ADIM 14 (ADR, PR #563) + kapanışı (PR #566), **F-26** (PR #564) ve
-> **R-1 revision pin** (PR #565) landed. **Alembic head `0043_i08_registry_strategy_fks`**
-> (tek head) · **196 OpenAPI operation / 151 schema** · `ENGINE_VERSION =
-> backtest-engine-v18-gap-adjusted-stop-fill` (PR #555, #549 CLOSED) · capability matrix
-> değişmedi · migration yok.
-> **Son slice:** **F-26** — Strategy formu capability disclosure (#539 + #533 TEK slice,
-> PR #564, `5887f3f`): yeni `capabilityDisclosure.ts` + `CapabilityNote.tsx`; form artık
-> DEĞERE değil **ERİŞİLEBİLİRLİĞE** bakıyor (yanlış-negatif 15 satır + varsayılandaki sahte
-> blocker birlikte düzeldi), `MODELLED_FILTER_TYPES` matristen türetiliyor, 12 alanlık
-> exhaustiveness guard eklendi. **Frontend-only, backend byte-identical**, CI 6/6.
-> **#539 ve #533 issue'ları hâlâ AÇIK** (kapatma yetkisi insanda).
-> **Sıradaki:** ADR onayı (statü **`Proposed`**, `Accepted` DEĞİL) → ADIM 15 (merged-axis
-> clock primitive). Paralel açık: manifest'te eksik 3 kanonik alan, **#544** (NET),
-> **#559** (DST), ADIM 12'den **#550/#551/#552**, ADIM 13'ten **#556/#557/#558**, **#540**.
-> Ayrıntı: `docs/PROJECT_HISTORY.md` §F-26 + §ADIM 14 · `docs/ADIM14_LANDED_KICKOFF.md` ·
-> ADR §12/§13/§14 · `docs/ADIM13_LANDED_KICKOFF.md`.
+> **HEAD `0f44c3a`** — ADIM 15 (unified valuation clock, PR #567, commit `7888760`) +
+> **F-26** relabel & kapanış kaydı (PR #568) landed.
+> **Alembic head `0043_i08_registry_strategy_fks`** (tek head) · **196 OpenAPI operation /
+> 151 schema** · `ENGINE_VERSION = backtest-engine-v18-gap-adjusted-stop-fill` · **46 golden
+> digest sabit** · capability matrix ve containment değişmedi · migration yok.
+> **Son slice:** ADIM 15 — `domain/backtest/execution/clock.py` (300 satır) + 28 test; modül
+> **SAF ve hiçbir yerden import edilmiyor** (rollback = modülü sil; bir test bunu kilitler).
+> Backend suite exit 0, coverage **%92.93**, CI 6/6.
+> **Sıradaki:** ADIM 16 — `run_engine` bar döngüsü → resumable stepper; **tek kabul kanıtı 46
+> digest'in oynamaması**, clock'a dokunulmaz.
+> **Açık:** ADR 0002 hâlâ **`Proposed`** (ADIM 15 kullanıcı talimatıyla başladı — kayıt
+> düzeltilmeli) · **OD-2** (ADIM 17 blocker) · manifest'te eksik 3 kanonik alan ·
+> **#544 #559 #550 #551 #552 #556 #557 #558 #539 #533 #540 #514**.
+> **R-1 KAPANDI** (PR #565) — ADIM 14 belgeleri onu hâlâ "açık" diye taşıyordu.
+> Ayrıntı: `docs/ADIM15_LANDED_KICKOFF.md` · `docs/PROJECT_HISTORY.md` §ADIM 15 + §F-26 ·
+> ADR §12/§13/§14.
 > **Numaralandırma:** çözüldü — **ADIM 14 = ADR**, frontend slice = **F-26**; ADIM 15–20
 > unified-clock'a rezerve, ADIM dışı işe F-serisinden sıradaki boş numarayı ver.
-> **Uyarı 2:** `docs/audit/current_main_ground_truth_2026-08-03.md` §18'in sıra 2/3/4/6
-> kalemleri ADIM 5–8 ile kapandı ama o belge güncellenmedi — ona güvenmeden önce doğrula.
+> **Uyarı:** `docs/audit/current_main_ground_truth_2026-08-03.md` §18'in sıra 2/3/4/6 kalemleri
+> ADIM 5–8 ile kapandı ama o belge güncellenmedi — ona güvenmeden önce doğrula.
 
 
 - **Durum:** V1 ROADMAP COMPLETE (Stages 0–8, docs 01–22) + post-V1 + video-alignment +

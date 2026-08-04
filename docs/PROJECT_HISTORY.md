@@ -2922,15 +2922,22 @@ dönüştü, kalan 4 xfail `tests/integration/test_research_point_in_time_parity
 #556 / #557 / #558). **İkisi de ADIM 13'ün kapanışında (PR #562) düzeltildi**; bu kapanış
 düzeltmeyi korur ve kaynağını kayda geçirir.
 
-### Sıra ve numaralandırma çakışması (dürüst not)
+### Sıra ve numaralandırma çakışması — **çözüldü: ADIM 14 = ADR, frontend slice = F-26**
 
 ADR (#563) `origin/main`'e **ADIM 13'ün kapanış kaydından (#562, merge `801791f`) ÖNCE** indi;
-bu kayıt onun üzerine rebase edilerek yazıldı. Kronoloji tutarlı, **numaralandırma değil**:
-#562'nin "Next"i ADIM 14'ü *frontend capability disclosure (#539 + #533)* olarak tanımlıyor,
+bu kayıt onun üzerine rebase edilerek yazıldı. Kronoloji tutarlıydı, **numaralandırma değildi**:
+#562'nin "Next"i ADIM 14'ü *frontend capability disclosure (#539 + #533)* olarak tanımlıyordu,
 merge edilmiş ADR ise kendini ADIM 14 sayıyor (§16: "Per the ADIM 14 brief") ve **ADIM 15–20'yi
-unified-clock programına rezerve ediyor**. Bu kayıt merge edilmiş gerçeği izliyor:
-**ADIM 14 = ADR**. Frontend slice'ı geçerli ve sıradaki iş olmaya devam ediyor; yalnız
-**çakışmayan bir etikete taşınması gerekir** — bu bir ürün kararıdır, agent kararı değil.
+unified-clock programına rezerve ediyor**.
+
+**Karar (2026-08-04):** **ADIM 14 = ADR** (merge edilmiş gerçek; ADR immutable, metni
+değiştirilmedi — statüsü hâlâ `Proposed`) ve **frontend slice'ının etiketi `F-26`**. Gerekçe iki
+katlı: (1) slice saf frontend sunum işidir ve F-serisi tam olarak bunu adlandırır — `F-01…F-25`
+doluydu, `F-26` ilk boş numara; (2) ADIM 15–20 unified-clock programına rezerve olduğu için ADIM
+serisinden numara harcanmamalıydı. Etiket `docs/ADIM13_LANDED_KICKOFF.md`,
+`docs/STAGE2_HANDOFF.md`, `docs/ADIM14_LANDED_KICKOFF.md` ve `CLAUDE.md` genelinde bu değere göre
+düzeltildi; **tarihsel kayıtlar silinmedi, yalnız etiket düzeltildi.** Slice'ın kendisi
+**PR #564 ile landed** — tam kaydı aşağıda **§F-26**.
 
 ### Kapanış kararı
 
@@ -2938,3 +2945,110 @@ unified-clock programına rezerve ediyor**. Bu kayıt merge edilmiş gerçeği i
 **onaylanana kadar bir öneridir**. Bir sonraki oturum unified clock'a dokunuyorsa önce onun
 **statüsünü** okumalı: `Proposed` ise iş tasarım tartışmasıdır, implementasyon değil.
 Reuse anchor'ları ve resume prompt: `docs/ADIM14_LANDED_KICKOFF.md`.
+
+---
+
+## F-26 — Strategy formu capability disclosure (PR #564)
+
+**Commit `5887f3f`** → **merge `b8d62e2`** (2026-08-04T19:32:36Z) · branch
+`fix/strategy-form-capability-disclosure` · **frontend-only, sunum işi** · **Migration YOK**
+(alembic head `0043_i08_registry_strategy_fks`, tek head) · **OpenAPI DEĞİŞMEDİ** ·
+**`ENGINE_VERSION` DEĞİŞMEDİ** · **backend byte-identical**.
+
+**Etiket tarihçesi:** slice ADIM 13'ün kapanışında (#562) "ADIM 14" diye planlanmıştı. O numara
+`origin/main`'e daha önce inen ADR 0002'ye (#563) aitti; çakışma 2026-08-04'te **F-26** lehine
+karara bağlandı (yukarıdaki §"Sıra ve numaralandırma çakışması"). Planlama metinleri
+`docs/ADIM13_LANDED_KICKOFF.md` ve `docs/STAGE2_HANDOFF.md` §"Eski Next"te — etiketleri
+düzeltilmiş, içerikleri korunmuş halde — duruyor.
+
+### Kapatılan iki kusur — aynı kök, zıt yönler
+
+Üretilen capability aynası, kullanıcı bir `future_dev` opsiyonun **üzerine strateji kurmadan
+önce** o opsiyonu reddetmek için var. İki kusur bu sözü zıt yönlerden bozuyordu ve **kökleri
+aynıydı**: form kararını opsiyonun **DEĞERİNE** bakarak veriyordu, backend okuyucuları ise
+motorun alanı **okuyup okumadığına** bakıyor.
+
+**#539 — yanlış-NEGATİF (CRITICAL, ADIM 11'de açılmıştı).** `StrategyGraphForm` üretilen
+aynayı **hiç** import etmiyordu (`grep -c capabilityField`: ConfigForm 12, GraphForm **0**) ve
+kendi `SelectField`'ini taşıyordu. Matrisin 22 `future_dev` satırından **15'i** sıradan
+seçilebilir opsiyon gibi render ediliyordu:
+
+| alan | satır |
+|---|---:|
+| `scaling_logic.timeframe` | 10 |
+| `scaling_logic.timeframe_mode = increasing_by_layer` | 1 |
+| `restrictions_filters.filters.filter_type` | 4 |
+| **toplam** | **15** |
+
+> **Rakam notu:** issue #539'un başlığı "11" diyor, **kendi tablosuyla çelişiyor**; doğru sayı
+> **15**'tir (bağlı 9 ConfigForm alanının `future_dev` toplamı 7 → 22 − 7 = 15). Aynı hatalı
+> rakam ADIM 11'in tarihsel kaydında da duruyor ve **bilerek düzeltilmedi** (geçmiş yeniden
+> yazılmaz); kabul ölçütü 15 üzerinden ölçüldü.
+
+Kullanıcı gerçeği ancak stratejiyi kurduktan **sonra** Ready Check'te öğreniyordu
+(`STRATEGY_SCALING_UNSUPPORTED`). **Yetki açığı değildi** — sunucu koşuyu reddediyor, motor
+pozisyon açmıyor — ama bu bir **disclosure** kusuru ve hata yönü **güvensiz**.
+
+**#533 — yanlış-POZİTİF.** Yepyeni bir stratejide, **sevk edilen varsayılanlarla**, form
+`allow_hedge` için "Ready Check blocks it" basıyordu; Ready Check bloklamıyordu.
+`exit_on_opposite_signal` AÇIKKEN pozisyon hedge dalına erişilmeden kapanır → değer **inert**tir
+ve backend üçlü paritesi (`engine.py`, `capabilities.py::_read_opposite_hedge`, `validators.py`)
+bunu zaten doğru işliyordu. Kusur yalnız frontend iddiasındaydı.
+
+### Tek kural, tek modül
+
+#539'u **değere** bakarak kapılamak tam olarak #533'ü çoğaltırdı — bu yüzden ikisi ayrı değil
+**TEK slice**ta ve tek kuralla çözüldü; kural her forma kopyalanmak yerine **yeni tek modülde**
+tutuldu:
+
+* **`frontend/src/components/capabilityDisclosure.ts` (yeni)** — kuralın tek sahibi. Çağıran
+  kart alanın **erişilebilirliğini** (`scaling.enabled`, `filter.enabled`) ya da bir **inert
+  gerekçesini** (`exit_on_opposite_signal`) sağlar.
+* **`frontend/src/components/CapabilityNote.tsx` (yeni)** — notun tek render yüzeyi.
+* **Erişilemez alan** ne disable edilir ne de not alır — alanı atlayan backend okuyucusunu
+  aynalar. **Inert alan** da hiçbir şeyi disable etmez, çünkü değeri seçmek bloklamazdı.
+* **Zaten kaydedilmiş değer seçilebilir kalır** sözleşmesi **değişmedi**.
+
+### Yan kazanç — D-6 (`MODELLED_FILTER_TYPES`)
+
+`lib/strategyGraph.ts` içindeki `MODELLED_FILTER_TYPES`, motor allow-list'inin **elle bakımlı
+3 elemanlı kopyasıydı ve parite testi yoktu**. Artık **matristen türetiliyor** ve bir testle
+pinleniyor. Ayrıca uyarısı **disabled bir filtre satırında** da ateşleniyordu — kaydedilen
+revizyondan zaten düşen bir satır için blocker iddia ediyordu; o da düzeldi.
+
+### Regresyon kapısı
+
+Yeni exhaustiveness guard **12 bağlı alan yolunu** kaydediyor ve kaydedilmemiş bir alanda
+`future_dev` satırı belirirse **kırılıyor**. Bu, bugün **sıfır** `future_dev` taşıyan ama bağlı
+olmayan `scaling_logic.method` ile `position_exit_logic.partial_aftermath`'i de kapsıyor —
+yani matris yeniden üretilip biri `future_dev`'e dönerse **#539 sessizce geri gelemez**.
+
+### Dosyalar (6 dosya, +412 / −49)
+
+| dosya | durum |
+|---|---|
+| `frontend/src/components/capabilityDisclosure.ts` | **yeni** — kuralın tek sahibi |
+| `frontend/src/components/CapabilityNote.tsx` | **yeni** — notun render yüzeyi |
+| `frontend/src/components/StrategyConfigForm.tsx` | ortak kurala bağlandı |
+| `frontend/src/components/StrategyGraphForm.tsx` | aynayı ilk kez import ediyor |
+| `frontend/src/lib/strategyGraph.ts` | `MODELLED_FILTER_TYPES` matristen türetiliyor |
+| `frontend/src/test/capabilityDisclosure.test.tsx` | **yeni** — kural + guard + parite testleri |
+
+### Sınır (dürüst)
+
+**Dokunulmayanlar:** route path · react-query key · OCC token · Idempotency-Key · hooks ·
+SSE taksonomisi · API çağrıları · `lib/*.ts` veri mantığı — **hiçbiri değişmedi**.
+`CAPABILITY_MATRIX` satırları, üretilmiş `engineCapabilityMatrix.generated.ts` (backend parity
+testi byte byte pinliyor), readiness validator ve `opposite_direction_hedge`'in **sevk edilen
+varsayılan değeri** (ayrı ürün kararı, F-4) **dokunulmadı**. Backend byte-identical.
+
+**Doğrulama:** düzeltmeden **önce** üç kusuru da assert eden bir render probe'u yazıldı, düzeltme
+**sonrası** aynı assertion'lar düştü. **CI PR #564'te 6/6 SUCCESS** — Backend (lint/type/test) ·
+Frontend (lint/typecheck/build/test) · E2E gerçek tarayıcı (F-23) · E2E dev-auth acceptance ·
+A11Y axe-core (R2-14) · Docker build. **Bu kapanış kaydı docs-only bir oturumda yazıldı ve
+suite'i yeniden ÖLÇMEDİ**; tek doğrulama kanıtı #564'ün CI koşusudur.
+
+**Açık kalan:** **#539 ve #533 issue'ları hâlâ AÇIK** — düzeltme merge edildi ama issue kapatma
+yetkisi **insandadır**, agent kapatamaz. **#540** (exhaustiveness guard issue'su) bilerek kapsam
+dışı bırakıldı: bu slice'ın guard'ı **12 bağlı alanı** kapsıyor, #540'ın istediği **14 alanlık**
+tam kapsam değil.

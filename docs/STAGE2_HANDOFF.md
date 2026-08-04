@@ -3442,15 +3442,17 @@ bırakmıyor.
 
 ---
 
-## Eski Next (ADIM 13 kapanışında yazıldı — **numarası çakıştı, aşağıya bak**)
+## Eski Next (ADIM 13 kapanışında yazıldı — **etiketi F-26 oldu, slice LANDED**)
 
-> Bu blok slice'ı **"ADIM 14"** diye etiketliyor; ama `origin/main`'e daha önce inen
-> **PR #563** (ADR 0002) kendini ADIM 14 sayıyor ve **ADIM 15–20**'yi unified-clock programına
-> rezerve ediyor. Aşağıdaki `## ADIM 14 — Unified-clock portfolio ADR landed` kaydı merge
-> edilmiş gerçeği izler. **Bu frontend slice'ı hâlâ sıradaki iştir** — yalnız çakışmayan bir
-> etikete taşınması gerekir (ör. `F-08` ya da ADIM 21+); bu bir **ürün kararıdır**.
+> Bu blok slice'ı yazıldığı gün **"ADIM 14"** diye etiketliyordu; ama `origin/main`'e daha
+> önce inen **PR #563** (ADR 0002) kendini ADIM 14 sayıyor ve **ADIM 15–20**'yi unified-clock
+> programına rezerve ediyor. **Çakışma karara bağlandı: frontend slice'ının etiketi `F-26`.**
+> Gerekçe: iş saf frontend sunum işi (F-serisi tam olarak bu; F-01…F-25 dolu) ve ADIM 15–20
+> rezerve olduğu için ADIM serisinden numara harcanmamalı. Slice bu etiketle **PR #564'te
+> landed** — aşağıdaki analiz artık **kapanmış işin ön-tanısıdır**, sıradaki iş değil; sonucu
+> için `## F-26 — Strategy formu capability disclosure landed (PR #564)` kaydına bak.
 
-### ~~ADIM 14~~ → yeniden etiketlenecek: Strategy formu capability disclosure (#539 + #533 TEK slice)
+### F-26 (yazıldığındaki etiket: ~~ADIM 14~~) — Strategy formu capability disclosure (#539 + #533 TEK slice)
 
 İki issue **aynı mekanizmanın iki zıt yönde kusuru**; ayrı düzeltmek diğerini üretir.
 Backend tarafı **doğru ve testli** — kusur yalnız UI iddiasında. İkisi de güncel `main`
@@ -3534,15 +3536,88 @@ tazelenmedi — gerekmiyor:** yeni endpoint / tablo / sayfa / job yok.
 
 **Sıra notu (dürüst kayıt):** ADR (#563) `origin/main`'e **ADIM 13'ün kapanış kaydından
 (#562, merge `801791f`) ÖNCE** indi; bu kapanış onun üzerine rebase edildi. Bu yüzden belgede
-sıra kronolojiktir ama **numaralandırma çakışıyor**: #562'nin "Next"i ADIM 14'ü *frontend
-capability disclosure (#539 + #533)* sanıyor, merge edilmiş ADR ise kendini ADIM 14 sayıp
-**ADIM 15–20'yi unified-clock'a rezerve ediyor**. Bu kayıt ADR'ı izler; **frontend slice'ı
-çakışmayan bir etikete taşınmalı** — ürün kararıdır, agent kararı değil. Yukarıdaki
-"Eski Next" bloğu bu yüzden üstü çizili başlıkla duruyor: iş geçerli, etiketi geçersiz.
+sıra kronolojiktir ama bir süre **numaralandırma çakıştı**: #562'nin "Next"i ADIM 14'ü
+*frontend capability disclosure (#539 + #533)* sanıyordu, merge edilmiş ADR ise kendini ADIM 14
+sayıp **ADIM 15–20'yi unified-clock'a rezerve ediyordu**. **Karara bağlandı (2026-08-04):
+ADIM 14 = ADR; frontend slice'ının etiketi `F-26`.** ADR immutable olduğu ve F-serisi tam
+olarak saf frontend sunum işini adlandırdığı için taşınan taraf slice oldu; ADIM 15–20 rezerve
+kaldığından ADIM serisinden numara harcanmadı. Yukarıdaki "Eski Next" bloğu bu yüzden artık
+F-26 başlığını taşıyor — iş geçerliydi, yalnız etiketi geçersizdi ve o slice **PR #564 ile
+landed**.
 
 **Doküman:** `docs/adr/0002-unified-clock-portfolio-simulation.md` (tam tasarım) ·
 `docs/ADIM14_LANDED_KICKOFF.md` (reuse anchor'ları + resume prompt) ·
 `docs/PROJECT_HISTORY.md` §ADIM 14.
+
+---
+
+## F-26 — Strategy formu capability disclosure landed (PR #564)
+
+**Base `b8d62e2`'nin ebeveyni → commit `5887f3f` → merge `b8d62e2`** (2026-08-04T19:32:36Z) ·
+branch `fix/strategy-form-capability-disclosure` · **frontend-only** · **Migration YOK**
+(alembic head `0043_i08_registry_strategy_fks`) · **OpenAPI DEĞİŞMEDİ** · **`ENGINE_VERSION`
+DEĞİŞMEDİ** · **backend byte-identical**.
+
+> **Etiket:** bu slice ADIM 13 kapanışında "ADIM 14" diye planlanmıştı; o numara merge edilmiş
+> ADR 0002'ye ait olduğu için **F-26** olarak yeniden etiketlendi (yukarıdaki "Eski Next"
+> bloğu ve `docs/ADIM13_LANDED_KICKOFF.md` aynı etiketi taşır).
+
+**Ne düzeltti — iki zıt kusur, TEK kural.** Her ikisinin de kökü aynıydı: form kararını
+opsiyonun **DEĞERİNE** bakarak veriyordu, backend okuyucuları ise motorun alanı **okuyup
+okumadığına** bakıyor.
+
+* **#539 (yanlış-NEGATİF)** — `StrategyGraphForm` üretilen capability aynasını hiç import
+  etmiyordu ve kendi `SelectField`'ini taşıyordu; matrisin 22 `future_dev` satırından **15'i**
+  sıradan seçilebilir opsiyon gibi render ediliyordu (`scaling_logic.timeframe` 10 ·
+  `timeframe_mode` 1 · `filters.filter_type` 4). Kullanıcı gerçeği ancak stratejiyi kurduktan
+  sonra Ready Check'te öğreniyordu. **Yetki açığı değil** (sunucu koşuyu reddediyor, motor
+  pozisyon açmıyor) ama hata yönü güvensiz.
+* **#533 (yanlış-POZİTİF)** — not, her yeni stratejinin **sevk edilen varsayılanında**
+  `allow_hedge` için "Ready Check blocks it" diyordu. `exit_on_opposite_signal` AÇIKKEN pozisyon
+  hedge dalına erişilmeden kapanır; değer **inert**tir ve `_read_opposite_hedge` doğru şekilde
+  "seçim yok" raporlar.
+
+**Çözüm biçimi:** #539'u değere bakarak kapılamak tam olarak #533'ü çoğaltırdı, bu yüzden ikisi
+tek kuralla ve **her forma kopyalanmak yerine tek yeni modülde** çözüldü — yeni
+`frontend/src/components/capabilityDisclosure.ts` + `CapabilityNote.tsx`. Çağıran kart alanın
+**erişilebilirliğini** (`scaling.enabled`, `filter.enabled`) ya da bir **inert gerekçesini**
+(`exit_on_opposite_signal`) sağlar; erişilemez alan ne disable edilir ne de not alır (backend'in
+alanı atlayan okuyucusunu aynalar), inert alan da hiçbir şeyi disable etmez. **Zaten kaydedilmiş
+değer seçilebilir kalır** sözleşmesi değişmedi.
+
+**Yan kazanç (D-6):** `MODELLED_FILTER_TYPES` elle bakımlı 3 elemanlı bir motor allow-list
+kopyasıydı ve parite testi yoktu; artık **matristen türetiliyor** ve bir testle pinleniyor.
+Uyarısı ayrıca **disabled bir filtre satırında** da ateşleniyordu — kaydedilen revizyondan
+düşen bir satır için blocker iddia ediyordu; o da düzeldi.
+
+**Regresyon kapısı:** yeni exhaustiveness guard **12 bağlı alan yolunu** kaydediyor ve
+kaydedilmemiş bir alanda `future_dev` satırı belirirse **kırılıyor**. Bu, bugün sıfır
+`future_dev` taşıyan ama bağlı olmayan `scaling_logic.method` ile
+`position_exit_logic.partial_aftermath`'i de kapsıyor — matris yeniden üretilirse #539
+sessizce geri gelemez.
+
+**Dosyalar (6 dosya, +412/−49):** `components/capabilityDisclosure.ts` (**yeni**) ·
+`components/CapabilityNote.tsx` (**yeni**) · `components/StrategyConfigForm.tsx` ·
+`components/StrategyGraphForm.tsx` · `lib/strategyGraph.ts` ·
+`test/capabilityDisclosure.test.tsx` (**yeni**).
+
+**Sınır — dokunulmayanlar:** route path / react-query key / OCC token / Idempotency-Key /
+hooks / SSE taksonomisi / API çağrısı / `lib/*.ts` veri mantığı **yok**; `CAPABILITY_MATRIX`,
+üretilmiş `engineCapabilityMatrix.generated.ts`, readiness validator ve
+`opposite_direction_hedge`'in **sevk edilen varsayılan değeri** (ayrı ürün kararı, F-4)
+**dokunulmadı**. Sunum işi.
+
+**Doğrulama:** düzeltmeden **önce** üç kusuru da assert eden bir render probe'u yazıldı,
+**sonra** aynı assertion'lar düştü. **CI PR #564'te 6/6 SUCCESS** (Backend lint/type/test ·
+Frontend lint/typecheck/build/test · E2E ×2 · A11Y axe-core · Docker build).
+**Dürüst sınır:** bu kapanış belgesi docs-only bir slice'tır ve **suite'i yeniden ölçmedi** —
+yukarıdaki tek doğrulama kanıtı #564'ün CI koşusudur; CLAUDE.md'deki test sayıları hâlâ ADIM
+13'ün ölçümüdür.
+
+**Açık kalan:** **#539 ve #533 issue'ları hâlâ AÇIK** — düzeltme merge edildi, ama issue kapatma
+yetkisi insandadır (agent kapatmaz). **#540** (exhaustiveness guard'ın kendi issue'su) bilerek
+kapsam dışında bırakıldı; bu slice'ın guard'ı 12 bağlı alanı kapsıyor, #540'ın istediği tam
+14 alanlık kapsam değil.
 
 ---
 
@@ -3555,13 +3630,14 @@ sınırlarına karşı başlar. Onay gelmezse tasarım tartışılır — ama ko
 
 **Onayı beklerken paralel yürüyebilecek, ADR'ı bloke etmeyen dört kalem:**
 
-1. **R-1 dar PR'ı** (revision pinning) — ADIM 20'nin önkoşulu. Worktree
-   `claude/allocation-revision-pin-fix-bb18c9` açık ama **boş**; iş yapılmadı.
+1. ~~**R-1 dar PR'ı** (revision pinning)~~ — **LANDED**: PR #565 (`a33d3e4`,
+   `fix(readiness): pin the allocation revision the snapshot names`), merge `06809cc`.
+   ADIM 20'nin bu önkoşulu artık açık değil.
 2. **#559 (DST)** — merged eksen karışık zaman dilimli kaynakları kapsamadan önce kapanmalı;
    bugün fold/gap sessizce çözülüyor ve saat bunu cross-item hale getirir.
 3. **#544 (NET)** — cross-item conflict policy kanonda tanımsız; ADIM 19 ile ya da öncesinde.
-4. **#539 (CRITICAL, ADIM 11'den)** — düzeltmesi **açık PR #564**'te; engine aritmetiğinden
-   bağımsız.
+4. ~~**#539 (CRITICAL, ADIM 11'den)**~~ — **düzeltmesi LANDED**: F-26 / PR #564 (`5887f3f`,
+   merge `b8d62e2`). Issue'nun kendisi hâlâ **AÇIK** (kapatma yetkisi insanda).
 
 **#550 / #551 / #552** (ADIM 12'nin açtığı sizing/booking uyuşmazlıkları) hâlâ açık ve unified
 clock'u bloke etmiyor; ama #550 karara bağlanmadan sizing üzerine yeni iş yapılmamalı.

@@ -20,21 +20,25 @@
 **Dallanmadan önce `git fetch` + merge doğrulaması yap** — bu seride `origin/main` oturum
 ortasında birden fazla kez ilerledi.
 
-## ⚠ Numaralandırma çakışması (karar kullanıcıdadır)
+## ✅ Numaralandırma çakışması — çözüldü (ADIM 14 = ADR, frontend slice = F-26)
 
 `origin/main` üzerinde **ADIM 14 = bu ADR'dır** — ADR metni kendini böyle adlandırıyor
 (§16: "Per the ADIM 14 brief") ve ADIM **15–20**'yi unified-clock programı için donduruyor (§12).
 
-Ama **PR #562** (ADIM 13'ün kapanışı, merge `801791f` — ADR'dan **sonra** indi) kendi
-"Next"inde **ADIM 14 = #539 + #533 frontend capability disclosure** diyor; onun uygulaması da
-**açık PR #564**. İki tanım aynı numarayı kullanıyor. Merge edilmiş ADR'ın tarafında olduğu
-için bu belge ADIM 14'ü ADR olarak kaydeder; **frontend slice'ının yeniden numaralandırılması
-gerekir** (ADIM 15–20 unified-clock'a rezerve — çakışmayan bir etiket seçilmeli, ör. `F-08` ya
-da ADIM 21+). Slice'ın **kendisi geçerli ve sıradaki iş**; geçersiz olan yalnız etiketi.
-Bu bir ürün/sahiplik kararıdır, agent kararı değil.
+Bir süre **PR #562** (ADIM 13'ün kapanışı, merge `801791f` — ADR'dan **sonra** indi) kendi
+"Next"inde **ADIM 14 = #539 + #533 frontend capability disclosure** diyordu; iki tanım aynı
+numarayı kullanıyordu.
 
-`STAGE2_HANDOFF.md` içinde #562'nin "Next" bloğu bu yüzden **"Eski Next"** başlığıyla ve üstü
-çizili slice adıyla duruyor — silinmedi, çünkü iş hâlâ sırada.
+**Karar (2026-08-04): ADIM 14 = ADR, frontend slice = `F-26`.** ADR immutable ve merge edilmiş
+gerçeğin tarafında olduğu için taşınan taraf slice oldu. `F-26` seçildi çünkü (1) iş saf
+frontend sunum işidir ve F-serisi tam olarak bunu adlandırır — `F-01…F-25` doluydu, `F-26` ilk
+boş numara; (2) ADIM 15–20 unified-clock'a rezerve olduğundan ADIM serisinden numara
+harcanmamalıydı. Slice **PR #564 ile landed** (`5887f3f` → merge `b8d62e2`).
+
+`STAGE2_HANDOFF.md` içinde #562'nin "Next" bloğu **"Eski Next"** başlığıyla duruyor — silinmedi,
+etiketi F-26 olarak düzeltildi; slice'ın sonuç kaydı aynı belgede
+`## F-26 — Strategy formu capability disclosure landed (PR #564)`, tam kaydı
+`docs/PROJECT_HISTORY.md` §F-26.
 
 ## ADIM 14 ne bıraktı — reuse anchor'ları
 
@@ -170,9 +174,10 @@ HER OTURUMUN ZORUNLU BAŞLANGICI
    **Proposed** ise ADIM 15 BAŞLAMAZ (§16). Onay yoksa kod yazma; onay durumunu sor.
 5. `docs/ADIM14_LANDED_KICKOFF.md` (bu belge) + ADR §12 (sınırlar), §13 (açık kararlar),
    §14 (kabul matrisi) — bu üçü slice'ın sözleşmesidir.
-6. **Numaralandırma çakışması hâlâ açık olabilir:** PR #562 "ADIM 14"ü frontend slice'ı
-   (#539 + #533, uygulaması PR #564) sanıyor. Etiket kararı verilmediyse yeni bir slice'a
-   ADIM numarası atamadan önce sor.
+6. **Numaralandırma çözüldü — yeniden açma:** **ADIM 14 = bu ADR**, frontend capability
+   disclosure slice'ı (#539 + #533) **`F-26`** olarak etiketlendi ve **PR #564 ile landed**.
+   **ADIM 15–20 unified-clock'a rezervedir** — ADIM serisinden numara harcama; ADIM dışı
+   işlere F-serisinden sıradaki boş numarayı ver.
 7. İlgili `docs/CODEMAPS/` haritasını ve gerçek çağrı zincirini oku.
 8. Eski README/CLAUDE.md/handoff/backlog iddiasını current truth sayma — kaynak dosyayı oku.
 

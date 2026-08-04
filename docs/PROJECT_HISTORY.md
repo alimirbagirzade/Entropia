@@ -2807,3 +2807,134 @@ kanıt matrisi ve dürüst sınırlar. Bir sonraki oturum Research Data zamanın
 `backtest-engine-v18-gap-adjusted-stop-fill`** (önceki `backtest-engine-v18-same-candle-entry-exit`).
 ADIM 12'nin tek oracle `xfail(strict)`'i bununla kalktı; suite'teki tek xfail dosyası artık
 ADIM 13'ün parity testleri.
+
+---
+
+## ADIM 14 — Unified-clock multi-item portfolio ADR (PR #563)
+
+**Base `f4e2fd3` → commit `992ac9d` → merge `fb57cc8`** · 2026-08-04T18:27:28Z ·
+**docs-only**: `docs/adr/0002-unified-clock-portfolio-simulation.md` (761 satır) +
+`docs/adr/README.md` indeks satırı. **Migration YOK** (alembic head
+`0043_i08_registry_strategy_fks`, tek head) · **OpenAPI DEĞİŞMEDİ** (196 operation / 151 schema)
+· **`ENGINE_VERSION` DEĞİŞMEDİ** · **production kod ve test DEĞİŞMEDİ.**
+
+**Statü: `Proposed`.** PO / maintainer onayı bekliyor. ADR §16 bunu bir kapı olarak yazıyor:
+onaya kadar implementasyon başlamaz, statü **`Accepted` değildir** ve belge tasarımın herhangi
+bir parçasının **inşa edildiğinin kanıtı değildir**.
+
+### Neden bir ADR, neden şimdi
+
+Shared Equity Allocation bugün **contained**: `domain/allocation/capability.py` içindeki
+`SHARED_ALLOCATION_STATUS` `future_dev` ve shared sermayeli run'lar fail-closed reddediliyor
+(ADIM 3 / PR #520). Containment'ın gerekçesi kayıtlı ve altı maddelik bir **kaldırma koşulu**
+listesi taşıyor. Kusur şuydu: item'lar **sırayla** simüle ediliyor, her biri kendi ledger'ıyla;
+oysa kanon (doc 13 / Master Ref Modül 11) tek bir portföy sermayesi ister — tick başına **tek**
+`E(t)`, ondan türeyen `Ci(t)` sleeve'leri ve item sırasından bağımsız bir sonuç.
+
+Bu değişiklik engine'in **dış döngüsünün şeklini** değiştiriyor. ADIM 12 (oracle baseline) ve
+PR #555 (#549 gap-adjusted stop) engine aritmetiğini önceden sabitledi; ADIM 14'ün işi
+**tasarımı ADIM 15 tek satır kod yazmadan önce karara bağlamak** ve PR sınırlarını dondurmak.
+Sebep operasyonel: saat değişimi ile fiyatlama değişimi **aynı digest tazelemesine** karışırsa
+hangisinin neyi kaydırdığı bir daha kanıtlanamaz.
+
+### Kararın çekirdeği
+
+Dış döngü item listesi değil **birleştirilmiş zaman ekseni** (`t_ms` anahtarı, item bar
+iterator'ları üzerinde streaming k-way merge, `(pin_ordinal, item_id)` tie-break) olur. Tek
+`PortfolioLedger` `P0`/`R0`/`U0`'ı bir kez tutar; her tick'te zorunlu olaylar önce çözülür,
+sonra **tam bir** `E(t)` yayımlanır, sonra her item `Ci(t)`'sini o tek değere karşı hesaplar.
+
+**Blast radius'u sınırlayan invariant (§3.2):** tek-item yolu **bit-aynı** kalır. `run_engine`
+imzasını *ve semantiğini* korur; birleştirilmiş eksen tek item'a indirgendiğinde bugünkü bar
+dizisine eşittir. Bu yüzden 46 golden digest'in **37'si kımıldamaz** ve yalnız 9 `portfolio.*`
+senaryosu hareket eder — her biri yazılı gerekçeyle tek tek incelenmek üzere.
+
+### Üç dondurulmuş çıktı
+
+**§12 — ADIM 15–20 sınırları.** Her adım tek branch, tek PR, bağımsız revert edilebilir;
+**20 dışında hiçbiri containment'ı kaldırmaz**. 15 = saf clock primitive (engine kullanmaz,
+rollback = modülü sil). 16 = `run_engine`'in bar döngüsünü resumable stepper'a çıkaran **saf
+refactor**, tek kanıtı 46 digest'in değişmemesi. 17 = `PortfolioLedger` + `PortfolioSnapshot`.
+18 = `ItemIntent` + tick faz döngüsü, **yeni** `run_portfolio(...)` girişinde. 19 = simetrik,
+deterministik çatışma arbitrasyonu; solvency **reject** (asla kısmi, asla borç). 20 = manifest
+alanları + `ENGINE_VERSION` bump + digest yenileme + **containment lift**.
+ADIM 15–20'nin **parçası olmayan** önkoşullar ayrıca listelendi: #559 (DST), #544 (NET), R-1,
+OD-1…OD-6.
+
+**§13 — yedi açık karar (OD-1…OD-7).** Kanonun sessiz olduğu her yer bir OD olarak ayrıldı;
+her biri soru + kanon durumu + seçenekler + **onay gerektiren** öneri taşıyor. Örnekler:
+`record_time_basis` onurlandırılsın mı (OD-1); taze barı olmayan item'ın açık pozisyonu nasıl
+mark edilir (OD-2); birlikte karşılanamayan intent'lerden hangisi reddedilir (OD-3 —
+`(pin_ordinal, item_id)` sırası mı, tam simetrik "hepsini reddet" mi); `Ci(t)` sürekli mi yoksa
+yalnız girişte mi sınırlar (OD-4); FX kapsamda mı (OD-5, hayır); icra edilmeyen item sleeve
+tutabilir mi (OD-6); daha eksiksiz equity serisi `METRIC_SET_VERSION` bump'ı gerektirir mi
+(OD-7, hayır). **Hiçbiri ADR tarafından kapatılmadı** — kapatma yetkisi üründe.
+
+**§14 — A1–A22 kabul matrisi.** Containment lift'in kapısı; her satır kaynağı ve gerekli kanıtı
+ile. Kritikler: **A4** item permütasyonu aynı digest'i verir; **A13** 37 portföy-dışı digest
+değişmez; **A15** `ENGINE_VERSION` bump + `execution_key` namespace kayması; **A17** PR #560'ın
+point-in-time testleri **zayıflatılmadan** yeşil; **A19** eski shared-pool Result byte-identical
+okunur ve `LEGACY_SEQUENTIAL_RESULT_NOTE` ile etiketlenir; **A20** rollback kanıtlanır;
+**A22** full backend suite `--cov-fail-under=90` kapısında yeşil.
+
+### ADR'ın yazılırken bulduğu iki kalem — ikisi de bilerek düzeltilmedi
+
+**R-1 (§10.2) — latent pinning drift.** `application/commands/readiness_check.py::_resolve_allocation`
+(`:805-838`) kendini *"plan'ın mevcut revision config'ini pinler, yoksa canlı draft"* diye
+belgeliyor; kod ise **koşulsuz** `config = _plan_to_config(plan, entries)` ile **canlı draft
+satırlarından** kuruyor ve `plan_revision_id = plan.current_revision_id`'yi çıplak pointer olarak
+yazıyor. Pinlenen config'in adı geçen `PortfolioAllocationPlanRevision.config` satırıyla
+byte-eşleştiğini **hiçbir şey doğrulamıyor**. Snapshot bir kez alınıp bir daha join edilmediği
+için bu **canlı-join kusuru değil** — ama "plan revision N" ile gerçekte simüle edilen ayrışabilir.
+Doc 13 §8.5 composition snapshot'ının *tam* revision'ı sabitlemesini istiyor. **ADIM 20'den önce,
+saat işinden bağımsız, ayrı ve dar bir PR.**
+
+**§10.1 — manifest'te eksik üç kanonik alan.** Doc 13 §13 (`:1277`) ve Modül 11 §10
+(`:8313-8333`) shared-mode manifest'inin **resolved sleeve amounts**, **currency/FX refs** ve
+**`engine_allocation_policy_version`** taşımasını istiyor; sevk edilen `capital_execution`
+snapshot'ı yalnız `{enabled, plan_id, plan_revision_id, config_hash, config}` taşıyor
+(`readiness_check.py:829-835`) ve `grep -rn "allocation_policy" backend/ docs/openapi.json`
+hiçbir şey döndürmüyor. Bugün zararsız çünkü shared mode contained; **ADIM 20'den önce kapanmalı.**
+
+### Kapsam dışı bırakılanlar (kimse aksini çıkarmasın diye yazıldı)
+
+Cross-margin ve portföy likidasyonu **sevk edilmiyor** (§9.5). NET netting semantiği burada
+**tanımlanmıyor** (§9.4, #544). FX dönüşümü kapsam dışı (OD-5). Trading Signal / Trade Log
+icrası kapsam dışı (OD-6). `record_time_basis` semantiği değişmiyor (A-1 / OD-1). Retention
+auto-purge, LLM generation ve Graphic View renderer eskisi gibi kapsam dışı.
+
+### Doğrulama — dürüst sınır
+
+**Test suite KOŞULMADI.** Çalıştırılabilir hiçbir şey değişmedi (kod yok, test yok, migration
+yok, OpenAPI yok); docs-only bir slice'a önceki bir koşunun sayısını etiketlemek yanıltıcı
+olurdu. **Codemap tazelenmedi ve gerekmiyor:** yeni endpoint / tablo / sayfa / job yok, bu
+yüzden `docs/CODEMAPS/` haritalarının hiçbirinin girdisi değişmedi. Sistemin doğrulanmış test
+durumu için son **kod** slice'larının kayıtlarına bakılmalı (PR #555, #560).
+
+### İki bayat kayıt — ADR tespit etti, iki kapanış birden düzeltti
+
+ADR §10.3 yazılırken `CLAUDE.md` §Current position'da iki yanlış tespit edilip belgeye yazıldı:
+`ENGINE_VERSION`'ın `backtest-engine-v18-same-candle-entry-exit` gösterilmesi (gerçek değer
+`manifest.py:126`'da **`backtest-engine-v18-gap-adjusted-stop-fill`**, **PR #555** getirdi) ve
+oracle paketi için "78 pass + 1 `xfail(strict)`" iddiası (`grep -rn xfail
+backend/tests/unit/oracles/` **sıfır** dönüyor; #549 xfail'i PR #555 ile kalkıp düzenli teste
+dönüştü, kalan 4 xfail `tests/integration/test_research_point_in_time_parity.py` içinde —
+#556 / #557 / #558). **İkisi de ADIM 13'ün kapanışında (PR #562) düzeltildi**; bu kapanış
+düzeltmeyi korur ve kaynağını kayda geçirir.
+
+### Sıra ve numaralandırma çakışması (dürüst not)
+
+ADR (#563) `origin/main`'e **ADIM 13'ün kapanış kaydından (#562, merge `801791f`) ÖNCE** indi;
+bu kayıt onun üzerine rebase edilerek yazıldı. Kronoloji tutarlı, **numaralandırma değil**:
+#562'nin "Next"i ADIM 14'ü *frontend capability disclosure (#539 + #533)* olarak tanımlıyor,
+merge edilmiş ADR ise kendini ADIM 14 sayıyor (§16: "Per the ADIM 14 brief") ve **ADIM 15–20'yi
+unified-clock programına rezerve ediyor**. Bu kayıt merge edilmiş gerçeği izliyor:
+**ADIM 14 = ADR**. Frontend slice'ı geçerli ve sıradaki iş olmaya devam ediyor; yalnız
+**çakışmayan bir etikete taşınması gerekir** — bu bir ürün kararıdır, agent kararı değil.
+
+### Kapanış kararı
+
+`docs/adr/0002-unified-clock-portfolio-simulation.md` bu slice'ın kalıcı çıktısıdır ve
+**onaylanana kadar bir öneridir**. Bir sonraki oturum unified clock'a dokunuyorsa önce onun
+**statüsünü** okumalı: `Proposed` ise iş tasarım tartışmasıdır, implementasyon değil.
+Reuse anchor'ları ve resume prompt: `docs/ADIM14_LANDED_KICKOFF.md`.

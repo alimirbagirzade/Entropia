@@ -3442,7 +3442,15 @@ bırakmıyor.
 
 ---
 
-## Next: **ADIM 14 — Strategy formu capability disclosure (#539 + #533 TEK slice)**
+## Eski Next (ADIM 13 kapanışında yazıldı — **numarası çakıştı, aşağıya bak**)
+
+> Bu blok slice'ı **"ADIM 14"** diye etiketliyor; ama `origin/main`'e daha önce inen
+> **PR #563** (ADR 0002) kendini ADIM 14 sayıyor ve **ADIM 15–20**'yi unified-clock programına
+> rezerve ediyor. Aşağıdaki `## ADIM 14 — Unified-clock portfolio ADR landed` kaydı merge
+> edilmiş gerçeği izler. **Bu frontend slice'ı hâlâ sıradaki iştir** — yalnız çakışmayan bir
+> etikete taşınması gerekir (ör. `F-08` ya da ADIM 21+); bu bir **ürün kararıdır**.
+
+### ~~ADIM 14~~ → yeniden etiketlenecek: Strategy formu capability disclosure (#539 + #533 TEK slice)
 
 İki issue **aynı mekanizmanın iki zıt yönde kusuru**; ayrı düzeltmek diğerini üretir.
 Backend tarafı **doğru ve testli** — kusur yalnız UI iddiasında. İkisi de güncel `main`
@@ -3482,3 +3490,82 @@ Tam reçete, kabul ölçütleri ve önce-üret adımları: `docs/ADIM13_LANDED_K
 **Sıraya girmeyen açık kalemler:** #550/#551/#552 (ADIM 12 engine uyuşmazlıkları) ·
 #556/#557 (agent gateway parity — doğal çözüm iki yüzeyi TEK resolver'a bağlamak) ·
 #558/#559 (ürün kararı bekliyor) · #514 (ekran okuyucu denetimi; kapatma yetkisi insanda).
+
+---
+
+## ADIM 14 — Unified-clock portfolio ADR landed (PR #563)
+
+**Base `f4e2fd3` → commit `992ac9d` → merge `fb57cc8`** (2026-08-04T18:27:28Z) · **docs-only**
+· **Migration YOK** (alembic head `0043_i08_registry_strategy_fks`, tek head) · **OpenAPI
+DEĞİŞMEDİ** (196 operation / 151 schema) · **`ENGINE_VERSION` DEĞİŞMEDİ** · **production kod
+DEĞİŞMEDİ** — iki dosya: `docs/adr/0002-unified-clock-portfolio-simulation.md` (**761 satır**)
+ve `docs/adr/README.md` indeks satırı.
+
+**ADR statüsü: `Proposed`.** PO / maintainer onayı bekliyor — **`Accepted` DEĞİL.** §16 açık:
+onay gelmeden ADIM 15 başlamaz. Bu belge tasarımın **inşa edildiğinin** kanıtı değildir.
+
+**Ne kararlaştırdı:** Shared Equity Allocation (doc 13 / Modül 11) için icra modeli — dış
+döngü item listesi değil **birleştirilmiş zaman ekseni** olur; tek `PortfolioLedger` `P0`/`R0`/`U0`
+tutar; tick başına **tek** `E(t)` yayımlanır ve her item `Ci(t)`'yi ona karşı hesaplar. Blast
+radius'u sınırlayan invariant: **tek-item yolu bit-aynı kalır** — `run_engine` imzasını *ve
+semantiğini* korur, 46 golden digest'in 37'si kımıldamaz, yalnız 9 `portfolio.*` senaryosu hareket eder.
+
+**Üç dondurulmuş çıktı** (bir sonraki oturumun sözleşmesi):
+
+| Bölüm | İçerik |
+|---|---|
+| **§12** | **ADIM 15–20 sınırları** — her adım tek branch/tek PR/bağımsız revert; 20 dışında hiçbiri containment'ı kaldırmaz. Ayrıca ADIM 15–20'ye **dahil olmayan** önkoşullar: #559, #544, R-1, OD-1…OD-6. |
+| **§13** | **Yedi açık karar OD-1…OD-7** — kanonun sessiz olduğu yerler; her biri seçenek + öneri taşıyor, **kararı insan verir**. |
+| **§14** | **A1–A22 kabul matrisi** — containment lift'in kapısı; her satır kaynak + gerekli kanıt ile. |
+
+**ADR'ın kendi bulduğu iki kalem (ikisi de düzeltilmedi, bilerek):**
+
+* **R-1 (§10.2)** — `readiness_check.py::_resolve_allocation` (`:805-838`) kendini "revision
+  config'ini pinler" diye belgeliyor ama **koşulsuz canlı draft satırlarından** kuruyor ve
+  `plan_revision_id`'yi çıplak pointer olarak yazıyor; pinlenen config'in o revision satırıyla
+  eşleştiğini hiçbir şey doğrulamıyor. **ADIM 20'den önce, ayrı dar PR.**
+* **§10.1** — shared-mode manifest'inde kanonun istediği **resolved sleeve amounts**, **FX refs**
+  ve **`engine_allocation_policy_version`** yok. Bugün zararsız (shared mode contained), ADIM
+  20'den önce kapanmalı.
+
+**Doğrulama — dürüst sınır:** **test suite KOŞULMADI.** Çalıştırılabilir hiçbir şey değişmedi;
+docs-only bir slice'a eski bir koşunun sayısını etiketlemek yanıltıcı olurdu. **Codemap
+tazelenmedi — gerekmiyor:** yeni endpoint / tablo / sayfa / job yok.
+
+**Sıra notu (dürüst kayıt):** ADR (#563) `origin/main`'e **ADIM 13'ün kapanış kaydından
+(#562, merge `801791f`) ÖNCE** indi; bu kapanış onun üzerine rebase edildi. Bu yüzden belgede
+sıra kronolojiktir ama **numaralandırma çakışıyor**: #562'nin "Next"i ADIM 14'ü *frontend
+capability disclosure (#539 + #533)* sanıyor, merge edilmiş ADR ise kendini ADIM 14 sayıp
+**ADIM 15–20'yi unified-clock'a rezerve ediyor**. Bu kayıt ADR'ı izler; **frontend slice'ı
+çakışmayan bir etikete taşınmalı** — ürün kararıdır, agent kararı değil. Yukarıdaki
+"Eski Next" bloğu bu yüzden üstü çizili başlıkla duruyor: iş geçerli, etiketi geçersiz.
+
+**Doküman:** `docs/adr/0002-unified-clock-portfolio-simulation.md` (tam tasarım) ·
+`docs/ADIM14_LANDED_KICKOFF.md` (reuse anchor'ları + resume prompt) ·
+`docs/PROJECT_HISTORY.md` §ADIM 14.
+
+---
+
+## Next: **ADR onayı (PO) → ADIM 15 (merged-axis clock primitive)**
+
+**Sıradaki tek adım kod değil, bir onay.** ADR §16 bunu açıkça kapı yapıyor: statü
+**Proposed** olduğu sürece ADIM 15 başlamaz. Onay gelirse statü **Accepted** olur, §13'ün yedi
+kararı bir amendment tablosuna/takip ADR'ına **çözüm olarak** yazılır ve ADIM 15 §12
+sınırlarına karşı başlar. Onay gelmezse tasarım tartışılır — ama kod yazılmaz.
+
+**Onayı beklerken paralel yürüyebilecek, ADR'ı bloke etmeyen dört kalem:**
+
+1. **R-1 dar PR'ı** (revision pinning) — ADIM 20'nin önkoşulu. Worktree
+   `claude/allocation-revision-pin-fix-bb18c9` açık ama **boş**; iş yapılmadı.
+2. **#559 (DST)** — merged eksen karışık zaman dilimli kaynakları kapsamadan önce kapanmalı;
+   bugün fold/gap sessizce çözülüyor ve saat bunu cross-item hale getirir.
+3. **#544 (NET)** — cross-item conflict policy kanonda tanımsız; ADIM 19 ile ya da öncesinde.
+4. **#539 (CRITICAL, ADIM 11'den)** — düzeltmesi **açık PR #564**'te; engine aritmetiğinden
+   bağımsız.
+
+**#550 / #551 / #552** (ADIM 12'nin açtığı sizing/booking uyuşmazlıkları) hâlâ açık ve unified
+clock'u bloke etmiyor; ama #550 karara bağlanmadan sizing üzerine yeni iş yapılmamalı.
+
+`docs/audit/current_main_ground_truth_2026-08-03.md` §18'den kalanlar (sıra 5 →
+`test/fresh-install-acceptance`, sıra 7 → `ci/security-hardening`) değişmedi; o belgenin
+2/3/4/6 kalemleri kapandığı hâlde güncellenmedi — **kullanmadan önce doğrula.**

@@ -16,11 +16,30 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-from entropia.domain.research_data.enums import AvailableTimePolicy
-from entropia.shared.errors import TimePolicyInvalid
+from entropia.domain.research_data.enums import AvailableTimePolicy, ResearchRevisionState
+from entropia.shared.errors import LifecycleBlocked, TimePolicyInvalid
 
 # A defensive upper bound on a declared availability delay (doc 12: "bounded").
 MAX_AVAILABLE_DELAY = timedelta(days=31)
+
+# States after which a revision's available-time policy is FROZEN (doc 12 §11
+# "Revision immutability", §14 "Revision immutability"). Once a revision has been
+# approved it can be pinned by a Backtest Run manifest, a Backtest Result and an
+# Agent bundle — and the execution path re-reads the LIVE policy fields off the
+# revision row (``application/queries/funding.py``), while ``content_hash`` covers
+# the payload bytes only. Retiming such a revision in place therefore re-interprets
+# a finished Run's evidence under a rule that Run never used, which §14 forbids:
+# changing the available time after v1.0 is Approved must NOT mutate v1.0 — a v1.1
+# draft/analysis/revision is created, and existing run/result stay bound to v1.0.
+# ``approval_revoked``/``deprecated`` are frozen for the same reason — revoking or
+# deprecating stops NEW use, it does not unpin the manifests that already cite it.
+TIME_POLICY_FROZEN_STATES = frozenset(
+    {
+        ResearchRevisionState.APPROVED,
+        ResearchRevisionState.APPROVAL_REVOKED,
+        ResearchRevisionState.DEPRECATED,
+    }
+)
 
 # Native-schema column names that carry a record's EVENT time, most specific first.
 # Research payload keeps its native schema (M5 — it is never coerced to Market Data's
@@ -115,6 +134,42 @@ def time_policy_is_valid(
     if policy == AvailableTimePolicy.FIXED_DELAY:
         return delay_is_valid(delay)
     return delay is None
+
+
+def time_policy_is_frozen(state: ResearchRevisionState | None) -> bool:
+    """Is this revision past the point where its time policy may still be edited?
+
+    ``None`` (an unreadable/absent state) is treated as FROZEN — fail-closed: we
+    cannot prove a revision is still pre-approval, and a wrong "still editable"
+    answer silently retimes evidence a finished Run already cited."""
+    return state is None or state in TIME_POLICY_FROZEN_STATES
+
+
+def ensure_time_policy_mutable(
+    *, state: ResearchRevisionState | None, revision_id: str | None = None
+) -> None:
+    """Gate an in-place available-time-policy write (doc 12 §11, §14).
+
+    Raises ``LifecycleBlocked`` (409 ``LIFECYCLE_BLOCKED``, doc 12 §10 "Lifecycle")
+    once the revision is frozen. The caller's recovery is the canonical one the page
+    already implements: append a NEW revision (``create_research_dataset_revision``
+    advances the head to a fresh DRAFT) and set the policy there, so the previously
+    pinned revision keeps the exact rule its Runs and bundles were compiled under."""
+    if not time_policy_is_frozen(state):
+        return
+    raise LifecycleBlocked(
+        f"Research revision '{revision_id}' is {state} — its available-time policy is "
+        "frozen. Create a new revision to change it.",
+        details=[{"revision_id": revision_id, "revision_state": str(state) if state else None}],
+        remediation=(
+            "Create a new research dataset revision and set the time policy on that "
+            "draft; the approved revision stays bound to the runs that pinned it."
+        ),
+        suggested_action="create_new_revision",
+        scope_type="research_dataset_revision",
+        scope_id=revision_id,
+        field_path="available_time_policy",
+    )
 
 
 def instrument_mapping_is_valid(

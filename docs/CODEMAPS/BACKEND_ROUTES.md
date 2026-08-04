@@ -342,7 +342,7 @@ rv-N` kullanmaya devam ediyor).
 | POST `/{id}/upload-session/finalize` | `finalize_upload:174` | `rd_cmd.finalize_upload` | yok | ✔ |
 | POST `/{id}/analysis` (202) | `request_analysis:190` | `rd_cmd.request_research_dataset_analysis` | yok | ✔ |
 | POST `/{id}/revisions` | `create_revision:210` | `rd_cmd.create_research_dataset_revision` | If-Match `rv-N` (`:231`) | ✔ |
-| POST `/{id}/time-policy` | `set_time_policy:237` | `rd_cmd.set_time_policy` | yok | **✔** (O-13) |
+| POST `/{id}/time-policy` | `set_time_policy:237` | `rd_cmd.set_time_policy` | yok | **✔** (O-13) · **lifecycle kapısı:** head revizyon `approved`/`approval_revoked`/`deprecated` ise **409 `LIFECYCLE_BLOCKED`** (`time_policy.py::ensure_time_policy_mutable`, doc 12 §11/§14 — pinlenmiş kanıt yerinde retime EDİLEMEZ; kurtarma yolu yeni revizyon) |
 | POST `/{id}/field-definitions` (201) | `define_field:264` | `rd_cmd.define_field` | yok | **✔** (O-13; replay aynı definition, mükerrer satır yok) |
 | POST `/{id}/feature-definitions` (201) | `define_feature:291` | `rd_cmd.define_feature` | yok | **✔** (O-13; replay aynı definition) |
 | POST `/{id}/approve` | `approve:314` | `rd_cmd.approve_research_dataset_revision` | If-Match `rv-N` (`:327`) | ✔ |

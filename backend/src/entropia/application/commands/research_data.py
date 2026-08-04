@@ -41,7 +41,10 @@ from entropia.domain.research_data.enums import (
     UsageScope,
 )
 from entropia.domain.research_data.state_machine import next_research_revision_state
-from entropia.domain.research_data.time_policy import time_policy_is_valid
+from entropia.domain.research_data.time_policy import (
+    ensure_time_policy_mutable,
+    time_policy_is_valid,
+)
 from entropia.domain.research_data.value_objects import (
     AvailableTimeSpec,
     CategorySpec,
@@ -523,6 +526,14 @@ async def set_time_policy(
         raise TimePolicyInvalid("The available-time rule and delay are inconsistent.")
 
     async def _op() -> dict[str, Any]:
+        # Lifecycle gate INSIDE the idempotent body (the 2a lesson): a completed-key
+        # replay returns the cached reference without re-judging a state that may have
+        # advanced since. Doc 12 §11/§14 — an approved (or revoked/deprecated) revision
+        # is pinned by manifests whose runs resolved availability under THIS rule, and
+        # the worker re-reads these fields live, so an in-place retime would rewrite
+        # finished evidence. The recovery is a new revision, not a mutation.
+        revision = await _require_current_revision(session, root)
+        ensure_time_policy_mutable(state=revision.revision_state, revision_id=revision.revision_id)
         policy = rd_repo.set_time_policy(
             session,
             entity_id=entity_id,
@@ -534,7 +545,6 @@ async def set_time_policy(
             delay_seconds=available_time.delay_seconds,
             source_timezone_iana=timezone_spec.iana,
         )
-        revision = await _require_current_revision(session, root)
         revision.event_time_semantics = event_time_semantics
         revision.available_time_policy = available_time.policy
         revision.available_delay_seconds = available_time.delay_seconds

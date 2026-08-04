@@ -39,7 +39,7 @@ strict xfail XPASS verip suite'i kırar. Bu bilinçli.
 Backend tarafı **doğru ve testli**; kusur yalnız UI iddiasında. İkisi de `f4e2fd3` üzerinde
 yeniden doğrulandı.
 
-### #539 — yanlış-NEGATİF (11 satır çalışır görünüyor)
+### #539 — yanlış-NEGATİF (15 satır çalışır görünüyor)
 
 ```
 grep -c capabilityField frontend/src/components/StrategyConfigForm.tsx  -> 12
@@ -52,13 +52,33 @@ frontend/src/lib/strategyGraph.ts:229  MODELLED_FILTER_TYPES hâlâ elle bakıml
 Üretilen capability aynası "kullanıcı `future_dev` bir opsiyonun üzerine strateji **kurmadan
 önce** onu devre dışı bırak" diye var (kendi docstring'i böyle diyor). `StrategyGraphForm`
 onu hiç import etmiyor ve kendi `SelectField`'ini taşıyor (`:122-168`, `capabilityField`
-parametresi yok). 22 `future_dev` satırından **11'i** sıradan seçilebilir görünüyor:
+parametresi yok). 22 `future_dev` satırından **15'i** sıradan seçilebilir görünüyor:
 
 | alan | satır | yer |
 |---|---:|---|
 | `scaling_logic.timeframe` | 10 | `StrategyGraphForm.tsx:750-756` |
 | `scaling_logic.timeframe_mode = increasing_by_layer` | 1 | `:757-763` |
 | `restrictions_filters.filters.filter_type` | 4 | `:1018-1020` |
+| **toplam** | **15** | |
+
+> ⚠ **Sayı 11 DEĞİL, 15 — issue #539'un başlığı yanlış.** #539'un gövdesi "11 of the 22
+> future_dev rows" diyor ama **kendi tablosu 10+1+4 = 15'e toplanıyor**. Matris `f4e2fd3`
+> üzerinde yeniden ölçüldü: capability aynasına **bağlı 9 ConfigForm alanının** `future_dev`
+> toplamı **7**; 22 − 7 = **15**. Aynı hatalı rakam `docs/STAGE2_HANDOFF.md` ve
+> `docs/PROJECT_HISTORY.md`'nin **ADIM 11 tarihsel kayıtlarında** (D-1 bulgusu) da duruyor —
+> o kayıtlar bilerek düzeltilmedi (geçmiş yeniden yazılmaz), ama **kabul ölçütünü 15 üzerinden
+> ölç** ve PR gövdesinde issue'nun 11 rakamını düzelt.
+>
+> On `future_dev` timeframe değerinin **hepsi** `BLOCK_TIMEFRAME_OPTIONS` içinde (11 opsiyon;
+> yalnız `same_as_base_tf` `active_v1`), dört filtre değerinin hepsi `FILTER_TYPE_OPTIONS`
+> içinde render ediliyor — yani hiçbiri "opsiyon listesinde eksik olduğu için görünmez" değil.
+>
+> **Bugün zararsız ama latent iki alan:** `scaling_logic.method` ve
+> `position_exit_logic.partial_aftermath` şu an **0** `future_dev` taşıyor; matris yeniden
+> üretildiğinde biri `future_dev`'e dönerse **hiçbir şey** onu devre dışı bırakmaz. Aşağıdaki
+> 5. kabul ölçütü tam olarak bunu yakalamak için var ve **#540**'ın (exhaustiveness guard
+> 14 alanın yalnız 9'unu — yani tam olarak bağlı alanları — kapsıyor) doğal örtüşmesidir.
+> **#540'ı ADIM 14'e ALMA**, ama testi kurarken kapsamı **14 alanın tamamı** olacak şekilde yaz.
 
 Kullanıcı gerçeği ancak stratejiyi kurduktan **sonra** Ready Check'te öğreniyor
 (`STRATEGY_SCALING_UNSUPPORTED`). **Yetki açığı değil** — sunucu koşuyu reddediyor, motor

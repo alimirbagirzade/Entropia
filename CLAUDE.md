@@ -191,9 +191,11 @@ Before stopping a working session, produce **ALL** of the following:
 
 - **Testler (2026-08-04, ADIM 13 / PR #560'ta ölçüldü — collection değil, PASS):** backend
   full suite **exit 0**, 0 failed/error, coverage **%92.89** (kapı ≥90), **4 bilinçli
-  `xfail(strict)`** (#556 / #557 / #558 / #559 — dördü de tek dosyada,
-  `test_research_point_in_time_parity.py`; ADIM 12'nin #549 xfail'i PR #555 ile kalktı);
-  frontend **696 passed** (68 dosya, `npm run coverage` exit 0), `npm run typecheck` temiz.
+  `xfail(strict)`** — dördü de tek dosyada
+  (`test_research_point_in_time_parity.py`), issue eşlemesi **#556 ×2 · #557 · #558**;
+  **#559'un xfail'i YOK** (DST fold/gap geçen bir karakterizasyon testiyle pinlendi);
+  ADIM 12'nin #549 xfail'i PR #555 ile kalktı.
+  Frontend **696 passed** (68 dosya, `npm run coverage` exit 0), `npm run typecheck` temiz.
   **CI 6/6 pass** (ADIM 13 / PR #560 Backend job **46m01s**). Yine de **otorite CI'dır.**
   Doğrula: `gh run list --branch main --limit 1` → job log.
   **Ortam tuzağı:** paralel worktree oturumları aynı anda koşuyor — `TEST_DATABASE_URL` ile

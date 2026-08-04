@@ -3450,9 +3450,12 @@ Backend tarafı **doğru ve testli** — kusur yalnız UI iddiasında. İkisi de
 
 * **#539 — yanlış-NEGATİF.** `StrategyGraphForm` üretilen capability aynasını **hiç** import
   etmiyor (`grep -c capabilityField`: ConfigForm 12, GraphForm **0**), kendi `SelectField`'ini
-  taşıyor. 22 `future_dev` satırından **11'i** sıradan seçilebilir opsiyon gibi görünüyor
+  taşıyor. 22 `future_dev` satırından **15'i** sıradan seçilebilir opsiyon gibi görünüyor
   (`scaling_logic.timeframe` 10 · `timeframe_mode=increasing_by_layer` 1 ·
-  `restrictions_filters.filters.filter_type` 4). Kullanıcı gerçeği ancak stratejiyi
+  `restrictions_filters.filters.filter_type` 4 → **10+1+4 = 15**; bağlı 9 ConfigForm alanının
+  `future_dev` toplamı 7, 22−7 = 15). **Issue #539'un başlığındaki "11" yanlış** — kendi
+  tablosuyla çelişiyor; aynı hatalı rakam yukarıdaki **ADIM 11 tarihsel kaydında** da duruyor
+  ve bilerek düzeltilmedi. Kabul ölçütünü **15** üzerinden ölç. Kullanıcı gerçeği ancak stratejiyi
   kurduktan **sonra** Ready Check'te öğreniyor. Yetki açığı değil — sunucu koşuyu
   reddediyor; **disclosure** kusuru, hata yönü güvensiz.
 * **#533 — yanlış-POZİTİF.** Sevk edilen varsayılanlarla form "Ready Check blocks it" diyor;

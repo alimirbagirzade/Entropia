@@ -3237,18 +3237,80 @@ dokümanı: **`docs/audit/esp_export_schema_v2.md`** (v1/v2 matrisi + şema + de
 ayrı kalemler: §G-03 Tool Gateway `strategy.*`/`trading_signal.*`, §G-04 Library
 Request-Validation UI.
 
-## Next: **ADIM 5 — `feat/library-request-validation-ui`** (§18 sıra 2, §G-04)
+## ADIM 8 — Yüksek riskli API sözleşmeleri typed (PR #529)
 
-`docs/audit/current_main_ground_truth_2026-08-03.md` §18'de kalan sıradaki tek slice.
-**Backend TAM** — route `POST /library/{entity_id}/validation-runs` (201,
-`apps/api/routes/library.py`), komut `pkg_cmd.request_package_validation`, aynı CP pipeline'ı
-(`start_package_validation_run`), rol kapısı `ensure_can_edit` (owner-or-Admin), bayrak
-`can_request_validation` list+shared+detail DTO'sunda. **Eksik olan yalnız frontend yüzeyi:**
-`frontend/src/lib/library.ts` bayrağı tipliyor ama çağıran bir hook YOK.
+**Base `870cc1a` → commit `62705ec` → merge `8a87460`** · 2026-08-04 · **Migration YOK**
+(alembic head `0043_i08_registry_strategy_fks` sabit, tek head) · **`ENGINE_VERSION`
+DEĞİŞMEDİ** · **OpenAPI: 30 yeni schema, 0 kaldırılan, operation sayısı 196'da sabit.**
 
-Ondan sonra §18 sırası: 4 → `fix/i16a-panel-logs-display-title` (+ F-07 kalıntısı
-`pages/PanelLogs.tsx:134`), 5 → `test/fresh-install-acceptance`, 6 →
-`feat/agent-tool-gateway-strategy-trading-signal` (§G-03), 7 → `ci/security-hardening`.
+> **Handoff boşluğu (dürüst kayıt):** ADIM 5 (#525), ADIM 6 (#526) ve ADIM 7 (#527) bu
+> belgeye girdi yazılmadan merge edildi. Bu girdi yalnız ADIM 8'i kapsar — o üç slice'ın
+> ayrıntısını geriye dönük uydurmuyorum; kayıtları PR'larında. Ayrıca **PR #528**
+> (`fix/agent-tools-trade-log-handoff`, `30ff98f`) ADIM 8'in base'i ile merge'i arasına
+> girdi — bir sonraki slice base olarak `8a87460` almalı, `870cc1a` değil.
+
+ADIM 2–7 ile değişen 16 public 2xx gövdesi `dict[str, Any]` dönüyordu: gövde
+`docs/openapi.json`'dan **görünmez** kalırken drift guard yeşildi — O-30'un purge 202,
+G-02'nin package export için kapattığı **aynı tuzak**.
+
+**Landed:** yeni `apps/api/schemas/` paketi (`common`/`esp`/`library`/`agent_tool_gateway`),
+16 uçta `response_model`. **Wire byte'ları değişmedi.** Handler'lar `dict[str, Any]` dönmeye
+devam ediyor (sevk edilmiş kalıp), böylece serileştirmeden ÖNCE çalışan route-içi
+subscript'ler korunuyor (iki ETag + broker devri). `PackageExportResponse` ve
+`PackageValidationRunAcceptedResponse` **aynı sınıf adlarıyla** taşındı → component anahtarı
+kaymadı.
+
+**Üç kural:** her alan REQUIRED, nullability TİPTE (`= None` default'u asla atlanmayan bir
+anahtarı atlanabilir gösterir); enum'lar `string` (RESPONSE'ta kapalı enum, sunucunun meşru
+ürettiği değeri `response_model` çıkış doğrulamasında **500**'e çevirir); zaman damgaları
+`string` (serializer zaten `.isoformat()` basıyor). Son ikisi el listesiyle değil, 2xx
+gövdesinden erişilebilen HER component üzerinde **blanket walk** ile sınanıyor.
+
+**Bilerek açık:** export `manifest` (sürümlü artifact, `POST /package-imports`'a aynen geri
+gider), JSONB sözleşmeler, gateway `request`/`response_ref` (33 tool üzerinde `tool_name` ile
+ayrışır, Strategy/Trading Signal parity sonuçlarını aynen taşır). **Gateway ZARFI tam tipli.**
+**Enqueue'nun HTTP yüzeyi yok** — worker düzlemi.
+
+**Landing'i engelleyen kusur düzeltildi:** `POST /package-imports` çağıranın manifest'ini
+JSONB `rationale_family_snapshot`'a yalnız kap-seviyesi kapıyla yazıyor;
+`_pinned_family`/`_live_family` id'yi çıplak truthiness ile eliyordu →
+`{"rationale_family_id": 7}` tipli sözleşmede **tüm `GET /library` sayfasını 500** yapardı.
+İkisi de artık serializer'da eleniyor (`_package_name` emsali). Geçerli veri birebir aynı.
+
+**Frontend parity makine kontrollü** (`test_wire_contract_parity.py`, 27 çift) ve **dört
+sapma** buldu: `EspPackageDetail` `latest_validation_run`'ı hiç bildirmemiş (R8'den beri
+gönderiliyor); iki `lifecycle_state` TS'te nullable kolondan dar; `ProvenanceScan`'in iki
+alanı NOT NULL kolondan geniş. `lifecycleTone` artık `string | null` alıyor,
+`UNSTATED_LIFECYCLE_LABEL` ile düşüyor — asla uydurma `"active"`.
+
+**Testler:** 4 yeni modül (17 + 11 + 27 çift + 16). Integration modülü HTTP gövdesini **saklı
+idempotency zarfıyla** karşılaştırıyor — `run_idempotent` komutun dönüşünü aynen sakladığı
+için bu, `response_model` **öncesi** dict ile sonrası demektir; tek karşılaştırma hem drop'u
+hem replay-parity'yi kanıtlar. İki eski contract stub'ı (`test_library_contract.py`) gerçek
+projeksiyona hizalandı. Backend **3143 passed / coverage %92.81 / exit 0**; frontend **696
+passed**; ruff + mypy + OpenAPI drift temiz; **CI 6/6 pass** (Backend 44m18s).
+
+**Yeni doküman:** `docs/audit/high_risk_api_contract_audit.md` (18 uçluk denetim tablosu,
+OpenAPI before/after, uyumluluk matrisi, kalan risk). Güncellendi: `BACKEND_ROUTES.md`,
+`FRONTEND_MAP.md`.
+
+**Deferred (bilerek):** `GET /library-shared-with-me` birebir aynı `LibraryPage` zarfını
+döndürüyor, hâlâ tipsiz — `LibraryPageResponse` onun için aynen kullanılabilir. API'nin
+geri kalanındaki ~161 `dict[str, Any]` route dönüşü dokunulmadı.
+
+## Next: **ADIM 9 — TANIMLANMAMIŞ** (brief kullanıcıdan gelir)
+
+ADIM serisi her seferinde kullanıcının verdiği tam brief ile yürüyor; repo'da ADIM 9 diye bir
+kalem **yok** (arama yapıldı). Bir sonraki oturum ya ADIM 9 brief'ini alır ya da aşağıdaki
+doğrulanmış backlog'dan seçer.
+
+**Bu slice'ın bıraktığı en yakın kalem:** `GET /library-shared-with-me` (`routes/sharing.py`)
+— `LibraryPageResponse` olduğu gibi uygulanabilir, ~5 satır + test.
+
+`docs/audit/current_main_ground_truth_2026-08-03.md` §18'den kalanlar: sıra 5 →
+`test/fresh-install-acceptance`, sıra 7 → `ci/security-hardening`. **Not:** §18'in sıra
+2/3/4/6 kalemleri ADIM 5–8 ile kapandı ama o belge güncellenmedi — bir sonraki slice ona
+dokunuyorsa **önce doğrula**, listeye güvenme.
 
 **İnsan işi (agent kapatamaz):** **A-08 / GitHub #514** — NVDA/Firefox + VoiceOver/Safari
 ekran okuyucu kabul denetimi. 2026-07-30'da kanıtsız kapatılmıştı, 2026-08-03'te yeniden

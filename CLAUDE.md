@@ -165,13 +165,18 @@ Before stopping a working session, produce **ALL** of the following:
 
 ## Current position (keep in sync at each closing)
 
-> Aşağıdaki değerler **2026-08-03** tarihinde `origin/main` @ `0dcce69` üzerinden repodan
-> empirik yeniden ölçüldü. **Alembic head `0043_i08_registry_strategy_fks`** (43 migration,
-> tek head) · 104 tablo / 140 FK · 196 OpenAPI operation (drift guard temiz) ·
-> `ENGINE_VERSION = backtest-engine-v18-same-candle-entry-exit` · capability matrix 62 girdi
-> (40 `active_v1` / 22 `future_dev`, Python↔TS parity yeşil). **Tam ölçüm + doğrulanmış
-> boşluk listesi: `docs/audit/current_main_ground_truth_2026-08-03.md`** — bir slice'a
-> başlamadan önce ORAYI oku, buradaki özeti değil.
+> **HEAD `8a87460`** (ADIM 8 / PR #529, 2026-08-04). **Alembic head
+> `0043_i08_registry_strategy_fks`** (43 migration, tek head) · **196 OpenAPI operation**
+> (değişmedi) / **151 schema** · `ENGINE_VERSION = backtest-engine-v18-same-candle-entry-exit` ·
+> capability matrix 62 girdi (Python↔TS parity yeşil).
+> **Son slice:** ADIM 8 — 16 public 2xx gövdesi `dict[str, Any]`'den yayımlanan
+> `response_model`'e geçti (`apps/api/schemas/`); wire byte'ları değişmedi; frontend wire
+> parity artık makine kontrollü (`test_wire_contract_parity.py`, 27 çift).
+> **Sıradaki:** ADIM 9 tanımsız — brief kullanıcıdan gelir; en yakın hazır kalem
+> `GET /library-shared-with-me`'yi `LibraryPageResponse` ile tiplemek.
+> Ayrıntı: `docs/ADIM8_LANDED_KICKOFF.md` · `docs/PROJECT_HISTORY.md` §ADIM 8.
+> **Uyarı:** `docs/audit/current_main_ground_truth_2026-08-03.md` §18'in sıra 2/3/4/6
+> kalemleri ADIM 5–8 ile kapandı ama o belge güncellenmedi — ona güvenmeden önce doğrula.
 
 
 - **Durum:** V1 ROADMAP COMPLETE (Stages 0–8, docs 01–22) + post-V1 + video-alignment +
@@ -180,10 +185,10 @@ Before stopping a working session, produce **ALL** of the following:
 
 
 
-- **Testler (2026-08-03, PR #521'de ölçüldü — collection değil, PASS):** backend
-  **2974 passed** tek koşuda, 0 failed/skipped/error, coverage **%92.47** (kapı ≥90);
-  frontend **680 passed** (67 dosya, `npm run coverage` exit 0), `npm run typecheck` temiz.
-  **CI 6/6 pass** (Backend job 32m39s). Yine de **otorite CI'dır.**
+- **Testler (2026-08-04, PR #529'da ölçüldü — collection değil, PASS):** backend
+  **3143 passed** tek koşuda, 0 failed/skipped/error, coverage **%92.81** (kapı ≥90);
+  frontend **696 passed** (68 dosya, `npm run coverage` exit 0), `npm run typecheck` temiz.
+  **CI 6/6 pass** (Backend job 44m18s). Yine de **otorite CI'dır.**
   Doğrula: `gh run list --branch main --limit 1` → job log.
   **Ortam tuzağı:** paralel worktree oturumları aynı anda koşuyor — `TEST_DATABASE_URL` ile
   worktree'ye özel izole DB kullan (conftest her testte `drop_all`/`create_all`). Tam suite'i

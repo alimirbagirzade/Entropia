@@ -3127,6 +3127,22 @@ bucket'ının kardeş tick'lerden etkilenmemesi · `tick_key`'in sevk edilen epo
 uyuşması · `CLOCK_POLICY_VERSION` pini · `timeline_identity` determinizm + ayırt edicilik ·
 üretime bağlanmamışlık + manifest/ENGINE_VERSION sabitliği.
 
+### Mutation testi — bir mutasyon ilk turda hayatta kaldı
+
+Testler mutasyonla sınandı: **altı mutasyon, altısı da yakalanıyor** — cursor'ın mükerrer bardan
+ilkini (sonuncusu yerine) izlemesi · barsız view'ların düşürülmesi · **merge'ün `t_ms` yerine ham
+timestamp string'iyle anahtarlanması** · geriye-giden-akış guard'ının kaldırılması ·
+`(pin_ordinal, item_id)` sıralamasının kaldırılması · mükerrer `item_id` guard'ının kaldırılması.
+
+**String-key mutasyonu ilk turda HAYATTA KALDI.** Offset fixture'ı iki kaydı tesadüfen bitişik
+bırakıyordu, bu yüzden `groupby` yanlış anahtarla bile doğru gruplamıştı — yani testlerin o anki
+"geçmesi" eksen sözleşmesinin kanıtı **değildi**. Kapatan test sonradan yazıldı:
+`test_a_mixed_offset_axis_orders_by_instant_and_not_by_text`, ve o mutasyon altında düşüyor.
+
+**Bu, ADIM 16–19 için yöntemsel bir kayıttır:** geçen bir suite tek başına kanıt sayılmaz.
+ADIM 16'nın tek kabul kanıtı 46 golden digest olduğu için orada mutasyon yerine digest sabitliği
+kapıdır; ama ADIM 17–19'un yeni davranış getiren testleri aynı şekilde sınanmalı.
+
 ### Bilerek karar verilmeyenler
 
 Shared ledger + snapshot (**ADIM 17**) · `ItemIntent` + faz döngüsü (**ADIM 18**) ·
@@ -3142,6 +3158,21 @@ implementation slice starts"*). §16 onay gelmeden ADIM 15'in başlamamasını �
 **PR #567 kayıtlı bir onay olmadan indi.** Zarar dar — modül saf, hiçbir yerden import edilmiyor,
 rollback tek dosya silme — ama **kapı atlanmıştır ve bu kayda geçer.** §13'ün yedi açık kararı
 (OD-1…OD-7) çözülmedi. ADIM 16'ya geçmeden önce onay durumu açıkça teyit edilmeli.
+
+### İkinci dürüst sınır — naive timestamp ayrışması (K-01)
+
+`tick_key` → `parse_utc(timestamp, source_zone=None)` **offset'siz** bir timestamp'ı çözümsüz
+sayar, bu yüzden clock onu `UnplaceableBarTimestampError` ile **reddeder** (fail-closed, doğru
+davranış). Ama `domain/backtest/indicators.py::_epoch_seconds` **aynı değeri sessizce UTC kabul
+eder**. İki yardımcı gerçekten ayrışıyor.
+
+Bugün tetiklenmesi beklenmiyor — üretim barları ingest'te UTC-normalize ediliyor — ve
+`test_tick_key_agrees_with_the_shipped_epoch_helpers` clock'un iki *sevk edilmiş* epoch
+wrapper'ıyla (`engine._epoch_ms_or_none`, `execution.rules.bar_epoch_ms`) uyuştuğunu kilitliyor;
+`indicators._epoch_seconds` o üçlünün dışında. **ADIM 16/18 bununla karşılaşacak:** stepper ve
+`run_portfolio` aynı bar akışını hem eksene hem indikatör hesabına verdiğinde iki yorum aynı
+satırda buluşur. Kalem burada açık bırakılıyor — clock'un davranışı doğru olan, ayrışma
+`indicators` tarafında ele alınmalı.
 
 **Codemap:** `docs/CODEMAPS/BACKEND_LAYERS.md` PR #567 içinde tazelendi; başka harita
 gerekmiyor (yeni endpoint / tablo / sayfa / job yok).

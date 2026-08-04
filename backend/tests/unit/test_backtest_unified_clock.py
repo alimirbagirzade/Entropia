@@ -536,14 +536,21 @@ def test_the_clock_is_not_wired_into_production_yet() -> None:
 
     That is only true while it stays true, and it is exactly what keeps every shipped digest
     still. When ADIM 18 wires ``run_portfolio`` in, this test is the one that must be updated
-    deliberately — it should never fail by accident."""
+    deliberately — it should never fail by accident.
+
+    It has been updated deliberately once: the shared-snapshot intent layer
+    (``execution/intents.py``) reads the clock's ``ItemTickView``, so it is named here as the
+    ONE permitted importer rather than the assertion being loosened to "some importers are
+    fine". That module is itself contained — ``test_backtest_item_intents.py`` asserts nothing
+    imports IT — so the property this test defends is unchanged: no production path reaches
+    the clock, and the rollback is still "delete the modules"."""
     src = Path(__file__).resolve().parents[2] / "src" / "entropia"
     importers = [
         path.relative_to(src).as_posix()
         for path in src.rglob("*.py")
         if path.name != "clock.py" and "execution.clock" in path.read_text(encoding="utf-8")
     ]
-    assert importers == []
+    assert importers == ["domain/backtest/execution/intents.py"]
 
 
 def test_no_clock_field_ships_in_the_manifest_yet_and_the_engine_version_stands() -> None:

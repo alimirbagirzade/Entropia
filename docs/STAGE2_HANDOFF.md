@@ -3621,14 +3621,130 @@ kapsam dışında bırakıldı; bu slice'ın guard'ı 12 bağlı alanı kapsıyo
 
 ---
 
-## Next: **ADR onayı (PO) → ADIM 15 (merged-axis clock primitive)**
+## ADIM 15 — Merged-axis valuation clock landed (PR #567)
 
-**Sıradaki tek adım kod değil, bir onay.** ADR §16 bunu açıkça kapı yapıyor: statü
-**Proposed** olduğu sürece ADIM 15 başlamaz. Onay gelirse statü **Accepted** olur, §13'ün yedi
-kararı bir amendment tablosuna/takip ADR'ına **çözüm olarak** yazılır ve ADIM 15 §12
-sınırlarına karşı başlar. Onay gelmezse tasarım tartışılır — ama kod yazılmaz.
+**Commit `4b06f0c`-serisi → merge `ef11dc9`** (2026-08-04T20:06:44Z) · branch
+`feat/portfolio-unified-clock-core` · **+864 / −1, 3 dosya** · **Migration YOK** (alembic head
+`0043_i08_registry_strategy_fks`) · **OpenAPI DEĞİŞMEDİ** · **`ENGINE_VERSION` DEĞİŞMEDİ**
+(`backtest-engine-v18-gap-adjusted-stop-fill`) · **CI 6/6 SUCCESS**.
 
-**Onayı beklerken paralel yürüyebilecek, ADR'ı bloke etmeyen dört kalem:**
+| dosya | |
+|---|---|
+| `backend/src/entropia/domain/backtest/execution/clock.py` | **yeni**, 300 satır |
+| `backend/tests/unit/test_backtest_unified_clock.py` | **yeni**, 563 satır / **27 test** |
+| `docs/CODEMAPS/BACKEND_LAYERS.md` | `backtest` satırına `execution/clock.py` paragrafı |
+
+**Ne getirdi — ADR 0002 §12'nin ADIM 15'i, fazlası değil.** Kanon portföy motorunun **DIŞ
+döngüsünün** öğe listesi değil, tüm aktif öğeler üzerindeki birleşik zaman damgası ekseni
+olmasını istiyor (doc 13 §8.3 · Modül 11 §5.2 · Modül 12 §9.2). Sevk edilen worker
+(`application/jobs/backtest_engine.py:298`) öğeler üzerinde dönüp bitmiş run'ları pin sırasında
+katlıyor — composite eğrinin **zaman serisi bile olmamasının** sebebi bu; mevcut
+`test_composite_portfolio_curve_is_not_time_ordered` kusuru bilerek pinliyor (aynı dört
+kapanışın unified-clock replay'i 3000.00 verirken 5000.00 raporlanıyor).
+
+**Modülün sözleşmeleri (tercih değil, kural):**
+
+* **Tick anahtarı `t_ms`** — UTC epoch ms (ADR §4.1), kod tabanının öğeler arasında zaten
+  kullandığı anahtar. String timestamp'ler karışık offset biçimleri girince yalnız **kazara**
+  sıralıdır; `…T02:00:00+01:00` ile `…T01:00:00Z` **tek tick**'e düşmeli — burada düşüyor,
+  string sort'ta düşmezdi.
+* **Tick bir değerleme noktasıdır, asla bir (item, zaman) çifti değil** (§4.1). Öğeler tick'in
+  **içinde** yaşıyor; böylece "t anında her öğe aynı snapshot'ı görür" yapısal bir gerçek olur,
+  sonraki bir gözden geçirenin yeniden doğrulaması gereken bir disiplin değil.
+* **Dedup EKSENİN'dir, öğe verisinin ASLA değil.** Bir öğenin pinli akışı aynı anda iki bar
+  taşıyorsa **ikisi de** o öğenin görünümünde yüzeye çıkar (`bars` bir tuple) ve eksen bir kez
+  ilerler. Katlamak kanonun vermediği bir merge kuralı gerektirirdi; birini düşürmek pinli
+  veriyi sessizce atardı.
+* **Bar timestamp == karar zamanı** (§4.3, adjudication A-1) — sevk edilen konvansiyon korundu,
+  `record_time_basis` üzerinden dallanma **YOK**; o **OD-1**'dir ve aynı digest tazelemesine
+  ikinci bir anlamsal değişiklik sokardı.
+* **Fail closed, asla atlama.** Yerleştirilemeyen timestamp → `UnplaceableBarTimestampError`,
+  geriye giden akış → `NonMonotonicBarStreamError`, mükerrer `item_id` →
+  `DuplicateItemStreamError`. Üçü de `ClockAxisError(ValueError)` altında; worker bunları
+  `engine.UnresolvedStrategyError` gibi başarısız run'a çevirir (§11 / Modül 12 §9).
+* **Streaming.** Mevcut chunked bar iterator'ları üzerinde k-way heap merge; öğe başına en fazla
+  **bir bar** tutuluyor. Materialize-then-sort kabul edilemez (§11) ve kaynak generator'lardan
+  çekilen satırları **sayan** bir testle pinlenmiş.
+* **Duvar saati yok, rastgelelik yok** — eksen pinli girdilerinin saf fonksiyonu.
+
+**Public yüzey:** `ItemBarStream(item_id, pin_ordinal, batches)` · `ItemTickView` (`bars`,
+`last_closed`, `last_closed_t_ms`, `is_decision`, `staleness_ms`) · `ClockTick` (`t_ms`,
+`views`, `deciding`, `view_for`) · `iter_ticks()` · `tick_key()` · `timeline_identity()` ·
+`CLOCK_POLICY_VERSION = "clock-policy-v1"` (ADR §10.3 bunu MANIFEST alanı sayıyor; **manifest'e
+yazmak ADIM 20'nindir** ve bilerek yapılmadı — sabit erken sevk edilsin diye değil, adlandırdığı
+politikanın ilk satırından itibaren tek evi olsun diye var).
+
+**Sıralama determinizmi:** görünümler `(pin_ordinal, item_id)` ile sıralanıyor — `pin_ordinal`
+manifest'in deterministik pin sırasından (`manifest._pinned_items`, `(root_id,
+selected_revision_id)`'ye göre sıralı). **Asla DOM sırası, asla istek varış sırası** (§4.4).
+
+**İzolasyon — doğrulandı, iddia değil.** `origin/main` üzerinde `git grep` ile:
+**hiçbir üretim modülü `clock.py`'yi import etmiyor** (`backend/src` altında sıfır eşleşme);
+`run_engine` imzası **ve semantiği** korundu (§3.2), hiçbir golden digest / `ENGINE_VERSION` /
+`execution_key` oynamadı. ADIM 15'in rollback'i gerçekten **"modülü sil"** — ve bu iddia
+`test_the_clock_is_not_wired_into_production_yet` +
+`test_no_clock_field_ships_in_the_manifest_yet_and_the_engine_version_stands` ile **testle
+kilitli**, sözle değil.
+
+**27 testin kapsadığı eksenler:** tek-öğe indirgemesi (§3.2) · sıralı birleşim · paylaşılan
+instant'ın tek tick'e çökmesi · offset biçimlerinin aynı instant'a düşmesi · metin değil instant
+sıralaması · tek taraflı eksen · boş/barsız öğe · heterojen timeframe interleave (**bar ödünç
+almadan**) · öğe içi mükerrer instant'ın **yüzeye çıkması** · "hiçbir görünüm gelecekten veri
+taşımaz" · seyrek öğenin staleness **ölçümü** · pin sırası tie-break · girdi sırası bağımsızlığı ·
+rerun determinizmi · batch chunk bağımsızlığı · **materialize etmeme** · üç fail-closed dalı ·
+motorun düşürdüğü satırı **aynı şekilde** düşürme · availability gate'in öğenin kendi karar
+zamanında değerlenmesi · üst timeframe bucket'ının kardeş tick'lerden etkilenmemesi ·
+`tick_key`'in sevk edilen epoch helper'larıyla uyuşması · `CLOCK_POLICY_VERSION` pini ·
+`timeline_identity` determinizm + ayırt edicilik.
+
+**Bilerek KARAR VERİLMEYENLER:** shared ledger + snapshot (ADIM 17) · `ItemIntent` + faz döngüsü
+(ADIM 18) · conflict/sleeve arbitrasyonu (ADIM 19) · manifest alanları + `ENGINE_VERSION` bump +
+containment lift (ADIM 20) · **taze barı olmayan bir pozisyonun tick'te nasıl mark edileceği —
+OD-2, hâlâ AÇIK**; clock bir mark politikasının ihtiyaç duyacağı olguları **raporluyor**, seçim
+yapmıyor.
+
+> ### ⚠ Dürüst sınır — ADR kapısı atlandı
+>
+> **ADR 0002'nin statüsü hâlâ `Proposed`** (satır 4: *"requires PO / maintainer approval before
+> any implementation slice starts"*) ve §16 onay gelmeden ADIM 15'in başlamamasını şart
+> koşuyordu. PR #567 bu kapıdan geçtiğine dair **kayıtlı bir onay olmadan** indi. Zarar dar —
+> modül saf, hiçbir yerden import edilmiyor, rollback tek dosya silme — ama **kapı atlanmıştır**
+> ve bu kayda geçer. ADIM 16'ya geçmeden önce onay durumu **açıkça** teyit edilmeli; §13'ün yedi
+> açık kararı (OD-1…OD-7) hâlâ çözülmedi.
+
+**Codemap:** `docs/CODEMAPS/BACKEND_LAYERS.md` **PR #567 içinde tazelendi** — ayrıca gerekmiyor.
+Yeni endpoint / tablo / sayfa / job yok, diğer haritalar değişmedi.
+
+**Doğrulama — dürüst sınır:** bu kapanış kaydı **docs-only bir oturumda** yazıldı ve **suite'i
+yeniden ÖLÇMEDİ.** İddia edilen tek doğrulama **PR #567'nin kendi CI'ıdır (6/6 SUCCESS)**;
+modül izolasyonu, `ENGINE_VERSION` sabitliği ve ADR statüsü `origin/main` üzerinde `git grep` ile
+ayrıca teyit edildi.
+
+**Doküman:** `docs/ADIM15_LANDED_KICKOFF.md` (reuse anchor'ları + ADIM 16 resume prompt) ·
+`docs/PROJECT_HISTORY.md` §ADIM 15 · ADR §12 (sınırlar) / §13 (açık kararlar) / §14 (kabul
+matrisi).
+
+---
+
+## Next: **ADR onayı (PO) → ADIM 16 (resumable per-item stepper, SAF refactor)**
+
+**Önce kapı: ADR statüsü hâlâ `Proposed`.** ADIM 15 bu onay olmadan indi (yukarıya bak);
+ADIM 16'ya geçmeden önce onay **açıkça teyit edilmeli**. Onay gelirse statü **Accepted** olur ve
+§13'ün yedi kararı bir amendment tablosuna **çözüm olarak** yazılır.
+
+**ADIM 16 (ADR §12):** `run_engine`'in bar-döngü gövdesini, bir öğeyi verilen bir `t`'ye
+ilerletebilen bir **stepper**'a çıkar; `run_engine` **imzasını VE semantiğini** koruyup o
+stepper üzerinde ince bir sürücüye dönüşsün (§3.2). **Saf refactor.**
+Dosyalar: `domain/backtest/engine.py`, `execution/state.py`.
+**Kabul: 46 golden digest'in TAMAMI değişmemeli** (hepsi `run_engine`/`combine_item_runs`'ı
+doğrudan çağırıyor, worker'ı asla) + tam engine suite yeşil. Rollback: revert; hiçbir anlamsal
+yüzey değişmedi.
+
+**ADIM 15'in ADIM 16'ya bıraktığı:** `iter_ticks` bir öğenin **hangi `t`'lerde** ilerletilmesi
+gerektiğini zaten söylüyor; ADIM 16'nın işi o `t`'ye **ilerletebilen** bir motor gövdesi
+üretmek. İkisi ADIM 18'de birleşir — ADIM 16'da clock'u engine'e **bağlama**.
+
+**Paralel yürüyebilecek, ADIM 16'yı bloke etmeyen kalemler:**
 
 1. ~~**R-1 dar PR'ı** (revision pinning)~~ — **LANDED**: PR #565 (`a33d3e4`,
    `fix(readiness): pin the allocation revision the snapshot names`), merge `06809cc`.

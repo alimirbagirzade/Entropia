@@ -3052,3 +3052,101 @@ suite'i yeniden ÖLÇMEDİ**; tek doğrulama kanıtı #564'ün CI koşusudur.
 yetkisi **insandadır**, agent kapatamaz. **#540** (exhaustiveness guard issue'su) bilerek kapsam
 dışı bırakıldı: bu slice'ın guard'ı **12 bağlı alanı** kapsıyor, #540'ın istediği **14 alanlık**
 tam kapsam değil.
+
+---
+
+## ADIM 15 — Merged-axis valuation clock primitive (PR #567)
+
+**Merge `ef11dc9`** (2026-08-04T20:06:44Z) · branch `feat/portfolio-unified-clock-core` ·
+**+864 / −1, 3 dosya** · **backend-only** · **Migration YOK** (alembic head
+`0043_i08_registry_strategy_fks`) · **OpenAPI DEĞİŞMEDİ** · **`ENGINE_VERSION` DEĞİŞMEDİ**
+(`backtest-engine-v18-gap-adjusted-stop-fill`) · **frontend dokunulmadı** · **CI 6/6 SUCCESS**.
+
+ADR 0002 §12'nin ilk uygulama dilimi: **merged-axis clock primitive, ve başka hiçbir şey.**
+
+### Neden — katlanan eğri bir zaman serisi değil
+
+Kanon portföy motorunun **DIŞ döngüsünün** öğe listesi değil, tüm aktif öğeler üzerindeki
+birleşik zaman damgası ekseni olmasını istiyor (doc 13 §8.3 · Modül 11 §5.2 · Modül 12 §9.2 —
+`domain/allocation/capability.py`'de kaldırma şartı #1 olarak da yazılı). Sevk edilen worker
+(`application/jobs/backtest_engine.py:298`) öğeler üzerinde dönüyor ve bitmiş run'ları pin
+sırasında katlıyor. Sonuç yalnız yanlış değil, **tür olarak yanlış**: composite eğri bir zaman
+serisi değil. Mevcut `test_composite_portfolio_curve_is_not_time_ordered` kusuru **bilerek**
+pinliyor — aynı dört kapanışın unified-clock replay'i **3000.00** verirken sevk edilen kat
+**5000.00** raporluyor.
+
+### Sözleşmeler (tercih değil, kural)
+
+| kural | ADR | ne demek |
+|---|---|---|
+| Tick anahtarı **`t_ms`** (UTC epoch ms) | §4.1 | String timestamp'ler karışık offset biçimleri girince yalnız **kazara** sıralıdır. `…T02:00:00+01:00` ile `…T01:00:00Z` **TEK** tick'e düşmeli — burada düşüyor, string sort'ta düşmezdi. Kod tabanı bu anahtarı zaten kullanıyor (`PriorItemInterval.start_ms/end_ms`) |
+| Tick = **değerleme noktası**, asla (item, zaman) çifti değil | §4.1 | Öğeler tick'in **içinde** yaşıyor → "t anında her öğe aynı snapshot'ı görür" **yapısal** bir gerçek olur, sonradan doğrulanacak bir disiplin değil |
+| Dedup **EKSENİN**, öğe verisinin **ASLA** değil | §4.2 | Bir öğenin pinli akışı aynı anda iki bar taşıyorsa **ikisi de** görünümde yüzeye çıkar (`bars` tuple), eksen **bir kez** ilerler. Katlamak kanonun vermediği bir merge kuralı ister; birini düşürmek pinli veriyi sessizce atar |
+| Bar timestamp **==** karar zamanı | §4.3 / A-1 | Sevk edilen konvansiyon korundu; `record_time_basis` üzerinden **dallanma YOK** — o **OD-1**'dir ve aynı digest tazelemesine ikinci bir anlamsal değişiklik sokardı |
+| **Fail closed, asla atlama** | §11 | Yerleştirilemeyen timestamp / geriye giden akış / mükerrer `item_id` → **raise**. Worker bunları başarısız run'a çevirir; sessizce bozuk bir eksen üzerinde devam etmez |
+| **Streaming** k-way merge | §11 | Mevcut chunked bar iterator'ları üzerinde heap merge; öğe başına en fazla **bir bar** tutulur. Materialize-then-sort kabul edilemez — kaynak generator'lardan çekilen satırları **sayan** bir testle pinli |
+| Tie-break **`(pin_ordinal, item_id)`** | §4.4 | `pin_ordinal` manifest'in deterministik pin sırasından (`manifest._pinned_items`, `(root_id, selected_revision_id)`). **Asla DOM sırası, asla varış sırası** |
+| Duvar saati yok, rastgelelik yok | — | Eksen pinli girdilerinin **saf fonksiyonu** → replay yapıca yeniden üretilebilir |
+
+### Public yüzey
+
+`ItemBarStream(item_id, pin_ordinal, batches)` — worker'ın bugün zaten tuttuğu chunked
+iterator doğrudan geçiyor; clock `run_engine`'in tükettiği **aynı** satırları tüketiyor ve
+**aynı** coercion'ı (`_normalize`) uyguluyor, yani motorun düşürdüğü satır burada da düşüyor.
+`ItemTickView` (`bars`, `last_closed`, `last_closed_t_ms`, `is_decision`, `staleness_ms`) ·
+`ClockTick` (`t_ms`, `views`, `deciding`, `view_for`) · `iter_ticks()` · `tick_key()` ·
+`timeline_identity()` (kendi sha256 namespace'i var, başka bir digest'le çakışamaz) ·
+`CLOCK_POLICY_VERSION = "clock-policy-v1"`.
+Hata sınıfları: `ClockAxisError(ValueError)` ← `UnplaceableBarTimestampError` ·
+`NonMonotonicBarStreamError` · `DuplicateItemStreamError`.
+
+> **`CLOCK_POLICY_VERSION` neden şimdi var ama manifest'te yok:** ADR §10.3 onu bir MANIFEST
+> alanı sayıyor; **manifest'e yazmak ADIM 20'nindir.** Sabit, erken sevk edilsin diye değil,
+> adlandırdığı politikanın **ilk satırından itibaren tek evi olsun** diye burada.
+
+### İzolasyon — testle kilitli, sözle değil
+
+**Hiçbir üretim modülü `clock.py`'yi import etmiyor** (`origin/main` üzerinde `git grep`,
+`backend/src` altında sıfır eşleşme). `run_engine` **imzasını VE semantiğini** korudu (§3.2) →
+hiçbir golden digest, `ENGINE_VERSION` veya `execution_key` oynamadı. ADIM 15'in rollback'i
+gerçekten **"modülü sil"**. Bu iddia iki testle pinli:
+`test_the_clock_is_not_wired_into_production_yet` ve
+`test_no_clock_field_ships_in_the_manifest_yet_and_the_engine_version_stands`.
+
+### 27 test neyi kapsıyor
+
+Tek-öğe indirgemesi (§3.2) · sıralı birleşim · paylaşılan instant'ın tek tick'e çökmesi ·
+offset biçimlerinin aynı instant'a düşmesi · **metin değil instant** sıralaması · tek taraflı
+eksen · boş akış kümesi + barsız öğe · heterojen timeframe interleave (**bar ödünç almadan**) ·
+öğe içi mükerrer instant'ın **yüzeye çıkması** (katlanmaması) · "hiçbir görünüm **gelecekten**
+veri taşımaz" · seyrek öğenin son kapanışı + staleness **ÖLÇÜMÜ** · pin sırası tie-break ·
+girdi sırasının ekseni değiştirememesi · rerun determinizmi · batch chunk bağımsızlığı ·
+**materialize etmeme** · üç fail-closed dalı · motorun düşürdüğü satırın **aynı şekilde**
+düşmesi · availability gate'in **öğenin kendi** karar zamanında değerlenmesi · üst timeframe
+bucket'ının kardeş tick'lerden etkilenmemesi · `tick_key`'in sevk edilen epoch helper'larıyla
+uyuşması · `CLOCK_POLICY_VERSION` pini · `timeline_identity` determinizm + ayırt edicilik ·
+üretime bağlanmamışlık + manifest/ENGINE_VERSION sabitliği.
+
+### Bilerek karar verilmeyenler
+
+Shared ledger + snapshot (**ADIM 17**) · `ItemIntent` + faz döngüsü (**ADIM 18**) ·
+conflict/sleeve arbitrasyonu (**ADIM 19**) · manifest alanları + `ENGINE_VERSION` bump +
+containment lift (**ADIM 20**) · **taze barı olmayan bir pozisyonun tick'te nasıl mark
+edileceği — OD-2, hâlâ AÇIK.** Clock bir mark politikasının ihtiyaç duyacağı olguları
+**raporluyor** (`last_closed`, `last_closed_t_ms`, `staleness_ms`) ve **hiçbir eşik koymuyor**.
+
+### Dürüst sınır — ADR kapısı kayıtsız geçildi
+
+**ADR 0002'nin statüsü hâlâ `Proposed`** (satır 4: *"requires PO / maintainer approval before any
+implementation slice starts"*). §16 onay gelmeden ADIM 15'in başlamamasını şart koşuyordu;
+**PR #567 kayıtlı bir onay olmadan indi.** Zarar dar — modül saf, hiçbir yerden import edilmiyor,
+rollback tek dosya silme — ama **kapı atlanmıştır ve bu kayda geçer.** §13'ün yedi açık kararı
+(OD-1…OD-7) çözülmedi. ADIM 16'ya geçmeden önce onay durumu açıkça teyit edilmeli.
+
+**Codemap:** `docs/CODEMAPS/BACKEND_LAYERS.md` PR #567 içinde tazelendi; başka harita
+gerekmiyor (yeni endpoint / tablo / sayfa / job yok).
+
+**Doğrulama:** bu kayıt **docs-only bir oturumda** yazıldı ve **suite'i yeniden ÖLÇMEDİ.**
+İddia edilen tek doğrulama **PR #567'nin kendi CI'ıdır (6/6 SUCCESS)**; modül izolasyonu,
+`ENGINE_VERSION` sabitliği ve ADR statüsü `origin/main` üzerinde `git grep` ile ayrıca teyit
+edildi.

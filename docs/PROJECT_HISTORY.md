@@ -2398,3 +2398,118 @@ enqueue-route'u-yok notu) · `docs/CODEMAPS/FRONTEND_MAP.md`.
 döndürüyor ve hâlâ tipsiz — kapsam dışı; `LibraryPageResponse` onun için olduğu gibi
 kullanılabilir. API'nin geri kalanındaki ~161 `dict[str, Any]` route dönüşü **dokunulmadı**;
 bu slice bilerek repo çapında bir DTO rewrite değildir.
+
+---
+
+## ADIM 9 / ADIM 10 — kayıt boşluğu (dürüst not)
+
+Bu iki slice `main`'e indi ama **PROJECT_HISTORY'ye yazılmadı**. Ayrıntı için kaynaklarına
+git, buradan tahmin etme:
+
+* **ADIM 9 — PR #531** `test(acceptance): replace ID hits with semantic evidence mapping`
+  (merged 2026-08-04T09:44Z, commit `e36f082`).
+* **ADIM 10 — PR #537** `docs(audit): close the Strategy conflict matrix evidence chain`
+  (merged 2026-08-04T11:28Z, commit `e4cbec0`). Tam kaydı kendi dokümanında:
+  **`docs/audit/strategy_conflict_matrix_closure.md`**. Bulguları issue #532–#536 olarak
+  açıldı; #535 (product decision) ve #536 hâlâ açık.
+
+---
+
+## ADIM 11 — Capability matrix canonical adjudication (PR #538)
+
+**Base:** `origin/main` @ `53c28de` · **merged** 2026-08-04T12:35Z → `061d6d7` · CI **6/6 pass**
+(Backend 47m22s) · **audit-only, tek dosya, +443 satır, kod/şema/migration/OpenAPI/codemap
+değişikliği YOK.**
+
+Yeni: **`docs/audit/capability_matrix_canonical_adjudication.md`**.
+
+### Ne yapıldı
+
+Engine capability matrisinin (**62 satır / 22 `future_dev` / 14 alan**) her `future_dev`
+satırı V18 kanonuna karşı hükme bağlandı: gerçek data/model/determinism engeli olanlar ile
+**kanonun hiç tanımlamadığı** ya da **ürün kararı bekleyen** olanlar ayrıştırıldı. Yöntem:
+kanonik okuma → statik çağrı zinciri → **gerçek engine/Pydantic/form modülleri üzerinde
+çalıştırılan probe** → test envanteri. Dört read-only subagent kanıt üretti; disposition
+değiştiren her iddia ana oturumda yeniden ölçüldü ve **üç subagent sonucu geçersiz kılındı**.
+
+### Disposition (22 satır)
+
+`canonical_gap` **16** · `product_decision_required` **3** · `keep_future_dev` **2** ·
+`eligible_for_implementation` **1** · `incorrect_current_status` **0**.
+
+**Hiçbir capability aktif edilmedi.** `incorrect_current_status` en sert biçimde sekiz
+tick-bağımlı `active_v1` satırına karşı test edildi ("gizli Future Dev mi?") ve **ölçümle
+çürütüldü** — partial fill `size=20` vs `50`; intrabar touch print otoritesiyle bar
+modelinin aldığı bir fill'i *kaldırıyor*; stop/limit priority bir bar gecikmesini kapatıyor.
+Statü alanı her yerde dürüst; yanlış olan **kayıtlı gerekçeler** ve **kullanıcıya gösterilen
+iddialar**.
+
+### On kusur
+
+| # | Kusur | Şiddet |
+|---|---|---|
+| D-1 | 22 `future_dev` satırının **11'i** formda sıradan, seçilebilir seçenek olarak render ediliyor — `StrategyGraphForm.tsx` generated matrix'i hiç import etmiyor (`capabilityField`: `StrategyConfigForm` 12, burada **0**) | **CRITICAL** |
+| D-2 | Exhaustiveness guard matrisin **14 alanından 9'unu** kapsıyor; kapsanmayan 3 alanda zaten `future_dev` satırı var | **HIGH** |
+| D-3 | 6 alan diagnostics provenance bloğunda yok (#534 ailesi) | MEDIUM |
+| D-4 | Restriction **action** uzayı kanonik, doğru şekilde fail-closed, ama matriste **alanı yok** → run atıl iken `capability_not_in_build` boş | MEDIUM |
+| D-5 | `strategyGraph.ts:93-95` var olmayan bir disable iddia ediyor | MEDIUM |
+| D-6 | `MODELLED_FILTER_TYPES` parity testi olmayan elle bakımlı kopya | MEDIUM |
+| D-7 | `increasing_by_layer`'ın kayıtlı gerekçesi **kanon tarafından yalanlanıyor**; scaling-timeframe'inki replay'in yapamadığını **abartıyor** | **HIGH** |
+| D-8 | Kanonik `FORMULA_AST_INVALID` (doc 02 `:2394`) hiç emit edilmiyor | LOW |
+| D-9 | `signal_strength_adjustment`'ın 4 literal'inden 3'ü — **sevk edilmiş `active_v1` olan `volatility_adjusted` dahil** — hiçbir kanonik belgede yok | **HIGH** |
+| D-10 | `correlation_filter` şemada var kanonda yok; `regime_filter` kanonda var şemada yok | **HIGH** |
+
+### Hareket eden tek satır
+
+`scaling_logic.timeframe_mode = increasing_by_layer` → `eligible_for_implementation`.
+Matris "doc 02 §5.7 rung boyunu söylemiyor" diyor; **§5.7 için doğru, doc 02 için yanlış** —
+§6.1 ⓘ paneli (`02_..._v1_1.md:1998`) *"her yeni layer'da … bir üst timeframe'e geçer"*
+diyor, `15m → 30m → 1h` örneğiyle, `CANONICAL_TIMEFRAMES` index+1 ile örtüşüyor. Mekanizma
+S5c'den beri sevk edilmiş (`layer_timeframe`/`layer_bucket`). **Aktif edilmedi** — `1D` üstü
+davranış açık ürün kararı.
+
+### NET — matrisin dışında
+
+`NET` capability matrisi satırı **değil**; `CrossItemConflictPolicy.NET`
+(`domain/allocation/enums.py:35-52`) allocation yüzeyinde. Kanon hiçbir policy seti
+saymıyor ve doc 13'ün kendi draft-write sözleşmesi (`:816`) `conflict_policy` alanını hiç
+taşımıyor. Dahası **açıklaması karşı-olgusal**: ADIM 3 containment'ından sonra hiçbir shared
+run kabul edilmiyor, ama uyarı ve tarayıcı etiketi hâlâ *"executed as Block opposite"*
+reklamı yapıyor (ölçüldü: `BLOCKER SHARED_MODE_NOT_IN_BUILD` + `WARNING
+CONFLICT_POLICY_NET_V1` aynı config'te birlikte).
+
+### Doğrulama
+
+Backend targeted **271 passed** + allocation **18 passed** + frontend **14 passed** — hepsi
+exit 0. Generator temp path'e yeniden üretilip diff'lendi: **byte-identical** (sha256
+eşleşti, tracked dosyaya yazılmadı). Doküman referansları 14/14 çözüldü. Tam suite
+koşulmadı — PR hiç kod değiştirmiyor.
+
+### Açılan issue'lar
+
+| Issue | İçerik |
+|---|---|
+| #539 | **C-1 (CRITICAL)** — matrix'i `StrategyGraphForm`'a bağla, reachability'ye göre gate'le, `MODELLED_FILTER_TYPES`'ı sil |
+| #540 | C-2 — exhaustiveness guard'ı 14/14'e çıkar |
+| #541 | C-3 — iki yanlış gerekçe + bayat yorum (text-only) |
+| #542 | **P-1 ürün kararı** — signal-strength taksonomisi (aktif satırı da etkiliyor) |
+| #543 | **P-2 ürün kararı** — `correlation_filter` mi `regime_filter` mi |
+| #544 | **P-6 ürün kararı** — NET'i tanımla ya da kaldır (+ text-only açıklama düzeltmesi bağımsız yapılabilir) |
+| #545 | P-3+P-4 ürün kararı — ikinci dataset pin'i + stale-quote eşiği |
+| #546 | P-5+P-8 ürün kararı — hangi volatility/volume koşulları ship edilir + action uzayı matrise girsin mi |
+| #547 | C-5 — `increasing_by_layer` implementasyonu (P-7'ye bağlı, `ENGINE_VERSION` değerlendirmesi zorunlu) |
+| #534 | C-4 — provenance eksikleri, **yeni issue açılmadı**, mevcut issue'ya 6 alan eklendi |
+
+### Devam belgeleri
+
+Bir sonraki oturumun seed'i: **`docs/ADIM11_LANDED_KICKOFF.md`** (reuse
+anchor'ları + paste-ready resume prompt). Handoff girdisi: `docs/STAGE2_HANDOFF.md`
+§"ADIM 11 … landed".
+
+### Dürüst sınır
+
+D-1'in etkisi form modülleri üzerinde ölçüldü, **tarayıcıda değil** — insan ya da ekran
+okuyucu oturumu yapılmadı. Sunucu tarafı (bu 11 satırın Ready Check + engine tarafından hâlâ
+reddedildiği) doğrudan ölçüldü ve tutuyor. `_ReferenceSeries` resampler'ı **okundu,
+koşturulmadı** — "scaling override'a hizmet edebilir" iddiası bilerek bir disposition'ı
+gerekçelendirmek için KULLANILMADI.

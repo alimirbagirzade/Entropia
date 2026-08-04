@@ -3298,7 +3298,47 @@ OpenAPI before/after, uyumluluk matrisi, kalan risk). Güncellendi: `BACKEND_ROU
 döndürüyor, hâlâ tipsiz — `LibraryPageResponse` onun için aynen kullanılabilir. API'nin
 geri kalanındaki ~161 `dict[str, Any]` route dönüşü dokunulmadı.
 
-## Next: **ADIM 9 — TANIMLANMAMIŞ** (brief kullanıcıdan gelir)
+## ADIM 11 — Capability matrix canonical adjudication landed (PR #538)
+
+**Merged** 2026-08-04T12:35Z, base `53c28de` → `main` `061d6d7`, **CI 6/6 pass**.
+**Audit-only:** tek yeni dosya `docs/audit/capability_matrix_canonical_adjudication.md`
+(+443). Migration YOK · OpenAPI YOK · codemap YOK · `ENGINE_VERSION` değişmedi
+(`backtest-engine-v18-same-candle-entry-exit`) · alembic head `0043_i08_registry_strategy_fks`
+(tek head) · `CAPABILITY_MATRIX` ve her status literal'i dokunulmadı.
+
+Matrisin 22 `future_dev` satırı hükme bağlandı: `canonical_gap` 16 ·
+`product_decision_required` 3 · `keep_future_dev` 2 · `eligible_for_implementation` 1 ·
+`incorrect_current_status` **0**. **Hiçbir capability aktif edilmedi.**
+
+Testler: backend targeted **271 passed** + allocation **18 passed** + frontend **14 passed**,
+hepsi exit 0; capability generator temp path'e yeniden üretilip diff'lendi → **byte-identical**.
+Tam suite koşulmadı (PR hiç kod değiştirmiyor).
+
+En ağır bulgu **D-1 (CRITICAL)**: 22 `future_dev` satırının **11'i** Strategy formunda hiç
+devre dışı bırakılmıyor — `StrategyGraphForm.tsx` generated matrix'i hiç import etmiyor.
+Sunucu run'ı yine reddediyor (yetkilendirme açığı değil, **açıklama açığı**), ama bu #533'ün
+tam tersi yönü ve 5 kat fazla satır. Ayrıca **D-9**: `signal_strength_adjustment`'ın dört
+literal'inden üçü — sevk edilmiş **aktif** `volatility_adjusted` dahil — hiçbir kanonik
+belgede yok. **D-10**: `correlation_filter` şemada var kanonda yok, `regime_filter` tersi.
+
+Açılan issue'lar: **#539** (C-1 CRITICAL) · #540 · #541 · **#542/#543/#544/#545/#546**
+(ürün kararları) · #547 (C-5) · #534'e 6 alanlık provenance yorumu eklendi.
+
+Ayrıntı: `docs/PROJECT_HISTORY.md` §ADIM 11 · `docs/ADIM11_LANDED_KICKOFF.md`.
+
+**Kayıt boşluğu (dürüst not):** ADIM 9 (PR #531) ve ADIM 10 (PR #537) `main`'e indi ama
+PROJECT_HISTORY'ye yazılmamıştı; ADIM 11 kapanışında yalnız **işaretçi** eklendi, geriye
+dönük anlatı üretilmedi. ADIM 10'un tam kaydı kendi dokümanında:
+`docs/audit/strategy_conflict_matrix_closure.md`.
+
+---
+
+## Next: **ADIM 12 — TANIMLANMAMIŞ** (brief kullanıcıdan gelir)
+
+En yakın hazır kalem **#539 (C-1)** — matrix'i `StrategyGraphForm`'a bağlamak. Presentation-only,
+hiçbir ürün kararına bağlı değil, ve bu denetimin en yüksek değerli kod düzeltmesi.
+Ürün kararı gerektiren kalemler (#542 / #543 / #544) **insana aittir; agent kapatamaz** ve
+açık **#535** ile birlikte karara bağlanmalıdır.
 
 ADIM serisi her seferinde kullanıcının verdiği tam brief ile yürüyor; repo'da ADIM 9 diye bir
 kalem **yok** (arama yapıldı). Bir sonraki oturum ya ADIM 9 brief'ini alır ya da aşağıdaki

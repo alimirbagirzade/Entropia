@@ -501,3 +501,90 @@ async def test_trade_log_foreign_owner_revision_denial_parity(session, fake_obje
     assert call is not None and call.failure_code == human_code
     # The foreign root keeps exactly its single (owner-created) revision.
     assert await _count(session, WorkObjectRevision) == 1
+
+
+# --------------------------------------------------------------------------- #
+# Trade Log import — the durable job actually reaches its actor                 #
+# --------------------------------------------------------------------------- #
+
+
+async def test_trade_log_import_is_handed_off_to_its_data_actor(
+    session, fake_object_store, monkeypatch
+) -> None:
+    """The step the human route performs (``routes/trade_log.py`` ->
+    ``send_job(run_trade_log_import, ...)``) and the Gateway plane did not.
+
+    ``enqueue_job`` only INSERTs a QUEUED row; the caller dispatches the actor after
+    commit. The ``data`` queue is deliberately excluded from the scheduler's automatic
+    redelivery sweep (``ACTOR_BY_QUEUE``) because it is multi-actor, so an
+    agent-admitted Trade Log import sat QUEUED until an Admin ran the manual
+    redelivery action — a call reporting ``succeeded`` over work that could never
+    start. Regression guard for that defect.
+    """
+    from entropia.application.jobs.data_queue import TRADE_LOG_IMPORT
+    from entropia.apps.worker import actors as worker_actors
+
+    await _seed(session)
+    upload = await tl_cmd.upload_source_asset(
+        session, AGENT, content=_GOOD_CSV, original_filename="trades.csv"
+    )
+    await session.commit()
+
+    requested = await agent_tools.dispatch_tool_call(
+        session,
+        AGENT,
+        tool_name="trade_log.request_import",
+        policy_scope="research",
+        request={"source_asset_id": upload["source_asset_id"], "instrument_id": "BTCUSDT"},
+    )
+    await session.commit()
+
+    assert requested["status"] == "succeeded"  # the CALL was admitted
+    assert requested["import_status"] == "queued"  # the WORK has not run
+    assert requested["import_job_kind"] == TRADE_LOG_IMPORT
+    assert agent_tools.pending_data_job_dispatch(requested) == (
+        TRADE_LOG_IMPORT,
+        requested["job_id"],
+    )
+
+    sent: list[tuple[object, str]] = []
+    monkeypatch.setattr(
+        "entropia.infrastructure.queues.enqueue.send_job",
+        lambda actor, job_id: sent.append((actor, job_id)),
+    )
+    worker_actors._dispatch_pending_data_job(requested)
+    assert sent == [(worker_actors.run_trade_log_import, requested["job_id"])]
+
+
+async def test_a_replayed_trade_log_import_never_re_dispatches(session, fake_object_store) -> None:
+    """A redelivered tool call admitted no new work. ``run_import`` has no
+    terminal-state guard, so re-sending a finished job would parse the file twice and
+    write a second record batch."""
+    await _seed(session)
+    upload = await tl_cmd.upload_source_asset(
+        session, AGENT, content=_GOOD_CSV, original_filename="trades.csv"
+    )
+    await session.commit()
+
+    first = await agent_tools.dispatch_tool_call(
+        session,
+        AGENT,
+        tool_name="trade_log.request_import",
+        policy_scope="research",
+        request={"source_asset_id": upload["source_asset_id"], "instrument_id": "BTCUSDT"},
+        idempotency_key="tl-import-1",
+    )
+    await session.commit()
+    replay = await agent_tools.dispatch_tool_call(
+        session,
+        AGENT,
+        tool_name="trade_log.request_import",
+        policy_scope="research",
+        request={"source_asset_id": upload["source_asset_id"], "instrument_id": "BTCUSDT"},
+        idempotency_key="tl-import-1",
+    )
+    await session.commit()
+
+    assert replay["replayed"] is True
+    assert replay["job_id"] == first["job_id"]
+    assert agent_tools.pending_data_job_dispatch(replay) is None

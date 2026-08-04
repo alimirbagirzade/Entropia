@@ -830,6 +830,7 @@ async def _handle_trade_log_request_import(ctx: _Ctx) -> _ToolOutcome:
     (doc 05 §11, CR-09). The Agent receives the structured job handle and may plan
     a remediation task; the worker parses/normalizes/validates."""
     from entropia.application.commands.trade_log import request_trade_log_import
+    from entropia.application.jobs.data_queue import TRADE_LOG_IMPORT
 
     request = ctx.request
     result = await request_trade_log_import(
@@ -846,6 +847,13 @@ async def _handle_trade_log_request_import(ctx: _Ctx) -> _ToolOutcome:
     # terminal call ``status`` (doc 18 §9.2 envelope-wins rule).
     response = {**result, "import_status": result.get("status")}
     response.pop("status", None)
+    # The job kind the post-commit broker hand-off routes on. Without it
+    # ``pending_data_job_dispatch`` returns None and the admitted import sits QUEUED
+    # forever: ``data`` is excluded from the scheduler's automatic redelivery sweep
+    # because it is multi-actor, so ONLY an explicit Admin redelivery would have moved
+    # it. The trading_signal family shipped this with its tools; trade_log predates
+    # the hand-off and was left admitting work that could never start.
+    response["import_job_kind"] = TRADE_LOG_IMPORT
     return _ToolOutcome(
         response=response,
         artifact_output_ref=result.get("job_id"),

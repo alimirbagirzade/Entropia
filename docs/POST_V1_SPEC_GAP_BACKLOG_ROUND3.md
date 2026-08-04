@@ -78,6 +78,24 @@
 > >
 > > Tam ölçüm ve gerekçe:
 > > [`docs/audit/current_main_ground_truth_2026-08-03.md`](audit/current_main_ground_truth_2026-08-03.md) §N-02.
+> >
+> > ---
+> >
+> > **⚠️ KAPSAM DÜZELTMESİ (2026-08-04, ADIM 10 — `origin/main` @ `57c9d0e`).**
+> > Yukarıdaki "S5b **KAPANDI**" hükmü **fazla geniş yazılmış**. Ölçüm doğrudur ama
+> > yalnız **4 satırı** kapsar (Stop Mode · Multiple Stops · Same Candle Entry / Exit ·
+> > Stop + Exit) — oysa **doc 02 §5.9 tablosu 12 satırdır** ve v18 prototipi de 12 `<select>`
+> > basar. Kalan satırların (Long + Short · Entry + Exit *(pozisyon içi)* ·
+> > Entry + Restriction · Scaling + Stop · Opposite-Direction Signal *(ayrı policy)* ·
+> > Allow Multiple Same Direction · Allow Opposite While Open) **typed alanı yoktur**;
+> > bu sefer ad değil, **kavram** arandı (şema literal'i yok, engine dalı yok, capability
+> > satırı yok, UI kontrolü yok). Ayrıca sevk edilmiş 3 satırın **default'u canonical
+> > default'tan farklıdır**.
+> >
+> > Yani: **S5b'nin ölçülen 4 satırı gerçekten landed'dir; S5b'nin tamamı değildir.**
+> > Bu belgeyi "kalan iş listesi" diye okuyan oturum, S5b'yi tümüyle kapalı saymasın.
+> > Satır satır kanıt, ölçüm çıktıları ve açılan issue'lar:
+> > [`docs/audit/strategy_conflict_matrix_closure.md`](audit/strategy_conflict_matrix_closure.md).
 >
 > | Madde | ~~2026-07-29 ölçümü~~ (geçersiz — yukarıdaki nota bak) |
 > |---|---|

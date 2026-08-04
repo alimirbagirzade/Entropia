@@ -142,6 +142,23 @@ async def create_revision(
     return revision
 
 
+async def get_plan_revision(
+    session: AsyncSession, plan_id: str, plan_revision_id: str
+) -> PortfolioAllocationPlanRevision | None:
+    """Read one frozen revision, scoped to its own plan (doc 13 §8.1).
+
+    ``plan_id`` is part of the predicate, not a convenience: ``current_revision_id``
+    is a plain head pointer carrying no ForeignKey, so a caller that pins "the
+    plan's current revision" must be told when the pointer does not resolve
+    *within that plan* rather than silently reading a foreign row.
+    """
+    stmt = select(PortfolioAllocationPlanRevision).where(
+        PortfolioAllocationPlanRevision.plan_revision_id == plan_revision_id,
+        PortfolioAllocationPlanRevision.plan_id == plan_id,
+    )
+    return (await session.execute(stmt)).scalars().first()
+
+
 async def max_revision_no(session: AsyncSession, plan_id: str) -> int:
     stmt = select(func.max(PortfolioAllocationPlanRevision.revision_no)).where(
         PortfolioAllocationPlanRevision.plan_id == plan_id

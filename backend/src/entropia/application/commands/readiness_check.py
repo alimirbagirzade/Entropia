@@ -62,6 +62,7 @@ from entropia.infrastructure.postgres.models import (
     EntityRegistry,
     MainboardWorkingItem,
     PortfolioAllocationEntry,
+    PortfolioAllocationPlanRevision,
 )
 from entropia.infrastructure.postgres.repositories import allocation as alloc_repo
 from entropia.infrastructure.postgres.repositories import audit as audit_repo
@@ -803,18 +804,39 @@ async def _resolve_allocation(
     composition_id: str,
     available_items: list[MainboardWorkingItem],
 ) -> tuple[bool, list[Any], dict[str, Any] | None]:
-    """Resolve the persisted allocation draft into (enabled, issues, capital_mode).
+    """Resolve the persisted allocation state into (enabled, issues, capital_mode).
 
-    Reuses the 4a plan/entries + ``validate_allocation`` (issues are empty in
-    independent mode). ``capital_mode`` pins the plan's current revision config
-    where one exists (doc 14 §9.1 capital mode snapshot), else the live draft.
+    R-1 — the config pinned in ``capital_mode`` is the config of the revision the
+    snapshot NAMES. Doc 13 §1.2 fixes the chain ``draft -> plan revision ->
+    composition snapshot -> run manifest``, §8.5 says the snapshot pins the *exact*
+    plan revision, and §11.1 says the draft "direct engine input degildir" (Master
+    Ref Modul 11: "sonuc manifest'te exact allocation plan revision/snapshot olarak
+    saklanir"). A re-cut draft therefore takes effect only once it is frozen into a
+    NEW revision (§1.2); it does not retro-fit the config attributed to the old
+    one. Divergence is not a finding here: doc 14 §9.2 enumerates the portfolio
+    blockers/warnings and defines none for it, so raising one would be taxonomy
+    this project does not own.
+
+    The live draft is pinned ONLY when nothing else is — independent mode, or
+    before a first revision exists — and then ``plan_revision_id`` is null, so the
+    pinned config and the pointer cannot disagree in either direction.
+
+    The MODE stays the live plan's toggle (doc 13 §10.1): a plan switched back to
+    independent stays independent even though a frozen revision still exists.
+    ``validate_allocation`` re-applies the Modul 11 rules to whichever config was
+    pinned, against LIVE item availability — an item frozen into a revision and
+    soft-deleted since is still ITEM_UNAVAILABLE.
     """
     plan = await alloc_repo.get_plan_for_workspace(session, composition_id)
     if plan is None:
         return False, [], {"enabled": False}
 
-    entries = await alloc_repo.list_entries(session, plan.plan_id)
-    config = _plan_to_config(plan, entries)
+    revision = await _pinned_revision(session, plan)
+    if revision is None:
+        entries = await alloc_repo.list_entries(session, plan.plan_id)
+        config = _plan_to_config(plan, entries)
+    else:
+        config = PortfolioAllocationConfigV1.model_validate(revision.config)
     active_ids = {item.item_id for item in available_items}
     settlement = await resolve_settlement_currencies(session, available_items)
     item_refs = {
@@ -823,17 +845,53 @@ async def _resolve_allocation(
             available=e.composition_item_id in active_ids,
             settlement_currency=settlement.get(e.composition_item_id),
         )
-        for e in entries
+        for e in config.entries
+        # An entry whose kind is unresolvable gets NO ref, so validation blocks it
+        # as ITEM_UNAVAILABLE instead of guessing a kind. A draft always carries one
+        # (the column is NOT NULL); this only guards a hand-written config.
+        if e.item_type is not None
     }
     issues, _derived = validate_allocation(config, item_refs=item_refs)
     capital_mode: dict[str, Any] = {
         "enabled": config.enabled,
         "plan_id": plan.plan_id,
-        "plan_revision_id": plan.current_revision_id,
-        "config_hash": compute_config_hash(config) if config.enabled else None,
+        "plan_revision_id": None if revision is None else revision.plan_revision_id,
+        "config_hash": _pinned_config_hash(config, revision),
         "config": canonical_config(config) if config.enabled else None,
     }
     return config.enabled, list(issues), capital_mode
+
+
+async def _pinned_revision(
+    session: AsyncSession, plan: Any
+) -> PortfolioAllocationPlanRevision | None:
+    """The frozen revision this snapshot may pin, or ``None`` for the live draft.
+
+    Only shared mode pins one — the mode is the live toggle (doc 13 §10.1), so a
+    plan toggled back to independent must not be re-enabled by a leftover head
+    pointer. A pointer that does not resolve within this plan pins NOTHING: the
+    snapshot then reports the draft with a null ``plan_revision_id``, the same
+    self-consistent shape as "enabled but never frozen". Naming a revision whose
+    config was never read is the one outcome R-1 forbids.
+    """
+    if not plan.enabled or plan.current_revision_id is None:
+        return None
+    return await alloc_repo.get_plan_revision(session, plan.plan_id, plan.current_revision_id)
+
+
+def _pinned_config_hash(
+    config: PortfolioAllocationConfigV1, revision: PortfolioAllocationPlanRevision | None
+) -> str | None:
+    """The hash OF the pinned config: the revision's own, or one over the draft.
+
+    The revision's stored ``config_hash`` is preferred over recomputing it, so the
+    snapshot reproduces what was frozen even if the canonical serialization is ever
+    revised — a recomputed hash would silently disagree with the immutable row it
+    claims to describe.
+    """
+    if revision is not None:
+        return str(revision.config_hash)
+    return compute_config_hash(config) if config.enabled else None
 
 
 def _plan_to_config(

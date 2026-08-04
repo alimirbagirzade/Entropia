@@ -165,22 +165,24 @@ Before stopping a working session, produce **ALL** of the following:
 
 ## Current position (keep in sync at each closing)
 
-> **HEAD `801791f`** — ADIM 14 (ADR, PR #563) + ADIM 13 kapanış kaydı (PR #562) landed.
-> **Alembic head `0043_i08_registry_strategy_fks`** (tek head) · **196 OpenAPI operation /
-> 151 schema** · `ENGINE_VERSION = backtest-engine-v18-gap-adjusted-stop-fill` (PR #555, #549
-> CLOSED) · capability matrix değişmedi — **ADIM 14 hiçbirine dokunmadı.**
-> **Son slice:** ADIM 14 — `docs/adr/0002-unified-clock-portfolio-simulation.md` (761 satır),
-> **docs-only**, statü **`Proposed`** (PO onayı bekliyor, `Accepted` DEĞİL); ADIM **15–20**
-> sınırlarını, **7 açık kararı (OD-1…OD-7)** ve **A1–A22 kabul matrisini** donduruyor.
-> **Sıradaki:** ADR onayı → ADIM 15 (merged-axis clock primitive). Paralel açık kalemler:
-> **R-1** (`readiness_check._resolve_allocation` canlı draft pinliyor), manifest'te eksik 3
-> kanonik alan, **#544** (NET), **#559** (DST), **#539** (CRITICAL — düzeltmesi açık PR #564),
-> ADIM 12'den **#550/#551/#552**, ADIM 13'ten **#556/#557/#558**.
-> Ayrıntı: `docs/ADIM14_LANDED_KICKOFF.md` · `docs/PROJECT_HISTORY.md` §ADIM 14 ·
-> ADR §12/§13/§14 · ADIM 13 için `docs/ADIM13_LANDED_KICKOFF.md`.
-> **Uyarı 1 — numaralandırma çakışması:** PR #562 "ADIM 14"ü frontend slice'ı (#539 + #533)
-> sanıyor; merged ADR ise kendini ADIM 14 sayıp **ADIM 15–20'yi unified-clock'a rezerve
-> ediyor**. Frontend slice'ı çakışmayan bir etikete taşınmalı — **ürün kararı**.
+> **HEAD `893dbac`** — ADIM 14 (ADR, PR #563) + kapanışı (PR #566), **F-26** (PR #564) ve
+> **R-1 revision pin** (PR #565) landed. **Alembic head `0043_i08_registry_strategy_fks`**
+> (tek head) · **196 OpenAPI operation / 151 schema** · `ENGINE_VERSION =
+> backtest-engine-v18-gap-adjusted-stop-fill` (PR #555, #549 CLOSED) · capability matrix
+> değişmedi · migration yok.
+> **Son slice:** **F-26** — Strategy formu capability disclosure (#539 + #533 TEK slice,
+> PR #564, `5887f3f`): yeni `capabilityDisclosure.ts` + `CapabilityNote.tsx`; form artık
+> DEĞERE değil **ERİŞİLEBİLİRLİĞE** bakıyor (yanlış-negatif 15 satır + varsayılandaki sahte
+> blocker birlikte düzeldi), `MODELLED_FILTER_TYPES` matristen türetiliyor, 12 alanlık
+> exhaustiveness guard eklendi. **Frontend-only, backend byte-identical**, CI 6/6.
+> **#539 ve #533 issue'ları hâlâ AÇIK** (kapatma yetkisi insanda).
+> **Sıradaki:** ADR onayı (statü **`Proposed`**, `Accepted` DEĞİL) → ADIM 15 (merged-axis
+> clock primitive). Paralel açık: manifest'te eksik 3 kanonik alan, **#544** (NET),
+> **#559** (DST), ADIM 12'den **#550/#551/#552**, ADIM 13'ten **#556/#557/#558**, **#540**.
+> Ayrıntı: `docs/PROJECT_HISTORY.md` §F-26 + §ADIM 14 · `docs/ADIM14_LANDED_KICKOFF.md` ·
+> ADR §12/§13/§14 · `docs/ADIM13_LANDED_KICKOFF.md`.
+> **Numaralandırma:** çözüldü — **ADIM 14 = ADR**, frontend slice = **F-26**; ADIM 15–20
+> unified-clock'a rezerve, ADIM dışı işe F-serisinden sıradaki boş numarayı ver.
 > **Uyarı 2:** `docs/audit/current_main_ground_truth_2026-08-03.md` §18'in sıra 2/3/4/6
 > kalemleri ADIM 5–8 ile kapandı ama o belge güncellenmedi — ona güvenmeden önce doğrula.
 
@@ -200,8 +202,11 @@ Before stopping a working session, produce **ALL** of the following:
   Frontend **696 passed** (68 dosya, `npm run coverage` exit 0), `npm run typecheck` temiz.
   **CI 6/6 pass** (ADIM 13 / PR #560 Backend job **46m01s**). Yine de **otorite CI'dır.**
   Doğrula: `gh run list --branch main --limit 1` → job log.
-  **ADIM 14 docs-only olduğu için suite'i YENİDEN ÖLÇMEDİ** — yukarıdaki sayılar ADIM 13'ün
-  ölçümüdür ve geçerlidir; oracle paketinde xfail **sıfırdır** (#549 PR #555 ile kapandı).
+  **ADIM 14 docs-only olduğu için suite'i YENİDEN ÖLÇMEDİ**; oracle paketinde xfail
+  **sıfırdır** (#549 PR #555 ile kapandı). **Backend sayıları hâlâ geçerli** — F-26 (PR #564)
+  backend'e byte-identical. **Frontend `696 passed / 68 dosya` ise ARTIK ESKİ:** F-26 yeni bir
+  test dosyası ekledi (`test/capabilityDisclosure.test.tsx`); PR #564'ün CI'ı 6/6 yeşildi ama
+  yeni sayı **ölçülmedi** — güncel rakam için CI job log'una bak, buradaki sayıya güvenme.
   **Ortam tuzağı:** paralel worktree oturumları aynı anda koşuyor — `TEST_DATABASE_URL` ile
   worktree'ye özel izole DB kullan (conftest her testte `drop_all`/`create_all`; **sürücü
   `postgresql+asyncpg://` olmalı** — `psycopg` integration conftest'ini `create_async_engine`'de

@@ -1,4 +1,10 @@
-# ADIM 13 landed → ADIM 14 kickoff
+# ADIM 13 landed → F-26 kickoff
+
+> **Etiket notu (2026-08-04):** bu belge yazıldığında sıradaki slice "ADIM 14" diye
+> etiketlenmişti. O numara merge edilmiş **ADR 0002**'ye ait (kendini ADIM 14 sayar ve
+> ADIM 15–20'yi unified-clock programına rezerve eder), bu yüzden frontend slice'ı
+> **F-26** olarak yeniden etiketlendi. Slice **PR #564 ile landed** — aşağıdaki reçete ve
+> resume prompt **tarihsel kayıttır, yeniden koşulmaz**.
 
 **Nerede olduğumuz:** `origin/main` @ `f4e2fd3`. ADIM 13 (**PR #560**, commit `4110138`,
 base `c610600`) merged; aynı gün **PR #555** de landed. Alembic head
@@ -33,7 +39,7 @@ strict xfail XPASS verip suite'i kırar. Bu bilinçli.
 
 ---
 
-## ADIM 14 — Strategy formu capability disclosure (#539 + #533, TEK slice)
+## F-26 — Strategy formu capability disclosure (#539 + #533, TEK slice)
 
 İki issue **aynı mekanizmanın iki zıt yönde kusuru**. Ayrı düzeltmek diğerini üretir.
 Backend tarafı **doğru ve testli**; kusur yalnız UI iddiasında. İkisi de `f4e2fd3` üzerinde
@@ -78,7 +84,7 @@ parametresi yok). 22 `future_dev` satırından **15'i** sıradan seçilebilir g�
 > üretildiğinde biri `future_dev`'e dönerse **hiçbir şey** onu devre dışı bırakmaz. Aşağıdaki
 > 5. kabul ölçütü tam olarak bunu yakalamak için var ve **#540**'ın (exhaustiveness guard
 > 14 alanın yalnız 9'unu — yani tam olarak bağlı alanları — kapsıyor) doğal örtüşmesidir.
-> **#540'ı ADIM 14'e ALMA**, ama testi kurarken kapsamı **14 alanın tamamı** olacak şekilde yaz.
+> **#540'ı F-26'ya ALMA**, ama testi kurarken kapsamı **14 alanın tamamı** olacak şekilde yaz.
 
 Kullanıcı gerçeği ancak stratejiyi kurduktan **sonra** Ready Check'te öğreniyor
 (`STRATEGY_SCALING_UNSUPPORTED`). **Yetki açığı değil** — sunucu koşuyu reddediyor, motor
@@ -196,10 +202,14 @@ değişmez. Migration / OpenAPI / engine **yok**. V18 mockup
 
 ---
 
-## Paste-ready resume prompt
+## Paste-ready resume prompt (TÜKETİLDİ — F-26 landed, PR #564)
+
+> Bu prompt **koşuldu ve slice landed**. Yeni bir oturuma **yapıştırma**; burada
+> yalnız tarihsel kayıt olarak duruyor. Sıradaki iş için `docs/STAGE2_HANDOFF.md`
+> §Next'e bak.
 
 ```
-ENTROPIA — ADIM 14: Strategy formu capability disclosure (#539 + #533, TEK slice)
+ENTROPIA — F-26: Strategy formu capability disclosure (#539 + #533, TEK slice)
 
 Session START protokolü: git fetch --all --prune ; git status --short (kirliyse DUR) ;
 origin/main'i doğrula ; her iki issue'nun da AÇIK olduğunu teyit et.

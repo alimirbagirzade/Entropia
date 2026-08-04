@@ -19,6 +19,10 @@ from entropia.application.commands import lab_message as lab_message_cmd
 from entropia.application.queries import agent_tool_gateway as tool_gateway_query
 from entropia.application.queries import agent_workspace as agent_workspace_query
 from entropia.apps.api.deps import RequestContext, request_context
+from entropia.apps.api.schemas.agent_tool_gateway import (
+    AgentToolCallDetailResponse,
+    AgentToolCallListResponse,
+)
 from entropia.domain.agent_lab.enums import ALPHA_AGENT_ID
 from entropia.domain.identity.policy import require_role
 from entropia.domain.lifecycle.enums import Role
@@ -98,7 +102,7 @@ async def get_task(task_id: str, ctx: RequestContext = Depends(request_context))
     return await agent_workspace_query.get_task(ctx.session, ctx.actor, task_id=task_id)
 
 
-@router.get(_TASK_TOOL_CALLS_PATH)
+@router.get(_TASK_TOOL_CALLS_PATH, response_model=AgentToolCallListResponse)
 async def list_task_tool_calls(
     task_id: str,
     ctx: RequestContext = Depends(request_context),
@@ -109,7 +113,7 @@ async def list_task_tool_calls(
     )
 
 
-@router.get(_TOOL_CALL_DETAIL_PATH)
+@router.get(_TOOL_CALL_DETAIL_PATH, response_model=AgentToolCallDetailResponse)
 async def get_tool_call(
     tool_call_id: str, ctx: RequestContext = Depends(request_context)
 ) -> dict[str, Any]:

@@ -30,6 +30,40 @@
         "title": "ActivateRequest",
         "type": "object"
       },
+      "ActivateResolverResponse": {
+        "description": "``POST /embedded-system-packages/{entity_id}/activate``. ``registry_version`` is the\nPOST-increment value — the next ``X-Registry-Version`` OCC token the caller must send.",
+        "properties": {
+          "canonical_key": {
+            "title": "Canonical Key",
+            "type": "string"
+          },
+          "entity_id": {
+            "title": "Entity Id",
+            "type": "string"
+          },
+          "registry_version": {
+            "title": "Registry Version",
+            "type": "integer"
+          },
+          "revision_id": {
+            "title": "Revision Id",
+            "type": "string"
+          },
+          "trust_state": {
+            "title": "Trust State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "entity_id",
+          "revision_id",
+          "canonical_key",
+          "trust_state",
+          "registry_version"
+        ],
+        "title": "ActivateResolverResponse",
+        "type": "object"
+      },
       "AddAliasRequest": {
         "properties": {
           "alias": {
@@ -41,6 +75,343 @@
           "alias"
         ],
         "title": "AddAliasRequest",
+        "type": "object"
+      },
+      "AgentToolCallCard": {
+        "description": "Summary row (``queries/agent_tool_gateway.py::_tool_call_card``).\n\nPayload bodies are omitted from the listing by design — the per-call detail carries them.\n``failure_code`` is a free-form ``AppError.code`` (UPPER_SNAKE_CASE), unlike ``status`` /\n``actor_kind`` / ``policy_scope`` which are lowercase ``StrEnum`` wire values; it is not\na closed set, so it is declared ``str`` rather than an enum.",
+        "properties": {
+          "actor_kind": {
+            "title": "Actor Kind",
+            "type": "string"
+          },
+          "artifact_output_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artifact Output Ref"
+          },
+          "checkpoint_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checkpoint Id"
+          },
+          "correlation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Correlation Id"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "failure_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Code"
+          },
+          "failure_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Message"
+          },
+          "policy_scope": {
+            "title": "Policy Scope",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "task_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Id"
+          },
+          "tool_call_id": {
+            "title": "Tool Call Id",
+            "type": "string"
+          },
+          "tool_name": {
+            "title": "Tool Name",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "tool_call_id",
+          "tool_name",
+          "task_id",
+          "checkpoint_id",
+          "actor_kind",
+          "policy_scope",
+          "status",
+          "artifact_output_ref",
+          "failure_code",
+          "failure_message",
+          "correlation_id",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "AgentToolCallCard",
+        "type": "object"
+      },
+      "AgentToolCallDetailResponse": {
+        "description": "``GET /agent-tool-calls/{tool_call_id}`` — the card plus the verbatim payloads.\n\nInherits the card so the detail can never fall out of superset with the listing.\n\n``response_ref`` is a THREE-WAY union kept open: on ``succeeded`` it is the tool's own\npayload (Strategy draft/revision results, Trading Signal upload/import/create results,\n…) with no ``status`` key at all — read the sibling ``status`` column instead; on\n``rejected`` it is ``{status, reason_code, reason}``; on ``failed`` it is\n``{status, failure_code, failure_reason, details}``. It is ``null`` while the call is\nstill ``running``.",
+        "properties": {
+          "actor_kind": {
+            "title": "Actor Kind",
+            "type": "string"
+          },
+          "actor_principal_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Principal Id"
+          },
+          "agent_id": {
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "artifact_output_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artifact Output Ref"
+          },
+          "checkpoint_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checkpoint Id"
+          },
+          "correlation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Correlation Id"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "failure_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Code"
+          },
+          "failure_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Message"
+          },
+          "idempotency_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Idempotency Key"
+          },
+          "input_manifest_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Manifest Id"
+          },
+          "policy_scope": {
+            "title": "Policy Scope",
+            "type": "string"
+          },
+          "request": {
+            "additionalProperties": true,
+            "title": "Request",
+            "type": "object"
+          },
+          "response_ref": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Response Ref"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "task_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Id"
+          },
+          "tool_call_id": {
+            "title": "Tool Call Id",
+            "type": "string"
+          },
+          "tool_name": {
+            "title": "Tool Name",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "tool_call_id",
+          "tool_name",
+          "task_id",
+          "checkpoint_id",
+          "actor_kind",
+          "policy_scope",
+          "status",
+          "artifact_output_ref",
+          "failure_code",
+          "failure_message",
+          "correlation_id",
+          "created_at",
+          "updated_at",
+          "agent_id",
+          "actor_principal_id",
+          "input_manifest_id",
+          "idempotency_key",
+          "request",
+          "response_ref"
+        ],
+        "title": "AgentToolCallDetailResponse",
+        "type": "object"
+      },
+      "AgentToolCallListResponse": {
+        "description": "``GET /agent-tasks/{task_id}/tool-calls`` — newest-first, bounded, NOT cursor-paged.\n\nThe envelope carries no cursor on purpose: the listing is a bounded recent-activity\nview (``clamp_limit``), not a pageable history, so it must not advertise a ``meta``\nblock the server never advances.",
+        "properties": {
+          "tool_calls": {
+            "items": {
+              "$ref": "#/components/schemas/AgentToolCallCard"
+            },
+            "title": "Tool Calls",
+            "type": "array"
+          }
+        },
+        "required": [
+          "tool_calls"
+        ],
+        "title": "AgentToolCallListResponse",
         "type": "object"
       },
       "AllocationEntryBody": {
@@ -214,6 +585,35 @@
           "revision_id"
         ],
         "title": "ApprovePackageRequest",
+        "type": "object"
+      },
+      "ApprovePackageResponse": {
+        "description": "``POST /library/{entity_id}/approve`` — Admin-only approve + publish in one tx.\n\n``visibility_scope`` is NOT pinned to ``published``: the already-approved short-circuit\nbranch echoes the row's live scope, which is whatever it actually holds.",
+        "properties": {
+          "approval_state": {
+            "title": "Approval State",
+            "type": "string"
+          },
+          "entity_id": {
+            "title": "Entity Id",
+            "type": "string"
+          },
+          "revision_id": {
+            "title": "Revision Id",
+            "type": "string"
+          },
+          "visibility_scope": {
+            "title": "Visibility Scope",
+            "type": "string"
+          }
+        },
+        "required": [
+          "entity_id",
+          "revision_id",
+          "approval_state",
+          "visibility_scope"
+        ],
+        "title": "ApprovePackageResponse",
         "type": "object"
       },
       "ApproveRequest": {
@@ -837,6 +1237,40 @@
         "title": "CreateEspRequest",
         "type": "object"
       },
+      "CreateEspResponse": {
+        "description": "``POST /embedded-system-packages`` (201). ``trust_state`` is always ``candidate``:\na freshly created resolver is never trusted, activation is a separate Admin step.",
+        "properties": {
+          "canonical_key": {
+            "title": "Canonical Key",
+            "type": "string"
+          },
+          "entity_id": {
+            "title": "Entity Id",
+            "type": "string"
+          },
+          "revision_id": {
+            "title": "Revision Id",
+            "type": "string"
+          },
+          "runtime_adapter": {
+            "title": "Runtime Adapter",
+            "type": "string"
+          },
+          "trust_state": {
+            "title": "Trust State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "entity_id",
+          "revision_id",
+          "canonical_key",
+          "trust_state",
+          "runtime_adapter"
+        ],
+        "title": "CreateEspResponse",
+        "type": "object"
+      },
       "CreateFamilyRequest": {
         "properties": {
           "change_note": {
@@ -873,6 +1307,40 @@
           "display_name"
         ],
         "title": "CreateFamilyRequest",
+        "type": "object"
+      },
+      "CreatePackageRevisionResponse": {
+        "description": "``POST /library/{entity_id}/revisions`` (201).\n\n``current_revision_id`` is read AFTER the append, so it equals the new ``revision_id``;\n``base_revision_id`` is the head that was superseded. Both are reported because the\nOCC token for the NEXT call is the new head, while the audit trail needs the old one.",
+        "properties": {
+          "base_revision_id": {
+            "title": "Base Revision Id",
+            "type": "string"
+          },
+          "current_revision_id": {
+            "title": "Current Revision Id",
+            "type": "string"
+          },
+          "entity_id": {
+            "title": "Entity Id",
+            "type": "string"
+          },
+          "revision_id": {
+            "title": "Revision Id",
+            "type": "string"
+          },
+          "revision_no": {
+            "title": "Revision No",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "entity_id",
+          "revision_id",
+          "revision_no",
+          "current_revision_id",
+          "base_revision_id"
+        ],
+        "title": "CreatePackageRevisionResponse",
         "type": "object"
       },
       "CreateRequestBody": {
@@ -1212,6 +1680,32 @@
         "title": "CreationMode",
         "type": "string"
       },
+      "CursorPageMeta": {
+        "description": "The cursor-pagination envelope: ``{\"cursor\": <next|null>, \"has_more\": bool}``.\n\n``cursor`` is REQUIRED-and-nullable, not optional: the key is always present and carries\n``null`` on the last page. Callers page by testing ``has_more``, never by testing key\npresence.",
+        "properties": {
+          "cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cursor"
+          },
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "cursor",
+          "has_more"
+        ],
+        "title": "CursorPageMeta",
+        "type": "object"
+      },
       "DeleteDatasetRequest": {
         "properties": {
           "reason": {
@@ -1349,6 +1843,66 @@
         "title": "DeprecatePackageRequest",
         "type": "object"
       },
+      "DeprecatePackageResponse": {
+        "description": "``POST /library/{entity_id}/deprecate`` — ``active -> deprecated`` (doc 08 §7).",
+        "properties": {
+          "entity_id": {
+            "title": "Entity Id",
+            "type": "string"
+          },
+          "lifecycle_state": {
+            "title": "Lifecycle State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "entity_id",
+          "lifecycle_state"
+        ],
+        "title": "DeprecatePackageResponse",
+        "type": "object"
+      },
+      "DeprecateResolverResponse": {
+        "description": "``POST /embedded-system-packages/{entity_id}/deprecate``.\n\nDeliberately NOT merged with ``ActivateResolverResponse``: deprecate reports the\n``replacement_revision_id`` the caller nominated and carries no ``revision_id``, because\ndeprecation targets the canonical key rather than one revision. Sharing one model would\nhave made both fields optional and hidden which endpoint really returns which.",
+        "properties": {
+          "canonical_key": {
+            "title": "Canonical Key",
+            "type": "string"
+          },
+          "entity_id": {
+            "title": "Entity Id",
+            "type": "string"
+          },
+          "registry_version": {
+            "title": "Registry Version",
+            "type": "integer"
+          },
+          "replacement_revision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replacement Revision Id"
+          },
+          "trust_state": {
+            "title": "Trust State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "canonical_key",
+          "entity_id",
+          "trust_state",
+          "replacement_revision_id",
+          "registry_version"
+        ],
+        "title": "DeprecateResolverResponse",
+        "type": "object"
+      },
       "DerivePackageRequest": {
         "properties": {
           "change_note": {
@@ -1376,6 +1930,45 @@
           "name"
         ],
         "title": "DerivePackageRequest",
+        "type": "object"
+      },
+      "DerivePackageResponse": {
+        "description": "``POST /library/{entity_id}/derive`` (201).\n\n``entity_id`` is the NEW root the caller now owns; the path id is echoed back as\n``source_entity_id``. Keeping both is what lets the UI navigate to the copy without\nre-reading the catalog, and the source is never mutated.",
+        "properties": {
+          "current_revision_id": {
+            "title": "Current Revision Id",
+            "type": "string"
+          },
+          "derived_from_revision_id": {
+            "title": "Derived From Revision Id",
+            "type": "string"
+          },
+          "entity_id": {
+            "title": "Entity Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "package_kind": {
+            "title": "Package Kind",
+            "type": "string"
+          },
+          "source_entity_id": {
+            "title": "Source Entity Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "entity_id",
+          "current_revision_id",
+          "package_kind",
+          "name",
+          "derived_from_revision_id",
+          "source_entity_id"
+        ],
+        "title": "DerivePackageResponse",
         "type": "object"
       },
       "DirectiveBody": {
@@ -1580,6 +2173,440 @@
           "error"
         ],
         "title": "ErrorResponse",
+        "type": "object"
+      },
+      "EspPackageDetailResponse": {
+        "description": "``GET /embedded-system-packages/{entity_id}`` (``queries/esp.py::get_esp_detail``).\n\n``lifecycle_state`` is nullable because ``entity_registry.lifecycle_state`` is a\nnullable free-form column, not a lifecycle enum — declaring it non-null would turn a\nnull row into a 500 on an otherwise valid read.\n\nThe three nested objects are INDEPENDENTLY nullable: ``contract`` is null when the\nrevision has no resolver contract, ``registry`` is null when there is no contract or no\nregistry row for its key, ``latest_validation_run`` is null until a run exists.",
+        "properties": {
+          "approval_state": {
+            "title": "Approval State",
+            "type": "string"
+          },
+          "backtest_ready": {
+            "title": "Backtest Ready",
+            "type": "string"
+          },
+          "content_hash": {
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "contract": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EspResolverContract"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "entity_id": {
+            "title": "Entity Id",
+            "type": "string"
+          },
+          "latest_validation_run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EspValidationRunSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "lifecycle_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lifecycle State"
+          },
+          "net_profit": {
+            "title": "Net Profit",
+            "type": "string"
+          },
+          "oos_passed": {
+            "title": "Oos Passed",
+            "type": "string"
+          },
+          "owner_principal_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Principal Id"
+          },
+          "package_kind": {
+            "title": "Package Kind",
+            "type": "string"
+          },
+          "registry": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EspRegistryEntry"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "revision_id": {
+            "title": "Revision Id",
+            "type": "string"
+          },
+          "revision_no": {
+            "title": "Revision No",
+            "type": "integer"
+          },
+          "row_version": {
+            "title": "Row Version",
+            "type": "integer"
+          },
+          "validation_state": {
+            "title": "Validation State",
+            "type": "string"
+          },
+          "visibility_scope": {
+            "title": "Visibility Scope",
+            "type": "string"
+          }
+        },
+        "required": [
+          "entity_id",
+          "revision_id",
+          "revision_no",
+          "package_kind",
+          "visibility_scope",
+          "validation_state",
+          "approval_state",
+          "content_hash",
+          "row_version",
+          "lifecycle_state",
+          "owner_principal_id",
+          "contract",
+          "registry",
+          "latest_validation_run",
+          "created_at",
+          "net_profit",
+          "backtest_ready",
+          "oos_passed"
+        ],
+        "title": "EspPackageDetailResponse",
+        "type": "object"
+      },
+      "EspRegistryEntry": {
+        "description": "One resolver registry row (``queries/esp.py::_registry_dict``).\n\n``visibility_scope`` is nullable BY CONTEXT, not by accident: list rows carry the\nbacking package root's scope, while the ``registry`` block nested inside the detail\nsends ``null`` rather than re-resolving a possibly-different package's root just to\nduplicate the detail's own top-level ``visibility_scope``.\n\nThe performance triplet is the literal string ``\"not_applicable\"`` — resolvers have no\nruns, and a fabricated zero would read as a measured result (doc 09 §14, L4).",
+        "properties": {
+          "backtest_ready": {
+            "title": "Backtest Ready",
+            "type": "string"
+          },
+          "canonical_key": {
+            "title": "Canonical Key",
+            "type": "string"
+          },
+          "net_profit": {
+            "title": "Net Profit",
+            "type": "string"
+          },
+          "oos_passed": {
+            "title": "Oos Passed",
+            "type": "string"
+          },
+          "package_entity_id": {
+            "title": "Package Entity Id",
+            "type": "string"
+          },
+          "registry_id": {
+            "title": "Registry Id",
+            "type": "string"
+          },
+          "registry_version": {
+            "title": "Registry Version",
+            "type": "integer"
+          },
+          "replacement_revision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replacement Revision Id"
+          },
+          "runtime_adapter": {
+            "title": "Runtime Adapter",
+            "type": "string"
+          },
+          "trust_state": {
+            "title": "Trust State",
+            "type": "string"
+          },
+          "trusted_active_revision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trusted Active Revision Id"
+          },
+          "visibility_scope": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Visibility Scope"
+          }
+        },
+        "required": [
+          "registry_id",
+          "canonical_key",
+          "package_entity_id",
+          "trusted_active_revision_id",
+          "trust_state",
+          "runtime_adapter",
+          "registry_version",
+          "replacement_revision_id",
+          "visibility_scope",
+          "net_profit",
+          "backtest_ready",
+          "oos_passed"
+        ],
+        "title": "EspRegistryEntry",
+        "type": "object"
+      },
+      "EspRegistryPageResponse": {
+        "description": "``GET /embedded-system-packages`` — cursor page of registry rows.",
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/EspRegistryEntry"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/CursorPageMeta"
+          }
+        },
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "EspRegistryPageResponse",
+        "type": "object"
+      },
+      "EspResolverContract": {
+        "description": "The resolver contract pinned to the current revision (``_contract_dict``).\n\n``signature`` and ``evidence`` are caller-authored JSONB blobs rendered verbatim by the\nUI; they are OPEN objects here and must stay that way.",
+        "properties": {
+          "canonical_key": {
+            "title": "Canonical Key",
+            "type": "string"
+          },
+          "contract_id": {
+            "title": "Contract Id",
+            "type": "string"
+          },
+          "evidence": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence"
+          },
+          "repaint": {
+            "title": "Repaint",
+            "type": "boolean"
+          },
+          "runtime_adapter": {
+            "title": "Runtime Adapter",
+            "type": "string"
+          },
+          "signature": {
+            "additionalProperties": true,
+            "title": "Signature",
+            "type": "object"
+          },
+          "timing_semantics": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timing Semantics"
+          },
+          "warm_up_period": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warm Up Period"
+          }
+        },
+        "required": [
+          "contract_id",
+          "canonical_key",
+          "signature",
+          "runtime_adapter",
+          "warm_up_period",
+          "timing_semantics",
+          "repaint",
+          "evidence"
+        ],
+        "title": "EspResolverContract",
+        "type": "object"
+      },
+      "EspValidationCheck": {
+        "description": "One check line from ``domain/esp/validation.py::ResolverCheck.as_dict``.",
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "status",
+          "detail"
+        ],
+        "title": "EspValidationCheck",
+        "type": "object"
+      },
+      "EspValidationRunResponse": {
+        "description": "``POST /embedded-system-packages/{entity_id}/validate``.\n\n``checks`` here is the per-check LIST built in-process by the command — a closed,\nfixed-order shape — unlike the same-named stored envelope on the detail read. The two\nare deliberately different types and are not merged.",
+        "properties": {
+          "canonical_key": {
+            "title": "Canonical Key",
+            "type": "string"
+          },
+          "checks": {
+            "items": {
+              "$ref": "#/components/schemas/EspValidationCheck"
+            },
+            "title": "Checks",
+            "type": "array"
+          },
+          "entity_id": {
+            "title": "Entity Id",
+            "type": "string"
+          },
+          "revision_id": {
+            "title": "Revision Id",
+            "type": "string"
+          },
+          "validation_state": {
+            "title": "Validation State",
+            "type": "string"
+          },
+          "vectors_run": {
+            "title": "Vectors Run",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "entity_id",
+          "revision_id",
+          "canonical_key",
+          "validation_state",
+          "vectors_run",
+          "checks"
+        ],
+        "title": "EspValidationRunResponse",
+        "type": "object"
+      },
+      "EspValidationRunSummary": {
+        "description": "Latest immutable validation-run evidence (``_validation_run_dict``, R8).\n\n``checks`` is the STORED report envelope read straight out of JSONB — the whole\n``ResolverValidationReport.as_dict()``, i.e. a dict, NOT the per-check list that the\nvalidate COMMAND returns under the same name. Rows written by an older\n``validator_version`` may carry a different shape, so it stays an open object.",
+        "properties": {
+          "checks": {
+            "additionalProperties": true,
+            "title": "Checks",
+            "type": "object"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "validator_version": {
+            "title": "Validator Version",
+            "type": "string"
+          },
+          "vectors_run": {
+            "title": "Vectors Run",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "run_id",
+          "status",
+          "validator_version",
+          "vectors_run",
+          "checks",
+          "completed_at"
+        ],
+        "title": "EspValidationRunSummary",
         "type": "object"
       },
       "EventTimeSemantics": {
@@ -1789,6 +2816,406 @@
         "title": "LabMessageBody",
         "type": "object"
       },
+      "LibraryPackageDetailResponse": {
+        "description": "``GET /library/{entity_id}`` — the catalog row plus the full contracts.\n\nExtends the SHARED base rather than ``LibraryPackageRow`` so the detail can never fall\nout of superset with the list without overriding a field type (which mypy rejects as a\nLiskov violation). ``rationale_family`` is re-declared here as the live 4-field\nreference, exactly as the query overwrites that one key in place.\n\nThe four contract blobs are caller-authored JSONB rendered verbatim by the UI and read\nby arbitrary key (``input_contract.market`` / ``.timeframe``), so they stay open.",
+        "properties": {
+          "approval_state": {
+            "title": "Approval State",
+            "type": "string"
+          },
+          "change_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Change Note"
+          },
+          "content_hash": {
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "current_revision_id": {
+            "title": "Current Revision Id",
+            "type": "string"
+          },
+          "dependency_snapshot": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dependency Snapshot"
+          },
+          "derived_from_revision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Derived From Revision Id"
+          },
+          "entity_id": {
+            "title": "Entity Id",
+            "type": "string"
+          },
+          "input_contract": {
+            "additionalProperties": true,
+            "title": "Input Contract",
+            "type": "object"
+          },
+          "lifecycle_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lifecycle State"
+          },
+          "market_scope": {
+            "title": "Market Scope",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "output_contract": {
+            "additionalProperties": true,
+            "title": "Output Contract",
+            "type": "object"
+          },
+          "output_kinds": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Output Kinds",
+            "type": "array"
+          },
+          "owner_principal_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Principal Id"
+          },
+          "package_kind": {
+            "title": "Package Kind",
+            "type": "string"
+          },
+          "performance": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Performance",
+            "type": "object"
+          },
+          "permissions": {
+            "$ref": "#/components/schemas/PackagePermissionFlags"
+          },
+          "provenance": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PackageProvenance"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rationale_family": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LiveRationaleFamilyRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "revision_no": {
+            "title": "Revision No",
+            "type": "integer"
+          },
+          "revisions": {
+            "items": {
+              "$ref": "#/components/schemas/PackageRevisionSummary"
+            },
+            "title": "Revisions",
+            "type": "array"
+          },
+          "row_version": {
+            "title": "Row Version",
+            "type": "integer"
+          },
+          "timeframe_scope": {
+            "title": "Timeframe Scope",
+            "type": "string"
+          },
+          "validation_state": {
+            "title": "Validation State",
+            "type": "string"
+          },
+          "validation_summary": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Validation Summary"
+          },
+          "visibility_scope": {
+            "title": "Visibility Scope",
+            "type": "string"
+          }
+        },
+        "required": [
+          "entity_id",
+          "package_kind",
+          "name",
+          "current_revision_id",
+          "revision_no",
+          "lifecycle_state",
+          "validation_state",
+          "approval_state",
+          "visibility_scope",
+          "market_scope",
+          "timeframe_scope",
+          "output_kinds",
+          "derived_from_revision_id",
+          "owner_principal_id",
+          "row_version",
+          "content_hash",
+          "created_at",
+          "permissions",
+          "performance",
+          "input_contract",
+          "output_contract",
+          "dependency_snapshot",
+          "validation_summary",
+          "change_note",
+          "rationale_family",
+          "provenance",
+          "revisions"
+        ],
+        "title": "LibraryPackageDetailResponse",
+        "type": "object"
+      },
+      "LibraryPackageRow": {
+        "description": "One catalog row: the shared fields plus the PINNED family reference.",
+        "properties": {
+          "approval_state": {
+            "title": "Approval State",
+            "type": "string"
+          },
+          "content_hash": {
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "current_revision_id": {
+            "title": "Current Revision Id",
+            "type": "string"
+          },
+          "derived_from_revision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Derived From Revision Id"
+          },
+          "entity_id": {
+            "title": "Entity Id",
+            "type": "string"
+          },
+          "lifecycle_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lifecycle State"
+          },
+          "market_scope": {
+            "title": "Market Scope",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "output_kinds": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Output Kinds",
+            "type": "array"
+          },
+          "owner_principal_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Principal Id"
+          },
+          "package_kind": {
+            "title": "Package Kind",
+            "type": "string"
+          },
+          "performance": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Performance",
+            "type": "object"
+          },
+          "permissions": {
+            "$ref": "#/components/schemas/PackagePermissionFlags"
+          },
+          "rationale_family": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PinnedRationaleFamilyRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "revision_no": {
+            "title": "Revision No",
+            "type": "integer"
+          },
+          "row_version": {
+            "title": "Row Version",
+            "type": "integer"
+          },
+          "timeframe_scope": {
+            "title": "Timeframe Scope",
+            "type": "string"
+          },
+          "validation_state": {
+            "title": "Validation State",
+            "type": "string"
+          },
+          "visibility_scope": {
+            "title": "Visibility Scope",
+            "type": "string"
+          }
+        },
+        "required": [
+          "entity_id",
+          "package_kind",
+          "name",
+          "current_revision_id",
+          "revision_no",
+          "lifecycle_state",
+          "validation_state",
+          "approval_state",
+          "visibility_scope",
+          "market_scope",
+          "timeframe_scope",
+          "output_kinds",
+          "derived_from_revision_id",
+          "owner_principal_id",
+          "row_version",
+          "content_hash",
+          "created_at",
+          "permissions",
+          "performance",
+          "rationale_family"
+        ],
+        "title": "LibraryPackageRow",
+        "type": "object"
+      },
+      "LibraryPageResponse": {
+        "description": "``GET /library`` — cursor page of catalog rows.",
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/LibraryPackageRow"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/CursorPageMeta"
+          }
+        },
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "LibraryPageResponse",
+        "type": "object"
+      },
       "LifecycleTransitionRequest": {
         "properties": {
           "dependency_snapshot": {
@@ -1822,6 +3249,49 @@
           "expected_registry_version"
         ],
         "title": "LifecycleTransitionRequest",
+        "type": "object"
+      },
+      "LiveRationaleFamilyRef": {
+        "description": "Detail family reference (``_live_family``) — strictly WIDER than the list row.\n\nThe detail resolves the pinned snapshot to the family's CURRENT name (a rename without\na re-pin) and reports whether the family is still active; a soft-deleted family keeps\nits pinned historical name and is flagged inactive. The two shapes are separate models\non purpose: collapsing them would advertise ``pinned_name``/``family_active`` on list\nrows that never carry them.",
+        "properties": {
+          "family_active": {
+            "title": "Family Active",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "pinned_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pinned Name"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "pinned_name",
+          "family_active"
+        ],
+        "title": "LiveRationaleFamilyRef",
         "type": "object"
       },
       "LiveResponse": {
@@ -2015,7 +3485,7 @@
         "type": "object"
       },
       "PackageExportResponse": {
-        "description": "The export envelope, declared so the contract is PUBLISHED in the schema (G-02).\n\nA ``dict[str, Any]`` return kept this body invisible to ``docs/openapi.json`` while the\ndrift guard stayed green — the same trap O-30 closed for the purge 202. ``manifest``\nstays an open object on purpose: it is a versioned, content-addressed artifact whose\nfield set is stated by its own ``export_schema_version``, and freezing it into a closed\nmodel here would make every future schema bump an API break.\n\n``registry_observation`` is a SIBLING of the manifest, never a member: it is live ESP\nregistry state read at export time, so it must not be inside the hashed artifact (see\n``domain/package/export_contract.py``). It is ``None`` for a package with no resolver\ncontract, and ``None`` on a replay of a pre-G-02 idempotency record.",
+        "description": "``POST /library/{entity_id}/export`` — the export envelope (G-02).\n\nA ``dict[str, Any]`` return kept this body invisible to ``docs/openapi.json`` while the\ndrift guard stayed green — the same trap O-30 closed for the purge 202. ``manifest``\nstays an open object on purpose: it is a versioned, content-addressed artifact whose\nfield set is stated by its own ``export_schema_version``, it is round-tripped verbatim\ninto ``POST /package-imports``, and freezing it into a closed model here would make\nevery future schema bump an API break.\n\n``registry_observation`` is a SIBLING of the manifest, never a member (see\n``domain/package/export_contract.py``). It is ``null`` for a package with no resolver\ncontract, and ``null`` on a replay of a pre-G-02 idempotency record — but the key is\nalways PRESENT, because ``_with_export_envelope_defaults`` back-fills a legacy envelope\nbefore it is returned. That is why it is required-and-nullable rather than optional.",
         "properties": {
           "entity_id": {
             "title": "Entity Id",
@@ -2037,14 +3507,12 @@
           "registry_observation": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/PackageRegistryObservation"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Registry Observation"
+            ]
           },
           "revision_id": {
             "title": "Revision Id",
@@ -2056,13 +3524,310 @@
           "revision_id",
           "manifest_hash",
           "export_schema_version",
-          "manifest"
+          "manifest",
+          "registry_observation"
         ],
         "title": "PackageExportResponse",
         "type": "object"
       },
+      "PackagePermissionFlags": {
+        "description": "Server-computed action grants (``domain/package/permissions.py``).\n\nThe UI early-returns on each flag, so a DROPPED flag silently hides the action instead\nof failing loudly — which is why the no-field-drop test pins this model against the\nbacking dataclass's fields rather than a hand-written list.",
+        "properties": {
+          "can_approve_publish": {
+            "title": "Can Approve Publish",
+            "type": "boolean"
+          },
+          "can_create_revision": {
+            "title": "Can Create Revision",
+            "type": "boolean"
+          },
+          "can_deprecate": {
+            "title": "Can Deprecate",
+            "type": "boolean"
+          },
+          "can_derive": {
+            "title": "Can Derive",
+            "type": "boolean"
+          },
+          "can_export": {
+            "title": "Can Export",
+            "type": "boolean"
+          },
+          "can_request_approval": {
+            "title": "Can Request Approval",
+            "type": "boolean"
+          },
+          "can_request_validation": {
+            "title": "Can Request Validation",
+            "type": "boolean"
+          },
+          "can_share": {
+            "title": "Can Share",
+            "type": "boolean"
+          },
+          "can_soft_delete": {
+            "title": "Can Soft Delete",
+            "type": "boolean"
+          },
+          "can_use": {
+            "title": "Can Use",
+            "type": "boolean"
+          },
+          "can_view": {
+            "title": "Can View",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "can_view",
+          "can_use",
+          "can_derive",
+          "can_create_revision",
+          "can_request_validation",
+          "can_request_approval",
+          "can_approve_publish",
+          "can_deprecate",
+          "can_soft_delete",
+          "can_export",
+          "can_share"
+        ],
+        "title": "PackagePermissionFlags",
+        "type": "object"
+      },
+      "PackageProvenance": {
+        "description": "Best-effort Stage-2e creation provenance; ``null`` for a root with no request.",
+        "properties": {
+          "creation_mode": {
+            "title": "Creation Mode",
+            "type": "string"
+          },
+          "draft_revision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Draft Revision Id"
+          },
+          "request_entity_id": {
+            "title": "Request Entity Id",
+            "type": "string"
+          },
+          "scan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PackageProvenanceScan"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source_kind": {
+            "title": "Source Kind",
+            "type": "string"
+          },
+          "source_language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Language"
+          },
+          "target_runtime": {
+            "title": "Target Runtime",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_entity_id",
+          "creation_mode",
+          "source_kind",
+          "source_language",
+          "target_runtime",
+          "draft_revision_id",
+          "scan"
+        ],
+        "title": "PackageProvenance",
+        "type": "object"
+      },
+      "PackageProvenanceScan": {
+        "description": "Dependency-scan evidence behind a Create-Package-built root (``_scan_summary``).\n\n``resolved_refs`` / ``missing_calls`` / ``unsupported_calls`` are JSONB lists of\nper-call ROWS whose shape belongs to the Pre-Check plane, so they stay open.",
+        "properties": {
+          "attempt_no": {
+            "title": "Attempt No",
+            "type": "integer"
+          },
+          "context_hash": {
+            "title": "Context Hash",
+            "type": "string"
+          },
+          "detected_calls": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Detected Calls",
+            "type": "array"
+          },
+          "missing_calls": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Missing Calls",
+            "type": "array"
+          },
+          "registry_fingerprint": {
+            "title": "Registry Fingerprint",
+            "type": "string"
+          },
+          "resolved_refs": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Resolved Refs",
+            "type": "array"
+          },
+          "scan_id": {
+            "title": "Scan Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "unsupported_calls": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Unsupported Calls",
+            "type": "array"
+          }
+        },
+        "required": [
+          "scan_id",
+          "attempt_no",
+          "status",
+          "detected_calls",
+          "resolved_refs",
+          "missing_calls",
+          "unsupported_calls",
+          "registry_fingerprint",
+          "context_hash"
+        ],
+        "title": "PackageProvenanceScan",
+        "type": "object"
+      },
+      "PackageRegistryObservation": {
+        "description": "LIVE ESP registry state read at export time (``build_registry_observation``).\n\nA SIBLING of the manifest, never a member: it is outside the hashed artifact so the\nanswer to \"is the revision in my hands still trusted-active?\" can change while the\n``manifest_hash`` does not.",
+        "properties": {
+          "canonical_key": {
+            "title": "Canonical Key",
+            "type": "string"
+          },
+          "is_trusted_active_revision": {
+            "title": "Is Trusted Active Revision",
+            "type": "boolean"
+          },
+          "registry_version": {
+            "title": "Registry Version",
+            "type": "integer"
+          },
+          "runtime_adapter": {
+            "title": "Runtime Adapter",
+            "type": "string"
+          },
+          "trust_state": {
+            "title": "Trust State",
+            "type": "string"
+          },
+          "trusted_active_revision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trusted Active Revision Id"
+          }
+        },
+        "required": [
+          "canonical_key",
+          "trust_state",
+          "trusted_active_revision_id",
+          "registry_version",
+          "runtime_adapter",
+          "is_trusted_active_revision"
+        ],
+        "title": "PackageRegistryObservation",
+        "type": "object"
+      },
+      "PackageRevisionSummary": {
+        "description": "One entry of the newest-first revision history (``_revision_history``, max 50).",
+        "properties": {
+          "approval_state": {
+            "title": "Approval State",
+            "type": "string"
+          },
+          "change_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Change Note"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "revision_id": {
+            "title": "Revision Id",
+            "type": "string"
+          },
+          "revision_no": {
+            "title": "Revision No",
+            "type": "integer"
+          },
+          "validation_state": {
+            "title": "Validation State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision_id",
+          "revision_no",
+          "validation_state",
+          "approval_state",
+          "change_note",
+          "created_at"
+        ],
+        "title": "PackageRevisionSummary",
+        "type": "object"
+      },
       "PackageValidationRunAcceptedResponse": {
-        "description": "The queued-validation envelope, PUBLISHED in the schema rather than a bare dict.\n\nSame trap O-30 closed for the purge 202 and G-02 closed for the export body: a\n``dict[str, Any]`` return keeps the contract invisible to ``docs/openapi.json`` while\nthe drift guard stays green, so the frontend has nothing to bind to.\n\nThe envelope deliberately names BOTH planes for one run. The caller addressed a\npackage (``entity_id`` / ``revision_id``), but the evidence, the durable job and the\nstate machine live in the CreatePackage plane (``request_id`` / ``validation_run_id`` /\n``attempt_no`` / ``job_id``) — this route wraps that pipeline instead of owning a\nsecond one, so it reports the CP identifiers rather than minting Library-local ones.\n\n``status`` and ``state`` answer DIFFERENT questions and are never collapsed:\n``status`` is the immutable run's ``ValidationRunStatus`` (``queued`` on admission),\n``state`` is the request's ``CreatePackageState`` (``validation_running``). The\nterminal verdict lands on the projection when the durable worker finishes — this\nenvelope only reports the admission.",
+        "description": "``POST /library/{entity_id}/validation-runs`` (201) — the queued-validation envelope.\n\nThe envelope deliberately names BOTH planes for one run. The caller addressed a package\n(``entity_id`` / ``revision_id``), but the evidence, the durable job and the state\nmachine live in the CreatePackage plane (``request_id`` / ``validation_run_id`` /\n``attempt_no`` / ``job_id``) — this route wraps that pipeline instead of owning a second\none, so it reports the CP identifiers rather than minting Library-local ones.\n\n``status`` and ``state`` answer DIFFERENT questions and are never collapsed: ``status``\nis the immutable run's ``ValidationRunStatus`` (``queued`` on admission), ``state`` is\nthe request's ``CreatePackageState`` (``validation_running``). The terminal verdict\nlands on the projection when the durable worker finishes — this envelope only reports\nthe admission.",
         "properties": {
           "attempt_no": {
             "title": "Attempt No",
@@ -2217,6 +3982,32 @@
           }
         },
         "title": "PatchStrategyDraftBody",
+        "type": "object"
+      },
+      "PinnedRationaleFamilyRef": {
+        "description": "List-row family reference: the PINNED snapshot only (``_pinned_family``).",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "PinnedRationaleFamilyRef",
         "type": "object"
       },
       "PurgeAcceptedResponse": {
@@ -2707,6 +4498,30 @@
         "title": "RequestImportBody",
         "type": "object"
       },
+      "RequestPackageApprovalResponse": {
+        "description": "``POST /library/{entity_id}/request-approval`` — ``draft -> approval_requested``.",
+        "properties": {
+          "approval_state": {
+            "title": "Approval State",
+            "type": "string"
+          },
+          "entity_id": {
+            "title": "Entity Id",
+            "type": "string"
+          },
+          "revision_id": {
+            "title": "Revision Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "entity_id",
+          "revision_id",
+          "approval_state"
+        ],
+        "title": "RequestPackageApprovalResponse",
+        "type": "object"
+      },
       "RequestRunBody": {
         "properties": {
           "expected_fingerprint": {
@@ -2783,6 +4598,69 @@
         ],
         "title": "ResearchTimezoneMode",
         "type": "string"
+      },
+      "ResolveDependencyResponse": {
+        "description": "``POST /embedded-system-packages/resolve`` — Agent-Gateway/Pre-Check parity.\n\n``resolved`` is always ``true`` on a 2xx: every non-resolution RAISES a typed error\n(404 not-resolved / 409 not-active / 409 adapter-incompatible / 422 signature-mismatch),\nso there is no ``{\"resolved\": false}`` body to model. The field is kept because the\npublished contract and the frontend interface have always carried it.",
+        "properties": {
+          "canonical_key": {
+            "title": "Canonical Key",
+            "type": "string"
+          },
+          "content_hash": {
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "entity_id": {
+            "title": "Entity Id",
+            "type": "string"
+          },
+          "evidence": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence"
+          },
+          "registry_version": {
+            "title": "Registry Version",
+            "type": "integer"
+          },
+          "resolved": {
+            "title": "Resolved",
+            "type": "boolean"
+          },
+          "revision_id": {
+            "title": "Revision Id",
+            "type": "string"
+          },
+          "runtime_adapter": {
+            "title": "Runtime Adapter",
+            "type": "string"
+          },
+          "signature": {
+            "additionalProperties": true,
+            "title": "Signature",
+            "type": "object"
+          }
+        },
+        "required": [
+          "resolved",
+          "canonical_key",
+          "entity_id",
+          "revision_id",
+          "content_hash",
+          "runtime_adapter",
+          "registry_version",
+          "signature",
+          "evidence"
+        ],
+        "title": "ResolveDependencyResponse",
+        "type": "object"
       },
       "ResolveRequest": {
         "properties": {
@@ -5195,9 +7073,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response List Task Tool Calls Api V1 Agent Tasks  Task Id  Tool Calls Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/AgentToolCallListResponse"
                 }
               }
             },
@@ -5239,9 +7115,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Tool Call Api V1 Agent Tool Calls  Tool Call Id  Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/AgentToolCallDetailResponse"
                 }
               }
             },
@@ -7658,9 +9532,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response List Esp Api V1 Embedded System Packages Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/EspRegistryPageResponse"
                 }
               }
             },
@@ -7717,9 +9589,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Create Esp Api V1 Embedded System Packages Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/CreateEspResponse"
                 }
               }
             },
@@ -7760,9 +9630,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Resolve Dependency Api V1 Embedded System Packages Resolve Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ResolveDependencyResponse"
                 }
               }
             },
@@ -7804,9 +9672,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Esp Api V1 Embedded System Packages  Entity Id  Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/EspPackageDetailResponse"
                 }
               }
             },
@@ -7890,9 +9756,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Activate Esp Api V1 Embedded System Packages  Entity Id  Activate Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ActivateResolverResponse"
                 }
               }
             },
@@ -7976,9 +9840,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Deprecate Esp Api V1 Embedded System Packages  Entity Id  Deprecate Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/DeprecateResolverResponse"
                 }
               }
             },
@@ -8046,9 +9908,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Validate Esp Api V1 Embedded System Packages  Entity Id  Validate Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/EspValidationRunResponse"
                 }
               }
             },
@@ -9072,9 +10932,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response List Library Api V1 Library Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/LibraryPageResponse"
                 }
               }
             },
@@ -9246,9 +11104,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Library Package Api V1 Library  Entity Id  Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/LibraryPackageDetailResponse"
                 }
               }
             },
@@ -9317,9 +11173,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Approve Package Api V1 Library  Entity Id  Approve Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ApprovePackageResponse"
                 }
               }
             },
@@ -9395,9 +11249,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Deprecate Package Api V1 Library  Entity Id  Deprecate Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/DeprecatePackageResponse"
                 }
               }
             },
@@ -9466,9 +11318,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Derive Package Api V1 Library  Entity Id  Derive Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/DerivePackageResponse"
                 }
               }
             },
@@ -9606,9 +11456,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Request Package Approval Api V1 Library  Entity Id  Request Approval Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/RequestPackageApprovalResponse"
                 }
               }
             },
@@ -9677,9 +11525,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Create Package Revision Api V1 Library  Entity Id  Revisions Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/CreatePackageRevisionResponse"
                 }
               }
             },

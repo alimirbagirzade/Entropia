@@ -25,7 +25,12 @@ import {
   type EspPackageDetail,
   type EspRegistryRow,
 } from "@/lib/esp";
-import { approvalTone, lifecycleTone, validationTone } from "@/lib/library";
+import {
+  UNSTATED_LIFECYCLE_LABEL,
+  approvalTone,
+  lifecycleTone,
+  validationTone,
+} from "@/lib/library";
 
 // Wide JSON payloads wrap + scroll inside their own box (never widen the page).
 const contractStyle = {
@@ -264,7 +269,10 @@ function EspDetailCard({ entityId, onClose }: { entityId: string; onClose: () =>
             </dd>
             <dt>States</dt>
             <dd>
-              <StatusBadge tone={lifecycleTone(esp.lifecycle_state)} label={esp.lifecycle_state} />{" "}
+              <StatusBadge
+                tone={lifecycleTone(esp.lifecycle_state)}
+                label={esp.lifecycle_state ?? UNSTATED_LIFECYCLE_LABEL}
+              />{" "}
               <StatusBadge
                 tone={validationTone(esp.validation_state)}
                 label={esp.validation_state}

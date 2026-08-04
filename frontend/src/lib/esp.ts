@@ -77,6 +77,19 @@ export interface EspContract {
   evidence: Record<string, unknown> | null;
 }
 
+// Latest immutable validation-run evidence (R8). `checks` is the STORED report
+// envelope read straight out of JSONB — the whole report, NOT the per-check list
+// the validate COMMAND returns under the same name — and rows written by an older
+// `validator_version` may carry a different shape, so it stays an open record.
+export interface EspValidationRunSummary {
+  run_id: string;
+  status: string;
+  validator_version: string;
+  vectors_run: number;
+  checks: Record<string, unknown>;
+  completed_at: string | null;
+}
+
 export interface EspPackageDetail {
   entity_id: string;
   revision_id: string;
@@ -87,10 +100,15 @@ export interface EspPackageDetail {
   approval_state: string;
   content_hash: string;
   row_version: number;
-  lifecycle_state: string;
+  // Nullable: `entity_registry.lifecycle_state` is a free-form nullable column,
+  // not a lifecycle enum — the server has always been able to send null here.
+  lifecycle_state: string | null;
   owner_principal_id: string | null;
   contract: EspContract | null;
   registry: EspRegistryRow | null;
+  // Sent by the server since R8; the Embedded page does not render it yet, but the
+  // wire type must state what actually arrives rather than omitting a live field.
+  latest_validation_run: EspValidationRunSummary | null;
   created_at: string | null;
   net_profit: string;
   backtest_ready: string;

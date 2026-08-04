@@ -36,7 +36,11 @@ _PARTIAL_BARS = [
     *flat_run(),
     _UP_CROSS,
     bar(22, "102", "102", "99", "99"),
-    bar(23, "99", "104", "99", "104"),
+    # Bar 23 OPENS at 103, above every stop level these fixtures install, and dips to 99.
+    # That is deliberate: it keeps these tests about the AFTERMATH rules. An open BELOW the
+    # remainder's stop would let the gap rule (#549) decide the exit instead — a different
+    # property, tested on its own in ``test_a_remainder_stop_obeys_the_gap_rule_too``.
+    bar(23, "103", "104", "99", "104"),
 ]
 # bar 22 retraces 1% below the 102 entry without crossing the MA (no exit signal);
 # bar 23 recovers to 104.
@@ -151,6 +155,43 @@ def test_a_partial_lot_pays_commission_in_proportion_but_the_final_close_pays_a_
 
     assert [t.pnl for t in out.trades] == [Decimal("-65.60"), Decimal("-14.00")]
     assert out.summary["final_equity"] == Decimal("9920.40")
+
+
+def test_a_remainder_stop_obeys_the_gap_rule_too() -> None:
+    """#549 reaches the aftermath, not only the originally-installed stops.
+
+    Same 40% partial at 99 (-60.00), same ``move_stop_to_entry`` breakeven stop at 102 —
+    but bar 23 now OPENS at 95, already below it. The remainder cannot wait for a rally
+    back to 102: it exits at min(102, 95) = 95.
+    (95 - 102) * 30 = -210.00, run total -270.00.
+
+    This is the widest reading of the defect and the reason it is worth more than the word
+    "gap" suggests: the level does not need to be outside the bar's RANGE (bar 23 trades up
+    to 104, through 102). It only needs to be beyond the bar's OPEN."""
+    out = run_oracle(
+        oracle_config(
+            direction="long",
+            protection={},
+            conflict={"same_candle_entry_exit": "exit_first"},
+            exit_logic={
+                "applies_to_direction": "long_and_short",
+                "close_percentage": "40",
+                "partial_aftermath": "move_stop_to_entry",
+            },
+        ),
+        [
+            *flat_run(),
+            _UP_CROSS,
+            bar(22, "102", "102", "99", "99"),
+            bar(23, "95", "104", "95", "104"),
+        ],
+        plan=entry_and_exit_plan(),
+    )
+
+    assert [t.pnl for t in out.trades] == [Decimal("-60.00"), Decimal("-210.00")]
+    assert out.trades[1].exit_price == Decimal("95.00")
+    assert out.summary["final_equity"] == Decimal("9730.00")
+    assert out.diagnostics["gap_adjusted_stops"] == 1
 
 
 # --------------------------------------------------------------------------- #

@@ -13,16 +13,17 @@ Canonical rules under test (doc 02 §5.5/§5.6/§5.9, Master Ref §9.1-§9.3):
 
 SPEC BOUNDARY: the master reference is SILENT on the EXECUTION price of a triggered stop —
 it fixes the trigger level and says the ledger stores a ``trigger_price``, but never that
-the fill equals it. The shipped engine executes at the level. These oracles pin that
-convention; the one case where it is provably unattainable is marked ``xfail`` below.
+the fill equals it. The shipped engine executes at the level when the level was reachable,
+and at the bar's OPEN when the bar opened already past it (#549): the level did not exist
+during that bar, so booking it would credit a price the market never printed. That is the
+same ``max(trigger, open)`` rule the engine applies to a gapped stop ENTRY — one rule, two
+signs — rather than a reading invented where canon is silent.
 """
 
 from __future__ import annotations
 
 from decimal import Decimal
 from typing import Any
-
-import pytest
 
 from entropia.domain.backtest.engine import EngineOutput
 from tests.unit.oracles.harness import (
@@ -243,31 +244,94 @@ def test_first_trigger_wins_resolves_to_the_stop_over_plain_ohlcv() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# Known divergence                                                             #
+# Gapped stops (#549)                                                          #
 # --------------------------------------------------------------------------- #
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "Protection stops are not gap-adjusted: the exit is booked at the stop LEVEL even "
-        "when the bar's whole range is beyond it, so the level was never attainable. "
-        "Tracked in issue #549."
-    ),
-)
-def test_a_stop_gapped_through_at_the_open_should_fill_at_the_open() -> None:
+def test_a_stop_gapped_through_at_the_open_fills_at_the_open() -> None:
     """Long from 102 with a 1% stop at 100.98. Bar 22 GAPS: it opens at 90 and its entire
     range is 88-92, so 100.98 does not exist anywhere on that bar.
 
-    The first attainable price is the OPEN, 90 — the same rule the engine already applies
-    to a gapped stop ENTRY (``max(trigger, open)``; see
+    The first attainable price is the OPEN, 90 — the same rule the engine applies to a
+    gapped stop ENTRY (``max(trigger, open)``; see
     ``test_a_stop_entry_gapped_through_pays_the_open_not_the_trigger``).
 
-        expected: pnl = (90 - 102) * 50 = -600.00
-        shipped:  pnl = (100.98 - 102) * 50 = -51.00
+        pnl = (90 - 102) * 50 = -600.00
 
-    The shipped reading understates the loss by 549.00 on this one bar and does so on
-    EVERY gapped stop-out, always in the run's favour."""
+    Booking the untouchable 100.98 would report -51.00 — 549.00 of loss the market never
+    gave back, on this bar and on every other gapped stop-out."""
     bars = [*flat_run(), _UP_CROSS, bar(22, "90", "92", "88", "91")]
     trade = _run(_PCT_1, bars).trades[0]
 
     assert trade.exit_price == Decimal("90.00")
     assert trade.pnl == Decimal("-600.00")
+
+
+def test_a_short_stop_gapped_through_mirrors_the_rule() -> None:
+    """Short from 98, 1% stop at 98.98. Bar 22 opens at 110 (range 108-112), so 98.98 was
+    never available: the buy-back fills at max(98.98, 110) = 110.00.
+    pnl = (110 - 98) * 50 * (-1) = -600.00."""
+    bars = [*flat_run(), _DOWN_CROSS, bar(22, "110", "112", "108", "111")]
+    trade = _run(_PCT_1, bars, direction="short").trades[0]
+
+    assert trade.exit_price == Decimal("110.00")
+    assert trade.pnl == Decimal("-600.00")
+
+
+def test_an_absolute_stop_gapped_through_fills_at_the_open_too() -> None:
+    """The rule is a property of the BAR, not of which stop rule won: absolute stop at 101,
+    bar 22 opens at 80 (range 78-82) -> fill 80.00, pnl = (80 - 102) * 50 = -1100.00."""
+    bars = [*flat_run(), _UP_CROSS, bar(22, "80", "82", "78", "81")]
+    protection = {"absolute_stop": {"enabled": True, "absolute_price": "101"}}
+    trade = _run(protection, bars).trades[0]
+
+    assert trade.exit_price == Decimal("80.00")
+    assert trade.pnl == Decimal("-1100.00")
+
+
+def test_a_stop_touched_inside_the_bar_is_untouched_by_the_gap_rule() -> None:
+    """The control that keeps the fix narrow. Bar 22 OPENS at 102, above the 100.98 level,
+    and trades down to 90: the level existed on the way down, so the fill is still the
+    level. min(100.98, 102) = 100.98, pnl = -51.00 — unchanged from before #549."""
+    bars = [*flat_run(), _UP_CROSS, bar(22, "102", "102", "90", "95")]
+    trade = _run(_PCT_1, bars).trades[0]
+
+    assert trade.exit_price == Decimal("100.98")
+    assert trade.pnl == Decimal("-51.00")
+
+
+def test_the_gap_clamp_does_not_change_which_rule_is_reported_as_executed() -> None:
+    """Both stops (percentage 100.98, absolute 101.50) are gapped through by a bar opening
+    at 90. The clamp is applied AFTER the winner is chosen, so ``most_conservative`` still
+    picks the tightest LEVEL — absolute — and reports it, even though both would execute at
+    the same 90.00. Clamping before the comparison would collapse the two distances to zero
+    and hand the win to whichever key sorted first."""
+    bars = [*flat_run(), _UP_CROSS, bar(22, "90", "92", "88", "91")]
+    out = _run({**_TWO_STOPS, "stop_conflict_resolution": "most_conservative"}, bars)
+
+    resolution = next(e for e in out.signal_events if e.event_type == "stop_resolution")
+    assert resolution.detail["executed"] == "absolute"
+    assert out.trades[0].exit_price == Decimal("90.00")
+
+
+def test_a_gapped_stop_publishes_both_the_trigger_and_the_executed_price() -> None:
+    """The divergence must be readable, not inferred: the trace carries the level that
+    fired the rule (101.50) beside the price it could actually fill at (90.00), and the
+    run's diagnostics count the occurrence."""
+    bars = [*flat_run(), _UP_CROSS, bar(22, "90", "92", "88", "91")]
+    protection = {"absolute_stop": {"enabled": True, "absolute_price": "101.50"}}
+    out = _run(protection, bars)
+
+    resolution = next(e for e in out.signal_events if e.event_type == "stop_resolution")
+    assert resolution.detail["gap_adjusted"] is True
+    assert resolution.detail["trigger_price"] == "101.50"
+    assert resolution.detail["executed_price"] == "90.00"
+    assert out.diagnostics["gap_adjusted_stops"] == 1
+
+
+def test_an_ungapped_run_reports_no_gap_adjusted_stops() -> None:
+    """The counter is evidence, so it must stay at 0 when nothing gapped — otherwise it
+    would read as noise rather than as a signal about the data."""
+    bars = [*flat_run(), _UP_CROSS, bar(22, "102", "102", "90", "95")]
+    out = _run(_PCT_1, bars)
+
+    assert out.diagnostics["gap_adjusted_stops"] == 0
+    assert not [e for e in out.signal_events if e.event_type == "stop_resolution"]

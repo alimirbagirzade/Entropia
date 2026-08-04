@@ -284,15 +284,16 @@ def test_trailing_lock_in_activates_then_locks_a_profitable_stop() -> None:
     # configured besides trailing), so a dip would NOT have stopped it out this bar.
     # Bar 23 pushes to a high of 105 (>= 104.04) -> ACTIVATES; level = 105 * 0.992 =
     # 104.16, and bar 23's own low (104.5) stays above it (survives the same bar).
-    # Bar 24's high (104) is LOWER than the anchor (105) -> the anchor does not retreat;
-    # its low (103) touches the still-104.16 level -> stops out there, locking in profit.
+    # Bar 24's high (104.2) is LOWER than the anchor (105) -> the anchor does not retreat;
+    # it OPENS above the 104.16 level (so the level is reachable, #549) and its low (103)
+    # touches it -> stops out there, locking in profit.
     out = _run(
         _config(trail_percentage="0.8", lock_in_percentage="2.0"),
         _long_then(
             [
                 _fu(22, "102", "103", "101", "102"),
                 _fu(23, "102", "105", "104.5", "104"),
-                _fu(24, "104", "104", "103", "103"),
+                _fu(24, "104.2", "104.2", "103", "103"),
             ]
         ),
     )
@@ -385,8 +386,10 @@ def test_trailing_stop_aftermath_force_activates_when_trailing_configured() -> N
     assert out.summary["total_trades"] == 2
     assert out.trades[0].exit_reason == "partial_exit"
     # Force-activation sets trail_anchor to entry*(1+2%) = 104.04; trail level =
-    # 104.04 * (1 - 0.5%) = 103.5198, quantized to money (2dp) = 103.52 -> bar 23's flat
-    # close (99) is BELOW it, so the remainder should already be stopped out intrabar at
-    # that forced level.
+    # 104.04 * (1 - 0.5%) = 103.5198 -> bar 23 is entirely BELOW it, so the remainder is
+    # stopped out. Since #549 the fill is bar 23's OPEN (99) rather than the unreachable
+    # 103.52: the level is what proves force-activation happened (without it the remainder
+    # would carry no stop at all and never close as ``stop_loss``), the open is what the
+    # exit could actually have got.
     assert out.trades[1].exit_reason == "stop_loss"
-    assert out.trades[1].exit_price == Decimal("103.52")
+    assert out.trades[1].exit_price == Decimal("99.00")

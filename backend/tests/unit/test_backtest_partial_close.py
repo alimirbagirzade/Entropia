@@ -227,10 +227,12 @@ def test_partial_close_50_percent_realizes_a_lot_and_holds_remainder() -> None:
 
 
 def test_move_stop_to_entry_breakevens_the_remainder() -> None:
-    # After the 50% partial the remainder's stop is moved to the entry (102); bar 23 dips to
-    # low 100 <= 102 -> the remainder stops out at breakeven (102, pnl 0). Without the moved
-    # stop (with_stop OFF) the remainder would have no stop at all.
-    followups = [_EXIT_SIGNAL, _fu(23, "101", "101", "100", "101")]
+    # After the 50% partial the remainder's stop is moved to the entry (102); bar 23 OPENS
+    # at 103 (above it, so breakeven is reachable — #549) and dips to low 100 <= 102 -> the
+    # remainder stops out at breakeven (102, pnl 0). Without the moved stop (with_stop OFF)
+    # the remainder would have no stop at all. The gapped case, where the bar opens BELOW
+    # the breakeven level, is covered by the oracle suite.
+    followups = [_EXIT_SIGNAL, _fu(23, "103", "103", "100", "101")]
     out = _run(
         _config(close_percentage="50", partial_aftermath="move_stop_to_entry"),
         _long_then(followups),

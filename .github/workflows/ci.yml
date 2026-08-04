@@ -50,6 +50,17 @@ jobs:
       - name: Mypy
         working-directory: backend
         run: uv run mypy src
+      - name: Acceptance traceability gate (semantic map)
+        working-directory: backend
+        # docs/audit/acceptance_semantic_map.yaml claims, clause by clause, which
+        # test node proves each acceptance criterion in docs/spec/01..22. This step
+        # fails when a cited node has been renamed or deleted, when a criterion
+        # claims coverage it cannot cite, or when a server-truth axis (auth, OCC,
+        # idempotency, agent parity) rests on a jsdom render. Static and DB-free —
+        # it resolves nodes with `ast` and title extraction, never by running them,
+        # so it is cheap and its verdict cannot drift with the environment.
+        run: uv run python ../docs/audit/acceptance_semantic_scan.py --root .. --report
+
       - name: OpenAPI schema drift guard
         working-directory: backend
         # Regenerate the schema from the app and fail if docs/openapi.json is

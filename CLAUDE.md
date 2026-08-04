@@ -165,24 +165,26 @@ Before stopping a working session, produce **ALL** of the following:
 
 ## Current position (keep in sync at each closing)
 
-> **HEAD `893dbac`** — ADIM 14 (ADR, PR #563) + kapanışı (PR #566), **F-26** (PR #564) ve
-> **R-1 revision pin** (PR #565) landed. **Alembic head `0043_i08_registry_strategy_fks`**
-> (tek head) · **196 OpenAPI operation / 151 schema** · `ENGINE_VERSION =
-> backtest-engine-v18-gap-adjusted-stop-fill` (PR #555, #549 CLOSED) · capability matrix
-> değişmedi · migration yok.
-> **Son slice:** **F-26** — Strategy formu capability disclosure (#539 + #533 TEK slice,
-> PR #564, `5887f3f`): yeni `capabilityDisclosure.ts` + `CapabilityNote.tsx`; form artık
-> DEĞERE değil **ERİŞİLEBİLİRLİĞE** bakıyor (yanlış-negatif 15 satır + varsayılandaki sahte
-> blocker birlikte düzeldi), `MODELLED_FILTER_TYPES` matristen türetiliyor, 12 alanlık
-> exhaustiveness guard eklendi. **Frontend-only, backend byte-identical**, CI 6/6.
-> **#539 ve #533 issue'ları hâlâ AÇIK** (kapatma yetkisi insanda).
-> **Sıradaki:** ADR onayı (statü **`Proposed`**, `Accepted` DEĞİL) → ADIM 15 (merged-axis
-> clock primitive). Paralel açık: manifest'te eksik 3 kanonik alan, **#544** (NET),
-> **#559** (DST), ADIM 12'den **#550/#551/#552**, ADIM 13'ten **#556/#557/#558**, **#540**.
-> Ayrıntı: `docs/PROJECT_HISTORY.md` §F-26 + §ADIM 14 · `docs/ADIM14_LANDED_KICKOFF.md` ·
-> ADR §12/§13/§14 · `docs/ADIM13_LANDED_KICKOFF.md`.
-> **Numaralandırma:** çözüldü — **ADIM 14 = ADR**, frontend slice = **F-26**; ADIM 15–20
-> unified-clock'a rezerve, ADIM dışı işe F-serisinden sıradaki boş numarayı ver.
+> **HEAD `0f44c3a`** — **ADIM 15** (PR #567) · **F-26** (PR #564) · R-1 revision pin (PR #565) ·
+> ADIM 14 ADR + kapanışı (PR #563/#566) landed. **Alembic head
+> `0043_i08_registry_strategy_fks`** (tek head) · **196 OpenAPI operation / 151 schema** ·
+> `ENGINE_VERSION = backtest-engine-v18-gap-adjusted-stop-fill` (değişmedi) · migration yok.
+> **Son slice: ADIM 15** — merged-axis valuation clock (`domain/backtest/execution/clock.py`,
+> 300 satır + **27 test**): tick anahtarı `t_ms`, streaming k-way merge, `(pin_ordinal,
+> item_id)` tie-break, öğe başına `last_closed` + `staleness_ms` **ölçümü**; dedup **eksenin**,
+> öğe verisinin değil; fail-closed. **Hiçbir üretim modülü import ETMİYOR** (rollback = modülü
+> sil), `run_engine` semantiği ve golden digest'ler sabit — ikisi de testle kilitli.
+> **⚠ ADR 0002 statüsü hâlâ `Proposed` ve §16 onay şartı koşuyordu; ADIM 15 kayıtlı onay
+> olmadan indi.** OD-1…OD-7 açık; **OD-2** (taze barsız pozisyon nasıl mark edilir) clock'un
+> bilerek seçmediği karar.
+> **Sıradaki:** **önce ADR onayını sor** → **ADIM 16** (run_engine'den resumable stepper, SAF
+> refactor; kabul = **46 golden digest'in tamamı değişmemeli**). Clock'u ADIM 16'da engine'e
+> BAĞLAMA — o ADIM 18. Paralel açık: **#544** (NET), **#559** (DST), **#550/#551/#552**,
+> **#556/#557/#558**, **#539/#533/#540**.
+> Ayrıntı: `docs/ADIM15_LANDED_KICKOFF.md` · `docs/PROJECT_HISTORY.md` §ADIM 15 + §F-26 ·
+> ADR §12/§13/§14.
+> **Numaralandırma:** **ADIM 14 = ADR**, frontend slice = **F-26**; ADIM 15–20 unified-clock'a
+> rezerve, ADIM dışı işe F-serisinden sıradaki boş numarayı ver.
 > **Uyarı 2:** `docs/audit/current_main_ground_truth_2026-08-03.md` §18'in sıra 2/3/4/6
 > kalemleri ADIM 5–8 ile kapandı ama o belge güncellenmedi — ona güvenmeden önce doğrula.
 

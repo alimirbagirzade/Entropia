@@ -165,19 +165,20 @@ Before stopping a working session, produce **ALL** of the following:
 
 ## Current position (keep in sync at each closing)
 
-> **HEAD `061d6d7`** (ADIM 11 / PR #538, 2026-08-04, CI 6/6 pass). **Alembic head
-> `0043_i08_registry_strategy_fks`** (43 migration, tek head) · **196 OpenAPI operation** /
-> **151 schema** (değişmedi) · `ENGINE_VERSION = backtest-engine-v18-same-candle-entry-exit` ·
-> capability matrix **62 satır / 22 future_dev / 14 alan** (Python↔TS parity byte-exact, yeşil).
-> **Son slice:** ADIM 11 — audit-only; 22 `future_dev` satırı kanona karşı hükme bağlandı
-> (`canonical_gap` 16 · `product_decision_required` 3 · `keep_future_dev` 2 ·
-> `eligible_for_implementation` 1 · `incorrect_current_status` 0). **Hiçbir capability aktif
-> edilmedi**, kod/şema/migration/OpenAPI/codemap değişmedi. 9 issue açıldı (#539–#547).
-> **Sıradaki:** ADIM 12 tanımsız; en yakın hazır kalem **#539 (CRITICAL)** — 22 `future_dev`
-> satırının 11'i Strategy formunda hiç devre dışı bırakılmıyor (`StrategyGraphForm.tsx`
-> generated matrix'i import etmiyor); sunucu run'ı yine reddediyor, bu bir **açıklama** açığı.
-> Ayrıntı: `docs/ADIM11_LANDED_KICKOFF.md` · `docs/PROJECT_HISTORY.md` §ADIM 11 ·
-> `docs/audit/capability_matrix_canonical_adjudication.md`.
+> **HEAD `83739ad`** (ADIM 11 / PR #548). **ADIM 12** commit `b5c7c44`, base `061d6d7`,
+> **PR #553 merge bekliyor** (ADIM 11 paralel landed — ADIM 12 onu görmeden dallandı).
+> **Alembic head `0043_i08_registry_strategy_fks`** (tek head) · **196 OpenAPI operation /
+> 151 schema** · `ENGINE_VERSION = backtest-engine-v18-same-candle-entry-exit` · capability
+> matrix **62 satır / 22 future_dev / 14 alan** — ADIM 12 bunların **hiçbirini değiştirmedi**.
+> **Son slice:** ADIM 12 — `backend/tests/unit/oracles/`: 79 bağımsız finansal oracle
+> senaryosu (78 pass + 1 `xfail(strict)`), beklenen değerler engine helper'ından DEĞİL elle
+> hesaplandı; unified-clock işinin baseline'ı. Production kod dokunulmadı. Dört uyuşmazlık
+> açıldı, hiçbiri düzeltilmedi: **#549** (gap'li stop ulaşılamayan seviyeden kayıt açıyor —
+> high), **#550** (`base_position_size` birim mi yüzde mi — ürün kararı), **#551**, **#552**.
+> **Sıradaki:** #549 adjudication (`ENGINE_VERSION` kararı) → **sonra** unified clock.
+> ADIM 11'in bıraktığı **#539 (CRITICAL)** hâlâ açık ve bağımsız bir kalem.
+> Ayrıntı: `docs/ADIM12_LANDED_KICKOFF.md` · `docs/audit/backtest_oracle_fixtures.md` ·
+> `docs/PROJECT_HISTORY.md` §ADIM 12 · `docs/ADIM11_LANDED_KICKOFF.md`.
 > **Uyarı:** `docs/audit/current_main_ground_truth_2026-08-03.md` §18'in sıra 2/3/4/6
 > kalemleri ADIM 5–8 ile kapandı ama o belge güncellenmedi — ona güvenmeden önce doğrula.
 
@@ -189,12 +190,14 @@ Before stopping a working session, produce **ALL** of the following:
 
 
 - **Testler (2026-08-04, PR #529'da ölçüldü — collection değil, PASS):** backend
-  **3143 passed** tek koşuda, 0 failed/skipped/error, coverage **%92.81** (kapı ≥90);
+  **3143 passed** tek koşuda, 0 failed/skipped/error, coverage **%92.84** (kapı ≥90, ADIM 12'de ölçüldü), 1 bilinçli `xfail(strict)` (#549);
   frontend **696 passed** (68 dosya, `npm run coverage` exit 0), `npm run typecheck` temiz.
   **CI 6/6 pass** (Backend job 44m18s). Yine de **otorite CI'dır.**
   Doğrula: `gh run list --branch main --limit 1` → job log.
   **Ortam tuzağı:** paralel worktree oturumları aynı anda koşuyor — `TEST_DATABASE_URL` ile
-  worktree'ye özel izole DB kullan (conftest her testte `drop_all`/`create_all`). Tam suite'i
+  worktree'ye özel izole DB kullan (conftest her testte `drop_all`/`create_all`; **sürücü
+  `postgresql+asyncpg://` olmalı** — `psycopg` integration conftest'ini `create_async_engine`'de
+  patlatır → 2319 sahte ERROR). Tam suite'i
   **tek pytest çağrısında** koş ve **ortada öldürme**: arka arkaya iki çağrı ya da yarıda kesilmiş
   bir koşu, artakalan bağlantılar yüzünden sonraki koşuda sahte FAILED/ERROR üretir. Suite
   koşarken **`uv sync`/`uv run` çalıştırma** (venv ortadan yeniden kurulur → sahte ERROR) ve

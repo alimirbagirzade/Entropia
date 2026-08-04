@@ -165,20 +165,20 @@ Before stopping a working session, produce **ALL** of the following:
 
 ## Current position (keep in sync at each closing)
 
-> **HEAD `83739ad`** (ADIM 11 / PR #548). **ADIM 12** commit `b5c7c44`, base `061d6d7`,
-> **PR #553 merge bekliyor** (ADIM 11 paralel landed — ADIM 12 onu görmeden dallandı).
-> **Alembic head `0043_i08_registry_strategy_fks`** (tek head) · **196 OpenAPI operation /
-> 151 schema** · `ENGINE_VERSION = backtest-engine-v18-same-candle-entry-exit` · capability
-> matrix **62 satır / 22 future_dev / 14 alan** — ADIM 12 bunların **hiçbirini değiştirmedi**.
-> **Son slice:** ADIM 12 — `backend/tests/unit/oracles/`: 79 bağımsız finansal oracle
-> senaryosu (78 pass + 1 `xfail(strict)`), beklenen değerler engine helper'ından DEĞİL elle
-> hesaplandı; unified-clock işinin baseline'ı. Production kod dokunulmadı. Dört uyuşmazlık
-> açıldı, hiçbiri düzeltilmedi: **#549** (gap'li stop ulaşılamayan seviyeden kayıt açıyor —
-> high), **#550** (`base_position_size` birim mi yüzde mi — ürün kararı), **#551**, **#552**.
-> **Sıradaki:** #549 adjudication (`ENGINE_VERSION` kararı) → **sonra** unified clock.
-> ADIM 11'in bıraktığı **#539 (CRITICAL)** hâlâ açık ve bağımsız bir kalem.
-> Ayrıntı: `docs/ADIM12_LANDED_KICKOFF.md` · `docs/audit/backtest_oracle_fixtures.md` ·
-> `docs/PROJECT_HISTORY.md` §ADIM 12 · `docs/ADIM11_LANDED_KICKOFF.md`.
+> **HEAD `f4e2fd3`.** Son slice: **ADIM 13** — Research Data point-in-time & Agent/Run parity
+> (PR #560, commit `4110138`, base `c610600`). Aynı gün **PR #555** de landed → **#549 CLOSED**
+> ve **`ENGINE_VERSION = backtest-engine-v18-gap-adjusted-stop-fill`** (ADIM 13 değiştirmedi).
+> **Alembic head `0043_i08_registry_strategy_fks`** (tek head) · OpenAPI + capability matrix
+> değişmedi · migration yok · frontend dokunulmadı.
+> **ADIM 13:** dört bundle-pinleme yüzeyi (Agent tool gateway / Agent bundle / evidence bundle /
+> Run manifest) karşılaştırıldı; 40 yeni senaryo + **4 `xfail(strict)`**. Dar üretim düzeltmesi
+> tek kalem: onaylı bir revizyonun available-time politikası artık **donmuş**
+> (`time_policy.py::ensure_time_policy_mutable` → 409 `LIFECYCLE_BLOCKED`). Dört uyuşmazlık
+> açıldı, düzeltilmedi: **#556**, **#557** (agent gateway parity), **#558**, **#559** (ürün kararı).
+> **Sıradaki:** **ADIM 14 — #539 + #533 TEK slice** (Strategy formu capability disclosure;
+> ayrı düzeltmek diğerini üretir). ADIM 12'nin **#550/#551/#552**'si hâlâ açık.
+> Ayrıntı: `docs/ADIM13_LANDED_KICKOFF.md` · `docs/audit/research_point_in_time_matrix.md` ·
+> `docs/PROJECT_HISTORY.md` §ADIM 13.
 > **Uyarı:** `docs/audit/current_main_ground_truth_2026-08-03.md` §18'in sıra 2/3/4/6
 > kalemleri ADIM 5–8 ile kapandı ama o belge güncellenmedi — ona güvenmeden önce doğrula.
 
@@ -189,10 +189,14 @@ Before stopping a working session, produce **ALL** of the following:
 
 
 
-- **Testler (2026-08-04, PR #529'da ölçüldü — collection değil, PASS):** backend
-  **3143 passed** tek koşuda, 0 failed/skipped/error, coverage **%92.84** (kapı ≥90, ADIM 12'de ölçüldü), 1 bilinçli `xfail(strict)` (#549);
-  frontend **696 passed** (68 dosya, `npm run coverage` exit 0), `npm run typecheck` temiz.
-  **CI 6/6 pass** (Backend job 44m18s). Yine de **otorite CI'dır.**
+- **Testler (2026-08-04, ADIM 13 / PR #560'ta ölçüldü — collection değil, PASS):** backend
+  full suite **exit 0**, 0 failed/error, coverage **%92.89** (kapı ≥90), **4 bilinçli
+  `xfail(strict)`** — dördü de tek dosyada
+  (`test_research_point_in_time_parity.py`), issue eşlemesi **#556 ×2 · #557 · #558**;
+  **#559'un xfail'i YOK** (DST fold/gap geçen bir karakterizasyon testiyle pinlendi);
+  ADIM 12'nin #549 xfail'i PR #555 ile kalktı.
+  Frontend **696 passed** (68 dosya, `npm run coverage` exit 0), `npm run typecheck` temiz.
+  **CI 6/6 pass** (ADIM 13 / PR #560 Backend job **46m01s**). Yine de **otorite CI'dır.**
   Doğrula: `gh run list --branch main --limit 1` → job log.
   **Ortam tuzağı:** paralel worktree oturumları aynı anda koşuyor — `TEST_DATABASE_URL` ile
   worktree'ye özel izole DB kullan (conftest her testte `drop_all`/`create_all`; **sürücü

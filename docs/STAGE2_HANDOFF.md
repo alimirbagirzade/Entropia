@@ -3369,27 +3369,113 @@ stop önceliği, Kelly, min position size — hiçbiri master reference'ta sabit
 
 ---
 
-## Next: **#549 adjudication → sonra unified clock**
+## ADIM 13 — Research Data point-in-time ve Agent/Run parity (PR #560)
 
-ADIM 12 unified-clock işinin baseline'ını kurdu. Sıradaki tek adım bir **karar**: #549
-(gap-adjusted stop icrası) `ENGINE_VERSION` bump'ı gerektiriyor ve bu karar unified clock'tan
-**ÖNCE** verilmeli — yoksa yeni saat, düzeltilmemiş bir stop fiyatının üzerine oturur ve iki
-semantik değişikliği tek digest tazelemesinde ayırt edilemez hale gelir.
+**Base `c610600` → commit `4110138`** · 2026-08-04 · **Migration YOK** (alembic head
+`0043_i08_registry_strategy_fks` sabit) · **OpenAPI değişmedi** · **`ENGINE_VERSION`
+ADIM 13 tarafından değiştirilmedi** · **capability matrix dokunulmadı** · **frontend HİÇ
+dokunulmadı** (DTO / route / react-query key / OCC token / Idempotency-Key).
 
-#550 ayrı bir ürün kararı (`base_position_size` birim mi yüzde mi) ve tek başına saved
-revision migration'ı demek — unified clock'u bloke ETMEZ, ama karara bağlanmadan sizing
-üzerine yeni iş yapılmamalı.
+**Soru:** bir Research Data revizyonu Agent research bundle'ına, Backtest execution
+bundle'ına taşıdığı **aynı canonical point-in-time doğruluğunu** taşıyor mu? Dört ayrı kod
+parçası bir revizyonu pinleyebiliyor, o yüzden parity **varsayılmadı, kanıtlandı**:
 
-**Bu slice'ın bıraktığı en yakın kalem:** oracle paketinin tick/print icra modlarını
-(`intrabar_touch`, `limit_fill_simulation`, `stop_limit_priority_simulation`,
-`not_allowed` dışı partial-fill) kapsayan ikinci dalgası — pinli tick revision gerektiren
-farklı bir fixture şekli, `tests/unit/test_backtest_tick_data.py` kalıbı üzerinden.
+| | yüzey | giriş noktası |
+|---|---|---|
+| A1 | Agent tool gateway | `jobs/agent_tools.py::_handle_data_bundle_resolve` |
+| A2 | Agent bundle derleyici | `jobs/research_data.py::compile_agent_data_bundle` |
+| B1 | Evidence bundle derleyici | `jobs/research_data.py::compile_backtest_evidence_bundle` |
+| B2 | Run manifest | `commands/backtest_run_context.py::_research_entries` |
 
-**ADIM 11 (PR #548, capability matrix adjudication) ADIM 12 ile PARALEL landed** — ADIM 12
-onu görmeden `061d6d7`'den dallandı, kapanış dokümanları sonradan ADIM 11'in üzerine yeniden
-kuruldu. ADIM 11'in bıraktığı **#539 (CRITICAL)** hâlâ açık ve #549'dan bağımsız bir kalem.
+**40 yeni senaryo** (27 saf + 13 DB-destekli) anlaşmaları kilitliyor; **4 `xfail(strict)`**
+kodun canon'la çeliştiği yeri canon'un ifadesiyle yazıyor. Her kusur, yazılmadan ÖNCE
+`c610600` üzerinde gerçek veritabanına karşı **yeniden üretildi**.
 
-`docs/audit/current_main_ground_truth_2026-08-03.md` §18'den kalanlar: sıra 5 →
-`test/fresh-install-acceptance`, sıra 7 → `ci/security-hardening`. **Not:** §18'in sıra
-2/3/4/6 kalemleri ADIM 5–8 ile kapandı ama o belge güncellenmedi — ona dokunuyorsan **önce
-doğrula**, listeye güvenme.
+**Dar üretim düzeltmesi (tek kalem, ortak time-policy katmanı).** `set_time_policy` yalnız
+sahipliği (`ensure_can_edit_draft`) kontrol ediyordu, revizyon **durumunu** değil. APPROVED
+bir revizyonun available-time kuralı yerinde yeniden yazılabiliyordu; `content_hash` yalnız
+payload byte'larını kapsıyor ve `queries/funding.py` bu alanları **canlı** okuyor → aynı
+revizyonu pinleyen iki koşu farklı `available_at` çözüp farklı funding maliyeti
+kitaplayabiliyordu, manifest snapshot'ı aynı görünürken. Ampirik probe (düzeltme öncesi):
+`state=approved · before=(None,None) · after=(fixed_delay,7200) · content_hash DEĞİŞMEDİ`.
+Doc 12 §11/§14 bunu yasaklıyor. Artık `domain/research_data/time_policy.py` içinde
+`TIME_POLICY_FROZEN_STATES` + `time_policy_is_frozen` + `ensure_time_policy_mutable` →
+**409 `LIFECYCLE_BLOCKED`** (`field_path=available_time_policy`,
+`suggested_action=create_new_revision`, `retryable=false`; okunamayan durum fail-closed
+FROZEN). Tek çağrı, `run_idempotent` gövdesinin **içinde** (2a dersi). Kurtarma yolu zaten
+vardı ve değişmedi: `create_research_dataset_revision` yeni DRAFT açıp head'i ilerletiyor.
+
+**Yeni kapsam (öncesinde eşdeğeri yoktu):** mikrosaniye as-of sınırı (önceki kapsam saniyede
+duruyordu) · aynı `available_at`'li iki kayıt ikisi de birer kez ateşler (sessiz dedupe yok)
+· geç varış replay'de de uygun değil · non-UTC kaynak zaman dilimi `build_funding_schedule`
+üzerinden (tüm önceki funding testleri `ZoneInfo("UTC")` geçiyordu) · DST fold/gap
+**karakterize** edildi · ingest normalizer ile funding reader her DST vakasında aynı cevabı
+veriyor · `feature_input_only` + onaylı tanım **pozitif** yolu · historical correction pinli
+revizyonu ve yeniden derlenen `bundle_hash`'i byte-identical bırakıyor.
+
+**Dört uyuşmazlık açıldı, hiçbiri düzeltilmedi** (hepsi ortak time-policy katmanının dışında;
+her biri `xfail(strict)` — düzeltildikleri gün test kırmızıya döner, sessizce yeşile kaymaz):
+
+| # | özet |
+|---|---|
+| #556 | `data_bundle.resolve` **hiç** lifecycle durumu okumuyor — soft-deleted root ve deprecated/revoked revizyon pinleniyor; ikizi ikisini de blokluyor. Aynı handler'da market yarısı "approved" iddia eden docstring'ine rağmen yalnız varlık kontrolü yapıyor. |
+| #557 | `data_bundle.resolve` Feature-Input-Only kapısını **çağıranın gönderdiği** boolean'dan karara bağlıyor; ikizi gerçek `SELECT` ile çözüyor. Engine bu pini çalıştırmadığı için CRITICAL değil. |
+| #558 | Hiçbir bundle üyesi doc 12 §9.1/§9.2'nin adını verdiği available-time policy'yi pinlemiyor → `bundle_hash` politika değişimine karşı **değişmez**. Run manifest pinliyor; iki execution-evidence yüzeyi çelişiyor. |
+| #559 | DST fold/gap için canon kural **yok**; ikisi de sessizce çözülüyor ve katlanan saatin **ikinci oluşumu kaynak dosyadan adreslenemiyor** (`fold=0`). |
+
+**Doğrulama:** hedefli 40 passed + 4 xfailed · full backend suite **exit 0**, coverage
+**%92.89** (kapı ≥90) · `ruff` + `ruff format` + `mypy src` (385 dosya) temiz · **CI 6/6 pass**
+(Backend job 46m01s).
+
+**Doküman:** `docs/audit/research_point_in_time_matrix.md` — tüketim yolu haritası, zaman
+sözlüğünün ne olup ne olmadığı, T/S/L/P kanıt matrisi ve dürüst sınırlar.
+
+**Paralel landed (ADIM 13'ün işi DEĞİL):** PR #555 `fix(engine): fill a gapped protection
+stop at the bar open, not at the level` → **#549 CLOSED** ve **`ENGINE_VERSION` artık
+`backtest-engine-v18-gap-adjusted-stop-fill`** (önceki `…-same-candle-entry-exit`). ADIM
+12'nin oracle `xfail`'i kalktı; suite'teki tek xfail dosyası artık ADIM 13'ünki.
+
+**Frontend takip notu (issue açılmadı):** `ResearchLifecycle.tsx` onaylı bir revizyon için
+time-policy formunu hâlâ sunabiliyor ve artık 409 alacak; zarf `remediation` +
+`suggested_action` taşıdığı için kurtarma açıklanıyor, ama UI kontrolü ön-devre dışı
+bırakmıyor.
+
+---
+
+## Next: **ADIM 14 — Strategy formu capability disclosure (#539 + #533 TEK slice)**
+
+İki issue **aynı mekanizmanın iki zıt yönde kusuru**; ayrı düzeltmek diğerini üretir.
+Backend tarafı **doğru ve testli** — kusur yalnız UI iddiasında. İkisi de güncel `main`
+(`f4e2fd3`) üzerinde yeniden doğrulandı.
+
+* **#539 — yanlış-NEGATİF.** `StrategyGraphForm` üretilen capability aynasını **hiç** import
+  etmiyor (`grep -c capabilityField`: ConfigForm 12, GraphForm **0**), kendi `SelectField`'ini
+  taşıyor. 22 `future_dev` satırından **11'i** sıradan seçilebilir opsiyon gibi görünüyor
+  (`scaling_logic.timeframe` 10 · `timeframe_mode=increasing_by_layer` 1 ·
+  `restrictions_filters.filters.filter_type` 4). Kullanıcı gerçeği ancak stratejiyi
+  kurduktan **sonra** Ready Check'te öğreniyor. Yetki açığı değil — sunucu koşuyu
+  reddediyor; **disclosure** kusuru, hata yönü güvensiz.
+* **#533 — yanlış-POZİTİF.** Sevk edilen varsayılanlarla form "Ready Check blocks it" diyor;
+  Ready Check bloklamıyor. `exit_on_opposite_signal` AÇIKKEN kaydedilmiş `allow_hedge`
+  **inert**tir ve backend üçlü paritesi (`engine.py:573-576`, `capabilities.py:638-645`,
+  `validators.py:644-655`) bunu doğru işliyor. Frontend notu yalnız **değere** bakıyor.
+
+**Tuzak:** #539'un naif düzeltmesi (değere bakıp kapıla) tam olarak #533'ü çoğaltır. Backend
+okuyucular değere değil **erişilebilirliğe** bakıyor (`scaling.enabled`, `filter.enabled`,
+`exit_on_opposite_signal`). Ortak çözüm: `SelectField`'e "bu `future_dev` değer şu an inert,
+çünkü …" predicate'ini **çağıran kart** sağlar.
+
+**Test boşluğu (doğrulandı):** `engineCapabilityMatrix.test.tsx` yalnız `DataExecutionCard`
+ve `PositionSizingCard` render ediyor — `ConflictCard` ve `StrategyGraphForm` hiçbir
+capability testinde yok.
+
+**Sınır:** yalnız sunum. `capabilities.py`, `_read_opposite_hedge`, `CAPABILITY_MATRIX`
+satırları, `engineCapabilityMatrix.generated.ts` (üretilmiş — backend parity testi byte byte
+pinliyor), readiness validator ve `opposite_direction_hedge`'in sevk edilen varsayılan değeri
+(ayrı ürün kararı, F-4) **dokunulmaz**.
+
+Tam reçete, kabul ölçütleri ve önce-üret adımları: `docs/ADIM13_LANDED_KICKOFF.md`.
+
+**Sıraya girmeyen açık kalemler:** #550/#551/#552 (ADIM 12 engine uyuşmazlıkları) ·
+#556/#557 (agent gateway parity — doğal çözüm iki yüzeyi TEK resolver'a bağlamak) ·
+#558/#559 (ürün kararı bekliyor) · #514 (ekran okuyucu denetimi; kapatma yetkisi insanda).

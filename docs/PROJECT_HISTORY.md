@@ -2653,3 +2653,157 @@ fixture şekli. Partial-fill karar tablosu mevcut helper testleriyle korunmaya d
 spec-open konvansiyon tablosu ve dört bulgunun künyesi orada. Bir sonraki oturum engine
 aritmetiğine dokunuyorsa **önce onu okumalı** — hangi sayının kanon, hangisinin sevk edilmiş
 konvansiyon olduğunu ayıran tek belge o.
+
+---
+
+## ADIM 13 — Research Data point-in-time ve Agent/Run parity (PR #560)
+
+**Base `c610600` → commit `4110138`** · 2026-08-04 · **Migration YOK** (alembic head
+`0043_i08_registry_strategy_fks` sabit) · **OpenAPI değişmedi** · **capability matrix
+dokunulmadı** · **frontend HİÇ dokunulmadı**. `ENGINE_VERSION`'ı ADIM 13 değiştirmedi
+(aynı gün paralel landed olan PR #555 değiştirdi — aşağıda).
+
+### Soru ve yöntem
+
+Bir Research Data revizyonu, Agent research bundle'ına Backtest execution bundle'ına
+taşıdığı **aynı canonical point-in-time doğruluğunu** taşıyor mu? Dört ayrı kod parçası bir
+revizyonu pinleyebiliyor, dolayısıyla parity varsayılamazdı:
+
+| | yüzey | giriş noktası | erişim |
+|---|---|---|---|
+| A1 | Agent tool gateway | `jobs/agent_tools.py::_handle_data_bundle_resolve` | `data_bundle.resolve` tool |
+| A2 | Agent bundle derleyici | `jobs/research_data.py::compile_agent_data_bundle` | `POST /research-datasets/bundles/agent` |
+| B1 | Evidence bundle derleyici | `jobs/research_data.py::compile_backtest_evidence_bundle` | `POST /research-datasets/bundles/backtest-evidence` |
+| B2 | Run manifest | `commands/backtest_run_context.py::_research_entries` | her `request_backtest_run` |
+
+**A1 ve A2 aynı kavramın iki bağımsız implementasyonu** ve farklı kural setleri uyguluyor.
+Yöntem: her kusur, yazılmadan **önce** `c610600` üzerinde gerçek veritabanına karşı bir probe
+ile yeniden üretildi; kod okumasından çıkarılan hiçbir iddia bulgu sayılmadı.
+
+### Dar üretim düzeltmesi (tek kalem, ortak time-policy katmanı)
+
+`set_time_policy` yalnız sahipliği (`ensure_can_edit_draft` → owner/Admin) kontrol ediyordu,
+revizyonun **durumunu** değil. Sonuç: APPROVED bir revizyonun `available_time_policy`,
+`available_delay_seconds` ve kaynak zaman dilimi **yerinde** yeniden yazılabiliyordu.
+`content_hash` yalnız payload byte'larını kapsadığı ve `application/queries/funding.py` bu
+alanları koşu anında **canlı** okuduğu için, aynı revizyon id'sini pinleyen iki koşu farklı
+`available_at` çözüp farklı funding maliyeti kitaplayabiliyordu — manifest snapshot'ı
+birebir aynı görünürken.
+
+Ampirik probe (düzeltmeden önce):
+
+```
+state=approved   before=(None, None)   after=(fixed_delay, 7200)
+content_hash=b704109aaf…  (DEĞİŞMEDİ)
+```
+
+Canon: doc 12 §11 *"available-time policy change → new Research Dataset Revision. In-place
+overwrite forbidden."* · §14 *"Approved v1.0 mutate edilmez; existing run/result v1.0'a bağlı
+kalır."*
+
+**Düzeltmenin tamamı:** `domain/research_data/time_policy.py` içine
+`TIME_POLICY_FROZEN_STATES` (`approved` / `approval_revoked` / `deprecated`),
+`time_policy_is_frozen` ve `ensure_time_policy_mutable` eklendi → **409 `LIFECYCLE_BLOCKED`**,
+`field_path=available_time_policy`, `suggested_action=create_new_revision`,
+`retryable=false`; okunamayan durum fail-closed FROZEN sayılır. Tek çağrı yeri:
+`set_time_policy`'nin `run_idempotent` gövdesinin **içinde** (2a dersi — tamamlanmış bir
+key'in replay'i ilerlemiş durumu yeniden yargılamaz). `approval_revoked`/`deprecated` de
+donmuş: onayı geri almak veya deprecate etmek **yeni** kullanımı durdurur, o revizyonu zaten
+zikreden manifestleri unpinlemez. Kurtarma yolu zaten vardı ve değişmedi:
+`create_research_dataset_revision` yeni bir DRAFT ekleyip head'i ilerletiyor.
+
+### Yeni kapsam (öncesinde eşdeğeri yoktu)
+
+* **mikrosaniye** as-of sınırı — önceki kapsam saniyede duruyordu;
+* aynı `available_at`'li iki kayıt **ikisi de birer kez** ateşler (sessiz dedupe yok — ileride
+  bir "dedupe" kitaplanan funding maliyetini yarıya indirirdi);
+* **geç varış** replay'de de uygun değil, aynı barı tekrar oynatmak aynı boş cevabı verir;
+* **non-UTC** beyan edilmiş kaynak zaman dilimi `build_funding_schedule` üzerinden — tüm
+  önceki funding testleri `ZoneInfo("UTC")` geçiyordu, gerçek offset uygulayan dal test
+  edilmemişti;
+* **DST fold / DST gap** karakterize edildi (aşağıda);
+* ingest normalizer (`resolve_timestamp`) ile funding reader (`parse_utc`) — iki ayrı
+  implementasyon — her DST vakasında **aynı** cevabı veriyor;
+* `feature_input_only` + **onaylı tanım** pozitif yolu (yalnız negatif hâli test edilmişti);
+* **historical correction** pinli revizyonu *ve yeniden derlenen `bundle_hash`'i*
+  byte-identical bırakıyor.
+
+### DST: karakterize edildi, kural uydurulmadı
+
+Beyan edilen zaman dilimi `America/New_York`, offset taşımayan kaynak hücresi:
+
+| vaka | hücre | çözülen an | işaretleniyor mu |
+|---|---|---|---|
+| fold — 01:30 **iki kez** oluyor (EDT, sonra EST) | `2024-11-03T01:30:00` | `2024-11-03T05:30:00Z` (**ilk**, EDT oluşum) | hayır |
+| gap — 02:30 **hiç olmadı** | `2024-03-10T02:30:00` | `2024-03-10T07:30:00Z` | hayır |
+
+Mekanizma: her iki okuyucu da `datetime.replace(tzinfo=zone)` kullanıyor, `fold` varsayılan
+`0`. Sonuç: **katlanan saatin ikinci oluşumu kaynak dosyadan adreslenemiyor** — offset
+taşımayan bir string `fold=1`'i ifade edemez, yılda bir saatlik veri sessizce erken ana
+çöküyor. Deterministik ve tekrar üretilebilir, ama **beyan edilmemiş**. Doc 12 §5.2 "conversion
+failure blocks approval/run" diyor, fakat 1:1 olmayan iki yerel duvar saati için kural
+tanımlamıyor → ADIM 13 karar **vermedi**, davranışı test ile pinledi ve #559'u açtı.
+
+### Dört uyuşmazlık açıldı, hiçbiri düzeltilmedi
+
+Hepsi ortak time-policy katmanının **dışında**; her biri `xfail(strict=True)` — düzeltildikleri
+gün xfail'in kendisi kırılır ve marker kaldırılmak zorunda kalır, sessizce yeşile kayamaz.
+
+| # | özet |
+|---|---|
+| #556 | `data_bundle.resolve` **hiç** lifecycle durumu okumuyor: soft-deleted root ve `deprecated`/`approval_revoked` revizyon başarıyla pinleniyor, ikizi `compile_agent_data_bundle` ikisini de `NotFoundError` ile blokluyor. İkincil kusur: market yarısı, docstring'i "approved Market" iddia etmesine rağmen yalnız varlık kontrolü yapıyor. |
+| #557 | `data_bundle.resolve` (`agent_tools.py:396`) Feature-Input-Only kapısını **istek gövdesinden gelen** `has_approved_feature_definition` boolean'ından karara bağlıyor; ikizi (`research_data.py:488`) gerçek `SELECT` ile çözüyor. Engine bu pini çalıştırmadığı (Ready Check + worker kapısı her şeyi DB'den yeniden türetiyor) için CRITICAL değil — kaydedilen Agent provenance'ını bozuyor. |
+| #558 | Hiçbir bundle üyesi doc 12 §9.1'in ("exact revision IDs, usage scope **and time policy**") ve §9.2'nin (`available_time_policies[]`) adını verdiği zaman politikasını pinlemiyor → `bundle_hash` politika değişimine karşı **değişmez**, bir bundle hangi kural altında derlendiğini kendi içeriğinden ispatlayamıyor. Run manifest hepsini pinliyor; iki execution-evidence yüzeyi çelişiyor. §9.2'nin diğer dört alanı (`feature_definition_revision_ids[]`, `instrument_mapping_revision_ids[]`, `alignment_policy_versions[]`, `missing_and_stale_policies[]`) da yok, aynı issue'ya katlandı. |
+| #559 | DST fold/gap ürün kararı (yukarıda). |
+
+### Dürüst sınırlar
+
+* **V1 engine TEK research feed tüketiyor** — pinlenmiş funding-rate kaynağı. `grep -rn
+  "research" domain/backtest/` tam olarak dört şeye çarpıyor: `funding.py`,
+  `execution/costs.py:39`, `history.py` (manifest snapshot'ının geri okunması — canlı root
+  ASLA) ve `result_visibility.py` (ilgisiz ACL). Hiçbir research değeri indikatöre, filtreye
+  veya sinyale ulaşmıyor. Matrisi doldurmak için **sahte join yazılmadı**.
+* Doc 12 §8.4 kural 3'ün *"t anından önce/eşit `available_at` taşıyan en son uygun record
+  seçilir"* as-of join'inin **hiçbir implementasyonu yok** — o bir *değeri t anında okuma*
+  kuralı; funding tüketicisi her *olayı* bir kez uyguluyor (`due_funding_charges` monoton
+  imleç). İkisi de kendi semantiği için doğru, ama research **seviyesi** okuyan kimse olmadığı
+  için kural 3 şu an işletilmiyor.
+* `event_time_semantics` manifestte pinli ama **hiçbir yerde uygulanmıyor**; Ready Check de
+  bakmıyor.
+* **As-of tolerance / max staleness yok** — uygun bir kayıt asla eskimiyor. Canon da bir sınır
+  tanımlamıyor, o yüzden uydurulmadı.
+* `verified` durumu hâlâ retime edilebilir; doc 12 §5.2'nin ima ettiği "retime prior analysis'i
+  geçersizler" reset'i implemente **değil** ve bu slice'ın kapsamı dışındaydı.
+* **A2'nin zaman politikasını doğrulamaması kusur değil, bilinçli:** doc 12 §9.3 her scope'u
+  Agent research'e kabul ediyor ve bir Agent bundle'ı as-of çözümlemesi yapmıyor; yalnız
+  üyeleri karar zamanlarına karşı oynatılan B1 çözülebilir bir kural istiyor. Bu asimetri
+  geçen bir testle **kasıtlı** olarak iddia edildi, kusur olarak dosyalanmadı.
+* **A1'in `src` içinde çağıranı yok** — yalnız tool yüzeyi ve testler ulaşıyor;
+  `agent_executor` `backtest.ready_check` (`:413`), `backtest.request` (`:470`),
+  `result.query` (`:550`) ve `artifact.create` (`:584`) dışında bir şey dispatch etmiyor. Bu
+  #556/#557'nin bugünkü etki alanını sınırlar, kapatmaz.
+* **Frontend takip notu (issue açılmadı):** `ResearchLifecycle.tsx` onaylı bir revizyon için
+  time-policy formunu hâlâ sunabiliyor ve artık 409 alacak; zarf `remediation` +
+  `suggested_action` taşıdığı için kurtarma açıklanıyor, ama UI kontrolü ön-devre dışı
+  bırakmıyor.
+
+### Doğrulama
+
+Hedefli **40 passed + 4 xfailed** · full backend suite **exit 0**, coverage **%92.89**
+(kapı ≥90) · `ruff check` + `ruff format --check` + `mypy src` (385 dosya) temiz ·
+**CI 6/6 pass** (Backend 46m01s, E2E-browser 8m53s, A11Y 2m41s, E2E dev-auth 1m59s,
+Frontend 1m55s, Docker 43s).
+
+**Doküman:** `docs/audit/research_point_in_time_matrix.md` — dört yüzeyin ne okuduğu tablosu,
+zaman sözlüğünün ne olup **ne olmadığı** (per-record ingestion time yok, tolerance yok,
+forward-fill hiç implemente edilmemiş → doc 12 §8.4 kural 5 boş yere sağlanıyor), T/S/L/P
+kanıt matrisi ve dürüst sınırlar. Bir sonraki oturum Research Data zamanına dokunuyorsa
+**önce onu okumalı**.
+
+### Aynı gün paralel landed (ADIM 13'ün işi DEĞİL)
+
+**PR #555** — `fix(engine): fill a gapped protection stop at the bar open, not at the level`
+→ **issue #549 CLOSED** ve **`ENGINE_VERSION` artık
+`backtest-engine-v18-gap-adjusted-stop-fill`** (önceki `backtest-engine-v18-same-candle-entry-exit`).
+ADIM 12'nin tek oracle `xfail(strict)`'i bununla kalktı; suite'teki tek xfail dosyası artık
+ADIM 13'ün parity testleri.

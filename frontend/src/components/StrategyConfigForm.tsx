@@ -2,11 +2,8 @@ import { useId, useState } from "react";
 
 import { DatasetPicker } from "@/components/DatasetPicker";
 import { InfoPanel } from "@/components/InfoPanel";
-import {
-  type CapabilityOption,
-  capabilityOption,
-  isFutureDev,
-} from "@/lib/engineCapabilityMatrix.generated";
+import { CapabilityNoteText } from "@/components/CapabilityNote";
+import { capabilityDisclosure, capabilityOptionLabel } from "@/components/capabilityDisclosure";
 import {
   ENTRY_TIMING_OPTIONS,
   EXIT_TIMING_OPTIONS,
@@ -132,6 +129,8 @@ function SelectField({
   panelKey,
   placeholder,
   capabilityField,
+  capabilityReachable,
+  capabilityInertReason,
 }: {
   label: string;
   value: string;
@@ -147,26 +146,23 @@ function SelectField({
   // so the user learns the option cannot run BEFORE building a strategy on it, instead of
   // discovering it at Ready Check or in a silently inert Result.
   capabilityField?: string;
+  // Whether the engine consults this field at all right now (see CapabilityDisclosure).
+  capabilityReachable?: boolean;
+  // Why this field's future_dev values are inert under the CURRENT sibling settings (#533).
+  capabilityInertReason?: string;
 }) {
   const id = useId();
   const noteId = `${id}-capability`;
-  const field = capabilityField ?? "";
   // An already-saved future_dev value stays SELECTABLE: disabling the CURRENT value would
   // make an existing strategy un-editable and let the form silently rewrite saved config.
   // Ready Check still blocks it, so it can never run — it is only kept representable.
-  const blockedValues = new Set(
-    options
-      .filter((option) => option.value !== value && isFutureDev(field, option.value))
-      .map((option) => option.value),
-  );
-  const selectedBlocked = isFutureDev(field, value) ? capabilityOption(field, value) : undefined;
-  // The NOTES come from the matrix rows (they carry the dependency text), the DISABLED flag
-  // from the value set — the option lists themselves stay label-only presentation data.
-  const notes: CapabilityOption[] = selectedBlocked
-    ? [selectedBlocked]
-    : [...blockedValues]
-        .map((blockedValue) => capabilityOption(field, blockedValue))
-        .filter((entry): entry is CapabilityOption => entry !== undefined);
+  const { blockedValues, note } = capabilityDisclosure({
+    fieldPath: capabilityField,
+    value,
+    optionValues: options.map((option) => option.value),
+    reachable: capabilityReachable,
+    inertReason: capabilityInertReason,
+  });
   return (
     <div className="field-row wide-label">
       <FieldHead id={id} label={label} required={required} panelKey={panelKey} />
@@ -175,33 +171,19 @@ function SelectField({
         className="sd-select"
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        aria-describedby={notes.length > 0 ? noteId : undefined}
+        aria-describedby={note.kind === "none" ? undefined : noteId}
       >
         {placeholder !== undefined ? <option value="">{placeholder}</option> : null}
         {options.map((option) => {
           const unavailable = blockedValues.has(option.value);
           return (
             <option key={option.value} value={option.value} disabled={unavailable}>
-              {unavailable ? `${option.label} — not available in this build` : option.label}
+              {capabilityOptionLabel(option.label, unavailable)}
             </option>
           );
         })}
       </select>
-      {notes.length > 0 ? (
-        <p className="sd-capability-note" id={noteId}>
-          {selectedBlocked ? (
-            <>
-              <strong>Not available in this build:</strong> {selectedBlocked.label} is saved but
-              will not run — Ready Check blocks it. {selectedBlocked.dependency}
-            </>
-          ) : (
-            <>
-              <strong>Not available in this build:</strong>{" "}
-              {notes.map((entry) => `${entry.label} — ${entry.dependency}`).join(" ")}
-            </>
-          )}
-        </p>
-      ) : null}
+      <CapabilityNoteText note={note} id={noteId} />
     </div>
   );
 }
@@ -760,6 +742,16 @@ export function ConflictCard({
           onChange={(v) => setConflict({ opposite_direction_hedge: v })}
           options={OPPOSITE_HEDGE_OPTIONS}
           capabilityField="conflict_position_handling.opposite_direction_hedge"
+          // #533 — with exit-on-opposite ON the position closes before the hedge branch is
+          // reachable, so `allow_hedge` executes nothing AND blocks nothing. The backend
+          // agrees (`_read_opposite_hedge`, capabilities.py:638-645), so claiming "Ready
+          // Check blocks it" here would be false on the shipped default of every new
+          // strategy. Only the exit-on-opposite OFF branch is a genuine blocker.
+          capabilityInertReason={
+            c.exit_on_opposite_signal
+              ? "'Exit on opposite signal' is ON, so the position closes before a hedge could open."
+              : undefined
+          }
         />
         <SelectField
           label="Stop + Exit conflict"

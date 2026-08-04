@@ -454,6 +454,10 @@ def build_diagnostics(ctx: _RunConfig, led: _Ledger, warnings: list[str]) -> dic
         "stop_trigger_requirement": ctx.stop_trigger_requirement,
         "stop_conflict_resolution": ctx.stop_conflict_resolution,
         "logic_stop_triggers": led.logic_stop_triggers,
+        # #549: how many stop exits filled at the bar OPEN because the bar gapped past the
+        # level. Reported beside the stop policy because it explains a result the policy
+        # alone cannot: two runs of the same strategy differ here purely by the data's gaps.
+        "gap_adjusted_stops": led.gap_adjusted_stops,
         "allocation_enabled": ctx.alloc_on,
         "allocation_compounding": ("compound" if ctx.alloc_compound else "fixed")
         if ctx.alloc_on

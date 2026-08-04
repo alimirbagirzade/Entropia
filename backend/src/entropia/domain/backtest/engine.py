@@ -1727,17 +1727,25 @@ def run_engine(
         """Record the resolved stop (Master Ref §9.2: ledger carries priority + sources).
 
         Emits a ``stop_resolution`` decision-trace event whenever more than one rule fired,
-        the executed rule was a Logic-Based Stop, or the OHLCV first-trigger approximation
-        applied. The single-price-stop default path emits nothing extra (byte-identical to
-        pre-F-08 output)."""
+        the executed rule was a Logic-Based Stop, the OHLCV first-trigger approximation
+        applied, or the bar GAPPED past the winning level so the fill differs from the
+        trigger. The plain single-price-stop path still emits nothing extra.
+
+        The gap case earns an event of its own precisely because it is the one where the
+        executed price cannot be re-derived from the config: every other stop fill IS the
+        rule's own level, so a reader who could not see ``trigger_price`` beside ``price``
+        would have no way to tell a gapped exit from a mis-computed one (#549)."""
         if any(k.startswith("logic:") for k in outcome.triggered):
             led.logic_stop_triggers += 1
         if outcome.tick_resolved:
             led.tick_first_trigger_resolutions += 1
+        if outcome.gap_adjusted:
+            led.gap_adjusted_stops += 1
         if (
             len(outcome.triggered) > 1
             or outcome.approximated_first
             or outcome.tick_resolved
+            or outcome.gap_adjusted
             or outcome.executed_key.startswith("logic:")
         ):
             detail: dict[str, Any] = {
@@ -1751,6 +1759,16 @@ def run_engine(
             # tick-less traces stay byte-identical.
             if outcome.tick_resolved:
                 detail["first_trigger_tick_resolved"] = True
+            # #549: BOTH prices, and only when they diverge — a non-gapped trace keeps its
+            # existing shape rather than growing a field that always echoes ``price``.
+            if outcome.gap_adjusted:
+                # Quantized to the money step like every other price the trace publishes:
+                # these two come from different sources (a configured level vs a bar's
+                # open), so raw ``str()`` would render "101.50" beside "90" purely from how
+                # the inputs were written.
+                detail["trigger_price"] = str(outcome.trigger_price.quantize(_MONEY))
+                detail["executed_price"] = str(outcome.price.quantize(_MONEY))
+                detail["gap_adjusted"] = True
             led.signal_events.append(
                 SignalEventRow(
                     seq=len(led.signal_events),

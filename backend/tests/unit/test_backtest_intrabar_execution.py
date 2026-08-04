@@ -141,10 +141,13 @@ def _pos_short_trailing() -> _Position:
     )
 
 
-def _bar(low: str, high: str = "100", close: str = "98") -> _Bar:
+def _bar(low: str, high: str = "100", close: str = "98", open_: str = "100") -> _Bar:
+    # ``open_`` matters since #549: a bar that OPENS past a stop level fills there rather
+    # than at the level, so a fixture whose prints start above its own open is no longer
+    # self-consistent. The first-touch tests below pass an open equal to their first print.
     return _Bar(
         timestamp="2024-01-22T00:00:00Z",
-        open=Decimal("100"),
+        open=Decimal(open_),
         high=Decimal(high),
         low=Decimal(low),
         close=Decimal(close),
@@ -257,21 +260,35 @@ def test_first_tick_touch_gap_print_resolves_to_the_continuous_path_order() -> N
 def test_first_trigger_with_ticks_resolves_the_real_first_touch_long() -> None:
     # Falling path 111 -> 107 -> 94: 107 touches trailing (108.25) FIRST. The
     # conservative model would have picked the entry-tighter percentage (95).
-    out = _resolve(_pos_long_trailing(), _bar(low="94"), _ticks("111", "107", "94"))
+    out = _resolve(
+        _pos_long_trailing(),
+        _bar(low="94", high="111", open_="111"),
+        _ticks("111", "107", "94"),
+    )
     assert out is not None
     assert out.tick_resolved is True
     assert out.approximated_first is False
     assert out.executed_key == "trailing"
+    # The rule that fired and the price it filled at are the same here: the bar opened at
+    # 111, ABOVE the 109.25 trailing level, so the level was reachable on the way down.
+    assert out.trigger_price == Decimal("115") * Decimal("0.95")
     assert out.price == Decimal("115") * Decimal("0.95")
 
 
 def test_first_trigger_with_ticks_resolves_the_real_first_touch_short() -> None:
     # Rising path 92 -> 95 -> 104: 95 touches the short trailing lock (94.5) FIRST;
     # conservative would have picked the entry-tighter percentage (103).
-    out = _resolve(_pos_short_trailing(), _bar(low="92", high="104"), _ticks("92", "95", "104"))
+    out = _resolve(
+        _pos_short_trailing(),
+        _bar(low="92", high="104", open_="92"),
+        _ticks("92", "95", "104"),
+    )
     assert out is not None
     assert out.tick_resolved is True
     assert out.executed_key == "trailing"
+    # Bar opens at 92, BELOW the 94.5 short trailing lock, so the level was reachable on
+    # the way up and the fill is the level itself.
+    assert out.trigger_price == Decimal("90") * Decimal("1.05")
     assert out.price == Decimal("90") * Decimal("1.05")
 
 

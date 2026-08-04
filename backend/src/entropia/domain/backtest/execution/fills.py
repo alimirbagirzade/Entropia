@@ -506,13 +506,47 @@ def _stop_priority_index(custom_order: list[str] | None, logic_keys: list[str]) 
 
 @dataclass(frozen=True, slots=True)
 class _StopOutcome:
-    """Resolved protection-stop firing for one bar (F-08 combination engine)."""
+    """Resolved protection-stop firing for one bar (F-08 combination engine).
 
-    price: Decimal  # executed exit price of the winning rule
+    ``trigger_price`` and ``price`` are two DIFFERENT facts, deliberately kept apart
+    (Master Ref §9.2 has the ledger carry a ``trigger_price`` and never equates it to the
+    fill): the first is the level whose breach fired the rule — the evidence for WHY this
+    stop won — and the second is the price the exit could actually have executed at. They
+    differ only when the bar gapped past the level (see ``_attainable_stop_fill``);
+    collapsing them into one field loses whichever question the reader is asking."""
+
+    price: Decimal  # executable exit price (gap-adjusted for a price stop)
+    trigger_price: Decimal  # the winning rule's own level — trace evidence, not the fill
     executed_key: str  # winning stop key (e.g. "percentage" / "logic:<block_id>")
     triggered: tuple[str, ...]  # every stop key that fired this bar (sorted)
     approximated_first: bool  # first_trigger_wins resolved to conservative over OHLCV
     tick_resolved: bool = False  # first_trigger_wins resolved by the REAL tick order (F-07i B)
+
+    @property
+    def gap_adjusted(self) -> bool:
+        """Did the bar gap past the winning level, so the fill is worse than the trigger?"""
+        return self.price != self.trigger_price
+
+
+def _attainable_stop_fill(level: Decimal, bar: _Bar, *, is_long: bool) -> Decimal:
+    """The first price a triggered PRICE stop could actually have executed at.
+
+    A level inside the bar's range executes at the level. When the bar OPENS already
+    beyond it, the level never existed at any point in that bar, so the first attainable
+    price is the open: long (a sell) ``min(level, open)``, short (a buy)
+    ``max(level, open)``.
+
+    This is not an intrabar-path assumption — the open is a boundary FACT carried by
+    OHLCV, not the ordering guess Master Ref §9.3 forbids. It is also the exact mirror of
+    the rule this engine already applies to a gapped stop ENTRY (``max(trigger, open)``
+    long, ``min`` short — see ``_WorkingStop``): one rule, two signs. Booking the
+    untouchable level instead understates the loss on every gapped stop-out, always in the
+    run's favour.
+
+    Logic-Based stops never come here: they fill at ``bar.close``, which is inside the bar
+    by construction, and clamping that against the open would move a price that was always
+    attainable."""
+    return min(level, bar.open) if is_long else max(level, bar.open)
 
 
 def _resolve_stop(
@@ -529,7 +563,9 @@ def _resolve_stop(
     Enabled rules = each enabled price stop (percentage / absolute / trailing) plus each
     enabled Logic-Based Stop Block (``logic_enabled``). A price stop TRIGGERS when the
     bar's adverse extreme touches its level (long: ``low <= level``; short:
-    ``high >= level``) and executes at that level. A logic block triggers when it emits a
+    ``high >= level``) and executes at that level — or, when the bar OPENED already past
+    it, at the open, which is the first price that actually existed
+    (``_attainable_stop_fill``). A logic block triggers when it emits a
     signal against the open position (``logic_triggered``) and executes at the bar close
     (signal-confirmed). ``stop_trigger_requirement`` decides WHETHER protection fires
     (``any_active`` = any rule; ``all_active`` = every enabled rule this bar);
@@ -590,7 +626,8 @@ def _resolve_stop(
         )
         if winner is not None:
             return _StopOutcome(
-                price=triggered[winner],
+                price=_attainable_stop_fill(triggered[winner], bar, is_long=is_long),
+                trigger_price=triggered[winner],
                 executed_key=winner,
                 triggered=tuple(sorted(triggered)),
                 approximated_first=False,
@@ -607,8 +644,16 @@ def _resolve_stop(
             key=lambda k: (abs(entry - triggered[k]), priority.get(k, len(priority))),
         )
 
+    # The gap clamp is applied AFTER the winner is chosen, never before: the selection
+    # comparators above read each rule's own LEVEL, so clamping first would collapse every
+    # gapped-through level onto the same open price and silently change which rule is
+    # reported as executed. A logic stop keeps its bar-close fill (always attainable).
+    level = triggered[winner]
     return _StopOutcome(
-        price=triggered[winner],
+        price=_attainable_stop_fill(level, bar, is_long=is_long)
+        if winner in price_levels
+        else level,
+        trigger_price=level,
         executed_key=winner,
         triggered=tuple(sorted(triggered)),
         approximated_first=approximated_first,

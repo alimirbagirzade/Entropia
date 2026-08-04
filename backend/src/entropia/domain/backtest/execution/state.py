@@ -221,6 +221,11 @@ class _Ledger:
     same_bar_stop_limit_fills: int = 0
     logic_stop_triggers: int = 0
     tick_first_trigger_resolutions: int = 0
+    # #549: stop exits whose bar OPENED past the winning level, so the fill was the open
+    # rather than the level. Counted because the divergence is a property of the DATA, not
+    # of the config — a reader comparing two runs needs to know how much of the difference
+    # came from gaps before reading anything into the strategy.
+    gap_adjusted_stops: int = 0
     strength_adjustments: int = 0
     # L4 flag: partial fills were active and the bar had prints, but none carried a size.
     partial_evidence_missing: bool = False

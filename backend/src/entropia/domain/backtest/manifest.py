@@ -115,7 +115,15 @@ from entropia.shared.manifest import manifest_hash
 # labels stay outside execution_content so renames do not fork reproducibility, but the
 # artifact shape changed; this namespace shift prevents stale label-less Results from
 # being idempotently reused.
-ENGINE_VERSION = "backtest-engine-v18-same-candle-entry-exit"
+# v18-gap-adjusted-stop-fill (#549): a triggered PRICE stop now executes at the bar's OPEN
+# when the bar opened already past the level, instead of at the level itself. The level was
+# unattainable for the whole bar in that case, so the old reading understated the loss on
+# every gapped stop-out — always in the run's favour. This is the exact mirror of the
+# ``max(trigger, open)`` rule the engine already applied to a gapped stop ENTRY, so it
+# completes a shipped rule rather than inventing one where canon is silent. Every gapped
+# stop-out returns a different PnL, so the namespace must shift: a pre-fix Result can never
+# be idempotently reused for a re-RUN (INF-04/INF-05).
+ENGINE_VERSION = "backtest-engine-v18-gap-adjusted-stop-fill"
 METRIC_SET_VERSION = "metric-set-v1"
 OUTPUT_ARTIFACT_PROFILE = "standard-v1"
 

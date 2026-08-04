@@ -912,14 +912,22 @@ def test_nothing_in_production_imports_the_intent_layer_yet() -> None:
     """The rollback for this slice is "delete the module", exactly as for the ADIM 15
     clock — which is what keeps every shipped digest still. When the phase loop wires
     ``run_portfolio`` in, this test is the one that must be updated deliberately; it
-    should never fail by accident."""
+    should never fail by accident.
+
+    It has been updated deliberately once, in the same shape the clock's own containment
+    test was: the ADIM 17 shared ledger (``execution/portfolio_ledger.py``) publishes a
+    ``PortfolioSnapshot``, so it is named here as the ONE permitted importer rather than
+    the assertion being loosened to "some importers are fine". That module is itself
+    contained — ``test_backtest_portfolio_ledger.py`` asserts nothing imports IT — so the
+    property this test defends is unchanged: no production path reaches the intent layer,
+    and the rollback is still "delete the modules"."""
     src = Path(__file__).resolve().parents[2] / "src" / "entropia"
     importers = [
         path.relative_to(src).as_posix()
         for path in src.rglob("*.py")
         if path.name != "intents.py" and _imports_intents(path.read_text(encoding="utf-8"))
     ]
-    assert importers == []
+    assert importers == ["domain/backtest/execution/portfolio_ledger.py"]
 
 
 def test_no_intent_field_ships_in_the_manifest_yet_and_the_engine_version_stands() -> None:

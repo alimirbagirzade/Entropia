@@ -165,16 +165,19 @@ Before stopping a working session, produce **ALL** of the following:
 
 ## Current position (keep in sync at each closing)
 
-> **HEAD `8a87460`** (ADIM 8 / PR #529, 2026-08-04). **Alembic head
-> `0043_i08_registry_strategy_fks`** (43 migration, tek head) · **196 OpenAPI operation**
-> (değişmedi) / **151 schema** · `ENGINE_VERSION = backtest-engine-v18-same-candle-entry-exit` ·
-> capability matrix 62 girdi (Python↔TS parity yeşil).
-> **Son slice:** ADIM 8 — 16 public 2xx gövdesi `dict[str, Any]`'den yayımlanan
-> `response_model`'e geçti (`apps/api/schemas/`); wire byte'ları değişmedi; frontend wire
-> parity artık makine kontrollü (`test_wire_contract_parity.py`, 27 çift).
-> **Sıradaki:** ADIM 9 tanımsız — brief kullanıcıdan gelir; en yakın hazır kalem
-> `GET /library-shared-with-me`'yi `LibraryPageResponse` ile tiplemek.
-> Ayrıntı: `docs/ADIM8_LANDED_KICKOFF.md` · `docs/PROJECT_HISTORY.md` §ADIM 8.
+> **HEAD `061d6d7`** (ADIM 11 / PR #538, 2026-08-04, CI 6/6 pass). **Alembic head
+> `0043_i08_registry_strategy_fks`** (43 migration, tek head) · **196 OpenAPI operation** /
+> **151 schema** (değişmedi) · `ENGINE_VERSION = backtest-engine-v18-same-candle-entry-exit` ·
+> capability matrix **62 satır / 22 future_dev / 14 alan** (Python↔TS parity byte-exact, yeşil).
+> **Son slice:** ADIM 11 — audit-only; 22 `future_dev` satırı kanona karşı hükme bağlandı
+> (`canonical_gap` 16 · `product_decision_required` 3 · `keep_future_dev` 2 ·
+> `eligible_for_implementation` 1 · `incorrect_current_status` 0). **Hiçbir capability aktif
+> edilmedi**, kod/şema/migration/OpenAPI/codemap değişmedi. 9 issue açıldı (#539–#547).
+> **Sıradaki:** ADIM 12 tanımsız; en yakın hazır kalem **#539 (CRITICAL)** — 22 `future_dev`
+> satırının 11'i Strategy formunda hiç devre dışı bırakılmıyor (`StrategyGraphForm.tsx`
+> generated matrix'i import etmiyor); sunucu run'ı yine reddediyor, bu bir **açıklama** açığı.
+> Ayrıntı: `docs/ADIM11_LANDED_KICKOFF.md` · `docs/PROJECT_HISTORY.md` §ADIM 11 ·
+> `docs/audit/capability_matrix_canonical_adjudication.md`.
 > **Uyarı:** `docs/audit/current_main_ground_truth_2026-08-03.md` §18'in sıra 2/3/4/6
 > kalemleri ADIM 5–8 ile kapandı ama o belge güncellenmedi — ona güvenmeden önce doğrula.
 

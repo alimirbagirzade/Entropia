@@ -2513,3 +2513,143 @@ okuyucu oturumu yapılmadı. Sunucu tarafı (bu 11 satırın Ready Check + engin
 reddedildiği) doğrudan ölçüldü ve tutuyor. `_ReferenceSeries` resampler'ı **okundu,
 koşturulmadı** — "scaling override'a hizmet edebilir" iddiası bilerek bir disposition'ı
 gerekçelendirmek için KULLANILMADI.
+
+---
+
+## ADIM 12 — Bağımsız finansal oracle baseline'ı (PR #553)
+
+**Base `061d6d7` → commit `b5c7c44`** · 2026-08-04 · **Migration YOK** (alembic head
+`0043_i08_registry_strategy_fks` sabit, tek head) · **OpenAPI DEĞİŞMEDİ** (196 operation /
+151 schema) · **`ENGINE_VERSION` DEĞİŞMEDİ** · **production kod DEĞİŞMEDİ** — 9 yeni test
+dosyası + 1 audit dokümanı, 2181 satır, tamamı additive.
+
+### Neden — mevcut iki koruma katmanının cevaplamadığı soru
+
+Engine suite'i bugün iki şekilde korunuyor ve **ikisi de kalıyor**:
+
+* **golden digest'ler** (`test_backtest_engine_golden.py` + `engine_golden_digests.json`) —
+  *değişimi* yakalar, ama digest'i de güncelleyen bir değişiklik yeşil geçer;
+* **helper unit testleri** (`test_backtest_costs.py`, `test_backtest_fills.py`, …) —
+  beklentilerini `_effective_fill` / `_position_size` / `due_funding_charges` çağırarak
+  kuruyor, yani o helper'larla **yapı gereği** anlaşıyorlar.
+
+Hiçbiri şunu sormuyor: *engine'in ürettiği sayı, aritmetiğin söylediği sayı mı?* ADIM 12'nin
+tek işi bu ölçüyü kurmak — ve bunu unified-clock değişikliğinden **önce** yapmak, ki yeni saat
+neyi koruduğunu/neyi bilerek değiştirdiğini gösterebilsin.
+
+### Landed
+
+`backend/tests/unit/oracles/` — **79 senaryo** (78 passing, 1 `xfail(strict)`).
+
+| modül | senaryo | eksen |
+|---|---|---|
+| `harness.py` | — | fixture kurucu; **hiçbir beklenen değer üretmez** |
+| `test_oracle_entry_exit_timing.py` | 10 | current/next candle open-close, market fill, short mirror, gap-open no-lookahead, end-of-data, same-candle entry+exit |
+| `test_oracle_costs.py` | 14 | spread, slippage, kompozisyon sırası, commission, short aynalar, funding işareti, event_time↔available_time |
+| `test_oracle_orders.py` | 10 | limit touch/no-touch/convert-to-market/±offset, stop trigger, stop gap, short mirror |
+| `test_oracle_protection_stops.py` | 13 + 1 xfail | percentage/absolute/trailing seviyeleri, aktivasyon eşiği, any↔all, most-conservative↔priority order, stop+exit çakışması ×4 |
+| `test_oracle_sizing.py` | 13 | base, risk-based, tam/kesirli Kelly, negatif edge, min/max, leverage modları, allocation sleeve |
+| `test_oracle_position_lifecycle.py` | 8 | partial close ×3 aftermath, komisyon dağılımı, scaling ladder ×3 basis, cap reddi |
+| `test_oracle_properties.py` | 10 | PnL korunumu, equity kimliği, batch invariance, deterministik replay, disabled-config etkisizliği, restrictions, no-lookahead, MTF closed-bar |
+
+### Üç bağlayıcı kural (paketin `__init__.py` docstring'inde)
+
+**Beklenen değerler engine'den ÜRETİLMEZ.** Pakette `_effective_fill`, `_position_size`,
+`_resolve_stop`, `due_funding_charges` gibi hiçbir aritmetik helper import edilmiyor; tek
+production import `run_engine` + tükettiği tipli girdiler. Bir helper çağırıp beklenti kurmak,
+testi implementasyonun aynası yapardı.
+
+**Fixture 5–20 bar.** Ledger'ın tamamı elle denetlenebilir kalmalı; hesap docstring'de yazılı.
+Ortak geometri: **20 düz bar @100** (20-bar SMA tam 100'e oturur, 20 kopyanın ortalaması
+tartışmalı değil) → **bar 21** kesişir. Sinyal `validity="current_candle_only"` ile **EDGE**:
+sadece kesişim barında canlı, sonraki barlar sessizce yeni giriş ateşleyip elle hesaplanmış
+ledger'ı bozamaz.
+
+**Spec'in sessiz olduğu yerde "canon böyle diyor" DENMEZ.** V18 canon icra aritmetiğinin
+çoğunu bilerek engine manifest'ine bırakıyor (Master Ref §10.13). Oracle'lar bu alanlarda
+**sevk edilmiş konvansiyonu** pinliyor ve modül docstring'inde bunu açıkça söylüyor:
+
+| alan | spec durumu | pinlenen konvansiyon |
+|---|---|---|
+| timing seçeneği başına fill fiyatı | sadece enum, **fiyat eşlemesi YOK** | close / next open / next close |
+| spread+slippage işareti ve sırası | **adverse-side kuralı YOK** | iki tarafta da aleyhte; önce spread, sonra yüzde |
+| commission taraf başına mı round-trip mi | **belirtilmemiş** | tam kapanışta `commission × 2` |
+| funding işareti | doc 02 "düşülür veya … eklenir" | long öder, short alır |
+| limit/stop seviyesinden gap | **spec sessiz** | dokunulan limit kendi seviyesinden; stop girişi `max(trigger, open)` |
+| tetiklenen stop'un icra fiyatı | **spec sessiz** (sadece trigger seviyesini sabitler) | seviyeden — kanıtlanabilir şekilde ulaşılamaz olan tek vaka #549 |
+| varsayılan stop önceliği | **kanonik sıra YOK**; `priority_order` kullanıcı listesi | percentage → trailing → absolute |
+| `most_conservative` karşılaştırıcısı | sadece niteliksel | en dar aleyhte mesafe, kanonik rank tie-break |
+| Kelly | **spec'te hiç geçmiyor** | `f* = kf × (W − (1−W)/R)`, 0'da kırpılır |
+| min position size | **spec'te hiç geçmiyor** | engine-only alan |
+
+### Dört uyuşmazlık — açıldı, düzeltilmedi
+
+Slice yapı gereği test-only; her düzeltme engine semantiğini değiştirir → `ENGINE_VERSION`
+kararı + golden digest tazelemesi gerekir.
+
+**#549 (high) — gap'le atlanan koruma stop'u ulaşılamayan seviyeden kayıt açıyor.**
+`_resolve_stop` icra fiyatı olarak stop **seviyesini** koşulsuz döndürüyor
+(`execution/fills.py:610`, `price=triggered[winner]`); `bar.open` ile hiç karşılaştırmıyor.
+102'den long, %1 stop → 100.98. Bar 22 `(open 90, high 92, low 88, close 91)` — **tüm aralık
+88–92**, yani 100.98 o barın hiçbir yerinde yok. Engine −51.00 yazıyor; ilk ulaşılabilir fiyat
+(open, 90) −600.00 demek. Tek barda 549.00, ve **her** gap'li stop-out'ta, hep run'ın lehine.
+Bunun bir konvansiyon değil kusur olduğunun kanıtı engine'in kendisinde: stop **GİRİŞİ** gap'le
+atlandığında `max(trigger, open)` ile doluyor (`engine.py:307`, `fills.py:205`) — aynı geometri,
+ters işaret, kural yok. Ve bu bir *yol* varsayımı değil: `open` sınır gerçeğidir, bar içi sıra
+bilgisi değil. Aritmetik repo'da `xfail(strict=True)` olarak duruyor → engine düzeltilince
+pass'e döner ve düzeltmeyi bu dosyaya bağlar.
+
+**#550 (high / ürün kararı) — `base_position_size` birim adedi olarak yürütülüyor.**
+`_raw_position_size` alanı birebir birim sayısı olarak döndürüyor. Canon aynı alanı "resolved
+capital'in yüzdesi" diye tanımlıyor (Master Ref §10.1; doc 02 ⓘ + çalışılmış örnek "Equity
+10.000 USD ve Position Size %10 → 1.000 USD nominal"), ve V18 mockup input'u inline `%` ekiyle
+render ediyor (`index_guncellenmis_duzeltilmis_v18.html:5696`). Şema alanı birimsiz. İki okuma
+enstrüman fiyatıyla **sınırsız** ayrışıyor: 10.000 fiyatlı bir enstrümanda `base_position_size
+= 10` canon'a göre 1.000 USD nominal, sevk edilene göre **100.000 USD** — 10.000'lik hesapta
+10× kaldıraç. Karar isteniyor, sessiz değişiklik değil: birim okuması şema/engine/frontend/~3100
+test boyunca tutarlı, çevirmek `ENGINE_VERSION` + saklı revision migration'ı demek.
+
+**#551 (medium) — `min > max` penceresi 0-size hayalet trade açıyor.** `_clamp_to_limits`
+tatmin edilemez pencereyi `0`'a indiriyor ve kendi docstring'i `0`'ı "açma" sentinel'i diye
+adlandırıyor; bar loop bunu onurlandırmıyor, pozisyonu 0 size ile açıp trade satırı yazıyor.
+`total_trades` risk taşımamış bir pozisyonu sayıyor ve `close_position`'ın
+`if pnl > 0 … else gross_loss` sınıflandırması 0-PnL'i **zarar** tarafına koyuyor. Engine'in
+diğer fail-closed yollarıyla (unmodelled sizing, unmodelled leverage, sıfır sleeve — hepsi
+`entry_blocked`) tutarsız.
+
+**#552 (medium) — kısmi kapatılan pozisyon 1.4 komisyon round-trip ödüyor.**
+`close_position`: `commission * 2 if is_full else commission * 2 * fraction`, docstring
+iddiası "N kısmi lot toplamda tam bir round-trip öder". Bu yalnız pozisyon **tamamen** kısmi
+lotlarla kapanırsa doğru. Normal şekil — bir kısmi kapatma, sonra kalanın tam kapanışı — daha
+fazla ödüyor: 50 birim @102, komisyon 7 (round-trip 14.00), `close_percentage=40`,
+aftermath `move_stop_to_entry` → kısmi lot 14.00×0.4 = 5.60 (pnl −65.60), kalan tam kapanış
+14.00 (pnl −14.00). Toplam **19.60**, oysa pozisyonun **üç** fill'i var (bir giriş, iki çıkış):
+ne 3×7 = 21.00, ne belgelenen 14.00. Yön olarak muhafazakâr (fazla tahsil), bu yüzden fark
+edilmemiş — ama maliyet modeli config'ten yeniden üretilemez hale geliyor.
+
+### Doğrulama
+
+Hedefli: `pytest tests/unit/oracles -q` → **78 passed, 1 xfailed**. Full backend suite
+**exit 0**, 0 FAILED/ERROR, coverage **%92.84** (kapı ≥90). `ruff check` + `ruff format --check`
+temiz; `mypy src` temiz — yeni paket ayrıca **mypy-strict temiz** (CI yalnız `src` denetliyor,
+paket yine de o çıtaya çekildi).
+
+**Ortam tuzağı (kaydedilmeli):** `TEST_DATABASE_URL` sürücüsü **`postgresql+asyncpg://`**
+olmalı. `postgresql+psycopg://` ile integration conftest'i `create_async_engine`'de patlıyor ve
+**2319 ERROR** üretiyor — testlerle ilgisi yok, tamamen sürücü uyuşmazlığı. Suite lokalde
+~35 dakika; **tek pytest çağrısında** koş.
+
+### Dürüst sınır
+
+Oracle'lar yalnız **single-item** engine'i kapsıyor. Unified clock üzerinde çok-item
+ko-simülasyon, cross-currency FX ve tick/print icra modları (`intrabar_touch`,
+`limit_fill_simulation`, `stop_limit_priority_simulation`, `not_allowed` dışı partial-fill)
+kapsam DIŞI: ilk ikisi implemente değil, üçüncüsü pinli tick revision gerektiren farklı bir
+fixture şekli. Partial-fill karar tablosu mevcut helper testleriyle korunmaya devam ediyor.
+
+### Kapanış kararı
+
+`docs/audit/backtest_oracle_fixtures.md` bu slice'ın kalıcı çıktısı: her fixture'ın el hesabı,
+spec-open konvansiyon tablosu ve dört bulgunun künyesi orada. Bir sonraki oturum engine
+aritmetiğine dokunuyorsa **önce onu okumalı** — hangi sayının kanon, hangisinin sevk edilmiş
+konvansiyon olduğunu ayıran tek belge o.

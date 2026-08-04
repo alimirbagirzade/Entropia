@@ -3333,25 +3333,63 @@ dönük anlatı üretilmedi. ADIM 10'un tam kaydı kendi dokümanında:
 
 ---
 
-## Next: **ADIM 12 — TANIMLANMAMIŞ** (brief kullanıcıdan gelir)
+## ADIM 12 — Bağımsız finansal oracle baseline'ı (PR #553)
 
-En yakın hazır kalem **#539 (C-1)** — matrix'i `StrategyGraphForm`'a bağlamak. Presentation-only,
-hiçbir ürün kararına bağlı değil, ve bu denetimin en yüksek değerli kod düzeltmesi.
-Ürün kararı gerektiren kalemler (#542 / #543 / #544) **insana aittir; agent kapatamaz** ve
-açık **#535** ile birlikte karara bağlanmalıdır.
+**Base `061d6d7` → commit `b5c7c44`** · 2026-08-04 · **Migration YOK** (alembic head
+`0043_i08_registry_strategy_fks` sabit) · **OpenAPI değişmedi** (196 operation / 151 schema) ·
+**`ENGINE_VERSION` DEĞİŞMEDİ** · **production kod DEĞİŞMEDİ** — slice tamamen additive.
 
-ADIM serisi her seferinde kullanıcının verdiği tam brief ile yürüyor; repo'da ADIM 9 diye bir
-kalem **yok** (arama yapıldı). Bir sonraki oturum ya ADIM 9 brief'ini alır ya da aşağıdaki
-doğrulanmış backlog'dan seçer.
+`backend/tests/unit/oracles/` — **79 senaryo** (78 passing, 1 `xfail(strict)`). Her beklenen
+değer kanonik kuraldan **elle** hesaplanıp literal yazıldı; pakette hiçbir engine aritmetik
+helper'ı (`_effective_fill`, `_position_size`, `_resolve_stop`, `due_funding_charges`) import
+EDİLMİYOR — tek production import `run_engine` ve tükettiği tipli girdiler. Fixture'lar 5–20
+bar, yani ledger'ın tamamı elle denetlenebilir. Golden digest'ler yerinde ve yeşil; oracle'lar
+onların yerine GEÇMEZ.
 
-**Bu slice'ın bıraktığı en yakın kalem:** `GET /library-shared-with-me` (`routes/sharing.py`)
-— `LibraryPageResponse` olduğu gibi uygulanabilir, ~5 satır + test.
+**Amaç:** unified-clock değişikliğinden önce mevcut single-item engine davranışını, engine'in
+kendi helper'larından bağımsız bir ölçüyle sabitlemek.
+
+**Dört uyuşmazlık bulundu, hiçbiri düzeltilmedi** (her biri engine semantiğini değiştirir →
+`ENGINE_VERSION` kararı + golden digest tazelemesi gerekir):
+
+| # | ağırlık | özet |
+|---|---|---|
+| #549 | high | gap'le atlanan koruma stop'u hâlâ ulaşılamayan seviyeden kayıt açıyor (bar 88–92, stop 100.98 → −51.00 yerine −600.00); engine stop **girişinde** `max(trigger, open)` uyguluyor, koruyucu çıkışta uygulamıyor. `xfail(strict)` olarak repo'da. |
+| #550 | high / ürün | `base_position_size` birim adedi olarak yürütülüyor; canon + V18 formunun `%` eki "resolved capital yüzdesi" diyor |
+| #551 | medium | `min > max` size penceresi 0-size hayalet trade açıyor |
+| #552 | medium | kısmi kapatılan pozisyon 1.4 komisyon round-trip ödüyor |
+
+**Doğrulama:** hedefli 78 passed + 1 xfailed · full backend suite **exit 0**, 0 FAILED/ERROR,
+coverage **%92.84** · `ruff` + `ruff format` + `mypy src` temiz (yeni paket mypy-strict temiz).
+
+**Doküman:** `docs/audit/backtest_oracle_fixtures.md` — tüm el hesapları + spec'in
+**sessiz/açık** bıraktığı ve oracle'ların "sevk edilmiş konvansiyon" diye pinlediği alanların
+listesi (fill fiyatı, maliyet işareti/sırası, gap, tetiklenen stop'un icra fiyatı, varsayılan
+stop önceliği, Kelly, min position size — hiçbiri master reference'ta sabitlenmemiş).
+
+---
+
+## Next: **#549 adjudication → sonra unified clock**
+
+ADIM 12 unified-clock işinin baseline'ını kurdu. Sıradaki tek adım bir **karar**: #549
+(gap-adjusted stop icrası) `ENGINE_VERSION` bump'ı gerektiriyor ve bu karar unified clock'tan
+**ÖNCE** verilmeli — yoksa yeni saat, düzeltilmemiş bir stop fiyatının üzerine oturur ve iki
+semantik değişikliği tek digest tazelemesinde ayırt edilemez hale gelir.
+
+#550 ayrı bir ürün kararı (`base_position_size` birim mi yüzde mi) ve tek başına saved
+revision migration'ı demek — unified clock'u bloke ETMEZ, ama karara bağlanmadan sizing
+üzerine yeni iş yapılmamalı.
+
+**Bu slice'ın bıraktığı en yakın kalem:** oracle paketinin tick/print icra modlarını
+(`intrabar_touch`, `limit_fill_simulation`, `stop_limit_priority_simulation`,
+`not_allowed` dışı partial-fill) kapsayan ikinci dalgası — pinli tick revision gerektiren
+farklı bir fixture şekli, `tests/unit/test_backtest_tick_data.py` kalıbı üzerinden.
+
+**ADIM 11 (PR #548, capability matrix adjudication) ADIM 12 ile PARALEL landed** — ADIM 12
+onu görmeden `061d6d7`'den dallandı, kapanış dokümanları sonradan ADIM 11'in üzerine yeniden
+kuruldu. ADIM 11'in bıraktığı **#539 (CRITICAL)** hâlâ açık ve #549'dan bağımsız bir kalem.
 
 `docs/audit/current_main_ground_truth_2026-08-03.md` §18'den kalanlar: sıra 5 →
 `test/fresh-install-acceptance`, sıra 7 → `ci/security-hardening`. **Not:** §18'in sıra
-2/3/4/6 kalemleri ADIM 5–8 ile kapandı ama o belge güncellenmedi — bir sonraki slice ona
-dokunuyorsa **önce doğrula**, listeye güvenme.
-
-**İnsan işi (agent kapatamaz):** **A-08 / GitHub #514** — NVDA/Firefox + VoiceOver/Safari
-ekran okuyucu kabul denetimi. 2026-07-30'da kanıtsız kapatılmıştı, 2026-08-03'te yeniden
-açıldı.
+2/3/4/6 kalemleri ADIM 5–8 ile kapandı ama o belge güncellenmedi — ona dokunuyorsan **önce
+doğrula**, listeye güvenme.

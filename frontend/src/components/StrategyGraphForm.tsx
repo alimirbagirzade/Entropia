@@ -1,5 +1,7 @@
 import { useId, useState } from "react";
 
+import { CapabilityNoteText } from "@/components/CapabilityNote";
+import { capabilityDisclosure, capabilityOptionLabel } from "@/components/capabilityDisclosure";
 import { InfoPanel } from "@/components/InfoPanel";
 import { PackagePicker } from "@/components/PackagePicker";
 import type { InfoPanelContent } from "@/lib/strategyForm";
@@ -127,6 +129,9 @@ function SelectField({
   panel,
   placeholder,
   required,
+  capabilityField,
+  capabilityReachable,
+  capabilityInertReason,
 }: {
   label: string;
   value: string;
@@ -135,8 +140,26 @@ function SelectField({
   panel?: InfoPanelContent;
   placeholder?: string;
   required?: boolean;
+  // #539 — the dotted saved-config path of this field. Without it a `future_dev` option
+  // renders as an ordinary choice and the user only learns it cannot run at Ready Check,
+  // AFTER building a strategy on it. Same contract as StrategyConfigForm's SelectField;
+  // the rule itself lives once, in CapabilityDisclosure.
+  capabilityField?: string;
+  // Whether the engine consults this field at all right now (`scaling.enabled`,
+  // `filter.enabled`) — gate on reachability the way the backend readers do, never on the
+  // value alone, or the fix reproduces #533.
+  capabilityReachable?: boolean;
+  capabilityInertReason?: string;
 }) {
   const id = useId();
+  const noteId = `${id}-capability`;
+  const { blockedValues, note } = capabilityDisclosure({
+    fieldPath: capabilityField,
+    value,
+    optionValues: options.map((option) => option.value),
+    reachable: capabilityReachable,
+    inertReason: capabilityInertReason,
+  });
   return (
     <div className="field-row wide-label">
       <span className="field-head">
@@ -156,14 +179,19 @@ function SelectField({
         className="sd-select"
         value={value}
         onChange={(event) => onChange(event.target.value)}
+        aria-describedby={note.kind === "none" ? undefined : noteId}
       >
         {placeholder !== undefined ? <option value="">{placeholder}</option> : null}
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
+        {options.map((option) => {
+          const unavailable = blockedValues.has(option.value);
+          return (
+            <option key={option.value} value={option.value} disabled={unavailable}>
+              {capabilityOptionLabel(option.label, unavailable)}
+            </option>
+          );
+        })}
       </select>
+      <CapabilityNoteText note={note} id={noteId} />
     </div>
   );
 }
@@ -747,12 +775,16 @@ function ScalingSection({
           checked={scaling.enabled}
           onChange={(v) => onChange({ enabled: v })}
         />
+        {/* #539 — reachability, not value: with scaling OFF the engine never reads these
+            two fields, so a capability claim about them would be as false as the #533 one. */}
         <SelectField
           label="Scaling timeframe"
           value={scaling.timeframe}
           onChange={(v) => onChange({ timeframe: v })}
           options={BLOCK_TIMEFRAME_OPTIONS}
           panel={P.scalingTimeframeStructure}
+          capabilityField="scaling_logic.timeframe"
+          capabilityReachable={scaling.enabled}
         />
         <SelectField
           label="Timeframe mode"
@@ -760,6 +792,8 @@ function ScalingSection({
           onChange={(v) => onChange({ timeframe_mode: v })}
           options={SCALING_TIMEFRAME_MODE_OPTIONS}
           panel={P.timeframeMode}
+          capabilityField="scaling_logic.timeframe_mode"
+          capabilityReachable={scaling.enabled}
         />
         <SelectField
           label="Additional layer method"
@@ -932,7 +966,10 @@ function FilterConfigFields({
       </div>
     );
   }
-  if (filter.filter_type !== "" && !MODELLED_FILTER_TYPES.has(filter.filter_type)) {
+  // #539 — `filter.enabled` gates this the same way the select's capability note is gated:
+  // a disabled row is dropped from the saved revision and never reaches Ready Check, so
+  // warning about it claimed a blocker that does not exist.
+  if (filter.enabled && filter.filter_type !== "" && !MODELLED_FILTER_TYPES.has(filter.filter_type)) {
     return (
       <p className="cp-note">
         This filter category is not modelled by the V1 engine — Ready Check blocks a run
@@ -1019,6 +1056,11 @@ function RestrictionsSection({
                 onChange={(v) => updateFilter(i, { filter_type: v })}
                 options={FILTER_TYPE_OPTIONS}
                 placeholder="Choose filter type"
+                capabilityField="restrictions_filters.filters.filter_type"
+                // A disabled filter is dropped from the saved revision and the backend
+                // reader treats it as inert (`_read_filter_types`, capabilities.py:633-635),
+                // so an unmodelled category on a disabled row blocks nothing.
+                capabilityReachable={filter.enabled}
               />
               <CheckboxField
                 label="Enabled"

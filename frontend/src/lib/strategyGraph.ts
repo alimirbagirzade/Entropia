@@ -17,6 +17,7 @@
 // survive a round-trip untouched. mergeGraphSections overlays the two covered
 // sections back over the FULL payload, preserving every uncovered key.
 
+import { ENGINE_CAPABILITY_MATRIX } from "@/lib/engineCapabilityMatrix.generated";
 import type { InfoPanelContent } from "@/lib/strategyForm";
 
 // ---------------------------------------------------------------------------
@@ -224,13 +225,18 @@ export const CONDITION_SOURCE_OPTIONS: SelectOption[] = [
   { value: "indicator_output", label: "Indicator output (parent block)" },
 ];
 
-// R2-05a — restriction filter types the V1 engine actually models
-// (engine.py _MODELLED_FILTER_TYPES); the rest fail closed at Ready Check.
-export const MODELLED_FILTER_TYPES = new Set([
-  "date_blackout_filter",
-  "max_daily_loss_filter",
-  "consecutive_loss_filter",
-]);
+// R2-05a / #539 (D-6) — restriction filter types the V1 engine actually models; the rest
+// fail closed at Ready Check. DERIVED from the generated capability matrix, never listed by
+// hand: the previous 3-element literal duplicated engine.py's allow-list with no parity
+// test, so a matrix change could silently leave this set stale and the form would keep
+// advertising a category the engine had dropped (or warn about one it had gained).
+export const MODELLED_FILTER_TYPES: ReadonlySet<string> = new Set(
+  ENGINE_CAPABILITY_MATRIX.filter(
+    (option) =>
+      option.fieldPath === "restrictions_filters.filters.filter_type" &&
+      option.status === "active_v1",
+  ).map((option) => option.value),
+);
 
 // R2-05a — stop_conflict_resolution values that consult stop_priority_order.
 export const PRIORITY_STOP_RESOLUTIONS = new Set([

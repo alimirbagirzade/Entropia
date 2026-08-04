@@ -3703,6 +3703,19 @@ containment lift (ADIM 20) · **taze barı olmayan bir pozisyonun tick'te nasıl
 OD-2, hâlâ AÇIK**; clock bir mark politikasının ihtiyaç duyacağı olguları **raporluyor**, seçim
 yapmıyor.
 
+**Mutation testi — kayda değer:** altı mutasyon uygulandı, altısı da yakalanıyor; ama **biri ilk
+turda hayatta kaldı** — merge'ü `t_ms` yerine ham timestamp string'iyle anahtarlamak. Offset
+fixture'ı iki kaydı tesadüfen bitişik bırakıyordu, `groupby` yanlış anahtarla bile doğru
+gruplamıştı. Kapatan test sonradan yazıldı: `test_a_mixed_offset_axis_orders_by_instant_and_not_by_text`.
+**ADIM 16–19 için yöntemsel kayıt: geçen bir suite tek başına kanıt değildir.**
+
+**İkinci dürüst sınır — naive timestamp ayrışması (K-01):** `tick_key` →
+`parse_utc(source_zone=None)` offset'siz timestamp'ı reddeder (fail-closed, doğru), ama
+`indicators._epoch_seconds` **aynı değeri UTC varsayar**. Üretim barları ingest'te
+UTC-normalize olduğu için bugün tetiklenmesi beklenmiyor, fakat **ADIM 16/18 bununla
+karşılaşacak** — stepper ve `run_portfolio` aynı akışı hem eksene hem indikatöre verdiğinde iki
+yorum aynı satırda buluşur. Ayrışma `indicators` tarafında ele alınmalı.
+
 > ### ⚠ Dürüst sınır — ADR kapısı atlandı
 >
 > **ADR 0002'nin statüsü hâlâ `Proposed`** (satır 4: *"requires PO / maintainer approval before

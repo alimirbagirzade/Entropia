@@ -77,6 +77,39 @@ döngüsü · ADIM 19 conflict/sleeve arbitrasyonu · ADIM 20 manifest + `ENGINE
 
 ---
 
+## İki kalem — ADIM 16 bunları bilerek devralmalı
+
+### 1. Mutation testi: bir mutasyon ilk turda hayatta kaldı
+
+ADIM 15'in testleri mutasyonla sınandı — **altı mutasyon, altısı da yakalanıyor**: cursor'ın
+mükerrer bardan ilkini (sonuncusu yerine) izlemesi · barsız view'ların düşürülmesi · **merge'ün
+`t_ms` yerine ham timestamp string'iyle anahtarlanması** · geriye-giden-akış guard'ının
+kaldırılması · `(pin_ordinal, item_id)` sıralamasının kaldırılması · mükerrer `item_id`
+guard'ının kaldırılması.
+
+**String-key mutasyonu ilk turda hayatta kaldı.** Offset fixture'ı iki kaydı tesadüfen bitişik
+bırakıyordu, `groupby` yanlış anahtarla bile doğru gruplamıştı — testlerin o anki "geçmesi" eksen
+sözleşmesinin kanıtı değildi. Kapatan test sonradan yazıldı:
+`test_a_mixed_offset_axis_orders_by_instant_and_not_by_text`.
+
+**Yöntemsel kayıt:** geçen bir suite tek başına kanıt değildir. ADIM 16'da kapı zaten 46 golden
+digest'in sabitliği; ama **ADIM 17–19'un yeni davranış getiren testleri mutasyonla sınanmalı**,
+yoksa aynı sessiz boşluk tekrarlanır.
+
+### 2. Naive timestamp ayrışması (K-01) — ADIM 16/18 bununla karşılaşacak
+
+`tick_key` → `parse_utc(timestamp, source_zone=None)` **offset'siz** bir timestamp'ı çözümsüz
+sayar ve clock onu `UnplaceableBarTimestampError` ile **reddeder** (fail-closed, doğru davranış).
+Ama `domain/backtest/indicators.py::_epoch_seconds` **aynı değeri sessizce UTC kabul eder.**
+
+`test_tick_key_agrees_with_the_shipped_epoch_helpers` clock'un iki *sevk edilmiş* wrapper'la
+(`engine._epoch_ms_or_none`, `execution.rules.bar_epoch_ms`) uyuştuğunu kilitliyor;
+`indicators._epoch_seconds` o üçlünün **dışında**. Üretim barları ingest'te UTC-normalize edildiği
+için bugün tetiklenmesi beklenmiyor, ama **stepper (ADIM 16) ve `run_portfolio` (ADIM 18) aynı bar
+akışını hem eksene hem indikatör hesabına verdiğinde iki yorum aynı satırda buluşur.**
+Clock'un davranışı doğru olan; ayrışma `indicators` tarafında ele alınmalı. Bu bir ADIM 15 kusuru
+değil, **devredilen bir kalemdir.**
+
 ## Çalışma döngüsü (ADIM 15'te işe yarayan)
 
 1. **Önce kusuru üret**, sonra düzelt/ekle — ADIM 15'te bu, katlanan eğrinin zaman serisi

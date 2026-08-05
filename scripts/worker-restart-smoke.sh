@@ -112,10 +112,19 @@ done
 # --- 5. let the scheduler complete at least one maintenance pass ------------- #
 # The sweep is what redelivers whatever the killed workers were holding. Poll the
 # scheduler's own log line instead of sleeping for a fixed tick.
+#
+# The event name must END here: a bare "scheduler.maintenance" substring ALSO
+# matches "scheduler.maintenance_failed", so the old grep reported "OK scheduler
+# swept" on a stack where every single sweep aborted — precisely the symptom of
+# the per-tick event-loop bug this assertion exists to catch. Requiring a
+# non-underscore (or end of line) after the name keeps this renderer-agnostic:
+# it matches both the shipped JSON form ("event": "scheduler.maintenance") and
+# the console form (scheduler.maintenance relayed=0 ...).
 echo "  waiting for a scheduler maintenance pass ..."
 swept=0
 for _ in $(seq 1 180); do
-  if "${DC[@]}" logs --tail=200 scheduler 2>/dev/null | grep -q "scheduler.maintenance"; then
+  if "${DC[@]}" logs --tail=200 scheduler 2>/dev/null \
+      | grep -Eq 'scheduler\.maintenance([^_]|$)'; then
     swept=1; break
   fi
   sleep 1

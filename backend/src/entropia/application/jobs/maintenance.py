@@ -7,8 +7,10 @@ commits). Two sweeps:
   A RUNNING job whose ``started_at``/``claimed_at`` is older than the stale
   threshold is recovered: attempts += 1, then either back to QUEUED (for
   redelivery) or terminally FAILED once ``max_attempts`` is exhausted. Every
-  recovery is audited. Workers are redelivery-idempotent (proven per plane), so
-  a half-produced artifact is never published as a result.
+  recovery is audited. Workers are redelivery-idempotent — proven per plane by
+  ``tests/integration/test_worker_delivery_recovery.py`` and the per-plane suites
+  it cross-references, not assumed here — so a half-produced artifact is never
+  published as a result.
 
 - ``redeliverable_queued_jobs`` — a Redis restart may lose queued messages while
   the durable ``jobs`` row survives (INF-03). QUEUED rows older than the grace

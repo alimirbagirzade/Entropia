@@ -23,6 +23,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from entropia.application.jobs.delivery import claim_job_for_delivery
 from entropia.domain.lifecycle.enums import JobStatus, ValidationStatus
 from entropia.domain.market_data.enums import (
     MarketDataType,
@@ -42,7 +43,7 @@ from entropia.domain.market_data.validation_rules import (
     validate_spread_row,
     validate_tick_row,
 )
-from entropia.infrastructure.postgres.models import Job, MarketDatasetRevision
+from entropia.infrastructure.postgres.models import MarketDatasetRevision
 from entropia.infrastructure.postgres.repositories import audit as audit_repo
 from entropia.infrastructure.postgres.repositories import market_data as md_repo
 from entropia.shared.manifest import manifest_hash
@@ -233,10 +234,15 @@ async def run_analysis(
     Returns a JSON-safe result reference. Does not commit (the worker's session
     scope commits). ``load_and_parse``/``write_processed`` default to the real
     S3/Polars helpers; tests inject in-memory fakes.
+
+    The delivery claim is the at-least-once guard: the validation run and its
+    issues are append-only with freshly generated ids, so a redelivered message
+    would insert a SECOND run for the same revision and re-advance the revision
+    state. See ``jobs/delivery.py``.
     """
-    job = await session.get(Job, job_id)
-    if job is None:
-        raise ValueError(f"Job '{job_id}' not found.")
+    job, replay = await claim_job_for_delivery(session, job_id)
+    if replay is not None:
+        return replay
     payload = job.payload or {}
     entity_id = str(payload.get("entity_id"))
     revision_id = str(payload.get("revision_id"))

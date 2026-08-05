@@ -18,16 +18,24 @@ The brief requires reproducing current behaviour before writing anything. The re
 not "an oracle failed": it is that **the system the oracles are supposed to accept does not
 exist on this commit.**
 
+> **§1.1 — Updated 2026-08-05 (PR #585, ADIM 18).** Two of the probes below have since
+> changed and are struck through rather than rewritten, so the reproduction that produced
+> this document stays readable. **The verdict does not change:** the containment lift is
+> still BLOCKED. `run_portfolio` now exists and is itself contained — nothing imports it and
+> the worker still folds finished per-item runs — so no production path reaches a tick loop.
+> ADR §12's **ADIM 16 stepper is still unwritten** (re-planned as **ADIM 18b**), and ADIM 20
+> must not merge before it.
+
 | Probe | Result |
 |---|---|
-| `grep -rn "def run_portfolio" backend/src` | no match — ADR §12 ADIM 18's entry point was never written |
-| importers of `execution.{clock,intents,portfolio_ledger,arbitration,attribution,provenance}` outside `execution/` | none |
+| `grep -rn "def run_portfolio" backend/src` | ~~no match~~ → **one match since PR #585** (`domain/backtest/portfolio_engine.py`). See §1.1 |
+| importers of `execution.{clock,intents,portfolio_ledger,arbitration,attribution,provenance}` outside `execution/` | ~~none~~ → **only `portfolio_engine.py`**, which itself has no importer |
 | `application/jobs/backtest_engine.py:298` | `for prepared in prepared_items:` — the outer loop is still the ITEM list |
 | `application/jobs/backtest_engine.py:363` | `combine_item_runs(...)` — finished runs are still folded in pin order |
-| resumable per-item stepper (ADR §12 **ADIM 16**, a pure refactor) | **never written** — no stepper in `engine.py` or `execution/state.py` |
+| resumable per-item stepper (ADR §12 **ADIM 16**, a pure refactor) | **still never written** — no stepper in `engine.py` or `execution/state.py`; re-planned as **ADIM 18b** in ADR §12.1 |
 | `ENGINE_VERSION` | unchanged; `execution_key` namespace has not shifted |
 | `manifest.py` policy fields (`clock_policy_version`, `arbitration_policy_version`, `engine_allocation_policy_version`, `mark_staleness_policy`) | absent |
-| ADR 0002 status | **`Proposed`** — §16 makes approval a precondition for *any* implementation slice |
+| ADR 0002 status | ~~`Proposed`~~ → **`Accepted` (2026-08-05)**, retroactively covering ADIM 15-19. §13's OD-1…OD-7 remain open |
 
 The six unified-clock modules that landed as ADIM 15–19 are a **detached island**: complete,
 heavily unit-tested primitives (216 tests) that nothing calls. Every removal condition in
@@ -60,11 +68,12 @@ rejected `0` units → `5`) failed exactly those four tests and no others.
 
 ### Honest boundary — read before trusting a green run
 
-The phase loop these oracles drive is **test-owned**, because `run_portfolio` does not exist.
-A green run is evidence about the **primitives**, not about the shipped engine, which never
-calls them. When ADIM 18 lands, `portfolio_harness.simulate` must be replaced by
-`run_portfolio` and these oracles re-run unchanged — **that substitution is the acceptance
-evidence ADR §14 asks for, and nothing here substitutes for it.**
+The phase loop these oracles drive is **still test-owned**. `run_portfolio` now EXISTS
+(PR #585) but `portfolio_harness.simulate` has not yet been re-pointed at it, and the shipped
+engine still never calls either. A green run remains evidence about the **primitives**.
+**The substitution is now unblocked and is the immediate next step:** replacing
+`portfolio_harness.simulate` with `run_portfolio` and re-running these oracles **unchanged**
+is the acceptance evidence ADR §14 asks for, and nothing here substitutes for it.
 
 ## 3. ADR §14 acceptance matrix — status on this commit
 
@@ -73,7 +82,7 @@ Legend: **MET** · **PRIMITIVE** (proven for the modules; unreachable in product
 
 | # | Criterion | Status | Evidence |
 |---|---|---|---|
-| A1 | Outer loop is the merged timestamp axis | **BLOCKED** | no `run_portfolio`; worker still item-loops (§1) |
+| A1 | Outer loop is the merged timestamp axis | **BLOCKED** | `run_portfolio` exists (PR #585) but nothing imports it; worker still item-loops (§1). Unblocking needs ADIM 18b |
 | A2 | Exactly one ledger holds `P0`/`R0`/`U0` | **PRIMITIVE** | `ledger_for_items` drives all items in the oracle suite; production shared path still seeds a per-item `_Ledger` from the full pool |
 | A3 | Mandatory events first, then exactly one `E(t)` every item sizes against | **PRIMITIVE** | `test_a_stop_that_fires_at_a_tick_shrinks_its_siblings_sleeve_at_that_same_tick`, `test_every_item_at_a_tick_sizes_against_exactly_one_published_valuation` |
 | A4 | Item order does not change the result | **PRIMITIVE** | `test_the_order_the_caller_visits_items_in_cannot_move_a_number`. ADR requires an identical **`EngineOutput` digest** under permuted `mainboard_items` — needs the real engine |

@@ -127,15 +127,30 @@ def test_the_same_trades_read_5000_sequentially_and_3000_on_one_clock() -> None:
     assert "portfolio_curve_sequential_not_unified_clock" in sequential.diagnostics["warnings"]
 
 
-def test_no_unified_clock_driver_exists_in_production_on_this_commit() -> None:
+def test_the_unified_clock_driver_exists_but_nothing_in_production_reaches_it() -> None:
     """ADR §12 ADIM 18 / §14 A1: the outer loop must become the merged timestamp axis.
 
-    It has not. There is no ``run_portfolio`` entry point, and every unified-clock module is
-    imported only from inside ``execution/`` — so no request, retry or Agent call can reach a
-    tick loop. The worker still folds finished per-item runs."""
+    **Updated deliberately, which is what this module was built for.** Its own docstring says
+    it is written to fail *"the day someone … wires a driver without the rest of the matrix,
+    which is precisely when a human must re-read §14 rather than trust a green suite."* ADIM 18
+    (PR #585) landed ``run_portfolio``, so the two assertions that encoded *"no such entry
+    point exists"* are now false — and the PROPERTY they defended is unchanged, so it is
+    restated rather than deleted:
+
+    * the driver exists, and it lives in ``domain/backtest/portfolio_engine.py``;
+    * that module is the ONLY production importer of the six unified-clock modules, and it has
+      no importer of its own — so no request, retry or Agent call can reach a tick loop;
+    * the worker still loops over items and folds finished per-item runs.
+
+    Deleting the test instead would have removed the one gate that notices the difference
+    between *"the loop exists"* and *"the loop runs"*. Wiring the worker is ADIM 18b, and this
+    test is the thing that must go red when it happens."""
     sources = {p: p.read_text() for p in _SRC.rglob("*.py")}
 
-    assert not any("def run_portfolio" in text for text in sources.values())
+    definitions = sorted(
+        str(path.relative_to(_SRC)) for path, text in sources.items() if "def run_portfolio" in text
+    )
+    assert definitions == ["domain/backtest/portfolio_engine.py"]
 
     for module in _PHASE_LOOP_MODULES:
         importers = sorted(
@@ -144,9 +159,20 @@ def test_no_unified_clock_driver_exists_in_production_on_this_commit() -> None:
             if f"execution.{module.split('.')[-1]} import" in text
             and path.parent.name != "execution"
         )
-        assert importers == [], f"{module} gained a production importer outside execution/"
+        assert importers == ["domain/backtest/portfolio_engine.py"], (
+            f"{module} gained a production importer outside execution/ and the phase loop"
+        )
+
+    # The phase loop is contained in turn: nothing imports IT, so the chain from any
+    # production entry point to a tick loop is still broken.
+    assert [
+        str(path.relative_to(_SRC))
+        for path, text in sources.items()
+        if "backtest.portfolio_engine" in text and path.name != "portfolio_engine.py"
+    ] == []
 
     worker = (_SRC / "application" / "jobs" / "backtest_engine.py").read_text()
+    assert "run_portfolio" not in worker
     assert "combine_item_runs(" in worker
     assert "for prepared in prepared_items:" in worker
 

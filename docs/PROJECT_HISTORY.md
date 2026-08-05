@@ -3551,7 +3551,7 @@ gösteriyordu. Bu kapanış boşluğu **işaret ediyor ama başkasının slice k
 `git revert fd0ead5` — yalnız test ve doküman siler; üretim davranışı zaten hiç değişmedi.
 
 
-## ADIM 18 — `run_portfolio` per-tick faz döngüsü (PR TBD)
+## ADIM 18 — `run_portfolio` per-tick faz döngüsü (PR #585)
 
 **Yeni dosya:** `backend/src/entropia/domain/backtest/portfolio_engine.py` (751 satır, test kapsamı **%100**).
 **Migration yok, OpenAPI değişmedi, `ENGINE_VERSION` değişmedi, 46 golden digest'in HİÇBİRİ
@@ -3692,6 +3692,27 @@ ile okuyor, yani yanlış yazılmış bir `item_id` sessizce düşüyordu. İkis
 instrument conflict kapısını yalnızca **fail-closed** yapar, ama düşen bir `max_position_notional`
 bir **item risk limitini sessizce KALDIRIR** (M11 §6.1 katman 3: allocation boyutu kısar, asla
 gevşetmez). İkisi de artık `IncoherentRunInputsError` veriyor; alt küme adlandırmak hâlâ serbest.
+
+### Paralel slice çakışması — ADIM 20 (#583/#584) ile aynı anda koşuldu
+
+Bu slice yazılırken **paralel bir oturum ADIM 20'yi indirdi** (#583 oracle suite + #584
+kapanış belgeleri). İkisi aynı boşluğa bakıyordu ve çakışma gerçek oldu:
+
+| Çakışma | Nasıl çözüldü |
+|---|---|
+| `oracles/test_oracle_portfolio_containment_gate.py::test_no_unified_clock_driver_exists_in_production_on_this_commit` → `assert not any("def run_portfolio" ...)` | Test **bilerek** güncellendi ve adı gerçeğe döndü (`..._exists_but_nothing_in_production_reaches_it`). Kendi docstring'i zaten *"written to FAIL the day someone wires a driver… precisely when a human must re-read §14"* diyordu. **Silinmedi:** savunduğu özellik ("üretimden hiçbir yol tick döngüsüne ulaşmıyor") değişmedi, yalnız yeniden ifade edildi — artık `portfolio_engine.py`'nin **tek** izinli importer olduğunu ve **kendisinin** hiç import edilmediğini de pinliyor. |
+| `docs/audit/unified_portfolio_oracle_acceptance.md`'nin üç iddiası (bir grep sonucu dahil) yanlışa döndü | Üstü çizilerek düzeltildi (§1.1 notu) — reprodüksiyon okunur kalsın diye yeniden yazılmadı. **Verdict değişmedi: containment lift hâlâ BLOCKED.** |
+| `CLAUDE.md` / `PROJECT_HISTORY.md` / `STAGE2_HANDOFF.md` üçünde de rebase çakışması | İki anlatı da **korundu**; #584'ün ADIM 20 kaydı yerinde, ADIM 18 kaydı üstüne eklendi, onların Next'i "Eski Next" olarak indirildi. |
+| Numaralandırma: #584 arbitration'ı "ADIM 18" diye etiketliyor, ADR §12.1 onu "ADR'nin ADIM 19'u" diye eşliyor | **§12.1 otoritedir** ve CLAUDE.md bunu açıkça söylüyor. |
+
+**Kalan mükerrerlik — bilerek bu PR'da giderilmedi.** #583'ün
+`tests/unit/oracles/portfolio_harness.py::simulate`'i **test-owned bir faz döngüsüdür** ve
+aynı tasarımı, hatta aynı tip adlarını (`TickRecord`, `PortfolioRun`) kullanır. Kendi
+docstring'i şunu yazıyor: *"When ADIM 18 lands, `simulate` should be replaced by
+`run_portfolio` and these oracles re-run unchanged — that substitution is the acceptance
+evidence ADR §14 asks for."* O ikame **artık engellenmiş değil** ve sıradaki adımdır; bu PR'a
+katılmadı çünkü başka bir oturumun inen test suite'ini yeniden yazmak ayrı bir mantıksal
+değişikliktir ve 26 oracle assertion'ının **değişmeden** geçmesi kanıtın ta kendisidir.
 
 ### Kapsam dışı (bilerek)
 

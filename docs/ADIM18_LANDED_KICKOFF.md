@@ -48,6 +48,19 @@ değişmedi, **46 golden digest'in hiçbiri oynamadı**. Rollback = commit'i rev
 
 ---
 
+## Sıradan ÖNCE: harness ikamesi (küçük, ve kabul kanıtı)
+
+Paralel inen ADIM 20 (#583) `tests/unit/oracles/portfolio_harness.py::simulate` adında
+**test-owned bir faz döngüsü** bıraktı ve kendi docstring'inde şunu ilan etti: *"When ADIM 18
+lands, `simulate` should be replaced by `run_portfolio` and these oracles re-run unchanged —
+that substitution is the acceptance evidence ADR §14 asks for."*
+
+`simulate` zaten `ledger_for_items` + `profiles_from_pins` + identities + streams'i kuruyor;
+yapılacak tek şey kendi `_run_tick` döngüsünü silip `run_portfolio`'yu çağırmak ve
+`ScriptedItem` üzerinden bir `ItemDriver` adaptörü yazmak. **26 oracle assertion'ı
+DEĞİŞMEDEN** geçmeli — kanıt budur. `PortfolioRun.instants` / `.max_drawdown` sarmalayıcıları
+korunmalı (gate testi onları okuyor).
+
 ## Sıradaki: **ADIM 18b** — iki yarım, bu sırayla
 
 **Bu, ADR'nin hiç yazılmamış ADIM 16'sıdır.** `engine.py:1782` hâlâ monolitik

@@ -58,7 +58,7 @@ OHLCV stream is consumed one batch at a time.
 from __future__ import annotations
 
 from collections import deque
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal, InvalidOperation
@@ -752,10 +752,33 @@ def _exit_proxy(position: _Position, bar: _Bar, window: deque[_Bar]) -> bool:
     return bar.close > max(b.high for b in window)
 
 
-def run_engine(
+@dataclass(frozen=True)
+class _ItemStepper:
+    """One item's replay, suspended between bars instead of run to completion.
+
+    ``run_engine`` drives it over its own bar stream; a caller that owns a MERGED clock
+    (ADR-0002 §8) drives the same object bar by bar to advance this item to a given ``t``.
+    The record is deliberately thin — the replay state stays in the factory's closure,
+    exactly where the bar loop already kept it, so lifting the loop out moved no state
+    between scopes and could not move a number."""
+
+    step: Callable[[_Bar], None]
+    """Advance the replay by ONE normalized bar (the caller normalizes: ``_normalize``)."""
+    finalize: Callable[[], None]
+    """End-of-data: cancel a resting order, close an open position. Call once, after the
+    last ``step``."""
+    output: Callable[[], EngineOutput]
+    """Project (ctx, led) into the run's ``EngineOutput``. Replays nothing."""
+    open_position: Callable[[], _Position | None]
+    """The position currently held, or ``None`` — what a portfolio participant must read
+    to decide carry / mandatory exit without reaching into the replay's internals."""
+    ledger: _Ledger
+    ctx: _RunConfig
+
+
+def _build_stepper(
     *,
     strategy_config: StrategyConfig,
-    bar_batches: Iterator[list[dict[str, Any]]],
     execution_key: str,
     item_count: int = 1,
     indicator_plan: IndicatorPlan | None = None,
@@ -765,64 +788,13 @@ def run_engine(
     tick_batches: Iterator[list[dict[str, Any]]] | None = None,
     portfolio_rules: PortfolioRules | None = None,
     builtin_breakout_fixture: bool = False,
-) -> EngineOutput:
-    """Deterministically bar-replay one strategy over its pinned OHLCV bars.
+) -> _ItemStepper:
+    """Resolve one run's pinned settings and hand back its suspendable replay.
 
-    Entry/exit timing uses real built-in indicator signals: the run REQUIRES an
-    ``indicator_plan`` that resolves to at least one computable entry block. F-04 —
-    FAIL CLOSED: with no such plan the engine raises ``UnresolvedStrategyError`` and
-    materializes NOTHING, rather than fabricate metrics from a strategy the user never
-    defined (production is also guarded at admission and in the worker). The historical
-    deterministic breakout is available ONLY as an explicit test-only fixture: pass
-    ``builtin_breakout_fixture=True`` to exercise the price/stop/cost/sizing machinery
-    without a real indicator layer. That opt-in is the sole way to reach the proxy — it
-    is never a production fallback.
-
-    ``timeframe`` is the pinned market revision's base bar timeframe, resolved by
-    the CALLER (the engine is pure — no I/O); ``None`` means the revision is not
-    bar-timeframed (event-based / unknown) and is surfaced as-is, never guessed.
-
-    ``allocation`` applies the pinned shared-pool capital model (doc 13 §8.3/§8.4): the
-    run is capitalised from the portfolio pool P0 (minus the fixed nominal reserve R0),
-    and every entry is bounded by the item's sleeve cap ``Ci(t) = A(t) * wi / 100`` as
-    an OUTER ``allowed_size`` limit — compound mode recomputes A(t) from live portfolio
-    equity each valuation point, fixed mode holds it at the initial A0. ``None`` (the
-    default, independent mode) sizes from the strategy's own ``initial_capital`` and is
-    BYTE-IDENTICAL to the pre-allocation engine. Honest V1 boundary: this is the
-    single-item foundation — the replayed strategy is capitalised and capped as one
-    portfolio sleeve; a genuine multi-item co-simulation over a unified clock across
-    heterogeneous bar sources, and cross-currency FX conversion (GAP-16), stay
-    deferred (surfaced as L4 diagnostics, never hidden).
-
-    ``funding`` applies a pinned ``funding_rate`` Research revision as a real cost on the
-    open position (F-11, doc 12 §8.4). It is an already-resolved, available-time-safe
-    ``FundingSchedule`` (each record carries the first moment it could truly have been used —
-    event time shifted by the revision's available-time policy). The engine consumes it with
-    a backward/as-of join: a record fires at the first bar whose time is >= its
-    ``available_at`` and, while a position is held, charges ``notional * rate`` (a long pays
-    a positive rate, a short receives). A value dated after the last replayed bar can never
-    fire, so future leakage is impossible by construction. ``None`` (the default) books no
-    funding and is BYTE-IDENTICAL to the pre-F-11 engine.
-
-    ``portfolio_rules`` applies the plan's PORTFOLIO-LEVEL rules (cross-item, doc 13
-    §8.4): a composition-wide Max Total Exposure cap (percent of the pool P0, enforced
-    against the prior-pinned items' held windows + this item's own open notional at
-    every entry/stack/scale acceptance) and the opposing same-instrument conflict
-    policy (BLOCK_OPPOSITE blocks this item's entry while an earlier-pinned item held
-    the opposite direction on the same instrument; NET executes conservatively AS
-    BLOCK_OPPOSITE — L4-disclosed, never silently netted). Enforcement is sequential
-    in pin order (an earlier item is never re-simulated because of a later one — the
-    honest V1 boundary, surfaced as an L4 warning). ``None`` (the default) is
-    BYTE-IDENTICAL to the pre-rules engine.
-
-    ``tick_batches`` injects the PINNED tick/trade revision's processed print stream
-    (F-07i B) — the worker resolves it from the manifest pin ONLY when the strategy
-    demands tick data (``tick_data_required``), mirroring the bar path (the engine stays
-    pure — no I/O). The prints are aligned to per-bar windows via ``timeframe`` (an
-    un-timeframed revision cannot be aligned — surfaced as a warning, L4, and the run
-    stays on the conservative OHLCV model) and resolve the ``first_trigger_wins``
-    stop-conflict order by TRUE first touch instead of the flagged conservative
-    approximation. ``None`` (the default) is BYTE-IDENTICAL to the pre-F-07i engine."""
+    This is ``run_engine``'s body up to the bar loop, unchanged: the same fail-closed
+    ``UnresolvedStrategyError``, the same ledger seed, the same ``_RunConfig`` snapshot and
+    the same decision closures. It exists so the bar loop can be entered one bar at a time
+    (ADR-0002 §12 ADIM 16) — nothing here decides anything a bar does."""
     config = strategy_config
     alloc_on = allocation is not None
     alloc_compound = False
@@ -1779,99 +1751,55 @@ def run_engine(
                 )
             )
 
-    for batch in bar_batches:
-        for raw in batch:
-            bar = _normalize(raw)
-            if bar is None:
-                continue
-            led.bars_seen += 1
-            if not led.first_ts:
-                led.first_ts = bar.timestamp
-            led.last_bar = bar
-            # F-07i (B): advance the tick cursor EVERY bar (position open or not) so the
-            # forward-only stream stays aligned to the bar clock.
-            bar_ticks: tuple[_Tick, ...] = ()
-            if tick_cursor is not None:
-                bar_ticks = tick_cursor.for_bar(bar.timestamp)
-                if bar_ticks:
-                    led.tick_bars += 1
-            # F-07d: an exit lot (full or partial) realized on THIS bar appends a trade row;
-            # the scale ladder below never adds to a position a bar has already reduced.
-            trades_before_bar = len(led.trades)
+    def _step(bar: _Bar) -> None:
+        """Replay ONE bar: doc 15 §9.3 steps (1)-(8), verbatim from the former loop body.
 
-            # F-07e: the restriction filters' clock. The bar's UTC calendar date drives the
-            # date-blackout windows and rolls the max-daily-loss accumulator at each new
-            # day; an unparseable timestamp yields ``None`` (date-dependent filters then
-            # fail closed) and never resets the day. Skipped entirely when no modelled
-            # filter is enabled — the hot loop stays byte-identical.
-            bar_date: date | None = None
-            if restriction_specs:
-                parsed_bar_time = parse_utc(bar.timestamp, source_zone=None)
-                bar_date = parsed_bar_time.date() if parsed_bar_time is not None else None
-                if bar_date is not None and bar_date != current_day:
-                    current_day = bar_date
-                    led.day_realized = _ZERO
+        The ten ``nonlocal`` names below are the replay state that carries from one bar to
+        the next; every other name the body binds is a within-bar temporary and was proven
+        (definite-assignment analysis over the body) to be written before it is read on
+        every path, so keeping them local to the step is not a behaviour change."""
+        nonlocal current_day, exit_touch, funding_idx, pending, position
+        nonlocal prev_entry_signal, prev_scale_signal, scale_signal
+        nonlocal working_limit, working_stop
 
-            # (1) doc 15 §9.3 step 1 — admit only the Market/Research data available by this
-            # bar's clock time. The market side is the bar itself (the pinned revision is
-            # replayed strictly forward, so a later bar can never be read early); the
-            # research side is the K-02 available-time gate applied in step (2) below and in
-            # every other research feed. Real indicator signals (when a plan resolved);
-            # evaluators see EVERY bar.
-            entry_signal: str | None = None
-            exit_hit = False
-            if plan_active and indicator_plan is not None:
-                for ev in entry_evals:
-                    ev.update(
-                        bar.close,
-                        bar.high,
-                        bar.low,
-                        bar.open,
-                        volume=bar.volume,
-                        timestamp=bar.timestamp,
-                    )
-                for ev in exit_evals:
-                    ev.update(
-                        bar.close,
-                        bar.high,
-                        bar.low,
-                        bar.open,
-                        volume=bar.volume,
-                        timestamp=bar.timestamp,
-                    )
-                entry_signal = aggregate(indicator_plan.entry_rule, entry_evals)
-                if exit_evals and indicator_plan.exit_rule is not None:
-                    exit_hit = aggregate(indicator_plan.exit_rule, exit_evals) is not None
+        led.bars_seen += 1
+        if not led.first_ts:
+            led.first_ts = bar.timestamp
+        led.last_bar = bar
+        # F-07i (B): advance the tick cursor EVERY bar (position open or not) so the
+        # forward-only stream stays aligned to the bar clock.
+        bar_ticks: tuple[_Tick, ...] = ()
+        if tick_cursor is not None:
+            bar_ticks = tick_cursor.for_bar(bar.timestamp)
+            if bar_ticks:
+                led.tick_bars += 1
+        # F-07d: an exit lot (full or partial) realized on THIS bar appends a trade row;
+        # the scale ladder below never adds to a position a bar has already reduced.
+        trades_before_bar = len(led.trades)
 
-            # §5.9 Same Candle Entry / Exit — when FLAT, an entry and an explicit exit
-            # decision can be close-confirmed by the same bar. There is no position for
-            # the exit to close and no honest intrabar ordering between two close-derived
-            # signals. The default and every conservative policy suppress the new entry;
-            # explicit ``exit_first`` processes the exit as a no-op, then admits it.
-            if position is None and entry_signal is not None and exit_hit:
-                admits_entry = same_candle_entry_exit == "exit_first"
-                _emit(
-                    "entry_exit_collision",
-                    event_time=bar.timestamp,
-                    direction=entry_signal,
-                    bar_seq=led.bars_seen,
-                    detail={
-                        "policy": same_candle_entry_exit,
-                        "resolution": (
-                            "flat_exit_noop_then_entry"
-                            if admits_entry
-                            else "ambiguous_entry_suppressed"
-                        ),
-                        "intrabar_order_available": False,
-                    },
-                )
-                if not admits_entry:
-                    led.suppressed_entries += 1
-                    entry_signal = None
+        # F-07e: the restriction filters' clock. The bar's UTC calendar date drives the
+        # date-blackout windows and rolls the max-daily-loss accumulator at each new
+        # day; an unparseable timestamp yields ``None`` (date-dependent filters then
+        # fail closed) and never resets the day. Skipped entirely when no modelled
+        # filter is enabled — the hot loop stays byte-identical.
+        bar_date: date | None = None
+        if restriction_specs:
+            parsed_bar_time = parse_utc(bar.timestamp, source_zone=None)
+            bar_date = parsed_bar_time.date() if parsed_bar_time is not None else None
+            if bar_date is not None and bar_date != current_day:
+                current_day = bar_date
+                led.day_realized = _ZERO
 
-            # F-08: logic-stop evaluators advance EVERY bar (independent of the entry plan)
-            # so a logic-based stop can fire against the open position.
-            for ev in stop_evals:
+        # (1) doc 15 §9.3 step 1 — admit only the Market/Research data available by this
+        # bar's clock time. The market side is the bar itself (the pinned revision is
+        # replayed strictly forward, so a later bar can never be read early); the
+        # research side is the K-02 available-time gate applied in step (2) below and in
+        # every other research feed. Real indicator signals (when a plan resolved);
+        # evaluators see EVERY bar.
+        entry_signal: str | None = None
+        exit_hit = False
+        if plan_active and indicator_plan is not None:
+            for ev in entry_evals:
                 ev.update(
                     bar.close,
                     bar.high,
@@ -1880,157 +1808,284 @@ def run_engine(
                     volume=bar.volume,
                     timestamp=bar.timestamp,
                 )
-
-            # S5c: logic-SCALING evaluators advance every bar for the same reason. The
-            # aggregated direction is this bar's scaling proposal; the ladder below turns it
-            # into a layer only on an EDGE, in the open position's own direction, and only
-            # on a bar that closes the layer's timeframe candle.
-            if scale_evals and indicator_plan is not None and indicator_plan.scale_rule is not None:
-                for ev in scale_evals:
-                    ev.update(
-                        bar.close,
-                        bar.high,
-                        bar.low,
-                        bar.open,
-                        volume=bar.volume,
-                        timestamp=bar.timestamp,
-                    )
-                scale_signal = aggregate(indicator_plan.scale_rule, scale_evals)
-
-            # (2) K-03 / F-11 funding cost — doc 15 §9.3 step 2: funding/fee/carry is applied
-            # at the TOP of the bar, BEFORE any fill, stop, exposure check, entry or scaling
-            # of this bar. That ordering is not cosmetic: ``led.equity`` is what sizes an entry
-            # (``_position_size``) and what bounds the allocation sleeve / exposure caps
-            # (``_sleeve_capital``). Charging funding at the END of the bar (the pre-K-03
-            # order) sized every entry and every scale layer off an equity that had not yet
-            # paid its carry — under perp funding, a one-directional cumulative bias toward
-            # systematically LARGER positions and a late-binding ``max_total_exposure``.
-            #
-            # A backward/as-of join over the available-time-safe schedule (doc 12 §8.4
-            # rule 3). Every funding record now AVAILABLE at this bar
-            # (``available_at <= bar_time``) fires exactly once; while a position is held it
-            # charges ``notional * rate`` (a long pays a positive rate, a short receives),
-            # reducing equity mid-run so funding-on and funding-off produce a verifiably
-            # different result. A record dated after the last replayed bar never fires — a
-            # future value can never leak into the run. Records that become available while
-            # flat are consumed without a charge: funding is paid only for the interval the
-            # position is actually held (perp funding convention). Two consequences of the
-            # step-2 placement follow directly from that convention: a position still open at
-            # the START of this bar pays a record available now even if the bar later closes
-            # it (the pre-K-03 order silently DROPPED that charge), and a position OPENED on
-            # this bar does not pay it (it was not held when the record became available).
-            #
-            # K-02: the as-of comparison is NOT written inline here — it is delegated to
-            # ``research_data.time_policy.is_eligible_for_decision``, the single canonical
-            # rule-2 gate (mapping AND ``available_at <= t``). This bar's timestamp is the
-            # decision time, and ``schedule.has_instrument_mapping`` is the resolved mapping
-            # conjunct, so every research value the engine consumes passes one audited
-            # predicate rather than a hand-rolled comparison that can drift.
-            #
-            # FAIL CLOSED on an unresolvable bar timestamp: with no decision time, eligibility
-            # cannot be evaluated at all, and silently firing nothing would book an
-            # over-optimistic ZERO funding cost for the whole run. This deliberately differs
-            # from the date-blackout precedent below, where a restrictive reading exists
-            # (treat the bar as inside the window); a cost has no such reading.
-            if funding_records:
-                # ``due_funding_charges`` decides WHICH records fire and what each costs;
-                # applying them (equity/peak/counters + the decision event) stays here.
-                # Records that become available while FLAT are still consumed — the cursor
-                # advances even when nothing is charged.
-                funding_idx, due_charges = due_funding_charges(
-                    funding_records,
-                    start_index=funding_idx,
-                    decision_time=resolve_funding_decision_time(bar.timestamp),
-                    has_instrument_mapping=funding_has_mapping,
-                    position_direction=position.direction if position is not None else None,
-                    position_notional=(position.entry_notional if position is not None else _ZERO),
+            for ev in exit_evals:
+                ev.update(
+                    bar.close,
+                    bar.high,
+                    bar.low,
+                    bar.open,
+                    volume=bar.volume,
+                    timestamp=bar.timestamp,
                 )
-                if position is not None:
-                    for due in due_charges:
-                        rec = due.record
-                        charge = due.amount
-                        if charge != _ZERO:
-                            led.equity = (led.equity - charge).quantize(_MONEY)
-                            led.peak = max(led.peak, led.equity)
-                            led.funding_paid += charge
-                        led.funding_charges += 1
+            entry_signal = aggregate(indicator_plan.entry_rule, entry_evals)
+            if exit_evals and indicator_plan.exit_rule is not None:
+                exit_hit = aggregate(indicator_plan.exit_rule, exit_evals) is not None
+
+        # §5.9 Same Candle Entry / Exit — when FLAT, an entry and an explicit exit
+        # decision can be close-confirmed by the same bar. There is no position for
+        # the exit to close and no honest intrabar ordering between two close-derived
+        # signals. The default and every conservative policy suppress the new entry;
+        # explicit ``exit_first`` processes the exit as a no-op, then admits it.
+        if position is None and entry_signal is not None and exit_hit:
+            admits_entry = same_candle_entry_exit == "exit_first"
+            _emit(
+                "entry_exit_collision",
+                event_time=bar.timestamp,
+                direction=entry_signal,
+                bar_seq=led.bars_seen,
+                detail={
+                    "policy": same_candle_entry_exit,
+                    "resolution": (
+                        "flat_exit_noop_then_entry"
+                        if admits_entry
+                        else "ambiguous_entry_suppressed"
+                    ),
+                    "intrabar_order_available": False,
+                },
+            )
+            if not admits_entry:
+                led.suppressed_entries += 1
+                entry_signal = None
+
+        # F-08: logic-stop evaluators advance EVERY bar (independent of the entry plan)
+        # so a logic-based stop can fire against the open position.
+        for ev in stop_evals:
+            ev.update(
+                bar.close,
+                bar.high,
+                bar.low,
+                bar.open,
+                volume=bar.volume,
+                timestamp=bar.timestamp,
+            )
+
+        # S5c: logic-SCALING evaluators advance every bar for the same reason. The
+        # aggregated direction is this bar's scaling proposal; the ladder below turns it
+        # into a layer only on an EDGE, in the open position's own direction, and only
+        # on a bar that closes the layer's timeframe candle.
+        if scale_evals and indicator_plan is not None and indicator_plan.scale_rule is not None:
+            for ev in scale_evals:
+                ev.update(
+                    bar.close,
+                    bar.high,
+                    bar.low,
+                    bar.open,
+                    volume=bar.volume,
+                    timestamp=bar.timestamp,
+                )
+            scale_signal = aggregate(indicator_plan.scale_rule, scale_evals)
+
+        # (2) K-03 / F-11 funding cost — doc 15 §9.3 step 2: funding/fee/carry is applied
+        # at the TOP of the bar, BEFORE any fill, stop, exposure check, entry or scaling
+        # of this bar. That ordering is not cosmetic: ``led.equity`` is what sizes an entry
+        # (``_position_size``) and what bounds the allocation sleeve / exposure caps
+        # (``_sleeve_capital``). Charging funding at the END of the bar (the pre-K-03
+        # order) sized every entry and every scale layer off an equity that had not yet
+        # paid its carry — under perp funding, a one-directional cumulative bias toward
+        # systematically LARGER positions and a late-binding ``max_total_exposure``.
+        #
+        # A backward/as-of join over the available-time-safe schedule (doc 12 §8.4
+        # rule 3). Every funding record now AVAILABLE at this bar
+        # (``available_at <= bar_time``) fires exactly once; while a position is held it
+        # charges ``notional * rate`` (a long pays a positive rate, a short receives),
+        # reducing equity mid-run so funding-on and funding-off produce a verifiably
+        # different result. A record dated after the last replayed bar never fires — a
+        # future value can never leak into the run. Records that become available while
+        # flat are consumed without a charge: funding is paid only for the interval the
+        # position is actually held (perp funding convention). Two consequences of the
+        # step-2 placement follow directly from that convention: a position still open at
+        # the START of this bar pays a record available now even if the bar later closes
+        # it (the pre-K-03 order silently DROPPED that charge), and a position OPENED on
+        # this bar does not pay it (it was not held when the record became available).
+        #
+        # K-02: the as-of comparison is NOT written inline here — it is delegated to
+        # ``research_data.time_policy.is_eligible_for_decision``, the single canonical
+        # rule-2 gate (mapping AND ``available_at <= t``). This bar's timestamp is the
+        # decision time, and ``schedule.has_instrument_mapping`` is the resolved mapping
+        # conjunct, so every research value the engine consumes passes one audited
+        # predicate rather than a hand-rolled comparison that can drift.
+        #
+        # FAIL CLOSED on an unresolvable bar timestamp: with no decision time, eligibility
+        # cannot be evaluated at all, and silently firing nothing would book an
+        # over-optimistic ZERO funding cost for the whole run. This deliberately differs
+        # from the date-blackout precedent below, where a restrictive reading exists
+        # (treat the bar as inside the window); a cost has no such reading.
+        if funding_records:
+            # ``due_funding_charges`` decides WHICH records fire and what each costs;
+            # applying them (equity/peak/counters + the decision event) stays here.
+            # Records that become available while FLAT are still consumed — the cursor
+            # advances even when nothing is charged.
+            funding_idx, due_charges = due_funding_charges(
+                funding_records,
+                start_index=funding_idx,
+                decision_time=resolve_funding_decision_time(bar.timestamp),
+                has_instrument_mapping=funding_has_mapping,
+                position_direction=position.direction if position is not None else None,
+                position_notional=(position.entry_notional if position is not None else _ZERO),
+            )
+            if position is not None:
+                for due in due_charges:
+                    rec = due.record
+                    charge = due.amount
+                    if charge != _ZERO:
+                        led.equity = (led.equity - charge).quantize(_MONEY)
+                        led.peak = max(led.peak, led.equity)
+                        led.funding_paid += charge
+                    led.funding_charges += 1
+                    _emit(
+                        "funding_charge",
+                        event_time=bar.timestamp,
+                        direction=position.direction,
+                        bar_seq=led.bars_seen,
+                        detail={
+                            "position_seq": position.position_seq,
+                            "rate": str(rec.rate),
+                            "charge": str(charge),
+                            "available_at": rec.available_at.isoformat(),
+                            "event_at": rec.event_at.isoformat(),
+                            "source_revision_id": (
+                                funding.source_revision_id if funding is not None else None
+                            ),
+                        },
+                    )
+
+        # (3) Resolve a fill deferred to THIS bar's OPEN (next_candle_open). Runs
+        # before the intrabar stop path so the open fill precedes the bar's high/low.
+        if pending is not None and pending.target_seq == led.bars_seen and pending.at_open:
+            if pending.kind == "entry" and position is None:
+                led.deferred_entry_fills += 1
+                position = _do_open(
+                    pending.direction,
+                    bar,
+                    bar.open,
+                    bar_seq=led.bars_seen,
+                    deferred=True,
+                    strength=pending.strength,
+                )
+            elif pending.kind == "exit" and position is not None:
+                led.deferred_exit_fills += 1
+                # F-07c: a deferred exit SIGNAL closes ``close_fraction`` and holds the
+                # remainder under the aftermath (a full close nulls the position).
+                if _close(
+                    bar.timestamp,
+                    bar.open,
+                    pending.reason,
+                    position,
+                    bar_seq=led.bars_seen,
+                    fraction=close_fraction,
+                ):
+                    position = None
+                else:
+                    _apply_partial_aftermath(position, bar.open)
+            pending = None
+
+        # (3b) Resolve a RESTING limit ENTRY order against THIS bar (F-07b/F-07i C).
+        # Resolves before the position block (like a next_open fill), so a same-bar
+        # protective stop can hit the just-filled position — consistent with the
+        # deferred-open path. A touch fills at the limit via ``_fill_resting_limit``
+        # (print-authoritative under a tick-backed timing; partial-fill policy from
+        # print-size evidence); on the expiry bar an order still resting applies its
+        # policy (convert-to-market fills at the close, else cancel); otherwise a
+        # re-price policy recomputes the limit from THIS bar's close for the next bar.
+        if (
+            working_limit is not None
+            and working_limit.remaining_size is None  # a remainder is (1b2)'s, never a fresh entry
+            and position is None
+        ):
+            wl = working_limit
+            touched, touch_prints = _limit_touch_evidence(wl, bar, bar_ticks)
+            if touched:
+                _fill_resting_limit(wl, bar, touch_prints, bar_seq=led.bars_seen)
+            if working_limit is not None and position is None:
+                expired = wl.expires_seq is not None and led.bars_seen >= wl.expires_seq
+                if expired:
+                    if wl.unfilled_policy == "convert_to_market_order":
+                        led.limit_orders_filled += 1
+                        position = _do_open(
+                            wl.direction,
+                            bar,
+                            bar.close,
+                            bar_seq=led.bars_seen,
+                            deferred=True,
+                            strength=wl.strength,
+                        )
+                    else:
+                        led.limit_orders_cancelled += 1
                         _emit(
-                            "funding_charge",
+                            "limit_order_cancelled",
                             event_time=bar.timestamp,
-                            direction=position.direction,
+                            direction=wl.direction,
                             bar_seq=led.bars_seen,
                             detail={
-                                "position_seq": position.position_seq,
-                                "rate": str(rec.rate),
-                                "charge": str(charge),
-                                "available_at": rec.available_at.isoformat(),
-                                "event_at": rec.event_at.isoformat(),
-                                "source_revision_id": (
-                                    funding.source_revision_id if funding is not None else None
-                                ),
+                                "reason": "validity_expired",
+                                "unfilled_policy": wl.unfilled_policy,
+                                "limit_price": str(wl.limit_price),
                             },
                         )
+                    working_limit = None
+                elif wl.unfilled_policy == "re_price_next_candle":
+                    wl.limit_price = _limit_price(wl.price_rule, bar.close, wl.offset)
 
-            # (3) Resolve a fill deferred to THIS bar's OPEN (next_candle_open). Runs
-            # before the intrabar stop path so the open fill precedes the bar's high/low.
-            if pending is not None and pending.target_seq == led.bars_seen and pending.at_open:
-                if pending.kind == "entry" and position is None:
-                    led.deferred_entry_fills += 1
-                    position = _do_open(
-                        pending.direction,
-                        bar,
-                        bar.open,
-                        bar_seq=led.bars_seen,
-                        deferred=True,
-                        strength=pending.strength,
-                    )
-                elif pending.kind == "exit" and position is not None:
-                    led.deferred_exit_fills += 1
-                    # F-07c: a deferred exit SIGNAL closes ``close_fraction`` and holds the
-                    # remainder under the aftermath (a full close nulls the position).
-                    if _close(
-                        bar.timestamp,
-                        bar.open,
-                        pending.reason,
-                        position,
-                        bar_seq=led.bars_seen,
-                        fraction=close_fraction,
-                    ):
-                        position = None
-                    else:
-                        _apply_partial_aftermath(position, bar.open)
-                pending = None
-
-            # (3b) Resolve a RESTING limit ENTRY order against THIS bar (F-07b/F-07i C).
-            # Resolves before the position block (like a next_open fill), so a same-bar
-            # protective stop can hit the just-filled position — consistent with the
-            # deferred-open path. A touch fills at the limit via ``_fill_resting_limit``
-            # (print-authoritative under a tick-backed timing; partial-fill policy from
-            # print-size evidence); on the expiry bar an order still resting applies its
-            # policy (convert-to-market fills at the close, else cancel); otherwise a
-            # re-price policy recomputes the limit from THIS bar's close for the next bar.
-            if (
-                working_limit is not None
-                and working_limit.remaining_size
-                is None  # a remainder is (1b2)'s, never a fresh entry
-                and position is None
-            ):
-                wl = working_limit
+        # (3b2) F-07i (C): a PARTIAL fill's remaining order rests AGAINST its open
+        # position (the order-remaining ledger, Master Ref §6.3): later touches top
+        # the position up at the limit level until the validity/unfilled policy
+        # disposes of the remainder. The remainder dies with its position — a
+        # stop/exit closing the position cancels the order's remaining intent.
+        if working_limit is not None and working_limit.remaining_size is not None:
+            wl = working_limit
+            remaining = working_limit.remaining_size
+            if position is None or position.position_seq != wl.for_position_seq:
+                # The order's position is gone — the remaining intent is cancelled,
+                # traced (never a silent gap, and NEVER re-armed as a fresh entry).
+                led.limit_orders_cancelled += 1
+                _emit(
+                    "limit_order_cancelled",
+                    event_time=bar.timestamp,
+                    direction=wl.direction,
+                    bar_seq=led.bars_seen,
+                    detail={
+                        "reason": "position_closed",
+                        "unfilled_policy": wl.unfilled_policy,
+                        "limit_price": str(wl.limit_price),
+                        "remaining_size": str(remaining),
+                    },
+                )
+                working_limit = None
+            elif wl.remainder_placed_seq is not None and led.bars_seen > wl.remainder_placed_seq:
                 touched, touch_prints = _limit_touch_evidence(wl, bar, bar_ticks)
                 if touched:
-                    _fill_resting_limit(wl, bar, touch_prints, bar_seq=led.bars_seen)
-                if working_limit is not None and position is None:
+                    sized = [t for t in touch_prints if t.size is not None]
+                    if touch_prints and not sized:
+                        led.partial_evidence_missing = True
+                    top_up = (
+                        min(
+                            remaining,
+                            sum((t.size for t in sized if t.size is not None), _ZERO),
+                        )
+                        if sized
+                        # no size evidence -> coarse model: the whole remainder fills
+                        else remaining
+                    )
+                    if top_up > _ZERO:
+                        _absorb_remainder(
+                            position, bar, wl.limit_price, top_up, action="remainder_touch"
+                        )
+                        remaining = remaining - top_up
+                        if remaining <= _ZERO:
+                            working_limit = None
+                        else:
+                            wl.remaining_size = remaining
+                            wl.remainder_placed_seq = led.bars_seen
+                if working_limit is not None:
                     expired = wl.expires_seq is not None and led.bars_seen >= wl.expires_seq
                     if expired:
                         if wl.unfilled_policy == "convert_to_market_order":
-                            led.limit_orders_filled += 1
-                            position = _do_open(
-                                wl.direction,
+                            _absorb_remainder(
+                                position,
                                 bar,
                                 bar.close,
-                                bar_seq=led.bars_seen,
-                                deferred=True,
-                                strength=wl.strength,
+                                remaining,
+                                action="remainder_validity_market",
                             )
                         else:
                             led.limit_orders_cancelled += 1
@@ -2040,287 +2095,190 @@ def run_engine(
                                 direction=wl.direction,
                                 bar_seq=led.bars_seen,
                                 detail={
-                                    "reason": "validity_expired",
+                                    "reason": "partial_remainder_expired",
                                     "unfilled_policy": wl.unfilled_policy,
                                     "limit_price": str(wl.limit_price),
+                                    "remaining_size": str(wl.remaining_size),
                                 },
                             )
                         working_limit = None
                     elif wl.unfilled_policy == "re_price_next_candle":
                         wl.limit_price = _limit_price(wl.price_rule, bar.close, wl.offset)
 
-            # (3b2) F-07i (C): a PARTIAL fill's remaining order rests AGAINST its open
-            # position (the order-remaining ledger, Master Ref §6.3): later touches top
-            # the position up at the limit level until the validity/unfilled policy
-            # disposes of the remainder. The remainder dies with its position — a
-            # stop/exit closing the position cancels the order's remaining intent.
-            if working_limit is not None and working_limit.remaining_size is not None:
-                wl = working_limit
-                remaining = working_limit.remaining_size
-                if position is None or position.position_seq != wl.for_position_seq:
-                    # The order's position is gone — the remaining intent is cancelled,
-                    # traced (never a silent gap, and NEVER re-armed as a fresh entry).
-                    led.limit_orders_cancelled += 1
-                    _emit(
-                        "limit_order_cancelled",
-                        event_time=bar.timestamp,
-                        direction=wl.direction,
-                        bar_seq=led.bars_seen,
-                        detail={
-                            "reason": "position_closed",
-                            "unfilled_policy": wl.unfilled_policy,
-                            "limit_price": str(wl.limit_price),
-                            "remaining_size": str(remaining),
-                        },
+        # (3c) Resolve a RESTING stop ENTRY trigger against THIS bar (F-07h). A long
+        # buy-stop fires when the bar's high reaches the trigger (short mirror: low).
+        # A plain stop then fills market-like at max(trigger, open) — a gap through
+        # the trigger fills at the open (the trigger price no longer exists),
+        # deterministic over OHLCV. A stop-limit instead ARMS the (1b) limit machine:
+        # placed HERE (below the (1b) block), the armed limit is first examined on the
+        # NEXT bar — the same-bar stop-then-limit sequence needs tick ordering, so a
+        # same-bar limit touch never fills (doc 02 §5.2: the trigger may fire and the
+        # position still never open). Validity counts from the trigger bar, and the
+        # (3b) unfilled/re-price policies then apply verbatim.
+        if working_stop is not None and position is None:
+            ws = working_stop
+            fired = (
+                bar.high >= ws.trigger_price
+                if ws.direction == "long"
+                else bar.low <= ws.trigger_price
+            )
+            if fired:
+                led.stop_orders_triggered += 1
+                trigger_detail: dict[str, Any] = {
+                    "trigger_price": str(ws.trigger_price),
+                    "order_type": order_cfg.type,
+                }
+                if ws.limit_price is None:
+                    fill_price = (
+                        max(ws.trigger_price, bar.open)
+                        if ws.direction == "long"
+                        else min(ws.trigger_price, bar.open)
                     )
-                    working_limit = None
-                elif (
-                    wl.remainder_placed_seq is not None and led.bars_seen > wl.remainder_placed_seq
-                ):
-                    touched, touch_prints = _limit_touch_evidence(wl, bar, bar_ticks)
-                    if touched:
-                        sized = [t for t in touch_prints if t.size is not None]
-                        if touch_prints and not sized:
-                            led.partial_evidence_missing = True
-                        top_up = (
-                            min(
-                                remaining,
-                                sum((t.size for t in sized if t.size is not None), _ZERO),
-                            )
-                            if sized
-                            # no size evidence -> coarse model: the whole remainder fills
-                            else remaining
-                        )
-                        if top_up > _ZERO:
-                            _absorb_remainder(
-                                position, bar, wl.limit_price, top_up, action="remainder_touch"
-                            )
-                            remaining = remaining - top_up
-                            if remaining <= _ZERO:
-                                working_limit = None
-                            else:
-                                wl.remaining_size = remaining
-                                wl.remainder_placed_seq = led.bars_seen
-                    if working_limit is not None:
-                        expired = wl.expires_seq is not None and led.bars_seen >= wl.expires_seq
-                        if expired:
-                            if wl.unfilled_policy == "convert_to_market_order":
-                                _absorb_remainder(
-                                    position,
-                                    bar,
-                                    bar.close,
-                                    remaining,
-                                    action="remainder_validity_market",
-                                )
-                            else:
-                                led.limit_orders_cancelled += 1
-                                _emit(
-                                    "limit_order_cancelled",
-                                    event_time=bar.timestamp,
-                                    direction=wl.direction,
-                                    bar_seq=led.bars_seen,
-                                    detail={
-                                        "reason": "partial_remainder_expired",
-                                        "unfilled_policy": wl.unfilled_policy,
-                                        "limit_price": str(wl.limit_price),
-                                        "remaining_size": str(wl.remaining_size),
-                                    },
-                                )
-                            working_limit = None
-                        elif wl.unfilled_policy == "re_price_next_candle":
-                            wl.limit_price = _limit_price(wl.price_rule, bar.close, wl.offset)
-
-            # (3c) Resolve a RESTING stop ENTRY trigger against THIS bar (F-07h). A long
-            # buy-stop fires when the bar's high reaches the trigger (short mirror: low).
-            # A plain stop then fills market-like at max(trigger, open) — a gap through
-            # the trigger fills at the open (the trigger price no longer exists),
-            # deterministic over OHLCV. A stop-limit instead ARMS the (1b) limit machine:
-            # placed HERE (below the (1b) block), the armed limit is first examined on the
-            # NEXT bar — the same-bar stop-then-limit sequence needs tick ordering, so a
-            # same-bar limit touch never fills (doc 02 §5.2: the trigger may fire and the
-            # position still never open). Validity counts from the trigger bar, and the
-            # (3b) unfilled/re-price policies then apply verbatim.
-            if working_stop is not None and position is None:
-                ws = working_stop
-                fired = (
-                    bar.high >= ws.trigger_price
-                    if ws.direction == "long"
-                    else bar.low <= ws.trigger_price
-                )
-                if fired:
-                    led.stop_orders_triggered += 1
-                    trigger_detail: dict[str, Any] = {
-                        "trigger_price": str(ws.trigger_price),
-                        "order_type": order_cfg.type,
-                    }
-                    if ws.limit_price is None:
-                        fill_price = (
-                            max(ws.trigger_price, bar.open)
-                            if ws.direction == "long"
-                            else min(ws.trigger_price, bar.open)
-                        )
-                        trigger_detail["fill_price"] = str(fill_price)
-                        _emit(
-                            "stop_order_triggered",
-                            event_time=bar.timestamp,
-                            direction=ws.direction,
-                            bar_seq=led.bars_seen,
-                            detail=trigger_detail,
-                        )
-                        position = _do_open(
-                            ws.direction,
-                            bar,
-                            fill_price,
-                            bar_seq=led.bars_seen,
-                            deferred=True,
-                            strength=ws.strength,
-                        )
-                    else:
-                        working_limit = _WorkingLimit(
-                            direction=ws.direction,
-                            limit_price=ws.limit_price,
-                            offset=ws.limit_offset,
-                            price_rule=ws.limit_rule,
-                            unfilled_policy=ws.unfilled_policy,
-                            expires_seq=(
-                                None
-                                if ws.validity_bars is None
-                                else led.bars_seen + ws.validity_bars
-                            ),
-                            strength=ws.strength,
-                        )
-                        led.limit_orders_placed += 1
-                        trigger_detail["limit_price"] = str(ws.limit_price)
-                        _emit(
-                            "stop_order_triggered",
-                            event_time=bar.timestamp,
-                            direction=ws.direction,
-                            bar_seq=led.bars_seen,
-                            detail=trigger_detail,
-                        )
-                        _emit(
-                            "limit_order_placed",
-                            event_time=bar.timestamp,
-                            direction=ws.direction,
-                            bar_seq=led.bars_seen,
-                            detail={
-                                "limit_price": str(ws.limit_price),
-                                "price_rule": ws.limit_rule,
-                                "unfilled_policy": ws.unfilled_policy,
-                                "expires_bar_seq": working_limit.expires_seq,
-                                "armed_by": "stop_order_triggered",
-                            },
-                        )
-                        # F-07i (C): under ``stop_limit_priority_simulation`` the
-                        # same-bar stop-then-limit sequence is resolved by the OBSERVED
-                        # print path: if a print AFTER the trigger's first touch reaches
-                        # the armed limit, the limit fills THIS bar (doc 02 §5.2 stays
-                        # true — the trigger may fire and the position still never open
-                        # when the later prints never come back to the limit). A
-                        # print-less trigger bar keeps the conservative next-bar model
-                        # (Master Ref §9.1: no assumed/implicit price path — the
-                        # sequence is only ever taken from observed prints).
-                        if stop_limit_sim and bar_ticks:
-                            trigger_idx = _first_trigger_index(
-                                bar_ticks,
-                                ws.trigger_price,
-                                is_long=ws.direction == "long",
-                            )
-                            if trigger_idx is not None:
-                                armed = working_limit
-                                after_trigger = _touching_ticks(
-                                    bar_ticks[trigger_idx + 1 :],
-                                    armed.limit_price,
-                                    is_buy=armed.direction == "long",
-                                )
-                                if after_trigger:
-                                    _fill_resting_limit(
-                                        armed,
-                                        bar,
-                                        after_trigger,
-                                        bar_seq=led.bars_seen,
-                                        armed_same_bar=True,
-                                    )
-                    working_stop = None
-
-            if position is not None:
-                # (4) protection / stop / exit against this bar (intrabar touch).
-                if position.direction == "long":
-                    position.trail_anchor = max(position.trail_anchor, bar.high)
+                    trigger_detail["fill_price"] = str(fill_price)
+                    _emit(
+                        "stop_order_triggered",
+                        event_time=bar.timestamp,
+                        direction=ws.direction,
+                        bar_seq=led.bars_seen,
+                        detail=trigger_detail,
+                    )
+                    position = _do_open(
+                        ws.direction,
+                        bar,
+                        fill_price,
+                        bar_seq=led.bars_seen,
+                        deferred=True,
+                        strength=ws.strength,
+                    )
                 else:
-                    position.trail_anchor = min(position.trail_anchor, bar.low)
-                opp = "short" if position.direction == "long" else "long"
-                logic_triggered = [
-                    f"logic:{spec.block_id}" for spec, ev in stop_pairs if ev.current_signal == opp
-                ]
-                stop_outcome = _resolve_stop(
-                    config,
-                    position,
-                    bar,
-                    logic_enabled=logic_enabled,
-                    logic_triggered=logic_triggered,
-                    ticks=bar_ticks,
-                )
-                stop_touched = stop_outcome is not None
-                # A fresh exit signal is evaluated only when no exit is already committed:
-                # a deferred exit from a prior bar (``pending``) — or a resting touch
-                # exit (F-07i C) — is pinned and cannot be pre-empted by a new signal;
-                # only an intrabar stop below can cancel it.
-                exit_wanted = (
-                    pending is None
-                    and exit_touch is None
-                    and (
-                        _plan_exit(position, entry_signal, exit_hit)
-                        if plan_active
-                        else _exit_proxy(position, bar, window)
+                    working_limit = _WorkingLimit(
+                        direction=ws.direction,
+                        limit_price=ws.limit_price,
+                        offset=ws.limit_offset,
+                        price_rule=ws.limit_rule,
+                        unfilled_policy=ws.unfilled_policy,
+                        expires_seq=(
+                            None if ws.validity_bars is None else led.bars_seen + ws.validity_bars
+                        ),
+                        strength=ws.strength,
                     )
-                )
-                if stop_touched and exit_wanted and exit_sched == "immediate":
-                    # §5.9 same-bar Stop+Exit collision — only when the exit ALSO fills
-                    # this bar (immediate timing). A deferred exit would fill strictly
-                    # later, so an intrabar stop simply wins (handled by the elif below).
-                    # Only "exit_has_priority" changes the OUTCOME (close at close as an
-                    # exit); the other three execute the stop (the intrabar touch precedes
-                    # the close-based exit), "record_both_reasons" logs both codes.
-                    led.stop_exit_collisions += 1
-                    executed_reason = (
-                        "exit_signal" if stop_exit_conflict == "exit_has_priority" else "stop_loss"
-                    )
-                    # F-10: the CONFLICT decision is ALWAYS traced (was only under
-                    # record_both_reasons) — which rule executed, which also triggered, and
-                    # the governing policy — so a reviewer can reconstruct the tie-break.
+                    led.limit_orders_placed += 1
+                    trigger_detail["limit_price"] = str(ws.limit_price)
                     _emit(
-                        "stop_exit_collision",
+                        "stop_order_triggered",
                         event_time=bar.timestamp,
-                        direction=position.direction,
+                        direction=ws.direction,
+                        bar_seq=led.bars_seen,
+                        detail=trigger_detail,
+                    )
+                    _emit(
+                        "limit_order_placed",
+                        event_time=bar.timestamp,
+                        direction=ws.direction,
                         bar_seq=led.bars_seen,
                         detail={
-                            "position_seq": position.position_seq,
-                            "executed": executed_reason,
-                            "also_triggered": (
-                                "stop_loss" if executed_reason == "exit_signal" else "exit_signal"
-                            ),
-                            "policy": stop_exit_conflict,
+                            "limit_price": str(ws.limit_price),
+                            "price_rule": ws.limit_rule,
+                            "unfilled_policy": ws.unfilled_policy,
+                            "expires_bar_seq": working_limit.expires_seq,
+                            "armed_by": "stop_order_triggered",
                         },
                     )
-                    if stop_exit_conflict == "exit_has_priority":
-                        _close(
-                            bar.timestamp, bar.close, "exit_signal", position, bar_seq=led.bars_seen
+                    # F-07i (C): under ``stop_limit_priority_simulation`` the
+                    # same-bar stop-then-limit sequence is resolved by the OBSERVED
+                    # print path: if a print AFTER the trigger's first touch reaches
+                    # the armed limit, the limit fills THIS bar (doc 02 §5.2 stays
+                    # true — the trigger may fire and the position still never open
+                    # when the later prints never come back to the limit). A
+                    # print-less trigger bar keeps the conservative next-bar model
+                    # (Master Ref §9.1: no assumed/implicit price path — the
+                    # sequence is only ever taken from observed prints).
+                    if stop_limit_sim and bar_ticks:
+                        trigger_idx = _first_trigger_index(
+                            bar_ticks,
+                            ws.trigger_price,
+                            is_long=ws.direction == "long",
                         )
-                    else:
-                        assert stop_outcome is not None  # implied by stop_touched
-                        _close(
-                            bar.timestamp,
-                            stop_outcome.price,
-                            "stop_loss",
-                            position,
-                            bar_seq=led.bars_seen,
-                        )
-                        _emit_stop_resolution(stop_outcome, bar.timestamp, position.direction)
-                    position = None
-                elif stop_touched:
-                    # An intrabar stop fires immediately and subsumes any deferred exit
-                    # scheduled for later this bar (or a later bar) — the stop is hit first.
+                        if trigger_idx is not None:
+                            armed = working_limit
+                            after_trigger = _touching_ticks(
+                                bar_ticks[trigger_idx + 1 :],
+                                armed.limit_price,
+                                is_buy=armed.direction == "long",
+                            )
+                            if after_trigger:
+                                _fill_resting_limit(
+                                    armed,
+                                    bar,
+                                    after_trigger,
+                                    bar_seq=led.bars_seen,
+                                    armed_same_bar=True,
+                                )
+                working_stop = None
+
+        if position is not None:
+            # (4) protection / stop / exit against this bar (intrabar touch).
+            if position.direction == "long":
+                position.trail_anchor = max(position.trail_anchor, bar.high)
+            else:
+                position.trail_anchor = min(position.trail_anchor, bar.low)
+            opp = "short" if position.direction == "long" else "long"
+            logic_triggered = [
+                f"logic:{spec.block_id}" for spec, ev in stop_pairs if ev.current_signal == opp
+            ]
+            stop_outcome = _resolve_stop(
+                config,
+                position,
+                bar,
+                logic_enabled=logic_enabled,
+                logic_triggered=logic_triggered,
+                ticks=bar_ticks,
+            )
+            stop_touched = stop_outcome is not None
+            # A fresh exit signal is evaluated only when no exit is already committed:
+            # a deferred exit from a prior bar (``pending``) — or a resting touch
+            # exit (F-07i C) — is pinned and cannot be pre-empted by a new signal;
+            # only an intrabar stop below can cancel it.
+            exit_wanted = (
+                pending is None
+                and exit_touch is None
+                and (
+                    _plan_exit(position, entry_signal, exit_hit)
+                    if plan_active
+                    else _exit_proxy(position, bar, window)
+                )
+            )
+            if stop_touched and exit_wanted and exit_sched == "immediate":
+                # §5.9 same-bar Stop+Exit collision — only when the exit ALSO fills
+                # this bar (immediate timing). A deferred exit would fill strictly
+                # later, so an intrabar stop simply wins (handled by the elif below).
+                # Only "exit_has_priority" changes the OUTCOME (close at close as an
+                # exit); the other three execute the stop (the intrabar touch precedes
+                # the close-based exit), "record_both_reasons" logs both codes.
+                led.stop_exit_collisions += 1
+                executed_reason = (
+                    "exit_signal" if stop_exit_conflict == "exit_has_priority" else "stop_loss"
+                )
+                # F-10: the CONFLICT decision is ALWAYS traced (was only under
+                # record_both_reasons) — which rule executed, which also triggered, and
+                # the governing policy — so a reviewer can reconstruct the tie-break.
+                _emit(
+                    "stop_exit_collision",
+                    event_time=bar.timestamp,
+                    direction=position.direction,
+                    bar_seq=led.bars_seen,
+                    detail={
+                        "position_seq": position.position_seq,
+                        "executed": executed_reason,
+                        "also_triggered": (
+                            "stop_loss" if executed_reason == "exit_signal" else "exit_signal"
+                        ),
+                        "policy": stop_exit_conflict,
+                    },
+                )
+                if stop_exit_conflict == "exit_has_priority":
+                    _close(bar.timestamp, bar.close, "exit_signal", position, bar_seq=led.bars_seen)
+                else:
                     assert stop_outcome is not None  # implied by stop_touched
                     _close(
                         bar.timestamp,
@@ -2330,357 +2288,62 @@ def run_engine(
                         bar_seq=led.bars_seen,
                     )
                     _emit_stop_resolution(stop_outcome, bar.timestamp, position.direction)
-                    position = None
-                    pending = None
-                elif exit_touch is not None and led.bars_seen > exit_touch[1]:
-                    # F-07i (C) ``intrabar_touch`` EXIT: the resting exit fills when price
-                    # comes back to TOUCH the exit-signal level (a long SELLS at the
-                    # level — prints at/above it; short mirror). Print-authoritative on a
-                    # bar with prints; a print-less bar keeps the coarse bar-extreme
-                    # touch. Never on the signal bar itself (the level IS that bar's
-                    # close — an instant self-touch would just be a close fill). An
-                    # intrabar stop the same bar wins above (the risk event pre-empts
-                    # the resting exit, the deferred-exit precedent).
-                    touch_level, _placed_seq = exit_touch
-                    is_long_pos = position.direction == "long"
-                    if bar_ticks:
-                        exit_touched = bool(
-                            _touching_ticks(bar_ticks, touch_level, is_buy=not is_long_pos)
-                        )
-                    else:
-                        exit_touched = (
-                            bar.high >= touch_level if is_long_pos else bar.low <= touch_level
-                        )
-                    if exit_touched:
-                        led.touch_exit_fills += 1
-                        if _close(
-                            bar.timestamp,
-                            touch_level,
-                            "exit_signal",
-                            position,
-                            bar_seq=led.bars_seen,
-                            fraction=close_fraction,
-                        ):
-                            position = None
-                        else:
-                            _apply_partial_aftermath(position, touch_level)
-                        exit_touch = None
-                elif exit_wanted:
-                    if exit_sched == "immediate":
-                        # F-07c: an exit signal closes ``close_fraction`` and holds the
-                        # remainder under the aftermath; a full close (fraction 1) nulls it.
-                        if _close(
-                            bar.timestamp,
-                            bar.close,
-                            "exit_signal",
-                            position,
-                            bar_seq=led.bars_seen,
-                            fraction=close_fraction,
-                        ):
-                            position = None
-                        else:
-                            _apply_partial_aftermath(position, bar.close)
-                    elif exit_sched == "touch":
-                        # F-07i (C): rest the exit as a TOUCH order at the signal bar's
-                        # close level; it fills only when a later bar's prints (or, on a
-                        # print-less bar, its extreme) come back to the level — resolved
-                        # by the touch branch above. Protection stops stay live on the
-                        # position throughout (the touch exit is opportunity, the stop is
-                        # risk).
-                        _emit(
-                            "exit_scheduled",
-                            event_time=bar.timestamp,
-                            direction=position.direction,
-                            bar_seq=led.bars_seen,
-                            detail={
-                                "position_seq": position.position_seq,
-                                "reason": "exit_signal",
-                                "timing": config.data.execution.exit_timing,
-                                "touch_level": str(bar.close),
-                            },
-                        )
-                        exit_touch = (bar.close, led.bars_seen)
-                    else:
-                        # Defer the exit to the next bar's open / close (F-07a); trace the
-                        # scheduling decision so the two-phase timing is reconstructable.
-                        _emit(
-                            "exit_scheduled",
-                            event_time=bar.timestamp,
-                            direction=position.direction,
-                            bar_seq=led.bars_seen,
-                            detail={
-                                "position_seq": position.position_seq,
-                                "reason": "exit_signal",
-                                "timing": config.data.execution.exit_timing,
-                                "target_bar_seq": led.bars_seen + 1,
-                            },
-                        )
-                        pending = _Pending(
-                            "exit", exit_sched == "next_open", led.bars_seen + 1, "", "exit_signal"
-                        )
-            elif (
-                timing_ok
-                and order_ok
-                and partial_close_ok
-                and scaling_ok
-                and restrictions_ok
-                and conflict_ok
-                and pending is None
-                and working_limit is None
-                and working_stop is None
-            ):
-                # Flat and uncommitted: evaluate a fresh entry, then open now (immediate),
-                # schedule a deferred fill (timing), or rest a limit order. ``timing_ok``,
-                # ``order_ok``, ``partial_close_ok``, ``scaling_ok``, ``restrictions_ok``
-                # and ``conflict_ok`` are the fail-closed backstops — an unsupported timing /
-                # order type / partial-close aftermath / scaling config / restriction filter /
-                # hedge policy opens nothing (F-07a / F-07b / F-07c / F-07d / F-07e).
-                want: str | None = None
-                if plan_active:
-                    # (6a) real indicator entry, respecting the direction bias.
-                    if entry_signal is not None:
-                        if (entry_signal == "long" and not long_ok) or (
-                            entry_signal == "short" and not short_ok
-                        ):
-                            led.suppressed_entries += 1
-                            _emit(
-                                "filtered_no_entry",
-                                event_time=bar.timestamp,
-                                direction=entry_signal,
-                                bar_seq=led.bars_seen,
-                                detail={
-                                    "reason": "direction_restriction",
-                                    "direction_mode": config.position_entry_logic.direction_mode,
-                                },
-                            )
-                        else:
-                            want = entry_signal
-                elif len(window) == _BREAKOUT_WINDOW:
-                    # (6b) breakout entry proxy, with a full look-back.
-                    highest = max(b.high for b in window)
-                    lowest = min(b.low for b in window)
-                    want_long = bar.close > highest
-                    want_short = bar.close < lowest
-                    if (want_long and not long_ok) or (want_short and not short_ok):
-                        led.suppressed_entries += 1
-                        _emit(
-                            "filtered_no_entry",
-                            event_time=bar.timestamp,
-                            direction="long" if want_long else "short",
-                            bar_seq=led.bars_seen,
-                            detail={
-                                "reason": "direction_restriction",
-                                "direction_mode": config.position_entry_logic.direction_mode,
-                            },
-                        )
-                    elif want_long or want_short:
-                        # long wins a same-bar tie (deterministic); sides are exclusive.
-                        want = "long" if want_long else "short"
-                if want is not None and restriction_specs:
-                    # F-07e: the Restrictions/Filters ENTRY gate (Master Ref §12.1 "block
-                    # entry"). Evaluated AFTER the signal + direction bias produced a wanted
-                    # entry, so the trace shows a real signal the filters vetoed — never a
-                    # phantom suppression. The gate runs at DECISION time (the signal bar);
-                    # a deferred/limit fill inherits its signal bar's verdict (V1 boundary,
-                    # engine-version-pinned).
-                    active_filters = _active_restrictions(bar_date)
-                    if _restrictions_block(active_filters):
-                        led.entries_blocked_by_restriction += 1
-                        _emit(
-                            "filtered_no_entry",
-                            event_time=bar.timestamp,
-                            direction=want,
-                            bar_seq=led.bars_seen,
-                            detail={
-                                "reason": "restriction_blocked",
-                                "rule": restriction_rule,
-                                "active_filters": active_filters,
-                                "context": "flat_entry",
-                            },
-                        )
-                        want = None
-                if want is not None:
-                    # F-07g: the SIGNAL bar's strength multiplier, computed once at the
-                    # decision point (after the restriction gate — a vetoed signal never
-                    # computes strength) and inherited verbatim by whichever fill path
-                    # executes (immediate / deferred / limit) — never re-priced later.
-                    strength = _signal_strength(bar)
-                    entry_detail: dict[str, Any] = {"rule": _entry_rule_snapshot(want)}
-                    if strength_active:
-                        entry_detail["signal_strength"] = {
-                            "mode": strength_mode,
-                            "multiplier": str(strength),
-                        }
-                    # F-10: the entry DECISION (signal fired + bias allowed), carrying the
-                    # evaluated rule id(s) and each nested condition's pass/fail — distinct
-                    # from the ``entry_fill`` execution event (doc 15 §16).
-                    _emit(
-                        "entry_signal",
-                        event_time=bar.timestamp,
-                        direction=want,
-                        bar_seq=led.bars_seen,
-                        detail=entry_detail,
+                position = None
+            elif stop_touched:
+                # An intrabar stop fires immediately and subsumes any deferred exit
+                # scheduled for later this bar (or a later bar) — the stop is hit first.
+                assert stop_outcome is not None  # implied by stop_touched
+                _close(
+                    bar.timestamp,
+                    stop_outcome.price,
+                    "stop_loss",
+                    position,
+                    bar_seq=led.bars_seen,
+                )
+                _emit_stop_resolution(stop_outcome, bar.timestamp, position.direction)
+                position = None
+                pending = None
+            elif exit_touch is not None and led.bars_seen > exit_touch[1]:
+                # F-07i (C) ``intrabar_touch`` EXIT: the resting exit fills when price
+                # comes back to TOUCH the exit-signal level (a long SELLS at the
+                # level — prints at/above it; short mirror). Print-authoritative on a
+                # bar with prints; a print-less bar keeps the coarse bar-extreme
+                # touch. Never on the signal bar itself (the level IS that bar's
+                # close — an instant self-touch would just be a close fill). An
+                # intrabar stop the same bar wins above (the risk event pre-empts
+                # the resting exit, the deferred-exit precedent).
+                touch_level, _placed_seq = exit_touch
+                is_long_pos = position.direction == "long"
+                if bar_ticks:
+                    exit_touched = bool(
+                        _touching_ticks(bar_ticks, touch_level, is_buy=not is_long_pos)
                     )
-                    if order_is_limit:
-                        # F-07b: rest a limit order at the signal-derived price; it fills
-                        # only on a later touch within the validity window (resolved by the
-                        # (3b) block on subsequent bars), never on this signal bar.
-                        limit = order_cfg.limit
-                        assert limit is not None  # guaranteed by order_ok
-                        offset = limit.price_offset or _ZERO
-                        limit_level = _limit_price(limit.price_rule, bar.close, offset)
-                        validity_bars = _VALIDITY_BARS[limit.validity]
-                        working_limit = _WorkingLimit(
-                            direction=want,
-                            limit_price=limit_level,
-                            offset=offset,
-                            price_rule=limit.price_rule,
-                            unfilled_policy=limit.unfilled_policy,
-                            expires_seq=(
-                                None if validity_bars is None else led.bars_seen + validity_bars
-                            ),
-                            strength=strength,
-                        )
-                        led.limit_orders_placed += 1
-                        _emit(
-                            "limit_order_placed",
-                            event_time=bar.timestamp,
-                            direction=want,
-                            bar_seq=led.bars_seen,
-                            detail={
-                                "limit_price": str(limit_level),
-                                "price_rule": limit.price_rule,
-                                "validity": limit.validity,
-                                "unfilled_policy": limit.unfilled_policy,
-                                "expires_bar_seq": working_limit.expires_seq,
-                            },
-                        )
-                    elif order_is_stop:
-                        # F-07h: rest a stop trigger at the signal-derived level; it fires
-                        # only on a later touch (resolved by the (1c) block on subsequent
-                        # bars), never on this signal bar. For a stop-limit the limit leg
-                        # is pre-computed HERE from the same signal close, so the armed
-                        # limit is signal-derived exactly like a plain limit order's.
-                        stop = order_cfg.stop
-                        assert stop is not None  # guaranteed by order_ok
-                        trigger_level = _limit_price(
-                            stop.activation_rule, bar.close, stop.trigger_offset or _ZERO
-                        )
-                        limit = order_cfg.limit  # present iff stop_limit_order
-                        limit_offset = (limit.price_offset or _ZERO) if limit else _ZERO
-                        place_detail: dict[str, Any] = {
-                            "trigger_price": str(trigger_level),
-                            "activation_rule": stop.activation_rule,
-                            "order_type": order_cfg.type,
-                        }
-                        stop_limit_level: Decimal | None = None
-                        if limit is not None:
-                            stop_limit_level = _limit_price(
-                                limit.price_rule, bar.close, limit_offset
-                            )
-                            place_detail["limit_price"] = str(stop_limit_level)
-                            place_detail["validity"] = limit.validity
-                            place_detail["unfilled_policy"] = limit.unfilled_policy
-                        working_stop = _WorkingStop(
-                            direction=want,
-                            trigger_price=trigger_level,
-                            limit_price=stop_limit_level,
-                            limit_offset=limit_offset,
-                            limit_rule=limit.price_rule if limit else "",
-                            unfilled_policy=limit.unfilled_policy if limit else "",
-                            validity_bars=(_VALIDITY_BARS[limit.validity] if limit else None),
-                            strength=strength,
-                        )
-                        led.stop_orders_placed += 1
-                        _emit(
-                            "stop_order_placed",
-                            event_time=bar.timestamp,
-                            direction=want,
-                            bar_seq=led.bars_seen,
-                            detail=place_detail,
-                        )
-                    elif entry_sched == "touch":
-                        # F-07i (C) ``intrabar_touch`` ENTRY: rest a TOUCH order at the
-                        # signal price (the signal bar's close) and fill only when a
-                        # later bar's prints come back to the level — reusing the F-07b
-                        # working-limit machinery verbatim (entry-signal-price rule, no
-                        # offset, until-cancelled). With a limit/stop order type the
-                        # branches above already govern the fill (the order's own touch
-                        # semantics subsume the timing).
-                        working_limit = _WorkingLimit(
-                            direction=want,
-                            limit_price=bar.close,
-                            offset=_ZERO,
-                            price_rule="entry_signal_price",
-                            unfilled_policy="keep_until_validity_ends",
-                            expires_seq=None,
-                            strength=strength,
-                        )
-                        led.touch_orders_placed += 1
-                        _emit(
-                            "limit_order_placed",
-                            event_time=bar.timestamp,
-                            direction=want,
-                            bar_seq=led.bars_seen,
-                            detail={
-                                "limit_price": str(bar.close),
-                                "price_rule": "entry_signal_price",
-                                "mode": "intrabar_touch",
-                                "unfilled_policy": "keep_until_validity_ends",
-                                "expires_bar_seq": None,
-                            },
-                        )
-                    elif entry_sched == "immediate":
-                        position = _do_open(
-                            want,
-                            bar,
-                            bar.close,
-                            bar_seq=led.bars_seen,
-                            deferred=False,
-                            strength=strength,
-                        )
-                    else:
-                        _emit(
-                            "entry_scheduled",
-                            event_time=bar.timestamp,
-                            direction=want,
-                            bar_seq=led.bars_seen,
-                            detail={
-                                "timing": config.data.execution.entry_timing,
-                                "target_bar_seq": led.bars_seen + 1,
-                            },
-                        )
-                        pending = _Pending(
-                            "entry",
-                            entry_sched == "next_open",
-                            led.bars_seen + 1,
-                            want,
-                            "",
-                            strength,
-                        )
-
-            # (3d) Resolve a fill deferred to THIS bar's CLOSE (next_candle_close). Runs at
-            # end-of-bar so an intrabar stop (above) pre-empts a scheduled close exit, and
-            # so a pending set THIS bar (target bars_seen+1) is never resolved early.
-            if pending is not None and pending.target_seq == led.bars_seen and not pending.at_open:
-                if pending.kind == "entry" and position is None:
-                    led.deferred_entry_fills += 1
-                    position = _do_open(
-                        pending.direction,
-                        bar,
-                        bar.close,
-                        bar_seq=led.bars_seen,
-                        deferred=True,
-                        strength=pending.strength,
+                else:
+                    exit_touched = (
+                        bar.high >= touch_level if is_long_pos else bar.low <= touch_level
                     )
-                elif pending.kind == "exit" and position is not None:
-                    led.deferred_exit_fills += 1
-                    # F-07c: a deferred exit SIGNAL at the close closes ``close_fraction`` and
-                    # holds the remainder under the aftermath (a full close nulls the position).
+                if exit_touched:
+                    led.touch_exit_fills += 1
+                    if _close(
+                        bar.timestamp,
+                        touch_level,
+                        "exit_signal",
+                        position,
+                        bar_seq=led.bars_seen,
+                        fraction=close_fraction,
+                    ):
+                        position = None
+                    else:
+                        _apply_partial_aftermath(position, touch_level)
+                    exit_touch = None
+            elif exit_wanted:
+                if exit_sched == "immediate":
+                    # F-07c: an exit signal closes ``close_fraction`` and holds the
+                    # remainder under the aftermath; a full close (fraction 1) nulls it.
                     if _close(
                         bar.timestamp,
                         bar.close,
-                        pending.reason,
+                        "exit_signal",
                         position,
                         bar_seq=led.bars_seen,
                         fraction=close_fraction,
@@ -2688,250 +2351,339 @@ def run_engine(
                         position = None
                     else:
                         _apply_partial_aftermath(position, bar.close)
-                pending = None
-
-            # (5) F-07e conflict / position handling — a NEW aggregated entry-signal EDGE
-            # while a position is OPEN (Master Ref §13; plan mode only — the breakout proxy
-            # computes no signals while a position is held, so it stays byte-identical).
-            # Runs AFTER the bar's exit/stop resolution so a risk event always dominates
-            # (§13 priority order: exit/stop before entry candidates): a bar that closed or
-            # reduced the position (``trades_before_bar``) or committed an exit (``pending``)
-            # never also stacks/replaces it. The EDGE guard (``prev_entry_signal``) makes a
-            # HELD signal one entry event — never a per-bar stack/replace/churn storm.
-            # An opposite signal only reaches here when exit-on-opposite left the position
-            # open (otherwise it already closed above); ``allow_hedge`` in that state is
-            # unreachable — the ``conflict_ok`` fail-closed gate opened no position at all.
-            if (
-                position is not None
-                # The signal edge that OPENED the position this bar (flat entry, deferred
-                # fill or limit touch) is one entry event — it must never also stack /
-                # replace / close its own position on the same bar.
-                and position.entry_bar_seq != led.bars_seen
-                and plan_active
-                and pending is None
-                and len(led.trades) == trades_before_bar
-                and entry_signal is not None
-                and entry_signal != prev_entry_signal
-            ):
-                if entry_signal == position.direction:
-                    if stacking_policy == "ignore":
-                        led.conflict_signals_ignored += 1
+                elif exit_sched == "touch":
+                    # F-07i (C): rest the exit as a TOUCH order at the signal bar's
+                    # close level; it fills only when a later bar's prints (or, on a
+                    # print-less bar, its extreme) come back to the level — resolved
+                    # by the touch branch above. Protection stops stay live on the
+                    # position throughout (the touch exit is opportunity, the stop is
+                    # risk).
+                    _emit(
+                        "exit_scheduled",
+                        event_time=bar.timestamp,
+                        direction=position.direction,
+                        bar_seq=led.bars_seen,
+                        detail={
+                            "position_seq": position.position_seq,
+                            "reason": "exit_signal",
+                            "timing": config.data.execution.exit_timing,
+                            "touch_level": str(bar.close),
+                        },
+                    )
+                    exit_touch = (bar.close, led.bars_seen)
+                else:
+                    # Defer the exit to the next bar's open / close (F-07a); trace the
+                    # scheduling decision so the two-phase timing is reconstructable.
+                    _emit(
+                        "exit_scheduled",
+                        event_time=bar.timestamp,
+                        direction=position.direction,
+                        bar_seq=led.bars_seen,
+                        detail={
+                            "position_seq": position.position_seq,
+                            "reason": "exit_signal",
+                            "timing": config.data.execution.exit_timing,
+                            "target_bar_seq": led.bars_seen + 1,
+                        },
+                    )
+                    pending = _Pending(
+                        "exit", exit_sched == "next_open", led.bars_seen + 1, "", "exit_signal"
+                    )
+        elif (
+            timing_ok
+            and order_ok
+            and partial_close_ok
+            and scaling_ok
+            and restrictions_ok
+            and conflict_ok
+            and pending is None
+            and working_limit is None
+            and working_stop is None
+        ):
+            # Flat and uncommitted: evaluate a fresh entry, then open now (immediate),
+            # schedule a deferred fill (timing), or rest a limit order. ``timing_ok``,
+            # ``order_ok``, ``partial_close_ok``, ``scaling_ok``, ``restrictions_ok``
+            # and ``conflict_ok`` are the fail-closed backstops — an unsupported timing /
+            # order type / partial-close aftermath / scaling config / restriction filter /
+            # hedge policy opens nothing (F-07a / F-07b / F-07c / F-07d / F-07e).
+            want: str | None = None
+            if plan_active:
+                # (6a) real indicator entry, respecting the direction bias.
+                if entry_signal is not None:
+                    if (entry_signal == "long" and not long_ok) or (
+                        entry_signal == "short" and not short_ok
+                    ):
+                        led.suppressed_entries += 1
                         _emit(
                             "filtered_no_entry",
                             event_time=bar.timestamp,
                             direction=entry_signal,
                             bar_seq=led.bars_seen,
                             detail={
-                                "reason": "stacking_ignored",
-                                "policy": stacking_policy,
-                                "position_seq": position.position_seq,
-                            },
-                        )
-                    elif stacking_policy == "scale_existing":
-                        # The repeated signal itself adds nothing — position growth is
-                        # DELEGATED to the scaling ladder (§13 "only if scaling allows");
-                        # with scaling disabled the signal is a traced no-op.
-                        led.conflict_signals_ignored += 1
-                        _emit(
-                            "filtered_no_entry",
-                            event_time=bar.timestamp,
-                            direction=entry_signal,
-                            bar_seq=led.bars_seen,
-                            detail={
-                                "reason": "stacking_scale_only",
-                                "policy": stacking_policy,
-                                "scaling_enabled": scaling_active,
-                                "position_seq": position.position_seq,
+                                "reason": "direction_restriction",
+                                "direction_mode": config.position_entry_logic.direction_mode,
                             },
                         )
                     else:
-                        # allow_stacking / replace_existing EXECUTE a new entry — the same
-                        # Restrictions/Filters gate that vets a flat entry vets it (§12.1
-                        # "block entry" is entry-scoped, not flat-scoped).
-                        conflict_active = (
-                            _active_restrictions(bar_date) if restriction_specs else []
-                        )
-                        if _restrictions_block(conflict_active):
-                            led.entries_blocked_by_restriction += 1
-                            _emit(
-                                "filtered_no_entry",
-                                event_time=bar.timestamp,
-                                direction=entry_signal,
-                                bar_seq=led.bars_seen,
-                                detail={
-                                    "reason": "restriction_blocked",
-                                    "rule": restriction_rule,
-                                    "active_filters": conflict_active,
-                                    "context": "conflict_entry",
-                                },
-                            )
-                        elif stacking_policy == "replace_existing":
-                            # Close the held position and re-enter fresh at the decision
-                            # bar's close (the deterministic decision point — the scale-
-                            # layer fill precedent; the F-07a deferral remains the FLAT
-                            # entry's contract). The close emits ``position_close`` with
-                            # the "replaced_by_signal" reason; the re-open emits its own
-                            # ``entry_signal`` + ``entry_fill`` so the F-10 chain stays
-                            # complete.
-                            replaced_seq = position.position_seq
-                            led.positions_replaced += 1
-                            # F-07g: the conflict entry is a SIGNAL entry — it gets its
-                            # own decision bar's strength multiplier, exactly like a
-                            # flat entry.
-                            conflict_strength = _signal_strength(bar)
-                            replace_detail: dict[str, Any] = {
-                                "rule": _entry_rule_snapshot(entry_signal),
-                                "conflict": "replace_existing",
-                                "replaced_position_seq": replaced_seq,
-                            }
-                            if strength_active:
-                                replace_detail["signal_strength"] = {
-                                    "mode": strength_mode,
-                                    "multiplier": str(conflict_strength),
-                                }
-                            _emit(
-                                "entry_signal",
-                                event_time=bar.timestamp,
-                                direction=entry_signal,
-                                bar_seq=led.bars_seen,
-                                detail=replace_detail,
-                            )
-                            _close(
-                                bar.timestamp,
-                                bar.close,
-                                "replaced_by_signal",
-                                position,
-                                bar_seq=led.bars_seen,
-                            )
-                            position = _do_open(
-                                entry_signal,
-                                bar,
-                                bar.close,
-                                bar_seq=led.bars_seen,
-                                deferred=False,
-                                strength=conflict_strength,
-                            )
-                        else:  # allow_stacking — fold a signal-driven tranche into the position
-                            stack_eff = _effective_fill(
-                                bar.close,
-                                is_buy=position.direction == "long",
-                                half_spread=half_spread,
-                                slip=slippage,
-                            )
-                            # F-07g: a stack tranche is a SIGNAL entry — its size gets its
-                            # own decision bar's strength multiplier (the traced
-                            # ``stack_size`` reflects it).
-                            stack_strength = _signal_strength(bar)
-                            if alloc_on:
-                                sleeve = _sleeve_capital(led.equity)
-                                tranche = _cap_to_sleeve(
-                                    _position_size(config, stack_eff, sleeve, stack_strength),
-                                    sleeve,
-                                    stack_eff,
-                                )
-                            else:
-                                tranche = _position_size(
-                                    config, stack_eff, led.equity, stack_strength
-                                )
-                            stacked_size = position.size + tranche
-                            size_limits = config.position_sizing.position_size_limits
-                            stack_reject: str | None = None
-                            stack_cap: str | None = None
-                            if tranche <= _ZERO:
-                                stack_reject = "stack_size_not_positive"
-                            elif (
-                                size_limits is not None
-                                and size_limits.max_position_size is not None
-                                and stacked_size > size_limits.max_position_size
-                            ):
-                                stack_reject = "position_size_limit"
-                                stack_cap = str(size_limits.max_position_size)
-                            elif alloc_on:
-                                sleeve_remaining = (
-                                    _sleeve_capital(led.equity) - position.entry_notional
-                                )
-                                if (stack_eff * tranche) > sleeve_remaining:
-                                    stack_reject = "sleeve_capacity"
-                                    stack_cap = str(max(sleeve_remaining, _ZERO).quantize(_MONEY))
-                            if (
-                                stack_reject is None
-                                and rules_active
-                                and portfolio_cap_amount is not None
-                            ):
-                                # Composition-wide cap on the ADD: prior items' concurrent
-                                # notional + this position's own. An over-cap tranche is
-                                # REJECTED, never auto-trimmed (the §11.4 acceptance rule).
-                                headroom = (
-                                    portfolio_cap_amount
-                                    - _prior_exposure_at(_bar_epoch_ms(bar.timestamp))
-                                    - position.entry_notional
-                                )
-                                if (stack_eff * tranche) > headroom:
-                                    stack_reject = "portfolio_max_total_exposure"
-                                    stack_cap = str(max(headroom, _ZERO).quantize(_MONEY))
-                            if stack_reject is not None:
-                                led.stack_entries_rejected += 1
-                                _emit(
-                                    "stack_entry_rejected",
-                                    event_time=bar.timestamp,
-                                    direction=position.direction,
-                                    bar_seq=led.bars_seen,
-                                    detail={
-                                        "position_seq": position.position_seq,
-                                        "reason": stack_reject,
-                                        "cap": stack_cap,
-                                        "candidate_size": str(tranche),
-                                        "policy": stacking_policy,
-                                    },
-                                )
-                            else:
-                                # One lifecycle, one trade-per-lot accounting: the tranche
-                                # folds into a size-weighted average basis exactly like a
-                                # scale layer; stop LEVELS stay as installed at entry and
-                                # the ladder's own reference/caps are untouched (a stack is
-                                # a SIGNAL entry, not a ladder layer). The tranche's fill
-                                # pays one commission now — the close still books one round
-                                # trip.
-                                new_basis = (
-                                    (position.entry_price * position.size + stack_eff * tranche)
-                                    / stacked_size
-                                ).quantize(_MONEY)
-                                position.entry_price = new_basis
-                                position.size = stacked_size
-                                position.entry_notional = (new_basis * stacked_size).quantize(
-                                    _MONEY
-                                )
-                                position.peak_notional = max(
-                                    position.peak_notional, position.entry_notional
-                                )
-                                led.stack_entries_added += 1
-                                if commission > _ZERO:
-                                    led.equity = (led.equity - commission).quantize(_MONEY)
-                                _emit(
-                                    "stack_entry_added",
-                                    event_time=bar.timestamp,
-                                    direction=position.direction,
-                                    bar_seq=led.bars_seen,
-                                    detail={
-                                        "position_seq": position.position_seq,
-                                        "fill_price": str(stack_eff),
-                                        "stack_size": str(tranche),
-                                        "new_size": str(stacked_size),
-                                        "entry_basis": str(new_basis),
-                                        "exposure": str(position.entry_notional),
-                                        "policy": stacking_policy,
-                                    },
-                                )
-                elif hedge_policy == "close_existing":
-                    # An opposite signal with exit-on-opposite OFF: the policy closes the
-                    # held position at the decision bar's close ("Close" §13 — the flat
-                    # rules take over from the next bar; no same-bar reverse).
-                    led.opposite_signal_closes += 1
-                    _close(
-                        bar.timestamp, bar.close, "opposite_signal", position, bar_seq=led.bars_seen
+                        want = entry_signal
+            elif len(window) == _BREAKOUT_WINDOW:
+                # (6b) breakout entry proxy, with a full look-back.
+                highest = max(b.high for b in window)
+                lowest = min(b.low for b in window)
+                want_long = bar.close > highest
+                want_short = bar.close < lowest
+                if (want_long and not long_ok) or (want_short and not short_ok):
+                    led.suppressed_entries += 1
+                    _emit(
+                        "filtered_no_entry",
+                        event_time=bar.timestamp,
+                        direction="long" if want_long else "short",
+                        bar_seq=led.bars_seen,
+                        detail={
+                            "reason": "direction_restriction",
+                            "direction_mode": config.position_entry_logic.direction_mode,
+                        },
                     )
+                elif want_long or want_short:
+                    # long wins a same-bar tie (deterministic); sides are exclusive.
+                    want = "long" if want_long else "short"
+            if want is not None and restriction_specs:
+                # F-07e: the Restrictions/Filters ENTRY gate (Master Ref §12.1 "block
+                # entry"). Evaluated AFTER the signal + direction bias produced a wanted
+                # entry, so the trace shows a real signal the filters vetoed — never a
+                # phantom suppression. The gate runs at DECISION time (the signal bar);
+                # a deferred/limit fill inherits its signal bar's verdict (V1 boundary,
+                # engine-version-pinned).
+                active_filters = _active_restrictions(bar_date)
+                if _restrictions_block(active_filters):
+                    led.entries_blocked_by_restriction += 1
+                    _emit(
+                        "filtered_no_entry",
+                        event_time=bar.timestamp,
+                        direction=want,
+                        bar_seq=led.bars_seen,
+                        detail={
+                            "reason": "restriction_blocked",
+                            "rule": restriction_rule,
+                            "active_filters": active_filters,
+                            "context": "flat_entry",
+                        },
+                    )
+                    want = None
+            if want is not None:
+                # F-07g: the SIGNAL bar's strength multiplier, computed once at the
+                # decision point (after the restriction gate — a vetoed signal never
+                # computes strength) and inherited verbatim by whichever fill path
+                # executes (immediate / deferred / limit) — never re-priced later.
+                strength = _signal_strength(bar)
+                entry_detail: dict[str, Any] = {"rule": _entry_rule_snapshot(want)}
+                if strength_active:
+                    entry_detail["signal_strength"] = {
+                        "mode": strength_mode,
+                        "multiplier": str(strength),
+                    }
+                # F-10: the entry DECISION (signal fired + bias allowed), carrying the
+                # evaluated rule id(s) and each nested condition's pass/fail — distinct
+                # from the ``entry_fill`` execution event (doc 15 §16).
+                _emit(
+                    "entry_signal",
+                    event_time=bar.timestamp,
+                    direction=want,
+                    bar_seq=led.bars_seen,
+                    detail=entry_detail,
+                )
+                if order_is_limit:
+                    # F-07b: rest a limit order at the signal-derived price; it fills
+                    # only on a later touch within the validity window (resolved by the
+                    # (3b) block on subsequent bars), never on this signal bar.
+                    limit = order_cfg.limit
+                    assert limit is not None  # guaranteed by order_ok
+                    offset = limit.price_offset or _ZERO
+                    limit_level = _limit_price(limit.price_rule, bar.close, offset)
+                    validity_bars = _VALIDITY_BARS[limit.validity]
+                    working_limit = _WorkingLimit(
+                        direction=want,
+                        limit_price=limit_level,
+                        offset=offset,
+                        price_rule=limit.price_rule,
+                        unfilled_policy=limit.unfilled_policy,
+                        expires_seq=(
+                            None if validity_bars is None else led.bars_seen + validity_bars
+                        ),
+                        strength=strength,
+                    )
+                    led.limit_orders_placed += 1
+                    _emit(
+                        "limit_order_placed",
+                        event_time=bar.timestamp,
+                        direction=want,
+                        bar_seq=led.bars_seen,
+                        detail={
+                            "limit_price": str(limit_level),
+                            "price_rule": limit.price_rule,
+                            "validity": limit.validity,
+                            "unfilled_policy": limit.unfilled_policy,
+                            "expires_bar_seq": working_limit.expires_seq,
+                        },
+                    )
+                elif order_is_stop:
+                    # F-07h: rest a stop trigger at the signal-derived level; it fires
+                    # only on a later touch (resolved by the (1c) block on subsequent
+                    # bars), never on this signal bar. For a stop-limit the limit leg
+                    # is pre-computed HERE from the same signal close, so the armed
+                    # limit is signal-derived exactly like a plain limit order's.
+                    stop = order_cfg.stop
+                    assert stop is not None  # guaranteed by order_ok
+                    trigger_level = _limit_price(
+                        stop.activation_rule, bar.close, stop.trigger_offset or _ZERO
+                    )
+                    limit = order_cfg.limit  # present iff stop_limit_order
+                    limit_offset = (limit.price_offset or _ZERO) if limit else _ZERO
+                    place_detail: dict[str, Any] = {
+                        "trigger_price": str(trigger_level),
+                        "activation_rule": stop.activation_rule,
+                        "order_type": order_cfg.type,
+                    }
+                    stop_limit_level: Decimal | None = None
+                    if limit is not None:
+                        stop_limit_level = _limit_price(limit.price_rule, bar.close, limit_offset)
+                        place_detail["limit_price"] = str(stop_limit_level)
+                        place_detail["validity"] = limit.validity
+                        place_detail["unfilled_policy"] = limit.unfilled_policy
+                    working_stop = _WorkingStop(
+                        direction=want,
+                        trigger_price=trigger_level,
+                        limit_price=stop_limit_level,
+                        limit_offset=limit_offset,
+                        limit_rule=limit.price_rule if limit else "",
+                        unfilled_policy=limit.unfilled_policy if limit else "",
+                        validity_bars=(_VALIDITY_BARS[limit.validity] if limit else None),
+                        strength=strength,
+                    )
+                    led.stop_orders_placed += 1
+                    _emit(
+                        "stop_order_placed",
+                        event_time=bar.timestamp,
+                        direction=want,
+                        bar_seq=led.bars_seen,
+                        detail=place_detail,
+                    )
+                elif entry_sched == "touch":
+                    # F-07i (C) ``intrabar_touch`` ENTRY: rest a TOUCH order at the
+                    # signal price (the signal bar's close) and fill only when a
+                    # later bar's prints come back to the level — reusing the F-07b
+                    # working-limit machinery verbatim (entry-signal-price rule, no
+                    # offset, until-cancelled). With a limit/stop order type the
+                    # branches above already govern the fill (the order's own touch
+                    # semantics subsume the timing).
+                    working_limit = _WorkingLimit(
+                        direction=want,
+                        limit_price=bar.close,
+                        offset=_ZERO,
+                        price_rule="entry_signal_price",
+                        unfilled_policy="keep_until_validity_ends",
+                        expires_seq=None,
+                        strength=strength,
+                    )
+                    led.touch_orders_placed += 1
+                    _emit(
+                        "limit_order_placed",
+                        event_time=bar.timestamp,
+                        direction=want,
+                        bar_seq=led.bars_seen,
+                        detail={
+                            "limit_price": str(bar.close),
+                            "price_rule": "entry_signal_price",
+                            "mode": "intrabar_touch",
+                            "unfilled_policy": "keep_until_validity_ends",
+                            "expires_bar_seq": None,
+                        },
+                    )
+                elif entry_sched == "immediate":
+                    position = _do_open(
+                        want,
+                        bar,
+                        bar.close,
+                        bar_seq=led.bars_seen,
+                        deferred=False,
+                        strength=strength,
+                    )
+                else:
+                    _emit(
+                        "entry_scheduled",
+                        event_time=bar.timestamp,
+                        direction=want,
+                        bar_seq=led.bars_seen,
+                        detail={
+                            "timing": config.data.execution.entry_timing,
+                            "target_bar_seq": led.bars_seen + 1,
+                        },
+                    )
+                    pending = _Pending(
+                        "entry",
+                        entry_sched == "next_open",
+                        led.bars_seen + 1,
+                        want,
+                        "",
+                        strength,
+                    )
+
+        # (3d) Resolve a fill deferred to THIS bar's CLOSE (next_candle_close). Runs at
+        # end-of-bar so an intrabar stop (above) pre-empts a scheduled close exit, and
+        # so a pending set THIS bar (target bars_seen+1) is never resolved early.
+        if pending is not None and pending.target_seq == led.bars_seen and not pending.at_open:
+            if pending.kind == "entry" and position is None:
+                led.deferred_entry_fills += 1
+                position = _do_open(
+                    pending.direction,
+                    bar,
+                    bar.close,
+                    bar_seq=led.bars_seen,
+                    deferred=True,
+                    strength=pending.strength,
+                )
+            elif pending.kind == "exit" and position is not None:
+                led.deferred_exit_fills += 1
+                # F-07c: a deferred exit SIGNAL at the close closes ``close_fraction`` and
+                # holds the remainder under the aftermath (a full close nulls the position).
+                if _close(
+                    bar.timestamp,
+                    bar.close,
+                    pending.reason,
+                    position,
+                    bar_seq=led.bars_seen,
+                    fraction=close_fraction,
+                ):
                     position = None
-                elif hedge_policy == "ignore":
+                else:
+                    _apply_partial_aftermath(position, bar.close)
+            pending = None
+
+        # (5) F-07e conflict / position handling — a NEW aggregated entry-signal EDGE
+        # while a position is OPEN (Master Ref §13; plan mode only — the breakout proxy
+        # computes no signals while a position is held, so it stays byte-identical).
+        # Runs AFTER the bar's exit/stop resolution so a risk event always dominates
+        # (§13 priority order: exit/stop before entry candidates): a bar that closed or
+        # reduced the position (``trades_before_bar``) or committed an exit (``pending``)
+        # never also stacks/replaces it. The EDGE guard (``prev_entry_signal``) makes a
+        # HELD signal one entry event — never a per-bar stack/replace/churn storm.
+        # An opposite signal only reaches here when exit-on-opposite left the position
+        # open (otherwise it already closed above); ``allow_hedge`` in that state is
+        # unreachable — the ``conflict_ok`` fail-closed gate opened no position at all.
+        if (
+            position is not None
+            # The signal edge that OPENED the position this bar (flat entry, deferred
+            # fill or limit touch) is one entry event — it must never also stack /
+            # replace / close its own position on the same bar.
+            and position.entry_bar_seq != led.bars_seen
+            and plan_active
+            and pending is None
+            and len(led.trades) == trades_before_bar
+            and entry_signal is not None
+            and entry_signal != prev_entry_signal
+        ):
+            if entry_signal == position.direction:
+                if stacking_policy == "ignore":
                     led.conflict_signals_ignored += 1
                     _emit(
                         "filtered_no_entry",
@@ -2939,263 +2691,577 @@ def run_engine(
                         direction=entry_signal,
                         bar_seq=led.bars_seen,
                         detail={
-                            "reason": "hedge_ignored",
-                            "policy": hedge_policy,
+                            "reason": "stacking_ignored",
+                            "policy": stacking_policy,
                             "position_seq": position.position_seq,
                         },
                     )
-
-            # (7) F-07d same-direction scaling — the price-distance ladder over the OPEN
-            # position (Master Ref §11.3/§11.4). Runs AFTER every entry/exit/stop resolution
-            # of the bar so it sees the position's final state: a bar that closed or reduced
-            # the position (``trades_before_bar``) or committed an exit (``pending``) never
-            # also scales it. One threshold cross = ONE candidate: crossing
-            # ``retracement_distance``% ADVERSE from the reference (initial entry fill, then
-            # each trigger close) creates the candidate and ADVANCES the reference whether or
-            # not the candidate is accepted — bounded events (each further candidate needs a
-            # further full step), no O(bars) re-trigger spam. The layer-count caps gate
-            # candidate CREATION (an exhausted ladder generates nothing, §11.4); the
-            # exposure/size caps gate ACCEPTANCE — an over-cap layer is REJECTED with a
-            # ledger reason, never auto-trimmed (§11.4 exposure binding). An accepted layer
-            # fills at the trigger bar's CLOSE (the deterministic decision point — the
-            # F-07a deferral remains the initial entry's contract), pays one fill's
-            # commission at fill time (the close still books the round trip), and folds into
-            # the single position as a size-weighted average basis; stop LEVELS stay as
-            # installed at entry.
-            if (
-                position is not None
-                and scaling_active
-                and pending is None
-                and len(led.trades) == trades_before_bar
-                and position.layers_filled < scale_max_layers
-            ):
-                # Captured BEFORE the cross advances it — the trace reports the
-                # reference the candidate was measured from, not the new one.
-                scale_ref = position.scale_reference
-                scale_long = position.direction == "long"
-                # S5c per-layer closed-bar gate (doc 02 §5.7), applied ONLY to the
-                # LOGIC-BASED ladder. doc 02 §6.1's ⓘ panel is explicit and its reasoning is
-                # mechanical, not incidental: "Price-Distance Based Scaling doğrudan fiyat
-                # mesafesiyle tetiklendiğinden bu timeframe dizisini kullanmaz" — a price
-                # comparison evaluates no indicator, so it has no candle to close on. The
-                # sequence therefore governs which candle a logic-based SIGNAL is read from,
-                # and the price-distance ladder below stays exactly as it was pre-S5c.
-                # ``next_layer_tf`` is None under same_strategy, leaving even the logic
-                # ladder ungated (every base bar is a decision point).
-                next_layer_tf = (
-                    layer_timeframe(config, position.layers_filled) if scale_logic_mode else None
-                )
-                this_bucket = layer_bucket(_bar_epoch_ms(bar.timestamp), next_layer_tf)
-                layer_bar_ready = next_layer_tf is None or (
-                    this_bucket is not None and this_bucket != position.scale_layer_bucket
-                )
-                if scale_logic_mode:
-                    # The logic ladder proposes a layer when the resolved scaling blocks
-                    # aggregate to a signal in the POSITION'S OWN direction (§5.7's
-                    # same-direction-only canonical rule — an opposite signal is never
-                    # scaling; it is resolved by the §9 conflict rules). An EDGE is
-                    # required, mirroring the F-07e conflict detector: a signal that simply
-                    # stays true must not add a layer on every subsequent bar.
-                    scale_fires = (
-                        layer_bar_ready
-                        and scale_signal == position.direction
-                        and prev_scale_signal != position.direction
+                elif stacking_policy == "scale_existing":
+                    # The repeated signal itself adds nothing — position growth is
+                    # DELEGATED to the scaling ladder (§13 "only if scaling allows");
+                    # with scaling disabled the signal is a traced no-op.
+                    led.conflict_signals_ignored += 1
+                    _emit(
+                        "filtered_no_entry",
+                        event_time=bar.timestamp,
+                        direction=entry_signal,
+                        bar_seq=led.bars_seen,
+                        detail={
+                            "reason": "stacking_scale_only",
+                            "policy": stacking_policy,
+                            "scaling_enabled": scaling_active,
+                            "position_seq": position.position_seq,
+                        },
                     )
                 else:
-                    scale_fires = scale_threshold_crossed(
-                        reference=scale_ref,
-                        distance_pct=scale_distance,
-                        close=bar.close,
-                        is_long=scale_long,
-                    )
-                if scale_fires:
-                    position.scale_reference = bar.close  # the ladder steps from this trigger
-                    # S5c: this candle has now been SPENT on a decision, accepted or not —
-                    # advance the gate anchor so a gated logic ladder makes at most one
-                    # decision per layer-timeframe candle. Under same_strategy (and on the
-                    # whole price-distance path) ``this_bucket`` is None, which restores the
-                    # pre-S5c inert anchor exactly.
-                    position.scale_layer_bucket = this_bucket
-                    layer_size = resolve_scale_layer_size(
-                        basis=scale_add_basis,
-                        value=scale_add_value,
-                        initial_size=position.initial_size,
-                        current_size=position.size,
-                    )
-                    layer_eff = _effective_fill(
-                        bar.close, is_buy=scale_long, half_spread=half_spread, slip=slippage
-                    )
-                    scaled_size = position.size + layer_size
-                    size_limits = config.position_sizing.position_size_limits
-                    # The composition-wide cap is a MONEY basis, distinct from the
-                    # per-strategy size-units "max_total_exposure"; both bind here and
-                    # the precedence order decides which name reaches the ledger.
-                    reject_reason, reject_cap = resolve_scale_rejection(
-                        layer_size=layer_size,
-                        layer_notional=layer_eff * layer_size,
-                        scaled_size=scaled_size,
-                        max_total_size=scale_max_total,
-                        max_position_size=(
-                            size_limits.max_position_size if size_limits is not None else None
-                        ),
-                        sleeve_remaining=(
-                            _sleeve_capital(led.equity) - position.entry_notional
-                            if alloc_on
-                            else None
-                        ),
-                        portfolio_headroom=(
-                            portfolio_cap_amount
-                            - _prior_exposure_at(_bar_epoch_ms(bar.timestamp))
-                            - position.entry_notional
-                            if rules_active and portfolio_cap_amount is not None
-                            else None
-                        ),
-                    )
-                    if reject_reason is not None:
-                        led.scale_layers_rejected += 1
+                    # allow_stacking / replace_existing EXECUTE a new entry — the same
+                    # Restrictions/Filters gate that vets a flat entry vets it (§12.1
+                    # "block entry" is entry-scoped, not flat-scoped).
+                    conflict_active = _active_restrictions(bar_date) if restriction_specs else []
+                    if _restrictions_block(conflict_active):
+                        led.entries_blocked_by_restriction += 1
                         _emit(
-                            "scale_layer_rejected",
+                            "filtered_no_entry",
                             event_time=bar.timestamp,
-                            direction=position.direction,
+                            direction=entry_signal,
                             bar_seq=led.bars_seen,
                             detail={
-                                "position_seq": position.position_seq,
-                                "reason": reject_reason,
-                                "cap": reject_cap,
-                                "reference": str(scale_ref),
-                                "candidate_size": str(layer_size),
-                                "layers_filled": position.layers_filled,
+                                "reason": "restriction_blocked",
+                                "rule": restriction_rule,
+                                "active_filters": conflict_active,
+                                "context": "conflict_entry",
                             },
                         )
-                    else:
-                        new_basis = (
-                            (position.entry_price * position.size + layer_eff * layer_size)
-                            / scaled_size
-                        ).quantize(_MONEY)
-                        position.entry_price = new_basis
-                        position.size = scaled_size
-                        position.entry_notional = (new_basis * scaled_size).quantize(_MONEY)
-                        position.peak_notional = max(
-                            position.peak_notional, position.entry_notional
-                        )
-                        position.layers_filled += 1
-                        # S5c: the NEXT layer has its own timeframe, so the gate must be
-                        # re-anchored in that timeframe's buckets — not left in the one the
-                        # layer just filled used. Re-anchoring to THIS bar means the next
-                        # layer waits for a full candle of its own (coarser) timeframe.
-                        position.scale_layer_bucket = layer_bucket(
-                            _bar_epoch_ms(bar.timestamp),
-                            layer_timeframe(config, position.layers_filled),
-                        )
-                        led.scale_layers_added += 1
-                        if commission > _ZERO:
-                            # The layer's own entry fill pays its commission NOW; the close
-                            # still books one round trip (initial entry + exit) — N layers
-                            # pay exactly N extra fills, no double counting.
-                            led.equity = (led.equity - commission).quantize(_MONEY)
+                    elif stacking_policy == "replace_existing":
+                        # Close the held position and re-enter fresh at the decision
+                        # bar's close (the deterministic decision point — the scale-
+                        # layer fill precedent; the F-07a deferral remains the FLAT
+                        # entry's contract). The close emits ``position_close`` with
+                        # the "replaced_by_signal" reason; the re-open emits its own
+                        # ``entry_signal`` + ``entry_fill`` so the F-10 chain stays
+                        # complete.
+                        replaced_seq = position.position_seq
+                        led.positions_replaced += 1
+                        # F-07g: the conflict entry is a SIGNAL entry — it gets its
+                        # own decision bar's strength multiplier, exactly like a
+                        # flat entry.
+                        conflict_strength = _signal_strength(bar)
+                        replace_detail: dict[str, Any] = {
+                            "rule": _entry_rule_snapshot(entry_signal),
+                            "conflict": "replace_existing",
+                            "replaced_position_seq": replaced_seq,
+                        }
+                        if strength_active:
+                            replace_detail["signal_strength"] = {
+                                "mode": strength_mode,
+                                "multiplier": str(conflict_strength),
+                            }
                         _emit(
-                            "scale_layer_added",
+                            "entry_signal",
                             event_time=bar.timestamp,
-                            direction=position.direction,
+                            direction=entry_signal,
                             bar_seq=led.bars_seen,
-                            detail={
-                                "position_seq": position.position_seq,
-                                "layer_seq": position.layers_filled,
-                                "reference": str(scale_ref),
-                                "fill_price": str(layer_eff),
-                                "layer_size": str(layer_size),
-                                "new_size": str(scaled_size),
-                                "entry_basis": str(new_basis),
-                                "exposure": str(position.entry_notional),
-                                "method": (
-                                    "logic_based_scaling"
-                                    if scale_logic_mode
-                                    else "price_distance_scaling"
-                                ),
-                                # S5c: which timeframe's closed candle authorized this
-                                # layer. None under same_strategy and on the whole
-                                # price-distance path (both ungated) — the trace states the
-                                # ladder's structure, it never implies one.
-                                "layer_timeframe": next_layer_tf,
-                            },
+                            detail=replace_detail,
                         )
+                        _close(
+                            bar.timestamp,
+                            bar.close,
+                            "replaced_by_signal",
+                            position,
+                            bar_seq=led.bars_seen,
+                        )
+                        position = _do_open(
+                            entry_signal,
+                            bar,
+                            bar.close,
+                            bar_seq=led.bars_seen,
+                            deferred=False,
+                            strength=conflict_strength,
+                        )
+                    else:  # allow_stacking — fold a signal-driven tranche into the position
+                        stack_eff = _effective_fill(
+                            bar.close,
+                            is_buy=position.direction == "long",
+                            half_spread=half_spread,
+                            slip=slippage,
+                        )
+                        # F-07g: a stack tranche is a SIGNAL entry — its size gets its
+                        # own decision bar's strength multiplier (the traced
+                        # ``stack_size`` reflects it).
+                        stack_strength = _signal_strength(bar)
+                        if alloc_on:
+                            sleeve = _sleeve_capital(led.equity)
+                            tranche = _cap_to_sleeve(
+                                _position_size(config, stack_eff, sleeve, stack_strength),
+                                sleeve,
+                                stack_eff,
+                            )
+                        else:
+                            tranche = _position_size(config, stack_eff, led.equity, stack_strength)
+                        stacked_size = position.size + tranche
+                        size_limits = config.position_sizing.position_size_limits
+                        stack_reject: str | None = None
+                        stack_cap: str | None = None
+                        if tranche <= _ZERO:
+                            stack_reject = "stack_size_not_positive"
+                        elif (
+                            size_limits is not None
+                            and size_limits.max_position_size is not None
+                            and stacked_size > size_limits.max_position_size
+                        ):
+                            stack_reject = "position_size_limit"
+                            stack_cap = str(size_limits.max_position_size)
+                        elif alloc_on:
+                            sleeve_remaining = _sleeve_capital(led.equity) - position.entry_notional
+                            if (stack_eff * tranche) > sleeve_remaining:
+                                stack_reject = "sleeve_capacity"
+                                stack_cap = str(max(sleeve_remaining, _ZERO).quantize(_MONEY))
+                        if (
+                            stack_reject is None
+                            and rules_active
+                            and portfolio_cap_amount is not None
+                        ):
+                            # Composition-wide cap on the ADD: prior items' concurrent
+                            # notional + this position's own. An over-cap tranche is
+                            # REJECTED, never auto-trimmed (the §11.4 acceptance rule).
+                            headroom = (
+                                portfolio_cap_amount
+                                - _prior_exposure_at(_bar_epoch_ms(bar.timestamp))
+                                - position.entry_notional
+                            )
+                            if (stack_eff * tranche) > headroom:
+                                stack_reject = "portfolio_max_total_exposure"
+                                stack_cap = str(max(headroom, _ZERO).quantize(_MONEY))
+                        if stack_reject is not None:
+                            led.stack_entries_rejected += 1
+                            _emit(
+                                "stack_entry_rejected",
+                                event_time=bar.timestamp,
+                                direction=position.direction,
+                                bar_seq=led.bars_seen,
+                                detail={
+                                    "position_seq": position.position_seq,
+                                    "reason": stack_reject,
+                                    "cap": stack_cap,
+                                    "candidate_size": str(tranche),
+                                    "policy": stacking_policy,
+                                },
+                            )
+                        else:
+                            # One lifecycle, one trade-per-lot accounting: the tranche
+                            # folds into a size-weighted average basis exactly like a
+                            # scale layer; stop LEVELS stay as installed at entry and
+                            # the ladder's own reference/caps are untouched (a stack is
+                            # a SIGNAL entry, not a ladder layer). The tranche's fill
+                            # pays one commission now — the close still books one round
+                            # trip.
+                            new_basis = (
+                                (position.entry_price * position.size + stack_eff * tranche)
+                                / stacked_size
+                            ).quantize(_MONEY)
+                            position.entry_price = new_basis
+                            position.size = stacked_size
+                            position.entry_notional = (new_basis * stacked_size).quantize(_MONEY)
+                            position.peak_notional = max(
+                                position.peak_notional, position.entry_notional
+                            )
+                            led.stack_entries_added += 1
+                            if commission > _ZERO:
+                                led.equity = (led.equity - commission).quantize(_MONEY)
+                            _emit(
+                                "stack_entry_added",
+                                event_time=bar.timestamp,
+                                direction=position.direction,
+                                bar_seq=led.bars_seen,
+                                detail={
+                                    "position_seq": position.position_seq,
+                                    "fill_price": str(stack_eff),
+                                    "stack_size": str(tranche),
+                                    "new_size": str(stacked_size),
+                                    "entry_basis": str(new_basis),
+                                    "exposure": str(position.entry_notional),
+                                    "policy": stacking_policy,
+                                },
+                            )
+            elif hedge_policy == "close_existing":
+                # An opposite signal with exit-on-opposite OFF: the policy closes the
+                # held position at the decision bar's close ("Close" §13 — the flat
+                # rules take over from the next bar; no same-bar reverse).
+                led.opposite_signal_closes += 1
+                _close(bar.timestamp, bar.close, "opposite_signal", position, bar_seq=led.bars_seen)
+                position = None
+            elif hedge_policy == "ignore":
+                led.conflict_signals_ignored += 1
+                _emit(
+                    "filtered_no_entry",
+                    event_time=bar.timestamp,
+                    direction=entry_signal,
+                    bar_seq=led.bars_seen,
+                    detail={
+                        "reason": "hedge_ignored",
+                        "policy": hedge_policy,
+                        "position_seq": position.position_seq,
+                    },
+                )
 
-            # (8) doc 15 §9.3 step 8 — state snapshot + decision-trace tail.
-            # F-07e: the conflict EDGE detector's memory — this bar's aggregated signal is
-            # the next bar's "previous" (None in proxy mode, so the detector stays inert).
-            prev_entry_signal = entry_signal
-            # S5c: this bar's scaling proposal becomes the next bar's "previous" so the
-            # ladder fires on the signal's EDGE, not on every bar it stays true.
-            prev_scale_signal = scale_signal
+        # (7) F-07d same-direction scaling — the price-distance ladder over the OPEN
+        # position (Master Ref §11.3/§11.4). Runs AFTER every entry/exit/stop resolution
+        # of the bar so it sees the position's final state: a bar that closed or reduced
+        # the position (``trades_before_bar``) or committed an exit (``pending``) never
+        # also scales it. One threshold cross = ONE candidate: crossing
+        # ``retracement_distance``% ADVERSE from the reference (initial entry fill, then
+        # each trigger close) creates the candidate and ADVANCES the reference whether or
+        # not the candidate is accepted — bounded events (each further candidate needs a
+        # further full step), no O(bars) re-trigger spam. The layer-count caps gate
+        # candidate CREATION (an exhausted ladder generates nothing, §11.4); the
+        # exposure/size caps gate ACCEPTANCE — an over-cap layer is REJECTED with a
+        # ledger reason, never auto-trimmed (§11.4 exposure binding). An accepted layer
+        # fills at the trigger bar's CLOSE (the deterministic decision point — the
+        # F-07a deferral remains the initial entry's contract), pays one fill's
+        # commission at fill time (the close still books the round trip), and folds into
+        # the single position as a size-weighted average basis; stop LEVELS stay as
+        # installed at entry.
+        if (
+            position is not None
+            and scaling_active
+            and pending is None
+            and len(led.trades) == trades_before_bar
+            and position.layers_filled < scale_max_layers
+        ):
+            # Captured BEFORE the cross advances it — the trace reports the
+            # reference the candidate was measured from, not the new one.
+            scale_ref = position.scale_reference
+            scale_long = position.direction == "long"
+            # S5c per-layer closed-bar gate (doc 02 §5.7), applied ONLY to the
+            # LOGIC-BASED ladder. doc 02 §6.1's ⓘ panel is explicit and its reasoning is
+            # mechanical, not incidental: "Price-Distance Based Scaling doğrudan fiyat
+            # mesafesiyle tetiklendiğinden bu timeframe dizisini kullanmaz" — a price
+            # comparison evaluates no indicator, so it has no candle to close on. The
+            # sequence therefore governs which candle a logic-based SIGNAL is read from,
+            # and the price-distance ladder below stays exactly as it was pre-S5c.
+            # ``next_layer_tf`` is None under same_strategy, leaving even the logic
+            # ladder ungated (every base bar is a decision point).
+            next_layer_tf = (
+                layer_timeframe(config, position.layers_filled) if scale_logic_mode else None
+            )
+            this_bucket = layer_bucket(_bar_epoch_ms(bar.timestamp), next_layer_tf)
+            layer_bar_ready = next_layer_tf is None or (
+                this_bucket is not None and this_bucket != position.scale_layer_bucket
+            )
+            if scale_logic_mode:
+                # The logic ladder proposes a layer when the resolved scaling blocks
+                # aggregate to a signal in the POSITION'S OWN direction (§5.7's
+                # same-direction-only canonical rule — an opposite signal is never
+                # scaling; it is resolved by the §9 conflict rules). An EDGE is
+                # required, mirroring the F-07e conflict detector: a signal that simply
+                # stays true must not add a layer on every subsequent bar.
+                scale_fires = (
+                    layer_bar_ready
+                    and scale_signal == position.direction
+                    and prev_scale_signal != position.direction
+                )
+            else:
+                scale_fires = scale_threshold_crossed(
+                    reference=scale_ref,
+                    distance_pct=scale_distance,
+                    close=bar.close,
+                    is_long=scale_long,
+                )
+            if scale_fires:
+                position.scale_reference = bar.close  # the ladder steps from this trigger
+                # S5c: this candle has now been SPENT on a decision, accepted or not —
+                # advance the gate anchor so a gated logic ladder makes at most one
+                # decision per layer-timeframe candle. Under same_strategy (and on the
+                # whole price-distance path) ``this_bucket`` is None, which restores the
+                # pre-S5c inert anchor exactly.
+                position.scale_layer_bucket = this_bucket
+                layer_size = resolve_scale_layer_size(
+                    basis=scale_add_basis,
+                    value=scale_add_value,
+                    initial_size=position.initial_size,
+                    current_size=position.size,
+                )
+                layer_eff = _effective_fill(
+                    bar.close, is_buy=scale_long, half_spread=half_spread, slip=slippage
+                )
+                scaled_size = position.size + layer_size
+                size_limits = config.position_sizing.position_size_limits
+                # The composition-wide cap is a MONEY basis, distinct from the
+                # per-strategy size-units "max_total_exposure"; both bind here and
+                # the precedence order decides which name reaches the ledger.
+                reject_reason, reject_cap = resolve_scale_rejection(
+                    layer_size=layer_size,
+                    layer_notional=layer_eff * layer_size,
+                    scaled_size=scaled_size,
+                    max_total_size=scale_max_total,
+                    max_position_size=(
+                        size_limits.max_position_size if size_limits is not None else None
+                    ),
+                    sleeve_remaining=(
+                        _sleeve_capital(led.equity) - position.entry_notional if alloc_on else None
+                    ),
+                    portfolio_headroom=(
+                        portfolio_cap_amount
+                        - _prior_exposure_at(_bar_epoch_ms(bar.timestamp))
+                        - position.entry_notional
+                        if rules_active and portfolio_cap_amount is not None
+                        else None
+                    ),
+                )
+                if reject_reason is not None:
+                    led.scale_layers_rejected += 1
+                    _emit(
+                        "scale_layer_rejected",
+                        event_time=bar.timestamp,
+                        direction=position.direction,
+                        bar_seq=led.bars_seen,
+                        detail={
+                            "position_seq": position.position_seq,
+                            "reason": reject_reason,
+                            "cap": reject_cap,
+                            "reference": str(scale_ref),
+                            "candidate_size": str(layer_size),
+                            "layers_filled": position.layers_filled,
+                        },
+                    )
+                else:
+                    new_basis = (
+                        (position.entry_price * position.size + layer_eff * layer_size)
+                        / scaled_size
+                    ).quantize(_MONEY)
+                    position.entry_price = new_basis
+                    position.size = scaled_size
+                    position.entry_notional = (new_basis * scaled_size).quantize(_MONEY)
+                    position.peak_notional = max(position.peak_notional, position.entry_notional)
+                    position.layers_filled += 1
+                    # S5c: the NEXT layer has its own timeframe, so the gate must be
+                    # re-anchored in that timeframe's buckets — not left in the one the
+                    # layer just filled used. Re-anchoring to THIS bar means the next
+                    # layer waits for a full candle of its own (coarser) timeframe.
+                    position.scale_layer_bucket = layer_bucket(
+                        _bar_epoch_ms(bar.timestamp),
+                        layer_timeframe(config, position.layers_filled),
+                    )
+                    led.scale_layers_added += 1
+                    if commission > _ZERO:
+                        # The layer's own entry fill pays its commission NOW; the close
+                        # still books one round trip (initial entry + exit) — N layers
+                        # pay exactly N extra fills, no double counting.
+                        led.equity = (led.equity - commission).quantize(_MONEY)
+                    _emit(
+                        "scale_layer_added",
+                        event_time=bar.timestamp,
+                        direction=position.direction,
+                        bar_seq=led.bars_seen,
+                        detail={
+                            "position_seq": position.position_seq,
+                            "layer_seq": position.layers_filled,
+                            "reference": str(scale_ref),
+                            "fill_price": str(layer_eff),
+                            "layer_size": str(layer_size),
+                            "new_size": str(scaled_size),
+                            "entry_basis": str(new_basis),
+                            "exposure": str(position.entry_notional),
+                            "method": (
+                                "logic_based_scaling"
+                                if scale_logic_mode
+                                else "price_distance_scaling"
+                            ),
+                            # S5c: which timeframe's closed candle authorized this
+                            # layer. None under same_strategy and on the whole
+                            # price-distance path (both ungated) — the trace states the
+                            # ladder's structure, it never implies one.
+                            "layer_timeframe": next_layer_tf,
+                        },
+                    )
 
-            # F-07i (C): a resting touch exit dies with its position — whatever closed it
-            # (stop / deferred exit / the touch itself) consumed the exit intent; a later
-            # position never inherits a stale touch level.
-            if position is None:
-                exit_touch = None
+        # (8) doc 15 §9.3 step 8 — state snapshot + decision-trace tail.
+        # F-07e: the conflict EDGE detector's memory — this bar's aggregated signal is
+        # the next bar's "previous" (None in proxy mode, so the detector stays inert).
+        prev_entry_signal = entry_signal
+        # S5c: this bar's scaling proposal becomes the next bar's "previous" so the
+        # ladder fires on the signal's EDGE, not on every bar it stays true.
+        prev_scale_signal = scale_signal
 
-            window.append(bar)
+        # F-07i (C): a resting touch exit dies with its position — whatever closed it
+        # (stop / deferred exit / the touch itself) consumed the exit intent; a later
+        # position never inherits a stale touch level.
+        if position is None:
+            exit_touch = None
 
-    # End-of-data: a limit order still resting past the last bar never filled → cancel it
-    # (F-07b), so an unfilled limit is an auditable no-fill, never a silent gap.
-    if working_limit is not None and led.last_bar is not None:
-        led.limit_orders_cancelled += 1
-        _emit(
-            "limit_order_cancelled",
-            event_time=led.last_bar.timestamp,
-            direction=working_limit.direction,
-            bar_seq=led.bars_seen,
-            detail={
-                "reason": "end_of_data",
-                "unfilled_policy": working_limit.unfilled_policy,
-                "limit_price": str(working_limit.limit_price),
-            },
+        window.append(bar)
+
+    def _finalize() -> None:
+        """End-of-data settlement — the former tail of ``run_engine``, unchanged."""
+        nonlocal position, working_limit, working_stop
+
+        # End-of-data: a limit order still resting past the last bar never filled → cancel it
+        # (F-07b), so an unfilled limit is an auditable no-fill, never a silent gap.
+        if working_limit is not None and led.last_bar is not None:
+            led.limit_orders_cancelled += 1
+            _emit(
+                "limit_order_cancelled",
+                event_time=led.last_bar.timestamp,
+                direction=working_limit.direction,
+                bar_seq=led.bars_seen,
+                detail={
+                    "reason": "end_of_data",
+                    "unfilled_policy": working_limit.unfilled_policy,
+                    "limit_price": str(working_limit.limit_price),
+                },
+            )
+            working_limit = None
+
+        # End-of-data: a stop trigger still resting past the last bar never fired → cancel it
+        # (F-07h), so an unfired stop is an auditable no-fill, never a silent gap.
+        if working_stop is not None and led.last_bar is not None:
+            led.stop_orders_cancelled += 1
+            _emit(
+                "stop_order_cancelled",
+                event_time=led.last_bar.timestamp,
+                direction=working_stop.direction,
+                bar_seq=led.bars_seen,
+                detail={
+                    "reason": "end_of_data",
+                    "trigger_price": str(working_stop.trigger_price),
+                    "order_type": order_cfg.type,
+                },
+            )
+            working_stop = None
+
+        # End-of-data: close any open position at the last bar's close (never left dangling).
+        if position is not None and led.last_bar is not None:
+            _close(
+                led.last_bar.timestamp,
+                led.last_bar.close,
+                "end_of_data",
+                position,
+                bar_seq=led.bars_seen,
+            )
+            position = None
+
+    def _output() -> EngineOutput:
+        """The run's result, assembled from the state the steps accumulated."""
+        # K-11b: the output assembly is a pure projection of (ctx, led) — no bar is replayed
+        # here. ``warnings`` is threaded into the diagnostics block because the Result carries
+        # it under a diagnostics key, not as a field of its own.
+        summary = build_summary(ctx, led)
+        warnings = build_warnings(ctx, led)
+        diagnostics = build_diagnostics(ctx, led, warnings)
+        return EngineOutput(
+            summary=summary,
+            trades=led.trades,
+            equity_points=led.equity_points,
+            signal_events=led.signal_events,
+            diagnostics=diagnostics,
+            position_intervals=led.position_intervals,
+            filtered_events=led.filtered_events,
         )
-        working_limit = None
 
-    # End-of-data: a stop trigger still resting past the last bar never fired → cancel it
-    # (F-07h), so an unfired stop is an auditable no-fill, never a silent gap.
-    if working_stop is not None and led.last_bar is not None:
-        led.stop_orders_cancelled += 1
-        _emit(
-            "stop_order_cancelled",
-            event_time=led.last_bar.timestamp,
-            direction=working_stop.direction,
-            bar_seq=led.bars_seen,
-            detail={
-                "reason": "end_of_data",
-                "trigger_price": str(working_stop.trigger_price),
-                "order_type": order_cfg.type,
-            },
-        )
-        working_stop = None
+    def _open_position() -> _Position | None:
+        return position
 
-    # End-of-data: close any open position at the last bar's close (never left dangling).
-    if position is not None and led.last_bar is not None:
-        _close(
-            led.last_bar.timestamp,
-            led.last_bar.close,
-            "end_of_data",
-            position,
-            bar_seq=led.bars_seen,
-        )
-        position = None
-
-    # K-11b: the output assembly is a pure projection of (ctx, led) — no bar is replayed
-    # here. ``warnings`` is threaded into the diagnostics block because the Result carries
-    # it under a diagnostics key, not as a field of its own.
-    summary = build_summary(ctx, led)
-    warnings = build_warnings(ctx, led)
-    diagnostics = build_diagnostics(ctx, led, warnings)
-    return EngineOutput(
-        summary=summary,
-        trades=led.trades,
-        equity_points=led.equity_points,
-        signal_events=led.signal_events,
-        diagnostics=diagnostics,
-        position_intervals=led.position_intervals,
-        filtered_events=led.filtered_events,
+    return _ItemStepper(
+        step=_step,
+        finalize=_finalize,
+        output=_output,
+        open_position=_open_position,
+        ledger=led,
+        ctx=ctx,
     )
+
+
+def run_engine(
+    *,
+    strategy_config: StrategyConfig,
+    bar_batches: Iterator[list[dict[str, Any]]],
+    execution_key: str,
+    item_count: int = 1,
+    indicator_plan: IndicatorPlan | None = None,
+    timeframe: str | None = None,
+    allocation: AllocationExecution | None = None,
+    funding: FundingSchedule | None = None,
+    tick_batches: Iterator[list[dict[str, Any]]] | None = None,
+    portfolio_rules: PortfolioRules | None = None,
+    builtin_breakout_fixture: bool = False,
+) -> EngineOutput:
+    """Deterministically bar-replay one strategy over its pinned OHLCV bars.
+
+    Entry/exit timing uses real built-in indicator signals: the run REQUIRES an
+    ``indicator_plan`` that resolves to at least one computable entry block. F-04 —
+    FAIL CLOSED: with no such plan the engine raises ``UnresolvedStrategyError`` and
+    materializes NOTHING, rather than fabricate metrics from a strategy the user never
+    defined (production is also guarded at admission and in the worker). The historical
+    deterministic breakout is available ONLY as an explicit test-only fixture: pass
+    ``builtin_breakout_fixture=True`` to exercise the price/stop/cost/sizing machinery
+    without a real indicator layer. That opt-in is the sole way to reach the proxy — it
+    is never a production fallback.
+
+    ``timeframe`` is the pinned market revision's base bar timeframe, resolved by
+    the CALLER (the engine is pure — no I/O); ``None`` means the revision is not
+    bar-timeframed (event-based / unknown) and is surfaced as-is, never guessed.
+
+    ``allocation`` applies the pinned shared-pool capital model (doc 13 §8.3/§8.4): the
+    run is capitalised from the portfolio pool P0 (minus the fixed nominal reserve R0),
+    and every entry is bounded by the item's sleeve cap ``Ci(t) = A(t) * wi / 100`` as
+    an OUTER ``allowed_size`` limit — compound mode recomputes A(t) from live portfolio
+    equity each valuation point, fixed mode holds it at the initial A0. ``None`` (the
+    default, independent mode) sizes from the strategy's own ``initial_capital`` and is
+    BYTE-IDENTICAL to the pre-allocation engine. Honest V1 boundary: this is the
+    single-item foundation — the replayed strategy is capitalised and capped as one
+    portfolio sleeve; a genuine multi-item co-simulation over a unified clock across
+    heterogeneous bar sources, and cross-currency FX conversion (GAP-16), stay
+    deferred (surfaced as L4 diagnostics, never hidden).
+
+    ``funding`` applies a pinned ``funding_rate`` Research revision as a real cost on the
+    open position (F-11, doc 12 §8.4). It is an already-resolved, available-time-safe
+    ``FundingSchedule`` (each record carries the first moment it could truly have been used —
+    event time shifted by the revision's available-time policy). The engine consumes it with
+    a backward/as-of join: a record fires at the first bar whose time is >= its
+    ``available_at`` and, while a position is held, charges ``notional * rate`` (a long pays
+    a positive rate, a short receives). A value dated after the last replayed bar can never
+    fire, so future leakage is impossible by construction. ``None`` (the default) books no
+    funding and is BYTE-IDENTICAL to the pre-F-11 engine.
+
+    ``portfolio_rules`` applies the plan's PORTFOLIO-LEVEL rules (cross-item, doc 13
+    §8.4): a composition-wide Max Total Exposure cap (percent of the pool P0, enforced
+    against the prior-pinned items' held windows + this item's own open notional at
+    every entry/stack/scale acceptance) and the opposing same-instrument conflict
+    policy (BLOCK_OPPOSITE blocks this item's entry while an earlier-pinned item held
+    the opposite direction on the same instrument; NET executes conservatively AS
+    BLOCK_OPPOSITE — L4-disclosed, never silently netted). Enforcement is sequential
+    in pin order (an earlier item is never re-simulated because of a later one — the
+    honest V1 boundary, surfaced as an L4 warning). ``None`` (the default) is
+    BYTE-IDENTICAL to the pre-rules engine.
+
+    ``tick_batches`` injects the PINNED tick/trade revision's processed print stream
+    (F-07i B) — the worker resolves it from the manifest pin ONLY when the strategy
+    demands tick data (``tick_data_required``), mirroring the bar path (the engine stays
+    pure — no I/O). The prints are aligned to per-bar windows via ``timeframe`` (an
+    un-timeframed revision cannot be aligned — surfaced as a warning, L4, and the run
+    stays on the conservative OHLCV model) and resolve the ``first_trigger_wins``
+    stop-conflict order by TRUE first touch instead of the flagged conservative
+    approximation. ``None`` (the default) is BYTE-IDENTICAL to the pre-F-07i engine."""
+    stepper = _build_stepper(
+        strategy_config=strategy_config,
+        execution_key=execution_key,
+        item_count=item_count,
+        indicator_plan=indicator_plan,
+        timeframe=timeframe,
+        allocation=allocation,
+        funding=funding,
+        tick_batches=tick_batches,
+        portfolio_rules=portfolio_rules,
+        builtin_breakout_fixture=builtin_breakout_fixture,
+    )
+    for batch in bar_batches:
+        for raw in batch:
+            bar = _normalize(raw)
+            if bar is None:
+                continue
+            stepper.step(bar)
+    stepper.finalize()
+    return stepper.output()
 
 
 __all__ = [

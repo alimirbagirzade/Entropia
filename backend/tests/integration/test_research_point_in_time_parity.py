@@ -517,22 +517,23 @@ async def test_the_agent_bundle_does_not_validate_the_time_policy_by_design(sess
 
 
 # --------------------------------------------------------------------------- #
-# CONFIRMED DISCREPANCIES — canonical expectation, expected to fail today       #
+# CONFIRMED DISCREPANCIES — canonical expectation                               #
 # --------------------------------------------------------------------------- #
-# Each of these reproduces a defect that ADIM 13 confirmed empirically but did NOT
-# fix: the charter allows a narrow fix only in the shared time-policy layer, and
-# these live in the Agent tool gateway / the bundle member shape. They are
-# ``strict`` so the day the defect is fixed the xfail itself fails and the marker
-# must be removed — a silent "it started passing" is not possible.
+# Each of these reproduced a defect that ADIM 13 confirmed empirically but did NOT
+# fix. They were ``xfail(strict)`` so the day the defect was fixed the xfail itself
+# would fail and the marker HAD to be removed — a silent "it started passing" was
+# never possible.
+#
+# The three Agent-tool-gateway rows (#556 twice, #557) are now FIXED and assert
+# normally: ``jobs/agent_tools._handle_data_bundle_resolve`` passes every research
+# member through ``rd_jobs.admit_bundle_member``, the same admission gate the human
+# compilers use. The last one (#558, the missing available-time-policy pin) is a
+# PRODUCT decision, not a bug fix, and keeps its marker.
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="GH #556 — data_bundle.resolve reads no lifecycle state: a soft-deleted "
-    "root and a deprecated/revoked revision both pin successfully, while the twin "
-    "compile_agent_data_bundle blocks both (doc 12 §11, §14).",
-)
 async def test_the_agent_tool_gateway_blocks_a_soft_deleted_root(session) -> None:
+    # GH #556, FIXED: the gateway routes through the SAME
+    # ``rd_jobs.admit_bundle_member`` gate the twin compiler uses (doc 12 §11, §14).
     await _seed(session)
     market_id = await _approved_market(session)
     entity_id, revision = await _research(session, market_id, UsageScope.RESEARCH_BACKTEST)
@@ -545,12 +546,9 @@ async def test_the_agent_tool_gateway_blocks_a_soft_deleted_root(session) -> Non
     assert result["status"] == "rejected"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="GH #556 — data_bundle.resolve reads no revision_state: a DEPRECATED "
-    "revision pins successfully (doc 12 §11).",
-)
 async def test_the_agent_tool_gateway_blocks_a_deprecated_revision(session) -> None:
+    # GH #556, FIXED: a non-consumable revision is refused a NEW bundle on every
+    # surface, the gateway included (doc 12 §11).
     await _seed(session)
     market_id = await _approved_market(session)
     _, revision = await _research(session, market_id, UsageScope.RESEARCH_BACKTEST)
@@ -561,15 +559,12 @@ async def test_the_agent_tool_gateway_blocks_a_deprecated_revision(session) -> N
     assert result["status"] == "rejected"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="GH #557 — data_bundle.resolve trusts the CALLER's claimed "
-    "has_approved_feature_definition instead of resolving it server-side the way "
-    "compile_backtest_evidence_bundle does (doc 12 §9.3, §2 server-side policy).",
-)
 async def test_the_agent_tool_gateway_resolves_the_feature_definition_server_side(
     session,
 ) -> None:
+    # GH #557, FIXED: the Feature-Input-Only precondition is resolved from the
+    # database by the shared gate; the caller's claim is not read at all
+    # (doc 12 §9.3, §2 server-side policy).
     await _seed(session)
     market_id = await _approved_market(session)
     _, revision = await _research(session, market_id, UsageScope.FEATURE_INPUT_ONLY)

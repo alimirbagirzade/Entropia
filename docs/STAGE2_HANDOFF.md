@@ -3861,7 +3861,43 @@ alembic head, OpenAPI snapshot ve frontend dokunulmadı.
 
 ---
 
-## Next: **ADR §12 sapmasını karara bağla → ADIM 18 (`run_portfolio` faz döngüsü)**
+## ADIM 20 — Unified portfolio oracle suite; containment KALDIRILMADI (PR #583, BLOCKED)
+
+**Base `b0bb4a0` → commit `fd0ead5` → PR #583 DRAFT/BLOCKED** · issue **#582** · 2026-08-05 ·
+**migration YOK** (alembic head `0043_i08_registry_strategy_fks`) · **OpenAPI değişmedi** ·
+**`ENGINE_VERSION` değişmedi** · **üretim kodu HİÇ değişmedi**.
+
+**`SHARED_ALLOCATION_STATUS` = `future_dev` kaldı.** Durma koşulu tetiklendi — bir oracle
+kırmızı olduğu için değil, **kabul edilecek sistem olmadığı için**: `run_portfolio` yok,
+altı unified-clock modülü üretimden hiç import edilmiyor, `jobs/backtest_engine.py` hâlâ
+item döngüsü (`:298`) + `combine_item_runs` (`:363`), ADR'nin **ADIM 16**'sı (resumable
+stepper) atlandı, ADR hâlâ `Proposed`.
+
+**İndi:** 25 test — mevcut 216 birim testinin bıraktığı tek boşluk, yani **çok-tick /
+çok-item birleşik simülasyon** (clock → intents → ledger → arbitration birlikte).
+`tests/unit/oracles/portfolio_harness.py` (ADR §8.2 faz döngüsü, **TEST-OWNED**) +
+`test_oracle_portfolio_clock.py` (10) + `test_oracle_portfolio_capital.py` (11) +
+`test_oracle_portfolio_containment_gate.py` (4) + `docs/audit/unified_portfolio_oracle_acceptance.md`
+(A1–A22 durum tablosu). Aynı dört kapanış **sıralı fold'da 5000.00**, **birleşik saatte
+3000.00**. Beklenen değerlerin tümü elle türetilmiş literal; **non-vacuity dört literal
+bozularak doğrulandı** (tam olarak o dört test kırıldı).
+
+**Testler:** yerel tam suite tek çağrıda **exit 0**, 0 FAILED, **coverage %93.24** (kapı ≥90);
+`ruff`/`mypy` temiz; `tests/unit/oracles/` **111 passed**. Frontend dosyası değişmedi.
+
+**Dürüst sınır:** faz döngüsü **test-owned**; yeşil koşu primitifler hakkında kanıttır, sevk
+edilen engine hakkında değil. ADIM 18 indiğinde `portfolio_harness.simulate` →
+`run_portfolio` ikame edilmeli ve 25 oracle **değişmeden** yeşil olmalı.
+
+Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 20 · handoff: `docs/ADIM20_BLOCKED_KICKOFF.md`.
+
+**Yan bulgu:** bu dosya ve `PROJECT_HISTORY.md` **PR #575 (arbitration) ve #581 (provenance)
+için `landed` kaydı taşımıyor**; aşağıdaki `## Next:` bloğu ADIM 20 öncesine aitti ve hâlâ
+geçerlidir. Eksik kayıtları yazacak olan o slice'ları indirendir.
+
+---
+
+## Next: **ADR 0002'yi karara bağla (insan) → ADIM 18 (`run_portfolio` faz döngüsü)**
 
 **Önce iki kapı, ikisi de insana ait:**
 

@@ -3438,3 +3438,115 @@ ADR 0002'nin `Proposed` durumu ve §12 numaralandırma sapması da açık kalmay
 **Rollback:** `git revert` + `rm -rf ~/.claude/skills/{ponytail,ponytail-review,task-observer,sast-*}`
 ve `~/.claude/rules/skill-routing.md`'deki blok. Üretim kodu etkilenmediği için risk yok.
 
+---
+
+## ADIM 20 — Unified portfolio oracle suite; containment KALDIRILMADI (PR #583, BLOCKED)
+
+**Base `b0bb4a0` → commit `fd0ead5` → PR #583 (DRAFT/BLOCKED, merge edilmedi)** · 2026-08-05 ·
+**Migration YOK** (alembic head `0043_i08_registry_strategy_fks`, tek head) · **OpenAPI
+DEĞİŞMEDİ** · **`ENGINE_VERSION` DEĞİŞMEDİ** · **üretim kodu HİÇ değişmedi** · blocking issue
+**#582**.
+
+**`SHARED_ALLOCATION_STATUS` `future_dev` kaldı.** Bu slice containment'ı kaldırmadı.
+
+### Neden kaldırılmadı — kod yazmadan önce üretilen probe'lar
+
+Görev "oracle'ları yaz, hepsi yeşilse containment'ı kaldır" idi. Durma koşulu tetiklendi, ama
+**bir oracle kırmızı olduğu için değil: kabul edilecek sistem yok.**
+
+| Probe | Sonuç |
+|---|---|
+| `grep -rn "def run_portfolio" backend/src` | **eşleşme yok** — ADR 0002 §12'nin **ADIM 18**'i hiç yazılmadı |
+| altı `execution/` unified-clock modülünün `execution/` dışı import'u | **yok** |
+| `application/jobs/backtest_engine.py:298` | hâlâ `for prepared in prepared_items:` — dış döngü hâlâ **item listesi** |
+| `application/jobs/backtest_engine.py:363` | hâlâ `combine_item_runs(...)` — bitmiş koşular hâlâ pin sırasında katlanıyor |
+| ADR §12 **ADIM 16** (resumable stepper, saf refactor) | **hiç yazılmadı** — atlandı |
+| `manifest.py` policy alanları (`clock_policy_version`, `arbitration_policy_version`, `engine_allocation_policy_version`, `mark_staleness_policy`) | yok |
+| ADR 0002 statüsü | **`Proposed`** — §16 onayı her uygulama slice'ı için ön koşul |
+
+ADIM 15–19'da inen altı modül **kopuk bir ada**: 216 testle kaplı, eksiksiz primitifler — ama
+hiçbir üretim yolu onlara ulaşmıyor. `domain/allocation/capability.py` §REMOVAL'daki
+kaldırma koşullarının **motorla ilgili olanları** (#1 dış döngü, #3 sizing'e ulaşan tek
+`E(t)`, #5 sevk edilen yolda doc 13 §14 test 11, #6 `ENGINE_VERSION`) bu yüzden **inşa gereği**
+karşılanamıyor — başarısız bir assertion yüzünden değil.
+
+### Ne indi — 25 test, tek boşluğu dolduran
+
+Mevcut 216 birim testi altı modülü kaplıyor ama **hepsi tek-tick veya tek-modül**. Hiçbiri
+clock → intents → ledger → arbitration'ı bir portföyün ömrü boyunca **birlikte** koşmuyordu —
+oysa contained kusur tam orada yaşıyor.
+
+* `backend/tests/unit/oracles/portfolio_harness.py` — ADR §8.2 faz döngüsü
+  (P1 → P3 → PV → P4 → P5/P6b → P7 → P9). Girdi ve sıralama; gerçekleşen PnL fikstür tarafından
+  **beyan edilir**, burada yeniden türetilmez.
+* `test_oracle_portfolio_clock.py` (**10**) — tick başına tek yayımlanan değerleme ve her
+  item'ın onu okuması; mandatory olayların ondan **önce** çözülmesi; inşa gereği zaman sıralı
+  eğri; gelecekten veri taşımayan view; heterojen timeframe'lerin tek havuz için çekişmesi;
+  çağıran-sırası ve bar-batch değişmezliği; 12 item × 72 tick yük sağlaması.
+* `test_oracle_portfolio_capital.py` (**11**) — doc 13 §14 test 10 bölüşümü (3600/3150/1350,
+  U0 900); çok-tick drawdown boyunca sabit nominal `R0`; tek fikstürde compound vs fixed
+  (**2500.00 vs 4500.00**); ortak insolvency'de **tam red** — kalan nakdin alacağı 5 unit'e
+  kırpılmıyor; blocked item'ın share'i asla devredilmiyor; kompozisyon-geneli exposure cap;
+  karşıt yön çatışması; NET fail-closed; her değerlemede muhasebe kimliği; sıfır-residual
+  per-item mutabakat.
+* `test_oracle_portfolio_containment_gate.py` (**4**) — aynı dört kapanış **sıralı fold'da
+  5000.00**, **birleşik saatte 3000.00**; artı yukarıdaki dört kapı olgusu assertion olarak.
+* `docs/audit/unified_portfolio_oracle_acceptance.md` — A1–A22 durum tablosu, decision-record
+  §6 koşulları, desteklenmeyen politikalar, insan kapıları.
+
+Tüm beklenen değerler doc 13 / Master Ref Modül 11 / ADR 0002'den **elle türetilmiş literal**;
+hiçbir engine aritmetik helper'ı beklenti üretmiyor.
+
+**Non-vacuity varsayılmadı, DOĞRULANDI:** dört taşıyıcı literal bozuldu (`3000.00`→`5000.00`,
+sleeve `3500.00`→`4500.00`, compound `2500.00`→`4500.00`, red edilen `0`→`5` unit) →
+**tam olarak o dört test kırıldı**, başkası değil.
+
+> **Yöntem notu — tekrarlanmasın:** ilk mutasyon denemesi faz sırasını bozmaktı
+> (`publish_snapshot`'ı P3'ün önüne almak). **Geçersizdi:** `arbitrate` donmuş ledger ister,
+> döngü yapısal olarak çöktü ve **her** test kırıldı. Bu semantik tespit değil, crash'tir.
+> Literal perturbasyonu doğru araçtı.
+
+### Dürüst sınır (üç yerde yazılı, kaldırılmamalı)
+
+Oracle'ların sürdüğü faz döngüsü **TEST-OWNED**, çünkü `run_portfolio` yok. Yeşil koşu
+**primitifler** hakkında kanıttır, **sevk edilen engine hakkında DEĞİL** — engine onları hiç
+çağırmıyor. ADIM 18 indiğinde `portfolio_harness.simulate` yerine `run_portfolio` konmalı ve
+25 oracle **değişmeden** yeniden koşulmalı; ADR §14'ün gerçekten istediği kanıt **o ikamedir**.
+Yazılı olduğu yerler: harness docstring'i §"HONEST BOUNDARY", iki test modülünün docstring'i,
+raporun §2'si.
+
+### Kaldırmayı bloklayanlar (ölçülmüş)
+
+**Yapısal (üretim yolu yok):** A1, A3, A5, A15, A16, A21 (cancel checkpoint'i hâlâ **item
+başına** — `jobs/backtest_engine.py` O-06 checkpoint #3). A4/A18 gerçek `EngineOutput`
+**digest**'i istiyor. A13/A14 yalnız hiçbir şey bağlı olmadığı için trivially doğru.
+
+**Test önkoşulu:** **A17** — `tests/integration/test_research_point_in_time_parity.py`'de
+**4 `xfail(strict=True)`** (#556 ×2, #557, #558); "green, unweakened" değil.
+
+**İnsan kapıları:** ADR `Proposed` (§16) · ADR §12 numaralandırması sevk edilenle uyuşmuyor
+(ADIM 16 atlandı; "yeniden yapılandır" ile "yeniden fiyatla" ayrımı artık yok) ·
+**OD-1…OD-7** açık (ADR R-5) · **#544 (NET)** · **#559 (DST)**.
+
+**Kapalı, kayda geçsin:** **R-1** (revision pinning drift) →
+`a33d3e4 fix(readiness): pin the allocation revision the snapshot names`.
+
+### Testler / CI
+
+Yerel tam suite **tek çağrıda**, worktree'ye özel izole `TEST_DATABASE_URL`, çıktı dosyaya,
+`$?` ayrı okundu: **exit 0**, **0 FAILED / 0 ERROR**, **coverage %93.24** (kapı ≥90).
+`ruff check .` / `ruff format --check .` (757 dosya) / `mypy src` (392 dosya) **temiz**.
+Hedefli `tests/unit/oracles/`: **111 passed** (86 mevcut + 25 yeni).
+Frontend/E2E: **hiç frontend dosyası değişmedi**; CI otoritedir.
+
+### Yan bulgu — doküman-gerçeği boşluğu
+
+`docs/STAGE2_HANDOFF.md` ve bu dosya **PR #575 (arbitration) ve #581 (provenance) için
+`landed` kaydı taşımıyordu**; handoff'un son `## Next:` bloğu hâlâ ADIM 18'i sıradaki iş
+gösteriyordu. Bu kapanış boşluğu **işaret ediyor ama başkasının slice kaydını uydurmuyor** —
+#575/#581'in tam anlatısını yazacak olan o slice'ları indirendir.
+
+### Rollback
+
+`git revert fd0ead5` — yalnız test ve doküman siler; üretim davranışı zaten hiç değişmedi.
+

@@ -4242,54 +4242,91 @@ INF-03 sweep'i telafi ediyor, o sweep de %50 çalışıyordu. `apps/worker/actor
 `asyncio.run` çağrısı **analiz EDİLMEDİ** — dramatiq thread yeniden kullanımına bağlı, ölçmeden
 iddia yok.
 
-## Next: **worker call site — `ItemParticipant` (gerçek engine) → sonra ADIM 20**
+## ADIM 16 — `run_engine` bar döngüsü resumable stepper'a çıktı landed (PR #602)
 
-**Sıradaki tek adım ADIM 20 DEĞİL.** `run_portfolio` var ama **çağıranı yok**; ADIM 20'nin
-matrisindeki A1/A3/A5 dışında hiçbir satır bu boşluk kapanmadan kapanamaz.
+ADR §12'nin **SKIPPED** işaretlediği ADIM 16, faz döngüsünün yerine değil **worker call
+site'ının ön koşulu** olarak yazıldı (§12 düzeltme notunun birebir dediği şey). `run_engine`'in
+kurulum yarısı `_build_stepper(...)` oldu → `_ItemStepper{step(bar), finalize(), output(),
+open_position(), ledger, ctx}`; `run_engine` **imzasını/docstring'ini/semantiğini korudu** ve
+dokuz satırlık sürücüye indi. `bar_batches` fabrikaya GEÇMEZ — bar akışını çağıran sahiplenir;
+`UnresolvedStrategyError` fabrikada, ilk bardan önce atılır.
 
-**1. Engine-destekli `ItemParticipant` (yeni ADIM 21 / eski ADR ADIM 16'nın gerçek borcu).**
-`run_engine`'in bar döngüsünü (`engine.py:1782`, ~1100 satırlık fonksiyonun içinde) bir
-stepper'a çıkar; `run_engine` o stepper üzerinde ince bir sürücü olur ve **gözlemlenebilir
-biçimde değişmez**. Tek kanıt: **46 golden digest kımıldamaz.** Sonra o stepper'ın üstüne
-`portfolio_engine.ItemParticipant`'ı uygulayan bir adaptör yaz ve
-`jobs/backtest_engine.py:298`'deki item döngüsünü `run_portfolio` ile değiştir (yalnız
-**>1 item** çalışırken; tek item `run_engine`'de kalır — ADR §3.2).
-**Bu iki iş ayrı PR olmalı** — ADR §15 R-4'ün "restructure ile re-price'ı ayır" kuralı zaten bir
-kez kaybedildi, ikinci kez kaybedilmesin.
+**Kabul = 46 golden digest, başka hiçbir şey** (ADR §15 R-4). **46/46 sabit.** Tam suite tek
+çağrıda **3699 passed / 4 bilinen xfail / 0 failed**, coverage **%93.29** (kapı ≥%90,
+`engine.py` %95.1), CI 8/8. Taşınan 2365 satırın birebirliği `HEAD`'e karşı satır satır
+doğrulandı; `nonlocal` kümesi AST ile **ölçüldü** (bar'lar arası taşınan tam 10 ad), kalan 83
+geçici için kesin-atama analizi yapıldı. Yeni `tests/unit/test_backtest_engine_stepper.py`
+golden'ın göremediği yarıyı kilitler: aynı senaryolar **bar başına bir çağrıyla, her bar arasında
+askıya alınarak** koşulduğunda digest değişmiyor.
+
+**Kapsam dışı (bilerek):** worker'a dokunulmadı (`jobs/backtest_engine.py:298` hâlâ item
+döngüsü), `ENGINE_VERSION` değişmedi, containment kapalı kaldı, migration/OpenAPI yok.
+`_ItemStepper` / `_build_stepper` modül-private, `__all__`'da değil — **üretimde çağıranı yok.**
+Devir: `docs/ADIM16_STEPPER_LANDED_KICKOFF.md`.
+
+## Next: **PR B — `ItemParticipant` adaptörü + `run_portfolio` call site → sonra ADIM 20**
+
+**Stepper indi (PR #602); kalan borç adaptör + call site.** `run_portfolio` hâlâ üretimde
+**çağrısız**: `jobs/backtest_engine.py:298` item döngüsü, `:363` `combine_item_runs`,
+`SHARED_ALLOCATION_STATUS = future_dev`. ADIM 20'nin matrisindeki A1/A3/A5 dışında hiçbir satır
+bu boşluk kapanmadan kapanamaz.
+
+**1. PR B — adaptör + worker call site.** Stepper üstüne `portfolio_engine.ItemParticipant`'ı
+uygula (`carry` / `mandatory_exit` / `entry`) ve `jobs/backtest_engine.py:298`'deki item
+döngüsünü `run_portfolio` ile değiştir — **yalnız >1 item** çalışırken; tek item `run_engine`'de
+kalır (ADR §3.2). Containment guard'ını **gevşetme, yeniden yaz** (artık üretim yolu var:
+assertion'lar korunur, adlar düzeltilir, importer'lar adlandırılır).
+
+> **Bu mekanik bir ikame DEĞİL.** `ItemParticipant.entry` hazır bir `ItemIntent` ister ama
+> `intents.form_intent` entry'yi item'ın kendi `StrategyConfig`/`FillCosts`'u olmadan ölçemez; ve
+> stepper bir barı **bütün olarak** ilerletirken faz döngüsü aynı barı **fazlara bölünmüş**
+> ister. O boşluğu kapatmak PR B'nin asıl tasarım işidir. Uydurulamayan fazı fail-closed reddet.
+
+**Kabul:** 37 non-portfolio digest **KIMILDAMAMALI**; `portfolio.*` digest'lerinin kımıldaması
+**beklenir** ve her biri tek tek gerekçelendirilir. `ENGINE_VERSION`'a dokunma, containment'ı
+kaldırma (ikisi de ADIM 20).
+
+**PR A'nın bıraktığı reuse anchor'ları — tam sembol adlarıyla:**
+
+| ne | nerede |
+|---|---|
+| stepper fabrikası | `domain/backtest/engine.py::_build_stepper` |
+| stepper kaydı | `engine.py::_ItemStepper` |
+| bir barı ilerlet | `_ItemStepper.step(bar: _Bar) -> None` |
+| gün sonu settlement | `_ItemStepper.finalize() -> None` |
+| sonucu projekte et | `_ItemStepper.output() -> EngineOutput` |
+| tutulan pozisyonu oku | `_ItemStepper.open_position() -> _Position \| None` |
+| canlı defter / run ayarları | `_ItemStepper.ledger`, `_ItemStepper.ctx` |
+| ham dict → `_Bar` | `execution/state.py::_normalize` |
+| eşdeğerlik kanıtı şablonu | `tests/unit/test_backtest_engine_stepper.py` |
+
+**ADIM 18'in bıraktığı anchor'lar (değişmedi):** `portfolio_engine.py::run_portfolio` ·
+`::ItemParticipant` (Protocol) · `CarryCharges` / `MandatoryExit` · `PortfolioTick` /
+`PortfolioRun` · `PHASE_ORDER` / `PORTFOLIO_LOOP_VERSION` · fail-closed reddedişler
+(`InvalidParticipantError`, `MisformedIntentError`, `UnsupportedIntentKindError`,
+`UnpriceableAdmissionError`) · referans katılımcı
+`tests/unit/oracles/portfolio_harness.py::_ScriptedParticipant` · containment'ın kalan tek kapısı
+`tests/unit/oracles/test_oracle_portfolio_containment_gate.py::test_the_phase_loop_exists_but_no_production_path_reaches_it`.
+
+**Faz döngüsünün MODELLEMEDİĞİ (dürüst sınır, `portfolio_engine.py` docstring'inde de yazılı):**
+P0 (clock cursor'ı), **P2 pending fills**, **P8 same-direction scaling** — admitted bir
+`scale_in` bilerek `UnsupportedIntentKindError` atar. Mark policy yok (**OD-2**): `E(t)`
+realized-only.
 
 **2. Sonra ADIM 20** (manifest policy alanları, `ENGINE_VERSION` bump, digest yenileme,
 containment lift). Ön koşulları — hâlâ açık:
 - **A17**: `tests/integration/test_research_point_in_time_parity.py`'de 4 `xfail(strict)`
   (#556 ×2, #557, #558). "green, unweakened" değil.
-- **OD-1 / OD-2 / OD-6 kapıları KOD OLARAK YOK.** ADR §13.1 kararı kaydetti; blocker'ları
-  yazmadı. `provenance.MARK_STALENESS_POLICY` hâlâ `"undefined_pending_od2"`,
-  `arbitration.CONTENTION_SELECTION_STATUS` hâlâ `"recommended_pending_approval"` — **ikisini
-  de ADIM 20 çevirir**, manifest onları taşımaya başladığında (ADR §13.1 son paragraf, R-5).
+- **OD-1 / OD-2 / OD-6 kapıları KOD OLARAK YOK.** `provenance.MARK_STALENESS_POLICY` hâlâ
+  `"undefined_pending_od2"`, `arbitration.CONTENTION_SELECTION_STATUS` hâlâ
+  `"recommended_pending_approval"` — **ikisini de ADIM 20 çevirir** (ADR §13.1 son paragraf, R-5).
 - **#544 (NET)** kanonda tanımsız · **#559 (DST)** karışık zaman dilimi öncesi.
-- **A4 / A18** gerçek `EngineOutput` digest'i ister → 1. maddeye bağlı.
-- **A21** tick tabanlı cancel checkpoint → worker değişikliğine bağlı.
+- **A4 / A18** gerçek `EngineOutput` digest'i ister → PR B'ye bağlı. **A21** tick tabanlı cancel
+  checkpoint → PR B'ye bağlı.
 
-**ADIM 18'in bıraktığı reuse anchor'ları — tam sembol adlarıyla:**
-
-| ne | nerede |
-|---|---|
-| faz döngüsü giriş noktası | `domain/backtest/portfolio_engine.py::run_portfolio` |
-| katılımcı sözleşmesi | `portfolio_engine.py::ItemParticipant` (Protocol) |
-| P1 / P3 girdi tipleri | `portfolio_engine.py::CarryCharges`, `MandatoryExit` |
-| çıktı tipleri | `portfolio_engine.py::PortfolioTick`, `PortfolioRun` |
-| faz sırası, değer olarak | `portfolio_engine.py::PHASE_ORDER`, `PORTFOLIO_LOOP_VERSION` |
-| fail-closed reddedişler | `InvalidParticipantError`, `MisformedIntentError`, `UnsupportedIntentKindError`, `UnpriceableAdmissionError` |
-| scripted katılımcı (referans uygulama) | `tests/unit/oracles/portfolio_harness.py::_ScriptedParticipant` |
-| containment'ın kalan tek kapısı | `tests/unit/oracles/test_oracle_portfolio_containment_gate.py::test_the_phase_loop_exists_but_no_production_path_reaches_it` |
-
-**Faz döngüsünün MODELLEMEDİĞİ (dürüst sınır, `portfolio_engine.py` docstring'inde de yazılı):**
-P0 (clock cursor'ı), **P2 pending fills**, **P8 same-direction scaling** — admitted bir
-`scale_in` bilerek `UnsupportedIntentKindError` atar, çünkü `set_position` tutulan boyutu
-**değiştirir** ve pozisyonu sessizce küçültürdü. Mark policy yok (OD-2): `E(t)` realized-only.
-
-**Paralel yürüyebilecek, bloke etmeyen kalemler** (ADIM 20 kapanışından devralındı, değişmedi):
-#550/#551/#552 (sizing/booking — **#550 karara bağlanmadan sizing'e dokunma**), #539 (düzeltme
-indi, issue açık), #514 (ekran okuyucu, kanıtsız kapatma yok).
+**Paralel yürüyebilecek, bloke etmeyen kalemler:** #550/#551/#552 (sizing/booking — **#550 karara
+bağlanmadan sizing'e dokunma**), #539 (düzeltme indi, issue açık), #514 (ekran okuyucu, kanıtsız
+kapatma yok), #591 (`agent_coordinator` event-loop — PR #600 ile kapandıysa doğrula).
 
 `docs/audit/current_main_ground_truth_2026-08-03.md` §18'in 2/3/4/6 kalemleri kapandığı hâlde
 belge güncellenmedi — **kullanmadan önce doğrula.**

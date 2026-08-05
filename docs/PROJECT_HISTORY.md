@@ -3949,3 +3949,63 @@ INF-03 sweep'i telafi ediyor, o sweep de %50 çalışıyordu. `apps/worker/actor
 `asyncio.run` çağrısı **analiz EDİLMEDİ** — dramatiq thread yeniden kullanımına bağlı, ölçmeden
 iddia yok.
 
+## ADIM 16 — `run_engine` bar döngüsü → resumable stepper (PR #602)
+
+**ADR §12 bu adımı SKIPPED işaretlemişti** — faz döngüsü aynı yere öbür taraftan ulaştığı için.
+Ama aynı düzeltme notu şunu da yazıyordu: stepper hâlâ **worker call site'ının ön koşuludur**.
+Gerçek engine ile desteklenen bir `ItemParticipant` bir öğeyi verilen `t`'ye ilerletebilmek
+zorunda ve `engine.py` bunu yapamıyordu — bar döngüsü ~2400 satırlık bir fonksiyonun içinde
+1355 satır derinlikte nested'dı. Bu slice o borcu ödedi; faz döngüsünün yerine geçmedi.
+
+**Şekil.** `run_engine`'in gövdesinin bar döngüsüne kadarki kısmı `_build_stepper(...)` oldu ve
+bir `_ItemStepper` döndürüyor: `step(bar)` · `finalize()` · `output()` · `open_position()` +
+canlı `ledger` (`_Ledger`) ve `ctx` (`_RunConfig`). `run_engine` **imzasını, docstring'ini ve
+semantiğini korudu** ve dokuz satırlık bir sürücüye indi. `_build_stepper` `run_engine`'in tüm
+anahtar argümanlarını alır, **yalnız `bar_batches` hariç** — bar akışını artık çağıran sahiplenir;
+fail-closed `UnresolvedStrategyError` fabrikada, ilk bardan önce atılır.
+
+**State closure'da BIRAKILDI, bir `self`'e taşınmadı.** Replay durumu eskiden `run_engine`'in
+frame'indeydi; sınıf alanlarına taşımak 1355 satırın her adını `self.` ile yeniden yazmak, yani
+"saf refactor" iddiasını kaybetmek olurdu. `_ItemStepper` bu yüzden yalnız closure'lara işaret
+eden ince bir dataclass.
+
+**Arayüz ölçüldü, okunmadı.** AST ile: bar'lar arası taşınan **tam 10 ad** — `current_day`,
+`exit_touch`, `funding_idx`, `pending`, `position`, `prev_entry_signal`, `prev_scale_signal`,
+`scale_signal`, `working_limit`, `working_stop`. Gövdenin bağladığı diğer **83** ad bar-içi
+geçicidir ve bunu **kesin-atama (definite-assignment) analizi** kapattı: her okumadan önce, her
+yolda yazılıyorlar. (Analiz yanılsaydı hata modu sessiz bir sayı değil, gürültülü bir
+`UnboundLocalError` olurdu — bu yüzden kabul edilebilir bir risk profiliydi.) `position_seq`
+`_do_open`'ın `nonlocal`'ı olarak fabrikada kaldı; `_step` ona dokunmaz. Yerinde mutate edilenler
+(`led.*`, `position.*`, `window`) rebind olmadığı için `nonlocal` istemez.
+
+**Taşınan her satır birebir.** Düzenlemeden sonra taşınan aralıklar `HEAD`'e karşı satır satır
+karşılaştırıldı: setup **955**, step gövdesi **1351**, gün-sonu **44**, output assembly **15** —
+hepsi identical. Tek istisna, formatter'ın dedent sonrası tek satıra topladığı bir `max(...)`
+çağrısı.
+
+**Kabul = 46 golden digest, başka hiçbir şey** (ADR §15 R-4: *"46-digest invariance is the gate;
+no other assertion is trusted"*). **46/46 kımıldamadı.** Tam backend suite tek çağrıda: **3699
+passed, 4 xfailed (bilinen strict set #556 ×2 / #557 / #558), 0 failed**, coverage **%93.29**
+(kapı ≥%90; `engine.py` %95.1). CI 8/8 (2 nightly job by-design skip). ruff + format + `mypy src`
+temiz.
+
+**Golden'ın göremediği yarı ayrıca test edildi** (`tests/unit/test_backtest_engine_stepper.py`).
+`run_engine` stepper'ı **tek kesintisiz geçişte** besler, yani bar-içi yerele dönüşmüş bir
+taşınan ad — her barda okunmadan önce yazıldığı sürece — yine de kayıtlı digest'i üretebilirdi.
+Yeni testler aynı senaryoları **bar başına bir `step()` çağrısıyla, her bar arasında askıya
+alarak** koşar ve digest eşitliğini iddia eder; taşınan her ad için bir vaka: resting limit
+order, hiç touch etmeyen limit, tetiklenmeyen stop, merdiven kuran pozisyon, iki funding kaydı
+ödeyen tutulan pozisyon, blackout gününü aşan tutulan sinyal. Ayrıca: batch boyutunun
+gözlemlenemezliği, adım aralarında pozisyonun hayatta kalması, ve fail-closed kapının ilk bardan
+önce çalışması.
+
+**Bilerek KAPSAM DIŞI.** Worker'a dokunulmadı — `jobs/backtest_engine.py:298` hâlâ item döngüsü,
+`:363` hâlâ `combine_item_runs`. `ENGINE_VERSION` değişmedi, containment guard kapalı
+(`SHARED_ALLOCATION_STATUS = future_dev`), manifest policy alanı eklenmedi. Migration yok, model
+yok, OpenAPI yok. `_ItemStepper` / `_build_stepper` modül-private ve `__all__`'da DEĞİL: **henüz
+`engine.py` dışından çağıranı yok** — onlara tüketici kazandıran şey PR B'dir.
+
+**Dürüst sınır.** PR B mekanik bir ikame değil: `ItemParticipant.entry` HAZIR bir `ItemIntent`
+ister ama `form_intent` entry'yi item'ın kendi `StrategyConfig`/`FillCosts`'u olmadan ölçemez; ve
+stepper bir barı **bütün olarak** ilerletirken faz döngüsü aynı barı **fazlara bölünmüş** ister.
+O boşluğu kapatmak bir tasarım işidir. Devir belgesi: `docs/ADIM16_STEPPER_LANDED_KICKOFF.md`.

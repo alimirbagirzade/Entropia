@@ -1226,7 +1226,7 @@ def test_a_valuation_point_stays_linear_in_the_item_count() -> None:
 # ------------------------------------------------------------------------------ containment
 
 
-def test_nothing_in_production_imports_the_shared_ledger_yet() -> None:
+def test_the_shared_ledger_is_reachable_only_through_the_phase_loop() -> None:
     """ADR §12: the ADIM 17 rollback is "revert; the single-item path is untouched", and it
     stays true only while nothing reaches this module. When the phase loop wires
     ``run_portfolio`` in, this is the test that must be updated deliberately — it should never
@@ -1243,7 +1243,15 @@ def test_nothing_in_production_imports_the_shared_ledger_yet() -> None:
     Updated deliberately again (ADIM 19): ``execution/attribution.py`` decomposes this
     ledger into per-item rows and ``execution/provenance.py`` pins its policy version and
     equity series into the manifest. Both are contained; their own test files assert nothing
-    imports THEM."""
+    imports THEM.
+
+    **ADIM 18 adds ``portfolio_engine.py``, which is NOT contained — it is the production
+    phase loop, and it is the only writer.** Every ledger mutation in a shared run happens
+    inside ``run_portfolio``'s P1/P3/P7/P9, in that order, between one ``publish_snapshot``
+    and one ``commit_tick``. That single-writer property is what the freeze discipline
+    enforces at runtime; this list is what stops a second writer appearing at all. The ADIM 17
+    rollback is unchanged in substance: revert the loop and the single-item path — which never
+    reaches this module — is untouched."""
     src = Path(__file__).resolve().parents[2] / "src" / "entropia"
     importers = sorted(
         path.relative_to(src).as_posix()
@@ -1255,6 +1263,7 @@ def test_nothing_in_production_imports_the_shared_ledger_yet() -> None:
         "domain/backtest/execution/arbitration.py",
         "domain/backtest/execution/attribution.py",
         "domain/backtest/execution/provenance.py",
+        "domain/backtest/portfolio_engine.py",
     ]
 
 

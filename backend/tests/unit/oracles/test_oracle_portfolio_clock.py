@@ -9,9 +9,11 @@ than walked per timestamp. These oracles walk it.
 Every expected number below is hand-derived from doc 13 §8.3/§8.4/§13 and ADR 0002 §7/§8 and
 written as a literal. Nothing here calls an engine arithmetic helper to build an expectation.
 
-Read ``portfolio_harness`` §"HONEST BOUNDARY" first: the phase loop these oracles drive is
-TEST-OWNED, because ADIM 18's ``run_portfolio`` does not exist on this commit. A green run
-here is evidence about the primitives, not about the shipped engine.
+Since ADIM 18 these oracles drive the SHIPPED phase loop
+(``domain/backtest/portfolio_engine.py::run_portfolio``) — they were carried over unchanged
+across that substitution, which is the acceptance evidence ADR §14 asks for. Read
+``portfolio_harness`` §"WHAT MOVED AT ADIM 18" for what is still fixture-owned (the per-item
+DECISIONS) and for the remaining gap (the worker still folds per-item runs).
 """
 
 from __future__ import annotations

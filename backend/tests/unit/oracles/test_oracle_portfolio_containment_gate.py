@@ -2,13 +2,19 @@
 
 ``docs/decisions/2026-08-03_shared_portfolio_containment.md`` §6 lists six conditions for
 flipping ``SHARED_ALLOCATION_STATUS`` to ``"active_v1"``; ADR 0002 §14 expands them into the
-A1-A22 acceptance matrix. The six per-module ``test_nothing_in_production_imports_*`` guards
-each pin one edge of the containment. Nothing pins the SHAPE of the gap as a whole, and
-nothing shows the two numbers — sequential and unified — side by side on one trade set.
+A1-A22 acceptance matrix. The six per-module containment guards each pin one edge. Nothing
+pins the SHAPE of the gap as a whole, and nothing shows the two numbers — sequential and
+unified — side by side on one trade set.
 
 This module does both. It is written to FAIL the day someone lifts the flag, bumps the engine
-version or wires a driver without the rest of the matrix, which is precisely when a human must
-re-read §14 rather than trust a green suite.
+version or closes the last gap without the rest of the matrix, which is precisely when a human
+must re-read §14 rather than trust a green suite.
+
+**Updated at ADIM 18.** ``run_portfolio`` now exists and the oracles run on it, so the gate no
+longer asserts that no driver exists — it asserts the two facts that are still true and are
+what actually keeps the containment closed: the loop has no production CALLER (the worker
+still folds finished per-item runs), and every unified-clock module is reachable only through
+it. A phase loop nothing calls cannot change a shipped Result.
 """
 
 from __future__ import annotations
@@ -37,8 +43,8 @@ _SRC = pathlib.Path(__file__).resolve().parents[3] / "src" / "entropia"
 _P0 = Decimal("10000.00")
 _ZERO = Decimal("0.00")
 
-#: The unified-clock program's modules. ADR §12 puts the driver that would call them in ADIM
-#: 18; until it exists they are reachable only from each other.
+#: The unified-clock program's modules. Since ADIM 18 the phase loop reaches four of them; the
+#: other two (attribution, provenance) are still reachable only from inside ``execution/``.
 _PHASE_LOOP_MODULES = (
     "execution.clock",
     "execution.intents",
@@ -127,15 +133,32 @@ def test_the_same_trades_read_5000_sequentially_and_3000_on_one_clock() -> None:
     assert "portfolio_curve_sequential_not_unified_clock" in sequential.diagnostics["warnings"]
 
 
-def test_no_unified_clock_driver_exists_in_production_on_this_commit() -> None:
-    """ADR §12 ADIM 18 / §14 A1: the outer loop must become the merged timestamp axis.
+def test_the_phase_loop_exists_but_no_production_path_reaches_it() -> None:
+    """ADR §12 ADIM 18 / §14 A1 — the positive counterpart of the pre-ADIM-18 assertion.
 
-    It has not. There is no ``run_portfolio`` entry point, and every unified-clock module is
-    imported only from inside ``execution/`` — so no request, retry or Agent call can reach a
-    tick loop. The worker still folds finished per-item runs."""
+    The outer loop over the merged timestamp axis now EXISTS: ``run_portfolio`` is a shipped
+    production entry point and this package's oracles run on it unchanged. A1 is therefore no
+    longer "no such loop"; it is "the loop is there and nothing in production calls it".
+
+    That second half is what still holds the containment closed, and it is the honest gap:
+    wiring the worker needs an ``ItemParticipant`` backed by the real engine — a per-item
+    replay advanceable to a given ``t``, which is ADR §12's **ADIM 16 stepper and was never
+    written**. So the worker keeps its item loop and ``combine_item_runs``, no request or retry
+    can reach a tick loop, and no shipped Result can change. When the participant lands, this
+    test is the one that must be updated deliberately.
+
+    Every unified-clock module stays reachable ONLY through the phase loop: the per-module
+    guards name their importers exactly, and this asserts the containing shape of that — the
+    single production module they may be imported from."""
     sources = {p: p.read_text() for p in _SRC.rglob("*.py")}
 
-    assert not any("def run_portfolio" in text for text in sources.values())
+    loop = _SRC / "domain" / "backtest" / "portfolio_engine.py"
+    assert "def run_portfolio" in sources[loop]
+    # Exactly one production module defines the driver — two would be two answers to the
+    # phase-order question, which is the one thing this loop exists to make single.
+    assert [p.name for p, text in sources.items() if "def run_portfolio" in text] == [
+        "portfolio_engine.py"
+    ]
 
     for module in _PHASE_LOOP_MODULES:
         importers = sorted(
@@ -144,9 +167,19 @@ def test_no_unified_clock_driver_exists_in_production_on_this_commit() -> None:
             if f"execution.{module.split('.')[-1]} import" in text
             and path.parent.name != "execution"
         )
-        assert importers == [], f"{module} gained a production importer outside execution/"
+        assert importers in ([], ["domain/backtest/portfolio_engine.py"]), (
+            f"{module} gained a production importer outside the phase loop: {importers}"
+        )
 
-    worker = (_SRC / "application" / "jobs" / "backtest_engine.py").read_text()
+    # The containment itself: nothing CALLS the loop, and the worker is untouched.
+    callers = sorted(
+        str(path.relative_to(_SRC))
+        for path, text in sources.items()
+        if path != loop and ("run_portfolio(" in text or "import run_portfolio" in text)
+    )
+    assert callers == [], f"run_portfolio gained a production caller: {callers}"
+
+    worker = sources[_SRC / "application" / "jobs" / "backtest_engine.py"]
     assert "combine_item_runs(" in worker
     assert "for prepared in prepared_items:" in worker
 

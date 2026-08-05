@@ -1238,15 +1238,24 @@ def test_nothing_in_production_imports_the_shared_ledger_yet() -> None:
     as the ONE permitted importer rather than the assertion being loosened to "some importers
     are fine". That module is itself contained — ``test_backtest_cross_item_arbitration.py``
     asserts nothing imports IT — so the property this test defends is unchanged: no production
-    path reaches the shared ledger, and the rollback is still "delete the modules"."""
+    path reaches the shared ledger, and the rollback is still "delete the modules".
+
+    Updated deliberately again (ADIM 19): ``execution/attribution.py`` decomposes this
+    ledger into per-item rows and ``execution/provenance.py`` pins its policy version and
+    equity series into the manifest. Both are contained; their own test files assert nothing
+    imports THEM."""
     src = Path(__file__).resolve().parents[2] / "src" / "entropia"
-    importers = [
+    importers = sorted(
         path.relative_to(src).as_posix()
         for path in src.rglob("*.py")
         if path.name != "portfolio_ledger.py"
         and _imports_portfolio_ledger(path.read_text(encoding="utf-8"))
+    )
+    assert importers == [
+        "domain/backtest/execution/arbitration.py",
+        "domain/backtest/execution/attribution.py",
+        "domain/backtest/execution/provenance.py",
     ]
-    assert importers == ["domain/backtest/execution/arbitration.py"]
 
 
 def _imports_portfolio_ledger(source: str) -> bool:

@@ -16,6 +16,11 @@ const RESULT: BacktestResultDetail = {
   summary: null,
   metrics: [],
   manifest: null,
+  portfolio_simulation: {
+    mode: "legacy_sequential",
+    note: "Produced by the pre-containment sequential approximation.",
+    comparable_with_unified_clock: false,
+  },
   manifest_excerpt: {
     result_id: "res_x",
     composition_snapshot_id: null,

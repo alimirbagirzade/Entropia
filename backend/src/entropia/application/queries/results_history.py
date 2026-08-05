@@ -37,6 +37,7 @@ from entropia.domain.backtest.history import (
     extract_manifest_context,
     normalize_sort_key,
 )
+from entropia.domain.backtest.portfolio_mode import portfolio_simulation_context_from_parts
 from entropia.domain.identity import Actor
 from entropia.domain.identity.policy import can_edit, require_authenticated
 from entropia.domain.lifecycle.enums import DeletionState
@@ -86,6 +87,7 @@ async def list_backtest_results(
     result_ids = [row[0].result_id for row in page]
     digests = await _load_digests(session, result_ids)
     summaries = await _load_summaries(session, result_ids)
+    modes = await _load_portfolio_modes(session, result_ids)
 
     items = [
         _row_dto(
@@ -94,6 +96,7 @@ async def list_backtest_results(
             actor=actor,
             digest=digests.get(result.result_id, {}),
             summary=summaries.get(result.result_id),
+            portfolio_simulation=modes.get(result.result_id),
         )
         for (result, owner, _sort_value) in page
     ]
@@ -251,6 +254,23 @@ async def _load_summaries(session: AsyncSession, result_ids: list[str]) -> dict[
     return {row.result_id: row for row in (await session.execute(stmt)).scalars().all()}
 
 
+async def _load_portfolio_modes(
+    session: AsyncSession, result_ids: list[str]
+) -> dict[str, dict[str, Any]]:
+    """Which co-simulation produced each row, batched (no per-row manifest N+1).
+
+    Same rule as the Result detail page — both call into ``domain.backtest.portfolio_mode``
+    rather than re-implementing the classification, so the list and the detail can never
+    disagree about a Result. A row with no retained evidence resolves to ``unknown``."""
+    markers = await bt_repo.get_portfolio_mode_markers(session, result_ids)
+    return {
+        result_id: portfolio_simulation_context_from_parts(
+            entry.get("unified_manifest_version"), entry.get("diagnostics")
+        )
+        for result_id, entry in markers.items()
+    }
+
+
 def _row_dto(
     result: BacktestResult,
     *,
@@ -258,9 +278,14 @@ def _row_dto(
     actor: Actor,
     digest: dict[str, Any],
     summary: ResultSummary | None,
+    portfolio_simulation: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     return {
         "result_id": result.result_id,
+        # ADIM 19: which co-simulation produced this row, from ITS OWN pinned evidence.
+        # ``None`` only when the batched read found no marker at all — the caller must
+        # render that as "unknown", never as an era.
+        "portfolio_simulation": portfolio_simulation,
         "display_title": f"Backtest Result {result.result_id}",
         "composition_context": {
             "composition_id": result.workspace_entity_id,

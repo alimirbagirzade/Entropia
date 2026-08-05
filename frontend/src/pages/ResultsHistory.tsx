@@ -10,6 +10,7 @@ import {
   EM_DASH,
   HISTORY_SORTS,
   KEY_METRIC_COLUMNS,
+  PORTFOLIO_SIMULATION_LABELS,
   formatMetricValue,
   formatUtc,
   useBacktestResult,
@@ -180,6 +181,17 @@ export function ResultsHistory() {
                     <span>{formatUtc(row.completed_at_utc)}</span>
                     <span>{row.timeframe ?? EM_DASH}</span>
                     <span>{row.market_data_revision_summary?.symbol ?? EM_DASH}</span>
+                    {/* ADIM 19: the co-simulation era, server-derived from this row's own
+                        pinned manifest + diagnostics. Shown in the index because a legacy
+                        sequential drawdown and a unified portfolio drawdown are different
+                        quantities, and listing them side by side without saying so is
+                        misleading. Never inferred client-side. */}
+                    <span
+                      aria-label="Portfolio simulation mode"
+                      data-portfolio-mode={row.portfolio_simulation?.mode ?? "unknown"}
+                    >
+                      {PORTFOLIO_SIMULATION_LABELS[row.portfolio_simulation?.mode ?? "unknown"]}
+                    </span>
                   </div>
                   <div
                     style={{ display: "flex", alignItems: "center", gap: 8, whiteSpace: "nowrap" }}

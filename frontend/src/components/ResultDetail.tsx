@@ -13,6 +13,7 @@ import {
   formatUtc,
   METRIC_AVAILABILITY_NOTES,
   metricAvailabilityStatusLabel,
+  PORTFOLIO_SIMULATION_LABELS,
   useCreateResultExport,
   useResultArtifact,
   useResultMetrics,
@@ -43,6 +44,35 @@ function mutationErrorText(error: unknown): string {
 // The Metrics section binds the profile-hydrated view (doc 17 §9.1): the
 // resolved Arrange Metrics profile filters/orders the persisted rows. While
 // that view loads — or if it fails — the raw persisted rows keep rendering.
+// ADIM 19. Which co-simulation produced these numbers. The value is taken VERBATIM from
+// the server, which derived it from this Result's own pinned manifest + pinned
+// diagnostics; the client must never infer it from live composition state, because that
+// would let a later edit re-interpret an immutable Result (ADR 0002 §10.4, doc 13 §14
+// test 19). A Result whose projection carries no block renders "Unknown" rather than
+// having the component pick an era on the server's behalf.
+function PortfolioSimulationBadge({
+  context,
+}: {
+  context: BacktestResultDetail["portfolio_simulation"];
+}) {
+  const mode = context?.mode ?? "unknown";
+  const note = context?.note ?? null;
+  return (
+    <p
+      className="page-sub"
+      style={{ marginTop: 0 }}
+      aria-label="Portfolio simulation mode"
+      data-portfolio-mode={mode}
+    >
+      <strong>Portfolio simulation:</strong> {PORTFOLIO_SIMULATION_LABELS[mode]}
+      {context && !context.comparable_with_unified_clock ? (
+        <> · not comparable with a unified-clock result</>
+      ) : null}
+      {note ? <> — {note}</> : null}
+    </p>
+  );
+}
+
 export function ResultDetail({ result }: { result: BacktestResultDetail }) {
   const artifactEntries = Object.entries(result.artifact_counts);
   const hydrated = useResultMetrics(result.result_id);
@@ -53,6 +83,8 @@ export function ResultDetail({ result }: { result: BacktestResultDetail }) {
       <h3 id="result-detail-h" style={{ marginTop: 0 }}>
         Backtest Result <code>{result.result_id}</code>
       </h3>
+
+      <PortfolioSimulationBadge context={result.portfolio_simulation} />
 
       {result.summary ? (
         <dl className="kv">

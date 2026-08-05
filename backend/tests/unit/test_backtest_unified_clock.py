@@ -543,14 +543,25 @@ def test_the_clock_is_not_wired_into_production_yet() -> None:
     ONE permitted importer rather than the assertion being loosened to "some importers are
     fine". That module is itself contained — ``test_backtest_item_intents.py`` asserts nothing
     imports IT — so the property this test defends is unchanged: no production path reaches
-    the clock, and the rollback is still "delete the modules"."""
+    the clock, and the rollback is still "delete the modules".
+
+    Updated deliberately a second time (ADIM 19): ``execution/provenance.py`` pins
+    ``CLOCK_POLICY_VERSION`` and the merged axis's ``timeline_identity`` into the portfolio
+    manifest section. It is contained too — ``test_backtest_portfolio_provenance.py`` asserts
+    nothing imports IT — so the defended property still holds."""
     src = Path(__file__).resolve().parents[2] / "src" / "entropia"
-    importers = [
+    # sorted(): ``rglob`` yields in filesystem order, which differs between macOS and the
+    # Linux runner. With one permitted importer that was invisible; with two it made the
+    # assertion platform-dependent. The sibling containment tests already sort.
+    importers = sorted(
         path.relative_to(src).as_posix()
         for path in src.rglob("*.py")
         if path.name != "clock.py" and "execution.clock" in path.read_text(encoding="utf-8")
+    )
+    assert importers == [
+        "domain/backtest/execution/intents.py",
+        "domain/backtest/execution/provenance.py",
     ]
-    assert importers == ["domain/backtest/execution/intents.py"]
 
 
 def test_no_clock_field_ships_in_the_manifest_yet_and_the_engine_version_stands() -> None:

@@ -130,3 +130,11 @@ restore: ## Restore Postgres + object storage from a backup dir (DESTRUCTIVE; ma
 
 backup-verify: ## Verify the latest backup restores cleanly into a scratch DB
 	@bash scripts/backup-verify.sh
+
+.PHONY: migration-accept dr-accept
+
+migration-accept: ## Install/upgrade acceptance: single head, empty->head, LEGACY->head, down/up, provisioning idempotency (scratch DB, no Docker)
+	@bash scripts/migration-acceptance.sh
+
+dr-accept: ## DR acceptance: back up, restore into a scratch DB, verify counts + immutable hashes + object checksums
+	@bash scripts/dr-acceptance.sh

@@ -1,0 +1,408 @@
+# =============================================================================
+# Entropia — INSTALL / UPGRADE / RESTORE acceptance (ADIM 22).
+#
+# `ci.yml` proves the code; `e2e.yml` proves the browser journeys. Neither
+# proves the INSTALLATION: until this workflow existed, `scripts/e2e-acceptance.sh`
+# (fresh / legacy / dev-auth), `scripts/backup.sh` and `scripts/restore.sh` were
+# developer-only commands that CI never ran, so a broken install path, a
+# migration that could not be applied over an older database, or a backup that
+# restored a schema without its rows would all land green.
+#
+# Split by cost, per the ADIM 22 mandate:
+#   * PR + push        -> fast: the migration/provisioning gate and one
+#                         empty-volume fresh install (no browser, no Playwright).
+#   * nightly / manual -> heavy: the legacy-upgrade Docker flow and the full
+#                         backup -> scratch-restore -> deep-verify DR chain.
+# =============================================================================
+name: Install acceptance
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # 03:17 UTC — off the hour so it does not queue behind everyone else's cron.
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+    inputs:
+      run_heavy:
+        description: "Run the heavy legacy-upgrade + DR jobs on this manual run"
+        type: boolean
+        default: true
+
+concurrency:
+  group: install-acceptance-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+# Read-only token: every job here builds, runs and inspects containers; none of
+# them writes to the repository or to any package registry.
+permissions:
+  contents: read
+
+defaults:
+  run:
+    # NOT cosmetic. Without an explicit `shell:`, GitHub runs each step under
+    # `bash -e {0}` — with -e but WITHOUT pipefail. A step like
+    # `bash scripts/dr-acceptance.sh | tee dr-acceptance.txt` would then take
+    # `tee`'s exit status, which is always 0, so a failing DR run would report
+    # green and this workflow could never go red. Naming `bash` explicitly gets
+    # `bash --noprofile --norc -eo pipefail {0}`.
+    shell: bash
+
+jobs:
+  # ===========================================================================
+  # FAST (every PR) — schema + provisioning half of the install chain.
+  # No Docker build: a Postgres service plus the real `alembic upgrade` path.
+  # ===========================================================================
+  migration-acceptance:
+    name: Migration + provisioning acceptance
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: entropia
+          POSTGRES_PASSWORD: entropia
+          POSTGRES_DB: entropia
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U entropia"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        working-directory: backend
+        run: uv sync --all-extras
+
+      - name: Migration + provisioning acceptance
+        # Asserts, against a REAL PostgreSQL and the REAL `alembic upgrade` path
+        # (never metadata.create_all): a single head; empty -> head; migration
+        # <-> model column parity; migration-provisioned rows; two representative
+        # LEGACY revisions upgraded to head with their rows preserved; the head
+        # revision's down/up round trip; and provisioning idempotent under both
+        # repeat and CONCURRENCY. Runs entirely inside a scratch database.
+        env:
+          POSTGRES_USER: entropia
+          POSTGRES_PASSWORD: entropia
+          POSTGRES_DB: entropia
+        run: bash scripts/migration-acceptance.sh
+
+  # ===========================================================================
+  # FAST (every PR) — the empty-volume installation itself.
+  # Deliberately browser-free: e2e.yml already drives the UI. What this proves
+  # and nothing else does is the OPERATOR path — empty volumes, migrate,
+  # provision, bucket, first Admin, every plane healthy — plus the negative
+  # case, that the acceptance gate actually fails when a plane goes down.
+  # ===========================================================================
+  fresh-install:
+    name: Fresh install from empty volumes
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build the .env for the Compose stack
+        run: |
+          cp .env.example .env
+          # The shipped local profile verbatim (AUTH_MODE=session). Only two
+          # test-only values are supplied, neither of which repairs a product
+          # default: a deterministic bootstrap Admin address and a strong,
+          # non-committed service token.
+          sed -i \
+            -e 's/^ENTROPIA_BOOTSTRAP_ADMIN_EMAIL=.*/ENTROPIA_BOOTSTRAP_ADMIN_EMAIL=install_admin@e2e.entropia.test/' \
+            -e "s#^ENTROPIA_SERVICE_TOKEN=.*#ENTROPIA_SERVICE_TOKEN=ci-only-$(openssl rand -hex 24)#" \
+            .env
+
+      - name: Start the stack on EMPTY volumes
+        run: |
+          # Prove the volumes really are empty: this runner has never run the
+          # stack, and `down -v` removes anything a cached layer might have left.
+          docker compose down -v --remove-orphans >/dev/null 2>&1 || true
+          # Same bounded retry as e2e.yml: only a registry/BuildKit transport
+          # blip survives it; a genuinely broken build fails all three attempts.
+          for attempt in 1 2 3; do
+            if docker compose up -d --build; then exit 0; fi
+            echo "::warning::docker compose up failed (attempt ${attempt}/3); retrying"
+            docker compose down --remove-orphans --volumes || true
+            sleep $((attempt * 10))
+          done
+          echo "::error::docker compose up failed after 3 attempts"
+          exit 1
+
+      - name: Wait for the API and the web app
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:8000/api/v1/health/ready >/dev/null 2>&1 \
+              && curl -fsS http://localhost:8080 >/dev/null 2>&1; then
+              echo "Stack is ready."; exit 0
+            fi
+            echo "Waiting for stack... ($i/60)"; sleep 5
+          done
+          echo "::error::stack did not become ready"; docker compose ps; docker compose logs --tail 200
+          exit 1
+
+      - name: The one-shots completed — migrate, then provision, then the bucket
+        run: |
+          fail=0
+          for svc in migrate provision minio-setup; do
+            cid="$(docker compose ps -aq "$svc" | head -n1)"
+            if [ -z "$cid" ]; then echo "::error::$svc never ran"; fail=1; continue; fi
+            status="$(docker inspect -f '{{.State.Status}}' "$cid")"
+            code="$(docker inspect -f '{{.State.ExitCode}}' "$cid")"
+            if [ "$status" = exited ] && [ "$code" = 0 ]; then
+              echo "PASS  $svc — exited 0"
+            else
+              echo "::error::$svc status=$status exit=$code (want exited/0)"; fail=1
+            fi
+          done
+          # The artifact bucket must exist before any plane can store an object.
+          # Credentials come from the .env this job wrote, read WITHOUT executing
+          # it (the scripts/backup.sh idiom), so the probe follows the shipped
+          # profile instead of carrying a second hard-coded copy of it.
+          env_get() { sed -n "s/^$1=//p" .env | tail -1 | sed 's/[[:space:]]*#.*$//; s/[[:space:]]*$//'; }
+          ak="$(env_get OBJECT_STORAGE_ACCESS_KEY)"; ak="${ak:-entropia}"
+          sk="$(env_get OBJECT_STORAGE_SECRET_KEY)"; sk="${sk:-entropia-secret}"
+          bucket="$(env_get OBJECT_STORAGE_BUCKET)"; bucket="${bucket:-entropia-artifacts}"
+          if docker compose run --rm --entrypoint sh minio-setup -c \
+              "mc alias set l http://minio:9000 '$ak' '$sk' >/dev/null && mc ls 'l/$bucket' >/dev/null"; then
+            echo "PASS  artifact bucket '$bucket' exists"
+          else
+            echo "::error::the artifact bucket '$bucket' was not provisioned"; fail=1
+          fi
+          exit $fail
+
+      - name: A fresh database accepts the FIRST Admin, and only the first
+        run: |
+          set -euo pipefail
+          base=http://localhost:8000/api/v1
+          # Provisioning in session mode must NOT have created a login-capable
+          # Admin — that would permanently close the bootstrap window (PROV-05).
+          body="$(curl -fsS "$base/auth/bootstrap-status")"
+          echo "bootstrap-status: $body"
+          echo "$body" | grep -q '"login_capable_admin_exists":false'
+          created="$(curl -fsS -X POST "$base/auth/signup" -H 'Content-Type: application/json' \
+            -d '{"username":"installadmin","password":"Install!pw123","email":"install_admin@e2e.entropia.test"}')"
+          echo "signup: $created"
+          echo "$created" | grep -q '"role":"admin"'
+          curl -fsS "$base/auth/bootstrap-status" | grep -q '"login_capable_admin_exists":true'
+          tok="$(curl -fsS -X POST "$base/auth/login" -H 'Content-Type: application/json' \
+            -d '{"username":"installadmin","password":"Install!pw123"}' \
+            | sed -n 's/.*"token"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')"
+          test -n "$tok"
+          curl -fsS -o /dev/null -w '%{http_code}\n' "$base/admin/users" -H "Authorization: Bearer $tok" | grep -q '^200$'
+          echo "PASS  first Admin bootstrapped, logged in, and reached the Admin surface"
+          # "and only the first" has to be asserted, not just claimed: without
+          # this, a regression that promoted EVERY signup to admin would leave
+          # every assertion above passing.
+          second="$(curl -fsS -X POST "$base/auth/signup" -H 'Content-Type: application/json' \
+            -d '{"username":"seconduser","password":"Second!pw123","email":"second@e2e.entropia.test"}')"
+          echo "second signup: $second"
+          echo "$second" | grep -q '"role":"user"'
+          if echo "$second" | grep -q '"role":"admin"'; then
+            echo "::error::the bootstrap window stayed open — the second signup was promoted to admin"
+            exit 1
+          fi
+          echo "PASS  the bootstrap window closed: the second signup is a plain user"
+
+      - name: Acceptance gate — every plane up, nothing exited/restarted/unhealthy
+        # Bounded wait, not a blind retry. `/health/ready` answering over HTTP is
+        # not the same fact as Docker having RECORDED a healthcheck result: the
+        # api probe is `interval: 10s, retries: 6` with no `start_period`, so a
+        # 20-second-old container legitimately reads `health=starting` while the
+        # app is already serving. Polling the real gate until the deadline keeps
+        # the assertion exact — after it, the last run's FAIL lines are printed
+        # and the step fails, so a plane that never becomes healthy still fails.
+        run: |
+          for i in $(seq 1 24); do
+            if bash scripts/acceptance.sh >/tmp/accept.txt 2>&1; then
+              cat /tmp/accept.txt; exit 0
+            fi
+            echo "waiting for every plane to report healthy... ($i/24)"
+            sleep 5
+          done
+          echo "::error::the acceptance gate never went green within 120s"
+          cat /tmp/accept.txt
+          exit 1
+
+      - name: The acceptance gate FAILS when a plane goes down (negative case)
+        # A gate that has never been observed failing is not a gate. Stopping one
+        # worker must turn scripts/acceptance.sh red; restarting it must turn it
+        # green again, so the red was the plane and not a flaky probe.
+        run: |
+          docker compose stop worker-data
+          if bash scripts/acceptance.sh >/tmp/negative.txt 2>&1; then
+            echo "::error::the acceptance gate stayed GREEN with worker-data stopped"
+            cat /tmp/negative.txt
+            docker compose start worker-data
+            exit 1
+          fi
+          # It must go red for THIS reason. Any unrelated red would otherwise
+          # look like proof that the gate detects a stopped plane.
+          if ! grep -qE '^ +FAIL +worker-data' /tmp/negative.txt; then
+            echo "::error::the gate failed, but not because of worker-data:"
+            cat /tmp/negative.txt
+            docker compose start worker-data
+            exit 1
+          fi
+          grep -E '^ +FAIL' /tmp/negative.txt
+          echo "PASS  acceptance gate went red, naming worker-data"
+          docker compose start worker-data
+          for i in $(seq 1 24); do
+            if bash scripts/acceptance.sh >/dev/null 2>&1; then
+              echo "PASS  acceptance gate green again after the plane came back"; exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::worker-data never returned to healthy"; docker compose ps
+          exit 1
+
+      - name: Dump Compose logs on failure
+        if: failure()
+        run: docker compose logs --tail 500
+
+      - name: Collect the install evidence
+        if: always()
+        run: |
+          mkdir -p install-evidence
+          docker compose ps -a > install-evidence/compose-ps.txt 2>&1 || true
+          docker compose logs --tail 2000 > install-evidence/compose-logs.txt 2>&1 || true
+          bash scripts/acceptance.sh > install-evidence/acceptance.txt 2>&1 || true
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: fresh-install-evidence
+          path: install-evidence/
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
+
+  # ===========================================================================
+  # HEAVY (nightly + manual) — the legacy-upgrade Docker flow.
+  # ===========================================================================
+  legacy-upgrade:
+    name: Legacy upgrade (heavy — nightly/manual)
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.run_heavy)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - name: Legacy credentialless-Admin upgrade on the same volumes
+        # scripts/e2e-acceptance.sh legacy builds the OLD state (dev-mode
+        # credentialless user_admin + owned records), flips the running stack to
+        # AUTH_MODE=session WITHOUT resetting volumes, provisions twice, and
+        # proves every id / ownership row / audit event survived. It runs in its
+        # own isolated Compose project, so it cannot touch anything else.
+        run: bash scripts/e2e-acceptance.sh legacy
+      - name: Dump Compose logs on failure
+        if: failure()
+        run: docker compose -p entropia-e2e-legacy logs --tail 500 || true
+
+  # ===========================================================================
+  # HEAVY (nightly + manual) — backup -> scratch restore -> deep verification.
+  # docs/BACKUP_DR.md has told operators since V1 to "wire it into CI/cron to
+  # catch silent corruption early". This is that wiring.
+  # ===========================================================================
+  disaster-recovery:
+    name: Backup / restore acceptance (heavy — nightly/manual)
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.run_heavy)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install the PostgreSQL 16 client
+        # pg_dump refuses to dump a newer server than itself, and the stack runs
+        # postgres:16 — so pin the client major rather than trust the runner image.
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-client-16 \
+            || sudo apt-get install -y --no-install-recommends postgresql-client
+          pg_dump --version
+
+      - name: Build the .env for the Compose stack
+        run: |
+          cp .env.example .env
+          sed -i \
+            -e 's/^ENTROPIA_BOOTSTRAP_ADMIN_EMAIL=.*/ENTROPIA_BOOTSTRAP_ADMIN_EMAIL=dr_admin@e2e.entropia.test/' \
+            -e "s#^ENTROPIA_SERVICE_TOKEN=.*#ENTROPIA_SERVICE_TOKEN=ci-only-$(openssl rand -hex 24)#" \
+            .env
+
+      - name: Start the stack
+        run: |
+          for attempt in 1 2 3; do
+            if docker compose up -d --build; then exit 0; fi
+            echo "::warning::docker compose up failed (attempt ${attempt}/3); retrying"
+            docker compose down --remove-orphans --volumes || true
+            sleep $((attempt * 10))
+          done
+          echo "::error::docker compose up failed after 3 attempts"
+          exit 1
+
+      - name: Wait for the API
+        run: |
+          for i in $(seq 1 60); do
+            curl -fsS http://localhost:8000/api/v1/health/ready >/dev/null 2>&1 && { echo ready; exit 0; }
+            sleep 5
+          done
+          docker compose ps; docker compose logs --tail 200; exit 1
+
+      - name: Seed real evidence so the restore has something to preserve
+        # An EMPTY==EMPTY hash comparison proves nothing. The golden fixture
+        # writes real revisions, packages, rationale families and artifact
+        # objects, so steps [6] and [8] of dr-acceptance compare actual content.
+        run: |
+          docker compose exec -T -e SEED_E2E_GOLDEN=1 -e SEED_ESP_TA=1 -e SEED_RATIONALE=1 \
+            -e SEED_INSTRUMENTS=1 api python -m entropia.apps.seed
+
+      - name: DR acceptance — backup, restore to scratch, verify deeply
+        env:
+          POSTGRES_USER: entropia
+          POSTGRES_PASSWORD: entropia
+          POSTGRES_DB: entropia
+          # This job seeds a fixture that writes real artifact objects, so "the
+          # backup captured no object storage" is a REGRESSION here, not the
+          # acceptable Docker-free WARN it is on a developer's machine.
+          DR_REQUIRE_OBJECTS: "1"
+        run: bash scripts/dr-acceptance.sh | tee dr-acceptance.txt
+
+      - name: The quick backup gate still passes on the same backup
+        env:
+          POSTGRES_USER: entropia
+          POSTGRES_PASSWORD: entropia
+        run: bash scripts/backup-verify.sh | tee backup-verify.txt
+
+      - name: Dump Compose logs on failure
+        if: failure()
+        run: docker compose logs --tail 500
+
+      - name: Collect the DR evidence (manifests only — never the dump itself)
+        if: always()
+        run: |
+          mkdir -p dr-evidence
+          cp dr-acceptance.txt backup-verify.txt dr-evidence/ 2>/dev/null || true
+          # MANIFEST.json is provenance (head, table count, byte size); the dump
+          # and the mirrored objects are DATA and are deliberately not uploaded.
+          find backups -name MANIFEST.json -exec cp {} dr-evidence/ \; 2>/dev/null || true
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: dr-evidence
+          path: dr-evidence/
+          retention-days: 30
+          if-no-files-found: ignore
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

@@ -40,7 +40,8 @@ makes.
 | Command | Script | What it does |
 | --- | --- | --- |
 | `make backup` | `scripts/backup.sh` | Snapshot Postgres (+ MinIO if reachable) into `./backups/<UTC-stamp>/`. |
-| `make backup-verify` | `scripts/backup-verify.sh` | Prove the latest backup restores into a throwaway scratch DB. |
+| `make backup-verify` | `scripts/backup-verify.sh` | Quick gate: prove the latest backup **loads** into a throwaway scratch DB. |
+| `make dr-accept` | `scripts/dr-acceptance.sh` | Full gate: back up, restore into a scratch DB, and prove the **content** survived. |
 | `make restore` | `scripts/restore.sh` | Recover Postgres (+ MinIO) from a backup dir. **Destructive**, guarded. |
 
 Windows users run the scripts under Git Bash / WSL (see [Windows](#windows)).
@@ -87,13 +88,32 @@ BACKUP_DIR=/mnt/ext BACKUP_RETENTION=14 ./scripts/backup.sh
 ## Verifying a backup (do this routinely)
 
 ```bash
-make backup-verify
+make backup-verify   # quick: does the dump LOAD?
+make dr-accept       # full: did the CONTENT survive?
 ```
 
-Restores `postgres.dump` into a throwaway database (`entropia_restore_check`),
-asserts `alembic_version` is present and the table count matches the manifest,
-then drops the scratch DB. **An untested backup is not a backup** — run this
-after every backup, and wire it into CI/cron to catch silent corruption early.
+`backup-verify` restores `postgres.dump` into a throwaway database
+(`entropia_restore_check`), asserts `alembic_version` is present and the table
+count matches the manifest, then drops the scratch DB. **An untested backup is
+not a backup** — run it after every backup.
+
+It is deliberately shallow, though: a dump that lost every row, every immutable
+hash and every audit event still passes it. `make dr-accept`
+(`scripts/dr-acceptance.sh`) closes that gap. It backs up, restores into its own
+scratch database, and compares source vs restored on the Alembic head, the full
+public table set, **every table's row count**, the immutable evidence columns
+(revision content hashes, run/result manifest hashes and composition
+fingerprints, export checksums, manual-revision checksums), the append-only
+planes (`audit_events`, `outbox_events`, `agent_checkpoint`), and — when the
+backup captured object storage — the **per-object md5** of every artifact. The
+source database is only ever read.
+
+Both run in CI: `.github/workflows/install-acceptance.yml` job
+**disaster-recovery**, nightly (03:17 UTC) and on manual dispatch, against a
+stack seeded with the golden fixture so the hash comparisons have real content
+to compare. It uploads the run transcripts and every `MANIFEST.json` as the
+`dr-evidence` artifact — never the dump or the mirrored objects, which are data.
+This closes audit finding **H-07** ("backup/restore is not verified in CI").
 
 ---
 

@@ -720,8 +720,16 @@ TEST_DATABASE_URL=postgresql+asyncpg://entropia:entropia@localhost:5432/entropia
 
 Without a reachable PostgreSQL, integration tests skip themselves (unit and
 contract tests always run). Migration changes additionally require an
-up/down/up proof (`uv run alembic downgrade -1 && uv run alembic upgrade head`)
-and migration↔model column parity.
+up/down/up proof and migration↔model column parity — both are now automated:
+
+```bash
+make migration-accept   # single head · empty->head · LEGACY->head · down/up/up · column parity · provisioning idempotency
+```
+
+It works inside a scratch database (never your live one), needs no Docker, takes
+about half a minute, and gates every PR via
+[`.github/workflows/install-acceptance.yml`](.github/workflows/install-acceptance.yml).
+See [`docs/INSTALL_ACCEPTANCE.md`](docs/INSTALL_ACCEPTANCE.md).
 
 **Frontend** (from `frontend/`):
 
@@ -749,9 +757,13 @@ operator-initiated and local:
 
 ```bash
 make backup          # snapshot -> ./backups/<UTC-stamp>/  (Postgres required, MinIO optional)
-make backup-verify   # prove the latest backup restores into a throwaway DB
+make backup-verify   # quick: prove the latest backup LOADS into a throwaway DB
+make dr-accept       # full: restore to scratch and prove rows, hashes and object bytes survived
 make restore         # recover from the latest backup (DESTRUCTIVE, guarded)
 ```
+
+`make dr-accept` also runs nightly in CI (`install-acceptance.yml`, job
+**disaster-recovery**) and uploads its transcript as the `dr-evidence` artifact.
 
 The full runbook — retention, disaster scenarios, RPO/RTO, and what V1 defers to
 the infra module (PITR, off-site replication) — is in

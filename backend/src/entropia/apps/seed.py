@@ -13,6 +13,9 @@ import asyncio
 import os
 from typing import TYPE_CHECKING
 
+from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
+
 from entropia.config import get_settings
 from entropia.domain.esp.enums import ResolverTrustState, RuntimeAdapter
 from entropia.domain.instrument.enums import ContractType
@@ -55,6 +58,57 @@ SEED_DEMO_RESEARCH = os.getenv("SEED_DEMO_RESEARCH", "0") == "1"
 SEED_ESP_TA = os.getenv("SEED_ESP_TA", "0") == "1"
 SEED_RATIONALE = os.getenv("SEED_RATIONALE", "0") == "1"
 SEED_INSTRUMENTS = os.getenv("SEED_INSTRUMENTS", "0") == "1"
+
+# Fixed advisory-lock key serializing the provisioning transaction (ADIM 22).
+# Its own key, distinct from MANUAL_STREAM_LOCK_KEY (210_721) and the identity
+# repository's admin-count key (6_2000_1). Deadlock freedom comes from the fact
+# that no provisioning path acquires a SECOND advisory lock while holding this
+# one — keep it that way when adding a seed block that calls into a repository.
+PROVISION_LOCK_KEY = 220_000
+
+# How long a provisioning run waits for a concurrent one before giving up.
+# Generous, because the wait is legitimate: the E2E golden fixture writes real
+# revisions and S3 objects and the follower must let it finish. Bounded, because
+# an UNBOUNDED wait is worse than the failure it replaces — the compose
+# `provision` one-shot gates every plane, so a run blocked on a stale
+# idle-in-transaction backend would hang the whole stack with no error at all,
+# which is strictly harder to diagnose than an exit code.
+PROVISION_LOCK_TIMEOUT_MS = int(os.getenv("PROVISION_LOCK_TIMEOUT_MS", "120000"))
+
+
+class ProvisioningLockTimeout(RuntimeError):
+    """Another provisioning run held the lock past PROVISION_LOCK_TIMEOUT_MS."""
+
+
+async def lock_provisioning(session: AsyncSession) -> None:
+    """Take the xact-scoped provisioning lock BEFORE the first existence guard.
+
+    Transaction-scoped, so PostgreSQL releases it on commit OR rollback and a
+    crashed provisioning run can never leave the next one blocked. Concurrent
+    runs then queue instead of racing: the second one observes the first one's
+    COMMITTED rows, every guard reports "already there", and it exits 0 having
+    written nothing — which is what "provisioning is idempotent" has to mean for
+    a one-shot other services gate on.
+
+    Call this FIRST in any transaction that provisions: a caller that reads
+    before locking has already lost the guarantee, because its snapshot predates
+    the other run's commit.
+    """
+    # lock_timeout DOES bound pg_advisory_xact_lock (verified on PostgreSQL 16);
+    # SET LOCAL scopes it to this transaction so no other statement inherits it.
+    await session.execute(text(f"SET LOCAL lock_timeout = '{PROVISION_LOCK_TIMEOUT_MS}ms'"))
+    try:
+        await session.execute(
+            text("SELECT pg_advisory_xact_lock(:key)"), {"key": PROVISION_LOCK_KEY}
+        )
+    except DBAPIError as exc:  # statement cancelled while waiting for the lock
+        raise ProvisioningLockTimeout(
+            f"another provisioning run held the lock for more than "
+            f"{PROVISION_LOCK_TIMEOUT_MS}ms. Wait for it to finish, or raise "
+            f"PROVISION_LOCK_TIMEOUT_MS if this installation legitimately seeds "
+            f"for longer."
+        ) from exc
+
 
 # Canonical instrument seeds (GAP-16; Master §8.1). Each: (venue, symbol,
 # contract_type, display_name, base, quote, settlement, market_class, aliases).
@@ -236,36 +290,61 @@ async def seed_capabilities(session: AsyncSession) -> None:
     await session.flush()
 
 
+async def provision(session: AsyncSession, log: object) -> None:
+    """The whole provisioning body, in the caller's transaction.
+
+    Split out of :func:`_seed` so the concurrency contract can be exercised
+    against the REAL body: the integration suite runs on an isolated
+    ``<db>_test`` database (``tests/integration/db.py``) while ``_seed`` builds
+    its own sessions from ``get_session_factory()``, which targets a different
+    one. A test that hand-copied this ordering would drift from it silently.
+    The caller owns the commit — the lock below is transaction-scoped, so it is
+    held until that commit (or a rollback) and not one statement less."""
+    # ADIM 22: serialize the WHOLE provisioning transaction before the first
+    # guard reads anything. Every block below is SELECT-then-INSERT and the
+    # seed commits once at the end, so under READ COMMITTED a second
+    # provisioning run cannot see the first one's uncommitted rows: both pass
+    # their "does it already exist?" guard, and the loser dies on a PK/unique
+    # violation that rolls back its ENTIRE transaction. That is not cosmetic —
+    # the compose `provision` one-shot is a `service_completed_successfully`
+    # gate for every plane (docker-compose.yml x-needs-provision), so one
+    # racing exit-1 stops the whole stack from starting; and the guards with no
+    # unique constraint behind them (rationale families, the golden
+    # market/indicator fixtures) would commit silent duplicates instead of
+    # failing. Reproduced by scripts/migration-acceptance.sh step [8].
+    await lock_provisioning(session)
+    # E2E golden mode deliberately SKIPS the default-Admin identity seed:
+    # the E2E suite provisions its own first Admin via the
+    # ENTROPIA_BOOTSTRAP_ADMIN_EMAIL signup path, which is fail-closed
+    # "only while no active Admin exists" — seeding user_admin here would
+    # permanently disable that bootstrap on a fresh database.
+    if not SEED_E2E_GOLDEN:
+        await seed_identities(session)
+    await seed_capabilities(session)
+
+    if SEED_E2E_GOLDEN:
+        await _seed_e2e_golden_fixture(session, log)
+
+    if SEED_DEMO_MARKET or SEED_DEMO_RESEARCH:
+        market_revision_id = await _seed_demo_market_dataset(session, log)
+        if SEED_DEMO_RESEARCH:
+            await _seed_demo_research_dataset(session, log, market_revision_id)
+
+    if SEED_ESP_TA:
+        await _seed_esp_ta_resolvers(session, log)
+
+    if SEED_RATIONALE:
+        await _seed_rationale_families(session, log)
+
+    if SEED_INSTRUMENTS:
+        await _seed_instruments(session, log)
+
+
 async def _seed() -> None:
     log = get_logger("seed")
     factory = get_session_factory()
     async with factory() as session:
-        # E2E golden mode deliberately SKIPS the default-Admin identity seed:
-        # the E2E suite provisions its own first Admin via the
-        # ENTROPIA_BOOTSTRAP_ADMIN_EMAIL signup path, which is fail-closed
-        # "only while no active Admin exists" — seeding user_admin here would
-        # permanently disable that bootstrap on a fresh database.
-        if not SEED_E2E_GOLDEN:
-            await seed_identities(session)
-        await seed_capabilities(session)
-
-        if SEED_E2E_GOLDEN:
-            await _seed_e2e_golden_fixture(session, log)
-
-        if SEED_DEMO_MARKET or SEED_DEMO_RESEARCH:
-            market_revision_id = await _seed_demo_market_dataset(session, log)
-            if SEED_DEMO_RESEARCH:
-                await _seed_demo_research_dataset(session, log, market_revision_id)
-
-        if SEED_ESP_TA:
-            await _seed_esp_ta_resolvers(session, log)
-
-        if SEED_RATIONALE:
-            await _seed_rationale_families(session, log)
-
-        if SEED_INSTRUMENTS:
-            await _seed_instruments(session, log)
-
+        await provision(session, log)
         await session.commit()
     log.info("seed.done")
 

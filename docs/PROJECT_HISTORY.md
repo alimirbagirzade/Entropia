@@ -3367,3 +3367,74 @@ indi.
 **Rollback:** `git revert`. Üretimde modülü import eden yok
 (`test_nothing_in_production_imports_the_shared_ledger_yet` üç import yazımını da kapsar).
 
+---
+
+## T-02 — Ajan tooling: ponytail merdiveni + SAST skill alt kümesi (kod dışı slice)
+
+**Bu bir stage slice'ı DEĞİL.** Migration yok, endpoint yok, tablo yok, `ENGINE_VERSION`
+değişmedi, backend/frontend kaynak kodu hiç değişmedi. Yalnızca ajan operasyon katmanı.
+
+**Değerlendirilen dört repo, verilen karar:**
+
+| Repo | Karar | Gerekçe |
+|---|---|---|
+| `dietrichgebert/ponytail` (MIT, v4.8.4) | **Uyarlanarak alındı** | 7 basamaklı "tembel merdiven"in 2. basamağı (codebase'de zaten var mı) Entropia'nın REUSE-anchor disiplinine birebir oturuyor |
+| `utkusen/sast-skills` (MIT, fork: alimirbagirzade) | **10/16 skill alındı** | Kaynak-kod odaklı; mevcut 754 cybersecurity skill'i daha çok pentest/ops tarafı |
+| `rebelytics/one-skill-to-rule-them-all` (CC BY 4.0) | **Alındı (`task-observer`)** | claude-mem + `ecc:learn` ile örtüşüyor ama mekanizması farklı (oturum sürtünmesinden skill üretimi) |
+| `Egonex-AI/Understand-Anything` (MIT) | **REDDEDİLDİ** | `codebase-memory-mcp` (~13k node/59k edge) + `docs/CODEMAPS/` aynı işi yapıyor; kurmak npm bağımlılığı + 35 MB + tazeliği korunacak ikinci bir graf demekti — merdivenin 5. basamağı |
+
+**Ponytail'in Entropia ile üç gerçek çatışması** — bu yüzden upstream ruleset düz
+alınmadı, `.claude/skills/ponytail-entropia/SKILL.md` içine **override tablosu** yazıldı:
+
+1. Upstream "tek runnable check yeter, framework/fixture yok" der → burada
+   `--cov-fail-under=90` **kapıdır**, her yeni `create_*` için L1 FK insert-order proof +
+   alembic `<n>` up/down/up + migration↔model kolon paritesi zorunludur.
+2. Upstream "en az dosya, istenmemiş soyutlama yok" der → burada
+   `commands`/`queries`/`domain`/`routes` ayrımı, tek-tx no-commit, `run_idempotent`,
+   `session.refresh(with_for_update=True)`, `_audit_and_outbox` **mecburi desendir**.
+3. Upstream "en kısa diff kazanır" der → O-30'un `deletion_state` + `root_lifecycle_state`
+   ikilisi, O-02'nin `suggested_action` + `remediation` ayrımı ve O-12'nin dual-token
+   uzlaştırması **tekrar gibi görünen adjudicated kararlardır**; silinmeleri sözleşmeyi bozar.
+
+Override tablosu ayrıca şunları pazarlık dışı sabitler: `reconcile_occ_tokens`,
+`assert_supported_source_file` fail-closed kapısı, `TRASH_OBJECT_LOCATIONS` yazma zorunluluğu,
+typed response modeli (bare `dict` sözleşmeyi şemadan gizler), v18 mockup otoritesi ve
+kapanış ritüeli dokümanlarının "açıkça istenmiş çıktı" sayılması.
+
+**Kurulan (global `~/.claude/skills/`, v4.8.4'e pinli, `PROVENANCE.txt` ile):**
+`ponytail`, `ponytail-review`, `task-observer`, ve `sast-analysis`, `sast-report`,
+`sast-idor`, `sast-missingauth`, `sast-businesslogic`, `sast-fileupload`,
+`sast-pathtraversal`, `sast-sqli`, `sast-xss`, `sast-hardcodedsecrets`.
+
+**Kurulmayan 6 SAST skill'i — yüzey ampirik olarak doğrulandı, karşılığı yok:**
+`graphql` (grep: 0), `xxe` (XML parser yok), `ssti` (template render yok), `rce`
+(`subprocess`/`os.system`/`eval` yok), `jwt` (auth session-tabanlı: `shared/passwords.py` +
+revocable session), `ssrf` (giden HTTP çağrısı yok).
+
+**Bilerek yapılmayanlar (dürüst sınır):**
+- Upstream ponytail **plugin/hook'ları kurulmadı**. SessionStart/SubagentStart/
+  UserPromptSubmit'te üçüncü-parti Node script'i koşuyor, `~/.claude`'a flag yazıyor ve
+  ajana "kullanıcıya statusLine kurmayı proaktif öner" talimatı enjekte ediyor. Bu
+  *her projede her zaman* açık olurdu; istenen "gerektiğinde"ydi. `~/.claude/settings.json`
+  **hiç değiştirilmedi**.
+- README'nin *%54 daha az satır / %22 daha az token* rakamları **reponun kendi benchmark'ı**
+  ve greenfield FastAPI+React görevlerinden. Entropia spec'in şekli dikte ettiği bakım işi —
+  bu kazanç burada beklenmemeli. Ölçülmedi.
+- `sast-*` skill'leri 3'lük batch'lerde **paralel subagent** açıyor; CLAUDE.md'nin
+  "no unnecessary parallel agents" kuralıyla gerilimde. Tek vuln tipiyle başla.
+- `task-observer` gözlem log'u **stabil yola** yazmalı; `.claude/worktrees/` altındaki
+  geçici checkout ile birlikte silinir.
+
+**Otomatik tetikleme:** skill'ler `description` eşleşmesiyle devreye girer; ek olarak
+`~/.claude/rules/skill-routing.md`'ye yönlendirme bloğu eklendi (kod yazmadan önce →
+ponytail; auth/rol → sast-missingauth; upload → sast-fileupload; OCC/idempotency →
+sast-businesslogic; çok adımlı oturum → task-observer).
+
+**Yan bulgu:** PR #575 (`arbitration.py`) kod olarak indi ama `CLAUDE.md §Current position`
+güncellenmedi — HEAD hâlâ `f8f96c5` yazıyordu. Bu slice'ta düzeltildi. **ADIM 18
+(`run_portfolio` faz döngüsü) hâlâ açık**; #575 arbitration'dır, faz döngüsü değil.
+ADR 0002'nin `Proposed` durumu ve §12 numaralandırma sapması da açık kalmaya devam ediyor.
+
+**Rollback:** `git revert` + `rm -rf ~/.claude/skills/{ponytail,ponytail-review,task-observer,sast-*}`
+ve `~/.claude/rules/skill-routing.md`'deki blok. Üretim kodu etkilenmediği için risk yok.
+

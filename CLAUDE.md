@@ -59,6 +59,10 @@ Before stopping a working session, produce **ALL** of the following:
 
 - **Cost-conscious.** No unnecessary parallel agents or full-file reads. **Empirically
   verify** every code-review CRITICAL/HIGH finding before fixing (they are often wrong).
+- **Tembel merdiven (ponytail).** Kod yazmadan önce: gerekiyor mu → codebase'de var mı
+  (codemap + `codebase-memory-mcp`) → stdlib → native → kurulu bağımlılık → tek satır.
+  Merdiven ve **pazarlıksız Entropia override listesi** (coverage kapısı, katman deseni,
+  adjudicated alanlar): `.claude/skills/ponytail-entropia/SKILL.md`.
 - **Direct-author (no Workflow)** for backend slices; mirror the previous slice's pattern
   (module-level async commands, one-tx no-commit, `run_idempotent`,
   `session.refresh(with_for_update=True)`, `_audit_and_outbox`).
@@ -165,8 +169,11 @@ Before stopping a working session, produce **ALL** of the following:
 
 ## Current position (keep in sync at each closing)
 
-> **HEAD `f8f96c5`** — **ADIM 17** shared ledger (PR #573) landed · ADIM 16 intent katmanı
-> (PR #571/#572) landed. **Alembic head `0043_i08_registry_strategy_fks`** (tek head) ·
+> **HEAD `9739466`** — cross-item **arbitration** (PR #575, `execution/arbitration.py` +
+> `docs/audit/cross_item_conflict_policy.md`) landed · ADIM 17 shared ledger (PR #573) ·
+> ADIM 16 intent katmanı (PR #571/#572) landed. Ajan tooling slice **T-02** (ponytail
+> merdiveni + SAST alt kümesi, kod dışı) — `docs/PROJECT_HISTORY.md` §T-02.
+> **Alembic head `0043_i08_registry_strategy_fks`** (tek head) ·
 > `ENGINE_VERSION = backtest-engine-v18-gap-adjusted-stop-fill` (değişmedi) · migration/OpenAPI
 > yok. Unified-clock programının üç parçası (`execution/clock.py`, `intents.py`,
 > `portfolio_ledger.py`) yerinde ve **hiçbiri üretimden import EDİLMİYOR** (rollback = revert).

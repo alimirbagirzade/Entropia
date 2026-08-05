@@ -116,9 +116,12 @@ mc_run() {
       DR="dr"; MOUNT="$mount"; eval "$snippet" ) >/dev/null 2>&1
   elif command -v docker >/dev/null 2>&1; then
     local ep="${OBJ_ENDPOINT/localhost/host.docker.internal}"
-    docker run --rm --add-host=host.docker.internal:host-gateway -v "$mount:/mnt" \
-      -e "MC_HOST_dr=http://$OBJ_AK:$OBJ_SK@${ep#http://}" \
-      minio/mc:latest sh -c "DR=dr; MOUNT=/mnt; $snippet" >/dev/null 2>&1
+    # --entrypoint sh, same reason as backup.sh / restore.sh: minio/mc's
+    # ENTRYPOINT is `mc`, so `sh -c ...` would be parsed as mc arguments and
+    # step [8] could never read the restored bucket on a host without `mc`.
+    docker run --rm --entrypoint sh --add-host=host.docker.internal:host-gateway \
+      -v "$mount:/mnt" -e "MC_HOST_dr=http://$OBJ_AK:$OBJ_SK@${ep#http://}" \
+      minio/mc:latest -c "DR=dr; MOUNT=/mnt; $snippet" >/dev/null 2>&1
   else
     return 1
   fi

@@ -105,12 +105,20 @@ if [ -d "$SRC/minio" ]; then
     fi
   elif command -v docker >/dev/null 2>&1; then
     _ep="${OBJ_ENDPOINT/localhost/host.docker.internal}"
-    if docker run --rm --add-host=host.docker.internal:host-gateway -v "$SRC/minio:/backup" \
-        minio/mc:latest sh -c "mc alias set b '$_ep' '$OBJ_AK' '$OBJ_SK' >/dev/null && mc mb --ignore-existing b/$OBJ_BUCKET >/dev/null && mc mirror --overwrite /backup b/$OBJ_BUCKET" >/dev/null 2>&1; then
+    # --entrypoint sh, same reason as backup.sh: minio/mc's ENTRYPOINT is `mc`,
+    # so without it `sh -c ...` is parsed as mc arguments and the restore dies
+    # before touching a single object. Worse here than on the backup path — the
+    # database comes back, one WARN scrolls by, and the artifacts silently do not.
+    if docker run --rm --entrypoint sh --add-host=host.docker.internal:host-gateway \
+        -v "$SRC/minio:/backup" minio/mc:latest \
+        -c "mc alias set b '$_ep' '$OBJ_AK' '$OBJ_SK' >/dev/null && mc mb --ignore-existing b/$OBJ_BUCKET >/dev/null && mc mirror --overwrite /backup b/$OBJ_BUCKET" \
+        >"$SRC/.mc-restore.err" 2>&1; then
       pass "object storage restored via dockerized mc"
     else
-      warn "dockerized mc mirror (restore) failed"
+      warn "dockerized mc mirror (restore) failed — artifacts NOT restored:"
+      tail -5 "$SRC/.mc-restore.err" | sed 's/^/        /'
     fi
+    rm -f "$SRC/.mc-restore.err"
   else
     warn "no 'mc' and no 'docker' — object storage not restored"
   fi

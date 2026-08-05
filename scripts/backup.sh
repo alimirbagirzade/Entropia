@@ -93,14 +93,34 @@ elif command -v mc >/dev/null 2>&1; then
 elif command -v docker >/dev/null 2>&1; then
   mkdir -p "$DEST/minio"
   _ep="${OBJ_ENDPOINT/localhost/host.docker.internal}"
-  if docker run --rm --add-host=host.docker.internal:host-gateway -v "$DEST/minio:/backup" \
-      minio/mc:latest sh -c "mc alias set b '$_ep' '$OBJ_AK' '$OBJ_SK' >/dev/null && mc mirror --overwrite b/$OBJ_BUCKET /backup" >/dev/null 2>&1; then
+  # --entrypoint sh is load-bearing: minio/mc declares ENTRYPOINT ["mc"], so
+  # `minio/mc:latest sh -c "..."` hands `sh -c ...` to mc as ARGUMENTS and dies
+  # with `mc: 'sh' is not a recognized command`. This fallback therefore never
+  # worked on any platform — every artifact backup taken without a host-side
+  # `mc` binary silently contained no objects at all, and the WARN below was the
+  # only trace. Found by the ADIM 22 DR gate's first real CI run.
+  if docker run --rm --entrypoint sh --add-host=host.docker.internal:host-gateway \
+      -v "$DEST/minio:/backup" minio/mc:latest \
+      -c "mc alias set b '$_ep' '$OBJ_AK' '$OBJ_SK' >/dev/null && mc mirror --overwrite b/$OBJ_BUCKET /backup" \
+      >"$DEST/.mc.err" 2>&1; then
     OBJ_INCLUDED=true; pass "mirrored bucket '$OBJ_BUCKET' via dockerized mc"
   else
-    warn "dockerized mc mirror failed — artifact backup skipped (Postgres dump still captured)"
+    # Never swallow the reason: without it the log cannot tell "could not reach
+    # the object store" from "the bucket was empty", and those call for opposite
+    # responses from whoever reads it.
+    warn "dockerized mc mirror failed — artifact backup skipped (Postgres dump still captured):"
+    tail -5 "$DEST/.mc.err" | sed 's/^/        /'
   fi
+  rm -f "$DEST/.mc.err"
 else
   warn "no 'mc' and no 'docker' — cannot back up object storage; skipping (Postgres dump still captured)"
+fi
+# A mirror that succeeded but copied nothing is not the same as a mirror that
+# failed — and `object_storage_included: true` next to an absent minio/ (dropped
+# by the rmdir below) would be a lie in the manifest. Say which one happened.
+if [ "$OBJ_INCLUDED" = true ] && [ -z "$(find "$DEST/minio" -type f 2>/dev/null | head -1)" ]; then
+  OBJ_INCLUDED=false
+  warn "bucket '$OBJ_BUCKET' is EMPTY — the mirror succeeded but there are no artifact bytes to back up"
 fi
 [ -d "$DEST/minio" ] && rmdir "$DEST/minio" 2>/dev/null || true  # drop empty dir on skip
 

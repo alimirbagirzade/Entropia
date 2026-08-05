@@ -207,12 +207,12 @@ claimed as done.
 
 ## 7. Honest boundaries of this slice
 
-* **`make accept` was NOT run, and the Docker process-restart smoke was NOT executed.** Docker
-  is unavailable in this environment (`docker info` fails, `docker compose` is not installed).
-  `scripts/worker-restart-smoke.sh` is written, syntax-checked (`bash -n`) and wired to
-  `make worker-restart-smoke`, but it has **never been executed against a live stack**. The
-  same applies to the new `worker-agent-executor` service: it is correct by configuration
-  (the compose file parses and the queue is now consumed) but has not been booted.
+* ~~**`make accept` was NOT run, and the Docker process-restart smoke was NOT executed.**~~
+  **CLOSED 2026-08-05 (post-merge) — see §7.1.** Docker was unavailable while this slice was
+  authored (`docker info` failed, `docker compose` was not installed), so both gates shipped
+  unexecuted and `scripts/worker-restart-smoke.sh` had only been syntax-checked (`bash -n`).
+  Both have since been run against a live stack, including the mid-flight kill the script's
+  own header calls the interesting case. Two pre-existing defects surfaced doing so.
 * The `agent` / `agent-high` guard is `if idempotency_key is not None`. Every durable tool job
   observed in-tree carries one, but a caller that enqueues with `idempotency_key=None` would
   get an **unguarded** tool call. Not exercised here — recorded as an open question, not a
@@ -230,3 +230,121 @@ claimed as done.
   coverage 93.26% (gate >=90); `ruff check` / `ruff format --check` / `mypy src` clean;
   `openapi_export --check` reports no drift. The four pre-existing strict xfails are
   unchanged. No migration in this slice (single alembic head untouched).
+
+---
+
+### 7.1 Docker validation — run 2026-08-05, after the slice merged (PR #587 -> `f81ee82`)
+
+Run against the PR head `cd02450` (identical tree to the merge commit for every file involved).
+Engine: **OrbStack 2.2.2**, `docker` 29.4.0, Compose **v5.1.2**. Host ports 5432/6379/9000/9001
+belong to native postgres/redis/minio on that machine, so the stack ran on the compose-
+parameterized host ports (`PG_HOST_PORT=55432`, `REDIS_HOST_PORT=56379`, `MINIO_HOST_PORT=59000`,
+`MINIO_CONSOLE_HOST_PORT=59001`, `API_HOST_PORT=58000`, `WEB_HOST_PORT=58080`) supplied through
+the git-ignored `.env`. They must live in `.env` rather than the command line: `acceptance.sh`
+and `worker-restart-smoke.sh` shell out to `docker compose` themselves, and with the variables
+unset those calls re-render the infra services at their defaults and try to rebind the busy
+native ports. Container-internal URLs (`postgres:5432` etc.) are unaffected.
+
+**`make accept` -> exit 0.** 15/15 services PASS, every `RestartCount = 0`, the three one-shots
+(`minio-setup`, `migrate`, `provision`) exited 0. Re-run after the SIGKILL smoke: still exit 0.
+
+**`worker-agent-executor` boots and genuinely consumes its queue.** `{"queues":
+"agent-executor", "event": "worker.boot"}` proves only that the flag parsed, so consumption was
+confirmed at the broker: a 3 s `redis-cli MONITOR` sample shows the dramatiq consumer polling
+`agent-executor` and its `.DQ` delay queue. §5's defect is closed in the shipped stack, not just
+in the compose file.
+
+**`make worker-restart-smoke` -> exit 0, but on an idle stack the result is vacuous.** Every
+before/after count was `0` and `jobs` was empty, so no message was redelivered and
+`claim_job_for_delivery` was never entered. What that run does establish: the seven planes
+survive SIGKILL, return healthy with `RestartCount = 0`, and the sweeps invent nothing against an
+empty durable store.
+
+**Mid-flight kill (the strong form) — run under `dev-auth`, and the guard holds.** Staged 8
+Market Data datasets (`create` -> `raw-uploads` with an 8.6 MB / ~150 000-row OHLCV CSV ->
+`finalize`), fired all 8 `POST /market-datasets/{id}/analysis` concurrently, SIGKILLed
+`worker-data` 6 s in while the bodies were parsing, restarted it, and waited for every job to go
+terminal. Because `data` is deliberately excluded from scheduler re-dispatch (`ACTOR_BY_QUEUE`
+has no `data` key), the only automatic redelivery here is dramatiq requeuing the killed
+consumer's unacked messages — exactly the commit/ack seam §4's guard exists for. The plane
+logged **11 `worker.market_analysis.start` events for 8 distinct jobs**, so at least three
+redeliveries re-entered the body. Final state:
+
+```
+data jobs enqueued          9   (8 mid-flight + 1 earlier single-job probe)
+market.analysis.requested   9
+market.analysis.completed   8
+market_validation_run       8   -- exactly one per succeeded job
+audit_events               44
+outbox_events              44   -- paired, no orphan
+
+SELECT job_id, count(*) FROM market_validation_run GROUP BY job_id;
+-- every row count = 1;  job_ids with count > 1: 0
+```
+
+Before this slice each of those redeliveries would have written a second `market_validation_run`
+plus a second audit and outbox row. None did.
+
+#### Defect #3 (pre-existing, NOT introduced here) — the same event-loop bug lives in the worker actors and **strands** durable jobs
+
+`apps/worker/actors.py` calls `asyncio.run(...)` per message while
+`infrastructure/postgres/engine.py::get_engine` is `@lru_cache(maxsize=1)`. Each dramatiq worker
+thread therefore builds and closes its own loop over a process-wide asyncpg pool, so a connection
+created under one loop is checked out under another:
+
+```
+RuntimeError: Task <Task ... _run_market_data_analysis() at apps/worker/actors.py:53>
+  got Future <Future pending> attached to a different loop
+Retries exceeded for message '26c0e9c2-b4e6-499f-8056-3161a1a458a3'.
+```
+
+Observed: **4 loop crashes across 11 deliveries** (11 `start` vs 7 `done`), and **one message
+exhausted `max_retries=3` and was discarded**. Its durable row is stranded permanently —
+`job_01KZ9717XQ5V0PKJ1PGKMB7P7B`, `status=queued`, `attempts=0` (the body crashed before
+committing its RUNNING transition). Nothing recovers it: the broker message is gone and `data` is
+by design not auto-redelivered, so re-dispatch is an operator action nobody is prompted to take.
+A crash is **not** required to trigger this — any two `data` jobs running in parallel can hit it.
+
+This does not contradict §4: the guard did its job and wrote no duplicate. It is the mirror
+failure — an effect that never happens at all — on the same plane this slice hardened. The
+identical anti-pattern is in `apps/scheduler/__main__.py::run()`, where it makes **exactly every
+other** maintenance pass abort (observed 6 OK / 6 `scheduler.maintenance_failed` over 12
+consecutive 30 s ticks, strict alternation), halving the effective rate of the outbox relay and
+the INF-03/INF-09 sweeps. Both are tracked outside this slice.
+
+Related: `worker-restart-smoke.sh` step 5 greps for the substring `scheduler.maintenance`, which
+also matches `scheduler.maintenance_failed`. In this run the `OK scheduler swept` line was
+satisfied by a genuine successful pass, but the check would report the same on a stack where
+every sweep fails.
+
+#### Defect #4 (minor) — `worker-agent-executor` is missing from the dev-auth override
+
+The service was added to `docker-compose.yml` (§5) but not to `docker-compose.dev-auth.yml`.
+Verified on the running dev-auth stack:
+
+```
+api / worker-data / worker-agent / scheduler / agent-coordinator   AUTH_MODE=dev
+worker-agent-executor                                              AUTH_MODE=session
+```
+
+`tests/unit/test_worker_plane_deployment.py` cannot catch it — it pins
+`_COMPOSE = .../docker-compose.yml` and never reads the override. This is the same shape as the
+defect §5 fixed (a plane declared in one place and forgotten in another), so extending that test
+to the override file belongs with it.
+
+#### Transient observation
+
+While the 8 analyses ran, `worker-data` saturated CPU (~130%) and its healthcheck —
+`redis.ping()` in a fresh Python process, `timeout: 5s` — repeatedly exceeded the timeout, so the
+container reported `unhealthy` and `make accept` would have failed at that moment. It returned to
+`healthy` unaided once the load drained. Not a defect, but the 5 s margin is thin for a plane
+doing CPU-bound parsing.
+
+#### Still NOT proven by this run
+
+The mid-flight evidence covers the **`data`** plane only, and within it the market-data actor.
+The Trading Signal / Trade Log / Research Data / Package Import bodies share
+`claim_job_for_delivery` and are covered by `test_worker_delivery_recovery.py`, but were not
+crash-tested live. Seam 5 (two *simultaneous* deliveries of the same job) is still not exercised
+against a live stack for any plane, and the `agent`/`agent-high` `idempotency_key=None` question
+above remains open.

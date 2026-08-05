@@ -20,9 +20,8 @@ executes the double delivery per plane instead of asserting it in prose.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import signal
-import time
-import types
 from collections.abc import Sequence
 from typing import Any
 
@@ -80,12 +79,19 @@ ACTOR_BY_QUEUE: dict[str, Any] = {
     "default": run_create_package_job,
 }
 
-_running = True
+# The live sweep's stop flag, or ``None`` between runs. An ``asyncio.Event``
+# rather than the old ``bool`` because waiting on it makes a signal land at once
+# instead of waiting out the remainder of the tick — and it is created per run,
+# never at import, because an Event binds to the first loop that awaits it and
+# refuses every other one thereafter (one more reason the loop below is single
+# and long-lived).
+_stop: asyncio.Event | None = None
 
 
-def _handle_stop(signum: int, _frame: types.FrameType | None) -> None:
-    global _running
-    _running = False
+def request_stop() -> None:
+    """End the sweep after the current tick — the signal handlers' entry point."""
+    if _stop is not None:
+        _stop.set()
 
 
 async def _maintenance_pass() -> dict[str, Any]:
@@ -138,24 +144,83 @@ def _redeliver(candidates: Sequence[tuple[str, str]]) -> int:
     return redelivered
 
 
-def run() -> None:
-    configure_logging()
-    signal.signal(signal.SIGTERM, _handle_stop)
-    signal.signal(signal.SIGINT, _handle_stop)
+def _install_stop_handlers(stop: asyncio.Event) -> None:
+    """Route SIGTERM/SIGINT to ``stop`` as loop callbacks.
 
+    ``loop.add_signal_handler`` rather than ``signal.signal`` so the handler runs
+    as a loop callback and can set the event directly. Unix-only, which is what
+    the scheduler ships on (``docker-compose.yml`` service ``scheduler``).
+    """
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        loop.add_signal_handler(sig, stop.set)
+
+
+def _send_heartbeat() -> None:
+    try:
+        system_heartbeat.send(note="scheduler-tick")
+    except Exception as exc:  # never crash the scheduler on enqueue failure
+        log.warning("scheduler.enqueue_failed", error=str(exc))
+
+
+async def _wait_for_tick(stop: asyncio.Event, seconds: float) -> None:
+    """Wait one tick, returning early once a stop has been requested.
+
+    The old blocking ``time.sleep`` could not be interrupted: PEP 475 re-arms the
+    sleep after the signal handler returns, so SIGTERM cost up to a full tick
+    (30s in production) of shutdown latency. Waiting on the event instead ends
+    the tick the moment the signal lands.
+    """
+    # A whole tick elapsing is the ordinary path; only a stop ends the wait early.
+    with contextlib.suppress(TimeoutError):
+        await asyncio.wait_for(stop.wait(), timeout=seconds)
+
+
+async def _sweep_until_stopped() -> None:
+    global _stop
+    from entropia.infrastructure.postgres.engine import get_engine
+
+    stop = _stop = asyncio.Event()
+    _install_stop_handlers(stop)
     log.info("scheduler.start")
-    while _running:
-        try:
-            system_heartbeat.send(note="scheduler-tick")
-        except Exception as exc:  # never crash the scheduler on enqueue failure
-            log.warning("scheduler.enqueue_failed", error=str(exc))
-        try:
-            summary = asyncio.run(_maintenance_pass())
-            log.info("scheduler.maintenance", **summary)
-        except Exception as exc:  # a failed pass rolls back whole; next tick retries
-            log.warning("scheduler.maintenance_failed", error=str(exc))
-        time.sleep(tick_seconds())
-    log.info("scheduler.stop")
+    try:
+        while not stop.is_set():
+            _send_heartbeat()
+            try:
+                summary = await _maintenance_pass()
+                log.info("scheduler.maintenance", **summary)
+            except Exception as exc:  # a failed pass rolls back whole; next tick retries
+                log.warning("scheduler.maintenance_failed", error=str(exc))
+            await _wait_for_tick(stop, tick_seconds())
+    finally:
+        _stop = None
+        # Hand the pool back while its loop is still open, for the same reason the
+        # loop is long-lived at all: a connection outliving its loop is exactly the
+        # failure :func:`run` describes, and at exit it returns as shutdown noise.
+        await get_engine().dispose()
+        log.info("scheduler.stop")
+
+
+def run() -> None:
+    """Run the maintenance sweep until stopped, on ONE event loop.
+
+    The loop must outlive the engine's connection pool. ``get_engine`` is
+    ``@lru_cache``d process-wide, so a pooled asyncpg connection stays bound to
+    the loop that first opened it — and the previous shape, ``asyncio.run`` per
+    tick, closed that loop underneath it. The next tick then checked out a
+    connection attached to a dead loop and the whole pass aborted with "got
+    Future attached to a different loop" / "Event loop is closed"
+    (``asyncpg/connection.py::_cancel_current_command``). Because the failed pass
+    discarded the bad connection, the following tick got a fresh one and
+    succeeded: passes alternated OK/FAILED at exactly 50%, so half of every
+    outbox relay, stale-RUNNING recovery (INF-09) and lost-message redelivery
+    (INF-03) was skipped and delayed a further tick. Nothing was ever lost — the
+    pass rolls back whole and rows stay durably QUEUED — but recovery latency
+    doubled and the log carried a permanent warning stream. One loop for the
+    process lifetime also drops the per-tick connection setup cost.
+    """
+    configure_logging()
+    asyncio.run(_sweep_until_stopped())
 
 
 if __name__ == "__main__":

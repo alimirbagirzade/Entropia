@@ -64,11 +64,50 @@ Stepper'ın üstüne `portfolio_engine.ItemParticipant`'ı uygulayan bir adaptö
 `run_portfolio` ile değiştir — **yalnız >1 item çalışırken**; tek item `run_engine`'de kalır
 (ADR §3.2, tek-öğe indirgemesi).
 
-**Dikkat — sözleşme uyumsuzluğu gerçek ve tasarım gerektiriyor.** `ItemParticipant.entry` HAZIR
-bir `ItemIntent` ister; `intents.form_intent` entry'yi item'ın kendi `StrategyConfig`/
-`FillCosts`'u olmadan ölçemez. Stepper bir barı **bütün olarak** ilerletir (P1..P8 hepsi tek
-`step()` içinde), faz döngüsü ise aynı barı **fazlara bölünmüş** ister. Bu boşluğu kapatmak
-PR B'nin asıl işidir ve mekanik bir ikame değildir.
+### 4.1 ÖLÇÜLDÜ: PR B literal kapsamıyla ulaşılabilir DEĞİL — önce bir karar gerekiyor
+
+Bu slice kapanırken sözleşme okundu ve **üç somut engel** çıktı. Hiçbiri "adaptör yaz" ile
+kapanmıyor; PR B'ye başlayan oturum bunları veri olarak devralsın diye buraya yazıldı.
+
+**(a) Stepper atomik, faz döngüsü değil.** `portfolio_engine._run_tick` katılımcıya ayrı ayrı
+girer: `P1 carry` → `P3 mandatory_exit` → **PV `publish_snapshot` (defter DONAR)** → `P4 entry`
+→ P5/P6b arbitrate → P7 apply. `carry` **snapshot yayımlanmadan ÖNCE** bilinmek zorunda, çünkü
+paylaşılan deftere ondan önce işleniyor. `_ItemStepper.step(bar)` ise P1..P8'in hepsini **tek
+çağrıda** yapar ve sonucu **kendi** `_Ledger`'ına yazar. Aynı barı üç kez adımlamak çift
+booking'dir; adımlamadan `carry`/`mandatory_exit` sormak mümkün değil. → **Barın kendisi fazlara
+bölünmedikçe gerçek engine bir `ItemParticipant`'ı besleyemez.**
+
+**(b) `entry` item-local warmup ister, ama booking istemez.** `CarryCharges` / `MandatoryExit`
+docstring'leri bu ikisinin **sevk edilmiş resolver'lardan** (`costs.due_funding_charges`,
+`fills._resolve_stop` + `engine._plan_exit`) geldiğini söylüyor — yani stepper olmadan da
+kurulabilirler. Stepper'a gerçekten ihtiyaç duyan tek hook **`entry`**: boyut
+`costs._effective_fill` → `sizing._position_size` zincirini ve **indicator evaluator warmup'ını**
+ister, ki bu tam olarak stepper'ın closure'ında duran item-local state'tir. Yani ihtiyaç duyulan
+şey "bir barı ilerlet" değil, **"sinyali değerlendir ama hiçbir şey book etme"** — stepper'da
+böyle bir giriş yok.
+
+**(c) `run_portfolio`'nun çıktısı Result'a bağlanamıyor.** `run_portfolio` →
+`PortfolioRun{ledger, ticks}`. Worker'ın Result assembly'si ise `ItemRun.output`
+(`EngineOutput`: summary / trades / equity_points / signal_events / diagnostics /
+position_intervals) üzerinden `combine_item_runs` ile çalışıyor. **`PortfolioRun → EngineOutput`
+(ya da → Result artifact) projeksiyonu kod olarak YOK.** ADR'nin A4/A18 satırlarının "gerçek
+`EngineOutput` digest'i ister" demesinin sebebi budur; o projeksiyon başlı başına bir slice.
+
+**Ek olarak:** faz döngüsü **P2 pending fills** ve **P8 same-direction scaling**'i bilerek
+modellemiyor (`UnsupportedIntentKindError`), ama gerçek bar gövdesi ikisini de yapıyor. Gerçek
+engine ile beslenen bir katılımcı, scaling'i açık HERHANGİ bir stratejide anında raise eder.
+
+**Sonuç — PR B'den önce insan kapısı.** ADR §16 onay kapısının bir kez sıra dışı işletildiğini
+kaydediyor ve *"should hold for ADIM 20, which is the first slice that changes a shipped
+number"* diyor. (a)+(c)'yi kapatmak `run_engine`'in bar gövdesini fazlara bölmek demek — yani
+PR A'nın kapattığı byte-identity sorusunu yeniden açmak. **Bu bir ADR amendment'ı gerektirir,
+sessizce yeniden planlanamaz.** Seçenekler:
+1. **Barı fazlara böl** (yeni slice, kabul yine 46 digest) → sonra adaptör → sonra projeksiyon.
+2. **Katılımcıyı sevk edilmiş primitiflerden kur** (stepper'ı yalnız sinyal/warmup için kullan,
+   bunun için stepper'a book-etmeyen bir değerlendirme girişi ekle) → yine projeksiyon borcu.
+3. **Önce projeksiyonu yaz** (`PortfolioRun → Result`), çünkü hangi yol seçilirse seçilsin
+   gerekiyor ve tek başına test edilebilir.
+
 
 **Beklentiler:** 37 non-portfolio digest **KIMILDAMAMALI**. `portfolio.*` digest'lerinin
 kımıldaması bekleniyor — **her biri tek tek gerekçelendirilir**. `ENGINE_VERSION`'a

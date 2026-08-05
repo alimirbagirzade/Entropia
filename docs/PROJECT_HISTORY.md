@@ -3949,6 +3949,139 @@ INF-03 sweep'i telafi ediyor, o sweep de %50 çalışıyordu. `apps/worker/actor
 `asyncio.run` çağrısı **analiz EDİLMEDİ** — dramatiq thread yeniden kullanımına bağlı, ölçmeden
 iddia yok.
 
+
+## ADIM 22 — install/upgrade/restore acceptance (PR #594, #601)
+
+**Boşluk.** Kurulum zincirinin harness'ları vardı ama **kapısı yoktu**.
+`scripts/e2e-acceptance.sh`, `scripts/backup.sh`, `scripts/restore.sh`,
+`scripts/backup-verify.sh` geliştirici komutlarıydı; **hiçbir workflow bunları koşmuyordu**.
+Yani bozulmuş bir kurulum yolu, eski bir veritabanına uygulanamayan bir migration ve satırsız
+bir şemayı geri yükleyen bir backup — üçü de **yeşil inebilirdi**. Denetim bunun backup yarısını
+**H-07** diye kaydetmişti.
+
+**PR #594** — squash-merge `3cc9588` (2026-08-05T17:49:33Z), base `c3f5673`, branch
+`test/install-upgrade-restore-acceptance`, **+1728 / −38, 11 dosya**.
+**PR #601** — squash-merge `e6cd2ee` (2026-08-05T19:24:09Z), branch
+`fix/backup-object-storage-on-linux`, **+46 / −9, 4 dosya**.
+**Migration YOK** (alembic head `0043_i08_registry_strategy_fks`) · **OpenAPI DEĞİŞMEDİ** ·
+**`ENGINE_VERSION` DEĞİŞMEDİ**.
+
+### Ne indi
+
+| Yeni | Ne yapar |
+|---|---|
+| `scripts/migration-acceptance.sh` (`make migration-accept`) | Docker'sız, ~30 sn, **her PR**. Gerçek PostgreSQL + gerçek `alembic upgrade` yolu (asla `metadata.create_all`): tek head · empty→head · migration↔model **kolon** paritesi · migration'ın yazdığı satırlar · iki temsili legacy revizyon→head (değer parmak iziyle) · head down/up/up · provisioning tekrar **ve eşzamanlılık** idempotency'si |
+| `scripts/dr-acceptance.sh` (`make dr-accept`) | `backup-verify.sh`'in "dump yükleniyor mu?" sığlığını kapatır: scratch DB + scratch bucket'a restore, sonra kaynak↔restore karşılaştırması — head, tablo kümesi, **her tablonun** satır sayısı, değişmez kanıt kolonları, append-only düzlemler, per-object md5 |
+| `.github/workflows/install-acceptance.yml` | Dört job; maliyete göre bölünmüş: **her PR** → `migration-acceptance` + `fresh-install`; **nightly/manual** → `legacy-upgrade` + `disaster-recovery` |
+| `docs/INSTALL_ACCEPTANCE.md` | Zincirin hangi halkasının nerede kanıtlandığı + dürüst sınırlar |
+| `backend/tests/integration/test_provision_concurrency.py` | 6 test (aşağıya bak) |
+
+`scripts/e2e-acceptance.sh::assert_planes_healthy` listesine **`worker-agent-executor`
+eklendi** — o düzlem hiç yokken §9.4 akışı yeşil geçebiliyordu; Coordinator kimsenin
+tüketmediği Agent task'ları kuyruğa alır, scheduler onları sonsuza dek yeniden gönderir ve
+**her gönderim başarı raporlar**. Servisin kendi yorumunun tarif ettiği sessiz döngü, tam da
+onu yakalaması gereken listede yoktu.
+
+### Production değişikliği — provisioning eşzamanlı-güvenli DEĞİLDİ
+
+`apps/seed.py`'deki her guard SELECT-then-INSERT ve seed sonda **tek kez** commit ediyor.
+READ COMMITTED altında ikinci koşu birincinin commit edilmemiş satırlarını göremez: ikisi de
+"zaten var mı?" kontrolünü geçer, kaybeden `principals_pkey` ile ölür ve **tüm transaction'ını**
+geri alır. Taze, migrate edilmiş bir veritabanında üretildi: **3 paralel koşunun 2'si exit 1**.
+
+Bu kozmetik değil. Compose'daki `provision` one-shot **her düzlem** için
+`service_completed_successfully` kapısıdır (`docker-compose.yml` `x-needs-provision`), yani tek
+bir yarışan exit-1 API'yi, tüm worker düzlemlerini, coordinator'ı ve scheduler'ı başlatmaz.
+
+**Gürültülü çökme sadece görünen yarısı.** Arkasında unique constraint OLMAYAN guard'lar
+başarısız olmak yerine **sessizce duplike commit eder**: `rationale_family_revision.normalized_name`
+yalnızca `index=True`, yani iki koşu da "bu family var mı?" kontrolünü geçip ikisi de COMMIT eder.
+**Varsayılmadı, ölçüldü:** kilit kaldırıldığında 3 eşzamanlı koşu **6 kanonik yerine 18**
+rationale family üretiyor ve **hiçbir yerde hata raporlanmıyor**.
+`test_concurrency_does_not_duplicate_an_unguarded_seed_block` o sayıyı pinliyor.
+
+**Çözüm — yeni altyapı YOK.** `PROVISION_LOCK_KEY = 220_000` + `lock_provisioning()`:
+transaction-scoped `pg_advisory_xact_lock`, repo'da zaten kullanılan deyim
+(`repositories/identity.py::lock_admin_count`, `repositories/manual.py::lock_stream`). İlk guard
+herhangi bir şey okumadan ÖNCE alınır; PostgreSQL onu commit **veya** rollback'te bırakır, yani
+çöken bir koşu sonrakini bloke bırakamaz. `_seed()` ikiye ayrıldı: public
+`provision(session, log)` + session sahibi `_seed()`.
+
+Bekleme **sınırlı**: `PROVISION_LOCK_TIMEOUT_MS` (varsayılan 120000), `SET LOCAL lock_timeout`
+ile — **lock_timeout'un `pg_advisory_xact_lock`'a uygulandığı PostgreSQL 16'da ampirik
+doğrulandı**; aşılırsa `ProvisioningLockTimeout`. Sınırsız bekleme değiştirdiği hatadan **daha
+kötü** olurdu: stale idle-in-transaction bir backend'in arkasında bloke kalan bir koşu tüm
+stack'i **hatasız** asardı, ki bu bir exit code'dan daha zor teşhis edilir.
+
+**Her iki yarı da mutation-verified** — kilit `pass` ile değiştirildiğinde testler kırmızıya
+döndü (hem çökme yarısı hem sessiz-duplikasyon yarısı).
+
+### PR #601 — object storage aslında yedeklenmiyordu
+
+ADIM 22'nin DR kapısı **ilk gerçek CI koşusunda kırmızı** çıktı:
+*"the backup captured no object storage (minio/ absent)"*. Sebep ortam değil: `minio/mc` imajı
+`ENTRYPOINT ["mc"]` bildiriyor, yani `docker run minio/mc sh -c '...'` argümanları **mc
+parametresi** olarak ayrıştırılıyor ve fallback hiç çalışmıyordu. `--entrypoint sh` eklendi —
+`backup.sh`, `restore.sh` ve `dr-acceptance.sh`'in üçünde birden, çünkü üçü de aynı çağrıyı
+taşıyordu. Host'unda `mc` olan bir geliştiricide kusur hiç görünmüyordu; **`mc`'si olmayan her
+makinede object storage sessizce yedeklenmiyordu.**
+
+### CI kanıtı
+
+**Actions run 31038908690** — dört job da `success`:
+`fresh-install` · `migration-acceptance` · `legacy-upgrade` · `disaster-recovery`.
+Kanıt satırları: `PASS mirrored bucket 'entropia-artifacts' via dockerized mc` ·
+`DR ACCEPTANCE OK` · `VERIFY OK — 20260805T192122Z restores into a coherent database
+(head 0043_i08_registry_strategy_fks, 105 tables)`.
+
+**Dürüst nüans:** bu koşu `main`'in merge commit'inde değil, **`fix/backup-object-storage-on-linux`
+branch'inde `84d1a5e`'de** `workflow_dispatch` ile koştu — yani #601'in `e6cd2ee` olarak squash
+edilen içeriğinde. `main` üzerinde heavy job'lar ilk kez nightly cron'da (03:17 UTC) koşacak.
+
+### Dürüst sınırlar (yumuşatılmadı)
+
+1. **Index ADLARI gate dışı.** `alembic check` migration'lar ile `Base.metadata` arasında fark
+   bildiriyor — hepsi index-*adı* sapması (migration'ın adlandırdığı
+   `ix_result_manifest_snapshot_hash` vs model'in autogenerate ettiği
+   `ix_result_manifest_snapshot_manifest_hash`) artı bir server default. **Kolon paritesi**
+   — `CONTRIBUTING.md`'nin gerçekten adlandırdığı eksen — temiz ve **gate'li**.
+   `alembic check`'i kapıya çevirmek ayrı, daha büyük bir temizlik; sessizce yok sayılmıyor,
+   bilerek kapsam dışı.
+2. **Integration suite şemayı hâlâ `metadata.create_all` ile kuruyor**
+   (`tests/integration/conftest.py`). Bu bir test-hızı kararı, kurulum yolu değil — ve
+   **migration'ın yazdığı satırlar pytest'te YOK** (0016'nın `alpha-agent` `agent_runtime`
+   singleton'ı, 0019/0020 fixture'ları). Bu yüzden `migration-acceptance.sh` [4] onları
+   migrate edilmiş veritabanına karşı **ayrıca** doğruluyor.
+3. **DR kanıtı sığdı.** Aynı run'ın transcript'i şunu bastı: `[7] all three append-only planes
+   were EMPTY` ve `[8] 1 objects`. Sebep `apps/seed.py`'nin bir **fixture yazarı** olması —
+   repository'ler üzerinden insert ettiği için `_audit_and_outbox`'a hiç ulaşmıyor (sıfır
+   audit, sıfır outbox) ve `infrastructure/s3/datasets.py`'deki **dört** object writer'dan
+   yalnız birini çağırıyor. **ADIM 23 / PR #610** bunu kapatıyor (yedeklemeden önce gerçek bir
+   iş akışı + kapsama tabanları); bu kayıt yazıldığında PR **açık**, merge edilmedi.
+4. **Docker job'ları yerelde koşturulamamıştı.** ADIM 22 yazılırken paralel bir worktree
+   oturumu 5432/8000/8080/9000 portlarını tutuyordu; compose job'ları ilk gerçek yürütmelerini
+   CI'da aldı. `docs/INSTALL_ACCEPTANCE.md`'deki **▶** işaretleri bunu kaydediyordu — run
+   31038908690'dan sonra artık **✔**.
+5. **PITR, off-site replikasyon ve zamanlanmış backup V1 kapsamı dışında**
+   (`docs/BACKUP_DR.md` "Scope"). Bu slice V1'in gerçekten sevk ettiği operatör-tetiklemeli
+   zinciri kanıtlıyor; ertelenmiş altyapı modülünü icat etmiyor.
+
+### Kayıt doğrulaması (ADIM 23 oturumunda)
+
+- **PR #575 / #581 kaydı EKSİK DEĞİL.** `docs/PROJECT_HISTORY.md` §"ADIM 18 (sevk edilen sıra)"
+  ve §"ADIM 19" ile `docs/STAGE2_HANDOFF.md`'deki karşılıkları **PR #589 ile geriye dönük
+  yazıldı**; `CLAUDE.md` artık o borcu taşımıyor. Bu oturuma gelen brief'te borç hâlâ açık
+  sanılıyordu — doğrulandı, açık değil.
+- **Coordinator event-loop kusuru KAPANDI.** ADIM 22 kapanışı sırasında hâlâ açıktı; **PR #600**
+  (`735cc83`) scheduler'ın #593'teki düzeltmesinin aynısını uyguladı ve **issue #591'i
+  `COMPLETED` olarak kapattı**. Bu oturuma gelen brief 17:55Z ve 19:09Z'deki iki koşuyu kanıt
+  gösteriyordu; **ikisi de 19:19Z'deki merge'den ÖNCE**. Ayrı bir düzeltme gerekmedi.
+- **`apps/worker/actors.py`'deki 11 `asyncio.run` da KAPANDI** — **PR #597** (`aa29509`),
+  bu kayıt yazılırken merge edildi: aktör gövdeleri artık tek process-wide loop'ta. Aynı
+  tarama `apps/seed.py:782`'yi de buluyor: tek seferlik CLI çağrısı, loop yeniden kullanımı
+  yok, **bilerek dokunulmuyor**. Böylece per-tick/per-mesaj loop kusuru üç düzlemde de
+  kapandı: **#593** (scheduler) · **#600** (coordinator) · **#597** (worker aktörleri).
+
 ## ADIM 16 — `run_engine` bar döngüsü → resumable stepper (PR #602)
 
 **ADR §12 bu adımı SKIPPED işaretlemişti** — faz döngüsü aynı yere öbür taraftan ulaştığı için.

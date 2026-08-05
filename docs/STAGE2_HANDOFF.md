@@ -4242,6 +4242,65 @@ INF-03 sweep'i telafi ediyor, o sweep de %50 çalışıyordu. `apps/worker/actor
 `asyncio.run` çağrısı **analiz EDİLMEDİ** — dramatiq thread yeniden kullanımına bağlı, ölçmeden
 iddia yok.
 
+## ADIM 22 — install/upgrade/restore acceptance landed (PR #594, #601)
+
+**Boşluk.** Kurulum zincirinin harness'ları vardı ama **kapısı yoktu**. `e2e-acceptance.sh`,
+`backup.sh`, `restore.sh`, `backup-verify.sh` geliştirici komutlarıydı; **hiçbir workflow
+bunları koşmuyordu** — yani bozuk bir kurulum yolu, eski bir DB'ye uygulanamayan bir migration
+ve satırsız bir şemayı geri yükleyen bir backup, üçü de yeşil inebilirdi (denetim: **H-07**).
+
+**PR #594** squash-merge `3cc9588` (+1728 / −38, 11 dosya) · **PR #601** squash-merge `e6cd2ee`
+(+46 / −9, 4 dosya). **Migration YOK** (head `0043_i08_registry_strategy_fks`) · **OpenAPI
+DEĞİŞMEDİ** · **`ENGINE_VERSION` DEĞİŞMEDİ**.
+
+**Yeni:** `scripts/migration-acceptance.sh` (`make migration-accept`, Docker'sız ~30 sn, her PR)
+· `scripts/dr-acceptance.sh` (`make dr-accept`) · `.github/workflows/install-acceptance.yml`
+(4 job, maliyete göre bölünmüş) · `docs/INSTALL_ACCEPTANCE.md` ·
+`backend/tests/integration/test_provision_concurrency.py` (6 test).
+`e2e-acceptance.sh::assert_planes_healthy` listesine **`worker-agent-executor` eklendi** — o
+düzlem hiç yokken §9.4 yeşil geçebiliyordu.
+
+**Production değişikliği — provisioning eşzamanlı-güvenli DEĞİLDİ.** `apps/seed.py`'nin her
+guard'ı SELECT-then-INSERT ve seed sonda tek kez commit ediyor; READ COMMITTED altında ikinci
+koşu birincinin commit edilmemiş satırlarını göremiyor. **Ölçüldü:** 3 paralel koşunun **2'si**
+`principals_pkey` ile exit 1 — ve `provision` one-shot her düzlemin
+`service_completed_successfully` kapısı olduğu için tek bir yarışan exit-1 tüm stack'i
+başlatmıyor. **Sessiz yarısı daha kötü:** unique constraint'i olmayan guard'lar (ör.
+`rationale_family_revision.normalized_name`, yalnız `index=True`) hata vermeden duplike commit
+ediyor — 3 eşzamanlı koşu **6 kanonik yerine 18** rationale family üretiyor, hiçbir yerde hata
+yok. Çözüm yeni altyapı değil: `PROVISION_LOCK_KEY = 220_000` + `lock_provisioning()`
+(transaction-scoped `pg_advisory_xact_lock`, repo'nun mevcut deyimi), sınırlı bekleme
+`PROVISION_LOCK_TIMEOUT_MS` (120000, `SET LOCAL lock_timeout`; PG16'da
+`pg_advisory_xact_lock`'a uygulandığı ampirik doğrulandı) → `ProvisioningLockTimeout`.
+`_seed()` ikiye ayrıldı: public `provision(session, log)` + session sahibi `_seed()`.
+**Her iki yarı da mutation-verified** (kilit `pass` yapılınca testler kırmızı).
+
+**PR #601 — object storage aslında yedeklenmiyordu.** `minio/mc` imajı `ENTRYPOINT ["mc"]`
+bildiriyor, yani `docker run minio/mc sh -c '...'` argümanları mc parametresi olarak
+ayrıştırılıyordu ve dockerized fallback hiç çalışmıyordu. `--entrypoint sh` → `backup.sh`,
+`restore.sh`, `dr-acceptance.sh`. Host'unda `mc` olan geliştiricide görünmüyordu; **`mc`'si
+olmayan her makinede object storage sessizce yedeklenmiyordu.**
+
+**CI kanıtı — Actions run 31038908690**, dört job da `success`: `fresh-install` ·
+`migration-acceptance` · `legacy-upgrade` · `disaster-recovery`.
+`PASS mirrored bucket 'entropia-artifacts' via dockerized mc` · `DR ACCEPTANCE OK` ·
+`VERIFY OK — … (head 0043_i08_registry_strategy_fks, 105 tables)`.
+**Nüans:** bu koşu `main`'de değil, `fix/backup-object-storage-on-linux`@`84d1a5e`'de
+`workflow_dispatch` ile koştu (yani #601'in squash edilen içeriği). `main` üzerinde heavy
+job'lar ilk kez nightly cron'da (03:17 UTC) koşacak.
+
+**Dürüst sınırlar:** (1) **index ADLARI gate dışı** — `alembic check` yalnız index-adı sapması
++ bir server default bildiriyor; **kolon paritesi** temiz ve gate'li, `alembic check`'i kapıya
+çevirmek ayrı bir temizlik. (2) Integration suite şemayı hâlâ `metadata.create_all` ile kuruyor,
+yani **migration'ın yazdığı satırlar pytest'te YOK** (`alpha-agent` `agent_runtime` singleton'ı);
+`migration-acceptance.sh` [4] onları migrate edilmiş DB'ye karşı ayrıca doğruluyor. (3) **DR
+kanıtı sığdı** — aynı transcript `[7] all three append-only planes were EMPTY` ve `[8] 1 objects`
+bastı; sebebi `apps/seed.py`'nin repository'ler üzerinden yazması (→ `_audit_and_outbox`'a hiç
+ulaşmıyor) ve dört object writer'dan yalnız birini çağırması. **ADIM 23 / PR #610** bunu
+kapatıyor; bu kayıt yazıldığında PR **açık**. (4) Compose job'ları ADIM 22 sırasında yerelde
+koşturulamamıştı (paralel worktree portları tutuyordu) — `INSTALL_ACCEPTANCE.md`'deki **▶**
+işaretleri artık **✔**. (5) PITR / off-site replikasyon / zamanlanmış backup **V1 dışı**.
+
 ## ADIM 16 — `run_engine` bar döngüsü resumable stepper'a çıktı landed (PR #602)
 
 ADR §12'nin **SKIPPED** işaretlediği ADIM 16, faz döngüsünün yerine değil **worker call

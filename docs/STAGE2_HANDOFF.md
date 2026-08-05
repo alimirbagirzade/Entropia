@@ -4113,8 +4113,15 @@ Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 18 · handoff: `docs/ADIM18_LANDED_
 > **Ad çakışması, bilerek korundu — ADIM 18 kaydındaki desenin aynısı.** Aşağıdaki `## Next`
 > bloğu "yeni ADIM 21"i **engine-destekli `ItemParticipant`** (worker call site) olarak
 > planlamıştı; PR #587 ise kendini "ADIM 21 — worker delivery & recovery" diye adlandırarak
-> indi. **İki AYRI slice, tek numara.** Numara yeniden atanmadı — hangisinin "21" kalacağı
-> insan kararı. `Next`'teki `ItemParticipant` işi **değişmedi ve hâlâ sıradaki iştir**.
+> indi. **İki AYRI slice, tek numara.** `Next`'teki `ItemParticipant` işi **değişmedi ve hâlâ
+> sıradaki iştir**.
+>
+> **KARAR (2026-08-05, insan): numaralar OLDUĞU GİBİ kalıyor, ayrım adla yapılır.** Yeniden
+> atama yok. Sevk edilmiş slice her yerde **"ADIM 21 (worker delivery)"**, planlanan slice
+> **"ADIM 21 (ItemParticipant)"** diye anılır — çıplak "ADIM 21" tek başına belirsizdir, öyle
+> yazma. Gerekçe: #587/#592/#593/#595'in PR başlıkları, commit mesajları ve
+> `docs/audit/worker_delivery_recovery_matrix.md` §7.1 hepsi "ADIM 21" diyor ve geriye dönük
+> düzeltilemez; numarayı taşımak yazılı kaydı sessizce yanlışlardı.
 
 At-least-once transport altında crash/retry/redelivery güvenliği: exactly-once transport değil,
 **effectively-once domain effects**. İki kusur, ikisi de kod yazılmadan önce reprodüklendi.

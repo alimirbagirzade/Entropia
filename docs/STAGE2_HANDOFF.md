@@ -4149,12 +4149,16 @@ Tam kayıt: **`docs/audit/worker_delivery_recovery_matrix.md` §7.1**.
    `max_retries=3`'ü tüketip düştü, `job_01KZ9717XQ5V0PKJ1PGKMB7P7B` kalıcı `queued`/`attempts=0`
    ve **hiçbir şey kurtarmıyor**. Duplikasyonun ayna kusuru: etkinin hiç oluşmaması. Crash
    gerekmiyor, paralel iki `data` job'ı yeter. Aynı desen `apps/scheduler/__main__.py`'de **her
-   ikinci** maintenance pass'ini iptal ettiriyor (12 tick'te 6 OK / 6 failed, kusursuz alternasyon).
+   ikinci** maintenance pass'ini iptal ettiriyor (12 tick'te 6 OK / 6 failed, kusursuz alternasyon)
+   → **scheduler yarısı PR #593 (`20a32ab`) ile DÜZELTİLDİ** (process ömrü boyunca tek event
+   loop). **`actors.py` yarısı ölçüldüğü gibi AÇIK** — #593 yalnız scheduler ikizine dokundu.
 2. **`worker-agent-executor` dev-auth override'ında yok** → `AUTH_MODE=session` koşuyor;
    `test_worker_plane_deployment.py` yalnız `docker-compose.yml`'i pinlediği için görmüyor.
-   Kusur 2'nin tıpatıp aynı şekli.
+   Kusur 2'nin tıpatıp aynı şekli. → **DÜZELTİLDİ:** servis override'a eklendi, test artık
+   **iki compose dosyasını da** okuyor (`docs/audit/worker_delivery_recovery_matrix.md` §7.2).
 
-Ayrıca `worker-restart-smoke.sh` adım 5'in grep'i `scheduler.maintenance_failed`'i de yakalıyor.
+Ayrıca `worker-restart-smoke.sh` adım 5'in grep'i `scheduler.maintenance_failed`'i de yakalıyor
+→ **PR #593 ile DÜZELTİLDİ** (`scheduler\.maintenance([^_]|$)`).
 
 **Dürüst sınır:** mid-flight kanıtı yalnız `data`/market-data actor'ünü kapsıyor; diğer dört
 gövde canlı crash-test edilmedi. Seam 5 (eşzamanlı iki delivery) hiçbir plane için canlı

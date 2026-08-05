@@ -1038,22 +1038,34 @@ def _imports_arbitration(source: str) -> bool:
     )
 
 
-def test_nothing_in_production_imports_the_arbitration_layer_yet() -> None:
-    """The rollback for this slice is "delete the module", exactly as for the ADIM 15 clock,
-    the ADIM 16 intent layer and the ADIM 17 shared ledger — which is what keeps every shipped
-    digest still. When the phase loop wires ``run_portfolio`` in, this is the test that must be
-    updated deliberately; it should never fail by accident."""
+def test_the_arbitration_layer_is_reachable_only_through_the_phase_loop() -> None:
+    """**ADIM 18 wired the phase loop in, and this is the deliberate update for it.**
+
+    ``domain/backtest/portfolio_engine.py`` calls ``arbitrate`` at P5/P6b against a FROZEN
+    ledger, which is the only context in which the answer is meaningful — the layer refuses an
+    unfrozen one. It is a production entry point rather than a contained sibling, so "nothing
+    in production imports the arbitration layer" is retired here on purpose and replaced by
+    the property that has to hold instead: arbitration is reached from the phase loop and
+    nowhere else, so nothing can arbitrate outside the P5/P6b window.
+
+    ``execution/provenance.py`` remains the other named importer (ADIM 19): it pins the
+    resolved ``ConflictPolicyRule`` and ``ARBITRATION_POLICY_VERSION`` into the manifest
+    section, and is itself still contained — ``test_backtest_portfolio_provenance.py`` asserts
+    nothing imports IT.
+
+    ``sorted()``: ``rglob`` yields in filesystem order, which differs between macOS and the
+    Linux runner. With one importer that was invisible; with two it makes the assertion
+    platform-dependent, exactly as the clock's own guard already records."""
     src = Path(__file__).resolve().parents[2] / "src" / "entropia"
-    importers = [
+    importers = sorted(
         path.relative_to(src).as_posix()
         for path in src.rglob("*.py")
         if path.name != "arbitration.py" and _imports_arbitration(path.read_text(encoding="utf-8"))
+    )
+    assert importers == [
+        "domain/backtest/execution/provenance.py",
+        "domain/backtest/portfolio_engine.py",
     ]
-    # Updated deliberately once (ADIM 19): ``execution/provenance.py`` pins the resolved
-    # ``ConflictPolicyRule`` and ``ARBITRATION_POLICY_VERSION`` into the portfolio manifest
-    # section. It is contained too — ``test_backtest_portfolio_provenance.py`` asserts nothing
-    # imports IT — so no production path reaches arbitration and the rollback is unchanged.
-    assert importers == ["domain/backtest/execution/provenance.py"]
 
 
 def test_the_shipped_sequential_conflict_gate_is_untouched() -> None:

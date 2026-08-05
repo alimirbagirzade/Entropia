@@ -1,31 +1,33 @@
-"""Fixture construction and the ADR §8 phase driver for the unified-clock portfolio oracles.
+"""Fixtures for the unified-clock portfolio oracles, driven through the SHIPPED phase loop.
 
-This module builds INPUTS and SEQUENCES them. It computes no expected value: every number a
-test asserts is either a literal hand-derived from canon, or a figure the shipped primitives
-produced. Realized PnL is *stated* by the fixture (``exits={ts: "-3000.00"}``) rather than
-re-derived here, so no arithmetic of the harness can stand in for arithmetic under test.
+This module builds INPUTS. It computes no expected value: every number a test asserts is
+either a literal hand-derived from canon, or a figure the shipped primitives produced.
+Realized PnL is *stated* by the fixture (``exits={ts: "-3000.00"}``) rather than re-derived
+here, so no arithmetic of the harness can stand in for arithmetic under test.
 
-WHY A TEST-OWNED DRIVER (honest boundary — read this before trusting a green run)
---------------------------------------------------------------------------------
-``docs/adr/0002-unified-clock-portfolio-simulation.md`` §12 places the per-tick phase loop in
-a **new** ``run_portfolio(...)`` entry point (ADIM 18). That entry point **does not exist on
-this commit**: ``grep -rn "def run_portfolio" backend/src`` returns nothing, and
-``application/jobs/backtest_engine.py:298`` still loops over ITEMS and folds the finished runs
-with ``execution.portfolio.combine_item_runs`` (``:363``). The six unified-clock modules are
-imported only by each other — the six ``test_nothing_in_production_imports_*`` guards pin
-exactly that.
+WHAT MOVED AT ADIM 18, AND WHAT DID NOT (read this before trusting a green run)
+------------------------------------------------------------------------------
+The per-tick phase loop is no longer test-owned. ``simulate`` is now a thin adapter that
+turns each :class:`ScriptedItem` into an :class:`~entropia.domain.backtest.portfolio_engine.
+ItemParticipant` and hands it to the production entry point
+``domain/backtest/portfolio_engine.py::run_portfolio``. The ADR §8.2 order — P1 funding/fee
+-> P3 mandatory exits -> PV one snapshot -> P4 intents -> P5/P6b arbitrate -> P7 apply ->
+P9 commit — is executed by that module, not by this one, and the oracles below were carried
+over UNCHANGED across the substitution. That substitution is the acceptance evidence ADR §14
+asks for, and it is what moved A1/A3/A5 off a test-owned driver.
 
-So this driver sequences the shipped primitives through the phase order ADR §8.2 specifies. It
-proves the PRIMITIVES satisfy the oracles below. It does **not** prove the shipped engine does,
-because the shipped engine never calls them. When ADIM 18 lands, ``simulate`` should be
-replaced by ``run_portfolio`` and these oracles re-run unchanged — that substitution is the
-acceptance evidence ADR §14 asks for, and nothing here may be read as a substitute for it.
+What is still test-owned, and must stay disclosed: the DECISIONS. A ``ScriptedItem`` states
+what it wants (``entries``), what it is forced to close (``exits``) and what it is charged
+(``funding``/``fees``) as fixture data, where a real item would derive them from its own
+indicator evaluators, stop resolver and pinned funding schedule. That is the participant
+contract working as designed — ``execution.intents`` states that the decision is an INPUT —
+but it means these oracles prove the LOOP and the primitives, not any particular item's
+signal logic, which the engine's own suites cover.
 
-The phase order implemented (ADR §8.2), once per tick:
-
-    P1 funding/fees -> P3 mandatory exits (formed by the SHIPPED former, before any
-    snapshot exists) -> PV publish exactly one PortfolioSnapshot -> P4 discretionary
-    intents against PV -> P5/P6b arbitrate -> P7 apply admitted orders -> P9 commit
+The remaining boundary is the worker: ``application/jobs/backtest_engine.py`` still loops
+over items and folds them with ``combine_item_runs``. Wiring it needs a participant backed
+by the real engine (ADR §12's skipped ADIM 16 stepper), so ``SHARED_ALLOCATION_STATUS``
+stays ``future_dev``.
 """
 
 from __future__ import annotations
@@ -35,33 +37,26 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Any
 
-from entropia.domain.backtest.execution.arbitration import (
-    ArbitrationReport,
-    ItemArbitrationProfile,
-    arbitrate,
-    profiles_from_pins,
-)
-from entropia.domain.backtest.execution.clock import (
-    ClockTick,
-    ItemBarStream,
-    ItemTickView,
-    iter_ticks,
-)
+from entropia.domain.backtest.execution.clock import ItemBarStream, ItemTickView
 from entropia.domain.backtest.execution.intents import (
     ClosingSize,
     ItemDecision,
     ItemIdentity,
     ItemIntent,
     PortfolioSnapshot,
-    form_mandatory_intent,
 )
-from entropia.domain.backtest.execution.portfolio_ledger import (
-    PortfolioEquityPoint,
-    PortfolioLedger,
-    ledger_for_items,
+from entropia.domain.backtest.execution.portfolio_ledger import OpenPosition
+from entropia.domain.backtest.portfolio_engine import (
+    CarryCharges,
+    MandatoryExit,
+    PortfolioRun,
+    PortfolioTick,
+    run_portfolio,
 )
 
 _ZERO = Decimal("0")
+
+__all__ = ["PortfolioRun", "PortfolioTick", "ScriptedItem", "row", "simulate"]
 
 
 def row(timestamp: str, close: str) -> dict[str, Any]:
@@ -119,46 +114,6 @@ class ScriptedItem:
         )
 
 
-@dataclass(frozen=True, slots=True)
-class TickRecord:
-    """Everything one tick published, kept so an oracle can inspect the phase boundary."""
-
-    t_ms: int
-    timestamp: str
-    views: tuple[ItemTickView, ...]
-    snapshot: PortfolioSnapshot
-    mandatory: tuple[ItemIntent, ...]
-    intents: tuple[ItemIntent, ...]
-    report: ArbitrationReport
-    equity_point: PortfolioEquityPoint | None
-
-
-@dataclass(frozen=True, slots=True)
-class PortfolioRun:
-    ledger: PortfolioLedger
-    ticks: tuple[TickRecord, ...]
-
-    @property
-    def dated_points(self) -> tuple[PortfolioEquityPoint, ...]:
-        """The curve without the ``t_ms=None`` seed the ledger opens the book with."""
-        return tuple(p for p in self.ledger.equity_points if p.t_ms is not None)
-
-    @property
-    def instants(self) -> tuple[int, ...]:
-        return tuple(p.t_ms for p in self.dated_points)
-
-    @property
-    def max_drawdown(self) -> Decimal:
-        """The ledger's OWN per-point ``peak - equity``, maximised. Not recomputed here."""
-        return max((p.drawdown for p in self.ledger.equity_points), default=_ZERO)
-
-    def tick_at(self, timestamp: str) -> TickRecord:
-        for record in self.ticks:
-            if record.timestamp == timestamp:
-                return record
-        raise KeyError(f"no tick at {timestamp}")
-
-
 def _p4_intent(
     *,
     identity: ItemIdentity,
@@ -170,10 +125,12 @@ def _p4_intent(
     """A P4 entry intent in the exact shape ``form_intent`` builds one.
 
     Constructed directly so a portfolio fixture does not have to carry a whole
-    ``StrategyConfig`` per item; the shipped former is exercised end to end by
+    ``StrategyConfig`` per item — ``form_intent`` sizes an entry through the real chain and
+    would overwrite the literal unit counts these oracles assert. The shipped former is
+    exercised end to end by
     ``test_backtest_cross_item_arbitration.py::test_it_arbitrates_what_form_intents_actually_produces``
-    and by ``test_the_driver_arbitrates_what_the_shipped_former_produces`` in this package, so
-    the shortcut cannot drift from the shape it stands in for."""
+    and by ``test_the_driver_arbitrates_what_the_shipped_former_actually_produces`` in this
+    package, so the shortcut cannot drift from the shape it stands in for."""
     return ItemIntent(
         identity=identity,
         t_ms=snapshot.t_ms,
@@ -195,6 +152,61 @@ def _p4_intent(
     )
 
 
+@dataclass(frozen=True, slots=True)
+class _ScriptedParticipant:
+    """One ``ScriptedItem`` behind the production loop's participant contract.
+
+    Every hook reads the item's script at the timestamp of the bar it was handed, so the
+    fixture stays a wall-clock story and this class stays a lookup — it decides nothing the
+    fixture did not already state."""
+
+    item: ScriptedItem
+    identity: ItemIdentity
+    stream: ItemBarStream
+
+    @property
+    def instrument_id(self) -> str | None:
+        return self.item.instrument_id
+
+    def carry(self, view: ItemTickView) -> CarryCharges | None:
+        stamp = view.bars[-1].timestamp
+        funding = Decimal(self.item.funding.get(stamp, "0"))
+        fee = Decimal(self.item.fees.get(stamp, "0"))
+        if funding == _ZERO and fee == _ZERO:
+            return None
+        return CarryCharges(funding=funding, fee=fee)
+
+    def mandatory_exit(self, view: ItemTickView, *, held: OpenPosition) -> MandatoryExit | None:
+        stamp = view.bars[-1].timestamp
+        if stamp not in self.item.exits:
+            return None
+        return MandatoryExit(
+            decision=ItemDecision(kind="exit", direction=held.direction, reason="stop_loss"),
+            sizing=ClosingSize(units=held.size),
+            gross_pnl=Decimal(self.item.exits[stamp]),
+            commission=Decimal(self.item.commissions.get(stamp, "0")),
+        )
+
+    def entry(
+        self,
+        view: ItemTickView,
+        snapshot: PortfolioSnapshot,
+        *,
+        held: OpenPosition | None,
+    ) -> ItemIntent | None:
+        stamp = view.bars[-1].timestamp
+        if held is not None or stamp not in self.item.entries:
+            return None
+        direction, units = self.item.entries[stamp]
+        return _p4_intent(
+            identity=self.identity,
+            snapshot=snapshot,
+            direction=direction,
+            units=Decimal(units),
+            price=view.bars[-1].close,
+        )
+
+
 def simulate(
     items: Sequence[ScriptedItem],
     *,
@@ -207,157 +219,37 @@ def simulate(
     caller_order: Sequence[int] | None = None,
     batch: int = 0,
 ) -> PortfolioRun:
-    """Run the ADR §8 phase loop over ``items`` and return every tick it published.
+    """Run ``items`` through the shipped ``run_portfolio`` loop and return every tick.
 
     ``items`` is the MANIFEST PIN ORDER — ``pin_ordinal`` is the index and is never supplied.
-    ``caller_order`` permutes only the sequence the driver *visits* items in (the DOM/request
-    order doc 13 §13 forbids from mattering); it never moves a pin. ``batch`` chunks each
+    ``caller_order`` permutes only the sequence participants are HANDED to the engine in (the
+    DOM/request order doc 13 §13 forbids from mattering); it never moves a pin, and the engine
+    re-sorts to ``(pin_ordinal, item_id)`` before reading anything. ``batch`` chunks each
     item's bars, so a test can prove chunking cannot move a number."""
     order = list(caller_order) if caller_order is not None else list(range(len(items)))
-    ledger = ledger_for_items(
+    participants = [
+        _ScriptedParticipant(
+            item=items[i],
+            identity=items[i].identity(i),
+            stream=items[i].stream(i, batch=batch),
+        )
+        for i in order
+    ]
+    return run_portfolio(
+        participants,
         pool_initial=Decimal(pool),
-        reserve_percent=Decimal(reserve_percent),
         shares={item.item_id: Decimal(item.share) for item in items},
+        reserve_percent=Decimal(reserve_percent),
         compound=compound,
-    )
-    profiles: Mapping[str, ItemArbitrationProfile] = profiles_from_pins(
-        [(item.item_id, item.instrument_id) for item in items]
-    )
-    identities = {item.item_id: item.identity(i) for i, item in enumerate(items)}
-    caps = (
-        {k: Decimal(v) for k, v in max_position_notional.items()} if max_position_notional else None
-    )
-    exposure_cap = (
-        Decimal(max_total_exposure_notional) if max_total_exposure_notional is not None else None
-    )
-    streams = [items[i].stream(i, batch=batch) for i in order]
-
-    records: list[TickRecord] = []
-    for tick in iter_ticks(streams):
-        records.append(
-            _run_tick(
-                tick,
-                items=items,
-                order=order,
-                ledger=ledger,
-                identities=identities,
-                profiles=profiles,
-                policy=policy,
-                caps=caps,
-                exposure_cap=exposure_cap,
-            )
-        )
-    return PortfolioRun(ledger=ledger, ticks=tuple(records))
-
-
-def _run_tick(
-    tick: ClockTick,
-    *,
-    items: Sequence[ScriptedItem],
-    order: Sequence[int],
-    ledger: PortfolioLedger,
-    identities: Mapping[str, ItemIdentity],
-    profiles: Mapping[str, ItemArbitrationProfile],
-    policy: str | None,
-    caps: Mapping[str, Decimal] | None,
-    exposure_cap: Decimal | None,
-) -> TickRecord:
-    """One full cycle of ADR §8.1. Split out so the phase boundaries stay readable."""
-    visiting = [items[i] for i in order]
-    stamp = ""
-
-    # --- P1 -- funding and standalone fees on held positions (ledger writes, no discretion).
-    for item in visiting:
-        view = tick.view_for(item.item_id)
-        if view is None or not view.is_decision:
-            continue
-        ts = view.bars[-1].timestamp
-        stamp = stamp or ts
-        if ts in item.funding:
-            ledger.book_funding(item.item_id, amount=Decimal(item.funding[ts]))
-        if ts in item.fees:
-            ledger.book_fee(item.item_id, amount=Decimal(item.fees[ts]))
-
-    # --- P3 -- mandatory exits, formed by the SHIPPED former BEFORE E(t) exists.
-    mandatory: list[ItemIntent] = []
-    for item in visiting:
-        view = tick.view_for(item.item_id)
-        if view is None or not view.is_decision:
-            continue
-        ts = view.bars[-1].timestamp
-        held = ledger.positions.get(item.item_id)
-        if ts not in item.exits or held is None:
-            continue
-        mandatory.append(
-            form_mandatory_intent(
-                identity=identities[item.item_id],
-                view=view,
-                decision=ItemDecision(kind="exit", direction=held.direction, reason="stop_loss"),
-                sizing=ClosingSize(units=held.size),
-            )
-        )
-        ledger.close_position(item.item_id)
-        ledger.book_trade(
-            item.item_id,
-            gross_pnl=Decimal(item.exits[ts]),
-            commission=Decimal(item.commissions.get(ts, "0")),
-        )
-
-    # --- PV -- exactly one valuation, and the ledger freezes until P7.
-    snapshot = ledger.publish_snapshot(tick.t_ms)
-
-    # --- P4 -- discretionary intents, every one of them against THAT snapshot.
-    intents: list[ItemIntent] = []
-    prices: dict[str, Decimal] = {}
-    for item in visiting:
-        view = tick.view_for(item.item_id)
-        if view is None or not view.is_decision:
-            continue
-        ts = view.bars[-1].timestamp
-        if ts not in item.entries or item.item_id in ledger.positions:
-            continue
-        direction, units = item.entries[ts]
-        price = view.bars[-1].close
-        prices[item.item_id] = price
-        intents.append(
-            _p4_intent(
-                identity=identities[item.item_id],
-                snapshot=snapshot,
-                direction=direction,
-                units=Decimal(units),
-                price=price,
-            )
-        )
-
-    # --- P5 / P6b -- conflict then capacity, against the frozen ledger.
-    report = arbitrate(
-        ledger=ledger,
-        snapshot=snapshot,
-        intents=intents,
-        profiles=profiles,
-        policy=policy,
-        max_position_notional=caps,
-        max_total_exposure_notional=exposure_cap,
-    )
-
-    # --- P7 -- apply what was admitted, in pinned order. --- P9 -- one equity point.
-    ledger.begin_apply(tick.t_ms)
-    for decision in report.decisions:
-        if decision.is_admitted and decision.granted_units > _ZERO and decision.direction:
-            ledger.set_position(
-                decision.item_id,
-                direction=decision.direction,
-                size=decision.granted_units,
-                entry_price=prices[decision.item_id],
-            )
-    point = ledger.commit_tick(tick.t_ms)
-    return TickRecord(
-        t_ms=tick.t_ms,
-        timestamp=stamp,
-        views=tick.views,
-        snapshot=snapshot,
-        mandatory=tuple(mandatory),
-        intents=tuple(intents),
-        report=report,
-        equity_point=point,
+        conflict_policy=policy,
+        max_position_notional=(
+            {k: Decimal(v) for k, v in max_position_notional.items()}
+            if max_position_notional
+            else None
+        ),
+        max_total_exposure_notional=(
+            Decimal(max_total_exposure_notional)
+            if max_total_exposure_notional is not None
+            else None
+        ),
     )

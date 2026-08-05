@@ -8,8 +8,10 @@ Every expected figure is hand-derived from doc 13 §0.2/§6.1/§8.3/§8.4 and §
 Master Reference Modül 11 §5.1/§5.3/§6.1, and ADR 0002 §7/§9 — written as a literal. No engine
 arithmetic helper builds an expectation here.
 
-Read ``portfolio_harness`` §"HONEST BOUNDARY": the phase loop is TEST-OWNED because ADIM 18's
-``run_portfolio`` does not exist on this commit.
+Since ADIM 18 the phase loop is the SHIPPED one
+(``domain/backtest/portfolio_engine.py::run_portfolio``); these oracles were carried over
+unchanged across that substitution. Read ``portfolio_harness`` §"WHAT MOVED AT ADIM 18" for
+what is still fixture-owned and for the gap that keeps the containment closed.
 """
 
 from __future__ import annotations

@@ -1,5 +1,36 @@
 # Unified portfolio oracle acceptance — ADIM 20 gate report
 
+> ## ADDENDUM — ADIM 18, 2026-08-05 (`feat/stage-18-run-portfolio`)
+>
+> **This report was written on `b0bb4a0`, before `run_portfolio` existed. Three of its rows are
+> now out of date and are corrected below; everything else still holds.** The body is left
+> intact rather than rewritten, because §1's reproduction is the evidence that the gap was real
+> when it was measured.
+>
+> **What changed:** the phase loop shipped as `domain/backtest/portfolio_engine.py::run_portfolio`
+> and the 25 oracles were re-pointed at it **unchanged** — the exact substitution §2's honest
+> boundary named as the acceptance evidence ADR §14 asks for. **A1, A3 and A5 move from
+> PRIMITIVE/BLOCKED to MET** (see the corrected rows in §3). A2, A6–A12 and A18 remain
+> PRIMITIVE for one reason only: they are now proven *in the shipped loop*, but the shipped loop
+> has **no production caller**.
+>
+> **What did NOT change:** `SHARED_ALLOCATION_STATUS` is still `future_dev`;
+> `ENGINE_VERSION` is unchanged; no migration, no OpenAPI, no manifest field; the worker still
+> loops over items (`jobs/backtest_engine.py:298`) and folds with `combine_item_runs` (`:363`).
+> Wiring it needs an `ItemParticipant` backed by the real engine — ADR §12's skipped ADIM 16
+> stepper. §1's probe row for that stepper is **still accurate**.
+>
+> **§6's human gates are discharged:** ADR 0002 is **`Accepted`** (2026-08-05); OD-1…OD-7 are
+> resolved to their recommendations in the new ADR **§13.1** amendment table; §12's numbering is
+> corrected and ADIM 16 formally SKIPPED. Two policy *labels* in code still read `pending`
+> (`MARK_STALENESS_POLICY`, `CONTENTION_SELECTION_STATUS`) — deliberately, per §13.1: they are
+> published only through `build_portfolio_manifest`, which ADIM 20 owns.
+>
+> The gate test named in §1 was **rewritten, not deleted**:
+> `test_no_unified_clock_driver_exists_in_production_on_this_commit` →
+> `test_the_phase_loop_exists_but_no_production_path_reaches_it`.
+
+
 **Base:** `origin/main` @ `b0bb4a0` (PR #581, ADIM 19 provenance) · **Branch:**
 `test/portfolio-unified-oracles` · **Date:** 2026-08-05 · **Alembic head:**
 `0043_i08_registry_strategy_fks` (single head, unchanged) · **Migration:** none ·
@@ -73,11 +104,11 @@ Legend: **MET** · **PRIMITIVE** (proven for the modules; unreachable in product
 
 | # | Criterion | Status | Evidence |
 |---|---|---|---|
-| A1 | Outer loop is the merged timestamp axis | **BLOCKED** | no `run_portfolio`; worker still item-loops (§1) |
+| A1 | Outer loop is the merged timestamp axis | **MET in the loop / no caller** *(ADIM 18)* | `portfolio_engine.py::run_portfolio` iterates `iter_ticks(...)`, never the item list; the 25 oracles run on it. The worker does not call it — `test_the_phase_loop_exists_but_no_production_path_reaches_it` |
 | A2 | Exactly one ledger holds `P0`/`R0`/`U0` | **PRIMITIVE** | `ledger_for_items` drives all items in the oracle suite; production shared path still seeds a per-item `_Ledger` from the full pool |
-| A3 | Mandatory events first, then exactly one `E(t)` every item sizes against | **PRIMITIVE** | `test_a_stop_that_fires_at_a_tick_shrinks_its_siblings_sleeve_at_that_same_tick`, `test_every_item_at_a_tick_sizes_against_exactly_one_published_valuation` |
+| A3 | Mandatory events first, then exactly one `E(t)` every item sizes against | **MET in the loop** *(ADIM 18)* — the order is now structural: `publish_snapshot` freezes the ledger and `arbitrate` refuses an unfrozen one | `test_a_stop_that_fires_at_a_tick_shrinks_its_siblings_sleeve_at_that_same_tick`, `test_every_item_at_a_tick_sizes_against_exactly_one_published_valuation` |
 | A4 | Item order does not change the result | **PRIMITIVE** | `test_the_order_the_caller_visits_items_in_cannot_move_a_number`. ADR requires an identical **`EngineOutput` digest** under permuted `mainboard_items` — needs the real engine |
-| A5 | Composite curve time-ordered by construction; the 5000 fixture reports 3000 | **PRIMITIVE** | `test_the_unified_clock_reports_the_drawdown_the_sequential_fold_overstated`, `test_the_same_trades_read_5000_sequentially_and_3000_on_one_clock` |
+| A5 | Composite curve time-ordered by construction; the 5000 fixture reports 3000 | **MET in the loop** *(ADIM 18)* | `test_the_unified_clock_reports_the_drawdown_the_sequential_fold_overstated`, `test_the_same_trades_read_5000_sequentially_and_3000_on_one_clock` |
 | A6 | Compound sleeves recompute from `E(t)` including siblings' PnL/fees/funding | **PRIMITIVE** | `test_a_siblings_loss_shrinks_the_survivors_sleeve_only_under_compounding` (2500.00 vs 4500.00) |
 | A7 | Fixed mode keeps `Ci_fixed`; no auto-compounding; no silent borrow | **PRIMITIVE** | same test + `test_jointly_insolvent_entries_reject_the_later_pin_whole_and_never_trim_it` |
 | A8 | Over-sleeve desire ⇒ deterministic cap/reject; item risk limits never bypassed | **PRIMITIVE** | `test_the_composition_wide_exposure_cap_clamps_the_later_pin_at_the_same_tick` |
@@ -100,9 +131,9 @@ Legend: **MET** · **PRIMITIVE** (proven for the modules; unreachable in product
 
 | # | Condition | Status |
 |---|---|---|
-| 1 | Outer loop is the merged timestamp axis | **NOT MET** — production still loops over items |
+| 1 | Outer loop is the merged timestamp axis | **half met (ADIM 18)** — the merged-axis loop `run_portfolio` exists and is exercised; the worker still loops over items, so no *run* uses it |
 | 2 | One shared ledger holds `P0`, `R0`, `U0` | **primitive only** — `PortfolioLedger` exists, nothing calls it |
-| 3 | Mandatory events first, one `E(t)`, `Ci(t) = max(0, E(t) − R0)·wi/100` | **primitive only** |
+| 3 | Mandatory events first, one `E(t)`, `Ci(t) = max(0, E(t) − R0)·wi/100` | **proven in the shipped loop (ADIM 18)**; still unreachable from a run |
 | 4 | Symmetric conflict arbitration, id tie-break, share never transferred | **primitive proven** (A9, A10, opposite-direction conflict) |
 | 5 | doc 13 §14 test 11 passes; curve time-ordered by construction | **primitive proven**; the shipped path still reports `5000.00` and `test_composite_portfolio_curve_is_not_time_ordered` still holds |
 | 6 | `ENGINE_VERSION` bumped | **NOT MET** |
@@ -129,18 +160,23 @@ no shared run can be admitted.
 revision the snapshot names`; `readiness_check.py::_pinned_revision` now reads the named
 revision's config.
 
-## 6. Human gates that outrank the technical matrix
+## 6. Human gates that outrank the technical matrix — DISCHARGED at ADIM 18
 
-1. **ADR 0002 is `Proposed`.** §16: *"implementation does not begin until the PO / maintainer
-   approves it… This document is not evidence that any part of the design is built."* ADIM
-   15–19 landed anyway. Approval is a human act; an agent cannot supply it.
-2. **ADR §12's numbering does not match what shipped.** The ADR's ADIM 16 — making per-item
-   replay resumable, a *pure refactor* whose only proof is that all 46 golden digests stay
-   unchanged — **was never written**. The shipped slices jumped it. Restructure and re-price
-   were meant to be separated precisely so a moved digest could be attributed; that separation
-   no longer exists.
-3. **Seven open decisions (OD-1…OD-7)** are unresolved. ADR R-5: lifting containment while
-   OD-2/OD-3 are unanswered re-introduces an undisclosed policy.
+All three were resolved by the PO/maintainer on 2026-08-05, before any ADIM 18 code was written.
+The original text is kept below each item so the gate is readable as it was posed.
+
+1. ~~**ADR 0002 is `Proposed`.**~~ → **`Accepted`.** §16 is rewritten as *discharged* and records
+   that approval arrived **after** ADIM 15–19 had landed, rather than smoothing that over. The
+   gate is not a formality and must hold for ADIM 20, the first slice to change a shipped number.
+2. ~~**ADR §12's numbering does not match what shipped.**~~ → §12 is **corrected**: ADIM 16 is
+   formally SKIPPED, with a shipped-vs-ADR numbering map. **The substantive loss is recorded,
+   not argued away:** ADIM 16's proof obligation (46 digests unchanged) was discharged by ADIM 18
+   for free, because `run_portfolio` never touches `run_engine`'s body — but when the engine-backed
+   participant is written, restructure and re-price will land together and a moved digest will be
+   harder to attribute than ADR §15 R-4 intended. **The follow-up must split those into two PRs.**
+3. ~~**Seven open decisions (OD-1…OD-7) are unresolved.**~~ → resolved in ADR **§13.1**, each to
+   its own recommendation. R-5 still binds ADIM 20: the resolutions must be recorded in the
+   manifest as versioned policies before the lift, and the two `pending` code labels flipped.
 
 ## 7. Verification
 

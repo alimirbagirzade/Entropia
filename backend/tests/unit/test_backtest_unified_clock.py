@@ -531,12 +531,17 @@ def test_timeline_identity_is_deterministic_and_discriminating() -> None:
     assert len(timeline_identity(axis)) == 64
 
 
-def test_the_clock_is_not_wired_into_production_yet() -> None:
-    """ADR §12: the ADIM 15 rollback is "delete the module — nothing imports it".
+def test_the_clock_is_reachable_only_through_the_phase_loop() -> None:
+    """ADR §12: the ADIM 15 rollback was "delete the module — nothing imports it".
 
-    That is only true while it stays true, and it is exactly what keeps every shipped digest
-    still. When ADIM 18 wires ``run_portfolio`` in, this test is the one that must be updated
-    deliberately — it should never fail by accident.
+    **ADIM 18 changed that deliberately, and this is the update it was waiting for.** The
+    merged axis is now driven by a production entry point — ``run_portfolio`` in
+    ``domain/backtest/portfolio_engine.py`` — so "nothing imports it" is retired and replaced
+    by the property that
+    actually has to hold from here on: the clock is reachable through the PHASE LOOP and
+    nowhere else. Every importer is still NAMED, so a fifth one cannot appear by accident, and
+    the rollback is now "revert to the item loop" (ADR §12, ADIM 18) rather than "delete the
+    module" — ``run_engine`` never enters the loop, so no golden digest moves either way.
 
     It has been updated deliberately once: the shared-snapshot intent layer
     (``execution/intents.py``) reads the clock's ``ItemTickView``, so it is named here as the
@@ -561,6 +566,7 @@ def test_the_clock_is_not_wired_into_production_yet() -> None:
     assert importers == [
         "domain/backtest/execution/intents.py",
         "domain/backtest/execution/provenance.py",
+        "domain/backtest/portfolio_engine.py",
     ]
 
 

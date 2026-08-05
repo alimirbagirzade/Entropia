@@ -78,15 +78,52 @@ def test_every_failure_is_reported_not_just_the_first(monkeypatch, log) -> None:
     assert [fields["job_id"] for _event, fields in log.warnings] == ["job_a", "job_b"]
 
 
-def test_unmapped_queue_is_skipped_without_a_warning(monkeypatch, log) -> None:
+def test_unmapped_queue_is_skipped_but_not_silently(monkeypatch, log) -> None:
     """``data`` hosts several actor types and is deliberately NOT auto-redelivered
-    (module docstring) — skipping it is designed behaviour, not a failure."""
+    (module docstring) — skipping it is designed behaviour, not a failure.
+
+    Skipping it *silently* was the other half of the stranding defect: a ``data``
+    message discarded after exhausting its retries left a durable row QUEUED
+    forever whose only trace was a ``queued`` row nobody watches. The skip itself
+    is unchanged (no send, count 0) — it is now also evidence. Candidates reaching
+    here are already past the redeliver grace window, so a healthy in-flight job
+    never triggers this warning.
+    """
     attempted = _send_stub(monkeypatch, set())
 
     assert "data" not in scheduler.ACTOR_BY_QUEUE
     assert scheduler._redeliver([("data", "job_data")]) == 0
     assert attempted == []
-    assert log.warnings == []
+
+    assert len(log.warnings) == 1
+    event, fields = log.warnings[0]
+    assert event == "scheduler.redeliver_unroutable"
+    assert fields["queue"] == "data"
+    assert fields["count"] == 1
+    assert fields["job_ids"] == ["job_data"]
+
+
+def test_unroutable_backlog_is_counted_in_full_and_sampled_in_the_log(monkeypatch, log) -> None:
+    """One warning per queue: the count stays complete even though the id list is
+    capped, so a large backlog is visible without the tick log becoming the backlog."""
+    _send_stub(monkeypatch, set())
+    stranded = [("data", f"job_{index}") for index in range(scheduler._UNROUTABLE_SAMPLE + 5)]
+
+    assert scheduler._redeliver(stranded) == 0
+
+    assert len(log.warnings) == 1
+    _event, fields = log.warnings[0]
+    assert fields["count"] == len(stranded)
+    assert len(fields["job_ids"]) == scheduler._UNROUTABLE_SAMPLE
+
+
+def test_routable_and_unroutable_candidates_are_reported_separately(monkeypatch, log) -> None:
+    """A stuck ``data`` job must not suppress — or be suppressed by — a real send."""
+    attempted = _send_stub(monkeypatch, set())
+
+    assert scheduler._redeliver([("backtest", "job_ok"), ("data", "job_stuck")]) == 1
+    assert attempted == ["job_ok"]
+    assert [event for event, _fields in log.warnings] == ["scheduler.redeliver_unroutable"]
 
 
 def test_all_sends_succeeding_logs_nothing(monkeypatch, log) -> None:

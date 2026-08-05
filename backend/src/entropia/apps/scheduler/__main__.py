@@ -42,6 +42,10 @@ from entropia.infrastructure.queues.enqueue import send_job
 
 DEFAULT_TICK_SECONDS = 30.0
 
+# How many stranded job ids the unroutable warning names before it just counts —
+# a backlog must be visible without the tick log becoming the backlog.
+_UNROUTABLE_SAMPLE = 20
+
 
 def tick_seconds() -> float:
     """Seconds between maintenance passes (``SCHEDULER_TICK_SECONDS``).
@@ -129,11 +133,22 @@ def _redeliver(candidates: Sequence[tuple[str, str]]) -> int:
     either (finding O-23): a broker that rejects every send would otherwise look
     identical to "nothing needed redelivery" in the ``scheduler.maintenance``
     summary. The recovery behaviour is unchanged; only the evidence is added.
+
+    The same "not silent" rule applies to a queue with NO entry here — ``data``,
+    which multiplexes five actors and cannot be routed from the durable row
+    alone. Skipping it stays correct (re-dispatch is an operator action through
+    ``POST .../data-queue/redeliver``), but skipping it *silently* left a stranded
+    job with no trace but a ``queued`` row nobody watches. These candidates are
+    already past the redeliver grace window, so a normal in-flight job never
+    reaches this branch and the warning stays quiet until something is genuinely
+    stuck. Behaviour is unchanged — nothing is auto-redelivered.
     """
     redelivered = 0
+    unroutable: dict[str, list[str]] = {}
     for queue, job_id in candidates:
         actor = ACTOR_BY_QUEUE.get(queue)
         if actor is None:
+            unroutable.setdefault(queue, []).append(job_id)
             continue
         try:
             send_job(actor, job_id)
@@ -141,6 +156,14 @@ def _redeliver(candidates: Sequence[tuple[str, str]]) -> int:
             log.warning("scheduler.redeliver_failed", job_id=job_id, queue=queue, error=str(exc))
             continue
         redelivered += 1
+
+    for queue, job_ids in unroutable.items():
+        log.warning(
+            "scheduler.redeliver_unroutable",
+            queue=queue,
+            count=len(job_ids),
+            job_ids=job_ids[:_UNROUTABLE_SAMPLE],
+        )
     return redelivered
 
 

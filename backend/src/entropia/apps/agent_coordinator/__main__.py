@@ -13,11 +13,18 @@ durable Job row (``application/commands/agent_loop.py::_spawn_followup_task``) â
 mirrors ``apps/scheduler/__main__.py``'s commit-then-``send_job`` ordering. A
 crash between commit and dispatch never loses the task: the row stays QUEUED and
 the scheduler's redelivery sweep (INF-03) re-sends it.
+
+The tick crosses into its async body with ``async_runtime.run_sync``, never
+``asyncio.run``: the latter closes its loop every tick while the ``@lru_cache``
+asyncpg pool behind ``get_session_factory`` is process-wide, so tick N+1 checks
+out a connection created on tick N's closed loop and asyncpg raises "attached to
+a different loop". Here that surfaces as a tick that can never succeed again
+rather than a stranded row â€” the loop logs ``agent_coordinator.cycle_failed``
+forever and the Agent silently stops making progress.
 """
 
 from __future__ import annotations
 
-import asyncio
 import signal
 import time
 import types
@@ -25,6 +32,7 @@ import types
 from entropia.application.commands.agent_loop import run_coordinator_cycle
 from entropia.apps.worker.actors import run_agent_executor
 from entropia.domain.agent_lab.enums import ALPHA_AGENT_ID
+from entropia.infrastructure.async_runtime import run_sync
 from entropia.infrastructure.observability import configure_logging, get_logger
 from entropia.infrastructure.queues.enqueue import send_job
 
@@ -61,7 +69,7 @@ def run() -> None:
     log.info("agent_coordinator.start")
     while _running:
         try:
-            summary = asyncio.run(_run_cycle())
+            summary = run_sync(_run_cycle())
             log.info("agent_coordinator.cycle", **_loggable(summary))
             executor_job_id = summary.get("executor_job_id")
             if executor_job_id:

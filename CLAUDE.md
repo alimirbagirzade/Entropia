@@ -169,19 +169,24 @@ Before stopping a working session, produce **ALL** of the following:
 
 ## Current position (keep in sync at each closing)
 
-> **HEAD `b0bb4a0`** — ADIM 19 result provenance (PR #581) · ADIM 18 cross-item arbitration
-> (PR #575) · ADIM 17 shared ledger (PR #573) · ADIM 16 intent katmanı (PR #571/#572) landed.
-> **Alembic head `0043_i08_registry_strategy_fks`** (tek head) ·
-> `ENGINE_VERSION = backtest-engine-v18-gap-adjusted-stop-fill` (değişmedi) · migration/OpenAPI yok.
-> **ADIM 20 (PR #583) BLOCKED — containment KALDIRILMADI**, `SHARED_ALLOCATION_STATUS = future_dev`;
-> issue **#582**. Sebep bir kırmızı oracle değil: **`run_portfolio` YOK** (ADR §12 ADIM 18 hiç
-> yazılmadı), altı unified-clock modülü üretimden **hiç import edilmiyor**, worker hâlâ item
-> döngüsü (`jobs/backtest_engine.py:298`) + `combine_item_runs` (`:363`); ADR'nin **ADIM 16**'sı
-> (resumable stepper) **atlandı**; ADR 0002 hâlâ **`Proposed`** (§16 onay kapısı, insan işi).
-> ADIM 20'nin bıraktığı: 25 çok-tick/çok-item oracle (`tests/unit/oracles/portfolio_harness.py`
-> **TEST-OWNED** faz döngüsü) + `docs/audit/unified_portfolio_oracle_acceptance.md` (A1–A22).
-> **Sıradaki: ADR 0002'yi karara bağla (insan) → ADIM 18 `run_portfolio`** → harness'ı ona
-> yönlendir. Ayrıntı: `docs/ADIM20_BLOCKED_KICKOFF.md` · `docs/PROJECT_HISTORY.md` §ADIM 20.
+> **HEAD `<PR #585 sha>`** — **iki insan kapısı kapandı:** ADR 0002 artık **`Accepted`
+> (2026-08-05)** ve **§12.1 amendment** ADR-numarası ↔ sevk edilen PR eşlemesini kayda geçirdi
+> (**numaralandırmada otorite §12.1'dir** — ör. #575 = ADR'nin ADIM 19'u). **ADIM 18
+> `run_portfolio` landed (PR #585)**: `domain/backtest/portfolio_engine.py`, 49 test, kapsam
+> %100, mutasyon 32/35, **46 golden digest'in hiçbiri oynamadı**, migration/OpenAPI yok.
+> **Containment DURUYOR** — `SHARED_ALLOCATION_STATUS = future_dev`, ADIM 20 (PR #583) hâlâ
+> **BLOCKED** (issue **#582**); yedi unified-clock modülünün hiçbiri üretimden import
+> EDİLMİYOR, worker hâlâ item döngüsü (`jobs/backtest_engine.py:298`) + `combine_item_runs`.
+> **Alembic head `0043_i08_registry_strategy_fks`** (tek head) · `ENGINE_VERSION =
+> backtest-engine-v18-gap-adjusted-stop-fill` (değişmedi).
+> **Sıradaki: (1)** ADIM 20'nin bıraktığı 25 oracle'ın **TEST-OWNED** harness'ını
+> (`tests/unit/oracles/portfolio_harness.py::simulate`) `run_portfolio`'ya yönlendir — harness
+> kendi docstring'inde bu ikameyi **ADR §14 kabul kanıtı** ilan ediyor; **(2) ADIM 18b**
+> (resumable stepper + worker wiring), ADR'nin hiç yazılmamış ADIM 16'sı ve ADIM 20'nin
+> önkoşulu. **§13'ün OD-1…OD-7'si hepsi AÇIK** (R-5) ve `docs/adr/README.md` gereği Accepted
+> ADR **değişmez** — ADR 0002'yi düzenleme, ADR 0003 yaz. Ayrıntı:
+> `docs/ADIM18_LANDED_KICKOFF.md` · `docs/ADIM20_BLOCKED_KICKOFF.md` ·
+> `docs/PROJECT_HISTORY.md` §ADIM 18 + §ADIM 20.
 > **Uyarı:** `docs/audit/current_main_ground_truth_2026-08-03.md` §18'in 2/3/4/6 kalemleri
 > ADIM 5–8 ile kapandı ama o belge güncellenmedi — ona güvenmeden önce doğrula. `STAGE2_HANDOFF.md`
 > ve `PROJECT_HISTORY.md` **PR #575/#581 için landed kaydı taşımıyor**.

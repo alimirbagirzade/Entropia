@@ -2805,7 +2805,7 @@ Aynı gün dependabot: #350/#351/#352 (CI actions@7), #354/#355 minor-patch grup
 guard'ı EKLENMEDİ** (yoksa haftaya yeniden açılır); tam 3.14 migration ayrı manuel bir dal. Tam kayıt +
 madde-madde durum: `docs/PROJECT_HISTORY.md` §"Auth remediation dalgası".
 
-## V18-R3 · F-05 / M-05 — makine-okur capability matrix landed (PR TBD)
+## V18-R3 · F-05 / M-05 — makine-okur capability matrix landed (PR #585)
 
 **Migration YOK** (alembic head `0035_portfolio_rules` sabit) · **`ENGINE_VERSION` →
 `backtest-engine-v18-capability-matrix`** (davranış değişti → execution_key namespace kaymalı).
@@ -3050,7 +3050,7 @@ Kalan tek büyük açık iş hâlâ **R2'nin product-owner imzası**
 
 ---
 
-## I-17-COV — kalan kabul-ID kapsam boşlukları gerçek testlerle kapandı (PR TBD)
+## I-17-COV — kalan kabul-ID kapsam boşlukları gerçek testlerle kapandı (PR #585)
 
 **Branch:** `test/i17cov-acceptance-id-gaps` · **test-only: `src/` değişmedi, migration yok,
 alembic head `0039_backtest_run_cancellation`, `ENGINE_VERSION` bump yok.**
@@ -3897,7 +3897,99 @@ geçerlidir. Eksik kayıtları yazacak olan o slice'ları indirendir.
 
 ---
 
-## Next: **ADR 0002'yi karara bağla (insan) → ADIM 18 (`run_portfolio` faz döngüsü)**
+## ADIM 18 — `run_portfolio` per-tick faz döngüsü landed (PR #585)
+
+**Yeni:** `domain/backtest/portfolio_engine.py` (683 satır) + `tests/unit/test_backtest_portfolio_phase_loop.py` (41 test).
+**Migration yok · OpenAPI değişmedi · `ENGINE_VERSION` değişmedi · 46 golden digest'in HİÇBİRİ oynamadı**
+(`engine_golden_digests.json` dosyaya bile dokunulmadı, çünkü hiçbir üretim yolu döngüye ulaşmıyor).
+
+**İki insan kapısı kapandı:**
+
+1. **ADR 0002 → `Accepted` (2026-08-05).** Onay geriye dönük olarak ADIM 15/16/17/arbitration/
+   provenance'ı kapsıyor. **§13 çözülmedi — OD-1…OD-7 hepsi açık**; R-5 gereği containment
+   onlarsız kaldırılamaz. `docs/adr/README.md` durumu senkronlandı.
+   **DİKKAT:** `docs/adr/README.md` "ADR'ler Accepted olduktan sonra değişmezdir" diyor —
+   bundan sonra ADR 0002'yi düzenleme, **yeni bir ADR yaz**.
+2. **§12 sapması → amendment.** ADR'ye **§12.1** eklendi: ADR numarası ↔ sevk edilen PR
+   eşlemesi + eksik kalemin **ADIM 18b** olarak geri planlanması.
+
+**Ne indi:** faz döngüsünün kendisi — `iter_ticks` → P0..P3 mandatory → **PV** (defter DONAR)
+→ P4 `form_intents` → P5/P6b `arbitrate` → P7/P8 apply → P9 `commit_tick` + `attribute`.
+Altı contained modülün hepsi yeniden kullanıldı, hiçbiri yeniden yazılmadı.
+
+**Ne İNMEDİ ve neden:** worker wiring. ADR'nin ADIM 16 stepper'ı **hiç yazılmadı**
+(`engine.py:1782` hâlâ monolitik), dolayısıyla döngü bir öğenin gerçek replay'ini `t`'ye
+ilerletemez; ayrıca çok-öğeli **independent** koşu sevk edilmiş yoldur, oraya girmek
+`portfolio.*` dışı digest'leri de oynatır. Per-item yarı `ItemDriver` protokolüyle **enjekte
+edilir**; stepper indiğinde bu protokolün bir uygulaması olur ve döngü değişmez.
+
+**Kanıt:** doc 13 §14 test 11 (tek `E(t)` + permütasyon invariance) · ADR §1.2 fixture'ı tek
+saatte **3000.00** veriyor (sevk edilmiş `combine_item_runs` hâlâ 5000.00 ve containment testi
+bunu doğru olarak koruyor) · **cross-item batch invariance** (bugüne kadar hiçbir test
+kapsamıyordu) · mutasyon **14/14** (ilk tur 11/14'tü, üç gerçek boşluk kapatıldı — ayrıntı ve
+iki metodoloji tuzağı `docs/PROJECT_HISTORY.md` §ADIM 18).
+
+**Containment:** altı test BİLEREK güncellendi; `attribution` + `arbitration` testlerindeki
+sıralanmamış `rglob` platform bağımlılığı da düzeltildi.
+
+## Next: **ADIM 18b — resumable stepper + worker wiring (ADR §12.1)**
+
+Bu, ADR'nin **hiç yazılmamış ADIM 16'sıdır**, artık ADIM 20'nin planlı önkoşulu olarak
+numaralandırıldı. **ADIM 20 bundan önce merge EDİLEMEZ:** stepper olmadan worker hâlâ bitmiş
+koşuları katlıyor (`combine_item_runs`), yani containment'ı kaldırmak §1.2'nin %66 şişirdiği
+sequential eğriyi kanonik Result olarak yayımlamak olurdu.
+
+**İki yarım, bu sırayla, tercihen iki PR:**
+
+1. **Saf refactor.** `run_engine`'in bar-loop gövdesini (`engine.py:1782-1783`) bir öğeyi
+   verilen `t`'ye ilerletebilen stepper'a çıkar; `run_engine` imzasını **ve semantiğini**
+   koruyup o stepper üzerinde ince bir sürücü olur (ADR §3.2). **Tek kanıt: 46 golden
+   digest'in hiçbiri oynamamalı.** Başka hiçbir assertion'a güvenilmez (ADR R-4).
+2. **Wiring.** Stepper üzerinde `portfolio_engine.ItemDriver`'ı uygula ve worker'ın
+   `>1 öğe` yolunu `run_portfolio`'ya bağla. **Digest'ler BURADA oynar** — 9 `portfolio.*`
+   senaryosu tek tek gerekçelendirilir; başka bir digest oynarsa regresyondur.
+
+**ADIM 18'in ADIM 18b'ye bıraktığı — tam sembol adlarıyla:**
+
+| ne | nerede |
+|---|---|
+| faz döngüsü, sıra ve bütün değişmezler | `domain/backtest/portfolio_engine.py::run_portfolio` |
+| doldurulacak protokol | `portfolio_engine.ItemDriver` — `mandatory` / `propose` / `apply` |
+| P1/P2/P3 olgu tipleri | `portfolio_engine.CashEvent` / `FillEvent` / `CloseEvent` |
+| P7 sonucu | `portfolio_engine.AppliedFill` (**toplam** pozisyon, delta değil) + `default_fill` |
+| çıktı + digest | `portfolio_engine.PortfolioRun` (`identity`, `ticks`, `equity_points`) |
+| manifest adaptörü | `portfolio_engine.portfolio_manifest_for` |
+| hata zarfı | `PhaseLoopError` alt sınıfları — hepsi fail-closed |
+
+**ADIM 18b'de DİKKAT:**
+
+- `portfolio_engine.py` **contained**; wiring `test_nothing_imports_the_phase_loop` ve
+  `test_the_worker_still_loops_over_items`'i **bilerek** kırar. Kazara kırılmamalılar.
+- Containment testleri dosya metninde **düz substring** arar; yeni bir üretim dosyası
+  eklediğinde yorumlarında bile `execution.<modül>` dotted yazımı geçerse test kırılır.
+  Her yeni üretim dosyasından sonra containment suite'ini yeniden koş.
+- Mutasyon koşarken `__pycache__`'i sil (aynı bayt uzunluklu mutasyon stale `.pyc` bırakır)
+  ve pytest exit **1** (test hatası) ile **4** (kullanım hatası) ayır — ADIM 18'de ikisi de
+  ısırdı.
+
+**ADIM 20 için hâlâ AÇIK olan kapılar** (hiçbiri ADIM 18'de kapanmadı):
+
+1. **OD-1…OD-7'nin yedisi de açık.** R-5: her biri manifestte versiyonlu politika olarak
+   kayda geçmeden containment kaldırılamaz. Özellikle **OD-2** (stale mark) ve **OD-3**
+   (jointly-insolvent seçimi) — ikisi de bugün kodda "açık" diye etiketli.
+2. **R-1** (§10.2, revision pinning drift) — ADIM 20'den önce ayrı dar bir PR.
+3. **#544 (NET)**, **#559 (DST)**, **#550/#551/#552**, **#556/#557/#558**, **#539**, **#514**
+   — hepsi ADIM 17 kapanışındaki gibi açık.
+
+`docs/audit/current_main_ground_truth_2026-08-03.md` §18'in 2/3/4/6 kalemleri kapandığı hâlde
+belge güncellenmedi — **kullanmadan önce doğrula.**
+
+---
+
+---
+
+## Eski Next (ADIM 20 kapanışında yazıldı — **ADR kapısı kapandı, ADIM 18 LANDED**)
+
 
 **Önce iki kapı, ikisi de insana ait:**
 

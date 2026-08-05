@@ -1,7 +1,11 @@
 # ADR 0002 — Unified-clock multi-item portfolio co-simulation
 
 - **Date:** 2026-08-04
-- **Status:** **Proposed** — requires PO / maintainer approval before any implementation slice starts.
+- **Status:** **Accepted** (2026-08-05, PO approval recorded at the ADIM 18 gate). The approval
+  covers ADIM 15-19, which landed while this document still read `Proposed`, and authorises the
+  ADIM 20 boundaries — it does **not** resolve §13. **Every one of OD-1…OD-7 is still open**, and
+  §14 / R-5 still bar containment from being lifted until each is recorded as a versioned manifest
+  policy.
 - **Scope:** the execution model for Shared Equity Allocation (doc 13 / Master Ref Modül 11).
 - **Relates to:** `backend/src/entropia/domain/allocation/capability.py` (the containment this
   ADR is the exit plan for), GH #544 (NET), #559 (DST), #550/#551/#552 (sizing/booking,
@@ -663,7 +667,40 @@ Each step is one branch, one PR, independently revertible. **No step lifts conta
 | **19** | Conflict/exposure arbitration (§9): symmetric, deterministic, solvency **reject** (never partial, never borrow), full decision trace. Retires `PriorItemInterval` forward-only precedence. | `execution/rules.py`, `domain/allocation/rules.py` | doc 13 §14 **tests 12, 13**; the five `portfolio.rules_*` digests re-recorded; no-share-transfer proof | revert; forward-only rules restored |
 | **20** | Manifest fields (§10.1), `ENGINE_VERSION` bump, digest regeneration, **containment lift**, Result portfolio metadata + OpenAPI, codemaps. | `manifest.py`, `capability.py`, `readiness_check.py`, `docs/openapi.json`, `docs/CODEMAPS/*` | §14 acceptance matrix in full; rewrite `test_shared_allocation_containment.py` | flip `SHARED_ALLOCATION_STATUS` back to `future_dev` |
 
-**Prerequisites that are not part of ADIM 15–20** and must be scheduled separately:
+### 12.1 Amendment — what actually shipped under each number (2026-08-05)
+
+The table above is the **plan**. The numbers the PRs used drifted from it, and this amendment
+records the drift rather than quietly renumbering either side. Read this table, not §12, when
+asking "has X been built?".
+
+| ADR ADIM | Deliverable as written | What actually shipped | PR | Status |
+|---|---|---|---|---|
+| 15 | Merged-axis clock primitive | as written (`execution/clock.py`) | #56x | **done** |
+| 16 | **Resumable per-item stepper; `run_engine` becomes a thin driver. Pure refactor.** | *nothing* — the intent layer (`execution/intents.py`) shipped under this number instead | #571/#572 | **NOT BUILT** |
+| 17 | `PortfolioLedger` + `PortfolioSnapshot` | as written (`execution/portfolio_ledger.py`) | #573 | **done** |
+| 18 | `ItemIntent` + the per-tick phase loop in a new `run_portfolio(...)`, called by the worker when >1 item executes | the phase loop only (`domain/backtest/portfolio_engine.py`); `ItemIntent` had already shipped under 16. **The worker is NOT wired** — see below | #58x | **partial** |
+| 19 | Conflict/exposure arbitration | shipped as `execution/arbitration.py` | #575 | **done** |
+| — | (§10 manifest/attribution, which §12 assigns to ADIM 20) | shipped early under the label "ADIM 19" (`execution/provenance.py`, `execution/attribution.py`) | #581 | **done, early** |
+| 20 | Manifest fields, `ENGINE_VERSION` bump, digest regeneration, containment lift | not started | — | open |
+
+Two consequences follow, and neither is optional:
+
+1. **ADIM 18 could not deliver its worker half, and did not pretend to.** A phase loop cannot
+   advance an item's real replay to a given `t` until the ADIM 16 stepper exists;
+   `engine.py:1782` is still a monolithic `for batch in bar_batches:`. So `run_portfolio` was
+   built with the per-item work **injected** (`portfolio_engine.ItemDriver`), which reports facts
+   while the loop owns every ledger write and the whole phase order. When the stepper lands it
+   becomes one implementation of that protocol and the loop does not change.
+2. **The stepper is now a scheduled prerequisite of ADIM 20, not a skipped step.** It is
+   re-planned here as **ADIM 18b**, and ADIM 20 must not merge before it: without it the worker
+   still folds finished runs (`combine_item_runs`), so lifting containment would publish the very
+   sequential curve §1.2 measures as a 66 % drawdown overstatement.
+
+| ADIM | Deliverable | Primary files | Tests | Rollback |
+|---|---|---|---|---|
+| **18b** | The ADIM 16 deliverable, re-planned: extract `run_engine`'s bar-loop body into a resumable stepper; `run_engine` keeps its signature **and its semantics** and becomes a thin driver over it. Then implement `ItemDriver` over that stepper and wire the worker's >1-item path to `run_portfolio`. **Digests move here, not in 18.** | `domain/backtest/engine.py`, `execution/state.py`, `application/jobs/backtest_engine.py` | all 46 golden digests unchanged for the refactor half; the 9 `portfolio.*` scenarios reviewed one by one for the wiring half | revert; the item loop and `combine_item_runs` are still present |
+
+**Prerequisites that are not part of ADIM 15-20** and must be scheduled separately:
 GH **#559** (DST rule) before the merged axis spans mixed-zone sources; GH **#544** (NET) before or
 with ADIM 19; **R-1** (§10.2, revision pinning) before ADIM 20; **OD-1…OD-6** (§13) before the slice
 that depends on each.
@@ -755,7 +792,18 @@ proof, and the file should be renamed accordingly.
 
 ## 16. Stopping condition
 
-This ADR is **Proposed**. Per the ADIM 14 brief, implementation does not begin until the PO /
-maintainer approves it. On approval, its status becomes **Accepted**, §13's decisions are recorded as
-resolutions in a follow-up ADR or an amendment table, and ADIM 15 may start against the boundaries in
-§12. This document is not evidence that any part of the design is built.
+This ADR was **Proposed** until 2026-08-05 and is now **Accepted**. The approval was given at the
+ADIM 18 gate and is retroactive: ADIM 15, 16, 17, arbitration and the provenance slice all landed
+while this section still forbade them. That is recorded rather than tidied away — five contained
+slices shipped ahead of their gate, and the gate is what §16 exists to be.
+
+What the approval does and does not settle:
+
+- **Does:** the design in §1-§12 is adopted; the boundaries in §12 as amended by §12.1 are the ones
+  ADIM 20 must respect; contained slices may continue.
+- **Does not:** §13 is untouched. **OD-1 through OD-7 are all still open**, and R-5 states the
+  consequence plainly — *lifting containment while OD-2/OD-3 are unanswered would re-introduce an
+  undisclosed policy*. ADIM 20 must not merge until every OD is recorded in the manifest as a
+  versioned policy, and the §14 acceptance matrix passes in full.
+
+This document is still not evidence that any part of the design is built. §12.1 is.

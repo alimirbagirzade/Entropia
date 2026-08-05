@@ -3550,3 +3550,117 @@ gösteriyordu. Bu kapanış boşluğu **işaret ediyor ama başkasının slice k
 
 `git revert fd0ead5` — yalnız test ve doküman siler; üretim davranışı zaten hiç değişmedi.
 
+
+## ADIM 18 — `run_portfolio` per-tick faz döngüsü (PR TBD)
+
+**Yeni dosya:** `backend/src/entropia/domain/backtest/portfolio_engine.py` (683 satır).
+**Migration yok, OpenAPI değişmedi, `ENGINE_VERSION` değişmedi, 46 golden digest'in HİÇBİRİ
+oynamadı** (`engine_golden_digests.json` dosyaya bile dokunulmadı). Rollback = commit'i revert et.
+
+### İki insan kapısı, kod yazılmadan önce soruldu
+
+1. **ADR 0002 statüsü.** `Proposed` idi ve §16 uygulamayı PO onayına bağlıyordu; ADIM 15, 16, 17,
+   arbitration ve provenance — **beşi de** onaysız inmişti. Karar: **onaylandı**, ADR
+   `Accepted (2026-08-05)` oldu, onay geriye dönük olarak beş slice'ı kapsıyor. **§13 çözülmedi:
+   OD-1…OD-7 hepsi hâlâ açık** ve R-5 gereği containment onlarsız kaldırılamaz.
+2. **§12 numaralandırma sapması.** Karar: **amendment** — ADR'ye §12.1 eklendi (ADR numarası ↔
+   sevk edilen PR eşlemesi) ve eksik kalem **ADIM 18b** olarak geri planlandı.
+
+### Sapmanın kaydı (ADR §12.1)
+
+| ADR ADIM | Planlanan | Sevk edilen | Durum |
+|---|---|---|---|
+| 16 | **resumable stepper, saf refactor** | *hiçbir şey* — intent katmanı bu numarayla indi | **YAPILMADI** |
+| 18 | faz döngüsü + worker wiring | **yalnız faz döngüsü** | **kısmi** |
+| 19 | arbitration | arbitration (#575) | tamam |
+| (20'nin §10'u) | — | provenance/attribution "ADIM 19" etiketiyle erken indi (#581) | tamam, erken |
+
+### Neden worker'a bağlanmadı — dürüst sınır, gerekçesi kodda
+
+Faz döngüsü bir öğenin **gerçek** replay'ini `t`'ye ilerletemez: ADR'nin ADIM 16 stepper'ı hiç
+yazılmadı, `engine.py:1782` hâlâ monolitik `for batch in bar_batches:`. Ayrıca çok-öğeli
+**independent** koşu bugün contained DEĞİL, sevk edilmiş yoldur — oraya `run_portfolio` sokmak
+`portfolio.*` dışındaki digest'leri de oynatır ve fiilen containment'ı kaldırırdı. Bu yüzden
+per-item yarı **enjekte edilir** (`ItemDriver`: `mandatory` / `propose` / `apply`): sürücü
+**olgu bildirir**, döngü her defter yazımını kendisi yapar ve sürücüye defter **asla verilmez**
+(kardeş görememesi yapısal — ADR §6 kural 2). Stepper indiğinde bu protokolün bir
+uygulaması olur; **döngü değişmez.**
+
+### Faz sırası (ADR §8.2), tick başına bir tur
+
+`iter_ticks` → **P0..P3** mandatory (defter yazar) → **PV** `publish_snapshot` (defter DONAR)
+→ **P4** `form_intents` → **P5/P6b** `arbitrate` → **P7/P8** `begin_apply` + uygulama
+→ **P9** `commit_tick` + `attribute`.
+
+**Mandatory pencere faz faz süpürülür, item item değil.** M12 §9.2'nin 100 (funding), 101
+(scheduled fill) ve 102 (stop/exit) adımları ÜÇ ayrı clock adımıdır; item item süpürmek üçünü
+bire katlar ve deftere kanonun tarif etmediği bir sırayla valuation noktasına vardırır.
+
+**P6a ayrı bir çağrı değil:** sevk edilmiş pre-cap zinciri zaten `form_intents` içinde koşuyor.
+ADR **A-2** bu yerleşimi önemsiz kılar — bloklanan bir intent'in boyutu ilgisizdir.
+
+### Döngüde zorlanan değişmezler (testte değil, çağrı yerinde)
+
+| Değişmez | Nasıl | Kanon |
+|---|---|---|
+| tick başına TEK snapshot | `publish_snapshot` bir kez; ikinci publish `is_frozen` ile reddedilir | M11 §5.2 |
+| PV↔P7 arası yazar yok | defter DONUK; `arbitrate` donuk olmayan defterde çalışmayı zaten reddediyor | ADR §8.1 |
+| bütün intent'ler tek valuation adlandırır | `snapshot_identities(intents) == {snapshot.identity}` → `SnapshotLeakError` | doc 13 §14 test 11 |
+| eksen kesin ilerler | `TickOrderError` | removal condition #5 |
+| item sırası kararı değiştirmez | `(pin_ordinal, item_id)`; `_ordered_identities` mapping sırasını ASLA kullanmaz | doc 13 §13 |
+
+### Uydurulmayanlar (fail closed)
+
+- **Scale basis:** `default_fill` flat'ten açılışı çözer, tutulan pozisyona ekleme yapmayı
+  **reddeder** (`ScaleBasisNotSuppliedError`) — ladder kuralı `execution/scaling.py`'nindir,
+  ikinci bir uygulama ayrışmakta serbest olurdu. Sürücü verirse döngü kitaba geçirir.
+- **Mark policy:** `marks` çağıranın; varsayılan **yok** (OD-2 açık). `E(t)` zaten realized-only
+  olduğu için döngü marksız da kesindir; işaretlenemeyen pozisyon `unmarked_items`'a düşer.
+- **Streamless item:** sleeve'i olup bar stream'i olmayan item **reddedilir** (OD-6 açık) —
+  sessizce per-tick varlık vermek ürün kararını bir döngüde vermek olurdu.
+- **NET:** `resolve_policy` ilk tick'ten ÖNCE koşar; #544 bir saatlik replay'den sonra değil
+  hemen patlar.
+
+### Kanıt
+
+- **doc 13 §14 test 11** — bütün itemler tek `E(t)` okur (sürücülerin gördüğü değerler
+  karşılaştırılır, döngünün niyeti değil); `mainboard_items` permütasyonu **aynı run digest'i**.
+- **ADR §1.2 fixture'ı tersine döner:** aynı dört close tek saatte
+  `10000 → 13000 → 10000 → 13000 → 11000` yürür, en kötü drawdown **3000.00** — sevk edilmiş
+  `combine_item_runs` hâlâ **5000.00** diyor ve containment testi bunu **doğru olarak** koruyor
+  (bu yol değişmedi). %66'lık şişirmenin çözümü contained olarak kanıtlandı.
+- **Cross-item batch invariance** — bugüne kadar hiçbir test kapsamıyordu; dört farklı chunking
+  + permütasyonla bileşimi aynı digest'i veriyor.
+- **41 yeni test**, `tests/unit/test_backtest_portfolio_phase_loop.py`.
+
+### Mutasyon kaydı — ilk tur SAHTEYDİ
+
+İlk koşu 14/14 "öldü" dedi. **Yanlıştı:** script `--timeout=300` geçiriyordu, bu pytest'te
+tanınmıyor, her mutant **kullanım hatasıyla** (exit 4) çıkıyordu. Bayrak kaldırılınca gerçek
+sonuç **11/14** oldu ve üç hayatta kalan gerçek test boşluğuydu:
+
+1. faz süpürmesini item süpürmesine çevirmek — fixture ikisini ayırt etmiyordu (item A'nın P2
+   fill'i eklendi);
+2. run identity'nin arbitration sonucunu yok sayması — sayıları aynı, sonuçları farklı iki koşu
+   eklendi (`BLOCK_OPPOSITE` vs `KEEP_SEPARATE`);
+3. fill'in ödediği komisyonun atlanması — hiçbir fixture'da komisyonlu fill yoktu.
+
+Üçü kapatıldıktan sonra **14/14**. **İkinci bir tuzak:** `if extra:` → `if False:` mutasyonu
+**aynı bayt uzunlukta** olduğu için Python stale `.pyc`'yi yeniden kullandı ve mutant hiç
+koşmadı; script artık her mutasyondan sonra `__pycache__`'i siliyor ve
+`PYTHONDONTWRITEBYTECODE=1` ile koşuyor. Exit code 1 (test başarısızlığı) ile 4 (kullanım
+hatası) ayrıca ayırt ediliyor.
+
+### Containment — altı test BİLEREK güncellendi
+
+`portfolio_engine.py` altı contained modülü de import ediyor, dolayısıyla altı importer listesine
+eklendi. `attribution` ve `arbitration` containment testleri `rglob` çıktısını **sıralamıyordu** —
+tek importer'la görünmezdi, ikincisiyle assertion platforma bağımlı hale geliyordu; clock testinin
+zaten taşıdığı `sorted()` düzeltmesi bu ikisine de uygulandı. Yeni
+`test_nothing_imports_the_phase_loop` + `test_the_worker_still_loops_over_items` zinciri kapatıyor.
+
+### Kapsam dışı (bilerek)
+
+Stepper + worker wiring (**ADIM 18b**), manifest alanlarının sevk edilmiş `manifest.py`'ye
+bağlanması / `ENGINE_VERSION` bump / containment lift (ADIM 20), margin-cross (ADR §9.5),
+OD-2 mark policy, OD-3 seçim kuralı, NET semantiği (#544).

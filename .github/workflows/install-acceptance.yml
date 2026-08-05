@@ -381,6 +381,12 @@ jobs:
         env:
           POSTGRES_USER: entropia
           POSTGRES_PASSWORD: entropia
+          # dr-acceptance.sh keeps its backups in their own subdirectory, so
+          # backup.sh's retention prune can never delete an operator's real
+          # ones. backup-verify.sh only looks one level deep, so it has to be
+          # pointed at the same place — otherwise it reports "no backups found"
+          # and this step fails on a path assumption rather than on the backup.
+          BACKUP_DIR: backups/dr-acceptance
         run: bash scripts/backup-verify.sh | tee backup-verify.txt
 
       - name: Dump Compose logs on failure

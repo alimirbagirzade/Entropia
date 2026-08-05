@@ -116,14 +116,38 @@ margin/cross-margin (ADR §9.5) · NET semantiği (#544) · FX (OD-5).
 - **A4 / A18** gerçek `EngineOutput` digest'i ister → PR B'ye bağlı.
 - **A21** tick tabanlı cancel checkpoint → worker değişikliğine bağlı.
 
-## 5. Açık insan/ürün kararı — tek kalan
+## 5. Yarım-cent yuvarlama — KARARA BAĞLANDI (2026-08-06, ürün kararı)
 
-**Yarım-cent yuvarlama.** `allocation/rules.py::_money` = `ROUND_HALF_UP`;
+**Sorun.** `allocation/rules.py::_money` = `ROUND_HALF_UP`;
 `execution/portfolio_ledger.py::MONEY_ROUNDING` = `ROUND_HALF_EVEN`. `1000.10 @ %25` →
-preview `250.03`, execution `250.025`. **doc 13 §13 preview/manifest uyuşmazlığını YASAKLIYOR
-ama kanon kazananı seçmiyor.** Şu an `provenance.sleeve_amount_divergences()` farkı
-**raporluyor, çözmüyor** (`SLEEVE_AMOUNT_DIVERGENCE`). `initial_sleeve_capital` için hangi
-quantization kanonik? — **karar verilmeden sizing/allocation aritmetiğine dokunma.**
+preview `250.03`, execution `250.025`. doc 13 §13 preview/manifest uyuşmazlığını **yasaklıyor**
+ama kanon kazananı seçmiyordu; `provenance.sleeve_amount_divergences()` farkı
+(`SLEEVE_AMOUNT_DIVERGENCE`) yalnızca **raporluyordu**.
+
+**KARAR: `initial_sleeve_capital` yeniden quantize EDİLMEZ — dondurulmuş preview'dan KOPYALANIR.**
+Kaynak, `PortfolioAllocationPlanRevision.derived_amounts`'ın dondurulmuş değeridir; execution o
+tutarı birebir alır. **Hiçbir yuvarlama sabiti değişmez:** `portfolio_ledger.MONEY_ROUNDING`
+`ROUND_HALF_EVEN` kalır (equity/pnl digest'leri güvende), `allocation/rules.py::_money`
+`ROUND_HALF_UP` kalır (kullanıcının gördüğü preview kaymaz).
+
+**Gerekçe.** Repo'nun zaten yazılı doktrini: tutarlar dondurulmuş revizyondan **kopyalanır,
+yeniden hesaplanmaz** — `provenance.allocation_provenance_from_derived` tam olarak böyle çalışır.
+İki yolun ayrı ayrı hesaplayıp sonra "aynı yuvarlamayı kullansınlar" demesi kırılgandır ve
+ileride yeniden ayrışabilir; kopyalama ayrışmayı **yapısal olarak imkânsız** kılar. Ayrıca
+kullanıcının onayladığı tutar aynen icra edilir.
+
+**Uygulama sınırı — bu kararı hayata geçiren slice'a not.**
+- Dokunulacak yer `portfolio_ledger.build_sleeve_plan`'ın sleeve'i **türettiği** nokta:
+  türetme yerine dondurulmuş tutarı **girdi olarak al**.
+- Kopyalama yolu kurulduktan sonra `sleeve_amount_divergences()`'in anlamı değişir: bir
+  divergence artık "iki yol farklı yuvarladı" değil, **"kopyalama yolu atlandı"** demektir —
+  yani rapor olmaktan çıkıp **fail-closed** bir değişmeze dönmesi gerekir. Bu dönüşümü
+  yaparken çağıranların hepsini gözden geçir; **rapor→hata geçişi ayrı bir karar noktasıdır**,
+  bu kararın otomatik sonucu sayma.
+- Kalan artık `U0` (`A0 - Σ Ci0`) üzerinde toplanır; kopyalanan tutarlar toplamı `A0`'ı
+  aşamaz — bunu bir testle pinle.
+- **Karar verilmemiş olan sizing/booking kalemlerine (#550/#551/#552) hâlâ dokunma;**
+  bu karar yalnız `initial_sleeve_capital`'ı kapsar.
 
 ## 6. Çalışma yöntemi (bu repoda pahalıya mal olmuş tuzaklar)
 

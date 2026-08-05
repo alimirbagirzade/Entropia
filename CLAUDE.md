@@ -175,8 +175,10 @@ Before stopping a working session, produce **ALL** of the following:
 > **46/46 golden digest sabit**), event-loop ömrü (#597 worker actors, #600 agent-coordinator),
 > dev-auth override (#599), backup `mc` fallback (#601). **ADR 0002 `Accepted`** (§13.1 amendment
 > OD-1…OD-7'yi çözdü). **Next:** `ItemParticipant` adaptörü + worker call site (**PR B**) —
-> `STAGE2_HANDOFF.md` §Next 1(b). **Açık ürün kararı:** yarım-cent yuvarlama (preview
-> `ROUND_HALF_UP` ↔ execution `ROUND_HALF_EVEN`), şu an yalnız raporlanıyor.
+> `STAGE2_HANDOFF.md` §Next 1(b). **Yarım-cent yuvarlama KARARA BAĞLANDI (2026-08-06):**
+> `initial_sleeve_capital` yeniden quantize edilmez, dondurulmuş `derived_amounts`'tan
+> **kopyalanır**; iki yuvarlama sabiti de değişmez. Henüz **uygulanmadı** —
+> `ADIM16_STEPPER_LANDED_KICKOFF.md` §5.
 
 > **Uyarı:** `docs/audit/current_main_ground_truth_2026-08-03.md` §18'in 2/3/4/6 kalemleri
 > ADIM 5–8 ile kapandı ama o belge güncellenmedi — ona güvenmeden önce doğrula.

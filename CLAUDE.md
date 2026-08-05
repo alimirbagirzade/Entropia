@@ -169,22 +169,20 @@ Before stopping a working session, produce **ALL** of the following:
 
 ## Current position (keep in sync at each closing)
 
-> **HEAD `20a32ab`** — scheduler event-loop ömrü düzeltildi (PR #593, merged). `run()` artık
-> TEK `asyncio.run(_sweep_until_stopped())`; tick başına loop açıp kapatmak `@lru_cache`'li
-> asyncpg havuzunu ölü loop'a bağlıyordu ve passes **tam %50 dönüşümlü** OK/FAILED oluyordu
-> (canlı Postgres'te 6 tick → 3 OK / 3 FAILED ile üretilerek doğrulandı). Outbox relay +
-> INF-09 + INF-03 yarı hızda; veri kaybı YOK, gecikme iki katıydı. SIGTERM artık tick'i
-> beklemiyor. **`agent_coordinator` AYNI kusuru taşıyor → issue #591 (ayrı PR).** Migration /
-> OpenAPI / `ENGINE_VERSION` yok. **Sıradaki iş DEĞİŞMEDİ:** worker call site — `ItemParticipant`.
-
-
-> **HEAD `3cc9588`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok).
-> **Son dalga — ADIM 21 (worker delivery):** at-least-once delivery guard + `worker-agent-executor`
-> (#587), canlı Docker doğrulaması (#592), scheduler event-loop fix (#593), history/handoff kaydı
-> (#595). **Testler: otorite CI'dır** — son yeşil `Backend — lint, type, test` 45m12s; bu dalgada
-> yerel tam suite ölçülmedi. **Next:** engine-destekli `ItemParticipant` (worker call site) —
-> `STAGE2_HANDOFF.md` §Next. **AÇIK kusur:** `apps/worker/actors.py` event-loop hatası durable job'ı
-> kalıcı mahsur bırakıyor (ölçüldü, düzeltilmedi); `worker-agent-executor` dev-auth override'ında yok.
+> **HEAD `c5d4c5d`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok).
+> **Son dalga — ADIM 16 (ADR §12): `run_engine` resumable stepper (#602).** Bar döngüsü
+> `_build_stepper` → `_ItemStepper` (`engine.py:755/779`) oldu; `run_engine` (`:3174`) imzası ve
+> semantiği aynı, dokuz satırlık sürücü. **Saf refactor — 46 golden digest kımıldamadı,
+> `engine_golden_digests.json` değişmedi**; yeni `test_backtest_engine_stepper.py` (10 test)
+> bar-bar askıya alınmış replay'in digest-özdeşliğini kilitler. Migration / OpenAPI /
+> `ENGINE_VERSION` / frontend yok. **Containment KAPALI:** `run_portfolio`'nun üretimde çağıranı
+> hâlâ yok, `SHARED_ALLOCATION_STATUS = future_dev`. **Next:** PR B — `_ItemStepper` üzerinde
+> `ItemParticipant` adaptörü + `jobs/backtest_engine.py:298` call site (`>1` item);
+> `docs/ADIM16_STEPPER_LANDED_KICKOFF.md`. **Testler: otorite CI'dır** (yerelde bu dalgada yalnız
+> golden + stepper + containment koşuldu: 16 test, exit 0). **AÇIK kusur:** `apps/worker/actors.py`
+> event-loop hatası durable job'ı kalıcı mahsur bırakıyor (ölçüldü, düzeltilmedi);
+> `worker-agent-executor` dev-auth override'ında yok. **İki slice "ADIM 16" adını taşıyor**
+> (intent katmanı #571/#572 vs stepper #602) — numara yeniden atanmadı, insan kararı.
 
 > **Uyarı:** `docs/audit/current_main_ground_truth_2026-08-03.md` §18'in 2/3/4/6 kalemleri
 > ADIM 5–8 ile kapandı ama o belge güncellenmedi — ona güvenmeden önce doğrula.

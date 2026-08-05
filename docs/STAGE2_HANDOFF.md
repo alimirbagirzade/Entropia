@@ -4242,20 +4242,69 @@ INF-03 sweep'i telafi ediyor, o sweep de %50 çalışıyordu. `apps/worker/actor
 `asyncio.run` çağrısı **analiz EDİLMEDİ** — dramatiq thread yeniden kullanımına bağlı, ölçmeden
 iddia yok.
 
-## Next: **worker call site — `ItemParticipant` (gerçek engine) → sonra ADIM 20**
+## ADIM 16 (ADR §12) — `run_engine` resumable stepper landed (PR #602)
+
+> **İki ayrı slice "ADIM 16" adını taşıyor.** Sevk edilmiş ADIM 16 = **item intent katmanı**
+> (#571/#572, yukarıda). Buradaki = **ADR 0002 §12'nin resumable stepper'ı**, saf refactor.
+> Numara yeniden atanmadı; ayrım `ADIM 16 (ADR §12)` etiketiyle yapılıyor.
+
+**Ne indi.** `run_engine`'in bar döngüsüne kadarki gövdesi `_build_stepper` oldu ve
+`_ItemStepper` kaydını döndürüyor; `run_engine` imzasını, docstring'ini ve semantiğini
+koruyarak o stepper üzerinde **dokuz satırlık bir sürücü**. Replay state fabrikanın
+closure'ında kaldı — döngüyü dışarı almak hiçbir state'i scope'lar arasında taşımadı.
+
+| ne | nerede |
+|---|---|
+| askıya alınabilir replay kaydı | `domain/backtest/engine.py::_ItemStepper` (`:755`) |
+| fabrika | `engine.py::_build_stepper` (`:779`) |
+| ilerletme / kapanış / çıktı / pozisyon | `step(bar)` · `finalize()` · `output()` · `open_position()` |
+| canlı defter + pinli ayarlar | `_ItemStepper.ledger`, `_ItemStepper.ctx` |
+| ince sürücü | `engine.py::run_engine` (`:3174`) |
+| bar sınırını aşan **on** ad | `engine.py:1761-1763` (`nonlocal` bloğu) |
+
+**`nonlocal` listesi ölçüldü, tahmin edilmedi:** döngü gövdesi üzerinde AST geçişi bar sınırını
+aşan tam on adı raporladı; kalan 83 ad definite-assignment ile *her yolda okunmadan önce
+yazılıyor* diye elendi. Taşınan her satır birebir (kurulum 955, step 1351, veri-sonu 44, çıktı
+15); formatter dedent sonrası tek satıra sığan bir `max()` çağrısını daralttı. Diff:
+`engine.py` **+1417 / −1351**, yeni test **+216**.
+
+**Kabul kanıtı = 46 golden digest, başka hiçbir assertion değil (ADR §15 R-4).** Hiçbiri
+kımıldamadı ve `backend/tests/unit/engine_golden_digests.json` **dosyası da değişmedi**.
+Yeni `tests/unit/test_backtest_engine_stepper.py` (10 test) digest'in göremediği yarıyı
+kilitler: aynı senaryolar **çağrı başına bir bar**, her bar çifti arasında askıya alınarak,
+digest-özdeş — taşınan her ad için birer vaka (duran limit, tetiklenmemiş stop, merdivenlenen
+pozisyon, funding ödeyen pozisyon, blackout boyunca tutulan sinyal) + batch boyutunun
+gözlemlenemezliği + F-04 fail-closed kapısının fabrikada olması.
+
+**Containment KAPALI kaldı.** `portfolio_engine.py`'ye çağıran eklenmedi;
+`jobs/backtest_engine.py:298` hâlâ item döngüsü, `:363` hâlâ `combine_item_runs`;
+`SHARED_ALLOCATION_STATUS` `future_dev`;
+`test_the_phase_loop_exists_but_no_production_path_reaches_it` hâlâ yeşil.
+**Migration / model / OpenAPI / frontend / `ENGINE_VERSION` yok.**
+
+**Kapanış ritüeli gecikmeli yapıldı:** kod 2026-08-05 20:00Z'de indi, doküman dalgası sonraki
+oturumda `HEAD == origin/main == c5d4c5d` doğrulanıp golden + stepper + containment yerelde
+yeniden koşularak (16 test, exit 0, digest dosyası temiz) yazıldı.
+
+Doküman: `docs/ADIM16_STEPPER_LANDED_KICKOFF.md` (reuse anchor'ları + PR B resume prompt) ·
+tam kayıt: `docs/PROJECT_HISTORY.md` §"ADIM 16 (ADR §12)".
+
+## Next: **PR B — worker call site: `ItemParticipant` (gerçek engine) → sonra ADIM 20**
 
 **Sıradaki tek adım ADIM 20 DEĞİL.** `run_portfolio` var ama **çağıranı yok**; ADIM 20'nin
 matrisindeki A1/A3/A5 dışında hiçbir satır bu boşluk kapanmadan kapanamaz.
 
-**1. Engine-destekli `ItemParticipant` (yeni ADIM 21 / eski ADR ADIM 16'nın gerçek borcu).**
-`run_engine`'in bar döngüsünü (`engine.py:1782`, ~1100 satırlık fonksiyonun içinde) bir
-stepper'a çıkar; `run_engine` o stepper üzerinde ince bir sürücü olur ve **gözlemlenebilir
-biçimde değişmez**. Tek kanıt: **46 golden digest kımıldamaz.** Sonra o stepper'ın üstüne
-`portfolio_engine.ItemParticipant`'ı uygulayan bir adaptör yaz ve
+**1. Engine-destekli `ItemParticipant` — PR B.** Stepper yarısı **bitti** (#602, yukarıda);
+kalan borç adaptör ve call site. `_ItemStepper` üzerinde `portfolio_engine.ItemParticipant`'ı
+uygulayan bir adaptör yaz (`carry`→`CarryCharges`, `mandatory_exit`→`MandatoryExit`,
+`entry`→`ItemIntent`; pozisyonu `open_position()`'dan oku, replay'in içine uzanma) ve
 `jobs/backtest_engine.py:298`'deki item döngüsünü `run_portfolio` ile değiştir (yalnız
-**>1 item** çalışırken; tek item `run_engine`'de kalır — ADR §3.2).
-**Bu iki iş ayrı PR olmalı** — ADR §15 R-4'ün "restructure ile re-price'ı ayır" kuralı zaten bir
-kez kaybedildi, ikinci kez kaybedilmesin.
+**>1 item** çalışırken; tek item `run_engine`'de kalır — ADR §3.2). Containment guard'ı
+**ancak burada ve bilerek** güncellenir. Kanıt: 46 digest yine kımıldamaz (tek-item yol
+byte-identical kalır) + 25 portföy oracle'ı + gerçek engine ile `>1` item uçtan uca kanıtı —
+scripted katılımcı yeterli değil. **Faz döngüsünün modellemedikleri bu PR'da AÇILMAZ:**
+P2 pending fills, P8 same-direction scaling, OD-2 mark policy (ADR §15 R-4'ün ayrımı bir kez
+kaybedildi, ikinci kez kaybedilmiyor).
 
 **2. Sonra ADIM 20** (manifest policy alanları, `ENGINE_VERSION` bump, digest yenileme,
 containment lift). Ön koşulları — hâlâ açık:

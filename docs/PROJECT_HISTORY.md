@@ -3859,6 +3859,18 @@ başına** — `jobs/backtest_engine.py` O-06 checkpoint #3). A4/A18 gerçek `En
 (ADIM 16 atlandı; "yeniden yapılandır" ile "yeniden fiyatla" ayrımı artık yok) ·
 **OD-1…OD-7** açık (ADR R-5) · **#544 (NET)** · **#559 (DST)**.
 
+> **Sonradan değişti (PR #602, ADIM 16 / ADR §12).** Stepper yazıldı ve indi; "yeniden
+> yapılandır ile yeniden fiyatla ayrımı artık yok" cümlesi **artık geçerli değil** — ayrım geri
+> kazanıldı ve PR B (adaptör + call site) bilerek ayrı tutuldu. Numaralandırma uyuşmazlığı ise
+> **duruyor**: iki ayrı slice "ADIM 16" adını taşıyor (intent katmanı #571/#572 vs stepper
+> #602), insan kararı bekliyor. Diğer kapılar değişmedi.
+
+> **Sonradan değişti (PR #602, ADIM 16 / ADR §12).** Stepper yazıldı ve indi; "yeniden
+> yapılandır ile yeniden fiyatla ayrımı artık yok" cümlesi **artık geçerli değil** — ayrım
+> geri kazanıldı ve PR B (adaptör + call site) bilerek ayrı tutuldu. Numaralandırma
+> uyuşmazlığı ise **duruyor**: iki ayrı slice "ADIM 16" adını taşıyor (intent katmanı
+> #571/#572 vs stepper #602), insan kararı bekliyor. Diğer kapılar değişmedi.
+
 **Kapalı, kayda geçsin:** **R-1** (revision pinning drift) →
 `a33d3e4 fix(readiness): pin the allocation revision the snapshot names`.
 
@@ -3949,3 +3961,80 @@ INF-03 sweep'i telafi ediyor, o sweep de %50 çalışıyordu. `apps/worker/actor
 `asyncio.run` çağrısı **analiz EDİLMEDİ** — dramatiq thread yeniden kullanımına bağlı, ölçmeden
 iddia yok.
 
+
+## ADIM 16 (ADR §12) — `run_engine` resumable stepper (PR #602)
+
+> **İki ayrı şeye "ADIM 16" deniyor — karıştırma.** Sevk edilmiş **ADIM 16 = item intent
+> katmanı** (PR #571 + #572, yukarıda §"Paylaşılan snapshot'a karşı item intent'leri").
+> Buradaki **ADIM 16 = ADR 0002 §12 tablosundaki resumable stepper**, saf refactor. Numara
+> yeniden atanmadı; ayrım kayıtlarda `ADIM 16 (ADR §12)` etiketiyle yapılıyor — aynı insan
+> kararı "ADIM 21 iki slice'a verilmiş" için de alınmıştı.
+
+> **ADR §12'nin "ADIM 16 was never written, and is now formally SKIPPED" cümlesi ARTIK
+> YANLIŞ.** Slice yazıldı ve indi. §12 buna göre şerh edildi (aşağıda).
+
+**Neden gerekliydi.** ADR §12 ADIM 16'yı "faz döngüsü aynı yere öbür taraftan ulaştı" diye
+atlamıştı. Ama worker call site'ın **ön koşulu** hâlâ oydu: gerçek engine ile desteklenen bir
+`ItemParticipant` **TEK bir item'ı verilen bir `t`'ye ilerletebilmek** zorunda, ve `engine.py`
+içinde bunu yapabilecek hiçbir şey yoktu — bar döngüsü ~2400 satırlık bir fonksiyonun
+**1355 satır içine** gömülüydü.
+
+**İnen şey.**
+
+| ne | nerede |
+|---|---|
+| askıya alınabilir replay kaydı | `domain/backtest/engine.py::_ItemStepper` (`:755`, frozen dataclass) |
+| kurulum + kapanışların fabrikası | `engine.py::_build_stepper` (`:779`) |
+| bar başına ilerletme | `_ItemStepper.step(bar)` — çağıran normalize eder (`_normalize`) |
+| veri sonu uzlaştırma | `_ItemStepper.finalize()` — son `step`'ten sonra bir kez |
+| çıktı projeksiyonu | `_ItemStepper.output()` — hiçbir şeyi yeniden oynatmaz |
+| portföy katılımcısının okuyacağı pozisyon | `_ItemStepper.open_position()` |
+| ince sürücü | `engine.py::run_engine` (`:3174`) — imza, docstring ve semantik **aynı** |
+
+`run_engine`'in bar döngüsüne kadarki gövdesi `_build_stepper` oldu; `run_engine` artık o
+stepper üzerinde dokuz satırlık bir sürücü. **Replay state fabrikanın closure'ında kaldı** —
+bar döngüsünün zaten tuttuğu yerde; döngüyü dışarı almak hiçbir state'i scope'lar arasında
+taşımadı, dolayısıyla bir sayıyı kımıldatamazdı.
+
+**`nonlocal` bloğu ölçüldü, tahmin edilmedi.** Döngü gövdesi üzerinde bir AST geçişi bar
+sınırını aşan **tam on ad** raporladı (`engine.py:1761-1763`): `current_day`, `exit_touch`,
+`funding_idx`, `pending`, `position`, `prev_entry_signal`, `prev_scale_signal`, `scale_signal`,
+`working_limit`, `working_stop`. Gövdenin bağladığı diğer **83 ad** definite-assignment
+analiziyle *her yolda okunmadan önce yazılıyor* diye kanıtlandı — step'e local kalmaları bir
+kararı değiştiremez.
+
+**Taşınan her satır birebir taşındı:** kurulum 955, step gövdesi 1351, veri-sonu uzlaştırma 44,
+çıktı montajı 15 — düzenleme sonrası taşınan aralıklar HEAD ile karşılaştırılarak doğrulandı.
+Formatter dedent sonrası tek satıra sığan **tek bir `max()` çağrısını** daralttı. Diff:
+`engine.py` **+1417 / −1351** (3225 → 3291 satır), yeni test dosyası **+216**.
+
+**Kabul kanıtı = 46 golden digest, başka hiçbir assertion değil (ADR §15 R-4).**
+Hiçbiri kımıldamadı; `backend/tests/unit/engine_golden_digests.json` **dosyası da değişmedi**
+(son dokunuşu `c4f7013`, bu slice'tan çok önce). 42 senaryo `run_engine`'i, 4'ü
+`combine_item_runs`'ı **doğrudan** çağırır — worker'daki tek-item kısayolu bunları korumaz,
+yani digest sabitliği gerçekten motoru ölçer.
+
+**Yeni test — digest'in göremediği yarıyı kilitler.**
+`backend/tests/unit/test_backtest_engine_stepper.py` (10 test): aynı senaryolar **çağrı başına
+BİR bar** ile, her bar çiftinin arasında askıya alınarak oynatılır ve `run_engine` ile
+**digest-özdeş** çıkar. Taşınan her ad için birer vaka: duran limit emri, tetiklenmemiş stop,
+merdivenlenen pozisyon, funding ödeyen tutulan pozisyon, blackout günü boyunca tutulan sinyal.
+Ayrıca **batch boyutu gözlemlenemez** (I/O detayı, modelleme girdisi değil) ve **F-04
+fail-closed kapısı fabrikadadır** — çözülmemiş strateji tek bar adımlanmadan raise eder.
+
+**Bilerek KAPSAM DIŞI, ve containment kapalı kaldı.** Worker hâlâ itemler üzerinde döner
+(`jobs/backtest_engine.py:298`) ve bitmiş koşuları hâlâ `combine_item_runs` ile katlar (`:363`).
+`portfolio_engine.py`'ye çağıran EKLENMEDİ, `ENGINE_VERSION`'a dokunulmadı,
+`SHARED_ALLOCATION_STATUS` `future_dev` kaldı ve
+`tests/unit/oracles/test_oracle_portfolio_containment_gate.py::test_the_phase_loop_exists_but_no_production_path_reaches_it`
+— `run_portfolio`'nun çağıranı yok assertion'ı dahil — **hâlâ yeşil**. Adaptör + call site
+**PR B**: ADR §15 R-4'ün "restructure ile re-price'ı ayır" kuralı bir kez zaten kaybedildi,
+ikinci kez kaybedilmiyor.
+
+**Migration yok, model yok, OpenAPI yok, frontend yok, `ENGINE_VERSION` değişmedi.**
+
+**Kapanış ritüeli gecikmeli yapıldı (dürüst not).** Kod 2026-08-05 20:00Z'de #602 olarak indi;
+handoff / kickoff / tarihçe / CLAUDE.md / codemap / memory checkpoint **o oturumda yazılmadı**.
+Bu bölüm ve eşlik eden doküman dalgası sonraki oturumda, `HEAD == origin/main == c5d4c5d`
+doğrulanıp golden + stepper + containment testleri **yerelde yeniden koşularak** (16 test, exit 0,
+digest dosyası temiz) yazıldı.

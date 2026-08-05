@@ -165,28 +165,19 @@ Before stopping a working session, produce **ALL** of the following:
 
 ## Current position (keep in sync at each closing)
 
-> **HEAD `0f44c3a`** — **ADIM 15** (PR #567) · **F-26** (PR #564) · R-1 revision pin (PR #565) ·
-> ADIM 14 ADR + kapanışı (PR #563/#566) landed. **Alembic head
-> `0043_i08_registry_strategy_fks`** (tek head) · **196 OpenAPI operation / 151 schema** ·
-> `ENGINE_VERSION = backtest-engine-v18-gap-adjusted-stop-fill` (değişmedi) · migration yok.
-> **Son slice: ADIM 15** — merged-axis valuation clock (`domain/backtest/execution/clock.py`,
-> 300 satır + **27 test**): tick anahtarı `t_ms`, streaming k-way merge, `(pin_ordinal,
-> item_id)` tie-break, öğe başına `last_closed` + `staleness_ms` **ölçümü**; dedup **eksenin**,
-> öğe verisinin değil; fail-closed. **Hiçbir üretim modülü import ETMİYOR** (rollback = modülü
-> sil), `run_engine` semantiği ve golden digest'ler sabit — ikisi de testle kilitli.
-> **⚠ ADR 0002 statüsü hâlâ `Proposed` ve §16 onay şartı koşuyordu; ADIM 15 kayıtlı onay
-> olmadan indi.** OD-1…OD-7 açık; **OD-2** (taze barsız pozisyon nasıl mark edilir) clock'un
-> bilerek seçmediği karar.
-> **Sıradaki:** **önce ADR onayını sor** → **ADIM 16** (run_engine'den resumable stepper, SAF
-> refactor; kabul = **46 golden digest'in tamamı değişmemeli**). Clock'u ADIM 16'da engine'e
-> BAĞLAMA — o ADIM 18. Paralel açık: **#544** (NET), **#559** (DST), **#550/#551/#552**,
-> **#556/#557/#558**, **#539/#533/#540**.
-> Ayrıntı: `docs/ADIM15_LANDED_KICKOFF.md` · `docs/PROJECT_HISTORY.md` §ADIM 15 + §F-26 ·
-> ADR §12/§13/§14.
-> **Numaralandırma:** **ADIM 14 = ADR**, frontend slice = **F-26**; ADIM 15–20 unified-clock'a
-> rezerve, ADIM dışı işe F-serisinden sıradaki boş numarayı ver.
-> **Uyarı 2:** `docs/audit/current_main_ground_truth_2026-08-03.md` §18'in sıra 2/3/4/6
-> kalemleri ADIM 5–8 ile kapandı ama o belge güncellenmedi — ona güvenmeden önce doğrula.
+> **HEAD `f8f96c5`** — **ADIM 17** shared ledger (PR #573) landed · ADIM 16 intent katmanı
+> (PR #571/#572) landed. **Alembic head `0043_i08_registry_strategy_fks`** (tek head) ·
+> `ENGINE_VERSION = backtest-engine-v18-gap-adjusted-stop-fill` (değişmedi) · migration/OpenAPI
+> yok. Unified-clock programının üç parçası (`execution/clock.py`, `intents.py`,
+> `portfolio_ledger.py`) yerinde ve **hiçbiri üretimden import EDİLMİYOR** (rollback = revert).
+> **Sıradaki: ADIM 18** (`run_portfolio` faz döngüsü) — ama önce **iki insan kapısı**:
+> (1) ADR 0002 hâlâ `Proposed`, §16 onay şart koşuyor, ADIM 15/16/17 onaysız indi;
+> (2) **ADR §12 numaralandırması sevk edilenle uyuşmuyor** — ADR'nin ADIM 16'sı (resumable
+> stepper, saf refactor) **hiç yazılmadı**, yerine ADIM 18'in intent yarısı indi.
+> Ayrıntı: `docs/ADIM17_LANDED_KICKOFF.md` · `docs/PROJECT_HISTORY.md` §ADIM 16 + §ADIM 17 ·
+> `docs/audit/portfolio_ledger_accounting.md`.
+> **Uyarı:** `docs/audit/current_main_ground_truth_2026-08-03.md` §18'in 2/3/4/6 kalemleri
+> ADIM 5–8 ile kapandı ama o belge güncellenmedi — ona güvenmeden önce doğrula.
 
 
 - **Durum:** V1 ROADMAP COMPLETE (Stages 0–8, docs 01–22) + post-V1 + video-alignment +
@@ -195,31 +186,18 @@ Before stopping a working session, produce **ALL** of the following:
 
 
 
-- **Testler (2026-08-04, ADIM 13 / PR #560'ta ölçüldü — collection değil, PASS):** backend
-  full suite **exit 0**, 0 failed/error, coverage **%92.89** (kapı ≥90), **4 bilinçli
-  `xfail(strict)`** — dördü de tek dosyada
-  (`test_research_point_in_time_parity.py`), issue eşlemesi **#556 ×2 · #557 · #558**;
-  **#559'un xfail'i YOK** (DST fold/gap geçen bir karakterizasyon testiyle pinlendi);
-  ADIM 12'nin #549 xfail'i PR #555 ile kalktı.
-  Frontend **696 passed** (68 dosya, `npm run coverage` exit 0), `npm run typecheck` temiz.
-  **CI 6/6 pass** (ADIM 13 / PR #560 Backend job **46m01s**). Yine de **otorite CI'dır.**
+- **Testler (2026-08-05, ADIM 17 / PR #573 CI'ında doğrulandı):** **otorite CI'dır** —
+  `Backend — lint, type, test` **pass** (42m42s), CI 6/6. Yerel tam suite coverage kapısını
+  **%93.09** ile geçti (kapı ≥90; yeni `portfolio_ledger.py` %98.8). **Dikkat: o yerel koşuda
+  pytest'in özet satırı ve exit code'u YAKALANMADI** (arka planda başlatıldı) — bu hatayı
+  tekrarlama: çıktıyı dosyaya yaz, `$?`'i **ayrı** oku. **4 bilinçli `xfail(strict)`** tek
+  dosyada (`test_research_point_in_time_parity.py`), issue eşlemesi **#556 ×2 · #557 · #558**;
+  oracle paketinde xfail **sıfır**. Frontend sayısı **ölçülmedi** — CI job log'una bak.
   Doğrula: `gh run list --branch main --limit 1` → job log.
-  **ADIM 14 docs-only olduğu için suite'i YENİDEN ÖLÇMEDİ**; oracle paketinde xfail
-  **sıfırdır** (#549 PR #555 ile kapandı). **Backend sayıları hâlâ geçerli** — F-26 (PR #564)
-  backend'e byte-identical. **Frontend `696 passed / 68 dosya` ise ARTIK ESKİ:** F-26 yeni bir
-  test dosyası ekledi (`test/capabilityDisclosure.test.tsx`); PR #564'ün CI'ı 6/6 yeşildi ama
-  yeni sayı **ölçülmedi** — güncel rakam için CI job log'una bak, buradaki sayıya güvenme.
   **Ortam tuzağı:** paralel worktree oturumları aynı anda koşuyor — `TEST_DATABASE_URL` ile
-  worktree'ye özel izole DB kullan (conftest her testte `drop_all`/`create_all`; **sürücü
-  `postgresql+asyncpg://` olmalı** — `psycopg` integration conftest'ini `create_async_engine`'de
-  patlatır → 2319 sahte ERROR). Tam suite'i
-  **tek pytest çağrısında** koş ve **ortada öldürme**: arka arkaya iki çağrı ya da yarıda kesilmiş
-  bir koşu, artakalan bağlantılar yüzünden sonraki koşuda sahte FAILED/ERROR üretir. Suite
-  koşarken **`uv sync`/`uv run` çalıştırma** (venv ortadan yeniden kurulur → sahte ERROR) ve
-  **`pytest … | tail` KULLANMA** — exit code `tail`'in olur, pytest'in değil; T-01'de 20 ERROR
-  veren bir koşu bu yüzden bir tur "yeşil" sanıldı. Çıktıyı dosyaya yaz, `$?`'i ayrı oku.
-
-
+  worktree'ye özel izole DB kullan (**sürücü `postgresql+asyncpg://` olmalı**). Tam suite'i
+  **tek pytest çağrısında** koş ve **ortada öldürme**; suite koşarken `uv sync`/`uv run`
+  çalıştırma ve **`pytest … | tail` KULLANMA** (exit code `tail`'in olur).
 
 - **F-07 raw-id sweep — dört alan LANDED, bir kalıntı AÇIK.** `display_label`,
   `source_package_name`, `item_label`, `scope_label` + ortak `components/LabelledId.tsx`

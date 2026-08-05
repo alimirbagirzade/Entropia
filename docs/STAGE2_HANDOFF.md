@@ -3739,37 +3739,178 @@ matrisi).
 
 ---
 
-## Next: **ADR onayı (PO) → ADIM 16 (resumable per-item stepper, SAF refactor)**
+## ADIM 16 — Paylaşılan snapshot'a karşı item intent'leri landed (PR #571 + #572)
 
-**Önce kapı: ADR statüsü hâlâ `Proposed`.** ADIM 15 bu onay olmadan indi (yukarıya bak);
-ADIM 16'ya geçmeden önce onay **açıkça teyit edilmeli**. Onay gelirse statü **Accepted** olur ve
-§13'ün yedi kararı bir amendment tablosuna **çözüm olarak** yazılır.
+> **Bu kayıt geriye dönük yazıldı.** ADIM 16 kapanış ritüeli **yapılmamıştı**: PR #571 merge
+> edildi ama ne bu dosyaya ne `PROJECT_HISTORY.md`'ye bir giriş düştü, ve aşağıdaki eski
+> "Next" bloğu ADIM 16'yı hâlâ *yapılacak* iş olarak tarif ediyordu. ADIM 17 kapanışında
+> tespit edildi ve burada telafi ediliyor.
 
-**ADIM 16 (ADR §12):** `run_engine`'in bar-döngü gövdesini, bir öğeyi verilen bir `t`'ye
-ilerletebilen bir **stepper**'a çıkar; `run_engine` **imzasını VE semantiğini** koruyup o
-stepper üzerinde ince bir sürücüye dönüşsün (§3.2). **Saf refactor.**
-Dosyalar: `domain/backtest/engine.py`, `execution/state.py`.
-**Kabul: 46 golden digest'in TAMAMI değişmemeli** (hepsi `run_engine`/`combine_item_runs`'ı
-doğrudan çağırıyor, worker'ı asla) + tam engine suite yeşil. Rollback: revert; hiçbir anlamsal
-yüzey değişmedi.
+**Commit `e2695e4` → merge `a572e07`** (2026-08-05T00:51:39+03:00) · branch
+`feat/portfolio-item-intents` · **+1943 / −3, 4 dosya** · **Migration YOK** (alembic head
+`0043_i08_registry_strategy_fks`) · **OpenAPI DEĞİŞMEDİ** · **`ENGINE_VERSION` DEĞİŞMEDİ** ·
+CI yeşil. Ardından **PR #572** (`3a2aea9`) ADIM 15'in mutasyon kaydını ve naive-timestamp
+sapmasını docs'a taşıdı.
 
-**ADIM 15'in ADIM 16'ya bıraktığı:** `iter_ticks` bir öğenin **hangi `t`'lerde** ilerletilmesi
-gerektiğini zaten söylüyor; ADIM 16'nın işi o `t`'ye **ilerletebilen** bir motor gövdesi
-üretmek. İkisi ADIM 18'de birleşir — ADIM 16'da clock'u engine'e **bağlama**.
+| dosya | |
+|---|---|
+| `backend/src/entropia/domain/backtest/execution/intents.py` | **yeni**, 846 satır |
+| `backend/tests/unit/test_backtest_item_intents.py` | **yeni**, 1087 satır / **45 vaka** |
+| `backend/tests/unit/test_backtest_unified_clock.py` | clock containment testi bilerek güncellendi |
 
-**Paralel yürüyebilecek, ADIM 16'yı bloke etmeyen kalemler:**
+**⚠ PLAN SAPMASI — kayda geçirilmesi gereken:** ADR 0002 §12'nin tablosunda **ADIM 16 =
+`run_engine`'den resumable stepper (saf refactor, kabul = 46 golden digest sabit)**, **ADIM 18 =
+`ItemIntent` + faz döngüsü**. Sevk edilen ADIM 16 ise `ItemIntent` + `PortfolioSnapshot`
+katmanıdır — yani **ADR'nin ADIM 18'inin bir yarısı**, stepper'ın yerine. **Stepper hâlâ
+yazılmadı** ve ADR §12 sınırları "dondurulmuş" diye ilan edilmişti. Bir sonraki oturum ya
+ADR §12'yi bir amendment ile bu sıraya göre güncellemeli ya da stepper'ı geri planlamalı;
+**sessizce kabullenilmemeli.**
 
-1. ~~**R-1 dar PR'ı** (revision pinning)~~ — **LANDED**: PR #565 (`a33d3e4`,
-   `fix(readiness): pin the allocation revision the snapshot names`), merge `06809cc`.
-   ADIM 20'nin bu önkoşulu artık açık değil.
-2. **#559 (DST)** — merged eksen karışık zaman dilimli kaynakları kapsamadan önce kapanmalı;
-   bugün fold/gap sessizce çözülüyor ve saat bunu cross-item hale getirir.
-3. **#544 (NET)** — cross-item conflict policy kanonda tanımsız; ADIM 19 ile ya da öncesinde.
-4. ~~**#539 (CRITICAL, ADIM 11'den)**~~ — **düzeltmesi LANDED**: F-26 / PR #564 (`5887f3f`,
-   merge `b8d62e2`). Issue'nun kendisi hâlâ **AÇIK** (kapatma yetkisi insanda).
+**Ne getirdi:** doc 13 §8.4 adım 4'ün tek cümlesi — her aktif item aynı valuation snapshot'ıyla
+intent üretir. `PortfolioSnapshot` (read-only VALUE; `A(t)`/`U(t)` `__post_init__`'te TÜRETİLİR,
+`R0` sabit nominal, sha256 `identity`), `form_intent` (**P4**, snapshot'a karşı),
+`form_mandatory_intent` (**P3**, snapshot argümanı **ALMAZ** — stop/exit valuation'dan önce
+çözülür, kanonik sıra yapıyla korunur). Karar **girdidir**, burada yeniden hesaplanmaz; boyutlar
+sevk edilmiş zincirden gelir. Sleeve cap UYGULANMAZ (P6b). `no_op`/`blocked` birinci sınıf.
+**Hiçbir üretim modülü import etmiyor**; `clock`'un tek izinli importer'ı budur.
 
-**#550 / #551 / #552** (ADIM 12'nin açtığı sizing/booking uyuşmazlıkları) hâlâ açık ve unified
-clock'u bloke etmiyor; ama #550 karara bağlanmadan sizing üzerine yeni iş yapılmamalı.
+---
+
+## ADIM 17 — Shared capital ve exposure ledger landed (PR #573)
+
+**Commit `3ad5bf3` → squash-merge `f8f96c5`** (2026-08-05T02:13:50+03:00) · branch
+`feat/portfolio-shared-ledger` · **+2570 / −3, 5 dosya** · **Migration YOK** (alembic head
+`0043_i08_registry_strategy_fks`) · **OpenAPI DEĞİŞMEDİ** · **`ENGINE_VERSION` DEĞİŞMEDİ**
+(`backtest-engine-v18-gap-adjusted-stop-fill`) · **CI 6/6 SUCCESS** (Backend job 42m42s).
+
+| dosya | |
+|---|---|
+| `backend/src/entropia/domain/backtest/execution/portfolio_ledger.py` | **yeni**, 971 satır |
+| `backend/tests/unit/test_backtest_portfolio_ledger.py` | **yeni**, 1277 satır / **59 fonksiyon, 100 vaka** |
+| `docs/audit/portfolio_ledger_accounting.md` | **yeni**, 311 satır — muhasebe spec + fixture'lar + reconciliation |
+| `backend/tests/unit/test_backtest_item_intents.py` | intents containment testi **bilerek** güncellendi |
+| `docs/CODEMAPS/BACKEND_LAYERS.md` | `backtest` satırına `execution/portfolio_ledger.py` paragrafı |
+
+**Ne getirdi — ADR 0002 §12'nin ADIM 17'si.** Sevk edilen motor öğe **başına** bir `_Ledger`
+tutuyor ve her birini **tam havuzdan** tohumluyor (`engine.py:846`), bu yüzden bir öğenin
+sleeve'i kendi equity'si üzerinden compound oluyor ve kardeşinin PnL/fee/funding'ini asla
+göremiyor. Bu slice o durumun yerine geçen **tek** hesap defterini getirir — onu sürecek
+döngüyü değil.
+
+* **`SleevePlan`** `P0`/`R0`/`A0`/`Ci0`/`U0`'ı **bir kez** çözer; `A0`/`Ci0`/`U0`
+  `__post_init__`'te türetilir (tutarsız yayımlanamazlar), `R0` **nominal TUTAR** olarak
+  tutulur — böylece aşağı akışta hiçbir şey yüzdeyi sonraki bir equity'ye yeniden uygulayamaz.
+  `P0<=0`, negatif share, toplam share>100 **reddedilir** (üçü de kanonik Ready-Check blocker'ı).
+* **`E(t) = P0 + realized − fees − funding − other`, kanon gereği YALNIZ REALIZED.** Her booking
+  deltasını sevk edilmiş **artımlı** quantize ile uygular (`quantize(equity + delta, 0.01)`,
+  `booking.py:96`) ve kovaya **gerçekten uygulanan** deltayı yazar → `accounting_identity ==
+  equity` **yapıyla** sent sente doğru. Kovaları bağımsız toplamak eşdeğer DEĞİL: yuvarlama,
+  kuantumun tam katı boyunca yalnız half-even tie-break'i uyuştuğunda öteleme-değişmezdir.
+* **Spread/slippage fill fiyatının İÇİNDE** (`costs._effective_fill`), ikinci kez maliyet satırı
+  olarak yazılmaz — her fill'i çift sayardı. Ayrı satırlar: commission, funding, `other_costs`.
+* **`publish_snapshot` defteri DONDURUR** (`begin_apply`'a kadar): ADR §8.1'in "PV ile P7 arası
+  hiçbir yazar koşamaz" kuralı disiplin değil **yapı** oldu.
+* **`resolve_capacity` = P6b:** sleeve / item risk limit / exposure cap **CLAMP**, ledger
+  solvency **yalnız REDDEDER** — M11 §5.3 kısmi fill ve sessiz borrow'u yasaklıyor, kırpılmış
+  bir order zaten kısmi fill'dir. Her katmanın headroom'u yayımlanır, yalnız bağlayan değil.
+* **`net_exposure` ÖLÇÜMDÜR.** Hiçbir cap/headroom/solvency ondan türetilmez: NET semantiği
+  kanonda tanımsız (ADR §9.4, #544) ve net figürden kapasite hesaplamak NET'i kazara sevk
+  ederdi. Hedge'li long/short çifti **hiç** sermaye serbest bırakmaz.
+* **No-borrow guard ARTIŞI bağlar**, duran toplamı değil — equity düştüğünde "açık pozisyonlar
+  zorla rebalance edilmez" (doc 13 §8.3) kuralının tüm içeriği budur. **Yerinde reversal
+  reddedilir:** yeni notional'ı eskisiyle netlemek yalnız farkı kontrol ederdi, oysa reversal
+  bir taahhüdü bırakıp başka birini alır.
+* **`valuation()`** açık pozisyonları TEK noktada markler ve sonucu `E(t)`'nin **yanında**
+  raporlar, içine katlamaz. Marklanamayan pozisyon **raporlanır**, asla sıfır değerlenmez —
+  **OD-2 açık**; ledger authority ve staleness'ı kaydeder, eşik seçmez.
+* **`PortfolioEquityPoint` yeni bir tiptir**, `state.EquityPoint` değil. ADR §7 sevk edileni
+  yeniden kullanmayı taslaklamıştı; ama onun `exposure`'ı *kapanan lot'un* notional'ı /
+  kapanış öncesi equity demek — yeniden kullanmak alan adlarını koruyup ikisinin anlamını
+  sessizce değiştirirdi.
+
+**Parity iddia edilmedi, KONTROL EDİLDİ** (`docs/audit/portfolio_ledger_accounting.md` §4):
+başlangıç bölüşümü kullanıcıya gösterilen **allocation preview**'ıyla (M11 §5.1 bunu şart
+koşuyor ve bugüne dek hiçbir şey zorlamıyordu), `Ci(t)` `sizing.sleeve_capital` ile (24 vaka),
+granted units `sizing._cap_to_sleeve` ile (9 vaka), ve tüm tek-item zinciri sevk edilmiş sleeve
+oracle'ının **gerçek `run_engine` replay'i** ile (44.11764706 birim, 88.24 PnL, 100.088,24
+final book). Karşılaştırılacak sevk edilmiş bir şey **olmayan** yerler (çok-item `E(t)`,
+`net_exposure`, marklanmış figürler, portföy eğrisinin nokta sayısı) raporda **açıkça öyle
+yazıldı**.
+
+**Mutasyon kaydı — biri ilk turda HAYATTA KALDI.** 12 mutasyon tek tek uygulandı. **M6** —
+no-borrow guard'ının artış yerine **duran toplamı** bağlaması — tüm suite'i geçti, çünkü hiçbir
+test havuzun sıfırdan açmaya artık gücü yetmeyen bir pozisyonun **yeniden boyutlandırılmasını**
+zorlamıyordu; bu tam da no-force-rebalance kuralının koruduğu şekil.
+`test_only_the_increase_in_committed_capital_is_checked_against_the_pool` sonradan yazıldı
+(headroom'u tam tüketen bir scale-in + su altındayken bir **küçültme**), ikinci tur **12/12
+yakalandı, 0 hayatta kalan**. Yerinde-reversal guard'ı ise **testten değil gözden geçirmeden**
+çıktı; `M12` onunla birlikte eklendi.
+
+**Ölçüm dürüstlüğü.** Yerel tam suite koşuldu ve coverage kapısı **%93.09** ile geçti
+(kapı ≥90; yeni modül **%98.8**), ama koşu arka planda başlatıldığı için **pytest'in özet
+satırı ve exit code'u yakalanmadı** — CLAUDE.md'nin "çıktıyı dosyaya yaz, `$?`'i ayrı oku"
+uyarısına uyulmadı. **Otorite CI'dır:** `Backend — lint, type, test` **pass**, 42m42s. Bir
+sonraki slice bu hatayı tekrarlamamalı.
+
+**Kapsam dışı (bilerek):** faz döngüsü (ADIM 18), cross-item arbitrasyon / NET / **OD-3**
+(ADIM 19), manifest alanları + `ENGINE_VERSION` bump (ADIM 20), mark policy (**OD-2**),
+herhangi bir margin modeli (ADR §9.5 — `leverage_mode=cross` `canonical_gap` kalır).
+
+**Rollback:** `git revert`. Üretimde modülü import eden yok; `ENGINE_VERSION`, 46 golden digest,
+alembic head, OpenAPI snapshot ve frontend dokunulmadı.
+
+---
+
+## Next: **ADR §12 sapmasını karara bağla → ADIM 18 (`run_portfolio` faz döngüsü)**
+
+**Önce iki kapı, ikisi de insana ait:**
+
+1. **ADR 0002 statüsü hâlâ `Proposed`** ve §16 uygulamayı PO onayına bağlıyor. **ADIM 15, 16 ve
+   17'nin üçü de kayıtlı onay olmadan indi.** Onay gelirse statü **Accepted** olur ve §13'ün
+   yedi açık kararı bir amendment tablosuna çözüm olarak yazılır.
+2. **ADR §12'nin ADIM numaralandırması sevk edilenle uyuşmuyor** (yukarıda ADIM 16 kaydına
+   bak): ADR'nin ADIM 16'sı (resumable stepper, saf refactor) **hiç yazılmadı**, onun yerine
+   ADR'nin ADIM 18'inin intent yarısı indi. Karar gerekiyor: (a) §12'yi bir amendment ile
+   sevk edilen sıraya güncelle, (b) stepper'ı ADIM 18'in önüne geri planla. **Sessizce
+   devam etmek üçüncü bir seçenek değil.**
+
+**ADIM 18 (ADR §12, güncellenmiş okuma):** worker'ın **birden fazla öğe çalıştığında** çağırdığı
+**yeni** bir `run_portfolio(...)` giriş noktasında per-tick faz döngüsünü (§8) kur. `run_engine`
+bu yola **BAĞLANMAZ** (§3.2) — imzası ve semantiği aynı kalır.
+Dosyalar: `application/jobs/backtest_engine.py`, yeni `domain/backtest/portfolio_engine.py`.
+**Kabul:** doc 13 §14 **test 11** (tüm itemler tek `E(t)` görür; item sırası sonucu
+değiştirmez) + zaman-sıralı eğri + **cross-item batch invariance** (bugün hiçbir test
+kapsamıyor). Rollback: item döngüsüne dön; `combine_item_runs` yerinde duruyor.
+
+**ADIM 15/16/17'nin ADIM 18'e bıraktığı — tam sembol adlarıyla:**
+
+| ne | nerede |
+|---|---|
+| merged eksen, `t_ms`, streaming k-way merge | `execution/clock.py::iter_ticks`, `ClockTick`, `ItemTickView` |
+| tek valuation değeri + sha256 identity | `execution/intents.py::PortfolioSnapshot`, `build_snapshot` |
+| P4 / P3 intent üretimi | `execution/intents.py::form_intent`, `form_mandatory_intent`, `form_intents` |
+| tek hesap defteri, `E(t)`, attribution | `execution/portfolio_ledger.py::PortfolioLedger`, `SleevePlan`, `ledger_for_items` |
+| PV↔P7 donması | `PortfolioLedger.publish_snapshot` / `begin_apply` (`LedgerFrozenError`) |
+| P6b kapasite kararı | `PortfolioLedger.resolve_capacity` → `CapacityDecision` |
+| P9 eğri noktası | `PortfolioLedger.commit_tick` → `PortfolioEquityPoint` |
+| mark / exposure raporu | `PortfolioLedger.valuation` → `PortfolioValuation` |
+
+**ADIM 18'de DİKKAT:** üç modülün üçü de bugün **hiçbir yerden import edilmiyor** ve containment
+testleri bunu kilitliyor (`test_the_clock_is_not_wired_into_production_yet`,
+`test_nothing_in_production_imports_the_intent_layer_yet`,
+`test_nothing_in_production_imports_the_shared_ledger_yet`). Bunları **bilerek** güncelle;
+kazara kırılmamalılar.
+
+**Paralel yürüyebilecek, ADIM 18'i bloke etmeyen kalemler:**
+
+1. **#559 (DST)** — merged eksen karışık zaman dilimli kaynakları kapsamadan önce kapanmalı.
+2. **#544 (NET)** — cross-item conflict policy kanonda tanımsız; ADIM 19 ile ya da öncesinde.
+3. **#550 / #551 / #552** (ADIM 12'nin sizing/booking uyuşmazlıkları) hâlâ açık; **#550 karara
+   bağlanmadan sizing üzerine yeni iş yapılmamalı**.
+4. **#556 / #557 / #558** — `test_research_point_in_time_parity.py`'deki 4 bilinçli
+   `xfail(strict)`.
+5. **#539** düzeltmesi indi (F-26 / PR #564) ama issue hâlâ **AÇIK** — kapatma yetkisi insanda.
+6. **#514** (ekran okuyucu denetimi) açık; kanıtsız kapatılmamalı.
 
 `docs/audit/current_main_ground_truth_2026-08-03.md` §18'den kalanlar (sıra 5 →
 `test/fresh-install-acceptance`, sıra 7 → `ci/security-hardening`) değişmedi; o belgenin

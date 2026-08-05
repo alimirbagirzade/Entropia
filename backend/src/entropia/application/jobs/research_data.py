@@ -23,6 +23,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from entropia.application.jobs.delivery import claim_job_for_delivery
 from entropia.domain.identity import policy as identity_policy
 from entropia.domain.identity.actor import Actor
 from entropia.domain.lifecycle.enums import DeletionState, JobStatus, ValidationStatus
@@ -42,7 +43,6 @@ from entropia.domain.research_data.time_policy import (
 from entropia.domain.research_data.usage_scope import ensure_allows_evidence_bundle
 from entropia.infrastructure.postgres.models import (
     EntityRegistry,
-    Job,
     ResearchDatasetRevision,
 )
 from entropia.infrastructure.postgres.repositories import audit as audit_repo
@@ -259,13 +259,18 @@ async def run_analysis(
 ) -> dict[str, Any]:
     """Execute the durable research-analysis job. The ``jobs`` row is the source
     of truth. Does not commit (the worker's session scope commits). ``load_and_parse``
-    / ``write_native`` default to the real S3/Polars helpers; tests inject fakes."""
+    / ``write_native`` default to the real S3/Polars helpers; tests inject fakes.
+
+    The delivery claim is the at-least-once guard: the validation run and its
+    issues are append-only with freshly generated ids, so a redelivered message
+    would insert a SECOND run for the same revision and re-advance the revision
+    state. See ``jobs/delivery.py``."""
     load = load_and_parse or _load_and_parse
     write = write_native or _write_native
 
-    job = await session.get(Job, job_id)
-    if job is None:
-        raise ValueError(f"Job '{job_id}' not found.")
+    job, replay = await claim_job_for_delivery(session, job_id)
+    if replay is not None:
+        return replay
     payload = job.payload or {}
     entity_id = str(payload.get("entity_id"))
     revision_id = str(payload.get("revision_id"))

@@ -21,6 +21,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from entropia.application.jobs.delivery import claim_job_for_delivery
 from entropia.domain.lifecycle.enums import ActorKind, JobStatus
 from entropia.domain.trading_signal.events import (
     ImportOutcome,
@@ -28,7 +29,6 @@ from entropia.domain.trading_signal.events import (
     normalize_signal_rows,
     parse_delimited,
 )
-from entropia.infrastructure.postgres.models import Job
 from entropia.infrastructure.postgres.repositories import audit as audit_repo
 from entropia.infrastructure.postgres.repositories import trading_signal as ts_repo
 
@@ -42,10 +42,15 @@ async def run_import(session: AsyncSession, job_id: str) -> dict[str, Any]:
     commits). A source asset that cannot be read is a hard error (the worker retries
     per Dramatiq policy); a parse that runs but accepts no events writes a FAILED
     normalized revision with the skipped-row evidence (not an exception).
+
+    The delivery claim is the at-least-once guard: the normalized revision is
+    append-only with a freshly generated id, so a redelivered message would insert
+    a SECOND immutable revision (plus its audit + outbox rows) that no constraint
+    rejects. See ``jobs/delivery.py``.
     """
-    job = await session.get(Job, job_id)
-    if job is None:
-        raise ValueError(f"Job '{job_id}' not found.")
+    job, replay = await claim_job_for_delivery(session, job_id)
+    if replay is not None:
+        return replay
     payload = job.payload or {}
     source_asset_id = str(payload.get("source_asset_id"))
     instrument_id = str(payload.get("instrument_id"))

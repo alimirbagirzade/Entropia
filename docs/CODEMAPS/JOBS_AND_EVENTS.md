@@ -30,15 +30,24 @@ Tüm aktörler `max_retries=3`.
 
 ## Kuyruklar
 
-| Kuyruk | Aktör sayısı | Otomatik redelivery? |
-|---|---|---|
-| `data` | **5** (çok-aktörlü) | ❌ **Hayır** — kasıtlı olarak `ACTOR_BY_QUEUE` dışında |
-| `backtest` | 1 | ✔ |
-| `agent` | 1 | ✔ |
-| `agent-high` | 1 | ✔ |
-| `agent-executor` | 1 | ✔ |
-| `default` | 1 (`run_create_package_job`) | ✔ |
-| `maintenance` | 2 (`system_heartbeat`, `run_trash_purge`) | ✔ (`run_trash_purge`) |
+| Kuyruk | Aktör sayısı | Otomatik redelivery? | Compose tüketicisi |
+|---|---|---|---|
+| `data` | **5** (çok-aktörlü) | ❌ **Hayır** — kasıtlı olarak `ACTOR_BY_QUEUE` dışında | `worker-data` |
+| `backtest` | 1 | ✔ | `worker-backtest` |
+| `agent` | 1 | ✔ | `worker-agent` |
+| `agent-high` | 1 | ✔ | `worker-agent` |
+| `agent-executor` | 1 | ✔ | `worker-agent-executor` (**ADIM 21'de eklendi**) |
+| `default` | 1 (`run_create_package_job`) | ✔ | `worker-default` |
+| `maintenance` | 2 (`system_heartbeat`, `run_trash_purge`) | ✔ (`run_trash_purge`) | `worker-default` |
+
+> **ADIM 21 bulgusu.** `agent-executor` kuyruğunun compose'da **hiç tüketicisi yoktu**:
+> Coordinator ona iş gönderiyor, scheduler her grace penceresinde yeniden yolluyor, `send`
+> her seferinde BAŞARILI dönüyor ve görev asla koşmuyordu — hiçbir katman hata bildirmiyor.
+> `tests/unit/test_worker_plane_deployment.py` artık `docker-compose.yml`'i okuyup
+> aktör-kuyruk kümesiyle karşılaştırıyor; tüketicisiz her durable kuyruk CI'da kırmızı.
+> `system_heartbeat` durable job satırı üretmez (gövdesi `job_id` almaz), bu yüzden
+> `maintenance` fiilen **tek** durable aktörlüdür — `ACTOR_BY_QUEUE` girdisi güvenlidir
+> (`tests/unit/test_worker_queue_registry.py` bunu invariant olarak pinliyor).
 
 ### Neden `data` özel
 
@@ -297,6 +306,18 @@ sürümünü ilerletir. Built-in baseline manual **purge edilemez** (`PurgeNotEl
 
 ## Idempotency ve durability
 
+- **At-least-once delivery guard = `application/jobs/delivery.py::claim_job_for_delivery` (ADIM 21).**
+  Durable job satırını `FOR UPDATE` ile okur; `job.status in JOB_TERMINAL_STATES` ise gövde
+  hiçbir şey yazmadan `job.result_ref`'i **verbatim** replay eder. Kilit iki soruyu birden
+  yanıtlar: *"bu iş bitti mi?"* (terminal replay) ve *"şu anda başka bir teslimat koşuyor mu?"*
+  (ikinci teslimat birincinin commit'ini bekler, sonra replay eder). Beş `data` aktörü bunu
+  kullanır. **Kendi domain-satır kilidi olan gövdeler bunu ÇAĞIRMAZ** ve değişmedi:
+  `backtest_engine` (run satırı), `agent_executor` (runtime + task), `create_package`
+  (request root + `job.status`). Ayrıntı + kanıt: `docs/audit/worker_delivery_recovery_matrix.md`.
+- **`run_idempotent` ile karıştırma:** o, HTTP `Idempotency-Key`'i **admission** transaction'ında
+  tekilleştirir ve worker koştuğunda anahtar çoktan `202 queued` zarfıyla tamamlanmıştır —
+  replay'i kabul zarfını döndürürdü, worker'ın sonucunu değil. İkisi bileşiktir: anahtar ikinci
+  bir job açılmasını, claim tek bir job'un iki kez koşmasını engeller.
 - `idempotency_keys` tablosu (`models/jobs.py:48`) `Idempotency-Key` header'ını `actor_principal_id`
   ile birlikte tekilleştirir → aynı anahtar aynı sonucu döner, ikinci bir job açılmaz.
 - 202 dönen her endpoint (import'lar, analiz, backtest RUN/retry, purge, direktif) **kabul** eder;
@@ -312,8 +333,14 @@ sürümünü ilerletir. Built-in baseline manual **purge edilemez** (`PurgeNotEl
   bu haritada **incelenmedi**.
 - `relay_unpublished` ile SSE poller arasındaki cursor semantiği (`latest_event_id` başlangıcı)
   yalnız docstring'den okundu; at-least-once vs at-most-once garantisi kod okunarak doğrulanmalı.
-- `run_agent_tool` (`agent`) ile `run_agent_tool_high` (`agent-high`) arasındaki fark yalnız kuyruk
-  önceliği mi, yoksa farklı gövde mi — her ikisi de `agent_tools.py`'a işaret ediyor, ayrım doğrulanmadı.
-- `system_heartbeat` ve `run_trash_purge` aynı `maintenance` kuyruğunu paylaşıyor; `ACTOR_BY_QUEUE`
-  bu kuyruk için **tek** aktör (`run_trash_purge`) tanımlıyor — `system_heartbeat` durable job satırı
-  üretmediği için bunun güvenli olduğu varsayılıyor, ancak kanıtlanmadı.
+- ~~`run_agent_tool` / `run_agent_tool_high` farkı~~ → **ADIM 21'de çözüldü:** ikisi de aynı
+  `_run_agent_tool` gövdesini çağırır (`actors.py:186`), fark **yalnız kuyruktur**
+  (`agent` vs `agent-high`); ikisi de tek durable aktör olduğu için ikisi de `ACTOR_BY_QUEUE`'da.
+- ~~`maintenance` iki aktör paylaşıyor, `ACTOR_BY_QUEUE` tekini tanımlıyor~~ → **ADIM 21'de
+  kanıtlandı:** `system_heartbeat` gövdesi `job_id` almaz, yani durable job satırı üretmez ve
+  hiçbir sweep'in hedefi olamaz; `maintenance` fiilen tek durable aktörlüdür.
+  `tests/unit/test_worker_queue_registry.py` bunu invariant olarak pinliyor (tek-aktörlü her
+  kuyruk `ACTOR_BY_QUEUE`'da olmalı, çok-aktörlü hiçbiri olmamalı).
+- `dispatch_tool_call`'ın AL-14 guard'ı `if idempotency_key is not None` koşulludur.
+  Ağaçta gözlenen her durable tool job bir anahtar taşıyor, ama `idempotency_key=None` ile
+  enqueue eden bir çağıran **korumasız** bir tool call alırdı — ADIM 21'de sınanmadı, açık soru.

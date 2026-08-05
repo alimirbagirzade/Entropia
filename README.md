@@ -101,7 +101,7 @@ Then open:
 The stack runs migrations automatically (the `migrate` service), creates the
 MinIO bucket, and starts the API plus every worker plane
 (`worker-default`, `worker-data`, `worker-backtest`, `worker-agent`,
-`agent-coordinator`, `scheduler`).
+`worker-agent-executor`, `agent-coordinator`, `scheduler`).
 
 Stop it with `docker compose down` (add `-v` to also delete data volumes).
 

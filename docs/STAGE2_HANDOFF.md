@@ -3862,6 +3862,7 @@ alembic head, OpenAPI snapshot ve frontend dokunulmadı.
 ---
 
 ## ADIM 20 — Unified portfolio oracle suite; containment KALDIRILMADI (PR #583, BLOCKED)
+<<
 
 **Base `b0bb4a0` → commit `fd0ead5` → PR #583 DRAFT/BLOCKED** · issue **#582** · 2026-08-05 ·
 **migration YOK** (alembic head `0043_i08_registry_strategy_fks`) · **OpenAPI değişmedi** ·
@@ -3897,57 +3898,119 @@ geçerlidir. Eksik kayıtları yazacak olan o slice'ları indirendir.
 
 ---
 
-## Next: **ADR 0002'yi karara bağla (insan) → ADIM 18 (`run_portfolio` faz döngüsü)**
+## ADIM 18 — `run_portfolio` faz döngüsü; ADR 0002 Accepted (PR #TBD)
 
-**Önce iki kapı, ikisi de insana ait:**
+> **Ad çakışması, bilerek:** PR #575 de "ADIM 18" etiketiyle indi (cross-item arbitration).
+> Bu slice ADR §12'nin **18. satırının faz-döngüsü yarısıdır**. Sevk edilen numaralandırma ile
+> ADR'nin numaralandırması arasındaki tam eşleme artık ADR §12'nin düzeltme notundadır.
 
-1. **ADR 0002 statüsü hâlâ `Proposed`** ve §16 uygulamayı PO onayına bağlıyor. **ADIM 15, 16 ve
-   17'nin üçü de kayıtlı onay olmadan indi.** Onay gelirse statü **Accepted** olur ve §13'ün
-   yedi açık kararı bir amendment tablosuna çözüm olarak yazılır.
-2. **ADR §12'nin ADIM numaralandırması sevk edilenle uyuşmuyor** (yukarıda ADIM 16 kaydına
-   bak): ADR'nin ADIM 16'sı (resumable stepper, saf refactor) **hiç yazılmadı**, onun yerine
-   ADR'nin ADIM 18'inin intent yarısı indi. Karar gerekiyor: (a) §12'yi bir amendment ile
-   sevk edilen sıraya güncelle, (b) stepper'ı ADIM 18'in önüne geri planla. **Sessizce
-   devam etmek üçüncü bir seçenek değil.**
+**Base `d7fe432` → branch `feat/stage-18-run-portfolio`** · 2026-08-05 · **migration YOK**
+(alembic head `0043_i08_registry_strategy_fks`) · **OpenAPI değişmedi** · **`ENGINE_VERSION`
+değişmedi** · **frontend dokunulmadı** · **`SHARED_ALLOCATION_STATUS` = `future_dev` kaldı.**
 
-**ADIM 18 (ADR §12, güncellenmiş okuma):** worker'ın **birden fazla öğe çalıştığında** çağırdığı
-**yeni** bir `run_portfolio(...)` giriş noktasında per-tick faz döngüsünü (§8) kur. `run_engine`
-bu yola **BAĞLANMAZ** (§3.2) — imzası ve semantiği aynı kalır.
-Dosyalar: `application/jobs/backtest_engine.py`, yeni `domain/backtest/portfolio_engine.py`.
-**Kabul:** doc 13 §14 **test 11** (tüm itemler tek `E(t)` görür; item sırası sonucu
-değiştirmez) + zaman-sıralı eğri + **cross-item batch invariance** (bugün hiçbir test
-kapsamıyor). Rollback: item döngüsüne dön; `combine_item_runs` yerinde duruyor.
+**İnsan kapısı önce geçildi (ADIM 0).** ADR 0002 **`Accepted`** oldu; §13'ün yedi açık kararı
+§13.1 amendment tablosuna **tavsiye edildikleri gibi** (OD-1(a) … OD-7(a)) çözüm olarak yazıldı.
+§16, onayın **ADIM 15–19'dan SONRA** geldiğini tidy'lemeden kayda geçiriyor. §12 sevk edilene
+göre düzeltildi: **ADR'nin ADIM 16'sı (resumable stepper) formally SKIPPED**.
 
-**ADIM 15/16/17'nin ADIM 18'e bıraktığı — tam sembol adlarıyla:**
+**İndi — tek yeni üretim dosyası:** `backend/src/entropia/domain/backtest/portfolio_engine.py`
+(549 satır). `run_portfolio(...)` ADR §8.2 faz sırasını sahiplenir:
+`P1 carry → P3 mandatory (snapshot YOK) → PV publish_snapshot [ledger DONAR] → P4 intents →
+P5/P6b arbitrate → P7 begin_apply + set_position → P9 commit_tick`.
+Kendi aritmetiği **yok** — booking'i katılımcının bildirdiği rakamdan yapar, hiçbir şeyi cap'lemez,
+hiçbir boyut hesaplamaz. Yeni sözleşme: **`ItemParticipant` Protocol** (`identity`, `stream`,
+`instrument_id`, `carry` → `CarryCharges`, `mandatory_exit` → `MandatoryExit`, `entry` →
+`ItemIntent`). Çıktı tipleri `PortfolioTick` / `PortfolioRun` de burada.
+
+**Neden P4 hazır `ItemIntent` alıyor (sözleşme kararı):** `execution.intents` "karar bir
+GİRDİdir" diyor; aynı argüman bir entry'nin **boyutu** için de geçerli — `form_intent` entry'yi
+`costs._effective_fill` + `sizing._position_size` üzerinden ölçer ve bunlar item'ın kendi
+`StrategyConfig`/`FillCosts`'unu ister. Döngü bu yüzden **oluşturmaz, doğrular**: doğru item,
+doğru tick, doğru snapshot identity, doğru faz, mandatory olmayan tür. `form_intents`'in
+vereceği garantiler **sınırda kontrol edilir**.
+
+**Kabul — tek ölçüt karşılandı:** `portfolio_harness.simulate` artık `run_portfolio` üzerine
+ince bir adaptör; **25 portföy oracle'ı gövde ve beklenen literal olarak BİREBİR aynı kaldı**
+(yalnız iki docstring güncellendi — artık yanlış olan "TEST-OWNED" cümlesi). `tests/unit/oracles/`
+**111 passed**. Bu, A1/A3/A5'i PRIMITIVE'den MET'e taşıyan hamledir.
+
+**Bilerek güncellenen containment guard'ları (4/6 — diğer ikisine dokunulmadı):**
+`test_the_clock_is_not_wired_into_production_yet` → `..._is_reachable_only_through_the_phase_loop`;
+aynı yeniden adlandırma intent / shared-ledger / arbitration guard'larında. Dördü de artık
+`domain/backtest/portfolio_engine.py`'yi **adlandırılmış** importer olarak listeler — assertion
+gevşetilmedi. **`attribution` ve `provenance` guard'ları değişmedi**: faz döngüsü onları import
+etmiyor, o iki katman hâlâ tam contained (`build_portfolio_manifest` ADIM 20'nin).
+Oracle kapısı `test_no_unified_clock_driver_exists_in_production_on_this_commit` **silinmedi,
+pozitif muadiline yeniden yazıldı**: `test_the_phase_loop_exists_but_no_production_path_reaches_it`
+— döngünün var olduğunu, `def run_portfolio`'nun **tek** üretim modülünde olduğunu, altı modülün
+**yalnız** faz döngüsünden erişilebildiğini ve **`run_portfolio`'nun üretimde HİÇ çağıranı
+olmadığını** iddia eder.
+
+**Golden digest kapısı:** `test_backtest_engine_golden.py` yeşil, `engine_golden_digests.json`
+**dokunulmadı** — `run_engine`'in gövdesine hiç girilmedi (ADR §3.2).
+
+**DÜRÜST SINIR — kapanmadı:** `application/jobs/backtest_engine.py:298` **hâlâ item döngüsü**,
+`:363` hâlâ `combine_item_runs`. Worker'ı bağlamak, gerçek engine ile desteklenen bir
+`ItemParticipant` ister: bir item'ı verilen `t`'ye ilerletebilen replay — yani **ADR'nin
+atlanan ADIM 16 stepper'ı**. `engine.py`'de böyle bir şey yok (bar döngüsü `:1782`, ~1100
+satırlık fonksiyonun içinde). Bu yüzden faz döngüsü **çağıransız** indi: hiçbir request/retry
+bir tick loop'una ulaşamaz, hiçbir sevk edilmiş Result değişemez, containment kapalı kalır.
+
+Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 18 · handoff: `docs/ADIM18_LANDED_KICKOFF.md`.
+
+**Devam eden yan bulgu:** bu dosya ve `PROJECT_HISTORY.md` hâlâ **PR #575 (arbitration) ve #581
+(provenance) için `landed` kaydı taşımıyor**. Bu slice o kayıtları **uydurmadı**.
+
+---
+
+## Next: **worker call site — `ItemParticipant` (gerçek engine) → sonra ADIM 20**
+
+**Sıradaki tek adım ADIM 20 DEĞİL.** `run_portfolio` var ama **çağıranı yok**; ADIM 20'nin
+matrisindeki A1/A3/A5 dışında hiçbir satır bu boşluk kapanmadan kapanamaz.
+
+**1. Engine-destekli `ItemParticipant` (yeni ADIM 21 / eski ADR ADIM 16'nın gerçek borcu).**
+`run_engine`'in bar döngüsünü (`engine.py:1782`, ~1100 satırlık fonksiyonun içinde) bir
+stepper'a çıkar; `run_engine` o stepper üzerinde ince bir sürücü olur ve **gözlemlenebilir
+biçimde değişmez**. Tek kanıt: **46 golden digest kımıldamaz.** Sonra o stepper'ın üstüne
+`portfolio_engine.ItemParticipant`'ı uygulayan bir adaptör yaz ve
+`jobs/backtest_engine.py:298`'deki item döngüsünü `run_portfolio` ile değiştir (yalnız
+**>1 item** çalışırken; tek item `run_engine`'de kalır — ADR §3.2).
+**Bu iki iş ayrı PR olmalı** — ADR §15 R-4'ün "restructure ile re-price'ı ayır" kuralı zaten bir
+kez kaybedildi, ikinci kez kaybedilmesin.
+
+**2. Sonra ADIM 20** (manifest policy alanları, `ENGINE_VERSION` bump, digest yenileme,
+containment lift). Ön koşulları — hâlâ açık:
+- **A17**: `tests/integration/test_research_point_in_time_parity.py`'de 4 `xfail(strict)`
+  (#556 ×2, #557, #558). "green, unweakened" değil.
+- **OD-1 / OD-2 / OD-6 kapıları KOD OLARAK YOK.** ADR §13.1 kararı kaydetti; blocker'ları
+  yazmadı. `provenance.MARK_STALENESS_POLICY` hâlâ `"undefined_pending_od2"`,
+  `arbitration.CONTENTION_SELECTION_STATUS` hâlâ `"recommended_pending_approval"` — **ikisini
+  de ADIM 20 çevirir**, manifest onları taşımaya başladığında (ADR §13.1 son paragraf, R-5).
+- **#544 (NET)** kanonda tanımsız · **#559 (DST)** karışık zaman dilimi öncesi.
+- **A4 / A18** gerçek `EngineOutput` digest'i ister → 1. maddeye bağlı.
+- **A21** tick tabanlı cancel checkpoint → worker değişikliğine bağlı.
+
+**ADIM 18'in bıraktığı reuse anchor'ları — tam sembol adlarıyla:**
 
 | ne | nerede |
 |---|---|
-| merged eksen, `t_ms`, streaming k-way merge | `execution/clock.py::iter_ticks`, `ClockTick`, `ItemTickView` |
-| tek valuation değeri + sha256 identity | `execution/intents.py::PortfolioSnapshot`, `build_snapshot` |
-| P4 / P3 intent üretimi | `execution/intents.py::form_intent`, `form_mandatory_intent`, `form_intents` |
-| tek hesap defteri, `E(t)`, attribution | `execution/portfolio_ledger.py::PortfolioLedger`, `SleevePlan`, `ledger_for_items` |
-| PV↔P7 donması | `PortfolioLedger.publish_snapshot` / `begin_apply` (`LedgerFrozenError`) |
-| P6b kapasite kararı | `PortfolioLedger.resolve_capacity` → `CapacityDecision` |
-| P9 eğri noktası | `PortfolioLedger.commit_tick` → `PortfolioEquityPoint` |
-| mark / exposure raporu | `PortfolioLedger.valuation` → `PortfolioValuation` |
+| faz döngüsü giriş noktası | `domain/backtest/portfolio_engine.py::run_portfolio` |
+| katılımcı sözleşmesi | `portfolio_engine.py::ItemParticipant` (Protocol) |
+| P1 / P3 girdi tipleri | `portfolio_engine.py::CarryCharges`, `MandatoryExit` |
+| çıktı tipleri | `portfolio_engine.py::PortfolioTick`, `PortfolioRun` |
+| faz sırası, değer olarak | `portfolio_engine.py::PHASE_ORDER`, `PORTFOLIO_LOOP_VERSION` |
+| fail-closed reddedişler | `InvalidParticipantError`, `MisformedIntentError`, `UnsupportedIntentKindError`, `UnpriceableAdmissionError` |
+| scripted katılımcı (referans uygulama) | `tests/unit/oracles/portfolio_harness.py::_ScriptedParticipant` |
+| containment'ın kalan tek kapısı | `tests/unit/oracles/test_oracle_portfolio_containment_gate.py::test_the_phase_loop_exists_but_no_production_path_reaches_it` |
 
-**ADIM 18'de DİKKAT:** üç modülün üçü de bugün **hiçbir yerden import edilmiyor** ve containment
-testleri bunu kilitliyor (`test_the_clock_is_not_wired_into_production_yet`,
-`test_nothing_in_production_imports_the_intent_layer_yet`,
-`test_nothing_in_production_imports_the_shared_ledger_yet`). Bunları **bilerek** güncelle;
-kazara kırılmamalılar.
+**Faz döngüsünün MODELLEMEDİĞİ (dürüst sınır, `portfolio_engine.py` docstring'inde de yazılı):**
+P0 (clock cursor'ı), **P2 pending fills**, **P8 same-direction scaling** — admitted bir
+`scale_in` bilerek `UnsupportedIntentKindError` atar, çünkü `set_position` tutulan boyutu
+**değiştirir** ve pozisyonu sessizce küçültürdü. Mark policy yok (OD-2): `E(t)` realized-only.
 
-**Paralel yürüyebilecek, ADIM 18'i bloke etmeyen kalemler:**
+**Paralel yürüyebilecek, bloke etmeyen kalemler** (ADIM 20 kapanışından devralındı, değişmedi):
+#550/#551/#552 (sizing/booking — **#550 karara bağlanmadan sizing'e dokunma**), #539 (düzeltme
+indi, issue açık), #514 (ekran okuyucu, kanıtsız kapatma yok).
 
-1. **#559 (DST)** — merged eksen karışık zaman dilimli kaynakları kapsamadan önce kapanmalı.
-2. **#544 (NET)** — cross-item conflict policy kanonda tanımsız; ADIM 19 ile ya da öncesinde.
-3. **#550 / #551 / #552** (ADIM 12'nin sizing/booking uyuşmazlıkları) hâlâ açık; **#550 karara
-   bağlanmadan sizing üzerine yeni iş yapılmamalı**.
-4. **#556 / #557 / #558** — `test_research_point_in_time_parity.py`'deki 4 bilinçli
-   `xfail(strict)`.
-5. **#539** düzeltmesi indi (F-26 / PR #564) ama issue hâlâ **AÇIK** — kapatma yetkisi insanda.
-6. **#514** (ekran okuyucu denetimi) açık; kanıtsız kapatılmamalı.
-
-`docs/audit/current_main_ground_truth_2026-08-03.md` §18'den kalanlar (sıra 5 →
-`test/fresh-install-acceptance`, sıra 7 → `ci/security-hardening`) değişmedi; o belgenin
-2/3/4/6 kalemleri kapandığı hâlde güncellenmedi — **kullanmadan önce doğrula.**
+`docs/audit/current_main_ground_truth_2026-08-03.md` §18'in 2/3/4/6 kalemleri kapandığı hâlde
+belge güncellenmedi — **kullanmadan önce doğrula.**

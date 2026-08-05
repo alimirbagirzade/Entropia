@@ -9,8 +9,14 @@ set for the caller to dispatch (the route sends the actors after the tx, mirrori
 the other worker routes). Un-routable legacy rows (no ``job_kind``) are counted,
 never guessed. The action is audited once as an operator recovery event.
 
-Redelivery is inherently safe: the durable row is untouched (it stays QUEUED) and
-every data-plane worker is redelivery-idempotent, so a double send is a no-op.
+Redelivery is safe because the durable row is untouched (it stays QUEUED) and
+every data-plane body claims the job row through
+``application/jobs/delivery.py::claim_job_for_delivery`` before it writes: a send
+to an already-finished job replays its recorded outcome, and a send that races a
+live delivery serializes behind its row lock. That claim landed in ADIM 21 — this
+paragraph previously asserted the same safety while all five bodies would in fact
+have written a second immutable artifact
+(``tests/integration/test_worker_delivery_recovery.py``).
 """
 
 from __future__ import annotations

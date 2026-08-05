@@ -1,7 +1,9 @@
 # ADR 0002 — Unified-clock multi-item portfolio co-simulation
 
 - **Date:** 2026-08-04
-- **Status:** **Proposed** — requires PO / maintainer approval before any implementation slice starts.
+- **Status:** **Accepted** (2026-08-05, PO/maintainer). §13's seven open decisions are resolved
+  in the amendment table at §13.1. Approval was given *after* ADIM 15–19 had already landed —
+  that ordering is recorded rather than smoothed over; see §16.
 - **Scope:** the execution model for Shared Equity Allocation (doc 13 / Master Ref Modül 11).
 - **Relates to:** `backend/src/entropia/domain/allocation/capability.py` (the containment this
   ADR is the exit plan for), GH #544 (NET), #559 (DST), #550/#551/#552 (sizing/booking,
@@ -9,7 +11,8 @@
 - **Base:** `origin/main` @ `f4e2fd3`. Every code claim below was read on that commit.
 
 > **Docs-only.** This ADR changes no production code. It exists so the design is settled
-> *before* ADIM 15 writes a line, and so the PR boundaries of ADIM 15–20 are frozen.
+> and so the PR boundaries of ADIM 15–20 are frozen. Its delivery-plan numbering was
+> **corrected at ADIM 18** to match what actually shipped — see the note under §12.
 
 ---
 
@@ -657,11 +660,53 @@ Each step is one branch, one PR, independently revertible. **No step lifts conta
 | ADIM | Deliverable | Primary files | Tests | Rollback |
 |---|---|---|---|---|
 | **15** | Merged-axis clock primitive: `t_ms` key, streaming k-way merge over item bar iterators, `(pin_ordinal, item_id)` tie-break. Pure, unused by the engine. | new `domain/backtest/execution/clock.py` | new unit tests: dedup, single-item reduction (§3.2), interleaving, empty/one-sided axes, stream-not-materialize | delete the module — nothing imports it |
-| **16** | Make per-item replay **resumable**: extract the bar-loop body of `run_engine` into a stepper that can advance one item to a given `t`. `run_engine` keeps its signature **and its semantics** and becomes a thin driver over that stepper (§3.2). **Pure refactor.** | `domain/backtest/engine.py`, `execution/state.py` | **all 46 golden digests must be unchanged** (they call `run_engine`/`combine_item_runs` directly, never the worker); full engine suite green | revert; no semantic surface changed |
+| **16** | ~~Make per-item replay **resumable**: extract the bar-loop body of `run_engine` into a stepper.~~ **SKIPPED — see the correction note below.** | — | — | n/a |
 | **17** | `PortfolioLedger` + `PortfolioSnapshot`; `Ci(t)` derived from one `E(t)`; `R0`/`U0` held once. Multi-item path only. | `execution/state.py`, `execution/sizing.py`, new `execution/portfolio_ledger.py` | sleeve arithmetic vs doc 13 §14 test 10 (3600/3150/1350, U0=900); compound vs fixed | revert; single-item path untouched |
-| **18** | `ItemIntent` + the per-tick phase loop (§8) in a **new** `run_portfolio(...)` entry point, called by the worker only when >1 item executes. `run_engine` is not routed through it (§3.2). | `application/jobs/backtest_engine.py`, new `domain/backtest/portfolio_engine.py` | doc 13 §14 **test 11** (all items see one `E(t)`; item order irrelevant); time-ordered curve; **cross-item batch invariance** | revert to the item loop; `combine_item_runs` still present |
+| **18** | The per-tick phase loop (§8) in a **new** `run_portfolio(...)` entry point over an `ItemParticipant` contract. `run_engine` is not routed through it (§3.2). **Landed without the worker call site** — see the correction note. | new `domain/backtest/portfolio_engine.py` | doc 13 §14 **test 11** (all items see one `E(t)`; item order irrelevant); time-ordered curve; **cross-item batch invariance** — all 25 portfolio oracles carried over from the test-owned driver **unchanged** | delete the module; nothing calls it |
 | **19** | Conflict/exposure arbitration (§9): symmetric, deterministic, solvency **reject** (never partial, never borrow), full decision trace. Retires `PriorItemInterval` forward-only precedence. | `execution/rules.py`, `domain/allocation/rules.py` | doc 13 §14 **tests 12, 13**; the five `portfolio.rules_*` digests re-recorded; no-share-transfer proof | revert; forward-only rules restored |
 | **20** | Manifest fields (§10.1), `ENGINE_VERSION` bump, digest regeneration, **containment lift**, Result portfolio metadata + OpenAPI, codemaps. | `manifest.py`, `capability.py`, `readiness_check.py`, `docs/openapi.json`, `docs/CODEMAPS/*` | §14 acceptance matrix in full; rewrite `test_shared_allocation_containment.py` | flip `SHARED_ALLOCATION_STATUS` back to `future_dev` |
+
+> **Correction (2026-08-05, ADIM 18) — the numbering above was written before the slices ran,
+> and two rows did not survive contact with the code. Recorded here rather than quietly
+> re-plotted, because §15 R-4 makes the *separation* of "restructure" from "re-price" a risk
+> control, and one half of it is gone.**
+>
+> **The shipped slice numbers and this table's numbers are offset by one.** Because ADIM 16 was
+> skipped, everything after it shipped one row early and a row was added at the end. Both
+> vocabularies are in use across `docs/PROJECT_HISTORY.md`, the PR titles and the issue tracker,
+> so the map is written here once rather than inferred each time:
+>
+> | §12 row | Shipped as | PR |
+> |---|---|---|
+> | 15 merged-axis clock | ADIM 15 | #567 |
+> | 16 resumable stepper | **skipped** | — |
+> | 17 shared ledger | ADIM 17 | #573 |
+> | 18 intent layer (first half of the row) | ADIM 16 | #571 / #572 |
+> | 18 phase loop (second half of the row) | **ADIM 18** | this slice |
+> | 19 arbitration | ADIM 18 | #575 |
+> | (not in §12) result provenance | ADIM 19 | #581 |
+> | 20 manifest + containment lift | attempted as ADIM 20, **blocked** (#582) | #583 / #584 |
+>
+> **ADIM 16 was never written, and is now formally SKIPPED.** Its purpose was to let a
+> per-item replay be advanced to a given `t` so the phase loop could interleave items. ADIM 18
+> reaches the same place from the other side: `run_portfolio` is a **separate entry point** with
+> its own tick loop and its own participant contract, so `run_engine`'s body is never touched
+> and the 46 golden digests cannot move — which was ADIM 16's entire proof obligation. The
+> stepper is therefore not a prerequisite of the phase loop.
+>
+> It *is* still the prerequisite of the **worker call site**. An `ItemParticipant` backed by the
+> real engine has to advance one item to `t` and report what it decided; nothing in
+> `engine.py` can do that today (the bar loop is nested at `engine.py:1782` inside a
+> ~1100-line function). So ADIM 18 shipped the loop **without** the `jobs/backtest_engine.py`
+> change its original row promised: the worker still loops over items and folds them with
+> `combine_item_runs`. That gap is the whole of what keeps the containment closed, and it is
+> asserted, not assumed — `tests/unit/oracles/test_oracle_portfolio_containment_gate.py::
+> test_the_phase_loop_exists_but_no_production_path_reaches_it`.
+>
+> **Consequence, stated plainly:** R-4's mitigation (*"an ADIM 16 refactor that silently changes
+> a single-item number — 46-digest invariance is the gate"*) still holds for ADIM 18 and was
+> verified. But when the participant is eventually written, restructure and re-price will land
+> together, and a moved digest will be harder to attribute than this plan intended.
 
 **Prerequisites that are not part of ADIM 15–20** and must be scheduled separately:
 GH **#559** (DST rule) before the merged axis spans mixed-zone sources; GH **#544** (NET) before or
@@ -686,6 +731,32 @@ proof, and the file should be renamed accordingly.
 | **OD-5** | Is FX conversion in scope? Base Currency must match every item's settlement currency **or** a pinned approved FX dataset must exist (doc 13 §5.1, M11 §1.2.5). | Rule is canonical; the conversion **mechanism** is GAP-16, deferred (`engine.py:792-795`). | (a) keep out of scope: shared runs remain **single-currency**, mismatch stays a blocker (`ALLOCATION_FX_DEPENDENCY`); (b) build FX conversion inside this programme | **(a).** FX is a separate programme; bundling it would double the surface of an already large change. |
 | **OD-6** | May a Trading Signal / Trade Log item hold a sleeve when the engine runs no simulation for it? | Doc 13 §1.1 and M11 §2.2 say yes, they may take a sleeve. The engine runs **nothing** for them (`jobs/backtest_engine.py:647-676`, `output=None`) while `ALLOCATABLE_ITEM_KINDS` admits all three kinds (`allocation/rules.py:41-46`). | (a) block a shared plan whose active entries include a non-executing kind; (b) allow, and disclose the sleeve as permanently idle; (c) implement Trading Signal / Trade Log execution | **(a) for ADIM 20**, with (c) as a later programme. Under (b) a user's 40 % share silently does nothing — the exact silent-degradation shape the working standard forbids. |
 | **OD-7** | The portfolio equity series now records funding-induced changes to `E(t)`, which today's per-trade-close curve omits (§7). Does a *more complete* series feeding an unchanged metric definition warrant a `METRIC_SET_VERSION` bump? | Canon fixes no series cardinality (M12 §10, `:8850`). | (a) no bump — `metric-set-v1` definitions are unchanged, only the series is complete; (b) bump to `metric-set-v2` so old and new portfolio drawdowns are never compared as like-for-like | **(a)**, because `ENGINE_VERSION` already forks the `execution_key` namespace and no cross-era comparison can be silent. Flagged because a reviewer may reasonably prefer (b). |
+
+### 13.1 Amendment table — resolutions (2026-08-05)
+
+Approval of this ADR resolves every open decision above **to its stated recommendation**. Each
+row below is the decision of record; the "Recommendation" column of §13 is now history, not a
+question. Nothing was resolved against its recommendation, so no rationale in §13 needs
+rewriting — only its status.
+
+| ID | Resolution | Effect on the delivery plan |
+|---|---|---|
+| **OD-1** | **(a)** — keep the shipped convention (A-1). A shared run whose pinned revisions declare *different* `record_time_basis` values is **blocked**. | The blocker is not built. It belongs with the readiness check, before the axis is allowed to span mixed-basis revisions. |
+| **OD-2** | **(a)** — carry the last closed bar's close forward with a declared `stale_after` bound and a diagnostic counter. | Not built. `run_portfolio` marks nothing: `E(t)` is realized-only, exactly as `PortfolioLedger` defines it, so no unmarked position can silently enter equity. Building the mark policy is a prerequisite of ADIM 20, not of the loop. |
+| **OD-3** | **(a)** — on joint insolvency, admit in `(pin_ordinal, item_id)` order until cash is exhausted and reject the rest. | Already the shipped behaviour: `arbitration.CONTENTION_SELECTION_POLICY == "pin_order_admission"`. |
+| **OD-4** | **(a)** — `Ci(t)` caps new notional at entry/scale time only; a position that drifts past its sleeve after equity falls is **not** force-reduced. | Already the shipped behaviour (`PortfolioLedger.set_position` checks only the increase). |
+| **OD-5** | **(a)** — FX stays out of scope; shared runs remain single-currency and a mismatch stays an `ALLOCATION_FX_DEPENDENCY` blocker. | Unchanged. |
+| **OD-6** | **(a) for ADIM 20** — block a shared plan whose active entries include a non-executing kind; Trading Signal / Trade Log execution stays a later programme. | Not built. `run_portfolio` takes only participants with a bar stream, so a non-executing kind cannot silently hold an idle sleeve *inside the loop*; admission is where the block belongs. |
+| **OD-7** | **(a)** — no `METRIC_SET_VERSION` bump. `ENGINE_VERSION` already forks the `execution_key` namespace, so no cross-era comparison can be silent. | Applies at ADIM 20, with the `ENGINE_VERSION` bump. |
+
+**Two of these are recorded in the ADR but not yet in the code, and that divergence is
+deliberate.** `provenance.MARK_STALENESS_POLICY` still reads `"undefined_pending_od2"` and
+`arbitration.CONTENTION_SELECTION_STATUS` still reads `"recommended_pending_approval"`. Both are
+declarative strings published through `build_portfolio_manifest`, which nothing calls yet; ADR
+§10.3 places the manifest fields in **ADIM 20**, and flipping a policy label before the manifest
+that carries it exists would advertise a decision no artifact records. **ADIM 20 owns both
+flips**, together with R-5 (*"must not merge until every OD is recorded in the manifest as a
+versioned policy"*) — which this table is now the input to, not a substitute for.
 
 ---
 
@@ -753,9 +824,21 @@ proof, and the file should be renamed accordingly.
 
 ---
 
-## 16. Stopping condition
+## 16. Stopping condition — discharged (2026-08-05)
 
-This ADR is **Proposed**. Per the ADIM 14 brief, implementation does not begin until the PO /
-maintainer approves it. On approval, its status becomes **Accepted**, §13's decisions are recorded as
-resolutions in a follow-up ADR or an amendment table, and ADIM 15 may start against the boundaries in
-§12. This document is not evidence that any part of the design is built.
+This ADR is **Accepted**. §13's decisions are recorded as resolutions in the §13.1 amendment
+table, and §12's boundaries are corrected to match what shipped.
+
+**The approval gate was not honoured in order, and that is recorded rather than tidied away.**
+The condition read: *implementation does not begin until the PO / maintainer approves it.*
+ADIM 15, 17, 19 and the ADIM 20 oracle suite all landed while the status was still `Proposed`
+(PRs #566, #573, #575, #581, #583). Approval arrived at ADIM 18. What that cost is knowable and
+small — every one of those slices was contained, none was reachable from production, and the
+containment guards are what made the cost small rather than luck. What it *would* have cost had
+a slice touched `run_engine` is exactly the risk §15 R-4 names, so the gate is not a formality
+and should hold for ADIM 20, which is the first slice that changes a shipped number.
+
+This document is still not evidence that any part of the design is built. **What is built, on
+this commit:** the six ADIM 15–19 primitives, and the ADIM 18 phase loop `run_portfolio` — with
+no production caller. **What is not:** the worker call site (needs the participant described in
+the §12 correction note), the OD-1/OD-2/OD-6 gates, and all of ADIM 20.

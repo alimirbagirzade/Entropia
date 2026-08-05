@@ -908,7 +908,7 @@ def test_every_engine_entry_decision_projects_to_exactly_one_intent() -> None:
 # ------------------------------------------------------------------------ containment
 
 
-def test_nothing_in_production_imports_the_intent_layer_yet() -> None:
+def test_the_intent_layer_is_reachable_only_through_the_phase_loop() -> None:
     """The rollback for this slice is "delete the module", exactly as for the ADIM 15
     clock — which is what keeps every shipped digest still. When the phase loop wires
     ``run_portfolio`` in, this test is the one that must be updated deliberately; it
@@ -924,7 +924,15 @@ def test_nothing_in_production_imports_the_intent_layer_yet() -> None:
     rollback is still "delete the modules".
 
     Third deliberate update (ADIM 19): ``execution/provenance.py`` projects ``ItemIdentity``
-    into the manifest's pinned item rows. Contained as well."""
+    into the manifest's pinned item rows. Contained as well.
+
+    **Fourth, and the one this test was written for: ADIM 18's ``portfolio_engine.py``.** It is
+    a production entry point, not a contained sibling, so "nothing in production imports the
+    intent layer" is retired here on purpose. What replaces it is the property that matters
+    from here on — the intent layer is reached through the P3/P4 phases of ``run_portfolio``
+    and nowhere else. The loop takes a P4 intent already FORMED by the item (an entry's size
+    needs the item's own ``StrategyConfig``) and validates it; it imports this module for
+    ``form_mandatory_intent`` and for the types it checks against."""
     src = Path(__file__).resolve().parents[2] / "src" / "entropia"
     importers = sorted(
         path.relative_to(src).as_posix()
@@ -935,6 +943,7 @@ def test_nothing_in_production_imports_the_intent_layer_yet() -> None:
         "domain/backtest/execution/arbitration.py",
         "domain/backtest/execution/portfolio_ledger.py",
         "domain/backtest/execution/provenance.py",
+        "domain/backtest/portfolio_engine.py",
     ]
 
 

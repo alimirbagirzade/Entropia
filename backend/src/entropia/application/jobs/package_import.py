@@ -38,6 +38,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from entropia.application.jobs.delivery import claim_job_for_delivery
 from entropia.domain.create_package.enums import PackageImportStatus
 from entropia.domain.esp.enums import ResolverTrustState
 from entropia.domain.lifecycle.enums import (
@@ -149,10 +150,14 @@ async def run_import(session: AsyncSession, job_id: str) -> dict[str, Any]:
     """Execute the durable package-import job. The ``jobs`` row is the source of truth.
 
     Returns a JSON-safe result reference; does not commit (the worker scope commits).
+
+    The delivery claim is the at-least-once guard: a clean manifest creates a NEW
+    DRAFT package root with a freshly generated id, so a redelivered message would
+    import the same package a second time. See ``jobs/delivery.py``.
     """
-    job = await session.get(Job, job_id)
-    if job is None:
-        raise ValueError(f"Job '{job_id}' not found.")
+    job, replay = await claim_job_for_delivery(session, job_id)
+    if replay is not None:
+        return replay
     import_row = await import_repo.get_import_job_by_job_id(session, job_id)
     if import_row is None:
         raise ValueError(f"Import job for '{job_id}' not found.")

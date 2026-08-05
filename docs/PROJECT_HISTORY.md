@@ -3550,3 +3550,4 @@ gösteriyordu. Bu kapanış boşluğu **işaret ediyor ama başkasının slice k
 
 `git revert fd0ead5` — yalnız test ve doküman siler; üretim davranışı zaten hiç değişmedi.
 
+

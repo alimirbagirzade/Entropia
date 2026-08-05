@@ -177,6 +177,21 @@ services:
     depends_on: *needs-provision
     command: ["python", "-m", "entropia.apps.worker", "--queues", "agent,agent-high"]
 
+  # The Coordinator dispatches every Agent task onto `agent-executor`
+  # (apps/agent_coordinator/__main__.py -> send_job(run_agent_executor, ...)), and
+  # the scheduler auto-redelivers that queue (ACTOR_BY_QUEUE). Without a consumer
+  # the two combine into a silent infinite loop: tasks are enqueued, re-sent every
+  # grace window, and never run — the send SUCCEEDS every time, so nothing reports
+  # a fault. Its own service rather than a queue appended to worker-agent: the
+  # executor runs the full backtest engine inside its body (run_agent_task's
+  # stream_bars default is the same S3-backed streamer worker-backtest uses), so
+  # it carries the backtest plane's runtime profile, not the tool gateway's
+  # latency-sensitive one. Pinned by tests/unit/test_worker_plane_deployment.py.
+  worker-agent-executor:
+    <<: [*backend-build, *worker-healthcheck]
+    depends_on: *needs-provision
+    command: ["python", "-m", "entropia.apps.worker", "--queues", "agent-executor"]
+
   agent-coordinator:
     <<: [*backend-build, *worker-healthcheck]
     depends_on: *needs-provision

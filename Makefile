@@ -12,7 +12,8 @@ COMPOSE_DEV_AUTH := docker compose -f docker-compose.yml -f docker-compose.dev-a
         accept accept-dev-auth \
         backend-install backend-dev backend-test backend-lint backend-format \
         openapi openapi-check \
-        frontend-install frontend-dev frontend-build frontend-lint test smoke clean nuke
+        frontend-install frontend-dev frontend-build frontend-lint test smoke \
+        worker-restart-smoke clean nuke
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -89,6 +90,9 @@ test: backend-test ## Run all tests — fails if EITHER backend or frontend suit
 
 smoke: ## Smoke-test a RUNNING stack (health, deps, metrics, identity, frontend)
 	@bash scripts/smoke.sh
+
+worker-restart-smoke: ## SIGKILL every worker plane on a RUNNING stack; prove the restart duplicates nothing (ADIM 21)
+	@bash scripts/worker-restart-smoke.sh
 
 accept: ## Acceptance gate for a RUNNING stack: fail if any service exited/restarted/unhealthy (DEP-05)
 	@bash scripts/acceptance.sh

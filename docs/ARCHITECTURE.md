@@ -43,6 +43,7 @@ Docker Compose **modular monolith**: one Python package (`entropia`), multiple p
    │ worker-data      queue=data           ingest/parse/validate parquet│
    │ worker-backtest  queue=backtest       manifest → engine → result   │
    │ worker-agent     queue=agent,agent-high  Alpha Agent tool execution│
+   │ worker-agent-executor queue=agent-executor  Agent task execution   │
    │ agent-coordinator (long-lived loop)   agent runtime / checkpoints  │
    │ scheduler        (cron / periodiq)    retention, outbox relay, GC   │
    └───────────────────────────────────────────────────────────────────┘
@@ -60,10 +61,11 @@ Docker Compose **modular monolith**: one Python package (`entropia`), multiple p
 | **worker-data** | `python -m entropia.apps.worker --queues data` | `data` | Market/Research ingestion: raw upload finalize, parse, schema-map, validate, Parquet write. Polars/PyArrow. |
 | **worker-backtest** | `python -m entropia.apps.worker --queues backtest` | `backtest` | Backtest execution plane: read manifest → run engine → materialize immutable result + artifacts. Lower concurrency, higher memory. |
 | **worker-agent** | `python -m entropia.apps.worker --queues agent,agent-high` | `agent`, `agent-high` | Executes Agent tool calls dispatched by the coordinator. `agent-high` carries High-priority directives but **never preempts** a running task. |
+| **worker-agent-executor** | `python -m entropia.apps.worker --queues agent-executor` | `agent-executor` | Executes the Agent tasks the Coordinator dispatches (`run_agent_task`). Its own plane, not a queue on `worker-agent`: the body runs the full backtest engine, so it carries the backtest runtime profile rather than the tool gateway's. |
 | **agent-coordinator** | `entropia.apps.agent_coordinator` | (long-lived) | Owns the always-on `agent_runtime` loop, task scheduling, checkpoint cadence, directive consumption at safe checkpoints. |
 | **scheduler** | `entropia.apps.scheduler` | cron | Outbox relay, retention sweeps, purge-job eligibility, projection refresh, stale-lease reclamation. |
 
-> The canonical Dramatiq queue set is fixed in `infrastructure/queues/broker.py`: **`default, data, backtest, agent, agent-high, maintenance`**. `maintenance` carries health/heartbeat and operational jobs.
+> The canonical Dramatiq queue set is fixed in `infrastructure/queues/broker.py::CANONICAL_QUEUES`: **`default, data, backtest, agent, agent-high, agent-executor, maintenance`**. `maintenance` carries health/heartbeat and operational jobs. Every queue with a durable actor must have a consumer here — a queue nobody consumes turns the scheduler's redelivery sweep into a silent infinite loop, which is exactly what `agent-executor` did until ADIM 21 (`docs/audit/worker_delivery_recovery_matrix.md` §5). `tests/unit/test_worker_plane_deployment.py` now reads `docker-compose.yml` and fails if the two ever diverge again.
 
 ### 2.2 Shared infrastructure services
 

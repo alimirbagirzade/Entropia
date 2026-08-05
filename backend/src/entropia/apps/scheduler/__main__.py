@@ -5,8 +5,16 @@ published checkpoint behind the SSE fan-out), recover stale RUNNING jobs
 (INF-09), and re-dispatch durable QUEUED jobs whose broker message was lost
 (INF-03) through the queue->actor registry. The ``data`` queue hosts several
 actor types per queue and is deliberately NOT auto-redelivered (recovery marks
-it back to QUEUED; re-dispatch is an operator action) — workers on every plane
-are redelivery-idempotent, so an occasional double send is safe.
+it back to QUEUED; re-dispatch is an operator action).
+
+An occasional double send is safe because every plane guards its own delivery,
+and each guard is named rather than assumed: ``backtest``/``agent-executor``/
+``default`` hold a domain-row lock and check a domain terminal state, ``agent``/
+``agent-high`` replay on the AL-14 tool-call key, and the five ``data`` actors go
+through ``application/jobs/delivery.py::claim_job_for_delivery``. Until ADIM 21
+this paragraph claimed the property for every plane while the ``data`` five had
+no guard at all; ``tests/integration/test_worker_delivery_recovery.py`` now
+executes the double delivery per plane instead of asserting it in prose.
 """
 
 from __future__ import annotations

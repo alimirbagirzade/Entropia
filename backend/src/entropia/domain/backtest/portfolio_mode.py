@@ -52,9 +52,13 @@ PORTFOLIO_MODES: frozenset[str] = frozenset(
     }
 )
 
-#: The manifest key a unified-clock run will pin (``execution.provenance``). Named here as a
-#: STRING on purpose: this production module must not import the contained layer, and the
-#: containment tests prove it does not.
+#: The manifest key a unified-clock run will pin (built by ``execution/provenance.py``).
+#: Named here as a STRING on purpose: this production module must not import the contained
+#: layer, and the containment tests prove it does not.
+#:
+#: Those tests match on the dotted import spelling as a plain substring over the file's
+#: text, so this comment deliberately writes the PATH form — the dotted form here would
+#: fail the very containment check this comment is describing.
 UNIFIED_MANIFEST_KEY = "portfolio_simulation"
 UNIFIED_MANIFEST_VERSION_FIELD = "portfolio_manifest_version"
 

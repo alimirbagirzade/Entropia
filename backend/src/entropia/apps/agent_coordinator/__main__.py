@@ -13,25 +13,17 @@ durable Job row (``application/commands/agent_loop.py::_spawn_followup_task``) �
 mirrors ``apps/scheduler/__main__.py``'s commit-then-``send_job`` ordering. A
 crash between commit and dispatch never loses the task: the row stays QUEUED and
 the scheduler's redelivery sweep (INF-03) re-sends it.
-
-The tick crosses into its async body with ``async_runtime.run_sync``, never
-``asyncio.run``: the latter closes its loop every tick while the ``@lru_cache``
-asyncpg pool behind ``get_session_factory`` is process-wide, so tick N+1 checks
-out a connection created on tick N's closed loop and asyncpg raises "attached to
-a different loop". Here that surfaces as a tick that can never succeed again
-rather than a stranded row — the loop logs ``agent_coordinator.cycle_failed``
-forever and the Agent silently stops making progress.
 """
 
 from __future__ import annotations
 
-
+import asyncio
+import contextlib
 import signal
 
 from entropia.application.commands.agent_loop import run_coordinator_cycle
 from entropia.apps.worker.actors import run_agent_executor
 from entropia.domain.agent_lab.enums import ALPHA_AGENT_ID
-from entropia.infrastructure.async_runtime import run_sync
 from entropia.infrastructure.observability import configure_logging, get_logger
 from entropia.infrastructure.queues.enqueue import send_job
 
@@ -97,7 +89,54 @@ async def _loop_until_stopped() -> None:
     stop = _stop = asyncio.Event()
     _install_stop_handlers(stop)
     log.info("agent_coordinator.start")
+    try:
+        while not stop.is_set():
+            try:
+                summary = await _run_cycle()
+                log.info("agent_coordinator.cycle", **_loggable(summary))
+                executor_job_id = summary.get("executor_job_id")
+                if executor_job_id:
+                    try:
+                        send_job(run_agent_executor, str(executor_job_id))
+                    except Exception as exc:  # row stays durably QUEUED; next tick/sweep resends
+                        log.warning("agent_coordinator.dispatch_failed", error=str(exc))
+            except Exception as exc:  # never crash the loop on a single bad tick
+                log.warning("agent_coordinator.cycle_failed", error=str(exc))
+            await _wait_for_cycle(stop, CYCLE_SLEEP_SECONDS)
+    finally:
+        _stop = None
+        # Hand the pool back while its loop is still open — a connection outliving
+        # its loop is the very failure :func:`run` describes.
+        await get_engine().dispose()
+        log.info("agent_coordinator.stop")
 
+
+def run() -> None:
+    """Run the coordinator cycle until stopped, on ONE event loop.
+
+    The loop must outlive the engine's connection pool. ``get_engine`` is
+    ``@lru_cache``d process-wide, so a pooled asyncpg connection stays bound to
+    the loop that first opened it — and the previous shape, ``asyncio.run`` per
+    cycle, closed that loop underneath it. The next cycle then checked out a
+    connection attached to a dead loop and the whole cycle aborted with "got
+    Future attached to a different loop" / "Event loop is closed"
+    (``asyncpg/connection.py::_cancel_current_command``). The failed cycle
+    discarded the bad connection, so the one after it succeeded: cycles
+    alternated at exactly 50%.
+
+    That halved the rate of applying pending control at a safe checkpoint,
+    consuming the next directive, and materializing the autonomous follow-up task
+    with its durable executor Job (F-20). Nothing was lost — the cycle rolls back
+    whole and canonical state is re-read next tick (AL-14) — but latency doubled,
+    and a stranded cycle also skipped its ``send_job``. The docstring above notes
+    the scheduler's INF-03 sweep re-sends such a task; until #593 that sweep was
+    itself running at 50%, so the two defects compounded.
+
+    Identical fix, identical reasoning: ``apps/scheduler/__main__.py::run``
+    (#593). Deliberately NOT extracted into a shared helper — see #591.
+    """
+    configure_logging()
+    asyncio.run(_loop_until_stopped())
 
 
 def _loggable(summary: dict[str, object]) -> dict[str, object]:

@@ -175,11 +175,26 @@ whole stack with no error at all, which is harder to diagnose than an exit code.
   `agent_runtime` singleton, `0019`/`0020` fixtures) do **not** exist in pytest.
   Anything that depends on them must be asserted against a migrated database —
   which is what `migration-acceptance.sh` is for.
-- **`dr-acceptance.sh` warns when it proved little.** An `EMPTY == EMPTY`
-  comparison is a true statement about nothing, so step [6] warns when fewer
-  than two evidence tables carried rows and step [7] warns when all three
-  append-only planes were empty — instead of either reading as a strong DR
-  result. The nightly job therefore seeds the golden fixture first.
+- **`dr-acceptance.sh` warns when it proved little, and CI gates on how much it
+  proved.** An `EMPTY == EMPTY` comparison is a true statement about nothing, so
+  step [6] warns when fewer than two evidence tables carried rows and step [7]
+  warns when all three append-only planes were empty. But a warning nobody can
+  configure into a failure fires forever and gets read as normal, so the nightly
+  job also sets coverage **floors** — `DR_MIN_EVIDENCE_TABLES`,
+  `DR_REQUIRE_APPEND_ONLY`, `DR_MIN_OBJECTS` — at what its fixture and workload
+  actually produce. They are off by default: a developer verifying one backup by
+  hand should not have to satisfy CI's fixture coverage.
+- **The seed alone cannot cover the append-only planes.** `apps/seed.py` writes
+  through the repositories, so it never reaches `_audit_and_outbox`: it produces
+  zero `audit_events` and zero `outbox_events`, and it calls exactly one of the
+  four object writers. Measured, not assumed — Actions run 31038908690 printed
+  "[7] all three append-only planes were EMPTY" and "[8] 1 objects". The nightly
+  job therefore drives `scripts/dr-workload.sh` (one authenticated
+  `POST /trade-logs/source-assets`) between seeding and backing up. Still
+  uncovered on purpose: `agent_checkpoint`, and the `market/raw` and
+  `create-package/baseline` key prefixes — step [8] names the prefixes it did
+  cover on every run, so that gap stays in the transcript instead of being
+  inferred from a PASS line.
 - **Object *bytes* are only covered when MinIO is reachable.** With no object
   store, `backup.sh` WARN-skips the mirror and step [8] warns rather than
   passes. `DR_REQUIRE_OBJECTS=1` (which CI sets) turns that warning into a

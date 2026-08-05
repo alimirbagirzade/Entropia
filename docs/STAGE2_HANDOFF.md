@@ -4042,7 +4042,7 @@ geçerlidir. Eksik kayıtları yazacak olan o slice'ları indirendir.
 
 ---
 
-## ADIM 18 — `run_portfolio` faz döngüsü; ADR 0002 Accepted (PR #TBD)
+## ADIM 18 — `run_portfolio` faz döngüsü; ADR 0002 Accepted (PR #586)
 
 > **Ad çakışması, bilerek:** PR #575 de "ADIM 18" etiketiyle indi (cross-item arbitration).
 > Bu slice ADR §12'nin **18. satırının faz-döngüsü yarısıdır**. Sevk edilen numaralandırma ile
@@ -4104,6 +4104,61 @@ Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 18 · handoff: `docs/ADIM18_LANDED_
 
 **Devam eden yan bulgu:** bu dosya ve `PROJECT_HISTORY.md` hâlâ **PR #575 (arbitration) ve #581
 (provenance) için `landed` kaydı taşımıyor**. Bu slice o kayıtları **uydurmadı**.
+
+---
+
+## ADIM 21 (worker delivery) — Crash/retry/redelivery güvenliği landed (PR #587) + canlı Docker doğrulaması (PR #592)
+
+> **Ad çakışması, bilerek korundu — ADIM 18 kaydındaki desenin aynısı.** Aşağıdaki `## Next`
+> bloğu "yeni ADIM 21"i **engine-destekli `ItemParticipant`** (worker call site) olarak
+> planlamıştı; PR #587 ise kendini "ADIM 21 — worker delivery & recovery" diye adlandırarak
+> indi. **İki AYRI slice, tek numara.** Numara yeniden atanmadı — hangisinin "21" kalacağı
+> insan kararı. `Next`'teki `ItemParticipant` işi **değişmedi ve hâlâ sıradaki iştir**.
+
+At-least-once transport altında crash/retry/redelivery güvenliği: exactly-once transport değil,
+**effectively-once domain effects**. İki kusur, ikisi de kod yazılmadan önce reprodüklendi.
+
+- **Kusur 1 — `data` kuyruğunun guard'ı YOKTU.** Beş `data` gövdesini aynı `job_id` ile iki kez
+  koşturmak ikinci immutable artefakt + audit + outbox yazıyordu (`revisions=2 audits=2
+  outbox=2`); taze id'ler yüzünden hiçbir unique constraint tetiklenmiyor. Yeni paylaşılan
+  **`application/jobs/delivery.py::claim_job_for_delivery`** — `jobs` satırının
+  `SELECT … FOR UPDATE` ile okunması + terminal replay. Kendi domain-satır kilidi olan
+  gövdeler (`backtest_engine`, `agent_executor`, `create_package`) bunu **çağırmaz**.
+- **Kusur 2 — `agent-executor` kuyruğunun TÜKETİCİSİ YOKTU.** Coordinator gönderiyor, scheduler
+  sonsuza dek yeniden yolluyor, task hiç koşmuyor, `send` hep başarılı olduğu için hiçbir katman
+  hata bildirmiyor. Yeni **`worker-agent-executor`** compose servisi (worker-agent'a eklenen bir
+  kuyruk değil — executor tam backtest engine'i koşuyor).
+
+**Migration YOK** · **OpenAPI drift YOK** · frontend dokunulmadı · `ENGINE_VERSION` değişmedi.
+Suite **3669 passed / 4 xfailed**, coverage **%93.26**, CI 6/6 yeşil.
+
+**Canlı doğrulama (merge sonrası).** PR #587 iki kapıyı dürüstçe **"koşulmadı"** diye
+işaretleyerek indi — o ortamda Docker yoktu, smoke yalnız `bash -n` görmüştü,
+`worker-agent-executor` hiç boot edilmemişti. Kapatıldı: `make accept` **exit 0** (15/15,
+`RestartCount=0`), `worker-agent-executor` tüketimi **broker'da** doğrulandı, boş-stack smoke
+exit 0 **ama boş bir doğru** (tüm sayaçlar 0, guard hiç girilmedi), ve **mid-flight kill**
+gerçek kanıtı verdi: 8 eşzamanlı job, parse sırasında SIGKILL, **11 delivery**, job başına
+**tam 1** `market_validation_run`, `audit=outbox=44`, duplicate **0**.
+Tam kayıt: **`docs/audit/worker_delivery_recovery_matrix.md` §7.1**.
+
+**Doğrulamada çıkan iki pre-existing kusur (bu slice'ın regresyonu DEĞİL, düzeltilmedi):**
+
+1. **`apps/worker/actors.py` durable job MAHSUR bırakıyor.** Mesaj başına `asyncio.run` +
+   `@lru_cache`'li engine → `attached to a different loop`; 11 delivery'de 4 çökme, bir mesaj
+   `max_retries=3`'ü tüketip düştü, `job_01KZ9717XQ5V0PKJ1PGKMB7P7B` kalıcı `queued`/`attempts=0`
+   ve **hiçbir şey kurtarmıyor**. Duplikasyonun ayna kusuru: etkinin hiç oluşmaması. Crash
+   gerekmiyor, paralel iki `data` job'ı yeter. Aynı desen `apps/scheduler/__main__.py`'de **her
+   ikinci** maintenance pass'ini iptal ettiriyor (12 tick'te 6 OK / 6 failed, kusursuz alternasyon).
+2. **`worker-agent-executor` dev-auth override'ında yok** → `AUTH_MODE=session` koşuyor;
+   `test_worker_plane_deployment.py` yalnız `docker-compose.yml`'i pinlediği için görmüyor.
+   Kusur 2'nin tıpatıp aynı şekli.
+
+Ayrıca `worker-restart-smoke.sh` adım 5'in grep'i `scheduler.maintenance_failed`'i de yakalıyor.
+
+**Dürüst sınır:** mid-flight kanıtı yalnız `data`/market-data actor'ünü kapsıyor; diğer dört
+gövde canlı crash-test edilmedi. Seam 5 (eşzamanlı iki delivery) hiçbir plane için canlı
+doğrulanmadı. `agent`/`agent-high` guard'ı `idempotency_key is not None` biçiminde — `None` ile
+enqueue eden çağıran guard'sız kalır (açık soru).
 
 ---
 

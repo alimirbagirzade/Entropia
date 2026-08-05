@@ -4093,3 +4093,156 @@ hiç değişmedi — hiçbir şey döngüyü çağırmıyor.
 stepper'a çıkar — tek kanıt 46 digest kımıldamaz —, (b) **ayrı bir PR'da** adaptörü yaz ve
 worker'ın item döngüsünü `run_portfolio` ile değiştir (yalnız >1 item). ADR §15 R-4'ün
 "restructure ile re-price'ı ayır" kuralı bir kez kaybedildi; ikinci kez kaybedilmemeli.
+
+---
+
+## ADIM 21 (worker delivery) — Crash/retry/redelivery güvenliği + canlı Docker doğrulaması (PR #587, doğrulama #592)
+
+> **Ad çakışması, bilerek korundu — ADIM 18 kaydındaki desenin aynısı.** Handoff'un
+> `## Next` bloğu "yeni ADIM 21"i **engine-destekli `ItemParticipant`** (worker call site,
+> `run_engine` bar döngüsünün stepper'a çıkarılması) olarak planlamıştı. PR #587 ise kendini
+> "ADIM 21 — worker delivery & recovery" diye adlandırarak indi. **İki AYRI slice, tek numara.**
+> Numarayı yeniden atamıyorum — hangisinin "21" kalacağı insan kararı. Bu kayıt kendini
+> `ADIM 21 (worker delivery)` diye ayırır; `Next`'teki planlı `ItemParticipant` işi
+> **değişmeden** durur ve hâlâ sıradaki iştir.
+
+**Hedef:** exactly-once transport değil (Redis + dramatiq veremez), **effectively-once domain
+effects**. Broker ya da scheduler ne yaparsa yapsın, durable dünya tek immutable revision /
+validation run / imported package / Result / purge outcome, tek audit izi, tek outbox fan-out
+ile bitmeli.
+
+### İki kusur — ikisi de kod yazılmadan ÖNCE reprodüklendi
+
+**Kusur 1 — `data` kuyruğunun at-least-once guard'ı YOKTU.** Beş `data`-plane gövdesinden
+herhangi birini aynı `job_id` ile iki kez koşturmak (commit başarılı / ack kayıp vakası)
+**ikinci bir immutable artefakt** + ikinci audit + ikinci outbox satırı yazıyordu:
+
+```
+PROBE revisions=2 audits=2 outbox=2      # beklenen 1 1 1
+```
+
+Hiçbir şey reddetmiyor — her artefakt taze üretilmiş bir id taşıdığı için hiçbir unique
+constraint tetiklenmiyor. Çözüm: yeni paylaşılan
+`application/jobs/delivery.py::claim_job_for_delivery` — durable `jobs` satırının
+`SELECT ... FOR UPDATE` ile okunması + terminal ise kaydedilmiş sonucun replay'i. Kilit
+çağıranın tüm transaction'ı boyunca tutulur, yani ikinci delivery **bekler** ve sonra replay
+eder; erken dönmek "zaten bitti" ile "şu an uçuşta"yı ayırt edemezdi. Beş `data` actor'ü
+(`market_data`, `research_data`, `trading_signal`, `trade_log`, `package_import`) bu tek
+kapıdan geçer. Kendi domain-satır kilidi + domain terminal state'i olan gövdeler
+(`backtest_engine`, `agent_executor`, `create_package`) bu helper'ı **çağırmaz** — iki soruyu
+zaten o kilitle yanıtlıyorlar.
+
+**Kusur 2 — `agent-executor` kuyruğunun sevk edilen stack'te TÜKETİCİSİ YOKTU.** Coordinator
+her Agent task'ını `agent-executor`'a gönderiyor ve scheduler o kuyruğu auto-redeliver
+ediyordu; tüketici olmayınca ikisi sessiz bir sonsuz döngüye dönüşüyordu — task kuyruğa
+giriyor, her grace penceresinde yeniden yollanıyor, **hiç koşmuyor**, ve `send` her seferinde
+BAŞARILI olduğu için hiçbir katman hata bildirmiyordu. Çözüm: kendi
+`worker-agent-executor` compose servisi (worker-agent'a eklenen bir kuyruk değil — executor
+gövdesinin içinde tam backtest engine'i koşuyor, yani backtest plane'inin runtime profilini
+taşıyor, tool gateway'in latency-duyarlı profilini değil).
+
+### Ne indi
+
+`delivery.py` (yeni, 86 satır) · 5 `data` gövdesi + `data_queue.py` guard'a bağlandı ·
+`docker-compose.yml`'e `worker-agent-executor` · `scripts/worker-restart-smoke.sh` (yeni) +
+`make worker-restart-smoke` · dört yeni test dosyası
+(`test_worker_delivery_recovery.py` 650 satır, `test_worker_delivery_guard.py`,
+`test_worker_plane_deployment.py`, `test_worker_queue_registry.py`) ·
+`docs/audit/worker_delivery_recovery_matrix.md` (yeni matris) · scheduler + maintenance
+docstring'leri "prose'da iddia" yerine "test yürütüyor"a çevrildi.
+
+**Migration YOK** (alembic head değişmedi), **OpenAPI drift YOK**, frontend dokunulmadı,
+`ENGINE_VERSION` değişmedi.
+
+### Testler (PR #587)
+
+Tam backend suite **3669 passed, 4 xfailed**, exit 0, coverage **%93.26** (kapı ≥90);
+`ruff check` / `ruff format --check` / `mypy src` temiz; `openapi_export --check` drift yok.
+Dört pre-existing `xfail(strict)` değişmedi. CI 6/6 yeşil (Backend job 44m53s).
+
+### Canlı Docker doğrulaması — merge SONRASI (2026-08-05, PR #592)
+
+PR #587, `docs/audit/worker_delivery_recovery_matrix.md` §7'de **iki kapıyı dürüstçe
+"koşulmadı" diye işaretleyerek** indi: o ortamda Docker yoktu (`docker info` düşüyordu,
+`docker compose` kurulu değildi), smoke script'i yalnız `bash -n` ile sözdizimi kontrolünden
+geçmişti ve `worker-agent-executor` hiç boot edilmemişti. Bu boşluk sonradan kapatıldı;
+tam kayıt **`docs/audit/worker_delivery_recovery_matrix.md` §7.1**.
+
+Ortam: OrbStack 2.2.2, `docker` 29.4.0, Compose v5.1.2. O makinede native
+postgres/redis/minio 5432/6379/9000/9001'i tuttuğu için stack compose'un parametrik host
+portlarıyla kaldırıldı (`PG_HOST_PORT=55432` vb.), **`.env` üzerinden** — komut satırından
+DEĞİL: `acceptance.sh` ve `worker-restart-smoke.sh` kendi `docker compose`'unu çağırıyor ve
+değişkenler set değilken o çağrılar infra servislerini varsayılan portlara render edip meşgul
+native portlara bind etmeye çalışıyor.
+
+| Kapı | Sonuç |
+|---|---|
+| `make accept` | **exit 0** — 15/15 PASS, her `RestartCount = 0`, üç one-shot exit 0. SIGKILL smoke'undan sonra tekrar: yine exit 0 |
+| `worker-agent-executor` | healthy boot ediyor; tüketim **broker'da** doğrulandı (3 sn `redis-cli MONITOR`, consumer `agent-executor` + `.DQ` yokluyor) — yalnız boot log'una güvenilmedi |
+| `make worker-restart-smoke` (boş stack) | **exit 0**, ama **boş bir doğru** olarak kaydedildi: tüm sayaçlar `0`, `jobs` boş, `claim_job_for_delivery` hiç girilmedi |
+| Mid-flight kill (dev-auth) | **gerçek kanıt** — aşağıda |
+
+**Mid-flight kill.** 8 Market Data dataset'i hazırlandı (her biri 8.6 MB / ~150 000 satır
+OHLCV CSV), 8 analiz isteği eşzamanlı atıldı, gövdeler parse ederken `worker-data` 6. saniyede
+SIGKILL'lendi ve yeniden başlatıldı. `data` bilerek scheduler re-dispatch dışında
+(`ACTOR_BY_QUEUE`'da `data` anahtarı yok), yani buradaki tek otomatik redelivery dramatiq'in
+ölü consumer'ın unacked mesajlarını requeue etmesi — tam olarak guard'ın var olma sebebi olan
+commit/ack dikişi.
+
+```
+8 farklı job için 11 worker.market_analysis.start   -- en az 3 gerçek redelivery
+market_validation_run = 8   -- succeeded job başına TAM 1
+audit_events = 44, outbox_events = 44   -- eşleşmiş, orphan yok
+birden fazla validation run'ı olan job_id: 0
+```
+
+Bu slice'tan önce o redelivery'lerin her biri ikinci bir artefakt + audit + outbox yazardı.
+Yazmadı.
+
+### Doğrulama sırasında çıkan İKİ pre-existing kusur (bu slice'ın regresyonu DEĞİL)
+
+**Kusur 3 — `apps/worker/actors.py` durable job'ı MAHSUR bırakıyor.** Mesaj başına
+`asyncio.run(...)` + `@lru_cache`'li process-wide engine: her dramatiq thread'inin loop'u
+kapanırken asyncpg havuzu ayakta kaldığı için bir loop'ta yaratılan bağlantı başka bir loop'ta
+checkout ediliyor →
+`RuntimeError: ... got Future ... attached to a different loop` (actors.py:53). Ölçüm: **11
+delivery'de 4 çökme**, ve **bir mesaj `max_retries=3`'ü tüketip düştü** →
+`job_01KZ9717XQ5V0PKJ1PGKMB7P7B` kalıcı `queued`, `attempts=0` (gövde RUNNING geçişini commit
+etmeden çöktü). Hiçbir şey kurtarmıyor: broker mesajı gitti, `data` de bilerek
+auto-redeliver dışında. **Bu, §4'ün kapattığı duplikasyonun AYNA kusuru** — etkinin hiç
+oluşmaması. Tetiklemek için crash gerekmiyor; paralel iki `data` job'ı yeter. Aynı
+anti-pattern `apps/scheduler/__main__.py::run()` içinde de var ve **tam olarak her ikinci**
+maintenance pass'ini iptal ettiriyor (12 ardışık 30 sn tick'te 6 OK / 6
+`scheduler.maintenance_failed`, kusursuz alternasyon) — outbox relay'in ve INF-03/INF-09
+sweep'lerinin efektif hızını yarıya indiriyor.
+
+**Kusur 4 — `worker-agent-executor` dev-auth override'ında yok.** Servis
+`docker-compose.yml`'e eklendi ama `docker-compose.dev-auth.yml`'e eklenmedi; canlı dev-auth
+stack'inde diğer tüm plane'ler `AUTH_MODE=dev` iken o `AUTH_MODE=session` koşuyor.
+`tests/unit/test_worker_plane_deployment.py` yakalayamaz — yalnız `docker-compose.yml`'i
+pinliyor, override'ı hiç okumuyor. **Kusur 2'nin tıpatıp aynı şekli** (bir yerde tanımlanıp
+başka yerde unutulan plane).
+
+Ayrıca: `worker-restart-smoke.sh` adım 5'in grep'i `scheduler.maintenance` substring'i olduğu
+için `scheduler.maintenance_failed`'i de yakalıyor — bu koşuda gerçek bir başarılı pass vardı,
+ama her sweep'in patladığı bir stack'te de aynı "OK" yazardı.
+
+### Dürüst sınır
+
+Mid-flight kanıtı **yalnız `data` plane'inin market-data actor'ünü** kapsıyor. Diğer dört gövde
+aynı guard'ı paylaşıyor ve `test_worker_delivery_recovery.py` ile kapsanıyor ama **canlı
+crash-test edilmedi**. Seam 5 (aynı job'ın *eşzamanlı* iki delivery'si) hiçbir plane için canlı
+stack'e karşı doğrulanmadı. `agent`/`agent-high` guard'ı `if idempotency_key is not None`
+biçiminde; `idempotency_key=None` ile enqueue eden bir çağıran **guard'sız** kalır — açık soru
+olarak duruyor. §7'nin diğer honest-boundary maddelerine dokunulmadı.
+
+Yük altında bir geçici gözlem: 8 analiz koşarken `worker-data` CPU'yu doyurdu (~%130) ve
+`redis.ping()` healthcheck'i (`timeout: 5s`) tekrar tekrar aştı → container `unhealthy` oldu ve
+o anda `make accept` düşerdi. Yük boşalınca kendiliğinden `healthy` döndü. Kusur değil, ama
+CPU-bound parse yapan bir plane için 5 sn marj dar.
+
+### Rollback
+
+Kod tarafı: `git revert f81ee82` — guard'ı, `worker-agent-executor` servisini ve dört test
+dosyasını birlikte geri alır; ikisi de kusurları geri getirir. Doküman tarafı:
+`git revert` ilgili docs commit'i — yalnız kayıt siler, üretim davranışı değişmez.

@@ -1228,9 +1228,17 @@ def test_a_valuation_point_stays_linear_in_the_item_count() -> None:
 
 def test_nothing_in_production_imports_the_shared_ledger_yet() -> None:
     """ADR §12: the ADIM 17 rollback is "revert; the single-item path is untouched", and it
-    stays true only while nothing reaches this module. When ADIM 18 wires ``run_portfolio``
-    in, this is the test that must be updated deliberately — it should never fail by
-    accident."""
+    stays true only while nothing reaches this module. When the phase loop wires
+    ``run_portfolio`` in, this is the test that must be updated deliberately — it should never
+    fail by accident.
+
+    It has been updated deliberately once, in the same shape the clock's and the intent
+    layer's own containment tests were: the cross-item arbitration layer
+    (``execution/arbitration.py``) asks this ledger the capacity question, so it is named here
+    as the ONE permitted importer rather than the assertion being loosened to "some importers
+    are fine". That module is itself contained — ``test_backtest_cross_item_arbitration.py``
+    asserts nothing imports IT — so the property this test defends is unchanged: no production
+    path reaches the shared ledger, and the rollback is still "delete the modules"."""
     src = Path(__file__).resolve().parents[2] / "src" / "entropia"
     importers = [
         path.relative_to(src).as_posix()
@@ -1238,7 +1246,7 @@ def test_nothing_in_production_imports_the_shared_ledger_yet() -> None:
         if path.name != "portfolio_ledger.py"
         and _imports_portfolio_ledger(path.read_text(encoding="utf-8"))
     ]
-    assert importers == []
+    assert importers == ["domain/backtest/execution/arbitration.py"]
 
 
 def _imports_portfolio_ledger(source: str) -> bool:

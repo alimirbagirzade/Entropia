@@ -914,20 +914,24 @@ def test_nothing_in_production_imports_the_intent_layer_yet() -> None:
     ``run_portfolio`` in, this test is the one that must be updated deliberately; it
     should never fail by accident.
 
-    It has been updated deliberately once, in the same shape the clock's own containment
-    test was: the ADIM 17 shared ledger (``execution/portfolio_ledger.py``) publishes a
-    ``PortfolioSnapshot``, so it is named here as the ONE permitted importer rather than
-    the assertion being loosened to "some importers are fine". That module is itself
-    contained — ``test_backtest_portfolio_ledger.py`` asserts nothing imports IT — so the
-    property this test defends is unchanged: no production path reaches the intent layer,
-    and the rollback is still "delete the modules"."""
+    It has been updated deliberately twice, in the same shape the clock's own containment
+    test was, and each entry is NAMED rather than the assertion being loosened to "some
+    importers are fine": the ADIM 17 shared ledger (``execution/portfolio_ledger.py``)
+    publishes a ``PortfolioSnapshot``, and the cross-item arbitration layer
+    (``execution/arbitration.py``) reads the ``ItemIntent`` values it arbitrates. Both are
+    themselves contained — their own test files assert nothing imports THEM — so the property
+    this test defends is unchanged: no production path reaches the intent layer, and the
+    rollback is still "delete the modules"."""
     src = Path(__file__).resolve().parents[2] / "src" / "entropia"
-    importers = [
+    importers = sorted(
         path.relative_to(src).as_posix()
         for path in src.rglob("*.py")
         if path.name != "intents.py" and _imports_intents(path.read_text(encoding="utf-8"))
+    )
+    assert importers == [
+        "domain/backtest/execution/arbitration.py",
+        "domain/backtest/execution/portfolio_ledger.py",
     ]
-    assert importers == ["domain/backtest/execution/portfolio_ledger.py"]
 
 
 def test_no_intent_field_ships_in_the_manifest_yet_and_the_engine_version_stands() -> None:

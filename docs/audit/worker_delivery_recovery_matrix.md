@@ -312,10 +312,18 @@ other** maintenance pass abort (observed 6 OK / 6 `scheduler.maintenance_failed`
 consecutive 30 s ticks, strict alternation), halving the effective rate of the outbox relay and
 the INF-03/INF-09 sweeps. Both are tracked outside this slice.
 
+> **The scheduler half is FIXED — PR #593 (`20a32ab`), merged 2026-08-05.** It holds one event
+> loop for the process lifetime, so the alternation is gone. The measurement above is kept as the
+> record of that run, not as current state. **The `apps/worker/actors.py` half stands exactly as
+> measured** — #593 touched only the scheduler twin.
+
 Related: `worker-restart-smoke.sh` step 5 greps for the substring `scheduler.maintenance`, which
 also matches `scheduler.maintenance_failed`. In this run the `OK scheduler swept` line was
 satisfied by a genuine successful pass, but the check would report the same on a stack where
 every sweep fails.
+
+> **Fixed in the same PR #593 (`20a32ab`)** — step 5 now greps `scheduler\.maintenance([^_]|$)`,
+> so a stack whose every sweep aborts no longer reports `OK scheduler swept`.
 
 #### Defect #4 (minor) — `worker-agent-executor` is missing from the dev-auth override
 
@@ -331,6 +339,9 @@ worker-agent-executor                                              AUTH_MODE=ses
 `_COMPOSE = .../docker-compose.yml` and never reads the override. This is the same shape as the
 defect §5 fixed (a plane declared in one place and forgotten in another), so extending that test
 to the override file belongs with it.
+
+> **FIXED — see §7.2.** The service was added to `docker-compose.dev-auth.yml` and the test now
+> reads both files.
 
 #### Transient observation
 
@@ -348,3 +359,36 @@ The Trading Signal / Trade Log / Research Data / Package Import bodies share
 crash-tested live. Seam 5 (two *simultaneous* deliveries of the same job) is still not exercised
 against a live stack for any plane, and the `agent`/`agent-high` `idempotency_key=None` question
 above remains open.
+
+### 7.2 Defect #4 closed — the dev-auth override, and the test that now reads it
+
+`docker-compose.dev-auth.yml` gained the missing `worker-agent-executor` entry, so all **10**
+backend planes carry `AUTH_MODE: dev` under the override. Verified against the real merged
+config rather than the source file — `docker compose -f docker-compose.yml -f
+docker-compose.dev-auth.yml config` (exit 0), then the resolved `AUTH_MODE` read back per service
+that runs `image: entropia-backend:local`:
+
+```
+agent-coordinator  api  migrate  provision  scheduler
+worker-agent  worker-agent-executor  worker-backtest  worker-data  worker-default
+-- all 10: AUTH_MODE=dev   (before: worker-agent-executor = session)
+```
+
+`tests/unit/test_worker_plane_deployment.py` now reads **both** compose files and pins the
+invariant so the pairing cannot drift again:
+
+- `test_dev_auth_override_forces_dev_mode_on_every_backend_plane` — the plane set is derived from
+  the resolved `image: entropia-backend:local`, **not** a hand-kept name list, so a plane added
+  through the `*backend-build` anchor is covered the moment it is written. Also asserts every
+  override entry actually pins `AUTH_MODE: dev`, not merely that the key exists.
+- `test_dev_auth_override_declares_no_service_the_base_stack_lacks` — the mirror defect. Compose
+  merges by name, so a misspelt `worker-agent-exectuor:` raises nothing: it defines a new
+  imageless service **and** leaves the real plane on session mode.
+
+Reproduced red before the fix (`AssertionError: backend planes absent from
+docker-compose.dev-auth.yml: ['worker-agent-executor']`), green after — 4 passed.
+
+**Not covered by this:** `dev-auth` is currently the only override file, and the test names it
+explicitly — a second override added later gets no coverage until someone extends the test. No
+assertion is made about the base stack's own `AUTH_MODE` either; what is pinned is override-vs-base
+coverage, not the value any given stack ends up running.

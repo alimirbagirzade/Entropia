@@ -170,9 +170,18 @@ Before stopping a working session, produce **ALL** of the following:
 ## Current position (keep in sync at each closing)
 
 
+> **HEAD `3cc9588`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok).
+> **Son dalga — ADIM 21 (worker delivery):** at-least-once delivery guard + `worker-agent-executor`
+> (#587), canlı Docker doğrulaması (#592), scheduler event-loop fix (#593), history/handoff kaydı
+> (#595). **Testler: otorite CI'dır** — son yeşil `Backend — lint, type, test` 45m12s; bu dalgada
+> yerel tam suite ölçülmedi. **Next:** engine-destekli `ItemParticipant` (worker call site) —
+> `STAGE2_HANDOFF.md` §Next. **AÇIK kusur:** `apps/worker/actors.py` event-loop hatası durable job'ı
+> kalıcı mahsur bırakıyor (ölçüldü, düzeltilmedi); `worker-agent-executor` dev-auth override'ında yok.
+
 > **Uyarı:** `docs/audit/current_main_ground_truth_2026-08-03.md` §18'in 2/3/4/6 kalemleri
-> ADIM 5–8 ile kapandı ama o belge güncellenmedi — ona güvenmeden önce doğrula. `STAGE2_HANDOFF.md`
-> ve `PROJECT_HISTORY.md` **PR #575/#581 için landed kaydı taşımıyor**.
+> ADIM 5–8 ile kapandı ama o belge güncellenmedi — ona güvenmeden önce doğrula.
+> **"ADIM 21" iki slice'a verilmiş** (planlı `ItemParticipant` vs sevk edilen worker-delivery);
+> numara yeniden atanmadı, kayıtlar `ADIM 21 (worker delivery)` diye ayırıyor — insan kararı.
 
 
 - **Durum:** V1 ROADMAP COMPLETE (Stages 0–8, docs 01–22) + post-V1 + video-alignment +

@@ -550,11 +550,14 @@ def test_the_clock_is_not_wired_into_production_yet() -> None:
     manifest section. It is contained too — ``test_backtest_portfolio_provenance.py`` asserts
     nothing imports IT — so the defended property still holds."""
     src = Path(__file__).resolve().parents[2] / "src" / "entropia"
-    importers = [
+    # sorted(): ``rglob`` yields in filesystem order, which differs between macOS and the
+    # Linux runner. With one permitted importer that was invisible; with two it made the
+    # assertion platform-dependent. The sibling containment tests already sort.
+    importers = sorted(
         path.relative_to(src).as_posix()
         for path in src.rglob("*.py")
         if path.name != "clock.py" and "execution.clock" in path.read_text(encoding="utf-8")
-    ]
+    )
     assert importers == [
         "domain/backtest/execution/intents.py",
         "domain/backtest/execution/provenance.py",

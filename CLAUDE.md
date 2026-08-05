@@ -169,6 +169,14 @@ Before stopping a working session, produce **ALL** of the following:
 
 ## Current position (keep in sync at each closing)
 
+> **HEAD `20a32ab`** — scheduler event-loop ömrü düzeltildi (PR #593, merged). `run()` artık
+> TEK `asyncio.run(_sweep_until_stopped())`; tick başına loop açıp kapatmak `@lru_cache`'li
+> asyncpg havuzunu ölü loop'a bağlıyordu ve passes **tam %50 dönüşümlü** OK/FAILED oluyordu
+> (canlı Postgres'te 6 tick → 3 OK / 3 FAILED ile üretilerek doğrulandı). Outbox relay +
+> INF-09 + INF-03 yarı hızda; veri kaybı YOK, gecikme iki katıydı. SIGTERM artık tick'i
+> beklemiyor. **`agent_coordinator` AYNI kusuru taşıyor → issue #591 (ayrı PR).** Migration /
+> OpenAPI / `ENGINE_VERSION` yok. **Sıradaki iş DEĞİŞMEDİ:** worker call site — `ItemParticipant`.
+
 
 > **Uyarı:** `docs/audit/current_main_ground_truth_2026-08-03.md` §18'in 2/3/4/6 kalemleri
 > ADIM 5–8 ile kapandı ama o belge güncellenmedi — ona güvenmeden önce doğrula. `STAGE2_HANDOFF.md`

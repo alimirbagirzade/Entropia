@@ -3880,3 +3880,72 @@ gösteriyordu. Bu kapanış boşluğu **işaret ediyor ama başkasının slice k
 ### Rollback
 
 `git revert fd0ead5` — yalnız test ve doküman siler; üretim davranışı zaten hiç değişmedi.
+
+## INF-14 — Scheduler event-loop ömrü (PR #593)
+
+**Kusur (pre-existing, #587 DEĞİL).** `apps/scheduler/__main__.py::run` her tick'te
+`asyncio.run(_maintenance_pass())` çağırıyordu: tick başına bir event loop AÇILIP KAPANIYOR,
+ama `infrastructure/postgres/engine.py::get_engine` `@lru_cache`'li. Havuzdaki asyncpg
+bağlantısı kapanmış loop'a bağlı kalıyor, sonraki tick onu alıyor ve **tüm pass** düşüyordu:
+
+```
+RuntimeError: Event loop is closed
+  asyncpg/connection.py:1682 in _cancel_current_command
+  sqlalchemy/dialects/postgresql/asyncpg.py:912 in _terminate_graceful_close
+```
+
+Düşen pass bozuk bağlantıyı attığı için sonraki tick temiz bağlantı alıp başarılı oluyordu →
+passes **tam %50** dönüşümlü. Değişiklikten ÖNCE canlı Postgres'te 6 tick koşularak üretildi:
+**3 OK / 3 FAILED**, katı dönüşüm.
+
+**Etki.** Outbox relay + stale-RUNNING recovery (INF-09) + lost-message redelivery (INF-03)
+yarı hızda çalışıyordu. **Veri kaybı yok** — pass bütün olarak rollback ediyor, satırlar durable
+QUEUED kalıyor — ama recovery gecikmesi iki katı ve log'da kalıcı warning akışı vardı.
+
+**Çözüm.** `run()` = `configure_logging(); asyncio.run(_sweep_until_stopped())` — process ömrü
+boyunca TEK loop, havuz asla loop'unu geçmiyor; tick başına bağlantı kurulum maliyeti de gitti.
+Engine `finally` içinde, loop HÂLÂ AÇIKKEN dispose ediliyor (aksi halde aynı kusur çıkış
+gürültüsü olarak dönüyor).
+
+**Shutdown yolu yeniden kuruldu** (zorunluydu: bloklayan `time.sleep` restructure'ı geçemezdi).
+`signal.signal` yerine `loop.add_signal_handler` → `asyncio.Event`; tick artık
+`asyncio.wait_for(stop.wait(), timeout=tick_seconds())`. Bu **latent bir kusuru da kapatıyor**:
+PEP 475 gereği `time.sleep` handler döndükten sonra yeniden kuruluyordu, yani SIGTERM eskiden
+**tam bir tick'e (30s)** mal oluyordu. `Event` import'ta DEĞİL her run'da yaratılıyor — bir
+`Event` kendisini ilk bekleyen loop'a bağlar ve sonra başkasını reddeder (loop'un tek ve uzun
+ömürlü olması gerektiğinin bir sebebi daha). Yeni seam: `request_stop()`.
+
+**Smoke düzeltmesi.** `scripts/worker-restart-smoke.sh` adım 5 çıplak `scheduler.maintenance`
+substring'ini arıyordu — bu `scheduler.maintenance_failed`'i DE yakalıyor, yani her sweep'in
+düştüğü bir stack'te "OK scheduler swept" yazıyordu. **Tam olarak bu bug'ı maskeleyecek bir
+assertion'dı.** `grep -Eq 'scheduler\.maintenance([^_]|$)'` → hem json hem console renderer'da
+doğru.
+
+**Testler (ikisi de fix ÖNCESİ şekle karşı KIRMIZI doğrulandı).**
+- `tests/integration/test_scheduler_maintenance_passes.py` — gerçek `run()`, gerçek Postgres,
+  gerçek **cached + POOLED** engine (ikisi de taşıyıcı; suite'in NullPool engine'i her tick'e
+  taze bağlantı verir ve bug hiç görünmez). Altı ardışık pass → **sıfır**
+  `scheduler.maintenance_failed`. Pre-fix şekle karşı: *"3 of 6 passes aborted"*.
+- `tests/unit/test_scheduler_loop_lifetime.py` — DB'siz yapısal değişmez: tüm pass'ler tek
+  loop, hiçbir pass önceki tick'in kapanmış loop'uyla başlamıyor, havuz kendi loop'unda
+  dispose ediliyor, düşen pass döngüyü bitirmiyor, SIGTERM stop event'ini kuruyor.
+
+Integration testin durma koşulu **iki sonucu birden** sayar; yalnız `scheduler.maintenance`'e
+bağlansaydı her pass'i düşen bir scheduler'da sonsuza dek dönerdi — yani test edilen durumda.
+
+**Migration yok, model yok, OpenAPI yok, `ENGINE_VERSION` değişmedi.** `_maintenance_pass`'in
+SQL'i ve tek-transaction commit/rollback sınırı, `_redeliver`, `ACTOR_BY_QUEUE`, `tick_seconds`,
+tick heartbeat'i ve **her log event adı** bilerek aynı.
+
+**CI 6/6 yeşil** — `Backend — lint, type, test` 46m26s (coverage kapısı dahil). Yerel tam suite
+%78'e kadar sıfır hata ile ilerledikten sonra arka plan wrapper'ı öldürüldü (exit 144, `EXIT=$?`
+dosyası hiç yazılmadı) — **kapıyı yerelde doğrulamadım, otorite CI koşusudur.**
+
+**AÇIK DEVİR:** `apps/agent_coordinator/__main__.py` **aynı kusuru taşıyor** (aynı dört ön koşul;
+`asyncio.run(_run_cycle())` `:64`, `time.sleep` `:74`, cached factory `:42/:44`) — farkı sadece
+`agent_coordinator.cycle_failed` adıyla görünmesi, bu yüzden scheduler aramalarında çıkmadı.
+**Issue #591**, ayrı PR. İkisi birleşiyordu: coordinator'ın kaçırdığı executor dispatch'ini
+INF-03 sweep'i telafi ediyor, o sweep de %50 çalışıyordu. `apps/worker/actors.py`'deki 11
+`asyncio.run` çağrısı **analiz EDİLMEDİ** — dramatiq thread yeniden kullanımına bağlı, ölçmeden
+iddia yok.
+

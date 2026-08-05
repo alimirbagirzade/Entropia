@@ -518,6 +518,21 @@ def run_portfolio(
             f"The allocation plan carries no share for these participating items: {missing}. "
             "An item with no sleeve would size against a capacity nobody allocated."
         )
+    # The other per-item map is checked in the OTHER direction, and the asymmetry is the
+    # point. ``shares`` must COVER every participant, because a missing share fails closed —
+    # the item has no sleeve and cannot size. ``max_position_notional`` need not cover
+    # anyone, but every name it carries must exist, because ``arbitrate`` reads it with
+    # ``.get(item_id)``: a key that matches nobody is silently dropped, and a dropped item
+    # risk limit fails OPEN. Modül 11 §6.1 puts that limit at layer 3, above the allocation
+    # sleeve, precisely so allocation can cap a size and never relax one; doc 13 §14 test 13
+    # asks for a deterministic cap, and a cap that vanishes on a typo is neither.
+    unknown_limits = sorted(set(max_position_notional or {}) - set(item_ids))
+    if unknown_limits:
+        raise InvalidParticipantError(
+            f"These items carry a max_position_notional limit but do not participate in this "
+            f"run: {unknown_limits}. The limit would be silently dropped and the item it was "
+            "meant for would size with no item risk limit at all."
+        )
 
     ledger = ledger_for_items(
         pool_initial=pool_initial,

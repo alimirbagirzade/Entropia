@@ -41,8 +41,10 @@ exits non-zero if any step fails.
   mode-safe provisioning; bootstrap-Admin signup on a fresh DB; logout→login;
   exact `/me` principal + role; Mainboard/strategy not 401; session retained on
   refresh; normal User created + Admin surface `403`; revoked token →
-  `401 SESSION_INVALID`; every worker plane broker-connected; full acceptance
-  gate (`scripts/acceptance.sh`) — API, web, Postgres, Redis, MinIO, scheduler,
+  `401 SESSION_INVALID`; every worker plane broker-connected (`worker-default`,
+  `worker-data`, `worker-backtest`, `worker-agent`, `worker-agent-executor`,
+  `agent-coordinator`, `scheduler`); full acceptance gate
+  (`scripts/acceptance.sh`) — API, web, Postgres, Redis, MinIO, scheduler,
   coordinator, all workers.
 - **§9.5 legacy-upgrade** — seed a credentialless `user_admin` + owned records
   under dev; flip to `AUTH_MODE=session` on the **same volumes** (no reset);
@@ -54,6 +56,17 @@ exits non-zero if any step fails.
   login rejected with `AUTH_MODE_MISMATCH`; a stale Bearer resolves anonymous;
   `X-Actor-Id: user_admin` authenticates that principal; a Bearer alongside
   `X-Actor-Id` is ignored; protected pages return non-401.
+
+## Where this runs
+
+Until ADIM 22 these flows ran **only** on a developer's machine — no workflow
+invoked them, so a broken install or upgrade path could land green. The legacy
+flow is now executed by `.github/workflows/install-acceptance.yml` (job
+**legacy-upgrade**) nightly and on manual dispatch; the fresh-install path is
+covered on every PR by that workflow's **fresh-install** and
+**migration-acceptance** jobs. See
+[`docs/INSTALL_ACCEPTANCE.md`](INSTALL_ACCEPTANCE.md) for the full chain and
+which link is proven where.
 
 ## Honest boundaries
 

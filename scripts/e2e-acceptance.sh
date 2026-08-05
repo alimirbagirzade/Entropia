@@ -105,7 +105,12 @@ wait_healthy() {
 
 # Assert every long-running worker/coordinator/scheduler plane is up & healthy.
 assert_planes_healthy() {
-  local planes="worker-default worker-data worker-backtest worker-agent agent-coordinator scheduler"
+  # Every long-running plane docker-compose.yml defines. `worker-agent-executor`
+  # is not optional: without it the Coordinator enqueues Agent tasks nobody
+  # consumes and the scheduler re-sends them forever, every send reporting
+  # success — the silent loop that service's own comment describes. It was
+  # missing from this list, so the flow could pass with that plane absent.
+  local planes="worker-default worker-data worker-backtest worker-agent worker-agent-executor agent-coordinator scheduler"
   local svc cid status health restarts
   for svc in $planes; do
     cid="$(dc ps -aq "$svc" 2>/dev/null | head -n1)"

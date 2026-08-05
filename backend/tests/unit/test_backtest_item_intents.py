@@ -921,7 +921,10 @@ def test_nothing_in_production_imports_the_intent_layer_yet() -> None:
     (``execution/arbitration.py``) reads the ``ItemIntent`` values it arbitrates. Both are
     themselves contained — their own test files assert nothing imports THEM — so the property
     this test defends is unchanged: no production path reaches the intent layer, and the
-    rollback is still "delete the modules"."""
+    rollback is still "delete the modules".
+
+    Third deliberate update (ADIM 19): ``execution/provenance.py`` projects ``ItemIdentity``
+    into the manifest's pinned item rows. Contained as well."""
     src = Path(__file__).resolve().parents[2] / "src" / "entropia"
     importers = sorted(
         path.relative_to(src).as_posix()
@@ -931,6 +934,7 @@ def test_nothing_in_production_imports_the_intent_layer_yet() -> None:
     assert importers == [
         "domain/backtest/execution/arbitration.py",
         "domain/backtest/execution/portfolio_ledger.py",
+        "domain/backtest/execution/provenance.py",
     ]
 
 

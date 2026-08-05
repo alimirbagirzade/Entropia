@@ -466,6 +466,94 @@ async def get_manifest_snapshot(
     return (await session.execute(stmt)).scalars().first()
 
 
+async def get_run_diagnostics_markers(
+    session: AsyncSession, result_id: str
+) -> dict[str, Any] | None:
+    """The two diagnostics fields the portfolio-mode label needs, and nothing else.
+
+    Deliberately NOT a full ``diagnostics`` read: for a multi-item Result that blob carries
+    every item's whole equity curve, and the Result detail endpoint must not pay for it just
+    to answer "which co-simulation produced this". Two JSONB path extracts on one indexed
+    row instead. ``None`` when the Result retains no diagnostics artifact — the caller
+    reports that as ``unknown`` rather than assuming an era."""
+    stmt = (
+        select(
+            DiagnosticArtifact.content["engine_kind"].label("engine_kind"),
+            DiagnosticArtifact.content["warnings"].label("warnings"),
+            DiagnosticArtifact.content["composition"]["strategy_count"].label("strategy_count"),
+        )
+        .where(
+            DiagnosticArtifact.result_id == result_id,
+            DiagnosticArtifact.kind == "run_diagnostics",
+        )
+        .limit(1)
+    )
+    row = (await session.execute(stmt)).first()
+    if row is None:
+        return None
+    composition = {"strategy_count": row.strategy_count} if row.strategy_count is not None else {}
+    return {
+        "engine_kind": row.engine_kind,
+        "warnings": row.warnings,
+        "composition": composition,
+    }
+
+
+async def get_portfolio_mode_markers(
+    session: AsyncSession, result_ids: list[str]
+) -> dict[str, dict[str, Any]]:
+    """The portfolio-mode inputs for a whole history page, in TWO batched reads.
+
+    Mirrors the ``_load_digests`` / ``_load_summaries`` pattern already used by the
+    history index: one ``IN (...)`` per table, never one read per row. Only the JSONB
+    paths that matter are extracted — a per-row full-manifest or full-diagnostics read
+    would be an N+1 over two of the largest columns in the schema.
+
+    A result absent from either map simply contributes nothing; the caller resolves that
+    to ``unknown`` rather than assuming an era."""
+    if not result_ids:
+        return {}
+    markers: dict[str, dict[str, Any]] = {}
+
+    diag = select(
+        DiagnosticArtifact.result_id.label("result_id"),
+        DiagnosticArtifact.content["engine_kind"].label("engine_kind"),
+        DiagnosticArtifact.content["warnings"].label("warnings"),
+        DiagnosticArtifact.content["composition"]["strategy_count"].label("strategy_count"),
+    ).where(
+        DiagnosticArtifact.result_id.in_(result_ids),
+        DiagnosticArtifact.kind == "run_diagnostics",
+    )
+    for row in (await session.execute(diag)).all():
+        composition = (
+            {"strategy_count": row.strategy_count} if row.strategy_count is not None else {}
+        )
+        markers[row.result_id] = {
+            "diagnostics": {
+                "engine_kind": row.engine_kind,
+                "warnings": row.warnings,
+                "composition": composition,
+            },
+            "unified_manifest_version": None,
+        }
+
+    pinned = select(
+        ResultManifestSnapshot.result_id.label("result_id"),
+        ResultManifestSnapshot.manifest["portfolio_simulation"]["policy_versions"][
+            "portfolio_manifest_version"
+        ]
+        .as_string()
+        .label("version"),
+    ).where(ResultManifestSnapshot.result_id.in_(result_ids))
+    for row in (await session.execute(pinned)).all():
+        entry = markers.setdefault(
+            row.result_id, {"diagnostics": None, "unified_manifest_version": None}
+        )
+        entry["unified_manifest_version"] = row.version
+
+    return markers
+
+
 async def count_artifacts(session: AsyncSession, result_id: str) -> dict[str, int]:
     """Cheap projection counts for the collapsed Result row (heavy pagination is a
     later slice)."""

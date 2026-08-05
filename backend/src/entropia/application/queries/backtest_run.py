@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from entropia.application.queries import result_access
 from entropia.domain.backtest.history import build_manifest_excerpt
+from entropia.domain.backtest.portfolio_mode import portfolio_simulation_context
 from entropia.domain.identity import Actor
 from entropia.domain.identity.policy import require_authenticated
 from entropia.infrastructure.postgres.repositories import backtest as bt_repo
@@ -140,6 +141,11 @@ async def get_backtest_result(
     metrics = await bt_repo.list_metric_values(session, result_id)
     manifest_snapshot = await bt_repo.get_manifest_snapshot(session, result_id)
     counts = await bt_repo.count_artifacts(session, result_id)
+    # ADIM 19: which co-simulation produced this Result. Derived from the Result's OWN
+    # pinned manifest + its OWN diagnostics markers — never from the live composition and
+    # never from the live capability flag, so flipping that flag cannot re-label an
+    # already-written Result (ADR 0002 §10.4, doc 13 §14 test 19).
+    markers = await bt_repo.get_run_diagnostics_markers(session, result_id)
 
     manifest = manifest_snapshot.manifest if manifest_snapshot is not None else None
     return {
@@ -157,6 +163,9 @@ async def get_backtest_result(
             result_id=result.result_id,
             completed_at_utc=_iso(result.created_at),
             artifact_availability=_artifact_availability(counts),
+        ),
+        "portfolio_simulation": portfolio_simulation_context(
+            manifest if isinstance(manifest, dict) else None, markers
         ),
         "artifact_counts": counts,
     }

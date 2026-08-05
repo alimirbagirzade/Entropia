@@ -160,6 +160,28 @@ export interface ResultManifestExcerpt {
   artifact_availability: { counts: Record<string, number>; any_available: boolean };
 }
 
+/** Which co-simulation produced a Result, as the SERVER derived it from that Result's
+ * pinned manifest + pinned diagnostics. The client never re-derives this: doing so would
+ * mean joining live composition state onto an immutable Result. */
+export type PortfolioSimulationMode =
+  | "single_item"
+  | "legacy_sequential"
+  | "unified_clock"
+  | "unknown";
+
+export interface PortfolioSimulationContext {
+  mode: PortfolioSimulationMode;
+  note: string | null;
+  comparable_with_unified_clock: boolean;
+}
+
+export const PORTFOLIO_SIMULATION_LABELS: Record<PortfolioSimulationMode, string> = {
+  single_item: "Single item",
+  legacy_sequential: "Legacy sequential",
+  unified_clock: "Unified clock",
+  unknown: "Unknown",
+};
+
 export interface BacktestResultDetail {
   result_id: string;
   run_id: string;
@@ -171,6 +193,9 @@ export interface BacktestResultDetail {
   metrics: MetricValue[];
   manifest: ManifestExcerpt | null;
   manifest_excerpt: ResultManifestExcerpt;
+  // Nullable so a Result read back through an older projection renders "Unknown"
+  // rather than the component asserting a mode the server never stated.
+  portfolio_simulation: PortfolioSimulationContext | null;
   artifact_counts: Record<string, number>;
 }
 
@@ -190,6 +215,9 @@ export interface HistoryRow {
   engine_version: string;
   completed_at_utc: string | null;
   materialization_status: string;
+  // Which co-simulation produced this row, server-derived from ITS OWN pinned evidence.
+  // Null when the batched read found no marker — render "Unknown", never an era.
+  portfolio_simulation: PortfolioSimulationContext | null;
   allowed_actions: { view: boolean; compare: boolean; export: boolean; soft_delete: boolean };
 }
 

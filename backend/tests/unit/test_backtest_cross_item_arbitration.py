@@ -1049,7 +1049,11 @@ def test_nothing_in_production_imports_the_arbitration_layer_yet() -> None:
         for path in src.rglob("*.py")
         if path.name != "arbitration.py" and _imports_arbitration(path.read_text(encoding="utf-8"))
     ]
-    assert importers == []
+    # Updated deliberately once (ADIM 19): ``execution/provenance.py`` pins the resolved
+    # ``ConflictPolicyRule`` and ``ARBITRATION_POLICY_VERSION`` into the portfolio manifest
+    # section. It is contained too — ``test_backtest_portfolio_provenance.py`` asserts nothing
+    # imports IT — so no production path reaches arbitration and the rollback is unchanged.
+    assert importers == ["domain/backtest/execution/provenance.py"]
 
 
 def test_the_shipped_sequential_conflict_gate_is_untouched() -> None:

@@ -238,6 +238,7 @@ rv-N` kullanmaya devam ediyor).
 | POST `/backtest-runs/{run_id}/retries` (202) | `retry_backtest_run:120` | `backtest_cmd.retry_backtest_run` | yok | ✔ |
 | POST `/backtest-runs/{run_id}/cancel` (202) | `cancel_backtest_run:133` | `backtest_cmd.cancel_backtest_run` | **DUAL** — body `expected_row_version` (int) + sayısal `If-Match`, `reconcile_occ_tokens:149` ile uzlaştırılır; çelişki → 409 `OCC_TOKEN_CONFLICT` | ✔ |
 | GET `/backtest-results/{result_id}` | `get_backtest_result:164` | `backtest_query.get_backtest_result` | yok | — |
+| ↳ **ADIM 19** | gövde `portfolio_simulation = {mode, note, comparable_with_unified_clock}` taşır — hangi co-simulation'ın ürettiği. `mode ∈ {single_item, legacy_sequential, unified_clock, unknown}`, `domain/backtest/portfolio_mode.py::resolve_portfolio_simulation_mode` ile **yalnız Result'ın KENDİ pinli manifest'i + KENDİ pinli diagnostics marker'larından** türetilir (`bt_repo.get_run_diagnostics_markers` = tek satır, üç JSONB path — tam diagnostics blob'u okunmaz). **Canlı composition join YOK, canlı `SHARED_ALLOCATION_STATUS` okunmaz** → flag çevrilse bile yazılmış bir Result yeniden etiketlenemez (ADR 0002 §10.4, doc 13 §14 test 19). `legacy_sequential` notu sevk edilmiş `LEGACY_SEQUENTIAL_RESULT_NOTE` sabitidir (tanımlıydı, hiç tüketilmiyordu). Kanıt yoksa **`unknown`** — sequential varsayılmaz. **Şemada YAYIMLANMIYOR:** route `dict[str, Any]` döner, yani tüm Result-detail gövdesi `docs/openapi.json`'da yok (O-30 biçimli, ÖNCEDEN VAR OLAN boşluk; endpoint'i tiplemek ayrı bir slice). | yok | — |
 | DELETE `/backtest-results/{result_id}` | `soft_delete_backtest_result:172` | `backtest_cmd.soft_delete_backtest_result` | **DUAL** — body `expected_row_version` (int) / If-Match `rv-N` (`reconcile_occ_tokens:182`) | ✔ |
 
 > **Run stage replay (O-05).** `GET /backtest-runs/{run_id}/events?last_sequence=&limit=`
@@ -269,6 +270,7 @@ rv-N` kullanmaya devam ediyor).
 | METHOD path | fonksiyon | çağırdığı | OCC | Idem |
 |---|---|---|---|---|
 | GET `/backtest-results` | `list_backtest_results:44` | `history_query.list_backtest_results` | yok | — |
+| ↳ **ADIM 19** | her satır `portfolio_simulation` taşır (detay ile **aynı** çözümleyici — `portfolio_mode`, iki yüzey ayrışamaz; integration testi iki payload'ın eşitliğini kilitler). **N+1 YOK:** sayfa başına **iki batched `IN (...)`** okuma (`bt_repo.get_portfolio_mode_markers`), sevk edilmiş `_load_digests`/`_load_summaries` desenini aynalar; satır başına tam manifest / tam diagnostics blob'u ASLA okunmaz (şemanın en büyük iki kolonu). Test repository çağrısını sarar ve sayfa başına **tam bir kez** çağrıldığını doğrular. | yok | — |
 | POST `/backtest-results/compare` | `compare_backtest_results:56` | `history_query.compare_backtest_results` (**pure read**) | yok | — |
 | POST `/backtest-results/{result_id}/delete` | `soft_delete_backtest_result:66` | `backtest_cmd.soft_delete_backtest_result` | **DUAL** — body `expected_row_version` / If-Match (`reconcile_occ_tokens:76`) | ✔ |
 

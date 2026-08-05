@@ -26,6 +26,11 @@ const RESULT: BacktestResultDetail = {
     },
   ],
   manifest: null,
+  portfolio_simulation: {
+    mode: "single_item",
+    note: null,
+    comparable_with_unified_clock: false,
+  },
   manifest_excerpt: {
     result_id: "res_9",
     composition_snapshot_id: null,

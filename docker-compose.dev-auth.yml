@@ -42,6 +42,13 @@ services:
     <<: *dev-auth-env
   worker-agent:
     <<: *dev-auth-env
+  # The Agent executor plane is a SEPARATE service from worker-agent (it carries
+  # the backtest runtime profile, not the tool gateway's). It was missing here
+  # while present in the base stack, so under this override it was the one plane
+  # still running AUTH_MODE=session — started, healthy, wrong mode. Pinned by
+  # tests/unit/test_worker_plane_deployment.py.
+  worker-agent-executor:
+    <<: *dev-auth-env
   agent-coordinator:
     <<: *dev-auth-env
   scheduler:

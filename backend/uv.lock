@@ -355,8 +355,7 @@ requires-dist = [
     { name = "alembic", specifier = ">=1.13,<2.0" },
     { name = "argon2-cffi", specifier = ">=23.1,<26.0" },
     { name = "asyncpg", specifier = ">=0.31.0,<0.32" },
-    { name = "boto3", specifier = ">=1.43.62,<2.0" },
-    { name = "boto3-stubs", extras = ["s3"], marker = "extra == 'dev'", specifier = ">=1.43.62" },
+
     { name = "dramatiq", extras = ["redis"], specifier = ">=2.2.0,<3.0" },
     { name = "fastapi", specifier = ">=0.141.1,<1.0" },
     { name = "greenlet", specifier = ">=3.5.4" },

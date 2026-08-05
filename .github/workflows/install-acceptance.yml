@@ -214,7 +214,24 @@ jobs:
           echo "PASS  the bootstrap window closed: the second signup is a plain user"
 
       - name: Acceptance gate — every plane up, nothing exited/restarted/unhealthy
-        run: bash scripts/acceptance.sh
+        # Bounded wait, not a blind retry. `/health/ready` answering over HTTP is
+        # not the same fact as Docker having RECORDED a healthcheck result: the
+        # api probe is `interval: 10s, retries: 6` with no `start_period`, so a
+        # 20-second-old container legitimately reads `health=starting` while the
+        # app is already serving. Polling the real gate until the deadline keeps
+        # the assertion exact — after it, the last run's FAIL lines are printed
+        # and the step fails, so a plane that never becomes healthy still fails.
+        run: |
+          for i in $(seq 1 24); do
+            if bash scripts/acceptance.sh >/tmp/accept.txt 2>&1; then
+              cat /tmp/accept.txt; exit 0
+            fi
+            echo "waiting for every plane to report healthy... ($i/24)"
+            sleep 5
+          done
+          echo "::error::the acceptance gate never went green within 120s"
+          cat /tmp/accept.txt
+          exit 1
 
       - name: The acceptance gate FAILS when a plane goes down (negative case)
         # A gate that has never been observed failing is not a gate. Stopping one
@@ -222,12 +239,22 @@ jobs:
         # green again, so the red was the plane and not a flaky probe.
         run: |
           docker compose stop worker-data
-          if bash scripts/acceptance.sh; then
+          if bash scripts/acceptance.sh >/tmp/negative.txt 2>&1; then
             echo "::error::the acceptance gate stayed GREEN with worker-data stopped"
+            cat /tmp/negative.txt
             docker compose start worker-data
             exit 1
           fi
-          echo "PASS  acceptance gate went red with worker-data stopped"
+          # It must go red for THIS reason. Any unrelated red would otherwise
+          # look like proof that the gate detects a stopped plane.
+          if ! grep -qE '^ +FAIL +worker-data' /tmp/negative.txt; then
+            echo "::error::the gate failed, but not because of worker-data:"
+            cat /tmp/negative.txt
+            docker compose start worker-data
+            exit 1
+          fi
+          grep -E '^ +FAIL' /tmp/negative.txt
+          echo "PASS  acceptance gate went red, naming worker-data"
           docker compose start worker-data
           for i in $(seq 1 24); do
             if bash scripts/acceptance.sh >/dev/null 2>&1; then

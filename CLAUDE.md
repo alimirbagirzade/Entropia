@@ -169,18 +169,7 @@ Before stopping a working session, produce **ALL** of the following:
 
 ## Current position (keep in sync at each closing)
 
-> **HEAD `d7fe432`** — ADIM 18 `run_portfolio` faz döngüsü bu slice'ta indi (branch
-> `feat/stage-18-run-portfolio`) · ADIM 20 oracle suite (PR #583/#584) · ADIM 19 provenance (#581) landed.
-> **ADR 0002 artık `Accepted`** (§13.1 amendment: OD-1…OD-7 hepsi kendi tavsiyesine; §12'de ADIM 16
-> formally SKIPPED + sevk-edilen↔ADR numaralandırma haritası). **Alembic head
-> `0043_i08_registry_strategy_fks`** · `ENGINE_VERSION` değişmedi · migration/OpenAPI yok.
-> **Yeni:** `domain/backtest/portfolio_engine.py::run_portfolio` (ADR §8.2 faz sırası +
-> `ItemParticipant` Protocol); 25 portföy oracle'ı ikame sonrası **değişmeden** yeşil → **A1/A3/A5 MET**.
-> **DÜRÜST SINIR: döngünün üretimde ÇAĞIRANI YOK** — `jobs/backtest_engine.py:298` hâlâ item döngüsü,
-> `:363` `combine_item_runs`; `SHARED_ALLOCATION_STATUS` = `future_dev`, issue **#582** açık.
-> **Sıradaki: engine-destekli `ItemParticipant`** — (a) `run_engine` bar döngüsünü stepper'a çıkar
-> (tek kanıt: 46 digest kımıldamaz), (b) **AYRI PR'da** worker'ı `run_portfolio`'ya bağla → sonra ADIM 20.
-> Ayrıntı: `docs/ADIM18_LANDED_KICKOFF.md` · `docs/PROJECT_HISTORY.md` §ADIM 18.
+
 > **Uyarı:** `docs/audit/current_main_ground_truth_2026-08-03.md` §18'in 2/3/4/6 kalemleri
 > ADIM 5–8 ile kapandı ama o belge güncellenmedi — ona güvenmeden önce doğrula. `STAGE2_HANDOFF.md`
 > ve `PROJECT_HISTORY.md` **PR #575/#581 için landed kaydı taşımıyor**.

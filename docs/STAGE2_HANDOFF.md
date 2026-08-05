@@ -4007,6 +4007,7 @@ okuma-zamanı bir etiket ekliyor (yeni tablo/kolon/yazma yolu yok).
 ---
 
 ## ADIM 20 — Unified portfolio oracle suite; containment KALDIRILMADI (PR #583, BLOCKED)
+<<
 
 **Base `b0bb4a0` → commit `fd0ead5` → PR #583 DRAFT/BLOCKED** · issue **#582** · 2026-08-05 ·
 **migration YOK** (alembic head `0043_i08_registry_strategy_fks`) · **OpenAPI değişmedi** ·

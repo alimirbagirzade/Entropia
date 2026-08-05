@@ -3861,6 +3861,151 @@ alembic head, OpenAPI snapshot ve frontend dokunulmadı.
 
 ---
 
+## ADIM 18 (sevk edilen sıra) — Cross-item intent arbitrasyonu landed (PR #575)
+
+> **Geriye dönük kayıt.** Bu slice'ın kapanışı zamanında yapılmadı; bölüm PR #575'in gerçek
+> diff'i ve CI kaydı okunarak sonradan yazıldı. Tam anlatı:
+> `docs/PROJECT_HISTORY.md` §"ADIM 18 (sevk edilen sıra)".
+
+**Commit `df0082e` → squash-merge `9739466`** (2026-08-05T09:08:51+03:00) · base `1430b28` ·
+branch `feat/portfolio-cross-item-arbitration` · **+2257 / −14, 6 dosya** · **Migration YOK**
+(alembic head `0043_i08_registry_strategy_fks`) · **OpenAPI DEĞİŞMEDİ** · **`ENGINE_VERSION`
+DEĞİŞMEDİ** (46 golden digest sabit) · **CI 6/6 SUCCESS** (Backend job 43m40s).
+
+**⚠ Başlıktaki "ADIM 18" ADR §12'nin ADIM 18'i DEĞİL.** PR kendine numara vermedi; ADIM 17
+kapanışı arbitrasyonu "ADIM 19" diye rezerve etmişti, sonra PR #581 kendini "ADIM 19" ilan etti.
+Buradaki numara **sevk sırasıdır** (15 clock · 16 intents · 17 ledger · **18 arbitration** ·
+19 provenance). **ADR §12'nin ADIM 18'i `run_portfolio` faz döngüsüdür ve hâlâ yazılmadı** —
+aşağıdaki `## Next:` bloğu geçerliliğini koruyor.
+
+| dosya | |
+|---|---|
+| `backend/src/entropia/domain/backtest/execution/arbitration.py` | **yeni**, 919 satır |
+| `backend/tests/unit/test_backtest_cross_item_arbitration.py` | **yeni**, 1145 satır / **41 fonksiyon, 44 vaka** |
+| `docs/audit/cross_item_conflict_policy.md` | **yeni**, 171 satır — politika tablosu + NET durumu |
+| `test_backtest_item_intents.py` · `test_backtest_portfolio_ledger.py` | containment testleri **bilerek** güncellendi |
+| `docs/CODEMAPS/BACKEND_LAYERS.md` | `execution/arbitration.py` satırı |
+
+**Ne getirdi — ADR §9'un P5 (cross-item conflict) + P6b (capacity) fazları.** Saf ve contained;
+`run_engine` imzası **ve** semantiği aynı, replay oynamıyor. `CONFLICT_POLICY_TABLE`:
+`KEEP_SEPARATE` karşıta izin verir, `BLOCK_OPPOSITE` bloklar, **`NET` reddedilir** — sevk edilen
+motorun `NET → BLOCK_OPPOSITE` düşürmesi **ileri taşınmadı**, `resolve_policy("NET")` karar
+oluşmadan fırlatır ve `NET_UNDEFINED_SEMANTICS` beş tanımsız semantiği adlandırır. Bilinmeyen
+token da reddedilir. `shares_capital` her satırda `True` ve **yazılı**: politika pozisyon
+defterini ayırır, havuzu değil. Tutulan pozisyon **pin ordinalinden bağımsız kazanır**
+(ileri-yönlü sevk kuralı sıralı döngünün artefaktıydı); aynı tick'te düşük
+`(pin_ordinal, item_id)` kabul edilir; bilinmeyen enstrüman kimliği fail-closed; **zorunlu P3
+intent'i asla arbitre edilmez**; `arbitrate()` **donmamış** defterde koşmayı reddeder. Kapasite
+çekişmesinde cap'ler **clamp**, solvency **bütün olarak reddeder**, **bloklanan öğenin kapasitesi
+kardeşe devredilmez**. **OD-3 AÇIK ve etiketli:** `CONTENTION_SELECTION_POLICY =
+"pin_order_admission"` + `CONTENTION_SELECTION_STATUS = "recommended_pending_approval"` her
+raporda ve çekişmeli her kararda taşınır. **Yeni reason sözcüğü YOK** — `ARBITRATION_REASONS`
+sevk edilmiş token kümesi üzerinde kapalı.
+
+**Ölçüm:** otorite CI (Backend pass 43m40s). PR gövdesinde kayıtlı yerel ölçüm: exit 0,
+0 FAILED/0 ERROR, coverage **%93.15** (kapı ≥90), `arbitration.py` **%99.1**, ruff/mypy temiz.
+**Mutasyon turu bu slice'ta kaydedilmedi** (ADIM 17'de 12, ADIM 19'da 10 vardı) — eksiklik
+olarak yazılıyor, geriye dönük sayı uydurulmuyor.
+
+**Kapsam dışı (bilerek):** faz döngüsü · Result attribution / diagnostics kalıcılığı (kararlar
+typed değer olarak üretilir, hiçbir şey yazmaz) · manifest alanları
+(`arbitration_policy_version` `ENGINE_VERSION` bump'ıyla) · containment lift · cross-margin /
+netting · **OD-2**. **ADR 0002 hâlâ `Proposed`**, bu slice da kayıtlı onay olmadan indi.
+
+**Rollback:** `git revert` (= "modülü sil").
+
+---
+
+## ADIM 19 — Unified-clock result provenance + per-item attribution landed (PR #581)
+
+> **Geriye dönük kayıt.** Kapanışı zamanında yapılmadı; PR #581'in gerçek diff'i ve CI kaydı
+> okunarak sonradan yazıldı. Tam anlatı: `docs/PROJECT_HISTORY.md` §ADIM 19 + kanıt raporu
+> `docs/audit/portfolio_result_provenance.md`.
+
+**Commit `89cf0b6` (+ `7fcf3ea`, `61da506`) → squash-merge `b0bb4a0`**
+(2026-08-05T12:37:21+03:00) · base `9739466` · branch `feat/portfolio-unified-result-artifacts` ·
+**+3199 / −9, 23 dosya** · **Migration YOK** (alembic head `0043_i08_registry_strategy_fks`) ·
+**OpenAPI snapshot BYTE-ÖZDEŞ** · **`ENGINE_VERSION` DEĞİŞMEDİ** (46 golden digest sabit,
+`contract.execution_key` dahil) · **CI 6/6 SUCCESS** (Backend job 45m45s).
+
+**Programın ÜRETİME dokunan ilk slice'ı.** ADIM 15–18 tamamen contained'dı; burada iki contained
+modülün yanında sevk edilen bir **okuma-zamanı etiketi** indi. **Containment yine de
+KALDIRILMADI:** `SHARED_ALLOCATION_STATUS = "future_dev"`.
+
+| dosya | |
+|---|---|
+| `execution/provenance.py` · `execution/attribution.py` | **yeni, contained**, 542 + 406 satır |
+| `domain/backtest/portfolio_mode.py` | **yeni, ÜRETİM**, 206 satır |
+| `repositories/backtest.py` | `get_run_diagnostics_markers` + `get_portfolio_mode_markers` (+88) |
+| `queries/backtest_run.py` · `queries/results_history.py` | `portfolio_simulation` (+9 / +25) |
+| `lib/backtest.ts` · `pages/ResultsHistory.tsx` · `components/ResultDetail.tsx` | tip + iki render (+28 / +12 / +32) |
+| 3 yeni unit + 1 entegrasyon + 1 frontend test dosyası | **80 yeni backend vakası + 6 frontend vakası** |
+| `docs/audit/portfolio_result_provenance.md` | **yeni**, 372 satır |
+| dört mevcut containment testi | **bilerek** güncellendi; iki yenisi eklendi |
+
+**Kapattığı iki boşluk, kod yazılmadan önce reprodüksiyonla kanıtlandı.** (A) `validate_allocation`
+kanonun istediği her figürü hesaplayıp `_resolve_allocation` onu **atıyordu**;
+`initial_sleeve_capital` ve `engine_allocation_policy_version` manifest JSON'ının hiçbir yerinde
+yoktu. (B) per-item **unrealized** attribution hiç yoktu.
+
+**Üç karar:** (1) **`ENGINE_VERSION` bump EDİLMEDİ** — bump `execution_key` namespace'ini kaydırıp
+mevcut her Result'ı idempotent re-RUN için kullanılamaz yapardı; (2) **görünen etiketler hash'in
+dışında** (`identity` yalnız `execution_content()`'i hash'ler); (3) **karşı-olgusal marjinal
+uydurulmadı** (`COUNTERFACTUAL_MARGINAL_STATUS = "not_derivable_without_re_simulation"`).
+**OD-2 ifşa edildi:** `MARK_STALENESS_POLICY = "undefined_pending_od2"` — ADIM 18'in OD-3
+emsalinin aynısı.
+
+**İki bulgu:** preview ve execution aynı sleeve'i farklı yuvarlıyor (`ROUND_HALF_UP` vs
+`ROUND_HALF_EVEN`; `1000.10 @ %25` → **250.03 vs 250.025**) → manifest donmuş preview'ı tutar,
+`sleeve_amount_divergences()` anlaşmazlığı **raporlar**, *ürün kararı gerekiyor*; ve tek-item
+Result teşhissiz Result'tan **ayırt edilemiyordu** → motorun kendi pinli `engine_kind`'ıyla
+çözüldü.
+
+**Ölçüm:** otorite CI (Backend pass 45m45s, 6/6). **Mutasyon: 10 enjekte, 10'u öldürüldü**
+(M3'ün *pattern not found*'u bayat harness literaliydi; gerçek kaynağa yeniden uygulanıp
+öldürüldü — bayat pattern tasarım gereği **hayatta kalan** sayılır). **KAYDEDİLMEYEN:** bu PR
+gövdesi **coverage yüzdesi ve suite toplamı bildirmiyor**; o figürler bu slice için hiç
+ölçülmedi/yazılmadı ve buraya geriye dönük konmadı — coverage kapısının geçtiğinin tek kanıtı
+yeşil CI job'ıdır.
+
+**Dürüst sınırlar:** (1) unified faz döngüsü YOK, `unified_clock` **üretimde erişilemez**, yalnız
+sentetik pinli manifest'li testlerle sınanıyor — "unified koşular çalışıyor" diye okunmamalı;
+(2) `portfolio_simulation` **OpenAPI'de yayımlanmıyor** — iki route da bare `dict[str, Any]`
+döndürüyor, yani tüm Result-detail/history gövdesi şemada yok (önceden var olan, **O-30 şeklinde**
+kusur; typed hâle getirmek ayrı slice); (3) yarım-sentlik sleeve sapması **düzeltilmedi, ifşa
+edildi**; (4) **ADR 0002 hâlâ `Proposed`** ve §12 numaralandırması sevk edilenle uyuşmuyor.
+
+**ADIM 18/19'un `run_portfolio`'ya bıraktığı — tam sembol adlarıyla** (aşağıdaki `## Next:`
+bloğundaki ADIM 15/16/17 tablosunun devamı):
+
+| ne | nerede |
+|---|---|
+| P5 çatışma + P6b kapasite kararı, tick başına | `execution/arbitration.py::arbitrate` → `ArbitrationReport` / `ArbitrationDecision` |
+| politika tablosu + NET reddi | `arbitration.py::CONFLICT_POLICY_TABLE`, `ConflictPolicyRule`, `resolve_policy`, `NET_UNDEFINED_SEMANTICS` |
+| manifest pin'lerinden profil kurma | `arbitration.py::profiles_from_pins` → `ItemArbitrationProfile` |
+| OD-3 etiketi (rapora ve karara gömülü) | `arbitration.py::CONTENTION_SELECTION_POLICY` / `CONTENTION_SELECTION_STATUS` |
+| unified manifest bölümü + kimlik | `execution/provenance.py::build_portfolio_manifest` → `PortfolioManifest` |
+| donmuş allocation tutarlarının kopyası | `provenance.py::allocation_provenance_from_derived`, `independent_allocation_provenance`, `AllocationProvenance` |
+| preview↔execution sapma raporu | `provenance.py::sleeve_amount_divergences` |
+| ledger artefakt referansı + checksum | `provenance.py::ledger_artifact_ref` → `LedgerArtifactRef`, `ledger_equity_rows` |
+| pinli öğe listesi / etiketler | `provenance.py::pinned_items_from_identities`, `item_labels_from_identities`, `PinnedItem` |
+| per-item mutabakatlı attribution | `execution/attribution.py::attribute` → `PortfolioAttribution` / `ItemContribution` (residual≠0 → `AttributionResidualError`) |
+| katkı serisi + korelasyon raporu | `attribution.py::contribution_series`, `contribution_correlation`, `build_contribution_report` |
+| Result'ın hangi co-simulation'dan geldiği | `domain/backtest/portfolio_mode.py::resolve_portfolio_simulation_mode`, `portfolio_simulation_context`, `…_from_parts` |
+| batched marker okuma (N+1 yok) | `repositories/backtest.py::get_run_diagnostics_markers`, `get_portfolio_mode_markers` |
+
+**DİKKAT:** `arbitration.py`, `provenance.py` ve `attribution.py` bugün **üretimden import
+edilmiyor** ve containment testleri bunu kilitliyor
+(`test_nothing_in_production_imports_the_arbitration_layer_yet`,
+`…_the_provenance_layer_yet`, `…_the_attribution_layer_yet`). `portfolio_mode.py`
+**istisnadır** — o sevk edildi. Containment testlerini **bilerek** güncelle; kazara
+kırılmamalılar.
+
+**Rollback:** `git revert`. Contained iki modülü import eden yok; üretim tarafı yalnız
+okuma-zamanı bir etiket ekliyor (yeni tablo/kolon/yazma yolu yok).
+
+---
+
 ## ADIM 20 — Unified portfolio oracle suite; containment KALDIRILMADI (PR #583, BLOCKED)
 
 **Base `b0bb4a0` → commit `fd0ead5` → PR #583 DRAFT/BLOCKED** · issue **#582** · 2026-08-05 ·

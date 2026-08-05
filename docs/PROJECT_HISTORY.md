@@ -3369,6 +3369,147 @@ indi.
 
 ---
 
+## ADIM 18 (sevk edilen sıra) — Cross-item intent arbitrasyonu (PR #575)
+
+> **Geriye dönük kayıt.** Bu slice'ın kapanış ritüeli zamanında yapılmadı; bölüm PR #575'in
+> **gerçek diff'i ve CI kaydı okunarak** sonradan yazıldı. Zamanında ölçülmemiş hiçbir sayı
+> burada uydurulmadı — kayıt olmayan yerde açıkça öyle yazılıyor.
+
+**Commit `df0082e` → squash-merge `9739466`** (2026-08-05T09:08:51+03:00) · base `1430b28` ·
+branch `feat/portfolio-cross-item-arbitration` · **+2257 / −14, 6 dosya** · **Migration YOK**
+(alembic head `0043_i08_registry_strategy_fks`) · **OpenAPI DEĞİŞMEDİ** · **`ENGINE_VERSION`
+DEĞİŞMEDİ** (`backtest-engine-v18-gap-adjusted-stop-fill`; **46 golden digest sabit**) ·
+**CI 6/6 SUCCESS** (Backend job 43m40s).
+
+**⚠ Numaralandırma — bu başlıktaki "ADIM 18" ADR §12'nin ADIM 18'i DEĞİL.** PR #575 kendine
+ADIM numarası vermedi (gövdesi yalnız *"ADR 0002 §9, phases P5/P6b… the fourth slice"* der).
+ADIM 17 kapanışı arbitrasyonu **"ADIM 19"** diye rezerve etmişti; sonradan inen PR #581 ise
+kendini **"ADIM 19"** ilan etti. Sevk edilen sıra bu yüzden 15=clock, 16=intents, 17=ledger,
+**18=arbitration**, 19=provenance diye okunuyor — ama **ADR §12'nin ADIM 18'i `run_portfolio`
+faz döngüsüdür ve hâlâ yazılmadı**. Başlıktaki numara sevk sırasıdır, ADR tablosuna uyum
+iddiası değil; §12 sapması açık bir insan kapısı olarak duruyor.
+
+| dosya | |
+|---|---|
+| `backend/src/entropia/domain/backtest/execution/arbitration.py` | **yeni**, 919 satır |
+| `backend/tests/unit/test_backtest_cross_item_arbitration.py` | **yeni**, 1145 satır / **41 fonksiyon, 44 vaka** |
+| `docs/audit/cross_item_conflict_policy.md` | **yeni**, 171 satır — politika tablosu + NET yetenek durumu |
+| `backend/tests/unit/test_backtest_item_intents.py` | intents containment testi **bilerek** güncellendi (+13/−9) |
+| `backend/tests/unit/test_backtest_portfolio_ledger.py` | ledger containment testi **bilerek** güncellendi (+12/−4) |
+| `docs/CODEMAPS/BACKEND_LAYERS.md` | `execution/arbitration.py` satırı (+1/−1) |
+
+### Ne getirdi
+
+ADR 0002 §9'un **P5 (cross-item conflict)** ve **P6b (capacity)** fazları. Saf ve contained:
+**hiçbir üretim modülü import etmiyor**
+(`test_nothing_in_production_imports_the_arbitration_layer_yet`), `run_engine` imzası **ve**
+semantiği aynı kaldı — hiçbir replay oynamıyor. Modülde `await` yok, session yok, query yok:
+koşudan sonra düzenlenen bir plan, geçmiş bir raporun nasıl çözüldüğünü değiştiremez
+(doc 13 §11.1).
+
+### Sözleşmeler (tercih değil, kural)
+
+* **Politika tablosu `CONFLICT_POLICY_TABLE`** (`ConflictPolicyRule`, kanonik wire token'ıyla
+  anahtarlı): `KEEP_SEPARATE` karşıt yöne **izin verir**, `BLOCK_OPPOSITE` **bloklar**, `NET`
+  **reddedilir**. **`shares_capital` her satırda `True`** ve varsayılmak yerine **yazılıyor**:
+  `KEEP_SEPARATE` pozisyon **defterlerini** ayırır, havuzu değil. Sleeve cap, kompozisyon-geneli
+  Max Total Exposure ve solvency limiti **her politika altında aynı** uygulanır (Modül 11 §6.1)
+  — testle pinli.
+* **`NET` düşürülmedi, REDDEDİLDİ.** Sevk edilen sıralı motor `NET`'i `BLOCK_OPPOSITE` olarak
+  koşup bunu ifşa ediyor (`engine.py:862-871`, `CONFLICT_POLICY_NET_V1`); **bu düşürme ileri
+  taşınmadı**. `resolve_policy("NET")` herhangi bir karar oluşmadan
+  `UnsupportedConflictPolicyError` fırlatır; `NET_UNDEFINED_SEMANTICS` reddin gerekçesi olarak
+  beş tanımsız semantiği adlandırır: netleme fiyatı · pozisyon custody'si · fee attribution ·
+  realized-PnL attribution · margin/collateral (sonuncusu var olmayan cross-margin modeline
+  bloke — Master Ref §10.2 / ADR §9.5). **Bilinmeyen token da reddedilir**: sevk edilen kapı
+  onu blokla*maya* fail-closed eder, yani kimsenin adlandıramadığı bir politikayı koşar;
+  reddetmek hiç Result üretmez. `NET_SUPPORT_STATUS = "undefined_in_canon"`. Sevk edilen yol
+  dokunulmadı (`test_the_shipped_sequential_conflict_gate_is_untouched`).
+* **Tutulan pozisyon, pin ordinali ne olursa olsun KAZANIR.** Sevk edilen kural ileri-yönlüydü
+  (*"EARLIER-pinned holder blocks a LATER-pinned entry"*) — çünkü sıralı döngü daha sonraki bir
+  öğenin pozisyonunu **fiziksel olarak göremez**. Birleşik eksen görebilir, dolayısıyla
+  pin-sırası yarısı kural olmaktan çıkıp artefakta dönüşür; ADR §12 onu bu slice'ta emekliye
+  ayırır. Kanonun söylediği, çatışma kurallarının iki öğenin **karşıt pozisyon AÇMASINI**
+  sınırladığıdır (Modül 11 §6.3); doc 13 §8.3 açık bir pozisyonu zorla rebalance etmeyi
+  yasaklar — kardeşin pozisyonunu kapatıp yer açmak kanonun sunduğu bir sonuç değildir.
+* **Aynı tick'te iki intent → düşük `(pin_ordinal, item_id)` kabul edilir.** ADR §4.4'ün
+  tie-break'i, **pinli manifest'ten** okunur; DOM, geliş veya DB sırası asla değil (doc 13 §13).
+  Çağıranın girdi sırasının üç permütasyonu **özdeş karar demeti ve özdeş digest** üretir.
+* **Bilinmeyen enstrüman kimliği fail-closed.** İki BİLİNEN farklı enstrüman çatışamaz; başka
+  her şey çatışabilir. Sevk edilen L4 token'ı `portfolio_conflict_symbol_unknown_fail_closed`
+  diagnostics'e yazılır — **ikinci bir reason olarak değil**; okuma
+  `execution/rules.py::conflicts_with_prior`'dan birebir.
+* **Zorunlu P3 intent'i asla arbitre edilmez** (`MandatoryIntentNotArbitrableError`). Test
+  edilmiş sonuç: `t` anında ateşleyen bir stop pozisyonunu `PV`'den **önce** bırakır, bu yüzden
+  karşıt öğenin aynı `t`'deki girişi kabul edilir — istisnayla değil, **çatışacak bir şey
+  kalmadığı için**.
+* **`arbitrate()` yazılabilir defter üzerinde koşmayı REDDEDER** (`LedgerNotFrozenError`).
+  P5/P6b `PV` ile `P7` arasındadır (ADR §8.1); donmamış defterde bir kardeşin booking'i, hâlâ
+  arbitre edilen öğelerin altından `E(t)`'yi kaydırabilirdi.
+* **Tutulan pozisyon taraması karşı tarafın PİNLİ önceliğine göre sıralıdır**,
+  `ledger.positions` insertion order'ına göre değil: atfedilen karşı taraf bir **sonuçtur** ve
+  ADR §4.4 dict iterasyonunun bir sonucu belirlemesini yasaklar.
+
+### Kapasite çekişmesi — ve OD-3'ün açık bıraktığı
+
+Defter `PV`–`P7` arası donuk olduğu için `available_capital` **her öğe için aynı** figürü okur;
+koşan bir sayaç olmasa iki öğeye de havuzun tamamı verilirdi. Arbitrasyon bu sayacı tutar ve hem
+solvency headroom'undan hem exposure cap'inden düşer.
+
+* Cap katmanları **CLAMP** eder — `capped` bir sonuç daha küçük **kabul edilmiş boyuttur**,
+  kısmi fill değil (doc 13 §14 test 13).
+* Solvency **bütün olarak REDDEDER** — Modül 11 §5.3: *"engine orderi reddeder, kismi fill veya
+  sessiz borrow yapmaz"*. "1000 kaldı, 1000'i al" mevcut bir yanıt değildir.
+* **Bloklanan öğenin kapasitesi kardeşine ASLA devredilmez.** Döngü yalnızca çıkarır; test bunu
+  hayatta kalanın grant'ini bloklanan öğe **varken ve yokken** karşılaştırarak kanıtlar.
+
+> **OD-3 AÇIK ve etiketlenmiş, sessizce benimsenmiş değil.** Kanon açığa verilecek **yanıtı**
+> belirler (reddet; asla kısmi, asla borrow), **hangi** intent'in reddedileceğini değil. ADR'nin
+> tavsiyesi `CONTENTION_SELECTION_POLICY = "pin_order_admission"` olarak sevk edildi ve
+> `CONTENTION_SELECTION_STATUS = "recommended_pending_approval"` **her raporda ve çekişmeli her
+> kararda taşınır** — böylece bu kural altında üretilmiş bir Result, farklı bir çözümle
+> üretilmişten her zaman ayırt edilebilir. Bir gözden geçirenin tercih edebileceği alternatif
+> (**tüm** rakip intent'leri reddet) `docs/audit/cross_item_conflict_policy.md` §3'te kayıtlı.
+
+### Yeni sözcük dağarcığı YOK
+
+Bu katmanın ürettiği her reason, sevk edilen motorun ya da paylaşılan defterin **zaten yazdığı**
+bir token: `portfolio_conflict_blocked`, `sleeve_zero_capacity`, `portfolio_max_total_exposure`
+ve `LEDGER_LAYER_REASONS`'ın dördü. `ARBITRATION_REASONS` tam olarak bu küme üzerinde kapalıdır
+ve bir test bunu doğrular. **Yeni olan hangi öğenin reddedildiğidir, ne tür bir reddin var
+olduğu değil** — yeni bir sözlük yalnızca tek bir bulguya iki ad verirdi.
+
+### Ölçüm dürüstlüğü
+
+**Otorite CI'dır:** `Backend — lint, type, test` **pass, 43m40s**; CI **6/6 SUCCESS**.
+PR gövdesinde kayıtlı **yerel** ölçüm (izole worktree DB'si, tek pytest çağrısı, exit code
+**ayrı** okunmuş — ADIM 17'nin hatası tekrarlanmamış): **exit 0**, **0 FAILED / 0 ERROR**,
+coverage **%93.15** (kapı ≥90), `arbitration.py` **%99.1** (233 statement, 2 kapsanmayan);
+`ruff check src/ tests/` temiz, `mypy src` 389 dosyada temiz.
+
+**Bu slice'ta mutasyon turu kaydedilmedi.** ADIM 17'nin 12 mutasyonu ve ADIM 19'un 10 mutasyonu
+gibi bir kayıt PR #575'te **yok**; sonradan da koşulmadı. Bu bir eksiklik olarak yazılıyor,
+geriye dönük bir sayı uydurulmuyor.
+
+### Kapsam dışı (bilerek, ki kimse aksini çıkarmasın)
+
+Faz döngüsü / `run_portfolio` · **Result attribution ve diagnostics kalıcılığı** (reddedilen ve
+kısmi kararlar `item_id`, reason, karşı taraf ve bağlayıcı katmanı taşıyan **typed değerler**
+olarak üretilir — bir Result'ın kaydetmesine hazır, ama burada hiçbir şey yazmıyor) ·
+**manifest alanları** (`arbitration_policy_version` `ENGINE_VERSION` bump'ıyla gelir, ADR §10.3;
+bir test onun `manifest.py`'de **hâlâ yok** olduğunu doğrular) · **containment lift**
+(`SHARED_ALLOCATION_STATUS = "future_dev"` kaldı) · cross-margin / netting (ADR §9.4, §9.5) ·
+**OD-2** (taze barı olmayan pozisyonun markı) — arbitrasyon fiyatları intent'lerden okur ve mark
+politikası **seçmez**.
+
+**ADR 0002 hâlâ `Proposed`** ve §16 uygulamayı onaya bağlıyor; ADIM 15, 16, 17'nin ardından bu
+slice de **kayıtlı onay olmadan** indi.
+
+**Rollback:** `git revert` — "modülü sil" ile eşdeğer. Üretimde import eden yok; `ENGINE_VERSION`,
+46 golden digest, alembic head, OpenAPI snapshot ve frontend dokunulmadı.
+
+---
+
 ## T-02 — Ajan tooling: ponytail merdiveni + SAST skill alt kümesi (kod dışı slice)
 
 **Bu bir stage slice'ı DEĞİL.** Migration yok, endpoint yok, tablo yok, `ENGINE_VERSION`
@@ -3437,6 +3578,196 @@ ADR 0002'nin `Proposed` durumu ve §12 numaralandırma sapması da açık kalmay
 
 **Rollback:** `git revert` + `rm -rf ~/.claude/skills/{ponytail,ponytail-review,task-observer,sast-*}`
 ve `~/.claude/rules/skill-routing.md`'deki blok. Üretim kodu etkilenmediği için risk yok.
+
+---
+
+## ADIM 19 — Unified-clock result provenance + per-item attribution (PR #581)
+
+> **Geriye dönük kayıt.** ADIM 18 gibi bu slice'ın da kapanış ritüeli zamanında yapılmadı;
+> bölüm PR #581'in **gerçek diff'i ve CI kaydı okunarak** sonradan yazıldı. Zamanında
+> ölçülmemiş sayılar uydurulmadı — **coverage yüzdesi ve suite toplamı bu PR'da hiç
+> kaydedilmedi**, aşağıda §Ölçüm dürüstlüğü'nde öyle yazıyor.
+
+**Commit `89cf0b6` (+ `7fcf3ea`, `61da506`) → squash-merge `b0bb4a0`**
+(2026-08-05T12:37:21+03:00) · base `9739466` · branch `feat/portfolio-unified-result-artifacts` ·
+**+3199 / −9, 23 dosya** · **Migration YOK** (alembic head `0043_i08_registry_strategy_fks`) ·
+**OpenAPI snapshot BYTE-ÖZDEŞ** · **`ENGINE_VERSION` DEĞİŞMEDİ**
+(`backtest-engine-v18-gap-adjusted-stop-fill`; **46 golden digest sabit, `contract.execution_key`
+dahil**) · **CI 6/6 SUCCESS** (Backend job 45m45s). Tam kanıt:
+`docs/audit/portfolio_result_provenance.md`.
+
+**Bu, unified-clock programının ÜRETİME dokunan ilk slice'ıdır.** ADIM 15–18 tamamen contained'dı;
+burada iki contained modülün yanında **gerçekten sevk edilen** bir okuma-zamanı etiketi indi
+(`portfolio_mode.py` + iki query + repo + üç frontend dosyası). **Containment yine de
+KALDIRILMADI:** `SHARED_ALLOCATION_STATUS = "future_dev"`, shared koşular admission'da hâlâ
+reddediliyor.
+
+| dosya | |
+|---|---|
+| `backend/src/entropia/domain/backtest/execution/provenance.py` | **yeni, contained**, 542 satır |
+| `backend/src/entropia/domain/backtest/execution/attribution.py` | **yeni, contained**, 406 satır |
+| `backend/src/entropia/domain/backtest/portfolio_mode.py` | **yeni, ÜRETİM**, 206 satır |
+| `backend/src/entropia/infrastructure/postgres/repositories/backtest.py` | `get_run_diagnostics_markers` + `get_portfolio_mode_markers` (+88) |
+| `backend/src/entropia/application/queries/backtest_run.py` | Result detail'e `portfolio_simulation` (+9) |
+| `backend/src/entropia/application/queries/results_history.py` | history index'e batched mode (+25) |
+| `backend/tests/unit/test_backtest_portfolio_provenance.py` | **yeni**, 508 satır / 23 fonksiyon, **26 vaka** |
+| `backend/tests/unit/test_backtest_portfolio_attribution.py` | **yeni**, 327 satır / 21 fonksiyon, **25 vaka** |
+| `backend/tests/unit/test_backtest_portfolio_mode.py` | **yeni**, 220 satır / 16 fonksiyon, **22 vaka** |
+| `backend/tests/integration/test_portfolio_simulation_mode.py` | **yeni**, 198 satır / **7 vaka** |
+| `frontend/src/test/portfolioSimulationMode.test.tsx` | **yeni**, 177 satır / **6 vaka** |
+| `frontend/src/lib/backtest.ts` · `pages/ResultsHistory.tsx` · `components/ResultDetail.tsx` | tip + iki render noktası (+28 / +12 / +32) |
+| `docs/audit/portfolio_result_provenance.md` | **yeni**, 372 satır |
+| dört mevcut containment testi + iki frontend testi | **bilerek** güncellendi (aşağıda) |
+| `docs/CODEMAPS/BACKEND_LAYERS.md` · `BACKEND_ROUTES.md` | (+1/−1) · (+2) |
+
+### İki boşluk, kod yazılmadan ÖNCE reprodüksiyonla kanıtlandı
+
+**Boşluk A — kanonun istediği allocation provenance'ının yaşayacağı yer yoktu.**
+`validate_allocation` doc 13 §13 / Modül 11 §10'un istediği her figürü **zaten hesaplıyor** ve
+`_resolve_allocation` (`readiness_check.py:846`) onu **atıyor**. doc 13 §14 test 10 fikstüründe
+(10.000 USDT, reserve %10, 40/35/15) probe çıktısı: `reserved_cash 1000.00 ·
+capital_available 9000.00 · sleeve 3600.00 / 3150.00 / 1350.00 · unallocated 900.00`, buna karşılık
+`manifest['capital_execution']` anahtarları yalnız `[config, config_hash, enabled, plan_id,
+plan_revision_id]` — `initial_sleeve_capital` ve `engine_allocation_policy_version` manifest
+JSON'ının **hiçbir yerinde yok**.
+
+**Boşluk B — per-item unrealized attribution hiç yoktu.** Defterin realized kimliği tutuyor
+(`482.50 == 482.50`), ama `ItemAttribution`'da `unrealized` alanı, `PortfolioValuation`'da
+per-item satır yok — yani per-item döküm **marklanmış** bir portföy toplamıyla mutabakat
+edilemiyordu.
+
+### Ne indi
+
+**Contained (üretimde import eden yok; rollback = `git revert`):**
+
+* **`execution/provenance.py`** — `build_portfolio_manifest` → `PortfolioManifest`. Her politika
+  versiyonunu pinler (clock / intent / ledger / arbitration / allocation / attribution), öğe
+  sırasını, allocation revision'ını, conflict policy'yi, zaman hizalamasını, per-item data
+  revision'larını ve **tam item revision**'larını; artı değişmez bir ledger-artefakt referansı +
+  checksum (`LedgerArtifactRef`, `ledger_artifact_ref`, `ledger_equity_rows`). Kanon alan adları
+  Modül 11 §10'dan **birebir**; `test_the_allocation_block_uses_canon_field_names_verbatim` tam
+  anahtar kümesini pinler. **Tutarlar KOPYALANIR, yeniden hesaplanmaz**: donmuş
+  `PortfolioAllocationPlanRevision.derived_amounts` projeksiyonu
+  (`allocation_provenance_from_derived`, `AllocationProvenance`, `SleeveProvenance`). Independent
+  mod **açıkça** `enabled=false` yazar (`independent_allocation_provenance`) — eksik blok "off"
+  değil "unknown" okunurdu. Pinli öğe listesi: `PinnedItem`, `pinned_items_from_identities`,
+  `item_labels_from_identities`. Versiyon sabitleri: `PORTFOLIO_MANIFEST_VERSION =
+  "portfolio-manifest-v1"`, `ENGINE_ALLOCATION_POLICY_VERSION = "portfolio-allocation-v1"`.
+* **`execution/attribution.py`** — `attribute` → `PortfolioAttribution` / `ItemContribution`:
+  per-item realized / unrealized / costs / contribution, portföy toplamıyla **tam mutabakat**
+  (residual `0`; sıfırdan farklı bir realized residual **`AttributionResidualError` fırlatır**,
+  tolerans değildir). `ATTRIBUTION_POLICY_VERSION = "portfolio-attribution-v1"`,
+  `CONTRIBUTION_METHOD = "additive_pnl_decomposition"`; marklanamayan pozisyon
+  `UNMARKED_POSITION` ile raporlanır. Katkı serisi ve korelasyon: `contribution_series`,
+  `ContributionSeries`, `contribution_correlation`, `build_contribution_report`,
+  `ContributionReport`, `pearson`.
+
+**Üretim:**
+
+* **`domain/backtest/portfolio_mode.py`** — kalıcı bir Result'ı **kendi pinli manifest'i + kendi
+  pinli diagnostics'i** üzerinden `single_item` / `legacy_sequential` / `unified_clock` /
+  `unknown` diye sınıflandırır (`resolve_portfolio_simulation_mode`, `resolve_mode_from_parts`,
+  `portfolio_simulation_context`, `portfolio_simulation_context_from_parts`). **Canlı
+  kompozisyondan ve canlı capability bayrağından ASLA okumaz** — bayrağı çevirmek yazılmış bir
+  Result'ı yeniden etiketleyemez (ADR §10.4, doc 13 §14 test 19). Marker'lar
+  `UNIFIED_MANIFEST_KEY = "portfolio_simulation"` + motorun kendi pinli `engine_kind`'ı
+  (`SINGLE_ITEM_ENGINE_KIND = "v1_bar_replay"` → `execution/output.py:369`;
+  `COMPOSITION_ENGINE_KIND = "v1_bar_replay_composition"` → `execution/portfolio.py:570`).
+* **`GET /backtest-results/{id}` ve `GET /backtest-results`** ikisi de
+  `portfolio_simulation = {mode, note, comparable_with_unified_clock}` döner; Result detail ve
+  Results History bunu render eder (`PORTFOLIO_SIMULATION_LABELS`, `PortfolioSimulationContext`).
+  Repo tarafı **N+1 değil**: `get_run_diagnostics_markers` tek satırda iki JSONB path extract'ı
+  (tam `diagnostics` blob'u okumaz — çok-item Result'ta o blob her öğenin tüm equity eğrisini
+  taşır), `get_portfolio_mode_markers` sayfa başına **iki batched read** (`_load_digests` /
+  `_load_summaries` deseninin aynısı). Bir test index'in **tek** batched marker okuması
+  yaptığını ve liste ile detail'in **özdeş** `portfolio_simulation` gövdesi döndürdüğünü
+  doğrular.
+
+### Üç karar (gözden geçirmeye değer)
+
+1. **`ENGINE_VERSION` BUMP EDİLMEDİ.** Koşan davranış değişmedi; bump `execution_key` namespace'ini
+   kaydırır ve **mevcut her Result'ı idempotent yeniden-RUN için yeniden kullanılamaz** hâle
+   getirirdi — hiçbir sayıyı değiştirmeyen bir değişiklik için gerçek bir regresyon.
+   `engine_golden_digests.json` dokunulmadı. Bump containment-lift slice'ının.
+2. **Görünen etiketler hash'in DIŞINDA.** `identity` yalnız `execution_content()`'i hash'ler;
+   öğe etiketleri `presentation`'da yolculuk eder — `manifest.pinned_item_labels`'ın zaten
+   yaptığı ayrımın aynısı (`manifest.py:160-185`). Bir yeniden adlandırma bir koşunun
+   tekrarlanabilirlik kimliğini **asla** çatallamamalı
+   (`test_the_manifest_identity_ignores_display_labels`).
+3. **Karşı-olgusal marjinal UYDURULMADI.** Paylaşılan saatte leave-one-out, portföyü o öğe
+   olmadan **yeniden simüle etmeyi** gerektirirdi; kanon formül tanımlamıyor. Artefakt tam
+   **toplamsal** ayrıştırmayı taşır ve eksikliği yüksek sesle kaydeder:
+   `COUNTERFACTUAL_MARGINAL_STATUS = "not_derivable_without_re_simulation"`.
+
+**Açık kararlar tahmin edilmedi, İFŞA EDİLDİ:** OD-2 `MARK_STALENESS_POLICY =
+"undefined_pending_od2"` olarak pinlendi — ADIM 18'in OD-3 için kurduğu
+`arbitration.CONTENTION_SELECTION_STATUS` emsalinin aynısı. `attribution.py` bu yüzden
+**stale-ama-kullanılabilir** bir markı değerler ve bir staleness eşiği icat etmeyi reddeder.
+
+### İki bulgu
+
+1. **Preview ve execution aynı sleeve'i FARKLI yuvarlıyor.** `allocation.rules._money`
+   `ROUND_HALF_UP`; `portfolio_ledger.MONEY_ROUNDING` `ROUND_HALF_EVEN`. `1000.10 @ %25`'te
+   preview **`250.03`**, execution **`250.025`** der. doc 13 §13 tam olarak bu uyuşmazlığı
+   yasaklıyor ve **hiçbir kanon kuralı bir tarafı kazandırmıyor** — bu yüzden manifest donmuş
+   preview sayısını tutar ve `sleeve_amount_divergences()` (`SLEEVE_AMOUNT_DIVERGENCE =
+   "sleeve_amount_preview_execution_divergence"`) anlaşmazlığı sessizce bir tarafı tercih etmek
+   yerine **raporlar**. *Ürün kararı gerekiyor.*
+2. **Tek-item Result, teşhissiz bir Result'tan ayırt EDİLEMİYORDU.** İnceleyerek değil, **düşen
+   bir entegrasyon testiyle** bulundu: tek-item bypass'ı **hiç** `composition` bloğu yaymıyor,
+   dolayısıyla tek başına `strategy_count` "bir öğe koştu" ile "diagnostics hiç saklanmadı"yı
+   ayıramıyordu. Motorun kendi pinli `engine_kind` marker'ıyla çözüldü.
+
+### Değişmeyen sınırlar (her biri testle pinli)
+
+`ENGINE_VERSION` · `SHARED_ALLOCATION_STATUS = "future_dev"` · `engine_golden_digests.json`,
+`manifest.py`, `capability.py`, `docs/openapi.json` — dokunulmadı · migration yok, alembic head
+sabit · `run_engine`, fill modeli, sizing zinciri, `combine_item_runs` — dokunulmadı · export
+sözleşmesi (`EXPORT_SCHEMA_VERSION`, `compute_export_checksum`) **bilerek** değişmedi, çünkü mode
+bir **okuma-zamanı etiketidir, artefakt içeriği değil**. Dört mevcut containment testi
+**bilerek** güncellendi (her biri yeni contained importer'ı açıkça adlandırır, assertion
+gevşetilmez), iki yenisi eklendi
+(`test_nothing_in_production_imports_the_provenance_layer_yet`,
+`…_the_attribution_layer_yet`).
+
+### Ölçüm dürüstlüğü
+
+**Otorite CI'dır:** `Backend — lint, type, test` **pass, 45m45s**; CI **6/6 SUCCESS**
+(A11Y, Docker, iki E2E ve Frontend jobları dahil).
+
+**Mutasyon testi: 10 kasıtlı kusur tek tek enjekte edildi, 10'u da öldürüldü.** (M3 ilk turda
+*pattern not found* raporladı — `ruff format` sonrası bayatlamış bir harness literali; gerçek
+kaynağa yeniden uygulandı ve öldürüldü. **Bayat pattern tasarım gereği hayatta kalan sayılır,
+asla "geçti" değil.**) Parity **yeniden ifade edilmedi, sevk edilen kod ÇAĞRILARAK kanıtlandı**:
+sleeve tutarları `validate_allocation`'ı, korelasyon `portfolio._pearson`'ı, ledger checksum'ı
+`artifacts.compute_artifact_checksum`'ı çağırır.
+
+**KAYDEDİLMEYEN:** PR #581 gövdesi ne **coverage yüzdesi**, ne **suite toplam sayısı**, ne de
+yerel `pytest` özet satırı bildiriyor — ADIM 18'in `%93.15`'i ve ADIM 20'nin `%93.24`'ü gibi bir
+figür bu slice için **hiç ölçülmedi/yazılmadı**. Buraya geriye dönük bir sayı konmadı; coverage
+kapısının bu commit'te geçtiğinin tek kanıtı **yeşil CI job'ıdır**. Yeni test vakaları sonradan
+sayıldı: **80 yeni backend vakası** (26 provenance + 25 attribution + 22 mode + 7 entegrasyon) +
+**6 yeni frontend vakası**.
+
+### Dürüst sınırlar
+
+1. **Unified faz döngüsü YOK.** ADR §12'nin ADIM 18'i (`run_portfolio`) hiç yazılmadı — PR #575
+   yerine arbitrasyonu indirdi. Bugün hiçbir şey unified bir Result üretmiyor, dolayısıyla
+   `unified_clock` **üretimde erişilemez** ve yalnız sentetik pinli manifest'li testlerle
+   sınanıyor. Parser'ın şekli üreticiden **önce** kabul etmesi gerekiyordu — ama bu
+   *"unified koşular çalışıyor"* diye okunmamalı.
+2. **`portfolio_simulation` OpenAPI şemasında yayımlanmıyor.** İki route da bare
+   `dict[str, Any]` döndürüyor, yani yalnız bu alan değil **tüm** Result-detail ve history
+   gövdesi `docs/openapi.json`'da yok. Önceden var olan, **O-30 şeklinde** bir kusur; o
+   endpoint'leri typed hâle getirmek ayrı bir slice. Gizlenmedi, kaydedildi.
+3. **Yarım-sentlik sleeve sapması düzeltilmedi, ifşa edildi** — ürün kararı gerekiyor.
+4. **ADR 0002 hâlâ `Proposed`.** §16 uygulamadan önce onay şart koşuyor; ADIM 15/16/17/18 ve
+   şimdi 19 **hiçbiri kayıtlı onay olmadan** indi ve §12'nin numaralandırması sevk edilenle
+   hâlâ uyuşmuyor. İki kapı da bakımcıda açık.
+
+**Rollback:** `git revert`. Contained iki modülü import eden yok; üretim tarafı yalnız
+**okuma-zamanı** bir etiket ekliyor (yeni tablo, yeni kolon, yeni yazma yolu yok) —
+`ENGINE_VERSION`, 46 golden digest, alembic head ve OpenAPI snapshot dokunulmadı.
 
 ---
 

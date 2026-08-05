@@ -317,11 +317,24 @@ def _imports_attribution(source: str) -> bool:
 
 
 def test_nothing_in_production_imports_the_attribution_layer_yet() -> None:
-    """Only the sibling provenance module (also contained) may import it."""
+    """Only the sibling provenance module (also contained) may import it.
+
+    Updated deliberately again (ADIM 18): ``domain/backtest/portfolio_engine.py`` — the
+    per-tick phase loop — drives this module. It is contained in turn
+    (``test_backtest_portfolio_phase_loop.py`` asserts nothing imports IT, and that the
+    worker still runs its item loop), so the defended property is unchanged: no production
+    path reaches here, and the rollback is still "revert the commit"."""
     src = Path(__file__).resolve().parents[2] / "src" / "entropia"
-    importers = [
+    # sorted(): ``rglob`` yields in filesystem order, which differs between macOS and the
+    # Linux runner. With one permitted importer that was invisible; with two it makes the
+    # assertion platform-dependent — the same correction the clock's containment test
+    # already carries.
+    importers = sorted(
         path.relative_to(src).as_posix()
         for path in src.rglob("*.py")
         if path.name != "attribution.py" and _imports_attribution(path.read_text(encoding="utf-8"))
+    )
+    assert importers == [
+        "domain/backtest/execution/provenance.py",
+        "domain/backtest/portfolio_engine.py",
     ]
-    assert importers == ["domain/backtest/execution/provenance.py"]

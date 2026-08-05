@@ -433,7 +433,13 @@ def test_the_ledger_artifact_checksum_detects_a_mutated_equity_point() -> None:
 
 
 def test_the_seed_point_is_part_of_the_checksummed_series() -> None:
-    """A series that gains a seed point must not collide with one that never had it."""
+    """A series that gains a seed point must not collide with one that never had it.
+
+    Updated deliberately again (ADIM 18): ``domain/backtest/portfolio_engine.py`` — the
+    per-tick phase loop — drives this module. It is contained in turn
+    (``test_backtest_portfolio_phase_loop.py`` asserts nothing imports IT, and that the
+    worker still runs its item loop), so the defended property is unchanged: no production
+    path reaches here, and the rollback is still "revert the commit"."""
     points = _points()
     assert ledger_artifact_ref(points[1:]).checksum != ledger_artifact_ref(points).checksum
     assert ledger_equity_rows(points)[0]["t_ms"] is None
@@ -480,7 +486,7 @@ def test_nothing_in_production_imports_the_provenance_layer_yet() -> None:
         for path in src.rglob("*.py")
         if path.name != "provenance.py" and _imports_provenance(path.read_text(encoding="utf-8"))
     ]
-    assert importers == []
+    assert importers == ["domain/backtest/portfolio_engine.py"]
 
 
 def test_no_portfolio_manifest_field_ships_in_the_shipped_manifest_yet() -> None:

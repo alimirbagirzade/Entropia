@@ -924,7 +924,13 @@ def test_nothing_in_production_imports_the_intent_layer_yet() -> None:
     rollback is still "delete the modules".
 
     Third deliberate update (ADIM 19): ``execution/provenance.py`` projects ``ItemIdentity``
-    into the manifest's pinned item rows. Contained as well."""
+    into the manifest's pinned item rows. Contained as well.
+
+    Updated deliberately again (ADIM 18): ``domain/backtest/portfolio_engine.py`` — the
+    per-tick phase loop — drives this module. It is contained in turn
+    (``test_backtest_portfolio_phase_loop.py`` asserts nothing imports IT, and that the
+    worker still runs its item loop), so the defended property is unchanged: no production
+    path reaches here, and the rollback is still "revert the commit"."""
     src = Path(__file__).resolve().parents[2] / "src" / "entropia"
     importers = sorted(
         path.relative_to(src).as_posix()
@@ -935,6 +941,7 @@ def test_nothing_in_production_imports_the_intent_layer_yet() -> None:
         "domain/backtest/execution/arbitration.py",
         "domain/backtest/execution/portfolio_ledger.py",
         "domain/backtest/execution/provenance.py",
+        "domain/backtest/portfolio_engine.py",
     ]
 
 

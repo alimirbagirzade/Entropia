@@ -548,7 +548,13 @@ def test_the_clock_is_not_wired_into_production_yet() -> None:
     Updated deliberately a second time (ADIM 19): ``execution/provenance.py`` pins
     ``CLOCK_POLICY_VERSION`` and the merged axis's ``timeline_identity`` into the portfolio
     manifest section. It is contained too — ``test_backtest_portfolio_provenance.py`` asserts
-    nothing imports IT — so the defended property still holds."""
+    nothing imports IT — so the defended property still holds.
+
+    Updated deliberately again (ADIM 18): ``domain/backtest/portfolio_engine.py`` — the
+    per-tick phase loop — drives this module. It is contained in turn
+    (``test_backtest_portfolio_phase_loop.py`` asserts nothing imports IT, and that the
+    worker still runs its item loop), so the defended property is unchanged: no production
+    path reaches here, and the rollback is still "revert the commit"."""
     src = Path(__file__).resolve().parents[2] / "src" / "entropia"
     # sorted(): ``rglob`` yields in filesystem order, which differs between macOS and the
     # Linux runner. With one permitted importer that was invisible; with two it made the
@@ -561,6 +567,7 @@ def test_the_clock_is_not_wired_into_production_yet() -> None:
     assert importers == [
         "domain/backtest/execution/intents.py",
         "domain/backtest/execution/provenance.py",
+        "domain/backtest/portfolio_engine.py",
     ]
 
 

@@ -1042,18 +1042,31 @@ def test_nothing_in_production_imports_the_arbitration_layer_yet() -> None:
     """The rollback for this slice is "delete the module", exactly as for the ADIM 15 clock,
     the ADIM 16 intent layer and the ADIM 17 shared ledger — which is what keeps every shipped
     digest still. When the phase loop wires ``run_portfolio`` in, this is the test that must be
-    updated deliberately; it should never fail by accident."""
+    updated deliberately; it should never fail by accident.
+
+    Updated deliberately again (ADIM 18): ``domain/backtest/portfolio_engine.py`` — the
+    per-tick phase loop — drives this module. It is contained in turn
+    (``test_backtest_portfolio_phase_loop.py`` asserts nothing imports IT, and that the
+    worker still runs its item loop), so the defended property is unchanged: no production
+    path reaches here, and the rollback is still "revert the commit"."""
     src = Path(__file__).resolve().parents[2] / "src" / "entropia"
-    importers = [
+    # sorted(): ``rglob`` yields in filesystem order, which differs between macOS and the
+    # Linux runner. With one permitted importer that was invisible; with two it makes the
+    # assertion platform-dependent — the same correction the clock's containment test
+    # already carries.
+    importers = sorted(
         path.relative_to(src).as_posix()
         for path in src.rglob("*.py")
         if path.name != "arbitration.py" and _imports_arbitration(path.read_text(encoding="utf-8"))
-    ]
+    )
     # Updated deliberately once (ADIM 19): ``execution/provenance.py`` pins the resolved
     # ``ConflictPolicyRule`` and ``ARBITRATION_POLICY_VERSION`` into the portfolio manifest
     # section. It is contained too — ``test_backtest_portfolio_provenance.py`` asserts nothing
     # imports IT — so no production path reaches arbitration and the rollback is unchanged.
-    assert importers == ["domain/backtest/execution/provenance.py"]
+    assert importers == [
+        "domain/backtest/execution/provenance.py",
+        "domain/backtest/portfolio_engine.py",
+    ]
 
 
 def test_the_shipped_sequential_conflict_gate_is_untouched() -> None:

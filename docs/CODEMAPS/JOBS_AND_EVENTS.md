@@ -53,7 +53,7 @@ Tüm aktörler `max_retries=3`.
 
 `data` kuyruğu dört+bir durable aktör tipini multiplex eder. Scheduler, durable satırdan hangi
 aktöre gideceğini **çıkaramaz** → otomatik sweep bu kuyruğu asla yönlendirmez
-(`apps/scheduler/__main__.py:62` yorumu: *"Queues with exactly ONE durable-job actor are safe to auto-redeliver"*).
+(`apps/scheduler/__main__.py:69` yorumu: *"Queues with exactly ONE durable-job actor are safe to auto-redeliver"*).
 
 Bunun yerine **operator eylemi** vardır: `POST /admin/data-queue/redeliver`
 (`routes/admin_panel.py:205` → `commands/data_queue.py::redeliver_data_queue_jobs`), payload'daki
@@ -155,18 +155,30 @@ Tam kayıt + alias tablosu ve `ExportFormat.PARQUET`: `docs/PROJECT_HISTORY.md` 
 
 ## Scheduler (`apps/scheduler/__main__.py`)
 
-Tick aralığı **yapılandırılabilir**: `DEFAULT_TICK_SECONDS = 30.0` (`:36`), `SCHEDULER_TICK_SECONDS`
-env değişkeniyle ezilir (pozitif olmayan değer varsayılana düşer, `:55`). Her tick'te
-(`_maintenance_pass:83`):
+**Süreç ömrü boyunca TEK event loop** (INF-14 / PR #593): `run():204` =
+`asyncio.run(_sweep_until_stopped())`, tick içinde `await`. Tick başına `asyncio.run` havuzu
+ölü loop'a bağlıyor ve passes %50 dönüşümlü düşüyordu — `get_engine` `@lru_cache`'li olduğu
+için **yeni bir loop döngüye sokan her değişiklik bu kusuru geri getirir**. Engine `finally`
+içinde, loop hâlâ açıkken dispose edilir (`:200`).
+
+Durdurma: `request_stop():91` → run başına yaratılan `asyncio.Event`; SIGTERM/SIGINT
+`_install_stop_handlers:147` ile `loop.add_signal_handler` üzerinden bağlanır (`signal.signal`
+DEĞİL). Tick beklemesi `_wait_for_tick:166` = `asyncio.wait_for(stop.wait(), timeout=...)`, bu
+yüzden SIGTERM tick'in kalanını beklemez. `Event` import'ta yaratılmaz: ilk bekleyen loop'a
+bağlanır ve sonra başkasını reddeder.
+
+Tick aralığı **yapılandırılabilir**: `DEFAULT_TICK_SECONDS = 30.0` (`:43`), `SCHEDULER_TICK_SECONDS`
+env değişkeniyle ezilir (pozitif olmayan değer varsayılana düşer, `:59`). Her tick'te
+(`_maintenance_pass:97`):
 
 | Adım | Fonksiyon | Ne yapar |
 |---|---|---|
 | 1 | `relay_unpublished` (`outbox_relay.py`) | Yayınlanmamış outbox satırlarını işaretler (batch: `settings.outbox_relay_batch_size`) |
 | 2 | `recover_stale_jobs` (`maintenance.py`) | Worker çökmesiyle RUNNING'de kalmış job'ları geri alır (INF-09), audit'lenir |
 | 3 | `redeliverable_queued_jobs` (`maintenance.py`) | Grace süresini aşmış QUEUED job'ları listeler (INF-03) |
-| 4 | `ACTOR_BY_QUEUE.get(queue)` (`:121`) | Tek-aktörlü kuyruklar için yeniden dağıtır; `data` atlanır |
+| 4 | `ACTOR_BY_QUEUE.get(queue)` (`:135`) | Tek-aktörlü kuyruklar için yeniden dağıtır; `data` atlanır |
 
-`ACTOR_BY_QUEUE` (`:63`): `backtest`, `agent`, `agent-high`, `agent-executor`, `maintenance`.
+`ACTOR_BY_QUEUE` (`:70`): `backtest`, `agent`, `agent-high`, `agent-executor`, `maintenance`.
 
 ---
 

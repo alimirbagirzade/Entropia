@@ -169,27 +169,22 @@ Before stopping a working session, produce **ALL** of the following:
 
 ## Current position (keep in sync at each closing)
 
-> **HEAD `20a32ab`** — scheduler event-loop ömrü düzeltildi (PR #593, merged). `run()` artık
-> TEK `asyncio.run(_sweep_until_stopped())`; tick başına loop açıp kapatmak `@lru_cache`'li
-> asyncpg havuzunu ölü loop'a bağlıyordu ve passes **tam %50 dönüşümlü** OK/FAILED oluyordu
-> (canlı Postgres'te 6 tick → 3 OK / 3 FAILED ile üretilerek doğrulandı). Outbox relay +
-> INF-09 + INF-03 yarı hızda; veri kaybı YOK, gecikme iki katıydı. SIGTERM artık tick'i
-> beklemiyor. **`agent_coordinator` AYNI kusuru taşıyor → issue #591 (ayrı PR).** Migration /
-> OpenAPI / `ENGINE_VERSION` yok. **Sıradaki iş DEĞİŞMEDİ:** worker call site — `ItemParticipant`.
-
-
-> **HEAD `3cc9588`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok).
-> **Son dalga — ADIM 21 (worker delivery):** at-least-once delivery guard + `worker-agent-executor`
-> (#587), canlı Docker doğrulaması (#592), scheduler event-loop fix (#593), history/handoff kaydı
-> (#595). **Testler: otorite CI'dır** — son yeşil `Backend — lint, type, test` 45m12s; bu dalgada
-> yerel tam suite ölçülmedi. **Next:** engine-destekli `ItemParticipant` (worker call site) —
-> `STAGE2_HANDOFF.md` §Next. **AÇIK kusur:** `apps/worker/actors.py` event-loop hatası durable job'ı
-> kalıcı mahsur bırakıyor (ölçüldü, düzeltilmedi); `worker-agent-executor` dev-auth override'ında yok.
+> **HEAD `c5d4c5d`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).
+> **Son dalga:** ADIM 16 stepper (#602 — `run_engine` → `_build_stepper`/`_ItemStepper`, kabul
+> **46/46 golden digest sabit**), event-loop ömrü (#597 worker actors, #600 agent-coordinator),
+> dev-auth override (#599), backup `mc` fallback (#601). **ADR 0002 `Accepted`** (§13.1 amendment
+> OD-1…OD-7'yi çözdü). **Next:** `ItemParticipant` adaptörü + worker call site (**PR B**) —
+> `STAGE2_HANDOFF.md` §Next 1(b). **Açık ürün kararı:** yarım-cent yuvarlama (preview
+> `ROUND_HALF_UP` ↔ execution `ROUND_HALF_EVEN`), şu an yalnız raporlanıyor.
 
 > **Uyarı:** `docs/audit/current_main_ground_truth_2026-08-03.md` §18'in 2/3/4/6 kalemleri
 > ADIM 5–8 ile kapandı ama o belge güncellenmedi — ona güvenmeden önce doğrula.
 > **"ADIM 21" iki slice'a verilmiş** (planlı `ItemParticipant` vs sevk edilen worker-delivery);
 > numara yeniden atanmadı, kayıtlar `ADIM 21 (worker delivery)` diye ayırıyor — insan kararı.
+> **Docs onarımı (2026-08-06):** PR #590, PR #586'nın `PROJECT_HISTORY.md`'ye yazdığı ADIM 18
+> faz-döngüsü kaydını (208 satır) sessizce silmişti; geri yüklendi. Hiçbir CI kapısı bu dosyayı
+> okumaz — docs PR'ı açarken **kendi diff'inin silme satırlarına bak**.
 
 
 - **Durum:** V1 ROADMAP COMPLETE (Stages 0–8, docs 01–22) + post-V1 + video-alignment +

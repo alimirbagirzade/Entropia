@@ -42,6 +42,18 @@ uzun ömürlü loop kullanır (ayrı daemon thread), böylece pool loop'undan as
 Regresyon: `tests/unit/test_async_runtime.py` (AST guard) +
 `tests/integration/test_worker_actor_event_loop.py` (gerçek engine, eşzamanlı gövdeler).
 
+> **İKİ MEKANİZMA BİLEREK AYRI — birini silme (karar: 2026-08-05).** Aynı kusur üç yerde
+> çıktı ve **iki farklı** şekilde düzeltildi: aktör gövdeleri `run_sync` (#597), uzun ömürlü
+> process'ler (`apps/scheduler/__main__.py` #593, `apps/agent_coordinator/__main__.py` #600)
+> ise kendi içlerinde `asyncio.run(_loop_until_stopped())`. Bu bir tutarsızlık **değil**;
+> `run_sync` yalnız **senkron entrypoint** dikişidir. Scheduler/coordinator oraya
+> BAĞLANAMAZ: ikisi de SIGTERM/SIGINT'i `loop.add_signal_handler` ile kurar ve bu ana thread
+> dışında `RuntimeError: set_wakeup_fd only works in main thread of the main interpreter`
+> atar (ölçüldü) — oysa `run_sync`'in loop'u tanımı gereği **daemon thread**'tedir. Şekil de
+> farklı: onlarda process'in kendisi TEK uzun ömürlü async gövdedir, aktörde ise mesaj başına
+> çağrılan kısa bir sync entrypoint vardır ve çağrıdan uzun yaşayan bir loop gerekir.
+> **Tek kural, iki uygulama:** loop pool'dan uzun yaşamalı.
+
 ## Kuyruklar
 
 | Kuyruk | Aktör sayısı | Otomatik redelivery? | Compose tüketicisi |
@@ -57,8 +69,18 @@ Regresyon: `tests/unit/test_async_runtime.py` (AST guard) +
 > **ADIM 21 bulgusu.** `agent-executor` kuyruğunun compose'da **hiç tüketicisi yoktu**:
 > Coordinator ona iş gönderiyor, scheduler her grace penceresinde yeniden yolluyor, `send`
 > her seferinde BAŞARILI dönüyor ve görev asla koşmuyordu — hiçbir katman hata bildirmiyor.
-> `tests/unit/test_worker_plane_deployment.py` artık `docker-compose.yml`'i okuyup
-> aktör-kuyruk kümesiyle karşılaştırıyor; tüketicisiz her durable kuyruk CI'da kırmızı.
+> `tests/unit/test_worker_plane_deployment.py` artık **iki compose dosyasını da** okuyor.
+> `docker-compose.yml` tarafında aktör-kuyruk kümesiyle karşılaştırır: tüketicisiz her durable
+> kuyruk CI'da kırmızı (`test_every_durable_queue_has_a_worker_service`), aktörü olmayan her
+> tüketici de öyle (`test_no_worker_service_consumes_a_queue_no_actor_serves`). **#599'dan beri**
+> `docker-compose.dev-auth.yml` tarafında iki invariant daha pinli:
+> `test_dev_auth_override_forces_dev_mode_on_every_backend_plane` — base compose'da
+> `image: entropia-backend:local` olan HER plane override'da `AUTH_MODE: dev` taşımak zorunda
+> (plane kümesi el yazımı bir listeden değil, **çözülmüş image değerinden** türer, yani yeni bir
+> plane sessizce dışarıda kalamaz); ve `test_dev_auth_override_declares_no_service_the_base_stack_lacks`
+> — override'daki bir yazım hatası compose'a sessizce imajsız yeni bir servis tanımlatır ve
+> gerçek plane'i `AUTH_MODE=session`'da bırakır (tam olarak `worker-agent-executor`'ın başına
+> gelen şey).
 > `system_heartbeat` durable job satırı üretmez (gövdesi `job_id` almaz), bu yüzden
 > `maintenance` fiilen **tek** durable aktörlüdür — `ACTOR_BY_QUEUE` girdisi güvenlidir
 > (`tests/unit/test_worker_queue_registry.py` bunu invariant olarak pinliyor).

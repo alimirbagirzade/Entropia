@@ -22,9 +22,21 @@ The fix is to give the pool a loop that outlives it instead of the other way
 around: ONE loop per process, owned by a dedicated daemon thread, with every
 sync entrypoint submitting its coroutine through ``run_sync``. Every pooled
 connection is then created and awaited on the same loop for the life of the
-process. This is the shared seam — the scheduler and the agent coordinator have
-the same ``asyncio.run``-per-tick shape and should route through here too rather
-than growing their own loop.
+process.
+
+Scope — this is the seam for SYNC ENTRYPOINTS ONLY, and deliberately not a
+process-wide loop policy. ``apps/scheduler/__main__.py`` and
+``apps/agent_coordinator/__main__.py`` carried the same defect and were fixed
+separately (#593, #600): each now holds ONE loop for its process lifetime as
+``asyncio.run(_loop_until_stopped())``. They must NOT be routed through here, for
+two reasons. They own their process's main loop and install SIGTERM/SIGINT with
+``loop.add_signal_handler``, which raises ``RuntimeError: set_wakeup_fd only
+works in main thread of the main interpreter`` anywhere but the main thread —
+and this module's loop lives on a daemon thread by construction. And the shapes
+differ: those two run a single long-lived async body that IS the process,
+whereas an actor is a short sync entrypoint invoked once per message, which is
+exactly the case that needs a loop outliving the call. Two mechanisms, one rule
+(the loop must outlive the pool) — not an inconsistency to collapse.
 
 Consequence worth knowing: coroutines submitted from all worker threads now
 interleave on ONE loop thread. For the I/O-bound job bodies on these queues that

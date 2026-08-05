@@ -23,6 +23,7 @@ exists. The rollback is still "revert the commit"."""
 from __future__ import annotations
 
 from collections.abc import Iterator, Mapping, Sequence
+from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -51,6 +52,8 @@ from entropia.domain.backtest.execution.intents import (
 )
 from entropia.domain.backtest.execution.portfolio_ledger import (
     LedgerFrozenError,
+    LedgerSolvencyViolation,
+    MarkPrice,
     OpenPosition,
     PortfolioLedger,
     SleevePlan,
@@ -312,6 +315,7 @@ def _run(
     drivers: Mapping[str, ScriptedDriver],
     ledger: PortfolioLedger | None = None,
     chunk: Mapping[str, int] | None = None,
+    pin_ordinals: Mapping[str, int] | None = None,
     instruments: Mapping[str, str | None] | None = None,
     policy: str | None = None,
     **kwargs: Any,
@@ -321,7 +325,7 @@ def _run(
     ``order`` is the ORDER A CALLER LISTS THEM IN — a UI row order, a DB query order, an
     API arrival order. The pinned ordinal is a property of the manifest and stays fixed, so
     permuting ``order`` must change nothing (doc 13 §13)."""
-    ordinals = {"item_a": 0, "item_b": 1}
+    ordinals = dict(pin_ordinals or {"item_a": 0, "item_b": 1})
     stamps = dict(timestamps or {item: list(_HOURS[:5]) for item in ordinals})
     chunks = dict(chunk or {})
     streams = [
@@ -645,6 +649,56 @@ def test_mandatory_events_move_the_equity_the_snapshot_publishes() -> None:
     assert drivers["item_b"].seen_equity == [(_t(0), Decimal("9960.00"))]
 
 
+def test_the_three_mandatory_cash_lines_stay_apart() -> None:
+    """doc 13 §8.3 counts realized PnL, fees, funding and other realized costs as separate
+    terms of ``E(t)``. ``_book_cash`` routes to three different ledger lines, and routing
+    two of them to the same place would still balance the accounting identity while
+    misreporting where the money went — so each line is asserted on its own."""
+    drivers = {
+        "item_a": ScriptedDriver(
+            "item_a",
+            events={
+                _HOURS[0]: (
+                    CashEvent(item_id="item_a", kind="funding", amount=Decimal("3.00")),
+                    CashEvent(item_id="item_a", kind="fee", amount=Decimal("5.00")),
+                    CashEvent(item_id="item_a", kind="other_cost", amount=Decimal("7.00")),
+                )
+            },
+        ),
+        "item_b": ScriptedDriver("item_b"),
+    }
+    run = _run(drivers=drivers, timestamps=dict.fromkeys(drivers, _HOURS[:1]))
+
+    assert run.ledger.funding == Decimal("3.00")
+    assert run.ledger.fees == Decimal("5.00")
+    assert run.ledger.other_costs == Decimal("7.00")
+    assert run.ledger.equity == Decimal("9985.00")
+    assert run.ledger.accounting_identity == run.ledger.equity
+
+    row = run.ticks[0].attribution.by_item("item_a")
+    assert (row.funding, row.fees, row.other_costs) == (
+        Decimal("3.00"),
+        Decimal("5.00"),
+        Decimal("7.00"),
+    )
+
+
+def test_a_ledger_handed_in_already_frozen_is_refused() -> None:
+    """The freeze belongs to the tick that published it. A ledger arriving frozen means a
+    previous tick never reached its apply phase, and publishing a second valuation over it
+    would be the two-``E(t)`` defect this whole loop removes."""
+    ledger = PortfolioLedger(_plan())
+    ledger.publish_snapshot(_t(0))
+    drivers = {"item_a": ScriptedDriver("item_a"), "item_b": ScriptedDriver("item_b")}
+
+    with pytest.raises(portfolio_engine.PhaseLoopError, match="still frozen"):
+        _run(
+            drivers=drivers,
+            ledger=ledger,
+            timestamps=dict.fromkeys(drivers, _HOURS[:1]),
+        )
+
+
 def test_p3_events_are_traced_as_intents_that_name_no_snapshot() -> None:
     """ADR §6 rules 4 and 5: a mandatory event is resolved before ``E(t)`` exists and is
     still emitted to the trace. A close that booked PnL without appearing anywhere would
@@ -911,6 +965,53 @@ def test_an_item_with_a_sleeve_but_no_bar_stream_fails_rather_than_idling() -> N
         )
 
 
+def test_a_mistyped_item_risk_limit_is_refused_rather_than_dropped() -> None:
+    """``max_position_notional`` is read with ``.get()``, so a key that names no item
+    vanishes — and a vanished limit does not fail closed, it silently REMOVES an item risk
+    limit. Modül 11 §6.1 layer 3: allocation caps a size, it never relaxes one."""
+    drivers = {"item_a": ScriptedDriver("item_a"), "item_b": ScriptedDriver("item_b")}
+
+    with pytest.raises(IncoherentRunInputsError, match="max_position_notional"):
+        _run(
+            drivers=drivers,
+            timestamps=dict.fromkeys(drivers, _HOURS[:1]),
+            max_position_notional={"item_a": Decimal("500"), "itme_b": Decimal("500")},
+        )
+
+
+def test_a_mistyped_instrument_is_refused_rather_than_dropped() -> None:
+    """The milder half of the same defect, refused for consistency: an item whose
+    instrument silently went missing is treated as *identity unknown*, which fails the
+    conflict gate closed — safe, but for a reason the caller never intended."""
+    drivers = {"item_a": ScriptedDriver("item_a"), "item_b": ScriptedDriver("item_b")}
+
+    with pytest.raises(IncoherentRunInputsError, match="instrument"):
+        _run(
+            drivers=drivers,
+            timestamps=dict.fromkeys(drivers, _HOURS[:1]),
+            instruments={"item_a": "BTCUSDT", "item_c": "ETHUSDT"},
+        )
+
+
+def test_the_optional_maps_may_still_name_a_subset() -> None:
+    """The guard refuses UNKNOWN names, not incomplete ones. An item with no configured
+    limit genuinely has none, and that must stay expressible."""
+    drivers = {
+        "item_a": ScriptedDriver("item_a", proposals={_HOURS[0]: _entry("long")}),
+        "item_b": ScriptedDriver("item_b", proposals={_HOURS[0]: _entry("long")}),
+    }
+    run = _run(
+        drivers=drivers,
+        timestamps=dict.fromkeys(drivers, _HOURS[:1]),
+        instruments={"item_a": "BTCUSDT", "item_b": "ETHUSDT"},
+        max_position_notional={"item_a": Decimal("500")},
+    )
+
+    report = run.ticks[0].arbitration
+    assert report.by_item("item_a").granted_notional <= Decimal("500")
+    assert report.by_item("item_b").granted_notional > Decimal("500")
+
+
 def test_a_driver_cannot_report_an_event_for_another_item() -> None:
     """Booking one item's PnL against another's sleeve is cross-item contamination
     arriving through the mandatory window instead of the intent window."""
@@ -988,6 +1089,164 @@ def test_intents_naming_two_valuations_fail_the_run(monkeypatch: pytest.MonkeyPa
         _run(drivers=drivers, timestamps=dict.fromkeys(drivers, _HOURS[:1]))
 
 
+def test_default_fill_refuses_a_directionless_grant() -> None:
+    """``_effective_fill`` takes a boolean side, so an absent direction would be booked as
+    one of them rather than refused. The intent layer already fails closed on this; the
+    apply path must not quietly re-open the hole."""
+    intent = (
+        _run(
+            drivers={
+                "item_a": ScriptedDriver("item_a", proposals={_HOURS[0]: _entry("long")}),
+                "item_b": ScriptedDriver("item_b"),
+            },
+            instruments={"item_a": "BTCUSDT", "item_b": "ETHUSDT"},
+            timestamps=dict.fromkeys(("item_a", "item_b"), _HOURS[:1]),
+        )
+        .ticks[0]
+        .intents[0]
+    )
+    undirected = ArbitrationDecision(
+        item_id="item_a",
+        pin_ordinal=0,
+        outcome="admitted",
+        kind="entry",
+        direction=None,
+        instrument_id="BTCUSDT",
+        requested_units=Decimal("1"),
+        granted_units=Decimal("1"),
+        granted_notional=Decimal("100"),
+        reason=None,
+        binding_constraint=None,
+    )
+
+    with pytest.raises(ScaleBasisNotSuppliedError, match="no side to book"):
+        default_fill(grant=undirected, intent=intent, held=None)
+
+
+def test_default_fill_refuses_a_grant_with_no_price() -> None:
+    """The loop's own intent path cannot produce this (an actionable intent without a price
+    is refused when it is formed), but ``default_fill`` is exported and a future driver may
+    call it with anything. It must not book a fill at an absent price."""
+    intent = (
+        _run(
+            drivers={
+                "item_a": ScriptedDriver("item_a", proposals={_HOURS[0]: _entry("long")}),
+                "item_b": ScriptedDriver("item_b"),
+            },
+            instruments={"item_a": "BTCUSDT", "item_b": "ETHUSDT"},
+            timestamps=dict.fromkeys(("item_a", "item_b"), _HOURS[:1]),
+        )
+        .ticks[0]
+        .intents[0]
+    )
+    priceless = replace(intent, effective_price=None, reference_price=None)
+    grant = ArbitrationDecision(
+        item_id="item_a",
+        pin_ordinal=0,
+        outcome="admitted",
+        kind="entry",
+        direction="long",
+        instrument_id="BTCUSDT",
+        requested_units=Decimal("1"),
+        granted_units=Decimal("1"),
+        granted_notional=Decimal("100"),
+        reason=None,
+        binding_constraint=None,
+    )
+
+    with pytest.raises(ScaleBasisNotSuppliedError, match="no price"):
+        default_fill(grant=grant, intent=priceless, held=None)
+
+
+def test_a_fills_commission_is_charged_before_its_capital_is_committed() -> None:
+    """The ordering claim in ``AppliedFill``, proven where it changes the ANSWER.
+
+    A fill of 9995 notional paying a 10.00 commission against a 10000 pool: charging the
+    fee first leaves 9990 of capital and the deployment is REFUSED, which is
+    ``no silent borrow`` (doc 13 §14 test 12, Modül 11 §5.1). Recording the position first
+    would pass the guard against pre-fee capital and only then spend it, leaving the pool
+    holding 9995 against 9990 — borrowed, and silently."""
+    drivers = {
+        "item_a": ScriptedDriver(
+            "item_a",
+            events={
+                _HOURS[0]: (
+                    FillEvent(
+                        item_id="item_a",
+                        fill=AppliedFill(
+                            direction="long",
+                            size=Decimal("1"),
+                            entry_price=Decimal("9995"),
+                            commission=Decimal("10.00"),
+                        ),
+                    ),
+                )
+            },
+        ),
+        "item_b": ScriptedDriver("item_b"),
+    }
+
+    with pytest.raises(LedgerSolvencyViolation):
+        _run(drivers=drivers, timestamps=dict.fromkeys(drivers, _HOURS[:1]))
+
+
+def test_a_partial_exit_keeps_holding_its_remainder() -> None:
+    """``CloseEvent.resulting``. The ledger holds at most one position per item and
+    ``close_position`` releases all of it, so a partial exit is release -> realize ->
+    re-record. Dropping the third step would silently flatten a position the item still
+    holds, and its sleeve would read as free."""
+    drivers = {
+        "item_a": ScriptedDriver(
+            "item_a",
+            events={
+                _HOURS[0]: (_fill_for("item_a", size="4"),),
+                _HOURS[1]: (
+                    CloseEvent(
+                        item_id="item_a",
+                        gross_pnl=Decimal("120.00"),
+                        commission=_ZERO,
+                        decision=ItemDecision(
+                            kind="partial_exit", direction=None, reason="exit_signal"
+                        ),
+                        closing=ClosingSize(units=Decimal("1")),
+                        resulting=AppliedFill(
+                            direction="long", size=Decimal("3"), entry_price=Decimal("100")
+                        ),
+                    ),
+                ),
+            },
+        ),
+        "item_b": ScriptedDriver("item_b"),
+    }
+    run = _run(drivers=drivers, timestamps=dict.fromkeys(drivers, _HOURS[:2]))
+
+    assert run.ledger.positions["item_a"].size == Decimal("3")
+    assert run.ledger.realized_pnl == Decimal("120.00")
+    assert run.ticks[-1].attribution.by_item("item_a").open_notional == Decimal("300")
+    assert [i.kind for i in run.ticks[-1].mandatory_intents] == ["partial_exit"]
+
+
+def test_supplied_marks_reach_attribution() -> None:
+    """The ``marks`` callback is the caller's OD-2 answer, and the loop must actually ask
+    it. With a usable mark the open position is valued; with none it is disclosed. Both
+    halves are asserted, because a loop that ignored marks would still pass the second."""
+    drivers = {
+        "item_a": ScriptedDriver("item_a", events={_HOURS[0]: (_fill_for("item_a"),)}),
+        "item_b": ScriptedDriver("item_b"),
+    }
+    marked = _run(
+        drivers=drivers,
+        timestamps=dict.fromkeys(drivers, _HOURS[:1]),
+        marks=lambda tick: {"item_a": MarkPrice(price=Decimal("110"), authority="fresh_bar_close")},
+    )
+
+    attribution = marked.ticks[0].attribution
+    assert attribution.unmarked_items == ()
+    assert attribution.unrealized_total == Decimal("10")
+    assert attribution.by_item("item_a").unrealized == Decimal("10")
+    assert attribution.marked_reconciled is True
+
+
 def test_default_fill_refuses_to_invent_a_scale_basis() -> None:
     """The averaging rule for a scale-in is the engine's ladder path. A second
     implementation here would be free to drift from the one that books the trade."""
@@ -1031,6 +1290,42 @@ def test_a_driver_may_supply_the_scale_basis_the_loop_refuses_to_guess() -> None
     )
 
     assert run.ledger.positions["item_a"].size == Decimal("3")
+
+
+# --------------------------------------------------------------------------- #
+# Pinned order is the PIN's, not the alphabet's                                #
+# --------------------------------------------------------------------------- #
+
+
+def test_pinned_order_drives_arbitration_application_and_attribution() -> None:
+    """Every ordered region obeys ``(pin_ordinal, item_id)`` — and the fixture INVERTS the
+    ordinals so that pinned order and alphabetical order disagree.
+
+    Without the inversion this test would pass under an implementation that sorted by
+    ``item_id``, dropped the ordinals entirely, or applied grants in whatever order the
+    report happened to arrive in. ADR §4.4: the ordinal comes from the manifest's
+    deterministic pin, never from DOM, arrival or DB order."""
+    ledger = _RecordingLedger(_plan())
+    drivers = {
+        "item_a": ScriptedDriver("item_a", proposals={_HOURS[0]: _entry("long")}),
+        "item_b": ScriptedDriver("item_b", proposals={_HOURS[0]: _entry("long")}),
+    }
+    run = _run(
+        order=("item_a", "item_b"),
+        drivers=drivers,
+        ledger=ledger,
+        pin_ordinals={"item_a": 1, "item_b": 0},
+        instruments={"item_a": "BTCUSDT", "item_b": "ETHUSDT"},
+        timestamps=dict.fromkeys(drivers, _HOURS[:1]),
+    )
+
+    assert [d.item_id for d in run.ticks[0].arbitration.decisions] == ["item_b", "item_a"]
+    assert [call for call in ledger.calls if call.startswith("fill:")] == [
+        "fill:item_b",
+        "fill:item_a",
+    ]
+    assert [row.item_id for row in run.ticks[0].attribution.rows] == ["item_b", "item_a"]
+    assert [row.pin_ordinal for row in run.ticks[0].attribution.rows] == [0, 1]
 
 
 # --------------------------------------------------------------------------- #

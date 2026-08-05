@@ -3899,7 +3899,7 @@ geçerlidir. Eksik kayıtları yazacak olan o slice'ları indirendir.
 
 ## ADIM 18 — `run_portfolio` per-tick faz döngüsü landed (PR #585)
 
-**Yeni:** `domain/backtest/portfolio_engine.py` (683 satır) + `tests/unit/test_backtest_portfolio_phase_loop.py` (41 test).
+**Yeni:** `domain/backtest/portfolio_engine.py` (751 satır, kapsam **%100**) + `tests/unit/test_backtest_portfolio_phase_loop.py` (49 test).
 **Migration yok · OpenAPI değişmedi · `ENGINE_VERSION` değişmedi · 46 golden digest'in HİÇBİRİ oynamadı**
 (`engine_golden_digests.json` dosyaya bile dokunulmadı, çünkü hiçbir üretim yolu döngüye ulaşmıyor).
 
@@ -3926,8 +3926,8 @@ edilir**; stepper indiğinde bu protokolün bir uygulaması olur ve döngü değ
 **Kanıt:** doc 13 §14 test 11 (tek `E(t)` + permütasyon invariance) · ADR §1.2 fixture'ı tek
 saatte **3000.00** veriyor (sevk edilmiş `combine_item_runs` hâlâ 5000.00 ve containment testi
 bunu doğru olarak koruyor) · **cross-item batch invariance** (bugüne kadar hiçbir test
-kapsamıyordu) · mutasyon **14/14** (ilk tur 11/14'tü, üç gerçek boşluk kapatıldı — ayrıntı ve
-iki metodoloji tuzağı `docs/PROJECT_HISTORY.md` §ADIM 18).
+kapsamıyordu) · mutasyon **32/35** (kalan 3'ü kanıtlanabilir **eşdeğer mutant**, test boşluğu değil —
+ayrıntı ve iki metodoloji tuzağı `docs/PROJECT_HISTORY.md` §ADIM 18).
 
 **Containment:** altı test BİLEREK güncellendi; `attribution` + `arbitration` testlerindeki
 sıralanmamış `rglob` platform bağımlılığı da düzeltildi.

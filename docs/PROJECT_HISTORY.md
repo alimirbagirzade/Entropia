@@ -3553,7 +3553,7 @@ gösteriyordu. Bu kapanış boşluğu **işaret ediyor ama başkasının slice k
 
 ## ADIM 18 — `run_portfolio` per-tick faz döngüsü (PR TBD)
 
-**Yeni dosya:** `backend/src/entropia/domain/backtest/portfolio_engine.py` (683 satır).
+**Yeni dosya:** `backend/src/entropia/domain/backtest/portfolio_engine.py` (751 satır, test kapsamı **%100**).
 **Migration yok, OpenAPI değişmedi, `ENGINE_VERSION` değişmedi, 46 golden digest'in HİÇBİRİ
 oynamadı** (`engine_golden_digests.json` dosyaya bile dokunulmadı). Rollback = commit'i revert et.
 
@@ -3631,7 +3631,7 @@ ADR **A-2** bu yerleşimi önemsiz kılar — bloklanan bir intent'in boyutu ilg
   (bu yol değişmedi). %66'lık şişirmenin çözümü contained olarak kanıtlandı.
 - **Cross-item batch invariance** — bugüne kadar hiçbir test kapsamıyordu; dört farklı chunking
   + permütasyonla bileşimi aynı digest'i veriyor.
-- **41 yeni test**, `tests/unit/test_backtest_portfolio_phase_loop.py`.
+- **49 yeni test** (52 test item), `tests/unit/test_backtest_portfolio_phase_loop.py`; modül kapsamı **%100**.
 
 ### Mutasyon kaydı — ilk tur SAHTEYDİ
 
@@ -3645,7 +3645,24 @@ sonuç **11/14** oldu ve üç hayatta kalan gerçek test boşluğuydu:
    eklendi (`BLOCK_OPPOSITE` vs `KEEP_SEPARATE`);
 3. fill'in ödediği komisyonun atlanması — hiçbir fixture'da komisyonlu fill yoktu.
 
-Üçü kapatıldıktan sonra **14/14**. **İkinci bir tuzak:** `if extra:` → `if False:` mutasyonu
+Üçü kapatıldıktan sonra 14/14. Sonra kampanya **35 mutanta** genişletildi (faz sırası, para,
+kimlik, attribution): **26/35**, dokuz hayatta kalan. Altısı gerçek boşluktu ve kapatıldı —
+ters pinli uygulama sırası, yönsüz grant, komisyonun pozisyondan SONRA bookenmesi (bunu
+öldüren fixture, ücret önce kesilince deployment'ın **reddedildiğini** kanıtlıyor: sessiz
+borrow yok), partial-exit kalanının düşürülmesi, mark'ların attribution'a ulaşmaması ve pin
+ordinal'lerinin kaybı (bu sonuncusu ancak **ters ordinal** fixture'ıyla öldürülebiliyor —
+`item_a`/`item_b` alfabetik sırayla pinli sıra aynıydı). Nihai skor **32/35**.
+
+Kalan üçü **test boşluğu DEĞİL, kanıtlanabilir eşdeğer mutant** ve gerekçeleri
+`_run_identity` docstring'ine yazıldı: (1) `snapshot.identity` zaten
+`arbitration.identity`'nin içinde hash'leniyor; (2) sondaki `n=` terimi kayıt ayırıcılarının
+zaten engellediği bir çakışmaya karşı; (3) `_canonical_decimal` biçimlendirmeyi normalize
+ediyor ama defter zaten her rakamı `0.01`'e quantize ediyor. Üçü de tek bir upstream
+değişiklik uzağında anlamlı hale gelir ve permütasyon/batch-invariance kanıtları **bu tek
+digest'e** dayandığı için sessizce kapsamayı bırakan bir identity onları boşa çıkarırdı —
+burada fazlalık ucuz, yanlışlık tespit edilemez.
+
+**İkinci bir tuzak:** `if extra:` → `if False:` mutasyonu
 **aynı bayt uzunlukta** olduğu için Python stale `.pyc`'yi yeniden kullandı ve mutant hiç
 koşmadı; script artık her mutasyondan sonra `__pycache__`'i siliyor ve
 `PYTHONDONTWRITEBYTECODE=1` ile koşuyor. Exit code 1 (test başarısızlığı) ile 4 (kullanım
@@ -3658,6 +3675,23 @@ eklendi. `attribution` ve `arbitration` containment testleri `rglob` çıktısı
 tek importer'la görünmezdi, ikincisiyle assertion platforma bağımlı hale geliyordu; clock testinin
 zaten taşıdığı `sorted()` düzeltmesi bu ikisine de uygulandı. Yeni
 `test_nothing_imports_the_phase_loop` + `test_the_worker_still_loops_over_items` zinciri kapatıyor.
+
+### İkinci dürüst sınır — retention O(tick)
+
+Döngü her tick için tam bir `TickRecord` saklıyor ve her tick'i attribute ediyor. Contained,
+incelenmek için var olan bir döngü için doğru şekil (değişmezler o kayıtlara karşı doğrulanıyor)
+ama ADR §11 peak memory'nin **düşmesini** şart koşuyor ve clock tam bu yüzden streaming.
+Üretimden erişilemediği için bugün maliyeti yok; **ADIM 18b worker'ı bağlamadan önce** uzun bir
+koşunun ne sakladığına karar vermeli. Spekülatif bir retention knob'u ile çözülmedi — worker'ın
+istediği şekil henüz bilinmiyor (ponytail: istenmemiş soyutlama yok).
+
+### Üçüncü dürüst sınır — opsiyonel haritaların bilinmeyen anahtarları
+
+Kendi diff incelemesinde bulundu: `instruments` ve `max_position_notional` tüketicileri `.get()`
+ile okuyor, yani yanlış yazılmış bir `item_id` sessizce düşüyordu. İkisi simetrik DEĞİL — bilinmeyen
+instrument conflict kapısını yalnızca **fail-closed** yapar, ama düşen bir `max_position_notional`
+bir **item risk limitini sessizce KALDIRIR** (M11 §6.1 katman 3: allocation boyutu kısar, asla
+gevşetmez). İkisi de artık `IncoherentRunInputsError` veriyor; alt küme adlandırmak hâlâ serbest.
 
 ### Kapsam dışı (bilerek)
 

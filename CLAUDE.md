@@ -173,7 +173,8 @@ Before stopping a working session, produce **ALL** of the following:
 > (2026-08-05)** ve **§12.1 amendment** ADR-numarası ↔ sevk edilen PR eşlemesini kayda geçirdi
 > (**numaralandırmada otorite §12.1'dir** — ör. #575 = ADR'nin ADIM 19'u). **ADIM 18
 > `run_portfolio` landed (PR #585)**: `domain/backtest/portfolio_engine.py`, 49 test, kapsam
-> %100, mutasyon 32/35, **46 golden digest'in hiçbiri oynamadı**, migration/OpenAPI yok.
+> %100, mutasyon 32/35 (kalan 3'ü kanıtlanabilir **eşdeğer mutant**),
+> **46 golden digest'in hiçbiri oynamadı**, migration/OpenAPI yok.
 > **Containment DURUYOR** — `SHARED_ALLOCATION_STATUS = future_dev`, ADIM 20 (PR #583) hâlâ
 > **BLOCKED** (issue **#582**); yedi unified-clock modülünün hiçbiri üretimden import
 > EDİLMİYOR, worker hâlâ item döngüsü (`jobs/backtest_engine.py:298`) + `combine_item_runs`.

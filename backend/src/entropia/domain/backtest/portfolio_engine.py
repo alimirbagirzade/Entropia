@@ -43,6 +43,18 @@ itself. That split is not a workaround to be undone later — it is what keeps t
 discipline in one place. When the stepper lands it becomes one implementation of
 :class:`ItemDriver`, and the loop does not change.
 
+**Honest boundary — retention is O(ticks) and ADIM 18b must resolve it before wiring.**
+Every tick keeps a whole :class:`TickRecord` (its snapshot, both intent sets, the
+arbitration report, the attribution row), and every tick is attributed. That is the right
+shape for a contained loop whose entire purpose is to be *inspected* — the invariants above
+are checked against those records — but it is not the shape a year of 1-minute bars wants:
+ADR §11 requires peak memory to FALL relative to today's fold, and the clock itself streams
+precisely so an axis need not be materialized (``timeline_identity`` is computed
+incrementally for that reason). Nothing here is reachable from production, so this costs
+nothing today; wiring the worker (ADIM 18b) must decide what a long run retains before it
+does, rather than discovering the answer in a memory graph. It is deliberately NOT solved
+with a speculative retention knob here — the shape the worker needs is not yet known.
+
 Two things the driver deliberately may NOT do, because they are open decisions:
 
 * it is never handed the ledger, only the frozen snapshot — an intent that could read a
@@ -359,6 +371,24 @@ def _canonical_decimal(value: Decimal) -> str:
 
 
 def _run_identity(records: Sequence[TickRecord], ledger: PortfolioLedger) -> str:
+    """A deterministic digest of the whole replay.
+
+    Three of its terms are deliberately REDUNDANT today, and are kept rather than trimmed.
+    A mutation campaign confirms each survives every test — not because a test is missing,
+    but because nothing the loop can currently produce distinguishes them:
+
+    * ``snapshot.identity`` is already hashed inside ``arbitration.identity`` (which digests
+      ``t_ms`` and ``snapshot_identity`` before its decisions), so dropping it loses nothing
+      **while that stays true**;
+    * the trailing ``n=`` guards against two different tick sequences colliding, which the
+      per-record separators already prevent;
+    * :func:`_canonical_decimal` normalizes formatting, and the ledger quantizes every
+      figure to ``0.01``, so no two runs can differ only in how a number was written.
+
+    Each is one upstream change away from mattering, and an identity that silently stopped
+    covering a valuation would make the permutation and batch-invariance proofs vacuous —
+    they are single string comparisons against this digest. Redundant here is cheap;
+    wrong here is undetectable."""
     digest = hashlib.sha256()
     digest.update(_RUN_IDENTITY_NAMESPACE.encode("utf-8"))
     digest.update(b"\x1f")
@@ -394,6 +424,8 @@ def _check_inputs(
     identities: Mapping[str, ItemIdentity],
     drivers: Mapping[str, ItemDriver],
     ledger: PortfolioLedger,
+    instruments: Mapping[str, str | None],
+    max_position_notional: Mapping[str, Decimal],
 ) -> None:
     """One set of items, named four times; any disagreement fails the run.
 
@@ -419,6 +451,23 @@ def _check_inputs(
                 f"These items have a {label} but no bar stream, so the loop would run "
                 f"nothing for them: {extra}. Whether a non-executing item may hold a "
                 "sleeve is OD-6 and is not decided here."
+            )
+    # The two OPTIONAL per-item maps are checked in one direction only: they need not name
+    # every item, but a name they DO carry must exist. Both consumers read them with
+    # ``.get()``, so a mistyped key vanishes — and the two failures are not symmetric. An
+    # unknown instrument merely fails the conflict gate CLOSED, but an unknown
+    # ``max_position_notional`` key silently REMOVES an item risk limit, and allocation
+    # caps a size, it never relaxes one (Modul 11 §6.1 layer 3). Refuse both, so the
+    # dangerous one cannot arrive as a typo.
+    for label, named in (
+        ("instrument", set(instruments)),
+        ("max_position_notional limit", set(max_position_notional)),
+    ):
+        unknown = sorted(named - axis)
+        if unknown:
+            raise IncoherentRunInputsError(
+                f"These items are named by a {label} but are not on the merged axis, so "
+                f"the value would be silently dropped: {unknown}."
             )
 
 
@@ -526,15 +575,29 @@ def run_portfolio(
 
     ``marks`` is optional and defaults to none. ``E(t)`` is realized-only by canon, so the
     loop is exact without a mark; supplying one only enriches attribution. Carrying a
-    stale bar forward is **OD-2** and is the caller's decision, never this loop's.
+    stale bar forward is **OD-2** and is the caller's decision, never this loop's. A mark
+    for an item the run does not value is the ONE per-item value that may be ignored, and
+    only because ignoring it is loud: the position it failed to mark is disclosed in
+    ``unmarked_items``, never valued at zero.
+
+    ``instruments`` and ``max_position_notional`` may name a subset of the items, but every
+    name they carry must be on the axis — see :func:`_check_inputs`.
 
     :raises PhaseLoopError: on any incoherent input or out-of-order phase. Nothing is
         skipped and nothing degrades — ADR §11 / Modül 12 §9.
     """
-    _check_inputs(streams=streams, identities=identities, drivers=drivers, ledger=ledger)
+    named_instruments = instruments or {}
+    named_limits = max_position_notional or {}
+    _check_inputs(
+        streams=streams,
+        identities=identities,
+        drivers=drivers,
+        ledger=ledger,
+        instruments=named_instruments,
+        max_position_notional=named_limits,
+    )
     rule = resolve_policy(policy)
     ordered = _ordered_identities(identities)
-    named_instruments = instruments or {}
     profiles: Mapping[str, ItemArbitrationProfile] = profiles_from_pins(
         [(identity.item_id, named_instruments.get(identity.item_id)) for identity in ordered]
     )
@@ -588,7 +651,7 @@ def run_portfolio(
             intents=intents,
             profiles=profiles,
             policy=policy,
-            max_position_notional=max_position_notional,
+            max_position_notional=named_limits,
             max_total_exposure_notional=max_total_exposure_notional,
         )
 

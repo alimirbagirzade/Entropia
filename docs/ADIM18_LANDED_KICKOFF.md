@@ -61,6 +61,16 @@ değişmedi, **46 golden digest'in hiçbiri oynamadı**. Rollback = commit'i rev
    `run_portfolio`'ya bağla. **Digest'ler burada oynar:** 9 `portfolio.*` senaryosu tek tek
    gerekçelendirilir; başkası oynarsa regresyondur.
 
+**Wiring'den önce karara bağlanacak üçüncü şey — retention.** Döngü bugün her tick için tam
+bir `TickRecord` (snapshot, iki intent kümesi, arbitration raporu, attribution satırı) saklıyor
+ve her tick'i attribute ediyor. Contained, *incelenmek için* var olan bir döngü için doğru şekil
+— değişmezler o kayıtlara karşı doğrulanıyor — ama bir yıllık 1 dakikalık eksenin istediği şekil
+bu değil: ADR §11 peak memory'nin **düşmesini** şart koşuyor ve clock zaten tam bu yüzden
+streaming (`timeline_identity` artımlı hesaplanıyor). Üretimden erişilemediği için bugün bir
+maliyeti yok; **worker'ı bağlamadan önce uzun bir koşunun ne sakladığına karar ver**, sonra
+memory grafiğinde keşfetme. ADIM 18'de bilerek spekülatif bir retention knob'u ile
+çözülmedi — worker'ın istediği şekil henüz bilinmiyor.
+
 **ADIM 20 bundan ÖNCE merge edilemez.** Stepper olmadan worker bitmiş koşuları katlıyor, yani
 containment'ı kaldırmak ADR §1.2'nin %66 şişirdiği sequential eğriyi kanonik Result olarak
 yayımlamak olurdu.

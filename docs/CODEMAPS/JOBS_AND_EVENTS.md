@@ -13,20 +13,34 @@ transport'tur. Mesaj kaybolursa scheduler sweep'i (INF-03/INF-09) işi geri geti
 
 | Aktör | Kuyruk | Satır | Gövde (`application/jobs/`) |
 |---|---|---|---|
-| `system_heartbeat` | `maintenance` | `:28` | (scheduler tick ping'i) |
-| `run_market_data_analysis` | `data` | `:34` | `market_data.py` |
-| `run_research_data_analysis` | `data` | `:61` | `research_data.py` |
-| `run_trading_signal_import` | `data` | `:88` | `trading_signal.py` |
-| `run_trade_log_import` | `data` | `:115` | `trade_log.py` |
-| `run_backtest_engine` | `backtest` | `:142` | `backtest_engine.py` |
-| `run_agent_tool` | `agent` | `:170` | `agent_tools.py` |
-| `run_agent_tool_high` | `agent-high` | `:182` | `agent_tools.py` |
-| `run_agent_executor` | `agent-executor` | `:205` | `agent_executor.py` |
-| `run_create_package_job` | `default` | `:234` | `create_package.py` (kind-dispatch) |
-| `run_trash_purge` | `maintenance` | `:263` | `purge.py` |
-| `run_package_import` | `data` | `:290` | `package_import.py` |
+| `system_heartbeat` | `maintenance` | `:39` | (scheduler tick ping'i) |
+| `run_market_data_analysis` | `data` | `:45` | `market_data.py` |
+| `run_research_data_analysis` | `data` | `:72` | `research_data.py` |
+| `run_trading_signal_import` | `data` | `:99` | `trading_signal.py` |
+| `run_trade_log_import` | `data` | `:126` | `trade_log.py` |
+| `run_backtest_engine` | `backtest` | `:153` | `backtest_engine.py` |
+| `run_agent_tool` | `agent` | `:181` | `agent_tools.py` |
+| `run_agent_tool_high` | `agent-high` | `:193` | `agent_tools.py` |
+| `run_agent_executor` | `agent-executor` | `:216` | `agent_executor.py` |
+| `run_create_package_job` | `default` | `:245` | `create_package.py` (kind-dispatch) |
+| `run_trash_purge` | `maintenance` | `:274` | `purge.py` |
+| `run_package_import` | `data` | `:301` | `package_import.py` |
 
 Tüm aktörler `max_retries=3`.
+
+### Yürütme modeli — sync gövde → async gövde (ZORUNLU: `run_sync`)
+
+Her aktör gövdesi async gövdesine **`infrastructure/async_runtime.py::run_sync`** ile geçer;
+**`asyncio.run` YASAK**. `asyncio.run` her mesajda loop'u kapatır, oysa
+`postgres/engine.py::get_engine` `@lru_cache(maxsize=1)`'dir → asyncpg pool'u **process-wide**
+ve her loop'tan uzun yaşar. dramatiq çok thread'li çalıştığı için bir thread'in loop'unda
+doğan bağlantı başka thread'in loop'unda check-out edilir ve asyncpg
+`got Future ... attached to a different loop` atar; mesaj `max_retries`'i tüketir ve broker onu
+**düşürür**. `data` kuyruğunda bu **kurtarılamaz** (aşağıdaki tabloya göre otomatik redelivery
+yok) — satır sonsuza dek `queued` + `attempts = 0` kalır. `run_sync` process başına **tek**
+uzun ömürlü loop kullanır (ayrı daemon thread), böylece pool loop'undan asla uzun yaşamaz.
+Regresyon: `tests/unit/test_async_runtime.py` (AST guard) +
+`tests/integration/test_worker_actor_event_loop.py` (gerçek engine, eşzamanlı gövdeler).
 
 ## Kuyruklar
 
@@ -57,7 +71,15 @@ aktöre gideceğini **çıkaramaz** → otomatik sweep bu kuyruğu asla yönlend
 
 Bunun yerine **operator eylemi** vardır: `POST /admin/data-queue/redeliver`
 (`routes/admin_panel.py:205` → `commands/data_queue.py::redeliver_data_queue_jobs`), payload'daki
-`job_kind` ayırıcısını `DATA_ACTOR_BY_KIND` (`actors.py:323`) ile eşleyerek yönlendirir.
+`job_kind` ayırıcısını `DATA_ACTOR_BY_KIND` (`actors.py:334`) ile eşleyerek yönlendirir.
+
+**Ama atlamak SESSİZ değildir.** Re-dispatch operator eylemi olarak kalır; yalnız her tick'te
+`_redeliver` yönlendiremediği adayları **`scheduler.redeliver_unroutable`** uyarısıyla bildirir
+(alanlar: `queue`, `count`, ilk `_UNROUTABLE_SAMPLE=20` `job_ids`). Adaylar zaten redeliver grace
+penceresini aşmış satırlardır, yani sağlıklı bir in-flight iş bu dalı hiç görmez — uyarı ancak
+gerçekten sıkışmış bir iş varsa çıkar. Bu, kaybolan bir `data` mesajının tek izinin "kimsenin
+izlemediği bir `queued` satır" olması durumunu kapatır. Davranış değişmedi: hiçbir şey otomatik
+redeliver edilmez.
 
 **`job_kind` taksonomisi** (`application/jobs/data_queue.py:31-37`, `DATA_JOB_KINDS:37`):
 `market_data_analysis` · `research_data_analysis` · `trading_signal_import` · `trade_log_import` · `package_import`

@@ -2,11 +2,21 @@
 
 Importing the broker first binds it process-wide, so the @dramatiq.actor
 decorators below register against the canonical Redis broker.
+
+Every actor body is a thin sync shell around an async body, and it MUST cross
+that boundary with ``async_runtime.run_sync`` — never ``asyncio.run``.
+``asyncio.run`` closes its loop per message while the ``@lru_cache`` asyncpg
+pool behind ``get_session_factory`` is process-wide, so with several worker
+threads a connection born on one thread's loop is checked out on another's and
+asyncpg raises "attached to a different loop". The message then burns its
+retries and the broker discards it — and on the ``data`` queue nothing recovers
+that, because ``data`` is deliberately absent from the scheduler's
+``ACTOR_BY_QUEUE`` (re-dispatch is an operator action), leaving the durable row
+QUEUED forever with ``attempts = 0``. See ``infrastructure/async_runtime.py``.
 """
 
 from __future__ import annotations
 
-import asyncio
 from typing import Any
 
 import dramatiq
@@ -18,6 +28,7 @@ from entropia.application.jobs.data_queue import (
     TRADE_LOG_IMPORT,
     TRADING_SIGNAL_IMPORT,
 )
+from entropia.infrastructure.async_runtime import run_sync
 from entropia.infrastructure.observability import get_logger
 from entropia.infrastructure.queues import broker as _broker  # noqa: F401  (installs broker)
 
@@ -39,7 +50,7 @@ def run_market_data_analysis(job_id: str) -> None:
     that enqueued it has long since returned (browser close never cancels it).
     """
     log.info("worker.market_analysis.start", job_id=job_id)
-    asyncio.run(_run_market_data_analysis(job_id))
+    run_sync(_run_market_data_analysis(job_id))
     log.info("worker.market_analysis.done", job_id=job_id)
 
 
@@ -66,7 +77,7 @@ def run_research_data_analysis(job_id: str) -> None:
     that enqueued it has long since returned (browser close never cancels it).
     """
     log.info("worker.research_analysis.start", job_id=job_id)
-    asyncio.run(_run_research_data_analysis(job_id))
+    run_sync(_run_research_data_analysis(job_id))
     log.info("worker.research_analysis.done", job_id=job_id)
 
 
@@ -93,7 +104,7 @@ def run_trading_signal_import(job_id: str) -> None:
     that enqueued it has long since returned (browser close never cancels it).
     """
     log.info("worker.trading_signal_import.start", job_id=job_id)
-    asyncio.run(_run_trading_signal_import(job_id))
+    run_sync(_run_trading_signal_import(job_id))
     log.info("worker.trading_signal_import.done", job_id=job_id)
 
 
@@ -120,7 +131,7 @@ def run_trade_log_import(job_id: str) -> None:
     request that enqueued it has long since returned (browser close never cancels it).
     """
     log.info("worker.trade_log_import.start", job_id=job_id)
-    asyncio.run(_run_trade_log_import(job_id))
+    run_sync(_run_trade_log_import(job_id))
     log.info("worker.trade_log_import.done", job_id=job_id)
 
 
@@ -148,7 +159,7 @@ def run_backtest_engine(job_id: str) -> None:
     since returned (browser close never cancels it, doc 15 §8.2).
     """
     log.info("worker.backtest_engine.start", job_id=job_id)
-    asyncio.run(_run_backtest_engine(job_id))
+    run_sync(_run_backtest_engine(job_id))
     log.info("worker.backtest_engine.done", job_id=job_id)
 
 
@@ -174,7 +185,7 @@ def run_agent_tool(job_id: str) -> None:
     Gateway's idempotency guard makes a redelivered call replay its recorded
     outcome instead of re-executing (AL-14)."""
     log.info("worker.agent_tool.start", job_id=job_id)
-    asyncio.run(_run_agent_tool(job_id))
+    run_sync(_run_agent_tool(job_id))
     log.info("worker.agent_tool.done", job_id=job_id)
 
 
@@ -183,7 +194,7 @@ def run_agent_tool_high(job_id: str) -> None:
     """Execute a durable agent Tool Gateway job on the ``agent-high`` plane — the
     heavier execution-scoped tools (backtest ready-check / request), doc 18 §9.2."""
     log.info("worker.agent_tool_high.start", job_id=job_id)
-    asyncio.run(_run_agent_tool(job_id))
+    run_sync(_run_agent_tool(job_id))
     log.info("worker.agent_tool_high.done", job_id=job_id)
 
 
@@ -249,7 +260,7 @@ def run_agent_executor(job_id: str) -> None:
     the same guarantee ``backtest``/``agent`` already get
     (``apps/scheduler/__main__.py::ACTOR_BY_QUEUE``)."""
     log.info("worker.agent_executor.start", job_id=job_id)
-    asyncio.run(_run_agent_executor(job_id))
+    run_sync(_run_agent_executor(job_id))
     log.info("worker.agent_executor.done", job_id=job_id)
 
 
@@ -278,7 +289,7 @@ def run_create_package_job(job_id: str) -> None:
     admitted it returned ``queued`` long ago (browser close never cancels it).
     """
     log.info("worker.create_package.start", job_id=job_id)
-    asyncio.run(_run_create_package_job(job_id))
+    run_sync(_run_create_package_job(job_id))
     log.info("worker.create_package.done", job_id=job_id)
 
 
@@ -305,7 +316,7 @@ def run_trash_purge(job_id: str) -> None:
     and commits the terminal purged/tombstone (or purge_failed) outcome — the
     Admin request that accepted it returned 202 long ago."""
     log.info("worker.trash_purge.start", job_id=job_id)
-    asyncio.run(_run_trash_purge(job_id))
+    run_sync(_run_trash_purge(job_id))
     log.info("worker.trash_purge.done", job_id=job_id)
 
 
@@ -333,7 +344,7 @@ def run_package_import(job_id: str) -> None:
     long since returned (browser close never cancels it).
     """
     log.info("worker.package_import.start", job_id=job_id)
-    asyncio.run(_run_package_import(job_id))
+    run_sync(_run_package_import(job_id))
     log.info("worker.package_import.done", job_id=job_id)
 
 

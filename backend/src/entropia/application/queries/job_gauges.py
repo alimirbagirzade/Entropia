@@ -21,6 +21,7 @@ from datetime import UTC, datetime
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from entropia.application.jobs.heartbeat import worker_heartbeat_age_seconds
 from entropia.application.jobs.outbox_relay import outbox_lag_seconds
 from entropia.domain.lifecycle.enums import JobStatus
 from entropia.infrastructure.postgres.models import Job
@@ -40,6 +41,11 @@ class JobGauges:
     queue_depth: tuple[tuple[str, JobStatus, int], ...]
     outbox_lag_seconds: float | None
     oldest_lease_age_seconds: float
+    #: Seconds since a worker last completed the maintenance-queue round-trip,
+    #: or ``None`` when no heartbeat has ever been recorded. ``None`` must NOT
+    #: collapse to ``0.0`` downstream: "never proven alive" and "alive one
+    #: instant ago" are opposite operational facts.
+    worker_heartbeat_age_seconds: float | None = None
 
 
 async def job_gauges(session: AsyncSession, *, now: datetime | None = None) -> JobGauges:
@@ -64,8 +70,11 @@ async def job_gauges(session: AsyncSession, *, now: datetime | None = None) -> J
     oldest = (await session.execute(lease_stmt)).scalar_one_or_none()
     age = 0.0 if oldest is None else ((now or datetime.now(UTC)) - oldest).total_seconds()
 
+    heartbeat_age = await worker_heartbeat_age_seconds(session, now=now)
+
     return JobGauges(
         queue_depth=queue_depth,
         outbox_lag_seconds=lag,
         oldest_lease_age_seconds=max(0.0, age),
+        worker_heartbeat_age_seconds=heartbeat_age,
     )

@@ -153,6 +153,11 @@ export interface MetricsSummary {
   readonly jobsDepthTotal: number;
   readonly outboxLagSeconds: number | null;
   readonly leaseAgeSeconds: number | null;
+  // Seconds since a worker last completed the maintenance-queue round-trip.
+  // `null` means the backend published NO sample — it emits the TYPE line alone
+  // when no heartbeat has ever been recorded, rather than a healthy-looking 0.
+  // The page must render that as "never recorded", never as a fresh heartbeat.
+  readonly workerHeartbeatAgeSeconds: number | null;
   // The backend degrades gracefully when Postgres is unreachable: it drops the
   // gauge block and emits a note instead of failing the scrape.
   readonly degraded: boolean;
@@ -165,6 +170,7 @@ const IN_FLIGHT = "entropia_http_requests_in_flight";
 const JOBS_DEPTH = "entropia_jobs_depth";
 const OUTBOX_LAG = "entropia_outbox_lag_seconds";
 const LEASE_AGE = "entropia_job_lease_age_seconds";
+const WORKER_HEARTBEAT_AGE = "entropia_worker_heartbeat_age_seconds";
 const DB_UNAVAILABLE_NOTE = "operational gauges unavailable";
 const MS_PER_SECOND = 1000;
 
@@ -231,6 +237,7 @@ export function summarizeMetrics(metrics: ParsedMetrics): MetricsSummary {
     jobsDepthTotal: rows.reduce((acc, row) => acc + row.count, 0),
     outboxLagSeconds,
     leaseAgeSeconds,
+    workerHeartbeatAgeSeconds: scalar(metrics, WORKER_HEARTBEAT_AGE),
     degraded: noteDegraded || gaugesMissing,
     familyCount: Object.keys(metrics.families).length,
   };

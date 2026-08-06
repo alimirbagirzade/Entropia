@@ -72,6 +72,17 @@ def _render_operational_gauges(gauges: JobGauges) -> str:
 
     lines.append("# TYPE entropia_job_lease_age_seconds gauge")
     lines.append(f"entropia_job_lease_age_seconds {gauges.oldest_lease_age_seconds:.3f}")
+
+    # A never-recorded heartbeat publishes the TYPE line and NO sample, so the
+    # series is genuinely absent and `absent(...)` alerts fire on it. Rendering
+    # 0.0 here — the way the outbox lag legitimately does, because there
+    # "nothing unpublished" really IS zero lag — would advertise a worker as
+    # alive one instant ago when nothing has ever proven it ran. That is the
+    # silent fallback this exposition must never emit.
+    lines.append("# TYPE entropia_worker_heartbeat_age_seconds gauge")
+    heartbeat = gauges.worker_heartbeat_age_seconds
+    if heartbeat is not None:
+        lines.append(f"entropia_worker_heartbeat_age_seconds {heartbeat:.3f}")
     return "\n".join(lines) + "\n"
 
 

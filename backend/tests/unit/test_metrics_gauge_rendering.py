@@ -64,8 +64,16 @@ CASES = [
 ]
 
 
+#: ADIM 25 appended a fourth gauge family. It is asserted as a SUFFIX so the
+#: pre-I-05 bytes above stay pinned exactly as they were: a scraper's recording
+#: rules key on those, and "we added a family" must never become licence to
+#: reflow the families that preceded it. With no heartbeat recorded the family
+#: is the TYPE line and no sample — see test_worker_heartbeat_gauge.py.
+HEARTBEAT_TYPE_LINE = "# TYPE entropia_worker_heartbeat_age_seconds gauge\n"
+
+
 @pytest.mark.parametrize(("rows", "lag", "oldest"), CASES)
-def test_rendering_matches_the_pre_i05_body(rows, lag, oldest) -> None:
+def test_rendering_still_opens_with_the_pre_i05_body(rows, lag, oldest) -> None:
     age = 0.0 if oldest is None else (NOW - oldest).total_seconds()
     gauges = JobGauges(
         queue_depth=rows,
@@ -73,15 +81,17 @@ def test_rendering_matches_the_pre_i05_body(rows, lag, oldest) -> None:
         oldest_lease_age_seconds=max(0.0, age),
     )
 
-    assert _render_operational_gauges(gauges) == _legacy_gauge_text(rows, lag, oldest, NOW)
+    legacy = _legacy_gauge_text(rows, lag, oldest, NOW)
+    assert _render_operational_gauges(gauges) == legacy + HEARTBEAT_TYPE_LINE
 
 
 def test_metric_names_and_label_order_are_pinned() -> None:
-    """The three metric names and the ``queue`` -> ``status`` label order are contract."""
+    """The four metric names and the ``queue`` -> ``status`` label order are contract."""
     gauges = JobGauges(
         queue_depth=(("backtest", JobStatus.RUNNING, 2),),
         outbox_lag_seconds=1.5,
         oldest_lease_age_seconds=60.0,
+        worker_heartbeat_age_seconds=7.25,
     )
 
     assert _render_operational_gauges(gauges) == (
@@ -91,4 +101,6 @@ def test_metric_names_and_label_order_are_pinned() -> None:
         "entropia_outbox_lag_seconds 1.500\n"
         "# TYPE entropia_job_lease_age_seconds gauge\n"
         "entropia_job_lease_age_seconds 60.000\n"
+        "# TYPE entropia_worker_heartbeat_age_seconds gauge\n"
+        "entropia_worker_heartbeat_age_seconds 7.250\n"
     )

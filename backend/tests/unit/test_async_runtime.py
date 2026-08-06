@@ -144,7 +144,10 @@ def test_every_actor_crosses_the_boundary_through_run_sync() -> None:
             for node in ast.walk(body)
             if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
         }
-        # ``system_heartbeat`` is pure logging and needs no async body at all.
-        assert "run_sync" in calls or body.name == "system_heartbeat", (
+        # No exemption remains. ``system_heartbeat`` used to be pure logging and
+        # was allowed to skip the boundary; ADIM 25 gave it a durable write, so
+        # every actor now reaches its async body the same way and the escape
+        # hatch would only hide the next actor that forgets.
+        assert "run_sync" in calls, (
             f"actor {body.name} does not reach its async body through run_sync()"
         )

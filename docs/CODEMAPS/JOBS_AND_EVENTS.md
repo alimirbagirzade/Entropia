@@ -13,7 +13,7 @@ transport'tur. Mesaj kaybolursa scheduler sweep'i (INF-03/INF-09) işi geri geti
 
 | Aktör | Kuyruk | Satır | Gövde (`application/jobs/`) |
 |---|---|---|---|
-| `system_heartbeat` | `maintenance` | `:39` | (scheduler tick ping'i) |
+| `system_heartbeat` | `maintenance` | `:39` | `heartbeat.py::record_worker_heartbeat` — scheduler tick ping'i **ve** round-trip kanıtının kalıcı kaydı (ADIM 25) |
 | `run_market_data_analysis` | `data` | `:45` | `market_data.py` |
 | `run_research_data_analysis` | `data` | `:72` | `research_data.py` |
 | `run_trading_signal_import` | `data` | `:99` | `trading_signal.py` |
@@ -81,9 +81,17 @@ Regresyon: `tests/unit/test_async_runtime.py` (AST guard) +
 > — override'daki bir yazım hatası compose'a sessizce imajsız yeni bir servis tanımlatır ve
 > gerçek plane'i `AUTH_MODE=session`'da bırakır (tam olarak `worker-agent-executor`'ın başına
 > gelen şey).
-> `system_heartbeat` durable job satırı üretmez (gövdesi `job_id` almaz), bu yüzden
+> `system_heartbeat` durable **job** satırı üretmez (gövdesi `job_id` almaz), bu yüzden
 > `maintenance` fiilen **tek** durable aktörlüdür — `ACTOR_BY_QUEUE` girdisi güvenlidir
 > (`tests/unit/test_worker_queue_registry.py` bunu invariant olarak pinliyor).
+>
+> **ADIM 25 — artık salt log değil.** Gövde `application/jobs/heartbeat.py::record_worker_heartbeat`
+> ile `app_metadata`'ya tek satırlık **upsert** yapar (`key="worker.maintenance.last_heartbeat_at"`,
+> migration YOK — tablo zaten mapped'di ve yazarı yoktu). `jobs` tablosuna hâlâ hiçbir şey
+> yazmaz, yani yukarıdaki invariant **bozulmadı**. Okuma ucu `queries/job_gauges.py` →
+> `entropia_worker_heartbeat_age_seconds`. **Kapsam sınırı:** bu gauge yalnız `maintenance`
+> kuyruğunu tüketen worker'ın (`worker-default`) canlılığını kanıtlar; ölü bir `worker-backtest`
+> onu tazecik bırakır — bkz. `docs/runbooks/worker-down.md`.
 
 ### Neden `data` özel
 

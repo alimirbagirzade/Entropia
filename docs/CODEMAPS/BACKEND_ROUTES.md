@@ -87,7 +87,7 @@ rv-N` kullanmaya devam ediyor).
 | GET `/health/live` | `live` `health.py:31` | — | |
 | GET `/health/ready` | `ready` `health.py:36` | — | |
 | GET `/meta` | `meta` `meta.py:32` | — | |
-| GET `/metrics` | `metrics_endpoint` `metrics.py:104` | Prometheus text exposition | `require_metrics_scraper:42` (O-22 — Bearer `ENTROPIA_METRICS_TOKEN`; yok=401 `METRICS_SCRAPE_UNAUTHORIZED`, yanlış=403 `METRICS_SCRAPE_FORBIDDEN`; token yapılandırılmamışsa production'da fail-closed 403, local'de açık) |
+| GET `/metrics` | `metrics_endpoint` `metrics.py:104` | Prometheus text exposition — **7 aile** (3 process + 4 DB-backed gauge; sonuncusu ADIM 25 `entropia_worker_heartbeat_age_seconds`). Envanter + alert/runbook eşlemesi: `docs/runbooks/METRIC_ALERT_MATRIX.md` | `require_metrics_scraper:42` (O-22 — Bearer `ENTROPIA_METRICS_TOKEN`; yok=401 `METRICS_SCRAPE_UNAUTHORIZED`, yanlış=403 `METRICS_SCRAPE_FORBIDDEN`; token yapılandırılmamışsa production'da fail-closed 403, local'de açık) |
 | GET `/events` | `events` `sse.py:293` | **SSE stream** — `EventSourceResponse(_event_source)`; outbox→SSE fan-out'un HTTP ucu. `Last-Event-ID` header'ı replay cursor'ıdır (O-21). OCC/Idem kavramsal olarak yok | `_authenticated_subscriber:270` → `require_authenticated` (AUTH-11; anonim abonelik kapalı, handshake DB'ye dokunmadan reddedilir) |
 
 > **Prob hatası artık sessiz değil (I-13, #467).** `/health/ready` ve `/metrics`'i besleyen dört

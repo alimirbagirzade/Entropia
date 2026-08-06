@@ -128,3 +128,60 @@ describe("summarizeMetrics", () => {
     expect(s.familyCount).toBe(0);
   });
 });
+
+// --------------------------------------------------------------------------
+// Worker heartbeat (ADIM 25).
+//
+// The backend prints the TYPE line with NO sample when no worker round-trip has
+// ever been recorded, deliberately, so the series is absent rather than a
+// healthy-looking 0. The parser must carry that distinction through to the
+// summary — collapsing it to 0 here would re-introduce on the client exactly
+// the lie the exposition refuses to tell.
+// --------------------------------------------------------------------------
+
+const HEARTBEAT_RECORDED = `# TYPE entropia_jobs_depth gauge
+entropia_jobs_depth{queue="maintenance",status="running"} 1
+# TYPE entropia_outbox_lag_seconds gauge
+entropia_outbox_lag_seconds 0.400
+# TYPE entropia_job_lease_age_seconds gauge
+entropia_job_lease_age_seconds 2.000
+# TYPE entropia_worker_heartbeat_age_seconds gauge
+entropia_worker_heartbeat_age_seconds 12.500
+`;
+
+const HEARTBEAT_NEVER_RECORDED = `# TYPE entropia_jobs_depth gauge
+entropia_jobs_depth{queue="maintenance",status="running"} 1
+# TYPE entropia_outbox_lag_seconds gauge
+entropia_outbox_lag_seconds 0.400
+# TYPE entropia_job_lease_age_seconds gauge
+entropia_job_lease_age_seconds 2.000
+# TYPE entropia_worker_heartbeat_age_seconds gauge
+`;
+
+describe("worker heartbeat gauge", () => {
+  it("reads the recorded age", () => {
+    expect(parseMetricsSummary(HEARTBEAT_RECORDED).workerHeartbeatAgeSeconds).toBe(12.5);
+  });
+
+  it("reports null — never 0 — when the backend published no sample", () => {
+    const summary = parseMetricsSummary(HEARTBEAT_NEVER_RECORDED);
+    expect(summary.workerHeartbeatAgeSeconds).toBeNull();
+    expect(summary.workerHeartbeatAgeSeconds).not.toBe(0);
+    // The rest of the gauge block is present, so this is NOT a degraded scrape:
+    // "no worker has ever checked in" is a different fact from "DB unreachable".
+    expect(summary.degraded).toBe(false);
+  });
+
+  it("is null on a degraded scrape, where every gauge is missing", () => {
+    const summary = parseMetricsSummary(DEGRADED);
+    expect(summary.workerHeartbeatAgeSeconds).toBeNull();
+    expect(summary.degraded).toBe(true);
+  });
+
+  it("does not disturb the gauges that preceded it", () => {
+    const summary = parseMetricsSummary(HEARTBEAT_RECORDED);
+    expect(summary.outboxLagSeconds).toBe(0.4);
+    expect(summary.leaseAgeSeconds).toBe(2);
+    expect(summary.jobsDepthTotal).toBe(1);
+  });
+});

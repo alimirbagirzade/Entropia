@@ -4242,165 +4242,41 @@ INF-03 sweep'i telafi ediyor, o sweep de %50 çalışıyordu. `apps/worker/actor
 `asyncio.run` çağrısı **analiz EDİLMEDİ** — dramatiq thread yeniden kullanımına bağlı, ölçmeden
 iddia yok.
 
-> **KAPANDI (sonradan).** Bu devrin iki ucu da indi: `agent_coordinator` → **PR #600** (#591),
-> `apps/worker/actors.py`'nin 11 `asyncio.run` çağrısı → **PR #597** (ölçüldü: canlı stack'te 4
-> loop çökmesi, 1 mesaj düşürüldü). Ayrıntı: bu dosyanın §INF-15 girdisi.
 
-## INF-15 — Worker actor + agent-coordinator event-loop ömrü landed (PR #597, #600)
+| ne | nerede |
+|---|---|
+| stepper fabrikası | `domain/backtest/engine.py::_build_stepper` |
+| stepper kaydı | `engine.py::_ItemStepper` |
+| bir barı ilerlet | `_ItemStepper.step(bar: _Bar) -> None` |
+| gün sonu settlement | `_ItemStepper.finalize() -> None` |
+| sonucu projekte et | `_ItemStepper.output() -> EngineOutput` |
+| tutulan pozisyonu oku | `_ItemStepper.open_position() -> _Position \| None` |
+| canlı defter / run ayarları | `_ItemStepper.ledger`, `_ItemStepper.ctx` |
+| ham dict → `_Bar` | `execution/state.py::_normalize` |
+| eşdeğerlik kanıtı şablonu | `tests/unit/test_backtest_engine_stepper.py` |
 
-INF-14'ün (PR #593) scheduler'da düzelttiği kusurun iki ikizi de kapandı. Aynı şekil: iş birimi
-başına `asyncio.run(...)` loop açıp kapatıyor, `get_engine` `@lru_cache`'li, asyncpg havuzu
-process-wide.
+**ADIM 18'in bıraktığı anchor'lar (değişmedi):** `portfolio_engine.py::run_portfolio` ·
+`::ItemParticipant` (Protocol) · `CarryCharges` / `MandatoryExit` · `PortfolioTick` /
+`PortfolioRun` · `PHASE_ORDER` / `PORTFOLIO_LOOP_VERSION` · fail-closed reddedişler
+(`InvalidParticipantError`, `MisformedIntentError`, `UnsupportedIntentKindError`,
+`UnpriceableAdmissionError`) · referans katılımcı
+`tests/unit/oracles/portfolio_harness.py::_ScriptedParticipant` · containment'ın kalan tek kapısı
+`tests/unit/oracles/test_oracle_portfolio_containment_gate.py::test_the_phase_loop_exists_but_no_production_path_reaches_it`.
 
-- **PR #600 — `agent_coordinator`** (#591'i kapatır). Cycle'lar **tam %50 dönüşümlü** düşüyordu;
-  `agent_coordinator.cycle_failed` adıyla göründüğü için scheduler aramalarında çıkmamıştı.
-  Yarısı F-20 follow-up task + durable executor Job'ını materialize etmeyi atlıyordu. **Kayıp
-  yok** (cycle bütün rollback, AL-14 yeniden okur) ama gecikme iki katıydı. `run()` →
-  `asyncio.run(_loop_until_stopped())`; `Event` **run başına** kurulur; engine `finally`'de loop
-  hâlâ açıkken dispose edilir. Scheduler ile ortak helper'a **bilerek çıkarılmadı** — #591'deki
-  çıkarma önerisi açık takip. Test fix öncesi **KIRMIZI** (9'un 5'i). Canlı-Postgres ikizi
-  bilerek yok (gerekçe: mekanizma scheduler'da aynı şekle karşı zaten kanıtlandı).
-- **PR #597 — `apps/worker/actors.py`**, ADIM 21'in açık bıraktığı yarı. Burada kusur satır
-  sıkıştırmıyor, **durable job'ı kalıcı mahsur bırakıyordu**: `data` kuyruğu scheduler'ın
-  `ACTOR_BY_QUEUE`'sunda bilerek yok, dolayısıyla düşen mesaj sonsuza dek `queued`/`attempts=0`
-  kalıyor ve **etki hiç gerçekleşmiyor**. Canlı dev-auth stack'inde üretildi (8 eşzamanlı Market
-  Data: 11 start, 7 done, 4 loop çökmesi, 1 mesaj düşürüldü). **Çökme gerekli değil** — paralel
-  iki `data` job'ı yeter. Yeni `infrastructure/async_runtime.py`: process başına tek uzun ömürlü
-  loop (daemon thread) + `run_sync()` + `os.register_at_fork` guard'ı. **11 async actor'ün
-  TAMAMI** geçti. Ayrıca `scheduler._redeliver` artık yönlendiremediği adayları sessizce
-  atlamıyor → `scheduler.redeliver_unroutable` (davranış aynı, yalnız operator sinyali).
 
-**Migration/OpenAPI/`ENGINE_VERSION` yok · log event adları değişmedi ·
-`docs/CODEMAPS/JOBS_AND_EVENTS.md` tazelendi.**
-Bu ikisi, ADIM 21 bloğundaki *"AÇIK kusur / AÇIK DEVİR"* satırlarını **kapatır**.
-
----
-
-## INF-16 — dev-auth override + backup fallback landed (PR #599, #601)
-
-- **PR #599** — `worker-agent-executor` `docker-compose.dev-auth.yml`'de yoktu →
-  `AUTH_MODE=session` koşuyordu; konteyner başlıyor ve healthcheck'i geçiyordu, stack yeşil
-  okunuyordu. Test artık **iki compose dosyasını da** okuyor ve plane kümesini çözülmüş
-  `image: entropia-backend:local` değerinden türetiyor. **Birleşmiş config doğrulandı:**
-  `docker compose config` → 10/10 `dev`.
-- **PR #601** — dockerize edilmiş `mc` fallback'i **yazıldığı günden beri hiçbir platformda
-  çalışmamıştı**: `minio/mc` `ENTRYPOINT ["mc"]` bildirir, `sh -c "…"` shell olarak koşmaz.
-  Host'ta `mc` yoksa (sunucu ve CI'da **normal durum**) her yedek **hiç artefakt byte'ı
-  içermiyordu** ve `restore.sh` aynı hatayı taşıdığı için gerçek bir DR veritabanını geri yükler,
-  bir WARN basar, **exit 0** verir ve her artefaktı geri yüklenmemiş bırakırdı. İlk hipotez
-  (Linux networking) yanlıştı; yerel reprodüksiyon çürüttü.
-
----
-
-## ADIM 16 (geç sevk) — `run_engine` resumable stepper landed (PR #602)
-
-**Handoff `## Next` bloğunun 1(a) maddesidir ve KAPANDI.** Base `e6cd2ee` → merge `c5d4c5d`.
-
-`run_engine`'in 1355 satırlık bar-döngüsü gövdesi artık bir **resumable stepper**: kurulum yarısı
-`_build_stepper(...)`, dönen `_ItemStepper` kaydı `step(bar)` / `finalize()` / `output()` /
-`open_position()` + canlı `ledger` ve `ctx` taşıyor. `run_engine` **imzasını, docstring'ini ve
-semantiğini korudu**, dokuz satırlık sürücü oldu. Engine-destekli `ItemParticipant` çiftinin
-**PR A**'sı; worker'a dokunulmadı.
-
-**Kabul = ADR §15 R-4: 46 golden digest, başka hiçbir şey. 46/46 kımıldamadı.** Tam suite tek
-çağrıda **3699 passed / 4 xfailed / 0 failed**, coverage **%93.29** (`engine.py` %95.1);
-dört xfail bilinen katı küme (#556 ×2, #557, #558). ruff/mypy temiz.
-
-**Saf refactor kanıtı:** taşınan aralıklar `HEAD`'e karşı byte-byte karşılaştırıldı (955 / 1351 /
-44 / 15 satır — hepsi aynı; formatter yalnız bir `max(...)` çağrısını daralttı). `nonlocal` bloğu
-**ölçüldü, tahmin edilmedi**: AST geçişi barlar arası taşınan **tam on** adı bildiriyor; diğer 83
-ad definite-assignment ile kanıtlandı. `tests/unit/test_backtest_engine_stepper.py` (216 satır)
-digest'lerin kapatamadığı yarıyı kilitler: aynı senaryolar **çağrı başına tek bar**, her bar
-çifti arasında askıya alınarak yeniden oynatılır ve digest özdeşliği iddia edilir.
-
-**Bilerek yok:** adaptör + `jobs/backtest_engine.py:298` call site (**PR B**), `ENGINE_VERSION`
-bump, containment lift, manifest policy alanları (üçü de **ADIM 20**).
-`SHARED_ALLOCATION_STATUS` = `future_dev`, migration/OpenAPI yok.
-
----
-
-## DOKÜMAN ONARIMI landed — silinen ADIM 18 kaydı + kayıtsız slice'lar
-
-**Docs-only, sıfır üretim satırı.** Bu kapanış slice'ı `PROJECT_HISTORY.md`'ye PR #590'ın
-sessizce sildiği **ADIM 18 faz-döngüsü kaydını** (208 satır, `ba586c5`'ten birebir) geri yükledi
-ve hiç yazılmamış dört kaydı ekledi: ADIM 21 (worker delivery), INF-15, INF-16, ADIM 16 stepper.
-Ayrıca bayat iddialar kapatıldı (handoff'un *"`actors.py` analiz EDİLMEDİ"* devri; `CLAUDE.md`'nin
-`20a32ab`/`3cc9588` HEAD'i ve iki *"AÇIK kusur"* satırı). Yeni kickoff:
-`docs/ADIM16_STEPPER_LANDED_KICKOFF.md`.
-
-**Yerel tam suite bu slice'ta KOŞULMADI — dürüst gerekçe, sonuç iddiası değil.** Diff tamamen
-markdown; `grep -rn` ile doğrulandı ki **hiçbir test bu dosyaların içeriğini okumuyor**
-(`PROJECT_HISTORY` / `CLAUDE.md` yalnız iki e2e spec'inin **yorumunda** anılıyor), `src/` ve
-`tests/` dokunulmadı, dolayısıyla coverage kapısı yapısal olarak kımıldayamaz. Koşu **başlatıldı
-ve terk edildi**: aynı makinede iki tam pytest suite'i daha koşuyordu (load average **32** / 8
-çekirdek), 47 dakikada **%7**'ye ulaştı. Bu tabloda ölçülen şey doğruluk değil çekişme olurdu.
-Bu ağaç için otorite: PR #602'nin **aynı içerik** üzerindeki tam koşusu (**3699 passed /
-4 xfailed / 0 failed**, coverage **%93.29**) ve CI.
-
-**Ders:** hiçbir CI kapısı `docs/` markdown'ını okumaz; bir docs PR'ı sessizce başka bir docs
-PR'ını geri alabilir. **Docs PR'ı açarken kendi diff'inin silme satırlarına bak** —
-`git show <sha> -- docs/ | grep '^-' | head`.
-
----
-
-## Next: **worker call site — `ItemParticipant` (gerçek engine) → sonra ADIM 20**
-
-**Sıradaki tek adım ADIM 20 DEĞİL.** `run_portfolio` var ama **çağıranı yok**; ADIM 20'nin
-matrisindeki A1/A3/A5 dışında hiçbir satır bu boşluk kapanmadan kapanamaz.
-
-**1. Engine-destekli `ItemParticipant` — iki PR'a bölünmüştü; (a) İNDİ, (b) sıradaki iştir.**
-
-- **(a) Stepper — LANDED (PR #602, `c5d4c5d`).** `run_engine`'in bar döngüsü artık
-  `_build_stepper(...)` → `_ItemStepper` (`step(bar)` / `finalize()` / `output()` /
-  `open_position()` + canlı `ledger`, `ctx`); `run_engine` imzasını ve semantiğini koruyan dokuz
-  satırlık bir sürücü. Kabul karşılandı: **46/46 golden digest kımıldamadı.**
-- **(b) Adaptör + worker call site — AÇIK, sıradaki TEK adım.** `_ItemStepper` üstüne
-  `portfolio_engine.ItemParticipant`'ı uygulayan bir adaptör yaz ve
-  `jobs/backtest_engine.py:298`'deki item döngüsünü `run_portfolio` ile değiştir (yalnız
-  **>1 item** çalışırken; tek item `run_engine`'de kalır — ADR §3.2).
-  Adaptörün karşılaması gereken sözleşme: `ItemParticipant` Protocol'ünün `identity`, `stream`,
-  `instrument_id`, `carry`, `mandatory_exit`, `entry` üyeleri.
-  **Ayrılık korunmalı:** (a) restructure'dı, (b) re-price riskini taşır — ADR §15 R-4'ün kuralı
-  ADIM 16 atlandığında bir kez kaybedildi, ikinci kez kaybedilmesin.
-  **Faz döngüsünün modellemediği üç faz (P0 cursor, P2 pending fills, P8 same-direction
-  scaling) adaptörün de sınırıdır** — admitted bir `scale_in` bilerek
-  `UnsupportedIntentKindError` atar.
 
 **2. Sonra ADIM 20** (manifest policy alanları, `ENGINE_VERSION` bump, digest yenileme,
 containment lift). Ön koşulları — hâlâ açık:
 - **A17**: `tests/integration/test_research_point_in_time_parity.py`'de 4 `xfail(strict)`
   (#556 ×2, #557, #558). "green, unweakened" değil.
-- **OD-1 / OD-2 / OD-6 kapıları KOD OLARAK YOK.** ADR §13.1 kararı kaydetti; blocker'ları
-  yazmadı. `provenance.MARK_STALENESS_POLICY` hâlâ `"undefined_pending_od2"`,
-  `arbitration.CONTENTION_SELECTION_STATUS` hâlâ `"recommended_pending_approval"` — **ikisini
-  de ADIM 20 çevirir**, manifest onları taşımaya başladığında (ADR §13.1 son paragraf, R-5).
+- **OD-1 / OD-2 / OD-6 kapıları KOD OLARAK YOK.** `provenance.MARK_STALENESS_POLICY` hâlâ
+  `"undefined_pending_od2"`, `arbitration.CONTENTION_SELECTION_STATUS` hâlâ
+  `"recommended_pending_approval"` — **ikisini de ADIM 20 çevirir** (ADR §13.1 son paragraf, R-5).
 - **#544 (NET)** kanonda tanımsız · **#559 (DST)** karışık zaman dilimi öncesi.
-- **A4 / A18** gerçek `EngineOutput` digest'i ister → 1. maddeye bağlı.
-- **A21** tick tabanlı cancel checkpoint → worker değişikliğine bağlı.
 
-**ADIM 18'in bıraktığı reuse anchor'ları — tam sembol adlarıyla:**
-
-| ne | nerede |
-|---|---|
-| faz döngüsü giriş noktası | `domain/backtest/portfolio_engine.py::run_portfolio` |
-| katılımcı sözleşmesi | `portfolio_engine.py::ItemParticipant` (Protocol) |
-| P1 / P3 girdi tipleri | `portfolio_engine.py::CarryCharges`, `MandatoryExit` |
-| çıktı tipleri | `portfolio_engine.py::PortfolioTick`, `PortfolioRun` |
-| faz sırası, değer olarak | `portfolio_engine.py::PHASE_ORDER`, `PORTFOLIO_LOOP_VERSION` |
-| fail-closed reddedişler | `InvalidParticipantError`, `MisformedIntentError`, `UnsupportedIntentKindError`, `UnpriceableAdmissionError` |
-| scripted katılımcı (referans uygulama) | `tests/unit/oracles/portfolio_harness.py::_ScriptedParticipant` |
-| **stepper (PR #602 bıraktı — adaptörün dayanacağı yüzey)** | `domain/backtest/engine.py::_build_stepper`, `::_ItemStepper` (`step` / `finalize` / `output` / `open_position` / `ledger` / `ctx`) |
-| stepper'ın resumability kanıtı | `tests/unit/test_backtest_engine_stepper.py` (bar-başına askıya alarak digest özdeşliği) |
-| containment'ın kalan tek kapısı | `tests/unit/oracles/test_oracle_portfolio_containment_gate.py::test_the_phase_loop_exists_but_no_production_path_reaches_it` |
-
-**Faz döngüsünün MODELLEMEDİĞİ (dürüst sınır, `portfolio_engine.py` docstring'inde de yazılı):**
-P0 (clock cursor'ı), **P2 pending fills**, **P8 same-direction scaling** — admitted bir
-`scale_in` bilerek `UnsupportedIntentKindError` atar, çünkü `set_position` tutulan boyutu
-**değiştirir** ve pozisyonu sessizce küçültürdü. Mark policy yok (OD-2): `E(t)` realized-only.
-
-**Paralel yürüyebilecek, bloke etmeyen kalemler** (ADIM 20 kapanışından devralındı, değişmedi):
-#550/#551/#552 (sizing/booking — **#550 karara bağlanmadan sizing'e dokunma**), #539 (düzeltme
-indi, issue açık), #514 (ekran okuyucu, kanıtsız kapatma yok).
+**Paralel yürüyebilecek, bloke etmeyen kalemler:** #550/#551/#552 (sizing/booking — **#550 karara
+bağlanmadan sizing'e dokunma**), #539 (düzeltme indi, issue açık), #514 (ekran okuyucu, kanıtsız
+kapatma yok), #591 (`agent_coordinator` event-loop — PR #600 ile kapandıysa doğrula).
 
 `docs/audit/current_main_ground_truth_2026-08-03.md` §18'in 2/3/4/6 kalemleri kapandığı hâlde
 belge güncellenmedi — **kullanmadan önce doğrula.**

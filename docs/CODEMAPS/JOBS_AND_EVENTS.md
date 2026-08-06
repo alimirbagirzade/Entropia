@@ -13,20 +13,46 @@ transport'tur. Mesaj kaybolursa scheduler sweep'i (INF-03/INF-09) işi geri geti
 
 | Aktör | Kuyruk | Satır | Gövde (`application/jobs/`) |
 |---|---|---|---|
-| `system_heartbeat` | `maintenance` | `:28` | (scheduler tick ping'i) |
-| `run_market_data_analysis` | `data` | `:34` | `market_data.py` |
-| `run_research_data_analysis` | `data` | `:61` | `research_data.py` |
-| `run_trading_signal_import` | `data` | `:88` | `trading_signal.py` |
-| `run_trade_log_import` | `data` | `:115` | `trade_log.py` |
-| `run_backtest_engine` | `backtest` | `:142` | `backtest_engine.py` |
-| `run_agent_tool` | `agent` | `:170` | `agent_tools.py` |
-| `run_agent_tool_high` | `agent-high` | `:182` | `agent_tools.py` |
-| `run_agent_executor` | `agent-executor` | `:205` | `agent_executor.py` |
-| `run_create_package_job` | `default` | `:234` | `create_package.py` (kind-dispatch) |
-| `run_trash_purge` | `maintenance` | `:263` | `purge.py` |
-| `run_package_import` | `data` | `:290` | `package_import.py` |
+| `system_heartbeat` | `maintenance` | `:39` | (scheduler tick ping'i) |
+| `run_market_data_analysis` | `data` | `:45` | `market_data.py` |
+| `run_research_data_analysis` | `data` | `:72` | `research_data.py` |
+| `run_trading_signal_import` | `data` | `:99` | `trading_signal.py` |
+| `run_trade_log_import` | `data` | `:126` | `trade_log.py` |
+| `run_backtest_engine` | `backtest` | `:153` | `backtest_engine.py` |
+| `run_agent_tool` | `agent` | `:181` | `agent_tools.py` |
+| `run_agent_tool_high` | `agent-high` | `:193` | `agent_tools.py` |
+| `run_agent_executor` | `agent-executor` | `:216` | `agent_executor.py` |
+| `run_create_package_job` | `default` | `:245` | `create_package.py` (kind-dispatch) |
+| `run_trash_purge` | `maintenance` | `:274` | `purge.py` |
+| `run_package_import` | `data` | `:301` | `package_import.py` |
 
 Tüm aktörler `max_retries=3`.
+
+### Yürütme modeli — sync gövde → async gövde (ZORUNLU: `run_sync`)
+
+Her aktör gövdesi async gövdesine **`infrastructure/async_runtime.py::run_sync`** ile geçer;
+**`asyncio.run` YASAK**. `asyncio.run` her mesajda loop'u kapatır, oysa
+`postgres/engine.py::get_engine` `@lru_cache(maxsize=1)`'dir → asyncpg pool'u **process-wide**
+ve her loop'tan uzun yaşar. dramatiq çok thread'li çalıştığı için bir thread'in loop'unda
+doğan bağlantı başka thread'in loop'unda check-out edilir ve asyncpg
+`got Future ... attached to a different loop` atar; mesaj `max_retries`'i tüketir ve broker onu
+**düşürür**. `data` kuyruğunda bu **kurtarılamaz** (aşağıdaki tabloya göre otomatik redelivery
+yok) — satır sonsuza dek `queued` + `attempts = 0` kalır. `run_sync` process başına **tek**
+uzun ömürlü loop kullanır (ayrı daemon thread), böylece pool loop'undan asla uzun yaşamaz.
+Regresyon: `tests/unit/test_async_runtime.py` (AST guard) +
+`tests/integration/test_worker_actor_event_loop.py` (gerçek engine, eşzamanlı gövdeler).
+
+> **İKİ MEKANİZMA BİLEREK AYRI — birini silme (karar: 2026-08-05).** Aynı kusur üç yerde
+> çıktı ve **iki farklı** şekilde düzeltildi: aktör gövdeleri `run_sync` (#597), uzun ömürlü
+> process'ler (`apps/scheduler/__main__.py` #593, `apps/agent_coordinator/__main__.py` #600)
+> ise kendi içlerinde `asyncio.run(_loop_until_stopped())`. Bu bir tutarsızlık **değil**;
+> `run_sync` yalnız **senkron entrypoint** dikişidir. Scheduler/coordinator oraya
+> BAĞLANAMAZ: ikisi de SIGTERM/SIGINT'i `loop.add_signal_handler` ile kurar ve bu ana thread
+> dışında `RuntimeError: set_wakeup_fd only works in main thread of the main interpreter`
+> atar (ölçüldü) — oysa `run_sync`'in loop'u tanımı gereği **daemon thread**'tedir. Şekil de
+> farklı: onlarda process'in kendisi TEK uzun ömürlü async gövdedir, aktörde ise mesaj başına
+> çağrılan kısa bir sync entrypoint vardır ve çağrıdan uzun yaşayan bir loop gerekir.
+> **Tek kural, iki uygulama:** loop pool'dan uzun yaşamalı.
 
 ## Kuyruklar
 
@@ -43,8 +69,18 @@ Tüm aktörler `max_retries=3`.
 > **ADIM 21 bulgusu.** `agent-executor` kuyruğunun compose'da **hiç tüketicisi yoktu**:
 > Coordinator ona iş gönderiyor, scheduler her grace penceresinde yeniden yolluyor, `send`
 > her seferinde BAŞARILI dönüyor ve görev asla koşmuyordu — hiçbir katman hata bildirmiyor.
-> `tests/unit/test_worker_plane_deployment.py` artık `docker-compose.yml`'i okuyup
-> aktör-kuyruk kümesiyle karşılaştırıyor; tüketicisiz her durable kuyruk CI'da kırmızı.
+> `tests/unit/test_worker_plane_deployment.py` artık **iki compose dosyasını da** okuyor.
+> `docker-compose.yml` tarafında aktör-kuyruk kümesiyle karşılaştırır: tüketicisiz her durable
+> kuyruk CI'da kırmızı (`test_every_durable_queue_has_a_worker_service`), aktörü olmayan her
+> tüketici de öyle (`test_no_worker_service_consumes_a_queue_no_actor_serves`). **#599'dan beri**
+> `docker-compose.dev-auth.yml` tarafında iki invariant daha pinli:
+> `test_dev_auth_override_forces_dev_mode_on_every_backend_plane` — base compose'da
+> `image: entropia-backend:local` olan HER plane override'da `AUTH_MODE: dev` taşımak zorunda
+> (plane kümesi el yazımı bir listeden değil, **çözülmüş image değerinden** türer, yani yeni bir
+> plane sessizce dışarıda kalamaz); ve `test_dev_auth_override_declares_no_service_the_base_stack_lacks`
+> — override'daki bir yazım hatası compose'a sessizce imajsız yeni bir servis tanımlatır ve
+> gerçek plane'i `AUTH_MODE=session`'da bırakır (tam olarak `worker-agent-executor`'ın başına
+> gelen şey).
 > `system_heartbeat` durable job satırı üretmez (gövdesi `job_id` almaz), bu yüzden
 > `maintenance` fiilen **tek** durable aktörlüdür — `ACTOR_BY_QUEUE` girdisi güvenlidir
 > (`tests/unit/test_worker_queue_registry.py` bunu invariant olarak pinliyor).
@@ -57,7 +93,15 @@ aktöre gideceğini **çıkaramaz** → otomatik sweep bu kuyruğu asla yönlend
 
 Bunun yerine **operator eylemi** vardır: `POST /admin/data-queue/redeliver`
 (`routes/admin_panel.py:205` → `commands/data_queue.py::redeliver_data_queue_jobs`), payload'daki
-`job_kind` ayırıcısını `DATA_ACTOR_BY_KIND` (`actors.py:323`) ile eşleyerek yönlendirir.
+`job_kind` ayırıcısını `DATA_ACTOR_BY_KIND` (`actors.py:334`) ile eşleyerek yönlendirir.
+
+**Ama atlamak SESSİZ değildir.** Re-dispatch operator eylemi olarak kalır; yalnız her tick'te
+`_redeliver` yönlendiremediği adayları **`scheduler.redeliver_unroutable`** uyarısıyla bildirir
+(alanlar: `queue`, `count`, ilk `_UNROUTABLE_SAMPLE=20` `job_ids`). Adaylar zaten redeliver grace
+penceresini aşmış satırlardır, yani sağlıklı bir in-flight iş bu dalı hiç görmez — uyarı ancak
+gerçekten sıkışmış bir iş varsa çıkar. Bu, kaybolan bir `data` mesajının tek izinin "kimsenin
+izlemediği bir `queued` satır" olması durumunu kapatır. Davranış değişmedi: hiçbir şey otomatik
+redeliver edilmez.
 
 **`job_kind` taksonomisi** (`application/jobs/data_queue.py:31-37`, `DATA_JOB_KINDS:37`):
 `market_data_analysis` · `research_data_analysis` · `trading_signal_import` · `trade_log_import` · `package_import`

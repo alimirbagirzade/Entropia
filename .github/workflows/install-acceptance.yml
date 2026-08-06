@@ -366,6 +366,22 @@ jobs:
           docker compose exec -T -e SEED_E2E_GOLDEN=1 -e SEED_ESP_TA=1 -e SEED_RATIONALE=1 \
             -e SEED_INSTRUMENTS=1 api python -m entropia.apps.seed
 
+      - name: Drive a real workload so the append-only planes are not empty
+        # The seed is a fixture writer, not a user: it inserts through the
+        # repositories, so it never reaches `_audit_and_outbox` and writes ZERO
+        # audit_events and ZERO outbox_events — and it touches exactly one of
+        # the four object writers, leaving step [8] resting on a single
+        # `market/processed` parquet key. Measured on run 31038908690:
+        # "[7] all three append-only planes were EMPTY" and "[8] 1 objects".
+        #
+        # One authenticated `POST /trade-logs/source-assets` closes both through
+        # the shipped command path — a `signals/source` object plus a real audit
+        # row and outbox row. It runs AFTER the seed (which owns provisioning)
+        # and BEFORE the backup, because the backup is what has to capture it.
+        env:
+          DR_WORKLOAD_BASE: http://localhost:8000/api/v1
+        run: bash scripts/dr-workload.sh | tee dr-workload.txt
+
       - name: DR acceptance — backup, restore to scratch, verify deeply
         env:
           POSTGRES_USER: entropia
@@ -375,6 +391,19 @@ jobs:
           # backup captured no object storage" is a REGRESSION here, not the
           # acceptable Docker-free WARN it is on a developer's machine.
           DR_REQUIRE_OBJECTS: "1"
+          # Floors, not descriptions. Each is what the seed + workload above
+          # actually produce, so a fixture that quietly stops writing turns the
+          # build red instead of printing a smaller number under a PASS line.
+          # Raise them when the fixture grows; never lower one to make a run
+          # green.
+          #   4 = market_dataset_revision, package_revision,
+          #       rationale_family_revision, manual_document_revisions
+          DR_MIN_EVIDENCE_TABLES: "4"
+          #   the workload's audit_events + outbox_events rows
+          DR_REQUIRE_APPEND_ONLY: "1"
+          #   2 = the seed's market/processed parquet
+          #     + the workload's signals/source asset
+          DR_MIN_OBJECTS: "2"
         run: bash scripts/dr-acceptance.sh | tee dr-acceptance.txt
 
       - name: The quick backup gate still passes on the same backup
@@ -397,7 +426,7 @@ jobs:
         if: always()
         run: |
           mkdir -p dr-evidence
-          cp dr-acceptance.txt backup-verify.txt dr-evidence/ 2>/dev/null || true
+          cp dr-acceptance.txt backup-verify.txt dr-workload.txt dr-evidence/ 2>/dev/null || true
           # MANIFEST.json is provenance (head, table count, byte size); the dump
           # and the mirrored objects are DATA and are deliberately not uploaded.
           find backups -name MANIFEST.json -exec cp {} dr-evidence/ \; 2>/dev/null || true

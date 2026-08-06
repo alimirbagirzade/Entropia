@@ -7,6 +7,15 @@
 **Narrow production fix:** `domain/research_data/time_policy.py::ensure_time_policy_mutable`
 (one call site: `application/commands/research_data.py::set_time_policy`)
 
+> **STATUS UPDATE (2026-08-06, later slice).** Everything below is the ADIM 13 record and is
+> left verbatim — the probe transcripts are the evidence. Two of the four discrepancies have
+> since been FIXED: **D-2 (#556, research half)** and **D-3 (#557)**. The gateway now routes
+> every research member through `jobs/research_data.py::admit_bundle_member`, the same
+> admission gate the compilers use, and resolves the Feature-Input-Only precondition with
+> `has_approved_feature_definition` instead of reading the caller's claim. The file is now
+> **16 passing + 1 `xfail(strict)`** (#558 only). Still open: **#558** (product decision) and
+> the **market half of #556** (`data_bundle.resolve` checks market-revision existence only).
+
 ---
 
 ## 1. The question this slice answers
@@ -133,14 +142,14 @@ string cannot express `fold=1`. Deterministic and reproducible, but undeclared.
 | S-1 | `agent_research_only` → allowed for Agent research, forbidden for the evidence bundle, rejected at `policy_scope="execution"` | **PROVEN** on all three surfaces | `test_agent_research_only_is_allowed_for_research_and_forbidden_for_execution` |
 | S-2 | `feature_input_only` **without** an approved definition → blocked from the evidence bundle, still allowed for Agent research | **PROVEN** | `test_feature_input_only_without_an_approved_definition_is_blocked` |
 | S-2b | `feature_input_only` **with** an approved definition → admitted (the required path actually opens the gate) | **PROVEN** (positive path had no coverage) | `test_feature_input_only_with_an_approved_definition_enters_the_evidence_bundle` |
-| S-3 | The Feature-Input-Only gate is decided **server-side**, not from a caller-supplied boolean | **DISCREPANCY → #557** | `test_the_agent_tool_gateway_resolves_the_feature_definition_server_side` (`xfail`) |
+| S-3 | The Feature-Input-Only gate is decided **server-side**, not from a caller-supplied boolean | ~~**DISCREPANCY → #557**~~ → **FIXED**, marker removed | `test_the_agent_tool_gateway_resolves_the_feature_definition_server_side` (now passing) |
 
 ### L — lifecycle (doc 12 §11, §14)
 
 | # | Scenario | Verdict | Evidence |
 |---|---|---|---|
-| L-1 | A soft-deleted root is blocked from **new** bundle use | **PROVEN for A2/B1; DISCREPANCY for A1 → #556** | `test_a_soft_deleted_root_is_blocked_from_both_bundle_compilers` (pass) vs `test_the_agent_tool_gateway_blocks_a_soft_deleted_root` (`xfail`) |
-| L-2 | A `deprecated` / `approval_revoked` revision is blocked from **new** bundle use | **PROVEN for A2/B1; DISCREPANCY for A1 → #556** | `test_a_non_consumable_revision_is_blocked_from_both_bundle_compilers` (pass) vs `test_the_agent_tool_gateway_blocks_a_deprecated_revision` (`xfail`) |
+| L-1 | A soft-deleted root is blocked from **new** bundle use | **PROVEN on A1/A2/B1** (was a DISCREPANCY for A1 → #556, now **FIXED**) | `test_a_soft_deleted_root_is_blocked_from_both_bundle_compilers` + `test_the_agent_tool_gateway_blocks_a_soft_deleted_root` (both passing) |
+| L-2 | A `deprecated` / `approval_revoked` revision is blocked from **new** bundle use | **PROVEN on A1/A2/B1** (was a DISCREPANCY for A1 → #556, now **FIXED**) | `test_a_non_consumable_revision_is_blocked_from_both_bundle_compilers` + `test_the_agent_tool_gateway_blocks_a_deprecated_revision` (both passing) |
 | L-3 | A historical correction leaves the previously pinned revision **and its compiled bundle** byte-identical | **PROVEN** | `test_the_canonical_recovery_is_a_new_revision_that_leaves_v1_intact` (recompiled `bundle_hash` and `members` are equal) |
 | L-4 | The freeze does not break the ordinary creation flow (a draft is still editable) | **PROVEN** | `test_a_pre_approval_revision_may_still_be_retimed_through_the_command` |
 
@@ -189,7 +198,7 @@ frozen. Result: 409 `LIFECYCLE_BLOCKED` with `field_path="available_time_policy"
 The canonical recovery already existed and is unchanged: `create_research_dataset_revision`
 appends a fresh DRAFT and advances the head, and the policy is set there.
 
-### D-2 — `data_bundle.resolve` reads no lifecycle state · **#556**
+### D-2 — `data_bundle.resolve` reads no lifecycle state · **#556** · research half **FIXED**
 
 A soft-deleted root and a `deprecated`/`approval_revoked` revision both pin successfully
 through the Agent **tool** surface, while the Agent **bundle compiler** blocks both:
@@ -202,7 +211,19 @@ compile_agent_data_bundle  -> NotFoundError: Research revision 'rrev_…' is not
 Same handler, secondary defect: the market half checks existence only while its docstring
 claims it pins *"approved Market"*.
 
-### D-3 — the Feature-Input-Only gate is decided from client input · **#557**
+**Fix (later slice).** The research half now calls
+`jobs/research_data.py::admit_bundle_member` — the same gate `compile_agent_data_bundle`
+and `compile_backtest_evidence_bundle` were refactored onto — so a soft-deleted root and a
+non-consumable revision are refused a NEW bundle on the tool surface too, as a recorded
+`rejected` / `RESEARCH_INPUT_BLOCKED` outcome rather than a crash. The gateway calls it with
+`for_execution=False` on both scopes on purpose: it pins a *context* manifest, not a
+`BacktestEvidenceBundle`, so it does not inherit the evidence compiler's ACTIVE+APPROVED and
+time-policy preconditions (a landed acceptance test pins a draft revision into an
+execution-scope context bundle, and the run re-derives those itself).
+**The market half is NOT fixed** — the docstring no longer claims "approved Market", and the
+ACTIVE-root + APPROVED-revision gate for a pinned market revision stays open on #556.
+
+### D-3 — the Feature-Input-Only gate is decided from client input · **#557** · **FIXED**
 
 `agent_tools.py:396` reads `has_approved_feature_definition` **from the request body** and
 feeds it straight into `ensure_allows_evidence_bundle`; the twin resolves it with a real
@@ -217,6 +238,14 @@ Mitigating context (why not CRITICAL): the engine does not execute this pin. Rea
 (`validators.py:782`) and the worker gate (`queries/funding.py:59-93`) both re-derive scope
 and state from the database, so the false pin corrupts recorded Agent provenance rather than
 an executed run.
+
+**Fix (later slice).** `has_approved_feature_definition` (the private helper, published) is
+now called by BOTH surfaces, and the gateway no longer reads
+`research_revisions[].has_approved_feature_definition` from the request at all — the field is
+simply ignored, so a caller asserting a precondition that does not hold gets a recorded
+`rejected` outcome instead of a pin. The `ensure_allows_evidence_bundle` rule itself stayed
+where it always was, in `domain/research_data/usage_scope.py`; only its *input* moved from
+the caller to the database.
 
 ### D-4 — no bundle pins the time policy · **#558**
 

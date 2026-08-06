@@ -137,7 +137,41 @@ OD-1/OD-2/OD-6 kapıları **kod olarak yok** · `MARK_STALENESS_POLICY` +
 
 ---
 
-## 6. Paste-ready resume prompt
+## 6. Yarım-cent yuvarlama — KARARA BAĞLANDI (2026-08-06, ürün kararı)
+
+**Sorun.** `allocation/rules.py::_money` = `ROUND_HALF_UP`;
+`execution/portfolio_ledger.py::MONEY_ROUNDING` = `ROUND_HALF_EVEN`. `1000.10 @ %25` →
+preview `250.03`, execution `250.025`. doc 13 §13 preview/manifest uyuşmazlığını **yasaklıyor**
+ama kanon kazananı seçmiyordu; `provenance.sleeve_amount_divergences()` farkı
+(`SLEEVE_AMOUNT_DIVERGENCE`) yalnızca **raporluyordu**.
+
+**KARAR: `initial_sleeve_capital` yeniden quantize EDİLMEZ — dondurulmuş preview'dan KOPYALANIR.**
+Kaynak, `PortfolioAllocationPlanRevision.derived_amounts`'ın dondurulmuş değeridir; execution o
+tutarı birebir alır. **Hiçbir yuvarlama sabiti değişmez:** `portfolio_ledger.MONEY_ROUNDING`
+`ROUND_HALF_EVEN` kalır (equity/pnl digest'leri güvende), `allocation/rules.py::_money`
+`ROUND_HALF_UP` kalır (kullanıcının gördüğü preview kaymaz).
+
+**Gerekçe.** Repo'nun zaten yazılı doktrini: tutarlar dondurulmuş revizyondan **kopyalanır,
+yeniden hesaplanmaz** — `provenance.allocation_provenance_from_derived` tam olarak böyle çalışır.
+İki yolun ayrı ayrı hesaplayıp sonra aynı yuvarlama modunda anlaşması kırılgandır ve ileride
+yeniden ayrışabilir; kopyalama ayrışmayı **yapısal olarak imkânsız** kılar. Ayrıca kullanıcının
+onayladığı tutar aynen icra edilir.
+
+**Uygulama sınırı — kararı hayata geçiren slice'a not. HENÜZ UYGULANMADI.**
+- Dokunulacak yer `portfolio_ledger.build_sleeve_plan`'ın sleeve'i **türettiği** nokta:
+  türetme yerine dondurulmuş tutarı **girdi olarak al**.
+- Kopyalama yolu kurulduktan sonra `sleeve_amount_divergences()`'in anlamı değişir: bir
+  divergence artık "iki yol farklı yuvarladı" değil, **"kopyalama yolu atlandı"** demektir —
+  yani rapor olmaktan çıkıp **fail-closed** bir değişmeze dönmesi gerekir. Bu dönüşüm
+  **ayrı bir karar noktasıdır**, bu kararın otomatik sonucu sayma.
+- Kalan artık `U0` (`A0 - Σ Ci0`) üzerinde toplanır; kopyalanan tutarların toplamı `A0`'ı
+  aşamaz — bunu bir testle pinle.
+- Karara bağlanmamış sizing/booking kalemlerine (#550/#551/#552) **hâlâ dokunma**; bu karar
+  yalnız `initial_sleeve_capital`'ı kapsar.
+
+---
+
+## 7. Paste-ready resume prompt
 
 ```text
 ENTROPIA V18 — worker call site PR B: ItemParticipant adaptörü + run_portfolio call site

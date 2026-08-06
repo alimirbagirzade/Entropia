@@ -179,11 +179,17 @@ Before stopping a working session, produce **ALL** of the following:
 > loop). **Next:** **PR B** — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:298` call
 > site (`docs/ADIM16_STEPPER_LANDED_KICKOFF.md`).
 > **AÇIK PR:** #610 — DR kanıtı `[7]` boş / `[8]` tek nesne sınırını kapatıyor.
+> **Yarım-cent yuvarlama KARARA BAĞLANDI (2026-08-06):** `initial_sleeve_capital` yeniden
+> quantize edilmez, dondurulmuş `derived_amounts`'tan **kopyalanır**; iki yuvarlama sabiti de
+> değişmez. Henüz **uygulanmadı** — `ADIM16_STEPPER_LANDED_KICKOFF.md` §6.
 
 > **Uyarı:** `docs/audit/current_main_ground_truth_2026-08-03.md` §18'in 2/3/4/6 kalemleri
 > ADIM 5–8 ile kapandı ama o belge güncellenmedi — ona güvenmeden önce doğrula.
 > **"ADIM 21" iki slice'a verilmiş** (planlı `ItemParticipant` vs sevk edilen worker-delivery);
 > numara yeniden atanmadı, kayıtlar `ADIM 21 (worker delivery)` diye ayırıyor — insan kararı.
+> **Docs onarımı (2026-08-06):** PR #590, PR #586'nın `PROJECT_HISTORY.md`'ye yazdığı ADIM 18
+> faz-döngüsü kaydını (208 satır) sessizce silmişti; geri yüklendi. Hiçbir CI kapısı bu dosyayı
+> okumaz — docs PR'ı açarken **kendi diff'inin silme satırlarına bak**.
 
 
 - **Durum:** V1 ROADMAP COMPLETE (Stages 0–8, docs 01–22) + post-V1 + video-alignment +

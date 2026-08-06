@@ -1,3 +1,9 @@
+<!-- doc-status: historical -->
+> **HISTORICAL RECORD — bu belge GÜNCEL GERÇEK DEĞİLDİR.** Yazıldığı andaki durumu
+> kaydeder; SHA'lar, sayılar, alembic head'i ve "next" maddeleri bayat olabilir.
+> Güncel otorite: `CLAUDE.md` §Current position + `docs/generated/repository_facts.md`
+> (üretilmiş, CI'da `--check` ile kapılı).
+
 # ADIM 16 LANDED — `run_engine`'in bar döngüsü resumable stepper'a çıkarıldı (PR #602) · sıradaki slice kickoff'u
 
 > Bu belge **ADIM 16'nın** (engine-destekli `ItemParticipant` çiftinin **PR A**'sı) kapanış

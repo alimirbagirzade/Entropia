@@ -1,3 +1,9 @@
+<!-- doc-status: historical -->
+> **HISTORICAL RECORD — bu belge GÜNCEL GERÇEK DEĞİLDİR.** Yazıldığı andaki durumu
+> kaydeder; SHA'lar, sayılar, alembic head'i ve "next" maddeleri bayat olabilir.
+> Güncel otorite: `CLAUDE.md` §Current position + `docs/generated/repository_facts.md`
+> (üretilmiş, CI'da `--check` ile kapılı).
+
 # Stage 3d — Trade Log (doc 05) — Kickoff / Resume Handoff
 
 > **Amaç:** Yeni/temiz bir oturumda kaldığımız yerden devam edebilmek için hazır bağlam + **yapıştırmaya hazır başlangıç prompt'u**. Bu dosya her kapanış oturumunda güncellenir (bir sonraki dilim için).

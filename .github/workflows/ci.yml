@@ -81,6 +81,31 @@ jobs:
         # stale (DB-free). Validity of the document is asserted by the contract
         # test suite. To fix a failure: `make openapi` and commit the snapshot.
         run: uv run python -m entropia.apps.api.openapi_export --check
+
+      - name: Documentation truth gate (generated repository facts)
+        working-directory: backend
+        # Nothing in CI read `docs/` before this step, and the cost was measured,
+        # not hypothetical: stale-base docs PRs deleted history records three
+        # times (#590, #604), CLAUDE.md advertised "4 deliberate xfail" for weeks
+        # after the real number became 1, and the same table total shipped as 102
+        # in DATA_MODEL.md and 104 in CODEMAPS/README.md — both hand-counted.
+        #
+        # This step regenerates the facts in memory and fails when
+        # docs/generated/repository_facts.{json,md} or README.md's generated block
+        # is stale, when a kickoff/audit/history document carries no `doc-status`
+        # marker (so a landed handoff still reads as the live one), or when a
+        # present-tense document names an alembic head, ENGINE_VERSION or
+        # SHARED_ALLOCATION_STATUS that the tree contradicts.
+        #
+        # Deliberately ordered AFTER the OpenAPI drift guard: the route facts are
+        # read from docs/openapi.json, so when the snapshot itself is stale that
+        # step names the cause and this one does not have to guess. Static and
+        # DB-free like its two neighbours, and it reads no GitHub API — open PR
+        # and issue counts are properties of a server, not of this tree, and a
+        # gate depending on them could go red with no commit able to fix it.
+        # To fix a failure: run the same script without --check and commit.
+        run: uv run python ../scripts/generate_repository_facts.py --root .. --check
+
       - name: Alembic migrations apply cleanly
         working-directory: backend
         run: uv run alembic upgrade head

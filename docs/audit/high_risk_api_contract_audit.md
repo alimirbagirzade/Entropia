@@ -1,3 +1,9 @@
+<!-- doc-status: historical -->
+> **HISTORICAL RECORD — bu belge GÜNCEL GERÇEK DEĞİLDİR.** Yazıldığı andaki durumu
+> kaydeder; SHA'lar, sayılar, alembic head'i ve "next" maddeleri bayat olabilir.
+> Güncel otorite: `CLAUDE.md` §Current position + `docs/generated/repository_facts.md`
+> (üretilmiş, CI'da `--check` ile kapılı).
+
 # High-risk API contract audit — ESP / Package Library / Agent Tool Gateway
 
 **Base:** `origin/main` @ `870cc1a` (2026-08-03) · **Branch:** `refactor/typed-contracts-esp-library-agent`

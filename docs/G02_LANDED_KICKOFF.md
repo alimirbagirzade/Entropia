@@ -1,3 +1,9 @@
+<!-- doc-status: historical -->
+> **HISTORICAL RECORD — bu belge GÜNCEL GERÇEK DEĞİLDİR.** Yazıldığı andaki durumu
+> kaydeder; SHA'lar, sayılar, alembic head'i ve "next" maddeleri bayat olabilir.
+> Güncel otorite: `CLAUDE.md` §Current position + `docs/generated/repository_facts.md`
+> (üretilmiş, CI'da `--check` ile kapılı).
+
 # Kickoff — G-02 landed (ESP export contract v2) → ADIM 5: Library Request-Validation UI (§G-04)
 
 > Bu doküman **`origin/main` @ `a570934`** (PR #521 merge'ü) itibarıyla yazıldı, 2026-08-03.

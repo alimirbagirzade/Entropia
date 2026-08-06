@@ -1,3 +1,9 @@
+<!-- doc-status: historical -->
+> **HISTORICAL RECORD — bu belge GÜNCEL GERÇEK DEĞİLDİR.** Yazıldığı andaki durumu
+> kaydeder; SHA'lar, sayılar, alembic head'i ve "next" maddeleri bayat olabilir.
+> Güncel otorite: `CLAUDE.md` §Current position + `docs/generated/repository_facts.md`
+> (üretilmiş, CI'da `--check` ile kapılı).
+
 # Stage R3 — 22-Jul Deep-Audit Remediation · Kickoff & Resume
 
 > # ⛔ SUPERSEDED (2026-07-28) — R3 MÜHENDİSLİK BACKLOG'U KAPANDI

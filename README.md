@@ -44,21 +44,52 @@ This repository is built **stage by stage** from a canonical specification (see
 > residuals, F-09 doc honesty). Per-requirement, per-axis status lives in
 > [`entropia_v18_remediation_status.md`](docs/implementation/entropia_v18_remediation_status.md).
 >
-> **Test/schema figures are recomputable, not a frozen claim (F-09).** Recompute on
-> `main` with `make test` (runs the backend **and** frontend suites, no swallowed
-> exit codes); CI is the authoritative source. Alembic head:
-> **`0043_i08_registry_strategy_fks`** (43 migrations, single head).
-> Last empirically re-measured on `origin/main` @ `0dcce69` (2026-08-03):
-> **2886 backend** tests and **673 frontend** tests *collected* — these are
-> `--collect-only` / `vitest list` counts, **not** pass counts; only CI reports green.
-> The full re-measurement, including the gaps this repo still carries, lives in
-> [`docs/audit/current_main_ground_truth_2026-08-03.md`](docs/audit/current_main_ground_truth_2026-08-03.md).
+> **Test/schema figures are recomputable, not a frozen claim (F-09).** They are no
+> longer typed here by hand: the table below is **generated** from the working tree by
+> `scripts/generate_repository_facts.py`, and CI fails when it is stale — so a number
+> in this README cannot quietly outlive the code it describes. Pass counts are still
+> **not** claimed anywhere: the generator collects test *nodes* statically, and only a
+> full CI run reports green. Recompute locally with `make test` (backend **and**
+> frontend suites, no swallowed exit codes).
 > *(Historical, kept auditable: the R2 close (PR #364, 2026-07-22) cited ≈1841 backend /
-> ≈577 frontend tests and alembic `0035_portfolio_rules`.)* This is not "everything is possible"
-> software — the engine and architecture have deliberate, fail-closed boundaries and
-> out-of-scope non-goals, listed under [Known limitations](#known-limitations) and in
+> ≈577 frontend tests and alembic `0035_portfolio_rules`; a full re-measurement on
+> `origin/main` @ `0dcce69` (2026-08-03), including the gaps this repo still carries,
+> lives in [`docs/audit/current_main_ground_truth_2026-08-03.md`](docs/audit/current_main_ground_truth_2026-08-03.md).)*
+> This is not "everything is possible" software — the engine and architecture have
+> deliberate, fail-closed boundaries and out-of-scope non-goals, listed under
+> [Known limitations](#known-limitations) and in
 > [`docs/POST_V1_KICKOFF.md`](docs/POST_V1_KICKOFF.md). The running handoff lives
 > in [`docs/STAGE2_HANDOFF.md`](docs/STAGE2_HANDOFF.md).
+
+## Repository facts
+
+<!-- BEGIN GENERATED: repository-facts -->
+<!-- Written by scripts/generate_repository_facts.py; `--check` gates it in CI. -->
+
+| Fact | Value |
+|---|---|
+| Alembic head | `0043_i08_registry_strategy_fks` |
+| Alembic revisions | 43 (single head) |
+| Postgres tables | 104 |
+| Foreign keys | 140 |
+| HTTP paths | 177 |
+| HTTP operations | 196 |
+| Frontend router paths | 29 |
+| Frontend nav items | 25 |
+| `ENGINE_VERSION` | `backtest-engine-v18-gap-adjusted-stop-fill` |
+| `SHARED_ALLOCATION_STATUS` | `future_dev` |
+| Capability matrix | 62 rows (40 `active_v1`, 22 `future_dev`) |
+| Backend tests **collected** (static, not a pass count) | 3395 in 328 files |
+| Backend `xfail` markers | 1 (1 strict) |
+| Frontend unit test **call sites** (static; `.each` expands at run time) | 711 in 70 files |
+| E2E test **call sites** (static) | 73 in 20 specs |
+| Acceptance criteria mapped | 383 |
+| Acceptance clauses mapped | 1175 |
+
+*Generated from the working tree — no commit sha, no GitHub state, no pass counts.*
+*Full detail: [`docs/generated/repository_facts.md`](docs/generated/repository_facts.md).*
+
+<!-- END GENERATED: repository-facts -->
 
 Contributing? See [`CONTRIBUTING.md`](CONTRIBUTING.md) for local setup and the
 development workflow. Found a security issue? See [`SECURITY.md`](SECURITY.md)

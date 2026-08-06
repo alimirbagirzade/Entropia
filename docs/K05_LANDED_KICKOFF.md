@@ -1,3 +1,9 @@
+<!-- doc-status: historical -->
+> **HISTORICAL RECORD — bu belge GÜNCEL GERÇEK DEĞİLDİR.** Yazıldığı andaki durumu
+> kaydeder; SHA'lar, sayılar, alembic head'i ve "next" maddeleri bayat olabilir.
+> Güncel otorite: `CLAUDE.md` §Current position + `docs/generated/repository_facts.md`
+> (üretilmiş, CI'da `--check` ile kapılı).
+
 # K-05 landed — devam kickoff'u (V18-R3 fail-closed sweep)
 
 > Bu doc bir **slice kapanış handoff'u**dur. Otoritesi: `docs/STAGE2_HANDOFF.md` §Next >

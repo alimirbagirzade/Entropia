@@ -1,3 +1,9 @@
+<!-- doc-status: historical -->
+> **HISTORICAL RECORD — bu belge GÜNCEL GERÇEK DEĞİLDİR.** Yazıldığı andaki durumu
+> kaydeder; SHA'lar, sayılar, alembic head'i ve "next" maddeleri bayat olabilir.
+> Güncel otorite: `CLAUDE.md` §Current position + `docs/generated/repository_facts.md`
+> (üretilmiş, CI'da `--check` ile kapılı).
+
 # Stage 5b — Results History + Arrange Metrics (docs 16–17) + doc-15 deferred — Kickoff / Resume Handoff
 
 > **Amaç:** Yeni/temiz bir oturumda kaldığımız yerden devam. Yapıştırmaya hazır başlangıç prompt'u aşağıda. Her kapanışta güncellenir.

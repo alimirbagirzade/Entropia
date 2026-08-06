@@ -1,3 +1,9 @@
+<!-- doc-status: historical -->
+> **HISTORICAL RECORD — bu belge GÜNCEL GERÇEK DEĞİLDİR.** Yazıldığı andaki durumu
+> kaydeder; SHA'lar, sayılar, alembic head'i ve "next" maddeleri bayat olabilir.
+> Güncel otorite: `CLAUDE.md` §Current position + `docs/generated/repository_facts.md`
+> (üretilmiş, CI'da `--check` ile kapılı).
+
 # ADIM 3 landed — Shared portfolio containment (PR #520) · sıradaki slice kickoff'u
 
 > Bu belge **ADIM 3'ün** kapanış handoff'udur. En altta **paste-ready resume prompt** var.

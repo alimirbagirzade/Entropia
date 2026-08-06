@@ -3,3 +3,17 @@ test-results/
 playwright-report/
 playwright/.cache/
 .env.e2e
+
+# A-08 precheck output is deliberately NOT committed, unlike its sibling
+# a11y-report/axe-results.json. The axe file is a frozen acceptance artifact;
+# this one is whatever a developer's last local run produced. Committed, it
+# would sit beside the audit worksheet looking like recorded evidence for an
+# audit that has not happened. CI uploads it as a build artifact instead.
+a11y-report/precheck-results.json
+
+# Same reasoning, and the same hazard observed while preparing A-08: a local
+# `npm run a11y` writes these two next to the tracked axe evidence, and they are
+# easy to commit by accident. They are re-baselining INPUT — you copy their
+# contents into a11y-baseline.json — never a record in their own right.
+a11y-report/axe-baseline.measured.json
+a11y-report/axe-baseline.tightened.json

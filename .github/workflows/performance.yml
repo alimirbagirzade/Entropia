@@ -261,3 +261,72 @@ jobs:
       - name: Tear down the stack
         if: always()
         run: docker compose down -v
+
+  # ===========================================================================
+  # NIGHTLY FAILURE NOTICE.
+  # Same reasoning as install-acceptance.yml: `load-full` runs ONLY on the 04:23
+  # cron, and a scheduled run has no PR to annotate and no reviewer. Without
+  # this, a nightly that stops producing a baseline — which is exactly the
+  # artifact docs/performance/README.md section 6 needs five of before the
+  # latency ratio gate can be switched on — would simply stop appearing,
+  # silently, and the activation clock would never start.
+  #
+  # `load-smoke` is deliberately NOT in `needs`: it is push/PR-gated and never
+  # runs on the cron, so depending on it would only add a permanently skipped edge.
+  # ===========================================================================
+  nightly-failure-notice:
+    name: Nightly failure notice
+    needs: [load-full]
+    # `always()` so this still runs after a failed dependency; the explicit
+    # `== 'failure'` keeps it silent on a green night and on a cancelled run.
+    if: always() && github.event_name == 'schedule' && needs.load-full.result == 'failure'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # The only job in this workflow that writes to the repository.
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Open or update the nightly failure issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # No checkout in this job, so `gh` has no git remote to infer from.
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          # A separate title from the install-acceptance notice on purpose: a
+          # missing load baseline and a broken restore chain are different
+          # failures and must not collapse into one thread.
+          title='Nightly FAILED — Performance'
+
+          {
+            printf 'The scheduled `Performance` run failed on `%s`.\n\n' "$GITHUB_SHA"
+            printf 'Failed job:\n\n- `load-full`\n\n'
+            printf 'Run: %s\n\n' "$RUN_URL"
+            printf 'This run produced no baseline artifact, so it does not count toward\n'
+            printf 'the five nightly baselines that `docs/performance/README.md` section 6\n'
+            printf 'requires before the latency ratio gate can be activated.\n\n'
+            printf 'Opened automatically by `.github/workflows/performance.yml`.\n'
+            printf 'It is **not** closed automatically — close it once a green nightly\n'
+            printf 'has produced a baseline again.\n'
+          } > nightly-failure.md
+
+          # Idempotent bootstrap: re-creating an existing label is a no-op, and a
+          # label that genuinely cannot be created makes `gh issue create` below
+          # fail loudly rather than posting an unfindable issue.
+          gh label create nightly-failure \
+            --color B60205 \
+            --description "Gecelik (schedule) CI kosusu kirmizi — otomatik acildi" \
+            >/dev/null 2>&1 || true
+
+          existing="$(gh issue list --state open --label nightly-failure --limit 50 \
+            --json number,title \
+            | jq -r --arg t "$title" 'map(select(.title == $t)) | .[0].number // empty')"
+
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body-file nightly-failure.md
+            echo "Nightly still failing — commented on #$existing"
+          else
+            gh issue create --title "$title" --label nightly-failure \
+              --body-file nightly-failure.md
+          fi

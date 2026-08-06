@@ -707,6 +707,39 @@ Each step is one branch, one PR, independently revertible. **No step lifts conta
 > a single-item number — 46-digest invariance is the gate"*) still holds for ADIM 18 and was
 > verified. But when the participant is eventually written, restructure and re-price will land
 > together, and a moved digest will be harder to attribute than this plan intended.
+>
+> ---
+>
+> **AMENDMENT (2026-08-05, PR #602) — ADIM 16 is NO LONGER SKIPPED. The paragraph above is
+> superseded on its one prediction.** The stepper was written and merged as a pure refactor
+> *before* any participant work started, so the feared consequence **did not materialise**:
+> restructure and re-price are separated again, and a future moved digest stays attributable.
+>
+> `run_engine`'s body up to the bar loop is now `_build_stepper` (`engine.py:779`), returning an
+> `_ItemStepper` (`engine.py:755`) of `step(bar)` / `finalize()` / `output()` / `open_position()`
+> plus the live ledger and run config. `run_engine` (`engine.py:3174`) keeps its signature, its
+> docstring and its semantics and is a nine-line driver over it. The ten names that cross a bar
+> boundary were **measured** by an AST pass over the loop body, not guessed
+> (`engine.py:1761-1763`); the other 83 names the body binds were eliminated by
+> definite-assignment analysis.
+>
+> Acceptance was R-4's gate and nothing else: **all 46 golden digests unmoved and
+> `backend/tests/unit/engine_golden_digests.json` itself unchanged**, plus
+> `backend/tests/unit/test_backtest_engine_stepper.py` (10 tests) locking the half no digest can
+> see — the same scenarios replayed one bar per call, suspended between every pair of bars,
+> digest-identical.
+>
+> **What this amendment does NOT change.** ADIM 16 added **no** caller:
+> `jobs/backtest_engine.py:298` still loops over items, `:363` still folds with
+> `combine_item_runs`, `SHARED_ALLOCATION_STATUS` stays `future_dev`, `ENGINE_VERSION` is
+> untouched, and `test_the_phase_loop_exists_but_no_production_path_reaches_it` is still green —
+> the containment described above is intact. The adapter and the call site are a separate PR,
+> which is the whole point. The **numbering** mismatch this section documents also stands: two
+> shipped slices are called ADIM 16 (the intent layer, #571/#572, and this stepper, #602); they
+> were not renumbered, and records disambiguate as `ADIM 16 (ADR §12)`.
+>
+> Full record: `docs/PROJECT_HISTORY.md` §"ADIM 16 — `run_engine` bar döngüsü → resumable
+> stepper (PR #602)".
 
 **Prerequisites that are not part of ADIM 15–20** and must be scheduled separately:
 GH **#559** (DST rule) before the merged axis spans mixed-zone sources; GH **#544** (NET) before or

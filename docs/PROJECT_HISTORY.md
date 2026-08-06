@@ -3791,7 +3791,7 @@ Görev "oracle'ları yaz, hepsi yeşilse containment'ı kaldır" idi. Durma koş
 | altı `execution/` unified-clock modülünün `execution/` dışı import'u | **yok** |
 | `application/jobs/backtest_engine.py:298` | hâlâ `for prepared in prepared_items:` — dış döngü hâlâ **item listesi** |
 | `application/jobs/backtest_engine.py:363` | hâlâ `combine_item_runs(...)` — bitmiş koşular hâlâ pin sırasında katlanıyor |
-| ADR §12 **ADIM 16** (resumable stepper, saf refactor) | **hiç yazılmadı** — atlandı |
+| ADR §12 **ADIM 16** (resumable stepper, saf refactor) | **hiç yazılmadı** — atlandı ⟵ *sonradan kapandı: PR #602; aşağıda §"ADIM 16 — `run_engine` bar döngüsü → resumable stepper"* |
 | `manifest.py` policy alanları (`clock_policy_version`, `arbitration_policy_version`, `engine_allocation_policy_version`, `mark_staleness_policy`) | yok |
 | ADR 0002 statüsü | **`Proposed`** — §16 onayı her uygulama slice'ı için ön koşul |
 
@@ -3858,6 +3858,12 @@ başına** — `jobs/backtest_engine.py` O-06 checkpoint #3). A4/A18 gerçek `En
 **İnsan kapıları:** ADR `Proposed` (§16) · ADR §12 numaralandırması sevk edilenle uyuşmuyor
 (ADIM 16 atlandı; "yeniden yapılandır" ile "yeniden fiyatla" ayrımı artık yok) ·
 **OD-1…OD-7** açık (ADR R-5) · **#544 (NET)** · **#559 (DST)**.
+
+> **Sonradan değişti (PR #602).** *"Ayrım artık yok"* cümlesi **geçerli değil** — stepper saf
+> refactor olarak yazıldı ve indi, adaptör + call site bilerek ayrı PR'a bırakıldı, yani ayrım
+> geri kazanıldı (ADR §12 amendment). Numaralandırma uyuşmazlığı **duruyor**: iki sevk edilmiş
+> slice "ADIM 16" adını taşıyor (intent katmanı #571/#572 vs stepper #602), yeniden
+> numaralandırılmadı — **insan kararı**. Diğer kapılar değişmedi.
 
 **Kapalı, kayda geçsin:** **R-1** (revision pinning drift) →
 `a33d3e4 fix(readiness): pin the allocation revision the snapshot names`.

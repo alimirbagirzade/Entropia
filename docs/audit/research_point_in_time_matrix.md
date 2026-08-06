@@ -1,3 +1,9 @@
+<!-- doc-status: historical -->
+> **HISTORICAL RECORD — bu belge GÜNCEL GERÇEK DEĞİLDİR.** Yazıldığı andaki durumu
+> kaydeder; SHA'lar, sayılar, alembic head'i ve "next" maddeleri bayat olabilir.
+> Güncel otorite: `CLAUDE.md` §Current position + `docs/generated/repository_facts.md`
+> (üretilmiş, CI'da `--check` ile kapılı).
+
 # Research Data point-in-time — consumption map, parity matrix and no-lookahead evidence
 
 **Slice:** ADIM 13 — Research Data point-in-time and Agent/Run parity

@@ -1,3 +1,9 @@
+<!-- doc-status: historical -->
+> **HISTORICAL RECORD — bu belge GÜNCEL GERÇEK DEĞİLDİR.** Yazıldığı andaki durumu
+> kaydeder; SHA'lar, sayılar, alembic head'i ve "next" maddeleri bayat olabilir.
+> Güncel otorite: `CLAUDE.md` §Current position + `docs/generated/repository_facts.md`
+> (üretilmiş, CI'da `--check` ile kapılı).
+
 # ADIM 22 landed — install / upgrade / restore kabul zinciri (kurulum-alanı devri)
 
 > **Bu belge SIRADAKİ SLICE'IN tohumu DEĞİLDİR.** Sıradaki iş **PR B** (`ItemParticipant`

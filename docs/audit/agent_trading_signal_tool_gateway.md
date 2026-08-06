@@ -1,3 +1,9 @@
+<!-- doc-status: historical -->
+> **HISTORICAL RECORD — bu belge GÜNCEL GERÇEK DEĞİLDİR.** Yazıldığı andaki durumu
+> kaydeder; SHA'lar, sayılar, alembic head'i ve "next" maddeleri bayat olabilir.
+> Güncel otorite: `CLAUDE.md` §Current position + `docs/generated/repository_facts.md`
+> (üretilmiş, CI'da `--check` ile kapılı).
+
 # Agent Trading Signal Tool Gateway parity (TS-20 / AOS-20) — policy, scope table, payload limits
 
 **Branch:** `feat/agent-trading-signal-tool-gateway` · **Base:** `origin/main` @ `d6bbe9b`

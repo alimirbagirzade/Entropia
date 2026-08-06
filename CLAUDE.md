@@ -169,6 +169,16 @@ Before stopping a working session, produce **ALL** of the following:
 
 ## Current position (keep in sync at each closing)
 
+> **SAYISAL OTORİTE BU BLOK DEĞİL** →
+> [`docs/generated/repository_facts.md`](docs/generated/repository_facts.md) (**üretilmiş**:
+> alembic head/sayı, tablo & FK, HTTP operation, frontend route, `ENGINE_VERSION`,
+> capability ve test **collection** sayıları). Üretici `scripts/generate_repository_facts.py`;
+> CI'da `--check` **bloklayıcıdır** ve bu blokla çelişen bir head / `ENGINE_VERSION` /
+> `SHARED_ALLOCATION_STATUS` iddiasını kırmızıya çevirir. Aşağısı **elle** yazılır ve
+> içindeki **HEAD sha'sı yapısal olarak bayattır** — kapanış commit'inin kendisi onu
+> değiştirir; sha'ya değil üretilmiş bloğa güven. Bir belgenin güncel mi tarihsel mi
+> olduğunu ilk satırındaki `<!-- doc-status: … -->` işareti söyler.
+
 > **HEAD `708ec07`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).
 > **Son dalga — ADIM 26 (observability, PR #624 — AÇIK, merge EDİLMEDİ, önce doğrula):**

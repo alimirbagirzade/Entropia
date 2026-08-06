@@ -1,3 +1,9 @@
+<!-- doc-status: historical -->
+> **HISTORICAL RECORD — bu belge GÜNCEL GERÇEK DEĞİLDİR.** Yazıldığı andaki durumu
+> kaydeder; SHA'lar, sayılar, alembic head'i ve "next" maddeleri bayat olabilir.
+> Güncel otorite: `CLAUDE.md` §Current position + `docs/generated/repository_facts.md`
+> (üretilmiş, CI'da `--check` ile kapılı).
+
 # A11Y — CI ratchet + A11Y-01 yeniden adjudication
 
 Kapsam: `chore/a11y-ci-baseline`. Bu belge **iki** işi yapar:

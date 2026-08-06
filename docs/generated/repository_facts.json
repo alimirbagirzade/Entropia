@@ -1,0 +1,864 @@
+{
+  "acceptance": {
+    "clause_count": 1175,
+    "clauses_by_status": {
+      "covered": 971,
+      "deliberate_future_dev": 27,
+      "not_applicable": 12,
+      "partial": 10,
+      "uncovered": 155
+    },
+    "criteria_by_status": {
+      "covered": 229,
+      "deliberate_future_dev": 8,
+      "not_applicable": 7,
+      "partial": 131,
+      "uncovered": 8
+    },
+    "criteria_count": 383
+  },
+  "alembic": {
+    "head": "0043_i08_registry_strategy_fks",
+    "heads": [
+      "0043_i08_registry_strategy_fks"
+    ],
+    "revision_count": 43,
+    "single_head": true
+  },
+  "capabilities": {
+    "active_v1": 40,
+    "future_dev": 22,
+    "total": 62
+  },
+  "contains": "working-tree facts only — no commit sha, no timestamp, no GitHub state, and no test pass count; regenerate with the generator, never by hand",
+  "database": {
+    "foreign_key_count": 140,
+    "table_count": 104,
+    "tables": [
+      {
+        "columns": 10,
+        "foreign_keys": 1,
+        "name": "agent_checkpoint"
+      },
+      {
+        "columns": 10,
+        "foreign_keys": 2,
+        "name": "agent_event"
+      },
+      {
+        "columns": 11,
+        "foreign_keys": 0,
+        "name": "agent_runtime"
+      },
+      {
+        "columns": 15,
+        "foreign_keys": 1,
+        "name": "agent_task"
+      },
+      {
+        "columns": 19,
+        "foreign_keys": 3,
+        "name": "agent_tool_call"
+      },
+      {
+        "columns": 5,
+        "foreign_keys": 1,
+        "name": "agents"
+      },
+      {
+        "columns": 12,
+        "foreign_keys": 2,
+        "name": "analysis_artifact"
+      },
+      {
+        "columns": 3,
+        "foreign_keys": 0,
+        "name": "app_metadata"
+      },
+      {
+        "columns": 11,
+        "foreign_keys": 1,
+        "name": "approval_decision"
+      },
+      {
+        "columns": 6,
+        "foreign_keys": 1,
+        "name": "artifact_link"
+      },
+      {
+        "columns": 19,
+        "foreign_keys": 0,
+        "name": "audit_events"
+      },
+      {
+        "columns": 8,
+        "foreign_keys": 1,
+        "name": "auth_sessions"
+      },
+      {
+        "columns": 11,
+        "foreign_keys": 0,
+        "name": "backtest_result"
+      },
+      {
+        "columns": 22,
+        "foreign_keys": 2,
+        "name": "backtest_run"
+      },
+      {
+        "columns": 9,
+        "foreign_keys": 1,
+        "name": "backtest_run_event"
+      },
+      {
+        "columns": 9,
+        "foreign_keys": 0,
+        "name": "backtest_run_manifest"
+      },
+      {
+        "columns": 17,
+        "foreign_keys": 2,
+        "name": "baseline_asset"
+      },
+      {
+        "columns": 16,
+        "foreign_keys": 2,
+        "name": "canonical_trade_record_batch"
+      },
+      {
+        "columns": 13,
+        "foreign_keys": 2,
+        "name": "capability_activation_event"
+      },
+      {
+        "columns": 8,
+        "foreign_keys": 1,
+        "name": "dataset_coverage_slice"
+      },
+      {
+        "columns": 20,
+        "foreign_keys": 2,
+        "name": "dependency_scan"
+      },
+      {
+        "columns": 5,
+        "foreign_keys": 1,
+        "name": "diagnostic_artifact"
+      },
+      {
+        "columns": 11,
+        "foreign_keys": 1,
+        "name": "embedded_resolver_contract"
+      },
+      {
+        "columns": 11,
+        "foreign_keys": 2,
+        "name": "embedded_resolver_registry"
+      },
+      {
+        "columns": 11,
+        "foreign_keys": 2,
+        "name": "embedded_resolver_validation_run"
+      },
+      {
+        "columns": 13,
+        "foreign_keys": 1,
+        "name": "entity_registry"
+      },
+      {
+        "columns": 9,
+        "foreign_keys": 1,
+        "name": "entity_revisions"
+      },
+      {
+        "columns": 11,
+        "foreign_keys": 1,
+        "name": "execution_plan"
+      },
+      {
+        "columns": 10,
+        "foreign_keys": 1,
+        "name": "experiment_proposal"
+      },
+      {
+        "columns": 13,
+        "foreign_keys": 1,
+        "name": "export_artifact"
+      },
+      {
+        "columns": 7,
+        "foreign_keys": 1,
+        "name": "filtered_event"
+      },
+      {
+        "columns": 15,
+        "foreign_keys": 1,
+        "name": "future_capability"
+      },
+      {
+        "columns": 5,
+        "foreign_keys": 1,
+        "name": "human_credentials"
+      },
+      {
+        "columns": 15,
+        "foreign_keys": 1,
+        "name": "human_users"
+      },
+      {
+        "columns": 15,
+        "foreign_keys": 2,
+        "name": "hypothesis_artifact"
+      },
+      {
+        "columns": 6,
+        "foreign_keys": 0,
+        "name": "idempotency_keys"
+      },
+      {
+        "columns": 7,
+        "foreign_keys": 2,
+        "name": "instrument_alias"
+      },
+      {
+        "columns": 18,
+        "foreign_keys": 2,
+        "name": "instrument_registry"
+      },
+      {
+        "columns": 16,
+        "foreign_keys": 0,
+        "name": "jobs"
+      },
+      {
+        "columns": 7,
+        "foreign_keys": 2,
+        "name": "lab_message"
+      },
+      {
+        "columns": 9,
+        "foreign_keys": 1,
+        "name": "mainboard_composition_snapshot"
+      },
+      {
+        "columns": 12,
+        "foreign_keys": 3,
+        "name": "mainboard_working_item"
+      },
+      {
+        "columns": 7,
+        "foreign_keys": 1,
+        "name": "mainboard_workspace"
+      },
+      {
+        "columns": 6,
+        "foreign_keys": 1,
+        "name": "manual_content_blocks"
+      },
+      {
+        "columns": 10,
+        "foreign_keys": 2,
+        "name": "manual_document_revisions"
+      },
+      {
+        "columns": 12,
+        "foreign_keys": 2,
+        "name": "manual_documents"
+      },
+      {
+        "columns": 15,
+        "foreign_keys": 2,
+        "name": "manual_publication_events"
+      },
+      {
+        "columns": 8,
+        "foreign_keys": 2,
+        "name": "manual_search_chunks"
+      },
+      {
+        "columns": 8,
+        "foreign_keys": 2,
+        "name": "manual_stream_entries"
+      },
+      {
+        "columns": 20,
+        "foreign_keys": 2,
+        "name": "market_dataset_revision"
+      },
+      {
+        "columns": 11,
+        "foreign_keys": 1,
+        "name": "market_processed_asset"
+      },
+      {
+        "columns": 11,
+        "foreign_keys": 2,
+        "name": "market_raw_asset"
+      },
+      {
+        "columns": 12,
+        "foreign_keys": 2,
+        "name": "market_schema_mapping"
+      },
+      {
+        "columns": 8,
+        "foreign_keys": 1,
+        "name": "market_validation_issue"
+      },
+      {
+        "columns": 11,
+        "foreign_keys": 1,
+        "name": "market_validation_run"
+      },
+      {
+        "columns": 10,
+        "foreign_keys": 0,
+        "name": "metric_definition"
+      },
+      {
+        "columns": 10,
+        "foreign_keys": 1,
+        "name": "metric_value"
+      },
+      {
+        "columns": 15,
+        "foreign_keys": 2,
+        "name": "normalized_signal_event_revision"
+      },
+      {
+        "columns": 9,
+        "foreign_keys": 0,
+        "name": "outbox_events"
+      },
+      {
+        "columns": 14,
+        "foreign_keys": 1,
+        "name": "package_import_job"
+      },
+      {
+        "columns": 11,
+        "foreign_keys": 1,
+        "name": "package_rationale_assignment"
+      },
+      {
+        "columns": 30,
+        "foreign_keys": 1,
+        "name": "package_request"
+      },
+      {
+        "columns": 18,
+        "foreign_keys": 2,
+        "name": "package_revision"
+      },
+      {
+        "columns": 11,
+        "foreign_keys": 2,
+        "name": "package_revision_link"
+      },
+      {
+        "columns": 5,
+        "foreign_keys": 1,
+        "name": "package_root"
+      },
+      {
+        "columns": 14,
+        "foreign_keys": 2,
+        "name": "package_validation_run"
+      },
+      {
+        "columns": 10,
+        "foreign_keys": 1,
+        "name": "portfolio_allocation_entry"
+      },
+      {
+        "columns": 15,
+        "foreign_keys": 2,
+        "name": "portfolio_allocation_plan"
+      },
+      {
+        "columns": 9,
+        "foreign_keys": 2,
+        "name": "portfolio_allocation_plan_revision"
+      },
+      {
+        "columns": 4,
+        "foreign_keys": 0,
+        "name": "principals"
+      },
+      {
+        "columns": 12,
+        "foreign_keys": 2,
+        "name": "rationale_family_revision"
+      },
+      {
+        "columns": 2,
+        "foreign_keys": 1,
+        "name": "rationale_family_root"
+      },
+      {
+        "columns": 10,
+        "foreign_keys": 1,
+        "name": "readiness_issue"
+      },
+      {
+        "columns": 11,
+        "foreign_keys": 1,
+        "name": "ready_check_report"
+      },
+      {
+        "columns": 9,
+        "foreign_keys": 1,
+        "name": "reauth_proofs"
+      },
+      {
+        "columns": 33,
+        "foreign_keys": 2,
+        "name": "research_dataset_revision"
+      },
+      {
+        "columns": 10,
+        "foreign_keys": 1,
+        "name": "research_feature_definition"
+      },
+      {
+        "columns": 14,
+        "foreign_keys": 1,
+        "name": "research_field_definition"
+      },
+      {
+        "columns": 6,
+        "foreign_keys": 1,
+        "name": "research_market_link"
+      },
+      {
+        "columns": 11,
+        "foreign_keys": 1,
+        "name": "research_native_asset"
+      },
+      {
+        "columns": 11,
+        "foreign_keys": 2,
+        "name": "research_raw_asset"
+      },
+      {
+        "columns": 11,
+        "foreign_keys": 1,
+        "name": "research_time_policy"
+      },
+      {
+        "columns": 9,
+        "foreign_keys": 1,
+        "name": "research_validation_issue"
+      },
+      {
+        "columns": 11,
+        "foreign_keys": 1,
+        "name": "research_validation_run"
+      },
+      {
+        "columns": 9,
+        "foreign_keys": 3,
+        "name": "resource_share"
+      },
+      {
+        "columns": 6,
+        "foreign_keys": 1,
+        "name": "result_artifact_checksum"
+      },
+      {
+        "columns": 7,
+        "foreign_keys": 1,
+        "name": "result_equity_point"
+      },
+      {
+        "columns": 7,
+        "foreign_keys": 1,
+        "name": "result_manifest_snapshot"
+      },
+      {
+        "columns": 9,
+        "foreign_keys": 1,
+        "name": "result_summary"
+      },
+      {
+        "columns": 12,
+        "foreign_keys": 2,
+        "name": "result_view_metric_profile_revision"
+      },
+      {
+        "columns": 8,
+        "foreign_keys": 1,
+        "name": "result_view_metric_profile_root"
+      },
+      {
+        "columns": 7,
+        "foreign_keys": 1,
+        "name": "signal_event"
+      },
+      {
+        "columns": 11,
+        "foreign_keys": 2,
+        "name": "source_asset"
+      },
+      {
+        "columns": 11,
+        "foreign_keys": 3,
+        "name": "strategy_editor_draft"
+      },
+      {
+        "columns": 14,
+        "foreign_keys": 2,
+        "name": "strategy_revision"
+      },
+      {
+        "columns": 9,
+        "foreign_keys": 1,
+        "name": "strategy_revision_references"
+      },
+      {
+        "columns": 10,
+        "foreign_keys": 5,
+        "name": "strategy_root"
+      },
+      {
+        "columns": 11,
+        "foreign_keys": 2,
+        "name": "task_directive"
+      },
+      {
+        "columns": 4,
+        "foreign_keys": 0,
+        "name": "tombstones"
+      },
+      {
+        "columns": 10,
+        "foreign_keys": 1,
+        "name": "trade_ledger_row"
+      },
+      {
+        "columns": 19,
+        "foreign_keys": 0,
+        "name": "trash_entries"
+      },
+      {
+        "columns": 13,
+        "foreign_keys": 2,
+        "name": "view_dataset"
+      },
+      {
+        "columns": 14,
+        "foreign_keys": 2,
+        "name": "work_object_revision"
+      },
+      {
+        "columns": 2,
+        "foreign_keys": 1,
+        "name": "work_object_root"
+      }
+    ]
+  },
+  "deviations": {
+    "visual_deviation_fix_rows": 8,
+    "visual_deviation_other_rows": 4,
+    "visual_deviation_po_approve_rows": 26,
+    "visual_deviation_rows": 38
+  },
+  "engine": {
+    "engine_version": "backtest-engine-v18-gap-adjusted-stop-fill",
+    "shared_allocation_status": "future_dev"
+  },
+  "frontend": {
+    "future_dev_subpage_count": 6,
+    "nav_admin_only_count": 4,
+    "nav_item_count": 25,
+    "nav_paths": [
+      "/",
+      "/analysis-lab",
+      "/backtest/history",
+      "/backtest/metrics",
+      "/backtest/ready-check",
+      "/backtest/run",
+      "/future-dev",
+      "/instruments",
+      "/market-data",
+      "/packages/create",
+      "/packages/embedded",
+      "/packages/library",
+      "/packages/pre-check",
+      "/panel/logs",
+      "/panel/management",
+      "/panel/metrics",
+      "/panel/provisioning",
+      "/portfolio",
+      "/rationale-families",
+      "/research-data",
+      "/strategy",
+      "/trade-log",
+      "/trading-signal",
+      "/trash",
+      "/user-manual"
+    ],
+    "router_path_count": 29,
+    "router_paths": [
+      "*",
+      "/analysis-lab",
+      "/backtest/history",
+      "/backtest/metrics",
+      "/backtest/ready-check",
+      "/backtest/run",
+      "/future-dev",
+      "/future-dev/graphic-view",
+      "/instruments",
+      "/login",
+      "/market-data",
+      "/outsource-signal",
+      "/packages/create",
+      "/packages/embedded",
+      "/packages/library",
+      "/packages/pre-check",
+      "/panel",
+      "/panel/logs",
+      "/panel/management",
+      "/panel/metrics",
+      "/panel/provisioning",
+      "/portfolio",
+      "/rationale-families",
+      "/research-data",
+      "/strategy",
+      "/trade-log",
+      "/trading-signal",
+      "/trash",
+      "/user-manual"
+    ]
+  },
+  "generated_by": "scripts/generate_repository_facts.py",
+  "http_api": {
+    "openapi_version": "3.1.0",
+    "operation_count": 196,
+    "operations": [
+      "DELETE /api/v1/admin/manual/documents/{document_id}",
+      "DELETE /api/v1/backtest-results/{result_id}",
+      "DELETE /api/v1/entities/{entity_id}",
+      "DELETE /api/v1/library/{entity_id}",
+      "DELETE /api/v1/library/{entity_id}/shares/{share_id}",
+      "DELETE /api/v1/market-datasets/{entity_id}",
+      "DELETE /api/v1/rationale-families/{entity_id}",
+      "DELETE /api/v1/research-datasets/{entity_id}",
+      "DELETE /api/v1/work-objects/{root_id}",
+      "GET /api/v1/admin/backtest-logs",
+      "GET /api/v1/admin/log-resource-types",
+      "GET /api/v1/admin/logs",
+      "GET /api/v1/admin/logs/{event_id}",
+      "GET /api/v1/admin/role-matrix",
+      "GET /api/v1/admin/system-actors",
+      "GET /api/v1/admin/users",
+      "GET /api/v1/agent-events/stream",
+      "GET /api/v1/agent-tasks",
+      "GET /api/v1/agent-tasks/{task_id}",
+      "GET /api/v1/agent-tasks/{task_id}/tool-calls",
+      "GET /api/v1/agent-tool-calls/{tool_call_id}",
+      "GET /api/v1/agent-workspace/overview",
+      "GET /api/v1/analysis-artifacts",
+      "GET /api/v1/analysis-artifacts/{artifact_id}",
+      "GET /api/v1/audit-events",
+      "GET /api/v1/auth/bootstrap-status",
+      "GET /api/v1/backtest-results",
+      "GET /api/v1/backtest-results/{result_id}",
+      "GET /api/v1/backtest-results/{result_id}/artifacts/{artifact_type}",
+      "GET /api/v1/backtest-results/{result_id}/metrics",
+      "GET /api/v1/backtest-runs/{run_id}",
+      "GET /api/v1/backtest-runs/{run_id}/events",
+      "GET /api/v1/baseline-assets/{baseline_asset_id}",
+      "GET /api/v1/capabilities",
+      "GET /api/v1/capabilities/{capability_key}",
+      "GET /api/v1/capabilities/{capability_key}/lifecycle-transitions",
+      "GET /api/v1/create-package/requests",
+      "GET /api/v1/create-package/requests/{request_id}",
+      "GET /api/v1/dependency-scans/{scan_id}",
+      "GET /api/v1/embedded-system-packages",
+      "GET /api/v1/embedded-system-packages/{entity_id}",
+      "GET /api/v1/events",
+      "GET /api/v1/future-dev/graphic-view/overview",
+      "GET /api/v1/health/live",
+      "GET /api/v1/health/ready",
+      "GET /api/v1/hypotheses",
+      "GET /api/v1/instruments",
+      "GET /api/v1/instruments/{instrument_id}",
+      "GET /api/v1/lab/messages",
+      "GET /api/v1/library",
+      "GET /api/v1/library-shared-with-me",
+      "GET /api/v1/library/{entity_id}",
+      "GET /api/v1/library/{entity_id}/shares",
+      "GET /api/v1/mainboard-compositions/{composition_id}/portfolio-allocation-draft",
+      "GET /api/v1/mainboard-compositions/{composition_id}/readiness",
+      "GET /api/v1/mainboards/default",
+      "GET /api/v1/manual/search",
+      "GET /api/v1/manual/stream",
+      "GET /api/v1/market-datasets",
+      "GET /api/v1/market-datasets/{entity_id}",
+      "GET /api/v1/market-datasets/{entity_id}/approved-bundle",
+      "GET /api/v1/me",
+      "GET /api/v1/meta",
+      "GET /api/v1/metric-definitions",
+      "GET /api/v1/metric-profiles/resolved",
+      "GET /api/v1/metrics",
+      "GET /api/v1/package-imports",
+      "GET /api/v1/package-imports/{import_job_id}",
+      "GET /api/v1/package-rationale-assignments",
+      "GET /api/v1/rationale-families",
+      "GET /api/v1/rationale-families/{entity_id}",
+      "GET /api/v1/rationale-families:suggest",
+      "GET /api/v1/readiness-reports/{report_id}",
+      "GET /api/v1/research-datasets",
+      "GET /api/v1/research-datasets/{entity_id}",
+      "GET /api/v1/strategies/{root_id}",
+      "GET /api/v1/strategies/{root_id}/revisions",
+      "GET /api/v1/strategy-drafts",
+      "GET /api/v1/strategy-drafts/{draft_id}",
+      "GET /api/v1/strategy-revisions/{revision_id}",
+      "GET /api/v1/trade-logs/imports/{job_id}",
+      "GET /api/v1/trade-logs/{root_id}",
+      "GET /api/v1/trading-signals/imports/{job_id}",
+      "GET /api/v1/trading-signals/{root_id}",
+      "GET /api/v1/trash-entries",
+      "GET /api/v1/trash-entries/{trash_entry_id}",
+      "GET /api/v1/trash-entries/{trash_entry_id}/restore-preflight",
+      "GET /api/v1/validation-runs/{validation_run_id}",
+      "GET /api/v1/view-datasets",
+      "GET /api/v1/view-datasets/{view_dataset_id}",
+      "PATCH /api/v1/admin/users/{user_id}/role",
+      "PATCH /api/v1/mainboard-items/{item_id}",
+      "PATCH /api/v1/strategy-drafts/{draft_id}",
+      "POST /api/v1/admin/data-queue/redeliver",
+      "POST /api/v1/admin/manual/documents",
+      "POST /api/v1/admin/manual/documents/{document_id}/revisions",
+      "POST /api/v1/admin/manual/documents/{document_id}:restore",
+      "POST /api/v1/admin/manual/documents:upload",
+      "POST /api/v1/agent-directives",
+      "POST /api/v1/agent-runs/{run_id}/stop",
+      "POST /api/v1/agent-runtime/pause",
+      "POST /api/v1/agent-runtime/resume",
+      "POST /api/v1/analysis-artifacts",
+      "POST /api/v1/auth/login",
+      "POST /api/v1/auth/logout",
+      "POST /api/v1/auth/reauth",
+      "POST /api/v1/auth/signup",
+      "POST /api/v1/backtest-results/compare",
+      "POST /api/v1/backtest-results/{result_id}/delete",
+      "POST /api/v1/backtest-results/{result_id}/exports",
+      "POST /api/v1/backtest-runs/{run_id}/cancel",
+      "POST /api/v1/backtest-runs/{run_id}/retries",
+      "POST /api/v1/capabilities/{capability_key}/lifecycle-transitions",
+      "POST /api/v1/create-package/requests",
+      "POST /api/v1/create-package/requests/{request_id}/approve",
+      "POST /api/v1/create-package/requests/{request_id}/baseline",
+      "POST /api/v1/create-package/requests/{request_id}/baseline-parse",
+      "POST /api/v1/create-package/requests/{request_id}/draft",
+      "POST /api/v1/create-package/requests/{request_id}/generate-candidate",
+      "POST /api/v1/create-package/requests/{request_id}/pre-check",
+      "POST /api/v1/create-package/requests/{request_id}/request-revision",
+      "POST /api/v1/create-package/requests/{request_id}/validate",
+      "POST /api/v1/embedded-system-packages",
+      "POST /api/v1/embedded-system-packages/resolve",
+      "POST /api/v1/embedded-system-packages/{entity_id}/activate",
+      "POST /api/v1/embedded-system-packages/{entity_id}/deprecate",
+      "POST /api/v1/embedded-system-packages/{entity_id}/validate",
+      "POST /api/v1/external-work-object-drafts/{kind}",
+      "POST /api/v1/instruments",
+      "POST /api/v1/instruments/resolve",
+      "POST /api/v1/instruments/{instrument_id}/aliases",
+      "POST /api/v1/instruments/{instrument_id}/deprecate",
+      "POST /api/v1/lab/messages",
+      "POST /api/v1/library/{entity_id}/approve",
+      "POST /api/v1/library/{entity_id}/deprecate",
+      "POST /api/v1/library/{entity_id}/derive",
+      "POST /api/v1/library/{entity_id}/export",
+      "POST /api/v1/library/{entity_id}/request-approval",
+      "POST /api/v1/library/{entity_id}/revisions",
+      "POST /api/v1/library/{entity_id}/shares",
+      "POST /api/v1/library/{entity_id}/validation-runs",
+      "POST /api/v1/mainboard-compositions/{composition_id}/backtest-runs",
+      "POST /api/v1/mainboard-compositions/{composition_id}/portfolio-allocation/revisions",
+      "POST /api/v1/mainboard-compositions/{composition_id}/portfolio-allocation/sync",
+      "POST /api/v1/mainboard-compositions/{composition_id}/portfolio-allocation/validate",
+      "POST /api/v1/mainboard-compositions/{composition_id}/readiness-checks",
+      "POST /api/v1/mainboards/{workspace_id}/items",
+      "POST /api/v1/mainboards/{workspace_id}/snapshots",
+      "POST /api/v1/market-datasets",
+      "POST /api/v1/market-datasets/{entity_id}/analysis",
+      "POST /api/v1/market-datasets/{entity_id}/approve",
+      "POST /api/v1/market-datasets/{entity_id}/deprecate",
+      "POST /api/v1/market-datasets/{entity_id}/raw-uploads",
+      "POST /api/v1/market-datasets/{entity_id}/raw-uploads/finalize",
+      "POST /api/v1/market-datasets/{entity_id}/revisions",
+      "POST /api/v1/market-datasets/{entity_id}/schema-mapping",
+      "POST /api/v1/market-datasets/{entity_id}/successor",
+      "POST /api/v1/metric-profiles/{profile_id}/revisions",
+      "POST /api/v1/package-imports",
+      "POST /api/v1/package-rationale-assignments:batch",
+      "POST /api/v1/rationale-families",
+      "POST /api/v1/rationale-families/{entity_id}/revisions",
+      "POST /api/v1/research-datasets",
+      "POST /api/v1/research-datasets/bundles/agent",
+      "POST /api/v1/research-datasets/bundles/backtest-evidence",
+      "POST /api/v1/research-datasets/{entity_id}/analysis",
+      "POST /api/v1/research-datasets/{entity_id}/approve",
+      "POST /api/v1/research-datasets/{entity_id}/feature-definitions",
+      "POST /api/v1/research-datasets/{entity_id}/field-definitions",
+      "POST /api/v1/research-datasets/{entity_id}/revisions",
+      "POST /api/v1/research-datasets/{entity_id}/revoke",
+      "POST /api/v1/research-datasets/{entity_id}/time-policy",
+      "POST /api/v1/research-datasets/{entity_id}/upload-session",
+      "POST /api/v1/research-datasets/{entity_id}/upload-session/finalize",
+      "POST /api/v1/strategies/{root_id}/rationale-family",
+      "POST /api/v1/strategy-drafts",
+      "POST /api/v1/strategy-drafts/{draft_id}/clear",
+      "POST /api/v1/strategy-drafts/{draft_id}/save",
+      "POST /api/v1/strategy-drafts/{draft_id}/validate",
+      "POST /api/v1/trade-logs",
+      "POST /api/v1/trade-logs/imports",
+      "POST /api/v1/trade-logs/source-assets",
+      "POST /api/v1/trade-logs/{root_id}/export",
+      "POST /api/v1/trade-logs/{root_id}/revisions",
+      "POST /api/v1/trading-signals",
+      "POST /api/v1/trading-signals/imports",
+      "POST /api/v1/trading-signals/source-assets",
+      "POST /api/v1/trading-signals/{root_id}/export",
+      "POST /api/v1/trading-signals/{root_id}/revisions",
+      "POST /api/v1/trash-entries/{trash_entry_id}/purge",
+      "POST /api/v1/trash-entries/{trash_entry_id}/restore",
+      "POST /api/v1/users/{user_id}/role",
+      "POST /api/v1/view-datasets/query",
+      "POST /api/v1/work-objects",
+      "POST /api/v1/work-objects/{root_id}/revisions",
+      "PUT /api/v1/mainboard-compositions/{composition_id}/portfolio-allocation-draft"
+    ],
+    "operations_by_method": {
+      "delete": 9,
+      "get": 81,
+      "patch": 3,
+      "post": 102,
+      "put": 1
+    },
+    "path_count": 177
+  },
+  "schema_version": 1,
+  "tests": {
+    "backend_collected_test_functions": 3395,
+    "backend_test_files": 328,
+    "backend_xfail_markers": 1,
+    "backend_xfail_strict_markers": 1,
+    "collection_method": "static ast/regex walk of the test tree — no suite is executed, so these are COLLECTED counts and never pass counts. They are also LOWER than a runner's count, because one parametrized site expands into many cases at run time: `npx vitest list` reports 721 cases over the same 70 files this walk sees as 711 call sites, and pytest expands `@pytest.mark.parametrize` the same way. Compare file counts across the two, never case counts.",
+    "e2e_spec_files": 20,
+    "e2e_test_call_sites": 73,
+    "frontend_unit_test_call_sites": 711,
+    "frontend_unit_test_files": 70
+  },
+  "visual_baselines": {
+    "a11y_frozen_pages": 23,
+    "a11y_frozen_serious_nodes": 45,
+    "playwright_snapshot_pngs": 16,
+    "screenshot_baseline_pngs": 122,
+    "screenshot_prototype_pngs": 20
+  }
+}

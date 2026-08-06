@@ -1,3 +1,9 @@
+<!-- doc-status: historical -->
+> **HISTORICAL RECORD — bu belge GÜNCEL GERÇEK DEĞİLDİR.** Yazıldığı andaki durumu
+> kaydeder; SHA'lar, sayılar, alembic head'i ve "next" maddeleri bayat olabilir.
+> Güncel otorite: `CLAUDE.md` §Current position + `docs/generated/repository_facts.md`
+> (üretilmiş, CI'da `--check` ile kapılı).
+
 # ADIM 15 landed — merged-axis valuation clock (PR #567) · ADIM 16 kickoff
 
 > Bu belge **ADIM 15'in** kapanış handoff'udur. En altta **paste-ready resume prompt** var.

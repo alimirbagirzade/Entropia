@@ -1,3 +1,7 @@
+<!-- doc-status: current -->
+> **CURRENT SLICE KICKOFF.** Sayısal gerçekler için otorite:
+> `CLAUDE.md` §Current position + `docs/generated/repository_facts.md` (üretilmiş).
+
 # ADIM 26 kapanış devri — alert kuralları artık GERÇEKTEN doğrulanıyor
 
 > **Durum uyarısı:** bu belge yazıldığında **PR #624 AÇIK, merge EDİLMEMİŞTİ.**

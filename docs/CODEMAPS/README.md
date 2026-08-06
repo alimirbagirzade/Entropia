@@ -4,20 +4,26 @@ Sıkıştırılmış, tablo ağırlıklı referans haritalar. Her biri tek ekran
 Kaynak: repo üzerinde **gözlemlenen** kod (route imzaları, model tanımları, aktör
 dekoratörleri, frontend import/query-key'leri). Emin olunamayan yerlerde `?` var.
 
-> **Son tazeleme: 2026-08-03** — `origin/main` @ `0dcce69` (ground-truth reset denetimi;
-> önceki tazeleme 2026-07-29 @ `0995c37`). Aşağıdaki sayıların **hepsi** o gün repodan sayıldı:
+> **Sayılar artık burada TUTULMUYOR — üretiliyor.**
+> Alembic head, tablo / FK sayısı, HTTP operation sayısı, frontend route sayısı ve test
+> **collection** sayıları tek yerde yaşıyor:
+> **[`docs/generated/repository_facts.md`](../generated/repository_facts.md)**
+> (üretici `scripts/generate_repository_facts.py`, CI'da `--check` ile **bloklayıcı**).
+> Elle yazılan bir sayıyı hiçbir kapı doğrulamaz; bayatladığında da kimse fark etmez —
+> bu dosya tam olarak öyle bayatlamıştı: burası **104 tablo** derken
+> `DATA_MODEL.md` **102** diyordu ve ikisi de elle sayılmıştı.
 >
-> | Olgu | Değer | Nasıl doğrulanır |
-> |---|---|---|
-> | Alembic head | **`0043_i08_registry_strategy_fks`** (43 migration, tek head) | `cd backend && uv run alembic heads` |
-> | HTTP endpoint | **196** (openapi operation sayısıyla birebir) | `BACKEND_ROUTES.md` başındaki tek satırlık python |
-> | Postgres tablosu | **104** (30 model dosyası) | `grep -rh __tablename__ …/models/ \| sort -u \| wc -l` |
-> | `ForeignKey(...)` bildirimi | **140** (25 dosyada) | `grep -rh "ForeignKey(" …/models/ \| wc -l` |
-> | audit `event_kind` | **126 düz literal** (+ dolaylı yazımlar) | `JOBS_AND_EVENTS.md` §Audit kataloğu |
-> | Frontend | **31 sayfa**, **40 `lib/*.ts`** | `ls frontend/src/pages/*.tsx \| wc -l` |
+> **Son yapısal tazeleme: 2026-08-03** — `origin/main` @ `0dcce69` (ground-truth reset
+> denetimi; önceki tazeleme 2026-07-29 @ `0995c37`). Bu tarih **haritaların kendisi**
+> içindir (hangi endpoint hangi command'i çağırıyor, hangi tablo neye bağlı) — sayılar
+> için değil. Yapı değişince `ecc:update-codemaps` ile tazele.
 >
-> *(Tarihsel, denetlenebilir kalsın diye: 2026-07-29 tazelemesi head
-> `0040_export_type_agent_pine` / 40 migration, 102 tablo, 135 FK sayıyordu.)*
+> **Üreticiye alınmayan iki olgu** (ikisi de tek bir sembolden değil, dağınık
+> yazımlardan türüyor, o yüzden statik olarak güvenilir sayılamıyor): audit
+> `event_kind` **126 düz literal** (+ dolaylı yazımlar → `JOBS_AND_EVENTS.md`
+> §Audit kataloğu) ve frontend **31 sayfa / 40 `lib/*.ts`**
+> (`ls frontend/src/pages/*.tsx | wc -l`). Bu ikisi 2026-08-03 elle sayımıdır ve
+> **bayat olabilir** — kapı onları korumuyor.
 
 ---
 

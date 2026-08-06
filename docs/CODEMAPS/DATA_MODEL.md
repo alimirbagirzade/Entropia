@@ -1,11 +1,21 @@
 # DATA_MODEL — Postgres tabloları
 
-Modeller: `backend/src/entropia/infrastructure/postgres/models/*.py` (30 dosya, **102 tablo**).
+Modeller: `backend/src/entropia/infrastructure/postgres/models/*.py`.
 Alembic: `backend/alembic/versions/` — **head = `0043_i08_registry_strategy_fks`**
-(43 migration, tek head; `0042_package_import_source_name` üzerine I-08 slice 1'de
-eklendi — **yeni tablo yok, yalnız 3 FK constraint**).
+(`0042_package_import_source_name` üzerine I-08 slice 1'de eklendi — **yeni tablo yok,
+yalnız 3 FK constraint**).
 
-> **`0042` YENİ TABLO GETİRMEDİ** (102 sayısı değişmedi). F-07 §4.4: `package_import_job` tablosuna
+> **Tablo / FK / migration SAYISI artık burada yazmıyor — üretiliyor:**
+> [`docs/generated/repository_facts.md`](../generated/repository_facts.md)
+> (`database.table_count`, `database.foreign_key_count`, `alembic.revision_count`;
+> üretici `scripts/generate_repository_facts.py`, CI'da `--check` ile bloklayıcı).
+> Buradaki elle sayım **bayatlamıştı**: bu satır **102 tablo** derken SQLAlchemy
+> metadata'sı **104** veriyordu, `CODEMAPS/README.md` de 104 yazıyordu — aynı olgu
+> iki haritada iki farklı sayıydı. (Aynı sayı daha önce de kaymıştı:
+> `DOC_TRUTH_REPAIR_LANDED_KICKOFF.md` §"63 → 100 → 102".) Head satırı elle kalıyor
+> ama artık **kapılı** — gerçek head'den saparsa CI kırmızıya döner.
+
+> **`0042` YENİ TABLO GETİRMEDİ.** F-07 §4.4: `package_import_job` tablosuna
 > nullable `source_package_name VARCHAR(255)` ekler — Library Import raporunun ham `import_job_id`
 > yerine gösterdiği ad. `submit_package_import` bunu **submit anında** gönderilen export
 > manifest'inin `name` alanından yakalar; `blocked`/`failed` biten bir import hiç paket üretmediği

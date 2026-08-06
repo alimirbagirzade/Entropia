@@ -1,3 +1,9 @@
+<!-- doc-status: historical -->
+> **HISTORICAL RECORD — bu belge GÜNCEL GERÇEK DEĞİLDİR.** Yazıldığı andaki durumu
+> kaydeder; SHA'lar, sayılar, alembic head'i ve "next" maddeleri bayat olabilir.
+> Güncel otorite: `CLAUDE.md` §Current position + `docs/generated/repository_facts.md`
+> (üretilmiş, CI'da `--check` ile kapılı).
+
 # ADIM 20 BLOCKED — unified portfolio oracles landed, containment NOT lifted (PR #583) · sıradaki slice kickoff'u
 
 > Bu belge **ADIM 20'nin** kapanış handoff'udur. En altta **paste-ready resume prompt** var.

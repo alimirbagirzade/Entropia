@@ -1,0 +1,348 @@
+# Entropia — Prometheus alerting rules (ADIM 25).
+#
+# CONTRACT, enforced by backend/tests/contract/test_alert_rules_contract.py:
+#
+#   1. Every `expr` may reference ONLY metric names this deployment actually
+#      emits (the seven `entropia_*` families of GET /metrics, plus the
+#      scraper's own `up`). An alert over a metric nobody produces never fires
+#      and reads as coverage that does not exist.
+#   2. Every alert carries `for:`, a `severity` of `page` or `ticket`, and the
+#      full annotation set: summary, diagnosis, response, mitigation, recovery,
+#      escalation, false_positives, derivation, runbook.
+#   3. Every `runbook` annotation must resolve to a file that exists on disk.
+#   4. `derivation` must state where the number came from. Entropia has NO
+#      adjudicated latency or throughput target — docs/performance/README.md
+#      leaves the p95 row deliberately blank rather than guessing — so no rule
+#      here may invent one. Thresholds are derived from shipped configuration
+#      defaults or are structural (a series is absent, a process is down).
+#
+# SCRAPE ASSUMPTION: the API is scraped as job="entropia-api" with the Bearer
+# credential from ENTROPIA_METRICS_TOKEN. Only the API process serves /metrics;
+# worker, scheduler and agent-coordinator have no HTTP surface, so their health
+# is inferred from the job/heartbeat gauges below, never from `up`.
+
+groups:
+  - name: entropia-api
+    rules:
+      - alert: EntropiaApiDown
+        expr: up{job="entropia-api"} == 0
+        for: 2m
+        labels:
+          severity: page
+          component: api
+        annotations:
+          summary: "The Entropia API is not answering scrapes."
+          derivation: >-
+            Structural, not a tuned threshold: `up == 0` means the scrape itself
+            failed. 2m rides out one missed scrape at any sane interval without
+            paging on a single blip.
+          diagnosis: >-
+            Distinguish "process dead" from "process alive, port unreachable":
+            `docker compose ps api` and `docker compose logs --tail=200 api`. A
+            running container with a failing scrape is usually the credential
+            (401/403 from the /metrics gate) or a network policy, not an outage —
+            curl /health/live from inside the network to tell them apart.
+          response: "Confirm whether users are affected before touching anything: /health/live from a client network."
+          mitigation: "Restart the API service. If it crash-loops, capture logs BEFORE the next restart — the loop overwrites the useful frame."
+          recovery: "`up == 1` for 5m and /health/ready returns 200 with all three checks ok."
+          escalation: "Page the on-call operator immediately; this alert means the product is unavailable."
+          false_positives: >-
+            A planned redeploy fires this. Silence for the deploy window. A wrong
+            or missing ENTROPIA_METRICS_TOKEN also presents as `up == 0` while
+            the product is perfectly healthy — check the scrape config first.
+          runbook: docs/runbooks/api.md
+
+      - alert: EntropiaApiServerErrors
+        expr: sum(rate(entropia_http_requests_total{status=~"5.."}[5m])) > 0
+        for: 10m
+        labels:
+          severity: page
+          component: api
+        annotations:
+          summary: "5xx errors have not stopped: at least one in every 5m window for 10m."
+          derivation: >-
+            Zero, not a percentage. docs/performance/README.md pins "Errors in a
+            load run = 0" as the one hard, non-noisy gate; that is the only
+            adjudicated error target this project has, so the alert inherits it
+            rather than inventing a 1%/5% SLO the spec never agreed to. `for: 10m`
+            is what keeps it quiet — a single 500 will not page, a sustained one will.
+          diagnosis: >-
+            Break down by route and status:
+            `sum by (path, status) (rate(entropia_http_requests_total{status=~"5.."}[5m]))`.
+            One path implicates that handler; every path implicates a shared
+            dependency — check /health/ready, then EntropiaMetricsDatabaseProbeFailing.
+          response: "Identify the failing route group, then follow the dependency chain from /health/ready outward."
+          mitigation: "If one route is at fault and the release is recent, roll back. Shared-dependency failures are handled by the postgres/redis/object-storage runbooks."
+          recovery: "The 5m 5xx rate returns to 0 and stays there for 15m."
+          escalation: "Page. If the cause is data corruption rather than availability, stop writes before continuing."
+          false_positives: >-
+            A load test or a security scan against production drives real 5xx.
+            Correlate with `entropia_http_requests_in_flight` and the client IPs
+            in the access logs before treating it as a product defect. Note the
+            sensitivity: roughly three errors spaced under 5 minutes apart keep the
+            rate positive across the whole 10m window and will page, even on an
+            otherwise healthy API. A single 500 will not.
+          runbook: docs/runbooks/api.md
+
+      - alert: EntropiaApiRequestsExceedLargestBucket
+        expr: >-
+          sum(increase(entropia_http_request_duration_seconds_bucket{le="+Inf"}[10m]))
+          - sum(increase(entropia_http_request_duration_seconds_bucket{le="5.0"}[10m])) >= 1
+        for: 15m
+        labels:
+          severity: ticket
+          component: api
+        annotations:
+          summary: "Requests are landing beyond the histogram's largest bucket (>5s)."
+          derivation: >-
+            5.0s is NOT a new latency target — it is the largest bucket already
+            shipped in infrastructure/observability/metrics.py:15. Overflowing it
+            is a structural fact ("slower than this exposition can even measure"),
+            which is why this alert can exist while an absolute p95 SLO cannot.
+            `increase(...) >= 1` rather than `rate(...) > 0`: the bound is one whole
+            request, and subtracting two rates would leave extrapolation dust that
+            flaps a `> 0` comparison.
+          diagnosis: >-
+            Find the route:
+            `sum by (path) (rate(...{le="+Inf"}[10m])) - sum by (path) (rate(...{le="5.0"}[10m]))`.
+            Then check whether the DB is the cause — the query budgets in
+            docs/performance/query_budgets.json name the expected round-trip count
+            per operation, and a regression there shows up here first.
+          response: "Ticket it. This is a degradation signal, not an outage; do not page unless it coincides with EntropiaApiServerErrors."
+          mitigation: "If one route regressed against its query budget, revert the change that moved it. Otherwise check DB load and the connection pool (SQLAlchemy defaults: 5 + 10 overflow, unconfigured)."
+          recovery: "The over-5s rate returns to 0 for 30m."
+          escalation: "Escalate to page only if it is accompanied by 5xx or by growing in-flight requests."
+          false_positives: >-
+            Large uploads and export downloads legitimately exceed 5s and are
+            counted here. Confirm the affected `path` is an interactive read
+            before treating it as a regression.
+          runbook: docs/runbooks/api.md
+
+  - name: entropia-dependencies
+    rules:
+      - alert: EntropiaMetricsDatabaseProbeFailing
+        expr: up{job="entropia-api"} == 1 and on() absent(entropia_outbox_lag_seconds)
+        for: 5m
+        labels:
+          severity: page
+          component: postgres
+        annotations:
+          summary: "The API is up but cannot reach PostgreSQL at scrape time."
+          derivation: >-
+            Structural. apps/api/routes/metrics.py degrades the DB-backed gauge
+            block to a comment line when the session cannot be opened, so the
+            four gauges vanish together while the process metrics keep flowing.
+            "up but gauges absent" therefore means exactly one thing.
+          diagnosis: >-
+            `curl -s /health/ready | jq` names which dependency is down. Then
+            `docker compose logs --tail=200 postgres`. In the API log look for
+            `metrics.operational_gauges_probe_failed`, which carries `error_type`
+            only — deliberately, because driver errors echo the DSN.
+          response: "Treat as a live incident: with Postgres unreachable every durable write is failing, even though /metrics still returns 200."
+          mitigation: "Restore Postgres connectivity (service down, connection limit reached, or disk full). See the postgres runbook for the exhaustion checks."
+          recovery: "`entropia_outbox_lag_seconds` is present again and /health/ready returns 200."
+          escalation: "Page. If Postgres is up but refusing connections, check max_connections against the pool — the engine sets no explicit pool_size, so SQLAlchemy defaults apply per process."
+          false_positives: >-
+            The very first scrape after an API start can race the pool warm-up.
+            `for: 5m` covers that. A scrape refused by the auth gate returns 401/403
+            and does not reach this rule at all.
+          runbook: docs/runbooks/postgres.md
+
+  - name: entropia-workers
+    rules:
+      - alert: EntropiaWorkerHeartbeatStale
+        expr: entropia_worker_heartbeat_age_seconds > 180
+        for: 5m
+        labels:
+          severity: page
+          component: worker
+        annotations:
+          summary: "No worker has completed the maintenance round-trip in over 3 minutes."
+          derivation: >-
+            SCHEDULER_TICK_SECONDS defaults to 30s (config/settings.py), so the
+            heartbeat normally oscillates between 0 and 30 seconds. 180s is six
+            consecutive missed ticks — derived from the shipped cadence, not chosen.
+          diagnosis: >-
+            The round-trip has three links; find the broken one. Scheduler alive?
+            `docker compose logs --tail=100 scheduler` should show `scheduler.maintenance`
+            every tick. Redis reachable? `redis-cli ping`. Worker consuming?
+            `docker compose logs --tail=100 worker` should show `worker.heartbeat`.
+          response: "Page. A stalled maintenance worker also means the outbox relay and stale-job reclaim have stopped, so SSE and job recovery are both degraded."
+          mitigation: "Restart the stopped link. If the worker is alive but idle, Redis lost the queue — check Redis memory/eviction policy."
+          recovery: "`entropia_worker_heartbeat_age_seconds` drops back under 60s and stays there."
+          escalation: "Page. Pair with EntropiaOutboxLagSevere: both firing together confirms the scheduler, not the worker."
+          false_positives: >-
+            SCOPE: this proves only that a worker consuming the `maintenance`
+            queue is alive. A dead `data` or `backtest` worker leaves it perfectly
+            fresh — EntropiaQueueNeverDrains covers those. A planned scheduler stop
+            fires this; silence for the window.
+          runbook: docs/runbooks/worker-down.md
+
+      - alert: EntropiaWorkerHeartbeatNeverRecorded
+        expr: up{job="entropia-api"} == 1 and on() absent(entropia_worker_heartbeat_age_seconds)
+        for: 15m
+        labels:
+          severity: page
+          component: worker
+        annotations:
+          summary: "No worker round-trip has EVER been recorded on this deployment."
+          derivation: >-
+            Structural. The exposition prints the TYPE line with no sample when
+            app_metadata holds no heartbeat row, precisely so this is detectable
+            rather than rendering a healthy-looking 0.0. 15m is 30 scheduler ticks.
+          diagnosis: >-
+            This is a provisioning failure, not a runtime one. Confirm the scheduler
+            service exists in the compose/deployment at all, then that a worker
+            consumes the `maintenance` queue. `SELECT * FROM app_metadata WHERE
+            key = 'worker.maintenance.last_heartbeat_at';` should return one row.
+          response: >-
+            Treat this as the async plane never having been wired up at all. Every
+            durable job on this deployment is at risk, not just maintenance.
+          mitigation: "Start the scheduler and a maintenance-queue worker. Verify with the queue round-trip check in the runbook."
+          recovery: "The series appears and EntropiaWorkerHeartbeatStale stays clear for 30m."
+          escalation: "Page. Do not accept user traffic on a deployment whose async plane has never proven itself."
+          false_positives: >-
+            Expected during the first minutes of a brand-new stack, before the
+            scheduler's first tick. `for: 15m` is the allowance; if it fires on a
+            fresh install, the install is genuinely incomplete.
+          runbook: docs/runbooks/worker-down.md
+
+  - name: entropia-jobs
+    rules:
+      - alert: EntropiaJobLeaseStuck
+        expr: entropia_job_lease_age_seconds > 1200
+        for: 10m
+        labels:
+          severity: page
+          component: jobs
+        annotations:
+          summary: "A RUNNING job has held its lease past the point the scheduler should have reclaimed it."
+          derivation: >-
+            JOB_STALE_AFTER_SECONDS defaults to 600s and the scheduler reclaims
+            RUNNING jobs older than that on every tick. 1200s is 2x that bound: by
+            then a healthy sweep has had ~20 chances to act, so the age itself
+            proves the reclaim path is not running or is failing.
+          diagnosis: >-
+            First decide whether the sweep is alive: look for `scheduler.maintenance`
+            in the scheduler log, and for `scheduler.maintenance_failed` (carries
+            `error`). If the sweep IS running, the job is being re-claimed in a loop —
+            check `attempts` against `max_attempts` on the jobs row.
+          response: "Identify the job: `SELECT job_id, queue, status, attempts, claimed_at, started_at FROM jobs WHERE status = 'running' ORDER BY coalesce(started_at, claimed_at) LIMIT 5;`"
+          mitigation: "If the worker holding it is gone, let the sweep reclaim it once the scheduler is restored. Never hand-edit a jobs row to SUCCEEDED — that fabricates an outcome no run produced."
+          recovery: "`entropia_job_lease_age_seconds` falls below 600s."
+          escalation: "Page. A stuck backtest lease blocks the run's result and the user sees no terminal state."
+          false_positives: >-
+            A legitimately long backtest exceeds 1200s of wall clock. Confirm
+            against the run's `backtest_run_event` rows before killing anything —
+            a long run is progressing, a stuck one is not.
+          runbook: docs/runbooks/stale-jobs.md
+
+      - alert: EntropiaQueueNeverDrains
+        expr: min_over_time(entropia_jobs_depth{status="queued"}[20m]) > 0
+        for: 10m
+        labels:
+          severity: ticket
+          component: jobs
+        annotations:
+          summary: "A queue has held at least one QUEUED job for 20 minutes without ever emptying."
+          derivation: >-
+            JOB_REDELIVER_GRACE_SECONDS defaults to 600s — a QUEUED job older than
+            that is redelivery-eligible on the next sweep. 20m is 2x the grace.
+            READ THE EXPRESSION LITERALLY: `entropia_jobs_depth` is built by a
+            GROUP BY, so a queue with zero QUEUED rows emits NO SERIES rather than
+            a 0, and `min_over_time` skips gaps. This detects "every sample the
+            queue reported in 20m was above zero", NOT "the queue never emptied" —
+            a queue that drained briefly and refilled still matches. `min_over_time`
+            (not `avg`) is still the right choice: it refuses to average a backlog
+            away.
+          diagnosis: >-
+            Read the `queue` label. `data` is the expected offender: it is
+            deliberately absent from the scheduler's ACTOR_BY_QUEUE, so lost `data`
+            messages are logged as `scheduler.redeliver_unroutable` and re-dispatch
+            is an OPERATOR action by design, not a bug. Any other queue means the
+            worker for it is gone — check EntropiaWorkerHeartbeatStale.
+          response: "Ticket. Confirm which queue, then whether the matching worker service is running."
+          mitigation: "For `data`, re-dispatch per the runbook. For other queues, restart the worker consuming that queue."
+          recovery: "The queue reaches depth 0 at least once in a 20m window."
+          escalation: "Escalate to page if the affected queue is `backtest` and users are waiting on run results."
+          false_positives: >-
+            A genuine sustained backlog under heavy legitimate load also holds
+            depth above zero. Check whether SUCCEEDED counts are rising in parallel —
+            a draining-but-busy queue is throughput, not breakage. And per the
+            derivation: a queue that DID empty for a short stretch still fires,
+            because an absent series is a gap, not a zero. Confirm against the
+            `jobs` table before concluding the queue is wedged.
+          runbook: docs/runbooks/stale-jobs.md
+
+      - alert: EntropiaJobsFailingTerminally
+        expr: delta(entropia_jobs_depth{status="failed_final"}[1h]) > 0
+        for: 5m
+        labels:
+          severity: ticket
+          component: jobs
+        annotations:
+          summary: "Jobs have reached the terminal failed_final state in the last hour."
+          derivation: >-
+            `> 0` new terminal failures — a count of real events, not a tuned rate.
+            `delta` (not `increase`) because entropia_jobs_depth is a GAUGE of rows
+            per status, not a counter. `failed_final` and not `failed_retryable`:
+            the retryable state is the retry machinery working as designed.
+          diagnosis: >-
+            `SELECT queue, count(*) FROM jobs WHERE status = 'failed_final' AND
+            finished_at > now() - interval '1 hour' GROUP BY queue;` then read the
+            worker log for that queue around those timestamps.
+          response: "Ticket. Terminal failures are user-visible: the originating page shows a failed job with no result."
+          mitigation: "Fix the underlying cause and let the user re-submit. Do not rewrite the failed row — a Backtest Run that did not SUCCEED must never yield a Result."
+          recovery: "No new failed_final transitions for 2h."
+          escalation: "Escalate if failures cluster on one queue (a systemic defect) rather than scattering across users."
+          false_positives: >-
+            Bad user input that legitimately fails validation lands here too.
+            Read a sample of the failures before treating the alert as an incident.
+          runbook: docs/runbooks/stale-jobs.md
+
+  - name: entropia-events
+    rules:
+      - alert: EntropiaOutboxLagGrowing
+        expr: entropia_outbox_lag_seconds > 300
+        for: 10m
+        labels:
+          severity: ticket
+          component: outbox
+        annotations:
+          summary: "The outbox relay is behind by more than 5 minutes; SSE updates are stale."
+          derivation: >-
+            The relay runs inside the scheduler's maintenance pass, i.e. every
+            SCHEDULER_TICK_SECONDS = 30s. 300s is ten consecutive missed relay
+            passes — derived from the shipped cadence.
+          diagnosis: >-
+            The `relayed` field of the `scheduler.maintenance` log line says whether
+            the relay is doing work. Relayed rows climbing while lag stays high means
+            saturation, not stoppage — OUTBOX_RELAY_BATCH_SIZE defaults to 200 per pass.
+          response: "Ticket. The product is functional but the UI stops updating live; users see stale state until they reload."
+          mitigation: "If the scheduler is stopped, restart it. If it is saturated, raise OUTBOX_RELAY_BATCH_SIZE or shorten the tick."
+          recovery: "`entropia_outbox_lag_seconds` returns below 60s."
+          escalation: "Escalates on its own via EntropiaOutboxLagSevere."
+          false_positives: >-
+            A large import or backtest legitimately produces a burst the relay drains
+            over several passes. A lag that is falling is draining, not stuck — check
+            the trend, not the instantaneous value.
+          runbook: docs/runbooks/outbox-lag.md
+
+      - alert: EntropiaOutboxLagSevere
+        expr: entropia_outbox_lag_seconds > 1800
+        for: 10m
+        labels:
+          severity: page
+          component: outbox
+        annotations:
+          summary: "The outbox relay is behind by more than 30 minutes."
+          derivation: "Sixty consecutive missed relay passes at the 30s default tick. Same derivation as EntropiaOutboxLagGrowing, one order of magnitude out."
+          diagnosis: "As EntropiaOutboxLagGrowing, but at this magnitude assume the relay has stopped rather than fallen behind: confirm the scheduler process is alive at all."
+          response: "Page. At this lag the event stream is effectively dead and operators are flying blind on job progress."
+          mitigation: "Restart the scheduler. If the relay is failing rather than absent, `scheduler.maintenance_failed` carries the error."
+          recovery: "Lag falls below 300s and EntropiaOutboxLagGrowing clears."
+          escalation: "Page. Pair with EntropiaWorkerHeartbeatStale to separate a dead scheduler from a dead worker."
+          false_positives: >-
+            A stack deliberately left running with the scheduler stopped (a
+            debugging session) reproduces this exactly. Silence before doing that.
+          runbook: docs/runbooks/outbox-lag.md

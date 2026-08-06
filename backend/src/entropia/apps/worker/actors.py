@@ -37,8 +37,33 @@ log = get_logger("worker")
 
 @dramatiq.actor(queue_name="maintenance", max_retries=3)
 def system_heartbeat(note: str = "ping") -> None:
-    """Proves the queue/worker round-trip works end to end."""
+    """Proves the queue/worker round-trip works end to end, and RECORDS the proof.
+
+    The log line alone left worker liveness un-scrapeable: queue depth and lease
+    age only speak once a real job is pending, so a worker that died on an idle
+    system stayed invisible until the next request needed it. Persisting the
+    round-trip lets ``entropia_worker_heartbeat_age_seconds`` answer it directly.
+    """
     log.info("worker.heartbeat", note=note)
+    run_sync(_record_system_heartbeat())
+
+
+async def _record_system_heartbeat() -> None:
+    from entropia.application.jobs.heartbeat import record_worker_heartbeat
+    from entropia.infrastructure.postgres.engine import get_session_factory
+
+    factory = get_session_factory()
+    async with factory() as session:
+        # Same shape as every other actor body: an explicit rollback before the
+        # re-raise. The `async with` would close the session either way, but the
+        # heartbeat must not be the one actor that quietly differs — the next
+        # person to copy a body should find the same pattern here.
+        try:
+            await record_worker_heartbeat(session)
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
 
 
 @dramatiq.actor(queue_name="data", max_retries=3)

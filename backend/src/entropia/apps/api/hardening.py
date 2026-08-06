@@ -150,6 +150,26 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         return response
 
 
+#: HTTP methods allowed to label the registry. The five the API actually serves
+#: plus the two the framework answers on its own (HEAD, and OPTIONS for CORS
+#: preflight). Anything else collapses to ``"other"``.
+_KNOWN_METHODS = frozenset({"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"})
+
+
+def _bounded_method(method: str) -> str:
+    """Clamp the method label, for the same reason ``path`` is clamped.
+
+    ``request.method`` is an arbitrary token off the wire: h11 accepts any valid
+    HTTP token, so a scanner sending ``PROPFIND``, ``EVIL0``, ``EVIL1`` … mints a
+    new series per request. The path label was carefully bounded to the resolved
+    route template while this one was passed through verbatim, which left the
+    exact unbounded-cardinality hole the path guard exists to close — just on the
+    other axis. Verified by driving the real app with six invented methods and
+    reading six ``method="…"`` values back out of the exposition.
+    """
+    return method if method in _KNOWN_METHODS else "other"
+
+
 class MetricsMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         metrics.request_started()
@@ -166,7 +186,10 @@ class MetricsMiddleware(BaseHTTPMiddleware):
             route = request.scope.get("route")
             path_template = getattr(route, "path_format", None) or "unmatched"
             metrics.request_finished(
-                request.method, path_template, status, time.perf_counter() - started
+                _bounded_method(request.method),
+                path_template,
+                status,
+                time.perf_counter() - started,
             )
 
 

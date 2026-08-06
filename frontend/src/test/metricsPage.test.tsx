@@ -90,3 +90,53 @@ describe("Metrics dashboard", () => {
     expect(await screen.findByText("Unable to load")).toBeInTheDocument();
   });
 });
+
+// --------------------------------------------------------------------------
+// Worker heartbeat row (ADIM 25). The page must not turn "no worker has ever
+// checked in" into something that reads as healthy — this is the System Metrics
+// page an operator opens precisely to find that out.
+// --------------------------------------------------------------------------
+
+const HEARTBEAT_RECORDED = `${HEALTHY}# TYPE entropia_worker_heartbeat_age_seconds gauge
+entropia_worker_heartbeat_age_seconds 12.500
+`;
+
+// Exactly what the backend serves when app_metadata holds no heartbeat row:
+// the TYPE line, and no sample.
+const HEARTBEAT_NEVER_RECORDED = `${HEALTHY}# TYPE entropia_worker_heartbeat_age_seconds gauge
+`;
+
+describe("Metrics dashboard — worker heartbeat", () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("shows the age when a worker round-trip has been recorded", async () => {
+    stubFetch(HEARTBEAT_RECORDED);
+    renderMetrics();
+
+    expect(await screen.findByText("Worker heartbeat age")).toBeInTheDocument();
+    expect(screen.getByText("12.50 s")).toBeInTheDocument();
+  });
+
+  it("says 'never recorded' rather than a dash or a healthy-looking zero", async () => {
+    stubFetch(HEARTBEAT_NEVER_RECORDED);
+    renderMetrics();
+
+    expect(await screen.findByText("never recorded")).toBeInTheDocument();
+    expect(screen.queryByText("0.00 s")).not.toBeInTheDocument();
+    // The other gauges are present, so the page must NOT claim degradation.
+    expect(screen.queryByText(/operational gauges degraded/i)).not.toBeInTheDocument();
+  });
+
+  it("distinguishes an unreachable database from a worker that never checked in", async () => {
+    stubFetch(DEGRADED);
+    renderMetrics();
+
+    expect(await screen.findByText(/operational gauges degraded/i)).toBeInTheDocument();
+    // Unknown, not "never": the scrape could not read app_metadata at all.
+    expect(screen.queryByText("never recorded")).not.toBeInTheDocument();
+  });
+});

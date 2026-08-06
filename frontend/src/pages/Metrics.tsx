@@ -81,6 +81,8 @@ function MetricsPanels({ summary, fetching }: { summary: MetricsSummary; fetchin
             <dd>{formatSeconds(summary.outboxLagSeconds)}</dd>
             <dt>Oldest lease age</dt>
             <dd>{formatSeconds(summary.leaseAgeSeconds)}</dd>
+            <dt>Worker heartbeat age</dt>
+            <dd>{formatHeartbeat(summary.workerHeartbeatAgeSeconds, summary.degraded)}</dd>
             <dt>Jobs (total)</dt>
             <dd>{formatCount(summary.jobsDepthTotal)}</dd>
           </dl>
@@ -148,4 +150,16 @@ function formatMs(value: number | null): string {
 function formatSeconds(value: number | null): string {
   if (value === null || !Number.isFinite(value)) return "—";
   return `${value.toFixed(2)} s`;
+}
+
+// The heartbeat is the one gauge whose absence carries its own meaning, so it
+// cannot share formatSeconds' single "—". The backend emits no sample when no
+// worker round-trip has EVER been recorded; rendering that as a dash (or worse,
+// as 0.00 s) would read as "fine" on the page an operator opens to find out
+// whether the async plane is alive. When the whole gauge block is missing the
+// database was unreachable at scrape time, which is genuinely unknown, not
+// "never" — the two are shown differently on purpose.
+function formatHeartbeat(value: number | null, degraded: boolean): string {
+  if (value !== null && Number.isFinite(value)) return `${value.toFixed(2)} s`;
+  return degraded ? "—" : "never recorded";
 }

@@ -101,7 +101,7 @@ CLAUDE.md'deki **"her yeni `create_*` için L1 FK insert-order proof"** kuralın
 |---|---|---|---|---|
 | `entity_registry` | Evrensel kimlik + yaşam döngüsü + head pointer | **FK** `owner_principal_id` (I-08) · `current_revision_id` (polimorfik, FK YOK) | `deletion_state`, `deleted_at` | ✔ `row_version` |
 | `entity_revisions` | Değişmez revision zinciri | **FK** `entity_id`, `parent_revision_id` | — | — |
-| `app_metadata` | Uygulama meta anahtar/değer | — | — | — |
+| `app_metadata` | Uygulama meta anahtar/değer. **Tek yazarı (ADIM 25):** `application/jobs/heartbeat.py` → `key="worker.maintenance.last_heartbeat_at"`, `value=<ISO8601 UTC>`; `job_gauges.py` okur, `entropia_worker_heartbeat_age_seconds` olarak yayımlanır. PK conflict'te upsert — satır **birikmez**, migration gerekmedi | — | — | — |
 
 ## Identity & Auth
 

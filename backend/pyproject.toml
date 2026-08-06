@@ -41,6 +41,11 @@ dev = [
   "httpx>=0.27,<1.0",
   "boto3-stubs[s3]>=1.43.62",
   "openapi-spec-validator>=0.7,<1.0",
+  # Reads ops/alerts/entropia.rules.yml in test_alert_rules_contract.py. Declared
+  # rather than inherited: uvicorn[standard] happens to pull PyYAML in today, and
+  # a test that silently depends on someone else's extra breaks the day that
+  # extra is trimmed.
+  "pyyaml>=6.0,<7.0",
   # ruff 0.15.21's Linux x86_64 wheel ships no `ruff` binary, so `uv run ruff`
   # fails with "Failed to spawn: ruff" in CI (the macOS wheel is fine, which is
   # why it passed locally). Pin to the last good release until a fixed one lands.

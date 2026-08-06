@@ -169,15 +169,6 @@ Before stopping a working session, produce **ALL** of the following:
 
 ## Current position (keep in sync at each closing)
 
-> **HEAD `c5d4c5d`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok).
-> **Son dalga — ADIM 16 (PR #602):** `run_engine`'in 1355 satırlık bar döngüsü `_build_stepper` /
-> `_ItemStepper`'a çıkarıldı; `run_engine` dokuz satırlık sürücü, imza + semantik aynı, **46/46
-> golden digest kımıldamadı** — ADR §15 R-4'ün tek kabul kriteri. `ENGINE_VERSION` bump YOK,
-> containment `future_dev`, migration/OpenAPI yok. **Testler: otorite CI'dır** (#602: 8 job pass,
-> `Backend` 44m09s); yerel tam suite bu dalgada ölçülmedi. **Next:** PR B — `_ItemStepper` üstüne
-> `ItemParticipant` adaptörü + `jobs/backtest_engine.py:298` call site (`run_portfolio`, **yalnız
-> >1 item**) → `docs/ADIM16_LANDED_KICKOFF.md`. **AÇIK:** `apps/worker/actors.py` event-loop kusuru
-> (fix PR #597 açık, CI yeşil, merge EDİLMEDİ) · #594/#599/#600/#601 merged ama doküman kaydı YOK.
 
 > **Uyarı:** `docs/audit/current_main_ground_truth_2026-08-03.md` §18'in 2/3/4/6 kalemleri
 > ADIM 5–8 ile kapandı ama o belge güncellenmedi — ona güvenmeden önce doğrula.

@@ -772,6 +772,20 @@ class _ItemStepper:
     open_position: Callable[[], _Position | None]
     """The position currently held, or ``None`` — what a portfolio participant must read
     to decide carry / mandatory exit without reaching into the replay's internals."""
+    admit: Callable[[_Bar], None]
+    """Phase (1): admit the bar and derive its decision inputs. Books nothing."""
+    carry: Callable[[_Bar], None]
+    """Phase (2) / ADR-0002 P1: funding and carry on a held position."""
+    open_fills: Callable[[_Bar], None]
+    """Phases (3)/(3b)/(3c): fills deferred to this bar's open, resting orders."""
+    held: Callable[[_Bar], bool]
+    """Phase (4) / P3: protection, stop and exit. Returns whether a position was held, which
+    is what keeps the former ``if``/``elif`` exclusive once the two arms are called apart."""
+    entry: Callable[..., None]
+    """Phase (5) / P4: a fresh entry while flat, sized against ``equity`` when one is given —
+    the SHARED ``E(t)`` for a portfolio participant, this item's own ledger otherwise."""
+    tail: Callable[[_Bar], None]
+    """Phases (3d)/(6)/(7)/(8): close-deferred fill, stacking rules, scale ladder, snapshot."""
     ledger: _Ledger
     ctx: _RunConfig
 
@@ -1119,6 +1133,18 @@ def _build_stepper(
     pending: _Pending | None = None  # a fill deferred to a future bar (F-07a timing)
     working_limit: _WorkingLimit | None = None  # a resting limit ENTRY order (F-07b)
     working_stop: _WorkingStop | None = None  # a resting stop ENTRY trigger (F-07h)
+    # Per-BAR working state (ADIM 16b). These were locals of the former single-body step;
+    # they live here so each phase the stepper exposes can be called on its own. Every one
+    # is re-initialised at the top of ``_phase_admit``, so none of them carries across bars.
+    bar_ticks: tuple[_Tick, ...] = ()
+    trades_before_bar = 0
+    bar_date: date | None = None
+    entry_signal: str | None = None
+    exit_hit = False
+    # The valuation an entry is sized against. ``None`` means "this item's own ledger",
+    # which is the only answer a standalone run has. A portfolio participant sets it to the
+    # SHARED E(t) for the duration of P4 and clears it again (ADR-0002 §7).
+    sizing_equity: Decimal | None = None
     # F-07h: stop-trigger lifecycle counts (a stop-limit's armed limit leg then counts
     # through the limit_orders_* counters — the two machines compose, never double-count).
     # F-07i (C): tick-setting execution counts — print-resolved entry fills (a resting
@@ -1377,7 +1403,14 @@ def _build_stepper(
         return prior_exposure_at(led, portfolio_rules, t_ms)
 
     def _planned_size(direction: str, fill_raw: Decimal, strength: Decimal) -> Decimal:
-        return planned_size(ctx, led, direction=direction, fill_raw=fill_raw, strength=strength)
+        return planned_size(
+            ctx,
+            led,
+            direction=direction,
+            fill_raw=fill_raw,
+            strength=strength,
+            equity=sizing_equity,
+        )
 
     def _open(
         direction: str,
@@ -1751,16 +1784,18 @@ def _build_stepper(
                 )
             )
 
-    def _step(bar: _Bar) -> None:
-        """Replay ONE bar: doc 15 §9.3 steps (1)-(8), verbatim from the former loop body.
+    def _phase_admit(bar: _Bar) -> None:
+        """P0 / doc 15 §9.3 step (1) — admit this bar and derive its decision inputs.
 
-        The ten ``nonlocal`` names below are the replay state that carries from one bar to
-        the next; every other name the body binds is a within-bar temporary and was proven
-        (definite-assignment analysis over the body) to be written before it is read on
-        every path, so keeping them local to the step is not a behaviour change."""
-        nonlocal current_day, exit_touch, funding_idx, pending, position
-        nonlocal prev_entry_signal, prev_scale_signal, scale_signal
-        nonlocal working_limit, working_stop
+        Bookkeeping, the tick cursor, the restriction clock, then the evaluators and the
+        signals they aggregate. It decides nothing and books no money; what it leaves behind
+        (``entry_signal``, ``exit_hit``, ``bar_ticks``, ``bar_date``, ``trades_before_bar``)
+        is what the later phases read. Those five were per-bar locals of the former ``_step``
+        and are now function-scope state for the same reason the ten carried names are: a
+        phase the caller invokes separately cannot reach another phase's locals. Each is
+        re-initialised HERE, at the top of every bar, so nothing leaks from the previous one."""
+        nonlocal bar_date, bar_ticks, current_day, entry_signal, exit_hit
+        nonlocal scale_signal, trades_before_bar
 
         led.bars_seen += 1
         if not led.first_ts:
@@ -1768,7 +1803,7 @@ def _build_stepper(
         led.last_bar = bar
         # F-07i (B): advance the tick cursor EVERY bar (position open or not) so the
         # forward-only stream stays aligned to the bar clock.
-        bar_ticks: tuple[_Tick, ...] = ()
+        bar_ticks = ()
         if tick_cursor is not None:
             bar_ticks = tick_cursor.for_bar(bar.timestamp)
             if bar_ticks:
@@ -1782,7 +1817,7 @@ def _build_stepper(
         # day; an unparseable timestamp yields ``None`` (date-dependent filters then
         # fail closed) and never resets the day. Skipped entirely when no modelled
         # filter is enabled — the hot loop stays byte-identical.
-        bar_date: date | None = None
+        bar_date = None
         if restriction_specs:
             parsed_bar_time = parse_utc(bar.timestamp, source_zone=None)
             bar_date = parsed_bar_time.date() if parsed_bar_time is not None else None
@@ -1796,7 +1831,7 @@ def _build_stepper(
         # research side is the K-02 available-time gate applied in step (2) below and in
         # every other research feed. Real indicator signals (when a plan resolved);
         # evaluators see EVERY bar.
-        entry_signal: str | None = None
+        entry_signal = None
         exit_hit = False
         if plan_active and indicator_plan is not None:
             for ev in entry_evals:
@@ -1875,6 +1910,10 @@ def _build_stepper(
                 )
             scale_signal = aggregate(indicator_plan.scale_rule, scale_evals)
 
+    def _phase_carry(bar: _Bar) -> None:
+        """P1 / doc 15 §9.3 step (2) — funding and carry, charged at the TOP of the bar."""
+        nonlocal funding_idx
+
         # (2) K-03 / F-11 funding cost — doc 15 §9.3 step 2: funding/fee/carry is applied
         # at the TOP of the bar, BEFORE any fill, stop, exposure check, entry or scaling
         # of this bar. That ordering is not cosmetic: ``led.equity`` is what sizes an entry
@@ -1948,6 +1987,12 @@ def _build_stepper(
                             ),
                         },
                     )
+
+    def _phase_open_fills(bar: _Bar) -> None:
+        """Steps (3)/(3b)/(3c) — fills deferred to this bar's OPEN, resting limit orders and
+        a resting stop trigger while flat. ADR-0002 calls this P2 and the phase loop does not
+        model it; it stays on the item's own timeline, which is where it already lived."""
+        nonlocal pending, position, working_limit, working_stop
 
         # (3) Resolve a fill deferred to THIS bar's OPEN (next_candle_open). Runs
         # before the intrabar stop path so the open fill precedes the bar's high/low.
@@ -2216,6 +2261,14 @@ def _build_stepper(
                                 )
                 working_stop = None
 
+    def _phase_held(bar: _Bar) -> bool:
+        """P3 / step (4) — protection, stop and exit against a HELD position.
+
+        Returns whether it took the branch, which is how the former ``if/elif`` chain keeps
+        its exclusivity across the split: a bar that closes a position here must NOT then be
+        offered a fresh entry by :func:`_phase_entry`, exactly as the ``elif`` guaranteed."""
+        nonlocal exit_touch, pending, position
+
         if position is not None:
             # (4) protection / stop / exit against this bar (intrabar touch).
             if position.direction == "long":
@@ -2389,7 +2442,32 @@ def _build_stepper(
                     pending = _Pending(
                         "exit", exit_sched == "next_open", led.bars_seen + 1, "", "exit_signal"
                     )
-        elif (
+            return True
+        return False
+
+    def _phase_entry(bar: _Bar, *, equity: Decimal | None = None) -> None:
+        """P4 / step (5) — flat and uncommitted: evaluate and place a fresh entry.
+
+        The former ``elif`` arm. Reached only when :func:`_phase_held` did not take its
+        branch, so the condition below is evaluated in exactly the state it used to be.
+
+        ``equity`` is the valuation the entry is sized against, and it is scoped to THIS
+        call: set on the way in, cleared on the way out, so a later phase can never size
+        against a snapshot that has since been superseded. ``None`` — what ``_step`` passes —
+        leaves the sizing chain reading this item's own ledger, unchanged."""
+        nonlocal pending, position, sizing_equity, working_limit, working_stop
+
+        sizing_equity = equity
+        try:
+            _phase_entry_body(bar)
+        finally:
+            sizing_equity = None
+
+    def _phase_entry_body(bar: _Bar) -> None:
+        """The former ``elif`` body. Separate only so the equity scope above is a ``finally``."""
+        nonlocal pending, position, working_limit, working_stop
+
+        if (
             timing_ok
             and order_ok
             and partial_close_ok
@@ -2627,6 +2705,11 @@ def _build_stepper(
                         "",
                         strength,
                     )
+
+    def _phase_tail(bar: _Bar) -> None:
+        """Steps (3d)/(6)/(7)/(8) — the close-deferred fill, the stacking and opposite-signal
+        rules, the scale ladder and the end-of-bar snapshot."""
+        nonlocal exit_touch, pending, position, prev_entry_signal, prev_scale_signal
 
         # (3d) Resolve a fill deferred to THIS bar's CLOSE (next_candle_close). Runs at
         # end-of-bar so an intrabar stop (above) pre-empts a scheduled close exit, and
@@ -3091,6 +3174,22 @@ def _build_stepper(
 
         window.append(bar)
 
+    def _step(bar: _Bar) -> None:
+        """Replay ONE bar as the ordered phases of doc 15 §9.3, unchanged in order or effect.
+
+        The phases were the numbered sections of the former single-body step and are now
+        separately callable, because a participant driven by a MERGED clock (ADR-0002 §8) has
+        to ask one item what it is charged, what it must close and what it wants at three
+        different points of a shared tick — not run a whole bar in one call. Driving them in
+        this order from here is byte-identical to the former body: the same statements in the
+        same sequence over the same state."""
+        _phase_admit(bar)
+        _phase_carry(bar)
+        _phase_open_fills(bar)
+        if not _phase_held(bar):
+            _phase_entry(bar)
+        _phase_tail(bar)
+
     def _finalize() -> None:
         """End-of-data settlement — the former tail of ``run_engine``, unchanged."""
         nonlocal position, working_limit, working_stop
@@ -3166,6 +3265,12 @@ def _build_stepper(
         finalize=_finalize,
         output=_output,
         open_position=_open_position,
+        admit=_phase_admit,
+        carry=_phase_carry,
+        open_fills=_phase_open_fills,
+        held=_phase_held,
+        entry=_phase_entry,
+        tail=_phase_tail,
         ledger=led,
         ctx=ctx,
     )

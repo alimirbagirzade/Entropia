@@ -105,8 +105,8 @@ public table set, **every table's row count**, the immutable evidence columns
 (revision content hashes, run/result manifest hashes and composition
 fingerprints, export checksums, manual-revision checksums), the append-only
 planes (`audit_events`, `outbox_events`, `agent_checkpoint`), and — when the
-backup captured object storage — the **per-object md5** of every artifact. The
-source database is only ever read.
+backup captured object storage — the path, size and **md5 of every object the
+backup mirrored**. The source database is only ever read.
 
 Both run in CI: `.github/workflows/install-acceptance.yml` job
 **disaster-recovery**, nightly (03:17 UTC) and on manual dispatch, against a
@@ -114,6 +114,37 @@ stack seeded with the golden fixture so the hash comparisons have real content
 to compare. It uploads the run transcripts and every `MANIFEST.json` as the
 `dr-evidence` artifact — never the dump or the mirrored objects, which are data.
 This closes audit finding **H-07** ("backup/restore is not verified in CI").
+
+### How much a given run actually covers
+
+"Every object the backup mirrored" is a claim about the **run**, not about the
+product: steps [6]–[8] compare source to restored and cannot make the source
+hold anything. A run against an empty stack compares `EMPTY` to `EMPTY` and
+passes while proving nothing, so read the transcript, not just the exit code:
+
+- step **[6]** prints each evidence table's fingerprint and warns when fewer
+  than two carried rows;
+- step **[7]** names, by table, the append-only planes that were empty on both
+  sides;
+- step **[8]** prints the object count **and the key prefixes** it covered.
+  `infrastructure/s3/datasets.py` has four writers — `market/raw`,
+  `market/processed`, `signals/source`, `create-package/baseline` — and a run
+  that exercised only one of them says so.
+
+The CI job sets `DR_MIN_EVIDENCE_TABLES`, `DR_REQUIRE_APPEND_ONLY`,
+`DR_REQUIRE_OBJECTS` and `DR_MIN_OBJECTS` to what its fixture and workload
+actually produce, so coverage that quietly shrinks fails the build instead of
+printing a smaller number under a PASS line. `apps/seed.py` cannot satisfy the
+append-only floor by itself — it writes through the repositories and so never
+reaches `_audit_and_outbox` — which is why the job drives
+`scripts/dr-workload.sh` (one authenticated `POST /trade-logs/source-assets`,
+producing a `signals/source` object plus a real audit and outbox row) between
+seeding and backing up.
+
+**Still uncovered, deliberately:** `agent_checkpoint` (it needs an Agent tool
+call) and the `market/raw` + `create-package/baseline` key prefixes. The
+transcript names them on every run rather than leaving them to be inferred from
+a PASS line.
 
 ---
 

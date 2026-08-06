@@ -433,6 +433,57 @@ async def _write_native(
 # --------------------------------------------------------------------------- #
 
 
+async def admit_bundle_member(
+    session: AsyncSession,
+    actor: Actor,
+    revision_id: str,
+    *,
+    for_execution: bool,
+) -> ResearchDatasetRevision:
+    """The ONE admission gate for a research revision entering ANY bundle.
+
+    Research/context use (doc 12 §9.1, §11, §14): the root must be ACTIVE and
+    viewable by ``actor``, and the revision must be in a consumable state — a
+    soft-deleted root or a ``deprecated`` / ``approval_revoked`` revision stays
+    readable through the manifests that already cite it but is barred from a NEW
+    bundle. Execution use adds doc 12 §9.2/§9.3: ACTIVE+APPROVED, a usage scope
+    that admits an evidence bundle (Feature-Input-Only only via an approved
+    feature definition, resolved HERE from the database), and a valid time policy.
+
+    Every surface that pins a revision goes through this function — the two
+    compilers below and the UI-less Agent tool gateway
+    (``jobs/agent_tools._handle_data_bundle_resolve``). A second copy of the
+    lifecycle checks living on the gateway is exactly what GH #556 was: the Agent
+    is not a human account, but the server-side policy for both is the SAME one.
+
+    The gateway calls it with ``for_execution=False`` even under EXECUTION scope,
+    on purpose: ``data_bundle.resolve`` pins a CONTEXT manifest, not a
+    ``BacktestEvidenceBundle``, so it takes the lifecycle admission every surface
+    owes (§11/§14) and then applies the §9.3 usage-scope gate itself — with the
+    Feature-Input-Only precondition read from the database via
+    ``has_approved_feature_definition`` and never from the caller's request body
+    (GH #557, doc 12 §2, §9.2). It does NOT inherit the evidence compiler's
+    ACTIVE+APPROVED and time-policy preconditions; the executed run re-derives
+    those for itself (``queries/funding.py``, Ready Check), and a landed
+    acceptance test pins a draft revision into an execution-scope context bundle.
+    """
+    revision = await _require_revision(session, revision_id)
+    await _require_viewable_root(session, actor, revision, consumable_only=not for_execution)
+    if not for_execution:
+        return revision
+    if revision.revision_state != ResearchRevisionState.APPROVED:
+        raise NotFoundError(
+            f"Research revision '{revision_id}' is not ACTIVE+APPROVED for a bundle."
+        )
+    has_feature = await has_approved_feature_definition(session, revision.entity_id)
+    if revision.usage_scope is not None:
+        ensure_allows_evidence_bundle(
+            revision.usage_scope, has_approved_feature_definition=has_feature
+        )
+    _ensure_time_policy_valid(revision)
+    return revision
+
+
 async def compile_agent_data_bundle(
     session: AsyncSession,
     actor: Actor,
@@ -451,8 +502,7 @@ async def compile_agent_data_bundle(
     rd_policy.ensure_can_access_page(actor)
     members: list[dict[str, Any]] = []
     for revision_id in research_revision_ids:
-        revision = await _require_revision(session, revision_id)
-        await _require_viewable_root(session, actor, revision, consumable_only=True)
+        revision = await admit_bundle_member(session, actor, revision_id, for_execution=False)
         link = await rd_repo.get_market_link(session, revision_id)
         members.append(
             {
@@ -484,18 +534,7 @@ async def compile_backtest_evidence_bundle(
     rd_policy.ensure_can_access_page(actor)
     members: list[dict[str, Any]] = []
     for revision_id in research_revision_ids:
-        revision = await _require_revision(session, revision_id)
-        await _require_viewable_root(session, actor, revision)
-        if revision.revision_state != ResearchRevisionState.APPROVED:
-            raise NotFoundError(
-                f"Research revision '{revision_id}' is not ACTIVE+APPROVED for a bundle."
-            )
-        has_feature = await _has_approved_feature_definition(session, revision.entity_id)
-        if revision.usage_scope is not None:
-            ensure_allows_evidence_bundle(
-                revision.usage_scope, has_approved_feature_definition=has_feature
-            )
-        _ensure_time_policy_valid(revision)
+        revision = await admit_bundle_member(session, actor, revision_id, for_execution=True)
         link = await rd_repo.get_market_link(session, revision_id)
         members.append(
             {
@@ -557,7 +596,7 @@ async def _require_viewable_root(
     return root
 
 
-async def _has_approved_feature_definition(session: AsyncSession, entity_id: str) -> bool:
+async def has_approved_feature_definition(session: AsyncSession, entity_id: str) -> bool:
     from sqlalchemy import select
 
     from entropia.infrastructure.postgres.models import ResearchFeatureDefinition

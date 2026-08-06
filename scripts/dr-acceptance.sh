@@ -20,6 +20,26 @@
 #   [8] object storage round-trips byte-for-byte (per-object md5), when the
 #       backup captured it
 #
+# COVERAGE FLOORS. Steps [6]-[8] compare source to restored; they cannot make
+# the source hold anything. An EMPTY == EMPTY comparison passes while proving
+# nothing, so each of those steps already carries a WARN for that case — but a
+# warning nobody can configure into a failure is one that fires forever and gets
+# read as normal. The floors below turn "how much did this run actually cover?"
+# into a gate. They are OFF by default (a developer verifying a backup by hand
+# should not have to satisfy CI's fixture coverage) and ON in
+# `.github/workflows/install-acceptance.yml`:
+#
+#   DR_MIN_EVIDENCE_TABLES=N   [6] FAIL when fewer than N evidence tables held rows
+#   DR_REQUIRE_APPEND_ONLY=1   [7] FAIL when ALL THREE append-only planes were empty
+#   DR_REQUIRE_OBJECTS=1       [8] FAIL when object bytes were not covered at all
+#   DR_MIN_OBJECTS=N           [8] FAIL when fewer than N objects were compared
+#
+# Set them to what the run's fixture + workload actually produce, so a fixture
+# that silently stops writing is a red build rather than a smaller green number.
+# `scripts/dr-workload.sh` is what makes the append-only floor satisfiable at
+# all: `apps/seed.py` writes rows through the repositories and so never reaches
+# `_audit_and_outbox` — it produces zero audit and zero outbox rows by design.
+#
 #   scripts/dr-acceptance.sh                 # back up the live DB, restore to scratch
 #   scripts/dr-acceptance.sh ./backups/<ts>  # verify an EXISTING backup dir
 #   DR_SCRATCH_DB=my_scratch scripts/dr-acceptance.sh
@@ -285,6 +305,14 @@ if [ "$EV_FAIL" -eq 0 ] && [ "$EV_NONEMPTY" -lt 2 ]; then
   warn "[6] only $EV_NONEMPTY evidence table(s) actually held rows — this run proves little about hash preservation."
   info "[6] Seed the source stack first (SEED_E2E_GOLDEN=1 SEED_ESP_TA=1 SEED_RATIONALE=1) so revisions, manifests and results exist."
 fi
+# The floor is separate from the warning above on purpose. The warning marks
+# "this run proved little"; the floor asserts "the fixture still writes what it
+# used to". Without it a fixture that quietly stopped populating a table would
+# drop the count and stay green — the number is printed, but nothing reads it.
+EV_MIN="${DR_MIN_EVIDENCE_TABLES:-0}"
+if [ "$EV_FAIL" -eq 0 ] && [ "${EV_MIN:-0}" -gt 0 ] && [ "$EV_NONEMPTY" -lt "$EV_MIN" ]; then
+  bad "[6] only $EV_NONEMPTY evidence table(s) held rows, floor is $EV_MIN (DR_MIN_EVIDENCE_TABLES)"
+fi
 
 # =============================================================================
 # [7] append-only planes
@@ -293,13 +321,13 @@ step "[7] audit, outbox and agent checkpoints survive intact"
 APPEND="audit_events|event_id||event_kind||coalesce(payload_hash_before,'')||coalesce(payload_hash_after,'')||coalesce(correlation_id,'')
 outbox_events|id||event_type||resource_type||resource_id||coalesce(correlation_id,'')||attempts::text
 agent_checkpoint|checkpoint_id||coalesce(context_manifest_id,'')"
-AP_FAIL=0; AP_NONEMPTY=0
+AP_FAIL=0; AP_NONEMPTY=0; AP_EMPTY=""
 while IFS='|' read -r tbl expr; do
   [ -z "$tbl" ] && continue
   s="$(evidence_fp qs "$tbl" "$expr")"; d="$(evidence_fp qd "$tbl" "$expr")"
   n="$(qs "select count(*) from $tbl")"
   if [ -n "$s" ] && [ "$s" = "$d" ]; then
-    [ "$s" = "EMPTY" ] || AP_NONEMPTY=$((AP_NONEMPTY+1))
+    if [ "$s" = "EMPTY" ]; then AP_EMPTY="$AP_EMPTY $tbl"; else AP_NONEMPTY=$((AP_NONEMPTY+1)); fi
     info "[7] $tbl — ${n:-?} rows, fingerprint $s"
   else
     bad "[7] $tbl diverged: source=$s restored=$d"; AP_FAIL=1
@@ -310,7 +338,17 @@ EOF
 [ "$AP_FAIL" -eq 0 ] && ok "[7] audit_events / outbox_events / agent_checkpoint identical ($AP_NONEMPTY carried rows)"
 # Same honesty rule as [6]: three empty tables comparing equal is not evidence.
 if [ "$AP_FAIL" -eq 0 ] && [ "$AP_NONEMPTY" -eq 0 ]; then
-  warn "[7] all three append-only planes were EMPTY — this run proves nothing about audit/outbox preservation."
+  if [ "${DR_REQUIRE_APPEND_ONLY:-0}" = "1" ]; then
+    bad "[7] all three append-only planes were EMPTY (DR_REQUIRE_APPEND_ONLY=1)"
+    info "[7] apps/seed.py writes through the repositories and never reaches _audit_and_outbox — drive scripts/dr-workload.sh against the stack BEFORE backing it up."
+  else
+    warn "[7] all three append-only planes were EMPTY — this run proves nothing about audit/outbox preservation."
+  fi
+# A partially covered [7] is the ordinary case and must not read as full
+# coverage: naming the planes that stayed empty keeps the gap in the transcript
+# instead of hiding it behind a PASS line that only counts the covered ones.
+elif [ "$AP_FAIL" -eq 0 ] && [ -n "$AP_EMPTY" ]; then
+  info "[7] NOT covered by this run (empty on both sides):$AP_EMPTY"
 fi
 
 # =============================================================================
@@ -347,6 +385,17 @@ else
     if diff -q "$WORK/obj_backup.txt" "$WORK/obj_restored.txt" >/dev/null 2>&1; then
       if [ "${N_OBJ:-0}" -gt 0 ]; then
         ok "[8] $N_OBJ objects: path, size and md5 identical between the backup and the RESTORED bucket"
+        # A raw count hides WHICH kind of artifact was covered. The four writers in
+        # `infrastructure/s3/datasets.py` use four distinct key prefixes, and a run
+        # that only ever exercises one of them proves nothing about the other three
+        # — which is precisely what the seed-only fixture did (`market/processed`
+        # alone). Naming the prefixes keeps that visible in the transcript.
+        awk '{ n = split($1, p, "/"); print (n >= 4 ? p[2] "/" p[3] : $1) }' "$WORK/obj_backup.txt" \
+          | sort | uniq -c | while read -r cnt pfx; do info "[8] key prefix $pfx — $cnt object(s)"; done
+        OBJ_MIN="${DR_MIN_OBJECTS:-0}"
+        if [ "${OBJ_MIN:-0}" -gt 0 ] && [ "$N_OBJ" -lt "$OBJ_MIN" ]; then
+          bad "[8] only $N_OBJ object(s) compared, floor is $OBJ_MIN (DR_MIN_OBJECTS)"
+        fi
       else
         obj_missing "the backup's object mirror was empty — zero artifact bytes were compared"
       fi

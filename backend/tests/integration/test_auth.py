@@ -44,6 +44,7 @@ from entropia.shared.errors import (
     SessionInvalidError,
     UsernameTakenError,
 )
+from tests.production_profile import rotate_production_credentials
 
 pytestmark = pytest.mark.integration
 
@@ -96,6 +97,7 @@ def production_session_mode(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("ENTROPIA_ENV", "production")
     monkeypatch.setenv("AUTH_MODE", "session")
     monkeypatch.setenv("ENTROPIA_SERVICE_TOKEN", "svc-secret-token")
+    rotate_production_credentials(monkeypatch)  # ADIM 23: no shipped defaults
     get_settings.cache_clear()
     yield
     get_settings.cache_clear()

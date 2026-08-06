@@ -2,6 +2,7 @@ import pytest
 from pydantic import ValidationError
 
 from entropia.config import Settings
+from tests.production_profile import PRODUCTION_CREDENTIALS
 
 
 def test_cors_origins_parsed_to_list() -> None:
@@ -26,7 +27,10 @@ def test_local_dev_profile_allows_dev_auth_mode() -> None:
 
 @pytest.mark.parametrize("env", ["local", "staging", "production"])
 def test_session_auth_mode_allowed_in_every_environment(env: str) -> None:
-    s = Settings(ENTROPIA_ENV=env, AUTH_MODE="session")
+    # Rotated credentials so the `production` case stays about AUTH_MODE: since
+    # ADIM 23 a production Settings also refuses the values published in
+    # `.env.example`. Harmless for local/staging, which have no such gate.
+    s = Settings(ENTROPIA_ENV=env, AUTH_MODE="session", **PRODUCTION_CREDENTIALS)
     assert s.auth_mode == "session"
 
 

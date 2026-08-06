@@ -52,17 +52,18 @@ from entropia.domain.create_package import (
     ensure_can_approve_publish,
     ensure_can_create_request,
     ensure_can_operate_request,
-    is_allowed_baseline_file,
     missing_baseline_metadata_fields,
     next_request_state,
     normalize_request,
     resolve_equivalence_claim,
     source_hash,
 )
+from entropia.domain.create_package.baseline import ALLOWED_BASELINE_EXTENSIONS
 from entropia.domain.create_package.source_scan import SOURCE_SCANNER_VERSION
 from entropia.domain.create_package.validation import VALIDATOR_VERSION
 from entropia.domain.esp.enums import RuntimeAdapter
 from entropia.domain.identity import Actor
+from entropia.domain.importing.source_file import assert_supported_source_file
 from entropia.domain.lifecycle.enums import (
     ApprovalState,
     DeletionState,
@@ -1037,8 +1038,23 @@ async def upload_baseline_asset(
     attempt is never mutated). The parse (StartBaselineParse) runs separately.
     """
     root, detail = await _require_request(session, actor, request_id)
-    if not is_allowed_baseline_file(original_filename):
-        raise FileTypeNotAllowedError("Upload a CSV baseline file.")
+    # The shared K-07 gate, not a bare extension check. `is_allowed_baseline_file`
+    # asked only whether the NAME ends in .csv, so a zip/pdf/ELF renamed
+    # `baseline.csv` was accepted and written to object storage as an IMMUTABLE
+    # baseline asset — the one artifact a package's equivalence claim rests on.
+    # Every other upload surface (trade_log, trading_signal, market_data,
+    # research_data) already routes through this function; baseline was the
+    # exception. The error class is unchanged — doc 06 §8.3 gives this page
+    # FILE_TYPE_NOT_ALLOWED — so the wire contract is identical; the gate simply
+    # also refuses content that is not text. `is_allowed_baseline_file` stays in
+    # the domain module (still exported, still unit-tested) as the name-only
+    # predicate; it is just no longer the whole gate.
+    assert_supported_source_file(
+        original_filename,
+        content,
+        error=FileTypeNotAllowedError,
+        allowed_extensions=ALLOWED_BASELINE_EXTENSIONS,
+    )
     if not content:
         raise ValidationError("The baseline file is empty.")
     if len(content) > _MAX_BASELINE_BYTES:

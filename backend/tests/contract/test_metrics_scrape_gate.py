@@ -15,6 +15,7 @@ from httpx import ASGITransport, AsyncClient
 
 from entropia.apps.api import hardening
 from entropia.config import get_settings
+from tests.production_profile import rotate_production_credentials
 
 METRICS_PATH = "/api/v1/metrics"
 TOKEN = "prom-scraper-secret"
@@ -108,6 +109,7 @@ async def test_unconfigured_token_is_fail_closed_in_production(app, monkeypatch)
     """A production deployment that forgot the credential publishes NOTHING."""
     monkeypatch.setenv("ENTROPIA_ENV", "production")
     monkeypatch.setenv("AUTH_MODE", "session")  # F-22: non-local forbids dev auth
+    rotate_production_credentials(monkeypatch)  # ADIM 23: no shipped defaults
     monkeypatch.delenv("ENTROPIA_METRICS_TOKEN", raising=False)
     get_settings.cache_clear()
     settings = get_settings()

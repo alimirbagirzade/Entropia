@@ -11,6 +11,13 @@ concurrency:
   group: e2e-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
+# Read-only token — see the same block in ci.yml. This workflow matters more than
+# most: it boots the full Compose stack and drives it with a real browser, so it
+# executes Playwright, its browser downloads and the whole application inside the
+# job. None of that should be holding a token that can write to the repository.
+permissions:
+  contents: read
+
 jobs:
   e2e:
     name: E2E — real browser vs. Docker Compose stack (F-23)

@@ -19,6 +19,7 @@ from pydantic import ValidationError
 
 from entropia.apps.api.main import CORS_ALLOWED_HEADERS, CORS_ALLOWED_METHODS
 from entropia.config import Settings
+from tests.production_profile import PRODUCTION_CREDENTIALS
 
 _ALLOWED_ORIGIN = "http://localhost:5173"  # settings.py default origin list
 
@@ -139,10 +140,15 @@ def test_cors_production_rejects_empty_origin_list(blank: str) -> None:
 
 
 def test_cors_production_accepts_explicit_origins() -> None:
+    # A production Settings expected to SUCCEED must also carry rotated
+    # credentials (ADIM 23). The three rejection cases above need no such thing:
+    # the CORS validator runs before the credential one, so they still fail on —
+    # and still `match=` — the message they are actually about.
     s = Settings(
         ENTROPIA_ENV="production",
         AUTH_MODE="session",
         API_CORS_ORIGINS="https://app.example.test, https://admin.example.test",
+        **PRODUCTION_CREDENTIALS,
     )
     assert s.cors_origin_list == ["https://app.example.test", "https://admin.example.test"]
 

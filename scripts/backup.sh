@@ -60,7 +60,17 @@ DEST="$BACKUP_DIR/$STAMP"
 command -v pg_dump >/dev/null 2>&1 || { fail "pg_dump not found — install the PostgreSQL client tools"; exit 1; }
 
 say "== Entropia backup -> $DEST =="
+# A backup is the most concentrated secret this system produces: postgres.dump
+# carries every argon2id password hash, every session token digest and every row
+# of user data, and minio/ mirrors the artifact store. Created under the default
+# umask it lands 0755/0644 — world-readable to every other account on the host,
+# which on a shared box or a mounted NAS is a copy of the whole database anyone
+# can take. `umask 077` covers everything pg_dump/mc create from here on; the
+# explicit chmod fixes BACKUP_DIR itself, which may already exist from an
+# earlier, laxer run.
+umask 077
 mkdir -p "$DEST"
+chmod 700 "$BACKUP_DIR" "$DEST" 2>/dev/null || true
 
 # ---- 1. PostgreSQL (REQUIRED) ----
 say "== PostgreSQL ($PGDATABASE @ $PGHOST:$PGPORT) =="
@@ -77,6 +87,22 @@ ALEMBIC_HEAD=$(psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" -tAc
 TABLE_COUNT=$(psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" -tAc "select count(*) from information_schema.tables where table_schema='public'" 2>/dev/null | head -1)
 pass "alembic head: ${ALEMBIC_HEAD:-unknown} · public tables: ${TABLE_COUNT:-unknown}"
 
+# Percent-encode one value for a URL userinfo field. Needed because the
+# MC_HOST_<alias> form below carries the credential inside a URL, and a real
+# secret may legitimately contain '@', ':' or '/', any of which would otherwise
+# re-parse the URL and produce a confusing auth failure. Bash 3.2 safe (macOS).
+urlenc() {
+  local s="$1" out="" i c
+  for (( i=0; i<${#s}; i++ )); do
+    c="${s:$i:1}"
+    case "$c" in
+      [a-zA-Z0-9.~_-]) out="$out$c" ;;
+      *) out="$out$(printf '%%%02X' "'$c")" ;;
+    esac
+  done
+  printf '%s' "$out"
+}
+
 # ---- 2. Object storage (OPTIONAL) ----
 say "== Object storage ($OBJ_BUCKET @ $OBJ_ENDPOINT) =="
 OBJ_INCLUDED=false
@@ -84,7 +110,13 @@ if ! curl -s --max-time 5 "$OBJ_ENDPOINT/minio/health/live" >/dev/null 2>&1; the
   warn "object storage unreachable — skipping artifact backup (OK for the minimal Docker-free setup)"
 elif command -v mc >/dev/null 2>&1; then
   mkdir -p "$DEST/minio"
-  mc alias set entropia_bak "$OBJ_ENDPOINT" "$OBJ_AK" "$OBJ_SK" >/dev/null 2>&1 || true
+  # MC_HOST_<alias>, not `mc alias set <ep> <ak> <sk>`: an argument vector is
+  # world-readable on Linux (/proc/<pid>/cmdline), so the object-storage secret
+  # was visible to every other account on the host for the life of the call, and
+  # to anything sampling `ps`. An environment variable is readable only by the
+  # same user. `mc alias set` also PERSISTS the credential to ~/.mc/config.json;
+  # MC_HOST_ is per-invocation and leaves nothing behind.
+  export MC_HOST_entropia_bak="${OBJ_ENDPOINT/:\/\//://$(urlenc "$OBJ_AK"):$(urlenc "$OBJ_SK")@}"
   if mc mirror --overwrite "entropia_bak/$OBJ_BUCKET" "$DEST/minio" >/dev/null 2>&1; then
     OBJ_INCLUDED=true; pass "mirrored bucket '$OBJ_BUCKET' via host mc"
   else
@@ -99,9 +131,16 @@ elif command -v docker >/dev/null 2>&1; then
   # worked on any platform — every artifact backup taken without a host-side
   # `mc` binary silently contained no objects at all, and the WARN below was the
   # only trace. Found by the ADIM 22 DR gate's first real CI run.
+  # Same MC_HOST_ reasoning as the host-mc branch, plus one more: the secret used
+  # to sit inside the `-c "..."` string, so it was in this process's argv AND in
+  # the container's stored command, where `docker inspect` hands it to anyone in
+  # the docker group forever. `-e VAR` (name only, value inherited) keeps it out
+  # of both argv and the image history; it is still in the container's env, which
+  # is the smallest surface docker offers without an --env-file temp file.
+  export MC_HOST_b="${_ep/:\/\//://$(urlenc "$OBJ_AK"):$(urlenc "$OBJ_SK")@}"
   if docker run --rm --entrypoint sh --add-host=host.docker.internal:host-gateway \
-      -v "$DEST/minio:/backup" minio/mc:latest \
-      -c "mc alias set b '$_ep' '$OBJ_AK' '$OBJ_SK' >/dev/null && mc mirror --overwrite b/$OBJ_BUCKET /backup" \
+      -e MC_HOST_b -v "$DEST/minio:/backup" minio/mc:latest \
+      -c "mc mirror --overwrite b/$OBJ_BUCKET /backup" \
       >"$DEST/.mc.err" 2>&1; then
     OBJ_INCLUDED=true; pass "mirrored bucket '$OBJ_BUCKET' via dockerized mc"
   else

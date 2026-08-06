@@ -328,6 +328,57 @@ async def test_non_csv_upload_is_rejected(session, fake_object_store) -> None:
         )
 
 
+@pytest.mark.parametrize(
+    "payload",
+    [
+        b"PK\x03\x04\x14\x00\x00\x00",
+        b"%PDF-1.7\n%\xe2\xe3\xcf\xd3",
+        b"\x7fELF\x02\x01\x01\x00",
+        b"\x1f\x8b\x08\x00",
+        b"trade_id,symbol\x00,side",
+    ],
+    ids=["zip", "pdf", "elf", "gzip", "embedded-nul"],
+)
+async def test_binary_content_behind_a_csv_name_is_rejected(
+    session, fake_object_store, payload: bytes
+) -> None:
+    """ADIM 23 — the name is not the file type.
+
+    This surface used to ask only whether the filename ended in ``.csv``
+    (``is_allowed_baseline_file``), so any of these payloads was accepted and
+    written to object storage as an IMMUTABLE baseline asset — the single artifact
+    a package's equivalence claim is evidenced by. Every other upload surface
+    already ran the shared K-07 content gate; this one did not.
+    """
+    request_id = await _seed_request_at_draft(session)
+    with pytest.raises(FileTypeNotAllowedError):
+        await cp_cmd.upload_baseline_asset(
+            session,
+            OWNER,
+            request_id=request_id,
+            content=payload,
+            baseline_metadata=_FULL_METADATA,
+            original_filename="baseline.csv",
+        )
+
+
+@pytest.mark.parametrize("filename", [None, "", "   "], ids=["none", "empty", "whitespace"])
+async def test_blank_filename_fails_closed(
+    session, fake_object_store, filename: str | None
+) -> None:
+    """A missing name means the type cannot be established — refuse, never skip."""
+    request_id = await _seed_request_at_draft(session)
+    with pytest.raises(FileTypeNotAllowedError):
+        await cp_cmd.upload_baseline_asset(
+            session,
+            OWNER,
+            request_id=request_id,
+            content=_GOOD_CSV,
+            baseline_metadata=_FULL_METADATA,
+            original_filename=filename,
+        )
+
+
 async def test_parse_without_upload_is_not_found(session, fake_object_store) -> None:
     request_id = await _seed_request_at_draft(session)
     with pytest.raises(BaselineAssetNotFound):

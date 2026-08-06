@@ -22,6 +22,18 @@ x-backend-build: &backend-build
     minio:
       condition: service_healthy
   restart: unless-stopped
+  # The image already drops root (`USER entropia`, uid 10001 — backend/Dockerfile).
+  # These two close what that alone does not:
+  #   no-new-privileges — a setuid binary inside the image can never raise the
+  #     process back to root, so a code-execution bug in the API or a worker
+  #     cannot escalate by finding one.
+  #   cap_drop ALL      — the planes bind :8000 (unprivileged) and reach
+  #     Postgres/Redis/S3 over TCP. None of them needs a single Linux capability,
+  #     so the default set is pure attack surface.
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
 
 # Worker planes have no HTTP surface; dramatiq consumes from Redis. A live
 # broker connection is the meaningful liveness signal — the container's PID 1
@@ -210,17 +222,30 @@ services:
         VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000/api/v1}
     image: entropia-web:local
     ports:
-      - "${WEB_HOST_PORT:-8080}:80"
+      # Container side is 8080, not 80: the runtime image is nginx-unprivileged
+      # and its master runs as uid 101, which cannot bind a privileged port. The
+      # HOST side is unchanged, so localhost:8080 still serves the app.
+      - "${WEB_HOST_PORT:-8080}:8080"
     depends_on:
       - api
     restart: unless-stopped
+    # Serving static files needs no capabilities and no writable root. `/tmp` is
+    # a tmpfs because nginx puts its client-body/proxy temp paths there, and a
+    # read-only root without it would fail the first request large enough to spool.
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
     healthcheck:
       # F-08 (audit 22-Jul): use the IPv4 loopback literal, not "localhost".
       # In this container "localhost" can resolve to ::1 (IPv6) while nginx
       # listens on 0.0.0.0:80 (IPv4), so the probe failed and the container was
       # marked unhealthy even though the served page worked. 127.0.0.1 is
       # deterministic and address-family-safe.
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:80/"]
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/"]
       interval: 15s
       timeout: 5s
       retries: 5

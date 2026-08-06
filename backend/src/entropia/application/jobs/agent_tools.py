@@ -807,20 +807,31 @@ async def _handle_allocation_create_revision(ctx: _Ctx) -> _ToolOutcome:
 async def _handle_trade_log_upload_source(ctx: _Ctx) -> _ToolOutcome:
     """`trade_log.upload_source_asset` — store an immutable TXT/CSV source asset
     (doc 05 §11). Content-addressed dedup lives in the command. The bytes ride in
-    ``content`` (bytes, or a UTF-8 string coerced here for a JSON-safe envelope)."""
-    from entropia.application.commands.trade_log import upload_source_asset
+    ``content`` (bytes, or a UTF-8 string coerced here for a JSON-safe envelope).
 
-    request = ctx.request
-    raw = request.get("content", b"")
-    content = raw.encode("utf-8") if isinstance(raw, str) else bytes(raw)
+    The F-03 byte gate runs HERE for the same reason its Trading Signal twin does:
+    on the human plane it lives at the multipart route
+    (``routes/trade_log.py`` -> ``validate_multipart_upload(file, require_csv_schema=True)``),
+    and the Agent has no browser to go through. Without it this plane enforced only
+    the command's extension+sniff gate — no size ceiling, no whole-document UTF-8
+    check, no CSV header check — so the Agent could upload a file the page refuses.
+    The sibling handler's docstring already stated the rule ("the Agent can never
+    upload what a human cannot"); this handler was the one place it was not true.
+    """
+    from entropia.application.commands.trade_log import upload_source_asset
+    from entropia.domain.importing.source_file import assert_source_bytes_admissible
+
+    content = _require_source_content(ctx)
+    # ``require_csv_schema=True`` mirrors routes/trade_log.py exactly.
+    assert_source_bytes_admissible(content, require_csv_schema=True)
     result = await upload_source_asset(
         ctx.session,
         ctx.actor,
         content=content,
-        content_type=request.get("content_type"),
-        original_filename=request.get("original_filename"),
-        draft_id=request.get("draft_id"),
-        idempotency_key=request.get("idempotency_key"),
+        content_type=_optional_text(ctx, "content_type"),
+        original_filename=_optional_text(ctx, "original_filename"),
+        draft_id=_optional_text(ctx, "draft_id"),
+        idempotency_key=_optional_text(ctx, "idempotency_key"),
     )
     return _ToolOutcome(response=result, artifact_output_ref=result.get("source_asset_id"))
 

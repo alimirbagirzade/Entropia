@@ -1,0 +1,190 @@
+# Release-blocking security + supply-chain gates.
+#
+# Split out of ci.yml on purpose: ci.yml is the correctness gate every push waits
+# on, and these scans have a different cost profile (image builds, a CodeQL
+# database, a vulnerability DB download) and a different failure meaning. Keeping
+# them separate means a red scan names itself in the checks list instead of
+# hiding inside "Backend — lint, type, test".
+#
+# FORK-PR SECRET EXPOSURE: every trigger below is `pull_request`, never
+# `pull_request_target`. A fork PR therefore runs with a read-only token and no
+# repository secrets, which is what makes it safe to check out and scan attacker-
+# authored code here. Do not "fix" a missing-secret failure by switching to
+# pull_request_target — that would hand fork code a writable token.
+name: Security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly, Mondays 04:17 UTC. Vulnerability databases move even when the code
+    # does not, so a repo that only scans on push goes quietly stale between PRs.
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+# Least privilege by default. Only the CodeQL job widens it, and only to the one
+# scope it needs (security-events: write, to upload SARIF).
+permissions:
+  contents: read
+
+defaults:
+  run:
+    # Explicit `bash` gets `-eo pipefail`; GitHub's implicit shell is `bash -e`
+    # WITHOUT pipefail, so any `scanner | tee report` step would take tee's exit
+    # status and a failing scan would report green. Same reasoning as
+    # install-acceptance.yml.
+    shell: bash
+
+jobs:
+  codeql:
+    name: CodeQL — ${{ matrix.language }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [python, javascript-typescript]
+    steps:
+      - uses: actions/checkout@v7
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@24c7eb380a2dc368f2d129e4c65e51d172983a1e # v4
+        with:
+          languages: ${{ matrix.language }}
+          # Neither language needs a compile step, and `none` keeps this off the
+          # uv/npm install path — a dependency-resolution hiccup should fail the
+          # CI job that is about dependencies, not the security scan.
+          build-mode: none
+          queries: security-and-quality
+      - name: Analyze
+        uses: github/codeql-action/analyze@24c7eb380a2dc368f2d129e4c65e51d172983a1e # v4
+        with:
+          category: /language:${{ matrix.language }}
+
+  secrets:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # A scheduled run scans the whole history; push/PR runs scan the tree.
+          # A secret that was committed and later deleted is a ROTATION problem,
+          # not a merge blocker, so it does not belong on the PR path.
+          #
+          # The quotes are load-bearing. GitHub's `A && B || C` ternary follows
+          # JS truthiness, and the NUMBER 0 is falsy — so `... && 0 || 1`
+          # evaluates to 1 even when the condition holds, and the scheduled
+          # full-history scan would silently run against a shallow clone while
+          # still reporting green. `'0'` is a non-empty string, hence truthy.
+          fetch-depth: ${{ github.event_name == 'schedule' && '0' || '1' }}
+      - name: Scan working tree
+        # Pinned by digest, not by tag: a tag is mutable, and this container runs
+        # over the whole repository. Third-party actions are avoided entirely
+        # here — a digest-pinned image is a stronger guarantee than a SHA-pinned
+        # marketplace action, because it also pins the tool's own dependencies.
+        run: |
+          docker run --rm -v "$PWD:/repo:ro" \
+            zricethezav/gitleaks@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f \
+            detect --source /repo --no-git --config /repo/.gitleaks.toml --redact -v
+      - name: Scan full history
+        if: github.event_name == 'schedule'
+        run: |
+          docker run --rm -v "$PWD:/repo:ro" \
+            zricethezav/gitleaks@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f \
+            detect --source /repo --config /repo/.gitleaks.toml --redact -v
+
+  containers:
+    name: Container scan + SBOM
+    runs-on: ubuntu-latest
+    env:
+      # Digest-pinned for the same reason as gitleaks above. Bump deliberately.
+      TRIVY: aquasec/trivy@sha256:7cced7cae583819fc7806d4cbc0dbbc7cad18b99f7d3e235192e6da8c091045c
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build images
+        run: |
+          docker build -t entropia-backend:scan ./backend
+          docker build -t entropia-web:scan ./frontend
+
+      - name: Export image filesystems
+        # `docker save` + `--input` instead of mounting /var/run/docker.sock into
+        # the scanner. The socket is root-equivalent on the host; a scanner needs
+        # to read image layers, not to control the daemon.
+        run: |
+          mkdir -p sbom reports
+          docker save entropia-backend:scan -o reports/backend-image.tar
+          docker save entropia-web:scan -o reports/frontend-image.tar
+
+      - name: Verify runtime users are non-root
+        # A scan says which packages are vulnerable; it never says who the process
+        # would be when one is exploited. Both images must drop root in the image
+        # itself, so the guarantee survives a `docker run` that forgets `--user`.
+        run: |
+          fail=0
+          for image in entropia-backend:scan entropia-web:scan; do
+            uid="$(docker run --rm --entrypoint id "$image" -u)"
+            echo "$image runtime uid=$uid"
+            if [ "$uid" = "0" ]; then echo "FAIL — $image runs as root"; fail=1; fi
+          done
+          exit "$fail"
+
+      - name: Trivy — backend image
+        run: |
+          docker run --rm -v "$PWD:/work" "$TRIVY" image --quiet --scanners vuln \
+            --severity HIGH,CRITICAL --ignore-unfixed --format json \
+            --input /work/reports/backend-image.tar > reports/trivy-backend.json
+
+      - name: Trivy — frontend image
+        run: |
+          docker run --rm -v "$PWD:/work" "$TRIVY" image --quiet --scanners vuln \
+            --severity HIGH,CRITICAL --ignore-unfixed --format json \
+            --input /work/reports/frontend-image.tar > reports/trivy-frontend.json
+
+      - name: Vulnerability allowlist gate
+        # Fails on any fixable CRITICAL/HIGH without a recorded exception, AND on
+        # any exception past its expiry date. See .github/security-allowlist.json.
+        run: |
+          node scripts/security-allowlist-gate.mjs \
+            container:backend=reports/trivy-backend.json \
+            container:frontend=reports/trivy-frontend.json
+
+      - name: Generate SBOMs (CycloneDX)
+        # Four documents, because the images and the sources answer different
+        # questions. The frontend IMAGE is nginx + built assets — node_modules
+        # never ship — so an image-only SBOM would silently omit every JS
+        # dependency the bundle was built from. The `fs` scans read the lockfiles.
+        run: |
+          docker run --rm -v "$PWD:/work" "$TRIVY" image --quiet --format cyclonedx \
+            --input /work/reports/backend-image.tar  > sbom/backend-image.cdx.json
+          docker run --rm -v "$PWD:/work" "$TRIVY" image --quiet --format cyclonedx \
+            --input /work/reports/frontend-image.tar > sbom/frontend-image.cdx.json
+          docker run --rm -v "$PWD:/work" "$TRIVY" fs --quiet --format cyclonedx \
+            /work/backend  > sbom/backend-source.cdx.json
+          docker run --rm -v "$PWD:/work" "$TRIVY" fs --quiet --format cyclonedx \
+            /work/frontend > sbom/frontend-source.cdx.json
+          for f in sbom/*.cdx.json; do
+            node -e "const d=require('./$f'); if(d.bomFormat!=='CycloneDX') throw new Error('$f is not CycloneDX'); console.log('$f', (d.components||[]).length, 'components')"
+          done
+
+      - name: Upload SBOMs
+        uses: actions/upload-artifact@v7
+        with:
+          name: sbom-cyclonedx
+          path: sbom/
+          retention-days: 90
+
+      - name: Upload scan reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: container-scan-reports
+          path: reports/*.json
+          retention-days: 30

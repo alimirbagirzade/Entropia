@@ -14,6 +14,16 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 Environment = Literal["local", "staging", "production"]
 
+# The credential literals shipped in `.env.example` (and baked into
+# docker-compose.yml as `${VAR:-default}` fallbacks). Named here so the
+# production startup check reads as a list of known-public values rather than
+# three magic strings, and so a single test can assert they still match what
+# `.env.example` actually contains — see
+# tests/unit/test_default_credential_gate.py::test_constants_match_env_example.
+_SHIPPED_OBJECT_ACCESS_KEY = "entropia"
+_SHIPPED_OBJECT_SECRET_KEY = "entropia-secret"
+_SHIPPED_DB_CREDENTIALS = "entropia:entropia@"
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -166,6 +176,49 @@ class Settings(BaseSettings):
                     "combined with allow_credentials=True it reflects any caller's Origin, "
                     "trusting every site on the internet with credentialed requests."
                 )
+        return self
+
+    @model_validator(mode="after")
+    def _reject_shipped_default_credentials_in_production(self) -> Settings:
+        """ADIM 23: refuse to start in production while any credential is still
+        the value shipped in ``.env.example``.
+
+        Those literals — ``entropia`` / ``entropia-secret`` for object storage,
+        ``entropia:entropia`` in the database URL — are committed, public, and
+        also baked into ``docker-compose.yml`` as shell defaults
+        (``${OBJECT_STORAGE_SECRET_KEY:-entropia-secret}``). That combination is
+        what makes this worth failing on rather than documenting: a production
+        deployment that simply never set the variable does not get an error, it
+        gets a WORKING stack whose artifact store and database are reachable with
+        credentials anyone can read in this repository. Nothing else notices —
+        every health check is green, because the credentials are correct.
+
+        Same fail-closed-at-startup shape as ``_restrict_dev_auth_to_local`` and
+        ``_require_explicit_cors_origins_in_production``, and deliberately
+        production-only: local and staging are supposed to run on these values,
+        and breaking ``make up`` in the name of security would only teach people
+        to unset ``ENTROPIA_ENV``.
+        """
+        if not self.is_production:
+            return self
+
+        offenders: list[str] = []
+        if self.object_storage_access_key == _SHIPPED_OBJECT_ACCESS_KEY:
+            offenders.append("OBJECT_STORAGE_ACCESS_KEY")
+        if self.object_storage_secret_key == _SHIPPED_OBJECT_SECRET_KEY:
+            offenders.append("OBJECT_STORAGE_SECRET_KEY")
+        # Substring, not equality: host and database name legitimately differ per
+        # deployment, so an operator who changed only the host would otherwise keep
+        # the published password. What must not survive is the credential pair.
+        if _SHIPPED_DB_CREDENTIALS in self.database_url:
+            offenders.append("DATABASE_URL")
+
+        if offenders:
+            raise ValueError(
+                f"{', '.join(offenders)} still hold the values published in "
+                ".env.example, which are public. Set real secrets before running "
+                "with ENTROPIA_ENV=production."
+            )
         return self
 
 

@@ -169,15 +169,17 @@ Before stopping a working session, produce **ALL** of the following:
 
 ## Current position (keep in sync at each closing)
 
-> **HEAD `780dc92`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **HEAD `708ec07`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).
-> **Son dalga — ADIM 25 (observability, PR #622):** 11 alert / 5 grup
-> (`ops/alerts/entropia.rules.yml`) + 13 runbook (`docs/runbooks/`) + yeni metrik ailesi
-> `entropia_worker_heartbeat_age_seconds` (kayıt yoksa **`None` → örnek satırı YOK**, 0.0 değil);
-> iki gerçek kusur düzeltildi (sınırsız `method` label'ı · hiç ateşlenemeyen `and absent()`).
-> Backend **3912 passed / 1 xfailed / 0 failed**, coverage **%93.52**; frontend **721 passed**,
-> **%84.92**. Öncesinde ADIM 24 (#619 perf bütçeleri) ve ADIM 23 (#610 DR workload) — **ikisi de
-> `PROJECT_HISTORY.md`'de kayıtsız** (dürüst not, kapatılmadı).
+> **Son dalga — ADIM 26 (observability, PR #624 — AÇIK, merge EDİLMEDİ, önce doğrula):**
+> alert kuralları artık gerçek PromQL ile **değerlendiriliyor** — yeni bloklayıcı CI job
+> `Alert rules — promtool` (`scripts/alert-rules-gate.sh`, digest-pinned v3.5.0, paralel,
+> +0 wall-clock) + `ops/prometheus/prometheus.yml` (`job="entropia-api"` artık zorlanıyor)
+> + 15 unit-test case + 5 contract testi. **11 alert'in anlamı değişmedi.** Backend
+> **3917 passed / 1 xfailed / 0 failed**, coverage **%93.52**; frontend etkilenmedi.
+> Öncesinde ADIM 25 (#622 alerts+runbooks), ADIM 24 (#619), ADIM 23 (#610) — **son ikisi
+> `PROJECT_HISTORY.md`'de hâlâ kayıtsız** (dürüst not, kapatılmadı).
+> **Açık sınır:** Alertmanager YOK — kurallar ateşliyor ama **kimseye ulaşmıyor**.
 > **Next:** **PR B** — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:298` call site.
 > **Yarım-cent yuvarlama KARARA BAĞLANDI (2026-08-06):** `initial_sleeve_capital` yeniden
 > quantize edilmez, dondurulmuş `derived_amounts`'tan **kopyalanır**; iki yuvarlama sabiti de

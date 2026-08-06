@@ -4530,3 +4530,124 @@ kapısı, merged `2026-08-06`) ve **ADIM 24 = PR #619** (`docs/performance/READM
 YOK**. Aynı dalgadaki #620/#621 (nightly failure notice) ve #614 (supply-chain gates) de
 kayıtsız. Bu boşluk bu slice'ta **kapatılmadı** — kapsam ADIM 25'ti; `## ADIM 9 / ADIM 10 —
 kayıt boşluğu (dürüst not)` ile aynı türden bir borç olarak burada bildiriliyor.
+
+## ADIM 26 (observability) — alert kuralları gerçek bir PromQL kapısına bağlandı (PR #624)
+
+> **Bu kayıt yazıldığında PR #624 AÇIKTI, merge EDİLMEMİŞTİ.** "landed" demiyorum
+> çünkü inmedi. Okurken önce `gh pr view 624 --json state,mergedAt` ile doğrula.
+
+**Branch** `ci/promtool-alert-rules-gate`, base `708ec07` · commit'ler `ed2d387` +
+`68313ad` · **migration YOK**, alembic head `0043_i08_registry_strategy_fks` değişmedi ·
+OpenAPI yüzeyi değişmedi · **frontend etkilenmedi** (hiçbir frontend dosyasına dokunulmadı).
+
+### Kapatılan boşluk
+
+ADIM 25, 11 alert kuralını **hiçbir PromQL doğrulaması olmadan** sevk etti: `promtool`
+kurulu değildi, CI'da yoktu, repoda `prometheus.yml` yoktu. Bedeli hipotetik değil,
+**ölçülmüştü** — iki paging kuralı `up{...} == 1 and absent(...)` biçiminde çıktı.
+Bu ifade parse olur, yüklenir, kapsam gibi görünür ve **hiç ateşlenemez**: `absent()`
+etiketsiz bir eleman döndürür, `and` ise varsayılan olarak tüm etiket kümesini
+eşleştirir, dolayısıyla `job`/`instance` taşıyan `up` ile asla eşleşmez. Onu bir kapı
+değil, insan review'ı yakaladı. Ayrıca dört kural `job="entropia-api"` adına bağlıydı
+ve bu adı **yalnızca bir yorum satırı** iddia ediyordu.
+
+### Ne sevk edildi
+
+* **`scripts/alert-rules-gate.sh`** — `promtool check config` → `check rules` →
+  `test rules`. Araç, resmi Prometheus imajından **digest ile pinlenmiş** gelir
+  (`prom/prometheus@sha256:63805ebb8d2b3920190daf1cb14a60871b16fd38bed42b857a3182bc621f4996`,
+  v3.5.0 LTS) — `security.yml`'deki gitleaks/trivy pin deseninin aynısı. Digest,
+  sürüm+checksum'dan güçlüdür çünkü aracın **kendi bağımlılıklarını da** sabitler.
+  Yeni marketplace action yok, indirilen binary yok, repo secret'ı yok.
+* **CI job `Alert rules — promtool`** (`ci.yml`) — bloklayıcı, **paralel** koşar →
+  eklenen wall-clock **0**. Ölçüm: **43 sn soğuk** (imaj çekimi baskın) / **3 sn sıcak**
+  yerelde, **14 sn** CI'da. `Backend — lint, type, test` (~42 dk) dokunulmadı; ayrı
+  job olmasının nedeni bu — kapı ne Postgres'e ne Python ortamına ihtiyaç duyar.
+* **`ops/prometheus/prometheus.yml`** — `job_name: entropia-api`'yi kontrol edilebilir
+  bir olguya çevirir. `rule_files` ve `credentials_file` **göreli**; Prometheus göreli
+  yolları config dosyasının kendi dizinine göre çözer (`JoinDir`), böylece `ops/` tek
+  parça mount edilip taşınabilir. `scrape_interval: 30s` = `SCHEDULER_TICK_SECONDS`.
+* **`ops/alerts/entropia.rules.test.yml`** — 15 promtool unit-test case'i: bayat
+  heartbeat, hiç kaydedilmemiş heartbeat, absent DB gauge'ları, sıkışmış lease, iki
+  outbox lag katmanı, drenaj olmayan kuyruk (**ve drene OLAN kuyruk**), terminal
+  başarısızlıklar, sürekli 5xx, en büyük bucket taşması, artı **"sağlıklı stack
+  hiçbir şey ateşlemez"** case'i (tüm `ALERTS` kümesi üzerinde).
+
+### Neden `alert_rule_test` DEĞİL de `ALERTS{...}` — kalıcı gerekçe
+
+promtool'un `alert_rule_test`'i alert'in **anotasyonlarını tam olarak** karşılaştırır.
+Ampirik olarak doğrulandı: `exp_annotations` verilmediğinde `Annotations:{}` beklenir
+ve test kırmızı olur. Yani her beklenen alert dokuz operatör anotasyonunu **birebir
+tekrar yazmak** zorunda kalırdı. Bu kopya kaçınılmaz olarak `entropia.rules.yml`'den
+sapardı ve **sapma, geçen bir test gibi görünürdü** — tam olarak bu slice'ın karşı
+çıktığı kusur. Sentetik `ALERTS{alertname=…, alertstate=…}` serisi üzerinde assert
+etmek aynı semantiği verir (`for:` süresi, pending/firing geçişi, etiket yayılımı)
+ve kural dosyasını tek doğruluk kaynağı olarak bırakır. Test dosyası hiçbir eşiği
+veya ifadeyi tekrar yazmaz: **girdi** verir, **sonuç** üzerinde assert eder.
+
+Yan bulgu, testlerde pinlendi: `and on()` boş etiket kümesinde eşleşir ama **sol
+tarafın etiketlerini KORUR**, dolayısıyla iki absence alert'i `job`/`instance` taşır.
+Bu, onları routable yapan şeydir — instance etiketi olmayan bir absence alert'i
+*hangi* API'nin veritabanını kaybettiğini söyleyemezdi.
+
+### Contract testleri (5 yeni, `test_alert_rules_contract.py`)
+
+`test_every_job_matcher_names_a_declared_scrape_job` ·
+`test_the_scrape_config_loads_the_shipped_rule_file` ·
+`test_the_scrape_interval_is_no_slower_than_the_scheduler_tick` ·
+`test_the_metrics_scrape_presents_a_credential` (dosya-tabanlı Bearer zorunlu,
+literal `credentials` yasak) · `test_every_alert_has_an_evaluated_firing_case` —
+sonuncusu, değerlendirilmiş firing case'i olmayan kuralı reddeder, yani ucuz metin
+kapısı gerçek PromQL kapısını sessizce geçemez.
+
+### Kapı kendi kendine test edildi (4 kanıt, hepsi geri alındı)
+
+| # | Enjekte edilen kusur | Sonuç |
+|---|---|---|
+| A | `on()` silindi — **tam olarak ADIM 25 kusuru** | `check rules` **SUCCESS: 11 rules found**, `test rules` **FAILED — `got: nil`** |
+| B | Geçersiz PromQL (`>> 1200(`) | `check rules` FAILED `213:15 … unexpected <op:>>` |
+| C | Scrape job `entropia-backend` yapıldı | 2 contract testi kırmızı, 4 etkilenen kuralı adıyla söyler |
+| D | Bir firing assertion'ı `pending`'e düşürüldü | `test_every_alert_has_an_evaluated_firing_case` kırmızı |
+
+### Yerelde yeşil, CI'da kırmızı — TEKRARLAMA
+
+İlk CI koşusunda kapı `promtool: error: stat /ops/prometheus/prometheus.yml:
+permission denied` ile düştü. `mktemp -d` **0700** izinli, çağıran kullanıcıya ait bir
+dizin üretir; resmi Prometheus imajı **`nobody` (uid 65534)** olarak koşar ve dizine
+giremez. **macOS bunu tamamen gizler** — Docker Desktop sahipliği VM üzerinden eşler,
+`chmod 700` + `--user 65534` ile bile hata yerelde **ÜRETİLEMEDİ**. Düzeltme
+(`68313ad`): `chmod -R a+rX "$workdir"`, ve **placeholder token yazıldıktan SONRA**
+(0600 bir credentials dosyası aynı hatayı bir adım sonra verir). Aracı root olarak
+koşturmak yerine kopya genişletildi — içerik zaten takipli config + placeholder.
+
+### Değişmeyen sınırlar
+
+**11 alert'in ANLAMI değişmedi** — `entropia.rules.yml` diff'i **yalnızca yorum
+satırları** (yorum-dışı değişiklikler filtrelenerek doğrulandı: boş). Hiçbir eşik
+oynatılmadı, tüm derivation testleri korundu.
+`test_no_rule_invents_an_absolute_latency_target` **aynen duruyor ve zayıflatılmadı**;
+`docs/performance/README.md:144` p95 satırı bilerek boş kaldı. `/metrics`'in yaymadığı
+hiçbir metrik adı eklenmedi.
+
+### Ölçümler
+
+Tam backend suite **tek pytest çağrısında**: **3917 passed / 1 xfailed / 0 failed**,
+**exit code 0** (ayrı okundu, `| tail` kullanılmadı), coverage **%93.52** (kapı ≥90).
+ADIM 25'teki 3912 + **tam olarak 5** yeni contract testi. `ruff check` ✅ ·
+`ruff format --check` ✅ · `mypy src` ✅ 396 dosya. Hedefli koşu: 58 passed.
+**Frontend koşulmadı — etkilenmedi.** Codemap etkisi **yok**: `docs/CODEMAPS/`
+haritalarının hiçbiri `ops/` veya CI'ı kapsamıyor (grep ile doğrulandı).
+
+### Dürüst sınırlar — KAPSAM DIŞI bırakıldı
+
+* **Alertmanager / monitoring stack YOK.** `docker-compose.yml`'ye Prometheus servisi
+  eklenmedi ve `prometheus.yml` bilerek `alerting:` bloğu taşımıyor: repo Alertmanager
+  sevk etmiyor, var olmayan bir routing'i reklam etmek yalan olurdu.
+  **`severity: page` hâlâ hiçbir alıcının okumadığı bir etikettir — kurallar doğru
+  ateşliyor ama kimseye ulaşmıyor.** `METRIC_ALERT_MATRIX.md` §4'ün "The alert rules
+  themselves" satırı bu yüzden silinmedi, **"Alert NOTIFICATION"** olarak yeniden
+  yazıldı: değerlendirme kör noktası kapandı, **teslimat kör noktası kapanmadı**.
+* Kurallar **gerçek üretim serilerine** karşı hiç değerlendirilmedi — var olan ama
+  pratikte hiç doldurulmayan bir metrik burada sağlıklı görünür.
+* **Sevk edilen Prometheus'un gerçekten bu dosyadan yapılandırıldığını hiçbir kapı
+  kanıtlamıyor.**

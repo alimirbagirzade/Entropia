@@ -4527,9 +4527,41 @@ boşalmadı" **demez** (boşalan kuyruk seri üretmez, `min_over_time` boşlukla
 **Tam kayıt:** `docs/PROJECT_HISTORY.md` § *ADIM 25 (observability)*.
 **Devir:** `docs/ADIM26_KICKOFF.md`.
 
+## ADIM 26 (observability) — alert kuralları promtool kapısına bağlandı (PR #624, **AÇIK**)
+
+> **Merge EDİLMEDİ.** Bu satır yazıldığında #624 açıktı; "landed" demiyorum.
+> Yeni oturumda **önce** `gh pr view 624 --json state,mergedAt`.
+
+**Branch `ci/promtool-alert-rules-gate`**, base `708ec07`, commit'ler `ed2d387` + `68313ad`
+· 8 dosya, **+618 / −10** (+ permission fix) · **migration YOK**, alembic head
+`0043_i08_registry_strategy_fks` değişmedi · OpenAPI değişmedi · **frontend etkilenmedi**.
+
+ADIM 25'in bilerek açık bıraktığı TEK boşluk kapandı: 11 alert kuralı artık **gerçek bir
+PromQL motoruyla değerlendiriliyor**, sadece tokenize edilmiyor. Yeni bloklayıcı CI job
+`Alert rules — promtool` (`scripts/alert-rules-gate.sh`) — `check config` → `check rules`
+→ `test rules`, digest-pinned `prom/prometheus@sha256:63805ebb…` (v3.5.0 LTS). Paralel
+koşar, eklenen wall-clock **0** (CI'da 14 sn). Yeni `ops/prometheus/prometheus.yml`
+`job="entropia-api"`'yi kontrol edilebilir olguya çevirir; `ops/alerts/entropia.rules.test.yml`
+15 unit-test case'i taşır; `test_alert_rules_contract.py`'ye 5 yeni test.
+
+**11 alert'in ANLAMI değişmedi** — kural dosyası diff'i yalnızca yorum satırları.
+Latency SLO uydurulmadı. Tam suite **3917 passed / 1 xfailed / 0 failed**, exit **0**,
+coverage **%93.52**.
+
+**İki ders, tekrarlanmasın:** (1) `alert_rule_test` anotasyonları TAM karşılaştırır →
+assertion'lar sentetik `ALERTS{...}` serisi üzerinde yazıldı, aksi halde 9 anotasyon
+her alert için kopyalanır ve sapma "geçen test" gibi görünürdü. (2) Kapı **yerelde
+yeşil, CI'da kırmızıydı**: `mktemp -d` 0700 üretir, Prometheus imajı `nobody` (uid
+65534) koşar → `permission denied`; **macOS bunu tamamen gizler**, hata yerelde
+üretilemedi. Fix: `chmod -R a+rX "$workdir"`, placeholder token'dan SONRA.
+
+**Açık kalan (bilerek):** Alertmanager YOK → kurallar doğru ateşliyor ama **kimseye
+ulaşmıyor**; `severity: page` hiçbir alıcının okumadığı bir etiket.
+**Devir:** `docs/ADIM26_LANDED_KICKOFF.md`. Tam kayıt: `PROJECT_HISTORY.md`.
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:298` call site**
 
-**Değişmedi** — ADIM 25 bir ops/gözlemlenebilirlik slice'ıydı ve motor yoluna dokunmadı.
+**Değişmedi** — ADIM 25 ve ADIM 26 ops/CI slice'larıydı ve motor yoluna dokunmadı.
 `run_portfolio` hâlâ üretimde **çağrısız**: `jobs/backtest_engine.py:298` item döngüsü, `:363`
 `combine_item_runs`, `SHARED_ALLOCATION_STATUS = future_dev` (containment KAPALI). ADIM 20
 matrisindeki A1/A3/A5 dışında hiçbir satır bu boşluk kapanmadan kapanamaz. Stepper indi

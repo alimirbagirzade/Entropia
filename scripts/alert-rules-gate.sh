@@ -34,6 +34,15 @@ trap 'rm -rf "$workdir"' EXIT
 
 cp -R "$REPO_ROOT/ops/." "$workdir/"
 
+# The official Prometheus image runs as `nobody` (uid 65534), while `mktemp -d`
+# creates a 0700 directory owned by the invoking user. The container therefore
+# cannot even traverse into it: `stat /ops/prometheus/prometheus.yml: permission
+# denied`. Nothing in here is secret — it is a throwaway copy of tracked config
+# plus a placeholder token — so widen the copy rather than run the tool as root.
+# Do NOT delete this as redundant after testing on macOS: Docker Desktop maps
+# ownership through its VM and hides the failure entirely. This was green locally
+# and red on the very first CI run.
+
 # `promtool check config` stats every credentials_file, so a config that
 # authenticates cannot be validated without one on disk. The real token is a
 # deployment secret (ENTROPIA_METRICS_TOKEN) and is gitignored; validating the
@@ -41,6 +50,10 @@ cp -R "$REPO_ROOT/ops/." "$workdir/"
 # copy and never touches the working tree, so it cannot be committed by accident
 # and cannot be mistaken for a credential in the repo.
 printf 'placeholder-for-config-validation-only\n' > "$workdir/prometheus/metrics_token"
+
+# Last, so it covers the placeholder too — a 0600 token file fails exactly the
+# same way the 0700 directory did, just one step later.
+chmod -R a+rX "$workdir"
 
 promtool() {
   docker run --rm --entrypoint promtool -v "$workdir:/ops:ro" "$PROMETHEUS_IMAGE" "$@"

@@ -169,11 +169,27 @@ Before stopping a working session, produce **ALL** of the following:
 
 ## Current position (keep in sync at each closing)
 
+> **HEAD `4df00f1`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).
+> **Son dalga — ADIM 16 (PR #602):** `run_engine`'in bar döngüsü resumable stepper'a çıktı
+> (`_build_stepper` → `_ItemStepper`); imza/semantik korundu, **46/46 golden digest sabit**
+> (ADR §15 R-4 kapısı). Yerel tam suite **3699 passed / 4 bilinen xfail / 0 failed**, coverage
+> **%93.29**; CI 8/8. Öncesinde **ADIM 22** (install/upgrade/restore, #594/#601) ve iki event-loop
+> düzeltmesi: **#600** (agent-coordinator, issue **#591 KAPANDI**) ve **#597** (worker aktörleri).
+> **Next:** **PR B** — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:298` call site.
+> **Yarım-cent yuvarlama KARARA BAĞLANDI (2026-08-06):** `initial_sleeve_capital` yeniden
+> quantize edilmez, dondurulmuş `derived_amounts`'tan **kopyalanır**; iki yuvarlama sabiti de
+> değişmez. Henüz **uygulanmadı** — `STAGE2_HANDOFF.md` §Yarım-cent.
 
 > **Uyarı:** `docs/audit/current_main_ground_truth_2026-08-03.md` §18'in 2/3/4/6 kalemleri
 > ADIM 5–8 ile kapandı ama o belge güncellenmedi — ona güvenmeden önce doğrula.
 > **"ADIM 21" iki slice'a verilmiş** (planlı `ItemParticipant` vs sevk edilen worker-delivery);
 > numara yeniden atanmadı, kayıtlar `ADIM 21 (worker delivery)` diye ayırıyor — insan kararı.
+> **Docs regresyonu ÜÇ KEZ oldu (2026-08-06'da onarıldı):** bayat base'li docs PR'ları
+> `PROJECT_HISTORY.md`'den kayıt sildi — #590 (ADIM 18, 211 satır) ve #604 (ADIM 22 + ADIM 16,
+> 194 satır; ayrıca bu bloğu boşalttı). Hiçbir CI kapısı `docs/` okumaz. **Docs PR'ı merge
+> etmeden önce `git show <sha> -- docs/ | grep '^-## '` çalıştır.** İki rakip ADIM 16 kickoff
+> dosyası main'de yan yana — hangisi otorite, insan kararı.
 
 
 - **Durum:** V1 ROADMAP COMPLETE (Stages 0–8, docs 01–22) + post-V1 + video-alignment +

@@ -142,6 +142,22 @@ jobs:
         # a11y scan. Runs from the lockfiles, so no npm install is needed for e2e.
         run: node scripts/npm-audit-gate.mjs frontend frontend/e2e
 
+  alerts:
+    name: Alert rules — promtool
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Validate alert rules and scrape config
+        # A separate job, not a step inside `backend`: this validates ops/ config
+        # with a Prometheus binary and needs neither Postgres nor the Python
+        # environment, so bolting a ~40-second check onto the ~42-minute backend
+        # job would make it wait for one. In parallel it costs no extra wall
+        # clock. Runs `promtool check config` + `check rules` + `test rules` from
+        # a DIGEST-PINNED official Prometheus image — see the script header for
+        # the supply-chain reasoning, which matches the gitleaks and trivy pins
+        # in security.yml.
+        run: scripts/alert-rules-gate.sh
+
   docker:
     name: Docker — build images
     runs-on: ubuntu-latest

@@ -1,0 +1,292 @@
+# Entropia — promtool unit tests for the alerting rules (ADIM 26).
+#
+# WHY THESE EXIST. ADIM 25 shipped two paging rules written as
+# `up{...} == 1 and absent(...)`. They parsed, they loaded, they read as
+# coverage — and they could never fire, because `absent()` returns a LABEL-LESS
+# element while `and` matches on the full label set. A human review caught it.
+# Nothing else could have: the contract test in
+# backend/tests/contract/test_alert_rules_contract.py tokenizes the expression,
+# it does not EVALUATE it. These tests evaluate it, against a real PromQL engine,
+# on synthetic series. A rule that cannot fire fails here.
+#
+# WHY EVERY ASSERTION IS `ALERTS{...}` AND NOT `alert_rule_test`.
+# promtool's `alert_rule_test` compares the alert's ANNOTATIONS in full, so each
+# expected alert would have to restate all nine operator annotations verbatim.
+# That is exactly the duplication this slice is against: the copy would drift
+# from ops/alerts/entropia.rules.yml and the drift would look like a passing
+# test. Asserting on the synthetic `ALERTS` series instead gives the same
+# firing/pending semantics — including the `for:` duration and the propagated
+# labels — while the rule file stays the single source of truth. Nothing here
+# restates a threshold or an expression either; the tests supply INPUT and
+# assert on the OUTCOME.
+#
+# Run: scripts/alert-rules-gate.sh (pinned promtool; also runs check rules/config).
+
+rule_files:
+  - entropia.rules.yml
+
+evaluation_interval: 1m
+
+tests:
+  # ---------------------------------------------------------------------------
+  # 1. A healthy deployment fires NOTHING. This is the test that fails when a new
+  #    rule is too eager, and the only one that asserts over the whole ALERTS set
+  #    rather than one alertname — a rule added without a test still has to
+  #    survive it.
+  # ---------------------------------------------------------------------------
+  - name: a healthy stack raises no alert at all
+    interval: 1m
+    input_series:
+      - series: 'up{job="entropia-api", instance="api:8000"}'
+        values: "1+0x90"
+      - series: "entropia_outbox_lag_seconds"
+        values: "0+0x90"
+      - series: "entropia_job_lease_age_seconds"
+        values: "12+0x90"
+      - series: "entropia_worker_heartbeat_age_seconds"
+        values: "14+0x90"
+      - series: 'entropia_jobs_depth{queue="backtest", status="queued"}'
+        values: "0+0x90"
+      - series: 'entropia_jobs_depth{queue="backtest", status="failed_final"}'
+        values: "4+0x90"
+      - series: 'entropia_http_requests_total{path="/api/projects", method="GET", status="200"}'
+        values: "0+7x90"
+      # Both bucket counters advance together: every request landed under 5s, so
+      # the +Inf overflow difference is exactly zero.
+      - series: 'entropia_http_request_duration_seconds_bucket{le="5.0"}'
+        values: "0+7x90"
+      - series: 'entropia_http_request_duration_seconds_bucket{le="+Inf"}'
+        values: "0+7x90"
+    promql_expr_test:
+      - expr: ALERTS
+        eval_time: 80m
+        exp_samples: []
+
+  # ---------------------------------------------------------------------------
+  # 2. up == 0 pages, and only after `for:` has elapsed.
+  # ---------------------------------------------------------------------------
+  - name: a dead API pages once the for-duration has elapsed
+    interval: 1m
+    input_series:
+      - series: 'up{job="entropia-api", instance="api:8000"}'
+        values: "0+0x30"
+    promql_expr_test:
+      - expr: 'ALERTS{alertname="EntropiaApiDown"}'
+        eval_time: 1m
+        exp_samples:
+          - labels: 'ALERTS{alertname="EntropiaApiDown", alertstate="pending", component="api", instance="api:8000", job="entropia-api", severity="page"}'
+            value: 1
+      - expr: 'ALERTS{alertname="EntropiaApiDown"}'
+        eval_time: 5m
+        exp_samples:
+          - labels: 'ALERTS{alertname="EntropiaApiDown", alertstate="firing", component="api", instance="api:8000", job="entropia-api", severity="page"}'
+            value: 1
+
+  # ---------------------------------------------------------------------------
+  # 3. THE REGRESSION TEST FOR THE ADIM 25 DEFECT. `up == 1` carries `job` and
+  #    `instance`; `absent()` carries no labels at all. Written without `on()`
+  #    this alert evaluates to the empty vector forever. Both absence rules are
+  #    proven to fire here, which is the check the hand-rolled tokenizer could
+  #    never perform.
+  # ---------------------------------------------------------------------------
+  - name: an up API whose DB gauges vanished pages (absent joined on the empty label set)
+    interval: 1m
+    input_series:
+      - series: 'up{job="entropia-api", instance="api:8000"}'
+        values: "1+0x30"
+      # entropia_outbox_lag_seconds deliberately absent: routes/metrics.py drops
+      # the whole DB-backed gauge block to a comment when the session will not open.
+      - series: "entropia_worker_heartbeat_age_seconds"
+        values: "14+0x30"
+    promql_expr_test:
+      - expr: 'ALERTS{alertname="EntropiaMetricsDatabaseProbeFailing"}'
+        eval_time: 10m
+        exp_samples:
+          # `and on()` matches on the EMPTY label set but KEEPS the left-hand
+          # side's labels, so this alert is scoped per scrape target. Pinned here
+          # because it is what makes an absence alert routable: without the
+          # instance label it could not say WHICH API lost its database.
+          - labels: 'ALERTS{alertname="EntropiaMetricsDatabaseProbeFailing", alertstate="firing", component="postgres", instance="api:8000", job="entropia-api", severity="page"}'
+            value: 1
+
+  - name: a deployment whose worker never once reported pages after fifteen minutes
+    interval: 1m
+    input_series:
+      - series: 'up{job="entropia-api", instance="api:8000"}'
+        values: "1+0x40"
+      - series: "entropia_outbox_lag_seconds"
+        values: "0+0x40"
+      # entropia_worker_heartbeat_age_seconds absent: the exposition prints the
+      # TYPE line with NO sample when app_metadata holds no heartbeat row.
+    promql_expr_test:
+      - expr: 'ALERTS{alertname="EntropiaWorkerHeartbeatNeverRecorded"}'
+        eval_time: 10m
+        exp_samples:
+          - labels: 'ALERTS{alertname="EntropiaWorkerHeartbeatNeverRecorded", alertstate="pending", component="worker", instance="api:8000", job="entropia-api", severity="page"}'
+            value: 1
+      - expr: 'ALERTS{alertname="EntropiaWorkerHeartbeatNeverRecorded"}'
+        eval_time: 20m
+        exp_samples:
+          - labels: 'ALERTS{alertname="EntropiaWorkerHeartbeatNeverRecorded", alertstate="firing", component="worker", instance="api:8000", job="entropia-api", severity="page"}'
+            value: 1
+      # ...and the stale-age rule stays silent, because there is no sample to be
+      # stale. The two absence cases are genuinely distinct alerts.
+      - expr: 'ALERTS{alertname="EntropiaWorkerHeartbeatStale"}'
+        eval_time: 20m
+        exp_samples: []
+
+  # ---------------------------------------------------------------------------
+  # 4. Gauge thresholds fire above the bound and stay silent just below it. The
+  #    numbers here are INPUTS chosen to straddle the shipped threshold, not
+  #    copies of it: the threshold-vs-config derivation is asserted separately in
+  #    test_alert_rules_contract.py.
+  # ---------------------------------------------------------------------------
+  - name: a heartbeat older than six scheduler ticks pages
+    interval: 1m
+    input_series:
+      - series: "entropia_worker_heartbeat_age_seconds"
+        values: "181+1x30"
+    promql_expr_test:
+      - expr: 'ALERTS{alertname="EntropiaWorkerHeartbeatStale"}'
+        eval_time: 10m
+        exp_samples:
+          - labels: 'ALERTS{alertname="EntropiaWorkerHeartbeatStale", alertstate="firing", component="worker", severity="page"}'
+            value: 1
+
+  - name: a heartbeat one second below the bound stays silent
+    interval: 1m
+    input_series:
+      - series: "entropia_worker_heartbeat_age_seconds"
+        values: "179+0x30"
+    promql_expr_test:
+      - expr: ALERTS
+        eval_time: 20m
+        exp_samples: []
+
+  - name: outbox lag escalates from ticket to page as it grows
+    interval: 1m
+    input_series:
+      - series: "entropia_outbox_lag_seconds"
+        values: "400+0x30"
+    promql_expr_test:
+      - expr: 'ALERTS{alertname="EntropiaOutboxLagGrowing"}'
+        eval_time: 20m
+        exp_samples:
+          - labels: 'ALERTS{alertname="EntropiaOutboxLagGrowing", alertstate="firing", component="outbox", severity="ticket"}'
+            value: 1
+      - expr: 'ALERTS{alertname="EntropiaOutboxLagSevere"}'
+        eval_time: 20m
+        exp_samples: []
+
+  - name: severe outbox lag raises both the ticket and the page
+    interval: 1m
+    input_series:
+      - series: "entropia_outbox_lag_seconds"
+        values: "1900+0x30"
+    promql_expr_test:
+      - expr: 'ALERTS{alertname="EntropiaOutboxLagSevere"}'
+        eval_time: 20m
+        exp_samples:
+          - labels: 'ALERTS{alertname="EntropiaOutboxLagSevere", alertstate="firing", component="outbox", severity="page"}'
+            value: 1
+      - expr: 'ALERTS{alertname="EntropiaOutboxLagGrowing"}'
+        eval_time: 20m
+        exp_samples:
+          - labels: 'ALERTS{alertname="EntropiaOutboxLagGrowing", alertstate="firing", component="outbox", severity="ticket"}'
+            value: 1
+
+  - name: a lease held past twice the reclaim bound pages
+    interval: 1m
+    input_series:
+      - series: "entropia_job_lease_age_seconds"
+        values: "1201+60x30"
+    promql_expr_test:
+      - expr: 'ALERTS{alertname="EntropiaJobLeaseStuck"}'
+        eval_time: 20m
+        exp_samples:
+          - labels: 'ALERTS{alertname="EntropiaJobLeaseStuck", alertstate="firing", component="jobs", severity="page"}'
+            value: 1
+
+  # ---------------------------------------------------------------------------
+  # 5. The two entropia_jobs_depth rules, including the honest boundary the
+  #    derivation annotation already admits: an absent series is a GAP, not a
+  #    zero, so a queue that emptied briefly still matches min_over_time.
+  # ---------------------------------------------------------------------------
+  - name: a queue that never empties raises a ticket, and its queue label survives
+    interval: 1m
+    input_series:
+      - series: 'entropia_jobs_depth{queue="data", status="queued"}'
+        values: "3+0x60"
+    promql_expr_test:
+      - expr: 'ALERTS{alertname="EntropiaQueueNeverDrains"}'
+        eval_time: 40m
+        exp_samples:
+          - labels: 'ALERTS{alertname="EntropiaQueueNeverDrains", alertstate="firing", component="jobs", queue="data", severity="ticket", status="queued"}'
+            value: 1
+
+  - name: a queue that reaches depth zero inside the window stays silent
+    interval: 1m
+    input_series:
+      - series: 'entropia_jobs_depth{queue="data", status="queued"}'
+        values: "0+0x60"
+    promql_expr_test:
+      - expr: ALERTS
+        eval_time: 40m
+        exp_samples: []
+
+  - name: new terminal job failures raise a ticket
+    interval: 1m
+    input_series:
+      - series: 'entropia_jobs_depth{queue="backtest", status="failed_final"}'
+        values: "0+0x60 1+0x60"
+    promql_expr_test:
+      - expr: 'ALERTS{alertname="EntropiaJobsFailingTerminally"}'
+        eval_time: 100m
+        exp_samples:
+          - labels: 'ALERTS{alertname="EntropiaJobsFailingTerminally", alertstate="firing", component="jobs", queue="backtest", severity="ticket", status="failed_final"}'
+            value: 1
+
+  # ---------------------------------------------------------------------------
+  # 6. The HTTP rules. Both are aggregated with sum(), so they carry no series
+  #    labels — worth pinning, because a future `sum by (path)` would change the
+  #    alert's identity and its grouping in any receiver.
+  # ---------------------------------------------------------------------------
+  - name: sustained 5xx pages while 2xx traffic alone does not
+    interval: 1m
+    input_series:
+      - series: 'entropia_http_requests_total{path="/api/projects", method="GET", status="200"}'
+        values: "0+50x40"
+      - series: 'entropia_http_requests_total{path="/api/projects", method="GET", status="500"}'
+        values: "0+1x40"
+    promql_expr_test:
+      - expr: 'ALERTS{alertname="EntropiaApiServerErrors"}'
+        eval_time: 30m
+        exp_samples:
+          - labels: 'ALERTS{alertname="EntropiaApiServerErrors", alertstate="firing", component="api", severity="page"}'
+            value: 1
+
+  - name: 2xx traffic alone raises nothing
+    interval: 1m
+    input_series:
+      - series: 'entropia_http_requests_total{path="/api/projects", method="GET", status="200"}'
+        values: "0+50x40"
+    promql_expr_test:
+      - expr: ALERTS
+        eval_time: 30m
+        exp_samples: []
+
+  - name: requests overflowing the largest shipped bucket raise a ticket
+    interval: 1m
+    input_series:
+      # Every request counted in +Inf but not in le="5.0" took longer than the
+      # histogram can express — the structural fact the rule is built on.
+      - series: 'entropia_http_request_duration_seconds_bucket{le="5.0"}'
+        values: "0+9x60"
+      - series: 'entropia_http_request_duration_seconds_bucket{le="+Inf"}'
+        values: "0+10x60"
+    promql_expr_test:
+      - expr: 'ALERTS{alertname="EntropiaApiRequestsExceedLargestBucket"}'
+        eval_time: 40m
+        exp_samples:
+          - labels: 'ALERTS{alertname="EntropiaApiRequestsExceedLargestBucket", alertstate="firing", component="api", severity="ticket"}'
+            value: 1

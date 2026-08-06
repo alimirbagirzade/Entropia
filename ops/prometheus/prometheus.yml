@@ -1,0 +1,59 @@
+# Entropia — Prometheus scrape configuration (ADIM 26).
+#
+# WHY THIS FILE EXISTS AT ALL. ops/alerts/entropia.rules.yml shipped in ADIM 25
+# with four rules keyed on `job="entropia-api"`. That name was asserted by a
+# COMMENT and enforced by nothing: rename the scrape job in a deployment and
+# EntropiaApiDown, EntropiaMetricsDatabaseProbeFailing and both worker-absence
+# rules stop matching anything, while still parsing and still loading. This file
+# makes the name a checked fact — `promtool check config` loads it together with
+# the rules (scripts/alert-rules-gate.sh), and
+# test_alert_rules_contract.py::test_every_job_matcher_names_a_declared_scrape_job
+# fails the build if a rule ever names a job this config does not declare.
+#
+# WHAT IT IS NOT. This is a validation-anchored scrape config, not a monitoring
+# stack. No Prometheus service is added to docker-compose.yml and there is
+# deliberately NO `alerting:` block: the repo ships no Alertmanager, so
+# `severity: page` and `severity: ticket` are labels with no configured
+# receiver. Nothing here pages anyone. Wiring notification routing is a separate,
+# larger decision (retention, storage, HA, on-call integration) and is out of
+# this slice's scope — see docs/runbooks/METRIC_ALERT_MATRIX.md §4.
+#
+# HOW AN OPERATOR USES IT. Mount the whole `ops/` tree into a Prometheus you run
+# yourself and point it at ops/prometheus/prometheus.yml. Both `rule_files` and
+# `credentials_file` below are RELATIVE, and Prometheus resolves relative paths
+# against the config file's own directory, so the tree relocates as one unit.
+
+global:
+  # Matches SCHEDULER_TICK_SECONDS (config/settings.py). Every threshold in the
+  # rules file is expressed as a multiple of that tick, so scraping slower than
+  # the tick would blur the very signal the derivations are counted in.
+  scrape_interval: 30s
+  scrape_timeout: 10s
+  evaluation_interval: 30s
+  external_labels:
+    deployment: entropia
+
+rule_files:
+  - ../alerts/entropia.rules.yml
+
+scrape_configs:
+  # The job name four alert rules match on. Changing it here without changing
+  # them there is what the contract test exists to stop.
+  - job_name: entropia-api
+    metrics_path: /metrics
+    scheme: http
+    # GET /metrics is credentialed (finding O-22) and fail-closed in production,
+    # so an unauthenticated scraper gets 403 and the target reads as `up == 0`
+    # while the product is perfectly healthy — the false-positive EntropiaApiDown
+    # warns about. The file holds ENTROPIA_METRICS_TOKEN verbatim; it is
+    # gitignored, never committed, and the validation gate substitutes a
+    # throwaway placeholder so the config's SHAPE can be checked without one.
+    authorization:
+      type: Bearer
+      credentials_file: metrics_token
+    static_configs:
+      # The compose service name and container port (docker-compose.yml `api`).
+      # Only the API process serves /metrics — worker, scheduler and
+      # agent-coordinator have no HTTP surface, which is why their health is
+      # inferred from the gauges rather than from `up`.
+      - targets: ["api:8000"]

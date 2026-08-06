@@ -106,7 +106,7 @@ that no metric will catch. Diagnosis is possible — via logs or SQL — but onl
 | **DB pool** | pool size/overflow/checkout utilisation | `create_async_engine` sets only `pool_pre_ping=True`; no `pool_size`, `max_overflow`, `pool_timeout`. SQLAlchemy defaults (5 + 10 overflow) apply **per process** | Pool exhaustion presents as latency, then 5xx, with no direct signal. See [postgres.md](postgres.md) |
 | **Worker (per queue)** | liveness of `data`, `backtest`, `agent`, `agent-high`, `agent-executor` workers | `entropia_worker_heartbeat_age_seconds` covers the **`maintenance` queue only** (`worker-default`) | A dead `worker-backtest` leaves the heartbeat fresh. Caught indirectly by `EntropiaQueueNeverDrains`, and only once work is pending |
 | **Correlation into workers** | `correlation_id` in worker logs | bound by the API middleware only (`apps/api/context.py`). `Job.correlation_id` exists as a **column** but no actor binds it to the log context | An API request cannot be traced into the worker log line that executed its job |
-| **The alert rules themselves** | PromQL validation. `promtool` is not installed, not in CI, and there is no `prometheus.yml` in the repo — `ops/` contains only the rule file | `backend/tests/contract/test_alert_rules_contract.py` checks metric names, thresholds, annotations and runbook links with a hand-rolled tokenizer | **A syntactically valid rule that means the wrong thing is not caught.** One shipped in this very slice (`and absent(...)` without `on()`, which can never fire) and was found by review, not by a gate. The scrape job name `entropia-api`, which four rules depend on, is asserted by a comment and enforced by nothing |
+| **Alert NOTIFICATION** — *(was "the alert rules themselves"; the PromQL-validation half was closed in ADIM 26)* | an Alertmanager. No receiver, no routing, no silences, no on-call integration; `severity: page` vs `ticket` is a label nothing reads | the rules are now **evaluated**, not just tokenized: `scripts/alert-rules-gate.sh` runs `promtool check config` + `check rules` + `test rules` against a digest-pinned Prometheus as its own blocking CI job, and `ops/alerts/entropia.rules.test.yml` proves each of the 11 alerts actually reaches `alertstate="firing"` on synthetic series. `ops/prometheus/prometheus.yml` makes `job="entropia-api"` a real scrape job, and the contract test fails on any rule naming a job it does not declare | **Rules that fire correctly still notify nobody.** The evaluation blind spot is closed — the ADIM 25 `and absent(...)` defect now fails the gate (proven by deleting `on()`: `check rules` stays green, `test rules` reports `got: nil`). The DELIVERY blind spot is not: standing up Alertmanager was deliberately out of ADIM 26's scope, which is a validation gate, not a monitoring stack. Two things also remain unvalidated: the rules are never evaluated against **real production series** (a metric that exists but is never populated looks healthy here), and no gate proves the deployed Prometheus is actually configured from this file |
 | **Log redaction** | a structlog scrubbing processor | enforced **by hand, per call site** — probes log `type(exc).__name__` instead of `str(exc)` because driver errors echo the DSN. `errors.py:203` still logs `str(exc)` | A new call site can leak a secret without any gate objecting. `test_probe_failure_logging.py` covers the probes only |
 
 ---
@@ -114,9 +114,21 @@ that no metric will catch. Diagnosis is possible — via logs or SQL — but onl
 ## 5. Maintenance
 
 * Alert rules: `ops/alerts/entropia.rules.yml`
-* Enforcement: `backend/tests/contract/test_alert_rules_contract.py` — metric
-  names are derived from the exposition code, thresholds are checked against the
-  configuration defaults they claim to be multiples of, and every `runbook`
-  annotation must resolve to a real file.
+* Scrape config: `ops/prometheus/prometheus.yml` — the file that makes
+  `job="entropia-api"` a checked fact rather than a comment. No Prometheus
+  service is shipped; mount `ops/` into one you run yourself.
+* Enforcement runs at **two levels**, and both are blocking:
+  * *Text* — `backend/tests/contract/test_alert_rules_contract.py`: metric names
+    are derived from the exposition code, thresholds are checked against the
+    configuration defaults they claim to be multiples of, every `runbook`
+    annotation must resolve to a real file, and every `job=` matcher must name a
+    job the scrape config declares.
+  * *Evaluation* — `scripts/alert-rules-gate.sh` (CI job **Alert rules —
+    promtool**): `check config`, `check rules`, then `test rules` over
+    `ops/alerts/entropia.rules.test.yml`. Run it locally before pushing; it needs
+    docker and nothing else.
 * Adding a metric: emit it, then add the row here, then (only then) write a rule.
   The contract test will reject a rule over a metric that does not exist.
+* Adding a rule: it is not done until `entropia.rules.test.yml` contains a case
+  in which it reaches `alertstate="firing"`.
+  `test_every_alert_has_an_evaluated_firing_case` refuses a rule nobody has run.

@@ -13,6 +13,17 @@ The same applies to label VALUES: ``entropia_jobs_depth`` is labelled with
 ``str(JobStatus)``, so a rule matching ``status="failed"`` would silently match
 nothing (the real terminal value is ``failed_final``). That class of typo is
 checked against the enum rather than against a copy of it.
+
+ADIM 26 extends the same reasoning to the ``job`` label and to PromQL MEANING.
+Four rules key on ``job="entropia-api"``; until ``ops/prometheus/prometheus.yml``
+existed that name was asserted by a comment and enforced by nothing. It is now
+checked against the shipped scrape config. And because everything in this file
+tokenizes expressions rather than evaluating them — which is why a rule that
+parses but can never fire got through ADIM 25 — the real PromQL engine runs in
+``scripts/alert-rules-gate.sh`` (``promtool check config`` / ``check rules`` /
+``test rules``) as its own CI job. The tests at the bottom of this file are the
+seam between the two: they fail if a rule is added without an evaluated firing
+case, so the cheap gate cannot silently outrun the real one.
 """
 
 from __future__ import annotations
@@ -30,6 +41,8 @@ from entropia.infrastructure.observability.metrics import render_process_metrics
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 RULES_PATH = REPO_ROOT / "ops" / "alerts" / "entropia.rules.yml"
+RULES_TEST_PATH = REPO_ROOT / "ops" / "alerts" / "entropia.rules.test.yml"
+PROMETHEUS_CONFIG_PATH = REPO_ROOT / "ops" / "prometheus" / "prometheus.yml"
 
 #: Series Prometheus synthesises for every scrape target. Not produced by us,
 #: but legitimately referenceable — ``up`` is how a dead API is detected at all.
@@ -303,3 +316,140 @@ def test_the_tokenizer_still_catches_a_bogus_metric_name() -> None:
     # ...and does not cry wolf over legal grouping or modifier syntax.
     assert not _referenced_metric_names("sum by (queue) (entropia_jobs_depth)") - allowed
     assert not _referenced_metric_names("entropia_outbox_lag_seconds offset 5m") - allowed
+
+
+# --------------------------------------------------------------------------------
+# ADIM 26 — the rules must agree with the scrape config that loads them, and no
+# rule may ship without having been EVALUATED.
+#
+# Everything above reads expressions as text. That is why ADIM 25 shipped two
+# paging rules that parsed, loaded, and could never fire. The PromQL engine now
+# runs in scripts/alert-rules-gate.sh as its own CI job; these tests stop the two
+# gates from drifting apart, and stop `job="entropia-api"` from being a name only
+# a comment believes in.
+# --------------------------------------------------------------------------------
+
+
+def _scrape_config() -> dict:
+    return yaml.safe_load(PROMETHEUS_CONFIG_PATH.read_text())
+
+
+def _declared_scrape_jobs() -> set[str]:
+    return {job["job_name"] for job in _scrape_config()["scrape_configs"]}
+
+
+def _duration_seconds(literal: str) -> float:
+    """Parse the Prometheus duration literals this config uses (``30s``, ``5m``)."""
+    match = re.fullmatch(r"(\d+)(ms|[smhdwy])", literal)
+    assert match, f"{literal!r} is not a Prometheus duration"
+    unit = {"ms": 0.001, "s": 1, "m": 60, "h": 3600, "d": 86400, "w": 604800, "y": 31536000}
+    return float(match.group(1)) * unit[match.group(2)]
+
+
+def test_every_job_matcher_names_a_declared_scrape_job() -> None:
+    """``job="entropia-api"`` must be a job something actually scrapes.
+
+    Four rules — EntropiaApiDown, EntropiaMetricsDatabaseProbeFailing and both
+    worker-absence rules — select on this label. Rename the scrape job without
+    renaming them and every one of them silently matches nothing, exactly the
+    dead-rule failure mode this whole file exists to prevent. Before ADIM 26 the
+    name was asserted by a comment at the top of the rules file and by nothing
+    else, because the repo had no scrape config to check it against.
+    """
+    declared = _declared_scrape_jobs()
+    assert declared, "ops/prometheus/prometheus.yml declares no scrape job"
+
+    for _, rule in ALL_RULES:
+        for job in re.findall(r'job\s*=\s*"([^"]+)"', rule["expr"]):
+            assert job in declared, (
+                f"{rule['alert']} matches job={job!r}, which ops/prometheus/prometheus.yml "
+                f"does not scrape. Declared jobs: {sorted(declared)}"
+            )
+
+
+def test_the_scrape_config_loads_the_shipped_rule_file() -> None:
+    """A scrape config that does not load these rules would pin the job name to nothing.
+
+    Prometheus resolves ``rule_files`` relative to the config file's own
+    directory, which is what lets ``ops/`` be mounted and relocated as one unit.
+    """
+    rule_files = _scrape_config()["rule_files"]
+    resolved = {(PROMETHEUS_CONFIG_PATH.parent / entry).resolve() for entry in rule_files}
+    assert RULES_PATH.resolve() in resolved, (
+        f"ops/prometheus/prometheus.yml loads {sorted(map(str, resolved))}, not {RULES_PATH}"
+    )
+
+
+def test_the_scrape_interval_is_no_slower_than_the_scheduler_tick() -> None:
+    """Every threshold is counted in scheduler ticks; scraping slower blurs the count.
+
+    EntropiaWorkerHeartbeatStale means "six consecutive missed ticks". At a
+    scrape interval coarser than the tick, six missed ticks may not produce six
+    samples, and the derivation stops describing what the alert measures.
+    """
+    from entropia.config import get_settings
+
+    interval = _duration_seconds(_scrape_config()["global"]["scrape_interval"])
+    assert interval <= get_settings().scheduler_tick_seconds
+
+
+def test_the_metrics_scrape_presents_a_credential() -> None:
+    """GET /metrics is fail-closed in production (O-22); an anonymous scrape is 403.
+
+    A scrape config without a credential would make a perfectly healthy API read
+    as ``up == 0`` — the false positive EntropiaApiDown's own annotation warns
+    about — so shipping one without authorization would build that trap in.
+    """
+    for job in _scrape_config()["scrape_configs"]:
+        if job["job_name"] != "entropia-api":
+            continue
+        authorization = job.get("authorization")
+        assert authorization, "the entropia-api scrape job presents no credential"
+        assert authorization["type"] == "Bearer"
+        assert authorization.get("credentials_file"), (
+            "the token must come from a file, never be inlined into a tracked config"
+        )
+        assert "credentials" not in authorization, "a literal credential must never be committed"
+        return
+    raise AssertionError("no entropia-api scrape job is declared")
+
+
+def _alertnames_with_an_evaluated_firing_case() -> set[str]:
+    """Alert names the promtool unit tests assert actually reach ``alertstate="firing"``."""
+    document = yaml.safe_load(RULES_TEST_PATH.read_text())
+    firing: set[str] = set()
+    for case in document["tests"]:
+        for assertion in case.get("promql_expr_test", []):
+            for sample in assertion.get("exp_samples", []):
+                labels = sample["labels"]
+                if 'alertstate="firing"' not in labels:
+                    continue
+                name = re.search(r'alertname="([^"]+)"', labels)
+                if name:
+                    firing.add(name.group(1))
+    return firing
+
+
+def test_every_alert_has_an_evaluated_firing_case() -> None:
+    """No rule ships without promtool having proven it can fire.
+
+    This is the guard the ADIM 25 defect needed and did not have. ``and absent(...)``
+    without ``on()`` passes every text-level check in this file — it names real
+    metrics, carries every annotation, points at a real runbook — and evaluates
+    to the empty vector forever. Only running it against a PromQL engine catches
+    that, so a rule with no firing case in ops/alerts/entropia.rules.test.yml is
+    a rule nobody has proven works.
+    """
+    declared = {rule["alert"] for _, rule in ALL_RULES}
+    proven = _alertnames_with_an_evaluated_firing_case()
+
+    unproven = declared - proven
+    assert not unproven, (
+        f"{sorted(unproven)} have no firing case in ops/alerts/entropia.rules.test.yml. "
+        "Add one there — a rule that has never been evaluated may be unable to fire at all."
+    )
+
+    stale = proven - declared
+    assert not stale, (
+        f"ops/alerts/entropia.rules.test.yml asserts on {sorted(stale)}, which no rule declares"
+    )

@@ -54,6 +54,13 @@ tmp/
 # ---- Backups (data-bearing; never commit) ----
 backups/
 
+# ---- Prometheus scrape credential ----
+# ops/prometheus/prometheus.yml reads ENTROPIA_METRICS_TOKEN from this file at
+# scrape time (GET /metrics is credentialed, finding O-22). An operator drops the
+# real token here in their own checkout; it must never be committed. The
+# validation gate uses a throwaway placeholder in a temp copy instead.
+ops/prometheus/metrics_token
+
 # ---- v18 mockup: dev-only serving copy (npm run dev serves it at /mockup_v18.html
 #      for visual reference). Canonical lives in docs/spec/ and is tracked; the copy
 #      is a duplicate, so it is never committed. ----

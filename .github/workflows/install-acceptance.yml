@@ -444,3 +444,71 @@ jobs:
       - name: Tear down
         if: always()
         run: docker compose down -v
+
+  # ===========================================================================
+  # NIGHTLY FAILURE NOTICE.
+  # The two heavy jobs above run ONLY on the 03:17 cron, and a scheduled run has
+  # nothing to annotate: no PR, no reviewer, no commit status anybody is looking
+  # at. So a red nightly — a legacy upgrade that stopped applying, a backup that
+  # restores a schema without its rows — stayed invisible until someone happened
+  # to open the Actions tab. This job turns that into an issue, and folds a
+  # repeat failure into a comment on the SAME issue so a week of breakage is one
+  # thread instead of seven.
+  #
+  # Scheduled runs only, deliberately: a push/PR failure is already visible on
+  # the PR, and a manual dispatch has a human watching it.
+  # ===========================================================================
+  nightly-failure-notice:
+    name: Nightly failure notice
+    needs: [migration-acceptance, fresh-install, legacy-upgrade, disaster-recovery]
+    # `always()` so this still runs after a failed dependency; the `contains`
+    # keeps it silent on a green night and on a cancelled run.
+    if: always() && github.event_name == 'schedule' && contains(needs.*.result, 'failure')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # The only job in this workflow that writes to the repository.
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Open or update the nightly failure issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # No checkout in this job, so `gh` has no git remote to infer from.
+          GH_REPO: ${{ github.repository }}
+          NEEDS: ${{ toJSON(needs) }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title='Nightly FAILED — Install acceptance'
+
+          failed="$(printf '%s' "$NEEDS" \
+            | jq -r 'to_entries | map(select(.value.result == "failure")) | .[].key | "- `\(.)`"')"
+
+          {
+            printf 'The scheduled `Install acceptance` run failed on `%s`.\n\n' "$GITHUB_SHA"
+            printf 'Failed jobs:\n\n%s\n\n' "$failed"
+            printf 'Run: %s\n\n' "$RUN_URL"
+            printf 'Opened automatically by `.github/workflows/install-acceptance.yml`.\n'
+            printf 'It is **not** closed automatically — close it once a green nightly\n'
+            printf 'proves the install / upgrade / restore chain is back.\n'
+          } > nightly-failure.md
+
+          # Idempotent bootstrap: re-creating an existing label is a no-op, and a
+          # label that genuinely cannot be created makes `gh issue create` below
+          # fail loudly rather than posting an unfindable issue.
+          gh label create nightly-failure \
+            --color B60205 \
+            --description "Gecelik (schedule) CI kosusu kirmizi — otomatik acildi" \
+            >/dev/null 2>&1 || true
+
+          existing="$(gh issue list --state open --label nightly-failure --limit 50 \
+            --json number,title \
+            | jq -r --arg t "$title" 'map(select(.title == $t)) | .[0].number // empty')"
+
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body-file nightly-failure.md
+            echo "Nightly still failing — commented on #$existing"
+          else
+            gh issue create --title "$title" --label nightly-failure \
+              --body-file nightly-failure.md
+          fi

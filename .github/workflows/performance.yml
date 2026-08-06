@@ -16,7 +16,7 @@
 #   * nightly / manual -> `load-full`: the full matrix against the Docker Compose
 #     stack, writing the baseline JSON that docs/performance/ is calibrated from.
 #     Also gates on errors; the latency RATIO gate is implemented and unit-tested
-#     (scripts/loadgen.py::_ratio_gate) but is deliberately NOT wired in yet — see
+#     (`_ratio_gate` in scripts/loadgen.py) but is deliberately NOT wired in yet — see
 #     "Activating the ratio gate" in docs/performance/README.md. Turning it on
 #     needs a measured run-to-run spread from this job, not a guessed band.
 # =============================================================================

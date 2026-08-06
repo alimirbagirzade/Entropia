@@ -28,6 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from entropia.application.commands import agent_artifact as artifact_cmd
 from entropia.application.commands import backtest_run as backtest_cmd
 from entropia.application.commands import readiness_check as readiness_cmd
+from entropia.application.jobs import research_data as rd_jobs
 from entropia.domain.agent_lab.enums import (
     ALPHA_AGENT_ID,
     AgentTaskPriority,
@@ -54,7 +55,6 @@ from entropia.infrastructure.postgres.repositories import agent_lab as al_repo
 from entropia.infrastructure.postgres.repositories import agent_tool_gateway as tg_repo
 from entropia.infrastructure.postgres.repositories import backtest as bt_repo
 from entropia.infrastructure.postgres.repositories import market_data as market_repo
-from entropia.infrastructure.postgres.repositories import research_data as research_repo
 from entropia.infrastructure.queues.enqueue import enqueue_job
 from entropia.shared.errors import (
     AgentToolCallForbiddenError,
@@ -374,9 +374,22 @@ async def _handle_result_query(ctx: _Ctx) -> _ToolOutcome:
 
 
 async def _handle_data_bundle_resolve(ctx: _Ctx) -> _ToolOutcome:
-    """`data_bundle.resolve` — pin approved Market + usage-scoped Research revisions
-    into a context bundle. EXECUTION scope enforces the evidence-bundle gate:
-    ``agent_research_only`` is blocked and never enters the manifest (AL-11)."""
+    """`data_bundle.resolve` — pin Market + usage-scoped Research revisions into a
+    context bundle. EXECUTION scope enforces the evidence-bundle gate:
+    ``agent_research_only`` is blocked and never enters the manifest (AL-11).
+
+    The research half passes through ``rd_jobs.admit_bundle_member`` — the SAME
+    admission gate the human compilers use — so a soft-deleted root and a
+    deprecated/revoked revision are refused a NEW bundle here exactly as they are
+    there (GH #556; doc 12 §11, §14). The §9.3 usage-scope gate then runs with the
+    Feature-Input-Only precondition RESOLVED FROM THE DATABASE; the caller's
+    ``has_approved_feature_definition`` claim is not read (GH #557; doc 12 §2,
+    §9.2 "must not rely on a dropdown selection or a browser-held record").
+
+    Honest boundary: the market half still checks existence only. This docstring
+    used to claim "approved Market" — it does not enforce that, and the ACTIVE-root
+    + APPROVED-revision gate for a pinned market revision stays tracked on #556.
+    """
     market_ids = [str(x) for x in ctx.request.get("market_revision_ids", [])]
     research_specs = ctx.request.get("research_revisions", [])
     execution = ctx.scope is PolicyScope.EXECUTION
@@ -393,26 +406,45 @@ async def _handle_data_bundle_resolve(ctx: _Ctx) -> _ToolOutcome:
     pinned_research: list[str] = []
     for spec in research_specs:
         revision_id = str(spec.get("revision_id"))
-        has_feature_def = bool(spec.get("has_approved_feature_definition", False))
-        research_rev = await research_repo.get_revision(ctx.session, revision_id)
-        if research_rev is None or research_rev.usage_scope is None:
-            raise ResearchInputBlockedError(
-                f"Research revision '{revision_id}' is not resolvable for a data bundle."
+        # ``for_execution=False`` on both scopes: this tool pins a CONTEXT manifest,
+        # not a BacktestEvidenceBundle, so it takes the lifecycle admission every
+        # surface owes and applies the §9.3 scope gate itself below (see the gate's
+        # docstring). Refusals are translated into the one rejection taxonomy this
+        # surface has always used, because a typed non-``ForbiddenError`` (the
+        # NotFoundError for a soft-deleted root, the FieldMeaningInsufficient for a
+        # missing feature definition) would otherwise escape the gateway —
+        # ``data_bundle.resolve`` is not a durable-FAILED family, so nothing would
+        # be recorded and the Agent would get a crash instead of a blocker to read
+        # (doc 18 §9.2 "on governance denial: REJECTED, never a crash").
+        try:
+            research_rev = await rd_jobs.admit_bundle_member(
+                ctx.session, ctx.actor, revision_id, for_execution=False
             )
-        scope = research_rev.usage_scope
-        if execution:
-            # Real evidence-bundle gate: agent_research_only -> UsageScopeForbidden;
-            # feature_input_only requires an approved feature definition (doc 12 §9.3).
-            try:
-                ensure_allows_evidence_bundle(
-                    scope, has_approved_feature_definition=has_feature_def
+            scope = research_rev.usage_scope
+            if scope is None:
+                raise ResearchInputBlockedError(
+                    f"Research revision '{revision_id}' is not resolvable for a data bundle."
                 )
-            except ForbiddenError as exc:
-                raise ResearchInputBlockedError(str(exc)) from exc
-        elif not allows_agent_research(scope):
-            raise ResearchInputBlockedError(
-                f"Research revision '{revision_id}' scope forbids Agent research use."
-            )
+            if execution:
+                # Real evidence-bundle gate: agent_research_only -> UsageScopeForbidden;
+                # feature_input_only requires an approved feature definition, and
+                # whether one exists is a SERVER fact (doc 12 §9.3, GH #557).
+                ensure_allows_evidence_bundle(
+                    scope,
+                    has_approved_feature_definition=(
+                        await rd_jobs.has_approved_feature_definition(
+                            ctx.session, research_rev.entity_id
+                        )
+                    ),
+                )
+            elif not allows_agent_research(scope):
+                raise ResearchInputBlockedError(
+                    f"Research revision '{revision_id}' scope forbids Agent research use."
+                )
+        except ResearchInputBlockedError:
+            raise
+        except AppError as denial:
+            raise ResearchInputBlockedError(denial.message) from denial
         pinned_research.append(revision_id)
 
     manifest_id = new_id("agtbundle")

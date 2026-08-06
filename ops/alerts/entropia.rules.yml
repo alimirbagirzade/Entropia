@@ -1,4 +1,15 @@
-# Entropia — Prometheus alerting rules (ADIM 25).
+# Entropia — Prometheus alerting rules (ADIM 25, validated since ADIM 26).
+#
+# TWO GATES GUARD THIS FILE, and the second exists because the first was not
+# enough. backend/tests/contract/test_alert_rules_contract.py reads the
+# expressions as TEXT; scripts/alert-rules-gate.sh EVALUATES them with a
+# digest-pinned promtool (`check config`, `check rules`, then `test rules` over
+# ops/alerts/entropia.rules.test.yml) in its own blocking CI job. ADIM 25 is why:
+# two paging rules shipped as `up{...} == 1 and absent(...)`, which parses,
+# loads, reads as coverage and can never fire. Every text-level check passed it;
+# a human caught it. Adding a rule now means adding a case to the unit-test file
+# in which it actually reaches `alertstate="firing"` — the contract test rejects
+# a rule nobody has evaluated.
 #
 # CONTRACT, enforced by backend/tests/contract/test_alert_rules_contract.py:
 #
@@ -16,10 +27,13 @@
 #      here may invent one. Thresholds are derived from shipped configuration
 #      defaults or are structural (a series is absent, a process is down).
 #
-# SCRAPE ASSUMPTION: the API is scraped as job="entropia-api" with the Bearer
-# credential from ENTROPIA_METRICS_TOKEN. Only the API process serves /metrics;
-# worker, scheduler and agent-coordinator have no HTTP surface, so their health
-# is inferred from the job/heartbeat gauges below, never from `up`.
+# SCRAPE CONTRACT (was an ASSUMPTION until ADIM 26): the API is scraped as
+# job="entropia-api" with the Bearer credential from ENTROPIA_METRICS_TOKEN. That
+# name is no longer a claim in a comment — ops/prometheus/prometheus.yml declares
+# the job, and test_every_job_matcher_names_a_declared_scrape_job fails the build
+# if any rule here names a job that config does not scrape. Only the API process
+# serves /metrics; worker, scheduler and agent-coordinator have no HTTP surface,
+# so their health is inferred from the job/heartbeat gauges below, never from `up`.
 
 groups:
   - name: entropia-api

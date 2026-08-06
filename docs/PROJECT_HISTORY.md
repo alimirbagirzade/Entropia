@@ -3184,7 +3184,7 @@ edildi.
 
 ---
 
-## ADIM 16 — Paylaşılan snapshot'a karşı item intent'leri (PR #571 + #572)
+## ADIM 16 (sevk edilen) — Paylaşılan snapshot'a karşı item intent'leri (PR #571 + #572)
 
 > **Geriye dönük kayıt.** ADIM 16'nın kapanış ritüeli yapılmamıştı; bu bölüm ADIM 17
 > kapanışında telafi olarak yazıldı. Detay derinliği diğer slice'lardan daha az — kaynak

@@ -183,8 +183,14 @@ Before stopping a working session, produce **ALL** of the following:
 
 > **Uyarı:** `docs/audit/current_main_ground_truth_2026-08-03.md` §18'in 2/3/4/6 kalemleri
 > ADIM 5–8 ile kapandı ama o belge güncellenmedi — ona güvenmeden önce doğrula.
-> **"ADIM 21" iki slice'a verilmiş** (planlı `ItemParticipant` vs sevk edilen worker-delivery);
-> numara yeniden atanmadı, kayıtlar `ADIM 21 (worker delivery)` diye ayırıyor — insan kararı.
+> **İKİ slice adı çift kullanılmış; numaralar bilerek yeniden atanmadı** — merge edilmiş PR
+> başlıkları ve commit mesajları değiştirilemez, yeniden numaralandırma dokümanları git
+> geçmişinden ayırırdı. Ayrım **başlık ekiyle** yapılır, kural budur:
+> **`ADIM 16 (sevk edilen)`** = item intent katmanı (#571/#572) ·
+> **`ADIM 16 (ADR §12)`** = `run_engine` resumable stepper (#602) ·
+> **`ADIM 21 (worker delivery)`** = at-least-once delivery guard (#587), planlı `ADIM 21` =
+> `ItemParticipant`. Yeni kayıt yazarken bu ekleri **aynen** kullan — eksiz "ADIM 16" tek
+> anlamlı değildir. Çakışma **kaldırılmadı**, tek-anlamlı hale getirildi (insan kararı).
 > **Docs regresyonu ÜÇ KEZ oldu (2026-08-06'da onarıldı):** bayat base'li docs PR'ları
 > `PROJECT_HISTORY.md`'den kayıt sildi — #590 (ADIM 18, 211 satır) ve #604 (ADIM 22 + ADIM 16,
 > 194 satır; ayrıca bu bloğu boşalttı). Hiçbir CI kapısı `docs/` okumaz. **Docs PR'ı merge

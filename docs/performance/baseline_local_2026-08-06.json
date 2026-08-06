@@ -1,0 +1,1022 @@
+{
+  "environment": {
+    "auth": "session-login",
+    "base_url": "http://127.0.0.1:8124",
+    "concurrency": 8,
+    "git_sha": "",
+    "repeats": 20,
+    "runner": "local",
+    "runner_class": "local-darwin-arm64-dev-laptop",
+    "runner_os": "darwin"
+  },
+  "not_measured": {
+    "api_rss_and_cpu": "Container memory/CPU is not exposed by the application. The nightly workflow captures `docker stats` alongside this JSON rather than having the driver guess.",
+    "backtest_run_admission": "POST /backtest-runs enqueues real work; a load run would fill the queue with runs nothing consumes. Admission cost is gated by tests/integration/test_backtest_query_count.py.",
+    "ready_check_admission": "POST /readiness-checks mutates and needs a composition whose items are all pinned and approved; seeding one per repeat would measure the seed. Its DB cost is gated deterministically instead \u2014 docs/performance/query_budgets.json -> readiness_check.market_data_leg.",
+    "worker_throughput": "Ingest/import/validation/backtest/export/Agent worker time is not observable from an HTTP client. The run reports the queue-depth and oldest-lease-age gauges the API exposes; per-actor worker time needs worker-side instrumentation that does not exist yet."
+  },
+  "phases": {
+    "cold": {
+      "admin_logs": {
+        "bytes_received": 1743,
+        "errors": 0,
+        "latency_ms": {
+          "max": 4.637,
+          "mean": 4.637,
+          "p50": 4.637,
+          "p95": 4.637,
+          "p99": 4.637
+        },
+        "requests": 1,
+        "status_counts": {
+          "200": 1
+        },
+        "throughput_rps": 7.077,
+        "transport_errors": 0
+      },
+      "agent_overview": {
+        "bytes_received": 270,
+        "errors": 0,
+        "latency_ms": {
+          "max": 7.288,
+          "mean": 7.288,
+          "p50": 7.288,
+          "p95": 7.288,
+          "p99": 7.288
+        },
+        "requests": 1,
+        "status_counts": {
+          "200": 1
+        },
+        "throughput_rps": 7.077,
+        "transport_errors": 0
+      },
+      "agent_tasks": {
+        "bytes_received": 31,
+        "errors": 0,
+        "latency_ms": {
+          "max": 6.389,
+          "mean": 6.389,
+          "p50": 6.389,
+          "p95": 6.389,
+          "p99": 6.389
+        },
+        "requests": 1,
+        "status_counts": {
+          "200": 1
+        },
+        "throughput_rps": 7.077,
+        "transport_errors": 0
+      },
+      "audit_events": {
+        "bytes_received": 1664,
+        "errors": 0,
+        "latency_ms": {
+          "max": 6.037,
+          "mean": 6.037,
+          "p50": 6.037,
+          "p95": 6.037,
+          "p99": 6.037
+        },
+        "requests": 1,
+        "status_counts": {
+          "200": 1
+        },
+        "throughput_rps": 7.077,
+        "transport_errors": 0
+      },
+      "capabilities": {
+        "bytes_received": 4351,
+        "errors": 0,
+        "latency_ms": {
+          "max": 11.157,
+          "mean": 11.157,
+          "p50": 11.157,
+          "p95": 11.157,
+          "p99": 11.157
+        },
+        "requests": 1,
+        "status_counts": {
+          "200": 1
+        },
+        "throughput_rps": 7.077,
+        "transport_errors": 0
+      },
+      "hypotheses": {
+        "bytes_received": 36,
+        "errors": 0,
+        "latency_ms": {
+          "max": 5.567,
+          "mean": 5.567,
+          "p50": 5.567,
+          "p95": 5.567,
+          "p99": 5.567
+        },
+        "requests": 1,
+        "status_counts": {
+          "200": 1
+        },
+        "throughput_rps": 7.077,
+        "transport_errors": 0
+      },
+      "instruments": {
+        "bytes_received": 51,
+        "errors": 0,
+        "latency_ms": {
+          "max": 8.438,
+          "mean": 8.438,
+          "p50": 8.438,
+          "p95": 8.438,
+          "p99": 8.438
+        },
+        "requests": 1,
+        "status_counts": {
+          "200": 1
+        },
+        "throughput_rps": 7.077,
+        "transport_errors": 0
+      },
+      "lab_messages": {
+        "bytes_received": 34,
+        "errors": 0,
+        "latency_ms": {
+          "max": 8.388,
+          "mean": 8.388,
+          "p50": 8.388,
+          "p95": 8.388,
+          "p99": 8.388
+        },
+        "requests": 1,
+        "status_counts": {
+          "200": 1
+        },
+        "throughput_rps": 7.077,
+        "transport_errors": 0
+      },
+      "library": {
+        "bytes_received": 51,
+        "errors": 0,
+        "latency_ms": {
+          "max": 12.828,
+          "mean": 12.828,
+          "p50": 12.828,
+          "p95": 12.828,
+          "p99": 12.828
+        },
+        "requests": 1,
+        "status_counts": {
+          "200": 1
+        },
+        "throughput_rps": 7.077,
+        "transport_errors": 0
+      },
+      "library_shared": {
+        "bytes_received": 51,
+        "errors": 0,
+        "latency_ms": {
+          "max": 5.154,
+          "mean": 5.154,
+          "p50": 5.154,
+          "p95": 5.154,
+          "p99": 5.154
+        },
+        "requests": 1,
+        "status_counts": {
+          "200": 1
+        },
+        "throughput_rps": 7.077,
+        "transport_errors": 0
+      },
+      "mainboard": {
+        "bytes_received": 220,
+        "errors": 0,
+        "latency_ms": {
+          "max": 15.748,
+          "mean": 15.748,
+          "p50": 15.748,
+          "p95": 15.748,
+          "p99": 15.748
+        },
+        "requests": 1,
+        "status_counts": {
+          "200": 1
+        },
+        "throughput_rps": 7.077,
+        "transport_errors": 0
+      },
+      "market_datasets": {
+        "bytes_received": 51,
+        "errors": 0,
+        "latency_ms": {
+          "max": 9.556,
+          "mean": 9.556,
+          "p50": 9.556,
+          "p95": 9.556,
+          "p99": 9.556
+        },
+        "requests": 1,
+        "status_counts": {
+          "200": 1
+        },
+        "throughput_rps": 7.077,
+        "transport_errors": 0
+      },
+      "meta": {
+        "bytes_received": 111,
+        "errors": 0,
+        "latency_ms": {
+          "max": 1.919,
+          "mean": 1.919,
+          "p50": 1.919,
+          "p95": 1.919,
+          "p99": 1.919
+        },
+        "requests": 1,
+        "status_counts": {
+          "200": 1
+        },
+        "throughput_rps": 7.077,
+        "transport_errors": 0
+      },
+      "research_datasets": {
+        "bytes_received": 51,
+        "errors": 0,
+        "latency_ms": {
+          "max": 7.709,
+          "mean": 7.709,
+          "p50": 7.709,
+          "p95": 7.709,
+          "p99": 7.709
+        },
+        "requests": 1,
+        "status_counts": {
+          "200": 1
+        },
+        "throughput_rps": 7.077,
+        "transport_errors": 0
+      },
+      "results_history": {
+        "bytes_received": 92,
+        "errors": 0,
+        "latency_ms": {
+          "max": 6.932,
+          "mean": 6.932,
+          "p50": 6.932,
+          "p95": 6.932,
+          "p99": 6.932
+        },
+        "requests": 1,
+        "status_counts": {
+          "200": 1
+        },
+        "throughput_rps": 7.077,
+        "transport_errors": 0
+      },
+      "strategy_drafts": {
+        "bytes_received": 2,
+        "errors": 0,
+        "latency_ms": {
+          "max": 15.107,
+          "mean": 15.107,
+          "p50": 15.107,
+          "p95": 15.107,
+          "p99": 15.107
+        },
+        "requests": 1,
+        "status_counts": {
+          "200": 1
+        },
+        "throughput_rps": 7.077,
+        "transport_errors": 0
+      },
+      "trash_entries": {
+        "bytes_received": 268,
+        "errors": 0,
+        "latency_ms": {
+          "max": 7.865,
+          "mean": 7.865,
+          "p50": 7.865,
+          "p95": 7.865,
+          "p99": 7.865
+        },
+        "requests": 1,
+        "status_counts": {
+          "200": 1
+        },
+        "throughput_rps": 7.077,
+        "transport_errors": 0
+      }
+    },
+    "warm": {
+      "admin_logs": {
+        "bytes_received": 34860,
+        "errors": 0,
+        "latency_ms": {
+          "max": 98.104,
+          "mean": 30.516,
+          "p50": 22.806,
+          "p95": 84.953,
+          "p99": 98.104
+        },
+        "requests": 20,
+        "status_counts": {
+          "200": 20
+        },
+        "throughput_rps": 16.559,
+        "transport_errors": 0
+      },
+      "agent_overview": {
+        "bytes_received": 5400,
+        "errors": 0,
+        "latency_ms": {
+          "max": 101.159,
+          "mean": 34.061,
+          "p50": 26.69,
+          "p95": 97.327,
+          "p99": 101.159
+        },
+        "requests": 20,
+        "status_counts": {
+          "200": 20
+        },
+        "throughput_rps": 16.559,
+        "transport_errors": 0
+      },
+      "agent_tasks": {
+        "bytes_received": 620,
+        "errors": 0,
+        "latency_ms": {
+          "max": 33.264,
+          "mean": 21.607,
+          "p50": 19.895,
+          "p95": 29.327,
+          "p99": 33.264
+        },
+        "requests": 20,
+        "status_counts": {
+          "200": 20
+        },
+        "throughput_rps": 16.559,
+        "transport_errors": 0
+      },
+      "audit_events": {
+        "bytes_received": 33280,
+        "errors": 0,
+        "latency_ms": {
+          "max": 99.968,
+          "mean": 27.992,
+          "p50": 19.452,
+          "p95": 59.792,
+          "p99": 99.968
+        },
+        "requests": 20,
+        "status_counts": {
+          "200": 20
+        },
+        "throughput_rps": 16.559,
+        "transport_errors": 0
+      },
+      "capabilities": {
+        "bytes_received": 87020,
+        "errors": 0,
+        "latency_ms": {
+          "max": 47.164,
+          "mean": 22.94,
+          "p50": 20.187,
+          "p95": 37.409,
+          "p99": 47.164
+        },
+        "requests": 20,
+        "status_counts": {
+          "200": 20
+        },
+        "throughput_rps": 16.559,
+        "transport_errors": 0
+      },
+      "hypotheses": {
+        "bytes_received": 720,
+        "errors": 0,
+        "latency_ms": {
+          "max": 100.453,
+          "mean": 26.284,
+          "p50": 20.028,
+          "p95": 53.221,
+          "p99": 100.453
+        },
+        "requests": 20,
+        "status_counts": {
+          "200": 20
+        },
+        "throughput_rps": 16.559,
+        "transport_errors": 0
+      },
+      "instruments": {
+        "bytes_received": 1020,
+        "errors": 0,
+        "latency_ms": {
+          "max": 36.012,
+          "mean": 24.35,
+          "p50": 22.31,
+          "p95": 35.68,
+          "p99": 36.012
+        },
+        "requests": 20,
+        "status_counts": {
+          "200": 20
+        },
+        "throughput_rps": 16.559,
+        "transport_errors": 0
+      },
+      "lab_messages": {
+        "bytes_received": 680,
+        "errors": 0,
+        "latency_ms": {
+          "max": 97.14,
+          "mean": 26.544,
+          "p50": 20.739,
+          "p95": 59.247,
+          "p99": 97.14
+        },
+        "requests": 20,
+        "status_counts": {
+          "200": 20
+        },
+        "throughput_rps": 16.559,
+        "transport_errors": 0
+      },
+      "library": {
+        "bytes_received": 1020,
+        "errors": 0,
+        "latency_ms": {
+          "max": 78.665,
+          "mean": 30.527,
+          "p50": 25.42,
+          "p95": 55.897,
+          "p99": 78.665
+        },
+        "requests": 20,
+        "status_counts": {
+          "200": 20
+        },
+        "throughput_rps": 16.559,
+        "transport_errors": 0
+      },
+      "library_shared": {
+        "bytes_received": 1020,
+        "errors": 0,
+        "latency_ms": {
+          "max": 63.249,
+          "mean": 24.738,
+          "p50": 21.619,
+          "p95": 30.395,
+          "p99": 63.249
+        },
+        "requests": 20,
+        "status_counts": {
+          "200": 20
+        },
+        "throughput_rps": 16.559,
+        "transport_errors": 0
+      },
+      "mainboard": {
+        "bytes_received": 4400,
+        "errors": 0,
+        "latency_ms": {
+          "max": 104.697,
+          "mean": 39.625,
+          "p50": 33.563,
+          "p95": 75.804,
+          "p99": 104.697
+        },
+        "requests": 20,
+        "status_counts": {
+          "200": 20
+        },
+        "throughput_rps": 16.559,
+        "transport_errors": 0
+      },
+      "market_datasets": {
+        "bytes_received": 1020,
+        "errors": 0,
+        "latency_ms": {
+          "max": 57.194,
+          "mean": 29.254,
+          "p50": 24.232,
+          "p95": 49.165,
+          "p99": 57.194
+        },
+        "requests": 20,
+        "status_counts": {
+          "200": 20
+        },
+        "throughput_rps": 16.559,
+        "transport_errors": 0
+      },
+      "meta": {
+        "bytes_received": 2220,
+        "errors": 0,
+        "latency_ms": {
+          "max": 88.14,
+          "mean": 14.557,
+          "p50": 9.791,
+          "p95": 28.822,
+          "p99": 88.14
+        },
+        "requests": 20,
+        "status_counts": {
+          "200": 20
+        },
+        "throughput_rps": 16.559,
+        "transport_errors": 0
+      },
+      "research_datasets": {
+        "bytes_received": 1020,
+        "errors": 0,
+        "latency_ms": {
+          "max": 85.638,
+          "mean": 30.785,
+          "p50": 24.339,
+          "p95": 57.096,
+          "p99": 85.638
+        },
+        "requests": 20,
+        "status_counts": {
+          "200": 20
+        },
+        "throughput_rps": 16.559,
+        "transport_errors": 0
+      },
+      "results_history": {
+        "bytes_received": 1840,
+        "errors": 0,
+        "latency_ms": {
+          "max": 59.645,
+          "mean": 30.51,
+          "p50": 25.919,
+          "p95": 59.498,
+          "p99": 59.645
+        },
+        "requests": 20,
+        "status_counts": {
+          "200": 20
+        },
+        "throughput_rps": 16.559,
+        "transport_errors": 0
+      },
+      "strategy_drafts": {
+        "bytes_received": 40,
+        "errors": 0,
+        "latency_ms": {
+          "max": 62.941,
+          "mean": 28.874,
+          "p50": 24.889,
+          "p95": 49.145,
+          "p99": 62.941
+        },
+        "requests": 20,
+        "status_counts": {
+          "200": 20
+        },
+        "throughput_rps": 16.559,
+        "transport_errors": 0
+      },
+      "trash_entries": {
+        "bytes_received": 5360,
+        "errors": 0,
+        "latency_ms": {
+          "max": 103.59,
+          "mean": 34.513,
+          "p50": 24.421,
+          "p95": 97.577,
+          "p99": 103.59
+        },
+        "requests": 20,
+        "status_counts": {
+          "200": 20
+        },
+        "throughput_rps": 16.559,
+        "transport_errors": 0
+      }
+    }
+  },
+  "profile": "full",
+  "recorded_at": "2026-08-06T07:00:29Z",
+  "scenarios": [
+    {
+      "group": "control",
+      "method": "GET",
+      "name": "meta",
+      "note": "Unauthenticated, no DB read. The within-run control: if THIS moves, the runner moved, not the application.",
+      "path": "/api/v1/meta"
+    },
+    {
+      "group": "interactive_read",
+      "method": "GET",
+      "name": "mainboard",
+      "note": "",
+      "path": "/api/v1/mainboards/default"
+    },
+    {
+      "group": "interactive_read",
+      "method": "GET",
+      "name": "library",
+      "note": "",
+      "path": "/api/v1/library?limit=25"
+    },
+    {
+      "group": "interactive_read",
+      "method": "GET",
+      "name": "library_shared",
+      "note": "",
+      "path": "/api/v1/library-shared-with-me?limit=25"
+    },
+    {
+      "group": "interactive_read",
+      "method": "GET",
+      "name": "results_history",
+      "note": "",
+      "path": "/api/v1/backtest-results?limit=25"
+    },
+    {
+      "group": "interactive_read",
+      "method": "GET",
+      "name": "strategy_drafts",
+      "note": "",
+      "path": "/api/v1/strategy-drafts"
+    },
+    {
+      "group": "interactive_read",
+      "method": "GET",
+      "name": "market_datasets",
+      "note": "",
+      "path": "/api/v1/market-datasets?limit=25"
+    },
+    {
+      "group": "interactive_read",
+      "method": "GET",
+      "name": "research_datasets",
+      "note": "",
+      "path": "/api/v1/research-datasets?limit=25"
+    },
+    {
+      "group": "interactive_read",
+      "method": "GET",
+      "name": "instruments",
+      "note": "",
+      "path": "/api/v1/instruments"
+    },
+    {
+      "group": "interactive_read",
+      "method": "GET",
+      "name": "capabilities",
+      "note": "",
+      "path": "/api/v1/capabilities"
+    },
+    {
+      "group": "analysis_lab",
+      "method": "GET",
+      "name": "agent_tasks",
+      "note": "",
+      "path": "/api/v1/agent-tasks"
+    },
+    {
+      "group": "analysis_lab",
+      "method": "GET",
+      "name": "agent_overview",
+      "note": "",
+      "path": "/api/v1/agent-workspace/overview"
+    },
+    {
+      "group": "analysis_lab",
+      "method": "GET",
+      "name": "hypotheses",
+      "note": "",
+      "path": "/api/v1/hypotheses"
+    },
+    {
+      "group": "analysis_lab",
+      "method": "GET",
+      "name": "lab_messages",
+      "note": "",
+      "path": "/api/v1/lab/messages"
+    },
+    {
+      "group": "audit",
+      "method": "GET",
+      "name": "audit_events",
+      "note": "",
+      "path": "/api/v1/audit-events?limit=25"
+    },
+    {
+      "group": "audit",
+      "method": "GET",
+      "name": "admin_logs",
+      "note": "",
+      "path": "/api/v1/admin/logs?limit=25"
+    },
+    {
+      "group": "interactive_read",
+      "method": "GET",
+      "name": "trash_entries",
+      "note": "",
+      "path": "/api/v1/trash-entries?limit=25"
+    }
+  ],
+  "schema_version": 1,
+  "server_metrics": {
+    "delta": {
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/admin/logs\",le=\"+Inf\"}": 21.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/admin/logs\",le=\"0.01\"}": 2.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/admin/logs\",le=\"0.025\"}": 18.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/admin/logs\",le=\"0.05\"}": 37.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/admin/logs\",le=\"0.1\"}": 58.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/admin/logs\",le=\"0.25\"}": 79.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/admin/logs\",le=\"0.5\"}": 100.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/admin/logs\",le=\"1.0\"}": 121.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/admin/logs\",le=\"2.5\"}": 142.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/admin/logs\",le=\"5.0\"}": 163.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/agent-tasks\",le=\"+Inf\"}": 21.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/agent-tasks\",le=\"0.01\"}": 3.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/agent-tasks\",le=\"0.025\"}": 23.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/agent-tasks\",le=\"0.05\"}": 44.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/agent-tasks\",le=\"0.1\"}": 65.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/agent-tasks\",le=\"0.25\"}": 86.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/agent-tasks\",le=\"0.5\"}": 107.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/agent-tasks\",le=\"1.0\"}": 128.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/agent-tasks\",le=\"2.5\"}": 149.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/agent-tasks\",le=\"5.0\"}": 170.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/agent-workspace/overview\",le=\"+Inf\"}": 21.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/agent-workspace/overview\",le=\"0.01\"}": 2.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/agent-workspace/overview\",le=\"0.025\"}": 19.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/agent-workspace/overview\",le=\"0.05\"}": 38.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/agent-workspace/overview\",le=\"0.1\"}": 59.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/agent-workspace/overview\",le=\"0.25\"}": 80.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/agent-workspace/overview\",le=\"0.5\"}": 101.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/agent-workspace/overview\",le=\"1.0\"}": 122.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/agent-workspace/overview\",le=\"2.5\"}": 143.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/agent-workspace/overview\",le=\"5.0\"}": 164.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/audit-events\",le=\"+Inf\"}": 21.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/audit-events\",le=\"0.01\"}": 2.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/audit-events\",le=\"0.025\"}": 20.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/audit-events\",le=\"0.05\"}": 40.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/audit-events\",le=\"0.1\"}": 61.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/audit-events\",le=\"0.25\"}": 82.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/audit-events\",le=\"0.5\"}": 103.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/audit-events\",le=\"1.0\"}": 124.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/audit-events\",le=\"2.5\"}": 145.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/audit-events\",le=\"5.0\"}": 166.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/backtest-results\",le=\"+Inf\"}": 21.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/backtest-results\",le=\"0.01\"}": 1.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/backtest-results\",le=\"0.025\"}": 18.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/backtest-results\",le=\"0.05\"}": 38.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/backtest-results\",le=\"0.1\"}": 59.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/backtest-results\",le=\"0.25\"}": 80.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/backtest-results\",le=\"0.5\"}": 101.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/backtest-results\",le=\"1.0\"}": 122.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/backtest-results\",le=\"2.5\"}": 143.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/backtest-results\",le=\"5.0\"}": 164.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/capabilities\",le=\"+Inf\"}": 21.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/capabilities\",le=\"0.01\"}": 2.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/capabilities\",le=\"0.025\"}": 21.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/capabilities\",le=\"0.05\"}": 42.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/capabilities\",le=\"0.1\"}": 63.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/capabilities\",le=\"0.25\"}": 84.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/capabilities\",le=\"0.5\"}": 105.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/capabilities\",le=\"1.0\"}": 126.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/capabilities\",le=\"2.5\"}": 147.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/capabilities\",le=\"5.0\"}": 168.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/events\",le=\"+Inf\"}": 0.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/events\",le=\"0.01\"}": 0.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/events\",le=\"0.025\"}": 0.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/events\",le=\"0.05\"}": 0.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/events\",le=\"0.1\"}": 0.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/events\",le=\"0.25\"}": 0.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/events\",le=\"0.5\"}": 0.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/events\",le=\"1.0\"}": 0.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/events\",le=\"2.5\"}": 0.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/events\",le=\"5.0\"}": 0.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/hypotheses\",le=\"+Inf\"}": 21.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/hypotheses\",le=\"0.01\"}": 2.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/hypotheses\",le=\"0.025\"}": 21.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/hypotheses\",le=\"0.05\"}": 41.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/hypotheses\",le=\"0.1\"}": 62.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/hypotheses\",le=\"0.25\"}": 83.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/hypotheses\",le=\"0.5\"}": 104.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/hypotheses\",le=\"1.0\"}": 125.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/hypotheses\",le=\"2.5\"}": 146.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/hypotheses\",le=\"5.0\"}": 167.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/instruments\",le=\"+Inf\"}": 21.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/instruments\",le=\"0.01\"}": 2.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/instruments\",le=\"0.025\"}": 20.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/instruments\",le=\"0.05\"}": 41.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/instruments\",le=\"0.1\"}": 62.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/instruments\",le=\"0.25\"}": 83.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/instruments\",le=\"0.5\"}": 104.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/instruments\",le=\"1.0\"}": 125.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/instruments\",le=\"2.5\"}": 146.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/instruments\",le=\"5.0\"}": 167.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/lab/messages\",le=\"+Inf\"}": 21.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/lab/messages\",le=\"0.01\"}": 3.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/lab/messages\",le=\"0.025\"}": 22.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/lab/messages\",le=\"0.05\"}": 42.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/lab/messages\",le=\"0.1\"}": 63.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/lab/messages\",le=\"0.25\"}": 84.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/lab/messages\",le=\"0.5\"}": 105.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/lab/messages\",le=\"1.0\"}": 126.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/lab/messages\",le=\"2.5\"}": 147.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/lab/messages\",le=\"5.0\"}": 168.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/library\",le=\"+Inf\"}": 21.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/library\",le=\"0.01\"}": 0.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/library\",le=\"0.025\"}": 18.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/library\",le=\"0.05\"}": 38.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/library\",le=\"0.1\"}": 59.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/library\",le=\"0.25\"}": 80.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/library\",le=\"0.5\"}": 101.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/library\",le=\"1.0\"}": 122.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/library\",le=\"2.5\"}": 143.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/library\",le=\"5.0\"}": 164.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/library-shared-with-me\",le=\"+Inf\"}": 21.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/library-shared-with-me\",le=\"0.01\"}": 1.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/library-shared-with-me\",le=\"0.025\"}": 21.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/library-shared-with-me\",le=\"0.05\"}": 42.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/library-shared-with-me\",le=\"0.1\"}": 63.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/library-shared-with-me\",le=\"0.25\"}": 84.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/library-shared-with-me\",le=\"0.5\"}": 105.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/library-shared-with-me\",le=\"1.0\"}": 126.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/library-shared-with-me\",le=\"2.5\"}": 147.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/library-shared-with-me\",le=\"5.0\"}": 168.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/mainboards/default\",le=\"+Inf\"}": 21.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/mainboards/default\",le=\"0.01\"}": 0.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/mainboards/default\",le=\"0.025\"}": 10.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/mainboards/default\",le=\"0.05\"}": 29.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/mainboards/default\",le=\"0.1\"}": 50.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/mainboards/default\",le=\"0.25\"}": 71.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/mainboards/default\",le=\"0.5\"}": 92.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/mainboards/default\",le=\"1.0\"}": 113.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/mainboards/default\",le=\"2.5\"}": 134.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/mainboards/default\",le=\"5.0\"}": 155.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/market-datasets\",le=\"+Inf\"}": 21.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/market-datasets\",le=\"0.01\"}": 1.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/market-datasets\",le=\"0.025\"}": 17.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/market-datasets\",le=\"0.05\"}": 38.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/market-datasets\",le=\"0.1\"}": 59.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/market-datasets\",le=\"0.25\"}": 80.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/market-datasets\",le=\"0.5\"}": 101.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/market-datasets\",le=\"1.0\"}": 122.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/market-datasets\",le=\"2.5\"}": 143.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/market-datasets\",le=\"5.0\"}": 164.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/meta\",le=\"+Inf\"}": 21.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/meta\",le=\"0.01\"}": 20.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/meta\",le=\"0.025\"}": 40.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/meta\",le=\"0.05\"}": 60.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/meta\",le=\"0.1\"}": 81.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/meta\",le=\"0.25\"}": 102.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/meta\",le=\"0.5\"}": 123.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/meta\",le=\"1.0\"}": 144.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/meta\",le=\"2.5\"}": 165.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/meta\",le=\"5.0\"}": 186.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/metrics\",le=\"+Inf\"}": 1.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/metrics\",le=\"0.01\"}": 1.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/metrics\",le=\"0.025\"}": 2.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/metrics\",le=\"0.05\"}": 3.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/metrics\",le=\"0.1\"}": 4.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/metrics\",le=\"0.25\"}": 5.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/metrics\",le=\"0.5\"}": 6.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/metrics\",le=\"1.0\"}": 7.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/metrics\",le=\"2.5\"}": 8.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/metrics\",le=\"5.0\"}": 9.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/research-datasets\",le=\"+Inf\"}": 21.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/research-datasets\",le=\"0.01\"}": 1.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/research-datasets\",le=\"0.025\"}": 18.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/research-datasets\",le=\"0.05\"}": 38.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/research-datasets\",le=\"0.1\"}": 59.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/research-datasets\",le=\"0.25\"}": 80.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/research-datasets\",le=\"0.5\"}": 101.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/research-datasets\",le=\"1.0\"}": 122.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/research-datasets\",le=\"2.5\"}": 143.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/research-datasets\",le=\"5.0\"}": 164.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/strategy-drafts\",le=\"+Inf\"}": 21.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/strategy-drafts\",le=\"0.01\"}": 0.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/strategy-drafts\",le=\"0.025\"}": 19.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/strategy-drafts\",le=\"0.05\"}": 39.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/strategy-drafts\",le=\"0.1\"}": 60.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/strategy-drafts\",le=\"0.25\"}": 81.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/strategy-drafts\",le=\"0.5\"}": 102.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/strategy-drafts\",le=\"1.0\"}": 123.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/strategy-drafts\",le=\"2.5\"}": 144.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/strategy-drafts\",le=\"5.0\"}": 165.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/trash-entries\",le=\"+Inf\"}": 21.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/trash-entries\",le=\"0.01\"}": 1.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/trash-entries\",le=\"0.025\"}": 17.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/trash-entries\",le=\"0.05\"}": 35.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/trash-entries\",le=\"0.1\"}": 56.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/trash-entries\",le=\"0.25\"}": 77.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/trash-entries\",le=\"0.5\"}": 98.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/trash-entries\",le=\"1.0\"}": 119.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/trash-entries\",le=\"2.5\"}": 140.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"GET\",path=\"/trash-entries\",le=\"5.0\"}": 161.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"POST\",path=\"/auth/login\",le=\"+Inf\"}": 0.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"POST\",path=\"/auth/login\",le=\"0.01\"}": 0.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"POST\",path=\"/auth/login\",le=\"0.025\"}": 0.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"POST\",path=\"/auth/login\",le=\"0.05\"}": 0.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"POST\",path=\"/auth/login\",le=\"0.1\"}": 0.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"POST\",path=\"/auth/login\",le=\"0.25\"}": 0.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"POST\",path=\"/auth/login\",le=\"0.5\"}": 0.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"POST\",path=\"/auth/login\",le=\"1.0\"}": 0.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"POST\",path=\"/auth/login\",le=\"2.5\"}": 0.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"POST\",path=\"/auth/login\",le=\"5.0\"}": 0.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"POST\",path=\"/auth/signup\",le=\"+Inf\"}": 0.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"POST\",path=\"/auth/signup\",le=\"0.01\"}": 0.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"POST\",path=\"/auth/signup\",le=\"0.025\"}": 0.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"POST\",path=\"/auth/signup\",le=\"0.05\"}": 0.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"POST\",path=\"/auth/signup\",le=\"0.1\"}": 0.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"POST\",path=\"/auth/signup\",le=\"0.25\"}": 0.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"POST\",path=\"/auth/signup\",le=\"0.5\"}": 0.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"POST\",path=\"/auth/signup\",le=\"1.0\"}": 0.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"POST\",path=\"/auth/signup\",le=\"2.5\"}": 0.0,
+      "entropia_http_request_duration_seconds_bucket{method=\"POST\",path=\"/auth/signup\",le=\"5.0\"}": 0.0,
+      "entropia_http_request_duration_seconds_count{method=\"GET\",path=\"/admin/logs\"}": 21.0,
+      "entropia_http_request_duration_seconds_count{method=\"GET\",path=\"/agent-tasks\"}": 21.0,
+      "entropia_http_request_duration_seconds_count{method=\"GET\",path=\"/agent-workspace/overview\"}": 21.0,
+      "entropia_http_request_duration_seconds_count{method=\"GET\",path=\"/audit-events\"}": 21.0,
+      "entropia_http_request_duration_seconds_count{method=\"GET\",path=\"/backtest-results\"}": 21.0,
+      "entropia_http_request_duration_seconds_count{method=\"GET\",path=\"/capabilities\"}": 21.0,
+      "entropia_http_request_duration_seconds_count{method=\"GET\",path=\"/events\"}": 0.0,
+      "entropia_http_request_duration_seconds_count{method=\"GET\",path=\"/hypotheses\"}": 21.0,
+      "entropia_http_request_duration_seconds_count{method=\"GET\",path=\"/instruments\"}": 21.0,
+      "entropia_http_request_duration_seconds_count{method=\"GET\",path=\"/lab/messages\"}": 21.0,
+      "entropia_http_request_duration_seconds_count{method=\"GET\",path=\"/library\"}": 21.0,
+      "entropia_http_request_duration_seconds_count{method=\"GET\",path=\"/library-shared-with-me\"}": 21.0,
+      "entropia_http_request_duration_seconds_count{method=\"GET\",path=\"/mainboards/default\"}": 21.0,
+      "entropia_http_request_duration_seconds_count{method=\"GET\",path=\"/market-datasets\"}": 21.0,
+      "entropia_http_request_duration_seconds_count{method=\"GET\",path=\"/meta\"}": 21.0,
+      "entropia_http_request_duration_seconds_count{method=\"GET\",path=\"/metrics\"}": 1.0,
+      "entropia_http_request_duration_seconds_count{method=\"GET\",path=\"/research-datasets\"}": 21.0,
+      "entropia_http_request_duration_seconds_count{method=\"GET\",path=\"/strategy-drafts\"}": 21.0,
+      "entropia_http_request_duration_seconds_count{method=\"GET\",path=\"/trash-entries\"}": 21.0,
+      "entropia_http_request_duration_seconds_count{method=\"POST\",path=\"/auth/login\"}": 0.0,
+      "entropia_http_request_duration_seconds_count{method=\"POST\",path=\"/auth/signup\"}": 0.0,
+      "entropia_http_request_duration_seconds_sum{method=\"GET\",path=\"/admin/logs\"}": 0.4529,
+      "entropia_http_request_duration_seconds_sum{method=\"GET\",path=\"/agent-tasks\"}": 0.294909,
+      "entropia_http_request_duration_seconds_sum{method=\"GET\",path=\"/agent-workspace/overview\"}": 0.525292,
+      "entropia_http_request_duration_seconds_sum{method=\"GET\",path=\"/audit-events\"}": 0.421736,
+      "entropia_http_request_duration_seconds_sum{method=\"GET\",path=\"/backtest-results\"}": 0.460822,
+      "entropia_http_request_duration_seconds_sum{method=\"GET\",path=\"/capabilities\"}": 0.327752,
+      "entropia_http_request_duration_seconds_sum{method=\"GET\",path=\"/events\"}": 0.0,
+      "entropia_http_request_duration_seconds_sum{method=\"GET\",path=\"/hypotheses\"}": 0.375133,
+      "entropia_http_request_duration_seconds_sum{method=\"GET\",path=\"/instruments\"}": 0.338753,
+      "entropia_http_request_duration_seconds_sum{method=\"GET\",path=\"/lab/messages\"}": 0.39482,
+      "entropia_http_request_duration_seconds_sum{method=\"GET\",path=\"/library\"}": 0.469643,
+      "entropia_http_request_duration_seconds_sum{method=\"GET\",path=\"/library-shared-with-me\"}": 0.34751,
+      "entropia_http_request_duration_seconds_sum{method=\"GET\",path=\"/mainboards/default\"}": 0.583174,
+      "entropia_http_request_duration_seconds_sum{method=\"GET\",path=\"/market-datasets\"}": 0.423012,
+      "entropia_http_request_duration_seconds_sum{method=\"GET\",path=\"/meta\"}": 0.143498,
+      "entropia_http_request_duration_seconds_sum{method=\"GET\",path=\"/metrics\"}": 0.004382,
+      "entropia_http_request_duration_seconds_sum{method=\"GET\",path=\"/research-datasets\"}": 0.456717,
+      "entropia_http_request_duration_seconds_sum{method=\"GET\",path=\"/strategy-drafts\"}": 0.427895,
+      "entropia_http_request_duration_seconds_sum{method=\"GET\",path=\"/trash-entries\"}": 0.549014,
+      "entropia_http_request_duration_seconds_sum{method=\"POST\",path=\"/auth/login\"}": 0.0,
+      "entropia_http_request_duration_seconds_sum{method=\"POST\",path=\"/auth/signup\"}": 0.0,
+      "entropia_http_requests_total{method=\"GET\",path=\"/admin/logs\",status=\"200\"}": 21.0,
+      "entropia_http_requests_total{method=\"GET\",path=\"/agent-tasks\",status=\"200\"}": 21.0,
+      "entropia_http_requests_total{method=\"GET\",path=\"/agent-workspace/overview\",status=\"200\"}": 21.0,
+      "entropia_http_requests_total{method=\"GET\",path=\"/audit-events\",status=\"200\"}": 21.0,
+      "entropia_http_requests_total{method=\"GET\",path=\"/backtest-results\",status=\"200\"}": 21.0,
+      "entropia_http_requests_total{method=\"GET\",path=\"/capabilities\",status=\"200\"}": 21.0,
+      "entropia_http_requests_total{method=\"GET\",path=\"/events\",status=\"200\"}": 0.0,
+      "entropia_http_requests_total{method=\"GET\",path=\"/hypotheses\",status=\"200\"}": 21.0,
+      "entropia_http_requests_total{method=\"GET\",path=\"/instruments\",status=\"200\"}": 21.0,
+      "entropia_http_requests_total{method=\"GET\",path=\"/lab/messages\",status=\"200\"}": 21.0,
+      "entropia_http_requests_total{method=\"GET\",path=\"/library\",status=\"200\"}": 21.0,
+      "entropia_http_requests_total{method=\"GET\",path=\"/library-shared-with-me\",status=\"200\"}": 21.0,
+      "entropia_http_requests_total{method=\"GET\",path=\"/mainboards/default\",status=\"200\"}": 21.0,
+      "entropia_http_requests_total{method=\"GET\",path=\"/market-datasets\",status=\"200\"}": 21.0,
+      "entropia_http_requests_total{method=\"GET\",path=\"/meta\",status=\"200\"}": 21.0,
+      "entropia_http_requests_total{method=\"GET\",path=\"/metrics\",status=\"200\"}": 1.0,
+      "entropia_http_requests_total{method=\"GET\",path=\"/research-datasets\",status=\"200\"}": 21.0,
+      "entropia_http_requests_total{method=\"GET\",path=\"/strategy-drafts\",status=\"200\"}": 21.0,
+      "entropia_http_requests_total{method=\"GET\",path=\"/trash-entries\",status=\"200\"}": 21.0,
+      "entropia_http_requests_total{method=\"POST\",path=\"/auth/login\",status=\"200\"}": 0.0,
+      "entropia_http_requests_total{method=\"POST\",path=\"/auth/signup\",status=\"201\"}": 0.0
+    },
+    "gauges_after": {
+      "entropia_http_requests_in_flight": 1.0,
+      "entropia_job_lease_age_seconds": 0.0,
+      "entropia_outbox_lag_seconds": 28.342
+    },
+    "scraped": true
+  },
+  "sse": {
+    "connects": 1,
+    "events_received": 0,
+    "reconnects": 0,
+    "supported": true,
+    "time_to_first_line_ms": null,
+    "transport_disconnects": 0,
+    "window_seconds": 3.0
+  },
+  "wall_seconds": {
+    "cold": 0.141,
+    "warm": 1.208
+  }
+}

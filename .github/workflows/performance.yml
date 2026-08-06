@@ -1,0 +1,263 @@
+# =============================================================================
+# Entropia — PERFORMANCE gates (ADIM 24).
+#
+# Split by what each measurement can honestly prove:
+#
+#   * The DB round-trip budgets are NOT here. They are ordinary integration tests
+#     (backend/tests/integration/test_query_budgets.py) and already block every PR
+#     inside ci.yml's pytest step — counts are deterministic, so they need no
+#     dedicated environment and no dedicated job.
+#
+#   * PR + push -> `load-smoke`: a short, low-concurrency pass against a real API
+#     process. It gates on ERRORS and completion only. It deliberately does not
+#     judge latency: a shared runner's milliseconds are weather, and a gate built
+#     on weather gets switched off, which is worse than never building it.
+#
+#   * nightly / manual -> `load-full`: the full matrix against the Docker Compose
+#     stack, writing the baseline JSON that docs/performance/ is calibrated from.
+#     Also gates on errors; the latency RATIO gate is implemented and unit-tested
+#     (`_ratio_gate` in scripts/loadgen.py) but is deliberately NOT wired in yet — see
+#     "Activating the ratio gate" in docs/performance/README.md. Turning it on
+#     needs a measured run-to-run spread from this job, not a guessed band.
+# =============================================================================
+name: Performance
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # 04:23 UTC — after install-acceptance's 03:17 so the two heavy nightlies do
+    # not contend for the same runner pool.
+    - cron: "23 4 * * *"
+  workflow_dispatch:
+    inputs:
+      concurrency:
+        description: "In-flight requests for the full load run"
+        type: string
+        default: "16"
+      repeats:
+        description: "Passes over the scenario catalogue"
+        type: string
+        default: "40"
+
+concurrency:
+  group: performance-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+# Read-only token — see the same block in ci.yml. This workflow builds and runs the
+# whole application; none of it writes back to the repository.
+permissions:
+  contents: read
+
+jobs:
+  load-smoke:
+    name: Load smoke — every scenario answers (PR gate)
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Postgres only — no Redis, no MinIO. Verified rather than assumed: with
+    # REDIS_URL and OBJECT_STORAGE_ENDPOINT pointed at dead ports, all 17 read
+    # scenarios and the SSE probe still answer 2xx, because none of them enqueues
+    # work or fetches an artifact. /health/live (not /ready) is therefore the right
+    # readiness probe for this job. The nightly job runs the full stack.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: entropia
+          POSTGRES_PASSWORD: entropia
+          POSTGRES_DB: entropia
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U entropia"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+asyncpg://entropia:entropia@localhost:5432/entropia
+      ENTROPIA_ENV: local
+      # The REAL session profile (argon2id credentials + opaque Bearer tokens), not
+      # dev impersonation: per-request session verification is application work, and
+      # a baseline that skipped it would understate every authenticated scenario.
+      AUTH_MODE: session
+      ENTROPIA_BOOTSTRAP_ADMIN_EMAIL: perf_admin@perf.entropia.test
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install uv
+        # SHA-pinned for the same reason as ci.yml: `astral-sh` is a third party and
+        # `@v7` is a mutable tag. Bumped by dependabot's github-actions ecosystem.
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        working-directory: backend
+        run: uv sync --all-extras
+      - name: Apply migrations
+        working-directory: backend
+        run: uv run alembic upgrade head
+      - name: Start the API
+        working-directory: backend
+        run: |
+          nohup uv run uvicorn entropia.apps.api.main:app \
+            --host 127.0.0.1 --port 8000 > "${RUNNER_TEMP}/api.log" 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8000/api/v1/health/live >/dev/null 2>&1; then
+              echo "API is up."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::the API did not become live in time"
+          cat "${RUNNER_TEMP}/api.log"
+          exit 1
+      - name: Provision the load account
+        # First signup with ENTROPIA_BOOTSTRAP_ADMIN_EMAIL is promoted to Admin, so
+        # the run sees the whole surface. The password is generated per run and never
+        # committed — the same idiom e2e.yml uses for its service token.
+        run: |
+          PASSWORD="perf-$(openssl rand -hex 24)!Aa1"
+          echo "::add-mask::${PASSWORD}"
+          echo "LOADGEN_PASSWORD=${PASSWORD}" >> "$GITHUB_ENV"
+          curl -fsS -X POST http://127.0.0.1:8000/api/v1/auth/signup \
+            -H 'Content-Type: application/json' \
+            -d "{\"username\":\"perf_admin\",\"password\":\"${PASSWORD}\",\"email\":\"perf_admin@perf.entropia.test\",\"display_name\":\"Perf Admin\"}" \
+            > /dev/null
+      - name: Load smoke
+        working-directory: backend
+        env:
+          LOADGEN_USERNAME: perf_admin
+          LOADGEN_RUNNER_CLASS: github-ubuntu-latest
+        run: |
+          uv run python ../scripts/loadgen.py \
+            --base-url http://127.0.0.1:8000 \
+            --profile smoke --concurrency 4 --repeats 5 --sse-seconds 5 \
+            --out "${RUNNER_TEMP}/loadgen-smoke.json"
+      - name: Upload the smoke report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: loadgen-smoke
+          path: ${{ runner.temp }}/loadgen-smoke.json
+          retention-days: 14
+          if-no-files-found: ignore
+      - name: Dump the API log on failure
+        if: failure()
+        run: cat "${RUNNER_TEMP}/api.log"
+
+  load-full:
+    name: Load full — Compose stack baseline (nightly / manual)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build the .env for the Compose stack
+        # .env.example ships the NORMAL LOCAL profile (AUTH_MODE=session), so the
+        # baseline measures the profile a user actually installs — no ad-hoc auth
+        # surgery that would only benchmark a repaired environment.
+        run: |
+          cp .env.example .env
+          PASSWORD="perf-$(openssl rand -hex 24)!Aa1"
+          echo "::add-mask::${PASSWORD}"
+          echo "LOADGEN_PASSWORD=${PASSWORD}" >> "$GITHUB_ENV"
+          sed -i \
+            -e 's/^ENTROPIA_BOOTSTRAP_ADMIN_EMAIL=.*/ENTROPIA_BOOTSTRAP_ADMIN_EMAIL=perf_admin@perf.entropia.test/' \
+            -e "s#^ENTROPIA_SERVICE_TOKEN=.*#ENTROPIA_SERVICE_TOKEN=perf-only-$(openssl rand -hex 24)#" \
+            .env
+
+      - name: Start the Docker Compose stack
+        run: |
+          # Same bounded retry as e2e.yml: a registry/BuildKit transport blip kills
+          # the job in ~30s before anything runs, while a genuinely broken build
+          # fails all three attempts identically.
+          for attempt in 1 2 3; do
+            if docker compose up -d --build; then
+              exit 0
+            fi
+            echo "::warning::docker compose up failed (attempt ${attempt}/3); retrying"
+            docker compose down --remove-orphans --volumes || true
+            sleep $((attempt * 10))
+          done
+          echo "::error::docker compose up failed after 3 attempts"
+          exit 1
+
+      - name: Wait for the API to become ready
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:8000/api/v1/health/ready >/dev/null 2>&1; then
+              echo "Stack is ready."
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::the stack did not become ready in time"
+          docker compose ps
+          docker compose logs --tail 200
+          exit 1
+
+      - name: Seed the golden fixture
+        # The same seed the E2E jobs use: without rows on them, Library / Results /
+        # Market Data would be measured empty and the baseline would describe a
+        # system nobody runs.
+        run: docker compose exec -T -e SEED_E2E_GOLDEN=1 -e SEED_ESP_TA=1 -e SEED_RATIONALE=1 api python -m entropia.apps.seed
+
+      - name: Provision the load account
+        run: |
+          curl -fsS -X POST http://localhost:8000/api/v1/auth/signup \
+            -H 'Content-Type: application/json' \
+            -d "{\"username\":\"perf_admin\",\"password\":\"${LOADGEN_PASSWORD}\",\"email\":\"perf_admin@perf.entropia.test\",\"display_name\":\"Perf Admin\"}" \
+            > /dev/null
+
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        working-directory: backend
+        run: uv sync --all-extras
+
+      - name: Container resource snapshot (before)
+        # What the driver honestly cannot see from an HTTP client: container memory
+        # and CPU. Captured here instead of estimated there.
+        run: docker stats --no-stream --format '{{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}' | tee "${RUNNER_TEMP}/docker-stats-before.txt"
+
+      - name: Full load run
+        working-directory: backend
+        env:
+          LOADGEN_USERNAME: perf_admin
+          LOADGEN_RUNNER_CLASS: github-ubuntu-latest
+        run: |
+          uv run python ../scripts/loadgen.py \
+            --base-url http://localhost:8000 \
+            --profile full \
+            --concurrency "${{ inputs.concurrency || '16' }}" \
+            --repeats "${{ inputs.repeats || '40' }}" \
+            --sse-seconds 15 \
+            --out "${RUNNER_TEMP}/loadgen-full.json"
+
+      - name: Container resource snapshot (after)
+        if: always()
+        run: docker stats --no-stream --format '{{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}' | tee "${RUNNER_TEMP}/docker-stats-after.txt"
+
+      - name: Upload the baseline
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: loadgen-baseline
+          path: |
+            ${{ runner.temp }}/loadgen-full.json
+            ${{ runner.temp }}/docker-stats-before.txt
+            ${{ runner.temp }}/docker-stats-after.txt
+          retention-days: 30
+          if-no-files-found: ignore
+
+      - name: Dump Compose logs on failure
+        if: failure()
+        run: docker compose logs --tail 500
+
+      - name: Tear down the stack
+        if: always()
+        run: docker compose down -v

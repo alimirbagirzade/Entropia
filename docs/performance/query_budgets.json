@@ -1,0 +1,86 @@
+{
+  "_comment": [
+    "ADIM 24 — DB round-trip budgets per operation. MEASURED, not aspirational.",
+    "The gate is backend/tests/integration/test_query_budgets.py; the methodology and",
+    "the fixed environment are docs/performance/README.md.",
+    "",
+    "queries_small / queries_large are the TOTAL statements the operation issues at",
+    "n_small and n_large rows on its axis, from a cold identity map. per_item is the",
+    "slope between them and is the N+1 gate: a surface recorded at 0 that starts",
+    "reading per row fails even if its small-n total is unchanged.",
+    "",
+    "This file is a RATCHET. Coming in under budget prints a tighten-me line naming",
+    "the new numbers (run with `pytest -s`); going over fails the build. Raising a",
+    "budget or a slope is a deliberate edit with a written reason in `note`, the same",
+    "idiom as frontend/e2e/a11y-baseline.json."
+  ],
+  "measured_on": {
+    "date": "2026-08-06",
+    "base_sha": "02608a3",
+    "postgres": "16",
+    "driver": "asyncpg via SQLAlchemy 2 (backend/uv.lock)",
+    "note": "Counts are round trips, not wall-clock — identical on a laptop and on a GitHub runner, which is why this gate blocks PRs while the load run does not."
+  },
+  "surfaces": {
+    "library.list_packages": {
+      "title": "Package Library — one catalog page (doc 08 §3)",
+      "axis": "package on the page",
+      "n_small": 1,
+      "n_large": 11,
+      "queries_small": 3,
+      "queries_large": 3,
+      "per_item": 0,
+      "note": "Flat. The viewer's share set, the joined catalog page, and ONE batched validatable-draft lookup. The per-row permission projection is computed in Python from rows already on the page — adding a per-row read here (a live rationale-family name, a per-row share check) is the regression this budget stops."
+    },
+    "results_history.list_backtest_results": {
+      "title": "Results History — one index page (doc 16 §9.3)",
+      "axis": "result on the page",
+      "n_small": 1,
+      "n_large": 11,
+      "queries_small": 6,
+      "queries_large": 6,
+      "per_item": 0,
+      "note": "Flat. Shared-composition ids, the visibility-filtered page, then three IN() batches (key-metric digests, immutable summaries, portfolio-mode markers). The markers batch exists precisely so the co-simulation era is not re-derived from each row's manifest — see queries/results_history.py::_load_portfolio_modes."
+    },
+    "readiness_check.market_data_leg": {
+      "title": "Ready Check — market-data leg (doc 14 §9.2/§11)",
+      "axis": "Strategy item in the composition",
+      "n_small": 1,
+      "n_large": 11,
+      "queries_small": 2,
+      "queries_large": 12,
+      "per_item": 1,
+      "note": "OPEN N+1, recorded not blessed. O-24b batched the pinned market_dataset_revision read into one IN(), and tests/integration/test_readiness_query_count.py pins that at 1 — but it counts ONLY that table. Counting the whole leg shows commands/readiness_check.py::_resolve_market_data_issues still calls market_repo.get_dataset_root INSIDE the item loop, so a composition's Strategy count still decides how many round trips the page a user waits on costs. Tracked in GitHub #617; the fix is a batched root read and it tightens this row to per_item 0."
+    },
+    "dependency_pins.ensure_pinned_resolvers_active": {
+      "title": "Approve Package — pinned ESP resolver re-validation (doc 06 §7)",
+      "axis": "pinned resolver ref on the revision",
+      "n_small": 1,
+      "n_large": 11,
+      "queries_small": 2,
+      "queries_large": 22,
+      "per_item": 2,
+      "note": "OPEN N+1, recorded not blessed. queries/dependency_pins.py::_pin_defect reads the registry entry and then the pinned revision, once per ref, so approval admission costs 2 round trips per pin. Smaller blast radius than the Ready Check row (pin counts are bounded by a package's declared calls, and this is an admin action, not a page load), which is why it is recorded rather than repaired inside a gates-only PR. Tracked in GitHub #618; batching both reads tightens this row to per_item 0."
+    },
+    "agent_workspace.list_tasks": {
+      "title": "Analysis Lab — Alpha Agent task queue/history page (doc 18 §7)",
+      "axis": "task on the page",
+      "n_small": 1,
+      "n_large": 11,
+      "queries_small": 1,
+      "queries_large": 1,
+      "per_item": 0,
+      "note": "Flat: one keyset page, projected in Python. The cards carry no joined label today; this budget is what stops a later 'show each task's pinned context manifest' from arriving as a per-row read."
+    },
+    "audit_log.list_audit_events": {
+      "title": "Admin — audit event page (M3 §8)",
+      "axis": "audit event on the page",
+      "n_small": 1,
+      "n_large": 11,
+      "queries_small": 1,
+      "queries_large": 1,
+      "per_item": 0,
+      "note": "Flat, and a GUARD rather than a repair: the projection emits target_entity_id raw. Resolving a display label per row is the obvious next product request and the obvious next N+1 — it must arrive as one batched lookup, and this row is what forces that."
+    }
+  }
+}

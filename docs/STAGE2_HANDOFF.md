@@ -4277,6 +4277,36 @@ passed / 4 xfailed / coverage %93.29 — **yerelde bağımsız doğrulanmadı, o
 ikinci tüketicisi yok. Tam kayıt: `docs/PROJECT_HISTORY.md` §"ADIM 16", kickoff:
 `docs/ADIM16_LANDED_KICKOFF.md`.
 
+## Yarım-cent yuvarlama — KARARA BAĞLANDI (2026-08-06, ürün kararı), UYGULANMADI
+
+`allocation/rules.py::_money` = `ROUND_HALF_UP`; `execution/portfolio_ledger.py::MONEY_ROUNDING`
+= `ROUND_HALF_EVEN`. `1000.10 @ %25` → preview `250.03`, execution `250.025`. doc 13 §13
+preview/manifest uyuşmazlığını **yasaklıyor** ama kanon kazananı seçmiyordu;
+`provenance.sleeve_amount_divergences()` (`SLEEVE_AMOUNT_DIVERGENCE`) farkı yalnızca raporluyordu.
+
+**KARAR: `initial_sleeve_capital` yeniden quantize EDİLMEZ — dondurulmuş preview'dan KOPYALANIR.**
+Kaynak `PortfolioAllocationPlanRevision.derived_amounts`'ın dondurulmuş değeridir. **Hiçbir
+yuvarlama sabiti değişmez:** `MONEY_ROUNDING` `ROUND_HALF_EVEN` kalır (equity/pnl digest'leri
+güvende), `_money` `ROUND_HALF_UP` kalır (kullanıcının onayladığı preview kaymaz).
+
+**Gerekçe.** Repo'nun yazılı doktrini zaten bu: tutarlar dondurulmuş revizyondan **kopyalanır,
+yeniden hesaplanmaz** (`provenance.allocation_provenance_from_derived` tam olarak böyle yapar).
+İki yolun ayrı hesaplayıp aynı modda anlaşması kırılgandır ve yeniden ayrışabilir; kopyalama
+ayrışmayı **yapısal olarak imkânsız** kılar.
+
+**Uygulama sınırı — kararı hayata geçiren slice'a not.**
+- Dokunulacak yer `portfolio_ledger.build_sleeve_plan`'ın sleeve'i **türettiği** nokta: türetme
+  yerine dondurulmuş tutarı **girdi olarak al**.
+- Sonrasında `sleeve_amount_divergences()`'in anlamı değişir: divergence artık "iki yol farklı
+  yuvarladı" değil **"kopyalama yolu atlandı"** demektir → rapor olmaktan çıkıp **fail-closed**
+  bir değişmeze dönmesi gerekir. Bu **ayrı bir karar noktasıdır**, otomatik sonuç sayma.
+- Kalan artık `U0` (`A0 - Σ Ci0`) üzerinde toplanır; kopyalanan tutarların toplamı `A0`'ı aşamaz
+  — testle pinle.
+- Karara bağlanmamış sizing/booking kalemlerine (#550/#551/#552) **hâlâ dokunma**; bu karar
+  yalnız `initial_sleeve_capital`'ı kapsar.
+
+---
+
 ## Next: **worker call site — `ItemParticipant` (gerçek engine) → sonra ADIM 20**
 ## ADIM 22 — install/upgrade/restore acceptance landed (PR #594, #601)
 

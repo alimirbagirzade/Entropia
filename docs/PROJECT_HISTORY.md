@@ -3954,3 +3954,451 @@ dosyası hiç yazılmadı) — **kapıyı yerelde doğrulamadım, otorite CI ko�
 INF-03 sweep'i telafi ediyor, o sweep de %50 çalışıyordu. `apps/worker/actors.py`'deki 11
 `asyncio.run` çağrısı **analiz EDİLMEDİ** — dramatiq thread yeniden kullanımına bağlı, ölçmeden
 iddia yok.
+
+
+---
+
+## DOKÜMAN ONARIMI — üç silinen kaydın geri yüklenmesi (2026-08-06)
+
+**Aynı kusur üç kez tekrarlandı: bayat base'den merge edilen bir docs PR'ı, başka bir docs PR'ının
+bu dosyaya yazdığı kaydı sessizce geri alıyor.** Hiçbir CI job'ı `docs/` markdown'ını okumadığı
+için üçü de yeşil merge oldu.
+
+| silinen kayıt | yazan | silen | silme diff'i |
+|---|---|---|---|
+| `## ADIM 18 — run_portfolio faz döngüsü; ADR 0002 Accepted` | `cdb3ab1` (#586) | `c3f5673` (**#590**) | 211 silme / 0 ekleme |
+| `## ADIM 22 — install/upgrade/restore acceptance` | `f2c963f` (#611) | `4df00f1` (**#604**) | ↓ |
+| `` `## ADIM 16 — run_engine bar döngüsü → resumable stepper` `` | `5e457e8` (#603) | `4df00f1` (**#604**) | ikisi birlikte 194 silme |
+
+```
+git show c3f5673 --stat -- docs/PROJECT_HISTORY.md   #  211 ------------
+git show 4df00f1 --stat -- docs/PROJECT_HISTORY.md   #  194 ------------
+```
+
+**#590** PR #584 ile aynı başlık ve gövdeyi taşıyan mükerrer bir PR'dı. **#604** ise #603 ve
+#611'den önceki bir base'den kesilmişti; kendi ADIM 16 anlatısını `STAGE2_HANDOFF.md` ile yeni bir
+`ADIM16_LANDED_KICKOFF.md`'ye yazdı ama **bu dosyaya yazmadı**, dolayısıyla sildiği iki kaydın
+yerine hiçbir şey koymadı. Aynı commit `CLAUDE.md §Current position` bloğunu da **tamamen
+boşalttı** (10 satır silindi, yerine hiçbir şey konmadı) — o da bu onarımda geri yüklendi.
+
+Hiçbir silme, ilgili PR'ın gövdesinde veya commit mesajında bildirilmedi.
+
+**Onarım.** Üç bölüm de kaybolmadan önceki commit'lerinden **birebir** geri yüklendi; tek kelimesi
+değiştirilmedi. Tekrarlanabilir komutlar:
+
+```
+git show ba586c5:docs/PROJECT_HISTORY.md | awk '/^## ADIM 18 — `run_portfolio`/,0'
+git show f2c963f:docs/PROJECT_HISTORY.md | awk '/^## ADIM 22 —/,/^## ADIM 16 — `run_engine`/'
+git show f2c963f:docs/PROJECT_HISTORY.md | awk '/^## ADIM 16 — `run_engine`/,0'
+```
+
+**Bilerek düzeltilmedi:** §T-02 kaydındaki *"ADIM 18 faz döngüsü hâlâ açık"* cümlesi — tarihçe
+kayıtları tarihli anlık görüntülerdir, geriye dönük yeniden yazılmaz. Ayrıca **iki rakip ADIM 16
+kickoff dosyası** (`ADIM16_STEPPER_LANDED_KICKOFF.md` #603'ten, `ADIM16_LANDED_KICKOFF.md`
+#604'ten) main'de yan yana duruyor; hangisinin otorite olduğu **insan kararıdır**, bu onarım
+birini silmiyor.
+
+**Süreç dersi — üç kez kanıtlandı:** bir docs PR'ı sessizce başka bir docs PR'ını geri alabilir ve
+hiçbir otomatik kapı görmez. **Docs PR'ı merge etmeden önce kendi diff'inin silme satırlarına
+bak:** `git show <sha> -- docs/ | grep '^-## '`.
+
+## ADIM 18 — `run_portfolio` faz döngüsü; ADR 0002 `Accepted` (branch `feat/stage-18-run-portfolio`)
+
+> **Ad çakışması var, bilerek korundu.** PR #575 de "ADIM 18" etiketiyle indi (cross-item
+> arbitration). Bu slice ADR §12'nin **18. satırının faz-döngüsü yarısıdır**. Sevk edilen
+> numaralandırma ile ADR'nin numaralandırması arasındaki tam eşleme tablosu artık ADR §12'nin
+> düzeltme notunda; iki sözlük de dolaşımda olduğu için bir kez yazıldı, her seferinde
+> çıkarsanmıyor.
+
+**Base `d7fe432`** · 2026-08-05 · **migration YOK** (alembic head `0043_i08_registry_strategy_fks`,
+tek head) · **OpenAPI değişmedi** · **`ENGINE_VERSION` değişmedi**
+(`backtest-engine-v18-gap-adjusted-stop-fill`) · **frontend dokunulmadı** ·
+**`SHARED_ALLOCATION_STATUS` = `future_dev`**.
+
+### ADIM 0 — insan kapısı, atlanmadı
+
+ADR 0002 §16 uygulamayı PO/maintainer onayına bağlıyordu ve statü hâlâ `Proposed`'du; ADIM
+15–19 bu onay olmadan inmişti. Kod yazılmadan **soruldu** ve iki karar alındı:
+
+1. **ADR onaylandı → statü `Accepted`.** §13'ün yedi açık kararı yeni **§13.1 amendment
+   tablosuna** çözüm olarak yazıldı — **hepsi kendi tavsiyesine** (OD-1(a) … OD-7(a)); hiçbiri
+   tavsiyesinin tersine karara bağlanmadı, bu yüzden §13'ün gerekçeleri yeniden yazılmadı,
+   yalnız statüleri değişti.
+2. **§12 sevk edilene göre düzeltildi** — ADR'nin **ADIM 16**'sı (resumable stepper) formally
+   **SKIPPED**.
+
+§16 "discharged" olarak yeniden yazıldı ve **onayın ADIM 15–19'dan SONRA geldiğini** kayda
+geçiriyor: bu slice'ların hepsi contained olduğu için maliyet küçüktü, ama küçük olmasının
+sebebi containment guard'larıydı, şans değil — ve kapı, sevk edilmiş bir sayıyı değiştirecek
+ilk slice olan ADIM 20 için tutmalı.
+
+**§13.1'in bilinçli boşluğu:** OD-2 ve OD-3 ADR'de çözüldü ama **kodda hâlâ `pending` yazıyor**
+(`provenance.MARK_STALENESS_POLICY == "undefined_pending_od2"`,
+`arbitration.CONTENTION_SELECTION_STATUS == "recommended_pending_approval"`). İkisi de yalnız
+`build_portfolio_manifest` üzerinden yayımlanan **beyan string'i** ve o fonksiyonu hiçbir şey
+çağırmıyor; ADR §10.3 manifest alanlarını ADIM 20'ye koyuyor. Taşıyacak manifest yokken bir
+policy etiketini çevirmek, hiçbir artefaktın kaydetmediği bir kararı ilan etmek olurdu →
+**iki flip de ADIM 20'nin**, R-5 ile birlikte.
+
+### Neden ADIM 16 gerekmedi — ve neyin borcu olarak kaldı
+
+Stepper'ın amacı bir per-item replay'i verilen `t`'ye ilerletebilmekti, ki faz döngüsü item'ları
+araya sokabilsin. ADIM 18 aynı yere **öbür taraftan** varıyor: `run_portfolio` **ayrı bir giriş
+noktası**, kendi tick döngüsü ve kendi katılımcı sözleşmesiyle — `run_engine`'in gövdesine hiç
+girilmiyor, dolayısıyla **46 golden digest kımıldayamaz**, ki bu ADIM 16'nın bütün kanıt
+yükümlülüğüydü.
+
+Ama stepper **worker call site'ın** ön koşulu olarak duruyor: gerçek engine ile desteklenen bir
+`ItemParticipant`, bir item'ı `t`'ye ilerletip ne karar verdiğini bildirmek zorunda ve
+`engine.py`'de bunu yapabilecek hiçbir şey yok — bar döngüsü `engine.py:1782`, ~1100 satırlık
+tek bir fonksiyonun içinde nested. **Empirik olarak doğrulandı:** `grep -n "def step\|yield "
+engine.py` üretimde hiçbir stepper döndürmüyor.
+
+### İnen kod — tek yeni üretim dosyası
+
+`backend/src/entropia/domain/backtest/portfolio_engine.py` (549 satır).
+
+`run_portfolio(participants, *, pool_initial, shares, reserve_percent, compound,
+conflict_policy, max_position_notional, max_total_exposure_notional) -> PortfolioRun`
+ADR §8.2 faz sırasını sahiplenir, tick başına bir kez:
+
+```
+P1 carry (funding/fee/other_cost)
+P3 mandatory exits  — form_mandatory_intent, snapshot ARGÜMANI YOK
+PV publish_snapshot(t)      [ledger DONAR — her yazıcı LedgerFrozenError atar]
+P4 intents                  [hepsi O snapshot'a karşı]
+P5/P6b arbitrate(...)       [donmuş ledger'a karşı; arbitrate donmamışı REDDEDER]
+P7 begin_apply(t) + set_position
+P9 commit_tick(t)           [E(t) kımıldadıysa TEK equity point]
+```
+
+**Kendi aritmetiği yok.** Katılımcının bildirdiğini booking eder, hiçbir şeyi cap'lemez, hiçbir
+boyut hesaplamaz. Bir sayı kımıldarsa, kendi testleri olan bir primitifte kımıldamıştır.
+
+**Yeni sözleşme — `ItemParticipant` (Protocol):** `identity`, `stream`, `instrument_id`,
+`carry(view) -> CarryCharges | None` (P1), `mandatory_exit(view, *, held) -> MandatoryExit | None`
+(P3), `entry(view, snapshot, *, held) -> ItemIntent | None` (P4). Kasten dar: döngü item'ın
+ne **ücretlendirildiğini**, ne **kapatmak zorunda olduğunu** ve ne **istediğini** sorar; nasıl
+hesaplandığını hiç sormaz ve item-local state'e (cursor, indicator warmup, stop ladder) hiç
+uzanmaz (ADR §5). Havuzun aritmetiğiyle item'ın aritmetiğini birbirine büyümekten alıkoyan şey bu.
+
+**Çıktı tipleri:** `PortfolioTick` (`t_ms, timestamp, views, snapshot, mandatory, intents,
+report, equity_point`) ve `PortfolioRun` (`ledger, ticks` + `dated_points`, `instants`,
+`max_drawdown`, `tick_at`). İkisi de test harness'ından **üretime taşındı**.
+
+**Sabitler:** `PHASE_ORDER` (faz sırası bir DEĞER olarak — bir test kaynağı yeniden okumadan
+sözleşmeyi iddia edebilsin), `PORTFOLIO_LOOP_VERSION = "portfolio-phase-loop-v1"`.
+
+### Sözleşme kararı — P4 neden hazır `ItemIntent` alıyor
+
+`execution.intents` kendi kuralını koyuyor: *karar bir GİRDİdir, burada yeniden hesaplanmaz* —
+mutable `BlockEvaluator` state'ine ve bar-ötesi edge detector'lara bağlı. **Aynı argüman bir
+entry'nin BOYUTU için bir adım daha ileri gidiyor:** `form_intent` bir entry'yi
+`costs._effective_fill` + `sizing._position_size` üzerinden ölçer ve bunlar item'ın kendi
+`StrategyConfig`/`FillCosts`'unu ister — bunlar item'da yaşar, havuzda değil.
+
+Bu yüzden katılımcı kendi P4 intent'ini **sevk edilmiş former'larla** kurar, döngü onu
+**doğrular**: doğru item, `phase == "P4"`, mandatory olmayan tür, `t_ms` tick ile aynı,
+`snapshot_identity` bu tick'in snapshot'ıyla aynı. `form_intents`'in vereceği garantiler
+**sınırda kontrol edilir**, çağrı sırasına güvenilmez.
+
+**Açıkça saklanmayan sonuç:** `form_intents`'in aksine döngü sessiz bir item için izlenen bir
+`no_op` **üretmez**; katılımcı `None` döner ve tick gerçekten oluşturulmuş intent'leri kaydeder.
+Per-item sessizlik kaydı bir raporlama değişikliğidir, sermaye değişikliği değil, ve decision
+trace'e aittir.
+
+### Modellemeyenler (fail-closed, sessiz değil)
+
+- **P0** clock cursor'ının kendisi; **P2 pending fills** ve **P8 same-direction scaling** item'ın
+  kendi execution modeline ait. Admitted bir `scale_in` bu yüzden `UnsupportedIntentKindError`
+  **atar** — `set_position` tutulan boyutu **değiştirir**, layer boyutunu yazsa pozisyonu sessizce
+  küçültürdü.
+- **Mark policy yok (OD-2).** `E(t)` ledger'ın tanımladığı gibi realized-only.
+- Fail-closed reddedişler: `InvalidParticipantError` (kendiyle çelişen katılımcı: duplicate
+  `item_id`, identity ile stream'in farklı item'ı, pin_ordinal uyuşmazlığı, share'i olmayan item),
+  `MisformedIntentError`, `UnsupportedIntentKindError`, `UnpriceableAdmissionError`.
+
+### Determinizm
+
+`_ordered()` katılımcıları argüman sırasına güvenmeden `(pin_ordinal, item_id)`'ye **sıralar**
+(ADR §4.4) — çağıranın sırası DOM/request sırasıdır ve doc 13 §13 onun sonucu etkilemesini
+yasaklar. Clock da stream'lerini aynı şekilde sıralar. Tick'in `timestamp` etiketi **pinli
+sıradaki ilk karar veren view'dan** okunur, yani eksenin bir özelliği; `ctx.prices` her P4'ten
+önce **temizlenir** — eski bir tick'ten kalmış fiyat yalnız yanlışlıkla okunabilirdi ve okunsa
+pozisyonu bayat bir barda açardı.
+
+### Kabul — tek ölçüt karşılandı
+
+`tests/unit/oracles/portfolio_harness.py` artık **test-owned faz döngüsü taşımıyor**:
+`_run_tick`, `TickRecord` ve `PortfolioRun` silindi; `simulate` her `ScriptedItem`'ı bir
+`_ScriptedParticipant`'a çevirip `run_portfolio`'ya veren **ince bir adaptör**.
+
+**25 portföy oracle'ı gövde ve beklenen literal olarak BİREBİR aynı kaldı.** `git diff`
+`test_oracle_portfolio_clock.py` ve `test_oracle_portfolio_capital.py` için **yalnız modül
+docstring'i** gösteriyor (artık yanlış olan "faz döngüsü TEST-OWNED" cümlesi; yanlış bir dürüst-
+sınır notu bırakmak, notu güncellemekten kötüdür). İkame ilk koşuşta **24/25 yeşil** geldi; tek
+kırmızı, zaten yeniden yazılacak olan containment kapısıydı. `tests/unit/oracles/`: **111 passed**.
+
+Bu, ADR §14'ün **A1 / A3 / A5**'ini PRIMITIVE'den **MET**'e taşıyan hamledir.
+
+### Containment — 4 guard güncellendi, 2'sine dokunulmadı, kapı pozitife çevrildi
+
+| guard | ne oldu |
+|---|---|
+| `test_the_clock_is_not_wired_into_production_yet` | → `test_the_clock_is_reachable_only_through_the_phase_loop` |
+| `test_nothing_in_production_imports_the_intent_layer_yet` | → `test_the_intent_layer_is_reachable_only_through_the_phase_loop` |
+| `test_nothing_in_production_imports_the_shared_ledger_yet` | → `test_the_shared_ledger_is_reachable_only_through_the_phase_loop` |
+| `test_nothing_in_production_imports_the_arbitration_layer_yet` | → `test_the_arbitration_layer_is_reachable_only_through_the_phase_loop` |
+| `test_nothing_in_production_imports_the_attribution_layer_yet` | **değişmedi** — faz döngüsü import etmiyor |
+| `test_nothing_in_production_imports_the_provenance_layer_yet` | **değişmedi** — `build_portfolio_manifest` ADIM 20'nin |
+
+Adlar yeniden yazıldı çünkü ad bir **iddiadır**: "nothing in production imports" artık
+düpedüz yanlış olurdu. Assertion'lar **gevşetilmedi** — dördü de
+`domain/backtest/portfolio_engine.py`'yi **adlandırılmış** importer olarak listeler, beşincisi
+kazara beliremez. Arbitration guard'ı ayrıca `sorted()` aldı (rglob dosya sistemi sırası
+macOS/Linux arasında değişiyor — clock guard'ı bu tespiti zaten kaydetmişti; tek importer'la
+görünmezdi, ikiyle platform-bağımlı olurdu).
+
+Oracle kapısı `test_no_unified_clock_driver_exists_in_production_on_this_commit` **silinmedi**,
+pozitif muadiline yeniden yazıldı: **`test_the_phase_loop_exists_but_no_production_path_reaches_it`**
+— (1) `def run_portfolio` var, (2) onu tanımlayan **tek** üretim modülü var (iki tanesi, faz
+sırası sorusuna iki cevap demek olurdu), (3) altı unified-clock modülü `execution/` dışında
+**yalnız** faz döngüsünden import ediliyor, (4) **`run_portfolio`'nun üretimde hiç çağıranı
+yok**, (5) worker hâlâ `combine_item_runs` + `for prepared in prepared_items:`.
+
+### Golden digest kapısı
+
+`tests/unit/test_backtest_engine_golden.py` yeşil; `backend/tests/unit/engine_golden_digests.json`
+**dokunulmadı** (`git status` temiz). `run_engine`'in imzası da gövdesi de hiç değişmedi (ADR §3.2).
+
+### DÜRÜST SINIR — kapanmadı, ve kapanmadığı iddia ediliyor
+
+`application/jobs/backtest_engine.py:298` **hâlâ item döngüsü**, `:363` hâlâ
+`combine_item_runs`. `run_portfolio` **çağıransız** indi. Bu, ADIM 15–19'un "kopuk ada"
+probleminin bir seviye yukarısıdır ve **kabul edilerek** yapıldı: alternatif, engine'i faz
+döngüsünün içinde yeniden yazmak (bir ikinci engine — `intents.py` docstring'inin açıkça
+yasakladığı şey) ya da 25 oracle'ın beklenen literallerini değiştirmek olurdu.
+
+Sonuç: hiçbir request/retry/Agent çağrısı bir tick loop'una ulaşamaz, hiçbir sevk edilmiş
+Result değişemez, `SHARED_ALLOCATION_STATUS` `future_dev` kalır. Bu **varsayılmıyor,
+iddia ediliyor** — yukarıdaki (4) ve (5).
+
+### Testler / CI
+
+Yerel tam suite **tek çağrıda**, worktree'ye özel izole DB
+(`TEST_DATABASE_URL=postgresql+asyncpg://…/entropia_wt_runportfolio`), çıktı dosyaya, `$?`
+**ayrı** okundu. `ruff check .` / `ruff format --check .` (758 dosya) / `mypy src` (393 dosya)
+**temiz**. `mypy tests/unit/oracles/portfolio_harness.py` de temiz — `_ScriptedParticipant`'ın
+`ItemParticipant`'ı karşıladığı **statik olarak** doğrulandı (repo kapısı yalnız `src`'yi tarar).
+Golden: 2 passed, digest dosyası değişmedi. Oracles: 111 passed. Containment guard suite'leri:
+267 passed.
+
+**Ortam notu:** `uv sync --all-extras --dev` `backend/uv.lock`'u değiştirdi (main'in lock'unda
+`requires-dist` altında `boto3` / `boto3-stubs` satırlarının yerinde **boş bir satır** var).
+Bu slice o farkı **geri aldı** (`git restore`) — alakasız bir değişiklik diff'i kirletmemeli;
+`uv run` tek başına lock'u kirletmiyor. **Lock'taki o boşluk main'de duruyor ve ayrı bir
+inceleme konusu.**
+
+### Rollback
+
+`portfolio_engine.py`'yi sil + dört guard'ı ve oracle kapısını geri al. Üretim davranışı zaten
+hiç değişmedi — hiçbir şey döngüyü çağırmıyor.
+
+### Sıradaki tek adım
+
+**ADIM 20 DEĞİL.** Önce engine-destekli `ItemParticipant`: (a) `run_engine`'in bar döngüsünü
+stepper'a çıkar — tek kanıt 46 digest kımıldamaz —, (b) **ayrı bir PR'da** adaptörü yaz ve
+worker'ın item döngüsünü `run_portfolio` ile değiştir (yalnız >1 item). ADR §15 R-4'ün
+"restructure ile re-price'ı ayır" kuralı bir kez kaybedildi; ikinci kez kaybedilmemeli.
+## ADIM 22 — install/upgrade/restore acceptance (PR #594, #601)
+
+**Boşluk.** Kurulum zincirinin harness'ları vardı ama **kapısı yoktu**.
+`scripts/e2e-acceptance.sh`, `scripts/backup.sh`, `scripts/restore.sh`,
+`scripts/backup-verify.sh` geliştirici komutlarıydı; **hiçbir workflow bunları koşmuyordu**.
+Yani bozulmuş bir kurulum yolu, eski bir veritabanına uygulanamayan bir migration ve satırsız
+bir şemayı geri yükleyen bir backup — üçü de **yeşil inebilirdi**. Denetim bunun backup yarısını
+**H-07** diye kaydetmişti.
+
+**PR #594** — squash-merge `3cc9588` (2026-08-05T17:49:33Z), base `c3f5673`, branch
+`test/install-upgrade-restore-acceptance`, **+1728 / −38, 11 dosya**.
+**PR #601** — squash-merge `e6cd2ee` (2026-08-05T19:24:09Z), branch
+`fix/backup-object-storage-on-linux`, **+46 / −9, 4 dosya**.
+**Migration YOK** (alembic head `0043_i08_registry_strategy_fks`) · **OpenAPI DEĞİŞMEDİ** ·
+**`ENGINE_VERSION` DEĞİŞMEDİ**.
+
+### Ne indi
+
+| Yeni | Ne yapar |
+|---|---|
+| `scripts/migration-acceptance.sh` (`make migration-accept`) | Docker'sız, ~30 sn, **her PR**. Gerçek PostgreSQL + gerçek `alembic upgrade` yolu (asla `metadata.create_all`): tek head · empty→head · migration↔model **kolon** paritesi · migration'ın yazdığı satırlar · iki temsili legacy revizyon→head (değer parmak iziyle) · head down/up/up · provisioning tekrar **ve eşzamanlılık** idempotency'si |
+| `scripts/dr-acceptance.sh` (`make dr-accept`) | `backup-verify.sh`'in "dump yükleniyor mu?" sığlığını kapatır: scratch DB + scratch bucket'a restore, sonra kaynak↔restore karşılaştırması — head, tablo kümesi, **her tablonun** satır sayısı, değişmez kanıt kolonları, append-only düzlemler, per-object md5 |
+| `.github/workflows/install-acceptance.yml` | Dört job; maliyete göre bölünmüş: **her PR** → `migration-acceptance` + `fresh-install`; **nightly/manual** → `legacy-upgrade` + `disaster-recovery` |
+| `docs/INSTALL_ACCEPTANCE.md` | Zincirin hangi halkasının nerede kanıtlandığı + dürüst sınırlar |
+| `backend/tests/integration/test_provision_concurrency.py` | 6 test (aşağıya bak) |
+
+`scripts/e2e-acceptance.sh::assert_planes_healthy` listesine **`worker-agent-executor`
+eklendi** — o düzlem hiç yokken §9.4 akışı yeşil geçebiliyordu; Coordinator kimsenin
+tüketmediği Agent task'ları kuyruğa alır, scheduler onları sonsuza dek yeniden gönderir ve
+**her gönderim başarı raporlar**. Servisin kendi yorumunun tarif ettiği sessiz döngü, tam da
+onu yakalaması gereken listede yoktu.
+
+### Production değişikliği — provisioning eşzamanlı-güvenli DEĞİLDİ
+
+`apps/seed.py`'deki her guard SELECT-then-INSERT ve seed sonda **tek kez** commit ediyor.
+READ COMMITTED altında ikinci koşu birincinin commit edilmemiş satırlarını göremez: ikisi de
+"zaten var mı?" kontrolünü geçer, kaybeden `principals_pkey` ile ölür ve **tüm transaction'ını**
+geri alır. Taze, migrate edilmiş bir veritabanında üretildi: **3 paralel koşunun 2'si exit 1**.
+
+Bu kozmetik değil. Compose'daki `provision` one-shot **her düzlem** için
+`service_completed_successfully` kapısıdır (`docker-compose.yml` `x-needs-provision`), yani tek
+bir yarışan exit-1 API'yi, tüm worker düzlemlerini, coordinator'ı ve scheduler'ı başlatmaz.
+
+**Gürültülü çökme sadece görünen yarısı.** Arkasında unique constraint OLMAYAN guard'lar
+başarısız olmak yerine **sessizce duplike commit eder**: `rationale_family_revision.normalized_name`
+yalnızca `index=True`, yani iki koşu da "bu family var mı?" kontrolünü geçip ikisi de COMMIT eder.
+**Varsayılmadı, ölçüldü:** kilit kaldırıldığında 3 eşzamanlı koşu **6 kanonik yerine 18**
+rationale family üretiyor ve **hiçbir yerde hata raporlanmıyor**.
+`test_concurrency_does_not_duplicate_an_unguarded_seed_block` o sayıyı pinliyor.
+
+**Çözüm — yeni altyapı YOK.** `PROVISION_LOCK_KEY = 220_000` + `lock_provisioning()`:
+transaction-scoped `pg_advisory_xact_lock`, repo'da zaten kullanılan deyim
+(`repositories/identity.py::lock_admin_count`, `repositories/manual.py::lock_stream`). İlk guard
+herhangi bir şey okumadan ÖNCE alınır; PostgreSQL onu commit **veya** rollback'te bırakır, yani
+çöken bir koşu sonrakini bloke bırakamaz. `_seed()` ikiye ayrıldı: public
+`provision(session, log)` + session sahibi `_seed()`.
+
+Bekleme **sınırlı**: `PROVISION_LOCK_TIMEOUT_MS` (varsayılan 120000), `SET LOCAL lock_timeout`
+ile — **lock_timeout'un `pg_advisory_xact_lock`'a uygulandığı PostgreSQL 16'da ampirik
+doğrulandı**; aşılırsa `ProvisioningLockTimeout`. Sınırsız bekleme değiştirdiği hatadan **daha
+kötü** olurdu: stale idle-in-transaction bir backend'in arkasında bloke kalan bir koşu tüm
+stack'i **hatasız** asardı, ki bu bir exit code'dan daha zor teşhis edilir.
+
+**Her iki yarı da mutation-verified** — kilit `pass` ile değiştirildiğinde testler kırmızıya
+döndü (hem çökme yarısı hem sessiz-duplikasyon yarısı).
+
+### PR #601 — object storage aslında yedeklenmiyordu
+
+ADIM 22'nin DR kapısı **ilk gerçek CI koşusunda kırmızı** çıktı:
+*"the backup captured no object storage (minio/ absent)"*. Sebep ortam değil: `minio/mc` imajı
+`ENTRYPOINT ["mc"]` bildiriyor, yani `docker run minio/mc sh -c '...'` argümanları **mc
+parametresi** olarak ayrıştırılıyor ve fallback hiç çalışmıyordu. `--entrypoint sh` eklendi —
+`backup.sh`, `restore.sh` ve `dr-acceptance.sh`'in üçünde birden, çünkü üçü de aynı çağrıyı
+taşıyordu. Host'unda `mc` olan bir geliştiricide kusur hiç görünmüyordu; **`mc`'si olmayan her
+makinede object storage sessizce yedeklenmiyordu.**
+
+### CI kanıtı
+
+**Actions run 31038908690** — dört job da `success`:
+`fresh-install` · `migration-acceptance` · `legacy-upgrade` · `disaster-recovery`.
+Kanıt satırları: `PASS mirrored bucket 'entropia-artifacts' via dockerized mc` ·
+`DR ACCEPTANCE OK` · `VERIFY OK — 20260805T192122Z restores into a coherent database
+(head 0043_i08_registry_strategy_fks, 105 tables)`.
+
+**Dürüst nüans:** bu koşu `main`'in merge commit'inde değil, **`fix/backup-object-storage-on-linux`
+branch'inde `84d1a5e`'de** `workflow_dispatch` ile koştu — yani #601'in `e6cd2ee` olarak squash
+edilen içeriğinde. `main` üzerinde heavy job'lar ilk kez nightly cron'da (03:17 UTC) koşacak.
+
+### Dürüst sınırlar (yumuşatılmadı)
+
+1. **Index ADLARI gate dışı.** `alembic check` migration'lar ile `Base.metadata` arasında fark
+   bildiriyor — hepsi index-*adı* sapması (migration'ın adlandırdığı
+   `ix_result_manifest_snapshot_hash` vs model'in autogenerate ettiği
+   `ix_result_manifest_snapshot_manifest_hash`) artı bir server default. **Kolon paritesi**
+   — `CONTRIBUTING.md`'nin gerçekten adlandırdığı eksen — temiz ve **gate'li**.
+   `alembic check`'i kapıya çevirmek ayrı, daha büyük bir temizlik; sessizce yok sayılmıyor,
+   bilerek kapsam dışı.
+2. **Integration suite şemayı hâlâ `metadata.create_all` ile kuruyor**
+   (`tests/integration/conftest.py`). Bu bir test-hızı kararı, kurulum yolu değil — ve
+   **migration'ın yazdığı satırlar pytest'te YOK** (0016'nın `alpha-agent` `agent_runtime`
+   singleton'ı, 0019/0020 fixture'ları). Bu yüzden `migration-acceptance.sh` [4] onları
+   migrate edilmiş veritabanına karşı **ayrıca** doğruluyor.
+3. **DR kanıtı sığdı.** Aynı run'ın transcript'i şunu bastı: `[7] all three append-only planes
+   were EMPTY` ve `[8] 1 objects`. Sebep `apps/seed.py`'nin bir **fixture yazarı** olması —
+   repository'ler üzerinden insert ettiği için `_audit_and_outbox`'a hiç ulaşmıyor (sıfır
+   audit, sıfır outbox) ve `infrastructure/s3/datasets.py`'deki **dört** object writer'dan
+   yalnız birini çağırıyor. **ADIM 23 / PR #610** bunu kapatıyor (yedeklemeden önce gerçek bir
+   iş akışı + kapsama tabanları); bu kayıt yazıldığında PR **açık**, merge edilmedi.
+4. **Docker job'ları yerelde koşturulamamıştı.** ADIM 22 yazılırken paralel bir worktree
+   oturumu 5432/8000/8080/9000 portlarını tutuyordu; compose job'ları ilk gerçek yürütmelerini
+   CI'da aldı. `docs/INSTALL_ACCEPTANCE.md`'deki **▶** işaretleri bunu kaydediyordu — run
+   31038908690'dan sonra artık **✔**.
+5. **PITR, off-site replikasyon ve zamanlanmış backup V1 kapsamı dışında**
+   (`docs/BACKUP_DR.md` "Scope"). Bu slice V1'in gerçekten sevk ettiği operatör-tetiklemeli
+   zinciri kanıtlıyor; ertelenmiş altyapı modülünü icat etmiyor.
+
+### Kayıt doğrulaması (ADIM 23 oturumunda)
+
+- **PR #575 / #581 kaydı EKSİK DEĞİL.** `docs/PROJECT_HISTORY.md` §"ADIM 18 (sevk edilen sıra)"
+  ve §"ADIM 19" ile `docs/STAGE2_HANDOFF.md`'deki karşılıkları **PR #589 ile geriye dönük
+  yazıldı**; `CLAUDE.md` artık o borcu taşımıyor. Bu oturuma gelen brief'te borç hâlâ açık
+  sanılıyordu — doğrulandı, açık değil.
+- **Coordinator event-loop kusuru KAPANDI.** ADIM 22 kapanışı sırasında hâlâ açıktı; **PR #600**
+  (`735cc83`) scheduler'ın #593'teki düzeltmesinin aynısını uyguladı ve **issue #591'i
+  `COMPLETED` olarak kapattı**. Bu oturuma gelen brief 17:55Z ve 19:09Z'deki iki koşuyu kanıt
+  gösteriyordu; **ikisi de 19:19Z'deki merge'den ÖNCE**. Ayrı bir düzeltme gerekmedi.
+- **`apps/worker/actors.py`'deki 11 `asyncio.run` da KAPANDI** — **PR #597** (`aa29509`),
+  bu kayıt yazılırken merge edildi: aktör gövdeleri artık tek process-wide loop'ta. Aynı
+  tarama `apps/seed.py:782`'yi de buluyor: tek seferlik CLI çağrısı, loop yeniden kullanımı
+  yok, **bilerek dokunulmuyor**. Böylece per-tick/per-mesaj loop kusuru üç düzlemde de
+  kapandı: **#593** (scheduler) · **#600** (coordinator) · **#597** (worker aktörleri).
+
+## ADIM 16 — `run_engine` bar döngüsü → resumable stepper (PR #602)
+
+**ADR §12 bu adımı SKIPPED işaretlemişti** — faz döngüsü aynı yere öbür taraftan ulaştığı için.
+Ama aynı düzeltme notu şunu da yazıyordu: stepper hâlâ **worker call site'ının ön koşuludur**.
+Gerçek engine ile desteklenen bir `ItemParticipant` bir öğeyi verilen `t`'ye ilerletebilmek
+zorunda ve `engine.py` bunu yapamıyordu — bar döngüsü ~2400 satırlık bir fonksiyonun içinde
+1355 satır derinlikte nested'dı. Bu slice o borcu ödedi; faz döngüsünün yerine geçmedi.
+
+**Şekil.** `run_engine`'in gövdesinin bar döngüsüne kadarki kısmı `_build_stepper(...)` oldu ve
+bir `_ItemStepper` döndürüyor: `step(bar)` · `finalize()` · `output()` · `open_position()` +
+canlı `ledger` (`_Ledger`) ve `ctx` (`_RunConfig`). `run_engine` **imzasını, docstring'ini ve
+semantiğini korudu** ve dokuz satırlık bir sürücüye indi. `_build_stepper` `run_engine`'in tüm
+anahtar argümanlarını alır, **yalnız `bar_batches` hariç** — bar akışını artık çağıran sahiplenir;
+fail-closed `UnresolvedStrategyError` fabrikada, ilk bardan önce atılır.
+
+**State closure'da BIRAKILDI, bir `self`'e taşınmadı.** Replay durumu eskiden `run_engine`'in
+frame'indeydi; sınıf alanlarına taşımak 1355 satırın her adını `self.` ile yeniden yazmak, yani
+"saf refactor" iddiasını kaybetmek olurdu. `_ItemStepper` bu yüzden yalnız closure'lara işaret
+eden ince bir dataclass.
+
+**Arayüz ölçüldü, okunmadı.** AST ile: bar'lar arası taşınan **tam 10 ad** — `current_day`,
+`exit_touch`, `funding_idx`, `pending`, `position`, `prev_entry_signal`, `prev_scale_signal`,
+`scale_signal`, `working_limit`, `working_stop`. Gövdenin bağladığı diğer **83** ad bar-içi
+geçicidir ve bunu **kesin-atama (definite-assignment) analizi** kapattı: her okumadan önce, her
+yolda yazılıyorlar. (Analiz yanılsaydı hata modu sessiz bir sayı değil, gürültülü bir
+`UnboundLocalError` olurdu — bu yüzden kabul edilebilir bir risk profiliydi.) `position_seq`
+`_do_open`'ın `nonlocal`'ı olarak fabrikada kaldı; `_step` ona dokunmaz. Yerinde mutate edilenler
+(`led.*`, `position.*`, `window`) rebind olmadığı için `nonlocal` istemez.
+
+**Taşınan her satır birebir.** Düzenlemeden sonra taşınan aralıklar `HEAD`'e karşı satır satır
+karşılaştırıldı: setup **955**, step gövdesi **1351**, gün-sonu **44**, output assembly **15** —
+hepsi identical. Tek istisna, formatter'ın dedent sonrası tek satıra topladığı bir `max(...)`
+çağrısı.
+
+**Kabul = 46 golden digest, başka hiçbir şey** (ADR §15 R-4: *"46-digest invariance is the gate;
+no other assertion is trusted"*). **46/46 kımıldamadı.** Tam backend suite tek çağrıda: **3699
+passed, 4 xfailed (bilinen strict set #556 ×2 / #557 / #558), 0 failed**, coverage **%93.29**
+(kapı ≥%90; `engine.py` %95.1). CI 8/8 (2 nightly job by-design skip). ruff + format + `mypy src`
+temiz.
+
+**Golden'ın göremediği yarı ayrıca test edildi** (`tests/unit/test_backtest_engine_stepper.py`).
+`run_engine` stepper'ı **tek kesintisiz geçişte** besler, yani bar-içi yerele dönüşmüş bir
+taşınan ad — her barda okunmadan önce yazıldığı sürece — yine de kayıtlı digest'i üretebilirdi.
+Yeni testler aynı senaryoları **bar başına bir `step()` çağrısıyla, her bar arasında askıya
+alarak** koşar ve digest eşitliğini iddia eder; taşınan her ad için bir vaka: resting limit
+order, hiç touch etmeyen limit, tetiklenmeyen stop, merdiven kuran pozisyon, iki funding kaydı
+ödeyen tutulan pozisyon, blackout gününü aşan tutulan sinyal. Ayrıca: batch boyutunun
+gözlemlenemezliği, adım aralarında pozisyonun hayatta kalması, ve fail-closed kapının ilk bardan
+önce çalışması.
+
+**Bilerek KAPSAM DIŞI.** Worker'a dokunulmadı — `jobs/backtest_engine.py:298` hâlâ item döngüsü,
+`:363` hâlâ `combine_item_runs`. `ENGINE_VERSION` değişmedi, containment guard kapalı
+(`SHARED_ALLOCATION_STATUS = future_dev`), manifest policy alanı eklenmedi. Migration yok, model
+yok, OpenAPI yok. `_ItemStepper` / `_build_stepper` modül-private ve `__all__`'da DEĞİL: **henüz
+`engine.py` dışından çağıranı yok** — onlara tüketici kazandıran şey PR B'dir.
+
+**Dürüst sınır.** PR B mekanik bir ikame değil: `ItemParticipant.entry` HAZIR bir `ItemIntent`
+ister ama `form_intent` entry'yi item'ın kendi `StrategyConfig`/`FillCosts`'u olmadan ölçemez; ve
+stepper bir barı **bütün olarak** ilerletirken faz döngüsü aynı barı **fazlara bölünmüş** ister.
+O boşluğu kapatmak bir tasarım işidir. Devir belgesi: `docs/ADIM16_STEPPER_LANDED_KICKOFF.md`.

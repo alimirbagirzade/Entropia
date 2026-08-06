@@ -3739,7 +3739,7 @@ matrisi).
 
 ---
 
-## ADIM 16 — Paylaşılan snapshot'a karşı item intent'leri landed (PR #571 + #572)
+## ADIM 16 (sevk edilen) — Paylaşılan snapshot'a karşı item intent'leri landed (PR #571 + #572)
 
 > **Bu kayıt geriye dönük yazıldı.** ADIM 16 kapanış ritüeli **yapılmamıştı**: PR #571 merge
 > edildi ama ne bu dosyaya ne `PROJECT_HISTORY.md`'ye bir giriş düştü, ve aşağıdaki eski
@@ -4242,7 +4242,7 @@ INF-03 sweep'i telafi ediyor, o sweep de %50 çalışıyordu. `apps/worker/actor
 `asyncio.run` çağrısı **analiz EDİLMEDİ** — dramatiq thread yeniden kullanımına bağlı, ölçmeden
 iddia yok.
 
-## ADIM 16 — `run_engine`'in bar döngüsü resumable stepper'a çıkarıldı ✅ landed (PR #602)
+## ADIM 16 (ADR §12) — `run_engine`'in bar döngüsü resumable stepper'a çıkarıldı ✅ landed (PR #602)
 
 Engine-destekli `ItemParticipant` çiftinin **PR A**'sı. `run_engine`'in ~2400 satırlık gövdesine
 gömülü **1355 satırlık bar döngüsü** askıya alınabilir bir stepper'a çıkarıldı: setup yarısı
@@ -4367,7 +4367,7 @@ kapatıyor; bu kayıt yazıldığında PR **açık**. (4) Compose job'ları ADIM
 koşturulamamıştı (paralel worktree portları tutuyordu) — `INSTALL_ACCEPTANCE.md`'deki **▶**
 işaretleri artık **✔**. (5) PITR / off-site replikasyon / zamanlanmış backup **V1 dışı**.
 
-## ADIM 16 — `run_engine` bar döngüsü resumable stepper'a çıktı landed (PR #602)
+## ADIM 16 (ADR §12) — `run_engine` bar döngüsü resumable stepper'a çıktı landed (PR #602)
 
 ADR §12'nin **SKIPPED** işaretlediği ADIM 16, faz döngüsünün yerine değil **worker call
 site'ının ön koşulu** olarak yazıldı (§12 düzeltme notunun birebir dediği şey). `run_engine`'in

@@ -39,7 +39,6 @@ from entropia.shared.errors import (
 )
 
 _HEADER = "trade_id,symbol,side,quantity,price,executed_at"
-_GOOD_ROW = "t-1,BTCUSD,BUY,1,100,2026-01-01T00:00:00Z"
 
 _UPLOAD_HANDLERS = {
     "trade_log": agent_tools._handle_trade_log_upload_source,

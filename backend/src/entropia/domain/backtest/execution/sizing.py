@@ -294,14 +294,28 @@ def sleeve_capital(ctx: _RunConfig, current_equity: Decimal) -> Decimal:
 
 
 def planned_size(
-    ctx: _RunConfig, led: _Ledger, *, direction: str, fill_raw: Decimal, strength: Decimal
+    ctx: _RunConfig,
+    led: _Ledger,
+    *,
+    direction: str,
+    fill_raw: Decimal,
+    strength: Decimal,
+    equity: Decimal | None = None,
 ) -> Decimal:
     """The size the sizing chain would open at ``fill_raw`` right now.
 
     The single source the entry path books from AND the F-07i (C) partial-fill logic
     measures print-size evidence against — one computation, no drift. Applies the
     full Strategy Details sizing/limits chain and (under allocation) the sleeve
-    outer cap."""
+    outer cap.
+
+    ``equity`` is the valuation this size is measured against. It defaults to the
+    replayed item's OWN ledger equity, which is what a standalone ``run_engine`` run has
+    and the only thing it can have. A portfolio participant supplies the SHARED ``E(t)``
+    instead (ADR-0002 §7): under one pool the sleeve is a slice of the portfolio's
+    equity, not of a private ledger that no longer holds the capital. Passing ``None``
+    is byte-identical to the pre-parameter behaviour."""
+    sizing_equity = led.equity if equity is None else equity
     is_long = direction == "long"
     entry_eff = _effective_fill(
         fill_raw,
@@ -310,11 +324,11 @@ def planned_size(
         slip=ctx.fill_costs.slippage,
     )
     if ctx.alloc_on:
-        sleeve = sleeve_capital(ctx, led.equity)
+        sleeve = sleeve_capital(ctx, sizing_equity)
         return _cap_to_sleeve(
             _position_size(ctx.config, entry_eff, sleeve, strength), sleeve, entry_eff
         )
-    return _position_size(ctx.config, entry_eff, led.equity, strength)
+    return _position_size(ctx.config, entry_eff, sizing_equity, strength)
 
 
 def blocked_reason(ctx: _RunConfig, led: _Ledger) -> str:

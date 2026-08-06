@@ -4402,3 +4402,131 @@ yok, OpenAPI yok. `_ItemStepper` / `_build_stepper` modül-private ve `__all__`'
 ister ama `form_intent` entry'yi item'ın kendi `StrategyConfig`/`FillCosts`'u olmadan ölçemez; ve
 stepper bir barı **bütün olarak** ilerletirken faz döngüsü aynı barı **fazlara bölünmüş** ister.
 O boşluğu kapatmak bir tasarım işidir. Devir belgesi: `docs/ADIM16_STEPPER_LANDED_KICKOFF.md`.
+
+## ADIM 25 (observability) — alert kuralları + operatör runbook'ları (PR #622)
+
+**Merged `780dc92`**, branch `ops/observability-alerts-runbooks`, base `e5c650a`.
+**35 dosya, +2885 / −13.** Migration **YOK** — alembic head `0043_i08_registry_strategy_fks`
+değişmedi. `ENGINE_VERSION` değişmedi. OpenAPI sözleşmesi değişmedi.
+
+### Neden
+
+Stage 8b'de sevk edilen `/metrics` expozisyonu **hiçbir şeye bağlı değildi**: repoda tek bir
+alert kuralı yoktu, `docs/runbooks/` dizini **hiç yoktu** ve hangi metriğin hangi soruyu
+yanıtladığını söyleyen bir belge de yoktu. Kimsenin alert yazmadığı metrik observability değil,
+dashboard'dur.
+
+### Ne indi
+
+1. **`ops/alerts/entropia.rules.yml` — 11 alert / 5 grup.** Her alert `severity` (`page` |
+   `ticket`), `component`, `for:` ve **dokuz zorunlu anotasyon** taşır: `summary`, `derivation`,
+   `diagnosis`, `response`, `mitigation`, `recovery`, `escalation`, `false_positives`, `runbook`.
+   Kurallar: `EntropiaApiDown` · `EntropiaApiServerErrors` ·
+   `EntropiaApiRequestsExceedLargestBucket` · `EntropiaMetricsDatabaseProbeFailing` ·
+   `EntropiaWorkerHeartbeatStale` · `EntropiaWorkerHeartbeatNeverRecorded` ·
+   `EntropiaJobLeaseStuck` · `EntropiaQueueNeverDrains` · `EntropiaJobsFailingTerminally` ·
+   `EntropiaOutboxLagGrowing` · `EntropiaOutboxLagSevere`.
+2. **`docs/runbooks/` — 13 dosya:** `README.md` (index), `METRIC_ALERT_MATRIX.md` ve ateşleyen
+   alert'ten erişilebilen 11 runbook (`api`, `postgres`, `redis`, `object-storage`,
+   `worker-down`, `stale-jobs`, `outbox-lag`, `backtest`, `agent-coordinator`,
+   `backup-restore`, `migration`).
+3. **Yeni metrik ailesi — `entropia_worker_heartbeat_age_seconds`.**
+   `apps/worker/actors.py::system_heartbeat` zaten scheduler→Redis→worker round-trip'ini
+   kanıtlıyordu ama **hiçbir şey kaydetmiyordu**; boştaki bir sistemde ölen worker görünmez
+   kalıyordu (queue depth ve lease age ancak bekleyen bir iş varken konuşur). Artık round-trip
+   `application/jobs/heartbeat.py::record_worker_heartbeat` ile `app_metadata` tablosuna
+   upsert ediliyor (`key="worker.maintenance.last_heartbeat_at"`). **Migration gerekmedi** —
+   tablo zaten mapped'di ve yazarı yoktu. Okuma ucu:
+   `application/queries/job_gauges.py::JobGauges.worker_heartbeat_age_seconds`.
+4. **Frontend (brief'te anılmayan, ama sevk edilen dördüncü parça):** `lib/metrics.ts` +
+   `pages/Metrics.tsx` heartbeat'i okur ve kayıt yokken **"never recorded"** basar — asla taze
+   bir heartbeat gibi göstermez. Testler: `test/metrics.test.ts`, `test/metricsPage.test.tsx`
+   (+128 satır, 4 dosya).
+
+### Kritik semantik — None asla 0.0'a çökmez
+
+`routes/metrics.py::_render_operational_gauges` heartbeat için `# TYPE` satırını basar ama
+**kayıt yoksa ÖRNEK SATIRI BASMAZ**. Böylece seri gerçekten *absent* olur ve `absent()` tabanlı
+alert ateşleyebilir. `entropia_outbox_lag_seconds`'ın meşru biçimde 0.0 basmasının sebebi
+farklıdır ("yayınlanmamış bir şey yok" gerçekten sıfır lag demektir); heartbeat'te 0.0 basmak,
+hiçbir şeyin koştuğunu kanıtlamadığı anda worker'ı "bir an önce canlıydı" diye **reklam etmek**
+olurdu. Bu expozisyonun asla üretmemesi gereken sessiz fallback tam olarak budur.
+
+### İki gerçek kusur bulundu ve düzeltildi (ikisi de mevcut kodda)
+
+**(a) `method` metrik label'ı SINIRSIZDI.** `path` özenle çözümlenmiş route template'ine
+sıkıştırılmışken `request.method` — hattan gelen keyfi bir token — verbatim geçiyordu. **Gerçek
+app'e karşı kanıtlandı:** altı uydurma HTTP metodu altı ayrı seri üretti. Düzeltme:
+`apps/api/hardening.py::_bounded_method` + `_KNOWN_METHODS` (7 metot + `"other"` = **8 tavan**).
+
+**(b) `up{...} == 1 and absent(...)` HİÇ ATEŞLENEMEZDİ.** Eşitlik matcher'ı olmayan bir selector
+üzerindeki `absent()` **etiketsiz** bir eleman döndürür ve `and` varsayılan olarak **tüm etiket
+kümesini** eşleştirir → boş vektör. İki **paging** alert'i ölüydü. Düzeltme: `and on()`.
+Regresyon kapısı: `test_absent_is_always_joined_with_on_to_match_label_sets`.
+
+### Eşikler türetildi, seçilmedi (adjudicated — mutlak latency SLO'su YOK)
+
+`docs/performance/README.md:144` interactive-read p95 satırını *"deliberately blank rather than
+guessed"* diye bırakmıştır. Bu yüzden **hiçbir alert mutlak latency/throughput hedefi
+uydurmaz.** Tek latency sınırı `le="5.0"` — histogram'ın **zaten sevk edilmiş** en büyük
+bucket'ı. `entropia_http_requests_in_flight` için alert **YOK** (adjudicated bir concurrency
+hedefi yok). Diğer tüm eşikler shipped config default'unun katıdır: **6x / 10x / 60x**
+`SCHEDULER_TICK_SECONDS` (30), **2x** `JOB_STALE_AFTER_SECONDS` (600), **2x**
+`JOB_REDELIVER_GRACE_SECONDS` (600). Hepsi `test_alert_rules_contract.py` içinde
+`get_settings()` ve `_BUCKETS`'a karşı **makineyle pinli**; legal metrik-adı kümesi
+expozisyon kodunun kendisinden türetilir, böylece yeniden adlandırılan bir metrik **aynı
+commit'te** kırılır.
+
+### Testler
+
+**Yeni:** `tests/contract/test_alert_rules_contract.py`,
+`tests/contract/test_metrics_label_cardinality.py`, `tests/unit/test_worker_heartbeat_gauge.py`,
+`tests/integration/test_worker_heartbeat_persistence.py`.
+**Güncellenen:** `tests/unit/test_metrics_gauge_rendering.py` (eski gövde artık **ÖNEK** olarak
+pinli — altı mevcut aile adını, label'ını ve bayt sırasını korur),
+`tests/unit/test_async_runtime.py` (`system_heartbeat` muafiyeti kaldırıldı — artık her actor
+`run_sync` kullanıyor).
+
+**Ölçümler:** backend tam suite **3912 passed / 1 xfailed / 0 failed**, exit 0, coverage
+**%93.52** (kapı ≥90), 22dk38s. Frontend **721 passed / 70 dosya**, coverage **%84.92 line**
+(baseline %84.67). `ruff` + `ruff format` + `mypy` (396 kaynak dosya) temiz.
+`make openapi-check` temiz.
+
+**Bağımlılık:** `pyyaml>=6.0,<7.0` dev extras'a eklendi — contract testinin kural dosyasını
+ayrıştırması transitive bir bağımlılığa güvenmesin diye.
+
+**Codemap'ler PR #622 içinde güncellendi** (bu kapanışta tekrar üretilmedi):
+`BACKEND_ROUTES.md`, `BACKEND_LAYERS.md`, `DATA_MODEL.md`, `JOBS_AND_EVENTS.md`.
+
+### Dürüst sınırlar (kayda aynen geçer)
+
+- **PromQL anlamsal olarak DOĞRULANMIYOR.** `promtool` kurulu değil, CI'da yok, repoda
+  `prometheus.yml` yok. Contract testi **elle yazılmış bir tokenizer** kullanıyor. Yukarıdaki
+  (b) kusurunu bir kapı değil, **insan review'ı** yakaladı. Dört alert'in dayandığı
+  `job="entropia-api"` scrape adını **hiçbir şey zorlamıyor** — `prometheus.yml`'de değiştirilirse
+  `EntropiaApiDown` ve `EntropiaMetricsDatabaseProbeFailing` sessizce eşleşmeyi bırakır.
+- **Heartbeat YALNIZ `maintenance` kuyruğunu (`worker-default`) kanıtlar.** Ölü bir
+  `worker-backtest` onu tazecik bırakır. Bu sınır modül docstring'inde, codemap'te, matriste ve
+  runbook'ta yazılıdır — üstü örtülmedi.
+- **Metriği OLMAYAN alanlar** (alert yazılmadı; `METRIC_ALERT_MATRIX.md` §4'te **kör nokta
+  haritası** olarak kayıtlı, backlog değil uyarı): **Backtest** (admission / readiness /
+  duration / bars / artifact — `jobs/backtest_engine.py`'de **logger bile yok**), **Agent
+  coordinator** (tick / state / task / checkpoint / ToolCall error), **SSE** (connection count /
+  dropped events / replay lag), **object storage** (availability / read-write / checksum),
+  **backup age & verify status**, **DB pool utilization** (`create_async_engine`
+  `pool_size`/`max_overflow` **ayarlamıyor**).
+- **`correlation_id` worker log'larına ULAŞMIYOR.** `Job.correlation_id` kolonu var ama hiçbir
+  actor onu log context'ine bağlamıyor.
+- **structlog REDACTION PROCESSOR'ü YOK** — kural elle, call-site bazında uygulanıyor.
+- **`EntropiaQueueNeverDrains` "hiç boşalmadı" DEMEZ.** `entropia_jobs_depth` bir GROUP BY
+  ürünü olduğu için boşalan kuyruk **seri üretmez** ve `min_over_time` boşlukları atlar.
+  Anotasyon ve runbook bunu açıkça yazar.
+
+### Numaralandırma — dürüst not (ADIM 23 ve ADIM 24 kayıtsız)
+
+Bu kapanış yazılırken doğrulandı: **ADIM 23 = PR #610** (DR öncesi gerçek workload + coverage
+kapısı, merged `2026-08-06`) ve **ADIM 24 = PR #619** (`docs/performance/README.md` +
+`query_budgets.json`, load/query bütçeleri) **main'e indi ama `PROJECT_HISTORY.md`'de kayıtları
+YOK**. Aynı dalgadaki #620/#621 (nightly failure notice) ve #614 (supply-chain gates) de
+kayıtsız. Bu boşluk bu slice'ta **kapatılmadı** — kapsam ADIM 25'ti; `## ADIM 9 / ADIM 10 —
+kayıt boşluğu (dürüst not)` ile aynı türden bir borç olarak burada bildiriliyor.

@@ -4472,3 +4472,66 @@ kapatma yok), #591 (`agent_coordinator` event-loop — PR #600 ile kapandıysa d
 
 `docs/audit/current_main_ground_truth_2026-08-03.md` §18'in 2/3/4/6 kalemleri kapandığı hâlde
 belge güncellenmedi — **kullanmadan önce doğrula.**
+
+## ADIM 25 (observability) — alerts + runbooks landed (PR #622)
+
+**Merged `780dc92`** (branch `ops/observability-alerts-runbooks`, base `e5c650a`) · 35 dosya,
+**+2885 / −13** · **migration YOK**, alembic head `0043_i08_registry_strategy_fks` değişmedi ·
+`ENGINE_VERSION` değişmedi · OpenAPI değişmedi.
+
+Stage 8b'nin `/metrics` expozisyonu hiçbir şeye bağlı değildi: repoda alert kuralı yoktu,
+`docs/runbooks/` yoktu, hangi metriğin hangi soruyu yanıtladığı yazılı değildi.
+
+**İndi:** `ops/alerts/entropia.rules.yml` (**11 alert / 5 grup**, her biri severity +
+component + `for:` + **9 zorunlu anotasyon**) · `docs/runbooks/` (**13 dosya**: README,
+`METRIC_ALERT_MATRIX.md`, 11 runbook) · **yeni metrik ailesi**
+`entropia_worker_heartbeat_age_seconds` (`system_heartbeat` artık round-trip'i
+`application/jobs/heartbeat.py::record_worker_heartbeat` ile `app_metadata`'ya upsert ediyor,
+`key="worker.maintenance.last_heartbeat_at"`; **tablo zaten mapped'di → migration gerekmedi**) ·
+frontend System Metrics sayfası heartbeat yokken **"never recorded"** basıyor.
+
+**Kritik semantik:** kayıt yoksa route `# TYPE` satırını basar ama **örnek satırı basmaz**
+(0.0'a çökmez) → seri gerçekten absent olur ve `absent()` alert'i çalışır.
+
+**İki gerçek kusur bulundu ve düzeltildi:** (a) `method` label'ı **sınırsızdı** (`path` route
+template'e sıkıştırılmışken `request.method` verbatim geçiyordu; gerçek app'e karşı 6 uydurma
+metot → 6 seri) → `hardening.py::_bounded_method` + `_KNOWN_METHODS`, tavan **8**. (b)
+`up{...} == 1 and absent(...)` **hiç ateşlenemezdi** (`absent()` etiketsiz eleman döndürür, `and`
+tüm etiket kümesini eşleştirir → boş vektör); **iki paging alert'i ölüydü** → `and on()` +
+regresyon testi.
+
+**Adjudicated:** `docs/performance/README.md:144` p95 satırını *"deliberately blank rather than
+guessed"* bıraktığı için **hiçbir alert mutlak latency/throughput hedefi uydurmaz**. Tek latency
+sınırı `le="5.0"` (histogram'ın zaten sevk edilmiş en büyük bucket'ı); `in_flight` için alert
+yok. Diğer eşikler shipped default'ların katı (6x/10x/60x `SCHEDULER_TICK_SECONDS`, 2x
+`JOB_STALE_AFTER_SECONDS`, 2x `JOB_REDELIVER_GRACE_SECONDS`), `test_alert_rules_contract.py`
+içinde `get_settings()`'e karşı makineyle pinli.
+
+**Ölçümler:** backend **3912 passed / 1 xfailed / 0 failed**, exit 0, coverage **%93.52**,
+22dk38s · frontend **721 passed / 70 dosya**, **%84.92 line** · ruff + format + mypy (396 dosya)
+temiz · `make openapi-check` temiz. `pyyaml>=6.0,<7.0` dev extras'a eklendi.
+Codemap'ler **PR #622 içinde** güncellendi (ROUTES / LAYERS / DATA_MODEL / JOBS_AND_EVENTS).
+
+**Dürüst sınırlar:** PromQL **anlamsal olarak doğrulanmıyor** (`promtool` yok, CI'da yok,
+`prometheus.yml` yok; contract testi elle yazılmış tokenizer — (b) kusurunu **insan review'ı**
+yakaladı, kapı değil) · `job="entropia-api"` scrape adını **hiçbir şey zorlamıyor** · heartbeat
+**yalnız `maintenance` kuyruğunu** kanıtlar (ölü `worker-backtest` onu taze bırakır) ·
+**metriği olmayan alanlar** (matris §4 kör nokta haritası): backtest içi, agent coordinator, SSE,
+object storage, backup age, DB pool utilization · `correlation_id` **worker log'larına
+ulaşmıyor** · structlog **redaction processor'ü yok** · `EntropiaQueueNeverDrains` "hiç
+boşalmadı" **demez** (boşalan kuyruk seri üretmez, `min_over_time` boşlukları atlar).
+
+**Numaralandırma borcu (dürüst not):** **ADIM 23 = #610** ve **ADIM 24 = #619** main'e indi ama
+`PROJECT_HISTORY.md`'de **kayıtları yok** (#620/#621/#614 de kayıtsız). Bu slice'ta kapatılmadı.
+
+**Tam kayıt:** `docs/PROJECT_HISTORY.md` § *ADIM 25 (observability)*.
+**Devir:** `docs/ADIM26_KICKOFF.md`.
+
+## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:298` call site**
+
+**Değişmedi** — ADIM 25 bir ops/gözlemlenebilirlik slice'ıydı ve motor yoluna dokunmadı.
+`run_portfolio` hâlâ üretimde **çağrısız**: `jobs/backtest_engine.py:298` item döngüsü, `:363`
+`combine_item_runs`, `SHARED_ALLOCATION_STATUS = future_dev` (containment KAPALI). ADIM 20
+matrisindeki A1/A3/A5 dışında hiçbir satır bu boşluk kapanmadan kapanamaz. Stepper indi
+(#602); kalan borç **adaptör + call site**. Ayrıntı ve tasarım işaretleri:
+`docs/ADIM16_STEPPER_LANDED_KICKOFF.md` ve `docs/ADIM26_KICKOFF.md`.

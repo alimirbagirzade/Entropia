@@ -169,13 +169,15 @@ Before stopping a working session, produce **ALL** of the following:
 
 ## Current position (keep in sync at each closing)
 
-> **HEAD `4df00f1`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **HEAD `780dc92`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).
-> **Son dalga — ADIM 16 (PR #602):** `run_engine`'in bar döngüsü resumable stepper'a çıktı
-> (`_build_stepper` → `_ItemStepper`); imza/semantik korundu, **46/46 golden digest sabit**
-> (ADR §15 R-4 kapısı). Yerel tam suite **3699 passed / 4 bilinen xfail / 0 failed**, coverage
-> **%93.29**; CI 8/8. Öncesinde **ADIM 22** (install/upgrade/restore, #594/#601) ve iki event-loop
-> düzeltmesi: **#600** (agent-coordinator, issue **#591 KAPANDI**) ve **#597** (worker aktörleri).
+> **Son dalga — ADIM 25 (observability, PR #622):** 11 alert / 5 grup
+> (`ops/alerts/entropia.rules.yml`) + 13 runbook (`docs/runbooks/`) + yeni metrik ailesi
+> `entropia_worker_heartbeat_age_seconds` (kayıt yoksa **`None` → örnek satırı YOK**, 0.0 değil);
+> iki gerçek kusur düzeltildi (sınırsız `method` label'ı · hiç ateşlenemeyen `and absent()`).
+> Backend **3912 passed / 1 xfailed / 0 failed**, coverage **%93.52**; frontend **721 passed**,
+> **%84.92**. Öncesinde ADIM 24 (#619 perf bütçeleri) ve ADIM 23 (#610 DR workload) — **ikisi de
+> `PROJECT_HISTORY.md`'de kayıtsız** (dürüst not, kapatılmadı).
 > **Next:** **PR B** — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:298` call site.
 > **Yarım-cent yuvarlama KARARA BAĞLANDI (2026-08-06):** `initial_sleeve_capital` yeniden
 > quantize edilmez, dondurulmuş `derived_amounts`'tan **kopyalanır**; iki yuvarlama sabiti de
@@ -204,13 +206,14 @@ Before stopping a working session, produce **ALL** of the following:
 
 
 
-- **Testler (2026-08-05, ADIM 17 / PR #573 CI'ında doğrulandı):** **otorite CI'dır** —
-  `Backend — lint, type, test` **pass** (42m42s), CI 6/6. Yerel tam suite coverage kapısını
-  **%93.09** ile geçti (kapı ≥90; yeni `portfolio_ledger.py` %98.8). **Dikkat: o yerel koşuda
-  pytest'in özet satırı ve exit code'u YAKALANMADI** (arka planda başlatıldı) — bu hatayı
-  tekrarlama: çıktıyı dosyaya yaz, `$?`'i **ayrı** oku. **4 bilinçli `xfail(strict)`** tek
-  dosyada (`test_research_point_in_time_parity.py`), issue eşlemesi **#556 ×2 · #557 · #558**;
-  oracle paketinde xfail **sıfır**. Frontend sayısı **ölçülmedi** — CI job log'una bak.
+- **Testler (2026-08-06, ADIM 25 / PR #622'de ölçüldü):** **otorite CI'dır.** Backend tam suite
+  **3912 passed / 1 xfailed / 0 failed**, exit 0, coverage **%93.52** (kapı ≥90); frontend
+  **721 passed / 70 dosya**, **%84.92 line**. **Dikkat (eski bir hata, tekrarlama):** ADIM 17
+  koşusunda pytest'in özet satırı ve exit code'u yakalanmamıştı — çıktıyı dosyaya yaz, `$?`'i
+  **ayrı** oku. **Bilinçli `xfail(strict)` sayısı 1'dir** (eskiden 4 yazıyordu — **bayat**):
+  `test_research_point_in_time_parity.py:583`, tek issue **#558** (available-time policy pin'i
+  bir ÜRÜN kararı, bug değil). **#556 ×2 ve #557 düzeltildi**, artık normal assert ediyor
+  (gateway `rd_jobs.admit_bundle_member` kapısından geçiyor). Oracle paketinde xfail **sıfır**.
   Doğrula: `gh run list --branch main --limit 1` → job log.
   **Ortam tuzağı:** paralel worktree oturumları aynı anda koşuyor — `TEST_DATABASE_URL` ile
   worktree'ye özel izole DB kullan (**sürücü `postgresql+asyncpg://` olmalı**). Tam suite'i

@@ -179,17 +179,18 @@ Before stopping a working session, produce **ALL** of the following:
 > değiştirir; sha'ya değil üretilmiş bloğa güven. Bir belgenin güncel mi tarihsel mi
 > olduğunu ilk satırındaki `<!-- doc-status: … -->` işareti söyler.
 
-> **HEAD `708ec07`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **HEAD `0e67e9d`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).
-> **Son dalga — ADIM 26 (observability, PR #624 — AÇIK, merge EDİLMEDİ, önce doğrula):**
-> alert kuralları artık gerçek PromQL ile **değerlendiriliyor** — yeni bloklayıcı CI job
-> `Alert rules — promtool` (`scripts/alert-rules-gate.sh`, digest-pinned v3.5.0, paralel,
-> +0 wall-clock) + `ops/prometheus/prometheus.yml` (`job="entropia-api"` artık zorlanıyor)
-> + 15 unit-test case + 5 contract testi. **11 alert'in anlamı değişmedi.** Backend
-> **3917 passed / 1 xfailed / 0 failed**, coverage **%93.52**; frontend etkilenmedi.
-> Öncesinde ADIM 25 (#622 alerts+runbooks), ADIM 24 (#619), ADIM 23 (#610) — **son ikisi
-> `PROJECT_HISTORY.md`'de hâlâ kayıtsız** (dürüst not, kapatılmadı).
-> **Açık sınır:** Alertmanager YOK — kurallar ateşliyor ama **kimseye ulaşmıyor**.
+> **Son dalga — ADIM 27 (documentation-truth CI, PR #626 — MERGED):** belgelerin ileri
+> sürdüğü olgular artık ağaçtan üretiliyor (`scripts/generate_repository_facts.py` →
+> `docs/generated/repository_facts.{json,md}` + README bloğu) ve bloklayıcı CI adımı
+> `Documentation truth gate` ile karşılaştırılıyor; 77 belge `doc-status` işareti aldı
+> (**tek bir `current` kickoff** kuralı artık kapılı) + 28 guard testi.
+> Öncesinde ADIM 26 (#624 promtool gate), ADIM 25 (#622), ADIM 24 (#619), ADIM 23 (#610)
+> — **son ikisi `PROJECT_HISTORY.md`'de hâlâ kayıtsız** (dürüst not, kapatılmadı).
+> **Açık sınırlar:** kapı `0e67e9d` için main'de **hiç koşmadı** (GitHub Actions arızası;
+> `ci.yml` `workflow_dispatch` taşımıyor) — ilk gerçek koşu ADIM 27 kapanış PR'ıdır ·
+> Alertmanager YOK, kurallar ateşliyor ama **kimseye ulaşmıyor**.
 > **Next:** **PR B** — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:298` call site.
 > **Yarım-cent yuvarlama KARARA BAĞLANDI (2026-08-06):** `initial_sleeve_capital` yeniden
 > quantize edilmez, dondurulmuş `derived_amounts`'tan **kopyalanır**; iki yuvarlama sabiti de

@@ -4657,3 +4657,150 @@ haritalarının hiçbiri `ops/` veya CI'ı kapsamıyor (grep ile doğrulandı).
   pratikte hiç doldurulmayan bir metrik burada sağlıklı görünür.
 * **Sevk edilen Prometheus'un gerçekten bu dosyadan yapılandırıldığını hiçbir kapı
   kanıtlamıyor.**
+
+---
+
+## ADIM 27 — documentation-truth CI kapısı (PR #626)
+
+**Branch `ci/documentation-truth-guard`** · base `7a9be2d` · merge commit **`0e67e9d`**
+("ci(docs): prevent repository fact drift") · **86 dosya, +2665 / −29**.
+
+**Ürün koduna dokunmadı:** migration **YOK** (alembic head `0043_i08_registry_strategy_fks`
+sabit), yeni tablo YOK, yeni endpoint YOK, yeni sayfa YOK, yeni job YOK, OpenAPI değişmedi,
+`ENGINE_VERSION` değişmedi, `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI),
+frontend etkilenmedi.
+
+### Neden — üç ölçülmüş sapma, üçü de gerçek
+
+Kapı hipotetik bir riske karşı yazılmadı. `ci.yml`'deki adım yorumunun kaydettiği üç olay:
+
+1. **Bayat-base docs PR'ları `PROJECT_HISTORY.md`'den kayıt sildi — üç kez** (#590 ADIM 18,
+   211 satır; #604 ADIM 22 + ADIM 16, 194 satır). Hiçbir CI kapısı `docs/` okumuyordu.
+2. **`CLAUDE.md` haftalarca "4 deliberate xfail" reklamı yaptı**, gerçek sayı 1 olduktan
+   sonra bile.
+3. **Aynı tablo toplamı iki belgede farklı sevk edildi:** `DATA_MODEL.md` 102,
+   `CODEMAPS/README.md` 104 — ikisi de elle sayılmıştı. **Gerçek 104.**
+
+### Ne indi
+
+**`scripts/generate_repository_facts.py`** — 873 satır, tek dosya, harici bağımlılık yok.
+`collect_facts(root)` on olgu ailesini toplar; alt toplayıcılar: `collect_alembic` (head +
+revision sayısı), `collect_database` (tablo/FK), `collect_http_api` (path/operation),
+`collect_frontend_routes` (router path + nav item), `collect_engine_and_capabilities`
+(`ENGINE_VERSION`, capability matrisi), `collect_tests` (statik **collection** sayıları,
+`_count_python_tests` yardımcısıyla), `collect_acceptance` (kriter/clause),
+`collect_visual_and_deviations` (PNG/baseline/prototype/a11y/sapma).
+
+Üç artefakt tek kaynaktan üretilir: `render_markdown` → `docs/generated/repository_facts.md`,
+`render_json` → `docs/generated/repository_facts.json`, `render_readme_block` + `splice_readme`
+→ `README.md` içindeki `<!-- BEGIN GENERATED: repository-facts -->` /
+`<!-- END GENERATED: repository-facts -->` bloğu.
+
+**Kapı:** `.github/workflows/ci.yml` backend job'una bloklayıcı adım
+**`Documentation truth gate (generated repository facts)`**, **OpenAPI drift guard'ından
+SONRA** — sıra bilinçli: route olguları o adımın ürettiği şemadan okunur. Komut:
+`uv run python ../scripts/generate_repository_facts.py --root .. --check`
+(`working-directory: backend`).
+
+`--check` üç bağımsız kontrolü birden reddeder:
+
+* **`check_artifacts`** — `docs/generated/repository_facts.{json,md}` veya README bloğu bayat.
+* **`check_classification`** — `CLASSIFIED_GLOBS` (`docs/*KICKOFF*.md`, `PROJECT_HISTORY.md`,
+  `POST_V1_SPEC_GAP_BACKLOG_*.md`, `V18_R2_ROADMAP.md`, `docs/audit/*.md`,
+  `docs/implementation/*.md`) içinden bir belge `doc-status` işareti taşımıyorsa, **birden
+  fazla** belge `current` iddia ediyorsa, ya da `ALWAYS_HISTORICAL_GLOBS`'taki bir kayıt
+  `current` işaretliyse. İşaret `STATUS_MARKER_RE` ile **ilk 3 satırda** aranır.
+* **`check_assertions`** — `INVARIANT_GLOBS` (`README.md`, `CLAUDE.md`, `backend/README.md`,
+  `frontend/README.md`, `docs/README.md`, `docs/CODEMAPS/*.md`, `STAGE2_HANDOFF.md`,
+  `STAGE_BUILD_PLAN.md`, `ARCHITECTURE.md`, `DOMAIN_MODEL.md`, `USAGE.md`) içinde ağacın
+  yalanladığı bir alembic head (`HEAD_ASSERTION_RE`), `ENGINE_VERSION` (`ENGINE_VERSION_RE`)
+  veya `SHARED_ALLOCATION_STATUS` (`SHARED_ALLOCATION_RE`) — ya da `INVARIANT_RULES`'un
+  **beş yasak eşitlemesinden** biri: `A08_COMPLETE` (A-08 ekran-okuyucu kabulü "Complete"),
+  `WCAG_CONFORMANCE` ("WCAG 2.2 AA uyumlu"), `RUN_IS_RESULT` (Backtest Run = Backtest Result),
+  `SIGNAL_IS_PACKAGE` (Trading Signal / Trade Log = Package), `FUTURE_DEV_ACTIVE`
+  (Future Dev çalışıyor/üretiyor).
+
+İki kaçış valfi bilerek var: **`NEGATION_RE`** iddiayı *reddeden* satırı muaf tutar (bir yalanı
+doğru biçimde yasaklayan cümle zorunlu olarak yalanın kelimelerini içerir; Türkçe'nin `-ma-/-me-`
+ekli olumsuzları da listede), **`HISTORICAL_HEDGE_RE`** kendini geçmiş olarak çerçeveleyen satırın
+eski bir revision adı taşımasına izin verir — repo kendi sapmasını böyle denetlenebilir tutar.
+
+**Banner sabitleri `HISTORICAL_BANNER` / `CURRENT_BANNER` üreticinin içinde yaşar** — yeni belge
+yazan herkes metni oradan birebir kopyalar, elle yazmaz.
+
+### Sınıflandırma dalgası
+
+77 belge `doc-status` işareti aldı: **76 `historical` + 1 `current`**
+(o an `docs/ADIM26_LANDED_KICKOFF.md`). Dokunuşların **tamamı saf eklemeydi** —
+76 dosya ×(+6/−0), 1 dosya ×(+4/−0), **sıfır silme**. `docs/CODEMAPS/README.md` ve
+`DATA_MODEL.md` elle sayılan olgu tablolarını bıraktı; `CLAUDE.md` §Current position
+"**SAYISAL OTORİTE BU BLOK DEĞİL**" pointer'ı aldı ve içindeki HEAD sha'sının
+**yapısal olarak bayat** olduğunu (kapanış commit'i onu değiştirir) açıkça söyledi.
+
+### Testler
+
+`backend/tests/contract/test_repository_facts_guard.py` — **28 case** (16 `def test_`,
+kalanı parametrize genişlemesi). Bunlar kapının kendi davranışını kilitler: bayat artefakt,
+işaretsiz belge, iki `current`, `PROJECT_HISTORY.md`'nin `current` işaretlenmesi, beş
+invariant kuralının her biri, ve negasyon/hedge muafiyetleri.
+
+### Ölçümler
+
+Sayısal otorite **`docs/generated/repository_facts.md`** — bu bölüme rakam kopyalanmıyor,
+çünkü kopyalanan rakam bayatlar (bu slice'ın var oluş sebebi tam olarak budur). Artefaktın
+kapsadığı aileler: alembic head + revision, tablo, FK, HTTP path + operation, frontend
+router path + nav item, `ENGINE_VERSION`, capability matrisi, backend/frontend/e2e test
+**collection** sayıları, acceptance kriter + clause, görsel PNG/baseline/prototype/a11y,
+sapma satırları.
+
+Kapanış öncesi tam backend suite (tek pytest çağrısı, exit code ayrı okundu):
+**3945 passed / 1 xfailed / 0 failed**, exit **0**, coverage **%93.52** (kapı ≥90).
+`ruff check` ✅ · `ruff format --check` ✅ · `mypy src` ✅ 396 dosya · OpenAPI drift guard ✅ ·
+acceptance semantic scan ✅ · doc-truth `--check` ✅ · 28/28 guard testi ✅.
+**Frontend koşulmadı — etkilenmedi.**
+
+### Dürüst sınırlar
+
+* **Kapı `0e67e9d` için main'de HİÇ KOŞMADI.** 2026-08-06 16:00–17:00 arasında GitHub
+  Actions servis arızası vardı: job'lar `Set up job` aşamasında
+  `Failed to resolve action download info. Error: Service Unavailable` ile öldü — repo kodu
+  hiç çalışmadı. `7a9be2d` (#625) main run'ı bu yüzden kırmızı (**altyapı, kusur değil** —
+  log ile doğrulandı), `0e67e9d` için main'de hiç run oluşmadı. `ci.yml` yalnız
+  `push:[main]` + `pull_request:[main]` taşır, **`workflow_dispatch` YOK** → main'de elle
+  run tetiklemenin yolu yok. `gh run rerun` de işe yaramaz: mevcut run `7a9be2d`'ye aittir
+  ve kapı o commit'te henüz mevcut değildir. Adımın **ilk gerçek koşusu ADIM 27 kapanış
+  PR'ıdır**.
+* **Kapsam dışı, bilerek:** commit sha, timestamp, GitHub API durumu (açık PR/issue,
+  workflow run) — bunlar sunucunun özelliğidir, ağacın değil; gömülmeleri artefaktı yeniden
+  üretilemez ve yeşil tutulamaz kılardı. **Test PASS sayısı da kapsam dışı:** artefaktın her
+  test sayısı statik bir yürüyüşten gelen *collection* sayısıdır ve satır adı bunu söyler.
+  Pass sayısını yalnız tam bir CI koşusu bildirir. Bu yüzden `CLAUDE.md`'nin "HEAD `708ec07`"
+  ve "PR #624 AÇIK, merge EDİLMEDİ" yalanlarını kapı **yakalayamadı** — üçü de merge
+  edilmişti; ADIM 27 kapanışında **elle** düzeltildi.
+* **İki olgu hâlâ elle sayılı ve kapı onları KORUMUYOR:** audit `event_kind` 126 literal;
+  frontend 31 sayfa / 40 `lib/*.ts`.
+* **Üretici `entropia`'yı import eder** → yalnız backend venv'inde koşar. Salt-docs
+  katkıcısı artefaktı yeniden üretemez; kapıyı kırdığında düzeltmesi için backend kurulumu
+  gerekir.
+* **`INVARIANT_RULES` regex tabanlıdır** — aynı yalanı farklı bir cümleyle yazan metni
+  kaçırır. **Tripwire'dır, kanıt değil.**
+* **Kapı silmeyi görmez.** `check_classification` sınıflandırmayı denetler; bir docs PR'ının
+  `PROJECT_HISTORY.md`'den kayıt silmesini engelleyen otomatik hiçbir şey **hâlâ yok**.
+  Merge öncesi elle kontrol zorunlu: `git show <sha> -- docs/ | grep '^-## '`.
+* **Kapanış ritüelinin 4. maddesi (memory checkpoint) YAPILAMADI.** Ne ecc knowledge graph
+  MCP'si (`create_entities` / `create_relations`) ne de `claude-mem` kapanış oturumunda
+  bağlıydı; bağlı tek bellek sunucusu `codebase-memory-mcp`'ydi ve o bir slice checkpoint'i
+  tutmaz. Bu slice bellekten aranamaz — kaynağı bu kayıt ve `docs/ADIM27_LANDED_KICKOFF.md`.
+  Sunucular bağlandığında geriye dönük yazılabilir: entity
+  `Entropia ADIM 27 — documentation-truth CI`, ilişki `unblocks` → PR B.
+* Devralınan açık sınırlar: **Alertmanager YOK** (ADIM 25/26 kuralları ateşliyor ama kimseye
+  ulaşmıyor); **ADIM 23 ve ADIM 24 bu dosyada hâlâ KAYITSIZ**; ekran okuyucu (NVDA/VoiceOver)
+  denetimi **YAPILMADI** — GitHub **#514** açık, kapatma yetkisi insandadır; **D-10** imzalı
+  kalıcı kontrast sapması → WCAG 2.2 AA 1.4.3 karşılanmıyor.
+
+### Devir
+
+Kickoff `docs/ADIM27_LANDED_KICKOFF.md` (`doc-status: current`);
+`docs/ADIM26_LANDED_KICKOFF.md` aynı commit'te `historical`'a çevrildi — kapı **tek bir**
+`current` belgeye izin verir. Sıradaki tek adım değişmedi: **PR B — `ItemParticipant`
+adaptörü + `jobs/backtest_engine.py:298` call site**.

@@ -10,11 +10,15 @@ existed (`scripts/e2e-acceptance.sh`, `scripts/backup.sh`, `scripts/restore.sh`,
 `scripts/backup-verify.sh`) but **no CI job ever ran any of them**, and three
 mandated properties had no automated proof anywhere:
 
-The **✔** rows were executed locally against a real PostgreSQL/MinIO while this
-slice was written. The **▶** rows are gated by Compose jobs that could not run
-locally — a parallel worktree session held ports 5432/8000/8080/9000 throughout —
-so they get their first real execution in CI on this PR. That distinction is
-part of the record, not a footnote.
+Every row below is now **✔** — executed, not planned. The first six were run
+locally against a real PostgreSQL/MinIO while this slice was written; the last
+two are Compose jobs that could not run locally (a parallel worktree session
+held ports 5432/8000/8080/9000 throughout) and got their first real execution in
+CI. That happened on **Actions run 31038908690**, where all four jobs —
+`migration-acceptance`, `fresh-install`, `legacy-upgrade`, `disaster-recovery` —
+came back `success`. The run was a `workflow_dispatch` on the branch whose
+content merged as `e6cd2ee`, so the heavy jobs will first execute on `main`
+itself at the nightly cron (03:17 UTC).
 
 | Property | Before | Now |
 | --- | --- | --- |
@@ -24,8 +28,8 @@ part of the record, not a footnote.
 | Migration ↔ **model column parity** | docstring claims | ✔ `migration-acceptance.sh` [3] · every PR |
 | Provisioning is **concurrent**-idempotent | not tested — **and it was broken** | ✔ `migration-acceptance.sh` [8] + `test_provision_concurrency.py` |
 | A backup **preserves rows and hashes** | only "does the dump load?" | ✔ `dr-acceptance.sh` [5]–[8] · nightly |
-| The acceptance gate **fails** when a plane dies | never observed failing | ▶ `install-acceptance.yml` negative step |
-| Empty volumes → first Admin, and **only** the first | never asserted end to end | ▶ `install-acceptance.yml` **fresh-install** |
+| The acceptance gate **fails** when a plane dies | never observed failing | ✔ `install-acceptance.yml` negative step · run 31038908690 |
+| Empty volumes → first Admin, and **only** the first | never asserted end to end | ✔ `install-acceptance.yml` **fresh-install** · run 31038908690 |
 
 ---
 
@@ -206,5 +210,18 @@ whole stack with no error at all, which is harder to diagnose than an exit code.
 - **The Docker jobs in `install-acceptance.yml` were not run locally.** A
   parallel worktree session held the default ports during this slice, so bringing
   up a second stack would have collided with it. The shell harnesses
-  (`migration-acceptance.sh`, `dr-acceptance.sh`) were run locally and are green;
-  the compose jobs get their first real execution in CI on this PR.
+  (`migration-acceptance.sh`, `dr-acceptance.sh`) were run locally and are green.
+  The compose jobs got their first real execution in CI on **run 31038908690**
+  (all four `success`) — on the branch whose content merged as `e6cd2ee`, via
+  `workflow_dispatch`, not on `main`'s merge commit. The heavy pair
+  (`legacy-upgrade`, `disaster-recovery`) does not run on push or PR, so its
+  first execution against `main` itself is the nightly cron.
+- **`dr-acceptance.sh` proved less on that run than a green exit suggests.** Its
+  own transcript said so out loud: `[7] all three append-only planes were EMPTY`
+  and `[8] 1 objects`. The cause is that `apps/seed.py` is a fixture writer, not
+  a user — it inserts through the repositories, so it never reaches
+  `_audit_and_outbox` (zero `audit_events`, zero `outbox_events`) and it calls
+  exactly one of the four object writers in `infrastructure/s3/datasets.py`.
+  So the whole object proof rested on a single `market/processed` parquet key.
+  Tracked and addressed separately in **PR #610** (a real workload driven before
+  the backup, plus coverage floors); open, not merged, as of this record.

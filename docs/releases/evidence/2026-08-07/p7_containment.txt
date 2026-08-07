@@ -1,0 +1,45 @@
+P7 — Future-Dev containment proof (unified portfolio)
+commit 6c239e4
+
+===== 1. SHARED_ALLOCATION_STATUS (source of truth) =====
+105:SHARED_ALLOCATION_STATUS: SharedAllocationStatus = "future_dev"
+docs/generated/repository_facts.md:
+26:| `ENGINE_VERSION` | `backtest-engine-v18-gap-adjusted-stop-fill` |
+27:| `SHARED_ALLOCATION_STATUS` | `future_dev` |
+
+===== 2. run_portfolio references in backend/src (definition + prose only) =====
+backend/src/entropia/domain/backtest/portfolio_engine.py:1:"""The ADR 0002 §8 per-tick phase loop — ``run_portfolio``, the multi-item entry point.
+backend/src/entropia/domain/backtest/portfolio_engine.py:479:def run_portfolio(
+backend/src/entropia/domain/backtest/portfolio_engine.py:569:    "run_portfolio",
+backend/src/entropia/domain/backtest/execution/intents.py:15:* run the phase loop or drive the clock — ``run_portfolio`` is ADIM 18;
+backend/src/entropia/domain/backtest/execution/portfolio_ledger.py:20:* run the phase loop or drive the clock — ``run_portfolio`` is ADIM 18. This module is the
+backend/src/entropia/domain/backtest/execution/arbitration.py:11:* run the phase loop or drive the clock — ``run_portfolio`` is the phase-loop slice. This
+
+-- frontend/src references --
+(none)
+
+-- test-only callers --
+backend/tests/unit/test_backtest_item_intents.py
+backend/tests/unit/test_backtest_portfolio_engine.py
+backend/tests/unit/test_backtest_unified_clock.py
+backend/tests/unit/test_backtest_portfolio_ledger.py
+backend/tests/unit/oracles/test_oracle_portfolio_capital.py
+backend/tests/unit/oracles/test_oracle_portfolio_containment_gate.py
+backend/tests/unit/oracles/test_oracle_portfolio_clock.py
+backend/tests/unit/oracles/portfolio_harness.py
+
+-- worker still folds finished per-item runs --
+100:from entropia.domain.backtest.execution.portfolio import combine_item_runs
+298:    for prepared in prepared_items:
+363:        output = combine_item_runs(
+
+===== 3. containment guard suites (44 tests, exit 0) =====
+command: TEST_DATABASE_URL=postgresql+asyncpg://.../entropia_p7_oracle uv run --extra dev pytest \
+  tests/unit/test_shared_allocation_containment.py tests/integration/test_shared_allocation_containment.py \
+  tests/contract/test_repository_facts_guard.py --no-cov -q -p no:warnings
+............................................                             [100%]
+
+===== 4. repository_facts documentation-truth gate =====
+command: uv run --extra dev python ../scripts/generate_repository_facts.py --check --root ..
+documentation-truth gate OK — artefacts fresh, documents classified, no stale claims.
+exit 0

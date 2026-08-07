@@ -1,0 +1,38 @@
+P7 — pinned artefact labels are read from the snapshot/manifest, never joined live
+commit 6c239e4
+
+===== unit: F-07 manifest label pinning + portfolio-mode labelling (28 tests, exit 0) =====
+command: uv run --extra dev pytest tests/unit/test_f07_manifest_item_labels.py tests/unit/test_backtest_portfolio_mode.py --no-cov -q
+............................                                             [100%]
+
+===== integration: real DB (16 tests, exit 0) =====
+command: TEST_DATABASE_URL=postgresql+asyncpg://.../entropia_p7_oracle uv run --extra dev pytest \
+  tests/integration/test_f07_display_labels.py tests/integration/test_backtest_manifest_pinning.py \
+  tests/integration/test_portfolio_simulation_mode.py --no-cov -q
+................                                                         [100%]
+
+===== the label pipeline, end to end (source) =====
+160:def pinned_item_labels(item_manifest: dict[str, Any]) -> dict[str, str]:
+257:        "mainboard_item_labels": pinned_item_labels(item_manifest),
+280:    "pinned_item_labels",
+--
+295:    item_labels = _manifest_item_labels(manifest.manifest)
+327:            item_label=item_labels.get(prepared.item_id),
+--
+def _manifest_item_labels(manifest: dict[str, Any]) -> dict[str, str]:
+    """Read the run manifest's pinned display labels (F-07 §4.4).
+
+    ``build_run_manifest`` already projected these out of the composition snapshot into
+    ``mainboard_item_labels`` — a key deliberately OUTSIDE the hashed execution content,
+    so reading it can never perturb ``execution_key``. A manifest written before the key
+    existed yields an empty map and every row falls back to its raw id.
+    """
+    raw = manifest.get("mainboard_item_labels")
+    if not isinstance(raw, dict):
+        return {}
+    return {k: v for k, v in raw.items() if isinstance(k, str) and isinstance(v, str) and v}
+
+
+===== known residue: id-derived title on the history row (NOT a live join) =====
+289:        "display_title": f"Backtest Result {result.result_id}",
+137:                        `f"Backtest Result {result_id}"`

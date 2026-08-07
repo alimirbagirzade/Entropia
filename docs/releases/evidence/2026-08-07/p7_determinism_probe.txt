@@ -1,0 +1,61 @@
+P7 — bit-for-bit determinism probe
+commit 6c239e4 (== origin/main), worktree clean
+probe source: scratchpad/p7_determinism_probe.py (reuses the SHIPPED golden matrix
+and the SHIPPED portfolio harness; computes no expected value of its own)
+command: PYTHONPATH=. PYTHONHASHSEED=<seed> uv run --extra dev python p7_determinism_probe.py
+
+----- PYTHONHASHSEED=0 -----
+PYTHONHASHSEED           = 0
+python                   = 3.12.13
+ENGINE_VERSION           = backtest-engine-v18-gap-adjusted-stop-fill
+baseline engine_version  = backtest-engine-v18-gap-adjusted-stop-fill
+scenarios                = 46
+engine run A == run B    = True
+engine == golden baseline= True
+ENGINE_AGGREGATE_DIGEST  = fa4a24e0b7c25bd86f0f65d2b77d5769ca00de6d216be1914abddd3dfb85ade2
+BASELINE_AGGREGATE_DIGEST= fa4a24e0b7c25bd86f0f65d2b77d5769ca00de6d216be1914abddd3dfb85ade2
+portfolio run A == run B = True
+PORTFOLIO_RUN_DIGEST     = 345b91a68399d5c8975141a1cac014ae1da84facaf4686388174094c409f3a79
+RESULT                   = PASS
+
+----- PYTHONHASHSEED=1 -----
+PYTHONHASHSEED           = 1
+python                   = 3.12.13
+ENGINE_VERSION           = backtest-engine-v18-gap-adjusted-stop-fill
+baseline engine_version  = backtest-engine-v18-gap-adjusted-stop-fill
+scenarios                = 46
+engine run A == run B    = True
+engine == golden baseline= True
+ENGINE_AGGREGATE_DIGEST  = fa4a24e0b7c25bd86f0f65d2b77d5769ca00de6d216be1914abddd3dfb85ade2
+BASELINE_AGGREGATE_DIGEST= fa4a24e0b7c25bd86f0f65d2b77d5769ca00de6d216be1914abddd3dfb85ade2
+portfolio run A == run B = True
+PORTFOLIO_RUN_DIGEST     = 345b91a68399d5c8975141a1cac014ae1da84facaf4686388174094c409f3a79
+RESULT                   = PASS
+
+----- PYTHONHASHSEED=12345 -----
+PYTHONHASHSEED           = 12345
+python                   = 3.12.13
+ENGINE_VERSION           = backtest-engine-v18-gap-adjusted-stop-fill
+baseline engine_version  = backtest-engine-v18-gap-adjusted-stop-fill
+scenarios                = 46
+engine run A == run B    = True
+engine == golden baseline= True
+ENGINE_AGGREGATE_DIGEST  = fa4a24e0b7c25bd86f0f65d2b77d5769ca00de6d216be1914abddd3dfb85ade2
+BASELINE_AGGREGATE_DIGEST= fa4a24e0b7c25bd86f0f65d2b77d5769ca00de6d216be1914abddd3dfb85ade2
+portfolio run A == run B = True
+PORTFOLIO_RUN_DIGEST     = 345b91a68399d5c8975141a1cac014ae1da84facaf4686388174094c409f3a79
+RESULT                   = PASS
+
+----- PYTHONHASHSEED=random -----
+PYTHONHASHSEED           = random
+python                   = 3.12.13
+ENGINE_VERSION           = backtest-engine-v18-gap-adjusted-stop-fill
+baseline engine_version  = backtest-engine-v18-gap-adjusted-stop-fill
+scenarios                = 46
+engine run A == run B    = True
+engine == golden baseline= True
+ENGINE_AGGREGATE_DIGEST  = fa4a24e0b7c25bd86f0f65d2b77d5769ca00de6d216be1914abddd3dfb85ade2
+BASELINE_AGGREGATE_DIGEST= fa4a24e0b7c25bd86f0f65d2b77d5769ca00de6d216be1914abddd3dfb85ade2
+portfolio run A == run B = True
+PORTFOLIO_RUN_DIGEST     = 345b91a68399d5c8975141a1cac014ae1da84facaf4686388174094c409f3a79
+RESULT                   = PASS

@@ -1,0 +1,32 @@
+# P9-B1 verification — gate + build/test after js-yaml 4.3.0 -> 4.3.1
+
+## npm-audit-gate.mjs (exit 0)
+
+frontend: high=2 critical=0 (moderate=0 low=0)
+  frozen   GHSA-qwww-vcr4-c8h2 high react-router — React Router: RSC Mode CSRF Bypass Allows Action Execution Before 400 Response
+
+frontend/e2e: high=0 critical=0 (moderate=0 low=0)
+
+OK — no unrecorded high/critical advisories.
+
+## npm ci (exit 0) — installed js-yaml
+  "version": "4.3.1",
+
+## lint + typecheck + build (exit 0)
+rendering chunks...
+computing gzip size...
+dist/index.html                   0.51 kB │ gzip:   0.31 kB
+dist/assets/index-XKVdEXBv.css   56.40 kB │ gzip:  10.01 kB
+dist/assets/index-Bzm0BPr8.js   964.37 kB │ gzip: 242.36 kB
+
+✓ built in 1.38s
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+
+## vitest (exit 0)
+ Test Files  70 passed (70)
+      Tests  721 passed (721)
+   Duration  161.94s (transform 20.52s, setup 11.19s, import 28.49s, tests 52.66s, environment 53.08s)

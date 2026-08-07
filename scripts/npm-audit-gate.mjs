@@ -36,14 +36,18 @@ const FROZEN_ADVISORIES = {
       id: "GHSA-qwww-vcr4-c8h2",
       pkg: "react-router",
       reason:
-        "RSC-mode CSRF bypass. This app is a Vite SPA on react-router-dom's BrowserRouter and never enables RSC mode. react-router-dom@7.18.1 pins react-router@7.18.1 exactly, so the only patched line is react-router@8.2.1+, i.e. the v8 migration that drops react-router-dom.",
+        "RSC-mode CSRF bypass. This app is a Vite SPA on react-router-dom's BrowserRouter and never enables RSC mode. react-router-dom@7.18.2 pins react-router@7.18.2 exactly (an exact pin, not a range), and the advisory covers >=7.12.0 <8.3.0 — so every 7.x is affected and the only patched line is react-router@8.3.0+, i.e. the v8 migration that drops react-router-dom. No lockfile-only remedy exists: `npm audit fix` can only reach it via --force, which downgrades to react-router-dom@7.11.0, a breaking change. VERIFIED 2026-08-07 against the installed tree and the live advisory range; the two version numbers previously recorded here (7.18.1 / 8.2.1+) were wrong. UNSIGNED — this entry carries no owner and no expiry, so nothing forces anyone to revisit it. That is the gap .github/security-allowlist.json exists to close (it requires `owner` + `expires` and fails the build once the date passes). Moving this record there needs a named accountable human, which is a human decision and is NOT recorded as taken.",
     },
-    {
-      id: "GHSA-5p4m-2wfm-xmqj",
-      pkg: "js-yaml",
-      reason:
-        "CVE-2026-59870, quadratic CPU consumption resolving `!!omap`. Reached only as eslint@9 -> @eslint/eslintrc -> js-yaml@4.3.0: a devDependency that never enters the built bundle, so no shipped artifact and no request path touches it. The vulnerable code is eslintrc's YAML config loader, and here it is handed nothing at all — this project is flat-config (frontend/eslint.config.js) and the repository contains no .eslintrc file of any kind, so there is no YAML document to feed it, attacker-controlled or otherwise. `npm audit fix` offers no lockfile-only remedy; the published fix path is eslint@10, a major upgrade whose lint-rule churn is out of proportion to a build-time CPU-DoS on a file we author ourselves. RE-CHECK when eslint 9.x picks up a patched js-yaml, or if this repo ever gains an .eslintrc.y(a)ml — either event ends this reason.",
-    },
+    // The js-yaml freeze (GHSA-5p4m-2wfm-xmqj) was DROPPED 2026-08-07 — same pattern
+    // and same reason-expiry as the brace-expansion pair above. Its stated reason was
+    // "`npm audit fix` offers no lockfile-only remedy; the published fix path is
+    // eslint@10, a major upgrade". That was already false when the freeze merged:
+    // js-yaml 4.3.1 shipped 2026-07-31 and patches the advisory in place, seven days
+    // before #629 landed the freeze on 2026-08-07. `npm audit fix --package-lock-only`
+    // resolves it in a 3-line lockfile diff, package.json byte-identical, no eslint
+    // major. A freeze is a recorded boundary, not a standing waiver — once a remedy
+    // exists the entry has to go, or the gate keeps granting an exception that no
+    // longer has a reason behind it.
   ],
   "frontend/e2e": [],
 };

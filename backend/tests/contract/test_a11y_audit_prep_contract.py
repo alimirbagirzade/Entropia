@@ -1,4 +1,4 @@
-"""The A-08 audit preparation must stay usable, aligned and honest (ADIM 27).
+"""The A-08 audit preparation must stay usable, aligned and honest (ADIM 28).
 
 Preparation artifacts rot in a specific way: the worksheet keeps listing routes
 that were renamed, the stack script keeps seeding a fixture the checklist no

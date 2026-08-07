@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Entropia — A-08 human screen-reader audit stack (ADIM 27).
+# Entropia — A-08 human screen-reader audit stack (ADIM 28).
 #
 # ONE command brings up the exact environment GitHub #514 requires, seeds the
 # three fixtures the checklist names, and VALIDATES that the fixtures actually

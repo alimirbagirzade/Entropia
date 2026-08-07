@@ -1,4 +1,4 @@
-// ADIM 27 — automated prechecks for the A-08 HUMAN screen-reader audit (#514).
+// ADIM 28 — automated prechecks for the A-08 HUMAN screen-reader audit (#514).
 //
 // ============================ WHAT THIS IS NOT ==============================
 // This spec does NOT audit a screen reader and its output must NEVER be

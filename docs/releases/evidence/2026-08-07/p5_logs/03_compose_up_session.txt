@@ -1,0 +1,366 @@
+### docker compose up -d --build (session profile, AUTH_MODE=session from .env)
+ Image entropia-backend:local Building 
+ Image entropia-backend:local Building 
+ Image entropia-backend:local Building 
+ Image entropia-backend:local Building 
+ Image entropia-backend:local Building 
+ Image entropia-backend:local Building 
+ Image entropia-backend:local Building 
+ Image entropia-backend:local Building 
+ Image entropia-backend:local Building 
+ Image entropia-web:local Building 
+ Image entropia-backend:local Building 
+#1 [internal] load local bake definitions
+#1 reading from stdin 7.22kB done
+#1 DONE 0.0s
+
+#2 [web internal] load build definition from Dockerfile
+#2 DONE 0.0s
+
+#3 [migrate internal] load build definition from Dockerfile
+#3 transferring dockerfile:
+#3 transferring dockerfile: 1.05kB 0.2s done
+#3 transferring dockerfile: 1.05kB 0.2s done
+#3 DONE 1.0s
+
+#2 [web internal] load build definition from Dockerfile
+#2 transferring dockerfile: 1.57kB 0.1s done
+#2 DONE 1.4s
+
+#4 [migrate internal] load metadata for docker.io/library/python:3.13-slim
+#4 ...
+
+#5 [web internal] load metadata for docker.io/nginxinc/nginx-unprivileged:1.31-alpine
+#5 DONE 3.6s
+
+#6 [api internal] load metadata for ghcr.io/astral-sh/uv:latest
+#6 ...
+
+#7 [web internal] load metadata for docker.io/library/node:26-alpine
+#7 DONE 11.1s
+
+#6 [api internal] load metadata for ghcr.io/astral-sh/uv:latest
+#6 ...
+
+#8 [web internal] load .dockerignore
+#8 transferring context:
+#8 transferring context: 2B 0.0s done
+#8 ...
+
+#4 [api internal] load metadata for docker.io/library/python:3.13-slim
+#4 DONE 12.5s
+
+#8 [web internal] load .dockerignore
+#8 DONE 0.9s
+
+#6 [api internal] load metadata for ghcr.io/astral-sh/uv:latest
+#6 ...
+
+#9 [web internal] load build context
+#9 DONE 0.0s
+
+#10 [web build 1/6] FROM docker.io/library/node:26-alpine@sha256:aadf416b2cdce311a8811ba3f0608a61b77dbf997500e2eafe781b51f6a0b019
+#10 resolve docker.io/library/node:26-alpine@sha256:aadf416b2cdce311a8811ba3f0608a61b77dbf997500e2eafe781b51f6a0b019
+#10 ...
+
+#6 [worker-default internal] load metadata for ghcr.io/astral-sh/uv:latest
+#6 DONE 15.9s
+
+#11 [worker-default internal] load .dockerignore
+#11 transferring context: 2B 0.2s done
+#11 transferring context: 2B 0.2s done
+#11 DONE 1.0s
+
+#12 [web runtime 1/4] FROM docker.io/nginxinc/nginx-unprivileged:1.31-alpine@sha256:a6c3ec0c0d249d68b0682df854d4a9e222b90fb607dc3fcf2f1d2fcbc85d347e
+#12 resolve docker.io/nginxinc/nginx-unprivileged:1.31-alpine@sha256:a6c3ec0c0d249d68b0682df854d4a9e222b90fb607dc3fcf2f1d2fcbc85d347e
+#12 ...
+
+#13 [worker-data base  1/10] FROM docker.io/library/python:3.13-slim@sha256:9662417aace5ae7b8e2609cce472b72a8958e134ba372808abe9cc1a0c0125e6
+#13 ...
+
+#14 [worker-agent-executor internal] load build context
+#14 DONE 0.1s
+
+#13 [worker-agent base  1/10] FROM docker.io/library/python:3.13-slim@sha256:9662417aace5ae7b8e2609cce472b72a8958e134ba372808abe9cc1a0c0125e6
+#13 ...
+
+#14 [worker-agent internal] load build context
+#14 DONE 0.1s
+
+#15 [worker-agent] FROM ghcr.io/astral-sh/uv:latest@sha256:069a51314a7bb6031777a9273205fe1b0b19e914ef418207d1338b268df641dd
+#15 ...
+
+#14 [provision internal] load build context
+#14 DONE 0.1s
+
+#13 [provision base  1/10] FROM docker.io/library/python:3.13-slim@sha256:9662417aace5ae7b8e2609cce472b72a8958e134ba372808abe9cc1a0c0125e6
+#13 resolve docker.io/library/python:3.13-slim@sha256:9662417aace5ae7b8e2609cce472b72a8958e134ba372808abe9cc1a0c0125e6
+#13 ...
+
+#10 [web build 1/6] FROM docker.io/library/node:26-alpine@sha256:aadf416b2cdce311a8811ba3f0608a61b77dbf997500e2eafe781b51f6a0b019
+#10 resolve docker.io/library/node:26-alpine@sha256:aadf416b2cdce311a8811ba3f0608a61b77dbf997500e2eafe781b51f6a0b019 7.2s done
+#10 DONE 7.4s
+
+#12 [web runtime 1/4] FROM docker.io/nginxinc/nginx-unprivileged:1.31-alpine@sha256:a6c3ec0c0d249d68b0682df854d4a9e222b90fb607dc3fcf2f1d2fcbc85d347e
+#12 resolve docker.io/nginxinc/nginx-unprivileged:1.31-alpine@sha256:a6c3ec0c0d249d68b0682df854d4a9e222b90fb607dc3fcf2f1d2fcbc85d347e 7.2s done
+#12 DONE 7.5s
+
+#15 [provision] FROM ghcr.io/astral-sh/uv:latest@sha256:069a51314a7bb6031777a9273205fe1b0b19e914ef418207d1338b268df641dd
+#15 resolve ghcr.io/astral-sh/uv:latest@sha256:069a51314a7bb6031777a9273205fe1b0b19e914ef418207d1338b268df641dd
+#15 resolve ghcr.io/astral-sh/uv:latest@sha256:069a51314a7bb6031777a9273205fe1b0b19e914ef418207d1338b268df641dd 2.6s done
+#15 DONE 4.1s
+
+#13 [worker-data base  1/10] FROM docker.io/library/python:3.13-slim@sha256:9662417aace5ae7b8e2609cce472b72a8958e134ba372808abe9cc1a0c0125e6
+#13 resolve docker.io/library/python:3.13-slim@sha256:9662417aace5ae7b8e2609cce472b72a8958e134ba372808abe9cc1a0c0125e6 2.4s done
+#13 DONE 4.1s
+
+#14 [worker-data internal] load build context
+#14 transferring context:
+#14 transferring context: 3.91MB 4.6s done
+#14 DONE 5.7s
+
+#9 [web internal] load build context
+#9 ...
+
+#16 [worker-backtest base  3/10] WORKDIR /app
+#16 CACHED
+
+#17 [worker-backtest base  2/10] COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+#17 CACHED
+
+#18 [worker-backtest base  4/10] COPY pyproject.toml README.md ./
+#18 CACHED
+
+#17 [migrate base  2/10] COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+#17 CACHED
+
+#16 [migrate base  3/10] WORKDIR /app
+#16 CACHED
+
+#9 [web internal] load build context
+#9 transferring context: 12.58MB 10.6s
+#9 transferring context: 25.44MB 15.8s
+#9 ...
+
+#19 [api base  5/10] RUN uv venv /app/.venv && uv pip install -e .
+#19 ...
+
+#9 [web internal] load build context
+#9 transferring context: 33.96MB 20.8s
+#9 transferring context: 40.54MB 25.9s
+#9 transferring context: 52.87MB 31.0s
+#9 transferring context: 59.28MB 36.0s
+#9 ...
+
+#19 [api base  5/10] RUN uv venv /app/.venv && uv pip install -e .
+#19 32.62 Using CPython 3.13.14 interpreter at: /usr/local/bin/python3
+#19 32.64 Creating virtual environment at: .venv
+#19 ...
+
+#9 [web internal] load build context
+#9 transferring context: 66.33MB 45.2s
+#9 transferring context: 68.92MB 50.3s
+#9 transferring context: 80.57MB 55.5s
+#9 transferring context: 82.01MB 60.7s
+#9 transferring context: 87.81MB 65.7s
+#9 transferring context: 99.05MB 70.7s
+#9 transferring context: 106.81MB 75.8s
+#9 transferring context: 122.55MB 80.9s
+#9 transferring context: 127.24MB 86.0s
+#9 ...
+
+#19 [api base  5/10] RUN uv venv /app/.venv && uv pip install -e .
+#19 79.90 Resolved 46 packages in 22.76s
+#19 ...
+
+#9 [web internal] load build context
+#9 transferring context: 131.88MB 93.0s
+#9 ...
+
+#19 [api base  5/10] RUN uv venv /app/.venv && uv pip install -e .
+#19 88.73    Building entropia @ file:///app
+#19 93.56 Downloading botocore (14.8MiB)
+#19 93.69 Downloading pydantic-core (1.9MiB)
+#19 93.69 Downloading pyarrow (44.7MiB)
+#19 93.69 Downloading uvloop (4.1MiB)
+#19 93.69 Downloading sqlalchemy (3.1MiB)
+#19 93.69 Downloading polars-runtime-32 (49.0MiB)
+#19 ...
+
+#9 [web internal] load build context
+#9 transferring context: 146.08MB 101.8s
+#9 transferring context: 147.45MB 107.7s
+#9 transferring context: 147.45MB 107.7s done
+#9 DONE 112.3s
+
+#19 [api base  5/10] RUN uv venv /app/.venv && uv pip install -e .
+#19 94.18 Downloading asyncpg (3.3MiB)
+#19 ...
+
+#20 [web build 2/6] WORKDIR /app
+#20 CACHED
+
+#21 [web build 3/6] COPY package.json package-lock.json* ./
+#21 CACHED
+
+#22 [web build 4/6] RUN npm install
+#22 CACHED
+
+#23 [web build 5/6] COPY . .
+#23 ...
+
+#19 [api base  5/10] RUN uv venv /app/.venv && uv pip install -e .
+#19 125.1  Downloaded pydantic-core
+#19 150.3  Downloaded asyncpg
+#19 171.0  Downloaded uvloop
+#19 200.9  Downloaded sqlalchemy
+#19 212.1  Downloaded polars-runtime-32
+#19 213.4       Built entropia @ file:///app
+#19 214.1  Downloaded pyarrow
+#19 236.3  Downloaded botocore
+#19 236.4 Prepared 46 packages in 2m 35s
+#19 ...
+
+#23 [web build 5/6] COPY . .
+#23 DONE 162.3s
+
+#19 [api base  5/10] RUN uv venv /app/.venv && uv pip install -e .
+#19 ...
+
+#24 [web build 6/6] RUN npm run build
+#24 ...
+
+#19 [api base  5/10] RUN uv venv /app/.venv && uv pip install -e .
+#19 281.6 Installed 46 packages in 45.15s
+#19 281.7  + alembic==1.19.0
+#19 281.7  + annotated-doc==0.0.5
+#19 281.7  + annotated-types==0.8.0
+#19 281.7  + anyio==4.14.2
+#19 281.7  + argon2-cffi==25.1.0
+#19 281.7  + argon2-cffi-bindings==25.1.0
+#19 281.7  + asyncpg==0.31.0
+#19 281.7  + boto3==1.43.66
+#19 281.7  + botocore==1.43.66
+#19 281.7  + cffi==2.1.1
+#19 281.7  + click==8.4.2
+#19 281.7  + dramatiq==2.2.0
+#19 281.7  + entropia==0.1.0 (from file:///app)
+#19 281.7  + fastapi==0.141.1
+#19 281.7  + greenlet==3.5.4
+#19 281.7  + h11==0.16.0
+#19 281.7  + httptools==0.8.0
+#19 281.7  + idna==3.18
+#19 281.7  + jmespath==1.1.0
+#19 281.7  + mako==1.4.1
+#19 281.7  + markupsafe==3.0.3
+#19 281.7  + polars==1.43.2
+#19 281.7  + polars-runtime-32==1.43.2
+#19 281.7  + pyarrow==25.0.0
+#19 281.7  + pycparser==3.0
+#19 281.7  + pydantic==2.13.4
+#19 281.7  + pydantic-core==2.46.4
+#19 281.7  + pydantic-settings==2.15.0
+#19 281.7  + python-dateutil==2.9.0.post0
+#19 281.7  + python-dotenv==1.2.2
+#19 281.7  + python-multipart==0.0.32
+#19 281.7  + pyyaml==6.0.3
+#19 281.7  + redis==8.1.0
+#19 281.7  + s3transfer==0.19.2
+#19 281.7  + six==1.17.0
+#19 281.7  + sqlalchemy==2.0.51
+#19 281.7  + sse-starlette==3.4.8
+#19 281.7  + starlette==1.4.1
+#19 281.7  + structlog==26.1.0
+#19 281.7  + typing-extensions==4.16.0
+#19 281.7  + typing-inspection==0.4.2
+#19 281.7  + urllib3==2.7.0
+#19 281.7  + uvicorn==0.52.1
+#19 281.7  + uvloop==0.22.1
+#19 281.7  + watchfiles==1.2.0
+#19 281.7  + websockets==17.0.1
+#19 DONE 294.4s
+
+#25 [agent-coordinator base  6/10] COPY alembic.ini ./
+#25 DONE 4.3s
+
+#26 [worker-backtest base  7/10] COPY alembic ./alembic
+#26 DONE 0.7s
+
+#27 [provision base  8/10] COPY src ./src
+#27 DONE 2.4s
+
+#28 [worker-agent-executor base  9/10] RUN uv pip install -e .
+#28 5.319 Resolved 46 packages in 1.45s
+#28 5.571    Building entropia @ file:///app
+#28 ...
+
+#24 [web build 6/6] RUN npm run build
+#24 26.96 
+#24 26.96 > entropia-web@0.1.0 build
+#24 26.96 > tsc -b && vite build
+#24 26.96 
+#24 ...
+
+#28 [worker-default base  9/10] RUN uv pip install -e .
+#28 35.70       Built entropia @ file:///app
+#28 36.55 Prepared 1 package in 31.10s
+#28 36.93 Uninstalled 1 package in 294ms
+#28 37.17 Installed 1 package in 246ms
+#28 37.26  ~ entropia==0.1.0 (from file:///app)
+#28 DONE 41.3s
+
+#24 [web build 6/6] RUN npm run build
+#24 ...
+
+#29 [worker-backtest base 10/10] RUN useradd --create-home --uid 10001 entropia && chown -R entropia /app
+#29 DONE 19.3s
+
+#24 [web build 6/6] RUN npm run build
+#24 ...
+
+#30 [api] exporting to image
+#30 exporting layers
+#30 ...
+
+#31 [worker-data] exporting to image
+#31 ...
+
+#32 [worker-agent-executor] exporting to image
+#32 ...
+
+#33 [worker-default] exporting to image
+#33 ...
+
+#34 [agent-coordinator] exporting to image
+#34 ...
+
+#35 [worker-agent] exporting to image
+#35 ...
+
+#36 [scheduler] exporting to image
+#36 ...
+
+#37 [worker-backtest] exporting to image
+#37 ...
+
+#38 [provision] exporting to image
+#38 ...
+
+#39 [migrate] exporting to image
+
+
+### ABORTED BY OPERATOR (not a build failure)
+### `docker compose up -d --build` fanned out 10 SIMULTANEOUS "exporting to image"
+### jobs for the SAME 2.09 GB backend image (api, migrate, provision, worker-*,
+### agent-coordinator, scheduler). On this host that stalled: no buildkit output
+### for 16+ min, host load average 14.98/23.95/27.22, `docker stats --no-stream`
+### itself timed out at 120 s, and free disk fell 28 -> 22 GiB. Two OTHER Entropia
+### compose stacks (entropia-a11y-audit, entsec = 22 containers) plus a concurrent
+### image build from a parallel session share this 3.89 GiB Docker VM; tearing
+### those down is another session's call, not this run's.
+### CONTINUATION: reuse the images this run already built (step 01/02, both exit 0)
+### by tagging them :local, then `docker compose up -d` WITHOUT --build.
+### Equivalence: identical Dockerfiles + identical build contexts, and
+### frontend/Dockerfile:6 defaults ARG VITE_API_BASE_URL=http://localhost:8000/api/v1,
+### which is exactly the value docker-compose.yml passes by default.
+EXIT_CODE=ABORTED

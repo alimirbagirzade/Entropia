@@ -5071,3 +5071,229 @@ mesaj metnini değil — test değişmedi.
 Kickoff `docs/ADIM29_LANDED_KICKOFF.md` (`doc-status: current`); `ADIM28` aynı commit'te
 `historical`'a çevrildi. Sıradaki tek adım değişmedi: **PR B — `ItemParticipant` adaptörü +
 `jobs/backtest_engine.py:298` call site**.
+
+---
+
+## ADIM 23 — DR yedeğinden önce gerçek iş yükü; kanıt tabanları kapıya bağlandı (PR #610)
+
+**Kod değişmedi (`backend/` dokunulmadı).** Migration yok, alembic head değişmedi,
+`ENGINE_VERSION` değişmedi, OpenAPI değişmedi. Merge: `2026-08-06T04:09:15Z`.
+
+### Tetikleyen olgu — DR kanıtı boştu
+
+Sevk edilmiş harness'ın kendi çıktısı (Actions run `31038908690`, job `disaster-recovery`):
+
+```
+[7] audit_events    — 0 rows, fingerprint EMPTY
+[7] outbox_events   — 0 rows, fingerprint EMPTY
+[7] agent_checkpoint— 0 rows, fingerprint EMPTY
+WARN [7] all three append-only planes were EMPTY — this run proves nothing …
+```
+
+**Kök neden:** `apps/seed.py` bir *fixture writer*, kullanıcı değil. Repository'ler
+üzerinden yazdığı için `_audit_and_outbox`'a **hiç uğramıyor**; `infrastructure/s3/datasets.py`
+içindeki dört object writer'dan **yalnız birini** çağırıyor. `market/raw`, `signals/source`
+ve `create-package/baseline` prefiksleri hiçbir seed yolunda değildi — yani tüm object
+kanıtı hiçbir operatörün üretmediği bir key şekline dayanıyordu.
+
+### Seçim: (b) gerçek iş yükü + (c) ratchet
+
+Brief üç seçenek sunuyordu. **(a) fixture'ı büyütmek** reddedildi — sayıyı büyütmek için
+eklenen object ürün kanıtı değildir ve seed yazımı komut yolundan geçmediği için
+`audit_events` yine sıfır kalırdı. **(c) tek başına** döngüseldi: aynı reponun kontrol
+ettiği bir fixture'a taban koymak bugünkü sayıyı pinlemekten başka bir şey yapmaz.
+
+### Değişen
+
+| Dosya | Değişiklik |
+|---|---|
+| `scripts/dr-workload.sh` (**yeni**) | Tek authenticated `POST /trade-logs/source-assets`. Kendi principal'ını bootstrap eder (`AUTH_MODE=session`'da credentialless Admin yok), CSV'yi her koşuda damgalar (TL-15 content-addressed dedup sessizce no-op yapmasın), ve yanıt `deduplicated:true` gelirse **BAŞARISIZ olur** — dedup ne object ne audit satırı yazar, aksi halde hiçbir şey kanıtlamadan yeşil geçerdi |
+| `scripts/dr-acceptance.sh` | Üç opsiyonel taban: `DR_MIN_EVIDENCE_TABLES`, `DR_REQUIRE_APPEND_ONLY`, `DR_MIN_OBJECTS`. Adım [7] artık boş kalan düzlemleri **adlandırır**, adım [8] kapsadığı **key prefikslerini** basar |
+| `.github/workflows/install-acceptance.yml` | seed ile backup arasına workload adımı; tabanlar fixture+workload'ın gerçekten ürettiğine ayarlandı |
+| `docs/BACKUP_DR.md` · `docs/INSTALL_ACCEPTANCE.md` | iddia kanıta hizalandı |
+
+**Tabanlar varsayılan olarak KAPALI.** Elle tek yedek doğrulayan geliştirici CI'ın fixture
+kapsamını karşılamak zorunda değil; yalnız `install-acceptance.yml` açar.
+
+### Doğrulama (canlı Compose, izole portlar)
+
+| Kontrol | Sonuç |
+|---|---|
+| Baseline yeniden üretildi | `0/0/0` append-only satır, 1 object |
+| Workload sonrası | **3 audit + 2 outbox satırı, 2 object, 2 key prefix** |
+| Tam zincir, tabanlar açık | `8 passed, 0 failed, 0 warned` — kalıcı WARN kayboldu |
+| **Mutation kontrolü** | üç düzlem boşaltılıp tabanlar gerçeğin üstüne çekildi → **üçü de ateşledi**, `8 passed, 3 failed`, exit 1 |
+| Default-off kontrolü | tabansız → exit 0, WARN korunuyor; mevcut çağıranlar etkilenmedi |
+
+### Dürüst sınır
+
+**`agent_checkpoint` hâlâ kapsanmıyor** — bir Agent tool çağrısı gerektirir.
+`DR_REQUIRE_APPEND_ONLY` bu yüzden üçünü değil **en az birini** boş olmamaya zorlar ve
+adım [7] her koşuda `NOT covered by this run: agent_checkpoint` basar; boşluk transkriptte
+kalır, gizlenmez.
+
+---
+
+## ADIM 24 — yük ve sorgu regresyon bütçeleri (PR #619)
+
+**Üretim kodu dokunulmadı.** Migration yok, `ENGINE_VERSION` değişmedi, OpenAPI/route/OCC/
+Idempotency/SSE/frontend değişmedi, yeni bağımlılık yok. Merge: `2026-08-06T08:55:14Z`.
+
+### Tetikleyen olgu
+
+Entropia'nın **hiçbir performans kapısı yoktu**. Mevcut üç `*_query_count` testinin her
+biri **tek yüzeyde tek tabloyu** pinliyordu — artık bir N+1'in yeşil suite'ten sağ çıkmasının
+tam olarak yolu budur.
+
+### Bloklayıcı kapılar (deterministik — round trip, milisaniye değil)
+
+| Kapı | Yer |
+|---|---|
+| 6 yüzey için DB round-trip bütçesi | `backend/tests/integration/test_query_budgets.py` (ci.yml'nin mevcut pytest adımı içinde) |
+| Load-driver karar mantığı + scenario/OpenAPI tazeliği | `backend/tests/unit/test_loadgen.py` |
+| Load smoke: her senaryo 2xx yanıtlıyor | `performance.yml` → `load-smoke` (PR + push) |
+
+Her yüzey **tek oturumda n=1 ve n=11**'de ölçülür ve **iki** şeye birden bağlanır: toplam
+ve **öğe başına eğim**. Satır başına okumaya başlayan düz bir yüzey, küçük-n toplamı
+değişmese bile eğimden düşer — bu kusurlar gerçekte böyle sevk edilir.
+
+Bütçeler `docs/performance/query_budgets.json` içinde **ratchet** olarak yaşar
+(`frontend/e2e/a11y-baseline.json` ile aynı deyim).
+
+| Yüzey | n=1 | n=11 | öğe başına |
+|---|---|---|---|
+| `library.list_packages` | 3 | 3 | 0 |
+| `results_history.list_backtest_results` | 6 | 6 | 0 |
+| `readiness_check.market_data_leg` | 2 | 12 | **1** |
+| `dependency_pins.ensure_pinned_resolvers_active` | 2 | 22 | **2** |
+| `agent_workspace.list_tasks` | 1 | 1 | 0 |
+| `audit_log.list_audit_events` | 1 | 1 | 0 |
+
+### Kapının bulduğu iki açık N+1 — kaydedildi, ONARILMADI
+
+* **#617** — Ready Check'in market-data ayağı `get_dataset_root`'u öğe döngüsü **içinde**
+  çağırıyor; kullanıcının beklediği bir sayfanın gecikmesini composition'ın Strategy sayısı
+  belirliyor. `test_readiness_query_count` bunu **hiç görmedi** çünkü tek tabloya filtreliyor.
+* **#618** — Approve-Package pinned-resolver yeniden doğrulaması pin başına 2 okuma.
+
+**Bilerek düzeltilmedi:** ölçen slice aynı zamanda fail-closed bir admission yolunu
+değiştirmemeli. Her issue kabul ölçütünü adlandırıyor (bütçe satırını `per_item: 0`'a çek),
+böylece düzeltme ve kanıtı **birlikte** iner.
+
+### Bilerek bağlanMAYAN kapı: latency oranı
+
+`--compare` / `_ratio_gate` yazıldı ve unit-test edildi ama **CI'da değil**: bandı
+ölçümden türetmek mümkün olmadı — değişmemiş bir stack'e karşı arka arkaya iki tam koşu
+kontrolü **4.4x** oynattı, normalize sonrası bazı senaryolar 3–5x. Bu kanıt üzerine band
+seçmek **sayı uydurmak** olurdu; slice'a tam olarak bu yasaklanmıştı. Aktivasyon prosedürü
+`docs/performance/README.md` §6'da: ≥5 nightly artifact topla, gözlenen yayılımı hesapla,
+bandı ondan koy.
+
+### Dürüst sınır
+
+**Kanonik SLO YOK** — `grep -rniE '\bSLO\b|p95|p99' docs/spec/` **hiçbir şey** döndürmüyor.
+`docs/performance/` içindeki her hedef bu yüzden **operational target** etiketli, ve
+interaktif-okuma p95 satırı nightly gerçek artifact üretene dek **bilerek boş** bırakıldı.
+
+---
+
+## ADIM 29 (RC verification) — V18 Release Candidate kanıt dalgası (PR #632–#636, #637)
+
+> **Ad çakışması uyarısı — ÜÇÜNCÜ kez.** Bu kayıt, yukarıdaki
+> *"ADIM 29 — A-08 kaydı #514'ün kanıtsız kapatılmasıyla uzlaştırıldı (PR #631)"* ile
+> **AYNI numarayı** taşıyor ama **AYRI iştir**. Ayrım **başlık ekiyle** yapılır, kural budur:
+> **`ADIM 29 (A-08 kaydı)`** = #631 · **`ADIM 29 (RC verification)`** = bu dalga.
+> Eksiz "ADIM 29" tek anlamlı **değildir**. `ADIM 16` ve `ADIM 21` için konan kuralın aynısı.
+
+**Dalganın tipi:** P1–P12 adımlarının **hiçbiri kod değiştirmez** — yalnız kanıt üretirler.
+Tek istisna **P9-B1** (aşağıda), ki o bir P adımı değil, P9'un bulduğu blocker'ın düzeltmesidir.
+
+### Landed kanıt
+
+| Adım | Konu | PR | Karar |
+|---|---|---|---|
+| **P1** | repository truth + kanıt iskelesi | #632 | PASS |
+| **P3** | frontend kapıları (lint/typecheck/test/build) | #633 | PASS |
+| **P12** | A-08 insan kabul kapısı — adjudication | #634 | **BLOCKED** |
+| **P4** | migration + şema kanıtı | #635 | bulgu: **alembic check RED** |
+| **P9** | güvenlik kapıları | #636 | **BLOCKED** (B1 + B2) |
+
+Kanıt dizini: `docs/releases/evidence/2026-08-07/`.
+
+### P4'ün bulgusu — kaydedildi, onarılmadı
+
+`alembic check` **RED**: 40 index-name divergence + 1 redundant index. **Hiçbir CI
+workflow'u `alembic check` koşmuyor** — yani bu sapma kapıya bağlı değil.
+
+### P9'un iki blocker'ı
+
+* **B1** — `GHSA-5p4m-2wfm-xmqj` (js-yaml, HIGH) donduruldu ama **gerekçesi yanlıştı**.
+* **B2** — iki dondurulmuş HIGH advisory'nin **hiçbirinde imza yok** (ne sorumlu, ne tarih,
+  ne son kullanma).
+
+### P9-B1 düzeltmesi (PR #637 — **AÇIK, merge BEKLİYOR**)
+
+> Bu satır **merge edilmemiş** bir PR'ı tarif eder. Kapandığında bu bloğu güncelle.
+
+js-yaml freeze'inin gerekçesi *"`npm audit fix` offers no lockfile-only remedy; the
+published fix path is eslint@10, a major upgrade"* diyordu. Bu iddia **freeze merge
+edildiğinde zaten yanlıştı**: js-yaml `4.3.1` **2026-07-31**'de yayımlandı ve advisory'yi
+yerinde yamalıyor; #629 freeze'i **2026-08-07**'de, yani **yedi gün sonra** indi.
+
+Uygulanan: `npm audit fix --package-lock-only` → js-yaml `4.3.0` → `4.3.1`, **3 satırlık**
+lockfile diff, `package.json` **byte-identical**; ve `scripts/npm-audit-gate.mjs`'ten
+js-yaml girdisi **düşürüldü**. 2026-08-03'te brace-expansion çiftine uygulanan desenin
+aynısı — kapının kendi yorumu bunu emrediyor: *"A freeze whose reason has expired is worse
+than no freeze."*
+
+Doğrulama: kapı exit **0** (tek frozen kayıt react-router, "frozen but no longer reported"
+notu **çıkmıyor**); `npm ci` exit 0 (js-yaml **4.3.1**); lint/typecheck/build exit 0;
+vitest **721 passed / 70 dosya**. **Lint belirleyicidir** — js-yaml bu ağaca yalnız
+`eslint@9 → @eslint/eslintrc` yolundan girer.
+
+**B2 KAPANMADI.** react-router freeze'i **imzasız** kalmaya devam ediyor; yalnız iki bayat
+olgusu düzeltildi: pin **7.18.2 → 7.18.2** (exact, `7.18.1` değil) ve yamalı hat **8.3.0+**
+(`8.2.1+` değil; advisory `>=7.12.0 <8.3.0`). Freeze'in **özü ayakta** — tüm 7.x etkilenmiş,
+lockfile-only çare yok (`--force` yalnız `7.11.0`'a **downgrade** öneriyor). Kaydı
+`.github/security-allowlist.json` disiplinine taşımak **zorunlu `owner`** istiyor
+(*"the human accountable for revisiting it, not a team alias"*); **imzalayan verilmediği
+için hiçbir sapma kaydı YAZILMADI**.
+
+### KOŞULMAMIŞ P adımları — dürüst sınır
+
+**P2, P6, P7, P8, P10, P11, P13 için hiç kanıt YOK.** P5 **koşuldu ama commit EDİLMEDİ**:
+`entropia-v18-docker-auth-validation-52e446` worktree'sinde **untracked** duruyor
+(`P5_docker_auth.md` + `p5_logs/`), kararı **PARTIAL — 1/4 PASS, 3/4 BLOCKED** (imaj
+build'leri geçti; stack ayağa kalkma, health endpoint'leri ve smoke script'leri **yerel
+Docker daemon'ın kilitlenmesi** yüzünden bloklandı — ürün kusuru değil, host kaynak
+tükenmesi). `git clean` bu kanıtı yok eder.
+
+### Süreç kusuru — P adımlarının tanımı REPODA DEĞİL
+
+P1..P13 ayrıştırması **hiçbir repo belgesinde tanımlı değil**; yalnız bir sohbet
+transkriptinde yaşıyor. Repoda bulunan tek üst otorite
+`docs/spec/Entropia_V18_Nihai_29_Adimli_Claude_Opus_5_Prompt_Paketi.md` §ADIM 29'un
+**15 zorunlu iş kalemi**. Bu, dalganın devredilebilirliğini kırar: temiz bir oturum
+"sıradaki P adımı ne?" sorusunu **repodan yanıtlayamaz**.
+
+### CI kusuru — main'e giden iki commit'in CI'ı HİÇ KOŞMADI
+
+`ci.yml`'nin concurrency bloğu `cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}`
+ve yorumu şunu iddia ediyor:
+
+> "never on main: every push to main must run to completion so each merged commit lands
+> with a full, green CI check instead of a cancelled (incomplete) one."
+
+**Bu niyet gerçekleşmiyor.** GitHub bir concurrency grubunda **yalnız BİR** pending koşu
+tutar; yeni bir koşu kuyruğa girdiğinde önceki pending koşuyu **iptal eder**. Ölçülen:
+
+| Commit | PR | CI koşusu |
+|---|---|---|
+| `1f24391` | #632 | success |
+| `e8d1d48` | #633 | **cancelled — 0 job, HİÇ KOŞMADI** |
+| `bc59dae` | #634 | **cancelled — 0 job, HİÇ KOŞMADI** |
+| `6cd6172` | #635 | success |
+| `169cfaa` | #636 | success |
+
+Yani **iki merge edilmiş commit** tam CI kanıtı olmadan main'e indi. Kusur
+**kaydedildi, onarılmadı** — düzeltmesi bir CI politika kararıdır.

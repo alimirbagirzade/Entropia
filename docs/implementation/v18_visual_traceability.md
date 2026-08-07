@@ -85,7 +85,10 @@ from what is **open engineering**. Verified against `6e3fab9` code + R2 truth do
 
 ### Bucket 2 — Already-documented honest boundaries (not new, tracked OPEN)
 
-A-08 (NVDA/VoiceOver manual a11y, GitHub #514) ·
+A-08 (NVDA/VoiceOver manual a11y — **iş AÇIK, izleme KAPALI**: GitHub #514
+2026-08-07'de kanıtsız kapatıldı, denetim yapılmadı; kanonik kayıt
+[`a11y_screen_reader_audit_results.md`](../audit/a11y_screen_reader_audit_results.md)
+§STATUS ▸ *Tracking-issue state*) ·
 F-02 (NL package generation = Future-Dev) ·
 F-03 (multi-item unified-clock portfolio) · P-13 / F-06 (ResultDetail charts + AI Review).
 

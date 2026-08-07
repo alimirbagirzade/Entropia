@@ -4960,3 +4960,114 @@ Kickoff `docs/ADIM28_LANDED_KICKOFF.md` (`doc-status: current`);
 documentation-truth CI slice'ı için aldı, bu yüzden A-08 hazırlığı **ADIM 28**'dir; repoda
 zaten iki çift-kullanılmış slice adı var ve üçüncüsü yaratılmadı. Sıradaki tek adım
 değişmedi: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:298` call site**.
+
+---
+
+## ADIM 29 — A-08 kaydı #514'ün kanıtsız kapatılmasıyla uzlaştırıldı (PR #631)
+
+**Docs-only.** Ürün kodu, test ve CI **davranışı** değişmedi. Migration yok, alembic head
+değişmedi, `ENGINE_VERSION` değişmedi.
+
+### Tetikleyen olgu
+
+GitHub **#514** ("A-08: Complete human NVDA/Firefox + VoiceOver/Safari acceptance audit",
+label `human-only` — *"Sadece insan kapatabilir; kanitsiz kapatma yasak"*) repo sahibi
+tarafından **`2026-08-07T03:52:03Z`**'de `state_reason: completed` ile **KAPATILDI**.
+Doğrulama: `gh issue view 514 --json state,closedAt,stateReason,labels`.
+
+**Denetim koşulmadı.** ADIM 28 (#628/#630) yalnız iskeleyi kurmuştu;
+`docs/audit/a11y_screen_reader_audit_results.md` **boş defter** olarak inmişti — §5'teki
+dört çıkış kriteri de ☐, §3 findings register'da tek kayıt yok, §1/§2'deki 46 rota ve 20
+akış hücresinin tamamı `—`.
+
+Bu, **aynı issue'nun ikinci kanıtsız kapatılmasıdır**. İlki `2026-07-30T19:05:32Z`'deydi ve
+2026-08-03 ground-truth denetiminde geri alınmıştı. **İkincisi geri alınmadı.**
+
+### Sorun: iki iddia da yazılamaz
+
+Belgeler *"A-08 açık issue #514'te izleniyor"* diyordu — issue kapandığı için **BAYAT**.
+Ama *"A-08 tamamlandı"* demek de **YANLIŞ** olurdu — denetim yapılmadı. Kapanışın hangi
+niyetle yapıldığı (bilinçli kabul mü, sehven mi) **agent'ın veremeyeceği bir karardır**.
+
+### Karar: ayrışma ÇÖZÜLMEDİ, KAYDEDİLDİ
+
+Kullanıcı iki çerçeveyi de kullanmayı tercih etti. Uygulanan sentez: belgeler **niyeti
+hükme bağlamaz**, yalnız **olguyu** kaydeder ve **iki insan çözüm yolunu da açık listeler**.
+Gerekçe — her iki ihtimalde de doğru kalan tek çerçeve budur:
+
+* **(A) bilinçli kabul** yazılamadı çünkü **imzalayanın adı ve tarihi verilmedi**; D-10
+  biçiminde imza uydurmak reponun kendi kuralının ("kanıtsız kapatma yasak", "boş şablon
+  kanıt değildir") ihlali olurdu.
+* **(B) sehven kapandı** tek başına yazılamadı çünkü **#514'ü yeniden açma yetkisi
+  insandadır**; agent issue durumunu değiştiremez.
+* Her iki okuma da A-08'i tamamlanmış **yapmaz**: (A)'da kabul edilen şey denetimin
+  **yokluğudur**, (B)'de iş zaten açıktır.
+
+### Kanonik kayıt — tek yer
+
+`docs/audit/a11y_screen_reader_audit_results.md` §STATUS ▸ **"Tracking-issue state —
+closure/evidence divergence"**. Diğer bütün belgeler buraya **işaret eder**, olguyu
+tekrarlamaz. Blok üç şeyi sabitler:
+
+1. Beş olgu + `gh issue view` ile **yeniden türetme** yolu (issue durumu, label, denetim
+   yapıldı mı, çıkış kriterleri `0/4`, kayıtlı bulgu yok).
+2. Hüküm cümlesi: **"A closed issue is not evidence of a completed audit."**
+3. (A)/(B) tablosu — her satırda **gerekli insan işi**, ve (A) için *"No signer has been
+   supplied, so no such record exists."*
+
+### Dokunulan yüzeyler
+
+| Dosya | Değişiklik |
+|---|---|
+| `docs/audit/a11y_screen_reader_audit_results.md` | §STATUS'a kanonik ayrışma bloğu; §5'e *"Closing the tracking issue satisfies none of the four"* |
+| `docs/implementation/a11y_screen_reader_audit_checklist.md` | banner'a kapatma olgusu; §Çıkış kriteri'ne "iki kez kapatıldı"; denetçi satırı → *"artık hiçbir açık kayıt bu atamayı izlemiyor"* |
+| `docs/implementation/v18_final_acceptance.md` | §6'daki 2026-08-03 bloğu **korundu**, altına `GÜNCELLEME (2026-08-07)` |
+| `docs/implementation/entropia_v18_remediation_status.md` | aynı desen + `## Change log` 2026-08-07 girdisi + *"hâlâ açıktır (GitHub #514)"* parantezi düzeltildi |
+| `docs/implementation/v18_visual_traceability.md` | Bucket 2 A-08 satırı → **"iş AÇIK, izleme KAPALI"** |
+| `docs/audit/current_main_ground_truth_2026-08-03.md` | §16, §17, §18 ve **E-01** satırına tarihli ekler |
+| `CLAUDE.md` | §Current position "Son dalga" + §Açık iş (dürüst sınır) |
+| `docs/ADIM29_LANDED_KICKOFF.md` | yeni, `doc-status: current` |
+| `docs/ADIM28_LANDED_KICKOFF.md` | `current` → `historical` (tek-`current` kuralı) |
+| `scripts/generate_repository_facts.py` | `A08_COMPLETE` kuralının **mesaj metni** — *"GH #514 tracks it"* artık yanlıştı |
+
+**`generate_repository_facts.py` değişikliğinin sınırı:** yalnız insan-okur mesaj string'i.
+Kural kimliği `A08_COMPLETE` ve regex'i **aynen duruyor**, dolayısıyla `check_invariants()`
+davranışı birebir aynı. `test_repository_facts_guard.py:166` kural **id**'sini assert eder,
+mesaj metnini değil — test değişmedi.
+
+### Tavizsiz çizgiler (korundu)
+
+* Hiçbir belge A-08'i `Complete` / `PASS` / `Done` göstermiyor.
+* *"An empty template is not evidence"* worksheet'te **duruyor**.
+* **D-10 sürüyor** — WCAG 2.2 AA **1.4.3 karşılanmıyor**; AA uyumluluk iddiası yok.
+* Otomatik çıktı (axe-core / keyboard / prechecks) ekran-okuyucu kanıtı **sayılmıyor**.
+* **Tarihsel kayıt silinmedi:** 2026-07-30 kanıtsız kapatma ve 2026-08-03 yeniden açma
+  kayıtları **duruyor**; üzerlerine 2026-08-07 olayı eklendi. `git show <sha> -- docs/ |
+  grep '^-## '` boş.
+* **#514'ün durumu DEĞİŞTİRİLMEDİ.**
+
+### Doğrulama
+
+* `tests/contract/test_a11y_audit_prep_contract.py` + `test_repository_facts_guard.py`
+  `--no-cov` ile koşuldu.
+* `scripts/generate_repository_facts.py --root .. --check` — *documentation-truth gate OK*.
+* Yeni prose, `A08_COMPLETE` ve `WCAG_CONFORMANCE` invariant regex'lerini tetiklemiyor
+  (`NEGATION_RE` muafiyeti ile birlikte doğrulandı).
+
+### Devralınan açık sınırlar
+
+* **A-08 denetimi YAPILMADI** ve **izlemesi kapalı** — iş açık, izleme kapalı. Çözüm
+  (A) imzalı kalıcı sapma **veya** (B) #514'ün insan eliyle yeniden açılması; **ikisi de
+  insan işi**, bu slice hiçbirini yapmadı ve yapamazdı.
+* **K-2..K-6** ölçüldü, düzeltilmedi — her biri ayrı ürün kararı.
+* **Alertmanager YOK**; **ADIM 23 ve ADIM 24 bu dosyada hâlâ KAYITSIZ**.
+* **Memory checkpoint (kapanış ritüeli md. 4) YİNE YAPILAMADI** — ADIM 27/28'deki ile aynı
+  sebep: ne ecc knowledge graph MCP'si ne `claude-mem` bu oturumda bağlıydı. Sunucular
+  bağlandığında geriye dönük yazılabilir: entity `Entropia ADIM 29 — A-08 record
+  reconciliation`, ilişki `unblocks` → PR B.
+
+### Devir
+
+Kickoff `docs/ADIM29_LANDED_KICKOFF.md` (`doc-status: current`); `ADIM28` aynı commit'te
+`historical`'a çevrildi. Sıradaki tek adım değişmedi: **PR B — `ItemParticipant` adaptörü +
+`jobs/backtest_engine.py:298` call site**.

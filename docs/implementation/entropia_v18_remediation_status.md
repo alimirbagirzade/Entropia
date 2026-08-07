@@ -98,7 +98,8 @@ A requirement is **Complete** only with working end-to-end behavior + passing ac
 > **Kapanışın KAPSAMADIĞI şey:** bu blok yalnız R2'nin *In Progress (R2)* etiketini kaldırdı.
 > O tarihte açık bırakılan eksenlerden A-06 derin görsel kıyas ve bloklayıcı visual CI kapısı
 > 2026-07-30'da kapandı; A11Y-01 D-10 ile imzalı kalıcı sapmaya dönüştü. **A-08 ekran
-> okuyucu denetimi hâlâ açıktır** (GitHub #514).
+> okuyucu denetimi hâlâ açıktır** — takip issue'su GitHub #514 ise 2026-08-07'de
+> **kanıtsız kapatıldı**; iş açık, izlemesi kapalı (aşağıdaki 2026-08-07 güncellemesi).
 >
 > > **A-08 issue durumu — düzeltme (2026-08-03).** GitHub #514 2026-07-30T19:05:32Z'de
 > > **kanıt commit edilmeden kapatılmıştı**. Ground-truth denetimi repository'de hiçbir insan
@@ -108,6 +109,16 @@ A requirement is **Complete** only with working end-to-end behavior + passing ac
 > > *"An agent or automated scan must not close this issue on its own"* diyor. **#514 yeniden
 > > açıldı**; A-08 hiçbir belgede `Complete`/`PASS` yazılamaz. Ayrıntı:
 > > [`docs/audit/current_main_ground_truth_2026-08-03.md`](../audit/current_main_ground_truth_2026-08-03.md) §17.
+> >
+> > **GÜNCELLEME (2026-08-07).** Yukarıdaki "#514 yeniden açıldı" ifadesi **bayattır**:
+> > issue **ikinci kez** kanıtsız kapatıldı (`2026-08-07T03:52:03Z`, `state_reason:
+> > completed`). Denetim yine koşulmadı — `docs/audit/a11y_screen_reader_audit_results.md`
+> > **boş defter** (dört çıkış kriteri de ☐, tek bir `SR-BULGU` kaydı yok). Bu bloğun
+> > yukarıdaki "**A-08 hâlâ açıktır**" hükmü **değişmedi**; değişen tek şey, artık bunu
+> > izleyen açık bir issue'nun **bulunmamasıdır**. Kapalı issue tamamlanma kanıtı değildir.
+> > Ayrışmanın kanonik kaydı ve açık duran iki insan çözüm yolu:
+> > [`docs/audit/a11y_screen_reader_audit_results.md`](../audit/a11y_screen_reader_audit_results.md)
+> > §STATUS ▸ *Tracking-issue state*.
 >
 > Kapanış anında Complete'e çekilen satırların kanıt tablosu: **§"R2 kapanış — satır bazında
 > kanıt"** (Status tablosunun hemen üstünde).
@@ -371,6 +382,15 @@ capture) **CI'da koşmaz** — bu satırların görsel kanıtı yerel koşuma da
 
 ## Change log
 
+- 2026-08-07 — **A-08 izleme/kanıt ayrışması kaydedildi (docs-only).** GitHub #514
+  `2026-08-07T03:52:03Z`'de `state_reason: completed` ile **ikinci kez kanıtsız kapatıldı**
+  (ilki 2026-07-30, 2026-08-03'te geri alınmıştı). Denetim yine **yapılmadı**:
+  `docs/audit/a11y_screen_reader_audit_results.md` boş defter, dört çıkış kriteri de ☐.
+  Bu belgedeki A-08 satırı **AÇIK kalır**; kapatma tamamlanma kanıtı sayılmaz. Ayrışmanın
+  kanonik kaydı ve açık duran iki insan çözüm yolu (imzalı kalıcı sapma **veya** #514'ün
+  insan eliyle yeniden açılması) o defterin §STATUS ▸ *Tracking-issue state* bloğundadır.
+  Aşağıdaki 2026-07-30 satırının "#514'te açık kaldı" ifadesi o tarihte doğruydu; **bugün
+  bayattır** ve tarihsel kayıt olarak korunmuştur.
 - 2026-07-30 — **Final acceptance closure.** A-06'nın kalan 10-doc derin görsel kıyası temiz
   seeded stack üzerinde tamamlandı; yeni F-7 collapsed resolver revision-label bulgusu aynı
   slice'ta düzeltildi. Ubuntu için sekiz visual-regression baseline'ı eklendi ve gerçek-session

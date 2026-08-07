@@ -4618,11 +4618,101 @@ suite **3945 passed / 1 xfailed / 0 failed**, exit **0**, coverage **%93.52** (k
 
 **Devir:** `docs/ADIM27_LANDED_KICKOFF.md`. Tam kayıt: `PROJECT_HISTORY.md`.
 
+## ADIM 28 — A-08 audit preparation landed (PR #628)
+
+**Branch `a11y/a08-human-audit-preparation`**, base `81336e1`, merge `20e942b`
+· 9 dosya, **+1762 / −8** · **migration YOK**, alembic head
+`0043_i08_registry_strategy_fks` değişmedi · **yeni tablo YOK** · OpenAPI değişmedi ·
+`ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI)
+· yeni endpoint / sayfa / job **YOK** · codemap değişmedi · `.github/workflows/` **hiç
+dokunulmadı**. Aynı dalganın unblocker'ı **PR #629** (merge `81336e1`, 1 dosya +6/−0).
+
+GitHub **#514** 2026-07-30'dan beri açıktı ve issue ile denetmen arasında duran tek şey
+düzyazıydı. Bu slice **iskeleyi** kurar; **denetimi YAPMAZ**.
+
+**`scripts/a11y-audit-stack.sh`** — `up | validate | status | down`. Compose projesi her
+zaman `entropia-a11y-audit` (`down` başkasını reddeder), hermetik git-ignored
+`.env.a11y-audit`, tek düğme **`A11Y_HOST`** (`0.0.0.0` → hard error: o bir bind adresidir,
+tarayıcının açacağı adres değil). Teardown **EXIT trap DEĞİL**, açık alt komut — tüketici
+oturumun ortasındaki bir insan. `validate` beş adımda **9/9** geçiyor: session profili
+(`/meta.auth_mode=session`), Admin oturumu (`/me.is_admin=true`), `SEED_E2E_GOLDEN` +
+`SEED_ESP_TA` + `SEED_RATIONALE` gerçekten satır üretiyor, 23 rotanın hepsi servis ediliyor.
+Amaç: kimse bir NVDA oturumunu ürün sebebiyle değil **seeding sebebiyle** boş sayfalarda
+harcamasın.
+
+**`docs/audit/a11y_screen_reader_audit_results.md`** — 23 rota × 2 kombinasyon + 10 akış × 2,
+**16 kolonlu** bulgu defteri + kolon sözleşmesi, §4 retest listesi, §5 çıkış kriterleri,
+§6 otomasyonun ne ölçtüğü + **K-1..K-6**. Rota satırları `screenshotMatrix.ts::TARGET_PAGES`'ten
+üretildi (axe taramasının yürüdüğü aynı matris). `doc-status: historical` — kapı
+`docs/audit/*.md` için bunu zorunlu kılıyor; belge bu gerilimi ilk paragrafında açıkça söylüyor.
+
+**`.github/ISSUE_TEMPLATE/a11y_screen_reader_finding.yml`** — her kolon için bir alan +
+**ZORUNLU "duydum" beyanı** (ekran-okuyucu bulgusunu DOM çıkarımından ayıran tek şey) +
+retest checkbox'ları. `accessibility` ve `a11y-screen-reader` label'ları bu dalgada AÇILDI.
+
+**`frontend/e2e/specs/20-a11y-prechecks.spec.ts`** — `@a11y` etiketli, `npm run a11y`
+(= `playwright test --grep @a11y`) onu **otomatik alır**; workflow'a tek satır eklenmedi.
+**BLOCKING:** tek `<h1>`den fazlası yok, tek `main`, `banner` + adlandırılmış `navigation`,
+dialog adı + Escape + odak geri dönüşü. **ADVISORY:** skip link, `contentinfo`, başlık
+atlaması, positive `tabindex`, `aria-live` envanteri, focus indicator, tab order. Ayrım
+gerekçeli — bir advisory'nin düzeltmesi bir **ürün kararıdır**, kırmızı kapı o kararı
+ihmalle vermiş olurdu. Her kayıt `screen_reader_verified: false`. Rapor
+`a11y-report/precheck-results.json` `.gitignore`'da (yerel çıktı kanıt gibi görünmesin),
+CI artifact olarak yükleniyor.
+
+**Testler:** `backend/tests/contract/test_a11y_audit_prep_contract.py` — **21 test**
+(20 `def test_` + parametrize genişlemesi). Rotaları `TARGET_PAGES`'e, akışları checklist'e,
+script'in seed bayrakları + rota listesini **ikisine birden**, defterin completion
+sayaçlarını **kendi hücrelerine** pinler; üç mutasyon testiyle ısırdığı doğrulandı.
+
+**PR #629 — js-yaml `!!omap` (GHSA-5p4m-2wfm-xmqj / CVE-2026-59870) gerekçeyle donduruldu.**
+`npm audit` kapısı hiçbir bağımlılığa dokunmayan PR'larda bile kırmızıydı. Zincir
+`eslint@9 → @eslint/eslintrc → js-yaml@4.3.0`: devDependency, bundle'a girmiyor; açık kod
+eslintrc'nin YAML config yükleyicisi ve eline hiçbir şey verilmiyor (proje flat-config,
+repoda **hiçbir türde `.eslintrc` yok**). Kayda iki bitiş koşulu yazıldı: eslint 9.x yamalı
+js-yaml'a geçtiğinde **veya** repo bir `.eslintrc.y(a)ml` kazandığında.
+
+**Ölçümler:** sayısal otorite `docs/generated/repository_facts.md`. Bu dalganın deltası:
+backend **collected** 3395 → **3415** (328 → 329 dosya), E2E **call site** 73 → **81**
+(20 → 21 spec) — *collection* sayılarıdır, pass değil. Koşular: backend tam suite exit **0**,
+**0 failed**, coverage **%93.52** (kapı ≥90); frontend **721 passed / 70 dosya**, **%84.92**
+line; `npm run a11y` (`CI=true`) exit **0**; CI'da **"A11Y — axe-core scan"** PASS.
+
+**Açık sınırlar (yumuşatılmadı):**
+* **A-08 denetimi YAPILMADI.** Defter **BOŞ** (`*(none recorded — audit not run)*`), §5'in
+  dört çıkış kriteri de **☐** (`0 / 2` kombinasyon, `0 / 46` rota, `0 / 20` akış).
+  **Boş şablon kanıt değildir** — hiçbir belge A-08'i `Complete`/`PASS` gösteremez.
+* **K-2..K-6 ÖLÇÜLDÜ, DÜZELTİLMEDİ** (her biri bir ürün kararı; precheck koşusu: 23 rota,
+  **0 blocking failure, 85 advisory**): skip link yok **23/23** · `contentinfo` yok **23/23**
+  · `h1 → h3` atlaması **21/23** · `/user-manual`'da `<h1>` yok (`UserManual.tsx:181`; sapma
+  `frontend/e2e/utils/pageTruth.ts:15`'te zaten kayıtlı) · focus indicator computed-style'da
+  görünmüyor — **yalnız insan gözü karar verebilir**.
+* **D-10 sürüyor:** 45 aksan-mavisi düğüm, WCAG 2.2 AA **1.4.3 KARŞILANMIYOR**; bu slice
+  hiçbir AA iddiası getirmiyor.
+* **ÖNCEDEN VAR OLAN iki kararsızlık** (bu slice'tan değil): `14-keyboard-flow` 4 koşudan
+  1'inde autofocus yarışında düştü; `13-a11y-scan` ilk denemede **gerçek** bir ratchet
+  ihlali verdi (`arrange-metrics`: `color-contrast` 4 düğüm, baseline 2), retry'da 2 ölçtü —
+  o sayfayı yeşil tutan şu an `playwright.config.ts:22`'deki `retries: CI ? 1 : 0`.
+* **GitHub #514 sahibi tarafından 2026-08-07T03:52Z'de KAPATILDI** (`completed`), denetim
+  kanıtı olmadan ve her iki dalga commit'inden de **önce**. Olgu olarak kaydedildi;
+  A-08 bununla tamamlanmış **değildir**. Ayrışmanın düzeltilmesi **ayrı bir slice**.
+* Kapanış ritüelinin **4. maddesi (memory checkpoint) yine YAPILAMADI** — ecc knowledge graph
+  ve `claude-mem` bu oturumda bağlı değildi (ADIM 27 ile aynı sebep).
+* Devralınan: **Alertmanager YOK** · **ADIM 23 / ADIM 24 `PROJECT_HISTORY.md`'de KAYITSIZ** ·
+  documentation-truth kapısı **silmeyi görmez** → merge öncesi elle
+  `git show <sha> -- docs/ | grep '^-## '`.
+
+**Devir:** `docs/ADIM28_LANDED_KICKOFF.md`. Tam kayıt: `PROJECT_HISTORY.md` §ADIM 28.
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:298` call site**
 
-**Değişmedi** — ADIM 25, ADIM 26 ve ADIM 27 ops/CI/docs slice'larıydı ve motor yoluna dokunmadı.
-`run_portfolio` hâlâ üretimde **çağrısız**: `jobs/backtest_engine.py:298` item döngüsü, `:363`
-`combine_item_runs`, `SHARED_ALLOCATION_STATUS = future_dev` (containment KAPALI). ADIM 20
-matrisindeki A1/A3/A5 dışında hiçbir satır bu boşluk kapanmadan kapanamaz. Stepper indi
-(#602); kalan borç **adaptör + call site**. Ayrıntı ve tasarım işaretleri:
+**Değişmedi** — ADIM 25/26/27 ops/CI/docs, ADIM 28 ise a11y-hazırlık slice'ıydı; hiçbiri
+motor yoluna dokunmadı. `run_portfolio` hâlâ üretimde **çağrısız**:
+`jobs/backtest_engine.py:298` item döngüsü, `:363` `combine_item_runs`,
+`SHARED_ALLOCATION_STATUS = future_dev` (containment KAPALI). ADIM 20 matrisindeki A1/A3/A5
+dışında hiçbir satır bu boşluk kapanmadan kapanamaz. Stepper indi (#602); kalan borç
+**adaptör + call site**. Ayrıntı ve tasarım işaretleri:
 `docs/ADIM16_STEPPER_LANDED_KICKOFF.md` ve `docs/ADIM26_KICKOFF.md`.
+
+**A-08 ayrı bir eksendedir ve PR B'yi bloklamaz.** İnsan denetimi hâlâ yapılmadı; iskele
+hazır (`scripts/a11y-audit-stack.sh up && … validate`), defter boş, #514 kanıtsız kapatıldı.

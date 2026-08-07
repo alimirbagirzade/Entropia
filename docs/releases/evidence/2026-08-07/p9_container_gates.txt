@@ -1,0 +1,25 @@
+# G7 — runtime users are non-root (security.yml 'Verify runtime users are non-root', local repro)
+
+entropia-backend:scan runtime uid=10001
+entropia-web:scan runtime uid=101
+NONROOT_EXIT=0
+
+# G8/G9/G5 — local repro NOT COMPLETED (environment fault, not a scan finding)
+
+attempt 1 (default 5m timeout):
+  FATAL run error: image scan error: scan error: scan failed: failed analysis:
+  analyze error: pipeline error: failed to analyze layer (sha256:da97f72be7b2...):
+  walk error: failed to process the file: failed to analyze file:
+  root/.cache/uv/archive-v0/jFzA_igtnMwd3Svg/pyarrow/libarrow_python.so:
+  semaphore acquire: context deadline exceeded
+
+attempt 2 (--timeout 45m):      no output after ~40 min, report file 0 bytes
+attempt 3 (--download-db-only): no output
+probe   (wget -T 20 https://ghcr.io/v2/ from the same image): hung >2 min
+cleanup (docker kill <trivy containers>): timed out after 2 min
+
+=> trivy cannot fetch its vulnerability DB and the Docker daemon is unresponsive
+   on this runner. Authority for G5/G8/G9 is the CI Security run on the IDENTICAL sha:
+   run 31190284830, headSha 6cd6172833aecf45186378de1e3aa3afa4e0b458, conclusion success
+   'Vulnerability allowlist gate' -> OK - 0 fixable CRITICAL/HIGH finding(s), all accounted for.
+   SBOMs -> backend-image 1202 / backend-source 81 / frontend-image 71 / frontend-source 13 components

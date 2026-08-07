@@ -1,0 +1,9 @@
+
+frontend: high=3 critical=0 (moderate=0 low=0)
+  frozen   GHSA-5p4m-2wfm-xmqj high js-yaml — JS-YAML: Quadratic CPU consumption in !!omap resolution (3.x and 4.x) — CVE-2026-59870 fix
+  frozen   GHSA-qwww-vcr4-c8h2 high react-router — React Router: RSC Mode CSRF Bypass Allows Action Execution Before 400 Response
+
+frontend/e2e: high=0 critical=0 (moderate=0 low=0)
+
+OK — no unrecorded high/critical advisories.
+EXIT=0

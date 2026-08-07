@@ -38,6 +38,12 @@ const FROZEN_ADVISORIES = {
       reason:
         "RSC-mode CSRF bypass. This app is a Vite SPA on react-router-dom's BrowserRouter and never enables RSC mode. react-router-dom@7.18.1 pins react-router@7.18.1 exactly, so the only patched line is react-router@8.2.1+, i.e. the v8 migration that drops react-router-dom.",
     },
+    {
+      id: "GHSA-5p4m-2wfm-xmqj",
+      pkg: "js-yaml",
+      reason:
+        "CVE-2026-59870, quadratic CPU consumption resolving `!!omap`. Reached only as eslint@9 -> @eslint/eslintrc -> js-yaml@4.3.0: a devDependency that never enters the built bundle, so no shipped artifact and no request path touches it. The vulnerable code is eslintrc's YAML config loader, and here it is handed nothing at all — this project is flat-config (frontend/eslint.config.js) and the repository contains no .eslintrc file of any kind, so there is no YAML document to feed it, attacker-controlled or otherwise. `npm audit fix` offers no lockfile-only remedy; the published fix path is eslint@10, a major upgrade whose lint-rule churn is out of proportion to a build-time CPU-DoS on a file we author ourselves. RE-CHECK when eslint 9.x picks up a patched js-yaml, or if this repo ever gains an .eslintrc.y(a)ml — either event ends this reason.",
+    },
   ],
   "frontend/e2e": [],
 };

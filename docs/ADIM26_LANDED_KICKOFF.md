@@ -1,13 +1,16 @@
-<!-- doc-status: current -->
-> **CURRENT SLICE KICKOFF.** Sayısal gerçekler için otorite:
-> `CLAUDE.md` §Current position + `docs/generated/repository_facts.md` (üretilmiş).
+<!-- doc-status: historical -->
+> **HISTORICAL RECORD — bu belge GÜNCEL GERÇEK DEĞİLDİR.** Yazıldığı andaki durumu
+> kaydeder; SHA'lar, sayılar, alembic head'i ve "next" maddeleri bayat olabilir.
+> Güncel otorite: `CLAUDE.md` §Current position + `docs/generated/repository_facts.md`
+> (üretilmiş, CI'da `--check` ile kapılı).
 
 # ADIM 26 kapanış devri — alert kuralları artık GERÇEKTEN doğrulanıyor
 
-> **Durum uyarısı:** bu belge yazıldığında **PR #624 AÇIK, merge EDİLMEMİŞTİ.**
-> "landed" yazmıyorum çünkü inmedi. Yeni oturuma başlarken **önce doğrula**:
-> `gh pr view 624 --json state,mergedAt`. Merge edilmediyse aşağıdaki her şey
-> hâlâ bir dal üzerindedir.
+> **Devredildi:** güncel kickoff artık `docs/ADIM27_LANDED_KICKOFF.md`.
+>
+> **Durum uyarısı (tarihsel):** bu belge yazıldığında **PR #624 AÇIK, merge
+> EDİLMEMİŞTİ** ve "landed" denmiyordu. **O gün geçti:** #624 ve #625 merge edildi
+> (`c859f1c`, `7a9be2d`), aşağıdakiler artık `main` üzerindedir.
 
 ## Nerede duruyoruz
 

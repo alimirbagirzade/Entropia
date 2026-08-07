@@ -4557,11 +4557,70 @@ yeşil, CI'da kırmızıydı**: `mktemp -d` 0700 üretir, Prometheus imajı `nob
 
 **Açık kalan (bilerek):** Alertmanager YOK → kurallar doğru ateşliyor ama **kimseye
 ulaşmıyor**; `severity: page` hiçbir alıcının okumadığı bir etiket.
-**Devir:** `docs/ADIM26_LANDED_KICKOFF.md`. Tam kayıt: `PROJECT_HISTORY.md`.
+**Devir:** `docs/ADIM26_LANDED_KICKOFF.md` (artık `historical`; güncel devir
+`docs/ADIM27_LANDED_KICKOFF.md`). Tam kayıt: `PROJECT_HISTORY.md`.
+**Sonradan doğrulandı:** #624 ve #625 merge edildi (`c859f1c`, `7a9be2d`).
+
+## ADIM 27 — documentation-truth CI landed (PR #626)
+
+**Branch `ci/documentation-truth-guard`**, base `7a9be2d`, merge `0e67e9d`
+· 86 dosya, **+2665 / −29** · **migration YOK**, alembic head
+`0043_i08_registry_strategy_fks` değişmedi · **yeni tablo YOK** · OpenAPI değişmedi ·
+`ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI)
+· yeni endpoint / sayfa / job **YOK** · **frontend etkilenmedi**.
+
+Belgelerin ileri sürdüğü olgular artık **çalışma ağacından üretiliyor** ve CI'da
+karşılaştırılıyor. `scripts/generate_repository_facts.py` (873 satır, bağımlılıksız)
+on olgu ailesini toplar → `docs/generated/repository_facts.{json,md}` + `README.md`
+içindeki `<!-- BEGIN/END GENERATED: repository-facts -->` bloğu. Backend job'una yeni
+bloklayıcı adım **`Documentation truth gate (generated repository facts)`** eklendi,
+OpenAPI drift guard'ından **SONRA** (route olguları o adımın şemasından okunur).
+
+`--check` üç şeyi birden reddeder: (1) üç artefakttan biri bayatsa
+(`check_artifacts`), (2) kickoff/audit/history belgesi `doc-status` işareti taşımıyorsa
+**veya** birden fazla belge `current` iddia ediyorsa **veya** bir history/audit kaydı
+`current` işaretliyse (`check_classification`), (3) güncel bir belge ağacın yalanladığı
+alembic head / `ENGINE_VERSION` / `SHARED_ALLOCATION_STATUS` söylüyorsa ya da
+`INVARIANT_RULES`'un beş yasak eşitlemesinden birini kuruyorsa (`check_assertions`).
+
+77 belge `doc-status` işareti aldı — 76 `historical` + 1 `current`; #626'daki dokunuşların
+**tamamı saf eklemeydi** (76×+6/−0, 1×+4/−0, **sıfır silme**). `docs/CODEMAPS/README.md`
+ve `DATA_MODEL.md` elle sayılan olgu tablolarını bıraktı: aynı tablo toplamı birinde 102,
+diğerinde 104 yazıyordu — **gerçek 104**. `CLAUDE.md` §Current position "sayısal otorite bu
+blok değil" pointer'ı aldı.
+
+**Testler:** `backend/tests/contract/test_repository_facts_guard.py` — **28 case**
+(16 `def test_`, kalanı parametrize genişlemesi). Ölçülmüş sayılar için elle rakam
+yazılmıyor: otorite **`docs/generated/repository_facts.md`** (tablo/FK/HTTP/route/nav/
+capability/test **collection**/acceptance/görsel/sapma). Kapanış öncesi ölçüm: tam backend
+suite **3945 passed / 1 xfailed / 0 failed**, exit **0**, coverage **%93.52** (kapı ≥90).
+
+**Açık sınırlar (yumuşatılmadı):**
+* **Kapı `0e67e9d` için main'de HİÇ KOŞMADI.** 2026-08-06 16:00–17:00 arasında GitHub
+  Actions arızası vardı (`Set up job` → `Failed to resolve action download info. Error:
+  Service Unavailable`); `7a9be2d` main run'ı bu yüzden kırmızı ve `0e67e9d` için main'de
+  run oluşmadı. `ci.yml` `workflow_dispatch` **taşımıyor** → main'de elle tetiklenemez.
+  Adımın ilk gerçek koşusu bu kapanış PR'ıdır.
+* **Kapsam dışı (bilerek):** commit sha, timestamp, GitHub durumu (açık PR/issue),
+  test **PASS** sayısı. Her test sayısı bir *collection* sayısıdır ve adı bunu söyler.
+* **İki olgu hâlâ elle sayılı ve kapı onları KORUMUYOR:** audit `event_kind` 126 literal,
+  frontend 31 sayfa / 40 `lib/*.ts`.
+* Üretici `entropia`'yı import eder → yalnız backend venv'inde koşar; salt-docs katkıcısı
+  artefaktı yeniden üretemez.
+* `INVARIANT_RULES` **regex tabanlıdır** — aynı yalanı farklı cümleyle yazan metni kaçırır.
+  **Tripwire, kanıt değil.**
+* Docs regresyonu bu repoda **üç kez** oldu (#590, #604). Kapı sınıflandırmayı görür,
+  **silmeyi görmez** — merge öncesi hâlâ elle: `git show <sha> -- docs/ | grep '^-## '`.
+* **Alertmanager YOK** (ADIM 25/26'dan devralınan sınır) → kurallar ateşliyor ama kimseye
+  ulaşmıyor. **`PROJECT_HISTORY.md`'de ADIM 23 ve ADIM 24 hâlâ KAYITSIZ.**
+* Ekran okuyucu (NVDA/VoiceOver) denetimi **YAPILMADI** — GitHub #514 açık.
+  **D-10** imzalı kalıcı kontrast sapması: WCAG 2.2 AA 1.4.3 karşılanmıyor.
+
+**Devir:** `docs/ADIM27_LANDED_KICKOFF.md`. Tam kayıt: `PROJECT_HISTORY.md`.
 
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:298` call site**
 
-**Değişmedi** — ADIM 25 ve ADIM 26 ops/CI slice'larıydı ve motor yoluna dokunmadı.
+**Değişmedi** — ADIM 25, ADIM 26 ve ADIM 27 ops/CI/docs slice'larıydı ve motor yoluna dokunmadı.
 `run_portfolio` hâlâ üretimde **çağrısız**: `jobs/backtest_engine.py:298` item döngüsü, `:363`
 `combine_item_runs`, `SHARED_ALLOCATION_STATUS = future_dev` (containment KAPALI). ADIM 20
 matrisindeki A1/A3/A5 dışında hiçbir satır bu boşluk kapanmadan kapanamaz. Stepper indi

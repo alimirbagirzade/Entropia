@@ -1,0 +1,21 @@
+Using CPython 3.12.13
+Creating virtual environment at: .venv
+   Building entropia @ file:///Users/mirbagirzade/Development/Entropia/.claude/worktrees/festive-grothendieck-8a8260/backend
+      Built entropia @ file:///Users/mirbagirzade/Development/Entropia/.claude/worktrees/festive-grothendieck-8a8260/backend
+Installed 46 packages in 757ms
+No known vulnerabilities found
+Name     Skip Reason
+-------- -----------------------------------------------------------------------
+entropia Dependency not found on PyPI and could not be audited: entropia (0.1.0)
+EXIT=0
+
+# ---------------------------------------------------------------------------
+# G2 — same audit with the dev extra installed (beyond CI; venv holds 79 dists)
+#   cd backend && uv run --extra dev --with pip-audit pip-audit
+# ---------------------------------------------------------------------------
+Installed 33 packages in 378ms
+No known vulnerabilities found
+Name     Skip Reason
+-------- -----------------------------------------------------------------------
+entropia Dependency not found on PyPI and could not be audited: entropia (0.1.0)
+EXIT=0

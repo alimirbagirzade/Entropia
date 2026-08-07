@@ -1,0 +1,20 @@
+# P6 — audit_events eşzamanlı-yazıcı kanıtı (dr-acceptance [5]/[7] adjudication)
+
+## Monotonik büyüme (aynı canlı DB, üç ayrı ölçüm)
+  dump anı (backup.sh 18:12:13Z, MANIFEST)   : 1030  <- restored tarafın taşıdığı değer
+  dr-acceptance [5] karşılaştırma anı        : 1032  (source)
+  bu ölçüm (19:06:40Z)                      : 1036
+
+## Yedekten SONRA yazılan satırlar (occurred_at > dr backup 18:18:20Z = 21:18:20 +03)
+          occurred_at          |           event_kind            | actor_principal_id 
+-------------------------------+---------------------------------+--------------------
+ 2026-08-07 21:19:22.24849+03  | backtest.run_admission_rejected | user_1
+ 2026-08-07 21:19:57.03034+03  | backtest.run_admission_rejected | user_1
+ 2026-08-07 21:20:33.886717+03 | backtest.run_admission_rejected | user_1
+ 2026-08-07 21:22:07.367137+03 | backtest.run_admission_rejected | user_1
+ 2026-08-07 21:22:30.807904+03 | backtest.run_admission_rejected | user_1
+ 2026-08-07 21:23:00.55627+03  | backtest.run_admission_rejected | user_1
+(6 satır)
+
+
+## Sapan tek tablo audit_events'tir — diğer 102 public tablo eşleşti (dr-acceptance [4]/[5])

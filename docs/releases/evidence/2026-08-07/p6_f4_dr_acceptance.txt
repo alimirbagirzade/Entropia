@@ -1,0 +1,58 @@
+
+[1m========== DR ACCEPTANCE  (source 'entropia' -> scratch 'entropia_dr_acceptance' @ localhost:5432) ==========[0m
+
+[36m— [1] take a real backup of the live database (scripts/backup.sh)[0m
+  [32mPASS[0m  [1] backup written: /Users/mirbagirzade/Development/Entropia/.claude/worktrees/entropia-v18-acceptance-flows-1b0a64/backups/dr-acceptance/20260807T181820Z
+        PASS  postgres.dump written (394464 bytes)
+        PASS  alembic head: 0039_backtest_run_cancellation · public tables: 103
+        PASS  mirrored bucket 'entropia-artifacts' via host mc
+        PASS  MANIFEST.json written
+
+[36m— [2] restore into the scratch database and the scratch bucket (the live stack is not written)[0m
+  [32mPASS[0m  [2] restore.sh completed into 'entropia_dr_acceptance' (+ bucket 'entropia-dr-acceptance')
+
+[36m— [3] the restored database is stamped at the same Alembic revision[0m
+  [32mPASS[0m  [3] alembic head identical: 0039_backtest_run_cancellation
+
+[36m— [4] the public table set is identical[0m
+  [32mPASS[0m  [4] 103 public tables, same set
+
+[36m— [5] every table's row count survives the round trip[0m
+  [31mFAIL[0m  [5] row counts diverged:
+      12c12
+      < audit_events=1032
+      ---
+      > audit_events=1030
+
+[36m— [6] immutable evidence is byte-identical (revision/manifest/result hashes, checksums)[0m
+  [2m[6] entity_revisions — no rows (fingerprint EMPTY on both sides)[0m
+  [2m[6] backtest_run_manifest — no rows (fingerprint EMPTY on both sides)[0m
+  [2m[6] backtest_result — no rows (fingerprint EMPTY on both sides)[0m
+  [2m[6] market_dataset_revision — no rows (fingerprint EMPTY on both sides)[0m
+  [2m[6] research_dataset_revision — no rows (fingerprint EMPTY on both sides)[0m
+  [2m[6] package_revision — no rows (fingerprint EMPTY on both sides)[0m
+  [2m[6] rationale_family_revision — no rows (fingerprint EMPTY on both sides)[0m
+  [2m[6] strategy_revision — no rows (fingerprint EMPTY on both sides)[0m
+  [2m[6] export_artifact — no rows (fingerprint EMPTY on both sides)[0m
+  [2m[6] manual_document_revisions — 4a6edc27ce44a496f2c7c0602a9dbe60[0m
+  [32mPASS[0m  [6] all 10 immutable-evidence projections identical (1 carried rows)
+  [33mWARN[0m  [6] only 1 evidence table(s) actually held rows — this run proves little about hash preservation.
+  [2m[6] Seed the source stack first (SEED_E2E_GOLDEN=1 SEED_ESP_TA=1 SEED_RATIONALE=1) so revisions, manifests and results exist.[0m
+
+[36m— [7] audit, outbox and agent checkpoints survive intact[0m
+  [31mFAIL[0m  [7] audit_events diverged: source=2ee73868a0cce7492683872b599ef041 restored=4a52995899a6de01d4498d844f113d22
+  [2m[7] outbox_events — 0 rows, fingerprint EMPTY[0m
+  [2m[7] agent_checkpoint — 0 rows, fingerprint EMPTY[0m
+
+[36m— [8] object storage round-trips byte-for-byte into the restored bucket[0m
+  [32mPASS[0m  [8] 56 objects: path, size and md5 identical between the backup and the RESTORED bucket
+  [2m[8] key prefix create-package/baseline — 4 object(s)[0m
+  [2m[8] key prefix market/processed — 10 object(s)[0m
+  [2m[8] key prefix market/raw — 7 object(s)[0m
+  [2m[8] key prefix signals/source — 35 object(s)[0m
+
+[1m========== RESULT ==========[0m
+  [32m6 passed[0m, [31m2 failed[0m, [33m1 warned[0m
+  [2mbackup under test: /Users/mirbagirzade/Development/Entropia/.claude/worktrees/entropia-v18-acceptance-flows-1b0a64/backups/dr-acceptance/20260807T181820Z[0m
+DR ACCEPTANCE FAILED — see the FAIL lines above.
+EXIT=1

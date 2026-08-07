@@ -1,0 +1,13 @@
++(eval):1> ./scripts/backup.sh
+== Entropia backup -> /Users/mirbagirzade/Development/Entropia/.claude/worktrees/entropia-v18-acceptance-flows-1b0a64/backups/20260807T181213Z ==
+== PostgreSQL (entropia @ localhost:5432) ==
+  PASS  postgres.dump written (394464 bytes)
+  PASS  alembic head: 0039_backtest_run_cancellation · public tables: 103
+== Object storage (entropia-artifacts @ http://localhost:9000) ==
+  PASS  mirrored bucket 'entropia-artifacts' via host mc
+  PASS  MANIFEST.json written
+
+BACKUP OK — /Users/mirbagirzade/Development/Entropia/.claude/worktrees/entropia-v18-acceptance-flows-1b0a64/backups/20260807T181213Z
+  restore : ./scripts/restore.sh "/Users/mirbagirzade/Development/Entropia/.claude/worktrees/entropia-v18-acceptance-flows-1b0a64/backups/20260807T181213Z" --yes
+  verify  : ./scripts/backup-verify.sh "/Users/mirbagirzade/Development/Entropia/.claude/worktrees/entropia-v18-acceptance-flows-1b0a64/backups/20260807T181213Z"
+EXIT=0

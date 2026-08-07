@@ -1,0 +1,6 @@
+== Verifying backup 20260807T181213Z into scratch DB 'entropia_restore_check' ==
+  PASS  alembic_version present: 0039_backtest_run_cancellation
+  PASS  public tables restored: 103
+
+VERIFY OK — 20260807T181213Z restores into a coherent database (head 0039_backtest_run_cancellation, 103 tables).
+EXIT=0

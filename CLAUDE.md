@@ -179,18 +179,20 @@ Before stopping a working session, produce **ALL** of the following:
 > değiştirir; sha'ya değil üretilmiş bloğa güven. Bir belgenin güncel mi tarihsel mi
 > olduğunu ilk satırındaki `<!-- doc-status: … -->` işareti söyler.
 
-> **HEAD `0e67e9d`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **HEAD `20e942b`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).
-> **Son dalga — ADIM 27 (documentation-truth CI, PR #626 — MERGED):** belgelerin ileri
-> sürdüğü olgular artık ağaçtan üretiliyor (`scripts/generate_repository_facts.py` →
-> `docs/generated/repository_facts.{json,md}` + README bloğu) ve bloklayıcı CI adımı
-> `Documentation truth gate` ile karşılaştırılıyor; 77 belge `doc-status` işareti aldı
-> (**tek bir `current` kickoff** kuralı artık kapılı) + 28 guard testi.
-> Öncesinde ADIM 26 (#624 promtool gate), ADIM 25 (#622), ADIM 24 (#619), ADIM 23 (#610)
-> — **son ikisi `PROJECT_HISTORY.md`'de hâlâ kayıtsız** (dürüst not, kapatılmadı).
-> **Açık sınırlar:** kapı `0e67e9d` için main'de **hiç koşmadı** (GitHub Actions arızası;
-> `ci.yml` `workflow_dispatch` taşımıyor) — ilk gerçek koşu ADIM 27 kapanış PR'ıdır ·
-> Alertmanager YOK, kurallar ateşliyor ama **kimseye ulaşmıyor**.
+> **Son dalga — ADIM 28 (A-08 insan denetimi HAZIRLIĞI, PR #628 — MERGED; unblocker #629):**
+> `scripts/a11y-audit-stack.sh` (`up|validate|status|down`, 9/9 fixture doğrulaması), boş
+> çalışma defteri `docs/audit/a11y_screen_reader_audit_results.md`, `@a11y` precheck spec'i
+> ve 21 kontrat testi indi. **Denetim YAPILMADI; defter BOŞ, dört çıkış kriteri de ☐** —
+> A-08 tamamlanmış **değildir**, hiçbir belge onu `Complete`/`PASS` gösteremez.
+> Öncesinde ADIM 27 (#626/#627),
+> ADIM 26 (#624), ADIM 25 (#622), ADIM 24 (#619), ADIM 23 (#610) — **son ikisi
+> `PROJECT_HISTORY.md`'de hâlâ kayıtsız** (dürüst not, kapatılmadı).
+> **Açık sınırlar:** GitHub #514 sahibi tarafından 2026-08-07'de **kanıtsız KAPATILDI**
+> (olgu; A-08 bununla tamamlanmış **değildir**, düzeltmesi ayrı slice) · K-2..K-6 ölçüldü ama
+> **düzeltilmedi** (her biri ürün kararı) · Alertmanager YOK, kurallar ateşliyor ama
+> **kimseye ulaşmıyor**.
 > **Next:** **PR B** — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:298` call site.
 > **Yarım-cent yuvarlama KARARA BAĞLANDI (2026-08-06):** `initial_sleeve_capital` yeniden
 > quantize edilmez, dondurulmuş `derived_amounts`'tan **kopyalanır**; iki yuvarlama sabiti de
@@ -244,11 +246,15 @@ Before stopping a working session, produce **ALL** of the following:
 
 
 
-- **Açık iş (dürüst sınır):** ekran okuyucu (NVDA/VoiceOver) denetimi **yapılmadı**;
-  takip **GitHub #514 — 2026-07-30'da kanıtsız kapatılmıştı, 2026-08-03'te yeniden açıldı**;
-  kapatma yetkisi insandadır, agent kapatamaz. Visual regression ve axe-core ratchet'i
-  CI'da bloklayıcı. Kalan 45 düğüm imza-mavisi **D-10 (2026-07-30) imzalı kalıcı sapmasıdır**;
-  WCAG 2.2 AA 1.4.3 karşılanmıyor, ürün bu ölçüt için uyumlu sayılamaz. Ayrıca doğrulanmış
+- **Açık iş (dürüst sınır):** ekran okuyucu (NVDA/VoiceOver) denetimi **hâlâ yapılmadı**.
+  ADIM 28 (#628) yalnız **iskeleyi** kurdu — `scripts/a11y-audit-stack.sh` +
+  `docs/audit/a11y_screen_reader_audit_results.md` (**BOŞ defter**, dört çıkış kriteri de ☐).
+  Takip **GitHub #514 — 2026-07-30'da kanıtsız kapatılmış, 2026-08-03'te yeniden açılmış,
+  2026-08-07'de yine kanıtsız kapatılmıştır**; kapatma yetkisi insandadır, agent kapatamaz.
+  Kapalı issue ile boş defter arasındaki ayrışma **sürüyor** ve düzeltilmesi ayrı bir slice'tır.
+  Visual regression ve axe-core ratchet'i CI'da bloklayıcı. Kalan 45 düğüm imza-mavisi
+  **D-10 (2026-07-30) imzalı kalıcı sapmasıdır**; WCAG 2.2 AA 1.4.3 karşılanmıyor, ürün bu
+  ölçüt için uyumlu sayılamaz.
 
 
 - **KAPSAM DIŞI (bilerek):** retention auto-purge (doc 20 §16 — "Production V1'de kapalı"),

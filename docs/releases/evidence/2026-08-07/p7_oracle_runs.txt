@@ -1,0 +1,28 @@
+P7 — oracle + golden suite, two independent runs
+commit 6c239e4, cwd backend/, isolated DB entropia_p7_oracle
+command: uv run --extra dev pytest tests/unit/oracles/ tests/unit/test_backtest_engine_golden.py --no-cov -q
+
+===== RUN 1 =====
+Installed 33 packages in 212ms
+........................................................................ [ 63%]
+.........................................                                [100%]
+EXIT=0
+
+===== RUN 2 =====
+........................................................................ [ 63%]
+.........................................                                [100%]
+EXIT=0
+
+===== per-module collection (111 oracle + 2 golden = 113) =====
+tests/unit/oracles/test_oracle_costs.py: 14
+tests/unit/oracles/test_oracle_entry_exit_timing.py: 10
+tests/unit/oracles/test_oracle_orders.py: 10
+tests/unit/oracles/test_oracle_portfolio_capital.py: 11
+tests/unit/oracles/test_oracle_portfolio_clock.py: 10
+tests/unit/oracles/test_oracle_portfolio_containment_gate.py: 4
+tests/unit/oracles/test_oracle_position_lifecycle.py: 9
+tests/unit/oracles/test_oracle_properties.py: 10
+tests/unit/oracles/test_oracle_protection_stops.py: 20
+tests/unit/oracles/test_oracle_sizing.py: 13
+tests/unit/test_backtest_engine_golden.py: 2
+

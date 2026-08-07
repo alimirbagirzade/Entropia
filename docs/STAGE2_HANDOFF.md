@@ -4738,6 +4738,62 @@ KAYITSIZ** · **memory checkpoint yine YAPILAMADI** (ecc graph ve `claude-mem` b
 **Devir:** `docs/ADIM29_LANDED_KICKOFF.md` (`current`; ADIM 28 `historical`'a çevrildi).
 Tam kayıt: `PROJECT_HISTORY.md` §ADIM 29.
 
+## ADIM 29 (RC verification) — V18 RC kanıt dalgası landed (PR #632–#636; #637 AÇIK)
+
+> **Ad çakışması:** bu, yukarıdaki *"ADIM 29 — A-08 kayıt uzlaştırması landed (PR #631)"*
+> ile **aynı numarayı** taşır ama **ayrı iştir**. Ayrım başlık ekiyle:
+> **`ADIM 29 (A-08 kaydı)`** = #631 · **`ADIM 29 (RC verification)`** = bu dalga.
+
+**Migration yok**, alembic head `0043_i08_registry_strategy_fks` değişmedi,
+`ENGINE_VERSION` değişmedi, `SHARED_ALLOCATION_STATUS` = `future_dev`.
+
+| Adım | Konu | PR | Karar |
+|---|---|---|---|
+| P1 | repository truth + kanıt iskelesi | #632 | PASS |
+| P3 | frontend kapıları | #633 | PASS |
+| P12 | A-08 insan kabul kapısı | #634 | **BLOCKED** |
+| P4 | migration + şema kanıtı | #635 | bulgu: `alembic check` **RED** |
+| P9 | güvenlik kapıları | #636 | **BLOCKED** (B1 + B2) |
+| **P9-B1** | js-yaml freeze düzeltmesi | **#637** | **AÇIK — merge bekliyor** |
+
+Kanıt dizini: `docs/releases/evidence/2026-08-07/`.
+
+### P9-B1 (PR #637) — bu dalganın TEK kod değişikliği
+
+js-yaml freeze'inin gerekçesi *"no lockfile-only remedy … the published fix path is
+eslint@10"* diyordu; **doğduğunda yanlıştı** — js-yaml `4.3.1` **2026-07-31**'de yayımlandı,
+freeze **2026-08-07**'de indi. `npm audit fix --package-lock-only` → `4.3.0`→`4.3.1`,
+3 satırlık lockfile diff, `package.json` byte-identical; gate girdisi **düşürüldü**.
+Doğrulama: gate exit 0, `npm ci` exit 0, lint/typecheck/build exit 0, vitest **721/70**.
+
+**B2 KAPANMADI** — react-router freeze'i **imzasız**. Yalnız iki bayat olgu düzeltildi
+(pin **7.18.2** exact, yamalı hat **8.3.0+**). `.github/security-allowlist.json`'a taşımak
+**adı verilmiş `owner`** ister; **imzalayan verilmediği için sapma kaydı YAZILMADI**.
+
+### Devam eden oturumun ilk işi — sırayla
+
+1. **PR #637'yi merge et** (self-merge kapalı; `gh pr checks 637` yeşilse insan merge eder).
+2. **P5 kanıtını KURTAR.** `entropia-v18-docker-auth-validation-52e446` worktree'sinde
+   `docs/releases/evidence/2026-08-07/P5_docker_auth.md` + `p5_logs/` **untracked** duruyor;
+   karar **PARTIAL — 1/4 PASS, 3/4 BLOCKED** (yerel Docker daemon kilitlendi; ürün kusuru
+   değil). **`git clean` bu kanıtı yok eder.**
+3. **P1..P13 tanımını repoya yaz.** Ayrıştırma **hiçbir repo belgesinde yok**, yalnız sohbet
+   transkriptinde. Repodaki tek üst otorite
+   `docs/spec/Entropia_V18_Nihai_29_Adimli_Claude_Opus_5_Prompt_Paketi.md` §ADIM 29'un
+   15 zorunlu kalemi. Bu boşluk dalganın devredilebilirliğini kırıyor.
+4. Kalan adımlar: **P2, P6, P7, P8, P10, P11** → sonra **P13** (RC readiness raporu + PR).
+
+### Kaydedilen, onarılmayan iki kusur
+
+* **`alembic check` RED** (P4) — 40 index-name divergence + 1 redundant index; **hiçbir CI
+  workflow'u `alembic check` koşmuyor**, yani sapma kapıya bağlı değil.
+* **`ci.yml` concurrency** — yorumu *"never on main: every push to main must run to
+  completion"* diyor ama GitHub bir grupta **tek** pending koşu tutar; yeni koşu öncekini
+  **iptal eder**. Sonuç: `e8d1d48` (#633) ve `bc59dae` (#634) **0 job ile cancelled** —
+  iki merge edilmiş commit'in CI'ı **hiç koşmadı**. Düzeltmesi bir CI politika kararıdır.
+
+---
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:298` call site**
 
 **Değişmedi** — ADIM 25/26/27 ops/CI/docs, ADIM 28 ise a11y-hazırlık slice'ıydı; hiçbiri

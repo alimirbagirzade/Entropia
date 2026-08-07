@@ -1,0 +1,3 @@
+### KOMUT: timeout 90 ./scripts/acceptance.sh
+== Acceptance gate (session stack) ==
+EXIT=124  (süre: 90s; 124 = timeout ile SIGTERM)

@@ -1,0 +1,12 @@
+== Entropia restore ==
+  source : backups/20260807T181213Z  (alembic head: 0039_backtest_run_cancellation)
+  target : database 'entropia_p6_restore_scratch' @ localhost:5432
+
+  WARN  This DROPs and recreates every object in 'entropia_p6_restore_scratch'. Existing data is lost.
+== Restoring PostgreSQL ==
+  PASS  PostgreSQL restored — alembic head now: 0039_backtest_run_cancellation
+== Restoring object storage (entropia-p6-restore-scratch @ http://localhost:9000) ==
+  PASS  object storage restored via host mc
+
+RESTORE OK — 'entropia_p6_restore_scratch' recovered from 20260807T181213Z.
+EXIT=0

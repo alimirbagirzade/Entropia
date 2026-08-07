@@ -1,0 +1,5 @@
+   Building entropia @ file:///Users/mirbagirzade/Development/Entropia/.claude/worktrees/entropia-portfolio-manifest-attribution-bb527a/backend
+      Built entropia @ file:///Users/mirbagirzade/Development/Entropia/.claude/worktrees/entropia-portfolio-manifest-attribution-bb527a/backend
+Uninstalled 8 packages in 548ms
+Installed 8 packages in 111ms
+documentation-truth gate OK — artefacts fresh, documents classified, no stale claims.

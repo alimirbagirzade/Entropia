@@ -4704,6 +4704,40 @@ line; `npm run a11y` (`CI=true`) exit **0**; CI'da **"A11Y — axe-core scan"** 
 
 **Devir:** `docs/ADIM28_LANDED_KICKOFF.md`. Tam kayıt: `PROJECT_HISTORY.md` §ADIM 28.
 
+## ADIM 29 — A-08 kayıt uzlaştırması landed (PR #631)
+
+**Docs-only.** Migration yok, alembic head değişmedi, `ENGINE_VERSION` değişmedi, ürün kodu
+ve test **davranışı** değişmedi.
+
+**Tetikleyen olgu.** GitHub **#514** (`human-only`) `2026-08-07T03:52:03Z`'de
+`state_reason: completed` ile **kanıtsız kapatıldı** — **ikinci kez** (ilki
+`2026-07-30T19:05:32Z`, 2026-08-03'te geri alınmıştı; **bu geri alınmadı**). Denetim yine
+koşulmadı: defter boş, dört çıkış kriteri de ☐, findings register'da tek kayıt yok.
+
+**Sorun.** *"A-08 açık issue #514'te izleniyor"* iddiası **BAYAT** (issue kapalı);
+*"A-08 tamamlandı"* iddiası ise **yanlış** — denetim yapılmadı. İkisi de yazılamazdı.
+
+**Karar — ayrışma ÇÖZÜLMEDİ, KAYDEDİLDİ.** Belgeler niyeti hükme bağlamaz, olguyu kaydeder
+ve **iki insan çözüm yolunu da açık listeler**: **(A)** D-10 biçiminde imzalı kalıcı sapma
+— *imzalayan verilmediği için YAZILMADI*; **(B)** #514'ün **insan eliyle** yeniden açılması
+— *agent issue durumunu değiştiremez*. Hiçbir okuma altında A-08 tamamlanmış **değildir**.
+
+**Kanonik kayıt tek yerde:** `docs/audit/a11y_screen_reader_audit_results.md` §STATUS ▸
+*Tracking-issue state — closure/evidence divergence*. Yedi belge + bir script mesajı oraya
+**işaret eder**, olguyu tekrarlamaz.
+
+**Doğrulama:** `test_a11y_audit_prep_contract.py` + `test_repository_facts_guard.py`
+(`--no-cov`) yeşil; `generate_repository_facts.py --root .. --check` → *documentation-truth
+gate OK*; `git show <sha> -- docs/ | grep '^-## '` **boş** (kayıt silme yok).
+
+**Sınırlar (dürüst):** A-08 **YAPILMADI** ve **izlemesi kapalı** — iş açık, izleme kapalı;
+çözüm insana düşer · D-10 sürüyor, **WCAG 2.2 AA 1.4.3 karşılanmıyor** · K-2..K-6 ölçüldü,
+düzeltilmedi · **Alertmanager YOK** · **ADIM 23 / ADIM 24 `PROJECT_HISTORY.md`'de hâlâ
+KAYITSIZ** · **memory checkpoint yine YAPILAMADI** (ecc graph ve `claude-mem` bağlı değildi).
+
+**Devir:** `docs/ADIM29_LANDED_KICKOFF.md` (`current`; ADIM 28 `historical`'a çevrildi).
+Tam kayıt: `PROJECT_HISTORY.md` §ADIM 29.
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:298` call site**
 
 **Değişmedi** — ADIM 25/26/27 ops/CI/docs, ADIM 28 ise a11y-hazırlık slice'ıydı; hiçbiri
@@ -4716,3 +4750,7 @@ dışında hiçbir satır bu boşluk kapanmadan kapanamaz. Stepper indi (#602); 
 
 **A-08 ayrı bir eksendedir ve PR B'yi bloklamaz.** İnsan denetimi hâlâ yapılmadı; iskele
 hazır (`scripts/a11y-audit-stack.sh up && … validate`), defter boş, #514 kanıtsız kapatıldı.
+ADIM 29 bu ayrışmayı **çözmedi, kaydetti** — kanonik blok
+`docs/audit/a11y_screen_reader_audit_results.md` §STATUS ▸ *Tracking-issue state*. Kalan iş
+**insana** düşer: (A) imzalı kalıcı sapma **veya** (B) #514'ün yeniden açılması. **A-08 için
+hiçbir belgeye `Complete`/`PASS`/`Done` yazma; "açık issue #514'te izleniyor" da yazma.**

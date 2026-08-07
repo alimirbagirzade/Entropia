@@ -421,7 +421,7 @@ Aşağıdakilerin hepsi **current main'de doğrulandı** (dokümandan değil, ko
 
 | # | Boşluk | Kanıt | Risk |
 |---|---|---|---|
-| **E-01** | **A-08 insan ekran-okuyucu denetimi YAPILMADI** ve GitHub #514 **yanlışlıkla KAPALI** | §17 | Release kabul kaydı gerçeğe aykırı |
+| **E-01** | **A-08 insan ekran-okuyucu denetimi YAPILMADI** ve GitHub #514 **yanlışlıkla KAPALI** — *2026-08-03'te yeniden açıldı, ancak **2026-08-07'de yine kanıtsız kapatıldı**; kalem AÇIK, bkz. §17 tarihli eki* | §17 | Release kabul kaydı gerçeğe aykırı |
 | **E-02** | Fresh-install (`alembic upgrade head`, seed yok) agent runtime satırını kanıtlayan **pytest yok** | Integration conftest `create_all` kullanır (`tests/integration/conftest.py:46-47`), migration'ı koşmaz; her test satırı elle seed eder. Tek kanıt CI adımı `ci.yml` `alembic upgrade head` (satır düzeyi assert yok) | Migration seed'i sessizce kaybolursa test yakalamaz |
 | **E-03** | Acceptance ID izlenebilirliği **174/215 (%80)**, 41 ID izlenemiyor | `acceptance_id_scan.py` çıktısı; en kötü sayfa **doc 16 Results History 2/16** | Kabul sözleşmesinin %20'si teste bağlanmamış |
 | ~~**E-04**~~ → **KAPANDI (2026-08-03)** | ~~Library validation-run HTTP route düzeyinde test yok, frontend testi sıfır~~ → route düzeyi 9 test + frontend 15 test + 1 E2E journey | §G-04 | ~~Route sözleşmesi regresyona açık~~ |
@@ -602,11 +602,33 @@ PASS gibi gösterilmedi.
 
 **#514 bu PR'da YENİDEN AÇILDI.** Gerekçe §17.
 
+> **2026-08-07 — bu satır artık geçerli DEĞİL.** #514 ikinci kez kanıtsız kapatıldı
+> (`2026-08-07T03:52:03Z`, `completed`) ve **geri alınmadı**. Denetim yine yapılmadı.
+> §17'nin tarihli ekine bakın.
+
 ---
 
 ## 17. Human-only gates
 
 ### A-08 — insan ekran-okuyucu kabulü: **AÇIK**
+
+> **SONRAKİ OLAY (2026-08-07) — bu bölümün 2026-08-03 bulguları aynen durur, hükmü de
+> geçerlidir; yalnız issue durumu değişmiştir.** #514 **ikinci kez** kanıtsız kapatıldı:
+> `2026-08-07T03:52:03Z`, `state_reason: completed`. Bu bölümün "**issue #514 yeniden
+> açıldı**" cümlesi (aşağıda, *Karar* paragrafı) **artık bayattır** — geri alınan kapatma
+> 2026-07-30 tarihlisiydi; 2026-08-07 kapatması **geri alınmamıştır**.
+>
+> Denetim bu arada da **koşulmadı**. ADIM 28 (#628) yalnız iskeleyi kurdu:
+> `scripts/a11y-audit-stack.sh` + `docs/audit/a11y_screen_reader_audit_results.md`
+> **boş defter** olarak indi — dört çıkış kriteri de ☐, findings register'da tek kayıt yok.
+> Yani aşağıdaki kanıt tablosunun **her satırı hâlâ geçerlidir**; yalnız artık bunu izleyen
+> açık bir issue de yoktur. **A-08 AÇIK kalır; kapalı issue tamamlanma kanıtı değildir.**
+>
+> Bu, bölümün sonundaki *"tekrarlayan bir stale-truth kalıbıdır"* uyarısının **ikinci
+> tekrarıdır**. Ayrışmanın kanonik kaydı ve açık duran iki insan çözüm yolu (imzalı kalıcı
+> sapma **veya** #514'ün insan eliyle yeniden açılması):
+> [`a11y_screen_reader_audit_results.md`](a11y_screen_reader_audit_results.md)
+> §STATUS ▸ *Tracking-issue state*.
 
 Issue #514 exit criteria'sı (kendi gövdesinden):
 
@@ -664,7 +686,7 @@ oturumunda **kapatılmayacaktır**.
 | 6 | `feat/agent-tool-gateway-strategy-trading-signal` | 10 literal Tool Gateway aracı + scope/handler/test | Domain komutları hazır; Gateway yüzeyi eksik (§G-03) |
 | 7 | `ci/security-hardening` | SAST + secret scan + image scan; CORS `"*"` yasağını non-local profillere genişlet | Production hardening (§H-01…H-04) |
 | 8 | `docs/a11y-baseline-adjudication-refresh` | `a11y-baseline.json` `adjudication` metnini D-10 imzasıyla uyumla | CI artefaktı, ayrı PR (§12) |
-| — | **A-08 (#514)** | **İNSAN** — agent kapatamaz | §17 |
+| — | **A-08 (#514)** | **İNSAN** — agent kapatamaz. *2026-08-07: issue kanıtsız kapatıldı, denetim yapılmadı; iş AÇIK, izleme KAPALI — çözümü de insana düşer (§17 tarihli ek)* | §17 |
 | — | Unified-clock portfolio co-simulation (§G-05) | Ürün kararı gerektirir; V1'de L4 ile bildirilmiş sınırdır | Engine değişikliği; bu denetimin kapsamı dışında |
 
 ---

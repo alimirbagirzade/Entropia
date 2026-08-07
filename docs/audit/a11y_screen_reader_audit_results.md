@@ -16,11 +16,45 @@
 > result cell below reads `—` because no human has run this audit. Nothing in
 > this repository — not the axe-core ratchet, not the keyboard spec, not the
 > automated prechecks added alongside this file — may be transcribed into these
-> tables as a screen-reader result. Tracking: **GitHub #514** (`human-only`; an
-> agent or automated scan must not close it).
+> tables as a screen-reader result.
+>
+> **The tracking issue is CLOSED while this worksheet is still empty.** Read the
+> divergence block below before citing **GitHub #514** as tracking anything.
+> `#514` carries the `human-only` label; an agent or automated scan must not
+> close it — nor re-open it.
 >
 > Recipe and rationale: [`a11y_screen_reader_audit_checklist.md`](../implementation/a11y_screen_reader_audit_checklist.md).
 > Environment: `scripts/a11y-audit-stack.sh up`.
+
+### Tracking-issue state — closure/evidence divergence (recorded 2026-08-07)
+
+This block is the **canonical record** of the divergence. Every other document
+points here instead of restating it.
+
+| Fact | Value | How to re-derive |
+|---|---|---|
+| GitHub **#514** state | **CLOSED** — `2026-08-07T03:52:03Z`, `state_reason: completed` | `gh issue view 514 --json state,closedAt,stateReason` |
+| Issue label | `human-only` — *"Sadece insan kapatabilir; kanitsiz kapatma yasak"* | `gh issue view 514 --json labels` |
+| Audit performed? | **NO** — every result cell is `—` | §1, §2 below |
+| Exit criteria met? | **0 / 4** — all four still `☐` | §5 below |
+| Findings committed? | **NO** — the register holds only its placeholder row | §3 below |
+
+**A closed issue is not evidence of a completed audit.** These facts are in
+conflict, and this file records the conflict rather than resolving it. Both
+readings below stay open: choosing between them is a **human** decision an agent
+may neither make nor enact, because each one either changes the issue's state or
+adds a signature.
+
+| Reading | What it would mean | What it requires — human action |
+|---|---|---|
+| **(A) Deliberate acceptance** | The product owner knowingly accepted shipping without the audit | A **signed permanent deviation** in the D-10 form — named signer, ISO date, explicit scope — recorded in [`v18_visual_deviations.md`](../implementation/v18_visual_deviations.md). **No signer has been supplied, so no such record exists**, and none may be written on an agent's initiative. |
+| **(B) Closed in error** | The tracking issue was closed by mistake | A human **re-opens #514**. That would make it the **second** evidence-free closure to be reverted — the first was `2026-07-30T19:05:32Z`, re-opened 2026-08-03. |
+
+Neither reading lets A-08 be reported as done. Under **(A)** what is accepted is
+the *absence* of the audit, not a result; under **(B)** the audit is simply still
+outstanding. The recurrence is itself the finding: **#514 has now been closed
+twice without a single committed result**, which is why §5's exit criteria — not
+the issue's state — are the gate.
 
 ---
 
@@ -258,6 +292,12 @@ Copied from the checklist so this file can be read alone:
 
 Until all four are `☑`, **no document may show A-08 as `Complete` or `PASS`** —
 including this one.
+
+**Closing the tracking issue satisfies none of the four.** GitHub #514 was closed
+on `2026-08-07T03:52:03Z` with this table still at `0 / 4`; the closure changed
+the issue's state, not this file's contents, and it added no auditor, no version
+string and no finding. The gate is this table. See the divergence block in the
+STATUS banner above.
 
 ---
 

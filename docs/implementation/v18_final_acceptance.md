@@ -246,6 +246,18 @@ responsive spec **6/6**, vitest **514/514**, tsc + eslint temiz.
   > belgede ve başka hiçbir belgede `Complete`/`PASS` yazılamaz; kapatma yetkisi insandadır.
   > Kanıt dökümü:
   > [`docs/audit/current_main_ground_truth_2026-08-03.md`](../audit/current_main_ground_truth_2026-08-03.md) §17.
+  >
+  > **GÜNCELLEME (2026-08-07) — yukarıdaki "yeniden açıldı" ifadesi artık BAYAT.**
+  > #514 **ikinci kez** kanıtsız kapatıldı: `2026-08-07T03:52:03Z`, `state_reason:
+  > completed`. Denetim bu kez de koşulmadı — ADIM 28 (#628) yalnız iskeleyi kurdu ve
+  > `docs/audit/a11y_screen_reader_audit_results.md` **boş defter** olarak indi (dört
+  > çıkış kriteri de ☐, findings register'da tek kayıt yok). **Kapalı issue, yapılmamış
+  > denetimin kanıtı değildir**; bu maddenin hükmü değişmedi — A-08 burada da, başka
+  > hiçbir belgede de `Complete`/`PASS`/`Done` yazılamaz. Ayrışmanın kanonik kaydı ve
+  > açık duran iki insan çözüm yolu (imzalı kalıcı sapma **veya** #514'ün insan eliyle
+  > yeniden açılması):
+  > [`docs/audit/a11y_screen_reader_audit_results.md`](../audit/a11y_screen_reader_audit_results.md)
+  > §STATUS ▸ *Tracking-issue state*.
 - **Klavye denetimi temel akışla sınırlıdır** (login → Mainboard → Add menü). Her sayfanın
   tam klavye gezinimi tek tek denenmemiştir.
 - **A-06 görsel kıyas tamamlandı; piksel eşitliği iddiası değildir.**

@@ -181,18 +181,19 @@ Before stopping a working session, produce **ALL** of the following:
 
 > **HEAD `20e942b`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).
-> **Son dalga — ADIM 28 (A-08 insan denetimi HAZIRLIĞI, PR #628 — MERGED; unblocker #629):**
-> `scripts/a11y-audit-stack.sh` (`up|validate|status|down`, 9/9 fixture doğrulaması), boş
-> çalışma defteri `docs/audit/a11y_screen_reader_audit_results.md`, `@a11y` precheck spec'i
-> ve 21 kontrat testi indi. **Denetim YAPILMADI; defter BOŞ, dört çıkış kriteri de ☐** —
-> A-08 tamamlanmış **değildir**, hiçbir belge onu `Complete`/`PASS` gösteremez.
-> Öncesinde ADIM 27 (#626/#627),
-> ADIM 26 (#624), ADIM 25 (#622), ADIM 24 (#619), ADIM 23 (#610) — **son ikisi
-> `PROJECT_HISTORY.md`'de hâlâ kayıtsız** (dürüst not, kapatılmadı).
-> **Açık sınırlar:** GitHub #514 sahibi tarafından 2026-08-07'de **kanıtsız KAPATILDI**
-> (olgu; A-08 bununla tamamlanmış **değildir**, düzeltmesi ayrı slice) · K-2..K-6 ölçüldü ama
-> **düzeltilmedi** (her biri ürün kararı) · Alertmanager YOK, kurallar ateşliyor ama
-> **kimseye ulaşmıyor**.
+> **Son dalga — ADIM 29 (A-08 kayıt uzlaştırması, PR #631 — docs-only, kod/test/CI
+> değişmedi):** #514'ün kanıtsız kapatılması ile **boş** denetim defteri arasındaki
+> **ayrışma** yedi belgede kaydedildi; kanonik blok
+> `docs/audit/a11y_screen_reader_audit_results.md` §STATUS ▸ *Tracking-issue state*
+> (iki insan çözüm yolu: imzalı kalıcı sapma **veya** #514'ün yeniden açılması —
+> **ikisi de agent'ın yapabileceği iş değil**; imzalayan verilmediği için sapma kaydı
+> YAZILMADI). Öncesinde ADIM 28 (#628/#630 — a11y iskelesi + BOŞ defter), ADIM 27
+> (#626/#627), ADIM 26 (#624), ADIM 25 (#622), ADIM 24 (#619), ADIM 23 (#610) —
+> **son ikisi `PROJECT_HISTORY.md`'de hâlâ kayıtsız** (dürüst not, kapatılmadı).
+> **Açık sınırlar:** **A-08 denetimi YAPILMADI** (defter BOŞ, dört çıkış kriteri de ☐) ve
+> izleme issue'su #514 **KAPALI** — iş açık, izleme kapalı; hiçbir belge A-08'i
+> `Complete`/`PASS`/`Done` gösteremez · K-2..K-6 ölçüldü ama **düzeltilmedi** (her biri
+> ürün kararı) · Alertmanager YOK, kurallar ateşliyor ama **kimseye ulaşmıyor**.
 > **Next:** **PR B** — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:298` call site.
 > **Yarım-cent yuvarlama KARARA BAĞLANDI (2026-08-06):** `initial_sleeve_capital` yeniden
 > quantize edilmez, dondurulmuş `derived_amounts`'tan **kopyalanır**; iki yuvarlama sabiti de
@@ -251,7 +252,12 @@ Before stopping a working session, produce **ALL** of the following:
   `docs/audit/a11y_screen_reader_audit_results.md` (**BOŞ defter**, dört çıkış kriteri de ☐).
   Takip **GitHub #514 — 2026-07-30'da kanıtsız kapatılmış, 2026-08-03'te yeniden açılmış,
   2026-08-07'de yine kanıtsız kapatılmıştır**; kapatma yetkisi insandadır, agent kapatamaz.
-  Kapalı issue ile boş defter arasındaki ayrışma **sürüyor** ve düzeltilmesi ayrı bir slice'tır.
+  Kapalı issue ile boş defter arasındaki ayrışma **sürüyor**; ADIM 29 onu **çözmedi, KAYDETTİ**
+  — kanonik blok `docs/audit/a11y_screen_reader_audit_results.md` §STATUS ▸ *Tracking-issue
+  state*, diğer tüm belgeler oraya işaret eder. Açık duran iki çözüm yolu da **insan işidir**:
+  (A) imzalı kalıcı sapma (D-10 biçimi: adı verilmiş imzalayan + ISO tarih + kapsam) —
+  **imzalayan verilmediği için böyle bir kayıt YOK**; (B) #514'ün insan eliyle yeniden
+  açılması. Hiçbirini agent yapamaz.
   Visual regression ve axe-core ratchet'i CI'da bloklayıcı. Kalan 45 düğüm imza-mavisi
   **D-10 (2026-07-30) imzalı kalıcı sapmasıdır**; WCAG 2.2 AA 1.4.3 karşılanmıyor, ürün bu
   ölçüt için uyumlu sayılamaz.

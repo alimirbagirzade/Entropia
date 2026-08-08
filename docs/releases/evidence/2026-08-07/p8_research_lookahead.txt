@@ -1,0 +1,21 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.12.13, pytest-9.1.1, pluggy-1.6.0
+rootdir: /Users/mirbagirzade/Development/Entropia/.claude/worktrees/hungry-nobel-46d2d0/backend
+configfile: pyproject.toml
+plugins: cov-7.1.0, anyio-4.14.1, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+collected 76 items
+
+tests/unit/test_research_time_policy.py .........                        [ 11%]
+tests/unit/test_research_point_in_time.py ...........................    [ 47%]
+tests/integration/test_research_available_time_enforcement.py ......     [ 55%]
+tests/integration/test_research_point_in_time_parity.py ................ [ 76%]
+x                                                                        [ 77%]
+tests/integration/test_readiness_research_data.py ......                 [ 85%]
+tests/integration/test_ingest_timezone_normalization.py ........         [ 96%]
+tests/integration/test_backtest_manifest_pinning.py ...                  [100%]
+
+=========================== short test summary info ============================
+XFAIL tests/integration/test_research_point_in_time_parity.py::test_both_bundles_pin_the_available_time_policy - GH #558 — neither bundle member carries the available-time policy, though doc 12 §9.1 requires the Agent Data Bundle to pin 'exact revision IDs, usage scope and time policy' and §9.2 lists available_time_policies[] as a BacktestEvidenceBundle field. The Run manifest DOES pin it, so the two execution-evidence surfaces disagree.
+================== 75 passed, 1 xfailed in 986.88s (0:16:26) ===================
+EXIT=0

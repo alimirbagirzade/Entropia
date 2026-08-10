@@ -1,0 +1,24 @@
+=== oracle package: xfail/skip markers (grep) ===
+(no xfail/skip marker in tests/unit/oracles/)
+
+=== oracle package files ===
+__init__.py
+__pycache__
+harness.py
+portfolio_harness.py
+test_oracle_costs.py
+test_oracle_entry_exit_timing.py
+test_oracle_orders.py
+test_oracle_portfolio_capital.py
+test_oracle_portfolio_clock.py
+test_oracle_portfolio_containment_gate.py
+test_oracle_position_lifecycle.py
+test_oracle_properties.py
+test_oracle_protection_stops.py
+test_oracle_sizing.py
+
+=== oracle package run (addopts already carries -q; -rxX reports xfail/xpass) ===
+........................................................................ [ 64%]
+.......................................                                  [100%]
+111 passed in 2.55s
+EXIT=0

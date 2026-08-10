@@ -1,0 +1,19 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.12.13, pytest-9.1.1, pluggy-1.6.0
+rootdir: /Users/mirbagirzade/Development/Entropia/.claude/worktrees/hungry-nobel-46d2d0/backend
+configfile: pyproject.toml
+plugins: cov-7.1.0, anyio-4.14.1, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+collected 49 items
+
+tests/unit/test_worker_delivery_guard.py ........                        [ 16%]
+tests/unit/test_scheduler_redelivery.py ........                         [ 32%]
+tests/unit/test_worker_queue_registry.py .....                           [ 42%]
+tests/unit/test_worker_plane_deployment.py ....                          [ 51%]
+tests/unit/test_scheduler_loop_lifetime.py ........                      [ 67%]
+tests/integration/test_worker_delivery_recovery.py ...........           [ 89%]
+tests/integration/test_data_queue_redelivery.py ...                      [ 95%]
+tests/integration/test_worker_actor_event_loop.py ..                     [100%]
+
+======================== 49 passed in 262.53s (0:04:22) ========================
+EXIT=0

@@ -14,7 +14,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, func
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -29,10 +29,14 @@ class ExportArtifact(Base):
     """Immutable schema-versioned export derived from one Result (doc 15 §9.1)."""
 
     __tablename__ = "export_artifact"
+    __table_args__ = (
+        Index("ix_export_artifact_result", "result_id"),
+        Index("ix_export_artifact_source_hash", "source_manifest_hash"),
+    )
 
     export_id: Mapped[str] = mapped_column(String(40), primary_key=True)
     result_id: Mapped[str] = mapped_column(
-        String(40), ForeignKey(_RESULT_FK, ondelete="CASCADE"), nullable=False, index=True
+        String(40), ForeignKey(_RESULT_FK, ondelete="CASCADE"), nullable=False
     )
     export_type: Mapped[ExportType] = mapped_column(
         enum_column(ExportType, "result_export_type"), nullable=False
@@ -40,7 +44,7 @@ class ExportArtifact(Base):
     export_format: Mapped[ExportFormat] = mapped_column(
         enum_column(ExportFormat, "result_export_format"), nullable=False
     )
-    source_manifest_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    source_manifest_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     object_key: Mapped[str] = mapped_column(String(255), nullable=False)
     checksum: Mapped[str] = mapped_column(String(64), nullable=False)
     schema_version: Mapped[str] = mapped_column(String(32), nullable=False)

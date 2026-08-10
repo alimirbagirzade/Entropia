@@ -18,6 +18,7 @@ from sqlalchemy import (
     BigInteger,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     String,
     UniqueConstraint,
@@ -54,6 +55,9 @@ class ResearchDatasetRevision(Base):
     __tablename__ = "research_dataset_revision"
     __table_args__ = (
         UniqueConstraint("entity_id", "revision_no", name="uq_research_dataset_revision_no"),
+        Index("ix_research_dataset_revision_state", "revision_state"),
+        Index("ix_research_dataset_revision_category", "category_key"),
+        Index("ix_research_dataset_revision_market_link", "linked_market_dataset_revision_id"),
     )
 
     revision_id: Mapped[str] = mapped_column(String(40), primary_key=True)
@@ -68,22 +72,19 @@ class ResearchDatasetRevision(Base):
         enum_column(ResearchRevisionState, "research_revision_state"),
         nullable=False,
         default=ResearchRevisionState.DRAFT,
-        index=True,
     )
     validation_status: Mapped[ValidationStatus | None] = mapped_column(
         enum_column(ValidationStatus, "validation_status"), nullable=True
     )
     display_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
-    category_key: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    category_key: Mapped[str | None] = mapped_column(String(128), nullable=True)
     custom_category: Mapped[str | None] = mapped_column(String(256), nullable=True)
     provider_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
     raw_asset_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
     native_asset_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
     native_schema_descriptor: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     field_definition_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    linked_market_dataset_revision_id: Mapped[str | None] = mapped_column(
-        String(40), nullable=True, index=True
-    )
+    linked_market_dataset_revision_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
     instrument_mapping_ref: Mapped[str | None] = mapped_column(String(256), nullable=True)
     event_time_semantics: Mapped[EventTimeSemantics | None] = mapped_column(
         enum_column(EventTimeSemantics, "event_time_semantics"), nullable=True
@@ -225,13 +226,16 @@ class ResearchMarketLink(Base):
     market dataset revision by ID + content hash (doc 12 §5.2, anti-orphan)."""
 
     __tablename__ = "research_market_link"
+    __table_args__ = (
+        Index("ix_research_market_link_market_revision", "market_dataset_revision_id"),
+    )
 
     link_id: Mapped[str] = mapped_column(String(40), primary_key=True)
     entity_id: Mapped[str] = mapped_column(
         String(40), ForeignKey(_ENTITY_FK), nullable=False, index=True
     )
     revision_id: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
-    market_dataset_revision_id: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    market_dataset_revision_id: Mapped[str] = mapped_column(String(40), nullable=False)
     market_content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

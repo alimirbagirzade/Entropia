@@ -840,7 +840,7 @@ açılmadı/kapatılmadı.
 | **P4-2** | `agent_event.seq`'te alembic yolunda fazladan non-unique index; `create_all` yolunda yok → iki kurulum yolu bu noktada bit-özdeş değil (fonksiyonel etki yok) | P4 |
 | **P10-B2** | 9 uçta sayfalama sınırı **şemada yayımlanmıyor** → `limit=100000` reddedilmiyor, sessizce 100'e iniyor | P10 |
 | ~~**P9-F2**~~ | ~~**SPA origin'inde CSP yok** — `frontend/nginx-security-headers.conf` CSP vermiyor; yürütülebilir bundle'ı sunan origin budur. API'de CSP var ve testli; statik origin için **hiçbir test/kapı/belge yok**~~ → **2026-08-10 (ADIM 32) KAPANDI** — politika sevk edildi, canlı yanıtta ölçüldü, CI kapısına bağlandı. Ayrıntı ve ham kanıt: **§6.7.1** | P9 |
-| **P9-F1** | `frontend/Dockerfile` **`npm install`** kullanıyor (`npm ci` değil) + `COPY package-lock.json*` glob'u lockfile yokluğunu tolere ediyor → reproducibility riski | P9 |
+| ~~**P9-F1**~~ | ~~`frontend/Dockerfile` **`npm install`** kullanıyor (`npm ci` değil) + `COPY package-lock.json*` glob'u lockfile yokluğunu tolere ediyor → reproducibility riski~~ → **2026-08-10 (ADIM 33) KAPANDI** — `npm ci` + glob'suz `COPY`; fail-closed olduğu **iki negatif durumda, her biri kontrolüyle** ölçüldü, ayrıca `frontend/.dockerignore` eklendi. Ayrıntı ve ham kanıt: **§6.7.2** | P9 |
 | **P11-1** | **`main` üzerinde branch protection YOK ve ruleset YOK** (`gh api …/protection` → 404, `…/rulesets` → `[]`) → visual/axe kapıları **job kapısıdır, required status check DEĞİLDİR**; kırmızı E2E ile merge'i mekanik engelleyen bir şey yok | P11 |
 | **P11-2** | Visual gate 23 sayfanın **8'ini** kapsıyor; kalan 15'te piksel regresyonu koruması **yok** | P11 |
 | **P11-3** | 8 `-chromium-darwin.png` baseline commit'li ama **hiçbir job onları assert etmiyor** → sessizce bayatlayabilir | P11 |
@@ -920,6 +920,53 @@ Ham çıktı: `p9f2_spa_csp.txt` · `p9f2_spa_csp_app_not_broken.txt`.
   beri bayattır** (o dalga `ci.yml`'i yeniden adlandırdı); ADIM 32 `install-acceptance.yml`'i
   de değiştirir. Cümle rapor tarihine (2026-08-07) göre doğruydu; **bugün için değildir**.
   Burada **kaydedildi**, §7 elle düzeltilmedi — o blok ADIM 29'un ölçümüdür.
+
+#### 6.7.2 P9-F1 KAPANDI — frontend build reproducibility (ADIM 33, 2026-08-10)
+
+**Verdict ve blocker sayısı DEĞİŞMEDİ.** P9-F1 bir blocker değildi; §8 hâlâ **BLOCKED**,
+açık blocker sayısı hâlâ **üç** (1, 2, 4). Aynı satırdaki **P11-1 (branch protection) ELE
+ALINMADI** — repo ayarı, insan kararı.
+
+**Önce ölçüldü, körü körüne kabul edilmedi.** İddianın iki parçası da doğruydu, ama
+**bugünkü etkisi** ölçülmeden yazılmamalıydı: `npm install` bu ağaçta lockfile'ı
+**bit-bit değiştirmiyor** (`a8979c98…` → `a8979c98…`) ve `npm install` ile `npm ci`
+**bit-bit aynı bundle'ı** üretiyor (dört `dist/` dosyasının dördü de aynı sha256; çözünen
+ağaç da aynı). **Dolayısıyla bu bir davranış değişikliği DEĞİLDİR** — değişen şey
+garantidir. Bu, P9'un kendi kaydıyla (`evidence/2026-08-07/P9_security.md` §F-1: "bugün
+fiilî ayrışma yok") **tutarlıdır**.
+
+**Sevk edilen:** `COPY package.json package-lock.json ./` (glob'suz) + `RUN npm ci`, ve
+**yeni** `frontend/.dockerignore`. Sonuncusu kozmetik değil: `COPY . .` install'dan
+**sonra** geldiği için host'un `node_modules`'ü image'inkinin üstüne biner ve `npm ci`'yi
+süs hâline getirir (ADIM 32'de yerel build'de bizzat yaşandı).
+
+**Isırdığının kanıtı — iki negatif, her biri kontrolüyle:**
+
+| Durum | Sevk edilen | Kontrol (eski hâl) |
+|---|---|---|
+| Lockfile YOK | `docker build` **exit 1**, `"/package-lock.json": not found` | glob **exit 0** — eşleşme yok, uyarı yok, build lockfile'sız devam etti |
+| `package.json` lockfile'da olmayan dep bildiriyor | `docker build` **exit 1**, `EUSAGE … Missing: left-pad@1.3.0 from lock file` | `npm install` **exit 0**, lockfile'ı **sessizce yeniden yazdı** (`a8979c98…` → `3d8c1b66…`) |
+
+`.dockerignore` de kontrollü ölçüldü: zehirli bir geliştirici ağacı (host `node_modules`,
+`dist/STALE.txt`, `e2e/node_modules`, `evil.example` işaret eden `.env`,
+`public/mockup_v18.html`) dosya varken **beşi de dışarıda**, dosya kaldırılınca **beşi de
+içeride**. Bu ölçüm sırasında **rapor satırında olmayan bir kusur bulundu**: Vite
+`public/`'i `dist/`'e olduğu gibi kopyaladığı için dev-only v18 mockup kopyası
+**production image'ına** sızıp nginx tarafından `/mockup_v18.html` adresinden sunulabiliyordu.
+
+**Kırılmadığı doğrulananlar:** image **exit 0 / 84 MB** (2026-08-07 ölçümü de 84 MB) ·
+sevk edilen bundle host'ta `npm ci` ile üretilenle **bit-bit aynı** · zehir image'a
+**girmedi** · **ADIM 32'nin CSP kapısı** canlı konteynerde **10/10 PASS**, ve yanlış
+`connect-src` iddia edildiğinde hâlâ **exit 1** (kapı hâlâ kapı).
+
+**Dürüst sınır:** frontend test suite bu dalgada **koşulmadı** — `src/` altında tek dosya
+değişmedi; bu bir gerekçedir, ölçüm değil, otorite CI'dır. Ayrıca bu değişiklik bir
+**tedarik-zinciri savunması değildir**: lockfile'a sadakati zorlar, lockfile'ın içeriğini
+denetlemez; `npm audit`'in 3 high-severity bulgusu **ele alınmadı**.
+
+Ham kanıt: `docs/releases/evidence/2026-08-10/P9F1_frontend_build_reproducibility.md` +
+`p9f1_install_vs_ci.txt` · `p9f1_npm_drift.txt` · `p9f1_negative_cases.txt` ·
+`p9f1_dockerignore.txt` · `p9f1_image_and_csp.txt`.
 
 ---
 

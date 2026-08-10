@@ -4794,6 +4794,51 @@ Doğrulama: gate exit 0, `npm ci` exit 0, lint/typecheck/build exit 0, vitest **
 
 ---
 
+## ADIM 30 — RC Blocker 2 kabul akışı harness kapsamı landed (PR pending)
+
+**Tip:** harness/test. **Ürün kodu değişmedi**, migration yok, lockfile değişmedi,
+`ENGINE_VERSION` sabit, `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).
+
+**Ne indi.** `scripts/e2e-acceptance.sh`'e beşinci alt-komut **`flows`** eklendi; gövdesi
+**`scripts/lib/acceptance-flows.sh`** (YENİ, 625 satır). Yeni harness icat edilmedi —
+izolasyon sözleşmesi, hermetik env, `dc`/`req` ve PASS/FAIL sayacı aynen yeniden kullanıldı.
+Proje `entropia-e2e-flows`, port bloğu 18030/18110/15462/16409/19030/19031.
+
+**Reuse anchor'ları (tam sembol adlarıyla) — bir sonraki slice buradan devam eder:**
+
+| Sembol / dosya | Ne yapar |
+|---|---|
+| `scripts/lib/acceptance-flows.sh::af_run_all_flows` | beş akışın sürücüsü |
+| `..::af_bootstrap_actors` | Admin + **plain USER** token'ı (tavizsiz kural 3'ün dayanağı) |
+| `..::af_flow_a_strategy_run` · `af_follow_run` | readiness OCC, Run≠Result, durable run takibi |
+| `..::af_flow_b_library_validation` | katalog, head-match, USER 403 |
+| `..::af_flow_c_esp_lifecycle_export` | ESP create/validate/registry OCC/trust gate + export zarfı |
+| `..::af_flow_d_agent_signal_tools` | TS≠Package, K-07 fail-closed, agent yüzeyleri |
+| `..::af_flow_e_trash_lifecycle` | O-12 dual-token 409, **restore** ayağı, O-30 purge gövdesi |
+| `..::af_browser_layer` | var olan spec 05/18/20-library/06'yı **koşar** (yeniden yazmaz) |
+| `..::af_skip` | SKIP kendi sayacında — PASS'e asla katılmaz |
+| `scripts/e2e-acceptance.sh::flow_acceptance` | yığını kaldırır, tohumlar, `E2E_KEEP_UP=1` destekler |
+
+**Ölçüm (2026-08-10):** `flows` → **60 passed / 0 failed / 2 skipped**, exit 0; tarayıcı
+katmanı **5 passed**. P5'in bloke kalemleri de koşuldu: session **27/0**, legacy **15/0**,
+dev-auth **9/0**, `acceptance.sh` **exit 0** (15 servis), `smoke.sh` **exit 0**,
+`worker-restart-smoke.sh` **exit 0** (mükerrer artefakt yok). Kanıt:
+`docs/releases/evidence/2026-08-10/`.
+
+**İki ölçülmüş harness tuzağı (tekrarlama):** (1) izole yığında **`API_CORS_ORIGINS` şart** —
+web origin allowlist'te değilse her tarayıcı yolculuğu düşer, ama curl (Origin göndermez)
+aynı API'yi sağlıklı raporlar. (2) `E2E_API_BASE_URL` **`E2E_BASE_URL` kadar yük taşır** —
+sunucu gerçeğini assert eden spec'ler API'ye doğrudan gider ve `:8000`'e düşer.
+
+**Deferred / dürüst sınır:** **`flows` bir CI kapısı değildir** — hiçbir workflow onu koşmaz,
+sunucu katmanındaki regresyon sessizce geri gelebilir. Bunu kapıya bağlamak (CI'da ikinci bir
+12 konteynerlik yığın + süre) **insan kararıdır**, bu slice'ta bilerek yapılmadı. Ayrıca iki
+SKIP açık iştir: pozitif ESP activate→deprecate (test vektörü gerekiyor) ve Tool Gateway
+çağrı günlüğü (taze yığında agent task yok). **RC verdict'i BLOCKED kalır; §6.2 "kısmen
+kapandı" der.** Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 30.
+
+---
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:298` call site**
 
 **Değişmedi** — ADIM 25/26/27 ops/CI/docs, ADIM 28 ise a11y-hazırlık slice'ıydı; hiçbiri

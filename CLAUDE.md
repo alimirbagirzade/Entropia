@@ -181,20 +181,23 @@ Before stopping a working session, produce **ALL** of the following:
 
 > **HEAD `169cfaa`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).
-> **Son dalga — ADIM 29 (RC verification, PR #632–#636):** V18 Release Candidate kanıt
-> dalgası. P1 (#632 PASS) · P3 (#633 PASS) · P12 (#634 **BLOCKED**) · P4 (#635 — bulgu:
-> `alembic check` **RED**, 40 index-name divergence, hiçbir CI workflow'u koşmuyor) ·
-> P9 (#636 **BLOCKED**). Kanıt: `docs/releases/evidence/2026-08-07/`. **P9-B1 düzeltmesi
-> PR #637'de AÇIK** (js-yaml freeze'i düşürüldü, advisory lockfile ile kapatıldı).
-> Öncesinde ADIM 29 (A-08 kayıt uzlaştırması, #631), ADIM 28 (#628/#630), ADIM 27
+> **Son dalga — ADIM 30 (RC blocker 2, harness):** `scripts/e2e-acceptance.sh` **`flows`**
+> alt-komutu + `scripts/lib/acceptance-flows.sh` (YENİ) → beş kabul akışı **60 passed /
+> 0 failed / 2 skipped**, tarayıcı katmanı **5 passed**; P5'in bloke üç kalemi de koşuldu
+> (session 27/0 · legacy 15/0 · dev-auth 9/0 · health/smoke/worker-restart exit 0). **Ürün
+> kodu değişmedi.** Kanıt: `docs/releases/evidence/2026-08-10/`. **Blocker 2 KISMEN kapandı —
+> `flows` bir CI kapısı DEĞİL; RC verdict'i BLOCKED kalır.** Tam kayıt:
+> `PROJECT_HISTORY.md` §ADIM 30.
+> Öncesinde ADIM 29 (RC verification, #632–#636; P9-B1 düzeltmesi #637), ADIM 29 (A-08 kayıt
+> uzlaştırması, #631), ADIM 28 (#628/#630), ADIM 27
 > (#626/#627), ADIM 26 (#624), ADIM 25 (#622) — **ADIM 23/24 artık `PROJECT_HISTORY.md`'de
 > KAYITLI** (borç kapandı).
 > **Açık sınırlar:** **A-08 denetimi YAPILMADI** (defter BOŞ, dört çıkış kriteri de ☐) ve
 > izleme issue'su #514 **KAPALI** — iş açık, izleme kapalı; hiçbir belge A-08'i
 > `Complete`/`PASS`/`Done` gösteremez · **P9-B2 imzasız** (react-router freeze'inde owner
 > yok — insan işi) · K-2..K-6 ölçüldü ama **düzeltilmedi** · Alertmanager YOK ·
-> **P2/P6/P7/P8/P10/P11/P13 kanıtı YOK; P5 koşuldu ama COMMIT EDİLMEDİ** (untracked,
-> `entropia-v18-docker-auth-validation-52e446` worktree'sinde — `git clean` yok eder) ·
+> **P5/P6 ADIM 30'da yeniden ölçülüp COMMIT EDİLDİ** (`evidence/2026-08-10/`) — ama
+> **`flows` CI'da koşmuyor**, sunucu katmanı regresyonu sessizce dönebilir ·
 > **P1..P13 tanımı REPODA DEĞİL** (yalnız sohbet transkriptinde) ·
 > **`ci.yml` concurrency kusuru:** main'de kuyruğa giren koşu bir öncekini iptal ediyor →
 > `e8d1d48` (#633) ve `bc59dae` (#634) **0 job ile cancelled**, CI'ları HİÇ koşmadı.

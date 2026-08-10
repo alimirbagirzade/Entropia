@@ -4995,11 +4995,60 @@ başlık yeniden yazmayı kayıt silme sayacağı için **bilerek düzeltilmedi*
 
 ---
 
+## ADIM 34 — RC §6.7 / P6-ek + P6-6: harness fail-fast landed (PR pending)
+
+**Tip:** harness/script. **`backend/src` ve `frontend/src` DEĞİŞMEDİ**, migration yok,
+`ENGINE_VERSION` sabit, `SHARED_ALLOCATION_STATUS` = `future_dev`. Route path, react-query
+key, OCC token, Idempotency-Key, hook, SSE taksonomisi, `lib/*.ts` **hiç dokunulmadı**.
+Kapsam yalnız §6.7'nin **P6-ek** ve **P6-6** kalemleri; **P11-1 hâlâ açık ve ELE ALINMADI**
+(repo ayarı, insan kararı).
+
+**Önce yeniden üretildi.** P6-ek: cevap vermeyen bir `docker` ile script **25s sonra hâlâ
+koşuyordu** — `FATAL … exit 2` dalı probe'un hemen altında ama probe hiç dönmüyor.
+P6-6: (a) takılmış `dropdb` → süresiz asılı; (b) `dropdb` başarısız → `|| true` yuttu →
+`createdb` patladı → **`exit 1`**, yani **hiç okunmamış sağlam bir yedek bozuk raporlandı**.
+
+**Ne indi.** `scripts/lib/bounded.sh` (**YENİ**): `bounded_run SECONDS CMD…` → komutun kendi
+statüsü ya da **124**; öldürdüğü bir komut için **asla 0** dönemez.
+`scripts/e2e-acceptance.sh`: iki preflight probe'u + `dc_probe` + `inspect_field` +
+`teardown` sınırlı.
+`scripts/backup-verify.sh`: dört pg çağrısı sınırlı, **yeni `exit 3` = doğrulanamadı**,
+ön-koşu `dropdb` artık **katı**.
+`backend/tests/contract/test_harness_failfast_contract.py` (**YENİ**, 12 test, **CI kapısı**).
+
+**Reuse anchor'ları (tam adlarıyla):** yeni bir harness'ta kısa bir harici sorgu
+koşacaksan `scripts/lib/bounded.sh::bounded_run` **üzerinden** geçir, kendi timeout'unu
+yazma — GNU `timeout` bu repoda **kullanılamaz** (macOS'ta yok). Sınır sabitini
+`E2E_DOCKER_PROBE_TIMEOUT_SECONDS` / `E2E_TEARDOWN_TIMEOUT_SECONDS` /
+`BACKUP_VERIFY_PG_TIMEOUT_SECONDS` / `BACKUP_VERIFY_RESTORE_TIMEOUT_SECONDS` kalıbıyla
+**adlandır ve ölçüme dayandır**. `e2e-acceptance.sh::dc` **bilerek sınırsızdır** —
+`up --build`/`exec`/`logs` oradan geçer; kısa sorgular için `dc_probe`'u kullan.
+`backup-verify.sh` içinde yeni bir ortam hatası eklerken `EXIT_UNVERIFIED` (3) kullan;
+`EXIT_NOT_RESTORABLE` (1) **yalnız yedek hakkında** karar içindir.
+
+**Ölçüldü.** docker CLI takılı → **2**/3.0s · yalnız `docker version` takılı → **2**/3.0s ·
+daemon anında reddediyor (kontrol) → **2**/0.0s, mesaj "not reachable" · `dropdb` takılı →
+**3**/6.1s · artık scratch DB → **3**/0.0s · `pg_restore` takılı → **3**/3.1s · tutarsız
+dump (kontrol) → **1** · **sağlam yedek (kontrol) → 0**. Testlerin ısırdığı kanıtlandı:
+düzeltme geri alınınca **5 failed / 7 passed**, düzeltmeyle **12 passed / 23.3s**.
+
+**Dürüst sınır.** **Blocker sayısı DEĞİŞMEDİ (üç); verdict BLOCKED kalır.**
+**"Docker düzeldi" denmiyor** — daemon'a dokunulmadı, o gün zaten normal cevap veriyordu;
+değişen tek şey bir sonraki takılmanın **kendini bildirecek** olması. **P5/P6 blocker'ı
+kapanmadı** — §6.2'nin ekseni kapsam boşluğu ve `flows`'un CI kapısı olmamasıdır (ADIM 30).
+Aynı kusur sınıfı **yalnız bu iki script içinde** tarandı. Frontend suite'i koşulmadı
+(tek satır TS değişmedi; gerekçedir, ölçüm değil — otorite CI'dır).
+
+Ayrıntı: `PROJECT_HISTORY.md` §ADIM 34 · rapor kaydı: RC readiness **§6.7.3** (+ §6.2 notu) ·
+ham kanıt: `docs/releases/evidence/2026-08-10/P6FF_harness_failfast.md`.
+
+---
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:298` call site**
 
 **Değişmedi** — ADIM 25/26/27 ops/CI/docs, ADIM 28 a11y-hazırlık, ADIM 29 RC-kanıt,
-ADIM 30 kabul-harness'ı, ADIM 31 ops/bildirim, ADIM 32 ise güvenlik-başlık slice'ıydı;
-hiçbiri motor yoluna dokunmadı. `run_portfolio` hâlâ üretimde **çağrısız**:
+ADIM 30 kabul-harness'ı, ADIM 31 ops/bildirim, ADIM 32 güvenlik-başlık, ADIM 33 build
+tesisatı, ADIM 34 ise harness fail-fast slice'ıydı; hiçbiri motor yoluna dokunmadı. `run_portfolio` hâlâ üretimde **çağrısız**:
 `jobs/backtest_engine.py:298` item döngüsü, `:363` `combine_item_runs`,
 `SHARED_ALLOCATION_STATUS = future_dev` (containment KAPALI). ADIM 20 matrisindeki A1/A3/A5
 dışında hiçbir satır bu boşluk kapanmadan kapanamaz. Stepper indi (#602); kalan borç

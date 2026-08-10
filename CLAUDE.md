@@ -179,18 +179,20 @@ Before stopping a working session, produce **ALL** of the following:
 > değiştirir; sha'ya değil üretilmiş bloğa güven. Bir belgenin güncel mi tarihsel mi
 > olduğunu ilk satırındaki `<!-- doc-status: … -->` işareti söyler.
 
-> **HEAD `979094e`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **HEAD `970ec81`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).
-> **Son dalga — ADIM 33 (RC §6.7 / P9-F1, build tesisatı):** `frontend/Dockerfile` artık
-> `npm ci` + **glob'suz** `COPY package.json package-lock.json ./` — lockfile yoksa build
-> **durur**. **YENİ `frontend/.dockerignore`**: `COPY . .` install'dan SONRA geldiği için
-> host `node_modules`'ü image'inkini eziyordu; o dosya olmadan `npm ci` uygulanabilir değil.
-> Fail-closed olduğu **iki negatifte, her biri kontrolüyle** ölçüldü; image **84 MB**, bundle
-> host `npm ci` referansıyla bit-bit aynı, ADIM 32'nin CSP kapısı **10/10 PASS**. Bugün
-> `npm install` da aynı bundle'ı veriyor → bu bir davranış değil, **garanti** değişikliği.
-> **Ürün kodu ve lockfile İÇERİĞİ değişmedi. Blocker sayısı DEĞİŞMEDİ (üç); RC verdict'i
-> BLOCKED kalır.** Tam kayıt: `PROJECT_HISTORY.md` §ADIM 33.
-> Öncesinde ADIM 32 (P9-F2 — SPA origin'inde CSP, #655),
+> **Son dalga — ADIM 34 (RC §6.7 / P6-ek + P6-6, harness fail-fast):** asılı kalma temiz
+> başarısızlığa çevrildi. **YENİ `scripts/lib/bounded.sh::bounded_run`** — kısa bir harici
+> sorguyu sınırlamanın tek yolu (GNU `timeout` macOS'ta yok); öldürdüğü komut için asla 0
+> dönmez. `e2e-acceptance.sh` preflight'ı takılı daemon'a **sınırlı sürede `exit 2`** verir
+> ("HUNG" ≠ "not reachable"); `backup-verify.sh`'e **`exit 3` = doğrulanamadı** eklendi —
+> ORTAM hatası artık "yedek bozuk" (1) diye raporlanmıyor, sağlam yedek hâlâ **0**.
+> İki kusur da düzeltmeden önce **yeniden üretildi**; testler ısırıyor (öncesi 5F/7P,
+> sonrası 12P) ve **CI kapısıdır**. **"Docker düzeldi" DEĞİL** — daemon'a dokunulmadı.
+> **Ürün kodu değişmedi. Blocker sayısı DEĞİŞMEDİ (üç); RC verdict'i BLOCKED kalır.**
+> Tam kayıt: `PROJECT_HISTORY.md` §ADIM 34.
+> Öncesinde ADIM 33 (P9-F1 — `npm ci` + `.dockerignore`, #656),
+> ADIM 32 (P9-F2 — SPA origin'inde CSP, #655),
 > ADIM 31 (RC blocker 3 — fail-closed bildirim yolu; blocker 4→3),
 > ADIM 30 (RC blocker 2, harness — `flows` 60/0/2, ama **CI kapısı değil**),
 > ADIM 29 (RC verification, #632–#636; P9-B1 düzeltmesi #637), ADIM 29 (A-08 kayıt

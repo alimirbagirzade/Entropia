@@ -1,0 +1,63 @@
+ADIM 34 — direct shell measurements (host: darwin 25.5.0, bash 3.2.57, docker 29.4.0 / compose v5.1.2)
+date: 2026-08-10
+
+== BASELINE: how fast do the probes answer on a HEALTHY host? ==
+(these are what the default bounds are calibrated against)
+  docker version .............. 1.441s   (client -> daemon round trip)
+  docker compose version ...... 0.157s   (client only)
+  dropdb  (existing database) . 4.828s   <- slowest control-plane call measured
+  dropdb  --if-exists (absent)  0.364s
+  createdb .................... 0.917s
+  psql catalog query .......... 0.129s
+  => E2E_DOCKER_PROBE_TIMEOUT_SECONDS=20   ~14x the slowest docker probe
+  => BACKUP_VERIFY_PG_TIMEOUT_SECONDS=60   ~12x the slowest dropdb
+
+NOTE: the Docker daemon on this host answered NORMALLY during this run.
+This slice does NOT claim 'Docker is fixed'. It makes a wedged daemon
+reportable instead of unbounded, so the next run diagnoses itself.
+
+== bounded_run semantics (scripts/lib/bounded.sh) ==
+  fast command            rc=0 elapsed=0s   (expect rc=0)
+  captured stdout         rc=0 out=[captured] elapsed=0s
+  own exit status         rc=7 elapsed=0s   (expect rc=7)
+  wedged command          rc=124 elapsed=2s   (expect rc=124, NEVER 0)
+  wedged GRANDCHILD       rc=124 out=[] elapsed=2s   (was 60s before the process group was killed)
+
+== scripts/e2e-acceptance.sh preflight, three negatives (probe bound = 3s) ==
+  negative 1: rc=2 elapsed=3.0s
+    FATAL: 'docker compose version' did not answer within 3s — the Docker CLI/daemon is HUNG, not absent. Restart Docker Desktop/OrbStack and re-run.
+  negative 2: rc=2 elapsed=3.0s
+    FATAL: the Docker daemon did not answer 'docker version' within 3s — it is HUNG, not merely unreachable. Restart Docker Desktop/OrbStack and re-run.
+  negative 3: rc=2 elapsed=0.0s
+    FATAL: the Docker daemon is not reachable — start Docker Desktop/OrbStack first.
+
+== scripts/backup-verify.sh exit-code matrix (bounds = 3s) ==
+  rc=3 (want 3) OK  elapsed=6.1s :: dropdb WEDGED
+    UNVERIFIED  dropdb did not answer within 3s — the scratch DB could not be reset, so this backup was NOT tested (this says nothing about the backup)
+  rc=3 (want 3) OK  elapsed=0.0s :: leftover scratch DB (the OLD false negative: was 1)
+    UNVERIFIED  dropdb --if-exists 'entropia_restore_check' failed (rc=1) — the scratch DB could not be reset, so this backup was NOT tested (this says nothing about the backup)
+  rc=3 (want 3) OK  elapsed=3.1s :: pg_restore WEDGED
+    UNVERIFIED  pg_restore did not finish within 3s — backup NOT tested (a partial restore proves nothing either way)
+  rc=1 (want 1) OK  elapsed=0.1s :: dump genuinely incoherent
+    FAIL  backup verification FAILED. pg_restore stderr:
+  rc=0 (want 0) OK  elapsed=0.1s :: SOUND backup
+    VERIFY OK — 20260810T000000Z restores into a coherent database (head 0043_i08_registry_strategy_fks, 120 tables).
+
+== POSITIVE CONTROL: the bound must not fire against a HEALTHY daemon ==
+(real docker on PATH, no fakes; an unknown flow name so nothing is built)
+  $ bash scripts/e2e-acceptance.sh __no_such_flow__
+  rc=2 elapsed=1.0s
+  stderr: usage: scripts/e2e-acceptance.sh [session|legacy|dev-auth|flows|all]
+  => both preflight probes passed in ~1s and execution reached the usage branch.
+     No FATAL, no timeout, and no job-control noise on stderr from `set -m`.
+
+== WATCHDOG CLEANUP (no orphaned sleeps) ==
+  fast under a 300s bound   rc=0   elapsed=0s
+  capture under 300s bound  rc=0   out=[cap] elapsed=0s
+  wedged                    rc=124 elapsed=2s
+  wedged grandchild         rc=124 out=[] elapsed=2s
+  own status                rc=7   elapsed=0s
+  orphan `sleep 300` processes left behind: NONE
+  (the watchdog is launched under job control too, so cancelling it takes its
+   sleep with it — otherwise a fast call under the 1800s pg_restore bound would
+   leave a sleeper behind for half an hour.)

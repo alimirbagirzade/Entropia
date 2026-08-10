@@ -36,22 +36,59 @@
 # CONTRACT those UI behaviors depend on is asserted here and cross-referenced.
 #
 # Exit code: 0 = every asserted step passed for every requested flow, 1 = a
-# step failed (details on the FAIL lines) or the stack never became healthy.
+# step failed (details on the FAIL lines) or the stack never became healthy,
+# 2 = the harness could not run at all — Compose missing, the daemon
+# unreachable, or (ADIM 34) the daemon HUNG. Those states are distinct on
+# purpose: a hang is never reported as a step failure and never as a pass.
 # =============================================================================
 set -uo pipefail
 cd "$(dirname "$0")/.."
 REPO_ROOT="$(pwd)"
 
+# ---- bounded external calls --------------------------------------------------
+# ADIM 34 / RC §6.7 P6-ek. The preflight below is a GUARD, and a guard that can
+# hang is not a guard: against a wedged daemon the probe itself blocked, so the
+# FATAL branch written directly underneath it could never be taken. MEASURED
+# before the fix — with a non-answering `docker` on PATH this script was still
+# running after 25s and would have run forever.
+. "$REPO_ROOT/scripts/lib/bounded.sh"
+
+# Bound for docker probes that are INSTANTANEOUS on a healthy daemon. MEASURED
+# on the development host: `docker version` 1.44s (client -> daemon round trip),
+# `docker compose version` 0.16s (client only), `docker inspect` well under 1s.
+# 20s is ~14x the slowest of those and still a bound, so a wedged daemon gets
+# reported instead of waited on. Overridable so the regression test can drive
+# this exact code path in seconds.
+DOCKER_PROBE_TIMEOUT_SECONDS="${E2E_DOCKER_PROBE_TIMEOUT_SECONDS:-20}"
+# Teardown removes ONE small isolated project with its volumes — seconds in
+# practice. 180s absorbs a slow volume reaper without letting the EXIT trap
+# block a CI runner forever.
+TEARDOWN_TIMEOUT_SECONDS="${E2E_TEARDOWN_TIMEOUT_SECONDS:-180}"
+
 # ---- Compose binary (v2 plugin preferred, v1 standalone fallback) -----------
-if docker compose version >/dev/null 2>&1; then
+bounded_run "$DOCKER_PROBE_TIMEOUT_SECONDS" docker compose version >/dev/null 2>&1
+PROBE_RC=$?
+if [ "$PROBE_RC" -eq 0 ]; then
   COMPOSE_BIN=(docker compose)
+elif [ "$PROBE_RC" -eq "$BOUNDED_TIMEOUT_RC" ]; then
+  # Deliberately NOT a fallback case: a docker CLI that cannot answer its own
+  # version query is wedged, and the v1 standalone binary talks to the same
+  # wedged socket. Falling back here would trade one hang for another.
+  echo "FATAL: 'docker compose version' did not answer within ${DOCKER_PROBE_TIMEOUT_SECONDS}s — the Docker CLI/daemon is HUNG, not absent. Restart Docker Desktop/OrbStack and re-run." >&2
+  exit 2
 elif command -v docker-compose >/dev/null 2>&1; then
   COMPOSE_BIN=(docker-compose)
 else
   echo "FATAL: neither 'docker compose' nor 'docker-compose' is available." >&2
   exit 2
 fi
-if ! docker version >/dev/null 2>&1; then
+
+bounded_run "$DOCKER_PROBE_TIMEOUT_SECONDS" docker version >/dev/null 2>&1
+PROBE_RC=$?
+if [ "$PROBE_RC" -eq "$BOUNDED_TIMEOUT_RC" ]; then
+  echo "FATAL: the Docker daemon did not answer 'docker version' within ${DOCKER_PROBE_TIMEOUT_SECONDS}s — it is HUNG, not merely unreachable. Restart Docker Desktop/OrbStack and re-run." >&2
+  exit 2
+elif [ "$PROBE_RC" -ne 0 ]; then
   echo "FATAL: the Docker daemon is not reachable — start Docker Desktop/OrbStack first." >&2
   exit 2
 fi
@@ -81,14 +118,30 @@ teardown() {
     *) echo "REFUSING to 'down -v' non-E2E project: $PROJECT" >&2; return 0 ;;
   esac
   info "tearing down $PROJECT (isolated volumes removed)"
-  "${COMPOSE_BIN[@]}" -p "$PROJECT" "${COMPOSE_FILES[@]}" down -v --remove-orphans >/dev/null 2>&1 || true
+  # Bounded: this runs from the EXIT trap, so an unbounded `down -v` against a
+  # daemon that wedged mid-run would hang the script AFTER it had already
+  # decided its verdict — a hang with the answer in hand. Never fatal here.
+  local down_rc=0
+  bounded_run "$TEARDOWN_TIMEOUT_SECONDS" \
+    "${COMPOSE_BIN[@]}" -p "$PROJECT" "${COMPOSE_FILES[@]}" down -v --remove-orphans >/dev/null 2>&1 || down_rc=$?
+  if [ "$down_rc" -eq "$BOUNDED_TIMEOUT_RC" ]; then
+    echo "WARN: teardown of $PROJECT did not finish within ${TEARDOWN_TIMEOUT_SECONDS}s — its containers/volumes may still exist; the Docker daemon is likely hung." >&2
+  fi
   [ -n "$ENVFILE" ] && rm -f "$REPO_ROOT/$ENVFILE"
   PROJECT=""; ENVFILE=""
 }
 trap teardown EXIT INT TERM
 
 # dc — run compose for the CURRENT flow with all interpolation vars exported.
+# Deliberately UNBOUNDED: its callers are `up --build`, `exec` and `logs`, whose
+# honest duration is minutes. Bounding those would invent false failures, which
+# is the opposite of what ADIM 34 is for.
 dc() { "${COMPOSE_BIN[@]}" -p "$PROJECT" "${COMPOSE_FILES[@]}" "$@"; }
+
+# dc_probe / inspect_field — the SHORT queries, bounded. Returns the command's
+# own status, or BOUNDED_TIMEOUT_RC when Docker did not answer in time.
+dc_probe()      { bounded_run "$DOCKER_PROBE_TIMEOUT_SECONDS" "${COMPOSE_BIN[@]}" -p "$PROJECT" "${COMPOSE_FILES[@]}" "$@"; }
+inspect_field() { bounded_run "$DOCKER_PROBE_TIMEOUT_SECONDS" docker inspect -f "$1" "$2" 2>/dev/null; }
 
 # ---- HTTP helpers (curl; no jq/python dependency) ---------------------------
 LAST_STATUS=""; LAST_BODY=""
@@ -124,13 +177,25 @@ assert_planes_healthy() {
   # success — the silent loop that service's own comment describes. It was
   # missing from this list, so the flow could pass with that plane absent.
   local planes="worker-default worker-data worker-backtest worker-agent worker-agent-executor agent-coordinator scheduler"
-  local svc cid status health restarts
+  local svc cid status health restarts probe_rc hung
   for svc in $planes; do
-    cid="$(dc ps -aq "$svc" 2>/dev/null | head -n1)"
+    # Same fault class as the preflight: these are instantaneous queries, and an
+    # unbounded one turns a wedged daemon into a hang HERE instead of a verdict.
+    # A timed-out probe is reported as its own thing — it is a statement about
+    # Docker, NOT a verdict on the plane, and it is never a pass.
+    cid="$(dc_probe ps -aq "$svc" 2>/dev/null)"; probe_rc=$?
+    if [ "$probe_rc" -eq "$BOUNDED_TIMEOUT_RC" ]; then
+      bad "[$1] plane $svc — 'compose ps' did not answer within ${DOCKER_PROBE_TIMEOUT_SECONDS}s (Docker is hung; not a verdict on the plane)"; continue
+    fi
+    cid="$(printf '%s' "$cid" | head -n1)"
     if [ -z "$cid" ]; then bad "[$1] plane $svc — no container"; continue; fi
-    status="$(docker inspect -f '{{.State.Status}}' "$cid" 2>/dev/null)"
-    restarts="$(docker inspect -f '{{.RestartCount}}' "$cid" 2>/dev/null)"
-    health="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$cid" 2>/dev/null)"
+    hung=0
+    status="$(inspect_field '{{.State.Status}}' "$cid")"; [ $? -eq "$BOUNDED_TIMEOUT_RC" ] && hung=1
+    restarts="$(inspect_field '{{.RestartCount}}' "$cid")"; [ $? -eq "$BOUNDED_TIMEOUT_RC" ] && hung=1
+    health="$(inspect_field '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$cid")"; [ $? -eq "$BOUNDED_TIMEOUT_RC" ] && hung=1
+    if [ "$hung" -eq 1 ]; then
+      bad "[$1] plane $svc — 'docker inspect' did not answer within ${DOCKER_PROBE_TIMEOUT_SECONDS}s (Docker is hung; not a verdict on the plane)"; continue
+    fi
     if [ "$status" = "running" ] && [ "${restarts:-0}" -eq 0 ] && { [ "$health" = "healthy" ] || [ "$health" = "none" ]; }; then
       ok "[$1] plane $svc broker-connected (health=$health restarts=$restarts)"
     else

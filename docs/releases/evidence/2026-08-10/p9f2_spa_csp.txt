@@ -1,0 +1,96 @@
+ADIM 32 — P9-F2: Content-Security-Policy on the SPA origin
+Captured: 2026-08-10T13:34:45Z  ·  git HEAD at capture: f3986fa
+Stack: docker compose (shipped docker-compose.yml), web=:8080, api=:8000, VITE_API_BASE_URL=http://localhost:8000/api/v1
+
+==============================================================================
+0. BEFORE — what the origin served on origin/main (f3986fa)
+==============================================================================
+frontend/nginx-security-headers.conf declared four headers and NO CSP.
+grep -rn 'Content-Security-Policy' frontend/  ->  no match on origin/main.
+The only CSP in the repo was the API's (backend/src/entropia/apps/api/hardening.py),
+pinned by backend/tests/contract/test_hardening_contract.py against a LIVE response.
+
+==============================================================================
+1. AFTER — the live SPA shell response (curl -sI)
+==============================================================================
+HTTP/1.1 200 OK
+Server: nginx/1.31.3
+Date: Mon, 10 Aug 2026 13:34:45 GMT
+Content-Type: text/html
+Content-Length: 516
+Last-Modified: Mon, 10 Aug 2026 13:03:44 GMT
+Connection: keep-alive
+ETag: "6a79cc30-204"
+X-Content-Type-Options: nosniff
+X-Frame-Options: DENY
+Referrer-Policy: strict-origin-when-cross-origin
+Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
+Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self' http://localhost:8000; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'
+Accept-Ranges: bytes
+
+
+==============================================================================
+2. AFTER — the live hashed BUNDLE response (the add_header inheritance trap)
+==============================================================================
+discovered bundle: /assets/index-3Ltp7ple.js
+HTTP/1.1 200 OK
+Server: nginx/1.31.3
+Date: Mon, 10 Aug 2026 13:34:45 GMT
+Content-Type: application/javascript
+Content-Length: 964396
+Last-Modified: Mon, 10 Aug 2026 13:03:44 GMT
+Connection: keep-alive
+ETag: "6a79cc30-eb72c"
+Expires: Tue, 10 Aug 2027 13:34:45 GMT
+Cache-Control: max-age=31536000
+Cache-Control: public, immutable
+X-Content-Type-Options: nosniff
+X-Frame-Options: DENY
+Referrer-Policy: strict-origin-when-cross-origin
+Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
+Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self' http://localhost:8000; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'
+Accept-Ranges: bytes
+
+
+==============================================================================
+3. THE GATE — scripts/spa-security-headers-gate.sh (positive)
+==============================================================================
+== SPA origin security headers (http://localhost:8080) ==
+   expected connect-src API origin: http://localhost:8000
+  PASS  /: content-security-policy
+  PASS  /: x-content-type-options
+  PASS  /: x-frame-options
+  PASS  /: referrer-policy
+  PASS  /: permissions-policy
+  PASS  /assets/index-3Ltp7ple.js: content-security-policy
+  PASS  /assets/index-3Ltp7ple.js: x-content-type-options
+  PASS  /assets/index-3Ltp7ple.js: x-frame-options
+  PASS  /assets/index-3Ltp7ple.js: referrer-policy
+  PASS  /assets/index-3Ltp7ple.js: permissions-policy
+
+SPA SECURITY HEADERS OK — CSP and the four companion headers ride both the shell and the bundle.
+GATE EXIT=0
+
+==============================================================================
+4. THE GATE — negative case: a mismatched connect-src origin must turn it red
+   (this is the exact command the CI step runs)
+==============================================================================
+== SPA origin security headers (http://localhost:8080) ==
+   expected connect-src API origin: http://not-the-api.invalid
+  FAIL  /: content-security-policy
+        expected: default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self' http://not-the-api.invalid; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'
+        actual:   default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self' http://localhost:8000; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'
+  PASS  /: x-content-type-options
+  PASS  /: x-frame-options
+  PASS  /: referrer-policy
+  PASS  /: permissions-policy
+  FAIL  /assets/index-3Ltp7ple.js: content-security-policy
+        expected: default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self' http://not-the-api.invalid; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'
+        actual:   default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self' http://localhost:8000; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'
+  PASS  /assets/index-3Ltp7ple.js: x-content-type-options
+  PASS  /assets/index-3Ltp7ple.js: x-frame-options
+  PASS  /assets/index-3Ltp7ple.js: referrer-policy
+  PASS  /assets/index-3Ltp7ple.js: permissions-policy
+
+SPA SECURITY HEADERS FAILED — fix the FAIL lines above.
+GATE EXIT=1 (1 = correct)

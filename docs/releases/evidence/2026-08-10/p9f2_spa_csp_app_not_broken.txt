@@ -1,0 +1,67 @@
+ADIM 32 — P9-F2: proof that the policy does not break the V18 app
+Captured: 2026-08-10T13:36:02Z  ·  git HEAD at capture: f3986fa
+
+==============================================================================
+1. WHY THE POLICY IS THIS NARROW — measured from the SHIPPED build, not assumed
+==============================================================================
+dist/index.html after `npm run build` (vite v8.2.0):
+    <script type="module" crossorigin src="/assets/index-<hash>.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-<hash>.css">
+  inline <script> in dist/index.html ......... 0
+  inline <style>  in dist/index.html ......... 0
+  'eval(' / 'new Function(' in the bundle .... 0
+  data: URIs inlined into the built CSS ...... 0
+  url() / @import / @font-face in the CSS .... 0
+  WebSocket / dynamic import() in src/ ....... 0
+  external http(s) literals in src/ .......... 0
+  <form action=...> in src/ .................. 0 (all onSubmit + preventDefault)
+=> neither 'unsafe-inline' nor 'unsafe-eval' is needed, so neither is present.
+
+==============================================================================
+2. THE POLICY IS ENFORCED, NOT MERELY PRESENT (live browser, http://localhost:8080)
+==============================================================================
+Probe executed in the page under the shipped policy:
+  injected inline <script> executed ............... false   <- refused (the XSS shape)
+  injected inline <style> applied ................. false   <- refused
+  setAttribute('style', ...) applied .............. false   <- refused
+  CSSOM assignment el.style.x = ... applied ....... TRUE    <- React's mechanism
+  (the CSSOM assignment still yields style="padding-left: 13px;" in the DOM,
+   i.e. React's ~800 style={{…}} props are NOT policed by style-src)
+
+Console on first load (unauthenticated shell): 8 x HTTP 401 from
+http://localhost:8000/api/v1 — expected in session auth mode, and itself proof
+that the CROSS-ORIGIN fetch was allowed through: a connect-src block reports a
+CSP refusal and a network error, never a 401.
+
+==============================================================================
+3. THE FULL E2E SUITE, in a real browser, against this CSP-serving stack
+==============================================================================
+  1 skipped
+  39 passed (3.3m)
+(command: E2E_BASE_URL=http://localhost:8080 npm test, in frontend/e2e — the
+ same invocation .github/workflows/e2e.yml uses. Covers login/signup, native
+ file uploads, Mainboard inline editors, responsive shell, stale-session
+ redirect, artifact drill-down, Library validation and every nav destination.)
+
+==============================================================================
+4. AUTHENTICATED PAGES: zero CSP violations, inline styles still render
+==============================================================================
+A throwaway Playwright probe (NOT committed — evidence only) logged in through
+the real form and walked nine routes, listening on console + pageerror for
+/Content Security Policy|Refused to (load|execute|apply|connect|create)/:
+ROUTE / -> 15 elements carrying a React inline style
+ROUTE /portfolio -> 32 elements carrying a React inline style
+ROUTE /packages/library?type=strategy -> 8 elements carrying a React inline style
+ROUTE /backtest/history -> 15 elements carrying a React inline style
+ROUTE /market-data -> 4 elements carrying a React inline style
+ROUTE /instruments -> 8 elements carrying a React inline style
+ROUTE /panel/management -> 5 elements carrying a React inline style
+ROUTE /user-manual -> 2 elements carrying a React inline style
+ROUTE /rationale-families -> 12 elements carrying a React inline style
+TOTAL inline-styled elements across 9 routes: 101
+CSP VIOLATIONS: 0
+
+=> 101 elements carrying a React inline style rendered across nine authenticated
+   routes, and NOT ONE CSP violation was reported. This is the check the e2e
+   suite alone could not give: a Playwright assertion can pass while the console
+   fills with CSP refusals.

@@ -153,6 +153,38 @@ jobs:
           echo "::error::stack did not become ready"; docker compose ps; docker compose logs --tail 200
           exit 1
 
+      - name: The SPA origin serves its security headers, CSP included
+        # The API's CSP is asserted against a LIVE response by a backend
+        # contract test. Until this step the STATIC origin — the one that serves
+        # the executable bundle — had no equivalent, so "the header is in the
+        # config file" was the strongest claim anyone could make about it.
+        #
+        # It belongs in THIS job rather than a cheaper one: the gate needs a
+        # running stack built from the shipped Dockerfile, and the build-time
+        # connect-src substitution cannot be observed anywhere else. This job
+        # already pays for that stack, and it runs on every PR.
+        run: bash scripts/spa-security-headers-gate.sh
+
+      - name: The header gate FAILS on a wrong policy (negative case)
+        # Same rule as the acceptance-gate negative step below: a gate nobody
+        # has watched fail is not a gate. Asserting a DIFFERENT connect-src
+        # origin than the image was built with must turn it red, and red for
+        # that reason — otherwise a comparison that silently matched everything
+        # would look exactly like a passing policy.
+        run: |
+          if VITE_API_BASE_URL=http://not-the-api.invalid/api/v1 \
+             bash scripts/spa-security-headers-gate.sh > /tmp/csp-negative.txt 2>&1; then
+            echo "::error::the header gate stayed GREEN against a policy it should reject"
+            cat /tmp/csp-negative.txt
+            exit 1
+          fi
+          if ! grep -q 'FAIL  /: content-security-policy' /tmp/csp-negative.txt; then
+            echo "::error::the gate failed, but not on the CSP comparison:"
+            cat /tmp/csp-negative.txt
+            exit 1
+          fi
+          echo "PASS  the header gate goes red on a mismatched Content-Security-Policy"
+
       - name: The one-shots completed — migrate, then provision, then the bucket
         run: |
           fail=0
@@ -279,6 +311,7 @@ jobs:
           docker compose ps -a > install-evidence/compose-ps.txt 2>&1 || true
           docker compose logs --tail 2000 > install-evidence/compose-logs.txt 2>&1 || true
           bash scripts/acceptance.sh > install-evidence/acceptance.txt 2>&1 || true
+          bash scripts/spa-security-headers-gate.sh > install-evidence/spa-security-headers.txt 2>&1 || true
       - uses: actions/upload-artifact@v7
         if: always()
         with:

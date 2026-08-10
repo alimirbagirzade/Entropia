@@ -4894,10 +4894,58 @@ tek yapısal `up == 0`). Bu repo içinde kapatılamaz; **imzalı sapma DEĞİLD�
 
 ---
 
+## ADIM 32 — RC §6.7 / P9-F2: SPA origin'inde CSP landed (PR pending)
+
+**Tip:** güvenlik / sunum-katmanı başlık işi. **`backend/src` ve `frontend/src`
+DEĞİŞMEDİ**, migration yok, lockfile değişmedi, `ENGINE_VERSION` sabit,
+`SHARED_ALLOCATION_STATUS` = `future_dev`. Route path, react-query key, OCC token,
+Idempotency-Key, hook, SSE taksonomisi, `lib/*.ts` **hiç dokunulmadı**.
+
+**Ne indi.** Yürütülebilir bundle'ı sunan origin'in **CSP'si yoktu** — API'ninki vardı ve
+canlı yanıt üzerinde testliydi, statik origin'inki yoktu. İddia `f3986fa` üzerinde yeniden
+ölçülüp doğrulandı (`grep -rn 'Content-Security-Policy' frontend/` → boş). Üç parça indi:
+
+1. **Politika** — `frontend/nginx-security-headers.conf`: `default-src 'none'` tabanlı,
+   `script-src` / `style-src` / `img-src 'self'`, `connect-src 'self' <API origin>`,
+   `base-uri 'none'`, `form-action 'self'`, `frame-ancestors 'none'`, `object-src 'none'`.
+   **`unsafe-inline` / `unsafe-eval` YOK** — sevk edilen `dist/`'ten ölçüldü, gerekmiyor.
+2. **Build-time `connect-src`** — `frontend/Dockerfile`'da `__API_ORIGIN__`, Vite'ın
+   bundle'a gömdüğü **aynı** `VITE_API_BASE_URL` arg'ından türetilir; yer tutucu hayatta
+   kalırsa **build durur**. Runtime envsubst mümkün değil (`read_only: true`) ve zaten
+   yanlış olurdu (bundle yalnız gömülü origin'e konuşabilir).
+3. **Kapı** — `scripts/spa-security-headers-gate.sh`: **canlı yanıtı** assert eder, config
+   dosyasını değil (API'nin CSP testinin aynası). Hem `/` hem hash'li bundle'ı sorgular —
+   `location /assets/` kendi `add_header`'ını bildirdiği için ikincisi **gereklidir**.
+   `install-acceptance.yml` → `fresh-install` job'ına bağlandı (her PR + `main` push'u),
+   **negatif adımıyla birlikte** (yanlış origin beklenince kapı kırmızıya dönmeli).
+
+**Reuse anchor'ları (tam sembol adlarıyla):** `scripts/spa-security-headers-gate.sh` içinde
+`EXPECTED_HEADERS` (name|exact-value listesi), `header_of()` (bash 3.2 uyumlu — assoc-array
+kullanmaz), `assert_surface()`. Yeni bir header eklerken **yalnız** `EXPECTED_HEADERS`'a
+satır ekle; iki yüzey de otomatik kapsanır.
+
+**Ölçüldü.** Kapı **exit 0** (2 yüzey × 5 header = 10 PASS); sahte origin ile **exit 1**,
+kırmızı `content-security-policy` satırında. Politika **uygulanıyor**: canlı sayfada
+enjekte inline `<script>` çalışmadı, inline `<style>` ve `setAttribute('style',…)`
+uygulanmadı, **CSSOM ataması uygulandı** (React'in `style={{}}` mekanizması — 814 prop
+hayatta). Uygulama **bozulmadı**: Playwright e2e **39 passed / 1 skipped / 0 failed**, ve
+kimliği doğrulanmış 9 route'ta **101** inline-style'lı öğe render oldu, **0 CSP ihlali**.
+
+**Dürüst sınır.** Kapı yalnız `install-acceptance.yml`'de koşar (e2e.yml'de değil) ·
+**P11-1 açık** olduğu için bu da required status check DEĞİL, job kapısı · CSP
+`report-uri`/`report-to` **taşımıyor**, production'da bir ihlal hiçbir yere raporlanmaz ·
+yalnız cross-origin compose topolojisi ölçüldü · **P9-F1 ve P11-1 bilerek dışarıda** ·
+backend/frontend birim suite'leri **koşulmadı** (tek satır Python/TS kaynağı değişmedi;
+`generate_repository_facts.py --check` exit 0). **RC verdict'i BLOCKED kalır, blocker
+sayısı DEĞİŞMEDİ (üç).** Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 32.
+
+---
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:298` call site**
 
-**Değişmedi** — ADIM 25/26/27 ops/CI/docs, ADIM 28 ise a11y-hazırlık slice'ıydı; hiçbiri
-motor yoluna dokunmadı. `run_portfolio` hâlâ üretimde **çağrısız**:
+**Değişmedi** — ADIM 25/26/27 ops/CI/docs, ADIM 28 a11y-hazırlık, ADIM 29 RC-kanıt,
+ADIM 30 kabul-harness'ı, ADIM 31 ops/bildirim, ADIM 32 ise güvenlik-başlık slice'ıydı;
+hiçbiri motor yoluna dokunmadı. `run_portfolio` hâlâ üretimde **çağrısız**:
 `jobs/backtest_engine.py:298` item döngüsü, `:363` `combine_item_runs`,
 `SHARED_ALLOCATION_STATUS = future_dev` (containment KAPALI). ADIM 20 matrisindeki A1/A3/A5
 dışında hiçbir satır bu boşluk kapanmadan kapanamaz. Stepper indi (#602); kalan borç

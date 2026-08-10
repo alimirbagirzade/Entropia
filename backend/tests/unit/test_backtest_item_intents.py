@@ -932,7 +932,16 @@ def test_the_intent_layer_is_reachable_only_through_the_phase_loop() -> None:
     from here on — the intent layer is reached through the P3/P4 phases of ``run_portfolio``
     and nowhere else. The loop takes a P4 intent already FORMED by the item (an entry's size
     needs the item's own ``StrategyConfig``) and validates it; it imports this module for
-    ``form_mandatory_intent`` and for the types it checks against."""
+    ``form_mandatory_intent`` and for the types it checks against.
+
+    **Fifth deliberate update: ``execution/portfolio_projection.py``.** The Result projection
+    READS a finished run's intents — they are its decision trace — so it needs the
+    ``ItemIntent`` type and nothing else from here: it forms no intent, validates none, and
+    never reaches the layer during a run. It is itself contained
+    (``test_oracle_portfolio_containment_gate.py`` asserts nothing calls it), and it is the
+    ONLY unified-clock module it imports at all: the three policy-version constants it might
+    have published were dropped rather than widen three more of these lists for a field no
+    consumer reads. So the property this test defends is unchanged."""
     src = Path(__file__).resolve().parents[2] / "src" / "entropia"
     importers = sorted(
         path.relative_to(src).as_posix()
@@ -942,6 +951,7 @@ def test_the_intent_layer_is_reachable_only_through_the_phase_loop() -> None:
     assert importers == [
         "domain/backtest/execution/arbitration.py",
         "domain/backtest/execution/portfolio_ledger.py",
+        "domain/backtest/execution/portfolio_projection.py",
         "domain/backtest/execution/provenance.py",
         "domain/backtest/portfolio_engine.py",
     ]

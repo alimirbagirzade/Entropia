@@ -43,14 +43,16 @@ from alembic.migration import MigrationContext
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import create_async_engine
 
-import entropia.infrastructure.postgres.models  # noqa: F401
 from entropia.config import get_settings
+from entropia.infrastructure.postgres import models as postgres_models
 from entropia.infrastructure.postgres.base import Base
 
+# Importing the models package is what registers every table on ``Base.metadata``.
+# The name is referenced below so the import cannot be read as a dead one.
+MODEL_PACKAGE = postgres_models.__name__
+
 # Operation names that carry the index/constraint axis this gate owns.
-INDEX_AXIS_OPS = frozenset(
-    {"add_index", "remove_index", "add_constraint", "remove_constraint"}
-)
+INDEX_AXIS_OPS = frozenset({"add_index", "remove_index", "add_constraint", "remove_constraint"})
 
 # Deviations knowingly left to a separate change (see module docstring). The gate
 # fails if this grows: an unfixed problem may stay unfixed, but it may not spread.
@@ -84,9 +86,7 @@ async def _index_shape(url: str) -> dict[tuple[str, str], tuple[bool, str]]:
         await conn.close()
     # Compare the definition WITHOUT the index name, so a rename shows up as a
     # name difference rather than as two unrelated shapes.
-    return {
-        (r["tbl"], r["idx"]): (r["uniq"], r["full_def"].split(" ON ", 1)[1]) for r in rows
-    }
+    return {(r["tbl"], r["idx"]): (r["uniq"], r["full_def"].split(" ON ", 1)[1]) for r in rows}
 
 
 async def _build_create_all(url: str) -> None:
@@ -131,6 +131,12 @@ def _op_name(op: object) -> str:
     return getattr(op, "__visit_name__", type(op).__name__)
 
 
+def _verdict(ok: bool, *, ok_text: str = "PASS", bad_text: str = "FAIL") -> str:
+    if ok:
+        return ok_text
+    return bad_text
+
+
 def _flatten(ops: list) -> list:
     """compare_metadata groups per-table modifications into nested lists."""
     out: list = []
@@ -143,6 +149,9 @@ def _flatten(ops: list) -> list:
 
 
 async def run(probe_suffix: str) -> int:
+    if not Base.metadata.tables:
+        raise RuntimeError(f"no tables registered on Base.metadata — {MODEL_PACKAGE} did not load")
+
     migrated_url = get_settings().database_url
     probe_name = urlsplit(migrated_url).path.lstrip("/") + probe_suffix
     admin_url = _swap_database(migrated_url, "postgres")
@@ -169,35 +178,33 @@ async def run(probe_suffix: str) -> int:
     for key in differing:
         print(f"    DIFFERS         {key[0]}.{key[1]}  {migrated[key]} != {probe[key]}")
     parity_ok = not (only_migrated or only_probe or differing)
-    print(f"    -> {'PASS' if parity_ok else 'FAIL'}")
+    print(f"    -> {_verdict(parity_ok)}")
 
     ops = _flatten(await _model_vs_migration_ops(migrated_url))
     index_ops = [op for op in ops if _op_name(op) in INDEX_AXIS_OPS]
     default_ops = [op for op in ops if _op_name(op) == "modify_default"]
-    other_ops = [
-        op for op in ops if _op_name(op) not in INDEX_AXIS_OPS | {"modify_default"}
-    ]
+    other_ops = [op for op in ops if _op_name(op) not in INDEX_AXIS_OPS | {"modify_default"}]
 
     print(f"\n[2] model/migration index axis — {len(index_ops)} operation(s)")
     for op in index_ops:
         print(f"    {op}")
     index_axis_ok = not index_ops
-    print(f"    -> {'PASS' if index_axis_ok else 'FAIL'}")
+    print(f"    -> {_verdict(index_axis_ok)}")
 
     print(f"\n[3] NOT owned by this gate — server-default deviations: {len(default_ops)}")
     print(f"    expected {EXPECTED_SERVER_DEFAULT_DEVIATIONS} (see module docstring);")
     print("    `alembic check` stays non-zero because of these. Not asserted clean.")
     budget_ok = len(default_ops) <= EXPECTED_SERVER_DEFAULT_DEVIATIONS
-    print(f"    -> {'PASS (no growth)' if budget_ok else 'FAIL (grew)'}")
+    print(f"    -> {_verdict(budget_ok, ok_text='PASS (no growth)', bad_text='FAIL (grew)')}")
 
     unexpected_ok = not other_ops
     print(f"\n[4] no other schema drift — {len(other_ops)} operation(s)")
     for op in other_ops:
         print(f"    {op}")
-    print(f"    -> {'PASS' if unexpected_ok else 'FAIL'}")
+    print(f"    -> {_verdict(unexpected_ok)}")
 
     ok = parity_ok and index_axis_ok and budget_ok and unexpected_ok
-    print(f"\nVERDICT: {'PASS' if ok else 'FAIL'}")
+    print(f"\nVERDICT: {_verdict(ok)}")
     return 0 if ok else 1
 
 

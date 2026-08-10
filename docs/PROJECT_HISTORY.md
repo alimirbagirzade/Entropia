@@ -5300,7 +5300,7 @@ Yani **iki merge edilmiş commit** tam CI kanıtı olmadan main'e indi. Kusur
 
 ---
 
-## ADIM 30 — RC Blocker 2: kabul akışı harness kapsamı (PR pending)
+## ADIM 30 — RC Blocker 2: kabul akışı harness kapsamı (PR #647)
 
 **Dalganın tipi:** harness/test. **Ürün kodu değişmedi** — `backend/src` ve `frontend/src`
 bu dalgada hiç düzenlenmedi; migration yok, lockfile değişmedi, `ENGINE_VERSION` sabit.
@@ -5406,7 +5406,7 @@ bilerek yapılmadı** — insan kararıdır. §6.2'deki iki SKIP de açık işti
 
 ---
 
-## ADIM 31 — RC Blocker 3: fail-closed bildirim yolu (PR pending)
+## ADIM 31 — RC Blocker 3: fail-closed bildirim yolu (PR #649)
 
 **Dalganın tipi:** ops/CI. **Ürün kodu değişmedi** — `backend/src` ve `frontend/` bu dalgada
 hiç düzenlenmedi; migration yok, lockfile değişmedi, `ENGINE_VERSION` sabit,

@@ -4794,7 +4794,7 @@ Doğrulama: gate exit 0, `npm ci` exit 0, lint/typecheck/build exit 0, vitest **
 
 ---
 
-## ADIM 30 — RC Blocker 2 kabul akışı harness kapsamı landed (PR pending)
+## ADIM 30 — RC Blocker 2 kabul akışı harness kapsamı landed (PR #647)
 
 **Tip:** harness/test. **Ürün kodu değişmedi**, migration yok, lockfile değişmedi,
 `ENGINE_VERSION` sabit, `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).
@@ -4839,7 +4839,7 @@ kapandı" der.** Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 30.
 
 ---
 
-## ADIM 31 — RC Blocker 3: fail-closed bildirim yolu landed (PR pending)
+## ADIM 31 — RC Blocker 3: fail-closed bildirim yolu landed (PR #649)
 
 **Tip:** ops/CI. **`backend/src` ve `frontend/` DEĞİŞMEDİ**, migration yok, lockfile
 değişmedi, `ENGINE_VERSION` sabit, `SHARED_ALLOCATION_STATUS` = `future_dev`.

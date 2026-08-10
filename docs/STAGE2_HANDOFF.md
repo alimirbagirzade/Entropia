@@ -2198,7 +2198,7 @@ KANITLANAMADI — Docker Desktop bu makinede self-update GUI onayı bekliyordu (
 `docker compose config --quiet` geçerli + CI'ın "Docker — build images" job'ı yeşil. Bir sonraki fırsatta:
 Docker Desktop'ı GUI'den güncelle/başlat → `docker compose up -d --build` → `make smoke`.
 
-## Video-alignment wave landed (#313–#318 MERGED) ✅ — the walkthrough (`docs/spec/Video Anlatımı /entropia_transkript.md`) driven live end-to-end
+## Video-alignment wave landed (#313–#318 MERGED) ✅ — the walkthrough (`docs/spec/video-anlatimi/entropia_transkript.md`) driven live end-to-end
 
 **MOSTLY FRONTEND + narrow backend; migration YOK** (alembic head `0023_audit_log_trgm_indexes` SABİT;
 `ENGINE_VERSION` SABİT). Kaynak: kullanıcının prototip anlatım videosu — kodlanan yapıyı prototiple satır

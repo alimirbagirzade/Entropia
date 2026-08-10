@@ -660,7 +660,7 @@ deneyimini getir — videonun en güçlü şikâyeti (9:24–12:37: "süreci ba�
 yükleme seçeneği maalesef yok").
 
 Önce oku: docs/V18_R2_ROADMAP.md (§3 + KALAN-A) → docs/STAGE2_HANDOFF.md "KALAN-A" bölümü →
-docs/spec/Video Anlatımı /entropia_transkript.md (9:24–12:37) → docs/spec/11_*.md →
+docs/spec/video-anlatimi/entropia_transkript.md (9:24–12:37) → docs/spec/11_*.md →
 pages/MarketData.tsx (mevcut Step 1/2 ingest zinciri — PR #103: create dataset / raw-upload
 start+finalize / durable 202 analysis / schema mapping; PR #105 lifecycle) → lib/marketData.ts →
 e2e/specs/02-market-data-upload.spec.ts + 07-file-uploads.spec.ts (mevcut kapsam).
@@ -694,7 +694,7 @@ Entropia V18-R2 / KALAN-B: videodaki Portfolio deneyimini tamamla — "Use Alloc
 toggle + Mainboard'daki her öğeye pay atama görünürlüğü (video 7:16–9:24).
 
 Önce oku: docs/V18_R2_ROADMAP.md (§3 + KALAN-B) → docs/STAGE2_HANDOFF.md "KALAN-B" bölümü →
-docs/spec/Video Anlatımı /entropia_transkript.md (7:16–9:24) → docs/spec/13_*.md →
+docs/spec/video-anlatimi/entropia_transkript.md (7:16–9:24) → docs/spec/13_*.md →
 pages/Portfolio.tsx + lib/allocation.ts (PR #113: draft OCC expected_row_version; PR #320:
 portfolio-level rules Max Total Exposure + conflict policy) → pages/Mainboard.tsx satır özeti →
 backend routes/allocation.py imzaları (toggle'ın backend karşılığını EMPİRİK tespit et: draft
@@ -788,7 +788,7 @@ Kapanış: ORTAK KURALLAR §6.
 - Remediation status dosyasına bu PR ile bir **re-opening banner'ı** eklendi: GAP belgesinin
   CONFIRMED bulguları nedeniyle UI-01/02/04/05/06/12 ve fonksiyonel bağlıları R2 kapsamı kapanana
   kadar "Complete" sayılamaz (GAP madde 17 zorunlu düzeltmesi).
-- `docs/spec/Video Anlatımı /entropia_transkript.md` referans verilen ama untracked bir dosyaydı;
+- `docs/spec/video-anlatimi/entropia_transkript.md` referans verilen ama untracked bir dosyaydı;
   bu PR ile commit'lendi (video .mp4 dosyası bilinçli olarak commit DIŞI — 153MB binary).
 - Slice'lar kodlanırken bu dosyadaki satır numaraları bayatlayabilir; her prompt bu yüzden oturum
   başında yeniden doğrulama emreder (§3 ORTAK KURALLAR #1).

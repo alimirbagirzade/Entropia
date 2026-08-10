@@ -13,7 +13,7 @@
 
 **MOSTLY FRONTEND + dar backend; migration YOK** (alembic head `0023_audit_log_trgm_indexes` SABİT;
 `ENGINE_VERSION` SABİT). `main` = `e1b9af7` (Merge #320). Kaynak: kullanıcının **prototip anlatım videosu**
-(`docs/spec/Video Anlatımı /entropia_transkript.md`) — kodlanan yapı prototiple satır satır karşılaştırıldı.
+(`docs/spec/video-anlatimi/entropia_transkript.md`) — kodlanan yapı prototiple satır satır karşılaştırıldı.
 Bu dalga videoda "çekirdek" (Entropia Core) ilan edilen **Add Strategy → yatay açılır kutu → çok-stratejili
 strateji evreni** akışını CANLI çalışır hale getirdi ve yolda çıkan çökme/kullanılamazlık defektlerini kapattı:
 

@@ -140,8 +140,12 @@ receivers:
         # be told the page cleared, and several rules' `recovery` annotations are
         # written as conditions someone is expected to observe.
         send_resolved: true
-        # Alertmanager's default is 3 retries over 5s; a page must survive a
-        # receiver blip longer than that.
+        # 0 = no truncation. Alertmanager otherwise trims a group's alert list
+        # to this many entries and the rest are dropped from the payload
+        # silently — during exactly the multi-alert burst an operator most needs
+        # to see whole. (0 is also the default; it is written out because a
+        # future edit to a non-zero value should look like the deliberate choice
+        # it is.)
         max_alerts: 0
 
   - name: entropia-ticket
@@ -153,4 +157,5 @@ receivers:
       # dropped; only the routing granularity degrades, loudly.
       - url_file: /tmp/alertmanager/notify_url_ticket
         send_resolved: true
+        # As above: no truncation.
         max_alerts: 0

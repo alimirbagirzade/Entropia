@@ -6,11 +6,15 @@
 **Rapor tarihi:** 2026-08-07 · **Dalga:** ADIM 29 / P1–P13 (V18 RC verification)
 **Kaynak:** `docs/releases/evidence/2026-08-07/` — 13 kanıt belgesi + 34 ham çıktı dosyası
 
-> **FINAL VERDICT: BLOCKED** — dört bağımsız eksende kapatılmamış blocker var
-> (A-08 insan kabul denetimi koşulmadı ve imzalı sapması yok · P5/P6'nın uçtan uca
-> kabul akışları hiç koşmadı · Alertmanager yok, ateşleyen alarm kimseye ulaşmıyor ·
-> react-router HIGH advisory'si imzasız dondurulmuş); imzalı sapma D-10 **yalnız**
-> WCAG 1.4.3 eksenini kapsar ve bu blocker'ların hiçbirini kapatmaz. Gerekçe: §7.
+> **FINAL VERDICT: BLOCKED** — **ÜÇ** bağımsız eksende kapatılmamış blocker var
+> (A-08 insan kabul denetimi koşulmadı ve imzalı sapması yok · P5/P6'nın kabul akışları
+> koştu ama `flows` bir CI kapısı değil · react-router HIGH advisory'si imzasız
+> dondurulmuş); imzalı sapma D-10 **yalnız** WCAG 1.4.3 eksenini kapsar ve bu
+> blocker'ların hiçbirini kapatmaz. Gerekçe: §7.
+>
+> **2026-08-10 (ADIM 31) — blocker sayısı 4 → 3.** Eski blocker **(3) Alertmanager yok**
+> **KAPANDI**: bildirim yolu sevk edildi, fail-closed, ve ateşleyen gerçek bir alarmın bir
+> alıcıya ulaştığı uçtan uca ölçüldü (§6.3). Verdict **BLOCKED kalır** — 1, 2 ve 4 açıktır.
 
 ---
 
@@ -696,31 +700,76 @@ kök nedende. O gün hiçbir katmanda kanıtlanmadığı yazılan liste: beş ak
 servis bazında health · `smoke.sh` · `worker-restart-smoke.sh`. Yukarıdaki ölçümler bu
 listenin tamamını yeniden ele almıştır; **silinmedi, yerine ölçüm konuldu.**
 
-### 6.3 Alertmanager YOK — **BLOCKER** (P10 §5.3)
+### 6.3 Alertmanager — **KAPANDI 2026-08-10 (ADIM 31)**, eski BLOCKER (P10 §5.3)
+
+> **Bu bölümün eski hâli** "Alertmanager YOK — **BLOCKER**" idi. Aşağıda önce o
+> tespitin **bu koşuda yeniden ölçülmüş** hâli, sonra kapanış kanıtı var. Rapordaki
+> sayılar kopyalanmadı; `docs/releases/evidence/2026-08-10/p10b_preexisting_state.txt`
+> onları `origin/main` üzerinde yeniden üretir.
+
+#### 6.3.1 Eski durum — yeniden ölçüldü, doğrulandı
+
+| Rapor iddiası | `origin/main` (`20108af`) üzerinde ölçülen | Doğru mu? |
+|---|---|---|
+| `prometheus.yml` içinde `alerting:` bloğu yok | `grep -n '^alerting:'` → **eşleşme yok** | ✅ |
+| `docker-compose.yml`'de Prometheus servisi yok | `grep -nE '^  (prometheus\|alertmanager):'` → **ikisi de yok** | ✅ |
+| Repo genelinde receiver / routing / silence / on-call yok | `ops/ scripts/ .github/ backend/src/` içinde 3 dosya eşleşiyor, **hepsi yokluğu anlatan YORUM** — tek satır yapılandırma yok | ✅ |
+| 11 kural, 7'si page | `grep -c '^      - alert:'` → **11** · `severity: page` **7**, `severity: ticket` **4** | ✅ |
+| promtool kapısı | CI job `alerts` / `Alert rules — promtool` → `scripts/alert-rules-gate.sh`, **exit 0** | ✅ |
+
+Yani §6.3'ün tespiti maddeten doğruydu: doğrulanmış 11 kural, hiçbiri bir insana ulaşmıyordu.
+
+#### 6.3.2 Karar ve kapanış
+
+**(A) sevk edildi. (B) imzalı sapma SEÇİLMEDİ** — eksik olan bir on-call *organizasyonu*
+değil, bildirim *yolunun kendisiydi*, ve o yol repo içi yapılandırmadır.
 
 ```
 metrik üretimi  →  scrape config  →  kural değerlendirme  →  ateşleme  →  BİLDİRİM  →  insan
-   ✅ 7 aile        ✅ entropia-api    ✅ promtool PASS       ✅ 11/11      ❌ YOK      ❌ ulaşmıyor
+   ✅ 7 aile        ✅ entropia-api    ✅ promtool PASS       ✅ 11/11      ✅ VAR      ✅ ULAŞTI
 ```
 
-**Olgu:** repo hiçbir Alertmanager sevk etmiyor — `ops/prometheus/prometheus.yml` içinde
-`alerting:` bloğu **bilerek yok**, `docker-compose.yml`'de Prometheus servisi de yok,
-repo genelinde receiver / routing ağacı / silence yapılandırması / on-call entegrasyonu
-bulunmuyor. `severity: page` ve `severity: ticket` **hiçbir şeyin okumadığı etiketlerdir**.
-**Yedi page-seviyeli alarm** — ürünün kullanılamaz olduğunu, Postgres'in erişilemez
-olduğunu, async düzlemin hiç kurulmamış olduğunu söyleyen alarmlar — bu boşluğun arkasında.
+**Sevk edilen:**
 
-**"`alerts` job'ı yeşil" bunu KAPATMAZ.** O job'ın kanıtladığı tek şey kuralların *doğru*
-olduğudur (PromQL geçerli, metrik adları gerçek, eşikler gerekçeli, sentetik seride
-ateşliyorlar). **Doğru bir kuralın kime gittiğini o job hiç sormaz.**
+| Kalem | Dosya | Ne yapar |
+|---|---|---|
+| Routing ağacı | `ops/alertmanager/alertmanager.yml` | `severity: page` → `entropia-page` (repeat 1h), `severity: ticket` → `entropia-ticket` (repeat 12h) — **iki AYRI receiver, iki AYRI zamanlama**. Kök receiver **gerçek**: eşleşmeyen alarm düşürülmez, page eder. 3 inhibit kuralı (hepsi **aşağı** yönlü). |
+| Fail-closed başlatıcı | `ops/alertmanager/entrypoint.sh` | `ALERTMANAGER_NOTIFY_URL` **unset / boş / http(s) değilse → exit 78, Alertmanager BAŞLAMAZ**. Placeholder receiver yok, `/dev/null` route yok, `receiver: null` yok. |
+| `alerting:` bloğu | `ops/prometheus/prometheus.yml` | Ateşleyen alarmı değerlendiriciden çıkarıp Alertmanager'a verir. |
+| Servisler | `docker-compose.yml` (profil `observability`) | Düz `docker compose up` **etkilenmez** — kabul script'lerinin getirdiği yığın birebir aynı kalır. |
+| CI kapısı (config) | `scripts/alert-notification-gate.sh` + `backend/tests/contract/test_alert_notification_contract.py` | `amtool check-config` + `amtool config routes test` + **21 yapısal test**. |
+| Uçtan uca kanıt | `scripts/alert-notification-proof.sh` | **CI kapısı DEĞİL** — dürüst sınır, §6.7'ye kaydedildi. |
 
-İki ek doğrulanmamış nokta: kurallar **gerçek production serilerine** karşı hiç
-değerlendirilmedi, ve **sevk edilen Prometheus'un gerçekten bu dosyadan yapılandığını**
-kanıtlayan bir kapı yok.
+**Ölçülen kanıt (2026-08-10, `docs/releases/evidence/2026-08-10/`):**
 
-**Kapanış: (A)** Alertmanager'ı ayağa kaldır (receiver + routing + silence + on-call) +
-Prometheus config provenance kapısı; **veya (B)** D-10 biçiminde **imzalı** kalıcı sapma
-("V1 üretimi bildirimsiz alarm ile sevk edilir"). **İkisi de insan işi.**
+| Faz | Ne kanıtlandı | Sonuç |
+|---|---|---|
+| 1 | Boş hedefle Alertmanager **başlamaz** | **exit 78** + değişken adını söyleyen mesaj · URL olmayan değerle de **exit 78** |
+| 2 | Sevk edilen çift, sevk edilen config'lerle ayağa kalkar | `prometheus` + `alertmanager` **ready** |
+| 3 | **PROVENANCE** — yürürlükteki config bu ağacınki | çalışma ağacı / mount / staged sha256 **üçü de `f1c1949c…`** · `--config.file=/tmp/ops/prometheus/prometheus.yml` · parse edilmiş config `entropia-api`, `api:8000`, `alertmanager:9093`, `entropia.rules.yml`, `deployment: entropia` taşıyor · yüklenen kural seti **11 = 11, diff boş** |
+| 4 | **DELIVERY** — gerçek bir alarm alıcıya ulaşır | `EntropiaApiDown` ateşledi (`up{job="entropia-api"} == 0` — **sentetik seri yok**, `api` servisi hiç koşmuyor) ve alıcıya **`"receiver": "entropia-page"`, `"alertname": "EntropiaApiDown"`, `"severity": "page"`** olarak ulaştı |
+
+`scripts/alert-notification-proof.sh` **exit 0**. Ham çıktı: `p10b_notification_proof.txt`.
+
+**"promtool PASS" bunu neden KANITLAMAZDI — ve hâlâ kanıtlamaz.** O job'ın söylediği tek
+şey kuralların *doğru* olduğudur. **Doğru bir kuralın kime gittiğini o job hiç sormaz.**
+CI job'ı bu yüzden `Alert rules — promtool` → **`Alert rules and notification path`**
+olarak yeniden adlandırıldı: eski ad daha güçlü bir iddia olarak okunuyordu.
+
+#### 6.3.3 KAPANMAYAN ARTIK — açıkça kayıtlı
+
+§6.3'ün **iki** doğrulanmamış noktası vardı. **İkincisi kapandı** (provenance kapısı artık
+var, faz 3). **BİRİNCİSİ KAPANMADI:**
+
+> **Kurallar gerçek production serilerine karşı hiç değerlendirilmedi.** `promtool test
+> rules` sentetik seri kullanır; ADIM 31'in uçtan uca kanıtı **tek bir yapısal kuralı**
+> (`up == 0`) ateşler. Gerçek trafiğe göre yanlış ayarlanmış bir eşik hâlâ *doğru* görünür.
+
+Bu **bu slice'ta kapanamaz** — yalnız gerçek trafik biriktikçe kapanır. Repo içindeki
+hiçbir kapı onu kapatamaz. **Kalıcı imzalı sapma DEĞİLDİR** ve öyle kaydedilmemiştir;
+süreli bir kayda dönüştürülmesi istenirse **imzayı agent atayamaz**. Tam liste:
+`docs/runbooks/alert-notification.md` §5 (5 madde: production serisi · monitörü izleyen yok ·
+delivery proof CI kapısı değil · on-call rotasyonu/ack yok · kuyruk bazında worker liveness yok).
 
 ### 6.4 react-router `GHSA-qwww-vcr4-c8h2` — imzasız freeze, **BLOCKER** (P9-B2)
 
@@ -803,6 +852,9 @@ açılmadı/kapatılmadı.
 | **P6-6** | `dropdb` bu host'ta takılıyor → `backup-verify.sh` CI/cron'da sağlam bir yedeği **başarısız** raporlayabilir | P6 |
 | **P6-ek** | `e2e-acceptance.sh` preflight koruması **takılmış** daemon'a karşı işlemiyor → net `exit 2` yerine sonsuz asılı kalma | P6 |
 | **P1-Gate3** | **8 uncovered kriter** + **131 partial kriter** (kapı yeşil sayıyor, ama RC kabul kararında okunmalıdır) — aralarında `AT-04`, `AOS-17`/`TS-17` (spec adı `ACTIVE_RUN_DEPENDENCY` ↔ sevk edilen `OBJECT_IN_ACTIVE_RUN`, **hiçbiri pinli değil**), `TL-20`/`AOS-18` (K-06 tehlikesi) | P1 |
+| **P10-B3** | **Bildirim yolunun DELIVERY kanıtı bir CI kapısı DEĞİL** (ADIM 31). Config yarısı kapılı (`scripts/alert-notification-gate.sh` + 21 contract testi); teslimat yarısı yalnız `scripts/alert-notification-proof.sh` ile ölçülür ve o üç konteyner + dakikalarca wall-clock ister. Kapıya bağlamak **insan kararıdır** (maliyet). Regresyon sessizce dönebilir | ADIM 31 |
+| **P10-B4** | **Monitörü izleyen yok.** Alertmanager erişilemezse Prometheus yeniden dener ve `prometheus_notifications_errors_total` sayacını artırır — **kendi** `/metrics`'inde, ki onu hiçbir şey scrape etmiyor. Sessizce teslim etmeyi bırakmış bir bildirim yolu, sessiz bir sistemden ayırt edilemez. Döngüsel olmayan bir çözüm ikinci bir Prometheus ister; denenmedi | ADIM 31 |
+| **P10-B5** | **On-call rotasyonu / escalation policy / acknowledgement YOK.** Alertmanager'ın ack kavramı yoktur; `repeat_interval` mekanizmanın tamamıdır. Kimin uyandırılacağı `ALERTMANAGER_NOTIFY_URL`'in ucundaki sistemde yaşar — **repo dışı, organizasyonel karar** | ADIM 31 |
 
 ---
 
@@ -826,17 +878,26 @@ Ek olarak: `SHARED_ALLOCATION_STATUS` **`future_dev`** (containment KAPALI, §4)
 
 > ## **BLOCKED**
 >
-> V18 Release Candidate `1f4b88b` **sevk edilemez**: dört kapatılmamış blocker'ı vardır —
+> V18 Release Candidate `1f4b88b` **sevk edilemez**: **üç** kapatılmamış blocker'ı vardır —
 > **(1)** A-08 insan ekran okuyucu kabul denetimi hiç koşulmadı (0/4 çıkış kriteri, 0/46
 > rota, 0/20 akış, 0 bulgu kaydı) ve yerine geçecek imzalı sapma **yok**, izleme issue'su
 > #514 ise **kanıtsız kapatılmış**; **(2)** kabul akışları — **2026-08-10'da kısmen
 > kapandı** (§6.2): harness kapsamı yazıldı, beş akış da koştu (**60 passed / 0 failed /
 > 2 skipped**, tarayıcı katmanı **5 passed**), ama `flows` hâlâ **bir CI kapısı değildir**,
-> yani regresyon sessizce geri gelebilir; **(3)** Alertmanager yok, yani doğrulanmış 11 alarm kuralının 7
-> page-seviyelisi dahil hiçbiri bir insana ulaşmıyor; **(4)** sevk edilen bir HIGH advisory
+> yani regresyon sessizce geri gelebilir; **(4)** sevk edilen bir HIGH advisory
 > (`GHSA-qwww-vcr4-c8h2`) imzasız bir freeze ile geçiriliyor. Tek imzalı sapma **D-10**'dur
-> ve kapsamı **yalnız WCAG 1.4.3**'tür — bu dördün hiçbirini kapsamaz, dolayısıyla
+> ve kapsamı **yalnız WCAG 1.4.3**'tür — bu üçün hiçbirini kapsamaz, dolayısıyla
 > "READY WITH SIGNED DEVIATIONS" **açık değildir**.
+>
+> **Eski blocker (3) — Alertmanager — 2026-08-10'da (ADIM 31) KAPANDI** (§6.3): bildirim yolu
+> sevk edildi ve **fail-closed**'dur (hedef yoksa Alertmanager **exit 78**, başlamaz),
+> provenance kapısı eklendi (yürürlükteki config'in sha256'sı çalışma ağacınınkiyle özdeş),
+> ve ateşleyen gerçek bir `EntropiaApiDown` **bir alıcıya `entropia-page` / `severity=page`
+> olarak ulaştı** — sentetik seri kullanılmadan. Numaralandırma **bilerek korunmuştur**:
+> kalanlar (1), (2), (4) olarak anılmaya devam eder, çünkü yeniden numaralandırmak bu
+> belgeye atıf yapan kayıtları geçmişten koparırdı. **Kapanmayan artık:** kurallar gerçek
+> production serilerine karşı hâlâ değerlendirilmedi (§6.3.3) — bu bir blocker olarak
+> sayılmıyor çünkü repo içinde kapatılabilir değil, ama **imzalı bir sapma da değildir**.
 
 ### Verdict'i **düşürmeyen** ölçümler (kayıt için)
 
@@ -860,7 +921,7 @@ visual **8/8** · axe **45/45 tavan, critical 0**.
 |---|---|---|
 | 1 | `A-08-HUMAN-GATE-UNMET` | (A) denetimi koştur — **önce #514'ü yeniden aç** — iki SR kombinasyonu, 23 rota + 10 akış, dört kriter ☑; **veya** (B) D-10 biçiminde imzalı kalıcı sapma |
 | 2 | Kabul akışları | ~~Harness'a (a)–(e) kapsamını **yaz** … üç auth modu + health + smoke + `worker-restart-smoke.sh` koştur~~ → **2026-08-10'da yapıldı** (§6.2 / §6.2.1). Kalan insan kararı: **`flows`'u bir CI kapısına bağla** (CI'da 12 konteynerlik ikinci yığın + süre maliyeti kabul edilecek mi?) ve §6.2'deki iki SKIP'i kapat |
-| 3 | Alertmanager | (A) receiver + routing + silence + on-call + Prometheus config provenance kapısı; **veya** (B) imzalı kalıcı sapma |
+| ~~3~~ | ~~Alertmanager~~ | ~~(A) receiver + routing + silence + on-call + Prometheus config provenance kapısı; **veya** (B) imzalı kalıcı sapma~~ → **2026-08-10'da (A) SEVK EDİLDİ, blocker KAPANDI** (§6.3). Kalan insan kararları blocker DEĞİL, §6.7'ye kaydedildi: **P10-B3** delivery proof'u bir CI kapısına bağlamak (maliyet kararı) · **P10-B5** on-call rotasyonu / escalation / ack (repo dışı) |
 | 4 | react-router freeze | Kaydı `.github/security-allowlist.json` disiplinine taşı (**zorunlu `owner` + `expires`**) — **imzalayan verilmediği için agent yazamaz** |
 
 Ayrıca **izleme hijyeni**: #558 / #559 / #617 / #618, kodun hâlâ açık olduğu ölçülmüşken
@@ -869,6 +930,20 @@ COMPLETED kapalıdır (§6.6). Yeniden açmak insan işidir.
 ---
 
 ## 9. Kanıt dizini
+
+### 9.0-b 2026-08-10 (ADIM 31) — blocker 3 dalgası
+
+Tüm ham çıktılar: **`docs/releases/evidence/2026-08-10/`**
+
+| Adım | Belge / dosya | Verdict |
+|---|---|---|
+| P10-B | `P10B_alert_notification_path.md` | **BLOCKER KAPANDI** (bildirim yolu sevk edildi, fail-closed, uçtan uca ölçüldü) |
+| — | `p10b_preexisting_state.txt` | §6.3'ün beş iddiası `origin/main`'de **yeniden ölçüldü**, beşi de doğru |
+| — | `p10b_promtool_gate.txt` | `scripts/alert-rules-gate.sh` yeni `alerting:` bloğuyla **exit 0**, 11 kural |
+| — | `p10b_amtool_gate.txt` | `scripts/alert-notification-gate.sh` (YENİ) **exit 0** — `check-config` + üç `routes test` |
+| — | `p10b_notification_proof.txt` | `scripts/alert-notification-proof.sh` (YENİ) **exit 0** — fail-closed exit 78 · sha256 provenance · gerçek `EntropiaApiDown` alıcıya ulaştı |
+| — | `p10b_contract_tests.txt` | `test_alert_notification_contract.py` (YENİ) **21 passed** + `test_alert_rules_contract.py` regresyonsuz |
+| — | `p10b_backend_suite.txt` | Tam backend suite — regresyon kontrolü |
 
 ### 9.0 2026-08-10 (ADIM 30) — blocker 2 dalgası
 
@@ -908,6 +983,19 @@ Tüm ham çıktılar: **`docs/releases/evidence/2026-08-07/`**
 ---
 
 ## 10. Bu adımda (P13) değişen ve değişmeyenler
+
+> **ADIM 31 eki (2026-08-10).** O dalgada bu belgenin **başlık verdict özeti**, **§6.3**
+> (tamamen yeniden yazıldı), **§6.7** (üç yeni kalem: P10-B3/B4/B5), **§8** (verdict metni +
+> insan-kararı tablosunun 3. satırı) ve **§9.0-b** güncellendi. **§6.1 / §6.2 / §6.4 / §6.5 /
+> §6.6 ve P1–P13 tablolarının tamamı el değmeden bırakıldı** — blocker 1, 2 ve 4 o slice'ın
+> kapsamı DIŞINDAYDI. Kod tarafında değişen: `ops/alertmanager/*` (YENİ),
+> `ops/prometheus/entrypoint.sh` (YENİ), `ops/prometheus/prometheus.yml` (`alerting:` bloğu),
+> `docker-compose.yml` (iki servis, `observability` profili — düz `docker compose up`
+> **etkilenmez**), `.github/workflows/ci.yml` (`alerts` job'ına bir adım + yeniden adlandırma),
+> `scripts/alert-notification-{gate,proof}.sh` (YENİ), `backend/tests/contract/test_alert_notification_contract.py`
+> (YENİ), `.env.example`, `docs/runbooks/alert-notification.md` (YENİ) + `METRIC_ALERT_MATRIX.md`.
+> **`backend/src` ve `frontend/` düzenlenmedi**; migration, lockfile, **imza**, tag, release,
+> issue açma/kapama **yok**.
 
 > **ADIM 30 eki (2026-08-10).** O dalgada bu belgenin §3/P5, §3/P6, §6.2, §8 ve §9
 > bölümleri güncellendi ve `docs/releases/evidence/2026-08-10/` eklendi. Kod tarafında

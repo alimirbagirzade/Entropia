@@ -1,0 +1,19 @@
+$ scripts/alert-notification-gate.sh   (NEW in ADIM 31)
+
+==> amtool (v0.28.1) check-config
+Checking '/ops/alertmanager/alertmanager.yml'  SUCCESS
+Found:
+ - global config
+ - route
+ - 3 inhibit rules
+ - 2 receivers
+ - 0 templates
+
+==> amtool config routes test — severity=page must reach entropia-page
+    -> entropia-page
+==> amtool config routes test — severity=ticket must reach entropia-ticket
+    -> entropia-ticket
+==> amtool config routes test — an unlabelled alert must still reach a receiver
+    -> entropia-page
+==> alert notification config OK
+exit=0

@@ -1,4 +1,6 @@
-# Metric and alert matrix (ADIM 25)
+<!-- doc-status: current -->
+
+# Metric and alert matrix (ADIM 25, delivery half ADIM 31)
 
 The complete, verified inventory of what Entropia can observe today — and, just
 as importantly, what it **cannot**. Every row was checked against the code at
@@ -106,7 +108,7 @@ that no metric will catch. Diagnosis is possible — via logs or SQL — but onl
 | **DB pool** | pool size/overflow/checkout utilisation | `create_async_engine` sets only `pool_pre_ping=True`; no `pool_size`, `max_overflow`, `pool_timeout`. SQLAlchemy defaults (5 + 10 overflow) apply **per process** | Pool exhaustion presents as latency, then 5xx, with no direct signal. See [postgres.md](postgres.md) |
 | **Worker (per queue)** | liveness of `data`, `backtest`, `agent`, `agent-high`, `agent-executor` workers | `entropia_worker_heartbeat_age_seconds` covers the **`maintenance` queue only** (`worker-default`) | A dead `worker-backtest` leaves the heartbeat fresh. Caught indirectly by `EntropiaQueueNeverDrains`, and only once work is pending |
 | **Correlation into workers** | `correlation_id` in worker logs | bound by the API middleware only (`apps/api/context.py`). `Job.correlation_id` exists as a **column** but no actor binds it to the log context | An API request cannot be traced into the worker log line that executed its job |
-| **Alert NOTIFICATION** — *(was "the alert rules themselves"; the PromQL-validation half was closed in ADIM 26)* | an Alertmanager. No receiver, no routing, no silences, no on-call integration; `severity: page` vs `ticket` is a label nothing reads | the rules are now **evaluated**, not just tokenized: `scripts/alert-rules-gate.sh` runs `promtool check config` + `check rules` + `test rules` against a digest-pinned Prometheus as its own blocking CI job, and `ops/alerts/entropia.rules.test.yml` proves each of the 11 alerts actually reaches `alertstate="firing"` on synthetic series. `ops/prometheus/prometheus.yml` makes `job="entropia-api"` a real scrape job, and the contract test fails on any rule naming a job it does not declare | **Rules that fire correctly still notify nobody.** The evaluation blind spot is closed — the ADIM 25 `and absent(...)` defect now fails the gate (proven by deleting `on()`: `check rules` stays green, `test rules` reports `got: nil`). The DELIVERY blind spot is not: standing up Alertmanager was deliberately out of ADIM 26's scope, which is a validation gate, not a monitoring stack. Two things also remain unvalidated: the rules are never evaluated against **real production series** (a metric that exists but is never populated looks healthy here), and no gate proves the deployed Prometheus is actually configured from this file |
+| **Alert NOTIFICATION** — *(was "the alert rules themselves"; the PromQL-validation half closed in ADIM 26, the DELIVERY half in ADIM 31)* | **nothing — this row is now about what delivery still does not prove.** | the path exists end to end: `ops/prometheus/prometheus.yml` carries an `alerting:` block, `ops/alertmanager/alertmanager.yml` routes `severity: page` and `severity: ticket` to two receivers with different timings, `ops/alertmanager/entrypoint.sh` **refuses to start** without `ALERTMANAGER_NOTIFY_URL` (exit 78), and `scripts/alert-notification-proof.sh` fires a real `EntropiaApiDown` and asserts it reaches a receiver as `entropia-page` / `severity=page`. CI gates the CONFIG (`scripts/alert-notification-gate.sh` + `test_alert_notification_contract.py`), not the delivery | **Rules now notify. What is still unproven: (a) the rules have never been evaluated against REAL production series — only synthetic ones plus one structural `up == 0`, so a threshold that is wrong for real traffic still looks correct; (b) nothing monitors the monitor — `prometheus_notifications_errors_total` lives on Prometheus's own `/metrics`, which nothing scrapes; (c) the delivery proof is NOT a CI gate. See [alert-notification.md](alert-notification.md) §5.** |
 | **Log redaction** | a structlog scrubbing processor | enforced **by hand, per call site** — probes log `type(exc).__name__` instead of `str(exc)` because driver errors echo the DSN. `errors.py:203` still logs `str(exc)` | A new call site can leak a secret without any gate objecting. `test_probe_failure_logging.py` covers the probes only |
 
 ---
@@ -114,19 +116,37 @@ that no metric will catch. Diagnosis is possible — via logs or SQL — but onl
 ## 5. Maintenance
 
 * Alert rules: `ops/alerts/entropia.rules.yml`
-* Scrape config: `ops/prometheus/prometheus.yml` — the file that makes
-  `job="entropia-api"` a checked fact rather than a comment. No Prometheus
-  service is shipped; mount `ops/` into one you run yourself.
-* Enforcement runs at **two levels**, and both are blocking:
+* Scrape config **and alerting block**: `ops/prometheus/prometheus.yml` — the
+  file that makes `job="entropia-api"` a checked fact rather than a comment, and
+  (since ADIM 31) the file that hands fired alerts to Alertmanager.
+* Notification routing: `ops/alertmanager/alertmanager.yml` + the fail-closed
+  launcher `ops/alertmanager/entrypoint.sh`. Both services ship in
+  `docker-compose.yml` behind the `observability` profile —
+  `docker compose --profile observability up -d prometheus alertmanager`. Full
+  path, silencing, and the open residues: **[alert-notification.md](alert-notification.md)**.
+* Enforcement runs at **three levels**, and the first two are blocking:
   * *Text* — `backend/tests/contract/test_alert_rules_contract.py`: metric names
     are derived from the exposition code, thresholds are checked against the
     configuration defaults they claim to be multiples of, every `runbook`
     annotation must resolve to a real file, and every `job=` matcher must name a
     job the scrape config declares.
-  * *Evaluation* — `scripts/alert-rules-gate.sh` (CI job **Alert rules —
-    promtool**): `check config`, `check rules`, then `test rules` over
-    `ops/alerts/entropia.rules.test.yml`. Run it locally before pushing; it needs
-    docker and nothing else.
+  * *Evaluation* — `scripts/alert-rules-gate.sh` (CI job **Alert rules and
+    notification path**): `check config`, `check rules`, then `test rules` over
+    `ops/alerts/entropia.rules.test.yml`. The same job runs
+    `scripts/alert-notification-gate.sh` (`amtool check-config` plus
+    `amtool config routes test`, which resolves concrete label sets through the
+    routing tree). Run both locally before pushing; they need docker and nothing
+    else. **The job was RENAMED in ADIM 31** because its old name was being read
+    as "alerting works" — it never meant more than "the rules are correct".
+  * *Delivery* — `scripts/alert-notification-proof.sh`, **not a CI gate**: it
+    stands up Prometheus + Alertmanager + a test receiver, proves the launcher
+    refuses an empty destination, hashes the config in effect against this tree,
+    and fires a real `EntropiaApiDown` end to end. Minutes of wall clock, so
+    running it per-PR is a cost decision for a human. Run it when the
+    notification path changes and record the output as release evidence.
+* Adding a receiver or a route: `alert-notification.md` §6. A receiver with no
+  notifier config passes `amtool check-config` — measured — and discards
+  everything routed to it; the contract test is what rejects that shape.
 * Adding a metric: emit it, then add the row here, then (only then) write a rule.
   The contract test will reject a rule over a metric that does not exist.
 * Adding a rule: it is not done until `entropia.rules.test.yml` contains a case

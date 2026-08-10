@@ -1,0 +1,82 @@
+$ scripts/alert-notification-proof.sh   (NEW in ADIM 31 — end-to-end delivery + provenance + fail-closed)
+Host: darwin 25.5.0, Docker 29.4.0, compose v5.1.2. Date: 2026-08-10.
+
+================================================================
+PHASE 1 — FAIL-CLOSED: Alertmanager must refuse an empty destination
+================================================================
+ Network entropia-alert-proof_default Creating 
+ Network entropia-alert-proof_default Created 
+ Volume entropia-alert-proof_alertmanagerdata Creating 
+ Volume entropia-alert-proof_alertmanagerdata Created 
+ Container entropia-alert-proof-alertmanager-run-2aecee1cbcee Creating 
+ Container entropia-alert-proof-alertmanager-run-2aecee1cbcee Created 
+alertmanager-entrypoint: FATAL: ALERTMANAGER_NOTIFY_URL is unset or empty. Set it to the endpoint that must receive Entropia alerts.
+alertmanager-entrypoint: refusing to start. An Alertmanager with no reachable
+alertmanager-entrypoint: destination reports success while notifying nobody;
+alertmanager-entrypoint: that failure mode is the reason this check exists.
+
+    exit code with ALERTMANAGER_NOTIFY_URL unset: 78
+    exit code with a non-URL destination: 78
+PHASE 1 OK — no destination, no process.
+
+================================================================
+PHASE 2 — bring the path up with a real (test) destination
+================================================================
+ Volume entropia-alert-proof_prometheusdata Creating 
+ Volume entropia-alert-proof_prometheusdata Created 
+ Container entropia-alert-proof-alertmanager-1 Creating 
+ Container entropia-alert-proof-alert-catcher-1 Creating 
+ Container entropia-alert-proof-prometheus-1 Creating 
+ Container entropia-alert-proof-alertmanager-1 Created 
+ Container entropia-alert-proof-prometheus-1 Created 
+ Container entropia-alert-proof-alert-catcher-1 Created 
+ Container entropia-alert-proof-prometheus-1 Starting 
+ Container entropia-alert-proof-alert-catcher-1 Starting 
+ Container entropia-alert-proof-alertmanager-1 Starting 
+ Container entropia-alert-proof-prometheus-1 Started 
+ Container entropia-alert-proof-alert-catcher-1 Started 
+ Container entropia-alert-proof-alertmanager-1 Started 
+PHASE 2 OK — both services up on the shipped configs.
+
+================================================================
+PHASE 3 — PROVENANCE: the config in effect IS this working tree's
+================================================================
+    working tree          : f1c1949c6d3382fa5450138604759509ac57262f93fbb219c3356b34e5be0e19
+    mounted in container  : f1c1949c6d3382fa5450138604759509ac57262f93fbb219c3356b34e5be0e19
+    staged (config.file)  : f1c1949c6d3382fa5450138604759509ac57262f93fbb219c3356b34e5be0e19
+    --config.file         : /tmp/ops/prometheus/prometheus.yml
+    parsed config carries  : entropia-api
+    parsed config carries  : alertmanager:9093
+    parsed config carries  : api:8000
+    parsed config carries  : entropia.rules.yml
+    parsed config carries  : deployment: entropia
+    tracked alert rules   : 11
+    loaded  alert rules   : 11
+PHASE 3 OK — provenance established for the scrape config, the alerting block and the rules.
+
+================================================================
+PHASE 4 — DELIVERY: a real alert must reach the receiver
+================================================================
+    no 'api' service is running, so up{job="entropia-api"} == 0 is simply true.
+    EntropiaApiDown is for: 2m; root group_wait is 30s. Waiting up to 480s.
+
+---- alertmanager's own view of the alert ----
+[{"annotations":{"derivation":"Structural, not a tuned threshold: `up == 0` means the scrape itself failed. 2m rides out one missed scrape at any sane interval without paging on a single blip.","diagnosis":"Distinguish \"process dead\" from \"process alive, port unreachable\": `docker compose ps api` and `docker compose logs --tail=200 api`. A running container with a failing scrape is usually the credential (401/403 from the /metrics gate) or a network policy, not an outage — curl /health/live from inside the network to tell them apart.","escalation":"Page the on-call operator immediately; this alert means the product is unavailable.","false_positives":"A planned redeploy fires this. Silence for the deploy window. A wrong or missing ENTROPIA_METRICS_TOKEN also presents as `up == 0` while the product is perfectly healthy — check the scrape config first.","mitigation":"Restart the API service. If it crash-loops, capture logs BEFORE the next restart — the loop overwrites the useful frame.","recovery":"`up == 1` for 5m and /health/ready returns 200 with all three checks ok.","response":"Confirm whether users are affected before touching anything: /health/live from a client network.","runbook":"docs/runbooks/api.md","summary":"The Entropia API is not answering scrapes."},"endsAt":"2026-08-10T10:18:25.725Z","fingerprint":"dca26b689a778de1","receivers":[{"name":"entropia-page"}],"startsAt":"2026-08-10T10:14:25.725Z","status":{"inhibitedBy":[],"mutedBy":[],"silencedBy":[],"state":"active"},"updatedAt":"2026-08-10T10:14:25.831Z","generatorURL":"http://e81b7f1ffe5b:9090/graph?g0.expr=up%7Bjob%3D%22entropia-api%22%7D+%3D%3D+0\u0026g0.tab=1","labels":{"alertname":"EntropiaApiDown","component":"api","deployment":"entropia","instance":"api:8000","job":"entropia-api","severity":"page"}}]
+
+---- what the receiver actually got ----
+alert-catcher-1  | NOTIFICATION_RECEIVED {"alerts": [{"annotations": {"runbook": "docs/runbooks/api.md", "summary": "The Entropia API is not answering scrapes."}, "labels": {"alertname": "EntropiaApiDown", "component": "api", "deployment": "entropia", "instance": "api:8000", "job": "entropia-api", "severity": "page"}, "status": "firing"}], "commonLabels": {"alertname": "EntropiaApiDown", "component": "api", "deployment": "entropia", "instance": "api:8000", "job": "entropia-api", "severity": "page"}, "groupLabels": {"alertname": "EntropiaApiDown", "component": "api", "deployment": "entropia"}, "path": "/notify", "receiver": "entropia-page", "status": "firing"}
+
+    payload carries: "receiver": "entropia-page"
+    payload carries: "alertname": "EntropiaApiDown"
+    payload carries: "severity": "page"
+
+================================================================
+PROOF PASSED — a fired alert reached the end of the notification path.
+================================================================
+Read this narrowly. It proves FAIL-CLOSED, PROVENANCE and DELIVERY for this
+stack, on this run, against a test receiver. It does NOT prove that the
+rules behave well against real PRODUCTION series — that residue stays open
+and is recorded in docs/runbooks/alert-notification.md §5.
+
+==> tearing down entropia-alert-proof
+exit=0

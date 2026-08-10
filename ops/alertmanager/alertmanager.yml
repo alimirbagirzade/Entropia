@@ -1,0 +1,161 @@
+# Entropia — Alertmanager routing and notification configuration (ADIM 31).
+#
+# WHY THIS FILE EXISTS. ADIM 25 shipped 11 alert rules; ADIM 26 proved they are
+# CORRECT (promtool `check config` / `check rules` / `test rules`, a blocking CI
+# job). Neither slice made a single one of them reach a human. Seven of the 11
+# carry `severity: page` — "the product is unavailable", "Postgres is
+# unreachable", "the async plane was never wired up" — and until this file
+# existed `severity` was a label with no reader. The RC readiness report
+# (docs/releases/Entropia_V18_RC_Readiness_2026-08-07.md §6.3) recorded that as a
+# release blocker, and this is the (A) branch of its two closures: ship the
+# notification path, do not sign for its absence.
+#
+# THE ONE RULE THIS FILE OBEYS: FAIL CLOSED. The destination of a page is a
+# secret and a deployment decision — nothing in this repository may invent one.
+# So there is no default URL, no placeholder receiver, no `receiver: null`, no
+# route that swallows an alert, and no receiver with zero notifier configs.
+# Both receivers below read their endpoint from a FILE that
+# ops/alertmanager/entrypoint.sh writes from ALERTMANAGER_NOTIFY_URL, and that
+# entrypoint refuses to exec Alertmanager at all when the variable is unset,
+# empty, or not an http(s) URL. A deployment therefore either has a real
+# notification path or has no Alertmanager process.
+#
+# `url_file` and not `url`: the same idiom as `credentials_file` in
+# ops/prometheus/prometheus.yml. A committed config must never carry the
+# credential-bearing endpoint itself, and a webhook URL routinely IS the
+# credential (Slack/PagerDuty/Opsgenie ingest URLs embed a key).
+#
+# WHY amtool IS NOT ENOUGH, measured rather than assumed: `amtool check-config`
+# returns SUCCESS on a receiver declared with NO notifier configs at all — the
+# exact silent-black-hole shape this file bans. That is why
+# backend/tests/contract/test_alert_notification_contract.py checks the routing
+# tree structurally on top of the amtool pass in scripts/alert-notification-gate.sh.
+
+global:
+  # How long after the last firing evaluation an alert is considered resolved if
+  # Prometheus stops sending it. Prometheus re-sends firing alerts every
+  # evaluation_interval (30s in ops/prometheus/prometheus.yml), so 5m is ten
+  # missed deliveries — long enough that a scrape hiccup does not fake a
+  # recovery, short enough that a genuine recovery is not announced late.
+  resolve_timeout: 5m
+
+route:
+  # `component` is in the grouping key on purpose: EntropiaApiDown and
+  # EntropiaWorkerHeartbeatStale are different incidents even when they fire in
+  # the same minute, and folding them into one notification would hide the
+  # second behind the first. `deployment` comes from Prometheus's external_labels
+  # and keeps two stacks reporting into one Alertmanager apart.
+  group_by: ["deployment", "component", "alertname"]
+
+  # THE ROOT RECEIVER IS A REAL ONE, DELIBERATELY. An alert that matches no child
+  # route lands here and PAGES. The alternative — a root that drops the unmatched
+  # — is the failure this whole slice exists to remove: every rule today declares
+  # `severity: page` or `severity: ticket` (enforced by
+  # test_alert_rules_contract.py::test_every_alert_is_actionable), so nothing
+  # should reach the root unmatched; if something ever does, the deployment has
+  # drifted and a human should be woken rather than a notification lost.
+  receiver: entropia-page
+
+  # Page timings. 30s of grouping delay is the standard trade: it lets two rules
+  # that fire off the same underlying failure arrive as one notification without
+  # measurably delaying the page. repeat_interval 1h means an unacknowledged page
+  # keeps reminding hourly — Alertmanager has no acknowledgement concept, so
+  # "keeps reminding until the alert resolves or is silenced" is the mechanism.
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 1h
+
+  routes:
+    # THE PAGE / TICKET SPLIT. Before this file, `severity: page` and
+    # `severity: ticket` were labels nothing read, so the four ticket-severity
+    # rules (EntropiaApiRequestsExceedLargestBucket, EntropiaQueueNeverDrains,
+    # EntropiaJobsFailingTerminally, EntropiaOutboxLagGrowing) were
+    # indistinguishable from the seven paging ones. They are separated here by
+    # RECEIVER and by TIMING, so a degradation ticket cannot arrive with the
+    # cadence of an outage.
+    - matchers:
+        - 'severity="ticket"'
+      receiver: entropia-ticket
+      # A ticket is not urgent, so it groups longer and repeats far less: a
+      # queue that has not drained in 20 minutes does not need to be restated
+      # every hour, and re-notifying every 12h is what keeps a stale ticket from
+      # becoming invisible without making it noise.
+      group_wait: 5m
+      group_interval: 30m
+      repeat_interval: 12h
+
+    - matchers:
+        - 'severity="page"'
+      receiver: entropia-page
+
+# Noise suppression, config-level. Each of these three encodes a causal claim the
+# alert rules' own `escalation` annotations already make; none of them suppresses
+# a page in favour of nothing — in every pair the SOURCE alert is itself
+# delivered, so the incident always reaches someone.
+inhibit_rules:
+  # If the API is not answering scrapes at all, its 5xx rate and its latency
+  # histogram are describing the same outage from the inside. EntropiaApiDown
+  # pages; these two would only add volume. (EntropiaMetricsDatabaseProbeFailing
+  # is deliberately NOT listed: its expression requires `up == 1`, so it and
+  # EntropiaApiDown are mutually exclusive by construction and an inhibit rule
+  # for the pair would be dead configuration.)
+  - source_matchers:
+      - 'alertname="EntropiaApiDown"'
+    target_matchers:
+      - 'alertname=~"EntropiaApiServerErrors|EntropiaApiRequestsExceedLargestBucket"'
+    equal: ["deployment"]
+
+  # "The async plane has NEVER run" strictly contains "the async plane has not
+  # run recently". EntropiaWorkerHeartbeatNeverRecorded is the provisioning
+  # failure; EntropiaWorkerHeartbeatStale is its inevitable shadow.
+  - source_matchers:
+      - 'alertname="EntropiaWorkerHeartbeatNeverRecorded"'
+    target_matchers:
+      - 'alertname="EntropiaWorkerHeartbeatStale"'
+    equal: ["deployment"]
+
+  # 1800s of outbox lag implies 300s of outbox lag: the severe rule is the
+  # growing rule's own declared escalation ("Escalates on its own via
+  # EntropiaOutboxLagSevere"). Suppressing the ticket while the page stands keeps
+  # one incident to one notification stream.
+  - source_matchers:
+      - 'alertname="EntropiaOutboxLagSevere"'
+    target_matchers:
+      - 'alertname="EntropiaOutboxLagGrowing"'
+    equal: ["deployment"]
+
+receivers:
+  # BOTH receivers carry a real notifier config. A receiver with an empty
+  # `webhook_configs` (or no notifier block at all) passes `amtool check-config`
+  # and silently discards everything routed to it — measured, not assumed. The
+  # contract test rejects that shape so it cannot be reintroduced as a "temporary
+  # placeholder".
+  - name: entropia-page
+    webhook_configs:
+      # Written by ops/alertmanager/entrypoint.sh from ALERTMANAGER_NOTIFY_URL.
+      # The path is under /tmp because the ops/ tree is mounted read-only and the
+      # container runs as `nobody`.
+      - url_file: /tmp/alertmanager/notify_url
+        # Recovery matters as much as onset: an operator who was paged needs to
+        # be told the page cleared, and several rules' `recovery` annotations are
+        # written as conditions someone is expected to observe.
+        send_resolved: true
+        # 0 = no truncation. Alertmanager otherwise trims a group's alert list
+        # to this many entries and the rest are dropped from the payload
+        # silently — during exactly the multi-alert burst an operator most needs
+        # to see whole. (0 is also the default; it is written out because a
+        # future edit to a non-zero value should look like the deliberate choice
+        # it is.)
+        max_alerts: 0
+
+  - name: entropia-ticket
+    webhook_configs:
+      # A SEPARATE file, not the same one. ALERTMANAGER_NOTIFY_URL_TICKET points
+      # the ticket lane at a different destination (an issue tracker, a low-noise
+      # channel). When it is not set the entrypoint copies the page URL here and
+      # SAYS SO on stdout — the lane still has a real destination and nothing is
+      # dropped; only the routing granularity degrades, loudly.
+      - url_file: /tmp/alertmanager/notify_url_ticket
+        send_resolved: true
+        # As above: no truncation.
+        max_alerts: 0

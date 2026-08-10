@@ -4939,6 +4939,43 @@ backend/frontend birim suite'leri **koşulmadı** (tek satır Python/TS kaynağ�
 `generate_repository_facts.py --check` exit 0). **RC verdict'i BLOCKED kalır, blocker
 sayısı DEĞİŞMEDİ (üç).** Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 32.
 
+## Stage — ADIM 34: RC §6.7 / P4-1 + P4-2, model↔migration şema paritesi (PR pending)
+
+**Base** `970ec81` (ADIM 33 / #656 merged). **alembic head DEĞİŞMEDİ**
+(`0043_i08_registry_strategy_fks`) — bu dalgada **migration YOK**. `ENGINE_VERSION` sabit,
+`docs/openapi.json` değişmedi, ürün davranışı değişmedi. Route path, react-query key, OCC
+token, Idempotency-Key, SSE taksonomisi, `lib/*.ts` **hiç dokunulmadı**.
+
+**Ne indi.** `alembic check` proje ömrü boyunca **exit 255** veriyordu (40 index-adı sapması)
+ve **hiçbir workflow onu koşmuyordu** — sapma sahipsizdi. 39'u **yalnız adlandırmaydı** (sevk
+edilen kısa ad ⇄ modelin `index=True`'dan türettiği SQLAlchemy varsayılanı; kolon/uniqueness
+aynı), 40'ıncısı (`agent_event.seq`) yapısaldı. **Fix tipi 1** seçildi: **DB'ye ve
+migration'lara dokunulmadı**, model sevk edilen ada hizalandı. Sevk edilen adlar
+`pg_index`'ten **okundu**, tahmin edilmedi; `alembic revision --autogenerate` **koşulmadı**.
+
+**Reuse anchor'ları (tam sembol adlarıyla):** `scripts/schema_parity_gate.py` içinde
+`INDEX_AXIS_OPS` (kapının sahiplendiği operasyon kümesi), `EXPECTED_SERVER_DEFAULT_DEVIATIONS`
+(**60** — P4-3 tavanı), `INDEX_SHAPE_SQL` (`pg_index` üzerinden ad+kolon+uniqueness),
+`_index_shape()`, `_build_create_all()`, `_model_vs_migration_ops()`. Model tarafında ev stili
+**`__table_args__` içinde `Index("<sevk edilen ad>", "<kolon>")`** — yeni bir index eklerken
+`index=True` **kullanma**, adı açıkça yaz, yoksa kapı kırmızıya döner.
+
+**Ölçüldü.** index ekseni **40 → 0**; kurulum yolu paritesi **DIVERGENT (361 vs 360) →
+BIT-IDENTICAL (361 vs 361, 0/0/0)**; `add/remove column` ve `add/remove table` **0**; tek head,
+`upgrade → downgrade -1 → upgrade` **4/4 exit 0**, head `0043` sabit. Kapı **exit 0**, ve
+**negatifi kanıtlandı** — iki sapma tipi de geri konuldu, ikisinde de **exit 1**.
+
+**Dürüst sınır.** **`alembic check` HÂLÂ exit 255** ve ne kapı ne belge bunu sıfırmış gibi
+gösterir. Sebep **P4-3 (YENİ bulgu)**: raporun *"tip/server-default değişimi = 0"* iddiası
+**yanlıştı** — aynı koşu **60 `modify_default`** işlemi de emitliyor (40 tabloda 60 kolon;
+DB'de server default var, model onu yalnız Python tarafında bildiriyor). P4-2 ile aynı
+aileden gerçek bir ayrışma; **ölçüldü, düzeltilmedi** (ayrı karar, ayrı PR) ve sayı kapıda
+**tavana** bağlandı. Kapı **`alembic check`'in exit code'unu assert etmez**; adı da bunu
+söyler (*index axis*). **P11-1 açık** olduğu için bu da required status check DEĞİL, job
+kapısı. `DATA_MODEL.md` tazelenmedi — kolon-seviyesi index detayı taşımadığını satır 290'da
+kendisi yazar ve head değişmedi. **RC verdict'i BLOCKED kalır, blocker sayısı DEĞİŞMEDİ
+(üç).** Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 34.
+
 ---
 
 ## ADIM 33 — RC §6.7 / P9-F1: frontend build reproducibility landed (PR pending)
@@ -4991,7 +5028,7 @@ dışlandı (bilinçli, gerekçesi PROJECT_HISTORY §ADIM 33'te) · ADIM 32'nin 
 belgede hâlâ `(PR pending)` diyor ama o dalga **#655** olarak indi — `docs-history-guard.py`
 başlık yeniden yazmayı kayıt silme sayacağı için **bilerek düzeltilmedi**.
 **RC verdict'i BLOCKED kalır, blocker sayısı DEĞİŞMEDİ (üç).** Tam kayıt:
-`docs/PROJECT_HISTORY.md` §ADIM 33.
+`docs/PROJECT_HISTORY.md` §ADIM 34.
 
 ---
 

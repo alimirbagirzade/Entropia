@@ -1,0 +1,19 @@
+migrated database : entropia_adim33
+create_all probe  : entropia_adim33_create_all_probe
+
+[1] install-path index parity — 361 vs 361 indexes
+    -> PASS
+
+[2] model/migration index axis — 0 operation(s)
+    -> PASS
+
+[3] NOT owned by this gate — server-default deviations: 60
+    expected 60 (see module docstring);
+    `alembic check` stays non-zero because of these. Not asserted clean.
+    -> PASS (no growth)
+
+[4] no other schema drift — 0 operation(s)
+    -> PASS
+
+VERDICT: PASS
+EXIT=0

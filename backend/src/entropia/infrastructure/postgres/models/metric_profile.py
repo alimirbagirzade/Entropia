@@ -31,6 +31,7 @@ from sqlalchemy import (
     Boolean,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -53,6 +54,7 @@ class MetricDefinition(Base):
     """Canonical, versioned metric registry row (doc 17 §9.2). Global (no owner)."""
 
     __tablename__ = "metric_definition"
+    __table_args__ = (Index("ix_metric_definition_availability", "availability_status"),)
 
     metric_code: Mapped[str] = mapped_column(String(64), primary_key=True)
     label: Mapped[str] = mapped_column(String(128), nullable=False)
@@ -61,7 +63,6 @@ class MetricDefinition(Base):
     availability_status: Mapped[MetricAvailabilityStatus] = mapped_column(
         enum_column(MetricAvailabilityStatus, "metric_availability_status"),
         nullable=False,
-        index=True,
     )
     display_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     formula_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
@@ -78,6 +79,7 @@ class ResultViewMetricProfileRoot(TimestampMixin, Base):
     __tablename__ = "result_view_metric_profile_root"
     __table_args__ = (
         UniqueConstraint("scope", "owner_principal_id", name="uq_result_view_metric_profile_owner"),
+        Index("ix_result_view_metric_profile_root_owner", "owner_principal_id"),
     )
 
     profile_id: Mapped[str] = mapped_column(String(40), primary_key=True)
@@ -85,7 +87,7 @@ class ResultViewMetricProfileRoot(TimestampMixin, Base):
         enum_column(ProfileScope, "metric_profile_scope"), nullable=False, index=True
     )
     owner_principal_id: Mapped[str | None] = mapped_column(
-        String(40), ForeignKey(_PRINCIPAL_FK), nullable=True, index=True
+        String(40), ForeignKey(_PRINCIPAL_FK), nullable=True
     )
     lifecycle_state: Mapped[str] = mapped_column(
         String(16), nullable=False, default="active", server_default="active"
@@ -103,11 +105,13 @@ class ResultViewMetricProfileRevision(Base):
         UniqueConstraint(
             "profile_id", "revision_no", name="uq_result_view_metric_profile_revision_no"
         ),
+        Index("ix_result_view_metric_profile_revision_profile", "profile_id"),
+        Index("ix_result_view_metric_profile_revision_hash", "config_hash"),
     )
 
     profile_revision_id: Mapped[str] = mapped_column(String(40), primary_key=True)
     profile_id: Mapped[str] = mapped_column(
-        String(40), ForeignKey(_PROFILE_FK, ondelete="CASCADE"), nullable=False, index=True
+        String(40), ForeignKey(_PROFILE_FK, ondelete="CASCADE"), nullable=False
     )
     revision_no: Mapped[int] = mapped_column(Integer, nullable=False)
     selected_metric_codes: Mapped[list[Any]] = mapped_column(JSONB, nullable=False)
@@ -116,7 +120,7 @@ class ResultViewMetricProfileRevision(Base):
         Boolean, nullable=False, default=False, server_default="false"
     )
     metric_definition_registry_version: Mapped[str] = mapped_column(String(32), nullable=False)
-    config_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    config_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     previous_revision_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
     created_by_principal_id: Mapped[str | None] = mapped_column(
         String(40), ForeignKey(_PRINCIPAL_FK), nullable=True

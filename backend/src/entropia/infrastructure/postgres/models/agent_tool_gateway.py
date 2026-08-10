@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import ForeignKey, String, UniqueConstraint
+from sqlalchemy import ForeignKey, Index, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -38,13 +38,15 @@ class AgentToolCall(TimestampMixin, Base):
     redelivered call replays instead of re-executing (AL-14)."""
 
     __tablename__ = "agent_tool_call"
-    __table_args__ = (UniqueConstraint("idempotency_key", name="uq_agent_tool_call_idem"),)
+    __table_args__ = (
+        UniqueConstraint("idempotency_key", name="uq_agent_tool_call_idem"),
+        Index("ix_agent_tool_call_agent", "agent_id"),
+        Index("ix_agent_tool_call_task", "task_id"),
+    )
 
     tool_call_id: Mapped[str] = mapped_column(String(40), primary_key=True)
     tool_name: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
-    agent_id: Mapped[str] = mapped_column(
-        String(64), ForeignKey(_RUNTIME_FK), nullable=False, index=True
-    )
+    agent_id: Mapped[str] = mapped_column(String(64), ForeignKey(_RUNTIME_FK), nullable=False)
     actor_principal_id: Mapped[str | None] = mapped_column(
         String(40), ForeignKey(_PRINCIPAL_FK), nullable=True
     )
@@ -52,7 +54,7 @@ class AgentToolCall(TimestampMixin, Base):
         enum_column(ActorKind, "agent_tool_call_actor_kind"), nullable=False
     )
     task_id: Mapped[str | None] = mapped_column(
-        String(40), ForeignKey(_TASK_FK, ondelete="SET NULL"), nullable=True, index=True
+        String(40), ForeignKey(_TASK_FK, ondelete="SET NULL"), nullable=True
     )
     checkpoint_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
     input_manifest_id: Mapped[str | None] = mapped_column(String(40), nullable=True)

@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import ForeignKey, Integer, Numeric, String, UniqueConstraint
+from sqlalchemy import ForeignKey, Index, Integer, Numeric, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from entropia.domain.instrument.enums import ContractType, InstrumentState
@@ -71,13 +71,16 @@ class InstrumentAlias(TimestampMixin, Base):
     """
 
     __tablename__ = "instrument_alias"
-    __table_args__ = (UniqueConstraint("alias_norm", name="uq_instrument_alias_norm"),)
+    __table_args__ = (
+        UniqueConstraint("alias_norm", name="uq_instrument_alias_norm"),
+        Index("ix_instrument_alias_norm", "alias_norm"),
+    )
 
     alias_id: Mapped[str] = mapped_column(String(40), primary_key=True)
     instrument_id: Mapped[str] = mapped_column(
         String(40), ForeignKey(_INSTRUMENT_FK), nullable=False, index=True
     )
-    alias_norm: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
+    alias_norm: Mapped[str] = mapped_column(String(200), nullable=False)
     alias_text: Mapped[str] = mapped_column(String(200), nullable=False)
     created_by_principal_id: Mapped[str | None] = mapped_column(
         String(40), ForeignKey(_PRINCIPAL_FK), nullable=True

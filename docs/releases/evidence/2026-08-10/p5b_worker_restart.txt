@@ -1,0 +1,17 @@
+== Worker process-restart smoke ==
+  planes: worker-default worker-data worker-backtest worker-agent worker-agent-executor agent-coordinator scheduler 
+  before: normalized_signal_event_revision=0 canonical_trade_record_batch=0 market_validation_run=0 research_validation_run=0 package_root=15 audit_events=69 outbox_events=40 
+  killing planes with SIGKILL ...
+  restarting planes ...
+  OK    worker-default restarted
+  OK    worker-data restarted
+  OK    worker-backtest restarted
+  OK    worker-agent restarted
+  OK    worker-agent-executor restarted
+  OK    agent-coordinator restarted
+  OK    scheduler restarted
+  waiting for a scheduler maintenance pass ...
+  OK    scheduler swept
+  after:  normalized_signal_event_revision=0 canonical_trade_record_batch=0 market_validation_run=0 research_validation_run=0 package_root=15 audit_events=69 outbox_events=40 
+  OK    no duplicated artifact, audit or outbox row
+== worker-restart-smoke: PASS ==

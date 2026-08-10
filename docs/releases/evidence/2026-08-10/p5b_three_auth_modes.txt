@@ -1,0 +1,142 @@
+########## FLOW session ##########
+
+========== §9.4 SESSION-CLEAN ==========
+  project=entropia-e2e-session  auth_mode=session  api=:18000  env=.env.e2e.session
+
+— [1] build the normal session profile (no ad-hoc mode replacement) + [14] bring the stack up
+  waiting for API health at :18000 (build + migrate can take a few minutes)
+  PASS  [1] /meta.auth_mode=session (real session profile)
+
+— [2] a strong service token is configured (never printed)
+  PASS  [2] ENTROPIA_SERVICE_TOKEN present, length 64 (value withheld)
+
+— [3] mode-safe provisioning completed (session skips the credentialless Admin)
+  PASS  [3] seed (provisioning) exit 0
+  PASS  [3] fresh DB — no login-capable Admin yet (bootstrap open)
+
+— [4] sign up the bootstrap Admin on the fresh database
+  PASS  [4] bootstrap Admin created (role=admin, id=usr_01KZNA78XWKDG87SR6B7SPM1Y7)
+  PASS  [4] bootstrap-status now reports a login-capable Admin
+
+— [5] log out and log in again
+  PASS  [5] first login issued a session token
+  PASS  [5] logout revoked the session
+  PASS  [5] second login issued a fresh token
+
+— [6] /me returns the exact authenticated principal and role
+  PASS  [6] /me -> principal_id=usr_01KZNA78XWKDG87SR6B7SPM1Y7, is_admin=true
+
+— [7] Mainboard and strategy endpoints do not return 401 + [8] no auth error in protected surface
+  PASS  [7] GET /mainboards/default -> 200 (not 401)
+  PASS  [7/8] GET /strategy-drafts -> 200 (protected surface renders, no auth error)
+
+— [9] refresh and retain the session
+  PASS  [9] re-request with the stored token still authenticates (session retained)
+
+— [10] create a normal User and prove the Admin surface is hidden
+  PASS  [10] normal User created (role=user)
+  PASS  [10] /me for the User -> is_admin=false
+  PASS  [10] GET /admin/users as User -> 403 (Admin surface hidden)
+  PASS  [10] GET /admin/users as Admin -> 200 (surface visible to Admin)
+
+— [11] revoke/logout and prove the old token is rejected + [12] one clean SESSION_INVALID redirect
+  PASS  [11] User session revoked
+  PASS  [11/12] revoked token -> 401 SESSION_INVALID (canonical single-redirect signal, not silent anonymous)
+
+— [13] every worker plane is up and broker-connected
+  PASS  [13] plane worker-default broker-connected (health=healthy restarts=0)
+  PASS  [13] plane worker-data broker-connected (health=healthy restarts=0)
+  PASS  [13] plane worker-backtest broker-connected (health=healthy restarts=0)
+  PASS  [13] plane worker-agent broker-connected (health=healthy restarts=0)
+  PASS  [13] plane worker-agent-executor broker-connected (health=healthy restarts=0)
+  PASS  [13] plane agent-coordinator broker-connected (health=healthy restarts=0)
+  PASS  [13] plane scheduler broker-connected (health=healthy restarts=0)
+  [13] per-plane JOB execution (data/backtest/agent pipelines) is exercised by backend integration — tests/integration/test_e2e_pipeline.py (honest boundary: not re-driven from this shell harness)
+
+— [14] full stack acceptance gate — API, web, Postgres, Redis, MinIO, scheduler, coordinator, all workers
+  PASS  [14] acceptance gate — nothing exited/restarted/unhealthy
+  tearing down entropia-e2e-session (isolated volumes removed)
+
+========== RESULT ==========
+  27 passed, 0 failed, 0 skipped
+E2E ACCEPTANCE OK — every asserted step passed.
+########## FLOW session EXIT=0 ##########
+########## FLOW legacy ##########
+
+========== §9.5 LEGACY-UPGRADE ==========
+  project=entropia-e2e-legacy  auth_mode=dev  api=:18010  env=.env.e2e.legacy
+
+— [1] create the OLD database state (credentialless user_admin + owned records)
+  waiting for API health at :18010 (build + migrate can take a few minutes)
+  PASS  [1] legacy seed exit 0
+  PASS  [1] credentialless user_admin resolves as Admin via X-Actor-Id
+  [1] snapshot: human_users=1 principals=2 agents=1 instruments=3 audit=0 admin_row=user_admin|admin|entropia
+  PASS  [1] representative owned records + admin row captured
+
+— [2] apply the NEW configuration (AUTH_MODE=session) WITHOUT resetting volumes
+  waiting for API health at :18010 (build + migrate can take a few minutes)
+  PASS  [2] upgraded stack now runs AUTH_MODE=session (volumes intact)
+
+— [3] run mode-aware provisioning TWICE (idempotent)
+  PASS  [3] provisioning run #1 exit 0
+  PASS  [3] provisioning run #2 exit 0 (idempotent)
+
+— [4] bootstrap a real Admin (legacy credentialless Admin does NOT block bootstrap — PROV-05)
+  PASS  [4] no login-capable Admin yet — bootstrap still open despite legacy user_admin
+  PASS  [4] real Admin bootstrapped (id=usr_01KZNAA86KNAMA44SPDXQ48Y41)
+
+— [5] log in and access the Admin surface
+  PASS  [5] real Admin logged in and reached GET /admin/users -> 200
+
+— [6] all prior IDs, ownership, audit history and domain data are preserved
+  PASS  [6] legacy user_admin row field-for-field identical (user_admin|admin|entropia)
+  PASS  [6] owned instrument records preserved (3)
+  PASS  [6] principals/human_users/agents non-destructive (A: 2/1/1 -> B: 3/2/1)
+  PASS  [6] audit history retained and appended-only (A:0 -> B:3)
+
+— [7] the real Admin is protected as the last login-capable Admin
+  PASS  [7] self-demotion of the last Admin blocked -> 422 (not 200)
+  PASS  [7] after the attempt the last Admin is STILL admin (invariant holds)
+  tearing down entropia-e2e-legacy (isolated volumes removed)
+
+========== RESULT ==========
+  15 passed, 0 failed, 0 skipped
+E2E ACCEPTANCE OK — every asserted step passed.
+########## FLOW legacy EXIT=0 ##########
+########## FLOW dev-auth ##########
+
+========== §9.6 DEV-AUTH ==========
+  project=entropia-e2e-dev-auth  auth_mode=dev  api=:18020  env=.env.e2e.dev-auth
+
+— [1] start the explicit local dev-auth profile
+  waiting for API health at :18020 (build + migrate can take a few minutes)
+  PASS  [1] base + docker-compose.dev-auth.yml stack is up
+
+— [2] /meta.auth_mode=dev
+  PASS  [2] /meta.auth_mode=dev
+
+— [3] Login/Sign Up is not functional (login rejected before touching credentials)
+  PASS  [3] POST /auth/login -> 409 AUTH_MODE_MISMATCH (login dead-on-arrival under dev)
+
+— [4] a stale session token in storage is IGNORED + [8] no Bearer is honored
+  PASS  [4/8] Bearer-only request -> anonymous (stale token cannot authenticate under dev)
+
+— [5] DevActorControl visibility — backend contract (/meta.auth_mode=dev, asserted in [2])
+  [5] browser-level visibility is asserted in the frontend layer (audit §9.3: frontend/src/test/*, frontend/e2e/specs/01-auth.spec.ts)
+  PASS  [5] backend advertises dev mode so the shell renders DevActorControl
+
+— [6] provision the dev fixture and [7] select user_admin — /me authenticates it via X-Actor-Id
+  PASS  [6] dev seed exit 0 (credentialless user_admin provisioned)
+  PASS  [7] /me -H X-Actor-Id: user_admin -> authenticated Admin principal
+
+— [8] a Bearer alongside X-Actor-Id is ignored — only X-Actor-Id resolves
+  PASS  [8] Bearer ignored; X-Actor-Id wins (no Bearer path under dev)
+
+— [9] protected pages work under dev-auth
+  PASS  [9] GET /mainboards/default -H X-Actor-Id -> 200 (not 401)
+  tearing down entropia-e2e-dev-auth (isolated volumes removed)
+
+========== RESULT ==========
+  9 passed, 0 failed, 0 skipped
+E2E ACCEPTANCE OK — every asserted step passed.
+########## FLOW dev-auth EXIT=0 ##########

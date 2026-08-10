@@ -1,16 +1,18 @@
 # Real Docker E2E acceptance (audit §9.4 / §9.5 / §9.6 — W7)
 
 `scripts/e2e-acceptance.sh` runs the three mandated authentication acceptance
-flows against a **real Dockerized stack**, each in a fully isolated Compose
-project so it can run alongside your normal `make up` stack and never touches
-its data.
+flows **and the five product acceptance flows** against a **real Dockerized
+stack**, each in a fully isolated Compose project so it can run alongside your
+normal `make up` stack and never touches its data.
 
 ```bash
-make e2e            # all three flows in sequence
+make e2e            # all four flows in sequence
 make e2e-session    # §9.4 clean session-mode bootstrap
 make e2e-legacy     # §9.5 legacy credentialless-Admin upgrade
 make e2e-dev-auth   # §9.6 dev-mode X-Actor-Id impersonation
-# or directly: scripts/e2e-acceptance.sh [session|legacy|dev-auth|all]
+make e2e-flows      # the five acceptance flows (a)-(e)
+# or directly: scripts/e2e-acceptance.sh [session|legacy|dev-auth|flows|all]
+# E2E_KEEP_UP=1 leaves the `flows` stack running for inspection.
 ```
 
 Requires a running Docker engine (Docker Desktop or OrbStack) and `curl`.
@@ -57,6 +59,38 @@ exits non-zero if any step fails.
   `X-Actor-Id: user_admin` authenticates that principal; a Bearer alongside
   `X-Actor-Id` is ignored; protected pages return non-401.
 
+### The five acceptance flows (`flows`)
+
+Added in ADIM 30 to close RC readiness blocker 2 (§6.2). Body:
+`scripts/lib/acceptance-flows.sh`. It reuses this script's isolation contract,
+hermetic env file, `dc`/`req` helpers and PASS/FAIL tally — it is not a second
+harness. The stack is seeded with `SEED_E2E_GOLDEN` + `SEED_ESP_TA` +
+`SEED_RATIONALE`, the same three fixtures CI and the a11y audit stack use.
+
+Two layers, and neither is allowed to stand in for the other:
+
+- **Browser layer** — the journeys `frontend/e2e/specs/*` already implement are
+  **run, not reimplemented**: `05` + `18` (flow a), `20-library` (flow b), `06`
+  (flow e's delete → purge leg), pointed at the isolated stack via
+  `E2E_BASE_URL` / `E2E_API_BASE_URL`.
+- **Server layer** — everything no layer covered: **(c)** ESP lifecycle (create →
+  validate → registry OCC → trust gate) and the package export envelope,
+  **(d)** Trading Signal / Agent tool surfaces, **(e)** the **restore** leg spec
+  `06` skips, plus the four invariants a browser cannot prove because a browser
+  only sees what the UI chose to render:
+
+  1. Trading Signal / Trade Log are **not** Packages — absent from the Library
+     catalog, and a package root is a 404 on the Trading Signal surface.
+  2. **Backtest Run ≠ Backtest Result** — a refused admission leaves the Results
+     plane untouched; only a SUCCEEDED run materialises a Result.
+  3. **UI hidden/disabled is not authorization** — every Admin/owner surface is
+     re-attacked with a plain USER token and must answer 403 server-side.
+  4. Long work runs on the **durable queue** — admissions are 202 + a job id and
+     are followed through the worker, never short-circuited.
+
+A step that cannot run is recorded **SKIP** on its own counter and is never
+folded into the pass total.
+
 ## Where this runs
 
 Until ADIM 22 these flows ran **only** on a developer's machine — no workflow
@@ -67,6 +101,14 @@ covered on every PR by that workflow's **fresh-install** and
 **migration-acceptance** jobs. See
 [`docs/INSTALL_ACCEPTANCE.md`](INSTALL_ACCEPTANCE.md) for the full chain and
 which link is proven where.
+
+**`flows` is NOT yet a CI gate.** No workflow invokes it, so a regression in the
+five acceptance flows can still land green — exactly the exposure the paragraph
+above describes for the auth flows before ADIM 22. Their **browser** halves are
+gated (`.github/workflows/e2e.yml` runs specs 05 / 18 / 20-library / 06 on every
+push and PR to `main`); the **server** halves are not gated anywhere. Wiring the
+subcommand into CI means paying for a second 12-container stack per run and is a
+deliberate open decision, not an oversight.
 
 ## Honest boundaries
 
@@ -79,3 +121,12 @@ which link is proven where.
   exercised by backend integration — `backend/tests/integration/test_e2e_pipeline.py`.
   This harness asserts every worker plane is up and broker-connected, and does
   not re-drive full pipelines from the shell.
+- **`flows` (c): a POSITIVE resolver activation is not driven here.** The probe
+  resolver ships no runnable test vectors, so its validation legitimately ends
+  `failed` and the registry refuses to promote it. The flow asserts that refusal
+  — the security-relevant direction — and records a **SKIP** for the positive
+  activate → deprecate path, which is covered in-process by
+  `backend/tests/integration/test_esp_persistence.py`.
+- **`flows` (d): the Tool Gateway call log is not exercised.** A freshly seeded
+  stack has no agent task, so `GET /agent-tasks` is a legitimate empty 200 and
+  the per-task tool-call read is recorded as a **SKIP**, not a pass.

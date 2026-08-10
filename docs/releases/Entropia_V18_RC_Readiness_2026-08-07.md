@@ -191,6 +191,10 @@ ama gerçek bir insert-order kanıtı §3'ün tohumlamasından çıkmıştır (*
 
 ### P5 — Docker stack + üç auth modu + servis sağlığı (verdict: **PARTIAL — 1 PASS / 3 BLOCKED**)
 
+> **AŞILDI — 2026-08-10 (ADIM 30).** Aşağıdaki 2/3/4 satırları o günün kaydıdır ve
+> **değiştirilmemiştir**. Üçü de 2026-08-10'da koşuldu ve geçti; güncel durum **§6.2 +
+> §6.2.1**, ham kanıt `docs/releases/evidence/2026-08-10/`. Bu tabloyu tek başına okuma.
+
 | # | Adım | Komut | Exit | Sonuç |
 |---|---|---|---:|---|
 | 1 | Backend image | `docker build -t entropia-backend:ci ./backend` | **0** | PASS — 203.4 s, **2.09 GB** |
@@ -210,6 +214,13 @@ başladı ve buildkit **16+ dakika** hiçbir çıktı üretmedi. Daemon yüzeyi 
 > **Sahte yeşil YOK:** 2–4 için hiçbir servis "healthy" yazılmadı.
 
 ### P6 — Uçtan uca kabul akışları (verdict: **BLOCKED**)
+
+> **AŞILDI — 2026-08-10 (ADIM 30).** (a)–(e) satırları o günün kaydıdır ve
+> **değiştirilmemiştir**. Beşi de 2026-08-10'da koşuldu (**60 passed / 0 failed /
+> 2 skipped**, tarayıcı katmanı **5 passed**) ve bu tablonun "kapsam boşluğu" gerekçesinin
+> tarayıcı katmanını atladığı ölçülerek gösterildi. Güncel durum **§6.2**, ham kanıt
+> `docs/releases/evidence/2026-08-10/P6B_acceptance_flows_harness.md`. Bu tabloyu tek
+> başına okuma.
 
 | # | Akış | Komut | Exit | Sonuç |
 |---|---|---|---:|---|
@@ -598,25 +609,92 @@ yok** (dosyadaki tek kimlik `D-1`); D-10 gerçekte
 `docs/implementation/a11y_ci_ratchet_and_adjudication.md:206-221`'de. İşaretçi yanlış olsa
 da **kararı güçlendirir**: her iki yerde de A-08 için sapma yok.
 
-### 6.2 Uçtan uca kabul akışları koşulmadı — **BLOCKER** (P5 + P6)
+### 6.2 Uçtan uca kabul akışları — **KISMEN KAPANDI**, blocker hâlâ **AÇIK** (P5 + P6)
 
-İki bağımsız sebep üst üste duruyor ve **ikincisi daha temeldir**:
+> **2026-08-10 / ADIM 30 güncellemesi.** Bu bölüm 2026-08-07'de yazıldı ve iki iddia
+> taşıyordu. Her ikisi de **yeniden ölçüldü**; biri düzeltildi, biri kısmen kapandı.
+> Aşağıdaki her sayı **2026-08-10 koşusunundur**, 08-07 kaydından kopyalanmamıştır.
+> Ham kanıt: `docs/releases/evidence/2026-08-10/` · özet:
+> `P6B_acceptance_flows_harness.md`. Ölçüm ağacı `origin/main` @ `aabb85d` + dal
+> `fix/rc-blocker2-acceptance-harness`; `1f4b88b..aabb85d` arasında `backend/src`,
+> `frontend/src` ve `frontend/e2e` **birebir aynıdır**, yani kanıt aday için geçerlidir.
 
-1. **Harness kapsam boşluğu (P6, birinci ve asıl blocker).** `scripts/acceptance.sh` bir
-   container sağlık kapısıdır; `scripts/e2e-acceptance.sh` bir auth/kimlik bootstrap
-   harness'ıdır. Beş kabul akışının (a)–(e) hiçbirini uygulamıyorlar — terim taraması
-   sıfır isabet. **Docker ayağa kalksaydı da bu beş akış koşmayacaktı.**
-2. **Uygulama düzlemi hiç ayağa kalkmadı (P5 + P6, ikinci blocker).** API:8000 ve web:5173
-   kapalı; Docker/OrbStack takılı (`docker ps` sürekli **124**). P5'in 2/3/4 kalemleri ve
-   P8'in 1b kalemi **aynı kök nedendedir**.
+**1. iddia — "Docker/OrbStack takılı (`docker ps` sürekli 124)": YENİDEN ÜRETİLEMEDİ.**
+Aynı makinede `docker version` **0**, `docker compose version` **0** (29.4.0 / v5.1.2),
+`timeout 20 docker ps -q` **0** ve `timeout 20 docker images -q` **0** — dördü de anında
+döndü. Raporun *kaynak baskısı* teşhisi doğrudur (host 8 GB, VM **3.89 GiB**, ölçüm anında
+18–21 konteyner koşuyor, load tepe **18.08**), ama ondan çıkarılan **daemon takılı** sonucu
+bugün geçerli değildir: izole yığın bu baskının altında sorunsuz ayağa kalktı ve P5'in
+2/3/4 kalemleri ile bu bölümün beş akışı **koşuldu**. Ham: `p6b_docker_remeasure.txt`.
 
-**Bu dalgada hiçbir katmanda kanıtlanmayan iddialar (açıkça):** Strategy→Ready-check→Run→
-Result akışı · Library validation · ESP lifecycle + export · Agent Strategy / Trading Signal
-tools · Trash soft-delete→restore→purge · üç auth modu (§9.4 session-clean / §9.5
-legacy-upgrade / §9.6 dev-auth) · servis bazında health · `smoke.sh` · `worker-restart-smoke.sh`.
-P6 §"işaretçiler" tablosu bir **koşulacaklar listesidir**, bir PASS iddiası değildir; onu
-doğrulamak için başlatılan destekleyici pytest dalgası **yarıda kesildi** ve kayda dahil
-EDİLMEDİ.
+**2. iddia — "beş akışın hiçbiri hiçbir katmanda doğrulanmadı": (a) ve (b) için YANLIŞTI.**
+Terim taraması **yalnız iki shell dosyasını** kapsıyordu ve o kapsamda doğrudur; hatalı olan
+oradan "hiçbir katmanda" genellemesine geçmektir. **Tarayıcı katmanı atlanmıştır.** Aday
+SHA'da GitHub Actions **E2E** run **31364211010** (branch `main`, head `aabb85d`,
+conclusion **success**, 5m34s) şunları koşmuştur: `05-mainboard-ready-check-run.spec.ts`
+**✓ 8.2s** = akış (a) · `20-library-request-validation.spec.ts` **✓ 7.2s** = akış (b) ·
+`06-trash-reauth.spec.ts` **✓ 2.3s** = akış (e)'nin delete→purge ayağı ·
+`04-create-package-lifecycle.spec.ts` **✓** · `18-result-artifacts-drilldown.spec.ts` **✓✓**
+— suite **39 passed**. Ham: `p6b_ci_browser_layer.txt`.
+
+**Gerçekten hiçbir katmanın kapsamadığı kalemler şunlardı:** **(c)** ESP lifecycle + export ·
+**(d)** Agent / Trading Signal tool yüzeyleri · **(e)**'nin **restore** ayağı (spec 06 onu
+atlıyor) · ve dört tavizsiz kuralın tamamı. Blocker'ın asıl içeriği buydu.
+
+**Bu dalgada yazılan kapsam.** Yeni harness **icat edilmedi**: `scripts/e2e-acceptance.sh`'e
+beşinci alt-komut (`flows`) eklendi, gövdesi `scripts/lib/acceptance-flows.sh`'e kondu;
+izolasyon sözleşmesi, hermetik env, `dc`/`req` ve PASS/FAIL sayacı aynen yeniden kullanıldı.
+Var olan yolculuklar **yeniden yazılmadı, koşuldu**; sunucu katmanı yalnız hiçbir katmanın
+kapsamadığını ekler. Terim taraması aynı yöntemle: `ready-check|readiness` 0 → **17**,
+`trash|purge` 0 → **43**, `restore` 0 → **19**, `library` 0 → **32**, `Idempotency-Key`
+0 → **17**, `embedded-system-package` 0 → **9** (`p6b_term_scan.txt`).
+
+**Koşu sonucu:** `./scripts/e2e-acceptance.sh flows` → **60 passed / 0 failed / 2 skipped**,
+**exit 0**; tarayıcı katmanı **5 passed (23.8s)**. Beş akışın **beşi de PASS**. Dört tavizsiz
+kural varsayılmadı, iddia edildi: TS/TL paket değil (katalogda yok, paket kökü TS yüzeyinde
+**404**) · reddedilen run Results düzlemini **0 → 0** bıraktı · **dokuz** Admin/owner yüzeyi
+plain USER token'ı ile yeniden saldırıya uğradı ve hepsi **403** verdi · purge **202** +
+`purge_job_id`, directive **202**, yedi düzlem broker-connected. O-30 doğrulandı:
+`deletion_state` = `root_lifecycle_state` = `purge_pending`. Ham: `p6b_flows_run.txt`.
+
+**İki SKIP, PASS değildir:** (i) pozitif ESP activate→deprecate koşulmadı — probe resolver
+`validation_state=failed / vectors_run=0` veriyor ve harness test vektörü sentezlemiyor;
+onun yerine **doğrulanmamış resolver trusted-active'e yükseltilemiyor** iddia edildi
+(pozitif yol in-process: `backend/tests/integration/test_esp_persistence.py`). (ii) Tool
+Gateway çağrı günlüğü egzersiz edilmedi — taze tohumlanmış yığında agent task yok.
+
+**P5'in bloke kalemleri de koşuldu:** servis bazında health `acceptance.sh` **exit 0**
+(15 servis, hiçbiri exited/restarted/unhealthy) · `smoke.sh` **exit 0** ·
+`worker-restart-smoke.sh` **exit 0** — yedi düzlem SIGKILL + restart sonrası
+`package_root` 15→15, `audit_events` 69→69, `outbox_events` 40→40, **mükerrer artefakt yok**.
+Üç auth modunun sonucu §6.2.1'dedir.
+
+> **Blocker neden hâlâ AÇIK.** Kapsam boşluğu kapandı ve beş akış koştu, ama **`flows` bir
+> CI kapısı değildir** — yerel bir komuttur, hiçbir workflow onu koşmaz, dolayısıyla bir
+> regresyon sessizce geri gelebilir. Kapıya bağlamak ayrı bir karardır (CI'da 12 konteynerlik
+> ikinci bir yığın + koşu süresi) ve bu slice'ta **yapılmadı**. Yukarıdaki iki SKIP de açık
+> iştir. Bu yüzden kayıt "kapandı" değil, **"kısmen kapandı"**dır.
+
+#### 6.2.1 Üç auth modu (P5 kalem 2) — 2026-08-10 koşusu
+
+2026-08-07'de üçü de **BLOCKED — hiç koşmadı** kaydedilmişti. Bugün, aynı makinede, her biri
+kendi izole Compose projesinde ve kendi volume'larıyla koşuldu:
+
+| Akış | Komut | Exit | Sonuç |
+|---|---|---:|---|
+| §9.4 session-clean | `./scripts/e2e-acceptance.sh session` | **0** | **PASS** — 27 passed / 0 failed / 0 skipped (14 adım + yedi düzlem + `acceptance.sh` kapısı) |
+| §9.5 legacy-upgrade | `./scripts/e2e-acceptance.sh legacy` | **0** | **PASS** — 15 passed / 0 failed / 0 skipped (credentialless `user_admin` korunarak session'a yükseltme, satır birebir aynı) |
+| §9.6 dev-auth | `./scripts/e2e-acceptance.sh dev-auth` | **0** | **PASS** — 9 passed / 0 failed / 0 skipped (`X-Actor-Id` impersonation, Bearer yok sayılıyor) |
+
+Ham: `p5b_three_auth_modes.txt`. Bu üç akış **bu dalgada değişmedi** — 08-07'de de aynı
+kodla oradaydılar; değişen tek şey, koşabilmiş olmalarıdır.
+
+**Bu bölümün eski hâli, kayıt için.** 2026-08-07'de burada yazan gerekçe şuydu: harness
+kapsam boşluğu (a)–(e)'yi hiç uygulamıyor **ve** uygulama düzlemi hiç ayağa kalkmadı
+(API:8000 / web:5173 kapalı, `docker ps` **124**), P5'in 2/3/4 ve P8'in 1b kalemleri aynı
+kök nedende. O gün hiçbir katmanda kanıtlanmadığı yazılan liste: beş akış · üç auth modu ·
+servis bazında health · `smoke.sh` · `worker-restart-smoke.sh`. Yukarıdaki ölçümler bu
+listenin tamamını yeniden ele almıştır; **silinmedi, yerine ölçüm konuldu.**
 
 ### 6.3 Alertmanager YOK — **BLOCKER** (P10 §5.3)
 
@@ -751,9 +829,10 @@ Ek olarak: `SHARED_ALLOCATION_STATUS` **`future_dev`** (containment KAPALI, §4)
 > V18 Release Candidate `1f4b88b` **sevk edilemez**: dört kapatılmamış blocker'ı vardır —
 > **(1)** A-08 insan ekran okuyucu kabul denetimi hiç koşulmadı (0/4 çıkış kriteri, 0/46
 > rota, 0/20 akış, 0 bulgu kaydı) ve yerine geçecek imzalı sapma **yok**, izleme issue'su
-> #514 ise **kanıtsız kapatılmış**; **(2)** beş uçtan uca kabul akışının hiçbiri hiçbir
-> katmanda doğrulanmadı — adlandırılan harness onları uygulamıyor **ve** uygulama düzlemi
-> hiç ayağa kalkmadı; **(3)** Alertmanager yok, yani doğrulanmış 11 alarm kuralının 7
+> #514 ise **kanıtsız kapatılmış**; **(2)** kabul akışları — **2026-08-10'da kısmen
+> kapandı** (§6.2): harness kapsamı yazıldı, beş akış da koştu (**60 passed / 0 failed /
+> 2 skipped**, tarayıcı katmanı **5 passed**), ama `flows` hâlâ **bir CI kapısı değildir**,
+> yani regresyon sessizce geri gelebilir; **(3)** Alertmanager yok, yani doğrulanmış 11 alarm kuralının 7
 > page-seviyelisi dahil hiçbiri bir insana ulaşmıyor; **(4)** sevk edilen bir HIGH advisory
 > (`GHSA-qwww-vcr4-c8h2`) imzasız bir freeze ile geçiriliyor. Tek imzalı sapma **D-10**'dur
 > ve kapsamı **yalnız WCAG 1.4.3**'tür — bu dördün hiçbirini kapsamaz, dolayısıyla
@@ -780,7 +859,7 @@ visual **8/8** · axe **45/45 tavan, critical 0**.
 | # | Blocker | İnsan kararı |
 |---|---|---|
 | 1 | `A-08-HUMAN-GATE-UNMET` | (A) denetimi koştur — **önce #514'ü yeniden aç** — iki SR kombinasyonu, 23 rota + 10 akış, dört kriter ☑; **veya** (B) D-10 biçiminde imzalı kalıcı sapma |
-| 2 | Kabul akışları | Harness'a (a)–(e) kapsamını **yaz** (kapsam boşluğu ortamdan bağımsızdır) **ve** sağlıklı bir hostta stack'i ayağa kaldırıp üç auth modu + health + smoke + `worker-restart-smoke.sh` koştur |
+| 2 | Kabul akışları | ~~Harness'a (a)–(e) kapsamını **yaz** … üç auth modu + health + smoke + `worker-restart-smoke.sh` koştur~~ → **2026-08-10'da yapıldı** (§6.2 / §6.2.1). Kalan insan kararı: **`flows`'u bir CI kapısına bağla** (CI'da 12 konteynerlik ikinci yığın + süre maliyeti kabul edilecek mi?) ve §6.2'deki iki SKIP'i kapat |
 | 3 | Alertmanager | (A) receiver + routing + silence + on-call + Prometheus config provenance kapısı; **veya** (B) imzalı kalıcı sapma |
 | 4 | react-router freeze | Kaydı `.github/security-allowlist.json` disiplinine taşı (**zorunlu `owner` + `expires`**) — **imzalayan verilmediği için agent yazamaz** |
 
@@ -790,6 +869,22 @@ COMPLETED kapalıdır (§6.6). Yeniden açmak insan işidir.
 ---
 
 ## 9. Kanıt dizini
+
+### 9.0 2026-08-10 (ADIM 30) — blocker 2 dalgası
+
+Tüm ham çıktılar: **`docs/releases/evidence/2026-08-10/`**
+
+| Adım | Belge / dosya | Verdict |
+|---|---|---|
+| P6-B | `P6B_acceptance_flows_harness.md` | **KISMEN KAPANDI** (harness yazıldı, beş akış koştu; CI kapısı değil) |
+| — | `p6b_flows_run.txt` | `flows` koşusu: 60 passed / 0 failed / 2 skipped + tarayıcı 5 passed |
+| — | `p6b_docker_remeasure.txt` | "docker ps → 124" **yeniden üretilemedi** |
+| — | `p6b_ci_browser_layer.txt` | aday SHA'da E2E run 31364211010 **success**, (a)/(b)/(e-kısmi) yeşil |
+| — | `p6b_term_scan.txt` | terim taraması BEFORE 0 → AFTER 17/43/19/32/17/9 |
+| P5-B | `p5b_three_auth_modes.txt` | üç auth modu **PASS** (27/0, 15/0, 9/0) |
+| P5-B | `p5b_acceptance_gate.txt` · `p5b_smoke.txt` · `p5b_worker_restart.txt` | health / smoke / restart **exit 0** |
+
+### 9.1 2026-08-07 (ADIM 29) — P1–P13 dalgası
 
 Tüm ham çıktılar: **`docs/releases/evidence/2026-08-07/`**
 
@@ -813,6 +908,15 @@ Tüm ham çıktılar: **`docs/releases/evidence/2026-08-07/`**
 ---
 
 ## 10. Bu adımda (P13) değişen ve değişmeyenler
+
+> **ADIM 30 eki (2026-08-10).** O dalgada bu belgenin §3/P5, §3/P6, §6.2, §8 ve §9
+> bölümleri güncellendi ve `docs/releases/evidence/2026-08-10/` eklendi. Kod tarafında
+> **yalnız harness** değişti: `scripts/lib/acceptance-flows.sh` (yeni),
+> `scripts/e2e-acceptance.sh` (`flows` alt-komutu + `API_CORS_ORIGINS` + SKIP sayacı),
+> `frontend/e2e/specs/05-mainboard-ready-check-run.spec.ts` (sabit-kodlu `:8000` yedeği
+> parametreleştirildi; `E2E_API_BASE_URL` yokken **aynı literal** → CI davranışı birebir
+> korunur). **`backend/src` ve `frontend/src` düzenlenmedi**; migration, lockfile, imza,
+> tag, release, issue açma/kapama **yok**. Aşağısı P13 dalgasının kaydıdır.
 
 **Değişen:** yalnız bu belge eklendi.
 

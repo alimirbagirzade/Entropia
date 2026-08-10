@@ -1,0 +1,20 @@
+== Core API ==
+  PASS  /health/live -> {"status":"ok"}
+  PASS  /meta -> {"name":"Entropia V18","version":"0.1.0","environment":"local","api_base_path":"/api/v1","auth_mode":"session"}
+  PASS  /openapi.json -> 200
+== Dependencies (/health/ready) ==
+  raw: {"status":"ok","checks":{"postgres":"ok","redis":"ok","object_storage":"ok"}}
+  PASS  postgres reachable
+  PASS  redis reachable (queues live)
+  PASS  object storage reachable (artifacts live)
+== Metrics ==
+  PASS  /metrics serves Prometheus exposition
+== Identity (auth-mode aware) ==
+  PASS  session: unauthenticated /me is anonymous (login required)
+  PASS  session: X-Actor-Id header ignored (no impersonation)
+  PASS  session: /auth/login live and rejects bad credentials (401)
+  (set SMOKE_USERNAME + SMOKE_PASSWORD to also assert a full login -> Bearer /me)
+== Frontend (optional) ==
+  PASS  http://localhost:18110 -> 200
+
+SMOKE OK — core stack is healthy.

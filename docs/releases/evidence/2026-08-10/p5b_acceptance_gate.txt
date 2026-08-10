@@ -1,0 +1,18 @@
+== Acceptance gate (session stack) ==
+  PASS  redis — running (health=healthy restarts=0)
+  PASS  minio — running (health=healthy restarts=0)
+  PASS  postgres — running (health=healthy restarts=0)
+  PASS  migrate — one-shot completed (exit 0)
+  PASS  provision — one-shot completed (exit 0)
+  PASS  agent-coordinator — running (health=healthy restarts=0)
+  PASS  worker-agent — running (health=healthy restarts=0)
+  PASS  minio-setup — one-shot completed (exit 0)
+  PASS  scheduler — running (health=healthy restarts=0)
+  PASS  worker-data — running (health=healthy restarts=0)
+  PASS  worker-default — running (health=healthy restarts=0)
+  PASS  api — running (health=healthy restarts=0)
+  PASS  worker-agent-executor — running (health=healthy restarts=0)
+  PASS  web — running (health=healthy restarts=0)
+  PASS  worker-backtest — running (health=healthy restarts=0)
+
+ACCEPTANCE OK — every plane is up; nothing exited/restarted/unhealthy.

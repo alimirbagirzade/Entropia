@@ -9,7 +9,15 @@
 #   scripts/e2e-acceptance.sh session     # §9.4 clean session-mode bootstrap
 #   scripts/e2e-acceptance.sh legacy      # §9.5 legacy credentialless upgrade
 #   scripts/e2e-acceptance.sh dev-auth    # §9.6 dev-mode X-Actor-Id impersonation
-#   scripts/e2e-acceptance.sh all         # (default) all three, in sequence
+#   scripts/e2e-acceptance.sh flows       # the FIVE acceptance flows (a)-(e)
+#   scripts/e2e-acceptance.sh all         # (default) all four, in sequence
+#
+# `flows` closes the coverage gap the V18 RC readiness report names in §6.2:
+# until it existed this script proved AUTH/identity bootstrap and nothing about
+# Strategy->Run, Library validation, ESP, Agent/Trading-Signal tools or Trash.
+# Its body lives in scripts/lib/acceptance-flows.sh and reuses everything here —
+# the isolation contract, the hermetic env file, `dc`, `req` and the PASS/FAIL
+# accounting. Set E2E_KEEP_UP=1 to leave that stack up for inspection.
 #
 # Isolation contract (safety-critical):
 #   * Compose project name is ALWAYS `entropia-e2e-<flow>` — a hard guard
@@ -49,13 +57,18 @@ if ! docker version >/dev/null 2>&1; then
 fi
 
 # ---- output helpers ----------------------------------------------------------
-BOLD=$'\033[1m'; DIM=$'\033[2m'; RED=$'\033[31m'; GRN=$'\033[32m'; CYA=$'\033[36m'; RST=$'\033[0m'
+BOLD=$'\033[1m'; DIM=$'\033[2m'; RED=$'\033[31m'; GRN=$'\033[32m'; YEL=$'\033[33m'; CYA=$'\033[36m'; RST=$'\033[0m'
 PASS_N=0; FAIL_N=0
 step()  { printf '\n%s— %s%s\n' "$CYA" "$*" "$RST"; }
 ok()    { PASS_N=$((PASS_N+1)); printf '  %sPASS%s  %s\n' "$GRN" "$RST" "$*"; }
 bad()   { FAIL_N=$((FAIL_N+1)); printf '  %sFAIL%s  %s\n' "$RED" "$RST" "$*"; }
 info()  { printf '  %s%s%s\n' "$DIM" "$*" "$RST"; }
 banner(){ printf '\n%s========== %s ==========%s\n' "$BOLD" "$*" "$RST"; }
+
+# The five acceptance flows (a)-(e). Sourced, not forked: they assert through
+# the helpers above and add to the same PASS_N/FAIL_N tally, so `flows` reports
+# in one voice with the three auth flows instead of alongside them.
+. "$REPO_ROOT/scripts/lib/acceptance-flows.sh"
 
 # ---- per-flow isolation state (set by begin_flow) ---------------------------
 PROJECT=""; ENVFILE=""; BASE=""; API_HOST_PORT=""; COMPOSE_FILES=()
@@ -394,17 +407,61 @@ flow_dev_auth() {
   teardown
 }
 
+# =============================================================================
+# The five acceptance flows (a)-(e) — RC readiness §6.2 blocker 2.
+# =============================================================================
+# Same isolation contract as the three auth flows above: its own compose
+# project, its own volumes, its own non-colliding port block (180xx/181xx, kept
+# clear of the a11y audit stack's 182xx), its own hermetic env file.
+flow_acceptance() {
+  banner "ACCEPTANCE FLOWS (a)-(e)"
+  # The three fixtures the flows read are exactly the three the a11y audit stack
+  # and .github/workflows/e2e.yml seed, so the browser journeys invoked from
+  # here observe the projection they were written against.
+  # API_CORS_ORIGINS is not optional here. The API mounts CORS with an explicit
+  # allowlist whose default only covers the 5173/8080 dev origins, so the web app
+  # published on 18110 is blocked at preflight — and curl, which sends no Origin,
+  # reports the very same API perfectly healthy. Measured on the first run of this
+  # flow: OPTIONS /meta with Origin http://localhost:18110 -> 400, and every
+  # browser journey failed on a shell that could not reach its own backend.
+  # (scripts/a11y-audit-stack.sh carries the same line for the same reason.)
+  begin_flow flows session 18030 18110 15462 16409 19030 19031 \
+    "API_CORS_ORIGINS=http://localhost:18110,http://127.0.0.1:18110"
+  step "[flows] bring the isolated stack up"
+  dc up -d --build >/dev/null 2>&1 || { bad "compose up (flows) failed"; return; }
+  wait_healthy || { bad "API (flows) never became healthy"; dc ps; return; }
+  dc exec -T -e SEED_E2E_GOLDEN=1 -e SEED_ESP_TA=1 -e SEED_RATIONALE=1 api \
+    python -m entropia.apps.seed >/dev/null 2>&1 \
+    && ok "[flows] seed (SEED_E2E_GOLDEN + SEED_ESP_TA + SEED_RATIONALE) exit 0" \
+    || { bad "[flows] seed failed"; return; }
+  assert_planes_healthy flows
+
+  af_run_all_flows
+
+  if [ "${E2E_KEEP_UP:-0}" = "1" ]; then
+    info "E2E_KEEP_UP=1 — leaving $PROJECT up (web http://localhost:$WEB_HOST_PORT, api $BASE)"
+    trap - EXIT INT TERM
+  else
+    teardown
+  fi
+}
+
 # ---- driver -----------------------------------------------------------------
 FLOW="${1:-all}"
 case "$FLOW" in
   session)  flow_session ;;
   legacy)   flow_legacy ;;
   dev-auth) flow_dev_auth ;;
-  all)      flow_session; flow_legacy; flow_dev_auth ;;
-  *) echo "usage: $0 [session|legacy|dev-auth|all]" >&2; exit 2 ;;
+  flows)    flow_acceptance ;;
+  all)      flow_session; flow_legacy; flow_dev_auth; flow_acceptance ;;
+  *) echo "usage: $0 [session|legacy|dev-auth|flows|all]" >&2; exit 2 ;;
 esac
 
 banner "RESULT"
-printf '  %s%d passed%s, %s%d failed%s\n' "$GRN" "$PASS_N" "$RST" "$RED" "$FAIL_N" "$RST"
+printf '  %s%d passed%s, %s%d failed%s, %s%d skipped%s\n' \
+  "$GRN" "$PASS_N" "$RST" "$RED" "$FAIL_N" "$RST" "$YEL" "${AF_SKIP_N:-0}" "$RST"
+# A SKIP is work that did not happen. It never counts as green, but it must not
+# be silently swallowed either — it is printed above and named on its own line.
+[ "${AF_SKIP_N:-0}" -gt 0 ] && echo "  (${AF_SKIP_N} step(s) SKIPPED — see the SKIP lines; they are NOT passes)"
 [ "$FAIL_N" -eq 0 ] && { echo "E2E ACCEPTANCE OK — every asserted step passed."; exit 0; }
 echo "E2E ACCEPTANCE FAILED — see the FAIL lines above."; exit 1

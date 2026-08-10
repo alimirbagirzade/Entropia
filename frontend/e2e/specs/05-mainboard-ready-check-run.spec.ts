@@ -3,6 +3,7 @@ import { expect, test } from "@playwright/test";
 import { ensureAdmin } from "../fixtures/auth";
 import { InlineStrategyEditor } from "../pages/InlineStrategyEditor";
 import { MainboardPage } from "../pages/MainboardPage";
+import { API_BASE } from "../utils/api";
 
 // R2-07 — the REAL golden path (GAP madde 12): Strategy created INLINE on the
 // Mainboard through the typed forms, the APPROVED indicator package pinned from
@@ -53,18 +54,23 @@ test.describe("Golden path: inline Strategy -> Ready PASS -> RUN SUCCEEDED -> in
 
     // 3) Required rationale family via the live registry read + the admin-gated
     //    Advanced editor (see honest boundary above).
-    const familyId = await page.evaluate(async () => {
+    // `__E2E_API_BASE__` stays the first choice, but nothing in the tree sets
+    // it, so the old literal fallback pinned this journey to an API on :8000 —
+    // true in CI, false on any isolated stack (measured: "TypeError: Failed to
+    // fetch" against a stack published on :18030). API_BASE resolves
+    // E2E_API_BASE_URL and defaults to that same :8000 literal, so CI is
+    // byte-for-byte unaffected.
+    const familyId = await page.evaluate(async (fallbackBase: string) => {
       const token = window.localStorage.getItem("entropia.sessionToken");
       const base =
-        (window as unknown as { __E2E_API_BASE__?: string }).__E2E_API_BASE__ ??
-        "http://localhost:8000/api/v1";
+        (window as unknown as { __E2E_API_BASE__?: string }).__E2E_API_BASE__ ?? fallbackBase;
       const response = await fetch(`${base}/rationale-families`, {
         headers: { Authorization: `Bearer ${token ?? ""}` },
       });
       const body = (await response.json()) as { data?: Array<{ entity_id: string }> };
       if (!body.data?.length) throw new Error("No rationale families seeded (SEED_E2E_GOLDEN missing?)");
       return body.data[0].entity_id;
-    });
+    }, API_BASE);
     await editor.setRationaleFamilyViaAdvancedEditor(familyId);
 
     // 4) Validate must be clean, then Save attaches the mirror revision.

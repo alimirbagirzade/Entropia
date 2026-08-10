@@ -652,7 +652,7 @@ kapsamadığını ekler. Terim taraması aynı yöntemle: `ready-check|readiness
 **Koşu sonucu:** `./scripts/e2e-acceptance.sh flows` → **60 passed / 0 failed / 2 skipped**,
 **exit 0**; tarayıcı katmanı **5 passed (23.8s)**. Beş akışın **beşi de PASS**. Dört tavizsiz
 kural varsayılmadı, iddia edildi: TS/TL paket değil (katalogda yok, paket kökü TS yüzeyinde
-**404**) · reddedilen run Results düzlemini **0 → 0** bıraktı · **dokuz** Admin/owner yüzeyi
+**404**) · reddedilen run Results düzlemini **0 → 0** bıraktı · **on** Admin/owner yüzeyi
 plain USER token'ı ile yeniden saldırıya uğradı ve hepsi **403** verdi · purge **202** +
 `purge_job_id`, directive **202**, yedi düzlem broker-connected. O-30 doğrulandı:
 `deletion_state` = `root_lifecycle_state` = `purge_pending`. Ham: `p6b_flows_run.txt`.

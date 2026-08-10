@@ -5331,10 +5331,10 @@ hiçbirini uygulamıyorlardı.
 
 1. **TS/TL Package değildir** — Library kataloğunda yok; paket kökü `GET /trading-signals/<pkg>` → **404**.
 2. **Run ≠ Result** — hazır olmayan kompozisyonda run **409**, Results düzlemi **0 → 0**.
-3. **UI gizleme authorization değildir** — **dokuz** Admin/owner yüzeyi plain USER token'ı ile
-   yeniden saldırıya uğradı, hepsi **403**: run admission · library approve · library delete ·
-   ESP activate · agent runtime pause · `GET /trash-entries` · trash detay · restore-preflight ·
-   restore · purge.
+3. **UI gizleme authorization değildir** — **on** Admin/owner yüzeyi plain USER token'ı ile
+   yeniden saldırıya uğradı, hepsi **403** (koşu log'unda sayıldı, elle değil): run admission ·
+   library approve · library delete · ESP activate · agent runtime pause · `GET /trash-entries` ·
+   trash detay · restore-preflight · restore · purge.
 4. **Uzun iş durable kuyrukta** — directive **202**, purge **202** + `purge_job_id`,
    `af_follow_run` gerçek worker'ı yokluyor, senkron kestirme yok.
 

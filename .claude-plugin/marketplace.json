@@ -1,0 +1,19 @@
+{
+  "name": "entropia",
+  "owner": {
+    "name": "Entropia maintainers"
+  },
+  "metadata": {
+    "description": "Entropia deposunun kendi plugin marketplace'i.",
+    "version": "0.3.0"
+  },
+  "plugins": [
+    {
+      "name": "entropia-maintenance",
+      "source": "./plugins/entropia-maintenance",
+      "description": "Entropia'ya ozgu ajanlar, adjudicated invariant skill'leri ve uretilmis dosyalari koruyan hook'lar.",
+      "version": "0.3.0",
+      "category": "development"
+    }
+  ]
+}

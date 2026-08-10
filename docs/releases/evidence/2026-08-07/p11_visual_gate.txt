@@ -1,0 +1,86 @@
+# P11 — visual-regression gate (Linux / ubuntu-latest, chromium)
+# source: GitHub Actions run 31212829328, job 92980675739 (E2E — real browser vs. Docker Compose stack (F-23))
+# sha 2cf7283d768ad86aa7952f206b99f1a4f4801620 (main) — step 'Run the visual-regression gate'
+
+##[group]Run npm test
+[36;1mnpm test[0m
+shell: /usr/bin/bash -e {0}
+env:
+  E2E_BASE_URL: http://localhost:8080
+  E2E_ADMIN_EMAIL: e2e_admin@e2e.entropia.test
+##[endgroup]
+
+> entropia-e2e@0.1.0 test
+> playwright test --grep-invert "@screenshots|@visual|@prototype|@a11y"
+
+
+Running 40 tests using 1 worker
+
+  ✓   1 [chromium] › specs/01-auth.spec.ts:19:3 › Authentication › session-mode signup → protected access → refresh → logout revokes (2.5s)
+  ✓   2 [chromium] › specs/01-auth.spec.ts:81:3 › Authentication › rejects an unknown login with the server's canonical error envelope (414ms)
+  ✓   3 [chromium] › specs/01-auth.spec.ts:94:3 › Authentication › a guest sees the unauthenticated Layout state, not a session (341ms)
+  ✓   4 [chromium] › specs/02-market-data-upload.spec.ts:15:3 › Market Data upload › Browse File starts the full ingest: upload → analysis → verified → Admin approve → bundle (5.2s)
+  ✓   5 [chromium] › specs/03-research-data-upload.spec.ts:15:3 › Research Data upload › locks create behind a server-confirmed approved Market Data link (1.5s)
+  ✓   6 [chromium] › specs/04-create-package-lifecycle.spec.ts:41:3 › Create Package lifecycle › drives a translate request from compose to published + usable in Library (10.2s)
+  ✓   7 [chromium] › specs/05-mainboard-ready-check-run.spec.ts:32:3 › Golden path: inline Strategy -> Ready PASS -> RUN SUCCEEDED -> inline Result › builds a runnable strategy on the Mainboard and follows the run to a succeeded inline Result (7.2s)
+  ✓   8 [chromium] › specs/06-trash-reauth.spec.ts:15:3 › Trash — soft-delete then re-auth purge › moves a work object to Trash and requests its permanent deletion (1.9s)
+  ✓   9 [chromium] › specs/07-file-uploads.spec.ts:14:3 › F-03 native file uploads › Trading Signal: selecting a CSV stores a content-addressed source asset (1.1s)
+  ✓  10 [chromium] › specs/07-file-uploads.spec.ts:30:3 › F-03 native file uploads › Trading Signal: a non-CSV file is rejected with a typed error (1.0s)
+  ✓  11 [chromium] › specs/07-file-uploads.spec.ts:47:3 › F-03 native file uploads › Trade Log: selecting a CSV stores a content-addressed source asset (1.3s)
+  ✓  12 [chromium] › specs/08-mainboard-inline-editors.spec.ts:130:3 › R2-01b Mainboard inline TS/TL editors › Trading Signal: create → upload → import → Save & Add → close, URL stays / (24.9s)
+  ✓  13 [chromium] › specs/08-mainboard-inline-editors.spec.ts:186:3 › R2-01b Mainboard inline TS/TL editors › Trade Log: create → upload → import → Save & Add → close, URL stays / (24.2s)
+  ✓  14 [chromium] › specs/08-mainboard-inline-editors.spec.ts:234:3 › R2-01b Mainboard inline TS/TL editors › Strategy: Add Strategy opens the inline draft editor without navigation (1.3s)
+  ✓  15 [chromium] › specs/09-responsive-overflow.spec.ts:36:5 › R2-11 responsive app shell — zero body-level horizontal overflow › no horizontal overflow at 375px (4.8s)
+  ✓  16 [chromium] › specs/09-responsive-overflow.spec.ts:36:5 › R2-11 responsive app shell — zero body-level horizontal overflow › no horizontal overflow at 768px (3.8s)
+  ✓  17 [chromium] › specs/09-responsive-overflow.spec.ts:36:5 › R2-11 responsive app shell — zero body-level horizontal overflow › no horizontal overflow at 1280px (3.8s)
+  ✓  18 [chromium] › specs/09-responsive-overflow.spec.ts:36:5 › R2-11 responsive app shell — zero body-level horizontal overflow › no horizontal overflow at 1440px (4.0s)
+  ✓  19 [chromium] › specs/09-responsive-overflow.spec.ts:36:5 › R2-11 responsive app shell — zero body-level horizontal overflow › no horizontal overflow at 1920px (5.0s)
+  ✓  20 [chromium] › specs/09-responsive-overflow.spec.ts:68:3 › R2-11 responsive app shell — zero body-level horizontal overflow › mobile hamburger menu is usable at 375px (1.1s)
+  ✓  21 [chromium] › specs/15-stale-session.spec.ts:15:3 › stale session — one clean redirect to login › a corrupted/revoked stored token lands the user back on /login once (1.4s)
+  -  22 [chromium] › specs/16-dev-mode-auth.spec.ts:19:3 › dev-mode acceptance (X-Actor-Id, no login) › dev mode hides login, keeps the actor control, and authenticates via X-Actor-Id
+  ✓  23 [chromium] › specs/17-page-coverage.spec.ts:120:5 › Page coverage: every nav destination serves real data, not just a heading › /backtest/history renders its projection from a served query (958ms)
+  ✓  24 [chromium] › specs/17-page-coverage.spec.ts:120:5 › Page coverage: every nav destination serves real data, not just a heading › /backtest/metrics renders its projection from a served query (1.0s)
+  ✓  25 [chromium] › specs/17-page-coverage.spec.ts:120:5 › Page coverage: every nav destination serves real data, not just a heading › /panel/logs renders its projection from a served query (1.1s)
+  ✓  26 [chromium] › specs/17-page-coverage.spec.ts:120:5 › Page coverage: every nav destination serves real data, not just a heading › /panel/management renders its projection from a served query (1.0s)
+  ✓  27 [chromium] › specs/17-page-coverage.spec.ts:120:5 › Page coverage: every nav destination serves real data, not just a heading › /panel/metrics renders its projection from a served query (1.0s)
+  ✓  28 [chromium] › specs/17-page-coverage.spec.ts:120:5 › Page coverage: every nav destination serves real data, not just a heading › /panel/provisioning renders its projection from a served query (1.1s)
+  ✓  29 [chromium] › specs/17-page-coverage.spec.ts:120:5 › Page coverage: every nav destination serves real data, not just a heading › /rationale-families renders its projection from a served query (998ms)
+  ✓  30 [chromium] › specs/17-page-coverage.spec.ts:120:5 › Page coverage: every nav destination serves real data, not just a heading › /portfolio renders its projection from a served query (1.0s)
+  ✓  31 [chromium] › specs/17-page-coverage.spec.ts:120:5 › Page coverage: every nav destination serves real data, not just a heading › /instruments renders its projection from a served query (1.3s)
+  ✓  32 [chromium] › specs/17-page-coverage.spec.ts:120:5 › Page coverage: every nav destination serves real data, not just a heading › /packages/embedded renders its projection from a served query (1.8s)
+  ✓  33 [chromium] › specs/17-page-coverage.spec.ts:120:5 › Page coverage: every nav destination serves real data, not just a heading › /analysis-lab renders its projection from a served query (1.0s)
+  ✓  34 [chromium] › specs/17-page-coverage.spec.ts:120:5 › Page coverage: every nav destination serves real data, not just a heading › /future-dev renders its projection from a served query (1.0s)
+  ✓  35 [chromium] › specs/17-page-coverage.spec.ts:120:5 › Page coverage: every nav destination serves real data, not just a heading › /user-manual renders its projection from a served query (1.0s)
+  ✓  36 [chromium] › specs/18-result-artifacts-drilldown.spec.ts:34:3 › Result artifact drill-down: Filtered Events is its own artifact (I-02) › serves filtered_events separately from signal_events, with a terminating cursor and a checksum (882ms)
+  ✓  37 [chromium] › specs/18-result-artifacts-drilldown.spec.ts:117:3 › Result artifact drill-down: Filtered Events is its own artifact (I-02) › rejects an unknown artifact type fail-closed instead of falling back (865ms)
+  ✓  38 [chromium] › specs/19-future-dev-boundary.spec.ts:35:3 › Future Dev boundary: placeholders stay honest (doc 22) › every Future-Dev capability is registered but NOT operational (834ms)
+  ✓  39 [chromium] › specs/19-future-dev-boundary.spec.ts:60:3 › Future Dev boundary: placeholders stay honest (doc 22) › the Future Dev page renders the registry rather than an empty shell (1.1s)
+  ✓  40 [chromium] › specs/20-library-request-validation.spec.ts:57:3 › Package Library — Request Validation › certifies a draft package from the Library and unlocks Request Approval (8.8s)
+
+  1 skipped
+  39 passed (2.3m)
+##[group]Run npm run visual
+[36;1mnpm run visual[0m
+shell: /usr/bin/bash -e {0}
+env:
+  E2E_BASE_URL: http://localhost:8080
+  E2E_ADMIN_EMAIL: e2e_admin@e2e.entropia.test
+##[endgroup]
+
+> entropia-e2e@0.1.0 visual
+> playwright test --grep @visual
+
+
+Running 8 tests using 1 worker
+
+  ✓  1 [chromium] › specs/11-visual-regression.spec.ts:65:5 › @visual R2-13 screenshot regression — critical pages › visual: mainboard (9.8s)
+  ✓  2 [chromium] › specs/11-visual-regression.spec.ts:65:5 › @visual R2-13 screenshot regression — critical pages › visual: strategy-standalone (9.6s)
+  ✓  3 [chromium] › specs/11-visual-regression.spec.ts:65:5 › @visual R2-13 screenshot regression — critical pages › visual: trading-signal-standalone (10.3s)
+  ✓  4 [chromium] › specs/11-visual-regression.spec.ts:65:5 › @visual R2-13 screenshot regression — critical pages › visual: trade-log-standalone (10.9s)
+  ✓  5 [chromium] › specs/11-visual-regression.spec.ts:65:5 › @visual R2-13 screenshot regression — critical pages › visual: market-data (9.6s)
+  ✓  6 [chromium] › specs/11-visual-regression.spec.ts:65:5 › @visual R2-13 screenshot regression — critical pages › visual: create-package (9.6s)
+  ✓  7 [chromium] › specs/11-visual-regression.spec.ts:65:5 › @visual R2-13 screenshot regression — critical pages › visual: ready-check (10.7s)
+  ✓  8 [chromium] › specs/11-visual-regression.spec.ts:65:5 › @visual R2-13 screenshot regression — critical pages › visual: run-result (9.7s)
+
+  8 passed (1.4m)
+##[group]Run actions/upload-artifact@v7

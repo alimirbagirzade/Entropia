@@ -1,0 +1,2 @@
+### KOMUT: timeout 90 ./scripts/e2e-acceptance.sh all
+EXIT=124  (süre: 90s; 124 = timeout ile SIGTERM, 2 = script'in kendi 'daemon unreachable' preflight'ı)

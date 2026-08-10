@@ -1,0 +1,11 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.12.13, pytest-9.1.1, pluggy-1.6.0
+rootdir: /Users/mirbagirzade/Development/Entropia/.claude/worktrees/festive-grothendieck-8a8260/backend
+configfile: pyproject.toml
+plugins: cov-7.1.0, anyio-4.14.1, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+collected 19 items
+
+tests/integration/test_trash_page.py ...................                 [100%]
+
+======================= 19 passed in 1089.02s (0:18:09) ========================

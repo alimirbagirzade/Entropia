@@ -32,27 +32,22 @@ const FROZEN_ADVISORIES = {
     // change. The gate's own "frozen but no longer reported" note is what surfaced
     // it. A freeze whose reason has expired is worse than no freeze — it silently
     // grants an exception nobody re-examined.
-    //
-    // The list is now EMPTY: the last two freezes were DROPPED 2026-08-10, both
-    // surfaced by the same "frozen but no longer reported" note, but for reasons of
-    // very different strength. Recorded separately so they are not read as equal.
-    //
-    // GHSA-5p4m-2wfm-xmqj (js-yaml) ended exactly the way its own reason predicted.
-    // That reason closed with "RE-CHECK when eslint 9.x picks up a patched js-yaml
-    // ... either event ends this reason", and eslint 9's @eslint/eslintrc now
-    // resolves js-yaml 4.3.1, which carries the `!!omap` fix. `npm audit fix
-    // --package-lock-only` moved 4.3.0 -> 4.3.1 with no package.json change and no
-    // major upgrade, so its premise ("npm audit fix offers no lockfile-only
-    // remedy") is no longer true. This is a real fix, not an expiry.
-    //
-    // GHSA-qwww-vcr4-c8h2 (react-router) was dropped on a WEAKER basis, stated
-    // plainly: npm stopped reporting it and this repo did NOT fix it. react-router
-    // is still pinned at 7.18.1 by react-router-dom, so no dependency here changed
-    // — the advisory left npm's feed on its own (withdrawn, re-scored, or re-scoped
-    // upstream), which this gate cannot distinguish. If it returns, the gate goes
-    // red and the freeze must be re-argued from scratch rather than restored from
-    // git history: the old reasoning (Vite SPA on BrowserRouter, RSC mode never
-    // enabled) may not answer whatever a re-published advisory actually claims.
+    {
+      id: "GHSA-qwww-vcr4-c8h2",
+      pkg: "react-router",
+      reason:
+        "RSC-mode CSRF bypass. This app is a Vite SPA on react-router-dom's BrowserRouter and never enables RSC mode. react-router-dom@7.18.2 pins react-router@7.18.2 exactly (an exact pin, not a range), and the advisory covers >=7.12.0 <8.3.0 — so every 7.x is affected and the only patched line is react-router@8.3.0+, i.e. the v8 migration that drops react-router-dom. No lockfile-only remedy exists: `npm audit fix` can only reach it via --force, which downgrades to react-router-dom@7.11.0, a breaking change. VERIFIED 2026-08-07 against the installed tree and the live advisory range; the two version numbers previously recorded here (7.18.1 / 8.2.1+) were wrong. UNSIGNED — this entry carries no owner and no expiry, so nothing forces anyone to revisit it. That is the gap .github/security-allowlist.json exists to close (it requires `owner` + `expires` and fails the build once the date passes). Moving this record there needs a named accountable human, which is a human decision and is NOT recorded as taken.",
+    },
+    // The js-yaml freeze (GHSA-5p4m-2wfm-xmqj) was DROPPED 2026-08-07 — same pattern
+    // and same reason-expiry as the brace-expansion pair above. Its stated reason was
+    // "`npm audit fix` offers no lockfile-only remedy; the published fix path is
+    // eslint@10, a major upgrade". That was already false when the freeze merged:
+    // js-yaml 4.3.1 shipped 2026-07-31 and patches the advisory in place, seven days
+    // before #629 landed the freeze on 2026-08-07. `npm audit fix --package-lock-only`
+    // resolves it in a 3-line lockfile diff, package.json byte-identical, no eslint
+    // major. A freeze is a recorded boundary, not a standing waiver — once a remedy
+    // exists the entry has to go, or the gate keeps granting an exception that no
+    // longer has a reason behind it.
   ],
   "frontend/e2e": [],
 };

@@ -1,0 +1,56 @@
+# js-yaml GHSA-5p4m-2wfm-xmqj — lockfile-only fix proof (scratch copy, repo untouched)
+
+## 1. npm audit --json, js-yaml + react-router nodes (frontend/)
+
+--- js-yaml
+  severity: high | range: 4.0.0 - 4.3.0 | fixAvailable: true
+  advisory: https://github.com/advisories/GHSA-5p4m-2wfm-xmqj | vulnerable: >=4.0.0 <4.3.1
+--- react-router
+  severity: high | range: 7.12.0 - 8.2.0 | fixAvailable: {"name":"react-router-dom","version":"7.11.0","isSemVerMajor":true}
+  advisory: https://github.com/advisories/GHSA-qwww-vcr4-c8h2 | vulnerable: >=7.12.0 <8.3.0
+--- react-router-dom
+  severity: high | range: >=7.12.0-pre.0 | fixAvailable: {"name":"react-router-dom","version":"7.11.0","isSemVerMajor":true}
+metadata: {"info":0,"low":0,"moderate":0,"high":3,"critical":0,"total":3}
+
+## 2. npm audit fix --package-lock-only in /tmp/p9_lockfix_a (copy of frontend/package*.json)
+
+
+up to date, audited 244 packages in 7s
+
+69 packages are looking for funding
+  run `npm fund` for details
+
+# npm audit report
+
+react-router  7.12.0 - 8.2.0
+Severity: high
+React Router: RSC Mode CSRF Bypass Allows Action Execution Before 400 Response - https://github.com/advisories/GHSA-qwww-vcr4-c8h2
+fix available via `npm audit fix --force`
+Will install react-router-dom@7.11.0, which is a breaking change
+node_modules/react-router
+  react-router-dom  >=7.12.0-pre.0
+  Depends on vulnerable versions of react-router
+  node_modules/react-router-dom
+
+2 high severity vulnerabilities
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force
+
+## 3. Resulting lockfile diff (repo lockfile -> fixed copy)
+
+2370,2372c2370,2372
+<       "version": "4.3.0",
+<       "resolved": "https://registry.npmjs.org/js-yaml/-/js-yaml-4.3.0.tgz",
+<       "integrity": "sha512-1td788aAnnZ5qs7V2QIRl1owjtYpbKt749Y3xauqQgwIIGF/xXWz1wMTEBx5O3LK3lXLVuqXPdPxj2BoFHaW9Q==",
+---
+>       "version": "4.3.1",
+>       "resolved": "https://registry.npmjs.org/js-yaml/-/js-yaml-4.3.1.tgz",
+>       "integrity": "sha512-CY6crGq313MX8GkwvB7tzgp99vjQxY1++5y10/BKN/GUfHqWaOGQMNZkBvqSzsZKWk/ijwHlWzzkLulsGHhjWQ==",
+
+## 4. package.json byte-identical after the fix
+IDENTICAL
+
+## 5. js-yaml release timestamps (npm registry)
+4.3.0 => 2026-06-26T22:29:00.874Z
+4.3.1 => 2026-07-31T17:39:51.183Z

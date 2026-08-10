@@ -1,0 +1,21 @@
+# P8 — docker/compose reachability probe (worker-restart-smoke precondition)
+date_utc=2026-08-07T20:19:30Z
+
+$ command -v docker
+/usr/local/bin/docker
+exit=0
+
+$ timeout 30 docker version --format '{{.Server.Version}}'
+
+exit=124
+
+$ timeout 30 docker info --format '{{.MemTotal}} bytes / {{.NCPU}} cpu'
+0 bytes / 0 cpu
+exit=124
+
+$ timeout 30 docker ps -a --format '{{.Names}} {{.Status}}'
+exit=124
+
+$ timeout 60 docker compose ps
+
+exit=124

@@ -1,0 +1,1 @@
+OpenAPI snapshot is up to date: /Users/mirbagirzade/Development/Entropia/.claude/worktrees/entropia-portfolio-manifest-attribution-bb527a/docs/openapi.json

@@ -18,6 +18,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Identity,
+    Index,
     Integer,
     String,
     Text,
@@ -77,11 +78,10 @@ class AgentTask(TimestampMixin, Base):
     registry from BacktestRun / generic Job enums (CR-04)."""
 
     __tablename__ = "agent_task"
+    __table_args__ = (Index("ix_agent_task_agent", "agent_id"),)
 
     task_id: Mapped[str] = mapped_column(String(40), primary_key=True)
-    agent_id: Mapped[str] = mapped_column(
-        String(64), ForeignKey(_RUNTIME_FK), nullable=False, index=True
-    )
+    agent_id: Mapped[str] = mapped_column(String(64), ForeignKey(_RUNTIME_FK), nullable=False)
     task_type: Mapped[str] = mapped_column(String(64), nullable=False)
     title: Mapped[str] = mapped_column(String(256), nullable=False)
     source: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -105,13 +105,17 @@ class TaskDirective(Base):
     trail."""
 
     __tablename__ = "task_directive"
+    __table_args__ = (
+        Index("ix_task_directive_author", "author_principal_id"),
+        Index("ix_task_directive_target", "target_agent_id"),
+    )
 
     directive_id: Mapped[str] = mapped_column(String(40), primary_key=True)
     author_principal_id: Mapped[str] = mapped_column(
-        String(40), ForeignKey(_PRINCIPAL_FK), nullable=False, index=True
+        String(40), ForeignKey(_PRINCIPAL_FK), nullable=False
     )
     target_agent_id: Mapped[str] = mapped_column(
-        String(64), ForeignKey(_RUNTIME_FK), nullable=False, index=True
+        String(64), ForeignKey(_RUNTIME_FK), nullable=False
     )
     related_task_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
     text: Mapped[str] = mapped_column(Text, nullable=False)
@@ -138,11 +142,14 @@ class AgentCheckpoint(Base):
     """Resumable, immutable work record (doc 18 §9, §9.1). Never UPDATEd."""
 
     __tablename__ = "agent_checkpoint"
-    __table_args__ = (UniqueConstraint("task_id", "checkpoint_no", name="uq_agent_checkpoint_no"),)
+    __table_args__ = (
+        UniqueConstraint("task_id", "checkpoint_no", name="uq_agent_checkpoint_no"),
+        Index("ix_agent_checkpoint_task", "task_id"),
+    )
 
     checkpoint_id: Mapped[str] = mapped_column(String(40), primary_key=True)
     task_id: Mapped[str] = mapped_column(
-        String(40), ForeignKey(_TASK_FK, ondelete="CASCADE"), nullable=False, index=True
+        String(40), ForeignKey(_TASK_FK, ondelete="CASCADE"), nullable=False
     )
     checkpoint_no: Mapped[int] = mapped_column(Integer, nullable=False)
     stage: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -165,6 +172,7 @@ class LabMessage(Base):
     clarification message, the original is never deleted."""
 
     __tablename__ = "lab_message"
+    __table_args__ = (Index("ix_lab_message_created", "created_at"),)
 
     message_id: Mapped[str] = mapped_column(String(40), primary_key=True)
     type: Mapped[LabMessageType] = mapped_column(
@@ -179,7 +187,7 @@ class LabMessage(Base):
     )
     correlation_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
+        DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
 
@@ -188,6 +196,10 @@ class HypothesisArtifact(TimestampMixin, Base):
     Agent-owned; soft delete keeps provenance/audit (AL-16)."""
 
     __tablename__ = "hypothesis_artifact"
+    __table_args__ = (
+        Index("ix_hypothesis_artifact_source_task", "source_task_id"),
+        Index("ix_hypothesis_artifact_deletion", "deletion_state"),
+    )
 
     artifact_id: Mapped[str] = mapped_column(String(40), primary_key=True)
     status: Mapped[HypothesisStatus] = mapped_column(
@@ -201,7 +213,7 @@ class HypothesisArtifact(TimestampMixin, Base):
     )
     next_action: Mapped[str | None] = mapped_column(Text, nullable=True)
     source_task_id: Mapped[str | None] = mapped_column(
-        String(40), ForeignKey(_TASK_FK, ondelete="SET NULL"), nullable=True, index=True
+        String(40), ForeignKey(_TASK_FK, ondelete="SET NULL"), nullable=True
     )
     checkpoint_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
     deletion_state: Mapped[DeletionState] = mapped_column(
@@ -209,7 +221,6 @@ class HypothesisArtifact(TimestampMixin, Base):
         nullable=False,
         default=DeletionState.ACTIVE,
         server_default=DeletionState.ACTIVE.value,
-        index=True,
     )
     created_by_principal_id: Mapped[str | None] = mapped_column(
         String(40), ForeignKey(_PRINCIPAL_FK), nullable=True
@@ -223,10 +234,11 @@ class ArtifactLink(Base):
     (doc 18 §9). Append-only."""
 
     __tablename__ = "artifact_link"
+    __table_args__ = (Index("ix_artifact_link_source", "source_artifact_id"),)
 
     link_id: Mapped[str] = mapped_column(String(40), primary_key=True)
     source_artifact_id: Mapped[str] = mapped_column(
-        String(40), ForeignKey(_ARTIFACT_FK, ondelete="CASCADE"), nullable=False, index=True
+        String(40), ForeignKey(_ARTIFACT_FK, ondelete="CASCADE"), nullable=False
     )
     target_type: Mapped[str] = mapped_column(String(64), nullable=False)
     target_id: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -247,11 +259,19 @@ class AgentEvent(Base):
     order it. Agent mutations reach that stream as ``agent.task.updated``."""
 
     __tablename__ = "agent_event"
+    # Mirrors what 0016 actually shipped: ``unique=True`` on the column alone
+    # yields the UNIQUE constraint ``agent_event_seq_key``, and ``ix_agent_event_seq``
+    # is a SEPARATE non-unique index. Declaring ``unique=True, index=True`` together
+    # would instead collapse both into one unique index and make create_all diverge
+    # from the migration path (RC §6.7 P4-2). Uniqueness is identical either way.
+    __table_args__ = (
+        Index("ix_agent_event_seq", "seq"),
+        Index("ix_agent_event_task", "task_id"),
+        Index("ix_agent_event_occurred", "occurred_at"),
+    )
 
     event_id: Mapped[str] = mapped_column(String(40), primary_key=True)
-    seq: Mapped[int] = mapped_column(
-        BigInteger, Identity(), nullable=False, unique=True, index=True
-    )
+    seq: Mapped[int] = mapped_column(BigInteger, Identity(), nullable=False, unique=True)
     type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     actor_principal_id: Mapped[str | None] = mapped_column(
         String(40), ForeignKey(_PRINCIPAL_FK), nullable=True
@@ -260,7 +280,7 @@ class AgentEvent(Base):
         enum_column(ActorKind, "agent_event_actor_kind"), nullable=False
     )
     task_id: Mapped[str | None] = mapped_column(
-        String(40), ForeignKey(_TASK_FK, ondelete="SET NULL"), nullable=True, index=True
+        String(40), ForeignKey(_TASK_FK, ondelete="SET NULL"), nullable=True
     )
     directive_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
     payload: Mapped[dict[str, Any]] = mapped_column(
@@ -268,7 +288,7 @@ class AgentEvent(Base):
     )
     correlation_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
     occurred_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
+        DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
 

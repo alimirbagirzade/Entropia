@@ -847,8 +847,9 @@ açılmadı/kapatılmadı.
 
 | # | Bulgu | Kaynak |
 |---|---|---|
-| **P4-1** | `alembic check` **exit 255** (40 gerçek index-adı sapması) ve **hiçbir CI workflow'u onu koşmuyor** → sahipsiz, izlenmeyen | P4 |
-| **P4-2** | `agent_event.seq`'te alembic yolunda fazladan non-unique index; `create_all` yolunda yok → iki kurulum yolu bu noktada bit-özdeş değil (fonksiyonel etki yok) | P4 |
+| ~~**P4-1**~~ | ~~`alembic check` **exit 255** (40 gerçek index-adı sapması) ve **hiçbir CI workflow'u onu koşmuyor** → sahipsiz, izlenmeyen~~ → **2026-08-10 (ADIM 34) KAPANDI** — 40 sapmanın 40'ı kapatıldı (index ekseni ölçülen **0**), kapı CI'ya bağlandı ve negatifiyle kanıtlandı. **`alembic check` yine de exit 255**, ayrı bir sınıf yüzünden — ayrıntı ve ham kanıt: **§6.7.3** | P4 |
+| ~~**P4-2**~~ | ~~`agent_event.seq`'te alembic yolunda fazladan non-unique index; `create_all` yolunda yok → iki kurulum yolu bu noktada bit-özdeş değil (fonksiyonel etki yok)~~ → **2026-08-10 (ADIM 34) KAPANDI** — iki kurulum yolu index ekseninde **bit-özdeş** (361/361, 0 sapma); fonksiyonel etkisizlik deneysel kanıtlandı. Ayrıntı: **§6.7.3** | P4 |
+| **P4-3** | **YENİ (ADIM 34 ölçümü, rapor bunu bildirmemişti).** §6.7'nin *"tip/server-default değişimi = 0"* iddiası **yanlıştı**: aynı `alembic check` koşusu **60 `modify_default`** işlemi de emitliyor (40 tabloda 60 kolon; DB'de server default var, model onu yalnız Python tarafında bildiriyor). P4-2 ile aynı aileden gerçek bir model↔migration ayrışması; **ölçüldü, düzeltilmedi** (modele `server_default` eklemek `create_all` şemasını değiştirir → ayrı karar, ayrı PR). Sayı ADIM 34 kapısında **tavana** bağlandı: büyüyemez | P4 |
 | **P10-B2** | 9 uçta sayfalama sınırı **şemada yayımlanmıyor** → `limit=100000` reddedilmiyor, sessizce 100'e iniyor | P10 |
 | ~~**P9-F2**~~ | ~~**SPA origin'inde CSP yok** — `frontend/nginx-security-headers.conf` CSP vermiyor; yürütülebilir bundle'ı sunan origin budur. API'de CSP var ve testli; statik origin için **hiçbir test/kapı/belge yok**~~ → **2026-08-10 (ADIM 32) KAPANDI** — politika sevk edildi, canlı yanıtta ölçüldü, CI kapısına bağlandı. Ayrıntı ve ham kanıt: **§6.7.1** | P9 |
 | ~~**P9-F1**~~ | ~~`frontend/Dockerfile` **`npm install`** kullanıyor (`npm ci` değil) + `COPY package-lock.json*` glob'u lockfile yokluğunu tolere ediyor → reproducibility riski~~ → **2026-08-10 (ADIM 33) KAPANDI** — `npm ci` + glob'suz `COPY`; fail-closed olduğu **iki negatif durumda, her biri kontrolüyle** ölçüldü, ayrıca `frontend/.dockerignore` eklendi. Ayrıntı ve ham kanıt: **§6.7.2** | P9 |
@@ -1031,6 +1032,54 @@ tarandı; diğer script'lere süpürme yapılmadı.
 
 Ham kanıt: `docs/releases/evidence/2026-08-10/P6FF_harness_failfast.md` +
 `p6ff_measurements.txt` · `p6ff_tests_before_fix.txt` · `p6ff_tests_after_fix.txt`.
+#### 6.7.3 P4-1 + P4-2 KAPANDI — model↔migration şema paritesi (ADIM 34, 2026-08-10)
+
+Tam kayıt ve ham çıktılar: **`evidence/2026-08-10/P4_schema_parity.md`** +
+`p4_alembic_check_before.txt` · `p4_alembic_check_after.txt` ·
+`p4_install_path_parity_before.txt` · `p4_parity_gate_green.txt` ·
+`p4_parity_gate_negative.txt`.
+
+**Raporun P4-1/P4-2 iddiaları yeniden ölçüldü ve DOĞRULANDI** (exit 255; 39+39+1+1; 40 gerçek
+sapma; hiçbir workflow koşmuyor; `agent_event.seq`'te fazladan non-unique index). 39 sapma
+**yalnız adlandırmadır** — sevk edilen kısa ad ⇄ modelin `index=True`'dan türettiği SQLAlchemy
+varsayılanı; kolon/uniqueness/predicate aynı. Bu yüzden **fix tipi 1** uygulandı: DB'ye ve
+migration'lara **dokunulmadı**, model sevk edilen ada hizalandı. Sevk edilen adlar **DB'den
+okundu**. 40'ıncı sapma (`agent_event.seq`) yapısaldır ama yine model tarafında kapandı: model
+artık migration'ın sevk ettiği şekli bildiriyor (`unique=True` ⇒ `agent_event_seq_key` **ayrı**,
+`Index("ix_agent_event_seq","seq")` **ayrı**).
+
+| Ölçüm | Önce | Sonra |
+|---|---|---|
+| `alembic check` index-ekseni operasyonu | **40** | **0** |
+| Kurulum yolu index paritesi (alembic ↔ `create_all`) | DIVERGENT (361 vs 360; 40/39/1) | **BIT-IDENTICAL** (361 vs 361; 0/0/0) |
+| `add/remove column` · `add/remove table` | 0 · 0 | **0 · 0** |
+| alembic head | `0043_i08_registry_strategy_fks` | **değişmedi** (bu dalgada migration YOK) |
+
+**P4-2 fonksiyonel etkisizliği deneysel kanıtlandı:** aynı `seq` ile iki satır eklendiğinde
+**iki yol da** reddediyor (alembic: `agent_event_seq_key`, create_all: `ix_agent_event_seq`) —
+ayrışan tek şey hata mesajındaki addır. Fazladan index **kaldırılmadı**; bir index'i düşürmek
+veya uniqueness'ını çevirmek ayrı bir karardır.
+
+**Kapı:** `scripts/schema_parity_gate.py`, `ci.yml` `backend` job'ında `alembic upgrade head`'in
+hemen ardından — **exit 0 doğrulandı**. Kapı `alembic check`'ten **daha güçlüdür**: alembic
+operatör sınıfı taşıyan dört `audit_events` expression index'ini atlayıp "eşit varsayar", kapı
+onları gerçek `pg_get_indexdef` üzerinden görür. **Negatifi kanıtlandı** — iki sapma tipi de
+geri konuldu, ikisinde de **exit 1**; geri alınınca yeniden exit 0.
+
+**Dürüst sınırlar — bu slice'ta KAPANMAYAN:**
+
+- **`alembic check` hâlâ exit 255** ve kapı bunu sıfırmış gibi göstermez. Sebep P4-3'tür:
+  **60 `modify_default`** sapması (40 tabloda 60 kolon). Rapor bunu *"tip/server-default
+  değişimi = 0"* diye bildirmişti — **o iddia yanlıştı**; sapmalar `alembic check`'in ERROR
+  satırında hep vardı, §6.7'nin taraması yalnız `Detected added/removed …` cümlelerini
+  saydığı için görünmemişti. **Ölçüldü, düzeltilmedi.**
+- Kapı **`alembic check`'in exit code'unu assert etmez** — index eksenini, kurulum-yolu
+  ayniyetini, kolon/tablo drift'ini ve server-default sapma **tavanını** assert eder.
+  Adı da bunu söyler (*index axis*). Kapının ölçmediği şeyi ölçtüğü sanılmasın.
+- **P11-1 hâlâ açık:** `main` üzerinde branch protection / ruleset YOK → bu kapı da
+  **job kapısıdır, required status check DEĞİLDİR**. Repo ayarı, **insan kararı**.
+
+**Blocker sayısı DEĞİŞMEDİ (üç). §8 verdict BLOCKED kalır.** P4-1/P4-2 blocker değildi.
 
 ---
 
@@ -1106,6 +1155,19 @@ COMPLETED kapalıdır (§6.6). Yeniden açmak insan işidir.
 ---
 
 ## 9. Kanıt dizini
+
+### 9.0-c 2026-08-10 (ADIM 34) — §6.7 P4-1 + P4-2 dalgası
+
+Tüm ham çıktılar: **`docs/releases/evidence/2026-08-10/`**
+
+| Adım | Belge / dosya | Verdict |
+|---|---|---|
+| P4-1/P4-2 | `P4_schema_parity.md` | **İKİSİ DE KAPANDI** (index ekseni 40 → **0**; iki kurulum yolu **bit-özdeş**; kapı CI'ya bağlı) |
+| — | `p4_alembic_check_before.txt` | `alembic check` **exit 255**, 39 removed / 39 added / 1 changed index + 1 removed unique constraint |
+| — | `p4_install_path_parity_before.txt` | alembic ↔ `create_all`: **DIVERGENT**, 361 vs 360, 40 only-alembic / 39 only-create_all / 1 differing |
+| — | `p4_alembic_check_after.txt` | index ekseni **0**; **exit hâlâ 255** — 60 `modify_default` (P4-3, kapsam dışı) |
+| — | `p4_parity_gate_green.txt` | `scripts/schema_parity_gate.py` **exit 0** — parity 361/361, index ekseni 0, drift 0 |
+| — | `p4_parity_gate_negative.txt` | **exit 1** — P4-2 sapması geri konulunca kapı gerçekten kırmızıya dönüyor |
 
 ### 9.0-b 2026-08-10 (ADIM 31) — blocker 3 dalgası
 

@@ -22,6 +22,7 @@ from sqlalchemy import (
     Boolean,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     String,
     UniqueConstraint,
@@ -336,6 +337,7 @@ class PackageImportJob(Base):
     """
 
     __tablename__ = "package_import_job"
+    __table_args__ = (Index("ix_package_import_job_created_by", "created_by_principal_id"),)
 
     import_job_id: Mapped[str] = mapped_column(String(40), primary_key=True)
     manifest_hash: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -362,7 +364,7 @@ class PackageImportJob(Base):
     job_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
     correlation_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_by_principal_id: Mapped[str | None] = mapped_column(
-        String(40), ForeignKey(_PRINCIPAL_FK), nullable=True, index=True
+        String(40), ForeignKey(_PRINCIPAL_FK), nullable=True
     )
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(

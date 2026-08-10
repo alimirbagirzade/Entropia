@@ -109,6 +109,26 @@ jobs:
       - name: Alembic migrations apply cleanly
         working-directory: backend
         run: uv run alembic upgrade head
+
+      - name: Model/migration schema parity gate (index axis)
+        working-directory: backend
+        # RC §6.7 P4-1/P4-2. `alembic check` reported 40 index-axis deviations for
+        # the whole life of the project and NO workflow ran it, so nothing owned
+        # them; `agent_event.seq` also disagreed structurally between the two
+        # install paths. Both are closed — this step is what keeps them closed.
+        #
+        # It runs directly after `alembic upgrade head` because it reads THAT
+        # database as the migration-path truth, then builds a throwaway
+        # `create_all` database beside it and asserts the two carry byte-identical
+        # indexes, plus that autogenerate emits no index/constraint operation.
+        #
+        # It does NOT assert `alembic check`'s exit code, which is still non-zero
+        # for a separate, previously unmeasured class: 60 columns whose database
+        # server default the model declares only Python-side. That count is held
+        # to a ceiling here so it cannot grow, but it is NOT zero and this step
+        # does not pretend otherwise — see the script's module docstring.
+        run: uv run python ../scripts/schema_parity_gate.py
+
       - name: Pytest (unit + contract + integration) + coverage gate
         working-directory: backend
         # pyproject's addopts carry --cov-fail-under=90, so a coverage drop fails

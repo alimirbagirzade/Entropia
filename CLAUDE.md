@@ -193,6 +193,27 @@ Before stopping a working session, produce **ALL** of the following:
 > Tam kayıt: `PROJECT_HISTORY.md` §ADIM 34.
 > Öncesinde ADIM 33 (P9-F1 — `npm ci` + `.dockerignore`, #656),
 > ADIM 32 (P9-F2 — SPA origin'inde CSP, #655),
+> **Son dalga — ADIM 34 (RC §6.7 / P4-1 + P4-2, şema paritesi):** model↔migration index
+> ekseni **40 sapmadan 0'a** indi; alembic ve `create_all` yolları artık **BIT-IDENTICAL**
+> (361/361). Fix **DB'ye dokunmadan** yapıldı — sevk edilen ad kazandı, model ona hizalandı.
+> `scripts/schema_parity_gate.py` `ci.yml` backend job'ına bağlandı, **exit 0** ve
+> **negatifi kanıtlı** (exit 1). **`alembic check` yine de exit 255** — kapı bunu sıfırmış
+> gibi GÖSTERMEZ; sebebi **P4-3 (YENİ bulgu)**: raporun *"server-default değişimi = 0"*
+> iddiası yanlıştı, **60 `modify_default`** sapması var (ölçüldü, düzeltilmedi, tavana
+> bağlandı). Migration yok, `ENGINE_VERSION` sabit, ürün davranışı değişmedi. **Blocker
+> sayısı DEĞİŞMEDİ (üç); RC verdict'i BLOCKED kalır.** Tam kayıt: `PROJECT_HISTORY.md`
+> §ADIM 34. **Yeni index eklerken `index=True` KULLANMA** — `__table_args__` içinde
+> `Index("<ad>", "<kolon>")` yaz ve migration'da AYNI adı kullan, yoksa kapı kırmızıya döner.
+> Öncesinde ADIM 33 (RC §6.7 / P9-F1, build tesisatı): `frontend/Dockerfile` artık
+> `npm ci` + **glob'suz** `COPY package.json package-lock.json ./` — lockfile yoksa build
+> **durur**. **YENİ `frontend/.dockerignore`**: `COPY . .` install'dan SONRA geldiği için
+> host `node_modules`'ü image'inkini eziyordu; o dosya olmadan `npm ci` uygulanabilir değil.
+> Fail-closed olduğu **iki negatifte, her biri kontrolüyle** ölçüldü; image **84 MB**, bundle
+> host `npm ci` referansıyla bit-bit aynı, ADIM 32'nin CSP kapısı **10/10 PASS**. Bugün
+> `npm install` da aynı bundle'ı veriyor → bu bir davranış değil, **garanti** değişikliği.
+> **Ürün kodu ve lockfile İÇERİĞİ değişmedi. Blocker sayısı DEĞİŞMEDİ (üç); RC verdict'i
+> BLOCKED kalır.** (§ADIM 33)
+> Öncesinde ADIM 32 (P9-F2 — SPA origin'inde CSP, #655),
 > ADIM 31 (RC blocker 3 — fail-closed bildirim yolu; blocker 4→3),
 > ADIM 30 (RC blocker 2, harness — `flows` 60/0/2, ama **CI kapısı değil**),
 > ADIM 29 (RC verification, #632–#636; P9-B1 düzeltmesi #637), ADIM 29 (A-08 kayıt
@@ -209,8 +230,10 @@ Before stopping a working session, produce **ALL** of the following:
 > **P5/P6 ADIM 30'da yeniden ölçülüp COMMIT EDİLDİ** (`evidence/2026-08-10/`) — ama
 > **`flows` CI'da koşmuyor**, sunucu katmanı regresyonu sessizce dönebilir ·
 > **P1..P13 tanımı REPODA DEĞİL** (yalnız sohbet transkriptinde) ·
-> **`ci.yml` concurrency kusuru:** main'de kuyruğa giren koşu bir öncekini iptal ediyor →
-> `e8d1d48` (#633) ve `bc59dae` (#634) **0 job ile cancelled**, CI'ları HİÇ koşmadı.
+> ~~**`ci.yml` concurrency kusuru**~~ **ONARILMIŞ** (ADIM 34'te doğrulandı): `ci.yml:9–14`
+> artık `cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}` — main'de iptal KAPALI.
+> Tarihsel kayıt sabit kalır: `e8d1d48` (#633) ve `bc59dae` (#634) 0 job ile cancelled olmuş,
+> CI'ları HİÇ koşmamıştı. Yeni bir job eklerken **gerçekten koştuğunu job log'undan** doğrula.
 > **Next:** **PR B** — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:298` call site.
 > **Yarım-cent yuvarlama KARARA BAĞLANDI (2026-08-06):** `initial_sleeve_capital` yeniden
 > quantize edilmez, dondurulmuş `derived_amounts`'tan **kopyalanır**; iki yuvarlama sabiti de

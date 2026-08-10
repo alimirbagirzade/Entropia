@@ -268,9 +268,22 @@ def test_e2e_preflight_still_names_an_absent_daemon_as_absent(tmp_path: Path) ->
 
     A daemon that REFUSES instantly is a different fact from one that hangs, and
     the operator is told which one they have.
+
+    The stub answers ``docker compose version`` (client-side, no daemon needed)
+    and refuses only the daemon query. That is not decoration: a stub that
+    refused BOTH leaves the script in its "no Compose binary at all" branch on
+    any host without the v1 standalone ``docker-compose``, so the assertion
+    would silently depend on what happens to be installed. It did — this test
+    passed locally and failed on CI for exactly that reason. A case about an
+    absent DAEMON must vary the daemon and nothing else.
     """
     fake_bin = tmp_path / "bin"
-    _fake_tool(fake_bin, "docker", 'echo "Cannot connect to the Docker daemon" >&2\nexit 1\n')
+    _fake_tool(
+        fake_bin,
+        "docker",
+        '[ "$1" = "compose" ] && { echo "Docker Compose version v5.1.2"; exit 0; }\n'
+        'echo "Cannot connect to the Docker daemon" >&2\nexit 1\n',
+    )
 
     proc, elapsed = _run(
         E2E_SCRIPT,

@@ -839,7 +839,7 @@ açılmadı/kapatılmadı.
 | **P4-1** | `alembic check` **exit 255** (40 gerçek index-adı sapması) ve **hiçbir CI workflow'u onu koşmuyor** → sahipsiz, izlenmeyen | P4 |
 | **P4-2** | `agent_event.seq`'te alembic yolunda fazladan non-unique index; `create_all` yolunda yok → iki kurulum yolu bu noktada bit-özdeş değil (fonksiyonel etki yok) | P4 |
 | **P10-B2** | 9 uçta sayfalama sınırı **şemada yayımlanmıyor** → `limit=100000` reddedilmiyor, sessizce 100'e iniyor | P10 |
-| **P9-F2** | **SPA origin'inde CSP yok** — `frontend/nginx-security-headers.conf` CSP vermiyor; yürütülebilir bundle'ı sunan origin budur. API'de CSP var ve testli; statik origin için **hiçbir test/kapı/belge yok** | P9 |
+| ~~**P9-F2**~~ | ~~**SPA origin'inde CSP yok** — `frontend/nginx-security-headers.conf` CSP vermiyor; yürütülebilir bundle'ı sunan origin budur. API'de CSP var ve testli; statik origin için **hiçbir test/kapı/belge yok**~~ → **2026-08-10 (ADIM 32) KAPANDI** — politika sevk edildi, canlı yanıtta ölçüldü, CI kapısına bağlandı. Ayrıntı ve ham kanıt: **§6.7.1** | P9 |
 | **P9-F1** | `frontend/Dockerfile` **`npm install`** kullanıyor (`npm ci` değil) + `COPY package-lock.json*` glob'u lockfile yokluğunu tolere ediyor → reproducibility riski | P9 |
 | **P11-1** | **`main` üzerinde branch protection YOK ve ruleset YOK** (`gh api …/protection` → 404, `…/rulesets` → `[]`) → visual/axe kapıları **job kapısıdır, required status check DEĞİLDİR**; kırmızı E2E ile merge'i mekanik engelleyen bir şey yok | P11 |
 | **P11-2** | Visual gate 23 sayfanın **8'ini** kapsıyor; kalan 15'te piksel regresyonu koruması **yok** | P11 |
@@ -855,6 +855,71 @@ açılmadı/kapatılmadı.
 | **P10-B3** | **Bildirim yolunun DELIVERY kanıtı bir CI kapısı DEĞİL** (ADIM 31). Config yarısı kapılı (`scripts/alert-notification-gate.sh` + 21 contract testi); teslimat yarısı yalnız `scripts/alert-notification-proof.sh` ile ölçülür ve o üç konteyner + dakikalarca wall-clock ister. Kapıya bağlamak **insan kararıdır** (maliyet). Regresyon sessizce dönebilir | ADIM 31 |
 | **P10-B4** | **Monitörü izleyen yok.** Alertmanager erişilemezse Prometheus yeniden dener ve `prometheus_notifications_errors_total` sayacını artırır — **kendi** `/metrics`'inde, ki onu hiçbir şey scrape etmiyor. Sessizce teslim etmeyi bırakmış bir bildirim yolu, sessiz bir sistemden ayırt edilemez. Döngüsel olmayan bir çözüm ikinci bir Prometheus ister; denenmedi | ADIM 31 |
 | **P10-B5** | **On-call rotasyonu / escalation policy / acknowledgement YOK.** Alertmanager'ın ack kavramı yoktur; `repeat_interval` mekanizmanın tamamıdır. Kimin uyandırılacağı `ALERTMANAGER_NOTIFY_URL`'in ucundaki sistemde yaşar — **repo dışı, organizasyonel karar** | ADIM 31 |
+
+#### 6.7.1 P9-F2 KAPANDI — SPA origin'inde CSP (ADIM 32, 2026-08-10)
+
+**Verdict ve blocker sayısı DEĞİŞMEDİ.** P9-F2 bir blocker değildi; §8 hâlâ **BLOCKED**,
+açık blocker sayısı hâlâ **üç** (1, 2, 4).
+
+**Önce yeniden ölçüldü, körü körüne kabul edilmedi.** `origin/main` `f3986fa` üzerinde
+`grep -rn 'Content-Security-Policy' frontend/` → **boş**; dört header (`nosniff`,
+`X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`) vardı, **CSP yoktu**.
+İddia doğruydu.
+
+**Sevk edilen politika** (`frontend/nginx-security-headers.conf`), genişliği **sevk edilen
+`dist/`'ten ölçülerek** belirlendi — varsayılmadı:
+
+```
+default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self';
+connect-src 'self' <API origin>; base-uri 'none'; form-action 'self';
+frame-ancestors 'none'; object-src 'none'
+```
+
+**`unsafe-inline` ve `unsafe-eval` YOK** — çünkü gerekmiyor: build tek harici module
+script + tek harici stylesheet yayıyor, `dist/index.html`'de inline `<script>`/`<style>`
+**0**, bundle'da `eval(`/`new Function(` **0**, CSS'te `data:`/`url()`/`@font-face` **0**,
+`src/`'de WebSocket / dynamic `import()` / harici URL / `<form action=>` **0**.
+`connect-src`'deki API origin'i **image build zamanında**, Vite'ın bundle'a gömdüğü aynı
+`VITE_API_BASE_URL` arg'ından türetilir (yer tutucu hayatta kalırsa build **durur**);
+runtime lookup değil, çünkü web konteyneri `read_only: true` ile koşuyor ve bundle zaten
+yalnız Vite'ın gömdüğü origin'e konuşabilir.
+
+**Kapı — canlı yanıtı assert eder, config dosyasını değil** (API'nin CSP testinin aynası):
+`scripts/spa-security-headers-gate.sh`, **hem** `/` **hem de** hash'li bundle'ı
+`/assets/`'ten sorgular — ikincisi gereksiz değil: `location /assets/` kendi
+`add_header`'ını bildirir ve include tekrarlanmazsa sunucu düzeyi header'ların **hepsini
+iptal eder** (bu regresyon bir kez sevk edildi). CI'a `install-acceptance.yml` →
+**`fresh-install`** job'ında bağlandı (her PR + `main` push'u) — o job zaten sevk edilen
+Dockerfile'dan kurulmuş çalışan bir stack ödüyor ve build-time substitution başka hiçbir
+yerde gözlemlenemez.
+
+**Ölçülen kanıt (2026-08-10, `docs/releases/evidence/2026-08-10/`):**
+
+| Faz | Ne kanıtlandı | Sonuç |
+|---|---|---|
+| 1 | Politika canlı yanıtta | `curl -sI :8080/` **ve** hash'li bundle → CSP **ikisinde de** ayniyle var |
+| 2 | Kapı geçiyor | `spa-security-headers-gate.sh` **exit 0** — 2 yüzey × 5 header = **10 PASS** |
+| 3 | **Kapı kırmızıya DÖNEBİLİYOR** | Yanlış bir `connect-src` origin'i beklenince **exit 1**, ve `content-security-policy` satırında kırmızı (karşılaştırma gerçekten ısırıyor). CI'da **negatif adım** olarak bağlandı |
+| 4 | **Politika UYGULANIYOR, sadece mevcut değil** | Canlı sayfada: enjekte inline `<script>` **çalışmadı**, inline `<style>` **uygulanmadı**, `setAttribute('style',…)` **uygulanmadı** |
+| 5 | **Uygulama BOZULMADI** | Playwright e2e (`npm test`, e2e.yml'in koştuğu çağrının aynısı) → **39 passed / 1 skipped / 0 failed**; ayrıca kimliği doğrulanmış 9 route'ta **101** React inline-style'lı öğe render oldu ve **0 CSP ihlali** raporlandı |
+
+Ham çıktı: `p9f2_spa_csp.txt` · `p9f2_spa_csp_app_not_broken.txt`.
+
+**Dürüst sınırlar — bu slice'ta KAPANMAYAN:**
+
+- **Kapı yalnız `fresh-install` job'ında koşar**, `e2e.yml`'de değil. Bu bilinçli (aynı
+  header'ı iki job'da ölçmek maliyeti ikiye katlar, kanıtı katlamaz) ama şu demek: **web
+  origin'ini kuran ama `install-acceptance` koşmayan bir yol** header'sız kalabilir.
+- **P11-1 hâlâ açık:** `main` üzerinde branch protection / ruleset YOK, dolayısıyla bu kapı
+  da diğerleri gibi **job kapısıdır, required status check DEĞİLDİR**. Kırmızıyken merge'i
+  mekanik engelleyen bir şey yok. Bu bir **repo ayarıdır, insan kararıdır** — agent kapatamaz.
+- **CSP `report-uri`/`report-to` taşımıyor.** Production'da gerçek bir ihlal olursa hiçbir
+  yere raporlanmaz; yalnız kullanıcının konsolunda görünür. Rapor toplayıcı bir uç
+  **yok** ve bu slice bir tane uydurmadı.
+- §7'nin *"`.github` ağacında `1f4b88b` sonrası sıfır değişiklik"* cümlesi **ADIM 31'den
+  beri bayattır** (o dalga `ci.yml`'i yeniden adlandırdı); ADIM 32 `install-acceptance.yml`'i
+  de değiştirir. Cümle rapor tarihine (2026-08-07) göre doğruydu; **bugün için değildir**.
+  Burada **kaydedildi**, §7 elle düzeltilmedi — o blok ADIM 29'un ölçümüdür.
 
 ---
 

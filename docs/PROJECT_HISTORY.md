@@ -5531,3 +5531,142 @@ bu belgeye atıf yapan merge edilmiş PR gövdelerini geçmişten koparırdı (A
 Kanıt: `docs/releases/evidence/2026-08-10/P10B_alert_notification_path.md` +
 `p10b_preexisting_state.txt` · `p10b_promtool_gate.txt` · `p10b_amtool_gate.txt` ·
 `p10b_notification_proof.txt` · `p10b_contract_tests.txt` · `p10b_backend_suite.txt`.
+
+---
+
+## ADIM 32 — RC §6.7 / P9-F2: SPA origin'inde Content-Security-Policy (PR pending)
+
+**Dalganın tipi:** güvenlik / sunum-katmanı başlık işi. **Ürün kodu değişmedi** —
+`backend/src` ve `frontend/src` bu dalgada hiç düzenlenmedi; route path, react-query key,
+OCC token, Idempotency-Key, hook, SSE taksonomisi, `lib/*.ts` **hiç dokunulmadı**.
+Migration yok, `ENGINE_VERSION` sabit, `SHARED_ALLOCATION_STATUS` = `future_dev`,
+lockfile değişmedi. Issue açma/kapama, tag, release **yok**. Base `f3986fa` (#649).
+
+### Neden — ve iddia yeniden ölçüldü
+
+RC readiness raporu §6.7'nin **P9-F2** kalemi: *"SPA origin'inde CSP yok."* Körü körüne
+kabul edilmedi. `origin/main` `f3986fa` üzerinde `grep -rn 'Content-Security-Policy'
+frontend/` → **boş**. `frontend/nginx-security-headers.conf` dört header veriyordu
+(`X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`,
+`Permissions-Policy`) ve **CSP vermiyordu**. Repodaki tek CSP API'ninkiydi
+(`apps/api/hardening.py:39` → `default-src 'none'`), ve onu
+`tests/contract/test_hardening_contract.py:29` **canlı bir yanıt üzerinde** pinliyordu.
+İddia doğruydu — ve **yürütülebilir bundle'ı sunan origin korumasızdı**.
+
+Aynı ölçüm ikinci bir boşluk gösterdi: SPA origin'inin **dört mevcut header'ı da** hiçbir
+zaman telden geri okunmamıştı. Hepsi bir config dosyası + düzyazı olarak sevk edilmişti.
+
+### Sevk edilen politika — genişliği ölçüldü, varsayılmadı
+
+`frontend/nginx-security-headers.conf`:
+
+```
+default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self';
+connect-src 'self' <API origin>; base-uri 'none'; form-action 'self';
+frame-ancestors 'none'; object-src 'none'
+```
+
+**`unsafe-inline` ve `unsafe-eval` YOKTUR** — gerekmediği **ölçüldüğü** için. Sevk edilen
+`dist/`'ten: tek harici module script + tek harici stylesheet; `dist/index.html`'de inline
+`<script>` **0**, inline `<style>` **0**; bundle'da `eval(` / `new Function(` **0**; built
+CSS'te `data:` URI / `url()` / `@import` / `@font-face` **0**; `src/`'de `new WebSocket` /
+dynamic `import()` / harici http(s) literali / `<form action=…>` **0**.
+
+Direktif gerekçeleri (dosyanın kendi yorumunda tam hâli): `base-uri 'none'` — uygulama
+`<base>` kullanmıyor, enjekte edilen bir tanesi her göreli varlık URL'sini yeniden
+hedefler. `form-action` **`'self'`, `'none'` değil** — her `<form>` `onSubmit` +
+preventDefault ve hiçbirinde `action` yok, ama `'none'` bir handler hatasından sızan
+native submit'i de bloklayıp **görünür bir bug'ı görünmez** hâle getirirdi; `'self'`
+origin-dışı sızma yolunu yine kapatır. `object-src 'none'` — `default-src` fallback'i
+tarayıcıların tarihsel olarak yanlış yaptığı yer olduğu için tekrar bildirildi.
+`frame-ancestors 'none'` ile `X-Frame-Options` **birlikte** sevk edilir (farklı tarayıcılar
+farklı olanı okur).
+
+### `connect-src` origin'i — build zamanında türetilir, runtime'da DEĞİL
+
+`apiClient.ts:9` → `import.meta.env.VITE_API_BASE_URL ?? "/api/v1"`; Vite bunu **build
+zamanında** bundle'a gömer, compose varsayılanı `http://localhost:8000/api/v1` yani
+**cross-origin**. Bu yüzden `connect-src`'nin API origin'ini taşıması **zorunlu**.
+
+Yer tutucu `__API_ORIGIN__`, `frontend/Dockerfile`'ın **build stage**'inde aynı
+`VITE_API_BASE_URL` arg'ından türetilip yerine konur ve **yer tutucu hayatta kalırsa build
+DURUR** (`! grep -q '__API_ORIGIN__'`). Runtime lookup **bilerek** seçilmedi, iki sebeple:
+(1) bundle zaten yalnız Vite'ın gömdüğü origin'e konuşabilir, dolayısıyla bir runtime
+değeri onunla **ancak çelişebilirdi**; (2) web konteyneri `read_only: true` koşuyor, yani
+nginx'in envsubst entrypoint'i üretilmiş bir config'i **yazamazdı** zaten. Runtime stage
+artık kaynağı değil, **üretilmiş** dosyayı kopyalar.
+
+### Kapı — canlı yanıtı assert eder, config dosyasını değil
+
+`scripts/spa-security-headers-gate.sh` (yeni). API'nin CSP testinin **aynası**: config
+okumaz, telden okur. **İki yüzeyi** sorgular — `/` (SPA shell) **ve** hash'li bundle
+(`/assets/…`, index.html'den keşfedilir, sabit yazılmaz). İkincisi gereksiz değil:
+`location /assets/` kendi `add_header`'ını bildirir ve include tekrarlanmazsa sunucu
+düzeyi header'ların **hepsi iptal olur** — bu regresyon bir kez gerçekten sevk edildi
+(bkz. conf dosyasının başındaki yorum). CSP dahil **beş header'ın da** değerini
+**birebir** karşılaştırır.
+
+CI: `.github/workflows/install-acceptance.yml` → **`fresh-install`** job'ı (her PR + `main`
+push'u), `Wait for the API and the web app` adımından hemen sonra. Oraya konmasının sebebi:
+kapı, **sevk edilen Dockerfile'dan kurulmuş çalışan bir stack** ister ve build-time
+substitution başka hiçbir yerde gözlemlenemez; o job zaten bu stack'i ödüyor. Ayrıca
+`fresh-install-evidence` artefaktına `spa-security-headers.txt` olarak düşer.
+
+**Negatif adım da bağlandı** — repo'nun kendi disiplini (*"a gate that has never been
+observed failing is not a gate"*): yanlış bir `connect-src` origin'i beklendiğinde kapı
+**exit 1** vermeli **ve** kırmızısı `content-security-policy` satırında olmalı. Rebuild
+istemez, ~1 saniye sürer, ve karşılaştırmanın gerçekten ısırdığını kanıtlar.
+
+### Ölçülen kanıt (2026-08-10, `docs/releases/evidence/2026-08-10/`)
+
+| Faz | Ne kanıtlandı | Sonuç |
+|---|---|---|
+| 1 | Politika **yanıtta** (config'de değil) | `curl -sI :8080/` **ve** hash'li bundle → CSP ikisinde de, `connect-src 'self' http://localhost:8000` olarak çözülmüş |
+| 2 | Kapı geçiyor | **exit 0** — 2 yüzey × 5 header = **10 PASS** |
+| 3 | Kapı **kırmızıya dönebiliyor** | Sahte origin ile **exit 1**, kırmızı `content-security-policy` satırında; beklenen/gerçek değerler yan yana basılıyor |
+| 4 | Politika **UYGULANIYOR**, sadece mevcut değil | Canlı sayfada: enjekte inline `<script>` **çalışmadı** (XSS payload şekli), inline `<style>` **uygulanmadı**, `setAttribute('style',…)` **uygulanmadı**; **CSSOM ataması uygulandı** |
+| 5 | **Uygulama BOZULMADI** | Playwright e2e (`npm test`, e2e.yml'in çağrısının aynısı) → **39 passed / 1 skipped / 0 failed** (3.3 dk) |
+| 6 | Sessiz kırılma **yok** | Kimliği doğrulanmış **9 route**'ta **101** React inline-style'lı öğe render oldu, console + pageerror'da **0 CSP ihlali** |
+
+Ham çıktı: `p9f2_spa_csp.txt` · `p9f2_spa_csp_app_not_broken.txt`.
+
+**Faz 4 neden bu slice'ın en önemli ölçümü:** kodda **814** adet React `style={{…}}` prop'u
+var ve `style-src 'self'` inline style'ları **polislemekle** ünlüdür. Ama React bunları
+`style` ATTRIBUTE'u olarak değil, **CSSOM üzerinden** (`node.style.setProperty`) uygular —
+ve CSP CSSOM atamasını denetlemez. Bu **varsayılmadı**: canlı sayfada, sevk edilen
+politikanın altında, üç şekil ayrı ayrı denendi ve yalnız CSSOM olanı geçti. İlk yüklenen
+sayfada (login shell) **hiç** inline style yoktu — yani o sayfaya bakıp "çalışıyor" demek
+bu soruyu **hiç sormamak** olurdu; kimliği doğrulanmış sayfalara geçmenin sebebi budur.
+
+### Dürüst sınırlar — bu slice'ta KAPANMAYAN
+
+- **Kapı yalnız `install-acceptance.yml`'de koşar**, `e2e.yml`'de değil. Aynı header'ı iki
+  job'da ölçmek maliyeti ikiye katlar, kanıtı katlamaz — ama şu demek: web origin'ini
+  kuran ama `install-acceptance` koşmayan bir yol header'sız kalabilir.
+- **P11-1 hâlâ açık.** `main` üzerinde branch protection / ruleset yok, dolayısıyla bu kapı
+  da diğerleri gibi **job kapısıdır, required status check DEĞİLDİR**. Kırmızıyken merge'i
+  mekanik engelleyen bir şey yok. **Repo ayarı, insan kararı** — agent kapatamaz.
+- **CSP `report-uri` / `report-to` taşımıyor.** Production'da gerçek bir ihlal hiçbir yere
+  raporlanmaz, yalnız kullanıcının konsolunda görünür. Toplayıcı bir uç **yok** ve bu
+  slice bir tane **uydurmadı**.
+- **Politika tek bir deployment topolojisine göre doğrulandı** (compose: web `:8080`, API
+  `:8000`, cross-origin). Reverse-proxy arkasında same-origin sunulan bir kurulumda
+  `connect-src` **kendiliğinden** doğru daralır (göreli base URL → yalnız `'self'`), ama
+  **o topoloji ölçülmedi**.
+- **P9-F1 (`npm install` → `npm ci`) ve P11-1 bilerek DIŞARIDA** — ayrı PR'lar.
+  `frontend/` altında `.dockerignore` **hâlâ yok**; yerel `node_modules` build context'ine
+  girer (CI'da temiz checkout olduğu için CI'yı etkilemez). Bu P9-F1 alanıdır, burada
+  düzeltilmedi.
+- Readiness raporu §7'nin *"`.github` ağacında `1f4b88b` sonrası sıfır değişiklik"*
+  cümlesi **ADIM 31'den beri bayattır**; ADIM 32 `install-acceptance.yml`'i de değiştirir.
+  §6.7.1'de **kaydedildi**, §7 elle düzeltilmedi (o blok ADIM 29'un ölçümüdür).
+- **Backend/frontend birim suite'leri yeniden KOŞULMADI.** Bu dalga tek satır Python veya
+  TypeScript kaynağı değiştirmiyor (`backend/src`, `frontend/src`, `backend/tests`,
+  `frontend/src/test` **dokunulmadı**), dolayısıyla onları koşturmak yeni bir olgu
+  üretmezdi. Değişikliği **gerçekten** sınayan suite — Playwright e2e — koşuldu ve yeşil.
+  `generate_repository_facts.py --check` **exit 0**.
+
+### Verdict
+
+**RC verdict'i BLOCKED KALIR. Blocker sayısı DEĞİŞMEDİ (üç: 1, 2, 4)** — P9-F2 bir blocker
+değildi, §6.7'nin blocker-olmayan kalemlerinden biriydi. **"READY" yazılmadı.**
